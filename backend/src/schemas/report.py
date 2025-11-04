@@ -561,3 +561,259 @@ class AnomalyDetectionRequestSchema(CamelCaseModel):
     devices: Optional[List[str]] = Field(None, description="设备ID列表")
     date_range: DateRangeSchema = Field(..., description="日期范围")
     sensitivity: str = Field("medium", description="灵敏度: low/medium/high")
+
+
+# ============================================================================
+# 统计报表Schema
+# ============================================================================
+
+class StatisticsRequestSchema(CamelCaseModel):
+    """统计数据请求"""
+    start_date: str = Field(..., description="开始日期 (ISO格式)")
+    end_date: str = Field(..., description="结束日期 (ISO格式)")
+    device_types: Optional[List[str]] = Field(None, description="设备类型筛选")
+    locations: Optional[List[str]] = Field(None, description="位置筛选")
+    device_groups: Optional[List[str]] = Field(None, description="设备组筛选")
+    group_by: str = Field("day", description="分组方式: hour/day/week/month")
+    include_trends: bool = Field(True, description="包含趋势数据")
+
+
+class DeviceTypeDistributionSchema(CamelCaseModel):
+    """设备类型分布"""
+    device_type: str = Field(..., description="设备类型")
+    count: int = Field(0, description="数量")
+    percentage: float = Field(0.0, description="百分比")
+    avg_health_score: float = Field(0.0, description="平均健康分数")
+
+
+class PerformanceRatingSchema(CamelCaseModel):
+    """性能评级分布"""
+    rating: str = Field(..., description="评级: excellent/good/fair/poor")
+    count: int = Field(0, description="数量")
+    percentage: float = Field(0.0, description="百分比")
+
+
+class DeviceRankingSchema(CamelCaseModel):
+    """设备排名数据"""
+    rank: int = Field(..., description="排名")
+    device_id: str = Field(..., description="设备ID")
+    device_name: str = Field(..., description="设备名称")
+    device_type: str = Field(..., description="设备类型")
+    score: float = Field(0.0, description="分数")
+    health_score: float = Field(0.0, description="健康分数")
+    uptime: float = Field(0.0, description="在线率 (%)")
+    avg_response_time: float = Field(0.0, description="平均响应时间 (ms)")
+    total_checks: int = Field(0, description="总检查次数")
+    failed_checks: int = Field(0, description="失败检查次数")
+    issues_count: int = Field(0, description="问题数量")
+    last_check_time: str = Field(..., description="最后检查时间")
+    status: str = Field("unknown", description="状态: online/offline/warning/error")
+
+
+class TrendPointSchema(CamelCaseModel):
+    """趋势数据点"""
+    date: str = Field(..., description="日期")
+    total_inspections: int = Field(0, description="巡检总数")
+    successful_inspections: int = Field(0, description="成功巡检数")
+    failed_inspections: int = Field(0, description="失败巡检数")
+    avg_health_score: float = Field(0.0, description="平均健康分数")
+    issues_detected: int = Field(0, description="检测到的问题数")
+    issues_resolved: int = Field(0, description="已解决的问题数")
+
+
+class IssuesByCategorySchema(CamelCaseModel):
+    """问题分类统计"""
+    category: str = Field(..., description="问题类别")
+    count: int = Field(0, description="数量")
+    percentage: float = Field(0.0, description="百分比")
+    critical_count: int = Field(0, description="严重问题数")
+    high_count: int = Field(0, description="高级问题数")
+    medium_count: int = Field(0, description="中级问题数")
+    low_count: int = Field(0, description="低级问题数")
+
+
+class StatisticsDataSchema(CamelCaseModel):
+    """统计数据响应"""
+    # 总览指标
+    total_devices: int = Field(0, description="设备总数")
+    online_devices: int = Field(0, description="在线设备数")
+    offline_devices: int = Field(0, description="离线设备数")
+    total_inspections: int = Field(0, description="巡检总数")
+    successful_inspections: int = Field(0, description="成功巡检数")
+    failed_inspections: int = Field(0, description="失败巡检数")
+    total_issues: int = Field(0, description="问题总数")
+    resolved_issues: int = Field(0, description="已解决问题数")
+    pending_issues: int = Field(0, description="待处理问题数")
+    critical_issues: int = Field(0, description="严重问题数")
+
+    # 比率指标
+    inspection_success_rate: float = Field(0.0, description="巡检成功率 (%)")
+    issue_resolution_rate: float = Field(0.0, description="问题解决率 (%)")
+    device_health_score: float = Field(0.0, description="设备健康分数 (0-100)")
+    avg_response_time: float = Field(0.0, description="平均响应时间 (ms)")
+
+    # 分布数据
+    device_type_distribution: List[DeviceTypeDistributionSchema] = Field(
+        default_factory=list,
+        description="设备类型分布"
+    )
+    performance_ratings: List[PerformanceRatingSchema] = Field(
+        default_factory=list,
+        description="性能评级分布"
+    )
+    issues_by_category: List[IssuesByCategorySchema] = Field(
+        default_factory=list,
+        description="问题分类统计"
+    )
+
+    # 排名数据
+    top_devices: List[DeviceRankingSchema] = Field(
+        default_factory=list,
+        description="表现最佳设备"
+    )
+    worst_devices: List[DeviceRankingSchema] = Field(
+        default_factory=list,
+        description="表现最差设备"
+    )
+
+    # 趋势数据
+    recent_trends: List[TrendPointSchema] = Field(
+        default_factory=list,
+        description="近期趋势"
+    )
+
+    # 元数据
+    generated_at: str = Field(..., description="生成时间")
+    time_range: DateRangeSchema = Field(..., description="时间范围")
+
+
+class GenerateStatisticsReportRequest(CamelCaseModel):
+    """生成统计报表请求"""
+    title: str = Field(..., description="报表标题")
+    description: Optional[str] = Field(None, description="报表描述")
+    start_date: str = Field(..., description="开始日期")
+    end_date: str = Field(..., description="结束日期")
+    device_types: Optional[List[str]] = Field(None, description="设备类型筛选")
+    locations: Optional[List[str]] = Field(None, description="位置筛选")
+    format: ReportFormat = Field(ReportFormat.PDF, description="报表格式")
+    include_charts: bool = Field(True, description="包含图表")
+    include_trends: bool = Field(True, description="包含趋势分析")
+    include_rankings: bool = Field(True, description="包含排名数据")
+
+
+class KPIRequestSchema(CamelCaseModel):
+    """KPI数据请求"""
+    start_date: str = Field(..., description="开始日期")
+    end_date: str = Field(..., description="结束日期")
+    device_types: Optional[List[str]] = Field(None, description="设备类型筛选")
+    comparison_period: Optional[str] = Field(None, description="对比周期: previous_period/previous_year")
+
+
+class KPIMetricSchema(CamelCaseModel):
+    """单个KPI指标"""
+    name: str = Field(..., description="指标名称")
+    display_name: str = Field(..., description="显示名称")
+    value: float = Field(0.0, description="当前值")
+    unit: str = Field("", description="单位")
+    target: Optional[float] = Field(None, description="目标值")
+    previous_value: Optional[float] = Field(None, description="上期值")
+    change_rate: float = Field(0.0, description="变化率 (%)")
+    trend: str = Field("stable", description="趋势: up/down/stable")
+    status: str = Field("normal", description="状态: excellent/good/warning/critical")
+    description: Optional[str] = Field(None, description="描述")
+
+
+class KPIDataSchema(CamelCaseModel):
+    """KPI数据响应"""
+    # 核心KPI
+    inspection_completion_rate: KPIMetricSchema = Field(..., description="巡检完成率")
+    inspection_success_rate: KPIMetricSchema = Field(..., description="巡检成功率")
+    avg_inspection_duration: KPIMetricSchema = Field(..., description="平均巡检时长")
+    device_availability: KPIMetricSchema = Field(..., description="设备可用率")
+    device_health_score: KPIMetricSchema = Field(..., description="设备健康分数")
+    issue_resolution_rate: KPIMetricSchema = Field(..., description="问题解决率")
+    avg_resolution_time: KPIMetricSchema = Field(..., description="平均解决时间")
+    mttr: KPIMetricSchema = Field(..., description="平均修复时间 (MTTR)")
+    mtbf: KPIMetricSchema = Field(..., description="平均无故障时间 (MTBF)")
+
+    # 次要KPI
+    critical_issues_count: KPIMetricSchema = Field(..., description="严重问题数")
+    sla_compliance_rate: KPIMetricSchema = Field(..., description="SLA达标率")
+    avg_response_time: KPIMetricSchema = Field(..., description="平均响应时间")
+
+    # 元数据
+    generated_at: str = Field(..., description="生成时间")
+    time_range: DateRangeSchema = Field(..., description="时间范围")
+
+
+class RankingsRequestSchema(CamelCaseModel):
+    """排名数据请求"""
+    start_date: str = Field(..., description="开始日期")
+    end_date: str = Field(..., description="结束日期")
+    ranking_type: str = Field("performance", description="排名类型: performance/reliability/efficiency")
+    device_types: Optional[List[str]] = Field(None, description="设备类型筛选")
+    top_n: int = Field(10, ge=1, le=100, description="返回前N名")
+    include_bottom: bool = Field(True, description="包含后N名")
+
+
+class RankingCategorySchema(CamelCaseModel):
+    """排名分类"""
+    category_name: str = Field(..., description="分类名称")
+    category_type: str = Field(..., description="分类类型")
+    rankings: List[DeviceRankingSchema] = Field(default_factory=list, description="排名列表")
+
+
+class RankingsDataSchema(CamelCaseModel):
+    """排名数据响应"""
+    # 综合排名
+    overall_rankings: List[DeviceRankingSchema] = Field(
+        default_factory=list,
+        description="综合排名"
+    )
+
+    # 分类排名
+    by_performance: List[DeviceRankingSchema] = Field(
+        default_factory=list,
+        description="按性能排名"
+    )
+    by_reliability: List[DeviceRankingSchema] = Field(
+        default_factory=list,
+        description="按可靠性排名"
+    )
+    by_efficiency: List[DeviceRankingSchema] = Field(
+        default_factory=list,
+        description="按效率排名"
+    )
+
+    # 按类型分组的排名
+    by_device_type: List[RankingCategorySchema] = Field(
+        default_factory=list,
+        description="按设备类型的排名"
+    )
+
+    # 元数据
+    total_devices: int = Field(0, description="参与排名的设备总数")
+    generated_at: str = Field(..., description="生成时间")
+    time_range: DateRangeSchema = Field(..., description="时间范围")
+
+
+class ExportRequestSchema(CamelCaseModel):
+    """导出请求（通用）"""
+    report_id: Optional[int] = Field(None, description="报表ID（如果基于现有报表）")
+    report_type: str = Field(..., description="报表类型: inspection/trend/statistics/custom")
+    data: Dict[str, Any] = Field(..., description="报表数据")
+    template_id: Optional[int] = Field(None, description="模板ID")
+    file_name: Optional[str] = Field(None, description="文件名")
+    title: str = Field("Report", description="报表标题")
+    description: Optional[str] = Field(None, description="报表描述")
+
+
+class ExportResponseSchema(CamelCaseModel):
+    """导出响应"""
+    success: bool = Field(True, description="是否成功")
+    file_url: str = Field(..., description="文件下载URL")
+    file_name: str = Field(..., description="文件名")
+    file_size: int = Field(0, description="文件大小（字节）")
+    download_token: str = Field(..., description="下载令牌")
+    expires_at: str = Field(..., description="过期时间")
+    format: str = Field(..., description="文件格式")

@@ -618,16 +618,27 @@ export async function getAnomalyDetection(params: {
 
 // 获取统计数据
 export async function getStatistics(params: {
-  dateRange: {
-    startDate: string
-    endDate: string
-  }
-  devices?: string[]
-  groupBy?: 'type' | 'group' | 'location'
-  includeComparisons: boolean
+  startDate: string                    // ✅ 扁平化日期参数
+  endDate: string
+  deviceTypes?: string[]               // ✅ 改名为device_types对应
+  locations?: string[]                 // ✅ 新增位置筛选
+  deviceGroups?: string[]              // ✅ 新增设备组筛选
+  groupBy?: 'hour' | 'day' | 'week' | 'month'  // ✅ 时间粒度而非分组维度
+  includeTrends?: boolean              // ✅ 改名
 }): Promise<StatisticsData> {
   try {
-    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/data', params)
+    // 构建后端期望的请求体（使用snake_case）
+    const requestBody = {
+      start_date: params.startDate,
+      end_date: params.endDate,
+      device_types: params.deviceTypes,
+      locations: params.locations,
+      device_groups: params.deviceGroups,
+      group_by: params.groupBy || 'day',
+      include_trends: params.includeTrends !== undefined ? params.includeTrends : true
+    }
+
+    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/data', requestBody)
 
     if (response.success && response.data) {
       return transformStatisticsData(response.data)
@@ -643,16 +654,32 @@ export async function getStatistics(params: {
 // 生成统计报表
 export async function generateStatisticsReport(reportData: {
   title: string
-  dateRange: {
-    startDate: string
-    endDate: string
-  }
-  devices?: string[]
+  description?: string                 // ✅ 新增描述字段
+  startDate: string                    // ✅ 扁平化日期参数
+  endDate: string
+  deviceTypes?: string[]               // ✅ 改名为device_types对应
+  locations?: string[]                 // ✅ 新增位置筛选
   format: 'pdf' | 'excel' | 'html' | 'word'
-  sections: string[] // ['overview', 'performance', 'compliance', 'trends']
+  includeCharts?: boolean              // ✅ 是否包含图表
+  includeTrends?: boolean              // ✅ 是否包含趋势
+  includeRankings?: boolean            // ✅ 是否包含排名
 }): Promise<Report> {
   try {
-    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/generate', reportData)
+    // 构建后端期望的请求体（使用snake_case）
+    const requestBody = {
+      title: reportData.title,
+      description: reportData.description,
+      start_date: reportData.startDate,
+      end_date: reportData.endDate,
+      device_types: reportData.deviceTypes,
+      locations: reportData.locations,
+      format: reportData.format,
+      include_charts: reportData.includeCharts !== undefined ? reportData.includeCharts : true,
+      include_trends: reportData.includeTrends !== undefined ? reportData.includeTrends : true,
+      include_rankings: reportData.includeRankings !== undefined ? reportData.includeRankings : true
+    }
+
+    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/generate', requestBody)
 
     if (response.success && response.data) {
       return transformReportData(response.data)
@@ -667,15 +694,21 @@ export async function generateStatisticsReport(reportData: {
 
 // 获取KPI数据
 export async function getKPIData(params: {
-  dateRange: {
-    startDate: string
-    endDate: string
-  }
-  kpis: string[] // ['availability', 'mttr', 'mtbf', 'sla']
-  devices?: string[]
+  startDate: string                    // ✅ 扁平化日期参数
+  endDate: string
+  deviceTypes?: string[]               // ✅ 改名为device_types对应
+  comparisonPeriod?: 'previous_period' | 'previous_year'  // ✅ 对比周期
 }): Promise<unknown> {
   try {
-    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/kpi', params)
+    // 构建后端期望的请求体（使用snake_case）
+    const requestBody = {
+      start_date: params.startDate,
+      end_date: params.endDate,
+      device_types: params.deviceTypes,
+      comparison_period: params.comparisonPeriod
+    }
+
+    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/kpi', requestBody)
 
     if (response.success && response.data) {
       return response.data
@@ -690,15 +723,25 @@ export async function getKPIData(params: {
 
 // 获取排名数据
 export async function getRankings(params: {
-  metric: 'availability' | 'performance' | 'compliance' | 'stability'
-  dateRange: {
-    startDate: string
-    endDate: string
-  }
-  limit?: number
+  startDate: string                    // ✅ 扁平化日期参数
+  endDate: string
+  rankingType?: 'performance' | 'reliability' | 'efficiency'  // ✅ 改名为ranking_type
+  deviceTypes?: string[]               // ✅ 设备类型筛选
+  topN?: number                        // ✅ 改名为top_n
+  includeBottom?: boolean              // ✅ 是否包含后N名
 }): Promise<unknown> {
   try {
-    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/rankings', params)
+    // 构建后端期望的请求体（使用snake_case）
+    const requestBody = {
+      start_date: params.startDate,
+      end_date: params.endDate,
+      ranking_type: params.rankingType || 'performance',
+      device_types: params.deviceTypes,
+      top_n: params.topN || 10,
+      include_bottom: params.includeBottom !== undefined ? params.includeBottom : true
+    }
+
+    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/rankings', requestBody)
 
     if (response.success && response.data) {
       return response.data
@@ -1257,11 +1300,14 @@ const transformTrendMetric = (input: unknown, fallbackName: string): TrendMetric
     : []
   return {
     name: toStringSafe(data.name, fallbackName),
-    current: toNumberSafe(data.current),
-    previous: toNumberSafe(data.previous),
-    change: toNumberSafe(data.change),
+    metricName: toStringSafe(data.metricName ?? data['metric_name'], fallbackName),  // 后端字段
+    displayName: toStringSafe(data.displayName ?? data['display_name'], fallbackName),  // 后端字段
+    unit: toStringSafe(data.unit, ''),  // 后端字段
+    current: toNumberSafe(data.current ?? data['current_value']),
+    previous: toNumberSafe(data.previous ?? data['previous_value']),
+    change: toNumberSafe(data.change ?? data['change_rate']),
     changePercentage: toNumberSafe(data.changePercentage ?? data['change_percentage']),
-    trend: toEnumValue(data.trend, TREND_DIRECTIONS, 'stable'),
+    trend: toEnumValue(data.trend ?? data['trend_direction'], TREND_DIRECTIONS, 'stable'),
     dataPoints: points,
   }
 }
@@ -1295,18 +1341,20 @@ const transformTrendAlertData = (input: unknown): TrendAlertData => {
 const transformTrendAnalysisData = (input: unknown): TrendAnalysisData => {
   const data = toRecord(input)
   const range = toRecord(data.timeRange ?? data['time_range'])
-  const metrics = toRecord(data.metrics)
+
+  // 后端现在返回数组格式，使用 mapRecordArray 处理
+  const metricsArray = mapRecordArray(data.metrics, (item) => {
+    const record = toRecord(item)
+    const metricName = toStringSafe(record.metric_name ?? record.metricName, 'unknown')
+    return transformTrendMetric(record, metricName)
+  })
+
   return {
     timeRange: {
       startDate: toStringSafe(range.startDate ?? range['start_date']),
       endDate: toStringSafe(range.endDate ?? range['end_date']),
     },
-    metrics: {
-      availability: transformTrendMetric(metrics.availability ?? metrics['availability'], 'availability'),
-      performance: transformTrendMetric(metrics.performance ?? metrics['performance'], 'performance'),
-      errors: transformTrendMetric(metrics.errors ?? metrics['errors'], 'errors'),
-      capacity: transformTrendMetric(metrics.capacity ?? metrics['capacity'], 'capacity'),
-    },
+    metrics: metricsArray,  // 直接返回数组
     predictions: mapRecordArray(data.predictions, transformPredictionData),
     alerts: mapRecordArray(data.alerts, transformTrendAlertData),
   }

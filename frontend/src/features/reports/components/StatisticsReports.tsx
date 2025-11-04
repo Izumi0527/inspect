@@ -1,67 +1,436 @@
-import React from 'react'
-import { BarChart3, Users, Target, Activity } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/atoms'
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import React, { useState, useMemo } from 'react'
+import { BarChart3, Users, Target, Activity, Filter, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  Button,
+  CardSkeleton,
+  ChartSkeleton,
+  TableSkeleton,
+  ErrorAlert,
+  DateRangePicker,
+  QuickDateRangeButtons,
+  MultiSelect
+} from '@/components/atoms'
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend
+} from 'recharts'
+import { useStatistics, useKPIData, useRankings, useGenerateStatisticsReport } from '../hooks/useReports'
+import toast from 'react-hot-toast'
 
 interface Props {
   searchText: string
 }
 
 export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
-  // 模拟统计数据
-  const deviceStats = [
-    { name: '路由器', count: 25, online: 23, offline: 2 },
-    { name: '交换机', count: 18, online: 17, offline: 1 },
-    { name: '防火墙', count: 12, online: 11, offline: 1 },
-    { name: '服务器', count: 8, online: 8, offline: 0 }
-  ]
+  // ==================== State Management ====================
+  const [dateRange, setDateRange] = useState({
+    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0]
+  })
+  const [showFilters, setShowFilters] = useState(false)
+  const [deviceTypes, setDeviceTypes] = useState<string[]>([])
+  const [locations, setLocations] = useState<string[]>([])
 
-  const performanceStats = [
-    { name: '优秀', value: 45, color: '#10B981' },
-    { name: '良好', value: 32, color: '#3B82F6' },
-    { name: '一般', value: 18, color: '#F59E0B' },
-    { name: '较差', value: 5, color: '#EF4444' }
-  ]
+  // ==================== API Hooks ====================
+  const {
+    data: statisticsData,
+    isLoading: statsLoading,
+    error: statsError,
+    refetch: refetchStats
+  } = useStatistics({
+    startDate: dateRange.startDate,
+    endDate: dateRange.endDate,
+    deviceTypes: deviceTypes.length > 0 ? deviceTypes : undefined,
+    locations: locations.length > 0 ? locations : undefined,
+    groupBy: 'day',
+    includeTrends: true
+  })
 
-  const rankingData = [
-    { rank: 1, name: 'Router-001', type: '路由器', availability: 99.8, score: 95.2, status: '优秀' },
-    { rank: 2, name: 'Switch-003', type: '交换机', availability: 99.5, score: 92.1, status: '优秀' },
-    { rank: 3, name: 'Firewall-002', type: '防火墙', availability: 98.9, score: 89.7, status: '良好' },
-    { rank: 4, name: 'Server-005', type: '服务器', availability: 98.2, score: 87.3, status: '良好' },
-    { rank: 5, name: 'Router-007', type: '路由器', availability: 96.8, score: 83.5, status: '一般' }
-  ]
+  const {
+    data: kpiData,
+    isLoading: kpiLoading,
+    error: kpiError
+  } = useKPIData({
+    startDate: dateRange.startDate,
+    endDate: dateRange.endDate,
+    deviceTypes: deviceTypes.length > 0 ? deviceTypes : undefined,
+    comparisonPeriod: 'previous_period'
+  })
 
+  const {
+    data: rankingsData,
+    isLoading: rankingsLoading,
+    error: rankingsError
+  } = useRankings({
+    startDate: dateRange.startDate,
+    endDate: dateRange.endDate,
+    deviceTypes: deviceTypes.length > 0 ? deviceTypes : undefined,
+    rankingType: 'performance',
+    topN: 10,
+    includeBottom: false
+  })
+
+  const generateReportMutation = useGenerateStatisticsReport()
+
+  // ==================== Derived Data ====================
+  const overview = statisticsData?.overview || {
+    totalDevices: 0,
+    activeDevices: 0,
+    offlineDevices: 0,
+    warningDevices: 0,
+    errorDevices: 0,
+    avgUptime: 0,
+    totalExecutions: 0,
+    avgScore: 0
+  }
+
+  // 设备类型分布数据（用于柱状图）
+  const deviceTypeChartData = useMemo(() => {
+    if (!statisticsData?.deviceDistribution?.byType) return []
+
+    return Object.entries(statisticsData.deviceDistribution.byType).map(([name, count]) => {
+      const online = Math.round(count * (overview.activeDevices / overview.totalDevices || 1))
+      const offline = count - online
+      return { name, count, online, offline }
+    })
+  }, [statisticsData, overview])
+
+  // 性能评级分布数据（用于饼图）
+  const performanceChartData = useMemo(() => {
+    if (!statisticsData?.performanceStats?.byDevice) return []
+
+    const scoreRanges = [
+      { name: '优秀', min: 90, max: 100, color: '#10B981', count: 0 },
+      { name: '良好', min: 75, max: 90, color: '#3B82F6', count: 0 },
+      { name: '一般', min: 60, max: 75, color: '#F59E0B', count: 0 },
+      { name: '较差', min: 0, max: 60, color: '#EF4444', count: 0 }
+    ]
+
+    statisticsData.performanceStats.byDevice.forEach((device: any) => {
+      const availability = device.metrics?.availability || 0
+      for (const range of scoreRanges) {
+        if (availability >= range.min && availability < range.max) {
+          range.count++
+          break
+        }
+      }
+    })
+
+    return scoreRanges.filter(r => r.count > 0).map(({ name, color, count }) => ({
+      name,
+      value: count,
+      color
+    }))
+  }, [statisticsData])
+
+  // 设备排名数据
+  const rankingTableData = useMemo(() => {
+    if (!rankingsData || !Array.isArray(rankingsData)) return []
+
+    return rankingsData.slice(0, 10).map((device: any, index: number) => ({
+      rank: index + 1,
+      name: device.deviceName || device.device_name || `Device-${device.deviceId}`,
+      type: device.deviceType || device.device_type || '-',
+      availability: device.metrics?.availability || 0,
+      score: device.ranking || 0,
+      status: device.metrics?.availability >= 98 ? '优秀' :
+              device.metrics?.availability >= 95 ? '良好' : '一般'
+    }))
+  }, [rankingsData])
+
+  // KPI 指标卡片数据
+  const kpiCards = useMemo(() => {
+    return [
+      {
+        title: '设备总数',
+        value: String(overview.totalDevices),
+        change: kpiData?.inspection_completion_rate_change || '+0',
+        icon: Users,
+        color: 'blue'
+      },
+      {
+        title: '在线率',
+        value: `${((overview.activeDevices / overview.totalDevices || 0) * 100).toFixed(1)}%`,
+        change: kpiData?.device_availability_change || '+0%',
+        icon: Activity,
+        color: 'green'
+      },
+      {
+        title: '平均评分',
+        value: overview.avgScore.toFixed(1),
+        change: kpiData?.avg_health_score_change || '+0',
+        icon: Target,
+        color: 'purple'
+      },
+      {
+        title: '故障率',
+        value: `${((overview.errorDevices / overview.totalDevices || 0) * 100).toFixed(1)}%`,
+        change: kpiData?.severe_issue_count_change || '-0%',
+        icon: BarChart3,
+        color: 'red'
+      }
+    ]
+  }, [overview, kpiData])
+
+  // ==================== Event Handlers ====================
+  const handleGenerateReport = async () => {
+    try {
+      await generateReportMutation.mutateAsync({
+        title: `统计报表_${dateRange.startDate}_${dateRange.endDate}`,
+        description: '设备统计报表',
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        format: 'pdf',
+        includeCharts: true,
+        includeTrends: true,
+        includeRankings: true
+      })
+      toast.success('报表生成任务已启动')
+    } catch (error) {
+      toast.error('生成报表失败')
+    }
+  }
+
+  const handleExportData = () => {
+    // TODO: 实现数据导出功能
+    toast.info('数据导出功能开发中')
+  }
+
+  const handleRefresh = () => {
+    refetchStats()
+    toast.success('数据已刷新')
+  }
+
+  const handleQuickDateRange = (startDate: string, endDate: string) => {
+    setDateRange({ startDate, endDate })
+  }
+
+  // 可用的设备类型和位置选项
+  const deviceTypeOptions = useMemo(() => {
+    if (!statisticsData?.deviceDistribution?.byType) return []
+    return Object.keys(statisticsData.deviceDistribution.byType).map(type => ({
+      value: type,
+      label: type
+    }))
+  }, [statisticsData])
+
+  const locationOptions = useMemo(() => {
+    if (!statisticsData?.deviceDistribution?.byLocation) return []
+    return Object.keys(statisticsData.deviceDistribution.byLocation).map(location => ({
+      value: location,
+      label: location
+    }))
+  }, [statisticsData])
+
+  // ==================== Search Filter ====================
   const normalizedKeyword = searchText.trim().toLowerCase()
-  const filteredDeviceStats = normalizedKeyword
-    ? deviceStats.filter((item) => item.name.toLowerCase().includes(normalizedKeyword))
-    : deviceStats
-  const filteredPerformanceStats = normalizedKeyword
-    ? performanceStats.filter((item) => item.name.toLowerCase().includes(normalizedKeyword))
-    : performanceStats
+
+  const filteredDeviceChartData = normalizedKeyword
+    ? deviceTypeChartData.filter((item) => item.name.toLowerCase().includes(normalizedKeyword))
+    : deviceTypeChartData
+
+  const filteredPerformanceChartData = normalizedKeyword
+    ? performanceChartData.filter((item) => item.name.toLowerCase().includes(normalizedKeyword))
+    : performanceChartData
+
   const filteredRankingData = normalizedKeyword
-    ? rankingData.filter((item) =>
+    ? rankingTableData.filter((item) =>
         item.name.toLowerCase().includes(normalizedKeyword) ||
         item.type.toLowerCase().includes(normalizedKeyword) ||
         item.status.toLowerCase().includes(normalizedKeyword)
       )
-    : rankingData
+    : rankingTableData
 
+  // ==================== Loading State ====================
+  if (statsLoading || kpiLoading || rankingsLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex gap-2">
+          <div className="h-10 w-32 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-10 w-24 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+        <CardSkeleton count={4} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ChartSkeleton />
+          <ChartSkeleton />
+        </div>
+        <TableSkeleton rows={5} columns={6} />
+      </div>
+    )
+  }
+
+  // ==================== Error State ====================
+  if (statsError || kpiError || rankingsError) {
+    return (
+      <div className="space-y-4">
+        {statsError && (
+          <ErrorAlert
+            title="统计数据加载失败"
+            message="无法加载统计数据，请检查网络连接或稍后重试"
+            error={statsError}
+            onRetry={refetchStats}
+          />
+        )}
+        {kpiError && (
+          <ErrorAlert
+            title="KPI 数据加载失败"
+            message="无法加载 KPI 指标数据"
+            error={kpiError}
+            variant="warning"
+          />
+        )}
+        {rankingsError && (
+          <ErrorAlert
+            title="排名数据加载失败"
+            message="无法加载设备排名数据"
+            error={rankingsError}
+            variant="warning"
+          />
+        )}
+      </div>
+    )
+  }
+
+  // ==================== Main Render ====================
   return (
     <div className="space-y-6">
+      {/* 筛选面板 */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="space-y-4">
+            {/* 筛选器标题栏 */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Filter className="w-5 h-5 text-gray-600" />
+                <h3 className="text-sm font-medium text-gray-900">数据筛选</h3>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                {showFilters ? (
+                  <>
+                    <ChevronUp className="w-4 h-4 mr-1" />
+                    收起
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4 mr-1" />
+                    展开
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* 筛选器内容 */}
+            {showFilters && (
+              <div className="space-y-4 pt-4 border-t">
+                {/* 日期范围选择 */}
+                <div>
+                  <DateRangePicker
+                    startDate={dateRange.startDate}
+                    endDate={dateRange.endDate}
+                    onStartDateChange={(date) => setDateRange(prev => ({ ...prev, startDate: date }))}
+                    onEndDateChange={(date) => setDateRange(prev => ({ ...prev, endDate: date }))}
+                    label="日期范围"
+                  />
+                  <QuickDateRangeButtons
+                    onRangeSelect={handleQuickDateRange}
+                    className="mt-2"
+                  />
+                </div>
+
+                {/* 设备类型筛选 */}
+                {deviceTypeOptions.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      设备类型
+                    </label>
+                    <MultiSelect
+                      options={deviceTypeOptions}
+                      value={deviceTypes}
+                      onChange={setDeviceTypes}
+                      placeholder="选择设备类型（可多选）"
+                    />
+                  </div>
+                )}
+
+                {/* 位置筛选 */}
+                {locationOptions.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      设备位置
+                    </label>
+                    <MultiSelect
+                      options={locationOptions}
+                      value={locations}
+                      onChange={setLocations}
+                      placeholder="选择设备位置（可多选）"
+                    />
+                  </div>
+                )}
+
+                {/* 筛选操作按钮 */}
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDeviceTypes([])
+                      setLocations([])
+                      setDateRange({
+                        startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                        endDate: new Date().toISOString().split('T')[0]
+                      })
+                    }}
+                  >
+                    重置筛选
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefresh}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-1" />
+                    刷新数据
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 操作按钮 */}
       <div className="flex gap-2">
-        <Button>生成统计报表</Button>
-        <Button variant="outline">导出数据</Button>
+        <Button
+          onClick={handleGenerateReport}
+          disabled={generateReportMutation.isPending}
+        >
+          {generateReportMutation.isPending ? '生成中...' : '生成统计报表'}
+        </Button>
+        <Button variant="outline" onClick={handleExportData}>
+          导出数据
+        </Button>
       </div>
 
-      {/* KPI指标卡片 */}
+      {/* KPI 指标卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {[
-          { title: '设备总数', value: '63', change: '+2', icon: Users, color: 'blue' },
-          { title: '在线率', value: '93.7%', change: '+1.2%', icon: Activity, color: 'green' },
-          { title: '平均评分', value: '87.5', change: '+2.3', icon: Target, color: 'purple' },
-          { title: '故障率', value: '6.3%', change: '-0.5%', icon: BarChart3, color: 'red' }
-        ].map((kpi) => (
+        {kpiCards.map((kpi) => (
           <Card key={kpi.title}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -72,7 +441,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
                     <span className={`text-sm font-medium text-${kpi.color}-600`}>
                       {kpi.change}
                     </span>
-                    <span className="text-sm text-gray-500">vs 上月</span>
+                    <span className="text-sm text-gray-500">vs 上期</span>
                   </div>
                 </div>
                 <div className={`p-3 bg-${kpi.color}-100 rounded-lg`}>
@@ -91,16 +460,23 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
             <CardTitle>设备类型分布</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={filteredDeviceStats}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="online" stackId="a" fill="#10B981" name="在线" />
-                <Bar dataKey="offline" stackId="a" fill="#EF4444" name="离线" />
-              </BarChart>
-            </ResponsiveContainer>
+            {filteredDeviceChartData.length === 0 ? (
+              <div className="h-[300px] flex items-center justify-center text-gray-500">
+                暂无数据
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={filteredDeviceChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="online" stackId="a" fill="#10B981" name="在线" />
+                  <Bar dataKey="offline" stackId="a" fill="#EF4444" name="离线" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -109,23 +485,29 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
             <CardTitle>性能评级分布</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={filteredPerformanceStats}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  dataKey="value"
-                  label={({ name, value }) => `${name}: ${value}`}
-                >
-                  {filteredPerformanceStats.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            {filteredPerformanceChartData.length === 0 ? (
+              <div className="h-[300px] flex items-center justify-center text-gray-500">
+                暂无数据
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={filteredPerformanceChartData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {filteredPerformanceChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -136,40 +518,48 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
           <CardTitle>设备性能排名</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-3">排名</th>
-                  <th className="text-left p-3">设备名称</th>
-                  <th className="text-left p-3">类型</th>
-                  <th className="text-left p-3">可用性</th>
-                  <th className="text-left p-3">性能评分</th>
-                  <th className="text-left p-3">状态</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRankingData.map((item) => (
-                  <tr key={item.rank} className="border-b hover:bg-gray-50">
-                    <td className="p-3 font-medium">#{item.rank}</td>
-                    <td className="p-3">{item.name}</td>
-                    <td className="p-3">{item.type}</td>
-                    <td className="p-3">{item.availability}%</td>
-                    <td className="p-3">{item.score}</td>
-                    <td className="p-3">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        item.status === '优秀' ? 'bg-green-100 text-green-800' :
-                        item.status === '良好' ? 'bg-blue-100 text-blue-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {item.status}
-                      </span>
-                    </td>
+          {filteredRankingData.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">暂无排名数据</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-3">排名</th>
+                    <th className="text-left p-3">设备名称</th>
+                    <th className="text-left p-3">类型</th>
+                    <th className="text-left p-3">可用性</th>
+                    <th className="text-left p-3">性能评分</th>
+                    <th className="text-left p-3">状态</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredRankingData.map((item) => (
+                    <tr key={item.rank} className="border-b hover:bg-gray-50">
+                      <td className="p-3 font-medium">#{item.rank}</td>
+                      <td className="p-3">{item.name}</td>
+                      <td className="p-3">{item.type}</td>
+                      <td className="p-3">{item.availability.toFixed(1)}%</td>
+                      <td className="p-3">{item.score.toFixed(1)}</td>
+                      <td className="p-3">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${
+                            item.status === '优秀'
+                              ? 'bg-green-100 text-green-800'
+                              : item.status === '良好'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}
+                        >
+                          {item.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

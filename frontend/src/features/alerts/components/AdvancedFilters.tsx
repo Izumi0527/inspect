@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, X, Calendar, Filter } from 'lucide-react'
-import { Button } from '@/components/atoms/button'
-import { Input } from '@/components/atoms/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/atoms/select'
-import { Card, CardContent } from '@/components/atoms/card'
+import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Card, CardContent } from '@/components/atoms'
 import { cn } from '@/utils/cn'
 import { AlertSeverity, AlertStatus, AlertCategory } from '../types'
 

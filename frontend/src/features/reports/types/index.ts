@@ -189,12 +189,7 @@ export interface TrendAnalysisData {
     startDate: string
     endDate: string
   }
-  metrics: {
-    availability: TrendMetric
-    performance: TrendMetric
-    errors: TrendMetric
-    capacity: TrendMetric
-  }
+  metrics: TrendMetric[]  // 改为数组类型，支持动态指标
   predictions: PredictionData[]
   alerts: TrendAlertData[]
 }
@@ -202,6 +197,9 @@ export interface TrendAnalysisData {
 // 趋势指标
 export interface TrendMetric {
   name: string
+  metricName?: string  // 后端返回的技术名称（如 availability）
+  displayName?: string  // 后端返回的显示名称（如 "可用性"）
+  unit?: string  // 后端返回的单位（如 "%", "ms"）
   current: number
   previous: number
   change: number

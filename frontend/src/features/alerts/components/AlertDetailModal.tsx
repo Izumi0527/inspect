@@ -14,9 +14,7 @@ import {
   Trash2,
   XCircle
 } from 'lucide-react'
-import { SimpleModal } from '@/components/atoms/modal'
-import { Badge } from '@/components/atoms/badge'
-import { Button } from '@/components/atoms/button'
+import { SimpleModal, Badge, Button } from '@/components/atoms'
 import { cn } from '@/utils/cn'
 import { Alert, AlertSeverity, AlertStatus } from '../types'
 import { useAlertStyles } from '../hooks/useAlerts'

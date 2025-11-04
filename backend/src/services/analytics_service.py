@@ -177,29 +177,73 @@ class AnalyticsService:
         """生成趋势分析报告"""
         try:
             start_time, end_time = self._get_time_range(time_range, start_date, end_date)
-            
+
             # 获取指标数据
             metrics_data = await self._get_metrics_data(
                 metrics, start_time, end_time, device_ids
             )
-            
-            # 趋势分析
-            trend_analysis = {}
+
+            # 异常检测（提前执行，以便统计每个指标的异常数量）
+            anomalies = self._detect_anomalies(metrics_data)
+
+            # 构建每个指标的异常计数映射
+            anomaly_counts = {}
+            for anomaly in anomalies:
+                metric_name = anomaly.get("metric")
+                if metric_name:
+                    anomaly_counts[metric_name] = anomaly_counts.get(metric_name, 0) + 1
+
+            # 构建完整的指标对象数组
+            metrics_list = []
             for metric in metrics:
                 if metric in metrics_data:
-                    trend_analysis[metric] = self._analyze_metric_trend(
-                        metrics_data[metric], metric
-                    )
-            
-            # 异常检测
-            anomalies = self._detect_anomalies(metrics_data)
-            
+                    metric_data = metrics_data[metric]
+
+                    # 趋势分析
+                    trend_result = self._analyze_metric_trend(metric_data, metric)
+
+                    # 提取时序数据点
+                    data_points = metric_data.get("values", [])
+
+                    # 计算当前值（最新数据点的值）
+                    current_value = data_points[-1]["value"] if data_points else 0.0
+
+                    # 构建前端期望的指标对象
+                    metric_obj = {
+                        "metric_name": metric,
+                        "display_name": self._get_metric_display_name(metric),
+                        "unit": self._get_metric_unit(metric),
+                        "data_points": data_points,  # 保留完整的时序数据
+                        "trend_direction": trend_result.get("trend", "stable"),
+                        "slope": trend_result.get("slope", 0),
+                        "change_rate": round(trend_result.get("slope", 0) * 100, 2),  # 转换为百分比
+                        "current_value": round(current_value, 2),
+                        "average_value": trend_result.get("statistics", {}).get("mean", 0),
+                        "min_value": trend_result.get("statistics", {}).get("min", 0),
+                        "max_value": trend_result.get("statistics", {}).get("max", 0),
+                        "anomaly_count": anomaly_counts.get(metric, 0)
+                    }
+
+                    metrics_list.append(metric_obj)
+
             # 相关性分析
             correlations = self._calculate_correlations(metrics_data)
-            
+
             # 预测分析
             forecasts = self._generate_forecasts(metrics_data, days_ahead=7)
-            
+
+            # 转换预测数据格式以匹配前端期望
+            predictions = []
+            for metric_name, forecast_data in forecasts.items():
+                if forecast_data:
+                    predictions.append({
+                        "metric": metric_name,
+                        "forecasted_values": forecast_data.get("forecast", []),
+                        "confidence_level": 0.95,
+                        "prediction_period": "week",
+                        "method": "moving_average"
+                    })
+
             report = {
                 "report_type": ReportType.TREND_ANALYSIS,
                 "time_range": {
@@ -207,26 +251,29 @@ class AnalyticsService:
                     "end": end_time.isoformat(),
                     "range_type": time_range
                 },
-                "metrics": metrics,
-                "trend_analysis": trend_analysis,
+                "metrics": metrics_list,  # 返回数组格式，前端期望数组
                 "anomalies": anomalies,
                 "correlations": correlations,
-                "forecasts": forecasts,
+                "predictions": predictions,  # 匹配前端字段名
                 "summary": {
-                    "total_data_points": sum([len(data["values"]) for data in metrics_data.values()]),
-                    "analyzed_metrics": len(metrics),
+                    "total_metrics": len(metrics_list),
+                    "time_range_days": (end_time - start_time).days,
+                    "total_data_points": sum([len(m["data_points"]) for m in metrics_list]),
                     "anomalies_detected": len(anomalies),
-                    "strongest_correlation": max(correlations.values()) if correlations else 0
+                    "improving_metrics": sum(1 for m in metrics_list if m["trend_direction"] == "increasing"),
+                    "degrading_metrics": sum(1 for m in metrics_list if m["trend_direction"] == "decreasing"),
+                    "stable_metrics": sum(1 for m in metrics_list if m["trend_direction"] == "stable"),
+                    "alerts_generated": 0  # 可根据实际需求添加告警逻辑
                 },
                 "generated_at": datetime.now().isoformat()
             }
-            
+
             logger.info("Trend analysis report generated",
-                       metrics_count=len(metrics),
+                       metrics_count=len(metrics_list),
                        anomalies_count=len(anomalies))
-            
+
             return report
-            
+
         except Exception as e:
             logger.error("Failed to generate trend analysis report", error=str(e))
             raise
@@ -1011,9 +1058,28 @@ class AnalyticsService:
             "memory_usage": "%",
             "response_time": "ms",
             "throughput": "Mbps",
-            "error_rate": "%"
+            "error_rate": "%",
+            "availability": "%",
+            "performance": "分",
+            "errors": "次",
+            "capacity": "%"
         }
         return units.get(metric, "")
+
+    def _get_metric_display_name(self, metric: str) -> str:
+        """获取指标显示名称（中文）"""
+        display_names = {
+            "cpu_usage": "CPU使用率",
+            "memory_usage": "内存使用率",
+            "response_time": "响应时间",
+            "throughput": "吞吐量",
+            "error_rate": "错误率",
+            "availability": "可用性",
+            "performance": "性能评分",
+            "errors": "错误数量",
+            "capacity": "容量使用率"
+        }
+        return display_names.get(metric, metric)
     
     def _analyze_metric_trend(self, metric_data: Dict, metric_name: str) -> Dict[str, Any]:
         """分析单个指标的趋势"""

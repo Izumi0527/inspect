@@ -216,18 +216,18 @@ export const useAnomalyDetection = () => {
 
 // 统计报表Hooks
 export const useStatistics = (params: {
-  dateRange: {
-    startDate: string
-    endDate: string
-  }
-  devices?: string[]
-  groupBy?: 'type' | 'group' | 'location'
-  includeComparisons: boolean
+  startDate: string                    // ✅ 扁平化日期参数
+  endDate: string
+  deviceTypes?: string[]               // ✅ 改名为device_types对应
+  locations?: string[]                 // ✅ 新增位置筛选
+  deviceGroups?: string[]              // ✅ 新增设备组筛选
+  groupBy?: 'hour' | 'day' | 'week' | 'month'  // ✅ 时间粒度而非分组维度
+  includeTrends?: boolean              // ✅ 改名
 }) => {
   return useQuery({
     queryKey: ['reports', 'statistics', 'data', params],
     queryFn: () => statisticsApi.getStatistics(params),
-    enabled: !!(params.dateRange.startDate && params.dateRange.endDate),
+    enabled: !!(params.startDate && params.endDate),
     staleTime: 5 * 60 * 1000,
   })
 }
@@ -248,33 +248,31 @@ export const useGenerateStatisticsReport = () => {
 }
 
 export const useKPIData = (params: {
-  dateRange: {
-    startDate: string
-    endDate: string
-  }
-  kpis: string[]
-  devices?: string[]
+  startDate: string                    // ✅ 扁平化日期参数
+  endDate: string
+  deviceTypes?: string[]               // ✅ 改名为device_types对应
+  comparisonPeriod?: 'previous_period' | 'previous_year'  // ✅ 对比周期
 }) => {
   return useQuery({
     queryKey: ['reports', 'statistics', 'kpi', params],
     queryFn: () => statisticsApi.getKPIData(params),
-    enabled: !!(params.dateRange.startDate && params.dateRange.endDate && params.kpis.length > 0),
+    enabled: !!(params.startDate && params.endDate),
     staleTime: 5 * 60 * 1000,
   })
 }
 
 export const useRankings = (params: {
-  metric: 'availability' | 'performance' | 'compliance' | 'stability'
-  dateRange: {
-    startDate: string
-    endDate: string
-  }
-  limit?: number
+  startDate: string                    // ✅ 扁平化日期参数
+  endDate: string
+  rankingType?: 'performance' | 'reliability' | 'efficiency'  // ✅ 改名为ranking_type
+  deviceTypes?: string[]               // ✅ 设备类型筛选
+  topN?: number                        // ✅ 改名为top_n
+  includeBottom?: boolean              // ✅ 是否包含后N名
 }) => {
   return useQuery({
     queryKey: ['reports', 'statistics', 'rankings', params],
     queryFn: () => statisticsApi.getRankings(params),
-    enabled: !!(params.dateRange.startDate && params.dateRange.endDate),
+    enabled: !!(params.startDate && params.endDate),
     staleTime: 10 * 60 * 1000,
   })
 }

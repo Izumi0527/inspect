@@ -31,10 +31,10 @@ import structlog
 logger = structlog.get_logger()
 
 class ReportExporter:
-    \"\"\"报表导出服务\"\"\"
+    """报表导出服务"""
     
     def __init__(self):
-        self.temp_dir = Path(tempfile.gettempdir()) / \"inspect_reports\"
+        self.temp_dir = Path(tempfile.gettempdir()) / "inspect_reports"
         self.temp_dir.mkdir(exist_ok=True)
         
         # 报表模板配置
@@ -52,10 +52,10 @@ class ReportExporter:
         title: str = None,
         subtitle: str = None
     ) -> str:
-        \"\"\"生成PDF报表\"\"\"
+        """生成PDF报表"""
         try:
             report_id = str(uuid.uuid4())
-            filename = f\"{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{report_id[:8]}.pdf\"
+            filename = f"{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{report_id[:8]}.pdf"
             filepath = self.temp_dir / filename
             
             # 创建PDF文档
@@ -105,7 +105,7 @@ class ReportExporter:
                 textColor=HexColor('#6b7280'),
                 alignment=2  # 右对齐
             )
-            story.append(Paragraph(f\"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\", time_style))
+            story.append(Paragraph(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", time_style))
             story.append(Spacer(1, 20))
             
             # 根据报表类型生成内容
@@ -124,7 +124,7 @@ class ReportExporter:
             # 生成PDF
             doc.build(story)
             
-            logger.info(\"PDF report generated\", 
+            logger.info("PDF report generated", 
                        report_type=report_type,
                        filename=filename,
                        filepath=str(filepath))
@@ -132,7 +132,7 @@ class ReportExporter:
             return str(filepath)
             
         except Exception as e:
-            logger.error(\"Failed to generate PDF report\",
+            logger.error("Failed to generate PDF report",
                         report_type=report_type,
                         error=str(e))
             raise e
@@ -144,10 +144,10 @@ class ReportExporter:
         title: str = None,
         subtitle: str = None
     ) -> str:
-        \"\"\"生成Word报表\"\"\"
+        """生成Word报表"""
         try:
             report_id = str(uuid.uuid4())
-            filename = f\"{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{report_id[:8]}.docx\"
+            filename = f"{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{report_id[:8]}.docx"
             filepath = self.temp_dir / filename
             
             # 创建Word文档
@@ -165,11 +165,11 @@ class ReportExporter:
             
             # 添加生成信息
             info_paragraph = doc.add_paragraph()
-            info_paragraph.add_run(f\"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\")
+            info_paragraph.add_run(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             info_paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
             
             # 添加分隔线
-            doc.add_paragraph(\"_\" * 50)
+            doc.add_paragraph("_" * 50)
             
             # 根据报表类型生成内容
             if report_type == 'device_summary':
@@ -187,7 +187,7 @@ class ReportExporter:
             # 保存文档
             doc.save(str(filepath))
             
-            logger.info(\"Word report generated\",
+            logger.info("Word report generated",
                        report_type=report_type, 
                        filename=filename,
                        filepath=str(filepath))
@@ -195,24 +195,24 @@ class ReportExporter:
             return str(filepath)
             
         except Exception as e:
-            logger.error(\"Failed to generate Word report\",
+            logger.error("Failed to generate Word report",
                         report_type=report_type,
                         error=str(e))
             raise e
     
     def _build_device_summary_pdf(self, data: Dict[str, Any], styles) -> List:
-        \"\"\"构建设备汇总PDF内容\"\"\"
+        """构建设备汇总PDF内容"""
         story = []
         
         # 概览统计
-        story.append(Paragraph(\"设备概览统计\", styles['Heading2']))
+        story.append(Paragraph("设备概览统计", styles['Heading2']))
         
         summary_data = [
             ['统计项', '数值', '占比'],
             ['设备总数', str(data.get('total', 0)), '100%'],
-            ['在线设备', str(data.get('online', 0)), f\"{data.get('online', 0) / max(data.get('total', 1), 1) * 100:.1f}%\"],
-            ['离线设备', str(data.get('offline', 0)), f\"{data.get('offline', 0) / max(data.get('total', 1), 1) * 100:.1f}%\"],
-            ['告警设备', str(data.get('warning', 0)), f\"{data.get('warning', 0) / max(data.get('total', 1), 1) * 100:.1f}%\"]
+            ['在线设备', str(data.get('online', 0)), f"{data.get('online', 0) / max(data.get('total', 1), 1) * 100:.1f}%"],
+            ['离线设备', str(data.get('offline', 0)), f"{data.get('offline', 0) / max(data.get('total', 1), 1) * 100:.1f}%"],
+            ['告警设备', str(data.get('warning', 0)), f"{data.get('warning', 0) / max(data.get('total', 1), 1) * 100:.1f}%"]
         ]
         
         summary_table = Table(summary_data, colWidths=[2*inch, 1*inch, 1*inch])
@@ -232,7 +232,7 @@ class ReportExporter:
         
         # 设备列表
         if 'devices' in data and data['devices']:
-            story.append(Paragraph(\"设备详情列表\", styles['Heading2']))
+            story.append(Paragraph("设备详情列表", styles['Heading2']))
             
             device_data = [['设备名称', 'IP地址', '设备类型', '状态', '位置']]
             for device in data['devices'][:20]:  # 限制显示20个设备
@@ -261,7 +261,7 @@ class ReportExporter:
         return story
     
     def _build_device_summary_word(self, doc: Document, data: Dict[str, Any]):
-        \"\"\"构建设备汇总Word内容\"\"\"
+        """构建设备汇总Word内容"""
         # 概览统计
         doc.add_heading('设备概览统计', level=1)
         
@@ -279,9 +279,9 @@ class ReportExporter:
         # 数据行
         rows_data = [
             ('设备总数', str(data.get('total', 0)), '100%'),
-            ('在线设备', str(data.get('online', 0)), f\"{data.get('online', 0) / max(data.get('total', 1), 1) * 100:.1f}%\"),
-            ('离线设备', str(data.get('offline', 0)), f\"{data.get('offline', 0) / max(data.get('total', 1), 1) * 100:.1f}%\"),
-            ('告警设备', str(data.get('warning', 0)), f\"{data.get('warning', 0) / max(data.get('total', 1), 1) * 100:.1f}%\")
+            ('在线设备', str(data.get('online', 0)), f"{data.get('online', 0) / max(data.get('total', 1), 1) * 100:.1f}%"),
+            ('离线设备', str(data.get('offline', 0)), f"{data.get('offline', 0) / max(data.get('total', 1), 1) * 100:.1f}%"),
+            ('告警设备', str(data.get('warning', 0)), f"{data.get('warning', 0) / max(data.get('total', 1), 1) * 100:.1f}%")
         ]
         
         for i, row_data in enumerate(rows_data, 1):
@@ -317,73 +317,73 @@ class ReportExporter:
                 row_cells[4].text = device.get('location', '')
     
     def _build_generic_pdf(self, data: Dict[str, Any], styles) -> List:
-        \"\"\"构建通用PDF内容\"\"\"
+        """构建通用PDF内容"""
         story = []
         
         for key, value in data.items():
-            story.append(Paragraph(f\"<b>{key}:</b> {str(value)}\", styles['Normal']))
+            story.append(Paragraph(f"<b>{key}:</b> {str(value)}", styles['Normal']))
             story.append(Spacer(1, 12))
         
         return story
     
     def _build_generic_word(self, doc: Document, data: Dict[str, Any]):
-        \"\"\"构建通用Word内容\"\"\"
+        """构建通用Word内容"""
         for key, value in data.items():
             p = doc.add_paragraph()
-            p.add_run(f\"{key}: \").bold = True
+            p.add_run(f"{key}: ").bold = True
             p.add_run(str(value))
     
     def _build_inspection_report_pdf(self, data: Dict[str, Any], styles) -> List:
-        \"\"\"构建巡检报告PDF内容\"\"\"
+        """构建巡检报告PDF内容"""
         # TODO: 实现巡检报告PDF格式
         return self._build_generic_pdf(data, styles)
     
     def _build_inspection_report_word(self, doc: Document, data: Dict[str, Any]):
-        \"\"\"构建巡检报告Word内容\"\"\"
+        """构建巡检报告Word内容"""
         # TODO: 实现巡检报告Word格式
         self._build_generic_word(doc, data)
     
     def _build_alert_report_pdf(self, data: Dict[str, Any], styles) -> List:
-        \"\"\"构建告警报告PDF内容\"\"\"
+        """构建告警报告PDF内容"""
         # TODO: 实现告警报告PDF格式
         return self._build_generic_pdf(data, styles)
     
     def _build_alert_report_word(self, doc: Document, data: Dict[str, Any]):
-        \"\"\"构建告警报告Word内容\"\"\"
+        """构建告警报告Word内容"""
         # TODO: 实现告警报告Word格式
         self._build_generic_word(doc, data)
     
     def _build_performance_report_pdf(self, data: Dict[str, Any], styles) -> List:
-        \"\"\"构建性能报告PDF内容\"\"\"
+        """构建性能报告PDF内容"""
         # TODO: 实现性能报告PDF格式
         return self._build_generic_pdf(data, styles)
     
     def _build_performance_report_word(self, doc: Document, data: Dict[str, Any]):
-        \"\"\"构建性能报告Word内容\"\"\"
+        """构建性能报告Word内容"""
         # TODO: 实现性能报告Word格式
         self._build_generic_word(doc, data)
     
     async def cleanup_old_reports(self, hours: int = 24):
-        \"\"\"清理过期的临时报表文件\"\"\"
+        """清理过期的临时报表文件"""
         try:
             cutoff_time = datetime.now() - timedelta(hours=hours)
             cleaned_count = 0
             
-            for file_path in self.temp_dir.glob(\"*\"):
+            for file_path in self.temp_dir.glob("*"):
                 if file_path.is_file():
                     file_mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
                     if file_mtime < cutoff_time:
                         file_path.unlink()
                         cleaned_count += 1
             
-            logger.info(\"Old reports cleaned up\",
+            logger.info("Old reports cleaned up",
                        cleaned_count=cleaned_count,
                        hours=hours)
             
             return cleaned_count
             
         except Exception as e:
-            logger.error(\"Failed to cleanup old reports\",
+            logger.error("Failed to cleanup old reports",
                         error=str(e))
             return 0
 

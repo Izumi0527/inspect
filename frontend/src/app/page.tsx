@@ -1,5 +1,5 @@
-import { Button } from '@/components/atoms/button'
-import { Card } from '@/components/atoms/card'
+import { Button } from '@/components/atoms'
+import { Card } from '@/components/atoms'
 import { Monitor, Network, Shield, TrendingUp, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 

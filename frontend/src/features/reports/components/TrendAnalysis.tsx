@@ -76,7 +76,9 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
         if (!dataMap.has(date)) {
           dataMap.set(date, { date })
         }
-        dataMap.get(date)[metricData.metricName] = point.value
+        // 使用 metricName 或 name 作为键（兼容性处理）
+        const key = metricData.metricName || metricData.name
+        dataMap.get(date)[key] = point.value
       })
     })
 

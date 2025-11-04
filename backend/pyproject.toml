@@ -71,7 +71,9 @@ dependencies = [
     "openpyxl>=3.1.0",        # Excel文件支持
     "xlsxwriter>=3.0.0",      # Excel写入支持
     "reportlab>=4.0.0",       # PDF报表生成
+    "python-docx>=1.1.0",     # Word文档生成
     "matplotlib>=3.7.0",      # 图表绘制库
+    "pillow>=10.0.0",         # 图像处理（用于报表中的图表）
     # 系统监控
     "psutil>=5.9.0",          # 系统性能监控库
 ]
