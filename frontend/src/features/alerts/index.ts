@@ -4,14 +4,15 @@ export { AlertStatsGrid } from './components/AlertStatsGrid'
 export { AlertFiltersBar } from './components/AlertFiltersBar'
 export { AlertList } from './components/AlertList'
 export { AlertListItem } from './components/AlertListItem'
+export { AlertDetailModal } from './components/AlertDetailModal'
+export { AdvancedFilters } from './components/AdvancedFilters'
 
-export { 
-  useAlerts, 
-  useAlertStats, 
-  useAlertFilters, 
-  useFilteredAlerts,
+export {
+  useAlerts,
+  useAlertStats,
+  useAlertFilters,
   useAlertSelection,
-  useAlertStyles 
+  useAlertStyles
 } from './hooks/useAlerts'
 
 export { 

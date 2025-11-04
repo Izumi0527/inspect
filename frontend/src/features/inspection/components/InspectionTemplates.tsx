@@ -1,16 +1,19 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { 
-  Plus, 
-  Edit, 
-  Copy, 
-  Trash2, 
-  Eye, 
-  FileText, 
-  Shield, 
-  Monitor, 
+import {
+  Plus,
+  Edit,
+  Copy,
+  Trash2,
+  Eye,
+  FileText,
+  Shield,
+  Monitor,
   Settings,
-  AlertCircle
+  AlertCircle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react'
 import {
   Card,
@@ -21,19 +24,33 @@ import {
   Column
 } from '@/components/atoms'
 import type { BadgeProps } from '@/components/atoms'
-import { 
-  useInspectionTemplates, 
-  useCloneTemplate 
+import {
+  useInspectionTemplates,
+  useCloneTemplate,
+  useDeleteTemplate
 } from '../hooks/useInspection'
 import { InspectionTemplate } from '../types'
+import { TemplateModal } from './TemplateModal'
+import { TemplateDetailModal } from './TemplateDetailModal'
+import { TemplateImportModal } from './TemplateImportModal'
 
 interface Props {
   searchText: string
 }
 
 export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
-  const { data: templatesData, isLoading } = useInspectionTemplates()
+  const { data: templatesData, isLoading, refetch } = useInspectionTemplates()
   const cloneTemplate = useCloneTemplate()
+  const deleteTemplate = useDeleteTemplate()
+
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<InspectionTemplate | null>(null)
+  const [viewingTemplate, setViewingTemplate] = useState<InspectionTemplate | null>(null)
+  const [deleteConfirmTemplate, setDeleteConfirmTemplate] = useState<InspectionTemplate | null>(null)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [sortField, setSortField] = useState<'name' | 'category' | 'updatedAt'>('updatedAt')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+  const [selectedCategory, setSelectedCategory] = useState<InspectionTemplate['category'] | 'all'>('all')
 
   const templates: InspectionTemplate[] = templatesData?.templates ?? []
 
@@ -42,12 +59,56 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
   const filteredTemplates = templates.filter(template => {
     const name = template.name?.toLowerCase() ?? ''
     const description = template.description?.toLowerCase() ?? ''
-    return (
-      !normalizedKeyword ||
+
+    // 搜索关键词筛选
+    const matchesSearch = !normalizedKeyword ||
       name.includes(normalizedKeyword) ||
       description.includes(normalizedKeyword)
-    )
+
+    // 类别筛选
+    const matchesCategory = selectedCategory === 'all' || template.category === selectedCategory
+
+    return matchesSearch && matchesCategory
   })
+
+  // 排序模板列表
+  const sortedTemplates = [...filteredTemplates].sort((a, b) => {
+    let compareResult = 0
+
+    switch (sortField) {
+      case 'name':
+        compareResult = a.name.localeCompare(b.name, 'zh-CN')
+        break
+      case 'category':
+        compareResult = a.category.localeCompare(b.category)
+        break
+      case 'updatedAt':
+        compareResult = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
+        break
+    }
+
+    return sortDirection === 'asc' ? compareResult : -compareResult
+  })
+
+  const handleSort = (field: 'name' | 'category' | 'updatedAt') => {
+    if (sortField === field) {
+      // 切换排序方向
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // 切换排序字段,默认降序
+      setSortField(field)
+      setSortDirection('desc')
+    }
+  }
+
+  const getSortIcon = (field: 'name' | 'category' | 'updatedAt') => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-4 h-4 text-gray-400" />
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="w-4 h-4 text-blue-600" />
+      : <ArrowDown className="w-4 h-4 text-blue-600" />
+  }
 
   const handleCloneTemplate = async (template: InspectionTemplate) => {
     try {
@@ -57,6 +118,83 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
       })
     } catch (error) {
       console.error('Clone template failed:', error)
+    }
+  }
+
+  const handleCreateTemplate = () => {
+    setEditingTemplate(null)
+    setIsModalOpen(true)
+  }
+
+  const handleEditTemplate = (template: InspectionTemplate) => {
+    setEditingTemplate(template)
+    setIsModalOpen(true)
+  }
+
+  const handleModalClose = () => {
+    setIsModalOpen(false)
+    setEditingTemplate(null)
+  }
+
+  const handleModalSuccess = () => {
+    handleModalClose()
+    refetch()
+  }
+
+  const handleDeleteTemplate = (template: InspectionTemplate) => {
+    setDeleteConfirmTemplate(template)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmTemplate) return
+
+    try {
+      await deleteTemplate.mutateAsync(deleteConfirmTemplate.id)
+      setDeleteConfirmTemplate(null)
+      refetch()
+    } catch (error) {
+      console.error('Delete template failed:', error)
+    }
+  }
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmTemplate(null)
+  }
+
+  const handleViewTemplate = (template: InspectionTemplate) => {
+    setViewingTemplate(template)
+  }
+
+  const handleCloseDetailModal = () => {
+    setViewingTemplate(null)
+  }
+
+  const handleEditFromDetail = () => {
+    if (viewingTemplate) {
+      setEditingTemplate(viewingTemplate)
+      setViewingTemplate(null)
+      setIsModalOpen(true)
+    }
+  }
+
+  const handleOpenImportModal = () => {
+    setIsImportModalOpen(true)
+  }
+
+  const handleCloseImportModal = () => {
+    setIsImportModalOpen(false)
+  }
+
+  const handleImportSuccess = () => {
+    refetch()
+  }
+
+  const handleCategoryClick = (category: InspectionTemplate['category'] | 'all') => {
+    // 如果点击当前选中的类别,则重置为"全部"
+    if (selectedCategory === category) {
+      setSelectedCategory('all')
+    } else {
+      setSelectedCategory(category)
     }
   }
 
@@ -170,7 +308,7 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => console.log('查看模板详情:', template.id)}
+            onClick={() => handleViewTemplate(template)}
             title="查看详情"
           >
             <Eye className="w-4 h-4" />
@@ -189,6 +327,7 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
               <Button
                 size="sm"
                 variant="ghost"
+                onClick={() => handleEditTemplate(template)}
                 title="编辑"
               >
                 <Edit className="w-4 h-4" />
@@ -196,7 +335,7 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => console.log('删除模板', template.id)}
+                onClick={() => handleDeleteTemplate(template)}
                 title="删除"
               >
                 <Trash2 className="w-4 h-4 text-red-500" />
@@ -237,11 +376,11 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
           <Badge variant="secondary">{filteredTemplates.length} 项</Badge>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleOpenImportModal}>
             <Copy className="w-4 h-4 mr-2" />
             导入模板
           </Button>
-          <Button>
+          <Button onClick={handleCreateTemplate}>
             <Plus className="w-4 h-4 mr-2" />
             创建模板
           </Button>
@@ -251,36 +390,84 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
       {/* 快速统计 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: '网络监控', count: templates.filter(t => t.category === 'network').length, icon: Monitor, color: 'blue' },
-          { label: '系统检查', count: templates.filter(t => t.category === 'system').length, icon: Settings, color: 'green' },
-          { label: '安全检测', count: templates.filter(t => t.category === 'security').length, icon: Shield, color: 'red' },
-          { label: '自定义', count: templates.filter(t => t.category === 'custom').length, icon: FileText, color: 'purple' }
-        ].map((item) => (
-          <Card key={item.label}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg bg-${item.color}-100`}>
-                  <item.icon className={`w-5 h-5 text-${item.color}-600`} />
+          { label: '网络监控', count: templates.filter(t => t.category === 'network').length, icon: Monitor, color: 'blue', category: 'network' as const },
+          { label: '系统检查', count: templates.filter(t => t.category === 'system').length, icon: Settings, color: 'green', category: 'system' as const },
+          { label: '安全检测', count: templates.filter(t => t.category === 'security').length, icon: Shield, color: 'red', category: 'security' as const },
+          { label: '自定义', count: templates.filter(t => t.category === 'custom').length, icon: FileText, color: 'purple', category: 'custom' as const }
+        ].map((item) => {
+          const isSelected = selectedCategory === item.category
+          return (
+            <Card
+              key={item.label}
+              className={`cursor-pointer transition-all hover:shadow-md ${
+                isSelected ? 'ring-2 ring-blue-500 shadow-md' : ''
+              }`}
+              onClick={() => handleCategoryClick(item.category)}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg bg-${item.color}-100`}>
+                    <item.icon className={`w-5 h-5 text-${item.color}-600`} />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-gray-900">{item.count}</div>
+                    <div className="text-sm text-gray-600">{item.label}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-2xl font-bold text-gray-900">{item.count}</div>
-                  <div className="text-sm text-gray-600">{item.label}</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                {isSelected && (
+                  <div className="mt-2 text-xs text-blue-600 font-medium">
+                    ✓ 已选中
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      {/* 排序选项 */}
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-gray-600">排序:</span>
+        <div className="flex gap-2">
+          <Button
+            variant={sortField === 'name' ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => handleSort('name')}
+            className="flex items-center gap-1"
+          >
+            模板名称
+            {getSortIcon('name')}
+          </Button>
+          <Button
+            variant={sortField === 'category' ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => handleSort('category')}
+            className="flex items-center gap-1"
+          >
+            类别
+            {getSortIcon('category')}
+          </Button>
+          <Button
+            variant={sortField === 'updatedAt' ? 'primary' : 'outline'}
+            size="sm"
+            onClick={() => handleSort('updatedAt')}
+            className="flex items-center gap-1"
+          >
+            更新时间
+            {getSortIcon('updatedAt')}
+          </Button>
+        </div>
       </div>
 
       {/* 模板列表 */}
-      {filteredTemplates.length > 0 ? (
+      {sortedTemplates.length > 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
         >
           <Table
-            data={filteredTemplates}
+            data={sortedTemplates}
             columns={columns}
             className="bg-white rounded-lg shadow-sm"
           />
@@ -297,7 +484,7 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
                 </p>
               </div>
               {!searchText && (
-                <Button className="mt-2">
+                <Button className="mt-2" onClick={handleCreateTemplate}>
                   <Plus className="w-4 h-4 mr-2" />
                   创建模板
                 </Button>
@@ -307,6 +494,84 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
         </Card>
       )}
 
+      {/* 模板创建/编辑 Modal */}
+      {isModalOpen && (
+        <TemplateModal
+          template={editingTemplate}
+          onClose={handleModalClose}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+
+      {/* 删除确认对话框 */}
+      {deleteConfirmTemplate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-xl shadow-xl max-w-md w-full p-6"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">确认删除</h3>
+                <p className="text-sm text-gray-500">此操作无法撤销</p>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-gray-700">
+                确定要删除巡检模板 <span className="font-semibold">"{deleteConfirmTemplate.name}"</span> 吗？
+              </p>
+              {deleteConfirmTemplate.isBuiltIn && (
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    ⚠️ 这是一个内置模板，删除后可能影响系统功能
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={handleCancelDelete}
+                disabled={deleteTemplate.isPending}
+              >
+                取消
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmDelete}
+                disabled={deleteTemplate.isPending}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deleteTemplate.isPending ? '删除中...' : '确认删除'}
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* 模板详情查看 Modal */}
+      {viewingTemplate && (
+        <TemplateDetailModal
+          template={viewingTemplate}
+          onClose={handleCloseDetailModal}
+          onEdit={handleEditFromDetail}
+        />
+      )}
+
+      {/* 模板导入 Modal */}
+      {isImportModalOpen && (
+        <TemplateImportModal
+          onClose={handleCloseImportModal}
+          onSuccess={handleImportSuccess}
+        />
+      )}
     </div>
   )
 }

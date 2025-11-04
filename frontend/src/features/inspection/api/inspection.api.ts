@@ -171,9 +171,14 @@ function transformTemplateData(apiData: unknown): InspectionTemplate {
     ? data.deviceTypes.filter((item): item is string => typeof item === 'string')
     : toStringArray(data['device_types'])
   const checkItems = toCheckItemArray(data.checkItems ?? data['check_items'])
+  // 修正: isBuiltIn 对应后端的 is_default
   const isBuiltIn = typeof data.isBuiltIn === 'boolean'
     ? data.isBuiltIn
-    : data['is_built_in'] !== false
+    : Boolean(data['is_default'])
+  // 新增: isActive 对应后端的 is_active
+  const isActive = typeof data.isActive === 'boolean'
+    ? data.isActive
+    : Boolean(data['is_active'] ?? true)
 
   return {
     id: toString(data.id),
@@ -183,6 +188,7 @@ function transformTemplateData(apiData: unknown): InspectionTemplate {
     deviceTypes,
     checkItems,
     isBuiltIn,
+    isActive,
     createdAt: toString(data.createdAt ?? data['created_at']),
     updatedAt: toString(data.updatedAt ?? data['updated_at'] ?? data['created_at']),
   }
@@ -313,10 +319,22 @@ export async function fetchInspectionTemplates(params?: {
     const searchParams = new URLSearchParams()
 
     if (params) {
-      if (params.page) searchParams.append('page', params.page.toString())
-      if (params.pageSize) searchParams.append('page_size', params.pageSize.toString())
-      if (params.category) searchParams.append('category', params.category)
-      if (params.deviceTypes) searchParams.append('device_types', params.deviceTypes.join(','))
+      // 修正: 将 page/pageSize 转换为 skip/limit
+      if (params.page && params.pageSize) {
+        const skip = (params.page - 1) * params.pageSize
+        searchParams.append('skip', skip.toString())
+        searchParams.append('limit', params.pageSize.toString())
+      } else if (params.pageSize) {
+        searchParams.append('limit', params.pageSize.toString())
+      }
+
+      // 注意: category 参数后端不支持，需要在客户端过滤
+      // 暂时保留参数定义，在返回后进行客户端过滤
+
+      // 修正: deviceTypes 改为单个 device_type（后端只支持单个设备类型过滤）
+      if (params.deviceTypes && params.deviceTypes.length > 0) {
+        searchParams.append('device_type', params.deviceTypes[0])
+      }
     }
 
     if (searchParams.toString()) {
@@ -330,9 +348,15 @@ export async function fetchInspectionTemplates(params?: {
     }
 
     const data = toRecord(response.data)
+    let templates = toRecordArray(data.templates ?? data['templates']).map(transformTemplateData)
+
+    // 客户端过滤 category（后端不支持该参数）
+    if (params?.category) {
+      templates = templates.filter(template => template.category === params.category)
+    }
 
     return {
-      templates: toRecordArray(data.templates ?? data['templates']).map(transformTemplateData),
+      templates,
       total: toNumber(data.total),
       pages: toNumber(data.pages),
     }
@@ -413,17 +437,30 @@ export async function fetchInspectionTasks(params?: {
   endDate?: string
 }): Promise<{ tasks: InspectionTask[]; total: number; pages: number }> {
   try {
-    let endpoint = '/inspection/tasks'
+    // 修复：复用 /inspection/ 端点，因为后端暂未实现独立的 /tasks 端点
+    // TODO: 未来可能需要独立的 tasks 端点来区分任务和执行记录的业务逻辑
+    let endpoint = '/inspection/'
     const searchParams = new URLSearchParams()
 
     if (params) {
-      if (params.page) searchParams.append('page', params.page.toString())
-      if (params.pageSize) searchParams.append('page_size', params.pageSize.toString())
-      if (params.status) searchParams.append('status', params.status.join(','))
-      if (params.deviceIds) searchParams.append('device_ids', params.deviceIds.join(','))
-      if (params.templateId) searchParams.append('template_id', params.templateId.toString())
-      if (params.startDate) searchParams.append('start_date', params.startDate)
-      if (params.endDate) searchParams.append('end_date', params.endDate)
+      // 后端使用 skip/limit 而不是 page/page_size
+      if (params.page && params.pageSize) {
+        searchParams.append('skip', String((params.page - 1) * params.pageSize))
+      }
+      if (params.pageSize) searchParams.append('limit', params.pageSize.toString())
+
+      // 后端只支持单个 status，取第一个
+      if (params.status && params.status.length > 0) {
+        searchParams.append('status', params.status[0])
+      }
+
+      // 后端使用 device_id（单个）而不是 device_ids（数组）
+      if (params.deviceIds && params.deviceIds.length > 0) {
+        searchParams.append('device_id', params.deviceIds[0].toString())
+      }
+
+      // 注意：后端不支持 templateId, startDate, endDate 参数
+      // 这些参数会被忽略，未来需要后端支持
     }
 
     if (searchParams.toString()) {
@@ -439,7 +476,7 @@ export async function fetchInspectionTasks(params?: {
     const data = toRecord(response.data)
 
     return {
-      tasks: toRecordArray(data.tasks ?? data['tasks']).map(transformTaskData),
+      tasks: toRecordArray(data.tasks ?? data['tasks'] ?? data).map(transformTaskData),
       total: toNumber(data.total),
       pages: toNumber(data.pages),
     }
@@ -455,7 +492,8 @@ export async function fetchInspectionTasks(params?: {
 
 export async function fetchInspectionTask(id: number): Promise<InspectionTask | null> {
   try {
-    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/tasks/${id}`)
+    // 修复：使用 /inspection/inspections/{id} 端点以避免与静态路由冲突
+    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/inspections/${id}`)
 
     if (!response.data) {
       throw new Error('获取任务详情失败')
@@ -534,7 +572,7 @@ export async function fetchInspectionExecutions(params?: {
   page?: number
   pageSize?: number
   status?: string[]
-  strategyId?: string
+  strategyId?: string | number
   startDate?: string
   endDate?: string
 }): Promise<{ items: InspectionExecution[]; total: number; pages: number }> {
@@ -543,33 +581,110 @@ export async function fetchInspectionExecutions(params?: {
     const searchParams = new URLSearchParams()
 
     if (params) {
-      if (params.page) searchParams.append('page', params.page.toString())
-      if (params.pageSize) searchParams.append('page_size', params.pageSize.toString())
-      if (params.status && params.status.length) searchParams.append('status', params.status.join(','))
-      if (params.strategyId) searchParams.append('strategy_id', params.strategyId)
-      if (params.startDate) searchParams.append('start_date', params.startDate)
-      if (params.endDate) searchParams.append('end_date', params.endDate)
+      // 参数验证: page 和 pageSize 必须是正整数
+      if (params.page !== undefined) {
+        const pageNum = Number(params.page)
+        if (Number.isInteger(pageNum) && pageNum > 0) {
+          searchParams.append('page', pageNum.toString())
+        } else {
+          console.warn(`[API] 无效的 page 参数: ${params.page}, 已忽略`)
+        }
+      }
+
+      if (params.pageSize !== undefined) {
+        const pageSizeNum = Number(params.pageSize)
+        if (Number.isInteger(pageSizeNum) && pageSizeNum > 0 && pageSizeNum <= 100) {
+          searchParams.append('page_size', pageSizeNum.toString())
+        } else {
+          console.warn(`[API] 无效的 pageSize 参数: ${params.pageSize}, 已忽略`)
+        }
+      }
+
+      // 参数验证: status 必须是有效的状态值
+      if (params.status && params.status.length) {
+        const validStatuses = params.status.filter(s =>
+          EXECUTION_STATUSES.includes(s as typeof EXECUTION_STATUSES[number])
+        )
+        if (validStatuses.length > 0) {
+          searchParams.append('status', validStatuses.join(','))
+        } else {
+          console.warn(`[API] 无效的 status 参数: ${params.status.join(',')}, 已忽略`)
+        }
+      }
+
+      // 参数验证: strategyId 必须是有效数字
+      if (params.strategyId !== undefined && params.strategyId !== null && params.strategyId !== '') {
+        const strategyIdStr = String(params.strategyId)
+        const strategyIdNum = Number(strategyIdStr)
+        if (!Number.isNaN(strategyIdNum) && Number.isFinite(strategyIdNum) && strategyIdNum > 0) {
+          searchParams.append('strategy_id', strategyIdStr)
+        } else {
+          console.warn(`[API] 无效的 strategyId 参数: ${params.strategyId}, 已忽略`)
+        }
+      }
+
+      // 参数验证: 日期格式 (YYYY-MM-DD)
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+      if (params.startDate) {
+        if (dateRegex.test(params.startDate)) {
+          searchParams.append('start_date', params.startDate)
+        } else {
+          console.warn(`[API] 无效的 startDate 格式: ${params.startDate}, 已忽略`)
+        }
+      }
+
+      if (params.endDate) {
+        if (dateRegex.test(params.endDate)) {
+          searchParams.append('end_date', params.endDate)
+        } else {
+          console.warn(`[API] 无效的 endDate 格式: ${params.endDate}, 已忽略`)
+        }
+      }
+
+      // 参数验证: 日期范围逻辑检查
+      if (params.startDate && params.endDate && dateRegex.test(params.startDate) && dateRegex.test(params.endDate)) {
+        if (params.startDate > params.endDate) {
+          console.warn(`[API] 开始日期晚于结束日期: ${params.startDate} > ${params.endDate}`)
+        }
+      }
     }
 
     if (searchParams.toString()) {
       endpoint += `?${searchParams.toString()}`
     }
 
+    console.log(`[API] 请求执行记录: ${endpoint}`)
+
     const response = await api.get<InspectionApiResponse<unknown>>(endpoint)
     if (!response.data) {
-      throw new Error(response.message || '获取巡检执行记录失败')
+      const errorMsg = response.message || '获取巡检执行记录失败'
+      console.error(`[API] ${errorMsg}`)
+      throw new Error(errorMsg)
     }
 
     const data = toRecord(response.data)
     const executions = data.executions ?? data.items ?? data['executions'] ?? data['items']
 
-    return {
+    const result = {
       items: toRecordArray(executions).map(transformExecutionData),
       total: toNumber(data.total),
       pages: toNumber(data.pages),
     }
+
+    console.log(`[API] 成功获取 ${result.items.length} 条执行记录 (共 ${result.total} 条)`)
+    return result
   } catch (error) {
-    console.error('获取巡检执行记录失败:', error)
+    // 增强错误处理
+    if (error instanceof Error) {
+      console.error('[API] 获取巡检执行记录失败:', {
+        message: error.message,
+        params,
+        stack: error.stack
+      })
+    } else {
+      console.error('[API] 获取巡检执行记录失败:', error)
+    }
+
     return {
       items: [],
       total: 0,
@@ -661,6 +776,268 @@ export async function fetchDeviceInspectionHistory(deviceId: number, limit?: num
   } catch (error) {
     console.error('获取设备巡检历史失败:', error)
     return []
+  }
+}
+
+// ==================== 巡检策略管理 ====================
+
+export async function fetchInspectionStrategies(params?: {
+  page?: number
+  pageSize?: number
+  type?: string
+  enabled?: boolean
+}): Promise<{ strategies: InspectionStrategy[]; total: number; pages: number }> {
+  try {
+    let endpoint = '/inspection/strategies'
+    const searchParams = new URLSearchParams()
+
+    if (params) {
+      // 后端使用 skip/limit
+      if (params.page && params.pageSize) {
+        searchParams.append('skip', String((params.page - 1) * params.pageSize))
+      }
+      if (params.pageSize) searchParams.append('limit', params.pageSize.toString())
+      if (params.type) searchParams.append('type', params.type)
+      if (params.enabled !== undefined) searchParams.append('enabled', String(params.enabled))
+    }
+
+    if (searchParams.toString()) {
+      endpoint += `?${searchParams.toString()}`
+    }
+
+    const response = await api.get<InspectionApiResponse<unknown>>(endpoint)
+
+    if (!response.data) {
+      throw new Error('获取策略列表失败')
+    }
+
+    // 后端现在返回 {items, total, pages} 格式
+    const data = toRecord(response.data)
+    const items = data.items ?? data['items']
+    const strategiesArray = Array.isArray(items) ? items : toRecordArray(items)
+
+    return {
+      strategies: strategiesArray.map(s => {
+        const record = toRecord(s)
+        // 转换 devices 和 templates 为数字数组
+        const devicesArray = Array.isArray(record.devices)
+          ? record.devices.map(d => typeof d === 'number' ? d : toNumber(d, 0))
+          : []
+        const templatesArray = Array.isArray(record.templates)
+          ? record.templates.map(t => typeof t === 'number' ? t : toNumber(t, 0))
+          : []
+
+        return {
+          id: toString(record.id),
+          name: toString(record.name),
+          description: toString(record.description, ''),
+          type: toString(record.type, 'manual') as 'scheduled' | 'manual',
+          cron: record.cron ? toString(record.cron) : undefined,
+          devices: devicesArray,
+          templates: templatesArray,
+          enabled: Boolean(record.enabled ?? true),
+          createdAt: toString(record.created_at ?? record.createdAt),
+          updatedAt: toString(record.updated_at ?? record.updatedAt),
+          nextRunTime: record.next_run_time || record.nextRunTime ? toString(record.next_run_time ?? record.nextRunTime) : undefined
+        }
+      }),
+      total: toNumber(data.total ?? data['total']),
+      pages: toNumber(data.pages ?? data['pages']),
+    }
+  } catch (error) {
+    console.error('获取策略列表失败:', error)
+    return { strategies: [], total: 0, pages: 0 }
+  }
+}
+
+export async function fetchInspectionStrategy(id: string): Promise<InspectionStrategy | null> {
+  try {
+    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/strategies/${id}`)
+
+    if (!response.data) {
+      throw new Error('获取策略详情失败')
+    }
+
+    const record = toRecord(response.data)
+    // 转换 devices 和 templates 为数字数组
+    const devicesArray = Array.isArray(record.devices)
+      ? record.devices.map(d => typeof d === 'number' ? d : toNumber(d, 0))
+      : []
+    const templatesArray = Array.isArray(record.templates)
+      ? record.templates.map(t => typeof t === 'number' ? t : toNumber(t, 0))
+      : []
+
+    return {
+      id: toString(record.id),
+      name: toString(record.name),
+      description: toString(record.description, ''),
+      type: toString(record.type, 'manual') as 'scheduled' | 'manual',
+      cron: record.cron ? toString(record.cron) : undefined,
+      devices: devicesArray,
+      templates: templatesArray,
+      enabled: Boolean(record.enabled ?? true),
+      createdAt: toString(record.created_at ?? record.createdAt),
+      updatedAt: toString(record.updated_at ?? record.updatedAt),
+      nextRunTime: record.next_run_time || record.nextRunTime ? toString(record.next_run_time ?? record.nextRunTime) : undefined
+    }
+  } catch (error) {
+    console.error('获取策略详情失败:', error)
+    return null
+  }
+}
+
+export async function createInspectionStrategy(data: Partial<InspectionStrategy>): Promise<InspectionStrategy> {
+  try {
+    const requestData = {
+      name: data.name,
+      description: data.description || '',
+      type: data.type || 'manual',
+      cron: data.cron,
+      devices: data.devices || [],
+      templates: data.templates || [],
+      enabled: data.enabled !== undefined ? data.enabled : true
+    }
+
+    const response = await api.post<InspectionApiResponse<unknown>>('/inspection/strategies', requestData)
+
+    if (!response.data) {
+      throw new Error('创建策略失败')
+    }
+
+    const record = toRecord(response.data)
+    // 转换 devices 和 templates 为数字数组
+    const devicesArray = Array.isArray(record.devices)
+      ? record.devices.map(d => typeof d === 'number' ? d : toNumber(d, 0))
+      : []
+    const templatesArray = Array.isArray(record.templates)
+      ? record.templates.map(t => typeof t === 'number' ? t : toNumber(t, 0))
+      : []
+
+    return {
+      id: toString(record.id),
+      name: toString(record.name),
+      description: toString(record.description, ''),
+      type: toString(record.type, 'manual') as 'scheduled' | 'manual',
+      cron: record.cron ? toString(record.cron) : undefined,
+      devices: devicesArray,
+      templates: templatesArray,
+      enabled: Boolean(record.enabled ?? true),
+      createdAt: toString(record.created_at ?? record.createdAt),
+      updatedAt: toString(record.updated_at ?? record.updatedAt),
+      nextRunTime: record.next_run_time || record.nextRunTime ? toString(record.next_run_time ?? record.nextRunTime) : undefined
+    }
+  } catch (error) {
+    console.error('创建策略失败:', error)
+    throw error
+  }
+}
+
+export async function updateInspectionStrategy(id: string, data: Partial<InspectionStrategy>): Promise<InspectionStrategy> {
+  try {
+    const requestData: Record<string, unknown> = {}
+    if (data.name !== undefined) requestData.name = data.name
+    if (data.description !== undefined) requestData.description = data.description
+    if (data.type !== undefined) requestData.type = data.type
+    if (data.cron !== undefined) requestData.cron = data.cron
+    if (data.devices !== undefined) requestData.devices = data.devices
+    if (data.templates !== undefined) requestData.templates = data.templates
+    if (data.enabled !== undefined) requestData.enabled = data.enabled
+
+    const response = await api.put<InspectionApiResponse<unknown>>(`/inspection/strategies/${id}`, requestData)
+
+    if (!response.data) {
+      throw new Error('更新策略失败')
+    }
+
+    const record = toRecord(response.data)
+    // 转换 devices 和 templates 为数字数组
+    const devicesArray = Array.isArray(record.devices)
+      ? record.devices.map(d => typeof d === 'number' ? d : toNumber(d, 0))
+      : []
+    const templatesArray = Array.isArray(record.templates)
+      ? record.templates.map(t => typeof t === 'number' ? t : toNumber(t, 0))
+      : []
+
+    return {
+      id: toString(record.id),
+      name: toString(record.name),
+      description: toString(record.description, ''),
+      type: toString(record.type, 'manual') as 'scheduled' | 'manual',
+      cron: record.cron ? toString(record.cron) : undefined,
+      devices: devicesArray,
+      templates: templatesArray,
+      enabled: Boolean(record.enabled ?? true),
+      createdAt: toString(record.created_at ?? record.createdAt),
+      updatedAt: toString(record.updated_at ?? record.updatedAt),
+      nextRunTime: record.next_run_time || record.nextRunTime ? toString(record.next_run_time ?? record.nextRunTime) : undefined
+    }
+  } catch (error) {
+    console.error('更新策略失败:', error)
+    throw error
+  }
+}
+
+export async function deleteInspectionStrategy(id: string): Promise<void> {
+  try {
+    await api.delete(`/inspection/strategies/${id}`)
+  } catch (error) {
+    console.error('删除策略失败:', error)
+    throw error
+  }
+}
+
+export async function toggleInspectionStrategy(id: string): Promise<InspectionStrategy> {
+  try {
+    const response = await api.post<InspectionApiResponse<unknown>>(`/inspection/strategies/${id}/toggle`)
+
+    if (!response.data) {
+      throw new Error('切换策略状态失败')
+    }
+
+    const record = toRecord(response.data)
+    // 转换 devices 和 templates 为数字数组
+    const devicesArray = Array.isArray(record.devices)
+      ? record.devices.map(d => typeof d === 'number' ? d : toNumber(d, 0))
+      : []
+    const templatesArray = Array.isArray(record.templates)
+      ? record.templates.map(t => typeof t === 'number' ? t : toNumber(t, 0))
+      : []
+
+    return {
+      id: toString(record.id),
+      name: toString(record.name),
+      description: toString(record.description, ''),
+      type: toString(record.type, 'manual') as 'scheduled' | 'manual',
+      cron: record.cron ? toString(record.cron) : undefined,
+      devices: devicesArray,
+      templates: templatesArray,
+      enabled: Boolean(record.enabled ?? true),
+      createdAt: toString(record.created_at ?? record.createdAt),
+      updatedAt: toString(record.updated_at ?? record.updatedAt),
+      nextRunTime: record.next_run_time || record.nextRunTime ? toString(record.next_run_time ?? record.nextRunTime) : undefined
+    }
+  } catch (error) {
+    console.error('切换策略状态失败:', error)
+    throw error
+  }
+}
+
+export async function triggerStrategyExecution(id: string): Promise<{ message: string; inspection_ids: number[] }> {
+  try {
+    const response = await api.post<InspectionApiResponse<unknown>>(`/inspection/strategies/${id}/trigger`)
+
+    if (!response.data) {
+      throw new Error('触发策略执行失败')
+    }
+
+    const record = toRecord(response.data)
+    return {
+      message: toString(record.message, '触发成功'),
+      inspection_ids: toRecordArray(record.inspection_ids ?? []).map(id => toNumber(id))
+    }
+  } catch (error) {
+    console.error('触发策略执行失败:', error)
+    throw error
   }
 }
 
@@ -822,5 +1199,60 @@ export async function fetchProblemDistribution(): Promise<Array<{
   } catch (error) {
     console.error('获取问题分布失败:', error)
     return []
+  }
+}
+
+export async function exportAnalyticsReport(params: {
+  period: 'day' | 'week' | 'month'
+  startDate?: string
+  endDate?: string
+  formatType?: 'excel' | 'pdf'
+  includeCharts?: boolean
+}): Promise<void> {
+  try {
+    const searchParams = new URLSearchParams()
+    searchParams.append('period', params.period)
+    if (params.startDate) searchParams.append('start_date', params.startDate)
+    if (params.endDate) searchParams.append('end_date', params.endDate)
+    searchParams.append('format_type', params.formatType || 'excel')
+    searchParams.append('include_charts', String(params.includeCharts ?? true))
+
+    const endpoint = `/inspection/analytics/export?${searchParams.toString()}`
+
+    // 使用原生 fetch 处理文件下载
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`导出报告失败: ${response.statusText}`)
+    }
+
+    // 从响应头获取文件名
+    const contentDisposition = response.headers.get('content-disposition')
+    let filename = `statistics_report_${new Date().getTime()}.${params.formatType || 'excel'}`
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename="?(.+)"?/)
+      if (filenameMatch) {
+        filename = decodeURIComponent(filenameMatch[1])
+      }
+    }
+
+    // 获取文件 blob 并触发下载
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+  } catch (error) {
+    console.error('导出分析报告失败:', error)
+    throw error
   }
 }

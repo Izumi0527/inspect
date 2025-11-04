@@ -47,7 +47,7 @@ async def get_users(
     role: str = Query(None, description="角色筛选"),
     status: str = Query(None, description="状态筛选"),
     sort_by: str = Query("created_at", description="排序字段"),
-    sort_order: str = Query("desc", regex="^(asc|desc)$", description="排序方向"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="排序方向"),
     current_user: User = Depends(get_current_user),
     user_service: UserService = Depends(get_user_service)
 ):

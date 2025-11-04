@@ -10,12 +10,25 @@ class ReportType(str, Enum):
     AVAILABILITY = "availability"
     ALERT = "alert"
     CUSTOM = "custom"
+    TREND = "trend"  # 新增：趋势分析
+    STATISTICS = "statistics"  # 新增：统计报表
+
+class ReportCategory(str, Enum):
+    """报表类别"""
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    QUARTERLY = "quarterly"
+    YEARLY = "yearly"
+    CUSTOM = "custom"
 
 class ReportFormat(str, Enum):
     PDF = "pdf"
     EXCEL = "excel"
     CSV = "csv"
     JSON = "json"
+    HTML = "html"  # 新增：HTML格式
+    WORD = "word"  # 新增：Word格式
 
 class ReportStatus(str, Enum):
     PENDING = "pending"
@@ -88,23 +101,24 @@ class ReportSchedule(Base):
 
 class Report(Base):
     __tablename__ = "reports"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    template_id = Column(Integer, ForeignKey("report_templates.id"), nullable=False)
+    template_id = Column(Integer, ForeignKey("report_templates.id"), nullable=True)  # 改为可空
     schedule_id = Column(Integer, ForeignKey("report_schedules.id"))
-    
+
     # 基本信息
     title = Column(String(200), nullable=False)
     description = Column(Text)
     report_type = Column(SQLEnum(ReportType), nullable=False)
-    
+    category = Column(SQLEnum(ReportCategory), default=ReportCategory.CUSTOM)  # 新增字段
+
     # 数据范围
     start_date = Column(DateTime(timezone=True), nullable=False)
     end_date = Column(DateTime(timezone=True), nullable=False)
     device_filters = Column(JSON)
     
     # 生成信息
-    status = Column(SQLEnum(ReportStatus), default=ReportStatus.PENDING)
+    status = Column(String(20), default='pending')
     generated_by = Column(String(36), ForeignKey("users.id"))
     generated_at = Column(DateTime(timezone=True))
     

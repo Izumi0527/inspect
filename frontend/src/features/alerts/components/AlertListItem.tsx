@@ -1,17 +1,18 @@
-import React from 'react'
-import { 
-  AlertCircle, 
-  AlertTriangle, 
-  Info, 
-  Shield, 
-  Clock, 
-  User, 
-  CheckCircle, 
-  X 
+import React, { useState } from 'react'
+import {
+  AlertCircle,
+  AlertTriangle,
+  Info,
+  Shield,
+  Clock,
+  User,
+  CheckCircle,
+  X
 } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { Alert } from '../types'
 import { useAlertStyles } from '../hooks/useAlerts'
+import { AlertDetailModal } from './AlertDetailModal'
 
 interface AlertListItemProps {
   alert: Alert
@@ -38,16 +39,33 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
 }) => {
   const { getSeverityColor, getStatusColor, getStatusText } = useAlertStyles()
   const SeverityIcon = severityIcons[alert.severity]
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+  // 阻止复选框点击触发详情弹窗
+  const handleCheckboxClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+  }
+
+  // 阻止按钮点击触发详情弹窗
+  const handleButtonClick = (e: React.MouseEvent, action: () => void) => {
+    e.stopPropagation()
+    action()
+  }
 
   return (
-    <div className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${getSeverityColor(alert.severity)}`}>
+    <>
+      <div
+        className={`border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer ${getSeverityColor(alert.severity)}`}
+        onClick={() => setIsModalOpen(true)}
+      >
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3 flex-1">
-          <input 
-            type="checkbox" 
+          <input
+            type="checkbox"
             className="mt-1 rounded"
             checked={isSelected}
             onChange={() => onSelect(alert.id)}
+            onClick={handleCheckboxClick}
           />
           <SeverityIcon className={`w-5 h-5 mt-0.5 ${
             alert.severity === 'critical' ? 'text-red-600' :
@@ -89,32 +107,43 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
         <div className="flex items-center gap-2 flex-shrink-0">
           {alert.status === 'active' && (
             <>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
-                onClick={() => onAcknowledge?.(alert.id)}
+                onClick={(e) => handleButtonClick(e, () => onAcknowledge?.(alert.id))}
               >
                 <CheckCircle className="w-4 h-4 mr-1" />
                 确认
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
-                onClick={() => onResolve?.(alert.id)}
+                onClick={(e) => handleButtonClick(e, () => onResolve?.(alert.id))}
               >
                 解决
               </Button>
             </>
           )}
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
-            onClick={() => onDelete?.(alert.id)}
+            onClick={(e) => handleButtonClick(e, () => onDelete?.(alert.id))}
           >
             <X className="w-4 h-4" />
           </Button>
         </div>
       </div>
     </div>
+
+    {/* 详情弹窗 */}
+    <AlertDetailModal
+      open={isModalOpen}
+      onClose={() => setIsModalOpen(false)}
+      alert={alert}
+      onAcknowledge={onAcknowledge}
+      onResolve={onResolve}
+      onDelete={onDelete}
+    />
+  </>
   )
 }

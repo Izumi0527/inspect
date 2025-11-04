@@ -1,6 +1,7 @@
 import React from 'react'
 import { Shield } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/atoms'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/atoms'
+import { Pagination } from '@/components/atoms/pagination'
 import { Alert } from '../types'
 import { AlertListItem } from './AlertListItem'
 
@@ -18,6 +19,7 @@ interface AlertListProps {
     total: number
     pageSize: number
     onPageChange: (page: number) => void
+    onPageSizeChange?: (pageSize: number) => void
   }
 }
 
@@ -88,33 +90,18 @@ export const AlertList: React.FC<AlertListProps> = ({
           </div>
         )}
 
-        {/* Pagination */}
+        {/* Pagination - 使用增强的分页组件 */}
         {pagination && alerts.length > 0 && (
-          <div className="flex items-center justify-between mt-6 pt-6 border-t">
-            <p className="text-sm text-gray-600">
-              显示 {Math.min(alerts.length, pagination.pageSize)} 项，共 {pagination.total} 项
-            </p>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                disabled={pagination.current <= 1}
-                onClick={() => pagination.onPageChange(pagination.current - 1)}
-              >
-                上一页
-              </Button>
-              <Button variant="outline" size="sm">
-                {pagination.current}
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                disabled={pagination.current * pagination.pageSize >= pagination.total}
-                onClick={() => pagination.onPageChange(pagination.current + 1)}
-              >
-                下一页
-              </Button>
-            </div>
+          <div className="mt-6 pt-6 border-t">
+            <Pagination
+              currentPage={pagination.current}
+              totalPages={Math.ceil(pagination.total / pagination.pageSize)}
+              totalItems={pagination.total}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.onPageChange}
+              onPageSizeChange={pagination.onPageSizeChange}
+              showPageSizeSelector={!!pagination.onPageSizeChange}
+            />
           </div>
         )}
       </CardContent>

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.models.inspection import InspectionStatus, CheckItemStatus, Inspection, InspectionResult
 from src.core.influxdb import influxdb_client
-from src.core.database import get_db
+from src.core.database import db_manager
 
 logger = structlog.get_logger()
 
@@ -417,7 +417,7 @@ class AnalyticsService:
                     "device_name": f"Device_{device_id:03d}",
                     "device_type": np.random.choice(["switch", "router", "firewall", "server"]),
                     "vendor": np.random.choice(["cisco", "huawei", "h3c", "juniper"]),
-                    "group_id": np.random.randint(1, 6),
+                    "group_id": int(np.random.randint(1, 6)),
                     "status": np.random.choice([
                         InspectionStatus.COMPLETED, 
                         InspectionStatus.FAILED, 
@@ -427,8 +427,8 @@ class AnalyticsService:
                     "created_at": current_time,
                     "started_at": current_time,
                     "completed_at": current_time + timedelta(seconds=np.random.randint(30, 300)),
-                    "execution_duration": np.random.randint(30, 300),
-                    "total_checks": np.random.randint(5, 15),
+                    "execution_duration": int(np.random.randint(30, 300)),
+                    "total_checks": int(np.random.randint(5, 15)),
                     "passed_checks": 0,
                     "failed_checks": 0,
                     "check_results": []
@@ -450,7 +450,7 @@ class AnalyticsService:
                             CheckItemStatus.PASS,
                             CheckItemStatus.PASS
                         ]),  # 60%通过率
-                        "execution_time": np.random.randint(5, 50),
+                        "execution_time": int(np.random.randint(5, 50)),
                         "actual_value": self._generate_mock_metric_value(i)
                     }
                     

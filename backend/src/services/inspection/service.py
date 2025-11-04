@@ -5,55 +5,120 @@ import asyncio
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.inspection import InspectionStatus, CheckItemStatus
+from src.models.inspection import InspectionStatus, CheckItemStatus, InspectionTrigger
 from src.services.device_connection import SNMPService, SSHService, DeviceInfo
 from src.services.device_connection.types import CheckResult
+from src.repositories.inspection_repository import InspectionRepository
 
 logger = structlog.get_logger()
 
 
 class InspectionService:
     """巡检服务类"""
-    
-    def __init__(self, snmp_service: Optional[SNMPService] = None, ssh_service: Optional[SSHService] = None):
-        self.active_inspections: Dict[int, Any] = {}
+
+    def __init__(
+        self,
+        snmp_service: Optional[SNMPService] = None,
+        ssh_service: Optional[SSHService] = None,
+        db_session: Optional[AsyncSession] = None
+    ):
+        self.active_inspections: Dict[int, Any] = {}  # 保留用于任务取消
         self.snmp_service = snmp_service or SNMPService()
         self.ssh_service = ssh_service or SSHService()
+        self.db_session = db_session
         self.logger = logger.bind(service="InspectionService")
-    
+
     async def execute_inspection(
-        self, 
-        inspection_id: int, 
-        device_info: Dict[str, Any], 
-        template_config: Dict[str, Any]
+        self,
+        inspection_id: int,
+        device_info: Dict[str, Any],
+        template_config: Dict[str, Any],
+        db_session: Optional[AsyncSession] = None
     ) -> Dict[str, Any]:
-        """执行设备巡检"""
-        self.logger.info("Starting inspection", 
-                        inspection_id=inspection_id, 
+        """执行设备巡检并持久化到数据库"""
+        session = db_session or self.db_session
+        if not session:
+            raise ValueError("Database session is required for inspection execution")
+
+        inspection_repo = InspectionRepository(session)
+
+        self.logger.info("Starting inspection",
+                        inspection_id=inspection_id,
                         device_ip=device_info.get("ip_address"))
-        
+
         try:
             # 更新巡检状态为运行中
+            await inspection_repo.update_inspection_status(
+                inspection_id,
+                InspectionStatus.RUNNING
+            )
+
+            # 更新内存中的活动巡检状态（用于取消操作）
             self.active_inspections[inspection_id] = {
                 "status": InspectionStatus.RUNNING,
                 "started_at": datetime.now(),
                 "device_info": device_info,
-                "results": []
+                "results": [],
+                "cancelled": False
             }
-            
+
             results = []
             check_items = template_config.get("check_items", [])
-            
+            total_checks = len(check_items)
+
             # 执行各项检查
-            for item in check_items:
+            for index, item in enumerate(check_items):
+                # 检查是否已取消
+                if self.active_inspections.get(inspection_id, {}).get("cancelled"):
+                    self.logger.info("Inspection cancelled by user", inspection_id=inspection_id)
+                    await inspection_repo.update_inspection_status(
+                        inspection_id,
+                        InspectionStatus.CANCELLED,
+                        error_message="用户取消执行"
+                    )
+                    return {
+                        "inspection_id": inspection_id,
+                        "status": InspectionStatus.CANCELLED,
+                        "message": "巡检已取消"
+                    }
+
                 try:
                     result = await self._execute_check_item(device_info, item)
                     results.append(result.to_dict())
-                    
-                    # 记录检查项结果
+
+                    # 保存检查结果到数据库
+                    await inspection_repo.save_inspection_result(
+                        inspection_id=inspection_id,
+                        check_item_name=result.check_item_name,
+                        check_item_type=result.check_item_type,
+                        status=result.status,
+                        expected_value=result.expected_value,
+                        actual_value=result.actual_value,
+                        message=result.message,
+                        description=item.get("description"),
+                        execution_time=result.execution_time,
+                        error_details=result.error_details
+                    )
+
+                    # 记录检查项结果到内存
                     self.active_inspections[inspection_id]["results"].append(result.to_dict())
-                    
+
+                    # 更新进度
+                    completed = index + 1
+                    passed = len([r for r in results if r["status"] == CheckItemStatus.PASS])
+                    failed = len([r for r in results if r["status"] == CheckItemStatus.FAIL])
+                    warnings = len([r for r in results if r["status"] == CheckItemStatus.WARNING])
+
+                    await inspection_repo.update_inspection_progress(
+                        inspection_id=inspection_id,
+                        total_checks=total_checks,
+                        passed_checks=passed,
+                        failed_checks=failed,
+                        warning_checks=warnings
+                    )
+
                 except Exception as e:
                     error_result = CheckResult(
                         check_item_name=item.get("name", "Unknown"),
@@ -64,17 +129,43 @@ class InspectionService:
                         error_details={"error": str(e)}
                     )
                     results.append(error_result.to_dict())
-                    self.logger.error("Check item failed", 
+
+                    # 保存错误结果到数据库
+                    await inspection_repo.save_inspection_result(
+                        inspection_id=inspection_id,
+                        check_item_name=error_result.check_item_name,
+                        check_item_type=error_result.check_item_type,
+                        status=error_result.status,
+                        message=error_result.message,
+                        error_details=error_result.error_details
+                    )
+
+                    self.logger.error("Check item failed",
                                    inspection_id=inspection_id,
                                    check_item=item.get("name"),
                                    error=str(e))
-            
+
             # 统计结果
             total_checks = len(results)
             passed_checks = len([r for r in results if r["status"] == CheckItemStatus.PASS])
             failed_checks = len([r for r in results if r["status"] == CheckItemStatus.FAIL])
-            
+            warning_checks = len([r for r in results if r["status"] == CheckItemStatus.WARNING])
+
             # 更新巡检状态为完成
+            await inspection_repo.update_inspection_progress(
+                inspection_id=inspection_id,
+                total_checks=total_checks,
+                passed_checks=passed_checks,
+                failed_checks=failed_checks,
+                warning_checks=warning_checks
+            )
+
+            await inspection_repo.update_inspection_status(
+                inspection_id,
+                InspectionStatus.COMPLETED
+            )
+
+            # 更新内存状态
             self.active_inspections[inspection_id].update({
                 "status": InspectionStatus.COMPLETED,
                 "completed_at": datetime.now(),
@@ -82,39 +173,60 @@ class InspectionService:
                 "passed_checks": passed_checks,
                 "failed_checks": failed_checks
             })
-            
-            self.logger.info("Inspection completed", 
+
+            self.logger.info("Inspection completed",
                            inspection_id=inspection_id,
                            total_checks=total_checks,
                            passed_checks=passed_checks,
-                           failed_checks=failed_checks)
-            
+                           failed_checks=failed_checks,
+                           warning_checks=warning_checks)
+
             return {
                 "inspection_id": inspection_id,
                 "status": InspectionStatus.COMPLETED,
                 "total_checks": total_checks,
                 "passed_checks": passed_checks,
                 "failed_checks": failed_checks,
+                "warning_checks": warning_checks,
                 "results": results
             }
-            
+
         except Exception as e:
-            # 巡检失败
+            # 巡检失败，更新数据库
+            await inspection_repo.update_inspection_status(
+                inspection_id,
+                InspectionStatus.FAILED,
+                error_message=str(e),
+                error_details={"exception": str(e), "type": type(e).__name__}
+            )
+
+            # 更新内存状态
             self.active_inspections[inspection_id] = {
                 "status": InspectionStatus.FAILED,
                 "error_message": str(e),
                 "completed_at": datetime.now()
             }
-            
-            self.logger.error("Inspection failed", 
-                            inspection_id=inspection_id, 
-                            error=str(e))
-            
+
+            self.logger.error("Inspection failed",
+                            inspection_id=inspection_id,
+                            error=str(e),
+                            exc_info=True)
+
             return {
                 "inspection_id": inspection_id,
                 "status": InspectionStatus.FAILED,
                 "error_message": str(e)
             }
+        finally:
+            # 清理内存中的活动巡检状态（24小时后）
+            # 注意：不立即删除，因为可能需要用于取消操作
+            pass
+
+    async def cancel_inspection(self, inspection_id: int):
+        """取消正在运行的巡检"""
+        if inspection_id in self.active_inspections:
+            self.active_inspections[inspection_id]["cancelled"] = True
+            self.logger.info("Inspection cancellation requested", inspection_id=inspection_id)
     
     async def _execute_check_item(self, device_info: Dict[str, Any], check_item: Dict[str, Any]) -> CheckResult:
         """执行单个检查项"""

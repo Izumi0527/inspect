@@ -1,26 +1,74 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { AppLayout } from '@/components/layout'
-import { 
-  useAlerts, 
-  useAlertStats, 
-  useAlertFilters, 
-  useAlertSelection,
-  useFilteredAlerts 
+import {
+  useAlerts,
+  useAlertStats,
+  useAlertFilters,
+  useAlertSelection
 } from '../hooks/useAlerts'
 import { AlertStatsGrid } from './AlertStatsGrid'
 import { AlertAction } from '../types'
 import { AlertFiltersBar } from './AlertFiltersBar'
 import { AlertList } from './AlertList'
+import { SkeletonCard, SkeletonList } from '@/components/atoms/skeleton'
+import { AdvancedFilters, AdvancedFilterValues } from './AdvancedFilters'
 
 export const AlertsView: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
-  const pageSize = 10
+  const [pageSize, setPageSize] = useState(10)
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterValues>({})
 
-  // 基础查询参数
-  const queryParams = {
-    page: currentPage,
-    pageSize
-  }
+  // 获取过滤器状态
+  const { filters, updateFilter } = useAlertFilters()
+
+  // 构建查询参数 - 合并基础过滤器和高级过滤器
+  const queryParams = useMemo(() => {
+    const params: any = {
+      page: currentPage,
+      pageSize
+    }
+
+    // 基础过滤器：搜索
+    if (filters.searchQuery || advancedFilters.search) {
+      params.search = advancedFilters.search || filters.searchQuery
+    }
+
+    // 高级过滤器：严重级别（优先使用高级过滤器）
+    if (advancedFilters.severity && advancedFilters.severity.length > 0) {
+      params.severity = advancedFilters.severity
+    } else if (filters.severityFilter && filters.severityFilter !== 'all') {
+      params.severity = [filters.severityFilter]
+    }
+
+    // 高级过滤器：状态（优先使用高级过滤器）
+    if (advancedFilters.status && advancedFilters.status.length > 0) {
+      params.status = advancedFilters.status
+    } else if (filters.statusFilter && filters.statusFilter !== 'all') {
+      params.status = [filters.statusFilter]
+    }
+
+    // 高级过滤器：分类
+    if (advancedFilters.category && advancedFilters.category.length > 0) {
+      params.category = advancedFilters.category
+    }
+
+    // 高级过滤器：日期范围
+    if (advancedFilters.dateRange) {
+      if (advancedFilters.dateRange.start) {
+        params.startDate = advancedFilters.dateRange.start
+      }
+      if (advancedFilters.dateRange.end) {
+        params.endDate = advancedFilters.dateRange.end
+      }
+    }
+
+    // 高级过滤器：设备ID
+    if (advancedFilters.deviceIds && advancedFilters.deviceIds.length > 0) {
+      params.deviceIds = advancedFilters.deviceIds
+    }
+
+    return params
+  }, [currentPage, pageSize, filters, advancedFilters])
 
   // 使用自定义hooks
   const { 
@@ -35,17 +83,13 @@ export const AlertsView: React.FC = () => {
   } = useAlerts(queryParams)
 
   const { stats, loading: statsLoading } = useAlertStats()
-  const { filters, updateFilter } = useAlertFilters()
-  const { 
-    selectedAlerts, 
-    toggleAlert, 
-    selectAll, 
-    clearSelection, 
-    handleBulkAction 
+  const {
+    selectedAlerts,
+    toggleAlert,
+    selectAll,
+    clearSelection,
+    handleBulkAction
   } = useAlertSelection()
-
-  // 客户端筛选（如果需要实时筛选）
-  const filteredAlerts = useFilteredAlerts(alerts, filters)
 
   // 处理批量操作
   const handleBulkActionClick = async (action: AlertAction) => {
@@ -61,6 +105,27 @@ export const AlertsView: React.FC = () => {
   // 处理分页
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
+  }
+
+  // 处理每页数量变更
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize)
+    // 重置到第一页，避免页码超出范围
+    setCurrentPage(1)
+  }
+
+  // 处理高级过滤器变更
+  const handleAdvancedFilterChange = (newFilters: AdvancedFilterValues) => {
+    setAdvancedFilters(newFilters)
+    // 过滤条件变更时重置到第一页
+    setCurrentPage(1)
+  }
+
+  // 处理高级过滤器重置
+  const handleAdvancedFilterReset = () => {
+    setAdvancedFilters({})
+    // 重置时也回到第一页
+    setCurrentPage(1)
   }
 
   if (error) {
@@ -80,11 +145,18 @@ export const AlertsView: React.FC = () => {
     <AppLayout title="告警中心">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Alert Statistics */}
-        {stats && !statsLoading && (
-          <div>
+        <div>
+          {statsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <SkeletonCard lines={2} />
+              <SkeletonCard lines={2} />
+              <SkeletonCard lines={2} />
+              <SkeletonCard lines={2} />
+            </div>
+          ) : stats ? (
             <AlertStatsGrid stats={stats} />
-          </div>
-        )}
+          ) : null}
+        </div>
 
         {/* Filters and Search */}
         <div className="mb-6">
@@ -96,34 +168,35 @@ export const AlertsView: React.FC = () => {
           />
         </div>
 
-        {/* Alerts List */}
-        <AlertList
-          alerts={filteredAlerts}
-          selectedAlerts={selectedAlerts}
-          onSelectAlert={toggleAlert}
-          onSelectAll={selectAll}
-          onClearSelection={clearSelection}
-          onAcknowledge={handleAcknowledgeAlert}
-          onResolve={handleResolveAlert}
-          onDelete={handleDeleteAlert}
-          pagination={{
-            current: pagination.page,
-            total: pagination.total,
-            pageSize: pagination.pageSize,
-            onPageChange: handlePageChange
-          }}
-        />
+        {/* Advanced Filters */}
+        <div className="mb-6">
+          <AdvancedFilters
+            onFilterChange={handleAdvancedFilterChange}
+            onReset={handleAdvancedFilterReset}
+          />
+        </div>
 
-        {/* Loading overlay */}
-        {loading && (
-          <div className="fixed inset-0 bg-black bg-opacity-20 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 shadow-lg">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">正在加载告警数据...</p>
-              </div>
-            </div>
-          </div>
+        {/* Alerts List */}
+        {loading ? (
+          <SkeletonList count={pageSize} itemHeight="h-32" spacing="space-y-4" />
+        ) : (
+          <AlertList
+            alerts={alerts}
+            selectedAlerts={selectedAlerts}
+            onSelectAlert={toggleAlert}
+            onSelectAll={selectAll}
+            onClearSelection={clearSelection}
+            onAcknowledge={handleAcknowledgeAlert}
+            onResolve={handleResolveAlert}
+            onDelete={handleDeleteAlert}
+            pagination={{
+              current: pagination.page,
+              total: pagination.total,
+              pageSize: pagination.pageSize,
+              onPageChange: handlePageChange,
+              onPageSizeChange: handlePageSizeChange
+            }}
+          />
         )}
       </div>
     </AppLayout>

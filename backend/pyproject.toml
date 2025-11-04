@@ -72,6 +72,8 @@ dependencies = [
     "xlsxwriter>=3.0.0",      # Excel写入支持
     "reportlab>=4.0.0",       # PDF报表生成
     "matplotlib>=3.7.0",      # 图表绘制库
+    # 系统监控
+    "psutil>=5.9.0",          # 系统性能监控库
 ]
 
 # 开发环境依赖

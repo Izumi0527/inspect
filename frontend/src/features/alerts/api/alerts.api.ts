@@ -135,32 +135,20 @@ const buildQueryParams = (params?: AlertQueryParams) => {
 }
 
 export async function fetchAlerts(params?: AlertQueryParams): Promise<AlertPaginatedResponse> {
-  try {
-    const response = await api.alerts.list(buildQueryParams(params))
-    const data: AlertsListDto = response ?? {}
-    const alerts = data.alerts?.map(transformAlert) ?? []
+  const response = await api.alerts.list(buildQueryParams(params))
+  const data: AlertsListDto = response ?? {}
+  const alerts = data.alerts?.map(transformAlert) ?? []
 
-    return {
-      alerts,
-      total: data.total ?? alerts.length,
-      page: params?.page ?? 1,
-      pageSize: params?.pageSize ?? alerts.length,
-      currentPage: data.current_page ?? params?.page ?? 1,
-      hasNext: data.has_next ?? false,
-      hasPrev: data.has_prev ?? false,
-    }
-  } catch (error) {
-    console.error('获取告警列表失败:', error)
-    return {
-      alerts: getDefaultAlertsData(),
-      total: 0,
-      page: 1,
-      pageSize: params?.pageSize ?? 20,
-      currentPage: 1,
-      hasNext: false,
-      hasPrev: false,
-    }
+  return {
+    alerts,
+    total: data.total ?? 0,
+    page: data.page ?? params?.page ?? 1,
+    pageSize: data.page_size ?? params?.pageSize ?? 20,
+    currentPage: data.current_page ?? params?.page ?? 1,
+    hasNext: data.has_next ?? false,
+    hasPrev: data.has_prev ?? false,
   }
+  // 移除try-catch，让错误向上传播到useAlerts hook进行统一处理
 }
 
 export async function fetchAlert(id: string): Promise<Alert | null> {
@@ -250,120 +238,42 @@ export async function bulkAlertAction(action: BulkAlertAction): Promise<boolean>
 }
 
 export async function fetchAlertStats(): Promise<AlertStats> {
-  try {
-    const response = await api.get<AlertStatsDto>('/alerts/stats')
-    const data = response ?? {}
+  const response = await api.get<AlertStatsDto>('/alerts/stats')
+  const data = response ?? {}
 
-    return {
-      total: data.total ?? 0,
-      critical: data.critical ?? 0,
-      warning: data.warning ?? 0,
-      info: data.info ?? 0,
-      active: data.active ?? 0,
-      acknowledged: data.acknowledged ?? 0,
-      resolved: data.resolved ?? 0,
-      byCategory: data.by_category ?? {},
-      byDevice: data.by_device ?? {},
-      trends: data.trends ?? {},
-    }
-  } catch (error) {
-    console.error('获取告警统计失败:', error)
-    return getDefaultAlertStats()
+  return {
+    total: data.total ?? 0,
+    critical: data.critical ?? 0,
+    warning: data.warning ?? 0,
+    info: data.info ?? 0,
+    active: data.active ?? 0,
+    acknowledged: data.acknowledged ?? 0,
+    resolved: data.resolved ?? 0,
+    byCategory: data.by_category ?? {},
+    byDevice: data.by_device ?? {},
+    trends: data.trends ?? {},
   }
+  // 移除try-catch，让错误向上传播到useAlerts hook进行统一处理
 }
 
 export async function fetchRecentAlerts(limit: number = 5): Promise<Alert[]> {
-  try {
-    const response = await api.get<RecentAlertDto[]>(appendLimit('/alerts/recent', limit))
-    const list = response ?? []
-    return list.map(item =>
-      transformAlert({
-        id: item.id,
-        title: item.title,
-        description: '',
-        device: item.device ?? '未知设备',
-        severity: item.severity,
-        status: 'active',
-        timestamp: item.timestamp,
-      })
-    )
-  } catch (error) {
-    console.error('获取最新告警失败:', error)
-    return getDefaultRecentAlerts()
-  }
+  const response = await api.get<RecentAlertDto[]>(appendLimit('/alerts/recent', limit))
+  const list = response ?? []
+  return list.map(item =>
+    transformAlert({
+      id: item.id,
+      title: item.title,
+      description: '',
+      device: item.device ?? '未知设备',
+      severity: item.severity,
+      status: 'active',
+      timestamp: item.timestamp,
+    })
+  )
+  // 移除try-catch，让错误向上传播到useAlerts hook进行统一处理
 }
 
 const appendLimit = (endpoint: string, limit: number) => {
   const search = new URLSearchParams({ limit: limit.toString() })
   return `${endpoint}?${search.toString()}`
-}
-
-function getDefaultAlertsData(): Alert[] {
-  return [
-    {
-      id: '1',
-      title: 'CPU 使用率过高',
-      description: '核心交换机 CPU 使用率达到 95%',
-      device: "核心交换机-01",
-      severity: 'critical',
-      status: 'active',
-      timestamp: '2024-01-20 14:30:25',
-      category: '性能',
-    },
-    {
-      id: '2',
-      title: '端口状态异常',
-      description: '路由器端口 GE0/0/1 状态变为 Down',
-      device: '路由器-A3',
-      severity: 'warning',
-      status: 'acknowledged',
-      timestamp: '2024-01-20 14:15:10',
-      assignee: '张工',
-      category: '连接',
-    },
-    {
-      id: '3',
-      title: '内存使用警告',
-      description: '防火墙内存使用率超过 80%',
-      device: '防火墙-02',
-      severity: 'warning',
-      status: 'active',
-      timestamp: '2024-01-20 13:45:30',
-      category: '性能',
-    },
-  ]
-}
-
-function getDefaultRecentAlerts(): Alert[] {
-  return getDefaultAlertsData().slice(0, 5)
-}
-
-function getDefaultAlertStats(): AlertStats {
-  return {
-    total: 25,
-    active: 12,
-    acknowledged: 8,
-    resolved: 5,
-    critical: 3,
-    warning: 15,
-    info: 7,
-    byCategory: {
-      性能: 15,
-      连接: 5,
-      安全: 3,
-      系统: 2,
-    },
-    byDevice: {
-      '核心交换机-01': 8,
-      '路由器-A3': 6,
-      '防火墙-02': 4,
-    },
-    trends: {
-      today: 5,
-      yesterday: 8,
-      change: -37.5,
-      daily: [],
-      hourly: [],
-    },
-  }
 }

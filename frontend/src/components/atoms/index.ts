@@ -49,3 +49,5 @@ export {
 export { Header, Sidebar } from './navigation'
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs'
 export type { TabsProps, TabsListProps, TabsTriggerProps, TabsContentProps } from './tabs'
+export { Pagination } from './pagination'
+export type { PaginationProps } from './pagination'

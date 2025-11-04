@@ -295,3 +295,21 @@ ssl/
 
 # 备份目录
 backups/
+
+# ==========================================
+# 测试相关
+# ==========================================
+# Playwright 测试报告
+frontend/playwright-report/
+frontend/test-results/
+backend/test-results/
+
+# 临时测试文件（项目根目录下）
+backend/test_*.py
+
+# ==========================================
+# 认证和敏感信息
+# ==========================================
+# 认证令牌文件
+frontend/auth.json
+backend/auth.json

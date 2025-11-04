@@ -369,35 +369,336 @@ function Load-EnvironmentConfiguration {
     Write-LogSuccess "环境配置加载完成"
 }
 
-# 运行数据库迁移
-function Invoke-DatabaseMigration {
-    if (-not $Migrate) {
-        Write-LogDebug "跳过数据库迁移（未指定-Migrate参数）"
-        return
-    }
-    
-    Write-LogStep "运行数据库迁移..."
-    
+# 获取数据库迁移状态
+function Get-MigrationStatus {
     Push-Location $script:BackendPath
     try {
-        # 检查Alembic配置
+        # 检查 Alembic 配置文件
         $alembicIni = Join-Path $script:BackendPath "alembic.ini"
         if (-not (Test-Path $alembicIni)) {
-            Write-LogWarning "未找到alembic.ini配置文件，跳过迁移"
-            return
+            return [PSCustomObject]@{
+                Current = $null
+                Target = $null
+                NeedsMigration = $false
+                Status = "no-config"
+                Message = "未找到 alembic.ini 配置文件"
+            }
         }
-        
-        # 运行迁移
-        Write-LogInfo "执行数据库模式迁移..."
-        uv run alembic upgrade head
-        
-        Write-LogSuccess "数据库迁移完成"
-        
+
+        # 获取当前数据库版本(抑制 stderr 避免日志污染)
+        $currentOutput = $null
+        $currentVersion = $null
+        $previousErrorAction = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'  # 临时允许错误继续执行
+            $currentOutput = uv run alembic current 2>$null | Out-String
+            $ErrorActionPreference = $previousErrorAction
+        } catch {
+            $ErrorActionPreference = $previousErrorAction
+            # 命令执行失败,忽略错误继续
+        }
+
+        # 检查是否有输出
+        if ($currentOutput) {
+            # 过滤掉 INFO/DEBUG/WARNING 日志行,只保留版本信息
+            $lines = $currentOutput -split "`r?`n" | Where-Object {
+                $_ -notmatch "^\s*(INFO|DEBUG|WARNING|ERROR)" -and $_.Trim()
+            }
+
+            # 匹配第一行的版本号,格式: 版本ID (head) 或 版本ID
+            $firstLine = $lines | Select-Object -First 1
+            if ($firstLine -and $firstLine -match "^([a-zA-Z0-9_]+)") {
+                $currentVersion = $matches[1]
+            }
+        }
+
+        # 获取最新可用版本
+        $headsOutput = $null
+        $targetVersion = $null
+        $previousErrorAction = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'  # 临时允许错误继续执行
+            $headsOutput = uv run alembic heads 2>$null | Out-String
+            $ErrorActionPreference = $previousErrorAction
+        } catch {
+            $ErrorActionPreference = $previousErrorAction
+            # 命令执行失败,忽略错误继续
+        }
+
+        # 检查是否有输出
+        if ($headsOutput) {
+            # 过滤掉日志行,只保留版本信息
+            $lines = $headsOutput -split "`r?`n" | Where-Object {
+                $_ -notmatch "^\s*(INFO|DEBUG|WARNING|ERROR)" -and $_.Trim()
+            }
+
+            # 匹配第一行的版本号
+            $firstLine = $lines | Select-Object -First 1
+            if ($firstLine -and $firstLine -match "^([a-zA-Z0-9_]+)") {
+                $targetVersion = $matches[1]
+            }
+        }
+
+        # 判断迁移状态
+        if (-not $currentVersion) {
+            return [PSCustomObject]@{
+                Current = $null
+                Target = $targetVersion
+                NeedsMigration = $true
+                Status = "no-database"
+                Message = "数据库未初始化或无迁移记录"
+            }
+        }
+
+        if (-not $targetVersion) {
+            return [PSCustomObject]@{
+                Current = $currentVersion
+                Target = $null
+                NeedsMigration = $false
+                Status = "error"
+                Message = "无法获取目标迁移版本"
+            }
+        }
+
+        if ($currentVersion -eq $targetVersion) {
+            return [PSCustomObject]@{
+                Current = $currentVersion
+                Target = $targetVersion
+                NeedsMigration = $false
+                Status = "up-to-date"
+                Message = "数据库迁移已是最新版本"
+            }
+        } else {
+            return [PSCustomObject]@{
+                Current = $currentVersion
+                Target = $targetVersion
+                NeedsMigration = $true
+                Status = "behind"
+                Message = "数据库迁移需要更新"
+            }
+        }
+
     } catch {
-        Write-LogError "数据库迁移失败: $($_.Exception.Message)"
-        Write-LogWarning "服务将继续启动，但可能存在数据库模式问题"
+        return [PSCustomObject]@{
+            Current = $null
+            Target = $null
+            NeedsMigration = $false
+            Status = "error"
+            Message = "检查迁移状态时发生错误: $($_.Exception.Message)"
+        }
     } finally {
         Pop-Location
+    }
+}
+
+# 显示迁移状态并获取用户选择
+function Show-MigrationPrompt {
+    param(
+        [Parameter(Mandatory=$true)]
+        [PSCustomObject]$MigrationStatus
+    )
+
+    Write-Host ""
+    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+    Write-Host "  数据库迁移状态检查" -ForegroundColor Cyan
+    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+    Write-Host ""
+
+    # 显示当前版本
+    if ($MigrationStatus.Current) {
+        Write-Host "  当前版本: " -NoNewline -ForegroundColor Gray
+        Write-Host $MigrationStatus.Current -ForegroundColor White
+    } else {
+        Write-Host "  当前版本: " -NoNewline -ForegroundColor Gray
+        Write-Host "无" -ForegroundColor Yellow
+    }
+
+    # 显示目标版本
+    if ($MigrationStatus.Target) {
+        Write-Host "  最新版本: " -NoNewline -ForegroundColor Gray
+        Write-Host $MigrationStatus.Target -ForegroundColor White
+    }
+
+    # 显示状态
+    Write-Host "  状态:     " -NoNewline -ForegroundColor Gray
+    switch ($MigrationStatus.Status) {
+        "up-to-date" {
+            Write-Host "✓ 已是最新" -ForegroundColor Green
+        }
+        "behind" {
+            Write-Host "⚠ 需要迁移" -ForegroundColor Yellow
+        }
+        "no-database" {
+            Write-Host "⚠ 需要初始化" -ForegroundColor Yellow
+        }
+        "no-config" {
+            Write-Host "✗ 配置缺失" -ForegroundColor Red
+        }
+        "error" {
+            Write-Host "✗ 检查失败" -ForegroundColor Red
+        }
+    }
+
+    Write-Host ""
+    Write-Host "  $($MigrationStatus.Message)" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+    Write-Host ""
+
+    # 如果配置缺失或检查失败,不提供迁移选项
+    if ($MigrationStatus.Status -eq "no-config" -or $MigrationStatus.Status -eq "error") {
+        Write-Host "  按任意键继续启动..." -ForegroundColor Yellow
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        return "skip"
+    }
+
+    # 提供选项
+    Write-Host "  请选择操作:" -ForegroundColor Cyan
+    Write-Host "    [Y] 是     - 执行数据库迁移" -ForegroundColor White
+    Write-Host "    [N] 否     - 跳过迁移,继续启动" -ForegroundColor White
+    Write-Host "    [V] 查看   - 查看迁移历史记录" -ForegroundColor White
+    Write-Host "    [S] 跳过   - 同 [N],跳过迁移" -ForegroundColor White
+    Write-Host ""
+
+    # 循环获取有效输入
+    while ($true) {
+        $choice = Read-Host "  您的选择"
+        $choice = $choice.Trim().ToUpper()
+
+        switch ($choice) {
+            "Y" {
+                Write-Host ""
+                return "migrate"
+            }
+            "N" {
+                Write-Host ""
+                return "skip"
+            }
+            "V" {
+                Write-Host ""
+                Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+                Write-Host "  迁移历史记录" -ForegroundColor Cyan
+                Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+                Write-Host ""
+                Push-Location $script:BackendPath
+                try {
+                    uv run alembic history --verbose
+                } catch {
+                    Write-Host "  获取迁移历史失败: $($_.Exception.Message)" -ForegroundColor Red
+                } finally {
+                    Pop-Location
+                }
+                Write-Host ""
+                Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+                Write-Host ""
+                # 继续循环,重新提示用户选择
+            }
+            "S" {
+                Write-Host ""
+                return "skip"
+            }
+            default {
+                Write-Host "  ✗ 无效选择,请输入 Y, N, V 或 S" -ForegroundColor Red
+            }
+        }
+    }
+}
+
+# 运行数据库迁移（增强版 - 支持自动检测和交互式选择）
+function Invoke-DatabaseMigration {
+    Write-LogStep "检查数据库迁移状态..."
+
+    # 获取迁移状态
+    $migrationStatus = Get-MigrationStatus
+
+    # 判断运行模式
+    $isInteractive = [Environment]::UserInteractive
+    $shouldMigrate = $false
+
+    # 模式1: 指定了 -Migrate 参数 (自动化模式,保持向后兼容)
+    if ($Migrate) {
+        Write-LogInfo "检测到 -Migrate 参数，将自动执行迁移"
+        $shouldMigrate = $true
+    }
+    # 模式2: 交互式环境 (显示提示,让用户选择)
+    elseif ($isInteractive) {
+        Write-LogDebug "交互式环境，显示迁移状态提示"
+
+        # 显示迁移状态并获取用户选择
+        $userChoice = Show-MigrationPrompt -MigrationStatus $migrationStatus
+
+        if ($userChoice -eq "migrate") {
+            $shouldMigrate = $true
+            Write-LogInfo "用户选择执行迁移"
+        } else {
+            Write-LogInfo "用户选择跳过迁移"
+            return
+        }
+    }
+    # 模式3: 非交互环境 (CI/CD等,自动跳过)
+    else {
+        Write-LogDebug "非交互环境，跳过迁移提示"
+        Write-LogInfo "数据库迁移状态: $($migrationStatus.Status) - $($migrationStatus.Message)"
+
+        if ($migrationStatus.NeedsMigration) {
+            Write-LogWarning "数据库需要迁移，但当前为非交互环境"
+            Write-LogWarning "请使用 -Migrate 参数或在交互环境中运行脚本"
+        }
+        return
+    }
+
+    # 执行迁移
+    if ($shouldMigrate) {
+        Write-LogStep "开始执行数据库迁移..."
+
+        Push-Location $script:BackendPath
+        try {
+            # 再次检查 Alembic 配置
+            $alembicIni = Join-Path $script:BackendPath "alembic.ini"
+            if (-not (Test-Path $alembicIni)) {
+                Write-LogError "未找到 alembic.ini 配置文件"
+                Write-LogWarning "服务将继续启动，但可能存在数据库模式问题"
+                return
+            }
+
+            # 显示迁移信息
+            if ($migrationStatus.Current) {
+                Write-LogInfo "当前版本: $($migrationStatus.Current)"
+            } else {
+                Write-LogInfo "当前版本: 无 (数据库未初始化)"
+            }
+            Write-LogInfo "目标版本: $($migrationStatus.Target)"
+            Write-LogInfo "执行迁移命令: uv run alembic upgrade head"
+            Write-Host ""
+
+            # 执行迁移
+            uv run alembic upgrade head
+
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host ""
+                Write-LogSuccess "数据库迁移完成"
+
+                # 显示新的版本
+                $newStatus = Get-MigrationStatus
+                if ($newStatus.Current) {
+                    Write-LogInfo "当前数据库版本: $($newStatus.Current)"
+                }
+            } else {
+                Write-LogError "迁移命令执行失败 (退出码: $LASTEXITCODE)"
+                Write-LogWarning "服务将继续启动，但可能存在数据库模式问题"
+            }
+
+        } catch {
+            Write-LogError "数据库迁移失败: $($_.Exception.Message)"
+            Write-LogWarning "服务将继续启动，但可能存在数据库模式问题"
+
+            # 显示详细错误信息
+            if ($_.Exception.StackTrace) {
+                Write-LogDebug "错误堆栈: $($_.Exception.StackTrace)"
+            }
+        } finally {
+            Pop-Location
+        }
     }
 }
 

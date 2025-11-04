@@ -4,10 +4,21 @@ import toast from 'react-hot-toast'
 import {
   fetchInspectionStats,
   fetchInspectionTemplates,
+  fetchInspectionTemplate,
+  createInspectionTemplate,
+  updateInspectionTemplate,
+  deleteInspectionTemplate,
   fetchInspectionExecutions,
   fetchInspectionTrends,
   fetchDeviceDistribution,
   fetchProblemDistribution,
+  fetchInspectionStrategies,
+  fetchInspectionStrategy,
+  createInspectionStrategy,
+  updateInspectionStrategy,
+  deleteInspectionStrategy,
+  toggleInspectionStrategy,
+  triggerStrategyExecution,
 } from '../api/inspection.api'
 import {
   InspectionStrategy,
@@ -21,32 +32,19 @@ export const useInspectionStrategies = (params?: {
   page?: number
   pageSize?: number
   type?: 'scheduled' | 'manual'
+  enabled?: boolean
 }) => {
   return useQuery({
     queryKey: ['inspection', 'strategies', params],
     queryFn: async () => {
-      const { templates, total, pages } = await fetchInspectionTemplates({
+      const { strategies, total, pages } = await fetchInspectionStrategies({
         page: params?.page,
         pageSize: params?.pageSize,
-        category: undefined,
-        deviceTypes: undefined,
+        type: params?.type,
+        enabled: params?.enabled,
       })
 
-      const items: InspectionStrategy[] = templates.map(template => ({
-        id: template.id,
-        name: template.name,
-        description: template.description ?? '',
-        type: params?.type ?? 'manual',
-        cron: params?.type === 'scheduled' ? '0 0 * * *' : undefined,
-        devices: [],
-        templates: [template.id],
-        enabled: true,
-        createdAt: template.createdAt,
-        updatedAt: template.updatedAt,
-        nextRunTime: undefined,
-      }))
-
-      return { items, total, pages }
+      return { items: strategies, total, pages }
     },
     staleTime: 5 * 60 * 1000, // 5分钟缓存
   })
@@ -55,7 +53,7 @@ export const useInspectionStrategies = (params?: {
 export const useInspectionStrategy = (id: string) => {
   return useQuery({
     queryKey: ['inspection', 'strategy', id],
-    queryFn: () => Promise.resolve(null as InspectionStrategy | null),
+    queryFn: () => fetchInspectionStrategy(id),
     enabled: !!id,
   })
 }
@@ -64,7 +62,7 @@ export const useCreateStrategy = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: Partial<InspectionStrategy>) => Promise.resolve(data as InspectionStrategy),
+    mutationFn: (data: Partial<InspectionStrategy>) => createInspectionStrategy(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
       toast.success('巡检策略创建成功')
@@ -80,8 +78,7 @@ export const useUpdateStrategy = () => {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<InspectionStrategy> }) => {
-      void id
-      return data as InspectionStrategy
+      return updateInspectionStrategy(id, data)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
@@ -98,7 +95,7 @@ export const useDeleteStrategy = () => {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      void id
+      await deleteInspectionStrategy(id)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
@@ -115,8 +112,9 @@ export const useToggleStrategy = () => {
 
   return useMutation({
     mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
-      void id
+      // 注意：后端 toggle 接口会自动切换状态，不需要传递 enabled 参数
       void enabled
+      return toggleInspectionStrategy(id)
     },
     onSuccess: (_, { enabled }) => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
@@ -142,10 +140,10 @@ export const useInspectionTemplates = (params?: {
   })
 }
 
-export const useInspectionTemplate = (id: string) => {
+export const useInspectionTemplate = (id: number) => {
   return useQuery({
     queryKey: ['inspection', 'template', id],
-    queryFn: () => Promise.resolve(null as InspectionTemplate | null),
+    queryFn: () => fetchInspectionTemplate(id),
     enabled: !!id,
   })
 }
@@ -154,7 +152,17 @@ export const useCreateTemplate = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: Partial<InspectionTemplate>) => Promise.resolve(data as InspectionTemplate),
+    mutationFn: (data: Partial<InspectionTemplate>) => {
+      // 转换数据格式，确保符合 API 要求
+      const templateData = {
+        name: data.name || '',
+        description: data.description || '',
+        category: data.category || 'custom',
+        deviceTypes: data.deviceTypes || [],
+        checkItems: data.checkItems || [],
+      }
+      return createInspectionTemplate(templateData as Omit<InspectionTemplate, 'id' | 'created_at' | 'updated_at'>)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'templates'] })
       toast.success('巡检模板创建成功')
@@ -170,9 +178,22 @@ export const useCloneTemplate = () => {
 
   return useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      void id
-      void name
-      return null as InspectionTemplate | null
+      // 获取原模板
+      const original = await fetchInspectionTemplate(Number(id))
+      if (!original) {
+        throw new Error('原模板不存在')
+      }
+
+      // 创建副本
+      const cloneData = {
+        name,
+        description: original.description,
+        category: original.category,
+        deviceTypes: original.deviceTypes,
+        checkItems: original.checkItems,
+      }
+
+      return createInspectionTemplate(cloneData as Omit<InspectionTemplate, 'id' | 'created_at' | 'updated_at'>)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'templates'] })
@@ -184,12 +205,50 @@ export const useCloneTemplate = () => {
   })
 }
 
+export const useUpdateTemplate = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<InspectionTemplate> }) => {
+      return updateInspectionTemplate(Number(id), data)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'templates'] })
+      toast.success('模板更新成功')
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '更新模板失败')
+    },
+  })
+}
+
+export const useDeleteTemplate = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const success = await deleteInspectionTemplate(Number(id))
+      if (!success) {
+        throw new Error('删除失败')
+      }
+      return success
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'templates'] })
+      toast.success('模板删除成功')
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '删除模板失败')
+    },
+  })
+}
+
 // 巡检执行Hooks - 连接到真实API
 export const useInspectionExecutions = (params?: {
   page?: number
   pageSize?: number
   status?: string
-  strategyId?: string
+  strategyId?: string | number
   startDate?: string
   endDate?: string
 }) => {
@@ -221,11 +280,12 @@ export const useTriggerExecution = () => {
 
   return useMutation({
     mutationFn: async (strategyId: string) => {
-      void strategyId
+      return triggerStrategyExecution(strategyId)
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'executions'] })
-      toast.success('巡检任务已启动')
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
+      toast.success(result.message || '巡检任务已启动')
     },
     onError: (error: Error) => {
       toast.error(error.message || '启动巡检失败')

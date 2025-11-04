@@ -27,8 +27,8 @@ interface StrategyFormData {
   description: string
   type: StrategyType
   cron: string
-  devices: string[]
-  templates: string[]
+  devices: number[]
+  templates: number[]
   enabled: boolean
 }
 
@@ -89,22 +89,35 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
   const validateForm = () => {
     const newErrors: Partial<Record<keyof StrategyFormData, string>> = {}
 
+    // 策略名称：必填，长度1-100字符
     if (!formData.name.trim()) {
       newErrors.name = '请输入策略名称'
+    } else if (formData.name.length > 100) {
+      newErrors.name = '策略名称不能超过100个字符'
     }
 
+    // 策略描述：必填，最多500字符
     if (!formData.description.trim()) {
       newErrors.description = '请输入策略描述'
+    } else if (formData.description.length > 500) {
+      newErrors.description = '策略描述不能超过500个字符'
     }
 
-    if (formData.type === 'scheduled' && !formData.cron.trim()) {
-      newErrors.cron = '请输入Cron表达式'
+    // Cron表达式：定时策略必填，最多100字符
+    if (formData.type === 'scheduled') {
+      if (!formData.cron.trim()) {
+        newErrors.cron = '请输入Cron表达式'
+      } else if (formData.cron.length > 100) {
+        newErrors.cron = 'Cron表达式不能超过100个字符'
+      }
     }
 
+    // 设备：至少选择一个
     if (formData.devices.length === 0) {
       newErrors.devices = '请选择至少一个设备'
     }
 
+    // 模板：至少选择一个
     if (formData.templates.length === 0) {
       newErrors.templates = '请选择至少一个模板'
     }
@@ -188,10 +201,18 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     placeholder="请输入策略名称"
                     className={errors.name ? 'border-red-500' : ''}
+                    maxLength={100}
                   />
-                  {errors.name && (
-                    <p className="text-sm text-red-500 mt-1">{errors.name}</p>
-                  )}
+                  <div className="flex justify-between items-center mt-1">
+                    {errors.name ? (
+                      <p className="text-sm text-red-500">{errors.name}</p>
+                    ) : (
+                      <p className="text-xs text-gray-500">策略名称长度1-100字符</p>
+                    )}
+                    <span className={`text-xs ${formData.name.length > 100 ? 'text-red-500' : 'text-gray-400'}`}>
+                      {formData.name.length}/100
+                    </span>
+                  </div>
                 </div>
 
                 <div className="md:col-span-2">
@@ -202,14 +223,22 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                     value={formData.description}
                     onChange={(e) => handleInputChange('description', e.target.value)}
                     placeholder="请输入策略描述"
+                    maxLength={500}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       errors.description ? 'border-red-500' : 'border-gray-300'
                     }`}
                     rows={3}
                   />
-                  {errors.description && (
-                    <p className="text-sm text-red-500 mt-1">{errors.description}</p>
-                  )}
+                  <div className="flex justify-between items-center mt-1">
+                    {errors.description ? (
+                      <p className="text-sm text-red-500">{errors.description}</p>
+                    ) : (
+                      <p className="text-xs text-gray-500">策略描述最多500字符</p>
+                    )}
+                    <span className={`text-xs ${formData.description.length > 500 ? 'text-red-500' : 'text-gray-400'}`}>
+                      {formData.description.length}/500
+                    </span>
+                  </div>
                 </div>
 
                 <div>
@@ -320,7 +349,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                       size="sm"
                       className="mt-2"
                       onClick={() => {
-                        const mockDeviceId = `device-${Date.now()}`
+                        const mockDeviceId = Date.now()
                         handleInputChange('devices', [...formData.devices, mockDeviceId])
                       }}
                     >
@@ -361,7 +390,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                       size="sm"
                       className="mt-2"
                       onClick={() => {
-                        const mockTemplateId = `template-${Date.now()}`
+                        const mockTemplateId = Date.now()
                         handleInputChange('templates', [...formData.templates, mockTemplateId])
                       }}
                     >

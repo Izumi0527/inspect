@@ -5,8 +5,9 @@ from src.models.device import (
     DeviceType, DeviceVendor, DeviceStatus
 )
 from src.models.inspection import (
-    InspectionTemplate, InspectionSchedule, Inspection, InspectionLog, 
-    InspectionResult, InspectionStatus, InspectionTrigger, CheckItemStatus
+    InspectionTemplate, InspectionSchedule, Inspection, InspectionLog,
+    InspectionResult, InspectionStrategy, InspectionStatus, InspectionTrigger,
+    CheckItemStatus, StrategyType
 )
 from src.models.alert import (
     AlertRule, Alert, AlertNotification, MaintenanceWindow,
@@ -27,9 +28,9 @@ __all__ = [
     "NetworkScan", "DiscoveredDevice", "DeviceType", "DeviceVendor", "DeviceStatus",
     
     # 巡检模型
-    "InspectionTemplate", "InspectionSchedule", "Inspection", 
-    "InspectionLog", "InspectionResult", "InspectionStatus", 
-    "InspectionTrigger", "CheckItemStatus",
+    "InspectionTemplate", "InspectionSchedule", "Inspection",
+    "InspectionLog", "InspectionResult", "InspectionStrategy",
+    "InspectionStatus", "InspectionTrigger", "CheckItemStatus", "StrategyType",
     
     # 告警模型
     "AlertRule", "Alert", "AlertNotification", "MaintenanceWindow",

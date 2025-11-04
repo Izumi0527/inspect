@@ -5,6 +5,7 @@
 
 import uuid
 import time
+import traceback
 import contextvars
 from typing import Optional
 import structlog
@@ -222,7 +223,7 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
             process_time=round(process_time, 4),
             error_type=type(exception).__name__,
             error_message=str(exception),
-            exception=exception
+            stack_trace=traceback.format_exc()
         )
 
 

@@ -19,15 +19,19 @@ class CacheService:
     # 缓存键前缀
     PREFIXES = {
         "user": "user",
-        "device": "device", 
+        "device": "device",
         "scan": "scan",
         "auth": "auth",
         "session": "session",
         "permission": "perm",
         "device_status": "dev_status",
-        "device_metrics": "dev_metrics"
+        "device_metrics": "dev_metrics",
+        "inspection_stats": "insp_stats",      # 巡检统计
+        "inspection_trends": "insp_trends",    # 巡检趋势
+        "device_dist": "dev_dist",             # 设备分布
+        "problem_dist": "prob_dist"            # 问题分布
     }
-    
+
     # 默认过期时间（秒）
     DEFAULT_EXPIRE = {
         "user": 300,        # 5分钟
@@ -36,8 +40,12 @@ class CacheService:
         "auth": 1800,       # 30分钟
         "session": 86400,   # 24小时
         "permission": 3600, # 1小时
-        "device_status": 60,    # 1分钟
-        "device_metrics": 300   # 5分钟
+        "device_status": 60,        # 1分钟
+        "device_metrics": 300,      # 5分钟
+        "inspection_stats": 180,    # 3分钟 - 统计数据
+        "inspection_trends": 240,   # 4分钟 - 趋势数据
+        "device_dist": 300,         # 5分钟 - 设备分布
+        "problem_dist": 240         # 4分钟 - 问题分布
     }
     
     def __init__(self):
@@ -226,6 +234,85 @@ class CacheService:
         """使用户权限缓存失效"""
         key = self._make_key(self.PREFIXES["permission"], user_id)
         return await self.redis.delete(key)
+
+    # ==================== 巡检统计缓存 ====================
+
+    async def cache_inspection_stats(self, time_range: str, stats_data: dict, expire: Optional[int] = None) -> bool:
+        """缓存巡检统计数据"""
+        key = self._make_key(self.PREFIXES["inspection_stats"], time_range)
+        expire = expire or self.DEFAULT_EXPIRE["inspection_stats"]
+        return await self.redis.set(key, stats_data, expire=expire)
+
+    async def get_cached_inspection_stats(self, time_range: str) -> Optional[dict]:
+        """获取缓存的巡检统计数据"""
+        key = self._make_key(self.PREFIXES["inspection_stats"], time_range)
+        return await self.redis.get(key)
+
+    async def invalidate_inspection_stats(self, time_range: Optional[str] = None) -> bool:
+        """使巡检统计缓存失效"""
+        if time_range:
+            key = self._make_key(self.PREFIXES["inspection_stats"], time_range)
+            return await self.redis.delete(key)
+        else:
+            # 清除所有统计缓存
+            pattern = self._make_key(self.PREFIXES["inspection_stats"], "*")
+            return await self.redis.clear_pattern(pattern) > 0
+
+    async def cache_inspection_trends(self, cache_key: str, trends_data: list, expire: Optional[int] = None) -> bool:
+        """缓存巡检趋势数据"""
+        key = self._make_key(self.PREFIXES["inspection_trends"], cache_key)
+        expire = expire or self.DEFAULT_EXPIRE["inspection_trends"]
+        return await self.redis.set(key, trends_data, expire=expire)
+
+    async def get_cached_inspection_trends(self, cache_key: str) -> Optional[list]:
+        """获取缓存的巡检趋势数据"""
+        key = self._make_key(self.PREFIXES["inspection_trends"], cache_key)
+        return await self.redis.get(key)
+
+    async def invalidate_inspection_trends(self) -> bool:
+        """使所有巡检趋势缓存失效"""
+        pattern = self._make_key(self.PREFIXES["inspection_trends"], "*")
+        return await self.redis.clear_pattern(pattern) > 0
+
+    async def cache_device_distribution(self, distribution_data: list, expire: Optional[int] = None) -> bool:
+        """缓存设备类型分布数据"""
+        key = self._make_key(self.PREFIXES["device_dist"], "all")
+        expire = expire or self.DEFAULT_EXPIRE["device_dist"]
+        return await self.redis.set(key, distribution_data, expire=expire)
+
+    async def get_cached_device_distribution(self) -> Optional[list]:
+        """获取缓存的设备类型分布数据"""
+        key = self._make_key(self.PREFIXES["device_dist"], "all")
+        return await self.redis.get(key)
+
+    async def invalidate_device_distribution(self) -> bool:
+        """使设备类型分布缓存失效"""
+        key = self._make_key(self.PREFIXES["device_dist"], "all")
+        return await self.redis.delete(key)
+
+    async def cache_problem_distribution(self, distribution_data: list, expire: Optional[int] = None) -> bool:
+        """缓存问题分布数据"""
+        key = self._make_key(self.PREFIXES["problem_dist"], "all")
+        expire = expire or self.DEFAULT_EXPIRE["problem_dist"]
+        return await self.redis.set(key, distribution_data, expire=expire)
+
+    async def get_cached_problem_distribution(self) -> Optional[list]:
+        """获取缓存的问题分布数据"""
+        key = self._make_key(self.PREFIXES["problem_dist"], "all")
+        return await self.redis.get(key)
+
+    async def invalidate_problem_distribution(self) -> bool:
+        """使问题分布缓存失效"""
+        key = self._make_key(self.PREFIXES["problem_dist"], "all")
+        return await self.redis.delete(key)
+
+    async def invalidate_all_inspection_caches(self) -> None:
+        """清除所有巡检相关缓存"""
+        await self.invalidate_inspection_stats()
+        await self.invalidate_inspection_trends()
+        await self.invalidate_device_distribution()
+        await self.invalidate_problem_distribution()
+        logger.info("All inspection related cache cleared")
     
     # ==================== 通用缓存操作 ====================
     

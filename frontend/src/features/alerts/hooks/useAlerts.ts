@@ -36,7 +36,17 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
         hasPrev: response.hasPrev
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载告警数据失败')
+      const errorMessage = err instanceof Error ? err.message : '加载告警数据失败'
+      setError(errorMessage)
+      setAlerts([])  // 错误时清空列表，而非显示假数据
+      setPagination({
+        page: 1,
+        pageSize: 10,
+        total: 0,
+        hasNext: false,
+        hasPrev: false
+      })
+      console.error('Failed to load alerts:', err)
     } finally {
       setLoading(false)
     }
@@ -150,22 +160,6 @@ export function useAlertFilters() {
   }
 }
 
-// 告警筛选逻辑hook
-export function useFilteredAlerts(alerts: Alert[], filters: AlertFilters) {
-  return useMemo(() => {
-    return alerts.filter(alert => {
-      const matchesSearch = alert.title.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
-                           alert.device.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
-                           alert.description.toLowerCase().includes(filters.searchQuery.toLowerCase())
-      
-      const matchesSeverity = filters.severityFilter === 'all' || alert.severity === filters.severityFilter
-      const matchesStatus = filters.statusFilter === 'all' || alert.status === filters.statusFilter
-      
-      return matchesSearch && matchesSeverity && matchesStatus
-    })
-  }, [alerts, filters])
-}
-
 // 告警选择hook
 export function useAlertSelection() {
   const [selectedAlerts, setSelectedAlerts] = useState<string[]>([])
@@ -179,8 +173,8 @@ export function useAlertSelection() {
   }, [])
 
   const toggleAlert = useCallback((alertId: string) => {
-    setSelectedAlerts(prev => 
-      prev.includes(alertId) 
+    setSelectedAlerts(prev =>
+      prev.includes(alertId)
         ? prev.filter(id => id !== alertId)
         : [...prev, alertId]
     )

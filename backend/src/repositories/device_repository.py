@@ -299,22 +299,22 @@ class DeviceRepository:
         total_query = select(func.count(Device.id))
         total_result = await self.session.execute(total_query)
         total_devices = total_result.scalar()
-        
+
         # 在线设备数
         online_query = select(func.count(Device.id)).where(Device.status == DeviceStatus.ONLINE)
         online_result = await self.session.execute(online_query)
         online_devices = online_result.scalar()
-        
+
         # 离线设备数
         offline_query = select(func.count(Device.id)).where(Device.status == DeviceStatus.OFFLINE)
         offline_result = await self.session.execute(offline_query)
         offline_devices = offline_result.scalar()
-        
+
         # 按类型统计
         type_query = select(Device.device_type, func.count(Device.id)).group_by(Device.device_type)
         type_result = await self.session.execute(type_query)
         type_stats = {device_type: count for device_type, count in type_result.all()}
-        
+
         return {
             "total_devices": total_devices,
             "online_devices": online_devices,
@@ -322,6 +322,57 @@ class DeviceRepository:
             "unknown_devices": total_devices - online_devices - offline_devices,
             "type_distribution": type_stats
         }
+
+    async def get_device_type_distribution(self) -> List[Dict[str, Any]]:
+        """
+        获取设备类型分布统计（用于统计分析页面）
+
+        Returns:
+            设备类型分布列表，每个元素包含name（中文名称）、value（数量）、color（颜色）
+        """
+        # 查询设备类型分布
+        query = select(
+            Device.device_type,
+            func.count(Device.id).label('count')
+        ).group_by(Device.device_type).order_by(desc(func.count(Device.id)))
+
+        result = await self.session.execute(query)
+        rows = result.all()
+
+        # 设备类型中文名称映射
+        type_names = {
+            "router": "路由器",
+            "switch": "交换机",
+            "firewall": "防火墙",
+            "server": "服务器",
+            "unknown": "其他"
+        }
+
+        # 颜色配置
+        colors = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"]
+
+        # 构造返回数据
+        distribution_data = []
+        for i, row in enumerate(rows):
+            device_type = row.device_type
+            count = int(row.count or 0)
+
+            # 获取设备类型的值（处理枚举类型）
+            type_value = device_type.value if hasattr(device_type, 'value') else str(device_type)
+
+            # 获取中文名称
+            type_name = type_names.get(type_value, type_value)
+
+            # 分配颜色（循环使用）
+            color = colors[i % len(colors)]
+
+            distribution_data.append({
+                "name": type_name,
+                "value": count,
+                "color": color
+            })
+
+        return distribution_data
 
 
 # 工厂函数

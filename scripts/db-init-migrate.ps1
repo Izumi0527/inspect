@@ -403,7 +403,10 @@ function Main {
             # 方法3: 设置PowerShell相关编码变量
             $OutputEncoding = [System.Text.Encoding]::UTF8
             $PSDefaultParameterValues['*:Encoding'] = 'utf8'
-            
+
+            # 方法5: 设置Python子进程的输出编码（最关键！）
+            $env:PYTHONIOENCODING = "utf-8"
+
             # 方法4: 设置当前线程的文化信息
             $currentCulture = [System.Globalization.CultureInfo]::CurrentCulture
             [System.Threading.Thread]::CurrentThread.CurrentCulture = $currentCulture
@@ -1381,7 +1384,7 @@ function Create-NewMigration {
             ".venv/bin/activate"
         }
         
-        if (Test-Path $activateScript -and ($IsWindows -or $env:OS -eq "Windows_NT")) {
+        if ((Test-Path $activateScript) -and ($IsWindows -or $env:OS -eq "Windows_NT")) {
             & $activateScript
         }
         
@@ -1426,7 +1429,7 @@ function Show-MigrationStatus {
             ".venv/bin/activate"
         }
         
-        if (Test-Path $activateScript -and ($IsWindows -or $env:OS -eq "Windows_NT")) {
+        if ((Test-Path $activateScript) -and ($IsWindows -or $env:OS -eq "Windows_NT")) {
             & $activateScript
         }
         
@@ -1442,31 +1445,82 @@ function Show-MigrationStatus {
         
         # 显示当前版本
         Write-LogInfo "当前数据库版本:"
-        $currentResult = alembic current 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host $currentResult -ForegroundColor Green
-        } else {
-            Write-Host $currentResult -ForegroundColor Red
+        $currentOutput = $null
+        $currentVersion = $null
+        $previousErrorAction = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'  # 临时允许错误继续执行
+            $currentOutput = uv run alembic current 2>$null | Out-String
+            $ErrorActionPreference = $previousErrorAction
+        } catch {
+            $ErrorActionPreference = $previousErrorAction
+            # 命令执行失败,忽略错误继续
         }
-        
+
+        # 检查是否有输出
+        if ($currentOutput) {
+            # 过滤掉 INFO/DEBUG/WARNING 日志行,只保留版本信息
+            $lines = $currentOutput -split "`r?`n" | Where-Object {
+                $_ -notmatch "^\s*(INFO|DEBUG|WARNING|ERROR)" -and $_.Trim()
+            }
+
+            # 匹配第一行的版本号
+            $firstLine = $lines | Select-Object -First 1
+            if ($firstLine) {
+                Write-Host $firstLine -ForegroundColor Green
+            } else {
+                Write-Host "无迁移版本记录" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "无迁移版本记录" -ForegroundColor Yellow
+        }
+
         Write-Host ""
-        
+
         # 显示迁移历史
         Write-LogInfo "迁移历史:"
-        $historyResult = alembic history 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host $historyResult -ForegroundColor Yellow
-        } else {
-            Write-Host $historyResult -ForegroundColor Red
+        $historyOutput = @()
+        try {
+            $historyOutput = & uv run alembic history 2>&1
+            $historyExitCode = $LASTEXITCODE
+        } catch {
+            $historyExitCode = 1
         }
-        
+
+        if ($historyExitCode -eq 0 -and $historyOutput) {
+            # 过滤掉 INFO/DEBUG/WARNING 日志行
+            $filteredHistory = $historyOutput | Where-Object {
+                ($_ -notmatch "^\s*(INFO|DEBUG|WARNING|ERROR)") -and ($_ -match "\S")
+            }
+            if ($filteredHistory) {
+                Write-Host ($filteredHistory -join "`n") -ForegroundColor Yellow
+            } else {
+                Write-Host "无迁移历史记录" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "无迁移历史记录" -ForegroundColor Yellow
+        }
+
         Write-Host ""
-        
+
         # 显示待执行的迁移
         Write-LogInfo "检查待执行的迁移:"
-        $upgradeResult = alembic show head 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "最新版本: $upgradeResult" -ForegroundColor Blue
+        $headOutput = @()
+        try {
+            $headOutput = & uv run alembic show head 2>&1
+            $headExitCode = $LASTEXITCODE
+        } catch {
+            $headExitCode = 1
+        }
+
+        if ($headExitCode -eq 0 -and $headOutput) {
+            # 过滤掉 INFO/DEBUG/WARNING 日志行
+            $filteredHead = $headOutput | Where-Object {
+                ($_ -notmatch "^\s*(INFO|DEBUG|WARNING|ERROR)") -and ($_ -match "\S")
+            }
+            if ($filteredHead) {
+                Write-Host "最新版本: $($filteredHead -join ' ')" -ForegroundColor Blue
+            }
         }
         
     } catch {

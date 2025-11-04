@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   TrendingUp,
   BarChart3,
@@ -43,26 +43,84 @@ import {
   useDeviceDistribution,
   useProblemDistribution
 } from '../hooks/useInspection'
+import { exportAnalyticsReport } from '../api/inspection.api'
+import toast from 'react-hot-toast'
 
 export const InspectionAnalytics: React.FC = () => {
   const [timePeriod, setTimePeriod] = useState<'day' | 'week' | 'month'>('week')
-  const [dateRange] = useState({
+  const [dateRange, setDateRange] = useState({
     startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0]
   })
 
-  const { data: stats, isLoading: statsLoading } = useInspectionStats()
-  const { data: trends, isLoading: trendsLoading } = useInspectionTrends({
+  // 根据 timePeriod 自动更新 dateRange
+  useEffect(() => {
+    const now = new Date()
+    const endDate = now.toISOString().split('T')[0]
+    let startDate: string
+
+    switch (timePeriod) {
+      case 'day':
+        // 按天显示最近7天数据
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        break
+      case 'week':
+        // 按周显示最近4周数据
+        startDate = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        break
+      case 'month':
+        // 按月显示最近12个月数据
+        startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        break
+      default:
+        startDate = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    }
+
+    setDateRange({ startDate, endDate })
+  }, [timePeriod])
+
+  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useInspectionStats()
+  const { data: trends, isLoading: trendsLoading, refetch: refetchTrends } = useInspectionTrends({
     period: timePeriod,
     startDate: dateRange.startDate,
     endDate: dateRange.endDate
   })
-  const { data: deviceDistribution, isLoading: deviceLoading } = useDeviceDistribution()
-  const { data: problemDistribution, isLoading: problemLoading } = useProblemDistribution()
+  const { data: deviceDistribution, isLoading: deviceLoading, refetch: refetchDevice } = useDeviceDistribution()
+  const { data: problemDistribution, isLoading: problemLoading, refetch: refetchProblem } = useProblemDistribution()
 
   const handlePeriodChange = (value: string) => {
     if (value === 'day' || value === 'week' || value === 'month') {
       setTimePeriod(value)
+    }
+  }
+
+  // 刷新所有统计数据
+  const handleRefreshAll = async () => {
+    await Promise.all([
+      refetchStats(),
+      refetchTrends(),
+      refetchDevice(),
+      refetchProblem()
+    ])
+  }
+
+  // 导出分析报告
+  const handleExportReport = async () => {
+    try {
+      toast.loading('正在生成报告...', { id: 'export-report' })
+
+      await exportAnalyticsReport({
+        period: timePeriod,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        formatType: 'excel', // 默认导出 Excel 格式
+        includeCharts: true
+      })
+
+      toast.success('报告已开始下载', { id: 'export-report' })
+    } catch (error) {
+      console.error('导出报告失败:', error)
+      toast.error('导出报告失败,请稍后重试', { id: 'export-report' })
     }
   }
 
@@ -99,11 +157,11 @@ export const InspectionAnalytics: React.FC = () => {
               <SelectItem value="month">按月</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleRefreshAll}>
             <RefreshCw className="w-4 h-4 mr-2" />
             刷新
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExportReport}>
             <Download className="w-4 h-4 mr-2" />
             导出报告
           </Button>

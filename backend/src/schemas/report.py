@@ -405,6 +405,7 @@ def convert_report_to_response(report_db, base_url: str = "") -> dict:
 def convert_snake_to_camel_dict(data: dict) -> dict:
     """
     递归地将字典的snake_case键转换为camelCase
+    同时将numpy类型转换为Python原生类型（兜底机制）
 
     Args:
         data: 输入字典
@@ -412,24 +413,34 @@ def convert_snake_to_camel_dict(data: dict) -> dict:
     Returns:
         dict: 转换后的字典
     """
+    import numpy as np
+
+    def convert_value(value):
+        """递归转换值，处理numpy类型和嵌套结构"""
+        # 处理numpy类型（兜底机制）
+        if isinstance(value, np.integer):
+            return int(value)
+        elif isinstance(value, np.floating):
+            return float(value)
+        elif isinstance(value, np.ndarray):
+            # 递归处理数组元素，确保元素也被转换
+            return [convert_value(item) for item in value.tolist()]
+        elif isinstance(value, dict):
+            return convert_snake_to_camel_dict(value)
+        elif isinstance(value, list):
+            return [convert_value(item) for item in value]
+        else:
+            return value
+
     if not isinstance(data, dict):
-        return data
+        return convert_value(data)
 
     result = {}
     for key, value in data.items():
         # 转换键名
         camel_key = to_camel(key)
-
-        # 递归处理值
-        if isinstance(value, dict):
-            result[camel_key] = convert_snake_to_camel_dict(value)
-        elif isinstance(value, list):
-            result[camel_key] = [
-                convert_snake_to_camel_dict(item) if isinstance(item, dict) else item
-                for item in value
-            ]
-        else:
-            result[camel_key] = value
+        # 转换值（包括类型转换和递归处理）
+        result[camel_key] = convert_value(value)
 
     return result
 

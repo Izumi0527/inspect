@@ -1,6 +1,32 @@
 """
-告警管理API路由
+告警管理API路由（已废弃）
+
+⚠️ DEPRECATED ⚠️
+此API已被废弃，请使用新版API: src.api.alerts (src/api/alerts/__init__.py)
+
+新版API改进：
+- 支持数据库持久化（Repository模式）
+- 细粒度权限控制（RBAC）
+- 批量操作支持
+- 告警重新激活功能
+- 软删除支持
+- 完整的分页功能
+
+迁移日期: 2025-01-27
+删除计划: 2025-03-01
+
+如需使用此API，请联系开发团队协助迁移。
 """
+import warnings
+
+# 发出废弃警告
+warnings.warn(
+    "alerts_deprecated API is deprecated and will be removed in version 2.0. "
+    "Please migrate to the new alerts API (src.api.alerts).",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any

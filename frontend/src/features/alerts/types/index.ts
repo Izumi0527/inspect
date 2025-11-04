@@ -3,6 +3,8 @@ export type AlertSeverity = 'critical' | 'warning' | 'info'
 
 export type AlertStatus = 'active' | 'acknowledged' | 'resolved'
 
+export type AlertCategory = 'connectivity' | 'performance' | 'security' | 'configuration' | 'hardware' | 'other'
+
 export interface Alert {
   id: string
   title: string
