@@ -1,0 +1,288 @@
+import * as React from 'react'
+import * as DialogPrimitive from '@radix-ui/react-dialog'
+import { X } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { cn } from '@/utils/cn'
+
+const Modal = DialogPrimitive.Root
+
+const ModalTrigger = DialogPrimitive.Trigger
+
+const ModalPortal = DialogPrimitive.Portal
+
+const ModalClose = DialogPrimitive.Close
+
+const ModalOverlay = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Overlay>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Overlay
+    ref={ref}
+    className={cn(
+      'fixed inset-0 z-50 bg-black/50 backdrop-blur-sm',
+      'data-[state=open]:animate-in data-[state=closed]:animate-out',
+      'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+      className
+    )}
+    {...props}
+  />
+))
+ModalOverlay.displayName = DialogPrimitive.Overlay.displayName
+
+const ModalContent = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
+>(({ className, children, ...props }, ref) => (
+  <ModalPortal>
+    <ModalOverlay />
+    <DialogPrimitive.Content
+      ref={ref}
+      className={cn(
+        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-gray-200/20 bg-white/95 backdrop-blur-xl p-6 shadow-2xl duration-200',
+        'data-[state=open]:animate-in data-[state=closed]:animate-out',
+        'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+        'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+        'data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]',
+        'data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
+        'rounded-2xl',
+        className
+      )}
+      {...props}
+    >
+      {children}
+      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 disabled:pointer-events-none">
+        <X className="h-4 w-4" />
+        <span className="sr-only">关闭</span>
+      </DialogPrimitive.Close>
+    </DialogPrimitive.Content>
+  </ModalPortal>
+))
+ModalContent.displayName = DialogPrimitive.Content.displayName
+
+const ModalHeader = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      'flex flex-col space-y-1.5 text-center sm:text-left',
+      className
+    )}
+    {...props}
+  />
+)
+ModalHeader.displayName = 'ModalHeader'
+
+const ModalFooter = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2',
+      className
+    )}
+    {...props}
+  />
+)
+ModalFooter.displayName = 'ModalFooter'
+
+const ModalTitle = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Title>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Title
+    ref={ref}
+    className={cn(
+      'text-lg font-semibold leading-none tracking-tight text-gray-900',
+      className
+    )}
+    {...props}
+  />
+))
+ModalTitle.displayName = DialogPrimitive.Title.displayName
+
+const ModalDescription = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Description>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Description
+    ref={ref}
+    className={cn('text-sm text-gray-600', className)}
+    {...props}
+  />
+))
+ModalDescription.displayName = DialogPrimitive.Description.displayName
+
+// 确认对话框组件
+interface ConfirmModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: () => void
+  title: string
+  description?: string
+  confirmText?: string
+  cancelText?: string
+  variant?: 'default' | 'destructive'
+}
+
+export const ConfirmModal: React.FC<ConfirmModalProps> = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  description,
+  confirmText = '确认',
+  cancelText = '取消',
+  variant = 'default'
+}) => {
+  return (
+    <Modal open={isOpen} onOpenChange={onClose}>
+      <ModalContent className="sm:max-w-[425px]">
+        <ModalHeader>
+          <ModalTitle className="flex items-center gap-2">
+            {variant === 'destructive' && (
+              <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center">
+                <X className="w-3 h-3 text-red-600" />
+              </div>
+            )}
+            {title}
+          </ModalTitle>
+          {description && (
+            <ModalDescription>{description}</ModalDescription>
+          )}
+        </ModalHeader>
+        <ModalFooter>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 transition-colors"
+          >
+            {cancelText}
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              onConfirm()
+              onClose()
+            }}
+            className={cn(
+              'px-4 py-2 text-sm font-medium text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ml-2',
+              variant === 'destructive'
+                ? 'bg-red-600 hover:bg-red-700 focus:ring-red-400'
+                : 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-400'
+            )}
+          >
+            {confirmText}
+          </motion.button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  )
+}
+
+// 通知模态框
+interface NotificationModalProps {
+  isOpen: boolean
+  onClose: () => void
+  title: string
+  message: string
+  type?: 'success' | 'warning' | 'error' | 'info'
+}
+
+export const NotificationModal: React.FC<NotificationModalProps> = ({
+  isOpen,
+  onClose,
+  title,
+  message,
+  type = 'info'
+}) => {
+  const typeStyles = {
+    success: 'bg-green-100 text-green-800',
+    warning: 'bg-yellow-100 text-yellow-800',
+    error: 'bg-red-100 text-red-800',
+    info: 'bg-blue-100 text-blue-800'
+  }
+
+  return (
+    <Modal open={isOpen} onOpenChange={onClose}>
+      <ModalContent className="sm:max-w-[425px]">
+        <ModalHeader>
+          <ModalTitle className="flex items-center gap-2">
+            <div className={cn('w-6 h-6 rounded-full flex items-center justify-center', typeStyles[type])}>
+              <div className="w-2 h-2 bg-current rounded-full" />
+            </div>
+            {title}
+          </ModalTitle>
+          <ModalDescription>{message}</ModalDescription>
+        </ModalHeader>
+        <ModalFooter>
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 transition-colors"
+          >
+            知道了
+          </motion.button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  )
+}
+
+// 简单模态框包装器 - 提供 onClose 接口
+interface SimpleModalProps {
+  open: boolean
+  onClose: () => void
+  title?: string
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl'
+  children: React.ReactNode
+}
+
+export const SimpleModal: React.FC<SimpleModalProps> = ({
+  open,
+  onClose,
+  title,
+  size = 'md',
+  children
+}) => {
+  const sizeClasses = {
+    sm: 'sm:max-w-sm',
+    md: 'sm:max-w-md',
+    lg: 'sm:max-w-lg',
+    xl: 'sm:max-w-xl',
+    '2xl': 'sm:max-w-2xl',
+    '3xl': 'sm:max-w-3xl',
+    '4xl': 'sm:max-w-4xl',
+    '5xl': 'sm:max-w-5xl'
+  }
+
+  return (
+    <Modal open={open} onOpenChange={onClose}>
+      <ModalContent className={sizeClasses[size]}>
+        {title && (
+          <ModalHeader>
+            <ModalTitle>{title}</ModalTitle>
+          </ModalHeader>
+        )}
+        {children}
+      </ModalContent>
+    </Modal>
+  )
+}
+
+export {
+  Modal,
+  ModalPortal,
+  ModalOverlay,
+  ModalClose,
+  ModalTrigger,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalTitle,
+  ModalDescription,
+}

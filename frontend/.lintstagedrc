@@ -1,0 +1,34 @@
+# Husky pre-commit hooks configuration
+
+# Installation:
+# npm install --save-dev husky lint-staged
+# npx husky install
+# npx husky add .husky/pre-commit "npx lint-staged"
+
+# This file defines what commands to run on staged files before committing
+
+# TypeScript and JavaScript files
+*.{js,jsx,ts,tsx}:
+  - npm run lint:fix
+  - npm run type-check
+  - npm test -- --findRelatedTests --passWithNoTests
+
+# JSON files
+*.json:
+  - prettier --write
+
+# Markdown files
+*.md:
+  - prettier --write
+
+# CSS and styling files
+*.{css,scss,sass}:
+  - prettier --write
+
+# Package.json and lock files
+package*.json:
+  - npm audit fix --audit-level moderate
+
+# YAML files
+*.{yml,yaml}:
+  - prettier --write

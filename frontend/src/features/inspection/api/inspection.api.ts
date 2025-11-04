@@ -1,0 +1,826 @@
+﻿import { api } from '@/lib/api-client'
+import {
+  InspectionTemplate,
+  InspectionExecution,
+  InspectionStats,
+  InspectionTask,
+  InspectionResult,
+  InspectionApiResponse,
+  InspectionSummary,
+  DeviceInspectionResult,
+  InspectionCheckItem,
+  CheckResult
+} from '../types'
+
+type UnknownRecord = Record<string, unknown>
+
+const TEMPLATE_CATEGORIES = ['network', 'system', 'security', 'custom'] as const
+const TASK_STATUSES = ['pending', 'running', 'completed', 'failed'] as const
+const EXECUTION_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const
+const DEVICE_STATUSES = ['success', 'warning', 'error', 'offline'] as const
+const TRIGGER_TYPES = ['scheduled', 'manual'] as const
+
+const CHECK_ITEM_TYPES = ['snmp', 'ssh', 'http', 'ping', 'script'] as const
+const CHECK_RESULT_STATUSES = ['pass', 'warning', 'fail', 'skip'] as const
+
+const isObject = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const toRecord = (value: unknown): UnknownRecord => (isObject(value) ? value : {})
+
+const toNumber = (value: unknown, fallback = 0): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+  return fallback
+}
+
+const toString = (value: unknown, fallback = ''): string =>
+  typeof value === 'string' ? value : fallback
+
+const toStringArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+
+const toRecordArray = (value: unknown): UnknownRecord[] =>
+  Array.isArray(value) ? value.filter(isObject).map(item => item as UnknownRecord) : []
+
+const toEnumValue = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
+  typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback
+
+const toOptionalNumber = (value: unknown): number | undefined => {
+  const num = toNumber(value, Number.NaN)
+  return Number.isFinite(num) ? num : undefined
+}
+
+const mapCheckItem = (value: UnknownRecord): InspectionCheckItem => {
+  const type = toEnumValue(value.type ?? value['type'], CHECK_ITEM_TYPES, 'script')
+  const configRecord = toRecord(value.config ?? value['config'])
+  const thresholdRecord = toRecord(configRecord.threshold ?? configRecord['threshold'])
+
+  const config: InspectionCheckItem['config'] = {}
+
+  const oid = toString(configRecord.oid ?? configRecord['oid'])
+  if (oid) {
+    config.oid = oid
+  }
+
+  const command = toString(configRecord.command ?? configRecord['command'])
+  if (command) {
+    config.command = command
+  }
+
+  const url = toString(configRecord.url ?? configRecord['url'])
+  if (url) {
+    config.url = url
+  }
+
+  const scriptValue = toString(configRecord.script ?? configRecord['script'])
+  if (scriptValue) {
+    config.script = scriptValue
+  }
+
+  const timeoutValue = toOptionalNumber(configRecord.timeout ?? configRecord['timeout'])
+  if (timeoutValue !== undefined) {
+    config.timeout = timeoutValue
+  }
+
+  const expectedValue = toString(configRecord.expectedValue ?? configRecord['expected_value'])
+  if (expectedValue) {
+    config.expectedValue = expectedValue
+  }
+
+  const threshold: { warning?: number; critical?: number } = {}
+  const warningValue = toOptionalNumber(thresholdRecord.warning ?? thresholdRecord['warning'])
+  if (warningValue !== undefined) {
+    threshold.warning = warningValue
+  }
+  const criticalValue = toOptionalNumber(thresholdRecord.critical ?? thresholdRecord['critical'])
+  if (criticalValue !== undefined) {
+    threshold.critical = criticalValue
+  }
+  if (Object.keys(threshold).length > 0) {
+    config.threshold = threshold
+  }
+
+  return {
+    id: toString(value.id ?? value['id']),
+    name: toString(value.name ?? value['name']),
+    type,
+    config,
+    weight: toNumber(value.weight ?? value['weight'], 1),
+  }
+}
+
+const mapCheckResult = (value: UnknownRecord): CheckResult => {
+  const status = toEnumValue(value.status ?? value['status'], CHECK_RESULT_STATUSES, 'pass')
+
+  const actualValue = toString(value.actualValue ?? value['actual_value'])
+  const expectedValue = toString(value.expectedValue ?? value['expected_value'])
+  const message = toString(value.message ?? value['message'])
+
+  return {
+    checkItemId: toString(value.checkItemId ?? value['check_item_id']),
+    checkItemName: toString(value.checkItemName ?? value['check_item_name']),
+    status,
+    actualValue: actualValue || undefined,
+    expectedValue: expectedValue || undefined,
+    message: message || undefined,
+    executionTime: toNumber(value.executionTime ?? value['execution_time']),
+  }
+}
+
+const toCheckItemArray = (value: unknown): InspectionCheckItem[] => {
+  if (!Array.isArray(value)) return []
+  return value.filter(isObject).map(item => mapCheckItem(item as UnknownRecord))
+}
+
+const toCheckResultArray = (value: unknown): CheckResult[] => {
+  if (!Array.isArray(value)) return []
+  return value.filter(isObject).map(item => mapCheckResult(item as UnknownRecord))
+}
+
+interface TrendPoint {
+  date: string
+  executions: number
+  success: number
+  failed: number
+  avgScore: number
+}
+
+const mapTrendPoint = (value: unknown): TrendPoint => {
+  const record = toRecord(value)
+  return {
+    date: toString(record.date),
+    executions: toNumber(record.executions),
+    success: toNumber(record.success),
+    failed: toNumber(record.failed),
+    avgScore: toNumber(record.avgScore),
+  }
+}
+
+function transformTemplateData(apiData: unknown): InspectionTemplate {
+  const data = toRecord(apiData)
+  const category = toEnumValue(data.category, TEMPLATE_CATEGORIES, 'custom')
+  const deviceTypes = Array.isArray(data.deviceTypes)
+    ? data.deviceTypes.filter((item): item is string => typeof item === 'string')
+    : toStringArray(data['device_types'])
+  const checkItems = toCheckItemArray(data.checkItems ?? data['check_items'])
+  const isBuiltIn = typeof data.isBuiltIn === 'boolean'
+    ? data.isBuiltIn
+    : data['is_built_in'] !== false
+
+  return {
+    id: toString(data.id),
+    name: toString(data.name),
+    description: toString(data.description),
+    category,
+    deviceTypes,
+    checkItems,
+    isBuiltIn,
+    createdAt: toString(data.createdAt ?? data['created_at']),
+    updatedAt: toString(data.updatedAt ?? data['updated_at'] ?? data['created_at']),
+  }
+}
+
+function transformTaskData(apiData: unknown): InspectionTask {
+  const data = toRecord(apiData)
+  const status = toEnumValue(data.status, TASK_STATUSES, 'pending')
+  const startTime = toString(data.startTime ?? data['started_at'])
+  const endTimeRaw = toString(data.endTime ?? data['completed_at'])
+
+  return {
+    id: toString(data.id),
+    strategyId: toString(data.strategyId ?? data['strategy_id']),
+    deviceId: toString(data.deviceId ?? data['device_id']),
+    templateId: toString(data.templateId ?? data['template_id']),
+    status,
+    progress: toNumber(data.progress),
+    startTime: startTime || undefined,
+    endTime: endTimeRaw || undefined,
+    checkItems: toCheckItemArray(data.checkItems ?? data['check_items']),
+    results: toCheckResultArray(data.results ?? data['results']),
+  }
+}
+
+function transformResultData(apiData: unknown): InspectionResult {
+  const data = toRecord(apiData)
+  const status = toEnumValue(data.status, DEVICE_STATUSES, 'offline')
+
+  return {
+    id: toString(data.id),
+    taskId: toString(data.taskId ?? data['task_id']),
+    executionId: toString(data.executionId ?? data['execution_id']),
+    deviceId: toString(data.deviceId ?? data['device_id']),
+    deviceName: toString(data.deviceName ?? data['device_name'], '未知设备'),
+    status,
+    score: toNumber(data.score),
+    totalChecks: toNumber(data.totalChecks ?? data['total_checks']),
+    passedChecks: toNumber(data.passedChecks ?? data['passed_checks']),
+    failedChecks: toNumber(data.failedChecks ?? data['failed_checks']),
+    warningChecks: toNumber(data.warningChecks ?? data['warning_checks']),
+    results: toCheckResultArray(data.results ?? data['check_results']),
+    summary: toString(data.summary),
+    createdAt: toString(data.createdAt ?? data['created_at'] ?? data['completed_at']),
+  }
+}
+
+function transformExecutionData(apiData: unknown): InspectionExecution {
+  const data = toRecord(apiData)
+  const status = toEnumValue(data.status, EXECUTION_STATUSES, 'pending')
+  const triggerType = toEnumValue(data.triggerType ?? data['trigger_type'], TRIGGER_TYPES, 'manual')
+  const endTimeValue = toString(data.endTime ?? data['end_time'])
+
+  return {
+    id: toString(data.id),
+    strategyId: toString(data.strategyId ?? data['strategy_id']),
+    strategyName: toString(data.strategyName ?? data['strategy_name']),
+    triggerType,
+    triggerUser: toString(data.triggerUser ?? data['trigger_user']) || undefined,
+    status,
+    progress: toNumber(data.progress),
+    totalDevices: toNumber(data.totalDevices ?? data['total_devices']),
+    completedDevices: toNumber(data.completedDevices ?? data['completed_devices']),
+    startTime: toString(data.startTime ?? data['start_time']),
+    endTime: endTimeValue || undefined,
+    duration: typeof data.duration === 'number' ? data.duration : undefined,
+    summary: transformSummaryData(data.summary ?? data['summary']),
+  }
+}
+
+function transformSummaryData(apiData: unknown): InspectionSummary {
+  const data = toRecord(apiData)
+  return {
+    totalChecks: toNumber(data.totalChecks ?? data['total_checks']),
+    passedChecks: toNumber(data.passedChecks ?? data['passed_checks']),
+    failedChecks: toNumber(data.failedChecks ?? data['failed_checks']),
+    warningChecks: toNumber(data.warningChecks ?? data['warning_checks']),
+    score: toNumber(data.score),
+    deviceResults: toRecordArray(data.deviceResults ?? data['device_results']).map(transformDeviceResultData),
+  }
+}
+
+function transformDeviceResultData(apiData: unknown): DeviceInspectionResult {
+  const data = toRecord(apiData)
+  const status = toEnumValue(data.status, DEVICE_STATUSES, 'offline')
+
+  return {
+    deviceId: toString(data.deviceId ?? data['device_id']),
+    deviceName: toString(data.deviceName ?? data['device_name']),
+    deviceType: toString(data.deviceType ?? data['device_type']),
+    status,
+    score: toNumber(data.score),
+    checkResults: toCheckResultArray(data.checkResults ?? data['check_results']),
+    executionTime: toNumber(data.executionTime ?? data['execution_time']),
+  }
+}
+
+function transformStatsData(apiData: unknown): InspectionStats {
+  const data = toRecord(apiData)
+  const changesRecord = toRecord(data.changes ?? data['changes'])
+
+  return {
+    totalStrategies: toNumber(data.totalStrategies ?? data['totalStrategies']),
+    activeStrategies: toNumber(data.activeStrategies ?? data['activeStrategies']),
+    todayExecutions: toNumber(data.todayExecutions ?? data['todayExecutions']),
+    successRate: toNumber(data.successRate ?? data['successRate']),
+    avgScore: toNumber(data.avgScore ?? data['avgScore']),
+    changes: {
+      executionsChange: toString(changesRecord.executionsChange, '0.0%'),
+      successRateChange: toString(changesRecord.successRateChange, '0.0%'),
+      avgScoreChange: toString(changesRecord.avgScoreChange, '0.0%'),
+      strategiesChange: toString(changesRecord.strategiesChange, '0.0%'),
+    },
+    recentExecutions: toRecordArray(data.recentExecutions ?? data['recentExecutions']).map(transformExecutionData),
+  }
+}
+
+// ==================== 巡检模板管理 ====================
+
+export async function fetchInspectionTemplates(params?: {
+  page?: number
+  pageSize?: number
+  category?: string
+  deviceTypes?: string[]
+}): Promise<{ templates: InspectionTemplate[]; total: number; pages: number }> {
+  try {
+    let endpoint = '/inspection/templates'
+    const searchParams = new URLSearchParams()
+
+    if (params) {
+      if (params.page) searchParams.append('page', params.page.toString())
+      if (params.pageSize) searchParams.append('page_size', params.pageSize.toString())
+      if (params.category) searchParams.append('category', params.category)
+      if (params.deviceTypes) searchParams.append('device_types', params.deviceTypes.join(','))
+    }
+
+    if (searchParams.toString()) {
+      endpoint += `?${searchParams.toString()}`
+    }
+
+    const response = await api.get<InspectionApiResponse<unknown>>(endpoint)
+
+    if (!response.data) {
+      throw new Error(response.message || '获取巡检模板失败')
+    }
+
+    const data = toRecord(response.data)
+
+    return {
+      templates: toRecordArray(data.templates ?? data['templates']).map(transformTemplateData),
+      total: toNumber(data.total),
+      pages: toNumber(data.pages),
+    }
+  } catch (error) {
+    console.error('获取巡检模板失败:', error)
+    return {
+      templates: [],
+      total: 0,
+      pages: 0,
+    }
+  }
+}
+
+export async function fetchInspectionTemplate(id: number): Promise<InspectionTemplate | null> {
+  try {
+    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/templates/${id}`)
+
+    if (!response.data) {
+      throw new Error('获取模板详情失败')
+    }
+
+    return transformTemplateData(response.data)
+  } catch (error) {
+    console.error('获取模板详情失败:', error)
+    return null
+  }
+}
+
+export async function createInspectionTemplate(template: Omit<InspectionTemplate, 'id' | 'created_at' | 'updated_at'>): Promise<InspectionTemplate> {
+  try {
+    const response = await api.post<InspectionApiResponse<unknown>>('/inspection/templates', template)
+
+    if (!response.data) {
+      throw new Error('创建模板失败')
+    }
+
+    return transformTemplateData(response.data)
+  } catch (error) {
+    console.error('创建模板失败:', error)
+    throw error
+  }
+}
+
+export async function updateInspectionTemplate(id: number, updates: Partial<InspectionTemplate>): Promise<InspectionTemplate> {
+  try {
+    const response = await api.put<InspectionApiResponse<unknown>>(`/inspection/templates/${id}`, updates)
+
+    if (!response.data) {
+      throw new Error('更新模板失败')
+    }
+
+    return transformTemplateData(response.data)
+  } catch (error) {
+    console.error('更新模板失败:', error)
+    throw error
+  }
+}
+
+export async function deleteInspectionTemplate(id: number): Promise<boolean> {
+  try {
+    const response = await api.delete<InspectionApiResponse<unknown>>(`/inspection/templates/${id}`)
+    return response.data !== undefined && response.data !== null
+  } catch (error) {
+    console.error('删除模板失败:', error)
+    throw error
+  }
+}
+
+// ==================== 巡检任务管理 ====================
+
+export async function fetchInspectionTasks(params?: {
+  page?: number
+  pageSize?: number
+  status?: string[]
+  deviceIds?: number[]
+  templateId?: number
+  startDate?: string
+  endDate?: string
+}): Promise<{ tasks: InspectionTask[]; total: number; pages: number }> {
+  try {
+    let endpoint = '/inspection/tasks'
+    const searchParams = new URLSearchParams()
+
+    if (params) {
+      if (params.page) searchParams.append('page', params.page.toString())
+      if (params.pageSize) searchParams.append('page_size', params.pageSize.toString())
+      if (params.status) searchParams.append('status', params.status.join(','))
+      if (params.deviceIds) searchParams.append('device_ids', params.deviceIds.join(','))
+      if (params.templateId) searchParams.append('template_id', params.templateId.toString())
+      if (params.startDate) searchParams.append('start_date', params.startDate)
+      if (params.endDate) searchParams.append('end_date', params.endDate)
+    }
+
+    if (searchParams.toString()) {
+      endpoint += `?${searchParams.toString()}`
+    }
+
+    const response = await api.get<InspectionApiResponse<unknown>>(endpoint)
+
+    if (!response.data) {
+      throw new Error(response.message || '获取巡检任务失败')
+    }
+
+    const data = toRecord(response.data)
+
+    return {
+      tasks: toRecordArray(data.tasks ?? data['tasks']).map(transformTaskData),
+      total: toNumber(data.total),
+      pages: toNumber(data.pages),
+    }
+  } catch (error) {
+    console.error('获取巡检任务失败:', error)
+    return {
+      tasks: [],
+      total: 0,
+      pages: 0,
+    }
+  }
+}
+
+export async function fetchInspectionTask(id: number): Promise<InspectionTask | null> {
+  try {
+    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/tasks/${id}`)
+
+    if (!response.data) {
+      throw new Error('获取任务详情失败')
+    }
+
+    return transformTaskData(response.data)
+  } catch (error) {
+    console.error('获取任务详情失败:', error)
+    return null
+  }
+}
+
+export async function createInspectionTask(task: {
+  name: string
+  description?: string
+  template_id: number
+  device_ids: number[]
+  scheduled_at?: string
+  priority?: 'low' | 'medium' | 'high'
+}): Promise<InspectionTask> {
+  try {
+    const response = await api.post<InspectionApiResponse<unknown>>('/inspection/tasks', task)
+
+    if (!response.data) {
+      throw new Error('创建任务失败')
+    }
+
+    return transformTaskData(response.data)
+  } catch (error) {
+    console.error('创建任务失败:', error)
+    throw error
+  }
+}
+
+export async function startInspectionTask(id: number): Promise<boolean> {
+  try {
+    const response = await api.post<InspectionApiResponse<unknown>>(`/inspection/tasks/${id}/start`)
+    return response.data !== undefined && response.data !== null
+  } catch (error) {
+    console.error('启动任务失败:', error)
+    throw error
+  }
+}
+
+export async function cancelInspectionTask(id: number, reason?: string): Promise<boolean> {
+  try {
+    const response = await api.post<InspectionApiResponse<unknown>>(`/inspection/tasks/${id}/cancel`, {
+      reason: reason || '手动取消',
+    })
+
+    return response.data !== undefined && response.data !== null
+  } catch (error) {
+    console.error('取消任务失败:', error)
+    throw error
+  }
+}
+
+export async function fetchTaskProgress(id: number): Promise<Record<string, unknown>> {
+  try {
+    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/tasks/${id}/progress`)
+
+    if (!response.data) {
+      throw new Error('获取任务进度失败')
+    }
+
+    return toRecord(response.data)
+  } catch (error) {
+    console.error('获取任务进度失败:', error)
+    return { progress: 0, status: 'unknown', message: '无法获取进度' }
+  }
+}
+
+// ==================== 巡检结果管理 ====================
+
+export async function fetchInspectionExecutions(params?: {
+  page?: number
+  pageSize?: number
+  status?: string[]
+  strategyId?: string
+  startDate?: string
+  endDate?: string
+}): Promise<{ items: InspectionExecution[]; total: number; pages: number }> {
+  try {
+    let endpoint = '/inspection/executions'
+    const searchParams = new URLSearchParams()
+
+    if (params) {
+      if (params.page) searchParams.append('page', params.page.toString())
+      if (params.pageSize) searchParams.append('page_size', params.pageSize.toString())
+      if (params.status && params.status.length) searchParams.append('status', params.status.join(','))
+      if (params.strategyId) searchParams.append('strategy_id', params.strategyId)
+      if (params.startDate) searchParams.append('start_date', params.startDate)
+      if (params.endDate) searchParams.append('end_date', params.endDate)
+    }
+
+    if (searchParams.toString()) {
+      endpoint += `?${searchParams.toString()}`
+    }
+
+    const response = await api.get<InspectionApiResponse<unknown>>(endpoint)
+    if (!response.data) {
+      throw new Error(response.message || '获取巡检执行记录失败')
+    }
+
+    const data = toRecord(response.data)
+    const executions = data.executions ?? data.items ?? data['executions'] ?? data['items']
+
+    return {
+      items: toRecordArray(executions).map(transformExecutionData),
+      total: toNumber(data.total),
+      pages: toNumber(data.pages),
+    }
+  } catch (error) {
+    console.error('获取巡检执行记录失败:', error)
+    return {
+      items: [],
+      total: 0,
+      pages: 0,
+    }
+  }
+}
+
+export async function fetchInspectionResults(params?: {
+  page?: number
+  pageSize?: number
+  taskId?: number
+  deviceId?: number
+  status?: string[]
+  startDate?: string
+  endDate?: string
+}): Promise<{ results: InspectionResult[]; total: number; pages: number }> {
+  try {
+    let endpoint = '/inspection/results'
+    const searchParams = new URLSearchParams()
+
+    if (params) {
+      if (params.page) searchParams.append('page', params.page.toString())
+      if (params.pageSize) searchParams.append('page_size', params.pageSize.toString())
+      if (params.taskId) searchParams.append('task_id', params.taskId.toString())
+      if (params.deviceId) searchParams.append('device_id', params.deviceId.toString())
+      if (params.status) searchParams.append('status', params.status.join(','))
+      if (params.startDate) searchParams.append('start_date', params.startDate)
+      if (params.endDate) searchParams.append('end_date', params.endDate)
+    }
+
+    if (searchParams.toString()) {
+      endpoint += `?${searchParams.toString()}`
+    }
+
+    const response = await api.get<InspectionApiResponse<unknown>>(endpoint)
+
+    if (!response.data) {
+      throw new Error(response.message || '获取巡检结果失败')
+    }
+
+    const data = toRecord(response.data)
+
+    return {
+      results: toRecordArray(data.results ?? data['results']).map(transformResultData),
+      total: toNumber(data.total),
+      pages: toNumber(data.pages),
+    }
+  } catch (error) {
+    console.error('获取巡检结果失败:', error)
+    return {
+      results: [],
+      total: 0,
+      pages: 0,
+    }
+  }
+}
+
+export async function fetchInspectionResult(id: number): Promise<InspectionResult | null> {
+  try {
+    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/results/${id}`)
+
+    if (!response.data) {
+      throw new Error('获取结果详情失败')
+    }
+
+    return transformResultData(response.data)
+  } catch (error) {
+    console.error('获取结果详情失败:', error)
+    return null
+  }
+}
+
+export async function fetchDeviceInspectionHistory(deviceId: number, limit?: number): Promise<InspectionResult[]> {
+  try {
+    let endpoint = `/inspection/devices/${deviceId}/history`
+    if (limit) {
+      endpoint += `?limit=${limit}`
+    }
+
+    const response = await api.get<InspectionApiResponse<unknown>>(endpoint)
+
+    if (!response.data) {
+      throw new Error('获取设备巡检历史失败')
+    }
+
+    const history = Array.isArray(response.data) ? response.data : toRecordArray(response.data)
+    return history.map(transformResultData)
+  } catch (error) {
+    console.error('获取设备巡检历史失败:', error)
+    return []
+  }
+}
+
+// ==================== 巡检报告 ====================
+
+export async function generateInspectionReport(params: {
+  task_id?: number
+  device_ids?: number[]
+  start_date?: string
+  end_date?: string
+  format?: 'excel' | 'pdf' | 'word'
+  template?: string
+}): Promise<{ report_id: string; download_url?: string }> {
+  try {
+    const response = await api.post<InspectionApiResponse<{ report_id: string; download_url?: string }>>('/inspection/reports/generate', params)
+
+    if (!response.data) {
+      throw new Error('生成报告失败')
+    }
+
+    return response.data
+  } catch (error) {
+    console.error('生成报告失败:', error)
+    throw error
+  }
+}
+
+export async function fetchReportStatus(reportId: string): Promise<Record<string, unknown>> {
+  try {
+    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/reports/${reportId}/status`)
+
+    if (!response.data) {
+      throw new Error('获取报告状态失败')
+    }
+
+    return toRecord(response.data)
+  } catch (error) {
+    console.error('获取报告状态失败:', error)
+    return { status: 'unknown', progress: 0 }
+  }
+}
+
+export async function downloadReport(reportId: string): Promise<string> {
+  try {
+    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/reports/${reportId}/download`)
+
+    if (!response.data) {
+      throw new Error('获取报告下载链接失败')
+    }
+
+    const data = toRecord(response.data)
+    const url = toString(data.download_url ?? data['download_url'])
+
+    if (!url) {
+      throw new Error('下载链接不存在')
+    }
+
+    return url
+  } catch (error) {
+    console.error('下载报告失败:', error)
+    throw error
+  }
+}
+
+// ==================== 统计分析 ====================
+
+export async function fetchInspectionStats(timeRange?: string): Promise<InspectionStats> {
+  try {
+    const endpoint = timeRange ? `/inspection/stats?range=${timeRange}` : '/inspection/stats'
+    const response = await api.get<InspectionApiResponse<unknown>>(endpoint)
+
+    if (!response.data) {
+      throw new Error('获取巡检统计失败')
+    }
+
+    return transformStatsData(response.data)
+  } catch (error) {
+    console.error('获取巡检统计失败:', error)
+    return transformStatsData({})
+  }
+}
+
+export async function fetchInspectionTrends(params: {
+  period: 'day' | 'week' | 'month'
+  startDate?: string
+  endDate?: string
+}): Promise<TrendPoint[]> {
+  try {
+    let endpoint = '/inspection/trends'
+    const searchParams = new URLSearchParams()
+    searchParams.append('period', params.period)
+    if (params.startDate) searchParams.append('start_date', params.startDate)
+    if (params.endDate) searchParams.append('end_date', params.endDate)
+
+    endpoint += `?${searchParams.toString()}`
+
+    const response = await api.get<InspectionApiResponse<unknown>>(endpoint)
+
+    if (!response.data) {
+      throw new Error('获取趋势数据失败')
+    }
+
+    const list = Array.isArray(response.data) ? response.data : toRecordArray(response.data)
+    return list.map(mapTrendPoint)
+  } catch (error) {
+    console.error('获取趋势数据失败:', error)
+    return []
+  }
+}
+
+export async function fetchDeviceDistribution(): Promise<Array<{
+  name: string
+  value: number
+  color: string
+}>> {
+  try {
+    const response = await api.get<InspectionApiResponse<unknown>>('/inspection/device-distribution')
+
+    if (!response.data) {
+      throw new Error('获取设备分布失败')
+    }
+
+    const items = Array.isArray(response.data) ? response.data : toRecordArray(response.data)
+
+    return items.map(item => {
+      const record = toRecord(item)
+      return {
+        name: toString(record.name),
+        value: toNumber(record.value),
+        color: toString(record.color, '#888888'),
+      }
+    })
+  } catch (error) {
+    console.error('获取设备分布失败:', error)
+    return []
+  }
+}
+
+export async function fetchProblemDistribution(): Promise<Array<{
+  category: string
+  count: number
+}>> {
+  try {
+    const response = await api.get<InspectionApiResponse<unknown>>('/inspection/problem-distribution')
+
+    if (!response.data) {
+      throw new Error('获取问题分布失败')
+    }
+
+    const items = Array.isArray(response.data) ? response.data : toRecordArray(response.data)
+
+    return items.map(item => {
+      const record = toRecord(item)
+      return {
+        category: toString(record.category),
+        count: toNumber(record.count),
+      }
+    })
+  } catch (error) {
+    console.error('获取问题分布失败:', error)
+    return []
+  }
+}

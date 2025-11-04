@@ -1,0 +1,125 @@
+{
+  "name": "网络设备巡检系统",
+  "short_name": "巡检系统",
+  "description": "现代化的企业级网络设备巡检与监控平台",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3B82F6",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/desktop-dashboard.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "主控制台界面"
+    },
+    {
+      "src": "/screenshots/mobile-dashboard.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "移动端控制台"
+    }
+  ],
+  "categories": ["utilities", "productivity", "business"],
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "launch_handler": {
+    "client_mode": ["focus-existing", "auto"]
+  },
+  "shortcuts": [
+    {
+      "name": "设备管理",
+      "short_name": "设备",
+      "description": "快速访问设备管理页面",
+      "url": "/dashboard/devices",
+      "icons": [
+        {
+          "src": "/icons/shortcut-devices.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "实时监控",
+      "short_name": "监控",
+      "description": "快速访问实时监控页面",
+      "url": "/dashboard/monitoring",
+      "icons": [
+        {
+          "src": "/icons/shortcut-monitoring.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "告警中心",
+      "short_name": "告警",
+      "description": "快速访问告警中心",
+      "url": "/dashboard/alerts",
+      "icons": [
+        {
+          "src": "/icons/shortcut-alerts.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ]
+}

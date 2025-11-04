@@ -1,0 +1,447 @@
+import React, { useState } from 'react'
+import { motion } from 'framer-motion'
+import { 
+  FileText, 
+  Plus, 
+  Calendar, 
+  Download, 
+  Eye, 
+  Edit, 
+  Trash2, 
+  Clock, 
+  Users,
+  AlertCircle,
+  Play,
+  CheckCircle,
+  Settings
+} from 'lucide-react'
+import {
+  Card,
+  CardContent,
+  Button,
+  Badge,
+  Table,
+  Column,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  ConfirmModal
+} from '@/components/atoms'
+import type { BadgeProps } from '@/components/atoms/badge'
+import {
+  useReports,
+  useDeleteReport
+} from '../hooks/useReports'
+import { Report } from '../types'
+import { InspectionReportModal } from './InspectionReportModal'
+import { ReportPreviewModal } from './ReportPreviewModal'
+
+interface Props {
+  searchText: string
+}
+
+export const InspectionReports: React.FC<Props> = ({ searchText }) => {
+  const [reportModal, setReportModal] = useState(false)
+  const [previewReport, setPreviewReport] = useState<Report | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [formatFilter, setFormatFilter] = useState('all')
+
+  const { data: reportsData, isLoading } = useReports({
+    type: 'inspection',
+    status: statusFilter !== 'all' ? statusFilter : undefined
+  })
+  const deleteReport = useDeleteReport()
+
+  const reports = reportsData?.reports || []
+
+  // 过滤报表列表
+  const filteredReports = reports.filter((report: Report) => 
+    (report.title.toLowerCase().includes(searchText.toLowerCase()) ||
+     report.description.toLowerCase().includes(searchText.toLowerCase())) &&
+    (formatFilter === 'all' || report.format === formatFilter)
+  )
+
+  const handleGenerateReport = () => {
+    setReportModal(true)
+  }
+
+  const handlePreviewReport = (report: Report) => {
+    setPreviewReport(report)
+  }
+
+  const handleDeleteReport = async (id: string) => {
+    try {
+      await deleteReport.mutateAsync(id)
+      setDeleteConfirm(null)
+    } catch (error) {
+      console.error('Delete report failed:', error)
+    }
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'generating':
+        return <Clock className="w-4 h-4 text-blue-500 animate-pulse" />
+      case 'completed':
+        return <CheckCircle className="w-4 h-4 text-green-500" />
+      case 'failed':
+        return <AlertCircle className="w-4 h-4 text-red-500" />
+      default:
+        return <Clock className="w-4 h-4 text-yellow-500" />
+    }
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'generating':
+        return <Badge variant="primary">生成中</Badge>
+      case 'completed':
+        return <Badge variant="success">已完成</Badge>
+      case 'failed':
+        return <Badge variant="danger">失败</Badge>
+      case 'scheduled':
+        return <Badge variant="warning">已计划</Badge>
+      default:
+        return <Badge variant="secondary">未知</Badge>
+    }
+  }
+
+  type BadgeVariant = BadgeProps['variant']
+
+  const getFormatBadge = (format: string) => {
+    const formatConfig: Record<'pdf' | 'excel' | 'html' | 'word', { variant: BadgeVariant; label: string }> = {
+      pdf: { variant: 'primary', label: 'PDF' },
+      excel: { variant: 'success', label: 'Excel' },
+      html: { variant: 'secondary', label: 'HTML' },
+      word: { variant: 'outline', label: 'Word' }
+    }
+    const config = formatConfig[format as keyof typeof formatConfig] ?? formatConfig.pdf
+    return <Badge variant={config.variant}>{config.label}</Badge>
+  }
+
+  const formatFileSize = (bytes: number | undefined) => {
+    if (!bytes) return '-'
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  const columns: Column<Report>[] = [
+    {
+      key: 'title',
+      title: '报表信息',
+      render: (_, report) => (
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-blue-600" />
+            <span className="font-medium text-gray-900">{report.title}</span>
+          </div>
+          <span className="text-sm text-gray-500 line-clamp-2 mt-1">{report.description}</span>
+          <div className="flex items-center gap-2 mt-2">
+            {getFormatBadge(report.format)}
+            <span className="text-xs text-gray-400">
+              {formatFileSize(report.fileSize)}
+            </span>
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'category',
+      title: '类别',
+      render: (_, report) => (
+        <Badge variant="outline">
+          {report.category === 'daily' ? '日报' :
+           report.category === 'weekly' ? '周报' :
+           report.category === 'monthly' ? '月报' :
+           report.category === 'quarterly' ? '季报' :
+           report.category === 'yearly' ? '年报' : '自定义'}
+        </Badge>
+      )
+    },
+    {
+      key: 'status',
+      title: '状态',
+      render: (_, report) => (
+        <div className="flex items-center gap-2">
+          {getStatusIcon(report.status)}
+          {getStatusBadge(report.status)}
+        </div>
+      )
+    },
+    {
+      key: 'parameters',
+      title: '参数范围',
+      render: (_, report) => (
+        <div className="flex flex-col text-sm">
+          <div className="flex items-center gap-1">
+            <Calendar className="w-3 h-3 text-gray-400" />
+            <span>
+              {new Date(report.parameters.dateRange.startDate).toLocaleDateString()} - 
+              {new Date(report.parameters.dateRange.endDate).toLocaleDateString()}
+            </span>
+          </div>
+          {report.parameters.devices && (
+            <div className="flex items-center gap-1 mt-1">
+              <Users className="w-3 h-3 text-gray-400" />
+              <span>{report.parameters.devices.length} 个设备</span>
+            </div>
+          )}
+        </div>
+      )
+    },
+    {
+      key: 'created',
+      title: '创建信息',
+      render: (_, report) => (
+        <div className="flex flex-col text-sm">
+          <div className="font-medium">{report.generatedBy}</div>
+          <div className="text-gray-500">
+            {new Date(report.createdAt).toLocaleDateString()}
+          </div>
+          <div className="text-gray-400 text-xs">
+            {new Date(report.createdAt).toLocaleTimeString()}
+          </div>
+        </div>
+      )
+    },
+    {
+      key: 'actions',
+      title: '操作',
+      render: (_, report) => (
+        <div className="flex items-center gap-1">
+          {report.status === 'completed' && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handlePreviewReport(report)}
+                title="预览报表"
+              >
+                <Eye className="w-4 h-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  // 下载报表
+                  if (report.downloadUrl) {
+                    const a = document.createElement('a')
+                    a.href = report.downloadUrl
+                    a.download = `${report.title}.${report.format}`
+                    a.click()
+                  }
+                }}
+                title="下载报表"
+              >
+                <Download className="w-4 h-4" />
+              </Button>
+            </>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            title="编辑"
+          >
+            <Edit className="w-4 h-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setDeleteConfirm(report.id)}
+            title="删除"
+          >
+            <Trash2 className="w-4 h-4 text-red-500" />
+          </Button>
+        </div>
+      )
+    }
+  ]
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {/* 加载骨架屏 */}
+        {[...Array(5)].map((_, index) => (
+          <Card key={index} className="animate-pulse">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-4">
+                <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/6"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/6"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 操作栏 */}
+      <div className="flex flex-col sm:flex-row justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg font-semibold">巡检报告管理</h3>
+          <Badge variant="secondary">{filteredReports.length} 项</Badge>
+        </div>
+        <div className="flex gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="状态筛选" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="generating">生成中</SelectItem>
+              <SelectItem value="completed">已完成</SelectItem>
+              <SelectItem value="failed">失败</SelectItem>
+              <SelectItem value="scheduled">已计划</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={formatFilter} onValueChange={setFormatFilter}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="格式筛选" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部格式</SelectItem>
+              <SelectItem value="pdf">PDF</SelectItem>
+              <SelectItem value="excel">Excel</SelectItem>
+              <SelectItem value="html">HTML</SelectItem>
+              <SelectItem value="word">Word</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button onClick={handleGenerateReport}>
+            <Plus className="w-4 h-4 mr-2" />
+            生成报告
+          </Button>
+        </div>
+      </div>
+
+      {/* 快速操作卡片 */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {[
+          {
+            title: '快速日报',
+            description: '生成昨日巡检总结',
+            icon: Calendar,
+            color: 'blue',
+            action: () => {
+              // 生成昨日报告
+            }
+          },
+          {
+            title: '设备对比',
+            description: '对比设备性能表现',
+            icon: Users,
+            color: 'green',
+            action: () => {
+              // 打开设备对比
+            }
+          },
+          {
+            title: '问题分析',
+            description: '分析常见问题趋势',
+            icon: AlertCircle,
+            color: 'red',
+            action: () => {
+              // 打开问题分析
+            }
+          },
+          {
+            title: '自定义配置',
+            description: '配置报告模板',
+            icon: Settings,
+            color: 'purple',
+            action: () => {
+              // 打开配置页面
+            }
+          }
+        ].map((item) => (
+          <Card key={item.title} className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-4" onClick={item.action}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg bg-${item.color}-100`}>
+                  <item.icon className={`w-5 h-5 text-${item.color}-600`} />
+                </div>
+                <div className="flex-1">
+                  <div className="font-medium text-gray-900">{item.title}</div>
+                  <div className="text-sm text-gray-600">{item.description}</div>
+                </div>
+                <Play className="w-4 h-4 text-gray-400" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* 报表列表 */}
+      {filteredReports.length > 0 ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Table
+            data={filteredReports}
+            columns={columns}
+            className="bg-white rounded-lg shadow-sm"
+          />
+        </motion.div>
+      ) : (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <FileText className="w-12 h-12 text-gray-400" />
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">暂无巡检报告</h3>
+                <p className="text-gray-500 mt-1">
+                  {searchText ? '没有找到匹配的报告' : '开始生成您的第一个巡检报告'}
+                </p>
+              </div>
+              {!searchText && (
+                <Button onClick={handleGenerateReport} className="mt-2">
+                  <Plus className="w-4 h-4 mr-2" />
+                  生成报告
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 生成报告弹窗 */}
+      {reportModal && (
+        <InspectionReportModal
+          onClose={() => setReportModal(false)}
+          onSuccess={() => {
+            setReportModal(false)
+          }}
+        />
+      )}
+
+      {/* 报告预览弹窗 */}
+      {previewReport && (
+        <ReportPreviewModal
+          report={previewReport}
+          onClose={() => setPreviewReport(null)}
+        />
+      )}
+
+      {/* 删除确认弹窗 */}
+      <ConfirmModal
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={() => deleteConfirm && handleDeleteReport(deleteConfirm)}
+        title="删除报告"
+        description="确定要删除这个巡检报告吗？此操作无法撤销。"
+        confirmText="删除"
+        cancelText="取消"
+        variant="destructive"
+      />
+    </div>
+  )
+}

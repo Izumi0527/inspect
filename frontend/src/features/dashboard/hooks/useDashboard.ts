@@ -1,0 +1,264 @@
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { DashboardData, DashboardConfig, RecentAlert, AlertSeverity } from '../types'
+
+type DeviceSearchResult = {
+  id: string
+  name: string
+  ip: string
+  status: string
+}
+
+const mapDeviceSearchResult = (item: Record<string, unknown>, index: number): DeviceSearchResult => ({
+  id: String(item.id ?? item.device_id ?? index),
+  name: typeof item.name === 'string' && item.name ? item.name : '未知设备',
+  ip: typeof item.ip === 'string' ? item.ip : '未提供 IP',
+  status: typeof item.status === 'string' ? item.status : 'unknown',
+})
+import { 
+  fetchDashboardData, 
+  fetchDashboardStats, 
+  performDeviceScan,
+  performPerformanceTest,
+  generateReport,
+  searchDevices
+} from '../api/dashboard.api'
+
+// Dashboard数据管理hook
+export function useDashboardData() {
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const dashboardData = await fetchDashboardData()
+      setData(dashboardData)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载Dashboard数据失败')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // 刷新统计数据
+  const refreshStats = useCallback(async () => {
+    try {
+      setLoading(true)  // 显示加载状态
+      const stats = await fetchDashboardStats()
+      // 只有在获取到有效数据时才更新，避免空数据覆盖
+      if (stats && stats.length > 0) {
+        setData(prev => prev ? { ...prev, stats, lastUpdated: new Date() } : null)
+      }
+    } catch (err) {
+      console.error('刷新统计数据失败:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // 初始加载
+  useEffect(() => {
+    const init = async () => {
+      await loadData()
+      // 移除自动刷新逻辑，避免数据覆盖冲突
+      // 数据已在 loadData() 中获取完整，无需额外刷新
+    }
+    init()
+  }, [loadData])
+
+  return {
+    data,
+    loading,
+    error,
+    loadData,
+    refreshStats
+  }
+}
+
+// Dashboard配置管理hook
+export function useDashboardConfig() {
+  const [config, setConfig] = useState<DashboardConfig>({
+    sidebarOpen: true,
+    autoRefresh: true,
+    refreshInterval: 60000 // 改为60秒，避免过于频繁
+  })
+
+  const toggleSidebar = useCallback(() => {
+    setConfig(prev => ({ ...prev, sidebarOpen: !prev.sidebarOpen }))
+  }, [])
+
+  const toggleAutoRefresh = useCallback(() => {
+    setConfig(prev => ({ ...prev, autoRefresh: !prev.autoRefresh }))
+  }, [])
+
+  const setRefreshInterval = useCallback((interval: number) => {
+    setConfig(prev => ({ ...prev, refreshInterval: interval }))
+  }, [])
+
+  return {
+    config,
+    toggleSidebar,
+    toggleAutoRefresh,
+    setRefreshInterval
+  }
+}
+
+// 自动刷新hook
+export function useDashboardAutoRefresh(callback: () => void, enabled: boolean, interval: number) {
+  useEffect(() => {
+    if (!enabled) return
+
+    const intervalId = setInterval(callback, interval)
+    return () => clearInterval(intervalId)
+  }, [callback, enabled, interval])
+}
+
+// 快速操作hook
+export function useQuickActions() {
+  const [loading, setLoading] = useState<Record<string, boolean>>({})
+  const [error, setError] = useState<string | null>(null)
+
+  const executeAction = useCallback(async (actionType: string) => {
+    try {
+      setLoading(prev => ({ ...prev, [actionType]: true }))
+      setError(null)
+
+      switch (actionType) {
+        case 'deviceScan':
+          await performDeviceScan()
+          break
+        case 'performanceTest':
+          await performPerformanceTest('localhost') // 默认测试本地主机
+          break
+        case 'generateReport':
+          await generateReport('dashboard', {}) // 默认生成仪表板报告
+          break
+        default:
+          throw new Error(`未知的操作类型: ${actionType}`)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '操作执行失败')
+    } finally {
+      setLoading(prev => ({ ...prev, [actionType]: false }))
+    }
+  }, [])
+
+  return {
+    loading,
+    error,
+    executeAction
+  }
+}
+
+// 设备搜索hook
+export function useDeviceSearch() {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<DeviceSearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [showResults, setShowResults] = useState(false)
+
+  const search = useCallback(async (searchQuery: string) => {
+    if (!searchQuery.trim()) {
+      setResults([])
+      setShowResults(false)
+      return
+    }
+
+    try {
+      setSearching(true)
+      const searchResults = await searchDevices(searchQuery)
+      const normalizedResults = searchResults.map((item, index) => mapDeviceSearchResult(item, index))
+      setResults(normalizedResults)
+      setShowResults(true)
+    } catch (err) {
+      console.error('搜索失败:', err)
+    } finally {
+      setSearching(false)
+    }
+  }, [])
+
+  const handleQueryChange = useCallback((newQuery: string) => {
+    setQuery(newQuery)
+    
+    // 防抖搜索
+    const timeoutId = setTimeout(() => {
+      search(newQuery)
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [search])
+
+  const clearSearch = useCallback(() => {
+    setQuery('')
+    setResults([])
+    setShowResults(false)
+  }, [])
+
+  return {
+    query,
+    results,
+    searching,
+    showResults,
+    setQuery: handleQueryChange,
+    clearSearch,
+    search
+  }
+}
+
+// 告警分析hook
+export function useAlertAnalysis(alerts: RecentAlert[]) {
+  return useMemo(() => {
+    const total = alerts.length
+    const high = alerts.filter(a => a.severity === 'high').length
+    const medium = alerts.filter(a => a.severity === 'medium').length
+    const low = alerts.filter(a => a.severity === 'low').length
+
+    const categories = alerts.reduce((acc, alert) => {
+      if (alert.category) {
+        acc[alert.category] = (acc[alert.category] || 0) + 1
+      }
+      return acc
+    }, {} as Record<string, number>)
+
+    return {
+      total,
+      high,
+      medium,
+      low,
+      categories,
+      criticalPercentage: total > 0 ? Math.round((high / total) * 100) : 0
+    }
+  }, [alerts])
+}
+
+// 告警样式工具hook
+export function useAlertSeverityStyles() {
+  const getSeverityColor = useCallback((severity: AlertSeverity) => {
+    switch (severity) {
+      case 'high':
+        return 'bg-red-500'
+      case 'medium':
+        return 'bg-yellow-500'
+      case 'low':
+        return 'bg-green-500'
+    }
+  }, [])
+
+  const getSeverityTextColor = useCallback((severity: AlertSeverity) => {
+    switch (severity) {
+      case 'high':
+        return 'text-red-600'
+      case 'medium':
+        return 'text-yellow-600'
+      case 'low':
+        return 'text-green-600'
+    }
+  }, [])
+
+  return {
+    getSeverityColor,
+    getSeverityTextColor
+  }
+}
