@@ -11,6 +11,7 @@ scripts/
 ├── dev-*.sh                    # 开发环境管理脚本
 ├── start-backend.ps1           # 后端服务启动脚本
 ├── test-*.{ps1,sh}            # 测试相关脚本
+├── test_*.ps1                  # API 测试脚本
 ├── view-logs.ps1              # 日志查看脚本
 ├── prod-deploy.sh             # 生产部署脚本
 └── init_test_data.py          # 测试数据初始化脚本
@@ -241,9 +242,48 @@ scripts/
 
 ---
 
+### 13. `test_new_endpoints.ps1` (Windows)
+
+测试新增的系统设置 API 端点。
+
+**测试内容：**
+- ✅ GET /settings/system/categories - 获取配置分类
+- ✅ GET /settings/system/info - 获取系统信息
+- ✅ GET /settings/system/backup - 获取备份列表
+- ✅ POST /settings/system/settings/bulk - 批量更新配置
+
+**使用方法：**
+```powershell
+# 确保后端服务已启动
+.\scripts\test_new_endpoints.ps1
+```
+
+**注意事项：**
+- 脚本包含测试用的 JWT token
+- 需要后端服务运行在 `http://localhost:8000`
+- 仅用于开发和测试环境
+
+---
+
+### 14. `test_security_config.ps1` (Windows)
+
+测试安全配置 API 端点。
+
+**测试内容：**
+- ✅ 获取安全配置列表
+- ✅ 显示配置详情(key、描述、值)
+
+**使用方法：**
+```powershell
+# 确保后端服务已启动
+.\scripts\test_security_config.ps1
+```
+
+---
+
 ## 📊 运维监控脚本
 
-### 13. `view-logs.ps1` (Windows)
+### 15. `view-logs.ps1` (Windows)
 
 应用日志查看和过滤工具，支持实时日志监控。
 
@@ -263,7 +303,7 @@ scripts/
 
 ## 🚢 部署脚本
 
-### 14. `prod-deploy.sh` (Linux/Mac)
+### 16. `prod-deploy.sh` (Linux/Mac)
 
 生产环境部署脚本。
 
@@ -276,7 +316,7 @@ scripts/
 
 ## 🐍 Python 脚本
 
-### 15. `init_test_data.py`
+### 17. `init_test_data.py`
 
 测试数据初始化脚本，快速生成开发和测试环境所需的设备数据。
 
