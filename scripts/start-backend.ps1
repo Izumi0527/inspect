@@ -552,15 +552,20 @@ function Show-MigrationPrompt {
     # 提供选项
     Write-Host "  请选择操作:" -ForegroundColor Cyan
     Write-Host "    [Y] 是     - 执行数据库迁移" -ForegroundColor White
-    Write-Host "    [N] 否     - 跳过迁移,继续启动" -ForegroundColor White
+    Write-Host "    [N] 否     - 跳过迁移,继续启动 (默认)" -ForegroundColor Green
     Write-Host "    [V] 查看   - 查看迁移历史记录" -ForegroundColor White
     Write-Host "    [S] 跳过   - 同 [N],跳过迁移" -ForegroundColor White
     Write-Host ""
 
     # 循环获取有效输入
     while ($true) {
-        $choice = Read-Host "  您的选择"
+        $choice = Read-Host "  您的选择 (直接回车跳过)"
         $choice = $choice.Trim().ToUpper()
+
+        # 处理空输入，使用默认值（跳过）
+        if ([string]::IsNullOrWhiteSpace($choice)) {
+            $choice = "N"
+        }
 
         switch ($choice) {
             "Y" {
