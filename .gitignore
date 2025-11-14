@@ -153,7 +153,7 @@ node_modules/
 .vitest/
 
 # Next.js
-/.next/
+.next/
 /out/
 
 # Production
@@ -313,3 +313,25 @@ backend/test_*.py
 # 认证令牌文件
 frontend/auth.json
 backend/auth.json
+
+# Claude Code 本地配置
+.claude/settings.local.json
+
+# ==========================================
+# MCP 和其他工具
+# ==========================================
+# Playwright MCP 工具目录
+.playwright-mcp/
+
+# ==========================================
+# Windows 和系统临时文件
+# ==========================================
+# Windows 空文件
+nul
+
+# 临时测试脚本
+test_*.ps1
+test_*.sh
+
+# 损坏或异常文件名
+*security_config.json
