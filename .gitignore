@@ -304,8 +304,12 @@ frontend/playwright-report/
 frontend/test-results/
 backend/test-results/
 
-# 临时测试文件（项目根目录下）
+# 临时测试文件(项目根目录下)
 backend/test_*.py
+
+# 后端测试目录(临时测试文件)
+backend/tests/test_*.py
+backend/tests/init_test_data.py
 
 # ==========================================
 # 认证和敏感信息

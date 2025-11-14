@@ -9,8 +9,8 @@ import os
 from pathlib import Path
 
 # 添加 backend 目录到 Python 路径
-# 脚本从根目录 scripts/ 运行，需要指向 backend/ 目录
-project_root = Path(__file__).parent.parent / "backend"
+# 脚本从 backend/tests/ 运行，需要指向 backend/ 目录
+project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.core.database import get_db_session_context

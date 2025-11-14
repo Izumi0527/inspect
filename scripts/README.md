@@ -13,8 +13,7 @@ scripts/
 ├── test-*.{ps1,sh}            # 测试相关脚本
 ├── test_*.ps1                  # API 测试脚本
 ├── view-logs.ps1              # 日志查看脚本
-├── prod-deploy.sh             # 生产部署脚本
-└── init_test_data.py          # 测试数据初始化脚本
+└── prod-deploy.sh             # 生产部署脚本
 ```
 
 ---
@@ -311,68 +310,6 @@ scripts/
 ```bash
 ./scripts/prod-deploy.sh
 ```
-
----
-
-## 🐍 Python 脚本
-
-### 17. `init_test_data.py`
-
-测试数据初始化脚本，快速生成开发和测试环境所需的设备数据。
-
-**功能特性：**
-- ✅ 创建设备组(核心网络、接入层、安全、服务器)
-- ✅ 创建测试设备(15+ 种设备类型)
-- ✅ 支持数据清除和重置
-- ✅ 自动处理重复数据
-
-**⚠️ 重要：需要在 backend 虚拟环境中运行**
-
-**使用方法：**
-
-#### Windows (PowerShell):
-```powershell
-# 1. 激活虚拟环境
-cd backend
-.\.venv\Scripts\Activate.ps1
-
-# 2. 运行脚本
-cd ..
-python scripts/init_test_data.py init      # 初始化测试数据
-python scripts/init_test_data.py clear     # 清除测试数据
-python scripts/init_test_data.py reset     # 重置(清除后重新初始化)
-```
-
-#### Linux/Mac (Bash):
-```bash
-# 1. 激活虚拟环境
-cd backend
-source .venv/bin/activate
-
-# 2. 运行脚本
-cd ..
-python scripts/init_test_data.py init      # 初始化测试数据
-python scripts/init_test_data.py clear     # 清除测试数据
-python scripts/init_test_data.py reset     # 重置(清除后重新初始化)
-```
-
-#### 一键运行(推荐):
-```powershell
-# Windows - 使用 start-backend.ps1 自动管理虚拟环境
-.\scripts\start-backend.ps1 -Dev
-# 然后在另一个终端运行(虚拟环境已激活):
-cd backend
-.\.venv\Scripts\python.exe ..\scripts\init_test_data.py init
-```
-
-**生成的测试数据：**
-- 4 个设备组
-- 15 个测试设备
-  - 核心网络设备: 3 台(路由器、交换机)
-  - 接入层设备: 5 台(交换机、AP)
-  - 安全设备: 2 台(防火墙)
-  - 服务器设备: 3 台(Web、数据库)
-  - 离线测试设备: 2 台
 
 ---
 
