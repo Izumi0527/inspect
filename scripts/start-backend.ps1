@@ -167,7 +167,7 @@ function Initialize-Directories {
 # 设置虚拟环境
 function Initialize-VirtualEnvironment {
     Write-LogStep "设置Python虚拟环境..."
-    
+
     Push-Location $script:BackendPath
     try {
         # 检查虚拟环境是否存在
@@ -178,18 +178,31 @@ function Initialize-VirtualEnvironment {
         } else {
             Write-LogDebug "虚拟环境已存在: $script:VenvPath"
         }
-        
+
         # 激活虚拟环境
         $activateScript = Join-Path $script:VenvPath "Scripts\Activate.ps1"
         if (Test-Path $activateScript) {
             Write-LogInfo "激活虚拟环境..."
             & $activateScript
-            Write-LogSuccess "虚拟环境激活成功"
+
+            # 验证虚拟环境激活状态
+            $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+            $venvPythonPath = Join-Path $script:VenvPath "Scripts\python.exe"
+
+            if ($pythonPath -and $pythonPath -eq $venvPythonPath) {
+                Write-LogSuccess "虚拟环境激活成功"
+                Write-LogDebug "Python路径: $pythonPath"
+            } else {
+                Write-LogWarning "虚拟环境可能未正确激活"
+                Write-LogInfo "当前Python路径: $pythonPath"
+                Write-LogInfo "预期路径: $venvPythonPath"
+                Write-LogInfo "将使用完整路径运行命令..."
+            }
         } else {
             Write-LogError "虚拟环境激活脚本不存在: $activateScript"
             throw "虚拟环境配置错误"
         }
-        
+
     } finally {
         Pop-Location
     }
@@ -251,43 +264,27 @@ function Install-Dependencies {
         
         Write-LogInfo "需要安装 $($missingPackages.Count) 个依赖包..."
         Write-LogInfo "使用uv高效安装项目依赖（这可能需要几分钟时间）..."
-        
-        # 使用uv的高性能安装选项
+
+        # 使用uv的高性能安装选项（不使用 --quiet 以显示下载进度）
         $uvArgs = @(
             "pip", "install",
-            "-r", "requirements.txt",
-            "--quiet"  # 减少输出噪音
+            "-r", "requirements.txt"
         )
-        
+
         if ($Debug) {
-            $uvArgs = $uvArgs | Where-Object { $_ -ne "--quiet" }
             Write-LogDebug "执行命令: uv $($uvArgs -join ' ')"
         }
-        
-        # 显示进度提示
-        $installJob = Start-Job -ScriptBlock {
-            param($uvArgs, $backendPath)
-            Set-Location $backendPath
-            & uv @uvArgs
-        } -ArgumentList $uvArgs, $script:BackendPath
-        
-        # 进度显示
-        $dots = 0
-        while ($installJob.State -eq "Running") {
-            $progressChar = @(".", "..", "...")[($dots % 3)]
-            Write-Host "`r[信息] 正在安装依赖包$progressChar" -ForegroundColor Blue -NoNewline
-            Start-Sleep -Seconds 2
-            $dots++
-        }
-        Write-Host ""  # 换行
-        
-        # 获取安装结果
-        $installResult = Receive-Job -Job $installJob -Wait
-        Remove-Job -Job $installJob
-        
+
+        # 直接执行 uv 安装，显示实时下载和安装进度
+        Write-Host ""  # 换行，为 uv 输出留出空间
+
+        & uv @uvArgs
+
         if ($LASTEXITCODE -eq 0) {
+            Write-Host ""  # 换行
             Write-LogSuccess "依赖包安装完成"
         } else {
+            Write-Host ""  # 换行
             throw "uv安装失败，退出代码: $LASTEXITCODE"
         }
         
