@@ -30,9 +30,12 @@ class CamelCaseModel(BaseModel):
 class ReportType(str, Enum):
     """报表类型"""
     INSPECTION = "inspection"
+    PERFORMANCE = "performance"
+    AVAILABILITY = "availability"
+    ALERT = "alert"
+    CUSTOM = "custom"
     TREND = "trend"
     STATISTICS = "statistics"
-    CUSTOM = "custom"
 
 
 class ReportCategory(str, Enum):
@@ -542,7 +545,8 @@ class GenerateTrendReportRequestSchema(CamelCaseModel):
     """生成趋势报告请求（前端格式）"""
     title: str = Field(..., description="报告标题")
     metrics: List[str] = Field(..., description="分析指标列表")
-    date_range: DateRangeSchema = Field(..., description="日期范围")
+    start_date: str = Field(..., description="开始日期")
+    end_date: str = Field(..., description="结束日期")
     devices: Optional[List[str]] = Field(None, description="设备ID列表")
     format: ReportFormat = Field(ReportFormat.PDF, description="报告格式")
     include_predictions: bool = Field(True, description="是否包含预测分析")
@@ -817,3 +821,80 @@ class ExportResponseSchema(CamelCaseModel):
     download_token: str = Field(..., description="下载令牌")
     expires_at: str = Field(..., description="过期时间")
     format: str = Field(..., description="文件格式")
+
+
+# ============================================================================
+# 报表模板相关Schema
+# ============================================================================
+
+class ReportTemplateBase(CamelCaseModel):
+    """报表模板基础信息"""
+    name: str = Field(..., min_length=1, max_length=100, description="模板名称")
+    description: Optional[str] = Field(None, description="模板描述")
+    report_type: ReportType = Field(..., description="报表类型")
+
+    # 模板配置
+    config: Dict[str, Any] = Field(default_factory=dict, description="报表配置（图表类型、数据源等）")
+    chart_configs: Optional[List[Dict[str, Any]]] = Field(None, description="图表配置列表")
+    table_configs: Optional[List[Dict[str, Any]]] = Field(None, description="表格配置列表")
+
+    # 样式配置
+    theme: Optional[str] = Field("default", description="主题")
+    logo_url: Optional[str] = Field(None, description="Logo URL")
+    header_text: Optional[str] = Field(None, description="页眉文本")
+    footer_text: Optional[str] = Field(None, description="页脚文本")
+
+
+class ReportTemplateCreate(ReportTemplateBase):
+    """创建报表模板请求"""
+    is_default: bool = Field(False, description="是否为默认模板")
+    is_active: bool = Field(True, description="是否激活")
+
+
+class ReportTemplateUpdate(CamelCaseModel):
+    """更新报表模板请求"""
+    name: Optional[str] = Field(None, min_length=1, max_length=100, description="模板名称")
+    description: Optional[str] = Field(None, description="模板描述")
+    report_type: Optional[ReportType] = Field(None, description="报表类型")
+
+    # 模板配置
+    config: Optional[Dict[str, Any]] = Field(None, description="报表配置")
+    chart_configs: Optional[List[Dict[str, Any]]] = Field(None, description="图表配置列表")
+    table_configs: Optional[List[Dict[str, Any]]] = Field(None, description="表格配置列表")
+
+    # 样式配置
+    theme: Optional[str] = Field(None, description="主题")
+    logo_url: Optional[str] = Field(None, description="Logo URL")
+    header_text: Optional[str] = Field(None, description="页眉文本")
+    footer_text: Optional[str] = Field(None, description="页脚文本")
+
+    is_default: Optional[bool] = Field(None, description="是否为默认模板")
+    is_active: Optional[bool] = Field(None, description="是否激活")
+
+
+class ReportTemplateResponse(ReportTemplateBase):
+    """报表模板响应"""
+    id: int = Field(..., description="模板ID")
+    is_default: bool = Field(..., description="是否为默认模板")
+    is_active: bool = Field(..., description="是否激活")
+    created_by: Optional[str] = Field(None, description="创建人")
+    created_at: str = Field(..., description="创建时间")
+    updated_at: str = Field(..., description="更新时间")
+
+
+class GenerateReportRequest(CamelCaseModel):
+    """生成报表请求"""
+    parameters: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="报表参数（日期范围、过滤条件等）"
+    )
+    format: ReportFormat = Field(ReportFormat.PDF, description="输出格式")
+
+
+class PreviewReportRequest(CamelCaseModel):
+    """预览报表请求"""
+    parameters: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="报表参数（日期范围、过滤条件等）"
+    )
+    limit: int = Field(100, ge=1, le=1000, description="预览数据条数限制")

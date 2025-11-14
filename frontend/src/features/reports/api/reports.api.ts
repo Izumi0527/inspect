@@ -548,10 +548,8 @@ export async function getTrendAnalysis(params: {
 export async function generateTrendReport(reportData: {
   title: string
   metrics: string[]
-  dateRange: {
-    startDate: string
-    endDate: string
-  }
+  startDate: string
+  endDate: string
   devices?: string[]
   format: 'pdf' | 'excel' | 'html' | 'word'
   includePredictions: boolean
@@ -665,21 +663,16 @@ export async function generateStatisticsReport(reportData: {
   includeRankings?: boolean            // ✅ 是否包含排名
 }): Promise<Report> {
   try {
-    // 构建后端期望的请求体（使用snake_case）
-    const requestBody = {
-      title: reportData.title,
-      description: reportData.description,
-      start_date: reportData.startDate,
-      end_date: reportData.endDate,
-      device_types: reportData.deviceTypes,
-      locations: reportData.locations,
-      format: reportData.format,
-      include_charts: reportData.includeCharts !== undefined ? reportData.includeCharts : true,
-      include_trends: reportData.includeTrends !== undefined ? reportData.includeTrends : true,
-      include_rankings: reportData.includeRankings !== undefined ? reportData.includeRankings : true
-    }
-
-    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/generate', requestBody)
+    // 直接发送 camelCase 格式，依赖后端 CamelCaseModel 自动转换
+    const response = await api.post<{success: boolean, data: unknown, message?: string}>(
+      '/reports/statistics/generate',
+      {
+        ...reportData,
+        includeCharts: reportData.includeCharts !== undefined ? reportData.includeCharts : true,
+        includeTrends: reportData.includeTrends !== undefined ? reportData.includeTrends : true,
+        includeRankings: reportData.includeRankings !== undefined ? reportData.includeRankings : true
+      }
+    )
 
     if (response.success && response.data) {
       return transformReportData(response.data)
@@ -700,15 +693,11 @@ export async function getKPIData(params: {
   comparisonPeriod?: 'previous_period' | 'previous_year'  // ✅ 对比周期
 }): Promise<unknown> {
   try {
-    // 构建后端期望的请求体（使用snake_case）
-    const requestBody = {
-      start_date: params.startDate,
-      end_date: params.endDate,
-      device_types: params.deviceTypes,
-      comparison_period: params.comparisonPeriod
-    }
-
-    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/kpi', requestBody)
+    // 直接发送 camelCase 格式，依赖后端 CamelCaseModel 自动转换
+    const response = await api.post<{success: boolean, data: unknown, message?: string}>(
+      '/reports/statistics/kpi',
+      params
+    )
 
     if (response.success && response.data) {
       return response.data

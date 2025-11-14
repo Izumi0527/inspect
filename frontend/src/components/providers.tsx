@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '@/lib/contexts/auth-context'
+import { SidebarProvider } from '@/lib/contexts/sidebar-context'
 import { ApiClientError } from '@/lib/api-client'
 import httpInterceptor from '@/services/httpInterceptor'
 import { createLogger } from '@/lib/logger'
@@ -71,21 +72,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        {children}
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: 'rgba(255, 255, 255, 0.9)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '16px',
-              color: '#374151',
-            },
-          }}
-        />
-        <ReactQueryDevtools initialIsOpen={false} />
+        <SidebarProvider>
+          {children}
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: 'rgba(255, 255, 255, 0.9)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '16px',
+                color: '#374151',
+              },
+            }}
+          />
+          <ReactQueryDevtools initialIsOpen={false} />
+        </SidebarProvider>
       </AuthProvider>
     </QueryClientProvider>
   )

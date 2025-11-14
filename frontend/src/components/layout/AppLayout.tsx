@@ -4,7 +4,7 @@ import React, { ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/features/dashboard/components/Sidebar'
 import { DashboardHeader } from '@/features/dashboard/components/DashboardHeader'
-import { useDashboardConfig } from '@/features/dashboard/hooks/useDashboard'
+import { useSidebar } from '@/lib/contexts/sidebar-context'
 import { AnimatedContainer } from '@/components/animation/AnimationSystem'
 import { ErrorBoundary } from '@/components/error/ErrorBoundary'
 
@@ -22,19 +22,19 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   fullWidth = false
 }) => {
   const pathname = usePathname()
-  const { config, toggleSidebar } = useDashboardConfig()
+  const { sidebarOpen, toggleSidebar } = useSidebar()
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sidebar */}
       <Sidebar
-        isOpen={config.sidebarOpen}
+        isOpen={sidebarOpen}
         onToggle={toggleSidebar}
         currentPath={pathname}
       />
 
       {/* Main Content */}
-      <div className={`${config.sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
+      <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
         {/* Header */}
         <DashboardHeader
           alertCount={alertCount}
@@ -57,10 +57,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
 // Hook for using AppLayout with alert data
 export const useAppLayout = () => {
-  const { config, toggleSidebar } = useDashboardConfig()
-  
+  const { sidebarOpen, toggleSidebar } = useSidebar()
+
   return {
-    sidebarOpen: config.sidebarOpen,
+    sidebarOpen,
     toggleSidebar
   }
 }

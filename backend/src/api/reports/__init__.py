@@ -8,7 +8,7 @@ from src.core.permissions import require_permission
 from src.services.analytics_service import analytics_service, ReportType, TimeRange
 
 # 导入子路由
-from src.api.reports import inspection, crud, trends, statistics, export
+from src.api.reports import inspection, crud, trends, statistics, export, custom, templates
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -18,6 +18,8 @@ router.include_router(inspection.router, tags=["巡检报告"])
 router.include_router(crud.router, tags=["报表管理"])
 router.include_router(trends.router, tags=["趋势分析"])
 router.include_router(statistics.router, tags=["统计报表"])
+router.include_router(custom.router, tags=["自定义报表"])
+router.include_router(templates.router, tags=["报表模板"])
 router.include_router(export.router, tags=["报表导出"])
 
 # 报表请求数据模型

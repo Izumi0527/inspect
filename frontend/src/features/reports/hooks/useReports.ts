@@ -313,8 +313,11 @@ export const useGenerateFromConfig = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ configId, parameters }: { configId: string; parameters?: ReportParameters }) =>
-      customReportsApi.generateFromConfig(configId, parameters),
+    mutationFn: ({ configId, parameters, format }: {
+      configId: number
+      parameters?: Record<string, any>
+      format?: string
+    }) => customReportsApi.generateFromConfig(String(configId), parameters, format),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reports', 'list'] })
       toast.success('自定义报表生成成功')
@@ -322,6 +325,23 @@ export const useGenerateFromConfig = () => {
     onError: (error: Error) => {
       toast.error(error.message || '生成报表失败')
     },
+  })
+}
+
+export const usePreviewCustomReportConfig = (
+  configId: number,
+  options?: { parameters?: Record<string, any>; limit?: number }
+) => {
+  return useQuery({
+    queryKey: ['reports', 'custom', 'preview', configId, options],
+    queryFn: () =>
+      customReportsApi.previewCustomReportConfig(
+        String(configId),
+        options?.parameters,
+        options?.limit
+      ),
+    enabled: !!configId,
+    staleTime: 30 * 1000, // 30秒缓存
   })
 }
 

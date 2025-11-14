@@ -27,7 +27,7 @@ import {
   SelectValue,
   ConfirmModal
 } from '@/components/atoms'
-import { 
+import {
   useConfigGroups,
   useSystemConfigs,
   useUpdateConfig,
@@ -36,15 +36,20 @@ import {
   useSettingsEditor
 } from '../hooks'
 import { SystemConfig } from '../types'
+import { systemConfigApi } from '../api/settings.api'
+import toast from 'react-hot-toast'
 
 interface Props {
   searchText: string
 }
 
 export const SystemConfiguration: React.FC<Props> = ({ searchText }) => {
-  const [selectedGroup, setSelectedGroup] = useState('general')
+  const [selectedGroup, setSelectedGroup] = useState('system')
   const [importModal, setImportModal] = useState(false)
   const [resetConfirm, setResetConfirm] = useState<string | null>(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
 
   const { data: configGroups, isLoading: groupsLoading } = useConfigGroups()
   const { data: configs, isLoading: configsLoading } = useSystemConfigs(selectedGroup)
@@ -106,6 +111,65 @@ export const SystemConfiguration: React.FC<Props> = ({ searchText }) => {
       setResetConfirm(null)
     } catch (error) {
       console.error('Reset config failed:', error)
+    }
+  }
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true)
+      const blob = await systemConfigApi.exportConfigs(selectedGroup === 'general' ? undefined : selectedGroup)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0]
+      a.download = `settings_export_${selectedGroup}_${timestamp}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('配置已导出为JSON文件')
+    } catch (error) {
+      console.error('Export failed:', error)
+      toast.error('导出失败，请稍后重试')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      if (!file.name.endsWith('.json')) {
+        toast.error('文件格式错误，仅支持 JSON 格式文件')
+        return
+      }
+      setImportFile(file)
+    }
+  }
+
+  const handleImport = async () => {
+    if (!importFile) {
+      toast.error('请先选择要导入的配置文件')
+      return
+    }
+
+    try {
+      setIsImporting(true)
+      const result = await systemConfigApi.importConfigs(importFile)
+
+      toast.success(result.message || '配置已成功导入')
+
+      // 关闭模态框并清空文件
+      setImportModal(false)
+      setImportFile(null)
+
+      // 刷新配置列表
+      window.location.reload()
+    } catch (error) {
+      console.error('Import failed:', error)
+      toast.error(error instanceof Error ? error.message : '导入失败，请稍后重试')
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -299,9 +363,9 @@ export const SystemConfiguration: React.FC<Props> = ({ searchText }) => {
             <Upload className="w-4 h-4 mr-2" />
             导入配置
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExport} disabled={isExporting}>
             <Download className="w-4 h-4 mr-2" />
-            导出配置
+            {isExporting ? '导出中...' : '导出配置'}
           </Button>
         </div>
       </div>
@@ -447,18 +511,21 @@ export const SystemConfiguration: React.FC<Props> = ({ searchText }) => {
               <div className="space-y-4">
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
                   <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-600 mb-2">拖拽文件到此处或点击选择</p>
+                  <p className="text-sm text-gray-600 mb-2">
+                    {importFile ? `已选择: ${importFile.name}` : '拖拽文件到此处或点击选择'}
+                  </p>
                   <input
                     type="file"
                     accept=".json,.yaml,.yml"
                     className="hidden"
                     id="config-file"
+                    onChange={handleFileChange}
                   />
                   <label
                     htmlFor="config-file"
                     className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded cursor-pointer hover:bg-blue-700"
                   >
-                    选择文件
+                    {importFile ? '重新选择' : '选择文件'}
                   </label>
                 </div>
                 <div className="flex items-start gap-2 p-3 bg-yellow-50 rounded-lg">
@@ -474,10 +541,22 @@ export const SystemConfiguration: React.FC<Props> = ({ searchText }) => {
                 </div>
               </div>
               <div className="flex justify-end gap-2 mt-6">
-                <Button variant="outline" onClick={() => setImportModal(false)}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setImportModal(false)
+                    setImportFile(null)
+                  }}
+                  disabled={isImporting}
+                >
                   取消
                 </Button>
-                <Button>导入</Button>
+                <Button
+                  onClick={handleImport}
+                  disabled={isImporting || !importFile}
+                >
+                  {isImporting ? '导入中...' : '导入'}
+                </Button>
               </div>
             </div>
           </motion.div>

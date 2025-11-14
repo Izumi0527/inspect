@@ -242,8 +242,8 @@ class SystemSettingsService:
             ),
             
             # 安全设置
-            "security.password_min_length": SystemSetting(
-                key="security.password_min_length",
+            "security.password.min_length": SystemSetting(
+                key="security.password.min_length",
                 value=8,
                 category=SettingCategory.SECURITY,
                 description="密码最小长度",
@@ -251,16 +251,213 @@ class SystemSettingsService:
                 default_value=8,
                 validation_rule=">=6,<=20"
             ),
-            "security.login_attempt_limit": SystemSetting(
-                key="security.login_attempt_limit",
+            "security.password.max_login_attempts": SystemSetting(
+                key="security.password.max_login_attempts",
                 value=5,
                 category=SettingCategory.SECURITY,
-                description="登录尝试次数限制",
+                description="最大登录尝试次数",
                 data_type="integer",
                 default_value=5,
                 validation_rule=">=3,<=10"
             ),
-            
+
+            # 会话管理配置
+            "security.session.session_timeout": SystemSetting(
+                key="security.session.session_timeout",
+                value=30,
+                category=SettingCategory.SECURITY,
+                description="会话超时时间（分钟）",
+                data_type="integer",
+                default_value=30,
+                validation_rule=">=5,<=1440"
+            ),
+            "security.session.auto_logout_enabled": SystemSetting(
+                key="security.session.auto_logout_enabled",
+                value=True,
+                category=SettingCategory.SECURITY,
+                description="启用自动登出",
+                data_type="boolean",
+                default_value=True
+            ),
+            "security.session.remember_me_enabled": SystemSetting(
+                key="security.session.remember_me_enabled",
+                value=True,
+                category=SettingCategory.SECURITY,
+                description="启用记住我功能",
+                data_type="boolean",
+                default_value=True
+            ),
+            "security.session.remember_me_duration": SystemSetting(
+                key="security.session.remember_me_duration",
+                value=7,
+                category=SettingCategory.SECURITY,
+                description="记住我持续时间（天）",
+                data_type="integer",
+                default_value=7,
+                validation_rule=">=1,<=90"
+            ),
+            "security.session.max_concurrent_sessions": SystemSetting(
+                key="security.session.max_concurrent_sessions",
+                value=3,
+                category=SettingCategory.SECURITY,
+                description="最大并发会话数",
+                data_type="integer",
+                default_value=3,
+                validation_rule=">=1,<=10"
+            ),
+            "security.session.force_logout_on_password_change": SystemSetting(
+                key="security.session.force_logout_on_password_change",
+                value=True,
+                category=SettingCategory.SECURITY,
+                description="密码变更后强制登出所有会话",
+                data_type="boolean",
+                default_value=True
+            ),
+
+            # 密码策略配置
+            "security.password.require_uppercase": SystemSetting(
+                key="security.password.require_uppercase",
+                value=True,
+                category=SettingCategory.SECURITY,
+                description="密码要求包含大写字母",
+                data_type="boolean",
+                default_value=True
+            ),
+            "security.password.require_lowercase": SystemSetting(
+                key="security.password.require_lowercase",
+                value=True,
+                category=SettingCategory.SECURITY,
+                description="密码要求包含小写字母",
+                data_type="boolean",
+                default_value=True
+            ),
+            "security.password.require_numbers": SystemSetting(
+                key="security.password.require_numbers",
+                value=True,
+                category=SettingCategory.SECURITY,
+                description="密码要求包含数字",
+                data_type="boolean",
+                default_value=True
+            ),
+            "security.password.require_special_chars": SystemSetting(
+                key="security.password.require_special_chars",
+                value=True,
+                category=SettingCategory.SECURITY,
+                description="密码要求包含特殊字符",
+                data_type="boolean",
+                default_value=True
+            ),
+            "security.password.password_expire_days": SystemSetting(
+                key="security.password.password_expire_days",
+                value=90,
+                category=SettingCategory.SECURITY,
+                description="密码过期天数（0表示永不过期）",
+                data_type="integer",
+                default_value=90,
+                validation_rule=">=0,<=365"
+            ),
+            "security.password.password_history_count": SystemSetting(
+                key="security.password.password_history_count",
+                value=5,
+                category=SettingCategory.SECURITY,
+                description="记住的历史密码数量",
+                data_type="integer",
+                default_value=5,
+                validation_rule=">=0,<=20"
+            ),
+            "security.password.prevent_common_passwords": SystemSetting(
+                key="security.password.prevent_common_passwords",
+                value=True,
+                category=SettingCategory.SECURITY,
+                description="防止使用常见密码",
+                data_type="boolean",
+                default_value=True
+            ),
+            "security.password.lockout_duration": SystemSetting(
+                key="security.password.lockout_duration",
+                value=30,
+                category=SettingCategory.SECURITY,
+                description="账户锁定持续时间（分钟）",
+                data_type="integer",
+                default_value=30,
+                validation_rule=">=5,<=1440"
+            ),
+
+            # 认证配置
+            "security.auth.mfa_enabled": SystemSetting(
+                key="security.auth.mfa_enabled",
+                value=False,
+                category=SettingCategory.SECURITY,
+                description="启用多因素认证(MFA)",
+                data_type="boolean",
+                default_value=False
+            ),
+            "security.auth.mfa_methods": SystemSetting(
+                key="security.auth.mfa_methods",
+                value=["totp"],
+                category=SettingCategory.SECURITY,
+                description="MFA认证方法列表",
+                data_type="json",
+                default_value=["totp"]
+            ),
+            "security.auth.mfa_required": SystemSetting(
+                key="security.auth.mfa_required",
+                value=False,
+                category=SettingCategory.SECURITY,
+                description="强制要求所有用户使用MFA",
+                data_type="boolean",
+                default_value=False
+            ),
+            "security.auth.allow_oauth_login": SystemSetting(
+                key="security.auth.allow_oauth_login",
+                value=False,
+                category=SettingCategory.SECURITY,
+                description="允许OAuth第三方登录",
+                data_type="boolean",
+                default_value=False
+            ),
+            "security.auth.oauth_providers": SystemSetting(
+                key="security.auth.oauth_providers",
+                value=[],
+                category=SettingCategory.SECURITY,
+                description="启用的OAuth提供商列表",
+                data_type="json",
+                default_value=[]
+            ),
+            "security.auth.allow_ldap_login": SystemSetting(
+                key="security.auth.allow_ldap_login",
+                value=False,
+                category=SettingCategory.SECURITY,
+                description="允许LDAP登录",
+                data_type="boolean",
+                default_value=False
+            ),
+            "security.auth.ldap_server_url": SystemSetting(
+                key="security.auth.ldap_server_url",
+                value="",
+                category=SettingCategory.SECURITY,
+                description="LDAP服务器URL",
+                data_type="string",
+                default_value="",
+                is_required=False
+            ),
+            "security.auth.ip_whitelist_enabled": SystemSetting(
+                key="security.auth.ip_whitelist_enabled",
+                value=False,
+                category=SettingCategory.SECURITY,
+                description="启用IP白名单限制",
+                data_type="boolean",
+                default_value=False
+            ),
+            "security.auth.ip_whitelist": SystemSetting(
+                key="security.auth.ip_whitelist",
+                value=[],
+                category=SettingCategory.SECURITY,
+                description="允许访问的IP地址列表",
+                data_type="json",
+                default_value=[]
+            ),
+
             # 备份设置
             "backup.auto_backup_enabled": SystemSetting(
                 key="backup.auto_backup_enabled",

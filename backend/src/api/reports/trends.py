@@ -122,8 +122,8 @@ async def generate_trend_report(
         from datetime import datetime
 
         # 解析日期范围
-        start_date = datetime.fromisoformat(request.date_range.start_date)
-        end_date = datetime.fromisoformat(request.date_range.end_date)
+        start_date = datetime.fromisoformat(request.start_date)
+        end_date = datetime.fromisoformat(request.end_date)
 
         # 解析设备ID
         device_ids = None

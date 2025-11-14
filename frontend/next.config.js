@@ -8,7 +8,7 @@ const nextConfig = {
     // Enable React Compiler if available
     reactCompiler: false,
     // Optimize package imports
-    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', 'recharts', 'framer-motion'],
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', 'framer-motion'],
   },
 
   // Performance optimizations

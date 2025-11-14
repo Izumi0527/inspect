@@ -13,13 +13,11 @@ import {
   License,
   SettingsGroup,
   SystemHealth,
-  SettingsApiResponse,
   UserPaginatedResponse,
   UserBulkOperation,
   UserBulkImport
 } from '../types'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { httpClient } from '@/lib/api-client'
 
 type ConfigValue = string | number | boolean | Record<string, unknown> | Array<unknown> | null
 
@@ -32,83 +30,63 @@ interface AuditLogExportParams {
   filters?: AuditLogExportFilters
 }
 
-// 通用请求封装
-const apiRequest = async <T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> => {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
-  })
-
-  if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`)
-  }
-
-  const result: SettingsApiResponse<T> = await response.json()
-
-  if (result.code !== 200) {
-    throw new Error(result.message || 'API请求失败')
-  }
-
-  return result.data
-}
-
 // 系统配置API
 export const systemConfigApi = {
-  // 获取配置分组（修复：匹配后端路由 /settings/system/categories）
+  // 获取配置分组
   getConfigGroups: () =>
-    apiRequest<SettingsGroup[]>('/api/v1/settings/system/categories'),
+    httpClient.get<SettingsGroup[]>('/settings/system/categories'),
 
-  // 获取所有配置（修复：匹配后端路由 /settings/system/settings）
+  // 获取所有配置
   getConfigs: (category?: string) => {
     const params = category ? `?category=${category}` : ''
-    return apiRequest<SystemConfig[]>(`/api/v1/settings/system/settings${params}`)
+    return httpClient.get<SystemConfig[]>(`/settings/system/settings${params}`)
   },
 
-  // 获取单个配置（修复：匹配后端路由 /settings/system/settings/{key}）
+  // 获取单个配置
   getConfig: (key: string) =>
-    apiRequest<SystemConfig>(`/api/v1/settings/system/settings/${key}`),
+    httpClient.get<SystemConfig>(`/settings/system/settings/${key}`),
 
-  // 更新配置（修复：匹配后端路由 /settings/system/settings/{key}）
+  // 更新配置
   updateConfig: (key: string, value: ConfigValue) =>
-    apiRequest<SystemConfig>(`/api/v1/settings/system/settings/${key}`, {
-      method: 'PUT',
-      body: JSON.stringify({ value }),
-    }),
+    httpClient.put<SystemConfig>(`/settings/system/settings/${key}`, { key, value }),
 
-  // 批量更新配置（修复：匹配后端路由 /settings/system/settings/bulk）
+  // 批量更新配置
   updateConfigs: (configs: Array<{ key: string; value: ConfigValue }>) =>
-    apiRequest<SystemConfig[]>('/api/v1/settings/system/settings/bulk', {
-      method: 'POST',
-      body: JSON.stringify({ settings: Object.fromEntries(configs.map(c => [c.key, c.value])) }),
-    }),
+    httpClient.post<{ message: string; results: Record<string, boolean> }>(
+      '/settings/system/settings/bulk',
+      { settings: Object.fromEntries(configs.map(c => [c.key, c.value])) }
+    ),
 
-  // 重置配置到默认值（修复：匹配后端路由 /settings/system/settings/{key}/reset）
+  // 重置配置到默认值
   resetConfig: (key: string) =>
-    apiRequest<SystemConfig>(`/api/v1/settings/system/settings/${key}/reset`, {
-      method: 'POST',
-    }),
+    httpClient.post<{ message: string; key: string }>(`/settings/system/settings/${key}/reset`),
 
-  // 导出配置（注意：此接口后端可能未实现，需要确认）
-  exportConfigs: (category?: string) => {
+  // 导出配置
+  exportConfigs: async (category?: string): Promise<Blob> => {
     const params = category ? `?category=${category}` : ''
-    return fetch(`${API_BASE_URL}/api/v1/settings/system/export${params}`)
-      .then(response => response.blob())
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authData') : null
+    const authData = token ? JSON.parse(token) : null
+
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/system/export${params}`, {
+      headers: authData?.token ? { 'Authorization': `Bearer ${authData.token}` } : {}
+    })
+    return response.blob()
   },
 
-  // 导入配置（注意：此接口后端可能未实现，需要确认）
-  importConfigs: (file: File) => {
+  // 导入配置
+  importConfigs: async (file: File) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authData') : null
+    const authData = token ? JSON.parse(token) : null
+
     const formData = new FormData()
     formData.append('file', file)
-    return fetch(`${API_BASE_URL}/api/v1/settings/system/import`, {
+
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/system/import`, {
       method: 'POST',
+      headers: authData?.token ? { 'Authorization': `Bearer ${authData.token}` } : {},
       body: formData,
-    }).then(response => response.json())
+    })
+    return response.json()
   },
 }
 
@@ -129,106 +107,75 @@ export const userManagementApi = {
     if (params?.status) searchParams.set('status', params.status)
     if (params?.search) searchParams.set('search', params.search)
 
-    return apiRequest<UserPaginatedResponse>(`/api/v1/settings/users?${searchParams}`)
+    return httpClient.get<UserPaginatedResponse>(`/settings/users?${searchParams}`)
   },
 
   // 获取用户详情
   getUser: (id: string) =>
-    apiRequest<User>(`/api/v1/settings/users/${id}`),
+    httpClient.get<User>(`/settings/users/${id}`),
 
   // 创建用户
   createUser: (data: Omit<User, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>) =>
-    apiRequest<User>('/api/v1/settings/users', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    httpClient.post<User>('/settings/users', data),
 
   // 更新用户
   updateUser: (id: string, data: Partial<User>) =>
-    apiRequest<User>(`/api/v1/settings/users/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+    httpClient.put<User>(`/settings/users/${id}`, data),
 
   // 删除用户
   deleteUser: (id: string) =>
-    apiRequest<void>(`/api/v1/settings/users/${id}`, {
-      method: 'DELETE',
-    }),
+    httpClient.delete<void>(`/settings/users/${id}`),
 
   // 重置用户密码
   resetPassword: (id: string, newPassword: string) =>
-    apiRequest<void>(`/api/v1/settings/users/${id}/reset-password`, {
-      method: 'POST',
-      body: JSON.stringify({ password: newPassword }),
-    }),
+    httpClient.post<void>(`/settings/users/${id}/reset-password`, { password: newPassword }),
 
   // 锁定/解锁用户
   toggleUserLock: (id: string, locked: boolean) =>
-    apiRequest<User>(`/api/v1/settings/users/${id}/lock`, {
-      method: 'POST',
-      body: JSON.stringify({ locked }),
-    }),
+    httpClient.post<User>(`/settings/users/${id}/lock`, { locked }),
 
   // 获取用户权限
   getUserPermissions: (id: string) =>
-    apiRequest<Permission[]>(`/api/v1/settings/users/${id}/permissions`),
+    httpClient.get<Permission[]>(`/settings/users/${id}/permissions`),
 
   // 批量操作用户
   bulkOperation: (operation: UserBulkOperation) =>
-    apiRequest<void>('/api/v1/settings/users/bulk-operation', {
-      method: 'POST',
-      body: JSON.stringify(operation),
-    }),
+    httpClient.post<void>('/settings/users/bulk-operation', operation),
 
   // 批量导入用户
   importUsers: (importData: UserBulkImport) =>
-    apiRequest<void>('/api/v1/settings/users/import', {
-      method: 'POST',
-      body: JSON.stringify(importData),
-    }),
+    httpClient.post<void>('/settings/users/import', importData),
 }
 
 // 角色管理API
 export const roleManagementApi = {
   // 获取角色列表
   getRoles: () =>
-    apiRequest<Role[]>('/api/v1/settings/roles'),
+    httpClient.get<Role[]>('/settings/roles'),
 
   // 获取角色详情
   getRole: (id: string) =>
-    apiRequest<Role>(`/api/v1/settings/roles/${id}`),
+    httpClient.get<Role>(`/settings/roles/${id}`),
 
   // 创建角色
   createRole: (data: Omit<Role, 'id' | 'userCount' | 'createdAt' | 'updatedAt'>) =>
-    apiRequest<Role>('/api/v1/settings/roles', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    httpClient.post<Role>('/settings/roles', data),
 
   // 更新角色
   updateRole: (id: string, data: Partial<Role>) =>
-    apiRequest<Role>(`/api/v1/settings/roles/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+    httpClient.put<Role>(`/settings/roles/${id}`, data),
 
   // 删除角色
   deleteRole: (id: string) =>
-    apiRequest<void>(`/api/v1/settings/roles/${id}`, {
-      method: 'DELETE',
-    }),
+    httpClient.delete<void>(`/settings/roles/${id}`),
 
   // 获取所有权限
   getPermissions: () =>
-    apiRequest<Permission[]>('/api/v1/settings/permissions'),
+    httpClient.get<Permission[]>('/settings/permissions'),
 
   // 分配权限给角色
   assignPermissions: (roleId: string, permissionIds: string[]) =>
-    apiRequest<Role>(`/api/v1/settings/roles/${roleId}/permissions`, {
-      method: 'PUT',
-      body: JSON.stringify({ permissionIds }),
-    }),
+    httpClient.put<Role>(`/settings/roles/${roleId}/permissions`, { permissionIds }),
 }
 
 // 审计日志API
@@ -254,45 +201,48 @@ export const auditLogApi = {
     if (params?.startDate) searchParams.set('start_date', params.startDate)
     if (params?.endDate) searchParams.set('end_date', params.endDate)
 
-    return apiRequest<{
+    return httpClient.get<{
       items: AuditLog[]
       total: number
       page: number
       pageSize: number
-    }>(`/api/v1/settings/audit/logs?${searchParams}`)
+    }>(`/settings/audit/logs?${searchParams}`)
   },
 
   // 获取审计日志详情
   getLog: (id: string) =>
-    apiRequest<AuditLog>(`/api/v1/settings/audit/logs/${id}`),
+    httpClient.get<AuditLog>(`/settings/audit/logs/${id}`),
 
   // 导出审计日志
-  exportLogs: (params: AuditLogExportParams): Promise<Blob> =>
-    fetch(`${API_BASE_URL}/api/v1/settings/audit/logs/export`, {
+  exportLogs: async (params: AuditLogExportParams): Promise<Blob> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authData') : null
+    const authData = token ? JSON.parse(token) : null
+
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/audit/logs/export`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(authData?.token && { 'Authorization': `Bearer ${authData.token}` })
       },
       body: JSON.stringify(params),
-    }).then(response => response.blob()),
+    })
+    return response.blob()
+  },
 
   // 清理旧日志
   cleanupLogs: (beforeDate: string) =>
-    apiRequest<{ deletedCount: number }>('/api/v1/settings/audit/logs/cleanup', {
-      method: 'DELETE',
-      body: JSON.stringify({ beforeDate }),
-    }),
+    httpClient.delete<{ deletedCount: number }>('/settings/audit/logs/cleanup', { beforeDate }),
 }
 
 // 备份恢复API
 export const backupApi = {
   // 获取备份列表
   getBackups: () =>
-    apiRequest<Backup[]>('/api/v1/settings/backup'),
+    httpClient.get<Backup[]>('/settings/backup'),
 
   // 获取备份详情
   getBackup: (id: string) =>
-    apiRequest<Backup>(`/api/v1/settings/backup/${id}`),
+    httpClient.get<Backup>(`/settings/backup/${id}`),
 
   // 创建备份
   createBackup: (data: {
@@ -304,37 +254,33 @@ export const backupApi = {
       name: string
     }>
   }) =>
-    apiRequest<Backup>('/api/v1/settings/backup', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    httpClient.post<Backup>('/settings/backup', data),
 
   // 删除备份
   deleteBackup: (id: string) =>
-    apiRequest<void>(`/api/v1/settings/backup/${id}`, {
-      method: 'DELETE',
-    }),
+    httpClient.delete<void>(`/settings/backup/${id}`),
 
   // 下载备份
-  downloadBackup: (id: string): Promise<Blob> =>
-    fetch(`${API_BASE_URL}/api/v1/settings/backup/${id}/download`)
-      .then(response => response.blob()),
+  downloadBackup: async (id: string): Promise<Blob> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authData') : null
+    const authData = token ? JSON.parse(token) : null
+
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/backup/${id}/download`, {
+      headers: authData?.token ? { 'Authorization': `Bearer ${authData.token}` } : {}
+    })
+    return response.blob()
+  },
 
   // 恢复备份
   restoreBackup: (id: string, options?: {
     overwrite?: boolean
     validateOnly?: boolean
   }) =>
-    apiRequest<{ success: boolean; message: string }>(`/api/v1/settings/backup/${id}/restore`, {
-      method: 'POST',
-      body: JSON.stringify(options || {}),
-    }),
+    httpClient.post<{ success: boolean; message: string }>(`/settings/backup/${id}/restore`, options || {}),
 
   // 验证备份
   validateBackup: (id: string) =>
-    apiRequest<{ valid: boolean; issues: string[] }>(`/api/v1/settings/backup/${id}/validate`, {
-      method: 'POST',
-    }),
+    httpClient.post<{ valid: boolean; issues: string[] }>(`/settings/backup/${id}/validate`),
 }
 
 // 系统监控API
@@ -350,123 +296,91 @@ export const systemMonitoringApi = {
       end_time: timeRange.endTime,
       interval: timeRange.interval || '5m'
     })}` : ''
-    return apiRequest<SystemMetrics[]>(`/api/v1/settings/monitoring/metrics${params}`)
+    return httpClient.get<SystemMetrics[]>(`/settings/monitoring/metrics${params}`)
   },
 
   // 获取系统健康状态
   getHealth: () =>
-    apiRequest<SystemHealth>('/api/v1/settings/monitoring/health'),
+    httpClient.get<SystemHealth>('/settings/monitoring/health'),
 
   // 获取系统信息
   getSystemInfo: () =>
-    apiRequest<SystemInfo>('/api/v1/settings/system/info'),
+    httpClient.get<SystemInfo>('/settings/system/info'),
 
   // 重启系统服务
   restartService: (serviceName: string) =>
-    apiRequest<{ success: boolean; message: string }>(`/api/v1/settings/system/services/${serviceName}/restart`, {
-      method: 'POST',
-    }),
+    httpClient.post<{ success: boolean; message: string }>(`/settings/system/services/${serviceName}/restart`),
 
   // 清理系统缓存
   clearCache: (type?: 'all' | 'session' | 'data' | 'reports') =>
-    apiRequest<{ success: boolean; message: string }>('/api/v1/settings/system/cache/clear', {
-      method: 'POST',
-      body: JSON.stringify({ type: type || 'all' }),
-    }),
+    httpClient.post<{ success: boolean; message: string }>('/settings/system/cache/clear', { type: type || 'all' }),
 }
 
 // 通知配置API
 export const notificationApi = {
   // 获取通知配置列表
   getConfigs: () =>
-    apiRequest<NotificationConfig[]>('/api/v1/settings/notifications'),
+    httpClient.get<NotificationConfig[]>('/settings/notifications'),
 
   // 获取通知配置详情
   getConfig: (id: string) =>
-    apiRequest<NotificationConfig>(`/api/v1/settings/notifications/${id}`),
+    httpClient.get<NotificationConfig>(`/settings/notifications/${id}`),
 
   // 创建通知配置
   createConfig: (data: Omit<NotificationConfig, 'id'>) =>
-    apiRequest<NotificationConfig>('/api/v1/settings/notifications', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+    httpClient.post<NotificationConfig>('/settings/notifications', data),
 
   // 更新通知配置
   updateConfig: (id: string, data: Partial<NotificationConfig>) =>
-    apiRequest<NotificationConfig>(`/api/v1/settings/notifications/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+    httpClient.put<NotificationConfig>(`/settings/notifications/${id}`, data),
 
   // 删除通知配置
   deleteConfig: (id: string) =>
-    apiRequest<void>(`/api/v1/settings/notifications/${id}`, {
-      method: 'DELETE',
-    }),
+    httpClient.delete<void>(`/settings/notifications/${id}`),
 
   // 测试通知配置
   testConfig: (id: string, recipient?: string) =>
-    apiRequest<{ success: boolean; message: string }>(`/api/v1/settings/notifications/${id}/test`, {
-      method: 'POST',
-      body: JSON.stringify({ recipient }),
-    }),
+    httpClient.post<{ success: boolean; message: string }>(`/settings/notifications/${id}/test`, { recipient }),
 }
 
 // 安全设置API
 export const securityApi = {
   // 获取安全设置
   getSecuritySettings: () =>
-    apiRequest<SecurityConfig>('/api/v1/settings/security'),
+    httpClient.get<SecurityConfig>('/settings/security'),
 
   // 更新安全设置
   updateSecuritySettings: (data: Partial<SecurityConfig>) =>
-    apiRequest<SecurityConfig>('/api/v1/settings/security', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+    httpClient.put<SecurityConfig>('/settings/security', data),
 
   // 获取LDAP配置
   getLDAPConfig: () =>
-    apiRequest<LDAPConfig>('/api/v1/settings/security/ldap'),
+    httpClient.get<LDAPConfig>('/settings/security/ldap'),
 
   // 更新LDAP配置
   updateLDAPConfig: (data: Partial<LDAPConfig>) =>
-    apiRequest<LDAPConfig>('/api/v1/settings/security/ldap', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+    httpClient.put<LDAPConfig>('/settings/security/ldap', data),
 
   // 测试LDAP连接
   testLDAPConnection: (config: LDAPConfig) =>
-    apiRequest<{ success: boolean; message: string; users?: number }>('/api/v1/settings/security/ldap/test', {
-      method: 'POST',
-      body: JSON.stringify(config),
-    }),
+    httpClient.post<{ success: boolean; message: string; users?: number }>('/settings/security/ldap/test', config),
 
   // 同步LDAP用户
   syncLDAPUsers: () =>
-    apiRequest<{ success: boolean; imported: number; updated: number }>('/api/v1/settings/security/ldap/sync', {
-      method: 'POST',
-    }),
+    httpClient.post<{ success: boolean; imported: number; updated: number }>('/settings/security/ldap/sync'),
 }
 
 // 许可证API
 export const licenseApi = {
   // 获取许可证信息
   getLicense: () =>
-    apiRequest<License>('/api/v1/settings/license'),
+    httpClient.get<License>('/settings/license'),
 
   // 更新许可证
   updateLicense: (licenseKey: string) =>
-    apiRequest<License>('/api/v1/settings/license', {
-      method: 'PUT',
-      body: JSON.stringify({ licenseKey }),
-    }),
+    httpClient.put<License>('/settings/license', { licenseKey }),
 
   // 验证许可证
   validateLicense: () =>
-    apiRequest<{ valid: boolean; message: string }>('/api/v1/settings/license/validate', {
-      method: 'POST',
-    }),
+    httpClient.post<{ valid: boolean; message: string }>('/settings/license/validate'),
 }

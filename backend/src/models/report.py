@@ -42,7 +42,7 @@ class ReportTemplate(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text)
-    report_type = Column(SQLEnum(ReportType), nullable=False)
+    report_type = Column(SQLEnum(ReportType, values_callable=lambda x: [e.value for e in x]), nullable=False)
     
     # 模板配置
     config = Column(JSON, nullable=False)  # 报表配置（图表类型、数据源等）
@@ -109,7 +109,7 @@ class Report(Base):
     # 基本信息
     title = Column(String(200), nullable=False)
     description = Column(Text)
-    report_type = Column(SQLEnum(ReportType), nullable=False)
+    report_type = Column(SQLEnum(ReportType, values_callable=lambda x: [e.value for e in x]), nullable=False)
     category = Column(SQLEnum(ReportCategory), default=ReportCategory.CUSTOM)  # 新增字段
 
     # 数据范围

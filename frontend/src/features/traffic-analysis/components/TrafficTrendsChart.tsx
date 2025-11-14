@@ -1,20 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  ReferenceLine
-} from 'recharts'
-import type { TooltipProps } from 'recharts'
-import {
   Card,
   CardHeader,
   CardTitle,
@@ -26,7 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
   Badge,
-  Loading
+  Loading,
+  LineChartComponent,
+  AreaChartComponent
 } from '@/components/atoms'
 import { useTrafficAnalysis } from '../hooks/useTrafficAnalysis'
 import { TrafficTrend } from '../types'
@@ -251,18 +239,63 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
   }
 
   const renderTrafficChart = () => {
-    const ChartComponent = chartType === 'area' ? AreaChart : LineChart
+    // 根据 metricType 和 chartType 配置数据系列
+    const getChartConfig = () => {
+      if (metricType === 'traffic') {
+        if (chartType === 'area') {
+          return {
+            areas: [
+              { key: 'current_in', name: '当前入向', color: '#2563eb' },
+              { key: 'current_out', name: '当前出向', color: '#059669' }
+            ]
+          }
+        } else {
+          return {
+            lines: [
+              { key: 'current_in', name: '当前入向', color: '#2563eb', strokeWidth: 2 },
+              { key: 'current_out', name: '当前出向', color: '#059669', strokeWidth: 2 },
+              { key: 'avg_in', name: '平均入向', color: '#2563eb', strokeWidth: 1 },
+              { key: 'avg_out', name: '平均出向', color: '#059669', strokeWidth: 1 }
+            ]
+          }
+        }
+      } else if (metricType === 'utilization') {
+        if (chartType === 'area') {
+          return {
+            areas: [
+              { key: 'current_utilization', name: '当前利用率', color: '#d97706' }
+            ]
+          }
+        } else {
+          return {
+            lines: [
+              { key: 'current_utilization', name: '当前利用率', color: '#d97706', strokeWidth: 2 },
+              { key: 'avg_utilization', name: '平均利用率', color: '#d97706', strokeWidth: 1 }
+            ]
+          }
+        }
+      } else { // trend
+        return {
+          lines: [
+            { key: 'trend_in', name: '入向趋势', color: '#7c3aed', strokeWidth: 2 },
+            { key: 'trend_out', name: '出向趋势', color: '#db2777', strokeWidth: 2 }
+          ]
+        }
+      }
+    }
+
+    const config = getChartConfig()
 
     return (
       <Card className="col-span-2">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>
-              {metricType === 'traffic' ? '流量趋势' : 
+              {metricType === 'traffic' ? '流量趋势' :
                metricType === 'utilization' ? '利用率趋势' : '趋势分析'}
             </CardTitle>
             <div className="flex items-center gap-2">
-              <Select value={metricType} onValueChange={(value: MetricType) => setMetricType(value)}>
+              <Select value={metricType} onValueChange={(value: string) => setMetricType(value as MetricType)}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
                 </SelectTrigger>
@@ -272,7 +305,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
                   <SelectItem value="trend">趋势</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={chartType} onValueChange={(value: ChartType) => setChartType(value)}>
+              <Select value={chartType} onValueChange={(value: string) => setChartType(value as ChartType)}>
                 <SelectTrigger className="w-20">
                   <SelectValue />
                 </SelectTrigger>
@@ -287,149 +320,27 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
         <CardContent>
           <div className="h-80">
             {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <ChartComponent data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis 
-                    dataKey="interface" 
-                    tick={{ fontSize: 12 }}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => 
-                      metricType === 'utilization' ? `${value}%` : formatBytes(value)
-                    }
-                  />
-                  <Tooltip
-                    formatter={chartTooltipFormatter}
-                  />
-                  <Legend />
-                  
-                  {metricType === 'traffic' && (
-                    <>
-                      {chartType === 'area' ? (
-                        <>
-                          <Area
-                            type="monotone"
-                            dataKey="current_in"
-                            stackId="1"
-                            stroke="#2563eb"
-                            fill="#2563eb"
-                            fillOpacity={0.6}
-                            name="当前入向"
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="current_out"
-                            stackId="2"
-                            stroke="#059669"
-                            fill="#059669"
-                            fillOpacity={0.6}
-                            name="当前出向"
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <Line
-                            type="monotone"
-                            dataKey="current_in"
-                            stroke="#2563eb"
-                            strokeWidth={2}
-                            dot={{ r: 4 }}
-                            name="当前入向"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="current_out"
-                            stroke="#059669"
-                            strokeWidth={2}
-                            dot={{ r: 4 }}
-                            name="当前出向"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="avg_in"
-                            stroke="#2563eb"
-                            strokeWidth={1}
-                            strokeDasharray="5 5"
-                            dot={false}
-                            name="平均入向"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="avg_out"
-                            stroke="#059669"
-                            strokeWidth={1}
-                            strokeDasharray="5 5"
-                            dot={false}
-                            name="平均出向"
-                          />
-                        </>
-                      )}
-                    </>
-                  )}
-                  
-                  {metricType === 'utilization' && (
-                    <>
-                      <ReferenceLine y={80} stroke="#f59e0b" strokeDasharray="3 3" />
-                      <ReferenceLine y={90} stroke="#dc2626" strokeDasharray="3 3" />
-                      
-                      {chartType === 'area' ? (
-                        <Area
-                          type="monotone"
-                          dataKey="current_utilization"
-                          stroke="#d97706"
-                          fill="#d97706"
-                          fillOpacity={0.6}
-                          name="当前利用率"
-                        />
-                      ) : (
-                        <>
-                          <Line
-                            type="monotone"
-                            dataKey="current_utilization"
-                            stroke="#d97706"
-                            strokeWidth={2}
-                            dot={{ r: 4 }}
-                            name="当前利用率"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="avg_utilization"
-                            stroke="#d97706"
-                            strokeWidth={1}
-                            strokeDasharray="5 5"
-                            dot={false}
-                            name="平均利用率"
-                          />
-                        </>
-                      )}
-                    </>
-                  )}
-                  
-                  {metricType === 'trend' && (
-                    <>
-                      <Line
-                        type="monotone"
-                        dataKey="trend_in"
-                        stroke="#7c3aed"
-                        strokeWidth={2}
-                        dot={{ r: 4 }}
-                        name="入向趋势"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="trend_out"
-                        stroke="#db2777"
-                        strokeWidth={2}
-                        dot={{ r: 4 }}
-                        name="出向趋势"
-                      />
-                      <ReferenceLine y={0} stroke="#6b7280" strokeDasharray="2 2" />
-                    </>
-                  )}
-                </ChartComponent>
-              </ResponsiveContainer>
+              chartType === 'area' && 'areas' in config ? (
+                <AreaChartComponent
+                  data={chartData}
+                  xKey="interface"
+                  areas={config.areas}
+                  height={320}
+                  formatter={(value) =>
+                    metricType === 'utilization' ? `${value}%` : formatBytes(Number(value))
+                  }
+                />
+              ) : 'lines' in config ? (
+                <LineChartComponent
+                  data={chartData}
+                  xKey="interface"
+                  lines={config.lines}
+                  height={320}
+                  formatter={(value) =>
+                    metricType === 'utilization' ? `${value}%` : formatBytes(Number(value))
+                  }
+                />
+              ) : null
             ) : (
               <div className="flex items-center justify-center h-full text-gray-500">
                 <div className="text-center">

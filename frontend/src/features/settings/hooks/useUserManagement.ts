@@ -1,102 +1,206 @@
+import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { userManagementApi } from '../api/settings.api'
-import { User } from '../types'
-import { showSuccessToast, showErrorToast } from './utils/toastHandlers'
-import toast from 'react-hot-toast'
+import { usersApi } from '../api/users.api'
+import type {
+  User,
+  UserListResponse,
+  UserStats,
+  CreateUserRequest,
+  UpdateUserRequest,
+  UserQueryParams,
+} from '../types/users.types'
 
-export const useUsers = (params?: {
-  page?: number
-  pageSize?: number
-  role?: string
-  status?: string
-  search?: string
-}) => {
-  return useQuery({
-    queryKey: ['settings', 'users', params],
-    queryFn: () => userManagementApi.getUsers(params),
-    staleTime: 2 * 60 * 1000,
-  })
-}
-
-export const useUser = (id: string) => {
-  return useQuery({
-    queryKey: ['settings', 'users', 'detail', id],
-    queryFn: () => userManagementApi.getUser(id),
-    enabled: !!id,
-  })
-}
-
-export const useCreateUser = () => {
+/**
+ * 用户管理 Hook
+ * 管理用户列表、创建、编辑、删除、批量操作等
+ */
+export function useUserManagement() {
   const queryClient = useQueryClient()
 
-  return useMutation({
-    mutationFn: userManagementApi.createUser,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['settings', 'users'] })
-      showSuccessToast('用户创建成功', data)
-    },
-    onError: (error: Error) => {
-      showErrorToast(error, '用户创建失败')
+  // 查询参数
+  const [queryParams, setQueryParams] = useState<UserQueryParams>({
+    page: 1,
+    pageSize: 20,
+    sortBy: 'createdAt',
+    sortOrder: 'desc',
+  })
+
+  // 获取用户列表
+  const {
+    data: userListData,
+    isLoading,
+    error,
+  } = useQuery<UserListResponse>({
+    queryKey: ['userList', queryParams],
+    queryFn: () => usersApi.getUserList(queryParams),
+    staleTime: 1000 * 60 * 2, // 2分钟缓存
+  })
+
+  // 获取用户统计
+  const { data: statsData } = useQuery<UserStats>({
+    queryKey: ['userStats'],
+    queryFn: usersApi.getUserStats,
+    staleTime: 1000 * 60 * 5, // 5分钟缓存
+  })
+
+  // 创建用户 mutation
+  const createMutation = useMutation({
+    mutationFn: (data: CreateUserRequest) => usersApi.createUser(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userList'] })
+      queryClient.invalidateQueries({ queryKey: ['userStats'] })
     },
   })
-}
 
-export const useUpdateUser = () => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<User> }) =>
-      userManagementApi.updateUser(id, data),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['settings', 'users'] })
-      showSuccessToast('用户更新成功', data)
-    },
-    onError: (error: Error) => {
-      showErrorToast(error, '用户更新失败')
+  // 更新用户 mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ userId, data }: { userId: string; data: UpdateUserRequest }) =>
+      usersApi.updateUser(userId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userList'] })
+      queryClient.invalidateQueries({ queryKey: ['userStats'] })
     },
   })
-}
 
-export const useDeleteUser = () => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: userManagementApi.deleteUser,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['settings', 'users'] })
-      showSuccessToast('用户删除成功', data)
-    },
-    onError: (error: Error) => {
-      showErrorToast(error, '用户删除失败')
+  // 删除用户 mutation
+  const deleteMutation = useMutation({
+    mutationFn: (userId: string) => usersApi.deleteUser(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userList'] })
+      queryClient.invalidateQueries({ queryKey: ['userStats'] })
     },
   })
-}
 
-export const useResetPassword = () => {
-  return useMutation({
-    mutationFn: ({ id, password }: { id: string; password: string }) =>
-      userManagementApi.resetPassword(id, password),
-    onSuccess: (data) => {
-      showSuccessToast('密码重置成功', data)
-    },
-    onError: (error: Error) => {
-      showErrorToast(error, '密码重置失败')
+  // 修改密码 mutation
+  const changePasswordMutation = useMutation({
+    mutationFn: (data: { userId: string; newPassword: string }) =>
+      usersApi.changePassword(data),
+  })
+
+  // 批量操作 mutation
+  const batchOperationMutation = useMutation({
+    mutationFn: (data: { userIds: string[]; operation: any }) => usersApi.batchOperation(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userList'] })
+      queryClient.invalidateQueries({ queryKey: ['userStats'] })
     },
   })
-}
 
-export const useToggleUserLock = () => {
-  const queryClient = useQueryClient()
+  // 更新查询参数
+  const updateQueryParams = useCallback((params: Partial<UserQueryParams>) => {
+    setQueryParams((prev) => ({ ...prev, ...params }))
+  }, [])
 
-  return useMutation({
-    mutationFn: ({ id, locked }: { id: string; locked: boolean }) =>
-      userManagementApi.toggleUserLock(id, locked),
-    onSuccess: (_, { locked }) => {
-      queryClient.invalidateQueries({ queryKey: ['settings', 'users'] })
-      toast.success(`用户已${locked ? '锁定' : '解锁'}`)
+  // 创建用户
+  const createUser = useCallback(
+    async (data: CreateUserRequest) => {
+      await createMutation.mutateAsync(data)
     },
-    onError: (error: Error) => {
-      showErrorToast(error, '操作失败')
+    [createMutation]
+  )
+
+  // 更新用户
+  const updateUser = useCallback(
+    async (userId: string, data: UpdateUserRequest) => {
+      await updateMutation.mutateAsync({ userId, data })
     },
-  })
+    [updateMutation]
+  )
+
+  // 删除用户
+  const deleteUser = useCallback(
+    async (userId: string) => {
+      await deleteMutation.mutateAsync(userId)
+    },
+    [deleteMutation]
+  )
+
+  // 修改密码
+  const changePassword = useCallback(
+    async (userId: string, newPassword: string) => {
+      await changePasswordMutation.mutateAsync({ userId, newPassword })
+    },
+    [changePasswordMutation]
+  )
+
+  // 激活用户
+  const activateUser = useCallback(
+    async (userId: string) => {
+      await usersApi.activateUser(userId)
+      queryClient.invalidateQueries({ queryKey: ['userList'] })
+      queryClient.invalidateQueries({ queryKey: ['userStats'] })
+    },
+    [queryClient]
+  )
+
+  // 停用用户
+  const deactivateUser = useCallback(
+    async (userId: string) => {
+      await usersApi.deactivateUser(userId)
+      queryClient.invalidateQueries({ queryKey: ['userList'] })
+      queryClient.invalidateQueries({ queryKey: ['userStats'] })
+    },
+    [queryClient]
+  )
+
+  // 锁定用户
+  const lockUser = useCallback(
+    async (userId: string) => {
+      await usersApi.lockUser(userId)
+      queryClient.invalidateQueries({ queryKey: ['userList'] })
+      queryClient.invalidateQueries({ queryKey: ['userStats'] })
+    },
+    [queryClient]
+  )
+
+  // 解锁用户
+  const unlockUser = useCallback(
+    async (userId: string) => {
+      await usersApi.unlockUser(userId)
+      queryClient.invalidateQueries({ queryKey: ['userList'] })
+      queryClient.invalidateQueries({ queryKey: ['userStats'] })
+    },
+    [queryClient]
+  )
+
+  // 批量操作
+  const batchOperation = useCallback(
+    async (userIds: string[], operation: 'activate' | 'deactivate' | 'lock' | 'unlock' | 'delete') => {
+      await batchOperationMutation.mutateAsync({ userIds, operation })
+    },
+    [batchOperationMutation]
+  )
+
+  return {
+    // 数据
+    users: userListData?.users || [],
+    totalCount: userListData?.totalCount || 0,
+    page: userListData?.page || 1,
+    pageSize: userListData?.pageSize || 20,
+    stats: statsData,
+    queryParams,
+
+    // 状态
+    isLoading,
+    isCreating: createMutation.isPending,
+    isUpdating: updateMutation.isPending,
+    isDeleting: deleteMutation.isPending,
+    isChangingPassword: changePasswordMutation.isPending,
+    isBatchOperating: batchOperationMutation.isPending,
+    error,
+
+    // 查询方法
+    updateQueryParams,
+
+    // 操作方法
+    createUser,
+    updateUser,
+    deleteUser,
+    changePassword,
+    activateUser,
+    deactivateUser,
+    lockUser,
+    unlockUser,
+    batchOperation,
+  }
 }

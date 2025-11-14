@@ -159,6 +159,43 @@ PERMISSIONS = {
     "dashboard:read": [UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER],
     "dashboard:stats": [UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER],
 
+    # 系统设置权限 - 通用配置
+    "settings:general:read": [UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER],
+    "settings:general:write": [UserRole.ADMIN],
+
+    # 系统设置权限 - 系统监控
+    "settings:monitoring:read": [UserRole.ADMIN, UserRole.OPERATOR],
+    "settings:monitoring:write": [UserRole.ADMIN],
+    "settings:monitoring:metrics": [UserRole.ADMIN, UserRole.OPERATOR],
+
+    # 系统设置权限 - 用户管理
+    "settings:users:read": [UserRole.ADMIN],
+    "settings:users:write": [UserRole.ADMIN],
+    "settings:users:create": [UserRole.ADMIN],
+    "settings:users:update": [UserRole.ADMIN],
+    "settings:users:delete": [UserRole.ADMIN],
+    "settings:users:batch": [UserRole.ADMIN],
+
+    # 系统设置权限 - 安全设置
+    "settings:security:read": [UserRole.ADMIN],
+    "settings:security:write": [UserRole.ADMIN],
+    "settings:security:test": [UserRole.ADMIN],
+
+    # 系统设置权限 - 审计日志
+    "settings:audit:read": [UserRole.ADMIN, UserRole.OPERATOR],
+    "settings:audit:export": [UserRole.ADMIN],
+
+    # 系统设置权限 - 备份管理
+    "settings:backup:read": [UserRole.ADMIN],
+    "settings:backup:write": [UserRole.ADMIN],
+    "settings:backup:create": [UserRole.ADMIN],
+    "settings:backup:restore": [UserRole.ADMIN],
+
+    # 系统设置权限 - 通知设置
+    "settings:notifications:read": [UserRole.ADMIN, UserRole.OPERATOR],
+    "settings:notifications:write": [UserRole.ADMIN],
+    "settings:notifications:test": [UserRole.ADMIN],
+
     # 系统管理权限
     "users:read": [UserRole.ADMIN],
     "users:create": [UserRole.ADMIN],

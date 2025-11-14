@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { TrendingUp, Calendar, AlertTriangle } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/atoms'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { Card, CardHeader, CardTitle, CardContent, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, LineChartComponent } from '@/components/atoms'
 import { useTrendAnalysis, useGenerateTrendReport } from '../hooks/useReports'
 import { Loading } from '@/components/atoms/loading'
 
@@ -54,7 +53,8 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
       await generateReportMutation.mutateAsync({
         title: `趋势分析报告 - ${new Date().toLocaleDateString()}`,
         metrics: ['availability', 'performance', 'errors'],
-        dateRange,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
         format: 'pdf',
         includePredictions: true
       })
@@ -162,17 +162,16 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
         </CardHeader>
         <CardContent>
           {filteredTrendData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={filteredTrendData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" tickFormatter={(value) => new Date(value).toLocaleDateString()} />
-                <YAxis />
-                <Tooltip labelFormatter={(value) => new Date(value).toLocaleDateString()} />
-                <Legend />
-                <Line type="monotone" dataKey="availability" stroke="#10B981" name="可用性 (%)" />
-                <Line type="monotone" dataKey="performance" stroke="#3B82F6" name="性能评分" />
-              </LineChart>
-            </ResponsiveContainer>
+            <LineChartComponent
+              data={filteredTrendData}
+              xKey="date"
+              lines={[
+                { key: 'availability', name: '可用性 (%)', color: '#10B981' },
+                { key: 'performance', name: '性能评分', color: '#3B82F6' }
+              ]}
+              height={400}
+              formatter={(value) => typeof value === 'number' ? value.toFixed(2) : value}
+            />
           ) : (
             <div className="text-center text-gray-500 py-20">
               暂无数据

@@ -12,21 +12,10 @@ import {
   ErrorAlert,
   DateRangePicker,
   QuickDateRangeButtons,
-  MultiSelect
+  MultiSelect,
+  BarChartComponent,
+  PieChartComponent
 } from '@/components/atoms'
-import {
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend
-} from 'recharts'
 import { useStatistics, useKPIData, useRankings, useGenerateStatisticsReport } from '../hooks/useReports'
 import toast from 'react-hot-toast'
 
@@ -465,17 +454,15 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
                 暂无数据
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={filteredDeviceChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="online" stackId="a" fill="#10B981" name="在线" />
-                  <Bar dataKey="offline" stackId="a" fill="#EF4444" name="离线" />
-                </BarChart>
-              </ResponsiveContainer>
+              <BarChartComponent
+                data={filteredDeviceChartData}
+                xKey="name"
+                bars={[
+                  { key: 'online', name: '在线', color: '#10B981', stackId: 'a' },
+                  { key: 'offline', name: '离线', color: '#EF4444', stackId: 'a' }
+                ]}
+                height={300}
+              />
             )}
           </CardContent>
         </Card>
@@ -490,23 +477,11 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
                 暂无数据
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={filteredPerformanceChartData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
-                  >
-                    {filteredPerformanceChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              <PieChartComponent
+                data={filteredPerformanceChartData}
+                height={300}
+                outerRadius={100}
+              />
             )}
           </CardContent>
         </Card>

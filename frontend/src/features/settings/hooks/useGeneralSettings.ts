@@ -1,0 +1,164 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { generalApi } from '../api/general.api'
+import type {
+  BasicInfoConfig,
+  InspectionConfig,
+  ReportConfig,
+  UserPreferenceConfig,
+  GeneralSettingsResponse,
+} from '../types/general.types'
+
+export function useGeneralSettings() {
+  const queryClient = useQueryClient()
+
+  // 获取配置
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['generalSettings'],
+    queryFn: generalApi.getGeneralSettings,
+    staleTime: 5 * 60 * 1000, // 5 分钟缓存
+  })
+
+  // 本地状态
+  const [basicInfo, setBasicInfo] = useState<BasicInfoConfig>({
+    applicationName: '',
+    version: '',
+    timezone: '',
+  })
+  const [inspectionConfig, setInspectionConfig] = useState<InspectionConfig>({
+    maxConcurrentTasks: 10,
+    defaultTimeout: 30,
+    retryAttempts: 3,
+  })
+  const [reportConfig, setReportConfig] = useState<ReportConfig>({
+    defaultFormat: 'excel',
+    maxExportRecords: 10000,
+  })
+  const [userPreference, setUserPreference] = useState<UserPreferenceConfig>({
+    theme: 'auto',
+    language: 'zh-CN',
+    dateFormat: 'YYYY-MM-DD',
+    timeFormat: '24h',
+  })
+  const [isDirty, setIsDirty] = useState(false)
+
+  // 同步服务端数据到本地状态
+  useEffect(() => {
+    if (data) {
+      setBasicInfo(data.basicInfo)
+      setInspectionConfig(data.inspectionConfig)
+      setReportConfig(data.reportConfig)
+      setUserPreference(data.userPreference)
+      setIsDirty(false)
+    }
+  }, [data])
+
+  // 保存所有配置
+  const saveMutation = useMutation({
+    mutationFn: generalApi.saveAll,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['generalSettings'] })
+      setIsDirty(false)
+    },
+  })
+
+  // 导出配置
+  const exportMutation = useMutation({
+    mutationFn: generalApi.exportConfig,
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `general-settings-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    },
+  })
+
+  // 导入配置
+  const importMutation = useMutation({
+    mutationFn: generalApi.importConfig,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['generalSettings'] })
+      window.location.reload()
+    },
+  })
+
+  // 更新方法
+  const updateBasicInfo = useCallback((field: keyof BasicInfoConfig, value: any) => {
+    setBasicInfo((prev) => ({ ...prev, [field]: value }))
+    setIsDirty(true)
+  }, [])
+
+  const updateInspectionConfig = useCallback((field: keyof InspectionConfig, value: any) => {
+    setInspectionConfig((prev) => ({ ...prev, [field]: value }))
+    setIsDirty(true)
+  }, [])
+
+  const updateReportConfig = useCallback((field: keyof ReportConfig, value: any) => {
+    setReportConfig((prev) => ({ ...prev, [field]: value }))
+    setIsDirty(true)
+  }, [])
+
+  const updateUserPreference = useCallback((field: keyof UserPreferenceConfig, value: any) => {
+    setUserPreference((prev) => ({ ...prev, [field]: value }))
+    setIsDirty(true)
+  }, [])
+
+  // 保存所有
+  const saveAll = useCallback(async () => {
+    await saveMutation.mutateAsync({
+      basicInfo,
+      inspectionConfig,
+      reportConfig,
+      userPreference,
+    })
+  }, [basicInfo, inspectionConfig, reportConfig, userPreference, saveMutation])
+
+  // 重置所有
+  const resetAll = useCallback(() => {
+    if (data) {
+      setBasicInfo(data.basicInfo)
+      setInspectionConfig(data.inspectionConfig)
+      setReportConfig(data.reportConfig)
+      setUserPreference(data.userPreference)
+      setIsDirty(false)
+    }
+  }, [data])
+
+  // 导出配置
+  const exportConfig = useCallback(async () => {
+    await exportMutation.mutateAsync()
+  }, [exportMutation])
+
+  // 导入配置
+  const importConfig = useCallback(
+    async (file: File) => {
+      await importMutation.mutateAsync(file)
+    },
+    [importMutation]
+  )
+
+  return {
+    basicInfo,
+    inspectionConfig,
+    reportConfig,
+    userPreference,
+    isLoading,
+    isSaving: saveMutation.isPending,
+    isDirty,
+    error,
+    updateBasicInfo,
+    updateInspectionConfig,
+    updateReportConfig,
+    updateUserPreference,
+    saveAll,
+    resetAll,
+    exportConfig,
+    importConfig,
+  }
+}

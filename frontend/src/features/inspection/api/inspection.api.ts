@@ -1,4 +1,4 @@
-﻿import { api } from '@/lib/api-client'
+﻿import { api, TokenManager } from '@/lib/api-client'
 import {
   InspectionTemplate,
   InspectionExecution,
@@ -1223,7 +1223,7 @@ export async function exportAnalyticsReport(params: {
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${endpoint}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`,
       },
     })
 

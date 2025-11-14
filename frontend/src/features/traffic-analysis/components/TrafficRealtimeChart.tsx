@@ -1,23 +1,12 @@
 import React, { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  ReferenceLine
-} from 'recharts'
-import type { TooltipProps } from 'recharts'
-import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-  Badge
+  Badge,
+  LineChartComponent
 } from '@/components/atoms'
 import { TrafficMetrics } from '../types'
 import { formatBytes, formatDate } from '@/utils/formatters'
@@ -88,36 +77,37 @@ export const TrafficRealtimeChart: React.FC<TrafficRealtimeChartProps> = ({
 
   // 颜色配置
   const colors = [
-    '#2563eb', '#dc2626', '#059669', '#d97706', 
+    '#2563eb', '#dc2626', '#059669', '#d97706',
     '#7c3aed', '#db2777', '#0891b2', '#65a30d'
   ]
 
-  const normalizeMetricValue = (value: unknown): number => {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return value
-    }
-    if (typeof value === 'string') {
-      const parsed = Number(value)
-      if (!Number.isNaN(parsed)) {
-        return parsed
+  // 为流量图表准备线条配置
+  const trafficLines = useMemo(() => {
+    return deviceInterfaces.flatMap((deviceInterface, index) => [
+      {
+        key: `${deviceInterface}_in`,
+        name: `${deviceInterface} 入向`,
+        color: colors[index % colors.length],
+        strokeWidth: 2
+      },
+      {
+        key: `${deviceInterface}_out`,
+        name: `${deviceInterface} 出向`,
+        color: colors[(index + 1) % colors.length],
+        strokeWidth: 2
       }
-    }
-    return 0
-  }
+    ])
+  }, [deviceInterfaces])
 
-  const trafficTooltipFormatter: TooltipProps<number, string>['formatter'] = (value, name) => {
-    const numericValue = normalizeMetricValue(value)
-    const label = typeof name === 'string' ? name : ''
-    const isUtil = label.includes('_util')
-    const displayValue = isUtil ? `${numericValue}%` : formatBytes(numericValue)
-    const displayLabel = isUtil ? '利用率' : label.includes('_in') ? '入向流量' : '出向流量'
-    return [displayValue, displayLabel]
-  }
-
-  const utilizationTooltipFormatter: TooltipProps<number, string>['formatter'] = (value) => {
-    const numericValue = normalizeMetricValue(value)
-    return [`${numericValue}%`, '利用率']
-  }
+  // 为利用率图表准备线条配置
+  const utilizationLines = useMemo(() => {
+    return deviceInterfaces.map((deviceInterface, index) => ({
+      key: `${deviceInterface}_util`,
+      name: deviceInterface,
+      color: colors[index % colors.length],
+      strokeWidth: 2
+    }))
+  }, [deviceInterfaces])
 
   const renderTrafficChart = () => (
     <Card className="col-span-2">
@@ -142,49 +132,13 @@ export const TrafficRealtimeChart: React.FC<TrafficRealtimeChartProps> = ({
       <CardContent>
         <div className="h-80">
           {lineChartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={lineChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis 
-                  dataKey="timestamp" 
-                  tick={{ fontSize: 12 }}
-                  interval="preserveStartEnd"
-                />
-                <YAxis 
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => formatBytes(value)}
-                />
-                <Tooltip
-                  formatter={trafficTooltipFormatter}
-                  labelFormatter={(label) => `时间: ${label}`}
-                />
-                <Legend />
-                
-                {deviceInterfaces.map((deviceInterface, index) => (
-                  <React.Fragment key={deviceInterface}>
-                    <Line
-                      type="monotone"
-                      dataKey={`${deviceInterface}_in`}
-                      stroke={colors[index % colors.length]}
-                      strokeWidth={2}
-                      dot={false}
-                      name={`${deviceInterface} 入向`}
-                      connectNulls={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey={`${deviceInterface}_out`}
-                      stroke={colors[(index + 1) % colors.length]}
-                      strokeWidth={2}
-                      strokeDasharray="5 5"
-                      dot={false}
-                      name={`${deviceInterface} 出向`}
-                      connectNulls={false}
-                    />
-                  </React.Fragment>
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+            <LineChartComponent
+              data={lineChartData}
+              xKey="timestamp"
+              lines={trafficLines}
+              height={320}
+              formatter={(value) => formatBytes(Number(value))}
+            />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-500">
               <div className="text-center">
@@ -206,43 +160,13 @@ export const TrafficRealtimeChart: React.FC<TrafficRealtimeChartProps> = ({
       <CardContent>
         <div className="h-64">
           {lineChartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={lineChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis 
-                  dataKey="timestamp" 
-                  tick={{ fontSize: 12 }}
-                  interval="preserveStartEnd"
-                />
-                <YAxis 
-                  tick={{ fontSize: 12 }}
-                  domain={[0, 100]}
-                  tickFormatter={(value) => `${value}%`}
-                />
-                <Tooltip
-                  formatter={utilizationTooltipFormatter}
-                  labelFormatter={(label) => `时间: ${label}`}
-                />
-                <Legend />
-                
-                {/* 利用率警戒线 */}
-                <ReferenceLine y={80} stroke="#f59e0b" strokeDasharray="5 5" />
-                <ReferenceLine y={90} stroke="#dc2626" strokeDasharray="5 5" />
-                
-                {deviceInterfaces.map((deviceInterface, index) => (
-                  <Line
-                    key={deviceInterface}
-                    type="monotone"
-                    dataKey={`${deviceInterface}_util`}
-                    stroke={colors[index % colors.length]}
-                    strokeWidth={2}
-                    dot={false}
-                    name={deviceInterface}
-                    connectNulls={false}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+            <LineChartComponent
+              data={lineChartData}
+              xKey="timestamp"
+              lines={utilizationLines}
+              height={256}
+              formatter={(value) => `${Number(value).toFixed(1)}%`}
+            />
           ) : (
             <div className="flex items-center justify-center h-full text-gray-500">
               暂无利用率数据

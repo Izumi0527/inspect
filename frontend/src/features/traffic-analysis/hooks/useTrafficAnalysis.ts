@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { TokenManager } from '@/lib/api-client'
 import { 
   TrafficMetrics, 
   TrafficAnomaly, 
@@ -26,7 +27,7 @@ export const useTrafficAnalysis = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
         }
       })
 
@@ -63,7 +64,7 @@ export const useTrafficAnalysis = () => {
 
       const response = await fetch(`${API_BASE}/anomalies?${params}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
         }
       })
 
@@ -92,7 +93,7 @@ export const useTrafficAnalysis = () => {
     try {
       const response = await fetch(`${API_BASE}/trends/${deviceIp}?hours=${hours}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
         }
       })
 
@@ -123,7 +124,7 @@ export const useTrafficAnalysis = () => {
 
       const response = await fetch(`${API_BASE}/summary?${params}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
         }
       })
 
@@ -155,7 +156,7 @@ export const useTrafficAnalysis = () => {
       const response = await fetch(`${API_BASE}/baseline/calculate?${params}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
         }
       })
 
@@ -182,7 +183,7 @@ export const useTrafficAnalysis = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
         },
         body: JSON.stringify(config)
       })
@@ -209,7 +210,7 @@ export const useTrafficAnalysis = () => {
       const response = await fetch(`${API_BASE}/data/cleanup?older_than_hours=${olderThanHours}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
         }
       })
 

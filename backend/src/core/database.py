@@ -2,6 +2,7 @@ import asyncio
 from typing import AsyncGenerator, Optional
 from contextlib import asynccontextmanager
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     create_async_engine,
@@ -138,6 +139,9 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield session
             await session.commit()
+        except HTTPException:
+            # HTTPException 应该直接传播,不记录为数据库错误
+            raise
         except Exception as e:
             await session.rollback()
             logger.error("Database session error in dependency", error=str(e))

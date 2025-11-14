@@ -8,31 +8,24 @@ from src.api.alerts import router as alerts_router
 from src.api.alert_escalation import router as alert_escalation_router
 from src.api.reports import router as reports_router
 from src.api.traffic import router as traffic_router
-from src.api.users import router as users_router
 from src.api.roles import router as roles_router
 from src.api.audit import router as audit_router
-from src.api.backup import router as backup_router
 from src.api.notifications import router as notifications_router
 from src.api.security import router as security_router
 from src.api.monitoring_settings import router as monitoring_settings_router
-from src.api.license import router as license_router
-from src.api.system import router as system_router
 from src.api.dashboard import router as dashboard_router
+from src.api.settings import router as settings_router
 
 api_router = APIRouter()
 
 # 注册各模块路由
 api_router.include_router(auth_router, prefix="/auth", tags=["认证"])
 api_router.include_router(dashboard_router, prefix="/dashboard", tags=["仪表板"])
-api_router.include_router(users_router, prefix="/settings/users", tags=["用户管理"])
-api_router.include_router(roles_router, prefix="/settings/roles", tags=["角色管理"])
-api_router.include_router(audit_router, prefix="/settings/audit", tags=["审计日志"])
-api_router.include_router(backup_router, prefix="/settings/backup", tags=["备份恢复"])
-api_router.include_router(notifications_router, prefix="/settings/notifications", tags=["通知配置"])
-api_router.include_router(security_router, prefix="/settings/security", tags=["安全设置"])
-api_router.include_router(monitoring_settings_router, prefix="/settings/monitoring", tags=["系统监控"])
-api_router.include_router(license_router, prefix="/settings/license", tags=["许可证管理"])
-api_router.include_router(system_router, prefix="/settings/system", tags=["系统设置"])
+
+# Settings 模块（统一路由）
+api_router.include_router(settings_router)  # settings_router 内部已包含 /settings 前缀
+
+# 业务模块
 api_router.include_router(devices_router, prefix="/devices", tags=["设备管理"])
 api_router.include_router(inspection_router, prefix="/inspection", tags=["巡检管理"])
 api_router.include_router(monitoring_router, prefix="/monitoring", tags=["实时监控"])

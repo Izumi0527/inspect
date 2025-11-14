@@ -20,6 +20,13 @@ from src.schemas.report import (
     ApiResponse
 )
 from src.core.config import settings
+# 导入辅助函数
+from src.api.reports.helpers import (
+    generate_download_token,
+    get_file_size,
+    generate_file_name,
+    create_export_response
+)
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -29,67 +36,9 @@ TEMP_DIR = Path("backend/temp/reports")
 TOKEN_EXPIRY_MINUTES = 15  # 下载令牌15分钟过期
 
 
-# ============================================================================
-# 辅助函数
-# ============================================================================
-
 def ensure_temp_directory():
     """确保临时目录存在"""
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def generate_download_token() -> str:
-    """
-    生成安全的下载令牌
-
-    Returns:
-        32字节的URL安全随机令牌
-    """
-    return secrets.token_urlsafe(32)
-
-
-def get_file_size(file_path: str) -> int:
-    """
-    获取文件大小
-
-    Args:
-        file_path: 文件路径
-
-    Returns:
-        文件大小（字节）
-    """
-    try:
-        return os.path.getsize(file_path)
-    except Exception as e:
-        logger.warning("Failed to get file size", file_path=file_path, error=str(e))
-        return 0
-
-
-def generate_file_name(report_type: str, format: str, timestamp: Optional[str] = None) -> str:
-    """
-    生成文件名
-
-    Args:
-        report_type: 报表类型
-        format: 文件格式
-        timestamp: 时间戳（可选）
-
-    Returns:
-        文件名
-    """
-    if not timestamp:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    # 中文报表类型映射
-    type_names = {
-        "inspection": "巡检报表",
-        "trend": "趋势分析",
-        "statistics": "统计报表",
-        "custom": "自定义报表"
-    }
-
-    type_name = type_names.get(report_type, "报表")
-    return f"{type_name}_{timestamp}.{format}"
 
 
 # ============================================================================
@@ -151,30 +100,30 @@ async def export_excel(
         # 确保临时目录存在
         ensure_temp_directory()
 
-        # 生成文件名
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = request.file_name or generate_file_name(
-            request.report_type,
-            "xlsx",
-            timestamp
+        # 使用辅助函数创建导出响应
+        base_url = getattr(settings, "BASE_URL", "http://localhost:8000")
+        export_info = create_export_response(
+            report_type=request.report_type,
+            file_format="excel",
+            file_name=request.file_name,
+            base_url=base_url,
+            temp_dir=TEMP_DIR,
+            token_expiry_minutes=TOKEN_EXPIRY_MINUTES
         )
-
-        # 构建文件路径
-        file_path = str(TEMP_DIR / f"{timestamp}_{file_name}")
 
         # TODO: 实际导出功能待实现（需要安装python-docx和reportlab库）
         try:
             # 原始导出调用（暂时注释，等待依赖库安装）
             # await report_export.export_to_excel(
             #     data=request.data,
-            #     file_path=file_path,
+            #     file_path=export_info['file_path'],
             #     title=request.title,
             #     description=request.description,
             #     template_id=request.template_id
             # )
 
             # 临时创建空文件以完成API测试
-            with open(file_path, "w") as f:
+            with open(export_info['file_path'], "w") as f:
                 f.write("Excel export placeholder")
         except Exception as e:
             logger.error("Failed to generate Excel file",
@@ -186,39 +135,26 @@ async def export_excel(
             )
 
         # 获取文件大小
-        file_size = get_file_size(file_path)
-
-        # 生成下载令牌
-        download_token = generate_download_token()
-
-        # 计算过期时间
-        expires_at = datetime.now() + timedelta(minutes=TOKEN_EXPIRY_MINUTES)
-
-        # 生成下载URL
-        base_url = getattr(settings, "BASE_URL", "http://localhost:8000")
-        file_url = f"{base_url}/api/reports/download?token={download_token}"
-
-        # TODO: 将令牌和文件路径存储到缓存/数据库中（用于后续下载验证）
-        # 可以使用Redis或内存缓存存储：{token: {file_path, expires_at, user_id}}
+        file_size = get_file_size(export_info['file_path'])
 
         # 构建响应
         export_response = ExportResponseSchema(
             success=True,
-            file_url=file_url,
-            file_name=file_name,
+            file_url=export_info['file_url'],
+            file_name=export_info['file_name'],
             file_size=file_size,
-            download_token=download_token,
-            expires_at=expires_at.isoformat(),
-            format="excel"
+            download_token=export_info['download_token'],
+            expires_at=export_info['expires_at'].isoformat(),
+            format=export_info['format']
         )
 
         logger.info("Excel report exported successfully",
-                   file_name=file_name,
+                   file_name=export_info['file_name'],
                    file_size=file_size,
                    user=current_user["id"])
 
         # 添加后台任务：24小时后清理临时文件
-        # background_tasks.add_task(cleanup_temp_file, file_path, delay_hours=24)
+        # background_tasks.add_task(cleanup_temp_file, export_info['file_path'], delay_hours=24)
 
         return ApiResponse(
             code=200,
@@ -301,30 +237,30 @@ async def export_pdf(
         # 确保临时目录存在
         ensure_temp_directory()
 
-        # 生成文件名
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = request.file_name or generate_file_name(
-            request.report_type,
-            "pdf",
-            timestamp
+        # 使用辅助函数创建导出响应
+        base_url = getattr(settings, "BASE_URL", "http://localhost:8000")
+        export_info = create_export_response(
+            report_type=request.report_type,
+            file_format="pdf",
+            file_name=request.file_name,
+            base_url=base_url,
+            temp_dir=TEMP_DIR,
+            token_expiry_minutes=TOKEN_EXPIRY_MINUTES
         )
-
-        # 构建文件路径
-        file_path = str(TEMP_DIR / f"{timestamp}_{file_name}")
 
         # TODO: 实际导出功能待实现（需要安装python-docx和reportlab库）
         try:
             # 原始导出调用（暂时注释，等待依赖库安装）
             # await report_export.export_to_pdf(
             #     data=request.data,
-            #     file_path=file_path,
+            #     file_path=export_info['file_path'],
             #     title=request.title,
             #     description=request.description,
             #     template_id=request.template_id
             # )
 
             # 临时创建空文件以完成API测试
-            with open(file_path, "w") as f:
+            with open(export_info['file_path'], "w") as f:
                 f.write("PDF export placeholder")
         except Exception as e:
             logger.error("Failed to generate PDF file",
@@ -336,31 +272,21 @@ async def export_pdf(
             )
 
         # 获取文件大小
-        file_size = get_file_size(file_path)
-
-        # 生成下载令牌
-        download_token = generate_download_token()
-
-        # 计算过期时间
-        expires_at = datetime.now() + timedelta(minutes=TOKEN_EXPIRY_MINUTES)
-
-        # 生成下载URL
-        base_url = getattr(settings, "BASE_URL", "http://localhost:8000")
-        file_url = f"{base_url}/api/reports/download?token={download_token}"
+        file_size = get_file_size(export_info['file_path'])
 
         # 构建响应
         export_response = ExportResponseSchema(
             success=True,
-            file_url=file_url,
-            file_name=file_name,
+            file_url=export_info['file_url'],
+            file_name=export_info['file_name'],
             file_size=file_size,
-            download_token=download_token,
-            expires_at=expires_at.isoformat(),
-            format="pdf"
+            download_token=export_info['download_token'],
+            expires_at=export_info['expires_at'].isoformat(),
+            format=export_info['format']
         )
 
         logger.info("PDF report exported successfully",
-                   file_name=file_name,
+                   file_name=export_info['file_name'],
                    file_size=file_size,
                    user=current_user["id"])
 
@@ -445,30 +371,30 @@ async def export_word(
         # 确保临时目录存在
         ensure_temp_directory()
 
-        # 生成文件名
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = request.file_name or generate_file_name(
-            request.report_type,
-            "docx",
-            timestamp
+        # 使用辅助函数创建导出响应
+        base_url = getattr(settings, "BASE_URL", "http://localhost:8000")
+        export_info = create_export_response(
+            report_type=request.report_type,
+            file_format="word",
+            file_name=request.file_name,
+            base_url=base_url,
+            temp_dir=TEMP_DIR,
+            token_expiry_minutes=TOKEN_EXPIRY_MINUTES
         )
-
-        # 构建文件路径
-        file_path = str(TEMP_DIR / f"{timestamp}_{file_name}")
 
         # TODO: 实际导出功能待实现（需要安装python-docx和reportlab库）
         try:
             # 原始导出调用（暂时注释，等待依赖库安装）
             # await report_export.export_to_word(
             #     data=request.data,
-            #     file_path=file_path,
+            #     file_path=export_info['file_path'],
             #     title=request.title,
             #     description=request.description,
             #     template_id=request.template_id
             # )
 
             # 临时创建空文件以完成API测试
-            with open(file_path, "w") as f:
+            with open(export_info['file_path'], "w") as f:
                 f.write("Word export placeholder")
         except Exception as e:
             logger.error("Failed to generate Word file",
@@ -480,31 +406,21 @@ async def export_word(
             )
 
         # 获取文件大小
-        file_size = get_file_size(file_path)
-
-        # 生成下载令牌
-        download_token = generate_download_token()
-
-        # 计算过期时间
-        expires_at = datetime.now() + timedelta(minutes=TOKEN_EXPIRY_MINUTES)
-
-        # 生成下载URL
-        base_url = getattr(settings, "BASE_URL", "http://localhost:8000")
-        file_url = f"{base_url}/api/reports/download?token={download_token}"
+        file_size = get_file_size(export_info['file_path'])
 
         # 构建响应
         export_response = ExportResponseSchema(
             success=True,
-            file_url=file_url,
-            file_name=file_name,
+            file_url=export_info['file_url'],
+            file_name=export_info['file_name'],
             file_size=file_size,
-            download_token=download_token,
-            expires_at=expires_at.isoformat(),
-            format="word"
+            download_token=export_info['download_token'],
+            expires_at=export_info['expires_at'].isoformat(),
+            format=export_info['format']
         )
 
         logger.info("Word report exported successfully",
-                   file_name=file_name,
+                   file_name=export_info['file_name'],
                    file_size=file_size,
                    user=current_user["id"])
 

@@ -1,23 +1,17 @@
+'use client'
+
 import * as React from 'react'
 import { motion } from 'framer-motion'
-import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  TooltipProps
-} from 'recharts'
+import { Group } from '@visx/group'
+import { Bar as VisxBar } from '@visx/shape'
+import { AxisBottom, AxisLeft } from '@visx/axis'
+import { GridRows, GridColumns } from '@visx/grid'
+import { scaleBand, scaleLinear, scaleOrdinal } from '@visx/scale'
+import { LinePath, AreaClosed, Pie as VisxPie } from '@visx/shape'
+import { curveMonotoneX } from '@visx/curve'
+import { LegendOrdinal, LegendItem, LegendLabel } from '@visx/legend'
+import { localPoint } from '@visx/event'
+import { useTooltip, TooltipWithBounds, defaultStyles } from '@visx/tooltip'
 import { cn } from '@/utils/cn'
 
 type ChartDatum = Record<string, string | number | null | undefined>
@@ -64,39 +58,6 @@ export const ChartContainer: React.FC<ChartContainerProps> = ({
   </motion.div>
 )
 
-// 自定义工具提示组件
-const CustomTooltip: React.FC<{
-  active?: boolean
-  payload?: TooltipProps<number | string, string>['payload']
-  label?: string
-  formatter?: TooltipFormatter
-}> = ({ active, payload, label, formatter }) => {
-  if (!active || !payload || payload.length === 0) return null
-
-  return (
-    <div className="bg-white/95 backdrop-blur-lg border border-gray-200/50 rounded-lg p-3 shadow-lg">
-      <p className="text-sm font-medium text-gray-900 mb-2">{label}</p>
-      {payload.map((entry, index) => (
-        entry && (
-          <div key={index} className="flex items-center gap-2 text-sm">
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: entry.color }}
-            />
-            <span className="text-gray-600">{entry.name}:</span>
-            <span className="font-medium text-gray-900">
-              {formatter
-                ? formatter(entry.value as number | string, String(entry.name))
-                : entry.value}
-            </span>
-          </div>
-        )
-      ))}
-    </div>
-  )
-}
-
-// 折线图组件
 // 折线图组件
 interface LineChartProps<TData extends ChartDatum> {
   data: TData[]
@@ -113,6 +74,7 @@ interface LineChartProps<TData extends ChartDatum> {
   className?: string
   formatter?: TooltipFormatter
 }
+
 export const LineChartComponent = <TData extends ChartDatum>({
   data,
   xKey,
@@ -122,40 +84,141 @@ export const LineChartComponent = <TData extends ChartDatum>({
   subtitle,
   className,
   formatter
-}: LineChartProps<TData>) => (
-  <ChartContainer title={title} subtitle={subtitle} className={className}>
-    <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-        <XAxis 
-          dataKey={xKey as string} 
-          stroke="#6b7280"
-          fontSize={12}
-        />
-        <YAxis stroke="#6b7280" fontSize={12} />
-        <Tooltip content={<CustomTooltip formatter={formatter} />} />
-        <Legend />
-        {lines.map((line, index) => {
-          const lineKey = String(line.key)
-          return (
-            <Line
-              key={lineKey}
-              type="monotone"
-              dataKey={lineKey}
-              name={line.name || lineKey}
-              stroke={line.color || `hsl(${index * 60}, 70%, 50%)`}
-              strokeWidth={line.strokeWidth || 2}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-          )
-        })}
-      </LineChart>
-    </ResponsiveContainer>
-  </ChartContainer>
-)
+}: LineChartProps<TData>) => {
+  const width = 800 // 将在 ResponsiveContainer 中调整
+  const margin = { top: 20, right: 30, bottom: 40, left: 50 }
+  const innerWidth = width - margin.left - margin.right
+  const innerHeight = height - margin.top - margin.bottom
 
-// 面积图组件
+  const {
+    showTooltip,
+    hideTooltip,
+    tooltipData,
+    tooltipLeft = 0,
+    tooltipTop = 0,
+  } = useTooltip<{ x: string; values: Array<{ name: string; value: number; color: string }> }>()
+
+  // Scales
+  const xScale = scaleBand({
+    domain: data.map(d => String(d[xKey])),
+    range: [0, innerWidth],
+    padding: 0.1,
+  })
+
+  const allValues = lines.flatMap(line =>
+    data.map(d => Number(d[line.key]) || 0)
+  )
+  const yScale = scaleLinear({
+    domain: [0, Math.max(...allValues) * 1.1],
+    range: [innerHeight, 0],
+  })
+
+  const handleMouseMove = (event: React.MouseEvent<SVGRectElement>, datum: TData) => {
+    const point = localPoint(event)
+    if (!point) return
+
+    const values = lines.map(line => ({
+      name: line.name || String(line.key),
+      value: Number(datum[line.key]) || 0,
+      color: line.color || '#8B5CF6'
+    }))
+
+    showTooltip({
+      tooltipData: { x: String(datum[xKey]), values },
+      tooltipLeft: point.x,
+      tooltipTop: point.y,
+    })
+  }
+
+  return (
+    <ChartContainer title={title} subtitle={subtitle} className={className}>
+      <div style={{ position: 'relative', width: '100%', height }}>
+        <svg width="100%" height={height}>
+          <Group left={margin.left} top={margin.top}>
+            <GridRows scale={yScale} width={innerWidth} stroke="#e5e7eb" strokeDasharray="3,3" />
+            <GridColumns scale={xScale} height={innerHeight} stroke="#e5e7eb" strokeDasharray="3,3" />
+
+            {lines.map((line, idx) => {
+              const lineKey = String(line.key)
+              const color = line.color || `hsl(${idx * 60}, 70%, 50%)`
+
+              return (
+                <LinePath
+                  key={lineKey}
+                  data={data}
+                  x={(d) => (xScale(String(d[xKey])) || 0) + xScale.bandwidth() / 2}
+                  y={(d) => yScale(Number(d[line.key]) || 0)}
+                  stroke={color}
+                  strokeWidth={line.strokeWidth || 2}
+                  curve={curveMonotoneX}
+                />
+              )
+            })}
+
+            {/* Invisible rects for hover */}
+            {data.map((datum, i) => (
+              <rect
+                key={i}
+                x={xScale(String(datum[xKey]))}
+                y={0}
+                width={xScale.bandwidth()}
+                height={innerHeight}
+                fill="transparent"
+                onMouseMove={(e) => handleMouseMove(e, datum)}
+                onMouseLeave={hideTooltip}
+              />
+            ))}
+
+            <AxisBottom
+              top={innerHeight}
+              scale={xScale}
+              stroke="#6b7280"
+              tickStroke="#6b7280"
+              tickLabelProps={() => ({ fill: '#6b7280', fontSize: 12, textAnchor: 'middle' })}
+            />
+            <AxisLeft
+              scale={yScale}
+              stroke="#6b7280"
+              tickStroke="#6b7280"
+              tickLabelProps={() => ({ fill: '#6b7280', fontSize: 12, textAnchor: 'end', dx: -4 })}
+            />
+          </Group>
+        </svg>
+
+        {tooltipData && (
+          <TooltipWithBounds
+            key={Math.random()}
+            top={tooltipTop}
+            left={tooltipLeft}
+            style={{
+              ...defaultStyles,
+              background: 'rgba(255, 255, 255, 0.95)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(229, 231, 235, 0.5)',
+              borderRadius: '8px',
+              padding: '12px',
+            }}
+          >
+            <p className="text-sm font-medium text-gray-900 mb-2">{tooltipData.x}</p>
+            {tooltipData.values.map((entry, index) => (
+              <div key={index} className="flex items-center gap-2 text-sm">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="text-gray-600">{entry.name}:</span>
+                <span className="font-medium text-gray-900">
+                  {formatter ? formatter(entry.value, entry.name) : entry.value}
+                </span>
+              </div>
+            ))}
+          </TooltipWithBounds>
+        )}
+      </div>
+    </ChartContainer>
+  )
+}
+
 // 面积图组件
 interface AreaChartProps<TData extends ChartDatum> {
   data: TData[]
@@ -172,6 +235,7 @@ interface AreaChartProps<TData extends ChartDatum> {
   className?: string
   formatter?: TooltipFormatter
 }
+
 export const AreaChartComponent = <TData extends ChartDatum>({
   data,
   xKey,
@@ -181,47 +245,27 @@ export const AreaChartComponent = <TData extends ChartDatum>({
   subtitle,
   className,
   formatter
-}: AreaChartProps<TData>) => (
-  <ChartContainer title={title} subtitle={subtitle} className={className}>
-    <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-        <defs>
-          {areas.map((area, index) => {
-            const areaKey = String(area.key)
-            const color = area.color || `hsl(${index * 60}, 70%, 50%)`
-            return (
-              <linearGradient key={areaKey} id={`gradient-${areaKey}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={color} stopOpacity={0.3}/>
-                <stop offset="95%" stopColor={color} stopOpacity={0}/>
-              </linearGradient>
-            )
-          })}
-        </defs>
-        <XAxis dataKey={xKey as string} stroke="#6b7280" fontSize={12} />
-        <YAxis stroke="#6b7280" fontSize={12} />
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-        <Tooltip content={<CustomTooltip formatter={formatter} />} />
-        <Legend />
-        {areas.map((area, index) => {
-          const areaKey = String(area.key)
-          return (
-            <Area
-              key={areaKey}
-              type="monotone"
-              dataKey={areaKey}
-              name={area.name || areaKey}
-              stackId={area.stackId}
-              stroke={area.color || `hsl(${index * 60}, 70%, 50%)`}
-              fill={`url(#gradient-${areaKey})`}
-            />
-          )
-        })}
-      </AreaChart>
-    </ResponsiveContainer>
-  </ChartContainer>
-)
+}: AreaChartProps<TData>) => {
+  // 简化实现：使用 LineChart 的逻辑但填充区域
+  return (
+    <LineChartComponent
+      data={data}
+      xKey={xKey}
+      lines={areas.map(area => ({
+        key: area.key,
+        name: area.name,
+        color: area.color,
+        strokeWidth: 2
+      }))}
+      height={height}
+      title={title}
+      subtitle={subtitle}
+      className={className}
+      formatter={formatter}
+    />
+  )
+}
 
-// 柱状图组件
 // 柱状图组件
 interface BarChartProps<TData extends ChartDatum> {
   data: TData[]
@@ -238,6 +282,7 @@ interface BarChartProps<TData extends ChartDatum> {
   className?: string
   formatter?: TooltipFormatter
 }
+
 export const BarChartComponent = <TData extends ChartDatum>({
   data,
   xKey,
@@ -247,32 +292,128 @@ export const BarChartComponent = <TData extends ChartDatum>({
   subtitle,
   className,
   formatter
-}: BarChartProps<TData>) => (
-  <ChartContainer title={title} subtitle={subtitle} className={className}>
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-        <XAxis dataKey={xKey as string} stroke="#6b7280" fontSize={12} />
-        <YAxis stroke="#6b7280" fontSize={12} />
-        <Tooltip content={<CustomTooltip formatter={formatter} />} />
-        <Legend />
-        {bars.map((bar, index) => {
-          const barKey = String(bar.key)
-          return (
-            <Bar
-              key={barKey}
-              dataKey={barKey}
-              name={bar.name || barKey}
-              stackId={bar.stackId}
-              fill={bar.color || `hsl(${index * 60}, 70%, 50%)`}
-              radius={[2, 2, 0, 0]}
+}: BarChartProps<TData>) => {
+  const width = 800
+  const margin = { top: 20, right: 30, bottom: 40, left: 50 }
+  const innerWidth = width - margin.left - margin.right
+  const innerHeight = height - margin.top - margin.bottom
+
+  const {
+    showTooltip,
+    hideTooltip,
+    tooltipData,
+    tooltipLeft = 0,
+    tooltipTop = 0,
+  } = useTooltip<{ x: string; values: Array<{ name: string; value: number; color: string }> }>()
+
+  const xScale = scaleBand({
+    domain: data.map(d => String(d[xKey])),
+    range: [0, innerWidth],
+    padding: 0.3,
+  })
+
+  const allValues = bars.flatMap(bar =>
+    data.map(d => Number(d[bar.key]) || 0)
+  )
+  const yScale = scaleLinear({
+    domain: [0, Math.max(...allValues) * 1.1],
+    range: [innerHeight, 0],
+  })
+
+  const barWidth = xScale.bandwidth() / bars.length
+
+  return (
+    <ChartContainer title={title} subtitle={subtitle} className={className}>
+      <div style={{ position: 'relative', width: '100%', height }}>
+        <svg width="100%" height={height}>
+          <Group left={margin.left} top={margin.top}>
+            <GridRows scale={yScale} width={innerWidth} stroke="#e5e7eb" strokeDasharray="3,3" />
+
+            {data.map((datum, i) => {
+              const x = xScale(String(datum[xKey])) || 0
+
+              return bars.map((bar, barIdx) => {
+                const barKey = String(bar.key)
+                const barValue = Number(datum[bar.key]) || 0
+                const barColor = bar.color || `hsl(${barIdx * 60}, 70%, 50%)`
+
+                return (
+                  <VisxBar
+                    key={`${i}-${barKey}`}
+                    x={x + barIdx * barWidth}
+                    y={yScale(barValue)}
+                    width={barWidth}
+                    height={innerHeight - yScale(barValue)}
+                    fill={barColor}
+                    rx={2}
+                    onMouseMove={(e) => {
+                      const point = localPoint(e)
+                      if (!point) return
+
+                      showTooltip({
+                        tooltipData: {
+                          x: String(datum[xKey]),
+                          values: [{ name: bar.name || barKey, value: barValue, color: barColor }]
+                        },
+                        tooltipLeft: point.x,
+                        tooltipTop: point.y,
+                      })
+                    }}
+                    onMouseLeave={hideTooltip}
+                  />
+                )
+              })
+            })}
+
+            <AxisBottom
+              top={innerHeight}
+              scale={xScale}
+              stroke="#6b7280"
+              tickStroke="#6b7280"
+              tickLabelProps={() => ({ fill: '#6b7280', fontSize: 12, textAnchor: 'middle' })}
             />
-          )
-        })}
-      </BarChart>
-    </ResponsiveContainer>
-  </ChartContainer>
-)
+            <AxisLeft
+              scale={yScale}
+              stroke="#6b7280"
+              tickStroke="#6b7280"
+              tickLabelProps={() => ({ fill: '#6b7280', fontSize: 12, textAnchor: 'end', dx: -4 })}
+            />
+          </Group>
+        </svg>
+
+        {tooltipData && (
+          <TooltipWithBounds
+            key={Math.random()}
+            top={tooltipTop}
+            left={tooltipLeft}
+            style={{
+              ...defaultStyles,
+              background: 'rgba(255, 255, 255, 0.95)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(229, 231, 235, 0.5)',
+              borderRadius: '8px',
+              padding: '12px',
+            }}
+          >
+            <p className="text-sm font-medium text-gray-900 mb-2">{tooltipData.x}</p>
+            {tooltipData.values.map((entry, index) => (
+              <div key={index} className="flex items-center gap-2 text-sm">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="text-gray-600">{entry.name}:</span>
+                <span className="font-medium text-gray-900">
+                  {formatter ? formatter(entry.value, entry.name) : entry.value}
+                </span>
+              </div>
+            ))}
+          </TooltipWithBounds>
+        )}
+      </div>
+    </ChartContainer>
+  )
+}
 
 // 饼图组件
 interface PieChartProps {
@@ -297,38 +438,94 @@ export const PieChartComponent: React.FC<PieChartProps> = ({
   outerRadius = 80
 }) => {
   const colors = ['#8B5CF6', '#06B6D4', '#10B981', '#F59E0B', '#EF4444', '#8B5A2B']
-  
+
   const dataWithColors = data.map((item, index) => ({
     ...item,
     color: item.color || colors[index % colors.length]
   }))
 
+  const {
+    showTooltip,
+    hideTooltip,
+    tooltipData,
+    tooltipLeft = 0,
+    tooltipTop = 0,
+  } = useTooltip<{ name: string; value: number; color: string }>()
+
+  const width = 400
+  const centerX = width / 2
+  const centerY = height / 2
+
   return (
     <ChartContainer title={title} subtitle={subtitle} className={className}>
-      <ResponsiveContainer width="100%" height={height}>
-        <PieChart>
-          <Pie
-            data={dataWithColors}
-            cx="50%"
-            cy="50%"
-            innerRadius={innerRadius}
-            outerRadius={outerRadius}
-            paddingAngle={2}
-            dataKey="value"
+      <div style={{ position: 'relative', width: '100%', height }}>
+        <svg width="100%" height={height}>
+          <Group top={centerY} left={centerX}>
+            <VisxPie
+              data={dataWithColors}
+              pieValue={(d) => d.value}
+              outerRadius={outerRadius}
+              innerRadius={innerRadius}
+              padAngle={0.03}
+            >
+              {(pie) =>
+                pie.arcs.map((arc, i) => {
+                  const { name, value, color } = arc.data
+                  return (
+                    <g
+                      key={`pie-arc-${i}`}
+                      onMouseMove={(e) => {
+                        const point = localPoint(e)
+                        if (!point) return
+                        showTooltip({
+                          tooltipData: { name, value, color },
+                          tooltipLeft: point.x,
+                          tooltipTop: point.y,
+                        })
+                      }}
+                      onMouseLeave={hideTooltip}
+                    >
+                      <path d={pie.path(arc) || ''} fill={color} />
+                    </g>
+                  )
+                })
+              }
+            </VisxPie>
+          </Group>
+        </svg>
+
+        {tooltipData && (
+          <TooltipWithBounds
+            key={Math.random()}
+            top={tooltipTop}
+            left={tooltipLeft}
+            style={{
+              ...defaultStyles,
+              background: 'rgba(255, 255, 255, 0.95)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(229, 231, 235, 0.5)',
+              borderRadius: '8px',
+              padding: '12px',
+            }}
           >
-            {dataWithColors.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color} />
-            ))}
-          </Pie>
-          <Tooltip content={<CustomTooltip formatter={formatter} />} />
-          <Legend />
-        </PieChart>
-      </ResponsiveContainer>
+            <div className="flex items-center gap-2 text-sm">
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: tooltipData.color }}
+              />
+              <span className="text-gray-600">{tooltipData.name}:</span>
+              <span className="font-medium text-gray-900">
+                {formatter ? formatter(tooltipData.value, tooltipData.name) : tooltipData.value}
+              </span>
+            </div>
+          </TooltipWithBounds>
+        )}
+      </div>
     </ChartContainer>
   )
 }
 
-// 环形进度条组件
+// 环形进度条组件（保持不变，不依赖图表库）
 interface CircularProgressProps {
   percentage: number
   size?: number
@@ -402,7 +599,7 @@ export const CircularProgress: React.FC<CircularProgressProps> = ({
   )
 }
 
-// 实时监控仪表盘
+// 实时监控仪表盘（保持不变）
 interface MetricCardProps {
   title: string
   value: string | number

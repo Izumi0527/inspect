@@ -9,15 +9,6 @@ import {
   RefreshCw
 } from 'lucide-react'
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer
-} from 'recharts'
-import {
   Card,
   CardHeader,
   CardTitle,
@@ -26,7 +17,8 @@ import {
   Button,
   Badge,
   LoadingOverlay,
-  PageLoading
+  PageLoading,
+  LineChartComponent
 } from '@/components/atoms'
 import {
   useSystemMetrics,
@@ -169,17 +161,17 @@ export const SystemMonitoring: React.FC = () => {
                 暂无监控数据
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="time" stroke="#9CA3AF" />
-                  <YAxis domain={[0, 100]} unit="%" stroke="#9CA3AF" />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="cpu" stroke="#6366F1" strokeWidth={2} dot={false} name="CPU" />
-                  <Line type="monotone" dataKey="memory" stroke="#22C55E" strokeWidth={2} dot={false} name="内存" />
-                  <Line type="monotone" dataKey="disk" stroke="#F97316" strokeWidth={2} dot={false} name="磁盘" />
-                </LineChart>
-              </ResponsiveContainer>
+              <LineChartComponent
+                data={chartData}
+                xKey="time"
+                lines={[
+                  { key: 'cpu', name: 'CPU', color: '#6366F1', strokeWidth: 2 },
+                  { key: 'memory', name: '内存', color: '#22C55E', strokeWidth: 2 },
+                  { key: 'disk', name: '磁盘', color: '#F97316', strokeWidth: 2 }
+                ]}
+                height={320}
+                formatter={(value) => `${Number(value).toFixed(1)}%`}
+              />
             )}
           </CardContent>
         </Card>

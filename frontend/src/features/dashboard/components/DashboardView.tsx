@@ -1,10 +1,11 @@
 import React from 'react'
-import { 
-  useDashboardData, 
-  useDashboardConfig, 
+import {
+  useDashboardData,
+  useDashboardConfig,
   useDashboardAutoRefresh,
   useAlertAnalysis
 } from '../hooks/useDashboard'
+import { useSidebar } from '@/lib/contexts/sidebar-context'
 import { Sidebar } from './Sidebar'
 import { DashboardHeader } from './DashboardHeader'
 import { StatsGrid } from './StatsGrid'
@@ -14,7 +15,8 @@ import { NetworkOverviewCard } from './NetworkOverviewCard'
 
 export const DashboardView: React.FC = () => {
   const { data, loading, error, refreshStats, loadData } = useDashboardData()
-  const { config, toggleSidebar } = useDashboardConfig()
+  const { sidebarOpen, toggleSidebar } = useSidebar()
+  const { config } = useDashboardConfig() // 仅用于自动刷新配置
 
   // 分析告警数据
   const alertAnalysis = useAlertAnalysis(data?.recentAlerts || [])
@@ -68,14 +70,14 @@ export const DashboardView: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sidebar */}
-      <Sidebar 
-        isOpen={config.sidebarOpen} 
+      <Sidebar
+        isOpen={sidebarOpen}
         onToggle={toggleSidebar}
         currentPath="/dashboard"
       />
 
       {/* Main Content */}
-      <div className={`${config.sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
+      <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
         {/* Header */}
         <DashboardHeader
           alertCount={alertAnalysis.high}

@@ -18,25 +18,12 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
+  SelectValue,
+  LineChartComponent,
+  AreaChartComponent,
+  BarChartComponent,
+  PieChartComponent
 } from '@/components/atoms'
-import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer
-} from 'recharts'
 import {
   useInspectionTrends,
   useInspectionStats,
@@ -238,37 +225,15 @@ export const InspectionAnalytics: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={trends || []}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => new Date(value).toLocaleDateString()}
-                />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip
-                  labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                />
-                <Legend />
-                <Area
-                  type="monotone"
-                  dataKey="executions"
-                  stroke="#3B82F6"
-                  fill="#3B82F6"
-                  fillOpacity={0.1}
-                  name="总执行"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="success"
-                  stroke="#10B981"
-                  fill="#10B981"
-                  fillOpacity={0.1}
-                  name="成功执行"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <AreaChartComponent
+              data={trends || []}
+              xKey="date"
+              areas={[
+                { key: 'executions', name: '总执行', color: '#3B82F6' },
+                { key: 'success', name: '成功执行', color: '#10B981' }
+              ]}
+              height={300}
+            />
           </CardContent>
         </Card>
 
@@ -281,29 +246,14 @@ export const InspectionAnalytics: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={trends || []}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 12 }}
-                  tickFormatter={(value) => new Date(value).toLocaleDateString()}
-                />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
-                <Tooltip
-                  labelFormatter={(value) => new Date(value).toLocaleDateString()}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="avgScore"
-                  stroke="#8B5CF6"
-                  strokeWidth={3}
-                  dot={{ fill: '#8B5CF6', strokeWidth: 2, r: 4 }}
-                  name="平均评分"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <LineChartComponent
+              data={trends || []}
+              xKey="date"
+              lines={[
+                { key: 'avgScore', name: '平均评分', color: '#8B5CF6', strokeWidth: 3 }
+              ]}
+              height={300}
+            />
           </CardContent>
         </Card>
       </div>
@@ -319,25 +269,17 @@ export const InspectionAnalytics: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={deviceDistribution || []}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {(deviceDistribution || []).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [`${value}台`, '数量']} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            <PieChartComponent
+              data={(deviceDistribution || []).map(item => ({
+                name: item.name,
+                value: item.value,
+                color: item.color
+              }))}
+              height={300}
+              innerRadius={60}
+              outerRadius={100}
+              formatter={(value) => `${value}台`}
+            />
           </CardContent>
         </Card>
 
@@ -350,20 +292,14 @@ export const InspectionAnalytics: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={problemDistribution || []} layout="horizontal">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tick={{ fontSize: 12 }} />
-                <YAxis
-                  type="category"
-                  dataKey="category"
-                  tick={{ fontSize: 12 }}
-                  width={80}
-                />
-                <Tooltip />
-                <Bar dataKey="count" fill="#F59E0B" />
-              </BarChart>
-            </ResponsiveContainer>
+            <BarChartComponent
+              data={problemDistribution || []}
+              xKey="category"
+              bars={[
+                { key: 'count', name: '问题数量', color: '#F59E0B' }
+              ]}
+              height={300}
+            />
           </CardContent>
         </Card>
       </div>
