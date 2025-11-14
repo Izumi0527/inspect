@@ -462,4 +462,4 @@ docker ps | grep inspect
 ---
 
 **最后更新**: 2025-11-14
-**维护者**: Inspect System Team
+**维护者**: Izumi0527
