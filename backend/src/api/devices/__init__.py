@@ -15,6 +15,8 @@ from src.repositories.device_repository import DeviceRepository
 from src.services.network_scanner import network_scanner, NetworkDevice, ScanResult
 from src.api.websocket import ws_notifier  # 导入WebSocket通知器
 
+from src.services.monitoring import monitoring_service
+from src.services.device_monitoring import device_monitoring_service
 logger = structlog.get_logger()
 router = APIRouter()
 
@@ -275,7 +277,17 @@ async def delete_device(
     success = await device_repo.delete_device(device_id)
     if not success:
         raise HTTPException(status_code=404, detail="设备不存在")
-    
+
+    # 删除后停止监控并清理缓存，避免后台继续探测
+    try:
+        await monitoring_service.stop_device_monitoring(device_id)
+    except Exception as e:
+        logger.warning("Stop realtime monitoring failed", device_id=device_id, error=str(e))
+    try:
+        await device_monitoring_service.mark_device_deleted(device_id)
+    except Exception as e:
+        logger.warning("Clear device cache failed", device_id=device_id, error=str(e))
+
     logger.info("Device deleted", 
                 device_id=device_id,
                 deleted_by=current_user["id"])
@@ -581,6 +593,7 @@ async def import_scan_devices(
     device_ips: Optional[List[str]] = None,
     auto_assign_names: bool = True,
     default_group_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db_session),
     current_user: dict = Depends(require_permission("devices:create"))
 ):
     """
@@ -611,23 +624,20 @@ async def import_scan_devices(
         
         imported_devices = []
         skipped_devices = []
-        
+        device_repo = DeviceRepository(db)
+
         for device in devices_to_import:
             try:
-                # 检查设备是否已存在
-                existing_device = None
-                for existing in TEMP_DEVICES.values():
-                    if existing["ip_address"] == device.ip_address:
-                        existing_device = existing
-                        break
-                
+                # 检查设备是否已存在（使用数据库查询）
+                existing_device = await device_repo.get_device_by_ip(device.ip_address)
+
                 if existing_device:
                     skipped_devices.append({
                         "ip_address": device.ip_address,
                         "reason": "设备已存在"
                     })
                     continue
-                
+
                 # 自动分配设备名称
                 if auto_assign_names:
                     if device.hostname:
@@ -638,35 +648,28 @@ async def import_scan_devices(
                         device_name = f"Device_{device.ip_address.replace('.', '_')}"
                 else:
                     device_name = f"Imported_{device.ip_address.replace('.', '_')}"
-                
-                # 创建设备记录
-                new_id = max(TEMP_DEVICES.keys()) + 1 if TEMP_DEVICES else 1
-                now = datetime.now()
-                
-                new_device = {
-                    "id": new_id,
-                    "name": device_name,
-                    "ip_address": device.ip_address,
-                    "device_type": device.device_type or "unknown",
-                    "vendor": device.vendor or "unknown",
-                    "model": None,
-                    "location": None,
-                    "group_id": default_group_id,
-                    "snmp_community": "public" if 161 in (device.open_ports or []) else None,
-                    "snmp_version": "2c",
-                    "ssh_username": None,
-                    "ssh_password": None,
-                    "description": f"从网络扫描 {scan_id} 导入",
-                    "status": "online",
-                    "last_seen": device.last_seen or now,
-                    "is_active": True,
-                    "created_by": current_user["id"],
-                    "created_at": now,
-                    "updated_at": now
-                }
-                
-                TEMP_DEVICES[new_id] = new_device
-                imported_devices.append(Device(**new_device))
+
+                # 创建设备记录（保存到数据库）
+                device_data = DeviceCreate(
+                    name=device_name,
+                    ip_address=device.ip_address,
+                    device_type=device.device_type or "unknown",
+                    vendor=device.vendor or "unknown",
+                    model=None,
+                    location=None,
+                    group_id=default_group_id,
+                    snmp_community="public" if 161 in (device.open_ports or []) else None,
+                    snmp_version="2c",
+                    ssh_username=None,
+                    ssh_password=None,
+                    description=f"从网络扫描 {scan_id} 导入"
+                )
+
+                new_device = await device_repo.create_device(
+                    device_data=device_data.dict(),
+                    created_by=current_user["id"]
+                )
+                imported_devices.append(new_device)
                 
             except Exception as e:
                 skipped_devices.append({
@@ -700,6 +703,7 @@ async def import_scan_devices(
 @router.post("/batch-import", summary="批量导入设备")
 async def batch_import_devices(
     request: DeviceBatchImportRequest,
+    db: AsyncSession = Depends(get_db_session),
     current_user: dict = Depends(require_permission("devices:create"))
 ):
     """
@@ -708,41 +712,27 @@ async def batch_import_devices(
     try:
         imported_devices = []
         skipped_devices = []
-        
+        device_repo = DeviceRepository(db)
+
         for device_data in request.devices:
             try:
-                # 检查IP地址是否已存在
+                # 检查IP地址是否已存在（使用数据库查询）
                 if request.skip_duplicates:
-                    existing_device = None
-                    for existing in TEMP_DEVICES.values():
-                        if existing["ip_address"] == device_data.ip_address:
-                            existing_device = existing
-                            break
-                    
+                    existing_device = await device_repo.get_device_by_ip(device_data.ip_address)
+
                     if existing_device:
                         skipped_devices.append({
                             "ip_address": device_data.ip_address,
                             "reason": "设备已存在"
                         })
                         continue
-                
-                # 创建设备记录
-                new_id = max(TEMP_DEVICES.keys()) + 1 if TEMP_DEVICES else 1
-                now = datetime.now()
-                
-                new_device = {
-                    "id": new_id,
-                    **device_data.dict(),
-                    "status": "unknown",
-                    "last_seen": None,
-                    "is_active": True,
-                    "created_by": current_user["id"],
-                    "created_at": now,
-                    "updated_at": now
-                }
-                
-                TEMP_DEVICES[new_id] = new_device
-                imported_devices.append(Device(**new_device))
+
+                # 创建设备记录（保存到数据库）
+                new_device = await device_repo.create_device(
+                    device_data=device_data.dict(),
+                    created_by=current_user["id"]
+                )
+                imported_devices.append(new_device)
                 
             except Exception as e:
                 skipped_devices.append({

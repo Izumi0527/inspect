@@ -64,7 +64,12 @@ class Settings(BaseSettings):
     INFLUXDB_TOKEN: Optional[str] = os.getenv("INFLUXDB_TOKEN", "")
     INFLUXDB_ORG: Optional[str] = os.getenv("INFLUXDB_ORG", "")
     INFLUXDB_BUCKET: Optional[str] = os.getenv("INFLUXDB_BUCKET", "monitoring")
-    
+
+    # 应用配置
+    APP_VERSION: str = os.getenv("APP_VERSION", "1.0.0")
+    APP_NAME: str = os.getenv("APP_NAME", "网络设备巡检系统")
+    LICENSE_EXPIRY: str = os.getenv("LICENSE_EXPIRY", "2025-12-31")
+
     @field_validator("ALLOWED_HOSTS", mode="before")
     @classmethod
     def parse_allowed_hosts(cls, v):

@@ -17,6 +17,7 @@ from src.models.report import (
     ReportTemplate, ReportSchedule, Report, DashboardWidget,
     ReportType, ReportFormat, ReportStatus
 )
+from src.models.system import SystemBackup
 
 # 导出所有模型
 __all__ = [
@@ -39,5 +40,8 @@ __all__ = [
     
     # 报表模型
     "ReportTemplate", "ReportSchedule", "Report", "DashboardWidget",
-    "ReportType", "ReportFormat", "ReportStatus"
+    "ReportType", "ReportFormat", "ReportStatus",
+
+    # 系统模型
+    "SystemBackup"
 ]

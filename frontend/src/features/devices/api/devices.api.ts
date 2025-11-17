@@ -15,7 +15,7 @@ import { ApiResponse } from '@/lib/types/api-response.types'
 interface DeviceDto {
   id: number
   name: string
-  ip: string
+  ip_address: string  // 修复：使用后端的ip_address字段
   device_type: string
   status?: string
   location?: string
@@ -80,12 +80,12 @@ const unwrapPayload = <T>(payload: unknown): T | undefined => {
 }
 
 const isDeviceDto = (candidate: unknown): candidate is DeviceDto =>
-  isObject(candidate) && typeof candidate.id === 'number' && typeof candidate.name === 'string' && typeof candidate.ip === 'string'
+  isObject(candidate) && typeof candidate.id === 'number' && typeof candidate.name === 'string' && typeof candidate.ip_address === 'string'
 
 const mapDevice = (dto: DeviceDto): Device => ({
   id: dto.id,
   name: dto.name,
-  ip: dto.ip,
+  ip: dto.ip_address,  // 修复：使用后端的ip_address字段映射到前端的ip字段
   device_type: dto.device_type as Device['device_type'],
   status: (dto.status as Device['status']) ?? 'unknown',
   location: dto.location ?? '',

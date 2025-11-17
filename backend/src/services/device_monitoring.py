@@ -10,7 +10,6 @@ import structlog
 from src.core.influxdb import influxdb_client, record_device_status, record_device_metrics
 from src.repositories.device_repository import DeviceRepository
 from src.core.database import get_db_session_context
-from src.api.websocket import ws_notifier
 from src.services.cache_service import cache_service
 from src.models.device import DeviceType
 from src.services.device_performance import MonitoringProtocol, DeviceCredentials
@@ -26,6 +25,12 @@ class DeviceMonitoringService:
         self.monitoring_tasks: Dict[int, asyncio.Task] = {}
         self.is_running = False
         self.monitor_interval = 60  # 监控间隔（秒）
+        self.deleted_devices: set[int] = set()
+
+    def _get_ws_notifier(self):
+        """延迟导入以避免循环依赖"""
+        from src.api.websocket import ws_notifier  # noqa: WPS433
+        return ws_notifier
     
     async def start_monitoring(self):
         """启动设备监控"""
@@ -53,6 +58,14 @@ class DeviceMonitoringService:
             self.monitoring_tasks.clear()
         
         logger.info("Device monitoring service stopped")
+
+    async def mark_device_deleted(self, device_id: int):
+        """标记设备已删除，立即跳过后续采集并清理缓存"""
+        self.deleted_devices.add(device_id)
+        task = self.monitoring_tasks.pop(device_id, None)
+        if task:
+            task.cancel()
+        await cache_service.clear_device_related_cache(device_id)
     
     async def _monitoring_loop(self):
         """主监控循环"""
@@ -138,6 +151,11 @@ class DeviceMonitoringService:
         device_id = device_data["id"]
         device_ip = device_data["ip_address"]
         device_name = device_data.get("name", "Unknown")
+
+        # 如果设备已被删除，跳过采集
+        if device_id in self.deleted_devices:
+            logger.debug("Skip monitoring deleted device", device_id=device_id)
+            return
         
         try:
             # 模拟设备监控（实际项目中需要实现真实的监控逻辑）
@@ -406,7 +424,8 @@ class DeviceMonitoringService:
             if previous_status and previous_status != current_status:
                 severity = "critical" if current_status == "offline" else "info"
                 
-                await ws_notifier.notify_device_status_change(
+                notifier = self._get_ws_notifier()
+                await notifier.notify_device_status_change(
                     device_id,
                     current_status,
                     device_name=device_name,
@@ -417,7 +436,7 @@ class DeviceMonitoringService:
                 
                 # 如果设备离线，发送告警
                 if current_status == "offline":
-                    await ws_notifier.notify_alert(
+                    await notifier.notify_alert(
                         "device_offline",
                         severity,
                         f"设备 {device_name} ({device_ip}) 离线",

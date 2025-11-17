@@ -14,11 +14,9 @@ const mapDeviceSearchResult = (item: Record<string, unknown>, index: number): De
   ip: typeof item.ip === 'string' ? item.ip : '未提供 IP',
   status: typeof item.status === 'string' ? item.status : 'unknown',
 })
-import { 
-  fetchDashboardData, 
-  fetchDashboardStats, 
+import {
+  fetchDashboardData,
   performDeviceScan,
-  performPerformanceTest,
   generateReport,
   searchDevices
 } from '../api/dashboard.api'
@@ -45,12 +43,10 @@ export function useDashboardData() {
   // 刷新统计数据
   const refreshStats = useCallback(async () => {
     try {
-      setLoading(true)  // 显示加载状态
-      const stats = await fetchDashboardStats()
-      // 只有在获取到有效数据时才更新，避免空数据覆盖
-      if (stats && stats.length > 0) {
-        setData(prev => prev ? { ...prev, stats, lastUpdated: new Date() } : null)
-      }
+      setLoading(true)
+      // 统一使用 fetchDashboardData() 保证数据一致性
+      const dashboardData = await fetchDashboardData()
+      setData(dashboardData)
     } catch (err) {
       console.error('刷新统计数据失败:', err)
     } finally {
@@ -127,13 +123,18 @@ export function useQuickActions() {
 
       switch (actionType) {
         case 'deviceScan':
-          await performDeviceScan()
+          await performDeviceScan('192.168.1.0/24') // 传递默认子网
           break
-        case 'performanceTest':
-          await performPerformanceTest('localhost') // 默认测试本地主机
+        case 'manualInspection':
+          // 跳转到巡检任务创建页面
+          window.location.href = '/inspection/tasks?action=create'
           break
         case 'generateReport':
-          await generateReport('dashboard', {}) // 默认生成仪表板报告
+          await generateReport('inspection-summary') // 生成巡检汇总报告
+          break
+        case 'systemConfig':
+          // 跳转到系统设置页面
+          window.location.href = '/settings'
           break
         default:
           throw new Error(`未知的操作类型: ${actionType}`)

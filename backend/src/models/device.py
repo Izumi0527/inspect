@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, List
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, Text, Float,
-    ForeignKey, JSON, Enum, Index
+    ForeignKey, JSON, Enum, Index, BigInteger
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -149,42 +149,50 @@ class DeviceGroup(Base):
 class DeviceInterface(Base):
     """设备接口模型"""
     __tablename__ = 'device_interfaces'
-    
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     device_id: Mapped[int] = mapped_column(Integer, ForeignKey('devices.id', ondelete='CASCADE'), nullable=False)
-    
+
     # 接口信息
-    interface_name: Mapped[str] = mapped_column(String(50), nullable=False)
-    interface_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    interface_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    alias: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # 网络配置
+    mac_address: Mapped[Optional[str]] = mapped_column(String(17), nullable=True)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+    subnet_mask: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+
     # 状态信息
-    admin_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # up/down
-    oper_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)   # up/down
-    speed: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # bps
+    is_up: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    admin_status: Mapped[Optional[str]] = mapped_column(String(20), default='down', nullable=True)  # up/down
+    oper_status: Mapped[Optional[str]] = mapped_column(String(20), default='down', nullable=True)   # up/down
+    speed: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)  # bps
     mtu: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    
+
     # 统计信息
-    in_octets: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    out_octets: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    in_errors: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    out_errors: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    
+    in_octets: Mapped[Optional[int]] = mapped_column(BigInteger, default=0, nullable=True)
+    out_octets: Mapped[Optional[int]] = mapped_column(BigInteger, default=0, nullable=True)
+    in_errors: Mapped[Optional[int]] = mapped_column(BigInteger, default=0, nullable=True)
+    out_errors: Mapped[Optional[int]] = mapped_column(BigInteger, default=0, nullable=True)
+
     # 时间字段
+    last_updated: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
-    
+
     # 关系
     device = relationship("Device", back_populates="interfaces")
-    
+
     # 索引
     __table_args__ = (
         Index('idx_interface_device_id', device_id),
-        Index('idx_interface_name', device_id, interface_name),
+        Index('idx_interface_name', device_id, name),
     )
-    
+
     def __repr__(self):
-        return f"<DeviceInterface(id={self.id}, device_id={self.device_id}, name='{self.interface_name}')>"
+        return f"<DeviceInterface(id={self.id}, device_id={self.device_id}, name='{self.name}')>"
 
 class DeviceMetric(Base):
     """设备监控指标数据模型（时序数据）"""
@@ -196,10 +204,18 @@ class DeviceMetric(Base):
     # 指标信息
     metric_name: Mapped[str] = mapped_column(String(100), nullable=False)
     metric_value: Mapped[float] = mapped_column(Float, nullable=False)
-    unit: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    unit: Mapped[Optional[str]] = mapped_column("metric_unit", String(20), nullable=True)
+    interface_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    tags: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     
     # 时间字段
-    timestamp: Mapped[datetime] = mapped_column(DateTime, default=func.now(), nullable=False)
+    # 数据库字段为 collected_at，这里保持 Python 属性名为 timestamp 以兼容现有调用
+    timestamp: Mapped[datetime] = mapped_column(
+        "collected_at", DateTime, default=func.now(), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
     
     # 关系
     device = relationship("Device", back_populates="monitoring_data")

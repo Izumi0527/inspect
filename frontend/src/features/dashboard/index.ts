@@ -17,15 +17,13 @@ export {
   useAlertSeverityStyles 
 } from './hooks/useDashboard'
 
-export { 
-  fetchDashboardData, 
-  fetchDashboardStats, 
-  fetchRecentAlerts, 
+export {
+  fetchDashboardData,
+  fetchRecentAlerts,
   fetchNetworkOverview,
   performDeviceScan,
-  performPerformanceTest,
   generateReport,
-  searchDevices 
+  searchDevices
 } from './api/dashboard.api'
 
 export type { 

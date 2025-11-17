@@ -38,21 +38,6 @@ interface DashboardOverviewDto {
   last_updated?: string
 }
 
-interface DashboardStatsDto {
-  devices?: {
-    online?: number
-    offline?: number
-    total?: number
-    health_percentage?: number
-  }
-  alerts?: {
-    total?: number
-    critical?: number
-    warning?: number
-    resolved?: number
-  }
-}
-
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
@@ -124,22 +109,6 @@ export async function fetchDashboardData(): Promise<DashboardData> {
   }
 }
 
-export async function fetchDashboardStats(): Promise<DashboardStat[]> {
-  try {
-    const payload = await api.get<unknown>('/dashboard/stats')
-    const statsDto = unwrapPayload<DashboardStatsDto>(payload)
-
-    if (!statsDto) {
-      return getEmptyStatsData()
-    }
-
-    return buildDashboardStats(statsDto)
-  } catch (error) {
-    console.warn('获取统计数据失败，使用空数据结构:', error)
-    return getEmptyStatsData()
-  }
-}
-
 export async function fetchRecentAlerts(limit: number = 5): Promise<RecentAlert[]> {
   try {
     const payload = await api.get<unknown>(appendLimit('/dashboard/recent-alerts', limit))
@@ -180,16 +149,32 @@ export async function fetchNetworkOverview(): Promise<NetworkOverviewItem[]> {
   }
 }
 
-export async function performDeviceScan(subnet?: string): Promise<Record<string, unknown>> {
-  return api.post('/devices/scan', subnet ? { subnet } : undefined)
+export async function performDeviceScan(subnet: string = '192.168.1.0/24'): Promise<Record<string, unknown>> {
+  return api.post('/devices/scan', {
+    target_network: subnet,
+    scan_type: 'ping',
+    port_scan: false,
+    snmp_scan: false,
+    deep_scan: false
+  })
 }
 
-export async function performPerformanceTest(target: string): Promise<Record<string, unknown>> {
-  return api.post('/performance/test', { target })
-}
+export async function generateReport(
+  reportType: 'inspection-summary' | 'device-health' | 'trend-analysis' = 'inspection-summary'
+): Promise<Record<string, unknown>> {
+  // 根据报表类型调用对应的具体端点
+  const endpoints = {
+    'inspection-summary': '/reports/inspection-summary',
+    'device-health': '/reports/device-health',
+    'trend-analysis': '/reports/trend-analysis'
+  }
 
-export async function generateReport<T>(type: string, params: Record<string, unknown>): Promise<T> {
-  return api.post<T>(`/reports/generate/${type}`, params)
+  const endpoint = endpoints[reportType]
+
+  return api.post(endpoint, {
+    time_range: 'last_7d',
+    group_by: 'day'
+  })
 }
 
 export async function searchDevices(query: string): Promise<Record<string, unknown>[]> {
@@ -226,49 +211,6 @@ const toDashboardStat = (dto: DashboardStatDto): DashboardStat => ({
   color: dto.color ?? 'gray',
 })
 
-const buildDashboardStats = (dto: DashboardStatsDto): DashboardStat[] => {
-  const onlineDevices = dto.devices?.online ?? 0
-  const totalDevices = dto.devices?.total ?? 0
-  const healthPercentage = dto.devices?.health_percentage ?? 0
-  const activeAlerts = dto.alerts?.total ?? 0
-  const criticalAlerts = dto.alerts?.critical ?? 0
-
-  return [
-    {
-      title: '在线设备',
-      value: onlineDevices.toString(),
-      change: totalDevices > 0 ? `${Math.round((onlineDevices / totalDevices) * 100)}% 在线` : '无数据',
-      iconName: 'Monitor',
-      iconColor: 'text-green-600',
-      color: 'green',
-    },
-    {
-      title: '活跃告警',
-      value: activeAlerts.toString(),
-      change: criticalAlerts > 0 ? `${criticalAlerts} 条严重告警` : '无严重告警',
-      iconName: 'AlertTriangle',
-      iconColor: criticalAlerts > 0 ? 'text-red-600' : 'text-yellow-600',
-      color: criticalAlerts > 0 ? 'red' : 'yellow',
-    },
-    {
-      title: '设备健康率',
-      value: `${healthPercentage}%`,
-      change: healthPercentage >= 95 ? '健康状况良好' : '需要关注',
-      iconName: 'Shield',
-      iconColor: 'text-blue-600',
-      color: 'blue',
-    },
-    {
-      title: '总设备数',
-      value: totalDevices.toString(),
-      change: totalDevices > 0 ? `${dto.devices?.offline ?? 0} 台离线` : '无设备',
-      iconName: 'Server',
-      iconColor: 'text-purple-600',
-      color: 'purple',
-    },
-  ]
-}
-
 const getEmptyDashboardData = (): DashboardData => ({
   stats: getEmptyStatsData(),
   recentAlerts: [],
@@ -294,15 +236,15 @@ const getEmptyStatsData = (): DashboardStat[] => [
     color: 'gray',
   },
   {
-    title: '设备健康率',
+    title: '网络流量',
     value: '-',
     change: '',
-    iconName: 'Shield',
+    iconName: 'Activity',
     iconColor: 'text-gray-400',
     color: 'gray',
   },
   {
-    title: '总设备数',
+    title: '系统负载',
     value: '-',
     change: '',
     iconName: 'Server',

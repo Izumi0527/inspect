@@ -327,6 +327,10 @@ class CacheService:
     async def clear_device_related_cache(self, device_id: int) -> None:
         """清除设备相关的所有缓存"""
         await self.invalidate_device(device_id)
+        await self.invalidate_active_devices()
+        # 清除单设备状态与指标缓存
+        await self.redis.delete(self._make_key(self.PREFIXES["device_status"], device_id))
+        await self.redis.delete(self._make_key(self.PREFIXES["device_metrics"], device_id))
         
         # 清除设备列表缓存（通配符清除）
         pattern = self._make_key(self.PREFIXES["device"], "list:*")

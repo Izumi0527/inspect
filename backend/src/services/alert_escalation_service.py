@@ -3,19 +3,22 @@
 实现告警自动升级、多级通知和升级历史记录功能
 """
 
+from __future__ import annotations
+
 import asyncio
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from enum import Enum
-from typing import Dict, List, Optional, Any, Set
+from typing import Dict, List, Optional, Any, Set, TYPE_CHECKING
 import structlog
 
 from src.models.alert import AlertSeverity, AlertStatus
-from src.services.alert_engine import alert_engine, Alert, AlertRule
 from src.core.database import get_db_session
 from src.core.influxdb import record_user_activity
-from src.api.websocket import ws_notifier
+
+if TYPE_CHECKING:
+    from src.services.alert_engine import Alert, AlertRule
 
 logger = structlog.get_logger()
 
@@ -95,9 +98,25 @@ class AlertEscalationService:
         self.escalation_task: Optional[asyncio.Task] = None
         self.check_interval = 60  # 检查间隔（秒）
         self.logger = logger.bind(component="alert_escalation_service")
+        self._alert_engine = None
+        self._ws_notifier = None
         
         # 注册默认升级规则
         self._register_default_escalation_rules()
+
+    def _get_alert_engine(self):
+        """延迟导入告警引擎以避免循环依赖"""
+        if self._alert_engine is None:
+            from src.services.alert_engine import alert_engine  # noqa: WPS433
+            self._alert_engine = alert_engine
+        return self._alert_engine
+    
+    def _get_ws_notifier(self):
+        """延迟导入 WebSocket 通知器以避免循环依赖"""
+        if self._ws_notifier is None:
+            from src.api.websocket import ws_notifier  # noqa: WPS433
+            self._ws_notifier = ws_notifier
+        return self._ws_notifier
     
     def _register_default_escalation_rules(self):
         """注册默认升级规则"""
@@ -182,7 +201,7 @@ class AlertEscalationService:
                     continue
                 
                 # 检查告警是否仍然活跃
-                alert = alert_engine.alerts.get(escalation.alert_id)
+                alert = self._get_alert_engine().alerts.get(escalation.alert_id)
                 if not alert or alert.status != AlertStatus.ACTIVE:
                     # 告警已解决或不存在，停止升级
                     escalation.is_active = False
@@ -251,7 +270,8 @@ class AlertEscalationService:
             await self._send_escalation_notifications(escalation, alert, rule, next_level)
             
             # 发送WebSocket通知
-            await ws_notifier.notify_alert_escalation(
+            notifier = self._get_ws_notifier()
+            await notifier.notify_alert_escalation(
                 alert_id=alert.id,
                 from_level=current_level.value,
                 to_level=next_level.value,

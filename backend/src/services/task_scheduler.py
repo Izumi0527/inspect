@@ -11,7 +11,6 @@ import structlog
 
 from src.core.database import get_db_session_context
 from src.repositories.device_repository import DeviceRepository
-from src.api.websocket import ws_notifier
 from src.core.influxdb import record_user_activity
 from src.services.network_scanner import network_scanner
 
@@ -88,6 +87,14 @@ class TaskScheduler:
         self.scheduler_task: Optional[asyncio.Task] = None
         self.is_running = False
         self.check_interval = 60  # 检查间隔（秒）
+        self._ws_notifier = None
+
+    def _get_ws_notifier(self):
+        """延迟导入以避免循环依赖"""
+        if self._ws_notifier is None:
+            from src.api.websocket import ws_notifier  # noqa: WPS433
+            self._ws_notifier = ws_notifier
+        return self._ws_notifier
     
     async def start(self):
         """启动调度器"""
@@ -242,7 +249,8 @@ class TaskScheduler:
         
         try:
             # 发送任务开始通知
-            await ws_notifier.notify_system_event(
+            notifier = self._get_ws_notifier()
+            await notifier.notify_system_event(
                 "task_started",
                 f"任务 '{task.name}' 开始执行",
                 task_id=task.id,
@@ -296,7 +304,8 @@ class TaskScheduler:
             task.updated_at = datetime.now(timezone.utc)
             
             # 发送任务完成通知
-            await ws_notifier.notify_system_event(
+            notifier = self._get_ws_notifier()
+            await notifier.notify_system_event(
                 "task_completed" if execution.status == TaskStatus.COMPLETED else "task_failed",
                 f"任务 '{task.name}' {'执行完成' if execution.status == TaskStatus.COMPLETED else '执行失败'}",
                 task_id=task.id,
@@ -463,7 +472,8 @@ class TaskScheduler:
             })
             
             # 发送扫描进度通知
-            await ws_notifier.notify_scan_progress(
+            notifier = self._get_ws_notifier()
+            await notifier.notify_scan_progress(
                 execution.id,
                 int(task.progress),
                 "scanning",
@@ -530,7 +540,8 @@ class TaskScheduler:
         ]
         
         if unhealthy_components:
-            await ws_notifier.notify_alert(
+            notifier = self._get_ws_notifier()
+            await notifier.notify_alert(
                 "system_health",
                 "warning",
                 f"系统健康检查发现问题: {', '.join(unhealthy_components)}",

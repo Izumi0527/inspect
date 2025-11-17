@@ -19,6 +19,8 @@ from src.models.device import Device, DeviceType, DeviceStatus
 from src.schemas.device import DeviceCreate, DeviceUpdate
 from src.services.device_performance import DeviceCredentials, MonitoringProtocol
 from src.core.influxdb import record_user_activity
+from src.services.monitoring import monitoring_service
+from src.services.device_monitoring import device_monitoring_service
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
@@ -292,6 +294,16 @@ class DeviceBatchService:
                         # 删除设备
                         success = await device_repo.delete_device(device_id)
                         if success:
+                            try:
+                                await monitoring_service.stop_device_monitoring(device_id)
+                            except Exception as e:
+                                self.logger.warning("Stop monitoring failed during batch delete",
+                                                    device_id=device_id, error=str(e))
+                            try:
+                                await device_monitoring_service.mark_device_deleted(device_id)
+                            except Exception as e:
+                                self.logger.warning("Clear device cache failed during batch delete",
+                                                    device_id=device_id, error=str(e))
                             operation.success_items.append({
                                 "index": i,
                                 "device_id": device_id,

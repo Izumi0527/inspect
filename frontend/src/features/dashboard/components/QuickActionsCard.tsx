@@ -1,5 +1,5 @@
 import React from 'react'
-import { Monitor, Activity, Database, Settings } from 'lucide-react'
+import { Monitor, Play, Database, Settings } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/atoms'
 import { useQuickActions } from '../hooks/useDashboard'
 
@@ -24,10 +24,10 @@ export const QuickActionsCard: React.FC<QuickActionsCardProps> = ({
       }
     },
     {
-      key: 'performanceTest',
-      title: '性能测试',
-      icon: Activity,
-      description: '测试网络性能',
+      key: 'manualInspection',
+      title: '手动巡检',
+      icon: Play,
+      description: '执行手动巡检任务',
       colorScheme: {
         hover: 'hover:bg-green-50 hover:text-green-600',
         text: 'text-green-600'

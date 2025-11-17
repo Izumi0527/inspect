@@ -6,14 +6,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select, func
 from typing import Dict, Any, List
+from datetime import datetime, timedelta
 import structlog
 
 from src.core.permissions import require_permission
 from src.core.database import get_db_session
+from src.core.config import settings
 from src.models.device import Device
 from src.models.alert import Alert, AlertSeverity
+from src.models.system import SystemBackup
 from src.repositories.device_repository import DeviceRepository
 from src.services.monitoring import MonitoringService
+from src.core.redis import redis_manager
+from src.core.influxdb import influxdb_client
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -65,7 +70,24 @@ async def get_dashboard_overview(
         )
         critical_result = await db.execute(critical_alerts_query)
         stats.critical_alerts = critical_result.scalar() or 0
-        
+
+        # 计算昨日告警数量（用于较昨日变化）
+        yesterday_start = datetime.now() - timedelta(days=1)
+        yesterday_start = yesterday_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday_end = yesterday_start + timedelta(days=1)
+
+        yesterday_alerts_query = select(func.count(Alert.id)).where(
+            Alert.created_at >= yesterday_start,
+            Alert.created_at < yesterday_end,
+            Alert.status.in_(['open', 'acknowledged'])
+        )
+        yesterday_alerts_result = await db.execute(yesterday_alerts_query)
+        yesterday_alert_count = yesterday_alerts_result.scalar() or 0
+
+        # 计算告警变化
+        alert_change = stats.active_alerts - yesterday_alert_count
+        alert_change_percent = round((alert_change / yesterday_alert_count * 100), 1) if yesterday_alert_count > 0 else 0
+
         # 3. 计算设备健康度
         device_health_percentage = (stats.online_devices / stats.total_devices * 100) if stats.total_devices > 0 else 0
         
@@ -83,8 +105,33 @@ async def get_dashboard_overview(
             logger.warning("获取监控数据失败", error=str(e))
             stats.network_traffic = "0 MB/s"
             stats.system_load = "0%"
-        
-        # 5. 构建响应数据
+
+        # 5. 获取系统运行时间
+        try:
+            import psutil
+            import time
+            boot_time = psutil.boot_time()  # 系统启动时间戳
+            uptime_seconds = time.time() - boot_time  # 运行秒数
+            days = int(uptime_seconds // 86400)
+            hours = int((uptime_seconds % 86400) // 3600)
+            system_uptime = f"{days}天 {hours}小时"
+        except Exception as e:
+            logger.warning("获取系统运行时间失败", error=str(e))
+            system_uptime = "未知"
+
+        # 6. 获取最后备份时间
+        try:
+            last_backup_query = select(SystemBackup.created_at).where(
+                SystemBackup.status == 'completed'
+            ).order_by(SystemBackup.created_at.desc()).limit(1)
+            last_backup_result = await db.execute(last_backup_query)
+            last_backup_time = last_backup_result.scalar()
+            last_backup_str = last_backup_time.strftime("%Y-%m-%d %H:%M:%S") if last_backup_time else "未执行"
+        except Exception as e:
+            logger.warning("获取最后备份时间失败", error=str(e))
+            last_backup_str = "未知"
+
+        # 7. 构建响应数据
         dashboard_data = {
             # 主要统计卡片
             "stats": [
@@ -103,12 +150,12 @@ async def get_dashboard_overview(
                     "title": "活跃告警",
                     "value": str(stats.active_alerts),
                     "critical": stats.critical_alerts,
-                    "change": f"{stats.active_alerts - 10}较昨日" if stats.active_alerts != 10 else "无变化",
-                    "changePercent": f"{round((stats.active_alerts - 10) / 10 * 100, 1)}%" if stats.active_alerts > 0 else "0%",
+                    "change": f"{alert_change:+d}较昨日" if alert_change != 0 else "无变化",
+                    "changePercent": f"{alert_change_percent:+.1f}%" if yesterday_alert_count > 0 else "0%",
                     "iconName": "AlertTriangle",
                     "iconColor": "text-red-600" if stats.critical_alerts > 0 else "text-yellow-600",
                     "color": "red" if stats.critical_alerts > 0 else "yellow",
-                    "trend": "down" if stats.active_alerts < 10 else "up"
+                    "trend": "down" if alert_change < 0 else ("up" if alert_change > 0 else "stable")
                 },
                 {
                     "title": "网络流量",
@@ -188,10 +235,10 @@ async def get_dashboard_overview(
             # 系统状态
             "system_status": {
                 "overall_health": "healthy" if device_health_percentage > 85 else "warning",
-                "uptime": "45天 12小时",
-                "last_backup": "2024-01-15 02:00:00",
-                "license_expiry": "2024-12-31",
-                "version": "1.0.0"
+                "uptime": system_uptime,
+                "last_backup": last_backup_str,
+                "license_expiry": settings.LICENSE_EXPIRY,
+                "version": settings.APP_VERSION
             }
         }
         
@@ -287,14 +334,14 @@ async def get_dashboard_stats(
 
 @router.get("/health", summary="获取系统健康状态")
 async def get_system_health(
+    db: AsyncSession = Depends(get_db_session),
     current_user: dict = Depends(require_permission("system:read"))
 ):
     """获取系统健康状态"""
     try:
-        # TODO: 连接真实的系统监控服务获取数据
         # 这里应该从实际的系统监控服务获取真实数据
         import psutil
-        import uptime
+        import time
 
         # 获取真实的系统指标
         cpu_percent = psutil.cpu_percent(interval=1)
@@ -303,23 +350,56 @@ async def get_system_health(
 
         # 获取系统运行时间
         try:
-            uptime_seconds = uptime.uptime()
+            boot_time = psutil.boot_time()  # 系统启动时间戳
+            uptime_seconds = time.time() - boot_time  # 运行秒数
             days = int(uptime_seconds // 86400)
             hours = int((uptime_seconds % 86400) // 3600)
             uptime_str = f"{days}天 {hours}小时"
-        except:
+        except Exception as e:
+            logger.warning("获取系统运行时间失败", error=str(e))
             uptime_str = "未知"
 
+        # 检查数据库连接
+        database_status = "connected"
+        try:
+            await db.execute(text("SELECT 1"))
+        except Exception as e:
+            logger.warning("数据库连接检查失败", error=str(e))
+            database_status = "disconnected"
+
+        # 检查Redis连接
+        redis_status = "not_configured"
+        if settings.REDIS_URL:
+            try:
+                redis_healthy = await redis_manager.ping()
+                redis_status = "connected" if redis_healthy else "disconnected"
+            except Exception as e:
+                logger.warning("Redis连接检查失败", error=str(e))
+                redis_status = "disconnected"
+
+        # 检查InfluxDB连接
+        influxdb_status = "not_configured"
+        if settings.INFLUXDB_URL:
+            try:
+                health_result = await influxdb_client.health()
+                influxdb_status = health_result.get('status', 'unknown')
+            except Exception as e:
+                logger.warning("InfluxDB连接检查失败", error=str(e))
+                influxdb_status = "disconnected"
+
+        # 网络状态基于数据库连接状态判断
+        network_status = "normal" if database_status == "connected" else "degraded"
+
         health_data = {
-            "overall_status": "healthy" if cpu_percent < 80 and memory.percent < 85 else "warning",
+            "overall_status": "healthy" if cpu_percent < 80 and memory.percent < 85 and database_status == "connected" else "warning",
             "uptime": uptime_str,
             "cpu_usage": f"{cpu_percent:.1f}%",
             "memory_usage": f"{memory.percent:.1f}%",
             "disk_usage": f"{disk.percent:.1f}%",
-            "network_status": "normal",  # TODO: 实际网络状态检查
-            "database_status": "connected",  # TODO: 实际数据库状态检查
-            "redis_status": "connected",  # TODO: 实际Redis状态检查
-            "influxdb_status": "connected"  # TODO: 实际InfluxDB状态检查
+            "network_status": network_status,
+            "database_status": database_status,
+            "redis_status": redis_status,
+            "influxdb_status": influxdb_status
         }
 
         return {

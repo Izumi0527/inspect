@@ -63,7 +63,7 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
                 </div>
                 <h3 className="font-semibold text-gray-900 mb-2">{item.title}</h3>
                 <p className="text-sm text-gray-600">
-                  {item.count}{item.description}
+                  {item.description}
                 </p>
               </div>
             )

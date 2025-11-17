@@ -15,7 +15,6 @@ import structlog
 from src.core.config import settings
 from src.core.database import get_db_session_context
 from src.repositories.device_repository import DeviceRepository
-from src.api.websocket import ws_notifier
 from src.core.influxdb import record_user_activity
 from src.services.cache_service import cache_service
 
@@ -308,6 +307,14 @@ class AlertEngine:
         
         # 升级服务将在启动时初始化，避免循环导入
         self.escalation_service = None
+        self._ws_notifier = None
+
+    def _get_ws_notifier(self):
+        """延迟获取 WebSocket 通知器，避免循环导入"""
+        if self._ws_notifier is None:
+            from src.api.websocket import ws_notifier  # noqa: WPS433
+            self._ws_notifier = ws_notifier
+        return self._ws_notifier
     
     async def start(self):
         """启动告警引擎"""
@@ -662,7 +669,8 @@ class AlertEngine:
             
             # 发送WebSocket通知
             if rule.notify_websocket:
-                await ws_notifier.notify_alert(
+                notifier = self._get_ws_notifier()
+                await notifier.notify_alert(
                     rule.id,
                     rule.severity.value,
                     alert.title,
@@ -702,6 +710,13 @@ class AlertEngine:
                     "device_id": device_id,
                     "severity": rule.severity.value
                 }
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to trigger alert",
+                rule_id=rule.id if rule else None,
+                device_id=device_id,
+                error=str(e)
             )
             
             logger.info(

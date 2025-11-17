@@ -236,11 +236,45 @@ class RedisManager:
         """获取哈希的所有键值对"""
         if not self.is_connected:
             return {}
-            
+
         try:
             return await self.redis.hgetall(name)
         except Exception as e:
             logger.error("Redis hash getall failed", name=name, error=str(e))
+            return {}
+
+    async def ping(self) -> bool:
+        """
+        健康检查：测试Redis连接
+
+        Returns:
+            bool: 连接是否正常
+        """
+        if not self.is_connected or not self.redis:
+            return False
+
+        try:
+            await self.redis.ping()
+            return True
+        except Exception as e:
+            logger.error("Redis ping failed", error=str(e))
+            return False
+
+    async def get_info(self) -> dict:
+        """
+        获取Redis服务器信息
+
+        Returns:
+            dict: Redis服务器信息，失败返回空字典
+        """
+        if not self.is_connected or not self.redis:
+            return {}
+
+        try:
+            info = await self.redis.info()
+            return info
+        except Exception as e:
+            logger.error("Redis get info failed", error=str(e))
             return {}
 
 

@@ -94,7 +94,69 @@ class InfluxDBClient:
             self._session = None
         self.is_connected = False
         logger.info("InfluxDB connection closed")
-    
+
+    async def health(self) -> Dict[str, Any]:
+        """
+        健康检查：获取InfluxDB健康状态
+
+        Returns:
+            健康状态字典: {
+                healthy: bool,      # 是否健康
+                message: str,       # 状态消息
+                status: str,        # 状态码: connected/disconnected/degraded
+                version: str        # 版本信息（可选）
+            }
+        """
+        if not self.is_connected or not self._session:
+            return {
+                "healthy": False,
+                "message": "InfluxDB not initialized or not connected",
+                "status": "disconnected"
+            }
+
+        try:
+            # InfluxDB 2.x health API
+            url = f"{self.base_url}/health"
+            async with self._session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # InfluxDB health API 返回格式:
+                    # {"name":"influxdb","message":"ready for queries and writes","status":"pass","version":"2.x.x"}
+                    is_healthy = data.get('status') == 'pass'
+                    return {
+                        "healthy": is_healthy,
+                        "message": data.get('message', 'OK'),
+                        "status": "connected" if is_healthy else "degraded",
+                        "version": data.get('version', 'unknown')
+                    }
+                elif response.status == 503:
+                    # 服务不可用
+                    return {
+                        "healthy": False,
+                        "message": "InfluxDB service unavailable",
+                        "status": "degraded"
+                    }
+                else:
+                    return {
+                        "healthy": False,
+                        "message": f"Health check returned status {response.status}",
+                        "status": "degraded"
+                    }
+        except aiohttp.ClientError as e:
+            logger.error("InfluxDB health check failed (network error)", error=str(e))
+            return {
+                "healthy": False,
+                "message": f"Network error: {str(e)}",
+                "status": "disconnected"
+            }
+        except Exception as e:
+            logger.error("InfluxDB health check failed", error=str(e))
+            return {
+                "healthy": False,
+                "message": f"Error: {str(e)}",
+                "status": "disconnected"
+            }
+
     async def _ping(self):
         """测试连接"""
         if not self._session:
