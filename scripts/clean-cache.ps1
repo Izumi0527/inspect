@@ -7,6 +7,7 @@ param(
     [switch]$Frontend,      # 仅清理前端缓存
     [switch]$Logs,          # 清理日志文件
     [switch]$Temp,          # 清理临时文件
+    [switch]$ProjectFiles,  # 清理项目特定临时文件
     [switch]$Force,         # 跳过确认直接清理
     [switch]$WhatIf,        # 预览将要删除的内容（不实际删除）
     [switch]$Verbose,       # 详细输出
@@ -65,11 +66,12 @@ function Show-Help {
     Write-Host "    .\clean-cache.ps1 [选项]"
     Write-Host ""
     Write-Host "清理选项:"
-    Write-Host "    -All                清理所有缓存（Python + 前端 + 日志 + 临时文件）"
+    Write-Host "    -All                清理所有缓存（Python + 前端 + 日志 + 临时文件 + 项目文件）"
     Write-Host "    -Python             仅清理 Python 缓存（__pycache__, .pyc, pytest, mypy等）"
     Write-Host "    -Frontend           仅清理前端缓存（node_modules/.cache, .next, dist等）"
     Write-Host "    -Logs               清理日志文件（超过7天的日志）"
     Write-Host "    -Temp               清理临时文件（.DS_Store, Thumbs.db, *.tmp等）"
+    Write-Host "    -ProjectFiles       清理项目特定文件（context.json, lint报告, 覆盖率等）"
     Write-Host ""
     Write-Host "执行选项:"
     Write-Host "    -Force              跳过确认直接清理"
@@ -81,6 +83,7 @@ function Show-Help {
     Write-Host "    .\clean-cache.ps1                      # 交互式选择清理项"
     Write-Host "    .\clean-cache.ps1 -All -Force          # 清理所有缓存，不确认"
     Write-Host "    .\clean-cache.ps1 -Python              # 仅清理 Python 缓存"
+    Write-Host "    .\clean-cache.ps1 -ProjectFiles        # 仅清理项目特定临时文件"
     Write-Host "    .\clean-cache.ps1 -WhatIf              # 预览将要删除的内容"
     Write-Host "    .\clean-cache.ps1 -All -Verbose        # 清理所有并显示详细信息"
     Write-Host ""
@@ -295,6 +298,72 @@ function Clear-TempFiles {
     }
 }
 
+# 清理项目特定临时文件
+function Clear-ProjectSpecificCache {
+    Write-LogStep "清理项目特定临时文件..."
+
+    # 运行时配置文件
+    $contextJson = Join-Path $script:ProjectRoot "context.json"
+    if (Test-Path $contextJson) {
+        Remove-CacheItem -Path $contextJson -Description "运行时配置 (context.json)"
+    }
+
+    # 前端 Lint 报告
+    $frontendLintReport = Join-Path $script:FrontendPath "lint-report.json"
+    if (Test-Path $frontendLintReport) {
+        Remove-CacheItem -Path $frontendLintReport -Description "ESLint 报告 (lint-report.json)"
+    }
+
+    $frontendLintResult = Join-Path $script:FrontendPath "lint-result.json"
+    if (Test-Path $frontendLintResult) {
+        Remove-CacheItem -Path $frontendLintResult -Description "ESLint 结果 (lint-result.json)"
+    }
+
+    # 前端覆盖率报告
+    $frontendCoverageReport = Join-Path $script:FrontendPath "coverage-report"
+    if (Test-Path $frontendCoverageReport) {
+        Remove-CacheItem -Path $frontendCoverageReport -Description "前端覆盖率报告"
+    }
+
+    # TypeScript 构建信息
+    Get-ChildItem -Path $script:FrontendPath -Recurse -Filter "*.tsbuildinfo" -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-CacheItem -Path $_.FullName -Description "TypeScript 构建信息 ($($_.Name))"
+    }
+
+    # 后端覆盖率文件
+    $backendCoverage = Join-Path $script:BackendPath ".coverage"
+    if (Test-Path $backendCoverage) {
+        Remove-CacheItem -Path $backendCoverage -Description "Python 覆盖率数据 (.coverage)"
+    }
+
+    $backendHtmlCov = Join-Path $script:BackendPath "htmlcov"
+    if (Test-Path $backendHtmlCov) {
+        Remove-CacheItem -Path $backendHtmlCov -Description "Python 覆盖率报告 (htmlcov)"
+    }
+
+    # 后端运行时数据（排除 .example.json）
+    $backendDataPath = Join-Path $script:BackendPath "data"
+    if (Test-Path $backendDataPath) {
+        Get-ChildItem -Path $backendDataPath -Filter "*.json" -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notmatch '\.example\.json$' } | ForEach-Object {
+            Remove-CacheItem -Path $_.FullName -Description "后端运行时数据 ($($_.Name))"
+        }
+    }
+
+    # 前端认证令牌（开发环境临时文件）
+    $frontendAuth = Join-Path $script:FrontendPath "auth.json"
+    if (Test-Path $frontendAuth) {
+        Write-LogWarning "发现前端认证文件 (auth.json)，如需清理请手动删除"
+        Write-LogVerbose "路径: $frontendAuth"
+    }
+
+    # Vitest 缓存
+    $vitestCache = Join-Path $script:FrontendPath ".vitest"
+    if (Test-Path $vitestCache) {
+        Remove-CacheItem -Path $vitestCache -Description "Vitest 测试缓存"
+    }
+}
+
 # 显示清理摘要
 function Show-Summary {
     Write-Host ""
@@ -328,12 +397,13 @@ function Show-InteractiveMenu {
     Write-Host "  [3] 仅清理前端缓存"
     Write-Host "  [4] 仅清理日志文件"
     Write-Host "  [5] 仅清理临时文件"
+    Write-Host "  [6] 仅清理项目特定文件（推荐）"
     Write-Host "  [0] 取消"
     Write-Host ""
     Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
     Write-Host ""
 
-    $choice = Read-Host "请选择 (0-5)"
+    $choice = Read-Host "请选择 (0-6)"
 
     switch ($choice) {
         "1" { $script:All = $true }
@@ -341,6 +411,7 @@ function Show-InteractiveMenu {
         "3" { $script:Frontend = $true }
         "4" { $script:Logs = $true }
         "5" { $script:Temp = $true }
+        "6" { $script:ProjectFiles = $true }
         "0" {
             Write-LogInfo "已取消清理操作"
             exit 0
@@ -366,7 +437,7 @@ function Main {
     }
 
     # 如果没有指定任何选项，显示交互式菜单
-    if (-not ($All -or $Python -or $Frontend -or $Logs -or $Temp)) {
+    if (-not ($All -or $Python -or $Frontend -or $Logs -or $Temp -or $ProjectFiles)) {
         Show-InteractiveMenu
     }
 
@@ -401,6 +472,10 @@ function Main {
 
     if ($All -or $Temp) {
         Clear-TempFiles
+    }
+
+    if ($All -or $ProjectFiles) {
+        Clear-ProjectSpecificCache
     }
 
     # 显示摘要

@@ -274,6 +274,9 @@ Temporary Items
 temp/
 tmp/
 
+# 运行时配置文件
+context.json
+
 # 上传文件
 uploads/
 media/
@@ -286,6 +289,15 @@ cache/
 data/local/
 data/dev/
 data/test/
+
+# 后端运行时数据（保留示例文件）
+backend/data/*.json
+!backend/data/*.example.json
+
+# 前端临时文件和报告
+frontend/lint-report.json
+frontend/lint-result.json
+frontend/coverage-report/
 
 # SSL证书文件
 *.key
@@ -303,13 +315,6 @@ backups/
 frontend/playwright-report/
 frontend/test-results/
 backend/test-results/
-
-# 临时测试文件(项目根目录下)
-backend/test_*.py
-
-# 后端测试目录(临时测试文件)
-backend/tests/test_*.py
-backend/tests/init_test_data.py
 
 # ==========================================
 # 认证和敏感信息
@@ -333,9 +338,5 @@ backend/auth.json
 # Windows 空文件
 nul
 
-# 临时测试脚本
-test_*.ps1
-test_*.sh
-
-# 损坏或异常文件名
-*security_config.json
+# 损坏或异常文件名（修正语法）
+**/*security_config.json
