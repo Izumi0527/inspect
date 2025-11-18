@@ -82,31 +82,31 @@ export const InspectionView: React.FC = () => {
   }
 
   return (
-    <AppLayout title="巡检管理" fullWidth={true}>
-      <div className="space-y-4">
+    <AppLayout title="巡检管理">
+      <div className="flex flex-col space-y-6 min-h-[calc(100vh-112px)] pb-6">
         {/* 快速统计卡片 */}
         {!statsLoading && stats && (
-          <div className="flex gap-4">
-            <Card className="min-w-[120px]">
-              <CardContent className="p-4 text-center">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-6 text-center">
                 <div className="text-2xl font-bold text-blue-600">{stats.totalStrategies}</div>
                 <div className="text-sm text-gray-600">总策略数</div>
               </CardContent>
             </Card>
-            <Card className="min-w-[120px]">
-              <CardContent className="p-4 text-center">
+            <Card>
+              <CardContent className="p-6 text-center">
                 <div className="text-2xl font-bold text-green-600">{stats.activeStrategies}</div>
                 <div className="text-sm text-gray-600">活跃策略</div>
               </CardContent>
             </Card>
-            <Card className="min-w-[120px]">
-              <CardContent className="p-4 text-center">
+            <Card>
+              <CardContent className="p-6 text-center">
                 <div className="text-2xl font-bold text-purple-600">{stats.todayExecutions}</div>
                 <div className="text-sm text-gray-600">今日执行</div>
               </CardContent>
             </Card>
-            <Card className="min-w-[120px]">
-              <CardContent className="p-4 text-center">
+            <Card>
+              <CardContent className="p-6 text-center">
                 <div className="text-2xl font-bold text-orange-600">{stats.avgScore.toFixed(1)}</div>
                 <div className="text-sm text-gray-600">平均评分</div>
               </CardContent>
@@ -115,7 +115,7 @@ export const InspectionView: React.FC = () => {
         )}
 
         {/* 标签导航 */}
-      <Card>
+      <Card className="flex-1 flex flex-col overflow-hidden">
         <CardHeader className="pb-0">
           <div className="flex flex-col sm:flex-row gap-4 justify-between">
             {/* 标签按钮 */}
@@ -182,17 +182,19 @@ export const InspectionView: React.FC = () => {
           </div>
         </CardHeader>
 
-        <CardContent className="pt-4">
+        <CardContent className="flex-1 flex flex-col overflow-hidden pt-4">
           {/* 标签内容区域 */}
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.2 }}
-          >
-            {renderTabContent()}
-          </motion.div>
+          <div className="flex-1 overflow-y-auto">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              {renderTabContent()}
+            </motion.div>
+          </div>
         </CardContent>
       </Card>
       </div>

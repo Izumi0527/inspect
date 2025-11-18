@@ -26,7 +26,7 @@ const iconMap = {
 export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) => {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[...Array(4)].map((_, index) => (
           <Card key={index} className="animate-pulse">
             <CardContent className="p-6">
@@ -46,10 +46,10 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) 
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {stats.map((stat, index) => {
         const IconComponent = iconMap[stat.iconName as keyof typeof iconMap]
-        
+
         return (
           <Card key={index} className="hover:shadow-lg transition-shadow">
             <CardContent className="p-6">

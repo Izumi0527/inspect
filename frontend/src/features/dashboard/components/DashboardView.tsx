@@ -115,32 +115,33 @@ export const DashboardView: React.FC = () => {
 
         {/* Main Content */}
         <main className="p-6">
-          {/* Stats Grid */}
-          <div className="mb-8">
-            <StatsGrid 
-              stats={data?.stats || []} 
-              loading={loading}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            {/* Recent Alerts */}
-            <RecentAlertsCard 
-              alerts={data?.recentAlerts || []} 
+          <div className="flex flex-col space-y-6 min-h-[calc(100vh-112px)] pb-6">
+            {/* Stats Grid */}
+            <StatsGrid
+              stats={data?.stats || []}
               loading={loading}
             />
 
-            {/* Quick Actions */}
-            <QuickActionsCard 
-              onActionComplete={handleActionComplete}
+            {/* Secondary Cards - Horizontal Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Recent Alerts */}
+              <RecentAlertsCard
+                alerts={data?.recentAlerts || []}
+                loading={loading}
+              />
+
+              {/* Quick Actions */}
+              <QuickActionsCard
+                onActionComplete={handleActionComplete}
+              />
+            </div>
+
+            {/* Main Content Card - Expands to bottom */}
+            <NetworkOverviewCard
+              overview={data?.networkOverview || []}
+              loading={loading}
             />
           </div>
-
-          {/* Network Overview */}
-          <NetworkOverviewCard 
-            overview={data?.networkOverview || []} 
-            loading={loading}
-          />
 
           {/* Loading overlay for refresh */}
           {loading && data && (

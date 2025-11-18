@@ -12,7 +12,7 @@ interface DashboardHeaderProps {
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   title = '控制台总览',
-  subtitle = '欢迎回来，查看您的网络设备运行状态',
+  subtitle,
   alertCount = 0
 }) => {
   const { query, results, searching, showResults, setQuery, clearSearch } = useDeviceSearch()
@@ -23,7 +23,9 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-            <p className="text-gray-600">{subtitle}</p>
+            {subtitle && (
+              <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
+            )}
           </div>
           <div className="flex items-center gap-4">
             {/* 搜索框 */}

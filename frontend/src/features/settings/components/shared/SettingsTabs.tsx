@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { LucideIcon } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import {
   Settings,
@@ -13,7 +14,15 @@ import {
   Activity,
 } from 'lucide-react'
 
-const tabs = [
+// 导出RouterTab类型（与AppLayout保持一致）
+export interface RouterTab {
+  name: string
+  href: string
+  icon: LucideIcon
+}
+
+// 导出默认的设置页面tabs配置
+export const settingsTabs: RouterTab[] = [
   { name: '通用配置', href: '/settings/general', icon: Settings },
   { name: '用户管理', href: '/settings/users', icon: Users },
   { name: '安全策略', href: '/settings/security', icon: Shield },
@@ -23,7 +32,11 @@ const tabs = [
   { name: '系统监控', href: '/settings/monitoring', icon: Activity },
 ]
 
-export function SettingsTabs() {
+interface SettingsTabsProps {
+  tabs?: RouterTab[] // 可选的tabs配置，默认使用settingsTabs
+}
+
+export function SettingsTabs({ tabs = settingsTabs }: SettingsTabsProps = {}) {
   const pathname = usePathname()
 
   return (

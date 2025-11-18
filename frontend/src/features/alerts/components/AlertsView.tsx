@@ -12,6 +12,15 @@ import { AlertFiltersBar } from './AlertFiltersBar'
 import { AlertList } from './AlertList'
 import { SkeletonCard, SkeletonList } from '@/components/atoms/skeleton'
 import { AdvancedFilters, AdvancedFilterValues } from './AdvancedFilters'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
+import { Download, CheckCheck, XCircle } from 'lucide-react'
 
 export const AlertsView: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
@@ -143,7 +152,7 @@ export const AlertsView: React.FC = () => {
 
   return (
     <AppLayout title="告警中心">
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="flex flex-col space-y-6 min-h-[calc(100vh-112px)] pb-6">
         {/* Alert Statistics */}
         <div>
           {statsLoading ? (
@@ -158,46 +167,93 @@ export const AlertsView: React.FC = () => {
           ) : null}
         </div>
 
-        {/* Filters and Search */}
-        <div className="mb-6">
-          <AlertFiltersBar
-            filters={filters}
-            onFilterChange={updateFilter}
-            selectedCount={selectedAlerts.length}
-            onBulkAction={handleBulkActionClick}
-          />
-        </div>
+        {/* Main Card Container */}
+        <Card className="flex-1 flex flex-col overflow-hidden">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>告警列表</CardTitle>
+              <div className="flex items-center gap-2">
+                {/* 导出按钮 */}
+                <Button variant="outline" size="sm">
+                  <Download className="h-4 w-4 mr-2" />
+                  导出告警
+                </Button>
 
-        {/* Advanced Filters */}
-        <div className="mb-6">
-          <AdvancedFilters
-            onFilterChange={handleAdvancedFilterChange}
-            onReset={handleAdvancedFilterReset}
-          />
-        </div>
+                {/* 批量操作下拉菜单 */}
+                {selectedAlerts.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        批量操作 ({selectedAlerts.length})
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleBulkActionClick('acknowledge')}>
+                        <CheckCheck className="h-4 w-4 mr-2" />
+                        批量确认
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleBulkActionClick('resolve')}>
+                        <CheckCheck className="h-4 w-4 mr-2" />
+                        批量解决
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleBulkActionClick('delete')}
+                        className="text-red-600"
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        批量删除
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            </div>
+          </CardHeader>
 
-        {/* Alerts List */}
-        {loading ? (
-          <SkeletonList count={pageSize} itemHeight="h-32" spacing="space-y-4" />
-        ) : (
-          <AlertList
-            alerts={alerts}
-            selectedAlerts={selectedAlerts}
-            onSelectAlert={toggleAlert}
-            onSelectAll={selectAll}
-            onClearSelection={clearSelection}
-            onAcknowledge={handleAcknowledgeAlert}
-            onResolve={handleResolveAlert}
-            onDelete={handleDeleteAlert}
-            pagination={{
-              current: pagination.page,
-              total: pagination.total,
-              pageSize: pagination.pageSize,
-              onPageChange: handlePageChange,
-              onPageSizeChange: handlePageSizeChange
-            }}
-          />
-        )}
+          <CardContent className="flex-1 flex flex-col overflow-hidden">
+            {/* Filters and Search - 不使用独立Card */}
+            <AlertFiltersBar
+              filters={filters}
+              onFilterChange={updateFilter}
+              selectedCount={selectedAlerts.length}
+              onBulkAction={handleBulkActionClick}
+              renderAsCard={false}
+            />
+
+            {/* Advanced Filters - 不使用独立Card */}
+            <AdvancedFilters
+              onFilterChange={handleAdvancedFilterChange}
+              onReset={handleAdvancedFilterReset}
+              renderAsCard={false}
+            />
+
+            {/* Alerts List - 不使用独立Card */}
+            <div className="flex-1 overflow-y-auto">
+              {loading ? (
+                <SkeletonList count={pageSize} itemHeight="h-32" spacing="space-y-4" />
+              ) : (
+                <AlertList
+                  alerts={alerts}
+                  selectedAlerts={selectedAlerts}
+                  onSelectAlert={toggleAlert}
+                  onSelectAll={selectAll}
+                  onClearSelection={clearSelection}
+                  onAcknowledge={handleAcknowledgeAlert}
+                  onResolve={handleResolveAlert}
+                  onDelete={handleDeleteAlert}
+                  pagination={{
+                    current: pagination.page,
+                    total: pagination.total,
+                    pageSize: pagination.pageSize,
+                    onPageChange: handlePageChange,
+                    onPageSizeChange: handlePageSizeChange
+                  }}
+                  renderAsCard={false}
+                />
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
   )
