@@ -12,8 +12,15 @@ from src.repositories.device_repository import DeviceRepository
 from src.core.database import get_db_session_context
 from src.services.cache_service import cache_service
 from src.models.device import DeviceType
-from src.services.device_performance import MonitoringProtocol, DeviceCredentials
 from src.core.snmp import SNMPVersion
+
+from src.services.device_performance import (
+    device_performance_collector,
+    DeviceMonitoringConfig,
+    DeviceType as PerfDeviceType,
+    MonitoringProtocol,
+    DeviceCredentials,
+)
 
 logger = structlog.get_logger()
 
@@ -27,6 +34,17 @@ class DeviceMonitoringService:
         self.monitor_interval = 60  # 监控间隔（秒）
         self.deleted_devices: set[int] = set()
 
+    def _normalize_device_id(self, device_id: Any) -> Optional[int]:
+        """确保设备ID为整数，便于集合判断"""
+        if isinstance(device_id, int):
+            return device_id
+        if isinstance(device_id, str):
+            try:
+                return int(device_id)
+            except ValueError:
+                return None
+        return None
+    
     def _get_ws_notifier(self):
         """延迟导入以避免循环依赖"""
         from src.api.websocket import ws_notifier  # noqa: WPS433
@@ -61,8 +79,12 @@ class DeviceMonitoringService:
 
     async def mark_device_deleted(self, device_id: int):
         """标记设备已删除，立即跳过后续采集并清理缓存"""
-        self.deleted_devices.add(device_id)
-        task = self.monitoring_tasks.pop(device_id, None)
+        normalized_id = self._normalize_device_id(device_id)
+        if normalized_id is not None:
+            self.deleted_devices.add(normalized_id)
+            task = self.monitoring_tasks.pop(normalized_id, None)
+        else:
+            task = None
         if task:
             task.cancel()
         await cache_service.clear_device_related_cache(device_id)
@@ -119,7 +141,19 @@ class DeviceMonitoringService:
                 logger.debug(f"Using cached active devices list: {len(devices_data)} devices")
             
             # 过滤出需要监控的设备
-            monitored_devices = [device for device in devices_data if device.get("is_monitored", True)]
+            monitored_devices = []
+            for device in devices_data:
+                device_id = self._normalize_device_id(device.get("id"))
+                if device_id is None:
+                    continue
+                if device_id in self.deleted_devices:
+                    continue
+                if not device.get("is_monitored", True):
+                    continue
+                monitored_devices.append({
+                    **device,
+                    "id": device_id
+                })
             
             if not monitored_devices:
                 logger.debug("No devices to monitor")
@@ -148,7 +182,10 @@ class DeviceMonitoringService:
     async def _monitor_single_device(self, device_data):
         """监控单个设备"""
         start_time = time.time()
-        device_id = device_data["id"]
+        device_id = self._normalize_device_id(device_data["id"])
+        if device_id is None:
+            logger.warning("Invalid device id detected, skip monitoring", device_data=device_data)
+            return
         device_ip = device_data["ip_address"]
         device_name = device_data.get("name", "Unknown")
 
@@ -214,15 +251,7 @@ class DeviceMonitoringService:
     
     async def _check_device_status(self, device_data) -> Dict[str, Any]:
         """检查设备状态（使用真实的性能采集器）"""
-        from src.services.device_performance import (
-            device_performance_collector,
-            DeviceMonitoringConfig,
-            DeviceType,
-            MonitoringProtocol,
-            DeviceCredentials,
-            SNMPVersion
-        )
-        
+        import json
         device_id = device_data["id"]
         device_name = device_data.get("name", "Unknown")
         device_ip = device_data["ip_address"]
@@ -249,7 +278,8 @@ class DeviceMonitoringService:
                 ip_address=device_ip,
                 device_type=device_type,
                 protocols=protocols,
-                credentials=credentials
+                credentials=credentials,
+                ssh_port=device_data.get('ssh_port') or 22
             )
             
             logger.debug("Device monitoring config created successfully", device_id=device_id)
@@ -322,6 +352,15 @@ class DeviceMonitoringService:
         
         return DeviceType.UNKNOWN
     
+    def _get_cli_config(self, device_data) -> Dict[str, Any]:
+        tags = device_data.get("tags")
+        if isinstance(tags, str):
+            try:
+                tags = json.loads(tags)
+            except (ValueError, json.JSONDecodeError):
+                tags = {}
+        return (tags or {}).get("cli_config") or {}
+
     def _determine_protocols(self, device_data) -> List[MonitoringProtocol]:
         """确定设备支持的监控协议"""
         protocols = []
@@ -334,9 +373,16 @@ class DeviceMonitoringService:
         
         # 如果是服务器类设备，也尝试SSH
         device_type = self._determine_device_type(device_data)
-        if device_type in [DeviceType.SERVER, DeviceType.ROUTER, DeviceType.SWITCH]:
-            protocols.append(MonitoringProtocol.SSH)
-        
+        cli_config = self._get_cli_config(device_data)
+        cli_protocol = cli_config.get("cli_protocol")
+
+        if cli_protocol == "ssh":
+            if device_data.get("ssh_username") and device_data.get("ssh_password"):
+                protocols.append(MonitoringProtocol.SSH)
+        elif cli_protocol in (None, "", "default"):
+            if device_type in [DeviceType.SERVER, DeviceType.ROUTER, DeviceType.SWITCH] and device_data.get("ssh_username"):
+                protocols.append(MonitoringProtocol.SSH)
+    
         return protocols
     
     def _build_credentials(self, device_data) -> DeviceCredentials:
@@ -352,16 +398,15 @@ class DeviceMonitoringService:
         credentials.snmp_community = device_data.get('snmp_community', 
             os.getenv('DEFAULT_SNMP_COMMUNITY', 'public'))
         
-        # SSH 默认配置（如果设备有SSH配置）
-        ssh_username = (device_data.get('ssh_username') or 
-                       os.getenv('DEFAULT_SSH_USERNAME', 'admin'))
-        ssh_password = (device_data.get('ssh_password') or 
-                       os.getenv('DEFAULT_SSH_PASSWORD', 'admin'))
+        cli_protocol = self._get_cli_config(device_data).get("cli_protocol")
         
-        if ssh_username:
+        ssh_username = device_data.get('ssh_username')
+        ssh_password = device_data.get('ssh_password')
+        
+        if cli_protocol == "ssh" and ssh_username and ssh_password:
             credentials.ssh_username = ssh_username
             credentials.ssh_password = ssh_password
-        
+    
         return credentials
     
     async def _simple_ping_check(self, device_data) -> Dict[str, Any]:

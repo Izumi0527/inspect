@@ -29,6 +29,8 @@ interface DeviceDto {
   snmp_community?: string
   ssh_username?: string
   ssh_password?: string
+  ssh_port?: number
+  tags?: Record<string, unknown> | string | null
   created_at?: string
   updated_at?: string
 }
@@ -82,26 +84,50 @@ const unwrapPayload = <T>(payload: unknown): T | undefined => {
 const isDeviceDto = (candidate: unknown): candidate is DeviceDto =>
   isObject(candidate) && typeof candidate.id === 'number' && typeof candidate.name === 'string' && typeof candidate.ip_address === 'string'
 
-const mapDevice = (dto: DeviceDto): Device => ({
-  id: dto.id,
-  name: dto.name,
-  ip: dto.ip_address,  // 修复：使用后端的ip_address字段映射到前端的ip字段
-  device_type: dto.device_type as Device['device_type'],
-  status: (dto.status as Device['status']) ?? 'unknown',
-  location: dto.location ?? '',
-  last_seen: dto.last_seen ?? '',
-  uptime: dto.uptime ?? '',
-  cpu_usage: dto.cpu_usage ?? 0,
-  memory_usage: dto.memory_usage ?? 0,
-  network_traffic: dto.network_traffic ?? 0,
-  alert_count: dto.alert_count ?? 0,
-  description: dto.description ?? '',
-  snmp_community: dto.snmp_community ?? '',
-  ssh_username: dto.ssh_username ?? '',
-  ssh_password: dto.ssh_password ?? '',
-  created_at: dto.created_at,
-  updated_at: dto.updated_at,
-})
+const mapDevice = (dto: DeviceDto): Device => {
+  const parsedTags = (() => {
+    if (!dto.tags) return null
+    if (typeof dto.tags === 'string') {
+      try {
+        return JSON.parse(dto.tags) as Record<string, unknown>
+      } catch {
+        return null
+      }
+    }
+    return dto.tags as Record<string, unknown>
+  })()
+
+  const cliConfig = parsedTags?.cli_config as Record<string, unknown> | undefined
+  const snmpConfigFromTags = parsedTags?.snmp_config as Device['snmp_config']
+
+  return {
+    id: dto.id,
+    name: dto.name,
+    ip: dto.ip_address,
+    device_type: dto.device_type as Device['device_type'],
+    status: (dto.status as Device['status']) ?? 'unknown',
+    location: dto.location ?? '',
+    last_seen: dto.last_seen ?? '',
+    uptime: dto.uptime ?? '',
+    cpu_usage: dto.cpu_usage ?? 0,
+    memory_usage: dto.memory_usage ?? 0,
+    network_traffic: dto.network_traffic ?? 0,
+    alert_count: dto.alert_count ?? 0,
+    description: dto.description ?? '',
+    snmp_community: dto.snmp_community ?? snmpConfigFromTags?.v2c_config?.community ?? '',
+    snmp_version: dto.snmp_version ?? snmpConfigFromTags?.version,
+    ssh_username: dto.ssh_username ?? '',
+    ssh_password: dto.ssh_password ?? '',
+    ssh_port: dto.ssh_port,
+    snmp_config: snmpConfigFromTags,
+    ssh_config: cliConfig?.ssh_config as Device['ssh_config'],
+    telnet_config: cliConfig?.telnet_config as Device['telnet_config'],
+    cli_protocol: cliConfig?.cli_protocol as Device['cli_protocol'],
+    tags: parsedTags,
+    created_at: dto.created_at,
+    updated_at: dto.updated_at,
+  }
+}
 
 const extractDevices = (payload: unknown): DeviceDto[] => {
   const unwrapped = unwrapPayload<DeviceDto[] | DeviceListDto>(payload)
@@ -148,10 +174,25 @@ export async function fetchDevices(filters?: DeviceFilters): Promise<Device[]> {
 
 export async function fetchDevice(id: number): Promise<Device | null> {
   try {
-    const payload = await api.get<ApiResponse<DeviceDto>>(`/devices/${id}`)
-    if (payload.success && payload.data) {
-      return mapDevice(payload.data)
+    const payload = await api.get<unknown>(`/devices/${id}`)
+
+    // 兼容两种响应格式
+    if (isObject(payload)) {
+      // 格式1: 标准 ApiResponse<DeviceDto>
+      if ('success' in payload && 'data' in payload) {
+        const apiResponse = payload as ApiResponse<DeviceDto>
+        if (apiResponse.success && apiResponse.data) {
+          return mapDevice(apiResponse.data)
+        }
+        return null
+      }
+
+      // 格式2: 直接返回设备对象 (后端当前格式)
+      if (isDeviceDto(payload)) {
+        return mapDevice(payload)
+      }
     }
+
     return null
   } catch (error) {
     console.error('获取设备详情失败:', error)
@@ -160,24 +201,73 @@ export async function fetchDevice(id: number): Promise<Device | null> {
 }
 
 export async function createDevice(device: Omit<Device, 'id' | 'created_at' | 'updated_at'>): Promise<Device> {
-  const payload = await api.post<ApiResponse<DeviceDto>>('/devices', device)
-  if (payload.success && payload.data) {
-    return mapDevice(payload.data)
+  const payload = await api.post<unknown>('/devices', device)
+
+  // 兼容两种响应格式
+  if (isObject(payload)) {
+    // 格式1: 标准 ApiResponse<DeviceDto>
+    if ('success' in payload && 'data' in payload) {
+      const apiResponse = payload as ApiResponse<DeviceDto>
+      if (apiResponse.success && apiResponse.data) {
+        return mapDevice(apiResponse.data)
+      }
+      throw new Error(apiResponse.message || '创建设备失败')
+    }
+
+    // 格式2: 直接返回设备对象 (后端当前格式)
+    if (isDeviceDto(payload)) {
+      return mapDevice(payload)
+    }
   }
-  throw new Error(payload.message || '创建设备失败')
+
+  throw new Error('创建设备失败：响应格式不正确')
 }
 
 export async function updateDevice(id: number, updates: Partial<Device>): Promise<Device> {
-  const payload = await api.put<ApiResponse<DeviceDto>>(`/devices/${id}`, updates)
-  if (payload.success && payload.data) {
-    return mapDevice(payload.data)
+  const payload = await api.put<unknown>(`/devices/${id}`, updates)
+
+  // 兼容两种响应格式
+  if (isObject(payload)) {
+    // 格式1: 标准 ApiResponse<DeviceDto>
+    if ('success' in payload && 'data' in payload) {
+      const apiResponse = payload as ApiResponse<DeviceDto>
+      if (apiResponse.success && apiResponse.data) {
+        return mapDevice(apiResponse.data)
+      }
+      throw new Error(apiResponse.message || '更新设备失败')
+    }
+
+    // 格式2: 直接返回设备对象 (后端当前格式)
+    if (isDeviceDto(payload)) {
+      return mapDevice(payload)
+    }
   }
-  throw new Error(payload.message || '更新设备失败')
+
+  throw new Error('更新设备失败：响应格式不正确')
 }
 
 export async function deleteDevice(id: number): Promise<boolean> {
-  const payload = await api.delete<ApiResponse<{ success: boolean }>>(`/devices/${id}`)
-  return payload.success
+  const payload = await api.delete<unknown>(`/devices/${id}`)
+
+  // 兼容两种响应格式
+  if (isObject(payload)) {
+    // 格式1: 标准 ApiResponse
+    if ('success' in payload) {
+      return (payload as ApiResponse<unknown>).success
+    }
+
+    // 格式2: 直接返回 {success: boolean} 或其他对象
+    // DELETE 成功通常返回 204 No Content 或 200 OK，没有响应体
+    // 如果能执行到这里说明请求成功了
+    return true
+  }
+
+  // 如果 payload 为空（204 No Content），也视为成功
+  if (payload === null || payload === undefined || payload === '') {
+    return true
+  }
+
+  return false
 }
 
 const performBulkAction = async (
@@ -229,7 +319,7 @@ export async function bulkUpdateDevices(params: BulkUpdateParams): Promise<BulkO
 
 export async function bulkImportDevices(devices: DeviceImportData[]): Promise<ImportResult> {
   try {
-    const payload = await api.post<ApiResponse<ImportResponseDto>>('/devices/bulk-import', {
+    const payload = await api.post<ApiResponse<ImportResponseDto>>('/devices/batch-import', {
       devices,
       auto_detect: true,
       skip_duplicates: true,
@@ -277,19 +367,45 @@ export async function bulkImportDevices(devices: DeviceImportData[]): Promise<Im
 }
 
 export async function fetchDeviceStats(): Promise<Record<string, unknown>> {
-  const payload = await api.get<ApiResponse<Record<string, unknown>>>('/devices/stats')
-  if (payload.success && payload.data) {
-    return payload.data
+  const payload = await api.get<unknown>('/devices/stats')
+
+  // 兼容两种响应格式
+  if (isObject(payload)) {
+    // 格式1: 标准 ApiResponse
+    if ('success' in payload && 'data' in payload) {
+      const apiResponse = payload as ApiResponse<Record<string, unknown>>
+      if (apiResponse.success && apiResponse.data) {
+        return apiResponse.data
+      }
+      throw new Error(apiResponse.message || '获取设备统计失败')
+    }
+
+    // 格式2: 直接返回统计对象 (后端当前格式)
+    return payload as Record<string, unknown>
   }
-  throw new Error(payload.message || '获取设备统计失败')
+
+  throw new Error('获取设备统计失败：响应格式不正确')
 }
 
 export async function healthCheckDevice(id: number): Promise<Record<string, unknown>> {
-  const payload = await api.post<ApiResponse<Record<string, unknown>>>(`/devices/${id}/health-check`)
-  if (payload.success) {
-    return payload.data ?? {}
+  const payload = await api.post<unknown>(`/devices/${id}/health-check`)
+
+  // 兼容两种响应格式
+  if (isObject(payload)) {
+    // 格式1: 标准 ApiResponse
+    if ('success' in payload && 'data' in payload) {
+      const apiResponse = payload as ApiResponse<Record<string, unknown>>
+      if (apiResponse.success) {
+        return apiResponse.data ?? {}
+      }
+      throw new Error(apiResponse.message || '设备健康检查失败')
+    }
+
+    // 格式2: 直接返回健康检查结果对象 (后端当前格式)
+    return payload as Record<string, unknown>
   }
-  throw new Error(payload.message || '设备健康检查失败')
+
+  return {}
 }
 
 export async function fetchDevicePerformance(
@@ -297,11 +413,24 @@ export async function fetchDevicePerformance(
   timeRange?: string
 ): Promise<Record<string, unknown>> {
   const endpoint = appendQuery(`/devices/${id}/performance`, timeRange ? { time_range: timeRange } : undefined)
-  const payload = await api.get<ApiResponse<Record<string, unknown>>>(endpoint)
-  if (payload.success && payload.data) {
-    return payload.data
+  const payload = await api.get<unknown>(endpoint)
+
+  // 兼容两种响应格式
+  if (isObject(payload)) {
+    // 格式1: 标准 ApiResponse
+    if ('success' in payload && 'data' in payload) {
+      const apiResponse = payload as ApiResponse<Record<string, unknown>>
+      if (apiResponse.success && apiResponse.data) {
+        return apiResponse.data
+      }
+      throw new Error(apiResponse.message || '获取设备性能数据失败')
+    }
+
+    // 格式2: 直接返回性能数据对象 (后端当前格式)
+    return payload as Record<string, unknown>
   }
-  throw new Error(payload.message || '获取设备性能数据失败')
+
+  throw new Error('获取设备性能数据失败：响应格式不正确')
 }
 
 const appendQuery = (endpoint: string, params?: Record<string, string | number | boolean | undefined>) => {

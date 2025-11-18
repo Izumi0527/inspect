@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+﻿import React, { useState } from 'react'
 import {
   Server,
   Plus,
@@ -9,7 +9,7 @@ import {
   Power,
   AlertTriangle,
   Upload,
-  Settings2
+  Download
 } from 'lucide-react'
 import {
   Card,
@@ -29,19 +29,22 @@ import {
   ConfirmModal
 } from '@/components/atoms'
 import { AppLayout } from '@/components/layout'
+import toast from 'react-hot-toast'
 
 import { Device, DeviceStatus, DeviceType } from '../types'
 import { DeviceIcon, StatusBadge, getDeviceTypeLabel } from './DeviceIcon'
-import { BulkOperationModal } from './BulkOperationModal'
 import { BulkDeviceImport } from './BulkDeviceImport'
 import { AddDeviceModal } from './AddDeviceModal'
+import { DeviceDetailsModal } from './DeviceDetailsModal'
+import { EditDeviceModal } from './EditDeviceModal'
 import { 
   useDevices, 
   useDeviceFilters, 
   useFilteredDevices, 
-  useDeviceSummary,
-  useDeviceSelection 
+  useDeviceSummary
 } from '../hooks/useDevices'
+import { fetchDevice, updateDevice as updateDeviceApi } from '../api/devices.api'
+import type { DevicePayload } from '../utils/deviceFormMapper'
 
 const DEVICE_STATUSES: DeviceStatus[] = ['online', 'offline', 'warning', 'maintenance']
 const DEVICE_TYPES: DeviceType[] = ['switch', 'router', 'firewall', 'wireless_ap']
@@ -79,27 +82,66 @@ const toAlertCount = (value: unknown): number => {
 }
 
 export const DeviceManagementView: React.FC = () => {
-  const { devices, loading, error, setError, addDevice, removeDevice, performBulkAction, importDevices, loadDevices } = useDevices()
+  const { devices, loading, error, setError, addDevice, removeDevice, importDevices, loadDevices } = useDevices()
   const { filters, updateFilter } = useDeviceFilters()
   const filteredDevices = useFilteredDevices(devices, filters)
   const summary = useDeviceSummary(devices)
-  const { selectedDevices, setSelectedDevices, clearSelection } = useDeviceSelection()
   
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [addModalOpen, setAddModalOpen] = useState(false)
-  const [bulkModalOpen, setBulkModalOpen] = useState(false)
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [deviceToDelete, setDeviceToDelete] = useState<Device | null>(null)
+  const [viewModalOpen, setViewModalOpen] = useState(false)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [viewingDevice, setViewingDevice] = useState<Device | null>(null)
+  const [editingDevice, setEditingDevice] = useState<Device | null>(null)
+  const [viewModalLoading, setViewModalLoading] = useState(false)
+  const [editModalLoading, setEditModalLoading] = useState(false)
 
   // 设备操作处理函数
-  const handleViewDevice = (device: Device) => {
-    console.log('查看设备:', device)
-    // TODO: 导航到设备详情页面
+  const handleViewDevice = async (device: Device) => {
+    setViewModalOpen(true)
+    setViewModalLoading(true)
+    try {
+      const latest = await fetchDevice(device.id)
+      setViewingDevice(latest ?? device)
+    } catch (error) {
+      console.error('查看设备详情失败:', error)
+      setViewingDevice(device)
+    } finally {
+      setViewModalLoading(false)
+    }
   }
 
-  const handleEditDevice = (device: Device) => {
-    console.log('编辑设备:', device)
-    // TODO: 打开编辑设备对话框
+  const handleEditDevice = async (device: Device) => {
+    setEditModalOpen(true)
+    setEditModalLoading(true)
+    try {
+      const latest = await fetchDevice(device.id)
+      setEditingDevice(latest ?? device)
+    } catch (error) {
+      console.error('加载设备编辑数据失败:', error)
+      setEditingDevice(device)
+    } finally {
+      setEditModalLoading(false)
+    }
+  }
+
+  const handleUpdateDevice = async (deviceId: number, payload: DevicePayload) => {
+    try {
+      setEditModalLoading(true)
+      await updateDeviceApi(deviceId, payload as Partial<Device>)
+      await loadDevices(filters)
+      toast.success('设备更新成功')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '更新设备失败'
+      setError(message)
+      console.error('更新设备失败:', error)
+      toast.error(message)
+      throw error
+    } finally {
+      setEditModalLoading(false)
+    }
   }
 
   const handleDeleteDevice = (device: Device) => {
@@ -123,8 +165,20 @@ export const DeviceManagementView: React.FC = () => {
     setImportModalOpen(true)
   }
 
-  const handleOpenBulkModal = () => {
-    setBulkModalOpen(true)
+  const handleDownloadTemplate = () => {
+    const headerLine = '设备名称,IP地址,设备类型,位置,描述,SNMP团体字符串,SSH用户名,SSH密码'
+    const sampleLines = [
+      '核心交换机1,192.168.1.1,switch,数据中心A,核心网络设备,public,admin,',
+      '路由器网关1,192.168.1.254,router,数据中心A,主网关路由器,public,admin,',
+      '边界防火墙1,192.168.1.100,firewall,数据中心B,边界防护设备,public,admin,'
+    ]
+    const csvContent = [headerLine, ...sampleLines].join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = '设备导入模板.csv'
+    link.click()
   }
 
   // 表格列定义
@@ -266,11 +320,11 @@ export const DeviceManagementView: React.FC = () => {
   }
 
   return (
-    <AppLayout 
+    <AppLayout
       title="设备管理"
       alertCount={summary.totalAlerts}
     >
-      <div className="space-y-6">
+      <div className="flex flex-col space-y-6 min-h-[calc(100vh-112px)] pb-6">
         {/* 统计卡片 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <Card>
@@ -345,13 +399,21 @@ export const DeviceManagementView: React.FC = () => {
       </div>
 
       {/* 筛选和搜索 */}
-      <Card>
+      <Card className="flex-1 flex flex-col overflow-hidden">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>设备列表</CardTitle>
             <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
+                onClick={handleDownloadTemplate}
+                className="flex items-center gap-2"
+              >
+                <Download className="h-4 w-4" />
+                下载模板
+              </Button>
+              <Button
+                variant="outline"
                 onClick={handleBulkImport}
                 className="flex items-center gap-2"
               >
@@ -365,7 +427,7 @@ export const DeviceManagementView: React.FC = () => {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1 flex flex-col overflow-hidden">
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             <div className="flex-1">
               <Input
@@ -402,68 +464,37 @@ export const DeviceManagementView: React.FC = () => {
           </div>
 
           {/* 批量操作 */}
-          {selectedDevices.length > 0 && (
-            <div className="flex items-center gap-2 mb-4 p-3 bg-purple-50 rounded-lg">
-              <span className="text-sm text-purple-700">
-                已选择 {selectedDevices.length} 个设备
-              </span>
-              <div className="flex gap-2 ml-auto">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleOpenBulkModal}
-                  className="flex items-center gap-1"
-                >
-                  <Settings2 className="h-4 w-4" />
-                  批量操作
-                </Button>
-              </div>
-            </div>
-          )}
-
           {/* 设备表格 */}
-          {filteredDevices.length === 0 && !loading && !error && (
-            <div className="text-center py-12">
-              <Server className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">暂无设备数据</h3>
-              <p className="text-gray-600 mb-4">
-                {devices.length === 0 
-                  ? "系统中还没有添加任何设备，点击上方「添加设备」按钮开始管理您的网络设备。"
-                  : "当前筛选条件下没有找到匹配的设备，请尝试调整筛选条件。"
-                }
-              </p>
-              <div className="space-x-3">
-                <Button onClick={handleAddDevice} className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  添加设备
-                </Button>
-                <Button variant="outline" onClick={handleBulkImport}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  批量导入
-                </Button>
+          <div className="flex-1 overflow-y-auto">
+            {filteredDevices.length === 0 && !loading && !error && (
+              <div className="text-center py-12">
+                <Server className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">暂无设备数据</h3>
+                <p className="text-gray-600">
+                  {devices.length === 0
+                    ? "系统中还没有添加任何设备,点击上方「添加设备」按钮开始管理您的网络设备。"
+                    : "当前筛选条件下没有找到匹配的设备，请尝试调整筛选条件。"
+                  }
+                </p>
               </div>
-            </div>
-          )}
+            )}
 
-          {filteredDevices.length > 0 && (
-            <Table
-              columns={columns}
-              data={filteredDevices}
-              loading={loading}
-              rowSelection={{
-                selectedRowKeys: selectedDevices,
-                onChange: (keys) => setSelectedDevices(keys as number[])
-              }}
-              pagination={{
-                current: 1,
-                pageSize: 10,
-                total: filteredDevices.length,
-                onChange: (page, pageSize) => {
-                  console.log('分页:', page, pageSize)
-                }
-              }}
-            />
-          )}
+            {filteredDevices.length > 0 && (
+              <Table
+                columns={columns}
+                data={filteredDevices}
+                loading={loading}
+                pagination={{
+                  current: 1,
+                  pageSize: 10,
+                  total: filteredDevices.length,
+                  onChange: (page, pageSize) => {
+                    console.log('分页:', page, pageSize)
+                  }
+                }}
+              />
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -479,22 +510,33 @@ export const DeviceManagementView: React.FC = () => {
         variant="destructive"
       />
 
+      <DeviceDetailsModal
+        isOpen={viewModalOpen}
+        onClose={() => {
+          setViewModalOpen(false)
+          setViewingDevice(null)
+        }}
+        device={viewingDevice}
+        loading={viewModalLoading}
+      />
+
+      <EditDeviceModal
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false)
+          setEditingDevice(null)
+        }}
+        device={editingDevice}
+        loading={editModalLoading}
+        onSubmit={handleUpdateDevice}
+      />
+
       {/* 添加设备模态框 */}
       <AddDeviceModal
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
         onSubmit={addDevice}
         loading={loading}
-      />
-
-      {/* 批量操作模态框 */}
-      <BulkOperationModal
-        isOpen={bulkModalOpen}
-        onClose={() => setBulkModalOpen(false)}
-        selectedDevices={selectedDevices}
-        devices={devices}
-        onBulkAction={performBulkAction}
-        onClearSelection={clearSelection}
       />
 
       {/* 批量导入模态框 */}

@@ -5,6 +5,7 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+import json
 
 
 class DeviceConnectionType(str, Enum):
@@ -103,7 +104,7 @@ class DeviceInfo:
     updated_at: Optional[datetime] = None
     
     # 扩展属性
-    tags: Optional[List[str]] = None
+    tags: Optional[Dict[str, Any]] = None
     custom_fields: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> Dict[str, Any]:
@@ -134,7 +135,8 @@ class DeviceInfo:
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "tags": self.tags or [],
-            "custom_fields": self.custom_fields or {}
+            "custom_fields": self.custom_fields or {},
+            "tags": self.tags or {}
         }
         return result
     
@@ -145,6 +147,13 @@ class DeviceInfo:
         for date_field in ["last_seen", "created_at", "updated_at"]:
             if data.get(date_field) and isinstance(data[date_field], str):
                 data[date_field] = datetime.fromisoformat(data[date_field])
+
+        tags = data.get("tags")
+        if isinstance(tags, str):
+            try:
+                data["tags"] = json.loads(tags)
+            except (ValueError, json.JSONDecodeError):
+                data["tags"] = {}
         
         return cls(**data)
 

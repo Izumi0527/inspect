@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 from pydantic import BaseModel, validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
@@ -34,6 +34,7 @@ class DeviceCreate(BaseModel):
     ssh_username: Optional[str] = None
     ssh_password: Optional[str] = None
     description: Optional[str] = None
+    tags: Optional[Dict[str, Any]] = None
 
     @validator('snmp_version')
     def convert_snmp_version(cls, v):
@@ -60,6 +61,7 @@ class DeviceUpdate(BaseModel):
     ssh_password: Optional[str] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
+    tags: Optional[Dict[str, Any]] = None
 
 class Device(BaseModel):
     id: int
@@ -76,6 +78,13 @@ class Device(BaseModel):
     created_by: Optional[int] = None
     created_at: datetime
     updated_at: datetime
+    snmp_community: Optional[str] = None
+    snmp_version: Optional[str] = None
+    snmp_port: Optional[int] = None
+    ssh_username: Optional[str] = None
+    ssh_password: Optional[str] = None
+    ssh_port: Optional[int] = None
+    tags: Optional[Dict[str, Any]] = None
 
 class DeviceGroup(BaseModel):
     id: int

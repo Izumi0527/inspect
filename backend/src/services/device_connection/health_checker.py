@@ -13,6 +13,7 @@ import time
 from .snmp_service import SNMPService
 from .ssh_service import SSHService
 from .types import DeviceInfo, DeviceConnectionType
+import json
 
 logger = structlog.get_logger()
 
@@ -248,15 +249,25 @@ class DeviceHealthChecker:
     def _get_available_connection_types(self, device: DeviceInfo) -> List[DeviceConnectionType]:
         """获取设备可用的连接类型"""
         connection_types = []
-        
+        cli_protocol = None
+        if device.tags:
+            tags = device.tags
+            if isinstance(tags, str):
+                try:
+                    tags = json.loads(tags)
+                except (ValueError, json.JSONDecodeError):
+                    tags = {}
+            cli_config = (tags or {}).get("cli_config") or {}
+            cli_protocol = cli_config.get("cli_protocol")
+    
         # 检查SNMP配置
         if device.snmp_community or (device.snmp_version == "3" and device.snmp_username):
             connection_types.append(DeviceConnectionType.SNMP)
-        
+    
         # 检查SSH配置
-        if device.ssh_username and device.ssh_password:
+        if (cli_protocol in (None, "ssh")) and device.ssh_username and device.ssh_password:
             connection_types.append(DeviceConnectionType.SSH)
-        
+    
         return connection_types or [DeviceConnectionType.SNMP]  # 默认SNMP
     
     async def _check_snmp_health(self, device: DeviceInfo) -> tuple[bool, Optional[str], Dict[str, Any]]:

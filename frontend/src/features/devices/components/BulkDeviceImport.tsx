@@ -1,13 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react'
-import { Upload, Download, FileText, AlertCircle, CheckCircle, X, Plus } from 'lucide-react'
+import { Upload, Download, FileText, AlertCircle, CheckCircle } from 'lucide-react'
 import {
   Modal,
+  ModalContent,
   Button,
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-  Input,
   Select,
   SelectContent,
   SelectItem,
@@ -94,17 +94,6 @@ const HEADER_HINTS: Record<string, keyof DeviceImportData> = {
   ssh_password: 'ssh_password'
 }
 
-const createEmptyDevice = (): DeviceImportData => ({
-  name: '',
-  ip: '',
-  device_type: 'switch',
-  location: '',
-  description: '',
-  snmp_community: '',
-  ssh_username: '',
-  ssh_password: ''
-})
-
 const normalizeDevice = (partial: Partial<DeviceImportData>): DeviceImportData => ({
   name: partial.name ?? '',
   ip: partial.ip ?? '',
@@ -130,7 +119,6 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
   const [fieldMapping, setFieldMapping] = useState<Record<string, keyof DeviceImportData | ''>>({})
   const [isProcessing, setIsProcessing] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
-  const [manualDevices, setManualDevices] = useState<DeviceImportData[]>([createEmptyDevice()])
   const [mappingErrors, setMappingErrors] = useState<string[]>([])
 
   const mappedDevices = useMemo(() => {
@@ -157,7 +145,6 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
     setCsvData(null)
     setFieldMapping({})
     setImportResult(null)
-    setManualDevices([createEmptyDevice()])
     setMappingErrors([])
   }
 
@@ -227,18 +214,6 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
     setStep('preview')
   }
 
-  const handleManualDeviceChange = (index: number, field: keyof DeviceImportData, value: string) => {
-    setManualDevices(prev => prev.map((device, idx) => (idx === index ? { ...device, [field]: value } : device)))
-  }
-
-  const addManualDevice = () => {
-    setManualDevices(prev => [...prev, createEmptyDevice()])
-  }
-
-  const removeManualDevice = (index: number) => {
-    setManualDevices(prev => (prev.length > 1 ? prev.filter((_, idx) => idx !== index) : prev))
-  }
-
   const downloadTemplate = () => {
     const headerLine = '设备名称,IP地址,设备类型,位置,描述,SNMP团体字符串,SSH用户名,SSH密码'
     const sampleLines = [
@@ -258,8 +233,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
   const handleImport = async () => {
     setIsProcessing(true)
     try {
-      const devices = csvData ? mappedDevices : manualDevices.filter(device => device.name && device.ip)
-      const result = await onImport(devices)
+      const result = await onImport(mappedDevices)
       setImportResult(result)
       setStep('result')
     } catch (error) {
@@ -276,7 +250,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
           <Upload className="h-8 w-8 text-blue-600" />
         </div>
         <h3 className="text-lg font-semibold text-gray-900 mb-2">批量导入设备</h3>
-        <p className="text-sm text-gray-600">支持上传 CSV 文件或手动添加设备。</p>
+        <p className="text-sm text-gray-600">通过上传 CSV 文件批量导入设备信息。</p>
       </div>
 
       <Card>
@@ -285,113 +259,13 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Button variant="outline" onClick={downloadTemplate} className="flex items-center gap-2">
-                <Download className="h-4 w-4" />
-                下载模板
-              </Button>
-              <span className="text-sm text-gray-500">下载模板后填写设备信息并重新上传。</span>
-            </div>
             <label className="flex flex-col gap-3 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 transition-colors">
               <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
               <FileText className="h-10 w-10 mx-auto text-blue-500" />
-              <div className="text-sm text-gray-600">点击上传或将文件拖拽到此区域，支持 CSV 格式</div>
-            </label>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">手动添加设备</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {manualDevices.map((device, index) => {
-            const nameId = `manual-name-${index}`
-            const ipId = `manual-ip-${index}`
-            const locationId = `manual-location-${index}`
-            const descriptionId = `manual-description-${index}`
-
-            return (
-              <div key={`${device.ip || 'device'}-${index}`} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end bg-gray-50 p-4 rounded-lg">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-500" htmlFor={nameId}>
-                    设备名称
-                  </label>
-                  <Input
-                    id={nameId}
-                    value={device.name}
-                    onChange={event => handleManualDeviceChange(index, 'name', event.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-500" htmlFor={ipId}>
-                    IP 地址
-                  </label>
-                  <Input
-                    id={ipId}
-                    value={device.ip}
-                    onChange={event => handleManualDeviceChange(index, 'ip', event.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-500">设备类型</label>
-                  <Select
-                    value={device.device_type}
-                    onValueChange={(value: DeviceType) => handleManualDeviceChange(index, 'device_type', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="请选择设备类型" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEVICE_TYPES.map(item => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-500" htmlFor={locationId}>
-                    位置
-                  </label>
-                  <Input
-                    id={locationId}
-                    value={device.location ?? ''}
-                    onChange={event => handleManualDeviceChange(index, 'location', event.target.value)}
-                  />
-                </div>
-                <div className="flex items-end justify-end">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => removeManualDevice(index)}
-                    disabled={manualDevices.length === 1}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="md:col-span-5 flex flex-col gap-1">
-                  <label className="text-xs font-medium text-gray-500" htmlFor={descriptionId}>
-                    描述
-                  </label>
-                  <Input
-                    id={descriptionId}
-                    value={device.description ?? ''}
-                    onChange={event => handleManualDeviceChange(index, 'description', event.target.value)}
-                  />
-                </div>
+              <div className="text-sm text-gray-600">
+                点击上传或将文件拖拽到此区域，支持 CSV 格式。请先使用主界面的"下载模板"按钮获取模板文件。
               </div>
-            )
-          })}
-          <Button variant="outline" className="flex items-center gap-2" onClick={addManualDevice}>
-            <Plus className="h-4 w-4" /> 添加设备
-          </Button>
-          <div className="text-right">
-            <Button onClick={() => setStep('preview')}>
-              下一步
-            </Button>
+            </label>
           </div>
         </CardContent>
       </Card>
@@ -455,7 +329,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
   )
 
   const renderPreviewStep = () => {
-    const previewDevices = csvData ? mappedDevices : manualDevices
+    const previewDevices = mappedDevices
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -463,7 +337,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
             <h3 className="text-lg font-semibold text-gray-900">导入预览</h3>
             <p className="text-sm text-gray-600">共有 {previewDevices.length} 条记录将被导入。</p>
           </div>
-          <Button variant="ghost" onClick={() => setStep(csvData ? 'mapping' : 'upload')} disabled={isProcessing}>
+          <Button variant="ghost" onClick={() => setStep('mapping')} disabled={isProcessing}>
             返回修改
           </Button>
         </div>
@@ -492,15 +366,12 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
           </div>
         </div>
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setStep(csvData ? 'mapping' : 'upload')} disabled={isProcessing}>
+          <Button variant="outline" onClick={() => setStep('mapping')} disabled={isProcessing}>
             上一步
           </Button>
           <Button
             onClick={handleImport}
-            disabled={
-              isProcessing ||
-              (csvData ? mappedDevices.length === 0 : manualDevices.every(device => !device.name || !device.ip))
-            }
+            disabled={isProcessing || mappedDevices.length === 0}
           >
             {isProcessing ? <Loading size="sm" /> : '开始导入'}
           </Button>
@@ -554,12 +425,14 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         }
       }}
     >
-      <div className="p-6 space-y-6 max-w-4xl">
-        {step === 'upload' && renderUploadStep()}
-        {step === 'mapping' && renderMappingStep()}
-        {step === 'preview' && renderPreviewStep()}
-        {step === 'result' && renderResultStep()}
-      </div>
+      <ModalContent className="max-w-4xl">
+        <div className="space-y-6">
+          {step === 'upload' && renderUploadStep()}
+          {step === 'mapping' && renderMappingStep()}
+          {step === 'preview' && renderPreviewStep()}
+          {step === 'result' && renderResultStep()}
+        </div>
+      </ModalContent>
     </Modal>
   )
 }

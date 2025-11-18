@@ -72,6 +72,7 @@ export interface Device {
   id: number
   name: string
   ip: string
+  ip_address?: string
   device_type: DeviceType
   status: DeviceStatus
   location: string
@@ -90,10 +91,14 @@ export interface Device {
   snmp_config?: SNMPConfig
   advanced_config?: AdvancedConfig
 
-  // 兼容性字段 - 保持向后兼容
+  // 兼容性字�?- 保持向后兼容
   snmp_community?: string
+  snmp_version?: string
   ssh_username?: string
   ssh_password?: string
+  vendor?: string
+  ssh_port?: number
+  tags?: Record<string, unknown> | null
 
   created_at?: string
   updated_at?: string

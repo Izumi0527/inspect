@@ -1,4 +1,5 @@
 from typing import List, Optional, Dict, Any, Tuple
+import json
 from datetime import datetime
 from sqlalchemy import and_, or_, desc, asc, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +40,19 @@ class DeviceRepository:
         result = await self.session.execute(query)
         return result.scalar_one_or_none() is not None
     
+    def _normalize_tags(self, tags: Optional[Any]) -> Optional[Dict[str, Any]]:
+        """确保 tags 以 dict 形式存储，可传入字符串/None"""
+        if tags is None:
+            return None
+        if isinstance(tags, str):
+            try:
+                return json.loads(tags)
+            except json.JSONDecodeError:
+                return None
+        if isinstance(tags, dict):
+            return tags
+        return None
+
     async def create_device(self, device_data: dict, created_by: str) -> Device:
         """创建设备"""
         creator_id = None
@@ -46,6 +60,8 @@ class DeviceRepository:
             existing_user = await self.session.get(User, created_by)
             if existing_user:
                 creator_id = created_by
+
+        tags = self._normalize_tags(device_data.get("tags"))
 
         device = Device(
             name=device_data["name"],
@@ -59,6 +75,7 @@ class DeviceRepository:
             snmp_version=device_data.get("snmp_version", "2c"),
             ssh_username=device_data.get("ssh_username"),
             ssh_password=device_data.get("ssh_password"),
+            tags=tags,
             description=device_data.get("description"),
             status=DeviceStatus.UNKNOWN,
             is_active=True,
@@ -80,8 +97,21 @@ class DeviceRepository:
             return None
         
         # 更新字段
+        nullable_fields = {"ssh_username", "ssh_password", "ssh_port"}
+
         for key, value in device_data.items():
-            if hasattr(device, key) and value is not None:
+            if value is None and key not in nullable_fields:
+                continue
+
+            if key == "tags":
+                setattr(device, "tags", self._normalize_tags(value))
+                continue
+
+            if key in nullable_fields and value is None and hasattr(device, key):
+                setattr(device, key, None)
+                continue
+
+            if hasattr(device, key):
                 setattr(device, key, value)
         
         device.updated_at = datetime.utcnow()
