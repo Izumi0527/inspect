@@ -26,12 +26,12 @@ const actionLabels: Record<AuditAction, string> = {
 // 状态Badge
 function StatusBadge({ status }: { status: 'success' | 'failed' }) {
   return status === 'success' ? (
-    <Badge className="bg-green-100 text-green-800">
+    <Badge className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
       <CheckCircle className="w-3 h-3 mr-1" />
       成功
     </Badge>
   ) : (
-    <Badge className="bg-red-100 text-red-800">
+    <Badge className="bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
       <XCircle className="w-3 h-3 mr-1" />
       失败
     </Badge>
@@ -85,32 +85,32 @@ export function AuditLogs() {
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">总日志数</p>
-                <p className="text-2xl font-bold">{stats.totalLogs.toLocaleString()}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">总日志数</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.totalLogs.toLocaleString()}</p>
               </div>
-              <FileText className="w-8 h-8 text-blue-600" />
+              <FileText className="w-8 h-8 text-blue-600 dark:text-blue-400" />
             </div>
           </Card>
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">今日日志</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-sm text-gray-600 dark:text-gray-400">今日日志</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                   {stats.todayLogs.toLocaleString()}
                 </p>
               </div>
-              <FileText className="w-8 h-8 text-green-600" />
+              <FileText className="w-8 h-8 text-green-600 dark:text-green-400" />
             </div>
           </Card>
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">成功率</p>
-                <p className="text-2xl font-bold text-purple-600">
+                <p className="text-sm text-gray-600 dark:text-gray-400">成功率</p>
+                <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
                   {(stats.successRate * 100).toFixed(1)}%
                 </p>
               </div>
-              <CheckCircle className="w-8 h-8 text-purple-600" />
+              <CheckCircle className="w-8 h-8 text-purple-600 dark:text-purple-400" />
             </div>
           </Card>
         </div>
@@ -150,29 +150,29 @@ export function AuditLogs() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-4 py-3 text-left font-medium text-gray-700">时间</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">用户</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">操作</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">资源</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">详情</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">IP地址</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">状态</th>
+              <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">时间</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">用户</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">操作</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">资源</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">详情</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">IP地址</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">状态</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {logs.map((log) => (
-                <tr key={log.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-xs text-gray-600">{formatDate(log.createdAt)}</td>
-                  <td className="px-4 py-3 font-medium">{log.username}</td>
+                <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-400">{formatDate(log.createdAt)}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{log.username}</td>
                   <td className="px-4 py-3">
                     <Badge variant="outline">{actionLabels[log.action]}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{log.resource}</td>
-                  <td className="px-4 py-3 text-gray-600 max-w-xs truncate" title={log.details}>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{log.resource}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400 max-w-xs truncate" title={log.details}>
                     {log.details}
                   </td>
-                  <td className="px-4 py-3 text-gray-600 font-mono text-xs">{log.ipAddress}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400 font-mono text-xs">{log.ipAddress}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={log.status} />
                   </td>
@@ -184,8 +184,8 @@ export function AuditLogs() {
 
         {/* 分页 */}
         {totalCount > pageSize && (
-          <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
+          <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div className="text-sm text-gray-600 dark:text-gray-400">
               共 {totalCount.toLocaleString()} 条记录，第 {page} 页
             </div>
             <div className="flex gap-2">

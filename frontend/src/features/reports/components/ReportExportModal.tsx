@@ -169,11 +169,11 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
   const renderSelectStep = () => (
     <div className="space-y-6">
       <div className="text-center">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-100 flex items-center justify-center">
-          <FileText className="h-8 w-8 text-blue-600" />
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+          <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400" />
         </div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">选择报表模板</h3>
-        <p className="text-sm text-gray-600">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">选择报表模板</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
           请选择要导出的报表类型
         </p>
       </div>
@@ -192,14 +192,14 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
               <Card className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                      <IconComponent className="h-5 w-5 text-blue-600" />
+                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+                      <IconComponent className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-medium text-gray-900 mb-1">
+                      <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-1">
                         {template.name}
                       </h4>
-                      <p className="text-sm text-gray-600 mb-2">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                         {template.description}
                       </p>
                       <div className="flex flex-wrap gap-1">
@@ -236,8 +236,8 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
           ← 返回
         </Button>
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">配置报表</h3>
-          <p className="text-sm text-gray-600">{selectedTemplate?.name}</p>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">配置报表</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{selectedTemplate?.name}</p>
         </div>
       </div>
 
@@ -249,7 +249,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 报表标题
               </label>
               <Input
@@ -258,9 +258,9 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
                 placeholder="输入报表标题"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 副标题
               </label>
               <Input
@@ -269,14 +269,14 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
                 placeholder="输入副标题"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 导出格式
               </label>
               <Select
                 value={exportRequest.format}
-                onValueChange={(value: 'pdf' | 'word') => 
+                onValueChange={(value: 'pdf' | 'word') =>
                   setExportRequest(prev => ({ ...prev, format: value }))
                 }
               >
@@ -287,13 +287,13 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
                   <SelectItem value="pdf">
                     <div>
                       <div className="font-medium">PDF格式</div>
-                      <div className="text-xs text-gray-500">便于打印和存档</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">便于打印和存档</div>
                     </div>
                   </SelectItem>
                   <SelectItem value="word">
                     <div>
                       <div className="font-medium">Word文档</div>
-                      <div className="text-xs text-gray-500">可编辑的文档格式</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">可编辑的文档格式</div>
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -312,7 +312,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 开始日期
               </label>
               <Input
@@ -328,9 +328,9 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
                 }))}
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 结束日期
               </label>
               <Input
@@ -347,8 +347,8 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
               />
             </div>
 
-            <div className="p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm text-blue-800">
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
                 <strong>提示：</strong>不选择日期将生成全部数据的报表
               </p>
             </div>
@@ -363,8 +363,8 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
         >
           上一步
         </Button>
-        <Button 
-          onClick={handleExport} 
+        <Button
+          onClick={handleExport}
           disabled={isExporting || !selectedTemplate}
         >
           {isExporting ? (
@@ -387,19 +387,19 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
     <div className="space-y-6">
       <div className="text-center">
         {exportResult?.success ? (
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 flex items-center justify-center">
-            <CheckCircle className="h-8 w-8 text-green-600" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
+            <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
           </div>
         ) : (
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
-            <AlertTriangle className="h-8 w-8 text-red-600" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+            <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
           </div>
         )}
-        
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
           {exportResult?.success ? '导出成功' : '导出失败'}
         </h3>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
           {exportResult?.message}
         </p>
       </div>
@@ -409,31 +409,31 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
           <CardContent className="p-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">报表类型</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">报表类型</span>
                 <span className="text-sm font-medium">
                   {selectedTemplate?.name}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">文件格式</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">文件格式</span>
                 <span className="text-sm font-medium uppercase">
                   {exportRequest.format}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">文件大小</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">文件大小</span>
                 <span className="text-sm font-medium">
-                  {exportResult.file_size ? 
-                    `${(exportResult.file_size / 1024).toFixed(1)} KB` : 
+                  {exportResult.file_size ?
+                    `${(exportResult.file_size / 1024).toFixed(1)} KB` :
                     '--'
                   }
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">过期时间</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">过期时间</span>
                 <span className="text-sm font-medium">
-                  {exportResult.expires_at ? 
-                    new Date(exportResult.expires_at).toLocaleString() : 
+                  {exportResult.expires_at ?
+                    new Date(exportResult.expires_at).toLocaleString() :
                     '24小时后'
                   }
                 </span>
@@ -450,8 +450,8 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
             立即下载
           </Button>
         )}
-        <Button 
-          variant={exportResult?.success ? "outline" : "default"} 
+        <Button
+          variant={exportResult?.success ? "outline" : "default"}
           onClick={exportResult?.success ? handleClose : () => setCurrentStep('configure')}
         >
           {exportResult?.success ? '完成' : '重新配置'}
@@ -465,7 +465,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
       <div className="p-6">
         {/* 标题栏 */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">导出报表</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">导出报表</h2>
           <Button variant="ghost" size="sm" onClick={handleClose}>
             <X className="h-4 w-4" />
           </Button>
@@ -482,7 +482,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
               const isActive = step.key === currentStep
               const isCompleted = ['select', 'configure', 'export']
                 .indexOf(currentStep) > index
-              
+
               return (
                 <React.Fragment key={step.key}>
                   <div className="flex items-center">
@@ -490,18 +490,18 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
                       w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
                       ${isActive ? 'bg-blue-600 text-white' : ''}
                       ${isCompleted ? 'bg-green-600 text-white' : ''}
-                      ${!isActive && !isCompleted ? 'bg-gray-200 text-gray-600' : ''}
+                      ${!isActive && !isCompleted ? 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400' : ''}
                     `}>
                       {isCompleted ? <CheckCircle className="h-4 w-4" /> : index + 1}
                     </div>
-                    <span className="ml-2 text-sm font-medium text-gray-900">
+                    <span className="ml-2 text-sm font-medium text-gray-900 dark:text-gray-100">
                       {step.title}
                     </span>
                   </div>
                   {index < 2 && (
                     <div className="flex-1 mx-4">
                       <div className={`h-1 rounded ${
-                        isCompleted ? 'bg-green-600' : 'bg-gray-200'
+                        isCompleted ? 'bg-green-600' : 'bg-gray-200 dark:bg-gray-700'
                       }`} />
                     </div>
                   )}

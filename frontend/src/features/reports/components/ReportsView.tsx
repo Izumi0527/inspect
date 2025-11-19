@@ -91,26 +91,26 @@ export const ReportsView: React.FC = () => {
           <div className="flex gap-4">
             <Card className="min-w-[120px]">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600">{stats.totalReports}</div>
-                <div className="text-sm text-gray-600">总报表数</div>
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-500">{stats.totalReports}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">总报表数</div>
               </CardContent>
             </Card>
             <Card className="min-w-[120px]">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-green-600">{stats.generatedToday}</div>
-                <div className="text-sm text-gray-600">今日生成</div>
+                <div className="text-2xl font-bold text-green-600 dark:text-green-500">{stats.generatedToday}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">今日生成</div>
               </CardContent>
             </Card>
             <Card className="min-w-[120px]">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-purple-600">{stats.scheduledReports}</div>
-                <div className="text-sm text-gray-600">定时报表</div>
+                <div className="text-2xl font-bold text-purple-600 dark:text-purple-500">{stats.scheduledReports}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">定时报表</div>
               </CardContent>
             </Card>
             <Card className="min-w-[120px]">
               <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-orange-600">{stats.mostUsedFormat.toUpperCase()}</div>
-                <div className="text-sm text-gray-600">热门格式</div>
+                <div className="text-2xl font-bold text-orange-600 dark:text-orange-500">{stats.mostUsedFormat.toUpperCase()}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-400">热门格式</div>
               </CardContent>
             </Card>
           </div>
@@ -133,9 +133,9 @@ export const ReportsView: React.FC = () => {
                     className={`
                       relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
                       transition-all duration-200
-                      ${isActive 
-                        ? 'bg-blue-50 text-blue-600 shadow-sm' 
-                        : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
+                      ${isActive
+                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                       }
                     `}
                     whileHover={{ scale: 1.02 }}
@@ -157,7 +157,7 @@ export const ReportsView: React.FC = () => {
             {/* 搜索和操作按钮 */}
             <div className="flex gap-2">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                 <Input
                   placeholder="搜索报表..."
                   value={searchText}
@@ -182,7 +182,7 @@ export const ReportsView: React.FC = () => {
 
           {/* 当前标签描述 */}
           <div className="pt-2">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               {tabs.find(tab => tab.key === activeTab)?.description}
             </p>
           </div>

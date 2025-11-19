@@ -117,7 +117,7 @@ export const InspectionAnalytics: React.FC = () => {
         {[...Array(4)].map((_, index) => (
           <Card key={index} className="animate-pulse">
             <CardContent className="p-6">
-              <div className="h-64 bg-gray-200 rounded"></div>
+              <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded"></div>
             </CardContent>
           </Card>
         ))}
@@ -130,8 +130,8 @@ export const InspectionAnalytics: React.FC = () => {
       {/* 操作栏 */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div>
-          <h3 className="text-lg font-semibold">统计分析</h3>
-          <p className="text-gray-600 text-sm">巡检数据的趋势分析和统计报告</p>
+          <h3 className="text-lg font-semibold dark:text-gray-100">统计分析</h3>
+          <p className="text-gray-600 dark:text-gray-400 text-sm">巡检数据的趋势分析和统计报告</p>
         </div>
         <div className="flex gap-2">
           <Select value={timePeriod} onValueChange={handlePeriodChange}>
@@ -195,14 +195,14 @@ export const InspectionAnalytics: React.FC = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">{metric.title}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-2">{metric.value}</p>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{metric.title}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">{metric.value}</p>
                   <div className="flex items-center gap-1 mt-2">
                     <TrendingUp className={`w-4 h-4 text-${metric.color}-500`} />
                     <span className={`text-sm font-medium text-${metric.color}-600`}>
                       {metric.change}
                     </span>
-                    <span className="text-sm text-gray-500">vs 上周</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">vs 上周</span>
                   </div>
                 </div>
                 <div className={`p-3 bg-${metric.color}-100 rounded-lg`}>
@@ -316,24 +316,24 @@ export const InspectionAnalytics: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b">
-                  <th className="text-left p-3">日期</th>
-                  <th className="text-left p-3">执行次数</th>
-                  <th className="text-left p-3">成功率</th>
-                  <th className="text-left p-3">平均评分</th>
-                  <th className="text-left p-3">问题数</th>
+                <tr className="border-b dark:border-gray-700">
+                  <th className="text-left p-3 dark:text-gray-300">日期</th>
+                  <th className="text-left p-3 dark:text-gray-300">执行次数</th>
+                  <th className="text-left p-3 dark:text-gray-300">成功率</th>
+                  <th className="text-left p-3 dark:text-gray-300">平均评分</th>
+                  <th className="text-left p-3 dark:text-gray-300">问题数</th>
                 </tr>
               </thead>
               <tbody>
                 {(trends || []).slice(-7).map((item, index) => (
-                  <tr key={index} className="border-b hover:bg-gray-50">
+                  <tr key={index} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td className="p-3">{new Date(item.date).toLocaleDateString()}</td>
                     <td className="p-3">{item.executions}</td>
                     <td className="p-3">
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
                         (item.success / item.executions * 100) >= 90
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
+                          : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'
                       }`}>
                         {((item.success / item.executions) * 100).toFixed(1)}%
                       </span>

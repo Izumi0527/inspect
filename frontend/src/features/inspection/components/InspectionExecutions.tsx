@@ -192,11 +192,11 @@ export const InspectionExecutions: React.FC<Props> = ({ searchText }) => {
       title: '策略信息',
       render: (_, execution) => (
         <div className="flex flex-col">
-          <span className="font-medium text-gray-900">{execution.strategyName}</span>
+          <span className="font-medium text-gray-900 dark:text-gray-100">{execution.strategyName}</span>
           <div className="flex items-center gap-2 mt-1">
             {getTriggerTypeBadge(execution.triggerType)}
             {execution.triggerUser && (
-              <div className="flex items-center gap-1 text-xs text-gray-500">
+              <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                 <User className="w-3 h-3" />
                 {execution.triggerUser}
               </div>
@@ -221,15 +221,15 @@ export const InspectionExecutions: React.FC<Props> = ({ searchText }) => {
       render: (_, execution) => (
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
-            <div className="flex-1 bg-gray-200 rounded-full h-2">
-              <div 
+            <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div
                 className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${execution.progress}%` }}
               />
             </div>
             <span className="text-sm font-medium">{execution.progress}%</span>
           </div>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
             {execution.completedDevices}/{execution.totalDevices} 设备
           </div>
         </div>
@@ -243,7 +243,7 @@ export const InspectionExecutions: React.FC<Props> = ({ searchText }) => {
           <div className={`text-lg font-bold ${getScoreColor(execution.summary.score)}`}>
             {execution.summary.score.toFixed(1)}
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             通过: {execution.summary.passedChecks}/{execution.summary.totalChecks}
           </div>
         </div>
@@ -255,15 +255,15 @@ export const InspectionExecutions: React.FC<Props> = ({ searchText }) => {
       render: (_, execution) => (
         <div className="flex flex-col text-sm">
           <div className="flex items-center gap-1">
-            <Calendar className="w-3 h-3 text-gray-400" />
+            <Calendar className="w-3 h-3 text-gray-400 dark:text-gray-500" />
             {new Date(execution.startTime).toLocaleDateString()}
           </div>
-          <div className="flex items-center gap-1 text-gray-500">
+          <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
             <Clock className="w-3 h-3" />
             {new Date(execution.startTime).toLocaleTimeString()}
           </div>
           {execution.duration && (
-            <div className="text-xs text-gray-500 mt-1">
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               耗时: {formatDuration(execution.duration)}
             </div>
           )}
@@ -323,7 +323,7 @@ export const InspectionExecutions: React.FC<Props> = ({ searchText }) => {
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-semibold">执行历史记录</h3>
+              <h3 className="text-lg font-semibold dark:text-gray-100">执行历史记录</h3>
               <Badge variant="secondary">{filteredExecutions.length} 项</Badge>
             </div>
             <Button variant="outline" onClick={() => refetch()}>
@@ -349,18 +349,18 @@ export const InspectionExecutions: React.FC<Props> = ({ searchText }) => {
         </div>
 
         {selectedExecution && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-4 text-sm text-gray-600 dark:text-gray-300">
             <div className="flex items-center gap-2">
-              <span className="font-medium text-gray-900">已选择执行</span>
+              <span className="font-medium text-gray-900 dark:text-gray-100">已选择执行</span>
               {getStatusBadge(selectedExecution.status)}
             </div>
-            <div className="text-gray-700">
+            <div className="text-gray-700 dark:text-gray-300">
               {selectedExecution.strategyName}
             </div>
-            <div className="text-xs text-gray-400">
+            <div className="text-xs text-gray-400 dark:text-gray-500">
               {new Date(selectedExecution.startTime).toLocaleString()}
             </div>
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-gray-500 dark:text-gray-400">
               完成进度：{selectedExecution.progress}% ({selectedExecution.completedDevices}/{selectedExecution.totalDevices})
             </div>
             <Button variant="ghost" size="sm" onClick={() => setSelectedExecution(null)}>
@@ -383,7 +383,7 @@ export const InspectionExecutions: React.FC<Props> = ({ searchText }) => {
               <Table
                 data={filteredExecutions}
                 columns={columns}
-                className="bg-white rounded-lg shadow-sm"
+                className="bg-white dark:bg-gray-900 rounded-lg shadow-sm"
               />
             </motion.div>
 

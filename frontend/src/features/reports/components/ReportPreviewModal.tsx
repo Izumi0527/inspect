@@ -25,15 +25,15 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+        className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <FileText className="w-6 h-6 text-blue-600" />
+            <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">{report.title}</h2>
-              <p className="text-sm text-gray-500">{report.description}</p>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{report.title}</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{report.description}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -49,13 +49,13 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
 
         {/* 内容预览 */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-          <div className="bg-gray-50 rounded-lg p-8 text-center">
-            <Eye className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">报告预览</h3>
-            <p className="text-gray-600 mb-4">
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-8 text-center">
+            <Eye className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">报告预览</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
               报告预览功能正在开发中，您可以点击下载按钮获取完整报告。
             </p>
-            <div className="text-sm text-gray-500 space-y-1">
+            <div className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
               <p>报告格式：{report.format.toUpperCase()}</p>
               <p>生成时间：{new Date(report.createdAt).toLocaleString()}</p>
               <p>生成者：{report.generatedBy}</p>

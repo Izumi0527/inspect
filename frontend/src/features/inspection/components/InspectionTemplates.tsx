@@ -103,7 +103,7 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
 
   const getSortIcon = (field: 'name' | 'category' | 'updatedAt') => {
     if (sortField !== field) {
-      return <ArrowUpDown className="w-4 h-4 text-gray-400" />
+      return <ArrowUpDown className="w-4 h-4 text-gray-400 dark:text-gray-500" />
     }
     return sortDirection === 'asc'
       ? <ArrowUp className="w-4 h-4 text-blue-600" />
@@ -242,12 +242,12 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             {getCategoryIcon(template.category)}
-            <span className="font-medium text-gray-900">{template.name}</span>
+            <span className="font-medium text-gray-900 dark:text-gray-100">{template.name}</span>
             {template.isBuiltIn && (
               <Badge variant="success" size="sm">内置</Badge>
             )}
           </div>
-          <span className="text-sm text-gray-500 line-clamp-2 mt-1">{template.description}</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">{template.description}</span>
         </div>
       )
     },
@@ -286,7 +286,7 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
       title: '检查项',
       render: (_value, template) => (
         <div className="flex items-center gap-1">
-          <FileText className="w-4 h-4 text-gray-400" />
+          <FileText className="w-4 h-4 text-gray-400 dark:text-gray-500" />
           <span className="font-medium">{template.checkItems.length}</span>
         </div>
       )
@@ -295,7 +295,7 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
       key: 'updatedAt',
       title: '更新时间',
       render: (_value, template) => (
-        <div className="text-sm text-gray-600">
+        <div className="text-sm text-gray-600 dark:text-gray-300">
           {new Date(template.updatedAt).toLocaleDateString()}
         </div>
       )
@@ -355,10 +355,10 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
           <Card key={index} className="animate-pulse">
             <CardContent className="p-4">
               <div className="flex items-center gap-4">
-                <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/6"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/6"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/6"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/6"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
               </div>
             </CardContent>
           </Card>
@@ -372,7 +372,7 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
       {/* 操作栏 */}
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold">巡检模板管理</h3>
+          <h3 className="text-lg font-semibold dark:text-gray-100">巡检模板管理</h3>
           <Badge variant="secondary">{filteredTemplates.length} 项</Badge>
         </div>
         <div className="flex gap-2">
@@ -410,12 +410,12 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
                     <item.icon className={`w-5 h-5 text-${item.color}-600`} />
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-gray-900">{item.count}</div>
-                    <div className="text-sm text-gray-600">{item.label}</div>
+                    <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{item.count}</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-300">{item.label}</div>
                   </div>
                 </div>
                 {isSelected && (
-                  <div className="mt-2 text-xs text-blue-600 font-medium">
+                  <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 font-medium">
                     ✓ 已选中
                   </div>
                 )}
@@ -427,7 +427,7 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
 
       {/* 排序选项 */}
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-gray-600">排序:</span>
+        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">排序:</span>
         <div className="flex gap-2">
           <Button
             variant={sortField === 'name' ? 'primary' : 'outline'}
@@ -469,17 +469,17 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
           <Table
             data={sortedTemplates}
             columns={columns}
-            className="bg-white rounded-lg shadow-sm"
+            className="bg-white dark:bg-gray-900 rounded-lg shadow-sm"
           />
         </motion.div>
       ) : (
         <Card>
           <CardContent className="p-8 text-center">
             <div className="flex flex-col items-center gap-4">
-              <AlertCircle className="w-12 h-12 text-gray-400" />
+              <AlertCircle className="w-12 h-12 text-gray-400 dark:text-gray-500" />
               <div>
-                <h3 className="text-lg font-medium text-gray-900">暂无巡检模板</h3>
-                <p className="text-gray-500 mt-1">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">暂无巡检模板</h3>
+                <p className="text-gray-500 dark:text-gray-400 mt-1">
                   {searchText ? '没有找到匹配的模板' : '开始创建您的第一个巡检模板'}
                 </p>
               </div>
@@ -510,25 +510,25 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-xl shadow-xl max-w-md w-full p-6"
+            className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full p-6"
           >
             <div className="flex items-center gap-3 mb-4">
               <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
                 <AlertCircle className="w-6 h-6 text-red-600" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">确认删除</h3>
-                <p className="text-sm text-gray-500">此操作无法撤销</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">确认删除</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">此操作无法撤销</p>
               </div>
             </div>
 
             <div className="mb-6">
-              <p className="text-gray-700">
+              <p className="text-gray-700 dark:text-gray-300">
                 确定要删除巡检模板 <span className="font-semibold">"{deleteConfirmTemplate.name}"</span> 吗？
               </p>
               {deleteConfirmTemplate.isBuiltIn && (
-                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-sm text-yellow-800">
+                <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-300">
                     ⚠️ 这是一个内置模板，删除后可能影响系统功能
                   </p>
                 </div>

@@ -174,6 +174,30 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
     ]
   }, [overview, kpiData])
 
+  // 颜色映射对象 - 解决动态类名问题
+  const colorMap = {
+    blue: {
+      bg: 'bg-blue-100 dark:bg-blue-900/20',
+      text: 'text-blue-600 dark:text-blue-400',
+      icon: 'text-blue-600 dark:text-blue-400'
+    },
+    green: {
+      bg: 'bg-green-100 dark:bg-green-900/20',
+      text: 'text-green-600 dark:text-green-400',
+      icon: 'text-green-600 dark:text-green-400'
+    },
+    purple: {
+      bg: 'bg-purple-100 dark:bg-purple-900/20',
+      text: 'text-purple-600 dark:text-purple-400',
+      icon: 'text-purple-600 dark:text-purple-400'
+    },
+    red: {
+      bg: 'bg-red-100 dark:bg-red-900/20',
+      text: 'text-red-600 dark:text-red-400',
+      icon: 'text-red-600 dark:text-red-400'
+    }
+  }
+
   // ==================== Event Handlers ====================
   const handleGenerateReport = async () => {
     try {
@@ -248,8 +272,8 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
     return (
       <div className="space-y-6">
         <div className="flex gap-2">
-          <div className="h-10 w-32 bg-gray-200 rounded animate-pulse"></div>
-          <div className="h-10 w-24 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-10 w-32 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          <div className="h-10 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
         </div>
         <CardSkeleton count={4} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -303,8 +327,8 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
             {/* 筛选器标题栏 */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Filter className="w-5 h-5 text-gray-600" />
-                <h3 className="text-sm font-medium text-gray-900">数据筛选</h3>
+                <Filter className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white">数据筛选</h3>
               </div>
               <Button
                 variant="outline"
@@ -346,7 +370,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
                 {/* 设备类型筛选 */}
                 {deviceTypeOptions.length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       设备类型
                     </label>
                     <MultiSelect
@@ -361,7 +385,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
                 {/* 位置筛选 */}
                 {locationOptions.length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       设备位置
                     </label>
                     <MultiSelect
@@ -419,27 +443,30 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
 
       {/* KPI 指标卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {kpiCards.map((kpi) => (
-          <Card key={kpi.title}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{kpi.title}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-2">{kpi.value}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <span className={`text-sm font-medium text-${kpi.color}-600`}>
-                      {kpi.change}
-                    </span>
-                    <span className="text-sm text-gray-500">vs 上期</span>
+        {kpiCards.map((kpi) => {
+          const colors = colorMap[kpi.color as keyof typeof colorMap]
+          return (
+            <Card key={kpi.title}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{kpi.title}</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">{kpi.value}</p>
+                    <div className="flex items-center gap-1 mt-2">
+                      <span className={`text-sm font-medium ${colors.text}`}>
+                        {kpi.change}
+                      </span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">vs 上期</span>
+                    </div>
+                  </div>
+                  <div className={`p-3 ${colors.bg} rounded-lg`}>
+                    <kpi.icon className={`w-6 h-6 ${colors.icon}`} />
                   </div>
                 </div>
-                <div className={`p-3 bg-${kpi.color}-100 rounded-lg`}>
-                  <kpi.icon className={`w-6 h-6 text-${kpi.color}-600`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {/* 统计图表 */}
@@ -450,7 +477,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
           </CardHeader>
           <CardContent>
             {filteredDeviceChartData.length === 0 ? (
-              <div className="h-[300px] flex items-center justify-center text-gray-500">
+              <div className="h-[300px] flex items-center justify-center text-gray-500 dark:text-gray-400">
                 暂无数据
               </div>
             ) : (
@@ -473,7 +500,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
           </CardHeader>
           <CardContent>
             {filteredPerformanceChartData.length === 0 ? (
-              <div className="h-[300px] flex items-center justify-center text-gray-500">
+              <div className="h-[300px] flex items-center justify-center text-gray-500 dark:text-gray-400">
                 暂无数据
               </div>
             ) : (
@@ -494,7 +521,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
         </CardHeader>
         <CardContent>
           {filteredRankingData.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">暂无排名数据</div>
+            <div className="p-8 text-center text-gray-500 dark:text-gray-400">暂无排名数据</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -510,7 +537,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
                 </thead>
                 <tbody>
                   {filteredRankingData.map((item) => (
-                    <tr key={item.rank} className="border-b hover:bg-gray-50">
+                    <tr key={item.rank} className="border-b hover:bg-gray-50 dark:hover:bg-gray-700">
                       <td className="p-3 font-medium">#{item.rank}</td>
                       <td className="p-3">{item.name}</td>
                       <td className="p-3">{item.type}</td>

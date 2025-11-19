@@ -81,9 +81,9 @@ export const ExecutionFilters: React.FC<Props> = React.memo((props) => {
         {/* 日期范围筛选 */}
         <div className="flex items-center gap-2">
           {/* 开始日期 */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white">
-            <Calendar className="w-4 h-4 text-gray-500" />
-            <span className="text-sm text-gray-600">开始日期:</span>
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+            <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            <span className="text-sm text-gray-600 dark:text-gray-300">开始日期:</span>
             <Input
               type="date"
               value={startDate}
@@ -93,12 +93,12 @@ export const ExecutionFilters: React.FC<Props> = React.memo((props) => {
             />
           </div>
 
-          <span className="text-gray-400">-</span>
+          <span className="text-gray-400 dark:text-gray-500">-</span>
 
           {/* 结束日期 */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white">
-            <Calendar className="w-4 h-4 text-gray-500" />
-            <span className="text-sm text-gray-600">结束日期:</span>
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+            <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            <span className="text-sm text-gray-600 dark:text-gray-300">结束日期:</span>
             <Input
               type="date"
               value={endDate}
@@ -140,7 +140,7 @@ export const ExecutionFilters: React.FC<Props> = React.memo((props) => {
 
       {/* 快捷日期筛选行 */}
       <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-500">快速筛选:</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">快速筛选:</span>
         <div className="flex gap-2">
           <Button
             variant="ghost"
@@ -170,7 +170,7 @@ export const ExecutionFilters: React.FC<Props> = React.memo((props) => {
 
         {/* 筛选状态指示器 */}
         {hasAnyFilter && (
-          <div className="ml-auto flex items-center gap-2 text-sm text-gray-600">
+          <div className="ml-auto flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
             <Badge variant="secondary" className="px-2 py-1">
               已应用 {filterCount} 个筛选条件
             </Badge>

@@ -103,47 +103,47 @@ export const SystemMonitoring: React.FC = () => {
           </CardHeader>
 
           <CardContent className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-            <div className="rounded-lg border border-gray-200 p-4">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-500">系统版本</p>
-                  <p className="text-lg font-semibold text-gray-900">{systemInfo?.version || '--'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">系统版本</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{systemInfo?.version || '--'}</p>
                 </div>
-                <Server className="h-6 w-6 text-purple-500" />
+                <Server className="h-6 w-6 text-purple-500 dark:text-purple-400" />
               </div>
-              <p className="mt-3 text-xs text-gray-500">{systemInfo?.environment?.toUpperCase()}</p>
+              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">{systemInfo?.environment?.toUpperCase()}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-500">运行时长</p>
-                  <p className="text-lg font-semibold text-gray-900">{systemInfo ? formatDuration(systemInfo.uptime) : '--'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">运行时长</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{systemInfo ? formatDuration(systemInfo.uptime) : '--'}</p>
                 </div>
-                <Activity className="h-6 w-6 text-emerald-500" />
+                <Activity className="h-6 w-6 text-emerald-500 dark:text-emerald-400" />
               </div>
-              <p className="mt-3 text-xs text-gray-500">启动时间：{systemInfo ? new Date(systemInfo.startTime).toLocaleString() : '--'}</p>
+              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">启动时间：{systemInfo ? new Date(systemInfo.startTime).toLocaleString() : '--'}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-500">健康状态</p>
-                  <p className="text-lg font-semibold text-gray-900">{health ? (health.overall === 'healthy' ? '正常' : health.overall === 'warning' ? '警告' : '异常') : '--'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">健康状态</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{health ? (health.overall === 'healthy' ? '正常' : health.overall === 'warning' ? '警告' : '异常') : '--'}</p>
                 </div>
                 <Badge variant={health?.overall === 'healthy' ? 'success' : health?.overall === 'warning' ? 'warning' : 'danger'} size="sm">
                   {health?.overall || '--'}
                 </Badge>
               </div>
-              <p className="mt-3 text-xs text-gray-500">告警数量：{health?.alerts.length ?? 0}</p>
+              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">告警数量：{health?.alerts.length ?? 0}</p>
             </div>
-            <div className="rounded-lg border border-gray-200 p-4">
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-500">请求统计</p>
-                  <p className="text-lg font-semibold text-gray-900">{latestMetric?.application.requests ?? '--'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">请求统计</p>
+                  <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{latestMetric?.application.requests ?? '--'}</p>
                 </div>
-                <Cpu className="h-6 w-6 text-blue-500" />
+                <Cpu className="h-6 w-6 text-blue-500 dark:text-blue-400" />
               </div>
-              <p className="mt-3 text-xs text-gray-500">错误数：{latestMetric?.application.errors ?? '--'}</p>
+              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">错误数：{latestMetric?.application.errors ?? '--'}</p>
             </div>
           </CardContent>
         </Card>
@@ -157,7 +157,7 @@ export const SystemMonitoring: React.FC = () => {
             {metricsQuery.isLoading ? (
               <PageLoading message="正在加载监控数据..." />
             ) : chartData.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-gray-500">
+              <div className="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                 暂无监控数据
               </div>
             ) : (
@@ -192,15 +192,15 @@ export const SystemMonitoring: React.FC = () => {
                 const Icon = item.icon
                 const variant: 'success' | 'warning' | 'danger' = item.status === 'normal' ? 'success' : item.status === 'warning' ? 'warning' : 'danger'
                 return (
-                  <div key={item.label} className="rounded-lg border border-gray-200 p-4">
+                  <div key={item.label} className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs text-gray-500">{item.label}</p>
-                        <p className="text-lg font-semibold text-gray-900">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{item.label}</p>
+                        <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                           {item.label === '数据库连接' ? item.value : formatPercent(item.value)}
                         </p>
                       </div>
-                      <Icon className="h-6 w-6 text-purple-500" />
+                      <Icon className="h-6 w-6 text-purple-500 dark:text-purple-400" />
                     </div>
                     <Badge variant={variant} size="sm" className="mt-3">
                       {item.status === 'normal' ? '正常' : item.status === 'warning' ? '警告' : '异常'}
@@ -230,10 +230,10 @@ export const SystemMonitoring: React.FC = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               {health.services.map(service => (
-                <div key={service.name} className="flex flex-col gap-2 rounded-lg border border-gray-200 p-4 md:flex-row md:items-center md:justify-between">
+                <div key={service.name} className="flex flex-col gap-2 rounded-lg border border-gray-200 dark:border-gray-700 p-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="font-medium text-gray-900">{service.name}</p>
-                    <p className="text-xs text-gray-500">运行时间：{formatDuration(service.uptime)}</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{service.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">运行时间：{formatDuration(service.uptime)}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <Badge variant={service.status === 'running' ? 'success' : service.status === 'stopped' ? 'outline' : 'danger'} size="sm">
@@ -261,11 +261,11 @@ export const SystemMonitoring: React.FC = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               {health.alerts.map((alert, index) => (
-                <div key={`${alert.timestamp}-${index}`} className="flex items-start gap-3 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
-                  <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                <div key={`${alert.timestamp}-${index}`} className="flex items-start gap-3 rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-4">
+                  <AlertTriangle className="h-5 w-5 text-yellow-500 dark:text-yellow-400" />
                   <div>
-                    <p className="text-sm font-medium text-yellow-700">{alert.message}</p>
-                    <p className="text-xs text-yellow-600 mt-1">{new Date(alert.timestamp).toLocaleString()}</p>
+                    <p className="text-sm font-medium text-yellow-700 dark:text-yellow-300">{alert.message}</p>
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">{new Date(alert.timestamp).toLocaleString()}</p>
                   </div>
                 </div>
               ))}

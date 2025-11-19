@@ -88,7 +88,7 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
     return (
       <div className="flex items-center justify-center py-12">
         <Loading />
-        <span className="ml-2 text-gray-600">加载配置中...</span>
+        <span className="ml-2 text-gray-600 dark:text-gray-400">加载配置中...</span>
       </div>
     )
   }
@@ -97,8 +97,8 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
   if (error) {
     return (
       <div className="flex items-center justify-center py-12">
-        <AlertCircle className="w-6 h-6 text-red-500 mr-2" />
-        <span className="text-red-600">加载配置失败: {error.message}</span>
+        <AlertCircle className="w-6 h-6 text-red-500 dark:text-red-400 mr-2" />
+        <span className="text-red-600 dark:text-red-400">加载配置失败: {error.message}</span>
       </div>
     )
   }
@@ -114,10 +114,10 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
           </Button>
           <Button variant="outline" onClick={handleImport}>导入模板</Button>
         </div>
-        <div className="bg-gray-50 rounded-lg p-8 text-center">
-          <Settings className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">暂无报表配置</h3>
-          <p className="text-gray-600 mb-4">
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-8 text-center">
+          <Settings className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">暂无报表配置</h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
             创建您的第一个自定义报表配置，或从模板库导入。
           </p>
         </div>
@@ -147,7 +147,7 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
                     <Settings className="w-4 h-4" />
                     {config.name}
                   </CardTitle>
-                  <p className="text-sm text-gray-600 mt-1">{config.description}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{config.description}</p>
                 </div>
                 <Badge variant={config.type === 'template' ? 'primary' : 'secondary'}>
                   {config.type === 'template' ? '模板' : '自定义'}
@@ -157,11 +157,11 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
             <CardContent>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">最后使用：</span>
+                  <span className="text-gray-600 dark:text-gray-400">最后使用：</span>
                   <span>{config.lastUsed || '从未使用'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">使用次数：</span>
+                  <span className="text-gray-600 dark:text-gray-400">使用次数：</span>
                   <span>{config.usageCount || 0} 次</span>
                 </div>
                 <div className="flex gap-2">
@@ -214,8 +214,8 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
 
       {/* 无搜索结果 */}
       {filteredConfigs.length === 0 && customConfigs.length > 0 && (
-        <div className="bg-gray-50 rounded-lg p-8 text-center">
-          <p className="text-gray-600">
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-8 text-center">
+          <p className="text-gray-600 dark:text-gray-400">
             没有找到匹配 "{searchText}" 的配置
           </p>
         </div>
@@ -227,10 +227,10 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
           <CardTitle>自定义报表生成器</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="bg-gray-50 rounded-lg p-8 text-center">
-            <Settings className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">报表生成器</h3>
-            <p className="text-gray-600 mb-4">
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-8 text-center">
+            <Settings className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">报表生成器</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
               可视化报表生成器正在开发中，即将支持拖拽式报表设计。
             </p>
             <Button disabled>进入生成器</Button>

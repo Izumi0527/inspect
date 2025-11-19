@@ -157,15 +157,15 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+        className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
               生成巡检报告
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               配置报告参数并生成详细的巡检分析报告
             </p>
           </div>
@@ -180,13 +180,13 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
             {/* 基本信息 */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600" />
+                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 基本信息
               </h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     报告标题 *
                   </label>
                   <Input
@@ -198,20 +198,20 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     报告描述
                   </label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => handleInputChange('description', e.target.value)}
                     placeholder="请输入报告描述（可选）"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                     rows={3}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     报告类别
                   </label>
                   <Select
@@ -232,7 +232,7 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     输出格式
                   </label>
                   <div className="grid grid-cols-2 gap-2">
@@ -243,12 +243,12 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                         onClick={() => handleInputChange('format', option.value)}
                         className={`p-3 border rounded-lg text-left transition-colors ${
                           formData.format === option.value
-                            ? 'border-blue-500 bg-blue-50 text-blue-900'
-                            : 'border-gray-300 hover:border-gray-400'
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-200'
+                            : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
                         }`}
                       >
                         <div className="font-medium">{option.label}</div>
-                        <div className="text-xs text-gray-600">{option.description}</div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">{option.description}</div>
                       </button>
                     ))}
                   </div>
@@ -259,13 +259,13 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
             {/* 时间范围 */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-purple-600" />
+                <Calendar className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 时间范围
               </h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     开始日期 *
                   </label>
                   <Input
@@ -277,7 +277,7 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     结束日期 *
                   </label>
                   <Input
@@ -289,7 +289,7 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                 </div>
 
                 {errors.dateRange && (
-                  <div className="md:col-span-2 text-sm text-red-500">
+                  <div className="md:col-span-2 text-sm text-red-500 dark:text-red-400">
                     {errors.dateRange}
                   </div>
                 )}
@@ -297,7 +297,7 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
 
               {/* 快速时间选择 */}
               <div className="flex flex-wrap gap-2">
-                <span className="text-sm text-gray-600">快速选择：</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">快速选择：</span>
                 {[
                   { label: '最近7天', days: 7 },
                   { label: '最近30天', days: 30 },
@@ -342,16 +342,16 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
             {/* 筛选条件 */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium flex items-center gap-2">
-                <Users className="w-5 h-5 text-green-600" />
+                <Users className="w-5 h-5 text-green-600 dark:text-green-400" />
                 筛选条件
               </h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     目标设备 ({formData.devices.length} 个)
                   </label>
-                  <div className="border border-gray-300 rounded-lg p-3 min-h-[80px] bg-gray-50">
+                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[80px] bg-gray-50 dark:bg-gray-800">
                     <div className="flex flex-wrap gap-2">
                       {formData.devices.map((deviceId) => (
                         <Badge key={deviceId} variant="secondary" className="flex items-center gap-1">
@@ -384,14 +384,14 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                       添加设备
                     </Button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">不选择则包含所有设备</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">不选择则包含所有设备</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     巡检策略 ({formData.strategies.length} 个)
                   </label>
-                  <div className="border border-gray-300 rounded-lg p-3 min-h-[80px] bg-gray-50">
+                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[80px] bg-gray-50 dark:bg-gray-800">
                     <div className="flex flex-wrap gap-2">
                       {formData.strategies.map((strategyId) => (
                         <Badge key={strategyId} variant="primary" className="flex items-center gap-1">
@@ -424,14 +424,14 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                       添加策略
                     </Button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">不选择则包含所有策略</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">不选择则包含所有策略</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     执行记录 ({formData.executionIds.length} 个)
                   </label>
-                  <div className="border border-gray-300 rounded-lg p-3 min-h-[80px] bg-gray-50">
+                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[80px] bg-gray-50 dark:bg-gray-800">
                     <div className="flex flex-wrap gap-2">
                       {formData.executionIds.map((executionId) => (
                         <Badge key={executionId} variant="outline" className="flex items-center gap-1">
@@ -464,7 +464,7 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                       添加记录
                     </Button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">不选择则包含所有执行记录</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">不选择则包含所有执行记录</p>
                 </div>
               </div>
             </div>
@@ -472,21 +472,21 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
             {/* 报告选项 */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium flex items-center gap-2">
-                <Settings className="w-5 h-5 text-orange-600" />
+                <Settings className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                 报告选项
               </h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <label className="flex items-center space-x-3">
                   <input
                     type="checkbox"
                     checked={formData.includeCharts}
                     onChange={(e) => handleInputChange('includeCharts', e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 dark:bg-gray-800"
                   />
                   <div>
-                    <div className="font-medium">包含图表</div>
-                    <div className="text-sm text-gray-600">添加可视化图表和统计图</div>
+                    <div className="font-medium text-gray-900 dark:text-gray-100">包含图表</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">添加可视化图表和统计图</div>
                   </div>
                 </label>
 
@@ -495,11 +495,11 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                     type="checkbox"
                     checked={formData.includeDetailData}
                     onChange={(e) => handleInputChange('includeDetailData', e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 dark:bg-gray-800"
                   />
                   <div>
-                    <div className="font-medium">包含详细数据</div>
-                    <div className="text-sm text-gray-600">添加原始数据和详细信息</div>
+                    <div className="font-medium text-gray-900 dark:text-gray-100">包含详细数据</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">添加原始数据和详细信息</div>
                   </div>
                 </label>
 
@@ -508,11 +508,11 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                     type="checkbox"
                     checked={formData.includeRecommendations}
                     onChange={(e) => handleInputChange('includeRecommendations', e.target.checked)}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 dark:bg-gray-800"
                   />
                   <div>
-                    <div className="font-medium">包含建议</div>
-                    <div className="text-sm text-gray-600">添加优化建议和解决方案</div>
+                    <div className="font-medium text-gray-900 dark:text-gray-100">包含建议</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">添加优化建议和解决方案</div>
                   </div>
                 </label>
               </div>
@@ -521,7 +521,7 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
         </form>
 
         {/* 底部操作按钮 */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+        <div className="flex items-center justify-end gap-3 p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             取消
           </Button>

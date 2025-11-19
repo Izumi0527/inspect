@@ -218,12 +218,12 @@ export const DeviceManagementPage: React.FC = () => {
       width: '200px',
       render: (_, record) => (
         <div className="flex items-center gap-3">
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
-            <DeviceIcon type={record.device_type} className="h-4 w-4 text-gray-600" />
+          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+            <DeviceIcon type={record.device_type} className="h-4 w-4 text-gray-600 dark:text-gray-300" />
           </div>
           <div>
-            <div className="font-medium text-gray-900">{record.name}</div>
-            <div className="text-sm text-gray-500">{record.ip}</div>
+            <div className="font-medium text-gray-900 dark:text-gray-100">{record.name}</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">{record.ip}</div>
           </div>
         </div>
       )
@@ -242,7 +242,7 @@ export const DeviceManagementPage: React.FC = () => {
         isDeviceStatus(value) ? (
           <StatusBadge status={value} />
         ) : (
-          <span className="text-gray-500">-</span>
+          <span className="text-gray-500 dark:text-gray-400">-</span>
         )
       )
     },
@@ -352,8 +352,8 @@ export const DeviceManagementPage: React.FC = () => {
       {/* 页面头部 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">设备管理</h1>
-          <p className="text-gray-600 mt-1">管理和监控网络设备状态</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">设备管理</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">管理和监控网络设备状态</p>
         </div>
         <Button onClick={handleAddDevice} className="flex items-center gap-2">
           <Plus className="h-4 w-4" />
@@ -366,12 +366,12 @@ export const DeviceManagementPage: React.FC = () => {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-blue-100">
-                <Server className="h-6 w-6 text-blue-600" />
+              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <Server className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">总设备数</p>
-                <p className="text-2xl font-bold text-gray-900">{summary.total}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">总设备数</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.total}</p>
               </div>
             </div>
           </CardContent>
@@ -380,12 +380,12 @@ export const DeviceManagementPage: React.FC = () => {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-green-100">
-                <CheckCircle className="h-6 w-6 text-green-600" />
+              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">在线设备</p>
-                <p className="text-2xl font-bold text-green-600">{summary.online}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">在线设备</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{summary.online}</p>
               </div>
             </div>
           </CardContent>
@@ -394,12 +394,12 @@ export const DeviceManagementPage: React.FC = () => {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-red-100">
-                <Power className="h-6 w-6 text-red-600" />
+              <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
+                <Power className="h-6 w-6 text-red-600 dark:text-red-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">离线设备</p>
-                <p className="text-2xl font-bold text-red-600">{summary.offline}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">离线设备</p>
+                <p className="text-2xl font-bold text-red-600 dark:text-red-400">{summary.offline}</p>
               </div>
             </div>
           </CardContent>
@@ -408,12 +408,12 @@ export const DeviceManagementPage: React.FC = () => {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-yellow-100">
-                <AlertTriangle className="h-6 w-6 text-yellow-600" />
+              <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
+                <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">告警设备</p>
-                <p className="text-2xl font-bold text-yellow-600">{summary.warning}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">告警设备</p>
+                <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{summary.warning}</p>
               </div>
             </div>
           </CardContent>
@@ -422,12 +422,12 @@ export const DeviceManagementPage: React.FC = () => {
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-purple-100">
-                <AlertTriangle className="h-6 w-6 text-purple-600" />
+              <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                <AlertTriangle className="h-6 w-6 text-purple-600 dark:text-purple-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">总告警数</p>
-                <p className="text-2xl font-bold text-purple-600">{summary.totalAlerts}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">总告警数</p>
+                <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{summary.totalAlerts}</p>
               </div>
             </div>
           </CardContent>
@@ -477,8 +477,8 @@ export const DeviceManagementPage: React.FC = () => {
 
           {/* 批量操作 */}
           {selectedDevices.length > 0 && (
-            <div className="flex items-center gap-2 mb-4 p-3 bg-purple-50 rounded-lg">
-              <span className="text-sm text-purple-700">
+            <div className="flex items-center gap-2 mb-4 p-3 bg-purple-50 dark:bg-purple-900/30 rounded-lg">
+              <span className="text-sm text-purple-700 dark:text-purple-300">
                 已选择 {selectedDevices.length} 个设备
               </span>
               <div className="flex gap-2 ml-auto">

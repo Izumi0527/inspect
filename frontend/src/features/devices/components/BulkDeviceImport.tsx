@@ -249,8 +249,8 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-100 flex items-center justify-center">
           <Upload className="h-8 w-8 text-blue-600" />
         </div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">批量导入设备</h3>
-        <p className="text-sm text-gray-600">通过上传 CSV 文件批量导入设备信息。</p>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">批量导入设备</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400">通过上传 CSV 文件批量导入设备信息。</p>
       </div>
 
       <Card>
@@ -259,10 +259,10 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <label className="flex flex-col gap-3 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 transition-colors">
+            <label className="flex flex-col gap-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
               <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
               <FileText className="h-10 w-10 mx-auto text-blue-500" />
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
                 点击上传或将文件拖拽到此区域，支持 CSV 格式。请先使用主界面的"下载模板"按钮获取模板文件。
               </div>
             </label>
@@ -274,10 +274,10 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
 
   const renderMappingStep = () => (
     <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-gray-900">字段映射</h3>
-      <p className="text-sm text-gray-600">请确认 CSV 列与系统字段的对应关系。</p>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">字段映射</h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400">请确认 CSV 列与系统字段的对应关系。</p>
       {mappingErrors.length > 0 && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-4 space-y-1">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 text-sm rounded-lg p-4 space-y-1">
           {mappingErrors.map(errorMessage => (
             <div key={errorMessage} className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
@@ -290,8 +290,8 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         {csvData?.headers.map(header => (
           <div key={header} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
             <div>
-              <p className="text-sm font-medium text-gray-900">{header}</p>
-              <p className="text-xs text-gray-500">来自 CSV 文件</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{header}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">来自 CSV 文件</p>
             </div>
             <div className="md:col-span-2">
               <Select
@@ -334,15 +334,15 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">导入预览</h3>
-            <p className="text-sm text-gray-600">共有 {previewDevices.length} 条记录将被导入。</p>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">导入预览</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">共有 {previewDevices.length} 条记录将被导入。</p>
           </div>
           <Button variant="ghost" onClick={() => setStep('mapping')} disabled={isProcessing}>
             返回修改
           </Button>
         </div>
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="grid grid-cols-7 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-500">
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-800/50 px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400">
             <span>名称</span>
             <span>IP 地址</span>
             <span>类型</span>
@@ -353,7 +353,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
           </div>
           <div className="max-h-64 overflow-y-auto divide-y">
             {previewDevices.map((device, index) => (
-              <div key={`${device.name || device.ip || 'device'}-${index}`} className="grid grid-cols-7 px-4 py-2 text-xs text-gray-700">
+              <div key={`${device.name || device.ip || 'device'}-${index}`} className="grid grid-cols-7 px-4 py-2 text-xs text-gray-700 dark:text-gray-300">
                 <span>{device.name || '-'}</span>
                 <span>{device.ip || '-'}</span>
                 <span>{device.device_type}</span>
@@ -386,11 +386,11 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         <CheckCircle className="h-10 w-10 text-green-600" />
       </div>
       <div>
-        <h3 className="text-lg font-semibold text-gray-900">导入完成</h3>
-        <p className="text-sm text-gray-600 mt-1">已导入 {importResult?.imported_count ?? 0} 条设备数据。</p>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">导入完成</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">已导入 {importResult?.imported_count ?? 0} 条设备数据。</p>
       </div>
       {importResult && importResult.errors.length > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-left text-sm text-yellow-800">
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 text-left text-sm text-yellow-800 dark:text-yellow-200">
           <h4 className="font-medium mb-2">以下记录导入失败：</h4>
           <ul className="space-y-1 list-disc list-inside">
             {importResult.errors.map((errorItem, index) => (

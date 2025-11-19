@@ -231,7 +231,7 @@ export const DeviceForm: React.FC<Props> = ({
         <Card>
           <CardContent className="p-4">
             <div className="space-y-4">
-              <h3 className="text-md font-medium text-gray-900 flex items-center gap-2">
+              <h3 className="text-md font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <Server className="h-4 w-4" />
                 设备基本信息
               </h3>
@@ -241,7 +241,7 @@ export const DeviceForm: React.FC<Props> = ({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* 设备名称 */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       设备名称 <span className="text-red-500">*</span>
                     </label>
                     <Controller
@@ -259,7 +259,7 @@ export const DeviceForm: React.FC<Props> = ({
 
                   {/* IP地址 */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       IP地址 <span className="text-red-500">*</span>
                     </label>
                     <Controller
@@ -277,7 +277,7 @@ export const DeviceForm: React.FC<Props> = ({
 
                   {/* 设备类型 */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       设备类型 <span className="text-red-500">*</span>
                     </label>
                     <Controller
@@ -313,7 +313,7 @@ export const DeviceForm: React.FC<Props> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* 位置信息 */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       位置信息
                     </label>
                     <Controller
@@ -331,7 +331,7 @@ export const DeviceForm: React.FC<Props> = ({
 
                   {/* 设备描述 */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       设备描述
                     </label>
                     <Controller
@@ -375,7 +375,7 @@ export const DeviceForm: React.FC<Props> = ({
       </div>
 
       {/* 固定底部按钮 */}
-      <div className="flex-shrink-0 flex justify-end space-x-3 pt-6 mt-6 border-t bg-white">
+      <div className="flex-shrink-0 flex justify-end space-x-3 pt-6 mt-6 border-t bg-white dark:bg-gray-900">
         <Button
           type="button"
           variant="outline"

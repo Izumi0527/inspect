@@ -57,6 +57,30 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
 
   const reports = reportsData?.reports || []
 
+  // 颜色映射对象 - 解决动态类名问题
+  const colorMap = {
+    blue: {
+      bg: 'bg-blue-100 dark:bg-blue-900/20',
+      text: 'text-blue-600 dark:text-blue-400',
+      icon: 'text-blue-600 dark:text-blue-400'
+    },
+    green: {
+      bg: 'bg-green-100 dark:bg-green-900/20',
+      text: 'text-green-600 dark:text-green-400',
+      icon: 'text-green-600 dark:text-green-400'
+    },
+    red: {
+      bg: 'bg-red-100 dark:bg-red-900/20',
+      text: 'text-red-600 dark:text-red-400',
+      icon: 'text-red-600 dark:text-red-400'
+    },
+    purple: {
+      bg: 'bg-purple-100 dark:bg-purple-900/20',
+      text: 'text-purple-600 dark:text-purple-400',
+      icon: 'text-purple-600 dark:text-purple-400'
+    }
+  }
+
   // 过滤报表列表
   const filteredReports = reports.filter((report: Report) => 
     (report.title.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -136,13 +160,13 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
       render: (_, report) => (
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-blue-600" />
-            <span className="font-medium text-gray-900">{report.title}</span>
+            <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span className="font-medium text-gray-900 dark:text-gray-100">{report.title}</span>
           </div>
-          <span className="text-sm text-gray-500 line-clamp-2 mt-1">{report.description}</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">{report.description}</span>
           <div className="flex items-center gap-2 mt-2">
             {getFormatBadge(report.format)}
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-gray-400 dark:text-gray-500">
               {formatFileSize(report.fileSize)}
             </span>
           </div>
@@ -178,15 +202,15 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
       render: (_, report) => (
         <div className="flex flex-col text-sm">
           <div className="flex items-center gap-1">
-            <Calendar className="w-3 h-3 text-gray-400" />
+            <Calendar className="w-3 h-3 text-gray-400 dark:text-gray-500" />
             <span>
-              {new Date(report.parameters.dateRange.startDate).toLocaleDateString()} - 
+              {new Date(report.parameters.dateRange.startDate).toLocaleDateString()} -
               {new Date(report.parameters.dateRange.endDate).toLocaleDateString()}
             </span>
           </div>
           {report.parameters.devices && (
             <div className="flex items-center gap-1 mt-1">
-              <Users className="w-3 h-3 text-gray-400" />
+              <Users className="w-3 h-3 text-gray-400 dark:text-gray-500" />
               <span>{report.parameters.devices.length} 个设备</span>
             </div>
           )}
@@ -198,11 +222,11 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
       title: '创建信息',
       render: (_, report) => (
         <div className="flex flex-col text-sm">
-          <div className="font-medium">{report.generatedBy}</div>
-          <div className="text-gray-500">
+          <div className="font-medium text-gray-900 dark:text-gray-100">{report.generatedBy}</div>
+          <div className="text-gray-500 dark:text-gray-400">
             {new Date(report.createdAt).toLocaleDateString()}
           </div>
-          <div className="text-gray-400 text-xs">
+          <div className="text-gray-400 dark:text-gray-500 text-xs">
             {new Date(report.createdAt).toLocaleTimeString()}
           </div>
         </div>
@@ -269,10 +293,10 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
           <Card key={index} className="animate-pulse">
             <CardContent className="p-4">
               <div className="flex items-center gap-4">
-                <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/6"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/6"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/6"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/6"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
               </div>
             </CardContent>
           </Card>
@@ -286,7 +310,7 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
       {/* 操作栏 */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold">巡检报告管理</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">巡检报告管理</h3>
           <Badge variant="secondary">{filteredReports.length} 项</Badge>
         </div>
         <div className="flex gap-2">
@@ -360,22 +384,25 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
               // 打开配置页面
             }
           }
-        ].map((item) => (
-          <Card key={item.title} className="hover:shadow-md transition-shadow cursor-pointer">
-            <CardContent className="p-4" onClick={item.action}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg bg-${item.color}-100`}>
-                  <item.icon className={`w-5 h-5 text-${item.color}-600`} />
+        ].map((item) => {
+          const colors = colorMap[item.color as keyof typeof colorMap]
+          return (
+            <Card key={item.title} className="hover:shadow-md transition-shadow cursor-pointer">
+              <CardContent className="p-4" onClick={item.action}>
+                <div className="flex items-center gap-3">
+                  <div className={colors.bg + ' p-2 rounded-lg'}>
+                    <item.icon className={colors.icon + ' w-5 h-5'} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{item.title}</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">{item.description}</div>
+                  </div>
+                  <Play className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                 </div>
-                <div className="flex-1">
-                  <div className="font-medium text-gray-900">{item.title}</div>
-                  <div className="text-sm text-gray-600">{item.description}</div>
-                </div>
-                <Play className="w-4 h-4 text-gray-400" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {/* 报表列表 */}
@@ -388,17 +415,17 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
           <Table
             data={filteredReports}
             columns={columns}
-            className="bg-white rounded-lg shadow-sm"
+            className="bg-white dark:bg-gray-900 rounded-lg shadow-sm"
           />
         </motion.div>
       ) : (
         <Card>
           <CardContent className="p-8 text-center">
             <div className="flex flex-col items-center gap-4">
-              <FileText className="w-12 h-12 text-gray-400" />
+              <FileText className="w-12 h-12 text-gray-400 dark:text-gray-500" />
               <div>
-                <h3 className="text-lg font-medium text-gray-900">暂无巡检报告</h3>
-                <p className="text-gray-500 mt-1">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">暂无巡检报告</h3>
+                <p className="text-gray-500 dark:text-gray-400 mt-1">
                   {searchText ? '没有找到匹配的报告' : '开始生成您的第一个巡检报告'}
                 </p>
               </div>

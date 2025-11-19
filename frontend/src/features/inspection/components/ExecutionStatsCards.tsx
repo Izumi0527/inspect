@@ -81,7 +81,7 @@ export const ExecutionStatsCards: React.FC<Props> = React.memo(({ executions }) 
             <div className={`text-2xl font-bold text-${item.color}-600`}>
               {item.count}
             </div>
-            <div className="text-sm text-gray-600">{item.label}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">{item.label}</div>
           </CardContent>
         </Card>
       ))}

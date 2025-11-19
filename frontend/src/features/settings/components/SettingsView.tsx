@@ -139,10 +139,10 @@ export const SettingsView: React.FC = () => {
 
   const healthBadgeClass =
     systemHealth?.overall === 'healthy'
-      ? 'text-green-600'
+      ? 'text-green-600 dark:text-green-400'
       : systemHealth?.overall === 'warning'
-        ? 'text-yellow-600'
-        : 'text-red-600'
+        ? 'text-yellow-600 dark:text-yellow-400'
+        : 'text-red-600 dark:text-red-400'
 
   const healthLabel =
     systemHealth?.overall === 'healthy'
@@ -161,20 +161,20 @@ export const SettingsView: React.FC = () => {
           <div className="flex gap-4 overflow-x-auto">
             <Card className="min-w-[160px]">
               <CardContent className="p-4 text-center">
-                <p className="text-sm text-gray-600">系统版本</p>
-                <p className="mt-2 text-lg font-semibold text-gray-900">{systemInfo.version}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">系统版本</p>
+                <p className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">{systemInfo.version}</p>
               </CardContent>
             </Card>
             <Card className="min-w-[160px]">
               <CardContent className="p-4 text-center">
-                <p className="text-sm text-gray-600">运行状态</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">运行状态</p>
                 <p className={`mt-2 text-lg font-semibold ${healthBadgeClass}`}>{healthLabel}</p>
               </CardContent>
             </Card>
             <Card className="min-w-[160px]">
               <CardContent className="p-4 text-center">
-                <p className="text-sm text-gray-600">累计运行天数</p>
-                <p className="mt-2 text-lg font-semibold text-gray-900">
+                <p className="text-sm text-gray-600 dark:text-gray-400">累计运行天数</p>
+                <p className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
                   {Math.floor(systemInfo.uptime / 86400)} 天
                 </p>
               </CardContent>
@@ -198,8 +198,8 @@ export const SettingsView: React.FC = () => {
                       onClick={() => setActiveTab(tab.key)}
                       className={`relative flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
                         isActive
-                          ? 'bg-blue-50 text-blue-600 shadow-sm'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-blue-600'
+                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400'
                       }`}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
@@ -214,7 +214,7 @@ export const SettingsView: React.FC = () => {
                       {isActive && (
                         <motion.span
                           layoutId="settings-tab-indicator"
-                          className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-blue-600"
+                          className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-blue-600 dark:bg-blue-400"
                         />
                       )}
                     </motion.button>
@@ -225,7 +225,7 @@ export const SettingsView: React.FC = () => {
               <div className="flex gap-2">
                 {['general', 'users', 'logs'].includes(activeTab) && (
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                     <Input
                       placeholder="搜索..."
                       value={searchText}
@@ -244,7 +244,7 @@ export const SettingsView: React.FC = () => {
             </div>
 
             <div className="pt-2">
-              <p className="text-sm text-gray-600">{tabs.find(tab => tab.key === activeTab)?.description}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{tabs.find(tab => tab.key === activeTab)?.description}</p>
             </div>
           </CardHeader>
 

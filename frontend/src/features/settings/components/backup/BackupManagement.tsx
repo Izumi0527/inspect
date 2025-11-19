@@ -93,11 +93,11 @@ export function BackupManagement() {
       <div>
         <ActionButtons />
         <div className="p-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 flex items-start space-x-4">
-            <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 flex items-start space-x-4">
+            <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
             <div>
-              <h3 className="text-lg font-semibold text-red-900 mb-2">加载配置失败</h3>
-              <p className="text-sm text-red-700">
+              <h3 className="text-lg font-semibold text-red-900 dark:text-red-200 mb-2">加载配置失败</h3>
+              <p className="text-sm text-red-700 dark:text-red-300">
                 {(error as Error).message || '无法连接到服务器，请检查网络连接或稍后重试'}
               </p>
             </div>
@@ -137,12 +137,12 @@ export function BackupManagement() {
         {/* 恢复中的全局提示 */}
         {isRestoring && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
+            <div className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-sm mx-4">
               <div className="flex items-center space-x-3">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">正在恢复备份...</h3>
-                  <p className="text-sm text-gray-600 mt-1">请勿关闭或刷新页面</p>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">正在恢复备份...</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">请勿关闭或刷新页面</p>
                 </div>
               </div>
             </div>

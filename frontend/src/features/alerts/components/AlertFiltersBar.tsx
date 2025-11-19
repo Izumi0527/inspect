@@ -22,7 +22,7 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
   const filtersContent = (
     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
       <div className="relative flex-1 w-full sm:max-w-md">
-        <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+        <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" />
         <Input
           type="text"
           placeholder="搜索告警..."
@@ -35,7 +35,7 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
       <select
         value={filters.severityFilter}
         onChange={(e) => onFilterChange('severityFilter', e.target.value)}
-        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-auto"
+        className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-auto sm:min-w-[180px] bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
       >
         <option value="all">所有严重级别</option>
         <option value="critical">严重</option>
@@ -46,7 +46,7 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
       <select
         value={filters.statusFilter}
         onChange={(e) => onFilterChange('statusFilter', e.target.value)}
-        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-auto"
+        className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-auto sm:min-w-[150px] bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
       >
         <option value="all">所有状态</option>
         <option value="active">活跃</option>
@@ -69,7 +69,7 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
             <div className="flex gap-2 items-center">
               {selectedCount > 0 && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
                     已选择 {selectedCount} 项
                   </span>
                   <Button

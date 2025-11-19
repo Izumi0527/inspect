@@ -38,7 +38,7 @@ const ModalContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-gray-200/20 bg-white/95 backdrop-blur-xl p-6 shadow-2xl duration-200',
+        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-gray-200/20 dark:border-gray-700/20 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl p-6 shadow-2xl duration-200',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -94,7 +94,7 @@ const ModalTitle = React.forwardRef<
   <DialogPrimitive.Title
     ref={ref}
     className={cn(
-      'text-lg font-semibold leading-none tracking-tight text-gray-900',
+      'text-lg font-semibold leading-none tracking-tight text-gray-900 dark:text-gray-100',
       className
     )}
     {...props}
@@ -108,7 +108,7 @@ const ModalDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-gray-600', className)}
+    className={cn('text-sm text-gray-600 dark:text-gray-400', className)}
     {...props}
   />
 ))
@@ -142,8 +142,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
         <ModalHeader>
           <ModalTitle className="flex items-center gap-2">
             {variant === 'destructive' && (
-              <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center">
-                <X className="w-3 h-3 text-red-600" />
+              <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center">
+                <X className="w-3 h-3 text-red-600 dark:text-red-400" />
               </div>
             )}
             {title}
@@ -157,7 +157,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 transition-colors"
           >
             {cancelText}
           </motion.button>
@@ -200,10 +200,10 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   type = 'info'
 }) => {
   const typeStyles = {
-    success: 'bg-green-100 text-green-800',
-    warning: 'bg-yellow-100 text-yellow-800',
-    error: 'bg-red-100 text-red-800',
-    info: 'bg-blue-100 text-blue-800'
+    success: 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200',
+    warning: 'bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200',
+    error: 'bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200',
+    info: 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200'
   }
 
   return (

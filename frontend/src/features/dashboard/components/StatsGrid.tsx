@@ -32,11 +32,11 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) 
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="h-4 bg-gray-200 rounded w-20 mb-2"></div>
-                  <div className="h-8 bg-gray-200 rounded w-16 mb-1"></div>
-                  <div className="h-3 bg-gray-200 rounded w-12"></div>
+                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20 mb-2"></div>
+                  <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-16 mb-1"></div>
+                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
                 </div>
-                <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+                <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
               </div>
             </CardContent>
           </Card>
@@ -55,16 +55,16 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) 
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1" data-testid="stat-title">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900" data-testid="stat-value">{stat.value}</p>
+                  <p className="text-sm text-gray-600 dark:text-muted-foreground mb-1" data-testid="stat-title">{stat.title}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-foreground" data-testid="stat-value">{stat.value}</p>
                   <p className={`text-sm ${
-                    stat.change.startsWith('+') ? 'text-green-600' :
-                    stat.change.startsWith('-') ? 'text-red-600' : 'text-gray-600'
+                    stat.change.startsWith('+') ? 'text-green-600 dark:text-green-400' :
+                    stat.change.startsWith('-') ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-muted-foreground'
                   }`} data-testid="stat-change">
                     {stat.change} 较昨日
                   </p>
                 </div>
-                <div className="p-3 bg-gray-50 rounded-full" data-testid="stat-icon">
+                <div className="p-3 bg-gray-50 dark:bg-accent/10 rounded-full" data-testid="stat-icon">
                   {IconComponent && <IconComponent className={`w-8 h-8 ${stat.iconColor}`} />}
                 </div>
               </div>

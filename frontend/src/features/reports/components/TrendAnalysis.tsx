@@ -110,10 +110,10 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
     return (
       <Card>
         <CardContent className="p-6">
-          <div className="text-center text-red-600">
+          <div className="text-center text-red-600 dark:text-red-400">
             <AlertTriangle className="w-12 h-12 mx-auto mb-2" />
             <p className="text-lg font-medium">加载趋势分析数据失败</p>
-            <p className="text-sm text-gray-600 mt-1">{error instanceof Error ? error.message : '未知错误'}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{error instanceof Error ? error.message : '未知错误'}</p>
           </div>
         </CardContent>
       </Card>
@@ -156,7 +156,7 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-blue-600" />
+            <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             设备性能趋势分析
           </CardTitle>
         </CardHeader>
@@ -173,7 +173,7 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
               formatter={(value) => typeof value === 'number' ? value.toFixed(2) : value}
             />
           ) : (
-            <div className="text-center text-gray-500 py-20">
+            <div className="text-center text-gray-500 dark:text-gray-400 py-20">
               暂无数据
             </div>
           )}
@@ -185,7 +185,7 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-purple-600" />
+              <Calendar className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               预测分析
             </CardTitle>
           </CardHeader>
@@ -193,19 +193,19 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
             <div className="space-y-4">
               {trendData?.predictions && trendData.predictions.length > 0 ? (
                 trendData.predictions.map((prediction, index) => (
-                  <div key={index} className="p-4 bg-blue-50 rounded-lg">
-                    <h4 className="font-medium text-blue-900">{prediction.metric} 预测</h4>
-                    <p className="text-sm text-blue-700 mt-1">
+                  <div key={index} className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <h4 className="font-medium text-blue-900 dark:text-blue-200">{prediction.metric} 预测</h4>
+                    <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
                       预测周期: {prediction.predictionPeriod}
                     </p>
-                    <p className="text-xs text-blue-600 mt-1">
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                       置信水平: {(prediction.confidenceLevel * 100).toFixed(1)}%
                     </p>
                   </div>
                 ))
               ) : (
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">暂无预测数据</p>
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">暂无预测数据</p>
                 </div>
               )}
             </div>
@@ -215,7 +215,7 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
               趋势告警
             </CardTitle>
           </CardHeader>
@@ -226,28 +226,28 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
                   <div
                     key={alert.id}
                     className={`flex items-center gap-3 p-3 rounded-lg ${
-                      alert.severity === 'critical' ? 'bg-red-50' :
-                      alert.severity === 'warning' ? 'bg-yellow-50' :
-                      'bg-blue-50'
+                      alert.severity === 'critical' ? 'bg-red-50 dark:bg-red-900/20' :
+                      alert.severity === 'warning' ? 'bg-yellow-50 dark:bg-yellow-900/20' :
+                      'bg-blue-50 dark:bg-blue-900/20'
                     }`}
                   >
                     <AlertTriangle className={`w-5 h-5 ${
-                      alert.severity === 'critical' ? 'text-red-600' :
-                      alert.severity === 'warning' ? 'text-yellow-600' :
-                      'text-blue-600'
+                      alert.severity === 'critical' ? 'text-red-600 dark:text-red-400' :
+                      alert.severity === 'warning' ? 'text-yellow-600 dark:text-yellow-400' :
+                      'text-blue-600 dark:text-blue-400'
                     }`} />
                     <div className="flex-1">
                       <div className={`text-sm font-medium ${
-                        alert.severity === 'critical' ? 'text-red-900' :
-                        alert.severity === 'warning' ? 'text-yellow-900' :
-                        'text-blue-900'
+                        alert.severity === 'critical' ? 'text-red-900 dark:text-red-200' :
+                        alert.severity === 'warning' ? 'text-yellow-900 dark:text-yellow-200' :
+                        'text-blue-900 dark:text-blue-200'
                       }`}>
                         {alert.message}
                       </div>
                       <div className={`text-xs ${
-                        alert.severity === 'critical' ? 'text-red-700' :
-                        alert.severity === 'warning' ? 'text-yellow-700' :
-                        'text-blue-700'
+                        alert.severity === 'critical' ? 'text-red-700 dark:text-red-300' :
+                        alert.severity === 'warning' ? 'text-yellow-700 dark:text-yellow-300' :
+                        'text-blue-700 dark:text-blue-300'
                       }`}>
                         {alert.description}
                       </div>
@@ -255,8 +255,8 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
                   </div>
                 ))
               ) : (
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <p className="text-sm text-green-700">暂无趋势告警</p>
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                  <p className="text-sm text-green-700 dark:text-green-300">暂无趋势告警</p>
                 </div>
               )}
             </div>

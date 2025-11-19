@@ -20,10 +20,10 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats }) => {
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">总告警数</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">总告警数</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.total}</p>
             </div>
-            <Bell className="w-8 h-8 text-gray-600" />
+            <Bell className="w-8 h-8 text-gray-600 dark:text-gray-500" />
           </div>
         </CardContent>
       </Card>
@@ -32,10 +32,10 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats }) => {
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">严重告警</p>
-              <p className="text-2xl font-bold text-red-600">{stats.critical}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">严重告警</p>
+              <p className="text-2xl font-bold text-red-600 dark:text-red-500">{stats.critical}</p>
             </div>
-            <AlertCircle className="w-8 h-8 text-red-600" />
+            <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-500" />
           </div>
         </CardContent>
       </Card>
@@ -44,10 +44,10 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats }) => {
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">警告告警</p>
-              <p className="text-2xl font-bold text-yellow-600">{stats.warning}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">警告告警</p>
+              <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-500">{stats.warning}</p>
             </div>
-            <AlertTriangle className="w-8 h-8 text-yellow-600" />
+            <AlertTriangle className="w-8 h-8 text-yellow-600 dark:text-yellow-500" />
           </div>
         </CardContent>
       </Card>
@@ -56,10 +56,10 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats }) => {
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">信息告警</p>
-              <p className="text-2xl font-bold text-blue-600">{stats.info}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">信息告警</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-500">{stats.info}</p>
             </div>
-            <Info className="w-8 h-8 text-blue-600" />
+            <Info className="w-8 h-8 text-blue-600 dark:text-blue-500" />
           </div>
         </CardContent>
       </Card>
@@ -68,10 +68,10 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats }) => {
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">活跃告警</p>
-              <p className="text-2xl font-bold text-orange-600">{stats.active}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">活跃告警</p>
+              <p className="text-2xl font-bold text-orange-600 dark:text-orange-500">{stats.active}</p>
             </div>
-            <Shield className="w-8 h-8 text-orange-600" />
+            <Shield className="w-8 h-8 text-orange-600 dark:text-orange-500" />
           </div>
         </CardContent>
       </Card>

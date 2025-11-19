@@ -66,14 +66,14 @@ export const AlertList: React.FC<AlertListProps> = ({
 
       {alerts.length === 0 && (
         <div className="text-center py-12">
-          <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-500">没有找到匹配的告警</p>
+          <Shield className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+          <p className="text-gray-500 dark:text-gray-400">没有找到匹配的告警</p>
         </div>
       )}
 
       {/* Pagination - 使用增强的分页组件 */}
       {pagination && alerts.length > 0 && (
-        <div className="mt-6 pt-6 border-t">
+        <div className="mt-6 pt-6 border-t dark:border-gray-700">
           <Pagination
             currentPage={pagination.current}
             totalPages={Math.ceil(pagination.total / pagination.pageSize)}
@@ -106,7 +106,7 @@ export const AlertList: React.FC<AlertListProps> = ({
                   onChange={handleSelectAll}
                   className="rounded"
                 />
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
                   {selectedAlerts.length > 0 ? `已选择 ${selectedAlerts.length} 项` : '全选'}
                 </span>
               </div>

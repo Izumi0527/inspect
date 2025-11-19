@@ -139,11 +139,11 @@ export const AlertsView: React.FC = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-12">
-            <div className="text-red-600 mb-4">加载告警数据时出现错误</div>
-            <p className="text-gray-500">{error}</p>
+            <div className="text-red-600 dark:text-red-500 mb-4">加载告警数据时出现错误</div>
+            <p className="text-gray-500 dark:text-gray-400">{error}</p>
           </div>
         </div>
       </div>

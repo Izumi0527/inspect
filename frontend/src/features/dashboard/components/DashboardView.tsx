@@ -45,11 +45,11 @@ export const DashboardView: React.FC = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="max-w-md w-full text-center bg-white rounded-lg shadow-lg p-8">
+      <div className="min-h-screen bg-gray-50 dark:bg-background flex items-center justify-center">
+        <div className="max-w-md w-full text-center bg-white dark:bg-card rounded-lg shadow-lg p-8">
           <div className="text-red-600 text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">无法加载数据</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
+          <h2 className="text-xl font-semibold text-gray-800 dark:text-foreground mb-2">无法加载数据</h2>
+          <p className="text-gray-600 dark:text-muted-foreground mb-6">{error}</p>
           <div className="space-y-3">
             <button
               onClick={handleRetry}
@@ -58,7 +58,7 @@ export const DashboardView: React.FC = () => {
             >
               {loading ? '重试中...' : '重试'}
             </button>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-muted-foreground">
               如果问题持续存在，请联系系统管理员
             </p>
           </div>
@@ -68,7 +68,7 @@ export const DashboardView: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-background">
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -86,23 +86,23 @@ export const DashboardView: React.FC = () => {
         {/* Permission Limited Banner */}
         {isPermissionLimited && (
           <div className="mx-6 mt-4 mb-0">
-            <div className="bg-yellow-50 border-l-4 border-yellow-400 rounded-lg p-4">
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 dark:border-yellow-500 rounded-lg p-4">
               <div className="flex items-start">
                 <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <svg className="h-5 w-5 text-yellow-400 dark:text-yellow-500" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M8.485 3.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 3.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                   </svg>
                 </div>
                 <div className="ml-3 flex-1">
-                  <h3 className="text-sm font-medium text-yellow-800">数据访问受限</h3>
-                  <p className="mt-1 text-sm text-yellow-700">
+                  <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300">数据访问受限</h3>
+                  <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-400">
                     由于权限限制，无法获取完整的监控数据。如需完整访问权限，请联系系统管理员。
                   </p>
                   <div className="mt-3">
                     <button
                       onClick={handleRetry}
                       disabled={loading}
-                      className="text-sm bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded-md transition-colors duration-200 disabled:opacity-50"
+                      className="text-sm bg-yellow-100 dark:bg-yellow-900/30 hover:bg-yellow-200 dark:hover:bg-yellow-900/50 text-yellow-800 dark:text-yellow-300 px-3 py-1 rounded-md transition-colors duration-200 disabled:opacity-50"
                     >
                       {loading ? '重试中...' : '重新尝试'}
                     </button>
@@ -145,10 +145,10 @@ export const DashboardView: React.FC = () => {
 
           {/* Loading overlay for refresh */}
           {loading && data && (
-            <div className="fixed top-4 right-4 bg-white rounded-lg shadow-lg p-3 z-50">
+            <div className="fixed top-4 right-4 bg-white dark:bg-card rounded-lg shadow-lg p-3 z-50">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-sm text-gray-600">刷新数据中...</span>
+                <span className="text-sm text-gray-600 dark:text-muted-foreground">刷新数据中...</span>
               </div>
             </div>
           )}

@@ -1,6 +1,7 @@
 import React from 'react'
 import { Search, Bell } from 'lucide-react'
 import { Button, Input } from '@/components/atoms'
+import { ThemeToggle } from '@/components/molecules'
 import { useDeviceSearch } from '../hooks/useDashboard'
 
 interface DashboardHeaderProps {
@@ -18,13 +19,13 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   const { query, results, searching, showResults, setQuery, clearSearch } = useDeviceSearch()
 
   return (
-    <header className="bg-white shadow-sm border-b">
+    <header className="bg-white dark:bg-card shadow-sm border-b dark:border-border">
       <div className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-foreground">{title}</h1>
             {subtitle && (
-              <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
+              <p className="text-sm text-gray-600 dark:text-muted-foreground mt-1">{subtitle}</p>
             )}
           </div>
           <div className="flex items-center gap-4">
@@ -36,13 +37,13 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                 placeholder="搜索设备..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="pl-10 pr-12 py-2 w-64"
+                className="pl-10 pr-12 py-2 w-56"
               />
               {query && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                   onClick={() => {
                     clearSearch()
                     setQuery('')
@@ -54,24 +55,24 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
               
               {/* 搜索结果下拉 */}
               {showResults && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-card border border-gray-200 dark:border-border rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
                   {searching ? (
-                    <div className="p-4 text-center text-gray-500">搜索中...</div>
+                    <div className="p-4 text-center text-gray-500 dark:text-muted-foreground">搜索中...</div>
                   ) : results.length > 0 ? (
                     <div className="py-2">
                       {results.map((device) => (
                         <div
                           key={device.id}
-                          className="px-4 py-2 hover:bg-gray-50 cursor-pointer flex items-center justify-between"
+                          className="px-4 py-2 hover:bg-gray-50 dark:hover:bg-accent/10 cursor-pointer flex items-center justify-between"
                         >
                           <div>
-                            <div className="font-medium text-gray-900">{device.name}</div>
-                            <div className="text-sm text-gray-600">{device.ip}</div>
+                            <div className="font-medium text-gray-900 dark:text-foreground">{device.name}</div>
+                            <div className="text-sm text-gray-600 dark:text-muted-foreground">{device.ip}</div>
                           </div>
                           <span className={`px-2 py-1 text-xs rounded-full ${
-                            device.status === 'online' ? 'bg-green-100 text-green-800' :
-                            device.status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
+                            device.status === 'online' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                            device.status === 'warning' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                            'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
                           }`}>
                             {device.status === 'online' ? '在线' :
                              device.status === 'warning' ? '告警' : '离线'}
@@ -80,11 +81,14 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                       ))}
                     </div>
                   ) : (
-                    <div className="p-4 text-center text-gray-500">没有找到匹配的设备</div>
+                    <div className="p-4 text-center text-gray-500 dark:text-muted-foreground">没有找到匹配的设备</div>
                   )}
                 </div>
               )}
             </div>
+
+            {/* 主题切换 */}
+            <ThemeToggle />
 
             {/* 通知按钮 */}
             <Button variant="ghost" size="icon" className="relative">

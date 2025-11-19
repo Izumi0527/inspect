@@ -37,7 +37,7 @@ export const ChartContainer: React.FC<ChartContainerProps> = ({
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     className={cn(
-      'rounded-xl bg-white/80 backdrop-blur-lg border border-gray-200/50 p-6',
+      'rounded-xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border border-gray-200/50 dark:border-gray-700/50 p-6',
       className
     )}
   >
@@ -45,10 +45,10 @@ export const ChartContainer: React.FC<ChartContainerProps> = ({
       <div className="flex items-center justify-between mb-4">
         <div>
           {title && (
-            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
           )}
           {subtitle && (
-            <p className="text-sm text-gray-600 mt-1">{subtitle}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{subtitle}</p>
           )}
         </div>
         {actions && <div>{actions}</div>}
@@ -89,6 +89,13 @@ export const LineChartComponent = <TData extends ChartDatum>({
   const margin = { top: 20, right: 30, bottom: 40, left: 50 }
   const innerWidth = width - margin.left - margin.right
   const innerHeight = height - margin.top - margin.bottom
+
+  // 深色模式检测
+  const isDark = typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
+  const gridColor = isDark ? '#374151' : '#e5e7eb'
+  const axisColor = isDark ? '#9CA3AF' : '#6b7280'
+  const tooltipBg = isDark ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)'
+  const tooltipBorder = isDark ? 'rgba(55, 65, 81, 0.5)' : 'rgba(229, 231, 235, 0.5)'
 
   const {
     showTooltip,
@@ -135,8 +142,8 @@ export const LineChartComponent = <TData extends ChartDatum>({
       <div style={{ position: 'relative', width: '100%', height }}>
         <svg width="100%" height={height}>
           <Group left={margin.left} top={margin.top}>
-            <GridRows scale={yScale} width={innerWidth} stroke="#e5e7eb" strokeDasharray="3,3" />
-            <GridColumns scale={xScale} height={innerHeight} stroke="#e5e7eb" strokeDasharray="3,3" />
+            <GridRows scale={yScale} width={innerWidth} stroke={gridColor} strokeDasharray="3,3" />
+            <GridColumns scale={xScale} height={innerHeight} stroke={gridColor} strokeDasharray="3,3" />
 
             {lines.map((line, idx) => {
               const lineKey = String(line.key)
@@ -172,15 +179,15 @@ export const LineChartComponent = <TData extends ChartDatum>({
             <AxisBottom
               top={innerHeight}
               scale={xScale}
-              stroke="#6b7280"
-              tickStroke="#6b7280"
-              tickLabelProps={() => ({ fill: '#6b7280', fontSize: 12, textAnchor: 'middle' })}
+              stroke={axisColor}
+              tickStroke={axisColor}
+              tickLabelProps={() => ({ fill: axisColor, fontSize: 12, textAnchor: 'middle' })}
             />
             <AxisLeft
               scale={yScale}
-              stroke="#6b7280"
-              tickStroke="#6b7280"
-              tickLabelProps={() => ({ fill: '#6b7280', fontSize: 12, textAnchor: 'end', dx: -4 })}
+              stroke={axisColor}
+              tickStroke={axisColor}
+              tickLabelProps={() => ({ fill: axisColor, fontSize: 12, textAnchor: 'end', dx: -4 })}
             />
           </Group>
         </svg>
@@ -192,22 +199,22 @@ export const LineChartComponent = <TData extends ChartDatum>({
             left={tooltipLeft}
             style={{
               ...defaultStyles,
-              background: 'rgba(255, 255, 255, 0.95)',
+              background: tooltipBg,
               backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(229, 231, 235, 0.5)',
+              border: `1px solid ${tooltipBorder}`,
               borderRadius: '8px',
               padding: '12px',
             }}
           >
-            <p className="text-sm font-medium text-gray-900 mb-2">{tooltipData.x}</p>
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">{tooltipData.x}</p>
             {tooltipData.values.map((entry, index) => (
               <div key={index} className="flex items-center gap-2 text-sm">
                 <div
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-gray-600">{entry.name}:</span>
-                <span className="font-medium text-gray-900">
+                <span className="text-gray-600 dark:text-gray-400">{entry.name}:</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">
                   {formatter ? formatter(entry.value, entry.name) : entry.value}
                 </span>
               </div>
@@ -298,6 +305,13 @@ export const BarChartComponent = <TData extends ChartDatum>({
   const innerWidth = width - margin.left - margin.right
   const innerHeight = height - margin.top - margin.bottom
 
+  // 深色模式检测
+  const isDark = typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
+  const gridColor = isDark ? '#374151' : '#e5e7eb'
+  const axisColor = isDark ? '#9CA3AF' : '#6b7280'
+  const tooltipBg = isDark ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)'
+  const tooltipBorder = isDark ? 'rgba(55, 65, 81, 0.5)' : 'rgba(229, 231, 235, 0.5)'
+
   const {
     showTooltip,
     hideTooltip,
@@ -327,7 +341,7 @@ export const BarChartComponent = <TData extends ChartDatum>({
       <div style={{ position: 'relative', width: '100%', height }}>
         <svg width="100%" height={height}>
           <Group left={margin.left} top={margin.top}>
-            <GridRows scale={yScale} width={innerWidth} stroke="#e5e7eb" strokeDasharray="3,3" />
+            <GridRows scale={yScale} width={innerWidth} stroke={gridColor} strokeDasharray="3,3" />
 
             {data.map((datum, i) => {
               const x = xScale(String(datum[xKey])) || 0
@@ -368,15 +382,15 @@ export const BarChartComponent = <TData extends ChartDatum>({
             <AxisBottom
               top={innerHeight}
               scale={xScale}
-              stroke="#6b7280"
-              tickStroke="#6b7280"
-              tickLabelProps={() => ({ fill: '#6b7280', fontSize: 12, textAnchor: 'middle' })}
+              stroke={axisColor}
+              tickStroke={axisColor}
+              tickLabelProps={() => ({ fill: axisColor, fontSize: 12, textAnchor: 'middle' })}
             />
             <AxisLeft
               scale={yScale}
-              stroke="#6b7280"
-              tickStroke="#6b7280"
-              tickLabelProps={() => ({ fill: '#6b7280', fontSize: 12, textAnchor: 'end', dx: -4 })}
+              stroke={axisColor}
+              tickStroke={axisColor}
+              tickLabelProps={() => ({ fill: axisColor, fontSize: 12, textAnchor: 'end', dx: -4 })}
             />
           </Group>
         </svg>
@@ -388,22 +402,22 @@ export const BarChartComponent = <TData extends ChartDatum>({
             left={tooltipLeft}
             style={{
               ...defaultStyles,
-              background: 'rgba(255, 255, 255, 0.95)',
+              background: tooltipBg,
               backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(229, 231, 235, 0.5)',
+              border: `1px solid ${tooltipBorder}`,
               borderRadius: '8px',
               padding: '12px',
             }}
           >
-            <p className="text-sm font-medium text-gray-900 mb-2">{tooltipData.x}</p>
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">{tooltipData.x}</p>
             {tooltipData.values.map((entry, index) => (
               <div key={index} className="flex items-center gap-2 text-sm">
                 <div
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-gray-600">{entry.name}:</span>
-                <span className="font-medium text-gray-900">
+                <span className="text-gray-600 dark:text-gray-400">{entry.name}:</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">
                   {formatter ? formatter(entry.value, entry.name) : entry.value}
                 </span>
               </div>
@@ -443,6 +457,11 @@ export const PieChartComponent: React.FC<PieChartProps> = ({
     ...item,
     color: item.color || colors[index % colors.length]
   }))
+
+  // 深色模式检测
+  const isDark = typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
+  const tooltipBg = isDark ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)'
+  const tooltipBorder = isDark ? 'rgba(55, 65, 81, 0.5)' : 'rgba(229, 231, 235, 0.5)'
 
   const {
     showTooltip,
@@ -501,9 +520,9 @@ export const PieChartComponent: React.FC<PieChartProps> = ({
             left={tooltipLeft}
             style={{
               ...defaultStyles,
-              background: 'rgba(255, 255, 255, 0.95)',
+              background: tooltipBg,
               backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(229, 231, 235, 0.5)',
+              border: `1px solid ${tooltipBorder}`,
               borderRadius: '8px',
               padding: '12px',
             }}
@@ -513,8 +532,8 @@ export const PieChartComponent: React.FC<PieChartProps> = ({
                 className="w-3 h-3 rounded-full"
                 style={{ backgroundColor: tooltipData.color }}
               />
-              <span className="text-gray-600">{tooltipData.name}:</span>
-              <span className="font-medium text-gray-900">
+              <span className="text-gray-600 dark:text-gray-400">{tooltipData.name}:</span>
+              <span className="font-medium text-gray-900 dark:text-gray-100">
                 {formatter ? formatter(tooltipData.value, tooltipData.name) : tooltipData.value}
               </span>
             </div>
@@ -588,7 +607,7 @@ export const CircularProgress: React.FC<CircularProgressProps> = ({
           {/* 中心文字 */}
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {Math.round(percentage)}%
               </div>
             </div>
@@ -638,18 +657,18 @@ export const MetricCard: React.FC<MetricCardProps> = ({
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       className={cn(
-        'rounded-xl bg-white/80 backdrop-blur-lg border border-gray-200/50 p-6',
+        'rounded-xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border border-gray-200/50 dark:border-gray-700/50 p-6',
         className
       )}
     >
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-gray-600">{title}</h3>
+        <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">{title}</h3>
         <div className={cn('w-2 h-2 rounded-full', colorClasses[color as keyof typeof colorClasses])} />
       </div>
       <div className="flex items-baseline justify-between">
         <div>
-          <span className="text-2xl font-bold text-gray-900">{value}</span>
-          {unit && <span className="text-sm text-gray-600 ml-1">{unit}</span>}
+          <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</span>
+          {unit && <span className="text-sm text-gray-600 dark:text-gray-400 ml-1">{unit}</span>}
         </div>
         {trend && trendValue && (
           <div className={cn('text-sm font-medium', trendColors[trend])}>

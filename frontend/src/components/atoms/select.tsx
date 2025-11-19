@@ -17,11 +17,11 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-12 w-full items-center justify-between rounded-xl border border-gray-200/50 bg-white/80 backdrop-blur-lg px-4 py-3 text-base ring-offset-background',
-      'placeholder:text-gray-500',
-      'focus:border-purple-400 focus:bg-white focus:ring-2 focus:ring-purple-400/20 focus:outline-none',
+      'flex h-12 w-full items-center justify-between rounded-xl border border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg px-4 py-3 text-base dark:text-gray-100 ring-offset-background',
+      'placeholder:text-gray-500 dark:placeholder:text-gray-400',
+      'focus:border-purple-400 focus:bg-white dark:focus:bg-gray-800 focus:ring-2 focus:ring-purple-400/20 focus:outline-none',
       'disabled:cursor-not-allowed disabled:opacity-50',
-      'hover:border-gray-300',
+      'hover:border-gray-300 dark:hover:border-gray-600',
       '[&>span]:line-clamp-1',
       className
     )}
@@ -77,7 +77,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-xl border border-gray-200/20 bg-white/95 backdrop-blur-xl text-gray-950 shadow-2xl',
+        'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-xl border border-gray-200/20 dark:border-gray-700/20 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl text-gray-950 dark:text-gray-100 shadow-2xl',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -112,7 +112,7 @@ const SelectLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Label
     ref={ref}
-    className={cn('py-1.5 pl-8 pr-2 text-sm font-semibold text-gray-900', className)}
+    className={cn('py-1.5 pl-8 pr-2 text-sm font-semibold text-gray-900 dark:text-gray-100', className)}
     {...props}
   />
 ))
@@ -126,9 +126,9 @@ const SelectItem = React.forwardRef<
     ref={ref}
     className={cn(
       'relative flex w-full cursor-default select-none items-center rounded-lg py-2 pl-8 pr-2 text-sm outline-none',
-      'focus:bg-purple-100/50 focus:text-purple-900',
+      'focus:bg-purple-100/50 dark:focus:bg-purple-900/30 focus:text-purple-900 dark:focus:text-purple-100',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-      'hover:bg-gray-100/50',
+      'hover:bg-gray-100/50 dark:hover:bg-gray-700/50',
       className
     )}
     {...props}
@@ -149,7 +149,7 @@ const SelectSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Separator
     ref={ref}
-    className={cn('-mx-1 my-1 h-px bg-gray-200', className)}
+    className={cn('-mx-1 my-1 h-px bg-gray-200 dark:bg-gray-700', className)}
     {...props}
   />
 ))
@@ -208,17 +208,17 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex h-12 w-full items-center justify-between rounded-xl border border-gray-200/50 bg-white/80 backdrop-blur-lg px-4 py-3 text-base',
-          'placeholder:text-gray-500',
-          'focus:border-purple-400 focus:bg-white focus:ring-2 focus:ring-purple-400/20 focus:outline-none',
+          'flex h-12 w-full items-center justify-between rounded-xl border border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg px-4 py-3 text-base dark:text-gray-100',
+          'placeholder:text-gray-500 dark:placeholder:text-gray-400',
+          'focus:border-purple-400 focus:bg-white dark:focus:bg-gray-800 focus:ring-2 focus:ring-purple-400/20 focus:outline-none',
           'disabled:cursor-not-allowed disabled:opacity-50',
-          'hover:border-gray-300',
+          'hover:border-gray-300 dark:hover:border-gray-600',
           'text-left'
         )}
       >
         <span className={cn(
           'block truncate',
-          value.length === 0 && 'text-gray-500'
+          value.length === 0 && 'text-gray-500 dark:text-gray-400'
         )}>
           {displayText}
         </span>
@@ -233,7 +233,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
-          className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200/20 bg-white/95 backdrop-blur-xl shadow-2xl"
+          className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200/20 dark:border-gray-700/20 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl shadow-2xl"
         >
           <div className="max-h-60 overflow-auto p-1">
             {options.map((option) => (
@@ -253,7 +253,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                   'flex h-4 w-4 items-center justify-center rounded border-2 transition-colors',
                   value.includes(option.value)
                     ? 'border-purple-500 bg-purple-500 text-white'
-                    : 'border-gray-300 bg-white'
+                    : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700'
                 )}>
                   {value.includes(option.value) && (
                     <Check className="h-3 w-3" />
@@ -265,11 +265,11 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
           </div>
           
           {value.length > 0 && (
-            <div className="border-t border-gray-200 p-2">
+            <div className="border-t border-gray-200 dark:border-gray-700 p-2">
               <button
                 type="button"
                 onClick={() => onChange([])}
-                className="w-full rounded-lg px-3 py-2 text-xs text-gray-600 hover:bg-gray-100/50 transition-colors"
+                className="w-full rounded-lg px-3 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100/50 dark:hover:bg-gray-700/50 transition-colors"
               >
                 清空选择
               </button>
@@ -321,7 +321,7 @@ const SimpleSelect: React.FC<SimpleSelectProps> = ({
         </SelectContent>
       </Select>
       {error && (
-        <p className="mt-1 text-sm text-red-600">{error}</p>
+        <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
     </div>
   )
