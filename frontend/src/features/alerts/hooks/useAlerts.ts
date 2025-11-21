@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Alert, AlertFilters, AlertStats, AlertQueryParams, AlertSeverity, AlertStatus, AlertAction } from '../types'
 import { 
   fetchAlerts, 

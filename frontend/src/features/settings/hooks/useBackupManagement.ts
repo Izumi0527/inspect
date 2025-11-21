@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { backupApi } from '../api/backup.api'
 import type {
   BackupConfig,
-  BackupRecord,
   BackupManagementResponse,
   CreateBackupRequest,
   RestoreBackupRequest,

@@ -25,7 +25,7 @@ const Input = React.forwardRef<
 Input.displayName = 'Input'
 
 // Simple Input wrapper with error support
-interface SimpleInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface SimpleInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   error?: string
   leftIcon?: React.ReactNode
   rightIcon?: React.ReactNode

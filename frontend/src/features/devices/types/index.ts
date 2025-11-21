@@ -93,11 +93,11 @@ export interface Device {
 
   // 兼容性字�?- 保持向后兼容
   snmp_community?: string
-  snmp_version?: string
-  ssh_username?: string
-  ssh_password?: string
+  snmp_version?: string | null
+  ssh_username?: string | null
+  ssh_password?: string | null
   vendor?: string
-  ssh_port?: number
+  ssh_port?: number | null
   tags?: Record<string, unknown> | null
 
   created_at?: string

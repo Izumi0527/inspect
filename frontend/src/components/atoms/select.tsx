@@ -156,13 +156,13 @@ const SelectSeparator = React.forwardRef<
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName
 
 // 多选下拉框组件
-interface MultiSelectOption {
+export interface MultiSelectOption {
   value: string
   label: string
   disabled?: boolean
 }
 
-interface MultiSelectProps {
+export interface MultiSelectProps {
   options: MultiSelectOption[]
   value: string[]
   onChange: (value: string[]) => void
@@ -290,7 +290,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
 }
 
 // 简单下拉选择器包装器 - 提供 onChange 接口和 error 支持
-interface SimpleSelectProps {
+export interface SimpleSelectProps {
   value?: string
   onChange?: (value: string) => void
   placeholder?: string
@@ -338,5 +338,5 @@ export {
   SelectSeparator,
   SelectScrollUpButton,
   SelectScrollDownButton,
-  SimpleSelect,
+  SimpleSelect
 }

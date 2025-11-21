@@ -1,8 +1,11 @@
 import React from 'react'
-import { Search, Bell } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Search } from 'lucide-react'
 import { Button, Input } from '@/components/atoms'
 import { ThemeToggle } from '@/components/molecules'
 import { useDeviceSearch } from '../hooks/useDashboard'
+import { NotificationCenter } from './NotificationCenter'
+import { UserMenu } from './UserMenu'
 
 interface DashboardHeaderProps {
   title?: string
@@ -16,6 +19,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   subtitle,
   alertCount = 0
 }) => {
+  const router = useRouter()
   const { query, results, searching, showResults, setQuery, clearSearch } = useDeviceSearch()
 
   return (
@@ -90,15 +94,14 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
             {/* 主题切换 */}
             <ThemeToggle />
 
-            {/* 通知按钮 */}
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="w-5 h-5" />
-              {alertCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                  {alertCount > 9 ? '9+' : alertCount}
-                </span>
-              )}
-            </Button>
+            {/* 通知中心 */}
+            <NotificationCenter
+              alertCount={alertCount}
+              onViewAll={() => router.push('/alerts')}
+            />
+
+            {/* 用户菜单 */}
+            <UserMenu />
           </div>
         </div>
       </div>

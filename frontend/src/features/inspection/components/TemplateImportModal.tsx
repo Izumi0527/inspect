@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X, Upload, FileText, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { X, Upload, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import {
   Button,
   Badge,

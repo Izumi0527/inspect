@@ -35,6 +35,8 @@ interface AlertsListDto {
   alerts?: AlertDto[]
   total?: number
   pages?: number
+  page?: number
+  page_size?: number
   current_page?: number
   has_next?: boolean
   has_prev?: boolean

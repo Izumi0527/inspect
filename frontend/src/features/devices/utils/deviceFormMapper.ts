@@ -86,7 +86,7 @@ export const buildFormInitialData = (device?: Device | null): Partial<Device> | 
     device.cli_protocol ||
     (device.ssh_username || device.ssh_password ? 'ssh' : 'none')
 
-  const normalizeVersion = (version?: string) => {
+  const normalizeVersion = (version?: string | null) => {
     if (!version) return 'v2c'
     if (version === '2c' || version === 'v2c') return 'v2c'
     if (version === '3' || version === 'v3') return 'v3'

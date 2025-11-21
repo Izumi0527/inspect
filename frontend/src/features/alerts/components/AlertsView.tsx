@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { AppLayout } from '@/components/layout'
 import {
   useAlerts,
@@ -10,6 +11,7 @@ import { AlertStatsGrid } from './AlertStatsGrid'
 import { AlertAction } from '../types'
 import { AlertFiltersBar } from './AlertFiltersBar'
 import { AlertList } from './AlertList'
+import { AlertDetailModal } from './AlertDetailModal'
 import { SkeletonCard, SkeletonList } from '@/components/atoms/skeleton'
 import { AdvancedFilters, AdvancedFilterValues } from './AdvancedFilters'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -23,9 +25,11 @@ import {
 import { Download, CheckCheck, XCircle } from 'lucide-react'
 
 export const AlertsView: React.FC = () => {
+  const searchParams = useSearchParams()
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterValues>({})
+  const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null)
 
   // 获取过滤器状态
   const { filters, updateFilter } = useAlertFilters()
@@ -99,6 +103,19 @@ export const AlertsView: React.FC = () => {
     clearSelection,
     handleBulkAction
   } = useAlertSelection()
+  const selectedAlert = useMemo(
+    () => alerts.find(alert => alert.id === selectedAlertId) ?? null,
+    [alerts, selectedAlertId]
+  )
+
+  // 处理 URL 参数中的告警 ID
+  useEffect(() => {
+    const alertId = searchParams.get('id')
+    if (alertId) {
+      // 如果 URL 中有告警 ID，自动打开详情弹窗
+      setSelectedAlertId(alertId)
+    }
+  }, [searchParams])
 
   // 处理批量操作
   const handleBulkActionClick = async (action: AlertAction) => {
@@ -135,6 +152,11 @@ export const AlertsView: React.FC = () => {
     setAdvancedFilters({})
     // 重置时也回到第一页
     setCurrentPage(1)
+  }
+
+  // 处理关闭告警详情
+  const handleCloseAlertDetail = () => {
+    setSelectedAlertId(null)
   }
 
   if (error) {
@@ -255,6 +277,15 @@ export const AlertsView: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* 告警详情弹窗 */}
+      {selectedAlertId && (
+        <AlertDetailModal
+          open={!!selectedAlertId}
+          alert={selectedAlert}
+          onClose={handleCloseAlertDetail}
+        />
+      )}
     </AppLayout>
   )
 }

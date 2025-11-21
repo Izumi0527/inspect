@@ -7,7 +7,6 @@ import type {
   EmailNotificationConfig,
   SmsNotificationConfig,
   WebhookNotificationConfig,
-  NotificationSettingsResponse,
 } from '../types/notification.types'
 
 export function useNotificationSettings() {

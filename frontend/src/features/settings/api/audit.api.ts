@@ -1,6 +1,5 @@
 import { httpClient, TokenManager } from '@/lib/api-client'
 import type {
-  AuditLog,
   AuditLogListResponse,
   AuditStats,
   AuditLogQueryParams,

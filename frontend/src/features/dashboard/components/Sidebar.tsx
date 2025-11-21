@@ -8,13 +8,11 @@ import {
   Database,
   Settings,
   Menu,
-  LogOut,
   ChevronRight,
   Search
 } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { NavigationItem } from '../types'
-import { useAuth } from '@/lib/contexts/auth-context'
 
 interface SidebarProps {
   isOpen: boolean
@@ -27,8 +25,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggle,
   currentPath = '/dashboard'
 }) => {
-  const { logout } = useAuth()
-
   const navItems: NavigationItem[] = [
     { name: '总览', icon: Home, href: '/dashboard' },
     { name: '设备管理', icon: Monitor, href: '/devices' },
@@ -38,10 +34,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { name: '报表分析', icon: Database, href: '/reports' },
     { name: '系统设置', icon: Settings, href: '/settings' },
   ]
-
-  const handleLogout = () => {
-    logout()
-  }
 
   return (
     <div className={`fixed inset-y-0 left-0 z-50 ${isOpen ? 'w-64' : 'w-20'} bg-white dark:bg-card shadow-lg dark:border-r dark:border-border transform transition-all duration-300`}>
@@ -84,17 +76,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )
         })}
       </nav>
-
-      <div className="absolute bottom-0 w-full p-4 border-t dark:border-border">
-        <Button
-          variant="ghost"
-          onClick={handleLogout}
-          className="w-full justify-start text-gray-600 dark:text-muted-foreground hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-        >
-          <LogOut className="w-5 h-5" />
-          {isOpen && <span className="ml-3">退出登录</span>}
-        </Button>
-      </div>
     </div>
   )
 }

@@ -27,9 +27,10 @@ interface DeviceDto {
   alert_count?: number
   description?: string
   snmp_community?: string
+  snmp_version?: string
   ssh_username?: string
   ssh_password?: string
-  ssh_port?: number
+  ssh_port?: number | null
   tags?: Record<string, unknown> | string | null
   created_at?: string
   updated_at?: string
@@ -83,6 +84,12 @@ const unwrapPayload = <T>(payload: unknown): T | undefined => {
 
 const isDeviceDto = (candidate: unknown): candidate is DeviceDto =>
   isObject(candidate) && typeof candidate.id === 'number' && typeof candidate.name === 'string' && typeof candidate.ip_address === 'string'
+
+const isApiResponse = <T>(candidate: unknown): candidate is ApiResponse<T> =>
+  typeof candidate === 'object' &&
+  candidate !== null &&
+  'success' in (candidate as Record<string, unknown>) &&
+  'data' in (candidate as Record<string, unknown>)
 
 const mapDevice = (dto: DeviceDto): Device => {
   const parsedTags = (() => {
@@ -179,10 +186,9 @@ export async function fetchDevice(id: number): Promise<Device | null> {
     // 兼容两种响应格式
     if (isObject(payload)) {
       // 格式1: 标准 ApiResponse<DeviceDto>
-      if ('success' in payload && 'data' in payload) {
-        const apiResponse = payload as ApiResponse<DeviceDto>
-        if (apiResponse.success && apiResponse.data) {
-          return mapDevice(apiResponse.data)
+      if (isApiResponse<DeviceDto>(payload)) {
+        if (payload.success && payload.data) {
+          return mapDevice(payload.data)
         }
         return null
       }
@@ -207,7 +213,7 @@ export async function createDevice(device: Omit<Device, 'id' | 'created_at' | 'u
   if (isObject(payload)) {
     // 格式1: 标准 ApiResponse<DeviceDto>
     if ('success' in payload && 'data' in payload) {
-      const apiResponse = payload as ApiResponse<DeviceDto>
+      const apiResponse = payload as unknown as ApiResponse<DeviceDto>
       if (apiResponse.success && apiResponse.data) {
         return mapDevice(apiResponse.data)
       }
@@ -230,7 +236,7 @@ export async function updateDevice(id: number, updates: Partial<Device>): Promis
   if (isObject(payload)) {
     // 格式1: 标准 ApiResponse<DeviceDto>
     if ('success' in payload && 'data' in payload) {
-      const apiResponse = payload as ApiResponse<DeviceDto>
+      const apiResponse = payload as unknown as ApiResponse<DeviceDto>
       if (apiResponse.success && apiResponse.data) {
         return mapDevice(apiResponse.data)
       }
@@ -252,8 +258,8 @@ export async function deleteDevice(id: number): Promise<boolean> {
   // 兼容两种响应格式
   if (isObject(payload)) {
     // 格式1: 标准 ApiResponse
-    if ('success' in payload) {
-      return (payload as ApiResponse<unknown>).success
+    if (isApiResponse<unknown>(payload)) {
+      return payload.success
     }
 
     // 格式2: 直接返回 {success: boolean} 或其他对象
@@ -373,7 +379,7 @@ export async function fetchDeviceStats(): Promise<Record<string, unknown>> {
   if (isObject(payload)) {
     // 格式1: 标准 ApiResponse
     if ('success' in payload && 'data' in payload) {
-      const apiResponse = payload as ApiResponse<Record<string, unknown>>
+      const apiResponse = payload as unknown as ApiResponse<Record<string, unknown>>
       if (apiResponse.success && apiResponse.data) {
         return apiResponse.data
       }
@@ -394,7 +400,7 @@ export async function healthCheckDevice(id: number): Promise<Record<string, unkn
   if (isObject(payload)) {
     // 格式1: 标准 ApiResponse
     if ('success' in payload && 'data' in payload) {
-      const apiResponse = payload as ApiResponse<Record<string, unknown>>
+      const apiResponse = payload as unknown as ApiResponse<Record<string, unknown>>
       if (apiResponse.success) {
         return apiResponse.data ?? {}
       }
@@ -419,7 +425,7 @@ export async function fetchDevicePerformance(
   if (isObject(payload)) {
     // 格式1: 标准 ApiResponse
     if ('success' in payload && 'data' in payload) {
-      const apiResponse = payload as ApiResponse<Record<string, unknown>>
+      const apiResponse = payload as unknown as ApiResponse<Record<string, unknown>>
       if (apiResponse.success && apiResponse.data) {
         return apiResponse.data
       }

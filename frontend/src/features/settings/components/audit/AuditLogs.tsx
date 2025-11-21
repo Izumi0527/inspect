@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { FileText, Download, Filter, CheckCircle, XCircle } from 'lucide-react'
+import { FileText, Download, CheckCircle, XCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import type { AuditAction } from '../../types/audit.types'
 

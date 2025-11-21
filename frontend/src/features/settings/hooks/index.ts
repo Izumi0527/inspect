@@ -1,6 +1,7 @@
 export * from './useSystemConfig'
 export * from './useUserManagement'
 export * from './useRoleManagement'
+export * from './useUsers'
 export * from './useAuditLog'
 export * from './useBackup'
 export * from './useSystemMonitoring'

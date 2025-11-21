@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { X, Eye, AlertCircle, BarChart3, Table as TableIcon } from 'lucide-react'

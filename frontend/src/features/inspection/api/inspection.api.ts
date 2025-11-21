@@ -9,7 +9,8 @@ import {
   InspectionSummary,
   DeviceInspectionResult,
   InspectionCheckItem,
-  CheckResult
+  CheckResult,
+  InspectionStrategy
 } from '../types'
 
 type UnknownRecord = Record<string, unknown>
@@ -151,6 +152,7 @@ interface TrendPoint {
   success: number
   failed: number
   avgScore: number
+  [key: string]: string | number
 }
 
 const mapTrendPoint = (value: unknown): TrendPoint => {

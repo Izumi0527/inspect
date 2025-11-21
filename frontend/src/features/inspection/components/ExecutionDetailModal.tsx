@@ -3,7 +3,6 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  X,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -18,7 +17,7 @@ import {
 import { SimpleModal } from '@/components/atoms/modal'
 import { Badge } from '@/components/atoms/badge'
 import { cn } from '@/utils/cn'
-import type { InspectionExecution, DeviceInspectionResult, CheckResult } from '../types'
+import type { InspectionExecution } from '../types'
 
 interface ExecutionDetailModalProps {
   open: boolean

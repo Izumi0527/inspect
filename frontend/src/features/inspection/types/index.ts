@@ -217,7 +217,10 @@ export interface DeviceInspectionResult {
   /** 设备类型 */
   deviceType: string
 
-  /** 设备巡检整体状态 */
+  /** 设备IP地址 */
+  deviceIp?: string
+
+  /** 设备巡检状态 */
   status: DeviceStatus
 
   /** 设备巡检得分 0-100 */
@@ -226,7 +229,13 @@ export interface DeviceInspectionResult {
   /** 所有检查项的结果列表 */
   checkResults: CheckResult[]
 
-  /** 设备巡检执行总耗时(毫秒) */
+  /** 通过检查数 */
+  passedChecks?: number
+
+  /** 检查总数 */
+  totalChecks?: number
+
+  /** 设备巡检执行总耗时(秒) */
   executionTime: number
 }
 
@@ -486,3 +495,5 @@ export interface InspectionResult {
   /** 创建时间 */
   createdAt: string
 }
+
+

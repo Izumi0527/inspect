@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react'
-import { Upload, Download, FileText, AlertCircle, CheckCircle } from 'lucide-react'
+import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react'
 import {
   Modal,
   ModalContent,
@@ -65,7 +65,7 @@ const FIELD_DEFINITIONS: FieldDefinition[] = [
   { key: 'ssh_password', label: 'SSH 密码', required: false }
 ]
 
-const DEVICE_TYPES: Array<{ value: DeviceType; label: string }> = [
+const _DEVICE_TYPES: Array<{ value: DeviceType; label: string }> = [
   { value: 'switch', label: '交换机' },
   { value: 'router', label: '路由器' },
   { value: 'firewall', label: '防火墙' },
@@ -214,7 +214,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
     setStep('preview')
   }
 
-  const downloadTemplate = () => {
+  const _downloadTemplate = () => {
     const headerLine = '设备名称,IP地址,设备类型,位置,描述,SNMP团体字符串,SSH用户名,SSH密码'
     const sampleLines = [
       '核心交换机1,192.168.1.1,switch,数据中心A,核心网络设备,public,admin,',

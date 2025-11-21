@@ -7,7 +7,6 @@ import type {
   SessionManagementConfig,
   PasswordPolicyConfig,
   AuthenticationConfig,
-  SecuritySettingsResponse,
 } from '../types/security.types'
 
 export function useSecuritySettings() {

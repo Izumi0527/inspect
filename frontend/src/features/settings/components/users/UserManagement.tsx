@@ -11,14 +11,11 @@ import {
   Users,
   UserPlus,
   Search,
-  MoreVertical,
-  Edit,
   Trash2,
   Lock,
   Unlock,
   CheckCircle,
   XCircle,
-  AlertCircle,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import type { User, UserRole, UserStatus } from '../../types/users.types'

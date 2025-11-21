@@ -8,7 +8,7 @@ interface ConfigInputProps {
   onChange?: (value: string) => void
   placeholder?: string
   disabled?: boolean
-  type?: 'text' | 'number' | 'email' | 'password' | 'url'
+  type?: 'text' | 'number' | 'email' | 'password' | 'url' | 'time'
   min?: number
   max?: number
   className?: string
