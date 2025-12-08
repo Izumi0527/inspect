@@ -1,0 +1,171 @@
+import { useMemo } from 'react'
+import { motion } from 'framer-motion'
+import { ChartContainer } from '@/components/atoms/charts'
+import type { AvailabilityData } from '../../types'
+
+interface AvailabilityGaugeChartProps {
+  data: AvailabilityData
+  size?: number
+  strokeWidth?: number
+  className?: string
+}
+
+/**
+ * 整体可用性环形进度条
+ *
+ * 以环形进度条形式展示系统可用性
+ * - 90-100%: 绿色 (优秀)
+ * - 80-90%: 黄色 (警告)
+ * - <80%: 红色 (严重)
+ */
+export function AvailabilityGaugeChart({
+  data,
+  size = 160,
+  strokeWidth = 12,
+  className,
+}: AvailabilityGaugeChartProps) {
+  // 计算颜色
+  const gaugeColor = useMemo(() => {
+    if (data.current >= 90) return '#10B981' // 绿色
+    if (data.current >= 80) return '#F59E0B' // 黄色
+    return '#EF4444' // 红色
+  }, [data.current])
+
+  // 计算与目标的差值
+  const diffFromTarget = useMemo(() => {
+    const diff = data.current - data.target
+    const sign = diff >= 0 ? '+' : ''
+    return `${sign}${diff.toFixed(2)}%`
+  }, [data.current, data.target])
+
+  // 趋势图标和颜色
+  const trendConfig = useMemo(() => {
+    switch (data.trend) {
+      case 'up':
+        return { icon: '↑', color: 'text-green-600', label: '上升' }
+      case 'down':
+        return { icon: '↓', color: 'text-red-600', label: '下降' }
+      case 'stable':
+        return { icon: '→', color: 'text-gray-600', label: '稳定' }
+    }
+  }, [data.trend])
+
+  // 环形进度条参数
+  const radius = (size - strokeWidth) / 2
+  const circumference = radius * 2 * Math.PI
+  const strokeDasharray = `${circumference} ${circumference}`
+  const strokeDashoffset = circumference - (data.current / 100) * circumference
+
+  // 深色模式检测
+  const isDark =
+    typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
+  const bgColor = isDark ? '#374151' : '#E5E7EB'
+
+  return (
+    <ChartContainer className={className}>
+      <div className="flex flex-col items-center justify-center">
+        {/* 环形进度条 */}
+        <div className="relative mb-6">
+          <svg className="-rotate-90 transform" width={size} height={size}>
+            {/* 背景圆环 */}
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke={bgColor}
+              strokeWidth={strokeWidth}
+              fill="none"
+            />
+            {/* 进度圆环 */}
+            <motion.circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke={gaugeColor}
+              strokeWidth={strokeWidth}
+              fill="none"
+              strokeDasharray={strokeDasharray}
+              initial={{ strokeDashoffset: circumference }}
+              animate={{ strokeDashoffset }}
+              transition={{ duration: 1, ease: 'easeInOut' }}
+              strokeLinecap="round"
+            />
+          </svg>
+          {/* 中心文字 */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <div
+                className="text-4xl font-bold"
+                style={{ color: gaugeColor }}
+              >
+                {data.current.toFixed(2)}%
+              </div>
+              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">可用性</div>
+            </div>
+          </div>
+        </div>
+
+        {/* 详细信息 */}
+        <div className="w-full space-y-2">
+          {/* 目标对比 */}
+          <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2 dark:bg-gray-800">
+            <span className="text-sm text-gray-600 dark:text-gray-400">目标值</span>
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-gray-900 dark:text-gray-100">
+                {data.target}%
+              </span>
+              <span
+                className={`text-sm font-medium ${data.current >= data.target ? 'text-green-600' : 'text-red-600'}`}
+              >
+                ({diffFromTarget})
+              </span>
+            </div>
+          </div>
+
+          {/* 趋势 */}
+          <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2 dark:bg-gray-800">
+            <span className="text-sm text-gray-600 dark:text-gray-400">趋势</span>
+            <div className="flex items-center gap-2">
+              <span className={`text-xl ${trendConfig.color}`}>{trendConfig.icon}</span>
+              <span className={`text-sm font-medium ${trendConfig.color}`}>
+                {trendConfig.label}
+              </span>
+            </div>
+          </div>
+
+          {/* 最后更新时间 */}
+          {data.lastUpdate && (
+            <div className="mt-4 text-center text-xs text-gray-500 dark:text-gray-400">
+              更新于:{' '}
+              {new Date(data.lastUpdate).toLocaleString('zh-CN', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 评级标识 */}
+        <div className="mt-6 flex gap-2 text-xs">
+          <div
+            className={`rounded px-2 py-1 ${data.current >= 90 ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}
+          >
+            优秀 (≥90%)
+          </div>
+          <div
+            className={`rounded px-2 py-1 ${data.current >= 80 && data.current < 90 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}
+          >
+            警告 (80-90%)
+          </div>
+          <div
+            className={`rounded px-2 py-1 ${data.current < 80 ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}
+          >
+            严重 (&lt;80%)
+          </div>
+        </div>
+      </div>
+    </ChartContainer>
+  )
+}

@@ -1,5 +1,19 @@
 ﻿import { api } from '@/lib/api-client'
-import { NetworkStat, DeviceMonitoringStatus, NetworkTraffic, AlertSummary, MonitoringData } from '../types'
+import {
+  NetworkStat,
+  DeviceMonitoringStatus,
+  NetworkTraffic,
+  AlertSummary,
+  MonitoringData,
+  SystemPerformanceDataPoint,
+  TemperatureDataPoint,
+  DeviceStatusDistribution,
+  AvailabilityData,
+  NetworkTrafficDataPoint,
+  StatCardData,
+  Alert,
+  MonitoringDataV2,
+} from '../types'
 
 /**
  * 监控模块 API 接口
@@ -387,7 +401,369 @@ function getColorForMetric(name: string): string {
 // 导出别名函数以保持向后兼容
 export const fetchMonitoringData = fetchMonitoringOverview
 export const fetchDeviceStatus = fetchDeviceMonitoringStatus
-export const exportMonitoringReport = async (_params: unknown) => {
-  void _params
-  throw new Error('exportMonitoringReport API 暂未实现')
+
+/**
+ * 导出监控报告参数
+ */
+export interface ExportMonitoringReportParams {
+  /** 导出格式 */
+  format: 'pdf' | 'excel' | 'csv'
+  /** 时间范围 */
+  time_range: string
+  /** 包含的部分 */
+  sections: string[]
 }
+
+/**
+ * 导出监控报告响应
+ */
+export interface ExportMonitoringReportResponse {
+  /** 导出格式 */
+  format: string
+  /** 时间范围 */
+  time_range: string
+  /** 包含的部分 */
+  sections: string[]
+  /** 生成时间 */
+  generated_at: string
+  /** 下载链接 */
+  download_url: string
+  /** 状态 */
+  status: string
+}
+
+/**
+ * 导出监控报告
+ * @param params - 导出参数
+ * @returns 报告元数据
+ */
+export const exportMonitoringReport = async (
+  params: ExportMonitoringReportParams
+): Promise<ExportMonitoringReportResponse> => {
+  return await api.post<ExportMonitoringReportResponse>('/monitoring/reports/export', params)
+}
+
+/**
+ * ════════════════════════════════════════════════��══════════
+ * 监控中心 v1.1 API - 扩展接口
+ * ═══════════════════════════════════════════════════════════
+ */
+
+/**
+ * 获取系统性能历史数据
+ * @param timeRange - 时间范围 (24h, 7d, 30d)
+ * @returns 系统性能数据点数组
+ */
+export async function fetchSystemPerformanceHistory(
+  timeRange: string = '24h'
+): Promise<SystemPerformanceDataPoint[]> {
+  try {
+    const { start, end } = resolveTimeRange(timeRange)
+
+    const response = await api.post('/monitoring/system/performance', {
+      start_time: start,
+      end_time: end,
+      metrics: ['cpu_usage', 'memory_usage', 'network_traffic'],
+    })
+
+    // 转换后端数据格式
+    if (Array.isArray(response) && response.length > 0) {
+      return response.map((point: any) => ({
+        timestamp: point.timestamp || point.time || new Date().toISOString(),
+        cpu: point.cpu_usage ?? point.cpu ?? 0,
+        memory: point.memory_usage ?? point.memory ?? 0,
+        network: point.network_traffic ?? point.network ?? 0,
+      }))
+    }
+
+    return []
+  } catch (error) {
+    console.error('获取系统性能历史失败:', error)
+    throw error instanceof Error ? error : new Error('获取系统性能历史失败')
+  }
+}
+
+/**
+ * 获取设备温度历史数据
+ * @param timeRange - 时间范围
+ * @returns 温度历史数据点数组
+ */
+export async function fetchTemperatureHistory(
+  timeRange: string = '24h'
+): Promise<TemperatureDataPoint[]> {
+  try {
+    const { start, end } = resolveTimeRange(timeRange)
+
+    const response = await api.post('/monitoring/devices/temperature', {
+      start_time: start,
+      end_time: end,
+    })
+
+    // 转换后端数据格式
+    if (Array.isArray(response) && response.length > 0) {
+      return response.map((point: any) => ({
+        timestamp: point.timestamp || point.time || new Date().toISOString(),
+        devices: point.devices || point.temperatures || {},
+      }))
+    }
+
+    return []
+  } catch (error) {
+    console.error('获取温度历史失败:', error)
+    throw error instanceof Error ? error : new Error('获取温度历史失败')
+  }
+}
+
+/**
+ * 获取设备状态分布
+ * @returns 设备状态分布统计
+ */
+export async function fetchDeviceStatusDistribution(): Promise<DeviceStatusDistribution> {
+  try {
+    const response = await api.get<any>('/monitoring/devices/distribution')
+
+    return {
+      healthy: response?.healthy ?? response?.normal ?? 0,
+      warning: response?.warning ?? response?.degraded ?? 0,
+      critical: response?.critical ?? response?.error ?? response?.down ?? 0,
+      offline: response?.offline ?? response?.inactive ?? 0,
+    }
+  } catch (error) {
+    console.error('获取设备状态分布失败:', error)
+    throw error instanceof Error ? error : new Error('获取设备状态分布失败')
+  }
+}
+
+/**
+ * 获取整体可用性数据
+ * @returns 可用性数据
+ */
+export async function fetchAvailabilityData(): Promise<AvailabilityData> {
+  try {
+    const response = await api.get<any>('/monitoring/availability')
+
+    return {
+      current: response?.current ?? response?.availability ?? 99.5,
+      target: response?.target ?? response?.sla ?? 99.9,
+      trend: response?.trend ?? 'stable',
+    }
+  } catch (error) {
+    console.error('获取可用性数据失败:', error)
+    throw error instanceof Error ? error : new Error('获取可用性数据失败')
+  }
+}
+
+/**
+ * 获取网络流量历史数据
+ * @param timeRange - 时间范围
+ * @returns 网络流量历史数据点数组
+ */
+export async function fetchNetworkTrafficHistory(
+  timeRange: string = '24h'
+): Promise<NetworkTrafficDataPoint[]> {
+  try {
+    const { start, end } = resolveTimeRange(timeRange)
+
+    const response = await api.post('/monitoring/network/traffic/history', {
+      start_time: start,
+      end_time: end,
+    })
+
+    // 转换后端数据格式
+    if (Array.isArray(response) && response.length > 0) {
+      return response.map((point: any) => ({
+        timestamp: point.timestamp || point.time || new Date().toISOString(),
+        inbound: point.inbound ?? point.in ?? point.rx ?? 0,
+        outbound: point.outbound ?? point.out ?? point.tx ?? 0,
+      }))
+    }
+
+    return []
+  } catch (error) {
+    console.error('获取网络流量历史失败:', error)
+    throw error instanceof Error ? error : new Error('获取网络流量历史失败')
+  }
+}
+
+/**
+ * 获取统计卡片数据 (v1.1 的 6 个关键指标)
+ * @returns 统计卡片数据数组
+ */
+export async function fetchStatsV2(): Promise<StatCardData[]> {
+  try {
+    console.log('[fetchStatsV2] Calling /monitoring/stats/summary')
+    const response = await api.get<any>('/monitoring/stats/summary')
+    console.log('[fetchStatsV2] Response received:', response)
+
+    // 如果后端返回数组，直接使用
+    if (Array.isArray(response)) {
+      return response.map((stat: any, index: number) => ({
+        id: stat.id || `stat_${index}`,
+        title: stat.title || stat.name || '',
+        value: String(stat.value ?? '0'),
+        change: stat.change,
+        trend: stat.trend as 'up' | 'down' | 'stable' | undefined,
+        icon: stat.icon,
+        color: stat.color as any,
+      }))
+    }
+
+    // 如果后端返回对象，转换为数组
+    if (response && typeof response === 'object') {
+      return [
+        // 1. 总设备
+        {
+          id: 'total_devices',
+          title: '总设备',
+          value: String(response.total_devices ?? '0'),
+          change: undefined, // 后端暂未提供趋势数据
+          trend: undefined,
+        },
+        // 2. 可用性
+        {
+          id: 'availability',
+          title: '可用性',
+          value: `${Number(response.availability ?? 0).toFixed(1)}%`,
+          change: undefined,
+          trend: undefined,
+        },
+        // 3. 活跃告警
+        {
+          id: 'active_alerts',
+          title: '活跃告警',
+          value: String(response.active_alerts ?? '0'),
+          change: undefined,
+          trend: undefined,
+        },
+        // 4. 平均 CPU
+        {
+          id: 'avg_cpu',
+          title: '平均 CPU',
+          value: `${Number(response.avg_cpu ?? 0).toFixed(1)}%`,
+          change: undefined,
+          trend: undefined,
+        },
+        // 5. 平均内存
+        {
+          id: 'avg_memory',
+          title: '平均内存',
+          value: `${Number(response.avg_memory ?? 0).toFixed(1)}%`,
+          change: undefined,
+          trend: undefined,
+        },
+        // 6. 网络流量峰值
+        {
+          id: 'avg_network',
+          title: '网络流量',
+          value: `${Number(response.avg_network ?? 0).toFixed(1)} Mbps`,
+          change: undefined,
+          trend: undefined,
+        },
+      ]
+    }
+
+    return []
+  } catch (error) {
+    console.error('[fetchStatsV2] API call failed:', {
+      error,
+      message: error instanceof Error ? error.message : String(error),
+      url: '/monitoring/stats/summary'
+    })
+    throw error instanceof Error ? error : new Error('获取统计数据失败')
+  }
+}
+
+/**
+ * 获取实时告警列表
+ * @param limit - 返回数量限制
+ * @returns 告警数组
+ */
+export async function fetchRealtimeAlerts(limit: number = 10): Promise<Alert[]> {
+  try {
+    const response = await api.get<any>(`/monitoring/alerts/recent?limit=${limit}`)
+
+    if (Array.isArray(response)) {
+      return response.map((alert: any) => ({
+        id: alert.id ?? alert.alert_id ?? 0,
+        deviceName: alert.device_name ?? alert.deviceName ?? alert.source ?? '未知设备',
+        message: alert.message ?? alert.description ?? '',
+        severity: (alert.severity ?? alert.level ?? 'info') as 'critical' | 'warning' | 'info',
+        time: alert.time ?? alert.timestamp ?? alert.created_at ?? new Date().toISOString(),
+      }))
+    }
+
+    // 兼容旧格式 (recent 数组)
+    if (response?.recent && Array.isArray(response.recent)) {
+      return response.recent.map((alert: any) => ({
+        id: alert.id ?? 0,
+        deviceName: alert.device_name ?? '未知设备',
+        message: alert.message ?? '',
+        severity: alert.severity as any,
+        time: alert.time ?? new Date().toISOString(),
+      }))
+    }
+
+    return []
+  } catch (error) {
+    console.error('获取实时告警失败:', error)
+    throw error instanceof Error ? error : new Error('获取实时告警失败')
+  }
+}
+
+/**
+ * 获取完整的监控数据 v2 (一次性获取所有数据)
+ * @param timeRange - 时间范围
+ * @returns 监控数据 v2
+ */
+export async function fetchMonitoringDataV2(
+  timeRange: string = '24h'
+): Promise<Partial<MonitoringDataV2>> {
+  try {
+    const [
+      systemPerformance,
+      temperatureHistory,
+      deviceStatusDistribution,
+      availability,
+      networkTrafficHistory,
+      statsV2,
+      realtimeAlerts,
+    ] = await Promise.allSettled([
+      fetchSystemPerformanceHistory(timeRange),
+      fetchTemperatureHistory(timeRange),
+      fetchDeviceStatusDistribution(),
+      fetchAvailabilityData(),
+      fetchNetworkTrafficHistory(timeRange),
+      fetchStatsV2(),
+      fetchRealtimeAlerts(10),
+    ])
+
+    return {
+      systemPerformance: systemPerformance.status === 'fulfilled' ? systemPerformance.value : [],
+      temperatureHistory: temperatureHistory.status === 'fulfilled' ? temperatureHistory.value : [],
+      deviceStatusDistribution:
+        deviceStatusDistribution.status === 'fulfilled'
+          ? deviceStatusDistribution.value
+          : { healthy: 0, warning: 0, critical: 0, offline: 0 },
+      availability:
+        availability.status === 'fulfilled'
+          ? availability.value
+          : { current: 99.5, target: 99.9, trend: 'stable' },
+      networkTrafficHistory:
+        networkTrafficHistory.status === 'fulfilled' ? networkTrafficHistory.value : [],
+      statsV2: (() => {
+        if (statsV2.status === 'fulfilled') {
+          return statsV2.value
+        } else {
+          console.error('[fetchMonitoringDataV2] statsV2 request failed:', statsV2.reason)
+          return []
+        }
+      })(),
+      realtimeAlerts: realtimeAlerts.status === 'fulfilled' ? realtimeAlerts.value : [],
+      lastUpdate: new Date().toISOString(),
+    }
+  } catch (error) {
+    console.error('获取监控数据 v2 失败:', error)
+    throw error instanceof Error ? error : new Error('获取监控数据 v2 失败')
+  }
+}
+

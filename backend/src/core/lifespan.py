@@ -134,8 +134,24 @@ async def lifespan(app):
     """FastAPI lifespan context manager"""
     # 启动
     await app_lifespan.startup()
-    
+
+    # 🔍 调试：打印所有注册的路由
+    logger.info("=" * 60)
+    logger.info("已注册的路由列表:")
+    for route in app.routes:
+        if hasattr(route, 'path') and hasattr(route, 'methods'):
+            logger.info(f"  {route.methods} {route.path}")
+    logger.info("=" * 60)
+
+    # 专门查找 monitoring 相关路由
+    monitoring_routes = [r for r in app.routes if hasattr(r, 'path') and '/monitoring/' in r.path]
+    logger.info(f"找到 {len(monitoring_routes)} 个 monitoring 路由:")
+    for route in monitoring_routes:
+        if hasattr(route, 'methods'):
+            logger.info(f"  {route.methods} {route.path}")
+    logger.info("=" * 60)
+
     yield
-    
+
     # 关闭
     await app_lifespan.shutdown()

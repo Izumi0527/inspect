@@ -20,9 +20,9 @@ export const LazyInspectionManagement = lazy(() =>
   }))
 )
 
-export const LazyRealtimeMonitoring = lazy(() =>
-  import('@/features/monitoring/components/MonitoringView').then(module => ({
-    default: module.MonitoringView
+export const LazyMonitoringViewV2 = lazy(() =>
+  import('@/features/monitoring/components/MonitoringViewV2').then(module => ({
+    default: module.MonitoringViewV2
   }))
 )
 

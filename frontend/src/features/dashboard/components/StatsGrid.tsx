@@ -6,8 +6,9 @@ import {
   Server,
   Shield
 } from 'lucide-react'
-import { Card, CardContent } from '@/components/atoms'
+import { StatCard } from '@/components/shared'
 import { DashboardStat } from '../types'
+import { Card, CardContent } from '@/components/atoms'
 
 interface StatsGridProps {
   stats: DashboardStat[]
@@ -21,6 +22,13 @@ const iconMap = {
   Activity,
   Server,
   Shield
+}
+
+// 从 change 字符串推断 trend
+const getTrend = (change: string): 'up' | 'down' | 'stable' => {
+  if (change.startsWith('+')) return 'up'
+  if (change.startsWith('-')) return 'down'
+  return 'stable'
 }
 
 export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) => {
@@ -50,26 +58,20 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) 
       {stats.map((stat, index) => {
         const IconComponent = iconMap[stat.iconName as keyof typeof iconMap]
 
+        // 如果没有找到图标,使用默认图标
+        if (!IconComponent) return null
+
         return (
-          <Card key={index} className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-muted-foreground mb-1" data-testid="stat-title">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-foreground" data-testid="stat-value">{stat.value}</p>
-                  <p className={`text-sm ${
-                    stat.change.startsWith('+') ? 'text-green-600 dark:text-green-400' :
-                    stat.change.startsWith('-') ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-muted-foreground'
-                  }`} data-testid="stat-change">
-                    {stat.change} 较昨日
-                  </p>
-                </div>
-                <div className="p-3 bg-gray-50 dark:bg-accent/10 rounded-full" data-testid="stat-icon">
-                  {IconComponent && <IconComponent className={`w-8 h-8 ${stat.iconColor}`} />}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <StatCard
+            key={index}
+            index={index}
+            title={stat.title}
+            value={stat.value}
+            change={`${stat.change} 较昨日`}
+            trend={getTrend(stat.change)}
+            icon={IconComponent}
+            iconColor={stat.iconColor}
+          />
         )
       })}
     </div>

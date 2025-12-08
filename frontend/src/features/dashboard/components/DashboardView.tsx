@@ -115,7 +115,7 @@ export const DashboardView: React.FC = () => {
 
         {/* Main Content */}
         <main className="p-6">
-          <div className="flex flex-col space-y-6 min-h-[calc(100vh-112px)] pb-6">
+          <div className="flex flex-col space-y-8 min-h-[calc(100vh-112px)] pb-6">
             {/* Stats Grid */}
             <StatsGrid
               stats={data?.stats || []}

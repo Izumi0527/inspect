@@ -2,10 +2,11 @@
 Monitoring Service
 系统监控服务层
 """
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any, Optional
 from datetime import datetime, timedelta
 import time
 import platform
+import asyncio
 import structlog
 
 from src.schemas.settings.monitoring import (
@@ -20,6 +21,7 @@ from src.schemas.settings.monitoring import (
     MetricDataPoint,
     MetricHistory
 )
+from src.core.influxdb import influxdb_client
 
 logger = structlog.get_logger()
 
@@ -278,6 +280,184 @@ class MonitoringService:
         except Exception as e:
             logger.error("Failed to get metric history", error=str(e))
             raise
+
+    # ==================== InfluxDB 查询优化方法 ====================
+
+    async def get_system_performance_from_influxdb(
+        self,
+        time_range: str = "24h",
+        aggregate_window: str = "5m"
+    ) -> List[Dict[str, Any]]:
+        """
+        从 InfluxDB 查询系统性能历史 - 优化版
+
+        Args:
+            time_range: 时间范围 (1h, 6h, 24h, 7d, 30d)
+            aggregate_window: 聚合窗口 (默认5分钟)
+
+        Returns:
+            系统性能数据点列表,每个点包含 timestamp, cpu, memory, disk
+        """
+        if not influxdb_client.is_connected:
+            logger.warning("InfluxDB not connected, returning empty data")
+            return []
+
+        try:
+            # 解析时间范围
+            range_map = {
+                "1h": "1h",
+                "6h": "6h",
+                "24h": "24h",
+                "7d": "7d",
+                "30d": "30d"
+            }
+
+            influx_range = range_map.get(time_range, "24h")
+
+            # Flux 查询优化：
+            # 1. 使用 range() 过滤时间（索引优化）
+            # 2. 使用 filter() 精确匹配 measurement 和 field
+            # 3. 使用 aggregateWindow() 降低数据点数量
+            # 4. 使用 mean 函数进行聚合
+            query = f'''
+                from(bucket: "{influxdb_client.bucket}")
+                  |> range(start: -{influx_range})
+                  |> filter(fn: (r) => r["_measurement"] == "system_performance")
+                  |> filter(fn: (r) =>
+                      r["_field"] == "cpu_percent" or
+                      r["_field"] == "memory_percent" or
+                      r["_field"] == "disk_percent"
+                  )
+                  |> aggregateWindow(
+                      every: {aggregate_window},
+                      fn: mean,
+                      createEmpty: false
+                  )
+            '''
+
+            # 异步查询（避免阻塞）
+            result = await influxdb_client.query(query)
+
+            if result is None:
+                logger.warning("InfluxDB query returned None")
+                return []
+
+            # 转换为前端需要的格式
+            return self._transform_influxdb_to_frontend_format(result)
+
+        except Exception as e:
+            logger.error("Failed to query system performance from InfluxDB", error=str(e))
+            return []
+
+    def _transform_influxdb_to_frontend_format(
+        self,
+        raw_data: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        转换 InfluxDB 查询结果为前端需要的格式
+
+        Args:
+            raw_data: InfluxDB 原始查询结果
+
+        Returns:
+            转换后的数据点列表
+            格式: [{"timestamp": "2024-01-01T12:00:00", "cpu": 45.2, "memory": 62.1, "disk": 30.5}, ...]
+        """
+        # 按时间戳分组数据
+        grouped_data = {}
+
+        for point in raw_data:
+            # InfluxDB 返回的数据格式可能是字典列表
+            if isinstance(point, dict):
+                timestamp = point.get("timestamp", point.get("_time"))
+                field = point.get("field", point.get("_field"))
+                value = point.get("value", point.get("_value"))
+
+                if timestamp and field and value is not None:
+                    # 转换时间戳为 ISO 格式字符串
+                    if isinstance(timestamp, datetime):
+                        ts_str = timestamp.isoformat()
+                    else:
+                        ts_str = str(timestamp)
+
+                    # 按时间戳分组
+                    if ts_str not in grouped_data:
+                        grouped_data[ts_str] = {"timestamp": ts_str}
+
+                    # 映射字段名
+                    field_map = {
+                        "cpu_percent": "cpu",
+                        "memory_percent": "memory",
+                        "disk_percent": "disk"
+                    }
+
+                    frontend_field = field_map.get(field, field)
+                    grouped_data[ts_str][frontend_field] = round(float(value), 2)
+
+        # 转换为列表并按时间排序
+        result = [
+            {
+                "timestamp": ts,
+                "cpu": data.get("cpu", 0),
+                "memory": data.get("memory", 0),
+                "disk": data.get("disk", 0)
+            }
+            for ts, data in sorted(grouped_data.items())
+        ]
+
+        logger.debug(
+            "Transformed InfluxDB data",
+            raw_points=len(raw_data),
+            grouped_points=len(result)
+        )
+
+        return result
+
+    async def get_device_metrics_from_influxdb(
+        self,
+        device_id: Optional[int] = None,
+        time_range: str = "24h"
+    ) -> List[Dict[str, Any]]:
+        """
+        从 InfluxDB 查询设备指标历史
+
+        Args:
+            device_id: 设备ID (可选,不指定则查询所有设备)
+            time_range: 时间范围
+
+        Returns:
+            设备指标数据点列表
+        """
+        if not influxdb_client.is_connected:
+            logger.warning("InfluxDB not connected, returning empty data")
+            return []
+
+        try:
+            # 构建查询
+            device_filter = f'|> filter(fn: (r) => r["device_id"] == "{device_id}")' if device_id else ''
+
+            query = f'''
+                from(bucket: "{influxdb_client.bucket}")
+                  |> range(start: -{time_range})
+                  |> filter(fn: (r) => r["_measurement"] == "device_metrics")
+                  {device_filter}
+                  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)
+            '''
+
+            result = await influxdb_client.query(query)
+
+            if result is None:
+                return []
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                "Failed to query device metrics from InfluxDB",
+                device_id=device_id,
+                error=str(e)
+            )
+            return []
 
 
 # 全局实例

@@ -305,8 +305,8 @@ frontend/coverage-report/
 *.pem
 ssl/
 
-# 备份目录
-backups/
+# 备份目录（项目根目录）
+/backups/
 
 # ==========================================
 # 测试相关
@@ -340,3 +340,22 @@ nul
 
 # 损坏或异常文件名（修正语法）
 **/*security_config.json
+
+# ==========================================
+# 项目特定补充规则 (2024-12)
+# ==========================================
+
+# HTML 预览和原型文件
+preview/
+
+# 数据导出和报告目录（明确化）
+backend/data/backups/*
+!backend/data/backups/.gitkeep
+backend/data/exports/*
+!backend/data/exports/.gitkeep
+backend/data/reports/*
+!backend/data/reports/.gitkeep
+
+# 构建缓存（预防性）
+.turbo/
+.swc/
