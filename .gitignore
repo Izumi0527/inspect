@@ -359,3 +359,6 @@ backend/data/reports/*
 # 构建缓存（预防性）
 .turbo/
 .swc/
+
+config/
+data/

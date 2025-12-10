@@ -16,11 +16,12 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Framework :: FastAPI",
     "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 
 # 生产环境依赖
 dependencies = [
@@ -115,7 +116,7 @@ packages = ["src"]
 
 [tool.black]
 line-length = 88
-target-version = ['py311']
+target-version = ['py311', 'py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -143,7 +144,7 @@ extend-ignore = ["E203", "W503", "E501"]
 exclude = [".git", "__pycache__", ".venv", "migrations/versions"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

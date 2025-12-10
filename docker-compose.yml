@@ -1,78 +1,72 @@
+# ===== 企业级网络设备巡检系统 - 基础配置 =====
+# 此文件作为基础配置，定义通用服务和网络
+# 使用方式：
+#   开发环境: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#   生产环境: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: '3.8'
+
+# ===== 网络配置 =====
+networks:
+  inspect_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ===== 基础服务定义 =====
 services:
-  # 前端服务
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: ../docker/frontend.Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-    depends_on:
-      - backend
-
-  # 后端服务
-  backend:
-    build:
-      context: ./backend
-      dockerfile: ../docker/backend.Dockerfile
-    ports:
-      - "8000:8000"
-    environment:
-      - DEBUG=true
-      - DATABASE_URL=postgresql+asyncpg://postgres:password@postgres:5432/inspect_db
-      - REDIS_URL=redis://redis:6379/0
-      - INFLUXDB_URL=http://influxdb:8086
-    volumes:
-      - ./backend/src:/app/src
-      - ./logs:/app/logs
-    depends_on:
-      - postgres
-      - redis
-      - influxdb
-
-  # PostgreSQL 数据库
+  # PostgreSQL 数据库服务
   postgres:
     image: postgres:16-alpine
-    environment:
-      - POSTGRES_DB=inspect_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-    ports:
-      - "5432:5432"
+    networks:
+      - inspect_network
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-  # Redis 缓存
+  # Redis 缓存服务
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
+    networks:
+      - inspect_network
     volumes:
       - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
 
-  # InfluxDB 时序数据库
+  # InfluxDB 时序数据库服务
   influxdb:
     image: influxdb:2.7-alpine
-    ports:
-      - "8086:8086"
-    environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=password123
-      - DOCKER_INFLUXDB_INIT_ORG=inspect-org
-      - DOCKER_INFLUXDB_INIT_BUCKET=device-metrics
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token
+    networks:
+      - inspect_network
     volumes:
       - influxdb_data:/var/lib/influxdb2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
+# ===== 数据卷定义 =====
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
   influxdb_data:
+    driver: local
