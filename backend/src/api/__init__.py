@@ -50,10 +50,6 @@ api_router.include_router(reports_router, prefix="/reports", tags=["报表分析
 api_router.include_router(traffic_router, prefix="/traffic", tags=["流量分析"])
 
 # ============================================================
-# v1版本路由（延迟导入避免循环依赖）
+# 注意: v1路由已在上方直接注册，无需再嵌套引入
+# api/v1/__init__.py 保留用于向后兼容，但不再重复注册
 # ============================================================
-def _get_v1_router():
-    from src.api.v1 import api_v1_router
-    return api_v1_router
-
-api_router.include_router(_get_v1_router())
