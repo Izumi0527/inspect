@@ -15,13 +15,13 @@ import structlog
 
 from src.core.snmp import SNMPClient, SNMPVersion, create_snmp_client, CommonOIDs
 from src.core.ssh import SSHClient, create_ssh_client, DeviceCommands
-from src.services.device_performance import (
+from src.services.device.performance import (
     DevicePerformanceCollector,
     DeviceMonitoringConfig,
-    DeviceType,
     MonitoringProtocol,
     DeviceCredentials
 )
+from src.models.device import DeviceType
 from src.core.influxdb import influxdb_client
 from src.core.database import get_db_session
 

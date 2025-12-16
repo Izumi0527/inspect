@@ -10,12 +10,14 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from datetime import datetime, timezone
-from src.services.alert_escalation_service import (
+from src.services.alert import (
     alert_escalation_service, 
     AlertSeverity, 
-    EscalationLevel
+    EscalationLevel,
+    alert_engine, 
+    Alert, 
+    AlertStatus
 )
-from src.services.alert_engine import alert_engine, Alert, AlertStatus
 import structlog
 
 # 设置日志

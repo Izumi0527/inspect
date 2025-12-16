@@ -9,6 +9,7 @@ from src.core.config import settings
 from src.core.logging import setup_logging
 from src.core.lifespan import lifespan
 from src.core.request_tracking import RequestTrackingMiddleware, get_request_logger
+from src.core.exception_handlers import register_exception_handlers
 from src.api import api_router
 
 # 设置日志
@@ -48,23 +49,8 @@ app.add_middleware(
     allowed_hosts=settings.ALLOWED_HOSTS,
 )
 
-# 全局异常处理
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(
-        "Unhandled exception",
-        exc_info=exc,
-        method=request.method,
-        url=str(request.url),
-    )
-    
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Internal server error" if not settings.DEBUG else str(exc),
-            "type": "internal_error",
-        },
-    )
+# 注册全局异常处理器
+register_exception_handlers(app)
 
 # 健康检查
 @app.get("/health")
@@ -78,8 +64,8 @@ async def health_check():
 # 注册API路由
 app.include_router(api_router, prefix="/api/v1")
 
-# 注册WebSocket路由
-from src.api.websocket import router as websocket_router
+# 注册WebSocket路由（从新模块导入）
+from src.modules.monitoring.websocket import router as websocket_router
 app.include_router(websocket_router, prefix="/api/v1", tags=["WebSocket"])
 
 if __name__ == "__main__":

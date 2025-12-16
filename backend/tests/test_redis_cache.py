@@ -11,7 +11,7 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from src.core.redis import redis_manager
-from src.services.cache_service import cache_service
+from src.infrastructure.cache import cache_service
 import structlog
 
 logger = structlog.get_logger()

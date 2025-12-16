@@ -6,7 +6,7 @@ from typing import Tuple, Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import structlog
 
-from src.services.system_settings import system_settings_service
+from src.services.common import system_settings_service
 from src.schemas.settings.security import SessionInfo
 
 logger = structlog.get_logger()

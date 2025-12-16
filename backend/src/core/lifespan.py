@@ -5,11 +5,10 @@ from contextlib import asynccontextmanager
 from src.core.database import init_database, close_database
 from src.core.redis import init_redis, close_redis
 from src.core.influxdb import init_influxdb, close_influxdb
-from src.services.system_settings import system_settings_service
-from src.services.scheduler import inspection_scheduler
-from src.services.device_monitoring import device_monitoring_service
-from src.services.task_scheduler import task_scheduler
-from src.services.alert_engine import alert_engine
+from src.services.common import system_settings_service
+from src.services.scheduler import inspection_scheduler, task_scheduler
+from src.services.device import device_monitoring_service
+from src.services.alert import alert_engine
 
 logger = structlog.get_logger()
 

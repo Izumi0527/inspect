@@ -12,7 +12,7 @@ import structlog
 from abc import ABC, abstractmethod
 
 from src.models.inspection import CheckItemStatus
-from src.services.device_connection.types import CheckResult
+from src.infrastructure.device_connection import CheckResult
 
 logger = structlog.get_logger()
 

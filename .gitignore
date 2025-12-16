@@ -282,7 +282,7 @@ uploads/
 media/
 
 # 缓存目录
-cache/
+
 .cache/
 
 # 本地数据文件

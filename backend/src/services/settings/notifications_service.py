@@ -8,7 +8,7 @@ import aiohttp
 import time
 import structlog
 
-from src.services.system_settings import system_settings_service
+from src.services.common import system_settings_service
 
 logger = structlog.get_logger()
 

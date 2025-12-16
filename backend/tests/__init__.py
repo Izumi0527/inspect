@@ -23,11 +23,11 @@
     python -m tests.test_main
     
     # 使用统一测试调度脚本
-    .\scripts\run-all-tests.ps1 -AppLayer          # 运行所有应用层测试
-    .\scripts\run-all-tests.ps1 -DatabaseOnly      # 仅测试数据库
-    .\scripts\run-all-tests.ps1 -RedisOnly         # 仅测试Redis缓存
-    .\scripts\run-all-tests.ps1 -InfluxDBOnly      # 仅测试InfluxDB
-    .\scripts\run-all-tests.ps1 -Full              # 运行完整测试套件
+    ./scripts/run-all-tests.ps1 -AppLayer          # 运行所有应用层测试
+    ./scripts/run-all-tests.ps1 -DatabaseOnly      # 仅测试数据库
+    ./scripts/run-all-tests.ps1 -RedisOnly         # 仅测试Redis缓存
+    ./scripts/run-all-tests.ps1 -InfluxDBOnly      # 仅测试InfluxDB
+    ./scripts/run-all-tests.ps1 -Full              # 运行完整测试套件
 
 测试覆盖范围：
 - 数据库连接和ORM操作

@@ -9,8 +9,7 @@ from typing import Dict, List, Optional, Any, Union
 import structlog
 
 from src.models.inspection import CheckItemStatus
-from src.services.device_connection import SNMPService, SSHService
-from src.services.device_connection.types import CheckResult, DeviceInfo
+from src.infrastructure.device_connection import SNMPService, SSHService, CheckResult, DeviceInfo
 
 logger = structlog.get_logger()
 

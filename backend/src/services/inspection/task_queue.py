@@ -16,8 +16,8 @@ from enum import Enum
 
 from src.core.config import settings
 from src.models.inspection import InspectionStatus, CheckItemStatus
-from src.services.inspection import InspectionService
-from src.services.device_connection import DeviceHealthChecker, SNMPService, SSHService
+from src.services.inspection.service import InspectionService
+from src.infrastructure.device_connection import DeviceHealthChecker, SNMPService, SSHService
 from src.repositories.device_repository import DeviceRepository
 from src.core.database import get_db_session
 

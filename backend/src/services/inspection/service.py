@@ -8,8 +8,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.inspection import InspectionStatus, CheckItemStatus, InspectionTrigger
-from src.services.device_connection import SNMPService, SSHService, DeviceInfo
-from src.services.device_connection.types import CheckResult
+from src.infrastructure.device_connection import SNMPService, SSHService, DeviceInfo, CheckResult
 from src.repositories.inspection_repository import InspectionRepository
 
 logger = structlog.get_logger()

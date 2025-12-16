@@ -27,12 +27,12 @@ def test_imports():
         from src.services.settings.general_service import general_settings_service
         print("✓ Service 导入成功")
 
-        print("\n3. 测试导入 settings API router...")
-        from src.api.settings import router as settings_router
+        print("\n3. 测试导入 settings API router (from modules)...")
+        from src.modules.settings.api import router as settings_router
         print("✓ Settings router 导入成功")
 
-        print("\n4. 测试导入 general API router...")
-        from src.api.settings.general import router as general_router
+        print("\n4. 测试导入 general API router (from modules)...")
+        from src.modules.settings.general.api import router as general_router
         print("✓ General router 导入成功")
 
         print("\n5. 测试导入主 API router...")
