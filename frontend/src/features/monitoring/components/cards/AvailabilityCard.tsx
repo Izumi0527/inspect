@@ -20,11 +20,13 @@ export function AvailabilityCard({ data, className }: AvailabilityCardProps) {
       transition={{ duration: 0.3, delay: 0.2 }}
       className={className}
     >
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
           整体可用性
         </h3>
-        <AvailabilityGaugeChart data={data} size={140} />
+        <div className="flex flex-1 flex-col">
+          <AvailabilityGaugeChart data={data} size={120} strokeWidth={10} />
+        </div>
       </div>
     </motion.div>
   )

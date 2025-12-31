@@ -66,13 +66,15 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
 
   // 转换后端数据为图表格式
   const chartData = useMemo(() => {
-    if (!trendData?.metrics) return []
+    if (!trendData?.metrics || !Array.isArray(trendData.metrics)) return []
 
     // 从 metrics 数组中提取数据点并合并
     const dataMap = new Map()
 
     trendData.metrics.forEach(metricData => {
-      metricData.dataPoints?.forEach(point => {
+      if (!metricData?.dataPoints || !Array.isArray(metricData.dataPoints)) return
+      metricData.dataPoints.forEach(point => {
+        if (!point?.timestamp) return
         const date = point.timestamp.split('T')[0] // 提取日期部分
         if (!dataMap.has(date)) {
           dataMap.set(date, { date })

@@ -38,42 +38,97 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
-@router.get("/overview", response_model=DashboardOverview, summary="获取仪表板概览")
+@router.get("/overview", summary="获取仪表板概览")
 async def get_dashboard_overview(
     current_user: dict = Depends(require_permission("dashboard:read")),
     session: AsyncSession = Depends(get_db_session)
 ):
-    """获取仪表板概览数据"""
+    """获取仪表板概览数据（返回前端期望的格式）"""
     DeviceRepository = get_device_repository()
     device_repo = DeviceRepository(session)
-    
+
     # 获取设备统计
     device_stats = await device_repo.get_device_statistics()
-    
+
     # 获取告警统计
     alert_engine = get_alert_engine()
     alerts = list(alert_engine.alerts.values())
     active_alerts = [a for a in alerts if a.status.value == "active"]
-    critical_alerts = [a for a in alerts if a.severity.value == "critical"]
-    
+
     # 计算系统健康度
     total_devices = device_stats.get("total_devices", 0)
     online_devices = device_stats.get("online_devices", 0)
-    system_health = (online_devices / total_devices * 100) if total_devices > 0 else 100.0
-    
-    return DashboardOverview(
-        total_devices=total_devices,
-        online_devices=online_devices,
-        offline_devices=device_stats.get("offline_devices", 0),
-        warning_devices=0,  # TODO: 从监控服务获取
-        total_alerts=len(alerts),
-        active_alerts=len(active_alerts),
-        critical_alerts=len(critical_alerts),
-        total_inspections=0,  # TODO: 从巡检服务获取
-        recent_inspections=0,
-        inspection_pass_rate=0.0,
-        system_health=round(system_health, 2)
-    )
+    system_health = (online_devices / total_devices * 100) if total_devices > 0 else 0.0
+
+    # 构建前端期望的 stats 数组
+    stats = [
+        {
+            "title": "在线设备",
+            "value": str(online_devices),
+            "change": "较昨日",
+            "iconName": "Monitor",
+            "iconColor": "text-green-500",
+            "color": "green"
+        },
+        {
+            "title": "活跃告警",
+            "value": str(len(active_alerts)),
+            "change": "较昨日",
+            "iconName": "AlertTriangle",
+            "iconColor": "text-red-500" if len(active_alerts) > 0 else "text-gray-400",
+            "color": "red" if len(active_alerts) > 0 else "gray"
+        },
+        {
+            "title": "网络流量",
+            "value": "N/A",  # TODO: 从监控数据获取
+            "change": "较昨日",
+            "iconName": "Activity",
+            "iconColor": "text-blue-500",
+            "color": "blue"
+        },
+        {
+            "title": "系统负载",
+            "value": f"{round(system_health, 1)}%" if total_devices > 0 else "N/A",
+            "change": "较昨日",
+            "iconName": "Server",
+            "iconColor": "text-purple-500",
+            "color": "purple"
+        }
+    ]
+
+    # 获取最近告警
+    recent_alerts = sorted(alerts, key=lambda a: a.created_at, reverse=True)[:5]
+    recent_alerts_data = [
+        {
+            "id": a.id,
+            "device": a.device_name or "未知设备",
+            "message": a.message,
+            "severity": a.severity.value,
+            "time": a.created_at.isoformat(),
+            "category": getattr(a, "category", None)
+        }
+        for a in recent_alerts
+    ]
+
+    # 获取网络概览
+    devices, _ = await device_repo.get_devices_paginated(limit=1000)  # 获取所有设备
+    groups_dict = {}
+    for device in devices:
+        device_type = device.device_type or "未分类"
+        if device_type not in groups_dict:
+            groups_dict[device_type] = {"name": device_type, "devices": 0, "status": "normal"}
+        groups_dict[device_type]["devices"] += 1
+        if device.status in ["down", "offline", "error"]:
+            groups_dict[device_type]["status"] = "critical"
+        elif device.status in ["warning", "degraded"] and groups_dict[device_type]["status"] == "normal":
+            groups_dict[device_type]["status"] = "warning"
+
+    return {
+        "stats": stats,
+        "recent_alerts": recent_alerts_data,
+        "network_overview": list(groups_dict.values()),
+        "last_updated": datetime.now().isoformat()
+    }
 
 
 @router.get("/device-status", response_model=DeviceStatusSummary, summary="获取设备状态摘要")
@@ -159,7 +214,7 @@ async def get_top_devices_by_alerts(
     """获取告警最多的设备列表"""
     alert_engine = get_alert_engine()
     alerts = list(alert_engine.alerts.values())
-    
+
     # 按设备统计告警
     device_alerts = {}
     for alert in alerts:
@@ -175,12 +230,72 @@ async def get_top_devices_by_alerts(
             device_alerts[alert.device_id]["alert_count"] += 1
             if alert.severity.value == "critical":
                 device_alerts[alert.device_id]["critical_count"] += 1
-    
+
     # 排序并返回
     sorted_devices = sorted(
         device_alerts.values(),
         key=lambda x: x["alert_count"],
         reverse=True
     )[:limit]
-    
+
     return [TopDevicesByAlerts(**d) for d in sorted_devices]
+
+
+@router.get("/recent-alerts", summary="获取最近告警")
+async def get_recent_alerts(
+    limit: int = Query(5, ge=1, le=50),
+    current_user: dict = Depends(require_permission("dashboard:read"))
+):
+    """获取最近告警列表"""
+    alert_engine = get_alert_engine()
+    alerts = sorted(
+        alert_engine.alerts.values(),
+        key=lambda a: a.created_at,
+        reverse=True
+    )[:limit]
+
+    return [
+        {
+            "id": a.id,
+            "device": a.device_name or "未知设备",
+            "message": a.message,
+            "severity": a.severity.value,
+            "time": a.created_at.isoformat(),
+            "category": a.category if hasattr(a, "category") else None
+        }
+        for a in alerts
+    ]
+
+
+@router.get("/network-overview", summary="获取网络概览")
+async def get_network_overview(
+    current_user: dict = Depends(require_permission("dashboard:read")),
+    session: AsyncSession = Depends(get_db_session)
+):
+    """获取网络设备分组概览"""
+    DeviceRepository = get_device_repository()
+    device_repo = DeviceRepository(session)
+
+    # 获取设备分组统计
+    devices = await device_repo.list_devices()
+
+    # 按设备类型分组
+    groups_dict = {}
+    for device in devices:
+        device_type = device.device_type or "未分类"
+        if device_type not in groups_dict:
+            groups_dict[device_type] = {
+                "name": device_type,
+                "devices": 0,
+                "status": "normal"
+            }
+        groups_dict[device_type]["devices"] += 1
+
+        # 根据设备状态更新组状态
+        if device.status in ["down", "offline", "error"]:
+            if groups_dict[device_type]["status"] != "critical":
+                groups_dict[device_type]["status"] = "critical"
+        elif device.status in ["warning", "degraded"] and groups_dict[device_type]["status"] == "normal":
+            groups_dict[device_type]["status"] = "warning"
+
+    return list(groups_dict.values())

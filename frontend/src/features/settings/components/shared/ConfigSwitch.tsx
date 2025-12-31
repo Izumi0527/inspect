@@ -4,7 +4,7 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 
 interface ConfigSwitchProps {
-  checked: boolean
+  checked: boolean | undefined
   onChange?: (checked: boolean) => void
   onCheckedChange?: (checked: boolean) => void
   disabled?: boolean
@@ -21,12 +21,14 @@ export function ConfigSwitch({
   id,
 }: ConfigSwitchProps) {
   const handleChange = onCheckedChange ?? onChange ?? (() => {})
+  // 确保 checked 始终有定义值，避免受控/非受控组件切换警告
+  const safeChecked = checked ?? false
 
   return (
     <div className="flex items-center space-x-2">
       <Switch
         id={id}
-        checked={checked}
+        checked={safeChecked}
         onCheckedChange={handleChange}
         disabled={disabled}
       />

@@ -45,7 +45,7 @@ export function RealTimeAlertsCard({
       transition={{ duration: 0.3, delay: 0.3 }}
       className={className}
     >
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">实时告警</h3>
           <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900 dark:text-red-100">
@@ -54,7 +54,7 @@ export function RealTimeAlertsCard({
         </div>
 
         {displayAlerts.length === 0 ? (
-          <div className="flex h-32 items-center justify-center">
+          <div className="flex flex-1 items-center justify-center">
             <p className="text-sm text-gray-500 dark:text-gray-400">暂无告警</p>
           </div>
         ) : (

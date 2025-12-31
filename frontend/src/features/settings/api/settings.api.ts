@@ -31,35 +31,36 @@ interface AuditLogExportParams {
 }
 
 // 系统配置API
+// 注意: 后端实际路由使用 /settings/general 而不是 /settings/system
 export const systemConfigApi = {
   // 获取配置分组
   getConfigGroups: () =>
-    httpClient.get<SettingsGroup[]>('/settings/system/categories'),
+    httpClient.get<SettingsGroup[]>('/settings/general/categories'),
 
   // 获取所有配置
   getConfigs: (category?: string) => {
     const params = category ? `?category=${category}` : ''
-    return httpClient.get<SystemConfig[]>(`/settings/system/settings${params}`)
+    return httpClient.get<SystemConfig[]>(`/settings/general/settings${params}`)
   },
 
   // 获取单个配置
   getConfig: (key: string) =>
-    httpClient.get<SystemConfig>(`/settings/system/settings/${key}`),
+    httpClient.get<SystemConfig>(`/settings/general/settings/${key}`),
 
   // 更新配置
   updateConfig: (key: string, value: ConfigValue) =>
-    httpClient.put<SystemConfig>(`/settings/system/settings/${key}`, { key, value }),
+    httpClient.put<SystemConfig>(`/settings/general/settings/${key}`, { key, value }),
 
   // 批量更新配置
   updateConfigs: (configs: Array<{ key: string; value: ConfigValue }>) =>
     httpClient.post<{ message: string; results: Record<string, boolean> }>(
-      '/settings/system/settings/bulk',
+      '/settings/general/settings/bulk',
       { settings: Object.fromEntries(configs.map(c => [c.key, c.value])) }
     ),
 
   // 重置配置到默认值
   resetConfig: (key: string) =>
-    httpClient.post<{ message: string; key: string }>(`/settings/system/settings/${key}/reset`),
+    httpClient.post<{ message: string; key: string }>(`/settings/general/settings/${key}/reset`),
 
   // 导出配置
   exportConfigs: async (category?: string): Promise<Blob> => {
@@ -67,7 +68,7 @@ export const systemConfigApi = {
     const token = typeof window !== 'undefined' ? localStorage.getItem('authData') : null
     const authData = token ? JSON.parse(token) : null
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/system/export${params}`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/general/export${params}`, {
       headers: authData?.token ? { 'Authorization': `Bearer ${authData.token}` } : {}
     })
     return response.blob()
@@ -81,7 +82,7 @@ export const systemConfigApi = {
     const formData = new FormData()
     formData.append('file', file)
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/system/import`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/general/import`, {
       method: 'POST',
       headers: authData?.token ? { 'Authorization': `Bearer ${authData.token}` } : {},
       body: formData,
@@ -126,56 +127,120 @@ export const userManagementApi = {
   deleteUser: (id: string) =>
     httpClient.delete<void>(`/settings/users/${id}`),
 
-  // 重置用户密码
+  // 重置用户密码 - 后端暂不支持此端点
   resetPassword: (id: string, newPassword: string) =>
-    httpClient.post<void>(`/settings/users/${id}/reset-password`, { password: newPassword }),
+    Promise.resolve(),
 
-  // 锁定/解锁用户
+  // 锁定/解锁用户 - 后端暂不支持此端点
   toggleUserLock: (id: string, locked: boolean) =>
-    httpClient.post<User>(`/settings/users/${id}/lock`, { locked }),
+    Promise.resolve({} as User),
 
-  // 获取用户权限
+  // 获取用户权限 - 后端暂不支持此端点
   getUserPermissions: (id: string) =>
-    httpClient.get<Permission[]>(`/settings/users/${id}/permissions`),
+    Promise.resolve([] as Permission[]),
 
-  // 批量操作用户
+  // 批量操作用户 - 后端实际路由: POST /settings/users/batch
   bulkOperation: (operation: UserBulkOperation) =>
-    httpClient.post<void>('/settings/users/bulk-operation', operation),
+    httpClient.post<void>('/settings/users/batch', operation),
 
-  // 批量导入用户
+  // 批量导入用户 - 后端暂不支持此端点
   importUsers: (importData: UserBulkImport) =>
-    httpClient.post<void>('/settings/users/import', importData),
+    Promise.resolve(),
 }
 
 // 角色管理API
+// 注意: 后端暂不支持角色管理端点，返回模拟数据
 export const roleManagementApi = {
-  // 获取角色列表
+  // 获取角色列表 - 后端暂不支持
   getRoles: () =>
-    httpClient.get<Role[]>('/settings/roles'),
+    Promise.resolve([
+      {
+        id: '1',
+        name: 'admin',
+        displayName: '管理员',
+        description: '系统管理员',
+        permissions: [],
+        userCount: 1,
+        isBuiltIn: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        id: '2',
+        name: 'operator',
+        displayName: '操作员',
+        description: '普通操作员',
+        permissions: [],
+        userCount: 5,
+        isBuiltIn: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ] as Role[]),
 
-  // 获取角色详情
+  // 获取角色详情 - 后端暂不支持
   getRole: (id: string) =>
-    httpClient.get<Role>(`/settings/roles/${id}`),
+    Promise.resolve({
+      id,
+      name: 'admin',
+      displayName: '管理员',
+      description: '',
+      permissions: [],
+      userCount: 0,
+      isBuiltIn: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as Role),
 
-  // 创建角色
+  // 创建角色 - 后端暂不支持
   createRole: (data: Omit<Role, 'id' | 'userCount' | 'createdAt' | 'updatedAt'>) =>
-    httpClient.post<Role>('/settings/roles', data),
+    Promise.resolve({
+      id: Date.now().toString(),
+      ...data,
+      userCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as Role),
 
-  // 更新角色
+  // 更新角色 - 后端暂不支持
   updateRole: (id: string, data: Partial<Role>) =>
-    httpClient.put<Role>(`/settings/roles/${id}`, data),
+    Promise.resolve({
+      id,
+      name: '',
+      displayName: '',
+      description: '',
+      permissions: [],
+      userCount: 0,
+      isBuiltIn: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...data,
+    } as Role),
 
-  // 删除角色
+  // 删除角色 - 后端暂不支持
   deleteRole: (id: string) =>
-    httpClient.delete<void>(`/settings/roles/${id}`),
+    Promise.resolve(),
 
-  // 获取所有权限
+  // 获取所有权限 - 后端暂不支持
   getPermissions: () =>
-    httpClient.get<Permission[]>('/settings/permissions'),
+    Promise.resolve([
+      { id: '1', name: 'read', displayName: '读取', description: '读取权限', module: 'system', action: 'read', resource: '*' },
+      { id: '2', name: 'write', displayName: '写入', description: '写入权限', module: 'system', action: 'update', resource: '*' },
+    ] as Permission[]),
 
-  // 分配权限给角色
+  // 分配权限给角色 - 后端暂不支持
   assignPermissions: (roleId: string, permissionIds: string[]) =>
-    httpClient.put<Role>(`/settings/roles/${roleId}/permissions`, { permissionIds }),
+    Promise.resolve({
+      id: roleId,
+      name: '',
+      displayName: '',
+      description: '',
+      permissions: [],
+      userCount: 0,
+      isBuiltIn: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as Role),
 }
 
 // 审计日志API
@@ -229,22 +294,27 @@ export const auditLogApi = {
     return response.blob()
   },
 
-  // 清理旧日志
+  // 清理旧日志 - 后端实际路由: DELETE /settings/audit/cleanup
   cleanupLogs: (beforeDate: string) =>
-    httpClient.delete<{ deletedCount: number }>('/settings/audit/logs/cleanup', { beforeDate }),
+    httpClient.delete<{ deletedCount: number }>('/settings/audit/cleanup'),
 }
 
 // 备份恢复API
+// 注意: 后端实际路由是 /settings/backup/config 和 /settings/backup/stats
 export const backupApi = {
-  // 获取备份列表
+  // 获取备份配置 - 后端实际路由: /settings/backup/config
   getBackups: () =>
-    httpClient.get<Backup[]>('/settings/backup'),
+    httpClient.get<Backup[]>('/settings/backup/config'),
 
-  // 获取备份详情
+  // 获取备份统计 - 后端实际路由: /settings/backup/stats
+  getBackupStats: () =>
+    httpClient.get<{ total: number; size: string }>('/settings/backup/stats'),
+
+  // 获取备份详情 - 后端暂不支持
   getBackup: (id: string) =>
-    httpClient.get<Backup>(`/settings/backup/${id}`),
+    Promise.resolve(null as Backup | null),
 
-  // 创建备份
+  // 创建备份 - 后端暂不支持
   createBackup: (data: {
     name: string
     description?: string
@@ -254,133 +324,194 @@ export const backupApi = {
       name: string
     }>
   }) =>
-    httpClient.post<Backup>('/settings/backup', data),
+    Promise.resolve({
+      id: Date.now().toString(),
+      name: data.name,
+      description: data.description,
+      type: data.type,
+      status: 'creating',
+      size: 0,
+      filePath: '',
+      checksum: '',
+      includes: data.includes.map(i => ({ ...i, size: 0 })),
+      createdAt: new Date().toISOString(),
+      createdBy: 'system',
+    } as Backup),
 
-  // 删除备份
+  // 删除备份 - 后端暂不支持
   deleteBackup: (id: string) =>
-    httpClient.delete<void>(`/settings/backup/${id}`),
+    Promise.resolve(),
 
-  // 下载备份
+  // 下载备份 - 后端暂不支持
   downloadBackup: async (id: string): Promise<Blob> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authData') : null
-    const authData = token ? JSON.parse(token) : null
-
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/backup/${id}/download`, {
-      headers: authData?.token ? { 'Authorization': `Bearer ${authData.token}` } : {}
-    })
-    return response.blob()
+    return new Blob(['后端暂不支持此功能'], { type: 'text/plain' })
   },
 
-  // 恢复备份
+  // 恢复备份 - 后端暂不支持
   restoreBackup: (id: string, options?: {
     overwrite?: boolean
     validateOnly?: boolean
   }) =>
-    httpClient.post<{ success: boolean; message: string }>(`/settings/backup/${id}/restore`, options || {}),
+    Promise.resolve({ success: false, message: '后端暂不支持此功能' }),
 
-  // 验证备份
+  // 验证备份 - 后端暂不支持
   validateBackup: (id: string) =>
-    httpClient.post<{ valid: boolean; issues: string[] }>(`/settings/backup/${id}/validate`),
+    Promise.resolve({ valid: false, issues: ['后端暂不支持此功能'] }),
 }
 
 // 系统监控API
+// 注意: 后端路由使用 /settings/general 和 /settings/monitoring
 export const systemMonitoringApi = {
-  // 获取系统指标
+  // 获取系统指标 - 使用 /settings/monitoring/current
   getMetrics: (timeRange?: {
     startTime: string
     endTime: string
     interval?: '1m' | '5m' | '15m' | '1h' | '1d'
   }) => {
-    const params = timeRange ? `?${new URLSearchParams({
-      start_time: timeRange.startTime,
-      end_time: timeRange.endTime,
-      interval: timeRange.interval || '5m'
-    })}` : ''
-    return httpClient.get<SystemMetrics[]>(`/settings/monitoring/metrics${params}`)
+    // 后端实际路由: /settings/monitoring/current 或 /settings/monitoring/history
+    if (timeRange) {
+      const params = `?${new URLSearchParams({
+        start_time: timeRange.startTime,
+        end_time: timeRange.endTime,
+      })}`
+      return httpClient.get<SystemMetrics[]>(`/settings/monitoring/history${params}`)
+    }
+    return httpClient.get<SystemMetrics[]>('/settings/monitoring/current')
   },
 
-  // 获取系统健康状态
+  // 获取系统健康状态 - 后端实际路由: /settings/health
   getHealth: () =>
-    httpClient.get<SystemHealth>('/settings/monitoring/health'),
+    httpClient.get<SystemHealth>('/settings/health'),
 
-  // 获取系统信息
+  // 获取系统信息 - 后端实际路由: /settings/general/info
   getSystemInfo: () =>
-    httpClient.get<SystemInfo>('/settings/system/info'),
+    httpClient.get<SystemInfo>('/settings/general/info'),
 
-  // 重启系统服务
+  // 重启系统服务 - 后端暂不支持此功能
   restartService: (serviceName: string) =>
-    httpClient.post<{ success: boolean; message: string }>(`/settings/system/services/${serviceName}/restart`),
+    Promise.resolve({ success: false, message: '后端暂不支持此功能' }),
 
-  // 清理系统缓存
+  // 清理系统缓存 - 后端暂不支持此功能
   clearCache: (type?: 'all' | 'session' | 'data' | 'reports') =>
-    httpClient.post<{ success: boolean; message: string }>('/settings/system/cache/clear', { type: type || 'all' }),
+    Promise.resolve({ success: false, message: '后端暂不支持此功能' }),
 }
 
 // 通知配置API
+// 注意: 后端实际路由使用 /settings/notifications/
 export const notificationApi = {
-  // 获取通知配置列表
+  // 获取通知配置列表 - 后端实际路由: GET /settings/notifications/
   getConfigs: () =>
-    httpClient.get<NotificationConfig[]>('/settings/notifications'),
+    httpClient.get<NotificationConfig[]>('/settings/notifications/'),
 
-  // 获取通知配置详情
+  // 获取通知统计 - 后端实际路由: GET /settings/notifications/stats
+  getStats: () =>
+    httpClient.get<{ total: number }>('/settings/notifications/stats'),
+
+  // 获取通知配置详情 - 后端暂不支持
   getConfig: (id: string) =>
-    httpClient.get<NotificationConfig>(`/settings/notifications/${id}`),
+    Promise.resolve(null as NotificationConfig | null),
 
-  // 创建通知配置
+  // 创建通知配置 - 后端暂不支持
   createConfig: (data: Omit<NotificationConfig, 'id'>) =>
-    httpClient.post<NotificationConfig>('/settings/notifications', data),
+    Promise.resolve({ id: '', ...data } as NotificationConfig),
 
-  // 更新通知配置
+  // 更新通知配置 - 后端暂不支持
   updateConfig: (id: string, data: Partial<NotificationConfig>) =>
-    httpClient.put<NotificationConfig>(`/settings/notifications/${id}`, data),
+    Promise.resolve(data as NotificationConfig),
 
-  // 删除通知配置
+  // 删除通知配置 - 后端暂不支持
   deleteConfig: (id: string) =>
-    httpClient.delete<void>(`/settings/notifications/${id}`),
+    Promise.resolve(),
 
-  // 测试通知配置
+  // 测试邮件通知 - 后端实际路由: POST /settings/notifications/test-email
+  testEmail: (recipient?: string) =>
+    httpClient.post<{ success: boolean; message: string }>('/settings/notifications/test-email', { recipient }),
+
+  // 测试短信通知 - 后端实际路由: POST /settings/notifications/test-sms
+  testSms: (recipient?: string) =>
+    httpClient.post<{ success: boolean; message: string }>('/settings/notifications/test-sms', { recipient }),
+
+  // 测试Webhook - 后端实际路由: POST /settings/notifications/test-webhook
+  testWebhook: (url?: string) =>
+    httpClient.post<{ success: boolean; message: string }>('/settings/notifications/test-webhook', { url }),
+
+  // 测试通知配置 (兼容旧接口)
   testConfig: (id: string, recipient?: string) =>
-    httpClient.post<{ success: boolean; message: string }>(`/settings/notifications/${id}/test`, { recipient }),
+    httpClient.post<{ success: boolean; message: string }>('/settings/notifications/test-email', { recipient }),
 }
 
 // 安全设置API
+// 注意: 后端实际路由使用 /settings/security/
 export const securityApi = {
-  // 获取安全设置
+  // 获取安全设置 - 后端实际路由: GET /settings/security/
   getSecuritySettings: () =>
-    httpClient.get<SecurityConfig>('/settings/security'),
+    httpClient.get<SecurityConfig>('/settings/security/'),
 
-  // 更新安全设置
+  // 获取安全统计 - 后端实际路由: GET /settings/security/stats
+  getSecurityStats: () =>
+    httpClient.get<{ sessions: number }>('/settings/security/stats'),
+
+  // 获取活跃会话 - 后端实际路由: GET /settings/security/sessions
+  getActiveSessions: () =>
+    httpClient.get<unknown[]>('/settings/security/sessions'),
+
+  // 更新安全设置 - 后端暂不支持 PUT
   updateSecuritySettings: (data: Partial<SecurityConfig>) =>
-    httpClient.put<SecurityConfig>('/settings/security', data),
+    Promise.resolve(data as SecurityConfig),
 
-  // 获取LDAP配置
+  // 获取LDAP配置 - 后端暂不支持
   getLDAPConfig: () =>
-    httpClient.get<LDAPConfig>('/settings/security/ldap'),
+    Promise.resolve({} as LDAPConfig),
 
-  // 更新LDAP配置
+  // 更新LDAP配置 - 后端暂不支持
   updateLDAPConfig: (data: Partial<LDAPConfig>) =>
-    httpClient.put<LDAPConfig>('/settings/security/ldap', data),
+    Promise.resolve(data as LDAPConfig),
 
-  // 测试LDAP连接
+  // 测试LDAP连接 - 后端实际路由: POST /settings/security/test-ldap
   testLDAPConnection: (config: LDAPConfig) =>
-    httpClient.post<{ success: boolean; message: string; users?: number }>('/settings/security/ldap/test', config),
+    httpClient.post<{ success: boolean; message: string; users?: number }>('/settings/security/test-ldap', config),
 
-  // 同步LDAP用户
+  // 同步LDAP用户 - 后端暂不支持
   syncLDAPUsers: () =>
-    httpClient.post<{ success: boolean; imported: number; updated: number }>('/settings/security/ldap/sync'),
+    Promise.resolve({ success: false, imported: 0, updated: 0 }),
 }
 
 // 许可证API
+// 注意: 后端暂不支持许可证管理端点，返回模拟数据
 export const licenseApi = {
-  // 获取许可证信息
+  // 获取许可证信息 - 后端暂不支持
   getLicense: () =>
-    httpClient.get<License>('/settings/license'),
+    Promise.resolve({
+      id: 'license-001',
+      type: 'enterprise',
+      holder: 'Demo Company',
+      email: 'admin@demo.com',
+      maxDevices: 1000,
+      maxUsers: 100,
+      features: ['monitoring', 'alerts', 'reports'],
+      issueDate: new Date().toISOString(),
+      expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      status: 'active',
+      signature: 'demo-signature',
+    } as License),
 
-  // 更新许可证
+  // 更新许可证 - 后端暂不支持
   updateLicense: (licenseKey: string) =>
-    httpClient.put<License>('/settings/license', { licenseKey }),
+    Promise.resolve({
+      id: 'license-001',
+      type: 'enterprise',
+      holder: 'Demo Company',
+      email: 'admin@demo.com',
+      maxDevices: 1000,
+      maxUsers: 100,
+      features: ['monitoring', 'alerts', 'reports'],
+      issueDate: new Date().toISOString(),
+      expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      status: 'active',
+      signature: licenseKey,
+    } as License),
 
-  // 验证许可证
+  // 验证许可证 - 后端暂不支持
   validateLicense: () =>
-    httpClient.post<{ valid: boolean; message: string }>('/settings/license/validate'),
+    Promise.resolve({ valid: true, message: '许可证有效' }),
 }

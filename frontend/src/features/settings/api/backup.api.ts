@@ -34,14 +34,8 @@ export const backupApi = {
    * 更新备份配置
    */
   updateBackupConfig: async (data: UpdateBackupConfigRequest): Promise<void> => {
-    // 转换 camelCase 为 snake_case
-    const snakeCaseData: Record<string, any> = {}
-    Object.entries(data).forEach(([key, value]) => {
-      const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase()
-      snakeCaseData[snakeKey] = value
-    })
-
-    await httpClient.put('/settings/backup/config', snakeCaseData)
+    // 后端已使用 camelCase，直接发送
+    await httpClient.put('/settings/backup/config', data)
   },
 
   /**
@@ -154,17 +148,7 @@ export const backupApi = {
    * 批量保存所有配置（备份配置）
    */
   saveAll: async (config: BackupConfig): Promise<void> => {
-    const snakeCaseData = {
-      auto_backup_enabled: config.autoBackupEnabled,
-      backup_frequency: config.backupFrequency,
-      backup_time: config.backupTime,
-      retention_days: config.retentionDays,
-      backup_path: config.backupPath,
-      include_database: config.includeDatabase,
-      include_files: config.includeFiles,
-      compress_backup: config.compressBackup,
-    }
-
-    await httpClient.put('/settings/backup/config', snakeCaseData)
+    // 后端已使用 camelCase，直接发送
+    await httpClient.put('/settings/backup/config', config)
   },
 }

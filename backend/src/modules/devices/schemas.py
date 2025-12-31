@@ -3,7 +3,7 @@
 """
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel, validator, Field
+from pydantic import Field, field_validator
 
 from src.shared.base_schema import BaseSchema, TimestampMixin, IDMixin, PaginatedResponse
 
@@ -18,18 +18,32 @@ class DeviceCreate(BaseSchema):
     location: Optional[str] = Field(None, max_length=200, description="位置")
     group_id: Optional[int] = Field(None, description="设备组ID")
     snmp_community: Optional[str] = Field("public", description="SNMP Community")
-    snmp_version: str = Field("v2c", description="SNMP版本: v2c, v3")
+    # 数据库约束 ck_devices_snmp_version 只允许 '1'/'2c'/'3'，这里默认用 '2c'
+    snmp_version: str = Field("2c", description="SNMP版本: 1, 2c, 3")
     ssh_username: Optional[str] = Field(None, description="SSH用户名")
     ssh_password: Optional[str] = Field(None, description="SSH密码")
     ssh_port: Optional[int] = Field(22, ge=1, le=65535, description="SSH端口")
     description: Optional[str] = Field(None, max_length=500, description="描述")
     tags: Optional[Dict[str, Any]] = Field(None, description="标签")
 
-    @validator('snmp_version')
-    def convert_snmp_version(cls, v):
-        """转换SNMP版本格式"""
-        version_map = {'v2c': '2c', 'v3': '3', '1': '1'}
-        return version_map.get(v, v)
+    @field_validator("snmp_version", mode="before")
+    @classmethod
+    def normalize_snmp_version(cls, v: Any):
+        """规范化 SNMP 版本输入，兼容 'v2c'/'v3' 等写法并落到数据库可接受值。"""
+        if v is None:
+            return v
+        if isinstance(v, str):
+            normalized = v.strip().lower()
+            version_map = {
+                "v1": "1",
+                "1": "1",
+                "v2c": "2c",
+                "2c": "2c",
+                "v3": "3",
+                "3": "3",
+            }
+            return version_map.get(normalized, v)
+        return v
 
 
 class DeviceUpdate(BaseSchema):
@@ -49,6 +63,25 @@ class DeviceUpdate(BaseSchema):
     description: Optional[str] = None
     is_active: Optional[bool] = None
     tags: Optional[Dict[str, Any]] = None
+
+    @field_validator("snmp_version", mode="before")
+    @classmethod
+    def normalize_snmp_version(cls, v: Any):
+        """与 DeviceCreate 保持一致：兼容输入并落到数据库可接受值。"""
+        if v is None:
+            return v
+        if isinstance(v, str):
+            normalized = v.strip().lower()
+            version_map = {
+                "v1": "1",
+                "1": "1",
+                "v2c": "2c",
+                "2c": "2c",
+                "v3": "3",
+                "3": "3",
+            }
+            return version_map.get(normalized, v)
+        return v
 
 
 class DeviceResponse(BaseSchema, IDMixin, TimestampMixin):

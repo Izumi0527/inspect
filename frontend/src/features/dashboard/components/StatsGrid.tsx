@@ -67,7 +67,7 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) 
             index={index}
             title={stat.title}
             value={stat.value}
-            change={`${stat.change} 较昨日`}
+            change={stat.change}
             trend={getTrend(stat.change)}
             icon={IconComponent}
             iconColor={stat.iconColor}

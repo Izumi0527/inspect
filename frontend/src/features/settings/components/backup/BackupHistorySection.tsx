@@ -89,7 +89,15 @@ function StatusBadge({ status }: { status: 'success' | 'failed' | 'in_progress' 
     },
   }
 
-  const { icon: Icon, label, className } = config[status]
+  // 防御性检查：如果状态值不在配置中，使用默认配置
+  const statusConfig = config[status] || {
+    variant: 'outline' as const,
+    icon: AlertCircle,
+    label: status || '未知',
+    className: 'bg-gray-100 text-gray-800 border-gray-200',
+  }
+
+  const { icon: Icon, label, className } = statusConfig
 
   return (
     <Badge variant="outline" className={className}>

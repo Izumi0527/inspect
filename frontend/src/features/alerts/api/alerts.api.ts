@@ -240,7 +240,8 @@ export async function bulkAlertAction(action: BulkAlertAction): Promise<boolean>
 }
 
 export async function fetchAlertStats(): Promise<AlertStats> {
-  const response = await api.get<AlertStatsDto>('/alerts/stats')
+  // 注意: 后端实际路由是 /alerts/statistics 而不是 /alerts/stats
+  const response = await api.get<AlertStatsDto>('/alerts/statistics')
   const data = response ?? {}
 
   return {

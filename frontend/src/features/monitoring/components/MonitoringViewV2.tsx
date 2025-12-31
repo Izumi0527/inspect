@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { useMonitoringV2, isUsingMockData } from '../hooks/useMonitoringV2'
+import { useMonitoringV2 } from '../hooks/useMonitoringV2'
 import { useSidebar } from '@/lib/contexts/sidebar-context'
 import { Sidebar } from '@/features/dashboard/components/Sidebar'
 import { DashboardHeader } from '@/features/dashboard'
@@ -77,9 +77,6 @@ export function MonitoringViewV2() {
     refetchInterval: 60000, // 60秒自动刷新
     enablePolling: true,
   })
-
-  // 判断当前数据源
-  const usingMockData = isUsingMockData()
 
   // ==================== 懒加载配置 ====================
   const chartInViewOptions = useMemo(
@@ -238,10 +235,10 @@ export function MonitoringViewV2() {
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 {/* 系统性能趋势图 */}
                 <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                  <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
+                  <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
                     系统性能趋势
                   </h3>
-                  <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                  <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
                     CPU、内存、网络流量的24小时趋势
                   </p>
                   {chartsInView ? (
@@ -259,10 +256,10 @@ export function MonitoringViewV2() {
 
                 {/* 设备温度监控图 */}
                 <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                  <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
+                  <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
                     设备温度监控
                   </h3>
-                  <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                  <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
                     多设备温度趋势对比(阈值: 75°C)
                   </p>
                   {chartsInView ? (
@@ -290,7 +287,7 @@ export function MonitoringViewV2() {
                 title="设备状态"
                 subtitle="设备健康状况、可用性和实时告警"
               />
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
                 {/* 设备状态分布卡片 */}
                 {data.deviceStatusDistribution && (
                   <DeviceStatusCard data={data.deviceStatusDistribution} />
@@ -331,30 +328,6 @@ export function MonitoringViewV2() {
                 )}
               </div>
             </section>
-
-            {/* 数据摘要(调试用) */}
-            <details className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900">
-              <summary className="cursor-pointer text-sm font-semibold text-gray-700 dark:text-gray-300">
-                📊 查看数据摘要 {usingMockData ? '(Mock 数据)' : '(真实 API)'}
-              </summary>
-              <pre className="mt-2 overflow-auto text-xs text-gray-600 dark:text-gray-400">
-                {JSON.stringify(
-                  {
-                    dataSource: usingMockData ? 'Mock' : 'Real API',
-                    systemPerformance: `${data.systemPerformance?.length ?? 0} 个数据点`,
-                    temperatureHistory: `${data.temperatureHistory?.length ?? 0} 个数据点`,
-                    deviceStatusDistribution: data.deviceStatusDistribution,
-                    availability: data.availability,
-                    networkTrafficHistory: `${data.networkTrafficHistory?.length ?? 0} 个数据点`,
-                    statsV2: `${data.statsV2?.length ?? 0} 个统计卡片`,
-                    realtimeAlerts: `${data.realtimeAlerts?.length ?? 0} 条告警`,
-                    lastUpdate: data.lastUpdate,
-                  },
-                  null,
-                  2
-                )}
-              </pre>
-            </details>
           </div>
         </main>
       </div>

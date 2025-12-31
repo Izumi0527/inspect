@@ -167,6 +167,43 @@ async def delete_alert_rule(
     return {"message": "告警规则已删除"}
 
 
+# ============= 统计 =============
+
+@router.get("/statistics", response_model=AlertStatistics, summary="获取告警统计")
+async def get_alert_statistics(
+    current_user: dict = Depends(require_permission("alerts:read"))
+):
+    """获取告警统计信息"""
+    engine = get_alert_engine()
+    alerts = list(engine.alerts.values())
+    
+    now = datetime.now()
+    last_24h = now - timedelta(hours=24)
+    
+    # 统计
+    by_severity = {}
+    by_device = {}
+    
+    for alert in alerts:
+        # 按严重级别
+        sev = alert.severity.value
+        by_severity[sev] = by_severity.get(sev, 0) + 1
+        
+        # 按设备
+        if alert.device_name:
+            by_device[alert.device_name] = by_device.get(alert.device_name, 0) + 1
+    
+    return AlertStatistics(
+        total_alerts=len(alerts),
+        active_alerts=len([a for a in alerts if a.status == AlertStatus.ACTIVE]),
+        acknowledged_alerts=len([a for a in alerts if a.status == AlertStatus.ACKNOWLEDGED]),
+        resolved_alerts=len([a for a in alerts if a.status == AlertStatus.RESOLVED]),
+        by_severity=by_severity,
+        by_device=by_device,
+        recent_24h=len([a for a in alerts if a.triggered_at >= last_24h])
+    )
+
+
 # ============= 告警查询 =============
 
 @router.get("/", response_model=List[AlertResponse], summary="获取告警列表")
@@ -298,40 +335,3 @@ async def resolve_alert(
     
     logger.info("Alert resolved", alert_id=alert_id, resolved_by=current_user["id"])
     return {"message": "告警已解决"}
-
-
-# ============= 统计 =============
-
-@router.get("/statistics", response_model=AlertStatistics, summary="获取告警统计")
-async def get_alert_statistics(
-    current_user: dict = Depends(require_permission("alerts:read"))
-):
-    """获取告警统计信息"""
-    engine = get_alert_engine()
-    alerts = list(engine.alerts.values())
-    
-    now = datetime.now()
-    last_24h = now - timedelta(hours=24)
-    
-    # 统计
-    by_severity = {}
-    by_device = {}
-    
-    for alert in alerts:
-        # 按严重级别
-        sev = alert.severity.value
-        by_severity[sev] = by_severity.get(sev, 0) + 1
-        
-        # 按设备
-        if alert.device_name:
-            by_device[alert.device_name] = by_device.get(alert.device_name, 0) + 1
-    
-    return AlertStatistics(
-        total_alerts=len(alerts),
-        active_alerts=len([a for a in alerts if a.status == AlertStatus.ACTIVE]),
-        acknowledged_alerts=len([a for a in alerts if a.status == AlertStatus.ACKNOWLEDGED]),
-        resolved_alerts=len([a for a in alerts if a.status == AlertStatus.RESOLVED]),
-        by_severity=by_severity,
-        by_device=by_device,
-        recent_24h=len([a for a in alerts if a.triggered_at >= last_24h])
-    )

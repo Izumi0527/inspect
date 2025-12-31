@@ -59,19 +59,19 @@ export function SystemPerformanceChart({
       key: 'cpu' as const,
       name: 'CPU',
       color: '#8B5CF6', // 紫色
-      strokeWidth: 2,
+      strokeWidth: 2.5,
     },
     {
       key: 'memory' as const,
       name: '内存',
-      color: '#06B6D4', // 青色
-      strokeWidth: 2,
+      color: '#0EA5E9', // 天蓝色
+      strokeWidth: 2.5,
     },
     {
       key: 'network' as const,
       name: '网络',
-      color: '#10B981', // 绿色
-      strokeWidth: 2,
+      color: '#22C55E', // 绿色
+      strokeWidth: 2.5,
     },
   ]
 

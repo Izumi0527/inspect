@@ -135,6 +135,7 @@ export interface DeviceImportData {
   name: string
   ip: string
   device_type: DeviceType
+  vendor?: string
   location?: string
   description?: string
 

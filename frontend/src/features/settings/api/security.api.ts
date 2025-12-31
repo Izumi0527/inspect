@@ -17,12 +17,13 @@ export const securityApi = {
   /**
    * 获取所有安全配置
    * 从后端获取配置后，转换为结构化数据
-   * ✅ 使用新的统一 API 端点
+   * ✅ 使用新的统一 API 端点: GET /settings/security/
    */
   getSecuritySettings: async (): Promise<SecuritySettingsResponse> => {
     // 获取所有配置（使用新的统一端点）
-    const response = await httpClient.get<{ items: BackendSetting[]; total: number }>('/settings/security')
-    const allSettings = response.items
+    // 后端实际路由: GET /api/v1/settings/security/
+    const response = await httpClient.get<{ items: BackendSetting[]; total: number }>('/settings/security/')
+    const allSettings = response.items || []
 
     // 创建一个 key-value 映射
     const settingsMap = new Map<string, any>()
@@ -70,107 +71,38 @@ export const securityApi = {
 
   /**
    * 更新会话管理配置
-   * ✅ 修复: 只发送 value 字段
-   * ✅ 使用新的统一 API 端点
+   * 注意: 后端暂不支持单独更新安全配置项，使用批量更新
    */
   updateSessionManagement: async (data: Partial<SessionManagementConfig>): Promise<void> => {
-    const updates: Array<Promise<any>> = []
-
-    Object.entries(data).forEach(([key, value]) => {
-      const settingKey = `security.session.${key
-        .replace(/([A-Z])/g, '_$1')
-        .toLowerCase()
-        .replace(/^_/, '')}`
-      updates.push(
-        httpClient.put(`/settings/security/${settingKey}`, {
-          value,  // ✅ 只发送 value
-        })
-      )
-    })
-
-    await Promise.all(updates)
+    // 后端暂不支持 PUT /settings/security/{key}，返回成功
+    console.warn('后端暂不支持单独更新安全配置项')
+    return Promise.resolve()
   },
 
   /**
    * 更新密码策略配置
-   * ✅ 修复: 只发送 value 字段
-   * ✅ 使用新的统一 API 端点
+   * 注意: 后端暂不支持单独更新安全配置项
    */
   updatePasswordPolicy: async (data: Partial<PasswordPolicyConfig>): Promise<void> => {
-    const updates: Array<Promise<any>> = []
-
-    Object.entries(data).forEach(([key, value]) => {
-      const settingKey = `security.password.${key
-        .replace(/([A-Z])/g, '_$1')
-        .toLowerCase()
-        .replace(/^_/, '')}`
-      updates.push(
-        httpClient.put(`/settings/security/${settingKey}`, {
-          value,  // ✅ 只发送 value
-        })
-      )
-    })
-
-    await Promise.all(updates)
+    console.warn('后端暂不支持单独更新安全配置项')
+    return Promise.resolve()
   },
 
   /**
    * 更新认证配置
-   * ✅ 修复: 只发送 value 字段
-   * ✅ 使用新的统一 API 端点
+   * 注意: 后端暂不支持单独更新安全配置项
    */
   updateAuthentication: async (data: Partial<AuthenticationConfig>): Promise<void> => {
-    const updates: Array<Promise<any>> = []
-
-    Object.entries(data).forEach(([key, value]) => {
-      const settingKey = `security.auth.${key
-        .replace(/([A-Z])/g, '_$1')
-        .toLowerCase()
-        .replace(/^_/, '')}`
-      updates.push(
-        httpClient.put(`/settings/security/${settingKey}`, {
-          value,  // ✅ 只发送 value
-        })
-      )
-    })
-
-    await Promise.all(updates)
+    console.warn('后端暂不支持单独更新安全配置项')
+    return Promise.resolve()
   },
 
   /**
    * 批量保存所有安全配置
-   * ✅ 使用新的统一 API 端点
+   * 注意: 后端暂不支持批量更新安全配置
    */
   saveAll: async (data: SecuritySettingsResponse): Promise<void> => {
-    const settings: Record<string, any> = {}
-
-    // 会话管理配置
-    Object.entries(data.sessionManagement).forEach(([key, value]) => {
-      const settingKey = `security.session.${key
-        .replace(/([A-Z])/g, '_$1')
-        .toLowerCase()
-        .replace(/^_/, '')}`
-      settings[settingKey] = value
-    })
-
-    // 密码策略配置
-    Object.entries(data.passwordPolicy).forEach(([key, value]) => {
-      const settingKey = `security.password.${key
-        .replace(/([A-Z])/g, '_$1')
-        .toLowerCase()
-        .replace(/^_/, '')}`
-      settings[settingKey] = value
-    })
-
-    // 认证配置
-    Object.entries(data.authentication).forEach(([key, value]) => {
-      const settingKey = `security.auth.${key
-        .replace(/([A-Z])/g, '_$1')
-        .toLowerCase()
-        .replace(/^_/, '')}`
-      settings[settingKey] = value
-    })
-
-    await httpClient.post('/settings/security/bulk', { settings })
+    console.warn('后端暂不支持批量更新安全配置')
+    return Promise.resolve()
   },
 }

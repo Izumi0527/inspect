@@ -54,6 +54,7 @@ const statusLabels: Record<UserStatus, string> = {
 }
 
 export const UserManagement: React.FC<Props> = ({ searchText }) => {
+  const allSelectValue = '__all__'
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(20)
   const [searchQuery, setSearchQuery] = useState('')
@@ -225,11 +226,11 @@ export const UserManagement: React.FC<Props> = ({ searchText }) => {
             
             {/* 角色筛选 */}
             <SimpleSelect
-              value={roleFilter}
-              onChange={(value) => handleFilterChange('role', value)}
+              value={roleFilter || allSelectValue}
+              onChange={(value) => handleFilterChange('role', value === allSelectValue ? '' : value)}
               placeholder="所有角色"
             >
-              <SelectItem value="">所有角色</SelectItem>
+              <SelectItem value={allSelectValue}>所有角色</SelectItem>
               <SelectItem value="admin">管理员</SelectItem>
               <SelectItem value="operator">操作员</SelectItem>
               <SelectItem value="viewer">查看者</SelectItem>
@@ -237,11 +238,11 @@ export const UserManagement: React.FC<Props> = ({ searchText }) => {
             
             {/* 状态筛选 */}
             <SimpleSelect
-              value={statusFilter}
-              onChange={(value) => handleFilterChange('status', value)}
+              value={statusFilter || allSelectValue}
+              onChange={(value) => handleFilterChange('status', value === allSelectValue ? '' : value)}
               placeholder="所有状态"
             >
-              <SelectItem value="">所有状态</SelectItem>
+              <SelectItem value={allSelectValue}>所有状态</SelectItem>
               <SelectItem value="active">活跃</SelectItem>
               <SelectItem value="inactive">停用</SelectItem>
               <SelectItem value="locked">锁定</SelectItem>

@@ -1672,12 +1672,12 @@ function getDefaultTrendAnalysisData(): TrendAnalysisData {
       startDate: '',
       endDate: '',
     },
-    metrics: {
-      availability: transformTrendMetric({}, 'availability'),
-      performance: transformTrendMetric({}, 'performance'),
-      errors: transformTrendMetric({}, 'errors'),
-      capacity: transformTrendMetric({}, 'capacity'),
-    },
+    metrics: [
+      transformTrendMetric({}, 'availability'),
+      transformTrendMetric({}, 'performance'),
+      transformTrendMetric({}, 'errors'),
+      transformTrendMetric({}, 'capacity'),
+    ],
     predictions: [],
     alerts: [],
   }

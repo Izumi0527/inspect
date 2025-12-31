@@ -46,6 +46,16 @@ class MonitoringStatsResponse(BaseSchema):
     error: Optional[str] = None
 
 
+class MonitoringDashboardStatsResponse(BaseSchema):
+    """监控中心仪表盘统计响应（6个关键指标）"""
+    total_devices: int = Field(0, description="总设备数")
+    availability: float = Field(0.0, description="可用性百分比")
+    active_alerts: int = Field(0, description="活跃告警数")
+    avg_cpu: float = Field(0.0, description="平均CPU使用率")
+    avg_memory: float = Field(0.0, description="平均内存使用率")
+    avg_network: float = Field(0.0, description="平均网络流量(Mbps)")
+
+
 class InterfaceStatusResponse(BaseSchema):
     """接口状态响应"""
     index: str

@@ -61,6 +61,8 @@ const SEVERITY_CONFIG = {
   critical: { color: 'bg-red-100 text-red-800', label: '严重' }
 }
 
+const ALL_FILTER_VALUE = '__all__'
+
 export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
   deviceIps,
   filter
@@ -223,12 +225,15 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
           <div className="flex flex-wrap gap-3">
             {/* 严重程度过滤 */}
-            <Select value={severityFilter} onValueChange={setSeverityFilter}>
+            <Select
+              value={severityFilter || ALL_FILTER_VALUE}
+              onValueChange={value => setSeverityFilter(value === ALL_FILTER_VALUE ? '' : value)}
+            >
               <SelectTrigger className="w-32">
                 <SelectValue placeholder="严重程度" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">全部</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>全部</SelectItem>
                 <SelectItem value="critical">严重</SelectItem>
                 <SelectItem value="high">高</SelectItem>
                 <SelectItem value="medium">中</SelectItem>
@@ -237,12 +242,15 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
             </Select>
 
             {/* 异常类型过滤 */}
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <Select
+              value={typeFilter || ALL_FILTER_VALUE}
+              onValueChange={value => setTypeFilter(value === ALL_FILTER_VALUE ? '' : value)}
+            >
               <SelectTrigger className="w-36">
                 <SelectValue placeholder="异常类型" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">全部类型</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>全部类型</SelectItem>
                 <SelectItem value="traffic_spike">流量激增</SelectItem>
                 <SelectItem value="traffic_drop">流量骤降</SelectItem>
                 <SelectItem value="high_utilization">高利用率</SelectItem>

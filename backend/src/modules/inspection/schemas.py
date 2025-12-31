@@ -95,9 +95,22 @@ class InspectionTemplateCreate(BaseSchema):
     """创建巡检模板请求"""
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
-    device_types: List[str] = []
-    check_items: List[Dict[str, Any]] = []
-    is_default: bool = False
+    category: str = Field("custom", description="模板分类: network, system, security, custom")
+    device_types: List[str] = Field(default_factory=list, alias="deviceTypes")
+    check_items: List[Dict[str, Any]] = Field(default_factory=list, alias="checkItems")
+    is_default: bool = Field(False, alias="isBuiltIn")
+    is_active: bool = Field(True, alias="isActive")
+
+
+class InspectionTemplateUpdate(BaseSchema):
+    """更新巡检模板请求（部分更新）"""
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = None
+    category: Optional[str] = None
+    device_types: Optional[List[str]] = Field(None, alias="deviceTypes")
+    check_items: Optional[List[Dict[str, Any]]] = Field(None, alias="checkItems")
+    is_default: Optional[bool] = Field(None, alias="isBuiltIn")
+    is_active: Optional[bool] = Field(None, alias="isActive")
 
 
 class InspectionTemplateResponse(BaseSchema):
@@ -105,9 +118,11 @@ class InspectionTemplateResponse(BaseSchema):
     id: int
     name: str
     description: Optional[str] = None
-    device_types: List[str]
-    check_items: List[Dict[str, Any]]
+    category: str = "custom"
+    device_types: List[str] = Field(default_factory=list)
+    check_items: List[Dict[str, Any]] = Field(default_factory=list)
     is_default: bool
+    is_active: bool = True
     created_by: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -118,11 +133,22 @@ class InspectionStrategyCreate(BaseSchema):
     """创建巡检策略请求"""
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
-    template_id: int
-    device_group_ids: List[int] = []
-    schedule_type: str = Field("manual", description="调度类型: manual, daily, weekly, monthly")
-    schedule_config: Optional[Dict[str, Any]] = None
+    type: str = Field("manual", description="策略类型: scheduled, manual")
+    cron: Optional[str] = Field(None, description="Cron表达式（仅 scheduled）")
+    devices: List[int] = Field(default_factory=list, description="设备ID列表")
+    templates: List[int] = Field(default_factory=list, description="模板ID列表")
     enabled: bool = True
+
+
+class InspectionStrategyUpdate(BaseSchema):
+    """更新巡检策略请求（部分更新）"""
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = None
+    type: Optional[str] = Field(None, description="策略类型: scheduled, manual")
+    cron: Optional[str] = Field(None, description="Cron表达式（仅 scheduled）")
+    devices: Optional[List[int]] = Field(None, description="设备ID列表")
+    templates: Optional[List[int]] = Field(None, description="模板ID列表")
+    enabled: Optional[bool] = None
 
 
 class InspectionStrategyResponse(BaseSchema):
@@ -130,15 +156,13 @@ class InspectionStrategyResponse(BaseSchema):
     id: int
     name: str
     description: Optional[str] = None
-    template_id: int
-    template_name: Optional[str] = None
-    device_group_ids: List[int]
-    schedule_type: str
-    schedule_config: Optional[Dict[str, Any]] = None
+    type: str
+    cron: Optional[str] = None
+    devices: List[int] = []
+    templates: List[int] = []
     enabled: bool
-    last_run_at: Optional[datetime] = None
-    next_run_at: Optional[datetime] = None
-    created_by: Optional[str] = None
+    last_run_time: Optional[datetime] = None
+    next_run_time: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

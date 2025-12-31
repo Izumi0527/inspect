@@ -25,11 +25,11 @@ export function TemperatureChart({
   className,
   temperatureThreshold = 75, // 默认75°C为阈值
 }: TemperatureChartProps) {
-  // 预定义的设备颜色
+  // 预定义的设备颜色 - 更鲜艳的配色
   const deviceColors = [
     '#8B5CF6', // 紫色
-    '#06B6D4', // 青色
-    '#10B981', // 绿色
+    '#0EA5E9', // 天蓝色
+    '#22C55E', // 绿色
     '#F59E0B', // 橙色
     '#EF4444', // 红色
   ]
@@ -80,7 +80,7 @@ export function TemperatureChart({
       key: deviceName,
       name: deviceName,
       color: deviceColors[index % deviceColors.length],
-      strokeWidth: 2,
+      strokeWidth: 2.5,
     }))
   }, [deviceNames])
 

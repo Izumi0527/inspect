@@ -16,7 +16,8 @@ $ErrorActionPreference = "Stop"
 
 # 全局变量
 $script:ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-$script:ProjectRoot = Split-Path -Parent $script:ScriptPath
+$script:ScriptsRoot = Split-Path -Parent $script:ScriptPath
+$script:ProjectRoot = Split-Path -Parent $script:ScriptsRoot
 $script:LogsPath = Join-Path $script:ProjectRoot "logs"
 $script:TestResults = @()
 

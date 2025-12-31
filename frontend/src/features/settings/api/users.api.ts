@@ -153,18 +153,16 @@ export const usersApi = {
 
   /**
    * 获取角色列表
+   * 注意: 后端暂不支持角色管理端点，返回默认角色列表
    */
   getRoleList: async (): Promise<RoleListResponse> => {
-    const response = await httpClient.get<{ roles: any[] }>('/settings/roles')
+    // 后端暂不支持 /settings/roles 端点，返回默认角色
     return {
-      roles: response.roles.map((role) => ({
-        id: role.id,
-        name: role.name,
-        displayName: role.display_name,
-        description: role.description,
-        permissions: role.permissions,
-        userCount: role.user_count,
-      })),
+      roles: [
+        { id: '1', name: 'admin', displayName: '管理员', description: '系统管理员', permissions: [], userCount: 0 },
+        { id: '2', name: 'operator', displayName: '操作员', description: '普通操作员', permissions: [], userCount: 0 },
+        { id: '3', name: 'viewer', displayName: '只读用户', description: '只读权限', permissions: [], userCount: 0 },
+      ],
     }
   },
 

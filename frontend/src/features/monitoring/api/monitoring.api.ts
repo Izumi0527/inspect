@@ -73,27 +73,28 @@ interface MonitoringOverviewApi {
   total_alerts?: number
 }
 // 获取监控概览数据
+// 注意: 后端路由已更新，使用实际存在的端点
 export async function fetchMonitoringOverview(): Promise<MonitoringData> {
   try {
-    const [overview, networkStatsRaw, deviceStatusRaw, networkTrafficRaw, alertSummaryRaw] = await Promise.all([
-      api.get<MonitoringOverviewApi>('/monitoring/overview'),
-      api.get<NetworkStatApi[]>('/monitoring/network-stats'),
-      api.get<DeviceStatusApi[]>('/monitoring/devices'),
-      api.get<NetworkTrafficApi>('/monitoring/traffic?time_range=24h'),
-      api.get<AlertSummaryApi>('/monitoring/alerts/summary'),
+    const [statsRaw, deviceStatusRaw, trafficSummaryRaw, alertStatsRaw] = await Promise.all([
+      api.get<MonitoringOverviewApi>('/monitoring/stats'),           // 后端实际路由
+      api.get<DeviceStatusApi[]>('/monitoring/devices/status'),      // 后端实际路由
+      api.get<NetworkTrafficApi>('/traffic/summary'),                // 后端实际路由
+      api.get<AlertSummaryApi>('/alerts/statistics'),                // 后端实际路由
     ])
 
-    const networkStats = transformNetworkStatsData(networkStatsRaw)
+    // 从 stats 响应构建网络统计数据
+    const networkStats = statsRaw ? transformStatsToNetworkStats(statsRaw) : []
     const deviceStatus = transformDeviceStatusData(deviceStatusRaw)
-    const networkTraffic = transformTrafficData(networkTrafficRaw)
-    const alertSummary = transformAlertSummaryData(alertSummaryRaw)
+    const networkTraffic = transformTrafficData(trafficSummaryRaw)
+    const alertSummary = transformAlertStatsData(alertStatsRaw)
 
     return {
       networkStats,
       deviceStatus,
       networkTraffic,
       alertSummary,
-      lastUpdate: overview?.last_updated ?? new Date().toISOString(),
+      lastUpdate: statsRaw?.last_updated ?? new Date().toISOString(),
       totalAlerts:
         (alertSummary?.critical ?? 0) +
         (alertSummary?.warning ?? 0) +
@@ -109,20 +110,84 @@ export async function fetchMonitoringOverview(): Promise<MonitoringData> {
 }
 
 // 获取网络统计数据
+// 注意: 后端没有专门的 network-stats 端点，从 /monitoring/stats 获取
 export async function fetchNetworkStats(): Promise<NetworkStat[]> {
   try {
-    const response = await api.get<NetworkStatApi[]>('/monitoring/network-stats')
-    return transformNetworkStatsData(response)
+    const response = await api.get<MonitoringOverviewApi>('/monitoring/stats')
+    return transformStatsToNetworkStats(response)
   } catch (error) {
     console.error('获取网络统计失败:', error)
     throw error instanceof Error ? error : new Error('获取网络统计失败')
   }
 }
 
+// 将 /monitoring/stats 响应转换为网络统计数据
+function transformStatsToNetworkStats(stats: MonitoringOverviewApi | null): NetworkStat[] {
+  if (!stats) return []
+  
+  // 从 stats 响应构建网络统计卡片数据
+  const statsData = stats as Record<string, unknown>
+  return [
+    {
+      title: '设备总数',
+      value: String(statsData.total_devices ?? statsData.device_count ?? 0),
+      change: '+0%',
+      trend: 'up' as const,
+      icon: 'server',
+      color: 'blue',
+      data: [],
+    },
+    {
+      title: '在线设备',
+      value: String(statsData.online_devices ?? statsData.active_devices ?? 0),
+      change: '+0%',
+      trend: 'up' as const,
+      icon: 'check-circle',
+      color: 'green',
+      data: [],
+    },
+    {
+      title: '告警数量',
+      value: String(statsData.total_alerts ?? statsData.alert_count ?? 0),
+      change: '+0%',
+      trend: 'up' as const,
+      icon: 'alert-triangle',
+      color: 'yellow',
+      data: [],
+    },
+    {
+      title: '平均响应时间',
+      value: `${statsData.avg_response_time ?? 0}ms`,
+      change: '+0%',
+      trend: 'up' as const,
+      icon: 'clock',
+      color: 'purple',
+      data: [],
+    },
+  ]
+}
+
+// 将 /alerts/statistics 响应转换为告警摘要
+function transformAlertStatsData(apiData: AlertSummaryApi | null): AlertSummary {
+  if (!apiData) {
+    return { critical: 0, warning: 0, info: 0, recent: [], trends: { up: 0, down: 0, stable: 0 } }
+  }
+  
+  const statsData = apiData as Record<string, unknown>
+  return {
+    critical: (statsData.critical as number) ?? (statsData.critical_count as number) ?? 0,
+    warning: (statsData.warning as number) ?? (statsData.warning_count as number) ?? 0,
+    info: (statsData.info as number) ?? (statsData.info_count as number) ?? 0,
+    recent: (statsData.recent as AlertSummary['recent']) ?? [],
+    trends: (statsData.trends as AlertSummary['trends']) ?? { up: 0, down: 0, stable: 0 },
+  }
+}
+
 // 获取设备监控状态
+// 注意: 后端实际路由是 /monitoring/devices/status
 export async function fetchDeviceMonitoringStatus(): Promise<DeviceMonitoringStatus[]> {
   try {
-    const response = await api.get<DeviceStatusApi[]>('/monitoring/devices')
+    const response = await api.get<DeviceStatusApi[]>('/monitoring/devices/status')
     return transformDeviceStatusData(response)
   } catch (error) {
     console.error('获取设备监控状态失败:', error)
@@ -131,9 +196,10 @@ export async function fetchDeviceMonitoringStatus(): Promise<DeviceMonitoringSta
 }
 
 // 获取网络流量数据
+// 注意: 后端实际路由是 /traffic/summary
 export async function fetchNetworkTraffic(timeRange: string = '24h'): Promise<NetworkTraffic> {
   try {
-    const response = await api.get<NetworkTrafficApi>(`/monitoring/traffic?time_range=${timeRange}`)
+    const response = await api.get<NetworkTrafficApi>(`/traffic/summary?time_range=${timeRange}`)
     return transformTrafficData(response)
   } catch (error) {
     console.error('获取网络流量失败:', error)
@@ -142,10 +208,11 @@ export async function fetchNetworkTraffic(timeRange: string = '24h'): Promise<Ne
 }
 
 // 获取告警汇总
+// 注意: 后端实际路由是 /alerts/statistics
 export async function fetchAlertSummary(): Promise<AlertSummary> {
   try {
-    const response = await api.get<AlertSummaryApi>('/monitoring/alerts/summary')
-    return transformAlertSummaryData(response)
+    const response = await api.get<AlertSummaryApi>('/alerts/statistics')
+    return transformAlertStatsData(response)
   } catch (error) {
     console.error('获取告警汇总失败:', error)
     throw error instanceof Error ? error : new Error('获取告警汇总失败')
@@ -543,9 +610,10 @@ export async function fetchAvailabilityData(): Promise<AvailabilityData> {
     const response = await api.get<any>('/monitoring/availability')
 
     return {
-      current: response?.current ?? response?.availability ?? 99.5,
+      current: response?.current ?? response?.availability ?? 0,
       target: response?.target ?? response?.sla ?? 99.9,
       trend: response?.trend ?? 'stable',
+      lastUpdate: response?.last_update ?? response?.lastUpdate ?? new Date().toISOString(),
     }
   } catch (error) {
     console.error('获取可用性数据失败:', error)
@@ -591,8 +659,9 @@ export async function fetchNetworkTrafficHistory(
  */
 export async function fetchStatsV2(): Promise<StatCardData[]> {
   try {
-    console.log('[fetchStatsV2] Calling /monitoring/stats/summary')
-    const response = await api.get<any>('/monitoring/stats/summary')
+    // 注意: 后端实际路由是 /monitoring/stats 而不是 /monitoring/stats/summary
+    console.log('[fetchStatsV2] Calling /monitoring/stats')
+    const response = await api.get<any>('/monitoring/stats')
     console.log('[fetchStatsV2] Response received:', response)
 
     // 如果后端返回数组，直接使用
@@ -667,7 +736,7 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
     console.error('[fetchStatsV2] API call failed:', {
       error,
       message: error instanceof Error ? error.message : String(error),
-      url: '/monitoring/stats/summary'
+      url: '/monitoring/stats'
     })
     throw error instanceof Error ? error : new Error('获取统计数据失败')
   }
@@ -680,7 +749,8 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
  */
 export async function fetchRealtimeAlerts(limit: number = 10): Promise<Alert[]> {
   try {
-    const response = await api.get<any>(`/monitoring/alerts/recent?limit=${limit}`)
+    // 注意: 后端没有 /monitoring/alerts/recent，使用 /alerts/ 并限制数量
+    const response = await api.get<any>(`/alerts/?limit=${limit}&sort_by=created_at&sort_order=desc`)
 
     if (Array.isArray(response)) {
       return response.map((alert: any) => ({
@@ -747,7 +817,7 @@ export async function fetchMonitoringDataV2(
       availability:
         availability.status === 'fulfilled'
           ? availability.value
-          : { current: 99.5, target: 99.9, trend: 'stable' },
+          : { current: 0, target: 99.9, trend: 'stable' },
       networkTrafficHistory:
         networkTrafficHistory.status === 'fulfilled' ? networkTrafficHistory.value : [],
       statsV2: (() => {

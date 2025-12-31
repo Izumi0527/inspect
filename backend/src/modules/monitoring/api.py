@@ -15,6 +15,7 @@ from src.modules.monitoring.schemas import (
     DeviceStatusResponse,
     DeviceMetricsResponse,
     MonitoringStatsResponse,
+    MonitoringDashboardStatsResponse,
     MetricsHistoryResponse,
 )
 
@@ -39,11 +40,103 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
-@router.get("/stats", response_model=MonitoringStatsResponse, summary="获取监控统计")
+@router.get("/stats", response_model=MonitoringDashboardStatsResponse, summary="获取监控仪表盘统计")
 async def get_monitoring_stats(
+    current_user: dict = Depends(require_permission("monitoring:read")),
+    session: AsyncSession = Depends(get_db_session)
+):
+    """
+    获取监控中心仪表盘的6个关键指标:
+    - 总设备数
+    - 可用性
+    - 活跃告警数
+    - 平均CPU使用率
+    - 平均内存使用率
+    - 平均网络流量
+    """
+    DeviceRepository = get_device_repository()
+    device_repo = DeviceRepository(session)
+    cache_service = get_cache_service()
+    
+    # 获取设备统计
+    device_stats = await device_repo.get_device_statistics()
+    total_devices = device_stats.get("total_devices", 0)
+    online_devices = device_stats.get("online_devices", 0)
+    
+    # 计算可用性
+    availability = (online_devices / total_devices * 100) if total_devices > 0 else 0.0
+    
+    # 获取告警统计（从告警模块）
+    try:
+        from src.repositories.alert_repository_db import DatabaseAlertRepository
+        alert_repo = DatabaseAlertRepository(session)
+        # 获取活跃告警（状态为 OPEN 或 ACKNOWLEDGED）
+        _, active_alerts = await alert_repo.get_active_alerts(skip=0, limit=1)
+    except Exception as e:
+        logger.warning(f"Failed to get alert count: {e}")
+        active_alerts = 0
+    
+    # 获取性能指标（从缓存或计算平均值）
+    avg_cpu = 0.0
+    avg_memory = 0.0
+    avg_network = 0.0
+    
+    try:
+        # 尝试从缓存获取所有设备的状态
+        devices, _ = await device_repo.get_devices_paginated(page=1, page_size=100, is_active=True)
+        cpu_values = []
+        memory_values = []
+        network_values = []
+        
+        for device in devices:
+            status_data = await cache_service.get_cached_device_status(device.id)
+            if status_data and isinstance(status_data, dict):
+                metrics = status_data.get("metrics", {})
+                if isinstance(metrics, dict):
+                    if "cpu_usage" in metrics:
+                        cpu_val = metrics["cpu_usage"]
+                        if isinstance(cpu_val, dict):
+                            cpu_values.append(cpu_val.get("value", 0))
+                        else:
+                            cpu_values.append(cpu_val)
+                    if "memory_usage" in metrics:
+                        mem_val = metrics["memory_usage"]
+                        if isinstance(mem_val, dict):
+                            memory_values.append(mem_val.get("value", 0))
+                        else:
+                            memory_values.append(mem_val)
+                    if "bandwidth_utilization" in metrics:
+                        net_val = metrics["bandwidth_utilization"]
+                        if isinstance(net_val, dict):
+                            network_values.append(net_val.get("value", 0))
+                        else:
+                            network_values.append(net_val)
+        
+        if cpu_values:
+            avg_cpu = sum(cpu_values) / len(cpu_values)
+        if memory_values:
+            avg_memory = sum(memory_values) / len(memory_values)
+        if network_values:
+            avg_network = sum(network_values) / len(network_values)
+            
+    except Exception as e:
+        logger.warning(f"Failed to calculate average metrics: {e}")
+    
+    return MonitoringDashboardStatsResponse(
+        total_devices=total_devices,
+        availability=round(availability, 2),
+        active_alerts=active_alerts,
+        avg_cpu=round(avg_cpu, 1),
+        avg_memory=round(avg_memory, 1),
+        avg_network=round(avg_network, 1)
+    )
+
+
+@router.get("/stats/service", response_model=MonitoringStatsResponse, summary="获取监控服务状态")
+async def get_monitoring_service_stats(
     current_user: dict = Depends(require_permission("monitoring:read"))
 ):
-    """获取监控服务统计信息"""
+    """获取监控服务运行状态（内部使用）"""
     service = get_device_monitoring_service()
     stats = await service.get_monitoring_stats()
     return MonitoringStatsResponse(**stats)
@@ -207,6 +300,169 @@ async def stop_monitoring(
     """停止设备监控服务"""
     service = get_device_monitoring_service()
     await service.stop_monitoring()
-    
+
     logger.info("Monitoring service stopped", stopped_by=current_user["id"])
     return {"message": "监控服务已停止"}
+
+
+@router.get("/devices/distribution", summary="获取设备状态分布")
+async def get_device_status_distribution(
+    current_user: dict = Depends(require_permission("monitoring:read")),
+    session: AsyncSession = Depends(get_db_session)
+):
+    """获取设备按状态的分布统计"""
+    DeviceRepository = get_device_repository()
+    device_repo = DeviceRepository(session)
+
+    stats = await device_repo.get_device_statistics()
+
+    return {
+        "healthy": stats.get("online_devices", 0),
+        "warning": stats.get("warning_devices", 0),
+        "critical": stats.get("critical_devices", 0),
+        "offline": stats.get("offline_devices", 0)
+    }
+
+
+@router.get("/availability", summary="获取系统可用性")
+async def get_system_availability(
+    current_user: dict = Depends(require_permission("monitoring:read")),
+    session: AsyncSession = Depends(get_db_session)
+):
+    """获取系统整体可用性数据"""
+    DeviceRepository = get_device_repository()
+    device_repo = DeviceRepository(session)
+
+    stats = await device_repo.get_device_statistics()
+    total = stats.get("total_devices", 0)
+    online = stats.get("online_devices", 0)
+
+    availability = (online / total * 100) if total > 0 else 100.0
+
+    return {
+        "current": round(availability, 2),
+        "target": 99.9,
+        "trend": "stable"
+    }
+
+
+@router.post("/system/performance", summary="获取系统性能历史")
+async def get_system_performance_history(
+    request_body: dict,
+    current_user: dict = Depends(require_permission("monitoring:read"))
+):
+    """获取系统性能历史数据（CPU、内存、网络）"""
+    monitoring_service = get_monitoring_service()
+
+    # 从请求体获取参数
+    start_time_str = request_body.get("start_time")
+    end_time_str = request_body.get("end_time")
+    metrics = request_body.get("metrics")
+
+    # 解析时间参数
+    try:
+        if isinstance(start_time_str, str):
+            start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+        else:
+            start_time = datetime.now() - timedelta(hours=24)
+        
+        if isinstance(end_time_str, str):
+            end_time = datetime.fromisoformat(end_time_str.replace("Z", "+00:00"))
+        else:
+            end_time = datetime.now()
+    except (ValueError, TypeError):
+        start_time = datetime.now() - timedelta(hours=24)
+        end_time = datetime.now()
+
+    # 获取系统级别的性能历史数据
+    metric_names = metrics if isinstance(metrics, list) else ["cpu_usage", "memory_usage", "network_traffic"]
+
+    try:
+        history_data = await monitoring_service.get_system_performance_history(
+            start_time=start_time,
+            end_time=end_time,
+            metrics=metric_names
+        )
+        return history_data or []
+    except Exception as e:
+        logger.warning(f"获取系统性能历史失败: {e}")
+        # 返回空数据而不是抛出异常
+        return []
+
+
+@router.post("/devices/temperature", summary="获取设备温度历史")
+async def get_device_temperature_history(
+    request_body: dict,
+    current_user: dict = Depends(require_permission("monitoring:read"))
+):
+    """获取设备温度历史数据"""
+    monitoring_service = get_monitoring_service()
+
+    # 从请求体获取参数
+    start_time_str = request_body.get("start_time")
+    end_time_str = request_body.get("end_time")
+
+    # 解析时间参数
+    try:
+        if isinstance(start_time_str, str):
+            start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+        else:
+            start_time = datetime.now() - timedelta(hours=24)
+        
+        if isinstance(end_time_str, str):
+            end_time = datetime.fromisoformat(end_time_str.replace("Z", "+00:00"))
+        else:
+            end_time = datetime.now()
+    except (ValueError, TypeError):
+        start_time = datetime.now() - timedelta(hours=24)
+        end_time = datetime.now()
+
+    try:
+        history_data = await monitoring_service.get_temperature_history(
+            start_time=start_time,
+            end_time=end_time
+        )
+        return history_data or []
+    except Exception as e:
+        logger.warning(f"获取温度历史失败: {e}")
+        # 返回空数据而不是抛出异常
+        return []
+
+
+@router.post("/network/traffic/history", summary="获取网络流量历史")
+async def get_network_traffic_history(
+    request_body: dict,
+    current_user: dict = Depends(require_permission("monitoring:read"))
+):
+    """获取网络流量历史数据"""
+    monitoring_service = get_monitoring_service()
+
+    # 从请求体获取参数
+    start_time_str = request_body.get("start_time")
+    end_time_str = request_body.get("end_time")
+
+    # 解析时间参数
+    try:
+        if isinstance(start_time_str, str):
+            start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+        else:
+            start_time = datetime.now() - timedelta(hours=24)
+        
+        if isinstance(end_time_str, str):
+            end_time = datetime.fromisoformat(end_time_str.replace("Z", "+00:00"))
+        else:
+            end_time = datetime.now()
+    except (ValueError, TypeError):
+        start_time = datetime.now() - timedelta(hours=24)
+        end_time = datetime.now()
+
+    try:
+        history_data = await monitoring_service.get_network_traffic_history(
+            start_time=start_time,
+            end_time=end_time
+        )
+        return history_data or []
+    except Exception as e:
+        logger.warning(f"获取网络流量历史失败: {e}")
+        # 返回空数据而不是抛出异常
+        return []

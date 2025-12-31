@@ -199,6 +199,12 @@ class DeviceService:
                 imported.append(DeviceResponse.model_validate(device))
                 
             except Exception as e:
+                # 如果某条记录写入失败（例如数据库约束/唯一键冲突），必须回滚以清理会话状态，
+                # 否则后续操作或依赖层的 commit 会触发 PendingRollbackError 并导致 500。
+                try:
+                    await self.session.rollback()
+                except Exception:
+                    pass
                 skipped.append({
                     "ip_address": device_data.ip_address,
                     "reason": f"导入失败: {str(e)}"

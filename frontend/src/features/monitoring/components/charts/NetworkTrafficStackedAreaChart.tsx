@@ -38,7 +38,7 @@ export function NetworkTrafficStackedAreaChart({
   const tooltipBorder = isDark ? 'rgba(55, 65, 81, 0.5)' : 'rgba(229, 231, 235, 0.5)'
 
   const width = 800
-  const margin = { top: 20, right: 30, bottom: 40, left: 60 }
+  const margin = { top: 20, right: 30, bottom: 50, left: 70 }
   const innerWidth = width - margin.left - margin.right
   const innerHeight = height - margin.top - margin.bottom
 
@@ -123,21 +123,21 @@ export function NetworkTrafficStackedAreaChart({
       <div style={{ position: 'relative', width: '100%', height }}>
         <svg width="100%" height={height}>
           <defs>
-            {/* 入站流量渐变 */}
+            {/* 入站流量渐变 - 更鲜艳的蓝色 */}
             <LinearGradient
               id="inbound-gradient"
-              from="#06B6D4"
-              to="#06B6D4"
-              fromOpacity={0.6}
-              toOpacity={0.1}
+              from="#0EA5E9"
+              to="#0EA5E9"
+              fromOpacity={0.7}
+              toOpacity={0.15}
             />
-            {/* 出站流量渐变 */}
+            {/* 出站流量渐变 - 更鲜艳的绿色 */}
             <LinearGradient
               id="outbound-gradient"
-              from="#10B981"
-              to="#10B981"
-              fromOpacity={0.6}
-              toOpacity={0.1}
+              from="#22C55E"
+              to="#22C55E"
+              fromOpacity={0.7}
+              toOpacity={0.15}
             />
           </defs>
 
@@ -171,8 +171,8 @@ export function NetworkTrafficStackedAreaChart({
               data={processedData}
               x={(d) => xScale(d.date)}
               y={(d) => yScale(d.inboundTop)}
-              stroke="#06B6D4"
-              strokeWidth={2}
+              stroke="#0EA5E9"
+              strokeWidth={2.5}
               curve={curveMonotoneX}
             />
 
@@ -181,8 +181,8 @@ export function NetworkTrafficStackedAreaChart({
               data={processedData}
               x={(d) => xScale(d.date)}
               y={(d) => yScale(d.outboundTop)}
-              stroke="#10B981"
-              strokeWidth={2}
+              stroke="#22C55E"
+              strokeWidth={2.5}
               curve={curveMonotoneX}
             />
 
@@ -265,10 +265,10 @@ export function NetworkTrafficStackedAreaChart({
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-4 text-sm">
                 <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full bg-cyan-500" />
+                  <div className="h-3 w-3 rounded-full bg-sky-500" />
                   <span className="text-gray-600 dark:text-gray-400">入站:</span>
                 </div>
-                <span className="font-medium text-gray-900 dark:text-gray-100">
+                <span className="font-semibold text-gray-900 dark:text-gray-100">
                   {tooltipData.inbound.toFixed(1)} Mbps
                 </span>
               </div>
@@ -277,7 +277,7 @@ export function NetworkTrafficStackedAreaChart({
                   <div className="h-3 w-3 rounded-full bg-green-500" />
                   <span className="text-gray-600 dark:text-gray-400">出站:</span>
                 </div>
-                <span className="font-medium text-gray-900 dark:text-gray-100">
+                <span className="font-semibold text-gray-900 dark:text-gray-100">
                   {tooltipData.outbound.toFixed(1)} Mbps
                 </span>
               </div>
@@ -297,12 +297,12 @@ export function NetworkTrafficStackedAreaChart({
       {/* 图例 */}
       <div className="mt-4 flex items-center justify-center gap-6">
         <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-cyan-500" />
-          <span className="text-sm text-gray-600 dark:text-gray-400">入站流量</span>
+          <div className="h-3 w-3 rounded-full bg-sky-500" />
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">入站流量</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-green-500" />
-          <span className="text-sm text-gray-600 dark:text-gray-400">出站流量</span>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">出站流量</span>
         </div>
       </div>
     </ChartContainer>

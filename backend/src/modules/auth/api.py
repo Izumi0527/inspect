@@ -42,7 +42,7 @@ class RefreshTokenRequest(BaseModel):
 
 
 class UserInfo(BaseModel):
-    id: int
+    id: str  # UUID string
     username: str
     email: EmailStr
     full_name: Optional[str] = None
@@ -178,6 +178,12 @@ async def logout(current_user: dict = Depends(get_current_active_user)):
 @router.get("/me", response_model=UserInfo, summary="获取当前用户信息")
 async def get_current_user_info(current_user: dict = Depends(get_current_active_user)):
     """获取当前登录用户信息"""
+    return UserInfo(**current_user)
+
+
+@router.get("/profile", response_model=UserInfo, summary="获取当前用户信息（别名）")
+async def get_user_profile(current_user: dict = Depends(get_current_active_user)):
+    """获取当前登录用户信息（/me 的别名，兼容前端 API 调用）"""
     return UserInfo(**current_user)
 
 

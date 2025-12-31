@@ -450,7 +450,7 @@ export const PieChartComponent: React.FC<PieChartProps> = ({
   innerRadius = 0,
   outerRadius = 80
 }) => {
-  const colors = ['#8B5CF6', '#06B6D4', '#10B981', '#F59E0B', '#EF4444', '#8B5A2B']
+  const colors = ['#8B5CF6', '#0EA5E9', '#22C55E', '#F59E0B', '#EF4444', '#EC4899']
 
   const dataWithColors = data.map((item, index) => ({
     ...item,

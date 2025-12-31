@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/utils/cn'
 
 interface ConfigInputProps {
-  value: string | number
+  value: string | number | undefined
   onChange?: (value: string) => void
   placeholder?: string
   disabled?: boolean
@@ -24,10 +24,13 @@ export function ConfigInput({
   max,
   className,
 }: ConfigInputProps) {
+  // 确保 value 始终有定义值，避免受控/非受控组件切换警告
+  const safeValue = value ?? (type === 'number' ? 0 : '')
+
   return (
     <Input
       type={type}
-      value={value}
+      value={safeValue}
       onChange={(e) => onChange?.(e.target.value)}
       placeholder={placeholder}
       disabled={disabled}

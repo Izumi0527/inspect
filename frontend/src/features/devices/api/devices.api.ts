@@ -1,5 +1,5 @@
 
-import { api } from '@/lib/api-client'
+import { api, ApiClientError } from '@/lib/api-client'
 import {
   Device,
   DeviceFilters,
@@ -67,6 +67,34 @@ interface ImportResponseDto {
   message?: string
 }
 
+interface DeviceCreateRequestDto {
+  name: string
+  ip_address: string
+  device_type: string
+  vendor: string
+  model?: string
+  location?: string
+  group_id?: number
+  snmp_community?: string
+  snmp_version?: string
+  ssh_username?: string
+  ssh_password?: string
+  ssh_port?: number
+  description?: string
+  tags?: Record<string, unknown> | string | null
+}
+
+interface DeviceBatchImportResponseDto {
+  message?: string
+  imported_count?: number
+  skipped_count?: number
+  imported_devices?: DeviceDto[]
+  skipped_devices?: Array<{
+    ip_address?: string
+    reason?: string
+  }>
+}
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
@@ -90,6 +118,118 @@ const isApiResponse = <T>(candidate: unknown): candidate is ApiResponse<T> =>
   candidate !== null &&
   'success' in (candidate as Record<string, unknown>) &&
   'data' in (candidate as Record<string, unknown>)
+
+const isDeviceBatchImportResponse = (candidate: unknown): candidate is DeviceBatchImportResponseDto =>
+  isObject(candidate) &&
+  typeof (candidate as Record<string, unknown>).imported_count === 'number' &&
+  typeof (candidate as Record<string, unknown>).skipped_count === 'number'
+
+interface FastApiValidationErrorItem {
+  loc?: unknown
+  msg?: unknown
+  type?: unknown
+}
+
+const parseFastApiValidationErrors = (
+  detail: unknown,
+  devices: DeviceImportData[]
+): { message: string; errors: ImportResult['errors'] } => {
+  if (!Array.isArray(detail)) {
+    return {
+      message: '设备导入失败：数据校验未通过',
+      errors: devices.slice(0, 1).map(data => ({ row: 0, data, error: '数据校验未通过' })),
+    }
+  }
+
+  const fieldLabels: Record<string, string> = {
+    name: '设备名称',
+    ip_address: 'IP 地址',
+    device_type: '设备类型',
+    vendor: '厂商',
+    snmp_community: 'SNMP 团体字符串',
+    ssh_username: 'SSH 用户名',
+    ssh_password: 'SSH 密码',
+  }
+
+  const indexedMessages = new Map<number, string[]>()
+  const generalMessages: string[] = []
+
+  for (const item of detail) {
+    const candidate = item as FastApiValidationErrorItem
+    const loc = candidate?.loc
+    const msg = typeof candidate?.msg === 'string' ? candidate.msg : '数据校验失败'
+
+    if (Array.isArray(loc)) {
+      const devicesPos = loc.findIndex(part => part === 'devices')
+      const maybeIndex = devicesPos >= 0 ? loc[devicesPos + 1] : undefined
+      const maybeField = devicesPos >= 0 ? loc[devicesPos + 2] : undefined
+
+      if (typeof maybeIndex === 'number') {
+        const fieldKey = typeof maybeField === 'string' ? maybeField : ''
+        const label = fieldLabels[fieldKey] ?? fieldKey ?? ''
+        const finalMsg = label ? `${label}：${msg}` : msg
+        const existing = indexedMessages.get(maybeIndex) ?? []
+        existing.push(finalMsg)
+        indexedMessages.set(maybeIndex, existing)
+        continue
+      }
+    }
+
+    generalMessages.push(msg)
+  }
+
+  const errors: ImportResult['errors'] = []
+
+  for (const [index, messages] of indexedMessages.entries()) {
+    const data =
+      devices[index] ??
+      devices[0] ??
+      ({ name: '', ip: '', device_type: 'switch' } as DeviceImportData)
+
+    errors.push({
+      row: index + 2,
+      data,
+      error: Array.from(new Set(messages)).join('；'),
+    })
+  }
+
+  if (errors.length === 0) {
+    errors.push(
+      ...devices.slice(0, 1).map(data => ({
+        row: 0,
+        data,
+        error: generalMessages[0] ?? '数据校验未通过',
+      }))
+    )
+  }
+
+  return {
+    message: '设备导入失败：数据校验未通过',
+    errors,
+  }
+}
+
+const mapImportDeviceTypeToBackend = (value: DeviceImportData['device_type']): string => {
+  // 后端模型/枚举使用 ap；前端使用 wireless_ap
+  if (value === 'wireless_ap') return 'ap'
+  return value
+}
+
+const mapImportDeviceToBackendCreate = (device: DeviceImportData): DeviceCreateRequestDto => {
+  const vendor = typeof device.vendor === 'string' ? device.vendor.trim() : ''
+
+  return {
+    name: device.name,
+    ip_address: device.ip.trim(),
+    device_type: mapImportDeviceTypeToBackend(device.device_type),
+    vendor: vendor || 'other',
+    location: device.location?.trim() || undefined,
+    description: device.description?.trim() || undefined,
+    snmp_community: device.snmp_community?.trim() || undefined,
+    ssh_username: device.ssh_username?.trim() || undefined,
+    ssh_password: device.ssh_password || undefined,
+  }
+}
 
 const mapDevice = (dto: DeviceDto): Device => {
   const parsedTags = (() => {
@@ -325,23 +465,55 @@ export async function bulkUpdateDevices(params: BulkUpdateParams): Promise<BulkO
 
 export async function bulkImportDevices(devices: DeviceImportData[]): Promise<ImportResult> {
   try {
-    const payload = await api.post<ApiResponse<ImportResponseDto>>('/devices/batch-import', {
-      devices,
+    const requestDevices = devices.map(mapImportDeviceToBackendCreate)
+
+    const payload = await api.post<unknown>('/devices/batch-import', {
+      devices: requestDevices,
       auto_detect: true,
       skip_duplicates: true,
     })
 
-    if (payload.success && payload.data) {
+    const unwrapped = unwrapPayload<unknown>(payload) ?? payload
+
+    // 优先匹配后端当前实现：直出 DeviceBatchImportResponse（无 ApiResponse 包装）
+    if (isDeviceBatchImportResponse(unwrapped)) {
+      const skipped = unwrapped.skipped_devices ?? []
+      const errors = skipped.map((item, index) => {
+        const ipAddress = item.ip_address?.trim() ?? ''
+        const matched = devices.find(d => d.ip.trim() === ipAddress)
+        const fallback = devices[0] ?? ({ name: '', ip: ipAddress, device_type: 'switch' } as DeviceImportData)
+
+        return {
+          row: index + 1,
+          data: matched ?? fallback,
+          error: item.reason ?? '已跳过',
+        }
+      })
+
       return {
-        success: payload.data.success ?? true,
-        imported_count: payload.data.imported_count ?? 0,
-        skipped_count: payload.data.skipped_count ?? 0,
-        errors: payload.data.errors?.map((error, index) => ({
-          row: error.row ?? index,
-          data: devices[error.row ?? 0] ?? devices[0],
-          error: error.error ?? '导入失败',
-        })) ?? [],
-        message: payload.data.message ?? payload.message ?? '设备导入成功',
+        success: true,
+        imported_count: unwrapped.imported_count ?? 0,
+        skipped_count: unwrapped.skipped_count ?? 0,
+        errors,
+        message: unwrapped.message ?? '设备导入完成',
+      }
+    }
+
+    // 兼容：后端若返回 ImportResponseDto 或使用 ApiResponse 包装
+    if (isObject(unwrapped) && ('imported_count' in unwrapped || 'skipped_count' in unwrapped)) {
+      const response = unwrapped as ImportResponseDto
+      const errors = response.errors?.map((error, index) => ({
+        row: error.row ?? index + 1,
+        data: devices[error.row ?? 0] ?? devices[0] ?? ({ name: '', ip: '', device_type: 'switch' } as DeviceImportData),
+        error: error.error ?? '导入失败',
+      })) ?? []
+
+      return {
+        success: response.success ?? true,
+        imported_count: response.imported_count ?? 0,
+        skipped_count: response.skipped_count ?? 0,
+        errors,
+        message: response.message ?? '设备导入完成',
       }
     }
 
@@ -349,15 +521,41 @@ export async function bulkImportDevices(devices: DeviceImportData[]): Promise<Im
       success: false,
       imported_count: 0,
       skipped_count: 0,
-      errors: payload.data?.errors?.map((error, index) => ({
-        row: error.row ?? index,
-        data: devices[error.row ?? 0] ?? devices[0],
-        error: error.error ?? payload.message ?? '导入失败',
-      })) ?? [],
-      message: payload.message ?? '设备导入失败',
+      errors: devices.slice(0, 1).map(data => ({
+        row: 0,
+        data,
+        error: '设备导入失败：响应格式不正确',
+      })),
+      message: '设备导入失败',
     }
   } catch (error) {
     console.error('设备导入失败:', error)
+
+    if (error instanceof ApiClientError) {
+      if (error.status === 422) {
+        const parsed = parseFastApiValidationErrors(error.detail, devices)
+        return {
+          success: false,
+          imported_count: 0,
+          skipped_count: 0,
+          errors: parsed.errors,
+          message: parsed.message,
+        }
+      }
+
+      return {
+        success: false,
+        imported_count: 0,
+        skipped_count: 0,
+        errors: devices.slice(0, 1).map(data => ({
+          row: 0,
+          data,
+          error: error.message,
+        })),
+        message: error.message,
+      }
+    }
+
     return {
       success: false,
       imported_count: 0,
@@ -373,7 +571,8 @@ export async function bulkImportDevices(devices: DeviceImportData[]): Promise<Im
 }
 
 export async function fetchDeviceStats(): Promise<Record<string, unknown>> {
-  const payload = await api.get<unknown>('/devices/stats')
+  // 注意: 后端实际路由是 /devices/statistics 而不是 /devices/stats
+  const payload = await api.get<unknown>('/devices/statistics')
 
   // 兼容两种响应格式
   if (isObject(payload)) {

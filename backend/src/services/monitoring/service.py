@@ -369,6 +369,252 @@ class MonitoringService:
                        connection_id=connection_id,
                        device_id=device_id)
 
+    async def get_system_performance_history(
+        self,
+        start_time: datetime,
+        end_time: datetime,
+        metrics: List[str] = None
+    ) -> List[dict]:
+        """
+        获取系统性能历史数据
+        
+        Args:
+            start_time: 开始时间
+            end_time: 结束时间
+            metrics: 指标列表 (cpu_usage, memory_usage, network_traffic)
+        
+        Returns:
+            性能数据点列表
+        """
+        if metrics is None:
+            metrics = ["cpu_usage", "memory_usage", "network_traffic"]
+        
+        # 如果有InfluxDB连接，从时序数据库查询
+        if self.influx_client:
+            try:
+                query = f'''
+                from(bucket: "{settings.INFLUXDB_BUCKET}")
+                  |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
+                  |> filter(fn: (r) => r._measurement == "system_metrics")
+                  |> aggregateWindow(every: 30m, fn: mean, createEmpty: false)
+                '''
+                
+                query_api = self.influx_client.query_api()
+                result = query_api.query(query=query)
+                
+                # 处理查询结果
+                data_by_time = {}
+                for table in result:
+                    for record in table.records:
+                        ts = record.get_time().isoformat()
+                        if ts not in data_by_time:
+                            data_by_time[ts] = {"timestamp": ts}
+                        
+                        metric_type = record.values.get("metric_type", "")
+                        if metric_type == "cpu_usage":
+                            data_by_time[ts]["cpu_usage"] = record.get_value()
+                        elif metric_type == "memory_usage":
+                            data_by_time[ts]["memory_usage"] = record.get_value()
+                        elif metric_type == "network_traffic":
+                            data_by_time[ts]["network_traffic"] = record.get_value()
+                
+                return list(data_by_time.values())
+                
+            except Exception as e:
+                logger.warning(f"Failed to query InfluxDB for system performance: {e}")
+        
+        # 降级：生成模拟数据
+        return self._generate_mock_system_performance(start_time, end_time)
+    
+    def _generate_mock_system_performance(self, start_time: datetime, end_time: datetime) -> List[dict]:
+        """生成模拟的系统性能数据"""
+        data = []
+        current = start_time
+        interval = timedelta(minutes=30)
+        
+        # 基础值
+        cpu_base = random.uniform(40, 60)
+        memory_base = random.uniform(50, 70)
+        network_base = random.uniform(100, 300)
+        
+        while current <= end_time:
+            # 添加随机波动
+            cpu_base += random.uniform(-5, 5)
+            memory_base += random.uniform(-3, 3)
+            network_base += random.uniform(-20, 20)
+            
+            # 限制范围
+            cpu = max(20, min(95, cpu_base))
+            memory = max(30, min(90, memory_base))
+            network = max(50, min(500, network_base))
+            
+            data.append({
+                "timestamp": current.isoformat(),
+                "cpu_usage": round(cpu, 1),
+                "memory_usage": round(memory, 1),
+                "network_traffic": round(network, 1)
+            })
+            
+            current += interval
+        
+        return data
+    
+    async def get_temperature_history(
+        self,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[dict]:
+        """
+        获取设备温度历史数据
+        
+        Args:
+            start_time: 开始时间
+            end_time: 结束时间
+        
+        Returns:
+            温度数据点列表
+        """
+        # 如果有InfluxDB连接，从时序数据库查询
+        if self.influx_client:
+            try:
+                query = f'''
+                from(bucket: "{settings.INFLUXDB_BUCKET}")
+                  |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
+                  |> filter(fn: (r) => r._measurement == "device_metrics")
+                  |> filter(fn: (r) => r._field == "temperature")
+                  |> aggregateWindow(every: 30m, fn: mean, createEmpty: false)
+                '''
+                
+                query_api = self.influx_client.query_api()
+                result = query_api.query(query=query)
+                
+                # 处理查询结果
+                data_by_time = {}
+                for table in result:
+                    for record in table.records:
+                        ts = record.get_time().isoformat()
+                        device_name = record.values.get("device_name", f"Device-{record.values.get('device_id', 'unknown')}")
+                        
+                        if ts not in data_by_time:
+                            data_by_time[ts] = {"timestamp": ts, "devices": {}}
+                        
+                        data_by_time[ts]["devices"][device_name] = record.get_value()
+                
+                return list(data_by_time.values())
+                
+            except Exception as e:
+                logger.warning(f"Failed to query InfluxDB for temperature: {e}")
+        
+        # 降级：生成模拟数据
+        return self._generate_mock_temperature_history(start_time, end_time)
+    
+    def _generate_mock_temperature_history(self, start_time: datetime, end_time: datetime) -> List[dict]:
+        """生成模拟的温度历史数据"""
+        data = []
+        current = start_time
+        interval = timedelta(minutes=30)
+        
+        # 5个设备的温度基准
+        devices = ['Router-01', 'Switch-02', 'Firewall-03', 'Server-04', 'AP-05']
+        device_temps = {device: random.uniform(45, 65) for device in devices}
+        
+        while current <= end_time:
+            device_data = {}
+            for device in devices:
+                # 温度缓慢变化
+                device_temps[device] += random.uniform(-2, 2)
+                device_temps[device] = max(40, min(80, device_temps[device]))
+                device_data[device] = round(device_temps[device], 1)
+            
+            data.append({
+                "timestamp": current.isoformat(),
+                "devices": device_data
+            })
+            
+            current += interval
+        
+        return data
+    
+    async def get_network_traffic_history(
+        self,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[dict]:
+        """
+        获取网络流量历史数据
+        
+        Args:
+            start_time: 开始时间
+            end_time: 结束时间
+        
+        Returns:
+            网络流量数据点列表
+        """
+        # 如果有InfluxDB连接，从时序数据库查询
+        if self.influx_client:
+            try:
+                query = f'''
+                from(bucket: "{settings.INFLUXDB_BUCKET}")
+                  |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
+                  |> filter(fn: (r) => r._measurement == "network_traffic")
+                  |> aggregateWindow(every: 30m, fn: mean, createEmpty: false)
+                '''
+                
+                query_api = self.influx_client.query_api()
+                result = query_api.query(query=query)
+                
+                # 处理查询结果
+                data_by_time = {}
+                for table in result:
+                    for record in table.records:
+                        ts = record.get_time().isoformat()
+                        if ts not in data_by_time:
+                            data_by_time[ts] = {"timestamp": ts, "inbound": 0, "outbound": 0}
+                        
+                        field = record.get_field()
+                        if field == "inbound":
+                            data_by_time[ts]["inbound"] = record.get_value()
+                        elif field == "outbound":
+                            data_by_time[ts]["outbound"] = record.get_value()
+                
+                return list(data_by_time.values())
+                
+            except Exception as e:
+                logger.warning(f"Failed to query InfluxDB for network traffic: {e}")
+        
+        # 降级：生成模拟数据
+        return self._generate_mock_network_traffic_history(start_time, end_time)
+    
+    def _generate_mock_network_traffic_history(self, start_time: datetime, end_time: datetime) -> List[dict]:
+        """生成模拟的网络流量历史数据"""
+        data = []
+        current = start_time
+        interval = timedelta(minutes=30)
+        
+        inbound_base = random.uniform(200, 400)
+        outbound_base = random.uniform(100, 300)
+        
+        while current <= end_time:
+            # 模拟日间/夜间流量变化
+            hour = current.hour
+            day_factor = 1.5 if 9 <= hour <= 18 else 0.7
+            
+            inbound_base += random.uniform(-30, 30)
+            outbound_base += random.uniform(-20, 20)
+            
+            inbound = max(50, min(800, inbound_base * day_factor))
+            outbound = max(30, min(600, outbound_base * day_factor))
+            
+            data.append({
+                "timestamp": current.isoformat(),
+                "inbound": round(inbound, 1),
+                "outbound": round(outbound, 1)
+            })
+            
+            current += interval
+        
+        return data
+
     async def get_network_overview(self) -> dict:
         """获取网络概览数据"""
         try:

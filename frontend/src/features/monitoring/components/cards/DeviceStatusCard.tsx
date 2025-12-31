@@ -20,11 +20,13 @@ export function DeviceStatusCard({ data, className }: DeviceStatusCardProps) {
       transition={{ duration: 0.3, delay: 0.1 }}
       className={className}
     >
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex h-full flex-col rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
           设备状态分布
         </h3>
-        <DeviceStatusPieChart data={data} height={240} showLegend={true} />
+        <div className="flex flex-1 flex-col">
+          <DeviceStatusPieChart data={data} height={200} showLegend={true} />
+        </div>
       </div>
     </motion.div>
   )

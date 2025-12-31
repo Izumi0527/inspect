@@ -562,8 +562,8 @@ class DeviceMonitoringService:
         try:
             async with get_db_session_context() as session:
                 device_repo = DeviceRepository(session)
-                total_devices, _ = await device_repo.get_devices_paginated(page=1, page_size=1)
-                active_devices, _ = await device_repo.get_devices_paginated(
+                _, total_devices = await device_repo.get_devices_paginated(page=1, page_size=1)
+                _, active_devices = await device_repo.get_devices_paginated(
                     page=1, page_size=1, is_active=True
                 )
                 
@@ -580,6 +580,11 @@ class DeviceMonitoringService:
             logger.error("Error getting monitoring stats", error=str(e))
             return {
                 "is_running": self.is_running,
+                "monitor_interval": self.monitor_interval,
+                "total_devices": 0,
+                "active_devices": 0,
+                "monitoring_tasks": 0,
+                "influxdb_connected": False,
                 "error": str(e)
             }
 

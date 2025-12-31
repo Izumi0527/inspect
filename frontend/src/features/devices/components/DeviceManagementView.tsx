@@ -166,13 +166,14 @@ export const DeviceManagementView: React.FC = () => {
   }
 
   const handleDownloadTemplate = () => {
-    const headerLine = '设备名称,IP地址,设备类型,位置,描述,SNMP团体字符串,SSH用户名,SSH密码'
+    const BOM = '\uFEFF'  // UTF-8 BOM - 让 Excel 正确识别 UTF-8 编码
+    const headerLine = '设备名称,IP地址,设备类型,厂商,位置,描述,SNMP团体字符串,SSH用户名,SSH密码'
     const sampleLines = [
-      '核心交换机1,192.168.1.1,switch,数据中心A,核心网络设备,public,admin,',
-      '路由器网关1,192.168.1.254,router,数据中心A,主网关路由器,public,admin,',
-      '边界防火墙1,192.168.1.100,firewall,数据中心B,边界防护设备,public,admin,'
+      '核心交换机1,192.168.1.1,switch,cisco,数据中心A,核心网络设备,public,admin,',
+      '路由器网关1,192.168.1.254,router,huawei,数据中心A,主网关路由器,public,admin,',
+      '边界防火墙1,192.168.1.100,firewall,fortinet,数据中心B,边界防护设备,public,admin,'
     ]
-    const csvContent = [headerLine, ...sampleLines].join('\r\n')
+    const csvContent = BOM + [headerLine, ...sampleLines].join('\r\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')

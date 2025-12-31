@@ -18,7 +18,8 @@ $ErrorActionPreference = "Continue"
 
 # 全局变量
 $script:ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-$script:ProjectRoot = Split-Path -Parent $script:ScriptPath
+$script:ScriptsRoot = Split-Path -Parent $script:ScriptPath
+$script:ProjectRoot = Split-Path -Parent $script:ScriptsRoot
 $script:BackendPath = Join-Path $script:ProjectRoot "backend"
 $script:FrontendPath = Join-Path $script:ProjectRoot "frontend"
 $script:LogsPath = Join-Path $script:ProjectRoot "logs"

@@ -24,10 +24,10 @@ export function AvailabilityGaugeChart({
   strokeWidth = 12,
   className,
 }: AvailabilityGaugeChartProps) {
-  // 计算颜色
+  // 计算颜色 - 更鲜艳的配色
   const gaugeColor = useMemo(() => {
-    if (data.current >= 90) return '#10B981' // 绿色
-    if (data.current >= 80) return '#F59E0B' // 黄色
+    if (data.current >= 90) return '#22C55E' // 鲜绿色
+    if (data.current >= 80) return '#F59E0B' // 橙色
     return '#EF4444' // 红色
   }, [data.current])
 
@@ -56,6 +56,10 @@ export function AvailabilityGaugeChart({
   const strokeDasharray = `${circumference} ${circumference}`
   const strokeDashoffset = circumference - (data.current / 100) * circumference
 
+  // 根据 size 动态计算字体大小
+  const fontSize = size <= 120 ? 'text-2xl' : 'text-4xl'
+  const subTextSize = size <= 120 ? 'text-[10px]' : 'text-xs'
+
   // 深色模式检测
   const isDark =
     typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -65,7 +69,7 @@ export function AvailabilityGaugeChart({
     <ChartContainer className={className}>
       <div className="flex flex-col items-center justify-center">
         {/* 环形进度条 */}
-        <div className="relative mb-6">
+        <div className="relative mb-4">
           <svg className="-rotate-90 transform" width={size} height={size}>
             {/* 背景圆环 */}
             <circle
@@ -91,16 +95,19 @@ export function AvailabilityGaugeChart({
               strokeLinecap="round"
             />
           </svg>
-          {/* 中心文字 */}
-          <div className="absolute inset-0 flex items-center justify-center">
+          {/* 中心文字 - 调整内边距避免与圆环重叠 */}
+          <div 
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ padding: strokeWidth + 4 }}
+          >
             <div className="text-center">
               <div
-                className="text-4xl font-bold"
+                className={`${fontSize} font-bold leading-tight`}
                 style={{ color: gaugeColor }}
               >
                 {data.current.toFixed(2)}%
               </div>
-              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">可用性</div>
+              <div className={`mt-0.5 ${subTextSize} text-gray-500 dark:text-gray-400`}>可用性</div>
             </div>
           </div>
         </div>

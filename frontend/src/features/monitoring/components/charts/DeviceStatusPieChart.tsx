@@ -27,8 +27,8 @@ export function DeviceStatusPieChart({
   // 转换数据格式并添加颜色
   const chartData = useMemo(() => {
     const statusConfig = [
-      { key: 'healthy', label: '健康', color: '#10B981' }, // 绿色
-      { key: 'warning', label: '警告', color: '#F59E0B' }, // 黄色
+      { key: 'healthy', label: '健康', color: '#22C55E' }, // 鲜绿色
+      { key: 'warning', label: '警告', color: '#F59E0B' }, // 橙色
       { key: 'critical', label: '严重', color: '#EF4444' }, // 红色
       { key: 'offline', label: '离线', color: '#6B7280' }, // 灰色
     ]

@@ -3,6 +3,9 @@ import { Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react'
 import {
   Modal,
   ModalContent,
+  ModalHeader,
+  ModalTitle,
+  ModalDescription,
   Button,
   Card,
   CardHeader,
@@ -58,6 +61,7 @@ const FIELD_DEFINITIONS: FieldDefinition[] = [
   { key: 'name', label: '设备名称', required: true },
   { key: 'ip', label: 'IP 地址', required: true },
   { key: 'device_type', label: '设备类型', required: true },
+  { key: 'vendor', label: '厂商', required: false },
   { key: 'location', label: '位置', required: false },
   { key: 'description', label: '描述', required: false },
   { key: 'snmp_community', label: 'SNMP 团体字符串', required: false },
@@ -81,6 +85,9 @@ const HEADER_HINTS: Record<string, keyof DeviceImportData> = {
   device_type: 'device_type',
   '设备类型': 'device_type',
   type: 'device_type',
+  vendor: 'vendor',
+  '厂商': 'vendor',
+  '厂牌': 'vendor',
   location: 'location',
   '位置': 'location',
   description: 'description',
@@ -94,10 +101,13 @@ const HEADER_HINTS: Record<string, keyof DeviceImportData> = {
   ssh_password: 'ssh_password'
 }
 
+const UNMAPPED_FIELD_VALUE = '__unmapped__'
+
 const normalizeDevice = (partial: Partial<DeviceImportData>): DeviceImportData => ({
   name: partial.name ?? '',
   ip: partial.ip ?? '',
   device_type: normalizeDeviceType(partial.device_type),
+  vendor: typeof partial.vendor === 'string' && partial.vendor.trim().length > 0 ? partial.vendor.trim() : undefined,
   location: partial.location ?? '',
   description: partial.description ?? '',
   snmp_community: partial.snmp_community ?? '',
@@ -120,6 +130,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
   const [isProcessing, setIsProcessing] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [mappingErrors, setMappingErrors] = useState<string[]>([])
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const mappedDevices = useMemo(() => {
     if (!csvData) return []
@@ -152,6 +163,10 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
     if (isProcessing) return
     resetState()
     onClose()
+  }
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click()
   }
 
   const parseCSV = (content: string): ParsedCSVData => {
@@ -215,11 +230,11 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
   }
 
   const _downloadTemplate = () => {
-    const headerLine = '设备名称,IP地址,设备类型,位置,描述,SNMP团体字符串,SSH用户名,SSH密码'
+    const headerLine = '设备名称,IP地址,设备类型,厂商,位置,描述,SNMP团体字符串,SSH用户名,SSH密码'
     const sampleLines = [
-      '核心交换机1,192.168.1.1,switch,数据中心A,核心网络设备,public,admin,',
-      '路由器网关1,192.168.1.254,router,数据中心A,主网关路由器,public,admin,',
-      '边界防火墙1,192.168.1.100,firewall,数据中心B,边界防护设备,public,admin,'
+      '核心交换机1,192.168.1.1,switch,cisco,数据中心A,核心网络设备,public,admin,',
+      '路由器网关1,192.168.1.254,router,huawei,数据中心A,主网关路由器,public,admin,',
+      '边界防火墙1,192.168.1.100,firewall,fortinet,数据中心B,边界防护设备,public,admin,'
     ]
     const csvContent = [headerLine, ...sampleLines].join('\r\n')
 
@@ -230,14 +245,71 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
     link.click()
   }
 
+  const isValidIpAddress = (candidate: string): boolean => {
+    const value = candidate.trim()
+    if (!value) return false
+
+    const ipv4Segment = '(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)'
+    const ipv4Pattern = new RegExp(`^${ipv4Segment}(\\.${ipv4Segment}){3}$`)
+    if (ipv4Pattern.test(value)) return true
+
+    // 简化的 IPv6 校验：允许常见的 :: 压缩形式；不做过度严格校验，避免误伤合法地址
+    if (value.includes(':')) {
+      const ipv6Pattern = /^[0-9a-fA-F:]+$/
+      if (!ipv6Pattern.test(value)) return false
+      if (value.split(':').length > 9) return false
+      return true
+    }
+
+    return false
+  }
+
   const handleImport = async () => {
     setIsProcessing(true)
     try {
+      // 前置校验：避免后端 422 导致整批失败
+      const validationErrors = mappedDevices
+        .map((device, index) => {
+          const errors: string[] = []
+          if (!device.name.trim()) errors.push('设备名称不能为空')
+          if (!device.ip.trim()) {
+            errors.push('IP 地址不能为空')
+          } else if (!isValidIpAddress(device.ip)) {
+            errors.push('IP 地址格式不正确')
+          }
+
+          return errors.length > 0
+            ? { row: index + 2, data: device, error: errors.join('；') }
+            : null
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null)
+
+      if (validationErrors.length > 0) {
+        setImportResult({
+          success: false,
+          imported_count: 0,
+          skipped_count: 0,
+          errors: validationErrors,
+          message: '导入失败：存在无效数据，请修正后重试',
+        })
+        setStep('result')
+        return
+      }
+
       const result = await onImport(mappedDevices)
       setImportResult(result)
       setStep('result')
     } catch (error) {
+      const message = error instanceof Error ? error.message : '设备导入失败'
       console.error('导入失败:', error)
+      setImportResult({
+        success: false,
+        imported_count: 0,
+        skipped_count: 0,
+        errors: mappedDevices.slice(0, 1).map(data => ({ row: 0, data, error: message })),
+        message,
+      })
+      setStep('result')
     } finally {
       setIsProcessing(false)
     }
@@ -249,9 +321,11 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-100 flex items-center justify-center">
           <Upload className="h-8 w-8 text-blue-600" />
         </div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">批量导入设备</h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400">通过上传 CSV 文件批量导入设备信息。</p>
       </div>
+      <ModalHeader className="text-center">
+        <ModalTitle>批量导入设备</ModalTitle>
+        <ModalDescription>通过上传 CSV 文件批量导入设备信息。</ModalDescription>
+      </ModalHeader>
 
       <Card>
         <CardHeader>
@@ -259,13 +333,15 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <label className="flex flex-col gap-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
-              <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+            <div
+              onClick={handleUploadClick}
+              className="flex flex-col gap-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
+            >
               <FileText className="h-10 w-10 mx-auto text-blue-500" />
               <div className="text-sm text-gray-600 dark:text-gray-400">
                 点击上传或将文件拖拽到此区域，支持 CSV 格式。请先使用主界面的"下载模板"按钮获取模板文件。
               </div>
-            </label>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -274,8 +350,10 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
 
   const renderMappingStep = () => (
     <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">字段映射</h3>
-      <p className="text-sm text-gray-600 dark:text-gray-400">请确认 CSV 列与系统字段的对应关系。</p>
+      <ModalHeader>
+        <ModalTitle>字段映射</ModalTitle>
+        <ModalDescription>请确认 CSV 列与系统字段的对应关系。</ModalDescription>
+      </ModalHeader>
       {mappingErrors.length > 0 && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 text-sm rounded-lg p-4 space-y-1">
           {mappingErrors.map(errorMessage => (
@@ -296,15 +374,19 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
             <div className="md:col-span-2">
               <Select
                 value={fieldMapping[header] ?? ''}
-                onValueChange={value =>
-                  setFieldMapping(prev => ({ ...prev, [header]: value ? (value as keyof DeviceImportData) : '' }))
-                }
+                onValueChange={value => {
+                  if (value === UNMAPPED_FIELD_VALUE) {
+                    setFieldMapping(prev => ({ ...prev, [header]: '' }))
+                    return
+                  }
+                  setFieldMapping(prev => ({ ...prev, [header]: value as keyof DeviceImportData }))
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="请选择对应字段" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">忽略该列</SelectItem>
+                  <SelectItem value={UNMAPPED_FIELD_VALUE}>不映射（忽略该列）</SelectItem>
                   {FIELD_DEFINITIONS.map(field => (
                     <SelectItem key={field.key} value={field.key}>
                       {field.label}
@@ -332,11 +414,11 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
     const previewDevices = mappedDevices
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">导入预览</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">共有 {previewDevices.length} 条记录将被导入。</p>
-          </div>
+        <ModalHeader>
+          <ModalTitle>导入预览</ModalTitle>
+          <ModalDescription>共有 {previewDevices.length} 条记录将被导入。</ModalDescription>
+        </ModalHeader>
+        <div className="flex justify-end">
           <Button variant="ghost" onClick={() => setStep('mapping')} disabled={isProcessing}>
             返回修改
           </Button>
@@ -380,59 +462,85 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
     )
   }
 
-  const renderResultStep = () => (
-    <div className="space-y-6 text-center">
-      <div className="w-16 h-16 mx-auto rounded-full bg-green-100 flex items-center justify-center">
-        <CheckCircle className="h-10 w-10 text-green-600" />
-      </div>
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">导入完成</h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">已导入 {importResult?.imported_count ?? 0} 条设备数据。</p>
-      </div>
-      {importResult && importResult.errors.length > 0 && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 text-left text-sm text-yellow-800 dark:text-yellow-200">
-          <h4 className="font-medium mb-2">以下记录导入失败：</h4>
-          <ul className="space-y-1 list-disc list-inside">
-            {importResult.errors.map((errorItem, index) => (
-              <li key={`error-${errorItem.row}-${index}`}>
-                第 {errorItem.row} 行 - {errorItem.error}
-              </li>
-            ))}
-          </ul>
+  const renderResultStep = () => {
+    const success = importResult?.success === true
+    const hasErrors = (importResult?.errors?.length ?? 0) > 0
+
+    const title = success ? (hasErrors ? '导入完成（部分记录未导入）' : '导入完成') : '导入失败'
+    const description = importResult?.message
+      ? importResult.message
+      : success
+        ? `已导入 ${importResult?.imported_count ?? 0} 条设备数据。`
+        : '设备导入失败'
+
+    return (
+      <div className="space-y-6 text-center">
+        <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center ${success ? 'bg-green-100' : 'bg-red-100'}`}>
+          {success ? (
+            <CheckCircle className="h-10 w-10 text-green-600" />
+          ) : (
+            <AlertCircle className="h-10 w-10 text-red-600" />
+          )}
         </div>
-      )}
-      <div className="flex justify-center gap-3">
-        <Button
-          variant="outline"
-          onClick={() => {
-            setStep('upload')
-            setCsvData(null)
-          }}
-        >
-          继续导入
-        </Button>
-        <Button onClick={handleClose}>完成</Button>
+        <ModalHeader className="text-center">
+          <ModalTitle>{title}</ModalTitle>
+          <ModalDescription>{description}</ModalDescription>
+        </ModalHeader>
+        {importResult && importResult.errors.length > 0 && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 text-left text-sm text-yellow-800 dark:text-yellow-200">
+            <h4 className="font-medium mb-2">以下记录未导入：</h4>
+            <ul className="space-y-1 list-disc list-inside">
+              {importResult.errors.map((errorItem, index) => (
+                <li key={`error-${errorItem.row}-${index}`}>
+                  第 {errorItem.row} 行 - {errorItem.error}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div className="flex justify-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setStep('upload')
+              setCsvData(null)
+            }}
+          >
+            继续导入
+          </Button>
+          <Button onClick={handleClose}>完成</Button>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
-    <Modal
-      open={isOpen}
-      onOpenChange={open => {
-        if (!open) {
-          handleClose()
-        }
-      }}
-    >
-      <ModalContent className="max-w-4xl">
-        <div className="space-y-6">
-          {step === 'upload' && renderUploadStep()}
-          {step === 'mapping' && renderMappingStep()}
-          {step === 'preview' && renderPreviewStep()}
-          {step === 'result' && renderResultStep()}
-        </div>
-      </ModalContent>
-    </Modal>
+    <>
+      {/* 关键修改: 将 input 移到 Modal 外部，不受 Portal 卸载影响 */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv"
+        className="hidden"
+        onChange={handleFileUpload}
+      />
+      <Modal
+        open={isOpen}
+        onOpenChange={open => {
+          if (!open) {
+            handleClose()
+          }
+        }}
+      >
+        <ModalContent className="max-w-4xl">
+          <div className="space-y-6">
+            {step === 'upload' && renderUploadStep()}
+            {step === 'mapping' && renderMappingStep()}
+            {step === 'preview' && renderPreviewStep()}
+            {step === 'result' && renderResultStep()}
+          </div>
+        </ModalContent>
+      </Modal>
+    </>
   )
 }

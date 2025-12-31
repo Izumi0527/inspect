@@ -12,7 +12,7 @@ import {
   TrafficFilter
 } from '../types'
 
-const API_BASE = '/api/traffic'
+const API_BASE = '/api/v1/traffic'
 
 export const useTrafficAnalysis = () => {
   const [isLoading, setIsLoading] = useState(false)

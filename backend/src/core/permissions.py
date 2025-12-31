@@ -139,6 +139,7 @@ PERMISSIONS = {
     "inspections:create": [UserRole.ADMIN, UserRole.OPERATOR],
     "inspections:update": [UserRole.ADMIN, UserRole.OPERATOR],
     "inspections:delete": [UserRole.ADMIN],
+    "inspections:execute": [UserRole.ADMIN, UserRole.OPERATOR],
     
     # 告警管理权限
     "alerts:read": [UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER],
