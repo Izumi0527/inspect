@@ -69,14 +69,17 @@ def upgrade():
         USING report_type::text::report_type_new;
     """)
 
-    # 7. 删除旧的枚举类型
-    op.execute("DROP TYPE reporttype;")
+    # 7. 安全删除旧的枚举类型（如果存在）
+    op.execute("""
+        DO $$ BEGIN
+            DROP TYPE IF EXISTS reporttype;
+        EXCEPTION
+            WHEN undefined_object THEN NULL;
+        END $$;
+    """)
 
     # 8. 重命名新枚举类型
     op.execute("ALTER TYPE report_type_new RENAME TO reporttype;")
-
-    # 注意：如果其他表也使用ReportFormat，需要类似的迁移
-    # 这里假设只有file_formats字段使用JSON存储，不需要修改枚举
 
     # Migration completed successfully
     pass
