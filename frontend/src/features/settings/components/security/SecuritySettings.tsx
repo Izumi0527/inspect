@@ -47,7 +47,7 @@ export function SecuritySettings() {
     return (
       <div>
         <ActionButtons />
-        <div className="space-y-6 p-6">
+        <div className="space-y-4 p-4">
           <Skeleton className="h-96 w-full" />
           <Skeleton className="h-96 w-full" />
           <Skeleton className="h-96 w-full" />
@@ -88,13 +88,15 @@ export function SecuritySettings() {
         onReset={handleReset}
       />
 
-      <div className="p-6 space-y-6">
-        <SessionManagementSection
-          data={sessionManagement}
-          onChange={updateSessionManagement}
-        />
-        <PasswordPolicySection data={passwordPolicy} onChange={updatePasswordPolicy} />
-        <AuthenticationSection data={authentication} onChange={updateAuthentication} />
+      <div className="p-4">
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          <SessionManagementSection
+            data={sessionManagement}
+            onChange={updateSessionManagement}
+          />
+          <PasswordPolicySection data={passwordPolicy} onChange={updatePasswordPolicy} />
+          <AuthenticationSection data={authentication} onChange={updateAuthentication} />
+        </div>
       </div>
     </div>
   )

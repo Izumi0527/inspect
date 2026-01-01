@@ -22,7 +22,7 @@ const timezones = [
 
 export function BasicInfoSection({ data, onChange }: Props) {
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <SectionHeader
         title="基础信息"
         description="系统的基本信息配置"
@@ -62,6 +62,6 @@ export function BasicInfoSection({ data, onChange }: Props) {
           />
         </ConfigItem>
       </div>
-    </Card>
+    </div>
   )
 }

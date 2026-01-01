@@ -64,7 +64,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         <ErrorBoundary>
           <AnimatedContainer
             animation="pageTransition"
-            className={fullWidth ? "p-2" : "p-6"}
+            className={fullWidth ? "p-1" : "p-4"}
           >
             {routerTabs ? (
               /* Router Tabs Mode - Tab和内容包装在Card中 */

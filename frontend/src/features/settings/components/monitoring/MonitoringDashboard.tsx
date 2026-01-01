@@ -79,7 +79,7 @@ export function MonitoringDashboard() {
   // 加载状态
   if (isLoading || !metrics) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-4 space-y-4">
         <Skeleton className="h-48 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -87,10 +87,10 @@ export function MonitoringDashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 space-y-4">
       {/* 系统信息卡片 */}
       {system && (
-        <Card className="p-6">
+        <Card className="p-4">
           <div className="flex items-center gap-2 mb-4">
             <Server className="w-5 h-5 text-gray-600" />
             <h2 className="text-lg font-semibold">系统信息</h2>
@@ -117,9 +117,9 @@ export function MonitoringDashboard() {
       )}
 
       {/* 资源监控卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* CPU */}
-        <Card className="p-6">
+        <Card className="p-4">
           <div className="flex items-center gap-2 mb-4">
             <Cpu className="w-5 h-5 text-blue-600" />
             <h3 className="font-semibold">CPU</h3>
@@ -151,7 +151,7 @@ export function MonitoringDashboard() {
         </Card>
 
         {/* 内存 */}
-        <Card className="p-6">
+        <Card className="p-4">
           <div className="flex items-center gap-2 mb-4">
             <MemoryStick className="w-5 h-5 text-green-600" />
             <h3 className="font-semibold">内存</h3>
@@ -183,7 +183,7 @@ export function MonitoringDashboard() {
         </Card>
 
         {/* 磁盘 */}
-        <Card className="p-6">
+        <Card className="p-4">
           <div className="flex items-center gap-2 mb-4">
             <HardDrive className="w-5 h-5 text-purple-600" />
             <h3 className="font-semibold">磁盘</h3>
@@ -216,7 +216,7 @@ export function MonitoringDashboard() {
       </div>
 
       {/* 网络流量 */}
-      <Card className="p-6">
+      <Card className="p-4">
         <div className="flex items-center gap-2 mb-4">
           <Network className="w-5 h-5 text-orange-600" />
           <h2 className="text-lg font-semibold">网络流量</h2>
@@ -246,7 +246,7 @@ export function MonitoringDashboard() {
       </Card>
 
       {/* 服务健康状态 */}
-      <Card className="p-6">
+      <Card className="p-4">
         <div className="flex items-center gap-2 mb-4">
           <Activity className="w-5 h-5 text-gray-600" />
           <h2 className="text-lg font-semibold">服务状态</h2>

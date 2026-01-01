@@ -75,7 +75,7 @@ export function GeneralSettings() {
     return (
       <div>
         <ActionButtons />
-        <div className="space-y-6 p-6">
+        <div className="space-y-4 p-4">
           <Skeleton className="h-64 w-full" />
           <Skeleton className="h-64 w-full" />
           <Skeleton className="h-64 w-full" />
@@ -119,17 +119,19 @@ export function GeneralSettings() {
         onImport={handleImport}
       />
 
-      <div className="p-6 space-y-6">
-        <BasicInfoSection data={basicInfo} onChange={updateBasicInfo} />
-        <InspectionConfigSection
-          data={inspectionConfig}
-          onChange={updateInspectionConfig}
-        />
-        <ReportConfigSection data={reportConfig} onChange={updateReportConfig} />
-        <UserPreferenceSection
-          data={userPreference}
-          onChange={updateUserPreference}
-        />
+      <div className="p-4">
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          <BasicInfoSection data={basicInfo} onChange={updateBasicInfo} />
+          <InspectionConfigSection
+            data={inspectionConfig}
+            onChange={updateInspectionConfig}
+          />
+          <ReportConfigSection data={reportConfig} onChange={updateReportConfig} />
+          <UserPreferenceSection
+            data={userPreference}
+            onChange={updateUserPreference}
+          />
+        </div>
       </div>
     </div>
   )

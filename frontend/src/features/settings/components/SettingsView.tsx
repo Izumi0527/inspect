@@ -105,65 +105,63 @@ export const SettingsView: React.FC = () => {
     }
   }
 
+  // 需要填充高度的标签页
+  const fillHeightTabs: TabType[] = ['users', 'audit']
+  const shouldFillHeight = fillHeightTabs.includes(activeTab)
+
   return (
     <AppLayout title="系统设置">
-      <div className="space-y-6">
-        {/* 标签导航 */}
-        <Card>
-          <CardHeader className="pb-0">
-            <div className="flex flex-col gap-4">
-              {/* 标签按钮 */}
-              <div className="flex flex-wrap gap-2">
-                {tabs.map((tab) => {
-                  const Icon = tab.icon
-                  const isActive = activeTab === tab.key
+      <div className={`p-1 ${shouldFillHeight ? 'h-[calc(100vh-64px)] flex flex-col' : ''}`}>
+        {/* 统一的白色容器 */}
+        <div className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 ${shouldFillHeight ? 'flex-1 flex flex-col min-h-0' : ''}`}>
+          {/* 标签导航 */}
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex flex-wrap gap-2">
+              {tabs.map((tab) => {
+                const Icon = tab.icon
+                const isActive = activeTab === tab.key
 
-                  return (
-                    <motion.button
-                      key={tab.key}
-                      onClick={() => setActiveTab(tab.key)}
-                      className={`
-                        relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium
-                        transition-all duration-200
-                        ${isActive
-                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 shadow-sm'
-                          : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                        }
-                      `}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <Icon className="w-4 h-4" />
-                      {tab.label}
-                      {isActive && (
-                        <motion.div
-                          className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400 rounded-full"
-                          layoutId="activeTabIndicator"
-                        />
-                      )}
-                    </motion.button>
-                  )
-                })}
-              </div>
-
-              {/* 当前标签描述 */}
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                {tabs.find(t => t.key === activeTab)?.description}
-              </div>
+                return (
+                  <motion.button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`
+                      relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium
+                      transition-all duration-200
+                      ${isActive
+                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      }
+                    `}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {tab.label}
+                    {isActive && (
+                      <motion.div
+                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400 rounded-full"
+                        layoutId="activeTabIndicator"
+                      />
+                    )}
+                  </motion.button>
+                )
+              })}
             </div>
-          </CardHeader>
-        </Card>
+          </div>
 
-        {/* 标签内容 */}
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.2 }}
-        >
-          {renderTabContent()}
-        </motion.div>
+          {/* 标签内容 */}
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className={shouldFillHeight ? 'flex-1 flex flex-col min-h-0 overflow-hidden' : ''}
+          >
+            {renderTabContent()}
+          </motion.div>
+        </div>
       </div>
     </AppLayout>
   )

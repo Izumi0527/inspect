@@ -15,7 +15,7 @@ interface Props {
 
 export function PasswordPolicySection({ data, onChange }: Props) {
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <SectionHeader
         title="密码策略"
         description="配置密码复杂度和安全要求"
@@ -159,6 +159,6 @@ export function PasswordPolicySection({ data, onChange }: Props) {
           </ConfigItem>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }

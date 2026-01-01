@@ -79,7 +79,7 @@ export function BackupManagement() {
     return (
       <div>
         <ActionButtons />
-        <div className="space-y-6 p-6">
+        <div className="space-y-4 p-4">
           <Skeleton className="h-96 w-full" />
           <Skeleton className="h-96 w-full" />
         </div>
@@ -117,22 +117,24 @@ export function BackupManagement() {
         onReset={handleReset}
       />
 
-      <div className="p-6 space-y-6">
-        {/* 备份配置 */}
-        <BackupConfigSection data={config} onChange={updateConfig} />
+      <div className="p-4">
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          {/* 备份配置 */}
+          <BackupConfigSection data={config} onChange={updateConfig} />
 
-        {/* 备份历史 */}
-        <BackupHistorySection
-          backups={backups}
-          totalCount={totalCount}
-          diskUsage={diskUsage}
-          isCreating={isCreating}
-          isDeleting={isDeleting}
-          onCreateBackup={handleCreateBackup}
-          onDownloadBackup={downloadBackup}
-          onRestoreBackup={handleRestoreBackup}
-          onDeleteBackup={deleteBackup}
-        />
+          {/* 备份历史 */}
+          <BackupHistorySection
+            backups={backups}
+            totalCount={totalCount}
+            diskUsage={diskUsage}
+            isCreating={isCreating}
+            isDeleting={isDeleting}
+            onCreateBackup={handleCreateBackup}
+            onDownloadBackup={downloadBackup}
+            onRestoreBackup={handleRestoreBackup}
+            onDeleteBackup={deleteBackup}
+          />
+        </div>
 
         {/* 恢复中的全局提示 */}
         {isRestoring && (

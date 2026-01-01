@@ -47,7 +47,9 @@ router = APIRouter()
 @router.get("/", response_model=List[DeviceResponse], summary="获取设备列表")
 async def get_devices(
     skip: int = Query(0, ge=0, description="跳过的记录数"),
-    limit: int = Query(10, ge=1, le=100, description="返回的记录数"),
+    limit: int = Query(100, ge=1, le=1000, description="返回的记录数"),
+    page: Optional[int] = Query(None, ge=1, description="页码（与page_size配合使用）"),
+    page_size: Optional[int] = Query(None, ge=1, le=1000, description="每页数量"),
     device_type: Optional[str] = Query(None, description="设备类型过滤"),
     status: Optional[str] = Query(None, description="状态过滤"),
     group_id: Optional[int] = Query(None, description="设备组过滤"),
@@ -55,15 +57,26 @@ async def get_devices(
     current_user: dict = Depends(require_permission("devices:read")),
     session: AsyncSession = Depends(get_db_session)
 ):
-    """获取设备列表，支持分页和过滤"""
+    """获取设备列表，支持分页和过滤
+    
+    分页参数支持两种方式：
+    1. skip/limit: 传统分页方式
+    2. page/page_size: 页码分页方式（优先使用）
+    """
     service = DeviceService(session)
     
-    # 转换skip/limit为page/page_size
-    page = (skip // limit) + 1 if limit > 0 else 1
+    # 优先使用 page/page_size 参数
+    if page is not None and page_size is not None:
+        final_page = page
+        final_page_size = page_size
+    else:
+        # 使用 skip/limit 转换为 page/page_size
+        final_page_size = limit
+        final_page = (skip // limit) + 1 if limit > 0 else 1
     
     devices, total = await service.get_devices_paginated(
-        page=page,
-        page_size=limit,
+        page=final_page,
+        page_size=final_page_size,
         device_type=device_type,
         status=status,
         group_id=group_id,
@@ -429,6 +442,55 @@ async def import_scan_devices(
         "skipped_count": len(skipped),
         "imported_devices": imported,
         "skipped_devices": skipped
+    }
+
+
+@router.post("/batch-delete", summary="批量删除设备")
+async def batch_delete_devices(
+    device_ids: List[int],
+    current_user: dict = Depends(require_permission("devices:delete")),
+    session: AsyncSession = Depends(get_db_session)
+):
+    """批量删除设备"""
+    if not device_ids:
+        raise HTTPException(status_code=400, detail="请选择要删除的设备")
+    
+    service = DeviceService(session)
+    deleted_count = 0
+    failed_items = []
+    
+    for device_id in device_ids:
+        try:
+            await service.delete_device(device_id)
+            deleted_count += 1
+            
+            # 停止监控并清理缓存
+            try:
+                monitoring_service = get_monitoring_service()
+                await monitoring_service.stop_device_monitoring(device_id)
+            except Exception as e:
+                logger.warning("Stop monitoring failed", device_id=device_id, error=str(e))
+            
+            try:
+                device_monitoring_service = get_device_monitoring_service()
+                await device_monitoring_service.mark_device_deleted(device_id)
+            except Exception as e:
+                logger.warning("Clear device cache failed", device_id=device_id, error=str(e))
+                
+        except Exception as e:
+            failed_items.append({"device_id": device_id, "error": str(e)})
+    
+    logger.info("Batch delete completed", 
+               deleted_count=deleted_count, 
+               failed_count=len(failed_items),
+               deleted_by=current_user["id"])
+    
+    return {
+        "success": True,
+        "message": f"成功删除 {deleted_count} 台设备",
+        "deleted_count": deleted_count,
+        "failed_count": len(failed_items),
+        "failed_items": failed_items
     }
 
 

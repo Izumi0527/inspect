@@ -22,7 +22,7 @@ const frequencyOptions = [
 
 export function BackupConfigSection({ data, onChange }: Props) {
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <SectionHeader
         title="备份策略配置"
         description="设置自动备份的频率、时间和保留策略"
@@ -171,6 +171,6 @@ export function BackupConfigSection({ data, onChange }: Props) {
           </div>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }

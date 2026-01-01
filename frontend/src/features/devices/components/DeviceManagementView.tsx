@@ -41,9 +41,10 @@ import {
   useDevices, 
   useDeviceFilters, 
   useFilteredDevices, 
-  useDeviceSummary
+  useDeviceSummary,
+  useDeviceSelection
 } from '../hooks/useDevices'
-import { fetchDevice, updateDevice as updateDeviceApi } from '../api/devices.api'
+import { fetchDevice, updateDevice as updateDeviceApi, batchDeleteDevices } from '../api/devices.api'
 import type { DevicePayload } from '../utils/deviceFormMapper'
 
 const DEVICE_STATUSES: DeviceStatus[] = ['online', 'offline', 'warning', 'maintenance']
@@ -86,6 +87,7 @@ export const DeviceManagementView: React.FC = () => {
   const { filters, updateFilter } = useDeviceFilters()
   const filteredDevices = useFilteredDevices(devices, filters)
   const summary = useDeviceSummary(devices)
+  const { selectedDevices, toggleDevice, selectAll, clearSelection, setSelectedDevices } = useDeviceSelection()
   
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [addModalOpen, setAddModalOpen] = useState(false)
@@ -97,6 +99,60 @@ export const DeviceManagementView: React.FC = () => {
   const [editingDevice, setEditingDevice] = useState<Device | null>(null)
   const [viewModalLoading, setViewModalLoading] = useState(false)
   const [editModalLoading, setEditModalLoading] = useState(false)
+  const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  
+  // 分页状态
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize] = useState(10)
+  
+  // 当筛选条件变化时，重置到第一页
+  React.useEffect(() => {
+    setCurrentPage(1)
+  }, [filters.searchQuery, filters.statusFilter, filters.typeFilter])
+  
+  // 计算当前页的数据
+  const paginatedDevices = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize
+    const endIndex = startIndex + pageSize
+    return filteredDevices.slice(startIndex, endIndex)
+  }, [filteredDevices, currentPage, pageSize])
+  
+  // 分页变化处理
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+  
+  // 批量删除处理
+  const handleBulkDelete = () => {
+    if (selectedDevices.length === 0) {
+      toast.error('请先选择要删除的设备')
+      return
+    }
+    setBulkDeleteModalOpen(true)
+  }
+  
+  const confirmBulkDelete = async () => {
+    if (selectedDevices.length === 0) return
+    
+    setBulkDeleting(true)
+    try {
+      const result = await batchDeleteDevices(selectedDevices)
+      if (result.success) {
+        toast.success(result.message)
+        clearSelection()
+        await loadDevices()
+      } else {
+        toast.error(result.message)
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '批量删除失败'
+      toast.error(message)
+    } finally {
+      setBulkDeleting(false)
+      setBulkDeleteModalOpen(false)
+    }
+  }
 
   // 设备操作处理函数
   const handleViewDevice = async (device: Device) => {
@@ -325,81 +381,81 @@ export const DeviceManagementView: React.FC = () => {
       title="设备管理"
       alertCount={summary.totalAlerts}
     >
-      <div className="flex flex-col space-y-6 min-h-[calc(100vh-112px)] pb-6">
+      <div className="flex flex-col space-y-4 min-h-[calc(100vh-112px)] pb-4">
         {/* 统计卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
           <Card>
-            <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                <Server className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            <CardContent className="p-4">
+              <div className="flex items-center">
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                  <Server className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">总设备数</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.total}</p>
+                </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">总设备数</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.total}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center">
+                <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                  <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">在线设备</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{summary.online}</p>
+                </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">在线设备</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{summary.online}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                <Power className="h-6 w-6 text-red-600 dark:text-red-400" />
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center">
+                <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
+                  <Power className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">离线设备</p>
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">{summary.offline}</p>
+                </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">离线设备</p>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400">{summary.offline}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
-                <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center">
+                <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
+                  <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">告警设备</p>
+                  <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{summary.warning}</p>
+                </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">告警设备</p>
-                <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{summary.warning}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                <AlertTriangle className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center">
+                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                  <AlertTriangle className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">总告警数</p>
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{summary.totalAlerts}</p>
+                </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">总告警数</p>
-                <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{summary.totalAlerts}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
 
-      {/* 筛选和搜索 */}
+        {/* 筛选和搜索 */}
       <Card className="flex-1 flex flex-col overflow-hidden">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -429,8 +485,8 @@ export const DeviceManagementView: React.FC = () => {
           </div>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-            <div className="flex-1">
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="w-full sm:w-[300px]">
               <Input
                 placeholder="搜索设备名称、IP或位置..."
                 value={filters.searchQuery}
@@ -464,7 +520,31 @@ export const DeviceManagementView: React.FC = () => {
             </Select>
           </div>
 
-          {/* 批量操作 */}
+          {/* 批量操作栏 */}
+          {selectedDevices.length > 0 && (
+            <div className="flex items-center gap-4 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <span className="text-sm text-blue-700 dark:text-blue-300">
+                已选择 {selectedDevices.length} 台设备
+              </span>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={handleBulkDelete}
+                className="flex items-center gap-1"
+              >
+                <Trash2 className="h-4 w-4" />
+                批量删除
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={clearSelection}
+              >
+                取消选择
+              </Button>
+            </div>
+          )}
+          
           {/* 设备表格 */}
           <div className="flex-1 overflow-y-auto">
             {filteredDevices.length === 0 && !loading && !error && (
@@ -483,15 +563,22 @@ export const DeviceManagementView: React.FC = () => {
             {filteredDevices.length > 0 && (
               <Table
                 columns={columns}
-                data={filteredDevices}
+                data={paginatedDevices}
                 loading={loading}
-                pagination={{
-                  current: 1,
-                  pageSize: 10,
-                  total: filteredDevices.length,
-                  onChange: (page, pageSize) => {
-                    console.log('分页:', page, pageSize)
+                rowKey="id"
+                rowSelection={{
+                  selectedRowKeys: selectedDevices,
+                  onChange: (keys) => {
+                    // 直接设置选中的设备ID，不需要清空再逐个添加
+                    const deviceIds = keys.filter((key): key is number => typeof key === 'number')
+                    setSelectedDevices(deviceIds)
                   }
+                }}
+                pagination={{
+                  current: currentPage,
+                  pageSize: pageSize,
+                  total: filteredDevices.length,
+                  onChange: (page) => handlePageChange(page)
                 }}
               />
             )}
@@ -507,6 +594,18 @@ export const DeviceManagementView: React.FC = () => {
         title="删除设备"
         description={`确定要删除设备 "${deviceToDelete?.name}" 吗？此操作不可撤销。`}
         confirmText="删除"
+        cancelText="取消"
+        variant="destructive"
+      />
+
+      {/* 批量删除确认对话框 */}
+      <ConfirmModal
+        isOpen={bulkDeleteModalOpen}
+        onClose={() => setBulkDeleteModalOpen(false)}
+        onConfirm={confirmBulkDelete}
+        title="批量删除设备"
+        description={`确定要删除选中的 ${selectedDevices.length} 台设备吗？此操作不可撤销。`}
+        confirmText={bulkDeleting ? "删除中..." : "确认删除"}
         cancelText="取消"
         variant="destructive"
       />

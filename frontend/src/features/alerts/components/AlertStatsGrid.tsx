@@ -15,9 +15,9 @@ interface AlertStatsGridProps {
 
 export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats }) => {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">总告警数</p>
@@ -29,7 +29,7 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats }) => {
       </Card>
       
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">严重告警</p>
@@ -41,7 +41,7 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats }) => {
       </Card>
       
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">警告告警</p>
@@ -53,7 +53,7 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats }) => {
       </Card>
       
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">信息告警</p>
@@ -65,7 +65,7 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats }) => {
       </Card>
       
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">活跃告警</p>

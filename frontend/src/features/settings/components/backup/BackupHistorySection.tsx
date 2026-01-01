@@ -183,7 +183,7 @@ export function BackupHistorySection({
   }
 
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <div className="flex items-start justify-between mb-6">
         <SectionHeader
           title="备份历史记录"
@@ -320,6 +320,6 @@ export function BackupHistorySection({
           </table>
         </div>
       )}
-    </Card>
+    </div>
   )
 }

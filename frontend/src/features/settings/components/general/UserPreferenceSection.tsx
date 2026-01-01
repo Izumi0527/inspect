@@ -30,7 +30,7 @@ const timeFormatOptions = [
 
 export function UserPreferenceSection({ data, onChange }: Props) {
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <SectionHeader
         title="个人偏好"
         description="自定义您的用户界面和显示偏好"
@@ -86,6 +86,6 @@ export function UserPreferenceSection({ data, onChange }: Props) {
           />
         </ConfigItem>
       </div>
-    </Card>
+    </div>
   )
 }

@@ -13,7 +13,7 @@ interface Props {
 
 export function InspectionConfigSection({ data, onChange }: Props) {
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <SectionHeader
         title="巡检配置"
         description="设备巡检任务的相关配置"
@@ -63,6 +63,6 @@ export function InspectionConfigSection({ data, onChange }: Props) {
           />
         </ConfigItem>
       </div>
-    </Card>
+    </div>
   )
 }

@@ -138,11 +138,16 @@ export function Table<T extends object>({
             <thead>
               <tr className="border-b border-gray-200/50 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/50">
                 {rowSelection && (
-                  <th className={cn('text-left font-medium text-gray-900 dark:text-gray-100', cellPadding[size])}>
+                  <th className={cn('text-left font-medium text-gray-900 dark:text-gray-100 w-12', cellPadding[size])} style={{ width: '48px' }}>
                     <input
                       type="checkbox"
-                      className="rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-purple-600 focus:ring-purple-500"
+                      className="custom-checkbox"
                       checked={rowSelection.selectedRowKeys.length === data.length && data.length > 0}
+                      ref={(input) => {
+                        if (input) {
+                          input.indeterminate = rowSelection.selectedRowKeys.length > 0 && rowSelection.selectedRowKeys.length < data.length
+                        }
+                      }}
                       onChange={(e) => {
                         if (e.target.checked) {
                           const allKeys = data.map((record, index) => getRowKey(record, index))
@@ -242,10 +247,10 @@ export function Table<T extends object>({
                     {...restRowProps}
                   >
                     {rowSelection && (
-                      <td className={cellPadding[size]}>
+                      <td className={cn(cellPadding[size], 'w-12')} style={{ width: '48px' }}>
                         <input
                           type="checkbox"
-                          className="rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-purple-600 focus:ring-purple-500"
+                          className="custom-checkbox"
                           checked={isSelected}
                           onChange={(e) => {
                             if (e.target.checked) {

@@ -20,7 +20,7 @@ const formatOptions = [
 
 export function ReportConfigSection({ data, onChange }: Props) {
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <SectionHeader
         title="报表配置"
         description="报表导出相关的配置"
@@ -54,6 +54,6 @@ export function ReportConfigSection({ data, onChange }: Props) {
           />
         </ConfigItem>
       </div>
-    </Card>
+    </div>
   )
 }

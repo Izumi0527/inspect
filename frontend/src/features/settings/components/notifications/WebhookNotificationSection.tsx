@@ -56,7 +56,7 @@ export function WebhookNotificationSection({ data, onChange, onTest, isTesting =
   }
 
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <SectionHeader
         title="Webhook 通知"
         description="配置 Webhook 以接收系统事件通知"
@@ -196,6 +196,6 @@ export function WebhookNotificationSection({ data, onChange, onTest, isTesting =
           </ConfigItem>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }

@@ -182,12 +182,11 @@ export function MonitoringViewV2() {
         />
 
         {/* 主内容区域 */}
-        <main className="p-6">
-          <div className="space-y-8">
+        <main className="p-4">
+          <div className="space-y-6">
             {/* 统计卡片网格(6个) */}
             <section>
-              <MonitoringSectionHeader title="关键指标" subtitle="实时监控系统核心指标" />
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 {data.statsV2 && data.statsV2.length > 0 ? (
                   data.statsV2.map((stat, index) => {
                     const IconComponent = monitoringIconMap[stat.id as keyof typeof monitoringIconMap] || Server
@@ -228,11 +227,7 @@ export function MonitoringViewV2() {
 
             {/* 图表区域(2列) */}
             <section ref={chartsRef}>
-              <MonitoringSectionHeader
-                title="性能趋势"
-                subtitle="系统性能和设备温度的历史趋势分析"
-              />
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {/* 系统性能趋势图 */}
                 <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
                   <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
@@ -283,11 +278,7 @@ export function MonitoringViewV2() {
 
             {/* 详情区域(3列) */}
             <section>
-              <MonitoringSectionHeader
-                title="设备状态"
-                subtitle="设备健康状况、可用性和实时告警"
-              />
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 items-stretch">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 items-stretch">
                 {/* 设备状态分布卡片 */}
                 {data.deviceStatusDistribution && (
                   <DeviceStatusCard data={data.deviceStatusDistribution} />
@@ -305,15 +296,6 @@ export function MonitoringViewV2() {
 
             {/* 网络流量区域(独立) */}
             <section ref={networkRef}>
-              <MonitoringSectionHeader
-                title="网络流量"
-                subtitle="入站和出站流量的堆叠面积图"
-                action={
-                  <button className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
-                    查看详情 →
-                  </button>
-                }
-              />
               <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
                 {networkInView ? (
                   data.networkTrafficHistory && data.networkTrafficHistory.length > 0 ? (

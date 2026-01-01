@@ -102,7 +102,7 @@ class DeviceResponse(BaseSchema, IDMixin, TimestampMixin):
     snmp_port: Optional[int] = None
     ssh_username: Optional[str] = None
     ssh_port: Optional[int] = None
-    tags: Optional[Dict[str, Any]] = None
+    tags: Optional[Any] = None  # 支持字典或列表格式
     description: Optional[str] = None
 
 

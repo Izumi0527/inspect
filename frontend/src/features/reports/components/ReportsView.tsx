@@ -85,10 +85,10 @@ export const ReportsView: React.FC = () => {
 
   return (
     <AppLayout title="报表分析">
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* 快速统计卡片 */}
         {!statsLoading && stats && (
-          <div className="flex gap-4">
+          <div className="flex gap-3">
             <Card className="min-w-[120px]">
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-blue-600 dark:text-blue-500">{stats.totalReports}</div>
@@ -119,7 +119,7 @@ export const ReportsView: React.FC = () => {
         {/* 标签导航 */}
         <Card>
           <CardHeader className="pb-0">
-          <div className="flex flex-col sm:flex-row gap-4 justify-between">
+          <div className="flex flex-col sm:flex-row gap-3 justify-between">
             {/* 标签按钮 */}
             <div className="flex flex-wrap gap-2">
               {tabs.map((tab) => {

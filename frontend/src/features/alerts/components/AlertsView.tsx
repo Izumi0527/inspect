@@ -174,11 +174,11 @@ export const AlertsView: React.FC = () => {
 
   return (
     <AppLayout title="告警中心">
-      <div className="flex flex-col space-y-6 min-h-[calc(100vh-112px)] pb-6">
+      <div className="flex flex-col space-y-4 min-h-[calc(100vh-112px)] pb-4">
         {/* Alert Statistics */}
         <div>
           {statsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <SkeletonCard lines={2} />
               <SkeletonCard lines={2} />
               <SkeletonCard lines={2} />

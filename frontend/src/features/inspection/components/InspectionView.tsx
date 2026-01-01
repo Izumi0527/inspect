@@ -83,30 +83,30 @@ export const InspectionView: React.FC = () => {
 
   return (
     <AppLayout title="巡检管理">
-      <div className="flex flex-col space-y-6 min-h-[calc(100vh-112px)] pb-6">
+      <div className="flex flex-col space-y-4 min-h-[calc(100vh-112px)] pb-4">
         {/* 快速统计卡片 */}
         {!statsLoading && stats && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             <Card>
-              <CardContent className="p-6 text-center">
+              <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-blue-600">{stats.totalStrategies}</div>
                 <div className="text-sm text-gray-600 dark:text-gray-400">总策略数</div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-6 text-center">
+              <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-green-600">{stats.activeStrategies}</div>
                 <div className="text-sm text-gray-600 dark:text-gray-400">活跃策略</div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-6 text-center">
+              <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-purple-600">{stats.todayExecutions}</div>
                 <div className="text-sm text-gray-600 dark:text-gray-400">今日执行</div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-6 text-center">
+              <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-orange-600">{stats.avgScore.toFixed(1)}</div>
                 <div className="text-sm text-gray-600 dark:text-gray-400">平均评分</div>
               </CardContent>
@@ -117,7 +117,7 @@ export const InspectionView: React.FC = () => {
         {/* 标签导航 */}
       <Card className="flex-1 flex flex-col overflow-hidden">
         <CardHeader className="pb-0">
-          <div className="flex flex-col sm:flex-row gap-4 justify-between">
+          <div className="flex flex-col sm:flex-row gap-3 justify-between">
             {/* 标签按钮 */}
             <div className="flex flex-wrap gap-2">
               {tabs.map((tab) => {

@@ -51,7 +51,7 @@ export function NotificationSettings() {
     return (
       <div>
         <ActionButtons />
-        <div className="space-y-6 p-6">
+        <div className="space-y-4 p-4">
           <Skeleton className="h-96 w-full" />
           <Skeleton className="h-96 w-full" />
           <Skeleton className="h-96 w-full" />
@@ -92,25 +92,27 @@ export function NotificationSettings() {
         onReset={handleReset}
       />
 
-      <div className="p-6 space-y-6">
-        <EmailNotificationSection
-          data={emailNotification}
-          onChange={updateEmailNotification}
-          onTest={testEmailNotification}
-          isTesting={isTesting}
-        />
-        <SmsNotificationSection
-          data={smsNotification}
-          onChange={updateSmsNotification}
-          onTest={testSmsNotification}
-          isTesting={isTesting}
-        />
-        <WebhookNotificationSection
-          data={webhookNotification}
-          onChange={updateWebhookNotification}
-          onTest={testWebhookNotification}
-          isTesting={isTesting}
-        />
+      <div className="p-4">
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          <EmailNotificationSection
+            data={emailNotification}
+            onChange={updateEmailNotification}
+            onTest={testEmailNotification}
+            isTesting={isTesting}
+          />
+          <SmsNotificationSection
+            data={smsNotification}
+            onChange={updateSmsNotification}
+            onTest={testSmsNotification}
+            isTesting={isTesting}
+          />
+          <WebhookNotificationSection
+            data={webhookNotification}
+            onChange={updateWebhookNotification}
+            onTest={testWebhookNotification}
+            isTesting={isTesting}
+          />
+        </div>
       </div>
     </div>
   )

@@ -125,7 +125,7 @@ export function UserManagement() {
   // 加载状态
   if (isLoading && !users.length) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-4 space-y-4">
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-96 w-full" />
       </div>
@@ -133,10 +133,10 @@ export function UserManagement() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 space-y-4 flex-1 flex flex-col min-h-0">
       {/* 统计卡片 */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -202,8 +202,8 @@ export function UserManagement() {
       </Card>
 
       {/* 用户列表 */}
-      <Card>
-        <div className="overflow-x-auto">
+      <Card className="flex-1 flex flex-col min-h-0">
+        <div className="overflow-x-auto flex-1">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">

@@ -90,7 +90,7 @@ export function AuthenticationSection({ data, onChange }: Props) {
   }
 
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <SectionHeader
         title="认证方式"
         description="配置多因素认证、OAuth登录和IP白名单"
@@ -260,6 +260,6 @@ export function AuthenticationSection({ data, onChange }: Props) {
           )}
         </div>
       </div>
-    </Card>
+    </div>
   )
 }

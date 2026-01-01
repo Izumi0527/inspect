@@ -49,7 +49,7 @@ export function EmailNotificationSection({ data, onChange, onTest, isTesting = f
   }
 
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <SectionHeader
         title="邮件通知"
         description="配置 SMTP 服务器用于发送邮件通知"
@@ -195,6 +195,6 @@ export function EmailNotificationSection({ data, onChange, onTest, isTesting = f
           </ConfigItem>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }

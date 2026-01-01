@@ -416,6 +416,31 @@ export async function deleteDevice(id: number): Promise<boolean> {
   return false
 }
 
+export async function batchDeleteDevices(deviceIds: number[]): Promise<{
+  success: boolean
+  message: string
+  deleted_count: number
+  failed_count: number
+}> {
+  const payload = await api.post<unknown>('/devices/batch-delete', deviceIds)
+
+  if (isObject(payload)) {
+    return {
+      success: (payload as Record<string, unknown>).success === true,
+      message: String((payload as Record<string, unknown>).message ?? '批量删除完成'),
+      deleted_count: Number((payload as Record<string, unknown>).deleted_count ?? 0),
+      failed_count: Number((payload as Record<string, unknown>).failed_count ?? 0),
+    }
+  }
+
+  return {
+    success: false,
+    message: '批量删除失败',
+    deleted_count: 0,
+    failed_count: deviceIds.length,
+  }
+}
+
 const performBulkAction = async (
   endpoint: string,
   body: Record<string, unknown>

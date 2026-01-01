@@ -57,7 +57,7 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
   }
 
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <SectionHeader
         title="短信通知"
         description="配置短信网关用于发送 SMS 通知"
@@ -212,6 +212,6 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
           </ConfigItem>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }

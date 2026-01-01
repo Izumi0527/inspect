@@ -15,7 +15,7 @@ interface Props {
 
 export function SessionManagementSection({ data, onChange }: Props) {
   return (
-    <Card className="p-6">
+    <div className="p-4">
       <SectionHeader
         title="会话管理"
         description="配置用户会话超时和并发控制"
@@ -101,6 +101,6 @@ export function SessionManagementSection({ data, onChange }: Props) {
           </ConfigItem>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }
