@@ -1,6 +1,30 @@
-import { redirect } from 'next/navigation'
+'use client'
+
+import { LazySystemSettings, LazyWrapper } from '@/components/lazy/LazyComponents'
+import { ErrorBoundary } from '@/components/error/ErrorBoundary'
+import { useRequireAuth } from '@/lib/contexts/auth-context'
 
 export default function SettingsPage() {
-  // 重定向到通用配置页面
-  redirect('/settings/general')
+  const { isAuthenticated, isLoading } = useRequireAuth()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 text-lg">验证登录状态...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) return null
+
+  return (
+    <ErrorBoundary>
+      <LazyWrapper>
+        <LazySystemSettings />
+      </LazyWrapper>
+    </ErrorBoundary>
+  )
 }
