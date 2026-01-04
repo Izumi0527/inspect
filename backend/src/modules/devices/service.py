@@ -220,6 +220,127 @@ class DeviceService:
                    created_by=created_by)
         
         return imported, skipped
+    
+    async def update_device_probe_status(
+        self,
+        device_id: int,
+        status: str,
+        icmp_status: str,
+        snmp_status: str,
+        response_time: Optional[float] = None,
+        last_seen: Optional[datetime] = None,
+        last_probe_time: Optional[datetime] = None
+    ) -> bool:
+        """
+        更新设备探测状态
+        
+        Args:
+            device_id: 设备ID
+            status: 设备状态 (online/offline)
+            icmp_status: ICMP状态 (online/offline)
+            snmp_status: SNMP状态 (success/failed/not_configured)
+            response_time: 响应时间（毫秒）
+            last_seen: 最后在线时间
+            last_probe_time: 最后探测时间
+        """
+        try:
+            # 移除时区信息，数据库使用 TIMESTAMP WITHOUT TIME ZONE
+            probe_time = last_probe_time or datetime.utcnow()
+            if probe_time.tzinfo is not None:
+                probe_time = probe_time.replace(tzinfo=None)
+            
+            update_data = {
+                "status": status,
+                "icmp_status": icmp_status,
+                "snmp_status": snmp_status,
+                "last_probe_time": probe_time
+            }
+            
+            if response_time is not None:
+                update_data["response_time"] = response_time
+            
+            # 移除 last_seen 的时区信息
+            if last_seen is not None:
+                if last_seen.tzinfo is not None:
+                    last_seen = last_seen.replace(tzinfo=None)
+                update_data["last_seen"] = last_seen
+            
+            await self.repository.update_device(device_id, update_data)
+            
+            # 清除缓存
+            await cache_service.clear_device_related_cache(device_id)
+            
+            logger.debug("Device probe status updated",
+                        device_id=device_id,
+                        status=status,
+                        icmp_status=icmp_status,
+                        snmp_status=snmp_status)
+            
+            return True
+            
+        except Exception as e:
+            logger.error("Failed to update device probe status",
+                        device_id=device_id,
+                        error=str(e))
+            return False
+
+    async def update_device_metrics(
+        self,
+        device_id: int,
+        cpu_usage: Optional[float] = None,
+        memory_usage: Optional[float] = None,
+        temperature: Optional[float] = None,
+        uptime: Optional[int] = None,
+        response_time: Optional[float] = None
+    ) -> bool:
+        """
+        更新设备性能指标
+        
+        Args:
+            device_id: 设备ID
+            cpu_usage: CPU使用率
+            memory_usage: 内存使用率
+            temperature: 温度
+            uptime: 运行时间（秒）
+            response_time: 响应时间（毫秒）
+        """
+        try:
+            update_data = {}
+            
+            if cpu_usage is not None:
+                update_data["cpu_usage"] = cpu_usage
+            
+            if memory_usage is not None:
+                update_data["memory_usage"] = memory_usage
+            
+            if temperature is not None:
+                update_data["temperature"] = temperature
+            
+            if uptime is not None:
+                update_data["uptime"] = uptime
+            
+            if response_time is not None:
+                update_data["response_time"] = response_time
+            
+            if not update_data:
+                return True  # 没有需要更新的数据
+            
+            # 更新最后在线时间
+            update_data["last_seen"] = datetime.utcnow()
+            
+            await self.repository.update_device(device_id, update_data)
+            
+            logger.debug("Device metrics updated",
+                        device_id=device_id,
+                        metrics=list(update_data.keys()))
+            
+            return True
+            
+        except Exception as e:
+            logger.error("Failed to update device metrics",
+                        device_id=device_id,
+                        error=str(e))
+            return False
 
 
 async def get_device_service(session: AsyncSession) -> DeviceService:

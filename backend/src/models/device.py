@@ -78,6 +78,11 @@ class Device(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_monitored: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     
+    # 连接状态（探测结果）
+    icmp_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # online/offline
+    snmp_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # success/failed/not_configured
+    last_probe_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # 最后探测时间
+    
     # 性能信息
     cpu_usage: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     memory_usage: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

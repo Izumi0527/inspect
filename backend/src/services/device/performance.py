@@ -223,12 +223,28 @@ class DevicePerformanceCollector:
             # 创建SNMP客户端
             snmp_client = await self._create_snmp_client(config)
             
+            self.logger.debug(
+                "SNMP客户端创建成功",
+                device_id=config.device_id,
+                ip_address=config.ip_address,
+                snmp_port=config.snmp_port,
+                snmp_version=str(config.credentials.snmp_version),
+                snmp_community=config.credentials.snmp_community[:3] + "***" if config.credentials.snmp_community else "None"
+            )
+            
             async with snmp_client:
                 # 测试连接
                 connection_ok = await snmp_client.test_connection()
                 if not connection_ok:
-                    self.logger.warning(f"SNMP连接失败: {config.ip_address}")
+                    self.logger.warning(
+                        "SNMP连接测试失败",
+                        device_id=config.device_id,
+                        ip_address=config.ip_address,
+                        snmp_port=config.snmp_port
+                    )
                     return metrics
+                
+                self.logger.debug("SNMP连接测试成功", device_id=config.device_id)
                 
                 # 采集系统基础信息
                 system_metrics = await self._collect_system_info_snmp(snmp_client)
@@ -243,7 +259,13 @@ class DevicePerformanceCollector:
                 metrics.extend(resource_metrics)
                 
         except Exception as e:
-            self.logger.error(f"SNMP数据采集异常: {e}")
+            self.logger.error(
+                "SNMP数据采集异常",
+                device_id=config.device_id,
+                ip_address=config.ip_address,
+                error=str(e),
+                error_type=type(e).__name__
+            )
         
         return metrics
 
@@ -279,6 +301,10 @@ class DevicePerformanceCollector:
         """创建SNMP客户端"""
         creds = config.credentials
         
+        # 增加超时时间和重试次数，网络设备响应可能较慢
+        snmp_timeout = min(config.timeout, 10.0)  # 最大10秒超时
+        snmp_retries = 2  # 重试2次
+        
         return await create_snmp_client(
             host=config.ip_address,
             port=config.snmp_port,
@@ -290,7 +316,8 @@ class DevicePerformanceCollector:
             auth_key=creds.snmp_auth_key,
             priv_protocol=creds.snmp_priv_protocol,
             priv_key=creds.snmp_priv_key,
-            timeout=config.timeout
+            timeout=snmp_timeout,
+            retries=snmp_retries
         )
 
     async def _create_ssh_client(self, config: DeviceMonitoringConfig) -> SSHClient:
@@ -453,6 +480,12 @@ class DevicePerformanceCollector:
         timestamp = datetime.now(timezone.utc)
         
         try:
+            # 首先尝试华为私有 OID
+            huawei_metrics = await self._collect_huawei_resource_info(snmp_client, timestamp)
+            if huawei_metrics:
+                metrics.extend(huawei_metrics)
+                return metrics
+            
             # 尝试获取CPU负载（需要设备支持HOST-RESOURCES-MIB）
             cpu_results = await snmp_client.walk(CommonOIDs.HR_PROCESSOR_LOAD)
             if cpu_results and not cpu_results[0].error:
@@ -507,6 +540,151 @@ class DevicePerformanceCollector:
             
         except Exception as e:
             self.logger.error(f"采集资源信息失败: {e}")
+        
+        return metrics
+
+    async def _collect_huawei_resource_info(self, snmp_client: SNMPClient, timestamp: datetime) -> List[PerformanceMetric]:
+        """
+        采集华为设备的CPU和内存信息
+        
+        华为S系列交换机使用的OID:
+        - CPU: 1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5 (hwEntityCpuUsage)
+        - 内存: 1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7 (hwEntityMemUsage)
+        
+        华为设备的这些OID是表格形式，需要walk获取所有条目
+        """
+        metrics = []
+        
+        try:
+            # 华为 CPU 使用率 OID - 按优先级排序
+            huawei_cpu_oids = [
+                # HUAWEI-ENTITY-EXTENT-MIB (S系列交换机常用)
+                ("1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5", "hwEntityCpuUsage"),
+                # 直接获取单个值的OID（某些设备支持）
+                ("1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5.67108873", "hwEntityCpuUsage_slot"),
+                ("1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5.68157449", "hwEntityCpuUsage_slot2"),
+                # 旧版OID
+                ("1.3.6.1.4.1.2011.6.3.4.1.2", "hwAvgDuty1min"),
+            ]
+            
+            # 华为内存使用率 OID
+            huawei_mem_oids = [
+                # HUAWEI-ENTITY-EXTENT-MIB
+                ("1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7", "hwEntityMemUsage"),
+                # 直接获取单个值的OID
+                ("1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7.67108873", "hwEntityMemUsage_slot"),
+                ("1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7.68157449", "hwEntityMemUsage_slot2"),
+                # 旧版OID
+                ("1.3.6.1.4.1.2011.6.3.5.1.1.2", "hwMemoryDevUsage"),
+            ]
+            
+            cpu_usage = None
+            memory_usage = None
+            
+            # 尝试获取 CPU 使用率
+            for cpu_oid, oid_name in huawei_cpu_oids:
+                try:
+                    self.logger.debug(f"尝试华为CPU OID: {cpu_oid} ({oid_name})")
+                    
+                    # 首先尝试直接GET（对于带索引的OID）
+                    if '.' in cpu_oid and len(cpu_oid.split('.')) > 12:
+                        cpu_results = await snmp_client.get([cpu_oid])
+                    else:
+                        cpu_results = await snmp_client.walk(cpu_oid)
+                    
+                    self.logger.debug(f"华为CPU OID {oid_name} 返回 {len(cpu_results)} 条结果")
+                    
+                    if cpu_results:
+                        cpu_values = []
+                        for r in cpu_results:
+                            if not r.error and r.value is not None:
+                                try:
+                                    # 处理可能的十六进制或字符串值
+                                    val_str = str(r.value).strip()
+                                    if val_str.startswith('0x'):
+                                        val = int(val_str, 16)
+                                    else:
+                                        val = int(float(val_str))
+                                    
+                                    # 只收集有效的非零值（华为设备返回很多0值的条目）
+                                    if 1 <= val <= 100:
+                                        cpu_values.append(val)
+                                        self.logger.debug(f"  有效CPU值: {val}%")
+                                except (ValueError, TypeError) as e:
+                                    continue
+                        
+                        if cpu_values:
+                            # 取最大值作为CPU使用率（主板CPU的值）
+                            cpu_usage = max(cpu_values)
+                            self.logger.info(f"华为设备CPU使用率采集成功: {cpu_usage:.1f}% (来自 {oid_name})")
+                            break
+                except Exception as e:
+                    self.logger.debug(f"尝试华为CPU OID {oid_name} 失败: {e}")
+                    continue
+            
+            # 尝试获取内存使用率
+            for mem_oid, oid_name in huawei_mem_oids:
+                try:
+                    self.logger.debug(f"尝试华为内存OID: {mem_oid} ({oid_name})")
+                    
+                    # 首先尝试直接GET（对于带索引的OID）
+                    if '.' in mem_oid and len(mem_oid.split('.')) > 12:
+                        mem_results = await snmp_client.get([mem_oid])
+                    else:
+                        mem_results = await snmp_client.walk(mem_oid)
+                    
+                    self.logger.debug(f"华为内存OID {oid_name} 返回 {len(mem_results)} 条结果")
+                    
+                    if mem_results:
+                        mem_values = []
+                        for r in mem_results:
+                            if not r.error and r.value is not None:
+                                try:
+                                    val_str = str(r.value).strip()
+                                    if val_str.startswith('0x'):
+                                        val = int(val_str, 16)
+                                    else:
+                                        val = int(float(val_str))
+                                    
+                                    # 只收集有效的非零值
+                                    if 1 <= val <= 100:
+                                        mem_values.append(val)
+                                        self.logger.debug(f"  有效内存值: {val}%")
+                                except (ValueError, TypeError) as e:
+                                    continue
+                        
+                        if mem_values:
+                            # 取最大值作为内存使用率
+                            memory_usage = max(mem_values)
+                            self.logger.info(f"华为设备内存使用率采集成功: {memory_usage:.1f}% (来自 {oid_name})")
+                            break
+                except Exception as e:
+                    self.logger.debug(f"尝试华为内存OID {oid_name} 失败: {e}")
+                    continue
+            
+            # 添加采集到的指标
+            if cpu_usage is not None:
+                metrics.append(PerformanceMetric(
+                    name="cpu_usage",
+                    value=round(cpu_usage, 1),
+                    unit="percent",
+                    timestamp=timestamp
+                ))
+            else:
+                self.logger.warning("华为设备CPU使用率采集失败，所有OID都未返回有效数据")
+            
+            if memory_usage is not None:
+                metrics.append(PerformanceMetric(
+                    name="memory_usage",
+                    value=round(memory_usage, 1),
+                    unit="percent",
+                    timestamp=timestamp
+                ))
+            else:
+                self.logger.warning("华为设备内存使用率采集失败，所有OID都未返回有效数据")
+            
+        except Exception as e:
+            self.logger.error(f"采集华为设备资源信息异常: {e}", exc_info=True)
         
         return metrics
 

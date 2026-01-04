@@ -18,7 +18,8 @@ from src.modules.devices.schemas import (
     DeviceCreate, DeviceUpdate, DeviceResponse, DeviceListResponse,
     DeviceGroupResponse, DeviceStatistics,
     NetworkScanRequest, NetworkScanResponse, ScanResultResponse,
-    DiscoveredDeviceResponse, DeviceBatchImportRequest, DeviceBatchImportResponse
+    DiscoveredDeviceResponse, DeviceBatchImportRequest, DeviceBatchImportResponse,
+    DeviceProbeResponse, DeviceBatchProbeRequest, DeviceBatchProbeResponse
 )
 
 # 延迟导入避免循环依赖
@@ -37,6 +38,10 @@ def get_monitoring_service():
 def get_device_monitoring_service():
     from src.services.device import device_monitoring_service
     return device_monitoring_service
+
+def get_device_probe_service():
+    from src.services.device.probe import device_probe_service
+    return device_probe_service
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -82,6 +87,22 @@ async def get_devices(
         group_id=group_id,
         search=search
     )
+    
+    # 获取设备告警数量
+    try:
+        from src.repositories.alert_repository_db import AlertRepositoryDB
+        alert_repo = AlertRepositoryDB(session)
+        alert_stats = await alert_repo.get_alert_statistics()
+        alerts_by_device = alert_stats.get("by_device", {})
+        
+        # 为每个设备添加告警数量
+        for device in devices:
+            device.alert_count = alerts_by_device.get(device.id, 0)
+    except Exception as e:
+        logger.warning("Failed to get alert counts for devices", error=str(e))
+        # 如果获取告警数量失败，设置为0
+        for device in devices:
+            device.alert_count = 0
     
     logger.info("Retrieved devices", count=len(devices), total=total, user_id=current_user.get("id"))
     return devices
@@ -505,3 +526,170 @@ async def get_device_statistics(
     service = DeviceService(session)
     stats = await service.get_device_statistics()
     return DeviceStatistics(**stats)
+
+
+
+# ============= 设备探测端点 =============
+
+@router.post("/{device_id}/probe", response_model=DeviceProbeResponse, summary="探测设备连接状态")
+async def probe_device(
+    device_id: int,
+    update_status: bool = Query(True, description="是否更新设备状态"),
+    current_user: dict = Depends(require_permission("devices:read")),
+    session: AsyncSession = Depends(get_db_session)
+):
+    """
+    探测设备的ICMP和SNMP连接状态
+    
+    - ICMP: 通过ping检测设备是否在线
+    - SNMP: 检测SNMP连接是否可用
+    - update_status: 是否将探测结果更新到设备状态（默认True）
+    """
+    service = DeviceService(session)
+    probe_service = get_device_probe_service()
+    
+    try:
+        # 获取设备信息
+        device = await service.get_device_by_id(device_id)
+        
+        # 执行探测
+        probe_result = await probe_service.probe_device(
+            device_id=device.id,
+            ip_address=device.ip_address,
+            snmp_community=device.snmp_community,
+            snmp_version=device.snmp_version or "2c",
+            snmp_port=device.snmp_port or 161,
+            tags=device.tags,
+            use_cache=False  # 手动探测不使用缓存
+        )
+        
+        # 更新设备状态到数据库
+        if update_status:
+            await service.update_device_probe_status(
+                device_id=device_id,
+                status=probe_result.status,
+                icmp_status=probe_result.icmp_status,
+                snmp_status=probe_result.snmp_status,
+                response_time=probe_result.icmp_response_time,
+                last_seen=probe_result.probed_at if probe_result.icmp_reachable else None,
+                last_probe_time=probe_result.probed_at
+            )
+        
+        logger.info("Device probed", 
+                   device_id=device_id,
+                   icmp_reachable=probe_result.icmp_reachable,
+                   snmp_reachable=probe_result.snmp_reachable,
+                   status_updated=update_status,
+                   user_id=current_user["id"])
+        
+        return DeviceProbeResponse(
+            device_id=probe_result.device_id,
+            ip_address=probe_result.ip_address,
+            icmp_reachable=probe_result.icmp_reachable,
+            icmp_response_time=probe_result.icmp_response_time,
+            icmp_error=probe_result.icmp_error,
+            snmp_reachable=probe_result.snmp_reachable,
+            snmp_response_time=probe_result.snmp_response_time,
+            snmp_error=probe_result.snmp_error,
+            snmp_system_info=probe_result.snmp_system_info,
+            probed_at=probe_result.probed_at
+        )
+        
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=e.message)
+    except Exception as e:
+        logger.error("Device probe failed", device_id=device_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"设备探测失败: {str(e)}")
+
+
+@router.post("/batch-probe", response_model=DeviceBatchProbeResponse, summary="批量探测设备")
+async def batch_probe_devices(
+    request: DeviceBatchProbeRequest,
+    update_status: bool = Query(True, description="是否更新设备状态"),
+    current_user: dict = Depends(require_permission("devices:read")),
+    session: AsyncSession = Depends(get_db_session)
+):
+    """
+    批量探测多个设备的连接状态
+    
+    支持同时探测多个设备的ICMP和SNMP连接状态，并更新设备状态
+    """
+    service = DeviceService(session)
+    probe_service = get_device_probe_service()
+    
+    try:
+        # 获取设备信息
+        devices_data = []
+        for device_id in request.device_ids:
+            try:
+                device = await service.get_device_by_id(device_id)
+                devices_data.append({
+                    "id": device.id,
+                    "ip_address": device.ip_address,
+                    "snmp_community": device.snmp_community,
+                    "snmp_version": device.snmp_version or "2c",
+                    "snmp_port": device.snmp_port or 161,
+                    "tags": device.tags
+                })
+            except NotFoundException:
+                logger.warning("Device not found for probe", device_id=device_id)
+                continue
+        
+        if not devices_data:
+            raise HTTPException(status_code=400, detail="没有找到有效的设备")
+        
+        # 批量探测
+        probe_results = await probe_service.batch_probe_devices(
+            devices=devices_data,
+            max_concurrent=request.max_concurrent
+        )
+        
+        # 更新设备状态到数据库
+        if update_status:
+            for device_id, probe_result in probe_results.items():
+                try:
+                    await service.update_device_probe_status(
+                        device_id=device_id,
+                        status=probe_result.status,
+                        icmp_status=probe_result.icmp_status,
+                        snmp_status=probe_result.snmp_status,
+                        response_time=probe_result.icmp_response_time,
+                        last_seen=probe_result.probed_at if probe_result.icmp_reachable else None,
+                        last_probe_time=probe_result.probed_at
+                    )
+                except Exception as e:
+                    logger.warning("Failed to update device status", device_id=device_id, error=str(e))
+        
+        # 转换为响应格式
+        results = []
+        for device_id, probe_result in probe_results.items():
+            results.append(DeviceProbeResponse(
+                device_id=probe_result.device_id,
+                ip_address=probe_result.ip_address,
+                icmp_reachable=probe_result.icmp_reachable,
+                icmp_response_time=probe_result.icmp_response_time,
+                icmp_error=probe_result.icmp_error,
+                snmp_reachable=probe_result.snmp_reachable,
+                snmp_response_time=probe_result.snmp_response_time,
+                snmp_error=probe_result.snmp_error,
+                snmp_system_info=probe_result.snmp_system_info,
+                probed_at=probe_result.probed_at
+            ))
+        
+        logger.info("Batch probe completed",
+                   total_devices=len(request.device_ids),
+                   probed_devices=len(results),
+                   status_updated=update_status,
+                   user_id=current_user["id"])
+        
+        return DeviceBatchProbeResponse(
+            total=len(request.device_ids),
+            probed=len(results),
+            results=results
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Batch probe failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"批量探测失败: {str(e)}")

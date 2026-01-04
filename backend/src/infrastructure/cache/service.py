@@ -164,7 +164,18 @@ class CacheService:
                 "ip_address": device.get("ip_address"),
                 "device_type": device.get("device_type"),
                 "is_active": device.get("is_active"),
-                "is_monitored": device.get("is_monitored")
+                "is_monitored": device.get("is_monitored"),
+                # SNMP 配置
+                "snmp_community": device.get("snmp_community"),
+                "snmp_version": device.get("snmp_version"),
+                "snmp_port": device.get("snmp_port"),
+                # SSH 配置
+                "ssh_username": device.get("ssh_username"),
+                "ssh_password": device.get("ssh_password"),
+                "ssh_port": device.get("ssh_port"),
+                # 其他配置
+                "vendor": device.get("vendor"),
+                "tags": device.get("tags"),
             }
             for device in devices
         ]

@@ -380,11 +380,16 @@ class SNMPService(DeviceConnection):
             if config.security_level == "noAuthNoPriv":
                 return UsmUserData(config.username)
             elif config.security_level == "authNoPriv":
-                auth_protocol = auth_protocol_map.get(config.auth_protocol.upper(), usmHMACMD5AuthProtocol)
+                auth_name = (config.auth_protocol or "MD5").upper()
+                auth_protocol = auth_protocol_map.get(auth_name, usmHMACMD5AuthProtocol)
                 return UsmUserData(config.username, config.auth_password, authProtocol=auth_protocol)
             elif config.security_level == "authPriv":
-                auth_protocol = auth_protocol_map.get(config.auth_protocol.upper(), usmHMACMD5AuthProtocol)
-                priv_protocol = priv_protocol_map.get(config.priv_protocol.upper(), usmDESPrivProtocol)
+                auth_name = (config.auth_protocol or "MD5").upper()
+                priv_name = (config.priv_protocol or "DES").upper()
+                if priv_name == "AES128":
+                    priv_name = "AES"
+                auth_protocol = auth_protocol_map.get(auth_name, usmHMACMD5AuthProtocol)
+                priv_protocol = priv_protocol_map.get(priv_name, usmDESPrivProtocol)
                 return UsmUserData(config.username, config.auth_password, config.priv_password,
                                   authProtocol=auth_protocol, privProtocol=priv_protocol)
         else:

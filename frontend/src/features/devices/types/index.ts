@@ -84,6 +84,12 @@ export interface Device {
   alert_count?: number
   description?: string
 
+  // 探测状态字段
+  icmp_status?: 'online' | 'offline' | null
+  snmp_status?: 'success' | 'failed' | 'not_configured' | null
+  response_time?: number | null  // 响应时间（毫秒）
+  last_probe_time?: string | null  // 最后探测时间
+
   // 连接配置 - 新增字段
   cli_protocol?: CLIProtocol
   ssh_config?: SSHConfig
@@ -91,7 +97,7 @@ export interface Device {
   snmp_config?: SNMPConfig
   advanced_config?: AdvancedConfig
 
-  // 兼容性字�?- 保持向后兼容
+  // 兼容性字段- 保持向后兼容
   snmp_community?: string
   snmp_version?: string | null
   ssh_username?: string | null
@@ -226,4 +232,33 @@ export interface BulkOperationResult {
     error: string
   }>
   message: string
+}
+
+
+// 设备探测相关类型
+export interface DeviceProbeResult {
+  device_id: number
+  ip_address: string
+  // ICMP 探测结果
+  icmp_reachable: boolean
+  icmp_response_time?: number
+  icmp_error?: string
+  // SNMP 探测结果
+  snmp_reachable: boolean
+  snmp_response_time?: number
+  snmp_error?: string
+  snmp_system_info?: string
+  // 探测时间
+  probed_at: string
+}
+
+export interface DeviceBatchProbeRequest {
+  device_ids: number[]
+  max_concurrent?: number
+}
+
+export interface DeviceBatchProbeResponse {
+  total: number
+  probed: number
+  results: DeviceProbeResult[]
 }

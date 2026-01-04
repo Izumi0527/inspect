@@ -674,3 +674,45 @@ const appendQuery = (endpoint: string, params?: Record<string, string | number |
   const query = searchParams.toString()
   return query ? `${endpoint}?${query}` : endpoint
 }
+
+
+/**
+ * 探测单个设备的连接状态
+ */
+export async function probeDevice(deviceId: number): Promise<import('../types').DeviceProbeResult> {
+  try {
+    const response = await api.post<import('../types').DeviceProbeResult>(
+      `/devices/${deviceId}/probe`
+    )
+    return response
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new Error(error.message || '探测设备失败')
+    }
+    throw error
+  }
+}
+
+/**
+ * 批量探测设备连接状态
+ */
+export async function batchProbeDevices(
+  deviceIds: number[],
+  maxConcurrent = 20
+): Promise<import('../types').DeviceBatchProbeResponse> {
+  try {
+    const response = await api.post<import('../types').DeviceBatchProbeResponse>(
+      '/devices/batch-probe',
+      {
+        device_ids: deviceIds,
+        max_concurrent: maxConcurrent
+      }
+    )
+    return response
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw new Error(error.message || '批量探测设备失败')
+    }
+    throw error
+  }
+}

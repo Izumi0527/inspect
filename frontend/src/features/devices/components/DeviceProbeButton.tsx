@@ -1,0 +1,151 @@
+import React, { useState } from 'react'
+import { Activity, Wifi, WifiOff, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { Button, Badge } from '@/components/atoms'
+import { probeDevice } from '../api/devices.api'
+import { DeviceProbeResult } from '../types'
+import toast from 'react-hot-toast'
+
+interface DeviceProbeButtonProps {
+  deviceId: number
+  deviceName: string
+  onProbeComplete?: (result: DeviceProbeResult) => void
+  size?: 'sm' | 'lg' | 'default'
+  variant?: 'default' | 'outline' | 'ghost'
+}
+
+export const DeviceProbeButton: React.FC<DeviceProbeButtonProps> = ({
+  deviceId,
+  deviceName,
+  onProbeComplete,
+  size = 'sm',
+  variant = 'ghost'
+}) => {
+  const [probing, setProbing] = useState(false)
+  const [result, setResult] = useState<DeviceProbeResult | null>(null)
+
+  const handleProbe = async () => {
+    setProbing(true)
+    try {
+      const probeResult = await probeDevice(deviceId)
+      setResult(probeResult)
+      
+      if (onProbeComplete) {
+        onProbeComplete(probeResult)
+      }
+
+      // 显示探测结果
+      const icmpStatus = probeResult.icmp_reachable ? '在线' : '离线'
+      const snmpStatus = probeResult.snmp_reachable ? '成功' : '失败'
+      
+      toast.success(
+        `设备 ${deviceName} 探测完成\nICMP: ${icmpStatus}${probeResult.icmp_response_time ? ` (${probeResult.icmp_response_time.toFixed(1)}ms)` : ''}\nSNMP: ${snmpStatus}${probeResult.snmp_response_time ? ` (${probeResult.snmp_response_time.toFixed(1)}ms)` : ''}`,
+        { duration: 4000 }
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '探测失败'
+      toast.error(message)
+    } finally {
+      setProbing(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        size={size}
+        variant={variant}
+        onClick={handleProbe}
+        disabled={probing}
+        title="探测设备连接状态"
+      >
+        {probing ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Activity className="h-4 w-4" />
+        )}
+        <span className="ml-1">探测</span>
+      </Button>
+
+      {result && !probing && (
+        <div className="flex items-center gap-1">
+          {/* ICMP 状态 */}
+          <div title={`ICMP ${result.icmp_reachable ? '在线' : '离线'}${result.icmp_response_time ? ` (${result.icmp_response_time.toFixed(1)}ms)` : ''}`}>
+            {result.icmp_reachable ? (
+              <Wifi className="h-4 w-4 text-green-500" />
+            ) : (
+              <WifiOff className="h-4 w-4 text-red-500" />
+            )}
+          </div>
+
+          {/* SNMP 状态 */}
+          <div title={`SNMP ${result.snmp_reachable ? '成功' : '失败'}${result.snmp_response_time ? ` (${result.snmp_response_time.toFixed(1)}ms)` : ''}`}>
+            {result.snmp_reachable ? (
+              <CheckCircle className="h-4 w-4 text-green-500" />
+            ) : (
+              <XCircle className="h-4 w-4 text-gray-400" />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface DeviceProbeStatusProps {
+  result: DeviceProbeResult | null
+  loading?: boolean
+}
+
+export const DeviceProbeStatus: React.FC<DeviceProbeStatusProps> = ({
+  result,
+  loading = false
+}) => {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2">
+        <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+        <span className="text-sm text-gray-500">探测中...</span>
+      </div>
+    )
+  }
+
+  if (!result) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-gray-400">未探测</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      {/* ICMP 状态 */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500 w-12">ICMP:</span>
+        {result.icmp_reachable ? (
+          <Badge variant="success" size="sm">
+            在线 {result.icmp_response_time && `(${result.icmp_response_time.toFixed(1)}ms)`}
+          </Badge>
+        ) : (
+          <Badge variant="error" size="sm">
+            离线
+          </Badge>
+        )}
+      </div>
+
+      {/* SNMP 状态 */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500 w-12">SNMP:</span>
+        {result.snmp_reachable ? (
+          <Badge variant="success" size="sm">
+            成功 {result.snmp_response_time && `(${result.snmp_response_time.toFixed(1)}ms)`}
+          </Badge>
+        ) : (
+          <Badge variant="default" size="sm">
+            {result.snmp_error || '失败'}
+          </Badge>
+        )}
+      </div>
+    </div>
+  )
+}

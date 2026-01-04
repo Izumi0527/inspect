@@ -6,10 +6,9 @@ SNMP协议核心模块
 """
 
 import asyncio
-import socket
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Dict, List, Any, Tuple, Union
+from typing import Optional, List, Any, Union
 import structlog
 
 # 使用 pysnmp 7.x 的正确导入路径
@@ -19,14 +18,12 @@ from pysnmp.hlapi.v3arch.asyncio import (
     ObjectType, ObjectIdentity,
     CommunityData, UsmUserData,
     usmHMACMD5AuthProtocol, usmHMACSHAAuthProtocol,
-    usmDESPrivProtocol, usmAesCfb128Protocol
+    usmHMAC128SHA224AuthProtocol, usmHMAC192SHA256AuthProtocol,
+    usmHMAC256SHA384AuthProtocol, usmHMAC384SHA512AuthProtocol,
+    usmDESPrivProtocol, usm3DESEDEPrivProtocol,
+    usmAesCfb128Protocol, usmAesCfb192Protocol, usmAesCfb256Protocol,
+    usmNoAuthProtocol, usmNoPrivProtocol
 )
-from pysnmp.proto import rfc1902
-from pysnmp.entity import engine, config
-from pysnmp.carrier.asyncio import dgram
-from pysnmp.smi import builder, view, compiler
-from pysnmp.entity.rfc3413 import cmdgen
-from pysnmp.proto.api import v2c
 
 logger = structlog.get_logger()
 
@@ -104,14 +101,15 @@ class SNMPClient:
     """
     异步SNMP客户端
     
-    支持SNMP v1/v2c/v3协议的Get、GetNext、GetBulk、Set操作
+    支持SNMP v1/v2c/v3协议的Get、GetNext、GetBulk操作
+    使用 pysnmp 7.x 高级 API
     """
 
     def __init__(self, config: SNMPConfig, credentials: SNMPCredentials):
         self.config = config
         self.credentials = credentials
-        self._engine = None
-        self._context = None
+        self._transport: Optional[UdpTransportTarget] = None
+        self._engine: Optional[SnmpEngine] = None
         self.logger = logger.bind(
             host=config.host,
             port=config.port,
@@ -120,131 +118,87 @@ class SNMPClient:
     
     async def __aenter__(self):
         """异步上下文管理器入口"""
-        await self._initialize_engine()
+        await self._initialize()
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """异步上下文管理器出口"""
-        if self._engine:
-            self._engine.transportDispatcher.closeDispatcher()
+        # pysnmp 7.x 高级 API 不需要显式关闭
+        pass
 
-    async def _initialize_engine(self):
-        """初始化SNMP引擎和认证配置"""
+    async def _initialize(self):
+        """初始化SNMP传输目标"""
         try:
-            self._engine = engine.SnmpEngine()
-            
-            # 配置传输协议
-            config.addTransport(
-                self._engine,
-                dgram.udp.domainName + (1,),
-                dgram.udp.UdpTransport().openClientMode()
-            )
-            
-            # 根据SNMP版本配置认证
-            if self.credentials.version in [SNMPVersion.V1, SNMPVersion.V2C]:
-                await self._configure_community_auth()
-            elif self.credentials.version == SNMPVersion.V3:
-                await self._configure_v3_auth()
-                
-            # 配置目标参数
-            # 获取正确的消息处理模型
-            mp_model = 1 if self.credentials.version == SNMPVersion.V2C else 0
-            
-            config.addTargetParams(
-                self._engine, 
-                'my-creds',     # 参数名称
-                'my-area',      # 安全名称
-                'noAuthNoPriv', # 安全级别（对于v1/v2c）
-                mp_model        # 消息处理模型
-            )
-            
-            config.addTargetAddr(
-                self._engine, 
-                'my-router',
-                dgram.udp.domainName, 
+            # 创建传输目标
+            self._transport = await UdpTransportTarget.create(
                 (self.config.host, self.config.port),
-                'my-creds'
+                timeout=self.config.timeout,
+                retries=self.config.retries
             )
-            
+            # 注意：不在这里创建 SnmpEngine，每次请求时创建新的
             self.logger.info("SNMP引擎初始化成功")
-            
         except Exception as e:
             self.logger.error(f"SNMP引擎初始化失败: {e}")
             raise
 
-    async def _configure_community_auth(self):
-        """配置Community认证（v1/v2c）"""
-        config.addV1System(
-            self._engine, 
-            'my-area',  # 安全名称，需要与addTargetParams中的安全名称对应
-            self.credentials.community or 'public'
-        )
+    def _get_auth_data(self):
+        """获取认证数据对象"""
+        if self.credentials.version == SNMPVersion.V1:
+            return CommunityData(self.credentials.community or 'public', mpModel=0)
+        elif self.credentials.version == SNMPVersion.V2C:
+            return CommunityData(self.credentials.community or 'public', mpModel=1)
+        elif self.credentials.version == SNMPVersion.V3:
+            return self._get_v3_auth_data()
+        
+        raise ValueError(f"不支持的SNMP版本: {self.credentials.version}")
 
-    async def _configure_v3_auth(self):
-        """配置v3认证"""
+    def _get_v3_auth_data(self):
+        """获取SNMPv3认证数据"""
         if not self.credentials.username:
             raise ValueError("SNMP v3需要用户名")
         
-        # 根据安全级别配置认证
         if self.credentials.security_level == SNMPSecurityLevel.NO_AUTH_NO_PRIV:
-            config.addV3User(
-                self._engine,
-                self.credentials.username,
-                config.usmNoAuthProtocol,
-                None,
-                config.usmNoPrivProtocol,
-                None,
-            )
+            return UsmUserData(self.credentials.username)
         elif self.credentials.security_level == SNMPSecurityLevel.AUTH_NO_PRIV:
-            auth_proto = self._get_auth_protocol()
-            config.addV3User(
-                self._engine,
+            return UsmUserData(
                 self.credentials.username,
-                auth_proto,
                 self.credentials.auth_key,
-                config.usmNoPrivProtocol,
-                None,
+                authProtocol=self._get_auth_protocol_enum()
             )
         elif self.credentials.security_level == SNMPSecurityLevel.AUTH_PRIV:
-            auth_proto = self._get_auth_protocol()
-            priv_proto = self._get_priv_protocol()
-            config.addV3User(
-                self._engine,
+            return UsmUserData(
                 self.credentials.username,
-                auth_proto,
                 self.credentials.auth_key,
-                priv_proto,
                 self.credentials.priv_key,
+                authProtocol=self._get_auth_protocol_enum(),
+                privProtocol=self._get_priv_protocol_enum()
             )
+        
+        # 默认无认证无加密
+        return UsmUserData(self.credentials.username)
 
-    def _get_auth_protocol(self):
-        """获取认证协议"""
+    def _get_auth_protocol_enum(self):
+        """获取认证协议枚举"""
         auth_map = {
-            SNMPAuthProtocol.MD5: config.usmHMACMD5AuthProtocol,
-            SNMPAuthProtocol.SHA: config.usmHMACSHAAuthProtocol,
-            SNMPAuthProtocol.SHA224: config.usmHMAC128SHA224AuthProtocol,
-            SNMPAuthProtocol.SHA256: config.usmHMAC192SHA256AuthProtocol,
-            SNMPAuthProtocol.SHA384: config.usmHMAC256SHA384AuthProtocol,
-            SNMPAuthProtocol.SHA512: config.usmHMAC384SHA512AuthProtocol,
+            SNMPAuthProtocol.MD5: usmHMACMD5AuthProtocol,
+            SNMPAuthProtocol.SHA: usmHMACSHAAuthProtocol,
+            SNMPAuthProtocol.SHA224: usmHMAC128SHA224AuthProtocol,
+            SNMPAuthProtocol.SHA256: usmHMAC192SHA256AuthProtocol,
+            SNMPAuthProtocol.SHA384: usmHMAC256SHA384AuthProtocol,
+            SNMPAuthProtocol.SHA512: usmHMAC384SHA512AuthProtocol,
         }
-        return auth_map.get(
-            self.credentials.auth_protocol, 
-            config.usmHMACMD5AuthProtocol
-        )
+        return auth_map.get(self.credentials.auth_protocol, usmHMACMD5AuthProtocol)
 
-    def _get_priv_protocol(self):
-        """获取加密协议"""
+    def _get_priv_protocol_enum(self):
+        """获取加密协议枚举"""
         priv_map = {
-            SNMPPrivProtocol.DES: config.usmDESPrivProtocol,
-            SNMPPrivProtocol.AES: config.usmAesCfb128Protocol,
-            SNMPPrivProtocol.AES192: config.usmAesCfb192Protocol,
-            SNMPPrivProtocol.AES256: config.usmAesCfb256Protocol,
-            SNMPPrivProtocol.TRIPLE_DES: config.usm3DESEDEPrivProtocol,
+            SNMPPrivProtocol.DES: usmDESPrivProtocol,
+            SNMPPrivProtocol.AES: usmAesCfb128Protocol,
+            SNMPPrivProtocol.AES192: usmAesCfb192Protocol,
+            SNMPPrivProtocol.AES256: usmAesCfb256Protocol,
+            SNMPPrivProtocol.TRIPLE_DES: usm3DESEDEPrivProtocol,
         }
-        return priv_map.get(
-            self.credentials.priv_protocol, 
-            config.usmDESPrivProtocol
-        )
+        return priv_map.get(self.credentials.priv_protocol, usmDESPrivProtocol)
 
     async def get(self, oids: Union[str, List[str]]) -> List[SNMPResult]:
         """
@@ -261,14 +215,12 @@ class SNMPClient:
         
         results = []
         try:
-            # 使用 pysnmp 7.x 的异步 API，需要先创建传输目标
-            transport_target = await UdpTransportTarget.create((self.config.host, self.config.port))
-            
+            # 每次请求创建新的 SnmpEngine 以避免状态问题
             errorIndication, errorStatus, errorIndex, varBinds = await get_cmd(
                 SnmpEngine(),
                 self._get_auth_data(),
-                transport_target,
-                ContextData(),
+                self._transport,
+                ContextData(contextName=self.credentials.context_name or ""),
                 *[ObjectType(ObjectIdentity(oid)) for oid in oids]
             )
             
@@ -315,6 +267,9 @@ class SNMPClient:
         """
         SNMP WALK操作
         
+        由于 pysnmp 7.x 在 Windows 上 next_cmd 可能有问题，
+        这里使用 GETBULK 或多次 GET 来实现 WALK 功能
+        
         Args:
             oid: 起始OID
             
@@ -322,31 +277,107 @@ class SNMPClient:
             查询结果列表
         """
         results = []
+        base_oid = oid
+        
         try:
-            # 使用 pysnmp 7.x 的异步 API，需要先创建传输目标
-            transport_target = await UdpTransportTarget.create((self.config.host, self.config.port))
+            # 首先尝试使用 GETBULK（更高效）
+            if self.credentials.version != SNMPVersion.V1:
+                bulk_results = await self._walk_with_bulk(oid, base_oid)
+                if bulk_results:
+                    return bulk_results
             
-            async for (errorIndication, errorStatus, errorIndex, varBinds) in next_cmd(
-                SnmpEngine(),
-                self._get_auth_data(),
-                transport_target,
-                ContextData(),
-                ObjectType(ObjectIdentity(oid)),
-                lexicographicMode=False
-            ):
+            # 如果 GETBULK 失败，使用多次 GET 模拟
+            # 这种方法效率较低，但兼容性更好
+            self.logger.debug(f"使用 GET 模拟 WALK: {oid}")
+            
+            # 获取常见的子 OID 列表
+            common_suffixes = list(range(1, 20))  # .1 到 .19
+            
+            for suffix in common_suffixes:
+                test_oid = f"{oid}.{suffix}.0" if not oid.endswith('.0') else f"{oid[:-2]}.{suffix}.0"
+                
+                try:
+                    errorIndication, errorStatus, errorIndex, varBinds = await get_cmd(
+                        SnmpEngine(),
+                        self._get_auth_data(),
+                        self._transport,
+                        ContextData(contextName=self.credentials.context_name or ""),
+                        ObjectType(ObjectIdentity(test_oid))
+                    )
+                    
+                    if errorIndication or errorStatus:
+                        continue
+                    
+                    for varBind in varBinds:
+                        oid_str = str(varBind[0])
+                        value = varBind[1]
+                        value_type = type(value).__name__
+                        
+                        # 跳过 NoSuchObject 和 NoSuchInstance
+                        if value_type in ['NoSuchObject', 'NoSuchInstance', 'EndOfMibView']:
+                            continue
+                        
+                        if hasattr(value, 'prettyPrint'):
+                            converted_value = value.prettyPrint()
+                        else:
+                            converted_value = str(value)
+                        
+                        results.append(SNMPResult(
+                            oid=oid_str,
+                            value=converted_value,
+                            value_type=value_type
+                        ))
+                except Exception:
+                    continue
+                    
+        except Exception as e:
+            self.logger.error(f"SNMP WALK操作失败: {e}")
+            if not results:
+                results.append(SNMPResult(oid=oid, value=None, value_type="error", error=str(e)))
+        
+        return results
+    
+    async def _walk_with_bulk(self, oid: str, base_oid: str) -> List[SNMPResult]:
+        """使用 GETBULK 实现 WALK"""
+        results = []
+        current_oid = oid
+        
+        try:
+            for _ in range(100):  # 最多100次迭代
+                errorIndication, errorStatus, errorIndex, varBinds = await bulk_cmd(
+                    SnmpEngine(),
+                    self._get_auth_data(),
+                    self._transport,
+                    ContextData(contextName=self.credentials.context_name or ""),
+                    0,  # nonRepeaters
+                    10, # maxRepetitions
+                    ObjectType(ObjectIdentity(current_oid))
+                )
+                
                 if errorIndication:
-                    self.logger.error(f"SNMP错误: {errorIndication}")
-                    break
+                    self.logger.debug(f"GETBULK 失败: {errorIndication}")
+                    return []  # 返回空列表，让调用者使用备用方法
                     
                 if errorStatus:
-                    error_msg = f"SNMP错误: {errorStatus.prettyPrint()} at {errorIndex and varBinds[int(errorIndex) - 1][0] or '?'}"
-                    self.logger.error(error_msg)
+                    self.logger.debug(f"GETBULK 错误: {errorStatus}")
+                    return []
+                
+                if not varBinds:
                     break
                 
+                found_valid = False
                 for varBind in varBinds:
                     oid_str = str(varBind[0])
                     value = varBind[1]
                     value_type = type(value).__name__
+                    
+                    # 检查是否还在基础 OID 的子树下
+                    if not oid_str.startswith(base_oid):
+                        return results
+                    
+                    # 检查是否到达结尾
+                    if value_type in ['EndOfMibView', 'NoSuchObject', 'NoSuchInstance']:
+                        continue
                     
                     if hasattr(value, 'prettyPrint'):
                         converted_value = value.prettyPrint()
@@ -359,9 +390,18 @@ class SNMPClient:
                         value_type=value_type
                     ))
                     
+                    current_oid = oid_str
+                    found_valid = True
+                
+                if not found_valid:
+                    break
+                    
+                if len(results) > 1000:
+                    break
+                    
         except Exception as e:
-            self.logger.error(f"SNMP WALK操作失败: {e}")
-            results.append(SNMPResult(oid=oid, value=None, value_type="error", error=str(e)))
+            self.logger.debug(f"GETBULK WALK 失败: {e}")
+            return []
         
         return results
 
@@ -384,14 +424,12 @@ class SNMPClient:
         results = []
         
         try:
-            # 使用 pysnmp 7.x 的异步 API，需要先创建传输目标
-            transport_target = await UdpTransportTarget.create((self.config.host, self.config.port))
-            
+            # 每次请求创建新的 SnmpEngine 以避免状态问题
             errorIndication, errorStatus, errorIndex, varBinds = await bulk_cmd(
                 SnmpEngine(),
                 self._get_auth_data(),
-                transport_target,
-                ContextData(),
+                self._transport,
+                ContextData(contextName=self.credentials.context_name or ""),
                 0,  # nonRepeaters
                 max_reps,  # maxRepetitions
                 *[ObjectType(ObjectIdentity(oid)) for oid in oids]
@@ -433,48 +471,6 @@ class SNMPClient:
         
         return results
 
-    def _get_auth_data(self):
-        """获取认证数据对象"""
-        if self.credentials.version == SNMPVersion.V1:
-            return CommunityData(self.credentials.community or 'public', mpModel=0)
-        elif self.credentials.version == SNMPVersion.V2C:
-            return CommunityData(self.credentials.community or 'public', mpModel=1)
-        elif self.credentials.version == SNMPVersion.V3:
-            if self.credentials.security_level == SNMPSecurityLevel.NO_AUTH_NO_PRIV:
-                return UsmUserData(self.credentials.username)
-            elif self.credentials.security_level == SNMPSecurityLevel.AUTH_NO_PRIV:
-                return UsmUserData(
-                    self.credentials.username,
-                    self.credentials.auth_key,
-                    authProtocol=self._get_auth_protocol_enum()
-                )
-            elif self.credentials.security_level == SNMPSecurityLevel.AUTH_PRIV:
-                return UsmUserData(
-                    self.credentials.username,
-                    self.credentials.auth_key,
-                    self.credentials.priv_key,
-                    authProtocol=self._get_auth_protocol_enum(),
-                    privProtocol=self._get_priv_protocol_enum()
-                )
-        
-        raise ValueError(f"不支持的SNMP版本或安全级别")
-
-    def _get_auth_protocol_enum(self):
-        """获取认证协议枚举（用于高级API）"""
-        auth_map = {
-            SNMPAuthProtocol.MD5: usmHMACMD5AuthProtocol,
-            SNMPAuthProtocol.SHA: usmHMACSHAAuthProtocol,
-        }
-        return auth_map.get(self.credentials.auth_protocol, usmHMACMD5AuthProtocol)
-
-    def _get_priv_protocol_enum(self):
-        """获取加密协议枚举（用于高级API）"""
-        priv_map = {
-            SNMPPrivProtocol.DES: usmDESPrivProtocol,
-            SNMPPrivProtocol.AES: usmAesCfb128Protocol,
-        }
-        return priv_map.get(self.credentials.priv_protocol, usmDESPrivProtocol)
-
     async def test_connection(self) -> bool:
         """
         测试SNMP连接
@@ -483,18 +479,28 @@ class SNMPClient:
             连接是否成功
         """
         try:
+            self.logger.debug(
+                "开始SNMP连接测试",
+                host=self.config.host,
+                port=self.config.port,
+                timeout=self.config.timeout,
+                retries=self.config.retries,
+                version=self.credentials.version.value
+            )
+            
             # 尝试获取系统描述 OID
             results = await self.get("1.3.6.1.2.1.1.1.0")  # sysDescr
             
             if results and not results[0].error:
-                self.logger.info(f"SNMP连接测试成功: {results[0].value}")
+                self.logger.info(f"SNMP连接测试成功: {results[0].value[:100] if results[0].value else 'N/A'}...")
                 return True
             else:
-                self.logger.error(f"SNMP连接测试失败: {results[0].error if results else '无响应'}")
+                error_msg = results[0].error if results else '无响应'
+                self.logger.error(f"SNMP连接测试失败: {error_msg}")
                 return False
                 
         except Exception as e:
-            self.logger.error(f"SNMP连接测试异常: {e}")
+            self.logger.error(f"SNMP连接测试异常: {e}", exc_info=True)
             return False
 
 

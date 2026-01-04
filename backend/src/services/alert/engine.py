@@ -218,7 +218,7 @@ class AlertEngine:
                     page=1, page_size=1000, is_active=True
                 )
             
-            # 转换为简化的设备信息
+            # 转换为设备信息（包含完整的 SNMP/SSH 配置）
             device_list = [
                 {
                     "id": device.id,
@@ -226,7 +226,18 @@ class AlertEngine:
                     "ip_address": device.ip_address,
                     "device_type": device.device_type,
                     "is_active": device.is_active,
-                    "is_monitored": device.is_monitored
+                    "is_monitored": device.is_monitored,
+                    # SNMP 配置
+                    "snmp_community": device.snmp_community,
+                    "snmp_version": device.snmp_version,
+                    "snmp_port": device.snmp_port,
+                    # SSH 配置
+                    "ssh_username": device.ssh_username,
+                    "ssh_password": device.ssh_password,
+                    "ssh_port": device.ssh_port,
+                    # 其他配置
+                    "vendor": device.vendor,
+                    "tags": device.tags,
                 }
                 for device in devices
             ]

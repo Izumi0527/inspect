@@ -12,7 +12,7 @@ from src.repositories.device_repository import DeviceRepository
 from src.core.database import get_db_session_context
 from src.infrastructure.cache import cache_service
 from src.models.device import DeviceType
-from src.core.snmp import SNMPVersion
+from src.core.snmp import SNMPVersion, SNMPSecurityLevel
 
 from src.services.device.performance import (
     device_performance_collector,
@@ -20,6 +20,13 @@ from src.services.device.performance import (
     DeviceType as PerfDeviceType,
     MonitoringProtocol,
     DeviceCredentials,
+)
+from src.services.device.snmp_utils import (
+    extract_snmp_config,
+    normalize_snmp_version,
+    normalize_snmp_security_level,
+    normalize_snmp_auth_protocol,
+    normalize_snmp_priv_protocol,
 )
 
 logger = structlog.get_logger()
@@ -121,7 +128,7 @@ class DeviceMonitoringService:
                     if not devices:
                         return
                     
-                    # 转换为字典格式并缓存
+                    # 转换为字典格式并缓存（包含SNMP和SSH配置）
                     devices_data = [
                         {
                             "id": device.id,
@@ -129,7 +136,18 @@ class DeviceMonitoringService:
                             "ip_address": device.ip_address,
                             "device_type": device.device_type,
                             "is_active": device.is_active,
-                            "is_monitored": device.is_monitored
+                            "is_monitored": device.is_monitored,
+                            # SNMP 配置
+                            "snmp_community": device.snmp_community,
+                            "snmp_version": device.snmp_version,
+                            "snmp_port": device.snmp_port,
+                            # SSH 配置
+                            "ssh_username": device.ssh_username,
+                            "ssh_password": device.ssh_password,
+                            "ssh_port": device.ssh_port,
+                            # 其他配置
+                            "vendor": device.vendor,
+                            "tags": device.tags,
                         }
                         for device in devices
                     ]
@@ -220,6 +238,9 @@ class DeviceMonitoringService:
                     device_ip,
                     monitoring_result["metrics"]
                 )
+                
+                # 同时更新数据库中的性能指标
+                await self._update_device_metrics_in_db(device_id, monitoring_result["metrics"])
             
             # 检查状态变化并发送WebSocket通知
             await self._check_status_change(device_data, monitoring_result)
@@ -260,7 +281,7 @@ class DeviceMonitoringService:
             # 构建设备监控配置（从字典设备信息中获取）
             device_type = self._determine_device_type(device_data)
             protocols = self._determine_protocols(device_data)
-            credentials = self._build_credentials(device_data)
+            credentials, snmp_port = self._build_credentials(device_data)
             
             logger.debug(
                 "Building device monitoring config",
@@ -279,6 +300,7 @@ class DeviceMonitoringService:
                 device_type=device_type,
                 protocols=protocols,
                 credentials=credentials,
+                snmp_port=snmp_port,
                 ssh_port=device_data.get('ssh_port') or 22
             )
             
@@ -385,18 +407,46 @@ class DeviceMonitoringService:
     
         return protocols
     
-    def _build_credentials(self, device_data) -> DeviceCredentials:
-        """构建设备认证信息"""
+    def _build_credentials(self, device_data) -> tuple[DeviceCredentials, int]:
+        """构建设备认证信息并返回SNMP端口"""
         # 这里应该从设备配置或加密存储中获取认证信息
-        # 为了示例，使用默认值和环境变量配置
         import os
         
         credentials = DeviceCredentials()
+        snmp_config = extract_snmp_config(device_data.get("tags"))
+        snmp_port = snmp_config.get("port") or device_data.get("snmp_port") or 161
+        snmp_community = None
         
-        # SNMP 默认配置
-        credentials.snmp_version = SNMPVersion.V2C
-        credentials.snmp_community = device_data.get('snmp_community', 
-            os.getenv('DEFAULT_SNMP_COMMUNITY', 'public'))
+        # SNMP 配置 - 优先使用 tags.snmp_config，否则使用设备字段/环境变量默认值
+        snmp_version_raw = snmp_config.get("version") or device_data.get("snmp_version")
+        credentials.snmp_version = normalize_snmp_version(snmp_version_raw) or SNMPVersion.V2C
+        
+        if credentials.snmp_version == SNMPVersion.V3:
+            v3_config = snmp_config.get("v3_config") or {}
+            credentials.snmp_username = v3_config.get("username")
+            credentials.snmp_security_level = (
+                normalize_snmp_security_level(v3_config.get("security_level"))
+                or SNMPSecurityLevel.NO_AUTH_NO_PRIV
+            )
+            credentials.snmp_auth_protocol = normalize_snmp_auth_protocol(v3_config.get("auth_protocol"))
+            credentials.snmp_auth_key = v3_config.get("auth_password") or v3_config.get("auth_key")
+            credentials.snmp_priv_protocol = normalize_snmp_priv_protocol(v3_config.get("priv_protocol"))
+            credentials.snmp_priv_key = v3_config.get("priv_password") or v3_config.get("priv_key")
+        else:
+            snmp_community = snmp_config.get("v2c_config", {}).get("community") or device_data.get("snmp_community")
+            if not snmp_community:
+                snmp_community = os.getenv("DEFAULT_SNMP_COMMUNITY", "public")
+            credentials.snmp_community = snmp_community
+        
+        logger.debug(
+            "构建设备认证信息",
+            device_id=device_data.get('id'),
+            snmp_version=str(credentials.snmp_version),
+            snmp_community_set=bool(snmp_community),
+            snmp_community_preview=snmp_community[:3] + "***" if snmp_community else "None",
+            snmp_username_set=bool(credentials.snmp_username),
+            snmp_security_level=credentials.snmp_security_level.value if credentials.snmp_security_level else None
+        )
         
         cli_protocol = self._get_cli_config(device_data).get("cli_protocol")
         
@@ -407,7 +457,7 @@ class DeviceMonitoringService:
             credentials.ssh_username = ssh_username
             credentials.ssh_password = ssh_password
     
-        return credentials
+        return credentials, snmp_port
     
     async def _simple_ping_check(self, device_data) -> Dict[str, Any]:
         """简单的ping检查作为降级方案"""
@@ -587,6 +637,71 @@ class DeviceMonitoringService:
                 "influxdb_connected": False,
                 "error": str(e)
             }
+
+    async def _update_device_metrics_in_db(self, device_id: int, metrics: Dict[str, Any]) -> bool:
+        """
+        将采集到的性能指标更新到数据库
+        
+        Args:
+            device_id: 设备ID
+            metrics: 性能指标字典，格式为 {metric_name: {value, unit, timestamp}}
+        """
+        try:
+            # 提取关键指标
+            cpu_usage = None
+            memory_usage = None
+            uptime = None
+            response_time = None
+            
+            for metric_name, metric_data in metrics.items():
+                if isinstance(metric_data, dict):
+                    value = metric_data.get("value")
+                else:
+                    value = metric_data
+                
+                if metric_name == "cpu_usage" and value is not None:
+                    cpu_usage = float(value)
+                elif metric_name == "memory_usage" and value is not None:
+                    memory_usage = float(value)
+                elif metric_name == "system_uptime" and value is not None:
+                    uptime = int(float(value))
+            
+            # 如果没有任何指标，跳过更新
+            if cpu_usage is None and memory_usage is None and uptime is None:
+                return True
+            
+            # 更新数据库
+            async with get_db_session_context() as session:
+                from src.modules.devices.service import DeviceService
+                device_service = DeviceService(session)
+                
+                success = await device_service.update_device_metrics(
+                    device_id=device_id,
+                    cpu_usage=cpu_usage,
+                    memory_usage=memory_usage,
+                    uptime=uptime,
+                    response_time=response_time
+                )
+                
+                if success:
+                    await session.commit()
+                    logger.debug(
+                        "Device metrics updated in database",
+                        device_id=device_id,
+                        cpu_usage=cpu_usage,
+                        memory_usage=memory_usage,
+                        uptime=uptime
+                    )
+                
+                return success
+                
+        except Exception as e:
+            logger.error(
+                "Error updating device metrics in database",
+                device_id=device_id,
+                error=str(e)
+            )
+            return False
 
 
 # 全局设备监控服务实例

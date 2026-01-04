@@ -37,6 +37,11 @@ from src.services.device.scanner import (
     NetworkDevice,
     ScanResult,
 )
+from src.services.device.probe import (
+    DeviceProbeService,
+    device_probe_service,
+    ProbeResult,
+)
 
 __all__ = [
     # 监控服务
@@ -73,4 +78,9 @@ __all__ = [
     "network_scanner",
     "NetworkDevice",
     "ScanResult",
+    
+    # 设备探测
+    "DeviceProbeService",
+    "device_probe_service",
+    "ProbeResult",
 ]

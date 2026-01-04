@@ -9,7 +9,8 @@ import {
   Power,
   AlertTriangle,
   Upload,
-  Download
+  Download,
+  Activity
 } from 'lucide-react'
 import {
   Card,
@@ -33,6 +34,7 @@ import toast from 'react-hot-toast'
 
 import { Device, DeviceStatus, DeviceType } from '../types'
 import { DeviceIcon, StatusBadge, getDeviceTypeLabel } from './DeviceIcon'
+import { DeviceProbeButton } from './DeviceProbeButton'
 import { BulkDeviceImport } from './BulkDeviceImport'
 import { AddDeviceModal } from './AddDeviceModal'
 import { DeviceDetailsModal } from './DeviceDetailsModal'
@@ -44,7 +46,7 @@ import {
   useDeviceSummary,
   useDeviceSelection
 } from '../hooks/useDevices'
-import { fetchDevice, updateDevice as updateDeviceApi, batchDeleteDevices } from '../api/devices.api'
+import { fetchDevice, updateDevice as updateDeviceApi, batchDeleteDevices, batchProbeDevices } from '../api/devices.api'
 import type { DevicePayload } from '../utils/deviceFormMapper'
 
 const DEVICE_STATUSES: DeviceStatus[] = ['online', 'offline', 'warning', 'maintenance']
@@ -101,6 +103,7 @@ export const DeviceManagementView: React.FC = () => {
   const [editModalLoading, setEditModalLoading] = useState(false)
   const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkProbing, setBulkProbing] = useState(false)
   
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1)
@@ -130,6 +133,64 @@ export const DeviceManagementView: React.FC = () => {
       return
     }
     setBulkDeleteModalOpen(true)
+  }
+  
+  // 批量探测处理
+  const handleBulkProbe = async () => {
+    if (selectedDevices.length === 0) {
+      toast.error('请先选择要探测的设备')
+      return
+    }
+    
+    setBulkProbing(true)
+    try {
+      const result = await batchProbeDevices(selectedDevices)
+      const onlineCount = result.results.filter(r => r.icmp_reachable).length
+      const snmpSuccessCount = result.results.filter(r => r.snmp_reachable).length
+      
+      toast.success(
+        `批量探测完成\n探测设备: ${result.probed}台\nICMP在线: ${onlineCount}台\nSNMP成功: ${snmpSuccessCount}台`,
+        { duration: 5000 }
+      )
+      
+      // 刷新设备列表以显示最新状态
+      await loadDevices()
+      clearSelection()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '批量探测失败'
+      toast.error(message)
+    } finally {
+      setBulkProbing(false)
+    }
+  }
+  
+  // 探测所有设备
+  const handleProbeAll = async () => {
+    if (filteredDevices.length === 0) {
+      toast.error('没有可探测的设备')
+      return
+    }
+    
+    const deviceIds = filteredDevices.map(d => d.id)
+    setBulkProbing(true)
+    try {
+      const result = await batchProbeDevices(deviceIds)
+      const onlineCount = result.results.filter(r => r.icmp_reachable).length
+      const snmpSuccessCount = result.results.filter(r => r.snmp_reachable).length
+      
+      toast.success(
+        `全部探测完成\n探测设备: ${result.probed}台\nICMP在线: ${onlineCount}台\nSNMP成功: ${snmpSuccessCount}台`,
+        { duration: 5000 }
+      )
+      
+      // 刷新设备列表以显示最新状态
+      await loadDevices()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '批量探测失败'
+      toast.error(message)
+    } finally {
+      setBulkProbing(false)
+    }
   }
   
   const confirmBulkDelete = async () => {
@@ -267,13 +328,49 @@ export const DeviceManagementView: React.FC = () => {
     {
       key: 'status',
       title: '状态',
-      width: '100px',
-      render: (value) => (
-        isDeviceStatus(value) ? (
-          <StatusBadge status={value} />
-        ) : (
-          <span className="text-gray-500 dark:text-gray-400">-</span>
-        )
+      width: '140px',
+      render: (_, record) => (
+        <div className="flex flex-col gap-1">
+          {/* 主状态 */}
+          {isDeviceStatus(record.status) ? (
+            <StatusBadge status={record.status} />
+          ) : (
+            <span className="text-gray-500 dark:text-gray-400">未知</span>
+          )}
+          {/* 探测状态指示器 */}
+          {(record.icmp_status || record.snmp_status) && (
+            <div className="flex items-center gap-1 text-xs">
+              {/* ICMP状态 */}
+              <span 
+                className={`inline-flex items-center px-1.5 py-0.5 rounded ${
+                  record.icmp_status === 'online' 
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                }`}
+                title={`ICMP: ${record.icmp_status === 'online' ? '在线' : '离线'}${record.response_time ? ` (${record.response_time.toFixed(1)}ms)` : ''}`}
+              >
+                ICMP
+              </span>
+              {/* SNMP状态 */}
+              <span 
+                className={`inline-flex items-center px-1.5 py-0.5 rounded ${
+                  record.snmp_status === 'success' 
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                    : record.snmp_status === 'not_configured'
+                    ? 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                    : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                }`}
+                title={`SNMP: ${
+                  record.snmp_status === 'success' ? '成功' 
+                  : record.snmp_status === 'not_configured' ? '未配置'
+                  : '失败'
+                }`}
+              >
+                SNMP
+              </span>
+            </div>
+          )}
+        </div>
       )
     },
     {
@@ -309,9 +406,19 @@ export const DeviceManagementView: React.FC = () => {
     {
       key: 'actions',
       title: '操作',
-      width: '120px',
+      width: '200px',
       render: (_, record) => (
         <div className="flex items-center gap-1">
+          <DeviceProbeButton
+            deviceId={record.id}
+            deviceName={record.name}
+            size="sm"
+            variant="ghost"
+            onProbeComplete={() => {
+              // 探测完成后刷新设备列表以显示最新状态
+              loadDevices()
+            }}
+          />
           <Button
             size="sm"
             variant="ghost"
@@ -463,6 +570,19 @@ export const DeviceManagementView: React.FC = () => {
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
+                onClick={handleProbeAll}
+                disabled={bulkProbing || filteredDevices.length === 0}
+                className="flex items-center gap-2"
+              >
+                {bulkProbing ? (
+                  <Activity className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Activity className="h-4 w-4" />
+                )}
+                探测全部
+              </Button>
+              <Button
+                variant="outline"
                 onClick={handleDownloadTemplate}
                 className="flex items-center gap-2"
               >
@@ -526,6 +646,20 @@ export const DeviceManagementView: React.FC = () => {
               <span className="text-sm text-blue-700 dark:text-blue-300">
                 已选择 {selectedDevices.length} 台设备
               </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleBulkProbe}
+                disabled={bulkProbing}
+                className="flex items-center gap-1"
+              >
+                {bulkProbing ? (
+                  <Activity className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Activity className="h-4 w-4" />
+                )}
+                批量探测
+              </Button>
               <Button
                 size="sm"
                 variant="destructive"

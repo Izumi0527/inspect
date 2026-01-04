@@ -104,6 +104,18 @@ class DeviceResponse(BaseSchema, IDMixin, TimestampMixin):
     ssh_port: Optional[int] = None
     tags: Optional[Any] = None  # 支持字典或列表格式
     description: Optional[str] = None
+    # 探测状态字段
+    icmp_status: Optional[str] = None  # online/offline
+    snmp_status: Optional[str] = None  # success/failed/not_configured
+    response_time: Optional[float] = None  # 响应时间（毫秒）
+    last_probe_time: Optional[datetime] = None  # 最后探测时间
+    # 性能指标字段
+    cpu_usage: Optional[float] = None  # CPU使用率
+    memory_usage: Optional[float] = None  # 内存使用率
+    temperature: Optional[float] = None  # 温度
+    uptime: Optional[int] = None  # 运行时间（秒）
+    # 告警统计字段
+    alert_count: Optional[int] = None  # 活跃告警数量
 
 
 class DeviceListResponse(PaginatedResponse[DeviceResponse]):
@@ -196,3 +208,35 @@ class DeviceStatistics(BaseSchema):
     offline_devices: int
     unknown_devices: int
     type_distribution: Dict[str, int]
+
+
+
+# 设备探测相关
+class DeviceProbeResponse(BaseSchema):
+    """设备探测响应"""
+    device_id: int
+    ip_address: str
+    # ICMP 探测结果
+    icmp_reachable: bool
+    icmp_response_time: Optional[float] = None
+    icmp_error: Optional[str] = None
+    # SNMP 探测结果
+    snmp_reachable: bool = False
+    snmp_response_time: Optional[float] = None
+    snmp_error: Optional[str] = None
+    snmp_system_info: Optional[str] = None
+    # 探测时间
+    probed_at: datetime
+
+
+class DeviceBatchProbeRequest(BaseSchema):
+    """批量探测设备请求"""
+    device_ids: List[int] = Field(..., min_length=1, description="设备ID列表")
+    max_concurrent: int = Field(20, ge=1, le=50, description="最大并发数")
+
+
+class DeviceBatchProbeResponse(BaseSchema):
+    """批量探测设备响应"""
+    total: int
+    probed: int
+    results: List[DeviceProbeResponse]
