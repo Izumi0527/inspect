@@ -28,6 +28,81 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
+# ============= 日志列表端点 =============
+
+@router.get("", response_model=LogListResponse, summary="获取日志列表")
+async def get_logs(
+    skip: int = Query(0, ge=0, description="跳过的记录数"),
+    limit: int = Query(100, ge=1, le=1000, description="返回的记录数"),
+    device_id: Optional[int] = Query(None, description="设备ID过滤"),
+    level: Optional[str] = Query(None, description="日志级别过滤"),
+    facility: Optional[str] = Query(None, description="设施类型过滤"),
+    start_time: Optional[datetime] = Query(None, description="开始时间"),
+    end_time: Optional[datetime] = Query(None, description="结束时间"),
+    search: Optional[str] = Query(None, description="搜索关键词"),
+    current_user: dict = Depends(require_permission("logs:read")),
+    session: AsyncSession = Depends(get_db_session)
+):
+    """获取日志列表，支持分页和过滤"""
+    service = LogService(session)
+    
+    # 转换枚举参数
+    level_enum = None
+    if level:
+        try:
+            level_enum = LogLevel(level)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid log level: {level}")
+    
+    facility_enum = None
+    if facility:
+        try:
+            facility_enum = LogFacility(facility)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid facility: {facility}")
+    
+    try:
+        if device_id:
+            # 获取指定设备的日志
+            logs, total = await service.get_device_logs(
+                device_id=device_id,
+                skip=skip,
+                limit=limit,
+                level=level_enum,
+                facility=facility_enum,
+                start_time=start_time,
+                end_time=end_time,
+                search=search
+            )
+        else:
+            # 获取所有设备的最近日志
+            logs = await service.get_recent_logs(
+                hours=24,
+                level=level_enum,
+                limit=limit
+            )
+            total = len(logs)
+            # 应用分页
+            logs = logs[skip:skip+limit]
+        
+        logger.info("Logs retrieved", 
+                   device_id=device_id, 
+                   count=len(logs), 
+                   total=total,
+                   user_id=current_user.get("id"))
+        
+        return LogListResponse(
+            logs=[LogResponse(**log) for log in logs],
+            total=total,
+            page=skip // limit + 1 if limit > 0 else 1,
+            page_size=limit
+        )
+        
+    except Exception as e:
+        logger.error("Failed to get logs", device_id=device_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"获取日志失败: {str(e)}")
+
+
 # ============= 日志查询端点 =============
 
 @router.get("/devices/{device_id}/logs", response_model=LogListResponse, summary="获取设备日志")
@@ -91,7 +166,7 @@ async def get_device_logs(
         raise HTTPException(status_code=500, detail=f"获取设备日志失败: {str(e)}")
 
 
-@router.get("/logs/recent", response_model=List[LogResponse], summary="获取最近日志")
+@router.get("/recent", response_model=List[LogResponse], summary="获取最近日志")
 async def get_recent_logs(
     device_id: Optional[int] = Query(None, description="设备ID过滤"),
     hours: int = Query(24, ge=1, le=168, description="最近小时数"),
@@ -132,7 +207,7 @@ async def get_recent_logs(
         raise HTTPException(status_code=500, detail=f"获取最近日志失败: {str(e)}")
 
 
-@router.get("/logs/search", response_model=LogListResponse, summary="搜索日志")
+@router.get("/search", response_model=LogListResponse, summary="搜索日志")
 async def search_logs(
     keyword: str = Query(..., description="搜索关键词"),
     skip: int = Query(0, ge=0, description="跳过的记录数"),
@@ -222,7 +297,7 @@ async def collect_device_logs(
         raise HTTPException(status_code=500, detail=f"启动日志采集失败: {str(e)}")
 
 
-@router.post("/logs/batch-collect", response_model=LogCollectionResponse, summary="批量采集设备日志")
+@router.post("/batch-collect", response_model=LogCollectionResponse, summary="批量采集设备日志")
 async def batch_collect_logs(
     device_ids: List[int],
     background_tasks: BackgroundTasks,
@@ -268,7 +343,7 @@ async def batch_collect_logs(
 
 # ============= 日志统计端点 =============
 
-@router.get("/logs/statistics", response_model=LogStatisticsResponse, summary="获取日志统计")
+@router.get("/statistics", response_model=LogStatisticsResponse, summary="获取日志统计")
 async def get_log_statistics(
     device_id: Optional[int] = Query(None, description="设备ID过滤"),
     hours: int = Query(24, ge=1, le=168, description="统计时间范围（小时）"),
@@ -390,7 +465,7 @@ async def export_device_logs(
         raise HTTPException(status_code=500, detail=f"导出设备日志失败: {str(e)}")
 
 
-@router.get("/logs/export", summary="导出日志（支持多设备）")
+@router.get("/export", summary="导出日志（支持多设备）")
 async def export_logs(
     format: str = Query("csv", description="导出格式 (csv, excel)"),
     device_ids: Optional[str] = Query(None, description="设备ID列表，逗号分隔"),

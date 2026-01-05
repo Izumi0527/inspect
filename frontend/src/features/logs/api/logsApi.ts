@@ -49,7 +49,7 @@ export async function getDeviceLogs(
  * 获取所有日志列表
  */
 export async function getAllLogs(params: LogQueryParams = {}): Promise<LogListResponse> {
-  const response = await api.get<LogListResponse>(`${BASE_URL}/`, {
+  const response = await api.get<LogListResponse>(`${BASE_URL}`, {
     params: {
       skip: ((params.page || 1) - 1) * (params.page_size || 20),
       limit: params.page_size || 20,
@@ -117,7 +117,7 @@ export async function batchCollectLogs(
   deviceIds: number[],
   logType: string = 'system'
 ): Promise<LogCollectionResponse> {
-  const response = await api.post<LogCollectionResponse>(`${BASE_URL}/logs/batch-collect`, {
+  const response = await api.post<LogCollectionResponse>(`${BASE_URL}/batch-collect`, {
     device_ids: deviceIds,
     log_type: logType
   })
