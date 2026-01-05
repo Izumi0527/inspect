@@ -4,6 +4,7 @@ from src.models.device import (
     Device, DeviceGroup, DeviceInterface, DeviceMetric, NetworkScan, DiscoveredDevice,
     DeviceType, DeviceVendor, DeviceStatus
 )
+from src.models.device_log import DeviceLog, LogParsingRule, LogLevel, LogFacility, LogSource
 from src.models.inspection import (
     InspectionTemplate, InspectionSchedule, Inspection, InspectionLog,
     InspectionResult, InspectionStrategy, InspectionStatus, InspectionTrigger,
@@ -27,6 +28,9 @@ __all__ = [
     # 设备模型
     "Device", "DeviceGroup", "DeviceInterface", "DeviceMetric", 
     "NetworkScan", "DiscoveredDevice", "DeviceType", "DeviceVendor", "DeviceStatus",
+    
+    # 设备日志模型
+    "DeviceLog", "LogParsingRule", "LogLevel", "LogFacility", "LogSource",
     
     # 巡检模型
     "InspectionTemplate", "InspectionSchedule", "Inspection",

@@ -9,7 +9,8 @@ import {
   Settings,
   Menu,
   ChevronRight,
-  Search
+  Search,
+  FileText
 } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { NavigationItem } from '../types'
@@ -31,6 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { name: '巡检管理', icon: Search, href: '/inspection' },
     { name: '监控中心', icon: BarChart3, href: '/monitoring' },
     { name: '告警中心', icon: Shield, href: '/alerts' },
+    { name: '日志中心', icon: FileText, href: '/logs' },
     { name: '报表分析', icon: Database, href: '/reports' },
     { name: '系统设置', icon: Settings, href: '/settings' },
   ]

@@ -528,6 +528,86 @@ class DatabaseAlertRepository(AlertRuleRepositoryInterface, AlertRepositoryInter
         result = await self.db.execute(stmt)
         return result.rowcount or 0
 
+    # ==================== 新增的抽象方法实现 ====================
+
+    async def bulk_acknowledge(self, alert_ids: List[int], user_id: int, note: Optional[str] = None) -> Tuple[int, List[int]]:
+        """批量确认告警"""
+        success_count = 0
+        failed_ids = []
+        
+        for alert_id in alert_ids:
+            if await self.acknowledge_alert(alert_id, user_id, note):
+                success_count += 1
+            else:
+                failed_ids.append(alert_id)
+        
+        return success_count, failed_ids
+
+    async def bulk_resolve(self, alert_ids: List[int], user_id: int, note: Optional[str] = None) -> Tuple[int, List[int]]:
+        """批量解决告警"""
+        success_count = 0
+        failed_ids = []
+        
+        for alert_id in alert_ids:
+            if await self.resolve_alert(alert_id, user_id, note):
+                success_count += 1
+            else:
+                failed_ids.append(alert_id)
+        
+        return success_count, failed_ids
+
+    async def bulk_close(self, alert_ids: List[int], user_id: int) -> Tuple[int, List[int]]:
+        """批量关闭告警"""
+        success_count = 0
+        failed_ids = []
+        
+        for alert_id in alert_ids:
+            if await self.close_alert(alert_id, user_id):
+                success_count += 1
+            else:
+                failed_ids.append(alert_id)
+        
+        return success_count, failed_ids
+
+    async def get_recent_alerts(self, limit: int = 5) -> List[Dict[str, Any]]:
+        """获取最新告警列表"""
+        stmt = select(Alert).options(
+            selectinload(Alert.device),
+            selectinload(Alert.rule)
+        ).order_by(desc(Alert.first_occurred)).limit(limit)
+
+        result = await self.db.execute(stmt)
+        alerts = result.scalars().all()
+
+        return [self._alert_to_dict(alert) for alert in alerts]
+
+    async def get_alert_count_by_status(self, status: AlertStatus) -> int:
+        """获取指定状态的告警数量"""
+        stmt = select(func.count(Alert.id)).where(Alert.status == status.value)
+        count = await self.db.scalar(stmt)
+        return count or 0
+
+    async def get_alert_count_by_severity(self, severity: AlertSeverity) -> int:
+        """获取指定严重级别的告警数量"""
+        stmt = select(func.count(Alert.id)).where(Alert.severity == severity.value)
+        count = await self.db.scalar(stmt)
+        return count or 0
+
+    async def archive_old_alerts(self, days: int = 90) -> int:
+        """归档旧告警"""
+        cutoff_date = datetime.now() - timedelta(days=days)
+        
+        # 将旧的已解决告警标记为已关闭
+        stmt = update(Alert).where(
+            and_(
+                Alert.status == AlertStatus.RESOLVED.value,
+                Alert.resolved_at < cutoff_date
+            )
+        ).values(status=AlertStatus.CLOSED.value, closed_at=datetime.now())
+        
+        result = await self.db.execute(stmt)
+        return result.rowcount or 0
+
     # ==================== 查询和统计 ====================
 
     async def get_alerts_by_device(self, device_id: int, status: Optional[AlertStatus] = None) -> List[Dict[str, Any]]:
@@ -751,12 +831,13 @@ class DatabaseAlertRepository(AlertRuleRepositoryInterface, AlertRepositoryInter
         history = AlertOperationHistory(
             alert_id=alert_id,
             operation_type=operation_type,
-            operator_id=operator_id,
+            operator_id=str(operator_id),  # Convert to string to match database field type
             operator_name=operator_name,
             note=note,
             previous_status=previous_status,
-            new_status=new_status,
-            operation_metadata=operation_metadata or {}
+            new_status=new_status
+            # 暂时不使用 operation_metadata 字段，因为数据库中可能不存在
+            # operation_metadata=operation_metadata or {}
         )
 
         self.db.add(history)
@@ -785,3 +866,7 @@ async def get_database_alert_repository(db_session: AsyncSession) -> DatabaseAle
             return {"alerts": alerts, "total": total}
     """
     return DatabaseAlertRepository(db_session)
+
+
+# 创建别名以便于导入
+AlertRepositoryDB = DatabaseAlertRepository

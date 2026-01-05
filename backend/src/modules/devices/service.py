@@ -49,10 +49,14 @@ class DeviceService:
         status: Optional[str] = None,
         group_id: Optional[int] = None,
         search: Optional[str] = None,
-        is_active: Optional[bool] = None
+        is_active: Optional[bool] = None,
+        include_alert_count: bool = True
     ) -> Tuple[List[DeviceResponse], int]:
         """
         分页获取设备列表
+        
+        Args:
+            include_alert_count: 是否包含告警数量统计
         
         Returns:
             (设备列表, 总数)
@@ -67,7 +71,26 @@ class DeviceService:
             is_active=is_active
         )
         
-        device_responses = [DeviceResponse.model_validate(d) for d in devices]
+        device_responses = []
+        
+        # 如果需要包含告警数量，获取告警统计
+        alerts_by_device = {}
+        if include_alert_count:
+            try:
+                from src.repositories.alert_repository_db import AlertRepositoryDB
+                alert_repo = AlertRepositoryDB(self.session)
+                alert_stats = await alert_repo.get_alert_statistics()
+                alerts_by_device = alert_stats.get("by_device", {})
+            except Exception as e:
+                logger.warning("Failed to get alert counts for devices", error=str(e))
+        
+        # 创建设备响应对象，包含告警数量
+        for device in devices:
+            device_dict = device.__dict__.copy()
+            if include_alert_count:
+                device_dict["alert_count"] = alerts_by_device.get(device.id, 0)
+            device_responses.append(DeviceResponse.model_validate(device_dict))
+        
         return device_responses, total
     
     async def create_device(self, device_data: DeviceCreate, created_by: str) -> DeviceResponse:

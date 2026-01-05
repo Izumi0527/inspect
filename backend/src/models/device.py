@@ -93,6 +93,9 @@ class Device(Base):
     response_time: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 毫秒
     last_seen: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     
+    # 告警统计
+    alert_count: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)  # 活跃告警数量
+    
     # 时间字段
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
@@ -112,6 +115,7 @@ class Device(Base):
     interfaces = relationship("DeviceInterface", back_populates="device")
     monitoring_data = relationship("DeviceMetric", back_populates="device")
     alerts = relationship("Alert", back_populates="device")
+    logs = relationship("DeviceLog", back_populates="device")
     
     # 索引
     __table_args__ = (

@@ -17,6 +17,7 @@ from src.modules.dashboard import router as dashboard_router
 from src.modules.reports import router as reports_router
 from src.modules.traffic import router as traffic_router
 from src.modules.scheduler import router as scheduler_router
+from src.modules.logs import router as logs_router
 
 # Settings模块从新模块导入
 from src.modules.settings.api import router as settings_router
@@ -48,6 +49,7 @@ api_router.include_router(alerts_router, prefix="/alerts", tags=["告警中心"]
 api_router.include_router(alert_escalation_router, tags=["告警升级"])
 api_router.include_router(reports_router, prefix="/reports", tags=["报表分析"])
 api_router.include_router(traffic_router, prefix="/traffic", tags=["流量分析"])
+api_router.include_router(logs_router, prefix="/logs", tags=["日志管理"])
 
 # ============================================================
 # 注意: v1路由已在上方直接注册，无需再嵌套引入

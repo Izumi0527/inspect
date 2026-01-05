@@ -85,24 +85,9 @@ async def get_devices(
         device_type=device_type,
         status=status,
         group_id=group_id,
-        search=search
+        search=search,
+        include_alert_count=True
     )
-    
-    # 获取设备告警数量
-    try:
-        from src.repositories.alert_repository_db import AlertRepositoryDB
-        alert_repo = AlertRepositoryDB(session)
-        alert_stats = await alert_repo.get_alert_statistics()
-        alerts_by_device = alert_stats.get("by_device", {})
-        
-        # 为每个设备添加告警数量
-        for device in devices:
-            device.alert_count = alerts_by_device.get(device.id, 0)
-    except Exception as e:
-        logger.warning("Failed to get alert counts for devices", error=str(e))
-        # 如果获取告警数量失败，设置为0
-        for device in devices:
-            device.alert_count = 0
     
     logger.info("Retrieved devices", count=len(devices), total=total, user_id=current_user.get("id"))
     return devices

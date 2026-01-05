@@ -32,6 +32,12 @@ export const LazyAlertCenter = lazy(() =>
   }))
 )
 
+export const LazyLogCenter = lazy(() =>
+  import('@/features/logs/components/LogsView').then(module => ({
+    default: module.LogsView
+  }))
+)
+
 export const LazyReportAnalysis = lazy(() =>
   import('@/features/reports/components/ReportsView').then(module => ({
     default: module.ReportsView
