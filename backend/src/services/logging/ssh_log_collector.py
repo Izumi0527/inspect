@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 import structlog
 
-from src.infrastructure.device_connection import SSHService
+from src.infrastructure.device_connection.ssh_service import SSHService
 from src.models.device_log import LogLevel, LogFacility, LogSource
 
 logger = structlog.get_logger()

@@ -112,8 +112,36 @@ export const LogsView: React.FC = () => {
   }
 
   // 处理导出
-  const handleExport = () => {
-    toast.success('导出功能开发中...')
+  const handleExport = async (format: 'csv' | 'excel') => {
+    try {
+      const params = new URLSearchParams()
+      
+      // 添加过滤参数
+      if (filters.level) params.append('level', filters.level)
+      if (filters.facility) params.append('facility', filters.facility)
+      if (filters.startTime) params.append('start_time', filters.startTime)
+      if (filters.endTime) params.append('end_time', filters.endTime)
+      if (filters.search) params.append('search', filters.search)
+      
+      params.append('format', format)
+      params.append('include_raw', 'true')
+      
+      // 构建导出URL
+      const exportUrl = `/api/logs/export?${params.toString()}`
+      
+      // 创建下载链接
+      const link = document.createElement('a')
+      link.href = exportUrl
+      link.download = `logs_export_${new Date().toISOString().slice(0, 10)}.${format === 'excel' ? 'xlsx' : 'csv'}`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      toast.success(`日志导出已开始 (${format.toUpperCase()})`)
+    } catch (error) {
+      console.error('Export failed:', error)
+      toast.error('导出失败，请重试')
+    }
   }
 
   // 错误状态
@@ -167,10 +195,24 @@ export const LogsView: React.FC = () => {
                 </Button>
 
                 {/* 导出按钮 */}
-                <Button variant="outline" size="sm" onClick={handleExport}>
-                  <Download className="h-4 w-4 mr-2" />
-                  导出
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Download className="h-4 w-4 mr-2" />
+                      导出
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleExport('csv')}>
+                      <Download className="h-4 w-4 mr-2" />
+                      导出为 CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport('excel')}>
+                      <Download className="h-4 w-4 mr-2" />
+                      导出为 Excel
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
                 {/* 采集按钮 */}
                 <DropdownMenu>

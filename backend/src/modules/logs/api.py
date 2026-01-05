@@ -1,13 +1,15 @@
 """
 设备日志管理 - API路由
 
-提供设备日志的采集、查询、搜索等API端点
+提供设备日志的采集、查询、搜索、导出等API端点
 """
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from typing import Optional, List
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
+import io
 
 from src.core.permissions import require_permission
 from src.core.database import get_db_session
@@ -15,6 +17,7 @@ from src.shared.exceptions import NotFoundException
 from src.shared.pagination import get_pagination_params, PaginationParams
 
 from src.services.logging.log_service import LogService
+from src.services.logging.log_export_service import LogExportService
 from src.models.device_log import LogLevel, LogFacility
 from src.modules.logs.schemas import (
     LogResponse, LogListResponse, LogStatisticsResponse,
@@ -292,6 +295,206 @@ async def get_log_statistics(
     except Exception as e:
         logger.error("Failed to get log statistics", error=str(e))
         raise HTTPException(status_code=500, detail=f"获取日志统计失败: {str(e)}")
+
+
+# ============= 日志导出端点 =============
+
+@router.get("/devices/{device_id}/logs/export", summary="导出设备日志")
+async def export_device_logs(
+    device_id: int,
+    format: str = Query("csv", description="导出格式 (csv, excel)"),
+    level: Optional[str] = Query(None, description="日志级别过滤"),
+    facility: Optional[str] = Query(None, description="设施类型过滤"),
+    start_time: Optional[datetime] = Query(None, description="开始时间"),
+    end_time: Optional[datetime] = Query(None, description="结束时间"),
+    search: Optional[str] = Query(None, description="搜索关键词"),
+    include_raw: bool = Query(False, description="是否包含原始消息"),
+    current_user: dict = Depends(require_permission("logs:export")),
+    session: AsyncSession = Depends(get_db_session)
+):
+    """导出指定设备的日志"""
+    service = LogService(session)
+    export_service = LogExportService()
+    
+    # 转换枚举参数
+    level_enum = None
+    if level:
+        try:
+            level_enum = LogLevel(level)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid log level: {level}")
+    
+    facility_enum = None
+    if facility:
+        try:
+            facility_enum = LogFacility(facility)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid facility: {facility}")
+    
+    try:
+        # 获取日志数据（不分页，获取所有匹配的日志）
+        logs, total = await service.get_device_logs(
+            device_id=device_id,
+            skip=0,
+            limit=10000,  # 设置一个较大的限制
+            level=level_enum,
+            facility=facility_enum,
+            start_time=start_time,
+            end_time=end_time,
+            search=search
+        )
+        
+        if not logs:
+            raise HTTPException(status_code=404, detail="没有找到匹配的日志数据")
+        
+        # 获取设备名称（用于文件名）
+        device_info = await service._get_device_info(device_id)
+        device_name = device_info.get('name', f'Device_{device_id}') if device_info else f'Device_{device_id}'
+        
+        # 生成文件名
+        filename = export_service.get_export_filename(
+            format_type=format,
+            device_name=device_name,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        # 根据格式导出
+        if format.lower() == 'csv':
+            content = export_service.export_to_csv(logs, include_raw)
+            media_type = "text/csv"
+            content_bytes = content.encode('utf-8-sig')  # 添加BOM以支持中文
+        elif format.lower() in ['excel', 'xlsx']:
+            content_bytes = export_service.export_to_excel(logs, include_raw, device_name)
+            media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        else:
+            raise HTTPException(status_code=400, detail=f"不支持的导出格式: {format}")
+        
+        logger.info("Device logs exported", 
+                   device_id=device_id,
+                   format=format,
+                   count=len(logs),
+                   user_id=current_user.get("id"))
+        
+        # 返回文件流
+        return StreamingResponse(
+            io.BytesIO(content_bytes),
+            media_type=media_type,
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to export device logs", device_id=device_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"导出设备日志失败: {str(e)}")
+
+
+@router.get("/logs/export", summary="导出日志（支持多设备）")
+async def export_logs(
+    format: str = Query("csv", description="导出格式 (csv, excel)"),
+    device_ids: Optional[str] = Query(None, description="设备ID列表，逗号分隔"),
+    level: Optional[str] = Query(None, description="日志级别过滤"),
+    start_time: Optional[datetime] = Query(None, description="开始时间"),
+    end_time: Optional[datetime] = Query(None, description="结束时间"),
+    search: Optional[str] = Query(None, description="搜索关键词"),
+    include_raw: bool = Query(False, description="是否包含原始消息"),
+    include_stats: bool = Query(False, description="是否包含统计信息"),
+    current_user: dict = Depends(require_permission("logs:export")),
+    session: AsyncSession = Depends(get_db_session)
+):
+    """导出日志（支持多设备和统计信息）"""
+    service = LogService(session)
+    export_service = LogExportService()
+    
+    # 解析设备ID列表
+    device_id_list = []
+    if device_ids:
+        try:
+            device_id_list = [int(id.strip()) for id in device_ids.split(',') if id.strip()]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="设备ID格式错误")
+    
+    # 转换枚举参数
+    level_enum = None
+    if level:
+        try:
+            level_enum = LogLevel(level)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid log level: {level}")
+    
+    try:
+        all_logs = []
+        
+        if device_id_list:
+            # 导出指定设备的日志
+            for device_id in device_id_list:
+                logs, _ = await service.get_device_logs(
+                    device_id=device_id,
+                    skip=0,
+                    limit=10000,
+                    level=level_enum,
+                    start_time=start_time,
+                    end_time=end_time,
+                    search=search
+                )
+                all_logs.extend(logs)
+        else:
+            # 导出所有设备的日志
+            recent_logs = await service.get_recent_logs(
+                hours=24 if not start_time else None,
+                level=level_enum,
+                limit=10000
+            )
+            all_logs = recent_logs
+        
+        if not all_logs:
+            raise HTTPException(status_code=404, detail="没有找到匹配的日志数据")
+        
+        # 生成文件名
+        filename = export_service.get_export_filename(
+            format_type=format,
+            start_time=start_time,
+            end_time=end_time
+        )
+        
+        # 根据格式和选项导出
+        if include_stats and format.lower() in ['excel', 'xlsx']:
+            # 获取统计信息
+            stats = await service.get_log_statistics(
+                hours=24 if not start_time else None
+            )
+            content_bytes = export_service.export_statistics_to_excel(stats, all_logs)
+            media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        elif format.lower() == 'csv':
+            content = export_service.export_to_csv(all_logs, include_raw)
+            media_type = "text/csv"
+            content_bytes = content.encode('utf-8-sig')
+        elif format.lower() in ['excel', 'xlsx']:
+            content_bytes = export_service.export_to_excel(all_logs, include_raw)
+            media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        else:
+            raise HTTPException(status_code=400, detail=f"不支持的导出格式: {format}")
+        
+        logger.info("Logs exported", 
+                   format=format,
+                   device_count=len(device_id_list) if device_id_list else 0,
+                   log_count=len(all_logs),
+                   include_stats=include_stats,
+                   user_id=current_user.get("id"))
+        
+        # 返回文件流
+        return StreamingResponse(
+            io.BytesIO(content_bytes),
+            media_type=media_type,
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to export logs", error=str(e))
+        raise HTTPException(status_code=500, detail=f"导出日志失败: {str(e)}")
 
 
 # ============= 后台任务 =============

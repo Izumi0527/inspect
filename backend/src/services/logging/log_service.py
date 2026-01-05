@@ -459,14 +459,15 @@ class LogService:
             device_result = await self.db.execute(device_stmt)
             by_device = {row[0]: row[1] for row in device_result}
         
-        # 时间趋势（按小时）- 简化版本
+        # 时间趋势（按小时）- 修复SQL错误
         try:
+            from sqlalchemy import text
             trend_stmt = select(
-                func.date_trunc('hour', DeviceLog.log_timestamp).label('hour'),
+                text("date_trunc('hour', log_timestamp) as hour"),
                 func.count(DeviceLog.id).label('count')
             ).where(and_(*base_conditions)).group_by(
-                func.date_trunc('hour', DeviceLog.log_timestamp)
-            ).order_by('hour')
+                text("date_trunc('hour', log_timestamp)")
+            ).order_by(text('hour'))
             trend_result = await self.db.execute(trend_stmt)
             trends = {str(row[0]): row[1] for row in trend_result}
         except Exception as e:
