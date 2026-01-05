@@ -115,7 +115,7 @@ class Device(Base):
     interfaces = relationship("DeviceInterface", back_populates="device")
     monitoring_data = relationship("DeviceMetric", back_populates="device")
     alerts = relationship("Alert", back_populates="device")
-    logs = relationship("DeviceLog", back_populates="device")
+    logs = relationship("DeviceLog", back_populates="device", cascade="all, delete-orphan", passive_deletes=True)
     
     # 索引
     __table_args__ = (
