@@ -70,10 +70,13 @@ export interface LogQueryParams {
 
 // 日志列表响应
 export interface LogListResponse {
-  logs: DeviceLog[]
+  items: DeviceLog[]
   total: number
   page: number
   page_size: number
+  total_pages: number
+  has_next: boolean
+  has_prev: boolean
 }
 
 // 日志采集请求

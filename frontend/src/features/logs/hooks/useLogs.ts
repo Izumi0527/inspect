@@ -32,11 +32,13 @@ export function useLogs(params: LogQueryParams = {}) {
         ? await logsApi.getDeviceLogs(params.device_id, params)
         : await logsApi.getAllLogs(params)
       
-      setLogs(response.logs || [])
+      // 安全地访问响应数据
+      const items = response?.items || []
+      setLogs(items)
       setPagination({
-        page: response.page || params.page || 1,
-        pageSize: response.page_size || params.page_size || 20,
-        total: response.total || 0
+        page: response?.page || params.page || 1,
+        pageSize: response?.page_size || params.page_size || 20,
+        total: response?.total || 0
       })
     } catch (err: any) {
       const message = err.message || '加载日志失败'

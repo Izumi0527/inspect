@@ -205,6 +205,12 @@ PERMISSIONS = {
     "system:config": [UserRole.ADMIN],
     "system:read": [UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER],
     "system:health": [UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER],
+
+    # 日志管理权限
+    "logs:read": [UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER],
+    "logs:collect": [UserRole.ADMIN, UserRole.OPERATOR],
+    "logs:export": [UserRole.ADMIN, UserRole.OPERATOR],
+    "logs:delete": [UserRole.ADMIN],
 }
 
 def check_permission(permission: str, user_role: str) -> bool:

@@ -30,7 +30,6 @@ interface TabConfig {
   key: TabType
   label: string
   icon: LucideIcon
-  description: string
 }
 
 export const InspectionView: React.FC = () => {
@@ -43,26 +42,22 @@ export const InspectionView: React.FC = () => {
     {
       key: 'strategies',
       label: '巡检策略',
-      icon: Calendar,
-      description: '配置和管理巡检策略'
+      icon: Calendar
     },
     {
       key: 'templates',
       label: '巡检模板',
-      icon: FileText,
-      description: '管理巡检项目模板'
+      icon: FileText
     },
     {
       key: 'executions',
       label: '执行历史',
-      icon: History,
-      description: '查看巡检执行记录'
+      icon: History
     },
     {
       key: 'analytics',
       label: '统计分析',
-      icon: BarChart3,
-      description: '巡检数据分析报告'
+      icon: BarChart3
     }
   ]
 
@@ -172,13 +167,6 @@ export const InspectionView: React.FC = () => {
                 刷新
               </Button>
             </div>
-          </div>
-
-          {/* 当前标签描述 */}
-          <div className="pt-2">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {tabs.find(tab => tab.key === activeTab)?.description}
-            </p>
           </div>
         </CardHeader>
 

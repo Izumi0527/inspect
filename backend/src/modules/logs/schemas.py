@@ -31,7 +31,7 @@ class LogResponse(BaseSchema):
 
 class LogListResponse(PaginatedResponse[LogResponse]):
     """日志列表响应"""
-    logs: List[LogResponse] = Field(..., description="日志列表")
+    pass  # 使用父类的 items 字段
 
 
 # ============= 日志采集相关 =============

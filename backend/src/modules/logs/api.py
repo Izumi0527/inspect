@@ -76,14 +76,14 @@ async def get_logs(
             )
         else:
             # 获取所有设备的最近日志
-            logs = await service.get_recent_logs(
+            all_logs = await service.get_recent_logs(
                 hours=24,
                 level=level_enum,
-                limit=limit
+                limit=limit + skip  # 获取足够的数据用于分页
             )
-            total = len(logs)
+            total = len(all_logs)
             # 应用分页
-            logs = logs[skip:skip+limit]
+            logs = all_logs[skip:skip+limit]
         
         logger.info("Logs retrieved", 
                    device_id=device_id, 
@@ -91,8 +91,17 @@ async def get_logs(
                    total=total,
                    user_id=current_user.get("id"))
         
+        # 构建响应项
+        items = []
+        for log in logs:
+            try:
+                items.append(LogResponse(**log))
+            except Exception as e:
+                logger.warning("Failed to parse log entry", log_id=log.get("id"), error=str(e))
+                continue
+        
         return LogListResponse(
-            logs=[LogResponse(**log) for log in logs],
+            items=items,
             total=total,
             page=skip // limit + 1 if limit > 0 else 1,
             page_size=limit
@@ -155,7 +164,7 @@ async def get_device_logs(
                    user_id=current_user.get("id"))
         
         return LogListResponse(
-            logs=[LogResponse(**log) for log in logs],
+            items=[LogResponse(**log) for log in logs],
             total=total,
             page=skip // limit + 1 if limit > 0 else 1,
             page_size=limit
@@ -245,7 +254,7 @@ async def search_logs(
                    user_id=current_user.get("id"))
         
         return LogListResponse(
-            logs=[LogResponse(**log) for log in logs],
+            items=[LogResponse(**log) for log in logs],
             total=total,
             page=skip // limit + 1 if limit > 0 else 1,
             page_size=limit

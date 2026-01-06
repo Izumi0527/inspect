@@ -322,10 +322,7 @@ export const InspectionExecutions: React.FC<Props> = ({ searchText }) => {
         {/* 操作栏 */}
         <div className="space-y-3">
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-semibold dark:text-gray-100">执行历史记录</h3>
-              <Badge variant="secondary">{filteredExecutions.length} 项</Badge>
-            </div>
+            <div></div>
             <Button variant="outline" onClick={() => refetch()}>
               <RefreshCw className="w-4 h-4 mr-2" />
               刷新

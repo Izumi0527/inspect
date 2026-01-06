@@ -1,3 +1,10 @@
+import sys
+import asyncio
+
+# Windows 平台使用 ProactorEventLoop 解决文件描述符限制问题
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -67,14 +74,3 @@ app.include_router(api_router, prefix="/api/v1")
 # 注册WebSocket路由（从新模块导入）
 from src.modules.monitoring.websocket import router as websocket_router
 app.include_router(websocket_router, prefix="/api/v1", tags=["WebSocket"])
-
-if __name__ == "__main__":
-    import uvicorn
-    
-    uvicorn.run(
-        "src.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.DEBUG,
-        log_level="info" if not settings.DEBUG else "debug",
-    )

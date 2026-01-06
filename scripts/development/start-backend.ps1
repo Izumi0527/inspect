@@ -722,19 +722,26 @@ function Start-BackendService {
         Write-LogWarning "按 Ctrl+C 停止服务"
         Write-Host ""
 
+        # Windows 平台特殊处理 - 设置环境变量解决事件循环问题
+        if ($env:OS -eq "Windows_NT") {
+            Write-LogInfo "检测到 Windows 平台，应用事件循环优化..."
+            $env:UVLOOP_DISABLE = "1"
+            $env:PYTHONPATH = $script:BackendPath
+            Write-LogDebug "设置 UVLOOP_DISABLE=1"
+            Write-LogDebug "设置 PYTHONPATH=$($script:BackendPath)"
+        }
+
         # 选择启动命令
         if ($Prod) {
             # 生产模式
             Write-LogInfo "生产模式启动参数："
             Write-LogInfo "  - 访问日志: 启用"
             Write-LogInfo "  - 日志级别: info"
-            Write-LogInfo "  - 工作进程: 1"
-            uv run uvicorn src.main:app `
-                --host 0.0.0.0 `
-                --port $Port `
-                --access-log `
-                --log-level info `
-                --no-use-colors
+            Write-LogInfo "  - 工作进程: 1 (Windows 优化)"
+            Write-LogInfo "  - 事件循环: asyncio (Windows 兼容)"
+            
+            # 使用专门的启动脚本以确保 Windows 兼容性
+            uv run python start_server.py --prod --port $Port
         } else {
             # 开发模式（默认）
             Write-LogInfo "开发模式启动参数："
@@ -742,13 +749,10 @@ function Start-BackendService {
             Write-LogInfo "  - 访问日志: 启用"
             Write-LogInfo "  - 日志级别: debug"
             Write-LogInfo "  - 彩色输出: 启用"
-            uv run uvicorn src.main:app `
-                --reload `
-                --host 0.0.0.0 `
-                --port $Port `
-                --access-log `
-                --log-level debug `
-                --use-colors
+            Write-LogInfo "  - 事件循环: asyncio (Windows 兼容)"
+            
+            # 使用专门的启动脚本以确保 Windows 兼容性
+            uv run python start_server.py --dev --port $Port
         }
 
     } catch {

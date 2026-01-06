@@ -371,10 +371,7 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
     <div className="space-y-4">
       {/* 操作栏 */}
       <div className="flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold dark:text-gray-100">巡检模板管理</h3>
-          <Badge variant="secondary">{filteredTemplates.length} 项</Badge>
-        </div>
+        <div></div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleOpenImportModal}>
             <Copy className="w-4 h-4 mr-2" />

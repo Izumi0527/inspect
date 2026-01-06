@@ -129,10 +129,7 @@ export const InspectionAnalytics: React.FC = () => {
     <div className="space-y-6">
       {/* 操作栏 */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
-        <div>
-          <h3 className="text-lg font-semibold dark:text-gray-100">统计分析</h3>
-          <p className="text-gray-600 dark:text-gray-400 text-sm">巡检数据的趋势分析和统计报告</p>
-        </div>
+        <div></div>
         <div className="flex gap-2">
           <Select value={timePeriod} onValueChange={handlePeriodChange}>
             <SelectTrigger className="w-32">
