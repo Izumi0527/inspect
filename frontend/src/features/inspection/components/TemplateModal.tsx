@@ -190,21 +190,21 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
               {React.createElement(getCategoryIcon(formData.category), { className: 'w-6 h-6' })}
               {isEditing ? '编辑巡检模板' : '创建巡检模板'}
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               配置巡检模板的基本信息和检查项
             </p>
           </div>
@@ -218,14 +218,14 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
           <div className="space-y-6">
             {/* 基本信息 */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium flex items-center gap-2">
+              <h3 className="text-lg font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100">
                 <FileText className="w-5 h-5 text-blue-600" />
                 基本信息
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     模板名称 *
                   </label>
                   <Input
@@ -239,7 +239,7 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
                     {errors.name ? (
                       <p className="text-sm text-red-500">{errors.name}</p>
                     ) : (
-                      <p className="text-xs text-gray-500">模板名称长度1-100字符</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">模板名称长度1-100字符</p>
                     )}
                     <span className={`text-xs ${formData.name.length > 100 ? 'text-red-500' : 'text-gray-400'}`}>
                       {formData.name.length}/100
@@ -248,7 +248,7 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     模板描述
                   </label>
                   <textarea
@@ -256,13 +256,13 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
                     onChange={(e) => handleInputChange('description', e.target.value)}
                     placeholder="请输入模板描述(可选)"
                     maxLength={500}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      errors.description ? 'border-red-500' : 'border-gray-300'
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 ${
+                      errors.description ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                     }`}
                     rows={3}
                   />
                   <div className="flex justify-between items-center mt-1">
-                    <p className="text-xs text-gray-500">模板描述最多500字符</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">模板描述最多500字符</p>
                     <span className={`text-xs ${formData.description.length > 500 ? 'text-red-500' : 'text-gray-400'}`}>
                       {formData.description.length}/500
                     </span>
@@ -270,7 +270,7 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     模板类别
                   </label>
                   <Select
@@ -297,13 +297,13 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
 
             {/* 设备类型 */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium flex items-center gap-2">
+              <h3 className="text-lg font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100">
                 <Monitor className="w-5 h-5 text-purple-600" />
                 支持设备类型 *
               </h3>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   常用设备类型
                 </label>
                 <div className="flex flex-wrap gap-2 mb-3">
@@ -351,7 +351,7 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
                 </div>
 
                 {formData.deviceTypes.length > 0 && (
-                  <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-700">
                     <div className="flex flex-wrap gap-2">
                       {formData.deviceTypes.map((deviceType) => (
                         <Badge key={deviceType} variant="secondary" className="flex items-center gap-1">
@@ -377,7 +377,7 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
             {/* 检查项配置 */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-medium flex items-center gap-2">
+                <h3 className="text-lg font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100">
                   <Settings className="w-5 h-5 text-green-600" />
                   检查项配置 * ({formData.checkItems.length} 项)
                 </h3>
@@ -395,7 +395,7 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
               {formData.checkItems.length > 0 ? (
                 <div className="space-y-3">
                   {formData.checkItems.map((checkItem, index) => (
-                    <div key={checkItem.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                    <div key={checkItem.id} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
                           <Input
@@ -432,9 +432,9 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
                   ))}
                 </div>
               ) : (
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center">
                   <FileText className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-500">暂无检查项，点击"添加检查项"按钮开始配置</p>
+                  <p className="text-gray-500 dark:text-gray-400">暂无检查项，点击"添加检查项"按钮开始配置</p>
                 </div>
               )}
               {errors.checkItems && (
@@ -445,7 +445,7 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
         </form>
 
         {/* 底部操作按钮 */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+        <div className="flex items-center justify-end gap-3 p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             取消
           </Button>

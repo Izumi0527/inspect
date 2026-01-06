@@ -159,20 +159,20 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
   const isLoading = createStrategy.isPending || updateStrategy.isPending
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
               {isEditing ? '编辑巡检策略' : '创建巡检策略'}
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               配置巡检策略的基本信息和执行规则
             </p>
           </div>
@@ -182,18 +182,18 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
         </div>
 
         {/* 表单内容 */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
           <div className="space-y-6">
             {/* 基本信息 */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium flex items-center gap-2">
+              <h3 className="text-lg font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100">
                 <FileText className="w-5 h-5 text-blue-600" />
                 基本信息
               </h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     策略名称 *
                   </label>
                   <Input
@@ -207,7 +207,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                     {errors.name ? (
                       <p className="text-sm text-red-500">{errors.name}</p>
                     ) : (
-                      <p className="text-xs text-gray-500">策略名称长度1-100字符</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">策略名称长度1-100字符</p>
                     )}
                     <span className={`text-xs ${formData.name.length > 100 ? 'text-red-500' : 'text-gray-400'}`}>
                       {formData.name.length}/100
@@ -216,7 +216,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     策略描述 *
                   </label>
                   <textarea
@@ -224,8 +224,8 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                     onChange={(e) => handleInputChange('description', e.target.value)}
                     placeholder="请输入策略描述"
                     maxLength={500}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      errors.description ? 'border-red-500' : 'border-gray-300'
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 ${
+                      errors.description ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                     }`}
                     rows={3}
                   />
@@ -233,7 +233,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                     {errors.description ? (
                       <p className="text-sm text-red-500">{errors.description}</p>
                     ) : (
-                      <p className="text-xs text-gray-500">策略描述最多500字符</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">策略描述最多500字符</p>
                     )}
                     <span className={`text-xs ${formData.description.length > 500 ? 'text-red-500' : 'text-gray-400'}`}>
                       {formData.description.length}/500
@@ -242,7 +242,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     策略类型 *
                   </label>
                   <Select
@@ -267,7 +267,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                       onChange={(e) => handleInputChange('enabled', e.target.checked)}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
-                    <span className="ml-2 text-sm text-gray-700">启用策略</span>
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">启用策略</span>
                   </label>
                 </div>
               </div>
@@ -276,13 +276,13 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
             {/* 执行时间配置 */}
             {formData.type === 'scheduled' && (
               <div className="space-y-4">
-                <h3 className="text-lg font-medium flex items-center gap-2">
+                <h3 className="text-lg font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100">
                   <Calendar className="w-5 h-5 text-purple-600" />
                   执行时间
                 </h3>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Cron表达式 *
                   </label>
                   <div className="flex gap-2">
@@ -306,7 +306,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                       </SelectContent>
                     </Select>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     格式：秒 分 时 日 月 周，例如：0 0 2 * * ? 表示每天凌晨2点执行
                   </p>
                 </div>
@@ -315,17 +315,17 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
 
             {/* 设备和模板选择 */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium flex items-center gap-2">
+              <h3 className="text-lg font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100">
                 <Users className="w-5 h-5 text-green-600" />
                 目标配置
               </h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     目标设备 * ({formData.devices.length} 个)
                   </label>
-                  <div className="border border-gray-300 rounded-lg p-3 min-h-[100px] bg-gray-50">
+                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[100px] bg-gray-50 dark:bg-gray-700">
                     <div className="flex flex-wrap gap-2">
                       {formData.devices.map((deviceId) => (
                         <Badge key={deviceId} variant="secondary" className="flex items-center gap-1">
@@ -363,10 +363,10 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     巡检模板 * ({formData.templates.length} 个)
                   </label>
-                  <div className="border border-gray-300 rounded-lg p-3 min-h-[100px] bg-gray-50">
+                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[100px] bg-gray-50 dark:bg-gray-700">
                     <div className="flex flex-wrap gap-2">
                       {formData.templates.map((templateId) => (
                         <Badge key={templateId} variant="primary" className="flex items-center gap-1">
@@ -408,7 +408,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
         </form>
 
         {/* 底部操作按钮 */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+        <div className="flex items-center justify-end gap-3 p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             取消
           </Button>

@@ -10,14 +10,12 @@ import { Card, CardContent, Button } from '@/components/atoms'
 
 interface Props {
   hasFilters: boolean
-  searchText?: string
   onClearFilters?: () => void
   onRefresh?: () => void
 }
 
 export const ExecutionEmptyState: React.FC<Props> = React.memo(({
   hasFilters,
-  searchText,
   onClearFilters,
   onRefresh
 }) => {
@@ -30,18 +28,11 @@ export const ExecutionEmptyState: React.FC<Props> = React.memo(({
       }
     }
 
-    if (searchText) {
-      return {
-        title: '未找到匹配的执行记录',
-        description: `没有找到包含 "${searchText}" 的执行记录`
-      }
-    }
-
     return {
       title: '暂无执行记录',
       description: '还没有执行过巡检任务，开始第一次巡检吧'
     }
-  }, [hasFilters, searchText])
+  }, [hasFilters])
 
   return (
     <Card>

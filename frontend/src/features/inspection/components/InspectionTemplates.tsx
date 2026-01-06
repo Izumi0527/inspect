@@ -34,11 +34,7 @@ import { TemplateModal } from './TemplateModal'
 import { TemplateDetailModal } from './TemplateDetailModal'
 import { TemplateImportModal } from './TemplateImportModal'
 
-interface Props {
-  searchText: string
-}
-
-export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
+export const InspectionTemplates: React.FC = () => {
   const { data: templatesData, isLoading, refetch } = useInspectionTemplates()
   const cloneTemplate = useCloneTemplate()
   const deleteTemplate = useDeleteTemplate()
@@ -54,21 +50,11 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
 
   const templates: InspectionTemplate[] = templatesData?.templates ?? []
 
-  // 过滤模板列表
-  const normalizedKeyword = searchText.trim().toLowerCase()
+  // 显示所有模板列表
   const filteredTemplates = templates.filter(template => {
-    const name = template.name?.toLowerCase() ?? ''
-    const description = template.description?.toLowerCase() ?? ''
-
-    // 搜索关键词筛选
-    const matchesSearch = !normalizedKeyword ||
-      name.includes(normalizedKeyword) ||
-      description.includes(normalizedKeyword)
-
     // 类别筛选
     const matchesCategory = selectedCategory === 'all' || template.category === selectedCategory
-
-    return matchesSearch && matchesCategory
+    return matchesCategory
   })
 
   // 排序模板列表
@@ -477,15 +463,13 @@ export const InspectionTemplates: React.FC<Props> = ({ searchText }) => {
               <div>
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">暂无巡检模板</h3>
                 <p className="text-gray-500 dark:text-gray-400 mt-1">
-                  {searchText ? '没有找到匹配的模板' : '开始创建您的第一个巡检模板'}
+                  开始创建您的第一个巡检模板
                 </p>
               </div>
-              {!searchText && (
-                <Button className="mt-2" onClick={handleCreateTemplate}>
+              <Button className="mt-2" onClick={handleCreateTemplate}>
                   <Plus className="w-4 h-4 mr-2" />
                   创建模板
                 </Button>
-              )}
             </div>
           </CardContent>
         </Card>

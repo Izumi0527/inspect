@@ -34,11 +34,7 @@ import { ExecutionFilters } from './ExecutionFilters'
 import { ExecutionTableSkeleton } from './ExecutionTableSkeleton'
 import { ExecutionEmptyState } from './ExecutionEmptyState'
 
-interface Props {
-  searchText: string
-}
-
-export const InspectionExecutions: React.FC<Props> = ({ searchText }) => {
+export const InspectionExecutions: React.FC = () => {
   // 使用URL筛选hooks
   const { filters, updateFilter, resetFilters } = useURLFilters()
   const { getDateRange } = useDateFilters()
@@ -65,13 +61,10 @@ export const InspectionExecutions: React.FC<Props> = ({ searchText }) => {
   const totalPages = executionsData?.pages || 1
   const totalItems = executionsData?.total || 0
 
-  // 过滤执行记录（搜索文本）
+  // 显示所有执行记录
   const filteredExecutions = useMemo(
-    () =>
-      executions.filter((execution) =>
-        execution.strategyName.toLowerCase().includes(searchText.toLowerCase())
-      ),
-    [executions, searchText]
+    () => executions,
+    [executions]
   )
 
   // 清除选中的执行记录（如果不存在）
@@ -405,7 +398,6 @@ export const InspectionExecutions: React.FC<Props> = ({ searchText }) => {
         ) : (
           <ExecutionEmptyState
             hasFilters={hasAnyFilter}
-            searchText={searchText}
             onClearFilters={resetFilters}
             onRefresh={refetch}
           />

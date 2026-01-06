@@ -28,11 +28,7 @@ import {
 import { InspectionStrategy } from '../types'
 import { StrategyModal } from './StrategyModal'
 
-interface Props {
-  searchText: string
-}
-
-export const InspectionStrategies: React.FC<Props> = ({ searchText }) => {
+export const InspectionStrategies: React.FC = () => {
   const [selectedStrategy, setSelectedStrategy] = useState<InspectionStrategy | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   
@@ -43,11 +39,8 @@ export const InspectionStrategies: React.FC<Props> = ({ searchText }) => {
 
   const strategies: InspectionStrategy[] = strategiesData?.items || []
 
-  // 过滤策略列表
-  const filteredStrategies = strategies.filter(strategy => 
-    strategy.name.toLowerCase().includes(searchText.toLowerCase()) ||
-    strategy.description.toLowerCase().includes(searchText.toLowerCase())
-  )
+  // 显示所有策略列表
+  const filteredStrategies = strategies
 
   const handleCreateStrategy = () => {
     setSelectedStrategy(null)
@@ -259,15 +252,13 @@ export const InspectionStrategies: React.FC<Props> = ({ searchText }) => {
               <div>
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">暂无巡检策略</h3>
                 <p className="text-gray-500 dark:text-gray-400 mt-1">
-                  {searchText ? '没有找到匹配的策略' : '开始创建您的第一个巡检策略'}
+                  开始创建您的第一个巡检策略
                 </p>
               </div>
-              {!searchText && (
-                <Button onClick={handleCreateStrategy} className="mt-2">
+              <Button onClick={handleCreateStrategy} className="mt-2">
                   <Plus className="w-4 h-4 mr-2" />
                   创建策略
                 </Button>
-              )}
             </div>
           </CardContent>
         </Card>

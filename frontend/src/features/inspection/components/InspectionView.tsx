@@ -4,18 +4,13 @@ import {
   Calendar, 
   FileText, 
   History, 
-  BarChart3,
-  Search,
-  Filter,
-  RefreshCw
+  BarChart3
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
   Card,
   CardHeader,
-  CardContent,
-  Button,
-  Input
+  CardContent
 } from '@/components/atoms'
 import { AppLayout } from '@/components/layout'
 import { useInspectionStats } from '../hooks/useInspection'
@@ -34,7 +29,6 @@ interface TabConfig {
 
 export const InspectionView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('strategies')
-  const [searchText, setSearchText] = useState('')
   
   const { data: stats, isLoading: statsLoading } = useInspectionStats()
 
@@ -64,11 +58,11 @@ export const InspectionView: React.FC = () => {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'strategies':
-        return <InspectionStrategies searchText={searchText} />
+        return <InspectionStrategies />
       case 'templates':
-        return <InspectionTemplates searchText={searchText} />
+        return <InspectionTemplates />
       case 'executions':
-        return <InspectionExecutions searchText={searchText} />
+        return <InspectionExecutions />
       case 'analytics':
         return <InspectionAnalytics />
       default:
@@ -145,27 +139,6 @@ export const InspectionView: React.FC = () => {
                   </motion.button>
                 )
               })}
-            </div>
-
-            {/* 搜索和操作按钮 */}
-            <div className="flex gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
-                <Input
-                  placeholder="搜索..."
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  className="pl-10 w-48"
-                />
-              </div>
-              <Button variant="outline" size="sm">
-                <Filter className="w-4 h-4 mr-2" />
-                筛选
-              </Button>
-              <Button variant="outline" size="sm">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                刷新
-              </Button>
             </div>
           </div>
         </CardHeader>
