@@ -8,7 +8,6 @@ import {
   SystemMetrics,
   NotificationConfig,
   SecurityConfig,
-  LDAPConfig,
   SystemInfo,
   License,
   SettingsGroup,
@@ -458,60 +457,12 @@ export const securityApi = {
   // 更新安全设置 - 后端暂不支持 PUT
   updateSecuritySettings: (data: Partial<SecurityConfig>) =>
     Promise.resolve(data as SecurityConfig),
-
-  // 获取LDAP配置 - 后端暂不支持
-  getLDAPConfig: () =>
-    Promise.resolve({} as LDAPConfig),
-
-  // 更新LDAP配置 - 后端暂不支持
-  updateLDAPConfig: (data: Partial<LDAPConfig>) =>
-    Promise.resolve(data as LDAPConfig),
-
-  // 测试LDAP连接 - 后端实际路由: POST /settings/security/test-ldap
-  testLDAPConnection: (config: LDAPConfig) =>
-    httpClient.post<{ success: boolean; message: string; users?: number }>('/settings/security/test-ldap', config),
-
-  // 同步LDAP用户 - 后端暂不支持
-  syncLDAPUsers: () =>
-    Promise.resolve({ success: false, imported: 0, updated: 0 }),
 }
 
 // 许可证API
-// 注意: 后端暂不支持许可证管理端点，返回模拟数据
+// 注意: 后端仅支持获取许可证信息
 export const licenseApi = {
-  // 获取许可证信息 - 后端暂不支持
+  // 获取许可证信息
   getLicense: () =>
-    Promise.resolve({
-      id: 'license-001',
-      type: 'enterprise',
-      holder: 'Demo Company',
-      email: 'admin@demo.com',
-      maxDevices: 1000,
-      maxUsers: 100,
-      features: ['monitoring', 'alerts', 'reports'],
-      issueDate: new Date().toISOString(),
-      expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      status: 'active',
-      signature: 'demo-signature',
-    } as License),
-
-  // 更新许可证 - 后端暂不支持
-  updateLicense: (licenseKey: string) =>
-    Promise.resolve({
-      id: 'license-001',
-      type: 'enterprise',
-      holder: 'Demo Company',
-      email: 'admin@demo.com',
-      maxDevices: 1000,
-      maxUsers: 100,
-      features: ['monitoring', 'alerts', 'reports'],
-      issueDate: new Date().toISOString(),
-      expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      status: 'active',
-      signature: licenseKey,
-    } as License),
-
-  // 验证许可证 - 后端暂不支持
-  validateLicense: () =>
-    Promise.resolve({ valid: true, message: '许可证有效' }),
+    httpClient.get<License>('/settings/license'),
 }

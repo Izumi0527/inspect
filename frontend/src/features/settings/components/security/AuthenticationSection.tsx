@@ -175,32 +175,6 @@ export function AuthenticationSection({ data, onChange }: Props) {
           )}
         </div>
 
-        {/* LDAP登录 */}
-        <div className="pt-4 border-t space-y-4">
-          <ConfigItem label="允许LDAP登录" description="集成企业LDAP/AD进行身份验证">
-            <ConfigSwitch
-              checked={data.allowLdapLogin}
-              onCheckedChange={(checked) => onChange('allowLdapLogin', checked)}
-            />
-          </ConfigItem>
-
-          {data.allowLdapLogin && (
-            <ConfigItem
-              label="LDAP服务器地址"
-              description="LDAP/AD服务器的URL地址"
-              required
-            >
-              <ConfigInput
-                type="url"
-                value={data.ldapServerUrl}
-                onChange={(value) => onChange('ldapServerUrl', value)}
-                placeholder="ldap://ldap.example.com:389"
-                disabled={!data.allowLdapLogin}
-              />
-            </ConfigItem>
-          )}
-        </div>
-
         {/* IP白名单 */}
         <div className="pt-4 border-t space-y-4">
           <ConfigItem

@@ -182,7 +182,7 @@ next-env.d.ts
 # ==========================================
 /logs/
 *.log
-*.sql
+# *.sql
 *.sqlite
 *.db
 
@@ -360,5 +360,6 @@ backend/data/reports/*
 .turbo/
 .swc/
 
-config/
-data/
+/data/
+
+/legacy/

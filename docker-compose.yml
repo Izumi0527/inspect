@@ -4,8 +4,6 @@
 #   开发环境: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 #   生产环境: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
-version: '3.8'
-
 # ===== 网络配置 =====
 networks:
   inspect_network:
@@ -16,9 +14,9 @@ networks:
 
 # ===== 基础服务定义 =====
 services:
-  # PostgreSQL 数据库服务
+  # TimescaleDB 数据库服务
   postgres:
-    image: postgres:16-alpine
+    image: timescale/timescaledb:2.15.3-pg16
     networks:
       - inspect_network
     volumes:
@@ -47,26 +45,9 @@ services:
       retries: 5
       start_period: 30s
 
-  # InfluxDB 时序数据库服务
-  influxdb:
-    image: influxdb:2.7-alpine
-    networks:
-      - inspect_network
-    volumes:
-      - influxdb_data:/var/lib/influxdb2
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-
 # ===== 数据卷定义 =====
 volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  influxdb_data:
     driver: local

@@ -1,0 +1,75 @@
+{
+  "overview": {
+    "total_devices": 9,
+    "active_devices": 7,
+    "offline_devices": 1,
+    "warning_devices": 1,
+    "error_devices": 0,
+    "avg_uptime": 456.7,
+    "total_executions": 128,
+    "avg_score": 92.3
+  },
+  "device_distribution": {
+    "by_type": {
+      "switch": 5,
+      "router": 2,
+      "firewall": 1,
+      "server": 1
+    },
+    "by_location": {
+      "数据中心": 5,
+      "总部": 2,
+      "分支机构": 2
+    }
+  },
+  "performance_stats": {
+    "by_device": [
+      {
+        "device_name": "核心交换机-01",
+        "metrics": {
+          "cpu_usage": 23.4,
+          "memory_usage": 61.2,
+          "availability": 99.9,
+          "health_score": 95.5
+        }
+      },
+      {
+        "device_name": "边界路由器-01",
+        "metrics": {
+          "cpu_usage": 78.9,
+          "memory_usage": 72.3,
+          "availability": 98.2,
+          "health_score": 84.2
+        }
+      },
+      {
+        "device_name": "防火墙-01",
+        "metrics": {
+          "cpu_usage": 35.7,
+          "memory_usage": 48.9,
+          "availability": 99.1,
+          "health_score": 90.8
+        }
+      }
+    ]
+  },
+  "top_devices": {
+    "by_performance": [
+      {
+        "device_name": "核心交换机-01",
+        "device_type": "switch",
+        "score": 97.5
+      },
+      {
+        "device_name": "防火墙-01",
+        "device_type": "firewall",
+        "score": 94.6
+      },
+      {
+        "device_name": "接入交换机-02",
+        "device_type": "switch",
+        "score": 92.1
+      }
+    ]
+  }
+}

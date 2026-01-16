@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { TokenManager } from '@/lib/api-client'
+import { api } from '@/lib/api-client'
 import { 
   TrafficMetrics, 
   TrafficAnomaly, 
@@ -12,70 +12,28 @@ import {
   TrafficFilter
 } from '../types'
 
-const API_BASE = '/api/v1/traffic'
-
 export const useTrafficAnalysis = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const collectTrafficData = async (deviceIp: string): Promise<TrafficMetrics[]> => {
-    setIsLoading(true)
-    setError(null)
-    
-    try {
-      const response = await fetch(`${API_BASE}/collect?device_ip=${deviceIp}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to collect traffic data')
-      }
-
-      const data: TrafficCollectionResponse = await response.json()
-      return data.metrics
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '采集流量数据失败'
-      setError(errorMsg)
-      throw err
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const getTrafficAnomalies = async (
-    deviceIp?: string,
-    severity?: string,
+  // 获取流量摘要
+  const getTrafficSummary = async (
+    deviceIPs?: string[], 
     hours: number = 24
-  ): Promise<TrafficAnomaly[]> => {
+  ): Promise<TrafficSummary> => {
     setIsLoading(true)
     setError(null)
     
     try {
-      const params = new URLSearchParams({
-        hours: hours.toString()
-      })
+      const params: Record<string, string | number> = { hours }
+      if (deviceIPs && deviceIPs.length > 0) {
+        params.device_ips = deviceIPs.join(',')
+      }
       
-      if (deviceIp) params.append('device_ip', deviceIp)
-      if (severity) params.append('severity', severity)
-
-      const response = await fetch(`${API_BASE}/anomalies?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to get traffic anomalies')
-      }
-
-      const data: TrafficAnomaliesResponse = await response.json()
-      return data.anomalies
+      const data = await api.traffic.summary(params)
+      return data as TrafficSummary
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '获取流量异常失败'
+      const errorMsg = err instanceof Error ? err.message : '获取流量摘要失败'
       setError(errorMsg)
       throw err
     } finally {
@@ -83,26 +41,42 @@ export const useTrafficAnalysis = () => {
     }
   }
 
+  // 获取设备流量
+  const getDeviceTraffic = async (deviceId: number) => {
+    setIsLoading(true)
+    setError(null)
+    
+    try {
+      const data = await api.traffic.deviceTraffic(deviceId)
+      return data
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '获取设备流量失败'
+      setError(errorMsg)
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // 获取流量趋势
   const getTrafficTrends = async (
-    deviceIp: string,
-    hours: number = 24
+    deviceId: number,
+    interfaceName?: string,
+    startTime?: string,
+    endTime?: string,
+    interval: string = '1h'
   ): Promise<TrafficTrend[]> => {
     setIsLoading(true)
     setError(null)
     
     try {
-      const response = await fetch(`${API_BASE}/trends/${deviceIp}?hours=${hours}`, {
-        headers: {
-          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to get traffic trends')
-      }
-
-      const data: TrafficTrendsResponse = await response.json()
-      return data.interface_trends
+      const params: Record<string, string> = { interval }
+      if (interfaceName) params.interface = interfaceName
+      if (startTime) params.start_time = startTime
+      if (endTime) params.end_time = endTime
+      
+      const data = await api.traffic.trend(deviceId, params)
+      return data as TrafficTrend[]
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '获取流量趋势失败'
       setError(errorMsg)
@@ -112,30 +86,16 @@ export const useTrafficAnalysis = () => {
     }
   }
 
-  const getTrafficSummary = async (deviceIps?: string[]): Promise<TrafficSummary> => {
+  // 获取TOP流量设备
+  const getTopTalkers = async (limit: number = 10, sortBy: string = 'total_bytes') => {
     setIsLoading(true)
     setError(null)
     
     try {
-      const params = new URLSearchParams()
-      if (deviceIps) {
-        deviceIps.forEach(ip => params.append('device_ips', ip))
-      }
-
-      const response = await fetch(`${API_BASE}/summary?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to get traffic summary')
-      }
-
-      const data = await response.json()
-      return data.summary
+      const data = await api.traffic.topTalkers(limit, sortBy)
+      return data
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '获取流量汇总失败'
+      const errorMsg = err instanceof Error ? err.message : '获取TOP流量失败'
       setError(errorMsg)
       throw err
     } finally {
@@ -143,30 +103,25 @@ export const useTrafficAnalysis = () => {
     }
   }
 
-  const calculateBaseline = async (deviceIp: string, interfaceName: string) => {
+  // 获取带宽利用率
+  const getBandwidthUtilization = async (
+    deviceId?: number,
+    threshold?: number,
+    limit?: number
+  ) => {
     setIsLoading(true)
     setError(null)
-
+    
     try {
-      const params = new URLSearchParams({
-        device_ip: deviceIp,
-        interface: interfaceName  // 修复：使用新的参数名
-      })
-
-      const response = await fetch(`${API_BASE}/baseline/calculate?${params}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to calculate baseline')
-      }
-
-      return await response.json()
+      const params: Record<string, number> = {}
+      if (deviceId) params.device_id = deviceId
+      if (threshold) params.threshold = threshold
+      if (limit) params.limit = limit
+      
+      const data = await api.traffic.bandwidthUtilization(params)
+      return data
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '计算基线失败'
+      const errorMsg = err instanceof Error ? err.message : '获取带宽利用率失败'
       setError(errorMsg)
       throw err
     } finally {
@@ -174,53 +129,16 @@ export const useTrafficAnalysis = () => {
     }
   }
 
-  const startMonitoring = async (config: TrafficAnalysisRequest) => {
+  // 获取TOP带宽利用率
+  const getTopBandwidth = async (limit: number = 10) => {
     setIsLoading(true)
     setError(null)
     
     try {
-      const response = await fetch(`${API_BASE}/monitoring/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
-        },
-        body: JSON.stringify(config)
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to start monitoring')
-      }
-
-      return await response.json()
+      const data = await api.traffic.topBandwidth(limit)
+      return data
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '启动监控失败'
-      setError(errorMsg)
-      throw err
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const cleanupData = async (olderThanHours: number = 168) => {
-    setIsLoading(true)
-    setError(null)
-    
-    try {
-      const response = await fetch(`${API_BASE}/data/cleanup?older_than_hours=${olderThanHours}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to cleanup data')
-      }
-
-      return await response.json()
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '清理数据失败'
+      const errorMsg = err instanceof Error ? err.message : '获取TOP带宽失败'
       setError(errorMsg)
       throw err
     } finally {
@@ -231,35 +149,34 @@ export const useTrafficAnalysis = () => {
   return {
     isLoading,
     error,
-    collectTrafficData,
-    getTrafficAnomalies,
-    getTrafficTrends,
     getTrafficSummary,
-    calculateBaseline,
-    startMonitoring,
-    cleanupData
+    getDeviceTraffic,
+    getTrafficTrends,
+    getTopTalkers,
+    getBandwidthUtilization,
+    getTopBandwidth,
   }
 }
 
-export const useTrafficRealtime = (deviceIps: string[], intervalMs: number = 30000) => {
-  const [trafficData, setTrafficData] = useState<Record<string, TrafficMetrics[]>>({})
+export const useTrafficRealtime = (deviceIds: number[], intervalMs: number = 30000) => {
+  const [trafficData, setTrafficData] = useState<Record<number, unknown>>({})
   const [isActive, setIsActive] = useState(false)
-  const { collectTrafficData } = useTrafficAnalysis()
+  const { getDeviceTraffic } = useTrafficAnalysis()
 
   useEffect(() => {
-    if (!isActive || deviceIps.length === 0) {
+    if (!isActive || deviceIds.length === 0) {
       return
     }
 
     const collectData = async () => {
-      const newData: Record<string, TrafficMetrics[]> = {}
+      const newData: Record<number, unknown> = {}
       
-      for (const deviceIp of deviceIps) {
+      for (const deviceId of deviceIds) {
         try {
-          const metrics = await collectTrafficData(deviceIp)
-          newData[deviceIp] = metrics
+          const metrics = await getDeviceTraffic(deviceId)
+          newData[deviceId] = metrics
         } catch (error) {
-          console.error(`Failed to collect data for ${deviceIp}:`, error)
+          console.error(`Failed to collect data for device ${deviceId}:`, error)
         }
       }
       
@@ -273,7 +190,7 @@ export const useTrafficRealtime = (deviceIps: string[], intervalMs: number = 300
     const interval = setInterval(collectData, intervalMs)
 
     return () => clearInterval(interval)
-  }, [deviceIps, intervalMs, isActive, collectTrafficData])
+  }, [deviceIds, intervalMs, isActive, getDeviceTraffic])
 
   const startRealtime = () => setIsActive(true)
   const stopRealtime = () => setIsActive(false)

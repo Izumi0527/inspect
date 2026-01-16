@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env pwsh
+#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     企业级网络设备巡检系统 - 一键开发环境设置脚本
@@ -109,8 +109,7 @@ function Test-Prerequisites {
         @{ Command = "docker"; Name = "Docker 容器" },
         @{ Command = "node"; Name = "Node.js 运行时" },
         @{ Command = "pnpm"; Name = "pnpm 包管理器" },
-        @{ Command = "python"; Name = "Python 运行时" },
-        @{ Command = "uv"; Name = "uv 包管理器" }
+        @{ Command = "go"; Name = "Go 运行时" }
     )
     
     $allOk = $true
@@ -137,32 +136,25 @@ function Test-Prerequisites {
 
 # 创建环境配置文件
 function New-EnvironmentFiles {
-    Write-ColorOutput "`n📝 创建环境配置文件..." "Blue"
-    
-    # 后端环境配置
-    $backendEnvPath = "backend\.env"
-    if (-not (Test-Path $backendEnvPath)) {
-        $backendEnvContent = @"
-# 数据库配置
-DATABASE_URL=postgresql+asyncpg://inspect_dev:dev_password_2024@localhost:5433/inspect_system_dev
-REDIS_URL=redis://:dev_redis_2024@localhost:6380/0
-INFLUXDB_URL=http://localhost:8087
-INFLUXDB_TOKEN=dev_token_2024
-INFLUXDB_ORG=inspect_dev
-INFLUXDB_BUCKET=device_metrics_dev
+    Write-ColorOutput "`n?? 创建环境配置文件..." "Blue"
 
-# 应用配置
-SECRET_KEY=dev_secret_key_2024_very_long_and_secure
-ENVIRONMENT=development
-DEBUG=true
-LOG_LEVEL=debug
+    $backendEnvCandidates = @(".env.development", ".env")
+    $backendEnvExists = $false
 
-# Python 配置
-PYTHONDONTWRITEBYTECODE=1
-PYTHONUNBUFFERED=1
-"@
-        $backendEnvContent | Out-File -FilePath $backendEnvPath -Encoding UTF8
-        Write-ColorOutput "✅ 后端环境配置文件已创建" "Green"
+    foreach ($candidate in $backendEnvCandidates) {
+        if (Test-Path $candidate) {
+            $backendEnvExists = $true
+            break
+        }
+    }
+
+    if (-not $backendEnvExists) {
+        if (Test-Path ".env.example") {
+            Copy-Item -Path ".env.example" -Destination ".env.development"
+            Write-ColorOutput "? 已创建后端环境配置文件: .env.development" "Green"
+        } else {
+            Write-ColorOutput "?? 未找到 .env.example，跳过后端环境文件创建" "Yellow"
+        }
     }
     
     # 前端环境配置
@@ -178,7 +170,7 @@ NODE_ENV=development
 NEXT_PUBLIC_ENV=development
 "@
         $frontendEnvContent | Out-File -FilePath $frontendEnvPath -Encoding UTF8
-        Write-ColorOutput "✅ 前端环境配置文件已创建" "Green"
+        Write-ColorOutput "? 前端环境配置文件已创建" "Green"
     }
 }
 
@@ -210,24 +202,23 @@ function Initialize-DatabaseEnvironment {
 
 # 设置后端环境
 function Initialize-BackendEnvironment {
-    Write-ColorOutput "`n🐍 设置后端环境..." "Blue"
-    
-    $backendDir = "backend"
-    
-    # 安装 Python 3.12.9
-    Invoke-CommandWithLogging "uv python install 3.12.9" "安装 Python 3.12.9" $backendDir
-    
-    # 创建虚拟环境
-    if (-not (Test-Path "$backendDir\.venv")) {
-        Invoke-CommandWithLogging "uv venv --python 3.12.9" "创建虚拟环境" $backendDir
+    Write-ColorOutput "`n?? 设置后端环境..." "Blue"
+
+    $backendDir = "backend-go"
+
+    $envFile = $null
+    if (Test-Path ".env.development") {
+        $envFile = (Resolve-Path ".env.development").Path
+    } elseif (Test-Path ".env") {
+        $envFile = (Resolve-Path ".env").Path
     }
-    
-    # 安装依赖包
-    Invoke-CommandWithLogging "uv sync --all-extras" "安装依赖包" $backendDir
-    
-    # 验证安装
-    Invoke-CommandWithLogging "uv run python --version" "验证 Python 版本" $backendDir
-    Invoke-CommandWithLogging "uv run python -c `"import fastapi, sqlalchemy, redis; print('核心依赖导入成功')`"" "验证核心依赖" $backendDir
+
+    if ($envFile) {
+        $env:ENV_FILE = $envFile
+    }
+
+    Invoke-CommandWithLogging "go mod download" "下载 Go 依赖" $backendDir
+    Invoke-CommandWithLogging "go run ./cmd/migrate" "执行数据库迁移" $backendDir -IgnoreErrors
 }
 
 # 设置前端环境
@@ -254,22 +245,22 @@ function Initialize-FrontendEnvironment {
 
 # 运行测试验证
 function Invoke-TestValidation {
-    Write-ColorOutput "`n🧪 运行测试验证环境..." "Blue"
-    
+    Write-ColorOutput "`n?? 运行测试验证环境..." "Blue"
+
     # 后端测试
-    $backendDir = "backend"
-    if (Test-Path "$backendDir\tests") {
-        Invoke-CommandWithLogging "uv run pytest tests/ -v --tb=short" "后端测试" $backendDir -IgnoreErrors
+    $backendDir = "backend-go"
+    if (Test-Path $backendDir) {
+        Invoke-CommandWithLogging "go test ./..." "后端测试" $backendDir -IgnoreErrors
     } else {
-        Write-ColorOutput "⚠️ 后端测试目录不存在，跳过后端测试" "Yellow"
+        Write-ColorOutput "?? 后端目录不存在，跳过后端测试" "Yellow"
     }
-    
+
     # 前端测试
     $frontendDir = "frontend"
     if (Test-Path $frontendDir) {
         Invoke-CommandWithLogging "pnpm test --run" "前端测试" $frontendDir -IgnoreErrors
     } else {
-        Write-ColorOutput "⚠️ 前端目录不存在，跳过前端测试" "Yellow"
+        Write-ColorOutput "?? 前端目录不存在，跳过前端测试" "Yellow"
     }
 }
 
@@ -282,16 +273,15 @@ function Show-SetupSummary {
     Write-ColorOutput "`n📊 服务访问地址:" "Blue"
     Write-ColorOutput "  🎨 前端开发服务器: http://localhost:3000" "White"
     Write-ColorOutput "  🐍 后端 API 服务器: http://localhost:8000" "White"
-    Write-ColorOutput "  📚 API 文档: http://localhost:8000/docs" "White"
+    Write-ColorOutput "  ?? API 说明: docs/api/openapi.json" "White"
     Write-ColorOutput "  🗄️ PostgreSQL: localhost:5433" "White"
     Write-ColorOutput "  🔴 Redis: localhost:6380" "White"
-    Write-ColorOutput "  📈 InfluxDB: http://localhost:8087" "White"
     Write-ColorOutput "  🔧 pgAdmin: http://localhost:5050" "White"
     Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"
     
     Write-ColorOutput "`n🚀 启动开发服务器:" "Blue"
     Write-ColorOutput "  前端: cd frontend && pnpm dev" "White"
-    Write-ColorOutput "  后端: cd backend && uv run uvicorn src.main:app --reload" "White"
+    Write-ColorOutput "  后端: cd backend-go && go run ./cmd/api" "White"
     
     Write-ColorOutput "`n🛠️ 常用命令:" "Blue"
     Write-ColorOutput "  数据库管理: .\scripts\db-manage.ps1 [start|stop|reset|backup]" "White"
@@ -345,3 +335,7 @@ function Main {
 
 # 执行主函数
 Main
+
+
+
+

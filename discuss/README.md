@@ -1,5 +1,8 @@
 # 📚 企业级网络设备巡检系统技术文档中心
 
+> 注意：本目录中涉及 Python/uv 的内容为历史参考，当前后端已迁移至 Go。请优先参考 docs/backend-go-quickstart.md 与 docs/development-environment-guide.md。
+
+
 ## 📋 文档概览
 
 本文档中心包含了企业级网络设备巡检系统的完整技术文档，涵盖环境配置、依赖管理、开发指南等各个方面。
@@ -17,8 +20,8 @@
 
 | 文档名称 | 描述 | 适用人群 | 更新时间 |
 |---------|------|----------|----------|
-| [🐍 Python 3.12.9 虚拟环境重建指南](./python-environment-setup.md) | 详细的 Python 环境配置和 uv 使用指南 | 后端开发者 | 2025-12-10 |
-| [⚡ uv 包管理器完全使用指南](./uv-package-manager-guide.md) | uv 包管理器的深度使用教程 | 后端开发者 | 2025-12-10 |
+| [🐍 Python 3.12.9 虚拟环境重建指南](../legacy/docs/python-environment-setup.md) | 详细的 Python 环境配置和 uv 使用指南 | 后端开发者 | 2025-12-10 |
+| [⚡ uv 包管理器完全使用指南](../legacy/docs/uv-package-manager-guide.md) | uv 包管理器的深度使用教程 | 后端开发者 | 2025-12-10 |
 | [🛠️ 开发环境完整配置指南](./development-environment-guide.md) | 全栈开发环境的一站式配置方案 | 全体开发者 | 2025-12-10 |
 
 ### 📦 依赖管理类
@@ -50,8 +53,8 @@
    - 按照指南安装必要的工具和依赖
 
 2. **后端环境** 🐍
-   - 参考 [Python 3.12.9 虚拟环境重建指南](./python-environment-setup.md)
-   - 学习 [uv 包管理器使用指南](./uv-package-manager-guide.md)
+   - 参考 [Python 3.12.9 虚拟环境重建指南](../legacy/docs/python-environment-setup.md)
+   - 学习 [uv 包管理器使用指南](../legacy/docs/uv-package-manager-guide.md)
 
 3. **依赖理解** 📦
    - 浏览 [项目依赖深度分析报告](./dependency-analysis.md)
@@ -116,7 +119,7 @@ python scripts/quality-check.py     # 代码质量检查
 |------|------|------|----------|
 | **PostgreSQL** | 16 | 主数据库 | [官方文档](https://www.postgresql.org/docs/16/) |
 | **Redis** | 7 | 缓存数据库 | [官方文档](https://redis.io/docs/) |
-| **InfluxDB** | 2.7 | 时序数据库 | [官方文档](https://docs.influxdata.com/influxdb/v2.7/) |
+| **TimescaleDB** | - | PostgreSQL 时序扩展 | [官方文档](https://www.timescale.com/) |
 
 ### 🐳 容器化技术栈
 
@@ -357,3 +360,5 @@ python scripts/quality-check.py     # 代码质量检查
 **联系方式**: [技术团队邮箱]
 
 > 💡 **提示**: 本文档中心会随着项目发展持续更新，建议定期查看最新版本。如有任何问题或建议，欢迎随时联系技术团队。
+
+

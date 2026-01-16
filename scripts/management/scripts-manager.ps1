@@ -14,7 +14,7 @@
     指定脚本名称
 
 .PARAMETER Category
-    脚本分类: setup, database, development, quality, test, all
+    脚本分类: setup, database, development, quality, test, maintenance, all
 
 .EXAMPLE
     .\scripts-manager.ps1 list
@@ -43,7 +43,7 @@ param(
     
     [string]$Script,
     
-    [ValidateSet("setup", "database", "development", "quality", "test", "all")]
+    [ValidateSet("setup", "database", "development", "quality", "test", "maintenance", "all")]
     [string]$Category = "all"
 )
 
@@ -72,117 +72,163 @@ function Write-ColorOutput {
     Write-Host $Message -ForegroundColor $colorMap[$Color]
 }
 
+function Get-ScriptFilePath {
+    param(
+        [hashtable]$ScriptInfo,
+        [string]$ScriptName
+    )
+
+    $relativePath = $ScriptInfo["Path"]
+    if ([string]::IsNullOrWhiteSpace($relativePath)) {
+        $relativePath = "$ScriptName.ps1"
+    }
+
+    return Join-Path "scripts" $relativePath
+}
+
 # 脚本定义
 function Get-ProjectScripts {
     return @{
         "setup-dev-env" = @{
             Category = "setup"
+            Path = "setup/setup-dev-env.ps1"
             Description = "一键开发环境设置脚本"
-            Usage = ".\scripts\setup-dev-env.ps1 [-SkipPrerequisites] [-SkipDatabase] [-SkipTests]"
+            Usage = ".\scripts\setup\setup-dev-env.ps1 [-SkipPrerequisites] [-SkipDatabase] [-SkipTests]"
             Examples = @(
-                ".\scripts\setup-dev-env.ps1                    # 完整环境设置",
-                ".\scripts\setup-dev-env.ps1 -SkipTests         # 跳过测试验证"
+                ".\scripts\setup\setup-dev-env.ps1                    # 完整环境设置",
+                ".\scripts\setup\setup-dev-env.ps1 -SkipTests         # 跳过测试验证"
             )
-            Dependencies = @("Docker", "uv", "pnpm")
+            Dependencies = @("Docker", "Go", "node", "pnpm")
         }
         "db-manage" = @{
             Category = "database"
+            Path = "database/db-manage.ps1"
             Description = "数据库管理工具"
-            Usage = ".\scripts\db-manage.ps1 <action> [-Service <service>] [-BackupPath <path>]"
+            Usage = ".\scripts\database\db-manage.ps1 <action> [-Service <service>] [-BackupPath <path>]"
             Examples = @(
-                ".\scripts\db-manage.ps1 start                  # 启动所有数据库服务",
-                ".\scripts\db-manage.ps1 backup                 # 备份数据库",
-                ".\scripts\db-manage.ps1 reset                  # 重置数据库"
+                ".\scripts\database\db-manage.ps1 start                  # 启动所有数据库服务",
+                ".\scripts\database\db-manage.ps1 backup                 # 备份数据库",
+                ".\scripts\database\db-manage.ps1 reset                  # 重置数据库"
             )
             Dependencies = @("Docker", "docker-compose")
         }
+        "db-init-migrate-go" = @{
+            Category = "database"
+            Path = "database/db-init-migrate-go.ps1"
+            Description = "数据库初始化与迁移（Go）"
+            Usage = ".\scripts\database\db-init-migrate-go.ps1 [-Migrate]"
+            Examples = @(
+                ".\scripts\database\db-init-migrate-go.ps1               # 执行数据库迁移"
+            )
+            Dependencies = @("Go")
+        }
         "dev-start" = @{
             Category = "development"
+            Path = "development/dev-start.ps1"
             Description = "开发环境快速启动脚本"
-            Usage = ".\scripts\dev-start.ps1 [-Services <services>] [-Wait <seconds>]"
+            Usage = ".\scripts\development\dev-start.ps1 [-Services <services>] [-Wait <seconds>]"
             Examples = @(
-                ".\scripts\dev-start.ps1                        # 启动所有服务",
-                ".\scripts\dev-start.ps1 -Services database     # 仅启动数据库"
+                ".\scripts\development\dev-start.ps1                        # 启动所有服务",
+                ".\scripts\development\dev-start.ps1 -Services database     # 仅启动数据库"
             )
-            Dependencies = @("Docker", "uv", "pnpm")
+            Dependencies = @("Docker", "Go", "pnpm")
         }
         "quality-check" = @{
             Category = "quality"
+            Path = "testing/quality-check.ps1"
             Description = "代码质量检查脚本"
-            Usage = ".\scripts\quality-check.ps1 [-Target <target>] [-Fix] [-Strict]"
+            Usage = ".\scripts\testing\quality-check.ps1 [-Target <target>] [-Fix] [-Strict]"
             Examples = @(
-                ".\scripts\quality-check.ps1                    # 检查所有代码",
-                ".\scripts\quality-check.ps1 -Target backend -Fix # 检查并修复后端代码"
+                ".\scripts\testing\quality-check.ps1                    # 检查所有代码",
+                ".\scripts\testing\quality-check.ps1 -Target backend -Fix # 检查并修复后端代码"
             )
-            Dependencies = @("uv", "pnpm")
+            Dependencies = @("Go", "pnpm", "golangci-lint (可选)")
         }
         "run-tests" = @{
             Category = "test"
+            Path = "testing/run-tests.ps1"
             Description = "统一测试运行脚本"
-            Usage = ".\scripts\run-tests.ps1 [-Target <target>] [-Type <type>] [-Coverage]"
+            Usage = ".\scripts\testing\run-tests.ps1 [-Target <target>] [-Type <type>] [-Coverage]"
             Examples = @(
-                ".\scripts\run-tests.ps1                        # 运行所有测试",
-                ".\scripts\run-tests.ps1 -Target backend -Coverage # 后端测试+覆盖率"
+                ".\scripts\testing\run-tests.ps1                        # 运行所有测试",
+                ".\scripts\testing\run-tests.ps1 -Target backend -Coverage # 后端测试+覆盖率"
             )
-            Dependencies = @("uv", "pnpm")
+            Dependencies = @("Go", "pnpm")
+        }
+        "device-probe-verify" = @{
+            Category = "test"
+            Path = "testing/device-probe-verify.ps1"
+            Description = "设备探测联调验证脚本（ICMP/SNMP）"
+            Usage = ".\scripts\testing\device-probe-verify.ps1 [-ApiBase <url>] [-Token <token>] [-DeviceIds <ids>] [-MaxConcurrent <n>]"
+            Examples = @(
+                ".\scripts\testing\device-probe-verify.ps1 -Token $env:AUTH_TOKEN -DeviceIds 1,2,3",
+                ".\scripts\testing\device-probe-verify.ps1 -Token $env:AUTH_TOKEN -Limit 200 -OnlySnmpConfigured"
+            )
+            Dependencies = @()
         }
         "frontend-setup" = @{
             Category = "setup"
+            Path = "setup/frontend-setup.ps1"
             Description = "前端开发环境设置脚本"
-            Usage = ".\scripts\frontend-setup.ps1 <action> [-SkipInstall] [-Production]"
+            Usage = ".\scripts\setup\frontend-setup.ps1 <action> [-SkipInstall] [-Production]"
             Examples = @(
-                ".\scripts\frontend-setup.ps1 setup             # 设置前端环境",
-                ".\scripts\frontend-setup.ps1 dev               # 启动开发服务器"
+                ".\scripts\setup\frontend-setup.ps1 setup             # 设置前端环境",
+                ".\scripts\setup\frontend-setup.ps1 dev               # 启动开发服务器"
             )
             Dependencies = @("node", "pnpm")
         }
         "backend-setup" = @{
             Category = "setup"
-            Description = "后端开发环境设置脚本"
-            Usage = ".\scripts\backend-setup.ps1 <action> [-Python <version>] [-Production]"
+            Path = "setup/backend-setup.ps1"
+            Description = "后端开发环境设置脚本（Go）"
+            Usage = ".\scripts\setup\backend-setup.ps1 <action> [-Production] [-Port <port>]"
             Examples = @(
-                ".\scripts\backend-setup.ps1 setup              # 设置后端环境",
-                ".\scripts\backend-setup.ps1 dev                # 启动开发服务器"
+                ".\scripts\setup\backend-setup.ps1 setup              # 设置后端环境",
+                ".\scripts\setup\backend-setup.ps1 dev                # 启动开发服务器"
             )
-            Dependencies = @("Python", "uv")
+            Dependencies = @("Go")
         }
-        "start-backend" = @{
+        "start-backend-go" = @{
             Category = "development"
-            Description = "后端服务启动脚本"
-            Usage = ".\scripts\start-backend.ps1 [-Environment <env>] [-Port <port>]"
+            Path = "development/start-backend-go.ps1"
+            Description = "后端服务启动脚本（Go）"
+            Usage = ".\scripts\development\start-backend-go.ps1 [-Port <port>]"
             Examples = @(
-                ".\scripts\start-backend.ps1                    # 启动后端服务",
-                ".\scripts\start-backend.ps1 -Port 8001         # 指定端口启动"
+                ".\scripts\development\start-backend-go.ps1                 # 启动 Go 后端服务",
+                ".\scripts\development\start-backend-go.ps1 -Port 8001      # 指定端口启动"
             )
-            Dependencies = @("uv")
+            Dependencies = @("Go")
         }
         "run-all-tests" = @{
             Category = "test"
-            Description = "运行所有测试套件"
-            Usage = ".\scripts\run-all-tests.ps1 [-Coverage] [-Parallel]"
+            Path = "testing/run-all-tests.ps1"
+            Description = "运行所有测试套件（Go）"
+            Usage = ".\scripts\testing\run-all-tests.ps1 [-AppLayer] [-Infrastructure] [-Full]"
             Examples = @(
-                ".\scripts\run-all-tests.ps1                    # 运行所有测试",
-                ".\scripts\run-all-tests.ps1 -Coverage          # 包含覆盖率报告"
+                ".\scripts\testing\run-all-tests.ps1                    # 运行所有测试",
+                ".\scripts\testing\run-all-tests.ps1 -Infrastructure    # 基础设施检查"
             )
-            Dependencies = @("uv", "pnpm")
+            Dependencies = @("Go", "Docker")
         }
         "db-health-check" = @{
             Category = "database"
+            Path = "database/db-health-check.ps1"
             Description = "数据库健康检查脚本"
-            Usage = ".\scripts\db-health-check.ps1 [-Detailed] [-Fix]"
+            Usage = ".\scripts\database\db-health-check.ps1 [-Detailed] [-Fix]"
             Examples = @(
-                ".\scripts\db-health-check.ps1                  # 基础健康检查",
-                ".\scripts\db-health-check.ps1 -Detailed        # 详细检查报告"
+                ".\scripts\database\db-health-check.ps1                  # 基础健康检查",
+                ".\scripts\database\db-health-check.ps1 -Detailed        # 详细检查报告"
             )
             Dependencies = @("Docker")
         }
         "clean-cache" = @{
-            Category = "development"
+            Category = "maintenance"
+            Path = "maintenance/clean-cache.ps1"
             Description = "清理项目缓存脚本"
-            Usage = ".\scripts\clean-cache.ps1 [-Target <target>] [-Deep]"
+            Usage = ".\scripts\maintenance\clean-cache.ps1 [-Target <target>] [-Deep]"
             Examples = @(
-                ".\scripts\clean-cache.ps1                      # 清理所有缓存",
-                ".\scripts\clean-cache.ps1 -Target backend      # 仅清理后端缓存"
+                ".\scripts\maintenance\clean-cache.ps1                      # 清理所有缓存",
+                ".\scripts\maintenance\clean-cache.ps1 -Target backend      # 仅清理后端缓存"
             )
             Dependencies = @()
         }
@@ -208,7 +254,7 @@ function Show-ScriptList {
             $scriptName = ($scripts.GetEnumerator() | Where-Object { $_.Value -eq $scriptInfo }).Key
             
             # 检查脚本文件是否存在
-            $scriptPath = "scripts\$scriptName.ps1"
+            $scriptPath = Get-ScriptFilePath -ScriptInfo $scriptInfo -ScriptName $scriptName
             $status = if (Test-Path $scriptPath) { "✅" } else { "❌" }
             
             Write-ColorOutput "  $status $scriptName" "White"
@@ -233,7 +279,7 @@ function Show-ScriptList {
     
     # 统计信息
     $totalScripts = $scripts.Count
-    $existingScripts = ($scripts.Keys | Where-Object { Test-Path "scripts\$_.ps1" }).Count
+$existingScripts = ($scripts.GetEnumerator() | Where-Object { Test-Path (Get-ScriptFilePath -ScriptInfo $_.Value -ScriptName $_.Key) }).Count
     
     Write-ColorOutput "`n📊 统计信息:" "Blue"
     Write-ColorOutput "  总脚本数: $totalScripts" "White"
@@ -258,7 +304,7 @@ function Show-ScriptHelp {
     }
     
     $scriptInfo = $scripts[$Script]
-    $scriptPath = "scripts\$Script.ps1"
+    $scriptPath = Get-ScriptFilePath -ScriptInfo $scriptInfo -ScriptName $Script
     
     Write-ColorOutput "📖 脚本帮助: $Script" "Blue"
     Write-ColorOutput "$('=' * 50)" "Cyan"
@@ -330,7 +376,7 @@ function Invoke-ProjectScript {
         return
     }
     
-    $scriptPath = "scripts\$Script.ps1"
+    $scriptPath = Get-ScriptFilePath -ScriptInfo $scripts[$Script] -ScriptName $Script
     
     if (-not (Test-Path $scriptPath)) {
         Write-ColorOutput "❌ 脚本文件不存在: $scriptPath" "Red"
@@ -383,7 +429,7 @@ function Test-ScriptsStatus {
     $issues = @()
     
     foreach ($scriptName in $scripts.Keys) {
-        $scriptPath = "scripts\$scriptName.ps1"
+        $scriptPath = Get-ScriptFilePath -ScriptInfo $scriptInfo -ScriptName $scriptName
         $scriptInfo = $scripts[$scriptName]
         
         Write-ColorOutput "`n📄 检查脚本: $scriptName" "Cyan"
@@ -479,7 +525,7 @@ function Update-Scripts {
     $scripts = Get-ProjectScripts
     
     foreach ($scriptName in $scripts.Keys) {
-        $scriptPath = "scripts\$scriptName.ps1"
+        $scriptPath = Get-ScriptFilePath -ScriptInfo $scripts[$scriptName] -ScriptName $scriptName
         if (Test-Path $scriptPath) {
             try {
                 # 在 Windows 上检查执行策略
@@ -509,7 +555,7 @@ function Clear-Scripts {
     $cleanedFiles = 0
     
     foreach ($pattern in $tempPatterns) {
-        $files = Get-ChildItem -Path "scripts" -Filter $pattern -File
+        $files = Get-ChildItem -Path "scripts" -Filter $pattern -File -Recurse
         foreach ($file in $files) {
             Remove-Item $file.FullName -Force
             Write-ColorOutput "🗑️ 已删除: $($file.Name)" "Gray"
@@ -525,15 +571,29 @@ function Clear-Scripts {
     
     # 检查孤立脚本
     Write-ColorOutput "`n🔍 检查孤立脚本..." "Cyan"
-    $definedScripts = (Get-ProjectScripts).Keys
-    $actualScripts = Get-ChildItem -Path "scripts" -Filter "*.ps1" | ForEach-Object { $_.BaseName }
+    $scripts = Get-ProjectScripts
+    $definedPaths = @{}
+    foreach ($entry in $scripts.GetEnumerator()) {
+        $relativePath = $entry.Value["Path"]
+        if ([string]::IsNullOrWhiteSpace($relativePath)) {
+            $relativePath = "$($entry.Key).ps1"
+        }
+        $definedPaths[$relativePath.Replace("\", "/")] = $true
+    }
+    $scriptRoot = (Resolve-Path "scripts").Path
+    $actualScripts = Get-ChildItem -Path $scriptRoot -Filter "*.ps1" -Recurse | ForEach-Object {
+        $_.FullName.Substring($scriptRoot.Length + 1).Replace("\", "/")
+    }
+    $ignoredPaths = @(
+        "management/scripts-manager.ps1"
+    )
     
-    $orphanedScripts = $actualScripts | Where-Object { $_ -notin $definedScripts -and $_ -ne "scripts-manager" }
+    $orphanedScripts = $actualScripts | Where-Object { -not $definedPaths.ContainsKey($_) -and $_ -notin $ignoredPaths }
     
     if ($orphanedScripts.Count -gt 0) {
         Write-ColorOutput "⚠️ 发现孤立脚本:" "Yellow"
         foreach ($script in $orphanedScripts) {
-            Write-ColorOutput "  - $script.ps1" "Gray"
+            Write-ColorOutput "  - $script" "Gray"
         }
     } else {
         Write-ColorOutput "✅ 无孤立脚本" "Green"

@@ -5,13 +5,13 @@
 
 .DESCRIPTION
     提供数据库的启动、停止、重置、备份等管理功能
-    支持 PostgreSQL、Redis、InfluxDB 的统一管理
+    支持 PostgreSQL（TimescaleDB）与 Redis 的统一管理
 
 .PARAMETER Action
     操作类型: start, stop, reset, backup, status, logs
 
 .PARAMETER Service
-    指定服务: postgres, redis, influxdb, all (默认)
+    指定服务: postgres, redis, all (默认)
 
 .PARAMETER BackupPath
     备份文件路径 (仅用于 backup 操作)
@@ -41,7 +41,7 @@ param(
     [ValidateSet("start", "stop", "reset", "backup", "status", "logs")]
     [string]$Action,
     
-    [ValidateSet("postgres", "redis", "influxdb", "all")]
+    [ValidateSet("postgres", "redis", "all")]
     [string]$Service = "all",
     
     [string]$BackupPath = "backups"
@@ -127,7 +127,6 @@ function Get-ServiceNames {
     $serviceMap = @{
         "postgres" = @("postgres", "postgres-dev", "inspect-postgres-dev")
         "redis" = @("redis", "redis-dev", "inspect-redis-dev")
-        "influxdb" = @("influxdb", "influxdb-dev", "inspect-influxdb-dev")
     }
     
     if ($Service -eq "all") {
@@ -275,35 +274,6 @@ function Backup-DatabaseServices {
             }
         }
         
-        # 备份 InfluxDB
-        if ($Service -eq "all" -or $Service -eq "influxdb") {
-            Write-ColorOutput "📈 备份 InfluxDB..." "Cyan"
-            $influxBackupDir = Join-Path $BackupPath "influxdb_backup_$timestamp"
-            
-            $containerNames = @("inspect-influxdb-dev", "influxdb-dev", "influxdb")
-            $backupSuccess = $false
-            
-            foreach ($containerName in $containerNames) {
-                try {
-                    $containerExists = docker ps --format "table {{.Names}}" | Select-String $containerName
-                    if ($containerExists) {
-                        New-Item -ItemType Directory -Path $influxBackupDir -Force | Out-Null
-                        Invoke-CommandSafely "docker exec $containerName influx backup /tmp/backup" "创建 InfluxDB 备份"
-                        Invoke-CommandSafely "docker cp $containerName`:/tmp/backup/. `"$influxBackupDir`"" "复制 InfluxDB 备份文件"
-                        $backupSuccess = $true
-                        break
-                    }
-                }
-                catch {
-                    continue
-                }
-            }
-            
-            if (-not $backupSuccess) {
-                Write-ColorOutput "⚠️ InfluxDB 容器未运行或备份失败" "Yellow"
-            }
-        }
-        
         Write-ColorOutput "✅ 数据库备份完成: $BackupPath" "Green"
         
         # 显示备份文件
@@ -330,7 +300,7 @@ function Show-ServiceStatus {
     
     # 显示容器健康状态
     Write-ColorOutput "`n🏥 容器健康状态:" "Blue"
-    $containers = docker ps --format "table {{.Names}}\t{{.Status}}" | Select-String -Pattern "(postgres|redis|influx)"
+    $containers = docker ps --format "table {{.Names}}\t{{.Status}}" | Select-String -Pattern "(postgres|redis)"
     
     if ($containers) {
         foreach ($container in $containers) {
@@ -367,10 +337,6 @@ function Show-ServiceInfo {
     Write-ColorOutput "    - 数据库: inspect_system_dev" "Gray"
     Write-ColorOutput "  🔴 Redis: localhost:6380" "White"
     Write-ColorOutput "    - 密码: dev_redis_2024" "Gray"
-    Write-ColorOutput "  📈 InfluxDB: http://localhost:8087" "White"
-    Write-ColorOutput "    - 用户名: dev_admin" "Gray"
-    Write-ColorOutput "    - 密码: dev_admin_2024" "Gray"
-    Write-ColorOutput "    - 组织: inspect_dev" "Gray"
     Write-ColorOutput "  🔧 pgAdmin: http://localhost:5050" "White"
     Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"
 }

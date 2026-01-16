@@ -85,7 +85,7 @@ export const ReportsView: React.FC = () => {
 
   return (
     <AppLayout title="报表分析">
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4 h-full">
         {/* 快速统计卡片 */}
         {!statsLoading && stats && (
           <div className="flex gap-3">
@@ -117,7 +117,7 @@ export const ReportsView: React.FC = () => {
         )}
 
         {/* 标签导航 */}
-        <Card>
+        <Card className="flex-1 flex flex-col overflow-hidden">
           <CardHeader className="pb-0">
           <div className="flex flex-col sm:flex-row gap-3 justify-between">
             {/* 标签按钮 */}
@@ -188,7 +188,7 @@ export const ReportsView: React.FC = () => {
           </div>
         </CardHeader>
 
-        <CardContent className="pt-4">
+        <CardContent className="flex-1 flex flex-col overflow-hidden pt-4">
           {/* 标签内容区域 */}
           <motion.div
             key={activeTab}
@@ -196,6 +196,7 @@ export const ReportsView: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.2 }}
+            className="flex-1 overflow-auto"
           >
             {renderTabContent()}
           </motion.div>

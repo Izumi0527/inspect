@@ -1,0 +1,11 @@
+{
+  "report_name": "通用报表示例",
+  "range": "2025-12-01 ~ 2025-12-31",
+  "generated_by": "report_exporter",
+  "summary": {
+    "total": 120,
+    "success": 110,
+    "failed": 10
+  },
+  "notes": "该数据用于导出基线验证"
+}

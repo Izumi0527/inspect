@@ -84,9 +84,25 @@ export const LineChartComponent = <TData extends ChartDatum>({
   className,
   formatter
 }: LineChartProps<TData>) => {
-  const width = 800 // 将在 ResponsiveContainer 中调整
+  // 容器引用和宽度状态 - 响应式宽度
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [width, setWidth] = React.useState(800)
+
+  // 监听容器宽度变化
+  React.useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setWidth(containerRef.current.clientWidth)
+      }
+    }
+
+    updateWidth()
+    window.addEventListener('resize', updateWidth)
+    return () => window.removeEventListener('resize', updateWidth)
+  }, [])
+
   const margin = { top: 20, right: 30, bottom: 40, left: 50 }
-  const innerWidth = width - margin.left - margin.right
+  const innerWidth = Math.max(width - margin.left - margin.right, 100)
   const innerHeight = height - margin.top - margin.bottom
 
   // 深色模式检测
@@ -138,8 +154,8 @@ export const LineChartComponent = <TData extends ChartDatum>({
 
   return (
     <ChartContainer title={title} subtitle={subtitle} className={className}>
-      <div style={{ position: 'relative', width: '100%', height }}>
-        <svg width="100%" height={height}>
+      <div ref={containerRef} style={{ position: 'relative', width: '100%', height }}>
+        <svg width={width} height={height} style={{ display: 'block' }}>
           <Group left={margin.left} top={margin.top}>
             <GridRows scale={yScale} width={innerWidth} stroke={gridColor} strokeDasharray="3,3" />
             <GridColumns scale={xScale} height={innerHeight} stroke={gridColor} strokeDasharray="3,3" />
@@ -299,9 +315,25 @@ export const BarChartComponent = <TData extends ChartDatum>({
   className,
   formatter
 }: BarChartProps<TData>) => {
-  const width = 800
+  // 容器引用和宽度状态 - 响应式宽度
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [width, setWidth] = React.useState(800)
+
+  // 监听容器宽度变化
+  React.useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setWidth(containerRef.current.clientWidth)
+      }
+    }
+
+    updateWidth()
+    window.addEventListener('resize', updateWidth)
+    return () => window.removeEventListener('resize', updateWidth)
+  }, [])
+
   const margin = { top: 20, right: 30, bottom: 40, left: 50 }
-  const innerWidth = width - margin.left - margin.right
+  const innerWidth = Math.max(width - margin.left - margin.right, 100)
   const innerHeight = height - margin.top - margin.bottom
 
   // 深色模式检测
@@ -337,8 +369,8 @@ export const BarChartComponent = <TData extends ChartDatum>({
 
   return (
     <ChartContainer title={title} subtitle={subtitle} className={className}>
-      <div style={{ position: 'relative', width: '100%', height }}>
-        <svg width="100%" height={height}>
+      <div ref={containerRef} style={{ position: 'relative', width: '100%', height }}>
+        <svg width={width} height={height} style={{ display: 'block' }}>
           <Group left={margin.left} top={margin.top}>
             <GridRows scale={yScale} width={innerWidth} stroke={gridColor} strokeDasharray="3,3" />
 

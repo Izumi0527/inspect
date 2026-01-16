@@ -14,18 +14,19 @@ scripts/
 ├── development/        # 开发服务脚本
 │   ├── dev-start.ps1          # 一键启动开发环境
 │   ├── start-frontend.ps1     # 启动前端服务
-│   └── start-backend.ps1      # 启动后端服务
+│   └── start-backend-go.ps1   # 启动后端服务（Go）
 │
 ├── database/          # 数据库管理脚本
 │   ├── db-manage.ps1          # 数据库服务管理
-│   ├── db-init-migrate.ps1    # 数据库初始化和迁移
+│   ├── db-init-migrate-go.ps1    # 数据库初始化和迁移
 │   ├── db-health-check.ps1    # 数据库健康检查
 │   └── db-query.ps1           # 数据库查询工具
 │
 ├── testing/           # 测试工具脚本
 │   ├── run-tests.ps1          # 统一测试运行器
 │   ├── run-all-tests.ps1      # 运行所有测试
-│   └── quality-check.ps1      # 代码质量检查
+│   ├── quality-check.ps1      # 代码质量检查
+│   └── device-probe-verify.ps1 # 设备探测联调验证
 │
 ├── maintenance/       # 维护工具脚本
 │   ├── clean-cache.ps1        # 清理项目缓存
@@ -37,6 +38,8 @@ scripts/
 │
 └── README.md          # 本说明文件
 ```
+
+> Python 后端相关脚本已迁移至 `legacy/scripts/`，仅保留历史参考。
 
 ## 🚀 快速开始
 
@@ -61,7 +64,7 @@ scripts/
 .\scripts\development\start-frontend.ps1
 
 # 仅启动后端服务
-.\scripts\development\start-backend.ps1
+.\scripts\development\start-backend-go.ps1
 ```
 
 ### 3. 数据库管理
@@ -70,7 +73,7 @@ scripts/
 .\scripts\database\db-manage.ps1 start
 
 # 初始化数据库
-.\scripts\database\db-init-migrate.ps1 -Init
+.\scripts\database\db-init-migrate-go.ps1
 
 # 健康检查
 .\scripts\database\db-health-check.ps1
@@ -96,16 +99,17 @@ scripts/
 ### Setup (环境设置)
 - **setup-dev-env.ps1**: 一键设置完整开发环境，包括前端、后端和数据库
 - **frontend-setup.ps1**: 专门用于前端环境设置，包括 Node.js 依赖安装
-- **backend-setup.ps1**: 专门用于后端环境设置，包括 Python 虚拟环境和依赖
+- **backend-setup.ps1**: 专门用于后端环境设置，包括 Go 依赖与迁移
 
 ### Development (开发服务)
 - **dev-start.ps1**: 一键启动所有开发服务，包括数据库、后端和前端
 - **start-frontend.ps1**: 启动前端开发服务器
-- **start-backend.ps1**: 启动后端 API 服务器
+- **start-backend-go.ps1**: 启动后端 API 服务器（Go）
+- Python 旧版启动脚本已迁移至 `legacy/scripts/development/start-backend.ps1`（仅保留参考）
 
 ### Database (数据库管理)
 - **db-manage.ps1**: 数据库服务的启动、停止、重启等管理操作
-- **db-init-migrate.ps1**: 数据库初始化、迁移、备份等操作
+- **db-init-migrate-go.ps1**: 数据库初始化、迁移、备份等操作
 - **db-health-check.ps1**: 检查数据库服务健康状态
 - **db-query.ps1**: 数据库查询和管理工具
 
@@ -113,6 +117,7 @@ scripts/
 - **run-tests.ps1**: 统一的测试运行器，支持前端、后端、单元测试等
 - **run-all-tests.ps1**: 运行完整的测试套件
 - **quality-check.ps1**: 代码质量检查，包括格式化、语法检查等
+- **device-probe-verify.ps1**: 设备探测联调验证（ICMP/SNMP）
 
 ### Maintenance (维护工具)
 - **clean-cache.ps1**: 清理项目中的各种缓存文件
@@ -138,3 +143,6 @@ scripts/
 ```
 
 如需添加新脚本，请按照现有分类放置，并更新 `scripts-manager.ps1` 中的配置。
+
+
+

@@ -1304,27 +1304,35 @@ const transformTrendMetric = (input: unknown, fallbackName: string): TrendMetric
 
 const transformPredictionData = (input: unknown): PredictionData => {
   const data = toRecord(input)
+  const timeframe = toStringSafe(data.timeframe ?? data['prediction_period'] ?? data['predictionPeriod'])
+  const confidence = toNumberSafe(data.confidence ?? data['confidence_level'] ?? data['confidenceLevel'])
   return {
     metric: toStringSafe(data.metric),
     currentValue: toNumberSafe(data.currentValue ?? data['current_value']),
     predictedValue: toNumberSafe(data.predictedValue ?? data['predicted_value']),
-    confidence: toNumberSafe(data.confidence),
-    timeframe: toStringSafe(data.timeframe),
+    confidence,
+    timeframe,
     recommendation: toStringSafe(data.recommendation),
+    predictionPeriod: timeframe,
+    confidenceLevel: confidence,
   }
 }
 
 const transformTrendAlertData = (input: unknown): TrendAlertData => {
   const data = toRecord(input)
+  const title = toStringSafe(data.title)
+  const description = toStringSafe(data.description)
+  const message = toStringSafe(data.message, title || description)
   return {
     id: toStringSafe(data.id, generateTempId()),
     type: toEnumValue(data.type, TREND_ALERT_TYPES, 'anomaly'),
     severity: toEnumValue(data.severity, TREND_ALERT_SEVERITIES, 'warning'),
-    title: toStringSafe(data.title),
-    description: toStringSafe(data.description),
+    title: title || message,
+    description: description || message,
     affectedMetrics: toStringArray(data.affectedMetrics ?? data['affected_metrics']),
     detectedAt: toStringSafe(data.detectedAt ?? data['detected_at']),
     status: toEnumValue(data.status, TREND_ALERT_STATUS, 'active'),
+    message,
   }
 }
 
@@ -1805,7 +1813,6 @@ export const reportStatsApi = {
   getUsageAnalysis,
   getPerformanceMetrics
 }
-
 
 
 

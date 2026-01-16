@@ -1,5 +1,5 @@
 ﻿# 企业级网络设备巡检系统 - 数据库健康检查脚本 (PowerShell 版本)
-# 用于检查PostgreSQL、Redis、InfluxDB三种数据库的健康状态
+# 用于检查 PostgreSQL（TimescaleDB）与 Redis 数据库的健康状态
 
 param(
     [switch]$Help
@@ -25,13 +25,6 @@ $Config = @{
         Container = "inspect-redis-dev"
         Password = "dev_redis_2024"
         Port = 6380
-    }
-    InfluxDB = @{
-        Container = "inspect-influxdb-dev"
-        Token = "dev_token_2024"
-        URL = "http://localhost:8087"
-        Port = 8087
-        Bucket = "device_metrics_dev"
     }
 }
 
@@ -166,6 +159,21 @@ function Test-PostgreSQL {
             $version = ($versionResult.Output | Select-Object -First 1).Trim()
             Write-LogInfo "PostgreSQL 版本: $version"
         }
+
+        # 检查 TimescaleDB 扩展
+        $extensionResult = Invoke-SafeCommand -Command "docker" -Arguments @(
+            "exec", $pgConfig.Container,
+            "psql", "-U", $pgConfig.User, "-d", $pgConfig.Database,
+            "-t", "-c", "SELECT extname FROM pg_extension WHERE extname = 'timescaledb';"
+        ) -SuppressOutput
+
+        if ($extensionResult.Success -and (($extensionResult.Output -join " ") -match "timescaledb")) {
+            Write-LogSuccess "TimescaleDB 扩展已启用"
+            Record-Check -Success $true
+        } else {
+            Write-LogWarning "TimescaleDB 扩展未启用或无法检测"
+            Record-Check -Success $false
+        }
         
         # 检查数据库大小
         $sizeQuery = "SELECT pg_size_pretty(pg_database_size('$($pgConfig.Database)'));"
@@ -276,69 +284,6 @@ function Test-Redis {
     }
 }
 
-# InfluxDB 健康检查
-function Test-InfluxDB {
-    Write-LogInfo "检查 InfluxDB 时序数据库..."
-    
-    $influxConfig = $Config.InfluxDB
-    
-    # 检查容器是否运行
-    if (-not (Test-DockerContainer -ContainerName $influxConfig.Container)) {
-        Write-LogError "InfluxDB 容器 $($influxConfig.Container) 未运行"
-        Record-Check -Success $false
-        return
-    }
-    
-    # 检查 InfluxDB 健康状态
-    try {
-        $headers = @{ "Authorization" = "Token $($influxConfig.Token)" }
-        $healthResponse = Invoke-RestMethod -Uri "$($influxConfig.URL)/health" -Headers $headers -Method Get -TimeoutSec 10
-        
-        if ($healthResponse.status -eq "pass") {
-            Write-LogSuccess "InfluxDB 健康检查通过"
-            
-            if ($healthResponse.version) {
-                Write-LogInfo "InfluxDB 版本: $($healthResponse.version)"
-            }
-            
-            Record-Check -Success $true
-        } else {
-            Write-LogError "InfluxDB 健康检查失败，状态: $($healthResponse.status)"
-            Record-Check -Success $false
-        }
-    } catch {
-        Write-LogError "InfluxDB 健康检查API无响应: $($_.Exception.Message)"
-        Record-Check -Success $false
-    }
-    
-    # 检查端口连通性
-    if (Test-PortConnectivity -Port $influxConfig.Port) {
-        Write-LogSuccess "InfluxDB 端口 $($influxConfig.Port) 可访问"
-        Record-Check -Success $true
-    } else {
-        Write-LogError "InfluxDB 端口 $($influxConfig.Port) 不可访问"
-        Record-Check -Success $false
-    }
-    
-    # 检查存储桶
-    try {
-        $headers = @{ "Authorization" = "Token $($influxConfig.Token)" }
-        $bucketsResponse = Invoke-RestMethod -Uri "$($influxConfig.URL)/api/v2/buckets" -Headers $headers -Method Get -TimeoutSec 10
-        
-        $bucketExists = $bucketsResponse.buckets | Where-Object { $_.name -eq $influxConfig.Bucket }
-        if ($bucketExists) {
-            Write-LogSuccess "InfluxDB 存储桶 '$($influxConfig.Bucket)' 存在"
-            Record-Check -Success $true
-        } else {
-            Write-LogWarning "InfluxDB 存储桶 '$($influxConfig.Bucket)' 不存在或无法访问"
-            Record-Check -Success $false
-        }
-    } catch {
-        Write-LogWarning "InfluxDB 存储桶 '$($influxConfig.Bucket)' 不存在或无法访问: $($_.Exception.Message)"
-        Record-Check -Success $false
-    }
-}
-
 # 检查必要工具
 function Test-Dependencies {
     Write-LogInfo "检查必要工具..."
@@ -387,8 +332,8 @@ function Show-Help {
 
 功能:
     - 检查 PostgreSQL 数据库连接和状态
-    - 检查 Redis 缓存数据库连接和状态  
-    - 检查 InfluxDB 时序数据库连接和状态
+    - 检查 TimescaleDB 扩展启用情况
+    - 检查 Redis 缓存数据库连接和状态
     - 检查各服务的端口连通性
     - 提供详细的健康状态报告
 
@@ -419,8 +364,6 @@ function Main {
     Test-PostgreSQL
     Write-Host ""
     Test-Redis  
-    Write-Host ""
-    Test-InfluxDB
     
     Show-Summary
 }

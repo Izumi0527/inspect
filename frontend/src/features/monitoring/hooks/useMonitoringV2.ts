@@ -37,7 +37,7 @@ interface UseMonitoringV2Options {
 
   /**
    * 轮询间隔（毫秒）
-   * @default 60000 (60秒)
+   * @default 120000 (2分钟)
    */
   refetchInterval?: number
 
@@ -53,7 +53,7 @@ export function useMonitoringV2(
 ): UseQueryResult<Partial<MonitoringDataV2>, Error> {
   const {
     timeRange = '24h',
-    refetchInterval = 60000, // 默认 60 秒
+    refetchInterval = 120000, // 默认 2 分钟 (120秒) - 比后端采集快，确保及时获取新数据
     enablePolling = true,
   } = options
 

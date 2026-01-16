@@ -68,7 +68,7 @@ export const DashboardView: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background">
+    <div className="h-screen bg-gray-50 dark:bg-background overflow-hidden">
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -77,7 +77,7 @@ export const DashboardView: React.FC = () => {
       />
 
       {/* Main Content */}
-      <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
+      <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300 h-full flex flex-col`}>
         {/* Header */}
         <DashboardHeader
           alertCount={alertAnalysis.high}
@@ -114,8 +114,8 @@ export const DashboardView: React.FC = () => {
         )}
 
         {/* Main Content */}
-        <main className="p-6">
-          <div className="flex flex-col space-y-8 min-h-[calc(100vh-112px)] pb-6">
+        <main className="p-4 flex-1 overflow-auto">
+          <div className="flex flex-col gap-4 h-full">
             {/* Stats Grid */}
             <StatsGrid
               stats={data?.stats || []}
@@ -123,7 +123,7 @@ export const DashboardView: React.FC = () => {
             />
 
             {/* Secondary Cards - Horizontal Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Recent Alerts */}
               <RecentAlertsCard
                 alerts={data?.recentAlerts || []}
@@ -137,10 +137,12 @@ export const DashboardView: React.FC = () => {
             </div>
 
             {/* Main Content Card - Expands to bottom */}
-            <NetworkOverviewCard
-              overview={data?.networkOverview || []}
-              loading={loading}
-            />
+            <div className="flex-1 flex flex-col">
+              <NetworkOverviewCard
+                overview={data?.networkOverview || []}
+                loading={loading}
+              />
+            </div>
           </div>
 
           {/* Loading overlay for refresh */}

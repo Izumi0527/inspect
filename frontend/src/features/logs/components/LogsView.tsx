@@ -162,20 +162,18 @@ export const LogsView: React.FC = () => {
 
   return (
     <AppLayout title="日志中心">
-      <div className="flex flex-col space-y-4 min-h-[calc(100vh-112px)] pb-4">
+      <div className="flex flex-col gap-4 h-full">
         {/* 日志统计 */}
-        <div>
-          {statsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <SkeletonCard lines={2} />
-              <SkeletonCard lines={2} />
-              <SkeletonCard lines={2} />
-              <SkeletonCard lines={2} />
-            </div>
-          ) : stats ? (
-            <LogStatsGrid stats={stats} />
-          ) : null}
-        </div>
+        {statsLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+          </div>
+        ) : stats ? (
+          <LogStatsGrid stats={stats} />
+        ) : null}
 
         {/* 主内容卡片 */}
         <Card className="flex-1 flex flex-col overflow-hidden">

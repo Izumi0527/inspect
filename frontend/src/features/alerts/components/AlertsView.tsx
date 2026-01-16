@@ -174,20 +174,18 @@ export const AlertsView: React.FC = () => {
 
   return (
     <AppLayout title="告警中心">
-      <div className="flex flex-col space-y-4 min-h-[calc(100vh-112px)] pb-4">
+      <div className="flex flex-col gap-4 h-full">
         {/* Alert Statistics */}
-        <div>
-          {statsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-              <SkeletonCard lines={2} />
-              <SkeletonCard lines={2} />
-              <SkeletonCard lines={2} />
-              <SkeletonCard lines={2} />
-            </div>
-          ) : stats ? (
-            <AlertStatsGrid stats={stats} />
-          ) : null}
-        </div>
+        {statsLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+          </div>
+        ) : stats ? (
+          <AlertStatsGrid stats={stats} />
+        ) : null}
 
         {/* Main Card Container */}
         <Card className="flex-1 flex flex-col overflow-hidden">
@@ -232,7 +230,7 @@ export const AlertsView: React.FC = () => {
             </div>
           </CardHeader>
 
-          <CardContent className="flex-1 flex flex-col overflow-hidden">
+          <CardContent className="flex flex-col overflow-hidden">
             {/* Filters and Search - 不使用独立Card */}
             <AlertFiltersBar
               filters={filters}
@@ -250,7 +248,7 @@ export const AlertsView: React.FC = () => {
             />
 
             {/* Alerts List - 不使用独立Card */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="overflow-y-auto">
               {loading ? (
                 <SkeletonList count={pageSize} itemHeight="h-32" spacing="space-y-4" />
               ) : (

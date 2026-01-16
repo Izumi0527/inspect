@@ -1,0 +1,123 @@
+{
+  "inspection_name": "核心网络例行巡检",
+  "inspection_id": "INSP-20260101-0001",
+  "inspection_time": "2026-01-01 00:00:00",
+  "status": "completed",
+  "execution_duration": 180,
+  "summary_stats": {
+    "total_checks": 8,
+    "passed_checks": 5,
+    "failed_checks": 1,
+    "warning_checks": 1,
+    "error_checks": 1,
+    "pass_rate": 62.5
+  },
+  "devices": [
+    {
+      "device_name": "核心交换机-01",
+      "ip_address": "10.0.0.1",
+      "device_type": "switch",
+      "vendor": "H3C",
+      "model": "S6520",
+      "software_version": "7.1.070",
+      "uptime": "23 days",
+      "last_inspection": "2025-12-31 23:50:00",
+      "inspection_status": "completed",
+      "pass_rate": 80.0,
+      "issue_count": 1,
+      "performance_metrics": {
+        "cpu_usage": 23.4,
+        "memory_usage": 61.2,
+        "active_interfaces": 22,
+        "total_interfaces": 24
+      },
+      "check_results": [
+        {
+          "check_item_name": "CPU使用率",
+          "check_item_type": "snmp",
+          "status": "pass",
+          "expected_value": "< 85%",
+          "actual_value": "23.4%",
+          "execution_time": 120
+        },
+        {
+          "check_item_name": "内存使用率",
+          "check_item_type": "snmp",
+          "status": "warning",
+          "expected_value": "< 75%",
+          "actual_value": "61.2%",
+          "execution_time": 98
+        },
+        {
+          "check_item_name": "系统版本",
+          "check_item_type": "ssh",
+          "status": "pass",
+          "expected_value": "7.1.x",
+          "actual_value": "7.1.070",
+          "execution_time": 210
+        },
+        {
+          "check_item_name": "接口错误率",
+          "check_item_type": "snmp",
+          "status": "fail",
+          "expected_value": "< 0.1%",
+          "actual_value": "0.5%",
+          "execution_time": 180
+        }
+      ]
+    },
+    {
+      "device_name": "边界路由器-01",
+      "ip_address": "10.0.0.254",
+      "device_type": "router",
+      "vendor": "Cisco",
+      "model": "ISR4451",
+      "software_version": "16.9.5",
+      "uptime": "102 days",
+      "last_inspection": "2025-12-31 23:45:00",
+      "inspection_status": "warning",
+      "pass_rate": 45.0,
+      "issue_count": 2,
+      "performance_metrics": {
+        "cpu_usage": 78.9,
+        "memory_usage": 72.3,
+        "active_interfaces": 6,
+        "total_interfaces": 8
+      },
+      "check_results": [
+        {
+          "check_item_name": "CPU使用率",
+          "check_item_type": "snmp",
+          "status": "warning",
+          "expected_value": "< 85%",
+          "actual_value": "78.9%",
+          "execution_time": 130
+        },
+        {
+          "check_item_name": "内存使用率",
+          "check_item_type": "snmp",
+          "status": "error",
+          "expected_value": "< 75%",
+          "actual_value": "72.3%",
+          "execution_time": 112
+        },
+        {
+          "check_item_name": "路由表状态",
+          "check_item_type": "ssh",
+          "status": "pass",
+          "expected_value": "稳定",
+          "actual_value": "稳定",
+          "execution_time": 260
+        },
+        {
+          "check_item_name": "丢包率",
+          "check_item_type": "snmp",
+          "status": "pass",
+          "expected_value": "< 0.1%",
+          "actual_value": "0.02%",
+          "execution_time": 145
+        }
+      ]
+    }
+  ]
+}

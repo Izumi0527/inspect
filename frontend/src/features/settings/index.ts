@@ -58,10 +58,6 @@ export {
   useTestNotificationConfig,
   useSecuritySettings,
   useUpdateSecuritySettings,
-  useLDAPConfig,
-  useTestLDAPConnection,
-  useUpdateLDAPConfig,
-  useSyncLDAPUsers,
   useSettingsFilters,
   useSettingsEditor
 } from './hooks'
@@ -83,7 +79,6 @@ export type {
   DingtalkConfig,
   WechatConfig,
   SecurityConfig,
-  LDAPConfig,
   DatabaseConfig,
   CacheConfig,
   SystemInfo,

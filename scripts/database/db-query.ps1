@@ -1,7 +1,5 @@
 ﻿# 企业级网络设备巡检系统 - PostgreSQL数据库查询脚本
 # 用于查询Docker容器中的PostgreSQL数据库的表、列和数据
-# Author: Claude Code Assistant
-# Version: 1.0.0
 
 param(
     [string]$Table = "",

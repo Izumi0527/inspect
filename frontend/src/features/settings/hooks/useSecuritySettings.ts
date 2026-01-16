@@ -48,8 +48,6 @@ export function useSecuritySettings() {
     mfaRequired: false,
     allowOAuthLogin: false,
     oauthProviders: [],
-    allowLdapLogin: false,
-    ldapServerUrl: '',
     ipWhitelistEnabled: false,
     ipWhitelist: [],
   })

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { Group } from '@visx/group'
 import { AreaClosed, LinePath } from '@visx/shape'
 import { AxisBottom, AxisLeft } from '@visx/axis'
@@ -29,6 +29,23 @@ export function NetworkTrafficStackedAreaChart({
   height = 300,
   className,
 }: NetworkTrafficStackedAreaChartProps) {
+  // 容器引用和宽度状态
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(800)
+
+  // 监听容器宽度变化
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setWidth(containerRef.current.clientWidth)
+      }
+    }
+
+    updateWidth()
+    window.addEventListener('resize', updateWidth)
+    return () => window.removeEventListener('resize', updateWidth)
+  }, [])
+
   // 深色模式检测
   const isDark =
     typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -37,9 +54,8 @@ export function NetworkTrafficStackedAreaChart({
   const tooltipBg = isDark ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)'
   const tooltipBorder = isDark ? 'rgba(55, 65, 81, 0.5)' : 'rgba(229, 231, 235, 0.5)'
 
-  const width = 800
   const margin = { top: 20, right: 30, bottom: 50, left: 70 }
-  const innerWidth = width - margin.left - margin.right
+  const innerWidth = Math.max(width - margin.left - margin.right, 100)
   const innerHeight = height - margin.top - margin.bottom
 
   const { showTooltip, hideTooltip, tooltipData, tooltipLeft = 0, tooltipTop = 0 } = useTooltip<{
@@ -120,8 +136,8 @@ export function NetworkTrafficStackedAreaChart({
 
   return (
     <ChartContainer className={className}>
-      <div style={{ position: 'relative', width: '100%', height }}>
-        <svg width="100%" height={height}>
+      <div ref={containerRef} style={{ position: 'relative', width: '100%', height }}>
+        <svg width={width} height={height} style={{ display: 'block' }}>
           <defs>
             {/* 入站流量渐变 - 更鲜艳的蓝色 */}
             <LinearGradient

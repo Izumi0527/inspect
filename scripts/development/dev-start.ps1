@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env pwsh
+#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     开发环境快速启动脚本
@@ -119,9 +119,16 @@ function Test-Prerequisites {
     Write-ColorOutput "🔍 检查前置条件..." "Blue"
     
     $tools = @(
-        @{ Command = "docker"; Name = "Docker" },
-        @{ Command = "uv"; Name = "uv 包管理器" }
+        @{ Command = "docker"; Name = "Docker" }
     )
+
+    if ($Services -in @("backend", "all")) {
+        $tools += @{ Command = "go"; Name = "Go 运行时" }
+    }
+
+    if ($Services -in @("frontend", "all")) {
+        $tools += @{ Command = "pnpm"; Name = "pnpm 包管理器" }
+    }
     
     $allOk = $true
     foreach ($tool in $tools) {
@@ -176,56 +183,27 @@ function Start-DatabaseServices {
 
 # 启动后端服务
 function Start-BackendService {
-    Write-ColorOutput "`n🐍 启动后端服务..." "Blue"
+    Write-ColorOutput "`n?? 启动后端服务..." "Blue"
     
-    $backendDir = "backend"
+    $backendDir = "backend-go"
     
     # 检查后端目录
     if (-not (Test-Path $backendDir)) {
-        Write-ColorOutput "⚠️ 后端目录不存在，跳过后端服务启动" "Yellow"
+        Write-ColorOutput "?? 后端目录不存在，跳过后端服务启动" "Yellow"
         return
-    }
-    
-    # 检查虚拟环境
-    if (-not (Test-Path "$backendDir\.venv")) {
-        Write-ColorOutput "⚠️ 虚拟环境不存在，请先运行环境设置脚本" "Yellow"
-        Write-ColorOutput "运行: .\scripts\setup-dev-env.ps1" "Cyan"
-        return
-    }
-    
-    # 检查环境配置文件
-    if (-not (Test-Path "$backendDir\.env")) {
-        Write-ColorOutput "⚠️ 环境配置文件不存在，创建默认配置..." "Yellow"
-        
-        $envContent = @"
-DATABASE_URL=postgresql+asyncpg://inspect_dev:dev_password_2024@localhost:5433/inspect_system_dev
-REDIS_URL=redis://:dev_redis_2024@localhost:6380/0
-INFLUXDB_URL=http://localhost:8087
-INFLUXDB_TOKEN=dev_token_2024
-INFLUXDB_ORG=inspect_dev
-INFLUXDB_BUCKET=device_metrics_dev
-SECRET_KEY=dev_secret_key_2024_very_long_and_secure
-ENVIRONMENT=development
-DEBUG=true
-LOG_LEVEL=debug
-PYTHONDONTWRITEBYTECODE=1
-PYTHONUNBUFFERED=1
-"@
-        $envContent | Out-File -FilePath "$backendDir\.env" -Encoding UTF8
-        Write-ColorOutput "✅ 已创建默认环境配置文件" "Green"
     }
     
     # 启动后端开发服务器
-    Write-ColorOutput "🚀 启动后端开发服务器..." "Cyan"
+    Write-ColorOutput "?? 启动后端开发服务器..." "Cyan"
     Write-ColorOutput "访问地址: http://localhost:8000" "White"
-    Write-ColorOutput "API 文档: http://localhost:8000/docs" "White"
+    Write-ColorOutput "API 说明: docs/api/openapi.json" "White"
     Write-ColorOutput "按 Ctrl+C 停止服务" "Gray"
     
     # 在新窗口中启动后端服务
-    $backendCommand = "cd $backendDir; uv run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug"
+    $backendCommand = "& `"$PSScriptRoot\start-backend-go.ps1`" -Port 8000"
     Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", $backendCommand
     
-    Write-ColorOutput "✅ 后端服务已在新窗口中启动" "Green"
+    Write-ColorOutput "? 后端服务已在新窗口中启动" "Green"
 }
 
 # 启动前端服务
@@ -283,8 +261,7 @@ function Test-ServicesHealth {
     # 检查数据库服务
     $dbServices = @(
         @{ Name = "PostgreSQL"; Port = 5433; Host = "localhost" },
-        @{ Name = "Redis"; Port = 6380; Host = "localhost" },
-        @{ Name = "InfluxDB"; Port = 8087; Host = "localhost" }
+        @{ Name = "Redis"; Port = 6380; Host = "localhost" }
     )
     
     foreach ($service in $dbServices) {
@@ -332,8 +309,8 @@ function Show-ServiceInfo {
     Write-ColorOutput "`n🌐 Web 服务:" "Blue"
     Write-ColorOutput "  🎨 前端应用: http://localhost:3000" "White"
     Write-ColorOutput "  🐍 后端 API: http://localhost:8000" "White"
-    Write-ColorOutput "  📚 API 文档: http://localhost:8000/docs" "White"
-    Write-ColorOutput "  📊 API 调试: http://localhost:8000/redoc" "White"
+    Write-ColorOutput "  ?? API 说明: docs/api/openapi.json" "White"
+    Write-ColorOutput "  ?? WS 约定: docs/api/websocket-contract.md" "White"
     
     Write-ColorOutput "`n🗄️ 数据库服务:" "Blue"
     Write-ColorOutput "  🐘 PostgreSQL: localhost:5433" "White"
@@ -342,9 +319,6 @@ function Show-ServiceInfo {
     Write-ColorOutput "    - 密码: dev_password_2024" "Gray"
     Write-ColorOutput "  🔴 Redis: localhost:6380" "White"
     Write-ColorOutput "    - 密码: dev_redis_2024" "Gray"
-    Write-ColorOutput "  📈 InfluxDB: http://localhost:8087" "White"
-    Write-ColorOutput "    - 用户名: dev_admin" "Gray"
-    Write-ColorOutput "    - 密码: dev_admin_2024" "Gray"
     
     Write-ColorOutput "`n🔧 管理工具:" "Blue"
     Write-ColorOutput "  🔧 pgAdmin: http://localhost:5050" "White"
@@ -411,3 +385,5 @@ function Main {
 
 # 执行主函数
 Main
+
+

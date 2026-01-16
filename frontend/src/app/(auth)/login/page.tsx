@@ -102,7 +102,7 @@ function LoginPage() {
                 用户名：<code className="bg-blue-100 px-2 py-1 rounded text-blue-800 font-mono">admin</code>
               </p>
               <p className="text-sm text-blue-700">
-                密码：<code className="bg-blue-100 px-2 py-1 rounded text-blue-800 font-mono">Admin123!</code>
+                密码：<code className="bg-blue-100 px-2 py-1 rounded text-blue-800 font-mono">admin123</code>
               </p>
               <p className="text-xs text-blue-600 mt-2">
                 点击下方按钮可自动填充测试账号
@@ -118,7 +118,7 @@ function LoginPage() {
                     shouldDirty: true,     // 标记为已修改
                     shouldTouch: true      // 标记为已触摸
                   });
-                  setValue('password', 'Admin123!', {
+                  setValue('password', 'admin123', {
                     shouldValidate: true,
                     shouldDirty: true,
                     shouldTouch: true

@@ -2,8 +2,6 @@
 # 生产环境专用配置，包含安全加固、性能优化和监控
 # 使用方式: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
-version: '3.8'
-
 services:
   # ===== 数据库服务生产配置 =====
   postgres:
@@ -46,68 +44,46 @@ services:
           memory: 256M
           cpus: '0.25'
 
-  influxdb:
-    container_name: inspect-influxdb-prod
-    environment:
-      DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_ADMIN_USER:-admin}
-      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_ADMIN_PASSWORD}
-      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG:-inspect-org}
-      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET:-device-metrics}
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN}
-    volumes:
-      - influxdb_data:/var/lib/influxdb2
-      - ./backups/influxdb:/backups
-    healthcheck:
-      test: ["CMD", "curl", "-f", "-H", "Authorization: Token ${INFLUXDB_TOKEN}", "http://localhost:8086/health"]
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '0.5'
-        reservations:
-          memory: 512M
-          cpus: '0.25'
-
-  # ===== 应用服务生产配置 =====
+  # ===== 应用服务生产配置 (Go) =====
   backend:
     build:
-      context: .
+      context: ./backend-go
       dockerfile: Dockerfile
-      target: production
+      target: release
     container_name: inspect-backend-prod
     environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8000
+
       # 数据库连接
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-inspect_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-inspect_system}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-inspect_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-inspect_system}
+      DATABASE_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DATABASE_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+      DATABASE_POOL_RECYCLE: ${DB_POOL_RECYCLE:-3600}
+      DB_AUTO_MIGRATE: ${DB_AUTO_MIGRATE:-true}
+      TIMESCALE_ENABLED: ${TIMESCALE_ENABLED:-true}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      INFLUXDB_URL: http://influxdb:8086
-      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
-      INFLUXDB_ORG: ${INFLUXDB_ORG:-inspect-org}
-      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-device-metrics}
-      
+
       # 应用安全配置
       SECRET_KEY: ${SECRET_KEY}
       ENVIRONMENT: production
       DEBUG: "false"
       LOG_LEVEL: info
-      
-      # 性能配置
-      WORKERS: ${BACKEND_WORKERS:-4}
-      MAX_CONNECTIONS: ${MAX_DB_CONNECTIONS:-20}
-      
+      LOG_FILE: logs/backend-go/app.log
+      REPORT_OUTPUT_DIR: data/reports/monitoring
+      REPORTS_OUTPUT_DIR: data/reports
+
       # 安全配置
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
       CORS_ORIGINS: ${CORS_ORIGINS:-https://yourdomain.com}
     volumes:
       - ./logs:/app/logs
-      - ./uploads:/app/uploads
+      - ./data:/app/data
       - ./backups:/app/backups
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      influxdb:
         condition: service_healthy
     networks:
       - inspect_network

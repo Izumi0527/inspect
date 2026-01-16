@@ -29,8 +29,6 @@ export interface AuthenticationConfig {
   mfaRequired: boolean // 是否强制所有用户使用MFA
   allowOAuthLogin: boolean // 是否允许OAuth登录
   oauthProviders: Array<'google' | 'microsoft' | 'github'> // 支持的OAuth提供商
-  allowLdapLogin: boolean // 是否允许LDAP登录
-  ldapServerUrl: string // LDAP服务器地址
   ipWhitelistEnabled: boolean // 是否启用IP白名单
   ipWhitelist: string[] // IP白名单列表
 }
@@ -71,8 +69,6 @@ export interface UpdateAuthenticationRequest {
   mfaRequired?: boolean
   allowOAuthLogin?: boolean
   oauthProviders?: Array<'google' | 'microsoft' | 'github'>
-  allowLdapLogin?: boolean
-  ldapServerUrl?: string
   ipWhitelistEnabled?: boolean
   ipWhitelist?: string[]
 }

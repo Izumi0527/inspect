@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env pwsh
+#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     统一测试运行脚本 - 执行前端和后端的所有测试
@@ -245,80 +245,37 @@ function Parse-TestOutput {
 
 # 运行后端测试
 function Invoke-BackendTests {
-    Write-ColorOutput "`n🐍 后端测试执行..." "Blue"
-    
-    $backendDir = "backend"
-    
+    Write-ColorOutput "`n?? 后端测试执行..." "Blue"
+
+    $backendDir = "backend-go"
+
     # 检查后端目录
     if (-not (Test-Path $backendDir)) {
-        Write-ColorOutput "⚠️ 后端目录不存在，跳过后端测试" "Yellow"
+        Write-ColorOutput "?? 后端目录不存在，跳过后端测试" "Yellow"
         return
     }
-    
-    # 检查虚拟环境
-    if (-not (Test-Path "$backendDir\.venv")) {
-        Write-ColorOutput "⚠️ 虚拟环境不存在，请先运行环境设置" "Yellow"
-        return
+
+    if ($Type -ne "all") {
+        Write-ColorOutput "?? Go 后端暂不区分测试类型，已按全量测试执行" "Yellow"
     }
-    
-    # 检查测试目录
-    if (-not (Test-Path "$backendDir\tests")) {
-        Write-ColorOutput "⚠️ 测试目录不存在，跳过后端测试" "Yellow"
-        return
+
+    if ($Watch) {
+        Write-ColorOutput "?? Go 后端暂不支持 Watch 模式，请使用外部工具" "Yellow"
     }
-    
-    # 构建测试命令
-    $baseCommand = "uv run pytest"
-    $testArgs = @()
-    
-    # 添加测试类型过滤
-    switch ($Type) {
-        "unit" { $testArgs += "tests/unit" }
-        "integration" { $testArgs += "tests/integration" }
-        "e2e" { $testArgs += "tests/e2e" }
-        "all" { $testArgs += "tests/" }
+
+    if ($Parallel) {
+        Write-ColorOutput "?? Go 后端并行参数由 go test 默认管理" "Yellow"
     }
-    
-    # 添加其他参数
-    if ($Verbose) { $testArgs += "-v" }
-    if ($Parallel) { $testArgs += "-n auto" }
-    if ($Watch) { $testArgs += "--looponfail" }
-    
-    # 基础测试命令
-    $testCommand = "$baseCommand $($testArgs -join ' ')"
-    
-    # 运行基础测试
-    Invoke-TestCommand $testCommand "后端单元测试" $backendDir "Backend"
-    
-    # 运行覆盖率测试
-    if ($Coverage) {
-        $coverageArgs = @(
-            "tests/",
-            "--cov=src",
-            "--cov-report=html:htmlcov",
-            "--cov-report=xml:coverage.xml",
-            "--cov-report=term-missing"
-        )
-        
-        if ($Verbose) { $coverageArgs += "-v" }
-        
-        $coverageCommand = "$baseCommand $($coverageArgs -join ' ')"
-        Invoke-TestCommand $coverageCommand "后端测试覆盖率" $backendDir "Backend" -AllowFailure
-        
-        # 显示覆盖率报告位置
-        if (Test-Path "$backendDir\htmlcov\index.html") {
-            Write-ColorOutput "📊 HTML 覆盖率报告: $backendDir\htmlcov\index.html" "Cyan"
-        }
-    }
-    
-    # 运行性能测试
-    if (Test-Path "$backendDir\tests\performance") {
-        try {
-            Invoke-TestCommand "uv run pytest tests/performance/ -v --benchmark-only" "后端性能测试" $backendDir "Backend" -AllowFailure
-        }
-        catch {
-            Write-ColorOutput "⚠️ 性能测试工具未安装，跳过性能测试" "Yellow"
-        }
+
+    $testCommand = "go test ./..."
+    if ($Verbose) { $testCommand += " -v" }
+    if ($Coverage) { $testCommand += " -coverprofile=coverage.out" }
+
+    Invoke-TestCommand $testCommand "后端测试" $backendDir "Backend"
+
+    if ($Coverage -and (Test-Path "$backendDir\coverage.out")) {
+        Write-ColorOutput "?? 覆盖率文件: $backendDir\coverage.out" "Cyan"
+        Write-ColorOutput "   可使用: go tool cover -html=coverage.out" "Gray"
     }
 }
 
@@ -396,33 +353,35 @@ function Invoke-FrontendTests {
 
 # 运行集成测试
 function Invoke-IntegrationTests {
-    Write-ColorOutput "`n🔗 集成测试执行..." "Blue"
-    
-    # 检查是否有独立的集成测试目录
-    if (Test-Path "tests\integration") {
-        Write-ColorOutput "🔄 运行系统集成测试..." "Cyan"
-        
+    Write-ColorOutput "`n?? 集成测试执行..." "Blue"
+
+    $backendDir = "backend-go"
+    $integrationDir = "tests\integration"
+    $backendIntegrationDir = Join-Path $backendDir "tests\integration"
+
+    if (Test-Path $integrationDir -or Test-Path $backendIntegrationDir) {
+        Write-ColorOutput "?? 运行系统集成测试..." "Cyan"
+
         # 确保数据库服务运行
         try {
             $dbStatus = docker-compose ps --services --filter "status=running" 2>$null
             if (-not $dbStatus) {
-                Write-ColorOutput "⚠️ 数据库服务未运行，启动测试数据库..." "Yellow"
+                Write-ColorOutput "?? 数据库服务未运行，启动测试数据库..." "Yellow"
                 & ".\scripts\db-manage.ps1" start
                 Start-Sleep -Seconds 10
             }
         }
         catch {
-            Write-ColorOutput "⚠️ 无法检查数据库状态，继续执行测试" "Yellow"
+            Write-ColorOutput "?? 无法检查数据库状态，继续执行测试" "Yellow"
         }
-        
-        # 运行集成测试
-        if (Test-Path "backend\tests\integration") {
-            Invoke-TestCommand "uv run pytest tests/integration/ -v" "后端集成测试" "backend" "Integration"
+
+        if (Test-Path $backendDir) {
+            Invoke-TestCommand "go test ./..." "后端集成测试" $backendDir "Integration" -AllowFailure
+        } else {
+            Write-ColorOutput "?? backend-go 目录不存在，跳过集成测试" "Yellow"
         }
-        
-        if (Test-Path "tests\api") {
-            Invoke-TestCommand "uv run pytest tests/api/ -v" "API 集成测试" "." "Integration"
-        }
+    } else {
+        Write-ColorOutput "?? 集成测试目录不存在，跳过集成测试" "Yellow"
     }
 }
 
@@ -491,8 +450,9 @@ function New-TestReport {
     # 覆盖率信息
     if ($Coverage) {
         Write-ColorOutput "`n📋 覆盖率报告:" "Blue"
-        if (Test-Path "backend\htmlcov\index.html") {
-            Write-ColorOutput "  🐍 后端: backend\htmlcov\index.html" "Cyan"
+        if (Test-Path "backend-go\\coverage.out") {
+            Write-ColorOutput "  ?? 后端: backend-go\\coverage.out" "Cyan"
+            Write-ColorOutput "     go tool cover -html=coverage.out" "Gray"
         }
         if (Test-Path "frontend\coverage\index.html") {
             Write-ColorOutput "  🎨 前端: frontend\coverage\index.html" "Cyan"
@@ -563,3 +523,6 @@ function Main {
 
 # 执行主函数
 Main
+
+
+

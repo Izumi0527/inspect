@@ -219,6 +219,8 @@ export interface PredictionData {
   confidence: number
   timeframe: string
   recommendation: string
+  predictionPeriod?: string
+  confidenceLevel?: number
 }
 
 // 趋势告警数据
@@ -231,6 +233,7 @@ export interface TrendAlertData {
   affectedMetrics: string[]
   detectedAt: string
   status: 'active' | 'acknowledged' | 'resolved'
+  message?: string
 }
 
 // 统计报表数据

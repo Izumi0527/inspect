@@ -74,7 +74,7 @@ export function MonitoringViewV2() {
     isRefetching,
   } = useMonitoringV2({
     timeRange: '24h',
-    refetchInterval: 60000, // 60秒自动刷新
+    // 使用 hook 默认的 2 分钟轮询间隔
     enablePolling: true,
   })
 
@@ -183,10 +183,10 @@ export function MonitoringViewV2() {
 
         {/* 主内容区域 */}
         <main className="p-4">
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* 统计卡片网格(6个) */}
             <section>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
                 {data.statsV2 && data.statsV2.length > 0 ? (
                   data.statsV2.map((stat, index) => {
                     const IconComponent = monitoringIconMap[stat.id as keyof typeof monitoringIconMap] || Server

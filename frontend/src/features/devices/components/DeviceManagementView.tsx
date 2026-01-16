@@ -488,7 +488,7 @@ export const DeviceManagementView: React.FC = () => {
       title="设备管理"
       alertCount={summary.totalAlerts}
     >
-      <div className="flex flex-col space-y-4 min-h-[calc(100vh-112px)] pb-4">
+      <div className="flex flex-col gap-4 h-full">
         {/* 统计卡片 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
           <Card>
@@ -604,7 +604,7 @@ export const DeviceManagementView: React.FC = () => {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col overflow-hidden">
+        <CardContent className="flex flex-col overflow-hidden">
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <div className="w-full sm:w-[300px]">
               <Input
@@ -680,7 +680,7 @@ export const DeviceManagementView: React.FC = () => {
           )}
           
           {/* 设备表格 */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="overflow-y-auto">
             {filteredDevices.length === 0 && !loading && !error && (
               <div className="text-center py-12">
                 <Server className="h-16 w-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />

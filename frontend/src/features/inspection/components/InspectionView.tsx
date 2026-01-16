@@ -72,7 +72,7 @@ export const InspectionView: React.FC = () => {
 
   return (
     <AppLayout title="巡检管理">
-      <div className="flex flex-col space-y-4 min-h-[calc(100vh-112px)] pb-4">
+      <div className="flex flex-col gap-4 h-full">
         {/* 快速统计卡片 */}
         {!statsLoading && stats && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -143,9 +143,9 @@ export const InspectionView: React.FC = () => {
           </div>
         </CardHeader>
 
-        <CardContent className="flex-1 flex flex-col overflow-hidden pt-4">
+        <CardContent className="flex flex-col overflow-hidden pt-4">
           {/* 标签内容区域 */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="overflow-y-auto">
             <motion.div
               key={activeTab}
               initial={{ opacity: 0, y: 20 }}

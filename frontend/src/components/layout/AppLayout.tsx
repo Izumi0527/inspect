@@ -41,7 +41,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const { sidebarOpen, toggleSidebar } = useSidebar()
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -50,7 +50,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       />
 
       {/* Main Content */}
-      <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
+      <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300 h-full flex flex-col`}>
         {/* Header - 显示标题、搜索和通知 */}
         {!hideHeader && (
           <DashboardHeader
@@ -64,7 +64,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         <ErrorBoundary>
           <AnimatedContainer
             animation="pageTransition"
-            className={fullWidth ? "p-1" : "p-4"}
+            className={`flex-1 overflow-auto ${fullWidth ? "p-1" : "p-4"}`}
           >
             {routerTabs ? (
               /* Router Tabs Mode - Tab和内容包装在Card中 */

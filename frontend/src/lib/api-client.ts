@@ -423,21 +423,76 @@ export const api = {
     update: (id: number, data: JsonRecord) => httpClient.put(`/devices/${id}`, data),
     delete: (id: number) => httpClient.delete(`/devices/${id}`),
     discover: (subnet: string) => httpClient.post('/devices/discover', { subnet }),
+    // 修复: 使用正确的后端路由 /devices/bulk-action
     bulkAction: (action: string, deviceIds: number[]) =>
-      httpClient.post('/devices/bulk', { action, device_ids: deviceIds }),
+      httpClient.post('/devices/bulk-action', { action, device_ids: deviceIds }),
+    // 新增: 批量更新设备
+    batchUpdate: (updates: JsonRecord[]) =>
+      httpClient.post('/devices/batch-update', { updates }),
+    // 新增: 批量导入设备
+    batchImport: (devices: JsonRecord[]) =>
+      httpClient.post('/devices/batch-import', { devices }),
+    // 新增: 批量删除设备
+    batchDelete: (deviceIds: number[]) =>
+      httpClient.post('/devices/batch-delete', { device_ids: deviceIds }),
+    // 新增: 设备健康检查
+    healthCheck: (id: number) =>
+      httpClient.post(`/devices/${id}/health-check`),
+    // 新增: 获取设备性能数据
+    getPerformance: (id: number, params?: QueryParams) =>
+      httpClient.get(appendQuery(`/devices/${id}/performance`, params)),
+    // 新增: 设备探测（ICMP + SNMP）
+    probe: (id: number) =>
+      httpClient.post(`/devices/${id}/probe`),
+    // 新增: 批量设备探测
+    batchProbe: (deviceIds: number[], maxConcurrent?: number) =>
+      httpClient.post('/devices/batch-probe', { 
+        device_ids: deviceIds, 
+        max_concurrent: maxConcurrent || 20 
+      }),
+    // 新增: 获取设备统计
+    getStatistics: (params?: QueryParams) =>
+      httpClient.get(appendQuery('/devices/statistics', params)),
   },
 
   // 监控数据
   monitoring: {
     overview: () => httpClient.get('/monitoring/overview'),
     devices: () => httpClient.get('/monitoring/devices'),
+    // 新增: 设备状态列表
+    devicesStatus: () => httpClient.get('/monitoring/devices/status'),
+    // 新增: 监控统计
+    stats: () => httpClient.get('/monitoring/stats'),
+    // 新增: 设备状态分布
+    distribution: () => httpClient.get('/monitoring/devices/distribution'),
+    // 新增: 可用性统计
+    availability: (params?: QueryParams) =>
+      httpClient.get(appendQuery('/monitoring/availability', params)),
     metrics: (deviceId: number, timeRange?: string) =>
       httpClient.get(
         appendQuery(`/monitoring/devices/${deviceId}/metrics`,
           timeRange ? { time_range: timeRange } : undefined),
       ),
+    // 新增: 设备历史指标
+    history: (deviceId: number, params?: QueryParams) =>
+      httpClient.get(appendQuery(`/monitoring/devices/${deviceId}/history`, params)),
+    // 新增: 设备当前状态
+    status: (deviceId: number) =>
+      httpClient.get(`/monitoring/devices/${deviceId}/status`),
     historical: (params?: QueryParams) =>
       httpClient.get(appendQuery('/monitoring/historical', params)),
+    // 新增: 批量设备历史
+    bulkHistory: (deviceIds: number[], params?: QueryParams) =>
+      httpClient.post('/monitoring/devices/historical', { 
+        device_ids: deviceIds, 
+        ...params 
+      }),
+    // 新增: 系统性能历史
+    systemPerformance: (params?: QueryParams) =>
+      httpClient.post('/monitoring/system/performance', params),
+    // 新增: 网络流量历史
+    networkTrafficHistory: (params?: QueryParams) =>
+      httpClient.post('/monitoring/network/traffic/history', params),
   },
 
   // 告警管理
@@ -449,8 +504,24 @@ export const api = {
       httpClient.post<AlertActionResponse>(`/alerts/${id}/acknowledge`, data),
     resolve: (id: string | number, data?: JsonRecord) =>
       httpClient.post<AlertActionResponse>(`/alerts/${id}/resolve`, data),
+    // 新增: 重新激活告警
+    reactivate: (id: string | number) =>
+      httpClient.post(`/alerts/${id}/reactivate`),
+    // 新增: 删除告警
+    delete: (id: string | number) =>
+      httpClient.delete(`/alerts/${id}`),
+    // 新增: 批量操作
+    bulk: (action: string, alertIds: (string | number)[]) =>
+      httpClient.post('/alerts/bulk', { action, alert_ids: alertIds }),
+    // 新增: 告警统计
+    statistics: (params?: QueryParams) =>
+      httpClient.get(appendQuery('/alerts/statistics', params)),
+    // 新增: 最近告警
+    recent: (limit?: number) =>
+      httpClient.get('/alerts/recent', { params: { limit: limit || 10 } }),
     rules: {
       list: () => httpClient.get('/alerts/rules'),
+      get: (id: string | number) => httpClient.get(`/alerts/rules/${id}`),
       create: (data: JsonRecord) => httpClient.post('/alerts/rules', data),
       update: (id: string | number, data: JsonRecord) => httpClient.put(`/alerts/rules/${id}`, data),
       delete: (id: string | number) => httpClient.delete(`/alerts/rules/${id}`),
@@ -515,6 +586,26 @@ export const api = {
     getUsers: (params?: QueryParams) =>
       httpClient.get<UsersListResponse>(appendQuery('/settings/users', params)),
     getUserPermissions: (id: string) => httpClient.get(`/settings/users/${id}/permissions`),
+  },
+
+  // 流量分析
+  traffic: {
+    summary: (params?: QueryParams) =>
+      httpClient.get(appendQuery('/traffic/summary', params)),
+    deviceTraffic: (deviceId: number) =>
+      httpClient.get(`/traffic/devices/${deviceId}`),
+    trend: (deviceId: number, params?: QueryParams) =>
+      httpClient.get(appendQuery(`/traffic/devices/${deviceId}/trend`, params)),
+    topTalkers: (limit?: number, sortBy?: string) =>
+      httpClient.get('/traffic/top-talkers', { 
+        params: { limit: limit || 10, sort_by: sortBy || 'total_bytes' } 
+      }),
+    bandwidthUtilization: (params?: QueryParams) =>
+      httpClient.get(appendQuery('/traffic/bandwidth-utilization', params)),
+    topBandwidth: (limit?: number) =>
+      httpClient.get('/traffic/bandwidth-utilization/top', { 
+        params: { limit: limit || 10 } 
+      }),
   },
 }
 

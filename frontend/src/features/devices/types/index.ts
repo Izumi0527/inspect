@@ -134,7 +134,7 @@ export interface DeviceSummary {
 }
 
 // 设备操作类型
-export type DeviceAction = 'view' | 'edit' | 'delete' | 'power' | 'inspect' | 'clone' | 'export'
+export type DeviceAction = 'view' | 'edit' | 'delete' | 'inspect' | 'clone' | 'export'
 
 // 设备导入/导出相关类型
 export interface DeviceImportData {
@@ -175,8 +175,6 @@ export interface ImportResult {
 export type BulkActionType =
   | 'start_inspection'
   | 'batch_config'
-  | 'power_on'
-  | 'power_off'
   | 'batch_delete'
   | 'batch_update'
   | 'batch_add_group'

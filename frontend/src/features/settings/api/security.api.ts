@@ -61,8 +61,6 @@ export const securityApi = {
         mfaRequired: settingsMap.get('security.auth.mfa_required') || false,
         allowOAuthLogin: settingsMap.get('security.auth.allow_oauth_login') || false,
         oauthProviders: settingsMap.get('security.auth.oauth_providers') || [],
-        allowLdapLogin: settingsMap.get('security.auth.allow_ldap_login') || false,
-        ldapServerUrl: settingsMap.get('security.auth.ldap_server_url') || '',
         ipWhitelistEnabled: settingsMap.get('security.auth.ip_whitelist_enabled') || false,
         ipWhitelist: settingsMap.get('security.auth.ip_whitelist') || [],
       },

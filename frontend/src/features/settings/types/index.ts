@@ -334,22 +334,6 @@ export interface SecurityConfig {
   }
 }
 
-// LDAP配置
-export interface LDAPConfig {
-  enabled: boolean
-  server: string
-  port: number
-  bindDN: string
-  bindPassword: string
-  baseDN: string
-  userFilter: string
-  usernameAttribute: string
-  emailAttribute: string
-  fullNameAttribute: string
-  ssl: boolean
-  timeout: number
-}
-
 // 数据库配置
 export interface DatabaseConfig {
   host: string
