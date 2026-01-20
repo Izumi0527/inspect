@@ -555,6 +555,13 @@ func (w *MetricsWriter) GetSystemPerformanceHistory(
 		metricSet = []string{"cpu_usage", "memory_usage", "network_traffic"}
 	}
 
+	// 尝试从缓存获取
+	if w.cache != nil {
+		if cached, found := w.cache.GetSystemPerformance(ctx, start, end, metricSet); found {
+			return cached, nil
+		}
+	}
+
 	bucket := bucketSizeForRange(start, end)
 	series := make(map[time.Time]*SystemPerformancePoint)
 
@@ -593,12 +600,26 @@ func (w *MetricsWriter) GetSystemPerformanceHistory(
 		}
 	}
 
-	return flattenSystemSeries(series), nil
+	result := flattenSystemSeries(series)
+
+	// 写入缓存
+	if w.cache != nil {
+		w.cache.SetSystemPerformance(ctx, start, end, metricSet, result)
+	}
+
+	return result, nil
 }
 
 func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time) ([]TemperatureHistoryPoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
+	}
+
+	// 尝试从缓存获取
+	if w.cache != nil {
+		if cached, found := w.cache.GetTemperature(ctx, start, end); found {
+			return cached, nil
+		}
 	}
 
 	bucket := bucketSizeForRange(start, end)
@@ -651,12 +672,26 @@ func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Ti
 		points[bucket][name] = *row.Value
 	}
 
-	return flattenTemperatureSeries(points), nil
+	result := flattenTemperatureSeries(points)
+
+	// 写入缓存
+	if w.cache != nil {
+		w.cache.SetTemperature(ctx, start, end, result)
+	}
+
+	return result, nil
 }
 
 func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time) ([]NetworkTrafficPoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
+	}
+
+	// 尝试从缓存获取
+	if w.cache != nil {
+		if cached, found := w.cache.GetNetworkTraffic(ctx, start, end); found {
+			return cached, nil
+		}
 	}
 
 	bucket := bucketSizeForRange(start, end)
@@ -732,6 +767,11 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 			Inbound:   bpsToMbps(inbound),
 			Outbound:  bpsToMbps(outbound),
 		})
+	}
+
+	// 写入缓存
+	if w.cache != nil {
+		w.cache.SetNetworkTraffic(ctx, start, end, points)
 	}
 
 	return points, nil

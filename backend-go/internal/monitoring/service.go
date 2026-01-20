@@ -28,6 +28,7 @@ type MetricsWriter struct {
 	db        *gorm.DB
 	wsManager *ws.Manager
 	logger    *zap.Logger
+	cache     *MetricsCache
 }
 
 func NewMetricsWriter(db *gorm.DB, wsManager *ws.Manager, logger *zap.Logger) *MetricsWriter {
@@ -35,7 +36,13 @@ func NewMetricsWriter(db *gorm.DB, wsManager *ws.Manager, logger *zap.Logger) *M
 		db:        db,
 		wsManager: wsManager,
 		logger:    logger,
+		cache:     nil, // 缓存需要单独设置
 	}
+}
+
+// SetCache 设置缓存服务
+func (w *MetricsWriter) SetCache(cache *MetricsCache) {
+	w.cache = cache
 }
 
 func (w *MetricsWriter) WriteDeviceMetrics(ctx context.Context, req DeviceMetricsRequest) (WriteResult, error) {

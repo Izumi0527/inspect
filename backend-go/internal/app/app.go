@@ -68,6 +68,12 @@ func New() (*App, error) {
 	wsManager := ws.NewManager()
 	wsHandler := ws.NewHandler(wsManager, log)
 	metricsWriter := monitoring.NewMetricsWriter(dbConn, wsManager, log)
+	
+	// 初始化监控数据缓存
+	cacheConfig := monitoring.DefaultCacheConfig()
+	metricsCache := monitoring.NewMetricsCache(redisClient, cacheConfig, log)
+	metricsWriter.SetCache(metricsCache)
+	
 	monitoringHandler := handlers.MonitoringHandler{
 		Writer:          metricsWriter,
 		ReportOutputDir: cfg.ReportOutputDir,
