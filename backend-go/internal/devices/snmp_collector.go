@@ -515,30 +515,69 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 	lastCache := c.lastOctets[ipAddress]
 
 	var totalInRate, totalOutRate float64
+	const maxReasonableBandwidth = 10000.0 // 10 Gbps - 超过此值视为异常
+	
 	for idx, iface := range interfaces {
 		if iface.InOctets != nil && iface.OutOctets != nil {
 			if last, ok := lastCache[idx]; ok {
 				elapsed := now.Sub(last.timestamp).Seconds()
 				if elapsed > 0 && elapsed < 300 { // Max 5 minutes between samples
+					// 检测 counter wrap - 如果当前值小于历史值，跳过此次采样
+					if *iface.InOctets < last.inOctets || *iface.OutOctets < last.outOctets {
+						// Counter wrapped or reset, skip this sample and update cache
+						lastCache[idx] = octetsCache{
+							inOctets:  *iface.InOctets,
+							outOctets: *iface.OutOctets,
+							timestamp: now,
+						}
+						continue
+					}
+
 					inDiff := *iface.InOctets - last.inOctets
 					outDiff := *iface.OutOctets - last.outOctets
-
-					// Handle counter wrap
-					if *iface.InOctets < last.inOctets {
-						inDiff = *iface.InOctets // Assume wrap, use current value
-					}
-					if *iface.OutOctets < last.outOctets {
-						outDiff = *iface.OutOctets
-					}
 
 					// Convert to Mbps (bytes/sec * 8 / 1000000)
 					inRate := (float64(inDiff) / elapsed) * 8 / 1000000
 					outRate := (float64(outDiff) / elapsed) * 8 / 1000000
+
+					// 合理性检查 1: 不应超过 10 Gbps
+					if inRate > maxReasonableBandwidth || outRate > maxReasonableBandwidth {
+						// 异常值，跳过但更新缓存
+						lastCache[idx] = octetsCache{
+							inOctets:  *iface.InOctets,
+							outOctets: *iface.OutOctets,
+							timestamp: now,
+						}
+						continue
+					}
+
+					// 合理性检查 2: 如果有接口速度信息，不应超过接口速度的 120%
+					if iface.Speed != nil && *iface.Speed > 0 {
+						maxSpeed := float64(*iface.Speed) // Speed is in Mbps
+						if inRate > maxSpeed*1.2 || outRate > maxSpeed*1.2 {
+							// 超过接口速度，跳过但更新缓存
+							lastCache[idx] = octetsCache{
+								inOctets:  *iface.InOctets,
+								outOctets: *iface.OutOctets,
+								timestamp: now,
+							}
+							continue
+						}
+					}
+
 					iface.InRate = &inRate
 					iface.OutRate = &outRate
 					totalInRate += inRate
 					totalOutRate += outRate
 				}
+			} else {
+				// 首次采集，只缓存数据，不计算速率（没有历史对比）
+				lastCache[idx] = octetsCache{
+					inOctets:  *iface.InOctets,
+					outOctets: *iface.OutOctets,
+					timestamp: now,
+				}
+				continue
 			}
 
 			// Update cache
@@ -551,7 +590,8 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 	}
 	c.mu.Unlock()
 
-	// Set total bandwidth (always set, even if 0, to indicate data was collected)
+	// Set total bandwidth
+	// 即使没有计算出速率（首次采集或异常值），也设置为 0 表示数据已采集
 	metrics.BandwidthIn = &totalInRate
 	metrics.BandwidthOut = &totalOutRate
 
