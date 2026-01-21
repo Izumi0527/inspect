@@ -176,3 +176,38 @@ export function formatDeviceStatus(status: string): string {
 
   return statusMap[status.toLowerCase()] || status
 }
+
+/**
+ * 将 bps 值格式化为人类可读的字符串
+ * 根据数值大小自动选择合适的单位（bps, Kbps, Mbps, Gbps）
+ * @param bps - 比特每秒的数值
+ * @returns 格式化后的字符串，如 "1.5 Mbps"
+ * @example
+ * formatBandwidth(500) // "500.0 bps"
+ * formatBandwidth(1500) // "1.5 Kbps"
+ * formatBandwidth(1500000) // "1.5 Mbps"
+ * formatBandwidth(1500000000) // "1.5 Gbps"
+ */
+export function formatBandwidth(bps: number): string {
+  // 处理无效输入
+  if (!isFinite(bps) || isNaN(bps)) {
+    return 'N/A'
+  }
+
+  // 处理负数
+  if (bps < 0) {
+    console.warn('Negative bandwidth value received:', bps)
+    return '0.0 bps'
+  }
+
+  // 根据数值大小选择合适的单位
+  if (bps < 1000) {
+    return `${bps.toFixed(1)} bps`
+  } else if (bps < 1_000_000) {
+    return `${(bps / 1000).toFixed(1)} Kbps`
+  } else if (bps < 1_000_000_000) {
+    return `${(bps / 1_000_000).toFixed(1)} Mbps`
+  } else {
+    return `${(bps / 1_000_000_000).toFixed(1)} Gbps`
+  }
+}

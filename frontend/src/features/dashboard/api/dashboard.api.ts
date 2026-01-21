@@ -14,6 +14,7 @@ interface DashboardStatDto {
   iconName?: string
   iconColor?: string
   color?: string
+  unit?: string // 需要格式化的值的单位（例如，带宽使用 "bps"）
 }
 
 interface RecentAlertDto {
@@ -209,6 +210,7 @@ const toDashboardStat = (dto: DashboardStatDto): DashboardStat => ({
   iconName: dto.iconName ?? 'Activity',
   iconColor: dto.iconColor ?? 'text-gray-400',
   color: dto.color ?? 'gray',
+  unit: dto.unit, // 传递单位字段供前端格式化
 })
 
 const getEmptyDashboardData = (): DashboardData => ({

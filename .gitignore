@@ -3,9 +3,9 @@
 # ==========================================
 # 忽略实际使用的环境配置文件（包含敏感信息）
 .env
-.env.local
-.env.development
-.env.production
+#.env.local
+#.env.development
+#.env.production
 
 # 保留示例文件（版本控制中）
 # !.env.example
@@ -361,5 +361,6 @@ backend/data/reports/*
 .swc/
 
 /data/
-
+.kiro/
 /legacy/
+.claude/

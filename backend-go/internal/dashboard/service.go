@@ -70,6 +70,7 @@ func (s *Service) GetOverview(ctx context.Context) (OverviewResponse, error) {
 		systemHealth = float64(deviceStats.Online) / float64(deviceStats.Total) * 100
 	}
 
+	bpsUnit := "bps"
 	stats := []StatCard{
 		{
 			Title:     "在线设备",
@@ -89,11 +90,12 @@ func (s *Service) GetOverview(ctx context.Context) (OverviewResponse, error) {
 		},
 		{
 			Title:     "网络流量",
-			Value:     formatNetworkValue(avgNetwork, hasNetwork),
+			Value:     formatNetworkValueBps(avgNetwork, hasNetwork),
 			Change:    "较昨日",
 			IconName:  "Activity",
 			IconColor: "text-blue-500",
 			Color:     "blue",
+			Unit:      &bpsUnit, // 标识此值单位为 bps，需要前端格式化
 		},
 		{
 			Title:     "系统负载",
@@ -137,6 +139,30 @@ func (s *Service) GetRecentAlerts(ctx context.Context, limit int) ([]RecentAlert
 
 func (s *Service) GetNetworkOverview(ctx context.Context) ([]NetworkOverviewItem, error) {
 	return s.getNetworkOverview(ctx)
+}
+
+func (s *Service) GetBandwidthStats(ctx context.Context) (BandwidthStats, error) {
+	if s == nil || s.db == nil {
+		return BandwidthStats{}, fmt.Errorf("database not initialized")
+	}
+
+	// 查询平均入站带宽（单位：bps）
+	inboundRate, _, err := s.avgMetricList(ctx, []string{"bandwidth_in", "network_bytes_in", "throughput_in"})
+	if err != nil {
+		return BandwidthStats{}, err
+	}
+
+	// 查询平均出站带宽（单位：bps）
+	outboundRate, _, err := s.avgMetricList(ctx, []string{"bandwidth_out", "network_bytes_out", "throughput_out"})
+	if err != nil {
+		return BandwidthStats{}, err
+	}
+
+	return BandwidthStats{
+		InboundRate:  inboundRate,
+		OutboundRate: outboundRate,
+		Unit:         "bps",
+	}, nil
 }
 
 func (s *Service) GetRecentActivities(ctx context.Context, limit int) ([]RecentActivity, error) {
@@ -528,6 +554,17 @@ func formatPercent(value float64, precision int) string {
 	return fmt.Sprintf("%.*f%%", precision, value)
 }
 
+// formatNetworkValueBps 返回原始 bps 值的字符串表示，如果不可用则返回 "N/A"
+// 前端将使用 formatBandwidth 函数格式化此值
+func formatNetworkValueBps(value float64, ok bool) string {
+	if !ok {
+		return "N/A"
+	}
+	// 返回原始 bps 值的字符串，供前端格式化
+	return fmt.Sprintf("%.0f", value)
+}
+
+// formatNetworkValue 将网络值格式化为 Mbps（已弃用，保留以向后兼容）
 func formatNetworkValue(value float64, ok bool) string {
 	if !ok {
 		return "N/A"

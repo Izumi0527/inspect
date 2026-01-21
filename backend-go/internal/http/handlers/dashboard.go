@@ -23,6 +23,7 @@ func (h DashboardHandler) Register(group *echo.Group) {
 	group.GET("/dashboard/top-devices-by-alerts", h.GetTopDevicesByAlerts)
 	group.GET("/dashboard/recent-alerts", h.GetRecentAlerts)
 	group.GET("/dashboard/network-overview", h.GetNetworkOverview)
+	group.GET("/dashboard/bandwidth-stats", h.GetBandwidthStats)
 }
 
 func (h DashboardHandler) GetOverview(c echo.Context) error {
@@ -165,6 +166,21 @@ func (h DashboardHandler) GetNetworkOverview(c echo.Context) error {
 	resp, err := h.Service.GetNetworkOverview(c.Request().Context())
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load network overview")
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h DashboardHandler) GetBandwidthStats(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+		return err
+	}
+
+	resp, err := h.Service.GetBandwidthStats(c.Request().Context())
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load bandwidth statistics")
 	}
 	return c.JSON(http.StatusOK, resp)
 }

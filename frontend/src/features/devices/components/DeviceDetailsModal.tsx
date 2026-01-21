@@ -4,6 +4,19 @@ import React from 'react'
 import { SimpleModal, Badge } from '@/components/atoms'
 import { Device } from '../types'
 
+// 格式化百分比值
+const formatPercentageValue = (value: number | undefined | null): string => {
+  if (value === undefined || value === null) {
+    return '0.0%'
+  }
+  // 如果值在 0-1 之间（小数格式），转换为百分比
+  if (value >= 0 && value < 1) {
+    return `${(value * 100).toFixed(1)}%`
+  }
+  // 如果值在 1-100 之间（已经是百分比），直接使用
+  return `${value.toFixed(1)}%`
+}
+
 const getCliConfiguration = (device: Device) => {
   const tags = (device.tags ?? {}) as Record<string, any>
   const cliConfig = tags.cli_config ?? {}
@@ -97,8 +110,8 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
           <InfoRow label="运行状态" value={<Badge variant="outline">{device.status}</Badge>} />
           <InfoRow label="IP 地址" value={device.ip} />
           <InfoRow label="所在位置" value={device.location || '未设置'} />
-          <InfoRow label="CPU 使用率" value={`${device.cpu_usage ?? 0}%`} />
-          <InfoRow label="内存使用率" value={`${device.memory_usage ?? 0}%`} />
+          <InfoRow label="CPU 使用率" value={formatPercentageValue(device.cpu_usage)} />
+          <InfoRow label="内存使用率" value={formatPercentageValue(device.memory_usage)} />
           <InfoRow label="最近在线时间" value={device.last_seen || '未知'} />
           <InfoRow label="累计告警" value={device.alert_count ?? 0} />
         </div>

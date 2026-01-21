@@ -60,12 +60,22 @@ const isDeviceType = (value: unknown): value is DeviceType =>
 
 const formatPercentage = (value: unknown): string => {
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return `${value}%`
+    // 如果值在 0-1 之间（小数格式），转换为百分比
+    if (value >= 0 && value < 1) {
+      return `${(value * 100).toFixed(1)}%`
+    }
+    // 如果值在 1-100 之间（已经是百分比），直接使用
+    return `${value.toFixed(1)}%`
   }
   if (typeof value === 'string') {
     const parsed = Number(value)
     if (!Number.isNaN(parsed)) {
-      return `${parsed}%`
+      // 如果值在 0-1 之间（小数格式），转换为百分比
+      if (parsed >= 0 && parsed < 1) {
+        return `${(parsed * 100).toFixed(1)}%`
+      }
+      // 如果值在 1-100 之间（已经是百分比），直接使用
+      return `${parsed.toFixed(1)}%`
     }
   }
   return '-'
@@ -85,7 +95,8 @@ const toAlertCount = (value: unknown): number => {
 }
 
 export const DeviceManagementView: React.FC = () => {
-  const { devices, loading, error, setError, addDevice, removeDevice, importDevices, loadDevices } = useDevices()
+  // 启用轮询：每60秒自动刷新设备数据（包括CPU和内存）
+  const { devices, loading, error, setError, addDevice, removeDevice, importDevices, loadDevices } = useDevices(true, 60000)
   const { filters, updateFilter } = useDeviceFilters()
   const filteredDevices = useFilteredDevices(devices, filters)
   const summary = useDeviceSummary(devices)

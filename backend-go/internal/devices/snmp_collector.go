@@ -43,6 +43,11 @@ const (
 	oidHuaweiTemperature      = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11" // Huawei
 	oidJuniperTemperature     = "1.3.6.1.4.1.2636.3.1.13.1.7"   // Juniper
 
+	// Huawei specific OIDs
+	oidHuaweiCpuUsage         = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"  // hwEntityCpuUsage
+	oidHuaweiMemoryUsage      = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"  // hwEntityMemUsage
+	oidHuaweiMemorySize       = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.10" // hwEntityMemSize
+
 	// UCD-SNMP-MIB (Linux/Unix systems)
 	oidUcdCpuUser   = "1.3.6.1.4.1.2021.11.9.0"
 	oidUcdCpuSystem = "1.3.6.1.4.1.2021.11.10.0"
@@ -52,7 +57,7 @@ const (
 	oidUcdMemFree   = "1.3.6.1.4.1.2021.4.11.0"
 )
 
-// SNMPMetrics holds collected SNMP metrics
+// SNMPMetrics 保存采集的 SNMP 指标
 type SNMPMetrics struct {
 	CPUUsage       *float64           `json:"cpu_usage,omitempty"`
 	MemoryUsage    *float64           `json:"memory_usage,omitempty"`
@@ -60,28 +65,28 @@ type SNMPMetrics struct {
 	MemoryUsed     *int64             `json:"memory_used,omitempty"`
 	Temperature    *float64           `json:"temperature,omitempty"`
 	Uptime         *int64             `json:"uptime,omitempty"`
-	BandwidthIn    *float64           `json:"bandwidth_in,omitempty"`
-	BandwidthOut   *float64           `json:"bandwidth_out,omitempty"`
+	BandwidthIn    *float64           `json:"bandwidth_in,omitempty"`  // 入站带宽，单位：bps（比特每秒）
+	BandwidthOut   *float64           `json:"bandwidth_out,omitempty"` // 出站带宽，单位：bps（比特每秒）
 	Interfaces     []InterfaceMetrics `json:"interfaces,omitempty"`
 	CollectedAt    time.Time          `json:"collected_at"`
 	CollectionTime float64            `json:"collection_time_ms"`
 }
 
-// InterfaceMetrics holds per-interface metrics
+// InterfaceMetrics 保存每个接口的指标
 type InterfaceMetrics struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
-	Speed       *int64   `json:"speed,omitempty"`       // Mbps
+	Speed       *int64   `json:"speed,omitempty"`       // 接口速率，单位：Mbps
 	InOctets    *uint64  `json:"in_octets,omitempty"`
 	OutOctets   *uint64  `json:"out_octets,omitempty"`
-	InRate      *float64 `json:"in_rate,omitempty"`     // Mbps
-	OutRate     *float64 `json:"out_rate,omitempty"`    // Mbps
+	InRate      *float64 `json:"in_rate,omitempty"`     // 入站速率，单位：bps（比特每秒）
+	OutRate     *float64 `json:"out_rate,omitempty"`    // 出站速率，单位：bps（比特每秒）
 }
 
-// SNMPCollector collects detailed metrics via SNMP
+// SNMPCollector 通过 SNMP 采集详细指标
 type SNMPCollector struct {
 	logger *zap.Logger
-	// Cache for rate calculations
+	// 用于速率计算的缓存
 	lastOctets map[string]map[int]octetsCache
 	mu         sync.RWMutex
 }
@@ -92,7 +97,7 @@ type octetsCache struct {
 	timestamp time.Time
 }
 
-// NewSNMPCollector creates a new SNMP collector
+// NewSNMPCollector 创建一个新的 SNMP 采集器
 func NewSNMPCollector(logger *zap.Logger) *SNMPCollector {
 	return &SNMPCollector{
 		logger:     logger,
@@ -100,7 +105,7 @@ func NewSNMPCollector(logger *zap.Logger) *SNMPCollector {
 	}
 }
 
-// CollectMetrics collects all available metrics from a device
+// CollectMetrics 从设备采集所有可用的指标
 func (c *SNMPCollector) CollectMetrics(
 	ctx context.Context,
 	ipAddress string,
@@ -138,31 +143,31 @@ func (c *SNMPCollector) CollectMetrics(
 		CollectedAt: time.Now().UTC(),
 	}
 
-	// Collect system uptime
+	// 采集系统运行时间
 	c.collectUptime(target, metrics)
 	if c.logger != nil && metrics.Uptime != nil {
 		c.logger.Debug("collected uptime", zap.Int64("uptime", *metrics.Uptime))
 	}
 
-	// Collect CPU usage
+	// 采集 CPU 使用率
 	c.collectCPU(target, metrics)
 	if c.logger != nil && metrics.CPUUsage != nil {
 		c.logger.Debug("collected CPU", zap.Float64("cpu", *metrics.CPUUsage))
 	}
 
-	// Collect memory usage
+	// 采集内存使用率
 	c.collectMemory(target, metrics)
 	if c.logger != nil && metrics.MemoryUsage != nil {
 		c.logger.Debug("collected memory", zap.Float64("memory", *metrics.MemoryUsage))
 	}
 
-	// Collect temperature
+	// 采集温度
 	c.collectTemperature(target, metrics)
 	if c.logger != nil && metrics.Temperature != nil {
 		c.logger.Debug("collected temperature", zap.Float64("temp", *metrics.Temperature))
 	}
 
-	// Collect interface metrics
+	// 采集接口指标
 	c.collectInterfaces(target, ipAddress, metrics)
 	if c.logger != nil {
 		c.logger.Debug("collected interfaces", zap.Int("count", len(metrics.Interfaces)))
@@ -231,12 +236,77 @@ func (c *SNMPCollector) collectUptime(target *gosnmp.GoSNMP, metrics *SNMPMetric
 }
 
 func (c *SNMPCollector) collectCPU(target *gosnmp.GoSNMP, metrics *SNMPMetrics) {
-	// Try HOST-RESOURCES-MIB first (hrProcessorLoad)
-	result, err := target.BulkWalkAll(oidHrProcessorLoad)
+	// 优先尝试华为设备特定的 CPU OID
+	result, err := target.BulkWalkAll(oidHuaweiCpuUsage)
 	if err == nil && len(result) > 0 {
+		var totalUsage float64
+		count := 0
+		
+		if c.logger != nil {
+			c.logger.Debug("华为 CPU OID 返回数据", zap.Int("result_count", len(result)))
+		}
+		
+		for _, variable := range result {
+			if variable.Type == gosnmp.Integer || variable.Type == gosnmp.Gauge32 {
+				rawValue := gosnmp.ToBigInt(variable.Value).Int64()
+				usage := float64(rawValue)
+				
+				if c.logger != nil {
+					c.logger.Debug("华为 CPU 原始值", 
+						zap.Int64("raw_value", rawValue),
+						zap.Float64("usage", usage),
+						zap.String("oid", variable.Name))
+				}
+				
+				// 华为设备可能返回不同格式的值：
+				// 1. 小数格式 (0-1)：需要乘以 100
+				// 2. 百分比格式 (0-100)：直接使用
+				// 3. 千分比格式 (0-10000)：需要除以 100
+				if usage >= 0 && usage < 1 {
+					// 小数格式，转换为百分比
+					usage = usage * 100
+					if c.logger != nil {
+						c.logger.Debug("华为 CPU 值转换（小数→百分比）", 
+							zap.Int64("raw_value", rawValue),
+							zap.Float64("converted_usage", usage))
+					}
+					totalUsage += usage
+					count++
+				} else if usage >= 1 && usage <= 100 {
+					// 百分比格式，直接使用
+					totalUsage += usage
+					count++
+				} else if usage > 100 && usage <= 10000 {
+					// 千分比格式，转换为百分比
+					usage = usage / 100
+					if c.logger != nil {
+						c.logger.Debug("华为 CPU 值转换（千分比→百分比）", 
+							zap.Int64("raw_value", rawValue),
+							zap.Float64("converted_usage", usage))
+					}
+					totalUsage += usage
+					count++
+				}
+			}
+		}
+		if count > 0 {
+			avgUsage := totalUsage / float64(count)
+			metrics.CPUUsage = &avgUsage
+			if c.logger != nil {
+				c.logger.Debug("collected CPU from Huawei OID", 
+					zap.Float64("cpu_usage", avgUsage),
+					zap.Int("cpu_count", count))
+			}
+			return
+		}
+	}
+
+	// 尝试 HOST-RESOURCES-MIB (hrProcessorLoad)
+	result2, err := target.BulkWalkAll(oidHrProcessorLoad)
+	if err == nil && len(result2) > 0 {
 		var totalLoad float64
 		count := 0
-		for _, variable := range result {
+		for _, variable := range result2 {
 			if variable.Type == gosnmp.Integer {
 				load := float64(gosnmp.ToBigInt(variable.Value).Int64())
 				totalLoad += load
@@ -246,15 +316,20 @@ func (c *SNMPCollector) collectCPU(target *gosnmp.GoSNMP, metrics *SNMPMetrics) 
 		if count > 0 {
 			avgLoad := totalLoad / float64(count)
 			metrics.CPUUsage = &avgLoad
+			if c.logger != nil {
+				c.logger.Debug("collected CPU from HOST-RESOURCES-MIB", 
+					zap.Float64("cpu_usage", avgLoad),
+					zap.Int("cpu_count", count))
+			}
 			return
 		}
 	}
 
-	// Fallback to UCD-SNMP-MIB (Linux systems)
-	result2, err := target.Get([]string{oidUcdCpuUser, oidUcdCpuSystem, oidUcdCpuIdle})
-	if err == nil && len(result2.Variables) >= 3 {
+	// 回退到 UCD-SNMP-MIB (Linux 系统)
+	result3, err := target.Get([]string{oidUcdCpuUser, oidUcdCpuSystem, oidUcdCpuIdle})
+	if err == nil && len(result3.Variables) >= 3 {
 		var user, system, idle float64
-		for _, v := range result2.Variables {
+		for _, v := range result3.Variables {
 			if v.Type == gosnmp.Integer {
 				val := float64(gosnmp.ToBigInt(v.Value).Int64())
 				if strings.Contains(v.Name, "9.0") {
@@ -270,19 +345,120 @@ func (c *SNMPCollector) collectCPU(target *gosnmp.GoSNMP, metrics *SNMPMetrics) 
 		if total > 0 {
 			cpuUsage := ((user + system) / total) * 100
 			metrics.CPUUsage = &cpuUsage
+			if c.logger != nil {
+				c.logger.Debug("collected CPU from UCD-SNMP-MIB", 
+					zap.Float64("cpu_usage", cpuUsage))
+			}
 		}
 	}
 }
 
 func (c *SNMPCollector) collectMemory(target *gosnmp.GoSNMP, metrics *SNMPMetrics) {
-	// Try HOST-RESOURCES-MIB (hrStorage)
+	// 优先尝试华为设备特定的内存 OID
+	usageResult, err1 := target.BulkWalkAll(oidHuaweiMemoryUsage)
+	sizeResult, err2 := target.BulkWalkAll(oidHuaweiMemorySize)
+	
+	if err1 == nil && err2 == nil && len(usageResult) > 0 && len(sizeResult) > 0 {
+		// 华为设备可能有多个内存模块，取平均值
+		var totalUsage float64
+		var totalSize int64
+		usageCount := 0
+		sizeCount := 0
+		
+		if c.logger != nil {
+			c.logger.Debug("华为内存 OID 返回数据", 
+				zap.Int("usage_result_count", len(usageResult)),
+				zap.Int("size_result_count", len(sizeResult)))
+		}
+		
+		for _, v := range usageResult {
+			if v.Type == gosnmp.Integer || v.Type == gosnmp.Gauge32 {
+				rawValue := gosnmp.ToBigInt(v.Value).Int64()
+				usage := float64(rawValue)
+				
+				if c.logger != nil {
+					c.logger.Debug("华为内存使用率原始值", 
+						zap.Int64("raw_value", rawValue),
+						zap.Float64("usage", usage),
+						zap.String("oid", v.Name))
+				}
+				
+				// 华为设备可能返回不同格式的值：
+				// 1. 小数格式 (0-1)：需要乘以 100
+				// 2. 百分比格式 (0-100)：直接使用
+				// 3. 千分比格式 (0-10000)：需要除以 100
+				if usage >= 0 && usage < 1 {
+					// 小数格式，转换为百分比
+					usage = usage * 100
+					if c.logger != nil {
+						c.logger.Debug("华为内存使用率值转换（小数→百分比）", 
+							zap.Int64("raw_value", rawValue),
+							zap.Float64("converted_usage", usage))
+					}
+					totalUsage += usage
+					usageCount++
+				} else if usage >= 1 && usage <= 100 {
+					// 百分比格式，直接使用
+					totalUsage += usage
+					usageCount++
+				} else if usage > 100 && usage <= 10000 {
+					// 千分比格式，转换为百分比
+					usage = usage / 100
+					if c.logger != nil {
+						c.logger.Debug("华为内存使用率值转换（千分比→百分比）", 
+							zap.Int64("raw_value", rawValue),
+							zap.Float64("converted_usage", usage))
+					}
+					totalUsage += usage
+					usageCount++
+				}
+			}
+		}
+		
+		for _, v := range sizeResult {
+			if v.Type == gosnmp.Integer || v.Type == gosnmp.Gauge32 {
+				size := gosnmp.ToBigInt(v.Value).Int64()
+				
+				if c.logger != nil {
+					c.logger.Debug("华为内存大小原始值", 
+						zap.Int64("size_kb", size),
+						zap.String("oid", v.Name))
+				}
+				
+				// 华为设备返回的是 KB，转换为字节
+				if size > 0 {
+					totalSize += size * 1024
+					sizeCount++
+				}
+			}
+		}
+		
+		if usageCount > 0 && sizeCount > 0 {
+			avgUsage := totalUsage / float64(usageCount)
+			metrics.MemoryUsage = &avgUsage
+			metrics.MemoryTotal = &totalSize
+			usedBytes := int64(float64(totalSize) * avgUsage / 100)
+			metrics.MemoryUsed = &usedBytes
+			
+			if c.logger != nil {
+				c.logger.Debug("collected memory from Huawei OID",
+					zap.Float64("memory_usage", avgUsage),
+					zap.Int64("memory_total", totalSize),
+					zap.Int64("memory_used", usedBytes),
+					zap.Int("modules", usageCount))
+			}
+			return
+		}
+	}
+
+	// 尝试 HOST-RESOURCES-MIB (hrStorage)
 	descrResult, err := target.BulkWalkAll(oidHrStorageDescr)
 	if err != nil {
 		c.collectMemoryUCD(target, metrics)
 		return
 	}
 
-	// Find RAM storage index
+	// 查找 RAM 存储索引
 	var ramIndex string
 	for _, v := range descrResult {
 		if v.Type == gosnmp.OctetString {
@@ -304,7 +480,7 @@ func (c *SNMPCollector) collectMemory(target *gosnmp.GoSNMP, metrics *SNMPMetric
 		return
 	}
 
-	// Get allocation units, size, and used for RAM
+	// 获取 RAM 的分配单元、大小和已用量
 	oids := []string{
 		oidHrStorageAllocationUnits + "." + ramIndex,
 		oidHrStorageSize + "." + ramIndex,
@@ -338,6 +514,13 @@ func (c *SNMPCollector) collectMemory(target *gosnmp.GoSNMP, metrics *SNMPMetric
 		metrics.MemoryUsed = &usedBytes
 		usage := (float64(usedBytes) / float64(totalBytes)) * 100
 		metrics.MemoryUsage = &usage
+		
+		if c.logger != nil {
+			c.logger.Debug("collected memory from HOST-RESOURCES-MIB",
+				zap.Float64("memory_usage", usage),
+				zap.Int64("memory_total", totalBytes),
+				zap.Int64("memory_used", usedBytes))
+		}
 	}
 }
 
@@ -365,6 +548,13 @@ func (c *SNMPCollector) collectMemoryUCD(target *gosnmp.GoSNMP, metrics *SNMPMet
 		metrics.MemoryUsed = &used
 		usage := (float64(used) / float64(total)) * 100
 		metrics.MemoryUsage = &usage
+		
+		if c.logger != nil {
+			c.logger.Debug("collected memory from UCD-SNMP-MIB",
+				zap.Float64("memory_usage", usage),
+				zap.Int64("memory_total", total),
+				zap.Int64("memory_used", used))
+		}
 	}
 }
 
@@ -426,7 +616,7 @@ func (c *SNMPCollector) collectTemperature(target *gosnmp.GoSNMP, metrics *SNMPM
 }
 
 func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress string, metrics *SNMPMetrics) {
-	// Get interface descriptions
+	// 获取接口描述
 	descrResult, err := target.BulkWalkAll(oidIfDescr)
 	if err != nil {
 		return
@@ -454,7 +644,7 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 		return
 	}
 
-	// Get interface speeds (try 64-bit first)
+	// 获取接口速率（优先尝试 64 位）
 	speedResult, _ := target.BulkWalkAll(oidIfHighSpeed)
 	for _, v := range speedResult {
 		if v.Type == gosnmp.Gauge32 || v.Type == gosnmp.Integer {
@@ -470,12 +660,12 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 		}
 	}
 
-	// Get interface octets (try 64-bit counters first)
+	// 获取接口字节数（优先尝试 64 位计数器）
 	now := time.Now()
 	inResult, _ := target.BulkWalkAll(oidIfHCInOctets)
 	outResult, _ := target.BulkWalkAll(oidIfHCOutOctets)
 
-	// Fallback to 32-bit if 64-bit not available
+	// 如果 64 位不可用，回退到 32 位
 	if len(inResult) == 0 {
 		inResult, _ = target.BulkWalkAll(oidIfInOctets)
 	}
@@ -507,7 +697,7 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 		}
 	}
 
-	// Calculate rates using cached values
+	// 使用缓存值计算速率
 	c.mu.Lock()
 	if c.lastOctets[ipAddress] == nil {
 		c.lastOctets[ipAddress] = make(map[int]octetsCache)
@@ -515,16 +705,18 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 	lastCache := c.lastOctets[ipAddress]
 
 	var totalInRate, totalOutRate float64
-	const maxReasonableBandwidth = 10000.0 // 10 Gbps - 超过此值视为异常
+	// 最大合理带宽：10 Gbps = 10,000,000,000 bps
+	// 超过此阈值的带宽值将被视为异常并跳过
+	const MaxReasonableBandwidthBps = 10_000_000_000
 	
 	for idx, iface := range interfaces {
 		if iface.InOctets != nil && iface.OutOctets != nil {
 			if last, ok := lastCache[idx]; ok {
 				elapsed := now.Sub(last.timestamp).Seconds()
-				if elapsed > 0 && elapsed < 300 { // Max 5 minutes between samples
+				if elapsed > 0 && elapsed < 300 { // 采样间隔最大 5 分钟
 					// 检测 counter wrap - 如果当前值小于历史值，跳过此次采样
 					if *iface.InOctets < last.inOctets || *iface.OutOctets < last.outOctets {
-						// Counter wrapped or reset, skip this sample and update cache
+						// Counter 回绕或重置，跳过此次采样并更新缓存
 						lastCache[idx] = octetsCache{
 							inOctets:  *iface.InOctets,
 							outOctets: *iface.OutOctets,
@@ -536,13 +728,22 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 					inDiff := *iface.InOctets - last.inOctets
 					outDiff := *iface.OutOctets - last.outOctets
 
-					// Convert to Mbps (bytes/sec * 8 / 1000000)
-					inRate := (float64(inDiff) / elapsed) * 8 / 1000000
-					outRate := (float64(outDiff) / elapsed) * 8 / 1000000
+					// 计算带宽速率（单位：bps - bits per second）
+					inRateBps := (float64(inDiff) / elapsed) * 8  // bps
+					outRateBps := (float64(outDiff) / elapsed) * 8  // bps
 
-					// 合理性检查 1: 不应超过 10 Gbps
-					if inRate > maxReasonableBandwidth || outRate > maxReasonableBandwidth {
-						// 异常值，跳过但更新缓存
+					// 合理性检查：不应超过 10 Gbps
+					if inRateBps > MaxReasonableBandwidthBps || outRateBps > MaxReasonableBandwidthBps {
+						// 异常值，记录警告并跳过，但更新缓存
+						if c.logger != nil {
+							c.logger.Warn("unreasonable bandwidth detected, skipping sample",
+								zap.String("interface", iface.Description),
+								zap.Float64("in_rate_bps", inRateBps),
+								zap.Float64("in_rate_gbps", inRateBps/1_000_000_000),
+								zap.Float64("out_rate_bps", outRateBps),
+								zap.Float64("out_rate_gbps", outRateBps/1_000_000_000),
+								zap.Float64("threshold_gbps", MaxReasonableBandwidthBps/1_000_000_000))
+						}
 						lastCache[idx] = octetsCache{
 							inOctets:  *iface.InOctets,
 							outOctets: *iface.OutOctets,
@@ -553,9 +754,17 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 
 					// 合理性检查 2: 如果有接口速度信息，不应超过接口速度的 120%
 					if iface.Speed != nil && *iface.Speed > 0 {
-						maxSpeed := float64(*iface.Speed) // Speed is in Mbps
-						if inRate > maxSpeed*1.2 || outRate > maxSpeed*1.2 {
-							// 超过接口速度，跳过但更新缓存
+						maxSpeedBps := float64(*iface.Speed) * 1_000_000 // Speed 单位为 Mbps，转换为 bps
+						if inRateBps > maxSpeedBps*1.2 || outRateBps > maxSpeedBps*1.2 {
+							// 超过接口速度，记录警告并跳过，但更新缓存
+							if c.logger != nil {
+								c.logger.Warn("bandwidth exceeds interface speed, skipping sample",
+									zap.String("interface", iface.Description),
+									zap.Float64("in_rate_bps", inRateBps),
+									zap.Float64("out_rate_bps", outRateBps),
+									zap.Float64("interface_speed_bps", maxSpeedBps),
+									zap.Float64("threshold_bps", maxSpeedBps*1.2))
+							}
 							lastCache[idx] = octetsCache{
 								inOctets:  *iface.InOctets,
 								outOctets: *iface.OutOctets,
@@ -565,10 +774,10 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 						}
 					}
 
-					iface.InRate = &inRate
-					iface.OutRate = &outRate
-					totalInRate += inRate
-					totalOutRate += outRate
+					iface.InRate = &inRateBps
+					iface.OutRate = &outRateBps
+					totalInRate += inRateBps
+					totalOutRate += outRateBps
 				}
 			} else {
 				// 首次采集，只缓存数据，不计算速率（没有历史对比）
@@ -580,7 +789,7 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 				continue
 			}
 
-			// Update cache
+			// 更新缓存
 			lastCache[idx] = octetsCache{
 				inOctets:  *iface.InOctets,
 				outOctets: *iface.OutOctets,
@@ -590,12 +799,12 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 	}
 	c.mu.Unlock()
 
-	// Set total bandwidth
+	// 设置总带宽
 	// 即使没有计算出速率（首次采集或异常值），也设置为 0 表示数据已采集
 	metrics.BandwidthIn = &totalInRate
 	metrics.BandwidthOut = &totalOutRate
 
-	// Convert map to slice
+	// 将 map 转换为 slice
 	for _, iface := range interfaces {
 		metrics.Interfaces = append(metrics.Interfaces, *iface)
 	}

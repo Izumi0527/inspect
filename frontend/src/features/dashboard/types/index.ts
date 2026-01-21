@@ -8,6 +8,7 @@ export interface DashboardStat {
   iconName: string
   iconColor: string
   color: string
+  unit?: string // 需要格式化的值的单位（例如，带宽使用 "bps"）
 }
 
 // 导航项接口

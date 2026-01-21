@@ -679,6 +679,17 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
 
     // 如果后端返回对象，转换为数组
     if (response && typeof response === 'object') {
+      // 辅助函数：将小数格式（0-1）转换为百分比格式（0-100）
+      const formatPercentageValue = (value: any): number => {
+        const num = Number(value ?? 0)
+        // 如果值在 0-1 之间（小数格式），乘以 100 转换为百分比
+        if (num >= 0 && num < 1) {
+          return num * 100
+        }
+        // 否则直接使用（已经是百分比格式）
+        return num
+      }
+
       return [
         // 1. 总设备
         {
@@ -692,7 +703,7 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
         {
           id: 'availability',
           title: '可用性',
-          value: `${Number(response.availability ?? 0).toFixed(1)}%`,
+          value: `${formatPercentageValue(response.availability).toFixed(1)}%`,
           change: undefined,
           trend: undefined,
         },
@@ -708,7 +719,7 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
         {
           id: 'avg_cpu',
           title: '平均 CPU',
-          value: `${Number(response.avg_cpu ?? 0).toFixed(1)}%`,
+          value: `${formatPercentageValue(response.avg_cpu).toFixed(1)}%`,
           change: undefined,
           trend: undefined,
         },
@@ -716,7 +727,7 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
         {
           id: 'avg_memory',
           title: '平均内存',
-          value: `${Number(response.avg_memory ?? 0).toFixed(1)}%`,
+          value: `${formatPercentageValue(response.avg_memory).toFixed(1)}%`,
           change: undefined,
           trend: undefined,
         },

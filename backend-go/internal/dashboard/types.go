@@ -3,12 +3,13 @@ package dashboard
 import "time"
 
 type StatCard struct {
-	Title     string `json:"title"`
-	Value     string `json:"value"`
-	Change    string `json:"change"`
-	IconName  string `json:"iconName"`
-	IconColor string `json:"iconColor"`
-	Color     string `json:"color"`
+	Title     string  `json:"title"`
+	Value     string  `json:"value"`
+	Change    string  `json:"change"`
+	IconName  string  `json:"iconName"`
+	IconColor string  `json:"iconColor"`
+	Color     string  `json:"color"`
+	Unit      *string `json:"unit,omitempty"` // 需要格式化的值的单位（例如，带宽使用 "bps"）
 }
 
 type RecentAlert struct {
@@ -76,4 +77,11 @@ type SystemStatus struct {
 	DatabaseConnected bool      `json:"database_connected"`
 	UptimeSeconds     int64     `json:"uptime_seconds"`
 	LastCheck         time.Time `json:"last_check"`
+}
+
+// BandwidthStats 表示带宽统计信息及其单位
+type BandwidthStats struct {
+	InboundRate  float64 `json:"inbound_rate"`  // 入站速率，单位：bps（比特每秒）
+	OutboundRate float64 `json:"outbound_rate"` // 出站速率，单位：bps（比特每秒）
+	Unit         string  `json:"unit"`          // 单位标识："bps"
 }

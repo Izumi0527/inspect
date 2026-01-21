@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { 
   Device, 
   DeviceFilters, 
@@ -17,15 +17,18 @@ import {
   bulkImportDevices
 } from '../api/devices.api'
 
-export function useDevices() {
+export function useDevices(enablePolling = true, pollingInterval = 60000) {
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const pollingTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // 加载设备列表
-  const loadDevices = useCallback(async (filters?: DeviceFilters) => {
+  const loadDevices = useCallback(async (filters?: DeviceFilters, silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) {
+        setLoading(true)
+      }
       setError(null)
       const data = await fetchDevices(filters)
       setDevices(data)
@@ -36,7 +39,9 @@ export function useDevices() {
       setDevices([])
       console.error('设备加载失败:', err)
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }, [])
 
@@ -135,6 +140,31 @@ export function useDevices() {
   useEffect(() => {
     loadDevices()
   }, [loadDevices])
+
+  // 轮询机制：定期刷新设备数据
+  useEffect(() => {
+    if (!enablePolling || pollingInterval <= 0) {
+      return
+    }
+
+    // 清除之前的定时器
+    if (pollingTimerRef.current) {
+      clearInterval(pollingTimerRef.current)
+    }
+
+    // 设置新的定时器（静默刷新，不显示加载状态）
+    pollingTimerRef.current = setInterval(() => {
+      loadDevices(undefined, true)
+    }, pollingInterval)
+
+    // 清理函数
+    return () => {
+      if (pollingTimerRef.current) {
+        clearInterval(pollingTimerRef.current)
+        pollingTimerRef.current = null
+      }
+    }
+  }, [enablePolling, pollingInterval, loadDevices])
 
   return {
     devices,

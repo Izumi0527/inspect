@@ -9,6 +9,7 @@ import {
 import { StatCard } from '@/components/shared'
 import { DashboardStat } from '../types'
 import { Card, CardContent } from '@/components/atoms'
+import { formatBandwidth } from '@/utils/formatters'
 
 interface StatsGridProps {
   stats: DashboardStat[]
@@ -29,6 +30,28 @@ const getTrend = (change: string): 'up' | 'down' | 'stable' => {
   if (change.startsWith('+')) return 'up'
   if (change.startsWith('-')) return 'down'
   return 'stable'
+}
+
+// 根据单位字段格式化统计值
+const formatStatValue = (value: string, unit?: string): string => {
+  // 验证单位字段并进行格式化
+  if (unit === 'bps') {
+    // 验证单位为 bps 后进行带宽格式化
+    const bpsValue = parseFloat(value)
+    if (isNaN(bpsValue)) {
+      console.warn('Invalid bps value received:', value)
+      return value // 返回原始值
+    }
+    return formatBandwidth(bpsValue)
+  }
+  
+  // 如果有其他单位但不是 bps，记录警告
+  if (unit && unit !== 'bps') {
+    console.warn(`Unexpected unit field: ${unit}, expected "bps" or undefined`)
+  }
+  
+  // 对于没有单位字段的值，直接返回原始值
+  return value
 }
 
 export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) => {
@@ -61,12 +84,15 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) 
         // 如果没有找到图标,使用默认图标
         if (!IconComponent) return null
 
+        // 格式化统计值（如果有单位字段，进行相应的格式化）
+        const formattedValue = formatStatValue(stat.value, stat.unit)
+
         return (
           <StatCard
             key={index}
             index={index}
             title={stat.title}
-            value={stat.value}
+            value={formattedValue}
             change={stat.change}
             trend={getTrend(stat.change)}
             icon={IconComponent}
