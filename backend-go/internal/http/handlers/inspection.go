@@ -41,11 +41,16 @@ func (h InspectionHandler) Register(group *echo.Group) {
 	group.GET("/inspection/tasks/:id/results", h.GetTaskResults)
 	group.GET("/inspection/tasks/:id/progress", h.GetTaskProgress)
 
-	group.GET("/inspection/templates", h.ListTemplates)
-	group.POST("/inspection/templates", h.CreateTemplate)
-	group.GET("/inspection/templates/:id", h.GetTemplate)
-	group.PUT("/inspection/templates/:id", h.UpdateTemplate)
-	group.DELETE("/inspection/templates/:id", h.DeleteTemplate)
+	// Enhanced template management API endpoints
+	group.GET("/inspection/templates", h.ListTemplatesV2)
+	group.POST("/inspection/templates", h.CreateTemplateV2)
+	group.GET("/inspection/templates/:id", h.GetTemplateV2)
+	group.PUT("/inspection/templates/:id", h.UpdateTemplateV2)
+	group.DELETE("/inspection/templates/:id", h.DeleteTemplateV2)
+	group.POST("/inspection/templates/:id/copy", h.CopyTemplate)
+	group.GET("/inspection/templates/:id/export", h.ExportTemplate)
+	group.POST("/inspection/templates/import", h.ImportTemplate)
+	group.POST("/inspection/templates/test-oid", h.TestOID)
 
 	group.GET("/inspection/strategies", h.ListStrategies)
 	group.POST("/inspection/strategies", h.CreateStrategy)
@@ -247,6 +252,369 @@ func (h InspectionHandler) DeleteTemplate(c echo.Context) error {
 	}
 
 	return inspectionOKWithMessage(c, "巡检模板已删除", map[string]interface{}{"id": templateID})
+}
+
+// ============================================================================
+// Enhanced Template Management API Handlers
+// ============================================================================
+
+// ListTemplatesV2 handles GET /api/v1/templates with enhanced filtering
+// Validates: Requirements 13.1, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6
+func (h InspectionHandler) ListTemplatesV2(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:read"); err != nil {
+		return err
+	}
+
+	// Parse filters
+	filters := inspection.TemplateFilters{
+		Vendor:     strings.TrimSpace(c.QueryParam("vendor")),
+		DeviceType: strings.TrimSpace(c.QueryParam("device_type")),
+		Category:   strings.TrimSpace(c.QueryParam("category")),
+		Search:     strings.TrimSpace(c.QueryParam("search")),
+	}
+
+	// Parse is_default filter
+	if isDefaultStr := strings.TrimSpace(c.QueryParam("is_default")); isDefaultStr != "" {
+		if isDefault, err := strconv.ParseBool(isDefaultStr); err == nil {
+			filters.IsDefault = &isDefault
+		}
+	}
+
+	// Parse pagination
+	pagination := inspection.Pagination{
+		Page:     parseIntWithDefault(c.QueryParam("page"), 1),
+		PageSize: parseIntWithDefault(c.QueryParam("page_size"), 20),
+		Sort:     strings.TrimSpace(c.QueryParam("sort")),
+		Order:    strings.TrimSpace(c.QueryParam("order")),
+	}
+
+	// Get templates
+	page, err := h.Service.List(c.Request().Context(), filters, pagination)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to list templates: %v", err))
+	}
+
+	// Build response
+	items := make([]map[string]interface{}, 0, len(page.Items))
+	for _, template := range page.Items {
+		items = append(items, buildTemplateResponseV2(template))
+	}
+
+	return inspectionOK(c, map[string]interface{}{
+		"items":     items,
+		"total":     page.Total,
+		"page":      page.Page,
+		"page_size": page.PageSize,
+	})
+}
+
+// GetTemplateV2 handles GET /api/v1/templates/:id
+// Validates: Requirements 13.2, 9.4
+func (h InspectionHandler) GetTemplateV2(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:read"); err != nil {
+		return err
+	}
+
+	templateID, err := parseIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	template, err := h.Service.GetByID(c.Request().Context(), templateID)
+	if err != nil {
+		if errors.Is(err, inspection.ErrTemplateNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "模板不存在")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to get template: %v", err))
+	}
+
+	return inspectionOK(c, buildTemplateResponseV2(template))
+}
+
+// CreateTemplateV2 handles POST /api/v1/templates
+// Validates: Requirements 13.3, 12.1, 12.2, 12.3, 12.4, 12.5, 12.6
+func (h InspectionHandler) CreateTemplateV2(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:create"); err != nil {
+		return err
+	}
+
+	// Parse request body
+	var req map[string]interface{}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	// Build template from request
+	template, err := buildTemplateFromRequest(req)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	// Create template
+	if err := h.Service.Create(c.Request().Context(), template); err != nil {
+		if validationErr, ok := err.(*inspection.ValidationError); ok {
+			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to create template: %v", err))
+	}
+
+	return inspectionOKWithCode(c, http.StatusCreated, "创建模板成功", buildTemplateResponseV2(template))
+}
+
+// UpdateTemplateV2 handles PUT /api/v1/templates/:id
+// Validates: Requirements 13.4, 13.9
+func (h InspectionHandler) UpdateTemplateV2(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:update"); err != nil {
+		return err
+	}
+
+	templateID, err := parseIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	// Parse request body
+	var req map[string]interface{}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	// Build template from request
+	template, err := buildTemplateFromRequest(req)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	// Update template
+	if err := h.Service.Update(c.Request().Context(), templateID, template); err != nil {
+		if errors.Is(err, inspection.ErrTemplateNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "模板不存在")
+		}
+		if errors.Is(err, inspection.ErrCannotModifyBuiltInTemplate) {
+			return echo.NewHTTPError(http.StatusForbidden, "不能修改内置模板")
+		}
+		if validationErr, ok := err.(*inspection.ValidationError); ok {
+			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to update template: %v", err))
+	}
+
+	// Get updated template
+	updated, err := h.Service.GetByID(c.Request().Context(), templateID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get updated template")
+	}
+
+	return inspectionOK(c, buildTemplateResponseV2(updated))
+}
+
+// DeleteTemplateV2 handles DELETE /api/v1/templates/:id
+// Validates: Requirements 13.5, 13.9
+func (h InspectionHandler) DeleteTemplateV2(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:delete"); err != nil {
+		return err
+	}
+
+	templateID, err := parseIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	if err := h.Service.Delete(c.Request().Context(), templateID); err != nil {
+		if errors.Is(err, inspection.ErrTemplateNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "模板不存在")
+		}
+		if errors.Is(err, inspection.ErrCannotDeleteBuiltInTemplate) {
+			return echo.NewHTTPError(http.StatusForbidden, "不能删除内置模板")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to delete template: %v", err))
+	}
+
+	return inspectionOKWithMessage(c, "模板已删除", map[string]interface{}{"id": templateID})
+}
+
+// CopyTemplate handles POST /api/v1/templates/:id/copy
+// Validates: Requirements 13.6, 10.1, 10.2, 10.3, 10.4, 10.5
+func (h InspectionHandler) CopyTemplate(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:create"); err != nil {
+		return err
+	}
+
+	templateID, err := parseIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	// Parse request body for optional new name
+	var req map[string]interface{}
+	_ = c.Bind(&req)
+	newName := readString(req, "name")
+
+	// Copy template
+	copied, err := h.Service.Copy(c.Request().Context(), templateID, newName)
+	if err != nil {
+		if errors.Is(err, inspection.ErrTemplateNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "模板不存在")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to copy template: %v", err))
+	}
+
+	return inspectionOKWithCode(c, http.StatusCreated, "复制模板成功", buildTemplateResponseV2(copied))
+}
+
+// ExportTemplate handles GET /api/v1/templates/:id/export
+// Validates: Requirement 13.8
+func (h InspectionHandler) ExportTemplate(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:read"); err != nil {
+		return err
+	}
+
+	templateID, err := parseIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	// Export template
+	data, err := h.Service.Export(c.Request().Context(), templateID)
+	if err != nil {
+		if errors.Is(err, inspection.ErrTemplateNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "模板不存在")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to export template: %v", err))
+	}
+
+	// Get template name for filename
+	template, _ := h.Service.GetByID(c.Request().Context(), templateID)
+	filename := fmt.Sprintf("template_%d.json", templateID)
+	if template != nil {
+		filename = fmt.Sprintf("%s.json", strings.ReplaceAll(template.Name, " ", "_"))
+	}
+
+	// Set headers for file download
+	c.Response().Header().Set("Content-Type", "application/json")
+	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+
+	return c.Blob(http.StatusOK, "application/json", data)
+}
+
+// ImportTemplate handles POST /api/v1/templates/import
+// Validates: Requirements 13.7, 11.1, 11.2, 11.3, 11.4
+func (h InspectionHandler) ImportTemplate(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:create"); err != nil {
+		return err
+	}
+
+	// Get file from multipart form
+	file, err := c.FormFile("file")
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "file is required")
+	}
+
+	// Open file
+	src, err := file.Open()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "failed to open file")
+	}
+	defer src.Close()
+
+	// Read file content
+	data, err := json.NewDecoder(src).Token()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid JSON file")
+	}
+
+	// Re-read the file properly
+	src.Close()
+	src, _ = file.Open()
+	var buf []byte
+	buf, err = json.Marshal(data)
+	if err != nil {
+		// Read raw bytes instead
+		src.Close()
+		src, _ = file.Open()
+		buf = make([]byte, file.Size)
+		_, err = src.Read(buf)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "failed to read file")
+		}
+	}
+
+	// Parse overwrite parameter
+	overwrite := false
+	if overwriteStr := c.FormValue("overwrite"); overwriteStr != "" {
+		overwrite, _ = strconv.ParseBool(overwriteStr)
+	}
+
+	// Import template
+	imported, err := h.Service.Import(c.Request().Context(), buf, overwrite)
+	if err != nil {
+		if validationErr, ok := err.(*inspection.ValidationError); ok {
+			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to import template: %v", err))
+	}
+
+	return inspectionOKWithCode(c, http.StatusCreated, "导入模板成功", buildTemplateResponseV2(imported))
+}
+
+// TestOID handles POST /api/v1/templates/test-oid
+// Validates: Requirements 15.1, 15.2, 15.3, 15.4
+func (h InspectionHandler) TestOID(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:read"); err != nil {
+		return err
+	}
+
+	// Parse request body
+	var req map[string]interface{}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	deviceID, _ := readInt(req, "device_id", "deviceId")
+	oid := readString(req, "oid")
+
+	if deviceID <= 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "device_id is required")
+	}
+	if strings.TrimSpace(oid) == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "oid is required")
+	}
+
+	// TODO: Implement OID testing service
+	// For now, return a placeholder response
+	return inspectionOK(c, map[string]interface{}{
+		"success": false,
+		"message": "OID testing service not yet implemented",
+		"value":   nil,
+		"type":    nil,
+	})
 }
 
 func (h InspectionHandler) ListStrategies(c echo.Context) error {
@@ -2299,4 +2667,99 @@ func resolveReportFilePath(report reports.Report) string {
 		return fmt.Sprint(value)
 	}
 	return ""
+}
+
+
+// ============================================================================
+// Helper Functions for Enhanced Template API
+// ============================================================================
+
+// buildTemplateResponseV2 builds a detailed template response with all check items
+func buildTemplateResponseV2(template *inspection.Template) map[string]interface{} {
+	if template == nil {
+		return nil
+	}
+
+	// Parse device types
+	var deviceTypes map[string]interface{}
+	if len(template.DeviceTypes) > 0 {
+		json.Unmarshal(template.DeviceTypes, &deviceTypes)
+	}
+
+	// Parse check items
+	var checkItems []map[string]interface{}
+	if len(template.CheckItems) > 0 {
+		json.Unmarshal(template.CheckItems, &checkItems)
+	}
+
+	// Count check items
+	checkItemsCount := len(checkItems)
+
+	response := map[string]interface{}{
+		"id":                template.ID,
+		"name":              template.Name,
+		"description":       defaultStringPtr(template.Description, ""),
+		"category":          defaultStringPtr(template.Category, ""),
+		"device_types":      deviceTypes,
+		"check_items":       checkItems,
+		"check_items_count": checkItemsCount,
+		"is_default":        template.IsDefault,
+		"is_active":         template.IsActive,
+		"created_at":        template.CreatedAt,
+		"updated_at":        firstTime(template.UpdatedAt, template.CreatedAt),
+	}
+
+	return response
+}
+
+// buildTemplateFromRequest builds a Template object from request data
+func buildTemplateFromRequest(req map[string]interface{}) (*inspection.Template, error) {
+	name := readString(req, "name")
+	if strings.TrimSpace(name) == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	template := &inspection.Template{
+		Name: name,
+	}
+
+	// Optional fields
+	if desc, ok := readOptionalString(req, "description"); ok {
+		template.Description = desc
+	}
+
+	if cat, ok := readOptionalString(req, "category"); ok {
+		template.Category = cat
+	}
+
+	// Device types
+	if deviceTypes, ok := req["device_types"]; ok {
+		deviceTypesJSON, err := json.Marshal(deviceTypes)
+		if err != nil {
+			return nil, fmt.Errorf("invalid device_types format")
+		}
+		template.DeviceTypes = deviceTypesJSON
+	}
+
+	// Check items
+	if checkItems, ok := req["check_items"]; ok {
+		checkItemsJSON, err := json.Marshal(checkItems)
+		if err != nil {
+			return nil, fmt.Errorf("invalid check_items format")
+		}
+		template.CheckItems = checkItemsJSON
+	}
+
+	// Boolean fields
+	if isDefault, ok := readBool(req, "is_default", "isDefault"); ok {
+		template.IsDefault = isDefault
+	}
+
+	if isActive, ok := readBool(req, "is_active", "isActive"); ok {
+		template.IsActive = isActive
+	} else {
+		template.IsActive = true // Default to active
+	}
+
+	return template, nil
 }
