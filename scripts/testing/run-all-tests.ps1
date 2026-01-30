@@ -182,11 +182,11 @@ function Main {
         }
 
         if ($DatabaseOnly) {
-            Test-Port -Name "PostgreSQL" -Port 5433
+            Test-Port -Name "PostgreSQL" -Port 15500
         }
 
         if ($RedisOnly) {
-            Test-Port -Name "Redis" -Port 6380
+            Test-Port -Name "Redis" -Port 16379
         }
 
         if ($APIOnly) {

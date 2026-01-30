@@ -326,27 +326,30 @@ services:
 git clone https://github.com/your-org/inspect-system.git
 cd inspect-system
 
-# 2. 复制环境变量
-cp .env.example .env.development
+# 2. 复制环境变量（可选，已有默认配置）
+cp .env.example .env
 
-# 3. 启动开发环境 (包含所有服务)
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# 3. 启动开发环境（核心服务）
+docker-compose -f docker-compose.dev.yml up -d
 
-# 4. 查看服务状态
-docker-compose ps
+# 4. 启动管理工具（可选）
+docker-compose -f docker-compose.dev.yml --profile tools up -d
+
+# 5. 查看服务状态
+docker-compose -f docker-compose.dev.yml ps
 
 # 访问地址:
 # 前端: http://localhost:3000
 # 后端: http://localhost:8001
-# pgAdmin: http://localhost:5050
-# Redis Commander: http://localhost:8081
+# pgAdmin: http://localhost:5050 (需启动 tools profile)
+# Redis Commander: http://localhost:8081 (需启动 tools profile)
 ```
 
 #### **方式二：本地开发启动**
 
 ```bash
 # 1. 启动基础服务 (PostgreSQL + Redis)
-docker-compose up -d postgres redis
+docker-compose -f docker-compose.dev.yml up -d postgres redis
 
 # 2. 后端启动
 cd backend-go
@@ -558,7 +561,27 @@ pnpm quality
 
 ### 📊 数据库管理
 
-#### **数据库迁移**
+#### **🚀 快速初始化（推荐）**
+```bash
+# 完整数据库初始化 - 一键完成所有配置
+.\scripts\database\db-manage.ps1 init
+
+# 或者使用专用脚本
+.\scripts\database\db-init-complete.ps1
+
+# 分步初始化（高级用户）
+.\scripts\database\db-init-complete.ps1 -InitOnly      # 仅基础配置
+.\scripts\database\db-init-complete.ps1 -TemplatesOnly # 仅内置模板
+```
+
+#### **📋 初始化内容**
+- ✅ **基础配置** - 用户、权限、PostgreSQL扩展
+- ✅ **TimescaleDB** - 时序数据库配置、压缩策略
+- ✅ **数据迁移** - 网络带宽单位迁移 (bps → Mbps)
+- ✅ **内置模板** - 18个厂商设备模板（6厂商 × 3设备类型）
+- ✅ **测试数据** - E2E测试种子数据
+
+#### **🔧 传统迁移方式**
 ```bash
 # 自动迁移 (开发环境)
 DB_AUTO_MIGRATE=true go run ./cmd/api
@@ -566,7 +589,7 @@ DB_AUTO_MIGRATE=true go run ./cmd/api
 # 手动迁移
 go run ./cmd/migrate
 
-# 使用脚本迁移 (Windows)
+# 使用Go迁移脚本 (Windows)
 .\scripts\database\db-init-migrate-go.ps1
 ```
 
@@ -886,9 +909,11 @@ inspect-system/
 │   ├── go.mod                 # Go模块依赖
 │   └── Dockerfile             # 多阶段构建
 ├── database/                   # 数据库初始化脚本
-│   ├── init.sql               # PostgreSQL基础表结构
-│   ├── timescaledb-init.sql   # TimescaleDB时序表配置
-│   └── migrate-bps-to-mbps.sql # 数据迁移脚本
+│   ├── 🆕 database-init-complete.sql    # 完整初始化脚本（推荐）
+│   ├── 🆕 builtin-templates-complete.sql # 完整内置模板脚本
+│   ├── MIGRATION_GUIDE.md      # 迁移指南
+│   ├── CONSOLIDATION_SUMMARY.md # 整合总结
+│   └── README-inspection-templates.md # 数据库文档
 ├── docs/                      # 技术文档
 │   ├── api/                   # API文档
 │   ├── backend-go-quickstart.md # Go后端快速启动

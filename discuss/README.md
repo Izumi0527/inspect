@@ -208,7 +208,7 @@ python scripts/quality-check.py     # 代码质量检查
 1. **端口冲突**
    ```bash
    # 检查端口占用
-   netstat -tulpn | grep :5433
+   netstat -tulpn | grep :15500
    
    # 修改端口配置
    # 编辑 docker-compose.db.yml 中的端口映射

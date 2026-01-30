@@ -92,7 +92,7 @@ curl http://localhost:8000/health
 curl http://localhost:3000
 
 # 数据库
-psql -h localhost -p 5433 -U inspect_dev -d inspect_system_dev
+psql -h localhost -p 15432 -U inspect_dev -d inspect_system_dev
 ```
 
 ## 环境变量配置
@@ -102,8 +102,8 @@ psql -h localhost -p 5433 -U inspect_dev -d inspect_system_dev
 ```env
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8000
-DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:5433/inspect_system_dev
-REDIS_URL=redis://:dev_redis_2024@localhost:6380/0
+DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15432/inspect_system_dev
+REDIS_URL=redis://:dev_redis_2024@localhost:16379/0
 DB_AUTO_MIGRATE=true
 TIMESCALE_ENABLED=true
 ```
@@ -126,10 +126,10 @@ curl -I https://registry-1.docker.io
 
 ```bash
 # Windows
-netstat -an | findstr :5433
+netstat -an | findstr :15432
 
 # Linux/macOS
-lsof -i :5433
+lsof -i :15432
 ```
 
 ## 常用脚本
