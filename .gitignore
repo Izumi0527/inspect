@@ -273,6 +273,13 @@ Temporary Items
 temp/
 tmp/
 
+# Go 编译产物
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
 # 运行时配置文件
 context.json
 
