@@ -8,7 +8,7 @@
     支持 PostgreSQL（TimescaleDB）与 Redis 的统一管理
 
 .PARAMETER Action
-    操作类型: start, stop, reset, backup, status, logs
+    操作类型: start, stop, reset, backup, status, logs, init
 
 .PARAMETER Service
     指定服务: postgres, redis, all (默认)
@@ -19,6 +19,10 @@
 .EXAMPLE
     .\db-manage.ps1 start
     启动所有数据库服务
+
+.EXAMPLE
+    .\db-manage.ps1 init
+    执行完整数据库初始化
 
 .EXAMPLE
     .\db-manage.ps1 stop -Service postgres
@@ -38,7 +42,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("start", "stop", "reset", "backup", "status", "logs")]
+    [ValidateSet("start", "stop", "reset", "backup", "status", "logs", "init")]
     [string]$Action,
     
     [ValidateSet("postgres", "redis", "all")]
@@ -106,7 +110,6 @@ function Invoke-CommandSafely {
 # 获取 Docker Compose 文件
 function Get-ComposeFile {
     $composeFiles = @(
-        "docker-compose.db.yml",
         "docker-compose.dev.yml",
         "docker-compose.yml"
     )
@@ -125,8 +128,8 @@ function Get-ServiceNames {
     param([string]$Service)
     
     $serviceMap = @{
-        "postgres" = @("postgres", "postgres-dev", "inspect-postgres-dev")
-        "redis" = @("redis", "redis-dev", "inspect-redis-dev")
+        "postgres" = @("postgres")
+        "redis" = @("redis")
     }
     
     if ($Service -eq "all") {
@@ -291,6 +294,36 @@ function Backup-DatabaseServices {
     }
 }
 
+# 初始化数据库
+function Initialize-Database {
+    Write-ColorOutput "`n🔧 初始化数据库..." "Blue"
+    
+    # 获取脚本路径
+    $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $initScript = Join-Path $scriptPath "db-init-complete.ps1"
+    
+    if (-not (Test-Path $initScript)) {
+        Write-ColorOutput "❌ 找不到初始化脚本: $initScript" "Red"
+        throw "初始化脚本不存在"
+    }
+    
+    Write-ColorOutput "📋 执行完整数据库初始化..." "Cyan"
+    Write-ColorOutput "  - 基础配置（用户、权限、扩展）" "Gray"
+    Write-ColorOutput "  - TimescaleDB 时序数据库配置" "Gray"
+    Write-ColorOutput "  - 内置巡检模板（18个厂商模板）" "Gray"
+    Write-ColorOutput "  - 测试数据种子" "Gray"
+    
+    try {
+        # 执行初始化脚本
+        & $initScript -Force
+        Write-ColorOutput "✅ 数据库初始化完成" "Green"
+    }
+    catch {
+        Write-ColorOutput "❌ 数据库初始化失败: $($_.Exception.Message)" "Red"
+        throw
+    }
+}
+
 # 显示服务状态
 function Show-ServiceStatus {
     Write-ColorOutput "`n📊 数据库服务状态:" "Blue"
@@ -328,14 +361,14 @@ function Show-ServiceLogs {
     }
 }
 
-# 显示服务访问信息
+# 显示服务信息
 function Show-ServiceInfo {
     Write-ColorOutput "`n📊 服务访问地址:" "Blue"
-    Write-ColorOutput "  🗄️ PostgreSQL: localhost:5433" "White"
+    Write-ColorOutput "  🗄️ PostgreSQL: localhost:15500" "White"
     Write-ColorOutput "    - 用户名: inspect_dev" "Gray"
     Write-ColorOutput "    - 密码: dev_password_2024" "Gray"
     Write-ColorOutput "    - 数据库: inspect_system_dev" "Gray"
-    Write-ColorOutput "  🔴 Redis: localhost:6380" "White"
+    Write-ColorOutput "  🔴 Redis: localhost:16379" "White"
     Write-ColorOutput "    - 密码: dev_redis_2024" "Gray"
     Write-ColorOutput "  🔧 pgAdmin: http://localhost:5050" "White"
     Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"
@@ -353,6 +386,7 @@ function Main {
             "stop" { Stop-DatabaseServices }
             "reset" { Reset-DatabaseServices }
             "backup" { Backup-DatabaseServices }
+            "init" { Initialize-Database }
             "status" { Show-ServiceStatus }
             "logs" { Show-ServiceLogs }
         }

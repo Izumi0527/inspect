@@ -49,7 +49,7 @@ $Config = @{
     Database = "inspect_system_dev"
     User = "inspect_dev"
     Password = "dev_password_2024"
-    Port = 5433
+    Port = 15500
     Host = "localhost"
 }
 
