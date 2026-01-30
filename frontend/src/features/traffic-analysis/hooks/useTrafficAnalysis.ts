@@ -1,13 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api-client'
 import { 
   TrafficMetrics, 
   TrafficAnomaly, 
   TrafficTrend, 
   TrafficSummary,
-  TrafficCollectionResponse,
-  TrafficAnomaliesResponse,
-  TrafficTrendsResponse,
   TrafficAnalysisRequest,
   TrafficFilter
 } from '../types'
@@ -15,6 +12,48 @@ import {
 export const useTrafficAnalysis = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // 开始流量监控 - 目前为模拟实现，后端 API 待添加
+  const startMonitoring = async (request: TrafficAnalysisRequest): Promise<void> => {
+    setIsLoading(true)
+    setError(null)
+    
+    try {
+      // TODO: 后端需要添加 /traffic/monitoring/start API
+      // 目前仅记录请求，实际监控通过轮询实现
+      console.log('Starting traffic monitoring:', request)
+      await Promise.resolve()
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '启动流量监控失败'
+      setError(errorMsg)
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // 获取流量异常 - 目前为模拟实现，后端 API 待添加
+  const getTrafficAnomalies = useCallback(async (
+    deviceIp?: string,
+    severity?: string,
+    hours: number = 24
+  ): Promise<TrafficAnomaly[]> => {
+    setIsLoading(true)
+    setError(null)
+    
+    try {
+      // TODO: 后端需要添加 /traffic/anomalies API
+      // 目前返回空数组
+      console.log('Getting traffic anomalies:', { deviceIp, severity, hours })
+      return []
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '获取流量异常失败'
+      setError(errorMsg)
+      return []
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
   // 获取流量摘要
   const getTrafficSummary = async (
@@ -149,6 +188,8 @@ export const useTrafficAnalysis = () => {
   return {
     isLoading,
     error,
+    startMonitoring,
+    getTrafficAnomalies,
     getTrafficSummary,
     getDeviceTraffic,
     getTrafficTrends,
@@ -158,28 +199,25 @@ export const useTrafficAnalysis = () => {
   }
 }
 
-export const useTrafficRealtime = (deviceIds: number[], intervalMs: number = 30000) => {
-  const [trafficData, setTrafficData] = useState<Record<number, unknown>>({})
+export const useTrafficRealtime = (deviceIps: string[], intervalMs: number = 30000) => {
+  const [trafficData, setTrafficData] = useState<Record<string, TrafficMetrics[]>>({})
   const [isActive, setIsActive] = useState(false)
-  const { getDeviceTraffic } = useTrafficAnalysis()
 
   useEffect(() => {
-    if (!isActive || deviceIds.length === 0) {
+    if (!isActive || deviceIps.length === 0) {
       return
     }
 
     const collectData = async () => {
-      const newData: Record<number, unknown> = {}
+      // TODO: 实现基于 IP 的流量数据获取
+      // 目前后端 API 仅支持通过 deviceId 获取
+      console.log('Collecting realtime traffic data for:', deviceIps)
       
-      for (const deviceId of deviceIds) {
-        try {
-          const metrics = await getDeviceTraffic(deviceId)
-          newData[deviceId] = metrics
-        } catch (error) {
-          console.error(`Failed to collect data for device ${deviceId}:`, error)
-        }
+      // 模拟数据收集 - 实际实现需要后端支持
+      const newData: Record<string, TrafficMetrics[]> = {}
+      for (const ip of deviceIps) {
+        newData[ip] = []
       }
-      
       setTrafficData(newData)
     }
 
@@ -190,7 +228,7 @@ export const useTrafficRealtime = (deviceIds: number[], intervalMs: number = 300
     const interval = setInterval(collectData, intervalMs)
 
     return () => clearInterval(interval)
-  }, [deviceIds, intervalMs, isActive, getDeviceTraffic])
+  }, [deviceIps, intervalMs, isActive])
 
   const startRealtime = () => setIsActive(true)
   const stopRealtime = () => setIsActive(false)

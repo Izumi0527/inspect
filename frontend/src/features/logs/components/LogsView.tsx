@@ -116,12 +116,22 @@ export const LogsView: React.FC = () => {
     try {
       const params = new URLSearchParams()
       
-      // 添加过滤参数
-      if (filters.level) params.append('level', filters.level)
-      if (filters.facility) params.append('facility', filters.facility)
-      if (filters.startTime) params.append('start_time', filters.startTime)
-      if (filters.endTime) params.append('end_time', filters.endTime)
-      if (filters.search) params.append('search', filters.search)
+      // 添加过滤参数 - 使用正确的 LogFilters 属性名
+      if (filters.levelFilter && filters.levelFilter !== 'all') {
+        params.append('level', filters.levelFilter)
+      }
+      if (filters.facilityFilter && filters.facilityFilter !== 'all') {
+        params.append('facility', filters.facilityFilter)
+      }
+      if (filters.dateRange?.start) {
+        params.append('start_time', filters.dateRange.start)
+      }
+      if (filters.dateRange?.end) {
+        params.append('end_time', filters.dateRange.end)
+      }
+      if (filters.searchQuery) {
+        params.append('search', filters.searchQuery)
+      }
       
       params.append('format', format)
       params.append('include_raw', 'true')

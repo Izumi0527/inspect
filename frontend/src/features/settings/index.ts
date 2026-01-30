@@ -1,12 +1,12 @@
 // 主要组件导出
 export { SettingsView } from './components/SettingsView'
-export { SystemConfiguration } from './components/SystemConfiguration'
-export { UserManagement } from './components/UserManagement'
-export { SecuritySettings } from './components/SecuritySettings'
-export { AuditLogs } from './components/AuditLogs'
-export { BackupRestore } from './components/BackupRestore'
-export { NotificationSettings } from './components/NotificationSettings'
-export { SystemMonitoring } from './components/SystemMonitoring'
+export { GeneralSettings as SystemConfiguration } from './components/general/GeneralSettings'
+export { UserManagement } from './components/users/UserManagement'
+export { SecuritySettings } from './components/security/SecuritySettings'
+export { AuditLogs } from './components/audit/AuditLogs'
+export { BackupManagement as BackupRestore } from './components/backup/BackupManagement'
+export { NotificationSettings } from './components/notifications/NotificationSettings'
+export { MonitoringDashboard as SystemMonitoring } from './components/monitoring/MonitoringDashboard'
 
 // API服务导出
 export {

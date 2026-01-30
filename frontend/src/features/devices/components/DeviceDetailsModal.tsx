@@ -3,6 +3,7 @@
 import React from 'react'
 import { SimpleModal, Badge } from '@/components/atoms'
 import { Device } from '../types'
+import { formatDate } from '@/utils/formatters'
 
 // 格式化百分比值
 const formatPercentageValue = (value: number | undefined | null): string => {
@@ -15,6 +16,14 @@ const formatPercentageValue = (value: number | undefined | null): string => {
   }
   // 如果值在 1-100 之间（已经是百分比），直接使用
   return `${value.toFixed(1)}%`
+}
+
+// 格式化最近在线时间
+const formatLastSeen = (lastSeen: string | undefined | null): string => {
+  if (!lastSeen) {
+    return '未知'
+  }
+  return formatDate(lastSeen, 'datetime')
 }
 
 const getCliConfiguration = (device: Device) => {
@@ -112,7 +121,7 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
           <InfoRow label="所在位置" value={device.location || '未设置'} />
           <InfoRow label="CPU 使用率" value={formatPercentageValue(device.cpu_usage)} />
           <InfoRow label="内存使用率" value={formatPercentageValue(device.memory_usage)} />
-          <InfoRow label="最近在线时间" value={device.last_seen || '未知'} />
+          <InfoRow label="最近在线时间" value={formatLastSeen(device.last_seen)} />
           <InfoRow label="累计告警" value={device.alert_count ?? 0} />
         </div>
 
