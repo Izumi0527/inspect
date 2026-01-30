@@ -161,7 +161,7 @@ export const useCreateTemplate = () => {
         deviceTypes: data.deviceTypes || [],
         checkItems: data.checkItems || [],
       }
-      return createInspectionTemplate(templateData as Omit<InspectionTemplate, 'id' | 'created_at' | 'updated_at'>)
+      return createInspectionTemplate(templateData as Omit<InspectionTemplate, 'id' | 'createdAt' | 'updatedAt'>)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'templates'] })
@@ -193,7 +193,7 @@ export const useCloneTemplate = () => {
         checkItems: original.checkItems,
       }
 
-      return createInspectionTemplate(cloneData as Omit<InspectionTemplate, 'id' | 'created_at' | 'updated_at'>)
+      return createInspectionTemplate(cloneData as Omit<InspectionTemplate, 'id' | 'createdAt' | 'updatedAt'>)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'templates'] })

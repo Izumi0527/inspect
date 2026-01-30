@@ -8,7 +8,7 @@ import {
   CardContent
 } from '@/components/atoms'
 import { useCreateTemplate } from '../hooks/useInspection'
-import { InspectionTemplate } from '../types'
+import type { InspectionTemplate, TemplateCategory } from '../types'
 
 interface Props {
   onClose: () => void
@@ -80,10 +80,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
     if (template.name.length > 100) {
       return '模板名称不能超过100个字符'
     }
-    if (!template.deviceTypes || !Array.isArray(template.deviceTypes)) {
-      return '设备类型必须是数组'
-    }
-    if (template.deviceTypes.length === 0) {
+    if (!template.deviceTypes || !Array.isArray(template.deviceTypes) || template.deviceTypes.length === 0) {
       return '至少需要一个设备类型'
     }
     if (!template.checkItems || !Array.isArray(template.checkItems)) {
@@ -120,13 +117,23 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
         }
 
         try {
-          await createTemplate.mutateAsync({
+          // 构建请求数据
+          const templateData: Partial<InspectionTemplate> = {
             name: template.name,
             description: template.description || '',
-            category: template.category || 'custom',
+            category: (template.category || 'custom') as TemplateCategory,
             deviceTypes: template.deviceTypes,
-            checkItems: template.checkItems
-          })
+            checkItems: template.checkItems.map((item: any) => ({
+              id: item.id || `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              name: item.name,
+              type: item.type || 'snmp',
+              config: item.config || {},
+              weight: item.weight || 1,
+            })),
+            isActive: template.isActive !== false,
+          }
+          
+          await createTemplate.mutateAsync(templateData)
           results.push({
             name: template.name,
             status: 'success'

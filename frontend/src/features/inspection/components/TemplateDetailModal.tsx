@@ -7,7 +7,7 @@ import {
   Card,
   CardContent
 } from '@/components/atoms'
-import { InspectionTemplate, InspectionCheckItem } from '../types'
+import type { InspectionTemplate } from '../types'
 
 interface Props {
   template: InspectionTemplate
@@ -16,7 +16,7 @@ interface Props {
 }
 
 export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit }) => {
-  const getCategoryIcon = (category: InspectionTemplate['category']) => {
+  const getCategoryIcon = (category?: string) => {
     switch (category) {
       case 'network':
         return <Monitor className="w-5 h-5 text-blue-600" />
@@ -29,17 +29,17 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
     }
   }
 
-  const getCategoryLabel = (category: InspectionTemplate['category']) => {
-    const labels = {
+  const getCategoryLabel = (category?: string) => {
+    const labels: Record<string, string> = {
       network: '网络监控',
       system: '系统检查',
       security: '安全检测',
       custom: '自定义'
     }
-    return labels[category as keyof typeof labels] || category
+    return labels[category || ''] || category || '未分类'
   }
 
-  const getCategoryBadgeVariant = (category: InspectionTemplate['category']) => {
+  const getCategoryBadgeVariant = (category?: string) => {
     switch (category) {
       case 'network':
         return 'primary' as const
@@ -52,18 +52,18 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
     }
   }
 
-  const getCheckTypeLabel = (type: InspectionCheckItem['type']) => {
-    const labels = {
+  const getCheckTypeLabel = (type?: string) => {
+    const labels: Record<string, string> = {
       snmp: 'SNMP检查',
       ssh: 'SSH命令',
       http: 'HTTP请求',
       ping: 'Ping测试',
       script: '脚本执行'
     }
-    return labels[type as keyof typeof labels] || type
+    return labels[type || ''] || type || '未知'
   }
 
-  const getCheckTypeBadgeVariant = (type: InspectionCheckItem['type']) => {
+  const getCheckTypeBadgeVariant = (type?: string) => {
     switch (type) {
       case 'snmp':
         return 'primary' as const
@@ -140,7 +140,7 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
                     </label>
                     <div className="flex items-center gap-2">
                       <Tag className="w-4 h-4 text-gray-400" />
-                      <span className="text-gray-900 font-medium">{template.checkItems.length} 项</span>
+                      <span className="text-gray-900 font-medium">{template.checkItems?.length || 0} 项</span>
                     </div>
                   </div>
                   <div>
@@ -150,7 +150,7 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-700">
-                        {new Date(template.createdAt).toLocaleString('zh-CN')}
+                        {template.createdAt ? new Date(template.createdAt).toLocaleString('zh-CN') : '-'}
                       </span>
                     </div>
                   </div>
@@ -161,7 +161,7 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-700">
-                        {new Date(template.updatedAt).toLocaleString('zh-CN')}
+                        {template.updatedAt ? new Date(template.updatedAt).toLocaleString('zh-CN') : '-'}
                       </span>
                     </div>
                   </div>
@@ -174,9 +174,9 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
               <CardContent className="p-5">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <Monitor className="w-5 h-5 text-purple-600" />
-                  支持设备类型 ({template.deviceTypes.length} 种)
+                  支持设备类型 ({template.deviceTypes?.length || 0} 种)
                 </h3>
-                {template.deviceTypes.length > 0 ? (
+                {template.deviceTypes && template.deviceTypes.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {template.deviceTypes.map((type) => (
                       <Badge key={type} variant="secondary" size="sm" className="px-3 py-1">
@@ -195,13 +195,13 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
               <CardContent className="p-5">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                   <Settings className="w-5 h-5 text-green-600" />
-                  检查项配置 ({template.checkItems.length} 项)
+                  检查项配置 ({template.checkItems?.length || 0} 项)
                 </h3>
-                {template.checkItems.length > 0 ? (
+                {template.checkItems && template.checkItems.length > 0 ? (
                   <div className="space-y-3">
                     {template.checkItems.map((checkItem, index) => (
                       <motion.div
-                        key={checkItem.id}
+                        key={checkItem.id || index}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05 }}

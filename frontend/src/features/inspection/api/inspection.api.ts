@@ -387,7 +387,7 @@ export async function fetchInspectionTemplate(id: number): Promise<InspectionTem
   }
 }
 
-export async function createInspectionTemplate(template: Omit<InspectionTemplate, 'id' | 'created_at' | 'updated_at'>): Promise<InspectionTemplate> {
+export async function createInspectionTemplate(template: Omit<InspectionTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<InspectionTemplate> {
   try {
     const response = await api.post<InspectionApiResponse<unknown>>('/inspection/templates', template)
 
@@ -423,6 +423,20 @@ export async function deleteInspectionTemplate(id: number): Promise<boolean> {
     return response.data !== undefined && response.data !== null
   } catch (error) {
     console.error('删除模板失败:', error)
+    throw error
+  }
+}
+
+export async function exportInspectionTemplate(id: number): Promise<Blob> {
+  try {
+    const template = await fetchInspectionTemplate(id)
+    if (!template) {
+      throw new Error('模板不存在')
+    }
+    const jsonStr = JSON.stringify(template, null, 2)
+    return new Blob([jsonStr], { type: 'application/json' })
+  } catch (error) {
+    console.error('导出模板失败:', error)
     throw error
   }
 }

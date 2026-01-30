@@ -6,18 +6,22 @@ export { InspectionExecutions } from './components/InspectionExecutions'
 export { InspectionAnalytics } from './components/InspectionAnalytics'
 export { StrategyModal } from './components/StrategyModal'
 
-// API服务导出 - 暂时禁用，等待API重构完成
-// export {
-//   inspectionStrategyApi,
-//   inspectionTemplateApi,
-//   inspectionExecutionApi,
-//   inspectionReportApi,
-//   inspectionStatsApi
-// } from './api/inspection.api'
+// 模板相关组件导出
+export { TemplateEditor } from './components/TemplateEditor'
+export { TemplateEditorWrapper } from './components/TemplateEditorWrapper'
+export { TemplateDetailModal } from './components/TemplateDetailModal'
+export { TemplateImportModal } from './components/TemplateImportModal'
+export { CheckItemEditor } from './components/CheckItemEditor'
 
-// 可用的API函数导出
+// API函数导出
 export {
-  fetchInspectionStats
+  fetchInspectionStats,
+  fetchInspectionTemplates,
+  fetchInspectionTemplate,
+  createInspectionTemplate,
+  updateInspectionTemplate,
+  deleteInspectionTemplate,
+  exportInspectionTemplate,
 } from './api/inspection.api'
 
 // Hooks导出
@@ -32,6 +36,8 @@ export {
   useInspectionTemplate,
   useCreateTemplate,
   useCloneTemplate,
+  useUpdateTemplate,
+  useDeleteTemplate,
   useInspectionExecutions,
   useInspectionExecution,
   useTriggerExecution,

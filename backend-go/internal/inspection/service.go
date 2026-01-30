@@ -2,6 +2,7 @@ package inspection
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -17,8 +18,52 @@ const (
 )
 
 type Service struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	db        *gorm.DB
+	logger    *zap.Logger
+	validator TemplateValidator
+}
+
+// TemplateService defines the interface for template management operations
+type TemplateService interface {
+	// Basic CRUD operations
+	List(ctx context.Context, filters TemplateFilters, pagination Pagination) (*TemplatePage, error)
+	GetByID(ctx context.Context, id int) (*Template, error)
+	Create(ctx context.Context, template *Template) error
+	Update(ctx context.Context, id int, template *Template) error
+	Delete(ctx context.Context, id int) error
+
+	// Advanced operations
+	Copy(ctx context.Context, id int, newName string) (*Template, error)
+	Export(ctx context.Context, id int) ([]byte, error)
+	Import(ctx context.Context, data []byte, overwrite bool) (*Template, error)
+
+	// Validation
+	Validate(ctx context.Context, template *Template) error
+}
+
+// TemplateFilters defines filter criteria for template queries
+type TemplateFilters struct {
+	Vendor     string
+	DeviceType string
+	Category   string
+	IsDefault  *bool
+	Search     string
+}
+
+// Pagination defines pagination parameters
+type Pagination struct {
+	Page     int
+	PageSize int
+	Sort     string
+	Order    string
+}
+
+// TemplatePage represents a paginated list of templates
+type TemplatePage struct {
+	Items    []*Template
+	Total    int64
+	Page     int
+	PageSize int
 }
 
 type TemplatePayload struct {
@@ -85,10 +130,13 @@ type CreateInspectionInput struct {
 }
 
 func NewService(db *gorm.DB, logger *zap.Logger) *Service {
-	return &Service{
+	service := &Service{
 		db:     db,
 		logger: logger,
 	}
+	// Initialize validator with the service
+	service.validator = NewTemplateValidator(service)
+	return service
 }
 
 func (s *Service) DB() *gorm.DB {
@@ -576,4 +624,325 @@ func normalizeSkip(skip int) int {
 		return 0
 	}
 	return skip
+}
+
+// ============================================================================
+// TemplateService Implementation
+// ============================================================================
+
+// List retrieves templates with filtering and pagination
+// Validates: Requirements 13.1, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6
+func (s *Service) List(ctx context.Context, filters TemplateFilters, pagination Pagination) (*TemplatePage, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	// Normalize pagination
+	if pagination.Page <= 0 {
+		pagination.Page = 1
+	}
+	if pagination.PageSize <= 0 {
+		pagination.PageSize = defaultLimit
+	}
+	if pagination.PageSize > maxLimit {
+		pagination.PageSize = maxLimit
+	}
+	if pagination.Sort == "" {
+		pagination.Sort = "created_at"
+	}
+	if pagination.Order == "" {
+		pagination.Order = "desc"
+	}
+
+	// Build query
+	query := s.db.WithContext(ctx).Model(&Template{})
+
+	// Apply filters
+	if filters.Vendor != "" {
+		// Filter by vendor in device_types.vendors array
+		query = query.Where("device_types->'vendors' @> ?", fmt.Sprintf(`["%s"]`, filters.Vendor))
+	}
+
+	if filters.DeviceType != "" {
+		// Filter by device type in device_types.device_types array
+		query = query.Where("device_types->'device_types' @> ?", fmt.Sprintf(`["%s"]`, filters.DeviceType))
+	}
+
+	if filters.Category != "" {
+		query = query.Where("category = ?", filters.Category)
+	}
+
+	if filters.IsDefault != nil {
+		query = query.Where("is_default = ?", *filters.IsDefault)
+	}
+
+	if filters.Search != "" {
+		searchPattern := "%" + filters.Search + "%"
+		query = query.Where("name ILIKE ? OR description ILIKE ?", searchPattern, searchPattern)
+	}
+
+	// Count total
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, fmt.Errorf("failed to count templates: %w", err)
+	}
+
+	// Apply sorting and pagination
+	orderClause := fmt.Sprintf("%s %s", pagination.Sort, pagination.Order)
+	offset := (pagination.Page - 1) * pagination.PageSize
+
+	var templates []*Template
+	if err := query.Order(orderClause).
+		Offset(offset).
+		Limit(pagination.PageSize).
+		Find(&templates).Error; err != nil {
+		return nil, fmt.Errorf("failed to list templates: %w", err)
+	}
+
+	return &TemplatePage{
+		Items:    templates,
+		Total:    total,
+		Page:     pagination.Page,
+		PageSize: pagination.PageSize,
+	}, nil
+}
+
+// GetByID retrieves a template by ID
+// Validates: Requirement 13.2
+func (s *Service) GetByID(ctx context.Context, id int) (*Template, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	var template Template
+	if err := s.db.WithContext(ctx).Where("id = ?", id).First(&template).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, ErrTemplateNotFound
+		}
+		return nil, fmt.Errorf("failed to get template: %w", err)
+	}
+
+	return &template, nil
+}
+
+// Create creates a new template
+// Validates: Requirements 13.3, 12.1, 12.2, 12.3, 12.4, 12.5, 12.6
+func (s *Service) Create(ctx context.Context, template *Template) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	// Validate template
+	if err := s.Validate(ctx, template); err != nil {
+		return err
+	}
+
+	// Set timestamps
+	now := time.Now().UTC()
+	template.CreatedAt = &now
+	template.UpdatedAt = &now
+
+	// Create template
+	if err := s.db.WithContext(ctx).Create(template).Error; err != nil {
+		return fmt.Errorf("failed to create template: %w", err)
+	}
+
+	return nil
+}
+
+// Update updates an existing template
+// Validates: Requirements 13.4, 13.9
+func (s *Service) Update(ctx context.Context, id int, template *Template) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	// Get existing template
+	existing, err := s.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Check if template can be modified (built-in template protection)
+	if err := CanModifyTemplate(existing); err != nil {
+		return err
+	}
+
+	// Validate template
+	if err := s.Validate(ctx, template); err != nil {
+		return err
+	}
+
+	// Update timestamp
+	now := time.Now().UTC()
+	template.UpdatedAt = &now
+	template.ID = id
+
+	// Preserve created_at
+	template.CreatedAt = existing.CreatedAt
+
+	// Update template
+	if err := s.db.WithContext(ctx).Model(&Template{}).Where("id = ?", id).Updates(template).Error; err != nil {
+		return fmt.Errorf("failed to update template: %w", err)
+	}
+
+	return nil
+}
+
+// Delete deletes a template
+// Validates: Requirements 13.5, 13.9
+func (s *Service) Delete(ctx context.Context, id int) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	// Get existing template
+	existing, err := s.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Check if template can be deleted (built-in template protection)
+	if err := CanDeleteTemplate(existing); err != nil {
+		return err
+	}
+
+	// Delete template
+	result := s.db.WithContext(ctx).Delete(&Template{}, id)
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete template: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrTemplateNotFound
+	}
+
+	return nil
+}
+
+// Copy creates a copy of an existing template
+// Validates: Requirements 13.6, 10.1, 10.2, 10.3, 10.4
+func (s *Service) Copy(ctx context.Context, id int, newName string) (*Template, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	// Get source template
+	source, err := s.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create new template
+	newTemplate := &Template{
+		Name:        newName,
+		Description: source.Description,
+		Category:    source.Category,
+		DeviceTypes: source.DeviceTypes,
+		CheckItems:  source.CheckItems,
+		IsDefault:   false, // Copied templates are never built-in
+		IsActive:    true,
+	}
+
+	// If no name provided, add suffix
+	if strings.TrimSpace(newName) == "" {
+		newTemplate.Name = source.Name + "（副本）"
+	}
+
+	// Create the copy
+	if err := s.Create(ctx, newTemplate); err != nil {
+		return nil, fmt.Errorf("failed to copy template: %w", err)
+	}
+
+	return newTemplate, nil
+}
+
+// Export exports a template as JSON
+// Validates: Requirement 13.8
+func (s *Service) Export(ctx context.Context, id int) ([]byte, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	// Get template
+	template, err := s.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Marshal to JSON
+	data, err := json.MarshalIndent(template, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to export template: %w", err)
+	}
+
+	return data, nil
+}
+
+// Import imports a template from JSON
+// Validates: Requirements 13.7, 11.1, 11.2, 11.3, 11.4
+func (s *Service) Import(ctx context.Context, data []byte, overwrite bool) (*Template, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	// Parse JSON
+	var template Template
+	if err := json.Unmarshal(data, &template); err != nil {
+		return nil, &ValidationError{
+			Field:   "json",
+			Message: "导入文件格式无效",
+			Err:     ErrInvalidImportFormat,
+		}
+	}
+
+	// Validate template
+	if err := s.Validate(ctx, &template); err != nil {
+		return nil, &ValidationError{
+			Field:   "template",
+			Message: "导入数据验证失败",
+			Err:     ErrImportValidationFailed,
+		}
+	}
+
+	// Check for name conflict
+	var existing Template
+	err := s.db.WithContext(ctx).Where("name = ?", template.Name).First(&existing).Error
+	if err == nil {
+		// Name exists
+		if !overwrite {
+			return nil, &ValidationError{
+				Field:   "name",
+				Message: fmt.Sprintf("模板名称 '%s' 已存在", template.Name),
+				Err:     ErrDuplicateTemplateName,
+			}
+		}
+		// Overwrite existing template
+		template.ID = existing.ID
+		if err := s.Update(ctx, existing.ID, &template); err != nil {
+			return nil, err
+		}
+		return &template, nil
+	} else if err != gorm.ErrRecordNotFound {
+		return nil, fmt.Errorf("failed to check for existing template: %w", err)
+	}
+
+	// Create new template
+	template.ID = 0 // Reset ID for new record
+	template.IsDefault = false // Imported templates are never built-in
+	if err := s.Create(ctx, &template); err != nil {
+		return nil, err
+	}
+
+	return &template, nil
+}
+
+// Validate validates a template
+// Validates: Requirements 12.1, 12.2, 12.3, 12.4, 12.5, 12.6
+func (s *Service) Validate(ctx context.Context, template *Template) error {
+	if s == nil || s.validator == nil {
+		return fmt.Errorf("validator not initialized")
+	}
+
+	return s.validator.ValidateTemplate(ctx, template)
 }

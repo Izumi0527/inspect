@@ -1,5 +1,10 @@
-import React, { useState } from 'react'
-import { motion } from 'framer-motion'
+/**
+ * 巡检模板管理组件 - 集成优化版
+ * 整合了新的筛选器、模板编辑器、导入导出等功能
+ */
+
+import React, { useState, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
   Edit,
@@ -13,7 +18,14 @@ import {
   AlertCircle,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Download,
+  Upload,
+  Search,
+  Filter,
+  X,
+  RefreshCw,
+  TestTube
 } from 'lucide-react'
 import {
   Card,
@@ -21,79 +33,166 @@ import {
   Button,
   Badge,
   Table,
-  Column
+  Column,
+  SimpleInput as Input
 } from '@/components/atoms'
 import type { BadgeProps } from '@/components/atoms'
+
+// 导入新版 hooks 和类型（来自 inspection feature）
 import {
   useInspectionTemplates,
   useCloneTemplate,
-  useDeleteTemplate
+  useDeleteTemplate,
 } from '../hooks/useInspection'
-import { InspectionTemplate } from '../types'
-import { TemplateModal } from './TemplateModal'
+import {
+  fetchInspectionTemplate,
+} from '../api/inspection.api'
+import type { InspectionTemplate } from '../types'
+
+// 筛选和分页类型（本地定义，与新版 API 兼容）
+interface TemplateFilters {
+  vendor?: string
+  deviceType?: string
+  category?: string
+  isBuiltIn?: boolean
+  search?: string
+}
+
+interface Pagination {
+  page: number
+  page_size: number
+  sort?: string
+  order?: 'asc' | 'desc'
+}
+
+// 导入筛选器组件
+import { VendorFilter } from './VendorFilter'
+import { DeviceTypeFilter } from './DeviceTypeFilter'
+import { CategoryFilter } from './CategoryFilter'
+
+// 导入模态框组件
 import { TemplateDetailModal } from './TemplateDetailModal'
 import { TemplateImportModal } from './TemplateImportModal'
 
-export const InspectionTemplates: React.FC = () => {
-  const { data: templatesData, isLoading, refetch } = useInspectionTemplates()
-  const cloneTemplate = useCloneTemplate()
-  const deleteTemplate = useDeleteTemplate()
+// 导入新的编辑器组件
+import { TemplateEditorWrapper } from './TemplateEditorWrapper'
+import { OIDTester } from './OIDTester'
 
-  const [isModalOpen, setIsModalOpen] = useState(false)
+// 类型定义
+type SortField = 'name' | 'category' | 'createdAt' | 'updatedAt'
+type SortOrder = 'asc' | 'desc'
+
+export const InspectionTemplates: React.FC = () => {
+  // 筛选状态
+  const [filters, setFilters] = useState<TemplateFilters>({})
+  const [searchText, setSearchText] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
+
+  // 分页和排序状态
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    page_size: 20,
+    sort: 'updatedAt',
+    order: 'desc'
+  })
+  const [sortField, setSortField] = useState<SortField>('updatedAt')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+
+  // 模态框状态
+  const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<InspectionTemplate | null>(null)
   const [viewingTemplate, setViewingTemplate] = useState<InspectionTemplate | null>(null)
   const [deleteConfirmTemplate, setDeleteConfirmTemplate] = useState<InspectionTemplate | null>(null)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
-  const [sortField, setSortField] = useState<'name' | 'category' | 'updatedAt'>('updatedAt')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
-  const [selectedCategory, setSelectedCategory] = useState<InspectionTemplate['category'] | 'all'>('all')
+  const [showOIDTester, setShowOIDTester] = useState(false)
 
-  const templates: InspectionTemplate[] = templatesData?.templates ?? []
-
-  // 显示所有模板列表
-  const filteredTemplates = templates.filter(template => {
-    // 类别筛选
-    const matchesCategory = selectedCategory === 'all' || template.category === selectedCategory
-    return matchesCategory
+  // 使用新版 hooks
+  const { data: templatesData, isLoading, refetch, error } = useInspectionTemplates({
+    page: pagination.page,
+    pageSize: pagination.page_size,
+    category: filters.category || undefined,
+    deviceTypes: filters.deviceType ? [filters.deviceType] : undefined,
   })
 
-  // 排序模板列表
-  const sortedTemplates = [...filteredTemplates].sort((a, b) => {
-    let compareResult = 0
+  const cloneTemplate = useCloneTemplate()
 
-    switch (sortField) {
-      case 'name':
-        compareResult = a.name.localeCompare(b.name, 'zh-CN')
-        break
-      case 'category':
-        compareResult = a.category.localeCompare(b.category)
-        break
-      case 'updatedAt':
-        compareResult = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
-        break
-    }
+  const deleteTemplateMutation = useDeleteTemplate()
 
-    return sortDirection === 'asc' ? compareResult : -compareResult
-  })
-
-  const handleSort = (field: 'name' | 'category' | 'updatedAt') => {
-    if (sortField === field) {
-      // 切换排序方向
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
-    } else {
-      // 切换排序字段,默认降序
-      setSortField(field)
-      setSortDirection('desc')
+  // 导出模板函数
+  const handleExportTemplate = async (template: InspectionTemplate) => {
+    try {
+      const fullTemplate = await fetchInspectionTemplate(Number(template.id))
+      if (fullTemplate) {
+        const blob = new Blob([JSON.stringify(fullTemplate, null, 2)], { type: 'application/json' })
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `template-${template.name}-${Date.now()}.json`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      }
+    } catch (error) {
+      console.error('Export template failed:', error)
     }
   }
 
-  const getSortIcon = (field: 'name' | 'category' | 'updatedAt') => {
-    if (sortField !== field) {
-      return <ArrowUpDown className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+  // 获取模板列表
+  const templates: InspectionTemplate[] = templatesData?.templates || []
+
+  const totalPages = Math.ceil((templatesData?.total || 0) / pagination.page_size)
+
+  // 处理筛选变更
+  const handleFilterChange = useCallback((key: keyof TemplateFilters, value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value || undefined
+    }))
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }, [])
+
+  // 处理搜索
+  const handleSearch = useCallback((value: string) => {
+    setSearchText(value)
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }, [])
+
+  // 处理排序
+  const handleSort = useCallback((field: SortField) => {
+    if (sortField === field) {
+      const newOrder = sortOrder === 'asc' ? 'desc' : 'asc'
+      setSortOrder(newOrder)
+      setPagination(prev => ({ ...prev, sort: field, order: newOrder }))
+    } else {
+      setSortField(field)
+      setSortOrder('desc')
+      setPagination(prev => ({ ...prev, sort: field, order: 'desc' }))
     }
-    return sortDirection === 'asc'
+  }, [sortField, sortOrder])
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-4 h-4 text-gray-400" />
+    }
+    return sortOrder === 'asc'
       ? <ArrowUp className="w-4 h-4 text-blue-600" />
       : <ArrowDown className="w-4 h-4 text-blue-600" />
+  }
+
+  // 操作处理函数
+  const handleCreateTemplate = () => {
+    setEditingTemplate(null)
+    setIsEditorOpen(true)
+  }
+
+  const handleEditTemplate = (template: InspectionTemplate) => {
+    setEditingTemplate(template)
+    setIsEditorOpen(true)
+  }
+
+  const handleViewTemplate = (template: InspectionTemplate) => {
+    setViewingTemplate(template)
   }
 
   const handleCloneTemplate = async (template: InspectionTemplate) => {
@@ -102,29 +201,10 @@ export const InspectionTemplates: React.FC = () => {
         id: template.id,
         name: `${template.name} - 副本`
       })
+      refetch()
     } catch (error) {
       console.error('Clone template failed:', error)
     }
-  }
-
-  const handleCreateTemplate = () => {
-    setEditingTemplate(null)
-    setIsModalOpen(true)
-  }
-
-  const handleEditTemplate = (template: InspectionTemplate) => {
-    setEditingTemplate(template)
-    setIsModalOpen(true)
-  }
-
-  const handleModalClose = () => {
-    setIsModalOpen(false)
-    setEditingTemplate(null)
-  }
-
-  const handleModalSuccess = () => {
-    handleModalClose()
-    refetch()
   }
 
   const handleDeleteTemplate = (template: InspectionTemplate) => {
@@ -133,9 +213,8 @@ export const InspectionTemplates: React.FC = () => {
 
   const handleConfirmDelete = async () => {
     if (!deleteConfirmTemplate) return
-
     try {
-      await deleteTemplate.mutateAsync(deleteConfirmTemplate.id)
+      await deleteTemplateMutation.mutateAsync(String(deleteConfirmTemplate.id))
       setDeleteConfirmTemplate(null)
       refetch()
     } catch (error) {
@@ -143,83 +222,64 @@ export const InspectionTemplates: React.FC = () => {
     }
   }
 
-  const handleCancelDelete = () => {
-    setDeleteConfirmTemplate(null)
+  const handleExportTemplateClick = async (template: InspectionTemplate) => {
+    await handleExportTemplate(template)
   }
 
-  const handleViewTemplate = (template: InspectionTemplate) => {
-    setViewingTemplate(template)
+  const handleEditorClose = () => {
+    setIsEditorOpen(false)
+    setEditingTemplate(null)
   }
 
-  const handleCloseDetailModal = () => {
-    setViewingTemplate(null)
-  }
-
-  const handleEditFromDetail = () => {
-    if (viewingTemplate) {
-      setEditingTemplate(viewingTemplate)
-      setViewingTemplate(null)
-      setIsModalOpen(true)
-    }
-  }
-
-  const handleOpenImportModal = () => {
-    setIsImportModalOpen(true)
-  }
-
-  const handleCloseImportModal = () => {
-    setIsImportModalOpen(false)
-  }
-
-  const handleImportSuccess = () => {
+  const handleEditorSuccess = () => {
+    handleEditorClose()
     refetch()
   }
 
-  const handleCategoryClick = (category: InspectionTemplate['category'] | 'all') => {
-    // 如果点击当前选中的类别,则重置为"全部"
-    if (selectedCategory === category) {
-      setSelectedCategory('all')
-    } else {
-      setSelectedCategory(category)
-    }
+  const handleImportSuccess = () => {
+    setIsImportModalOpen(false)
+    refetch()
   }
 
-  const getCategoryIcon = (category: InspectionTemplate['category']) => {
+  // 清除所有筛选
+  const handleClearFilters = () => {
+    setFilters({})
+    setSearchText('')
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }
+
+  const hasActiveFilters = filters.vendor || filters.deviceType || filters.category || searchText
+
+  // 辅助函数
+  const getCategoryIcon = (category?: string) => {
     switch (category) {
-      case 'network':
-        return <Monitor className="w-4 h-4" />
-      case 'system':
-        return <Settings className="w-4 h-4" />
-      case 'security':
-        return <Shield className="w-4 h-4" />
-      default:
-        return <FileText className="w-4 h-4" />
+      case 'network': return <Monitor className="w-4 h-4" />
+      case 'system': return <Settings className="w-4 h-4" />
+      case 'security': return <Shield className="w-4 h-4" />
+      default: return <FileText className="w-4 h-4" />
     }
   }
 
-  const getCategoryLabel = (category: InspectionTemplate['category']) => {
-    const labels = {
+  const getCategoryLabel = (category?: string) => {
+    const labels: Record<string, string> = {
       network: '网络监控',
       system: '系统检查',
       security: '安全检测',
       custom: '自定义'
     }
-    return labels[category as keyof typeof labels] || category
+    return labels[category || ''] || category || '未分类'
   }
 
-  const getCategoryBadgeVariant = (category: InspectionTemplate['category']): BadgeProps['variant'] => {
+  const getCategoryBadgeVariant = (category?: string): BadgeProps['variant'] => {
     switch (category) {
-      case 'network':
-        return 'primary'
-      case 'system':
-        return 'secondary'
-      case 'security':
-        return 'warning'
-      default:
-        return 'outline'
+      case 'network': return 'primary'
+      case 'system': return 'secondary'
+      case 'security': return 'warning'
+      default: return 'outline'
     }
   }
 
+  // 表格列定义
   const columns: Column<InspectionTemplate>[] = [
     {
       key: 'name',
@@ -232,8 +292,15 @@ export const InspectionTemplates: React.FC = () => {
             {template.isBuiltIn && (
               <Badge variant="success" size="sm">内置</Badge>
             )}
+            {!template.isActive && (
+              <Badge variant="outline" size="sm">已禁用</Badge>
+            )}
           </div>
-          <span className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">{template.description}</span>
+          {template.description && (
+            <span className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">
+              {template.description}
+            </span>
+          )}
         </div>
       )
     },
@@ -250,7 +317,7 @@ export const InspectionTemplates: React.FC = () => {
       key: 'deviceTypes',
       title: '支持设备',
       render: (_value, template) => {
-        const deviceTypes = template.deviceTypes ?? []
+        const deviceTypes = template.deviceTypes || []
         return (
           <div className="flex flex-wrap gap-1">
             {deviceTypes.slice(0, 3).map((type: string) => (
@@ -263,6 +330,9 @@ export const InspectionTemplates: React.FC = () => {
                 +{deviceTypes.length - 3}
               </Badge>
             )}
+            {deviceTypes.length === 0 && (
+              <span className="text-gray-400 text-sm">未配置</span>
+            )}
           </div>
         )
       }
@@ -272,8 +342,10 @@ export const InspectionTemplates: React.FC = () => {
       title: '检查项',
       render: (_value, template) => (
         <div className="flex items-center gap-1">
-          <FileText className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-          <span className="font-medium">{template.checkItems.length}</span>
+          <FileText className="w-4 h-4 text-gray-400" />
+          <span className="font-medium">
+            {template.checkItems?.length || 0}
+          </span>
         </div>
       )
     },
@@ -282,7 +354,7 @@ export const InspectionTemplates: React.FC = () => {
       title: '更新时间',
       render: (_value, template) => (
         <div className="text-sm text-gray-600 dark:text-gray-300">
-          {new Date(template.updatedAt).toLocaleDateString()}
+          {template.updatedAt ? new Date(template.updatedAt).toLocaleDateString() : '-'}
         </div>
       )
     },
@@ -307,6 +379,14 @@ export const InspectionTemplates: React.FC = () => {
             title="复制模板"
           >
             <Copy className="w-4 h-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => handleExportTemplateClick(template)}
+            title="导出模板"
+          >
+            <Download className="w-4 h-4" />
           </Button>
           {!template.isBuiltIn && (
             <>
@@ -333,10 +413,44 @@ export const InspectionTemplates: React.FC = () => {
     }
   ]
 
+  // 如果正在编辑模板，显示编辑器
+  if (isEditorOpen) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleEditorClose}>
+            <X className="w-4 h-4 mr-2" />
+            返回列表
+          </Button>
+        </div>
+        <TemplateEditorWrapper
+          template={editingTemplate || undefined}
+          onSuccess={handleEditorSuccess}
+          onCancel={handleEditorClose}
+        />
+      </div>
+    )
+  }
+
+  // 如果显示 OID 测试器
+  if (showOIDTester) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setShowOIDTester(false)}>
+            <X className="w-4 h-4 mr-2" />
+            返回列表
+          </Button>
+        </div>
+        <OIDTester />
+      </div>
+    )
+  }
+
+  // 加载状态
   if (isLoading) {
     return (
       <div className="space-y-4">
-        {/* 加载骨架屏 */}
         {[...Array(5)].map((_, index) => (
           <Card key={index} className="animate-pulse">
             <CardContent className="p-4">
@@ -353,14 +467,60 @@ export const InspectionTemplates: React.FC = () => {
     )
   }
 
+  // 错误状态
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">加载失败</h3>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">{error.message}</p>
+          <Button className="mt-4" onClick={() => refetch()}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            重试
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <div className="space-y-4">
       {/* 操作栏 */}
-      <div className="flex justify-between items-center">
-        <div></div>
+      <div className="flex flex-wrap justify-between items-center gap-4">
+        {/* 搜索框 */}
+        <div className="flex items-center gap-2 flex-1 max-w-md">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input
+              value={searchText}
+              onChange={(e) => handleSearch(e.target.value)}
+              placeholder="搜索模板名称或描述..."
+              className="pl-10"
+            />
+          </div>
+          <Button
+            variant={showFilters ? 'primary' : 'outline'}
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <Filter className="w-4 h-4 mr-2" />
+            筛选
+            {hasActiveFilters && (
+              <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">
+                {[filters.vendor, filters.deviceType, filters.category, searchText].filter(Boolean).length}
+              </span>
+            )}
+          </Button>
+        </div>
+
+        {/* 操作按钮 */}
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleOpenImportModal}>
-            <Copy className="w-4 h-4 mr-2" />
+          <Button variant="outline" onClick={() => setShowOIDTester(true)}>
+            <TestTube className="w-4 h-4 mr-2" />
+            OID 测试
+          </Button>
+          <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+            <Upload className="w-4 h-4 mr-2" />
             导入模板
           </Button>
           <Button onClick={handleCreateTemplate}>
@@ -370,42 +530,108 @@ export const InspectionTemplates: React.FC = () => {
         </div>
       </div>
 
-      {/* 快速统计 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {[
-          { label: '网络监控', count: templates.filter(t => t.category === 'network').length, icon: Monitor, color: 'blue', category: 'network' as const },
-          { label: '系统检查', count: templates.filter(t => t.category === 'system').length, icon: Settings, color: 'green', category: 'system' as const },
-          { label: '安全检测', count: templates.filter(t => t.category === 'security').length, icon: Shield, color: 'red', category: 'security' as const },
-          { label: '自定义', count: templates.filter(t => t.category === 'custom').length, icon: FileText, color: 'purple', category: 'custom' as const }
-        ].map((item) => {
-          const isSelected = selectedCategory === item.category
-          return (
-            <Card
-              key={item.label}
-              className={`cursor-pointer transition-all hover:shadow-md ${
-                isSelected ? 'ring-2 ring-blue-500 shadow-md' : ''
-              }`}
-              onClick={() => handleCategoryClick(item.category)}
-            >
+      {/* 筛选面板 */}
+      <AnimatePresence>
+        {showFilters && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Card>
               <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg bg-${item.color}-100`}>
-                    <item.icon className={`w-5 h-5 text-${item.color}-600`} />
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{item.count}</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-300">{item.label}</div>
-                  </div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100">筛选条件</h3>
+                  {hasActiveFilters && (
+                    <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+                      <X className="w-4 h-4 mr-1" />
+                      清除筛选
+                    </Button>
+                  )}
                 </div>
-                {isSelected && (
-                  <div className="mt-2 text-xs text-blue-600 dark:text-blue-400 font-medium">
-                    ✓ 已选中
-                  </div>
-                )}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <VendorFilter
+                    value={filters.vendor || ''}
+                    onChange={(value) => handleFilterChange('vendor', value)}
+                  />
+                  <DeviceTypeFilter
+                    value={filters.deviceType || ''}
+                    onChange={(value) => handleFilterChange('deviceType', value)}
+                  />
+                  <CategoryFilter
+                    value={filters.category || ''}
+                    onChange={(value) => handleFilterChange('category', value)}
+                  />
+                </div>
               </CardContent>
             </Card>
-          )
-        })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 统计卡片 */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="cursor-pointer hover:shadow-md transition-shadow">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {templatesData?.total || 0}
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-300">全部模板</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                <Shield className="w-5 h-5 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {templates.filter(t => t.isBuiltIn).length}
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-300">内置模板</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                <Settings className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {templates.filter(t => !t.isBuiltIn).length}
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-300">自定义模板</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+                <Monitor className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {templates.filter(t => t.isActive).length}
+                </div>
+                <div className="text-sm text-gray-600 dark:text-gray-300">已启用</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 排序选项 */}
@@ -440,20 +666,52 @@ export const InspectionTemplates: React.FC = () => {
             {getSortIcon('updatedAt')}
           </Button>
         </div>
+        <div className="ml-auto">
+          <Button variant="ghost" size="sm" onClick={() => refetch()}>
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       {/* 模板列表 */}
-      {sortedTemplates.length > 0 ? (
+      {templates.length > 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
         >
           <Table
-            data={sortedTemplates}
+            data={templates}
             columns={columns}
             className="bg-white dark:bg-gray-900 rounded-lg shadow-sm"
           />
+
+          {/* 分页 */}
+          {totalPages > 1 && (
+            <div className="flex justify-between items-center mt-4 px-2">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                第 {pagination.page} 页，共 {totalPages} 页（{templatesData?.total || 0} 条记录）
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPagination(p => ({ ...p, page: Math.max(1, p.page - 1) }))}
+                  disabled={pagination.page === 1}
+                >
+                  上一页
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
+                  disabled={pagination.page >= totalPages}
+                >
+                  下一页
+                </Button>
+              </div>
+            </div>
+          )}
         </motion.div>
       ) : (
         <Card>
@@ -461,27 +719,26 @@ export const InspectionTemplates: React.FC = () => {
             <div className="flex flex-col items-center gap-4">
               <AlertCircle className="w-12 h-12 text-gray-400 dark:text-gray-500" />
               <div>
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">暂无巡检模板</h3>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                  {hasActiveFilters ? '没有找到符合条件的模板' : '暂无巡检模板'}
+                </h3>
                 <p className="text-gray-500 dark:text-gray-400 mt-1">
-                  开始创建您的第一个巡检模板
+                  {hasActiveFilters ? '尝试调整筛选条件' : '开始创建您的第一个巡检模板'}
                 </p>
               </div>
-              <Button className="mt-2" onClick={handleCreateTemplate}>
+              {hasActiveFilters ? (
+                <Button variant="outline" onClick={handleClearFilters}>
+                  清除筛选条件
+                </Button>
+              ) : (
+                <Button onClick={handleCreateTemplate}>
                   <Plus className="w-4 h-4 mr-2" />
                   创建模板
                 </Button>
+              )}
             </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* 模板创建/编辑 Modal */}
-      {isModalOpen && (
-        <TemplateModal
-          template={editingTemplate}
-          onClose={handleModalClose}
-          onSuccess={handleModalSuccess}
-        />
       )}
 
       {/* 删除确认对话框 */}
@@ -519,18 +776,18 @@ export const InspectionTemplates: React.FC = () => {
             <div className="flex items-center justify-end gap-3">
               <Button
                 variant="outline"
-                onClick={handleCancelDelete}
-                disabled={deleteTemplate.isPending}
+                onClick={() => setDeleteConfirmTemplate(null)}
+                disabled={deleteTemplateMutation.isPending}
               >
                 取消
               </Button>
               <Button
                 variant="primary"
                 onClick={handleConfirmDelete}
-                disabled={deleteTemplate.isPending}
+                disabled={deleteTemplateMutation.isPending}
                 className="bg-red-600 hover:bg-red-700 text-white"
               >
-                {deleteTemplate.isPending ? '删除中...' : '确认删除'}
+                {deleteTemplateMutation.isPending ? '删除中...' : '确认删除'}
               </Button>
             </div>
           </motion.div>
@@ -540,16 +797,20 @@ export const InspectionTemplates: React.FC = () => {
       {/* 模板详情查看 Modal */}
       {viewingTemplate && (
         <TemplateDetailModal
-          template={viewingTemplate}
-          onClose={handleCloseDetailModal}
-          onEdit={handleEditFromDetail}
+          template={viewingTemplate as any}
+          onClose={() => setViewingTemplate(null)}
+          onEdit={() => {
+            setEditingTemplate(viewingTemplate)
+            setViewingTemplate(null)
+            setIsEditorOpen(true)
+          }}
         />
       )}
 
       {/* 模板导入 Modal */}
       {isImportModalOpen && (
         <TemplateImportModal
-          onClose={handleCloseImportModal}
+          onClose={() => setIsImportModalOpen(false)}
           onSuccess={handleImportSuccess}
         />
       )}
