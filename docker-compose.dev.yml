@@ -1,32 +1,67 @@
-# ===== 企业级网络设备巡检系统 - 开发环境配置 =====
-# 开发环境专用配置，包含热重载、调试功能和开发工具
-# 使用方式: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# ==========================================
+# 企业级网络设备巡检系统 - 开发环境
+# ==========================================
+# 使用方式: docker-compose -f docker-compose.dev.yml up -d
+# 停止服务: docker-compose -f docker-compose.dev.yml down
+# 查看日志: docker-compose -f docker-compose.dev.yml logs -f [service]
+# ==========================================
 
+# ===== 网络配置 =====
+networks:
+  inspect_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ===== 服务定义 =====
 services:
-  # ===== 数据库服务覆盖配置 =====
+  # ===== PostgreSQL 数据库 (TimescaleDB) =====
   postgres:
+    image: timescale/timescaledb:2.15.3-pg16
     container_name: inspect-postgres-dev
     environment:
       POSTGRES_DB: inspect_system_dev
       POSTGRES_USER: inspect_dev
       POSTGRES_PASSWORD: dev_password_2024
     volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/database-init-complete.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./database/builtin-templates-complete.sql:/docker-entrypoint-initdb.d/02-templates.sql:ro
       - ./config/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     ports:
-      - "5433:5432"
+      - "15500:5432"
+    networks:
+      - inspect_network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U inspect_dev -d inspect_system_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
+  # ===== Redis 缓存 =====
   redis:
+    image: redis:7-alpine
     container_name: inspect-redis-dev
     command: redis-server --requirepass dev_redis_2024 --appendonly yes
+    volumes:
+      - redis_data:/data
     ports:
-      - "6380:6379"
+      - "16379:6379"
+    networks:
+      - inspect_network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "dev_redis_2024", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
 
-  # ===== 后端开发服务 (Go) =====
+  # ===== 后端服务 (Go) =====
   backend:
     build:
       context: ./backend-go
@@ -34,31 +69,44 @@ services:
       target: development
     container_name: inspect-backend-dev
     environment:
+      # 服务配置
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 8000
+      ENVIRONMENT: development
+      DEBUG: "true"
+      LOG_LEVEL: debug
+      LOG_FILE: logs/backend-go/app-dev.log
 
-      # 数据库连接配置
+      # 数据库连接
       DATABASE_URL: postgresql://inspect_dev:dev_password_2024@postgres:5432/inspect_system_dev
       DATABASE_POOL_SIZE: 10
       DATABASE_MAX_OVERFLOW: 20
       DATABASE_POOL_RECYCLE: 3600
       DB_AUTO_MIGRATE: "true"
       TIMESCALE_ENABLED: "true"
+
+      # Redis 连接
       REDIS_URL: redis://:dev_redis_2024@redis:6379/0
 
-      # 应用配置
+      # 安全配置
       SECRET_KEY: dev_secret_key_2024_very_long_and_secure
-      ENVIRONMENT: development
-      DEBUG: "true"
-      LOG_LEVEL: debug
-      LOG_FILE: logs/backend-go/app.log
+      JWT_SECRET_KEY: dev_jwt_secret_key_2024
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      REFRESH_TOKEN_EXPIRE_DAYS: 30
+
+      # CORS 配置
+      CORS_ORIGINS: '["http://localhost:3000", "http://127.0.0.1:3000"]'
+      ALLOWED_HOSTS: '["*"]'
+
+      # 报表配置
       REPORT_OUTPUT_DIR: data/reports/monitoring
       REPORTS_OUTPUT_DIR: data/reports
     volumes:
       - ./backend-go:/app
       - ./logs:/app/logs
       - ./data:/app/data
-      - dev_cache:/go/pkg/mod
+      - go_cache:/go/pkg/mod
     ports:
       - "8001:8000"
     depends_on:
@@ -76,7 +124,7 @@ services:
       retries: 3
       start_period: 60s
 
-  # ===== 前端开发服务 =====
+  # ===== 前端服务 (Next.js) =====
   frontend:
     build:
       context: ./frontend
@@ -102,9 +150,7 @@ services:
     restart: unless-stopped
     command: pnpm dev
 
-  # ===== 开发工具服务 =====
-  
-  # pgAdmin 数据库管理工具
+  # ===== pgAdmin 数据库管理工具 =====
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: inspect-pgadmin-dev
@@ -121,8 +167,10 @@ services:
     networks:
       - inspect_network
     restart: unless-stopped
+    profiles:
+      - tools
 
-  # Redis Commander 缓存管理工具
+  # ===== Redis Commander 缓存管理工具 =====
   redis-commander:
     image: rediscommander/redis-commander:latest
     container_name: inspect-redis-commander-dev
@@ -135,10 +183,16 @@ services:
     networks:
       - inspect_network
     restart: unless-stopped
+    profiles:
+      - tools
 
-# ===== 开发环境专用数据卷 =====
+# ===== 数据卷定义 =====
 volumes:
-  dev_cache:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  go_cache:
     driver: local
   pgadmin_data:
     driver: local

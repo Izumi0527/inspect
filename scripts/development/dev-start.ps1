@@ -147,29 +147,96 @@ function Test-Prerequisites {
     }
 }
 
+# 检查数据库容器是否已运行
+function Test-DatabaseRunning {
+    try {
+        # 检查 PostgreSQL 容器
+        $pgContainer = docker ps --filter "name=inspect-postgres-dev" --format "{{.Names}}" 2>$null
+        $pgRunning = $pgContainer -eq "inspect-postgres-dev"
+        
+        # 检查 Redis 容器
+        $redisContainer = docker ps --filter "name=inspect-redis-dev" --format "{{.Names}}" 2>$null
+        $redisRunning = $redisContainer -eq "inspect-redis-dev"
+        
+        return @{
+            PostgreSQL = $pgRunning
+            Redis = $redisRunning
+            Both = $pgRunning -and $redisRunning
+        }
+    }
+    catch {
+        return @{
+            PostgreSQL = $false
+            Redis = $false
+            Both = $false
+        }
+    }
+}
+
 # 启动数据库服务
 function Start-DatabaseServices {
     Write-ColorOutput "`n🗄️ 启动数据库服务..." "Blue"
     
-    # 检查 Docker Compose 文件
-    $composeFiles = @("docker-compose.db.yml", "docker-compose.dev.yml", "docker-compose.yml")
-    $composeFile = $null
+    # 检查数据库是否已运行
+    $dbStatus = Test-DatabaseRunning
     
-    foreach ($file in $composeFiles) {
-        if (Test-Path $file) {
-            $composeFile = $file
-            break
+    if ($dbStatus.Both) {
+        Write-ColorOutput "✅ 数据库服务已在运行中，跳过启动" "Green"
+        Write-ColorOutput "  - PostgreSQL: inspect-postgres-dev" "Gray"
+        Write-ColorOutput "  - Redis: inspect-redis-dev" "Gray"
+        return
+    }
+    
+    if ($dbStatus.PostgreSQL -or $dbStatus.Redis) {
+        Write-ColorOutput "⚠️ 部分数据库服务已运行:" "Yellow"
+        if ($dbStatus.PostgreSQL) {
+            Write-ColorOutput "  - PostgreSQL: 已运行" "Gray"
+        }
+        if ($dbStatus.Redis) {
+            Write-ColorOutput "  - Redis: 已运行" "Gray"
+        }
+        Write-ColorOutput "将启动缺失的服务..." "Yellow"
+    }
+    
+    # 检查 Docker Compose 文件
+    $baseComposeFile = "docker-compose.yml"
+    $devComposeFile = "docker-compose.dev.yml"
+    
+    if (-not (Test-Path $baseComposeFile)) {
+        throw "未找到基础配置文件: $baseComposeFile"
+    }
+    
+    if (-not (Test-Path $devComposeFile)) {
+        throw "未找到开发配置文件: $devComposeFile"
+    }
+    
+    Write-ColorOutput "使用配置文件: $baseComposeFile + $devComposeFile" "Gray"
+    
+    # 启动数据库服务（只启动 postgres 和 redis，不启动其他服务）
+    try {
+        Write-ColorOutput "🔄 启动数据库容器..." "Cyan"
+        $composeCmd = "docker-compose -f $baseComposeFile -f $devComposeFile up -d postgres redis"
+        $result = Invoke-Expression $composeCmd 2>&1
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-ColorOutput "✅ 数据库容器启动成功" "Green"
+        } else {
+            # 如果失败，尝试只使用基础配置文件
+            Write-ColorOutput "⚠️ 使用完整配置启动失败，尝试使用基础配置..." "Yellow"
+            $composeCmd = "docker-compose -f $baseComposeFile up -d postgres redis"
+            $result = Invoke-Expression $composeCmd 2>&1
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-ColorOutput "✅ 数据库容器启动成功（使用基础配置）" "Green"
+            } else {
+                throw "数据库容器启动失败: $result"
+            }
         }
     }
-    
-    if (-not $composeFile) {
-        throw "未找到 Docker Compose 配置文件"
+    catch {
+        Write-ColorOutput "❌ 启动数据库容器失败: $($_.Exception.Message)" "Red"
+        throw
     }
-    
-    Write-ColorOutput "使用配置文件: $composeFile" "Gray"
-    
-    # 启动数据库服务
-    Invoke-CommandSafely "docker-compose -f $composeFile up -d" "启动数据库容器"
     
     # 等待服务启动
     if ($Wait -gt 0) {
@@ -177,33 +244,56 @@ function Start-DatabaseServices {
         Start-Sleep -Seconds $Wait
     }
     
-    # 显示服务状态
-    Invoke-CommandSafely "docker-compose -f $composeFile ps" "检查服务状态"
+    # 验证服务状态
+    $dbStatus = Test-DatabaseRunning
+    if ($dbStatus.Both) {
+        Write-ColorOutput "✅ 数据库服务验证通过" "Green"
+    } else {
+        Write-ColorOutput "⚠️ 数据库服务可能未完全启动" "Yellow"
+        if (-not $dbStatus.PostgreSQL) {
+            Write-ColorOutput "  - PostgreSQL: 未检测到" "Red"
+        }
+        if (-not $dbStatus.Redis) {
+            Write-ColorOutput "  - Redis: 未检测到" "Red"
+        }
+    }
 }
 
 # 启动后端服务
 function Start-BackendService {
-    Write-ColorOutput "`n?? 启动后端服务..." "Blue"
+    Write-ColorOutput "`n🔧 启动后端服务..." "Blue"
     
     $backendDir = "backend-go"
     
     # 检查后端目录
     if (-not (Test-Path $backendDir)) {
-        Write-ColorOutput "?? 后端目录不存在，跳过后端服务启动" "Yellow"
+        Write-ColorOutput "⚠️ 后端目录不存在，跳过后端服务启动" "Yellow"
+        return
+    }
+    
+    # 检查 Go 是否可用
+    try {
+        $null = Get-Command "go" -ErrorAction Stop
+    }
+    catch {
+        Write-ColorOutput "❌ Go 运行时不可用，无法启动后端服务" "Red"
         return
     }
     
     # 启动后端开发服务器
-    Write-ColorOutput "?? 启动后端开发服务器..." "Cyan"
+    Write-ColorOutput "🚀 启动后端开发服务器..." "Cyan"
     Write-ColorOutput "访问地址: http://localhost:8000" "White"
     Write-ColorOutput "API 说明: docs/api/openapi.json" "White"
     Write-ColorOutput "按 Ctrl+C 停止服务" "Gray"
     
     # 在新窗口中启动后端服务
-    $backendCommand = "& `"$PSScriptRoot\start-backend-go.ps1`" -Port 8000"
+    # 使用 ENV_FILE 环境变量指定配置文件路径，这样可以从 backend-go 目录运行
+    $projectRoot = Get-Location
+    $envFilePath = Join-Path $projectRoot ".env"
+    $backendCommand = "`$env:ENV_FILE='$envFilePath'; cd '$projectRoot\$backendDir'; go run ./cmd/api"
     Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", $backendCommand
     
-    Write-ColorOutput "? 后端服务已在新窗口中启动" "Green"
+    Write-ColorOutput "✅ 后端服务已在新窗口中启动" "Green"
 }
 
 # 启动前端服务
@@ -260,8 +350,8 @@ function Test-ServicesHealth {
     
     # 检查数据库服务
     $dbServices = @(
-        @{ Name = "PostgreSQL"; Port = 5433; Host = "localhost" },
-        @{ Name = "Redis"; Port = 6380; Host = "localhost" }
+        @{ Name = "PostgreSQL"; Port = 15500; Host = "localhost" },
+        @{ Name = "Redis"; Port = 16379; Host = "localhost" }
     )
     
     foreach ($service in $dbServices) {
@@ -278,26 +368,55 @@ function Test-ServicesHealth {
         }
     }
     
-    # 检查 Web 服务
-    Start-Sleep -Seconds 5  # 等待服务启动
+    # 等待后端服务启动
+    Write-ColorOutput "`n⏳ 等待后端服务启动..." "Yellow"
+    Start-Sleep -Seconds 5
     
-    $webServices = @(
-        @{ Name = "后端 API"; Url = "http://localhost:8000/health" },
-        @{ Name = "前端应用"; Url = "http://localhost:3000" }
-    )
+    # 检查后端健康状态（带重试）
+    $backendHealthUrl = "http://localhost:8000/health"
+    $maxRetries = 3
+    $retryDelay = 3
+    $backendHealthy = $false
     
-    foreach ($service in $webServices) {
+    for ($i = 1; $i -le $maxRetries; $i++) {
         try {
-            $response = Invoke-WebRequest -Uri $service.Url -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+            $response = Invoke-WebRequest -Uri $backendHealthUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
             if ($response.StatusCode -eq 200) {
-                Write-ColorOutput "✅ $($service.Name) 服务正常" "Green"
-            } else {
-                Write-ColorOutput "⚠️ $($service.Name) 服务响应异常 (状态码: $($response.StatusCode))" "Yellow"
+                $healthData = $response.Content | ConvertFrom-Json
+                Write-ColorOutput "✅ 后端 API 服务正常" "Green"
+                Write-ColorOutput "   - 状态: $($healthData.status)" "Gray"
+                Write-ColorOutput "   - 版本: $($healthData.version)" "Gray"
+                Write-ColorOutput "   - 端点: $backendHealthUrl" "Gray"
+                $backendHealthy = $true
+                break
             }
         }
         catch {
-            Write-ColorOutput "⚠️ $($service.Name) 服务暂未就绪" "Yellow"
+            if ($i -lt $maxRetries) {
+                Write-ColorOutput "⏳ 后端服务尚未就绪，等待重试 ($i/$maxRetries)..." "Yellow"
+                Start-Sleep -Seconds $retryDelay
+            } else {
+                Write-ColorOutput "⚠️ 后端 API 服务暂未就绪（可能仍在启动中）" "Yellow"
+                Write-ColorOutput "   - 端点: $backendHealthUrl" "Gray"
+                Write-ColorOutput "   - 请稍后手动检查: Invoke-WebRequest $backendHealthUrl" "Gray"
+            }
         }
+    }
+    
+    # 检查前端服务
+    $frontendUrl = "http://localhost:3000"
+    try {
+        $response = Invoke-WebRequest -Uri $frontendUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+        if ($response.StatusCode -eq 200) {
+            Write-ColorOutput "✅ 前端应用服务正常" "Green"
+            Write-ColorOutput "   - 端点: $frontendUrl" "Gray"
+        } else {
+            Write-ColorOutput "⚠️ 前端应用服务响应异常 (状态码: $($response.StatusCode))" "Yellow"
+        }
+    }
+    catch {
+        Write-ColorOutput "⚠️ 前端应用服务暂未就绪（可能仍在启动中）" "Yellow"
+        Write-ColorOutput "   - 端点: $frontendUrl" "Gray"
     }
 }
 
@@ -308,16 +427,17 @@ function Show-ServiceInfo {
     
     Write-ColorOutput "`n🌐 Web 服务:" "Blue"
     Write-ColorOutput "  🎨 前端应用: http://localhost:3000" "White"
-    Write-ColorOutput "  🐍 后端 API: http://localhost:8000" "White"
-    Write-ColorOutput "  ?? API 说明: docs/api/openapi.json" "White"
-    Write-ColorOutput "  ?? WS 约定: docs/api/websocket-contract.md" "White"
+    Write-ColorOutput "  🔧 后端 API: http://localhost:8000" "White"
+    Write-ColorOutput "  💚 健康检查: http://localhost:8000/health" "White"
+    Write-ColorOutput "  📚 API 说明: docs/api/openapi.json" "White"
+    Write-ColorOutput "  🔌 WS 约定: docs/api/websocket-contract.md" "White"
     
     Write-ColorOutput "`n🗄️ 数据库服务:" "Blue"
-    Write-ColorOutput "  🐘 PostgreSQL: localhost:5433" "White"
+    Write-ColorOutput "  🐘 PostgreSQL: localhost:15500" "White"
     Write-ColorOutput "    - 数据库: inspect_system_dev" "Gray"
     Write-ColorOutput "    - 用户名: inspect_dev" "Gray"
     Write-ColorOutput "    - 密码: dev_password_2024" "Gray"
-    Write-ColorOutput "  🔴 Redis: localhost:6380" "White"
+    Write-ColorOutput "  🔴 Redis: localhost:16379" "White"
     Write-ColorOutput "    - 密码: dev_redis_2024" "Gray"
     
     Write-ColorOutput "`n🔧 管理工具:" "Blue"
@@ -325,15 +445,17 @@ function Show-ServiceInfo {
     Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"
     
     Write-ColorOutput "`n🛠️ 常用命令:" "Blue"
-    Write-ColorOutput "  停止数据库: .\scripts\db-manage.ps1 stop" "White"
-    Write-ColorOutput "  查看日志: .\scripts\db-manage.ps1 logs" "White"
-    Write-ColorOutput "  重置数据库: .\scripts\db-manage.ps1 reset" "White"
-    Write-ColorOutput "  运行测试: .\scripts\run-tests.ps1" "White"
+    Write-ColorOutput "  停止数据库: .\scripts\database\db-manage.ps1 stop" "White"
+    Write-ColorOutput "  查看日志: .\scripts\database\db-manage.ps1 logs" "White"
+    Write-ColorOutput "  重置数据库: .\scripts\database\db-manage.ps1 reset" "White"
+    Write-ColorOutput "  运行测试: .\scripts\testing\run-all-tests.ps1" "White"
+    Write-ColorOutput "  健康检查: Invoke-WebRequest http://localhost:8000/health" "White"
     
     Write-ColorOutput "`n💡 提示:" "Yellow"
     Write-ColorOutput "  - 前端和后端服务在独立窗口中运行" "Gray"
     Write-ColorOutput "  - 使用 Ctrl+C 停止对应服务" "Gray"
     Write-ColorOutput "  - 修改代码后服务会自动重载" "Gray"
+    Write-ColorOutput "  - 后端健康检查返回 JSON: {status, version, timestamp}" "Gray"
 }
 
 # 主执行函数

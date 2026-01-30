@@ -273,9 +273,9 @@ function Show-SetupSummary {
     Write-ColorOutput "`n📊 服务访问地址:" "Blue"
     Write-ColorOutput "  🎨 前端开发服务器: http://localhost:3000" "White"
     Write-ColorOutput "  🐍 后端 API 服务器: http://localhost:8000" "White"
-    Write-ColorOutput "  ?? API 说明: docs/api/openapi.json" "White"
-    Write-ColorOutput "  🗄️ PostgreSQL: localhost:5433" "White"
-    Write-ColorOutput "  🔴 Redis: localhost:6380" "White"
+    Write-ColorOutput "  📚 API 说明: docs/api/openapi.json" "White"
+    Write-ColorOutput "  🗄️ PostgreSQL: localhost:15500" "White"
+    Write-ColorOutput "  🔴 Redis: localhost:16379" "White"
     Write-ColorOutput "  🔧 pgAdmin: http://localhost:5050" "White"
     Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"
     
