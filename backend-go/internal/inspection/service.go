@@ -946,3 +946,44 @@ func (s *Service) Validate(ctx context.Context, template *Template) error {
 
 	return s.validator.ValidateTemplate(ctx, template)
 }
+
+
+// SaveInspectionResult 保存巡检结果
+func (s *Service) SaveInspectionResult(ctx context.Context, result *Result) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	now := time.Now().UTC()
+	if result.CreatedAt == nil {
+		result.CreatedAt = &now
+	}
+
+	if err := s.db.WithContext(ctx).Create(result).Error; err != nil {
+		return fmt.Errorf("failed to save inspection result: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateInspectionStats 更新巡检统计信息
+func (s *Service) UpdateInspectionStats(ctx context.Context, inspectionID int, totalChecks, passedChecks, failedChecks, warningChecks, skippedChecks int) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	updates := map[string]interface{}{
+		"total_checks":   totalChecks,
+		"passed_checks":  passedChecks,
+		"failed_checks":  failedChecks,
+		"warning_checks": warningChecks,
+		"skipped_checks": skippedChecks,
+		"updated_at":     time.Now().UTC(),
+	}
+
+	if err := s.db.WithContext(ctx).Model(&Inspection{}).Where("id = ?", inspectionID).Updates(updates).Error; err != nil {
+		return fmt.Errorf("failed to update inspection stats: %w", err)
+	}
+
+	return nil
+}

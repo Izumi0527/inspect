@@ -123,6 +123,9 @@ func New() (*App, error) {
 		Service:         inspectionService,
 		Reports:         reportService,
 		Auth:            authService,
+		DeviceService:   deviceService,
+		ProbeService:    probeService,
+		Logger:          log,
 		ReportOutputDir: cfg.ReportsOutputDir,
 	}
 
@@ -209,7 +212,13 @@ func New() (*App, error) {
 func (a *App) Start() error {
 	address := a.Config.Address()
 	if a.Logger != nil {
-		a.Logger.Info("server starting", zap.String("address", address))
+		// 打印启动横幅
+		env := "production"
+		if a.Config.Debug {
+			env = "development"
+		}
+		logger.PrintBanner(a.Config.AppVersion, env)
+		logger.PrintStartupInfo(a.Logger, a.Config.ServerPort, env)
 	}
 	return a.Echo.Start(address)
 }
@@ -217,6 +226,10 @@ func (a *App) Start() error {
 func (a *App) Shutdown(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+
+	if a.Logger != nil {
+		logger.PrintShutdownInfo(a.Logger)
+	}
 
 	if err := a.Echo.Shutdown(shutdownCtx); err != nil {
 		return err
