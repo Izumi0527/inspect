@@ -30,7 +30,13 @@ func NewServer(
 ) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
-	e.HTTPErrorHandler = mw.ErrorHandler
+	
+	// 使用带日志的错误处理器
+	if logger != nil {
+		e.HTTPErrorHandler = mw.ErrorHandlerWithLogger(logger)
+	} else {
+		e.HTTPErrorHandler = mw.ErrorHandler
+	}
 
 	e.Use(echomw.Recover())
 	e.Use(mw.RequestTracking)

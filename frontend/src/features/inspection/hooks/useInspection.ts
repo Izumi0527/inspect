@@ -160,6 +160,8 @@ export const useCreateTemplate = () => {
         category: data.category || 'custom',
         deviceTypes: data.deviceTypes || [],
         checkItems: data.checkItems || [],
+        isActive: data.isActive ?? true,
+        isBuiltIn: false
       }
       return createInspectionTemplate(templateData as Omit<InspectionTemplate, 'id' | 'createdAt' | 'updatedAt'>)
     },
@@ -191,6 +193,8 @@ export const useCloneTemplate = () => {
         category: original.category,
         deviceTypes: original.deviceTypes,
         checkItems: original.checkItems,
+        isActive: true,
+        isBuiltIn: false
       }
 
       return createInspectionTemplate(cloneData as Omit<InspectionTemplate, 'id' | 'createdAt' | 'updatedAt'>)
@@ -209,8 +213,12 @@ export const useUpdateTemplate = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<InspectionTemplate> }) => {
-      return updateInspectionTemplate(Number(id), data)
+    mutationFn: async ({ id, data }: { id: string | number; data: Partial<InspectionTemplate> }) => {
+      const numericId = typeof id === 'number' ? id : parseInt(String(id), 10)
+      if (!numericId || isNaN(numericId) || numericId <= 0) {
+        throw new Error('无效的模板 ID')
+      }
+      return updateInspectionTemplate(numericId, data)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'templates'] })
@@ -226,8 +234,12 @@ export const useDeleteTemplate = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const success = await deleteInspectionTemplate(Number(id))
+    mutationFn: async (id: string | number) => {
+      const numericId = typeof id === 'number' ? id : parseInt(String(id), 10)
+      if (!numericId || isNaN(numericId) || numericId <= 0) {
+        throw new Error('无效的模板 ID')
+      }
+      const success = await deleteInspectionTemplate(numericId)
       if (!success) {
         throw new Error('删除失败')
       }

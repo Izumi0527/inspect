@@ -25,7 +25,8 @@ import {
   Filter,
   X,
   RefreshCw,
-  TestTube
+  TestTube,
+  Zap
 } from 'lucide-react'
 import {
   Card,
@@ -77,6 +78,8 @@ import { TemplateImportModal } from './TemplateImportModal'
 // 导入新的编辑器组件
 import { TemplateEditorWrapper } from './TemplateEditorWrapper'
 import { OIDTester } from './OIDTester'
+import { CreateTemplateWizard } from './CreateTemplateWizard'
+import { QuickTemplateCreate } from './QuickTemplateCreate'
 
 // 类型定义
 type SortField = 'name' | 'category' | 'createdAt' | 'updatedAt'
@@ -100,6 +103,7 @@ export const InspectionTemplates: React.FC = () => {
 
   // 模态框状态
   const [isEditorOpen, setIsEditorOpen] = useState(false)
+  const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<InspectionTemplate | null>(null)
   const [viewingTemplate, setViewingTemplate] = useState<InspectionTemplate | null>(null)
   const [deleteConfirmTemplate, setDeleteConfirmTemplate] = useState<InspectionTemplate | null>(null)
@@ -413,22 +417,16 @@ export const InspectionTemplates: React.FC = () => {
     }
   ]
 
-  // 如果正在编辑模板，显示编辑器
+  // 如果正在编辑模板，显示新的向导组件
   if (isEditorOpen) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleEditorClose}>
-            <X className="w-4 h-4 mr-2" />
-            返回列表
-          </Button>
-        </div>
-        <TemplateEditorWrapper
-          template={editingTemplate || undefined}
+      <>
+        <CreateTemplateWizard
+          template={editingTemplate}
+          onClose={handleEditorClose}
           onSuccess={handleEditorSuccess}
-          onCancel={handleEditorClose}
         />
-      </div>
+      </>
     )
   }
 
@@ -522,6 +520,10 @@ export const InspectionTemplates: React.FC = () => {
           <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
             <Upload className="w-4 h-4 mr-2" />
             导入模板
+          </Button>
+          <Button variant="outline" onClick={() => setIsQuickCreateOpen(true)}>
+            <Zap className="w-4 h-4 mr-2" />
+            快速创建
           </Button>
           <Button onClick={handleCreateTemplate}>
             <Plus className="w-4 h-4 mr-2" />
@@ -687,31 +689,128 @@ export const InspectionTemplates: React.FC = () => {
           />
 
           {/* 分页 */}
-          {totalPages > 1 && (
-            <div className="flex justify-between items-center mt-4 px-2">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                第 {pagination.page} 页，共 {totalPages} 页（{templatesData?.total || 0} 条记录）
+          <div className="flex flex-wrap justify-between items-center mt-4 px-2 gap-4">
+            {/* 左侧：每页显示数量选择 */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600 dark:text-gray-400">每页显示</span>
+              <select
+                value={pagination.page_size}
+                onChange={(e) => setPagination(p => ({ ...p, page: 1, page_size: Number(e.target.value) }))}
+                className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={10}>10 条</option>
+                <option value={20}>20 条</option>
+                <option value={50}>50 条</option>
+              </select>
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                共 {templatesData?.total || 0} 条记录
+              </span>
+            </div>
+
+            {/* 右侧：分页控制 */}
+            <div className="flex items-center gap-2">
+              {/* 上一页 */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPagination(p => ({ ...p, page: Math.max(1, p.page - 1) }))}
+                disabled={pagination.page === 1}
+              >
+                上一页
+              </Button>
+
+              {/* 页码显示 */}
+              <div className="flex items-center gap-1">
+                {(() => {
+                  const pages: (number | string)[] = []
+                  const current = pagination.page
+                  const total = totalPages
+
+                  if (total <= 7) {
+                    // 总页数小于等于7，显示所有页码
+                    for (let i = 1; i <= total; i++) {
+                      pages.push(i)
+                    }
+                  } else {
+                    // 总页数大于7，显示省略号
+                    if (current <= 4) {
+                      // 当前页靠近开头
+                      for (let i = 1; i <= 5; i++) pages.push(i)
+                      pages.push('...')
+                      pages.push(total)
+                    } else if (current >= total - 3) {
+                      // 当前页靠近结尾
+                      pages.push(1)
+                      pages.push('...')
+                      for (let i = total - 4; i <= total; i++) pages.push(i)
+                    } else {
+                      // 当前页在中间
+                      pages.push(1)
+                      pages.push('...')
+                      for (let i = current - 1; i <= current + 1; i++) pages.push(i)
+                      pages.push('...')
+                      pages.push(total)
+                    }
+                  }
+
+                  return pages.map((p, idx) => (
+                    p === '...' ? (
+                      <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">...</span>
+                    ) : (
+                      <button
+                        key={p}
+                        onClick={() => setPagination(prev => ({ ...prev, page: p as number }))}
+                        className={`min-w-[32px] h-8 px-2 text-sm rounded-md transition-colors ${
+                          pagination.page === p
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  ))
+                })()}
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPagination(p => ({ ...p, page: Math.max(1, p.page - 1) }))}
-                  disabled={pagination.page === 1}
-                >
-                  上一页
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
-                  disabled={pagination.page >= totalPages}
-                >
-                  下一页
-                </Button>
+
+              {/* 下一页 */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
+                disabled={pagination.page >= totalPages}
+              >
+                下一页
+              </Button>
+
+              {/* 跳转到指定页 */}
+              <div className="flex items-center gap-1 ml-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">跳至</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  defaultValue={pagination.page}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const value = parseInt((e.target as HTMLInputElement).value)
+                      if (value >= 1 && value <= totalPages) {
+                        setPagination(p => ({ ...p, page: value }))
+                      }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const value = parseInt(e.target.value)
+                    if (value >= 1 && value <= totalPages) {
+                      setPagination(p => ({ ...p, page: value }))
+                    }
+                  }}
+                  className="w-14 px-2 py-1 text-sm text-center border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">页</span>
               </div>
             </div>
-          )}
+          </div>
         </motion.div>
       ) : (
         <Card>
@@ -743,7 +842,7 @@ export const InspectionTemplates: React.FC = () => {
 
       {/* 删除确认对话框 */}
       {deleteConfirmTemplate && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -812,6 +911,22 @@ export const InspectionTemplates: React.FC = () => {
         <TemplateImportModal
           onClose={() => setIsImportModalOpen(false)}
           onSuccess={handleImportSuccess}
+        />
+      )}
+
+      {/* 快速创建模板 Modal */}
+      {isQuickCreateOpen && (
+        <QuickTemplateCreate
+          onClose={() => setIsQuickCreateOpen(false)}
+          onSuccess={() => {
+            setIsQuickCreateOpen(false)
+            refetch()
+          }}
+          onAdvanced={() => {
+            setIsQuickCreateOpen(false)
+            setEditingTemplate(null)
+            setIsEditorOpen(true)
+          }}
         />
       )}
     </div>

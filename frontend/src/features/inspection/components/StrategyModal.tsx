@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { X, Calendar, Users, FileText, Plus } from 'lucide-react'
+import { X, Calendar, FileText, Plus, Settings, Search, Check } from 'lucide-react'
 import {
   Button,
   SimpleInput as Input,
@@ -11,7 +11,8 @@ import {
   SelectValue,
   Badge
 } from '@/components/atoms'
-import { useCreateStrategy, useUpdateStrategy } from '../hooks/useInspection'
+import { useCreateStrategy, useUpdateStrategy, useInspectionTemplates } from '../hooks/useInspection'
+import { useDevices } from '@/features/devices/hooks/useDevices'
 import { InspectionStrategy } from '../types'
 
 interface Props {
@@ -45,8 +46,20 @@ const createInitialFormState = (): StrategyFormData => ({
 export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess }) => {
   const [formData, setFormData] = useState<StrategyFormData>(() => createInitialFormState())
   const [errors, setErrors] = useState<Partial<Record<keyof StrategyFormData, string>>>({})
+  const [deviceSearch, setDeviceSearch] = useState('')
+  const [templateSearch, setTemplateSearch] = useState('')
+  const [showDeviceSelector, setShowDeviceSelector] = useState(false)
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false)
+
   const createStrategy = useCreateStrategy()
   const updateStrategy = useUpdateStrategy()
+  
+  // 获取设备列表
+  const { devices: allDevices, loading: devicesLoading } = useDevices(false)
+  
+  // 获取模板列表
+  const { data: templatesData, isLoading: templatesLoading } = useInspectionTemplates({ pageSize: 100 })
+  const allTemplates = templatesData?.templates || []
 
   const isEditing = !!strategy
 
@@ -67,16 +80,9 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
   }, [strategy])
 
   const handleInputChange = <K extends keyof StrategyFormData>(field: K, value: StrategyFormData[K]) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }))
-
+    setFormData(prev => ({ ...prev, [field]: value }))
     if (errors[field]) {
-      setErrors(prev => ({
-        ...prev,
-        [field]: undefined
-      }))
+      setErrors(prev => ({ ...prev, [field]: undefined }))
     }
   }
 
@@ -86,24 +92,58 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
     }
   }
 
+  // 切换设备选择
+  const toggleDevice = (deviceId: number) => {
+    const newDevices = formData.devices.includes(deviceId)
+      ? formData.devices.filter(id => id !== deviceId)
+      : [...formData.devices, deviceId]
+    handleInputChange('devices', newDevices)
+  }
+
+  // 切换模板选择
+  const toggleTemplate = (templateId: number) => {
+    const newTemplates = formData.templates.includes(templateId)
+      ? formData.templates.filter(id => id !== templateId)
+      : [...formData.templates, templateId]
+    handleInputChange('templates', newTemplates)
+  }
+
+  // 过滤设备
+  const filteredDevices = allDevices.filter(device => 
+    device.name.toLowerCase().includes(deviceSearch.toLowerCase()) ||
+    device.ip_address?.toLowerCase().includes(deviceSearch.toLowerCase())
+  )
+
+  // 过滤模板
+  const filteredTemplates = allTemplates.filter(template =>
+    template.name.toLowerCase().includes(templateSearch.toLowerCase())
+  )
+
+  // 获取设备名称
+  const getDeviceName = (deviceId: number) => {
+    const device = allDevices.find(d => d.id === deviceId)
+    return device ? device.name : `设备-${deviceId}`
+  }
+
+  // 获取模板名称
+  const getTemplateName = (templateId: number) => {
+    const template = allTemplates.find(t => Number(t.id) === templateId)
+    return template ? template.name : `模板-${templateId}`
+  }
+
   const validateForm = () => {
     const newErrors: Partial<Record<keyof StrategyFormData, string>> = {}
 
-    // 策略名称：必填，长度1-100字符
     if (!formData.name.trim()) {
       newErrors.name = '请输入策略名称'
     } else if (formData.name.length > 100) {
       newErrors.name = '策略名称不能超过100个字符'
     }
 
-    // 策略描述：必填，最多500字符
-    if (!formData.description.trim()) {
-      newErrors.description = '请输入策略描述'
-    } else if (formData.description.length > 500) {
+    if (formData.description.length > 500) {
       newErrors.description = '策略描述不能超过500个字符'
     }
 
-    // Cron表达式：定时策略必填，最多100字符
     if (formData.type === 'scheduled') {
       if (!formData.cron.trim()) {
         newErrors.cron = '请输入Cron表达式'
@@ -112,12 +152,10 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
       }
     }
 
-    // 设备：至少选择一个
     if (formData.devices.length === 0) {
       newErrors.devices = '请选择至少一个设备'
     }
 
-    // 模板：至少选择一个
     if (formData.templates.length === 0) {
       newErrors.templates = '请选择至少一个模板'
     }
@@ -128,17 +166,11 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!validateForm()) {
-      return
-    }
+    if (!validateForm()) return
 
     try {
       if (isEditing && strategy) {
-        await updateStrategy.mutateAsync({
-          id: strategy.id,
-          data: formData
-        })
+        await updateStrategy.mutateAsync({ id: strategy.id, data: formData })
       } else {
         await createStrategy.mutateAsync(formData)
       }
@@ -159,42 +191,37 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
   const isLoading = createStrategy.isPending || updateStrategy.isPending
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-5xl w-full max-h-[85vh] overflow-hidden"
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              {isEditing ? '编辑巡检策略' : '创建巡检策略'}
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              配置巡检策略的基本信息和执行规则
-            </p>
-          </div>
+        <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            {isEditing ? '编辑巡检策略' : '创建巡检策略'}
+          </h2>
           <Button variant="ghost" size="sm" onClick={onClose}>
             <X className="w-5 h-5" />
           </Button>
         </div>
 
-        {/* 表单内容 */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
-          <div className="space-y-6">
-            {/* 基本信息 */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                <FileText className="w-5 h-5 text-blue-600" />
-                基本信息
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
+        {/* 表单内容 - 横向两栏布局 */}
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(85vh-140px)]">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 左栏：基本信息 + 执行时间 */}
+            <div className="space-y-5">
+              <div className="space-y-4">
+                <h3 className="text-base font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100 pb-2 border-b dark:border-gray-700">
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  基本信息
+                </h3>
+                
+                <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    策略名称 *
+                    策略名称 <span className="text-red-500">*</span>
                   </label>
                   <Input
                     value={formData.name}
@@ -204,203 +231,263 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                     maxLength={100}
                   />
                   <div className="flex justify-between items-center mt-1">
-                    {errors.name ? (
-                      <p className="text-sm text-red-500">{errors.name}</p>
-                    ) : (
-                      <p className="text-xs text-gray-500 dark:text-gray-400">策略名称长度1-100字符</p>
-                    )}
-                    <span className={`text-xs ${formData.name.length > 100 ? 'text-red-500' : 'text-gray-400'}`}>
+                    {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
+                    <span className={`text-xs ml-auto ${formData.name.length > 80 ? 'text-orange-500' : 'text-gray-400'}`}>
                       {formData.name.length}/100
                     </span>
                   </div>
                 </div>
 
-                <div className="md:col-span-2">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    策略描述 *
+                    策略描述
                   </label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => handleInputChange('description', e.target.value)}
-                    placeholder="请输入策略描述"
+                    placeholder="请输入策略描述（可选）"
                     maxLength={500}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 ${
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-none ${
                       errors.description ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                     }`}
-                    rows={3}
+                    rows={2}
                   />
-                  <div className="flex justify-between items-center mt-1">
-                    {errors.description ? (
-                      <p className="text-sm text-red-500">{errors.description}</p>
-                    ) : (
-                      <p className="text-xs text-gray-500 dark:text-gray-400">策略描述最多500字符</p>
-                    )}
-                    <span className={`text-xs ${formData.description.length > 500 ? 'text-red-500' : 'text-gray-400'}`}>
+                  <div className="flex justify-end mt-1">
+                    <span className={`text-xs ${formData.description.length > 400 ? 'text-orange-500' : 'text-gray-400'}`}>
                       {formData.description.length}/500
                     </span>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    策略类型 *
-                  </label>
-                  <Select
-                    value={formData.type}
-                    onValueChange={handleTypeChange}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择策略类型" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="scheduled">定时巡检</SelectItem>
-                      <SelectItem value="manual">手动巡检</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={formData.enabled}
-                      onChange={(e) => handleInputChange('enabled', e.target.checked)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">启用策略</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* 执行时间配置 */}
-            {formData.type === 'scheduled' && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                  <Calendar className="w-5 h-5 text-purple-600" />
-                  执行时间
-                </h3>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Cron表达式 *
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={formData.cron}
-                      onChange={(e) => handleInputChange('cron', e.target.value)}
-                      placeholder="0 0 2 * * ?"
-                      error={errors.cron}
-                      className="flex-1"
-                    />
-                    <Select onValueChange={(value) => handleInputChange('cron', value)}>
-                      <SelectTrigger className="w-48">
-                        <SelectValue placeholder="常用预设" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      策略类型 <span className="text-red-500">*</span>
+                    </label>
+                    <Select value={formData.type} onValueChange={handleTypeChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择策略类型" />
                       </SelectTrigger>
                       <SelectContent>
-                        {cronPresets.map((preset) => (
-                          <SelectItem key={preset.value} value={preset.value}>
-                            {preset.label}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="scheduled">定时巡检</SelectItem>
+                        <SelectItem value="manual">手动巡检</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    格式：秒 分 时 日 月 周，例如：0 0 2 * * ? 表示每天凌晨2点执行
-                  </p>
+
+                  <div className="flex items-end pb-1">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.enabled}
+                        onChange={(e) => handleInputChange('enabled', e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">启用策略</span>
+                    </label>
+                  </div>
                 </div>
               </div>
-            )}
 
-            {/* 设备和模板选择 */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                <Users className="w-5 h-5 text-green-600" />
-                目标配置
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 执行时间配置 */}
+              {formData.type === 'scheduled' && (
+                <div className="space-y-4">
+                  <h3 className="text-base font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100 pb-2 border-b dark:border-gray-700">
+                    <Calendar className="w-4 h-4 text-purple-600" />
+                    执行时间
+                  </h3>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Cron表达式 <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={formData.cron}
+                        onChange={(e) => handleInputChange('cron', e.target.value)}
+                        placeholder="0 0 2 * * ?"
+                        className={`flex-1 ${errors.cron ? 'border-red-500' : ''}`}
+                      />
+                      <Select onValueChange={(value) => handleInputChange('cron', value)}>
+                        <SelectTrigger className="w-36">
+                          <SelectValue placeholder="常用预设" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {cronPresets.map((preset) => (
+                            <SelectItem key={preset.value} value={preset.value}>
+                              {preset.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {errors.cron && <p className="text-xs text-red-500 mt-1">{errors.cron}</p>}
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      格式：秒 分 时 日 月 周，例如：0 0 2 * * ? 表示每天凌晨2点执行
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 右栏：目标配置 */}
+            <div className="space-y-5">
+              <div className="space-y-4">
+                <h3 className="text-base font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100 pb-2 border-b dark:border-gray-700">
+                  <Settings className="w-4 h-4 text-green-600" />
+                  目标配置
+                </h3>
+                
+                {/* 目标设备 */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    目标设备 * ({formData.devices.length} 个)
+                    目标设备 <span className="text-red-500">*</span>
+                    <span className="text-gray-400 font-normal ml-1">({formData.devices.length} 个)</span>
                   </label>
-                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[100px] bg-gray-50 dark:bg-gray-700">
-                    <div className="flex flex-wrap gap-2">
-                      {formData.devices.map((deviceId) => (
-                        <Badge key={deviceId} variant="secondary" className="flex items-center gap-1">
-                          设备-{deviceId}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newDevices = formData.devices.filter(id => id !== deviceId)
-                              handleInputChange('devices', newDevices)
-                            }}
-                            className="ml-1 hover:text-red-500"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </Badge>
-                      ))}
+                  <div className={`border rounded-lg overflow-hidden ${
+                    errors.devices ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                  }`}>
+                    {/* 已选设备 */}
+                    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 min-h-[60px]">
+                      {formData.devices.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {formData.devices.map((deviceId) => (
+                            <Badge key={deviceId} variant="secondary" className="flex items-center gap-1">
+                              {getDeviceName(deviceId)}
+                              <button
+                                type="button"
+                                onClick={() => toggleDevice(deviceId)}
+                                className="ml-1 hover:text-red-500"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-400">请从下方列表选择设备</p>
+                      )}
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => {
-                        const mockDeviceId = Date.now()
-                        handleInputChange('devices', [...formData.devices, mockDeviceId])
-                      }}
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      添加设备
-                    </Button>
+                    
+                    {/* 设备选择器 */}
+                    <div className="border-t dark:border-gray-600">
+                      <div className="p-2 border-b dark:border-gray-600">
+                        <div className="relative">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <input
+                            type="text"
+                            value={deviceSearch}
+                            onChange={(e) => setDeviceSearch(e.target.value)}
+                            placeholder="搜索设备..."
+                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          />
+                        </div>
+                      </div>
+                      <div className="max-h-[120px] overflow-y-auto">
+                        {devicesLoading ? (
+                          <p className="p-3 text-sm text-gray-500">加载中...</p>
+                        ) : filteredDevices.length > 0 ? (
+                          filteredDevices.map((device) => (
+                            <label
+                              key={device.id}
+                              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={formData.devices.includes(device.id)}
+                                onChange={() => toggleDevice(device.id)}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-sm text-gray-700 dark:text-gray-300 flex-1">
+                                {device.name}
+                              </span>
+                              <span className="text-xs text-gray-400">{device.ip_address}</span>
+                            </label>
+                          ))
+                        ) : (
+                          <p className="p-3 text-sm text-gray-500">暂无设备</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  {errors.devices && (
-                    <p className="text-sm text-red-500 mt-1">{errors.devices}</p>
-                  )}
+                  {errors.devices && <p className="text-xs text-red-500 mt-1">{errors.devices}</p>}
                 </div>
 
+                {/* 巡检模板 */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    巡检模板 * ({formData.templates.length} 个)
+                    巡检模板 <span className="text-red-500">*</span>
+                    <span className="text-gray-400 font-normal ml-1">({formData.templates.length} 个)</span>
                   </label>
-                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[100px] bg-gray-50 dark:bg-gray-700">
-                    <div className="flex flex-wrap gap-2">
-                      {formData.templates.map((templateId) => (
-                        <Badge key={templateId} variant="primary" className="flex items-center gap-1">
-                          模板-{templateId}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newTemplates = formData.templates.filter(id => id !== templateId)
-                              handleInputChange('templates', newTemplates)
-                            }}
-                            className="ml-1 hover:text-red-500"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </Badge>
-                      ))}
+                  <div className={`border rounded-lg overflow-hidden ${
+                    errors.templates ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                  }`}>
+                    {/* 已选模板 */}
+                    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 min-h-[60px]">
+                      {formData.templates.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {formData.templates.map((templateId) => (
+                            <Badge key={templateId} variant="primary" className="flex items-center gap-1">
+                              {getTemplateName(templateId)}
+                              <button
+                                type="button"
+                                onClick={() => toggleTemplate(templateId)}
+                                className="ml-1 hover:text-red-500"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-400">请从下方列表选择模板</p>
+                      )}
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => {
-                        const mockTemplateId = Date.now()
-                        handleInputChange('templates', [...formData.templates, mockTemplateId])
-                      }}
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      添加模板
-                    </Button>
+                    
+                    {/* 模板选择器 */}
+                    <div className="border-t dark:border-gray-600">
+                      <div className="p-2 border-b dark:border-gray-600">
+                        <div className="relative">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <input
+                            type="text"
+                            value={templateSearch}
+                            onChange={(e) => setTemplateSearch(e.target.value)}
+                            placeholder="搜索模板..."
+                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                          />
+                        </div>
+                      </div>
+                      <div className="max-h-[120px] overflow-y-auto">
+                        {templatesLoading ? (
+                          <p className="p-3 text-sm text-gray-500">加载中...</p>
+                        ) : filteredTemplates.length > 0 ? (
+                          filteredTemplates.map((template) => (
+                            <label
+                              key={template.id}
+                              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={formData.templates.includes(Number(template.id))}
+                                onChange={() => toggleTemplate(Number(template.id))}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-sm text-gray-700 dark:text-gray-300 flex-1">
+                                {template.name}
+                              </span>
+                              {template.isBuiltIn && (
+                                <Badge variant="success" size="sm">内置</Badge>
+                              )}
+                            </label>
+                          ))
+                        ) : (
+                          <p className="p-3 text-sm text-gray-500">暂无模板</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  {errors.templates && (
-                    <p className="text-sm text-red-500 mt-1">{errors.templates}</p>
-                  )}
+                  {errors.templates && <p className="text-xs text-red-500 mt-1">{errors.templates}</p>}
                 </div>
               </div>
             </div>
@@ -408,7 +495,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
         </form>
 
         {/* 底部操作按钮 */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             取消
           </Button>

@@ -42,8 +42,11 @@ const toNumber = (value: unknown, fallback = 0): number => {
   return fallback
 }
 
-const toString = (value: unknown, fallback = ''): string =>
-  typeof value === 'string' ? value : fallback
+const toString = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return fallback
+}
 
 const toStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
@@ -321,13 +324,12 @@ export async function fetchInspectionTemplates(params?: {
     const searchParams = new URLSearchParams()
 
     if (params) {
-      // 修正: 将 page/pageSize 转换为 skip/limit
-      if (params.page && params.pageSize) {
-        const skip = (params.page - 1) * params.pageSize
-        searchParams.append('skip', skip.toString())
-        searchParams.append('limit', params.pageSize.toString())
-      } else if (params.pageSize) {
-        searchParams.append('limit', params.pageSize.toString())
+      // 修正: 后端使用 page/page_size 参数
+      if (params.page) {
+        searchParams.append('page', params.page.toString())
+      }
+      if (params.pageSize) {
+        searchParams.append('page_size', params.pageSize.toString())
       }
 
       // 注意: category 参数后端不支持，需要在客户端过滤
@@ -350,7 +352,8 @@ export async function fetchInspectionTemplates(params?: {
     }
 
     const data = toRecord(response.data)
-    let templates = toRecordArray(data.templates ?? data['templates']).map(transformTemplateData)
+    // 后端 V2 API 返回 items，V1 返回 templates，兼容两种格式
+    let templates = toRecordArray(data.items ?? data.templates ?? data['items'] ?? data['templates']).map(transformTemplateData)
 
     // 客户端过滤 category（后端不支持该参数）
     if (params?.category) {
@@ -360,7 +363,7 @@ export async function fetchInspectionTemplates(params?: {
     return {
       templates,
       total: toNumber(data.total),
-      pages: toNumber(data.pages),
+      pages: toNumber(data.pages ?? Math.ceil(toNumber(data.total) / (params?.pageSize || 20))),
     }
   } catch (error) {
     console.error('获取巡检模板失败:', error)
@@ -389,7 +392,25 @@ export async function fetchInspectionTemplate(id: number): Promise<InspectionTem
 
 export async function createInspectionTemplate(template: Omit<InspectionTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<InspectionTemplate> {
   try {
-    const response = await api.post<InspectionApiResponse<unknown>>('/inspection/templates', template)
+    // 转换为后端期望的 snake_case 格式
+    const payload = {
+      name: template.name,
+      description: template.description,
+      category: template.category,
+      device_types: template.deviceTypes,
+      check_items: template.checkItems?.map(item => ({
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        weight: item.weight,
+        config: item.config,
+        enabled: true
+      })),
+      is_default: template.isBuiltIn || false,
+      is_active: template.isActive ?? true
+    }
+
+    const response = await api.post<InspectionApiResponse<unknown>>('/inspection/templates', payload)
 
     if (!response.data) {
       throw new Error('创建模板失败')
@@ -404,7 +425,27 @@ export async function createInspectionTemplate(template: Omit<InspectionTemplate
 
 export async function updateInspectionTemplate(id: number, updates: Partial<InspectionTemplate>): Promise<InspectionTemplate> {
   try {
-    const response = await api.put<InspectionApiResponse<unknown>>(`/inspection/templates/${id}`, updates)
+    // 转换为后端期望的 snake_case 格式
+    const payload: Record<string, unknown> = {}
+    
+    if (updates.name !== undefined) payload.name = updates.name
+    if (updates.description !== undefined) payload.description = updates.description
+    if (updates.category !== undefined) payload.category = updates.category
+    if (updates.deviceTypes !== undefined) payload.device_types = updates.deviceTypes
+    if (updates.checkItems !== undefined) {
+      payload.check_items = updates.checkItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        weight: item.weight,
+        config: item.config,
+        enabled: true
+      }))
+    }
+    if (updates.isBuiltIn !== undefined) payload.is_default = updates.isBuiltIn
+    if (updates.isActive !== undefined) payload.is_active = updates.isActive
+
+    const response = await api.put<InspectionApiResponse<unknown>>(`/inspection/templates/${id}`, payload)
 
     if (!response.data) {
       throw new Error('更新模板失败')
