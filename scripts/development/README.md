@@ -51,6 +51,8 @@ pnpm dev
 | 脚本 | 功能 | 用途 |
 |------|------|------|
 | `dev-start.ps1` | 统一开发环境启动工具 | 一键启动所有开发服务 |
+| `build-backend.ps1` | 后端编译工具 | 编译 Go 后端为可执行文件 |
+| `start-backend-compiled.ps1` | 启动已编译的后端 | 直接运行编译好的 app.exe |
 | `manage-go-deps.ps1` | Go 依赖管理工具 | 管理 Go 后端依赖 |
 | `diagnose.ps1` | 开发环境诊断工具 | 快速诊断环境问题 |
 | `test-db-status.ps1` | 数据库状态测试 | 检查数据库容器状态 |
@@ -93,6 +95,87 @@ pnpm dev
 - 🔧 后端 API: http://localhost:8000
 - 🐘 PostgreSQL: localhost:15500
 - 🔴 Redis: localhost:16379
+
+---
+
+### build-backend.ps1 - 后端编译工具 🔨
+
+**功能**: 编译 Go 后端服务为可执行文件
+
+**参数**:
+- `-Mode` - 编译模式: release (生产), debug (调试), dev (开发)
+- `-Platform` - 目标平台: windows, linux, darwin (macOS)
+- `-Output` - 输出文件名（不含扩展名，默认 app）
+- `-Clean` - 编译前清理旧文件
+
+**特性**:
+- ✅ 支持多种编译模式（生产/调试/开发）
+- ✅ 支持交叉编译（Windows/Linux/macOS）
+- ✅ 自动优化（生产模式去除调试信息）
+- ✅ 显示编译时间和文件大小
+- ✅ 智能文件命名
+
+**示例**:
+```powershell
+# 标准编译（生产版本）
+.\build-backend.ps1
+
+# 编译调试版本
+.\build-backend.ps1 -Mode debug
+
+# 交叉编译 Linux 版本
+.\build-backend.ps1 -Platform linux
+
+# 清理后重新编译
+.\build-backend.ps1 -Clean
+
+# 自定义输出文件名
+.\build-backend.ps1 -Output myapp
+```
+
+**编译模式说明**:
+- `release`: 生产版本，去除调试信息，最小化文件体积
+- `debug`: 调试版本，包含完整调试符号，便于调试
+- `dev`: 开发版本，标准编译
+
+**输出文件**:
+- Windows: `app.exe` (或 `app-debug.exe`)
+- Linux/macOS: `app` (或 `app-debug`)
+
+---
+
+### start-backend-compiled.ps1 - 启动已编译的后端 🚀
+
+**功能**: 直接运行已编译的 app.exe 程序
+
+**参数**:
+- `-Background` - 在后台运行
+- `-CheckHealth` - 启动后检查健康状态
+
+**特性**:
+- ✅ 快速启动（无需重新编译）
+- ✅ 支持前台/后台运行
+- ✅ 自动健康检查
+- ✅ 显示程序信息（大小、编译时间）
+- ✅ 检查端口占用
+
+**示例**:
+```powershell
+# 前台启动
+.\start-backend-compiled.ps1
+
+# 后台启动
+.\start-backend-compiled.ps1 -Background
+
+# 启动并检查健康状态
+.\start-backend-compiled.ps1 -Background -CheckHealth
+```
+
+**使用场景**:
+- 生产环境部署
+- 快速启动测试
+- 性能测试
+- 不需要修改代码时
 
 ---
 
@@ -289,17 +372,39 @@ pnpm dev
 # 在 backend-go 目录
 cd backend-go
 
-# 运行后端
+# 方式 1: 使用 go run（开发推荐，自动编译）
 go run ./cmd/api
 
-# 编译后端
-go build -o app.exe ./cmd/api
+# 方式 2: 编译后运行
+# 编译
+.\scripts\development\build-backend.ps1
+
+# 运行
+.\scripts\development\start-backend-compiled.ps1
+
+# 或直接运行
+.\backend-go\app.exe
 
 # 运行测试
 go test ./...
 
 # 格式化代码
 go fmt ./...
+
+# 代码检查
+go vet ./...
+```
+
+**编译选项**:
+```powershell
+# 生产版本（优化，体积小）
+.\scripts\development\build-backend.ps1 -Mode release
+
+# 调试版本（包含调试符号）
+.\scripts\development\build-backend.ps1 -Mode debug
+
+# 交叉编译 Linux 版本
+.\scripts\development\build-backend.ps1 -Platform linux
 ```
 
 ### 前端开发
@@ -666,6 +771,12 @@ PS> .\dev-start.ps1
 
 # 只启动后端（含数据库）
 .\scripts\development\dev-start.ps1 -Services backend
+
+# 编译后端
+.\scripts\development\build-backend.ps1
+
+# 启动已编译的后端
+.\scripts\development\start-backend-compiled.ps1
 
 # 全面诊断
 .\scripts\development\diagnose.ps1
