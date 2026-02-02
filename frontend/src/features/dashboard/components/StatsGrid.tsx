@@ -34,13 +34,18 @@ const getTrend = (change: string): 'up' | 'down' | 'stable' => {
 
 // 根据单位字段格式化统计值
 const formatStatValue = (value: string, unit?: string): string => {
+  // 如果值是 "N/A"，直接返回
+  if (value === 'N/A' || value === 'n/a' || value === '') {
+    return 'N/A'
+  }
+
   // 验证单位字段并进行格式化
   if (unit === 'bps') {
     // 验证单位为 bps 后进行带宽格式化
     const bpsValue = parseFloat(value)
-    if (isNaN(bpsValue)) {
-      console.warn('Invalid bps value received:', value)
-      return value // 返回原始值
+    if (isNaN(bpsValue) || !isFinite(bpsValue)) {
+      // 如果解析失败，返回 N/A 而不是原始值
+      return 'N/A'
     }
     return formatBandwidth(bpsValue)
   }

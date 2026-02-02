@@ -42,6 +42,7 @@ export {
   useInspectionExecution,
   useTriggerExecution,
   useStopExecution,
+  useDeleteExecution,
   useInspectionStats,
   useInspectionTrends,
   useInspectionReports,

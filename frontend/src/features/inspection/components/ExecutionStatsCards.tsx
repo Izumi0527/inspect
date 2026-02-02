@@ -20,7 +20,7 @@ interface Props {
 interface StatItem {
   label: string
   count: number | string
-  color: string
+  colorClass: string
 }
 
 export const ExecutionStatsCards: React.FC<Props> = React.memo(({ executions }) => {
@@ -48,27 +48,27 @@ export const ExecutionStatsCards: React.FC<Props> = React.memo(({ executions }) 
       {
         label: '总执行数',
         count: statsAccumulator.total,
-        color: 'blue'
+        colorClass: 'text-blue-600'
       },
       {
         label: '执行中',
         count: statsAccumulator.running,
-        color: 'blue'
+        colorClass: 'text-blue-600'
       },
       {
         label: '已完成',
         count: statsAccumulator.completed,
-        color: 'green'
+        colorClass: 'text-green-600'
       },
       {
         label: '失败',
         count: statsAccumulator.failed,
-        color: 'red'
+        colorClass: 'text-red-600'
       },
       {
         label: '平均评分',
         count: avgScore,
-        color: 'purple'
+        colorClass: 'text-purple-600'
       }
     ]
   }, [executions])
@@ -78,7 +78,7 @@ export const ExecutionStatsCards: React.FC<Props> = React.memo(({ executions }) 
       {stats.map((item) => (
         <Card key={item.label}>
           <CardContent className="p-4 text-center">
-            <div className={`text-2xl font-bold text-${item.color}-600`}>
+            <div className={`text-2xl font-bold ${item.colorClass}`}>
               {item.count}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">{item.label}</div>

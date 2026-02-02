@@ -188,7 +188,21 @@ export function formatDeviceStatus(status: string): string {
  * formatBandwidth(1500000) // "1.5 Mbps"
  * formatBandwidth(1500000000) // "1.5 Gbps"
  */
-export function formatBandwidth(bps: number): string {
+export function formatBandwidth(bps: number | string | null | undefined): string {
+  // 处理字符串输入
+  if (typeof bps === 'string') {
+    // 如果是 "N/A" 或空字符串，直接返回
+    if (bps === 'N/A' || bps === 'n/a' || bps === '' || bps.trim() === '') {
+      return 'N/A'
+    }
+    bps = parseFloat(bps)
+  }
+
+  // 处理 null/undefined
+  if (bps === null || bps === undefined) {
+    return 'N/A'
+  }
+
   // 处理无效输入
   if (!isFinite(bps) || isNaN(bps)) {
     return 'N/A'
@@ -196,7 +210,6 @@ export function formatBandwidth(bps: number): string {
 
   // 处理负数
   if (bps < 0) {
-    console.warn('Negative bandwidth value received:', bps)
     return '0.0 bps'
   }
 

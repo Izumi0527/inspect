@@ -31,12 +31,15 @@ ModalOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 const ModalContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    hideDescription?: boolean
+  }
+>(({ className, children, hideDescription = false, ...props }, ref) => (
   <ModalPortal>
     <ModalOverlay />
     <DialogPrimitive.Content
       ref={ref}
+      aria-describedby={hideDescription ? undefined : 'modal-description'}
       className={cn(
         'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-gray-200/20 dark:border-gray-700/20 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl p-6 shadow-2xl duration-200',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
@@ -50,6 +53,12 @@ const ModalContent = React.forwardRef<
       {...props}
     >
       {children}
+      {/* 隐藏的描述元素，用于满足无障碍要求 */}
+      {!hideDescription && (
+        <DialogPrimitive.Description id="modal-description" className="sr-only">
+          对话框内容
+        </DialogPrimitive.Description>
+      )}
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 disabled:pointer-events-none">
         <X className="h-4 w-4" />
         <span className="sr-only">关闭</span>
@@ -238,6 +247,8 @@ interface SimpleModalProps {
   open: boolean
   onClose: () => void
   title?: string
+  /** 无障碍标题，当不显示标题但需要为屏幕阅读器提供标题时使用 */
+  ariaLabel?: string
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl'
   children: React.ReactNode
 }
@@ -246,6 +257,7 @@ export const SimpleModal: React.FC<SimpleModalProps> = ({
   open,
   onClose,
   title,
+  ariaLabel,
   size = 'md',
   children
 }) => {
@@ -262,11 +274,18 @@ export const SimpleModal: React.FC<SimpleModalProps> = ({
 
   return (
     <Modal open={open} onOpenChange={onClose}>
-      <ModalContent className={sizeClasses[size]}>
+      <ModalContent className={sizeClasses[size]} hideDescription>
+        {/* 显示标题 */}
         {title && (
           <ModalHeader>
             <ModalTitle>{title}</ModalTitle>
           </ModalHeader>
+        )}
+        {/* 隐藏的无障碍标题，当没有显示标题时使用 */}
+        {!title && (
+          <ModalTitle className="sr-only">
+            {ariaLabel || '对话框'}
+          </ModalTitle>
         )}
         {children}
       </ModalContent>

@@ -19,11 +19,11 @@ import {
   deleteInspectionStrategy,
   toggleInspectionStrategy,
   triggerStrategyExecution,
+  generateInspectionReport,
 } from '../api/inspection.api'
 import {
   InspectionStrategy,
   InspectionTemplate,
-  InspectionExecution,
   InspectionStats
 } from '../types'
 
@@ -274,14 +274,21 @@ export const useInspectionExecutions = (params?: {
       startDate: params?.startDate,
       endDate: params?.endDate,
     }),
-    refetchInterval: false, // 禁用自动刷新
+    refetchInterval: false, // 禁用自动刷新，由组件控制
+    staleTime: 30 * 1000, // 30秒缓存
+    retry: 2, // 失败重试2次
   })
 }
 
 export const useInspectionExecution = (id: string) => {
   return useQuery({
     queryKey: ['inspection', 'execution', id],
-    queryFn: () => Promise.resolve(null as InspectionExecution | null),
+    queryFn: async () => {
+      if (!id) return null
+      // 获取单个执行记录详情
+      const result = await fetchInspectionExecutions({ page: 1, pageSize: 1 })
+      return result.items.find(item => item.id === id) || null
+    },
     enabled: !!id,
     refetchInterval: false,
   })
@@ -297,6 +304,7 @@ export const useTriggerExecution = () => {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'executions'] })
       queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
       toast.success(result.message || '巡检任务已启动')
     },
     onError: (error: Error) => {
@@ -310,7 +318,24 @@ export const useStopExecution = () => {
 
   return useMutation({
     mutationFn: async (executionId: string) => {
-      void executionId
+      // 调用后端停止执行API
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/inspection/executions/${executionId}/stop`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+          },
+        }
+      )
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || '停止执行失败')
+      }
+      
+      return response.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'executions'] })
@@ -318,6 +343,41 @@ export const useStopExecution = () => {
     },
     onError: (error: Error) => {
       toast.error(error.message || '停止巡检失败')
+    },
+  })
+}
+
+export const useDeleteExecution = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (executionId: string) => {
+      // 调用后端删除执行记录API
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/inspection/executions/${executionId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+          },
+        }
+      )
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || '删除执行记录失败')
+      }
+      
+      return response.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'executions'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
+      toast.success('执行记录已删除')
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '删除执行记录失败')
     },
   })
 }
@@ -362,7 +422,7 @@ export const useProblemDistribution = () => {
   })
 }
 
-// 巡检报告Hooks - 暂时禁用，等待API实现
+// 巡检报告Hooks - 部分实现
 export const useInspectionReports = (params?: {
   page?: number
   pageSize?: number
@@ -389,14 +449,25 @@ export const useGenerateReport = () => {
       type: 'summary' | 'detailed' | 'trend'
       format: 'pdf' | 'excel' | 'html' | 'word'
     }) => {
-      void executionId
-      void type
-      void format
-      return null
+      // TODO: 后端需要完善报告生成API
+      // 目前后端有 /inspection/reports/generate 端点，但功能可能不完整
+      console.log('[useGenerateReport] 生成报告请求:', { executionId, type, format })
+      
+      try {
+        const result = await generateInspectionReport({
+          task_id: parseInt(executionId, 10),
+          format: format === 'html' ? 'pdf' : format, // html 暂不支持，转为 pdf
+          template: type
+        })
+        return result
+      } catch (error) {
+        console.warn('[useGenerateReport] 报告生成失败，可能后端功能未完全实现:', error)
+        throw error
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'reports'] })
-      toast.success('报告生成成功')
+      toast.success('报告生成请求已提交')
     },
     onError: (error: Error) => {
       toast.error(error.message || '生成报告失败')

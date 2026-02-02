@@ -33,12 +33,15 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    hideDescription?: boolean
+  }
+>(({ className, children, hideDescription = false, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
+      aria-describedby={hideDescription ? undefined : 'dialog-description'}
       className={cn(
         'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-lg duration-200',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
@@ -52,6 +55,12 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
+      {/* 隐藏的描述元素，用于满足无障碍要求 */}
+      {!hideDescription && (
+        <DialogPrimitive.Description id="dialog-description" className="sr-only">
+          对话框内容
+        </DialogPrimitive.Description>
+      )}
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
         <X className="h-4 w-4" />
         <span className="sr-only">关闭</span>

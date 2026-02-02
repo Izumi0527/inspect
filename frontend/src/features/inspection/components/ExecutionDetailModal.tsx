@@ -70,7 +70,7 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
   }
 
   return (
-    <SimpleModal open={open} onClose={onClose} size="5xl">
+    <SimpleModal open={open} onClose={onClose} size="5xl" ariaLabel={`执行详情 - ${execution.strategyName}`}>
       <div className="flex flex-col h-[80vh]">
         {/* 头部 */}
         <div className="flex items-center justify-between pb-4 border-b border-gray-200">

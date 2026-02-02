@@ -96,7 +96,7 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
   }
 
   return (
-    <SimpleModal open={open} onClose={onClose} size="3xl">
+    <SimpleModal open={open} onClose={onClose} size="3xl" ariaLabel={`告警详情 - ${alert.title}`}>
       <div className="flex flex-col max-h-[85vh]">
         {/* 头部 */}
         <div className="flex items-start justify-between pb-4 border-b border-gray-200">

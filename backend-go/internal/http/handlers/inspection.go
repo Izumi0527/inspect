@@ -67,6 +67,8 @@ func (h InspectionHandler) Register(group *echo.Group) {
 
 	group.GET("/inspection/executions", h.ListExecutions)
 	group.GET("/inspection/executions/:id", h.GetExecution)
+	group.POST("/inspection/executions/:id/stop", h.StopExecution)
+	group.DELETE("/inspection/executions/:id", h.DeleteExecution)
 
 	group.GET("/inspection/results", h.ListResults)
 	group.GET("/inspection/results/:id", h.GetResult)
@@ -1289,6 +1291,91 @@ func (h InspectionHandler) GetExecution(c echo.Context) error {
 	response["summary"] = buildExecutionSummary(item, deviceInfo, results)
 
 	return inspectionOK(c, response)
+}
+
+// StopExecution 处理 POST /api/v1/inspection/executions/:id/stop 请求
+// 停止正在执行的巡检任务
+func (h InspectionHandler) StopExecution(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:execute"); err != nil {
+		return err
+	}
+
+	executionID, err := parseIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	// 获取执行记录
+	item, err := h.Service.GetInspection(c.Request().Context(), executionID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load execution")
+	}
+
+	// 检查状态是否可以停止
+	if item.Status != inspection.StatusRunning && item.Status != inspection.StatusPending {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("无法停止状态为 %s 的任务", item.Status))
+	}
+
+	// 更新状态为已取消
+	cancelMsg := "用户手动取消"
+	_, err = h.Service.UpdateInspectionStatus(c.Request().Context(), executionID, inspection.StatusCancelled, &cancelMsg)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to stop execution")
+	}
+
+	return inspectionOKWithMessage(c, "巡检任务已停止", map[string]interface{}{
+		"id":     executionID,
+		"status": inspection.StatusCancelled,
+	})
+}
+
+// DeleteExecution 处理 DELETE /api/v1/inspection/executions/:id 请求
+// 删除巡检执行记录及其相关结果
+func (h InspectionHandler) DeleteExecution(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:delete"); err != nil {
+		return err
+	}
+
+	executionID, err := parseIDParam(c, "id")
+	if err != nil {
+		return err
+	}
+
+	// 获取执行记录
+	item, err := h.Service.GetInspection(c.Request().Context(), executionID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load execution")
+	}
+
+	// 检查状态是否可以删除（不能删除正在执行的任务）
+	if item.Status == inspection.StatusRunning {
+		return echo.NewHTTPError(http.StatusBadRequest, "无法删除正在执行的任务，请先停止任务")
+	}
+
+	// 删除执行记录（包括相关的结果数据）
+	err = h.Service.DeleteInspection(c.Request().Context(), executionID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete execution")
+	}
+
+	return inspectionOKWithMessage(c, "执行记录已删除", map[string]interface{}{
+		"id": executionID,
+	})
 }
 
 func (h InspectionHandler) ListResults(c echo.Context) error {

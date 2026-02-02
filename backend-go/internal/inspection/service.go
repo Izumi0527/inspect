@@ -542,6 +542,32 @@ func (s *Service) GetInspection(ctx context.Context, id int) (Inspection, error)
 	return inspection, nil
 }
 
+// DeleteInspection 删除巡检执行记录及其相关的结果数据
+func (s *Service) DeleteInspection(ctx context.Context, id int) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	// 使用事务确保数据一致性
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 首先删除相关的巡检结果
+		if err := tx.Where("inspection_id = ?", id).Delete(&Result{}).Error; err != nil {
+			return fmt.Errorf("failed to delete inspection results: %w", err)
+		}
+
+		// 然后删除巡检记录本身
+		result := tx.Delete(&Inspection{}, id)
+		if result.Error != nil {
+			return fmt.Errorf("failed to delete inspection: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+
+		return nil
+	})
+}
+
 func (s *Service) UpdateInspectionStatus(ctx context.Context, id int, status string, errorMessage *string) (Inspection, error) {
 	if s == nil || s.db == nil {
 		return Inspection{}, fmt.Errorf("database not initialized")
