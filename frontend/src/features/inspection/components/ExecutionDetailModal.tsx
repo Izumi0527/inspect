@@ -19,7 +19,6 @@ import {
 } from 'lucide-react'
 import { SimpleModal } from '@/components/atoms/modal'
 import { Badge } from '@/components/atoms/badge'
-import { Button } from '@/components/atoms/button'
 import { cn } from '@/utils/cn'
 import { useGenerateReport, useExecutionDetail } from '../hooks/useInspection'
 import type { InspectionExecution, ReportFormat } from '../types'

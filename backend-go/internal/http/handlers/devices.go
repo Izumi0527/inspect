@@ -1503,11 +1503,11 @@ func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
 		metricsMap["uptime"] = monitoring.MetricValue{Value: &uptimeFloat, Unit: stringPtr("seconds")}
 	}
 	if metrics.BandwidthIn != nil {
-		bwIn := *metrics.BandwidthIn * 1000000 // Convert Mbps to bps
+		bwIn := *metrics.BandwidthIn // 直接存储 bps
 		metricsMap["bandwidth_in"] = monitoring.MetricValue{Value: &bwIn, Unit: stringPtr("bps")}
 	}
 	if metrics.BandwidthOut != nil {
-		bwOut := *metrics.BandwidthOut * 1000000
+		bwOut := *metrics.BandwidthOut // 直接存储 bps
 		metricsMap["bandwidth_out"] = monitoring.MetricValue{Value: &bwOut, Unit: stringPtr("bps")}
 	}
 
@@ -1530,10 +1530,10 @@ func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
 			ifaceMap["ifHCOutOctets"] = *iface.OutOctets
 		}
 		if iface.InRate != nil {
-			ifaceMap["bandwidth_in"] = *iface.InRate * 1000000 // Convert Mbps to bps
+			ifaceMap["bandwidth_in"] = *iface.InRate // 直接存储 bps
 		}
 		if iface.OutRate != nil {
-			ifaceMap["bandwidth_out"] = *iface.OutRate * 1000000
+			ifaceMap["bandwidth_out"] = *iface.OutRate // 直接存储 bps
 		}
 		interfaces = append(interfaces, ifaceMap)
 	}
@@ -1643,11 +1643,11 @@ func (h DevicesHandler) BatchCollectMetrics(c echo.Context) error {
 			metricsMap["uptime"] = monitoring.MetricValue{Value: &uptimeFloat, Unit: stringPtr("seconds")}
 		}
 		if metrics.BandwidthIn != nil {
-			bwIn := *metrics.BandwidthIn * 1000000
+			bwIn := *metrics.BandwidthIn // 直接存储 bps
 			metricsMap["bandwidth_in"] = monitoring.MetricValue{Value: &bwIn, Unit: stringPtr("bps")}
 		}
 		if metrics.BandwidthOut != nil {
-			bwOut := *metrics.BandwidthOut * 1000000
+			bwOut := *metrics.BandwidthOut // 直接存储 bps
 			metricsMap["bandwidth_out"] = monitoring.MetricValue{Value: &bwOut, Unit: stringPtr("bps")}
 		}
 

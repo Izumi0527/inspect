@@ -7,7 +7,6 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   X,
-  FileText,
   Monitor,
   Settings,
   Shield,
@@ -23,7 +22,7 @@ import {
   CardContent
 } from '@/components/atoms'
 import { useCreateTemplate } from '../hooks/useInspection'
-import type { InspectionCheckItem, TemplateCategory } from '../types'
+import type { TemplateCategory } from '../types'
 
 interface Props {
   onClose: () => void

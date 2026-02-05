@@ -60,7 +60,8 @@ func (s *Service) GetOverview(ctx context.Context) (OverviewResponse, error) {
 		return OverviewResponse{}, err
 	}
 
-	avgNetwork, hasNetwork, err := s.queryAvgNetworkMetric(ctx)
+	// 查询24小时内的峰值网络流量（bps）
+	peakNetwork, hasNetwork, err := s.queryPeakNetworkMetric24h(ctx)
 	if err != nil {
 		return OverviewResponse{}, err
 	}
@@ -89,8 +90,8 @@ func (s *Service) GetOverview(ctx context.Context) (OverviewResponse, error) {
 			Color:     "red",
 		},
 		{
-			Title:     "网络流量",
-			Value:     formatNetworkValueBps(avgNetwork, hasNetwork),
+			Title:     "峰值流量",
+			Value:     formatNetworkValueBps(peakNetwork, hasNetwork),
 			Change:    "较昨日",
 			IconName:  "Activity",
 			IconColor: "text-blue-500",
@@ -506,6 +507,62 @@ func resolveAlertTime(alert alerts.AlertWithDevice) string {
 	return time.Now().UTC().Format(time.RFC3339)
 }
 
+// MaxReasonableBandwidthBps 最大合理带宽阈值：10 Gbps = 10,000,000,000 bps
+// 超过此值的数据被视为异常数据（可能是历史错误数据）
+const MaxReasonableBandwidthBps = 10_000_000_000
+
+// queryPeakNetworkMetric24h 查询24小时内的峰值网络流量（入站+出站的最大值）
+// 返回值单位为 bps (bits per second)
+// 会过滤掉超过 10 Gbps 的异常数据
+func (s *Service) queryPeakNetworkMetric24h(ctx context.Context) (float64, bool, error) {
+	inbound := []string{"bandwidth_in", "network_bytes_in", "throughput_in"}
+	outbound := []string{"bandwidth_out", "network_bytes_out", "throughput_out"}
+	allMetrics := append(append([]string{}, inbound...), outbound...)
+
+	type peakRow struct {
+		PeakValue   sql.NullFloat64 `gorm:"column:peak_value"`
+		SampleCount int64           `gorm:"column:sample_count"`
+	}
+
+	var peak peakRow
+
+	// 使用子查询：先按时间点聚合入站和出站流量，然后取最大值
+	// 过滤掉超过 10 Gbps 的异常数据
+	query := `
+		WITH time_buckets AS (
+			SELECT 
+				time_bucket('5 minutes', collected_at) AS bucket,
+				SUM(CASE WHEN metric_name IN (?) AND metric_value < ? THEN metric_value ELSE 0 END) AS inbound,
+				SUM(CASE WHEN metric_name IN (?) AND metric_value < ? THEN metric_value ELSE 0 END) AS outbound
+			FROM device_metrics
+			WHERE metric_name IN (?)
+			AND collected_at >= NOW() - INTERVAL '24 hours'
+			AND metric_value < ?
+			GROUP BY bucket
+		)
+		SELECT 
+			MAX(inbound + outbound) AS peak_value,
+			COUNT(*) AS sample_count
+		FROM time_buckets
+		WHERE inbound + outbound > 0
+	`
+
+	if err := s.db.WithContext(ctx).Raw(query,
+		inbound, MaxReasonableBandwidthBps,
+		outbound, MaxReasonableBandwidthBps,
+		allMetrics,
+		MaxReasonableBandwidthBps,
+	).Scan(&peak).Error; err != nil {
+		return 0, false, err
+	}
+
+	if peak.SampleCount == 0 || !peak.PeakValue.Valid {
+		return 0, false, nil
+	}
+
+	return peak.PeakValue.Float64, true, nil
+}
+
 func (s *Service) queryAvgNetworkMetric(ctx context.Context) (float64, bool, error) {
 	avgInbound, inboundCount, err := s.avgMetricList(ctx, []string{"bandwidth_in", "network_bytes_in", "throughput_in"})
 	if err != nil {
@@ -536,11 +593,13 @@ func (s *Service) avgMetricList(ctx context.Context, metrics []string) (float64,
 		SampleCount int64           `gorm:"column:sample_count"`
 	}
 	var avg avgRow
+	// 过滤掉超过 10 Gbps 的异常数据
 	if err := s.db.WithContext(ctx).
 		Table("device_metrics").
 		Select("AVG(metric_value) AS avg_value, COUNT(*) AS sample_count").
 		Where("metric_name IN ?", metrics).
 		Where("collected_at >= NOW() - INTERVAL '1 hour'").
+		Where("metric_value < ?", MaxReasonableBandwidthBps).
 		Scan(&avg).Error; err != nil {
 		return 0, 0, err
 	}
@@ -554,11 +613,13 @@ func formatPercent(value float64, precision int) string {
 	return fmt.Sprintf("%.*f%%", precision, value)
 }
 
-// formatNetworkValueBps 返回原始 bps 值的字符串表示，如果不可用则返回 "N/A"
+// formatNetworkValueBps 返回原始 bps 值的字符串表示
+// 如果没有数据，返回 "0"，前端会将其格式化为 "0 bps"
 // 前端将使用 formatBandwidth 函数格式化此值
 func formatNetworkValueBps(value float64, ok bool) string {
 	if !ok {
-		return "N/A"
+		// 没有数据时返回 "0"，与监控中心保持一致
+		return "0"
 	}
 	// 返回原始 bps 值的字符串，供前端格式化
 	return fmt.Sprintf("%.0f", value)

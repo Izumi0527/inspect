@@ -71,7 +71,7 @@ export const securityApi = {
    * 更新会话管理配置
    * 注意: 后端暂不支持单独更新安全配置项，使用批量更新
    */
-  updateSessionManagement: async (data: Partial<SessionManagementConfig>): Promise<void> => {
+  updateSessionManagement: async (_data: Partial<SessionManagementConfig>): Promise<void> => {
     // 后端暂不支持 PUT /settings/security/{key}，返回成功
     console.warn('后端暂不支持单独更新安全配置项')
     return Promise.resolve()
@@ -81,7 +81,7 @@ export const securityApi = {
    * 更新密码策略配置
    * 注意: 后端暂不支持单独更新安全配置项
    */
-  updatePasswordPolicy: async (data: Partial<PasswordPolicyConfig>): Promise<void> => {
+  updatePasswordPolicy: async (_data: Partial<PasswordPolicyConfig>): Promise<void> => {
     console.warn('后端暂不支持单独更新安全配置项')
     return Promise.resolve()
   },
@@ -90,7 +90,7 @@ export const securityApi = {
    * 更新认证配置
    * 注意: 后端暂不支持单独更新安全配置项
    */
-  updateAuthentication: async (data: Partial<AuthenticationConfig>): Promise<void> => {
+  updateAuthentication: async (_data: Partial<AuthenticationConfig>): Promise<void> => {
     console.warn('后端暂不支持单独更新安全配置项')
     return Promise.resolve()
   },
@@ -99,7 +99,7 @@ export const securityApi = {
    * 批量保存所有安全配置
    * 注意: 后端暂不支持批量更新安全配置
    */
-  saveAll: async (data: SecuritySettingsResponse): Promise<void> => {
+  saveAll: async (_data: SecuritySettingsResponse): Promise<void> => {
     console.warn('后端暂不支持批量更新安全配置')
     return Promise.resolve()
   },

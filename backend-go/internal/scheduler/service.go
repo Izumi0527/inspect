@@ -672,12 +672,12 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 				metricsMap["uptime"] = monitoring.MetricValue{Value: &uptimeFloat, Unit: &unit}
 			}
 			if metrics.BandwidthIn != nil {
-				bwIn := *metrics.BandwidthIn * 1000000 // Convert Mbps to bps
+				bwIn := *metrics.BandwidthIn // 直接存储 bps
 				unit := "bps"
 				metricsMap["bandwidth_in"] = monitoring.MetricValue{Value: &bwIn, Unit: &unit}
 			}
 			if metrics.BandwidthOut != nil {
-				bwOut := *metrics.BandwidthOut * 1000000
+				bwOut := *metrics.BandwidthOut // 直接存储 bps
 				unit := "bps"
 				metricsMap["bandwidth_out"] = monitoring.MetricValue{Value: &bwOut, Unit: &unit}
 			}
@@ -701,10 +701,10 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 					ifaceMap["ifHCOutOctets"] = *iface.OutOctets
 				}
 				if iface.InRate != nil {
-					ifaceMap["bandwidth_in"] = *iface.InRate * 1000000
+					ifaceMap["bandwidth_in"] = *iface.InRate // 直接存储 bps
 				}
 				if iface.OutRate != nil {
-					ifaceMap["bandwidth_out"] = *iface.OutRate * 1000000
+					ifaceMap["bandwidth_out"] = *iface.OutRate // 直接存储 bps
 				}
 				interfaces = append(interfaces, ifaceMap)
 			}

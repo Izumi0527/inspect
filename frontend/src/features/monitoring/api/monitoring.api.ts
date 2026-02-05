@@ -20,16 +20,38 @@ import {
  * 已连接真实后端API - 支持实时数据更新
  */
 
-
-interface NetworkStatApi {
-  title?: string
-  name?: string
-  value: string
-  change?: string
-  trend?: 'up' | 'down' | string
-  icon?: string
-  color?: string
-  data?: number[]
+/**
+ * 格式化带宽值（bps），自动选择合适的单位
+ * @param bps - bits per second (比特每秒)
+ * @returns 格式化后的字符串，如 "1.5 Kbps", "2.3 Mbps", "1.2 Gbps"
+ * 
+ * 转换规则（使用1000进制，网络带宽标准）：
+ * - 1001 bps → 1.00 Kbps (超过1000时进位)
+ * - 1001 Kbps → 1.00 Mbps
+ * - 1001 Mbps → 1.00 Gbps
+ * - 1001 Gbps → 1.00 Tbps
+ */
+function formatBandwidthValue(bps: number): string {
+  if (bps === 0) return '0 bps'
+  if (bps < 0) return '0 bps'
+  
+  const units = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']
+  const k = 1000 // 网络带宽使用1000进制
+  
+  // 计算应该使用哪个单位
+  const i = Math.floor(Math.log(bps) / Math.log(k))
+  const unitIndex = Math.min(i, units.length - 1)
+  
+  const value = bps / Math.pow(k, unitIndex)
+  
+  // 根据数值大小决定小数位数
+  if (value >= 100) {
+    return `${value.toFixed(0)} ${units[unitIndex]}`
+  } else if (value >= 10) {
+    return `${value.toFixed(1)} ${units[unitIndex]}`
+  } else {
+    return `${value.toFixed(2)} ${units[unitIndex]}`
+  }
 }
 
 interface DeviceStatusApi {
@@ -327,26 +349,6 @@ export async function stopRealTimeMonitoring(deviceIds?: number[]): Promise<bool
 }
 
 // 数据转换函数
-function transformNetworkStatsData(apiData: NetworkStatApi[]): NetworkStat[] {
-  if (!Array.isArray(apiData)) return []
-
-  return apiData.map((stat, index) => {
-    const title = resolveStatTitle(stat, index)
-    const trend = resolveTrend(stat)
-    const change = stat.change ?? (trend === 'up' ? '+0%' : '-0%')
-
-    return {
-      title,
-      value: stat.value ?? '0',
-      change,
-      trend,
-      icon: stat.icon ?? getIconForMetric(title),
-      color: stat.color ?? getColorForMetric(title),
-      data: stat.data ?? [],
-    }
-  })
-}
-
 function transformDeviceStatusData(apiData: DeviceStatusApi[]): DeviceMonitoringStatus[] {
   if (!Array.isArray(apiData)) return []
 
@@ -371,32 +373,6 @@ function transformTrafficData(apiData: NetworkTrafficApi): NetworkTraffic {
     },
     peakTime: apiData?.peakTime,
   }
-}
-
-function transformAlertSummaryData(apiData: AlertSummaryApi): AlertSummary {
-  return {
-    critical: apiData?.critical || 0,
-    warning: apiData?.warning || 0,
-    info: apiData?.info || 0,
-    recent: apiData?.recent || [],
-    trends: apiData?.trends || { up: 0, down: 0, stable: 0 },
-  }
-}
-
-function resolveStatTitle(stat: NetworkStatApi, index: number): string {
-  const rawTitle = stat.title ?? stat.name
-  if (typeof rawTitle === 'string' && rawTitle.trim().length > 0) {
-    return rawTitle
-  }
-  return `指标${index + 1}`
-}
-
-function resolveTrend(stat: NetworkStatApi): 'up' | 'down' {
-  const normalized = (stat.trend ?? '').toLowerCase()
-  if (normalized === 'up') return 'up'
-  if (normalized === 'down') return 'down'
-  const change = stat.change ?? ''
-  return change.trim().startsWith('-') ? 'down' : 'up'
 }
 
 function normalizeDeviceStatus(status?: string): DeviceMonitoringStatus['status'] {
@@ -444,25 +420,6 @@ function resolveTimeRange(timeRange: string) {
     start: start.toISOString(),
     end: now.toISOString(),
   }
-}
-
-// 工具函数
-function getIconForMetric(name: string): string {
-  const lowerName = name.toLowerCase()
-  if (lowerName.includes('cpu') || lowerName.includes('处理')) return 'cpu'
-  if (lowerName.includes('memory') || lowerName.includes('内存')) return 'harddrive'
-  if (lowerName.includes('network') || lowerName.includes('网络') || lowerName.includes('流量')) return 'network'
-  if (lowerName.includes('response') || lowerName.includes('响应') || lowerName.includes('延迟')) return 'gauge'
-  return 'activity'
-}
-
-function getColorForMetric(name: string): string {
-  const lowerName = name.toLowerCase()
-  if (lowerName.includes('cpu') || lowerName.includes('处理')) return 'blue'
-  if (lowerName.includes('memory') || lowerName.includes('内存')) return 'green'
-  if (lowerName.includes('network') || lowerName.includes('网络') || lowerName.includes('流量')) return 'purple'
-  if (lowerName.includes('response') || lowerName.includes('响应') || lowerName.includes('延迟')) return 'yellow'
-  return 'blue'
 }
 
 // 导出别名函数以保持向后兼容
@@ -727,11 +684,11 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
           change: undefined,
           trend: undefined,
         },
-        // 6. 网络流量峰值
+        // 6. 峰值流量 (24小时内最高流量，单位自动转换)
         {
           id: 'avg_network',
-          title: '网络流量',
-          value: `${Number(response.avg_network ?? 0).toFixed(1)} Mbps`,
+          title: '峰值流量',
+          value: formatBandwidthValue(Number(response.avg_network ?? 0)),
           change: undefined,
           trend: undefined,
         },

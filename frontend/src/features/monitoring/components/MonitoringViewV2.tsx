@@ -14,7 +14,6 @@ import {
   HardDrive,
   Network
 } from 'lucide-react'
-import { MonitoringSectionHeader } from './MonitoringSectionHeader'
 import { DeviceStatusCard, AvailabilityCard, RealTimeAlertsCard } from './cards'
 import {
   SystemPerformanceChartWrapper,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { X, Calendar, FileText, Plus, Settings, Search, Check } from 'lucide-react'
+import { X, Calendar, FileText, Settings, Search } from 'lucide-react'
 import {
   Button,
   SimpleInput as Input,
@@ -48,8 +48,8 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
   const [errors, setErrors] = useState<Partial<Record<keyof StrategyFormData, string>>>({})
   const [deviceSearch, setDeviceSearch] = useState('')
   const [templateSearch, setTemplateSearch] = useState('')
-  const [showDeviceSelector, setShowDeviceSelector] = useState(false)
-  const [showTemplateSelector, setShowTemplateSelector] = useState(false)
+  const [_showDeviceSelector, _setShowDeviceSelector] = useState(false)
+  const [_showTemplateSelector, _setShowTemplateSelector] = useState(false)
 
   const createStrategy = useCreateStrategy()
   const updateStrategy = useUpdateStrategy()

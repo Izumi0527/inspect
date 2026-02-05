@@ -11,11 +11,6 @@ import {
   Bell,
   Activity
 } from 'lucide-react'
-import {
-  Card,
-  CardHeader,
-  Input
-} from '@/components/atoms'
 import { AppLayout } from '@/components/layout'
 import { GeneralSettings } from './general/GeneralSettings'
 import { UserManagement } from './users/UserManagement'

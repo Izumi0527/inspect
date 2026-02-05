@@ -240,7 +240,7 @@ export function generateMockStatsV2(): StatCardData[] {
     },
     {
       id: 'avg_network',
-      title: '网络流量峰值',
+      title: '峰值流量',
       value: `${randomInRange(300, 800).toFixed(0)} Mbps`,
       change: `+${randomInRange(10, 50).toFixed(0)} Mbps`,
       trend: 'up',

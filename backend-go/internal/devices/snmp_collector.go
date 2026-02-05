@@ -72,6 +72,9 @@ type SNMPMetrics struct {
 	CollectionTime float64            `json:"collection_time_ms"`
 }
 
+// MaxReasonableBandwidthBps 最大合理带宽：10 Gbps = 10,000,000,000 bps
+const MaxReasonableBandwidthBps = 10_000_000_000
+
 // InterfaceMetrics 保存每个接口的指标
 type InterfaceMetrics struct {
 	Name        string   `json:"name"`
@@ -717,9 +720,6 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 	lastCache := c.lastOctets[ipAddress]
 
 	var totalInRate, totalOutRate float64
-	// 最大合理带宽：10 Gbps = 10,000,000,000 bps
-	// 超过此阈值的带宽值将被视为异常并跳过
-	const MaxReasonableBandwidthBps = 10_000_000_000
 	
 	for idx, iface := range interfaces {
 		if iface.InOctets != nil && iface.OutOctets != nil {
@@ -741,8 +741,9 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 					outDiff := *iface.OutOctets - last.outOctets
 
 					// 计算带宽速率（单位：bps - bits per second）
-					inRateBps := (float64(inDiff) / elapsed) * 8  // bps
-					outRateBps := (float64(outDiff) / elapsed) * 8  // bps
+					// SNMP 采集的是字节数（Octets），需要乘以 8 转换为比特
+					inRateBps := (float64(inDiff) / elapsed) * 8   // bps
+					outRateBps := (float64(outDiff) / elapsed) * 8 // bps
 
 					// 合理性检查：不应超过 10 Gbps
 					if inRateBps > MaxReasonableBandwidthBps || outRateBps > MaxReasonableBandwidthBps {
@@ -754,7 +755,7 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 								zap.Float64("in_rate_gbps", inRateBps/1_000_000_000),
 								zap.Float64("out_rate_bps", outRateBps),
 								zap.Float64("out_rate_gbps", outRateBps/1_000_000_000),
-								zap.Float64("threshold_gbps", MaxReasonableBandwidthBps/1_000_000_000))
+								zap.Float64("threshold_gbps", float64(MaxReasonableBandwidthBps)/1_000_000_000))
 						}
 						lastCache[idx] = octetsCache{
 							inOctets:  *iface.InOctets,
@@ -766,7 +767,8 @@ func (c *SNMPCollector) collectInterfaces(target *gosnmp.GoSNMP, ipAddress strin
 
 					// 合理性检查 2: 如果有接口速度信息，不应超过接口速度的 120%
 					if iface.Speed != nil && *iface.Speed > 0 {
-						maxSpeedBps := float64(*iface.Speed) * 1_000_000 // Speed 单位为 Mbps，转换为 bps
+						// Speed 单位为 Mbps，转换为 bps: Mbps * 1,000,000
+						maxSpeedBps := float64(*iface.Speed) * 1_000_000
 						if inRateBps > maxSpeedBps*1.2 || outRateBps > maxSpeedBps*1.2 {
 							// 超过接口速度，记录警告并跳过，但更新缓存
 							if c.logger != nil {

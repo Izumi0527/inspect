@@ -127,15 +127,15 @@ export const userManagementApi = {
     httpClient.delete<void>(`/settings/users/${id}`),
 
   // 重置用户密码 - 后端暂不支持此端点
-  resetPassword: (id: string, newPassword: string) =>
+  resetPassword: (_id: string, _newPassword: string) =>
     Promise.resolve(),
 
   // 锁定/解锁用户 - 后端暂不支持此端点
-  toggleUserLock: (id: string, locked: boolean) =>
+  toggleUserLock: (_id: string, _locked: boolean) =>
     Promise.resolve({} as User),
 
   // 获取用户权限 - 后端暂不支持此端点
-  getUserPermissions: (id: string) =>
+  getUserPermissions: (_id: string) =>
     Promise.resolve([] as Permission[]),
 
   // 批量操作用户 - 后端实际路由: POST /settings/users/batch
@@ -143,7 +143,7 @@ export const userManagementApi = {
     httpClient.post<void>('/settings/users/batch', operation),
 
   // 批量导入用户 - 后端暂不支持此端点
-  importUsers: (importData: UserBulkImport) =>
+  importUsers: (_importData: UserBulkImport) =>
     Promise.resolve(),
 }
 
@@ -217,7 +217,7 @@ export const roleManagementApi = {
     } as Role),
 
   // 删除角色 - 后端暂不支持
-  deleteRole: (id: string) =>
+  deleteRole: (_id: string) =>
     Promise.resolve(),
 
   // 获取所有权限 - 后端暂不支持
@@ -228,7 +228,7 @@ export const roleManagementApi = {
     ] as Permission[]),
 
   // 分配权限给角色 - 后端暂不支持
-  assignPermissions: (roleId: string, permissionIds: string[]) =>
+  assignPermissions: (roleId: string, _permissionIds: string[]) =>
     Promise.resolve({
       id: roleId,
       name: '',
@@ -294,7 +294,7 @@ export const auditLogApi = {
   },
 
   // 清理旧日志 - 后端实际路由: DELETE /settings/audit/cleanup
-  cleanupLogs: (beforeDate: string) =>
+  cleanupLogs: (_beforeDate: string) =>
     httpClient.delete<{ deletedCount: number }>('/settings/audit/cleanup'),
 }
 
@@ -310,7 +310,7 @@ export const backupApi = {
     httpClient.get<{ total: number; size: string }>('/settings/backup/stats'),
 
   // 获取备份详情 - 后端暂不支持
-  getBackup: (id: string) =>
+  getBackup: (_id: string) =>
     Promise.resolve(null as Backup | null),
 
   // 创建备份 - 后端暂不支持
@@ -338,23 +338,23 @@ export const backupApi = {
     } as Backup),
 
   // 删除备份 - 后端暂不支持
-  deleteBackup: (id: string) =>
+  deleteBackup: (_id: string) =>
     Promise.resolve(),
 
   // 下载备份 - 后端暂不支持
-  downloadBackup: async (id: string): Promise<Blob> => {
+  downloadBackup: async (_id: string): Promise<Blob> => {
     return new Blob(['后端暂不支持此功能'], { type: 'text/plain' })
   },
 
   // 恢复备份 - 后端暂不支持
-  restoreBackup: (id: string, options?: {
+  restoreBackup: (_id: string, _options?: {
     overwrite?: boolean
     validateOnly?: boolean
   }) =>
     Promise.resolve({ success: false, message: '后端暂不支持此功能' }),
 
   // 验证备份 - 后端暂不支持
-  validateBackup: (id: string) =>
+  validateBackup: (_id: string) =>
     Promise.resolve({ valid: false, issues: ['后端暂不支持此功能'] }),
 }
 
@@ -387,11 +387,11 @@ export const systemMonitoringApi = {
     httpClient.get<SystemInfo>('/settings/general/info'),
 
   // 重启系统服务 - 后端暂不支持此功能
-  restartService: (serviceName: string) =>
+  restartService: (_serviceName: string) =>
     Promise.resolve({ success: false, message: '后端暂不支持此功能' }),
 
   // 清理系统缓存 - 后端暂不支持此功能
-  clearCache: (type?: 'all' | 'session' | 'data' | 'reports') =>
+  clearCache: (_type?: 'all' | 'session' | 'data' | 'reports') =>
     Promise.resolve({ success: false, message: '后端暂不支持此功能' }),
 }
 
@@ -407,7 +407,7 @@ export const notificationApi = {
     httpClient.get<{ total: number }>('/settings/notifications/stats'),
 
   // 获取通知配置详情 - 后端暂不支持
-  getConfig: (id: string) =>
+  getConfig: (_id: string) =>
     Promise.resolve(null as NotificationConfig | null),
 
   // 创建通知配置 - 后端暂不支持
@@ -415,11 +415,11 @@ export const notificationApi = {
     Promise.resolve({ id: '', ...data } as NotificationConfig),
 
   // 更新通知配置 - 后端暂不支持
-  updateConfig: (id: string, data: Partial<NotificationConfig>) =>
+  updateConfig: (_id: string, data: Partial<NotificationConfig>) =>
     Promise.resolve(data as NotificationConfig),
 
   // 删除通知配置 - 后端暂不支持
-  deleteConfig: (id: string) =>
+  deleteConfig: (_id: string) =>
     Promise.resolve(),
 
   // 测试邮件通知 - 后端实际路由: POST /settings/notifications/test-email

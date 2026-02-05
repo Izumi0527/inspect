@@ -100,7 +100,7 @@ export const DeviceManagementView: React.FC = () => {
   const { filters, updateFilter } = useDeviceFilters()
   const filteredDevices = useFilteredDevices(devices, filters)
   const summary = useDeviceSummary(devices)
-  const { selectedDevices, toggleDevice, selectAll, clearSelection, setSelectedDevices } = useDeviceSelection()
+  const { selectedDevices, toggleDevice: _toggleDevice, selectAll: _selectAll, clearSelection, setSelectedDevices } = useDeviceSelection()
   
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [addModalOpen, setAddModalOpen] = useState(false)

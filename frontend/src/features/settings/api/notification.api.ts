@@ -69,7 +69,7 @@ export const notificationApi = {
    * 更新邮件通知配置
    * 注意: 后端暂不支持单独更新通知配置项
    */
-  updateEmailNotification: async (data: Partial<EmailNotificationConfig>): Promise<void> => {
+  updateEmailNotification: async (_data: Partial<EmailNotificationConfig>): Promise<void> => {
     console.warn('后端暂不支持单独更新通知配置项')
     return Promise.resolve()
   },
@@ -78,7 +78,7 @@ export const notificationApi = {
    * 更新SMS通知配置
    * 注意: 后端暂不支持单独更新通知配置项
    */
-  updateSmsNotification: async (data: Partial<SmsNotificationConfig>): Promise<void> => {
+  updateSmsNotification: async (_data: Partial<SmsNotificationConfig>): Promise<void> => {
     console.warn('后端暂不支持单独更新通知配置项')
     return Promise.resolve()
   },
@@ -88,7 +88,7 @@ export const notificationApi = {
    * 注意: 后端暂不支持单独更新通知配置项
    */
   updateWebhookNotification: async (
-    data: Partial<WebhookNotificationConfig>
+    _data: Partial<WebhookNotificationConfig>
   ): Promise<void> => {
     console.warn('后端暂不支持单独更新通知配置项')
     return Promise.resolve()
@@ -98,7 +98,7 @@ export const notificationApi = {
    * 批量保存所有通知配置
    * 注意: 后端暂不支持批量更新通知配置
    */
-  saveAll: async (data: NotificationSettingsResponse): Promise<void> => {
+  saveAll: async (_data: NotificationSettingsResponse): Promise<void> => {
     console.warn('后端暂不支持批量更新通知配置')
     return Promise.resolve()
   },

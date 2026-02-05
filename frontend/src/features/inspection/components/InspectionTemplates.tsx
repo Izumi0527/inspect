@@ -76,7 +76,6 @@ import { TemplateDetailModal } from './TemplateDetailModal'
 import { TemplateImportModal } from './TemplateImportModal'
 
 // 导入新的编辑器组件
-import { TemplateEditorWrapper } from './TemplateEditorWrapper'
 import { OIDTester } from './OIDTester'
 import { CreateTemplateWizard } from './CreateTemplateWizard'
 import { QuickTemplateCreate } from './QuickTemplateCreate'

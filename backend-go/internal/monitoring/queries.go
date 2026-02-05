@@ -312,30 +312,36 @@ func (w *MetricsWriter) GetMonitoringStats(ctx context.Context) (MonitoringStats
 		return MonitoringStats{}, err
 	}
 
-	avgNetwork, _, err := avgNetworkMetric(ctx, w.db)
+	// 修正：如果值超过 100%，说明数据库中存储的是错误的值（被放大了 100 倍）
+	// 这种情况下需要除以 100 来修正
+	if avgCPU > 100 {
+		avgCPU = avgCPU / 100
+	}
+	if avgMemory > 100 {
+		avgMemory = avgMemory / 100
+	}
+
+	// 查询24小时内的峰值网络流量（bps）
+	peakNetwork, _, err := peakNetworkMetric24h(ctx, w.db)
 	if err != nil {
 		return MonitoringStats{}, err
 	}
-	avgNetworkValue := avgNetwork
 
 	availability := 100.0
 	if total > 0 {
 		availability = float64(online) / float64(total) * 100
 	}
 
-	// 将小数格式（0-1）转换为百分比格式（0-100）后再四舍五入
-	// 这样可以保持与设备管理页面显示的精度一致
-	// 例如：0.061 -> 6.1%，而不是 roundFloat(0.061, 1) = 0.1 -> 10%
-	avgCPUPercent := avgCPU * 100
-	avgMemoryPercent := avgMemory * 100
+	// devices 表中的 cpu_usage 和 memory_usage 已经是百分比格式（0-100）
+	// 不需要再乘以 100
 
 	return MonitoringStats{
 		TotalDevices: int(total),
 		Availability: roundFloat(availability, 2),
 		ActiveAlerts: int(activeAlerts),
-		AvgCPU:       roundFloat(avgCPUPercent, 1),
-		AvgMemory:    roundFloat(avgMemoryPercent, 1),
-		AvgNetwork:   roundFloat(avgNetworkValue, 1),
+		AvgCPU:       roundFloat(avgCPU, 1),
+		AvgMemory:    roundFloat(avgMemory, 1),
+		AvgNetwork:   roundFloat(peakNetwork, 1), // 24小时峰值流量（bps）
 	}, nil
 }
 
@@ -990,7 +996,97 @@ func avgNetworkMetric(ctx context.Context, db *gorm.DB) (float64, bool, error) {
 
 	sum := inboundValue + outboundValue
 
-	return bpsToMbps(sum), false, nil
+	// 返回 bytes (bps / 8)，不再转换为 Mbps
+	return bpsToBytes(sum), false, nil
+}
+
+// MaxReasonableBandwidthBps 最大合理带宽阈值：10 Gbps = 10,000,000,000 bps
+// 超过此值的数据被视为异常数据（可能是历史错误数据）
+const MaxReasonableBandwidthBps = 10_000_000_000
+
+// peakNetworkMetric24h 查询24小时内的峰值网络流量（入站+出站的最大值）
+// 返回值单位为 bps (bits per second，比特每秒)
+// 会过滤掉超过 10 Gbps 的异常数据
+func peakNetworkMetric24h(ctx context.Context, db *gorm.DB) (float64, bool, error) {
+	inbound := []string{"bandwidth_in", "network_bytes_in", "throughput_in"}
+	outbound := []string{"bandwidth_out", "network_bytes_out", "throughput_out"}
+	allMetrics := append(append([]string{}, inbound...), outbound...)
+
+	// 查询24小时内每个时间点的入站+出站总和的最大值
+	type peakRow struct {
+		PeakValue   sql.NullFloat64 `gorm:"column:peak_value"`
+		SampleCount int64           `gorm:"column:sample_count"`
+	}
+
+	var peak peakRow
+
+	// 使用子查询：先按时间点聚合入站和出站流量，然后取最大值
+	// 过滤掉超过 10 Gbps 的异常数据（可能是历史错误数据）
+	query := `
+		WITH time_buckets AS (
+			SELECT 
+				time_bucket('5 minutes', collected_at) AS bucket,
+				SUM(CASE WHEN metric_name IN (?) AND metric_value < ? THEN metric_value ELSE 0 END) AS inbound,
+				SUM(CASE WHEN metric_name IN (?) AND metric_value < ? THEN metric_value ELSE 0 END) AS outbound
+			FROM device_metrics
+			WHERE metric_name IN (?)
+			AND collected_at >= NOW() - INTERVAL '24 hours'
+			AND metric_value < ?
+			GROUP BY bucket
+		)
+		SELECT 
+			MAX(inbound + outbound) AS peak_value,
+			COUNT(*) AS sample_count
+		FROM time_buckets
+		WHERE inbound + outbound > 0
+	`
+
+	if err := db.WithContext(ctx).Raw(query,
+		inbound, MaxReasonableBandwidthBps,
+		outbound, MaxReasonableBandwidthBps,
+		allMetrics,
+		MaxReasonableBandwidthBps,
+	).Scan(&peak).Error; err != nil {
+		return 0, false, err
+	}
+
+	if peak.SampleCount == 0 || !peak.PeakValue.Valid {
+		// 没有数据，尝试使用 bandwidth_utilization 作为兜底
+		fallbackPeak, fallbackCount, err := maxMetricList24h(ctx, db, []string{"bandwidth_utilization"})
+		if err != nil {
+			return 0, false, err
+		}
+		if fallbackCount > 0 {
+			return fallbackPeak, true, nil
+		}
+		return 0, false, nil
+	}
+
+	// 数据库中存储的带宽值是 bps，直接返回
+	peakValue := peak.PeakValue.Float64
+
+	return peakValue, true, nil
+}
+
+// maxMetricList24h 查询24小时内指定指标的最大值
+func maxMetricList24h(ctx context.Context, db *gorm.DB, metrics []string) (float64, int64, error) {
+	type maxRow struct {
+		MaxValue    sql.NullFloat64 `gorm:"column:max_value"`
+		SampleCount int64           `gorm:"column:sample_count"`
+	}
+	var max maxRow
+	if err := db.WithContext(ctx).
+		Table("device_metrics").
+		Select("MAX(metric_value) AS max_value, COUNT(*) AS sample_count").
+		Where("metric_name IN ?", metrics).
+		Where("collected_at >= NOW() - INTERVAL '24 hours'").
+		Scan(&max).Error; err != nil {
+		return 0, 0, err
+	}
+	if max.MaxValue.Valid {
+		return max.MaxValue.Float64, max.SampleCount, nil
+	}
+	return 0, max.SampleCount, nil
 }
 
 func avgMetricList(ctx context.Context, db *gorm.DB, metrics []string) (float64, int64, error) {

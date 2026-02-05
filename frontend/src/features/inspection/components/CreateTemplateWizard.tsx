@@ -17,8 +17,6 @@ import {
   Plus,
   Trash2,
   GripVertical,
-  Edit2,
-  Copy,
   AlertCircle,
   Info,
   Zap,
@@ -28,11 +26,6 @@ import {
 import {
   Button,
   SimpleInput as Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Badge,
   Card,
   CardContent

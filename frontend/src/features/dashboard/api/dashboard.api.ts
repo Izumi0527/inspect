@@ -238,7 +238,7 @@ const getEmptyStatsData = (): DashboardStat[] => [
     color: 'gray',
   },
   {
-    title: '网络流量',
+    title: '峰值流量',
     value: '-',
     change: '',
     iconName: 'Activity',
