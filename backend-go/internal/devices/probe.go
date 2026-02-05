@@ -314,12 +314,89 @@ func probeSNMP(
 	}
 
 	value := packet.Variables[0].Value
-	info := fmt.Sprintf("%v", value)
+	info := formatSNMPValue(value)
 	if len(info) > 100 {
 		info = info[:100]
 	}
 
 	return true, &elapsed, &info, nil
+}
+
+// formatSNMPValue 将 SNMP 返回值转换为可读字符串
+func formatSNMPValue(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	
+	switch v := value.(type) {
+	case []byte:
+		// 将字节数组转换为字符串
+		// 过滤掉不可打印字符
+		result := make([]byte, 0, len(v))
+		for _, b := range v {
+			if b >= 32 && b < 127 {
+				result = append(result, b)
+			} else if b == '\n' || b == '\r' || b == '\t' {
+				result = append(result, ' ')
+			}
+		}
+		return strings.TrimSpace(string(result))
+	case string:
+		// 检查字符串是否是字节数组格式 [83 53 55 50...]
+		if strings.HasPrefix(v, "[") && len(v) > 2 {
+			// 尝试解析字节数组格式
+			trimmed := strings.TrimPrefix(strings.TrimSuffix(v, "]"), "[")
+			parts := strings.Fields(trimmed)
+			if len(parts) > 0 {
+				result := make([]byte, 0, len(parts))
+				allValid := true
+				for _, part := range parts {
+					if num, err := strconv.Atoi(part); err == nil && num >= 0 && num <= 255 {
+						if num >= 32 && num < 127 {
+							result = append(result, byte(num))
+						} else if num == 10 || num == 13 || num == 9 {
+							result = append(result, ' ')
+						}
+					} else {
+						allValid = false
+						break
+					}
+				}
+				if allValid && len(result) > 0 {
+					return strings.TrimSpace(string(result))
+				}
+			}
+		}
+		return strings.TrimSpace(v)
+	default:
+		// 对于其他类型，先转换为字符串，然后检查是否需要处理
+		str := fmt.Sprintf("%v", value)
+		// 检查是否是字节数组格式
+		if strings.HasPrefix(str, "[") && len(str) > 2 {
+			trimmed := strings.TrimPrefix(strings.TrimSuffix(str, "]"), "[")
+			parts := strings.Fields(trimmed)
+			if len(parts) > 0 {
+				result := make([]byte, 0, len(parts))
+				allValid := true
+				for _, part := range parts {
+					if num, err := strconv.Atoi(part); err == nil && num >= 0 && num <= 255 {
+						if num >= 32 && num < 127 {
+							result = append(result, byte(num))
+						} else if num == 10 || num == 13 || num == 9 {
+							result = append(result, ' ')
+						}
+					} else {
+						allValid = false
+						break
+					}
+				}
+				if allValid && len(result) > 0 {
+					return strings.TrimSpace(string(result))
+				}
+			}
+		}
+		return str
+	}
 }
 
 type snmpConfig struct {

@@ -119,17 +119,20 @@ func New() (*App, error) {
 		Auth:    authService,
 	}
 
+	// 提前创建 settingsService，因为 inspectionHandler 需要它来解析用户名
+	settingsService := settings.NewService(dbConn, redisClient, cfg, log)
+
 	inspectionHandler := handlers.InspectionHandler{
 		Service:         inspectionService,
 		Reports:         reportService,
 		Auth:            authService,
+		Settings:        settingsService,
 		DeviceService:   deviceService,
 		ProbeService:    probeService,
 		Logger:          log,
 		ReportOutputDir: cfg.ReportsOutputDir,
 	}
 
-	settingsService := settings.NewService(dbConn, redisClient, cfg, log)
 	settingsHandler := handlers.SettingsHandler{
 		Service: settingsService,
 		Auth:    authService,

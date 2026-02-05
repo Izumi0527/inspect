@@ -240,7 +240,9 @@ func (c *SNMPCollector) collectCPU(target *gosnmp.GoSNMP, metrics *SNMPMetrics) 
 	result, err := target.BulkWalkAll(oidHuaweiCpuUsage)
 	if err == nil && len(result) > 0 {
 		var totalUsage float64
+		var maxUsage float64
 		count := 0
+		nonZeroCount := 0
 		
 		if c.logger != nil {
 			c.logger.Debug("华为 CPU OID 返回数据", zap.Int("result_count", len(result)))
@@ -251,51 +253,52 @@ func (c *SNMPCollector) collectCPU(target *gosnmp.GoSNMP, metrics *SNMPMetrics) 
 				rawValue := gosnmp.ToBigInt(variable.Value).Int64()
 				usage := float64(rawValue)
 				
-				if c.logger != nil {
-					c.logger.Debug("华为 CPU 原始值", 
-						zap.Int64("raw_value", rawValue),
-						zap.Float64("usage", usage),
-						zap.String("oid", variable.Name))
-				}
-				
-				// 华为设备可能返回不同格式的值：
-				// 1. 小数格式 (0-1)：需要乘以 100
-				// 2. 百分比格式 (0-100)：直接使用
-				// 3. 千分比格式 (0-10000)：需要除以 100
-				if usage >= 0 && usage < 1 {
-					// 小数格式，转换为百分比
+				// 华为设备返回的 CPU 使用率通常是整数百分比（0-100）
+				// 例如：5 表示 5%，0 表示 0%
+				// 只有当值在 (0, 1) 之间时才认为是小数格式
+				if usage > 0 && usage < 1 {
+					// 小数格式（0.05 表示 5%），转换为百分比
 					usage = usage * 100
-					if c.logger != nil {
-						c.logger.Debug("华为 CPU 值转换（小数→百分比）", 
-							zap.Int64("raw_value", rawValue),
-							zap.Float64("converted_usage", usage))
-					}
-					totalUsage += usage
-					count++
-				} else if usage >= 1 && usage <= 100 {
-					// 百分比格式，直接使用
-					totalUsage += usage
-					count++
 				} else if usage > 100 && usage <= 10000 {
-					// 千分比格式，转换为百分比
+					// 千分比格式（500 表示 5%），转换为百分比
 					usage = usage / 100
-					if c.logger != nil {
-						c.logger.Debug("华为 CPU 值转换（千分比→百分比）", 
-							zap.Int64("raw_value", rawValue),
-							zap.Float64("converted_usage", usage))
-					}
+				}
+				// 其他情况（0 或 1-100）直接使用，认为是百分比格式
+				
+				// 只累加有效值（0-100 范围内）
+				if usage >= 0 && usage <= 100 {
 					totalUsage += usage
 					count++
+					if usage > 0 {
+						nonZeroCount++
+					}
+					if usage > maxUsage {
+						maxUsage = usage
+					}
 				}
 			}
 		}
+		
 		if count > 0 {
-			avgUsage := totalUsage / float64(count)
+			// 华为设备可能返回多个 CPU 核心的数据
+			// 如果大部分核心返回 0，说明这些是空闲核心
+			// 我们应该使用非零值的平均值，或者如果非零值太少，使用最大值
+			var avgUsage float64
+			if nonZeroCount > 0 {
+				// 使用非零值的平均值作为实际 CPU 使用率
+				avgUsage = totalUsage / float64(nonZeroCount)
+			} else {
+				// 所有核心都是 0，CPU 使用率就是 0
+				avgUsage = 0
+			}
+			
 			metrics.CPUUsage = &avgUsage
 			if c.logger != nil {
 				c.logger.Debug("collected CPU from Huawei OID", 
 					zap.Float64("cpu_usage", avgUsage),
-					zap.Int("cpu_count", count))
+					zap.Float64("max_usage", maxUsage),
+					zap.Int("total_count", count),
+					zap.Int("non_zero_count", nonZeroCount))
 			}
 			return
 		}
@@ -359,10 +362,12 @@ func (c *SNMPCollector) collectMemory(target *gosnmp.GoSNMP, metrics *SNMPMetric
 	sizeResult, err2 := target.BulkWalkAll(oidHuaweiMemorySize)
 	
 	if err1 == nil && err2 == nil && len(usageResult) > 0 && len(sizeResult) > 0 {
-		// 华为设备可能有多个内存模块，取平均值
+		// 华为设备可能有多个内存模块
 		var totalUsage float64
 		var totalSize int64
+		var maxUsage float64
 		usageCount := 0
+		nonZeroUsageCount := 0
 		sizeCount := 0
 		
 		if c.logger != nil {
@@ -383,34 +388,28 @@ func (c *SNMPCollector) collectMemory(target *gosnmp.GoSNMP, metrics *SNMPMetric
 						zap.String("oid", v.Name))
 				}
 				
-				// 华为设备可能返回不同格式的值：
-				// 1. 小数格式 (0-1)：需要乘以 100
-				// 2. 百分比格式 (0-100)：直接使用
-				// 3. 千分比格式 (0-10000)：需要除以 100
-				if usage >= 0 && usage < 1 {
-					// 小数格式，转换为百分比
+				// 华为设备返回的内存使用率通常是整数百分比（0-100）
+				// 例如：40 表示 40%，0 表示 0%
+				// 只有当值在 (0, 1) 之间时才认为是小数格式
+				if usage > 0 && usage < 1 {
+					// 小数格式（0.40 表示 40%），转换为百分比
 					usage = usage * 100
-					if c.logger != nil {
-						c.logger.Debug("华为内存使用率值转换（小数→百分比）", 
-							zap.Int64("raw_value", rawValue),
-							zap.Float64("converted_usage", usage))
-					}
-					totalUsage += usage
-					usageCount++
-				} else if usage >= 1 && usage <= 100 {
-					// 百分比格式，直接使用
-					totalUsage += usage
-					usageCount++
 				} else if usage > 100 && usage <= 10000 {
-					// 千分比格式，转换为百分比
+					// 千分比格式（4000 表示 40%），转换为百分比
 					usage = usage / 100
-					if c.logger != nil {
-						c.logger.Debug("华为内存使用率值转换（千分比→百分比）", 
-							zap.Int64("raw_value", rawValue),
-							zap.Float64("converted_usage", usage))
-					}
+				}
+				// 其他情况（0 或 1-100）直接使用，认为是百分比格式
+				
+				// 只累加有效值（0-100 范围内）
+				if usage >= 0 && usage <= 100 {
 					totalUsage += usage
 					usageCount++
+					if usage > 0 {
+						nonZeroUsageCount++
+					}
+					if usage > maxUsage {
+						maxUsage = usage
+					}
 				}
 			}
 		}
@@ -434,7 +433,18 @@ func (c *SNMPCollector) collectMemory(target *gosnmp.GoSNMP, metrics *SNMPMetric
 		}
 		
 		if usageCount > 0 && sizeCount > 0 {
-			avgUsage := totalUsage / float64(usageCount)
+			// 华为设备可能返回多个内存模块的数据
+			// 如果大部分模块返回 0，说明这些是空闲模块
+			// 我们应该使用非零值的平均值
+			var avgUsage float64
+			if nonZeroUsageCount > 0 {
+				// 使用非零值的平均值作为实际内存使用率
+				avgUsage = totalUsage / float64(nonZeroUsageCount)
+			} else {
+				// 所有模块都是 0，内存使用率就是 0
+				avgUsage = 0
+			}
+			
 			metrics.MemoryUsage = &avgUsage
 			metrics.MemoryTotal = &totalSize
 			usedBytes := int64(float64(totalSize) * avgUsage / 100)
@@ -443,9 +453,11 @@ func (c *SNMPCollector) collectMemory(target *gosnmp.GoSNMP, metrics *SNMPMetric
 			if c.logger != nil {
 				c.logger.Debug("collected memory from Huawei OID",
 					zap.Float64("memory_usage", avgUsage),
+					zap.Float64("max_usage", maxUsage),
 					zap.Int64("memory_total", totalSize),
 					zap.Int64("memory_used", usedBytes),
-					zap.Int("modules", usageCount))
+					zap.Int("total_modules", usageCount),
+					zap.Int("non_zero_modules", nonZeroUsageCount))
 			}
 			return
 		}

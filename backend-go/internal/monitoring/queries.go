@@ -323,12 +323,18 @@ func (w *MetricsWriter) GetMonitoringStats(ctx context.Context) (MonitoringStats
 		availability = float64(online) / float64(total) * 100
 	}
 
+	// 将小数格式（0-1）转换为百分比格式（0-100）后再四舍五入
+	// 这样可以保持与设备管理页面显示的精度一致
+	// 例如：0.061 -> 6.1%，而不是 roundFloat(0.061, 1) = 0.1 -> 10%
+	avgCPUPercent := avgCPU * 100
+	avgMemoryPercent := avgMemory * 100
+
 	return MonitoringStats{
 		TotalDevices: int(total),
 		Availability: roundFloat(availability, 2),
 		ActiveAlerts: int(activeAlerts),
-		AvgCPU:       roundFloat(avgCPU, 1),
-		AvgMemory:    roundFloat(avgMemory, 1),
+		AvgCPU:       roundFloat(avgCPUPercent, 1),
+		AvgMemory:    roundFloat(avgMemoryPercent, 1),
 		AvgNetwork:   roundFloat(avgNetworkValue, 1),
 	}, nil
 }
