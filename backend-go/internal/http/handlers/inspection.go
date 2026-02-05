@@ -22,12 +22,14 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 )
 
 type InspectionHandler struct {
 	Service         *inspection.Service
 	Reports         *reports.Service
 	Auth            *auth.Service
+	Settings        *settings.Service // 用于获取用户信息
 	DeviceService   *devices.Service
 	ProbeService    *devices.ProbeService
 	Logger          *zap.Logger
@@ -829,6 +831,25 @@ func (h InspectionHandler) executeCheckItems(ctx context.Context, inspectionID i
 		}
 	}
 
+	// 采集 SNMP 指标（如果设备支持 SNMP）
+	var snmpMetrics *devices.SNMPMetrics
+	if device != nil && probeResult != nil && probeResult.SnmpReachable {
+		collector := devices.NewSNMPCollector(h.Logger)
+		metrics, err := collector.CollectMetrics(
+			ctx,
+			device.IPAddress,
+			device.SnmpCommunity,
+			device.SnmpVersion,
+			device.SnmpPort,
+			nil,
+		)
+		if err == nil {
+			snmpMetrics = metrics
+		} else if h.Logger != nil {
+			h.Logger.Warn("failed to collect SNMP metrics", zap.Error(err))
+		}
+	}
+
 	for _, item := range checkItems {
 		itemName := readString(item, "name")
 		itemType := readString(item, "type")
@@ -848,7 +869,7 @@ func (h InspectionHandler) executeCheckItems(ctx context.Context, inspectionID i
 		case "icmp", "ping":
 			h.executeICMPCheck(&result, probeResult)
 		case "snmp":
-			h.executeSNMPCheck(&result, probeResult, item)
+			h.executeSNMPCheck(&result, probeResult, snmpMetrics, item)
 		default:
 			// 其他类型暂时跳过
 			result.Status = "skip"
@@ -891,30 +912,281 @@ func (h InspectionHandler) executeICMPCheck(result *inspection.Result, probeResu
 }
 
 // executeSNMPCheck 执行 SNMP 检查
-func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResult *devices.ProbeResult, checkItem map[string]interface{}) {
+func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResult *devices.ProbeResult, snmpMetrics *devices.SNMPMetrics, checkItem map[string]interface{}) {
 	if probeResult == nil {
 		result.Status = "skip"
 		result.Message = stringPtr("无法执行探测")
 		return
 	}
 
-	if probeResult.SnmpReachable {
-		result.Status = "pass"
-		result.Message = stringPtr("SNMP服务正常")
-		if probeResult.SnmpSystemInfo != nil {
-			result.ActualValue = probeResult.SnmpSystemInfo
-		}
-		if probeResult.SnmpResponseTime != nil {
-			responseTime := fmt.Sprintf("%.2fms", *probeResult.SnmpResponseTime)
-			result.ExpectedValue = &responseTime
-		}
-	} else {
+	if !probeResult.SnmpReachable {
 		result.Status = "fail"
 		result.Message = stringPtr("SNMP服务不可达")
 		if probeResult.SnmpError != nil {
 			result.ErrorMessage = probeResult.SnmpError
 		}
+		return
 	}
+
+	// 设置响应时间
+	if probeResult.SnmpResponseTime != nil {
+		responseTime := fmt.Sprintf("%.2fms", *probeResult.SnmpResponseTime)
+		result.ActualValue = &responseTime
+	}
+
+	// 获取检查项的名称和类别，用于确定要检查的指标类型
+	itemName := strings.ToLower(readString(checkItem, "name"))
+	itemCategory := strings.ToLower(readString(checkItem, "category"))
+	
+	// 调试日志
+	if h.Logger != nil {
+		h.Logger.Debug("executeSNMPCheck: processing check item",
+			zap.String("itemName", itemName),
+			zap.String("itemCategory", itemCategory),
+			zap.Bool("hasMetrics", snmpMetrics != nil))
+	}
+	
+	// 获取配置中的阈值
+	config, _ := checkItem["config"].(map[string]interface{})
+	threshold, _ := config["threshold"].(map[string]interface{})
+	warningThreshold, _ := threshold["warning"].(float64)
+	criticalThreshold, _ := threshold["critical"].(float64)
+
+	// 根据检查项名称或类别确定要检查的指标
+	// 使用更宽松的匹配规则
+	switch {
+	case strings.Contains(itemName, "cpu") || strings.Contains(itemName, "处理器") || 
+		 strings.Contains(itemName, "使用率") && !strings.Contains(itemName, "内存") ||
+		 itemCategory == "cpu" || itemCategory == "health" && strings.Contains(itemName, "cpu"):
+		h.checkCPUMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+	case strings.Contains(itemName, "内存") || strings.Contains(itemName, "memory") || 
+		 itemCategory == "memory":
+		h.checkMemoryMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+	case strings.Contains(itemName, "运行时间") || strings.Contains(itemName, "uptime") || 
+		 strings.Contains(itemName, "运行") && strings.Contains(itemName, "时间") ||
+		 itemCategory == "uptime":
+		h.checkUptimeMetric(result, snmpMetrics)
+	case strings.Contains(itemName, "接口") || strings.Contains(itemName, "interface") || 
+		 strings.Contains(itemName, "端口") || strings.Contains(itemName, "状态") && !strings.Contains(itemName, "运行") ||
+		 itemCategory == "interface" || itemCategory == "performance" && strings.Contains(itemName, "接口"):
+		h.checkInterfaceMetric(result, snmpMetrics)
+	case strings.Contains(itemName, "温度") || strings.Contains(itemName, "temperature") || 
+		 itemCategory == "temperature":
+		h.checkTemperatureMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+	case strings.Contains(itemName, "带宽") || strings.Contains(itemName, "bandwidth") || 
+		 itemCategory == "bandwidth":
+		h.checkBandwidthMetric(result, snmpMetrics)
+	default:
+		// 默认：SNMP 连通性检查
+		if h.Logger != nil {
+			h.Logger.Debug("executeSNMPCheck: no match found, using default SNMP check",
+				zap.String("itemName", itemName),
+				zap.String("itemCategory", itemCategory))
+		}
+		result.Status = "pass"
+		result.Message = stringPtr("SNMP服务正常")
+		if probeResult.SnmpSystemInfo != nil && *probeResult.SnmpSystemInfo != "" {
+			sysInfo := *probeResult.SnmpSystemInfo
+			if len(sysInfo) > 100 {
+				sysInfo = sysInfo[:100] + "..."
+			}
+			msg := fmt.Sprintf("SNMP服务正常 - %s", sysInfo)
+			result.Message = &msg
+		}
+	}
+}
+
+// checkCPUMetric 检查 CPU 使用率
+func (h InspectionHandler) checkCPUMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64) {
+	if metrics == nil || metrics.CPUUsage == nil {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取CPU使用率数据")
+		return
+	}
+
+	cpuUsage := *metrics.CPUUsage
+	actualValue := fmt.Sprintf("%.1f%%", cpuUsage)
+	result.ActualValue = &actualValue
+
+	// 设置默认阈值
+	if warningThreshold == 0 {
+		warningThreshold = 70
+	}
+	if criticalThreshold == 0 {
+		criticalThreshold = 90
+	}
+
+	if cpuUsage >= criticalThreshold {
+		result.Status = "fail"
+		msg := fmt.Sprintf("CPU使用率过高: %.1f%% (阈值: %.0f%%)", cpuUsage, criticalThreshold)
+		result.Message = &msg
+	} else if cpuUsage >= warningThreshold {
+		result.Status = "warning"
+		msg := fmt.Sprintf("CPU使用率较高: %.1f%% (警告阈值: %.0f%%)", cpuUsage, warningThreshold)
+		result.Message = &msg
+	} else {
+		result.Status = "pass"
+		msg := fmt.Sprintf("CPU使用率正常: %.1f%%", cpuUsage)
+		result.Message = &msg
+	}
+}
+
+// checkMemoryMetric 检查内存使用率
+func (h InspectionHandler) checkMemoryMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64) {
+	if metrics == nil || metrics.MemoryUsage == nil {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取内存使用率数据")
+		return
+	}
+
+	memUsage := *metrics.MemoryUsage
+	actualValue := fmt.Sprintf("%.1f%%", memUsage)
+	result.ActualValue = &actualValue
+
+	// 设置默认阈值
+	if warningThreshold == 0 {
+		warningThreshold = 80
+	}
+	if criticalThreshold == 0 {
+		criticalThreshold = 95
+	}
+
+	if memUsage >= criticalThreshold {
+		result.Status = "fail"
+		msg := fmt.Sprintf("内存使用率过高: %.1f%% (阈值: %.0f%%)", memUsage, criticalThreshold)
+		result.Message = &msg
+	} else if memUsage >= warningThreshold {
+		result.Status = "warning"
+		msg := fmt.Sprintf("内存使用率较高: %.1f%% (警告阈值: %.0f%%)", memUsage, warningThreshold)
+		result.Message = &msg
+	} else {
+		result.Status = "pass"
+		msg := fmt.Sprintf("内存使用率正常: %.1f%%", memUsage)
+		result.Message = &msg
+	}
+}
+
+// checkUptimeMetric 检查系统运行时间
+func (h InspectionHandler) checkUptimeMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
+	if metrics == nil || metrics.Uptime == nil {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取系统运行时间数据")
+		return
+	}
+
+	uptime := *metrics.Uptime
+	// 格式化运行时间
+	days := uptime / 86400
+	hours := (uptime % 86400) / 3600
+	minutes := (uptime % 3600) / 60
+
+	var uptimeStr string
+	if days > 0 {
+		uptimeStr = fmt.Sprintf("%d天%d小时%d分钟", days, hours, minutes)
+	} else if hours > 0 {
+		uptimeStr = fmt.Sprintf("%d小时%d分钟", hours, minutes)
+	} else {
+		uptimeStr = fmt.Sprintf("%d分钟", minutes)
+	}
+
+	result.ActualValue = &uptimeStr
+	result.Status = "pass"
+	msg := fmt.Sprintf("系统运行时间: %s", uptimeStr)
+	result.Message = &msg
+}
+
+// checkInterfaceMetric 检查接口状态
+func (h InspectionHandler) checkInterfaceMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
+	if metrics == nil || len(metrics.Interfaces) == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取接口状态数据")
+		return
+	}
+
+	totalInterfaces := len(metrics.Interfaces)
+	activeInterfaces := 0
+	for _, iface := range metrics.Interfaces {
+		// 如果有流量数据，认为接口是活跃的
+		if iface.InOctets != nil || iface.OutOctets != nil {
+			activeInterfaces++
+		}
+	}
+
+	actualValue := fmt.Sprintf("%d/%d", activeInterfaces, totalInterfaces)
+	result.ActualValue = &actualValue
+	result.Status = "pass"
+	msg := fmt.Sprintf("接口状态正常: %d个活跃接口 (共%d个)", activeInterfaces, totalInterfaces)
+	result.Message = &msg
+}
+
+// checkTemperatureMetric 检查温度
+func (h InspectionHandler) checkTemperatureMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64) {
+	if metrics == nil || metrics.Temperature == nil {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取温度数据")
+		return
+	}
+
+	temp := *metrics.Temperature
+	actualValue := fmt.Sprintf("%.1f°C", temp)
+	result.ActualValue = &actualValue
+
+	// 设置默认阈值
+	if warningThreshold == 0 {
+		warningThreshold = 60
+	}
+	if criticalThreshold == 0 {
+		criticalThreshold = 75
+	}
+
+	if temp >= criticalThreshold {
+		result.Status = "fail"
+		msg := fmt.Sprintf("设备温度过高: %.1f°C (阈值: %.0f°C)", temp, criticalThreshold)
+		result.Message = &msg
+	} else if temp >= warningThreshold {
+		result.Status = "warning"
+		msg := fmt.Sprintf("设备温度较高: %.1f°C (警告阈值: %.0f°C)", temp, warningThreshold)
+		result.Message = &msg
+	} else {
+		result.Status = "pass"
+		msg := fmt.Sprintf("设备温度正常: %.1f°C", temp)
+		result.Message = &msg
+	}
+}
+
+// checkBandwidthMetric 检查带宽使用
+func (h InspectionHandler) checkBandwidthMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
+	if metrics == nil || (metrics.BandwidthIn == nil && metrics.BandwidthOut == nil) {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取带宽数据")
+		return
+	}
+
+	var inBw, outBw float64
+	if metrics.BandwidthIn != nil {
+		inBw = *metrics.BandwidthIn
+	}
+	if metrics.BandwidthOut != nil {
+		outBw = *metrics.BandwidthOut
+	}
+
+	// 格式化带宽显示
+	formatBandwidth := func(bps float64) string {
+		if bps >= 1_000_000_000 {
+			return fmt.Sprintf("%.2f Gbps", bps/1_000_000_000)
+		} else if bps >= 1_000_000 {
+			return fmt.Sprintf("%.2f Mbps", bps/1_000_000)
+		} else if bps >= 1_000 {
+			return fmt.Sprintf("%.2f Kbps", bps/1_000)
+		}
+		return fmt.Sprintf("%.0f bps", bps)
+	}
+
+	actualValue := fmt.Sprintf("入: %s, 出: %s", formatBandwidth(inBw), formatBandwidth(outBw))
+	result.ActualValue = &actualValue
+	result.Status = "pass"
+	msg := fmt.Sprintf("带宽使用正常 - 入站: %s, 出站: %s", formatBandwidth(inBw), formatBandwidth(outBw))
+	result.Message = &msg
 }
 
 func (h InspectionHandler) ListTasks(c echo.Context) error {
@@ -1247,11 +1519,15 @@ func (h InspectionHandler) ListExecutions(c echo.Context) error {
 	}
 
 	strategyNames := h.loadStrategyNames(c.Request().Context(), rows)
+	userNames := h.loadUserNames(c.Request().Context(), rows)
 
 	items := make([]map[string]interface{}, 0, len(rows))
 	for _, item := range rows {
 		strategyName := resolveStrategyName(strategyNames, item.ScheduleID, item.Name)
-		items = append(items, buildExecutionResponse(item, strategyName))
+		response := buildExecutionResponse(item, strategyName)
+		// 将用户ID转换为用户名
+		response["triggerUser"] = resolveUserName(userNames, item.CreatedBy)
+		items = append(items, response)
 	}
 
 	return inspectionOK(c, map[string]interface{}{
@@ -1283,11 +1559,25 @@ func (h InspectionHandler) GetExecution(c echo.Context) error {
 	}
 
 	strategyNames := h.loadStrategyNames(c.Request().Context(), []inspection.Inspection{item})
+	userNames := h.loadUserNames(c.Request().Context(), []inspection.Inspection{item})
 	results, _ := h.Service.ListResultsByInspectionID(c.Request().Context(), item.ID)
 	deviceInfo := h.loadDeviceInfo(c.Request().Context(), item.DeviceID)
 
+	// 调试日志
+	if h.Logger != nil {
+		h.Logger.Info("GetExecution debug",
+			zap.Int("execution_id", item.ID),
+			zap.Int("device_id", item.DeviceID),
+			zap.Int("device_info_id", deviceInfo.ID),
+			zap.String("device_name", deviceInfo.Name),
+			zap.Int("results_count", len(results)),
+		)
+	}
+
 	strategyName := resolveStrategyName(strategyNames, item.ScheduleID, item.Name)
 	response := buildExecutionResponse(item, strategyName)
+	// 将用户ID转换为用户名
+	response["triggerUser"] = resolveUserName(userNames, item.CreatedBy)
 	response["summary"] = buildExecutionSummary(item, deviceInfo, results)
 
 	return inspectionOK(c, response)
@@ -1600,35 +1890,48 @@ func (h InspectionHandler) GetTrends(c echo.Context) error {
 		AvgScore   float64   `gorm:"column:avg_score"`
 	}
 
-	dateExpr := "date_trunc('week', created_at)"
+	// 根据周期选择不同的日期截断方式
+	// 使用 COALESCE 处理 created_at 为 NULL 的情况，使用 started_at 或 completed_at 作为备选
+	dateExpr := "date_trunc('week', COALESCE(created_at, started_at, completed_at, NOW()))"
 	switch period {
 	case "day":
-		dateExpr = "date_trunc('day', created_at)"
+		dateExpr = "date_trunc('day', COALESCE(created_at, started_at, completed_at, NOW()))"
 	case "month":
-		dateExpr = "date_trunc('month', created_at)"
+		dateExpr = "date_trunc('month', COALESCE(created_at, started_at, completed_at, NOW()))"
 	}
 
 	rows := make([]trendRow, 0)
+	
+	// 查询所有数据，不限制时间范围
 	if err := db.WithContext(c.Request().Context()).
 		Table("inspections").
 		Select(fmt.Sprintf("%s AS date, COUNT(*) AS executions, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS success, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed, AVG(CASE WHEN total_checks > 0 THEN passed_checks::float / total_checks * 100 ELSE NULL END) AS avg_score", dateExpr)).
-		Where("created_at >= ? AND created_at <= ?", start, end).
 		Group("date").
-		Order("date").
+		Order("date DESC").
+		Limit(20).
 		Scan(&rows).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load trend data")
 	}
 
-	payload := make([]map[string]interface{}, 0, len(rows))
-	for _, row := range rows {
-		payload = append(payload, map[string]interface{}{
-			"date":       row.Date.Format(time.RFC3339),
-			"executions": row.Executions,
-			"success":    row.Success,
-			"failed":     row.Failed,
-			"avgScore":   roundFloat(row.AvgScore, 1),
-		})
+	// 如果数据库有数据，返回数据库的结果
+	if len(rows) > 0 {
+		// 按日期升序排列
+		payload := make([]map[string]interface{}, 0, len(rows))
+		for i := len(rows) - 1; i >= 0; i-- {
+			row := rows[i]
+			payload = append(payload, map[string]interface{}{
+				"date":       row.Date.Format(time.RFC3339),
+				"executions": row.Executions,
+				"success":    row.Success,
+				"failed":     row.Failed,
+				"avgScore":   roundFloat(row.AvgScore, 1),
+			})
+		}
+		return inspectionOK(c, payload)
 	}
+
+	// 如果没有数据，生成空的时间序列
+	payload := generateEmptyTrendTimeSeries(start, end, period)
 
 	return inspectionOK(c, payload)
 }
@@ -1974,10 +2277,10 @@ type statsSummary struct {
 }
 
 type deviceInfo struct {
-	ID         int
-	Name       string
-	DeviceType string
-	IPAddress  string
+	ID         int    `gorm:"column:id"`
+	Name       string `gorm:"column:name"`
+	DeviceType string `gorm:"column:device_type"`
+	IPAddress  string `gorm:"column:ip_address"`
 }
 
 func inspectionOK(c echo.Context, data interface{}) error {
@@ -2243,14 +2546,14 @@ func buildCheckResults(results []inspection.Result) []map[string]interface{} {
 
 func buildCheckResultResponse(result inspection.Result) map[string]interface{} {
 	return map[string]interface{}{
-		"check_item_id":   fmt.Sprintf("%d", result.ID),
-		"check_item_name": result.CheckItemName,
-		"check_item_type": result.CheckItemType,
-		"status":          normalizeCheckResultStatus(result.Status),
-		"actual_value":    result.ActualValue,
-		"expected_value":  result.ExpectedValue,
-		"message":         result.Message,
-		"execution_time":  result.ExecutionTime,
+		"checkItemId":    fmt.Sprintf("%d", result.ID),
+		"checkItemName":  result.CheckItemName,
+		"checkItemType":  result.CheckItemType,
+		"status":         normalizeCheckResultStatus(result.Status),
+		"actualValue":    result.ActualValue,
+		"expectedValue":  result.ExpectedValue,
+		"message":        result.Message,
+		"executionTime":  result.ExecutionTime,
 	}
 }
 
@@ -2309,13 +2612,16 @@ func buildExecutionSummary(item inspection.Inspection, device deviceInfo, result
 	deviceResults := []interface{}{}
 	if device.ID > 0 {
 		deviceResults = append(deviceResults, map[string]interface{}{
-			"deviceId":       fmt.Sprintf("%d", device.ID),
-			"deviceName":     defaultString(device.Name, "未知设备"),
-			"deviceType":     device.DeviceType,
-			"status":         status,
-			"score":          score,
-			"checkResults":   checkResults,
-			"executionTime":  defaultIntPtr(item.Duration),
+			"deviceId":      fmt.Sprintf("%d", device.ID),
+			"deviceName":    defaultString(device.Name, "未知设备"),
+			"deviceType":    device.DeviceType,
+			"deviceIp":      device.IPAddress,
+			"status":        status,
+			"score":         float64(score),
+			"checkResults":  checkResults,
+			"passedChecks":  passed,
+			"totalChecks":   totalChecks,
+			"executionTime": defaultIntPtr(item.Duration),
 		})
 	}
 
@@ -2513,6 +2819,53 @@ func (h InspectionHandler) loadResultsMap(ctx context.Context, inspections []ins
 	return resultMap, nil
 }
 
+// loadUserNames 批量加载用户名映射（用户ID -> 用户名）
+func (h InspectionHandler) loadUserNames(ctx context.Context, inspections []inspection.Inspection) map[string]string {
+	userNames := make(map[string]string)
+	
+	if h.Settings == nil {
+		return userNames
+	}
+	
+	// 收集所有唯一的用户ID
+	userIDSet := make(map[string]struct{})
+	for _, item := range inspections {
+		if item.CreatedBy != nil && strings.TrimSpace(*item.CreatedBy) != "" {
+			userIDSet[*item.CreatedBy] = struct{}{}
+		}
+	}
+	
+	// 批量查询用户信息
+	for userID := range userIDSet {
+		user, err := h.Settings.GetUserByID(ctx, userID)
+		if err == nil && user != nil {
+			// 优先使用全名，如果没有则使用用户名
+			if user.FullName != nil && strings.TrimSpace(*user.FullName) != "" {
+				userNames[userID] = *user.FullName
+			} else {
+				userNames[userID] = user.Username
+			}
+		}
+	}
+	
+	return userNames
+}
+
+// resolveUserName 根据用户ID获取用户名
+func resolveUserName(userNames map[string]string, userID *string) string {
+	if userID == nil || strings.TrimSpace(*userID) == "" {
+		return ""
+	}
+	if name, ok := userNames[*userID]; ok {
+		return name
+	}
+	// 如果找不到用户名，返回原始ID（截断显示）
+	id := *userID
+	if len(id) > 8 {
+		return id[:8] + "..."
+	}
+	return id
+}
 func (h InspectionHandler) loadTemplatesMap(ctx context.Context, inspections []inspection.Inspection) (map[int][]map[string]interface{}, error) {
 	templateIDs := map[int]struct{}{}
 	for _, item := range inspections {
@@ -2729,23 +3082,150 @@ func roundFloat(value float64, precision int) float64 {
 
 func resolveTrendRange(period string, start *time.Time, end *time.Time) (time.Time, time.Time) {
 	now := time.Now().UTC()
+	// 设置结束时间为今天的23:59:59，确保包含今天的数据
+	endOfToday := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, time.UTC)
 	if end == nil {
-		end = &now
+		end = &endOfToday
 	}
 	if start == nil {
 		switch period {
 		case "day":
-			value := end.Add(-24 * time.Hour)
+			// 按天显示：查询最近7天的数据
+			value := time.Date(now.Year(), now.Month(), now.Day()-6, 0, 0, 0, 0, time.UTC)
 			start = &value
 		case "month":
-			value := end.Add(-30 * 24 * time.Hour)
+			// 按月显示：查询最近12个月的数据
+			value := time.Date(now.Year()-1, now.Month(), 1, 0, 0, 0, 0, time.UTC)
 			start = &value
 		default:
-			value := end.Add(-7 * 24 * time.Hour)
+			// 按周显示：查询最近4周的数据
+			value := time.Date(now.Year(), now.Month(), now.Day()-27, 0, 0, 0, 0, time.UTC)
 			start = &value
 		}
 	}
 	return *start, *end
+}
+
+// trendDataPoint 用于生成趋势时间序列
+type trendDataPoint struct {
+	Date       time.Time
+	Executions int
+	Success    int
+	Failed     int
+	AvgScore   float64
+}
+
+// generateEmptyTrendTimeSeries 生成空的时间序列（所有值为0）
+func generateEmptyTrendTimeSeries(start, end time.Time, period string) []map[string]interface{} {
+	result := make([]map[string]interface{}, 0)
+
+	// 根据周期确定时间步长和截断函数
+	var step func(t time.Time) time.Time
+	var truncate func(t time.Time) time.Time
+
+	switch period {
+	case "day":
+		step = func(t time.Time) time.Time { return t.AddDate(0, 0, 1) }
+		truncate = func(t time.Time) time.Time {
+			return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		}
+	case "month":
+		step = func(t time.Time) time.Time { return t.AddDate(0, 1, 0) }
+		truncate = func(t time.Time) time.Time {
+			return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+		}
+	default: // week
+		step = func(t time.Time) time.Time { return t.AddDate(0, 0, 7) }
+		truncate = func(t time.Time) time.Time {
+			// PostgreSQL date_trunc('week', ...) 返回的是 ISO 周的周一
+			// Go 的 Weekday(): Sunday=0, Monday=1, ..., Saturday=6
+			weekday := int(t.Weekday())
+			if weekday == 0 {
+				weekday = 7 // 周日当作7
+			}
+			// 回退到周一
+			return time.Date(t.Year(), t.Month(), t.Day()-(weekday-1), 0, 0, 0, 0, time.UTC)
+		}
+	}
+
+	// 从起始时间开始，按步长生成时间点
+	current := truncate(start)
+	endTruncated := truncate(end)
+
+	for !current.After(endTruncated) {
+		point := map[string]interface{}{
+			"date":       current.Format(time.RFC3339),
+			"executions": 0,
+			"success":    0,
+			"failed":     0,
+			"avgScore":   0.0,
+		}
+		result = append(result, point)
+		current = step(current)
+	}
+
+	return result
+}
+
+// generateTrendTimeSeries 生成完整的时间序列，填充缺失的数据点为0
+func generateTrendTimeSeries(start, end time.Time, period string, dataMap map[string]trendDataPoint) []map[string]interface{} {
+	result := make([]map[string]interface{}, 0)
+
+	// 根据周期确定时间步长
+	var step func(t time.Time) time.Time
+	var truncate func(t time.Time) time.Time
+
+	switch period {
+	case "day":
+		step = func(t time.Time) time.Time { return t.AddDate(0, 0, 1) }
+		truncate = func(t time.Time) time.Time {
+			return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		}
+	case "month":
+		step = func(t time.Time) time.Time { return t.AddDate(0, 1, 0) }
+		truncate = func(t time.Time) time.Time {
+			return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+		}
+	default: // week
+		step = func(t time.Time) time.Time { return t.AddDate(0, 0, 7) }
+		truncate = func(t time.Time) time.Time {
+			// 找到本周的周一
+			weekday := int(t.Weekday())
+			if weekday == 0 {
+				weekday = 7
+			}
+			return time.Date(t.Year(), t.Month(), t.Day()-(weekday-1), 0, 0, 0, 0, time.UTC)
+		}
+	}
+
+	// 从起始时间开始，按步长生成时间点
+	current := truncate(start)
+	endTruncated := truncate(end)
+
+	for !current.After(endTruncated) {
+		key := current.Format("2006-01-02")
+		data, exists := dataMap[key]
+
+		point := map[string]interface{}{
+			"date":       current.Format(time.RFC3339),
+			"executions": 0,
+			"success":    0,
+			"failed":     0,
+			"avgScore":   0.0,
+		}
+
+		if exists {
+			point["executions"] = data.Executions
+			point["success"] = data.Success
+			point["failed"] = data.Failed
+			point["avgScore"] = roundFloat(data.AvgScore, 1)
+		}
+
+		result = append(result, point)
+		current = step(current)
+	}
+
+	return result
 }
 
 func buildReportsDownloadURL(filename string) string {

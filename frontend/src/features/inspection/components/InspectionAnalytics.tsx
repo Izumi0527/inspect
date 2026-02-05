@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   TrendingUp,
   BarChart3,
@@ -32,6 +32,30 @@ import {
 } from '../hooks/useInspection'
 import { exportAnalyticsReport } from '../api/inspection.api'
 import toast from 'react-hot-toast'
+
+// 格式化日期为友好的显示格式
+const formatDateLabel = (dateStr: string, period: 'day' | 'week' | 'month'): string => {
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return dateStr
+    
+    switch (period) {
+      case 'day':
+        // 按天: 显示 MM/DD
+        return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`
+      case 'week':
+        // 按周: 显示 MM/DD (周一)
+        return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`
+      case 'month':
+        // 按月: 显示 YYYY/MM
+        return `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}`
+      default:
+        return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`
+    }
+  } catch {
+    return dateStr
+  }
+}
 
 export const InspectionAnalytics: React.FC = () => {
   const [timePeriod, setTimePeriod] = useState<'day' | 'week' | 'month'>('week')
@@ -74,6 +98,16 @@ export const InspectionAnalytics: React.FC = () => {
   })
   const { data: deviceDistribution, isLoading: deviceLoading, refetch: refetchDevice } = useDeviceDistribution()
   const { data: problemDistribution, isLoading: problemLoading, refetch: refetchProblem } = useProblemDistribution()
+
+  // 格式化趋势数据的日期标签
+  const formattedTrends = useMemo(() => {
+    if (!trends || trends.length === 0) return []
+    return trends.map(item => ({
+      ...item,
+      dateLabel: formatDateLabel(item.date, timePeriod)
+    }))
+  }, [trends, timePeriod])
+
 
   const handlePeriodChange = (value: string) => {
     if (value === 'day' || value === 'week' || value === 'month') {
@@ -223,8 +257,8 @@ export const InspectionAnalytics: React.FC = () => {
           </CardHeader>
           <CardContent>
             <AreaChartComponent
-              data={trends || []}
-              xKey="date"
+              data={formattedTrends}
+              xKey="dateLabel"
               areas={[
                 { key: 'executions', name: '总执行', color: '#3B82F6' },
                 { key: 'success', name: '成功执行', color: '#10B981' }
@@ -244,8 +278,8 @@ export const InspectionAnalytics: React.FC = () => {
           </CardHeader>
           <CardContent>
             <LineChartComponent
-              data={trends || []}
-              xKey="date"
+              data={formattedTrends}
+              xKey="dateLabel"
               lines={[
                 { key: 'avgScore', name: '平均评分', color: '#8B5CF6', strokeWidth: 3 }
               ]}
@@ -322,30 +356,39 @@ export const InspectionAnalytics: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {(trends || []).slice(-7).map((item, index) => (
+                {formattedTrends.slice(-7).map((item, index) => {
+                  // 安全计算成功率，避免除以0
+                  const successRate = item.executions > 0 
+                    ? (item.success / item.executions * 100) 
+                    : 0
+                  return (
                   <tr key={index} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td className="p-3">{new Date(item.date).toLocaleDateString()}</td>
                     <td className="p-3">{item.executions}</td>
                     <td className="p-3">
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        (item.success / item.executions * 100) >= 90
+                        successRate >= 90
                           ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
+                          : item.executions === 0
+                          ? 'bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-400'
                           : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'
                       }`}>
-                        {((item.success / item.executions) * 100).toFixed(1)}%
+                        {item.executions > 0 ? `${successRate.toFixed(1)}%` : '-'}
                       </span>
                     </td>
                     <td className="p-3">
                       <span className={`font-medium ${
                         item.avgScore >= 90 ? 'text-green-600' :
-                        item.avgScore >= 70 ? 'text-yellow-600' : 'text-red-600'
+                        item.avgScore >= 70 ? 'text-yellow-600' : 
+                        item.avgScore > 0 ? 'text-red-600' : 'text-gray-400'
                       }`}>
-                        {item.avgScore}
+                        {item.avgScore > 0 ? item.avgScore : '-'}
                       </span>
                     </td>
                     <td className="p-3">{item.failed}</td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

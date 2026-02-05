@@ -130,8 +130,10 @@ export const LineChartComponent = <TData extends ChartDatum>({
   const allValues = lines.flatMap(line =>
     data.map(d => Number(d[line.key]) || 0)
   )
+  // 确保 yScale 的最大值至少为 1，避免所有数据为 0 时图表无法显示
+  const maxValue = Math.max(...allValues, 1)
   const yScale = scaleLinear({
-    domain: [0, Math.max(...allValues) * 1.1],
+    domain: [0, maxValue * 1.1],
     range: [innerHeight, 0],
   })
 
@@ -150,6 +152,27 @@ export const LineChartComponent = <TData extends ChartDatum>({
       tooltipLeft: point.x,
       tooltipTop: point.y,
     })
+  }
+
+  // 如果没有数据，显示空状态提示
+  if (!data || data.length === 0) {
+    return (
+      <ChartContainer title={title} subtitle={subtitle} className={className}>
+        <div 
+          ref={containerRef} 
+          style={{ 
+            position: 'relative', 
+            width: '100%', 
+            height,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <p className="text-gray-400 dark:text-gray-500 text-sm">暂无数据</p>
+        </div>
+      </ChartContainer>
+    )
   }
 
   return (
@@ -351,6 +374,27 @@ export const BarChartComponent = <TData extends ChartDatum>({
     tooltipTop = 0,
   } = useTooltip<{ x: string; values: Array<{ name: string; value: number; color: string }> }>()
 
+  // 如果没有数据，显示空状态提示
+  if (!data || data.length === 0) {
+    return (
+      <ChartContainer title={title} subtitle={subtitle} className={className}>
+        <div 
+          ref={containerRef} 
+          style={{ 
+            position: 'relative', 
+            width: '100%', 
+            height,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <p className="text-gray-400 dark:text-gray-500 text-sm">暂无数据</p>
+        </div>
+      </ChartContainer>
+    )
+  }
+
   const xScale = scaleBand({
     domain: data.map(d => String(d[xKey])),
     range: [0, innerWidth],
@@ -470,6 +514,7 @@ interface PieChartProps {
   formatter?: TooltipFormatter
   innerRadius?: number
   outerRadius?: number
+  showLegend?: boolean
 }
 
 export const PieChartComponent: React.FC<PieChartProps> = ({
@@ -480,7 +525,8 @@ export const PieChartComponent: React.FC<PieChartProps> = ({
   className,
   formatter,
   innerRadius = 0,
-  outerRadius = 80
+  outerRadius = 80,
+  showLegend = true
 }) => {
   const colors = ['#8B5CF6', '#0EA5E9', '#22C55E', '#F59E0B', '#EF4444', '#EC4899']
 
@@ -488,6 +534,9 @@ export const PieChartComponent: React.FC<PieChartProps> = ({
     ...item,
     color: item.color || colors[index % colors.length]
   }))
+
+  // 计算总值用于百分比显示
+  const total = dataWithColors.reduce((sum, item) => sum + item.value, 0)
 
   // 深色模式检测
   const isDark = typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -502,47 +551,99 @@ export const PieChartComponent: React.FC<PieChartProps> = ({
     tooltipTop = 0,
   } = useTooltip<{ name: string; value: number; color: string }>()
 
-  const width = 400
-  const centerX = width / 2
+  // 如果没有数据，显示空状态
+  if (!data || data.length === 0 || total === 0) {
+    return (
+      <ChartContainer title={title} subtitle={subtitle} className={className}>
+        <div 
+          style={{ 
+            position: 'relative', 
+            width: '100%', 
+            height,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <p className="text-gray-400 dark:text-gray-500 text-sm">暂无数据</p>
+        </div>
+      </ChartContainer>
+    )
+  }
+
+  // 计算图表和图例的布局
+  const chartWidth = showLegend ? 200 : 300
+  const centerX = chartWidth / 2
   const centerY = height / 2
 
   return (
     <ChartContainer title={title} subtitle={subtitle} className={className}>
-      <div style={{ position: 'relative', width: '100%', height }}>
-        <svg width="100%" height={height}>
-          <Group top={centerY} left={centerX}>
-            <VisxPie
-              data={dataWithColors}
-              pieValue={(d) => d.value}
-              outerRadius={outerRadius}
-              innerRadius={innerRadius}
-              padAngle={0.03}
-            >
-              {(pie) =>
-                pie.arcs.map((arc, i) => {
-                  const { name, value, color } = arc.data
-                  return (
-                    <g
-                      key={`pie-arc-${i}`}
-                      onMouseMove={(e) => {
-                        const point = localPoint(e)
-                        if (!point) return
-                        showTooltip({
-                          tooltipData: { name, value, color },
-                          tooltipLeft: point.x,
-                          tooltipTop: point.y,
-                        })
-                      }}
-                      onMouseLeave={hideTooltip}
-                    >
-                      <path d={pie.path(arc) || ''} fill={color} />
-                    </g>
-                  )
-                })
-              }
-            </VisxPie>
-          </Group>
-        </svg>
+      <div style={{ position: 'relative', width: '100%', height, display: 'flex', alignItems: 'center' }}>
+        {/* 饼图区域 */}
+        <div style={{ flex: showLegend ? '0 0 200px' : '1', display: 'flex', justifyContent: 'center' }}>
+          <svg width={chartWidth} height={height}>
+            <Group top={centerY} left={centerX}>
+              <VisxPie
+                data={dataWithColors}
+                pieValue={(d) => d.value}
+                outerRadius={outerRadius}
+                innerRadius={innerRadius}
+                padAngle={0.03}
+              >
+                {(pie) =>
+                  pie.arcs.map((arc, i) => {
+                    const { name, value, color } = arc.data
+                    return (
+                      <g
+                        key={`pie-arc-${i}`}
+                        onMouseMove={(e) => {
+                          const point = localPoint(e)
+                          if (!point) return
+                          showTooltip({
+                            tooltipData: { name, value, color },
+                            tooltipLeft: point.x,
+                            tooltipTop: point.y,
+                          })
+                        }}
+                        onMouseLeave={hideTooltip}
+                      >
+                        <path d={pie.path(arc) || ''} fill={color} />
+                      </g>
+                    )
+                  })
+                }
+              </VisxPie>
+            </Group>
+          </svg>
+        </div>
+
+        {/* 图例区域 */}
+        {showLegend && (
+          <div style={{ flex: 1, paddingLeft: '16px', overflow: 'auto', maxHeight: height }}>
+            <div className="space-y-2">
+              {dataWithColors.map((item, index) => {
+                const percentage = total > 0 ? ((item.value / total) * 100).toFixed(1) : '0'
+                return (
+                  <div key={index} className="flex items-center gap-2 text-sm">
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="text-gray-700 dark:text-gray-300 truncate flex-1" title={item.name}>
+                      {item.name}
+                    </span>
+                    <span className="text-gray-500 dark:text-gray-400 flex-shrink-0">
+                      {formatter ? formatter(item.value, item.name) : item.value}
+                    </span>
+                    <span className="text-gray-400 dark:text-gray-500 flex-shrink-0 text-xs">
+                      ({percentage}%)
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {tooltipData && (
           <TooltipWithBounds
