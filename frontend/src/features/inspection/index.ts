@@ -40,6 +40,7 @@ export {
   useDeleteTemplate,
   useInspectionExecutions,
   useInspectionExecution,
+  useExecutionDetail,
   useTriggerExecution,
   useStopExecution,
   useDeleteExecution,

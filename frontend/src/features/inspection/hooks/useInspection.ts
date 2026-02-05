@@ -9,6 +9,7 @@ import {
   updateInspectionTemplate,
   deleteInspectionTemplate,
   fetchInspectionExecutions,
+  fetchExecutionDetail,
   fetchInspectionTrends,
   fetchDeviceDistribution,
   fetchProblemDistribution,
@@ -280,17 +281,31 @@ export const useInspectionExecutions = (params?: {
   })
 }
 
+/**
+ * 获取单个执行记录详情
+ * 包含完整的设备巡检结果和检查项数据
+ */
+export const useExecutionDetail = (executionId: string | null) => {
+  return useQuery({
+    queryKey: ['inspection', 'execution', 'detail', executionId],
+    queryFn: () => fetchExecutionDetail(executionId!),
+    enabled: !!executionId,
+    staleTime: 30 * 1000, // 30秒缓存
+    retry: 1,
+  })
+}
+
 export const useInspectionExecution = (id: string) => {
   return useQuery({
     queryKey: ['inspection', 'execution', id],
     queryFn: async () => {
       if (!id) return null
-      // 获取单个执行记录详情
-      const result = await fetchInspectionExecutions({ page: 1, pageSize: 1 })
-      return result.items.find(item => item.id === id) || null
+      // 使用详情 API 获取完整数据
+      return fetchExecutionDetail(id)
     },
     enabled: !!id,
     refetchInterval: false,
+    staleTime: 30 * 1000,
   })
 }
 
@@ -449,8 +464,6 @@ export const useGenerateReport = () => {
       type: 'summary' | 'detailed' | 'trend'
       format: 'pdf' | 'excel' | 'html' | 'word'
     }) => {
-      // TODO: 后端需要完善报告生成API
-      // 目前后端有 /inspection/reports/generate 端点，但功能可能不完整
       console.log('[useGenerateReport] 生成报告请求:', { executionId, type, format })
       
       try {
@@ -459,15 +472,71 @@ export const useGenerateReport = () => {
           format: format === 'html' ? 'pdf' : format, // html 暂不支持，转为 pdf
           template: type
         })
+        
+        // 如果返回了下载链接，自动下载
+        if (result.download_url) {
+          // 构建完整的下载URL
+          // 后端返回的是 /api/v1/reports/files/{filename}
+          // 需要通过后端API访问
+          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+          const downloadUrl = result.download_url.startsWith('http') 
+            ? result.download_url 
+            : `${apiBaseUrl}${result.download_url}`
+          
+          console.log('[useGenerateReport] 下载URL:', downloadUrl)
+          
+          // 获取token用于认证
+          const token = localStorage.getItem('access_token') || ''
+          
+          // 使用fetch下载文件（带认证）
+          const response = await fetch(downloadUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          })
+          
+          if (!response.ok) {
+            throw new Error('下载文件失败')
+          }
+          
+          // 获取文件blob
+          const blob = await response.blob()
+          
+          // 从Content-Disposition获取文件名，或使用默认名称
+          const contentDisposition = response.headers.get('Content-Disposition')
+          let filename = `inspection_report_${executionId}.${format}`
+          if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+            if (filenameMatch && filenameMatch[1]) {
+              filename = filenameMatch[1].replace(/['"]/g, '')
+            }
+          }
+          
+          // 创建下载链接
+          const blobUrl = window.URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = blobUrl
+          link.download = filename
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          window.URL.revokeObjectURL(blobUrl)
+        }
+        
         return result
       } catch (error) {
-        console.warn('[useGenerateReport] 报告生成失败，可能后端功能未完全实现:', error)
+        console.warn('[useGenerateReport] 报告生成失败:', error)
         throw error
       }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'reports'] })
-      toast.success('报告生成请求已提交')
+      if (result.download_url) {
+        toast.success('报告已生成，正在下载...')
+      } else {
+        toast.success('报告生成请求已提交')
+      }
     },
     onError: (error: Error) => {
       toast.error(error.message || '生成报告失败')

@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
-import { motion } from 'framer-motion'
+import React, { useState, useCallback, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle2,
   XCircle,
@@ -13,11 +13,16 @@ import {
   ChevronRight,
   FileText,
   Download,
+  FileSpreadsheet,
+  File,
+  Loader2,
 } from 'lucide-react'
 import { SimpleModal } from '@/components/atoms/modal'
 import { Badge } from '@/components/atoms/badge'
+import { Button } from '@/components/atoms/button'
 import { cn } from '@/utils/cn'
-import type { InspectionExecution } from '../types'
+import { useGenerateReport, useExecutionDetail } from '../hooks/useInspection'
+import type { InspectionExecution, ReportFormat } from '../types'
 
 interface ExecutionDetailModalProps {
   open: boolean
@@ -25,13 +30,57 @@ interface ExecutionDetailModalProps {
   execution: InspectionExecution | null
 }
 
+// 报告格式配置
+const reportFormats: { value: ReportFormat; label: string; icon: React.ReactNode; description: string }[] = [
+  { value: 'pdf', label: 'PDF', icon: <FileText className="w-4 h-4" />, description: '适合打印和分享' },
+  { value: 'excel', label: 'Excel', icon: <FileSpreadsheet className="w-4 h-4" />, description: '适合数据分析' },
+  { value: 'word', label: 'Word', icon: <File className="w-4 h-4" />, description: '适合编辑修改' },
+]
+
 export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
   open,
   onClose,
-  execution,
+  execution: initialExecution,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'devices' | 'checks'>('overview')
   const [expandedDevice, setExpandedDevice] = useState<string | null>(null)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  
+  // 获取完整的执行详情（包含设备结果和检查项）
+  const { data: detailedExecution, isLoading: isLoadingDetail } = useExecutionDetail(
+    open && initialExecution ? initialExecution.id : null
+  )
+  
+  // 使用详情数据，如果没有则使用初始数据
+  const execution = detailedExecution || initialExecution
+  
+  // 报告生成 hook
+  const generateReport = useGenerateReport()
+
+  // 重置标签页当弹窗打开时
+  useEffect(() => {
+    if (open) {
+      setActiveTab('overview')
+      setExpandedDevice(null)
+    }
+  }, [open])
+
+  // 处理导出报告
+  const handleExportReport = useCallback(async (format: ReportFormat) => {
+    if (!execution) return
+    
+    setShowExportMenu(false)
+    
+    try {
+      await generateReport.mutateAsync({
+        executionId: execution.id,
+        type: 'detailed',
+        format,
+      })
+    } catch (error) {
+      console.error('导出报告失败:', error)
+    }
+  }, [execution, generateReport])
 
   if (!execution) return null
 
@@ -53,6 +102,12 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
   }
 
   const currentStatus = statusConfig[execution.status] || statusConfig.pending
+  
+  // 是否可以导出报告（只有已完成的巡检才能导出）
+  const canExport = execution.status === 'completed'
+  
+  // 是否正在加载详情
+  const isLoading = isLoadingDetail && !detailedExecution
 
   // 格式化时长
   const formatDuration = (seconds: number | undefined) => {
@@ -62,6 +117,84 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     return `${hours}小时${minutes}分`
+  }
+
+  // 将字节数组字符串转换为可读文本
+  const convertByteArrayToString = (byteArrayStr: string): string | null => {
+    try {
+      // 移除方括号，获取数字部分
+      const byteStr = byteArrayStr.replace(/^\[|\]$/g, '').trim()
+      if (!byteStr) return null
+      
+      // 解析数字
+      const bytes = byteStr.split(/\s+/).map(b => parseInt(b, 10)).filter(b => !isNaN(b))
+      if (bytes.length === 0) return null
+      
+      // 将字节转换为字符，过滤不可打印字符
+      const chars: string[] = []
+      for (const b of bytes) {
+        if (b >= 32 && b < 127) {
+          // 可打印 ASCII 字符
+          chars.push(String.fromCharCode(b))
+        } else if (b === 10 || b === 13) {
+          // 换行符转为空格
+          if (chars.length > 0 && chars[chars.length - 1] !== ' ') {
+            chars.push(' ')
+          }
+        } else if (b === 9) {
+          // Tab 转为空格
+          chars.push(' ')
+        }
+        // 其他不可打印字符忽略
+      }
+      
+      const result = chars.join('').trim()
+      return result.length > 0 ? result : null
+    } catch {
+      return null
+    }
+  }
+
+  // 格式化检查值（处理字节数组格式的字符串）
+  const formatCheckValue = (value: string | undefined): string | null => {
+    if (!value) return null
+    
+    // 检查是否是字节数组格式 [83 53 55 50...] 或 [83 53 55 50...（未闭合）
+    if (value.startsWith('[') && /^\[\d+(\s+\d+)*/.test(value)) {
+      const converted = convertByteArrayToString(value)
+      if (converted) {
+        return converted.length > 50 ? converted.slice(0, 50) + '...' : converted
+      }
+    }
+    
+    // 检查是否是响应时间格式（如 "12.34ms"）
+    if (/^\d+(\.\d+)?ms$/i.test(value.trim())) {
+      return value.trim()
+    }
+    
+    // 普通字符串，直接返回（截断过长的内容）
+    return value.length > 100 ? value.slice(0, 100) + '...' : value
+  }
+
+  // 格式化消息字段（处理包含字节数组的消息）
+  const formatMessage = (message: string | undefined): string | null => {
+    if (!message) return null
+    
+    // 检查消息中是否包含字节数组格式 [83 53 55 50...]
+    // 支持未闭合的字节数组（如被截断的情况）
+    const byteArrayMatch = message.match(/\[(\d+(?:\s+\d+)+)\]?/)
+    if (byteArrayMatch) {
+      const converted = convertByteArrayToString(byteArrayMatch[0])
+      if (converted) {
+        // 替换消息中的字节数组为可读字符串
+        const readableInfo = converted.length > 60 ? converted.slice(0, 60) + '...' : converted
+        const newMessage = message.replace(byteArrayMatch[0], readableInfo)
+        return newMessage.length > 150 ? newMessage.slice(0, 150) + '...' : newMessage
+      }
+    }
+    
+    // 返回原始消息（截断过长的内容）
+    return message.length > 150 ? message.slice(0, 150) + '...' : message
   }
 
   // 切换设备展开状态
@@ -251,7 +384,12 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
           {/* 设备详情标签 */}
           {activeTab === 'devices' && (
             <div className="space-y-3">
-              {execution.summary.deviceResults.length === 0 ? (
+              {isLoading ? (
+                <div className="text-center py-12 text-gray-500">
+                  <Loader2 className="w-12 h-12 mx-auto mb-3 animate-spin text-purple-500" />
+                  <p>加载设备详情中...</p>
+                </div>
+              ) : execution.summary.deviceResults.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <Server className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p>暂无设备巡检结果</p>
@@ -272,7 +410,7 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                         <Server className="w-5 h-5 text-purple-500" />
                         <div className="text-left">
                           <p className="font-medium text-gray-900">{device.deviceName}</p>
-                          <p className="text-sm text-gray-500">{device.deviceIp || device.deviceId}</p>
+                          <p className="text-sm text-gray-500">{device.deviceIp || `设备ID: ${device.deviceId}`}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -307,6 +445,18 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                         <div className="p-4 space-y-2">
                           {device.checkResults.map((check, index) => {
                             const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
+                            // 根据检查项类型确定实际值的标签
+                            const getActualValueLabel = (checkName: string): string => {
+                              const name = checkName.toLowerCase()
+                              if (name.includes('cpu') || name.includes('处理器')) return '实际值'
+                              if (name.includes('内存') || name.includes('memory')) return '实际值'
+                              if (name.includes('运行时间') || name.includes('uptime')) return '运行时间'
+                              if (name.includes('接口') || name.includes('interface') || name.includes('端口')) return '接口状态'
+                              if (name.includes('温度') || name.includes('temperature')) return '温度'
+                              if (name.includes('带宽') || name.includes('bandwidth')) return '带宽'
+                              if (name.includes('icmp') || name.includes('ping')) return '响应时间'
+                              return '实际值'
+                            }
                             return (
                               <div
                                 key={index}
@@ -318,20 +468,14 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                                     <div className="flex-1">
                                       <p className="font-medium text-gray-900 text-sm">{check.checkItemName}</p>
                                       {check.message && (
-                                        <p className="text-xs text-gray-600 mt-1">{check.message}</p>
+                                        <p className="text-xs text-gray-600 mt-1">{formatMessage(check.message)}</p>
                                       )}
-                                      {(check.expectedValue || check.actualValue) && (
-                                        <div className="flex gap-4 mt-2 text-xs">
-                                          {check.expectedValue && (
+                                      {(formatCheckValue(check.expectedValue) || formatCheckValue(check.actualValue)) && (
+                                        <div className="flex flex-wrap gap-4 mt-2 text-xs">
+                                          {formatCheckValue(check.actualValue) && (
                                             <div>
-                                              <span className="text-gray-500">期望值: </span>
-                                              <span className="text-gray-700 font-medium">{check.expectedValue}</span>
-                                            </div>
-                                          )}
-                                          {check.actualValue && (
-                                            <div>
-                                              <span className="text-gray-500">实际值: </span>
-                                              <span className="text-gray-700 font-medium">{check.actualValue}</span>
+                                              <span className="text-gray-500">{getActualValueLabel(check.checkItemName)}: </span>
+                                              <span className="text-gray-700 font-medium">{formatCheckValue(check.actualValue)}</span>
                                             </div>
                                           )}
                                         </div>
@@ -355,7 +499,12 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
           {/* 检查项标签 */}
           {activeTab === 'checks' && (
             <div className="space-y-2">
-              {execution.summary.deviceResults.length === 0 ? (
+              {isLoading ? (
+                <div className="text-center py-12 text-gray-500">
+                  <Loader2 className="w-12 h-12 mx-auto mb-3 animate-spin text-purple-500" />
+                  <p>加载检查项结果中...</p>
+                </div>
+              ) : execution.summary.deviceResults.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p>暂无检查项结果</p>
@@ -364,6 +513,18 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                 execution.summary.deviceResults.flatMap((device) =>
                   device.checkResults?.map((check, index) => {
                     const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
+                    // 根据检查项类型确定实际值的标签
+                    const getActualValueLabel = (checkName: string): string => {
+                      const name = checkName.toLowerCase()
+                      if (name.includes('cpu') || name.includes('处理器')) return '实际值'
+                      if (name.includes('内存') || name.includes('memory')) return '实际值'
+                      if (name.includes('运行时间') || name.includes('uptime')) return '运行时间'
+                      if (name.includes('接口') || name.includes('interface') || name.includes('端口')) return '接口状态'
+                      if (name.includes('温度') || name.includes('temperature')) return '温度'
+                      if (name.includes('带宽') || name.includes('bandwidth')) return '带宽'
+                      if (name.includes('icmp') || name.includes('ping')) return '响应时间'
+                      return '实际值'
+                    }
                     return (
                       <motion.div
                         key={`${device.deviceId}-${index}`}
@@ -387,23 +548,15 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                           {check.message && (
                             <p>
                               <span className="text-gray-500">消息: </span>
-                              {check.message}
+                              {formatMessage(check.message)}
                             </p>
                           )}
-                          {(check.expectedValue || check.actualValue) && (
+                          {formatCheckValue(check.actualValue) && (
                             <div className="flex gap-4 pt-2 border-t border-gray-100">
-                              {check.expectedValue && (
-                                <div>
-                                  <span className="text-gray-500">期望值: </span>
-                                  <span className="font-medium text-gray-700">{check.expectedValue}</span>
-                                </div>
-                              )}
-                              {check.actualValue && (
-                                <div>
-                                  <span className="text-gray-500">实际值: </span>
-                                  <span className="font-medium text-gray-700">{check.actualValue}</span>
-                                </div>
-                              )}
+                              <div>
+                                <span className="text-gray-500">{getActualValueLabel(check.checkItemName)}: </span>
+                                <span className="font-medium text-gray-700">{formatCheckValue(check.actualValue)}</span>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -418,14 +571,76 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
 
         {/* 底部操作栏 */}
         <div className="flex items-center justify-between pt-4 border-t border-gray-200 mt-4">
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            导出报告
-          </motion.button>
+          {/* 导出报告按钮组 */}
+          <div className="relative">
+            <motion.button
+              whileHover={{ scale: canExport ? 1.02 : 1 }}
+              whileTap={{ scale: canExport ? 0.98 : 1 }}
+              onClick={() => canExport && setShowExportMenu(!showExportMenu)}
+              disabled={!canExport || generateReport.isPending}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+                canExport
+                  ? 'text-purple-600 bg-purple-50 hover:bg-purple-100'
+                  : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+              )}
+              title={!canExport ? '只有已完成的巡检才能导出报告' : '导出巡检报告'}
+            >
+              {generateReport.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {generateReport.isPending ? '生成中...' : '导出报告'}
+              {canExport && !generateReport.isPending && (
+                <ChevronDown className={cn('w-4 h-4 transition-transform', showExportMenu && 'rotate-180')} />
+              )}
+            </motion.button>
+
+            {/* 导出格式下拉菜单 */}
+            <AnimatePresence>
+              {showExportMenu && canExport && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute bottom-full left-0 mb-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden z-50"
+                >
+                  <div className="p-2">
+                    <p className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      选择导出格式
+                    </p>
+                    {reportFormats.map((format) => (
+                      <motion.button
+                        key={format.value}
+                        whileHover={{ backgroundColor: 'rgba(147, 51, 234, 0.05)' }}
+                        onClick={() => handleExportReport(format.value)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-md transition-colors hover:bg-purple-50"
+                      >
+                        <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-purple-100 text-purple-600 rounded-lg">
+                          {format.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{format.label}</p>
+                          <p className="text-xs text-gray-500 truncate">{format.description}</p>
+                        </div>
+                      </motion.button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* 点击外部关闭菜单 */}
+            {showExportMenu && (
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowExportMenu(false)}
+              />
+            )}
+          </div>
+
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}

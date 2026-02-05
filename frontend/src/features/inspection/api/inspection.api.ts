@@ -280,13 +280,19 @@ function transformDeviceResultData(apiData: unknown): DeviceInspectionResult {
   const data = toRecord(apiData)
   const status = toEnumValue(data.status, DEVICE_STATUSES, 'offline')
 
+  // 获取设备IP地址
+  const deviceIp = toString(data.deviceIp ?? data['device_ip'] ?? data['deviceIp'])
+
   return {
     deviceId: toString(data.deviceId ?? data['device_id']),
     deviceName: toString(data.deviceName ?? data['device_name']),
     deviceType: toString(data.deviceType ?? data['device_type']),
+    deviceIp: deviceIp || undefined,
     status,
     score: toNumber(data.score),
     checkResults: toCheckResultArray(data.checkResults ?? data['check_results']),
+    passedChecks: toNumber(data.passedChecks ?? data['passed_checks']),
+    totalChecks: toNumber(data.totalChecks ?? data['total_checks']),
     executionTime: toNumber(data.executionTime ?? data['execution_time']),
   }
 }
@@ -747,6 +753,28 @@ export async function fetchInspectionExecutions(params?: {
       total: 0,
       pages: 0,
     }
+  }
+}
+
+/**
+ * 获取单个执行记录详情
+ * 包含完整的设备巡检结果和检查项数据
+ */
+export async function fetchExecutionDetail(executionId: string): Promise<InspectionExecution | null> {
+  try {
+    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/executions/${executionId}`)
+    
+    if (!response.data) {
+      console.error('[API] 获取执行详情失败: 无数据返回')
+      return null
+    }
+
+    const execution = transformExecutionData(response.data)
+    console.log(`[API] 成功获取执行详情: ID=${executionId}, 设备结果数=${execution.summary.deviceResults.length}`)
+    return execution
+  } catch (error) {
+    console.error('[API] 获取执行详情失败:', error)
+    return null
   }
 }
 
