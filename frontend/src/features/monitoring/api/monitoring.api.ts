@@ -679,14 +679,10 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
 
     // 如果后端返回对象，转换为数组
     if (response && typeof response === 'object') {
-      // 辅助函数：将小数格式（0-1）转换为百分比格式（0-100）
+      // 后端现在返回的 avg_cpu 和 avg_memory 已经是百分比格式（0-100）
+      // 直接使用即可，不需要再乘以 100
       const formatPercentageValue = (value: any): number => {
         const num = Number(value ?? 0)
-        // 如果值在 0-1 之间（小数格式），乘以 100 转换为百分比
-        if (num >= 0 && num < 1) {
-          return num * 100
-        }
-        // 否则直接使用（已经是百分比格式）
         return num
       }
 
