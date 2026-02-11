@@ -1,7 +1,7 @@
 'use client'
 
 import {
-  LazyMonitoringViewV2,
+  LazyMonitoringView,
   LazyWrapper,
 } from '@/components/lazy/LazyComponents'
 import { ErrorBoundary } from '@/components/error/ErrorBoundary'
@@ -36,7 +36,7 @@ export default function MonitoringPage() {
 
         <ErrorBoundary>
           <LazyWrapper>
-            <LazyMonitoringViewV2 />
+            <LazyMonitoringView />
           </LazyWrapper>
         </ErrorBoundary>
       </div>
@@ -64,7 +64,7 @@ export default function MonitoringPage() {
   return (
     <ErrorBoundary>
       <LazyWrapper>
-        <LazyMonitoringViewV2 />
+        <LazyMonitoringView />
       </LazyWrapper>
     </ErrorBoundary>
   )

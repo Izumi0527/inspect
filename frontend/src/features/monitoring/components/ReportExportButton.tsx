@@ -1,17 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { Download } from 'lucide-react'
+import { Button } from '@/components/atoms'
 import { exportMonitoringReport } from '../api/monitoring.api'
-
-/**
- * 报告导出按钮组件
- *
- * @features
- * - 下拉菜单选择导出格式(PDF, Excel, CSV)
- * - 调用后端API导出监控报告
- * - 显示导出状态(进行中/成功/失败)
- * - 自动关闭菜单
- */
 
 type ExportFormat = 'pdf' | 'excel' | 'csv'
 
@@ -65,9 +57,13 @@ export function ReportExportButton() {
         },
       })
 
-      // 如果返回了下载URL,自动打开下载
+      // 如果返回了下载URL,拼接后端地址后打开下载
       if (result.download_url) {
-        window.open(result.download_url, '_blank')
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const downloadUrl = result.download_url.startsWith('http')
+          ? result.download_url
+          : `${apiBase}${result.download_url}`
+        window.open(downloadUrl, '_blank')
       }
 
       // 3秒后清除成功消息
@@ -94,52 +90,33 @@ export function ReportExportButton() {
   }
 
   const formatLabel = (format: ExportFormat): string => {
-    const labels = {
-      pdf: 'PDF',
-      excel: 'Excel',
-      csv: 'CSV',
-    }
+    const labels = { pdf: 'PDF', excel: 'Excel', csv: 'CSV' }
     return labels[format]
   }
 
   const formatIcon = (format: ExportFormat): string => {
-    const icons = {
-      pdf: '📄',
-      excel: '📊',
-      csv: '📑',
-    }
+    const icons = { pdf: '📄', excel: '📊', csv: '📑' }
     return icons[format]
   }
 
+  const buttonLabel = exportStatus.isExporting
+    ? '导出中...'
+    : exportStatus.lastExport
+      ? exportStatus.lastExport.success
+        ? exportStatus.lastExport.message
+        : exportStatus.lastExport.message
+      : '导出报告'
+
   return (
     <div className="relative" ref={menuRef}>
-      {/* 导出按钮 */}
-      <button
+      <Button
+        variant="outline"
         onClick={() => setIsMenuOpen(!isMenuOpen)}
         disabled={exportStatus.isExporting}
-        className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
-          exportStatus.isExporting
-            ? 'cursor-not-allowed bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-            : exportStatus.lastExport?.success
-            ? 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900 dark:text-green-100 dark:hover:bg-green-800'
-            : exportStatus.lastExport && !exportStatus.lastExport.success
-            ? 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900 dark:text-red-100 dark:hover:bg-red-800'
-            : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700'
-        }`}
-        title="导出监控报告"
       >
-        {exportStatus.isExporting ? (
-          <>⏳ 导出中...</>
-        ) : exportStatus.lastExport ? (
-          exportStatus.lastExport.success ? (
-            <>✅ {exportStatus.lastExport.message}</>
-          ) : (
-            <>❌ {exportStatus.lastExport.message}</>
-          )
-        ) : (
-          <>📥 导出报告</>
-        )}
-      </button>
+        <Download className={`w-4 h-4 mr-2 ${exportStatus.isExporting ? 'animate-pulse' : ''}`} />
+        {buttonLabel}
+      </Button>
 
       {/* 下拉菜单 */}
       {isMenuOpen && !exportStatus.isExporting && (

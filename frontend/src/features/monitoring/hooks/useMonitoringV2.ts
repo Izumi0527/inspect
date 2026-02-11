@@ -14,7 +14,7 @@ import type { MonitoringDataV2 } from '../types'
  *
  * @example
  * ```tsx
- * function MonitoringViewV2() {
+ * function MonitoringView() {
  *   const { data, isLoading, error, refetch } = useMonitoringV2({
  *     timeRange: '24h',
  *     refetchInterval: 60000,
@@ -97,18 +97,3 @@ export function useMonitoringV2(
   })
 }
 
-/**
- * 获取当前数据源类型
- * @returns 'api' (固定返回真实API)
- */
-export function getDataSource(): 'api' {
-  return 'api'
-}
-
-/**
- * 检查是否使用 Mock 数据
- * @returns false (v2版本强制使用真实API)
- */
-export function isUsingMockData(): boolean {
-  return false
-}

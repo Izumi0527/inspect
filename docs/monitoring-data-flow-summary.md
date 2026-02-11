@@ -5,7 +5,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     前端监控页面 (React 19)                      │
-│  MonitoringViewV2.tsx + useMonitoringV2 Hook                    │
+│  MonitoringView.tsx + useMonitoringV2 Hook                      │
 └────────────────────────┬────────────────────────────────────────┘
                          │ HTTP/WebSocket
                          ▼
@@ -23,7 +23,7 @@
 
 ## 1️⃣ 前端数据获取流程
 
-### 1.1 监控页面组件 (MonitoringViewV2.tsx)
+### 1.1 监控页面组件 (MonitoringView.tsx)
 
 **主要职责:**
 - 展示6个统计卡片 (总设备、可用性、活跃告警、平均CPU、平均内存、网络流量)
@@ -237,7 +237,7 @@ avg_value, min_value, max_value
 
 ```
 时间 → 事件
-T0   前端加载 MonitoringViewV2
+T0   前端加载 MonitoringView
      ↓
 T1   useMonitoringV2 Hook 触发
      ↓

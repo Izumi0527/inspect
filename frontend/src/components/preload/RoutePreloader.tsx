@@ -99,7 +99,7 @@ export const RoutePreloadManager: React.FC = () => {
     const coreRoutes = [
       () => import('@/features/dashboard/components/DashboardView'),
       () => import('@/features/devices/components/DeviceManagementView'),
-      () => import('@/features/monitoring/components/MonitoringViewV2'),
+      () => import('@/features/monitoring/components/MonitoringView'),
     ]
 
     const preloadTimer = window.setTimeout(() => {

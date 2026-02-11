@@ -6,13 +6,15 @@ import { useSidebar } from '@/lib/contexts/sidebar-context'
 import { Sidebar } from '@/features/dashboard/components/Sidebar'
 import { DashboardHeader } from '@/features/dashboard'
 import { StatCard } from '@/components/shared'
+import { Button } from '@/components/atoms'
 import {
   Server,
   Activity,
   AlertTriangle,
   Cpu,
   HardDrive,
-  Network
+  Network,
+  RefreshCw,
 } from 'lucide-react'
 import { DeviceStatusCard, AvailabilityCard, RealTimeAlertsCard } from './cards'
 import {
@@ -45,7 +47,7 @@ const monitoringIconColorMap = {
 }
 
 /**
- * 监控中心 v1.1 主视图组件
+ * 监控中心主视图组件
  *
  * 采用现代商务风格设计,包含:
  * - 6个统计卡片
@@ -54,13 +56,13 @@ const monitoringIconColorMap = {
  * - 1个独立网络流量区域
  *
  * @features
- * - 支持 Mock/Real API 数据切换(通过环境变量 NEXT_PUBLIC_USE_MOCK_DATA)
+ * - 自动轮询刷新(2分钟间隔)
  * - 自动轮询刷新(60秒间隔)
  * - 图表懒加载(IntersectionObserver)
  * - 代码分割(React.lazy)
  * - 错误处理与重试
  */
-export function MonitoringViewV2() {
+export function MonitoringView() {
   // ==================== Sidebar 状态 ====================
   const { sidebarOpen, toggleSidebar } = useSidebar()
 
@@ -163,20 +165,17 @@ export function MonitoringViewV2() {
           alertCount={data?.realtimeAlerts?.filter(a => a.severity === 'critical').length ?? 0}
           showSearch={false}
           actions={
-            <>
+            <div className="flex gap-2">
               <ReportExportButton />
-              <button
+              <Button
+                variant="outline"
                 onClick={() => refetch()}
                 disabled={isRefetching}
-                className={`rounded-md px-3 py-1 text-sm font-medium ${
-                  isRefetching
-                    ? 'cursor-not-allowed bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700'
-                }`}
               >
-                {isRefetching ? '⏳ 刷新中...' : '🔄 刷新'}
-              </button>
-            </>
+                <RefreshCw className={`w-4 h-4 mr-2 ${isRefetching ? 'animate-spin' : ''}`} />
+                {isRefetching ? '刷新中...' : '刷新'}
+              </Button>
+            </div>
           }
         />
 

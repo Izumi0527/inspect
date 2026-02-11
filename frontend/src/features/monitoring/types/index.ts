@@ -1,87 +1,3 @@
-// 网络统计指标类型
-export interface NetworkStat {
-  title: string
-  value: string
-  change: string
-  trend: 'up' | 'down'
-  icon: string
-  color: string
-  data: number[]
-}
-
-// 设备状态类型
-export type DeviceHealthStatus = 'healthy' | 'warning' | 'critical'
-
-// 设备监控状态接口
-export interface DeviceMonitoringStatus {
-  name: string
-  status: DeviceHealthStatus
-  cpu: number
-  memory: number
-  uptime: string
-  alerts?: number
-  lastSeen?: string
-}
-
-// 网络流量接口
-export interface NetworkTraffic {
-  inbound: {
-    value: string
-    percentage: number
-    current?: number
-    peak?: number
-    data?: number[]
-  }
-  outbound: {
-    value: string
-    percentage: number
-    current?: number
-    peak?: number
-    data?: number[]
-  }
-  packetLoss: {
-    value: string
-    percentage: number
-  }
-  peakTime?: string
-}
-
-// 告警汇总接口
-export interface AlertSummary {
-  critical: number
-  warning: number
-  info: number
-  recent?: Array<{
-    id: number
-    message: string
-    severity: string
-    time: string
-  }>
-  trends?: {
-    up: number
-    down: number
-    stable: number
-  }
-}
-
-// 监控数据汇总接口
-export interface MonitoringData {
-  networkStats: NetworkStat[]
-  deviceStatus: DeviceMonitoringStatus[]
-  networkTraffic: NetworkTraffic
-  alertSummary: AlertSummary
-  lastUpdate: Date | string
-  totalAlerts?: number
-}
-
-// 监控配置接口
-export interface MonitoringConfig {
-  autoRefresh: boolean
-  refreshInterval: number
-}
-
-// ==================== v1.1 新增类型定义 ====================
-
 // 系统性能历史数据点
 export interface SystemPerformanceDataPoint {
   timestamp: Date | string
@@ -136,22 +52,26 @@ export interface StatCardData {
   value: string | number
   change?: string
   trend?: 'up' | 'down' | 'stable'
-  icon?: string // 已弃用,保留用于兼容性
-  color?: string // 已弃用,保留用于兼容性
+  icon?: string
+  color?: string
 }
 
-// v1.1 监控数据汇总接口(扩展v1)
-export interface MonitoringDataV2 extends MonitoringData {
-  // v2 新增的数据
+// 监控数据汇总接口
+export interface MonitoringDataV2 {
+  // 系统性能历史
   systemPerformance: SystemPerformanceDataPoint[]
+  // 温度历史
   temperatureHistory: TemperatureDataPoint[]
+  // 设备状态分布
   deviceStatusDistribution: DeviceStatusDistribution
+  // 整体可用性
   availability: AvailabilityData
+  // 网络流量历史
   networkTrafficHistory: NetworkTrafficDataPoint[]
-
-  // 扩展的统计卡片数据(6个)
+  // 统计卡片数据(6个)
   statsV2?: StatCardData[]
-
   // 实时告警列表
   realtimeAlerts?: Alert[]
+  // 最后更新时间
+  lastUpdate?: Date | string
 }

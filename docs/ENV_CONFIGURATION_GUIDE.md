@@ -82,7 +82,6 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_WS_URL=ws://localhost:8000
 NEXT_PUBLIC_DISABLE_AUTH_CHECK=false
-NEXT_PUBLIC_USE_MOCK_DATA=false
 ```
 
 ### 生产环境配置
@@ -106,7 +105,6 @@ LOG_FORMAT=json
 NEXT_PUBLIC_API_URL=https://api.yourdomain.com
 NEXT_PUBLIC_WS_URL=wss://api.yourdomain.com
 NEXT_PUBLIC_DISABLE_AUTH_CHECK=false
-NEXT_PUBLIC_USE_MOCK_DATA=false
 ```
 
 ## 配置项说明
@@ -119,7 +117,6 @@ NEXT_PUBLIC_USE_MOCK_DATA=false
 
 #### 开发配置
 - `NEXT_PUBLIC_DISABLE_AUTH_CHECK`: 是否禁用认证检查（仅开发环境）
-- `NEXT_PUBLIC_USE_MOCK_DATA`: 是否使用Mock数据（前端独立开发）
 
 #### 功能开关
 - `NEXT_PUBLIC_DEBUG`: 是否启用调试模式
