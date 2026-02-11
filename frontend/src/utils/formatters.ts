@@ -217,10 +217,13 @@ export function formatBandwidth(bps: number | string | null | undefined): string
   if (bps < 1000) {
     return `${bps.toFixed(1)} bps`
   } else if (bps < 1_000_000) {
-    return `${(bps / 1000).toFixed(1)} Kbps`
+    const val = bps / 1000
+    return `${val < 10 ? val.toFixed(2) : val.toFixed(1)} Kbps`
   } else if (bps < 1_000_000_000) {
-    return `${(bps / 1_000_000).toFixed(1)} Mbps`
+    const val = bps / 1_000_000
+    return `${val < 10 ? val.toFixed(2) : val.toFixed(1)} Mbps`
   } else {
-    return `${(bps / 1_000_000_000).toFixed(1)} Gbps`
+    const val = bps / 1_000_000_000
+    return `${val < 10 ? val.toFixed(2) : val.toFixed(1)} Gbps`
   }
 }

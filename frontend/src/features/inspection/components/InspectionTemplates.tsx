@@ -3,7 +3,7 @@
  * 整合了新的筛选器、模板编辑器、导入导出等功能
  */
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
@@ -88,7 +88,23 @@ export const InspectionTemplates: React.FC = () => {
   // 筛选状态
   const [filters, setFilters] = useState<TemplateFilters>({})
   const [searchText, setSearchText] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+
+  // 搜索防抖（350ms）
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current)
+    }
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(searchText)
+      setPagination(prev => prev.page === 1 ? prev : { ...prev, page: 1 })
+    }, 350)
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    }
+  }, [searchText])
 
   // 分页和排序状态
   const [pagination, setPagination] = useState<Pagination>({
@@ -109,12 +125,24 @@ export const InspectionTemplates: React.FC = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [showOIDTester, setShowOIDTester] = useState(false)
 
+  // 排序字段映射：前端驼峰 → 后端蛇形（数据库列名）
+  const sortFieldMap: Record<SortField, string> = {
+    name: 'name',
+    category: 'category',
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+  }
+
   // 使用新版 hooks
   const { data: templatesData, isLoading, refetch, error } = useInspectionTemplates({
     page: pagination.page,
     pageSize: pagination.page_size,
     category: filters.category || undefined,
     deviceTypes: filters.deviceType ? [filters.deviceType] : undefined,
+    search: debouncedSearch || undefined,
+    vendor: filters.vendor || undefined,
+    sort: sortFieldMap[sortField] || undefined,
+    order: pagination.order || undefined,
   })
 
   const cloneTemplate = useCloneTemplate()
@@ -158,7 +186,6 @@ export const InspectionTemplates: React.FC = () => {
   // 处理搜索
   const handleSearch = useCallback((value: string) => {
     setSearchText(value)
-    setPagination(prev => ({ ...prev, page: 1 }))
   }, [])
 
   // 处理排序

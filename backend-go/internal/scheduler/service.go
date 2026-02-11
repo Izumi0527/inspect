@@ -21,7 +21,9 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
+	"github.com/your-org/inspect-system/backend-go/internal/alerts"
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
+	"github.com/your-org/inspect-system/backend-go/internal/logs"
 	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
@@ -44,6 +46,9 @@ type Service struct {
 	settingsService *settings.Service
 	trafficService  *traffic.Service
 	reportService   *reports.Service
+	alertEvaluator  *alerts.Evaluator
+	trapAlertBridge *alerts.TrapAlertBridge
+	logsService     *logs.Service
 	reportOutputDir string
 	redis         *redis.Client
 	checkInterval time.Duration
@@ -89,6 +94,9 @@ func NewService(
 	trafficService *traffic.Service,
 	reportService *reports.Service,
 	reportOutputDir string,
+	alertEvaluator *alerts.Evaluator,
+	trapAlertBridge *alerts.TrapAlertBridge,
+	logsService *logs.Service,
 ) *Service {
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 	return &Service{
@@ -102,6 +110,9 @@ func NewService(
 		settingsService: settingsService,
 		trafficService:  trafficService,
 		reportService:   reportService,
+		alertEvaluator:  alertEvaluator,
+		trapAlertBridge: trapAlertBridge,
+		logsService:     logsService,
 		reportOutputDir: strings.TrimSpace(reportOutputDir),
 		redis:         redis,
 		checkInterval: defaultCheckInterval,
@@ -589,6 +600,67 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 		metricsCollected = s.collectDeviceMetrics(ctx, devicesList, task.ID, total)
 	}
 
+	// Step 3: Evaluate alert rules against collected metrics
+	alertsCreated := 0
+	alertsResolved := 0
+	if s.alertEvaluator != nil {
+		created, resolved, evalErr := s.alertEvaluator.EvaluateAll(ctx)
+		if evalErr != nil {
+			if s.logger != nil {
+				s.logger.Warn("alert evaluation failed", zap.Error(evalErr))
+			}
+		} else {
+			alertsCreated = created
+			alertsResolved = resolved
+		}
+	}
+
+	// Step 4: Collect alarm logs via SSH (trapbuffer + alarm active) and convert to alerts
+	trapAlertsCreated := 0
+	if s.logsService != nil && s.trapAlertBridge != nil {
+		for _, device := range devicesList {
+			// 只对有 SSH 凭据的设备采集告警日志
+			if device.SshUsername == nil || strings.TrimSpace(*device.SshUsername) == "" {
+				continue
+			}
+			if device.SshPassword == nil || strings.TrimSpace(*device.SshPassword) == "" {
+				continue
+			}
+
+			// 采集 trapbuffer
+			trapCount, trapErr := s.logsService.CollectDeviceLogs(ctx, device.ID, "trap", 200)
+			if trapErr != nil {
+				if s.logger != nil {
+					s.logger.Debug("trap log collection failed",
+						zap.Int("device_id", device.ID), zap.Error(trapErr))
+				}
+			} else if trapCount > 0 {
+				if s.logger != nil {
+					s.logger.Info("trap logs collected",
+						zap.Int("device_id", device.ID), zap.Int("count", trapCount))
+				}
+			}
+
+			// 采集 alarm active
+			alarmCount, alarmErr := s.logsService.CollectDeviceLogs(ctx, device.ID, "alarm", 100)
+			if alarmErr != nil {
+				if s.logger != nil {
+					s.logger.Debug("alarm log collection failed",
+						zap.Int("device_id", device.ID), zap.Error(alarmErr))
+				}
+			} else if alarmCount > 0 {
+				if s.logger != nil {
+					s.logger.Info("alarm logs collected",
+						zap.Int("device_id", device.ID), zap.Int("count", alarmCount))
+				}
+			}
+
+			// 将采集到的 warning/critical 日志转换为告警
+			created := s.convertLogsToAlerts(ctx, device.ID, device.IPAddress)
+			trapAlertsCreated += created
+		}
+	}
+
 	successRate := 0.0
 	if total > 0 {
 		successRate = float64(onlineCount) / float64(total) * 100
@@ -597,12 +669,15 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 	s.updateTaskProgress(ctx, task.ID, 100)
 
 	return map[string]interface{}{
-		"total_devices":     total,
-		"inspected_count":   inspectedCount,
-		"online_count":      onlineCount,
-		"offline_count":     offlineCount,
-		"success_rate":      successRate,
-		"metrics_collected": metricsCollected,
+		"total_devices":       total,
+		"inspected_count":     inspectedCount,
+		"online_count":        onlineCount,
+		"offline_count":       offlineCount,
+		"success_rate":        successRate,
+		"metrics_collected":   metricsCollected,
+		"alerts_created":      alertsCreated + trapAlertsCreated,
+		"alerts_resolved":     alertsResolved,
+		"trap_alerts_created": trapAlertsCreated,
 	}, nil
 }
 
@@ -770,6 +845,46 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 	wg.Wait()
 	return collected
 }
+// convertLogsToAlerts queries recent warning/critical logs for a device and creates alerts
+func (s *Service) convertLogsToAlerts(ctx context.Context, deviceID int, ipAddress string) int {
+	if s.trapAlertBridge == nil || s.db == nil {
+		return 0
+	}
+
+	type logRow struct {
+		Level    string `gorm:"column:level"`
+		Facility string `gorm:"column:facility"`
+		Message  string `gorm:"column:message"`
+		Source   string `gorm:"column:source"`
+	}
+
+	var recentLogs []logRow
+	err := s.db.WithContext(ctx).
+		Table("device_logs").
+		Select("level, facility, message, source").
+		Where("device_id = ? AND level IN ? AND collected_at >= NOW() - INTERVAL '10 minutes'",
+			deviceID, []string{"critical", "error", "warning"}).
+		Order("collected_at DESC").
+		Limit(50).
+		Find(&recentLogs).Error
+	if err != nil || len(recentLogs) == 0 {
+		return 0
+	}
+
+	created := 0
+	for _, log := range recentLogs {
+		alertErr := s.trapAlertBridge.CreateTrapAlert(
+			ctx, deviceID, log.Level, log.Facility, log.Message, "", ipAddress,
+		)
+		if alertErr == nil {
+			created++
+		}
+	}
+
+	return created
+}
+
+
 
 func (s *Service) executeNetworkScan(ctx context.Context, task ScheduledTask) (map[string]interface{}, error) {
 	if s.scanner == nil {
@@ -929,26 +1044,64 @@ func (s *Service) executeDeviceBackup(ctx context.Context, task ScheduledTask) (
 		if strings.TrimSpace(device.IPAddress) == "" {
 			continue
 		}
-		if device.SshUsername == nil || strings.TrimSpace(*device.SshUsername) == "" {
-			continue
+
+		protocol := "ssh"
+		if device.CliProtocol != nil && strings.TrimSpace(*device.CliProtocol) != "" {
+			protocol = strings.ToLower(strings.TrimSpace(*device.CliProtocol))
 		}
-		if device.SshPassword == nil || strings.TrimSpace(*device.SshPassword) == "" {
-			continue
+
+		if protocol == "telnet" {
+			// Telnet 设备需要用户名和密码
+			if device.TelnetUsername == nil || strings.TrimSpace(*device.TelnetUsername) == "" {
+				continue
+			}
+			if device.TelnetPassword == nil || strings.TrimSpace(*device.TelnetPassword) == "" {
+				continue
+			}
+			port := 23
+			if device.TelnetPort != nil && *device.TelnetPort > 0 {
+				port = *device.TelnetPort
+			}
+			enablePwd := ""
+			if device.EnablePassword != nil {
+				enablePwd = *device.EnablePassword
+			}
+			targets = append(targets, deviceBackupTarget{
+				ID:             device.ID,
+				Name:           device.Name,
+				IPAddress:      device.IPAddress,
+				Vendor:         device.Vendor,
+				DeviceType:     device.DeviceType,
+				CliProtocol:    "telnet",
+				TelnetUsername: *device.TelnetUsername,
+				TelnetPassword: *device.TelnetPassword,
+				TelnetPort:     port,
+				EnablePassword: enablePwd,
+			})
+		} else {
+			// SSH 设备（默认）
+			if device.SshUsername == nil || strings.TrimSpace(*device.SshUsername) == "" {
+				continue
+			}
+			if device.SshPassword == nil || strings.TrimSpace(*device.SshPassword) == "" {
+				continue
+			}
+			port := 22
+			if device.SshPort != nil && *device.SshPort > 0 {
+				port = *device.SshPort
+			}
+			targets = append(targets, deviceBackupTarget{
+				ID:          device.ID,
+				Name:        device.Name,
+				IPAddress:   device.IPAddress,
+				Vendor:      device.Vendor,
+				DeviceType:  device.DeviceType,
+				CliProtocol: "ssh",
+				SshUsername: *device.SshUsername,
+				SshPassword: *device.SshPassword,
+				SshPort:     port,
+			})
 		}
-		port := 22
-		if device.SshPort != nil && *device.SshPort > 0 {
-			port = *device.SshPort
-		}
-		targets = append(targets, deviceBackupTarget{
-			ID:          device.ID,
-			Name:        device.Name,
-			IPAddress:   device.IPAddress,
-			Vendor:      device.Vendor,
-			DeviceType:  device.DeviceType,
-			SshUsername: *device.SshUsername,
-			SshPassword: *device.SshPassword,
-			SshPort:     port,
-		})
 	}
 
 	backupRoot := filepath.Join(backupPath, "device_configs")

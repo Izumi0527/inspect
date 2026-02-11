@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { AppLayout } from '@/components/layout'
 import {
@@ -22,7 +22,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Download, CheckCheck, XCircle } from 'lucide-react'
+import { Download, CheckCheck, XCircle, RefreshCw, Bell, BellOff, ArrowUpDown } from 'lucide-react'
+import { exportAlerts } from '../api/alerts.api'
+import { useWebSocketEvent } from '@/lib/websocket'
+import { WebSocketEvents } from '@/lib/websocket'
+
+const AUTO_REFRESH_INTERVAL = 30000 // 30秒
 
 export const AlertsView: React.FC = () => {
   const searchParams = useSearchParams()
@@ -30,64 +35,59 @@ export const AlertsView: React.FC = () => {
   const [pageSize, setPageSize] = useState(10)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterValues>({})
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [exporting, setExporting] = useState(false)
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
+  const [sortBy, setSortBy] = useState<'timestamp' | 'severity' | 'status'>('timestamp')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // 获取过滤器状态
   const { filters, updateFilter } = useAlertFilters()
 
-  // 构建查询参数 - 合并基础过滤器和高级过滤器
   const queryParams = useMemo(() => {
-    const params: any = {
+    const params: Record<string, unknown> = {
       page: currentPage,
-      pageSize
+      pageSize,
+      sortBy,
+      sortOrder
     }
 
-    // 基础过滤器：搜索
     if (filters.searchQuery || advancedFilters.search) {
       params.search = advancedFilters.search || filters.searchQuery
     }
 
-    // 高级过滤器：严重级别（优先使用高级过滤器）
     if (advancedFilters.severity && advancedFilters.severity.length > 0) {
       params.severity = advancedFilters.severity
     } else if (filters.severityFilter && filters.severityFilter !== 'all') {
       params.severity = [filters.severityFilter]
     }
 
-    // 高级过滤器：状态（优先使用高级过滤器）
     if (advancedFilters.status && advancedFilters.status.length > 0) {
       params.status = advancedFilters.status
     } else if (filters.statusFilter && filters.statusFilter !== 'all') {
       params.status = [filters.statusFilter]
     }
 
-    // 高级过滤器：分类
     if (advancedFilters.category && advancedFilters.category.length > 0) {
       params.category = advancedFilters.category
     }
 
-    // 高级过滤器：日期范围
     if (advancedFilters.dateRange) {
-      if (advancedFilters.dateRange.start) {
-        params.startDate = advancedFilters.dateRange.start
-      }
-      if (advancedFilters.dateRange.end) {
-        params.endDate = advancedFilters.dateRange.end
-      }
+      if (advancedFilters.dateRange.start) params.startDate = advancedFilters.dateRange.start
+      if (advancedFilters.dateRange.end) params.endDate = advancedFilters.dateRange.end
     }
 
-    // 高级过滤器：设备ID
     if (advancedFilters.deviceIds && advancedFilters.deviceIds.length > 0) {
       params.deviceIds = advancedFilters.deviceIds
     }
 
     return params
-  }, [currentPage, pageSize, filters, advancedFilters])
+  }, [currentPage, pageSize, filters, advancedFilters, sortBy, sortOrder])
 
-  // 使用自定义hooks
-  const { 
-    alerts, 
-    loading, 
-    error, 
+  const {
+    alerts,
+    loading,
+    error,
     pagination,
     handleAcknowledgeAlert,
     handleResolveAlert,
@@ -95,7 +95,7 @@ export const AlertsView: React.FC = () => {
     loadAlerts
   } = useAlerts(queryParams)
 
-  const { stats, loading: statsLoading } = useAlertStats()
+  const { stats, loading: statsLoading, loadStats } = useAlertStats()
   const {
     selectedAlerts,
     toggleAlert,
@@ -103,81 +103,126 @@ export const AlertsView: React.FC = () => {
     clearSelection,
     handleBulkAction
   } = useAlertSelection()
+
   const selectedAlert = useMemo(
     () => alerts.find(alert => alert.id === selectedAlertId) ?? null,
     [alerts, selectedAlertId]
   )
 
-  // 处理 URL 参数中的告警 ID
+  // URL 参数中的告警 ID
   useEffect(() => {
     const alertId = searchParams.get('id')
-    if (alertId) {
-      // 如果 URL 中有告警 ID，自动打开详情弹窗
-      setSelectedAlertId(alertId)
-    }
+    if (alertId) setSelectedAlertId(alertId)
   }, [searchParams])
 
-  // 处理批量操作
+  // 自动刷新
+  const refreshAll = useCallback(async () => {
+    await Promise.all([loadAlerts(), loadStats()])
+    setLastRefreshed(new Date())
+  }, [loadAlerts, loadStats])
+
+  useEffect(() => {
+    if (autoRefresh) {
+      refreshTimerRef.current = setInterval(refreshAll, AUTO_REFRESH_INTERVAL)
+    }
+    return () => {
+      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current)
+    }
+  }, [autoRefresh, refreshAll])
+
+  // 手动刷新
+  const handleManualRefresh = useCallback(async () => {
+    await refreshAll()
+  }, [refreshAll])
+
+  // WebSocket 实时告警更新
+  useWebSocketEvent(WebSocketEvents.NEW_ALERT, () => {
+    refreshAll()
+  })
+  useWebSocketEvent(WebSocketEvents.ALERT_UPDATE, () => {
+    refreshAll()
+  })
+  useWebSocketEvent(WebSocketEvents.ALERT_RESOLVED, () => {
+    refreshAll()
+  })
+
+  // 导出
+  const handleExport = useCallback(async () => {
+    setExporting(true)
+    try {
+      await exportAlerts(queryParams as any)
+    } catch {
+      // error already logged in exportAlerts
+    } finally {
+      setExporting(false)
+    }
+  }, [queryParams])
+
+  // 批量操作
   const handleBulkActionClick = async (action: AlertAction) => {
     try {
       await handleBulkAction(action)
-      // 重新加载数据
-      await loadAlerts()
+      await refreshAll()
     } catch (error) {
       console.error('批量操作失败:', error)
     }
   }
 
-  // 处理分页
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page)
-  }
-
-  // 处理每页数量变更
+  const handlePageChange = (page: number) => setCurrentPage(page)
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize)
-    // 重置到第一页，避免页码超出范围
     setCurrentPage(1)
   }
 
-  // 处理高级过滤器变更
+  const handleSortChange = (field: 'timestamp' | 'severity' | 'status') => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(field)
+      setSortOrder('desc')
+    }
+    setCurrentPage(1)
+  }
+
   const handleAdvancedFilterChange = (newFilters: AdvancedFilterValues) => {
     setAdvancedFilters(newFilters)
-    // 过滤条件变更时重置到第一页
     setCurrentPage(1)
   }
 
-  // 处理高级过滤器重置
   const handleAdvancedFilterReset = () => {
     setAdvancedFilters({})
-    // 重置时也回到第一页
     setCurrentPage(1)
   }
 
-  // 处理关闭告警详情
-  const handleCloseAlertDetail = () => {
-    setSelectedAlertId(null)
+  const handleCloseAlertDetail = () => setSelectedAlertId(null)
+
+  // 格式化最后刷新时间
+  const formatLastRefreshed = () => {
+    return lastRefreshed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center py-12">
-            <div className="text-red-600 dark:text-red-500 mb-4">加载告警数据时出现错误</div>
-            <p className="text-gray-500 dark:text-gray-400">{error}</p>
-          </div>
+      <AppLayout title="告警中心" alertCount={stats?.active ?? 0}>
+        <div className="text-center py-12">
+          <div className="text-red-600 dark:text-red-500 mb-4">加载告警数据时出现错误</div>
+          <p className="text-gray-500 dark:text-gray-400 mb-4">{error}</p>
+          <Button variant="outline" onClick={handleManualRefresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            重试
+          </Button>
         </div>
-      </div>
+      </AppLayout>
     )
   }
 
   return (
-    <AppLayout title="告警中心">
+    <AppLayout title="告警中心" alertCount={stats?.active ?? 0}>
       <div className="flex flex-col gap-4 h-full">
-        {/* Alert Statistics */}
+        {/* 统计卡片 */}
         {statsLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+            <SkeletonCard lines={2} />
             <SkeletonCard lines={2} />
             <SkeletonCard lines={2} />
             <SkeletonCard lines={2} />
@@ -187,19 +232,64 @@ export const AlertsView: React.FC = () => {
           <AlertStatsGrid stats={stats} />
         ) : null}
 
-        {/* Main Card Container */}
+        {/* 主内容区 */}
         <Card className="flex-1 flex flex-col overflow-hidden">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>告警列表</CardTitle>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <CardTitle>告警列表</CardTitle>
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                  最后刷新: {formatLastRefreshed()}
+                </span>
+              </div>
               <div className="flex items-center gap-2">
-                {/* 导出按钮 */}
-                <Button variant="outline" size="sm">
-                  <Download className="h-4 w-4 mr-2" />
-                  导出告警
+                {/* 自动刷新开关 */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAutoRefresh(!autoRefresh)}
+                  title={autoRefresh ? '关闭自动刷新' : '开启自动刷新'}
+                >
+                  {autoRefresh ? (
+                    <Bell className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <BellOff className="h-4 w-4 text-gray-400" />
+                  )}
                 </Button>
 
-                {/* 批量操作下拉菜单 */}
+                {/* 手动刷新 */}
+                <Button variant="ghost" size="sm" onClick={handleManualRefresh} disabled={loading}>
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </Button>
+
+                {/* 导出 */}
+                <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+                  <Download className="h-4 w-4 mr-2" />
+                  {exporting ? '导出中...' : '导出'}
+                </Button>
+
+                {/* 排序 */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <ArrowUpDown className="h-4 w-4 mr-2" />
+                      排序
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleSortChange('timestamp')}>
+                      按时间 {sortBy === 'timestamp' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSortChange('severity')}>
+                      按严重级别 {sortBy === 'severity' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSortChange('status')}>
+                      按状态 {sortBy === 'status' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* 批量操作 */}
                 {selectedAlerts.length > 0 && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -230,8 +320,7 @@ export const AlertsView: React.FC = () => {
             </div>
           </CardHeader>
 
-          <CardContent className="flex flex-col overflow-hidden">
-            {/* Filters and Search - 不使用独立Card */}
+          <CardContent className="flex flex-col overflow-hidden pt-0">
             <AlertFiltersBar
               filters={filters}
               onFilterChange={updateFilter}
@@ -240,17 +329,15 @@ export const AlertsView: React.FC = () => {
               renderAsCard={false}
             />
 
-            {/* Advanced Filters - 不使用独立Card */}
             <AdvancedFilters
               onFilterChange={handleAdvancedFilterChange}
               onReset={handleAdvancedFilterReset}
               renderAsCard={false}
             />
 
-            {/* Alerts List - 不使用独立Card */}
-            <div className="overflow-y-auto">
+            <div className="overflow-y-auto flex-1">
               {loading ? (
-                <SkeletonList count={pageSize} itemHeight="h-32" spacing="space-y-4" />
+                <SkeletonList count={pageSize} itemHeight="h-24" spacing="space-y-3" />
               ) : (
                 <AlertList
                   alerts={alerts}
@@ -276,12 +363,14 @@ export const AlertsView: React.FC = () => {
         </Card>
       </div>
 
-      {/* 告警详情弹窗 */}
       {selectedAlertId && (
         <AlertDetailModal
           open={!!selectedAlertId}
           alert={selectedAlert}
           onClose={handleCloseAlertDetail}
+          onAcknowledge={handleAcknowledgeAlert}
+          onResolve={handleResolveAlert}
+          onDelete={handleDeleteAlert}
         />
       )}
     </AppLayout>

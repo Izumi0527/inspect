@@ -680,18 +680,31 @@ func (s *Service) List(ctx context.Context, filters TemplateFilters, pagination 
 		pagination.Order = "desc"
 	}
 
+	// 白名单验证排序字段，防止 SQL 注入
+	allowedSortFields := map[string]bool{
+		"name": true, "category": true, "created_at": true, "updated_at": true,
+		"is_default": true, "is_active": true,
+	}
+	if !allowedSortFields[pagination.Sort] {
+		pagination.Sort = "created_at"
+	}
+	if pagination.Order != "asc" && pagination.Order != "desc" {
+		pagination.Order = "desc"
+	}
+
 	// Build query
 	query := s.db.WithContext(ctx).Model(&Template{})
 
 	// Apply filters
 	if filters.Vendor != "" {
-		// Filter by vendor in device_types.vendors array
-		query = query.Where("device_types->'vendors' @> ?", fmt.Sprintf(`["%s"]`, filters.Vendor))
+		// Vendor 搜索：在 name 或 description 中匹配厂商关键词
+		vendorPattern := "%" + filters.Vendor + "%"
+		query = query.Where("name ILIKE ? OR description ILIKE ?", vendorPattern, vendorPattern)
 	}
 
 	if filters.DeviceType != "" {
-		// Filter by device type in device_types.device_types array
-		query = query.Where("device_types->'device_types' @> ?", fmt.Sprintf(`["%s"]`, filters.DeviceType))
+		// device_types 列直接存储 ["router","switch"] 格式的 JSON 数组
+		query = query.Where("device_types @> ?", fmt.Sprintf(`["%s"]`, filters.DeviceType))
 	}
 
 	if filters.Category != "" {
@@ -801,14 +814,21 @@ func (s *Service) Update(ctx context.Context, id int, template *Template) error 
 
 	// Update timestamp
 	now := time.Now().UTC()
-	template.UpdatedAt = &now
-	template.ID = id
 
-	// Preserve created_at
-	template.CreatedAt = existing.CreatedAt
+	// 使用 map 更新以确保零值布尔字段（IsDefault=false, IsActive=false）也能被正确更新
+	// GORM 的 Updates(struct) 会跳过零值字段
+	updates := map[string]interface{}{
+		"name":         template.Name,
+		"description":  template.Description,
+		"category":     template.Category,
+		"device_types": template.DeviceTypes,
+		"check_items":  template.CheckItems,
+		"is_default":   template.IsDefault,
+		"is_active":    template.IsActive,
+		"updated_at":   &now,
+	}
 
-	// Update template
-	if err := s.db.WithContext(ctx).Model(&Template{}).Where("id = ?", id).Updates(template).Error; err != nil {
+	if err := s.db.WithContext(ctx).Model(&Template{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return fmt.Errorf("failed to update template: %w", err)
 	}
 

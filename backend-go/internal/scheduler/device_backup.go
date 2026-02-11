@@ -16,14 +16,19 @@ import (
 )
 
 type deviceBackupTarget struct {
-	ID          int
-	Name        string
-	IPAddress   string
-	Vendor      string
-	DeviceType  string
-	SshUsername string
-	SshPassword string
-	SshPort     int
+	ID             int
+	Name           string
+	IPAddress      string
+	Vendor         string
+	DeviceType     string
+	CliProtocol    string
+	SshUsername    string
+	SshPassword    string
+	SshPort        int
+	TelnetUsername string
+	TelnetPassword string
+	TelnetPort     int
+	EnablePassword string
 }
 
 type deviceBackupItem struct {
@@ -158,7 +163,13 @@ func (s *Service) backupSingleDevice(
 		return item, 0, err
 	}
 
-	output, err := executeSSHCommand(ctx, target, command, timeout)
+	var output string
+	var err error
+	if strings.EqualFold(target.CliProtocol, "telnet") {
+		output, err = executeTelnetCommand(ctx, target, command, timeout)
+	} else {
+		output, err = executeSSHCommand(ctx, target, command, timeout)
+	}
 	if err != nil {
 		item.Status = "failed"
 		item.ErrorMessage = err.Error()
@@ -259,6 +270,236 @@ func executeSSHCommand(ctx context.Context, target deviceBackupTarget, command s
 		return string(output), nil
 	}
 }
+
+func executeTelnetCommand(ctx context.Context, target deviceBackupTarget, command string, timeout time.Duration) (string, error) {
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	address := fmt.Sprintf("%s:%d", target.IPAddress, target.TelnetPort)
+	dialer := net.Dialer{Timeout: timeout}
+	conn, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return "", fmt.Errorf("telnet dial failed: %w", err)
+	}
+	defer conn.Close()
+
+	type result struct {
+		output string
+		err    error
+	}
+	done := make(chan result, 1)
+
+	go func() {
+		out, e := telnetSession(conn, target, command, timeout)
+		done <- result{out, e}
+	}()
+
+	select {
+	case <-ctx.Done():
+		_ = conn.Close()
+		return "", ctx.Err()
+	case r := <-done:
+		return r.output, r.err
+	}
+}
+
+// telnetSession 处理 Telnet 交互式会话：登录、进入特权模式、执行命令、收集输出
+func telnetSession(conn net.Conn, target deviceBackupTarget, command string, timeout time.Duration) (string, error) {
+	readTimeout := 5 * time.Second
+	if timeout < readTimeout {
+		readTimeout = timeout
+	}
+
+	buf := make([]byte, 4096)
+
+	// readUntil 读取直到遇到指定的提示符之一
+	readUntil := func(prompts ...string) (string, string, error) {
+		var accumulated strings.Builder
+		deadline := time.Now().Add(timeout)
+		for {
+			_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
+			n, err := conn.Read(buf)
+			if n > 0 {
+				chunk := telnetStripIAC(buf[:n])
+				accumulated.Write(chunk)
+				current := accumulated.String()
+				for _, prompt := range prompts {
+					if strings.Contains(strings.ToLower(current), strings.ToLower(prompt)) {
+						return current, prompt, nil
+					}
+				}
+			}
+			if err != nil {
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					if time.Now().After(deadline) {
+						return accumulated.String(), "", fmt.Errorf("telnet read timeout waiting for prompt")
+					}
+					continue
+				}
+				return accumulated.String(), "", fmt.Errorf("telnet read error: %w", err)
+			}
+		}
+	}
+
+	writeLine := func(text string) error {
+		_, err := conn.Write([]byte(text + "\r\n"))
+		return err
+	}
+
+	// 等待登录提示
+	_, matchedPrompt, err := readUntil("username:", "login:", "password:")
+	if err != nil {
+		return "", fmt.Errorf("telnet: waiting for login prompt failed: %w", err)
+	}
+
+	// 如果先出现用户名提示，发送用户名后等待密码提示
+	if strings.Contains(strings.ToLower(matchedPrompt), "username") || strings.Contains(strings.ToLower(matchedPrompt), "login") {
+		if err := writeLine(target.TelnetUsername); err != nil {
+			return "", fmt.Errorf("telnet: send username failed: %w", err)
+		}
+		_, _, err = readUntil("password:")
+		if err != nil {
+			return "", fmt.Errorf("telnet: waiting for password prompt failed: %w", err)
+		}
+	}
+
+	// 发送密码
+	if err := writeLine(target.TelnetPassword); err != nil {
+		return "", fmt.Errorf("telnet: send password failed: %w", err)
+	}
+
+	// 等待命令提示符（> 或 #）
+	loginOutput, _, err := readUntil(">", "#", "denied", "failed", "invalid")
+	if err != nil {
+		return "", fmt.Errorf("telnet: login failed: %w", err)
+	}
+	loginLower := strings.ToLower(loginOutput)
+	if strings.Contains(loginLower, "denied") || strings.Contains(loginLower, "failed") || strings.Contains(loginLower, "invalid") {
+		return "", fmt.Errorf("telnet: authentication failed")
+	}
+
+	// 如果当前在用户模式（>），尝试进入特权模式
+	if strings.HasSuffix(strings.TrimSpace(loginOutput), ">") {
+		if err := writeLine("enable"); err != nil {
+			return "", fmt.Errorf("telnet: send enable failed: %w", err)
+		}
+		enableOutput, _, err := readUntil("#", "password:")
+		if err != nil {
+			return "", fmt.Errorf("telnet: enable mode failed: %w", err)
+		}
+		if strings.Contains(strings.ToLower(enableOutput), "password") {
+			enablePwd := target.EnablePassword
+			if strings.TrimSpace(enablePwd) == "" {
+				enablePwd = target.TelnetPassword
+			}
+			if err := writeLine(enablePwd); err != nil {
+				return "", fmt.Errorf("telnet: send enable password failed: %w", err)
+			}
+			_, _, err = readUntil("#")
+			if err != nil {
+				return "", fmt.Errorf("telnet: enter privileged mode failed: %w", err)
+			}
+		}
+	}
+
+	// 禁用分页（适配主流厂商）
+	noPagerCommands := []string{
+		"terminal length 0",          // Cisco
+		"screen-length 0 temporary",  // Huawei
+		"set cli screen-length 0",    // Juniper
+	}
+	for _, cmd := range noPagerCommands {
+		_ = writeLine(cmd)
+		time.Sleep(300 * time.Millisecond)
+	}
+	// 清空缓冲区
+	_ = conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+	for {
+		n, err := conn.Read(buf)
+		if n == 0 || err != nil {
+			break
+		}
+	}
+
+	// 执行目标命令
+	if err := writeLine(command); err != nil {
+		return "", fmt.Errorf("telnet: send command failed: %w", err)
+	}
+
+	// 收集命令输出直到出现提示符
+	output, _, err := readUntil("#", ">")
+	if err != nil {
+		// 即使超时也返回已收集的输出
+		if strings.TrimSpace(output) != "" {
+			return telnetCleanOutput(output, command), nil
+		}
+		return "", fmt.Errorf("telnet: command execution failed: %w", err)
+	}
+
+	return telnetCleanOutput(output, command), nil
+}
+
+// telnetStripIAC 去除 Telnet IAC 协议控制序列
+func telnetStripIAC(data []byte) []byte {
+	result := make([]byte, 0, len(data))
+	i := 0
+	for i < len(data) {
+		if data[i] == 0xFF && i+1 < len(data) {
+			cmd := data[i+1]
+			switch cmd {
+			case 0xFB, 0xFC, 0xFD, 0xFE: // WILL, WONT, DO, DONT
+				if i+2 < len(data) {
+					i += 3
+				} else {
+					i += 2
+				}
+			case 0xFA: // SB (subnegotiation)
+				j := i + 2
+				for j < len(data)-1 {
+					if data[j] == 0xFF && data[j+1] == 0xF0 {
+						j += 2
+						break
+					}
+					j++
+				}
+				i = j
+			default:
+				i += 2
+			}
+		} else {
+			result = append(result, data[i])
+			i++
+		}
+	}
+	return result
+}
+
+// telnetCleanOutput 清理命令输出：去除命令回显和尾部提示符
+func telnetCleanOutput(raw string, command string) string {
+	lines := strings.Split(raw, "\n")
+	var cleaned []string
+	commandSent := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// 跳过命令回显行
+		if !commandSent && strings.Contains(trimmed, strings.TrimSpace(command)) {
+			commandSent = true
+			continue
+		}
+		// 跳过尾部提示符行
+		if commandSent && (strings.HasSuffix(trimmed, "#") || strings.HasSuffix(trimmed, ">")) && len(trimmed) < 80 {
+			// 可能是提示符行，检查是否是最后几行
+			continue
+		}
+		cleaned = append(cleaned, line)
+	}
+	return strings.TrimSpace(strings.Join(cleaned, "\n"))
+}
+
 
 func writeDeviceBackupManifest(dir string, manifest deviceBackupManifest) (string, error) {
 	path := filepath.Join(dir, "manifest.json")

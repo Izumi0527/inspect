@@ -30,6 +30,7 @@ const getCliConfiguration = (device: Device) => {
   const tags = (device.tags ?? {}) as Record<string, any>
   const cliConfig = tags.cli_config ?? {}
 
+  // 优先使用后端顶层字段，其次从 tags 中读取
   const protocol = device.cli_protocol || (cliConfig.cli_protocol as string) || 'none'
   const telnetConfig = device.telnet_config || (cliConfig.telnet_config as Record<string, any>)
   const sshConfig = device.ssh_config || (cliConfig.ssh_config as Record<string, any>)
@@ -51,13 +52,16 @@ const getCliConfiguration = (device: Device) => {
   }
 
   if (protocol === 'telnet') {
+    const username = telnetConfig?.username || '未配置'
     const port = telnetConfig?.port ?? 23
+    const password = telnetConfig?.password ? '******' : '未配置'
+    const enable = telnetConfig?.enable_password ? '******' : '未配置'
     return {
       protocolLabel,
-      username: telnetConfig?.username || '未配置',
+      username,
       port,
-      password: telnetConfig?.password ? '******' : '未配置',
-      enable: telnetConfig?.enable_password ? '******' : '未配置'
+      password,
+      enable
     }
   }
 

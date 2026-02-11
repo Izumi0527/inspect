@@ -18,6 +18,7 @@ import { SimpleModal, Badge, Button } from '@/components/atoms'
 import { cn } from '@/utils/cn'
 import { Alert, AlertSeverity, AlertStatus } from '../types'
 import { useAlertStyles } from '../hooks/useAlerts'
+import { addAlertComment } from '../api/alerts.api'
 
 interface AlertDetailModalProps {
   open: boolean
@@ -38,6 +39,9 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'details' | 'timeline' | 'comments'>('details')
   const [comment, setComment] = useState('')
+  const [submittingComment, setSubmittingComment] = useState(false)
+  const [commentError, setCommentError] = useState<string | null>(null)
+  const [commentSuccess, setCommentSuccess] = useState(false)
   const { getSeverityColor, getStatusColor } = useAlertStyles()
 
   if (!alert) return null
@@ -92,6 +96,23 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
     if (onDelete && confirm('确定要删除此告警吗？')) {
       onDelete(alert.id)
       onClose()
+    }
+  }
+
+  const handleSubmitComment = async () => {
+    if (!comment.trim()) return
+    setSubmittingComment(true)
+    setCommentError(null)
+    setCommentSuccess(false)
+    try {
+      await addAlertComment(alert.id, comment.trim())
+      setComment('')
+      setCommentSuccess(true)
+      setTimeout(() => setCommentSuccess(false), 3000)
+    } catch {
+      setCommentError('备注提交失败，请重试')
+    } finally {
+      setSubmittingComment(false)
     }
   }
 
@@ -327,19 +348,19 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
                   rows={4}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 />
-                <div className="flex justify-end mt-3">
+                <div className="flex justify-end mt-3 items-center gap-3">
+                  {commentError && (
+                    <span className="text-sm text-red-600">{commentError}</span>
+                  )}
+                  {commentSuccess && (
+                    <span className="text-sm text-green-600">备注已提交</span>
+                  )}
                   <Button
                     size="sm"
-                    disabled={!comment.trim()}
-                    onClick={() => {
-                      if (comment.trim()) {
-                        // TODO: 实现备注提交逻辑
-                        console.log('提交备注:', comment)
-                        setComment('')
-                      }
-                    }}
+                    disabled={!comment.trim() || submittingComment}
+                    onClick={handleSubmitComment}
                   >
-                    提交备注
+                    {submittingComment ? '提交中...' : '提交备注'}
                   </Button>
                 </div>
               </div>

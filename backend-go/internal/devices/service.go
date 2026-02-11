@@ -12,11 +12,13 @@ import (
 )
 
 const (
-	defaultSnmpCommunity = "public"
-	defaultSnmpVersion   = "2c"
-	defaultSnmpPort      = 161
-	defaultSshPort       = 22
-	defaultStatus        = "unknown"
+	defaultSnmpCommunity   = "public"
+	defaultSnmpVersion     = "2c"
+	defaultSnmpPort        = 161
+	defaultSshPort         = 22
+	defaultTelnetPort      = 23
+	defaultCliProtocol     = "none"
+	defaultStatus          = "unknown"
 	defaultMonitorInterval = 300
 )
 
@@ -166,6 +168,18 @@ func (s *Service) CreateDevice(ctx context.Context, req DeviceCreateRequest, cre
 		sshPort = &value
 	}
 
+	telnetPort := req.TelnetPort
+	if telnetPort == nil || *telnetPort <= 0 {
+		value := defaultTelnetPort
+		telnetPort = &value
+	}
+
+	cliProtocol := req.CliProtocol
+	if cliProtocol == nil || strings.TrimSpace(*cliProtocol) == "" {
+		value := defaultCliProtocol
+		cliProtocol = &value
+	}
+
 	tags, err := encodeTags(req.Tags)
 	if err != nil {
 		return nil, err
@@ -182,9 +196,14 @@ func (s *Service) CreateDevice(ctx context.Context, req DeviceCreateRequest, cre
 		SnmpCommunity:   snmpCommunity,
 		SnmpVersion:     &snmpVersion,
 		SnmpPort:        snmpPort,
+		CliProtocol:     cliProtocol,
 		SshUsername:     req.SshUsername,
 		SshPassword:     req.SshPassword,
 		SshPort:         sshPort,
+		TelnetUsername:  req.TelnetUsername,
+		TelnetPassword:  req.TelnetPassword,
+		TelnetPort:      telnetPort,
+		EnablePassword:  req.EnablePassword,
 		Status:          defaultStatus,
 		IsActive:        true,
 		IsMonitored:     true,
@@ -383,6 +402,24 @@ func (s *Service) GetDeviceStatistics(ctx context.Context) (DeviceStatistics, er
 		return DeviceStatistics{}, err
 	}
 
+	var warning int64
+	if err := s.db.WithContext(ctx).
+		Table("devices").
+		Where("status = ?", "warning").
+		Count(&warning).Error; err != nil {
+		return DeviceStatistics{}, err
+	}
+
+	// 统计总告警数
+	var totalAlerts int64
+	if err := s.db.WithContext(ctx).
+		Table("devices").
+		Select("COALESCE(SUM(alert_count), 0)").
+		Scan(&totalAlerts).Error; err != nil {
+		// 告警统计失败不影响其他数据
+		totalAlerts = 0
+	}
+
 	type typeRow struct {
 		DeviceType string `gorm:"column:device_type"`
 		Count      int    `gorm:"column:count"`
@@ -404,7 +441,7 @@ func (s *Service) GetDeviceStatistics(ctx context.Context) (DeviceStatistics, er
 		typeDistribution[row.DeviceType] = row.Count
 	}
 
-	unknown := int(total - online - offline)
+	unknown := int(total - online - offline - warning)
 	if unknown < 0 {
 		unknown = 0
 	}
@@ -413,7 +450,9 @@ func (s *Service) GetDeviceStatistics(ctx context.Context) (DeviceStatistics, er
 		TotalDevices:     int(total),
 		OnlineDevices:    int(online),
 		OfflineDevices:   int(offline),
+		WarningDevices:   int(warning),
 		UnknownDevices:   unknown,
+		TotalAlerts:      int(totalAlerts),
 		TypeDistribution: typeDistribution,
 	}, nil
 }
@@ -587,8 +626,12 @@ func buildDeviceResponse(device Device, alertCount *int) DeviceResponse {
 		SnmpCommunity: device.SnmpCommunity,
 		SnmpVersion:   device.SnmpVersion,
 		SnmpPort:      device.SnmpPort,
+		CliProtocol:   device.CliProtocol,
 		SshUsername:   device.SshUsername,
 		SshPort:       device.SshPort,
+		TelnetUsername: device.TelnetUsername,
+		TelnetPort:    device.TelnetPort,
+		EnablePassword: device.EnablePassword,
 		Tags:          decodeTags(device.Tags),
 		Description:   device.Description,
 		IcmpStatus:    device.IcmpStatus,

@@ -13,9 +13,14 @@ type DeviceCreateRequest struct {
 	SnmpCommunity *string     `json:"snmp_community,omitempty"`
 	SnmpVersion   *string     `json:"snmp_version,omitempty"`
 	SnmpPort      *int        `json:"snmp_port,omitempty"`
-	SshUsername   *string     `json:"ssh_username,omitempty"`
-	SshPassword   *string     `json:"ssh_password,omitempty"`
-	SshPort       *int        `json:"ssh_port,omitempty"`
+	CliProtocol    *string     `json:"cli_protocol,omitempty"`
+	SshUsername    *string     `json:"ssh_username,omitempty"`
+	SshPassword    *string     `json:"ssh_password,omitempty"`
+	SshPort        *int        `json:"ssh_port,omitempty"`
+	TelnetUsername *string     `json:"telnet_username,omitempty"`
+	TelnetPassword *string     `json:"telnet_password,omitempty"`
+	TelnetPort     *int        `json:"telnet_port,omitempty"`
+	EnablePassword *string     `json:"enable_password,omitempty"`
 	Description   *string     `json:"description,omitempty"`
 	Tags          interface{} `json:"tags,omitempty"`
 }
@@ -36,8 +41,12 @@ type DeviceResponse struct {
 	SnmpCommunity *string     `json:"snmp_community,omitempty"`
 	SnmpVersion   *string     `json:"snmp_version,omitempty"`
 	SnmpPort      *int        `json:"snmp_port,omitempty"`
-	SshUsername   *string     `json:"ssh_username,omitempty"`
-	SshPort       *int        `json:"ssh_port,omitempty"`
+	CliProtocol    *string     `json:"cli_protocol,omitempty"`
+	SshUsername    *string     `json:"ssh_username,omitempty"`
+	SshPort        *int        `json:"ssh_port,omitempty"`
+	TelnetUsername *string     `json:"telnet_username,omitempty"`
+	TelnetPort     *int        `json:"telnet_port,omitempty"`
+	EnablePassword *string     `json:"enable_password,omitempty"`
 	Tags          interface{} `json:"tags,omitempty"`
 	Description   *string     `json:"description,omitempty"`
 	IcmpStatus    *string     `json:"icmp_status,omitempty"`
@@ -126,7 +135,9 @@ type DeviceStatistics struct {
 	TotalDevices     int            `json:"total_devices"`
 	OnlineDevices    int            `json:"online_devices"`
 	OfflineDevices   int            `json:"offline_devices"`
+	WarningDevices   int            `json:"warning_devices"`
 	UnknownDevices   int            `json:"unknown_devices"`
+	TotalAlerts      int            `json:"total_alerts"`
 	TypeDistribution map[string]int `json:"type_distribution"`
 }
 

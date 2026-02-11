@@ -15,12 +15,16 @@ import { ApiResponse } from '@/lib/types/api-response.types'
 interface DeviceDto {
   id: number
   name: string
-  ip_address: string  // 修复：使用后端的ip_address字段
+  ip_address: string
   device_type: string
+  vendor?: string
+  model?: string
+  group_id?: number | null
   status?: string
+  is_active?: boolean
   location?: string
   last_seen?: string
-  uptime?: string
+  uptime?: number | string
   cpu_usage?: number
   memory_usage?: number
   network_traffic?: number
@@ -28,9 +32,19 @@ interface DeviceDto {
   description?: string
   snmp_community?: string
   snmp_version?: string
+  snmp_port?: number | null
+  cli_protocol?: string
   ssh_username?: string
   ssh_password?: string
   ssh_port?: number | null
+  telnet_username?: string
+  telnet_port?: number | null
+  enable_password?: string
+  icmp_status?: string | null
+  snmp_status?: string | null
+  response_time?: number | null
+  last_probe_time?: string | null
+  temperature?: number | null
   tags?: Record<string, unknown> | string | null
   created_at?: string
   updated_at?: string
@@ -77,9 +91,14 @@ interface DeviceCreateRequestDto {
   group_id?: number
   snmp_community?: string
   snmp_version?: string
+  cli_protocol?: string
   ssh_username?: string
   ssh_password?: string
   ssh_port?: number
+  telnet_username?: string
+  telnet_password?: string
+  telnet_port?: number
+  enable_password?: string
   description?: string
   tags?: Record<string, unknown> | string | null
 }
@@ -247,6 +266,27 @@ const mapDevice = (dto: DeviceDto): Device => {
   const cliConfig = parsedTags?.cli_config as Record<string, unknown> | undefined
   const snmpConfigFromTags = parsedTags?.snmp_config as Device['snmp_config']
 
+  // cli_protocol: 优先使用后端顶层字段，其次从 tags 中读取
+  const cliProtocol = (dto.cli_protocol || cliConfig?.cli_protocol as string || 'none') as Device['cli_protocol']
+
+  // ssh_config: 从后端字段或 tags 中构建
+  const sshConfig: Device['ssh_config'] = (cliConfig?.ssh_config as Device['ssh_config']) || {
+    username: dto.ssh_username || '',
+    password: dto.ssh_password || '',
+    port: dto.ssh_port || 22,
+  }
+
+  // telnet_config: 优先从后端顶层字段构建，其次从 tags 中读取
+  const telnetConfigFromTags = cliConfig?.telnet_config as Device['telnet_config']
+  const telnetConfig: Device['telnet_config'] = (dto.telnet_username || telnetConfigFromTags?.username)
+    ? {
+        username: dto.telnet_username || telnetConfigFromTags?.username || '',
+        password: telnetConfigFromTags?.password || '',
+        port: dto.telnet_port || telnetConfigFromTags?.port || 23,
+        enable_password: dto.enable_password || telnetConfigFromTags?.enable_password || '',
+      }
+    : telnetConfigFromTags
+
   return {
     id: dto.id,
     name: dto.name,
@@ -255,21 +295,26 @@ const mapDevice = (dto: DeviceDto): Device => {
     status: (dto.status as Device['status']) ?? 'unknown',
     location: dto.location ?? '',
     last_seen: dto.last_seen ?? '',
-    uptime: dto.uptime ?? '',
+    uptime: dto.uptime != null ? String(dto.uptime) : '',
     cpu_usage: dto.cpu_usage ?? 0,
     memory_usage: dto.memory_usage ?? 0,
     network_traffic: dto.network_traffic ?? 0,
     alert_count: dto.alert_count ?? 0,
     description: dto.description ?? '',
+    vendor: dto.vendor ?? '',
     snmp_community: dto.snmp_community ?? snmpConfigFromTags?.v2c_config?.community ?? '',
     snmp_version: dto.snmp_version ?? snmpConfigFromTags?.version,
     ssh_username: dto.ssh_username ?? '',
     ssh_password: dto.ssh_password ?? '',
     ssh_port: dto.ssh_port,
+    icmp_status: (dto.icmp_status as Device['icmp_status']) ?? null,
+    snmp_status: (dto.snmp_status as Device['snmp_status']) ?? null,
+    response_time: dto.response_time ?? null,
+    last_probe_time: dto.last_probe_time ?? null,
     snmp_config: snmpConfigFromTags,
-    ssh_config: cliConfig?.ssh_config as Device['ssh_config'],
-    telnet_config: cliConfig?.telnet_config as Device['telnet_config'],
-    cli_protocol: cliConfig?.cli_protocol as Device['cli_protocol'],
+    ssh_config: sshConfig,
+    telnet_config: telnetConfig,
+    cli_protocol: cliProtocol,
     tags: parsedTags,
     created_at: dto.created_at,
     updated_at: dto.updated_at,
@@ -309,10 +354,39 @@ const buildQueryString = (filters?: DeviceFilters) => {
   return query ? `?${query}` : ''
 }
 
-export async function fetchDevices(filters?: DeviceFilters): Promise<Device[]> {
+export interface FetchDevicesResult {
+  devices: Device[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export async function fetchDevices(filters?: DeviceFilters): Promise<FetchDevicesResult> {
   try {
     const payload = await api.get<unknown>(`/devices${buildQueryString(filters)}`)
-    return extractDevices(payload).map(mapDevice)
+
+    // 格式1: 分页响应 {devices: [...], total: N, page: N, page_size: N}
+    if (isObject(payload) && 'total' in payload) {
+      const obj = payload as Record<string, unknown>
+      const dtos = Array.isArray(obj.devices)
+        ? (obj.devices as unknown[]).filter(isDeviceDto)
+        : []
+      return {
+        devices: dtos.map(mapDevice),
+        total: typeof obj.total === 'number' ? obj.total : dtos.length,
+        page: typeof obj.page === 'number' ? obj.page : 1,
+        pageSize: typeof obj.page_size === 'number' ? obj.page_size : dtos.length,
+      }
+    }
+
+    // 格式2: 兼容旧格式（纯数组）
+    const dtos = extractDevices(payload)
+    return {
+      devices: dtos.map(mapDevice),
+      total: dtos.length,
+      page: 1,
+      pageSize: dtos.length,
+    }
   } catch (error) {
     console.error('获取设备列表失败:', error)
     throw error

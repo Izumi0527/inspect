@@ -280,3 +280,55 @@ const appendLimit = (endpoint: string, limit: number) => {
   const search = new URLSearchParams({ limit: limit.toString() })
   return `${endpoint}?${search.toString()}`
 }
+
+export async function addAlertComment(id: string, comment: string): Promise<boolean> {
+  try {
+    const result = await api.post<{ success: boolean }>(`/alerts/${id}/comment`, {
+      comment,
+    })
+    return result.success ?? true
+  } catch (error) {
+    console.error('添加备注失败:', error)
+    throw error
+  }
+}
+
+export async function exportAlerts(params?: AlertQueryParams): Promise<void> {
+  const query = params ? buildQueryParams(params) : undefined
+  const searchParams = new URLSearchParams()
+  if (query) {
+    Object.entries(query).forEach(([key, value]) => {
+      if (value === undefined || value === null) return
+      if (Array.isArray(value)) {
+        value.forEach(item => searchParams.append(key, String(item)))
+      } else {
+        searchParams.append(key, String(value))
+      }
+    })
+  }
+
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  const url = `${baseUrl}/api/v1/alerts/export${searchParams.toString() ? '?' + searchParams.toString() : ''}`
+
+  try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''
+    const response = await fetch(url, {
+      headers: { Authorization: token ? `Bearer ${token}` : '' },
+    })
+
+    if (!response.ok) throw new Error('导出失败')
+
+    const blob = await response.blob()
+    const downloadUrl = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = downloadUrl
+    a.download = `alerts_export_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(downloadUrl)
+  } catch (error) {
+    console.error('导出告警失败:', error)
+    throw error
+  }
+}

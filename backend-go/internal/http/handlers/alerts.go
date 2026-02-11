@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,8 +30,10 @@ func (h AlertsHandler) Register(group *echo.Group) {
 	group.POST("/alerts/:alert_id/acknowledge", h.AcknowledgeAlert)
 	group.POST("/alerts/:alert_id/resolve", h.ResolveAlert)
 	group.POST("/alerts/:alert_id/reactivate", h.ReactivateAlert)
+	group.POST("/alerts/:alert_id/comment", h.AddComment)
 	group.DELETE("/alerts/:alert_id", h.DeleteAlert)
 	group.POST("/alerts/bulk", h.BulkAlertAction)
+	group.GET("/alerts/export", h.ExportAlerts)
 
 	group.GET("/alerts/rules", h.ListRules)
 	group.GET("/alerts/rules/:rule_id", h.GetRule)
@@ -360,6 +363,89 @@ func (h AlertsHandler) DeleteAlert(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
 	})
+}
+
+func (h AlertsHandler) AddComment(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "alert service not configured")
+	}
+	user, err := requirePermission(c, h.Auth, "alerts:update")
+	if err != nil {
+		return err
+	}
+
+	alertID, err := parseIDParam(c, "alert_id")
+	if err != nil {
+		return err
+	}
+
+	payload := map[string]interface{}{}
+	_ = c.Bind(&payload)
+
+	comment := readStringPayload(payload, "comment")
+	if comment == nil {
+		comment = readStringPayload(payload, "note")
+	}
+	if comment == nil || strings.TrimSpace(*comment) == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "comment is required")
+	}
+
+	operator := buildOperator(user)
+	if err := h.Service.AddAlertComment(c.Request().Context(), alertID, operator, comment); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "alert not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to add comment")
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+	})
+}
+
+func (h AlertsHandler) ExportAlerts(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "alert service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "alerts:read"); err != nil {
+		return err
+	}
+
+	params := c.QueryParams()
+	filter := alerts.ListAlertsFilter{
+		Page:       1,
+		PageSize:   1000,
+		Statuses:   parseQueryValues(params["status"]),
+		Severities: parseQueryValues(params["severity"]),
+		Search:     strings.TrimSpace(c.QueryParam("search")),
+		SortBy:     "last_occurred",
+		SortOrder:  "desc",
+	}
+
+	rows, _, err := h.Service.ListAlerts(c.Request().Context(), filter)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to export alerts")
+	}
+
+	csvLines := []string{"ID,标题,设备,严重级别,状态,分类,时间,描述"}
+	for _, row := range rows {
+		device := resolveAlertDevice(row)
+		ts := resolveAlertTimestamp(row).Format("2006-01-02 15:04:05")
+		severity := alerts.NormalizeSeverity(row.Severity)
+		status := alerts.NormalizeStatus(row.Status)
+		title := strings.ReplaceAll(row.Title, ",", "，")
+		message := strings.ReplaceAll(row.Message, ",", "，")
+		message = strings.ReplaceAll(message, "\n", " ")
+		line := fmt.Sprintf("%d,%s,%s,%s,%s,%s,%s,%s",
+			row.ID, title, device, severity, status, row.Category, ts, message)
+		csvLines = append(csvLines, line)
+	}
+
+	csv := strings.Join(csvLines, "\n")
+	c.Response().Header().Set("Content-Type", "text/csv; charset=utf-8")
+	c.Response().Header().Set("Content-Disposition", "attachment; filename=alerts_export.csv")
+	// BOM for Excel UTF-8 compatibility
+	return c.String(http.StatusOK, "\xEF\xBB\xBF"+csv)
 }
 
 func (h AlertsHandler) BulkAlertAction(c echo.Context) error {

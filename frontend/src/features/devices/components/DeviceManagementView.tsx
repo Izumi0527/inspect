@@ -42,11 +42,9 @@ import { EditDeviceModal } from './EditDeviceModal'
 import { 
   useDevices, 
   useDeviceFilters, 
-  useFilteredDevices, 
-  useDeviceSummary,
   useDeviceSelection
 } from '../hooks/useDevices'
-import { fetchDevice, updateDevice as updateDeviceApi, batchDeleteDevices, batchProbeDevices } from '../api/devices.api'
+import { fetchDevice, fetchDeviceStats, updateDevice as updateDeviceApi, batchDeleteDevices, batchProbeDevices } from '../api/devices.api'
 import type { DevicePayload } from '../utils/deviceFormMapper'
 
 const DEVICE_STATUSES: DeviceStatus[] = ['online', 'offline', 'warning', 'maintenance']
@@ -96,11 +94,12 @@ const toAlertCount = (value: unknown): number => {
 
 export const DeviceManagementView: React.FC = () => {
   // 启用轮询：每60秒自动刷新设备数据（包括CPU和内存）
-  const { devices, loading, error, setError, addDevice, removeDevice, importDevices, loadDevices } = useDevices(true, 60000)
+  const { devices, total, loading, error, setError, addDevice, removeDevice, importDevices, loadDevices } = useDevices(true, 60000)
   const { filters, updateFilter } = useDeviceFilters()
-  const filteredDevices = useFilteredDevices(devices, filters)
-  const summary = useDeviceSummary(devices)
   const { selectedDevices, toggleDevice: _toggleDevice, selectAll: _selectAll, clearSelection, setSelectedDevices } = useDeviceSelection()
+
+  // 统计数据（从独立API获取，不受分页影响）
+  const [summary, setSummary] = React.useState({ total: 0, online: 0, offline: 0, warning: 0, totalAlerts: 0 })
   
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [addModalOpen, setAddModalOpen] = useState(false)
@@ -120,17 +119,57 @@ export const DeviceManagementView: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize] = useState(10)
   
+  // 搜索防抖：避免每次按键都触发后端请求
+  const [debouncedSearch, setDebouncedSearch] = React.useState(filters.searchQuery)
+  const searchTimerRef = React.useRef<NodeJS.Timeout | null>(null)
+
+  React.useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(filters.searchQuery)
+    }, 350)
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    }
+  }, [filters.searchQuery])
+
   // 当筛选条件变化时，重置到第一页
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [filters.searchQuery, filters.statusFilter, filters.typeFilter])
-  
-  // 计算当前页的数据
-  const paginatedDevices = React.useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize
-    const endIndex = startIndex + pageSize
-    return filteredDevices.slice(startIndex, endIndex)
-  }, [filteredDevices, currentPage, pageSize])
+  }, [debouncedSearch, filters.statusFilter, filters.typeFilter])
+
+  // 服务端分页/筛选：当筛选条件或分页变化时，请求后端
+  React.useEffect(() => {
+    const serverFilters: Record<string, string | number> = {
+      page: currentPage,
+      page_size: pageSize,
+    }
+    if (debouncedSearch) serverFilters.search = debouncedSearch
+    if (filters.statusFilter && filters.statusFilter !== 'all') serverFilters.status = filters.statusFilter
+    if (filters.typeFilter && filters.typeFilter !== 'all') serverFilters.device_type = filters.typeFilter
+
+    loadDevices(serverFilters as unknown as import('../types').DeviceFilters)
+  }, [debouncedSearch, filters.statusFilter, filters.typeFilter, currentPage, pageSize, loadDevices])
+
+  // 获取统计数据（独立于分页）
+  const loadStats = React.useCallback(async () => {
+    try {
+      const stats = await fetchDeviceStats()
+      setSummary({
+        total: Number(stats.total_devices ?? 0),
+        online: Number(stats.online_devices ?? 0),
+        offline: Number(stats.offline_devices ?? 0),
+        warning: Number(stats.warning_devices ?? 0),
+        totalAlerts: Number(stats.total_alerts ?? 0),
+      })
+    } catch {
+      // 统计获取失败不影响主功能
+    }
+  }, [])
+
+  React.useEffect(() => {
+    loadStats()
+  }, [loadStats])
   
   // 分页变化处理
   const handlePageChange = (page: number) => {
@@ -164,8 +203,9 @@ export const DeviceManagementView: React.FC = () => {
         { duration: 5000 }
       )
       
-      // 刷新设备列表以显示最新状态
+      // 刷新设备列表和统计以显示最新状态
       await loadDevices()
+      loadStats()
       clearSelection()
     } catch (err) {
       const message = err instanceof Error ? err.message : '批量探测失败'
@@ -175,14 +215,14 @@ export const DeviceManagementView: React.FC = () => {
     }
   }
   
-  // 探测所有设备
+  // 探测本页设备
   const handleProbeAll = async () => {
-    if (filteredDevices.length === 0) {
+    if (devices.length === 0) {
       toast.error('没有可探测的设备')
       return
     }
     
-    const deviceIds = filteredDevices.map(d => d.id)
+    const deviceIds = devices.map(d => d.id)
     setBulkProbing(true)
     try {
       const result = await batchProbeDevices(deviceIds)
@@ -194,8 +234,9 @@ export const DeviceManagementView: React.FC = () => {
         { duration: 5000 }
       )
       
-      // 刷新设备列表以显示最新状态
+      // 刷新设备列表和统计以显示最新状态
       await loadDevices()
+      loadStats()
     } catch (err) {
       const message = err instanceof Error ? err.message : '批量探测失败'
       toast.error(message)
@@ -214,6 +255,7 @@ export const DeviceManagementView: React.FC = () => {
         toast.success(result.message)
         clearSelection()
         await loadDevices()
+        loadStats()
       } else {
         toast.error(result.message)
       }
@@ -259,7 +301,8 @@ export const DeviceManagementView: React.FC = () => {
     try {
       setEditModalLoading(true)
       await updateDeviceApi(deviceId, payload as Partial<Device>)
-      await loadDevices(filters)
+      await loadDevices()
+      loadStats()
       toast.success('设备更新成功')
     } catch (error) {
       const message = error instanceof Error ? error.message : '更新设备失败'
@@ -281,6 +324,7 @@ export const DeviceManagementView: React.FC = () => {
     if (deviceToDelete) {
       await removeDevice(deviceToDelete.id)
       setDeviceToDelete(null)
+      loadStats()
     }
     setDeleteModalOpen(false)
   }
@@ -426,8 +470,9 @@ export const DeviceManagementView: React.FC = () => {
             size="sm"
             variant="ghost"
             onProbeComplete={() => {
-              // 探测完成后刷新设备列表以显示最新状态
+              // 探测完成后刷新设备列表和统计以显示最新状态
               loadDevices()
+              loadStats()
             }}
           />
           <Button
@@ -582,7 +627,7 @@ export const DeviceManagementView: React.FC = () => {
               <Button
                 variant="outline"
                 onClick={handleProbeAll}
-                disabled={bulkProbing || filteredDevices.length === 0}
+                disabled={bulkProbing || devices.length === 0}
                 className="flex items-center gap-2"
               >
                 {bulkProbing ? (
@@ -590,7 +635,7 @@ export const DeviceManagementView: React.FC = () => {
                 ) : (
                   <Activity className="h-4 w-4" />
                 )}
-                探测全部
+                探测本页
               </Button>
               <Button
                 variant="outline"
@@ -692,23 +737,23 @@ export const DeviceManagementView: React.FC = () => {
           
           {/* 设备表格 */}
           <div className="overflow-y-auto">
-            {filteredDevices.length === 0 && !loading && !error && (
+            {devices.length === 0 && !loading && !error && (
               <div className="text-center py-12">
                 <Server className="h-16 w-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">暂无设备数据</h3>
                 <p className="text-gray-600 dark:text-gray-400">
-                  {devices.length === 0
-                    ? "系统中还没有添加任何设备,点击上方「添加设备」按钮开始管理您的网络设备。"
-                    : "当前筛选条件下没有找到匹配的设备，请尝试调整筛选条件。"
+                  {(debouncedSearch || (filters.statusFilter !== 'all') || (filters.typeFilter !== 'all'))
+                    ? "当前筛选条件下没有找到匹配的设备，请尝试调整筛选条件。"
+                    : "系统中还没有添加任何设备,点击上方「添加设备」按钮开始管理您的网络设备。"
                   }
                 </p>
               </div>
             )}
 
-            {filteredDevices.length > 0 && (
+            {(devices.length > 0 || loading) && (
               <Table
                 columns={columns}
-                data={paginatedDevices}
+                data={devices}
                 loading={loading}
                 rowKey="id"
                 rowSelection={{
@@ -722,7 +767,7 @@ export const DeviceManagementView: React.FC = () => {
                 pagination={{
                   current: currentPage,
                   pageSize: pageSize,
-                  total: filteredDevices.length,
+                  total: total,
                   onChange: (page) => handlePageChange(page)
                 }}
               />
@@ -780,7 +825,10 @@ export const DeviceManagementView: React.FC = () => {
       <AddDeviceModal
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
-        onSubmit={addDevice}
+        onSubmit={async (data) => {
+          await addDevice(data)
+          loadStats()
+        }}
         loading={loading}
       />
 
@@ -788,7 +836,13 @@ export const DeviceManagementView: React.FC = () => {
       <BulkDeviceImport
         isOpen={importModalOpen}
         onClose={() => setImportModalOpen(false)}
-        onImport={importDevices}
+        onImport={async (data) => {
+          const result = await importDevices(data)
+          if (result.success && result.imported_count > 0) {
+            loadStats()
+          }
+          return result
+        }}
       />
       </div>
     </AppLayout>

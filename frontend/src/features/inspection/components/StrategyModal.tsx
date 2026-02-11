@@ -54,14 +54,19 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
   const createStrategy = useCreateStrategy()
   const updateStrategy = useUpdateStrategy()
   
-  // 获取设备列表
-  const { devices: allDevices, loading: devicesLoading } = useDevices(false)
+  // 获取设备列表（禁用轮询，手动触发加载全部设备）
+  const { devices: allDevices, loading: devicesLoading, loadDevices } = useDevices(false)
   
   // 获取模板列表
   const { data: templatesData, isLoading: templatesLoading } = useInspectionTemplates({ pageSize: 100 })
   const allTemplates = templatesData?.templates || []
 
   const isEditing = !!strategy
+
+  // 初始加载设备列表（不分页，获取全部）
+  useEffect(() => {
+    loadDevices({ page: 1, page_size: 1000 } as import('@/features/devices/types').DeviceFilters)
+  }, [loadDevices])
 
   useEffect(() => {
     if (strategy) {
@@ -111,7 +116,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
   // 过滤设备
   const filteredDevices = allDevices.filter(device => 
     device.name.toLowerCase().includes(deviceSearch.toLowerCase()) ||
-    device.ip_address?.toLowerCase().includes(deviceSearch.toLowerCase())
+    device.ip.toLowerCase().includes(deviceSearch.toLowerCase())
   )
 
   // 过滤模板
@@ -401,7 +406,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                               <span className="text-sm text-gray-700 dark:text-gray-300 flex-1">
                                 {device.name}
                               </span>
-                              <span className="text-xs text-gray-400">{device.ip_address}</span>
+                              <span className="text-xs text-gray-400">{device.ip}</span>
                             </label>
                           ))
                         ) : (

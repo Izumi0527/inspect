@@ -108,6 +108,7 @@ func New() (*App, error) {
 	}
 
 	alertService := alerts.NewService(dbConn, log)
+	alertEvaluator := alerts.NewEvaluator(dbConn, wsManager, log)
 	alertsHandler := handlers.AlertsHandler{
 		Service: alertService,
 		Auth:    authService,
@@ -140,6 +141,11 @@ func New() (*App, error) {
 
 	trafficService := traffic.NewService(dbConn, metricsWriter, log)
 
+	logsService := logs.NewService(dbConn, log)
+
+	// 创建 Trap 告警桥接器（scheduler 和 trapListener 都需要）
+	trapAlertBridge := alerts.NewTrapAlertBridge(dbConn, wsManager, log)
+
 	schedulerService := scheduler.NewService(
 		dbConn,
 		log,
@@ -153,6 +159,9 @@ func New() (*App, error) {
 		trafficService,
 		reportService,
 		cfg.ReportsOutputDir,
+		alertEvaluator,
+		trapAlertBridge,
+		logsService,
 	)
 	if err := schedulerService.Start(); err != nil {
 		return nil, err
@@ -168,12 +177,13 @@ func New() (*App, error) {
 		Auth:    authService,
 	}
 
-	logsService := logs.NewService(dbConn, log)
 	logsHandler := handlers.LogsHandler{
 		Service: logsService,
 		Auth:    authService,
 	}
 	trapListener := logs.NewSNMPTrapListener(logsService, log, cfg.SnmpTrapAddress(), cfg.SnmpTrapEnabled)
+	trapListener.SetAlertCreator(trapAlertBridge)
+
 	if err := trapListener.Start(); err != nil {
 		return nil, err
 	}

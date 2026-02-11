@@ -17,6 +17,7 @@ export const mapFormDataToApiPayload = (formData: DeviceFormData) => {
     '3': '3'
   }
 
+  const shouldUseTelnet = formData.cli_protocol === 'telnet'
   const shouldUseSSH = formData.cli_protocol === 'ssh'
   const sshUsername = shouldUseSSH
     ? (formData.ssh_config?.username || formData.ssh_username || '')
@@ -35,7 +36,7 @@ export const mapFormDataToApiPayload = (formData: DeviceFormData) => {
             port: formData.ssh_config?.port || 22
           }
         : undefined,
-      telnet_config: formData.cli_protocol === 'telnet'
+      telnet_config: shouldUseTelnet
         ? {
             username: formData.telnet_config?.username || '',
             password: formData.telnet_config?.password || '',
@@ -69,9 +70,14 @@ export const mapFormDataToApiPayload = (formData: DeviceFormData) => {
     description: formData.description || '',
     snmp_community: formData.snmp_config?.v2c_config?.community || 'public',
     snmp_version: snmpVersionMap[formData.snmp_config?.version ?? 'v2c'] ?? '2c',
+    cli_protocol: formData.cli_protocol ?? 'none',
     ssh_username: shouldUseSSH ? sshUsername || null : null,
     ssh_password: shouldUseSSH ? sshPassword || null : null,
     ssh_port: shouldUseSSH ? (formData.ssh_config?.port || 22) : null,
+    telnet_username: shouldUseTelnet ? (formData.telnet_config?.username || null) : null,
+    telnet_password: shouldUseTelnet ? (formData.telnet_config?.password || null) : null,
+    telnet_port: shouldUseTelnet ? (formData.telnet_config?.port || 23) : null,
+    enable_password: shouldUseTelnet ? (formData.telnet_config?.enable_password || null) : null,
     tags
   }
 }
@@ -84,7 +90,8 @@ export const buildFormInitialData = (device?: Device | null): Partial<Device> | 
 
   const cliProtocol: Device['cli_protocol'] =
     device.cli_protocol ||
-    (device.ssh_username || device.ssh_password ? 'ssh' : 'none')
+    (device.telnet_config?.username ? 'telnet' :
+    (device.ssh_username || device.ssh_password ? 'ssh' : 'none'))
 
   const normalizeVersion = (version?: string | null) => {
     if (!version) return 'v2c'

@@ -318,7 +318,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                 分类
               </label>
               <div className="space-y-2">
-                {['connectivity', 'performance', 'security'].map((category) => (
+                {['connectivity', 'performance', 'security', 'configuration', 'hardware', 'other'].map((category) => (
                   <label key={category} className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -336,6 +336,9 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                       {category === 'connectivity' && '连通性'}
                       {category === 'performance' && '性能'}
                       {category === 'security' && '安全'}
+                      {category === 'configuration' && '配置'}
+                      {category === 'hardware' && '硬件'}
+                      {category === 'other' && '其他'}
                     </span>
                   </label>
                 ))}

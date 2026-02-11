@@ -26,9 +26,14 @@ type Device struct {
 	SnmpVersion     *string        `gorm:"column:snmp_version"`
 	SnmpCommunity   *string        `gorm:"column:snmp_community"`
 	SnmpPort        *int           `gorm:"column:snmp_port"`
+	CliProtocol     *string        `gorm:"column:cli_protocol"`
 	SshUsername     *string        `gorm:"column:ssh_username"`
 	SshPassword     *string        `gorm:"column:ssh_password"`
 	SshPort         *int           `gorm:"column:ssh_port"`
+	TelnetUsername  *string        `gorm:"column:telnet_username"`
+	TelnetPassword  *string        `gorm:"column:telnet_password"`
+	TelnetPort      *int           `gorm:"column:telnet_port"`
+	EnablePassword  *string        `gorm:"column:enable_password"`
 	IcmpStatus      *string        `gorm:"column:icmp_status"`
 	SnmpStatus      *string        `gorm:"column:snmp_status"`
 	LastProbeTime   *time.Time     `gorm:"column:last_probe_time"`

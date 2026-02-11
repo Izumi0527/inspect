@@ -47,13 +47,19 @@ var trapFacilityOverrides = map[string]string{
 }
 
 type SNMPTrapListener struct {
-	service  *Service
-	logger   *zap.Logger
-	addr     string
-	enabled  bool
-	listener *gosnmp.TrapListener
-	running  bool
-	mu       sync.Mutex
+	service      *Service
+	logger       *zap.Logger
+	addr         string
+	enabled      bool
+	listener     *gosnmp.TrapListener
+	running      bool
+	mu           sync.Mutex
+	alertCreator TrapAlertCreator
+}
+
+// TrapAlertCreator 用于将 SNMP Trap 转换为告警的回调接口
+type TrapAlertCreator interface {
+	CreateTrapAlert(ctx context.Context, deviceID int, level string, facility string, message string, trapOID string, sourceIP string) error
 }
 
 type trapSnapshot struct {
@@ -88,6 +94,13 @@ func NewSNMPTrapListener(service *Service, logger *zap.Logger, addr string, enab
 		logger:  logger,
 		addr:    strings.TrimSpace(addr),
 		enabled: enabled,
+	}
+}
+
+// SetAlertCreator 设置告警创建回调
+func (l *SNMPTrapListener) SetAlertCreator(creator TrapAlertCreator) {
+	if l != nil {
+		l.alertCreator = creator
 	}
 }
 
@@ -220,6 +233,22 @@ func (l *SNMPTrapListener) persistTrap(snapshot trapSnapshot) {
 
 	if _, err := l.service.storeLogEntries(ctx, []logEntry{entry}); err != nil && l.logger != nil {
 		l.logger.Error("SNMP Trap写入日志失败", zap.Error(err))
+	}
+
+	// 对 warning/critical/error 级别的 Trap 自动创建告警
+	if l.alertCreator != nil && (level == "warning" || level == "critical" || level == "error") {
+		alertCtx, alertCancel := context.WithTimeout(context.Background(), defaultTrapStoreTimeout)
+		defer alertCancel()
+		if alertErr := l.alertCreator.CreateTrapAlert(alertCtx, deviceID, level, facility, message, snapshot.TrapOID, snapshot.SourceIP); alertErr != nil {
+			if l.logger != nil {
+				l.logger.Warn("SNMP Trap创建告警失败", zap.Error(alertErr), zap.Int("device_id", deviceID))
+			}
+		} else if l.logger != nil {
+			l.logger.Info("SNMP Trap告警已创建",
+				zap.Int("device_id", deviceID),
+				zap.String("level", level),
+				zap.String("trap_oid", snapshot.TrapOID))
+		}
 	}
 }
 

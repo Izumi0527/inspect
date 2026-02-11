@@ -71,7 +71,7 @@ func (h DevicesHandler) GetDevices(c echo.Context) error {
 	search := strings.TrimSpace(c.QueryParam("search"))
 	groupID := parseOptionalInt(c.QueryParam("group_id"))
 
-	result, _, err := h.Service.GetDevices(
+	result, total, err := h.Service.GetDevices(
 		c.Request().Context(),
 		page,
 		pageSize,
@@ -85,7 +85,12 @@ func (h DevicesHandler) GetDevices(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query devices")
 	}
-	return c.JSON(http.StatusOK, result)
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"devices":   result,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+	})
 }
 
 func (h DevicesHandler) CreateDevice(c echo.Context) error {
@@ -1006,7 +1011,7 @@ func buildDeviceUpdates(payload map[string]interface{}) map[string]interface{} {
 		}
 	}
 
-	for _, key := range []string{"snmp_community", "snmp_version", "ssh_username", "ssh_password"} {
+	for _, key := range []string{"snmp_community", "snmp_version", "ssh_username", "ssh_password", "cli_protocol", "telnet_username", "telnet_password", "enable_password"} {
 		if value, ok := payload[key]; ok {
 			if value == nil {
 				updates[key] = nil
@@ -1023,6 +1028,14 @@ func buildDeviceUpdates(payload map[string]interface{}) map[string]interface{} {
 			updates["ssh_port"] = nil
 		} else if num, ok := value.(float64); ok {
 			updates["ssh_port"] = int(num)
+		}
+	}
+
+	if value, ok := payload["telnet_port"]; ok {
+		if value == nil {
+			updates["telnet_port"] = nil
+		} else if num, ok := value.(float64); ok {
+			updates["telnet_port"] = int(num)
 		}
 	}
 

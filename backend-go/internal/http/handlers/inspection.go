@@ -1901,32 +1901,34 @@ func (h InspectionHandler) GetTrends(c echo.Context) error {
 	}
 
 	rows := make([]trendRow, 0)
-	
-	// 查询所有数据，不限制时间范围
+
+	// 使用 COALESCE 获取有效时间字段，与 dateExpr 保持一致
+	timeCol := "COALESCE(created_at, started_at, completed_at, NOW())"
+
 	if err := db.WithContext(c.Request().Context()).
 		Table("inspections").
 		Select(fmt.Sprintf("%s AS date, COUNT(*) AS executions, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS success, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed, AVG(CASE WHEN total_checks > 0 THEN passed_checks::float / total_checks * 100 ELSE NULL END) AS avg_score", dateExpr)).
+		Where(fmt.Sprintf("%s >= ? AND %s <= ?", timeCol, timeCol), start, end).
 		Group("date").
-		Order("date DESC").
-		Limit(20).
+		Order("date ASC").
 		Scan(&rows).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load trend data")
 	}
 
-	// 如果数据库有数据，返回数据库的结果
+	// 如果数据库有数据，使用 generateTrendTimeSeries 填充缺失的时间点
 	if len(rows) > 0 {
-		// 按日期升序排列
-		payload := make([]map[string]interface{}, 0, len(rows))
-		for i := len(rows) - 1; i >= 0; i-- {
-			row := rows[i]
-			payload = append(payload, map[string]interface{}{
-				"date":       row.Date.Format(time.RFC3339),
-				"executions": row.Executions,
-				"success":    row.Success,
-				"failed":     row.Failed,
-				"avgScore":   roundFloat(row.AvgScore, 1),
-			})
+		dataMap := make(map[string]trendDataPoint, len(rows))
+		for _, row := range rows {
+			key := row.Date.Format("2006-01-02")
+			dataMap[key] = trendDataPoint{
+				Date:       row.Date,
+				Executions: row.Executions,
+				Success:    row.Success,
+				Failed:     row.Failed,
+				AvgScore:   row.AvgScore,
+			}
 		}
+		payload := generateTrendTimeSeries(start, end, period, dataMap)
 		return inspectionOK(c, payload)
 	}
 
@@ -3086,6 +3088,11 @@ func resolveTrendRange(period string, start *time.Time, end *time.Time) (time.Ti
 	endOfToday := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, time.UTC)
 	if end == nil {
 		end = &endOfToday
+	} else {
+		// 前端传入的 end_date 解析为 00:00:00，需要调整到当天的 23:59:59
+		// 否则 WHERE ... <= 2026-02-11T00:00:00Z 会漏掉当天的所有数据
+		adjusted := time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 999999999, end.Location())
+		end = &adjusted
 	}
 	if start == nil {
 		switch period {

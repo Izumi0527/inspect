@@ -117,24 +117,32 @@ func resolveVendorCommand(vendor string, logType string) string {
 			"interface": "show logging | include %LINK",
 			"security":  "show logging | include %SEC",
 			"recent":    "show logging last 100",
+			"trap":      "show logging | include %",
+			"alarm":     "show logging | include %",
 		},
 		"huawei": {
 			"system":    "display logbuffer",
 			"interface": "display logbuffer | include IF",
 			"security":  "display logbuffer | include SEC",
 			"recent":    "display logbuffer reverse",
+			"trap":      "display trapbuffer",
+			"alarm":     "display alarm active",
 		},
 		"h3c": {
 			"system":    "display logbuffer",
 			"interface": "display logbuffer | include Link",
 			"security":  "display logbuffer | include SEC",
 			"recent":    "display logbuffer reverse",
+			"trap":      "display trapbuffer",
+			"alarm":     "display alarm active",
 		},
 		"juniper": {
 			"system":    "show log messages",
 			"interface": "show log messages | match interface",
 			"security":  "show log messages | match security",
 			"recent":    "show log messages | last 100",
+			"trap":      "show log messages | match SNMP_TRAP",
+			"alarm":     "show chassis alarms",
 		},
 	}
 
@@ -149,6 +157,24 @@ func parseLogOutput(output string, deviceID int, vendor string, collectedAt time
 	lines := strings.Split(output, "\n")
 	entries := make([]logEntry, 0, maxEntries)
 
+	// 检测是否为 trapbuffer 或 alarm active 输出（通过内容特征判断）
+	isTrapBuffer := false
+	isAlarmActive := false
+	vendorLower := strings.ToLower(strings.TrimSpace(vendor))
+	if vendorLower == "huawei" || vendorLower == "h3c" {
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.Contains(trimmed, "Trapping buffer") || strings.Contains(trimmed, "trapbuffer") || strings.HasPrefix(trimmed, "#") {
+				isTrapBuffer = true
+				break
+			}
+			if strings.Contains(trimmed, "Sequence") && strings.Contains(trimmed, "AlarmID") {
+				isAlarmActive = true
+				break
+			}
+		}
+	}
+
 	for _, line := range lines {
 		if len(entries) >= maxEntries {
 			break
@@ -157,7 +183,16 @@ func parseLogOutput(output string, deviceID int, vendor string, collectedAt time
 		if line == "" || isHeaderLine(line) {
 			continue
 		}
-		entry := parseLogLine(line, deviceID, vendor, collectedAt)
+
+		var entry *logEntry
+		if isTrapBuffer {
+			entry = parseTrapBufferLine(line, deviceID, collectedAt)
+		} else if isAlarmActive {
+			entry = parseAlarmActiveLine(line, deviceID, collectedAt)
+		}
+		if entry == nil {
+			entry = parseLogLine(line, deviceID, vendor, collectedAt)
+		}
 		if entry != nil {
 			entries = append(entries, *entry)
 		}
@@ -245,6 +280,136 @@ func parseLogLine(line string, deviceID int, vendor string, collectedAt time.Tim
 		CollectedAt:  collectedAt,
 	}
 }
+// huaweiTrapPattern matches Huawei trapbuffer output lines:
+// #Sep 17 2012 17:09:47+00:00 HUAWEI LLDP/4/NBRCHGTRAP:OID: 1.0.8802.1.1.2.0.0.1 Neighbor info changed.
+var huaweiTrapPattern = regexp.MustCompile(`(?i)^#?\s*(\w+\s+\d+\s+\d{4}\s+\d{2}:\d{2}:\d{2}[^\s]*|\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[^\s]*)\s+\S+\s+(?:%%\d+)?(\w+)/(\d+)/(\w+)(?:\([a-z]\))?[:\s]+(.+)`)
+
+// huaweiAlarmActivePattern matches Huawei "display alarm active" output lines:
+// 1  0x08d40001  hwBoardFail  Critical  ...  Board failed.
+var huaweiAlarmActivePattern = regexp.MustCompile(`(?i)^\s*(\d+)\s+0x[0-9a-fA-F]+\s+(\S+)\s+(Critical|Major|Minor|Warning)\s+(.+)`)
+
+// parseTrapBufferLine parses a single line from Huawei "display trapbuffer" output
+func parseTrapBufferLine(line string, deviceID int, collectedAt time.Time) *logEntry {
+	match := huaweiTrapPattern.FindStringSubmatch(line)
+	if len(match) < 6 {
+		return nil
+	}
+
+	timestamp := match[1]
+	module := match[2]
+	severityNum := match[3]
+	trapName := match[4]
+	description := strings.TrimSpace(match[5])
+
+	logTimestamp := parseTrapTimestamp(timestamp, collectedAt)
+	level := mapVRPSeverity(severityNum)
+	facility := detectLogFacility(module + " " + trapName + " " + description)
+
+	message := fmt.Sprintf("%s/%s/%s: %s", module, severityNum, trapName, description)
+
+	return &logEntry{
+		DeviceID:    deviceID,
+		Level:       level,
+		Facility:    facility,
+		Source:      "ssh",
+		Message:     message,
+		RawMessage:  line,
+		LogTimestamp: logTimestamp,
+		CollectedAt: collectedAt,
+	}
+}
+
+// parseAlarmActiveLine parses a single line from Huawei "display alarm active" output
+func parseAlarmActiveLine(line string, deviceID int, collectedAt time.Time) *logEntry {
+	match := huaweiAlarmActivePattern.FindStringSubmatch(line)
+	if len(match) < 5 {
+		return nil
+	}
+
+	alarmName := match[2]
+	severity := strings.ToLower(strings.TrimSpace(match[3]))
+	description := strings.TrimSpace(match[4])
+
+	level := "warning"
+	switch severity {
+	case "critical":
+		level = "critical"
+	case "major":
+		level = "error"
+	case "minor":
+		level = "warning"
+	case "warning":
+		level = "warning"
+	}
+
+	facility := detectLogFacility(alarmName + " " + description)
+	message := fmt.Sprintf("[%s] %s: %s", strings.ToUpper(severity), alarmName, description)
+
+	return &logEntry{
+		DeviceID:    deviceID,
+		Level:       level,
+		Facility:    facility,
+		Source:      "ssh",
+		Message:     message,
+		RawMessage:  line,
+		LogTimestamp: collectedAt,
+		CollectedAt: collectedAt,
+	}
+}
+
+// mapVRPSeverity maps Huawei VRP severity number (0-7) to our level
+// VRP: 0=Emergency, 1=Alert, 2=Critical, 3=Error, 4=Warning, 5=Notification, 6=Informational, 7=Debug
+func mapVRPSeverity(num string) string {
+	switch num {
+	case "0", "1", "2":
+		return "critical"
+	case "3":
+		return "error"
+	case "4":
+		return "warning"
+	case "5", "6":
+		return "info"
+	default:
+		return "debug"
+	}
+}
+
+// parseTrapTimestamp parses timestamps from Huawei trapbuffer
+// Formats: "Sep 17 2012 17:09:47+00:00" or "2024-01-15 10:30:22+08:00"
+func parseTrapTimestamp(raw string, fallback time.Time) time.Time {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return fallback
+	}
+
+	// Remove timezone offset suffix for simpler parsing
+	// "Sep 17 2012 17:09:47+00:00" -> "Sep 17 2012 17:09:47"
+	if idx := strings.LastIndex(value, "+"); idx > 10 {
+		value = value[:idx]
+	} else if idx := strings.LastIndex(value, "-"); idx > 10 {
+		// Be careful not to strip date hyphens
+		suffix := value[idx:]
+		if len(suffix) <= 6 && strings.Contains(suffix, ":") {
+			value = value[:idx]
+		}
+	}
+
+	layouts := []string{
+		"Jan 2 2006 15:04:05",
+		"Jan 02 2006 15:04:05",
+		"2006-01-02 15:04:05",
+	}
+
+	for _, layout := range layouts {
+		if parsed, err := time.ParseInLocation(layout, value, time.Local); err == nil {
+			return parsed.UTC()
+		}
+	}
+
+	return fallback
+}
+
+
 
 func parseTimestamp(raw string, vendor string, fallback time.Time) time.Time {
 	value := strings.TrimSpace(strings.TrimPrefix(raw, "*"))
@@ -361,6 +526,16 @@ func isHeaderLine(line string) bool {
 		"Buffer logging:",
 		"Logging to",
 		"Log Buffer",
+		"Trapping buffer",
+		"Allowed max buffer",
+		"Actual buffer size",
+		"Channel number",
+		"Channel name",
+		"Dropped messages",
+		"Overwritten messages",
+		"Current messages",
+		"Sequence",
+		"Total active alarms",
 	}
 
 	for _, prefix := range prefixes {

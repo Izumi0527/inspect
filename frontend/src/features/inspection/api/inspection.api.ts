@@ -324,26 +324,40 @@ export async function fetchInspectionTemplates(params?: {
   pageSize?: number
   category?: string
   deviceTypes?: string[]
+  search?: string
+  vendor?: string
+  sort?: string
+  order?: 'asc' | 'desc'
 }): Promise<{ templates: InspectionTemplate[]; total: number; pages: number }> {
   try {
     let endpoint = '/inspection/templates'
     const searchParams = new URLSearchParams()
 
     if (params) {
-      // 修正: 后端使用 page/page_size 参数
       if (params.page) {
         searchParams.append('page', params.page.toString())
       }
       if (params.pageSize) {
         searchParams.append('page_size', params.pageSize.toString())
       }
-
-      // 注意: category 参数后端不支持，需要在客户端过滤
-      // 暂时保留参数定义，在返回后进行客户端过滤
-
-      // 修正: deviceTypes 改为单个 device_type（后端只支持单个设备类型过滤）
+      if (params.category) {
+        searchParams.append('category', params.category)
+      }
+      // 后端只支持单个 device_type 过滤
       if (params.deviceTypes && params.deviceTypes.length > 0) {
         searchParams.append('device_type', params.deviceTypes[0])
+      }
+      if (params.search) {
+        searchParams.append('search', params.search)
+      }
+      if (params.vendor) {
+        searchParams.append('vendor', params.vendor)
+      }
+      if (params.sort) {
+        searchParams.append('sort', params.sort)
+      }
+      if (params.order) {
+        searchParams.append('order', params.order)
       }
     }
 
@@ -358,13 +372,8 @@ export async function fetchInspectionTemplates(params?: {
     }
 
     const data = toRecord(response.data)
-    // 后端 V2 API 返回 items，V1 返回 templates，兼容两种格式
-    let templates = toRecordArray(data.items ?? data.templates ?? data['items'] ?? data['templates']).map(transformTemplateData)
-
-    // 客户端过滤 category（后端不支持该参数）
-    if (params?.category) {
-      templates = templates.filter(template => template.category === params.category)
-    }
+    // 后端返回 items 和 templates 两个字段（兼容）
+    const templates = toRecordArray(data.items ?? data.templates ?? data['items'] ?? data['templates']).map(transformTemplateData)
 
     return {
       templates,
@@ -1116,9 +1125,14 @@ export async function triggerStrategyExecution(id: string): Promise<{ message: s
     }
 
     const record = toRecord(response.data)
+    // inspection_ids 是整数数组，不能用 toRecordArray（只保留对象）
+    const rawIds = record.inspection_ids
+    const ids: number[] = Array.isArray(rawIds)
+      ? rawIds.map(item => toNumber(item, 0)).filter(n => n > 0)
+      : []
     return {
       message: toString(record.message, '触发成功'),
-      inspection_ids: toRecordArray(record.inspection_ids ?? []).map(id => toNumber(id))
+      inspection_ids: ids
     }
   } catch (error) {
     console.error('触发策略执行失败:', error)
@@ -1302,7 +1316,7 @@ export async function exportAnalyticsReport(params: {
     searchParams.append('format_type', params.formatType || 'excel')
     searchParams.append('include_charts', String(params.includeCharts ?? true))
 
-    const endpoint = `/inspection/analytics/export?${searchParams.toString()}`
+    const endpoint = `/api/v1/inspection/analytics/export?${searchParams.toString()}`
 
     // 使用原生 fetch 处理文件下载
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${endpoint}`, {

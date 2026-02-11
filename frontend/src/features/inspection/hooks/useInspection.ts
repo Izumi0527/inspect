@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useCallback } from 'react'
 import toast from 'react-hot-toast'
+import { api, TokenManager } from '@/lib/api-client'
 import {
   fetchInspectionStats,
   fetchInspectionTemplates,
@@ -25,7 +26,8 @@ import {
 import {
   InspectionStrategy,
   InspectionTemplate,
-  InspectionStats
+  InspectionStats,
+  InspectionApiResponse
 } from '../types'
 
 // 巡检策略Hooks - 连接到真实API
@@ -133,6 +135,10 @@ export const useInspectionTemplates = (params?: {
   pageSize?: number
   category?: string
   deviceTypes?: string[]
+  search?: string
+  vendor?: string
+  sort?: string
+  order?: 'asc' | 'desc'
 }) => {
   return useQuery({
     queryKey: ['inspection', 'templates', params],
@@ -333,24 +339,13 @@ export const useStopExecution = () => {
 
   return useMutation({
     mutationFn: async (executionId: string) => {
-      // 调用后端停止执行API
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/inspection/executions/${executionId}/stop`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
-          },
-        }
+      const response = await api.post<InspectionApiResponse<unknown>>(
+        `/inspection/executions/${executionId}/stop`
       )
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || '停止执行失败')
+      if (response.code !== 200) {
+        throw new Error(response.message || '停止执行失败')
       }
-      
-      return response.json()
+      return response.data
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'executions'] })
@@ -367,24 +362,13 @@ export const useDeleteExecution = () => {
 
   return useMutation({
     mutationFn: async (executionId: string) => {
-      // 调用后端删除执行记录API
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/inspection/executions/${executionId}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
-          },
-        }
+      const response = await api.delete<InspectionApiResponse<unknown>>(
+        `/inspection/executions/${executionId}`
       )
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || '删除执行记录失败')
+      if (response.code !== 200) {
+        throw new Error(response.message || '删除执行记录失败')
       }
-      
-      return response.json()
+      return response.data
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'executions'] })
@@ -486,7 +470,7 @@ export const useGenerateReport = () => {
           console.log('[useGenerateReport] 下载URL:', downloadUrl)
           
           // 获取token用于认证
-          const token = localStorage.getItem('access_token') || ''
+          const token = TokenManager.getAccessToken() || ''
           
           // 使用fetch下载文件（带认证）
           const response = await fetch(downloadUrl, {

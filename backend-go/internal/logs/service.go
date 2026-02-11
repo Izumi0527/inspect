@@ -649,7 +649,7 @@ func (s *Service) storeLogEntries(ctx context.Context, entries []logEntry) (int,
 
 func normalizeLogType(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "system", "interface", "security", "recent":
+	case "system", "interface", "security", "recent", "trap", "alarm":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "system"
