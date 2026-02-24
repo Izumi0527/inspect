@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Download } from 'lucide-react'
+import { Download, FileText, Sheet, FileSpreadsheet } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { exportMonitoringReport } from '../api/monitoring.api'
 
@@ -14,6 +14,12 @@ interface ExportStatus {
     format: ExportFormat
     message: string
   }
+}
+
+const FORMAT_CONFIG: Record<ExportFormat, { label: string; icon: typeof FileText; iconColor: string }> = {
+  pdf: { label: 'PDF', icon: FileText, iconColor: 'text-red-500' },
+  excel: { label: 'Excel', icon: Sheet, iconColor: 'text-green-600' },
+  csv: { label: 'CSV', icon: FileSpreadsheet, iconColor: 'text-blue-500' },
 }
 
 export function ReportExportButton() {
@@ -53,7 +59,7 @@ export function ReportExportButton() {
         lastExport: {
           success: true,
           format,
-          message: `${formatLabel(format)} 报告已生成`,
+          message: `${FORMAT_CONFIG[format].label} 报告已生成`,
         },
       })
 
@@ -89,22 +95,10 @@ export function ReportExportButton() {
     }
   }
 
-  const formatLabel = (format: ExportFormat): string => {
-    const labels = { pdf: 'PDF', excel: 'Excel', csv: 'CSV' }
-    return labels[format]
-  }
-
-  const formatIcon = (format: ExportFormat): string => {
-    const icons = { pdf: '📄', excel: '📊', csv: '📑' }
-    return icons[format]
-  }
-
   const buttonLabel = exportStatus.isExporting
     ? '导出中...'
     : exportStatus.lastExport
-      ? exportStatus.lastExport.success
-        ? exportStatus.lastExport.message
-        : exportStatus.lastExport.message
+      ? exportStatus.lastExport.message
       : '导出报告'
 
   return (
@@ -127,16 +121,20 @@ export function ReportExportButton() {
                 选择格式
               </p>
             </div>
-            {(['pdf', 'excel', 'csv'] as ExportFormat[]).map((format) => (
-              <button
-                key={format}
-                onClick={() => handleExport(format)}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
-              >
-                <span className="text-lg">{formatIcon(format)}</span>
-                <span className="font-medium">{formatLabel(format)}</span>
-              </button>
-            ))}
+            {(['pdf', 'excel', 'csv'] as ExportFormat[]).map((format) => {
+              const config = FORMAT_CONFIG[format]
+              const Icon = config.icon
+              return (
+                <button
+                  key={format}
+                  onClick={() => handleExport(format)}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  <Icon className={`h-4 w-4 ${config.iconColor}`} />
+                  <span className="font-medium">{config.label}</span>
+                </button>
+              )
+            })}
           </div>
         </div>
       )}

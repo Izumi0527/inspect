@@ -6,7 +6,7 @@ import { useSidebar } from '@/lib/contexts/sidebar-context'
 import { Sidebar } from '@/features/dashboard/components/Sidebar'
 import { DashboardHeader } from '@/features/dashboard'
 import { StatCard } from '@/components/shared'
-import { Button } from '@/components/atoms'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, Button } from '@/components/atoms'
 import {
   Server,
   Activity,
@@ -15,6 +15,11 @@ import {
   HardDrive,
   Network,
   RefreshCw,
+  WifiOff,
+  DatabaseZap,
+  TrendingUp,
+  BarChart3,
+  Radio,
 } from 'lucide-react'
 import { DeviceStatusCard, AvailabilityCard, RealTimeAlertsCard } from './cards'
 import {
@@ -26,7 +31,7 @@ import {
 import { useInView } from '@/hooks'
 import { ReportExportButton } from './ReportExportButton'
 
-// 图标映射(根据监控中心的6个统计卡片)
+// 图标映射
 const monitoringIconMap = {
   total_devices: Server,
   availability: Activity,
@@ -47,26 +52,35 @@ const monitoringIconColorMap = {
 }
 
 /**
- * 监控中心主视图组件
- *
- * 采用现代商务风格设计,包含:
- * - 6个统计卡片
- * - 2个图表(系统性能趋势 + 设备温度监控)
- * - 3个详情卡片(设备状态分布 + 整体可用性 + 实时告警)
- * - 1个独立网络流量区域
- *
- * @features
- * - 自动轮询刷新(2分钟间隔)
- * - 自动轮询刷新(60秒间隔)
- * - 图表懒加载(IntersectionObserver)
- * - 代码分割(React.lazy)
- * - 错误处理与重试
+ * 区域标题组件 — 为每个 section 提供视觉锚点
  */
+function SectionHeader({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  description?: string
+}) {
+  return (
+    <div className="flex items-center gap-2.5 mb-3">
+      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/20">
+        <Icon className="h-4 w-4 text-primary" />
+      </div>
+      <div>
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-foreground">{title}</h2>
+        {description && (
+          <p className="text-xs text-gray-500 dark:text-muted-foreground">{description}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function MonitoringView() {
-  // ==================== Sidebar 状态 ====================
   const { sidebarOpen, toggleSidebar } = useSidebar()
 
-  // ==================== 数据获取 ====================
   const {
     data,
     isLoading,
@@ -75,40 +89,54 @@ export function MonitoringView() {
     isRefetching,
   } = useMonitoringV2({
     timeRange: '24h',
-    // 使用 hook 默认的 2 分钟轮询间隔
     enablePolling: true,
   })
 
-  // ==================== 懒加载配置 ====================
   const chartInViewOptions = useMemo(
-    () => ({
-      threshold: 0.1,
-      triggerOnce: true,
-      rootMargin: '100px', // 提前 100px 加载
-    }),
+    () => ({ threshold: 0.1, triggerOnce: true, rootMargin: '100px' }),
     []
   )
-
   const networkInViewOptions = useMemo(
-    () => ({
-      threshold: 0.1,
-      triggerOnce: true,
-      rootMargin: '100px',
-    }),
+    () => ({ threshold: 0.1, triggerOnce: true, rootMargin: '100px' }),
     []
   )
 
-  // 懒加载 hooks
   const { ref: chartsRef, inView: chartsInView } = useInView(chartInViewOptions)
   const { ref: networkRef, inView: networkInView } = useInView(networkInViewOptions)
 
   // ==================== 加载状态 ====================
   if (isLoading) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="text-center">
-          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600"></div>
-          <p className="text-gray-600 dark:text-gray-400">加载监控数据中...</p>
+      <div className="min-h-screen bg-gray-50 dark:bg-background">
+        <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} currentPath="/monitoring" />
+        <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
+          <DashboardHeader title="监控中心" showSearch={false} />
+          <main className="p-5">
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Card key={i} className="animate-pulse border-l-[3px] border-l-gray-300 dark:border-l-gray-600">
+                    <CardContent className="p-5">
+                      <div className="h-3 w-14 rounded bg-gray-200 dark:bg-gray-700" />
+                      <div className="mt-3 h-7 w-20 rounded bg-gray-200 dark:bg-gray-700" />
+                      <div className="mt-2 h-3 w-16 rounded bg-gray-200 dark:bg-gray-700" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <Card key={i} className="animate-pulse">
+                    <CardContent className="p-6">
+                      <div className="h-5 w-32 rounded bg-gray-200 dark:bg-gray-700" />
+                      <div className="mt-2 h-4 w-48 rounded bg-gray-200 dark:bg-gray-700" />
+                      <ChartSkeleton height={280} className="mt-4" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </main>
         </div>
       </div>
     )
@@ -117,21 +145,27 @@ export function MonitoringView() {
   // ==================== 错误状态 ====================
   if (error) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="max-w-md rounded-xl border border-red-200 bg-red-50 p-6 text-center dark:border-red-800 dark:bg-red-900/20">
-          <div className="mb-4 text-5xl">⚠️</div>
-          <h3 className="mb-2 text-lg font-semibold text-red-900 dark:text-red-100">
-            数据加载失败
-          </h3>
-          <p className="mb-4 text-sm text-red-700 dark:text-red-300">
-            {error.message || '无法连接到监控服务器'}
-          </p>
-          <button
-            onClick={() => refetch()}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-600"
-          >
-            🔄 重新加载
-          </button>
+      <div className="min-h-screen bg-gray-50 dark:bg-background">
+        <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} currentPath="/monitoring" />
+        <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
+          <DashboardHeader title="监控中心" showSearch={false} />
+          <main className="flex h-[calc(100vh-80px)] items-center justify-center p-5">
+            <div className="max-w-md rounded-xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-800 dark:bg-red-900/20">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/40">
+                <WifiOff className="h-7 w-7 text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="mb-2 text-lg font-semibold text-red-900 dark:text-red-100">
+                数据加载失败
+              </h3>
+              <p className="mb-5 text-sm text-red-700 dark:text-red-300">
+                {error.message || '无法连接到监控服务器'}
+              </p>
+              <Button variant="outline" onClick={() => refetch()} className="cursor-pointer">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                重新加载
+              </Button>
+            </div>
+          </main>
         </div>
       </div>
     )
@@ -140,9 +174,16 @@ export function MonitoringView() {
   // ==================== 无数据状态 ====================
   if (!data) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="text-center text-gray-600 dark:text-gray-400">
-          <p>无法加载监控数据</p>
+      <div className="min-h-screen bg-gray-50 dark:bg-background">
+        <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} currentPath="/monitoring" />
+        <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
+          <DashboardHeader title="监控中心" showSearch={false} />
+          <main className="flex h-[calc(100vh-80px)] items-center justify-center">
+            <div className="text-center">
+              <DatabaseZap className="mx-auto mb-3 h-10 w-10 text-gray-400" />
+              <p className="text-gray-600 dark:text-gray-400">无法加载监控数据</p>
+            </div>
+          </main>
         </div>
       </div>
     )
@@ -150,16 +191,13 @@ export function MonitoringView() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background">
-      {/* Sidebar 导航 */}
       <Sidebar
         isOpen={sidebarOpen}
         onToggle={toggleSidebar}
         currentPath="/monitoring"
       />
 
-      {/* 主内容区 - 动态左边距 */}
       <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
-        {/* Header - 与总览页面相同的层级 */}
         <DashboardHeader
           title="监控中心"
           alertCount={data?.realtimeAlerts?.filter(a => a.severity === 'critical').length ?? 0}
@@ -171,6 +209,7 @@ export function MonitoringView() {
                 variant="outline"
                 onClick={() => refetch()}
                 disabled={isRefetching}
+                className="cursor-pointer"
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${isRefetching ? 'animate-spin' : ''}`} />
                 {isRefetching ? '刷新中...' : '刷新'}
@@ -179,17 +218,17 @@ export function MonitoringView() {
           }
         />
 
-        {/* 主内容区域 */}
-        <main className="p-4">
-          <div className="space-y-4">
-            {/* 统计卡片网格(6个) */}
+        <main className="p-5">
+          <div className="space-y-6">
+
+            {/* ── 关键指标 ── */}
             <section>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
+              <SectionHeader icon={Activity} title="关键指标" description="实时系统运行概览" />
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 {data.statsV2 && data.statsV2.length > 0 ? (
                   data.statsV2.map((stat, index) => {
                     const IconComponent = monitoringIconMap[stat.id as keyof typeof monitoringIconMap] || Server
                     const iconColor = monitoringIconColorMap[stat.id as keyof typeof monitoringIconColorMap] || 'text-blue-600'
-
                     return (
                       <StatCard
                         key={stat.id}
@@ -204,110 +243,108 @@ export function MonitoringView() {
                     )
                   })
                 ) : (
-                  <div className="col-span-full rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-800/50">
-                    <AlertTriangle className="mx-auto mb-4 h-12 w-12 text-yellow-500" />
-                    <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  <div className="col-span-full rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-800/50">
+                    <AlertTriangle className="mx-auto mb-4 h-10 w-10 text-yellow-500" />
+                    <h3 className="mb-2 text-base font-semibold text-gray-900 dark:text-gray-100">
                       统计数据不可用
                     </h3>
                     <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
                       无法加载关键指标数据。可能的原因：后端API未响应、数据库无设备记录、网络连接异常
                     </p>
-                    <button
-                      onClick={() => refetch()}
-                      className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600"
-                    >
-                      🔄 重新加载
-                    </button>
+                    <Button variant="outline" onClick={() => refetch()} className="cursor-pointer">
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      重新加载
+                    </Button>
                   </div>
                 )}
               </div>
             </section>
 
-            {/* 图表区域(2列) */}
+            {/* ── 性能趋势 ── */}
             <section ref={chartsRef}>
+              <SectionHeader icon={TrendingUp} title="性能趋势" description="24小时系统性能与温度变化" />
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                {/* 系统性能趋势图 */}
-                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                  <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
-                    系统性能趋势
-                  </h3>
-                  <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-                    CPU、内存、网络流量的24小时趋势
-                  </p>
-                  {chartsInView ? (
-                    data.systemPerformance && data.systemPerformance.length > 0 ? (
-                      <SystemPerformanceChartWrapper data={data.systemPerformance} height={280} />
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">系统性能趋势</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {chartsInView ? (
+                      data.systemPerformance && data.systemPerformance.length > 0 ? (
+                        <SystemPerformanceChartWrapper data={data.systemPerformance} height={280} />
+                      ) : (
+                        <div className="flex h-64 items-center justify-center">
+                          <p className="text-sm text-gray-500 dark:text-gray-400">暂无性能数据</p>
+                        </div>
+                      )
                     ) : (
-                      <div className="flex h-64 items-center justify-center">
-                        <p className="text-gray-500 dark:text-gray-400">暂无性能数据</p>
-                      </div>
-                    )
-                  ) : (
-                    <ChartSkeleton height={280} />
-                  )}
-                </div>
+                      <ChartSkeleton height={280} />
+                    )}
+                  </CardContent>
+                </Card>
 
-                {/* 设备温度监控图 */}
-                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                  <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
-                    设备温度监控
-                  </h3>
-                  <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-                    多设备温度趋势对比(阈值: 75°C)
-                  </p>
-                  {chartsInView ? (
-                    data.temperatureHistory && data.temperatureHistory.length > 0 ? (
-                      <TemperatureChartWrapper
-                        data={data.temperatureHistory}
-                        height={280}
-                        temperatureThreshold={75}
-                      />
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">设备温度监控</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {chartsInView ? (
+                      data.temperatureHistory && data.temperatureHistory.length > 0 ? (
+                        <TemperatureChartWrapper
+                          data={data.temperatureHistory}
+                          height={280}
+                          temperatureThreshold={75}
+                        />
+                      ) : (
+                        <div className="flex h-64 items-center justify-center">
+                          <p className="text-sm text-gray-500 dark:text-gray-400">暂无温度数据</p>
+                        </div>
+                      )
                     ) : (
-                      <div className="flex h-64 items-center justify-center">
-                        <p className="text-gray-500 dark:text-gray-400">暂无温度数据</p>
-                      </div>
-                    )
-                  ) : (
-                    <ChartSkeleton height={280} />
-                  )}
-                </div>
+                      <ChartSkeleton height={280} />
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             </section>
 
-            {/* 详情区域(3列) */}
+            {/* ── 状态详情 ── */}
             <section>
+              <SectionHeader icon={BarChart3} title="状态详情" description="设备分布、可用性与实时告警" />
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 items-stretch">
-                {/* 设备状态分布卡片 */}
                 {data.deviceStatusDistribution && (
                   <DeviceStatusCard data={data.deviceStatusDistribution} />
                 )}
-
-                {/* 整体可用性卡片 */}
                 {data.availability && <AvailabilityCard data={data.availability} />}
-
-                {/* 实时告警卡片 */}
                 {data.realtimeAlerts && (
                   <RealTimeAlertsCard alerts={data.realtimeAlerts} maxItems={5} />
                 )}
               </div>
             </section>
 
-            {/* 网络流量区域(独立) */}
+            {/* ── 网络流量 ── */}
             <section ref={networkRef}>
-              <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                {networkInView ? (
-                  data.networkTrafficHistory && data.networkTrafficHistory.length > 0 ? (
-                    <NetworkTrafficChartWrapper data={data.networkTrafficHistory} height={240} />
+              <SectionHeader icon={Radio} title="网络流量" description="入站、出站及总流量的24小时趋势" />
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">流量监控</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {networkInView ? (
+                    data.networkTrafficHistory && data.networkTrafficHistory.length > 0 ? (
+                      <NetworkTrafficChartWrapper data={data.networkTrafficHistory} height={240} />
+                    ) : (
+                      <div className="flex h-48 items-center justify-center">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">暂无流量数据</p>
+                      </div>
+                    )
                   ) : (
-                    <div className="flex h-48 items-center justify-center">
-                      <p className="text-gray-500 dark:text-gray-400">暂无流量数据</p>
-                    </div>
-                  )
-                ) : (
-                  <ChartSkeleton height={240} />
-                )}
-              </div>
+                    <ChartSkeleton height={240} />
+                  )}
+                </CardContent>
+              </Card>
             </section>
+
           </div>
         </main>
       </div>

@@ -91,7 +91,7 @@ export function TemperatureChart({
 
     // 如果超过阈值,添加警告标识
     if (numValue >= temperatureThreshold) {
-      return `${tempStr} ⚠️`
+      return `${tempStr} [!]`
     }
 
     return tempStr
@@ -111,7 +111,7 @@ export function TemperatureChart({
             <div className="h-3 w-3 rounded-full" style={{ backgroundColor: line.color }} />
             <span className="text-sm text-gray-600 dark:text-gray-400">
               {line.name}
-              {hasHighTemp && <span className="ml-1 text-orange-500">⚠️</span>}
+              {hasHighTemp && <span className="ml-1 text-xs font-semibold text-orange-500">[!]</span>}
             </span>
           </div>
         )
@@ -153,7 +153,7 @@ export function TemperatureChart({
         </div>
         <span>·</span>
         <div className="flex items-center gap-1">
-          <span className="text-orange-500">⚠️</span>
+          <span className="font-semibold text-orange-500">[!]</span>
           <span>超阈值警告</span>
         </div>
       </div>

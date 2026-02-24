@@ -11,6 +11,20 @@ import { LinearGradient } from '@visx/gradient'
 import { ChartContainer } from '@/components/atoms/charts'
 import type { NetworkTrafficDataPoint } from '../../types'
 
+/**
+ * 格式化带宽值（bps），自动选择合适的单位
+ */
+function formatBandwidthValue(bps: number): string {
+  if (bps <= 0) return '0 bps'
+  const units = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']
+  const k = 1000
+  const i = Math.min(Math.floor(Math.log(bps) / Math.log(k)), units.length - 1)
+  const value = bps / Math.pow(k, i)
+  if (value >= 100) return `${value.toFixed(0)} ${units[i]}`
+  if (value >= 10) return `${value.toFixed(1)} ${units[i]}`
+  return `${value.toFixed(2)} ${units[i]}`
+}
+
 interface NetworkTrafficStackedAreaChartProps {
   data: NetworkTrafficDataPoint[]
   height?: number
@@ -20,9 +34,13 @@ interface NetworkTrafficStackedAreaChartProps {
 /**
  * 网络流量堆叠面积图
  *
- * 显示入站和出站流量的堆叠面积,便于对比总流量和流量分布
+ * 显示入站、出站和总流量的堆叠面积,便于对比总流量和流量分布
  * - 入站流量: 蓝色区域
  * - 出站流量: 绿色区域
+ * - 总流量: 入站 + 出站之和（橙色线）
+ *
+ * Y轴单位: bps（自适应 bps/Kbps/Mbps/Gbps）
+ * X轴间隔: 5分钟
  */
 export function NetworkTrafficStackedAreaChart({
   data,
@@ -65,21 +83,25 @@ export function NetworkTrafficStackedAreaChart({
     total: number
   }>()
 
-  // 数据处理:计算堆叠值
+  // 数据处理:将后端Mbps转为bps，计算堆叠值
   const processedData = useMemo(() => {
     return data.map((point) => {
       const date = new Date(point.timestamp)
+      // 后端返回Mbps，转换为bps以便自适应显示单位
+      const inboundBps = point.inbound * 1_000_000
+      const outboundBps = point.outbound * 1_000_000
+      const totalBps = inboundBps + outboundBps
       return {
         date,
         time: date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-        inbound: point.inbound,
-        outbound: point.outbound,
-        total: point.inbound + point.outbound,
+        inbound: inboundBps,
+        outbound: outboundBps,
+        total: totalBps,
         // 堆叠计算
         inboundBase: 0,
-        inboundTop: point.inbound,
-        outboundBase: point.inbound,
-        outboundTop: point.inbound + point.outbound,
+        inboundTop: inboundBps,
+        outboundBase: inboundBps,
+        outboundTop: totalBps,
       }
     })
   }, [data])
@@ -192,13 +214,24 @@ export function NetworkTrafficStackedAreaChart({
               curve={curveMonotoneX}
             />
 
-            {/* 总流量边界线 */}
+            {/* 出站流量边界线 */}
             <LinePath
               data={processedData}
               x={(d) => xScale(d.date)}
               y={(d) => yScale(d.outboundTop)}
               stroke="#22C55E"
+              strokeWidth={1.5}
+              curve={curveMonotoneX}
+            />
+
+            {/* 总流量线（入站+出站之和，虚线覆盖在堆叠顶部） */}
+            <LinePath
+              data={processedData}
+              x={(d) => xScale(d.date)}
+              y={(d) => yScale(d.total)}
+              stroke="#F97316"
               strokeWidth={2.5}
+              strokeDasharray="6,3"
               curve={curveMonotoneX}
             />
 
@@ -230,7 +263,28 @@ export function NetworkTrafficStackedAreaChart({
               scale={xScale}
               stroke={axisColor}
               tickStroke={axisColor}
-              numTicks={6}
+              tickValues={(() => {
+                // 按5分钟间隔生成刻度
+                if (processedData.length < 2) return undefined
+                const [minTime, maxTime] = xScale.domain()
+                const ticks: Date[] = []
+                const start = new Date(minTime)
+                // 对齐到最近的5分钟
+                start.setMinutes(Math.ceil(start.getMinutes() / 5) * 5, 0, 0)
+                const endTime = maxTime.getTime()
+                const current = new Date(start)
+                while (current.getTime() <= endTime) {
+                  ticks.push(new Date(current))
+                  current.setMinutes(current.getMinutes() + 5)
+                }
+                // 如果刻度太多（超过innerWidth/60），按倍数稀疏
+                const maxTicks = Math.max(Math.floor(innerWidth / 60), 4)
+                if (ticks.length > maxTicks) {
+                  const step = Math.ceil(ticks.length / maxTicks)
+                  return ticks.filter((_, i) => i % step === 0)
+                }
+                return ticks
+              })()}
               tickLabelProps={() => ({
                 fill: axisColor,
                 fontSize: 12,
@@ -254,7 +308,7 @@ export function NetworkTrafficStackedAreaChart({
                 textAnchor: 'end',
                 dx: -4,
               })}
-              tickFormat={(value) => `${value} Mbps`}
+              tickFormat={(value) => formatBandwidthValue(Number(value))}
               numTicks={5}
             />
           </Group>
@@ -285,7 +339,7 @@ export function NetworkTrafficStackedAreaChart({
                   <span className="text-gray-600 dark:text-gray-400">入站:</span>
                 </div>
                 <span className="font-semibold text-gray-900 dark:text-gray-100">
-                  {tooltipData.inbound.toFixed(1)} Mbps
+                  {formatBandwidthValue(tooltipData.inbound)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4 text-sm">
@@ -294,14 +348,17 @@ export function NetworkTrafficStackedAreaChart({
                   <span className="text-gray-600 dark:text-gray-400">出站:</span>
                 </div>
                 <span className="font-semibold text-gray-900 dark:text-gray-100">
-                  {tooltipData.outbound.toFixed(1)} Mbps
+                  {formatBandwidthValue(tooltipData.outbound)}
                 </span>
               </div>
               <div className="mt-2 border-t border-gray-200 pt-2 dark:border-gray-700">
                 <div className="flex items-center justify-between gap-4 text-sm">
-                  <span className="font-medium text-gray-700 dark:text-gray-300">总计:</span>
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full bg-orange-500" />
+                    <span className="font-medium text-gray-700 dark:text-gray-300">总流量:</span>
+                  </div>
                   <span className="font-bold text-gray-900 dark:text-gray-100">
-                    {tooltipData.total.toFixed(1)} Mbps
+                    {formatBandwidthValue(tooltipData.total)}
                   </span>
                 </div>
               </div>
@@ -319,6 +376,10 @@ export function NetworkTrafficStackedAreaChart({
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-green-500" />
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">出站流量</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="h-3 w-3 rounded-full bg-orange-500" />
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">总流量</span>
         </div>
       </div>
     </ChartContainer>
