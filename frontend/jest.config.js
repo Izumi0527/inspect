@@ -12,6 +12,9 @@ const customJestConfig = {
   
   // Test environment
   testEnvironment: 'jest-environment-jsdom',
+
+  // Allow loading test files from repository-level tests directory
+  roots: ['<rootDir>', '<rootDir>/../tests/frontend'],
   
   // Module name mapping
   moduleNameMapper: {
@@ -21,12 +24,16 @@ const customJestConfig = {
     '^@/hooks/(.*)$': '<rootDir>/src/hooks/$1',
     '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
   },
+
+  // Ensure tests outside frontend root can still resolve frontend dependencies
+  moduleDirectories: ['node_modules', '<rootDir>/node_modules'],
   
   // Test patterns
   testMatch: [
     '<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/src/**/*.{test,spec}.{js,jsx,ts,tsx}',
     '<rootDir>/__tests__/**/*.{js,jsx,ts,tsx}',
+    '<rootDir>/../tests/frontend/**/*.{test,spec}.{js,jsx,ts,tsx}',
   ],
   
   // Coverage configuration

@@ -67,7 +67,7 @@ export interface AlertQueryParams {
   deviceIds?: string[]
   startDate?: string
   endDate?: string
-  category?: string
+  category?: string[]
 }
 
 export interface AlertPaginatedResponse {

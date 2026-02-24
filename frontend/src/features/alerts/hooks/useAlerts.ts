@@ -56,34 +56,28 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
   const handleAcknowledgeAlert = useCallback(async (id: string, assignee?: string) => {
     try {
       await acknowledgeAlert(id, assignee)
-      // 重新加载数据
-      await loadAlerts()
     } catch (err) {
       setError(err instanceof Error ? err.message : '确认告警失败')
     }
-  }, [loadAlerts])
+  }, [])
 
   // 解决告警
   const handleResolveAlert = useCallback(async (id: string, comment?: string) => {
     try {
       await resolveAlert(id, comment)
-      // 重新加载数据
-      await loadAlerts()
     } catch (err) {
       setError(err instanceof Error ? err.message : '解决告警失败')
     }
-  }, [loadAlerts])
+  }, [])
 
   // 删除告警
   const handleDeleteAlert = useCallback(async (id: string) => {
     try {
       await deleteAlert(id)
-      // 重新加载数据
-      await loadAlerts()
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除告警失败')
     }
-  }, [loadAlerts])
+  }, [])
 
   // 初始加载
   useEffect(() => {

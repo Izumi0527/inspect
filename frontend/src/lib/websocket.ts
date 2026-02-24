@@ -3,7 +3,7 @@
  * 处理实时监控数据和告警推送
  */
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useAuth } from '@/lib/contexts/auth-context'
 
 // WebSocket事件类型
@@ -472,7 +472,7 @@ export const wsManager = new WebSocketManager()
 
 // WebSocket Hook
 export function useWebSocket() {
-  return {
+  return useMemo(() => ({
     connect: (userId?: number) => wsManager.connect(userId),
     disconnect: () => wsManager.disconnect(),
     on: <T = unknown>(event: string, handler: EventHandler<T>) => wsManager.on(event, handler),
@@ -486,7 +486,7 @@ export function useWebSocket() {
     unsubscribeFromAlerts: () => wsManager.unsubscribeFromAlerts(),
     subscribeToInspectionTasks: () => wsManager.subscribeToInspectionTasks(),
     unsubscribeFromInspectionTasks: () => wsManager.unsubscribeFromInspectionTasks(),
-  }
+  }), [])
 }
 
 // 便捷Hook：监听特定事件
@@ -510,17 +510,17 @@ export function useWebSocketConnection() {
 
   // 自动连接/断开
   useEffect(() => {
-    if (isAuthenticated && user) {
-      ws.connect(user.id).catch(console.error)
+    if (isAuthenticated && user?.id) {
+      wsManager.connect(user.id).catch(console.error)
     } else {
-      ws.disconnect()
+      wsManager.disconnect()
     }
 
     // 组件卸载时断开连接
     return () => {
-      ws.disconnect()
+      wsManager.disconnect()
     }
-  }, [isAuthenticated, user, ws])
+  }, [isAuthenticated, user?.id])
 
   return ws
 }

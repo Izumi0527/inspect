@@ -400,9 +400,9 @@ go run ./cmd/migrate
 
 #### **API对接状态**
 
-✅ **前后端API已完全对接** (2026-01-14更新)
+✅ **前后端API已对齐到当前实现** (2026-02-24更新)
 
-- **API匹配度**: 100%
+- **接口契约基线**: `docs/api/openapi.json` + `backend-go/internal/http/handlers/*`
 - **已修复问题**: 20个
 - **新增端点**: 24个
 - **详细报告**: [API对接修复报告](docs/api-fix-completion-report.md)
@@ -1031,7 +1031,6 @@ Made with ❤️ by Development Team
 **项目版本**: v1.0.0 | **API版本**: v1.1 | **最后更新**: 2026-01-14
 
 </div>
-
 
 
 

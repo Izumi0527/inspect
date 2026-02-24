@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,11 +16,13 @@ import (
 
 	"github.com/your-org/inspect-system/backend-go/internal/alerts"
 	"github.com/your-org/inspect-system/backend-go/internal/auth"
+	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
 type AlertsHandler struct {
 	Service *alerts.Service
 	Auth    *auth.Service
+	WS      *ws.Manager
 }
 
 func (h AlertsHandler) Register(group *echo.Group) {
@@ -55,6 +59,7 @@ func (h AlertsHandler) ListAlerts(c echo.Context) error {
 	params := c.QueryParams()
 	statusValues := parseQueryValues(params["status"])
 	severityValues := parseQueryValues(params["severity"])
+	categoryValues := parseQueryValues(params["category"])
 	deviceIDs := parseIntList(append(params["device_ids"], params["device_id"]...))
 
 	startDate, _ := parseTimeOptional(c.QueryParam("start_date"))
@@ -72,7 +77,7 @@ func (h AlertsHandler) ListAlerts(c echo.Context) error {
 		Statuses:   statusValues,
 		Severities: severityValues,
 		DeviceIDs:  deviceIDs,
-		Category:   strings.TrimSpace(c.QueryParam("category")),
+		Categories: categoryValues,
 		StartDate:  startDate,
 		EndDate:    endDate,
 		Search:     strings.TrimSpace(c.QueryParam("search")),
@@ -257,6 +262,7 @@ func (h AlertsHandler) AcknowledgeAlert(c echo.Context) error {
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to acknowledge alert")
 	}
+	h.broadcastAlertStatus(alertID, "acknowledged")
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -296,6 +302,7 @@ func (h AlertsHandler) ResolveAlert(c echo.Context) error {
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to resolve alert")
 	}
+	h.broadcastAlertStatus(alertID, "resolved")
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -334,6 +341,7 @@ func (h AlertsHandler) ReactivateAlert(c echo.Context) error {
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to reactivate alert")
 	}
+	h.broadcastAlertStatus(alertID, "active")
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -359,6 +367,7 @@ func (h AlertsHandler) DeleteAlert(c echo.Context) error {
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete alert")
 	}
+	h.broadcastAlertStatus(alertID, "resolved")
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -412,40 +421,128 @@ func (h AlertsHandler) ExportAlerts(c echo.Context) error {
 	}
 
 	params := c.QueryParams()
-	filter := alerts.ListAlertsFilter{
-		Page:       1,
-		PageSize:   1000,
-		Statuses:   parseQueryValues(params["status"]),
-		Severities: parseQueryValues(params["severity"]),
-		Search:     strings.TrimSpace(c.QueryParam("search")),
-		SortBy:     "last_occurred",
-		SortOrder:  "desc",
+	deviceIDs := parseIntList(append(params["device_ids"], params["device_id"]...))
+	categoryValues := parseQueryValues(params["category"])
+	startDate, _ := parseTimeOptional(c.QueryParam("start_date"))
+	if startDate == nil {
+		startDate, _ = parseTimeOptional(c.QueryParam("start_time"))
+	}
+	endDate, _ := parseTimeOptional(c.QueryParam("end_date"))
+	if endDate == nil {
+		endDate, _ = parseTimeOptional(c.QueryParam("end_time"))
 	}
 
-	rows, _, err := h.Service.ListAlerts(c.Request().Context(), filter)
+	sortBy := strings.TrimSpace(c.QueryParam("sort_by"))
+	if sortBy == "" {
+		sortBy = "last_occurred"
+	}
+	sortOrder := strings.TrimSpace(c.QueryParam("sort_order"))
+	if sortOrder == "" {
+		sortOrder = "desc"
+	}
+
+	filter := alerts.ListAlertsFilter{
+		Statuses:   parseQueryValues(params["status"]),
+		Severities: parseQueryValues(params["severity"]),
+		Categories: categoryValues,
+		DeviceIDs:  deviceIDs,
+		StartDate:  startDate,
+		EndDate:    endDate,
+		Search:     strings.TrimSpace(c.QueryParam("search")),
+		SortBy:     sortBy,
+		SortOrder:  sortOrder,
+	}
+
+	rows, err := CollectAllAlertsForExport(
+		filter,
+		func(pageFilter alerts.ListAlertsFilter) ([]alerts.AlertWithDevice, int64, error) {
+			return h.Service.ListAlerts(c.Request().Context(), pageFilter)
+		},
+		200,
+	)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to export alerts")
 	}
 
-	csvLines := []string{"ID,标题,设备,严重级别,状态,分类,时间,描述"}
-	for _, row := range rows {
-		device := resolveAlertDevice(row)
-		ts := resolveAlertTimestamp(row).Format("2006-01-02 15:04:05")
-		severity := alerts.NormalizeSeverity(row.Severity)
-		status := alerts.NormalizeStatus(row.Status)
-		title := strings.ReplaceAll(row.Title, ",", "，")
-		message := strings.ReplaceAll(row.Message, ",", "，")
-		message = strings.ReplaceAll(message, "\n", " ")
-		line := fmt.Sprintf("%d,%s,%s,%s,%s,%s,%s,%s",
-			row.ID, title, device, severity, status, row.Category, ts, message)
-		csvLines = append(csvLines, line)
+	csvData, err := BuildAlertsCSV(rows)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to build export file")
 	}
 
-	csv := strings.Join(csvLines, "\n")
 	c.Response().Header().Set("Content-Type", "text/csv; charset=utf-8")
 	c.Response().Header().Set("Content-Disposition", "attachment; filename=alerts_export.csv")
 	// BOM for Excel UTF-8 compatibility
-	return c.String(http.StatusOK, "\xEF\xBB\xBF"+csv)
+	return c.Blob(http.StatusOK, "text/csv; charset=utf-8", append([]byte("\xEF\xBB\xBF"), csvData...))
+}
+
+type AlertsExportFetcher func(filter alerts.ListAlertsFilter) ([]alerts.AlertWithDevice, int64, error)
+
+// CollectAllAlertsForExport 分页聚合导出数据，直到达到 total。
+func CollectAllAlertsForExport(baseFilter alerts.ListAlertsFilter, fetch AlertsExportFetcher, pageSize int) ([]alerts.AlertWithDevice, error) {
+	if fetch == nil {
+		return nil, fmt.Errorf("fetcher is nil")
+	}
+	if pageSize <= 0 {
+		pageSize = 200
+	}
+
+	allRows := make([]alerts.AlertWithDevice, 0)
+	page := 1
+
+	for {
+		pageFilter := baseFilter
+		pageFilter.Page = page
+		pageFilter.PageSize = pageSize
+
+		rows, total, err := fetch(pageFilter)
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) == 0 {
+			break
+		}
+
+		allRows = append(allRows, rows...)
+		if total > 0 && int64(len(allRows)) >= total {
+			break
+		}
+		page++
+	}
+
+	return allRows, nil
+}
+
+// BuildAlertsCSV 使用标准 CSV Writer 生成导出内容，自动处理转义与引用。
+func BuildAlertsCSV(rows []alerts.AlertWithDevice) ([]byte, error) {
+	buffer := bytes.NewBuffer(nil)
+	writer := csv.NewWriter(buffer)
+
+	if err := writer.Write([]string{"ID", "标题", "设备", "严重级别", "状态", "分类", "时间", "描述"}); err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		record := []string{
+			strconv.Itoa(row.ID),
+			row.Title,
+			resolveAlertDevice(row),
+			alerts.NormalizeSeverity(row.Severity),
+			alerts.NormalizeStatus(row.Status),
+			row.Category,
+			resolveAlertTimestamp(row).Format("2006-01-02 15:04:05"),
+			row.Message,
+		}
+		if err := writer.Write(record); err != nil {
+			return nil, err
+		}
+	}
+
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return nil, err
+	}
+
+	return buffer.Bytes(), nil
 }
 
 func (h AlertsHandler) BulkAlertAction(c echo.Context) error {
@@ -490,13 +587,17 @@ func (h AlertsHandler) BulkAlertAction(c echo.Context) error {
 
 	for _, id := range alertIDs {
 		var opErr error
+		broadcastStatus := ""
 		switch action {
 		case "acknowledge":
 			opErr = h.Service.AcknowledgeAlert(c.Request().Context(), id, operator, note, assignee)
+			broadcastStatus = "acknowledged"
 		case "resolve":
 			opErr = h.Service.ResolveAlert(c.Request().Context(), id, operator, note, note)
+			broadcastStatus = "resolved"
 		case "delete":
 			opErr = h.Service.DeleteAlert(c.Request().Context(), id)
+			broadcastStatus = "resolved"
 		case "assign":
 			opErr = h.Service.AssignAlert(c.Request().Context(), id, operator, assignee)
 		case "comment":
@@ -512,11 +613,14 @@ func (h AlertsHandler) BulkAlertAction(c echo.Context) error {
 			})
 			continue
 		}
+		if broadcastStatus != "" {
+			h.broadcastAlertStatus(id, broadcastStatus)
+		}
 		processed++
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"success":  len(failed) == 0,
+		"success":   len(failed) == 0,
 		"processed": processed,
 		"failed":    len(failed),
 		"errors":    failed,
@@ -750,10 +854,10 @@ func buildRecentAlerts(rows []alerts.AlertWithDevice, limit int) []map[string]in
 			message = row.Message
 		}
 		response = append(response, map[string]interface{}{
-			"id":       row.ID,
-			"message":  message,
-			"severity": alerts.NormalizeSeverity(row.Severity),
-			"time":     resolveAlertTimestamp(row).Format(time.RFC3339),
+			"id":          row.ID,
+			"message":     message,
+			"severity":    alerts.NormalizeSeverity(row.Severity),
+			"time":        resolveAlertTimestamp(row).Format(time.RFC3339),
 			"device_name": resolveAlertDevice(row),
 		})
 	}
@@ -807,8 +911,8 @@ func resolveAlertAssignee(row alerts.AlertWithDevice) string {
 }
 
 type alertRuleTriggerStats struct {
-	RuleID       int        `gorm:"column:rule_id"`
-	TriggerCount int        `gorm:"column:trigger_count"`
+	RuleID        int        `gorm:"column:rule_id"`
+	TriggerCount  int        `gorm:"column:trigger_count"`
 	LastTriggered *time.Time `gorm:"column:last_triggered"`
 }
 
@@ -922,6 +1026,24 @@ func buildOperator(user *auth.UserRecord) alerts.Operator {
 		name = strings.TrimSpace(*user.FullName)
 	}
 	return alerts.Operator{ID: user.ID, Name: name}
+}
+
+func (h AlertsHandler) broadcastAlertStatus(alertID int, status string) {
+	if h.WS == nil || alertID <= 0 {
+		return
+	}
+	normalizedStatus := strings.ToLower(strings.TrimSpace(status))
+	if normalizedStatus == "" {
+		return
+	}
+	h.WS.Broadcast(ws.Message{
+		Type: ws.MessageAlert,
+		Data: map[string]interface{}{
+			"id":        strconv.Itoa(alertID),
+			"status":    normalizedStatus,
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+		},
+	})
 }
 
 func parseQueryValues(values []string) []string {

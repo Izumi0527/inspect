@@ -161,6 +161,11 @@ curl -X GET "http://localhost:8001/api/v1/monitoring/devices/1/metrics" \
 | PUT | `/alerts/rules/:rule_id` | 更新告警规则 |
 | DELETE | `/alerts/rules/:rule_id` | 删除告警规则 |
 
+**查询与返回约定（实现基线）**:
+- `GET /alerts` 返回分页对象：`alerts`, `total`, `page`, `page_size`, `current_page`, `has_next`, `has_prev`
+- `category` 支持多值：`?category=security&category=performance` 或 `?category=security,performance`
+- `GET /alerts/export` 与 `GET /alerts` 使用同一筛选维度（状态、级别、分类、设备、时间范围、搜索、排序）
+
 **示例**:
 ```bash
 # 获取告警列表

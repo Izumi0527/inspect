@@ -1,5 +1,5 @@
 
-import { api } from '@/lib/api-client'
+import { api, TokenManager } from '@/lib/api-client'
 import {
   Alert,
   AlertQueryParams,
@@ -129,7 +129,7 @@ const buildQueryParams = (params?: AlertQueryParams) => {
   if (params.startDate) query.start_date = params.startDate
   if (params.endDate) query.end_date = params.endDate
   if (params.search) query.search = params.search
-  if (params.category) query.category = params.category
+  if (params.category && params.category.length) query.category = params.category
   if (params.sortBy) query.sort_by = params.sortBy
   if (params.sortOrder) query.sort_order = params.sortOrder
 
@@ -311,7 +311,7 @@ export async function exportAlerts(params?: AlertQueryParams): Promise<void> {
   const url = `${baseUrl}/api/v1/alerts/export${searchParams.toString() ? '?' + searchParams.toString() : ''}`
 
   try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') || '' : ''
+    const token = TokenManager.getAccessToken() || ''
     const response = await fetch(url, {
       headers: { Authorization: token ? `Bearer ${token}` : '' },
     })

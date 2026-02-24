@@ -6036,11 +6036,47 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AlertResponse"
+                  "type": "object",
+                  "properties": {
+                    "alerts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AlertResponse"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "pages": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "page_size": {
+                      "type": "integer"
+                    },
+                    "current_page": {
+                      "type": "integer"
+                    },
+                    "has_next": {
+                      "type": "boolean"
+                    },
+                    "has_prev": {
+                      "type": "boolean"
+                    }
                   },
-                  "title": "Response Get Alerts Api V1 Alerts  Get"
+                  "required": [
+                    "alerts",
+                    "total",
+                    "pages",
+                    "page",
+                    "page_size",
+                    "current_page",
+                    "has_next",
+                    "has_prev"
+                  ],
+                  "title": "AlertListResponse"
                 }
               }
             }

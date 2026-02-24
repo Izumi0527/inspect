@@ -47,17 +47,17 @@ type AlertWithDevice struct {
 }
 
 type ListAlertsFilter struct {
-	Page      int
-	PageSize  int
-	Statuses  []string
+	Page       int
+	PageSize   int
+	Statuses   []string
 	Severities []string
-	DeviceIDs []int
-	Category  string
-	StartDate *time.Time
-	EndDate   *time.Time
-	Search    string
-	SortBy    string
-	SortOrder string
+	DeviceIDs  []int
+	Categories []string
+	StartDate  *time.Time
+	EndDate    *time.Time
+	Search     string
+	SortBy     string
+	SortOrder  string
 }
 
 type ListRulesFilter struct {
@@ -118,18 +118,22 @@ func (s *Service) ListAlerts(ctx context.Context, filter ListAlertsFilter) ([]Al
 	if len(filter.DeviceIDs) > 0 {
 		query = query.Where("a.device_id IN ?", filter.DeviceIDs)
 	}
-	if strings.TrimSpace(filter.Category) != "" {
-		query = query.Where("a.category = ?", strings.TrimSpace(filter.Category))
+	categories := mapCategoryFilters(filter.Categories)
+	if len(categories) > 0 {
+		query = query.Where("LOWER(a.category) IN ?", categories)
 	}
 	if filter.StartDate != nil {
-		query = query.Where("a.first_occurred >= ?", *filter.StartDate)
+		query = query.Where("COALESCE(a.first_occurred, a.created_at) >= ?", *filter.StartDate)
 	}
 	if filter.EndDate != nil {
-		query = query.Where("a.first_occurred <= ?", *filter.EndDate)
+		query = query.Where("COALESCE(a.first_occurred, a.created_at) <= ?", *filter.EndDate)
 	}
 	if strings.TrimSpace(filter.Search) != "" {
 		pattern := "%" + strings.TrimSpace(filter.Search) + "%"
-		query = query.Where("(a.title ILIKE ? OR a.message ILIKE ?)", pattern, pattern)
+		query = query.Where(
+			"(a.title ILIKE ? OR a.message ILIKE ? OR d.name ILIKE ? OR CAST(d.ip_address AS TEXT) ILIKE ?)",
+			pattern, pattern, pattern, pattern,
+		)
 	}
 
 	statuses := mapStatusFilters(filter.Statuses)
@@ -349,17 +353,17 @@ func (s *Service) ReactivateAlert(ctx context.Context, alertID int, operator Ope
 
 		now := time.Now().UTC()
 		updates := map[string]interface{}{
-			"status":             alertStatusOpen,
-			"reactivated_at":     now,
-			"reactivated_by":     normalizeOperator(operator).ID,
+			"status":              alertStatusOpen,
+			"reactivated_at":      now,
+			"reactivated_by":      normalizeOperator(operator).ID,
 			"reactivation_reason": stringValueOrNil(reason),
-			"acknowledged_at":    nil,
-			"acknowledged_by":    nil,
-			"resolved_at":        nil,
-			"resolved_by":        nil,
-			"resolution_note":    nil,
-			"last_occurred":      now,
-			"updated_at":         now,
+			"acknowledged_at":     nil,
+			"acknowledged_by":     nil,
+			"resolved_at":         nil,
+			"resolved_by":         nil,
+			"resolution_note":     nil,
+			"last_occurred":       now,
+			"updated_at":          now,
 		}
 
 		if err := tx.Table("alerts").Where("id = ?", alertID).Updates(updates).Error; err != nil {
@@ -611,6 +615,30 @@ func mapSeverityFilters(values []string) []string {
 		result = append(result, normalized)
 	}
 	return result
+}
+
+func mapCategoryFilters(values []string) []string {
+	result := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, raw := range values {
+		for _, part := range strings.Split(raw, ",") {
+			normalized := strings.ToLower(strings.TrimSpace(part))
+			if normalized == "" {
+				continue
+			}
+			if _, ok := seen[normalized]; ok {
+				continue
+			}
+			seen[normalized] = struct{}{}
+			result = append(result, normalized)
+		}
+	}
+	return result
+}
+
+// NormalizeCategoryFilters 对分类筛选值做归一化处理，便于跨包回归测试复用。
+func NormalizeCategoryFilters(values []string) []string {
+	return mapCategoryFilters(values)
 }
 
 func buildAlertOrder(sortBy string, sortOrder string) string {

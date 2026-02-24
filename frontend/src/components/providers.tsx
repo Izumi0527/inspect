@@ -10,8 +10,14 @@ import { SidebarProvider } from '@/lib/contexts/sidebar-context'
 import { ApiClientError } from '@/lib/api-client'
 import httpInterceptor from '@/services/httpInterceptor'
 import { createLogger } from '@/lib/logger'
+import { useWebSocketConnection } from '@/lib/websocket'
 
 const logger = createLogger('providers')
+
+function WebSocketBootstrap() {
+  useWebSocketConnection()
+  return null
+}
 
 const getErrorStatus = (error: unknown): number | undefined => {
   if (error instanceof ApiClientError) {
@@ -79,6 +85,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     >
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <WebSocketBootstrap />
           <SidebarProvider>
             {children}
             <Toaster

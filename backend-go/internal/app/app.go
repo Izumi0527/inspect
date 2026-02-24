@@ -9,34 +9,34 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"github.com/your-org/inspect-system/backend-go/internal/auth"
 	"github.com/your-org/inspect-system/backend-go/internal/alerts"
+	"github.com/your-org/inspect-system/backend-go/internal/auth"
 	"github.com/your-org/inspect-system/backend-go/internal/config"
 	"github.com/your-org/inspect-system/backend-go/internal/dashboard"
 	"github.com/your-org/inspect-system/backend-go/internal/db"
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	"github.com/your-org/inspect-system/backend-go/internal/escalation"
-	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	httpserver "github.com/your-org/inspect-system/backend-go/internal/http"
 	handlers "github.com/your-org/inspect-system/backend-go/internal/http/handlers"
+	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"github.com/your-org/inspect-system/backend-go/internal/logger"
 	"github.com/your-org/inspect-system/backend-go/internal/logs"
 	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
-	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	redisstore "github.com/your-org/inspect-system/backend-go/internal/redis"
-	"github.com/your-org/inspect-system/backend-go/internal/settings"
+	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"github.com/your-org/inspect-system/backend-go/internal/scheduler"
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"github.com/your-org/inspect-system/backend-go/internal/traffic"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
 type App struct {
-	Config config.Config
-	Logger *zap.Logger
-	DB     *gorm.DB
-	Redis  *redis.Client
-	Echo   *echo.Echo
-	Scheduler *scheduler.Service
+	Config       config.Config
+	Logger       *zap.Logger
+	DB           *gorm.DB
+	Redis        *redis.Client
+	Echo         *echo.Echo
+	Scheduler    *scheduler.Service
 	TrapListener *logs.SNMPTrapListener
 }
 
@@ -68,12 +68,12 @@ func New() (*App, error) {
 	wsManager := ws.NewManager()
 	wsHandler := ws.NewHandler(wsManager, log)
 	metricsWriter := monitoring.NewMetricsWriter(dbConn, wsManager, log)
-	
+
 	// 初始化监控数据缓存
 	cacheConfig := monitoring.DefaultCacheConfig()
 	metricsCache := monitoring.NewMetricsCache(redisClient, cacheConfig, log)
 	metricsWriter.SetCache(metricsCache)
-	
+
 	monitoringHandler := handlers.MonitoringHandler{
 		Writer:          metricsWriter,
 		ReportOutputDir: cfg.ReportOutputDir,
@@ -112,6 +112,7 @@ func New() (*App, error) {
 	alertsHandler := handlers.AlertsHandler{
 		Service: alertService,
 		Auth:    authService,
+		WS:      wsManager,
 	}
 
 	escalationService := escalation.NewService(dbConn, log)
@@ -212,12 +213,12 @@ func New() (*App, error) {
 	)
 
 	return &App{
-		Config: cfg,
-		Logger: log,
-		DB:     dbConn,
-		Redis:  redisClient,
-		Echo:   server,
-		Scheduler: schedulerService,
+		Config:       cfg,
+		Logger:       log,
+		DB:           dbConn,
+		Redis:        redisClient,
+		Echo:         server,
+		Scheduler:    schedulerService,
 		TrapListener: trapListener,
 	}, nil
 }

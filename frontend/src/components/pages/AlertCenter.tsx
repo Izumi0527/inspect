@@ -1,3 +1,7 @@
+/**
+ * @deprecated 历史页面，仅供参考。
+ * 当前路由 `/alerts` 实际使用 `features/alerts/components/AlertsView`。
+ */
 import * as React from 'react'
 import {
   AlertTriangle,

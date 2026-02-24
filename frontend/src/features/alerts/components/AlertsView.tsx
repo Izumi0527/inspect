@@ -8,7 +8,7 @@ import {
   useAlertSelection
 } from '../hooks/useAlerts'
 import { AlertStatsGrid } from './AlertStatsGrid'
-import { AlertAction } from '../types'
+import { AlertAction, AlertQueryParams } from '../types'
 import { AlertFiltersBar } from './AlertFiltersBar'
 import { AlertList } from './AlertList'
 import { AlertDetailModal } from './AlertDetailModal'
@@ -28,6 +28,7 @@ import { useWebSocketEvent } from '@/lib/websocket'
 import { WebSocketEvents } from '@/lib/websocket'
 
 const AUTO_REFRESH_INTERVAL = 30000 // 30秒
+const WS_SELF_EVENT_TTL_MS = 5000 // 本端操作后短时间内忽略同ID回推事件，避免重复刷新
 
 export const AlertsView: React.FC = () => {
   const searchParams = useSearchParams()
@@ -41,11 +42,12 @@ export const AlertsView: React.FC = () => {
   const [sortBy, setSortBy] = useState<'timestamp' | 'severity' | 'status'>('timestamp')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const wsSelfEventRef = useRef<Map<string, number>>(new Map())
 
   const { filters, updateFilter } = useAlertFilters()
 
   const queryParams = useMemo(() => {
-    const params: Record<string, unknown> = {
+    const params: AlertQueryParams = {
       page: currentPage,
       pageSize,
       sortBy,
@@ -59,13 +61,25 @@ export const AlertsView: React.FC = () => {
     if (advancedFilters.severity && advancedFilters.severity.length > 0) {
       params.severity = advancedFilters.severity
     } else if (filters.severityFilter && filters.severityFilter !== 'all') {
-      params.severity = [filters.severityFilter]
+      if (
+        filters.severityFilter === 'critical' ||
+        filters.severityFilter === 'warning' ||
+        filters.severityFilter === 'info'
+      ) {
+        params.severity = [filters.severityFilter]
+      }
     }
 
     if (advancedFilters.status && advancedFilters.status.length > 0) {
       params.status = advancedFilters.status
     } else if (filters.statusFilter && filters.statusFilter !== 'all') {
-      params.status = [filters.statusFilter]
+      if (
+        filters.statusFilter === 'active' ||
+        filters.statusFilter === 'acknowledged' ||
+        filters.statusFilter === 'resolved'
+      ) {
+        params.status = [filters.statusFilter]
+      }
     }
 
     if (advancedFilters.category && advancedFilters.category.length > 0) {
@@ -135,14 +149,45 @@ export const AlertsView: React.FC = () => {
     await refreshAll()
   }, [refreshAll])
 
+  const markSelfEvent = useCallback((id: string) => {
+    const normalizedId = id.trim()
+    if (!normalizedId) return
+    wsSelfEventRef.current.set(normalizedId, Date.now() + WS_SELF_EVENT_TTL_MS)
+  }, [])
+
+  const shouldSkipSelfEventRefresh = useCallback((payload: unknown) => {
+    const now = Date.now()
+    wsSelfEventRef.current.forEach((expiresAt, key) => {
+      if (expiresAt <= now) wsSelfEventRef.current.delete(key)
+    })
+
+    if (!payload || typeof payload !== 'object') return false
+    const rawId = (payload as Record<string, unknown>).id
+    let id = ''
+    if (typeof rawId === 'string') id = rawId.trim()
+    if (typeof rawId === 'number' && Number.isFinite(rawId)) id = String(rawId)
+    if (!id) return false
+
+    const expiresAt = wsSelfEventRef.current.get(id)
+    if (!expiresAt || expiresAt <= now) {
+      wsSelfEventRef.current.delete(id)
+      return false
+    }
+    wsSelfEventRef.current.delete(id)
+    return true
+  }, [])
+
   // WebSocket 实时告警更新
-  useWebSocketEvent(WebSocketEvents.NEW_ALERT, () => {
+  useWebSocketEvent(WebSocketEvents.NEW_ALERT, (payload) => {
+    if (shouldSkipSelfEventRefresh(payload)) return
     refreshAll()
   })
-  useWebSocketEvent(WebSocketEvents.ALERT_UPDATE, () => {
+  useWebSocketEvent(WebSocketEvents.ALERT_UPDATE, (payload) => {
+    if (shouldSkipSelfEventRefresh(payload)) return
     refreshAll()
   })
-  useWebSocketEvent(WebSocketEvents.ALERT_RESOLVED, () => {
+  useWebSocketEvent(WebSocketEvents.ALERT_RESOLVED, (payload) => {
+    if (shouldSkipSelfEventRefresh(payload)) return
     refreshAll()
   })
 
@@ -150,7 +195,7 @@ export const AlertsView: React.FC = () => {
   const handleExport = useCallback(async () => {
     setExporting(true)
     try {
-      await exportAlerts(queryParams as any)
+      await exportAlerts(queryParams)
     } catch {
       // error already logged in exportAlerts
     } finally {
@@ -158,9 +203,28 @@ export const AlertsView: React.FC = () => {
     }
   }, [queryParams])
 
+  const handleAcknowledgeAndRefresh = useCallback(async (id: string, assignee?: string) => {
+    markSelfEvent(id)
+    await handleAcknowledgeAlert(id, assignee)
+    await refreshAll()
+  }, [markSelfEvent, handleAcknowledgeAlert, refreshAll])
+
+  const handleResolveAndRefresh = useCallback(async (id: string, comment?: string) => {
+    markSelfEvent(id)
+    await handleResolveAlert(id, comment)
+    await refreshAll()
+  }, [markSelfEvent, handleResolveAlert, refreshAll])
+
+  const handleDeleteAndRefresh = useCallback(async (id: string) => {
+    markSelfEvent(id)
+    await handleDeleteAlert(id)
+    await refreshAll()
+  }, [markSelfEvent, handleDeleteAlert, refreshAll])
+
   // 批量操作
   const handleBulkActionClick = async (action: AlertAction) => {
     try {
+      selectedAlerts.forEach(markSelfEvent)
       await handleBulkAction(action)
       await refreshAll()
     } catch (error) {
@@ -345,9 +409,9 @@ export const AlertsView: React.FC = () => {
                   onSelectAlert={toggleAlert}
                   onSelectAll={selectAll}
                   onClearSelection={clearSelection}
-                  onAcknowledge={handleAcknowledgeAlert}
-                  onResolve={handleResolveAlert}
-                  onDelete={handleDeleteAlert}
+                  onAcknowledge={handleAcknowledgeAndRefresh}
+                  onResolve={handleResolveAndRefresh}
+                  onDelete={handleDeleteAndRefresh}
                   pagination={{
                     current: pagination.page,
                     total: pagination.total,
@@ -368,9 +432,9 @@ export const AlertsView: React.FC = () => {
           open={!!selectedAlertId}
           alert={selectedAlert}
           onClose={handleCloseAlertDetail}
-          onAcknowledge={handleAcknowledgeAlert}
-          onResolve={handleResolveAlert}
-          onDelete={handleDeleteAlert}
+          onAcknowledge={handleAcknowledgeAndRefresh}
+          onResolve={handleResolveAndRefresh}
+          onDelete={handleDeleteAndRefresh}
         />
       )}
     </AppLayout>
