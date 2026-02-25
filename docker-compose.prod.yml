@@ -142,6 +142,9 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
       - ./backups:/app/backups
+    ports:
+      - "5514:5514"
+      - "5514:5514/udp"
     depends_on:
       postgres:
         condition: service_healthy

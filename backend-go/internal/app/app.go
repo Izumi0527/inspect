@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -38,6 +41,7 @@ type App struct {
 	Echo         *echo.Echo
 	Scheduler    *scheduler.Service
 	TrapListener *logs.SNMPTrapListener
+	Syslog       *logs.SyslogReceiver
 }
 
 func New() (*App, error) {
@@ -148,6 +152,9 @@ func New() (*App, error) {
 	// 创建 Trap 告警桥接器（scheduler 和 trapListener 都需要）
 	trapAlertBridge := alerts.NewTrapAlertBridge(dbConn, wsManager, log)
 
+	// Syslog 告警桥接器（用于日志级别联动告警 + 风暴保护）
+	syslogAlertBridge := alerts.NewSyslogAlertBridge(dbConn, redisClient, wsManager, log)
+
 	schedulerService := scheduler.NewService(
 		dbConn,
 		log,
@@ -179,9 +186,22 @@ func New() (*App, error) {
 		Auth:    authService,
 	}
 
+	syslogReceiver := logs.NewSyslogReceiver(logsService, log)
+	syslogReceiver.SetAlertCreator(syslogAlertBridge)
+
+	// 启动时从系统设置中加载 syslog 配置并尽力应用（失败不阻塞主服务启动）。
+	{
+		syslogCfg := readSyslogConfigFromSettings(context.Background(), settingsService)
+		if _, err := syslogReceiver.Apply(context.Background(), syslogCfg); err != nil && log != nil {
+			log.Warn("Syslog配置应用失败（将继续启动主服务）", zap.Error(err))
+		}
+	}
+
 	logsHandler := handlers.LogsHandler{
-		Service: logsService,
-		Auth:    authService,
+		Service:  logsService,
+		Auth:     authService,
+		Settings: settingsService,
+		Syslog:   syslogReceiver,
 	}
 	trapListener := logs.NewSNMPTrapListener(logsService, log, cfg.SnmpTrapAddress(), cfg.SnmpTrapEnabled)
 	trapListener.SetAlertCreator(trapAlertBridge)
@@ -221,6 +241,7 @@ func New() (*App, error) {
 		Echo:         server,
 		Scheduler:    schedulerService,
 		TrapListener: trapListener,
+		Syslog:       syslogReceiver,
 	}, nil
 }
 
@@ -259,6 +280,9 @@ func (a *App) Shutdown(ctx context.Context) error {
 	if a.TrapListener != nil {
 		_ = a.TrapListener.Stop(shutdownCtx)
 	}
+	if a.Syslog != nil {
+		_ = a.Syslog.Stop(shutdownCtx)
+	}
 
 	if a.DB != nil {
 		if sqlDB, err := a.DB.DB(); err == nil {
@@ -271,4 +295,121 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+type syslogSettingGetter interface {
+	GetSetting(ctx context.Context, key string) (*settings.SettingItem, error)
+}
+
+func readSyslogConfigFromSettings(ctx context.Context, getter syslogSettingGetter) logs.SyslogConfig {
+	// 默认值（与 handler/前端展示保持一致）。
+	cfg := logs.SyslogConfig{
+		Enabled:               false,
+		Protocol:              "both",
+		Host:                  "0.0.0.0",
+		Port:                  5514,
+		MaxMessageBytes:       8192,
+		AlertsEnabled:         true,
+		AlertsMaxNewPerMinute: 30,
+	}
+	if getter == nil {
+		return cfg
+	}
+
+	readString := func(key string) (string, bool) {
+		item, err := getter.GetSetting(ctx, key)
+		if err != nil || item == nil {
+			return "", false
+		}
+		switch v := item.Value.(type) {
+		case string:
+			return v, true
+		default:
+			return fmt.Sprint(v), true
+		}
+	}
+	readBool := func(key string) (bool, bool) {
+		item, err := getter.GetSetting(ctx, key)
+		if err != nil || item == nil {
+			return false, false
+		}
+		switch v := item.Value.(type) {
+		case bool:
+			return v, true
+		case string:
+			trimmed := strings.ToLower(strings.TrimSpace(v))
+			if trimmed == "true" {
+				return true, true
+			}
+			if trimmed == "false" {
+				return false, true
+			}
+			return false, false
+		case int:
+			return v != 0, true
+		case int64:
+			return v != 0, true
+		case float64:
+			return v != 0, true
+		default:
+			return false, false
+		}
+	}
+	readInt := func(key string) (int, bool) {
+		item, err := getter.GetSetting(ctx, key)
+		if err != nil || item == nil {
+			return 0, false
+		}
+		switch v := item.Value.(type) {
+		case int:
+			return v, true
+		case int64:
+			return int(v), true
+		case float64:
+			return int(v), true
+		case string:
+			parsed, err := strconv.Atoi(strings.TrimSpace(v))
+			if err == nil {
+				return parsed, true
+			}
+			return 0, false
+		default:
+			return 0, false
+		}
+	}
+
+	if v, ok := readBool("logs.syslog.enabled"); ok {
+		cfg.Enabled = v
+	}
+	if v, ok := readString("logs.syslog.protocol"); ok {
+		value := strings.ToLower(strings.TrimSpace(v))
+		if value == "udp" || value == "tcp" || value == "both" {
+			cfg.Protocol = value
+		}
+	}
+	if v, ok := readString("logs.syslog.host"); ok {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			cfg.Host = trimmed
+		}
+	}
+	if v, ok := readInt("logs.syslog.port"); ok {
+		if v > 0 && v <= 65535 {
+			cfg.Port = v
+		}
+	}
+	if v, ok := readInt("logs.syslog.max_message_bytes"); ok {
+		if v >= 256 && v <= 1024*1024 {
+			cfg.MaxMessageBytes = v
+		}
+	}
+	if v, ok := readBool("logs.syslog.alerts.enabled"); ok {
+		cfg.AlertsEnabled = v
+	}
+	if v, ok := readInt("logs.syslog.alerts.max_new_per_minute"); ok {
+		if v >= 0 && v <= 10000 {
+			cfg.AlertsMaxNewPerMinute = v
+		}
+	}
+
+	return cfg
 }

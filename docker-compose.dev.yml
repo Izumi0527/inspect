@@ -109,6 +109,8 @@ services:
       - go_cache:/go/pkg/mod
     ports:
       - "8001:8000"
+      - "5514:5514"
+      - "5514:5514/udp"
     depends_on:
       postgres:
         condition: service_healthy
