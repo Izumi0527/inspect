@@ -49,6 +49,11 @@ type BatchLogCollectionResponse struct {
 	Success        bool   `json:"success"`
 	Message        string `json:"message"`
 	CollectedCount int    `json:"collected_count"`
+	// 兼容旧前端：批量采集时保持 device_id 字段存在（固定为 0）。
+	DeviceID int `json:"device_id"`
+	// 新增：提供每台设备的采集明细，便于前端展示成功/失败原因。
+	Collected map[int]int    `json:"collected,omitempty"`
+	Failed    map[int]string `json:"failed,omitempty"`
 }
 
 type ParsingRulePayload struct {

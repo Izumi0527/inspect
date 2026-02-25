@@ -258,6 +258,12 @@ func (h LogsHandler) BatchCollectLogs(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to collect logs")
 	}
 
+	response := BuildBatchCollectLogsResponse(result)
+	return c.JSON(http.StatusOK, response)
+}
+
+// BuildBatchCollectLogsResponse 构造批量采集响应（可测试），包含每台设备采集明细。
+func BuildBatchCollectLogsResponse(result logs.BatchCollectResult) logs.BatchLogCollectionResponse {
 	total := 0
 	for _, count := range result.Collected {
 		total += count
@@ -272,12 +278,14 @@ func (h LogsHandler) BatchCollectLogs(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, logs.LogCollectionResponse{
+	return logs.BatchLogCollectionResponse{
 		Success:        success,
 		Message:        message,
 		CollectedCount: total,
 		DeviceID:       0,
-	})
+		Collected:      result.Collected,
+		Failed:         result.Failed,
+	}
 }
 
 func (h LogsHandler) DeleteLog(c echo.Context) error {
