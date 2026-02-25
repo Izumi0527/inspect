@@ -68,6 +68,14 @@ export interface LogQueryParams {
   page_size?: number
 }
 
+// 日志导出参数（导出接口返回 Blob 文件流）
+export interface LogExportParams extends LogQueryParams {
+  device_ids?: number[]
+  format?: 'csv' | 'excel' | 'xlsx'
+  include_raw?: boolean
+  include_stats?: boolean
+}
+
 // 日志列表响应
 export interface LogListResponse {
   items: DeviceLog[]

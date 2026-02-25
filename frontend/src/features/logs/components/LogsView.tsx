@@ -127,7 +127,7 @@ export const LogsView: React.FC = () => {
         format,
         include_raw: true,
         include_stats: format === 'excel',
-      } as any)
+      })
 
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')

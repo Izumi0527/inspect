@@ -40,7 +40,7 @@ describe('logsApi exportLogs', () => {
       level: 'info',
       format: 'csv',
       include_raw: true,
-    } as any)
+    })
 
     expect(global.fetch).toHaveBeenCalledTimes(1)
 
@@ -54,4 +54,3 @@ describe('logsApi exportLogs', () => {
     expect(headers.Authorization).toBe('Bearer manager-token')
   })
 })
-

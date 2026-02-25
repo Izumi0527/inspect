@@ -7,6 +7,7 @@ import type {
   LogParsingRule,
   LogStatistics,
   LogQueryParams,
+  LogExportParams,
   LogListResponse,
   LogCollectionRequest,
   LogCollectionResponse
@@ -211,7 +212,7 @@ export async function batchDeleteLogs(logIds: number[]): Promise<{ deleted_count
 /**
  * 导出日志
  */
-export async function exportLogs(params: LogQueryParams): Promise<Blob> {
+export async function exportLogs(params: LogExportParams): Promise<Blob> {
   // NOTE: 后端导出接口返回的是文件流（CSV/XLSX），不能走 api-client 的 JSON 解析。
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
   const searchParams = new URLSearchParams()
@@ -224,19 +225,12 @@ export async function exportLogs(params: LogQueryParams): Promise<Blob> {
   if (params.start_time) searchParams.append('start_time', String(params.start_time))
   if (params.end_time) searchParams.append('end_time', String(params.end_time))
 
-  const anyParams = params as unknown as {
-    device_ids?: number[]
-    format?: string
-    include_raw?: boolean
-    include_stats?: boolean
+  if (Array.isArray(params.device_ids) && params.device_ids.length > 0) {
+    searchParams.append('device_ids', params.device_ids.join(','))
   }
-
-  if (Array.isArray(anyParams.device_ids) && anyParams.device_ids.length > 0) {
-    searchParams.append('device_ids', anyParams.device_ids.join(','))
-  }
-  if (anyParams.format) searchParams.append('format', String(anyParams.format))
-  if (typeof anyParams.include_raw === 'boolean') searchParams.append('include_raw', String(anyParams.include_raw))
-  if (typeof anyParams.include_stats === 'boolean') searchParams.append('include_stats', String(anyParams.include_stats))
+  if (params.format) searchParams.append('format', String(params.format))
+  if (typeof params.include_raw === 'boolean') searchParams.append('include_raw', String(params.include_raw))
+  if (typeof params.include_stats === 'boolean') searchParams.append('include_stats', String(params.include_stats))
 
   const url = `${baseUrl}/api/v1/logs/export${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
   const token = TokenManager.getAccessToken() || ''
