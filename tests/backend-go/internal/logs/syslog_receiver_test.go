@@ -90,6 +90,48 @@ func TestSyslogReceiver_TCP_NewlineDelimited_ShouldStoreLog(t *testing.T) {
 	}
 }
 
+func TestSyslogReceiver_TCP_NewlineDelimited_WithoutTrailingNewline_ShouldStoreLog(t *testing.T) {
+	writer := &fakeWriter{}
+	resolver := fakeResolver{mapping: map[string]int{"127.0.0.1": 1}}
+
+	receiver := logs.NewSyslogReceiverWithDeps(resolver, writer, zap.NewNop())
+	defer func() { _ = receiver.Stop(context.Background()) }()
+
+	status, err := receiver.Apply(context.Background(), logs.SyslogConfig{
+		Enabled:         true,
+		Protocol:        "tcp",
+		Host:            "127.0.0.1",
+		Port:            0,
+		MaxMessageBytes: 8192,
+		AlertsEnabled:   false,
+	})
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if !status.Running {
+		t.Fatalf("Running=false, want true")
+	}
+
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", status.Config.Port))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	_, _ = conn.Write([]byte("<34>Oct 11 22:14:15 mymachine sshd[123]: no-newline"))
+	_ = conn.Close()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if writer.Count() == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if writer.Count() != 1 {
+		t.Fatalf("stored=%d, want 1", writer.Count())
+	}
+}
+
 func TestSyslogReceiver_TCP_OctetCounting_ShouldStoreLog(t *testing.T) {
 	writer := &fakeWriter{}
 	resolver := fakeResolver{mapping: map[string]int{"127.0.0.1": 2}}

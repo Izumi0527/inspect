@@ -453,7 +453,15 @@ func (r *SyslogReceiver) tcpConnLoop(ctx context.Context, conn net.Conn, maxByte
 		}
 		msg, err := readSyslogFrame(reader, maxBytes)
 		if err != nil {
-			if errors.Is(err, io.EOF) || isNetClosedErr(err) || ctx.Err() != nil {
+			// EOF 时仍可能带有最后一条未以换行结束的消息（例如发送端写完后直接关闭连接）。
+			if errors.Is(err, io.EOF) {
+				text := strings.TrimSpace(msg)
+				if text != "" {
+					r.handleMessage(ctx, remoteIP, text, time.Now().UTC())
+				}
+				return
+			}
+			if isNetClosedErr(err) || ctx.Err() != nil {
 				return
 			}
 			r.setError(err)
