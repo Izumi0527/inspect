@@ -14,14 +14,35 @@ import type {
 
 const BASE_URL = '/logs'
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+/**
+ * 兼容不同后端/历史实现的响应结构：
+ * - 裸对象/数组：X
+ * - 数据包装：{ data: X }
+ * - 标准信封：{ success: true, data: X }
+ */
+const unwrapPayload = <T>(payload: unknown): T => {
+  if (isObject(payload)) {
+    if ('success' in payload && payload.success === true && 'data' in payload) {
+      return payload.data as T
+    }
+    if ('data' in payload) {
+      return unwrapPayload<T>(payload.data)
+    }
+  }
+  return payload as T
+}
+
 /**
  * 获取日志统计信息
  */
 export async function getLogStatistics(hours: number = 24): Promise<LogStatistics> {
-  const response = await api.get<{ data: LogStatistics }>(`${BASE_URL}/statistics`, {
+  const payload = await api.get<unknown>(`${BASE_URL}/statistics`, {
     params: { hours }
   })
-  return response.data
+  return unwrapPayload<LogStatistics>(payload)
 }
 
 /**
@@ -31,37 +52,39 @@ export async function getDeviceLogs(
   deviceId: number,
   params: LogQueryParams = {}
 ): Promise<LogListResponse> {
-  const response = await api.get<{ data: LogListResponse }>(`${BASE_URL}/devices/${deviceId}/logs`, {
+  const payload = await api.get<unknown>(`${BASE_URL}/devices/${deviceId}/logs`, {
     params: {
       skip: ((params.page || 1) - 1) * (params.page_size || 20),
       limit: params.page_size || 20,
       level: params.level,
       facility: params.facility,
+      source: params.source,
       search: params.search,
       start_time: params.start_time,
       end_time: params.end_time
     }
   })
-  return response.data
+  return unwrapPayload<LogListResponse>(payload)
 }
 
 /**
  * 获取所有日志列表
  */
 export async function getAllLogs(params: LogQueryParams = {}): Promise<LogListResponse> {
-  const response = await api.get<{ data: LogListResponse }>(`${BASE_URL}`, {
+  const payload = await api.get<unknown>(`${BASE_URL}`, {
     params: {
       skip: ((params.page || 1) - 1) * (params.page_size || 20),
       limit: params.page_size || 20,
       device_id: params.device_id,
       level: params.level,
       facility: params.facility,
+      source: params.source,
       search: params.search,
       start_time: params.start_time,
       end_time: params.end_time
     }
   })
-  return response.data
+  return unwrapPayload<LogListResponse>(payload)
 }
 
 /**
@@ -71,16 +94,18 @@ export async function searchLogs(
   keyword: string,
   params: LogQueryParams = {}
 ): Promise<LogListResponse> {
-  const response = await api.get<{ data: LogListResponse }>(`${BASE_URL}/search`, {
+  const payload = await api.get<unknown>(`${BASE_URL}/search`, {
     params: {
       keyword,
       skip: ((params.page || 1) - 1) * (params.page_size || 20),
       limit: params.page_size || 20,
       device_id: params.device_id,
-      level: params.level
+      level: params.level,
+      facility: params.facility,
+      source: params.source,
     }
   })
-  return response.data
+  return unwrapPayload<LogListResponse>(payload)
 }
 
 /**
@@ -90,10 +115,10 @@ export async function getRecentLogs(
   hours: number = 24,
   limit: number = 100
 ): Promise<DeviceLog[]> {
-  const response = await api.get<{ data: DeviceLog[] }>(`${BASE_URL}/recent`, {
+  const payload = await api.get<unknown>(`${BASE_URL}/recent`, {
     params: { hours, limit }
   })
-  return response.data
+  return unwrapPayload<DeviceLog[]>(payload)
 }
 
 /**
@@ -103,11 +128,11 @@ export async function collectDeviceLogs(
   deviceId: number,
   request: LogCollectionRequest
 ): Promise<LogCollectionResponse> {
-  const response = await api.post<{ data: LogCollectionResponse }>(
+  const payload = await api.post<unknown>(
     `${BASE_URL}/devices/${deviceId}/logs/collect`,
     request
   )
-  return response.data
+  return unwrapPayload<LogCollectionResponse>(payload)
 }
 
 /**
@@ -117,19 +142,19 @@ export async function batchCollectLogs(
   deviceIds: number[],
   logType: string = 'system'
 ): Promise<LogCollectionResponse> {
-  const response = await api.post<{ data: LogCollectionResponse }>(`${BASE_URL}/batch-collect`, {
+  const payload = await api.post<unknown>(`${BASE_URL}/batch-collect`, {
     device_ids: deviceIds,
     log_type: logType
   })
-  return response.data
+  return unwrapPayload<LogCollectionResponse>(payload)
 }
 
 /**
  * 获取日志解析规则列表
  */
 export async function getParsingRules(): Promise<LogParsingRule[]> {
-  const response = await api.get<{ data: LogParsingRule[] }>(`${BASE_URL}/parsing-rules`)
-  return response.data
+  const payload = await api.get<unknown>(`${BASE_URL}/parsing-rules`)
+  return unwrapPayload<LogParsingRule[]>(payload)
 }
 
 /**
@@ -138,8 +163,8 @@ export async function getParsingRules(): Promise<LogParsingRule[]> {
 export async function createParsingRule(
   rule: Omit<LogParsingRule, 'id' | 'created_at' | 'updated_at'>
 ): Promise<LogParsingRule> {
-  const response = await api.post<{ data: LogParsingRule }>(`${BASE_URL}/parsing-rules`, rule)
-  return response.data
+  const payload = await api.post<unknown>(`${BASE_URL}/parsing-rules`, rule)
+  return unwrapPayload<LogParsingRule>(payload)
 }
 
 /**
@@ -149,8 +174,8 @@ export async function updateParsingRule(
   ruleId: number,
   rule: Partial<LogParsingRule>
 ): Promise<LogParsingRule> {
-  const response = await api.put<{ data: LogParsingRule }>(`${BASE_URL}/parsing-rules/${ruleId}`, rule)
-  return response.data
+  const payload = await api.put<unknown>(`${BASE_URL}/parsing-rules/${ruleId}`, rule)
+  return unwrapPayload<LogParsingRule>(payload)
 }
 
 /**
@@ -171,10 +196,10 @@ export async function deleteLog(logId: number): Promise<void> {
  * 批量删除日志
  */
 export async function batchDeleteLogs(logIds: number[]): Promise<{ deleted_count: number }> {
-  const response = await api.post<{ data: { deleted_count: number } }>(`${BASE_URL}/batch-delete`, {
+  const payload = await api.post<unknown>(`${BASE_URL}/batch-delete`, {
     log_ids: logIds
   })
-  return response.data
+  return unwrapPayload<{ deleted_count: number }>(payload)
 }
 
 /**
