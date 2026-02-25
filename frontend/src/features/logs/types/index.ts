@@ -92,6 +92,8 @@ export interface LogCollectionResponse {
   message: string
   collected_count: number
   device_id: number
+  collected?: Record<number, number> | Record<string, number>
+  failed?: Record<number, string> | Record<string, string>
 }
 
 // 日志过滤器状态

@@ -190,14 +190,18 @@ export function useLogCollection() {
   const [collecting, setCollecting] = useState(false)
   const [progress, setProgress] = useState<Record<number, 'pending' | 'collecting' | 'done' | 'error'>>({})
 
-  const collectLogs = useCallback(async (deviceId: number, logType: string = 'system') => {
+  const collectLogs = useCallback(async (
+    deviceId: number,
+    options: { logType?: string; maxEntries?: number } = {}
+  ) => {
     setCollecting(true)
     setProgress(prev => ({ ...prev, [deviceId]: 'collecting' }))
     
     try {
       const result = await logsApi.collectDeviceLogs(deviceId, {
         device_id: deviceId,
-        log_type: logType
+        log_type: options.logType || 'system',
+        max_entries: options.maxEntries,
       })
       
       setProgress(prev => ({ ...prev, [deviceId]: 'done' }))
@@ -212,18 +216,35 @@ export function useLogCollection() {
     }
   }, [])
 
-  const batchCollect = useCallback(async (deviceIds: number[], logType: string = 'system') => {
+  const batchCollect = useCallback(async (
+    deviceIds: number[],
+    options: { logType?: string; maxEntries?: number; maxConcurrent?: number } = {}
+  ) => {
     setCollecting(true)
     deviceIds.forEach(id => {
       setProgress(prev => ({ ...prev, [id]: 'pending' }))
     })
     
     try {
-      const result = await logsApi.batchCollectLogs(deviceIds, logType)
-      deviceIds.forEach(id => {
-        setProgress(prev => ({ ...prev, [id]: 'done' }))
+      const result = await logsApi.batchCollectLogs(deviceIds, {
+        logType: options.logType || 'system',
+        maxEntries: options.maxEntries,
+        maxConcurrent: options.maxConcurrent,
       })
-      toast.success(result.message)
+
+      const failedIds = new Set<number>(
+        result.failed ? Object.keys(result.failed).map(value => Number(value)) : []
+      )
+
+      deviceIds.forEach(id => {
+        setProgress(prev => ({ ...prev, [id]: failedIds.has(id) ? 'error' : 'done' }))
+      })
+
+      if (result.success) {
+        toast.success(result.message)
+      } else {
+        toast.error(result.message || '批量采集失败')
+      }
       return result
     } catch (err: any) {
       deviceIds.forEach(id => {

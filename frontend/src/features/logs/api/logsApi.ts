@@ -140,11 +140,17 @@ export async function collectDeviceLogs(
  */
 export async function batchCollectLogs(
   deviceIds: number[],
-  logType: string = 'system'
+  options: {
+    logType?: string
+    maxEntries?: number
+    maxConcurrent?: number
+  } = {}
 ): Promise<LogCollectionResponse> {
   const payload = await api.post<unknown>(`${BASE_URL}/batch-collect`, {
     device_ids: deviceIds,
-    log_type: logType
+    log_type: options.logType || 'system',
+    max_entries: options.maxEntries,
+    max_concurrent: options.maxConcurrent,
   })
   return unwrapPayload<LogCollectionResponse>(payload)
 }

@@ -42,6 +42,9 @@ jest.mock('@/features/logs/hooks/useLogs', () => ({
   }),
   useLogCollection: () => ({
     collecting: false,
+    progress: {},
+    collectLogs: jest.fn(),
+    batchCollect: jest.fn(),
   }),
 }))
 
@@ -63,6 +66,10 @@ jest.mock('@/features/logs/components/LogList', () => ({
 
 jest.mock('@/features/logs/components/LogDetailModal', () => ({
   LogDetailModal: () => null,
+}))
+
+jest.mock('@/features/logs/components/LogCollectionModal', () => ({
+  LogCollectionModal: () => null,
 }))
 
 jest.mock('@/components/atoms/skeleton', () => ({
@@ -150,4 +157,3 @@ describe('LogsView 导出', () => {
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1)
   })
 })
-

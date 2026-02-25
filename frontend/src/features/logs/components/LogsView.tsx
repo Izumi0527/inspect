@@ -15,6 +15,7 @@ import { LogStatsGrid } from './LogStatsGrid'
 import { LogFiltersBar } from './LogFiltersBar'
 import { LogList } from './LogList'
 import { LogDetailModal } from './LogDetailModal'
+import { LogCollectionModal } from './LogCollectionModal'
 import { SkeletonCard, SkeletonList } from '@/components/atoms/skeleton'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -38,6 +39,7 @@ export const LogsView: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [selectedLog, setSelectedLog] = useState<DeviceLog | null>(null)
+  const [collectionOpen, setCollectionOpen] = useState(false)
 
   // 获取过滤器状态
   const { filters, updateFilter, resetFilters, queryParams } = useLogFilters()
@@ -67,7 +69,7 @@ export const LogsView: React.FC = () => {
     selectAll,
     clearSelection
   } = useLogSelection()
-  const { collecting } = useLogCollection()
+  const { collecting, progress, collectLogs, batchCollect } = useLogCollection()
 
   // 处理分页
   const handlePageChange = (page: number) => {
@@ -220,13 +222,13 @@ export const LogsView: React.FC = () => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => toast.success('请在设备管理页面选择设备进行采集')}>
+                    <DropdownMenuItem onClick={() => setCollectionOpen(true)}>
                       <Play className="h-4 w-4 mr-2" />
-                      采集选中设备
+                      选择设备采集
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => toast.success('批量采集功能开发中...')}>
+                    <DropdownMenuItem onClick={() => setCollectionOpen(true)}>
                       <RefreshCw className="h-4 w-4 mr-2" />
-                      批量采集所有设备
+                      批量采集（多选）
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -309,6 +311,16 @@ export const LogsView: React.FC = () => {
         open={!!selectedLog}
         log={selectedLog}
         onClose={() => setSelectedLog(null)}
+      />
+
+      <LogCollectionModal
+        open={collectionOpen}
+        onClose={() => setCollectionOpen(false)}
+        collecting={collecting}
+        progress={progress}
+        onCollectSingle={(deviceId, options) => collectLogs(deviceId, options)}
+        onCollectBatch={(deviceIds, options) => batchCollect(deviceIds, options)}
+        onAfterCollect={() => Promise.all([loadLogs(), refreshStats()])}
       />
     </AppLayout>
   )

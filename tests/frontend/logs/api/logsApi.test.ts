@@ -15,6 +15,9 @@ jest.mock('@/lib/api-client', () => ({
     put: jest.fn(),
     delete: jest.fn(),
   },
+  TokenManager: {
+    getAccessToken: jest.fn(),
+  },
 }))
 
 describe('logsApi 响应解包兼容', () => {
@@ -124,4 +127,3 @@ describe('logsApi 响应解包兼容', () => {
     expect(result.deleted_count).toBe(3)
   })
 })
-
