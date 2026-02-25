@@ -1,7 +1,7 @@
 /**
  * 日志中心 API 接口
  */
-import { api } from '@/lib/api-client'
+import { api, TokenManager } from '@/lib/api-client'
 import type {
   DeviceLog,
   LogParsingRule,
@@ -206,18 +206,42 @@ export async function batchDeleteLogs(logIds: number[]): Promise<{ deleted_count
  * 导出日志
  */
 export async function exportLogs(params: LogQueryParams): Promise<Blob> {
-  const queryParams: Record<string, string | number | boolean | undefined> = {
-    page: params.page,
-    page_size: params.page_size,
-    device_id: params.device_id,
-    level: params.level,
-    facility: params.facility,
-    search: params.search,
-    start_time: params.start_time,
-    end_time: params.end_time
+  // NOTE: 后端导出接口返回的是文件流（CSV/XLSX），不能走 api-client 的 JSON 解析。
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  const searchParams = new URLSearchParams()
+
+  if (params.device_id) searchParams.append('device_id', String(params.device_id))
+  if (params.level) searchParams.append('level', String(params.level))
+  if (params.facility) searchParams.append('facility', String(params.facility))
+  if (params.source) searchParams.append('source', String(params.source))
+  if (params.search) searchParams.append('search', String(params.search))
+  if (params.start_time) searchParams.append('start_time', String(params.start_time))
+  if (params.end_time) searchParams.append('end_time', String(params.end_time))
+
+  const anyParams = params as unknown as {
+    device_ids?: number[]
+    format?: string
+    include_raw?: boolean
+    include_stats?: boolean
   }
-  const response = await api.get<{ data: Blob }>(`${BASE_URL}/export`, {
-    params: queryParams
+
+  if (Array.isArray(anyParams.device_ids) && anyParams.device_ids.length > 0) {
+    searchParams.append('device_ids', anyParams.device_ids.join(','))
+  }
+  if (anyParams.format) searchParams.append('format', String(anyParams.format))
+  if (typeof anyParams.include_raw === 'boolean') searchParams.append('include_raw', String(anyParams.include_raw))
+  if (typeof anyParams.include_stats === 'boolean') searchParams.append('include_stats', String(anyParams.include_stats))
+
+  const url = `${baseUrl}/api/v1/logs/export${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+  const token = TokenManager.getAccessToken() || ''
+
+  const response = await fetch(url, {
+    headers: { Authorization: token ? `Bearer ${token}` : '' },
   })
-  return response.data
+
+  if (!response.ok) {
+    throw new Error('导出失败')
+  }
+
+  return response.blob()
 }

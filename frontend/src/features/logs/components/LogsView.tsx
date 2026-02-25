@@ -10,6 +10,7 @@ import {
   useLogSelection,
   useLogCollection
 } from '../hooks/useLogs'
+import { exportLogs as exportLogsApi } from '../api/logsApi'
 import { LogStatsGrid } from './LogStatsGrid'
 import { LogFiltersBar } from './LogFiltersBar'
 import { LogList } from './LogList'
@@ -114,40 +115,28 @@ export const LogsView: React.FC = () => {
   // 处理导出
   const handleExport = async (format: 'csv' | 'excel') => {
     try {
-      const params = new URLSearchParams()
-      
-      // 添加过滤参数 - 使用正确的 LogFilters 属性名
-      if (filters.levelFilter && filters.levelFilter !== 'all') {
-        params.append('level', filters.levelFilter)
-      }
-      if (filters.facilityFilter && filters.facilityFilter !== 'all') {
-        params.append('facility', filters.facilityFilter)
-      }
-      if (filters.dateRange?.start) {
-        params.append('start_time', filters.dateRange.start)
-      }
-      if (filters.dateRange?.end) {
-        params.append('end_time', filters.dateRange.end)
-      }
-      if (filters.searchQuery) {
-        params.append('search', filters.searchQuery)
-      }
-      
-      params.append('format', format)
-      params.append('include_raw', 'true')
-      
-      // 构建导出URL
-      const exportUrl = `/api/logs/export?${params.toString()}`
-      
-      // 创建下载链接
+      const blob = await exportLogsApi({
+        level: filters.levelFilter !== 'all' ? filters.levelFilter : undefined,
+        facility: filters.facilityFilter !== 'all' ? filters.facilityFilter : undefined,
+        source: filters.sourceFilter !== 'all' ? filters.sourceFilter : undefined,
+        start_time: filters.dateRange?.start,
+        end_time: filters.dateRange?.end,
+        search: filters.searchQuery || undefined,
+        format,
+        include_raw: true,
+        include_stats: format === 'excel',
+      } as any)
+
+      const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
-      link.href = exportUrl
+      link.href = downloadUrl
       link.download = `logs_export_${new Date().toISOString().slice(0, 10)}.${format === 'excel' ? 'xlsx' : 'csv'}`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      
-      toast.success(`日志导出已开始 (${format.toUpperCase()})`)
+      window.URL.revokeObjectURL(downloadUrl)
+
+      toast.success(`日志导出成功 (${format.toUpperCase()})`)
     } catch (error) {
       console.error('Export failed:', error)
       toast.error('导出失败，请重试')
