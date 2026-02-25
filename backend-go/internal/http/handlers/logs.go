@@ -564,6 +564,10 @@ func buildLogFilter(c echo.Context, skip int, limit int) logs.LogFilter {
 	if facility != "" {
 		filter.Facility = &facility
 	}
+	source := strings.TrimSpace(c.QueryParam("source"))
+	if source != "" {
+		filter.Source = &source
+	}
 
 	startTime, _ := parseTimeOptional(c.QueryParam("start_time"))
 	endTime, _ := parseTimeOptional(c.QueryParam("end_time"))
@@ -576,6 +580,11 @@ func buildLogFilter(c echo.Context, skip int, limit int) logs.LogFilter {
 	}
 
 	return filter
+}
+
+// BuildLogFilter 提供可测试的过滤器构造入口（内部仍复用 buildLogFilter）。
+func BuildLogFilter(c echo.Context, skip int, limit int) logs.LogFilter {
+	return buildLogFilter(c, skip, limit)
 }
 
 func buildLogListResponse(rows []logs.DeviceLogWithDevice, total int64, page int, pageSize int) logs.LogListResponse {

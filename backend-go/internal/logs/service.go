@@ -27,6 +27,7 @@ type LogFilter struct {
 	DeviceID  *int
 	Level     *string
 	Facility  *string
+	Source    *string
 	StartTime *time.Time
 	EndTime   *time.Time
 	Search    *string
@@ -397,6 +398,9 @@ func (s *Service) buildLogQuery(ctx context.Context, filter LogFilter) *gorm.DB 
 	}
 	if filter.Facility != nil && strings.TrimSpace(*filter.Facility) != "" {
 		query = query.Where("l.facility = ?", strings.TrimSpace(*filter.Facility))
+	}
+	if filter.Source != nil && strings.TrimSpace(*filter.Source) != "" {
+		query = query.Where("l.source = ?", strings.TrimSpace(*filter.Source))
 	}
 	if filter.StartTime != nil {
 		query = query.Where("l.log_timestamp >= ?", *filter.StartTime)
