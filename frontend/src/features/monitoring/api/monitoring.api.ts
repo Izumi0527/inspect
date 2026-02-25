@@ -8,6 +8,9 @@ import {
   StatCardData,
   Alert,
   MonitoringDataV2,
+  MonitoringDataEnvelope,
+  MonitoringSectionKey,
+  MonitoringSectionStates,
 } from '../types'
 
 /**
@@ -355,7 +358,14 @@ export async function fetchRealtimeAlerts(limit: number = 10): Promise<Alert[]> 
  */
 export async function fetchMonitoringDataV2(
   timeRange: string = '24h'
-): Promise<Partial<MonitoringDataV2>> {
+): Promise<MonitoringDataEnvelope> {
+  const toErrorMessage = (reason: unknown, fallback: string) => {
+    if (reason instanceof Error && reason.message.trim() !== '') {
+      return reason.message
+    }
+    return fallback
+  }
+
   try {
     const [
       systemPerformance,
@@ -375,7 +385,45 @@ export async function fetchMonitoringDataV2(
       fetchRealtimeAlerts(10),
     ])
 
-    return {
+    const lastUpdate = new Date().toISOString()
+
+    const sections: MonitoringSectionStates = {
+      stats: {
+        ok: statsV2.status === 'fulfilled',
+        message: statsV2.status === 'rejected' ? toErrorMessage(statsV2.reason, '统计指标加载失败') : undefined,
+      },
+      systemPerformance: {
+        ok: systemPerformance.status === 'fulfilled',
+        message: systemPerformance.status === 'rejected' ? toErrorMessage(systemPerformance.reason, '系统性能数据加载失败') : undefined,
+      },
+      temperature: {
+        ok: temperatureHistory.status === 'fulfilled',
+        message: temperatureHistory.status === 'rejected' ? toErrorMessage(temperatureHistory.reason, '温度数据加载失败') : undefined,
+      },
+      deviceStatus: {
+        ok: deviceStatusDistribution.status === 'fulfilled',
+        message: deviceStatusDistribution.status === 'rejected' ? toErrorMessage(deviceStatusDistribution.reason, '设备状态分布加载失败') : undefined,
+      },
+      availability: {
+        ok: availability.status === 'fulfilled',
+        message: availability.status === 'rejected' ? toErrorMessage(availability.reason, '可用性数据加载失败') : undefined,
+      },
+      networkTraffic: {
+        ok: networkTrafficHistory.status === 'fulfilled',
+        message: networkTrafficHistory.status === 'rejected' ? toErrorMessage(networkTrafficHistory.reason, '网络流量数据加载失败') : undefined,
+      },
+      realtimeAlerts: {
+        ok: realtimeAlerts.status === 'fulfilled',
+        message: realtimeAlerts.status === 'rejected' ? toErrorMessage(realtimeAlerts.reason, '实时告警加载失败') : undefined,
+      },
+    }
+
+    const failedSections = (Object.keys(sections) as MonitoringSectionKey[]).filter((key) => !sections[key].ok)
+    if (failedSections.length === (Object.keys(sections) as MonitoringSectionKey[]).length) {
+      throw new Error('监控数据加载失败')
+    }
+
+    const data: MonitoringDataV2 = {
       systemPerformance: systemPerformance.status === 'fulfilled' ? systemPerformance.value : [],
       temperatureHistory: temperatureHistory.status === 'fulfilled' ? temperatureHistory.value : [],
       deviceStatusDistribution:
@@ -390,10 +438,21 @@ export async function fetchMonitoringDataV2(
         networkTrafficHistory.status === 'fulfilled' ? networkTrafficHistory.value : [],
       statsV2: statsV2.status === 'fulfilled' ? statsV2.value : [],
       realtimeAlerts: realtimeAlerts.status === 'fulfilled' ? realtimeAlerts.value : [],
-      lastUpdate: new Date().toISOString(),
+      lastUpdate,
+    }
+
+    return {
+      data,
+      sections,
+      hasPartialFailure: failedSections.length > 0,
+      failedSections,
+      lastUpdate,
     }
   } catch (error) {
     console.error('获取监控数据失败:', error)
-    throw error instanceof Error ? error : new Error('获取监控数据失败')
+    if (error instanceof Error && error.message.includes('监控数据加载失败')) {
+      throw error
+    }
+    throw new Error('监控数据加载失败')
   }
 }

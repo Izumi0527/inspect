@@ -371,3 +371,6 @@ backend/data/reports/*
 /legacy/
 .claude/
 */app.exe
+
+.tmp-openai-skills/
+.tmp-superpowers/

@@ -20,6 +20,18 @@ import (
 type MonitoringHandler struct {
 	Writer          *monitoring.MetricsWriter
 	ReportOutputDir string
+	Auth            PermissionService
+}
+
+const (
+	monitoringReadPermission    = "monitoring:read"
+	monitoringControlPermission = "monitoring:control"
+	monitoringExportPermission  = "monitoring:export"
+)
+
+func (h MonitoringHandler) ensurePermission(c echo.Context, permission string) error {
+	_, err := requirePermission(c, h.Auth, permission)
+	return err
 }
 
 func (h MonitoringHandler) Register(group *echo.Group) {
@@ -51,6 +63,9 @@ func (h MonitoringHandler) Register(group *echo.Group) {
 }
 
 func (h MonitoringHandler) GetDeviceMetrics(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -77,6 +92,9 @@ func (h MonitoringHandler) GetDeviceMetrics(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetDeviceMetricsHistory(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -117,6 +135,9 @@ func (h MonitoringHandler) GetDeviceMetricsHistory(c echo.Context) error {
 }
 
 func (h MonitoringHandler) WriteDeviceMetrics(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringControlPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -153,6 +174,9 @@ func (h MonitoringHandler) WriteDeviceMetrics(c echo.Context) error {
 }
 
 func (h MonitoringHandler) WriteSystemMetrics(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringControlPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -178,6 +202,9 @@ func (h MonitoringHandler) WriteSystemMetrics(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetDevicesStatus(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -190,6 +217,9 @@ func (h MonitoringHandler) GetDevicesStatus(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetDeviceStatus(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -210,6 +240,9 @@ func (h MonitoringHandler) GetDeviceStatus(c echo.Context) error {
 }
 
 func (h MonitoringHandler) ListMonitoringDevices(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -222,6 +255,9 @@ func (h MonitoringHandler) ListMonitoringDevices(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetDeviceStatusDistribution(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -234,6 +270,9 @@ func (h MonitoringHandler) GetDeviceStatusDistribution(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetAvailability(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -246,6 +285,9 @@ func (h MonitoringHandler) GetAvailability(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetMonitoringStats(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -258,6 +300,9 @@ func (h MonitoringHandler) GetMonitoringStats(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetMonitoringServiceStats(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -272,6 +317,9 @@ func (h MonitoringHandler) GetMonitoringServiceStats(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetMonitoringOverview(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -284,6 +332,9 @@ func (h MonitoringHandler) GetMonitoringOverview(c echo.Context) error {
 }
 
 func (h MonitoringHandler) StartMonitoringService(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringControlPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -298,6 +349,9 @@ func (h MonitoringHandler) StartMonitoringService(c echo.Context) error {
 }
 
 func (h MonitoringHandler) StopMonitoringService(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringControlPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -312,6 +366,9 @@ func (h MonitoringHandler) StopMonitoringService(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetSystemStatus(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -324,6 +381,9 @@ func (h MonitoringHandler) GetSystemStatus(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetBulkDeviceMetricsHistory(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -363,6 +423,9 @@ func (h MonitoringHandler) GetBulkDeviceMetricsHistory(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetSystemPerformanceHistory(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -386,6 +449,9 @@ func (h MonitoringHandler) GetSystemPerformanceHistory(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetDeviceTemperatureHistory(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -409,6 +475,9 @@ func (h MonitoringHandler) GetDeviceTemperatureHistory(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetNetworkTrafficHistory(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -432,6 +501,9 @@ func (h MonitoringHandler) GetNetworkTrafficHistory(c echo.Context) error {
 }
 
 func (h MonitoringHandler) ExportMonitoringReport(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringExportPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -469,6 +541,9 @@ func (h MonitoringHandler) ExportMonitoringReport(c echo.Context) error {
 }
 
 func (h MonitoringHandler) DownloadMonitoringReport(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringExportPermission); err != nil {
+		return err
+	}
 	if strings.TrimSpace(h.ReportOutputDir) == "" {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "report output not configured")
 	}
@@ -507,6 +582,9 @@ func (h MonitoringHandler) StopDeviceMonitoring(c echo.Context) error {
 }
 
 func (h MonitoringHandler) updateDeviceMonitoring(c echo.Context, enabled bool) error {
+	if err := h.ensurePermission(c, monitoringControlPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
@@ -540,6 +618,9 @@ func (h MonitoringHandler) updateDeviceMonitoring(c echo.Context, enabled bool) 
 }
 
 func (h MonitoringHandler) GetMonitoringHistorical(c echo.Context) error {
+	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Writer == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}

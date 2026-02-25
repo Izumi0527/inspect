@@ -75,3 +75,31 @@ export interface MonitoringDataV2 {
   // 最后更新时间
   lastUpdate?: Date | string
 }
+
+// 监控分区键
+export type MonitoringSectionKey =
+  | 'stats'
+  | 'systemPerformance'
+  | 'temperature'
+  | 'deviceStatus'
+  | 'availability'
+  | 'networkTraffic'
+  | 'realtimeAlerts'
+
+// 单个分区状态
+export interface MonitoringSectionStatus {
+  ok: boolean
+  message?: string
+}
+
+// 分区状态集合
+export type MonitoringSectionStates = Record<MonitoringSectionKey, MonitoringSectionStatus>
+
+// 监控页面数据包络结构（支持分区降级）
+export interface MonitoringDataEnvelope {
+  data: MonitoringDataV2
+  sections: MonitoringSectionStates
+  hasPartialFailure: boolean
+  failedSections: MonitoringSectionKey[]
+  lastUpdate: Date | string
+}

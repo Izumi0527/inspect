@@ -80,6 +80,7 @@ func New() (*App, error) {
 	}
 
 	authService := auth.NewService(dbConn, cfg, log)
+	monitoringHandler.Auth = authService
 	authHandler := handlers.AuthHandler{
 		Service: authService,
 	}

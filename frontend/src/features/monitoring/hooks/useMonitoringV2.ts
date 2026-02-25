@@ -1,6 +1,6 @@
 import { useQuery, UseQueryResult } from '@tanstack/react-query'
 import { fetchMonitoringDataV2 } from '../api/monitoring.api'
-import type { MonitoringDataV2 } from '../types'
+import type { MonitoringDataEnvelope } from '../types'
 
 /**
  * 监控中心 v2 自定义 Hook
@@ -50,14 +50,14 @@ interface UseMonitoringV2Options {
 
 export function useMonitoringV2(
   options: UseMonitoringV2Options = {}
-): UseQueryResult<Partial<MonitoringDataV2>, Error> {
+): UseQueryResult<MonitoringDataEnvelope, Error> {
   const {
     timeRange = '24h',
     refetchInterval = 120000, // 默认 2 分钟 (120秒) - 比后端采集快，确保及时获取新数据
     enablePolling = true,
   } = options
 
-  return useQuery<Partial<MonitoringDataV2>, Error>({
+  return useQuery<MonitoringDataEnvelope, Error>({
     queryKey: ['monitoring-v2', timeRange],
 
     queryFn: async () => {

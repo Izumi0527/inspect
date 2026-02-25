@@ -78,11 +78,53 @@ function SectionHeader({
   )
 }
 
+function SectionFailureContent({
+  title,
+  message,
+  onRetry,
+  className,
+}: {
+  title: string
+  message: string
+  onRetry: () => void
+  className?: string
+}) {
+  return (
+    <div className={`flex flex-col items-center justify-center text-center ${className ?? ''}`}>
+      <WifiOff className="h-6 w-6 text-red-600 dark:text-red-400" />
+      <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</p>
+      <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{message}</p>
+      <Button variant="outline" onClick={onRetry} className="mt-3 cursor-pointer">
+        <RefreshCw className="mr-2 h-4 w-4" />
+        重试
+      </Button>
+    </div>
+  )
+}
+
+function SectionFailureCard({
+  title,
+  message,
+  onRetry,
+}: {
+  title: string
+  message: string
+  onRetry: () => void
+}) {
+  return (
+    <Card className="border-2 border-dashed border-red-200 bg-red-50/60 dark:border-red-800 dark:bg-red-900/10">
+      <CardContent className="p-6">
+        <SectionFailureContent title={title} message={message} onRetry={onRetry} />
+      </CardContent>
+    </Card>
+  )
+}
+
 export function MonitoringView() {
   const { sidebarOpen, toggleSidebar } = useSidebar()
 
   const {
-    data,
+    data: envelope,
     isLoading,
     error,
     refetch,
@@ -91,6 +133,8 @@ export function MonitoringView() {
     timeRange: '24h',
     enablePolling: true,
   })
+
+  const data = envelope?.data
 
   const chartInViewOptions = useMemo(
     () => ({ threshold: 0.1, triggerOnce: true, rootMargin: '100px' }),
@@ -221,11 +265,35 @@ export function MonitoringView() {
         <main className="p-5">
           <div className="space-y-6">
 
+            {envelope?.hasPartialFailure && (
+              <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                  <div>
+                    <p className="text-sm font-semibold text-yellow-900 dark:text-yellow-100">
+                      监控数据不完整
+                    </p>
+                    <p className="mt-1 text-xs text-yellow-800 dark:text-yellow-200">
+                      部分数据分区加载失败，页面已自动降级显示。
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* ── 关键指标 ── */}
             <section>
               <SectionHeader icon={Activity} title="关键指标" description="实时系统运行概览" />
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-                {data.statsV2 && data.statsV2.length > 0 ? (
+                {envelope?.sections.stats?.ok === false ? (
+                  <div className="col-span-full rounded-xl border-2 border-dashed border-red-200 bg-red-50/60 p-8 text-center dark:border-red-800 dark:bg-red-900/10">
+                    <SectionFailureContent
+                      title="关键指标"
+                      message="统计指标加载失败"
+                      onRetry={() => refetch()}
+                    />
+                  </div>
+                ) : data.statsV2 && data.statsV2.length > 0 ? (
                   data.statsV2.map((stat, index) => {
                     const IconComponent = monitoringIconMap[stat.id as keyof typeof monitoringIconMap] || Server
                     const iconColor = monitoringIconColorMap[stat.id as keyof typeof monitoringIconColorMap] || 'text-blue-600'
@@ -270,7 +338,14 @@ export function MonitoringView() {
                   </CardHeader>
                   <CardContent>
                     {chartsInView ? (
-                      data.systemPerformance && data.systemPerformance.length > 0 ? (
+                      envelope?.sections.systemPerformance?.ok === false ? (
+                        <SectionFailureContent
+                          title="系统性能趋势"
+                          message="系统性能数据加载失败"
+                          onRetry={() => refetch()}
+                          className="h-64"
+                        />
+                      ) : data.systemPerformance && data.systemPerformance.length > 0 ? (
                         <SystemPerformanceChartWrapper data={data.systemPerformance} height={280} />
                       ) : (
                         <div className="flex h-64 items-center justify-center">
@@ -289,7 +364,14 @@ export function MonitoringView() {
                   </CardHeader>
                   <CardContent>
                     {chartsInView ? (
-                      data.temperatureHistory && data.temperatureHistory.length > 0 ? (
+                      envelope?.sections.temperature?.ok === false ? (
+                        <SectionFailureContent
+                          title="设备温度监控"
+                          message="温度数据加载失败"
+                          onRetry={() => refetch()}
+                          className="h-64"
+                        />
+                      ) : data.temperatureHistory && data.temperatureHistory.length > 0 ? (
                         <TemperatureChartWrapper
                           data={data.temperatureHistory}
                           height={280}
@@ -312,13 +394,35 @@ export function MonitoringView() {
             <section>
               <SectionHeader icon={BarChart3} title="状态详情" description="设备分布、可用性与实时告警" />
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 items-stretch">
-                {data.deviceStatusDistribution && (
+                {envelope?.sections.deviceStatus?.ok === false ? (
+                  <SectionFailureCard
+                    title="设备状态分布"
+                    message="设备状态分布加载失败"
+                    onRetry={() => refetch()}
+                  />
+                ) : data.deviceStatusDistribution ? (
                   <DeviceStatusCard data={data.deviceStatusDistribution} />
-                )}
-                {data.availability && <AvailabilityCard data={data.availability} />}
-                {data.realtimeAlerts && (
+                ) : null}
+
+                {envelope?.sections.availability?.ok === false ? (
+                  <SectionFailureCard
+                    title="整体可用性"
+                    message="可用性数据加载失败"
+                    onRetry={() => refetch()}
+                  />
+                ) : data.availability ? (
+                  <AvailabilityCard data={data.availability} />
+                ) : null}
+
+                {envelope?.sections.realtimeAlerts?.ok === false ? (
+                  <SectionFailureCard
+                    title="实时告警"
+                    message="实时告警加载失败"
+                    onRetry={() => refetch()}
+                  />
+                ) : data.realtimeAlerts ? (
                   <RealTimeAlertsCard alerts={data.realtimeAlerts} maxItems={5} />
-                )}
+                ) : null}
               </div>
             </section>
 
@@ -331,7 +435,14 @@ export function MonitoringView() {
                 </CardHeader>
                 <CardContent>
                   {networkInView ? (
-                    data.networkTrafficHistory && data.networkTrafficHistory.length > 0 ? (
+                    envelope?.sections.networkTraffic?.ok === false ? (
+                      <SectionFailureContent
+                        title="网络流量"
+                        message="网络流量数据加载失败"
+                        onRetry={() => refetch()}
+                        className="h-48"
+                      />
+                    ) : data.networkTrafficHistory && data.networkTrafficHistory.length > 0 ? (
                       <NetworkTrafficChartWrapper data={data.networkTrafficHistory} height={240} />
                     ) : (
                       <div className="flex h-48 items-center justify-center">
