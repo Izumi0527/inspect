@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"bytes"
 	"encoding/csv"
 	"errors"
@@ -14,13 +15,26 @@ import (
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 
-	"github.com/your-org/inspect-system/backend-go/internal/auth"
 	"github.com/your-org/inspect-system/backend-go/internal/logs"
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 )
 
 type LogsHandler struct {
 	Service *logs.Service
-	Auth    *auth.Service
+	Auth    PermissionService
+	// Settings 用于读取系统设置中的 Syslog 配置（通过 /logs/syslog/apply 生效）。
+	Settings SettingsGetter
+	// Syslog 为可注入的运行时接收器，便于测试与运行期热更新。
+	Syslog SyslogRuntime
+}
+
+type SettingsGetter interface {
+	GetSetting(ctx context.Context, key string) (*settings.SettingItem, error)
+}
+
+type SyslogRuntime interface {
+	Status() logs.SyslogStatus
+	Apply(ctx context.Context, cfg logs.SyslogConfig) (logs.SyslogStatus, error)
 }
 
 func (h LogsHandler) Register(group *echo.Group) {
@@ -37,6 +51,9 @@ func (h LogsHandler) Register(group *echo.Group) {
 	group.DELETE("/logs/:log_id", h.DeleteLog)
 	group.POST("/logs/batch-delete", h.BatchDeleteLogs)
 	group.POST("/logs/cleanup", h.CleanupDeviceLogs)
+
+	group.GET("/logs/syslog/status", h.GetSyslogStatus)
+	group.POST("/logs/syslog/apply", h.ApplySyslogConfig)
 
 	group.GET("/logs/parsing-rules", h.ListParsingRules)
 	group.GET("/logs/parsing-rules/:rule_id", h.GetParsingRule)
@@ -378,6 +395,38 @@ func (h LogsHandler) CleanupDeviceLogs(c echo.Context) error {
 	})
 }
 
+func (h LogsHandler) GetSyslogStatus(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, "system:config"); err != nil {
+		return err
+	}
+	if h.Syslog == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "syslog receiver not configured")
+	}
+
+	return c.JSON(http.StatusOK, h.Syslog.Status())
+}
+
+func (h LogsHandler) ApplySyslogConfig(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, "system:config"); err != nil {
+		return err
+	}
+	if h.Syslog == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "syslog receiver not configured")
+	}
+	if h.Settings == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "settings service not configured")
+	}
+
+	ctx := c.Request().Context()
+	cfg := readSyslogConfigFromSettings(ctx, h.Settings)
+
+	status, err := h.Syslog.Apply(ctx, cfg)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to apply syslog config")
+	}
+	return c.JSON(http.StatusOK, status)
+}
+
 func (h LogsHandler) ListParsingRules(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
@@ -391,6 +440,128 @@ func (h LogsHandler) ListParsingRules(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load parsing rules")
 	}
 	return c.JSON(http.StatusOK, rows)
+}
+
+func readSyslogConfigFromSettings(ctx context.Context, getter SettingsGetter) logs.SyslogConfig {
+	// 默认值（与前端展示保持一致）。
+	cfg := logs.SyslogConfig{
+		Enabled:               false,
+		Protocol:              "both",
+		Host:                  "0.0.0.0",
+		Port:                  5514,
+		MaxMessageBytes:       8192,
+		AlertsEnabled:         true,
+		AlertsMaxNewPerMinute: 30,
+	}
+	if getter == nil {
+		return cfg
+	}
+
+	if v, ok := readSettingBool(ctx, getter, "logs.syslog.enabled"); ok {
+		cfg.Enabled = v
+	}
+	if v, ok := readSettingString(ctx, getter, "logs.syslog.protocol"); ok {
+		value := strings.ToLower(strings.TrimSpace(v))
+		if value == "udp" || value == "tcp" || value == "both" {
+			cfg.Protocol = value
+		}
+	}
+	if v, ok := readSettingString(ctx, getter, "logs.syslog.host"); ok {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			cfg.Host = trimmed
+		}
+	}
+	if v, ok := readSettingInt(ctx, getter, "logs.syslog.port"); ok {
+		if v > 0 && v <= 65535 {
+			cfg.Port = v
+		}
+	}
+	if v, ok := readSettingInt(ctx, getter, "logs.syslog.max_message_bytes"); ok {
+		if v >= 256 && v <= 1024*1024 {
+			cfg.MaxMessageBytes = v
+		}
+	}
+	if v, ok := readSettingBool(ctx, getter, "logs.syslog.alerts.enabled"); ok {
+		cfg.AlertsEnabled = v
+	}
+	if v, ok := readSettingInt(ctx, getter, "logs.syslog.alerts.max_new_per_minute"); ok {
+		if v >= 0 && v <= 10000 {
+			cfg.AlertsMaxNewPerMinute = v
+		}
+	}
+
+	return cfg
+}
+
+func readSettingString(ctx context.Context, getter SettingsGetter, key string) (string, bool) {
+	if getter == nil {
+		return "", false
+	}
+	item, err := getter.GetSetting(ctx, key)
+	if err != nil || item == nil {
+		return "", false
+	}
+	switch v := item.Value.(type) {
+	case string:
+		return v, true
+	default:
+		return fmt.Sprint(v), true
+	}
+}
+
+func readSettingBool(ctx context.Context, getter SettingsGetter, key string) (bool, bool) {
+	if getter == nil {
+		return false, false
+	}
+	item, err := getter.GetSetting(ctx, key)
+	if err != nil || item == nil {
+		return false, false
+	}
+	switch v := item.Value.(type) {
+	case bool:
+		return v, true
+	case string:
+		trimmed := strings.ToLower(strings.TrimSpace(v))
+		if trimmed == "true" {
+			return true, true
+		}
+		if trimmed == "false" {
+			return false, true
+		}
+		return false, false
+	default:
+		return false, false
+	}
+}
+
+func readSettingInt(ctx context.Context, getter SettingsGetter, key string) (int, bool) {
+	if getter == nil {
+		return 0, false
+	}
+	item, err := getter.GetSetting(ctx, key)
+	if err != nil || item == nil {
+		return 0, false
+	}
+	switch v := item.Value.(type) {
+	case int:
+		return v, true
+	case int32:
+		return int(v), true
+	case int64:
+		return int(v), true
+	case float64:
+		return int(v), true
+	case float32:
+		return int(v), true
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil {
+			return 0, false
+		}
+		return parsed, true
+	default:
+		return 0, false
+	}
 }
 
 func (h LogsHandler) GetParsingRule(c echo.Context) error {
