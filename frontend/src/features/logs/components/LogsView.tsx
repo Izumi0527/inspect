@@ -320,7 +320,9 @@ export const LogsView: React.FC = () => {
         progress={progress}
         onCollectSingle={(deviceId, options) => collectLogs(deviceId, options)}
         onCollectBatch={(deviceIds, options) => batchCollect(deviceIds, options)}
-        onAfterCollect={() => Promise.all([loadLogs(), refreshStats()])}
+        onAfterCollect={async () => {
+          await Promise.all([loadLogs(), refreshStats()])
+        }}
       />
     </AppLayout>
   )
