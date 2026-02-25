@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
+import { useSearchParams } from 'next/navigation'
 import {
   Settings,
   Users,
@@ -9,7 +10,8 @@ import {
   FileText,
   Database,
   Bell,
-  Activity
+  Activity,
+  ScrollText
 } from 'lucide-react'
 import { AppLayout } from '@/components/layout'
 import { GeneralSettings } from './general/GeneralSettings'
@@ -19,8 +21,9 @@ import { AuditLogs } from './audit/AuditLogs'
 import { BackupManagement } from './backup/BackupManagement'
 import { NotificationSettings } from './notifications/NotificationSettings'
 import { MonitoringDashboard } from './monitoring/MonitoringDashboard'
+import { LogsSettings } from './logs/LogsSettings'
 
-type TabType = 'general' | 'users' | 'security' | 'audit' | 'backup' | 'notifications' | 'monitoring'
+type TabType = 'general' | 'users' | 'security' | 'audit' | 'backup' | 'notifications' | 'monitoring' | 'logs'
 
 type IconComponent = React.ComponentType<React.SVGProps<SVGSVGElement>>
 
@@ -32,7 +35,26 @@ interface TabConfig {
 }
 
 export const SettingsView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('general')
+  const searchParams = useSearchParams()
+
+  const tabParam = useMemo(() => {
+    const value = searchParams?.get('tab')
+    return value ? value.trim() : ''
+  }, [searchParams])
+
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    const initial = tabParam as TabType
+    const allowed: TabType[] = ['general', 'users', 'security', 'audit', 'backup', 'notifications', 'monitoring', 'logs']
+    return allowed.includes(initial) ? initial : 'general'
+  })
+
+  useEffect(() => {
+    const next = tabParam as TabType
+    const allowed: TabType[] = ['general', 'users', 'security', 'audit', 'backup', 'notifications', 'monitoring', 'logs']
+    if (allowed.includes(next) && next !== activeTab) {
+      setActiveTab(next)
+    }
+  }, [tabParam, activeTab])
 
   const tabs: TabConfig[] = [
     {
@@ -40,6 +62,12 @@ export const SettingsView: React.FC = () => {
       label: '通用配置',
       icon: Settings,
       description: '系统基础配置与核心参数管理'
+    },
+    {
+      key: 'logs',
+      label: '日志设置',
+      icon: ScrollText,
+      description: '日志中心的数据保留与采集策略配置'
     },
     {
       key: 'users',
@@ -83,6 +111,8 @@ export const SettingsView: React.FC = () => {
     switch (activeTab) {
       case 'general':
         return <GeneralSettings />
+      case 'logs':
+        return <LogsSettings />
       case 'users':
         return <UserManagement />
       case 'security':

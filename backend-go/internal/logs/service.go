@@ -251,6 +251,24 @@ func (s *Service) BatchDelete(ctx context.Context, logIDs []int) (int64, error) 
 	return result.RowsAffected, nil
 }
 
+func (s *Service) CleanupDeviceLogsBefore(ctx context.Context, before time.Time) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+	if before.IsZero() {
+		return 0, fmt.Errorf("before is required")
+	}
+
+	result := s.db.WithContext(ctx).
+		Table("device_logs").
+		Where("created_at < ?", before).
+		Delete(&DeviceLog{})
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
+}
+
 func (s *Service) ListParsingRules(ctx context.Context) ([]LogParsingRule, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("database not initialized")

@@ -24,7 +24,7 @@ func normalizeCategoryFromKey(key string) string {
 		return "system"
 	}
 	switch category {
-	case "system", "notification", "email", "inspection", "report", "security", "backup", "user_preference":
+	case "system", "notification", "email", "inspection", "report", "logs", "security", "backup", "user_preference":
 		return category
 	default:
 		return "system"
@@ -196,6 +196,8 @@ func generateSettingLabel(key string) string {
 		"inspection.retry_attempts":        "重试次数",
 		"report.default_format":            "默认报表格式",
 		"report.max_export_records":        "最大导出记录数",
+		"logs.auto_cleanup_enabled":        "启用日志自动清理",
+		"logs.retention_days":              "设备日志保留天数",
 		"security.password.min_length":     "密码最小长度",
 		"security.password.max_login_attempts": "最大登录尝试次数",
 		"backup.auto_backup_enabled":           "启用自动备份",

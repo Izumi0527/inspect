@@ -62,13 +62,21 @@ func settingsCategoryMetadata() map[string]categoryMetadata {
 			Icon:        "FileText",
 			Order:       5,
 		},
+		"logs": {
+			ID:          "logs",
+			Name:        "logs",
+			DisplayName: "日志设置",
+			Description: "日志中心与数据保留策略",
+			Icon:        "ScrollText",
+			Order:       6,
+		},
 		"security": {
 			ID:          "security",
 			Name:        "security",
 			DisplayName: "安全设置",
 			Description: "安全策略配置",
 			Icon:        "Shield",
-			Order:       6,
+			Order:       7,
 		},
 		"backup": {
 			ID:          "backup",
@@ -76,7 +84,7 @@ func settingsCategoryMetadata() map[string]categoryMetadata {
 			DisplayName: "备份设置",
 			Description: "系统备份相关配置",
 			Icon:        "Database",
-			Order:       7,
+			Order:       8,
 		},
 		"user_preference": {
 			ID:          "user_preference",
@@ -84,7 +92,7 @@ func settingsCategoryMetadata() map[string]categoryMetadata {
 			DisplayName: "用户偏好",
 			Description: "用户个人偏好设置",
 			Icon:        "User",
-			Order:       8,
+			Order:       9,
 		},
 	}
 }

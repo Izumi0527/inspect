@@ -2,6 +2,7 @@
  * 日志中心主视图
  */
 import React, { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { AppLayout } from '@/components/layout'
 import {
   useLogs,
@@ -36,6 +37,7 @@ import { toast } from 'react-hot-toast'
 import type { DeviceLog } from '../types'
 
 export const LogsView: React.FC = () => {
+  const router = useRouter()
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [selectedLog, setSelectedLog] = useState<DeviceLog | null>(null)
@@ -257,7 +259,8 @@ export const LogsView: React.FC = () => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => toast.success('日志设置功能开发中...')}
+                  aria-label="日志设置"
+                  onClick={() => router.push('/settings?tab=logs')}
                 >
                   <Settings className="h-4 w-4" />
                 </Button>

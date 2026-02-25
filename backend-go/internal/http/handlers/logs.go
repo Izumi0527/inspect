@@ -36,6 +36,7 @@ func (h LogsHandler) Register(group *echo.Group) {
 	group.POST("/logs/batch-collect", h.BatchCollectLogs)
 	group.DELETE("/logs/:log_id", h.DeleteLog)
 	group.POST("/logs/batch-delete", h.BatchDeleteLogs)
+	group.POST("/logs/cleanup", h.CleanupDeviceLogs)
 
 	group.GET("/logs/parsing-rules", h.ListParsingRules)
 	group.GET("/logs/parsing-rules/:rule_id", h.GetParsingRule)
@@ -333,6 +334,43 @@ func (h LogsHandler) BatchDeleteLogs(c echo.Context) error {
 	deleted, err := h.Service.BatchDelete(c.Request().Context(), req.LogIDs)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete logs")
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"deleted_count": deleted,
+	})
+}
+
+func (h LogsHandler) CleanupDeviceLogs(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "system:config"); err != nil {
+		return err
+	}
+
+	payload := map[string]interface{}{}
+	_ = c.Bind(&payload)
+
+	before := readString(payload, "beforeDate", "before_date", "before")
+	retentionDays, hasRetention := readInt(payload, "retentionDays", "retention_days", "days")
+
+	var cutoff time.Time
+	if strings.TrimSpace(before) != "" {
+		parsed, err := parseTimeValue(before)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid beforeDate")
+		}
+		cutoff = parsed
+	} else if hasRetention && retentionDays > 0 {
+		cutoff = time.Now().UTC().AddDate(0, 0, -retentionDays)
+	} else {
+		return echo.NewHTTPError(http.StatusBadRequest, "beforeDate or retentionDays is required")
+	}
+
+	deleted, err := h.Service.CleanupDeviceLogsBefore(c.Request().Context(), cutoff)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to cleanup logs")
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{

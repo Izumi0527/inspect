@@ -1184,19 +1184,54 @@ func (s *Service) executeDataCleanup(ctx context.Context, task ScheduledTask) (m
 	cleanupMetrics := readBoolWithFallback(config, true, "cleanup_old_metrics", "cleanupOldMetrics", "cleanup_metrics")
 
 	results := map[string]interface{}{}
-	cutoff := time.Now().UTC().AddDate(0, 0, -retentionDays)
+	now := time.Now().UTC()
+	metricsCutoff := now.AddDate(0, 0, -retentionDays)
 
-	if cleanupLogs {
+	logRetentionDays := retentionDays
+	logAutoCleanupEnabled := true
+	if s.settingsService != nil {
+		if item, err := s.settingsService.GetSetting(ctx, "logs.retention_days"); err == nil && item != nil {
+			switch v := item.Value.(type) {
+			case int:
+				logRetentionDays = v
+			case int64:
+				logRetentionDays = int(v)
+			case float64:
+				logRetentionDays = int(v)
+			case string:
+				if parsed, convErr := strconv.Atoi(strings.TrimSpace(v)); convErr == nil {
+					logRetentionDays = parsed
+				}
+			}
+		}
+		if item, err := s.settingsService.GetSetting(ctx, "logs.auto_cleanup_enabled"); err == nil && item != nil {
+			if v, ok := item.Value.(bool); ok {
+				logAutoCleanupEnabled = v
+			}
+		}
+	}
+	if logRetentionDays <= 0 {
+		logRetentionDays = retentionDays
+	}
+	if logRetentionDays <= 0 {
+		logRetentionDays = 90
+	}
+	if logRetentionDays > 3650 {
+		logRetentionDays = 3650
+	}
+	logCutoff := now.AddDate(0, 0, -logRetentionDays)
+
+	if cleanupLogs && logAutoCleanupEnabled {
 		if s.settingsService == nil {
 			return nil, fmt.Errorf("settings service not configured")
 		}
-		deleted, err := s.settingsService.CleanupAuditLogs(ctx, cutoff)
+		deleted, err := s.settingsService.CleanupAuditLogs(ctx, logCutoff)
 		if err != nil {
 			return nil, err
 		}
 		results["audit_logs_deleted"] = deleted
 
-		deviceLogsDeleted, err := s.cleanupDeviceLogs(ctx, cutoff)
+		deviceLogsDeleted, err := s.cleanupDeviceLogs(ctx, logCutoff)
 		if err != nil {
 			return nil, err
 		}
@@ -1213,7 +1248,7 @@ func (s *Service) executeDataCleanup(ctx context.Context, task ScheduledTask) (m
 			results["interface_metrics_deleted"] = deleted
 		}
 
-		tableResults, err := s.cleanupMetricsTables(ctx, cutoff)
+		tableResults, err := s.cleanupMetricsTables(ctx, metricsCutoff)
 		if err != nil {
 			return nil, err
 		}
@@ -1225,8 +1260,10 @@ func (s *Service) executeDataCleanup(ctx context.Context, task ScheduledTask) (m
 	s.updateTaskProgress(ctx, task.ID, 100)
 
 	return map[string]interface{}{
-		"retention_days":  retentionDays,
-		"cleanup_results": results,
+		"retention_days":            retentionDays,
+		"logs_retention_days":       logRetentionDays,
+		"logs_auto_cleanup_enabled": logAutoCleanupEnabled,
+		"cleanup_results":           results,
 	}, nil
 }
 
