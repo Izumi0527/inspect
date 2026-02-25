@@ -45,6 +45,29 @@ func (w *fakeWriter) Count() int {
 	return len(w.entries)
 }
 
+type fakeAlertCreator struct{}
+
+func (fakeAlertCreator) CreateSyslogAlert(context.Context, logs.SyslogAlertInput) (logs.SyslogAlertOutcome, error) {
+	return logs.SyslogAlertOutcomeNone, nil
+}
+
+func TestSyslogReceiver_SetAlertCreator_ShouldNotPanic(t *testing.T) {
+	writer := &fakeWriter{}
+	resolver := fakeResolver{mapping: map[string]int{"127.0.0.1": 1}}
+
+	receiver := logs.NewSyslogReceiverWithDeps(resolver, writer, zap.NewNop())
+
+	defer func() {
+		if v := recover(); v != nil {
+			t.Fatalf("SetAlertCreator panicked: %v", v)
+		}
+	}()
+
+	receiver.SetAlertCreator(fakeAlertCreator{})
+	receiver.SetAlertCreator(nil)
+	receiver.SetAlertCreator(fakeAlertCreator{})
+}
+
 func TestSyslogReceiver_TCP_NewlineDelimited_ShouldStoreLog(t *testing.T) {
 	writer := &fakeWriter{}
 	resolver := fakeResolver{mapping: map[string]int{"127.0.0.1": 1}}

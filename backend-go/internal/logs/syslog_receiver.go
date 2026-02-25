@@ -56,6 +56,12 @@ func (noopSyslogAlertCreator) CreateSyslogAlert(context.Context, SyslogAlertInpu
 	return SyslogAlertOutcomeNone, nil
 }
 
+// syslogAlertCreatorBox 用于包装接口值，保证 atomic.Value 存储的具体类型始终一致。
+// 否则在 SetAlertCreator 时从 noop 实现切换到真实实现会触发 “store of inconsistently typed value” panic。
+type syslogAlertCreatorBox struct {
+	creator SyslogAlertCreator
+}
+
 type SyslogAlertInput struct {
 	DeviceID        int
 	Level           string
@@ -81,7 +87,7 @@ type SyslogReceiver struct {
 	writer   SyslogLogWriter
 	logger   *zap.Logger
 
-	alertCreator atomic.Value // SyslogAlertCreator
+	alertCreator atomic.Value // syslogAlertCreatorBox
 
 	mu         sync.Mutex
 	running    bool
@@ -120,7 +126,7 @@ func NewSyslogReceiverWithDeps(resolver SyslogDeviceResolver, writer SyslogLogWr
 	}
 	r.lastError.Store("")
 	r.updatedAt.Store(time.Now().UTC())
-	r.alertCreator.Store(SyslogAlertCreator(noopSyslogAlertCreator{}))
+	r.alertCreator.Store(syslogAlertCreatorBox{creator: noopSyslogAlertCreator{}})
 	return r
 }
 
@@ -129,10 +135,10 @@ func (r *SyslogReceiver) SetAlertCreator(creator SyslogAlertCreator) {
 		return
 	}
 	if creator == nil {
-		r.alertCreator.Store(SyslogAlertCreator(noopSyslogAlertCreator{}))
+		r.alertCreator.Store(syslogAlertCreatorBox{creator: noopSyslogAlertCreator{}})
 		return
 	}
-	r.alertCreator.Store(creator)
+	r.alertCreator.Store(syslogAlertCreatorBox{creator: creator})
 }
 
 func (r *SyslogReceiver) Status() SyslogStatus {
@@ -591,12 +597,12 @@ func (r *SyslogReceiver) maybeCreateAlert(ctx context.Context, deviceID int, par
 		return
 	}
 
-	creator, _ := r.alertCreator.Load().(SyslogAlertCreator)
-	if creator == nil {
+	box, ok := r.alertCreator.Load().(syslogAlertCreatorBox)
+	if !ok || box.creator == nil {
 		return
 	}
 
-	outcome, err := creator.CreateSyslogAlert(ctx, SyslogAlertInput{
+	outcome, err := box.creator.CreateSyslogAlert(ctx, SyslogAlertInput{
 		DeviceID:        deviceID,
 		Level:           level,
 		Facility:        normalizeFacility(parsed.Facility),
