@@ -23,6 +23,7 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
+	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
 type InspectionHandler struct {
@@ -32,6 +33,7 @@ type InspectionHandler struct {
 	Settings        *settings.Service // 用于获取用户信息
 	DeviceService   *devices.Service
 	ProbeService    *devices.ProbeService
+	WS              *ws.Manager
 	Logger          *zap.Logger
 	ReportOutputDir string
 }
@@ -701,6 +703,76 @@ func (h InspectionHandler) executeInspectionsAsync(inspections []inspection.Insp
 	}
 }
 
+func (h InspectionHandler) broadcastScanProgress(inspectionID int, status string, progress int, extra map[string]interface{}) {
+	if h.WS == nil || inspectionID <= 0 {
+		return
+	}
+
+	normalizedStatus := strings.ToLower(strings.TrimSpace(status))
+	if normalizedStatus == "" {
+		normalizedStatus = "unknown"
+	}
+
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 100 {
+		progress = 100
+	}
+
+	payload := map[string]interface{}{
+		"id":        fmt.Sprintf("%d", inspectionID),
+		"status":    normalizedStatus,
+		"progress":  progress,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	for key, value := range extra {
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		payload[key] = value
+	}
+
+	_ = h.WS.SendToRoom("scan_progress", ws.Message{
+		Type: ws.MessageScanProgress,
+		Data: payload,
+	})
+}
+
+func (h InspectionHandler) isInspectionCancelled(ctx context.Context, inspectionID int) bool {
+	if h.Service == nil || inspectionID <= 0 {
+		return false
+	}
+
+	item, err := h.Service.GetInspection(ctx, inspectionID)
+	if err != nil {
+		return false
+	}
+
+	return strings.EqualFold(item.Status, inspection.StatusCancelled) || strings.EqualFold(item.Status, inspection.StatusTimeout)
+}
+
+func normalizeInspectionCheckItems(checkItems []map[string]interface{}) []map[string]interface{} {
+	if len(checkItems) > 0 {
+		return checkItems
+	}
+
+	// 默认连通性检查项
+	return []map[string]interface{}{
+		{
+			"name":     "ICMP连通性检查",
+			"type":     "icmp",
+			"category": "connectivity",
+		},
+		{
+			"name":     "SNMP连通性检查",
+			"type":     "snmp",
+			"category": "connectivity",
+		},
+	}
+}
+
 // executeInspection 执行单个巡检任务
 func (h InspectionHandler) executeInspection(ctx context.Context, insp inspection.Inspection, checkItems []map[string]interface{}) {
 	// 1. 更新状态为 running
@@ -712,6 +784,9 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 		return
 	}
 
+	// 广播开始执行（进度 0%）
+	h.broadcastScanProgress(insp.ID, inspection.StatusRunning, 0, nil)
+
 	// 2. 获取设备信息
 	var device *devices.DeviceResponse
 	if h.DeviceService != nil {
@@ -719,6 +794,7 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 		if err != nil {
 			errMsg := fmt.Sprintf("获取设备信息失败: %v", err)
 			h.Service.UpdateInspectionStatus(ctx, insp.ID, inspection.StatusFailed, &errMsg)
+			h.broadcastScanProgress(insp.ID, inspection.StatusFailed, 0, map[string]interface{}{"message": errMsg})
 			return
 		}
 	}
@@ -741,23 +817,38 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 		}
 	}
 
-	// 4. 执行检查项并生成结果
-	results := h.executeCheckItems(ctx, insp.ID, device, probeResult, checkItems)
+	// 如果任务已被取消，直接结束
+	if h.isInspectionCancelled(ctx, insp.ID) {
+		h.broadcastScanProgress(insp.ID, inspection.StatusCancelled, 0, nil)
+		return
+	}
+
+	// 4. 执行检查项并生成结果（实时保存 + 推送进度）
+	normalizedCheckItems := normalizeInspectionCheckItems(checkItems)
+	totalChecks := len(normalizedCheckItems)
+
+	// 初始化总检查数，便于前端/接口计算进度
+	if err := h.Service.UpdateInspectionStats(ctx, insp.ID, totalChecks, 0, 0, 0, 0); err != nil && h.Logger != nil {
+		h.Logger.Warn("failed to initialize inspection stats", zap.Int("inspection_id", insp.ID), zap.Error(err))
+	}
 
 	// 5. 保存结果
+	executedCount := 0
 	passedCount := 0
 	failedCount := 0
 	warningCount := 0
 	skippedCount := 0
 
-	for _, result := range results {
+	results := h.executeCheckItems(ctx, insp.ID, device, probeResult, normalizedCheckItems, func(result inspection.Result, completed int, total int) {
+		executedCount = completed
+
 		if err := h.Service.SaveInspectionResult(ctx, &result); err != nil {
 			if h.Logger != nil {
 				h.Logger.Error("failed to save inspection result", zap.Int("inspection_id", insp.ID), zap.Error(err))
 			}
 		}
 
-		switch result.Status {
+		switch normalizeCheckResultStatus(result.Status) {
 		case "pass":
 			passedCount++
 		case "fail":
@@ -767,33 +858,55 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 		case "skip":
 			skippedCount++
 		}
+
+		// 实时更新统计与进度
+		_ = h.Service.UpdateInspectionStats(ctx, insp.ID, total, passedCount, failedCount, warningCount, skippedCount)
+
+		progress := 0
+		if total > 0 {
+			progress = int(math.Round(float64(completed) / float64(total) * 100))
+		}
+		h.broadcastScanProgress(insp.ID, inspection.StatusRunning, progress, map[string]interface{}{
+			"completed_checks": completed,
+			"total_checks":     total,
+		})
+	})
+
+	// 若执行过程中被取消，保留取消状态，不再覆盖为 completed
+	if h.isInspectionCancelled(ctx, insp.ID) {
+		progress := 0
+		if totalChecks > 0 {
+			progress = int(math.Round(float64(executedCount) / float64(totalChecks) * 100))
+		}
+		h.broadcastScanProgress(insp.ID, inspection.StatusCancelled, progress, map[string]interface{}{
+			"completed_checks": executedCount,
+			"total_checks":     totalChecks,
+		})
+		return
 	}
 
 	// 6. 更新巡检统计并完成
-	h.Service.UpdateInspectionStats(ctx, insp.ID, len(results), passedCount, failedCount, warningCount, skippedCount)
-	h.Service.UpdateInspectionStatus(ctx, insp.ID, inspection.StatusCompleted, nil)
+	_ = h.Service.UpdateInspectionStats(ctx, insp.ID, len(results), passedCount, failedCount, warningCount, skippedCount)
+	if _, err := h.Service.UpdateInspectionStatus(ctx, insp.ID, inspection.StatusCompleted, nil); err != nil && h.Logger != nil {
+		h.Logger.Error("failed to update inspection status to completed", zap.Int("inspection_id", insp.ID), zap.Error(err))
+	}
+	h.broadcastScanProgress(insp.ID, inspection.StatusCompleted, 100, map[string]interface{}{
+		"completed_checks": len(results),
+		"total_checks":     len(results),
+	})
 }
 
 // executeCheckItems 执行检查项
-func (h InspectionHandler) executeCheckItems(ctx context.Context, inspectionID int, device *devices.DeviceResponse, probeResult *devices.ProbeResult, checkItems []map[string]interface{}) []inspection.Result {
+func (h InspectionHandler) executeCheckItems(
+	ctx context.Context,
+	inspectionID int,
+	device *devices.DeviceResponse,
+	probeResult *devices.ProbeResult,
+	checkItems []map[string]interface{},
+	onResult func(result inspection.Result, completed int, total int),
+) []inspection.Result {
 	results := make([]inspection.Result, 0)
-	now := time.Now().UTC()
-
-	// 如果没有检查项，创建默认的连通性检查
-	if len(checkItems) == 0 {
-		checkItems = []map[string]interface{}{
-			{
-				"name":     "ICMP连通性检查",
-				"type":     "icmp",
-				"category": "connectivity",
-			},
-			{
-				"name":     "SNMP连通性检查",
-				"type":     "snmp",
-				"category": "connectivity",
-			},
-		}
-	}
+	total := len(checkItems)
 
 	// 采集 SNMP 指标（如果设备支持 SNMP）
 	var snmpMetrics *devices.SNMPMetrics
@@ -815,17 +928,22 @@ func (h InspectionHandler) executeCheckItems(ctx context.Context, inspectionID i
 	}
 
 	for _, item := range checkItems {
+		if h.isInspectionCancelled(ctx, inspectionID) {
+			break
+		}
+
 		itemName := readString(item, "name")
 		itemType := readString(item, "type")
 		itemCategory := readString(item, "category")
 
+		startTime := time.Now().UTC()
 		result := inspection.Result{
 			InspectionID:      inspectionID,
 			CheckItemName:     itemName,
 			CheckItemType:     itemType,
 			CheckItemCategory: stringPtr(itemCategory),
-			StartTime:         &now,
-			CreatedAt:         &now,
+			StartTime:         &startTime,
+			CreatedAt:         &startTime,
 		}
 
 		// 根据检查类型执行检查
@@ -842,10 +960,13 @@ func (h InspectionHandler) executeCheckItems(ctx context.Context, inspectionID i
 
 		endTime := time.Now().UTC()
 		result.EndTime = &endTime
-		execTime := int(endTime.Sub(now).Milliseconds())
+		execTime := int(endTime.Sub(startTime).Milliseconds())
 		result.ExecutionTime = &execTime
 
 		results = append(results, result)
+		if onResult != nil {
+			onResult(result, len(results), total)
+		}
 	}
 
 	return results
@@ -1578,10 +1699,14 @@ func (h InspectionHandler) StopExecution(c echo.Context) error {
 
 	// 更新状态为已取消
 	cancelMsg := "用户手动取消"
-	_, err = h.Service.UpdateInspectionStatus(c.Request().Context(), executionID, inspection.StatusCancelled, &cancelMsg)
+	updated, err := h.Service.UpdateInspectionStatus(c.Request().Context(), executionID, inspection.StatusCancelled, &cancelMsg)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to stop execution")
 	}
+
+	h.broadcastScanProgress(executionID, inspection.StatusCancelled, computeProgress(updated), map[string]interface{}{
+		"message": cancelMsg,
+	})
 
 	return inspectionOKWithMessage(c, "巡检任务已停止", map[string]interface{}{
 		"id":     executionID,

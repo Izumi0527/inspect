@@ -136,6 +136,7 @@ func New() (*App, error) {
 		Settings:        settingsService,
 		DeviceService:   deviceService,
 		ProbeService:    probeService,
+		WS:              wsManager,
 		Logger:          log,
 		ReportOutputDir: cfg.ReportsOutputDir,
 	}
