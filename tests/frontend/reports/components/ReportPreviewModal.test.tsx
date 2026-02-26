@@ -1,0 +1,159 @@
+import React from 'react'
+import { render, screen, waitFor } from '@testing-library/react'
+import { ReportPreviewModal } from '@/features/reports/components/ReportPreviewModal'
+import type { Report } from '@/features/reports/types'
+
+const mockGetAccessToken = jest.fn()
+
+jest.mock('react-hot-toast', () => ({
+  __esModule: true,
+  default: {
+    success: jest.fn(),
+    error: jest.fn(),
+  },
+}))
+
+jest.mock('@/lib/api-client', () => ({
+  TokenManager: {
+    getAccessToken: () => mockGetAccessToken(),
+  },
+}))
+
+jest.mock('@/components/atoms', () => ({
+  Button: ({
+    children,
+    onClick,
+    disabled,
+    ...props
+  }: {
+    children: React.ReactNode
+    onClick?: () => void
+    disabled?: boolean
+  }) => (
+    <button type="button" disabled={disabled} onClick={onClick} {...props}>
+      {children}
+    </button>
+  ),
+}))
+
+describe('ReportPreviewModal', () => {
+  const originalCreateObjectURL = window.URL.createObjectURL
+  const originalRevokeObjectURL = window.URL.revokeObjectURL
+
+  beforeEach(() => {
+    ;(global.fetch as jest.Mock).mockReset()
+    window.URL.createObjectURL = jest.fn().mockReturnValue('blob:mock-preview')
+    window.URL.revokeObjectURL = jest.fn()
+    mockGetAccessToken.mockReturnValue('test-token')
+  })
+
+  afterAll(() => {
+    window.URL.createObjectURL = originalCreateObjectURL
+    window.URL.revokeObjectURL = originalRevokeObjectURL
+  })
+
+  it('PDF 报表应加载并渲染 iframe 预览', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
+    })
+
+    const report: Report = {
+      id: '1',
+      title: '巡检日报_2026-02-25',
+      description: '昨日巡检总结',
+      type: 'inspection',
+      category: 'daily',
+      format: 'pdf',
+      status: 'completed',
+      createdAt: '2026-02-26T00:00:00Z',
+      updatedAt: '2026-02-26T00:00:00Z',
+      generatedBy: '系统',
+      downloadUrl: '/api/v1/reports/files/report-1.pdf',
+      parameters: {
+        dateRange: { startDate: '2026-02-25', endDate: '2026-02-26' },
+        includeCharts: true,
+        includeDetailData: false,
+        includeRecommendations: true,
+      },
+    }
+
+    render(<ReportPreviewModal report={report} onClose={() => {}} />)
+
+    await waitFor(() => {
+      expect(screen.getByTitle('报告预览')).toBeInTheDocument()
+    })
+
+    expect(screen.getByTitle('报告预览')).toHaveAttribute('src', 'blob:mock-preview')
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/reports/files/report-1.pdf',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token',
+        }),
+      })
+    )
+  })
+
+  it('存在 previewUrl 时应默认使用 HTML 预览，并可切换到 PDF', async () => {
+    ;(global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        blob: async () => new Blob(['<html><body>ok</body></html>'], { type: 'text/html' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
+      })
+
+    const report: Report = {
+      id: '2',
+      title: '巡检日报_2026-02-25',
+      description: '昨日巡检总结',
+      type: 'inspection',
+      category: 'daily',
+      format: 'pdf',
+      status: 'completed',
+      createdAt: '2026-02-26T00:00:00Z',
+      updatedAt: '2026-02-26T00:00:00Z',
+      generatedBy: '系统',
+      downloadUrl: '/api/v1/reports/files/report-2.pdf',
+      previewUrl: '/api/v1/reports/files/report-2.html',
+      availableFormats: ['pdf', 'html'],
+      parameters: {
+        dateRange: { startDate: '2026-02-25', endDate: '2026-02-26' },
+        includeCharts: true,
+        includeDetailData: false,
+        includeRecommendations: true,
+      },
+    }
+
+    render(<ReportPreviewModal report={report} onClose={() => {}} />)
+
+    await waitFor(() => {
+      expect(screen.getByTitle('报告预览')).toBeInTheDocument()
+    })
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/v1/reports/files/report-2.html',
+      expect.any(Object)
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'PDF 预览' })).toBeInTheDocument()
+    })
+    screen.getByRole('button', { name: 'PDF 预览' }).click()
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:8000/api/v1/reports/files/report-2.pdf',
+        expect.any(Object)
+      )
+    })
+  })
+})
