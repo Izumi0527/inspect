@@ -176,7 +176,7 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
             </div>
           )}
 
-          {!isLoading && result && (
+          {!isLoading && !!result && (
             <div className="space-y-4">
               {/* 基准设备 */}
               {baseDevice && (

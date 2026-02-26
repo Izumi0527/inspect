@@ -64,7 +64,7 @@ export const mapFormDataToApiPayload = (formData: DeviceFormData) => {
     name: formData.name,
     ip: formData.ip,
     ip_address: formData.ip,
-    device_type: formData.device_type === 'wireless_ap' ? 'ap' : formData.device_type,
+    device_type: formData.device_type,
     vendor: vendorMap[formData.device_type] || 'other',
     location: formData.location || '',
     description: formData.description || '',
