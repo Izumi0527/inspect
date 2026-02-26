@@ -4,6 +4,9 @@ import { TrendingUp, Calendar, AlertTriangle } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, LineChartComponent } from '@/components/atoms'
 import { useTrendAnalysis, useGenerateTrendReport } from '../hooks/useReports'
 import { Loading } from '@/components/atoms/loading'
+import toast from 'react-hot-toast'
+import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
+import { downloadWithAuth } from '@/utils/download'
 
 interface Props {
   searchText: string
@@ -51,7 +54,7 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
   // 处理生成报告
   const handleGenerateReport = async () => {
     try {
-      await generateReportMutation.mutateAsync({
+      const report = await generateReportMutation.mutateAsync({
         title: `趋势分析报告 - ${new Date().toLocaleDateString()}`,
         metrics: ['availability', 'performance', 'errors'],
         startDate: dateRange.startDate,
@@ -59,8 +62,26 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
         format: 'pdf',
         includePredictions: true
       })
+
+      try {
+        const url = report?.downloadUrl || (await fetchDownloadUrl(report.id))
+        if (!url) {
+          toast.error('暂无可用的下载链接')
+          return
+        }
+
+        const format = String(report.format || 'pdf').toLowerCase()
+        const ext = format === 'excel' ? 'xlsx' : format === 'word' ? 'docx' : format
+        const filename = `${report.title || 'trend-report'}.${ext}`
+        await downloadWithAuth(url, filename)
+        toast.success('趋势报告已生成并开始下载')
+      } catch (err) {
+        console.error('下载趋势报告失败:', err)
+        toast.error('趋势报告生成成功，但下载失败')
+      }
     } catch (error) {
       console.error('生成报告失败:', error)
+      toast.error('生成趋势报告失败')
     }
   }
 

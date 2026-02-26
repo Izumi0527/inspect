@@ -1,20 +1,17 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
+import { useSearchParams } from 'next/navigation'
 import {
   FileText,
   TrendingUp,
   BarChart3,
   Settings,
-  Plus,
-  Search,
-  Filter,
-  RefreshCw
+  Search
 } from 'lucide-react'
 import {
   Card,
   CardHeader,
   CardContent,
-  Button,
   Input
 } from '@/components/atoms'
 import { AppLayout } from '@/components/layout'
@@ -36,10 +33,28 @@ interface TabConfig {
 }
 
 export const ReportsView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('inspection')
+  const searchParams = useSearchParams()
+
+  const tabFromUrl = useMemo((): TabType | null => {
+    const raw = String(searchParams?.get('tab') || '').toLowerCase().trim()
+    if (!raw) return null
+    if (raw === 'trend') return 'trends'
+    if (raw === 'inspection' || raw === 'trends' || raw === 'statistics' || raw === 'custom') {
+      return raw as TabType
+    }
+    return null
+  }, [searchParams])
+
+  const [activeTab, setActiveTab] = useState<TabType>(tabFromUrl || 'inspection')
   const [searchText, setSearchText] = useState('')
   
   const { data: stats, isLoading: statsLoading } = useReportStats()
+
+  useEffect(() => {
+    if (tabFromUrl) {
+      setActiveTab(tabFromUrl)
+    }
+  }, [tabFromUrl])
 
   const tabs: TabConfig[] = [
     {
@@ -165,18 +180,6 @@ export const ReportsView: React.FC = () => {
                   className="pl-10 w-48"
                 />
               </div>
-              <Button variant="outline" size="sm">
-                <Filter className="w-4 h-4 mr-2" />
-                筛选
-              </Button>
-              <Button variant="outline" size="sm">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                刷新
-              </Button>
-              <Button size="sm">
-                <Plus className="w-4 h-4 mr-2" />
-                新建报表
-              </Button>
             </div>
           </div>
 

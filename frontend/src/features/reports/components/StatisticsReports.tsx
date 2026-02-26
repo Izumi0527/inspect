@@ -19,6 +19,8 @@ import {
 } from '@/components/atoms'
 import { useStatistics, useKPIData, useRankings, useGenerateStatisticsReport } from '../hooks/useReports'
 import toast from 'react-hot-toast'
+import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
+import { downloadWithAuth } from '@/utils/download'
 
 interface Props {
   searchText: string
@@ -202,7 +204,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
   // ==================== Event Handlers ====================
   const handleGenerateReport = async () => {
     try {
-      await generateReportMutation.mutateAsync({
+      const report = await generateReportMutation.mutateAsync({
         title: `统计报表_${dateRange.startDate}_${dateRange.endDate}`,
         description: '设备统计报表',
         startDate: dateRange.startDate,
@@ -212,7 +214,23 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
         includeTrends: true,
         includeRankings: true
       })
-      toast.success('报表生成任务已启动')
+
+      try {
+        const url = report?.downloadUrl || (await fetchDownloadUrl(report.id))
+        if (!url) {
+          toast.error('暂无可用的下载链接')
+          return
+        }
+
+        const format = String(report.format || 'pdf').toLowerCase()
+        const ext = format === 'excel' ? 'xlsx' : format === 'word' ? 'docx' : format
+        const filename = `${report.title || 'statistics-report'}.${ext}`
+        await downloadWithAuth(url, filename)
+        toast.success('统计报表已生成并开始下载')
+      } catch (err) {
+        console.error('下载统计报表失败:', err)
+        toast.error('统计报表生成成功，但下载失败')
+      }
     } catch {
       toast.error('生成报表失败')
     }

@@ -1,9 +1,12 @@
 // @ts-nocheck
 import React, { useState } from 'react'
 import { Settings, Plus, Edit, Copy, AlertCircle, Eye } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Loading } from '@/components/atoms'
 import { useCustomReportConfigs, useGenerateFromConfig } from '../hooks/useReports'
 import { ConfigPreviewModal } from './ConfigPreviewModal'
+import { downloadWithAuth } from '@/utils/download'
+import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 
 interface Props {
   searchText: string
@@ -18,7 +21,7 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
   const generateReport = useGenerateFromConfig()
 
   // 提取配置列表
-  const customConfigs = configsData?.items || []
+  const customConfigs = configsData || []
 
   // 搜索过滤
   const normalizedKeyword = searchText.trim().toLowerCase()
@@ -45,11 +48,25 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
         format: 'pdf'
       })
 
-      console.log('Report generated:', result)
-      // TODO: 显示成功消息或打开下载链接
+      try {
+        const url = result?.downloadUrl || (await fetchDownloadUrl(result.id))
+        if (!url) {
+          toast.error('暂无可用的下载链接')
+          return
+        }
+
+        const format = String(result.format || 'pdf').toLowerCase()
+        const ext = format === 'excel' ? 'xlsx' : format === 'word' ? 'docx' : format
+        const filename = `${result.title || result.name || 'custom-report'}.${ext}`
+        await downloadWithAuth(url, filename)
+        toast.success('自定义报表已生成并开始下载')
+      } catch (err) {
+        console.error('下载自定义报表失败:', err)
+        toast.error('自定义报表生成成功，但下载失败')
+      }
     } catch (error) {
       console.error('Failed to generate report:', error)
-      // TODO: 显示错误消息
+      toast.error('生成报表失败')
     } finally {
       setGeneratingId(null)
     }

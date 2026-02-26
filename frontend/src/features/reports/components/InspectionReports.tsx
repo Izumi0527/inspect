@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
+import toast from 'react-hot-toast'
+import { useRouter } from 'next/navigation'
 import { 
   FileText, 
   Plus, 
@@ -27,35 +29,97 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  ConfirmModal
+  ConfirmModal,
+  ErrorAlert,
 } from '@/components/atoms'
 import type { BadgeProps } from '@/components/atoms/badge'
 import {
   useReports,
-  useDeleteReport
+  useDeleteReport,
+  useGenerateInspectionReport
 } from '../hooks/useReports'
+import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
+import { downloadWithAuth } from '@/utils/download'
 import { Report } from '../types'
 import { InspectionReportModal } from './InspectionReportModal'
 import { ReportPreviewModal } from './ReportPreviewModal'
+import { ReportEditModal } from './ReportEditModal'
+import { InspectionCompareModal } from './InspectionCompareModal'
+import { InspectionProblemAnalysisModal } from './InspectionProblemAnalysisModal'
 
 interface Props {
   searchText: string
 }
 
 export const InspectionReports: React.FC<Props> = ({ searchText }) => {
+  const router = useRouter()
   const [reportModal, setReportModal] = useState(false)
   const [previewReport, setPreviewReport] = useState<Report | null>(null)
+  const [editingReport, setEditingReport] = useState<Report | null>(null)
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [analysisOpen, setAnalysisOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [formatFilter, setFormatFilter] = useState('all')
+  const [quickDailyLoading, setQuickDailyLoading] = useState(false)
 
-  const { data: reportsData, isLoading } = useReports({
+  const { data: reportsData, isLoading, error, refetch } = useReports({
     type: 'inspection',
     status: statusFilter !== 'all' ? statusFilter : undefined
   })
   const deleteReport = useDeleteReport()
+  const generateReport = useGenerateInspectionReport()
 
   const reports = reportsData?.reports || []
+
+  const handleDownloadReport = async (report: Report) => {
+    try {
+      const url = report.downloadUrl || (await fetchDownloadUrl(report.id))
+      if (!url) {
+        toast.error('暂无可用的下载链接')
+        return
+      }
+
+      const format = String(report.format || 'pdf').toLowerCase()
+      const ext = format === 'excel' ? 'xlsx' : format === 'word' ? 'docx' : format
+      const filename = `${report.title || 'report'}.${ext}`
+      await downloadWithAuth(url, filename)
+    } catch (err) {
+      console.error('下载报表失败:', err)
+      toast.error('下载失败，请稍后重试')
+    }
+  }
+
+  const handleQuickDailyReport = async () => {
+    if (quickDailyLoading) return
+
+    try {
+      setQuickDailyLoading(true)
+      const endDate = new Date().toISOString().split('T')[0]
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+      const report = await generateReport.mutateAsync({
+        title: `巡检日报_${yesterday}`,
+        description: '昨日巡检总结',
+        category: 'daily',
+        dateRange: {
+          startDate: yesterday,
+          endDate
+        },
+        format: 'pdf',
+        includeCharts: true,
+        includeDetailData: false,
+        includeRecommendations: true
+      })
+
+      await handleDownloadReport(report)
+    } catch (err) {
+      console.error('快速日报生成失败:', err)
+      // toast 由 mutation hook onError 统一处理
+    } finally {
+      setQuickDailyLoading(false)
+    }
+  }
 
   // 颜色映射对象 - 解决动态类名问题
   const colorMap = {
@@ -250,15 +314,7 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  // 下载报表
-                  if (report.downloadUrl) {
-                    const a = document.createElement('a')
-                    a.href = report.downloadUrl
-                    a.download = `${report.title}.${report.format}`
-                    a.click()
-                  }
-                }}
+                onClick={() => handleDownloadReport(report)}
                 title="下载报表"
               >
                 <Download className="w-4 h-4" />
@@ -269,6 +325,7 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
             size="sm"
             variant="ghost"
             title="编辑"
+            onClick={() => setEditingReport(report)}
           >
             <Edit className="w-4 h-4" />
           </Button>
@@ -302,6 +359,17 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
           </Card>
         ))}
       </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <ErrorAlert
+        title="巡检报告加载失败"
+        message="无法加载巡检报表列表，请检查网络连接或稍后重试"
+        error={error}
+        onRetry={refetch}
+      />
     )
   }
 
@@ -353,42 +421,52 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
             description: '生成昨日巡检总结',
             icon: Calendar,
             color: 'blue',
-            action: () => {
-              // 生成昨日报告
-            }
+            action: handleQuickDailyReport,
+            disabled: quickDailyLoading || generateReport.isPending
           },
           {
             title: '设备对比',
             description: '对比设备性能表现',
             icon: Users,
             color: 'green',
-            action: () => {
-              // 打开设备对比
-            }
+            action: () => setCompareOpen(true),
+            disabled: false
           },
           {
             title: '问题分析',
             description: '分析常见问题趋势',
             icon: AlertCircle,
             color: 'red',
-            action: () => {
-              // 打开问题分析
-            }
+            action: () => setAnalysisOpen(true),
+            disabled: false
           },
           {
             title: '自定义配置',
             description: '配置报告模板',
             icon: Settings,
             color: 'purple',
-            action: () => {
-              // 打开配置页面
-            }
+            action: () => router.push('/reports?tab=custom'),
+            disabled: false
           }
         ].map((item) => {
           const colors = colorMap[item.color as keyof typeof colorMap]
+          const disabled = !!(item as any).disabled
           return (
-            <Card key={item.title} className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardContent className="p-4" onClick={item.action}>
+            <Card
+              key={item.title}
+              className={
+                disabled
+                  ? 'opacity-60 cursor-not-allowed'
+                  : 'hover:shadow-md transition-shadow cursor-pointer'
+              }
+            >
+              <CardContent
+                className="p-4"
+                onClick={() => {
+                  if (disabled) return
+                  item.action()
+                }}
+              >
                 <div className="flex items-center gap-3">
                   <div className={colors.bg + ' p-2 rounded-lg'}>
                     <item.icon className={colors.icon + ' w-5 h-5'} />
@@ -397,7 +475,11 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
                     <div className="font-medium text-gray-900 dark:text-gray-100">{item.title}</div>
                     <div className="text-sm text-gray-600 dark:text-gray-400">{item.description}</div>
                   </div>
-                  <Play className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                  {disabled ? (
+                    <Clock className="w-4 h-4 text-gray-400 dark:text-gray-500 animate-pulse" />
+                  ) : (
+                    <Play className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -455,6 +537,29 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
         <ReportPreviewModal
           report={previewReport}
           onClose={() => setPreviewReport(null)}
+        />
+      )}
+
+      {/* 编辑弹窗 */}
+      {editingReport && (
+        <ReportEditModal
+          report={editingReport}
+          onClose={() => setEditingReport(null)}
+          onSuccess={() => setEditingReport(null)}
+        />
+      )}
+
+      {/* 设备对比弹窗 */}
+      {compareOpen && (
+        <InspectionCompareModal
+          onClose={() => setCompareOpen(false)}
+        />
+      )}
+
+      {/* 问题分析弹窗 */}
+      {analysisOpen && (
+        <InspectionProblemAnalysisModal
+          onClose={() => setAnalysisOpen(false)}
         />
       )}
 

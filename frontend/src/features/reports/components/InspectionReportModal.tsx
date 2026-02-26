@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { X, Calendar, FileText, Settings, Users, Plus } from 'lucide-react'
+import { X, Calendar, FileText, Settings, Users } from 'lucide-react'
 import {
   Button,
   SimpleInput as Input,
@@ -30,9 +30,7 @@ interface InspectionReportForm {
     startDate: string
     endDate: string
   }
-  devices: string[]
-  strategies: string[]
-  executionIds: string[]
+  deviceIdsText: string
   includeCharts: boolean
   includeDetailData: boolean
   includeRecommendations: boolean
@@ -48,9 +46,7 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
       startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7天前
       endDate: new Date().toISOString().split('T')[0] // 今天
     },
-    devices: [] as string[],
-    strategies: [] as string[],
-    executionIds: [] as string[],
+    deviceIdsText: '',
     includeCharts: true,
     includeDetailData: true,
     includeRecommendations: true
@@ -109,6 +105,22 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
     return Object.keys(newErrors).length === 0
   }
 
+  const parsedDeviceIds = useMemo(() => {
+    const raw = String(formData.deviceIdsText || '').trim()
+    if (!raw) return [] as string[]
+    const parts = raw.split(/[,\uFF0C]+/g)
+    const seen = new Set<string>()
+    const result: string[] = []
+    for (const part of parts) {
+      const v = part.trim()
+      if (!v) continue
+      if (seen.has(v)) continue
+      seen.add(v)
+      result.push(v)
+    }
+    return result
+  }, [formData.deviceIdsText])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -118,10 +130,11 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
 
     try {
       await generateReport.mutateAsync({
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
         dateRange: formData.dateRange,
-        devices: formData.devices.length > 0 ? formData.devices : undefined,
-        strategies: formData.strategies.length > 0 ? formData.strategies : undefined,
-        executionIds: formData.executionIds.length > 0 ? formData.executionIds : undefined,
+        devices: parsedDeviceIds.length > 0 ? parsedDeviceIds : undefined,
         format: formData.format,
         includeCharts: formData.includeCharts,
         includeDetailData: formData.includeDetailData,
@@ -346,125 +359,26 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                 筛选条件
               </h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    目标设备 ({formData.devices.length} 个)
+                    目标设备ID（可选）
                   </label>
-                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[80px] bg-gray-50 dark:bg-gray-800">
-                    <div className="flex flex-wrap gap-2">
-                      {formData.devices.map((deviceId) => (
-                        <Badge key={deviceId} variant="secondary" className="flex items-center gap-1">
-                          设备-{deviceId}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newDevices = formData.devices.filter(id => id !== deviceId)
-                              handleInputChange('devices', newDevices)
-                            }}
-                            className="ml-1 hover:text-red-500"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => {
-                        // 模拟添加设备
-                        const mockDeviceId = `${Date.now()}`
-                        handleInputChange('devices', [...formData.devices, mockDeviceId])
-                      }}
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      添加设备
-                    </Button>
+                  <Input
+                    value={formData.deviceIdsText}
+                    onChange={(e) => handleInputChange('deviceIdsText', e.target.value)}
+                    placeholder="例如：1,2,3；留空代表全部设备"
+                  />
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {parsedDeviceIds.map((id) => (
+                      <Badge key={id} variant="secondary">
+                        设备-{id}
+                      </Badge>
+                    ))}
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">不选择则包含所有设备</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    巡检策略 ({formData.strategies.length} 个)
-                  </label>
-                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[80px] bg-gray-50 dark:bg-gray-800">
-                    <div className="flex flex-wrap gap-2">
-                      {formData.strategies.map((strategyId) => (
-                        <Badge key={strategyId} variant="primary" className="flex items-center gap-1">
-                          策略-{strategyId}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newStrategies = formData.strategies.filter(id => id !== strategyId)
-                              handleInputChange('strategies', newStrategies)
-                            }}
-                            className="ml-1 hover:text-red-500"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => {
-                        // 模拟添加策略
-                        const mockStrategyId = `${Date.now()}`
-                        handleInputChange('strategies', [...formData.strategies, mockStrategyId])
-                      }}
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      添加策略
-                    </Button>
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">不选择则包含所有策略</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    执行记录 ({formData.executionIds.length} 个)
-                  </label>
-                  <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 min-h-[80px] bg-gray-50 dark:bg-gray-800">
-                    <div className="flex flex-wrap gap-2">
-                      {formData.executionIds.map((executionId) => (
-                        <Badge key={executionId} variant="outline" className="flex items-center gap-1">
-                          执行-{executionId}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newExecutions = formData.executionIds.filter(id => id !== executionId)
-                              handleInputChange('executionIds', newExecutions)
-                            }}
-                            className="ml-1 hover:text-red-500"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => {
-                        // 模拟添加执行记录
-                        const mockExecutionId = `${Date.now()}`
-                        handleInputChange('executionIds', [...formData.executionIds, mockExecutionId])
-                      }}
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      添加记录
-                    </Button>
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">不选择则包含所有执行记录</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    当前仅支持按设备ID过滤（策略/执行记录筛选暂未对接后端，已移除模拟按钮避免生成空报表）。
+                  </p>
                 </div>
               </div>
             </div>
