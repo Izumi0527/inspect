@@ -164,7 +164,7 @@ func writeGenericWord(path string, data GenericReportData) error {
 
 	keys := sortedKeys(data.Extra)
 	for _, key := range keys {
-		elements = append(elements, docxParagraph(fmt.Sprintf("%s: %v", key, data.Extra[key]), ""))
+		elements = append(elements, docxParagraph(fmt.Sprintf("%s: %s", key, formatValueForReport(data.Extra[key])), ""))
 	}
 
 	return writeDocx(path, docxDocument(elements))

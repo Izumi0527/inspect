@@ -456,6 +456,57 @@ func (h ReportsHandler) GenerateReportFromRequest(c echo.Context) error {
 		"custom_config":   req.CustomConfig,
 	}
 
+	// 对于趋势类报表：在生成阶段预先组装一份“可落盘”的 report_data，
+	// 让通用报表渲染器也能输出与趋势分析一致的核心结果（而不是空报表）。
+	if reportType == "trend" {
+		reportData := map[string]interface{}{
+			"report_name":  req.Name,
+			"range":        fmt.Sprintf("%s ~ %s", startTime.Format("2006-01-02"), endTime.Format("2006-01-02")),
+			"generated_at": time.Now().UTC().Format(time.RFC3339),
+			"summary": map[string]interface{}{
+				"metrics": len(readStringSlice(req.CustomConfig, "metrics")),
+				"devices": len(req.DeviceIDs),
+			},
+			"notes": "该趋势报表为摘要版（不包含全部数据点），用于快速回溯趋势变化与预测结果。",
+		}
+
+		db := h.Service.DB()
+		if db == nil {
+			reportData["notes"] = "趋势数据获取失败：数据库未配置"
+		} else {
+			metrics := readStringSlice(req.CustomConfig, "metrics")
+			if len(metrics) == 0 {
+				metrics = []string{"availability", "performance", "errors", "capacity"}
+			}
+			granularity := normalizeGranularity(readString(req.CustomConfig, "granularity"))
+			series, err := loadTrendSeries(c.Request().Context(), db, metrics, startTime, endTime, granularity, req.DeviceIDs)
+			if err != nil {
+				reportData["notes"] = fmt.Sprintf("趋势数据获取失败：%s", err.Error())
+			} else {
+				compactMetrics := make([]map[string]interface{}, 0, len(series))
+				for _, item := range series {
+					payload := buildTrendMetricPayload(item)
+					// 报表文件中不落全量 data_points，避免内容过大且难读。
+					delete(payload, "data_points")
+					compactMetrics = append(compactMetrics, payload)
+				}
+				reportData["metrics"] = compactMetrics
+
+				includePredictions := false
+				if value, ok := readBool(req.CustomConfig, "include_predictions", "includePredictions"); ok {
+					includePredictions = value
+				}
+				if includePredictions {
+					timeframe := timeframeForRange(startTime, endTime)
+					reportData["predictions"] = buildTrendPredictions(series, predictionSteps(timeframe, granularity), timeframe)
+				}
+				reportData["alerts"] = buildTrendAlerts(series, "medium", 50)
+			}
+		}
+
+		parameters["report_data"] = reportData
+	}
+
 	filtersJSON, err := encodeJSON(parameters)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid parameters")
@@ -1088,14 +1139,14 @@ func (h ReportsHandler) GetTrendAnomalies(c echo.Context) error {
 		items := detectAnomalies(item, sensitivity)
 		for _, anomaly := range items {
 			anomalies = append(anomalies, map[string]interface{}{
-				"id":          fmt.Sprintf("%s-%s", anomaly.MetricName, anomaly.Timestamp.Format("20060102150405")),
-				"metric":      anomaly.MetricName,
+				"id":           fmt.Sprintf("%s-%s", anomaly.MetricName, anomaly.Timestamp.Format("20060102150405")),
+				"metric":       anomaly.MetricName,
 				"display_name": anomaly.DisplayName,
-				"timestamp":   anomaly.Timestamp.Format(time.RFC3339),
-				"value":       roundFloat(anomaly.Value, 2),
-				"expected":    roundFloat(anomaly.Expected, 2),
-				"score":       roundFloat(anomaly.Score, 2),
-				"severity":    anomaly.Severity,
+				"timestamp":    anomaly.Timestamp.Format(time.RFC3339),
+				"value":        roundFloat(anomaly.Value, 2),
+				"expected":     roundFloat(anomaly.Expected, 2),
+				"score":        roundFloat(anomaly.Score, 2),
+				"severity":     anomaly.Severity,
 			})
 			summary[anomaly.MetricName]++
 		}
@@ -1183,7 +1234,7 @@ func (h ReportsHandler) GetStatisticsData(c echo.Context) error {
 				"by_device":  buildPerformancePayload(perfList),
 				"aggregated": buildPerformanceAggregatePayload(perfAgg),
 			},
-			"compliance_stats":     complianceStats,
+			"compliance_stats":      complianceStats,
 			"historical_comparison": historicalComparison,
 		},
 	})
@@ -1401,7 +1452,7 @@ func (h ReportsHandler) GetDeviceStatistics(c echo.Context) error {
 				rate = float64(row.Online) / float64(row.Total) * 100
 			}
 			trendData = append(trendData, map[string]interface{}{
-				"date":          row.Bucket.Format(time.RFC3339),
+				"date":           row.Bucket.Format(time.RFC3339),
 				"online_devices": row.Online,
 				"total_devices":  row.Total,
 				"online_rate":    roundFloat(rate, 2),
@@ -1773,20 +1824,20 @@ func (h ReportsHandler) GetInspectionReportData(c echo.Context) error {
 		}
 
 		deviceResults = append(deviceResults, map[string]interface{}{
-			"device_id":        deviceID,
-			"device_name":      info.Name,
-			"device_type":      info.DeviceType,
-			"device_group":     groupName,
-			"status":           normalizeDeviceStatus(info.Status),
-			"total_checks":     totalChecks,
-			"passed_checks":    passedChecks,
-			"failed_checks":    failedChecks,
-			"warning_checks":   warningChecks,
-			"score":            roundFloat(score, 2),
-			"uptime":           roundFloat(availability, 2),
+			"device_id":         deviceID,
+			"device_name":       info.Name,
+			"device_type":       info.DeviceType,
+			"device_group":      groupName,
+			"status":            normalizeDeviceStatus(info.Status),
+			"total_checks":      totalChecks,
+			"passed_checks":     passedChecks,
+			"failed_checks":     failedChecks,
+			"warning_checks":    warningChecks,
+			"score":             roundFloat(score, 2),
+			"uptime":            roundFloat(availability, 2),
 			"avg_response_time": roundFloat(responseAvg, 2),
-			"last_check_time":  lastCheckTime,
-			"issues":           buildInspectionIssues(results),
+			"last_check_time":   lastCheckTime,
+			"issues":            buildInspectionIssues(results),
 			"performance_metrics": map[string]interface{}{
 				"cpu": map[string]interface{}{
 					"current": roundFloat(cpuCurrent, 2),
@@ -2065,7 +2116,11 @@ func (h ReportsHandler) DeleteCustomConfig(c echo.Context) error {
 }
 
 func (h ReportsHandler) GenerateFromCustomConfig(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth, "reports:create"); err != nil {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
+	}
+	user, err := requirePermission(c, h.Auth, "reports:create")
+	if err != nil {
 		return err
 	}
 
@@ -2082,22 +2137,104 @@ func (h ReportsHandler) GenerateFromCustomConfig(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load config")
 	}
 
+	var req struct {
+		Parameters map[string]interface{} `json:"parameters"`
+		Format     string                 `json:"format"`
+	}
+	_ = c.Bind(&req)
+
+	format := normalizeReportFormat(req.Format)
+	params := req.Parameters
+	if params == nil {
+		params = map[string]interface{}{}
+	}
+
+	// 将模板配置与本次生成参数合并写入 DeviceFilters，便于后续生成器读取。
+	config := decodeJSONMap(template.Config)
+	config["parameters"] = params
+
+	// 自定义报表当前走通用渲染器：注入一份 report_data，避免生成“空报表”。
+	chartCount := 0
+	if items, ok := config["charts"].([]interface{}); ok {
+		chartCount = len(items)
+	}
+	tableCount := 0
+	if items, ok := config["tables"].([]interface{}); ok {
+		tableCount = len(items)
+	}
+	filterCount := 0
+	if items, ok := config["filters"].([]interface{}); ok {
+		filterCount = len(items)
+	}
+	layoutColumns := 0
+	if layoutMap, ok := config["layout"].(map[string]interface{}); ok {
+		if value, ok := readInt(layoutMap, "columns"); ok {
+			layoutColumns = value
+		}
+	}
+
+	configJSON, err := encodeJSON(config)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid parameters")
+	}
+
+	start, end := resolveDateRangeFromPayload(params)
+	if start.IsZero() || end.IsZero() {
+		now := time.Now().UTC()
+		start = now.AddDate(0, 0, -7)
+		end = now
+	}
+
+	config["report_data"] = map[string]interface{}{
+		"report_name":  template.Name,
+		"range":        fmt.Sprintf("%s ~ %s", start.Format("2006-01-02"), end.Format("2006-01-02")),
+		"generated_at": time.Now().UTC().Format(time.RFC3339),
+		"summary": map[string]interface{}{
+			"charts":         chartCount,
+			"tables":         tableCount,
+			"filters":        filterCount,
+			"layout_columns": layoutColumns,
+		},
+		"parameters": params,
+		"charts":     config["charts"],
+		"tables":     config["tables"],
+		"filters":    config["filters"],
+		"layout":     config["layout"],
+		"notes":      "该自定义报表为“配置摘要版”。当前后端未实现按配置动态取数渲染，后续可扩展为真正的数据预览/渲染。",
+	}
+
+	// 重新编码（写入 report_data 后）用于生成器落盘。
+	configJSON, err = encodeJSON(config)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid parameters")
+	}
+
+	formatJSON, err := encodeJSON([]string{format})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to encode format")
+	}
+
 	report := reports.Report{
 		Title:         template.Name,
 		ReportType:    "custom",
 		Category:      stringPtr("custom"),
 		TemplateID:    &template.ID,
-		StartDate:     time.Now().UTC(),
-		EndDate:       time.Now().UTC(),
-		DeviceFilters: template.Config,
-		Status:        "pending",
-		FileFormats:   datatypes.JSON([]byte(`["pdf"]`)),
+		StartDate:     start,
+		EndDate:       end,
+		DeviceFilters: configJSON,
+		Status:        "generating",
+		FileFormats:   formatJSON,
 		FilePaths:     datatypes.JSON([]byte("{}")),
 		FileSizes:     datatypes.JSON([]byte("{}")),
+	}
+	if user != nil {
+		report.GeneratedBy = &user.ID
 	}
 	if err := h.Service.CreateReport(c.Request().Context(), &report); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create report")
 	}
+
+	report, _ = h.completeReportGeneration(c, report, format)
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -2543,15 +2680,33 @@ func (h ReportsHandler) completeReportGeneration(c echo.Context, report reports.
 		return updated, err
 	}
 
-	fileFormats := []string{format}
-	formatsJSON, _ := encodeJSON(fileFormats)
-	pathsJSON, _ := encodeJSON(map[string]string{format: filePath})
+	paths := map[string]string{format: filePath}
 
 	var size int64
 	if info, statErr := os.Stat(filePath); statErr == nil {
 		size = info.Size()
 	}
-	sizesJSON, _ := encodeJSON(map[string]int64{format: size})
+
+	sizes := map[string]int64{format: size}
+
+	// 预览优先使用 HTML（观感更佳），因此在主格式生成成功后，尽量补一份 HTML 文件。
+	// HTML 生成失败不影响主报表状态，只是没有 preview_url。
+	if format != "html" {
+		htmlPath, htmlErr := reports.GenerateReportFile(c.Request().Context(), h.Service.DB(), h.OutputDir, report, "html")
+		if htmlErr == nil && strings.TrimSpace(htmlPath) != "" {
+			paths["html"] = htmlPath
+			if info, statErr := os.Stat(htmlPath); statErr == nil {
+				sizes["html"] = info.Size()
+			}
+		} else if htmlErr != nil {
+			c.Logger().Warnf("generate report html preview failed: report_id=%d err=%v", report.ID, htmlErr)
+		}
+	}
+
+	fileFormats := []string{format}
+	formatsJSON, _ := encodeJSON(fileFormats)
+	pathsJSON, _ := encodeJSON(paths)
+	sizesJSON, _ := encodeJSON(sizes)
 
 	updates := map[string]interface{}{
 		"status":       "completed",
@@ -2629,33 +2784,65 @@ func buildReportResponse(report reports.Report, schedule *reports.ReportSchedule
 		downloadURL = buildDownloadURL(filepath.Base(filePath))
 	}
 
+	paths := decodeJSONMap(report.FilePaths)
+	previewURL := ""
+	if value, ok := paths["html"]; ok {
+		htmlPath := fmt.Sprint(value)
+		if strings.TrimSpace(htmlPath) != "" {
+			previewURL = buildDownloadURL(filepath.Base(htmlPath))
+		}
+	}
+
+	// available_formats：主格式优先，其次 html，其余按字母序，便于前端稳定展示/切换。
+	availableFormats := make([]string, 0, len(paths))
+	seen := map[string]bool{}
+	if _, ok := paths[format]; ok {
+		availableFormats = append(availableFormats, format)
+		seen[format] = true
+	}
+	if _, ok := paths["html"]; ok && !seen["html"] {
+		availableFormats = append(availableFormats, "html")
+		seen["html"] = true
+	}
+	rest := make([]string, 0, len(paths))
+	for key := range paths {
+		if seen[key] {
+			continue
+		}
+		rest = append(rest, key)
+	}
+	sort.Strings(rest)
+	availableFormats = append(availableFormats, rest...)
+
 	status := report.Status
 	if report.ScheduleID != nil && status == "pending" {
 		status = "scheduled"
 	}
 
 	result := map[string]interface{}{
-		"id":           report.ID,
-		"name":         report.Title,
-		"title":        report.Title,
-		"description":  report.Description,
-		"report_type":  report.ReportType,
-		"type":         report.ReportType,
-		"category":     defaultStringPtr(report.Category, "custom"),
-		"status":       status,
-		"start_time":   report.StartDate,
-		"end_time":     report.EndDate,
-		"format":       format,
-		"created_by":   report.GeneratedBy,
-		"created_at":   report.CreatedAt,
-		"updated_at":   report.UpdatedAt,
-		"completed_at": report.GeneratedAt,
-		"generated_by": report.GeneratedBy,
+		"id":            report.ID,
+		"name":          report.Title,
+		"title":         report.Title,
+		"description":   report.Description,
+		"report_type":   report.ReportType,
+		"type":          report.ReportType,
+		"category":      defaultStringPtr(report.Category, "custom"),
+		"status":        status,
+		"start_time":    report.StartDate,
+		"end_time":      report.EndDate,
+		"format":        format,
+		"created_by":    report.GeneratedBy,
+		"created_at":    report.CreatedAt,
+		"updated_at":    report.UpdatedAt,
+		"completed_at":  report.GeneratedAt,
+		"generated_by":  report.GeneratedBy,
 		"error_message": report.ErrorMessage,
-		"file_path":    filePath,
-		"file_size":    fileSize,
-		"download_url": downloadURL,
-		"parameters":   parameters,
+		"file_path":     filePath,
+		"file_size":     fileSize,
+		"download_url":  downloadURL,
+		"preview_url":   previewURL,
+		"available_formats": availableFormats,
+		"parameters":    parameters,
 	}
 
 	if schedule != nil {
@@ -2696,10 +2883,20 @@ func buildReportTemplateResponse(template reports.ReportTemplate) map[string]int
 
 func buildCustomConfigResponse(template reports.ReportTemplate) map[string]interface{} {
 	config := decodeJSONMap(template.Config)
+	tplType := "custom"
+	if template.IsDefault {
+		tplType = "template"
+	}
 	return map[string]interface{}{
 		"id":          template.ID,
 		"name":        template.Name,
+		"type":        tplType,
 		"description": template.Description,
+		"is_default":  template.IsDefault,
+		"is_active":   template.IsActive,
+		"created_by":  template.CreatedBy,
+		"created_at":  template.CreatedAt,
+		"updated_at":  template.UpdatedAt,
 		"template":    config["template"],
 		"parameters":  config["parameters"],
 		"charts":      config["charts"],

@@ -374,3 +374,5 @@ backend/data/reports/*
 
 .tmp-openai-skills/
 .tmp-superpowers/
+
+/backend-go/backend-go/

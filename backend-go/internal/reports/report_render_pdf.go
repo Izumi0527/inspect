@@ -215,7 +215,7 @@ func writeGenericPDF(path string, data GenericReportData) error {
 	}
 	keys := sortedKeys(data.Extra)
 	for _, key := range keys {
-		entries = append(entries, []string{key, fmt.Sprintf("%v", data.Extra[key])})
+		entries = append(entries, []string{key, formatValueForReport(data.Extra[key])})
 	}
 
 	for _, entry := range entries {

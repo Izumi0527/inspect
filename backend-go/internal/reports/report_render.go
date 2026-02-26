@@ -490,7 +490,7 @@ func writeGenericHTML(path string, data GenericReportData) error {
 	}
 	keys := sortedKeys(data.Extra)
 	for _, key := range keys {
-		rows = append(rows, htmlRow(key, fmt.Sprintf("%v", data.Extra[key])))
+		rows = append(rows, htmlRow(key, formatValueForReport(data.Extra[key])))
 	}
 	title := resolveGenericReportTitle(data.ReportType, data.ReportTitle, data.ReportName)
 	content := fmt.Sprintf("<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"UTF-8\"><title>%s</title></head><body><h1>%s</h1><table border=\"1\" cellpadding=\"4\" cellspacing=\"0\">%s</table></body></html>",

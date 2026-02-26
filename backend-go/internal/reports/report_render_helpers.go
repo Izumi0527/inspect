@@ -1,7 +1,9 @@
 package reports
 
 import (
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -93,6 +95,28 @@ func formatSummaryItem(value interface{}) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// formatValueForReport 用于把复杂结构（map/slice/array）格式化为可读的 JSON 字符串。
+// 主要服务于通用报表（GenericReportData）的 Extra 字段展示，避免输出难读的 Go 默认格式。
+func formatValueForReport(value interface{}) string {
+	if value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	}
+	rv := reflect.ValueOf(value)
+	switch rv.Kind() {
+	case reflect.Map, reflect.Slice, reflect.Array:
+		if raw, err := json.MarshalIndent(value, "", "  "); err == nil {
+			return string(raw)
+		}
+	}
+	return fmt.Sprintf("%v", value)
 }
 
 func sortedKeys(values map[string]interface{}) []string {

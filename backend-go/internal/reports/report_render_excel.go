@@ -904,7 +904,7 @@ func writeGenericExcel(path string, data GenericReportData) error {
 
 	sortedExtra := sortedKeys(data.Extra)
 	for _, key := range sortedExtra {
-		entries = append(entries, []string{key, fmt.Sprintf("%v", data.Extra[key])})
+		entries = append(entries, []string{key, formatValueForReport(data.Extra[key])})
 	}
 
 	for _, entry := range entries {
