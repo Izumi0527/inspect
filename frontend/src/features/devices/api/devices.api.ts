@@ -251,6 +251,9 @@ const mapImportDeviceToBackendCreate = (device: DeviceImportData): DeviceCreateR
 }
 
 const mapDevice = (dto: DeviceDto): Device => {
+  const normalizedDeviceType = String(dto.device_type ?? '').trim().toLowerCase()
+  const mappedDeviceType = normalizedDeviceType === 'ap' ? 'wireless_ap' : normalizedDeviceType
+
   const parsedTags = (() => {
     if (!dto.tags) return null
     if (typeof dto.tags === 'string') {
@@ -291,7 +294,7 @@ const mapDevice = (dto: DeviceDto): Device => {
     id: dto.id,
     name: dto.name,
     ip: dto.ip_address,
-    device_type: dto.device_type as Device['device_type'],
+    device_type: mappedDeviceType as Device['device_type'],
     status: (dto.status as Device['status']) ?? 'unknown',
     location: dto.location ?? '',
     last_seen: dto.last_seen ?? '',
@@ -344,7 +347,10 @@ const buildQueryString = (filters?: DeviceFilters) => {
   const params = new URLSearchParams()
 
   if (filters.status) params.append('status', filters.status)
-  if (filters.device_type) params.append('device_type', filters.device_type)
+  if (filters.device_type) {
+    const normalized = String(filters.device_type).trim().toLowerCase()
+    params.append('device_type', normalized === 'wireless_ap' ? 'ap' : normalized)
+  }
   if (filters.location) params.append('location', filters.location)
   if (filters.search) params.append('search', filters.search)
   if (filters.page) params.append('page', String(filters.page))

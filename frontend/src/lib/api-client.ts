@@ -434,7 +434,7 @@ export const api = {
       httpClient.post('/devices/batch-import', { devices }),
     // 新增: 批量删除设备
     batchDelete: (deviceIds: number[]) =>
-      httpClient.post('/devices/batch-delete', { device_ids: deviceIds }),
+      httpClient.post('/devices/batch-delete', deviceIds),
     // 新增: 设备健康检查
     healthCheck: (id: number) =>
       httpClient.post(`/devices/${id}/health-check`),

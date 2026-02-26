@@ -131,7 +131,7 @@ func (s *Service) CreateDevice(ctx context.Context, req DeviceCreateRequest, cre
 
 	name := strings.TrimSpace(req.Name)
 	ip := strings.TrimSpace(req.IPAddress)
-	deviceType := strings.TrimSpace(req.DeviceType)
+	deviceType := normalizeDeviceType(req.DeviceType)
 	vendor := strings.TrimSpace(req.Vendor)
 	if name == "" || ip == "" || deviceType == "" || vendor == "" {
 		return nil, fmt.Errorf("name, ip_address, device_type, vendor are required")
@@ -247,6 +247,12 @@ func (s *Service) UpdateDevice(ctx context.Context, deviceID int, updates map[st
 				return nil, fmt.Errorf("ip address already exists")
 			}
 			updates["ip_address"] = ip
+		}
+	}
+
+	if value, ok := updates["device_type"]; ok {
+		if raw, ok := value.(string); ok {
+			updates["device_type"] = normalizeDeviceType(raw)
 		}
 	}
 
@@ -574,9 +580,24 @@ func (s *Service) loadAlertCounts(ctx context.Context, deviceIDs []int) (map[int
 	return result, nil
 }
 
+func normalizeDeviceType(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "wireless_ap", "wirelessap", "accesspoint", "access_point", "ap":
+		return "ap"
+	default:
+		return normalized
+	}
+}
+
 func applyDeviceFilters(db *gorm.DB, deviceType string, status string, groupID *int, search string, isActive *bool) *gorm.DB {
-	if strings.TrimSpace(deviceType) != "" {
-		db = db.Where("device_type = ?", deviceType)
+	normalizedDeviceType := normalizeDeviceType(deviceType)
+	if normalizedDeviceType != "" {
+		if normalizedDeviceType == "ap" {
+			db = db.Where("device_type IN ?", []string{"ap", "wireless_ap"})
+		} else {
+			db = db.Where("device_type = ?", normalizedDeviceType)
+		}
 	}
 	if strings.TrimSpace(status) != "" {
 		db = db.Where("status = ?", status)

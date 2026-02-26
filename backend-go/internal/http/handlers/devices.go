@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -534,12 +535,38 @@ func (h DevicesHandler) BatchDeleteDevices(c echo.Context) error {
 		return err
 	}
 
-	var deviceIDs []int
-	if err := c.Bind(&deviceIDs); err != nil {
+	raw, err := io.ReadAll(c.Request().Body)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
 	}
-	if len(deviceIDs) == 0 {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
+	}
+
+	deviceIDs := make([]int, 0)
+	if err := json.Unmarshal(raw, &deviceIDs); err == nil {
+		if len(deviceIDs) == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
+		}
+	} else {
+		var req struct {
+			DeviceIDs []int `json:"device_ids"`
+		}
+		var reqCamel struct {
+			DeviceIDs []int `json:"deviceIds"`
+		}
+
+		if err := json.Unmarshal(raw, &req); err == nil {
+			deviceIDs = req.DeviceIDs
+		} else if err := json.Unmarshal(raw, &reqCamel); err == nil {
+			deviceIDs = reqCamel.DeviceIDs
+		} else {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+		}
+		if len(deviceIDs) == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
+		}
 	}
 
 	deleted := 0
@@ -555,9 +582,15 @@ func (h DevicesHandler) BatchDeleteDevices(c echo.Context) error {
 		deleted++
 	}
 
+	success := len(failed) == 0
+	message := fmt.Sprintf("deleted %d devices", deleted)
+	if !success {
+		message = fmt.Sprintf("deleted %d devices, %d failed", deleted, len(failed))
+	}
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"success":      true,
-		"message":      fmt.Sprintf("deleted %d devices", deleted),
+		"success":      success,
+		"message":      message,
 		"deleted_count": deleted,
 		"failed_count": len(failed),
 		"failed_items": failed,

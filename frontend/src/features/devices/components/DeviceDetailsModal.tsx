@@ -4,6 +4,7 @@ import React from 'react'
 import { SimpleModal, Badge } from '@/components/atoms'
 import { Device } from '../types'
 import { formatDate } from '@/utils/formatters'
+import { getDeviceTypeLabel } from './DeviceIcon'
 
 // 格式化百分比值
 const formatPercentageValue = (value: number | undefined | null): string => {
@@ -119,7 +120,7 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <InfoRow label="设备类型" value={device.device_type} />
+          <InfoRow label="设备类型" value={getDeviceTypeLabel(device.device_type)} />
           <InfoRow label="运行状态" value={<Badge variant="outline">{device.status}</Badge>} />
           <InfoRow label="IP 地址" value={device.ip} />
           <InfoRow label="所在位置" value={device.location || '未设置'} />
