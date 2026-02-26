@@ -725,7 +725,9 @@ export async function fetchInspectionExecutions(params?: {
       endpoint += `?${searchParams.toString()}`
     }
 
-    console.log(`[API] 请求执行记录: ${endpoint}`)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[API] 请求执行记录: ${endpoint}`)
+    }
 
     const response = await api.get<InspectionApiResponse<unknown>>(endpoint)
     if (!response.data) {
@@ -743,7 +745,9 @@ export async function fetchInspectionExecutions(params?: {
       pages: toNumber(data.pages),
     }
 
-    console.log(`[API] 成功获取 ${result.items.length} 条执行记录 (共 ${result.total} 条)`)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[API] 成功获取 ${result.items.length} 条执行记录 (共 ${result.total} 条)`)
+    }
     return result
   } catch (error) {
     // 增强错误处理
@@ -779,7 +783,9 @@ export async function fetchExecutionDetail(executionId: string): Promise<Inspect
     }
 
     const execution = transformExecutionData(response.data)
-    console.log(`[API] 成功获取执行详情: ID=${executionId}, 设备结果数=${execution.summary.deviceResults.length}`)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[API] 成功获取执行详情: ID=${executionId}, 设备结果数=${execution.summary.deviceResults.length}`)
+    }
     return execution
   } catch (error) {
     console.error('[API] 获取执行详情失败:', error)

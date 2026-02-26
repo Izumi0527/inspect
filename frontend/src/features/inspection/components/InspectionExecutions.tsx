@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Square,
   Clock,
@@ -37,11 +38,14 @@ import { ExecutionStatsCards } from './ExecutionStatsCards'
 import { ExecutionFilters } from './ExecutionFilters'
 import { ExecutionTableSkeleton } from './ExecutionTableSkeleton'
 import { ExecutionEmptyState } from './ExecutionEmptyState'
+import { useWebSocketEvent, WebSocketEvents, wsManager } from '@/lib/websocket'
 
 // 自动刷新间隔（毫秒）- 当有执行中的任务时
 const AUTO_REFRESH_INTERVAL = 10000
 
 export const InspectionExecutions: React.FC = () => {
+  const queryClient = useQueryClient()
+
   // 使用URL筛选hooks
   const { filters, updateFilter, resetFilters } = useURLFilters()
   const { getDateRange } = useDateFilters()
@@ -103,6 +107,106 @@ export const InspectionExecutions: React.FC = () => {
 
     return () => clearInterval(intervalId)
   }, [hasRunningExecutions, refetch])
+
+  // 订阅巡检执行进度（WebSocket room=scan_progress）
+  useEffect(() => {
+    wsManager.subscribeToInspectionTasks()
+    return () => {
+      wsManager.unsubscribeFromInspectionTasks()
+    }
+  }, [])
+
+  // 连接建立/重连时重新订阅，避免订阅丢失
+  useWebSocketEvent(WebSocketEvents.CONNECT, () => {
+    wsManager.subscribeToInspectionTasks()
+  })
+
+  // WebSocket 实时进度更新：更新缓存与本地选中状态
+  useWebSocketEvent(WebSocketEvents.INSPECTION_PROGRESS, (payload) => {
+    if (!payload || typeof payload !== 'object') return
+
+    const data = payload as Record<string, unknown>
+    const rawId = data.id
+    const executionId =
+      typeof rawId === 'string' ? rawId.trim() :
+      typeof rawId === 'number' && Number.isFinite(rawId) ? String(rawId) : ''
+    if (!executionId) return
+
+    const rawProgress = data.progress
+    const progress =
+      typeof rawProgress === 'number' && Number.isFinite(rawProgress)
+        ? Math.max(0, Math.min(100, Math.round(rawProgress)))
+        : undefined
+
+    const rawStatus = data.status
+    const status = typeof rawStatus === 'string' ? rawStatus.trim() : undefined
+
+    // 更新所有 executions 列表缓存（不同分页/筛选条件）
+    queryClient.setQueriesData({ queryKey: ['inspection', 'executions'] }, (oldData) => {
+      if (!oldData || typeof oldData !== 'object') return oldData
+      const record = oldData as { items?: unknown }
+      if (!Array.isArray(record.items)) return oldData
+
+      let changed = false
+      const nextItems = record.items.map((item) => {
+        if (!item || typeof item !== 'object') return item
+        const execution = item as InspectionExecution
+        if (execution.id !== executionId) return execution
+
+        const next: InspectionExecution = {
+          ...execution,
+          ...(progress !== undefined ? { progress } : {}),
+          ...(status ? { status } : {}),
+        }
+
+        if (next.progress !== execution.progress || next.status !== execution.status) {
+          changed = true
+        }
+        return next
+      })
+
+      if (!changed) return oldData
+      return { ...(oldData as Record<string, unknown>), items: nextItems }
+    })
+
+    // 更新详情缓存（弹窗内 useExecutionDetail）
+    queryClient.setQueryData(['inspection', 'execution', 'detail', executionId], (oldData) => {
+      if (!oldData || typeof oldData !== 'object') return oldData
+      const execution = oldData as InspectionExecution
+      const next: InspectionExecution = {
+        ...execution,
+        ...(progress !== undefined ? { progress } : {}),
+        ...(status ? { status } : {}),
+      }
+      if (next.progress === execution.progress && next.status === execution.status) return oldData
+      return next
+    })
+
+    // 更新另一个详情缓存（useInspectionExecution）
+    queryClient.setQueryData(['inspection', 'execution', executionId], (oldData) => {
+      if (!oldData || typeof oldData !== 'object') return oldData
+      const execution = oldData as InspectionExecution
+      const next: InspectionExecution = {
+        ...execution,
+        ...(progress !== undefined ? { progress } : {}),
+        ...(status ? { status } : {}),
+      }
+      if (next.progress === execution.progress && next.status === execution.status) return oldData
+      return next
+    })
+
+    // 同步本地选中执行（顶部“已选择执行”提示条）
+    setSelectedExecution((prev) => {
+      if (!prev || prev.id !== executionId) return prev
+      const next: InspectionExecution = {
+        ...prev,
+        ...(progress !== undefined ? { progress } : {}),
+        ...(status ? { status } : {}),
+      }
+      if (next.progress === prev.progress && next.status === prev.status) return prev
+      return next
+    })
+  })
 
   // 判断是否有任何筛选
   const hasDateFilter = useMemo(
