@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useCallback, useEffect } from 'react'
 import toast from 'react-hot-toast'
+import { downloadWithAuth } from '@/utils/download'
 import {
   reportsApi,
   inspectionReportsApi,
@@ -382,15 +383,15 @@ export const useCreateReportTemplate = () => {
 export const useExportToExcel = () => {
   return useMutation({
     mutationFn: exportApi.exportToExcel,
-    onSuccess: (downloadUrl) => {
-      // 使用下载链接
-      const a = document.createElement('a')
-      a.href = downloadUrl
-      a.download = `report_${Date.now()}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      toast.success('Excel导出成功')
+    onSuccess: async (downloadUrl) => {
+      try {
+        // 后端当前导出实现为 CSV（文件名为 export-*.csv）
+        await downloadWithAuth(downloadUrl, `report_${Date.now()}.csv`)
+        toast.success('Excel导出成功')
+      } catch (error) {
+        console.error('Excel导出下载失败:', error)
+        toast.error('Excel下载失败')
+      }
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Excel导出失败')
@@ -401,15 +402,14 @@ export const useExportToExcel = () => {
 export const useExportToPDF = () => {
   return useMutation({
     mutationFn: exportApi.exportToPDF,
-    onSuccess: (downloadUrl) => {
-      // 使用下载链接
-      const a = document.createElement('a')
-      a.href = downloadUrl
-      a.download = `report_${Date.now()}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      toast.success('PDF导出成功')
+    onSuccess: async (downloadUrl) => {
+      try {
+        await downloadWithAuth(downloadUrl, `report_${Date.now()}.pdf`)
+        toast.success('PDF导出成功')
+      } catch (error) {
+        console.error('PDF导出下载失败:', error)
+        toast.error('PDF下载失败')
+      }
     },
     onError: (error: Error) => {
       toast.error(error.message || 'PDF导出失败')
@@ -420,15 +420,15 @@ export const useExportToPDF = () => {
 export const useExportToWord = () => {
   return useMutation({
     mutationFn: exportApi.exportToWord,
-    onSuccess: (downloadUrl) => {
-      // 使用下载链接
-      const a = document.createElement('a')
-      a.href = downloadUrl
-      a.download = `report_${Date.now()}.docx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      toast.success('Word导出成功')
+    onSuccess: async (downloadUrl) => {
+      try {
+        // 后端当前导出实现为 .doc 文本文件
+        await downloadWithAuth(downloadUrl, `report_${Date.now()}.doc`)
+        toast.success('Word导出成功')
+      } catch (error) {
+        console.error('Word导出下载失败:', error)
+        toast.error('Word下载失败')
+      }
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Word导出失败')

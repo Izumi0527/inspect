@@ -13,6 +13,10 @@ export interface Report {
   filePath?: string
   fileSize?: number
   downloadUrl?: string
+  // 后端可选返回：HTML 预览地址（更适合在线查看），与 downloadUrl(主格式)区分
+  previewUrl?: string
+  // 后端可选返回：已落盘可用格式列表（如 ['pdf','html']）
+  availableFormats?: string[]
   parameters: ReportParameters
   schedule?: ReportSchedule
 }
@@ -322,6 +326,15 @@ export interface CustomReportConfig {
   id: string
   name: string
   description: string
+  // 后端补充字段（非所有接口都会返回）
+  type?: 'template' | 'custom' | string
+  isDefault?: boolean
+  isActive?: boolean
+  createdBy?: string
+  createdAt?: string
+  updatedAt?: string
+  lastUsed?: string
+  usageCount?: number
   template: ReportTemplate
   parameters: ReportParameters
   charts: ChartConfig[]

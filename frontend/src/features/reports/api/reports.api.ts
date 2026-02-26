@@ -67,6 +67,13 @@ interface ReportsApiEnvelope<T> {
   message?: string
 }
 
+// 报表模块默认“强对接后端”：生产环境不允许静默使用模拟数据。
+// 开发/测试环境可通过环境变量开启 mock 回退，便于无后端时演示页面。
+const REPORTS_ALLOW_MOCK_FALLBACK =
+  process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_REPORTS_ENABLE_MOCK === '1'
+
+const shouldUseMockFallback = () => REPORTS_ALLOW_MOCK_FALLBACK
+
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
@@ -106,6 +113,13 @@ const toBooleanSafe = (value: unknown, fallback = false): boolean => {
 
 const toStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.map(item => toStringSafe(item)).filter(item => item !== '') : []
+
+const toStringArrayLoose = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(item => toStringSafe(item).trim())
+    .filter(item => item !== '')
+}
 
 const mapRecordArray = <T>(value: unknown, mapper: (item: unknown) => T): T[] => {
   if (!Array.isArray(value)) {
@@ -156,6 +170,61 @@ const generateTempId = (): string => {
     return crypto.randomUUID()
   }
   return `temp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+// 后端生成报表通用请求体（handlers.reportGenerateRequest）为 snake_case。
+// 前端 UI 各子页表单字段不一致，这里做一层统一适配，避免“看似调用成功但后端拿不到参数”。
+interface BackendReportGenerateRequest {
+  name: string
+  report_type: string
+  start_time: string
+  end_time: string
+  device_ids?: number[]
+  include_charts?: boolean
+  include_details?: boolean
+  custom_config?: UnknownRecord
+  format?: string
+  category?: string
+}
+
+const toIntArray = (value: unknown): number[] | undefined => {
+  const raw = Array.isArray(value) ? value : []
+  const nums = raw
+    .map(item => (typeof item === 'number' ? item : typeof item === 'string' ? Number(item) : Number.NaN))
+    .filter(item => Number.isFinite(item) && item > 0)
+    .map(item => Math.trunc(item))
+
+  if (nums.length === 0) return undefined
+
+  // 去重，保持输入顺序
+  const seen = new Set<number>()
+  const unique: number[] = []
+  for (const n of nums) {
+    if (seen.has(n)) continue
+    seen.add(n)
+    unique.push(n)
+  }
+  return unique
+}
+
+const buildGenerateRequest = (input: Partial<BackendReportGenerateRequest>): BackendReportGenerateRequest => {
+  const name = toStringSafe(input.name, '').trim() || '报表'
+  const reportType = toStringSafe(input.report_type, '').trim() || 'custom'
+  const startTime = toStringSafe(input.start_time, '').trim()
+  const endTime = toStringSafe(input.end_time, '').trim()
+
+  return {
+    name,
+    report_type: reportType,
+    start_time: startTime,
+    end_time: endTime,
+    device_ids: input.device_ids,
+    include_charts: input.include_charts,
+    include_details: input.include_details,
+    custom_config: input.custom_config,
+    format: input.format,
+    category: input.category,
+  }
 }
 
 const createDefaultReportParameters = (): ReportParameters => ({
@@ -236,6 +305,8 @@ const transformReportData = (input: unknown): Report => {
     filePath: toOptionalString(data.filePath ?? data['file_path']),
     fileSize: fileSize === undefined ? undefined : fileSize,
     downloadUrl: toOptionalString(data.downloadUrl ?? data['download_url']),
+    previewUrl: toOptionalString(data.previewUrl ?? data['preview_url']),
+    availableFormats: toStringArrayLoose(data.availableFormats ?? data['available_formats']),
     parameters,
     schedule: scheduleValue ? transformReportSchedule(scheduleValue) : undefined,
   }
@@ -293,11 +364,14 @@ export async function fetchReports(params?: {
     }
   } catch (error) {
     console.error('获取报表鍒楄〃失败:', error)
-    return {
-      reports: getDefaultReports(),
-      total: 0,
-      pages: 0,
+    if (shouldUseMockFallback()) {
+      return {
+        reports: getDefaultReports(),
+        total: 0,
+        pages: 0,
+      }
     }
+    throw error instanceof Error ? error : new Error('获取报表列表失败')
   }
 }
 
@@ -316,7 +390,10 @@ export async function fetchReport(id: string): Promise<Report | null> {
     return transformReportData(response.data)
   } catch (error) {
     console.error('获取报表璇︽儏失败:', error)
-    return null
+    if (shouldUseMockFallback()) {
+      return null
+    }
+    throw error instanceof Error ? error : new Error('获取报表详情失败')
   }
 }
 
@@ -388,9 +465,13 @@ export async function generateReport(id: string): Promise<Report> {
   }
 }
 
-export async function downloadReport(id: string): Promise<string> {
+export async function downloadReport(
+  id: string,
+  format?: 'pdf' | 'excel' | 'html' | 'word'
+): Promise<string> {
   try {
-    const response = await api.get<ReportsApiEnvelope<UnknownRecord>>(`/reports/${id}/download`)
+    const suffix = format ? `?format=${encodeURIComponent(format)}` : ''
+    const response = await api.get<ReportsApiEnvelope<UnknownRecord>>(`/reports/${id}/download${suffix}`)
 
     if (response.success === false || !response.data) {
       throw new Error(response.message || '获取涓嬭浇閾炬帴失败')
@@ -425,7 +506,10 @@ export async function previewReport(id: string): Promise<UnknownRecord | null> {
     return toRecord(response.data)
   } catch (error) {
     console.error('获取报表预览失败:', error)
-    return null
+    if (shouldUseMockFallback()) {
+      return null
+    }
+    throw error instanceof Error ? error : new Error('获取报表预览失败')
   }
 }
 
@@ -448,6 +532,9 @@ export async function cloneReport(id: string, title: string): Promise<Report> {
 
 // 生成巡检报告
 export async function generateInspectionReport(reportData: {
+  title?: string
+  description?: string
+  category?: string
   executionIds?: string[]
   dateRange: {
     startDate: string
@@ -461,7 +548,26 @@ export async function generateInspectionReport(reportData: {
   includeRecommendations: boolean
 }): Promise<Report> {
   try {
-    const response = await api.post<ReportsApiEnvelope<UnknownRecord>>('/reports/inspection/generate', reportData)
+    const requestBody = buildGenerateRequest({
+      name: reportData.title,
+      report_type: 'inspection',
+      start_time: reportData.dateRange?.startDate,
+      end_time: reportData.dateRange?.endDate,
+      device_ids: toIntArray(reportData.devices),
+      include_charts: reportData.includeCharts,
+      include_details: reportData.includeDetailData,
+      custom_config: {
+        description: reportData.description,
+        category: reportData.category,
+        strategies: reportData.strategies,
+        execution_ids: reportData.executionIds,
+        include_recommendations: reportData.includeRecommendations,
+      },
+      format: reportData.format,
+      category: reportData.category,
+    })
+
+    const response = await api.post<ReportsApiEnvelope<UnknownRecord>>('/reports/inspection/generate', requestBody)
 
     if (response.success && response.data) {
       return transformReportData(response.data)
@@ -493,7 +599,10 @@ export async function getInspectionReportData(params: {
     }
   } catch (error) {
     console.error('获取巡检报告数据失败:', error)
-    return getDefaultInspectionReportData()
+    if (shouldUseMockFallback()) {
+      return getDefaultInspectionReportData()
+    }
+    throw error instanceof Error ? error : new Error('获取巡检报告数据失败')
   }
 }
 
@@ -515,7 +624,10 @@ export async function compareDeviceReports(params: {
     }
   } catch (error) {
     console.error('获取设备对比报告失败:', error)
-    return getDefaultCompareReports()
+    if (shouldUseMockFallback()) {
+      return getDefaultCompareReports()
+    }
+    throw error instanceof Error ? error : new Error('获取设备对比报告失败')
   }
 }
 
@@ -541,7 +653,10 @@ export async function getTrendAnalysis(params: {
     }
   } catch (error) {
     console.error('获取趋势分析数据失败:', error)
-    return getDefaultTrendAnalysisData()
+    if (shouldUseMockFallback()) {
+      return getDefaultTrendAnalysisData()
+    }
+    throw error instanceof Error ? error : new Error('获取趋势分析数据失败')
   }
 }
 
@@ -556,7 +671,23 @@ export async function generateTrendReport(reportData: {
   includePredictions: boolean
 }): Promise<Report> {
   try {
-    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/trends/generate', reportData)
+    const requestBody = buildGenerateRequest({
+      name: reportData.title,
+      report_type: 'trend',
+      start_time: reportData.startDate,
+      end_time: reportData.endDate,
+      device_ids: toIntArray(reportData.devices),
+      include_charts: true,
+      include_details: true,
+      custom_config: {
+        metrics: reportData.metrics,
+        include_predictions: reportData.includePredictions,
+      },
+      format: reportData.format,
+      category: 'custom',
+    })
+
+    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/trends/generate', requestBody)
 
     if (response.success && response.data) {
       return transformReportData(response.data)
@@ -585,7 +716,10 @@ export async function getPredictions(params: {
     }
   } catch (error) {
     console.error('获取预测数据失败:', error)
-    return getDefaultPredictions()
+    if (shouldUseMockFallback()) {
+      return getDefaultPredictions()
+    }
+    throw error instanceof Error ? error : new Error('获取预测数据失败')
   }
 }
 
@@ -609,7 +743,10 @@ export async function getAnomalyDetection(params: {
     }
   } catch (error) {
     console.error('获取异常检测结果失败:', error)
-    return getDefaultAnomalyData()
+    if (shouldUseMockFallback()) {
+      return getDefaultAnomalyData()
+    }
+    throw error instanceof Error ? error : new Error('获取异常检测结果失败')
   }
 }
 
@@ -646,7 +783,10 @@ export async function getStatistics(params: {
     }
   } catch (error) {
     console.error('获取统计数据失败:', error)
-    return getDefaultStatisticsData()
+    if (shouldUseMockFallback()) {
+      return getDefaultStatisticsData()
+    }
+    throw error instanceof Error ? error : new Error('获取统计数据失败')
   }
 }
 
@@ -664,16 +804,25 @@ export async function generateStatisticsReport(reportData: {
   includeRankings?: boolean            // ✅ 是否包含排名
 }): Promise<Report> {
   try {
-    // 直接发送 camelCase 格式，依赖后端 CamelCaseModel 自动转换
-    const response = await api.post<{success: boolean, data: unknown, message?: string}>(
-      '/reports/statistics/generate',
-      {
-        ...reportData,
-        includeCharts: reportData.includeCharts !== undefined ? reportData.includeCharts : true,
-        includeTrends: reportData.includeTrends !== undefined ? reportData.includeTrends : true,
-        includeRankings: reportData.includeRankings !== undefined ? reportData.includeRankings : true
-      }
-    )
+    const requestBody = buildGenerateRequest({
+      name: reportData.title,
+      report_type: 'statistics',
+      start_time: reportData.startDate,
+      end_time: reportData.endDate,
+      include_charts: reportData.includeCharts !== undefined ? reportData.includeCharts : true,
+      include_details: true,
+      custom_config: {
+        description: reportData.description,
+        device_types: reportData.deviceTypes,
+        locations: reportData.locations,
+        include_trends: reportData.includeTrends !== undefined ? reportData.includeTrends : true,
+        include_rankings: reportData.includeRankings !== undefined ? reportData.includeRankings : true,
+      },
+      format: reportData.format,
+      category: 'custom',
+    })
+
+    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/generate', requestBody)
 
     if (response.success && response.data) {
       return transformReportData(response.data)
@@ -707,7 +856,10 @@ export async function getKPIData(params: {
     }
   } catch (error) {
     console.error('获取KPI数据失败:', error)
-    return getDefaultKPIData()
+    if (shouldUseMockFallback()) {
+      return getDefaultKPIData()
+    }
+    throw error instanceof Error ? error : new Error('获取KPI数据失败')
   }
 }
 
@@ -740,7 +892,10 @@ export async function getRankings(params: {
     }
   } catch (error) {
     console.error('获取排名数据失败:', error)
-    return getDefaultRankings()
+    if (shouldUseMockFallback()) {
+      return getDefaultRankings()
+    }
+    throw error instanceof Error ? error : new Error('获取排名数据失败')
   }
 }
 
@@ -759,7 +914,10 @@ export async function fetchCustomReportConfigs(): Promise<CustomReportConfig[]> 
     }
   } catch (error) {
     console.error('获取自定义报表配置列表失败:', error)
-    return getDefaultCustomReportConfigs()
+    if (shouldUseMockFallback()) {
+      return getDefaultCustomReportConfigs()
+    }
+    throw error instanceof Error ? error : new Error('获取自定义报表配置列表失败')
   }
 }
 
@@ -775,7 +933,10 @@ export async function fetchCustomReportConfig(id: string): Promise<CustomReportC
     }
   } catch (error) {
     console.error('获取自定义报表配置详情失败:', error)
-    return null
+    if (shouldUseMockFallback()) {
+      return null
+    }
+    throw error instanceof Error ? error : new Error('获取自定义报表配置详情失败')
   }
 }
 
@@ -823,9 +984,15 @@ export async function deleteCustomReportConfig(id: string): Promise<boolean> {
 }
 
 // 使用配置生成报表
-export async function generateFromConfig(configId: string, parameters?: ReportParameters): Promise<Report> {
+export async function generateFromConfig(configId: string, parameters?: ReportParameters, format?: string): Promise<Report> {
   try {
-    const response = await api.post<{success: boolean, data: unknown, message?: string}>(`/reports/custom/configs/${configId}/generate`, { parameters })
+    const response = await api.post<{success: boolean, data: unknown, message?: string}>(
+      `/reports/custom/configs/${configId}/generate`,
+      {
+        parameters,
+        format: format || 'pdf',
+      }
+    )
 
     if (response.success && response.data) {
       return transformReportData(response.data)
@@ -839,18 +1006,21 @@ export async function generateFromConfig(configId: string, parameters?: ReportPa
 }
 
 // 预览自定义报表配置
-export async function previewCustomReportConfig(configId: string, parameters?: ReportParameters): Promise<unknown> {
+export async function previewCustomReportConfig(configId: string, parameters?: ReportParameters): Promise<CustomReportConfig | null> {
   try {
     const response = await api.post<ReportsApiEnvelope<unknown>>(`/reports/custom/configs/${configId}/preview`, { parameters })
 
     if (response.success && response.data) {
-      return response.data
+      return transformCustomReportConfigData(response.data)
     } else {
       throw new Error('预览自定义报表配置失败')
     }
   } catch (error) {
     console.error('预览自定义报表配置失败:', error)
-    return null
+    if (shouldUseMockFallback()) {
+      return null
+    }
+    throw error instanceof Error ? error : new Error('预览自定义报表配置失败')
   }
 }
 
@@ -868,7 +1038,10 @@ export async function fetchReportTemplates(): Promise<ReportTemplate[]> {
     throw new Error('获取报表妯℃澘鍒楄〃失败')
   } catch (error) {
     console.error('获取报表妯℃澘鍒楄〃失败:', error)
-    return getDefaultReportTemplates()
+    if (shouldUseMockFallback()) {
+      return getDefaultReportTemplates()
+    }
+    throw error instanceof Error ? error : new Error('获取报表模板列表失败')
   }
 }
 
@@ -884,7 +1057,10 @@ export async function fetchReportTemplate(id: string): Promise<ReportTemplate | 
     }
   } catch (error) {
     console.error('获取报表妯℃澘璇︽儏失败:', error)
-    return null
+    if (shouldUseMockFallback()) {
+      return null
+    }
+    throw error instanceof Error ? error : new Error('获取报表模板详情失败')
   }
 }
 
@@ -1054,7 +1230,10 @@ export async function fetchReportStats(): Promise<ReportStats> {
     }
   } catch (error) {
     console.error('获取报表统计数据失败:', error)
-    return getDefaultReportStats()
+    if (shouldUseMockFallback()) {
+      return getDefaultReportStats()
+    }
+    throw error instanceof Error ? error : new Error('获取报表统计数据失败')
   }
 }
 
@@ -1075,7 +1254,10 @@ export async function getUsageAnalysis(params: {
     }
   } catch (error) {
     console.error('获取浣跨敤分析失败:', error)
-    return getDefaultUsageAnalysis()
+    if (shouldUseMockFallback()) {
+      return getDefaultUsageAnalysis()
+    }
+    throw error instanceof Error ? error : new Error('获取使用分析失败')
   }
 }
 
@@ -1091,7 +1273,10 @@ export async function getPerformanceMetrics(): Promise<PerformanceMetricsResult>
     throw new Error('获取性能指标失败')
   } catch (error) {
     console.error('获取性能指标失败:', error)
-    return getDefaultPerformanceMetrics()
+    if (shouldUseMockFallback()) {
+      return getDefaultPerformanceMetrics()
+    }
+    throw error instanceof Error ? error : new Error('获取性能指标失败')
   }
 }
 
@@ -1604,7 +1789,13 @@ const transformCustomReportConfigData = (input: unknown): CustomReportConfig => 
   return {
     id: toStringSafe(data.id, generateTempId()),
     name: toStringSafe(data.name, '未命名方案'),
+    type: toStringSafe(data.type, 'custom'),
     description: toStringSafe(data.description),
+    isDefault: toBooleanSafe(data.isDefault ?? data['is_default'], false),
+    isActive: toBooleanSafe(data.isActive ?? data['is_active'], true),
+    createdBy: toOptionalString(data.createdBy ?? data['created_by']),
+    createdAt: toOptionalString(data.createdAt ?? data['created_at']),
+    updatedAt: toOptionalString(data.updatedAt ?? data['updated_at']),
     template: transformReportTemplateData(data.template),
     parameters: transformReportParameters(data.parameters),
     charts: mapRecordArray(data.charts, transformChartConfig),
@@ -1813,17 +2004,3 @@ export const reportStatsApi = {
   getUsageAnalysis,
   getPerformanceMetrics
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
