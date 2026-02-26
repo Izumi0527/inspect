@@ -57,7 +57,6 @@ func (h InspectionHandler) Register(group *echo.Group) {
 	group.POST("/inspection/templates/:id/copy", h.CopyTemplate)
 	group.GET("/inspection/templates/:id/export", h.ExportTemplate)
 	group.POST("/inspection/templates/import", h.ImportTemplate)
-	group.POST("/inspection/templates/test-oid", h.TestOID)
 
 	group.GET("/inspection/strategies", h.ListStrategies)
 	group.POST("/inspection/strategies", h.CreateStrategy)
@@ -407,41 +406,6 @@ func (h InspectionHandler) ImportTemplate(c echo.Context) error {
 	}
 
 	return inspectionOKWithCode(c, http.StatusCreated, "导入模板成功", buildTemplateResponse(imported))
-}
-
-// TestOID 处理 POST /api/v1/templates/test-oid 请求
-func (h InspectionHandler) TestOID(c echo.Context) error {
-	if h.Service == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, "inspections:read"); err != nil {
-		return err
-	}
-
-	// 解析请求体
-	var req map[string]interface{}
-	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
-	}
-
-	deviceID, _ := readInt(req, "device_id", "deviceId")
-	oid := readString(req, "oid")
-
-	if deviceID <= 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "device_id is required")
-	}
-	if strings.TrimSpace(oid) == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "oid is required")
-	}
-
-	// TODO: 实现 OID 测试服务
-	// 目前返回占位响应
-	return inspectionOK(c, map[string]interface{}{
-		"success": false,
-		"message": "OID 测试服务尚未实现",
-		"value":   nil,
-		"type":    nil,
-	})
 }
 
 func (h InspectionHandler) ListStrategies(c echo.Context) error {
