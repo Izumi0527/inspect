@@ -25,7 +25,6 @@ import {
   Filter,
   X,
   RefreshCw,
-  TestTube,
   Zap
 } from 'lucide-react'
 import {
@@ -76,7 +75,6 @@ import { TemplateDetailModal } from './TemplateDetailModal'
 import { TemplateImportModal } from './TemplateImportModal'
 
 // 导入新的编辑器组件
-import { OIDTester } from './OIDTester'
 import { CreateTemplateWizard } from './CreateTemplateWizard'
 import { QuickTemplateCreate } from './QuickTemplateCreate'
 
@@ -123,7 +121,6 @@ export const InspectionTemplates: React.FC = () => {
   const [viewingTemplate, setViewingTemplate] = useState<InspectionTemplate | null>(null)
   const [deleteConfirmTemplate, setDeleteConfirmTemplate] = useState<InspectionTemplate | null>(null)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
-  const [showOIDTester, setShowOIDTester] = useState(false)
 
   // 排序字段映射：前端驼峰 → 后端蛇形（数据库列名）
   const sortFieldMap: Record<SortField, string> = {
@@ -456,21 +453,6 @@ export const InspectionTemplates: React.FC = () => {
     )
   }
 
-  // 如果显示 OID 测试器
-  if (showOIDTester) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setShowOIDTester(false)}>
-            <X className="w-4 h-4 mr-2" />
-            返回列表
-          </Button>
-        </div>
-        <OIDTester />
-      </div>
-    )
-  }
-
   // 加载状态
   if (isLoading) {
     return (
@@ -539,10 +521,6 @@ export const InspectionTemplates: React.FC = () => {
 
         {/* 操作按钮 */}
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowOIDTester(true)}>
-            <TestTube className="w-4 h-4 mr-2" />
-            OID 测试
-          </Button>
           <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
             <Upload className="w-4 h-4 mr-2" />
             导入模板
