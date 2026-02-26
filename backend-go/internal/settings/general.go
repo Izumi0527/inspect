@@ -130,10 +130,17 @@ func (s *Service) GetSetting(ctx context.Context, key string) (*SettingItem, err
 	}
 
 	var row SystemSetting
-	if err := s.db.WithContext(ctx).
+	// 使用 Find 避免触发 GORM 对 ErrRecordNotFound 的错误日志输出（缺省配置属于正常情况）。
+	tx := s.db.WithContext(ctx).
+		Model(&SystemSetting{}).
 		Where("key = ?", value).
-		Take(&row).Error; err != nil {
-		return nil, err
+		Limit(1).
+		Find(&row)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	item := buildSettingItem(row)
