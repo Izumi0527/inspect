@@ -139,7 +139,22 @@ export const InspectionExecutions: React.FC = () => {
         : undefined
 
     const rawStatus = data.status
-    const status = typeof rawStatus === 'string' ? rawStatus.trim() : undefined
+    const status = (() => {
+      if (typeof rawStatus !== 'string') return undefined
+      const normalized = rawStatus.trim().toLowerCase()
+      switch (normalized) {
+        case 'pending':
+        case 'running':
+        case 'completed':
+        case 'failed':
+        case 'cancelled':
+          return normalized
+        case 'canceled':
+          return 'cancelled'
+        default:
+          return undefined
+      }
+    })()
 
     // 更新所有 executions 列表缓存（不同分页/筛选条件）
     queryClient.setQueriesData({ queryKey: ['inspection', 'executions'] }, (oldData) => {
