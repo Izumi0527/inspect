@@ -40,8 +40,9 @@ curl -X GET "http://localhost:8001/api/v1/dashboard/overview" \
   - `severity`：`critical` | `warning` | `info` | `success`
   - `timestamp`：时间戳（RFC3339）
   - `link`：前端跳转链接（例如 `/alerts?id=123`）
-  - `read`：后端默认返回 `false`（已读由前端本地存储覆盖）
+- `read`：是否已读（**后端按用户维度持久化**）
 - `last_updated`
+- `unread_count`：未读数量（按本次返回窗口统计，通常与 `limit` 绑定）
 
 **示例**
 ```bash
@@ -49,7 +50,47 @@ curl -X GET "http://localhost:8001/api/v1/dashboard/notifications?limit=20" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-## 3) 其他仪表板端点（可选）
+## 3) 通知已读/清空（后端持久化）
+
+### 3.1 标记已读
+
+**POST** `/api/v1/dashboard/notifications/read`
+
+**Body（二选一）**
+- 指定通知：
+```json
+{ "ids": ["alert-123", "report-9"] }
+```
+- 全部已读（最近窗口）：
+```json
+{ "all": true, "window_limit": 200 }
+```
+
+**响应**
+```json
+{ "updated": 2 }
+```
+
+### 3.2 清空（隐藏）通知
+
+**POST** `/api/v1/dashboard/notifications/dismiss`
+
+**Body（二选一）**
+- 指定通知：
+```json
+{ "ids": ["alert-123", "report-9"] }
+```
+- 全部清空（最近窗口）：
+```json
+{ "all": true, "window_limit": 200 }
+```
+
+**响应**
+```json
+{ "updated": 2 }
+```
+
+## 4) 其他仪表板端点（可选）
 
 - **GET** `/api/v1/dashboard/device-status`：设备状态摘要
 - **GET** `/api/v1/dashboard/alert-summary`：告警摘要
