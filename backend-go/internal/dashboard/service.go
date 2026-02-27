@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/your-org/inspect-system/backend-go/internal/alerts"
 	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
@@ -168,6 +169,10 @@ func (s *Service) GetBandwidthStats(ctx context.Context) (BandwidthStats, error)
 }
 
 func (s *Service) GetNotifications(ctx context.Context, limit int) (NotificationsResponse, error) {
+	return s.GetNotificationsForUser(ctx, "", limit)
+}
+
+func (s *Service) GetNotificationsForUser(ctx context.Context, userID string, limit int) (NotificationsResponse, error) {
 	if s == nil || s.db == nil {
 		return NotificationsResponse{}, fmt.Errorf("database not initialized")
 	}
@@ -179,6 +184,146 @@ func (s *Service) GetNotifications(ctx context.Context, limit int) (Notification
 		limit = 50
 	}
 
+	candidates := s.collectNotificationCandidates(ctx, limit)
+
+	stateByNotificationID := map[string]UserNotificationState{}
+	normalizedUserID := strings.TrimSpace(userID)
+	if normalizedUserID != "" && len(candidates) > 0 {
+		ids := make([]string, 0, len(candidates))
+		seen := make(map[string]struct{}, len(candidates))
+		for _, item := range candidates {
+			if _, ok := seen[item.notification.ID]; ok {
+				continue
+			}
+			seen[item.notification.ID] = struct{}{}
+			ids = append(ids, item.notification.ID)
+		}
+
+		states := make([]UserNotificationState, 0)
+		if err := s.db.WithContext(ctx).
+			Where("user_id = ? AND notification_id IN ?", normalizedUserID, ids).
+			Find(&states).Error; err != nil {
+			return NotificationsResponse{}, err
+		}
+		for _, state := range states {
+			stateByNotificationID[state.NotificationID] = state
+		}
+	}
+
+	notifications, unreadCount := applyUserNotificationStates(candidates, stateByNotificationID, limit)
+
+	return NotificationsResponse{
+		Notifications: notifications,
+		UnreadCount:   unreadCount,
+		LastUpdated:   time.Now().UTC(),
+	}, nil
+}
+
+func (s *Service) MarkNotificationsRead(ctx context.Context, userID string, ids []string) (int, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+
+	normalizedUserID := strings.TrimSpace(userID)
+	if normalizedUserID == "" {
+		return 0, fmt.Errorf("user_id required")
+	}
+
+	notificationIDs := normalizeNotificationIDs(ids, 0)
+	if len(notificationIDs) == 0 {
+		return 0, nil
+	}
+
+	now := time.Now().UTC()
+	states := make([]UserNotificationState, 0, len(notificationIDs))
+	for _, id := range notificationIDs {
+		states = append(states, UserNotificationState{
+			UserID:         normalizedUserID,
+			NotificationID: id,
+			ReadAt:         &now,
+		})
+	}
+
+	err := s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "user_id"},
+				{Name: "notification_id"},
+			},
+			DoUpdates: clause.Assignments(map[string]interface{}{
+				"read_at":      now,
+				"updated_at":   now,
+				"dismissed_at": gorm.Expr("dismissed_at"),
+			}),
+		}).
+		Create(&states).Error
+	if err != nil {
+		return 0, err
+	}
+
+	return len(notificationIDs), nil
+}
+
+func (s *Service) MarkAllNotificationsRead(ctx context.Context, userID string, windowLimit int) (int, error) {
+	normalizedLimit := normalizeNotificationWindowLimit(windowLimit)
+	candidates := s.collectNotificationCandidates(ctx, normalizedLimit)
+	ids := collectUniqueNotificationIDs(candidates, normalizedLimit)
+	return s.MarkNotificationsRead(ctx, userID, ids)
+}
+
+func (s *Service) DismissNotifications(ctx context.Context, userID string, ids []string) (int, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+
+	normalizedUserID := strings.TrimSpace(userID)
+	if normalizedUserID == "" {
+		return 0, fmt.Errorf("user_id required")
+	}
+
+	notificationIDs := normalizeNotificationIDs(ids, 0)
+	if len(notificationIDs) == 0 {
+		return 0, nil
+	}
+
+	now := time.Now().UTC()
+	states := make([]UserNotificationState, 0, len(notificationIDs))
+	for _, id := range notificationIDs {
+		states = append(states, UserNotificationState{
+			UserID:         normalizedUserID,
+			NotificationID: id,
+			DismissedAt:    &now,
+		})
+	}
+
+	err := s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "user_id"},
+				{Name: "notification_id"},
+			},
+			DoUpdates: clause.Assignments(map[string]interface{}{
+				"dismissed_at": now,
+				"updated_at":   now,
+				"read_at":      gorm.Expr("read_at"),
+			}),
+		}).
+		Create(&states).Error
+	if err != nil {
+		return 0, err
+	}
+
+	return len(notificationIDs), nil
+}
+
+func (s *Service) DismissAllNotifications(ctx context.Context, userID string, windowLimit int) (int, error) {
+	normalizedLimit := normalizeNotificationWindowLimit(windowLimit)
+	candidates := s.collectNotificationCandidates(ctx, normalizedLimit)
+	ids := collectUniqueNotificationIDs(candidates, normalizedLimit)
+	return s.DismissNotifications(ctx, userID, ids)
+}
+
+func (s *Service) collectNotificationCandidates(ctx context.Context, limit int) []notificationCandidate {
 	candidates := make([]notificationCandidate, 0, limit*2)
 
 	alertCandidates, err := s.buildAlertNotifications(ctx, limit)
@@ -209,7 +354,74 @@ func (s *Service) GetNotifications(ctx context.Context, limit int) (Notification
 		return candidates[i].timestamp.After(candidates[j].timestamp)
 	})
 
+	return candidates
+}
+
+func normalizeNotificationWindowLimit(limit int) int {
+	if limit <= 0 {
+		return 200
+	}
+	if limit > 500 {
+		return 500
+	}
+	return limit
+}
+
+func normalizeNotificationIDs(ids []string, max int) []string {
+	seen := make(map[string]struct{}, len(ids))
+	result := make([]string, 0, len(ids))
+	for _, item := range ids {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+		if max > 0 && len(result) >= max {
+			break
+		}
+	}
+	return result
+}
+
+func collectUniqueNotificationIDs(candidates []notificationCandidate, limit int) []string {
+	if limit <= 0 {
+		limit = 200
+	}
+
+	ids := make([]string, 0, minInt(limit, len(candidates)))
+	seen := make(map[string]struct{}, len(candidates))
+	for _, item := range candidates {
+		if len(ids) >= limit {
+			break
+		}
+		id := strings.TrimSpace(item.notification.ID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func applyUserNotificationStates(
+	candidates []notificationCandidate,
+	stateByNotificationID map[string]UserNotificationState,
+	limit int,
+) ([]Notification, int) {
+	if limit <= 0 {
+		limit = 20
+	}
+
 	notifications := make([]Notification, 0, minInt(limit, len(candidates)))
+	unreadCount := 0
 	seen := make(map[string]struct{}, len(candidates))
 	for _, item := range candidates {
 		if len(notifications) >= limit {
@@ -219,13 +431,23 @@ func (s *Service) GetNotifications(ctx context.Context, limit int) (Notification
 			continue
 		}
 		seen[item.notification.ID] = struct{}{}
-		notifications = append(notifications, item.notification)
+
+		notification := item.notification
+		if state, ok := stateByNotificationID[notification.ID]; ok {
+			if state.DismissedAt != nil {
+				continue
+			}
+			notification.Read = state.ReadAt != nil
+		}
+
+		if !notification.Read {
+			unreadCount++
+		}
+
+		notifications = append(notifications, notification)
 	}
 
-	return NotificationsResponse{
-		Notifications: notifications,
-		LastUpdated:   time.Now().UTC(),
-	}, nil
+	return notifications, unreadCount
 }
 
 func (s *Service) GetRecentActivities(ctx context.Context, limit int) ([]RecentActivity, error) {

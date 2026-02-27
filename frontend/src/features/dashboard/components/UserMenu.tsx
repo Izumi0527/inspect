@@ -29,7 +29,6 @@ export function UserMenu({ className }: UserMenuProps) {
   // 处理退出登录
   const handleLogout = async () => {
     await logout()
-    router.push('/login')
   }
 
   // 处理跳转到系统设置

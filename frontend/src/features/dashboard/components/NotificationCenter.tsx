@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/atoms/button'
@@ -16,7 +16,14 @@ import {
   NOTIFICATION_CATEGORIES,
 } from '@/types/notification'
 import { cn } from '@/utils/cn'
-import { fetchDashboardNotifications } from '../api/dashboard.api'
+import {
+  DashboardNotificationsResult,
+  dismissDashboardNotifications,
+  fetchDashboardNotificationsWithMeta,
+  markDashboardNotificationsRead,
+} from '../api/dashboard.api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
 
 interface NotificationCenterProps {
   /** 告警数量（显示在徽章上） */
@@ -31,69 +38,114 @@ interface NotificationCenterProps {
  */
 export function NotificationCenter({ alertCount: _alertCount, onViewAll }: NotificationCenterProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [activeCategory, setActiveCategory] = useState<NotificationCategoryKey>('all')
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [readNotifications, setReadNotifications] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(false)
 
-  // 从 localStorage 加载已读状态
-  useEffect(() => {
-    const stored = localStorage.getItem('notification_read_ids')
-    if (stored) {
-      try {
-        const ids = JSON.parse(stored)
-        setReadNotifications(new Set(ids))
-      } catch (e) {
-        console.error('Failed to parse read notifications:', e)
+  const limit = 20
+  const windowLimit = 200
+  const queryKey = ['dashboardNotifications', limit] as const
+
+  const {
+    data,
+    isLoading,
+  } = useQuery<DashboardNotificationsResult>({
+    queryKey,
+    queryFn: () => fetchDashboardNotificationsWithMeta(limit),
+    refetchInterval: 30_000,
+  })
+
+  const notifications = data?.notifications ?? []
+  const unreadCount = data?.unreadCount ?? notifications.filter((n) => !n.read).length
+
+  const updateCache = (updater: (prev: DashboardNotificationsResult | undefined) => DashboardNotificationsResult | undefined) => {
+    queryClient.setQueryData(queryKey, (prev: DashboardNotificationsResult | undefined) => updater(prev))
+  }
+
+  const markReadMutation = useMutation({
+    mutationFn: (payload: Parameters<typeof markDashboardNotificationsRead>[0]) =>
+      markDashboardNotificationsRead(payload),
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData<DashboardNotificationsResult>(queryKey)
+      if (!previous) {
+        return { previous }
       }
-    }
-  }, [])
 
-  useEffect(() => {
-    let cancelled = false
+      updateCache((prev) => {
+        if (!prev) return prev
 
-    const load = async () => {
-      setLoading(true)
-      const items = await fetchDashboardNotifications(20)
-      if (cancelled) return
-      setNotifications(items)
-      setLoading(false)
-    }
+        const isAll = 'all' in payload && payload.all
+        const ids = 'ids' in payload ? payload.ids : []
 
-    load().catch((e) => {
-      console.error('加载通知失败:', e)
-      if (cancelled) return
-      setNotifications([])
-      setLoading(false)
-    })
+        const nextNotifications = isAll
+          ? prev.notifications.map((n) => ({ ...n, read: true }))
+          : prev.notifications.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n))
 
-    return () => {
-      cancelled = true
-    }
-  }, [])
+        return {
+          ...prev,
+          notifications: nextNotifications,
+          unreadCount: nextNotifications.filter((n) => !n.read).length,
+        }
+      })
 
-  // 标记通知为已读
-  const markAsRead = (notificationId: string) => {
-    const newReadIds = new Set(readNotifications)
-    newReadIds.add(notificationId)
-    setReadNotifications(newReadIds)
-    localStorage.setItem('notification_read_ids', JSON.stringify(Array.from(newReadIds)))
-  }
+      return { previous }
+    },
+    onError: (error, _payload, context) => {
+      console.error('标记已读失败:', error)
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous)
+      }
+      toast.error('标记已读失败，请稍后重试')
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey })
+    },
+  })
 
-  // 标记全部为已读
-  const markAllAsRead = () => {
-    const allIds = notifications.map((n) => n.id)
-    const newReadIds = new Set(allIds)
-    setReadNotifications(newReadIds)
-    localStorage.setItem('notification_read_ids', JSON.stringify(allIds))
-  }
+  const dismissMutation = useMutation({
+    mutationFn: (payload: Parameters<typeof dismissDashboardNotifications>[0]) =>
+      dismissDashboardNotifications(payload),
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData<DashboardNotificationsResult>(queryKey)
+      if (!previous) {
+        return { previous }
+      }
 
-  // 清空所有通知
-  const clearAll = () => {
-    setNotifications([])
-    setReadNotifications(new Set())
-    localStorage.removeItem('notification_read_ids')
-  }
+      updateCache((prev) => {
+        if (!prev) return prev
+
+        const isAll = 'all' in payload && payload.all
+        if (isAll) {
+          return {
+            ...prev,
+            notifications: [],
+            unreadCount: 0,
+          }
+        }
+
+        const ids = 'ids' in payload ? payload.ids : []
+        const nextNotifications = prev.notifications.filter((n) => !ids.includes(n.id))
+        return {
+          ...prev,
+          notifications: nextNotifications,
+          unreadCount: nextNotifications.filter((n) => !n.read).length,
+        }
+      })
+
+      return { previous }
+    },
+    onError: (error, _payload, context) => {
+      console.error('清空通知失败:', error)
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous)
+      }
+      toast.error('清空失败，请稍后重试')
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey })
+    },
+  })
 
   // 根据当前标签筛选通知
   const filteredNotifications = useMemo(() => {
@@ -105,21 +157,12 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
       filtered = notifications.filter((n) => n.type === 'system')
     }
 
-    // 添加已读状态
-    return filtered.map((n) => ({
-      ...n,
-      read: readNotifications.has(n.id),
-    }))
-  }, [notifications, activeCategory, readNotifications])
-
-  // 计算未读数量
-  const unreadCount = useMemo(() => {
-    return notifications.filter((n) => !readNotifications.has(n.id)).length
-  }, [notifications, readNotifications])
+    return filtered
+  }, [notifications, activeCategory])
 
   // 处理通知点击
   const handleNotificationClick = (notification: Notification) => {
-    markAsRead(notification.id)
+    markReadMutation.mutate({ ids: [notification.id] })
 
     if (notification.link) {
       router.push(notification.link)
@@ -155,14 +198,14 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">通知中心</h3>
           <div className="flex items-center gap-2">
             <button
-              onClick={markAllAsRead}
+              onClick={() => markReadMutation.mutate({ all: true, window_limit: windowLimit })}
               className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
             >
               全部已读
             </button>
             <span className="text-gray-300 dark:text-gray-600">|</span>
             <button
-              onClick={clearAll}
+              onClick={() => dismissMutation.mutate({ all: true, window_limit: windowLimit })}
               className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
             >
               清空
@@ -206,7 +249,7 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
 
         {/* 通知列表 */}
         <div className="max-h-[400px] overflow-y-auto">
-          {loading ? (
+          {isLoading ? (
             <div className="p-4 text-center text-gray-500 dark:text-gray-400">加载中...</div>
           ) : filteredNotifications.length > 0 ? (
             filteredNotifications.map((notification) => (

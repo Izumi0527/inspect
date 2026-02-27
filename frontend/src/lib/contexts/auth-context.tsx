@@ -150,12 +150,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // 登出函数
   const logout = useCallback(async () => {
+    let apiFailed = false
     try {
       dispatch({ type: 'SET_LOADING', payload: true })
       
       // 调用后端登出API
       await api.auth.logout()
     } catch (error) {
+      apiFailed = true
       console.error('Logout API failed:', error)
     } finally {
       // 清除本地Token
@@ -167,7 +169,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // 跳转到登录页
       router.push('/login')
       
-      toast.success('已安全退出')
+      if (apiFailed) {
+        toast('已清理本地登录态（服务端登出失败）')
+      } else {
+        toast.success('已安全退出')
+      }
     }
   }, [router])
 

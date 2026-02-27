@@ -182,24 +182,34 @@ export function useDeviceSearch() {
   const [searching, setSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const requestIdRef = useRef(0)
+  const MIN_QUERY_LENGTH = 2
 
   const search = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) {
+    const trimmed = searchQuery.trim()
+    if (!trimmed || trimmed.length < MIN_QUERY_LENGTH) {
       setResults([])
       setShowResults(false)
+      setSearching(false)
       return
     }
 
+    const requestId = ++requestIdRef.current
+
     try {
       setSearching(true)
-      const searchResults = await searchDevices(searchQuery)
+      const searchResults = await searchDevices(trimmed)
+      if (requestId !== requestIdRef.current) return
       const normalizedResults = searchResults.map((item, index) => mapDeviceSearchResult(item, index))
       setResults(normalizedResults)
       setShowResults(true)
     } catch (err) {
+      if (requestId !== requestIdRef.current) return
       console.error('搜索失败:', err)
     } finally {
-      setSearching(false)
+      if (requestId === requestIdRef.current) {
+        setSearching(false)
+      }
     }
   }, [])
 
@@ -209,6 +219,16 @@ export function useDeviceSearch() {
     // 防抖搜索
     if (searchTimerRef.current) {
       clearTimeout(searchTimerRef.current)
+    }
+
+    const trimmed = newQuery.trim()
+    if (!trimmed || trimmed.length < MIN_QUERY_LENGTH) {
+      // 触发取消：避免旧请求回写结果
+      requestIdRef.current += 1
+      setResults([])
+      setShowResults(false)
+      setSearching(false)
+      return
     }
 
     searchTimerRef.current = setTimeout(() => {
@@ -221,9 +241,11 @@ export function useDeviceSearch() {
       clearTimeout(searchTimerRef.current)
       searchTimerRef.current = null
     }
+    requestIdRef.current += 1
     setQuery('')
     setResults([])
     setShowResults(false)
+    setSearching(false)
   }, [])
 
   useEffect(() => {
@@ -232,6 +254,7 @@ export function useDeviceSearch() {
         clearTimeout(searchTimerRef.current)
         searchTimerRef.current = null
       }
+      requestIdRef.current += 1
     }
   }, [])
 

@@ -25,6 +25,26 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 }) => {
   const router = useRouter()
   const { query, results, searching, showResults, setQuery, clearSearch } = useDeviceSearch()
+  const searchContainerRef = React.useRef<HTMLDivElement | null>(null)
+  const [activeIndex, setActiveIndex] = React.useState(-1)
+
+  React.useEffect(() => {
+    setActiveIndex(-1)
+  }, [query])
+
+  React.useEffect(() => {
+    const handleMouseDown = (event: MouseEvent) => {
+      const container = searchContainerRef.current
+      if (!container) return
+      if (!container.contains(event.target as Node)) {
+        setActiveIndex(-1)
+        clearSearch()
+      }
+    }
+
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [clearSearch])
 
   return (
     <header className="bg-white dark:bg-card shadow-sm border-b dark:border-border">
@@ -42,13 +62,44 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 
             {/* 搜索框 - 条件渲染 */}
             {showSearch && (
-              <div className="relative">
+              <div className="relative" ref={searchContainerRef}>
                 <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <Input
                   type="text"
                   placeholder="搜索设备..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault()
+                      setActiveIndex(-1)
+                      clearSearch()
+                      return
+                    }
+
+                    if (!showResults || searching || results.length === 0) return
+
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault()
+                      setActiveIndex((prev) => Math.min(prev + 1, results.length - 1))
+                      return
+                    }
+
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault()
+                      setActiveIndex((prev) => Math.max(prev - 1, 0))
+                      return
+                    }
+
+                    if (e.key === 'Enter') {
+                      if (activeIndex >= 0 && activeIndex < results.length) {
+                        e.preventDefault()
+                        const device = results[activeIndex]
+                        clearSearch()
+                        router.push(`/devices?search=${encodeURIComponent(device.name)}`)
+                      }
+                    }
+                  }}
                   className="pl-10 pr-12 py-2 w-56"
                 />
                 {query && (
@@ -71,10 +122,15 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                       <div className="p-4 text-center text-gray-500 dark:text-muted-foreground">搜索中...</div>
                     ) : results.length > 0 ? (
                       <div className="py-2">
-                        {results.map((device) => (
+                        {results.map((device, index) => (
                           <div
                             key={device.id}
-                            className="px-4 py-2 hover:bg-gray-50 dark:hover:bg-accent/10 cursor-pointer flex items-center justify-between"
+                            className={`px-4 py-2 cursor-pointer flex items-center justify-between ${
+                              index === activeIndex
+                                ? 'bg-gray-50 dark:bg-accent/10'
+                                : 'hover:bg-gray-50 dark:hover:bg-accent/10'
+                            }`}
+                            onMouseEnter={() => setActiveIndex(index)}
                             onClick={() => {
                               clearSearch()
                               router.push(`/devices?search=${encodeURIComponent(device.name)}`)

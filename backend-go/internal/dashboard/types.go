@@ -101,5 +101,6 @@ type Notification struct {
 
 type NotificationsResponse struct {
 	Notifications []Notification `json:"notifications"`
+	UnreadCount   int            `json:"unread_count"`
 	LastUpdated   time.Time      `json:"last_updated"`
 }

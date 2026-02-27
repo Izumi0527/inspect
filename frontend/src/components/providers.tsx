@@ -92,13 +92,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
               position="top-right"
               toastOptions={{
                 duration: 4000,
-                style: {
-                  background: 'rgba(255, 255, 255, 0.9)',
-                  backdropFilter: 'blur(12px)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
-                  borderRadius: '16px',
-                  color: '#374151',
-                },
+                className:
+                  'backdrop-blur-xl rounded-2xl border border-white/20 bg-white/90 text-gray-700 ' +
+                  'dark:border-gray-700/50 dark:bg-gray-900/80 dark:text-gray-100',
               }}
             />
             <ReactQueryDevtools initialIsOpen={false} />

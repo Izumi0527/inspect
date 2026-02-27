@@ -25,6 +25,8 @@ func (h DashboardHandler) Register(group *echo.Group) {
 	group.GET("/dashboard/network-overview", h.GetNetworkOverview)
 	group.GET("/dashboard/bandwidth-stats", h.GetBandwidthStats)
 	group.GET("/dashboard/notifications", h.GetNotifications)
+	group.POST("/dashboard/notifications/read", h.MarkNotificationsRead)
+	group.POST("/dashboard/notifications/dismiss", h.DismissNotifications)
 }
 
 func (h DashboardHandler) GetOverview(c echo.Context) error {
@@ -190,7 +192,8 @@ func (h DashboardHandler) GetNotifications(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+	user, err := requirePermission(c, h.Auth, "")
+	if err != nil {
 		return err
 	}
 
@@ -202,9 +205,103 @@ func (h DashboardHandler) GetNotifications(c echo.Context) error {
 		limit = 50
 	}
 
-	resp, err := h.Service.GetNotifications(c.Request().Context(), limit)
+	userID := ""
+	if user != nil {
+		userID = user.ID
+	}
+	resp, err := h.Service.GetNotificationsForUser(c.Request().Context(), userID, limit)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load notifications")
 	}
 	return c.JSON(http.StatusOK, resp)
+}
+
+func (h DashboardHandler) MarkNotificationsRead(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
+	}
+	user, err := requirePermission(c, h.Auth, "")
+	if err != nil {
+		return err
+	}
+
+	var req notificationActionRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+	if !req.All && len(req.IDs) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "ids or all required")
+	}
+
+	userID := ""
+	if user != nil {
+		userID = user.ID
+	}
+
+	var updated int
+	if req.All {
+		n, err := h.Service.MarkAllNotificationsRead(c.Request().Context(), userID, req.WindowLimit)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to mark notifications read")
+		}
+		updated = n
+	} else {
+		n, err := h.Service.MarkNotificationsRead(c.Request().Context(), userID, req.IDs)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to mark notifications read")
+		}
+		updated = n
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"updated": updated,
+	})
+}
+
+func (h DashboardHandler) DismissNotifications(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
+	}
+	user, err := requirePermission(c, h.Auth, "")
+	if err != nil {
+		return err
+	}
+
+	var req notificationActionRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+	if !req.All && len(req.IDs) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "ids or all required")
+	}
+
+	userID := ""
+	if user != nil {
+		userID = user.ID
+	}
+
+	var updated int
+	if req.All {
+		n, err := h.Service.DismissAllNotifications(c.Request().Context(), userID, req.WindowLimit)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to dismiss notifications")
+		}
+		updated = n
+	} else {
+		n, err := h.Service.DismissNotifications(c.Request().Context(), userID, req.IDs)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to dismiss notifications")
+		}
+		updated = n
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"updated": updated,
+	})
+}
+
+type notificationActionRequest struct {
+	IDs         []string `json:"ids"`
+	All         bool     `json:"all"`
+	WindowLimit int      `json:"window_limit"`
 }

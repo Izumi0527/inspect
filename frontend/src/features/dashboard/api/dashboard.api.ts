@@ -54,7 +54,22 @@ interface NotificationDto {
 
 interface DashboardNotificationsDto {
   notifications?: NotificationDto[]
+  unread_count?: number
   last_updated?: string
+}
+
+export type DashboardNotificationsResult = {
+  notifications: Notification[]
+  unreadCount: number
+  lastUpdated: Date
+}
+
+export type DashboardNotificationActionPayload =
+  | { ids: string[] }
+  | { all: true; window_limit?: number }
+
+type DashboardNotificationActionResponse = {
+  updated?: number
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -211,6 +226,67 @@ export async function fetchDashboardNotifications(limit: number = 20): Promise<N
   } catch (error) {
     console.error('获取通知失败:', error)
     return []
+  }
+}
+
+export async function fetchDashboardNotificationsWithMeta(limit: number = 20): Promise<DashboardNotificationsResult> {
+  try {
+    const payload = await api.get<unknown>(appendLimit('/dashboard/notifications', limit))
+    const dto = unwrapPayload<DashboardNotificationsDto | NotificationDto[]>(payload)
+
+    if (Array.isArray(dto)) {
+      const notifications = dto.map(toNotification)
+      const unreadCount = notifications.filter((n) => !n.read).length
+      return {
+        notifications,
+        unreadCount,
+        lastUpdated: new Date(),
+      }
+    }
+
+    const list = isObject(dto) ? ensureArray<NotificationDto>(dto.notifications) : undefined
+    const notifications = (list ?? []).map(toNotification)
+
+    const unreadCountValue =
+      typeof dto?.unread_count === 'number'
+        ? dto.unread_count
+        : notifications.filter((n) => !n.read).length
+
+    const lastUpdated =
+      typeof dto?.last_updated === 'string' && dto.last_updated
+        ? new Date(dto.last_updated)
+        : new Date()
+
+    return {
+      notifications,
+      unreadCount: unreadCountValue,
+      lastUpdated,
+    }
+  } catch (error) {
+    console.error('获取通知失败:', error)
+    return {
+      notifications: [],
+      unreadCount: 0,
+      lastUpdated: new Date(),
+    }
+  }
+}
+
+export async function markDashboardNotificationsRead(payload: DashboardNotificationActionPayload): Promise<{ updated: number }> {
+  const resp = await api.post<unknown>('/dashboard/notifications/read', payload)
+  const dto = unwrapPayload<DashboardNotificationActionResponse>(resp)
+
+  return {
+    updated: typeof dto?.updated === 'number' ? dto.updated : 0,
+  }
+}
+
+export async function dismissDashboardNotifications(payload: DashboardNotificationActionPayload): Promise<{ updated: number }> {
+  const resp = await api.post<unknown>('/dashboard/notifications/dismiss', payload)
+  const dto = unwrapPayload<DashboardNotificationActionResponse>(resp)
+
+  return {
+    updated: typeof dto?.updated === 'number' ? dto.updated : 0,
   }
 }
 

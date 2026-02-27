@@ -8,6 +8,7 @@ import (
 
 	"github.com/your-org/inspect-system/backend-go/internal/alerts"
 	"github.com/your-org/inspect-system/backend-go/internal/config"
+	"github.com/your-org/inspect-system/backend-go/internal/dashboard"
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"github.com/your-org/inspect-system/backend-go/internal/logs"
@@ -69,6 +70,8 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 		&reports.ReportTemplate{},
 		&reports.ReportSchedule{},
 		&reports.Report{},
+
+		&dashboard.UserNotificationState{},
 
 		&scheduler.ScheduledTask{},
 		&scheduler.TaskExecution{},
