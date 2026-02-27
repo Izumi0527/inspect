@@ -16,6 +16,7 @@ import {
   NOTIFICATION_CATEGORIES,
 } from '@/types/notification'
 import { cn } from '@/utils/cn'
+import { fetchDashboardNotifications } from '../api/dashboard.api'
 
 interface NotificationCenterProps {
   /** 告警数量（显示在徽章上） */
@@ -33,6 +34,7 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
   const [activeCategory, setActiveCategory] = useState<NotificationCategoryKey>('all')
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [readNotifications, setReadNotifications] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(false)
 
   // 从 localStorage 加载已读状态
   useEffect(() => {
@@ -47,55 +49,27 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
     }
   }, [])
 
-  // TODO: 从 API 获取告警通知
-  // 目前使用模拟数据演示
   useEffect(() => {
-    // 模拟数据：系统通知
-    const mockSystemNotifications: Notification[] = [
-      {
-        id: 'sys-1',
-        type: 'system',
-        title: '巡检任务完成',
-        content: '定时巡检任务"网络设备健康普查"已完成，发现3个问题',
-        timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-        read: false,
-      },
-      {
-        id: 'sys-2',
-        type: 'system',
-        title: '配置备份成功',
-        content: '系统已自动备份所有设备配置文件',
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        read: false,
-      },
-    ]
+    let cancelled = false
 
-    const mockAlertNotifications: Notification[] = [
-      {
-        id: 'alert-1',
-        type: 'alert',
-        title: '设备离线告警',
-        content: '核心交换机 SW-001 已离线超过5分钟',
-        timestamp: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
-        read: false,
-        severity: 'critical',
-        device: 'SW-001',
-      },
-      {
-        id: 'alert-2',
-        type: 'alert',
-        title: 'CPU使用率过高',
-        content: '路由器 RT-002 CPU使用率达到85%',
-        timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-        read: false,
-        severity: 'warning',
-        device: 'RT-002',
-      },
-    ]
+    const load = async () => {
+      setLoading(true)
+      const items = await fetchDashboardNotifications(20)
+      if (cancelled) return
+      setNotifications(items)
+      setLoading(false)
+    }
 
-    // 合并告警和系统通知
-    const allNotifications = [...mockAlertNotifications, ...mockSystemNotifications]
-    setNotifications(allNotifications)
+    load().catch((e) => {
+      console.error('加载通知失败:', e)
+      if (cancelled) return
+      setNotifications([])
+      setLoading(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // 标记通知为已读
@@ -147,13 +121,15 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
   const handleNotificationClick = (notification: Notification) => {
     markAsRead(notification.id)
 
+    if (notification.link) {
+      router.push(notification.link)
+      return
+    }
+
     // 根据通知类型处理跳转
     if (notification.type === 'alert') {
       // 告警类型：跳转到告警中心并传递告警 ID
       router.push(`/alerts?id=${notification.id}`)
-    } else if (notification.link) {
-      // 其他类型：使用 link 字段
-      router.push(notification.link)
     }
   }
 
@@ -230,7 +206,9 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
 
         {/* 通知列表 */}
         <div className="max-h-[400px] overflow-y-auto">
-          {filteredNotifications.length > 0 ? (
+          {loading ? (
+            <div className="p-4 text-center text-gray-500 dark:text-gray-400">加载中...</div>
+          ) : filteredNotifications.length > 0 ? (
             filteredNotifications.map((notification) => (
               <NotificationItem
                 key={notification.id}

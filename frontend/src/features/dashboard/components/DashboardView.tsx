@@ -14,7 +14,7 @@ import { QuickActionsCard } from './QuickActionsCard'
 import { NetworkOverviewCard } from './NetworkOverviewCard'
 
 export const DashboardView: React.FC = () => {
-  const { data, loading, error, refreshStats, loadData } = useDashboardData()
+  const { data, isInitialLoading, isRefreshing, error, refreshStats, loadData } = useDashboardData()
   const { sidebarOpen, toggleSidebar } = useSidebar()
   const { config } = useDashboardConfig() // 仅用于自动刷新配置
 
@@ -53,10 +53,10 @@ export const DashboardView: React.FC = () => {
           <div className="space-y-3">
             <button
               onClick={handleRetry}
-              disabled={loading}
+              disabled={isInitialLoading}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
             >
-              {loading ? '重试中...' : '重试'}
+              {isInitialLoading ? '重试中...' : '重试'}
             </button>
             <p className="text-sm text-gray-500 dark:text-muted-foreground">
               如果问题持续存在，请联系系统管理员
@@ -101,10 +101,10 @@ export const DashboardView: React.FC = () => {
                   <div className="mt-3">
                     <button
                       onClick={handleRetry}
-                      disabled={loading}
+                      disabled={isRefreshing}
                       className="text-sm bg-yellow-100 dark:bg-yellow-900/30 hover:bg-yellow-200 dark:hover:bg-yellow-900/50 text-yellow-800 dark:text-yellow-300 px-3 py-1 rounded-md transition-colors duration-200 disabled:opacity-50"
                     >
-                      {loading ? '重试中...' : '重新尝试'}
+                      {isRefreshing ? '重试中...' : '重新尝试'}
                     </button>
                   </div>
                 </div>
@@ -119,7 +119,7 @@ export const DashboardView: React.FC = () => {
             {/* Stats Grid */}
             <StatsGrid
               stats={data?.stats || []}
-              loading={loading}
+              loading={isInitialLoading}
             />
 
             {/* Secondary Cards - Horizontal Layout */}
@@ -127,7 +127,7 @@ export const DashboardView: React.FC = () => {
               {/* Recent Alerts */}
               <RecentAlertsCard
                 alerts={data?.recentAlerts || []}
-                loading={loading}
+                loading={isInitialLoading}
               />
 
               {/* Quick Actions */}
@@ -140,13 +140,13 @@ export const DashboardView: React.FC = () => {
             <div className="flex-1 flex flex-col">
               <NetworkOverviewCard
                 overview={data?.networkOverview || []}
-                loading={loading}
+                loading={isInitialLoading}
               />
             </div>
           </div>
 
           {/* Loading overlay for refresh */}
-          {loading && data && (
+          {isRefreshing && data && (
             <div className="fixed top-4 right-4 bg-white dark:bg-card rounded-lg shadow-lg p-3 z-50">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>

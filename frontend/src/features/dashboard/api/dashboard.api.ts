@@ -6,6 +6,7 @@ import {
   NetworkOverviewItem,
   RecentAlert,
 } from '../types'
+import type { Notification, NotificationSeverity, NotificationType } from '@/types/notification'
 
 interface DashboardStatDto {
   title: string
@@ -36,6 +37,23 @@ interface DashboardOverviewDto {
   stats?: DashboardStatDto[]
   recent_alerts?: RecentAlertDto[]
   network_overview?: NetworkOverviewDto[]
+  last_updated?: string
+}
+
+interface NotificationDto {
+  id: string | number
+  type: string
+  title: string
+  content: string
+  timestamp: string
+  read?: boolean
+  severity?: string
+  link?: string
+  device?: string
+}
+
+interface DashboardNotificationsDto {
+  notifications?: NotificationDto[]
   last_updated?: string
 }
 
@@ -150,6 +168,52 @@ export async function fetchNetworkOverview(): Promise<NetworkOverviewItem[]> {
   }
 }
 
+const normalizeNotificationSeverity = (value: unknown): NotificationSeverity => {
+  if (value === 'critical' || value === 'warning' || value === 'info' || value === 'success') {
+    return value
+  }
+  return 'info'
+}
+
+const normalizeNotificationType = (value: unknown): NotificationType => {
+  if (value === 'alert' || value === 'system') {
+    return value
+  }
+  return 'system'
+}
+
+const toNotification = (dto: NotificationDto): Notification => ({
+  id: String(dto.id),
+  type: normalizeNotificationType(dto.type),
+  title: dto.title,
+  content: dto.content,
+  timestamp: dto.timestamp,
+  read: Boolean(dto.read),
+  severity: dto.severity ? normalizeNotificationSeverity(dto.severity) : undefined,
+  link: typeof dto.link === 'string' ? dto.link : undefined,
+  device: typeof dto.device === 'string' ? dto.device : undefined,
+})
+
+export async function fetchDashboardNotifications(limit: number = 20): Promise<Notification[]> {
+  try {
+    const payload = await api.get<unknown>(appendLimit('/dashboard/notifications', limit))
+    const dto = unwrapPayload<DashboardNotificationsDto | NotificationDto[]>(payload)
+
+    const list = Array.isArray(dto)
+      ? dto
+      : (isObject(dto) ? ensureArray<NotificationDto>(dto.notifications) : undefined)
+
+    if (!list) {
+      return []
+    }
+
+    return list.map(toNotification)
+  } catch (error) {
+    console.error('获取通知失败:', error)
+    return []
+  }
+}
+
 export async function performDeviceScan(subnet: string = '192.168.1.0/24'): Promise<Record<string, unknown>> {
   return api.post('/devices/scan', {
     target_network: subnet,
@@ -163,24 +227,52 @@ export async function performDeviceScan(subnet: string = '192.168.1.0/24'): Prom
 export async function generateReport(
   reportType: 'inspection-summary' | 'device-health' | 'trend-analysis' = 'inspection-summary'
 ): Promise<Record<string, unknown>> {
-  // 根据报表类型调用对应的具体端点
-  const endpoints = {
-    'inspection-summary': '/reports/inspection-summary',
-    'device-health': '/reports/device-health',
-    'trend-analysis': '/reports/trend-analysis'
-  }
+  // 统一走后端通用端点：POST /api/v1/reports/generate
+  // 注意：该端点请求体为 snake_case（见后端 handlers.reportGenerateRequest）
+  const now = new Date()
+  const endTime = now.toISOString()
+  const startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const endpoint = endpoints[reportType]
+  const reportTypeMap = {
+    'inspection-summary': {
+      name: '巡检汇总报表',
+      report_type: 'inspection_summary',
+      custom_config: {},
+    },
+    'device-health': {
+      name: '设备健康报表',
+      report_type: 'performance',
+      custom_config: {},
+    },
+    'trend-analysis': {
+      name: '趋势分析报表',
+      report_type: 'trend',
+      custom_config: {
+        include_predictions: true,
+        granularity: 'day',
+      },
+    },
+  } as const
 
-  return api.post(endpoint, {
-    time_range: 'last_7d',
-    group_by: 'day'
+  const config = reportTypeMap[reportType]
+
+  return api.post('/reports/generate', {
+    name: config.name,
+    report_type: config.report_type,
+    start_time: startTime,
+    end_time: endTime,
+    device_ids: [],
+    include_charts: true,
+    include_details: true,
+    custom_config: config.custom_config,
+    format: 'pdf',
+    category: 'weekly',
   })
 }
 
 export async function searchDevices(query: string): Promise<Record<string, unknown>[]> {
   try {
-    const payload = await api.get<unknown>(`/devices/search?q=${encodeURIComponent(query)}`)
+    const payload = await api.get<unknown>(`/devices/search?q=${encodeURIComponent(query)}&limit=10`)
     const list = unwrapPayload<Record<string, unknown>[] | { devices?: Record<string, unknown>[] }>(payload)
 
     if (Array.isArray(list)) {

@@ -28,10 +28,10 @@ type NetworkOverviewItem struct {
 }
 
 type OverviewResponse struct {
-	Stats           []StatCard           `json:"stats"`
-	RecentAlerts    []RecentAlert        `json:"recent_alerts"`
+	Stats           []StatCard            `json:"stats"`
+	RecentAlerts    []RecentAlert         `json:"recent_alerts"`
 	NetworkOverview []NetworkOverviewItem `json:"network_overview"`
-	LastUpdated     time.Time            `json:"last_updated"`
+	LastUpdated     time.Time             `json:"last_updated"`
 }
 
 type DeviceStatusSummary struct {
@@ -59,24 +59,24 @@ type TopDevicesByAlerts struct {
 }
 
 type RecentActivity struct {
-	ID          string     `json:"id"`
-	Type        string     `json:"type"`
-	Title       string     `json:"title"`
-	Description string     `json:"description"`
-	Timestamp   time.Time  `json:"timestamp"`
-	RelatedID   *int       `json:"related_id,omitempty"`
-	Severity    *string    `json:"severity,omitempty"`
+	ID          string    `json:"id"`
+	Type        string    `json:"type"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Timestamp   time.Time `json:"timestamp"`
+	RelatedID   *int      `json:"related_id,omitempty"`
+	Severity    *string   `json:"severity,omitempty"`
 }
 
 type SystemStatus struct {
-	MonitoringService bool      `json:"monitoring_service"`
-	AlertEngine       bool      `json:"alert_engine"`
-	SchedulerService  bool      `json:"scheduler_service"`
-	MetricsStoreConnected bool   `json:"influxdb_connected"`
-	RedisConnected    bool      `json:"redis_connected"`
-	DatabaseConnected bool      `json:"database_connected"`
-	UptimeSeconds     int64     `json:"uptime_seconds"`
-	LastCheck         time.Time `json:"last_check"`
+	MonitoringService     bool      `json:"monitoring_service"`
+	AlertEngine           bool      `json:"alert_engine"`
+	SchedulerService      bool      `json:"scheduler_service"`
+	MetricsStoreConnected bool      `json:"influxdb_connected"`
+	RedisConnected        bool      `json:"redis_connected"`
+	DatabaseConnected     bool      `json:"database_connected"`
+	UptimeSeconds         int64     `json:"uptime_seconds"`
+	LastCheck             time.Time `json:"last_check"`
 }
 
 // BandwidthStats 表示带宽统计信息及其单位
@@ -84,4 +84,22 @@ type BandwidthStats struct {
 	InboundRate  float64 `json:"inbound_rate"`  // 入站速率，单位：bps（比特每秒）
 	OutboundRate float64 `json:"outbound_rate"` // 出站速率，单位：bps（比特每秒）
 	Unit         string  `json:"unit"`          // 单位标识："bps"
+}
+
+// Notification 用于仪表板通知中心的数据结构（告警 + 系统消息聚合）
+type Notification struct {
+	ID        string    `json:"id"`
+	Type      string    `json:"type"` // alert | system
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	Timestamp time.Time `json:"timestamp"`
+	Read      bool      `json:"read"`               // 由前端本地已读集合覆盖，此处默认 false
+	Severity  *string   `json:"severity,omitempty"` // critical | warning | info | success
+	Link      *string   `json:"link,omitempty"`
+	Device    *string   `json:"device,omitempty"`
+}
+
+type NotificationsResponse struct {
+	Notifications []Notification `json:"notifications"`
+	LastUpdated   time.Time      `json:"last_updated"`
 }

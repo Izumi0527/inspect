@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { DashboardData, DashboardConfig, RecentAlert, AlertSeverity } from '../types'
 
 type DeviceSearchResult = {
@@ -11,7 +11,9 @@ type DeviceSearchResult = {
 const mapDeviceSearchResult = (item: Record<string, unknown>, index: number): DeviceSearchResult => ({
   id: String(item.id ?? item.device_id ?? index),
   name: typeof item.name === 'string' && item.name ? item.name : '未知设备',
-  ip: typeof item.ip === 'string' ? item.ip : '未提供 IP',
+  ip: typeof item.ip_address === 'string'
+    ? item.ip_address
+    : (typeof item.ip === 'string' ? item.ip : '未提供 IP'),
   status: typeof item.status === 'string' ? item.status : 'unknown',
 })
 import {
@@ -24,33 +26,52 @@ import {
 // Dashboard数据管理hook
 export function useDashboardData() {
   const [data, setData] = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [isInitialLoading, setIsInitialLoading] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const dataRef = useRef<DashboardData | null>(null)
+
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
 
   const loadData = useCallback(async () => {
+    const initialLoad = dataRef.current === null
     try {
-      setLoading(true)
-      setError(null)
+      if (initialLoad) {
+        setIsInitialLoading(true)
+        setError(null)
+      } else {
+        setIsRefreshing(true)
+      }
       const dashboardData = await fetchDashboardData()
       setData(dashboardData)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载Dashboard数据失败')
+      if (initialLoad) {
+        setError(err instanceof Error ? err.message : '加载Dashboard数据失败')
+      } else {
+        console.error('刷新Dashboard数据失败:', err)
+      }
     } finally {
-      setLoading(false)
+      if (initialLoad) {
+        setIsInitialLoading(false)
+      } else {
+        setIsRefreshing(false)
+      }
     }
   }, [])
 
   // 刷新统计数据
   const refreshStats = useCallback(async () => {
     try {
-      setLoading(true)
+      setIsRefreshing(true)
       // 统一使用 fetchDashboardData() 保证数据一致性
       const dashboardData = await fetchDashboardData()
       setData(dashboardData)
     } catch (err) {
       console.error('刷新统计数据失败:', err)
     } finally {
-      setLoading(false)
+      setIsRefreshing(false)
     }
   }, [])
 
@@ -66,7 +87,8 @@ export function useDashboardData() {
 
   return {
     data,
-    loading,
+    isInitialLoading,
+    isRefreshing,
     error,
     loadData,
     refreshStats
@@ -159,6 +181,7 @@ export function useDeviceSearch() {
   const [results, setResults] = useState<DeviceSearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [showResults, setShowResults] = useState(false)
+  const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const search = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim()) {
@@ -184,17 +207,32 @@ export function useDeviceSearch() {
     setQuery(newQuery)
     
     // 防抖搜索
-    const timeoutId = setTimeout(() => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current)
+    }
+
+    searchTimerRef.current = setTimeout(() => {
       search(newQuery)
     }, 300)
-
-    return () => clearTimeout(timeoutId)
   }, [search])
 
   const clearSearch = useCallback(() => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current)
+      searchTimerRef.current = null
+    }
     setQuery('')
     setResults([])
     setShowResults(false)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current)
+        searchTimerRef.current = null
+      }
+    }
   }, [])
 
   return {

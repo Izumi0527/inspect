@@ -58,7 +58,6 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                     onClick={() => {
                       clearSearch()
-                      setQuery('')
                     }}
                   >
                     清除
@@ -76,6 +75,10 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                           <div
                             key={device.id}
                             className="px-4 py-2 hover:bg-gray-50 dark:hover:bg-accent/10 cursor-pointer flex items-center justify-between"
+                            onClick={() => {
+                              clearSearch()
+                              router.push(`/devices?search=${encodeURIComponent(device.name)}`)
+                            }}
                           >
                             <div>
                               <div className="font-medium text-gray-900 dark:text-foreground">{device.name}</div>

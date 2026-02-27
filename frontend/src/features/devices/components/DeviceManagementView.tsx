@@ -1,4 +1,5 @@
 ﻿import React, { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   Server,
   Plus,
@@ -93,6 +94,9 @@ const toAlertCount = (value: unknown): number => {
 }
 
 export const DeviceManagementView: React.FC = () => {
+  const searchParams = useSearchParams()
+  const appliedUrlSearchRef = React.useRef(false)
+
   // 启用轮询：每60秒自动刷新设备数据（包括CPU和内存）
   const { devices, total, loading, error, setError, addDevice, removeDevice, importDevices, loadDevices } = useDevices(true, 60000)
   const { filters, updateFilter } = useDeviceFilters()
@@ -122,6 +126,16 @@ export const DeviceManagementView: React.FC = () => {
   // 搜索防抖：避免每次按键都触发后端请求
   const [debouncedSearch, setDebouncedSearch] = React.useState(filters.searchQuery)
   const searchTimerRef = React.useRef<NodeJS.Timeout | null>(null)
+
+  // 从 URL 查询参数初始化搜索词（Dashboard 顶栏搜索跳转会带上 ?search=xxx）
+  React.useEffect(() => {
+    if (appliedUrlSearchRef.current) return
+    const initialSearch = searchParams.get('search')
+    if (initialSearch) {
+      updateFilter('searchQuery', initialSearch)
+    }
+    appliedUrlSearchRef.current = true
+  }, [searchParams, updateFilter])
 
   React.useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)

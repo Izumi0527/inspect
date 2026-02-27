@@ -313,11 +313,20 @@ DELETE /api/v1/reports/:report_id
 # 仪表板概览
 GET /api/v1/dashboard/overview
 
-# 统计数据
-GET /api/v1/dashboard/statistics
+# 设备状态摘要
+GET /api/v1/dashboard/device-status
 
-# KPI指标
-GET /api/v1/dashboard/kpi
+# 告警摘要
+GET /api/v1/dashboard/alert-summary
+
+# 最近告警
+GET /api/v1/dashboard/recent-alerts?limit=5
+
+# 网络概览
+GET /api/v1/dashboard/network-overview
+
+# 通知中心聚合（告警 + 系统消息）
+GET /api/v1/dashboard/notifications?limit=20
 ```
 
 ---
@@ -326,19 +335,13 @@ GET /api/v1/dashboard/kpi
 
 ```javascript
 // 连接WebSocket
-const ws = new WebSocket('ws://localhost:8001/ws')
-
-// 认证
-ws.send(JSON.stringify({
-  type: 'auth',
-  token: 'your_jwt_token'
-}))
+// 注意：WebSocket 连接地址包含 user_id
+const ws = new WebSocket('ws://localhost:8001/api/v1/ws/1')
 
 // 订阅设备状态
 ws.send(JSON.stringify({
   type: 'subscribe',
-  channel: 'device_status',
-  device_ids: [1, 2, 3]
+  data: { room: 'device_metrics' }
 }))
 
 // 接收消息

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -166,6 +167,67 @@ func (s *Service) GetBandwidthStats(ctx context.Context) (BandwidthStats, error)
 	}, nil
 }
 
+func (s *Service) GetNotifications(ctx context.Context, limit int) (NotificationsResponse, error) {
+	if s == nil || s.db == nil {
+		return NotificationsResponse{}, fmt.Errorf("database not initialized")
+	}
+
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	candidates := make([]notificationCandidate, 0, limit*2)
+
+	alertCandidates, err := s.buildAlertNotifications(ctx, limit)
+	if err != nil && s.logger != nil {
+		s.logger.Warn("加载告警通知失败", zap.Error(err))
+	}
+	candidates = append(candidates, alertCandidates...)
+
+	inspectionCandidates, err := s.buildInspectionNotifications(ctx, limit)
+	if err != nil && s.logger != nil {
+		s.logger.Warn("加载巡检通知失败", zap.Error(err))
+	}
+	candidates = append(candidates, inspectionCandidates...)
+
+	reportCandidates, err := s.buildReportNotifications(ctx, limit)
+	if err != nil && s.logger != nil {
+		s.logger.Warn("加载报表通知失败", zap.Error(err))
+	}
+	candidates = append(candidates, reportCandidates...)
+
+	scanCandidates, err := s.buildScanNotifications(ctx, limit)
+	if err != nil && s.logger != nil {
+		s.logger.Warn("加载扫描通知失败", zap.Error(err))
+	}
+	candidates = append(candidates, scanCandidates...)
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].timestamp.After(candidates[j].timestamp)
+	})
+
+	notifications := make([]Notification, 0, minInt(limit, len(candidates)))
+	seen := make(map[string]struct{}, len(candidates))
+	for _, item := range candidates {
+		if len(notifications) >= limit {
+			break
+		}
+		if _, ok := seen[item.notification.ID]; ok {
+			continue
+		}
+		seen[item.notification.ID] = struct{}{}
+		notifications = append(notifications, item.notification)
+	}
+
+	return NotificationsResponse{
+		Notifications: notifications,
+		LastUpdated:   time.Now().UTC(),
+	}, nil
+}
+
 func (s *Service) GetRecentActivities(ctx context.Context, limit int) ([]RecentActivity, error) {
 	// 当前无活动日志采集，保持与 Python 版本一致返回空列表。
 	_ = ctx
@@ -211,14 +273,14 @@ func (s *Service) GetSystemStatus(ctx context.Context) (SystemStatus, error) {
 	}
 
 	return SystemStatus{
-		MonitoringService: monitoringRunning,
-		AlertEngine:       s.alerts != nil,
-		SchedulerService:  schedulerRunning,
+		MonitoringService:     monitoringRunning,
+		AlertEngine:           s.alerts != nil,
+		SchedulerService:      schedulerRunning,
 		MetricsStoreConnected: metricsStoreConnected,
-		RedisConnected:    redisConnected,
-		DatabaseConnected: dbConnected,
-		UptimeSeconds:     uptime,
-		LastCheck:         time.Now().UTC(),
+		RedisConnected:        redisConnected,
+		DatabaseConnected:     dbConnected,
+		UptimeSeconds:         uptime,
+		LastCheck:             time.Now().UTC(),
 	}, nil
 }
 
@@ -369,12 +431,12 @@ func (s *Service) getRecentAlerts(ctx context.Context, limit int) ([]RecentAlert
 	}
 
 	type row struct {
-		ID        int     `gorm:"column:id"`
-		Message   string  `gorm:"column:message"`
-		Severity  string  `gorm:"column:severity"`
-		CreatedAt time.Time `gorm:"column:created_at"`
-		DeviceName *string `gorm:"column:device_name"`
-		Category  *string `gorm:"column:category"`
+		ID         int       `gorm:"column:id"`
+		Message    string    `gorm:"column:message"`
+		Severity   string    `gorm:"column:severity"`
+		CreatedAt  time.Time `gorm:"column:created_at"`
+		DeviceName *string   `gorm:"column:device_name"`
+		Category   *string   `gorm:"column:category"`
 	}
 
 	rows := make([]row, 0)
@@ -631,4 +693,290 @@ func formatNetworkValue(value float64, ok bool) string {
 		return "N/A"
 	}
 	return fmt.Sprintf("%.1f Mbps", value)
+}
+
+type notificationCandidate struct {
+	notification Notification
+	timestamp    time.Time
+}
+
+func (s *Service) buildAlertNotifications(ctx context.Context, limit int) ([]notificationCandidate, error) {
+	alertsList, err := s.getRecentAlerts(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]notificationCandidate, 0, len(alertsList))
+	for _, alert := range alertsList {
+		parsedTime, err := time.Parse(time.RFC3339, alert.Time)
+		if err != nil {
+			parsedTime = time.Now().UTC()
+		}
+
+		severity := strings.ToLower(strings.TrimSpace(alert.Severity))
+		link := fmt.Sprintf("/alerts?id=%d", alert.ID)
+		device := strings.TrimSpace(alert.Device)
+		if device == "" {
+			device = "未知设备"
+		}
+
+		title := fmt.Sprintf("告警：%s", device)
+		notification := Notification{
+			ID:        fmt.Sprintf("alert-%d", alert.ID),
+			Type:      "alert",
+			Title:     title,
+			Content:   alert.Message,
+			Timestamp: parsedTime.UTC(),
+			Read:      false,
+			Severity:  &severity,
+			Link:      &link,
+			Device:    &device,
+		}
+
+		result = append(result, notificationCandidate{
+			notification: notification,
+			timestamp:    notification.Timestamp,
+		})
+	}
+
+	return result, nil
+}
+
+func (s *Service) buildInspectionNotifications(ctx context.Context, limit int) ([]notificationCandidate, error) {
+	type row struct {
+		ID           int        `gorm:"column:id"`
+		Name         *string    `gorm:"column:name"`
+		Status       string     `gorm:"column:status"`
+		CompletedAt  *time.Time `gorm:"column:completed_at"`
+		UpdatedAt    *time.Time `gorm:"column:updated_at"`
+		ErrorMessage *string    `gorm:"column:error_message"`
+	}
+
+	rows := make([]row, 0)
+	err := s.db.WithContext(ctx).
+		Table("inspections").
+		Select("id, name, status, completed_at, updated_at, error_message").
+		Where("status IN ?", []string{"completed", "failed", "timeout", "cancelled"}).
+		Order("COALESCE(completed_at, updated_at) desc").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	link := "/inspection"
+	result := make([]notificationCandidate, 0, len(rows))
+	for _, item := range rows {
+		name := defaultStringPointer(item.Name, fmt.Sprintf("巡检 #%d", item.ID))
+
+		status := strings.ToLower(strings.TrimSpace(item.Status))
+		severity, title, content := inspectionNotificationSummary(status, name, item.ErrorMessage)
+
+		timestamp := time.Now().UTC()
+		if item.CompletedAt != nil && !item.CompletedAt.IsZero() {
+			timestamp = item.CompletedAt.UTC()
+		} else if item.UpdatedAt != nil && !item.UpdatedAt.IsZero() {
+			timestamp = item.UpdatedAt.UTC()
+		}
+
+		notification := Notification{
+			ID:        fmt.Sprintf("inspection-%d", item.ID),
+			Type:      "system",
+			Title:     title,
+			Content:   content,
+			Timestamp: timestamp,
+			Read:      false,
+			Severity:  &severity,
+			Link:      &link,
+		}
+
+		result = append(result, notificationCandidate{
+			notification: notification,
+			timestamp:    timestamp,
+		})
+	}
+
+	return result, nil
+}
+
+func (s *Service) buildReportNotifications(ctx context.Context, limit int) ([]notificationCandidate, error) {
+	type row struct {
+		ID           int        `gorm:"column:id"`
+		Title        string     `gorm:"column:title"`
+		Status       string     `gorm:"column:status"`
+		GeneratedAt  *time.Time `gorm:"column:generated_at"`
+		UpdatedAt    *time.Time `gorm:"column:updated_at"`
+		ErrorMessage *string    `gorm:"column:error_message"`
+	}
+
+	rows := make([]row, 0)
+	err := s.db.WithContext(ctx).
+		Table("reports").
+		Select("id, title, status, generated_at, updated_at, error_message").
+		Where("status IN ?", []string{"completed", "failed"}).
+		Order("COALESCE(generated_at, updated_at) desc").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	link := "/reports"
+	result := make([]notificationCandidate, 0, len(rows))
+	for _, item := range rows {
+		reportTitle := strings.TrimSpace(item.Title)
+		if reportTitle == "" {
+			reportTitle = fmt.Sprintf("报表 #%d", item.ID)
+		}
+
+		status := strings.ToLower(strings.TrimSpace(item.Status))
+		severity, title, content := reportNotificationSummary(status, reportTitle, item.ErrorMessage)
+
+		timestamp := time.Now().UTC()
+		if item.GeneratedAt != nil && !item.GeneratedAt.IsZero() {
+			timestamp = item.GeneratedAt.UTC()
+		} else if item.UpdatedAt != nil && !item.UpdatedAt.IsZero() {
+			timestamp = item.UpdatedAt.UTC()
+		}
+
+		notification := Notification{
+			ID:        fmt.Sprintf("report-%d", item.ID),
+			Type:      "system",
+			Title:     title,
+			Content:   content,
+			Timestamp: timestamp,
+			Read:      false,
+			Severity:  &severity,
+			Link:      &link,
+		}
+
+		result = append(result, notificationCandidate{
+			notification: notification,
+			timestamp:    timestamp,
+		})
+	}
+
+	return result, nil
+}
+
+func (s *Service) buildScanNotifications(ctx context.Context, limit int) ([]notificationCandidate, error) {
+	type row struct {
+		ID            string     `gorm:"column:id"`
+		TargetNetwork string     `gorm:"column:target_network"`
+		Status        string     `gorm:"column:status"`
+		DevicesFound  int        `gorm:"column:devices_found"`
+		CompletedAt   *time.Time `gorm:"column:completed_at"`
+		UpdatedAt     *time.Time `gorm:"column:updated_at"`
+		ErrorMessage  *string    `gorm:"column:error_message"`
+	}
+
+	rows := make([]row, 0)
+	err := s.db.WithContext(ctx).
+		Table("network_scans").
+		Select("id, target_network, status, devices_found, completed_at, updated_at, error_message").
+		Where("status IN ?", []string{"completed", "failed", "cancelled"}).
+		Order("COALESCE(completed_at, updated_at) desc").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	link := "/devices"
+	result := make([]notificationCandidate, 0, len(rows))
+	for _, item := range rows {
+		status := strings.ToLower(strings.TrimSpace(item.Status))
+		target := strings.TrimSpace(item.TargetNetwork)
+		if target == "" {
+			target = "未知网段"
+		}
+
+		severity, title, content := scanNotificationSummary(status, target, item.DevicesFound, item.ErrorMessage)
+
+		timestamp := time.Now().UTC()
+		if item.CompletedAt != nil && !item.CompletedAt.IsZero() {
+			timestamp = item.CompletedAt.UTC()
+		} else if item.UpdatedAt != nil && !item.UpdatedAt.IsZero() {
+			timestamp = item.UpdatedAt.UTC()
+		}
+
+		notification := Notification{
+			ID:        fmt.Sprintf("scan-%s", strings.TrimSpace(item.ID)),
+			Type:      "system",
+			Title:     title,
+			Content:   content,
+			Timestamp: timestamp,
+			Read:      false,
+			Severity:  &severity,
+			Link:      &link,
+		}
+
+		result = append(result, notificationCandidate{
+			notification: notification,
+			timestamp:    timestamp,
+		})
+	}
+
+	return result, nil
+}
+
+func inspectionNotificationSummary(status string, name string, errorMessage *string) (severity string, title string, content string) {
+	switch status {
+	case "completed":
+		return "success", "巡检任务完成", fmt.Sprintf("巡检任务“%s”已完成", name)
+	case "failed":
+		msg := defaultStringPointer(errorMessage, "巡检执行失败")
+		return "warning", "巡检任务失败", fmt.Sprintf("巡检任务“%s”失败：%s", name, msg)
+	case "timeout":
+		msg := defaultStringPointer(errorMessage, "巡检执行超时")
+		return "warning", "巡检任务超时", fmt.Sprintf("巡检任务“%s”超时：%s", name, msg)
+	case "cancelled":
+		return "info", "巡检任务已取消", fmt.Sprintf("巡检任务“%s”已取消", name)
+	default:
+		return "info", "巡检任务更新", fmt.Sprintf("巡检任务“%s”状态更新：%s", name, status)
+	}
+}
+
+func reportNotificationSummary(status string, reportTitle string, errorMessage *string) (severity string, title string, content string) {
+	switch status {
+	case "completed":
+		return "success", "报表生成完成", fmt.Sprintf("报表“%s”已生成，可在报表中心查看", reportTitle)
+	case "failed":
+		msg := defaultStringPointer(errorMessage, "报表生成失败")
+		return "warning", "报表生成失败", fmt.Sprintf("报表“%s”生成失败：%s", reportTitle, msg)
+	default:
+		return "info", "报表状态更新", fmt.Sprintf("报表“%s”状态更新：%s", reportTitle, status)
+	}
+}
+
+func scanNotificationSummary(status string, target string, found int, errorMessage *string) (severity string, title string, content string) {
+	switch status {
+	case "completed":
+		return "success", "设备扫描完成", fmt.Sprintf("扫描 %s 完成，发现 %d 台设备", target, found)
+	case "failed":
+		msg := defaultStringPointer(errorMessage, "扫描失败")
+		return "warning", "设备扫描失败", fmt.Sprintf("扫描 %s 失败：%s", target, msg)
+	case "cancelled":
+		return "info", "设备扫描已取消", fmt.Sprintf("扫描 %s 已取消", target)
+	default:
+		return "info", "设备扫描状态更新", fmt.Sprintf("扫描 %s 状态更新：%s", target, status)
+	}
+}
+
+func defaultStringPointer(value *string, fallback string) string {
+	if value == nil {
+		return fallback
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return fallback
+	}
+	return trimmed
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

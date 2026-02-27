@@ -24,6 +24,7 @@ func (h DashboardHandler) Register(group *echo.Group) {
 	group.GET("/dashboard/recent-alerts", h.GetRecentAlerts)
 	group.GET("/dashboard/network-overview", h.GetNetworkOverview)
 	group.GET("/dashboard/bandwidth-stats", h.GetBandwidthStats)
+	group.GET("/dashboard/notifications", h.GetNotifications)
 }
 
 func (h DashboardHandler) GetOverview(c echo.Context) error {
@@ -181,6 +182,29 @@ func (h DashboardHandler) GetBandwidthStats(c echo.Context) error {
 	resp, err := h.Service.GetBandwidthStats(c.Request().Context())
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load bandwidth statistics")
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h DashboardHandler) GetNotifications(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+		return err
+	}
+
+	limit := parseIntDefault(c.QueryParam("limit"), 20)
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	resp, err := h.Service.GetNotifications(c.Request().Context(), limit)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load notifications")
 	}
 	return c.JSON(http.StatusOK, resp)
 }

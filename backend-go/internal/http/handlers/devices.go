@@ -39,6 +39,7 @@ func (h DevicesHandler) Register(group *echo.Group) {
 	group.PUT("/devices/:device_id", h.UpdateDevice)
 	group.DELETE("/devices/:device_id", h.DeleteDevice)
 	group.GET("/devices/groups", h.GetDeviceGroups)
+	group.GET("/devices/search", h.SearchDevices)
 	group.POST("/devices/scan", h.StartNetworkScan)
 	group.GET("/devices/scan/:scan_id", h.GetScanResult)
 	group.GET("/devices/scan/:scan_id/devices", h.GetScanDevices)
@@ -91,6 +92,55 @@ func (h DevicesHandler) GetDevices(c echo.Context) error {
 		"total":     total,
 		"page":      page,
 		"page_size": pageSize,
+	})
+}
+
+func (h DevicesHandler) SearchDevices(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "device service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "devices:read"); err != nil {
+		return err
+	}
+
+	query := strings.TrimSpace(c.QueryParam("q"))
+	limit := parseIntDefault(c.QueryParam("limit"), 10)
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	if query == "" {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"devices":   []interface{}{},
+			"total":     0,
+			"page":      1,
+			"page_size": limit,
+		})
+	}
+
+	result, total, err := h.Service.GetDevices(
+		c.Request().Context(),
+		1,
+		limit,
+		"",
+		"",
+		nil,
+		query,
+		nil,
+		true,
+	)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to search devices")
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"devices":   result,
+		"total":     total,
+		"page":      1,
+		"page_size": limit,
 	})
 }
 
@@ -589,11 +639,11 @@ func (h DevicesHandler) BatchDeleteDevices(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"success":      success,
-		"message":      message,
+		"success":       success,
+		"message":       message,
 		"deleted_count": deleted,
-		"failed_count": len(failed),
-		"failed_items": failed,
+		"failed_count":  len(failed),
+		"failed_items":  failed,
 	})
 }
 
@@ -1599,10 +1649,10 @@ func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"success":           true,
-		"device_id":         deviceID,
-		"metrics_collected": metrics,
-		"metrics_written":   result.DeviceMetrics,
+		"success":            true,
+		"device_id":          deviceID,
+		"metrics_collected":  metrics,
+		"metrics_written":    result.DeviceMetrics,
 		"interfaces_written": result.InterfaceMetrics,
 		"collection_time_ms": metrics.CollectionTime,
 	})
@@ -1640,12 +1690,12 @@ func (h DevicesHandler) BatchCollectMetrics(c echo.Context) error {
 	}
 
 	type collectResult struct {
-		DeviceID       int                    `json:"device_id"`
-		DeviceName     string                 `json:"device_name"`
-		Success        bool                   `json:"success"`
-		Error          string                 `json:"error,omitempty"`
-		MetricsWritten int                    `json:"metrics_written,omitempty"`
-		Metrics        *devices.SNMPMetrics   `json:"metrics,omitempty"`
+		DeviceID       int                  `json:"device_id"`
+		DeviceName     string               `json:"device_name"`
+		Success        bool                 `json:"success"`
+		Error          string               `json:"error,omitempty"`
+		MetricsWritten int                  `json:"metrics_written,omitempty"`
+		Metrics        *devices.SNMPMetrics `json:"metrics,omitempty"`
 	}
 
 	results := make([]collectResult, 0, len(deviceRows))
@@ -1719,10 +1769,10 @@ func (h DevicesHandler) BatchCollectMetrics(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"success":       successCount > 0,
-		"total":         len(req.DeviceIDs),
-		"collected":     successCount,
-		"failed":        len(results) - successCount,
-		"results":       results,
+		"success":   successCount > 0,
+		"total":     len(req.DeviceIDs),
+		"collected": successCount,
+		"failed":    len(results) - successCount,
+		"results":   results,
 	})
 }

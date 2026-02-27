@@ -74,6 +74,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 | 方法 | 端点 | 说明 |
 |------|------|------|
 | GET | `/devices` | 获取设备列表 |
+| GET | `/devices/search` | 设备搜索（支持 `q`、`limit`） |
 | GET | `/devices/:device_id` | 获取设备详情 |
 | POST | `/devices` | 创建设备 |
 | PUT | `/devices/:device_id` | 更新设备 |
@@ -352,8 +353,15 @@ curl -X GET "http://localhost:8001/api/v1/settings/users?page=1&page_size=20" \
 | 方法 | 端点 | 说明 |
 |------|------|------|
 | GET | `/dashboard/overview` | 仪表板概览 |
-| GET | `/dashboard/statistics` | 统计数据 |
-| GET | `/dashboard/kpi` | KPI指标 |
+| GET | `/dashboard/device-status` | 设备状态摘要 |
+| GET | `/dashboard/alert-summary` | 告警摘要 |
+| GET | `/dashboard/recent-activities` | 最近活动（支持 `?limit=`） |
+| GET | `/dashboard/system-status` | 系统服务状态 |
+| GET | `/dashboard/top-devices-by-alerts` | 告警最多设备（支持 `?limit=`） |
+| GET | `/dashboard/recent-alerts` | 最近告警（支持 `?limit=`） |
+| GET | `/dashboard/network-overview` | 网络概览 |
+| GET | `/dashboard/bandwidth-stats` | 带宽统计 |
+| GET | `/dashboard/notifications` | 通知中心聚合（支持 `?limit=`） |
 
 ---
 
@@ -361,7 +369,7 @@ curl -X GET "http://localhost:8001/api/v1/settings/users?page=1&page_size=20" \
 
 实时数据推送使用WebSocket协议。
 
-**连接地址**: `ws://localhost:8001/ws`
+**连接地址**: `ws://localhost:8001/api/v1/ws/{user_id}`
 
 详细文档: [WebSocket协议文档](websocket-contract.md)
 

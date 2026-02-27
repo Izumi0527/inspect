@@ -493,8 +493,10 @@ SNMP_MAX_CONCURRENT=20
 #### **前端环境变量 (frontend/.env.local)**
 ```bash
 # API配置
-NEXT_PUBLIC_API_URL=http://localhost:8001/api/v1
-NEXT_PUBLIC_WS_URL=ws://localhost:8001/ws
+# 注意：前端会自动拼接 `/api/v1`，因此这里不需要包含 `/api/v1`
+NEXT_PUBLIC_API_URL=http://localhost:8001
+# 注意：WebSocket 会自动拼接 `/api/v1/ws/{userId}`，因此这里不需要包含额外路径
+NEXT_PUBLIC_WS_URL=ws://localhost:8001
 
 # 应用配置
 NEXT_PUBLIC_APP_NAME=企业级网络设备巡检系统
@@ -1031,6 +1033,5 @@ Made with ❤️ by Development Team
 **项目版本**: v1.0.0 | **API版本**: v1.1 | **最后更新**: 2026-01-14
 
 </div>
-
 
 
