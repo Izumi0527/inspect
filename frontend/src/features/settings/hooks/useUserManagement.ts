@@ -4,6 +4,7 @@ import { usersApi } from '../api/users.api'
 import type {
   UserListResponse,
   UserStats,
+  RoleListResponse,
   CreateUserRequest,
   UpdateUserRequest,
   UserQueryParams,
@@ -40,6 +41,17 @@ export function useUserManagement() {
     queryKey: ['userStats'],
     queryFn: usersApi.getUserStats,
     staleTime: 1000 * 60 * 5, // 5分钟缓存
+  })
+
+  // 获取角色列表（用于创建/编辑用户）
+  const {
+    data: roleListData,
+    isLoading: isRolesLoading,
+    error: rolesError,
+  } = useQuery<RoleListResponse>({
+    queryKey: ['roleList'],
+    queryFn: usersApi.getRoleList,
+    staleTime: 1000 * 60 * 10, // 10分钟缓存
   })
 
   // 创建用户 mutation
@@ -177,16 +189,19 @@ export function useUserManagement() {
     page: userListData?.page || 1,
     pageSize: userListData?.pageSize || 20,
     stats: statsData,
+    roles: roleListData?.roles || [],
     queryParams,
 
     // 状态
     isLoading,
+    isRolesLoading,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
     isChangingPassword: changePasswordMutation.isPending,
     isBatchOperating: batchOperationMutation.isPending,
     error,
+    rolesError,
 
     // 查询方法
     updateQueryParams,

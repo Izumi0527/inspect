@@ -12,13 +12,9 @@ export interface User {
   fullName: string
   role: UserRole
   status: UserStatus
-  department?: string
-  phoneNumber?: string
   lastLoginAt: string | null
   createdAt: string
-  createdBy: string
   updatedAt: string
-  updatedBy: string
 }
 
 // 角色信息
@@ -27,16 +23,23 @@ export interface Role {
   name: UserRole
   displayName: string
   description: string
-  permissions: string[]
+  permissions: Permission[]
+  permissionIds?: string[]
   userCount: number
+  isBuiltIn?: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
 // 权限信息
 export interface Permission {
   id: string
+  name: string
+  displayName: string
   module: string
   action: string
-  description: string
+  resource: string
+  description?: string | null
 }
 
 // 用户列表响应
@@ -59,8 +62,8 @@ export interface CreateUserRequest {
   password: string
   fullName: string
   role: UserRole
-  department?: string
-  phoneNumber?: string
+  status?: UserStatus
+  forcePasswordChange?: boolean
 }
 
 // 更新用户请求
@@ -69,8 +72,6 @@ export interface UpdateUserRequest {
   fullName?: string
   role?: UserRole
   status?: UserStatus
-  department?: string
-  phoneNumber?: string
 }
 
 // 修改密码请求

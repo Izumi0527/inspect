@@ -3,6 +3,8 @@ import type {
   User,
   UserListResponse,
   RoleListResponse,
+  Role,
+  Permission,
   UserStats,
   CreateUserRequest,
   UpdateUserRequest,
@@ -44,14 +46,36 @@ export const usersApi = {
     if (sortOrder) queryParams.sort_order = sortOrder
 
     const response = await httpClient.get<{
-      users: User[]
+      users: Array<{
+        id: string
+        username: string
+        email: string
+        fullName?: string | null
+        role: string
+        status: string
+        lastLoginAt?: string | null
+        createdAt?: string
+        updatedAt?: string
+      }>
       total_count: number
       page: number
       page_size: number
     }>('/settings/users', { params: queryParams })
 
+    const users: User[] = (response.users || []).map((item) => ({
+      id: item.id,
+      username: item.username,
+      email: item.email,
+      fullName: item.fullName || '',
+      role: (item.role as any) || 'viewer',
+      status: (item.status as any) || 'active',
+      lastLoginAt: item.lastLoginAt || null,
+      createdAt: item.createdAt || '',
+      updatedAt: item.updatedAt || '',
+    }))
+
     return {
-      users: response.users,
+      users,
       totalCount: response.total_count,
       page: response.page,
       pageSize: response.page_size,
@@ -75,8 +99,8 @@ export const usersApi = {
       password: data.password,
       full_name: data.fullName,
       role: data.role,
-      department: data.department,
-      phone_number: data.phoneNumber,
+      status: data.status,
+      force_password_change: data.forcePasswordChange,
     }
 
     return await httpClient.post<User>('/settings/users', snakeCaseData)
@@ -91,8 +115,6 @@ export const usersApi = {
     if (data.fullName !== undefined) snakeCaseData.full_name = data.fullName
     if (data.role !== undefined) snakeCaseData.role = data.role
     if (data.status !== undefined) snakeCaseData.status = data.status
-    if (data.department !== undefined) snakeCaseData.department = data.department
-    if (data.phoneNumber !== undefined) snakeCaseData.phone_number = data.phoneNumber
 
     return await httpClient.put<User>(`/settings/users/${userId}`, snakeCaseData)
   },
@@ -153,17 +175,28 @@ export const usersApi = {
 
   /**
    * 获取角色列表
-   * 注意: 后端暂不支持角色管理端点，返回默认角色列表
+   * ✅ 使用后端真实端点: GET /settings/roles
    */
   getRoleList: async (): Promise<RoleListResponse> => {
-    // 后端暂不支持 /settings/roles 端点，返回默认角色
-    return {
-      roles: [
-        { id: '1', name: 'admin', displayName: '管理员', description: '系统管理员', permissions: [], userCount: 0 },
-        { id: '2', name: 'operator', displayName: '操作员', description: '普通操作员', permissions: [], userCount: 0 },
-        { id: '3', name: 'viewer', displayName: '只读用户', description: '只读权限', permissions: [], userCount: 0 },
-      ],
-    }
+    const roles = await httpClient.get<Role[]>('/settings/roles')
+    return { roles: roles || [] }
+  },
+
+  /**
+   * 获取权限列表
+   * ✅ 使用后端真实端点: GET /settings/permissions
+   */
+  getPermissionList: async (): Promise<Permission[]> => {
+    const permissions = await httpClient.get<Permission[]>('/settings/permissions')
+    return permissions || []
+  },
+
+  /**
+   * 获取指定用户的权限（按角色展开）
+   * ✅ 使用后端真实端点: GET /settings/users/:id/permissions
+   */
+  getUserPermissions: async (userId: string): Promise<Permission[]> => {
+    return await httpClient.get<Permission[]>(`/settings/users/${userId}/permissions`)
   },
 
   /**

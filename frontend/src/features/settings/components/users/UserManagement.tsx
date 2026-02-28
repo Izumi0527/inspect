@@ -16,9 +16,17 @@ import {
   Unlock,
   CheckCircle,
   XCircle,
+  Pencil,
+  KeyRound,
+  Shield,
+  AlertCircle,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import type { User, UserRole, UserStatus } from '../../types/users.types'
+import type { Role } from '../../types/users.types'
+import { UserFormDialog } from './UserFormDialog'
+import { UserPasswordDialog } from './UserPasswordDialog'
+import { UserPermissionsDialog } from './UserPermissionsDialog'
 
 // 角色映射
 const roleLabels: Record<UserRole, string> = {
@@ -51,17 +59,39 @@ export function UserManagement() {
     page,
     pageSize,
     stats,
+    roles,
     isLoading,
+    isRolesLoading,
     isDeleting,
+    isCreating,
+    isUpdating,
+    isChangingPassword,
     updateQueryParams,
     deleteUser,
+    createUser,
+    updateUser,
+    changePassword,
     activateUser,
     deactivateUser,
     lockUser,
     unlockUser,
+    error,
+    rolesError,
   } = useUserManagement()
 
   const [keyword, setKeyword] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editUser, setEditUser] = useState<User | null>(null)
+  const [passwordUser, setPasswordUser] = useState<User | null>(null)
+  const [permissionsUser, setPermissionsUser] = useState<User | null>(null)
+
+  const effectiveRoles: Role[] = roles.length
+    ? roles
+    : [
+        { id: 'admin', name: 'admin', displayName: '管理员', description: '系统管理员', permissions: [], userCount: 0 },
+        { id: 'operator', name: 'operator', displayName: '操作员', description: '普通操作员', permissions: [], userCount: 0 },
+        { id: 'viewer', name: 'viewer', displayName: '只读用户', description: '只读权限', permissions: [], userCount: 0 },
+      ]
 
   // 处理搜索
   const handleSearch = useCallback(() => {
@@ -132,8 +162,77 @@ export function UserManagement() {
     )
   }
 
+  // 错误状态
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 flex items-start space-x-4">
+          <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-lg font-semibold text-red-900 dark:text-red-200 mb-2">
+              加载用户列表失败
+            </h3>
+            <p className="text-sm text-red-700 dark:text-red-300">
+              {(error as Error).message || '无法连接到服务器，请稍后重试'}
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 space-y-4 flex-1 flex flex-col min-h-0">
+      <UserFormDialog
+        open={createOpen}
+        mode="create"
+        roles={effectiveRoles}
+        isSubmitting={isCreating || isRolesLoading}
+        onOpenChange={setCreateOpen}
+        onCreate={async (data) => {
+          await createUser(data)
+          toast.success('用户创建成功')
+        }}
+        onUpdate={async () => {}}
+      />
+
+      <UserFormDialog
+        open={!!editUser}
+        mode="edit"
+        roles={effectiveRoles}
+        user={editUser}
+        isSubmitting={isUpdating || isRolesLoading}
+        onOpenChange={(open) => {
+          if (!open) setEditUser(null)
+        }}
+        onCreate={async () => {}}
+        onUpdate={async (userId, data) => {
+          await updateUser(userId, data)
+          toast.success('用户已更新')
+        }}
+      />
+
+      <UserPasswordDialog
+        open={!!passwordUser}
+        user={passwordUser}
+        isSubmitting={isChangingPassword}
+        onOpenChange={(open) => {
+          if (!open) setPasswordUser(null)
+        }}
+        onSubmit={async (userId, newPassword) => {
+          await changePassword(userId, newPassword)
+          toast.success('密码已重置')
+        }}
+      />
+
+      <UserPermissionsDialog
+        open={!!permissionsUser}
+        user={permissionsUser}
+        onOpenChange={(open) => {
+          if (!open) setPermissionsUser(null)
+        }}
+      />
+
       {/* 统计卡片 */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -194,11 +293,16 @@ export function UserManagement() {
               搜索
             </Button>
           </div>
-          <Button>
+          <Button onClick={() => setCreateOpen(true)} disabled={isRolesLoading}>
             <UserPlus className="w-4 h-4 mr-2" />
             添加用户
           </Button>
         </div>
+        {rolesError && (
+          <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+            {(rolesError as Error).message || '角色列表加载失败，已使用默认角色列表'}
+          </div>
+        )}
       </Card>
 
       {/* 用户列表 */}
@@ -233,6 +337,30 @@ export function UserManagement() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPermissionsUser(user)}
+                        title="查看权限"
+                      >
+                        <Shield className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPasswordUser(user)}
+                        title="重置密码"
+                      >
+                        <KeyRound className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditUser(user)}
+                        title="编辑用户"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                       {user.status === 'locked' && (
                         <Button
                           variant="ghost"
