@@ -83,6 +83,22 @@ function Main {
     Write-ColorOutput "  文件: $($fileInfo.Name)" "Gray"
     Write-ColorOutput "  大小: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" "Gray"
     Write-ColorOutput "  编译时间: $($fileInfo.LastWriteTime)" "Gray"
+
+    # 提醒：如果 app.exe 编译时间早于源码修改时间，启动的可能不是最新代码
+    try {
+        $sourceFiles = Get-ChildItem -Path "backend-go" -Recurse -Filter "*.go" -File -ErrorAction SilentlyContinue
+        if ($sourceFiles -and $sourceFiles.Count -gt 0) {
+            $latestSourceFile = $sourceFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($latestSourceFile -and $fileInfo.LastWriteTime -lt $latestSourceFile.LastWriteTime) {
+                Write-ColorOutput "⚠️ 警告: app.exe 编译时间早于源码最新修改时间 ($($latestSourceFile.LastWriteTime))" "Yellow"
+                Write-ColorOutput "  当前启动的后端可能未包含最新代码变更" "Yellow"
+                Write-ColorOutput "  如需更新，请执行: cd backend-go; go build -o app.exe ./cmd/api" "Gray"
+            }
+        }
+    }
+    catch {
+        # 忽略检查失败（例如权限/路径问题）
+    }
     
     # 检查环境配置
     if (-not (Test-Path ".env")) {

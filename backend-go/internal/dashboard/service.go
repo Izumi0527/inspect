@@ -253,7 +253,6 @@ func (s *Service) MarkNotificationsRead(ctx context.Context, userID string, ids 
 			DoUpdates: clause.Assignments(map[string]interface{}{
 				"read_at":      now,
 				"updated_at":   now,
-				"dismissed_at": gorm.Expr("dismissed_at"),
 			}),
 		}).
 		Create(&states).Error
@@ -305,7 +304,6 @@ func (s *Service) DismissNotifications(ctx context.Context, userID string, ids [
 			DoUpdates: clause.Assignments(map[string]interface{}{
 				"dismissed_at": now,
 				"updated_at":   now,
-				"read_at":      gorm.Expr("read_at"),
 			}),
 		}).
 		Create(&states).Error
