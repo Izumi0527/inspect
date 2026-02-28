@@ -9,6 +9,9 @@ import type {
   RestoreBackupRequest,
 } from '../types/backup.types'
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_PREFIX = '/api/v1'
+
 /**
  * 备份管理 API
  * 提供备份配置、历史记录、创建、恢复、删除、下载等功能
@@ -96,10 +99,10 @@ export const backupApi = {
 
   /**
    * 下载备份文件
-   * ✅ 修复: 添加 /v1 版本号前缀
+   * ✅ 兼容前后端分离部署：使用 NEXT_PUBLIC_API_URL 走后端绝对地址
    */
   downloadBackup: async (backupId: string, fileName: string): Promise<void> => {
-    const response = await fetch(`/api/v1/settings/backup/${backupId}/download`, {
+    const response = await fetch(`${API_BASE_URL}${API_PREFIX}/settings/backup/${backupId}/download`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${TokenManager.getAccessToken() || ''}`,

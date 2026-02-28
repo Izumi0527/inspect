@@ -5,6 +5,9 @@ import type {
   AuditLogQueryParams,
 } from '../types/audit.types'
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_PREFIX = '/api/v1'
+
 /**
  * 审计日志 API
  */
@@ -134,8 +137,8 @@ export const auditApi = {
     if (params.status) requestBody.filters.status = params.status
 
     // 调用后端API接口（POST /api/v1/settings/audit/logs/export）
-    // ✅ 修复: 添加 /settings 路径前缀
-    const response = await fetch('/api/v1/settings/audit/logs/export', {
+    // ✅ 兼容前后端分离部署：使用 NEXT_PUBLIC_API_URL 走后端绝对地址
+    const response = await fetch(`${API_BASE_URL}${API_PREFIX}/settings/audit/logs/export`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
