@@ -112,8 +112,11 @@ func New() (*App, error) {
 		OutputDir: cfg.ReportsOutputDir,
 	}
 
+	// 提前创建 settingsService：inspection/scheduler/alerts 通用依赖
+	settingsService := settings.NewService(dbConn, redisClient, cfg, log)
+
 	alertService := alerts.NewService(dbConn, log)
-	alertEvaluator := alerts.NewEvaluator(dbConn, wsManager, log)
+	alertEvaluator := alerts.NewEvaluator(dbConn, wsManager, settingsService, log)
 	alertsHandler := handlers.AlertsHandler{
 		Service: alertService,
 		Auth:    authService,
@@ -125,9 +128,6 @@ func New() (*App, error) {
 		Service: escalationService,
 		Auth:    authService,
 	}
-
-	// 提前创建 settingsService，因为 inspectionHandler 需要它来解析用户名
-	settingsService := settings.NewService(dbConn, redisClient, cfg, log)
 
 	inspectionHandler := handlers.InspectionHandler{
 		Service:         inspectionService,

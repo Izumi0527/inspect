@@ -7,10 +7,11 @@ import (
 	"strings"
 	"time"
 
-	gormlogger "gorm.io/gorm/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
@@ -18,9 +19,9 @@ import (
 type silentLogger struct{}
 
 func (silentLogger) LogMode(gormlogger.LogLevel) gormlogger.Interface { return silentLogger{} }
-func (silentLogger) Info(context.Context, string, ...interface{})      {}
-func (silentLogger) Warn(context.Context, string, ...interface{})      {}
-func (silentLogger) Error(context.Context, string, ...interface{})     {}
+func (silentLogger) Info(context.Context, string, ...interface{})     {}
+func (silentLogger) Warn(context.Context, string, ...interface{})     {}
+func (silentLogger) Error(context.Context, string, ...interface{})    {}
 func (silentLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
 }
 
@@ -31,14 +32,16 @@ type Evaluator struct {
 	db        *gorm.DB
 	wsManager *ws.Manager
 	logger    *zap.Logger
+	settings  *settings.Service
 }
 
 // NewEvaluator 创建告警评估引擎
-func NewEvaluator(db *gorm.DB, wsManager *ws.Manager, logger *zap.Logger) *Evaluator {
+func NewEvaluator(db *gorm.DB, wsManager *ws.Manager, settingsService *settings.Service, logger *zap.Logger) *Evaluator {
 	return &Evaluator{
 		db:        db,
 		wsManager: wsManager,
 		logger:    logger,
+		settings:  settingsService,
 	}
 }
 
@@ -496,7 +499,122 @@ func (e *Evaluator) createOrUpdateAlert(ctx context.Context, rule AlertRule, dm 
 	// 通过 WebSocket 推送实时告警通知
 	e.broadcastAlert(alert, dm)
 
+	// 触发外部通知（邮件/Webhook）。仅对新建告警触发一次，避免重复发生时刷屏。
+	e.dispatchExternalNotifications(rule, alert, dm)
+
 	return true, nil
+}
+
+func (e *Evaluator) dispatchExternalNotifications(rule AlertRule, alert Alert, dm deviceLatestMetrics) {
+	if e == nil || e.settings == nil {
+		return
+	}
+	if rule.NotificationEnabled != nil && !*rule.NotificationEnabled {
+		return
+	}
+
+	// 告警评估在调度器里周期运行，通知发送放到异步，避免阻塞主循环。
+	go func() {
+		ctx := context.Background()
+
+		// Email
+		if rule.EmailEnabled != nil && *rule.EmailEnabled {
+			if e.settings.EmailNotificationsEnabled(ctx) {
+				recipients := decodeRecipients([]byte(rule.EmailRecipients))
+				if len(recipients) > 0 {
+					subject := fmt.Sprintf("[告警][%s] %s", strings.ToUpper(alert.Severity), alert.Title)
+					content := buildExternalAlertContent(alert, dm, rule)
+					for _, recipient := range recipients {
+						if err := e.settings.SendEmail(ctx, recipient, subject, content); err != nil && e.logger != nil {
+							e.logger.Warn("send alert email failed", zap.Error(err), zap.String("recipient", recipient))
+						}
+					}
+				}
+			}
+		}
+
+		// Webhook
+		if rule.WebhookEnabled != nil && *rule.WebhookEnabled {
+			if e.settings.WebhookNotificationsEnabled(ctx) {
+				url := ""
+				if rule.WebhookURL != nil {
+					url = strings.TrimSpace(*rule.WebhookURL)
+				}
+
+				payload := map[string]interface{}{
+					"event":     "alert.created",
+					"timestamp": time.Now().UTC().Format(time.RFC3339),
+					"alert": map[string]interface{}{
+						"id":        alert.ID,
+						"device_id": alert.DeviceID,
+						"title":     alert.Title,
+						"message":   alert.Message,
+						"severity":  alert.Severity,
+						"category":  alert.Category,
+						"status":    alert.Status,
+					},
+					"rule": map[string]interface{}{
+						"id":   rule.ID,
+						"name": rule.Name,
+					},
+					"device": map[string]interface{}{
+						"id":   dm.DeviceID,
+						"name": dm.DeviceName,
+						"ip":   dm.IPAddress,
+						"type": dm.DeviceType,
+					},
+				}
+
+				if _, err := e.settings.SendWebhook(ctx, settings.WebhookSendInput{
+					URL:     url,
+					Method:  "",
+					Headers: nil,
+					Payload: payload,
+				}); err != nil && e.logger != nil {
+					e.logger.Warn("send alert webhook failed", zap.Error(err))
+				}
+			}
+		}
+	}()
+}
+
+func decodeRecipients(raw []byte) []string {
+	if len(raw) == 0 {
+		return []string{}
+	}
+
+	recipients := make([]string, 0)
+	_ = json.Unmarshal(raw, &recipients)
+
+	result := make([]string, 0, len(recipients))
+	for _, item := range recipients {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		result = append(result, trimmed)
+	}
+	return result
+}
+
+func buildExternalAlertContent(alert Alert, dm deviceLatestMetrics, rule AlertRule) string {
+	lines := []string{
+		"告警通知",
+		"",
+		fmt.Sprintf("告警标题：%s", alert.Title),
+		fmt.Sprintf("告警级别：%s", strings.ToUpper(alert.Severity)),
+		fmt.Sprintf("告警分类：%s", alert.Category),
+		fmt.Sprintf("告警状态：%s", alert.Status),
+		"",
+		fmt.Sprintf("设备名称：%s", dm.DeviceName),
+		fmt.Sprintf("设备IP：%s", dm.IPAddress),
+		fmt.Sprintf("设备类型：%s", dm.DeviceType),
+		"",
+		fmt.Sprintf("规则名称：%s", rule.Name),
+		"",
+		fmt.Sprintf("告警内容：%s", alert.Message),
+	}
+	return strings.Join(lines, "\n")
 }
 
 // autoResolveAlert 当指标恢复正常时自动解决告警
@@ -663,10 +781,10 @@ func normalizeMetricName(name string) string {
 func (e *Evaluator) evaluateDeviceConnectivity(ctx context.Context, deviceMetrics []deviceLatestMetrics) (created int, resolved int) {
 	// 查询所有被监控设备的状态
 	type statusRow struct {
-		ID        int     `gorm:"column:id"`
-		Name      string  `gorm:"column:name"`
-		IPAddress string  `gorm:"column:ip_address"`
-		Status    string  `gorm:"column:status"`
+		ID        int    `gorm:"column:id"`
+		Name      string `gorm:"column:name"`
+		IPAddress string `gorm:"column:ip_address"`
+		Status    string `gorm:"column:status"`
 	}
 
 	var devices []statusRow
@@ -718,7 +836,7 @@ func (e *Evaluator) createConnectivityAlert(ctx context.Context, deviceID int, d
 			Updates(map[string]interface{}{
 				"last_occurred":    now,
 				"occurrence_count": gorm.Expr("COALESCE(occurrence_count, 0) + 1"),
-				"updated_at":      now,
+				"updated_at":       now,
 			}).Error
 	}
 
@@ -803,15 +921,15 @@ func (e *Evaluator) resolveConnectivityAlert(ctx context.Context, deviceID int) 
 // metricNameAliases 指标名称别名映射
 // 规则中可能使用的名称 → 实际存储在 device_metrics 中的名称
 var metricNameAliases = map[string][]string{
-	"cpu_usage":      {"cpu_usage", "cpu", "cpu_utilization", "cpu_load"},
-	"memory_usage":   {"memory_usage", "memory", "mem_usage", "mem_utilization"},
-	"disk_usage":     {"disk_usage", "disk", "disk_utilization", "storage_usage"},
-	"temperature":    {"temperature", "temp", "cpu_temperature", "device_temperature"},
-	"bandwidth_in":   {"bandwidth_in", "network_bytes_in", "throughput_in", "inbound_bandwidth"},
-	"bandwidth_out":  {"bandwidth_out", "network_bytes_out", "throughput_out", "outbound_bandwidth"},
-	"packet_loss":    {"packet_loss", "loss_rate"},
-	"response_time":  {"response_time", "latency", "rtt"},
-	"uptime":         {"uptime", "system_uptime"},
+	"cpu_usage":     {"cpu_usage", "cpu", "cpu_utilization", "cpu_load"},
+	"memory_usage":  {"memory_usage", "memory", "mem_usage", "mem_utilization"},
+	"disk_usage":    {"disk_usage", "disk", "disk_utilization", "storage_usage"},
+	"temperature":   {"temperature", "temp", "cpu_temperature", "device_temperature"},
+	"bandwidth_in":  {"bandwidth_in", "network_bytes_in", "throughput_in", "inbound_bandwidth"},
+	"bandwidth_out": {"bandwidth_out", "network_bytes_out", "throughput_out", "outbound_bandwidth"},
+	"packet_loss":   {"packet_loss", "loss_rate"},
+	"response_time": {"response_time", "latency", "rtt"},
+	"uptime":        {"uptime", "system_uptime"},
 }
 
 // findMetricValue 在设备指标中查找匹配的指标值

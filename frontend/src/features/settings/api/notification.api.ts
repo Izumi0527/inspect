@@ -96,11 +96,40 @@ export const notificationApi = {
 
   /**
    * 批量保存所有通知配置
-   * 注意: 后端暂不支持批量更新通知配置
+   * ✅ 使用统一批量配置端点: POST /settings/general/bulk
    */
-  saveAll: async (_data: NotificationSettingsResponse): Promise<void> => {
-    console.warn('后端暂不支持批量更新通知配置')
-    return Promise.resolve()
+  saveAll: async (data: NotificationSettingsResponse): Promise<void> => {
+    const settings: Record<string, any> = {
+      // Email
+      'notification.email.enabled': data.emailNotification.enabled,
+      'notification.email.smtp_host': data.emailNotification.smtpHost,
+      'notification.email.smtp_port': data.emailNotification.smtpPort,
+      'notification.email.smtp_user': data.emailNotification.smtpUser,
+      'notification.email.smtp_password': data.emailNotification.smtpPassword,
+      'notification.email.smtp_use_tls': data.emailNotification.smtpUseTls,
+      'notification.email.sender_email': data.emailNotification.senderEmail,
+      'notification.email.sender_name': data.emailNotification.senderName,
+
+      // SMS（暂不做真实发送，但配置可落库）
+      'notification.sms.enabled': data.smsNotification.enabled,
+      'notification.sms.provider': data.smsNotification.provider,
+      'notification.sms.api_key': data.smsNotification.apiKey,
+      'notification.sms.api_secret': data.smsNotification.apiSecret,
+      'notification.sms.sign_name': data.smsNotification.signName,
+      'notification.sms.template_code': data.smsNotification.templateCode,
+
+      // Webhook
+      'notification.webhook.enabled': data.webhookNotification.enabled,
+      'notification.webhook.url': data.webhookNotification.url,
+      'notification.webhook.method': data.webhookNotification.method,
+      'notification.webhook.headers': data.webhookNotification.headers,
+      'notification.webhook.auth_type': data.webhookNotification.authType,
+      'notification.webhook.auth_token': data.webhookNotification.authToken || '',
+      'notification.webhook.retry_count': data.webhookNotification.retryCount,
+      'notification.webhook.timeout': data.webhookNotification.timeout,
+    }
+
+    await httpClient.post('/settings/general/bulk', { settings })
   },
 
   /**
@@ -120,7 +149,19 @@ export const notificationApi = {
   /**
    * 测试Webhook通知
    */
-  testWebhookNotification: async (): Promise<TestResult> => {
-    return await httpClient.post<TestResult>('/settings/notifications/test-webhook', {})
+  testWebhookNotification: async (data: Partial<WebhookNotificationConfig> = {}): Promise<TestResult> => {
+    const payload: Record<string, any> = {}
+    if (data.url) payload.url = data.url
+    if (data.method) payload.method = data.method
+    if (data.headers) payload.headers = data.headers
+
+    // 提供一个最小的测试事件载荷
+    payload.payload = {
+      event: 'test',
+      message: '这是一个测试Webhook请求',
+      timestamp: new Date().toISOString(),
+    }
+
+    return await httpClient.post<TestResult>('/settings/notifications/test-webhook', payload)
   },
 }

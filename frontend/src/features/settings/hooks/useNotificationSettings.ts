@@ -149,8 +149,22 @@ export function useNotificationSettings() {
 
   // 测试Webhook通知
   const testWebhookNotification = useCallback(async () => {
-    return await testWebhookMutation.mutateAsync()
-  }, [testWebhookMutation])
+    const headers: Record<string, string> = { ...(webhookNotification.headers || {}) }
+    const token = webhookNotification.authToken || ''
+    if (webhookNotification.authType === 'bearer' && token) {
+      headers['Authorization'] = `Bearer ${token}`
+    } else if (webhookNotification.authType === 'basic' && token) {
+      headers['Authorization'] = `Basic ${token}`
+    } else if (webhookNotification.authType === 'apikey' && token) {
+      headers['X-API-Key'] = token
+    }
+
+    return await testWebhookMutation.mutateAsync({
+      url: webhookNotification.url,
+      method: webhookNotification.method,
+      headers,
+    })
+  }, [testWebhookMutation, webhookNotification])
 
   return {
     emailNotification,
