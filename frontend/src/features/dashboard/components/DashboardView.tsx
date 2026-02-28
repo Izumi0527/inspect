@@ -31,14 +31,6 @@ export const DashboardView: React.FC = () => {
     config.refreshInterval
   )
 
-  const handleActionComplete = (actionType: string) => {
-    console.log(`操作完成: ${actionType}`)
-    // 可以在这里添加成功提示或刷新数据
-    if (actionType === 'deviceScan') {
-      refreshStats()
-    }
-  }
-
   const handleRetry = () => {
     loadData()
   }
@@ -131,9 +123,7 @@ export const DashboardView: React.FC = () => {
               />
 
               {/* Quick Actions */}
-              <QuickActionsCard
-                onActionComplete={handleActionComplete}
-              />
+              <QuickActionsCard />
             </div>
 
             {/* Main Content Card - Expands to bottom */}

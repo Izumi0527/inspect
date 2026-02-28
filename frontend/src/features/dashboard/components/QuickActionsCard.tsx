@@ -1,15 +1,11 @@
 import React from 'react'
+import { useRouter } from 'next/navigation'
 import { Monitor, Play, Database, Settings } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/atoms'
 import { useQuickActions } from '../hooks/useDashboard'
 
-interface QuickActionsCardProps {
-  onActionComplete?: (actionType: string) => void
-}
-
-export const QuickActionsCard: React.FC<QuickActionsCardProps> = ({ 
-  onActionComplete 
-}) => {
+export const QuickActionsCard: React.FC = () => {
+  const router = useRouter()
   const { loading, error, executeAction } = useQuickActions()
 
   const actions = [
@@ -21,7 +17,8 @@ export const QuickActionsCard: React.FC<QuickActionsCardProps> = ({
       colorScheme: {
         hover: 'hover:bg-blue-50 hover:text-blue-600',
         text: 'text-blue-600'
-      }
+      },
+      targetPath: '/devices'
     },
     {
       key: 'manualInspection',
@@ -31,7 +28,8 @@ export const QuickActionsCard: React.FC<QuickActionsCardProps> = ({
       colorScheme: {
         hover: 'hover:bg-green-50 hover:text-green-600',
         text: 'text-green-600'
-      }
+      },
+      targetPath: '/inspection'
     },
     {
       key: 'generateReport',
@@ -41,7 +39,8 @@ export const QuickActionsCard: React.FC<QuickActionsCardProps> = ({
       colorScheme: {
         hover: 'hover:bg-purple-50 hover:text-purple-600',
         text: 'text-purple-600'
-      }
+      },
+      targetPath: '/reports'
     },
     {
       key: 'systemConfig',
@@ -51,17 +50,16 @@ export const QuickActionsCard: React.FC<QuickActionsCardProps> = ({
       colorScheme: {
         hover: 'hover:bg-orange-50 hover:text-orange-600',
         text: 'text-orange-600'
-      }
+      },
+      targetPath: '/settings'
     }
   ]
 
-  const handleActionClick = async (actionKey: string) => {
-    try {
-      await executeAction(actionKey)
-      onActionComplete?.(actionKey)
-    } catch (err) {
+  const handleActionClick = (actionKey: string, targetPath: string) => {
+    void executeAction(actionKey).catch((err) => {
       console.error(`执行操作 ${actionKey} 失败:`, err)
-    }
+    })
+    router.push(targetPath)
   }
 
   return (
@@ -86,7 +84,7 @@ export const QuickActionsCard: React.FC<QuickActionsCardProps> = ({
                 key={action.key}
                 variant="outline"
                 disabled={isLoading}
-                onClick={() => handleActionClick(action.key)}
+                onClick={() => handleActionClick(action.key, action.targetPath)}
                 className={`h-20 flex flex-col items-center justify-center gap-2 ${action.colorScheme.hover} transition-colors`}
               >
                 {isLoading ? (

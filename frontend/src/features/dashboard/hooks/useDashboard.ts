@@ -148,21 +148,18 @@ export function useQuickActions() {
           await performDeviceScan('192.168.1.0/24') // 传递默认子网
           break
         case 'manualInspection':
-          // 跳转到巡检任务创建页面
-          window.location.href = '/inspection/tasks?action=create'
           break
         case 'generateReport':
           await generateReport('inspection-summary') // 生成巡检汇总报告
           break
         case 'systemConfig':
-          // 跳转到系统设置页面
-          window.location.href = '/settings'
           break
         default:
           throw new Error(`未知的操作类型: ${actionType}`)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '操作执行失败')
+      throw err
     } finally {
       setLoading(prev => ({ ...prev, [actionType]: false }))
     }
