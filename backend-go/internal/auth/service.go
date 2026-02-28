@@ -24,6 +24,7 @@ var (
 	ErrTokenInvalid      = errors.New("invalid token")
 	ErrTokenTypeMismatch = errors.New("invalid token type")
 	ErrUserInactive      = errors.New("inactive user")
+	ErrUserLocked        = errors.New("user locked")
 )
 
 type Service struct {
@@ -34,6 +35,7 @@ type Service struct {
 
 type Claims struct {
 	Type string `json:"type"`
+	Sid  string `json:"sid,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -47,6 +49,8 @@ type UserRecord struct {
 	IsActive       *bool      `gorm:"column:is_active"`
 	HashedPassword string     `gorm:"column:hashed_password"`
 	LastLoginAt    *time.Time `gorm:"column:last_login_at"`
+	LoginAttempts  *int       `gorm:"column:login_attempts"`
+	LockedUntil    *time.Time `gorm:"column:locked_until"`
 	CreatedAt      *time.Time `gorm:"column:created_at"`
 	UpdatedAt      *time.Time `gorm:"column:updated_at"`
 }
@@ -84,9 +88,21 @@ func (s *Service) AuthenticateUser(ctx context.Context, username string, passwor
 	if !isUserActive(user) {
 		return nil, nil
 	}
+
+	// 登录锁定检查（安全策略：security.password.max_login_attempts / lockout_duration）
+	if isUserLocked(user) {
+		return nil, ErrUserLocked
+	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.HashedPassword), []byte(password)); err != nil {
+		// 失败次数累加并可能触发锁定
+		policy := s.loadSecurityPolicy(ctx)
+		_ = s.onLoginFailed(ctx, user.ID, policy)
 		return nil, nil
 	}
+
+	// 登录成功：清理失败次数/锁定状态
+	_ = s.onLoginSucceeded(ctx, user.ID)
 	return user, nil
 }
 
@@ -103,7 +119,7 @@ func (s *Service) GetUserByUsername(ctx context.Context, username string) (*User
 	var user UserRecord
 	if err := s.db.WithContext(ctx).
 		Table("users").
-		Select("id, username, email, full_name, avatar, role, is_active, hashed_password, last_login_at, created_at, updated_at").
+		Select("id, username, email, full_name, avatar, role, is_active, hashed_password, last_login_at, login_attempts, locked_until, created_at, updated_at").
 		Where("username = ?", normalized).
 		Take(&user).Error; err != nil {
 		return nil, err
@@ -175,19 +191,31 @@ func (s *Service) GetPermissionsByRole(ctx context.Context, role string) ([]stri
 	return result, nil
 }
 
-func (s *Service) CreateAccessToken(username string) (string, int, error) {
-	expiresIn := s.cfg.AccessTokenExpireMinutes * 60
+func (s *Service) CreateAccessToken(username string, sid string, expireMinutes int) (string, int, error) {
+	minutes := expireMinutes
+	if minutes <= 0 {
+		minutes = s.cfg.AccessTokenExpireMinutes
+	}
+	expiresIn := minutes * 60
 	expireAt := time.Now().UTC().Add(time.Duration(expiresIn) * time.Second)
-	token, err := s.createToken(username, accessTokenType, expireAt)
+	token, err := s.createToken(username, accessTokenType, sid, expireAt)
 	if err != nil {
 		return "", 0, err
 	}
 	return token, expiresIn, nil
 }
 
-func (s *Service) CreateRefreshToken(username string) (string, error) {
-	expireAt := time.Now().UTC().Add(time.Duration(s.cfg.RefreshTokenExpireDays) * 24 * time.Hour)
-	return s.createToken(username, refreshTokenType, expireAt)
+func (s *Service) CreateRefreshToken(username string, sid string, expireDays int) (string, time.Time, error) {
+	days := expireDays
+	if days <= 0 {
+		days = s.cfg.RefreshTokenExpireDays
+	}
+	expireAt := time.Now().UTC().Add(time.Duration(days) * 24 * time.Hour)
+	token, err := s.createToken(username, refreshTokenType, sid, expireAt)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return token, expireAt, nil
 }
 
 func (s *Service) VerifyToken(tokenStr string, expectedType string) (*Claims, error) {
@@ -239,13 +267,28 @@ func (s *Service) GetUserFromToken(ctx context.Context, tokenStr string, tokenTy
 }
 
 func (s *Service) GetActiveUserFromToken(ctx context.Context, tokenStr string) (*UserRecord, error) {
-	user, err := s.GetUserFromToken(ctx, tokenStr, accessTokenType)
+	claims, err := s.VerifyToken(tokenStr, accessTokenType)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := s.GetUserByUsername(ctx, claims.Subject)
 	if err != nil {
 		return nil, err
 	}
 	if !isUserActive(user) {
 		return nil, ErrUserInactive
 	}
+
+	sid := strings.TrimSpace(claims.Sid)
+	if sid == "" {
+		return nil, ErrTokenInvalid
+	}
+	policy := s.loadSecurityPolicy(ctx)
+	if err := s.validateAccessSession(ctx, user.ID, sid, policy); err != nil {
+		return nil, err
+	}
+
 	return user, nil
 }
 
@@ -271,7 +314,7 @@ func (s *Service) UpdateLastLogin(ctx context.Context, userID string, ip string)
 		Error
 }
 
-func (s *Service) createToken(username string, tokenType string, expiresAt time.Time) (string, error) {
+func (s *Service) createToken(username string, tokenType string, sid string, expiresAt time.Time) (string, error) {
 	algorithm := strings.TrimSpace(s.cfg.JWTAlgorithm)
 	if algorithm == "" {
 		algorithm = "HS256"
@@ -289,6 +332,7 @@ func (s *Service) createToken(username string, tokenType string, expiresAt time.
 
 	claims := Claims{
 		Type: tokenType,
+		Sid:  strings.TrimSpace(sid),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   username,
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
@@ -318,4 +362,15 @@ func isUserActive(user *UserRecord) bool {
 		return true
 	}
 	return *user.IsActive
+}
+
+func isUserLocked(user *UserRecord) bool {
+	if user == nil || user.LockedUntil == nil {
+		return false
+	}
+	return user.LockedUntil.After(time.Now().UTC())
+}
+
+func (s *Service) isReady() bool {
+	return s != nil && s.db != nil
 }

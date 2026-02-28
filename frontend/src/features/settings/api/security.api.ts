@@ -97,10 +97,41 @@ export const securityApi = {
 
   /**
    * 批量保存所有安全配置
-   * 注意: 后端暂不支持批量更新安全配置
+   * ✅ 使用统一批量配置端点: POST /settings/general/bulk
    */
-  saveAll: async (_data: SecuritySettingsResponse): Promise<void> => {
-    console.warn('后端暂不支持批量更新安全配置')
-    return Promise.resolve()
+  saveAll: async (data: SecuritySettingsResponse): Promise<void> => {
+    const settings: Record<string, any> = {
+      // 会话管理
+      'security.session.timeout': data.sessionManagement.sessionTimeout,
+      'security.session.auto_logout_enabled': data.sessionManagement.autoLogoutEnabled,
+      'security.session.remember_me_enabled': data.sessionManagement.rememberMeEnabled,
+      'security.session.remember_me_duration': data.sessionManagement.rememberMeDuration,
+      'security.session.max_concurrent_sessions': data.sessionManagement.maxConcurrentSessions,
+      'security.session.force_logout_on_password_change':
+        data.sessionManagement.forceLogoutOnPasswordChange,
+
+      // 密码策略
+      'security.password.min_length': data.passwordPolicy.minLength,
+      'security.password.require_uppercase': data.passwordPolicy.requireUppercase,
+      'security.password.require_lowercase': data.passwordPolicy.requireLowercase,
+      'security.password.require_numbers': data.passwordPolicy.requireNumbers,
+      'security.password.require_special_chars': data.passwordPolicy.requireSpecialChars,
+      'security.password.password_expire_days': data.passwordPolicy.passwordExpireDays,
+      'security.password.password_history_count': data.passwordPolicy.passwordHistoryCount,
+      'security.password.prevent_common_passwords': data.passwordPolicy.preventCommonPasswords,
+      'security.password.max_login_attempts': data.passwordPolicy.maxLoginAttempts,
+      'security.password.lockout_duration': data.passwordPolicy.lockoutDuration,
+
+      // 认证配置
+      'security.auth.mfa_enabled': data.authentication.mfaEnabled,
+      'security.auth.mfa_methods': data.authentication.mfaMethods,
+      'security.auth.mfa_required': data.authentication.mfaRequired,
+      'security.auth.allow_oauth_login': data.authentication.allowOAuthLogin,
+      'security.auth.oauth_providers': data.authentication.oauthProviders,
+      'security.auth.ip_whitelist_enabled': data.authentication.ipWhitelistEnabled,
+      'security.auth.ip_whitelist': data.authentication.ipWhitelist,
+    }
+
+    await httpClient.post('/settings/general/bulk', { settings })
   },
 }

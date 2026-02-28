@@ -95,17 +95,17 @@ func (s *Service) ListUsers(ctx context.Context, query UserQuery) (UserListRespo
 	hasPrev := page > 1
 
 	return UserListResponse{
-		Items:      items,
-		Total:      int(total),
-		Page:       page,
-		PageSize:   pageSize,
-		HasNext:    hasNext,
-		HasPrev:    hasPrev,
-		Users:      items,
-		TotalCount: int(total),
-		PageSizeCamel: pageSize,
-		HasNextCamel:  hasNext,
-		HasPrevCamel:  hasPrev,
+		Items:           items,
+		Total:           int(total),
+		Page:            page,
+		PageSize:        pageSize,
+		HasNext:         hasNext,
+		HasPrev:         hasPrev,
+		Users:           items,
+		TotalCount:      int(total),
+		PageSizeCamel:   pageSize,
+		HasNextCamel:    hasNext,
+		HasPrevCamel:    hasPrev,
 		TotalCountCamel: int(total),
 	}, nil
 }
@@ -152,6 +152,9 @@ func (s *Service) CreateUser(ctx context.Context, payload map[string]interface{}
 	if password == "" {
 		return nil, fmt.Errorf("password is required")
 	}
+	if err := s.validatePasswordPolicy(ctx, password); err != nil {
+		return nil, err
+	}
 	if role == "" {
 		role = "viewer"
 	}
@@ -186,10 +189,10 @@ func (s *Service) CreateUser(ctx context.Context, payload map[string]interface{}
 			}
 			return nil
 		}(),
-		LockedUntil:    lockedUntil,
-		CreatedAt:      &now,
-		UpdatedAt:      &now,
-		CreatedBy:      emptyToNil(creatorID),
+		LockedUntil: lockedUntil,
+		CreatedAt:   &now,
+		UpdatedAt:   &now,
+		CreatedBy:   emptyToNil(creatorID),
 	}
 
 	if err := s.db.WithContext(ctx).Create(&user).Error; err != nil {
@@ -264,6 +267,9 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, newPassword
 	if id == "" || strings.TrimSpace(newPassword) == "" {
 		return fmt.Errorf("user_id and new_password are required")
 	}
+	if err := s.validatePasswordPolicy(ctx, newPassword); err != nil {
+		return err
+	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
@@ -271,10 +277,10 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, newPassword
 	}
 
 	updates := map[string]interface{}{
-		"hashed_password":    string(hashed),
-		"password_changed_at": time.Now().UTC(),
+		"hashed_password":       string(hashed),
+		"password_changed_at":   time.Now().UTC(),
 		"force_password_change": false,
-		"updated_at":          time.Now().UTC(),
+		"updated_at":            time.Now().UTC(),
 	}
 
 	result := s.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).Updates(updates)
@@ -283,6 +289,14 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, newPassword
 	}
 	if result.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound
+	}
+
+	// 安全策略：密码更改后强制登出所有会话（立即生效）
+	if s.getSettingBool(ctx, "security.session.force_logout_on_password_change", true) {
+		_ = s.db.WithContext(ctx).
+			Model(&UserSession{}).
+			Where("user_id = ? AND is_active = ?", id, true).
+			Updates(map[string]interface{}{"is_active": false}).Error
 	}
 	return nil
 }
@@ -309,9 +323,9 @@ func (s *Service) LockUser(ctx context.Context, userID string) error {
 
 func (s *Service) UnlockUser(ctx context.Context, userID string) error {
 	updates := map[string]interface{}{
-		"locked_until": nil,
+		"locked_until":   nil,
 		"login_attempts": 0,
-		"updated_at":   time.Now().UTC(),
+		"updated_at":     time.Now().UTC(),
 	}
 	return s.updateUserFields(ctx, userID, updates)
 }
@@ -440,11 +454,11 @@ func (s *Service) ImportUsers(ctx context.Context, users []ImportUserPayload, fo
 		}
 
 		createPayload := map[string]interface{}{
-			"username": username,
-			"email":    email,
-			"password": password,
+			"username":  username,
+			"email":     email,
+			"password":  password,
 			"full_name": strings.TrimSpace(payload.FullName),
-			"role":     role,
+			"role":      role,
 		}
 		if status := strings.TrimSpace(payload.Status); status != "" {
 			createPayload["status"] = status
@@ -639,8 +653,8 @@ func (s *Service) listRecentActiveUsers(ctx context.Context) []map[string]interf
 	}
 	for _, user := range users {
 		result = append(result, map[string]interface{}{
-			"user_id":      user.ID,
-			"username":     user.Username,
+			"user_id":       user.ID,
+			"username":      user.Username,
 			"last_activity": user.LastLoginAt,
 		})
 	}

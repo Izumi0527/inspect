@@ -56,20 +56,25 @@ func (h AuthHandler) Login(c echo.Context) error {
 
 	user, err := h.Service.AuthenticateUser(c.Request().Context(), req.Username, req.Password)
 	if err != nil {
+		if errors.Is(err, auth.ErrUserLocked) {
+			return echo.NewHTTPError(http.StatusLocked, "账号已锁定，请稍后重试")
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to authenticate user")
 	}
 	if user == nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "用户名或密码错误")
 	}
 
-	accessToken, expiresIn, err := h.Service.CreateAccessToken(user.Username)
+	rememberMe := req.RememberMe != nil && *req.RememberMe
+	accessToken, refreshToken, expiresIn, err := h.Service.IssueTokensWithSession(
+		c.Request().Context(),
+		user,
+		rememberMe,
+		c.RealIP(),
+		c.Request().UserAgent(),
+	)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create access token")
-	}
-
-	refreshToken, err := h.Service.CreateRefreshToken(user.Username)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create refresh token")
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create session tokens")
 	}
 
 	userInfo, err := h.Service.BuildUserInfo(c.Request().Context(), user)
@@ -101,27 +106,9 @@ func (h AuthHandler) RefreshToken(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "refresh_token is required")
 	}
 
-	claims, err := h.Service.VerifyToken(req.RefreshToken, "refresh")
+	accessToken, refreshToken, expiresIn, user, err := h.Service.RefreshTokensWithSession(c.Request().Context(), req.RefreshToken)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "刷新令牌无效或已过期")
-	}
-
-	user, err := h.Service.GetUserByUsername(c.Request().Context(), claims.Subject)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "用户不存在或已被禁用")
-	}
-	if user == nil || !authUserActive(user) {
-		return echo.NewHTTPError(http.StatusUnauthorized, "用户不存在或已被禁用")
-	}
-
-	accessToken, expiresIn, err := h.Service.CreateAccessToken(user.Username)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create access token")
-	}
-
-	refreshToken, err := h.Service.CreateRefreshToken(user.Username)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create refresh token")
 	}
 
 	userInfo, err := h.Service.BuildUserInfo(c.Request().Context(), user)
@@ -143,10 +130,11 @@ func (h AuthHandler) Logout(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "auth service not configured")
 	}
 
-	_, err := h.requireActiveUser(c)
+	token, err := readBearerToken(c)
 	if err != nil {
 		return err
 	}
+	_ = h.Service.LogoutSession(c.Request().Context(), token)
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "登出成功",
@@ -171,7 +159,7 @@ func (h AuthHandler) Verify(c echo.Context) error {
 		return err
 	}
 
-	user, err := h.Service.GetUserFromToken(c.Request().Context(), token, "access")
+	user, err := h.Service.GetActiveUserFromToken(c.Request().Context(), token)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "Could not validate credentials")
 	}
