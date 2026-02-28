@@ -377,3 +377,5 @@ backend/data/reports/*
 .tmp-superpowers-skills/
 
 /backend-go/backend-go/
+
+AGENTS.md
