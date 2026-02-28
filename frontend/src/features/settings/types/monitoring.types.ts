@@ -30,7 +30,7 @@ export interface ServiceHealth {
   name: string
   status: 'healthy' | 'unhealthy' | 'degraded'
   responseTime: number // 响应时间（毫秒）
-  uptime: number // 运行时间（秒）
+  uptime: number | null // 运行时间（秒），null 表示不可用
   lastCheck: string // 最后检查时间
   errorMessage?: string
 }

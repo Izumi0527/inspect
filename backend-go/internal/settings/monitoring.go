@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -169,10 +171,10 @@ func (s *Service) collectMetrics(ctx context.Context) (MonitoringMetrics, error)
 			Usage: roundFloat(diskUsage, 1),
 		},
 		Network: NetworkMetrics{
-			BytesReceived:  netBytesRecv,
-			BytesSent:      netBytesSent,
+			BytesReceived:   netBytesRecv,
+			BytesSent:       netBytesSent,
 			PacketsReceived: netPacketsRecv,
-			PacketsSent:    netPacketsSent,
+			PacketsSent:     netPacketsSent,
 		},
 	}, nil
 }
@@ -180,12 +182,13 @@ func (s *Service) collectMetrics(ctx context.Context) (MonitoringMetrics, error)
 func (s *Service) collectServiceHealth(ctx context.Context) []ServiceHealth {
 	services := make([]ServiceHealth, 0)
 	checkTime := time.Now().UTC()
+	apiUptime := normalizeUptimeSeconds(int64(time.Since(s.processStart).Seconds()))
 
 	services = append(services, ServiceHealth{
 		Name:         "API",
 		Status:       "healthy",
 		ResponseTime: 1,
-		Uptime:       int64(time.Since(s.processStart).Seconds()),
+		Uptime:       apiUptime,
 		LastCheck:    checkTime,
 	})
 
@@ -196,17 +199,21 @@ func (s *Service) collectServiceHealth(ctx context.Context) []ServiceHealth {
 			Name:         "PostgreSQL",
 			Status:       "unhealthy",
 			ResponseTime: 0,
-			Uptime:       0,
+			Uptime:       nil,
 			LastCheck:    checkTime,
 			ErrorMessage: &message,
 		})
 		return services
 	}
+	postgresUptime, err := s.queryPostgresUptimeSeconds(ctx)
+	if err != nil {
+		postgresUptime = nil
+	}
 	services = append(services, ServiceHealth{
 		Name:         "PostgreSQL",
 		Status:       dbStatus,
 		ResponseTime: 5,
-		Uptime:       0,
+		Uptime:       postgresUptime,
 		LastCheck:    checkTime,
 	})
 
@@ -217,22 +224,83 @@ func (s *Service) collectServiceHealth(ctx context.Context) []ServiceHealth {
 				Name:         "Redis",
 				Status:       "unhealthy",
 				ResponseTime: 0,
-				Uptime:       0,
+				Uptime:       nil,
 				LastCheck:    checkTime,
 				ErrorMessage: &message,
 			})
 		} else {
+			redisUptime, err := s.queryRedisUptimeSeconds(ctx)
+			if err != nil {
+				redisUptime = nil
+			}
 			services = append(services, ServiceHealth{
 				Name:         "Redis",
 				Status:       "healthy",
 				ResponseTime: 2,
-				Uptime:       0,
+				Uptime:       redisUptime,
 				LastCheck:    checkTime,
 			})
 		}
 	}
 
 	return services
+}
+
+func (s *Service) queryPostgresUptimeSeconds(ctx context.Context) (*int64, error) {
+	row := struct {
+		Uptime *int64 `gorm:"column:uptime"`
+	}{}
+	query := "SELECT EXTRACT(EPOCH FROM (NOW() - pg_postmaster_start_time()))::bigint AS uptime"
+	if err := s.db.WithContext(ctx).Raw(query).Scan(&row).Error; err != nil {
+		return nil, err
+	}
+	return normalizeUptimePointer(row.Uptime), nil
+}
+
+func (s *Service) queryRedisUptimeSeconds(ctx context.Context) (*int64, error) {
+	if s.redis == nil {
+		return nil, nil
+	}
+	info, err := s.redis.Info(ctx, "server").Result()
+	if err != nil {
+		return nil, err
+	}
+	return parseRedisUptimeSeconds(info)
+}
+
+func parseRedisUptimeSeconds(info string) (*int64, error) {
+	lines := strings.Split(info, "\n")
+	for _, line := range lines {
+		text := strings.TrimSpace(line)
+		if !strings.HasPrefix(text, "uptime_in_seconds:") {
+			continue
+		}
+		rawValue := strings.TrimSpace(strings.TrimPrefix(text, "uptime_in_seconds:"))
+		if rawValue == "" {
+			return nil, fmt.Errorf("redis uptime_in_seconds is empty")
+		}
+		seconds, err := strconv.ParseInt(rawValue, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parse redis uptime_in_seconds failed: %w", err)
+		}
+		return normalizeUptimeSeconds(seconds), nil
+	}
+	return nil, fmt.Errorf("redis uptime_in_seconds not found")
+}
+
+func normalizeUptimePointer(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	return normalizeUptimeSeconds(*value)
+}
+
+func normalizeUptimeSeconds(value int64) *int64 {
+	if value < 0 {
+		return nil
+	}
+	normalized := value
+	return &normalized
 }
 
 func (s *Service) collectSystemInfo(ctx context.Context) SystemInfo {

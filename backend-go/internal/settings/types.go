@@ -51,18 +51,18 @@ type SettingGroup struct {
 }
 
 type SettingDetails struct {
-	ID          string         `json:"id"`
-	Key         string         `json:"key"`
-	Value       interface{}    `json:"value"`
-	Category    string         `json:"category"`
-	Type        string         `json:"type"`
-	Label       string         `json:"label"`
-	Description *string        `json:"description,omitempty"`
-	Required    bool           `json:"required"`
-	Readonly    bool           `json:"readonly"`
+	ID          string          `json:"id"`
+	Key         string          `json:"key"`
+	Value       interface{}     `json:"value"`
+	Category    string          `json:"category"`
+	Type        string          `json:"type"`
+	Label       string          `json:"label"`
+	Description *string         `json:"description,omitempty"`
+	Required    bool            `json:"required"`
+	Readonly    bool            `json:"readonly"`
 	Validation  *ValidationRule `json:"validation,omitempty"`
-	UpdatedAt   *time.Time     `json:"updated_at,omitempty"`
-	UpdatedBy   *string        `json:"updated_by,omitempty"`
+	UpdatedAt   *time.Time      `json:"updated_at,omitempty"`
+	UpdatedBy   *string         `json:"updated_by,omitempty"`
 }
 
 type SystemInfoResponse struct {
@@ -73,14 +73,14 @@ type SystemInfoResponse struct {
 }
 
 type UserDTO struct {
-	ID          string   `json:"id"`
-	Username    string   `json:"username"`
-	Email       string   `json:"email"`
-	FullName    *string  `json:"fullName,omitempty"`
-	Avatar      *string  `json:"avatar,omitempty"`
-	Role        string   `json:"role"`
-	Status      string   `json:"status"`
-	Permissions []string `json:"permissions"`
+	ID          string     `json:"id"`
+	Username    string     `json:"username"`
+	Email       string     `json:"email"`
+	FullName    *string    `json:"fullName,omitempty"`
+	Avatar      *string    `json:"avatar,omitempty"`
+	Role        string     `json:"role"`
+	Status      string     `json:"status"`
+	Permissions []string   `json:"permissions"`
 	LastLoginAt *time.Time `json:"lastLoginAt,omitempty"`
 	LastLoginIP *string    `json:"lastLoginIP,omitempty"`
 	CreatedAt   *time.Time `json:"createdAt,omitempty"`
@@ -90,36 +90,36 @@ type UserDTO struct {
 }
 
 type UserListResponse struct {
-	Items      []UserDTO `json:"items"`
-	Total      int       `json:"total"`
-	Page       int       `json:"page"`
-	PageSize   int       `json:"page_size"`
-	HasNext    bool      `json:"has_next"`
-	HasPrev    bool      `json:"has_prev"`
-	Users      []UserDTO `json:"users"`
-	TotalCount int       `json:"total_count"`
-	PageSizeCamel int   `json:"pageSize,omitempty"`
-	HasNextCamel  bool  `json:"hasNext,omitempty"`
-	HasPrevCamel  bool  `json:"hasPrev,omitempty"`
-	TotalCountCamel int `json:"totalCount,omitempty"`
+	Items           []UserDTO `json:"items"`
+	Total           int       `json:"total"`
+	Page            int       `json:"page"`
+	PageSize        int       `json:"page_size"`
+	HasNext         bool      `json:"has_next"`
+	HasPrev         bool      `json:"has_prev"`
+	Users           []UserDTO `json:"users"`
+	TotalCount      int       `json:"total_count"`
+	PageSizeCamel   int       `json:"pageSize,omitempty"`
+	HasNextCamel    bool      `json:"hasNext,omitempty"`
+	HasPrevCamel    bool      `json:"hasPrev,omitempty"`
+	TotalCountCamel int       `json:"totalCount,omitempty"`
 }
 
 type UserStatsResponse struct {
-	TotalUsers     int               `json:"total_users"`
-	ActiveUsers    int               `json:"active_users"`
-	InactiveUsers  int               `json:"inactive_users"`
-	LockedUsers    int               `json:"locked_users"`
-	AdminCount     int               `json:"admin_count"`
-	OperatorCount  int               `json:"operator_count"`
-	ViewerCount    int               `json:"viewer_count"`
-	OnlineUsers    int               `json:"online_users"`
-	UsersByRole    map[string]int    `json:"users_by_role,omitempty"`
-	NewUsersToday  int               `json:"new_users_today,omitempty"`
-	NewUsersWeek   int               `json:"new_users_this_week,omitempty"`
-	NewUsersMonth  int               `json:"new_users_this_month,omitempty"`
-	LoginToday     int               `json:"login_count_today,omitempty"`
-	LoginWeek      int               `json:"login_count_this_week,omitempty"`
-	RecentUsers    []map[string]interface{} `json:"recent_active_users,omitempty"`
+	TotalUsers    int                      `json:"total_users"`
+	ActiveUsers   int                      `json:"active_users"`
+	InactiveUsers int                      `json:"inactive_users"`
+	LockedUsers   int                      `json:"locked_users"`
+	AdminCount    int                      `json:"admin_count"`
+	OperatorCount int                      `json:"operator_count"`
+	ViewerCount   int                      `json:"viewer_count"`
+	OnlineUsers   int                      `json:"online_users"`
+	UsersByRole   map[string]int           `json:"users_by_role,omitempty"`
+	NewUsersToday int                      `json:"new_users_today,omitempty"`
+	NewUsersWeek  int                      `json:"new_users_this_week,omitempty"`
+	NewUsersMonth int                      `json:"new_users_this_month,omitempty"`
+	LoginToday    int                      `json:"login_count_today,omitempty"`
+	LoginWeek     int                      `json:"login_count_this_week,omitempty"`
+	RecentUsers   []map[string]interface{} `json:"recent_active_users,omitempty"`
 }
 
 type ImportUserPayload struct {
@@ -146,9 +146,9 @@ type UserBulkImportError struct {
 }
 
 type UserBulkImportResult struct {
-	Total   int                  `json:"total"`
-	Success int                  `json:"success"`
-	Failed  int                  `json:"failed"`
+	Total   int                   `json:"total"`
+	Success int                   `json:"success"`
+	Failed  int                   `json:"failed"`
 	Errors  []UserBulkImportError `json:"errors"`
 }
 
@@ -159,23 +159,23 @@ type BatchOperationResult struct {
 }
 
 type BatchOperationResponse struct {
-	SuccessCount int                   `json:"success_count"`
-	FailedCount  int                   `json:"failed_count"`
+	SuccessCount int                    `json:"success_count"`
+	FailedCount  int                    `json:"failed_count"`
 	Results      []BatchOperationResult `json:"results"`
-	Message      string                `json:"message"`
+	Message      string                 `json:"message"`
 }
 
 type RoleDTO struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	DisplayName string         `json:"displayName"`
-	Description string         `json:"description"`
-	Permissions []PermissionDTO `json:"permissions"`
-	UserCount   int            `json:"userCount"`
-	IsBuiltIn   bool           `json:"isBuiltIn"`
-	CreatedAt   *time.Time     `json:"createdAt,omitempty"`
-	UpdatedAt   *time.Time     `json:"updatedAt,omitempty"`
-	PermissionIDs []string     `json:"permission_ids,omitempty"`
+	ID            string          `json:"id"`
+	Name          string          `json:"name"`
+	DisplayName   string          `json:"displayName"`
+	Description   string          `json:"description"`
+	Permissions   []PermissionDTO `json:"permissions"`
+	UserCount     int             `json:"userCount"`
+	IsBuiltIn     bool            `json:"isBuiltIn"`
+	CreatedAt     *time.Time      `json:"createdAt,omitempty"`
+	UpdatedAt     *time.Time      `json:"updatedAt,omitempty"`
+	PermissionIDs []string        `json:"permission_ids,omitempty"`
 }
 
 type PermissionDTO struct {
@@ -204,12 +204,12 @@ type AuditLogItem struct {
 	ErrorMessage *string     `json:"error_message,omitempty"`
 	CreatedAt    *time.Time  `json:"created_at,omitempty"`
 
-	Resource  string `json:"resource,omitempty"`
-	Method    string `json:"method,omitempty"`
-	Path      string `json:"path,omitempty"`
-	IP        string `json:"ip,omitempty"`
+	Resource  string     `json:"resource,omitempty"`
+	Method    string     `json:"method,omitempty"`
+	Path      string     `json:"path,omitempty"`
+	IP        string     `json:"ip,omitempty"`
 	Timestamp *time.Time `json:"timestamp,omitempty"`
-	Duration  int    `json:"duration,omitempty"`
+	Duration  int        `json:"duration,omitempty"`
 }
 
 type AuditLogListResponse struct {
@@ -220,17 +220,17 @@ type AuditLogListResponse struct {
 }
 
 type AuditStatsResponse struct {
-	TotalLogs            int                    `json:"total_logs"`
-	LogsToday            int                    `json:"logs_today"`
-	LogsThisWeek         int                    `json:"logs_this_week"`
-	LogsThisMonth        int                    `json:"logs_this_month"`
-	LogsByAction         map[string]int         `json:"logs_by_action"`
-	LogsByStatus         map[string]int         `json:"logs_by_status"`
-	LogsByResourceType   map[string]int         `json:"logs_by_resource_type"`
-	TopActiveUsers       []map[string]interface{} `json:"top_active_users"`
-	TopActions           []map[string]interface{} `json:"top_actions"`
-	FailedOperationsCount int                   `json:"failed_operations_count"`
-	FailedOperationsRate float64                `json:"failed_operations_rate"`
+	TotalLogs             int                      `json:"total_logs"`
+	LogsToday             int                      `json:"logs_today"`
+	LogsThisWeek          int                      `json:"logs_this_week"`
+	LogsThisMonth         int                      `json:"logs_this_month"`
+	LogsByAction          map[string]int           `json:"logs_by_action"`
+	LogsByStatus          map[string]int           `json:"logs_by_status"`
+	LogsByResourceType    map[string]int           `json:"logs_by_resource_type"`
+	TopActiveUsers        []map[string]interface{} `json:"top_active_users"`
+	TopActions            []map[string]interface{} `json:"top_actions"`
+	FailedOperationsCount int                      `json:"failed_operations_count"`
+	FailedOperationsRate  float64                  `json:"failed_operations_rate"`
 }
 
 type BackupConfig struct {
@@ -258,7 +258,7 @@ type BackupRecord struct {
 }
 
 type BackupManagementResponse struct {
-	Config     BackupConfig `json:"config"`
+	Config     BackupConfig   `json:"config"`
 	Backups    []BackupRecord `json:"backups"`
 	TotalCount int            `json:"totalCount"`
 	DiskUsage  DiskUsage      `json:"diskUsage"`
@@ -287,9 +287,9 @@ type MonitoringMetrics struct {
 }
 
 type CPUMetrics struct {
-	Usage       float64  `json:"usage"`
-	Cores       int      `json:"cores"`
-	Temperature *float64 `json:"temperature,omitempty"`
+	Usage       float64   `json:"usage"`
+	Cores       int       `json:"cores"`
+	Temperature *float64  `json:"temperature,omitempty"`
 	LoadAverage []float64 `json:"loadAverage,omitempty"`
 }
 
@@ -308,19 +308,19 @@ type DiskMetrics struct {
 }
 
 type NetworkMetrics struct {
-	BytesReceived  uint64 `json:"bytesReceived"`
-	BytesSent      uint64 `json:"bytesSent"`
+	BytesReceived   uint64 `json:"bytesReceived"`
+	BytesSent       uint64 `json:"bytesSent"`
 	PacketsReceived uint64 `json:"packetsReceived"`
-	PacketsSent    uint64 `json:"packetsSent"`
+	PacketsSent     uint64 `json:"packetsSent"`
 }
 
 type ServiceHealth struct {
-	Name         string     `json:"name"`
-	Status       string     `json:"status"`
-	ResponseTime int        `json:"responseTime"`
-	Uptime       int64      `json:"uptime"`
-	LastCheck    time.Time  `json:"lastCheck"`
-	ErrorMessage *string    `json:"errorMessage,omitempty"`
+	Name         string    `json:"name"`
+	Status       string    `json:"status"`
+	ResponseTime int       `json:"responseTime"`
+	Uptime       *int64    `json:"uptime"`
+	LastCheck    time.Time `json:"lastCheck"`
+	ErrorMessage *string   `json:"errorMessage,omitempty"`
 }
 
 type SystemInfo struct {
@@ -334,9 +334,9 @@ type SystemInfo struct {
 
 type MonitoringResponse struct {
 	Metrics   MonitoringMetrics `json:"metrics"`
-	Services  []ServiceHealth    `json:"services"`
-	System    SystemInfo         `json:"system"`
-	Timestamp time.Time          `json:"timestamp"`
+	Services  []ServiceHealth   `json:"services"`
+	System    SystemInfo        `json:"system"`
+	Timestamp time.Time         `json:"timestamp"`
 }
 
 type MetricDataPoint struct {
@@ -351,10 +351,10 @@ type MetricHistory struct {
 }
 
 type SystemHealthResponse struct {
-	Overall  string             `json:"overall"`
-	Services []SystemServiceHealth `json:"services"`
-	Resources SystemResourceHealth `json:"resources"`
-	Alerts   []SystemAlert       `json:"alerts"`
+	Overall   string                `json:"overall"`
+	Services  []SystemServiceHealth `json:"services"`
+	Resources SystemResourceHealth  `json:"resources"`
+	Alerts    []SystemAlert         `json:"alerts"`
 }
 
 type SystemServiceHealth struct {

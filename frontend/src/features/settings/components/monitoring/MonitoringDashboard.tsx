@@ -4,6 +4,7 @@ import { useSystemMonitoring } from '../../hooks/useSystemMonitoring'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { formatUptime } from './uptime'
 import {
   Activity,
   Cpu,
@@ -23,14 +24,6 @@ function formatBytes(bytes: number): string {
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
-}
-
-// 格式化运行时间
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  return `${days}天 ${hours}小时 ${minutes}分钟`
 }
 
 // 进度条
