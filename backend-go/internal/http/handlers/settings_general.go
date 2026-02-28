@@ -231,6 +231,14 @@ func (h SettingsHandler) GetSettingCategories(c echo.Context) error {
 	return c.JSON(http.StatusOK, groups)
 }
 
+func (h SettingsHandler) GeneralConfigExportDisabled(c echo.Context) error {
+	return echo.NewHTTPError(http.StatusNotFound, "通用配置导出接口已下线")
+}
+
+func (h SettingsHandler) GeneralConfigImportDisabled(c echo.Context) error {
+	return echo.NewHTTPError(http.StatusNotFound, "通用配置导入接口已下线")
+}
+
 func (h SettingsHandler) ExportConfig(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "settings service not configured")

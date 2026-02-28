@@ -23,8 +23,8 @@ func (h SettingsHandler) Register(group *echo.Group) {
 	group.POST("/settings/general/settings/bulk", h.BulkUpdateSettings)
 	group.POST("/settings/general/settings/:key/reset", h.ResetSetting)
 	group.GET("/settings/general/categories", h.GetSettingCategories)
-	group.GET("/settings/general/export", h.ExportConfig)
-	group.POST("/settings/general/import", h.ImportConfig)
+	group.GET("/settings/general/export", h.GeneralConfigExportDisabled)
+	group.POST("/settings/general/import", h.GeneralConfigImportDisabled)
 	group.GET("/settings/general/info", h.GetSystemInfo)
 
 	group.PUT("/settings/general/:key", h.UpdateSettingAlias)

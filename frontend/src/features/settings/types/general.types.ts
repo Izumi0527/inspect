@@ -58,26 +58,3 @@ export interface UpdateUserPreferenceRequest {
   dateFormat?: string
   timeFormat?: '12h' | '24h'
 }
-
-/**
- * 导出配置响应类型
- */
-export interface ExportConfigResponse {
-  config_data: Record<string, {
-    value: any
-    category?: string
-    description?: string
-  }>
-  export_time: string  // ISO datetime
-  total_count: number
-}
-
-/**
- * 导入配置响应类型
- */
-export interface ImportConfigResponse {
-  imported_count: number
-  skipped_count: number
-  failed_keys: string[]
-  message: string
-}

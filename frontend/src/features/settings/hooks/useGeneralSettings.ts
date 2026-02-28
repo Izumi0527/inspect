@@ -63,31 +63,6 @@ export function useGeneralSettings() {
     },
   })
 
-  // 导出配置
-  const exportMutation = useMutation({
-    mutationFn: async () => {
-      const data = await generalApi.exportConfig()
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `general-settings-${new Date().toISOString().split('T')[0]}.json`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    },
-  })
-
-  // 导入配置
-  const importMutation = useMutation({
-    mutationFn: generalApi.importConfig,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['generalSettings'] })
-      window.location.reload()
-    },
-  })
-
   // 更新方法
   const updateBasicInfo = useCallback((field: keyof BasicInfoConfig, value: any) => {
     setBasicInfo((prev) => ({ ...prev, [field]: value }))
@@ -130,19 +105,6 @@ export function useGeneralSettings() {
     }
   }, [data])
 
-  // 导出配置
-  const exportConfig = useCallback(async () => {
-    await exportMutation.mutateAsync()
-  }, [exportMutation])
-
-  // 导入配置
-  const importConfig = useCallback(
-    async (file: File) => {
-      await importMutation.mutateAsync(file)
-    },
-    [importMutation]
-  )
-
   return {
     basicInfo,
     inspectionConfig,
@@ -158,7 +120,5 @@ export function useGeneralSettings() {
     updateUserPreference,
     saveAll,
     resetAll,
-    exportConfig,
-    importConfig,
   }
 }

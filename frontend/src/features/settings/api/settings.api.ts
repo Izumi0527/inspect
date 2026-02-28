@@ -60,34 +60,6 @@ export const systemConfigApi = {
   // 重置配置到默认值
   resetConfig: (key: string) =>
     httpClient.post<{ message: string; key: string }>(`/settings/general/settings/${key}/reset`),
-
-  // 导出配置
-  exportConfigs: async (category?: string): Promise<Blob> => {
-    const params = category ? `?category=${category}` : ''
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authData') : null
-    const authData = token ? JSON.parse(token) : null
-
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/general/export${params}`, {
-      headers: authData?.token ? { 'Authorization': `Bearer ${authData.token}` } : {}
-    })
-    return response.blob()
-  },
-
-  // 导入配置
-  importConfigs: async (file: File) => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authData') : null
-    const authData = token ? JSON.parse(token) : null
-
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/general/import`, {
-      method: 'POST',
-      headers: authData?.token ? { 'Authorization': `Bearer ${authData.token}` } : {},
-      body: formData,
-    })
-    return response.json()
-  },
 }
 
 // 用户管理API

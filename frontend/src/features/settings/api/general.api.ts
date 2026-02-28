@@ -5,8 +5,6 @@ import type {
   ReportConfig,
   UserPreferenceConfig,
   GeneralSettingsResponse,
-  ExportConfigResponse,
-  ImportConfigResponse,
 } from '../types/general.types'
 
 // 后端配置项的类型
@@ -211,54 +209,6 @@ export const generalApi = {
     }
 
     await httpClient.post('/settings/general/bulk', { settings })
-  },
-
-  /**
-   * 导出通用配置
-   * ✅ 修复: 返回 JSON 格式而不是 Blob
-   * ✅ 使用新的统一 API 端点
-   */
-  exportConfig: async (): Promise<ExportConfigResponse> => {
-    return httpClient.get<ExportConfigResponse>('/settings/general/export')
-  },
-
-  /**
-   * 导出配置为文件下载
-   * GET /api/v1/settings/general/export → 下载为 JSON 文件
-   * ✅ 使用新的统一 API 端点
-   */
-  exportConfigAsFile: async (): Promise<void> => {
-    const data = await httpClient.get<ExportConfigResponse>('/settings/general/export')
-
-    // 创建 Blob 并下载
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `settings-export-${new Date().toISOString().slice(0, 10)}.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-  },
-
-  /**
-   * 导入通用配置
-   * ✅ 修复: 发送 JSON 格式而不是 FormData
-   * ✅ 使用新的统一 API 端点
-   */
-  importConfig: async (file: File, overwrite: boolean = true): Promise<ImportConfigResponse> => {
-    // 1. 读取文件内容
-    const text = await file.text()
-
-    // 2. 解析 JSON
-    const exportData: ExportConfigResponse = JSON.parse(text)
-
-    // 3. 发送 JSON 请求
-    return httpClient.post<ImportConfigResponse>('/settings/general/import', {
-      config_data: exportData.config_data,
-      overwrite: overwrite
-    })
   },
 
   /**

@@ -230,8 +230,6 @@ curl -X GET "http://localhost:8001/api/v1/traffic/top-talkers?limit=10" \
 | PUT | `/settings/general/settings/:key` | 更新设置 |
 | POST | `/settings/general/settings/bulk` | 批量更新设置 |
 | POST | `/settings/general/settings/:key/reset` | 重置设置 |
-| GET | `/settings/general/export` | 导出配置 |
-| POST | `/settings/general/import` | 导入配置 |
 | GET | `/settings/general/info` | 获取系统信息 |
 
 #### 用户管理

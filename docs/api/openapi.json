@@ -798,82 +798,6 @@
         ]
       }
     },
-    "/api/v1/settings/general/export": {
-      "get": {
-        "tags": [
-          "系统设置",
-          "General Settings"
-        ],
-        "summary": "Export Config",
-        "description": "导出系统配置",
-        "operationId": "export_config_api_v1_settings_general_export_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExportConfigResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/settings/general/import": {
-      "post": {
-        "tags": [
-          "系统设置",
-          "General Settings"
-        ],
-        "summary": "Import Config",
-        "description": "导入系统配置",
-        "operationId": "import_config_api_v1_settings_general_import_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ImportConfigRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportConfigResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/v1/settings/general/categories": {
       "get": {
         "tags": [
@@ -14802,35 +14726,6 @@
         "title": "EscalationStatusResponse",
         "description": "升级状态响应"
       },
-      "ExportConfigResponse": {
-        "properties": {
-          "config_data": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Config Data",
-            "description": "配置数据"
-          },
-          "export_time": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Export Time",
-            "description": "导出时间"
-          },
-          "total_count": {
-            "type": "integer",
-            "title": "Total Count",
-            "description": "配置项总数"
-          }
-        },
-        "type": "object",
-        "required": [
-          "config_data",
-          "export_time",
-          "total_count"
-        ],
-        "title": "ExportConfigResponse",
-        "description": "导出配置响应"
-      },
       "ExportFormat": {
         "type": "string",
         "enum": [
@@ -14854,62 +14749,6 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
-      },
-      "ImportConfigRequest": {
-        "properties": {
-          "config_data": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Config Data",
-            "description": "配置数据"
-          },
-          "overwrite": {
-            "type": "boolean",
-            "title": "Overwrite",
-            "description": "是否覆盖已有配置",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "config_data"
-        ],
-        "title": "ImportConfigRequest",
-        "description": "导入配置请求"
-      },
-      "ImportConfigResponse": {
-        "properties": {
-          "imported_count": {
-            "type": "integer",
-            "title": "Imported Count",
-            "description": "导入数量"
-          },
-          "skipped_count": {
-            "type": "integer",
-            "title": "Skipped Count",
-            "description": "跳过数量"
-          },
-          "failed_keys": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Failed Keys",
-            "description": "失败的键"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": "导入成功"
-          }
-        },
-        "type": "object",
-        "required": [
-          "imported_count",
-          "skipped_count"
-        ],
-        "title": "ImportConfigResponse",
-        "description": "导入配置响应"
       },
       "InspectionResultResponse": {
         "properties": {

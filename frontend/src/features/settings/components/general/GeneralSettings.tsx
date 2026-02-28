@@ -27,8 +27,6 @@ export function GeneralSettings() {
     updateUserPreference,
     saveAll,
     resetAll,
-    exportConfig,
-    importConfig,
   } = useGeneralSettings()
 
   // 处理保存操作
@@ -46,29 +44,6 @@ export function GeneralSettings() {
     resetAll()
     toast.success('已重置为服务器配置')
   }, [resetAll])
-
-  // 处理导出操作
-  const handleExport = useCallback(async () => {
-    try {
-      await exportConfig()
-      toast.success('配置已导出')
-    } catch (err) {
-      toast.error('导出失败：' + (err as Error).message)
-    }
-  }, [exportConfig])
-
-  // 处理导入操作
-  const handleImport = useCallback(
-    async (file: File) => {
-      try {
-        await importConfig(file)
-        toast.success('配置已导入，页面将刷新')
-      } catch (err) {
-        toast.error('导入失败：' + (err as Error).message)
-      }
-    },
-    [importConfig]
-  )
 
   // 加载状态
   if (isLoading) {
@@ -115,8 +90,6 @@ export function GeneralSettings() {
         isSaving={isSaving}
         onSave={handleSave}
         onReset={handleReset}
-        onExport={handleExport}
-        onImport={handleImport}
       />
 
       <div className="p-4">
