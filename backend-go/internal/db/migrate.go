@@ -195,6 +195,18 @@ func ensureMetricIndexes(db *gorm.DB) error {
 		}
 	}
 
+	// Ensure id column defaults are bound to sequences.
+	defaultStatements := []string{
+		`ALTER TABLE device_metrics ALTER COLUMN id SET DEFAULT nextval('device_metrics_id_seq');`,
+		`ALTER TABLE interface_metrics ALTER COLUMN id SET DEFAULT nextval('interface_metrics_id_seq');`,
+		`ALTER TABLE system_metrics ALTER COLUMN id SET DEFAULT nextval('system_metrics_id_seq');`,
+	}
+	for _, stmt := range defaultStatements {
+		if err := execSQL(db, stmt); err != nil {
+			return err
+		}
+	}
+
 	// Create indexes
 	statements := []string{
 		`CREATE INDEX IF NOT EXISTS idx_device_metrics_device_metric_time ON device_metrics (device_id, metric_name, collected_at DESC);`,

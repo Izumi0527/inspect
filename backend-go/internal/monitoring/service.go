@@ -148,7 +148,9 @@ func (w *MetricsWriter) WriteSystemMetrics(ctx context.Context, req SystemMetric
 		return WriteResult{}, ErrNoMetrics
 	}
 
-	if err := w.db.WithContext(ctx).Create(&records).Error; err != nil {
+	if err := w.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return InsertSystemMetricsRaw(tx, records)
+	}); err != nil {
 		if w.logger != nil {
 			w.logger.Error("write_system_metrics_failed", zap.String("host", host), zap.Error(err))
 		}
@@ -156,6 +158,48 @@ func (w *MetricsWriter) WriteSystemMetrics(ctx context.Context, req SystemMetric
 	}
 
 	return WriteResult{SystemMetrics: len(records)}, nil
+}
+
+// InsertSystemMetricsRaw inserts system metrics using raw SQL to work with TimescaleDB hypertables.
+func InsertSystemMetricsRaw(tx *gorm.DB, metrics []SystemMetric) error {
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	// Ensure sequence exists for environments that haven't run migration yet.
+	_ = tx.Exec(`CREATE SEQUENCE IF NOT EXISTS system_metrics_id_seq;`).Error
+
+	sql, values := buildSystemMetricsInsertSQL(metrics, time.Now().UTC())
+	return tx.Exec(sql, values...).Error
+}
+
+func buildSystemMetricsInsertSQL(metrics []SystemMetric, createdAt time.Time) (string, []interface{}) {
+	if len(metrics) == 0 {
+		return "", nil
+	}
+
+	sql := `INSERT INTO system_metrics (id, host, metric_name, metric_value, metric_unit, tags, collected_at, created_at) VALUES `
+	values := make([]interface{}, 0, len(metrics)*7)
+	placeholders := make([]string, 0, len(metrics))
+
+	for i, m := range metrics {
+		base := i * 7
+		placeholders = append(placeholders, fmt.Sprintf("(nextval('system_metrics_id_seq'), $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			base+1, base+2, base+3, base+4, base+5, base+6, base+7))
+
+		values = append(values,
+			m.Host,
+			m.MetricName,
+			m.MetricValue,
+			m.MetricUnit,
+			m.Tags,
+			m.CollectedAt,
+			createdAt,
+		)
+	}
+
+	sql += strings.Join(placeholders, ", ")
+	return sql, values
 }
 
 func (w *MetricsWriter) DeviceExists(ctx context.Context, deviceID int) (bool, error) {
@@ -269,11 +313,11 @@ func resolveCollectedAt(raw *FlexibleTime) time.Time {
 
 func (w *MetricsWriter) fillFromDeviceSnapshot(ctx context.Context, deviceID int, resp *DeviceMetricsResponse) {
 	type deviceSnapshot struct {
-		CPUUsage    *float64  `gorm:"column:cpu_usage"`
-		MemoryUsage *float64  `gorm:"column:memory_usage"`
-		DiskUsage   *float64  `gorm:"column:disk_usage"`
-		Temperature *float64  `gorm:"column:temperature"`
-		Uptime      *int64    `gorm:"column:uptime"`
+		CPUUsage    *float64   `gorm:"column:cpu_usage"`
+		MemoryUsage *float64   `gorm:"column:memory_usage"`
+		DiskUsage   *float64   `gorm:"column:disk_usage"`
+		Temperature *float64   `gorm:"column:temperature"`
+		Uptime      *int64     `gorm:"column:uptime"`
 		LastSeen    *time.Time `gorm:"column:last_seen"`
 		UpdatedAt   *time.Time `gorm:"column:updated_at"`
 	}

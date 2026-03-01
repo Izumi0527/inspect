@@ -16,7 +16,10 @@ import (
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/net"
+	"go.uber.org/zap"
 	"gorm.io/datatypes"
+
+	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
 )
 
 func (s *Service) GetCurrentMetrics(ctx context.Context) (MonitoringResponse, error) {
@@ -347,18 +350,29 @@ func (s *Service) storeMetrics(ctx context.Context, metrics MonitoringMetrics, h
 		{Name: "disk_usage", Value: metrics.Disk.Usage, Unit: "percent"},
 	}
 
+	records := make([]monitoring.SystemMetric, 0, len(items))
 	for _, item := range items {
 		value := item.Value
 		unit := item.Unit
 		host := hostname
-		_ = s.db.WithContext(ctx).Table("system_metrics").Create(map[string]interface{}{
-			"host":         host,
-			"metric_name":  item.Name,
-			"metric_value": value,
-			"metric_unit":  unit,
-			"tags":         datatypes.JSONMap{},
-			"collected_at": now,
-		}).Error
+		records = append(records, monitoring.SystemMetric{
+			Host:        &host,
+			MetricName:  item.Name,
+			MetricValue: &value,
+			MetricUnit:  &unit,
+			Tags:        datatypes.JSONMap{},
+			CollectedAt: now,
+			CreatedAt:   now,
+		})
+	}
+
+	if err := monitoring.InsertSystemMetricsRaw(s.db.WithContext(ctx), records); err != nil && s.logger != nil {
+		s.logger.Warn(
+			"store_settings_metrics_failed",
+			zap.String("host", hostname),
+			zap.Int("metrics_count", len(records)),
+			zap.Error(err),
+		)
 	}
 }
 
