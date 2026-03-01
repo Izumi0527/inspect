@@ -100,7 +100,7 @@ export function TemplateList({
   return (
     <div className="space-y-6">
       {/* 筛选器 */}
-      <div className="bg-white p-4 rounded-lg shadow">
+      <div className="bg-card border border-border p-4 rounded-lg shadow">
         <h2 className="text-lg font-semibold mb-4">筛选条件</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <VendorFilter
@@ -137,11 +137,11 @@ export function TemplateList({
       </div>
 
       {/* 模板列表 */}
-      <div className="bg-white p-4 rounded-lg shadow">
+      <div className="bg-card border border-border p-4 rounded-lg shadow">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold">
             模板列表
-            {templatesData && <span className="ml-2 text-sm font-normal text-gray-600">(共 {templatesData.total} 个)</span>}
+            {templatesData && <span className="ml-2 text-sm font-normal text-muted-foreground">(共 {templatesData.total} 个)</span>}
           </h2>
         </div>
 
@@ -169,7 +169,7 @@ export function TemplateList({
 
             {templates.length > 0 && (
               <div className="flex justify-between items-center pt-4 border-t">
-                <div className="text-sm text-gray-600">第 {pagination.page} 页，共 {totalPages} 页</div>
+                <div className="text-sm text-muted-foreground">第 {pagination.page} 页，共 {totalPages} 页</div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setPagination((p) => ({ ...p, page: Math.max(1, p.page - 1) }))}

@@ -141,10 +141,10 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
               </div>
             )}
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="text-lg font-semibold text-foreground">
                 {operationResult.success ? '操作完成' : '操作失败'}
               </h3>
-              <p className="text-sm text-gray-600">{operationResult.message}</p>
+              <p className="text-sm text-muted-foreground">{operationResult.message}</p>
             </div>
           </div>
 
@@ -155,7 +155,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
                   <div className="text-2xl font-bold text-green-600">
                     {operationResult.processed_count}
                   </div>
-                  <div className="text-sm text-gray-600">成功处理</div>
+                  <div className="text-sm text-muted-foreground">成功处理</div>
                 </div>
               </CardContent>
             </Card>
@@ -165,7 +165,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
                   <div className="text-2xl font-bold text-red-600">
                     {operationResult.failed_count}
                   </div>
-                  <div className="text-sm text-gray-600">处理失败</div>
+                  <div className="text-sm text-muted-foreground">处理失败</div>
                 </div>
               </CardContent>
             </Card>
@@ -173,7 +173,7 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
 
           {operationResult.errors.length > 0 && (
             <div className="mb-4">
-              <h4 className="text-sm font-medium text-gray-900 mb-2">错误详情：</h4>
+              <h4 className="text-sm font-medium text-foreground mb-2">错误详情：</h4>
               <div className="max-h-32 overflow-y-auto bg-red-50 rounded-lg p-3">
                 {operationResult.errors.map((error, index) => (
                   <div key={index} className="text-sm text-red-700 mb-1">
@@ -245,8 +245,8 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">批量操作</h2>
-            <p className="text-sm text-gray-600 mt-1">
+            <h2 className="text-xl font-semibold text-foreground">批量操作</h2>
+            <p className="text-sm text-muted-foreground mt-1">
               已选择 {selectedDevices.length} 个设备
             </p>
           </div>
@@ -270,11 +270,11 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
                   <div key={device.id} className="flex items-center gap-2 text-sm">
                     <Badge variant="outline">{device.device_type}</Badge>
                     <span className="font-medium">{device.name}</span>
-                    <span className="text-gray-500">({device.ip})</span>
+                    <span className="text-muted-foreground">({device.ip})</span>
                   </div>
                 ))}
                 {selectedDeviceData.length > 5 && (
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-muted-foreground">
                     还有 {selectedDeviceData.length - 5} 个设备...
                   </div>
                 )}
@@ -301,21 +301,21 @@ export const BulkOperationModal: React.FC<BulkOperationModalProps> = ({
                       <div className={`
                         flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center
                         ${operation.variant === 'primary' ? 'bg-blue-100' : ''}
-                        ${operation.variant === 'secondary' ? 'bg-gray-100' : ''}
+                        ${operation.variant === 'secondary' ? 'bg-muted/60' : ''}
                         ${operation.variant === 'destructive' ? 'bg-red-100' : ''}
                       `}>
                         <IconComponent className={`
                           h-5 w-5
                           ${operation.variant === 'primary' ? 'text-blue-600' : ''}
-                          ${operation.variant === 'secondary' ? 'text-gray-600' : ''}
+                          ${operation.variant === 'secondary' ? 'text-muted-foreground' : ''}
                           ${operation.variant === 'destructive' ? 'text-red-600' : ''}
                         `} />
                       </div>
                       <div>
-                        <h3 className="font-medium text-gray-900">
+                        <h3 className="font-medium text-foreground">
                           {operation.title}
                         </h3>
-                        <p className="text-sm text-gray-600 mt-1">
+                        <p className="text-sm text-muted-foreground mt-1">
                           {operation.description}
                         </p>
                       </div>

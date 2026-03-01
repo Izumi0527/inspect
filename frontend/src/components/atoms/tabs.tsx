@@ -21,7 +21,7 @@ const tabsVariants = cva(
 )
 
 const tabsListVariants = cva(
-  'inline-flex items-center justify-center rounded-xl bg-white/80 backdrop-blur-lg border border-gray-200/50 p-1 text-gray-500 shadow-lg',
+  'inline-flex items-center justify-center rounded-xl bg-muted/70 backdrop-blur-lg border border-border/50 p-1 text-muted-foreground shadow-lg',
   {
     variants: {
       orientation: {
@@ -40,8 +40,8 @@ const tabsTriggerVariants = cva(
   {
     variants: {
       active: {
-        true: 'bg-white text-gray-900 shadow-sm',
-        false: 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
+        true: 'bg-card text-foreground shadow-sm border border-border/60',
+        false: 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
       },
       orientation: {
         horizontal: 'flex-1',

@@ -99,7 +99,7 @@ export const InspectionStrategies: React.FC = () => {
       title: '策略名称',
       render: (_, strategy) => (
         <div className="flex flex-col">
-          <span className="font-medium text-gray-900 dark:text-gray-100">{strategy.name}</span>
+          <span className="font-medium text-foreground">{strategy.name}</span>
           <span className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{strategy.description}</span>
         </div>
       )
@@ -241,7 +241,7 @@ export const InspectionStrategies: React.FC = () => {
           <Table
             data={filteredStrategies}
             columns={columns}
-            className="bg-white dark:bg-gray-900 rounded-lg shadow-sm"
+            className="bg-card rounded-lg shadow-sm"
           />
         </motion.div>
       ) : (
@@ -250,7 +250,7 @@ export const InspectionStrategies: React.FC = () => {
             <div className="flex flex-col items-center gap-4">
               <AlertCircle className="w-12 h-12 text-gray-400 dark:text-gray-500" />
               <div>
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">暂无巡检策略</h3>
+                <h3 className="text-lg font-medium text-foreground">暂无巡检策略</h3>
                 <p className="text-gray-500 dark:text-gray-400 mt-1">
                   开始创建您的第一个巡检策略
                 </p>

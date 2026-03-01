@@ -39,8 +39,8 @@ export function ChartSkeleton({
       {/* 标题骨架(可选) */}
       {showTitle && (
         <div className="space-y-2">
-          <div className="h-6 w-40 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
-          <div className="h-4 w-64 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div className="h-6 w-40 animate-pulse rounded bg-muted"></div>
+          <div className="h-4 w-64 animate-pulse rounded bg-muted"></div>
         </div>
       )}
 
@@ -67,7 +67,7 @@ export function ChartSkeleton({
         {Array.from({ length: 4 }).map((_, index) => (
           <div
             key={index}
-            className="h-3 w-12 animate-pulse rounded bg-gray-200 dark:bg-gray-700"
+            className="h-3 w-12 animate-pulse rounded bg-muted"
             style={{ animationDelay: `${index * 0.15}s` }}
           ></div>
         ))}

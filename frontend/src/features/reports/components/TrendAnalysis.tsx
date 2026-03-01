@@ -137,7 +137,7 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
           <div className="text-center text-red-600 dark:text-red-400">
             <AlertTriangle className="w-12 h-12 mx-auto mb-2" />
             <p className="text-lg font-medium">加载趋势分析数据失败</p>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{error instanceof Error ? error.message : '未知错误'}</p>
+            <p className="text-sm text-muted-foreground mt-1">{error instanceof Error ? error.message : '未知错误'}</p>
           </div>
         </CardContent>
       </Card>
@@ -197,7 +197,7 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
               formatter={(value) => typeof value === 'number' ? value.toFixed(2) : value}
             />
           ) : (
-            <div className="text-center text-gray-500 dark:text-gray-400 py-20">
+            <div className="text-center text-muted-foreground py-20">
               暂无数据
             </div>
           )}
@@ -228,8 +228,8 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
                   </div>
                 ))
               ) : (
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">暂无预测数据</p>
+                <div className="p-4 bg-muted/40 rounded-lg">
+                  <p className="text-sm text-muted-foreground">暂无预测数据</p>
                 </div>
               )}
             </div>

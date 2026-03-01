@@ -51,15 +51,15 @@ export const ConfigPreviewModal: React.FC<Props> = ({
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-card rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col"
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b dark:border-gray-700 flex-shrink-0">
+        <div className="flex items-center justify-between p-6 border-b dark:border-border flex-shrink-0">
           <div className="flex items-center gap-3">
             <Settings className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">配置预览</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <h2 className="text-xl font-semibold text-foreground">配置预览</h2>
+              <p className="text-sm text-muted-foreground">
                 {previewData?.name || `配置 #${configId}`}
               </p>
             </div>
@@ -81,7 +81,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
           {isLoading && (
             <div className="flex items-center justify-center py-12">
               <Loading />
-              <span className="ml-2 text-gray-600 dark:text-gray-400">加载配置中...</span>
+              <span className="ml-2 text-muted-foreground">加载配置中...</span>
             </div>
           )}
 
@@ -90,7 +90,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
               <div className="text-center">
                 <AlertCircle className="w-10 h-10 text-red-500 dark:text-red-400 mx-auto mb-3" />
                 <div className="text-red-600 dark:text-red-400 mb-2">加载预览失败</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                <div className="text-sm text-muted-foreground mb-4">
                   {error.message || '未知错误'}
                 </div>
                 <Button variant="outline" onClick={() => refetch()}>
@@ -140,21 +140,21 @@ export const ConfigPreviewModal: React.FC<Props> = ({
 
               {/* 配置概览 */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4">
-                  <div className="text-sm text-gray-500 dark:text-gray-400">图表</div>
-                  <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{charts.length}</div>
+                <div className="bg-card border dark:border-border rounded-lg p-4">
+                  <div className="text-sm text-muted-foreground">图表</div>
+                  <div className="text-2xl font-semibold text-foreground">{charts.length}</div>
                 </div>
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4">
-                  <div className="text-sm text-gray-500 dark:text-gray-400">表格</div>
-                  <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{tables.length}</div>
+                <div className="bg-card border dark:border-border rounded-lg p-4">
+                  <div className="text-sm text-muted-foreground">表格</div>
+                  <div className="text-2xl font-semibold text-foreground">{tables.length}</div>
                 </div>
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4">
-                  <div className="text-sm text-gray-500 dark:text-gray-400">过滤器</div>
-                  <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{filters.length}</div>
+                <div className="bg-card border dark:border-border rounded-lg p-4">
+                  <div className="text-sm text-muted-foreground">过滤器</div>
+                  <div className="text-2xl font-semibold text-foreground">{filters.length}</div>
                 </div>
-                <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4">
-                  <div className="text-sm text-gray-500 dark:text-gray-400">布局列数</div>
-                  <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                <div className="bg-card border dark:border-border rounded-lg p-4">
+                  <div className="text-sm text-muted-foreground">布局列数</div>
+                  <div className="text-2xl font-semibold text-foreground">
                     {layout?.columns || 0}
                   </div>
                 </div>
@@ -162,7 +162,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
 
               {/* 图表配置 */}
               <div className="space-y-3">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <h3 className="text-lg font-medium text-foreground flex items-center gap-2">
                   <BarChart3 className="w-5 h-5" />
                   图表配置 ({charts.length})
                 </h3>
@@ -171,15 +171,15 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                     {charts.map((chart: any, index: number) => (
                       <div
                         key={chart.id || index}
-                        className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4"
+                        className="bg-card border dark:border-border rounded-lg p-4"
                       >
-                        <div className="font-medium text-gray-900 dark:text-gray-100">
+                        <div className="font-medium text-foreground">
                           {chart.title || `图表 ${index + 1}`}
                         </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        <div className="text-sm text-muted-foreground mt-1">
                           类型：{chart.type || '-'}，数据源：{chart.dataSource || chart.data_source || '-'}
                         </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <div className="text-xs text-muted-foreground mt-1">
                           X 轴：{chart.xAxis || chart.x_axis || '-'}，Y 轴：{chart.yAxis || chart.y_axis || '-'}，
                           系列：{Array.isArray(chart.series) ? chart.series.length : 0}
                         </div>
@@ -187,7 +187,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+                  <div className="bg-muted/40 rounded-lg p-6 text-center text-muted-foreground">
                     暂无图表配置
                   </div>
                 )}
@@ -195,7 +195,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
 
               {/* 表格配置 */}
               <div className="space-y-3">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <h3 className="text-lg font-medium text-foreground flex items-center gap-2">
                   <TableIcon className="w-5 h-5" />
                   表格配置 ({tables.length})
                 </h3>
@@ -204,12 +204,12 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                     {tables.map((table: any, index: number) => (
                       <div
                         key={table.id || index}
-                        className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4"
+                        className="bg-card border dark:border-border rounded-lg p-4"
                       >
-                        <div className="font-medium text-gray-900 dark:text-gray-100">
+                        <div className="font-medium text-foreground">
                           {table.title || `表格 ${index + 1}`}
                         </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        <div className="text-sm text-muted-foreground mt-1">
                           数据源：{table.dataSource || table.data_source || '-'}，列数：
                           {Array.isArray(table.columns) ? table.columns.length : 0}
                         </div>
@@ -217,7 +217,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+                  <div className="bg-muted/40 rounded-lg p-6 text-center text-muted-foreground">
                     暂无表格配置
                   </div>
                 )}
@@ -225,7 +225,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
 
               {/* 过滤器 */}
               <div className="space-y-3">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <h3 className="text-lg font-medium text-foreground flex items-center gap-2">
                   <Filter className="w-5 h-5" />
                   过滤器 ({filters.length})
                 </h3>
@@ -234,19 +234,19 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                     {filters.map((filter: any, index: number) => (
                       <div
                         key={filter.id || index}
-                        className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4"
+                        className="bg-card border dark:border-border rounded-lg p-4"
                       >
-                        <div className="font-medium text-gray-900 dark:text-gray-100">
+                        <div className="font-medium text-foreground">
                           {filter.label || `过滤器 ${index + 1}`}
                         </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        <div className="text-sm text-muted-foreground mt-1">
                           字段：{filter.field || '-'}，类型：{filter.type || '-'}
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
+                  <div className="bg-muted/40 rounded-lg p-6 text-center text-muted-foreground">
                     暂无过滤器配置
                   </div>
                 )}
@@ -258,4 +258,5 @@ export const ConfigPreviewModal: React.FC<Props> = ({
     </div>
   )
 }
+
 

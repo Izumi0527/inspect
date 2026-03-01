@@ -82,7 +82,7 @@ export const DeviceProbeButton: React.FC<DeviceProbeButtonProps> = ({
             {result.snmp_reachable ? (
               <CheckCircle className="h-4 w-4 text-green-500" />
             ) : (
-              <XCircle className="h-4 w-4 text-gray-400" />
+              <XCircle className="h-4 w-4 text-muted-foreground/80" />
             )}
           </div>
         </div>
@@ -104,7 +104,7 @@ export const DeviceProbeStatus: React.FC<DeviceProbeStatusProps> = ({
     return (
       <div className="flex items-center gap-2">
         <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-        <span className="text-sm text-gray-500">探测中...</span>
+        <span className="text-sm text-muted-foreground">探测中...</span>
       </div>
     )
   }
@@ -112,7 +112,7 @@ export const DeviceProbeStatus: React.FC<DeviceProbeStatusProps> = ({
   if (!result) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-400">未探测</span>
+        <span className="text-sm text-muted-foreground/80">未探测</span>
       </div>
     )
   }
@@ -121,7 +121,7 @@ export const DeviceProbeStatus: React.FC<DeviceProbeStatusProps> = ({
     <div className="flex flex-col gap-1">
       {/* ICMP 状态 */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 w-12">ICMP:</span>
+        <span className="text-xs text-muted-foreground w-12">ICMP:</span>
         {result.icmp_reachable ? (
           <Badge variant="success" size="sm">
             在线 {result.icmp_response_time && `(${result.icmp_response_time.toFixed(1)}ms)`}
@@ -135,7 +135,7 @@ export const DeviceProbeStatus: React.FC<DeviceProbeStatusProps> = ({
 
       {/* SNMP 状态 */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 w-12">SNMP:</span>
+        <span className="text-xs text-muted-foreground w-12">SNMP:</span>
         {result.snmp_reachable ? (
           <Badge variant="success" size="sm">
             成功 {result.snmp_response_time && `(${result.snmp_response_time.toFixed(1)}ms)`}

@@ -37,7 +37,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
           onCancel={onClose}
         />
       ) : (
-        <div className="py-10 text-center text-gray-500 dark:text-gray-400">请选择要编辑的设备</div>
+        <div className="py-10 text-center text-muted-foreground">请选择要编辑的设备</div>
       )}
     </SimpleModal>
   )

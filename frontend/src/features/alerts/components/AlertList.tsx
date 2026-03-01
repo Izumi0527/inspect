@@ -106,7 +106,7 @@ export const AlertList: React.FC<AlertListProps> = ({
                   onChange={handleSelectAll}
                   className="rounded"
                 />
-                <span className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="text-sm text-muted-foreground">
                   {selectedAlerts.length > 0 ? `已选择 ${selectedAlerts.length} 项` : '全选'}
                 </span>
               </div>

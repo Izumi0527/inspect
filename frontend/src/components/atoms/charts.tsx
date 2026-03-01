@@ -36,7 +36,7 @@ export const ChartContainer: React.FC<ChartContainerProps> = ({
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     className={cn(
-      'rounded-xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border border-gray-200/50 dark:border-gray-700/50 p-6',
+      'rounded-xl bg-card/80 backdrop-blur-lg border border-border/50 p-6',
       className
     )}
   >
@@ -44,10 +44,10 @@ export const ChartContainer: React.FC<ChartContainerProps> = ({
       <div className="flex items-center justify-between mb-4">
         <div>
           {title && (
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+            <h3 className="text-lg font-semibold text-foreground">{title}</h3>
           )}
           {subtitle && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{subtitle}</p>
+            <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
           )}
         </div>
         {actions && <div>{actions}</div>}
@@ -169,7 +169,7 @@ export const LineChartComponent = <TData extends ChartDatum>({
             justifyContent: 'center'
           }}
         >
-          <p className="text-gray-400 dark:text-gray-500 text-sm">暂无数据</p>
+          <p className="text-muted-foreground/80 text-sm">暂无数据</p>
         </div>
       </ChartContainer>
     )
@@ -244,15 +244,15 @@ export const LineChartComponent = <TData extends ChartDatum>({
               padding: '12px',
             }}
           >
-            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">{tooltipData.x}</p>
+            <p className="text-sm font-medium text-foreground mb-2">{tooltipData.x}</p>
             {tooltipData.values.map((entry, index) => (
               <div key={index} className="flex items-center gap-2 text-sm">
                 <div
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-gray-600 dark:text-gray-400">{entry.name}:</span>
-                <span className="font-medium text-gray-900 dark:text-gray-100">
+                <span className="text-muted-foreground">{entry.name}:</span>
+                <span className="font-medium text-foreground">
                   {formatter ? formatter(entry.value, entry.name) : entry.value}
                 </span>
               </div>
@@ -389,7 +389,7 @@ export const BarChartComponent = <TData extends ChartDatum>({
             justifyContent: 'center'
           }}
         >
-          <p className="text-gray-400 dark:text-gray-500 text-sm">暂无数据</p>
+          <p className="text-muted-foreground/80 text-sm">暂无数据</p>
         </div>
       </ChartContainer>
     )
@@ -484,15 +484,15 @@ export const BarChartComponent = <TData extends ChartDatum>({
               padding: '12px',
             }}
           >
-            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">{tooltipData.x}</p>
+            <p className="text-sm font-medium text-foreground mb-2">{tooltipData.x}</p>
             {tooltipData.values.map((entry, index) => (
               <div key={index} className="flex items-center gap-2 text-sm">
                 <div
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-gray-600 dark:text-gray-400">{entry.name}:</span>
-                <span className="font-medium text-gray-900 dark:text-gray-100">
+                <span className="text-muted-foreground">{entry.name}:</span>
+                <span className="font-medium text-foreground">
                   {formatter ? formatter(entry.value, entry.name) : entry.value}
                 </span>
               </div>
@@ -565,7 +565,7 @@ export const PieChartComponent: React.FC<PieChartProps> = ({
             justifyContent: 'center'
           }}
         >
-          <p className="text-gray-400 dark:text-gray-500 text-sm">暂无数据</p>
+          <p className="text-muted-foreground/80 text-sm">暂无数据</p>
         </div>
       </ChartContainer>
     )
@@ -629,13 +629,13 @@ export const PieChartComponent: React.FC<PieChartProps> = ({
                       className="w-3 h-3 rounded-full flex-shrink-0"
                       style={{ backgroundColor: item.color }}
                     />
-                    <span className="text-gray-700 dark:text-gray-300 truncate flex-1" title={item.name}>
+                    <span className="text-muted-foreground truncate flex-1" title={item.name}>
                       {item.name}
                     </span>
-                    <span className="text-gray-500 dark:text-gray-400 flex-shrink-0">
+                    <span className="text-muted-foreground flex-shrink-0">
                       {formatter ? formatter(item.value, item.name) : item.value}
                     </span>
-                    <span className="text-gray-400 dark:text-gray-500 flex-shrink-0 text-xs">
+                    <span className="text-muted-foreground/80 flex-shrink-0 text-xs">
                       ({percentage}%)
                     </span>
                   </div>
@@ -664,8 +664,8 @@ export const PieChartComponent: React.FC<PieChartProps> = ({
                 className="w-3 h-3 rounded-full"
                 style={{ backgroundColor: tooltipData.color }}
               />
-              <span className="text-gray-600 dark:text-gray-400">{tooltipData.name}:</span>
-              <span className="font-medium text-gray-900 dark:text-gray-100">
+              <span className="text-muted-foreground">{tooltipData.name}:</span>
+              <span className="font-medium text-foreground">
                 {formatter ? formatter(tooltipData.value, tooltipData.name) : tooltipData.value}
               </span>
             </div>
@@ -739,7 +739,7 @@ export const CircularProgress: React.FC<CircularProgressProps> = ({
           {/* 中心文字 */}
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              <div className="text-2xl font-bold text-foreground">
                 {Math.round(percentage)}%
               </div>
             </div>
@@ -781,7 +781,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   const trendColors = {
     up: 'text-green-600',
     down: 'text-red-600',
-    stable: 'text-gray-600'
+    stable: 'text-muted-foreground'
   }
 
   return (
@@ -789,18 +789,18 @@ export const MetricCard: React.FC<MetricCardProps> = ({
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       className={cn(
-        'rounded-xl bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border border-gray-200/50 dark:border-gray-700/50 p-6',
+        'rounded-xl bg-card/80 backdrop-blur-lg border border-border/50 p-6',
         className
       )}
     >
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">{title}</h3>
+        <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
         <div className={cn('w-2 h-2 rounded-full', colorClasses[color as keyof typeof colorClasses])} />
       </div>
       <div className="flex items-baseline justify-between">
         <div>
-          <span className="text-2xl font-bold text-gray-900 dark:text-gray-100">{value}</span>
-          {unit && <span className="text-sm text-gray-600 dark:text-gray-400 ml-1">{unit}</span>}
+          <span className="text-2xl font-bold text-foreground">{value}</span>
+          {unit && <span className="text-sm text-muted-foreground ml-1">{unit}</span>}
         </div>
         {trend && trendValue && (
           <div className={cn('text-sm font-medium', trendColors[trend])}>

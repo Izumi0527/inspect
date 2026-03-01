@@ -128,7 +128,7 @@ export const LogDetailModal: React.FC<LogDetailModalProps> = ({
           {/* 日志消息 */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-muted-foreground">
                 日志消息
               </label>
               <Button
@@ -140,7 +140,7 @@ export const LogDetailModal: React.FC<LogDetailModalProps> = ({
                 复制
               </Button>
             </div>
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 font-mono text-sm break-all whitespace-pre-wrap">
+            <div className="bg-muted/40 rounded-lg p-4 font-mono text-sm break-all whitespace-pre-wrap">
               {log.message}
             </div>
           </div>
@@ -149,7 +149,7 @@ export const LogDetailModal: React.FC<LogDetailModalProps> = ({
           {log.raw_message && log.raw_message !== log.message && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="text-sm font-medium text-muted-foreground">
                   原始消息
                 </label>
                 <Button
@@ -161,14 +161,14 @@ export const LogDetailModal: React.FC<LogDetailModalProps> = ({
                   复制
                 </Button>
               </div>
-              <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4 font-mono text-xs break-all whitespace-pre-wrap text-gray-600 dark:text-gray-400">
+              <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4 font-mono text-xs break-all whitespace-pre-wrap text-muted-foreground">
                 {log.raw_message}
               </div>
             </div>
           )}
 
           {/* 时间信息 */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+          <div className="border-t border-border pt-4">
             <div className="grid grid-cols-2 gap-4 text-sm text-gray-500 dark:text-gray-400">
               <div>
                 <span className="text-gray-400">采集时间：</span>

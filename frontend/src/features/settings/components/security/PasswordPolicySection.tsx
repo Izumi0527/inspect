@@ -43,7 +43,7 @@ export function PasswordPolicySection({ data, onChange }: Props) {
         </ConfigItem>
 
         <div className="pt-4 border-t space-y-4">
-          <div className="text-sm font-medium text-gray-700 mb-2">密码复杂度要求</div>
+          <div className="text-sm font-medium text-foreground/90 mb-2">密码复杂度要求</div>
 
           <ConfigItem
             label="需要大写字母"
@@ -127,7 +127,7 @@ export function PasswordPolicySection({ data, onChange }: Props) {
         </div>
 
         <div className="pt-4 border-t space-y-4">
-          <div className="text-sm font-medium text-gray-700 mb-2">登录安全</div>
+          <div className="text-sm font-medium text-foreground/90 mb-2">登录安全</div>
 
           <ConfigItem
             label="最大登录尝试次数"

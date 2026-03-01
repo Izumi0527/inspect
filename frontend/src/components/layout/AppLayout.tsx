@@ -41,7 +41,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const { sidebarOpen, toggleSidebar } = useSidebar()
 
   return (
-    <div className="h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
+    <div className="h-screen bg-muted/40 dark:bg-background overflow-hidden">
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -71,7 +71,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               <Card className="overflow-hidden">
                 <CardHeader className="pb-0">
                   {/* Tab导航 */}
-                  <div className="border-b border-gray-200 dark:border-gray-700 overflow-x-auto overflow-y-hidden">
+                  <div className="border-b border-border overflow-x-auto overflow-y-hidden">
                     <nav className="-mb-px flex space-x-8 min-w-max">
                       {routerTabs.map((tab) => {
                         const Icon = tab.icon
@@ -85,7 +85,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                               flex items-center gap-2 border-b-2 py-4 px-1 text-sm font-medium transition-colors whitespace-nowrap
                               ${isActive
                                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                                : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'
+                                : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-border dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'
                               }
                             `}
                           >

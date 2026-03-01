@@ -71,7 +71,7 @@ export function UserMenu({ className }: UserMenuProps) {
       <DropdownMenuContent align="end" className="w-56">
         {/* 用户信息区域 */}
         <div className="px-3 py-2">
-          <p className="text-sm font-medium text-gray-900 dark:text-white">
+          <p className="text-sm font-medium text-foreground">
             {displayName}
           </p>
           {user?.email && (

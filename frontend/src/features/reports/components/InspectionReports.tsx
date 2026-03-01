@@ -225,12 +225,12 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span className="font-medium text-gray-900 dark:text-gray-100">{report.title}</span>
+            <span className="font-medium text-foreground">{report.title}</span>
           </div>
-          <span className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">{report.description}</span>
+          <span className="text-sm text-muted-foreground line-clamp-2 mt-1">{report.description}</span>
           <div className="flex items-center gap-2 mt-2">
             {getFormatBadge(report.format)}
-            <span className="text-xs text-gray-400 dark:text-gray-500">
+            <span className="text-xs text-muted-foreground/80">
               {formatFileSize(report.fileSize)}
             </span>
           </div>
@@ -266,7 +266,7 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
       render: (_, report) => (
         <div className="flex flex-col text-sm">
           <div className="flex items-center gap-1">
-            <Calendar className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+            <Calendar className="w-3 h-3 text-muted-foreground/80" />
             <span>
               {new Date(report.parameters.dateRange.startDate).toLocaleDateString()} -
               {new Date(report.parameters.dateRange.endDate).toLocaleDateString()}
@@ -274,7 +274,7 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
           </div>
           {report.parameters.devices && (
             <div className="flex items-center gap-1 mt-1">
-              <Users className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+              <Users className="w-3 h-3 text-muted-foreground/80" />
               <span>{report.parameters.devices.length} 个设备</span>
             </div>
           )}
@@ -286,11 +286,11 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
       title: '创建信息',
       render: (_, report) => (
         <div className="flex flex-col text-sm">
-          <div className="font-medium text-gray-900 dark:text-gray-100">{report.generatedBy}</div>
-          <div className="text-gray-500 dark:text-gray-400">
+          <div className="font-medium text-foreground">{report.generatedBy}</div>
+          <div className="text-muted-foreground">
             {new Date(report.createdAt).toLocaleDateString()}
           </div>
-          <div className="text-gray-400 dark:text-gray-500 text-xs">
+          <div className="text-muted-foreground/80 text-xs">
             {new Date(report.createdAt).toLocaleTimeString()}
           </div>
         </div>
@@ -350,10 +350,10 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
           <Card key={index} className="animate-pulse">
             <CardContent className="p-4">
               <div className="flex items-center gap-4">
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/6"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/6"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+                <div className="h-4 bg-muted rounded w-1/4"></div>
+                <div className="h-4 bg-muted rounded w-1/6"></div>
+                <div className="h-4 bg-muted rounded w-1/6"></div>
+                <div className="h-4 bg-muted rounded w-1/4"></div>
               </div>
             </CardContent>
           </Card>
@@ -378,7 +378,7 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
       {/* 操作栏 */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">巡检报告管理</h3>
+          <h3 className="text-lg font-semibold text-foreground">巡检报告管理</h3>
           <Badge variant="secondary">{filteredReports.length} 项</Badge>
         </div>
         <div className="flex gap-2">
@@ -472,13 +472,13 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
                     <item.icon className={colors.icon + ' w-5 h-5'} />
                   </div>
                   <div className="flex-1">
-                    <div className="font-medium text-gray-900 dark:text-gray-100">{item.title}</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">{item.description}</div>
+                    <div className="font-medium text-foreground">{item.title}</div>
+                    <div className="text-sm text-muted-foreground">{item.description}</div>
                   </div>
                   {disabled ? (
-                    <Clock className="w-4 h-4 text-gray-400 dark:text-gray-500 animate-pulse" />
+                    <Clock className="w-4 h-4 text-muted-foreground/80 animate-pulse" />
                   ) : (
-                    <Play className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                    <Play className="w-4 h-4 text-muted-foreground/80" />
                   )}
                 </div>
               </CardContent>
@@ -497,17 +497,17 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
           <Table
             data={filteredReports}
             columns={columns}
-            className="bg-white dark:bg-gray-900 rounded-lg shadow-sm"
+            className="bg-card rounded-lg shadow-sm"
           />
         </motion.div>
       ) : (
         <Card>
           <CardContent className="p-8 text-center">
             <div className="flex flex-col items-center gap-4">
-              <FileText className="w-12 h-12 text-gray-400 dark:text-gray-500" />
+              <FileText className="w-12 h-12 text-muted-foreground/80" />
               <div>
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">暂无巡检报告</h3>
-                <p className="text-gray-500 dark:text-gray-400 mt-1">
+                <h3 className="text-lg font-medium text-foreground">暂无巡检报告</h3>
+                <p className="text-muted-foreground mt-1">
                   {searchText ? '没有找到匹配的报告' : '开始生成您的第一个巡检报告'}
                 </p>
               </div>

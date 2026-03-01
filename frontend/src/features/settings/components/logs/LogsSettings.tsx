@@ -194,8 +194,8 @@ export const LogsSettings: React.FC = () => {
         <div className="divide-y divide-gray-200 dark:divide-gray-700">
           <section className="py-6">
             <div className="mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">数据保留</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <h3 className="text-lg font-semibold text-foreground">数据保留</h3>
+              <p className="text-sm text-muted-foreground mt-1">
                 配置设备日志的自动清理策略。该配置将影响系统定时数据清理任务中的日志清理行为。
               </p>
             </div>
@@ -210,7 +210,7 @@ export const LogsSettings: React.FC = () => {
                     onCheckedChange={(value) => updateAutoCleanupEnabled(Boolean(value))}
                   />
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   关闭后系统不会自动清理历史设备日志。
                 </p>
               </div>
@@ -225,7 +225,7 @@ export const LogsSettings: React.FC = () => {
                   value={retentionDays}
                   onChange={(e) => updateRetentionDays(Number(e.target.value))}
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   超过该天数的设备日志将被清理。范围 1 到 3650。
                 </p>
               </div>
@@ -235,22 +235,22 @@ export const LogsSettings: React.FC = () => {
           <section className="py-6">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Syslog 接收</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <h3 className="text-lg font-semibold text-foreground">Syslog 接收</h3>
+                <p className="text-sm text-muted-foreground mt-1">
                   开启后后端将监听设备 Syslog 上报（UDP/TCP），并写入日志中心。日志级别为 warning/error/critical 时可联动生成告警。
                 </p>
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+              <div className="text-sm text-muted-foreground whitespace-nowrap">
                 {syslogStatusQuery.isLoading ? (
                   '状态加载中...'
                 ) : syslogStatusQuery.data ? (
                   syslogStatusQuery.data.running ? (
                     <span className="text-green-700 dark:text-green-400 font-medium">运行中</span>
                   ) : (
-                    <span className="text-gray-700 dark:text-gray-300 font-medium">已停止</span>
+                    <span className="text-foreground/90 font-medium">已停止</span>
                   )
                 ) : (
-                  <span className="text-gray-500">未获取</span>
+                  <span className="text-muted-foreground">未获取</span>
                 )}
               </div>
             </div>
@@ -265,7 +265,7 @@ export const LogsSettings: React.FC = () => {
                     onCheckedChange={(value) => updateSyslogEnabled(Boolean(value))}
                   />
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   监听地址默认为 <span className="font-mono">{syslogHost}:{syslogPort}</span>，端口默认 5514。
                 </p>
               </div>
@@ -282,7 +282,7 @@ export const LogsSettings: React.FC = () => {
                     <SelectItem value="tcp">仅 TCP</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   建议默认使用 UDP + TCP，兼容更多设备。
                 </p>
               </div>
@@ -295,7 +295,7 @@ export const LogsSettings: React.FC = () => {
                   onChange={(e) => updateSyslogHost(e.target.value)}
                   placeholder="0.0.0.0"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   一般保持 <span className="font-mono">0.0.0.0</span> 监听所有网卡。
                 </p>
               </div>
@@ -310,7 +310,7 @@ export const LogsSettings: React.FC = () => {
                   value={syslogPort}
                   onChange={(e) => updateSyslogPort(Number(e.target.value))}
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   默认端口 5514（避免与 514 冲突及权限问题）。
                 </p>
               </div>
@@ -325,7 +325,7 @@ export const LogsSettings: React.FC = () => {
                   value={syslogMaxMessageBytes}
                   onChange={(e) => updateSyslogMaxMessageBytes(Number(e.target.value))}
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   用于防止超大报文占用内存，范围 256 到 1MB。
                 </p>
               </div>
@@ -339,7 +339,7 @@ export const LogsSettings: React.FC = () => {
                     onCheckedChange={(value) => updateSyslogAlertsEnabled(Boolean(value))}
                   />
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   warning/error/critical 将触发告警（带去重与风暴保护）。
                 </p>
               </div>
@@ -354,7 +354,7 @@ export const LogsSettings: React.FC = () => {
                   value={syslogAlertsMaxNewPerMinute}
                   onChange={(e) => updateSyslogAlertsMaxNewPerMinute(Number(e.target.value))}
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   0 表示不限制。超过限制会创建/更新“告警风暴”告警。
                 </p>
               </div>
@@ -383,25 +383,25 @@ export const LogsSettings: React.FC = () => {
 
             {syslogStatusQuery.data && (
               <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl">
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">接收 / 落库</div>
-                  <div className="mt-2 text-sm text-gray-900 dark:text-gray-100">
+                <div className="rounded-lg border border-border p-4">
+                  <div className="text-xs text-muted-foreground">接收 / 落库</div>
+                  <div className="mt-2 text-sm text-foreground">
                     接收：<span className="font-mono">{syslogStatusQuery.data.received}</span>
                     <br />
                     落库：<span className="font-mono">{syslogStatusQuery.data.stored}</span>
                   </div>
                 </div>
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">丢弃</div>
-                  <div className="mt-2 text-sm text-gray-900 dark:text-gray-100">
+                <div className="rounded-lg border border-border p-4">
+                  <div className="text-xs text-muted-foreground">丢弃</div>
+                  <div className="mt-2 text-sm text-foreground">
                     未匹配设备：<span className="font-mono">{syslogStatusQuery.data.droppedUnmatched}</span>
                     <br />
                     解析丢弃：<span className="font-mono">{syslogStatusQuery.data.droppedParse}</span>
                   </div>
                 </div>
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">告警联动</div>
-                  <div className="mt-2 text-sm text-gray-900 dark:text-gray-100">
+                <div className="rounded-lg border border-border p-4">
+                  <div className="text-xs text-muted-foreground">告警联动</div>
+                  <div className="mt-2 text-sm text-foreground">
                     新建：<span className="font-mono">{syslogStatusQuery.data.alertsCreated}</span>
                     <br />
                     去重更新：<span className="font-mono">{syslogStatusQuery.data.alertsUpdated}</span>
@@ -420,8 +420,8 @@ export const LogsSettings: React.FC = () => {
 
           <section className="py-6">
             <div className="mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">手动清理</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <h3 className="text-lg font-semibold text-foreground">手动清理</h3>
+              <p className="text-sm text-muted-foreground mt-1">
                 可立即清理超过保留天数的设备日志，用于空间回收或应急处理。
               </p>
             </div>

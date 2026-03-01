@@ -106,14 +106,14 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-card rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
       >
-        <div className="flex items-center justify-between p-6 border-b dark:border-gray-700 flex-shrink-0">
+        <div className="flex items-center justify-between p-6 border-b dark:border-border flex-shrink-0">
           <div className="flex items-center gap-3">
             <GitCompare className="w-6 h-6 text-green-600 dark:text-green-400" />
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">设备对比</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">差异以“第一个设备”为基准</p>
+              <h2 className="text-xl font-semibold text-foreground">设备对比</h2>
+              <p className="text-sm text-muted-foreground">差异以“第一个设备”为基准</p>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
@@ -124,7 +124,7 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="md:col-span-3">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground/90 mb-1">
                 设备ID（逗号分隔，至少2个）
               </label>
               <Input
@@ -133,32 +133,32 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
                 placeholder="例如：1,2,3"
                 disabled={isLoading}
               />
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <div className="text-xs text-muted-foreground mt-1">
                 已识别：{deviceIds.length} 个
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground/90 mb-1">
                 开始日期
               </label>
               <input
                 type="date"
                 value={dateRange.startDate}
                 onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground"
                 disabled={isLoading}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground/90 mb-1">
                 结束日期
               </label>
               <input
                 type="date"
                 value={dateRange.endDate}
                 onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground"
                 disabled={isLoading}
               />
             </div>
@@ -172,7 +172,7 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
           {isLoading && (
             <div className="flex items-center justify-center py-6">
               <Loading />
-              <span className="ml-2 text-gray-600 dark:text-gray-400">计算对比数据中...</span>
+              <span className="ml-2 text-muted-foreground">计算对比数据中...</span>
             </div>
           )}
 
@@ -198,21 +198,21 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
 
               {/* 设备指标表 */}
               {devices.length > 0 ? (
-                <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
-                  <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b dark:border-gray-700 font-medium text-gray-900 dark:text-gray-100">
+                <div className="border dark:border-border rounded-lg overflow-hidden">
+                  <div className="bg-muted/40 px-4 py-3 border-b dark:border-border font-medium text-foreground">
                     设备指标
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full">
-                      <thead className="bg-gray-100 dark:bg-gray-800">
+                      <thead className="bg-muted/60 dark:bg-muted/80">
                         <tr>
-                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">设备</th>
-                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">状态</th>
-                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">通过率</th>
-                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">平均分</th>
-                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">可用性</th>
-                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">平均响应(ms)</th>
-                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">失败检查</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-foreground/90">设备</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-foreground/90">状态</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">通过率</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">平均分</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">可用性</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">平均响应(ms)</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">失败检查</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -222,29 +222,29 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
                           const metrics = toRecord(rec.metrics)
                           const isBase = id && id === baseId
                           return (
-                            <tr key={id || idx} className="border-t dark:border-gray-700">
-                              <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">
+                            <tr key={id || idx} className="border-t dark:border-border">
+                              <td className="px-4 py-2 text-sm text-foreground">
                                 <div className="font-medium">
                                   {isBase ? '基准 ' : ''}#{id} {String(rec.device_name ?? rec.deviceName ?? '')}
                                 </div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                <div className="text-xs text-muted-foreground">
                                   {String(rec.device_type ?? rec.deviceType ?? '-')}
                                 </div>
                               </td>
                               <td className="px-4 py-2 text-sm">{severityBadge(String(rec.status))}</td>
-                              <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
+                              <td className="px-4 py-2 text-sm text-right text-foreground">
                                 {toNumberSafe(metrics.pass_rate).toFixed(2)}%
                               </td>
-                              <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
+                              <td className="px-4 py-2 text-sm text-right text-foreground">
                                 {toNumberSafe(metrics.avg_score).toFixed(2)}
                               </td>
-                              <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
+                              <td className="px-4 py-2 text-sm text-right text-foreground">
                                 {toNumberSafe(metrics.availability).toFixed(2)}%
                               </td>
-                              <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
+                              <td className="px-4 py-2 text-sm text-right text-foreground">
                                 {toNumberSafe(metrics.avg_response_time).toFixed(2)}
                               </td>
-                              <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
+                              <td className="px-4 py-2 text-sm text-right text-foreground">
                                 {toNumberSafe(metrics.failed_checks).toFixed(0)}
                               </td>
                             </tr>
@@ -255,7 +255,7 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center py-10 text-gray-500 dark:text-gray-400">
+                <div className="flex items-center justify-center py-10 text-muted-foreground">
                   <AlertCircle className="w-5 h-5 mr-2" />
                   未返回可对比的设备数据
                 </div>
@@ -263,20 +263,20 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
 
               {/* 差异表 */}
               {comparisons.length > 0 && (
-                <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
-                  <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b dark:border-gray-700 font-medium text-gray-900 dark:text-gray-100">
+                <div className="border dark:border-border rounded-lg overflow-hidden">
+                  <div className="bg-muted/40 px-4 py-3 border-b dark:border-border font-medium text-foreground">
                     差异（相对基准）
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full">
-                      <thead className="bg-gray-100 dark:bg-gray-800">
+                      <thead className="bg-muted/60 dark:bg-muted/80">
                         <tr>
-                          <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">对比设备</th>
-                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">通过率</th>
-                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">平均分</th>
-                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">可用性</th>
-                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">平均响应</th>
-                          <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">失败检查</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium text-foreground/90">对比设备</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">通过率</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">平均分</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">可用性</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">平均响应</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">失败检查</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -287,15 +287,15 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
                           const device = compareId ? byDeviceId.get(compareId) : null
                           const name = device ? String(device.device_name ?? device.deviceName ?? '') : ''
                           return (
-                            <tr key={compareId || idx} className="border-t dark:border-gray-700">
-                              <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">
+                            <tr key={compareId || idx} className="border-t dark:border-border">
+                              <td className="px-4 py-2 text-sm text-foreground">
                                 <div className="font-medium">#{compareId} {name}</div>
                               </td>
-                              <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatDelta(diff.pass_rate)}%</td>
-                              <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatDelta(diff.avg_score)}</td>
-                              <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatDelta(diff.availability)}%</td>
-                              <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatDelta(diff.avg_response_time)}</td>
-                              <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{formatDelta(diff.failed_checks)}</td>
+                              <td className="px-4 py-2 text-sm text-right text-foreground">{formatDelta(diff.pass_rate)}%</td>
+                              <td className="px-4 py-2 text-sm text-right text-foreground">{formatDelta(diff.avg_score)}</td>
+                              <td className="px-4 py-2 text-sm text-right text-foreground">{formatDelta(diff.availability)}%</td>
+                              <td className="px-4 py-2 text-sm text-right text-foreground">{formatDelta(diff.avg_response_time)}</td>
+                              <td className="px-4 py-2 text-sm text-right text-foreground">{formatDelta(diff.failed_checks)}</td>
                             </tr>
                           )
                         })}
@@ -308,7 +308,7 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex-shrink-0">
+        <div className="flex items-center justify-end gap-3 p-6 border-t dark:border-border bg-muted/40 flex-shrink-0">
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             关闭
           </Button>

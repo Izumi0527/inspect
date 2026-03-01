@@ -3,10 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { Sun, Moon, Monitor, Check } from 'lucide-react'
+import { useThemeSettings } from '@/lib/contexts/theme-context'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuLabel,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/atoms/dropdown-menu'
 import { Button } from '@/components/atoms/button'
@@ -20,6 +25,7 @@ import { Button } from '@/components/atoms/button'
 export function ThemeToggle() {
   const [mounted, setMounted] = useState(false)
   const { theme, setTheme, systemTheme } = useTheme()
+  const { darkThemeVariant, setDarkThemeVariant } = useThemeSettings()
 
   // 避免 SSR 水合不匹配
   useEffect(() => {
@@ -63,7 +69,7 @@ export function ThemeToggle() {
 
       <DropdownMenuContent
         align="end"
-        className="w-40 bg-card/95 backdrop-blur-xl border-border/50 shadow-lg"
+        className="w-56 bg-card/95 backdrop-blur-xl border-border/50 shadow-lg"
         sideOffset={8}
       >
         <DropdownMenuItem
@@ -98,6 +104,26 @@ export function ThemeToggle() {
             <Check className="h-4 w-4 text-primary animate-in fade-in-0 zoom-in-95" />
           )}
         </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>深色风格</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={darkThemeVariant}
+          onValueChange={(value) => setDarkThemeVariant(value as 'vscode' | 'legacy')}
+        >
+          <DropdownMenuRadioItem
+            value="vscode"
+            className="cursor-pointer transition-all duration-150 hover:bg-accent/10"
+          >
+            VS Code Dark Modern
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem
+            value="legacy"
+            className="cursor-pointer transition-all duration-150 hover:bg-accent/10"
+          >
+            经典紫色风格
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -47,13 +47,13 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   }, [clearSearch])
 
   return (
-    <header className="bg-white dark:bg-card shadow-sm border-b dark:border-border">
+    <header className="bg-card shadow-sm border-b border-border">
       <div className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-foreground">{title}</h1>
+            <h1 className="text-2xl font-bold text-foreground">{title}</h1>
             {subtitle && (
-              <p className="text-sm text-gray-600 dark:text-muted-foreground mt-1">{subtitle}</p>
+              <p className="text-sm text-muted-foreground dark:text-muted-foreground mt-1">{subtitle}</p>
             )}
           </div>
           <div className="flex items-center gap-4">
@@ -117,7 +117,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 
                 {/* 搜索结果下拉 */}
                 {showResults && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-card border border-gray-200 dark:border-border rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
                     {searching ? (
                       <div className="p-4 text-center text-gray-500 dark:text-muted-foreground">搜索中...</div>
                     ) : results.length > 0 ? (
@@ -127,8 +127,8 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                             key={device.id}
                             className={`px-4 py-2 cursor-pointer flex items-center justify-between ${
                               index === activeIndex
-                                ? 'bg-gray-50 dark:bg-accent/10'
-                                : 'hover:bg-gray-50 dark:hover:bg-accent/10'
+                                ? 'bg-muted/40 dark:bg-accent/10'
+                                : 'hover:bg-muted/40 dark:hover:bg-accent/10'
                             }`}
                             onMouseEnter={() => setActiveIndex(index)}
                             onClick={() => {
@@ -137,8 +137,8 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
                             }}
                           >
                             <div>
-                              <div className="font-medium text-gray-900 dark:text-foreground">{device.name}</div>
-                              <div className="text-sm text-gray-600 dark:text-muted-foreground">{device.ip}</div>
+                              <div className="font-medium text-foreground">{device.name}</div>
+                              <div className="text-sm text-muted-foreground dark:text-muted-foreground">{device.ip}</div>
                             </div>
                             <span className={`px-2 py-1 text-xs rounded-full ${
                               device.status === 'online' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :

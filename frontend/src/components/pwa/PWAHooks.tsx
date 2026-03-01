@@ -261,7 +261,7 @@ export const PWAInstallPrompt: React.FC = () => {
   }
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:w-80 bg-white rounded-lg shadow-lg border p-4 z-50">
+    <div className="fixed bottom-4 left-4 right-4 z-50 rounded-lg border border-border bg-card p-4 shadow-lg md:left-auto md:w-80">
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0">
           <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -272,8 +272,8 @@ export const PWAInstallPrompt: React.FC = () => {
         </div>
         
         <div className="flex-1">
-          <h3 className="font-semibold text-gray-900 mb-1">安装应用到设备</h3>
-          <p className="text-sm text-gray-600 mb-3">
+          <h3 className="mb-1 font-semibold text-foreground">安装应用到设备</h3>
+          <p className="text-sm text-muted-foreground mb-3">
             将巡检系统安装到您的设备，获得更好的使用体验
           </p>
           
@@ -286,7 +286,7 @@ export const PWAInstallPrompt: React.FC = () => {
             </button>
             <button
               onClick={handleDismiss}
-              className="px-4 py-2 text-gray-600 text-sm hover:text-gray-800 transition-colors"
+              className="px-4 py-2 text-muted-foreground text-sm hover:text-gray-800 transition-colors"
             >
               暂不安装
             </button>
@@ -306,7 +306,7 @@ export const OfflineIndicator: React.FC = () => {
   return (
     <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-white text-center py-2 px-4 text-sm font-medium z-50">
       <div className="flex items-center justify-center gap-2">
-        <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+        <div className="h-2 w-2 animate-pulse rounded-full bg-yellow-100"></div>
         您当前处于离线状态，部分功能可能无法使用
       </div>
     </div>

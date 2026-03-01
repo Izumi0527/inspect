@@ -363,7 +363,7 @@ export const InspectionExecutions: React.FC = () => {
       title: '策略信息',
       render: (_, execution) => (
         <div className="flex flex-col">
-          <span className="font-medium text-gray-900 dark:text-gray-100">{execution.strategyName}</span>
+          <span className="font-medium text-foreground">{execution.strategyName}</span>
           <div className="flex items-center gap-2 mt-1">
             {getTriggerTypeBadge(execution.triggerType)}
             {execution.triggerUser && (
@@ -540,12 +540,12 @@ export const InspectionExecutions: React.FC = () => {
         </div>
 
         {selectedExecution && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-4 text-sm text-gray-600 dark:text-gray-300">
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
-              <span className="font-medium text-gray-900 dark:text-gray-100">已选择执行</span>
+              <span className="font-medium text-foreground">已选择执行</span>
               {getStatusBadge(selectedExecution.status)}
             </div>
-            <div className="text-gray-700 dark:text-gray-300">
+            <div className="text-muted-foreground">
               {selectedExecution.strategyName}
             </div>
             <div className="text-xs text-gray-400 dark:text-gray-500">
@@ -574,7 +574,7 @@ export const InspectionExecutions: React.FC = () => {
               <Table
                 data={filteredExecutions}
                 columns={columns}
-                className="bg-white dark:bg-gray-900 rounded-lg shadow-sm"
+                className="bg-card rounded-lg shadow-sm"
               />
             </motion.div>
 
@@ -624,23 +624,23 @@ export const InspectionExecutions: React.FC = () => {
             <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-full">
               <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            <h3 className="text-lg font-semibold text-foreground">
               确认删除执行记录
             </h3>
           </div>
           
           {executionToDelete && (
-            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <div className="mb-6 p-4 bg-muted/40 rounded-lg">
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">策略名称:</span>
-                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                  <span className="font-medium text-foreground">
                     {executionToDelete.strategyName}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">执行时间:</span>
-                  <span className="text-gray-700 dark:text-gray-300">
+                  <span className="text-muted-foreground">
                     {new Date(executionToDelete.startTime).toLocaleString()}
                   </span>
                 </div>
@@ -658,7 +658,7 @@ export const InspectionExecutions: React.FC = () => {
             </div>
           )}
           
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+          <p className="text-sm text-muted-foreground mb-6">
             删除后将无法恢复此执行记录及其相关的巡检结果数据。确定要继续吗？
           </p>
           

@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ]
 
   return (
-    <div className={`fixed inset-y-0 left-0 z-50 ${isOpen ? 'w-64' : 'w-20'} bg-white dark:bg-card shadow-lg dark:border-r dark:border-border transform transition-all duration-300`}>
+    <div className={`fixed inset-y-0 left-0 z-50 ${isOpen ? 'w-64' : 'w-20'} bg-card shadow-lg dark:border-r dark:border-border transform transition-all duration-300`}>
       <div className="flex items-center justify-between p-4 border-b dark:border-border">
         {isOpen && (
           <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">

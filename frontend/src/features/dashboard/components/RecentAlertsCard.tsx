@@ -29,7 +29,7 @@ export const RecentAlertsCard: React.FC<RecentAlertsCardProps> = ({
           <div className="space-y-4">
             {[...Array(3)].map((_, index) => (
               <div key={index} className="animate-pulse">
-                <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-accent/5 rounded-lg">
+                <div className="flex items-center gap-3 p-3 bg-muted/40 dark:bg-accent/5 rounded-lg">
                   <div className="w-2 h-2 bg-gray-300 dark:bg-gray-700 rounded-full"></div>
                   <div className="flex-1">
                     <div className="h-4 bg-gray-300 dark:bg-gray-700 rounded w-32 mb-1"></div>
@@ -58,13 +58,13 @@ export const RecentAlertsCard: React.FC<RecentAlertsCardProps> = ({
           {alerts.length > 0 ? (
             <>
               {alerts.map((alert) => (
-                <div key={alert.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-accent/5 rounded-lg hover:bg-gray-100 dark:hover:bg-accent/10 transition-colors">
+                <div key={alert.id} className="flex items-center gap-3 p-3 bg-muted/40 dark:bg-accent/5 rounded-lg hover:bg-gray-100 dark:hover:bg-accent/10 transition-colors">
                   <div className={`w-2 h-2 rounded-full ${getSeverityColor(alert.severity)}`} />
                   <div className="flex-1">
-                    <p className="font-medium text-gray-900 dark:text-foreground">{alert.device}</p>
-                    <p className="text-sm text-gray-600 dark:text-muted-foreground">{alert.message}</p>
+                    <p className="font-medium text-foreground">{alert.device}</p>
+                    <p className="text-sm text-muted-foreground dark:text-muted-foreground">{alert.message}</p>
                     {alert.category && (
-                      <span className="inline-block px-2 py-1 mt-1 text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full">
+                      <span className="inline-block px-2 py-1 mt-1 text-xs bg-gray-200 dark:bg-gray-700 text-muted-foreground rounded-full">
                         {alert.category}
                       </span>
                     )}

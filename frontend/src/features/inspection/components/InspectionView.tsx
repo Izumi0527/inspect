@@ -79,25 +79,25 @@ export const InspectionView: React.FC = () => {
             <Card>
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-blue-600">{stats.totalStrategies}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">总策略数</div>
+                <div className="text-sm text-muted-foreground">总策略数</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-green-600">{stats.activeStrategies}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">活跃策略</div>
+                <div className="text-sm text-muted-foreground">活跃策略</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-purple-600">{stats.todayExecutions}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">今日执行</div>
+                <div className="text-sm text-muted-foreground">今日执行</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-orange-600">{stats.avgScore.toFixed(1)}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">平均评分</div>
+                <div className="text-sm text-muted-foreground">平均评分</div>
               </CardContent>
             </Card>
           </div>
@@ -122,7 +122,7 @@ export const InspectionView: React.FC = () => {
                       transition-all duration-200
                       ${isActive
                         ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        : 'text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400 hover:bg-muted/40'
                       }
                     `}
                     whileHover={{ scale: 1.02 }}

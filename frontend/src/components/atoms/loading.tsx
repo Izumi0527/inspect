@@ -16,7 +16,7 @@ const sizeClasses = {
 
 const Spinner = ({ size = 'md', className }: { size: 'sm' | 'md' | 'lg'; className?: string }) => (
   <motion.div
-    className={cn('border-2 border-gray-200 border-t-purple-500 rounded-full', sizeClasses[size], className)}
+    className={cn('border-2 border-border border-t-primary rounded-full', sizeClasses[size], className)}
     animate={{ rotate: 360 }}
     transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
   />
@@ -30,7 +30,7 @@ const Dots = ({ size = 'md', className }: { size: 'sm' | 'md' | 'lg'; className?
       {[0, 1, 2].map((i) => (
         <motion.div
           key={i}
-          className={cn('bg-purple-500 rounded-full', dotSize)}
+          className={cn('bg-primary rounded-full', dotSize)}
           animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
           transition={{
             duration: 1.5,
@@ -46,7 +46,7 @@ const Dots = ({ size = 'md', className }: { size: 'sm' | 'md' | 'lg'; className?
 
 const Pulse = ({ size = 'md', className }: { size: 'sm' | 'md' | 'lg'; className?: string }) => (
   <motion.div
-    className={cn('bg-purple-500 rounded-full', sizeClasses[size], className)}
+    className={cn('bg-primary rounded-full', sizeClasses[size], className)}
     animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
     transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
   />
@@ -83,14 +83,14 @@ export const LoadingOverlay: React.FC<{
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm"
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm"
           >
             <Loading size="lg" variant="spinner" />
             <motion.p
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="mt-4 text-sm text-gray-600"
+              className="mt-4 text-sm text-muted-foreground"
             >
               {message}
             </motion.p>
@@ -106,7 +106,7 @@ export const PageLoading: React.FC<{ message?: string }> = ({ message = '页面�
   return (
     <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
       <Loading size="lg" variant="spinner" />
-      <p className="text-sm text-gray-600">{message}</p>
+      <p className="text-sm text-muted-foreground">{message}</p>
     </div>
   )
 }

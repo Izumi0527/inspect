@@ -37,11 +37,11 @@ export const DashboardView: React.FC = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-background flex items-center justify-center">
-        <div className="max-w-md w-full text-center bg-white dark:bg-card rounded-lg shadow-lg p-8">
+      <div className="min-h-screen bg-muted/40 dark:bg-background flex items-center justify-center">
+        <div className="max-w-md w-full text-center bg-card rounded-lg shadow-lg p-8">
           <div className="text-red-600 text-6xl mb-4">⚠️</div>
           <h2 className="text-xl font-semibold text-gray-800 dark:text-foreground mb-2">无法加载数据</h2>
-          <p className="text-gray-600 dark:text-muted-foreground mb-6">{error}</p>
+          <p className="text-muted-foreground dark:text-muted-foreground mb-6">{error}</p>
           <div className="space-y-3">
             <button
               onClick={handleRetry}
@@ -60,7 +60,7 @@ export const DashboardView: React.FC = () => {
   }
 
   return (
-    <div className="h-screen bg-gray-50 dark:bg-background overflow-hidden">
+    <div className="h-screen bg-muted/40 dark:bg-background overflow-hidden">
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -137,10 +137,10 @@ export const DashboardView: React.FC = () => {
 
           {/* Loading overlay for refresh */}
           {isRefreshing && data && (
-            <div className="fixed top-4 right-4 bg-white dark:bg-card rounded-lg shadow-lg p-3 z-50">
+            <div className="fixed top-4 right-4 bg-card rounded-lg shadow-lg p-3 z-50">
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-sm text-gray-600 dark:text-muted-foreground">刷新数据中...</span>
+                <span className="text-sm text-muted-foreground dark:text-muted-foreground">刷新数据中...</span>
               </div>
             </div>
           )}

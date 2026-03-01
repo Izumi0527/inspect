@@ -47,7 +47,7 @@ export const LogListItem: React.FC<LogListItemProps> = ({
     <div
       className={`
         group flex items-start gap-3 p-4 border-b border-gray-100 dark:border-gray-800
-        hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer
+        hover:bg-muted/40/50 transition-colors cursor-pointer
         ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
       `}
       onClick={() => onClick?.(log)}
@@ -70,7 +70,7 @@ export const LogListItem: React.FC<LogListItemProps> = ({
       {/* 日志内容 */}
       <div className="flex-1 min-w-0">
         {/* 日志消息 */}
-        <p className="text-sm text-gray-900 dark:text-gray-100 font-mono break-all line-clamp-2">
+        <p className="text-sm text-foreground font-mono break-all line-clamp-2">
           {log.message}
         </p>
 

@@ -9,12 +9,12 @@ const Input = React.forwardRef<
     <input
       type={type}
       className={cn(
-        'flex h-12 w-full rounded-xl border border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg px-4 py-3 text-base dark:text-gray-100 transition-all duration-200',
-        'file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-gray-950 dark:file:text-gray-100',
-        'placeholder:text-gray-500 dark:placeholder:text-gray-400',
-        'focus:border-purple-400 focus:bg-white dark:focus:bg-gray-800 focus:ring-2 focus:ring-purple-400/20 focus:outline-none',
+        'flex h-12 w-full rounded-xl border border-border/50 bg-card/80 backdrop-blur-lg px-4 py-3 text-base text-foreground transition-all duration-200',
+        'file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground',
+        'placeholder:text-muted-foreground',
+        'focus:border-primary focus:bg-background/90 focus:ring-2 focus:ring-ring/30 focus:outline-none',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        'hover:border-gray-300 dark:hover:border-gray-600',
+        'hover:border-border',
         className
       )}
       ref={ref}
@@ -36,7 +36,7 @@ const SimpleInput = React.forwardRef<HTMLInputElement, SimpleInputProps>(
     return (
       <div className="relative">
         {leftIcon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
             {leftIcon}
           </div>
         )}
@@ -71,11 +71,11 @@ const TextArea = React.forwardRef<
   return (
     <textarea
       className={cn(
-        'flex min-h-[120px] w-full rounded-xl border border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg px-4 py-3 text-base dark:text-gray-100 transition-all duration-200',
-        'placeholder:text-gray-500 dark:placeholder:text-gray-400',
-        'focus:border-purple-400 focus:bg-white dark:focus:bg-gray-800 focus:ring-2 focus:ring-purple-400/20 focus:outline-none',
+        'flex min-h-[120px] w-full rounded-xl border border-border/50 bg-card/80 backdrop-blur-lg px-4 py-3 text-base text-foreground transition-all duration-200',
+        'placeholder:text-muted-foreground',
+        'focus:border-primary focus:bg-background/90 focus:ring-2 focus:ring-ring/30 focus:outline-none',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        'hover:border-gray-300 dark:hover:border-gray-600',
+        'hover:border-border',
         'resize-none',
         className
       )}

@@ -76,7 +76,7 @@ export const LogList: React.FC<LogListProps> = ({
   return (
     <div className="flex flex-col h-full">
       {/* 列表头部 */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/50">
         <div className="flex items-center gap-3">
           <Checkbox
             checked={allSelected}
@@ -84,7 +84,7 @@ export const LogList: React.FC<LogListProps> = ({
             indeterminate={someSelected}
             onCheckedChange={handleSelectAll}
           />
-          <span className="text-sm text-gray-600 dark:text-gray-400">
+          <span className="text-sm text-muted-foreground">
             共 {pagination.total.toLocaleString()} 条日志
           </span>
         </div>
@@ -94,7 +94,7 @@ export const LogList: React.FC<LogListProps> = ({
           <select
             value={pagination.pageSize}
             onChange={(e) => pagination.onPageSizeChange(Number(e.target.value))}
-            className="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 bg-white dark:bg-gray-800"
+            className="text-sm border border-border rounded-md px-2 py-1 bg-card"
           >
             <option value={10}>10条/页</option>
             <option value={20}>20条/页</option>
@@ -131,8 +131,8 @@ export const LogList: React.FC<LogListProps> = ({
 
       {/* 分页 */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-          <span className="text-sm text-gray-600 dark:text-gray-400">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/50">
+          <span className="text-sm text-muted-foreground">
             第 {pagination.current} / {totalPages} 页
           </span>
 

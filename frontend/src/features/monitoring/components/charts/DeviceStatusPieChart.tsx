@@ -63,10 +63,10 @@ export function DeviceStatusPieChart({
           <div key={item.name} className="flex items-center justify-between gap-2 text-sm">
             <div className="flex items-center gap-2">
               <div className="h-3 w-3 flex-shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
-              <span className="text-gray-600 dark:text-gray-400">{item.name}</span>
+              <span className="text-muted-foreground">{item.name}</span>
             </div>
-            <span className="font-medium text-gray-900 dark:text-gray-100">
-              {item.value} <span className="text-xs text-gray-500">({percentage}%)</span>
+            <span className="font-medium text-foreground">
+              {item.value} <span className="text-xs text-muted-foreground">({percentage}%)</span>
             </span>
           </div>
         )
@@ -78,8 +78,8 @@ export function DeviceStatusPieChart({
   const Summary = () => (
     <div className="mb-4 flex items-center justify-center">
       <div className="text-center">
-        <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">{total}</div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">设备总数</div>
+        <div className="text-3xl font-bold text-foreground">{total}</div>
+        <div className="text-sm text-muted-foreground">设备总数</div>
       </div>
     </div>
   )
@@ -87,7 +87,7 @@ export function DeviceStatusPieChart({
   if (total === 0) {
     return (
       <div className="flex items-center justify-center" style={{ height }}>
-        <p className="text-gray-500 dark:text-gray-400">暂无设备数据</p>
+        <p className="text-muted-foreground">暂无设备数据</p>
       </div>
     )
   }

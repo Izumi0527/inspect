@@ -55,7 +55,7 @@ const ANOMALY_TYPE_CONFIG = {
 }
 
 const SEVERITY_CONFIG = {
-  low: { color: 'bg-gray-100 text-gray-800', label: '低' },
+  low: { color: 'bg-muted text-foreground', label: '低' },
   medium: { color: 'bg-yellow-100 text-yellow-800', label: '中' },
   high: { color: 'bg-orange-100 text-orange-800', label: '高' },
   critical: { color: 'bg-red-100 text-red-800', label: '严重' }
@@ -183,37 +183,37 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
       <Card>
         <CardContent className="p-4 text-center">
           <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
-          <div className="text-xs text-gray-600">总异常</div>
+          <div className="text-xs text-muted-foreground">总异常</div>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-4 text-center">
           <div className="text-2xl font-bold text-red-600">{stats.critical}</div>
-          <div className="text-xs text-gray-600">严重</div>
+          <div className="text-xs text-muted-foreground">严重</div>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-4 text-center">
           <div className="text-2xl font-bold text-orange-600">{stats.high}</div>
-          <div className="text-xs text-gray-600">高</div>
+          <div className="text-xs text-muted-foreground">高</div>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-4 text-center">
           <div className="text-2xl font-bold text-yellow-600">{stats.medium}</div>
-          <div className="text-xs text-gray-600">中</div>
+          <div className="text-xs text-muted-foreground">中</div>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-4 text-center">
-          <div className="text-2xl font-bold text-gray-600">{stats.low}</div>
-          <div className="text-xs text-gray-600">低</div>
+          <div className="text-2xl font-bold text-muted-foreground">{stats.low}</div>
+          <div className="text-xs text-muted-foreground">低</div>
         </CardContent>
       </Card>
       <Card>
         <CardContent className="p-4 text-center">
           <div className="text-2xl font-bold text-green-600">{stats.recent}</div>
-          <div className="text-xs text-gray-600">近1小时</div>
+          <div className="text-xs text-muted-foreground">近1小时</div>
         </CardContent>
       </Card>
     </div>
@@ -310,12 +310,12 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
           <CardContent className="p-4">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${typeConfig?.color || 'bg-gray-100 text-gray-800'}`}>
+                <div className={`p-2 rounded-lg ${typeConfig?.color || 'bg-muted text-foreground'}`}>
                   <IconComponent className="h-4 w-4" />
                 </div>
                 <div>
-                  <h4 className="font-medium text-gray-900">{anomaly.device_ip}</h4>
-                  <p className="text-sm text-gray-600">{anomaly.interface}</p>
+                  <h4 className="font-medium text-foreground">{anomaly.device_ip}</h4>
+                  <p className="text-sm text-muted-foreground">{anomaly.interface}</p>
                 </div>
               </div>
               <div className="text-right">
@@ -331,7 +331,7 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
             <div className="space-y-2">
               <div className="text-sm text-gray-800">{anomaly.description}</div>
               
-              <div className="flex justify-between text-xs text-gray-600">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>基线值: {formatBytes(anomaly.baseline_value)}</span>
                 <span>当前值: {formatBytes(anomaly.current_value)}</span>
               </div>
@@ -349,14 +349,14 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
               {Object.keys(anomaly.metadata).length > 0 && (
                 <div className="mt-2 pt-2 border-t">
                   <details className="text-xs">
-                    <summary className="cursor-pointer text-gray-600 hover:text-gray-800">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-gray-800">
                       详细信息
                     </summary>
                     <div className="mt-1 space-y-1">
                       {Object.entries(anomaly.metadata).map(([key, value]) => (
                         <div key={key} className="flex justify-between">
                           <span className="text-gray-500">{key}:</span>
-                          <span className="text-gray-700">{String(value)}</span>
+                          <span className="text-foreground/80">{String(value)}</span>
                         </div>
                       ))}
                     </div>
@@ -382,7 +382,7 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
       <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">流量异常详情</h3>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Clock className="h-4 w-4" />
             实时更新
           </div>
@@ -400,8 +400,8 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
           <Card>
             <CardContent className="p-12 text-center">
               <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">暂无异常</h3>
-              <p className="text-gray-600">
+              <h3 className="text-lg font-medium text-foreground mb-2">暂无异常</h3>
+              <p className="text-muted-foreground">
                 {anomalies.length === 0 
                   ? '当前没有检测到流量异常' 
                   : '当前筛选条件下无匹配的异常'

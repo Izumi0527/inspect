@@ -42,14 +42,14 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <AlertTriangle className="w-8 h-8 text-red-600" />
+        <div className="min-h-screen flex items-center justify-center bg-muted/40 dark:bg-background">
+          <div className="max-w-md w-full bg-card rounded-lg shadow-lg p-8 text-center border border-border">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-400" />
             </div>
             
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">出现了一些问题</h1>
-            <p className="text-gray-600 mb-8">
+            <h1 className="text-2xl font-bold text-foreground mb-4">出现了一些问题</h1>
+            <p className="text-muted-foreground dark:text-muted-foreground mb-8">
               页面加载时出现错误，请尝试刷新页面或返回首页。
             </p>
             
@@ -71,10 +71,10 @@ export class ErrorBoundary extends Component<Props, State> {
             
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <details className="mt-8 text-left">
-                <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
+                <summary className="cursor-pointer text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
                   查看错误详情
                 </summary>
-                <pre className="mt-4 p-4 bg-gray-100 rounded text-xs overflow-auto max-h-64 text-red-600">
+                <pre className="mt-4 p-4 bg-gray-100 dark:bg-gray-900 rounded text-xs overflow-auto max-h-64 text-red-600 dark:text-red-400">
                   {this.state.error.toString()}
                   {this.state.errorInfo?.componentStack}
                 </pre>

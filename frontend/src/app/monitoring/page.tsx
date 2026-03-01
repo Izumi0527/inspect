@@ -50,7 +50,7 @@ export default function MonitoringPage() {
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
           <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
-          <p className="text-gray-600">验证登录状态...</p>
+          <p className="text-muted-foreground">验证登录状态...</p>
         </div>
       </div>
     )

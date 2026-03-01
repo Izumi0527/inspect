@@ -39,7 +39,7 @@ const roleLabels: Record<UserRole, string> = {
 function StatusBadge({ status }: { status: UserStatus }) {
   const config = {
     active: { className: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300', label: '正常' },
-    inactive: { className: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300', label: '停用' },
+    inactive: { className: 'bg-muted/60 dark:bg-muted/80 text-foreground/90', label: '停用' },
     locked: { className: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300', label: '锁定' },
   }
   const { className, label } = config[status]
@@ -239,8 +239,8 @@ export function UserManagement() {
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">总用户数</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.totalUsers}</p>
+                <p className="text-sm text-muted-foreground">总用户数</p>
+                <p className="text-2xl font-bold text-foreground">{stats.totalUsers}</p>
               </div>
               <Users className="w-8 h-8 text-blue-600" />
             </div>
@@ -248,7 +248,7 @@ export function UserManagement() {
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">正常用户</p>
+                <p className="text-sm text-muted-foreground">正常用户</p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.activeUsers}</p>
               </div>
               <CheckCircle className="w-8 h-8 text-green-600" />
@@ -257,16 +257,16 @@ export function UserManagement() {
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">停用用户</p>
-                <p className="text-2xl font-bold text-gray-600 dark:text-gray-400">{stats.inactiveUsers}</p>
+                <p className="text-sm text-muted-foreground">停用用户</p>
+                <p className="text-2xl font-bold text-muted-foreground">{stats.inactiveUsers}</p>
               </div>
-              <XCircle className="w-8 h-8 text-gray-600" />
+              <XCircle className="w-8 h-8 text-muted-foreground" />
             </div>
           </Card>
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">锁定用户</p>
+                <p className="text-sm text-muted-foreground">锁定用户</p>
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.lockedUsers}</p>
               </div>
               <Lock className="w-8 h-8 text-red-600" />
@@ -280,7 +280,7 @@ export function UserManagement() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex-1 flex items-center gap-2">
             <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground/80" />
               <Input
                 placeholder="搜索用户名、邮箱..."
                 value={keyword}
@@ -310,29 +310,29 @@ export function UserManagement() {
         <div className="overflow-x-auto flex-1">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">用户名</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">邮箱</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">姓名</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">角色</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">状态</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700 dark:text-gray-300">最后登录</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">操作</th>
+              <tr className="border-b border-border bg-muted/40">
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">用户名</th>
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">邮箱</th>
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">姓名</th>
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">角色</th>
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">状态</th>
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">最后登录</th>
+                <th className="px-4 py-3 text-right font-medium text-foreground/90">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {users.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                <tr key={user.id} className="hover:bg-muted/60">
                   <td className="px-4 py-3 font-medium">{user.username}</td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{user.email}</td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{user.fullName}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{user.fullName}</td>
                   <td className="px-4 py-3">
                     <Badge variant="secondary">{roleLabels[user.role]}</Badge>
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={user.status} />
                   </td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">
+                  <td className="px-4 py-3 text-muted-foreground text-xs">
                     {formatDate(user.lastLoginAt)}
                   </td>
                   <td className="px-4 py-3">
@@ -420,8 +420,8 @@ export function UserManagement() {
 
         {/* 分页 */}
         {totalCount > pageSize && (
-          <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
+          <div className="px-4 py-3 border-t border-border flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
               共 {totalCount} 条记录，第 {page} 页
             </div>
             <div className="flex gap-2">

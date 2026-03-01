@@ -226,8 +226,8 @@ export const InspectionAnalytics: React.FC = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{metric.title}</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">{metric.value}</p>
+                  <p className="text-sm font-medium text-muted-foreground">{metric.title}</p>
+                  <p className="text-2xl font-bold text-foreground mt-2">{metric.value}</p>
                   <div className="flex items-center gap-1 mt-2">
                     <TrendingUp className={`w-4 h-4 text-${metric.color}-500`} />
                     <span className={`text-sm font-medium text-${metric.color}-600`}>
@@ -362,7 +362,7 @@ export const InspectionAnalytics: React.FC = () => {
                     ? (item.success / item.executions * 100) 
                     : 0
                   return (
-                  <tr key={index} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <tr key={index} className="border-b dark:border-gray-700 hover:bg-muted/40">
                     <td className="p-3">{new Date(item.date).toLocaleDateString()}</td>
                     <td className="p-3">{item.executions}</td>
                     <td className="p-3">

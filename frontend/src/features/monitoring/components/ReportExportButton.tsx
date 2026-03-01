@@ -114,10 +114,10 @@ export function ReportExportButton() {
 
       {/* 下拉菜单 */}
       {isMenuOpen && !exportStatus.isExporting && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+        <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-border bg-card shadow-lg">
           <div className="p-1">
-            <div className="border-b border-gray-200 px-3 py-2 dark:border-gray-700">
-              <p className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400">
+            <div className="border-b border-border px-3 py-2">
+              <p className="text-xs font-semibold uppercase text-muted-foreground">
                 选择格式
               </p>
             </div>
@@ -128,7 +128,7 @@ export function ReportExportButton() {
                 <button
                   key={format}
                   onClick={() => handleExport(format)}
-                  className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-foreground/90 transition-colors hover:bg-muted/60 dark:text-foreground/90 dark:hover:bg-muted/60"
                 >
                   <Icon className={`h-4 w-4 ${config.iconColor}`} />
                   <span className="font-medium">{config.label}</span>

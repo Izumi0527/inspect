@@ -18,7 +18,7 @@ export const ExecutionTableSkeleton: React.FC<Props> = ({ rows = 5 }) => {
     <Card>
       <CardContent className="p-6">
         {/* 表头骨架 */}
-        <div className="grid grid-cols-6 gap-4 pb-4 border-b border-gray-200">
+        <div className="grid grid-cols-6 gap-4 pb-4 border-b border-border">
           {headers.map((header) => (
             <div
               key={header}

@@ -38,7 +38,7 @@ export function ConfigInput({
       max={max}
       className={cn(
         'max-w-md',
-        disabled && 'bg-gray-50 cursor-not-allowed',
+        disabled && 'bg-muted/40 cursor-not-allowed',
         className
       )}
     />

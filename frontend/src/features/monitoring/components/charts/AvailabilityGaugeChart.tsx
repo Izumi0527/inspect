@@ -46,7 +46,7 @@ export function AvailabilityGaugeChart({
       case 'down':
         return { icon: '↓', color: 'text-red-600', label: '下降' }
       case 'stable':
-        return { icon: '→', color: 'text-gray-600', label: '稳定' }
+        return { icon: '→', color: 'text-muted-foreground', label: '稳定' }
     }
   }, [data.trend])
 
@@ -107,7 +107,7 @@ export function AvailabilityGaugeChart({
               >
                 {data.current.toFixed(2)}%
               </div>
-              <div className={`mt-0.5 ${subTextSize} text-gray-500 dark:text-gray-400`}>可用性</div>
+              <div className={`mt-0.5 ${subTextSize} text-muted-foreground`}>可用性</div>
             </div>
           </div>
         </div>
@@ -115,10 +115,10 @@ export function AvailabilityGaugeChart({
         {/* 详细信息 */}
         <div className="w-full space-y-2">
           {/* 目标对比 */}
-          <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2 dark:bg-gray-800">
-            <span className="text-sm text-gray-600 dark:text-gray-400">目标值</span>
+          <div className="flex items-center justify-between rounded-lg bg-muted/40 px-4 py-2 dark:bg-muted/80">
+            <span className="text-sm text-muted-foreground">目标值</span>
             <div className="flex items-center gap-2">
-              <span className="font-medium text-gray-900 dark:text-gray-100">
+              <span className="font-medium text-foreground">
                 {data.target}%
               </span>
               <span
@@ -130,8 +130,8 @@ export function AvailabilityGaugeChart({
           </div>
 
           {/* 趋势 */}
-          <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2 dark:bg-gray-800">
-            <span className="text-sm text-gray-600 dark:text-gray-400">趋势</span>
+          <div className="flex items-center justify-between rounded-lg bg-muted/40 px-4 py-2 dark:bg-muted/80">
+            <span className="text-sm text-muted-foreground">趋势</span>
             <div className="flex items-center gap-2">
               <span className={`text-xl ${trendConfig.color}`}>{trendConfig.icon}</span>
               <span className={`text-sm font-medium ${trendConfig.color}`}>
@@ -142,7 +142,7 @@ export function AvailabilityGaugeChart({
 
           {/* 最后更新时间 */}
           {data.lastUpdate && (
-            <div className="mt-4 text-center text-xs text-gray-500 dark:text-gray-400">
+            <div className="mt-4 text-center text-xs text-muted-foreground">
               更新于:{' '}
               {new Date(data.lastUpdate).toLocaleString('zh-CN', {
                 month: '2-digit',
@@ -157,17 +157,17 @@ export function AvailabilityGaugeChart({
         {/* 评级标识 */}
         <div className="mt-6 flex gap-2 text-xs">
           <div
-            className={`rounded px-2 py-1 ${data.current >= 90 ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}
+            className={`rounded px-2 py-1 ${data.current >= 90 ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100' : 'bg-muted/60 text-muted-foreground dark:bg-card/80 dark:text-muted-foreground'}`}
           >
             优秀 (≥90%)
           </div>
           <div
-            className={`rounded px-2 py-1 ${data.current >= 80 && data.current < 90 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}
+            className={`rounded px-2 py-1 ${data.current >= 80 && data.current < 90 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100' : 'bg-muted/60 text-muted-foreground dark:bg-card/80 dark:text-muted-foreground'}`}
           >
             警告 (80-90%)
           </div>
           <div
-            className={`rounded px-2 py-1 ${data.current < 80 ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}
+            className={`rounded px-2 py-1 ${data.current < 80 ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100' : 'bg-muted/60 text-muted-foreground dark:bg-card/80 dark:text-muted-foreground'}`}
           >
             严重 (&lt;80%)
           </div>

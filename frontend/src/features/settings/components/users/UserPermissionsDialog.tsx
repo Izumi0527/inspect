@@ -56,12 +56,12 @@ export function UserPermissionsDialog({ open, user, onOpenChange }: Props) {
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="text-sm text-gray-600 dark:text-gray-400">
+          <div className="text-sm text-muted-foreground">
             {user ? (
               <>
-                用户：<span className="font-medium text-gray-900 dark:text-gray-100">{user.username}</span>
+                用户：<span className="font-medium text-foreground">{user.username}</span>
                 <span className="mx-2">·</span>
-                角色：<span className="font-medium text-gray-900 dark:text-gray-100">{user.role}</span>
+                角色：<span className="font-medium text-foreground">{user.role}</span>
               </>
             ) : (
               '请选择用户'
@@ -85,13 +85,13 @@ export function UserPermissionsDialog({ open, user, onOpenChange }: Props) {
           {!isLoading && !error && (
             <div className="space-y-4">
               {grouped.length === 0 && (
-                <div className="text-sm text-gray-600 dark:text-gray-400">暂无权限数据</div>
+                <div className="text-sm text-muted-foreground">暂无权限数据</div>
               )}
 
               {grouped.map(([module, items]) => (
-                <div key={module} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <div key={module} className="border border-border rounded-lg p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <div className="font-medium text-gray-900 dark:text-gray-100">{module}</div>
+                    <div className="font-medium text-foreground">{module}</div>
                     <Badge variant="secondary">{items.length}</Badge>
                   </div>
                   <div className="flex flex-wrap gap-2">

@@ -83,8 +83,8 @@ interface DeviceDetailsModalProps {
 
 const InfoRow = ({ label, value }: { label: string; value?: React.ReactNode }) => (
   <div className="flex flex-col">
-    <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
-    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 break-all">{value ?? '-'}</span>
+    <span className="text-xs text-muted-foreground">{label}</span>
+    <span className="text-sm font-medium text-foreground break-all">{value ?? '-'}</span>
   </div>
 )
 
@@ -96,11 +96,11 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
 }) => {
   const renderContent = () => {
     if (loading) {
-      return <div className="py-10 text-center text-gray-500 dark:text-gray-400">正在加载设备信息...</div>
+      return <div className="py-10 text-center text-muted-foreground">正在加载设备信息...</div>
     }
 
     if (!device) {
-      return <div className="py-10 text-center text-gray-500 dark:text-gray-400">未找到设备信息</div>
+      return <div className="py-10 text-center text-muted-foreground">未找到设备信息</div>
     }
 
     const cliInfo = getCliConfiguration(device)
@@ -114,8 +114,8 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
             {device.name?.slice(0, 2)?.toUpperCase() || 'NA'}
           </div>
           <div>
-            <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{device.name}</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{device.description || '未填写描述'}</p>
+            <p className="text-lg font-semibold text-foreground">{device.name}</p>
+            <p className="text-sm text-muted-foreground">{device.description || '未填写描述'}</p>
           </div>
         </div>
 
@@ -130,9 +130,9 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
           <InfoRow label="累计告警" value={device.alert_count ?? 0} />
         </div>
 
-        <div className="border rounded-xl p-4 bg-gray-50 dark:bg-gray-800/50">
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">连接配置</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400">
+        <div className="border rounded-xl p-4 bg-muted/40">
+          <p className="text-sm font-semibold text-foreground/90 mb-2">连接配置</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-muted-foreground">
             <InfoRow label="SNMP 只读团体字" value={snmpRead} />
             <InfoRow label="SNMP 读写团体字" value={snmpWrite} />
             <InfoRow label="连接协议" value={cliInfo.protocolLabel} />

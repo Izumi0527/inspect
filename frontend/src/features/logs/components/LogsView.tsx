@@ -281,7 +281,7 @@ export const LogsView: React.FC = () => {
             />
 
             {/* 日志列表 */}
-            <div className="flex-1 overflow-hidden border border-gray-200 dark:border-gray-700 rounded-lg">
+            <div className="flex-1 overflow-hidden border border-border rounded-lg">
               {loading ? (
                 <SkeletonList count={pageSize} itemHeight="h-20" spacing="space-y-0" />
               ) : (

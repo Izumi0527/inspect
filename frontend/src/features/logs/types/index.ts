@@ -119,7 +119,7 @@ export interface LogFilters {
 
 // 日志级别配置
 export const LOG_LEVEL_CONFIG: Record<LogLevel, { label: string; color: string; bgColor: string }> = {
-  debug: { label: '调试', color: 'text-gray-600', bgColor: 'bg-gray-100' },
+  debug: { label: '调试', color: 'text-muted-foreground', bgColor: 'bg-gray-100' },
   info: { label: '信息', color: 'text-blue-600', bgColor: 'bg-blue-100' },
   warning: { label: '警告', color: 'text-yellow-600', bgColor: 'bg-yellow-100' },
   error: { label: '错误', color: 'text-red-600', bgColor: 'bg-red-100' },

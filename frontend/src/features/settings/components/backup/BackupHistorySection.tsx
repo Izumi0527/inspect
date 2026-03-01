@@ -93,7 +93,7 @@ function StatusBadge({ status }: { status: 'success' | 'failed' | 'in_progress' 
     variant: 'outline' as const,
     icon: AlertCircle,
     label: status || '未知',
-    className: 'bg-gray-100 text-gray-800 border-gray-200',
+    className: 'bg-muted text-foreground border-border',
   }
 
   const { icon: Icon, label, className } = statusConfig
@@ -205,14 +205,14 @@ export function BackupHistorySection({
       </div>
 
       {/* 磁盘使用情况 */}
-      <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+      <div className="mb-6 rounded-lg border border-border bg-muted/40 p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-700">磁盘使用情况</span>
-          <span className="text-sm text-gray-600">
+          <span className="text-sm font-medium text-foreground/90">磁盘使用情况</span>
+          <span className="text-sm text-muted-foreground">
             {formatFileSize(diskUsage.used)} / {formatFileSize(diskUsage.total)}
           </span>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-2.5">
+        <div className="w-full bg-muted rounded-full h-2.5">
           <div
             className={`h-2.5 rounded-full ${
               diskUsage.percentage > 90
@@ -224,7 +224,7 @@ export function BackupHistorySection({
             style={{ width: `${Math.min(diskUsage.percentage, 100)}%` }}
           />
         </div>
-        <div className="mt-2 text-xs text-gray-500">
+        <div className="mt-2 text-xs text-muted-foreground">
           {diskUsage.percentage > 90 && (
             <div className="flex items-center text-red-600">
               <AlertCircle className="w-4 h-4 mr-1" />
@@ -245,39 +245,39 @@ export function BackupHistorySection({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-4 py-3 text-left font-medium text-gray-700">文件名</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">大小</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">类型</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">状态</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">创建时间</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">耗时</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">创建者</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-700">操作</th>
+              <tr className="border-b border-border bg-muted/40">
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">文件名</th>
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">大小</th>
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">类型</th>
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">状态</th>
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">创建时间</th>
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">耗时</th>
+                <th className="px-4 py-3 text-left font-medium text-foreground/90">创建者</th>
+                <th className="px-4 py-3 text-right font-medium text-foreground/90">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {backups.map((backup) => (
-                <tr key={backup.id} className="hover:bg-gray-50">
+                <tr key={backup.id} className="hover:bg-muted/40">
                   <td className="px-4 py-3">
                     <div className="flex items-center">
-                      <Database className="w-4 h-4 mr-2 text-gray-400" />
+                      <Database className="w-4 h-4 mr-2 text-muted-foreground/80" />
                       <span className="font-mono text-xs">{backup.fileName}</span>
                     </div>
                     {backup.errorMessage && (
                       <div className="mt-1 text-xs text-red-600">{backup.errorMessage}</div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{formatFileSize(backup.fileSize)}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{formatFileSize(backup.fileSize)}</td>
                   <td className="px-4 py-3">
                     <TypeBadge type={backup.backupType} />
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={backup.status} />
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{formatDateTime(backup.createdAt)}</td>
-                  <td className="px-4 py-3 text-gray-600">{formatDuration(backup.duration)}</td>
-                  <td className="px-4 py-3 text-gray-600">{backup.createdBy}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{formatDateTime(backup.createdAt)}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{formatDuration(backup.duration)}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{backup.createdBy}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end space-x-2">
                       {backup.status === 'success' && (

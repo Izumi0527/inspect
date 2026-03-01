@@ -92,14 +92,14 @@ export const Pagination: React.FC<PaginationProps> = ({
     <div className={cn('flex items-center justify-between', className)}>
       {/* 左侧：总数信息和每页条数选择器 */}
       <div className="flex items-center gap-4">
-        <div className="text-sm text-gray-600">
+        <div className="text-sm text-muted-foreground">
           显示 <span className="font-medium">{startItem}</span> - <span className="font-medium">{endItem}</span>{' '}
           / 共 <span className="font-medium">{totalItems}</span> 条
         </div>
 
         {showPageSizeSelector && onPageSizeChange && (
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">每页:</span>
+            <span className="text-sm text-muted-foreground">每页:</span>
             <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
               <SelectTrigger className="w-20 h-8">
                 <SelectValue />
@@ -146,7 +146,7 @@ export const Pagination: React.FC<PaginationProps> = ({
         {pages.map((page, index) => {
           if (page === '...') {
             return (
-              <span key={`ellipsis-${index}`} className="px-2 text-gray-500">
+              <span key={`ellipsis-${index}`} className="px-2 text-muted-foreground">
                 ...
               </span>
             )

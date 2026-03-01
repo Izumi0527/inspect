@@ -20,8 +20,8 @@ export function DeviceStatusCard({ data, className }: DeviceStatusCardProps) {
       transition={{ duration: 0.25, delay: 0.05 }}
       className={className}
     >
-      <div className="flex h-full flex-col rounded-xl border border-gray-200/50 bg-white/80 p-5 shadow-lg backdrop-blur-lg dark:border-border dark:bg-card/80">
-        <h3 className="mb-3 text-lg font-semibold text-gray-900 dark:text-foreground">
+      <div className="flex h-full flex-col rounded-xl border border-border/50 bg-card/80 p-5 shadow-lg backdrop-blur-lg">
+        <h3 className="mb-3 text-lg font-semibold text-foreground">
           设备状态分布
         </h3>
         <div className="flex flex-1 flex-col">

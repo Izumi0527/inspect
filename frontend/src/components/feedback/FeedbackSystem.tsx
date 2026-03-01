@@ -185,7 +185,7 @@ const NotificationItem: React.FC<{
       case 'loading':
         return 'bg-blue-50 border-blue-200'
       default:
-        return 'bg-white border-gray-200'
+        return 'bg-card border-border'
     }
   }
 
@@ -207,11 +207,11 @@ const NotificationItem: React.FC<{
         </div>
         
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-gray-900 mb-1">
+          <div className="font-medium text-foreground mb-1">
             {notification.title}
           </div>
           {notification.message && (
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-muted-foreground dark:text-muted-foreground">
               {notification.message}
             </div>
           )}
@@ -228,7 +228,7 @@ const NotificationItem: React.FC<{
         
         <button
           onClick={() => onRemove(notification.id)}
-          className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+          className="flex-shrink-0 text-gray-400 dark:text-gray-500 hover:text-muted-foreground dark:hover:text-gray-300 transition-colors"
           aria-label="Close notification"
         >
           <X className="w-4 h-4" />
@@ -352,30 +352,30 @@ export const useConfirmDialog = () => {
     >
       {/* 背景遮罩 */}
       <div 
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 bg-black/50 dark:bg-black/70"
         onClick={cancel}
       />
       
       {/* 对话框 */}
       <div className="relative z-10 flex items-center justify-center min-h-full p-4">
         <motion.div
-          className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+          className="bg-card border border-border rounded-lg shadow-xl max-w-md w-full p-6"
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
         >
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          <h3 className="text-lg font-semibold text-foreground mb-4">
             {config.title}
           </h3>
           
-          <p className="text-gray-600 mb-6">
+          <p className="text-muted-foreground dark:text-muted-foreground mb-6">
             {config.message}
           </p>
           
           <div className="flex justify-end gap-3">
             <button
               onClick={cancel}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+              className="px-4 py-2 text-muted-foreground hover:text-gray-800 dark:hover:text-gray-100 transition-colors"
             >
               {config.cancelText}
             </button>

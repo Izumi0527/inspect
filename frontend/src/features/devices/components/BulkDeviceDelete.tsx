@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { AlertTriangle, Trash2, Server } from 'lucide-react'
 import { Modal, Button, Card, CardContent, Badge, Loading } from '@/components/atoms'
 import { Device } from '../types'
@@ -48,8 +48,8 @@ export const BulkDeviceDelete: React.FC<BulkDeviceDeleteProps> = ({
             <AlertTriangle className="h-6 w-6 text-red-600" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">确认批量删除</h2>
-            <p className="text-sm text-gray-600 mt-1">
+            <h2 className="text-xl font-semibold text-foreground">确认批量删除</h2>
+            <p className="text-sm text-muted-foreground mt-1">
               此操作不可撤销，请确认是否要删除以下设备。
             </p>
           </div>
@@ -67,7 +67,7 @@ export const BulkDeviceDelete: React.FC<BulkDeviceDeleteProps> = ({
                   <div className="text-2xl font-bold text-red-600">
                     {selectedDevices.length}
                   </div>
-                  <div className="text-sm text-gray-600">待删除设备</div>
+                  <div className="text-sm text-muted-foreground">待删除设备</div>
                 </div>
               </div>
             </CardContent>
@@ -83,7 +83,7 @@ export const BulkDeviceDelete: React.FC<BulkDeviceDeleteProps> = ({
                   <div className="text-2xl font-bold text-yellow-600">
                     {devicesWithAlerts}
                   </div>
-                  <div className="text-sm text-gray-600">存在告警的设备</div>
+                  <div className="text-sm text-muted-foreground">存在告警的设备</div>
                 </div>
               </div>
             </CardContent>
@@ -93,12 +93,12 @@ export const BulkDeviceDelete: React.FC<BulkDeviceDeleteProps> = ({
         {/* 设备列表 */}
         <Card className="mb-6">
           <CardContent className="p-4">
-            <h3 className="font-medium text-gray-900 mb-3">将被删除的设备列表：</h3>
+            <h3 className="font-medium text-foreground mb-3">将被删除的设备列表：</h3>
             <div className="max-h-64 overflow-y-auto space-y-3">
               {selectedDevices.map(device => (
                 <div
                   key={device.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                  className="flex items-center justify-between p-3 bg-muted/40 rounded-lg"
                 >
                   <div className="flex items-center gap-3">
                     <Badge
@@ -113,8 +113,8 @@ export const BulkDeviceDelete: React.FC<BulkDeviceDeleteProps> = ({
                       {device.status}
                     </Badge>
                     <div>
-                      <div className="font-medium text-gray-900">{device.name}</div>
-                      <div className="text-sm text-gray-600">
+                      <div className="font-medium text-foreground">{device.name}</div>
+                      <div className="text-sm text-muted-foreground">
                         {device.ip} · {device.device_type} · {device.location}
                       </div>
                     </div>
@@ -146,7 +146,7 @@ export const BulkDeviceDelete: React.FC<BulkDeviceDeleteProps> = ({
 
         {/* 确认输入 */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-900 mb-2" htmlFor="confirmInput">
+          <label className="block text-sm font-medium text-foreground mb-2" htmlFor="confirmInput">
             为确保操作安全，请输入 “确认删除” 以继续：
           </label>
           <input
@@ -154,7 +154,7 @@ export const BulkDeviceDelete: React.FC<BulkDeviceDeleteProps> = ({
             id="confirmInput"
             value={confirmInput}
             onChange={(event) => setConfirmInput(event.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+            className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
             placeholder="确认删除"
             disabled={isProcessing}
           />

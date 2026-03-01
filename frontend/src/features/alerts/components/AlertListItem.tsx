@@ -74,16 +74,16 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
           
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100">{alert.title}</h3>
+              <h3 className="font-semibold text-foreground">{alert.title}</h3>
               <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(alert.status)}`}>
                 {getStatusText(alert.status)}
               </span>
-              <span className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full">
+              <span className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-800 text-muted-foreground rounded-full">
                 {alert.category}
               </span>
             </div>
 
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{alert.description}</p>
+            <p className="text-sm text-muted-foreground mb-2">{alert.description}</p>
 
             <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
               <div className="flex items-center gap-1">

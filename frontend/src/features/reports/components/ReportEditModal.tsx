@@ -86,14 +86,14 @@ export const ReportEditModal: React.FC<Props> = ({ report, onClose, onSuccess })
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-2xl w-full overflow-hidden"
+        className="bg-card rounded-xl shadow-xl max-w-2xl w-full overflow-hidden"
       >
-        <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b dark:border-border">
           <div className="flex items-center gap-3">
             <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">编辑巡检报表</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">仅修改标题、描述与类别</p>
+              <h2 className="text-xl font-semibold text-foreground">编辑巡检报表</h2>
+              <p className="text-sm text-muted-foreground">仅修改标题、描述与类别</p>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
@@ -103,7 +103,7 @@ export const ReportEditModal: React.FC<Props> = ({ report, onClose, onSuccess })
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-foreground/90 mb-1">
               标题 *
             </label>
             <Input
@@ -119,21 +119,21 @@ export const ReportEditModal: React.FC<Props> = ({ report, onClose, onSuccess })
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-foreground/90 mb-1">
               描述
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="请输入报表描述（可选）"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-card text-foreground"
               rows={3}
               disabled={isLoading}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="block text-sm font-medium text-foreground/90 mb-1">
               类别
             </label>
             <Select

@@ -201,11 +201,11 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-5xl w-full max-h-[85vh] overflow-hidden"
+        className="bg-card rounded-xl shadow-xl max-w-5xl w-full max-h-[85vh] overflow-hidden"
       >
         {/* 头部 */}
         <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+          <h2 className="text-xl font-semibold text-foreground">
             {isEditing ? '编辑巡检策略' : '创建巡检策略'}
           </h2>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -219,13 +219,13 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
             {/* 左栏：基本信息 + 执行时间 */}
             <div className="space-y-5">
               <div className="space-y-4">
-                <h3 className="text-base font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100 pb-2 border-b dark:border-gray-700">
+                <h3 className="text-base font-medium flex items-center gap-2 text-foreground pb-2 border-b border-border">
                   <FileText className="w-4 h-4 text-blue-600" />
                   基本信息
                 </h3>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-muted-foreground mb-1">
                     策略名称 <span className="text-red-500">*</span>
                   </label>
                   <Input
@@ -244,7 +244,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-muted-foreground mb-1">
                     策略描述
                   </label>
                   <textarea
@@ -253,7 +253,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                     placeholder="请输入策略描述（可选）"
                     maxLength={500}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 resize-none ${
-                      errors.description ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                      errors.description ? 'border-red-500' : 'border-border'
                     }`}
                     rows={2}
                   />
@@ -266,7 +266,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label className="block text-sm font-medium text-muted-foreground mb-1">
                       策略类型 <span className="text-red-500">*</span>
                     </label>
                     <Select value={formData.type} onValueChange={handleTypeChange}>
@@ -286,9 +286,9 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                         type="checkbox"
                         checked={formData.enabled}
                         onChange={(e) => handleInputChange('enabled', e.target.checked)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                        className="rounded border-border text-blue-600 focus:ring-blue-500 w-4 h-4"
                       />
-                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">启用策略</span>
+                      <span className="ml-2 text-sm text-muted-foreground">启用策略</span>
                     </label>
                   </div>
                 </div>
@@ -297,13 +297,13 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
               {/* 执行时间配置 */}
               {formData.type === 'scheduled' && (
                 <div className="space-y-4">
-                  <h3 className="text-base font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100 pb-2 border-b dark:border-gray-700">
+                  <h3 className="text-base font-medium flex items-center gap-2 text-foreground pb-2 border-b border-border">
                     <Calendar className="w-4 h-4 text-purple-600" />
                     执行时间
                   </h3>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label className="block text-sm font-medium text-muted-foreground mb-1">
                       Cron表达式 <span className="text-red-500">*</span>
                     </label>
                     <div className="flex gap-2">
@@ -338,22 +338,22 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
             {/* 右栏：目标配置 */}
             <div className="space-y-5">
               <div className="space-y-4">
-                <h3 className="text-base font-medium flex items-center gap-2 text-gray-900 dark:text-gray-100 pb-2 border-b dark:border-gray-700">
+                <h3 className="text-base font-medium flex items-center gap-2 text-foreground pb-2 border-b border-border">
                   <Settings className="w-4 h-4 text-green-600" />
                   目标配置
                 </h3>
                 
                 {/* 目标设备 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-muted-foreground mb-1">
                     目标设备 <span className="text-red-500">*</span>
                     <span className="text-gray-400 font-normal ml-1">({formData.devices.length} 个)</span>
                   </label>
                   <div className={`border rounded-lg overflow-hidden ${
-                    errors.devices ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    errors.devices ? 'border-red-500' : 'border-border'
                   }`}>
                     {/* 已选设备 */}
-                    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 min-h-[60px]">
+                    <div className="p-3 bg-muted/40 dark:bg-gray-700/50 min-h-[60px]">
                       {formData.devices.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                           {formData.devices.map((deviceId) => (
@@ -384,7 +384,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                             value={deviceSearch}
                             onChange={(e) => setDeviceSearch(e.target.value)}
                             placeholder="搜索设备..."
-                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-border rounded bg-background text-foreground"
                           />
                         </div>
                       </div>
@@ -401,9 +401,9 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                                 type="checkbox"
                                 checked={formData.devices.includes(device.id)}
                                 onChange={() => toggleDevice(device.id)}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                className="rounded border-border text-blue-600 focus:ring-blue-500"
                               />
-                              <span className="text-sm text-gray-700 dark:text-gray-300 flex-1">
+                              <span className="text-sm text-muted-foreground flex-1">
                                 {device.name}
                               </span>
                               <span className="text-xs text-gray-400">{device.ip}</span>
@@ -420,15 +420,15 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
 
                 {/* 巡检模板 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-muted-foreground mb-1">
                     巡检模板 <span className="text-red-500">*</span>
                     <span className="text-gray-400 font-normal ml-1">({formData.templates.length} 个)</span>
                   </label>
                   <div className={`border rounded-lg overflow-hidden ${
-                    errors.templates ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    errors.templates ? 'border-red-500' : 'border-border'
                   }`}>
                     {/* 已选模板 */}
-                    <div className="p-3 bg-gray-50 dark:bg-gray-700/50 min-h-[60px]">
+                    <div className="p-3 bg-muted/40 dark:bg-gray-700/50 min-h-[60px]">
                       {formData.templates.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                           {formData.templates.map((templateId) => (
@@ -459,7 +459,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                             value={templateSearch}
                             onChange={(e) => setTemplateSearch(e.target.value)}
                             placeholder="搜索模板..."
-                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-border rounded bg-background text-foreground"
                           />
                         </div>
                       </div>
@@ -476,9 +476,9 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                                 type="checkbox"
                                 checked={formData.templates.includes(Number(template.id))}
                                 onChange={() => toggleTemplate(Number(template.id))}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                className="rounded border-border text-blue-600 focus:ring-blue-500"
                               />
-                              <span className="text-sm text-gray-700 dark:text-gray-300 flex-1">
+                              <span className="text-sm text-muted-foreground flex-1">
                                 {template.name}
                               </span>
                               {template.isBuiltIn && (
@@ -500,7 +500,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
         </form>
 
         {/* 底部操作按钮 */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t dark:border-gray-700 bg-muted/40/50">
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             取消
           </Button>

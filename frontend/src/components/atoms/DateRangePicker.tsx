@@ -63,7 +63,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   return (
     <div className={`space-y-2 ${className}`}>
       {label && (
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-muted-foreground">
           <Calendar className="w-4 h-4 inline-block mr-1" />
           {label}
         </label>
@@ -82,14 +82,14 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
               !isValidRange && startDate && endDate
                 ? 'border-red-300 focus:ring-red-500'
-                : 'border-gray-300'
-            } ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                : 'border-border'
+            } ${disabled ? 'bg-muted cursor-not-allowed' : 'bg-card'}`}
             aria-label="开始日期"
           />
         </div>
 
         {/* 分隔符 */}
-        <span className="text-gray-500 font-medium">至</span>
+        <span className="text-muted-foreground font-medium">至</span>
 
         {/* 结束日期 */}
         <div className="flex-1">
@@ -103,8 +103,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
               !isValidRange && startDate && endDate
                 ? 'border-red-300 focus:ring-red-500'
-                : 'border-gray-300'
-            } ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                : 'border-border'
+            } ${disabled ? 'bg-muted cursor-not-allowed' : 'bg-card'}`}
             aria-label="结束日期"
           />
         </div>

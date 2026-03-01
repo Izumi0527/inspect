@@ -17,11 +17,11 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-12 w-full items-center justify-between rounded-xl border border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg px-4 py-3 text-base dark:text-gray-100 ring-offset-background',
-      'placeholder:text-gray-500 dark:placeholder:text-gray-400',
-      'focus:border-purple-400 focus:bg-white dark:focus:bg-gray-800 focus:ring-2 focus:ring-purple-400/20 focus:outline-none',
+      'flex h-12 w-full items-center justify-between rounded-xl border border-border/50 bg-card/80 backdrop-blur-lg px-4 py-3 text-base text-foreground ring-offset-background',
+      'placeholder:text-muted-foreground',
+      'focus:border-primary focus:bg-background/90 focus:ring-2 focus:ring-ring/30 focus:outline-none',
       'disabled:cursor-not-allowed disabled:opacity-50',
-      'hover:border-gray-300 dark:hover:border-gray-600',
+      'hover:border-border',
       '[&>span]:line-clamp-1',
       className
     )}
@@ -77,7 +77,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-xl border border-gray-200/20 dark:border-gray-700/20 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl text-gray-950 dark:text-gray-100 shadow-2xl',
+        'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-xl border border-border/30 bg-popover/95 backdrop-blur-xl text-popover-foreground shadow-2xl',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -112,7 +112,7 @@ const SelectLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Label
     ref={ref}
-    className={cn('py-1.5 pl-8 pr-2 text-sm font-semibold text-gray-900 dark:text-gray-100', className)}
+    className={cn('py-1.5 pl-8 pr-2 text-sm font-semibold text-foreground', className)}
     {...props}
   />
 ))
@@ -126,9 +126,9 @@ const SelectItem = React.forwardRef<
     ref={ref}
     className={cn(
       'relative flex w-full cursor-default select-none items-center rounded-lg py-2 pl-8 pr-2 text-sm outline-none',
-      'focus:bg-purple-100/50 dark:focus:bg-purple-900/30 focus:text-purple-900 dark:focus:text-purple-100',
+      'focus:bg-accent/70 focus:text-accent-foreground',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-      'hover:bg-gray-100/50 dark:hover:bg-gray-700/50',
+      'hover:bg-accent/40',
       className
     )}
     {...props}
@@ -149,7 +149,7 @@ const SelectSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Separator
     ref={ref}
-    className={cn('-mx-1 my-1 h-px bg-gray-200 dark:bg-gray-700', className)}
+    className={cn('-mx-1 my-1 h-px bg-border/60', className)}
     {...props}
   />
 ))
@@ -208,17 +208,17 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex h-12 w-full items-center justify-between rounded-xl border border-gray-200/50 dark:border-gray-700/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg px-4 py-3 text-base dark:text-gray-100',
-          'placeholder:text-gray-500 dark:placeholder:text-gray-400',
-          'focus:border-purple-400 focus:bg-white dark:focus:bg-gray-800 focus:ring-2 focus:ring-purple-400/20 focus:outline-none',
+          'flex h-12 w-full items-center justify-between rounded-xl border border-border/50 bg-card/80 backdrop-blur-lg px-4 py-3 text-base text-foreground',
+          'placeholder:text-muted-foreground',
+          'focus:border-primary focus:bg-background/90 focus:ring-2 focus:ring-ring/30 focus:outline-none',
           'disabled:cursor-not-allowed disabled:opacity-50',
-          'hover:border-gray-300 dark:hover:border-gray-600',
+          'hover:border-border',
           'text-left'
         )}
       >
         <span className={cn(
           'block truncate',
-          value.length === 0 && 'text-gray-500 dark:text-gray-400'
+          value.length === 0 && 'text-muted-foreground'
         )}>
           {displayText}
         </span>
@@ -233,27 +233,26 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
-          className="absolute z-50 mt-1 w-full rounded-xl border border-gray-200/20 dark:border-gray-700/20 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl shadow-2xl"
+          className="absolute z-50 mt-1 w-full rounded-xl border border-border/30 bg-popover/95 backdrop-blur-xl shadow-2xl"
         >
           <div className="max-h-60 overflow-auto p-1">
             {options.map((option) => (
               <motion.button
                 key={option.value}
                 type="button"
-                whileHover={{ backgroundColor: 'rgba(139, 92, 246, 0.1)' }}
                 onClick={() => handleToggle(option.value)}
                 disabled={option.disabled}
                 className={cn(
                   'relative flex w-full items-center space-x-2 rounded-lg px-3 py-2 text-sm text-left transition-colors',
                   'disabled:cursor-not-allowed disabled:opacity-50',
-                  'hover:bg-purple-100/50'
+                  'hover:bg-accent/40'
                 )}
               >
                 <div className={cn(
                   'flex h-4 w-4 items-center justify-center rounded border-2 transition-colors',
                   value.includes(option.value)
-                    ? 'border-purple-500 bg-purple-500 text-white'
-                    : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700'
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border bg-card'
                 )}>
                   {value.includes(option.value) && (
                     <Check className="h-3 w-3" />
@@ -265,11 +264,11 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
           </div>
           
           {value.length > 0 && (
-            <div className="border-t border-gray-200 dark:border-gray-700 p-2">
+            <div className="border-t border-border/60 p-2">
               <button
                 type="button"
                 onClick={() => onChange([])}
-                className="w-full rounded-lg px-3 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100/50 dark:hover:bg-gray-700/50 transition-colors"
+                className="w-full rounded-lg px-3 py-2 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
               >
                 清空选择
               </button>

@@ -169,20 +169,20 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+        className="bg-card rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b dark:border-border">
           <div className="flex items-center gap-3">
             <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{report.title}</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{report.description}</p>
+              <h2 className="text-xl font-semibold text-foreground">{report.title}</h2>
+              <p className="text-sm text-muted-foreground">{report.description}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {report.status === 'completed' && (htmlPreviewAvailable || pdfPreviewAvailable) && (
-              <div className="flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-1">
+              <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/40 p-1">
                 {htmlPreviewAvailable && (
                   <Button
                     size="sm"
@@ -218,46 +218,46 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
         {/* 内容预览 */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
           {report.status !== 'completed' ? (
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-8 text-center">
+            <div className="bg-muted/40 rounded-lg p-8 text-center">
               <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">报告尚未生成完成</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
+              <h3 className="text-lg font-medium text-foreground mb-2">报告尚未生成完成</h3>
+              <p className="text-muted-foreground mb-4">
                 当前状态：{report.status === 'generating' ? '生成中' : report.status === 'failed' ? '生成失败' : '已计划'}
               </p>
-              <div className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
+              <div className="text-sm text-muted-foreground space-y-1">
                 <p>报告格式：{report.format.toUpperCase()}</p>
                 <p>创建时间：{new Date(report.createdAt).toLocaleString()}</p>
                 <p>生成者：{report.generatedBy}</p>
               </div>
             </div>
           ) : !htmlPreviewAvailable && !pdfPreviewAvailable ? (
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-8 text-center">
-              <Eye className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">暂不支持在线预览</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
+            <div className="bg-muted/40 rounded-lg p-8 text-center">
+              <Eye className="w-12 h-12 text-muted-foreground/80 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">暂不支持在线预览</h3>
+              <p className="text-muted-foreground mb-4">
                 当前报表未提供可用的 HTML/PDF 预览，请使用下载功能查看完整内容。
               </p>
-              <div className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
+              <div className="text-sm text-muted-foreground space-y-1">
                 <p>生成时间：{new Date(report.createdAt).toLocaleString()}</p>
                 <p>生成者：{report.generatedBy}</p>
               </div>
             </div>
           ) : loadingPreview ? (
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-8 text-center">
-              <Eye className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4 animate-pulse" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">加载预览中...</h3>
-              <p className="text-gray-600 dark:text-gray-400">正在获取并渲染报表文件</p>
+            <div className="bg-muted/40 rounded-lg p-8 text-center">
+              <Eye className="w-12 h-12 text-muted-foreground/80 mx-auto mb-4 animate-pulse" />
+              <h3 className="text-lg font-medium text-foreground mb-2">加载预览中...</h3>
+              <p className="text-muted-foreground">正在获取并渲染报表文件</p>
               {mode === 'html' && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+                <p className="text-xs text-muted-foreground mt-3">
                   HTML 预览用于提升可读性，排版可能与下载版 PDF 略有差异；以下载版为准。
                 </p>
               )}
             </div>
           ) : previewError ? (
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-8 text-center">
+            <div className="bg-muted/40 rounded-lg p-8 text-center">
               <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">预览加载失败</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">{previewError}</p>
+              <h3 className="text-lg font-medium text-foreground mb-2">预览加载失败</h3>
+              <p className="text-muted-foreground mb-4">{previewError}</p>
               <div className="flex items-center justify-center gap-3">
                 <Button variant="outline" size="sm" onClick={() => void loadPreview()}>
                   <RefreshCcw className="w-4 h-4 mr-2" />
@@ -270,7 +270,7 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
               </div>
             </div>
           ) : previewUrl ? (
-            <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+            <div className="rounded-lg overflow-hidden border border-border bg-card">
               <iframe
                 title="报告预览"
                 data-testid="report-preview-frame"
@@ -281,10 +281,10 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
               />
             </div>
           ) : (
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-8 text-center">
-              <Eye className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">暂无预览内容</h3>
-              <p className="text-gray-600 dark:text-gray-400">请稍后重试或直接下载查看。</p>
+            <div className="bg-muted/40 rounded-lg p-8 text-center">
+              <Eye className="w-12 h-12 text-muted-foreground/80 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">暂无预览内容</h3>
+              <p className="text-muted-foreground">请稍后重试或直接下载查看。</p>
             </div>
           )}
         </div>

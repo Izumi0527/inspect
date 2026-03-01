@@ -132,7 +132,39 @@
     --radius: 16px;
   }
 
+  /* VS Code Default Dark Modern（默认深色） */
   .dark {
+    --background: 0 0% 12%;
+    --foreground: 0 0% 80%;
+
+    --card: 240 1% 15%;
+    --card-foreground: 0 0% 80%;
+
+    --popover: 0 0% 19%;
+    --popover-foreground: 0 0% 80%;
+
+    --primary: 206 100% 42%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 0 0% 84%;
+
+    --muted: 0 0% 17%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 206 100% 42%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 24%;
+    --input: 0 0% 19%;
+    --ring: 206 100% 42%;
+  }
+
+  /* 经典紫色深色（可选变体） */
+  .dark[data-dark-variant='legacy'] {
     --background: 220 20% 8%;
     --foreground: 220 10% 95%;
 
@@ -179,11 +211,11 @@
 
 @layer components {
   .glass {
-    @apply bg-white/80 backdrop-blur-lg border border-white/20;
+    @apply bg-card/80 backdrop-blur-lg border border-border/30;
   }
 
   .glass-dark {
-    @apply bg-gray-900/80 backdrop-blur-lg border border-gray-700/20;
+    @apply bg-card/90 backdrop-blur-lg border border-border/40;
   }
 
   .gradient-primary {
@@ -203,16 +235,16 @@
   }
 
   .button-glass {
-    @apply bg-white/80 backdrop-blur-lg border border-white/20 rounded-xl px-6 py-3 font-medium transition-all duration-300 hover:bg-white/90 active:scale-95;
+    @apply bg-card/80 backdrop-blur-lg border border-border/30 rounded-xl px-6 py-3 font-medium transition-all duration-300 hover:bg-card/90 active:scale-95;
   }
 
   /* 自定义复选框样式 */
   .custom-checkbox {
-    @apply w-4 h-4 rounded border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-purple-600 focus:ring-2 focus:ring-purple-500/50 focus:ring-offset-0 transition-all duration-200 cursor-pointer;
+    @apply w-4 h-4 rounded border-2 border-border bg-card text-primary focus:ring-2 focus:ring-primary/50 focus:ring-offset-0 transition-all duration-200 cursor-pointer;
   }
 
   .custom-checkbox:checked {
-    @apply bg-purple-600 border-purple-600 dark:bg-purple-600 dark:border-purple-600;
+    @apply bg-primary border-primary;
     background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='m13.854 3.646-7.5 7.5a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6 10.293l7.146-7.147a.5.5 0 0 1 .708.708z'/%3e%3c/svg%3e");
     background-size: 100% 100%;
     background-position: center;
@@ -220,7 +252,7 @@
   }
 
   .custom-checkbox:indeterminate {
-    @apply bg-purple-600 border-purple-600 dark:bg-purple-600 dark:border-purple-600;
+    @apply bg-primary border-primary;
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 16 16'%3e%3cpath stroke='white' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M4 8h8'/%3e%3c/svg%3e");
     background-size: 100% 100%;
     background-position: center;
@@ -228,6 +260,6 @@
   }
 
   .custom-checkbox:hover {
-    @apply border-purple-400 dark:border-purple-400;
+    @apply border-primary/80;
   }
 }

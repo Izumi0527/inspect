@@ -173,12 +173,12 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-card rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
       >
         {/* 头部 */}
         <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-green-50 to-blue-50">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+            <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
               <Upload className="w-6 h-6 text-green-600" />
               导入巡检模板
             </h2>
@@ -197,7 +197,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
             {/* 文件上传区域 */}
             <Card>
               <CardContent className="p-5">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">上传模板文件</h3>
+                <h3 className="text-lg font-semibold text-foreground mb-4">上传模板文件</h3>
 
                 <div
                   onDrop={handleDrop}
@@ -206,7 +206,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
                   className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                     isDragging
                       ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-300 hover:border-gray-400'
+                      : 'border-border hover:border-gray-400'
                   }`}
                 >
                   <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
@@ -236,7 +236,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
             <Card>
               <CardContent className="p-5">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">JSON内容</h3>
+                  <h3 className="text-lg font-semibold text-foreground">JSON内容</h3>
                   {jsonContent && (
                     <Badge variant="secondary">
                       {jsonContent.length} 字符
@@ -248,7 +248,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
                   value={jsonContent}
                   onChange={(e) => setJsonContent(e.target.value)}
                   placeholder='粘贴JSON内容或上传文件&#10;示例格式:&#10;{&#10;  "name": "网络设备巡检模板",&#10;  "description": "用于网络设备的定期巡检",&#10;  "category": "network",&#10;  "deviceTypes": ["router", "switch"],&#10;  "checkItems": [&#10;    {&#10;      "id": "1",&#10;      "name": "CPU使用率检查",&#10;      "type": "snmp",&#10;      "config": {},&#10;      "weight": 1&#10;    }&#10;  ]&#10;}'
-                  className="w-full h-64 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  className="w-full h-64 px-3 py-2 border border-border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                 />
               </CardContent>
             </Card>
@@ -256,7 +256,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
             {/* 格式说明 */}
             <Card>
               <CardContent className="p-5">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 text-blue-600" />
                   JSON格式说明
                 </h3>
@@ -274,7 +274,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
               <Card>
                 <CardContent className="p-5">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">导入结果</h3>
+                    <h3 className="text-lg font-semibold text-foreground">导入结果</h3>
                     <div className="flex items-center gap-3">
                       <Badge variant="success">
                         成功: {successCount}
@@ -322,7 +322,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
         </div>
 
         {/* 底部操作按钮 */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
+        <div className="flex items-center justify-end gap-3 p-6 border-t bg-muted/40">
           <Button variant="outline" onClick={onClose} disabled={isImporting}>
             {importResults.length > 0 && successCount > 0 ? '完成' : '取消'}
           </Button>

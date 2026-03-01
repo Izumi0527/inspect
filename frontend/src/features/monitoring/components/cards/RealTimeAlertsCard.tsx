@@ -42,9 +42,9 @@ export function RealTimeAlertsCard({
       transition={{ duration: 0.25, delay: 0.15 }}
       className={className}
     >
-      <div className="flex h-full flex-col rounded-xl border border-gray-200/50 bg-white/80 p-5 shadow-lg backdrop-blur-lg dark:border-border dark:bg-card/80">
+      <div className="flex h-full flex-col rounded-xl border border-border/50 bg-card/80 p-5 shadow-lg backdrop-blur-lg dark:border-border dark:bg-card/80">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-foreground">实时告警</h3>
+          <h3 className="text-lg font-semibold text-foreground">实时告警</h3>
           <div className="flex items-center gap-2">
             {criticalCount > 0 && (
               <span className="flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-900/60 dark:text-red-300">
@@ -55,7 +55,7 @@ export function RealTimeAlertsCard({
                 {criticalCount} 严重
               </span>
             )}
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground dark:bg-muted/80 dark:text-foreground/90">
               共 {alerts.length} 条
             </span>
           </div>
@@ -63,7 +63,7 @@ export function RealTimeAlertsCard({
 
         {displayAlerts.length === 0 ? (
           <div className="flex flex-1 items-center justify-center">
-            <p className="text-sm text-gray-500 dark:text-gray-400">暂无告警</p>
+            <p className="text-sm text-muted-foreground">暂无告警</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -75,7 +75,7 @@ export function RealTimeAlertsCard({
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.2, delay: index * 0.04 }}
-                  className="group flex cursor-pointer items-start gap-3 rounded-lg bg-gray-50 p-3 transition-colors duration-150 hover:bg-gray-100 dark:bg-gray-900/60 dark:hover:bg-gray-800/80"
+                  className="group flex cursor-pointer items-start gap-3 rounded-lg bg-muted/40 p-3 transition-colors duration-150 hover:bg-muted/60 dark:bg-card/60 dark:hover:bg-card/80"
                 >
                   {/* 严重程度 badge */}
                   <span className={cn(
@@ -89,14 +89,14 @@ export function RealTimeAlertsCard({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
+                        <p className="truncate text-sm font-medium text-foreground">
                           {alert.deviceName}
                         </p>
-                        <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
+                        <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
                           {alert.message}
                         </p>
                       </div>
-                      <span className="flex-shrink-0 text-[11px] tabular-nums text-gray-400 dark:text-gray-500">
+                      <span className="flex-shrink-0 text-[11px] tabular-nums text-muted-foreground/80">
                         {alert.time}
                       </span>
                     </div>
@@ -108,7 +108,7 @@ export function RealTimeAlertsCard({
         )}
 
         {alerts.length > maxItems && (
-          <div className="mt-3 border-t border-gray-100 pt-3 text-center dark:border-gray-800">
+          <div className="mt-3 border-t border-border/60 pt-3 text-center dark:border-border">
             <button className="cursor-pointer text-sm font-medium text-primary transition-colors duration-150 hover:text-primary/80">
               查看全部 {alerts.length} 条告警 →
             </button>

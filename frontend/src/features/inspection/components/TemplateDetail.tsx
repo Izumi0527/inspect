@@ -42,15 +42,15 @@ export function TemplateDetail({
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-lg shadow p-8">
-        <div className="text-center text-gray-500">加载中...</div>
+      <div className="bg-card rounded-lg shadow p-8">
+        <div className="text-center text-muted-foreground">加载中...</div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="bg-white rounded-lg shadow p-8">
+      <div className="bg-card rounded-lg shadow p-8">
         <div className="text-center text-red-500">错误: {error.message}</div>
       </div>
     )
@@ -58,8 +58,8 @@ export function TemplateDetail({
 
   if (!template) {
     return (
-      <div className="bg-white rounded-lg shadow p-8">
-        <div className="text-center text-gray-500">模板不存在</div>
+      <div className="bg-card rounded-lg shadow p-8">
+        <div className="text-center text-muted-foreground">模板不存在</div>
       </div>
     )
   }
@@ -82,32 +82,32 @@ export function TemplateDetail({
   )
 
   return (
-    <div className="bg-white rounded-lg shadow">
+    <div className="bg-card rounded-lg shadow">
       {/* 头部 */}
-      <div className="p-6 border-b">
+      <div className="p-6 border-b border-border">
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <h2 className="text-2xl font-bold text-gray-900">{template.name}</h2>
+              <h2 className="text-2xl font-bold text-foreground">{template.name}</h2>
               {template.isBuiltIn && (
                 <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
                   内置模板
                 </span>
               )}
               {!template.isActive && (
-                <span className="px-3 py-1 bg-gray-100 text-gray-600 text-sm rounded-full">
+                <span className="px-3 py-1 bg-muted text-muted-foreground text-sm rounded-full">
                   已禁用
                 </span>
               )}
             </div>
             {template.description && (
-              <p className="text-gray-600 mb-4">{template.description}</p>
+              <p className="text-muted-foreground mb-4">{template.description}</p>
             )}
           </div>
           {onClose && (
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-muted-foreground hover:text-foreground transition-colors"
               title="关闭"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -125,26 +125,26 @@ export function TemplateDetail({
         {/* 基本信息 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
           <div>
-            <div className="text-sm text-gray-600">分类</div>
-            <div className="text-base font-medium text-gray-900">
+            <div className="text-sm text-muted-foreground">分类</div>
+            <div className="text-base font-medium text-foreground">
               {template.category || '-'}
             </div>
           </div>
           <div>
-            <div className="text-sm text-gray-600">状态</div>
-            <div className="text-base font-medium text-gray-900">
+            <div className="text-sm text-muted-foreground">状态</div>
+            <div className="text-base font-medium text-foreground">
               {(template.isActive ?? true) ? '启用' : '禁用'}
             </div>
           </div>
           <div>
-            <div className="text-sm text-gray-600">检查项数量</div>
-            <div className="text-base font-medium text-gray-900">
+            <div className="text-sm text-muted-foreground">检查项数量</div>
+            <div className="text-base font-medium text-foreground">
               {template.checkItems?.length || 0}
             </div>
           </div>
           <div>
-            <div className="text-sm text-gray-600">模板类型</div>
-            <div className="text-base font-medium text-gray-900">
+            <div className="text-sm text-muted-foreground">模板类型</div>
+            <div className="text-base font-medium text-foreground">
               {template.isBuiltIn ? '内置' : '自定义'}
             </div>
           </div>
@@ -152,9 +152,9 @@ export function TemplateDetail({
 
         {/* 设备类型信息 */}
         {template.deviceTypes && template.deviceTypes.length > 0 && (
-          <div className="mt-4 pt-4 border-t">
+          <div className="mt-4 pt-4 border-t border-border">
             <div>
-              <div className="text-sm text-gray-600 mb-1">支持设备类型</div>
+              <div className="text-sm text-muted-foreground mb-1">支持设备类型</div>
               <div className="flex flex-wrap gap-2">
                 {template.deviceTypes.map((type: string) => (
                   <span
@@ -190,7 +190,7 @@ export function TemplateDetail({
           {!template.isBuiltIn && onEdit && (
             <button
               onClick={() => onEdit(Number(template.id))}
-              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+              className="px-4 py-2 bg-muted/400 text-white rounded hover:bg-gray-600 transition-colors"
             >
               编辑模板
             </button>
@@ -202,7 +202,7 @@ export function TemplateDetail({
       <div className="p-6">
         <h3 className="text-lg font-semibold mb-4">检查项列表</h3>
         {sortedCategories.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-muted-foreground">
             该模板没有配置检查项
           </div>
         ) : (

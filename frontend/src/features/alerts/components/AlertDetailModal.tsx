@@ -120,7 +120,7 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
     <SimpleModal open={open} onClose={onClose} size="3xl" ariaLabel={`告警详情 - ${alert.title}`}>
       <div className="flex flex-col max-h-[85vh]">
         {/* 头部 */}
-        <div className="flex items-start justify-between pb-4 border-b border-gray-200">
+        <div className="flex items-start justify-between pb-4 border-b border-border">
           <div className="flex items-start gap-3 flex-1">
             <div className={cn(
               'p-2 rounded-lg',
@@ -131,8 +131,8 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
               </div>
             </div>
             <div className="flex-1">
-              <h2 className="text-xl font-semibold text-gray-900 mb-1">{alert.title}</h2>
-              <p className="text-sm text-gray-500">ID: {alert.id}</p>
+              <h2 className="text-xl font-semibold text-foreground mb-1">{alert.title}</h2>
+              <p className="text-sm text-muted-foreground">ID: {alert.id}</p>
             </div>
           </div>
           <div className="flex flex-col gap-2 items-end">
@@ -146,7 +146,7 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
         </div>
 
         {/* 标签页 */}
-        <div className="flex gap-4 mt-4 border-b border-gray-200">
+        <div className="flex gap-4 mt-4 border-b border-border">
           {[
             { key: 'details', label: '详情', icon: <FileText className="w-4 h-4" /> },
             { key: 'timeline', label: '时间线', icon: <Clock className="w-4 h-4" /> },
@@ -161,7 +161,7 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
                 'flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors border-b-2',
                 activeTab === tab.key
                   ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               )}
             >
               {tab.icon}
@@ -176,46 +176,46 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
           {activeTab === 'details' && (
             <div className="space-y-4">
               {/* 告警描述 */}
-              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+              <div className="p-4 bg-muted/40 rounded-lg border border-border">
+                <h3 className="text-sm font-semibold text-foreground/90 mb-2 flex items-center gap-2">
                   <FileText className="w-4 h-4" />
                   告警描述
                 </h3>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{alert.description}</p>
+                <p className="text-sm text-foreground/90 whitespace-pre-wrap">{alert.description}</p>
               </div>
 
               {/* 基本信息 */}
-              <div className="p-4 bg-white rounded-lg border border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">基本信息</h3>
+              <div className="p-4 bg-card rounded-lg border border-border">
+                <h3 className="text-sm font-semibold text-foreground/90 mb-3">基本信息</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center gap-2">
-                    <Server className="w-4 h-4 text-gray-400" />
+                    <Server className="w-4 h-4 text-muted-foreground" />
                     <div>
-                      <span className="text-xs text-gray-500 block">设备</span>
-                      <p className="text-sm font-medium text-gray-900">{alert.device}</p>
+                      <span className="text-xs text-muted-foreground block">设备</span>
+                      <p className="text-sm font-medium text-foreground">{alert.device}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-gray-400" />
+                    <FileText className="w-4 h-4 text-muted-foreground" />
                     <div>
-                      <span className="text-xs text-gray-500 block">分类</span>
-                      <p className="text-sm font-medium text-gray-900">{alert.category || '未分类'}</p>
+                      <span className="text-xs text-muted-foreground block">分类</span>
+                      <p className="text-sm font-medium text-foreground">{alert.category || '未分类'}</p>
                     </div>
                   </div>
                   {alert.assignee && (
                     <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-gray-400" />
+                      <User className="w-4 h-4 text-muted-foreground" />
                       <div>
-                        <span className="text-xs text-gray-500 block">负责人</span>
-                        <p className="text-sm font-medium text-gray-900">{alert.assignee}</p>
+                        <span className="text-xs text-muted-foreground block">负责人</span>
+                        <p className="text-sm font-medium text-foreground">{alert.assignee}</p>
                       </div>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-gray-400" />
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
                     <div>
-                      <span className="text-xs text-gray-500 block">创建时间</span>
-                      <p className="text-sm font-medium text-gray-900">{formatDate(alert.timestamp)}</p>
+                      <span className="text-xs text-muted-foreground block">创建时间</span>
+                      <p className="text-sm font-medium text-foreground">{formatDate(alert.timestamp)}</p>
                     </div>
                   </div>
                 </div>
@@ -234,8 +234,8 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
 
               {/* 标签（如果有） */}
               {alert.tags && alert.tags.length > 0 && (
-                <div className="p-4 bg-white rounded-lg border border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">标签</h3>
+                <div className="p-4 bg-card rounded-lg border border-border">
+                  <h3 className="text-sm font-semibold text-foreground/90 mb-2">标签</h3>
                   <div className="flex flex-wrap gap-2">
                     {alert.tags.map((tag, index) => (
                       <Badge key={index} className="bg-blue-100 text-blue-700">
@@ -248,13 +248,13 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
 
               {/* 元数据（如果有） */}
               {alert.metadata && Object.keys(alert.metadata).length > 0 && (
-                <div className="p-4 bg-white rounded-lg border border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">附加信息</h3>
+                <div className="p-4 bg-card rounded-lg border border-border">
+                  <h3 className="text-sm font-semibold text-foreground/90 mb-2">附加信息</h3>
                   <div className="space-y-2">
                     {Object.entries(alert.metadata).map(([key, value]) => (
                       <div key={key} className="flex items-start gap-2 text-sm">
-                        <span className="text-gray-500 min-w-24">{key}:</span>
-                        <span className="text-gray-700 font-medium break-all">
+                        <span className="text-muted-foreground min-w-24">{key}:</span>
+                        <span className="text-foreground/90 font-medium break-all">
                           {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
                         </span>
                       </div>
@@ -271,34 +271,34 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
               <div className="relative pl-8">
                 {/* 创建时间 */}
                 <div className="pb-6">
-                  <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-blue-500 border-2 border-white" />
-                  <div className="absolute left-2 top-6 bottom-0 w-0.5 bg-gray-200" />
-                  <div className="bg-white rounded-lg border border-gray-200 p-4">
+                  <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-blue-500 border-2 border-white dark:border-gray-900" />
+                  <div className="absolute left-2 top-6 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
+                  <div className="bg-card rounded-lg border border-border p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                      <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4 text-blue-500" />
                         告警创建
                       </h4>
-                      <span className="text-xs text-gray-500">{formatDate(alert.timestamp)}</span>
+                      <span className="text-xs text-muted-foreground">{formatDate(alert.timestamp)}</span>
                     </div>
-                    <p className="text-sm text-gray-600">告警已创建并进入活跃状态</p>
+                    <p className="text-sm text-muted-foreground">告警已创建并进入活跃状态</p>
                   </div>
                 </div>
 
                 {/* 确认时间 */}
                 {alert.acknowledgedAt && (
                   <div className="pb-6">
-                    <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-yellow-500 border-2 border-white" />
-                    {alert.resolvedAt && <div className="absolute left-2 top-6 bottom-0 w-0.5 bg-gray-200" />}
-                    <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-yellow-500 border-2 border-white dark:border-gray-900" />
+                    {alert.resolvedAt && <div className="absolute left-2 top-6 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />}
+                    <div className="bg-card rounded-lg border border-border p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 text-yellow-500" />
                           告警确认
                         </h4>
-                        <span className="text-xs text-gray-500">{formatDate(alert.acknowledgedAt)}</span>
+                        <span className="text-xs text-muted-foreground">{formatDate(alert.acknowledgedAt)}</span>
                       </div>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         {alert.assignee ? `由 ${alert.assignee} 确认` : '告警已被确认'}
                       </p>
                     </div>
@@ -308,16 +308,16 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
                 {/* 解决时间 */}
                 {alert.resolvedAt && (
                   <div className="pb-0">
-                    <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-green-500 border-2 border-white" />
-                    <div className="bg-white rounded-lg border border-gray-200 p-4">
+                    <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-green-500 border-2 border-white dark:border-gray-900" />
+                    <div className="bg-card rounded-lg border border-border p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 text-green-500" />
                           告警解决
                         </h4>
-                        <span className="text-xs text-gray-500">{formatDate(alert.resolvedAt)}</span>
+                        <span className="text-xs text-muted-foreground">{formatDate(alert.resolvedAt)}</span>
                       </div>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         {alert.resolution || '告警已被解决'}
                       </p>
                     </div>
@@ -327,7 +327,7 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
 
               {/* 如果没有操作历史 */}
               {!alert.acknowledgedAt && !alert.resolvedAt && (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-muted-foreground">
                   <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p className="text-sm">暂无操作记录</p>
                 </div>
@@ -339,14 +339,14 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
           {activeTab === 'comments' && (
             <div className="space-y-4">
               {/* 添加备注 */}
-              <div className="p-4 bg-white rounded-lg border border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">添加备注</h3>
+              <div className="p-4 bg-card rounded-lg border border-border">
+                <h3 className="text-sm font-semibold text-foreground/90 mb-3">添加备注</h3>
                 <textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   placeholder="输入您的备注..."
                   rows={4}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full px-3 py-2 text-sm border border-border/70 bg-card text-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 />
                 <div className="flex justify-end mt-3 items-center gap-3">
                   {commentError && (
@@ -366,9 +366,9 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
               </div>
 
               {/* 备注历史 */}
-              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">备注历史</h3>
-                <div className="text-center py-8 text-gray-500">
+              <div className="p-4 bg-muted/40 rounded-lg border border-border">
+                <h3 className="text-sm font-semibold text-foreground/90 mb-3">备注历史</h3>
+                <div className="text-center py-8 text-muted-foreground">
                   <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p className="text-sm">暂无备注</p>
                 </div>
@@ -378,7 +378,7 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
         </div>
 
         {/* 底部操作栏 */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-200 mt-4">
+        <div className="flex items-center justify-between pt-4 border-t border-border mt-4">
           <div className="flex gap-2">
             {alert.status === 'active' && onAcknowledge && (
               <motion.button
@@ -427,3 +427,4 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
     </SimpleModal>
   )
 }
+

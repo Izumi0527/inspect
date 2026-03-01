@@ -200,7 +200,7 @@ export const InspectionTemplates: React.FC = () => {
 
   const getSortIcon = (field: SortField) => {
     if (sortField !== field) {
-      return <ArrowUpDown className="w-4 h-4 text-gray-400" />
+      return <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
     }
     return sortOrder === 'asc'
       ? <ArrowUp className="w-4 h-4 text-blue-600" />
@@ -315,7 +315,7 @@ export const InspectionTemplates: React.FC = () => {
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             {getCategoryIcon(template.category)}
-            <span className="font-medium text-gray-900 dark:text-gray-100">{template.name}</span>
+            <span className="font-medium text-foreground">{template.name}</span>
             {template.isBuiltIn && (
               <Badge variant="success" size="sm">内置</Badge>
             )}
@@ -324,7 +324,7 @@ export const InspectionTemplates: React.FC = () => {
             )}
           </div>
           {template.description && (
-            <span className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">
+            <span className="text-sm text-muted-foreground line-clamp-2 mt-1">
               {template.description}
             </span>
           )}
@@ -358,7 +358,7 @@ export const InspectionTemplates: React.FC = () => {
               </Badge>
             )}
             {deviceTypes.length === 0 && (
-              <span className="text-gray-400 text-sm">未配置</span>
+              <span className="text-muted-foreground text-sm">未配置</span>
             )}
           </div>
         )
@@ -369,7 +369,7 @@ export const InspectionTemplates: React.FC = () => {
       title: '检查项',
       render: (_value, template) => (
         <div className="flex items-center gap-1">
-          <FileText className="w-4 h-4 text-gray-400" />
+          <FileText className="w-4 h-4 text-muted-foreground" />
           <span className="font-medium">
             {template.checkItems?.length || 0}
           </span>
@@ -380,7 +380,7 @@ export const InspectionTemplates: React.FC = () => {
       key: 'updatedAt',
       title: '更新时间',
       render: (_value, template) => (
-        <div className="text-sm text-gray-600 dark:text-gray-300">
+        <div className="text-sm text-muted-foreground dark:text-gray-300">
           {template.updatedAt ? new Date(template.updatedAt).toLocaleDateString() : '-'}
         </div>
       )
@@ -479,8 +479,8 @@ export const InspectionTemplates: React.FC = () => {
       <Card>
         <CardContent className="p-8 text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">加载失败</h3>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">{error.message}</p>
+          <h3 className="text-lg font-medium text-foreground">加载失败</h3>
+          <p className="text-muted-foreground mt-1">{error.message}</p>
           <Button className="mt-4" onClick={() => refetch()}>
             <RefreshCw className="w-4 h-4 mr-2" />
             重试
@@ -497,7 +497,7 @@ export const InspectionTemplates: React.FC = () => {
         {/* 搜索框 */}
         <div className="flex items-center gap-2 flex-1 max-w-md">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               value={searchText}
               onChange={(e) => handleSearch(e.target.value)}
@@ -548,7 +548,7 @@ export const InspectionTemplates: React.FC = () => {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-medium text-gray-900 dark:text-gray-100">筛选条件</h3>
+                  <h3 className="font-medium text-foreground">筛选条件</h3>
                   {hasActiveFilters && (
                     <Button variant="ghost" size="sm" onClick={handleClearFilters}>
                       <X className="w-4 h-4 mr-1" />
@@ -585,10 +585,10 @@ export const InspectionTemplates: React.FC = () => {
                 <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                <div className="text-2xl font-bold text-foreground">
                   {templatesData?.total || 0}
                 </div>
-                <div className="text-sm text-gray-600 dark:text-gray-300">全部模板</div>
+                <div className="text-sm text-muted-foreground dark:text-gray-300">全部模板</div>
               </div>
             </div>
           </CardContent>
@@ -600,10 +600,10 @@ export const InspectionTemplates: React.FC = () => {
                 <Shield className="w-5 h-5 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                <div className="text-2xl font-bold text-foreground">
                   {templates.filter(t => t.isBuiltIn).length}
                 </div>
-                <div className="text-sm text-gray-600 dark:text-gray-300">内置模板</div>
+                <div className="text-sm text-muted-foreground dark:text-gray-300">内置模板</div>
               </div>
             </div>
           </CardContent>
@@ -615,10 +615,10 @@ export const InspectionTemplates: React.FC = () => {
                 <Settings className="w-5 h-5 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                <div className="text-2xl font-bold text-foreground">
                   {templates.filter(t => !t.isBuiltIn).length}
                 </div>
-                <div className="text-sm text-gray-600 dark:text-gray-300">自定义模板</div>
+                <div className="text-sm text-muted-foreground dark:text-gray-300">自定义模板</div>
               </div>
             </div>
           </CardContent>
@@ -630,10 +630,10 @@ export const InspectionTemplates: React.FC = () => {
                 <Monitor className="w-5 h-5 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                <div className="text-2xl font-bold text-foreground">
                   {templates.filter(t => t.isActive).length}
                 </div>
-                <div className="text-sm text-gray-600 dark:text-gray-300">已启用</div>
+                <div className="text-sm text-muted-foreground dark:text-gray-300">已启用</div>
               </div>
             </div>
           </CardContent>
@@ -642,7 +642,7 @@ export const InspectionTemplates: React.FC = () => {
 
       {/* 排序选项 */}
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">排序:</span>
+        <span className="text-sm font-medium text-muted-foreground dark:text-gray-300">排序:</span>
         <div className="flex gap-2">
           <Button
             variant={sortField === 'name' ? 'primary' : 'outline'}
@@ -689,24 +689,24 @@ export const InspectionTemplates: React.FC = () => {
           <Table
             data={templates}
             columns={columns}
-            className="bg-white dark:bg-gray-900 rounded-lg shadow-sm"
+            className="bg-card rounded-lg shadow-sm"
           />
 
           {/* 分页 */}
           <div className="flex flex-wrap justify-between items-center mt-4 px-2 gap-4">
             {/* 左侧：每页显示数量选择 */}
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600 dark:text-gray-400">每页显示</span>
+              <span className="text-sm text-muted-foreground">每页显示</span>
               <select
                 value={pagination.page_size}
                 onChange={(e) => setPagination(p => ({ ...p, page: 1, page_size: Number(e.target.value) }))}
-                className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-2 py-1 text-sm border border-border/70 rounded-md bg-card text-foreground/90 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value={10}>10 条</option>
                 <option value={20}>20 条</option>
                 <option value={50}>50 条</option>
               </select>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-muted-foreground">
                 共 {templatesData?.total || 0} 条记录
               </span>
             </div>
@@ -759,7 +759,7 @@ export const InspectionTemplates: React.FC = () => {
 
                   return pages.map((p, idx) => (
                     p === '...' ? (
-                      <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">...</span>
+                      <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">...</span>
                     ) : (
                       <button
                         key={p}
@@ -767,7 +767,7 @@ export const InspectionTemplates: React.FC = () => {
                         className={`min-w-[32px] h-8 px-2 text-sm rounded-md transition-colors ${
                           pagination.page === p
                             ? 'bg-blue-600 text-white'
-                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            : 'bg-card text-foreground/90 border border-border/70 hover:bg-muted dark:hover:bg-gray-700'
                         }`}
                       >
                         {p}
@@ -789,7 +789,7 @@ export const InspectionTemplates: React.FC = () => {
 
               {/* 跳转到指定页 */}
               <div className="flex items-center gap-1 ml-2">
-                <span className="text-sm text-gray-600 dark:text-gray-400">跳至</span>
+                <span className="text-sm text-muted-foreground">跳至</span>
                 <input
                   type="number"
                   min={1}
@@ -809,9 +809,9 @@ export const InspectionTemplates: React.FC = () => {
                       setPagination(p => ({ ...p, page: value }))
                     }
                   }}
-                  className="w-14 px-2 py-1 text-sm text-center border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-14 px-2 py-1 text-sm text-center border border-border/70 rounded-md bg-card text-foreground/90 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <span className="text-sm text-gray-600 dark:text-gray-400">页</span>
+                <span className="text-sm text-muted-foreground">页</span>
               </div>
             </div>
           </div>
@@ -820,12 +820,12 @@ export const InspectionTemplates: React.FC = () => {
         <Card>
           <CardContent className="p-8 text-center">
             <div className="flex flex-col items-center gap-4">
-              <AlertCircle className="w-12 h-12 text-gray-400 dark:text-gray-500" />
+              <AlertCircle className="w-12 h-12 text-muted-foreground" />
               <div>
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                <h3 className="text-lg font-medium text-foreground">
                   {hasActiveFilters ? '没有找到符合条件的模板' : '暂无巡检模板'}
                 </h3>
-                <p className="text-gray-500 dark:text-gray-400 mt-1">
+                <p className="text-muted-foreground mt-1">
                   {hasActiveFilters ? '尝试调整筛选条件' : '开始创建您的第一个巡检模板'}
                 </p>
               </div>
@@ -851,20 +851,20 @@ export const InspectionTemplates: React.FC = () => {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full p-6"
+            className="bg-card rounded-xl shadow-xl max-w-md w-full p-6"
           >
             <div className="flex items-center gap-3 mb-4">
               <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
                 <AlertCircle className="w-6 h-6 text-red-600" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">确认删除</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">此操作无法撤销</p>
+                <h3 className="text-lg font-semibold text-foreground">确认删除</h3>
+                <p className="text-sm text-muted-foreground">此操作无法撤销</p>
               </div>
             </div>
 
             <div className="mb-6">
-              <p className="text-gray-700 dark:text-gray-300">
+              <p className="text-foreground/90">
                 确定要删除巡检模板 <span className="font-semibold">"{deleteConfirmTemplate.name}"</span> 吗？
               </p>
               {deleteConfirmTemplate.isBuiltIn && (
@@ -936,3 +936,4 @@ export const InspectionTemplates: React.FC = () => {
     </div>
   )
 }
+

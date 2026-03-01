@@ -41,7 +41,7 @@ const ModalContent = React.forwardRef<
       ref={ref}
       aria-describedby={hideDescription ? undefined : 'modal-description'}
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-gray-200/20 dark:border-gray-700/20 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl p-6 shadow-2xl duration-200',
+        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-border/30 bg-card/95 backdrop-blur-xl p-6 shadow-2xl duration-200',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -59,7 +59,7 @@ const ModalContent = React.forwardRef<
           对话框内容
         </DialogPrimitive.Description>
       )}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 disabled:pointer-events-none">
+      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring/40 focus:ring-offset-2 disabled:pointer-events-none">
         <X className="h-4 w-4" />
         <span className="sr-only">关闭</span>
       </DialogPrimitive.Close>
@@ -103,7 +103,7 @@ const ModalTitle = React.forwardRef<
   <DialogPrimitive.Title
     ref={ref}
     className={cn(
-      'text-lg font-semibold leading-none tracking-tight text-gray-900 dark:text-gray-100',
+      'text-lg font-semibold leading-none tracking-tight text-foreground',
       className
     )}
     {...props}
@@ -117,7 +117,7 @@ const ModalDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn('text-sm text-gray-600 dark:text-gray-400', className)}
+    className={cn('text-sm text-muted-foreground', className)}
     {...props}
   />
 ))
@@ -166,7 +166,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring/40 focus:ring-offset-2 transition-colors"
           >
             {cancelText}
           </motion.button>
@@ -178,10 +178,10 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               onClose()
             }}
             className={cn(
-              'px-4 py-2 text-sm font-medium text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ml-2',
+              'px-4 py-2 text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ml-2',
               variant === 'destructive'
-                ? 'bg-red-600 hover:bg-red-700 focus:ring-red-400'
-                : 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-400'
+                ? 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-400'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-ring/40'
             )}
           >
             {confirmText}
@@ -232,7 +232,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 transition-colors"
+            className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring/40 focus:ring-offset-2 transition-colors"
           >
             知道了
           </motion.button>

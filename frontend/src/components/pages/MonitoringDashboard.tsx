@@ -132,10 +132,10 @@ export const MonitoringDashboard: React.FC = () => {
       {/* 页面头部 */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">监控仪表盘</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">监控仪表盘</h1>
+          <p className="text-muted-foreground mt-1">
             实时监控网络设备状态和性能指标
-            <span className="ml-2 text-sm text-gray-500">
+            <span className="ml-2 text-sm text-muted-foreground">
               最后更新: {lastUpdate.toLocaleString('zh-CN')}
             </span>
           </p>
@@ -319,15 +319,15 @@ export const MonitoringDashboard: React.FC = () => {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  className="flex items-center justify-between p-3 rounded-lg bg-gray-50"
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/40"
                 >
                   <div className="flex-1">
-                    <div className="font-medium text-sm text-gray-900">
+                    <div className="font-medium text-sm text-foreground">
                       {device.device}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-500">CPU: {device.cpu}%</span>
-                      <span className="text-xs text-gray-500">内存: {device.memory}%</span>
+                      <span className="text-xs text-muted-foreground">CPU: {device.cpu}%</span>
+                      <span className="text-xs text-muted-foreground">内存: {device.memory}%</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -336,7 +336,7 @@ export const MonitoringDashboard: React.FC = () => {
                         {device.alerts} 告警
                       </Badge>
                     )}
-                    <div className="w-2 h-8 rounded bg-gray-200 overflow-hidden">
+                    <div className="w-2 h-8 rounded bg-muted overflow-hidden">
                       <div 
                         className="w-full bg-purple-500 transition-all duration-500"
                         style={{ height: `${Math.max(device.cpu, device.memory)}%` }}
@@ -410,7 +410,7 @@ export const MonitoringDashboard: React.FC = () => {
                 key={alert.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-center gap-3 p-3 rounded-lg border border-gray-200"
+                className="flex items-center gap-3 p-3 rounded-lg border border-border"
               >
                 <div className="flex-shrink-0">
                   <AlertTriangle className={`h-5 w-5 ${
@@ -420,10 +420,10 @@ export const MonitoringDashboard: React.FC = () => {
                   }`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-foreground">
                     {alert.device}
                   </p>
-                  <p className="text-sm text-gray-600 truncate">
+                  <p className="text-sm text-muted-foreground truncate">
                     {alert.message}
                   </p>
                 </div>
@@ -438,7 +438,7 @@ export const MonitoringDashboard: React.FC = () => {
                     {alert.severity}
                   </Badge>
                 </div>
-                <div className="flex-shrink-0 text-xs text-gray-500">
+                <div className="flex-shrink-0 text-xs text-muted-foreground">
                   {alert.time}
                 </div>
               </motion.div>

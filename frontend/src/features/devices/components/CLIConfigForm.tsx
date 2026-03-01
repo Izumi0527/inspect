@@ -26,7 +26,7 @@ import { DeviceFormData } from './DeviceForm'
 
 // CLI协议选项
 const CLI_PROTOCOL_OPTIONS = [
-  { value: 'none' as CLIProtocol, label: '不使用CLI', icon: Shield, color: 'text-gray-500' },
+  { value: 'none' as CLIProtocol, label: '不使用CLI', icon: Shield, color: 'text-muted-foreground' },
   { value: 'ssh' as CLIProtocol, label: 'SSH', icon: Terminal, color: 'text-green-600' },
   { value: 'telnet' as CLIProtocol, label: 'Telnet', icon: Server, color: 'text-blue-600' }
 ]
@@ -58,14 +58,14 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
     <Card>
       <CardContent className="p-6">
         <div className="space-y-6">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          <h3 className="text-lg font-medium text-foreground flex items-center gap-2">
             <Terminal className="h-5 w-5" />
             CLI连接配置
           </h3>
 
           {/* 协议选择 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-foreground/90 mb-2">
               连接协议
             </label>
             <Controller
@@ -107,7 +107,7 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* SSH用户名 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     用户名 <span className="text-red-500">*</span>
                   </label>
                   <Controller
@@ -125,7 +125,7 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
 
                 {/* SSH端口 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     端口号
                   </label>
                   <Controller
@@ -147,7 +147,7 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
 
               {/* SSH认证方式选择 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-foreground/90 mb-2">
                   认证方式
                 </label>
                 <Controller
@@ -182,7 +182,7 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
               {!((watch('ssh_config.use_key_auth') as boolean)) ? (
                 /* 密码认证 */
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     密码 <span className="text-red-500">*</span>
                   </label>
                   <Controller
@@ -202,9 +202,9 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
                           onClick={() => setShowSSHPassword(!showSSHPassword)}
                         >
                           {showSSHPassword ? (
-                            <EyeOff className="h-4 w-4 text-gray-400" />
+                            <EyeOff className="h-4 w-4 text-muted-foreground/80" />
                           ) : (
-                            <Eye className="h-4 w-4 text-gray-400" />
+                            <Eye className="h-4 w-4 text-muted-foreground/80" />
                           )}
                         </button>
                       </div>
@@ -214,7 +214,7 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
               ) : (
                 /* 密钥认证 */
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     私钥内容 <span className="text-red-500">*</span>
                   </label>
                   <Controller
@@ -225,10 +225,10 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
                         <textarea
                           {...field}
                           placeholder="请粘贴SSH私钥内容..."
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 font-mono text-sm dark:bg-gray-800 dark:text-gray-100"
+                          className="w-full px-3 py-2 border border-border rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 font-mono text-sm dark:bg-muted/80 dark:text-foreground"
                           rows={6}
                         />
-                        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <Key className="h-3 w-3" />
                           支持OpenSSH、RSA、DSA格式私钥
                         </div>
@@ -254,7 +254,7 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Telnet用户名 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     用户名 <span className="text-red-500">*</span>
                   </label>
                   <Controller
@@ -272,7 +272,7 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
 
                 {/* Telnet端口 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     端口号
                   </label>
                   <Controller
@@ -295,7 +295,7 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Telnet密码 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     登录密码 <span className="text-red-500">*</span>
                   </label>
                   <Controller
@@ -315,9 +315,9 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
                           onClick={() => setShowTelnetPassword(!showTelnetPassword)}
                         >
                           {showTelnetPassword ? (
-                            <EyeOff className="h-4 w-4 text-gray-400" />
+                            <EyeOff className="h-4 w-4 text-muted-foreground/80" />
                           ) : (
-                            <Eye className="h-4 w-4 text-gray-400" />
+                            <Eye className="h-4 w-4 text-muted-foreground/80" />
                           )}
                         </button>
                       </div>
@@ -327,7 +327,7 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
 
                 {/* Enable密码 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     Enable密码
                   </label>
                   <Controller
@@ -347,9 +347,9 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
                           onClick={() => setShowEnablePassword(!showEnablePassword)}
                         >
                           {showEnablePassword ? (
-                            <EyeOff className="h-4 w-4 text-gray-400" />
+                            <EyeOff className="h-4 w-4 text-muted-foreground/80" />
                           ) : (
-                            <Eye className="h-4 w-4 text-gray-400" />
+                            <Eye className="h-4 w-4 text-muted-foreground/80" />
                           )}
                         </button>
                       </div>
@@ -366,10 +366,10 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
 
           {/* 无CLI提示 */}
           {cliProtocol === 'none' && (
-            <div className="text-center p-6 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-              <Shield className="h-8 w-8 text-gray-400 dark:text-gray-500 mx-auto mb-2" />
-              <p className="text-gray-600 dark:text-gray-400">不使用CLI连接</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            <div className="text-center p-6 bg-muted/40 rounded-lg border border-border">
+              <Shield className="h-8 w-8 text-muted-foreground/80 mx-auto mb-2" />
+              <p className="text-muted-foreground">不使用CLI连接</p>
+              <p className="text-sm text-muted-foreground mt-1">
                 设备将仅支持SNMP监控，无法执行命令行操作
               </p>
             </div>

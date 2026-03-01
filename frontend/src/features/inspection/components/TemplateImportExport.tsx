@@ -127,7 +127,7 @@ export function TemplateImportExport({
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-card rounded-lg border border-border shadow p-6">
         <h3 className="text-lg font-semibold mb-4">导入模板</h3>
         <div className="space-y-4">
           <div>
@@ -174,9 +174,9 @@ export function TemplateImportExport({
       </div>
 
       {templateId && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-card rounded-lg border border-border shadow p-6">
           <h3 className="text-lg font-semibold mb-4">导出模板</h3>
-          <p className="text-sm text-gray-600 mb-4">将当前模板导出为 JSON 文件。</p>
+          <p className="text-sm text-muted-foreground mb-4">将当前模板导出为 JSON 文件。</p>
           <div className="flex justify-end">
             <button
               onClick={handleExport}

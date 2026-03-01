@@ -74,37 +74,37 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-[#181818] dark:via-[#1f1f1f] dark:to-[#252526] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         {/* 顶部Logo和标题区域 */}
         <div className="text-center">
           <div className="mx-auto h-16 w-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg">
             <Monitor className="h-8 w-8 text-white" />
           </div>
-          <h2 className="text-3xl font-bold text-slate-900 mb-2">
+          <h2 className="text-3xl font-bold text-foreground mb-2">
             网络设备巡检系统
           </h2>
-          <p className="text-slate-600">
+          <p className="text-slate-600 dark:text-gray-300">
             请登录您的账户以继续
           </p>
         </div>
 
         {/* 登录表单卡片 */}
-        <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-xl border border-white/20 p-8">
+        <div className="bg-card/80 backdrop-blur-lg rounded-2xl shadow-xl border border-border/50 p-8">
           {/* 测试账号提示 */}
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+          <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 rounded-xl">
             <div className="flex items-center justify-center mb-2">
-              <Shield className="h-5 w-5 text-blue-600 mr-2" />
-              <h3 className="text-sm font-semibold text-blue-800">测试账号信息</h3>
+              <Shield className="h-5 w-5 text-blue-600 dark:text-blue-300 mr-2" />
+              <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-200">测试账号信息</h3>
             </div>
             <div className="text-center space-y-1">
-              <p className="text-sm text-blue-700">
-                用户名：<code className="bg-blue-100 px-2 py-1 rounded text-blue-800 font-mono">admin</code>
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                用户名：<code className="bg-blue-100 dark:bg-blue-900/40 px-2 py-1 rounded text-blue-800 dark:text-blue-200 font-mono">admin</code>
               </p>
-              <p className="text-sm text-blue-700">
-                密码：<code className="bg-blue-100 px-2 py-1 rounded text-blue-800 font-mono">admin123</code>
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                密码：<code className="bg-blue-100 dark:bg-blue-900/40 px-2 py-1 rounded text-blue-800 dark:text-blue-200 font-mono">admin123</code>
               </p>
-              <p className="text-xs text-blue-600 mt-2">
+              <p className="text-xs text-blue-600 dark:text-blue-300 mt-2">
                 点击下方按钮可自动填充测试账号
               </p>
             </div>
@@ -124,7 +124,7 @@ function LoginPage() {
                     shouldTouch: true
                   });
                 }}
-                className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-lg transition-colors duration-200"
+                className="text-xs bg-blue-100 dark:bg-blue-900/40 hover:bg-blue-200 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-200 dark:text-blue-300 px-3 py-1 rounded-lg transition-colors duration-200"
               >
                 一键填充测试账号
               </button>
@@ -134,17 +134,17 @@ function LoginPage() {
           <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
             {/* 错误信息显示 */}
             {error && (
-              <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-lg">
+              <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-400 dark:border-red-500 p-4 rounded-lg">
                 <div className="flex items-center">
                   <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
-                  <p className="text-red-700 text-sm">{error}</p>
+                  <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
                 </div>
               </div>
             )}
 
             {/* 用户名输入 */}
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="username" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
                 用户名
               </label>
               <input
@@ -152,10 +152,10 @@ function LoginPage() {
                 type="text"
                 autoComplete="username"
                 className={`
-                  w-full px-4 py-3 border rounded-xl bg-white/50 backdrop-blur-sm
+                  w-full px-4 py-3 border rounded-xl bg-background/70 backdrop-blur-sm
                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
                   transition-all duration-200
-                  ${errors.username ? 'border-red-300' : 'border-slate-300'}
+                  ${errors.username ? 'border-red-300' : 'border-input'}
                 `}
                 placeholder="请输入用户名"
               />
@@ -166,7 +166,7 @@ function LoginPage() {
 
             {/* 密码输入 */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
                 密码
               </label>
               <div className="relative">
@@ -175,17 +175,17 @@ function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   className={`
-                    w-full px-4 py-3 pr-12 border rounded-xl bg-white/50 backdrop-blur-sm
+                    w-full px-4 py-3 pr-12 border rounded-xl bg-background/70 backdrop-blur-sm
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
                     transition-all duration-200
-                    ${errors.password ? 'border-red-300' : 'border-slate-300'}
+                    ${errors.password ? 'border-red-300' : 'border-input'}
                   `}
                   placeholder="请输入密码"
                 />
                 <button
                   type="button"
                   onClick={togglePasswordVisibility}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground"
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5" />
@@ -205,9 +205,9 @@ function LoginPage() {
                 <input
                   {...register('remember_me')}
                   type="checkbox"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
+                  className="h-4 w-4 text-blue-600 dark:text-blue-300 focus:ring-blue-500 border-input rounded"
                 />
-                <label htmlFor="remember_me" className="ml-2 block text-sm text-slate-700">
+                <label htmlFor="remember_me" className="ml-2 block text-sm text-slate-700 dark:text-gray-300">
                   记住我
                 </label>
               </div>
@@ -215,7 +215,7 @@ function LoginPage() {
               <div className="text-sm">
                 <Link
                   href="/forgot-password"
-                  className="text-blue-600 hover:text-blue-500 font-medium"
+                  className="text-blue-600 dark:text-blue-300 hover:text-blue-500 font-medium"
                 >
                   忘记密码？
                 </Link>
@@ -250,11 +250,11 @@ function LoginPage() {
 
           {/* 底部链接 */}
           <div className="mt-6 text-center">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 dark:text-gray-300">
               还没有账户？{' '}
               <Link
                 href="/register"
-                className="font-medium text-blue-600 hover:text-blue-500"
+                className="font-medium text-blue-600 dark:text-blue-300 hover:text-blue-500"
               >
                 联系管理员
               </Link>
@@ -264,10 +264,10 @@ function LoginPage() {
 
         {/* 系统信息 */}
         <div className="text-center">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-gray-400">
             企业级网络设备巡检与监控平台 v1.0.0
           </p>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-400 dark:text-gray-500 mt-1">
             基于 React 19 + Next.js 15 构建
           </p>
         </div>

@@ -56,7 +56,7 @@ export function TemplateCard({
       className={`border rounded-lg p-4 transition-all ${
         isSelected
           ? 'bg-blue-50 border-blue-500 shadow-md'
-          : 'bg-white hover:bg-gray-50 hover:shadow-sm'
+          : 'bg-card hover:bg-muted/60 hover:shadow-sm'
       } ${onSelect ? 'cursor-pointer' : ''} ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}
       onClick={handleCardClick}
     >
@@ -71,14 +71,14 @@ export function TemplateCard({
               </span>
             )}
             {!template.isActive && (
-              <span className="flex-shrink-0 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+              <span className="flex-shrink-0 text-xs bg-gray-100 text-muted-foreground px-2 py-1 rounded">
                 已禁用
               </span>
             )}
           </div>
 
           {template.description && (
-            <p className="text-sm text-gray-600 mb-2 line-clamp-2">{template.description}</p>
+            <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{template.description}</p>
           )}
 
           <div className="flex flex-wrap gap-2 text-xs text-gray-500">

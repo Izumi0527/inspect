@@ -142,7 +142,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-600">当前入向流量</p>
+                  <p className="text-xs text-muted-foreground">当前入向流量</p>
                   <p className="text-lg font-bold text-blue-600">
                     {formatBytes(statistics.totalCurrentIn)}
                   </p>
@@ -160,7 +160,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-600">当前出向流量</p>
+                  <p className="text-xs text-muted-foreground">当前出向流量</p>
                   <p className="text-lg font-bold text-green-600">
                     {formatBytes(statistics.totalCurrentOut)}
                   </p>
@@ -178,7 +178,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-600">平均利用率</p>
+                  <p className="text-xs text-muted-foreground">平均利用率</p>
                   <p className="text-lg font-bold text-orange-600">
                     {statistics.avgUtilization.toFixed(1)}%
                   </p>
@@ -196,7 +196,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-600">峰值利用率</p>
+                  <p className="text-xs text-muted-foreground">峰值利用率</p>
                   <p className={`text-lg font-bold ${
                     statistics.maxUtilization > 90 ? 'text-red-600' :
                     statistics.maxUtilization > 80 ? 'text-yellow-600' : 'text-green-600'
@@ -344,7 +344,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
             {chartData.map(trend => (
               <div 
                 key={trend.interface} 
-                className="p-3 border rounded-lg hover:bg-gray-50 transition-colors"
+                className="p-3 border rounded-lg hover:bg-muted/40 transition-colors"
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-medium text-sm">{trend.interface}</span>
@@ -353,7 +353,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
                   </Badge>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                   <div>
                     <div>当前入向: {formatBytes(trend.current_in)}</div>
                     <div>当前出向: {formatBytes(trend.current_out)}</div>
@@ -367,14 +367,14 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
                 <div className="mt-2 pt-2 border-t flex items-center justify-between text-xs">
                   <div className="flex items-center gap-4">
                     <span className={`flex items-center gap-1 ${
-                      trend.trend_in > 0 ? 'text-red-600' : trend.trend_in < 0 ? 'text-green-600' : 'text-gray-600'
+                      trend.trend_in > 0 ? 'text-red-600' : trend.trend_in < 0 ? 'text-green-600' : 'text-muted-foreground'
                     }`}>
                       {trend.trend_in > 0 ? <TrendingUp className="h-3 w-3" /> : 
                        trend.trend_in < 0 ? <TrendingDown className="h-3 w-3" /> : null}
                       入向趋势
                     </span>
                     <span className={`flex items-center gap-1 ${
-                      trend.trend_out > 0 ? 'text-red-600' : trend.trend_out < 0 ? 'text-green-600' : 'text-gray-600'
+                      trend.trend_out > 0 ? 'text-red-600' : trend.trend_out < 0 ? 'text-green-600' : 'text-muted-foreground'
                     }`}>
                       {trend.trend_out > 0 ? <TrendingUp className="h-3 w-3" /> : 
                        trend.trend_out < 0 ? <TrendingDown className="h-3 w-3" /> : null}

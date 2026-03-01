@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react'
+import React, { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   Server,
@@ -376,12 +376,12 @@ export const DeviceManagementView: React.FC = () => {
       width: '200px',
       render: (_, record) => (
         <div className="flex items-center gap-3">
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-            <DeviceIcon type={record.device_type} className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-muted/60 dark:bg-muted flex items-center justify-center">
+            <DeviceIcon type={record.device_type} className="h-4 w-4 text-muted-foreground dark:text-foreground/90" />
           </div>
           <div>
-            <div className="font-medium text-gray-900 dark:text-gray-100">{record.name}</div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">{record.ip}</div>
+            <div className="font-medium text-foreground">{record.name}</div>
+            <div className="text-sm text-muted-foreground">{record.ip}</div>
           </div>
         </div>
       )
@@ -404,7 +404,7 @@ export const DeviceManagementView: React.FC = () => {
           {isDeviceStatus(record.status) ? (
             <StatusBadge status={record.status} />
           ) : (
-            <span className="text-gray-500 dark:text-gray-400">未知</span>
+            <span className="text-muted-foreground">未知</span>
           )}
           {/* 探测状态指示器 */}
           {(record.icmp_status || record.snmp_status) && (
@@ -426,7 +426,7 @@ export const DeviceManagementView: React.FC = () => {
                   record.snmp_status === 'success' 
                     ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
                     : record.snmp_status === 'not_configured'
-                    ? 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                    ? 'bg-muted/60 text-muted-foreground dark:bg-muted dark:text-muted-foreground'
                     : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
                 }`}
                 title={`SNMP: ${
@@ -521,8 +521,8 @@ export const DeviceManagementView: React.FC = () => {
         <div className="text-center py-12">
           <div className="mb-6">
             <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">无法加载设备数据</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
+            <h3 className="text-lg font-semibold text-foreground mb-2">无法加载设备数据</h3>
+            <p className="text-muted-foreground mb-4">{error}</p>
             <div className="space-x-3">
               <Button 
                 onClick={() => window.location.reload()} 
@@ -540,7 +540,7 @@ export const DeviceManagementView: React.FC = () => {
               </Button>
             </div>
           </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">
+          <div className="text-sm text-muted-foreground">
             <p>可能的原因：</p>
             <ul className="mt-2 text-left inline-block">
               <li>• 后端服务未启动 (检查 http://localhost:8000)</li>
@@ -568,8 +568,8 @@ export const DeviceManagementView: React.FC = () => {
                   <Server className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">总设备数</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.total}</p>
+                  <p className="text-sm font-medium text-muted-foreground">总设备数</p>
+                  <p className="text-2xl font-bold text-foreground">{summary.total}</p>
                 </div>
               </div>
             </CardContent>
@@ -582,7 +582,7 @@ export const DeviceManagementView: React.FC = () => {
                   <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">在线设备</p>
+                  <p className="text-sm font-medium text-muted-foreground">在线设备</p>
                   <p className="text-2xl font-bold text-green-600 dark:text-green-400">{summary.online}</p>
                 </div>
               </div>
@@ -596,7 +596,7 @@ export const DeviceManagementView: React.FC = () => {
                   <Power className="h-6 w-6 text-red-600 dark:text-red-400" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">离线设备</p>
+                  <p className="text-sm font-medium text-muted-foreground">离线设备</p>
                   <p className="text-2xl font-bold text-red-600 dark:text-red-400">{summary.offline}</p>
                 </div>
               </div>
@@ -610,7 +610,7 @@ export const DeviceManagementView: React.FC = () => {
                   <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">告警设备</p>
+                  <p className="text-sm font-medium text-muted-foreground">告警设备</p>
                   <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{summary.warning}</p>
                 </div>
               </div>
@@ -624,7 +624,7 @@ export const DeviceManagementView: React.FC = () => {
                   <AlertTriangle className="h-6 w-6 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">总告警数</p>
+                  <p className="text-sm font-medium text-muted-foreground">总告警数</p>
                   <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{summary.totalAlerts}</p>
                 </div>
               </div>
@@ -753,9 +753,9 @@ export const DeviceManagementView: React.FC = () => {
           <div className="overflow-y-auto">
             {devices.length === 0 && !loading && !error && (
               <div className="text-center py-12">
-                <Server className="h-16 w-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">暂无设备数据</h3>
-                <p className="text-gray-600 dark:text-gray-400">
+                <Server className="h-16 w-16 text-muted-foreground/80 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">暂无设备数据</h3>
+                <p className="text-muted-foreground">
                   {(debouncedSearch || (filters.statusFilter !== 'all') || (filters.typeFilter !== 'all'))
                     ? "当前筛选条件下没有找到匹配的设备，请尝试调整筛选条件。"
                     : "系统中还没有添加任何设备,点击上方「添加设备」按钮开始管理您的网络设备。"

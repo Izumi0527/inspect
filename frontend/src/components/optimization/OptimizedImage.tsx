@@ -66,7 +66,7 @@ export const OptimizedImage: React.FC<OptimizedImageProps> = ({
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-gray-100 flex items-center justify-center z-10"
           >
-            <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-300 border-t-blue-600"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-2 border-border border-t-blue-600"></div>
           </motion.div>
         )}
       </AnimatePresence>

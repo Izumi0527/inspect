@@ -151,7 +151,7 @@ export function NetworkTrafficStackedAreaChart({
   if (processedData.length === 0) {
     return (
       <div className="flex items-center justify-center" style={{ height }}>
-        <p className="text-gray-500 dark:text-gray-400">暂无流量数据</p>
+        <p className="text-muted-foreground">暂无流量数据</p>
       </div>
     )
   }
@@ -329,35 +329,35 @@ export function NetworkTrafficStackedAreaChart({
               minWidth: '160px',
             }}
           >
-            <p className="mb-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+            <p className="mb-2 text-sm font-medium text-foreground">
               {tooltipData.time}
             </p>
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-4 text-sm">
                 <div className="flex items-center gap-2">
                   <div className="h-3 w-3 rounded-full bg-sky-500" />
-                  <span className="text-gray-600 dark:text-gray-400">入站:</span>
+                  <span className="text-muted-foreground">入站:</span>
                 </div>
-                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                <span className="font-semibold text-foreground">
                   {formatBandwidthValue(tooltipData.inbound)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4 text-sm">
                 <div className="flex items-center gap-2">
                   <div className="h-3 w-3 rounded-full bg-green-500" />
-                  <span className="text-gray-600 dark:text-gray-400">出站:</span>
+                  <span className="text-muted-foreground">出站:</span>
                 </div>
-                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                <span className="font-semibold text-foreground">
                   {formatBandwidthValue(tooltipData.outbound)}
                 </span>
               </div>
-              <div className="mt-2 border-t border-gray-200 pt-2 dark:border-gray-700">
+              <div className="mt-2 border-t border-border pt-2">
                 <div className="flex items-center justify-between gap-4 text-sm">
                   <div className="flex items-center gap-2">
                     <div className="h-3 w-3 rounded-full bg-orange-500" />
-                    <span className="font-medium text-gray-700 dark:text-gray-300">总流量:</span>
+                    <span className="font-medium text-foreground/90">总流量:</span>
                   </div>
-                  <span className="font-bold text-gray-900 dark:text-gray-100">
+                  <span className="font-bold text-foreground">
                     {formatBandwidthValue(tooltipData.total)}
                   </span>
                 </div>
@@ -371,15 +371,15 @@ export function NetworkTrafficStackedAreaChart({
       <div className="mt-4 flex items-center justify-center gap-6">
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-sky-500" />
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">入站流量</span>
+          <span className="text-sm font-medium text-foreground/90">入站流量</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-green-500" />
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">出站流量</span>
+          <span className="text-sm font-medium text-foreground/90">出站流量</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="h-3 w-3 rounded-full bg-orange-500" />
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">总流量</span>
+          <span className="text-sm font-medium text-foreground/90">总流量</span>
         </div>
       </div>
     </ChartContainer>

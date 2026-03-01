@@ -212,13 +212,13 @@ export const TrafficRealtimeChart: React.FC<TrafficRealtimeChartProps> = ({
                 <CardContent className="space-y-3">
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <div className="text-gray-600">入向</div>
+                      <div className="text-muted-foreground">入向</div>
                       <div className="font-medium text-blue-600">
                         {formatBytes(metric.bytes_in)}
                       </div>
                     </div>
                     <div>
-                      <div className="text-gray-600">出向</div>
+                      <div className="text-muted-foreground">出向</div>
                       <div className="font-medium text-green-600">
                         {formatBytes(metric.bytes_out)}
                       </div>
@@ -227,7 +227,7 @@ export const TrafficRealtimeChart: React.FC<TrafficRealtimeChartProps> = ({
                   
                   <div className="pt-2 border-t">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-600">利用率</span>
+                      <span className="text-muted-foreground">利用率</span>
                       <span className={`font-medium ${
                         metric.bandwidth_utilization > 90 ? 'text-red-600' :
                         metric.bandwidth_utilization > 80 ? 'text-yellow-600' :

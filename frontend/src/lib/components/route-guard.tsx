@@ -14,7 +14,7 @@ import { Permission, UserRole } from '../types/auth.types'
 function LoadingScreen() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
-      <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-8 shadow-xl border border-white/20">
+      <div className="bg-card/80 backdrop-blur-lg rounded-2xl p-8 shadow-xl border border-border/40">
         <div className="flex flex-col items-center space-y-6">
           {/* 加载动画 */}
           <div className="relative">
@@ -44,7 +44,7 @@ function AccessDenied({ message = '您没有权限访问此页面', onGoBack }: 
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
-      <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-8 shadow-xl border border-white/20 max-w-md w-full mx-4">
+      <div className="bg-card/80 backdrop-blur-lg rounded-2xl p-8 shadow-xl border border-border/40 max-w-md w-full mx-4">
         <div className="text-center space-y-6">
           {/* 错误图标 */}
           <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto">

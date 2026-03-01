@@ -138,9 +138,9 @@ export const SettingsView: React.FC = () => {
     <AppLayout title="系统设置">
       <div className={`p-1 ${shouldFillHeight ? 'h-[calc(100vh-64px)] flex flex-col' : ''}`}>
         {/* 统一的白色容器 */}
-        <div className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 ${shouldFillHeight ? 'flex-1 flex flex-col min-h-0' : ''}`}>
+        <div className={`bg-card rounded-xl border border-border ${shouldFillHeight ? 'flex-1 flex flex-col min-h-0' : ''}`}>
           {/* 标签导航 */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="p-4 border-b border-border">
             <div className="flex flex-wrap gap-2">
               {tabs.map((tab) => {
                 const Icon = tab.icon
@@ -155,7 +155,7 @@ export const SettingsView: React.FC = () => {
                       transition-all duration-200
                       ${isActive
                         ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        : 'text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400 hover:bg-muted/40'
                       }
                     `}
                     whileHover={{ scale: 1.02 }}

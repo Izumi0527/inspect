@@ -25,7 +25,7 @@ export function NotificationItem({ notification, onClick }: NotificationItemProp
       onClick={() => onClick?.(notification)}
       className={cn(
         'flex items-start gap-3 p-4 cursor-pointer transition-colors border-b border-gray-100 dark:border-gray-800 last:border-b-0',
-        'hover:bg-gray-50 dark:hover:bg-gray-800/50',
+        'hover:bg-muted/40/50',
         !read && 'bg-blue-50/50 dark:bg-blue-900/10'
       )}
     >
@@ -37,12 +37,12 @@ export function NotificationItem({ notification, onClick }: NotificationItemProp
       {/* 通知内容 */}
       <div className="flex-1 min-w-0">
         {/* 标题 */}
-        <div className={cn('text-sm font-medium mb-1', read ? 'text-gray-700 dark:text-gray-300' : 'text-gray-900 dark:text-white')}>
+        <div className={cn('text-sm font-medium mb-1', read ? 'text-muted-foreground' : 'text-foreground')}>
           {title}
         </div>
 
         {/* 内容 */}
-        <div className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mb-1.5">
+        <div className="text-xs text-muted-foreground line-clamp-2 mb-1.5">
           {content}
         </div>
 

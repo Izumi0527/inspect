@@ -134,7 +134,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
           <Filter className="w-4 h-4" />
           <span>高级过滤</span>
@@ -165,12 +165,12 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
 
       {/* 过滤条件面板 */}
       {isExpanded && (
-        <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="space-y-4 pt-4 border-t border-border">
           {/* 第一行：关键词搜索 + 时间范围 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 关键词搜索 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-muted-foreground mb-2">
                 关键词搜索
               </label>
               <Input
@@ -184,7 +184,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
 
             {/* 时间范围预设 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-muted-foreground mb-2">
                 <Calendar className="w-4 h-4 inline mr-1" />
                 时间范围
               </label>
@@ -210,7 +210,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
           {filters.dateRangePreset === 'custom' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-muted-foreground mb-2">
                   开始日期
                 </label>
                 <Input
@@ -227,7 +227,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-muted-foreground mb-2">
                   结束日期
                 </label>
                 <Input
@@ -249,7 +249,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* 严重级别多选 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-muted-foreground mb-2">
                 严重级别
               </label>
               <div className="space-y-2">
@@ -284,7 +284,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
 
             {/* 状态多选 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-muted-foreground mb-2">
                 状态
               </label>
               <div className="space-y-2">
@@ -302,7 +302,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                       }}
                       className="rounded text-blue-600"
                     />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                    <span className="text-sm text-muted-foreground">
                       {status === 'active' && '活跃'}
                       {status === 'acknowledged' && '已确认'}
                       {status === 'resolved' && '已解决'}
@@ -314,7 +314,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
 
             {/* 分类多选 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-muted-foreground mb-2">
                 分类
               </label>
               <div className="space-y-2">
@@ -332,7 +332,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                       }}
                       className="rounded text-blue-600"
                     />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                    <span className="text-sm text-muted-foreground">
                       {category === 'connectivity' && '连通性'}
                       {category === 'performance' && '性能'}
                       {category === 'security' && '安全'}
@@ -347,7 +347,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
           </div>
 
           {/* 底部操作按钮 */}
-          <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between pt-4 border-t border-border">
             <div className="text-sm text-gray-500">
               {activeFilterCount > 0 ? (
                 <span>已应用 {activeFilterCount} 个过滤条件</span>
@@ -376,7 +376,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
   // 根据renderAsCard决定是否包裹Card
   if (renderAsCard) {
     return (
-      <Card className="border-gray-200 dark:border-gray-700">
+      <Card className="border-border">
         <CardContent className="p-4">
           {filtersContent}
         </CardContent>
@@ -386,7 +386,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
 
   // 不使用Card时，直接返回内容
   return (
-    <div className="mb-6 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800">
+    <div className="mb-6 p-4 border border-border rounded-lg bg-card">
       {filtersContent}
     </div>
   )

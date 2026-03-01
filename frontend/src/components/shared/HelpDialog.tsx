@@ -43,7 +43,7 @@ export function HelpDialog({ title = '帮助', content, links }: HelpDialogProps
       {/* 帮助按钮 */}
       <button
         onClick={() => setIsOpen(true)}
-        className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50 transition-colors flex items-center"
+        className="flex items-center rounded border border-border bg-card px-4 py-2 text-foreground transition-colors hover:bg-muted"
         title="查看帮助"
       >
         <svg
@@ -68,19 +68,19 @@ export function HelpDialog({ title = '帮助', content, links }: HelpDialogProps
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             {/* 背景遮罩 */}
             <div
-              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              className="fixed inset-0 transition-opacity bg-muted/400 bg-opacity-75"
               onClick={() => setIsOpen(false)}
             />
 
             {/* 对话框内容 */}
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+            <div className="inline-block transform overflow-hidden rounded-lg border border-border/50 bg-card text-left text-foreground shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl sm:align-middle">
               {/* 头部 */}
               <div className="bg-blue-500 px-6 py-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-white">{title}</h3>
                   <button
                     onClick={() => setIsOpen(false)}
-                    className="text-white hover:text-gray-200 transition-colors"
+                    className="text-white hover:text-foreground/90 transition-colors"
                   >
                     <svg
                       className="w-6 h-6"
@@ -103,13 +103,13 @@ export function HelpDialog({ title = '帮助', content, links }: HelpDialogProps
               <div className="px-6 py-4">
                 {content && (
                   <div className="mb-6">
-                    <p className="text-gray-700 whitespace-pre-line">{content}</p>
+                    <p className="whitespace-pre-line text-muted-foreground">{content}</p>
                   </div>
                 )}
 
                 {/* 文档链接 */}
                 <div>
-                  <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                  <h4 className="mb-3 text-sm font-semibold text-foreground">
                     相关文档
                   </h4>
                   <div className="space-y-3">
@@ -119,7 +119,7 @@ export function HelpDialog({ title = '帮助', content, links }: HelpDialogProps
                         href={link.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block p-3 border rounded hover:bg-gray-50 transition-colors"
+                        className="block rounded border border-border bg-background/40 p-3 transition-colors hover:bg-muted/60"
                       >
                         <div className="flex items-start">
                           <svg
@@ -136,17 +136,17 @@ export function HelpDialog({ title = '帮助', content, links }: HelpDialogProps
                             />
                           </svg>
                           <div className="flex-1">
-                            <div className="font-medium text-gray-900">
+                            <div className="font-medium text-foreground">
                               {link.title}
                             </div>
                             {link.description && (
-                              <div className="text-sm text-gray-600 mt-1">
+                              <div className="mt-1 text-sm text-muted-foreground">
                                 {link.description}
                               </div>
                             )}
                           </div>
                           <svg
-                            className="w-5 h-5 text-gray-400 ml-2"
+                            className="ml-2 h-5 w-5 text-muted-foreground"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -194,7 +194,7 @@ export function HelpDialog({ title = '帮助', content, links }: HelpDialogProps
               </div>
 
               {/* 底部 */}
-              <div className="bg-gray-50 px-6 py-4 flex justify-end">
+              <div className="flex justify-end border-t border-border/50 bg-muted/40 px-6 py-4">
                 <button
                   onClick={() => setIsOpen(false)}
                   className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"

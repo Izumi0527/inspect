@@ -17,8 +17,8 @@ export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({
     <div className={`space-y-4 ${className}`}>
       {Array.from({ length: rows }).map((_, index) => (
         <div key={index} className="animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+          <div className="h-4 bg-muted rounded w-3/4 mb-2"></div>
+          <div className="h-4 bg-muted rounded w-1/2"></div>
         </div>
       ))}
     </div>
@@ -41,14 +41,14 @@ export const CardSkeleton: React.FC<CardSkeletonProps> = ({
   return (
     <div className={`grid grid-cols-1 md:grid-cols-4 gap-6 ${className}`}>
       {Array.from({ length: count }).map((_, index) => (
-        <div key={index} className="bg-white rounded-lg shadow p-6 animate-pulse">
+        <div key={index} className="bg-card rounded-lg border border-border/50 shadow-sm p-6 animate-pulse">
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <div className="h-3 bg-gray-200 rounded w-2/3 mb-3"></div>
-              <div className="h-8 bg-gray-200 rounded w-1/2 mb-3"></div>
-              <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+              <div className="h-3 bg-muted rounded w-2/3 mb-3"></div>
+              <div className="h-8 bg-muted rounded w-1/2 mb-3"></div>
+              <div className="h-3 bg-muted rounded w-1/3"></div>
             </div>
-            <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
+            <div className="w-12 h-12 bg-muted rounded-lg"></div>
           </div>
         </div>
       ))}
@@ -72,12 +72,12 @@ export const TableSkeleton: React.FC<TableSkeletonProps> = ({
   className = ''
 }) => {
   return (
-    <div className={`bg-white rounded-lg shadow ${className}`}>
+    <div className={`bg-card rounded-lg border border-border/50 shadow-sm ${className}`}>
       <div className="p-6">
         {/* Table Header */}
-        <div className="flex gap-4 pb-4 border-b border-gray-200">
+        <div className="flex gap-4 pb-4 border-b border-border/50">
           {Array.from({ length: columns }).map((_, index) => (
-            <div key={`header-${index}`} className="flex-1 h-4 bg-gray-200 rounded animate-pulse"></div>
+            <div key={`header-${index}`} className="flex-1 h-4 bg-muted rounded animate-pulse"></div>
           ))}
         </div>
 
@@ -86,7 +86,7 @@ export const TableSkeleton: React.FC<TableSkeletonProps> = ({
           {Array.from({ length: rows }).map((_, rowIndex) => (
             <div key={`row-${rowIndex}`} className="flex gap-4">
               {Array.from({ length: columns }).map((_, colIndex) => (
-                <div key={`cell-${rowIndex}-${colIndex}`} className="flex-1 h-4 bg-gray-200 rounded animate-pulse"></div>
+                <div key={`cell-${rowIndex}-${colIndex}`} className="flex-1 h-4 bg-muted rounded animate-pulse"></div>
               ))}
             </div>
           ))}
@@ -110,10 +110,10 @@ export const ChartSkeleton: React.FC<ChartSkeletonProps> = ({
   className = ''
 }) => {
   return (
-    <div className={`bg-white rounded-lg shadow p-6 ${className}`}>
-      <div className="h-4 bg-gray-200 rounded w-1/3 mb-4 animate-pulse"></div>
+    <div className={`bg-card rounded-lg border border-border/50 shadow-sm p-6 ${className}`}>
+      <div className="h-4 bg-muted rounded w-1/3 mb-4 animate-pulse"></div>
       <div
-        className="bg-gray-100 rounded animate-pulse"
+        className="bg-muted/60 rounded animate-pulse"
         style={{ height: `${height}px` }}
       ></div>
     </div>

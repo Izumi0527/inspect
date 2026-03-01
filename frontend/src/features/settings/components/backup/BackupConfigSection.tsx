@@ -111,7 +111,7 @@ export function BackupConfigSection({ data, onChange }: Props) {
 
         {/* 备份内容选项 */}
         <div className="pt-4 border-t space-y-4">
-          <div className="text-sm font-medium text-gray-700 mb-2">备份内容</div>
+          <div className="text-sm font-medium text-foreground/90 mb-2">备份内容</div>
 
           <ConfigItem
             label="包含数据库"
@@ -157,11 +157,11 @@ export function BackupConfigSection({ data, onChange }: Props) {
 
         {/* 提示信息 */}
         <div className="pt-4 border-t">
-          <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
-            <p className="text-sm text-gray-700 mb-2">
+          <div className="bg-muted/40 border border-border rounded-md p-4">
+            <p className="text-sm text-foreground/90 mb-2">
               <strong>备份建议：</strong>
             </p>
-            <ul className="text-sm text-gray-600 space-y-1 ml-4 list-disc">
+            <ul className="text-sm text-muted-foreground space-y-1 ml-4 list-disc">
               <li>定期测试备份恢复流程，确保备份文件可用</li>
               <li>将重要备份文件复制到异地存储，防止灾难性损失</li>
               <li>监控备份存储空间，避免磁盘满导致备份失败</li>

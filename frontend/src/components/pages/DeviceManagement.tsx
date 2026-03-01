@@ -218,12 +218,12 @@ export const DeviceManagementPage: React.FC = () => {
       width: '200px',
       render: (_, record) => (
         <div className="flex items-center gap-3">
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-            <DeviceIcon type={record.device_type} className="h-4 w-4 text-gray-600 dark:text-gray-300" />
+          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-muted/60 flex items-center justify-center">
+            <DeviceIcon type={record.device_type} className="h-4 w-4 text-muted-foreground" />
           </div>
           <div>
-            <div className="font-medium text-gray-900 dark:text-gray-100">{record.name}</div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">{record.ip}</div>
+            <div className="font-medium text-foreground">{record.name}</div>
+            <div className="text-sm text-muted-foreground">{record.ip}</div>
           </div>
         </div>
       )
@@ -242,7 +242,7 @@ export const DeviceManagementPage: React.FC = () => {
         isDeviceStatus(value) ? (
           <StatusBadge status={value} />
         ) : (
-          <span className="text-gray-500 dark:text-gray-400">-</span>
+          <span className="text-muted-foreground">-</span>
         )
       )
     },
@@ -352,8 +352,8 @@ export const DeviceManagementPage: React.FC = () => {
       {/* 页面头部 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">设备管理</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">管理和监控网络设备状态</p>
+          <h1 className="text-2xl font-bold text-foreground">设备管理</h1>
+          <p className="text-muted-foreground mt-1">管理和监控网络设备状态</p>
         </div>
         <Button onClick={handleAddDevice} className="flex items-center gap-2">
           <Plus className="h-4 w-4" />
@@ -370,8 +370,8 @@ export const DeviceManagementPage: React.FC = () => {
                 <Server className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">总设备数</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.total}</p>
+                <p className="text-sm font-medium text-muted-foreground">总设备数</p>
+                <p className="text-2xl font-bold text-foreground">{summary.total}</p>
               </div>
             </div>
           </CardContent>
@@ -384,7 +384,7 @@ export const DeviceManagementPage: React.FC = () => {
                 <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">在线设备</p>
+                <p className="text-sm font-medium text-muted-foreground">在线设备</p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400">{summary.online}</p>
               </div>
             </div>
@@ -398,7 +398,7 @@ export const DeviceManagementPage: React.FC = () => {
                 <Power className="h-6 w-6 text-red-600 dark:text-red-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">离线设备</p>
+                <p className="text-sm font-medium text-muted-foreground">离线设备</p>
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400">{summary.offline}</p>
               </div>
             </div>
@@ -412,7 +412,7 @@ export const DeviceManagementPage: React.FC = () => {
                 <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">告警设备</p>
+                <p className="text-sm font-medium text-muted-foreground">告警设备</p>
                 <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{summary.warning}</p>
               </div>
             </div>
@@ -426,7 +426,7 @@ export const DeviceManagementPage: React.FC = () => {
                 <AlertTriangle className="h-6 w-6 text-purple-600 dark:text-purple-400" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">总告警数</p>
+                <p className="text-sm font-medium text-muted-foreground">总告警数</p>
                 <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{summary.totalAlerts}</p>
               </div>
             </div>

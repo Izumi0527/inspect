@@ -111,8 +111,8 @@ const getDeviceStyle = (title: string): {
   return {
     icon: 'Chip',
     gradient: 'from-gray-500 via-gray-600 to-slate-600',
-    bgColor: 'bg-gray-50 dark:bg-gray-950/30',
-    iconColor: 'text-gray-600 dark:text-gray-400'
+    bgColor: 'bg-muted/40 dark:bg-gray-950/30',
+    iconColor: 'text-muted-foreground'
   }
 }
 
@@ -173,7 +173,7 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
                     <div className={`
                       relative overflow-hidden rounded-2xl p-6
                       ${style.bgColor}
-                      border border-gray-200 dark:border-gray-700
+                      border border-border
                       transition-all duration-300 ease-out
                       hover:shadow-xl hover:scale-[1.02]
                       hover:border-transparent
@@ -193,7 +193,7 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
                           relative mb-4
                           w-20 h-20 rounded-2xl
                           flex items-center justify-center
-                          bg-white dark:bg-gray-800
+                          bg-card
                           shadow-lg
                           transition-all duration-300
                           group-hover:shadow-2xl
@@ -224,7 +224,7 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
                         {/* 标题 */}
                         <h3 className={`
                           font-semibold text-base mb-2
-                          text-gray-900 dark:text-gray-100
+                          text-foreground
                           transition-colors duration-300
                           group-hover:${style.iconColor}
                         `}>
@@ -232,15 +232,15 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
                         </h3>
 
                         {/* 描述 */}
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <p className="text-sm text-muted-foreground">
                           {item.description}
                         </p>
 
                         {/* 设备数量徽章 */}
                         <div className={`
                           mt-3 px-3 py-1 rounded-full
-                          bg-white dark:bg-gray-800
-                          border border-gray-200 dark:border-gray-700
+                          bg-card
+                          border border-border
                           text-xs font-medium
                           ${style.iconColor}
                           transition-all duration-300

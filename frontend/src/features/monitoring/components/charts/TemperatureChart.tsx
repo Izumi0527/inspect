@@ -109,7 +109,7 @@ export function TemperatureChart({
         return (
           <div key={line.key} className="flex items-center gap-2">
             <div className="h-3 w-3 rounded-full" style={{ backgroundColor: line.color }} />
-            <span className="text-sm text-gray-600 dark:text-gray-400">
+            <span className="text-sm text-muted-foreground">
               {line.name}
               {hasHighTemp && <span className="ml-1 text-xs font-semibold text-orange-500">[!]</span>}
             </span>
@@ -118,7 +118,7 @@ export function TemperatureChart({
       })}
       {deviceNames.length === 5 && (
         <div className="mt-1 w-full text-center">
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="text-xs text-muted-foreground">
             (最多显示5个设备)
           </span>
         </div>
@@ -129,7 +129,7 @@ export function TemperatureChart({
   if (chartData.length === 0) {
     return (
       <div className="flex items-center justify-center" style={{ height }}>
-        <p className="text-gray-500 dark:text-gray-400">暂无温度数据</p>
+        <p className="text-muted-foreground">暂无温度数据</p>
       </div>
     )
   }
@@ -146,7 +146,7 @@ export function TemperatureChart({
       {showLegend && <Legend />}
 
       {/* 温度阈值提示 */}
-      <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+      <div className="mt-2 flex items-center justify-center gap-2 text-xs text-muted-foreground">
         <div className="flex items-center gap-1">
           <span>温度阈值:</span>
           <span className="font-medium">{temperatureThreshold}°C</span>

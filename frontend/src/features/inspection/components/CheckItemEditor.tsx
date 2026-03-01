@@ -91,7 +91,7 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto">
+    <div className="bg-card rounded-lg shadow-lg p-6 max-w-2xl mx-auto">
       <h3 className="text-xl font-bold mb-6">
         {item ? '编辑检查项' : '新建检查项'}
       </h3>

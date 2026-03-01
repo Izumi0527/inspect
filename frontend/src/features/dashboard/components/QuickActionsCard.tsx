@@ -88,7 +88,7 @@ export const QuickActionsCard: React.FC = () => {
                 className={`h-20 flex flex-col items-center justify-center gap-2 ${action.colorScheme.hover} transition-colors`}
               >
                 {isLoading ? (
-                  <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+                  <div className="w-6 h-6 border-2 border-border border-t-blue-600 rounded-full animate-spin" />
                 ) : (
                   <IconComponent className="w-6 h-6" />
                 )}

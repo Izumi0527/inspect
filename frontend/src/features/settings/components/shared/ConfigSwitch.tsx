@@ -35,7 +35,7 @@ export function ConfigSwitch({
       {label && (
         <Label
           htmlFor={id}
-          className="text-sm font-normal text-gray-700 cursor-pointer"
+          className="text-sm font-normal text-foreground/90 cursor-pointer"
         >
           {label}
         </Label>

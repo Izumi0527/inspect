@@ -140,7 +140,7 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
       case 'textarea':
         return (
           <textarea
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+            className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
             rows={3}
             placeholder={`输入${field.label}`}
             value={String(updateValues[field.key] ?? '')}
@@ -169,8 +169,8 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
             <Settings className="h-5 w-5 text-blue-600" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">批量更新设备</h2>
-            <p className="text-sm text-gray-600 mt-1">
+            <h2 className="text-xl font-semibold text-foreground">批量更新设备</h2>
+            <p className="text-sm text-muted-foreground mt-1">
               将更新 {selectedDevices.length} 个设备的属性
             </p>
           </div>
@@ -214,18 +214,18 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
                       id={`field-${String(field.key)}`}
                       checked={selectedFields.has(field.key)}
                       onChange={() => handleFieldToggle(field.key)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      className="w-4 h-4 text-blue-600 border-border rounded focus:ring-blue-500"
                     />
                     <label 
                       htmlFor={`field-${String(field.key)}`}
-                      className="font-medium text-gray-900 cursor-pointer"
+                      className="font-medium text-foreground cursor-pointer"
                     >
                       {field.label}
                     </label>
                   </div>
                   
                   {field.description && (
-                    <p className="text-sm text-gray-600 ml-7">
+                    <p className="text-sm text-muted-foreground ml-7">
                       {field.description}
                     </p>
                   )}

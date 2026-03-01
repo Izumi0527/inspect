@@ -76,10 +76,10 @@ export function UserPasswordDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="text-sm text-gray-600 dark:text-gray-400">
+          <div className="text-sm text-muted-foreground">
             {user ? (
               <>
-                为用户 <span className="font-medium text-gray-900 dark:text-gray-100">{user.username}</span> 重置密码
+                为用户 <span className="font-medium text-foreground">{user.username}</span> 重置密码
               </>
             ) : (
               '请选择需要重置密码的用户'

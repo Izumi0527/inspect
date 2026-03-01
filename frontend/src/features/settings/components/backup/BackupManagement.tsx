@@ -139,12 +139,12 @@ export function BackupManagement() {
         {/* 恢复中的全局提示 */}
         {isRestoring && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-sm mx-4">
+            <div className="bg-card border border-border rounded-lg p-6 max-w-sm mx-4">
               <div className="flex items-center space-x-3">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">正在恢复备份...</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">请勿关闭或刷新页面</p>
+                  <h3 className="text-lg font-semibold text-foreground">正在恢复备份...</h3>
+                  <p className="text-sm text-muted-foreground mt-1">请勿关闭或刷新页面</p>
                 </div>
               </div>
             </div>

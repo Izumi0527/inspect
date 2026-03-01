@@ -205,7 +205,7 @@ const CategoryBadge: React.FC<{ category: AlertCategory }> = ({ category }) => {
     performance: { label: '性能', color: 'bg-orange-100 text-orange-800' },
     security: { label: '安全', color: 'bg-red-100 text-red-800' },
     configuration: { label: '配置', color: 'bg-purple-100 text-purple-800' },
-    hardware: { label: '硬件', color: 'bg-gray-100 text-gray-800' },
+    hardware: { label: '硬件', color: 'bg-muted/60 text-foreground' },
     other: { label: '其他', color: 'bg-green-100 text-green-800' }
   }
   
@@ -254,8 +254,8 @@ export const AlertCenter: React.FC = () => {
       width: '300px',
       render: (_, record) => (
         <div className="space-y-1">
-          <div className="font-medium text-gray-900">{record.title}</div>
-          <div className="text-sm text-gray-600">{record.device_name}</div>
+          <div className="font-medium text-foreground">{record.title}</div>
+          <div className="text-sm text-muted-foreground">{record.device_name}</div>
           <CategoryBadge category={record.category} />
         </div>
       )
@@ -268,7 +268,7 @@ export const AlertCenter: React.FC = () => {
         isAlertSeverity(value) ? (
           <SeverityBadge severity={value} />
         ) : (
-          <span className="text-gray-500">-</span>
+          <span className="text-muted-foreground">-</span>
         )
       )
     },
@@ -280,7 +280,7 @@ export const AlertCenter: React.FC = () => {
         isAlertStatus(value) ? (
           <StatusBadge status={value} />
         ) : (
-          <span className="text-gray-500">-</span>
+          <span className="text-muted-foreground">-</span>
         )
       )
     },
@@ -433,8 +433,8 @@ export const AlertCenter: React.FC = () => {
       {/* 页面头部 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">告警中心</h1>
-          <p className="text-gray-600 mt-1">管理和处理系统告警信息</p>
+          <h1 className="text-2xl font-bold text-foreground">告警中心</h1>
+          <p className="text-muted-foreground mt-1">管理和处理系统告警信息</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={handleRefresh} disabled={loading}>
@@ -457,8 +457,8 @@ export const AlertCenter: React.FC = () => {
                 <Bell className="h-6 w-6 text-blue-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">总告警数</p>
-                <p className="text-2xl font-bold text-gray-900">{statistics.total}</p>
+                <p className="text-sm font-medium text-muted-foreground">总告警数</p>
+                <p className="text-2xl font-bold text-foreground">{statistics.total}</p>
               </div>
             </div>
           </CardContent>
@@ -471,7 +471,7 @@ export const AlertCenter: React.FC = () => {
                 <AlertTriangle className="h-6 w-6 text-red-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">活跃告警</p>
+                <p className="text-sm font-medium text-muted-foreground">活跃告警</p>
                 <p className="text-2xl font-bold text-red-600">{statistics.active}</p>
               </div>
             </div>
@@ -485,7 +485,7 @@ export const AlertCenter: React.FC = () => {
                 <Eye className="h-6 w-6 text-yellow-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">已确认</p>
+                <p className="text-sm font-medium text-muted-foreground">已确认</p>
                 <p className="text-2xl font-bold text-yellow-600">{statistics.acknowledged}</p>
               </div>
             </div>
@@ -499,7 +499,7 @@ export const AlertCenter: React.FC = () => {
                 <CheckCircle className="h-6 w-6 text-green-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">已解决</p>
+                <p className="text-sm font-medium text-muted-foreground">已解决</p>
                 <p className="text-2xl font-bold text-green-600">{statistics.resolved}</p>
               </div>
             </div>
@@ -513,7 +513,7 @@ export const AlertCenter: React.FC = () => {
                 <X className="h-6 w-6 text-purple-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">严重告警</p>
+                <p className="text-sm font-medium text-muted-foreground">严重告警</p>
                 <p className="text-2xl font-bold text-purple-600">{statistics.critical}</p>
               </div>
             </div>

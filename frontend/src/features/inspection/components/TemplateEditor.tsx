@@ -167,7 +167,7 @@ export function TemplateEditor({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 max-w-4xl mx-auto">
+    <div className="bg-card rounded-lg shadow-lg p-6 max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold mb-6">
         {template ? '编辑模板' : '创建模板'}
       </h2>
@@ -248,7 +248,7 @@ export function TemplateEditor({
                 {vendorOptions.map((vendor) => (
                   <label
                     key={vendor}
-                    className="flex items-center cursor-pointer px-3 py-2 border rounded hover:bg-gray-50 transition-colors"
+                    className="flex items-center cursor-pointer px-3 py-2 border rounded hover:bg-muted/40 transition-colors"
                   >
                     <input
                       type="checkbox"
@@ -270,7 +270,7 @@ export function TemplateEditor({
                 {deviceTypeOptions.map((type) => (
                   <label
                     key={type}
-                    className="flex items-center cursor-pointer px-3 py-2 border rounded hover:bg-gray-50 transition-colors"
+                    className="flex items-center cursor-pointer px-3 py-2 border rounded hover:bg-muted/40 transition-colors"
                   >
                     <input
                       type="checkbox"
@@ -294,7 +294,7 @@ export function TemplateEditor({
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold">
               检查项列表
-              <span className="ml-2 text-sm font-normal text-gray-600">
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
                 ({formData.checkItems.length} 项)
               </span>
             </h3>
@@ -319,7 +319,7 @@ export function TemplateEditor({
               {formData.checkItems.map((item, index) => (
                 <div
                   key={item.id}
-                  className="border rounded p-4 hover:bg-gray-50 transition-colors"
+                  className="border rounded p-4 hover:bg-muted/40 transition-colors"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">

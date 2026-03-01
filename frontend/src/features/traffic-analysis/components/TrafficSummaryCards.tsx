@@ -66,8 +66,8 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
       <Card>
         <CardContent className="p-12 text-center">
           <Activity className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">暂无流量数据</h3>
-          <p className="text-gray-600">请开始监控设备以查看流量汇总信息</p>
+          <h3 className="text-lg font-medium text-foreground mb-2">暂无流量数据</h3>
+          <p className="text-muted-foreground">请开始监控设备以查看流量汇总信息</p>
         </CardContent>
       </Card>
     )
@@ -84,7 +84,7 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">监控设备</p>
+                <p className="text-sm font-medium text-muted-foreground">监控设备</p>
                 <p className="text-3xl font-bold text-blue-600">{summary.total_devices}</p>
               </div>
               <div className="p-3 bg-blue-100 rounded-full">
@@ -104,7 +104,7 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">网络接口</p>
+                <p className="text-sm font-medium text-muted-foreground">网络接口</p>
                 <p className="text-3xl font-bold text-green-600">{summary.total_interfaces}</p>
               </div>
               <div className="p-3 bg-green-100 rounded-full">
@@ -124,7 +124,7 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">活跃异常</p>
+                <p className="text-sm font-medium text-muted-foreground">活跃异常</p>
                 <p className="text-3xl font-bold text-orange-600">{summary.active_anomalies}</p>
               </div>
               <div className="p-3 bg-orange-100 rounded-full">
@@ -144,7 +144,7 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">基线模式</p>
+                <p className="text-sm font-medium text-muted-foreground">基线模式</p>
                 <p className="text-3xl font-bold text-purple-600">{summary.baseline_patterns}</p>
               </div>
               <div className="p-3 bg-purple-100 rounded-full">
@@ -162,7 +162,7 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">设备详情</h3>
         {isRefreshing && (
-          <div className="flex items-center gap-2 text-sm text-gray-600">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loading size="sm" />
             更新中...
           </div>
@@ -198,16 +198,16 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
                 <CardContent className="space-y-4">
                   {/* 接口列表 */}
                   <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-gray-700">网络接口</h4>
+                    <h4 className="text-sm font-medium text-foreground/80">网络接口</h4>
                     <div className="space-y-2">
                       {Object.entries(deviceData.interfaces).map(([interfaceName, interfaceData]) => (
-                        <div key={interfaceName} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div key={interfaceName} className="flex items-center justify-between p-2 bg-muted/40 rounded">
                           <div className="flex items-center gap-2">
-                            <Wifi className="h-4 w-4 text-gray-600" />
+                            <Wifi className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm font-medium">{interfaceName}</span>
                           </div>
                           <div className="text-right">
-                            <div className="text-xs font-medium text-gray-900">
+                            <div className="text-xs font-medium text-foreground">
                               {interfaceData.avg_utilization.toFixed(1)}%
                             </div>
                             <div className="text-xs text-gray-500">
@@ -223,11 +223,11 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
                   <div className="pt-3 border-t">
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <div className="text-gray-600">样本数量</div>
+                        <div className="text-muted-foreground">样本数量</div>
                         <div className="font-medium">{deviceData.sample_count}</div>
                       </div>
                       <div>
-                        <div className="text-gray-600">最后更新</div>
+                        <div className="text-muted-foreground">最后更新</div>
                         <div className="font-medium text-xs">
                           {formatDate(deviceData.last_update, 'datetime')}
                         </div>
@@ -240,7 +240,7 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                        <span className="text-xs text-gray-600">实时监控</span>
+                        <span className="text-xs text-muted-foreground">实时监控</span>
                       </div>
                       <div className="flex items-center gap-1 text-xs text-gray-500">
                         <Clock className="h-3 w-3" />
@@ -295,7 +295,7 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">网络健康状态</h3>
+                <h3 className="text-lg font-semibold text-foreground mb-2">网络健康状态</h3>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
                     <div className={`w-3 h-3 rounded-full ${
@@ -306,16 +306,16 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
                       {healthStatus.label}
                     </span>
                   </div>
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-muted-foreground">
                     平均利用率: {calculateAverageUtilization().toFixed(1)}%
                   </div>
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold text-gray-900">
+                <div className="text-2xl font-bold text-foreground">
                   {summary.total_devices}
                 </div>
-                <div className="text-sm text-gray-600">设备在线</div>
+                <div className="text-sm text-muted-foreground">设备在线</div>
               </div>
             </div>
           </CardContent>

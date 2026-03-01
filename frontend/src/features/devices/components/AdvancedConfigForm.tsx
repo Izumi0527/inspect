@@ -30,7 +30,7 @@ export const AdvancedConfigForm: React.FC<AdvancedConfigFormProps> = ({
     <Card>
       <CardContent className="p-4">
         <div className="space-y-4">
-          <h3 className="text-md font-medium text-gray-900 flex items-center gap-2">
+          <h3 className="text-md font-medium text-foreground flex items-center gap-2">
             <Settings className="h-4 w-4" />
             高级配置
           </h3>
@@ -38,7 +38,7 @@ export const AdvancedConfigForm: React.FC<AdvancedConfigFormProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 连接超时 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-foreground/90 mb-1">
                 连接超时（秒）
               </label>
               <Controller
@@ -61,7 +61,7 @@ export const AdvancedConfigForm: React.FC<AdvancedConfigFormProps> = ({
 
             {/* 重试次数 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-foreground/90 mb-1">
                 重试次数
               </label>
               <Controller

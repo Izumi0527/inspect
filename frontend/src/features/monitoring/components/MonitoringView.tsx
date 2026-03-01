@@ -69,9 +69,9 @@ function SectionHeader({
         <Icon className="h-4 w-4 text-primary" />
       </div>
       <div>
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-foreground">{title}</h2>
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         {description && (
-          <p className="text-xs text-gray-500 dark:text-muted-foreground">{description}</p>
+          <p className="text-xs text-muted-foreground dark:text-muted-foreground">{description}</p>
         )}
       </div>
     </div>
@@ -92,8 +92,8 @@ function SectionFailureContent({
   return (
     <div className={`flex flex-col items-center justify-center text-center ${className ?? ''}`}>
       <WifiOff className="h-6 w-6 text-red-600 dark:text-red-400" />
-      <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</p>
-      <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{message}</p>
+      <p className="mt-2 text-sm font-semibold text-foreground">{title}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{message}</p>
       <Button variant="outline" onClick={onRetry} className="mt-3 cursor-pointer">
         <RefreshCw className="mr-2 h-4 w-4" />
         重试
@@ -151,7 +151,7 @@ export function MonitoringView() {
   // ==================== 加载状态 ====================
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-background">
+      <div className="min-h-screen bg-muted/40 dark:bg-background">
         <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} currentPath="/monitoring" />
         <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
           <DashboardHeader title="监控中心" showSearch={false} />
@@ -161,9 +161,9 @@ export function MonitoringView() {
                 {Array.from({ length: 6 }).map((_, i) => (
                   <Card key={i} className="animate-pulse border-l-[3px] border-l-gray-300 dark:border-l-gray-600">
                     <CardContent className="p-5">
-                      <div className="h-3 w-14 rounded bg-gray-200 dark:bg-gray-700" />
-                      <div className="mt-3 h-7 w-20 rounded bg-gray-200 dark:bg-gray-700" />
-                      <div className="mt-2 h-3 w-16 rounded bg-gray-200 dark:bg-gray-700" />
+                      <div className="h-3 w-14 rounded bg-muted" />
+                      <div className="mt-3 h-7 w-20 rounded bg-muted" />
+                      <div className="mt-2 h-3 w-16 rounded bg-muted" />
                     </CardContent>
                   </Card>
                 ))}
@@ -172,8 +172,8 @@ export function MonitoringView() {
                 {Array.from({ length: 2 }).map((_, i) => (
                   <Card key={i} className="animate-pulse">
                     <CardContent className="p-6">
-                      <div className="h-5 w-32 rounded bg-gray-200 dark:bg-gray-700" />
-                      <div className="mt-2 h-4 w-48 rounded bg-gray-200 dark:bg-gray-700" />
+                      <div className="h-5 w-32 rounded bg-muted" />
+                      <div className="mt-2 h-4 w-48 rounded bg-muted" />
                       <ChartSkeleton height={280} className="mt-4" />
                     </CardContent>
                   </Card>
@@ -189,7 +189,7 @@ export function MonitoringView() {
   // ==================== 错误状态 ====================
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-background">
+      <div className="min-h-screen bg-muted/40 dark:bg-background">
         <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} currentPath="/monitoring" />
         <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
           <DashboardHeader title="监控中心" showSearch={false} />
@@ -218,14 +218,14 @@ export function MonitoringView() {
   // ==================== 无数据状态 ====================
   if (!data) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-background">
+      <div className="min-h-screen bg-muted/40 dark:bg-background">
         <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} currentPath="/monitoring" />
         <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
           <DashboardHeader title="监控中心" showSearch={false} />
           <main className="flex h-[calc(100vh-80px)] items-center justify-center">
             <div className="text-center">
-              <DatabaseZap className="mx-auto mb-3 h-10 w-10 text-gray-400" />
-              <p className="text-gray-600 dark:text-gray-400">无法加载监控数据</p>
+              <DatabaseZap className="mx-auto mb-3 h-10 w-10 text-muted-foreground/80" />
+              <p className="text-muted-foreground">无法加载监控数据</p>
             </div>
           </main>
         </div>
@@ -234,7 +234,7 @@ export function MonitoringView() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background">
+    <div className="min-h-screen bg-muted/40 dark:bg-background">
       <Sidebar
         isOpen={sidebarOpen}
         onToggle={toggleSidebar}
@@ -311,12 +311,12 @@ export function MonitoringView() {
                     )
                   })
                 ) : (
-                  <div className="col-span-full rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-800/50">
+                  <div className="col-span-full rounded-xl border-2 border-dashed border-border bg-muted/40 p-8 text-center dark:border-border dark:bg-muted/40">
                     <AlertTriangle className="mx-auto mb-4 h-10 w-10 text-yellow-500" />
-                    <h3 className="mb-2 text-base font-semibold text-gray-900 dark:text-gray-100">
+                    <h3 className="mb-2 text-base font-semibold text-foreground">
                       统计数据不可用
                     </h3>
-                    <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                    <p className="mb-4 text-sm text-muted-foreground">
                       无法加载关键指标数据。可能的原因：后端API未响应、数据库无设备记录、网络连接异常
                     </p>
                     <Button variant="outline" onClick={() => refetch()} className="cursor-pointer">
@@ -349,7 +349,7 @@ export function MonitoringView() {
                         <SystemPerformanceChartWrapper data={data.systemPerformance} height={280} />
                       ) : (
                         <div className="flex h-64 items-center justify-center">
-                          <p className="text-sm text-gray-500 dark:text-gray-400">暂无性能数据</p>
+                          <p className="text-sm text-muted-foreground">暂无性能数据</p>
                         </div>
                       )
                     ) : (
@@ -379,7 +379,7 @@ export function MonitoringView() {
                         />
                       ) : (
                         <div className="flex h-64 items-center justify-center">
-                          <p className="text-sm text-gray-500 dark:text-gray-400">暂无温度数据</p>
+                          <p className="text-sm text-muted-foreground">暂无温度数据</p>
                         </div>
                       )
                     ) : (
@@ -446,7 +446,7 @@ export function MonitoringView() {
                       <NetworkTrafficChartWrapper data={data.networkTrafficHistory} height={240} />
                     ) : (
                       <div className="flex h-48 items-center justify-center">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">暂无流量数据</p>
+                        <p className="text-sm text-muted-foreground">暂无流量数据</p>
                       </div>
                     )
                   ) : (

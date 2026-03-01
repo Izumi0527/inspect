@@ -131,14 +131,14 @@ export function Table<T extends object>({
   }
 
   return (
-    <div className={cn('rounded-xl overflow-hidden bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border border-gray-200/50 dark:border-gray-700/50', className)}>
+    <div className={cn('rounded-xl overflow-hidden bg-card/80 backdrop-blur-lg border border-border/50', className)}>
       <div className="overflow-auto" style={{ maxHeight: scroll?.y }}>
         <table className="w-full" style={{ minWidth: scroll?.x }}>
           {showHeader && (
             <thead>
-              <tr className="border-b border-gray-200/50 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/50">
+              <tr className="border-b border-border/50 bg-muted/40">
                 {rowSelection && (
-                  <th className={cn('text-left font-medium text-gray-900 dark:text-gray-100 w-12', cellPadding[size])} style={{ width: '48px' }}>
+                  <th className={cn('text-left font-medium text-foreground w-12', cellPadding[size])} style={{ width: '48px' }}>
                     <input
                       type="checkbox"
                       className="custom-checkbox"
@@ -163,7 +163,7 @@ export function Table<T extends object>({
                   <th
                     key={index}
                     className={cn(
-                      'font-medium text-gray-900 dark:text-gray-100',
+                      'font-medium text-foreground',
                       cellPadding[size],
                       column.align === 'center' && 'text-center',
                       column.align === 'right' && 'text-right',
@@ -180,22 +180,22 @@ export function Table<T extends object>({
                       {column.sortable && (
                         <button
                           onClick={() => handleSort(column.key)}
-                          className="flex flex-col hover:text-purple-600 transition-colors"
+                          className="flex flex-col hover:text-primary transition-colors"
                         >
                           <ChevronUp
                             className={cn(
                               'h-3 w-3',
                               sortColumn === column.key && sortOrder === 'asc'
-                                ? 'text-purple-600'
-                                : 'text-gray-400'
+                                ? 'text-primary'
+                                : 'text-muted-foreground'
                             )}
                           />
                           <ChevronDown
                             className={cn(
                               'h-3 w-3 -mt-1',
                               sortColumn === column.key && sortOrder === 'desc'
-                                ? 'text-purple-600'
-                                : 'text-gray-400'
+                                ? 'text-primary'
+                                : 'text-muted-foreground'
                             )}
                           />
                         </button>
@@ -214,15 +214,15 @@ export function Table<T extends object>({
                     <motion.div
                       animate={{ rotate: 360 }}
                       transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                      className="w-4 h-4 border-2 border-purple-200 border-t-purple-600 rounded-full"
+                      className="w-4 h-4 border-2 border-border border-t-primary rounded-full"
                     />
-                    <span className="text-gray-500 dark:text-gray-400">加载中...</span>
+                    <span className="text-muted-foreground">加载中...</span>
                   </div>
                 </td>
               </tr>
             ) : sortedData.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + (rowSelection ? 1 : 0)} className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <td colSpan={columns.length + (rowSelection ? 1 : 0)} className="text-center py-8 text-muted-foreground">
                   暂无数据
                 </td>
               </tr>
@@ -240,8 +240,8 @@ export function Table<T extends object>({
                     animate={{ opacity: 1 }}
                     transition={{ delay: index * 0.02 }}
                     className={cn(
-                      'border-b border-gray-200/30 dark:border-gray-700/30 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors',
-                      isSelected && 'bg-purple-50/50 dark:bg-purple-900/20',
+                      'border-b border-border/30 hover:bg-muted/30 transition-colors',
+                      isSelected && 'bg-primary/10',
                       rowClassName
                     )}
                     {...restRowProps}
@@ -301,25 +301,25 @@ export function Table<T extends object>({
       </div>
 
       {pagination && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200/50 dark:border-gray-700/50 bg-gray-50/30 dark:bg-gray-800/30">
-          <div className="text-sm text-gray-700 dark:text-gray-300">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border/50 bg-muted/30">
+          <div className="text-sm text-muted-foreground">
             显示第 {(pagination.current - 1) * pagination.pageSize + 1} - {Math.min(pagination.current * pagination.pageSize, pagination.total)} 条，共 {pagination.total} 条
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => pagination.onChange(pagination.current - 1, pagination.pageSize)}
               disabled={pagination.current <= 1}
-              className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-1 text-sm text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               上一页
             </button>
-            <span className="text-sm text-gray-700 dark:text-gray-300">
+            <span className="text-sm text-muted-foreground">
               {pagination.current} / {Math.ceil(pagination.total / pagination.pageSize)}
             </span>
             <button
               onClick={() => pagination.onChange(pagination.current + 1, pagination.pageSize)}
               disabled={pagination.current >= Math.ceil(pagination.total / pagination.pageSize)}
-              className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-1 text-sm text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               下一页
             </button>

@@ -138,7 +138,7 @@ const StepBasicInfo: React.FC<StepProps> = ({ formData, errors, onChange }) => {
     <div className="space-y-6">
       {/* 模板名称 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label className="block text-sm font-medium text-foreground/90 mb-2">
           模板名称 <span className="text-red-500">*</span>
         </label>
         <Input
@@ -160,7 +160,7 @@ const StepBasicInfo: React.FC<StepProps> = ({ formData, errors, onChange }) => {
 
       {/* 模板描述 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label className="block text-sm font-medium text-foreground/90 mb-2">
           模板描述
         </label>
         <textarea
@@ -180,7 +180,7 @@ const StepBasicInfo: React.FC<StepProps> = ({ formData, errors, onChange }) => {
 
       {/* 模板分类 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+        <label className="block text-sm font-medium text-foreground/90 mb-3">
           模板分类 <span className="text-red-500">*</span>
         </label>
         <div className="grid grid-cols-2 gap-3">
@@ -195,7 +195,7 @@ const StepBasicInfo: React.FC<StepProps> = ({ formData, errors, onChange }) => {
                 className={`p-4 rounded-xl border-2 text-left transition-all ${
                   isSelected
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                    : 'border-border hover:border-border dark:hover:border-gray-500'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -204,7 +204,7 @@ const StepBasicInfo: React.FC<StepProps> = ({ formData, errors, onChange }) => {
                   }`}>
                     <Icon className={`w-5 h-5 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`} />
                   </div>
-                  <div className="font-medium text-gray-900 dark:text-gray-100">{option.label}</div>
+                  <div className="font-medium text-foreground">{option.label}</div>
                   {isSelected && (
                     <Check className="w-5 h-5 text-blue-600 ml-auto" />
                   )}
@@ -244,7 +244,7 @@ const StepDeviceTypes: React.FC<StepProps> = ({ formData, errors, onChange }) =>
     <div className="space-y-6">
       {/* 预设设备类型 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+        <label className="block text-sm font-medium text-foreground/90 mb-3">
           常用设备类型
         </label>
         <div className="grid grid-cols-3 gap-3">
@@ -258,11 +258,11 @@ const StepDeviceTypes: React.FC<StepProps> = ({ formData, errors, onChange }) =>
                 className={`p-4 rounded-xl border-2 text-center transition-all ${
                   isSelected
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'
+                    : 'border-border hover:border-border'
                 }`}
               >
                 <div className="text-2xl mb-2">{option.icon}</div>
-                <div className={`font-medium ${isSelected ? 'text-blue-600' : 'text-gray-700 dark:text-gray-300'}`}>
+                <div className={`font-medium ${isSelected ? 'text-blue-600' : 'text-foreground/90'}`}>
                   {option.label}
                 </div>
               </button>
@@ -273,7 +273,7 @@ const StepDeviceTypes: React.FC<StepProps> = ({ formData, errors, onChange }) =>
 
       {/* 自定义设备类型 */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label className="block text-sm font-medium text-foreground/90 mb-2">
           添加自定义设备类型
         </label>
         <div className="flex gap-2">
@@ -292,10 +292,10 @@ const StepDeviceTypes: React.FC<StepProps> = ({ formData, errors, onChange }) =>
       {/* 已选设备类型 */}
       {formData.deviceTypes.length > 0 && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label className="block text-sm font-medium text-foreground/90 mb-2">
             已选择 ({formData.deviceTypes.length})
           </label>
-          <div className="flex flex-wrap gap-2 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <div className="flex flex-wrap gap-2 p-4 bg-muted/40 rounded-lg">
             {formData.deviceTypes.map((type) => (
               <Badge key={type} variant="secondary" className="flex items-center gap-1 px-3 py-1.5">
                 {type}
@@ -366,11 +366,11 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
   }
 
   return (
-    <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-hidden">
       {/* 折叠头部 */}
       <div
         className={`flex items-center gap-3 p-4 cursor-pointer transition-colors ${
-          isExpanded ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'
+          isExpanded ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-card hover:bg-muted/40 dark:hover:bg-gray-700'
         }`}
         onClick={onToggleExpand}
       >
@@ -378,7 +378,7 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <span className="text-lg">{typeOption?.icon}</span>
-            <span className="font-medium text-gray-900 dark:text-gray-100">{item.name || '未命名检查项'}</span>
+            <span className="font-medium text-foreground">{item.name || '未命名检查项'}</span>
             <Badge variant="outline" size="sm">{typeOption?.label || item.type}</Badge>
             <Badge variant="secondary" size="sm">权重: {item.weight}</Badge>
           </div>
@@ -412,11 +412,11 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="p-4 border-t border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 space-y-4">
+            <div className="p-4 border-t border-border bg-muted/40 space-y-4">
               {/* 基本信息 */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     检查项名称 <span className="text-red-500">*</span>
                   </label>
                   <Input
@@ -426,7 +426,7 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     权重 (1-10)
                   </label>
                   <Input
@@ -441,7 +441,7 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
 
               {/* 检查类型 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-foreground/90 mb-2">
                   检查类型
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -453,7 +453,7 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                       className={`px-3 py-2 rounded-lg border text-sm transition-all ${
                         item.type === option.value
                           ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700'
-                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300'
+                          : 'border-border hover:border-border'
                       }`}
                     >
                       <span className="mr-1">{option.icon}</span>
@@ -465,12 +465,12 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
 
               {/* 类型特定配置 */}
               {item.type === 'snmp' && (
-                <div className="space-y-3 p-4 bg-white dark:bg-gray-700 rounded-lg">
-                  <h5 className="font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <div className="space-y-3 p-4 bg-card rounded-lg">
+                  <h5 className="font-medium text-foreground flex items-center gap-2">
                     <span>📊</span> SNMP 配置
                   </h5>
                   <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    <label className="block text-sm text-muted-foreground mb-1">
                       OID <span className="text-red-500">*</span>
                     </label>
                     <Input
@@ -481,7 +481,7 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                     <p className="text-xs text-gray-500 mt-1">输入要查询的 SNMP OID</p>
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    <label className="block text-sm text-muted-foreground mb-1">
                       超时时间 (毫秒)
                     </label>
                     <Input
@@ -495,12 +495,12 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
               )}
 
               {item.type === 'ssh' && (
-                <div className="space-y-3 p-4 bg-white dark:bg-gray-700 rounded-lg">
-                  <h5 className="font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <div className="space-y-3 p-4 bg-card rounded-lg">
+                  <h5 className="font-medium text-foreground flex items-center gap-2">
                     <span>💻</span> SSH 配置
                   </h5>
                   <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    <label className="block text-sm text-muted-foreground mb-1">
                       执行命令 <span className="text-red-500">*</span>
                     </label>
                     <Input
@@ -510,7 +510,7 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    <label className="block text-sm text-muted-foreground mb-1">
                       超时时间 (毫秒)
                     </label>
                     <Input
@@ -524,12 +524,12 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
               )}
 
               {item.type === 'http' && (
-                <div className="space-y-3 p-4 bg-white dark:bg-gray-700 rounded-lg">
-                  <h5 className="font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <div className="space-y-3 p-4 bg-card rounded-lg">
+                  <h5 className="font-medium text-foreground flex items-center gap-2">
                     <span>🌍</span> HTTP 配置
                   </h5>
                   <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    <label className="block text-sm text-muted-foreground mb-1">
                       请求 URL <span className="text-red-500">*</span>
                     </label>
                     <Input
@@ -539,7 +539,7 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    <label className="block text-sm text-muted-foreground mb-1">
                       期望值
                     </label>
                     <Input
@@ -552,12 +552,12 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
               )}
 
               {item.type === 'script' && (
-                <div className="space-y-3 p-4 bg-white dark:bg-gray-700 rounded-lg">
-                  <h5 className="font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <div className="space-y-3 p-4 bg-card rounded-lg">
+                  <h5 className="font-medium text-foreground flex items-center gap-2">
                     <span>📜</span> 脚本配置
                   </h5>
                   <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    <label className="block text-sm text-muted-foreground mb-1">
                       脚本内容
                     </label>
                     <textarea
@@ -572,13 +572,13 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
               )}
 
               {/* 阈值配置 */}
-              <div className="p-4 bg-white dark:bg-gray-700 rounded-lg">
-                <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+              <div className="p-4 bg-card rounded-lg">
+                <h5 className="font-medium text-foreground mb-3 flex items-center gap-2">
                   <span>⚡</span> 阈值配置 (可选)
                 </h5>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    <label className="block text-sm text-muted-foreground mb-1">
                       警告阈值
                     </label>
                     <Input
@@ -590,7 +590,7 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+                    <label className="block text-sm text-muted-foreground mb-1">
                       严重阈值
                     </label>
                     <Input
@@ -658,7 +658,7 @@ const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => 
       <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-xl">
         <div className="flex items-center gap-2 mb-3">
           <Zap className="w-5 h-5 text-blue-600" />
-          <span className="font-medium text-gray-900 dark:text-gray-100">快速添加预设检查项</span>
+          <span className="font-medium text-foreground">快速添加预设检查项</span>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -705,9 +705,9 @@ const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => 
             />
           ))
         ) : (
-          <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center">
+          <div className="border-2 border-dashed border-border/70 rounded-xl p-8 text-center">
             <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-500 dark:text-gray-400 mb-4">
+            <p className="text-muted-foreground mb-4">
               暂无检查项，点击下方按钮添加或使用预设
             </p>
           </div>
@@ -754,7 +754,7 @@ const StepPreview: React.FC<StepProps> = ({ formData }) => {
               <CategoryIcon className={`w-8 h-8 text-${categoryOption?.color || 'gray'}-600`} />
             </div>
             <div className="flex-1">
-              <h4 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              <h4 className="text-xl font-semibold text-foreground">
                 {formData.name || '未命名模板'}
               </h4>
               <div className="flex items-center gap-2 mt-3">
@@ -773,7 +773,7 @@ const StepPreview: React.FC<StepProps> = ({ formData }) => {
       {/* 设备类型预览 */}
       <Card>
         <CardContent className="p-6">
-          <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+          <h5 className="font-medium text-foreground mb-3 flex items-center gap-2">
             <Monitor className="w-5 h-5 text-purple-600" />
             支持设备类型 ({formData.deviceTypes.length})
           </h5>
@@ -794,7 +794,7 @@ const StepPreview: React.FC<StepProps> = ({ formData }) => {
       {/* 检查项预览 */}
       <Card>
         <CardContent className="p-6">
-          <h5 className="font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+          <h5 className="font-medium text-foreground mb-3 flex items-center gap-2">
             <Settings className="w-5 h-5 text-green-600" />
             检查项配置 ({formData.checkItems.length} 项)
           </h5>
@@ -804,12 +804,12 @@ const StepPreview: React.FC<StepProps> = ({ formData }) => {
               return (
                 <div
                   key={item.id}
-                  className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                  className="flex items-center gap-3 p-3 bg-muted/40 rounded-lg"
                 >
                   <span className="text-gray-400 font-mono text-sm w-6">{index + 1}.</span>
                   <span className="text-lg">{typeOption?.icon}</span>
                   <div className="flex-1">
-                    <span className="font-medium text-gray-900 dark:text-gray-100">
+                    <span className="font-medium text-foreground">
                       {item.name || '未命名'}
                     </span>
                     <span className="text-gray-500 text-sm ml-2">
@@ -984,15 +984,15 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-card rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
       >
         {/* 头部 */}
         <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            <h2 className="text-xl font-semibold text-foreground">
               {isEditing ? '编辑巡检模板' : '创建巡检模板'}
             </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            <p className="text-sm text-muted-foreground mt-0.5">
               {STEPS[currentStep - 1].description}
             </p>
           </div>
@@ -1002,7 +1002,7 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
         </div>
 
         {/* 步骤指示器 */}
-        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50">
+        <div className="px-6 py-4 bg-muted/40">
           <div className="flex items-center justify-between">
             {STEPS.map((step, index) => {
               const isActive = currentStep === step.id
@@ -1028,7 +1028,7 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
                       )}
                     </div>
                     <div className="hidden sm:block">
-                      <div className={`font-medium ${isActive ? 'text-blue-600' : 'text-gray-700 dark:text-gray-300'}`}>
+                      <div className={`font-medium ${isActive ? 'text-blue-600' : 'text-foreground/90'}`}>
                         {step.title}
                       </div>
                     </div>
@@ -1060,7 +1060,7 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
         </div>
 
         {/* 底部操作栏 */}
-        <div className="flex items-center justify-between px-6 py-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+        <div className="flex items-center justify-between px-6 py-4 border-t dark:border-gray-700 bg-muted/40">
           <div>
             {currentStep > 1 && (
               <Button variant="outline" onClick={handlePrev} disabled={isLoading}>
@@ -1099,3 +1099,4 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
     </div>
   )
 }
+

@@ -335,10 +335,10 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
           <div className="space-y-4">
             <div
               onClick={handleUploadClick}
-              className="flex flex-col gap-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
+              className="flex flex-col gap-3 border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
             >
               <FileText className="h-10 w-10 mx-auto text-blue-500" />
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="text-sm text-muted-foreground">
                 点击上传或将文件拖拽到此区域，支持 CSV 格式。请先使用主界面的"下载模板"按钮获取模板文件。
               </div>
             </div>
@@ -368,8 +368,8 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         {csvData?.headers.map(header => (
           <div key={header} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
             <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{header}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">来自 CSV 文件</p>
+              <p className="text-sm font-medium text-foreground">{header}</p>
+              <p className="text-xs text-muted-foreground">来自 CSV 文件</p>
             </div>
             <div className="md:col-span-2">
               <Select
@@ -423,8 +423,8 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
             返回修改
           </Button>
         </div>
-        <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-          <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-800/50 px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+        <div className="border border-border rounded-lg overflow-hidden">
+          <div className="grid grid-cols-7 bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground">
             <span>名称</span>
             <span>IP 地址</span>
             <span>类型</span>
@@ -435,7 +435,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
           </div>
           <div className="max-h-64 overflow-y-auto divide-y">
             {previewDevices.map((device, index) => (
-              <div key={`${device.name || device.ip || 'device'}-${index}`} className="grid grid-cols-7 px-4 py-2 text-xs text-gray-700 dark:text-gray-300">
+              <div key={`${device.name || device.ip || 'device'}-${index}`} className="grid grid-cols-7 px-4 py-2 text-xs text-foreground/90">
                 <span>{device.name || '-'}</span>
                 <span>{device.ip || '-'}</span>
                 <span>{device.device_type}</span>

@@ -45,7 +45,7 @@ export const ExecutionEmptyState: React.FC<Props> = React.memo(({
 
           {/* 文本内容 */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            <h3 className="text-lg font-semibold text-foreground mb-2">
               {content.title}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">{content.description}</p>

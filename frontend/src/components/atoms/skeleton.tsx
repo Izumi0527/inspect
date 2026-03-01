@@ -43,7 +43,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
     <div
       className={cn(
         // 基础样式
-        'bg-gray-200 dark:bg-gray-700',
+        'bg-muted',
         // 圆角样式（iOS 风格）
         circle ? 'rounded-full' : 'rounded-xl',
         // 波浪动画效果
@@ -128,7 +128,7 @@ export const SkeletonCard: React.FC<SkeletonCardProps> = ({
   lines = 3
 }) => {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+    <div className="bg-card rounded-xl p-6 shadow-sm border border-border/60">
       <div className="flex items-start space-x-4">
         {/* 头像骨架屏 */}
         {avatar && <Skeleton circle className="h-12 w-12 flex-shrink-0" />}

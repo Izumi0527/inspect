@@ -47,12 +47,12 @@ export const InspectionProblemAnalysisModal: React.FC<Props> = ({ onClose }) => 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-card rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col"
       >
-        <div className="flex items-center justify-between p-6 border-b dark:border-gray-700 flex-shrink-0">
+        <div className="flex items-center justify-between p-6 border-b dark:border-border flex-shrink-0">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">问题分析</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">基于巡检数据聚合统计</p>
+            <h2 className="text-xl font-semibold text-foreground">问题分析</h2>
+            <p className="text-sm text-muted-foreground">基于巡检数据聚合统计</p>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
             <X className="w-5 h-5" />
@@ -63,26 +63,26 @@ export const InspectionProblemAnalysisModal: React.FC<Props> = ({ onClose }) => 
           {/* 查询条件 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground/90 mb-1">
                 开始日期
               </label>
               <input
                 type="date"
                 value={dateRange.startDate}
                 onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground"
                 disabled={isLoading}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground/90 mb-1">
                 结束日期
               </label>
               <input
                 type="date"
                 value={dateRange.endDate}
                 onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground"
                 disabled={isLoading}
               />
             </div>
@@ -97,7 +97,7 @@ export const InspectionProblemAnalysisModal: React.FC<Props> = ({ onClose }) => 
           {isLoading && (
             <div className="flex items-center justify-center py-10">
               <Loading />
-              <span className="ml-2 text-gray-600 dark:text-gray-400">加载中...</span>
+              <span className="ml-2 text-muted-foreground">加载中...</span>
             </div>
           )}
 
@@ -113,64 +113,64 @@ export const InspectionProblemAnalysisModal: React.FC<Props> = ({ onClose }) => 
               {/* 概览 */}
               {summary && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">设备数</div>
-                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{summary.totalDevices}</div>
+                  <div className="bg-card border dark:border-border rounded-lg p-4">
+                    <div className="text-sm text-muted-foreground">设备数</div>
+                    <div className="text-2xl font-semibold text-foreground">{summary.totalDevices}</div>
                   </div>
-                  <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">执行次数</div>
-                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{summary.totalExecutions}</div>
+                  <div className="bg-card border dark:border-border rounded-lg p-4">
+                    <div className="text-sm text-muted-foreground">执行次数</div>
+                    <div className="text-2xl font-semibold text-foreground">{summary.totalExecutions}</div>
                   </div>
-                  <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">平均分</div>
-                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{summary.avgScore.toFixed(2)}</div>
+                  <div className="bg-card border dark:border-border rounded-lg p-4">
+                    <div className="text-sm text-muted-foreground">平均分</div>
+                    <div className="text-2xl font-semibold text-foreground">{summary.avgScore.toFixed(2)}</div>
                   </div>
-                  <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-4">
-                    <div className="text-sm text-gray-500 dark:text-gray-400">成功率</div>
-                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{summary.successRate.toFixed(2)}%</div>
+                  <div className="bg-card border dark:border-border rounded-lg p-4">
+                    <div className="text-sm text-muted-foreground">成功率</div>
+                    <div className="text-2xl font-semibold text-foreground">{summary.successRate.toFixed(2)}%</div>
                   </div>
                 </div>
               )}
 
               {/* 问题分析 */}
-              <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
-                <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b dark:border-gray-700 font-medium text-gray-900 dark:text-gray-100">
+              <div className="border dark:border-border rounded-lg overflow-hidden">
+                <div className="bg-muted/40 px-4 py-3 border-b dark:border-border font-medium text-foreground">
                   问题分类统计
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-gray-100 dark:bg-gray-800">
+                    <thead className="bg-muted/60 dark:bg-muted/80">
                       <tr>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">分类</th>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">严重度</th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">次数</th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">占比</th>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-700 dark:text-gray-300">趋势</th>
-                        <th className="px-4 py-2 text-right text-sm font-medium text-gray-700 dark:text-gray-300">影响设备</th>
+                        <th className="px-4 py-2 text-left text-sm font-medium text-foreground/90">分类</th>
+                        <th className="px-4 py-2 text-left text-sm font-medium text-foreground/90">严重度</th>
+                        <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">次数</th>
+                        <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">占比</th>
+                        <th className="px-4 py-2 text-left text-sm font-medium text-foreground/90">趋势</th>
+                        <th className="px-4 py-2 text-right text-sm font-medium text-foreground/90">影响设备</th>
                       </tr>
                     </thead>
                     <tbody>
                       {problemAnalysis.length > 0 ? (
                         problemAnalysis.map((item: any, idx: number) => (
-                          <tr key={item.category || idx} className="border-t dark:border-gray-700">
-                            <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">
+                          <tr key={item.category || idx} className="border-t dark:border-border">
+                            <td className="px-4 py-2 text-sm text-foreground">
                               <div className="font-medium">{item.category || '-'}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{item.description || ''}</div>
+                              <div className="text-xs text-muted-foreground line-clamp-1">{item.description || ''}</div>
                             </td>
                             <td className="px-4 py-2 text-sm">{severityBadge(item.severity)}</td>
-                            <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">{item.count ?? 0}</td>
-                            <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
+                            <td className="px-4 py-2 text-sm text-right text-foreground">{item.count ?? 0}</td>
+                            <td className="px-4 py-2 text-sm text-right text-foreground">
                               {Number(item.percentage ?? 0).toFixed(2)}%
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">{trendLabel(item.trend)}</td>
-                            <td className="px-4 py-2 text-sm text-right text-gray-900 dark:text-gray-100">
+                            <td className="px-4 py-2 text-sm text-foreground">{trendLabel(item.trend)}</td>
+                            <td className="px-4 py-2 text-sm text-right text-foreground">
                               {Array.isArray(item.affectedDevices) ? item.affectedDevices.length : 0}
                             </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                          <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                             暂无问题分析数据
                           </td>
                         </tr>
@@ -181,8 +181,8 @@ export const InspectionProblemAnalysisModal: React.FC<Props> = ({ onClose }) => 
               </div>
 
               {/* 建议 */}
-              <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
-                <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b dark:border-gray-700 font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <div className="border dark:border-border rounded-lg overflow-hidden">
+                <div className="bg-muted/40 px-4 py-3 border-b dark:border-border font-medium text-foreground flex items-center gap-2">
                   <Lightbulb className="w-4 h-4" />
                   优化建议
                 </div>
@@ -190,11 +190,11 @@ export const InspectionProblemAnalysisModal: React.FC<Props> = ({ onClose }) => 
                   {recommendations.length > 0 ? (
                     <div className="space-y-3">
                       {recommendations.map((rec: any) => (
-                        <div key={rec.id} className="border dark:border-gray-700 rounded-lg p-4">
+                        <div key={rec.id} className="border dark:border-border rounded-lg p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <div className="font-medium text-gray-900 dark:text-gray-100">{rec.title}</div>
-                              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">{rec.description}</div>
+                              <div className="font-medium text-foreground">{rec.title}</div>
+                              <div className="text-sm text-muted-foreground mt-1">{rec.description}</div>
                             </div>
                             <Badge variant="outline">{rec.priority}</Badge>
                           </div>
@@ -202,7 +202,7 @@ export const InspectionProblemAnalysisModal: React.FC<Props> = ({ onClose }) => 
                       ))}
                     </div>
                   ) : (
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                    <div className="text-sm text-muted-foreground">
                       暂无建议数据（后端目前默认返回空数组）。
                     </div>
                   )}
@@ -212,7 +212,7 @@ export const InspectionProblemAnalysisModal: React.FC<Props> = ({ onClose }) => 
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex-shrink-0">
+        <div className="flex items-center justify-end gap-3 p-6 border-t dark:border-border bg-muted/40 flex-shrink-0">
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
             关闭
           </Button>

@@ -38,7 +38,7 @@ export const StatCard = memo(function StatCard({
   const trendColors = {
     up: 'text-green-600 dark:text-green-400',
     down: 'text-red-600 dark:text-red-400',
-    stable: 'text-gray-600 dark:text-gray-400',
+    stable: 'text-muted-foreground',
   }
 
   const trendIcons = {
@@ -48,7 +48,7 @@ export const StatCard = memo(function StatCard({
   }
 
   const accent = useMemo(
-    () => colorAccentMap[iconColor] ?? { bg: 'bg-gray-50 dark:bg-gray-800/40', border: 'border-l-gray-400' },
+    () => colorAccentMap[iconColor] ?? { bg: 'bg-muted/40/40', border: 'border-l-gray-400' },
     [iconColor]
   )
 
@@ -66,10 +66,10 @@ export const StatCard = memo(function StatCard({
         <CardContent className="p-5">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {title}
               </p>
-              <p className="mt-1.5 text-2xl font-bold tabular-nums text-gray-900 dark:text-white">
+              <p className="mt-1.5 text-2xl font-bold tabular-nums text-foreground">
                 {value}
               </p>
               {change && (

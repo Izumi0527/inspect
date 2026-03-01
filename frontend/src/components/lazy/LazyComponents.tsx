@@ -52,7 +52,7 @@ export const LazySystemSettings = lazy(() =>
 
 // 统一的Loading组件
 export const PageLoadingSkeleton = () => (
-  <div className="min-h-screen bg-gray-50 p-6">
+  <div className="min-h-screen bg-muted/40 p-6">
     <motion.div 
       className="animate-pulse"
       initial={{ opacity: 0 }}
@@ -68,7 +68,7 @@ export const PageLoadingSkeleton = () => (
       {/* 卡片网格骨架 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white rounded-lg p-6 shadow-sm">
+          <div key={i} className="bg-card rounded-lg p-6 shadow-sm">
             <div className="h-4 bg-gray-200 rounded mb-4"></div>
             <div className="h-8 bg-gray-200 rounded mb-2"></div>
             <div className="h-3 bg-gray-200 rounded w-2/3"></div>
@@ -77,7 +77,7 @@ export const PageLoadingSkeleton = () => (
       </div>
       
       {/* 内容区域骨架 */}
-      <div className="bg-white rounded-lg p-6 shadow-sm">
+      <div className="bg-card rounded-lg p-6 shadow-sm">
         <div className="h-6 bg-gray-200 rounded w-1/3 mb-6"></div>
         <div className="space-y-4">
           {Array.from({ length: 6 }).map((_, i) => (

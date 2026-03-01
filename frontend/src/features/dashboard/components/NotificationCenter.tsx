@@ -194,8 +194,8 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
         className="w-[400px] max-h-[600px] p-0 overflow-hidden"
       >
         {/* 标题栏 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">通知中心</h3>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h3 className="text-lg font-semibold text-foreground">通知中心</h3>
           <div className="flex items-center gap-2">
             <button
               onClick={() => markReadMutation.mutate({ all: true, window_limit: windowLimit })}
@@ -203,10 +203,10 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
             >
               全部已读
             </button>
-            <span className="text-gray-300 dark:text-gray-600">|</span>
+            <span className="text-gray-300 dark:text-muted-foreground">|</span>
             <button
               onClick={() => dismissMutation.mutate({ all: true, window_limit: windowLimit })}
-              className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+              className="text-sm text-muted-foreground hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
             >
               清空
             </button>
@@ -214,7 +214,7 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
         </div>
 
         {/* 标签页 */}
-        <div className="flex items-center border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center border-b border-border">
           {NOTIFICATION_CATEGORIES.map((category) => {
             const isActive = activeCategory === category.key
             const count =
@@ -232,7 +232,7 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
                   'flex-1 px-4 py-3 text-sm font-medium transition-colors relative',
                   isActive
                     ? 'text-blue-600 dark:text-blue-400'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 {category.label}
@@ -262,7 +262,7 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
           ) : (
             /* 空状态 */
             <div className="flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400">
-              <ShieldCheck className="w-12 h-12 mb-3 text-gray-300 dark:text-gray-600" />
+              <ShieldCheck className="w-12 h-12 mb-3 text-gray-300 dark:text-muted-foreground" />
               <p className="text-sm">暂无最近{activeCategory === 'alerts' ? '告警' : activeCategory === 'system' ? '系统通知' : '通知'}</p>
             </div>
           )}
@@ -270,10 +270,10 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
 
         {/* 底部链接 */}
         {filteredNotifications.length > 0 && (
-          <div className="border-t border-gray-200 dark:border-gray-700">
+          <div className="border-t border-border">
             <button
               onClick={onViewAll}
-              className="w-full py-3 text-center text-sm text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+              className="w-full py-3 text-center text-sm text-blue-600 dark:text-blue-400 hover:bg-muted/40/50 transition-colors"
             >
               查看全部通知
             </button>

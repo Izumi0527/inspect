@@ -99,7 +99,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
     <Card>
       <CardContent className="p-6">
         <div className="space-y-6">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          <h3 className="text-lg font-medium text-foreground flex items-center gap-2">
             <Network className="h-5 w-5" />
             SNMP配置
           </h3>
@@ -107,7 +107,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* SNMP版本选择 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-foreground/90 mb-2">
                 SNMP版本 <span className="text-red-500">*</span>
               </label>
               <Controller
@@ -123,7 +123,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
                       <SelectItem key={option.value} value={option.value}>
                         <div className="flex flex-col">
                           <span className="font-medium">{option.label}</span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">{option.description}</span>
+                          <span className="text-xs text-muted-foreground">{option.description}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -137,7 +137,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
 
             {/* SNMP端口 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground/90 mb-1">
                 端口号
               </label>
               <Controller
@@ -168,7 +168,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 只读团体字符串 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     只读团体字符串 <span className="text-red-500">*</span>
                   </label>
                   <Controller
@@ -186,7 +186,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
 
                 {/* 读写团体字符串 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-foreground/90 mb-1">
                     读写团体字符串
                   </label>
                   <Controller
@@ -219,7 +219,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
 
               {/* 用户名 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-foreground/90 mb-1">
                   用户名 <span className="text-red-500">*</span>
                 </label>
                 <Controller
@@ -237,7 +237,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
 
               {/* 安全级别 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-foreground/90 mb-2">
                   安全级别 <span className="text-red-500">*</span>
                 </label>
                 <Controller
@@ -253,7 +253,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
                         <SelectItem key={level.value} value={level.value}>
                           <div className="flex flex-col">
                             <span className="font-medium">{level.label}</span>
-                            <span className="text-xs text-gray-500 dark:text-gray-400">{level.description}</span>
+                            <span className="text-xs text-muted-foreground">{level.description}</span>
                           </div>
                         </SelectItem>
                       ))}
@@ -276,7 +276,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* 认证协议 */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      <label className="block text-sm font-medium text-foreground/90 mb-1">
                         认证协议 <span className="text-red-500">*</span>
                       </label>
                       <Controller
@@ -292,7 +292,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
                               <SelectItem key={protocol.value} value={protocol.value}>
                                 <div className="flex flex-col">
                                   <span className="font-medium">{protocol.label}</span>
-                                  <span className="text-xs text-gray-500 dark:text-gray-400">{protocol.description}</span>
+                                  <span className="text-xs text-muted-foreground">{protocol.description}</span>
                                 </div>
                               </SelectItem>
                             ))}
@@ -303,7 +303,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
 
                     {/* 认证密码 */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      <label className="block text-sm font-medium text-foreground/90 mb-1">
                         认证密码 <span className="text-red-500">*</span>
                       </label>
                       <Controller
@@ -323,9 +323,9 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
                               onClick={() => setShowAuthPassword(!showAuthPassword)}
                             >
                               {showAuthPassword ? (
-                                <EyeOff className="h-4 w-4 text-gray-400" />
+                                <EyeOff className="h-4 w-4 text-muted-foreground/80" />
                               ) : (
-                                <Eye className="h-4 w-4 text-gray-400" />
+                                <Eye className="h-4 w-4 text-muted-foreground/80" />
                               )}
                             </button>
                           </div>
@@ -347,7 +347,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* 加密协议 */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      <label className="block text-sm font-medium text-foreground/90 mb-1">
                         加密协议 <span className="text-red-500">*</span>
                       </label>
                       <Controller
@@ -363,7 +363,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
                               <SelectItem key={protocol.value} value={protocol.value}>
                                 <div className="flex flex-col">
                                   <span className="font-medium">{protocol.label}</span>
-                                  <span className="text-xs text-gray-500 dark:text-gray-400">{protocol.description}</span>
+                                  <span className="text-xs text-muted-foreground">{protocol.description}</span>
                                 </div>
                               </SelectItem>
                             ))}
@@ -374,7 +374,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
 
                     {/* 加密密码 */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      <label className="block text-sm font-medium text-foreground/90 mb-1">
                         加密密码 <span className="text-red-500">*</span>
                       </label>
                       <Controller
@@ -394,9 +394,9 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
                               onClick={() => setShowPrivPassword(!showPrivPassword)}
                             >
                               {showPrivPassword ? (
-                                <EyeOff className="h-4 w-4 text-gray-400" />
+                                <EyeOff className="h-4 w-4 text-muted-foreground/80" />
                               ) : (
-                                <Eye className="h-4 w-4 text-gray-400" />
+                                <Eye className="h-4 w-4 text-muted-foreground/80" />
                               )}
                             </button>
                           </div>
@@ -409,7 +409,7 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
 
               {/* 上下文名称 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-foreground/90 mb-1">
                   上下文名称
                 </label>
                 <Controller
@@ -433,10 +433,10 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
 
           {/* 无版本选择提示 */}
           {!snmpVersion && (
-            <div className="text-center p-6 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-              <AlertTriangle className="h-8 w-8 text-gray-400 dark:text-gray-500 mx-auto mb-2" />
-              <p className="text-gray-600 dark:text-gray-400">请先选择SNMP版本</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            <div className="text-center p-6 bg-muted/40 rounded-lg border border-border">
+              <AlertTriangle className="h-8 w-8 text-muted-foreground/80 mx-auto mb-2" />
+              <p className="text-muted-foreground">请先选择SNMP版本</p>
+              <p className="text-sm text-muted-foreground mt-1">
                 推荐使用SNMPv3以获得更好的安全性
               </p>
             </div>

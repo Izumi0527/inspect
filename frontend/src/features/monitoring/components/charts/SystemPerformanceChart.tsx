@@ -84,7 +84,7 @@ export function SystemPerformanceChart({
             className="h-3 w-3 rounded-full"
             style={{ backgroundColor: line.color }}
           />
-          <span className="text-sm text-gray-600 dark:text-gray-400">{line.name}</span>
+          <span className="text-sm text-muted-foreground">{line.name}</span>
         </div>
       ))}
     </div>
@@ -93,7 +93,7 @@ export function SystemPerformanceChart({
   if (chartData.length === 0) {
     return (
       <div className="flex items-center justify-center" style={{ height }}>
-        <p className="text-gray-500 dark:text-gray-400">暂无性能数据</p>
+        <p className="text-muted-foreground">暂无性能数据</p>
       </div>
     )
   }
