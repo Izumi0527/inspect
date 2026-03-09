@@ -1,12 +1,17 @@
-package monitoring
+package monitoring_test
 
 import (
 	"strings"
 	"testing"
 	"time"
+	_ "unsafe"
 
+	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
 	"gorm.io/datatypes"
 )
+
+//go:linkname buildSystemMetricsInsertSQL github.com/your-org/inspect-system/backend-go/internal/monitoring.buildSystemMetricsInsertSQL
+func buildSystemMetricsInsertSQL(metrics []monitoring.SystemMetric, createdAt time.Time) (string, []interface{})
 
 func TestBuildSystemMetricsInsertSQL(t *testing.T) {
 	host := "host-a"
@@ -16,7 +21,7 @@ func TestBuildSystemMetricsInsertSQL(t *testing.T) {
 	collected := time.Date(2026, 3, 1, 4, 14, 59, 0, time.UTC)
 	created := time.Date(2026, 3, 1, 4, 15, 0, 0, time.UTC)
 
-	records := []SystemMetric{
+	records := []monitoring.SystemMetric{
 		{
 			Host:        &host,
 			MetricName:  "cpu_usage",

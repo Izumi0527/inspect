@@ -1,4 +1,4 @@
-package settings
+package settings_test
 
 import (
 	"context"
@@ -8,7 +8,23 @@ import (
 	"net/mail"
 	"strings"
 	"testing"
+	_ "unsafe"
+
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 )
+
+//go:linkname buildEmailMessage github.com/your-org/inspect-system/backend-go/internal/settings.buildEmailMessage
+func buildEmailMessage(from mail.Address, to mail.Address, subject string, content string) []byte
+
+//go:linkname doWebhookOnce github.com/your-org/inspect-system/backend-go/internal/settings.doWebhookOnce
+func doWebhookOnce(
+	ctx context.Context,
+	client *http.Client,
+	method string,
+	url string,
+	headers map[string]string,
+	payload map[string]interface{},
+) (settings.WebhookSendResult, error)
 
 func TestBuildEmailMessage_BasicHeaders(t *testing.T) {
 	from := mail.Address{Name: "网络设备巡检系统", Address: "noreply@example.com"}

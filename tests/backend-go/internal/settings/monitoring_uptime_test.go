@@ -1,6 +1,15 @@
-package settings
+package settings_test
 
-import "testing"
+import (
+	"testing"
+	_ "unsafe"
+)
+
+//go:linkname parseRedisUptimeSeconds github.com/your-org/inspect-system/backend-go/internal/settings.parseRedisUptimeSeconds
+func parseRedisUptimeSeconds(info string) (*int64, error)
+
+//go:linkname normalizeUptimeSeconds github.com/your-org/inspect-system/backend-go/internal/settings.normalizeUptimeSeconds
+func normalizeUptimeSeconds(value int64) *int64
 
 func TestParseRedisUptimeSeconds(t *testing.T) {
 	tests := []struct {

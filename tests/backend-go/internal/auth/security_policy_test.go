@@ -1,9 +1,33 @@
-package auth
+package auth_test
 
 import (
 	"context"
 	"testing"
+	_ "unsafe"
+
+	"github.com/your-org/inspect-system/backend-go/internal/auth"
 )
+
+type securityPolicy struct {
+	SessionTimeoutMinutes       int
+	AutoLogoutEnabled           bool
+	RememberMeEnabled           bool
+	RememberMeDurationDays      int
+	MaxConcurrentSessions       int
+	ForceLogoutOnPasswordChange bool
+	MaxLoginAttempts            int
+	LockoutDurationMinutes      int
+	PasswordMinLength           int
+}
+
+//go:linkname getSettingIntFromMap github.com/your-org/inspect-system/backend-go/internal/auth.getSettingIntFromMap
+func getSettingIntFromMap(settings map[string]string, key string, fallback int) int
+
+//go:linkname getSettingBoolFromMap github.com/your-org/inspect-system/backend-go/internal/auth.getSettingBoolFromMap
+func getSettingBoolFromMap(settings map[string]string, key string, fallback bool) bool
+
+//go:linkname loadSecurityPolicy github.com/your-org/inspect-system/backend-go/internal/auth.(*Service).loadSecurityPolicy
+func loadSecurityPolicy(service *auth.Service, ctx context.Context) securityPolicy
 
 func TestGetSettingIntFromMap(t *testing.T) {
 	settings := map[string]string{
@@ -48,8 +72,8 @@ func TestGetSettingBoolFromMap(t *testing.T) {
 }
 
 func TestLoadSecurityPolicyDefaultsWhenServiceNotReady(t *testing.T) {
-	service := &Service{}
-	policy := service.loadSecurityPolicy(context.Background())
+	service := &auth.Service{}
+	policy := loadSecurityPolicy(service, context.Background())
 
 	if policy.SessionTimeoutMinutes != 30 {
 		t.Fatalf("expected default session timeout 30, got %d", policy.SessionTimeoutMinutes)
