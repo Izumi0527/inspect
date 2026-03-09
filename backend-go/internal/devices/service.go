@@ -419,11 +419,19 @@ func (s *Service) GetDeviceStatistics(ctx context.Context) (DeviceStatistics, er
 	// 统计总告警数
 	var totalAlerts int64
 	if err := s.db.WithContext(ctx).
-		Table("devices").
-		Select("COALESCE(SUM(alert_count), 0)").
-		Scan(&totalAlerts).Error; err != nil {
-		// 告警统计失败不影响其他数据
+		Table("alerts").
+		Where("status IN ?", []string{"open", "acknowledged"}).
+		Count(&totalAlerts).Error; err != nil {
 		totalAlerts = 0
+	}
+
+	var alertingDevices int64
+	if err := s.db.WithContext(ctx).
+		Table("alerts").
+		Select("COUNT(DISTINCT device_id)").
+		Where("status IN ?", []string{"open", "acknowledged"}).
+		Scan(&alertingDevices).Error; err != nil {
+		alertingDevices = 0
 	}
 
 	type typeRow struct {
@@ -447,20 +455,7 @@ func (s *Service) GetDeviceStatistics(ctx context.Context) (DeviceStatistics, er
 		typeDistribution[row.DeviceType] = row.Count
 	}
 
-	unknown := int(total - online - offline - warning)
-	if unknown < 0 {
-		unknown = 0
-	}
-
-	return DeviceStatistics{
-		TotalDevices:     int(total),
-		OnlineDevices:    int(online),
-		OfflineDevices:   int(offline),
-		WarningDevices:   int(warning),
-		UnknownDevices:   unknown,
-		TotalAlerts:      int(totalAlerts),
-		TypeDistribution: typeDistribution,
-	}, nil
+	return buildDeviceStatistics(total, online, offline, warning, totalAlerts, alertingDevices, typeDistribution), nil
 }
 
 func (s *Service) UpdateDeviceProbeStatus(
@@ -478,11 +473,11 @@ func (s *Service) UpdateDeviceProbeStatus(
 	}
 
 	updates := map[string]interface{}{
-		"status":        status,
-		"icmp_status":   icmpStatus,
-		"snmp_status":   snmpStatus,
+		"status":          status,
+		"icmp_status":     icmpStatus,
+		"snmp_status":     snmpStatus,
 		"last_probe_time": time.Now().UTC(),
-		"updated_at":    time.Now().UTC(),
+		"updated_at":      time.Now().UTC(),
 	}
 
 	if responseTime != nil {
@@ -580,6 +575,35 @@ func (s *Service) loadAlertCounts(ctx context.Context, deviceIDs []int) (map[int
 	return result, nil
 }
 
+func buildDeviceStatistics(
+	total int64,
+	online int64,
+	offline int64,
+	warning int64,
+	totalAlerts int64,
+	alertingDevices int64,
+	typeDistribution map[string]int,
+) DeviceStatistics {
+	unknown := int(total - online - offline - warning)
+	if unknown < 0 {
+		unknown = 0
+	}
+	if typeDistribution == nil {
+		typeDistribution = map[string]int{}
+	}
+
+	return DeviceStatistics{
+		TotalDevices:     int(total),
+		OnlineDevices:    int(online),
+		OfflineDevices:   int(offline),
+		WarningDevices:   int(warning),
+		UnknownDevices:   unknown,
+		TotalAlerts:      int(totalAlerts),
+		AlertingDevices:  int(alertingDevices),
+		TypeDistribution: typeDistribution,
+	}
+}
+
 func normalizeDeviceType(value string) string {
 	normalized := strings.ToLower(strings.TrimSpace(value))
 	switch normalized {
@@ -632,40 +656,40 @@ func buildDeviceResponse(device Device, alertCount *int) DeviceResponse {
 	}
 
 	response := DeviceResponse{
-		ID:            device.ID,
-		Name:          device.Name,
-		IPAddress:     device.IPAddress,
-		DeviceType:    device.DeviceType,
-		Vendor:        device.Vendor,
-		Model:         device.Model,
-		Location:      device.Location,
-		GroupID:       device.GroupID,
-		Status:        status,
-		LastSeen:      device.LastSeen,
-		IsActive:      device.IsActive,
-		CreatedBy:     device.CreatedBy,
-		SnmpCommunity: device.SnmpCommunity,
-		SnmpVersion:   device.SnmpVersion,
-		SnmpPort:      device.SnmpPort,
-		CliProtocol:   device.CliProtocol,
-		SshUsername:   device.SshUsername,
-		SshPort:       device.SshPort,
+		ID:             device.ID,
+		Name:           device.Name,
+		IPAddress:      device.IPAddress,
+		DeviceType:     device.DeviceType,
+		Vendor:         device.Vendor,
+		Model:          device.Model,
+		Location:       device.Location,
+		GroupID:        device.GroupID,
+		Status:         status,
+		LastSeen:       device.LastSeen,
+		IsActive:       device.IsActive,
+		CreatedBy:      device.CreatedBy,
+		SnmpCommunity:  nil,
+		SnmpVersion:    device.SnmpVersion,
+		SnmpPort:       device.SnmpPort,
+		CliProtocol:    device.CliProtocol,
+		SshUsername:    device.SshUsername,
+		SshPort:        device.SshPort,
 		TelnetUsername: device.TelnetUsername,
-		TelnetPort:    device.TelnetPort,
-		EnablePassword: device.EnablePassword,
-		Tags:          decodeTags(device.Tags),
-		Description:   device.Description,
-		IcmpStatus:    device.IcmpStatus,
-		SnmpStatus:    device.SnmpStatus,
-		ResponseTime:  device.ResponseTime,
-		LastProbeTime: device.LastProbeTime,
-		CPUUsage:      device.CPUUsage,
-		MemoryUsage:   device.MemoryUsage,
-		Temperature:   device.Temperature,
-		Uptime:        device.Uptime,
-		AlertCount:    device.AlertCount,
-		CreatedAt:     device.CreatedAt,
-		UpdatedAt:     device.UpdatedAt,
+		TelnetPort:     device.TelnetPort,
+		EnablePassword: nil,
+		Tags:           sanitizeDeviceResponseTags(device.Tags),
+		Description:    device.Description,
+		IcmpStatus:     device.IcmpStatus,
+		SnmpStatus:     device.SnmpStatus,
+		ResponseTime:   device.ResponseTime,
+		LastProbeTime:  device.LastProbeTime,
+		CPUUsage:       device.CPUUsage,
+		MemoryUsage:    device.MemoryUsage,
+		Temperature:    device.Temperature,
+		Uptime:         device.Uptime,
+		AlertCount:     device.AlertCount,
+		CreatedAt:      device.CreatedAt,
+		UpdatedAt:      device.UpdatedAt,
 	}
 
 	if alertCount != nil {

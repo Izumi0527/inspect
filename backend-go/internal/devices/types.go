@@ -3,16 +3,16 @@ package devices
 import "time"
 
 type DeviceCreateRequest struct {
-	Name          string      `json:"name"`
-	IPAddress     string      `json:"ip_address"`
-	DeviceType    string      `json:"device_type"`
-	Vendor        string      `json:"vendor"`
-	Model         *string     `json:"model,omitempty"`
-	Location      *string     `json:"location,omitempty"`
-	GroupID       *int        `json:"group_id,omitempty"`
-	SnmpCommunity *string     `json:"snmp_community,omitempty"`
-	SnmpVersion   *string     `json:"snmp_version,omitempty"`
-	SnmpPort      *int        `json:"snmp_port,omitempty"`
+	Name           string      `json:"name"`
+	IPAddress      string      `json:"ip_address"`
+	DeviceType     string      `json:"device_type"`
+	Vendor         string      `json:"vendor"`
+	Model          *string     `json:"model,omitempty"`
+	Location       *string     `json:"location,omitempty"`
+	GroupID        *int        `json:"group_id,omitempty"`
+	SnmpCommunity  *string     `json:"snmp_community,omitempty"`
+	SnmpVersion    *string     `json:"snmp_version,omitempty"`
+	SnmpPort       *int        `json:"snmp_port,omitempty"`
 	CliProtocol    *string     `json:"cli_protocol,omitempty"`
 	SshUsername    *string     `json:"ssh_username,omitempty"`
 	SshPassword    *string     `json:"ssh_password,omitempty"`
@@ -21,45 +21,45 @@ type DeviceCreateRequest struct {
 	TelnetPassword *string     `json:"telnet_password,omitempty"`
 	TelnetPort     *int        `json:"telnet_port,omitempty"`
 	EnablePassword *string     `json:"enable_password,omitempty"`
-	Description   *string     `json:"description,omitempty"`
-	Tags          interface{} `json:"tags,omitempty"`
+	Description    *string     `json:"description,omitempty"`
+	Tags           interface{} `json:"tags,omitempty"`
 }
 
 type DeviceResponse struct {
-	ID            int         `json:"id"`
-	Name          string      `json:"name"`
-	IPAddress     string      `json:"ip_address"`
-	DeviceType    string      `json:"device_type"`
-	Vendor        string      `json:"vendor"`
-	Model         *string     `json:"model,omitempty"`
-	Location      *string     `json:"location,omitempty"`
-	GroupID       *int        `json:"group_id,omitempty"`
-	Status        string      `json:"status"`
-	LastSeen      *time.Time  `json:"last_seen,omitempty"`
-	IsActive      bool        `json:"is_active"`
-	CreatedBy     *string     `json:"created_by,omitempty"`
-	SnmpCommunity *string     `json:"snmp_community,omitempty"`
-	SnmpVersion   *string     `json:"snmp_version,omitempty"`
-	SnmpPort      *int        `json:"snmp_port,omitempty"`
+	ID             int         `json:"id"`
+	Name           string      `json:"name"`
+	IPAddress      string      `json:"ip_address"`
+	DeviceType     string      `json:"device_type"`
+	Vendor         string      `json:"vendor"`
+	Model          *string     `json:"model,omitempty"`
+	Location       *string     `json:"location,omitempty"`
+	GroupID        *int        `json:"group_id,omitempty"`
+	Status         string      `json:"status"`
+	LastSeen       *time.Time  `json:"last_seen,omitempty"`
+	IsActive       bool        `json:"is_active"`
+	CreatedBy      *string     `json:"created_by,omitempty"`
+	SnmpCommunity  *string     `json:"snmp_community,omitempty"`
+	SnmpVersion    *string     `json:"snmp_version,omitempty"`
+	SnmpPort       *int        `json:"snmp_port,omitempty"`
 	CliProtocol    *string     `json:"cli_protocol,omitempty"`
 	SshUsername    *string     `json:"ssh_username,omitempty"`
 	SshPort        *int        `json:"ssh_port,omitempty"`
 	TelnetUsername *string     `json:"telnet_username,omitempty"`
 	TelnetPort     *int        `json:"telnet_port,omitempty"`
 	EnablePassword *string     `json:"enable_password,omitempty"`
-	Tags          interface{} `json:"tags,omitempty"`
-	Description   *string     `json:"description,omitempty"`
-	IcmpStatus    *string     `json:"icmp_status,omitempty"`
-	SnmpStatus    *string     `json:"snmp_status,omitempty"`
-	ResponseTime  *float64    `json:"response_time,omitempty"`
-	LastProbeTime *time.Time  `json:"last_probe_time,omitempty"`
-	CPUUsage      *float64    `json:"cpu_usage,omitempty"`
-	MemoryUsage   *float64    `json:"memory_usage,omitempty"`
-	Temperature   *float64    `json:"temperature,omitempty"`
-	Uptime        *int64      `json:"uptime,omitempty"`
-	AlertCount    *int        `json:"alert_count,omitempty"`
-	CreatedAt     *time.Time  `json:"created_at,omitempty"`
-	UpdatedAt     *time.Time  `json:"updated_at,omitempty"`
+	Tags           interface{} `json:"tags,omitempty"`
+	Description    *string     `json:"description,omitempty"`
+	IcmpStatus     *string     `json:"icmp_status,omitempty"`
+	SnmpStatus     *string     `json:"snmp_status,omitempty"`
+	ResponseTime   *float64    `json:"response_time,omitempty"`
+	LastProbeTime  *time.Time  `json:"last_probe_time,omitempty"`
+	CPUUsage       *float64    `json:"cpu_usage,omitempty"`
+	MemoryUsage    *float64    `json:"memory_usage,omitempty"`
+	Temperature    *float64    `json:"temperature,omitempty"`
+	Uptime         *int64      `json:"uptime,omitempty"`
+	AlertCount     *int        `json:"alert_count,omitempty"`
+	CreatedAt      *time.Time  `json:"created_at,omitempty"`
+	UpdatedAt      *time.Time  `json:"updated_at,omitempty"`
 }
 
 type DeviceGroupResponse struct {
@@ -99,17 +99,17 @@ type ScanResultResponse struct {
 }
 
 type DiscoveredDeviceResponse struct {
-	IPAddress      string                 `json:"ip_address"`
-	Hostname       *string                `json:"hostname,omitempty"`
-	MacAddress     *string                `json:"mac_address,omitempty"`
-	Vendor         *string                `json:"vendor,omitempty"`
-	DeviceType     *string                `json:"device_type,omitempty"`
-	OpenPorts      []int                  `json:"open_ports"`
-	Services       map[string]interface{} `json:"services"`
-	ResponseTime   *float64               `json:"response_time,omitempty"`
-	LastSeen       *time.Time             `json:"last_seen,omitempty"`
-	OSInfo         *string                `json:"os_info,omitempty"`
-	SnmpAvailable  bool                   `json:"snmp_available"`
+	IPAddress     string                 `json:"ip_address"`
+	Hostname      *string                `json:"hostname,omitempty"`
+	MacAddress    *string                `json:"mac_address,omitempty"`
+	Vendor        *string                `json:"vendor,omitempty"`
+	DeviceType    *string                `json:"device_type,omitempty"`
+	OpenPorts     []int                  `json:"open_ports"`
+	Services      map[string]interface{} `json:"services"`
+	ResponseTime  *float64               `json:"response_time,omitempty"`
+	LastSeen      *time.Time             `json:"last_seen,omitempty"`
+	OSInfo        *string                `json:"os_info,omitempty"`
+	SnmpAvailable bool                   `json:"snmp_available"`
 }
 
 type DeviceBatchImportRequest struct {
@@ -138,6 +138,7 @@ type DeviceStatistics struct {
 	WarningDevices   int            `json:"warning_devices"`
 	UnknownDevices   int            `json:"unknown_devices"`
 	TotalAlerts      int            `json:"total_alerts"`
+	AlertingDevices  int            `json:"alerting_devices"`
 	TypeDistribution map[string]int `json:"type_distribution"`
 }
 
@@ -160,7 +161,7 @@ type DeviceBatchProbeRequest struct {
 }
 
 type DeviceBatchProbeResponse struct {
-	Total   int                  `json:"total"`
-	Probed  int                  `json:"probed"`
+	Total   int                   `json:"total"`
+	Probed  int                   `json:"probed"`
 	Results []DeviceProbeResponse `json:"results"`
 }

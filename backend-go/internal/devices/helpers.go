@@ -60,6 +60,67 @@ func decodeTags(raw datatypes.JSON) interface{} {
 	return parsed
 }
 
+func sanitizeDeviceResponseTags(raw datatypes.JSON) interface{} {
+	decoded := decodeTags(raw)
+	root, ok := cloneJSONValue(decoded).(map[string]interface{})
+	if !ok {
+		return decoded
+	}
+
+	if cliConfig, ok := root["cli_config"].(map[string]interface{}); ok {
+		if sshConfig, ok := cliConfig["ssh_config"].(map[string]interface{}); ok {
+			markConfiguredAndDelete(sshConfig, "password", "password_configured")
+			markConfiguredAndDelete(sshConfig, "private_key", "private_key_configured")
+		}
+		if telnetConfig, ok := cliConfig["telnet_config"].(map[string]interface{}); ok {
+			markConfiguredAndDelete(telnetConfig, "password", "password_configured")
+			markConfiguredAndDelete(telnetConfig, "enable_password", "enable_password_configured")
+		}
+	}
+
+	if snmpConfig, ok := root["snmp_config"].(map[string]interface{}); ok {
+		if v2cConfig, ok := snmpConfig["v2c_config"].(map[string]interface{}); ok {
+			markConfiguredAndDelete(v2cConfig, "community", "community_configured")
+			markConfiguredAndDelete(v2cConfig, "write_community", "write_community_configured")
+		}
+		if v3Config, ok := snmpConfig["v3_config"].(map[string]interface{}); ok {
+			markConfiguredAndDelete(v3Config, "auth_password", "auth_password_configured")
+			markConfiguredAndDelete(v3Config, "priv_password", "priv_password_configured")
+		}
+	}
+
+	return root
+}
+
+func cloneJSONValue(value interface{}) interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		cloned := make(map[string]interface{}, len(typed))
+		for key, item := range typed {
+			cloned[key] = cloneJSONValue(item)
+		}
+		return cloned
+	case []interface{}:
+		cloned := make([]interface{}, len(typed))
+		for index, item := range typed {
+			cloned[index] = cloneJSONValue(item)
+		}
+		return cloned
+	default:
+		return typed
+	}
+}
+
+func markConfiguredAndDelete(values map[string]interface{}, sourceKey string, flagKey string) {
+	raw, exists := values[sourceKey]
+	if exists {
+		if text, ok := raw.(string); ok && strings.TrimSpace(text) != "" {
+			values[flagKey] = true
+		}
+	}
+	delete(values, sourceKey)
+}
+
 func decodeJSONList(raw datatypes.JSON) []int {
 	if len(raw) == 0 {
 		return []int{}

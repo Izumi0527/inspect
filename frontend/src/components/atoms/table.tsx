@@ -130,6 +130,25 @@ export function Table<T extends object>({
     large: 'px-6 py-4'
   }
 
+  const currentPageKeys = React.useMemo(
+    () => data.map((record, index) => getRowKey(record, index)),
+    [data, getRowKey]
+  )
+  const currentPageKeySet = React.useMemo(
+    () => new Set(currentPageKeys),
+    [currentPageKeys]
+  )
+  const currentPageSelectedKeys = React.useMemo(
+    () => rowSelection
+      ? rowSelection.selectedRowKeys.filter(key => currentPageKeySet.has(key))
+      : [],
+    [currentPageKeySet, rowSelection]
+  )
+  const allCurrentPageSelected =
+    currentPageSelectedKeys.length === data.length && data.length > 0
+  const partiallyCurrentPageSelected =
+    currentPageSelectedKeys.length > 0 && currentPageSelectedKeys.length < data.length
+
   return (
     <div className={cn('rounded-xl overflow-hidden bg-card/80 backdrop-blur-lg border border-border/50', className)}>
       <div className="overflow-auto" style={{ maxHeight: scroll?.y }}>
@@ -142,18 +161,28 @@ export function Table<T extends object>({
                     <input
                       type="checkbox"
                       className="custom-checkbox"
-                      checked={rowSelection.selectedRowKeys.length === data.length && data.length > 0}
+                      checked={allCurrentPageSelected}
                       ref={(input) => {
                         if (input) {
-                          input.indeterminate = rowSelection.selectedRowKeys.length > 0 && rowSelection.selectedRowKeys.length < data.length
+                          input.indeterminate = partiallyCurrentPageSelected
                         }
                       }}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          const allKeys = data.map((record, index) => getRowKey(record, index))
-                          rowSelection.onChange(allKeys, data)
+                          const nonVisibleKeys = rowSelection.selectedRowKeys.filter(
+                            key => !currentPageKeySet.has(key)
+                          )
+                          rowSelection.onChange(
+                            Array.from(new Set([...nonVisibleKeys, ...currentPageKeys])),
+                            data
+                          )
                         } else {
-                          rowSelection.onChange([], [])
+                          rowSelection.onChange(
+                            rowSelection.selectedRowKeys.filter(
+                              key => !currentPageKeySet.has(key)
+                            ),
+                            []
+                          )
                         }
                       }}
                     />

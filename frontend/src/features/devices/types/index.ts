@@ -26,6 +26,8 @@ export interface SSHConfig {
   port?: number
   use_key_auth?: boolean
   private_key?: string
+  password_configured?: boolean
+  private_key_configured?: boolean
 }
 
 // Telnet配置接口
@@ -34,12 +36,16 @@ export interface TelnetConfig {
   password?: string
   port?: number
   enable_password?: string
+  password_configured?: boolean
+  enable_password_configured?: boolean
 }
 
 // SNMPv2c配置接口
 export interface SNMPv2cConfig {
   community: string
   write_community?: string
+  community_configured?: boolean
+  write_community_configured?: boolean
 }
 
 // SNMPv3配置接口
@@ -51,6 +57,8 @@ export interface SNMPv3Config {
   priv_protocol?: SNMPv3PrivProtocol
   priv_password?: string
   context_name?: string
+  auth_password_configured?: boolean
+  priv_password_configured?: boolean
 }
 
 // SNMP配置接口

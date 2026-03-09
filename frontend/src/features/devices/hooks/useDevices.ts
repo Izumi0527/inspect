@@ -17,6 +17,7 @@ import {
   bulkImportDevices
 } from '../api/devices.api'
 import type { FetchDevicesResult } from '../api/devices.api'
+import type { CreateDevicePayload } from '../utils/deviceFormMapper'
 
 export function useDevices(enablePolling = true, pollingInterval = 60000) {
   const [devices, setDevices] = useState<Device[]>([])
@@ -26,11 +27,25 @@ export function useDevices(enablePolling = true, pollingInterval = 60000) {
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null)
   // 保存最近一次请求的筛选参数，用于轮询和操作后刷新
   const lastFiltersRef = useRef<DeviceFilters | undefined>(undefined)
+  const latestRequestIdRef = useRef(0)
+  const loadingRequestIdRef = useRef<number | null>(null)
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      latestRequestIdRef.current += 1
+      loadingRequestIdRef.current = null
+    }
+  }, [])
 
   // 加载设备列表
   const loadDevices = useCallback(async (filters?: DeviceFilters, silent = false) => {
+    const requestId = ++latestRequestIdRef.current
+
     try {
       if (!silent) {
+        loadingRequestIdRef.current = requestId
         setLoading(true)
       }
       setError(null)
@@ -38,31 +53,33 @@ export function useDevices(enablePolling = true, pollingInterval = 60000) {
         lastFiltersRef.current = filters
       }
       const result: FetchDevicesResult = await fetchDevices(filters ?? lastFiltersRef.current)
+      if (!isMountedRef.current || requestId !== latestRequestIdRef.current) {
+        return
+      }
       setDevices(result.devices)
       setTotal(result.total)
     } catch (err) {
+      if (!isMountedRef.current || requestId !== latestRequestIdRef.current) {
+        return
+      }
       const errorMessage = err instanceof Error ? err.message : '加载设备失败'
       setError(errorMessage)
       setDevices([])
       setTotal(0)
       console.error('设备加载失败:', err)
     } finally {
-      if (!silent) {
+      if (!silent && isMountedRef.current && loadingRequestIdRef.current === requestId) {
+        loadingRequestIdRef.current = null
         setLoading(false)
       }
     }
   }, [])
 
   // 添加设备
-  const addDevice = useCallback(async (deviceData: Omit<Device, 'id' | 'status' | 'last_seen' | 'uptime' | 'cpu_usage' | 'memory_usage' | 'network_traffic' | 'alert_count' | 'created_at' | 'updated_at'>): Promise<void> => {
+  const addDevice = useCallback(async (deviceData: CreateDevicePayload): Promise<void> => {
     try {
       setLoading(true)
-      await createDevice({
-        ...deviceData,
-        status: 'offline' as const,
-        last_seen: '',
-        uptime: ''
-      })
+      await createDevice(deviceData)
       // 服务端分页模式：重新从后端获取当前页数据
       await loadDevices(lastFiltersRef.current)
     } catch (err) {

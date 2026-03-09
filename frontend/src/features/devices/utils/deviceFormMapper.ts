@@ -1,66 +1,145 @@
 import { Device } from '../types'
 import { DeviceFormData } from '../components/DeviceForm'
 
-// 将表单数据转换为后端 API 需要的字段格式
-export const mapFormDataToApiPayload = (formData: DeviceFormData) => {
-  const vendorMap: Record<string, string> = {
-    switch: 'cisco',
-    router: 'cisco',
-    firewall: 'fortinet',
-    wireless_ap: 'cisco'
-  }
+const vendorMap: Record<string, string> = {
+  switch: 'cisco',
+  router: 'cisco',
+  firewall: 'fortinet',
+  wireless_ap: 'cisco',
+}
 
-  const snmpVersionMap: Record<string, string> = {
-    v2c: '2c',
-    v3: '3',
-    '2c': '2c',
-    '3': '3'
-  }
+const snmpVersionMap: Record<string, string> = {
+  v2c: '2c',
+  v3: '3',
+  '2c': '2c',
+  '3': '3',
+}
 
-  const shouldUseTelnet = formData.cli_protocol === 'telnet'
-  const shouldUseSSH = formData.cli_protocol === 'ssh'
-  const sshUsername = shouldUseSSH
-    ? (formData.ssh_config?.username || formData.ssh_username || '')
-    : ''
-  const sshPassword = shouldUseSSH
-    ? (formData.ssh_config?.password || formData.ssh_password || '')
-    : ''
+const normalizeSnmpVersion = (value?: string | null): 'v2c' | 'v3' => {
+  if (value === '3' || value === 'v3') return 'v3'
+  return 'v2c'
+}
 
-  const tags = {
-    cli_config: {
-      cli_protocol: formData.cli_protocol ?? 'none',
-      ssh_config: shouldUseSSH
-        ? {
-            username: sshUsername || '',
-            password: sshPassword || '',
-            port: formData.ssh_config?.port || 22
-          }
-        : undefined,
-      telnet_config: shouldUseTelnet
-        ? {
-            username: formData.telnet_config?.username || '',
-            password: formData.telnet_config?.password || '',
-            port: formData.telnet_config?.port || 23,
-            enable_password: formData.telnet_config?.enable_password || ''
-          }
-        : undefined
-    },
-    snmp_config: {
-      version: formData.snmp_config?.version ?? 'v2c',
-      port: formData.snmp_config?.port ?? 161,
-      v2c_config: formData.snmp_config?.version !== 'v3'
-        ? {
-            community: formData.snmp_config?.v2c_config?.community || formData.snmp_community || 'public',
-            write_community: formData.snmp_config?.v2c_config?.write_community || ''
-          }
-        : undefined,
-      v3_config: formData.snmp_config?.version === 'v3'
-        ? formData.snmp_config?.v3_config
-        : undefined
+const pickText = (...values: Array<string | null | undefined>) => {
+  for (const item of values) {
+    if (typeof item === 'string' && item.trim() !== '') {
+      return item.trim()
     }
   }
+  return ''
+}
+
+const includeSensitiveValue = (
+  value: string,
+  mode: 'create' | 'update',
+): string | undefined => {
+  if (value) return value
+  if (mode === 'create') return undefined
+  return undefined
+}
+
+const buildCliTags = (formData: DeviceFormData, mode: 'create' | 'update') => {
+  const shouldUseSSH = formData.cli_protocol === 'ssh'
+  const shouldUseTelnet = formData.cli_protocol === 'telnet'
+  const useKeyAuth = !!formData.ssh_config?.use_key_auth
+
+  const sshUsername = shouldUseSSH
+    ? pickText(formData.ssh_config?.username, formData.ssh_username)
+    : ''
+  const sshPassword = shouldUseSSH
+    ? pickText(formData.ssh_config?.password, formData.ssh_password)
+    : ''
+  const sshPrivateKey = shouldUseSSH ? pickText(formData.ssh_config?.private_key) : ''
+
+  const sshConfig = shouldUseSSH
+    ? {
+        username: sshUsername || undefined,
+        port: formData.ssh_config?.port ?? 22,
+        use_key_auth: useKeyAuth,
+        password: useKeyAuth
+          ? undefined
+          : includeSensitiveValue(sshPassword, mode),
+        private_key: useKeyAuth
+          ? includeSensitiveValue(sshPrivateKey, mode)
+          : undefined,
+      }
+    : undefined
+
+  const telnetUsername = shouldUseTelnet ? pickText(formData.telnet_config?.username) : ''
+  const telnetPassword = shouldUseTelnet ? pickText(formData.telnet_config?.password) : ''
+  const enablePassword = shouldUseTelnet ? pickText(formData.telnet_config?.enable_password) : ''
+
+  const telnetConfig = shouldUseTelnet
+    ? {
+        username: telnetUsername || undefined,
+        port: formData.telnet_config?.port ?? 23,
+        password: includeSensitiveValue(telnetPassword, mode),
+        enable_password: includeSensitiveValue(enablePassword, mode),
+      }
+    : undefined
 
   return {
+    cli_protocol: formData.cli_protocol ?? 'none',
+    ssh_config: sshConfig,
+    telnet_config: telnetConfig,
+  }
+}
+
+const buildSnmpTags = (formData: DeviceFormData, mode: 'create' | 'update') => {
+  const version = formData.snmp_config?.version ?? 'v2c'
+  const readCommunity = pickText(
+    formData.snmp_config?.v2c_config?.community,
+    formData.snmp_community,
+  )
+  const writeCommunity = pickText(formData.snmp_config?.v2c_config?.write_community)
+
+  return {
+    version,
+    port: formData.snmp_config?.port ?? 161,
+    v2c_config: version !== 'v3'
+      ? {
+          community: includeSensitiveValue(readCommunity, mode),
+          write_community: includeSensitiveValue(writeCommunity, mode),
+        }
+      : undefined,
+    v3_config: version === 'v3'
+      ? {
+          username: pickText(formData.snmp_config?.v3_config?.username) || undefined,
+          security_level: formData.snmp_config?.v3_config?.security_level ?? 'noAuthNoPriv',
+          auth_protocol: formData.snmp_config?.v3_config?.auth_protocol,
+          auth_password: includeSensitiveValue(
+            pickText(formData.snmp_config?.v3_config?.auth_password),
+            mode,
+          ),
+          priv_protocol: formData.snmp_config?.v3_config?.priv_protocol,
+          priv_password: includeSensitiveValue(
+            pickText(formData.snmp_config?.v3_config?.priv_password),
+            mode,
+          ),
+          context_name: pickText(formData.snmp_config?.v3_config?.context_name) || undefined,
+        }
+      : undefined,
+  }
+}
+
+const buildCommonPayload = (formData: DeviceFormData, mode: 'create' | 'update') => {
+  const shouldUseSSH = formData.cli_protocol === 'ssh'
+  const shouldUseTelnet = formData.cli_protocol === 'telnet'
+  const sshUsername = shouldUseSSH
+    ? pickText(formData.ssh_config?.username, formData.ssh_username)
+    : ''
+  const sshPassword = shouldUseSSH
+    ? pickText(formData.ssh_config?.password, formData.ssh_password)
+    : ''
+  const telnetUsername = shouldUseTelnet ? pickText(formData.telnet_config?.username) : ''
+  const telnetPassword = shouldUseTelnet ? pickText(formData.telnet_config?.password) : ''
+  const enablePassword = shouldUseTelnet ? pickText(formData.telnet_config?.enable_password) : ''
+  const readCommunity = pickText(
+    formData.snmp_config?.v2c_config?.community,
+    formData.snmp_community,
+  )
+
+  const payload: Record<string, unknown> = {
     name: formData.name,
     ip: formData.ip,
     ip_address: formData.ip,
@@ -68,21 +147,64 @@ export const mapFormDataToApiPayload = (formData: DeviceFormData) => {
     vendor: vendorMap[formData.device_type] || 'other',
     location: formData.location || '',
     description: formData.description || '',
-    snmp_community: formData.snmp_config?.v2c_config?.community || 'public',
     snmp_version: snmpVersionMap[formData.snmp_config?.version ?? 'v2c'] ?? '2c',
+    snmp_port: formData.snmp_config?.port ?? 161,
     cli_protocol: formData.cli_protocol ?? 'none',
-    ssh_username: shouldUseSSH ? sshUsername || null : null,
-    ssh_password: shouldUseSSH ? sshPassword || null : null,
-    ssh_port: shouldUseSSH ? (formData.ssh_config?.port || 22) : null,
-    telnet_username: shouldUseTelnet ? (formData.telnet_config?.username || null) : null,
-    telnet_password: shouldUseTelnet ? (formData.telnet_config?.password || null) : null,
-    telnet_port: shouldUseTelnet ? (formData.telnet_config?.port || 23) : null,
-    enable_password: shouldUseTelnet ? (formData.telnet_config?.enable_password || null) : null,
-    tags
+    tags: {
+      cli_config: buildCliTags(formData, mode),
+      snmp_config: buildSnmpTags(formData, mode),
+    },
   }
+
+  if (shouldUseSSH) {
+    payload.ssh_username = sshUsername || null
+    payload.ssh_port = formData.ssh_config?.port ?? 22
+    if (sshPassword) {
+      payload.ssh_password = sshPassword
+    }
+  } else {
+    payload.ssh_username = null
+    payload.ssh_port = null
+  }
+
+  if (shouldUseTelnet) {
+    payload.telnet_username = telnetUsername || null
+    payload.telnet_port = formData.telnet_config?.port ?? 23
+    if (telnetPassword) {
+      payload.telnet_password = telnetPassword
+    }
+    if (enablePassword) {
+      payload.enable_password = enablePassword
+    }
+  } else {
+    payload.telnet_username = null
+    payload.telnet_port = null
+  }
+
+  if (formData.snmp_config?.version !== 'v3') {
+    if (mode === 'create') {
+      payload.snmp_community = readCommunity || 'public'
+    } else if (readCommunity) {
+      payload.snmp_community = readCommunity
+    }
+  }
+
+  return payload
 }
 
-export type DevicePayload = ReturnType<typeof mapFormDataToApiPayload>
+// 兼容原调用方：默认用于新增场景
+export const mapFormDataToApiPayload = (formData: DeviceFormData) => mapFormDataToCreatePayload(formData)
+
+export const mapFormDataToCreatePayload = (formData: DeviceFormData) => {
+  return buildCommonPayload(formData, 'create')
+}
+
+export const mapFormDataToUpdatePayload = (formData: DeviceFormData) => {
+  return buildCommonPayload(formData, 'update')
+}
+
+export type CreateDevicePayload = ReturnType<typeof mapFormDataToCreatePayload>
+export type DevicePayload = ReturnType<typeof mapFormDataToUpdatePayload>
 
 // 根据已有设备数据推导表单初始值，兼容旧字段
 export const buildFormInitialData = (device?: Device | null): Partial<Device> | undefined => {
@@ -90,54 +212,91 @@ export const buildFormInitialData = (device?: Device | null): Partial<Device> | 
 
   const cliProtocol: Device['cli_protocol'] =
     device.cli_protocol ||
-    (device.telnet_config?.username ? 'telnet' :
-    (device.ssh_username || device.ssh_password ? 'ssh' : 'none'))
+    (device.telnet_config?.username
+      ? 'telnet'
+      : (device.ssh_username || device.ssh_config?.username ? 'ssh' : 'none'))
 
-  const normalizeVersion = (version?: string | null) => {
-    if (!version) return 'v2c'
-    if (version === '2c' || version === 'v2c') return 'v2c'
-    if (version === '3' || version === 'v3') return 'v3'
-    return 'v2c'
+  const snmpVersion = normalizeSnmpVersion(device.snmp_config?.version ?? device.snmp_version)
+
+  const sshConfig: Device['ssh_config'] = {
+    username: device.ssh_config?.username ?? device.ssh_username ?? '',
+    password: '',
+    port: device.ssh_config?.port ?? device.ssh_port ?? 22,
+    use_key_auth: device.ssh_config?.use_key_auth ?? false,
+    private_key: '',
+    password_configured: device.ssh_config?.password_configured ?? false,
+    private_key_configured: device.ssh_config?.private_key_configured ?? false,
   }
 
-  const normalizedSnmpVersion = normalizeVersion(device.snmp_config?.version ?? device.snmp_version)
+  const telnetConfig: Device['telnet_config'] = {
+    username: device.telnet_config?.username ?? '',
+    password: '',
+    port: device.telnet_config?.port ?? 23,
+    enable_password: '',
+    password_configured: device.telnet_config?.password_configured ?? false,
+    enable_password_configured: device.telnet_config?.enable_password_configured ?? false,
+  }
+
+  const snmpConfig: Device['snmp_config'] = device.snmp_config
+    ? {
+        ...device.snmp_config,
+        version: snmpVersion,
+        port: device.snmp_config.port ?? 161,
+        v2c_config: snmpVersion !== 'v3'
+          ? {
+              community: '',
+              write_community: '',
+              community_configured: device.snmp_config.v2c_config?.community_configured ?? false,
+              write_community_configured: device.snmp_config.v2c_config?.write_community_configured ?? false,
+            }
+          : device.snmp_config.v2c_config,
+        v3_config: snmpVersion === 'v3'
+          ? {
+              username: device.snmp_config.v3_config?.username ?? '',
+              security_level: device.snmp_config.v3_config?.security_level ?? 'noAuthNoPriv',
+              auth_protocol: device.snmp_config.v3_config?.auth_protocol ?? 'SHA',
+              auth_password: '',
+              priv_protocol: device.snmp_config.v3_config?.priv_protocol ?? 'AES128',
+              priv_password: '',
+              context_name: device.snmp_config.v3_config?.context_name ?? '',
+              auth_password_configured: device.snmp_config.v3_config?.auth_password_configured ?? false,
+              priv_password_configured: device.snmp_config.v3_config?.priv_password_configured ?? false,
+            }
+          : device.snmp_config.v3_config,
+      }
+    : {
+        version: snmpVersion,
+        port: 161,
+        v2c_config: {
+          community: '',
+          write_community: '',
+          community_configured: false,
+          write_community_configured: false,
+        },
+        v3_config: {
+          username: '',
+          security_level: 'noAuthNoPriv',
+          auth_protocol: 'SHA',
+          auth_password: '',
+          priv_protocol: 'AES128',
+          priv_password: '',
+          context_name: '',
+          auth_password_configured: false,
+          priv_password_configured: false,
+        },
+      }
 
   return {
     ...device,
     cli_protocol: cliProtocol,
-    ssh_config: device.ssh_config || {
-      username: device.ssh_username || '',
-      password: device.ssh_password || '',
-      port: device.ssh_port || 22,
-      use_key_auth: false,
-      private_key: ''
-    },
-    telnet_config: device.telnet_config || {
-      username: '',
-      password: '',
-      port: 23,
-      enable_password: ''
-    },
-    snmp_config: device.snmp_config
-      ? {
-          ...device.snmp_config,
-          version: normalizedSnmpVersion
-        }
-      : {
-      version: normalizedSnmpVersion,
-      port: 161,
-      v2c_config: {
-        community: device.snmp_community || 'public',
-        write_community: ''
-      },
-      v3_config: {
-        username: '',
-        security_level: 'noAuthNoPriv'
-      }
-    },
+    ssh_config: sshConfig,
+    telnet_config: telnetConfig,
+    snmp_config: snmpConfig,
+    snmp_community: '',
+    ssh_password: '',
     advanced_config: device.advanced_config || {
       timeout: 30,
-      retry: 3
-    }
+      retry: 3,
+    },
   }
 }

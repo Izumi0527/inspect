@@ -72,13 +72,17 @@ const deviceFormSchema = z.object({
     password: z.string().optional(),
     port: z.number().optional(),
     use_key_auth: z.boolean().optional(),
-    private_key: z.string().optional()
+    private_key: z.string().optional(),
+    password_configured: z.boolean().optional(),
+    private_key_configured: z.boolean().optional()
   }).optional(),
   telnet_config: z.object({
     username: z.string().optional(),
     password: z.string().optional(),
     port: z.number().optional(),
-    enable_password: z.string().optional()
+    enable_password: z.string().optional(),
+    password_configured: z.boolean().optional(),
+    enable_password_configured: z.boolean().optional()
   }).optional(),
 
   // SNMP配置
@@ -87,7 +91,9 @@ const deviceFormSchema = z.object({
     port: z.number().optional(),
     v2c_config: z.object({
       community: z.string(),
-      write_community: z.string().optional()
+      write_community: z.string().optional(),
+      community_configured: z.boolean().optional(),
+      write_community_configured: z.boolean().optional()
     }).optional(),
     v3_config: z.object({
       username: z.string(),
@@ -96,7 +102,9 @@ const deviceFormSchema = z.object({
       auth_password: z.string().optional(),
       priv_protocol: z.enum(['DES', '3DES', 'AES128', 'AES192', 'AES256'] as const).optional(),
       priv_password: z.string().optional(),
-      context_name: z.string().optional()
+      context_name: z.string().optional(),
+      auth_password_configured: z.boolean().optional(),
+      priv_password_configured: z.boolean().optional()
     }).optional()
   }).optional(),
 
@@ -180,20 +188,22 @@ export const DeviceForm: React.FC<Props> = ({
 
       // SNMP配置
       snmp_config: {
-        version: initialData?.snmp_config?.version || 'v2c',
-        port: initialData?.snmp_config?.port || 161,
+        version: initialData?.snmp_config?.version ?? 'v2c',
+        port: initialData?.snmp_config?.port ?? 161,
         v2c_config: {
-          community: initialData?.snmp_config?.v2c_config?.community || 'public',
-          write_community: initialData?.snmp_config?.v2c_config?.write_community || ''
+          community: initialData?.snmp_config?.v2c_config?.community ?? (isEditMode ? '' : 'public'),
+          write_community: initialData?.snmp_config?.v2c_config?.write_community ?? ''
         },
         v3_config: {
-          username: initialData?.snmp_config?.v3_config?.username || '',
-          security_level: initialData?.snmp_config?.v3_config?.security_level || 'noAuthNoPriv',
-          auth_protocol: initialData?.snmp_config?.v3_config?.auth_protocol || 'SHA',
-          auth_password: initialData?.snmp_config?.v3_config?.auth_password || '',
-          priv_protocol: initialData?.snmp_config?.v3_config?.priv_protocol || 'AES128',
-          priv_password: initialData?.snmp_config?.v3_config?.priv_password || '',
-          context_name: initialData?.snmp_config?.v3_config?.context_name || ''
+          username: initialData?.snmp_config?.v3_config?.username ?? '',
+          security_level: initialData?.snmp_config?.v3_config?.security_level ?? 'noAuthNoPriv',
+          auth_protocol: initialData?.snmp_config?.v3_config?.auth_protocol ?? 'SHA',
+          auth_password: initialData?.snmp_config?.v3_config?.auth_password ?? '',
+          priv_protocol: initialData?.snmp_config?.v3_config?.priv_protocol ?? 'AES128',
+          priv_password: initialData?.snmp_config?.v3_config?.priv_password ?? '',
+          context_name: initialData?.snmp_config?.v3_config?.context_name ?? '',
+          auth_password_configured: initialData?.snmp_config?.v3_config?.auth_password_configured ?? false,
+          priv_password_configured: initialData?.snmp_config?.v3_config?.priv_password_configured ?? false,
         }
       },
 
@@ -204,9 +214,9 @@ export const DeviceForm: React.FC<Props> = ({
       },
 
       // 兼容性字段
-      snmp_community: initialData?.snmp_community || 'public',
-      ssh_username: initialData?.ssh_username || '',
-      ssh_password: initialData?.ssh_password || ''
+      snmp_community: initialData?.snmp_community ?? (isEditMode ? '' : 'public'),
+      ssh_username: initialData?.ssh_username ?? '',
+      ssh_password: initialData?.ssh_password ?? ''
     },
     mode: 'onChange'
   })

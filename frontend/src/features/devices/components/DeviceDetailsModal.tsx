@@ -1,25 +1,37 @@
 'use client'
 
 import React from 'react'
-import { SimpleModal, Badge } from '@/components/atoms'
+import {
+  SimpleModal,
+  Badge,
+  Button,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/atoms'
 import { Device } from '../types'
+import { healthCheckDevice, fetchDevicePerformance } from '../api/devices.api'
 import { formatDate } from '@/utils/formatters'
 import { getDeviceTypeLabel } from './DeviceIcon'
 
-// 格式化百分比值
+const PERFORMANCE_RANGES = [
+  { value: '24h', label: '近24小时' },
+  { value: '7d', label: '近7天' },
+  { value: '30d', label: '近30天' },
+]
+
 const formatPercentageValue = (value: number | undefined | null): string => {
   if (value === undefined || value === null) {
-    return '0.0%'
+    return '-'
   }
-  // 如果值在 0-1 之间（小数格式），转换为百分比
   if (value >= 0 && value < 1) {
     return `${(value * 100).toFixed(1)}%`
   }
-  // 如果值在 1-100 之间（已经是百分比），直接使用
   return `${value.toFixed(1)}%`
 }
 
-// 格式化最近在线时间
 const formatLastSeen = (lastSeen: string | undefined | null): string => {
   if (!lastSeen) {
     return '未知'
@@ -27,50 +39,87 @@ const formatLastSeen = (lastSeen: string | undefined | null): string => {
   return formatDate(lastSeen, 'datetime')
 }
 
+const toNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (!Number.isNaN(parsed)) {
+      return parsed
+    }
+  }
+  return undefined
+}
+
+const formatConfigured = (configured?: boolean) => (configured ? '已配置' : '未配置')
+
 const getCliConfiguration = (device: Device) => {
-  const tags = (device.tags ?? {}) as Record<string, any>
-  const cliConfig = tags.cli_config ?? {}
-
-  // 优先使用后端顶层字段，其次从 tags 中读取
-  const protocol = device.cli_protocol || (cliConfig.cli_protocol as string) || 'none'
-  const telnetConfig = device.telnet_config || (cliConfig.telnet_config as Record<string, any>)
-  const sshConfig = device.ssh_config || (cliConfig.ssh_config as Record<string, any>)
-
-  const protocolLabel =
-    protocol === 'ssh' ? 'SSH' :
-    protocol === 'telnet' ? 'Telnet' :
-    '未使用 CLI'
+  const protocol = device.cli_protocol ?? 'none'
+  const sshConfig = device.ssh_config
+  const telnetConfig = device.telnet_config
 
   if (protocol === 'ssh') {
-    const username = device.ssh_username || sshConfig?.username
-    const port = sshConfig?.port || device.ssh_config?.port || device.ssh_port || 22
     return {
-      protocolLabel,
-      username: username || '未配置',
-      port: port ?? 22,
-      password: (device.ssh_password || sshConfig?.password) ? '******' : '未配置'
+      protocolLabel: 'SSH',
+      username: device.ssh_username || sshConfig?.username || '未配置',
+      port: sshConfig?.port || device.ssh_port || 22,
+      credentialStatus: formatConfigured(sshConfig?.password_configured || sshConfig?.private_key_configured),
+      extraLabel: sshConfig?.use_key_auth ? '私钥状态' : '密码状态',
+      extraValue: sshConfig?.use_key_auth
+        ? formatConfigured(sshConfig?.private_key_configured)
+        : formatConfigured(sshConfig?.password_configured),
     }
   }
 
   if (protocol === 'telnet') {
-    const username = telnetConfig?.username || '未配置'
-    const port = telnetConfig?.port ?? 23
-    const password = telnetConfig?.password ? '******' : '未配置'
-    const enable = telnetConfig?.enable_password ? '******' : '未配置'
     return {
-      protocolLabel,
-      username,
-      port,
-      password,
-      enable
+      protocolLabel: 'Telnet',
+      username: telnetConfig?.username || '未配置',
+      port: telnetConfig?.port ?? 23,
+      credentialStatus: formatConfigured(telnetConfig?.password_configured || telnetConfig?.enable_password_configured),
+      extraLabel: 'Enable 状态',
+      extraValue: formatConfigured(telnetConfig?.enable_password_configured),
     }
   }
 
   return {
-    protocolLabel,
+    protocolLabel: '未使用 CLI',
     username: '未使用 CLI',
     port: '-',
-    password: '未使用 CLI'
+    credentialStatus: '未使用 CLI',
+    extraLabel: '凭据状态',
+    extraValue: '未使用 CLI',
+  }
+}
+
+const getSnmpConfiguration = (device: Device) => {
+  const version = device.snmp_config?.version ?? (device.snmp_version === '3' ? 'v3' : 'v2c')
+  const port = device.snmp_config?.port ?? 161
+
+  if (version === 'v3') {
+    return {
+      versionLabel: 'SNMPv3',
+      port,
+      credentialStatus: formatConfigured(
+        device.snmp_config?.v3_config?.auth_password_configured ||
+        device.snmp_config?.v3_config?.priv_password_configured ||
+        !!device.snmp_config?.v3_config?.username,
+      ),
+      extraLabel: '安全级别',
+      extraValue: device.snmp_config?.v3_config?.security_level ?? 'noAuthNoPriv',
+    }
+  }
+
+  return {
+    versionLabel: 'SNMPv2c',
+    port,
+    credentialStatus: formatConfigured(
+      device.snmp_config?.v2c_config?.community_configured ||
+      device.snmp_config?.v2c_config?.write_community_configured,
+    ),
+    extraLabel: '写凭据状态',
+    extraValue: formatConfigured(device.snmp_config?.v2c_config?.write_community_configured),
   }
 }
 
@@ -92,8 +141,69 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
   isOpen,
   device,
   loading,
-  onClose
+  onClose,
 }) => {
+  const [healthLoading, setHealthLoading] = React.useState(false)
+  const [healthResult, setHealthResult] = React.useState<Record<string, unknown> | null>(null)
+  const [healthError, setHealthError] = React.useState<string | null>(null)
+  const [timeRange, setTimeRange] = React.useState('24h')
+  const [performanceLoading, setPerformanceLoading] = React.useState(false)
+  const [performanceError, setPerformanceError] = React.useState<string | null>(null)
+  const [performanceData, setPerformanceData] = React.useState<Record<string, unknown> | null>(null)
+
+  React.useEffect(() => {
+    if (!isOpen || !device) {
+      setHealthResult(null)
+      setHealthError(null)
+      setPerformanceData(null)
+      setPerformanceError(null)
+      setTimeRange('24h')
+      return
+    }
+
+    let cancelled = false
+    setPerformanceLoading(true)
+    setPerformanceError(null)
+
+    fetchDevicePerformance(device.id, timeRange)
+      .then((result) => {
+        if (!cancelled) {
+          setPerformanceData(result)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : '加载性能数据失败'
+          setPerformanceError(message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPerformanceLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [device, isOpen, timeRange])
+
+  const handleHealthCheck = async () => {
+    if (!device) return
+
+    setHealthLoading(true)
+    setHealthError(null)
+    try {
+      const result = await healthCheckDevice(device.id)
+      setHealthResult(result)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '健康检查失败'
+      setHealthError(message)
+    } finally {
+      setHealthLoading(false)
+    }
+  }
+
   const renderContent = () => {
     if (loading) {
       return <div className="py-10 text-center text-muted-foreground">正在加载设备信息...</div>
@@ -104,8 +214,12 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
     }
 
     const cliInfo = getCliConfiguration(device)
-    const snmpRead = device.snmp_config?.v2c_config?.community ?? device.snmp_community ?? '未配置'
-    const snmpWrite = device.snmp_config?.v2c_config?.write_community ?? '未配置'
+    const snmpInfo = getSnmpConfiguration(device)
+    const currentMetrics = (performanceData?.current ?? {}) as Record<string, unknown>
+    const history = Array.isArray(performanceData?.history) ? performanceData?.history : []
+    const currentCpu = toNumber(currentMetrics.cpu_usage) ?? device.cpu_usage ?? null
+    const currentMemory = toNumber(currentMetrics.memory_usage) ?? device.memory_usage ?? null
+    const currentTemperature = toNumber(currentMetrics.temperature) ?? null
 
     return (
       <div className="space-y-6">
@@ -124,8 +238,8 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
           <InfoRow label="运行状态" value={<Badge variant="outline">{device.status}</Badge>} />
           <InfoRow label="IP 地址" value={device.ip} />
           <InfoRow label="所在位置" value={device.location || '未设置'} />
-          <InfoRow label="CPU 使用率" value={formatPercentageValue(device.cpu_usage)} />
-          <InfoRow label="内存使用率" value={formatPercentageValue(device.memory_usage)} />
+          <InfoRow label="CPU 使用率" value={formatPercentageValue(currentCpu)} />
+          <InfoRow label="内存使用率" value={formatPercentageValue(currentMemory)} />
           <InfoRow label="最近在线时间" value={formatLastSeen(device.last_seen)} />
           <InfoRow label="累计告警" value={device.alert_count ?? 0} />
         </div>
@@ -133,13 +247,69 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
         <div className="border rounded-xl p-4 bg-muted/40">
           <p className="text-sm font-semibold text-foreground/90 mb-2">连接配置</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-muted-foreground">
-            <InfoRow label="SNMP 只读团体字" value={snmpRead} />
-            <InfoRow label="SNMP 读写团体字" value={snmpWrite} />
+            <InfoRow label="SNMP 版本" value={snmpInfo.versionLabel} />
+            <InfoRow label="SNMP 端口" value={snmpInfo.port} />
+            <InfoRow label="SNMP 凭据状态" value={snmpInfo.credentialStatus} />
+            <InfoRow label={snmpInfo.extraLabel} value={snmpInfo.extraValue} />
             <InfoRow label="连接协议" value={cliInfo.protocolLabel} />
             <InfoRow label="CLI 用户名" value={cliInfo.username} />
-            <InfoRow label="CLI 密码" value={cliInfo.password} />
+            <InfoRow label="CLI 凭据状态" value={cliInfo.credentialStatus} />
             <InfoRow label="CLI 端口" value={cliInfo.port} />
-            {cliInfo.enable && <InfoRow label="Enable 密码" value={cliInfo.enable} />}
+            <InfoRow label={cliInfo.extraLabel} value={cliInfo.extraValue} />
+          </div>
+        </div>
+
+        <div className="border rounded-xl p-4 bg-muted/40 space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground/90">健康检查与性能</p>
+              <p className="text-xs text-muted-foreground">查看实时连通性与设备性能快照</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={timeRange} onValueChange={setTimeRange}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="选择时间范围" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PERFORMANCE_RANGES.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={handleHealthCheck} disabled={healthLoading}>
+                {healthLoading ? '检查中...' : '执行健康检查'}
+              </Button>
+            </div>
+          </div>
+
+          {healthError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {healthError}
+            </div>
+          )}
+
+          {healthResult && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <InfoRow label="健康状态" value={String(healthResult.status ?? '未知')} />
+              <InfoRow label="检查时间" value={formatLastSeen(String(healthResult.probed_at ?? ''))} />
+              <InfoRow label="ICMP 连通性" value={healthResult.icmp_reachable ? '在线' : '离线'} />
+              <InfoRow label="SNMP 连通性" value={healthResult.snmp_reachable ? '成功' : '失败'} />
+            </div>
+          )}
+
+          {performanceError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {performanceError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <InfoRow label="当前 CPU" value={performanceLoading ? '加载中...' : formatPercentageValue(currentCpu)} />
+            <InfoRow label="当前内存" value={performanceLoading ? '加载中...' : formatPercentageValue(currentMemory)} />
+            <InfoRow label="当前温度" value={performanceLoading ? '加载中...' : (currentTemperature != null ? `${currentTemperature.toFixed(1)}°C` : '-')} />
+            <InfoRow label="性能点数" value={performanceLoading ? '加载中...' : history.length} />
           </div>
         </div>
       </div>
@@ -147,7 +317,7 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
   }
 
   return (
-    <SimpleModal open={isOpen} onClose={onClose} title="设备详情" size="3xl">
+    <SimpleModal open={isOpen} onClose={onClose} title="设备详情" size="4xl">
       {renderContent()}
     </SimpleModal>
   )

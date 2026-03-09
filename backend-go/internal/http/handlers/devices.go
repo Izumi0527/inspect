@@ -1114,6 +1114,14 @@ func buildDeviceUpdates(payload map[string]interface{}) map[string]interface{} {
 		}
 	}
 
+	if value, ok := payload["snmp_port"]; ok {
+		if value == nil {
+			updates["snmp_port"] = nil
+		} else if num, ok := value.(float64); ok {
+			updates["snmp_port"] = int(num)
+		}
+	}
+
 	if value, ok := payload["telnet_port"]; ok {
 		if value == nil {
 			updates["telnet_port"] = nil

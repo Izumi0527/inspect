@@ -6,6 +6,7 @@ require (
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/your-org/inspect-system/backend-go v0.0.0
 	go.uber.org/zap v1.27.0
+	gorm.io/datatypes v1.2.4
 	gorm.io/gorm v1.25.12
 )
 
@@ -49,7 +50,6 @@ require (
 	golang.org/x/net v0.24.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
-	gorm.io/datatypes v1.2.4 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect
 )
 

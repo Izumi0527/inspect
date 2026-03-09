@@ -4,7 +4,7 @@ import React from 'react'
 import { SimpleModal } from '@/components/atoms'
 import { Device } from '../types'
 import { DeviceForm } from './DeviceForm'
-import { mapFormDataToApiPayload, buildFormInitialData, DevicePayload } from '../utils/deviceFormMapper'
+import { mapFormDataToUpdatePayload, buildFormInitialData, DevicePayload } from '../utils/deviceFormMapper'
 
 interface EditDeviceModalProps {
   isOpen: boolean
@@ -30,7 +30,7 @@ export const EditDeviceModal: React.FC<EditDeviceModalProps> = ({
           initialData={initialData}
           loading={loading}
           onSubmit={async (formData) => {
-            const payload = mapFormDataToApiPayload(formData)
+            const payload = mapFormDataToUpdatePayload(formData)
             await onSubmit(device.id, payload)
             onClose()
           }}
