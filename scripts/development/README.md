@@ -530,14 +530,14 @@ go build ./cmd/api
 如果遇到 `service refers to undefined network` 错误：
 
 ```powershell
-# 脚本会自动处理，使用正确的配置文件组合
-# 如果仍有问题，手动启动：
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
+# 脚本会自动处理，使用当前推荐的开发 Compose 配置
+# 如果仍有问题，可手动仅启动数据库：
+docker-compose -f docker-compose.dev.yml up -d postgres redis
 ```
 
-**根本原因**: `docker-compose.dev.yml` 中的服务引用了 `inspect_network` 网络，但该网络只在 `docker-compose.yml` 中定义。
+**常见原因**: 使用了旧版配置或本地仍在按“基础 + 覆盖”方式组合启动。
 
-**解决方案**: 脚本已修复为同时使用两个配置文件，并提供回退机制。
+**解决方案**: 统一使用 `docker-compose.dev.yml`（该文件已包含完整网络定义）。
 
 ### 数据库已运行但脚本报错
 
@@ -673,7 +673,7 @@ docker exec inspect-redis-dev redis-cli -a dev_redis_2024 ping
 - ✅ 数据库状态测试 (test-db-status.ps1) - 快速检查数据库
 
 **修复问题**:
-- ✅ Docker Compose 网络配置问题 - 正确使用配置文件组合
+- ✅ Docker Compose 网络配置问题 - 使用单文件完整配置
 - ✅ 后端启动脚本依赖问题 - 直接使用 go run
 - ✅ 错误处理和回退机制 - 完善的错误处理
 
@@ -689,15 +689,12 @@ docker exec inspect-redis-dev redis-cli -a dev_redis_2024 ping
 
 **问题**: 运行时出现 `service refers to undefined network inspect_network` 错误
 
-**原因**: `docker-compose.dev.yml` 引用了只在 `docker-compose.yml` 中定义的网络
+**原因**: 使用了旧版启动方式或本地仍在引用已删除的 `docker-compose.yml`
 
 **解决方案**:
 ```powershell
-# 修复前
+# 推荐用法（单文件完整配置）
 docker-compose -f docker-compose.dev.yml up -d
-
-# 修复后
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
 ```
 
 #### 2. 智能数据库检测
@@ -804,7 +801,7 @@ PS> .\dev-start.ps1
 
 ```powershell
 # 问题 1: Docker Compose 错误
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
+docker-compose -f docker-compose.dev.yml up -d postgres redis
 
 # 问题 2: 数据库状态检查
 .\scripts\development\test-db-status.ps1

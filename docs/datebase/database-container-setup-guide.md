@@ -35,16 +35,16 @@
 
 ```powershell
 # 1. 拉取镜像
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml pull postgres redis
+docker-compose -f docker-compose.dev.yml pull postgres redis
 
 # 2. 创建并启动容器
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
+docker-compose -f docker-compose.dev.yml up -d postgres redis
 
 # 3. 查看容器状态
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml ps
+docker-compose -f docker-compose.dev.yml ps
 
 # 4. 查看日志
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f postgres redis
+docker-compose -f docker-compose.dev.yml logs -f postgres redis
 ```
 
 ## 📦 容器配置详情
@@ -113,7 +113,7 @@ redis://:dev_redis_2024@localhost:16379/0
 
 ```powershell
 # 查看容器运行状态
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml ps
+docker-compose -f docker-compose.dev.yml ps
 
 # 预期输出：
 # NAME                    STATUS              PORTS
@@ -207,7 +207,7 @@ docker exec -i inspect-postgres-dev psql -U inspect_dev inspect_system_dev < bac
 
 # Redis 恢复
 docker cp backups/redis/dump.rdb inspect-redis-dev:/data/dump.rdb
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml restart redis
+docker-compose -f docker-compose.dev.yml restart redis
 ```
 
 ## 🔍 常用管理命令
@@ -216,29 +216,29 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml restart redis
 
 ```powershell
 # 启动容器
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
+docker-compose -f docker-compose.dev.yml up -d postgres redis
 
 # 停止容器
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml stop postgres redis
+docker-compose -f docker-compose.dev.yml stop postgres redis
 
 # 重启容器
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml restart postgres redis
+docker-compose -f docker-compose.dev.yml restart postgres redis
 
 # 删除容器（保留数据）
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml down
+docker-compose -f docker-compose.dev.yml down
 
 # 删除容器和数据卷
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml down -v
+docker-compose -f docker-compose.dev.yml down -v
 ```
 
 ### 日志查看
 
 ```powershell
 # 查看实时日志
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f postgres redis
+docker-compose -f docker-compose.dev.yml logs -f postgres redis
 
 # 查看最近 100 行日志
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 postgres redis
+docker-compose -f docker-compose.dev.yml logs --tail=100 postgres redis
 
 # 查看特定容器日志
 docker logs inspect-postgres-dev
@@ -267,7 +267,7 @@ docker exec -it inspect-redis-dev redis-cli -a dev_redis_2024
 
 ```powershell
 # 查看详细错误
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs postgres redis
+docker-compose -f docker-compose.dev.yml logs postgres redis
 
 # 检查端口占用
 netstat -ano | findstr "15500 16379"
@@ -299,7 +299,7 @@ docker inspect inspect-redis-dev | findstr Health
 docker network inspect inspect_network
 
 # 重启容器
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml restart postgres redis
+docker-compose -f docker-compose.dev.yml restart postgres redis
 ```
 
 ### 问题 4: TimescaleDB 扩展未加载

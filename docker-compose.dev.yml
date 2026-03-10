@@ -10,9 +10,6 @@
 networks:
   inspect_network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
 
 # ===== 服务定义 =====
 services:
@@ -31,7 +28,7 @@ services:
       - ./config/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     ports:
-      - "15500:5432"
+      - "${POSTGRES_HOST_PORT:-15500}:5432"
     networks:
       - inspect_network
     restart: unless-stopped
@@ -50,7 +47,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "16379:6379"
+      - "${REDIS_HOST_PORT:-16379}:6379"
     networks:
       - inspect_network
     restart: unless-stopped
@@ -96,7 +93,7 @@ services:
       REFRESH_TOKEN_EXPIRE_DAYS: 30
 
       # CORS 配置
-      CORS_ORIGINS: '["http://localhost:3000", "http://127.0.0.1:3000"]'
+      CORS_ORIGINS: '["http://localhost:${FRONTEND_HOST_PORT:-4000}", "http://127.0.0.1:${FRONTEND_HOST_PORT:-4000}"]'
       ALLOWED_HOSTS: '["*"]'
 
       # 报表配置
@@ -120,7 +117,7 @@ services:
       - inspect_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -144,13 +141,19 @@ services:
       - /app/node_modules
       - /app/.next
     ports:
-      - "3000:3000"
+      - "${FRONTEND_HOST_PORT:-4000}:3000"
     depends_on:
       - backend
     networks:
       - inspect_network
     restart: unless-stopped
-    command: pnpm dev
+    command: sh -lc "pnpm install && pnpm dev"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # ===== pgAdmin 数据库管理工具 =====
   pgadmin:

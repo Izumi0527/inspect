@@ -101,8 +101,9 @@ foreach ($container in $containers) {
 Write-Host "`n📄 检查配置文件..." -ForegroundColor Blue
 
 $configFiles = @(
-    @{ Name = "docker-compose.yml"; Path = "docker-compose.yml" },
     @{ Name = "docker-compose.dev.yml"; Path = "docker-compose.dev.yml" },
+    @{ Name = "docker-compose.prod.yml"; Path = "docker-compose.prod.yml" },
+    @{ Name = "docker-compose.yml (旧版/已迁移)"; Path = "docker-compose.yml" },
     @{ Name = ".env"; Path = ".env" },
     @{ Name = ".env.development"; Path = ".env.development" },
     @{ Name = "frontend/.env.local"; Path = "frontend/.env.local" }

@@ -56,7 +56,7 @@ pnpm --version
 ### 方式 1：Docker（推荐）
 
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+docker-compose -f docker-compose.dev.yml up -d
 ```
 
 此模式会启动数据库、后端、前端等完整服务。
@@ -65,7 +65,7 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 1. 启动数据库
    ```bash
-   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
+   docker-compose -f docker-compose.dev.yml up -d postgres redis
    ```
 
 2. 启动后端
@@ -92,7 +92,7 @@ curl http://localhost:8000/health
 curl http://localhost:3000
 
 # 数据库
-psql -h localhost -p 15432 -U inspect_dev -d inspect_system_dev
+psql -h localhost -p 15500 -U inspect_dev -d inspect_system_dev
 ```
 
 ## 环境变量配置
@@ -102,7 +102,7 @@ psql -h localhost -p 15432 -U inspect_dev -d inspect_system_dev
 ```env
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8000
-DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15432/inspect_system_dev
+DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 REDIS_URL=redis://:dev_redis_2024@localhost:16379/0
 DB_AUTO_MIGRATE=true
 TIMESCALE_ENABLED=true
@@ -126,10 +126,10 @@ curl -I https://registry-1.docker.io
 
 ```bash
 # Windows
-netstat -an | findstr :15432
+netstat -an | findstr :15500
 
 # Linux/macOS
-lsof -i :15432
+lsof -i :15500
 ```
 
 ## 常用脚本

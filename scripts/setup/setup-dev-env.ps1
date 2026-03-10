@@ -284,7 +284,7 @@ function Show-SetupSummary {
     Write-ColorOutput "  后端: cd backend-go && go run ./cmd/api" "White"
     
     Write-ColorOutput "`n🛠️ 常用命令:" "Blue"
-    Write-ColorOutput "  数据库管理: .\scripts\db-manage.ps1 [start|stop|reset|backup]" "White"
+    Write-ColorOutput "  数据库管理: .\scripts\database\db-manage.ps1 [start|stop|reset|backup]" "White"
     Write-ColorOutput "  代码质量检查: .\scripts\quality-check.ps1" "White"
     Write-ColorOutput "  运行测试: .\scripts\run-tests.ps1" "White"
     

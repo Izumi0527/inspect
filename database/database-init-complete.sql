@@ -20,25 +20,16 @@ CREATE EXTENSION IF NOT EXISTS "timescaledb";
 -- 设置时区
 SET timezone = 'Asia/Shanghai';
 
--- 创建应用用户（如果不存在）
-DO
-$$
+-- 注意：数据库用户/数据库名由容器环境变量 POSTGRES_USER / POSTGRES_DB 决定
+-- 为避免 dev/prod 初始化冲突，这里不再硬编码特定用户名或库名
+
+-- 设置数据库级默认参数（对当前数据库生效）
+DO $$
 BEGIN
-   IF NOT EXISTS (
-      SELECT FROM pg_catalog.pg_roles  
-      WHERE rolname = 'inspect_dev') THEN
-      
-      CREATE ROLE inspect_dev LOGIN PASSWORD 'dev_password_2024';
-   END IF;
+    EXECUTE format('ALTER DATABASE %I SET default_transaction_isolation TO %L', current_database(), 'read committed');
+    EXECUTE format('ALTER DATABASE %I SET timezone TO %L', current_database(), 'Asia/Shanghai');
 END
 $$;
-
--- 授予权限
-GRANT ALL PRIVILEGES ON DATABASE inspect_system_dev TO inspect_dev;
-
--- 设置连接池默认参数
-ALTER DATABASE inspect_system_dev SET default_transaction_isolation TO 'read committed';
-ALTER DATABASE inspect_system_dev SET timezone TO 'Asia/Shanghai';
 
 -- 创建审计日志函数（为后续功能准备）
 CREATE OR REPLACE FUNCTION audit_trigger_row()
@@ -558,8 +549,8 @@ ON CONFLICT DO NOTHING;
 -- ==========================================
 SELECT 
     'Database initialization completed at ' || NOW() as status,
-    'inspect_system_dev' as database_name,
-    'inspect_dev' as user_name,
+    current_database() as database_name,
+    current_user as user_name,
     'TimescaleDB enabled with compression and retention policies' as timescaledb_status,
     'Built-in inspection templates loaded' as templates_status,
     'Bandwidth units migrated to Mbps' as migration_status,

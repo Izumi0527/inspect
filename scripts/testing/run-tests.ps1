@@ -367,7 +367,7 @@ function Invoke-IntegrationTests {
             $dbStatus = docker-compose ps --services --filter "status=running" 2>$null
             if (-not $dbStatus) {
                 Write-ColorOutput "?? 数据库服务未运行，启动测试数据库..." "Yellow"
-                & ".\scripts\db-manage.ps1" start
+                & ".\scripts\database\db-manage.ps1" start
                 Start-Sleep -Seconds 10
             }
         }

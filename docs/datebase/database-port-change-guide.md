@@ -17,10 +17,10 @@
 
 ```powershell
 # 停止所有服务
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml down
+docker-compose -f docker-compose.dev.yml down
 
 # 或者只停止数据库服务
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml stop postgres redis
+docker-compose -f docker-compose.dev.yml stop postgres redis
 ```
 
 ### 2. 修改配置文件
@@ -54,17 +54,17 @@ REDIS_URL=redis://:dev_redis_2024@localhost:16379/0
 
 ```powershell
 # 启动所有服务
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+docker-compose -f docker-compose.dev.yml up -d
 
 # 或者只启动数据库服务
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
+docker-compose -f docker-compose.dev.yml up -d postgres redis
 ```
 
 ### 4. 验证端口变更
 
 ```powershell
 # 检查容器状态
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml ps
+docker-compose -f docker-compose.dev.yml ps
 
 # 检查端口监听
 netstat -an | findstr "15500 16379"
@@ -83,23 +83,23 @@ docker exec inspect-redis-dev redis-cli -a dev_redis_2024 ping
 
 # 1. 停止服务
 Write-Host "停止现有服务..." -ForegroundColor Yellow
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml down
+docker-compose -f docker-compose.dev.yml down
 
 # 2. 备份数据（可选但推荐）
 Write-Host "备份数据库..." -ForegroundColor Yellow
 # PostgreSQL 备份
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+docker-compose -f docker-compose.dev.yml up -d postgres
 Start-Sleep -Seconds 5
 docker exec inspect-postgres-dev pg_dump -U inspect_dev inspect_system_dev > backups/postgres/backup_before_port_change.sql
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml stop postgres
+docker-compose -f docker-compose.dev.yml stop postgres
 
 # 3. 清理旧容器（如果需要）
 Write-Host "清理旧容器..." -ForegroundColor Yellow
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml rm -f postgres redis
+docker-compose -f docker-compose.dev.yml rm -f postgres redis
 
 # 4. 启动服务（使用新端口）
 Write-Host "启动服务（新端口）..." -ForegroundColor Green
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+docker-compose -f docker-compose.dev.yml up -d
 
 # 5. 等待服务就绪
 Write-Host "等待服务就绪..." -ForegroundColor Yellow
@@ -126,7 +126,7 @@ if ($redisTest -eq "PONG") {
 
 # 7. 显示服务信息
 Write-Host "`n📊 服务信息:" -ForegroundColor Cyan
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml ps
+docker-compose -f docker-compose.dev.yml ps
 
 Write-Host "`n🔌 端口映射:" -ForegroundColor Cyan
 Write-Host "  PostgreSQL: localhost:15500 -> container:5432" -ForegroundColor White
@@ -182,8 +182,8 @@ Stop-Process -Id <PID> -Force
 
 ```powershell
 # 查看容器日志
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs postgres
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs redis
+docker-compose -f docker-compose.dev.yml logs postgres
+docker-compose -f docker-compose.dev.yml logs redis
 
 # 查看详细错误
 docker logs inspect-postgres-dev
@@ -200,7 +200,7 @@ docker ps -a | findstr "inspect-postgres\|inspect-redis"
 docker network inspect inspect_network
 
 # 重启容器
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml restart postgres redis
+docker-compose -f docker-compose.dev.yml restart postgres redis
 ```
 
 ### 数据丢失
@@ -211,7 +211,7 @@ docker exec -i inspect-postgres-dev psql -U inspect_dev inspect_system_dev < bac
 
 # 恢复 Redis 备份（如果有 RDB 文件）
 docker cp backups/redis/dump.rdb inspect-redis-dev:/data/
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml restart redis
+docker-compose -f docker-compose.dev.yml restart redis
 ```
 
 ## 📚 相关文件清单
@@ -242,13 +242,13 @@ docker-compose -f docker-compose.yml -f docker-compose.dev.yml restart redis
 
 ```powershell
 # 重启数据库服务
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml restart postgres redis
+docker-compose -f docker-compose.dev.yml restart postgres redis
 
 # 查看服务状态
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml ps
+docker-compose -f docker-compose.dev.yml ps
 
 # 查看实时日志
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml logs -f postgres redis
+docker-compose -f docker-compose.dev.yml logs -f postgres redis
 
 # 进入容器
 docker exec -it inspect-postgres-dev bash

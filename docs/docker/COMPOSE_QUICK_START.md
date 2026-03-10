@@ -28,7 +28,7 @@ docker-compose -f docker-compose.dev.yml --profile tools up -d
 ```
 
 ### 访问地址
-- 前端: http://localhost:3000
+- 前端: http://localhost:4000（可通过 FRONTEND_HOST_PORT 调整）
 - 后端: http://localhost:8001
 - pgAdmin: http://localhost:5050
 - Redis Commander: http://localhost:8081
@@ -98,7 +98,7 @@ docker system prune -a
 | postgres | 15500 | default | TimescaleDB |
 | redis | 16379 | default | Redis 缓存 |
 | backend | 8001 | default | Go 后端 |
-| frontend | 3000 | default | Next.js 前端 |
+| frontend | 4000 | default | Next.js 前端（可通过 FRONTEND_HOST_PORT 调整） |
 | pgadmin | 5050 | tools | 数据库管理 |
 | redis-commander | 8081 | tools | Redis 管理 |
 

@@ -35,7 +35,7 @@ REDIS_URL=redis://:password@host:6379/0
 ### Docker（开发/测试）
 
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
+docker-compose -f docker-compose.dev.yml up -d postgres redis
 ```
 
 ### 生产环境（示例）

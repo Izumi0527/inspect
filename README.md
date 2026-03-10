@@ -182,7 +182,7 @@ services:
     volumes: ["./backend-go:/app"]
     
   frontend:         # Next.js前端 (开发模式)
-    ports: ["3000:3000"]
+    ports: ["4000:3000"]
     volumes: ["./frontend:/app"]
     
   postgres:         # TimescaleDB数据库
@@ -339,7 +339,7 @@ docker-compose -f docker-compose.dev.yml --profile tools up -d
 docker-compose -f docker-compose.dev.yml ps
 
 # 访问地址:
-# 前端: http://localhost:3000
+# 前端: http://localhost:4000
 # 后端: http://localhost:8001
 # pgAdmin: http://localhost:5050 (需启动 tools profile)
 # Redis Commander: http://localhost:8081 (需启动 tools profile)
@@ -929,12 +929,10 @@ inspect-system/
 ├── config/                    # 配置文件
 ├── backups/                   # 备份目录
 ├── logs/                      # 日志目录
-├── docker-compose.yml         # 基础服务配置
 ├── docker-compose.dev.yml     # 开发环境配置
 ├── docker-compose.prod.yml    # 生产环境配置
 ├── .env.example               # 环境变量模板
-├── .env.development           # 开发环境变量
-├── .env.production            # 生产环境变量
+├── .env                       # 本地环境变量（git忽略）
 └── README.md                  # 项目说明文档
 ```
 
@@ -1033,5 +1031,3 @@ Made with ❤️ by Development Team
 **项目版本**: v1.0.0 | **API版本**: v1.1 | **最后更新**: 2026-01-14
 
 </div>
-
-

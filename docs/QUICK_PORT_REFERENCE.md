@@ -6,8 +6,8 @@
 
 | 服务 | 端口 | 协议 | 说明 |
 |------|------|------|------|
-| 前端应用 | 3000 | HTTP | Next.js 开发服务器 |
-| 后端 API | 8000 | HTTP/WebSocket | Go API 服务 |
+| 前端应用 | **4000** | HTTP | Next.js（宿主机端口，可通过 FRONTEND_HOST_PORT 调整） |
+| 后端 API | **8001** | HTTP/WebSocket | Go API（宿主机端口，容器内为 8000） |
 | Syslog 接收 | 5514 | TCP/UDP | 设备 Syslog 上报（UDP+TCP），用于日志中心与告警联动 |
 | PostgreSQL | **15500** | TCP | TimescaleDB 数据库 |
 | Redis | 16379 | TCP | 缓存服务 |
@@ -24,10 +24,10 @@
 ### Web 服务
 
 ```
-前端应用:     http://localhost:3000
-后端 API:     http://localhost:8000
-健康检查:     http://localhost:8000/health
-WebSocket:    ws://localhost:8000
+前端应用:     http://localhost:4000
+后端 API:     http://localhost:8001
+健康检查:     http://localhost:8001/health
+WebSocket:    ws://localhost:8001
 pgAdmin:      http://localhost:5050
 Redis管理:    http://localhost:8081
 ```
@@ -62,7 +62,7 @@ redis://:dev_redis_2024@localhost:16379/0
 
 ```powershell
 # Windows
-netstat -ano | findstr "3000 8000 5514 15500 16379"
+netstat -ano | findstr "4000 8001 5514 15500 16379"
 
 # 查看具体端口
 netstat -ano | findstr "15500"
@@ -126,7 +126,7 @@ docker logs inspect-postgres-dev
 docker logs inspect-redis-dev
 
 # 重启容器
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml restart postgres redis
+docker-compose -f docker-compose.dev.yml restart postgres redis
 ```
 
 ### Windows 端口保留问题

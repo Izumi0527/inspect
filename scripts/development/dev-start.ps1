@@ -198,39 +198,33 @@ function Start-DatabaseServices {
         Write-ColorOutput "将启动缺失的服务..." "Yellow"
     }
     
-    # 检查 Docker Compose 文件
-    $baseComposeFile = "docker-compose.yml"
+    # 检查 Docker Compose 文件（已迁移为“单文件完整配置”）
     $devComposeFile = "docker-compose.dev.yml"
-    
-    if (-not (Test-Path $baseComposeFile)) {
-        throw "未找到基础配置文件: $baseComposeFile"
+    $legacyComposeFile = "docker-compose.yml"
+
+    $composeFile = $null
+    if (Test-Path $devComposeFile) {
+        $composeFile = $devComposeFile
+    } elseif (Test-Path $legacyComposeFile) {
+        # 兼容旧结构（如历史分支/本地遗留文件）
+        $composeFile = $legacyComposeFile
+        Write-ColorOutput "⚠️ 检测到旧版配置文件: $legacyComposeFile（建议迁移到 docker-compose.dev.yml）" "Yellow"
+    } else {
+        throw "未找到 Docker Compose 配置文件: $devComposeFile"
     }
-    
-    if (-not (Test-Path $devComposeFile)) {
-        throw "未找到开发配置文件: $devComposeFile"
-    }
-    
-    Write-ColorOutput "使用配置文件: $baseComposeFile + $devComposeFile" "Gray"
-    
+
+    Write-ColorOutput "使用配置文件: $composeFile" "Gray"
+
     # 启动数据库服务（只启动 postgres 和 redis，不启动其他服务）
     try {
         Write-ColorOutput "🔄 启动数据库容器..." "Cyan"
-        $composeCmd = "docker-compose -f $baseComposeFile -f $devComposeFile up -d postgres redis"
+        $composeCmd = "docker-compose -f $composeFile up -d postgres redis"
         $result = Invoke-Expression $composeCmd 2>&1
         
         if ($LASTEXITCODE -eq 0) {
             Write-ColorOutput "✅ 数据库容器启动成功" "Green"
         } else {
-            # 如果失败，尝试只使用基础配置文件
-            Write-ColorOutput "⚠️ 使用完整配置启动失败，尝试使用基础配置..." "Yellow"
-            $composeCmd = "docker-compose -f $baseComposeFile up -d postgres redis"
-            $result = Invoke-Expression $composeCmd 2>&1
-            
-            if ($LASTEXITCODE -eq 0) {
-                Write-ColorOutput "✅ 数据库容器启动成功（使用基础配置）" "Green"
-            } else {
-                throw "数据库容器启动失败: $result"
-            }
+            throw "数据库容器启动失败: $result"
         }
     }
     catch {

@@ -44,7 +44,7 @@ REDIS_URL=redis://:dev_redis_2024@localhost:16379/0
 ./scripts/development/dev-start.ps1
 
 # 或仅启动数据库容器
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres redis
+docker-compose -f docker-compose.dev.yml up -d postgres redis
 ```
 
 ## TimescaleDB 初始化

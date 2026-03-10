@@ -48,7 +48,7 @@ scripts/database/
 - `README.md` - 主项目文档
 - `README-inspection-templates.md` - 数据库文档
 - `db-manage.ps1` - 数据库管理脚本
-- `docker-compose.yml` - Docker配置
+- `docker-compose.dev.yml` / `docker-compose.prod.yml` - Docker Compose 配置
 - 所有测试相关文件 (15+ 个文件)
 
 ## 🔍 验证结果
