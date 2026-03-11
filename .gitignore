@@ -379,3 +379,5 @@ backend/data/reports/*
 /backend-go/backend-go/
 
 AGENTS.md
+.pnpm-store/
+.gocache/

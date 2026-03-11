@@ -334,6 +334,54 @@ NEXT_PUBLIC_ENV=development
     Write-ColorOutput "✅ 前端服务已在新窗口中启动" "Green"
 }
 
+# 获取 Docker 容器映射到宿主机的端口（优先使用实际映射，其次读取环境变量，最后使用默认值）
+function Get-HostPort {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ContainerName,
+
+        [Parameter(Mandatory = $true)]
+        [int]$ContainerPort,
+
+        [Parameter(Mandatory = $true)]
+        [string]$EnvVarName,
+
+        [Parameter(Mandatory = $true)]
+        [int]$DefaultPort
+    )
+
+    # 1) 优先从当前 Docker 实际端口映射中解析（避免环境变量未同步导致显示错误）
+    try {
+        if (Get-Command "docker" -ErrorAction SilentlyContinue) {
+            $mapping = docker port $ContainerName "$ContainerPort/tcp" 2>$null
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($mapping)) {
+                foreach ($line in ($mapping -split "`r?`n")) {
+                    $trimmed = $line.Trim()
+                    if ($trimmed -match ":(\\d+)\\s*$") {
+                        return [int]$matches[1]
+                    }
+                }
+            }
+        }
+    } catch {
+        # 忽略解析失败，进入后续回退逻辑
+    }
+
+    # 2) 回退：读取环境变量（docker-compose.dev.yml 使用 POSTGRES_HOST_PORT/REDIS_HOST_PORT 覆盖）
+    try {
+        $raw = [System.Environment]::GetEnvironmentVariable($EnvVarName)
+        $parsed = 0
+        if (-not [string]::IsNullOrWhiteSpace($raw) -and [int]::TryParse($raw, [ref]$parsed)) {
+            return $parsed
+        }
+    } catch {
+        # 忽略
+    }
+
+    # 3) 最后回退：默认端口
+    return $DefaultPort
+}
+
 # 健康检查
 function Test-ServicesHealth {
     if ($SkipHealthCheck) {
@@ -343,9 +391,11 @@ function Test-ServicesHealth {
     Write-ColorOutput "`n🏥 服务健康检查..." "Blue"
     
     # 检查数据库服务
+    $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16379
     $dbServices = @(
-        @{ Name = "PostgreSQL"; Port = 15500; Host = "localhost" },
-        @{ Name = "Redis"; Port = 16379; Host = "localhost" }
+        @{ Name = "PostgreSQL"; Port = $postgresHostPort; Host = "localhost" },
+        @{ Name = "Redis"; Port = $redisHostPort; Host = "localhost" }
     )
     
     foreach ($service in $dbServices) {
@@ -416,6 +466,9 @@ function Test-ServicesHealth {
 
 # 显示服务信息
 function Show-ServiceInfo {
+    $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16379
+
     Write-ColorOutput "`n📊 开发环境服务信息:" "Blue"
     Write-ColorOutput "$('=' * 50)" "Cyan"
     
@@ -427,11 +480,11 @@ function Show-ServiceInfo {
     Write-ColorOutput "  🔌 WS 约定: docs/api/websocket-contract.md" "White"
     
     Write-ColorOutput "`n🗄️ 数据库服务:" "Blue"
-    Write-ColorOutput "  🐘 PostgreSQL: localhost:15500" "White"
+    Write-ColorOutput "  🐘 PostgreSQL: localhost:$postgresHostPort" "White"
     Write-ColorOutput "    - 数据库: inspect_system_dev" "Gray"
     Write-ColorOutput "    - 用户名: inspect_dev" "Gray"
     Write-ColorOutput "    - 密码: dev_password_2024" "Gray"
-    Write-ColorOutput "  🔴 Redis: localhost:16379" "White"
+    Write-ColorOutput "  🔴 Redis: localhost:$redisHostPort" "White"
     Write-ColorOutput "    - 密码: dev_redis_2024" "Gray"
     
     Write-ColorOutput "`n🔧 管理工具:" "Blue"

@@ -55,6 +55,9 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
+# 脚本根目录（避免在函数内使用 $MyInvocation 导致 Path 为 $null）
+$script:ScriptRoot = $PSScriptRoot
+
 # 颜色输出函数
 function Write-ColorOutput {
     param(
@@ -70,6 +73,8 @@ function Write-ColorOutput {
         "Cyan" = [ConsoleColor]::Cyan
         "Magenta" = [ConsoleColor]::Magenta
         "White" = [ConsoleColor]::White
+        "Gray" = [ConsoleColor]::DarkGray
+        "DarkGray" = [ConsoleColor]::DarkGray
     }
     
     Write-Host $Message -ForegroundColor $colorMap[$Color]
@@ -299,7 +304,7 @@ function Initialize-Database {
     Write-ColorOutput "`n🔧 初始化数据库..." "Blue"
     
     # 获取脚本路径
-    $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $scriptPath = $script:ScriptRoot
     $initScript = Join-Path $scriptPath "db-init-complete.ps1"
     
     if (-not (Test-Path $initScript)) {
@@ -361,14 +366,65 @@ function Show-ServiceLogs {
     }
 }
 
+# 获取 Docker 容器映射到宿主机的端口（优先使用实际映射，其次读取环境变量，最后使用默认值）
+function Get-HostPort {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ContainerName,
+
+        [Parameter(Mandatory = $true)]
+        [int]$ContainerPort,
+
+        [Parameter(Mandatory = $true)]
+        [string]$EnvVarName,
+
+        [Parameter(Mandatory = $true)]
+        [int]$DefaultPort
+    )
+
+    # 1) 优先从当前 Docker 实际端口映射中解析（避免环境变量未同步导致显示错误）
+    try {
+        if (Get-Command "docker" -ErrorAction SilentlyContinue) {
+            $mapping = docker port $ContainerName "$ContainerPort/tcp" 2>$null
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($mapping)) {
+                foreach ($line in ($mapping -split "`r?`n")) {
+                    $trimmed = $line.Trim()
+                    if ($trimmed -match ":(\\d+)\\s*$") {
+                        return [int]$matches[1]
+                    }
+                }
+            }
+        }
+    } catch {
+        # 忽略解析失败，进入后续回退逻辑
+    }
+
+    # 2) 回退：读取环境变量（docker-compose.dev.yml 使用 POSTGRES_HOST_PORT/REDIS_HOST_PORT 覆盖）
+    try {
+        $raw = [System.Environment]::GetEnvironmentVariable($EnvVarName)
+        $parsed = 0
+        if (-not [string]::IsNullOrWhiteSpace($raw) -and [int]::TryParse($raw, [ref]$parsed)) {
+            return $parsed
+        }
+    } catch {
+        # 忽略
+    }
+
+    # 3) 最后回退：默认端口
+    return $DefaultPort
+}
+
 # 显示服务信息
 function Show-ServiceInfo {
+    $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16379
+
     Write-ColorOutput "`n📊 服务访问地址:" "Blue"
-    Write-ColorOutput "  🗄️ PostgreSQL: localhost:15500" "White"
+    Write-ColorOutput "  🗄️ PostgreSQL: localhost:$postgresHostPort" "White"
     Write-ColorOutput "    - 用户名: inspect_dev" "Gray"
     Write-ColorOutput "    - 密码: dev_password_2024" "Gray"
     Write-ColorOutput "    - 数据库: inspect_system_dev" "Gray"
-    Write-ColorOutput "  🔴 Redis: localhost:16379" "White"
+    Write-ColorOutput "  🔴 Redis: localhost:$redisHostPort" "White"
     Write-ColorOutput "    - 密码: dev_redis_2024" "Gray"
     Write-ColorOutput "  🔧 pgAdmin: http://localhost:5050" "White"
     Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"

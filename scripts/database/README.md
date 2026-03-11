@@ -38,20 +38,30 @@
 ```
 
 ### 首次部署流程
-
+ 
 ```powershell
 # 1. 启动数据库容器
 .\db-manage.ps1 start
-
+ 
 # 2. 等待服务就绪（约10秒）
 Start-Sleep -Seconds 10
-
-# 3. 初始化数据库（创建表结构和内置模板）
+ 
+# 3. 初始化数据库（导入基础 SQL 与内置模板）
 .\db-manage.ps1 init
 
-# 4. 验证状态
+# 4. 初始化默认管理员账号与权限（用于系统登录）
+.\db-seed-admin.ps1
+ 
+# 5. 验证状态
 .\db-manage.ps1 status
 ```
+
+### 默认登录账号（开发环境）
+
+- 用户名：`admin`
+- 密码：`admin123`
+- 邮箱：`admin@admin.com`
+- 角色：`admin`（等同超级管理员；`superadmin` 会映射为 `admin`）
 
 ---
 
@@ -61,6 +71,7 @@ Start-Sleep -Seconds 10
 |------|------|--------|----------|
 | `db-manage.ps1` | 统一管理入口 | ~430行 | 日常数据库管理操作 |
 | `db-init-complete.ps1` | 专业初始化工具 | ~270行 | 数据库初始化和重置 |
+| `db-seed-admin.ps1` | 登录账号/权限种子 | ~120行 | 初始化默认管理员账号与 RBAC |
 | `db-query.ps1` | 数据库查询工具 | - | 查询表结构、数据导出 |
 
 ---
@@ -144,19 +155,22 @@ Start-Sleep -Seconds 10
 - ✅ 可独立使用或被 db-manage.ps1 调用
 
 #### 初始化内容
-
+ 
 1. **基础配置**
-   - 用户、权限、扩展
+   - 数据库扩展与基础结构（TimescaleDB/uuid 等）
    - TimescaleDB 时序数据库配置
    - 数据压缩和保留策略
    - 网络带宽单位迁移 (bps → Mbps)
-
+ 
 2. **内置模板**
    - 18个厂商设备模板（6厂商 × 3设备类型）
    - Cisco、Huawei、H3C、Juniper、Arista、Fortinet
    - 路由器、交换机、防火墙模板
 
 3. **测试数据种子**
+
+4. **登录账号/权限种子**
+   - 通过 `db-seed-admin.ps1` 初始化默认管理员账号与 RBAC（roles/permissions）
 
 #### 参数选项
 
