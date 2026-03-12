@@ -31,7 +31,7 @@ export function HelpDialog({ title = '帮助', content, links }: HelpDialogProps
     },
     {
       title: '厂商 OID 映射表',
-      url: '/docs/vendor-oid-mapping.md',
+      url: '/docs/integration/vendor-oid-mapping.md',
       description: '各厂商的 SNMP OID 参考',
     },
   ]

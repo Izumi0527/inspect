@@ -1,4 +1,4 @@
-import { format } from 'date-fns'
+import { formatDateYMD } from '@/utils/formatters'
 
 /**
  * 日期快捷筛选Hook
@@ -20,7 +20,7 @@ export const useDateFilters = () => {
   const getToday = (): DateFilterResult => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const dateStr = format(today, 'yyyy-MM-dd')
+    const dateStr = formatDateYMD(today)
 
     return {
       startDate: dateStr,
@@ -39,8 +39,8 @@ export const useDateFilters = () => {
     weekStart.setDate(today.getDate() - today.getDay())
 
     return {
-      startDate: format(weekStart, 'yyyy-MM-dd'),
-      endDate: format(today, 'yyyy-MM-dd')
+      startDate: formatDateYMD(weekStart),
+      endDate: formatDateYMD(today)
     }
   }
 
@@ -54,8 +54,8 @@ export const useDateFilters = () => {
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
 
     return {
-      startDate: format(monthStart, 'yyyy-MM-dd'),
-      endDate: format(today, 'yyyy-MM-dd')
+      startDate: formatDateYMD(monthStart),
+      endDate: formatDateYMD(today)
     }
   }
 

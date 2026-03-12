@@ -115,7 +115,7 @@ celerybeat.pid
 
 # Environments
 .venv
-env/
+#env/
 venv/
 ENV/
 env.bak/
@@ -274,11 +274,11 @@ temp/
 tmp/
 
 # Go 编译产物
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+backend/*.exe
+backend/*.exe~
+backend/*.dll
+backend/*.so
+backend/*.dylib
 
 # 运行时配置文件
 context.json
@@ -381,3 +381,4 @@ backend/data/reports/*
 AGENTS.md
 .pnpm-store/
 .gocache/
+.gomodcache/

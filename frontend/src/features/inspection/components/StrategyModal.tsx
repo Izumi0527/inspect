@@ -65,7 +65,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
 
   // 初始加载设备列表（不分页，获取全部）
   useEffect(() => {
-    loadDevices({ page: 1, page_size: 1000 } as import('@/features/devices/types').DeviceFilters)
+    loadDevices({ page: 1, page_size: 1000 })
   }, [loadDevices])
 
   useEffect(() => {

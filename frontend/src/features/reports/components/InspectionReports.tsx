@@ -567,7 +567,10 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
       <ConfirmModal
         isOpen={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
-        onConfirm={() => deleteConfirm && handleDeleteReport(deleteConfirm)}
+        onConfirm={async () => {
+          if (!deleteConfirm) return
+          await handleDeleteReport(deleteConfirm)
+        }}
         title="删除报告"
         description="确定要删除这个巡检报告吗？此操作无法撤销。"
         confirmText="删除"

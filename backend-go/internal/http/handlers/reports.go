@@ -18,14 +18,13 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
-	"github.com/your-org/inspect-system/backend-go/internal/auth"
 	"github.com/your-org/inspect-system/backend-go/internal/common"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 )
 
 type ReportsHandler struct {
 	Service   *reports.Service
-	Auth      *auth.Service
+	Auth      PermissionService
 	OutputDir string
 }
 
@@ -2820,29 +2819,29 @@ func buildReportResponse(report reports.Report, schedule *reports.ReportSchedule
 	}
 
 	result := map[string]interface{}{
-		"id":            report.ID,
-		"name":          report.Title,
-		"title":         report.Title,
-		"description":   report.Description,
-		"report_type":   report.ReportType,
-		"type":          report.ReportType,
-		"category":      defaultStringPtr(report.Category, "custom"),
-		"status":        status,
-		"start_time":    report.StartDate,
-		"end_time":      report.EndDate,
-		"format":        format,
-		"created_by":    report.GeneratedBy,
-		"created_at":    report.CreatedAt,
-		"updated_at":    report.UpdatedAt,
-		"completed_at":  report.GeneratedAt,
-		"generated_by":  report.GeneratedBy,
-		"error_message": report.ErrorMessage,
-		"file_path":     filePath,
-		"file_size":     fileSize,
-		"download_url":  downloadURL,
-		"preview_url":   previewURL,
+		"id":                report.ID,
+		"name":              report.Title,
+		"title":             report.Title,
+		"description":       report.Description,
+		"report_type":       report.ReportType,
+		"type":              report.ReportType,
+		"category":          defaultStringPtr(report.Category, "custom"),
+		"status":            status,
+		"start_time":        report.StartDate,
+		"end_time":          report.EndDate,
+		"format":            format,
+		"created_by":        report.GeneratedBy,
+		"created_at":        report.CreatedAt,
+		"updated_at":        report.UpdatedAt,
+		"completed_at":      report.GeneratedAt,
+		"generated_by":      report.GeneratedBy,
+		"error_message":     report.ErrorMessage,
+		"file_path":         filePath,
+		"file_size":         fileSize,
+		"download_url":      downloadURL,
+		"preview_url":       previewURL,
 		"available_formats": availableFormats,
-		"parameters":    parameters,
+		"parameters":        parameters,
 	}
 
 	if schedule != nil {

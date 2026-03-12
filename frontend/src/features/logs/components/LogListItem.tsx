@@ -2,8 +2,7 @@
  * 日志列表项组件
  */
 import React from 'react'
-import { format } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
+import { formatDateTimeMDHMS } from '@/utils/formatters'
 import { 
   Server, 
   Clock, 
@@ -36,11 +35,8 @@ export const LogListItem: React.FC<LogListItemProps> = ({
   const facilityConfig = LOG_FACILITY_CONFIG[log.facility] || LOG_FACILITY_CONFIG.other
 
   const formatTime = (dateStr: string) => {
-    try {
-      return format(new Date(dateStr), 'MM-dd HH:mm:ss', { locale: zhCN })
-    } catch {
-      return dateStr
-    }
+    const formatted = formatDateTimeMDHMS(dateStr)
+    return formatted === '无效日期' ? dateStr : formatted
   }
 
   return (

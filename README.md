@@ -919,12 +919,12 @@ inspect-system/
 ├── docs/                      # 技术文档
 │   ├── api/                   # API文档
 │   ├── backend-go-quickstart.md # Go后端快速启动
-│   ├── development-environment-guide.md # 开发环境指南
+│   ├── development/development-environment-guide.md # 开发环境指南
 │   ├── device-probe-feature.md # 设备探测功能文档
 │   └── report-templates.md    # 报表模板文档
 ├── discuss/                   # 技术讨论与分析
 │   ├── frontend-backend-api-mismatch-analysis.md # API不匹配分析
-│   └── visx-react19-update-analysis.md # Visx升级分析
+│   └── frontend/visx-react19-update-analysis.md # Visx升级分析
 ├── scripts/                   # 自动化脚本
 ├── config/                    # 配置文件
 ├── backups/                   # 备份目录
@@ -941,7 +941,7 @@ inspect-system/
 | 文档 | 描述 | 路径 |
 |------|------|------|
 | **快速启动** | Go后端快速启动指南 | `docs/backend-go-quickstart.md` |
-| **开发环境** | 完整开发环境搭建 | `docs/development-environment-guide.md` |
+| **开发环境** | 完整开发环境搭建 | `docs/development/development-environment-guide.md` |
 | **设备探测** | 设备探测功能详解 | `docs/device-probe-feature.md` |
 | **报表模板** | 报表生成模板说明 | `docs/report-templates.md` |
 | **API文档** | RESTful API接口文档 | `docs/api/` |
@@ -996,14 +996,14 @@ chore(scope): 简短描述
 - **问题反馈** - [GitHub Issues](https://github.com/your-org/inspect-system/issues)
 - **功能建议** - [GitHub Discussions](https://github.com/your-org/inspect-system/discussions)
 - **技术文档** - [项目Wiki](https://github.com/your-org/inspect-system/wiki)
-- **API文档** - [API文档](docs/api/README.md)
+- **API文档** - [API文档](docs/api/readme.md)
 - **开发交流** - 技术交流群
 
 ### 📚 文档资源
 
-- [API完整文档](docs/api/README.md) - RESTful API使用指南
-- [API更新日志](docs/api/CHANGELOG.md) - API版本变更记录
-- [开发环境指南](docs/development-environment-guide.md) - 环境搭建教程
+- [API完整文档](docs/api/readme.md) - RESTful API使用指南
+- [API更新日志](docs/api/changelog.md) - API版本变更记录
+- [开发环境指南](docs/development/development-environment-guide.md) - 环境搭建教程
 - [后端快速启动](docs/backend-go-quickstart.md) - Go后端快速上手
 - [设备探测功能](docs/device-probe-feature.md) - 设备探测详解
 - [WebSocket协议](docs/api/websocket-contract.md) - 实时通信协议

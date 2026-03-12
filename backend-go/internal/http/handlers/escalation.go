@@ -14,7 +14,7 @@ import (
 
 type EscalationHandler struct {
 	Service *escalation.Service
-	Auth    *auth.Service
+	Auth    PermissionService
 }
 
 func (h EscalationHandler) Register(group *echo.Group) {
@@ -243,9 +243,9 @@ func (h EscalationHandler) TestEscalation(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message":        "测试升级已创建",
-		"alert_id":       alertID,
-		"escalation_id":  escalationID,
+		"message":       "测试升级已创建",
+		"alert_id":      alertID,
+		"escalation_id": escalationID,
 	})
 }
 

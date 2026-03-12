@@ -21,7 +21,7 @@ import (
 
 type AlertsHandler struct {
 	Service *alerts.Service
-	Auth    *auth.Service
+	Auth    PermissionService
 	WS      *ws.Manager
 }
 

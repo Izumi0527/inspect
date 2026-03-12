@@ -320,12 +320,6 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/devices/components/BulkOperationModal.tsx',
-    bannedPatterns: [
-      /text-gray-900/g,
-    ],
-  },
-  {
     file: 'frontend/src/features/settings/components/users/UserPermissionsDialog.tsx',
     bannedPatterns: [
       /border-gray-200 dark:border-gray-700/g,

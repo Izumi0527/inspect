@@ -9,13 +9,12 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
-	"github.com/your-org/inspect-system/backend-go/internal/auth"
 	"github.com/your-org/inspect-system/backend-go/internal/traffic"
 )
 
 type TrafficHandler struct {
 	Service *traffic.Service
-	Auth    *auth.Service
+	Auth    PermissionService
 }
 
 func (h TrafficHandler) Register(group *echo.Group) {

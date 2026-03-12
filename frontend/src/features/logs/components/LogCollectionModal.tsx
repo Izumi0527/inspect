@@ -56,7 +56,7 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
       search: deviceSearch || undefined,
       page: 1,
       page_size: 200,
-    } as any)
+    })
       .then((res) => {
         if (canceled) return
         setDevices(res.devices ?? [])

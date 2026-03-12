@@ -1,6 +1,6 @@
 import React from 'react'
 import { Calendar } from 'lucide-react'
-import { format, parseISO, isValid } from 'date-fns'
+import { formatDateYMD } from '@/utils/formatters'
 
 interface DateRangePickerProps {
   startDate: string
@@ -32,18 +32,9 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   // 格式化日期显示 (YYYY-MM-DD)
   const formatDateForInput = (dateString: string): string => {
     if (!dateString) return ''
-    try {
-      const date = parseISO(dateString)
-      if (isValid(date)) {
-        return format(date, 'yyyy-MM-dd')
-      }
-    } catch {
-      // 如果已经是 YYYY-MM-DD 格式,直接返回
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-        return dateString
-      }
-    }
-    return ''
+
+    const formatted = formatDateYMD(dateString)
+    return formatted === '无效日期' ? '' : formatted
   }
 
   // 验证日期范围
@@ -140,8 +131,8 @@ export const QuickDateRangeButtons: React.FC<QuickDateRangeButtonsProps> = ({
     startDate.setDate(startDate.getDate() - days)
 
     return {
-      startDate: format(startDate, 'yyyy-MM-dd'),
-      endDate: format(endDate, 'yyyy-MM-dd')
+      startDate: formatDateYMD(startDate),
+      endDate: formatDateYMD(endDate)
     }
   }
 

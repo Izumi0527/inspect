@@ -166,7 +166,7 @@ air
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 
 # Redis 配置
-REDIS_URL=redis://:dev_redis_2024@localhost:16379/0
+REDIS_URL=redis://:dev_redis_2024@localhost:16380/0
 
 # JWT 配置
 JWT_SECRET_KEY=your-secret-key
@@ -201,10 +201,10 @@ go clean
 
 ## 相关文档
 
-- [开发环境搭建指南](../docs/development-environment-guide.md)
-- [API 文档](../docs/api/README.md)
+- [开发环境搭建指南](../docs/development/development-environment-guide.md)
+- [API 文档](../docs/api/readme.md)
 - [数据库迁移指南](../docs/datebase/database-deployment.md)
-- [Docker 部署指南](../docs/docker/COMPOSE_QUICK_START.md)
+- [Docker 部署指南](../docs/docker/compose_quick_start.md)
 
 ## 故障排查
 

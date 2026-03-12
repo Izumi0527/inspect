@@ -47,7 +47,8 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "${REDIS_HOST_PORT:-16379}:6379"
+      # 默认端口改为 16380，避免与其他项目常用的 16379 冲突（仍可通过 REDIS_HOST_PORT 覆盖）
+      - "${REDIS_HOST_PORT:-16380}:6379"
     networks:
       - inspect_network
     restart: unless-stopped

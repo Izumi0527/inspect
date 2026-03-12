@@ -227,3 +227,70 @@ export function formatBandwidth(bps: number | string | null | undefined): string
     return `${val < 10 ? val.toFixed(2) : val.toFixed(1)} Gbps`
   }
 }
+
+const pad2 = (value: number) => String(value).padStart(2, '0')
+
+const normalizeDateValue = (value: Date | string | number): Date | null => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value
+  }
+
+  if (typeof value === 'number') {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    // 针对 YYYY-MM-DD 这种“日期字符串”，避免 new Date(...) 的时区偏移问题
+    const ymdMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed)
+    if (ymdMatch) {
+      const year = Number(ymdMatch[1])
+      const month = Number(ymdMatch[2])
+      const day = Number(ymdMatch[3])
+      const date = new Date(year, month - 1, day)
+      if (
+        date.getFullYear() === year &&
+        date.getMonth() === month - 1 &&
+        date.getDate() === day
+      ) {
+        return date
+      }
+      return null
+    }
+
+    const date = new Date(trimmed)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  return null
+}
+
+/**
+ * 将日期格式化为 YYYY-MM-DD
+ */
+export function formatDateYMD(value: Date | string | number): string {
+  const date = normalizeDateValue(value)
+  if (!date) return '无效日期'
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+
+/**
+ * 将日期格式化为 YYYY-MM-DD HH:mm:ss
+ */
+export function formatDateTimeYMDHMS(value: Date | string | number): string {
+  const date = normalizeDateValue(value)
+  if (!date) return '无效日期'
+  return `${formatDateYMD(date)} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`
+}
+
+/**
+ * 将日期格式化为 MM-DD HH:mm:ss
+ */
+export function formatDateTimeMDHMS(value: Date | string | number): string {
+  const date = normalizeDateValue(value)
+  if (!date) return '无效日期'
+  return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`
+}

@@ -9,13 +9,12 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
-	"github.com/your-org/inspect-system/backend-go/internal/auth"
 	"github.com/your-org/inspect-system/backend-go/internal/scheduler"
 )
 
 type SchedulerHandler struct {
 	Service *scheduler.Service
-	Auth    *auth.Service
+	Auth    PermissionService
 }
 
 type schedulerTaskCreateRequest struct {
@@ -27,19 +26,19 @@ type schedulerTaskCreateRequest struct {
 }
 
 type schedulerTaskResponse struct {
-	ID            string  `json:"id"`
-	Name          string  `json:"name"`
-	TaskType      string  `json:"task_type"`
-	CronExpression string `json:"cron_expression"`
-	Enabled       bool    `json:"enabled"`
-	Status        string  `json:"status"`
-	Progress      float64 `json:"progress"`
-	LastRun       *string `json:"last_run"`
-	NextRun       *string `json:"next_run"`
-	RunCount      int     `json:"run_count"`
-	SuccessCount  int     `json:"success_count"`
-	FailureCount  int     `json:"failure_count"`
-	ErrorMessage  *string `json:"error_message"`
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	TaskType       string  `json:"task_type"`
+	CronExpression string  `json:"cron_expression"`
+	Enabled        bool    `json:"enabled"`
+	Status         string  `json:"status"`
+	Progress       float64 `json:"progress"`
+	LastRun        *string `json:"last_run"`
+	NextRun        *string `json:"next_run"`
+	RunCount       int     `json:"run_count"`
+	SuccessCount   int     `json:"success_count"`
+	FailureCount   int     `json:"failure_count"`
+	ErrorMessage   *string `json:"error_message"`
 }
 
 type schedulerStatsResponse struct {

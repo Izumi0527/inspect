@@ -18,7 +18,6 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
-	"github.com/your-org/inspect-system/backend-go/internal/auth"
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
@@ -29,7 +28,7 @@ import (
 type InspectionHandler struct {
 	Service         *inspection.Service
 	Reports         *reports.Service
-	Auth            *auth.Service
+	Auth            PermissionService
 	Settings        *settings.Service // 用于获取用户信息
 	DeviceService   *devices.Service
 	ProbeService    *devices.ProbeService
@@ -1022,7 +1021,7 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 	// 获取检查项的名称和类别，用于确定要检查的指标类型
 	itemName := strings.ToLower(readString(checkItem, "name"))
 	itemCategory := strings.ToLower(readString(checkItem, "category"))
-	
+
 	// 调试日志
 	if h.Logger != nil {
 		h.Logger.Debug("executeSNMPCheck: processing check item",
@@ -1030,7 +1029,7 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 			zap.String("itemCategory", itemCategory),
 			zap.Bool("hasMetrics", snmpMetrics != nil))
 	}
-	
+
 	// 获取配置中的阈值
 	config, _ := checkItem["config"].(map[string]interface{})
 	threshold, _ := config["threshold"].(map[string]interface{})
@@ -1040,26 +1039,26 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 	// 根据检查项名称或类别确定要检查的指标
 	// 使用更宽松的匹配规则
 	switch {
-	case strings.Contains(itemName, "cpu") || strings.Contains(itemName, "处理器") || 
-		 strings.Contains(itemName, "使用率") && !strings.Contains(itemName, "内存") ||
-		 itemCategory == "cpu" || itemCategory == "health" && strings.Contains(itemName, "cpu"):
+	case strings.Contains(itemName, "cpu") || strings.Contains(itemName, "处理器") ||
+		strings.Contains(itemName, "使用率") && !strings.Contains(itemName, "内存") ||
+		itemCategory == "cpu" || itemCategory == "health" && strings.Contains(itemName, "cpu"):
 		h.checkCPUMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
-	case strings.Contains(itemName, "内存") || strings.Contains(itemName, "memory") || 
-		 itemCategory == "memory":
+	case strings.Contains(itemName, "内存") || strings.Contains(itemName, "memory") ||
+		itemCategory == "memory":
 		h.checkMemoryMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
-	case strings.Contains(itemName, "运行时间") || strings.Contains(itemName, "uptime") || 
-		 strings.Contains(itemName, "运行") && strings.Contains(itemName, "时间") ||
-		 itemCategory == "uptime":
+	case strings.Contains(itemName, "运行时间") || strings.Contains(itemName, "uptime") ||
+		strings.Contains(itemName, "运行") && strings.Contains(itemName, "时间") ||
+		itemCategory == "uptime":
 		h.checkUptimeMetric(result, snmpMetrics)
-	case strings.Contains(itemName, "接口") || strings.Contains(itemName, "interface") || 
-		 strings.Contains(itemName, "端口") || strings.Contains(itemName, "状态") && !strings.Contains(itemName, "运行") ||
-		 itemCategory == "interface" || itemCategory == "performance" && strings.Contains(itemName, "接口"):
+	case strings.Contains(itemName, "接口") || strings.Contains(itemName, "interface") ||
+		strings.Contains(itemName, "端口") || strings.Contains(itemName, "状态") && !strings.Contains(itemName, "运行") ||
+		itemCategory == "interface" || itemCategory == "performance" && strings.Contains(itemName, "接口"):
 		h.checkInterfaceMetric(result, snmpMetrics)
-	case strings.Contains(itemName, "温度") || strings.Contains(itemName, "temperature") || 
-		 itemCategory == "temperature":
+	case strings.Contains(itemName, "温度") || strings.Contains(itemName, "temperature") ||
+		itemCategory == "temperature":
 		h.checkTemperatureMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
-	case strings.Contains(itemName, "带宽") || strings.Contains(itemName, "bandwidth") || 
-		 itemCategory == "bandwidth":
+	case strings.Contains(itemName, "带宽") || strings.Contains(itemName, "bandwidth") ||
+		itemCategory == "bandwidth":
 		h.checkBandwidthMetric(result, snmpMetrics)
 	default:
 		// 默认：SNMP 连通性检查
@@ -1938,7 +1937,7 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 		"successRate":      current.SuccessRate,
 		"avgScore":         current.AvgScore,
 		"changes": map[string]interface{}{
-			"executionsChange": pctChange(current.TotalExecutions, previous.TotalExecutions),
+			"executionsChange":  pctChange(current.TotalExecutions, previous.TotalExecutions),
 			"successRateChange": deltaChange(current.SuccessRate, previous.SuccessRate),
 			"avgScoreChange":    deltaChange(current.AvgScore, previous.AvgScore),
 			"strategiesChange":  "0.0%",
@@ -2100,17 +2099,17 @@ func (h InspectionHandler) GetProblemDistribution(c echo.Context) error {
 	}
 
 	categoryNames := map[string]string{
-		"connectivity":  "网络连通性",
-		"cpu_usage":     "CPU使用率",
-		"memory_usage":  "内存使用率",
-		"disk_usage":    "磁盘空间",
+		"connectivity":     "网络连通性",
+		"cpu_usage":        "CPU使用率",
+		"memory_usage":     "内存使用率",
+		"disk_usage":       "磁盘空间",
 		"interface_status": "端口状态",
-		"temperature":   "温度告警",
-		"snmp":          "SNMP检查",
-		"ssh":           "SSH检查",
-		"http":          "HTTP检查",
-		"ping":          "Ping检查",
-		"script":        "脚本检查",
+		"temperature":      "温度告警",
+		"snmp":             "SNMP检查",
+		"ssh":              "SSH检查",
+		"http":             "HTTP检查",
+		"ping":             "Ping检查",
+		"script":           "脚本检查",
 	}
 
 	payload := make([]map[string]interface{}, 0, len(rows))
@@ -2167,13 +2166,13 @@ func (h InspectionHandler) ExportAnalytics(c echo.Context) error {
 	paramsJSON, _ := encodeJSON(params)
 
 	report := reports.Report{
-		ID:          int(time.Now().Unix()),
-		Title:       "统计分析报告",
-		ReportType:  "statistics",
-		StartDate:   start,
-		EndDate:     end,
+		ID:            int(time.Now().Unix()),
+		Title:         "统计分析报告",
+		ReportType:    "statistics",
+		StartDate:     start,
+		EndDate:       end,
 		DeviceFilters: paramsJSON,
-		Status:      "completed",
+		Status:        "completed",
 	}
 
 	filePath, err := reports.GenerateReportFile(c.Request().Context(), h.Reports.DB(), h.ReportOutputDir, report, format)
@@ -2637,14 +2636,14 @@ func buildCheckResults(results []inspection.Result) []map[string]interface{} {
 
 func buildCheckResultResponse(result inspection.Result) map[string]interface{} {
 	return map[string]interface{}{
-		"checkItemId":    fmt.Sprintf("%d", result.ID),
-		"checkItemName":  result.CheckItemName,
-		"checkItemType":  result.CheckItemType,
-		"status":         normalizeCheckResultStatus(result.Status),
-		"actualValue":    result.ActualValue,
-		"expectedValue":  result.ExpectedValue,
-		"message":        result.Message,
-		"executionTime":  result.ExecutionTime,
+		"checkItemId":   fmt.Sprintf("%d", result.ID),
+		"checkItemName": result.CheckItemName,
+		"checkItemType": result.CheckItemType,
+		"status":        normalizeCheckResultStatus(result.Status),
+		"actualValue":   result.ActualValue,
+		"expectedValue": result.ExpectedValue,
+		"message":       result.Message,
+		"executionTime": result.ExecutionTime,
 	}
 }
 
@@ -2739,21 +2738,21 @@ func buildInspectionResultResponse(item inspection.Inspection, device deviceInfo
 	createdAt := coalesceTime(item.CompletedAt, item.CreatedAt)
 
 	return map[string]interface{}{
-		"id":            fmt.Sprintf("%d", item.ID),
-		"task_id":       item.ID,
-		"execution_id":  item.ID,
-		"device_id":     item.DeviceID,
-		"device_name":   defaultString(device.Name, "未知设备"),
-		"status":        status,
-		"score":         score,
-		"total_checks":  totalChecks,
-		"passed_checks": passed,
-		"failed_checks": failed,
+		"id":             fmt.Sprintf("%d", item.ID),
+		"task_id":        item.ID,
+		"execution_id":   item.ID,
+		"device_id":      item.DeviceID,
+		"device_name":    defaultString(device.Name, "未知设备"),
+		"status":         status,
+		"score":          score,
+		"total_checks":   totalChecks,
+		"passed_checks":  passed,
+		"failed_checks":  failed,
 		"warning_checks": warning,
-		"results":       checkResults,
-		"check_results": checkResults,
-		"summary":       summary,
-		"created_at":    createdAt,
+		"results":        checkResults,
+		"check_results":  checkResults,
+		"summary":        summary,
+		"created_at":     createdAt,
 	}
 }
 
@@ -2893,7 +2892,6 @@ func firstTime(primary *time.Time, fallback *time.Time) *time.Time {
 	return fallback
 }
 
-
 func (h InspectionHandler) loadResultsMap(ctx context.Context, inspections []inspection.Inspection) (map[int][]inspection.Result, error) {
 	ids := make([]int, 0, len(inspections))
 	for _, item := range inspections {
@@ -2913,11 +2911,11 @@ func (h InspectionHandler) loadResultsMap(ctx context.Context, inspections []ins
 // loadUserNames 批量加载用户名映射（用户ID -> 用户名）
 func (h InspectionHandler) loadUserNames(ctx context.Context, inspections []inspection.Inspection) map[string]string {
 	userNames := make(map[string]string)
-	
+
 	if h.Settings == nil {
 		return userNames
 	}
-	
+
 	// 收集所有唯一的用户ID
 	userIDSet := make(map[string]struct{})
 	for _, item := range inspections {
@@ -2925,7 +2923,7 @@ func (h InspectionHandler) loadUserNames(ctx context.Context, inspections []insp
 			userIDSet[*item.CreatedBy] = struct{}{}
 		}
 	}
-	
+
 	// 批量查询用户信息
 	for userID := range userIDSet {
 		user, err := h.Settings.GetUserByID(ctx, userID)
@@ -2938,7 +2936,7 @@ func (h InspectionHandler) loadUserNames(ctx context.Context, inspections []insp
 			}
 		}
 	}
-	
+
 	return userNames
 }
 
@@ -3345,7 +3343,6 @@ func resolveReportFilePath(report reports.Report) string {
 	return ""
 }
 
-
 // ============================================================================
 // 模板 API 辅助函数
 // ============================================================================
@@ -3387,14 +3384,14 @@ func buildTemplateResponse(template *inspection.Template) map[string]interface{}
 		"name":              template.Name,
 		"description":       defaultStringPtr(template.Description, ""),
 		"category":          defaultStringPtr(template.Category, ""),
-		"deviceTypes":       deviceTypes,       // 驼峰命名供前端使用
-		"device_types":      deviceTypes,       // 下划线命名保持兼容
-		"checkItems":        checkItems,        // 驼峰命名供前端使用
-		"check_items":       checkItems,        // 下划线命名保持兼容
+		"deviceTypes":       deviceTypes, // 驼峰命名供前端使用
+		"device_types":      deviceTypes, // 下划线命名保持兼容
+		"checkItems":        checkItems,  // 驼峰命名供前端使用
+		"check_items":       checkItems,  // 下划线命名保持兼容
 		"check_items_count": checkItemsCount,
 		"isBuiltIn":         template.IsDefault, // 前端使用 isBuiltIn
 		"is_default":        template.IsDefault,
-		"isActive":          template.IsActive,  // 前端使用 isActive
+		"isActive":          template.IsActive, // 前端使用 isActive
 		"is_active":         template.IsActive,
 		"createdAt":         template.CreatedAt,
 		"created_at":        template.CreatedAt,

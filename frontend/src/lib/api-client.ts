@@ -206,13 +206,6 @@ class HttpClient {
     }
   }
 
-  // 创建超时控制器
-  private createTimeoutController(timeout: number): AbortController {
-    const controller = new AbortController()
-    setTimeout(() => controller.abort(), timeout)
-    return controller
-  }
-
   // 构建请求头
   private buildHeaders(customHeaders?: HeadersInit): Headers {
     const headers = new Headers({ ...this.defaultHeaders, ...customHeaders })
@@ -243,15 +236,47 @@ class HttpClient {
     }
 
     const dataObject = isJsonObject(data) ? data : undefined
-    const detail = dataObject?.detail
-    const message = typeof dataObject?.message === 'string' ? dataObject.message : undefined
-    const type = typeof dataObject?.type === 'string' ? dataObject.type : undefined
+    const legacyDetail = dataObject?.detail
+    const legacyMessage = typeof dataObject?.message === 'string' ? dataObject.message : undefined
+    const legacyType = typeof dataObject?.type === 'string' ? dataObject.type : undefined
+
+    // 兼容后端统一错误结构：{ success:false, error:{ type, message, details? } }
+    const backendErrorRaw = dataObject?.error
+    const backendErrorObject =
+      backendErrorRaw &&
+      typeof backendErrorRaw === 'object' &&
+      !Array.isArray(backendErrorRaw)
+        ? (backendErrorRaw as Record<string, unknown>)
+        : undefined
+    const backendMessage =
+      typeof backendErrorObject?.message === 'string'
+        ? (backendErrorObject.message as string)
+        : undefined
+    const backendType =
+      typeof backendErrorObject?.type === 'string'
+        ? (backendErrorObject.type as string)
+        : undefined
+    const backendDetails =
+      backendErrorObject && 'details' in backendErrorObject
+        ? backendErrorObject.details
+        : undefined
 
     if (!response.ok) {
+      const resolvedMessage =
+        backendMessage ??
+        (typeof legacyDetail === 'string' ? legacyDetail : legacyMessage) ??
+        (typeof data === 'string' && data.trim() ? data : undefined) ??
+        `HTTP ${response.status} ${response.statusText}`
+
+      const resolvedType = backendType ?? legacyType ?? 'api_error'
+
+      const resolvedDetail =
+        backendDetails ?? legacyDetail ?? backendErrorRaw ?? undefined
+
       const error: ApiError = {
-        message: typeof detail === 'string' ? detail : message || `HTTP ${response.status} ${response.statusText}`,
-        type: type || 'api_error',
-        detail,
+        message: resolvedMessage,
+        type: resolvedType,
+        detail: resolvedDetail,
         status: response.status,
       }
 
@@ -300,44 +325,55 @@ class HttpClient {
   ): Promise<T> {
     const {
       timeout = DEFAULT_TIMEOUT,
-      retry = 3,
+      retry,
       retryDelay = 1000,
       headers,
       body,
       params,
+      method = 'GET',
       ...restConfig
     } = config
 
     const endpointWithParams = appendQuery(endpoint, params)
     const url = `${this.baseURL}${endpointWithParams}`
-    const controller = this.createTimeoutController(timeout)
+    const resolvedRetry = typeof retry === 'number'
+      ? retry
+      : (method === 'GET' || method === 'HEAD' ? 3 : 0)
 
     return this.withRetry(async () => {
-      const resolvedHeaders = this.buildHeaders(headers)
-      const requestConfig: RequestInit = {
-        ...restConfig,
-        headers: resolvedHeaders,
-        signal: controller.signal,
-      }
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeout)
 
-      if (body !== undefined && body !== null) {
-        if (body instanceof FormData) {
-          resolvedHeaders.delete('Content-Type')
-          requestConfig.body = body
-        } else if (body instanceof URLSearchParams) {
-          requestConfig.body = body
-        } else if (typeof body === 'string') {
-          requestConfig.body = body
-        } else if (typeof body === 'object') {
-          requestConfig.body = JSON.stringify(body)
-        } else {
-          requestConfig.body = String(body)
+      try {
+        const resolvedHeaders = this.buildHeaders(headers)
+        const requestConfig: RequestInit = {
+          ...restConfig,
+          method,
+          headers: resolvedHeaders,
+          signal: controller.signal,
         }
-      }
 
-      const response = await fetch(url, requestConfig)
-      return this.handleResponse<T>(response)
-    }, retry, retryDelay)
+        if (body !== undefined && body !== null) {
+          if (body instanceof FormData) {
+            resolvedHeaders.delete('Content-Type')
+            requestConfig.body = body
+          } else if (body instanceof URLSearchParams) {
+            requestConfig.body = body
+          } else if (typeof body === 'string') {
+            requestConfig.body = body
+          } else if (typeof body === 'object') {
+            requestConfig.body = JSON.stringify(body)
+          } else {
+            requestConfig.body = String(body)
+          }
+        }
+
+        const response = await fetch(url, requestConfig)
+        return this.handleResponse<T>(response)
+      } finally {
+        clearTimeout(timeoutId)
+      }
+    }, resolvedRetry, retryDelay)
   }
 
   // GET请求
@@ -422,13 +458,9 @@ export const api = {
     create: (data: JsonRecord) => httpClient.post('/devices', data),
     update: (id: number, data: JsonRecord) => httpClient.put(`/devices/${id}`, data),
     delete: (id: number) => httpClient.delete(`/devices/${id}`),
-    discover: (subnet: string) => httpClient.post('/devices/discover', { subnet }),
-    // 修复: 使用正确的后端路由 /devices/bulk-action
-    bulkAction: (action: string, deviceIds: number[]) =>
-      httpClient.post('/devices/bulk-action', { action, device_ids: deviceIds }),
-    // 新增: 批量更新设备
-    batchUpdate: (updates: JsonRecord[]) =>
-      httpClient.post('/devices/batch-update', { updates }),
+    // 批量更新设备（与后端契约保持一致）
+    batchUpdate: (deviceIds: number[], updates: JsonRecord) =>
+      httpClient.post('/devices/batch-update', { device_ids: deviceIds, updates }),
     // 新增: 批量导入设备
     batchImport: (devices: JsonRecord[]) =>
       httpClient.post('/devices/batch-import', { devices }),

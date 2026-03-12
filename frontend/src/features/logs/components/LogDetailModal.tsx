@@ -2,8 +2,7 @@
  * 日志详情弹窗
  */
 import React from 'react'
-import { format } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import {
   Server,
   Clock,
@@ -42,11 +41,8 @@ export const LogDetailModal: React.FC<LogDetailModalProps> = ({
   const sourceConfig = LOG_SOURCE_CONFIG[log.source] || { label: log.source }
 
   const formatTime = (dateStr: string) => {
-    try {
-      return format(new Date(dateStr), 'yyyy-MM-dd HH:mm:ss', { locale: zhCN })
-    } catch {
-      return dateStr
-    }
+    const formatted = formatDateTimeYMDHMS(dateStr)
+    return formatted === '无效日期' ? dateStr : formatted
   }
 
   const copyToClipboard = (text: string, label: string) => {

@@ -5,13 +5,12 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"github.com/your-org/inspect-system/backend-go/internal/auth"
 	"github.com/your-org/inspect-system/backend-go/internal/dashboard"
 )
 
 type DashboardHandler struct {
 	Service *dashboard.Service
-	Auth    *auth.Service
+	Auth    PermissionService
 }
 
 func (h DashboardHandler) Register(group *echo.Group) {
