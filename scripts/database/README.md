@@ -50,7 +50,7 @@ Start-Sleep -Seconds 10
 .\db-manage.ps1 init
 
 # 4. 初始化默认管理员账号与权限（用于系统登录）
-.\db-seed-admin.ps1
+.\db-manage.ps1 seed-admin
  
 # 5. 验证状态
 .\db-manage.ps1 status
@@ -71,8 +71,7 @@ Start-Sleep -Seconds 10
 |------|------|--------|----------|
 | `db-manage.ps1` | 统一管理入口 | ~430行 | 日常数据库管理操作 |
 | `db-init-complete.ps1` | 专业初始化工具 | ~270行 | 数据库初始化和重置 |
-| `db-seed-admin.ps1` | 登录账号/权限种子 | ~120行 | 初始化默认管理员账号与 RBAC |
-| `db-query.ps1` | 数据库查询工具 | - | 查询表结构、数据导出 |
+| `db-manage.ps1 seed-admin` | 登录账号/权限种子 | - | 初始化默认管理员账号与 RBAC |
 
 ---
 
@@ -99,6 +98,7 @@ Start-Sleep -Seconds 10
 | `backup` | 备份数据 | `.\db-manage.ps1 backup` |
 | `reset` | 重置数据库 | `.\db-manage.ps1 reset` |
 | `init` | 初始化数据库 | `.\db-manage.ps1 init` |
+| `seed-admin` | 初始化默认管理员账号与权限 | `.\db-manage.ps1 seed-admin` |
 
 #### 可用服务
 
@@ -135,7 +135,7 @@ Start-Sleep -Seconds 10
     - 用户名: inspect_dev
     - 密码: dev_password_2024
     - 数据库: inspect_system_dev
-  🔴 Redis: localhost:16379
+  🔴 Redis: localhost:16380
     - 密码: dev_redis_2024
   🔧 pgAdmin: http://localhost:5050
   🔧 Redis Commander: http://localhost:8081
@@ -170,7 +170,7 @@ Start-Sleep -Seconds 10
 3. **测试数据种子**
 
 4. **登录账号/权限种子**
-   - 通过 `db-seed-admin.ps1` 初始化默认管理员账号与 RBAC（roles/permissions）
+   - 通过 `db-manage.ps1 seed-admin` 初始化默认管理员账号与 RBAC（roles/permissions）
 
 #### 参数选项
 
@@ -204,52 +204,16 @@ Start-Sleep -Seconds 10
 
 ### 3. db-query.ps1 - 数据库查询工具
 
-**功能**: 强大的数据库查询和导出工具
+（已移除）
 
-#### 参数选项
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `-Table` | 指定表名 | - |
-| `-Limit` | 限制行数 | 10 |
-| `-Format` | 输出格式 | Console |
-| `-Output` | 输出文件路径 | - |
-| `-CustomSQL` | 执行自定义 SQL | - |
-| `-ShowSchema` | 只显示表结构 | - |
-| `-ShowData` | 只显示数据 | - |
-| `-ShowStats` | 显示统计信息 | - |
-| `-Pattern` | 表名过滤模式 | - |
-
-#### 输出格式
-
-- `Console` - 控制台表格输出
-- `CSV` - CSV 文件
-- `JSON` - JSON 文件
-- `HTML` - HTML 报告
-
-#### 使用示例
+`db-query.ps1` 已收口移除以减少脚本数量与文档漂移。建议使用以下方式查询数据库：
 
 ```powershell
-# 查询所有表
-.\db-query.ps1
+# 方式 1：进入容器执行 psql
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev
 
-# 查询指定表
-.\db-query.ps1 -Table users -Limit 20
-
-# 只显示表结构
-.\db-query.ps1 -ShowSchema
-
-# 导出为 JSON
-.\db-query.ps1 -Format JSON -Output "db_info.json"
-
-# 执行自定义 SQL
-.\db-query.ps1 -CustomSQL "SELECT COUNT(*) FROM devices"
-
-# 查询包含 "device" 的表
-.\db-query.ps1 -Pattern "*device*"
-
-# 导出 HTML 报告
-.\db-query.ps1 -Format HTML -Output "report.html"
+# 方式 2：使用本地 psql 连接（端口以实际映射为准）
+psql -h localhost -p 15500 -U inspect_dev -d inspect_system_dev
 ```
 
 ---
@@ -339,11 +303,11 @@ psql -h localhost -p 15500 -U inspect_dev -d inspect_system_dev
 
 ```
 主机: localhost
-端口: 16379
+端口: 16380
 密码: dev_redis_2024
 
 连接字符串:
-redis://:dev_redis_2024@localhost:16379/0
+redis://:dev_redis_2024@localhost:16380/0
 ```
 
 **测试连接：**
@@ -355,7 +319,7 @@ docker exec inspect-redis-dev redis-cli -a dev_redis_2024 ping
 docker exec -it inspect-redis-dev redis-cli -a dev_redis_2024
 
 # 从宿主机连接
-redis-cli -h localhost -p 16379 -a dev_redis_2024
+redis-cli -h localhost -p 16380 -a dev_redis_2024
 ```
 
 ### 管理工具
@@ -465,17 +429,17 @@ Start-Sleep -Seconds 10
 ### 场景 7: 数据查询和分析
 
 ```powershell
-# 查看所有表
-.\db-query.ps1
+# 方式 1：在容器内执行（推荐，环境最少依赖）
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "\dt"
 
-# 查询特定表数据
-.\db-query.ps1 -Table devices -Limit 50
+# 查询特定表数据（示例：devices 取前 50 行）
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT * FROM devices LIMIT 50;"
 
-# 导出数据库报告
-.\db-query.ps1 -Format HTML -Output "report.html"
+# 导出查询结果（CSV）
+docker exec -i inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "\copy (SELECT vendor, COUNT(*) FROM devices GROUP BY vendor) TO STDOUT WITH CSV HEADER" > report_devices_by_vendor.csv
 
 # 执行自定义查询
-.\db-query.ps1 -CustomSQL "SELECT vendor, COUNT(*) FROM devices GROUP BY vendor"
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT vendor, COUNT(*) FROM devices GROUP BY vendor;"
 ```
 
 ### 场景 8: CI/CD 集成
@@ -508,7 +472,7 @@ docker ps
 .\db-manage.ps1 logs
 
 # 检查端口占用
-netstat -ano | findstr "15500 16379"
+netstat -ano | findstr "15500 16380"
 
 # 尝试重置服务
 .\db-manage.ps1 reset
@@ -518,7 +482,7 @@ netstat -ano | findstr "15500 16379"
 
 ```powershell
 # 检查端口占用
-netstat -ano | findstr "15500 16379"
+netstat -ano | findstr "15500 16380"
 
 # 查找占用进程
 Get-NetTCPConnection -LocalPort 15500 | Select-Object OwningProcess
@@ -579,11 +543,11 @@ docker exec inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "S
 ### 问题 6: 数据问题
 
 ```powershell
-# 查看数据库信息
-.\db-query.ps1
+# 查看所有表
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "\dt"
 
-# 查看特定表
-.\db-query.ps1 -Table inspection_templates
+# 查看特定表（示例：inspection_templates）
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT * FROM inspection_templates LIMIT 50;"
 
 # 从备份恢复
 .\db-manage.ps1 backup  # 先备份当前数据
@@ -633,11 +597,11 @@ docker logs -f inspect-postgres-dev
 ### 4. 数据分析
 
 ```powershell
-# 定期查看数据库状态
-.\db-query.ps1 -ShowStats
+# 查看数据库统计信息（示例：连接数/事务）
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT datname, numbackends, xact_commit, xact_rollback FROM pg_stat_database WHERE datname = 'inspect_system_dev';"
 
-# 导出数据报告
-.\db-query.ps1 -Format HTML -Output "reports\db_report_$(Get-Date -Format 'yyyyMMdd').html"
+# 查看表大小排行（Top 20）
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT schemaname, tablename, pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size FROM pg_tables WHERE schemaname = 'public' ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC LIMIT 20;"
 ```
 
 ### 5. 安全配置
@@ -652,10 +616,10 @@ docker logs -f inspect-postgres-dev
 
 ```powershell
 # 查看数据库统计信息
-.\db-query.ps1 -CustomSQL "SELECT * FROM pg_stat_database WHERE datname = 'inspect_system_dev';"
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT * FROM pg_stat_database WHERE datname = 'inspect_system_dev';"
 
 # 查看表大小
-.\db-query.ps1 -CustomSQL "SELECT schemaname, tablename, pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size FROM pg_tables WHERE schemaname = 'public' ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;"
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT schemaname, tablename, pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size FROM pg_tables WHERE schemaname = 'public' ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;"
 ```
 
 ---
@@ -673,14 +637,14 @@ function dbm { .\scripts\database\db-manage.ps1 @args }
 function dbs { .\scripts\database\db-manage.ps1 status }
 function dbl { .\scripts\database\db-manage.ps1 logs @args }
 function dbb { .\scripts\database\db-manage.ps1 backup }
-function dbq { .\scripts\database\db-query.ps1 @args }
+function dbseed { .\scripts\database\db-manage.ps1 seed-admin @args }
 
 # 使用示例：
 # dbm start      # 启动服务
 # dbs            # 查看状态
 # dbl -Service postgres  # 查看日志
 # dbb            # 备份数据
-# dbq -Table users  # 查询表
+# dbseed         # 初始化管理员账号与权限
 ```
 
 ---

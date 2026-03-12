@@ -8,13 +8,31 @@
     支持 PostgreSQL（TimescaleDB）与 Redis 的统一管理
 
 .PARAMETER Action
-    操作类型: start, stop, reset, backup, status, logs, init
+    操作类型: start, stop, reset, backup, status, logs, init, seed-admin
 
 .PARAMETER Service
     指定服务: postgres, redis, all (默认)
 
 .PARAMETER BackupPath
     备份文件路径 (仅用于 backup 操作)
+
+.PARAMETER Username
+    seed-admin 操作的用户名（默认: admin）
+
+.PARAMETER Password
+    seed-admin 操作的密码（默认: admin123）
+
+.PARAMETER Email
+    seed-admin 操作的邮箱（默认: admin@admin.com）
+
+.PARAMETER Role
+    seed-admin 操作的角色（默认: superadmin；后端会映射到实际角色）
+
+.PARAMETER FullName
+    seed-admin 操作的显示名（默认: 系统管理员）
+
+.PARAMETER SkipMigrate
+    seed-admin 操作是否跳过数据库迁移（不推荐）
 
 .EXAMPLE
     .\db-manage.ps1 start
@@ -32,6 +50,10 @@
     .\db-manage.ps1 backup -BackupPath "backups\manual"
     手动备份到指定路径
 
+.EXAMPLE
+    .\db-manage.ps1 seed-admin
+    初始化默认管理员账号与 RBAC 权限数据
+
 .NOTES
     文件名: db-manage.ps1
     作者: 技术团队
@@ -42,13 +64,21 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("start", "stop", "reset", "backup", "status", "logs", "init")]
+    [ValidateSet("start", "stop", "reset", "backup", "status", "logs", "init", "seed-admin")]
     [string]$Action,
     
     [ValidateSet("postgres", "redis", "all")]
     [string]$Service = "all",
     
-    [string]$BackupPath = "backups"
+    [string]$BackupPath = "backups",
+
+    # seed-admin 参数
+    [string]$Username = "admin",
+    [string]$Password = "admin123",
+    [string]$Email = "admin@admin.com",
+    [string]$Role = "superadmin",
+    [string]$FullName = "系统管理员",
+    [switch]$SkipMigrate
 )
 
 # 设置错误处理
@@ -329,6 +359,70 @@ function Initialize-Database {
     }
 }
 
+# 初始化默认管理员账号与 RBAC（原独立脚本已合并到此处）
+function Seed-AdminUser {
+    Write-ColorOutput "`n👤 初始化默认管理员账号与权限..." "Blue"
+
+    if (-not (Get-Command "go" -ErrorAction SilentlyContinue)) {
+        throw "未检测到 Go 环境，请先安装 Go（用于执行 backend-go/cmd/seed）"
+    }
+
+    # 计算项目根目录
+    $scriptsRoot = Split-Path -Parent $script:ScriptRoot
+    $projectRoot = Split-Path -Parent $scriptsRoot
+    $backendPath = Join-Path $projectRoot "backend-go"
+    if (-not (Test-Path $backendPath)) {
+        throw "未找到后端目录: $backendPath"
+    }
+
+    # 选择环境文件（优先 .env）
+    $envFile = Join-Path $projectRoot ".env"
+    if (-not (Test-Path $envFile)) {
+        $envFile = Join-Path $projectRoot ".env.development"
+    }
+    if (Test-Path $envFile) {
+        $env:ENV_FILE = $envFile
+        Write-ColorOutput "使用环境文件: $envFile" "Gray"
+    } else {
+        Write-ColorOutput "⚠️ 未找到 .env/.env.development，将使用后端默认配置（可能连接不到数据库）" "Yellow"
+    }
+
+    # 兼容受限环境：将 Go 编译缓存放到项目目录，避免写入用户目录失败
+    $goCacheRoot = Join-Path $projectRoot ".gocache"
+    $goBuildCache = Join-Path $goCacheRoot "build"
+    $goTmpDir = Join-Path $goCacheRoot "tmp"
+    New-Item -ItemType Directory -Force -Path $goBuildCache, $goTmpDir | Out-Null
+    $env:GOCACHE = $goBuildCache
+    $env:GOTMPDIR = $goTmpDir
+
+    Push-Location $backendPath
+    try {
+        $args = @(
+            "run",
+            "./cmd/seed",
+            "--username", $Username,
+            "--password", $Password,
+            "--email", $Email,
+            "--role", $Role,
+            "--full-name", $FullName
+        )
+        if ($SkipMigrate) {
+            $args += "--skip-migrate"
+        }
+
+        Write-ColorOutput "执行: go $($args -join ' ')" "DarkGray"
+        & go @args
+        if ($LASTEXITCODE -ne 0) {
+            throw "初始化失败，退出代码: $LASTEXITCODE"
+        }
+
+        Write-ColorOutput "✅ 初始化完成，可使用 $Username / $Password 登录" "Green"
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 # 显示服务状态
 function Show-ServiceStatus {
     Write-ColorOutput "`n📊 数据库服务状态:" "Blue"
@@ -417,7 +511,7 @@ function Get-HostPort {
 # 显示服务信息
 function Show-ServiceInfo {
     $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
-    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16379
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
 
     Write-ColorOutput "`n📊 服务访问地址:" "Blue"
     Write-ColorOutput "  🗄️ PostgreSQL: localhost:$postgresHostPort" "White"
@@ -443,6 +537,7 @@ function Main {
             "reset" { Reset-DatabaseServices }
             "backup" { Backup-DatabaseServices }
             "init" { Initialize-Database }
+            "seed-admin" { Seed-AdminUser }
             "status" { Show-ServiceStatus }
             "logs" { Show-ServiceLogs }
         }

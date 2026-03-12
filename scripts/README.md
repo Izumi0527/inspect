@@ -6,35 +6,22 @@
 
 ```
 scripts/
-├── setup/              # 环境设置脚本
-│   ├── setup-dev-env.ps1      # 一键开发环境设置
-│   ├── frontend-setup.ps1     # 前端环境设置
-│   └── backend-setup.ps1      # 后端环境设置
-│
 ├── development/        # 开发服务脚本
+│   ├── setup-dev-env.ps1      # 一键开发环境设置
 │   ├── dev-start.ps1          # 一键启动开发环境
-│   ├── start-frontend.ps1     # 启动前端服务
-│   └── start-backend-go.ps1   # 启动后端服务（Go）
+│   └── README.md              # 开发脚本说明
 │
 ├── database/          # 数据库管理脚本
 │   ├── db-manage.ps1          # 数据库服务管理
-│   ├── db-init-migrate-go.ps1    # 数据库初始化和迁移
-│   ├── db-health-check.ps1    # 数据库健康检查
-│   └── db-query.ps1           # 数据库查询工具
+│   ├── db-init-complete.ps1   # 数据库完整初始化（基础配置/模板/种子）
+│   └── README.md              # 数据库脚本说明
 │
-├── testing/           # 测试工具脚本
+├── tests/             # 测试与维护脚本
 │   ├── run-tests.ps1          # 统一测试运行器
-│   ├── run-all-tests.ps1      # 运行所有测试
 │   ├── quality-check.ps1      # 代码质量检查
-│   └── device-probe-verify.ps1 # 设备探测联调验证
-│
-├── maintenance/       # 维护工具脚本
 │   ├── clean-cache.ps1        # 清理项目缓存
 │   ├── view-logs.ps1          # 日志查看工具
-│   └── test-logs.ps1          # 日志功能测试
-│
-├── management/        # 管理工具脚本
-│   └── scripts-manager.ps1    # 脚本管理工具
+│   └── README.md              # 说明文档
 │
 └── README.md          # 本说明文件
 ```
@@ -46,13 +33,7 @@ scripts/
 ### 1. 环境设置
 ```powershell
 # 一键设置完整开发环境
-.\scripts\setup\setup-dev-env.ps1
-
-# 仅设置前端环境
-.\scripts\setup\frontend-setup.ps1 setup
-
-# 仅设置后端环境
-.\scripts\setup\backend-setup.ps1 setup
+.\scripts\development\setup-dev-env.ps1
 ```
 
 ### 2. 启动开发服务
@@ -61,10 +42,12 @@ scripts/
 .\scripts\development\dev-start.ps1
 
 # 仅启动前端服务
-.\scripts\development\start-frontend.ps1
+cd frontend
+pnpm dev
 
 # 仅启动后端服务
-.\scripts\development\start-backend-go.ps1
+cd backend-go
+go run ./cmd/api
 ```
 
 ### 3. 数据库管理
@@ -72,66 +55,55 @@ scripts/
 # 启动数据库服务
 .\scripts\database\db-manage.ps1 start
 
-# 初始化数据库
-.\scripts\database\db-init-migrate-go.ps1
+# 初始化数据库（执行完整初始化脚本）
+.\scripts\database\db-manage.ps1 init
 
-# 健康检查
-.\scripts\database\db-health-check.ps1
+# 初始化系统登录用户/权限（开发环境默认：admin/admin123/admin@admin.com/superadmin）
+.\scripts\database\db-manage.ps1 seed-admin -Username admin -Password admin123 -Email admin@admin.com -Role superadmin
+
+# 查看数据库状态
+.\scripts\database\db-manage.ps1 status
 ```
 
-## 🛠️ 脚本管理工具
+## 🛠️ 脚本使用方式
 
-使用脚本管理工具可以方便地查看和运行所有脚本：
+本仓库不再提供统一的“脚本管理器”，建议直接运行脚本文件，或查看脚本内置帮助：
 
 ```powershell
-# 查看所有可用脚本
-.\scripts\management\scripts-manager.ps1 list
+# 查看脚本帮助（推荐）
+pwsh -NoProfile -File .\scripts\development\dev-start.ps1 -Help
+pwsh -NoProfile -File .\scripts\tests\view-logs.ps1 -Help
 
-# 运行指定脚本
-.\scripts\management\scripts-manager.ps1 run -Script "setup-dev-env.ps1"
-
-# 查看脚本帮助
-.\scripts\management\scripts-manager.ps1 help -Script "dev-start.ps1"
+# 直接运行脚本
+.\scripts\development\dev-start.ps1
+.\scripts\tests\run-tests.ps1 -Target backend
 ```
 
 ## 📋 脚本分类说明
 
 ### Setup (环境设置)
 - **setup-dev-env.ps1**: 一键设置完整开发环境，包括前端、后端和数据库
-- **frontend-setup.ps1**: 专门用于前端环境设置，包括 Node.js 依赖安装
-- **backend-setup.ps1**: 专门用于后端环境设置，包括 Go 依赖与迁移
 
 ### Development (开发服务)
 - **dev-start.ps1**: 一键启动所有开发服务，包括数据库、后端和前端
-- **start-frontend.ps1**: 启动前端开发服务器
-- **start-backend-go.ps1**: 启动后端 API 服务器（Go）
-- Python 旧版启动脚本已迁移至 `legacy/scripts/development/start-backend.ps1`（仅保留参考）
+- **setup-dev-env.ps1**: 一键开发环境设置（新环境/重装依赖时使用）
+- **dev-start.ps1 -Diagnose**: 开发环境诊断（已合并到 dev-start）
 
 ### Database (数据库管理)
 - **db-manage.ps1**: 数据库服务的启动、停止、重启等管理操作
-- **db-init-migrate-go.ps1**: 数据库初始化、迁移、备份等操作
-- **db-health-check.ps1**: 检查数据库服务健康状态
-- **db-query.ps1**: 数据库查询和管理工具
+- **db-init-complete.ps1**: 完整数据库初始化工具（可被 db-manage.ps1 init 调用）
 
-### Testing (测试工具)
+### Tests (测试与维护)
 - **run-tests.ps1**: 统一的测试运行器，支持前端、后端、单元测试等
-- **run-all-tests.ps1**: 运行完整的测试套件
 - **quality-check.ps1**: 代码质量检查，包括格式化、语法检查等
-- **device-probe-verify.ps1**: 设备探测联调验证（ICMP/SNMP）
-
-### Maintenance (维护工具)
 - **clean-cache.ps1**: 清理项目中的各种缓存文件
-- **view-logs.ps1**: 实时查看和过滤日志文件
-- **test-logs.ps1**: 测试日志系统功能
-
-### Management (管理工具)
-- **scripts-manager.ps1**: 脚本管理工具，提供统一的脚本查看和执行界面
+- **view-logs.ps1**: 查看/过滤 logs 目录下日志
 
 ## 💡 使用建议
 
 1. **新手开发者**: 从 `setup-dev-env.ps1` 开始，一键设置完整环境
 2. **日常开发**: 使用 `dev-start.ps1` 快速启动开发环境
-3. **问题排查**: 使用 `db-health-check.ps1` 和 `view-logs.ps1` 进行诊断
+3. **问题排查**: 使用 `dev-start.ps1 -Diagnose` 和 `view-logs.ps1` 进行诊断
 4. **代码提交前**: 运行 `run-tests.ps1` 和 `quality-check.ps1` 确保代码质量
 
 ## 🔧 自定义和扩展
@@ -139,10 +111,10 @@ scripts/
 所有脚本都支持参数自定义，使用 `-Help` 参数查看具体用法：
 
 ```powershell
-.\scripts\setup\setup-dev-env.ps1 -Help
+.\scripts\development\setup-dev-env.ps1 -Help
 ```
 
-如需添加新脚本，请按照现有分类放置，并更新 `scripts-manager.ps1` 中的配置。
+如需添加新脚本，请按照现有分类放置，并同步更新 `scripts/README.md` 与对应子目录的 `README.md`（如 `scripts/tests/README.md`）。
 
 
 

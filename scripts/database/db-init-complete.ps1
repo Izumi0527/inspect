@@ -264,13 +264,13 @@ Write-Host ""
 Write-Host "🎉 数据库初始化完成！" -ForegroundColor Green
 Write-Host ""
 Write-Host "后续步骤:" -ForegroundColor Cyan
-Write-Host "  1. 启动 Go 后端服务: .\scripts\development\start-backend-go.ps1" -ForegroundColor White
-Write-Host "  2. 启动前端服务: .\scripts\development\start-frontend.ps1" -ForegroundColor White
+Write-Host "  1. 启动后端服务（推荐）: .\scripts\development\dev-start.ps1 -Services backend" -ForegroundColor White
+Write-Host "  2. 启动前端服务（手动）: cd frontend; pnpm dev" -ForegroundColor White
 Write-Host "  3. 访问系统: http://localhost:3000" -ForegroundColor White
 Write-Host ""
 Write-Host "数据库管理:" -ForegroundColor Cyan
-Write-Host "  - 查看数据库状态: .\scripts\database\db-health-check.ps1" -ForegroundColor White
-Write-Host "  - 数据库查询工具: .\scripts\database\db-query.ps1" -ForegroundColor White
+Write-Host "  - 查看数据库状态: .\scripts\database\db-manage.ps1 status" -ForegroundColor White
+Write-Host "  - 初始化默认管理员账号: .\scripts\database\db-manage.ps1 seed-admin" -ForegroundColor White
 Write-Host "  - 数据库管理面板: .\scripts\database\db-manage.ps1" -ForegroundColor White
 
 # 清理环境变量
