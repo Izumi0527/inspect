@@ -344,14 +344,41 @@ func (s *Service) CreateStrategy(ctx context.Context, payload StrategyPayload) (
 	}
 
 	now := time.Now().UTC()
+	strategyType := normalizeStrategyType(payload.Type)
+
+	var cronPtr *string
+	if strategyType == StrategyScheduled && payload.Cron != nil {
+		cronText := strings.TrimSpace(*payload.Cron)
+		if cronText != "" {
+			cronPtr = &cronText
+		}
+	}
+
+	var nextRun *time.Time
+	if strategyType == StrategyScheduled && payload.Enabled {
+		if cronPtr == nil {
+			return Strategy{}, fmt.Errorf("cron is required for scheduled strategy")
+		}
+		normalizedCron, err := NormalizeCronExpression(*cronPtr)
+		if err != nil {
+			return Strategy{}, err
+		}
+		next, err := ComputeNextRunTime(normalizedCron, now)
+		if err != nil {
+			return Strategy{}, err
+		}
+		nextRun = &next
+	}
+
 	strategy := Strategy{
 		Name:        name,
 		Description: payload.Description,
-		Type:        normalizeStrategyType(payload.Type),
-		Cron:        payload.Cron,
+		Type:        strategyType,
+		Cron:        cronPtr, // manual 策略忽略 cron
 		Devices:     devicesJSON,
 		Templates:   templatesJSON,
 		Enabled:     payload.Enabled,
+		NextRunTime: nextRun,
 		CreatedAt:   &now,
 		UpdatedAt:   &now,
 	}
@@ -367,20 +394,45 @@ func (s *Service) UpdateStrategy(ctx context.Context, id int, payload StrategyUp
 		return Strategy{}, fmt.Errorf("database not initialized")
 	}
 
-	updates := map[string]interface{}{
-		"updated_at": time.Now().UTC(),
+	current, err := s.GetStrategy(ctx, id)
+	if err != nil {
+		return Strategy{}, err
 	}
+
+	now := time.Now().UTC()
+	updates := map[string]interface{}{
+		"updated_at": now,
+	}
+
 	if payload.Name != nil {
 		updates["name"] = strings.TrimSpace(*payload.Name)
 	}
 	if payload.Description != nil {
 		updates["description"] = *payload.Description
 	}
+
+	strategyType := current.Type
 	if payload.Type != nil {
-		updates["type"] = normalizeStrategyType(*payload.Type)
+		strategyType = normalizeStrategyType(*payload.Type)
+		updates["type"] = strategyType
 	}
+
+	enabled := current.Enabled
+	if payload.Enabled != nil {
+		enabled = *payload.Enabled
+		updates["enabled"] = enabled
+	}
+
+	cronPtr := current.Cron
 	if payload.Cron != nil {
-		updates["cron"] = *payload.Cron
+		cronText := strings.TrimSpace(*payload.Cron)
+		if cronText == "" {
+			cronPtr = nil
+			updates["cron"] = nil
+		} else {
+			cronPtr = &cronText
+			updates["cron"] = cronText
+		}
 	}
 	if payload.Devices != nil {
 		if devicesJSON, err := encodeJSON(*payload.Devices); err == nil {
@@ -396,8 +448,29 @@ func (s *Service) UpdateStrategy(ctx context.Context, id int, payload StrategyUp
 			return Strategy{}, err
 		}
 	}
-	if payload.Enabled != nil {
-		updates["enabled"] = *payload.Enabled
+
+	// 仅在 cron/type/enabled 发生变化时维护 next_run_time，避免无关字段更新导致 next_run_time 漂移
+	if payload.Type != nil || payload.Cron != nil || payload.Enabled != nil {
+		if strategyType == StrategyManual {
+			cronPtr = nil
+			updates["cron"] = nil
+			updates["next_run_time"] = nil
+		} else if !enabled {
+			updates["next_run_time"] = nil
+		} else {
+			if cronPtr == nil || strings.TrimSpace(*cronPtr) == "" {
+				return Strategy{}, fmt.Errorf("cron is required for scheduled strategy")
+			}
+			normalizedCron, err := NormalizeCronExpression(*cronPtr)
+			if err != nil {
+				return Strategy{}, err
+			}
+			next, err := ComputeNextRunTime(normalizedCron, now)
+			if err != nil {
+				return Strategy{}, err
+			}
+			updates["next_run_time"] = next
+		}
 	}
 
 	if err := s.db.WithContext(ctx).Model(&Strategy{}).Where("id = ?", id).Updates(updates).Error; err != nil {
@@ -426,10 +499,31 @@ func (s *Service) ToggleStrategy(ctx context.Context, id int) (Strategy, error) 
 		return Strategy{}, err
 	}
 	enabled := !strategy.Enabled
+	now := time.Now().UTC()
 	updates := map[string]interface{}{
 		"enabled":    enabled,
-		"updated_at": time.Now().UTC(),
+		"updated_at": now,
 	}
+
+	if !enabled {
+		updates["next_run_time"] = nil
+	} else if strings.EqualFold(strategy.Type, StrategyScheduled) {
+		if strategy.Cron == nil || strings.TrimSpace(*strategy.Cron) == "" {
+			return Strategy{}, fmt.Errorf("cron is required for scheduled strategy")
+		}
+		normalizedCron, err := NormalizeCronExpression(*strategy.Cron)
+		if err != nil {
+			return Strategy{}, err
+		}
+		next, err := ComputeNextRunTime(normalizedCron, now)
+		if err != nil {
+			return Strategy{}, err
+		}
+		updates["next_run_time"] = next
+	} else {
+		updates["next_run_time"] = nil
+	}
+
 	if err := s.db.WithContext(ctx).Model(&Strategy{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return Strategy{}, err
 	}
@@ -697,14 +791,35 @@ func (s *Service) List(ctx context.Context, filters TemplateFilters, pagination 
 
 	// Apply filters
 	if filters.Vendor != "" {
-		// Vendor 搜索：在 name 或 description 中匹配厂商关键词
-		vendorPattern := "%" + filters.Vendor + "%"
-		query = query.Where("name ILIKE ? OR description ILIKE ?", vendorPattern, vendorPattern)
+		// Vendor 搜索：
+		// 1) 兼容旧逻辑：在 name 或 description 中模糊匹配关键词
+		// 2) 兼容内置模板：device_types 可能为对象，包含 vendors 数组
+		vendor := strings.TrimSpace(filters.Vendor)
+		if vendor != "" {
+			vendorPattern := "%" + vendor + "%"
+			vendorJSON := fmt.Sprintf(`["%s"]`, vendor)
+			query = query.Where(
+				"(name ILIKE ? OR description ILIKE ? OR COALESCE(device_types->'vendors','[]'::jsonb) @> ?)",
+				vendorPattern,
+				vendorPattern,
+				vendorJSON,
+			)
+		}
 	}
 
 	if filters.DeviceType != "" {
-		// device_types 列直接存储 ["router","switch"] 格式的 JSON 数组
-		query = query.Where("device_types @> ?", fmt.Sprintf(`["%s"]`, filters.DeviceType))
+		// device_types 兼容两种存储形态：
+		// - 推荐：["router","switch"]
+		// - 历史：{"vendors":[...],"device_types":[...]}
+		deviceType := strings.TrimSpace(filters.DeviceType)
+		if deviceType != "" {
+			filterJSON := fmt.Sprintf(`["%s"]`, deviceType)
+			query = query.Where(
+				`((jsonb_typeof(device_types) = 'array' AND device_types @> ?) OR (jsonb_typeof(device_types) = 'object' AND COALESCE(device_types->'device_types','[]'::jsonb) @> ?))`,
+				filterJSON,
+				filterJSON,
+			)
+		}
 	}
 
 	if filters.Category != "" {

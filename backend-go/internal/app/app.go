@@ -42,6 +42,9 @@ type App struct {
 	Scheduler    *scheduler.Service
 	TrapListener *logs.SNMPTrapListener
 	Syslog       *logs.SyslogReceiver
+
+	InspectionSchedulerCancel context.CancelFunc
+	InspectionSchedulerDone   <-chan struct{}
 }
 
 func New() (*App, error) {
@@ -140,6 +143,9 @@ func New() (*App, error) {
 		Logger:          log,
 		ReportOutputDir: cfg.ReportsOutputDir,
 	}
+
+	inspectionSchedulerCtx, inspectionSchedulerCancel := context.WithCancel(context.Background())
+	inspectionSchedulerDone := inspectionHandler.StartStrategyScheduler(inspectionSchedulerCtx)
 
 	settingsHandler := handlers.SettingsHandler{
 		Service: settingsService,
@@ -243,6 +249,8 @@ func New() (*App, error) {
 		Scheduler:    schedulerService,
 		TrapListener: trapListener,
 		Syslog:       syslogReceiver,
+		InspectionSchedulerCancel: inspectionSchedulerCancel,
+		InspectionSchedulerDone:   inspectionSchedulerDone,
 	}, nil
 }
 
@@ -283,6 +291,16 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 	if a.Syslog != nil {
 		_ = a.Syslog.Stop(shutdownCtx)
+	}
+	if a.InspectionSchedulerCancel != nil {
+		a.InspectionSchedulerCancel()
+	}
+	if a.InspectionSchedulerDone != nil {
+		select {
+		case <-a.InspectionSchedulerDone:
+		case <-shutdownCtx.Done():
+			return shutdownCtx.Err()
+		}
 	}
 
 	if a.DB != nil {

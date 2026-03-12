@@ -30,6 +30,21 @@ interface Props {
   onAdvanced?: () => void // 切换到高级模式
 }
 
+// Tailwind 动态拼接 class 在生产构建可能被裁剪，这里用静态映射确保样式稳定
+const TEMPLATE_COLOR_CLASS = {
+  blue: { bg: 'bg-blue-100 dark:bg-blue-900/30', text600: 'text-blue-600' },
+  green: { bg: 'bg-green-100 dark:bg-green-900/30', text600: 'text-green-600' },
+  red: { bg: 'bg-red-100 dark:bg-red-900/30', text600: 'text-red-600' },
+  gray: { bg: 'bg-gray-100 dark:bg-gray-900/30', text600: 'text-gray-600' }
+} as const
+
+type TemplateColor = keyof typeof TEMPLATE_COLOR_CLASS
+
+const getTemplateColorClass = (color?: string) => {
+  if (!color) return TEMPLATE_COLOR_CLASS.gray
+  return TEMPLATE_COLOR_CLASS[color as TemplateColor] ?? TEMPLATE_COLOR_CLASS.gray
+}
+
 // 预设模板配置
 const QUICK_TEMPLATES = [
   {
@@ -83,6 +98,7 @@ export const QuickTemplateCreate: React.FC<Props> = ({ onClose, onSuccess, onAdv
   const [selectedTemplate, setSelectedTemplate] = useState<typeof QUICK_TEMPLATES[0] | null>(null)
   const [customName, setCustomName] = useState('')
   const [step, setStep] = useState<'select' | 'customize'>('select')
+  const selectedColorClass = getTemplateColorClass(selectedTemplate?.color)
 
   const createTemplate = useCreateTemplate()
 
@@ -152,14 +168,15 @@ export const QuickTemplateCreate: React.FC<Props> = ({ onClose, onSuccess, onAdv
               <div className="grid gap-3">
                 {QUICK_TEMPLATES.map((template) => {
                   const Icon = template.icon
+                  const colorClass = getTemplateColorClass(template.color)
                   return (
                     <button
                       key={template.id}
                       onClick={() => handleSelectTemplate(template)}
                       className="flex items-center gap-4 p-4 border border-border rounded-xl hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-left group"
                     >
-                      <div className={`p-3 rounded-xl bg-${template.color}-100 dark:bg-${template.color}-900/30`}>
-                        <Icon className={`w-6 h-6 text-${template.color}-600`} />
+                      <div className={`p-3 rounded-xl ${colorClass.bg}`}>
+                        <Icon className={`w-6 h-6 ${colorClass.text600}`} />
                       </div>
                       <div className="flex-1">
                         <h4 className="font-medium text-foreground">
@@ -213,9 +230,9 @@ export const QuickTemplateCreate: React.FC<Props> = ({ onClose, onSuccess, onAdv
                 <Card>
                   <CardContent className="p-4">
                     <div className="flex items-start gap-4">
-                      <div className={`p-3 rounded-xl bg-${selectedTemplate.color}-100 dark:bg-${selectedTemplate.color}-900/30`}>
+                      <div className={`p-3 rounded-xl ${selectedColorClass.bg}`}>
                         {React.createElement(selectedTemplate.icon, {
-                          className: `w-6 h-6 text-${selectedTemplate.color}-600`
+                          className: `w-6 h-6 ${selectedColorClass.text600}`
                         })}
                       </div>
                       <div className="flex-1">

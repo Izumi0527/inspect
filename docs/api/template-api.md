@@ -57,10 +57,8 @@ GET /inspection/templates
         "name": "Cisco 路由器标准巡检",
         "description": "适用于 Cisco 路由器的标准巡检模板",
         "category": "network",
-        "device_types": {
-          "vendors": ["Cisco"],
-          "device_types": ["router"]
-        },
+        "deviceTypes": ["router"],
+        "device_types": ["router"],
         "check_items_count": 15,
         "is_default": true,
         "is_active": true,
@@ -104,10 +102,8 @@ GET /inspection/templates/:id
     "name": "Cisco 路由器标准巡检",
     "description": "适用于 Cisco 路由器的标准巡检模板",
     "category": "network",
-    "device_types": {
-      "vendors": ["Cisco"],
-      "device_types": ["router"]
-    },
+    "deviceTypes": ["router"],
+    "device_types": ["router"],
     "check_items": [
       {
         "id": "cpu-usage",
@@ -150,15 +146,20 @@ POST /inspection/templates
 
 **请求体**
 
+> 说明：`device_types` 支持以下两种格式：
+>
+> 1) **推荐（新数据）**：设备类型数组 `["router","switch"]`
+>
+> 2) **兼容（历史/内置模板存量）**：对象 `{"vendors":["Cisco"],"device_types":["router"]}`
+>
+> 服务端响应会统一输出 `deviceTypes: string[]`，并同时返回 `device_types: string[]` 作为兼容字段（两者内容一致）。
+
 ```json
 {
   "name": "自定义路由器巡检",
   "description": "自定义的路由器巡检模板",
   "category": "network",
-  "device_types": {
-    "vendors": ["Cisco"],
-    "device_types": ["router"]
-  },
+  "device_types": ["router"],
   "check_items": [
     {
       "id": "cpu-usage",
@@ -479,10 +480,7 @@ curl -X POST "http://localhost:8000/api/v1/inspection/templates" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "测试模板",
-    "device_types": {
-      "vendors": ["Cisco"],
-      "device_types": ["router"]
-    },
+    "device_types": ["router"],
     "check_items": [],
     "is_active": true
   }'
@@ -514,10 +512,7 @@ const response = await fetch('http://localhost:8000/api/v1/inspection/templates'
   },
   body: JSON.stringify({
     name: '测试模板',
-    device_types: {
-      vendors: ['Cisco'],
-      device_types: ['router'],
-    },
+    device_types: ['router'],
     check_items: [],
     is_active: true,
   }),

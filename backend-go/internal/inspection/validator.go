@@ -289,31 +289,86 @@ func (v *templateValidator) ValidateCheckItemType(itemType string) error {
 // ValidateSNMPConfig validates SNMP check item configuration
 // Validates: Requirement 12.5
 func (v *templateValidator) ValidateSNMPConfig(config map[string]interface{}) error {
-	// Check if OID is present
-	oidValue, ok := config["oid"]
-	if !ok {
-		return &ValidationError{
-			Field:   "config.oid",
-			Message: "SNMP 检查项必须包含 OID",
-			Err:     ErrOIDRequired,
+	if config == nil {
+		return nil
+	}
+
+	// 1) 兼容原始单 OID 形态
+	if oidValue, ok := config["oid"]; ok {
+		oid, ok := oidValue.(string)
+		if !ok {
+			return &ValidationError{
+				Field:   "config.oid",
+				Message: "OID 必须是字符串类型",
+				Err:     ErrInvalidOIDFormat,
+			}
 		}
-	}
-
-	// Validate OID format
-	oid, ok := oidValue.(string)
-	if !ok {
-		return &ValidationError{
-			Field:   "config.oid",
-			Message: "OID 必须是字符串类型",
-			Err:     ErrInvalidOIDFormat,
+		if err := v.ValidateOIDFormat(oid); err != nil {
+			return rewriteValidationErrorField(err, "config.oid")
 		}
+		return nil
 	}
 
-	if err := v.ValidateOIDFormat(oid); err != nil {
-		return err
+	// 2) 兼容内置模板 oid_used/oid_free 形态（支持 snake 与 camel）
+	oidUsedValue, hasOIDUsed := config["oid_used"]
+	if !hasOIDUsed {
+		oidUsedValue, hasOIDUsed = config["oidUsed"]
+	}
+	oidFreeValue, hasOIDFree := config["oid_free"]
+	if !hasOIDFree {
+		oidFreeValue, hasOIDFree = config["oidFree"]
 	}
 
+	if hasOIDUsed || hasOIDFree {
+		if hasOIDUsed {
+			oidUsed, ok := oidUsedValue.(string)
+			if !ok {
+				return &ValidationError{
+					Field:   "config.oid_used",
+					Message: "OID 必须是字符串类型",
+					Err:     ErrInvalidOIDFormat,
+				}
+			}
+			if err := v.ValidateOIDFormat(oidUsed); err != nil {
+				return rewriteValidationErrorField(err, "config.oid_used")
+			}
+		}
+
+		if hasOIDFree {
+			oidFree, ok := oidFreeValue.(string)
+			if !ok {
+				return &ValidationError{
+					Field:   "config.oid_free",
+					Message: "OID 必须是字符串类型",
+					Err:     ErrInvalidOIDFormat,
+				}
+			}
+			if err := v.ValidateOIDFormat(oidFree); err != nil {
+				return rewriteValidationErrorField(err, "config.oid_free")
+			}
+		}
+
+		return nil
+	}
+
+	// 3) 没有任何 OID 配置：允许用于“SNMP 连通性/采集型检查”
 	return nil
+}
+
+func rewriteValidationErrorField(err error, field string) error {
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		return &ValidationError{
+			Field:   field,
+			Message: ve.Message,
+			Err:     ve.Err,
+		}
+	}
+	return &ValidationError{
+		Field:   field,
+		Message: err.Error(),
+		Err:     err,
+	}
 }
 
 // ValidateSSHConfig validates SSH check item configuration

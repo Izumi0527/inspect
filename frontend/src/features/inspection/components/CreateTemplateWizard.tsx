@@ -77,6 +77,22 @@ const CATEGORY_OPTIONS = [
   { value: 'custom', label: '自定义', icon: FileText, color: 'purple', description: '自定义检查项组合' }
 ] as const
 
+// Tailwind 动态拼接 class 在生产构建可能被裁剪，这里用静态映射确保样式稳定
+const CATEGORY_COLOR_CLASS = {
+  blue: { bg: 'bg-blue-100 dark:bg-blue-900/30', text600: 'text-blue-600' },
+  green: { bg: 'bg-green-100 dark:bg-green-900/30', text600: 'text-green-600' },
+  red: { bg: 'bg-red-100 dark:bg-red-900/30', text600: 'text-red-600' },
+  purple: { bg: 'bg-purple-100 dark:bg-purple-900/30', text600: 'text-purple-600' },
+  gray: { bg: 'bg-gray-100 dark:bg-gray-900/30', text600: 'text-gray-600' }
+} as const
+
+type CategoryColor = keyof typeof CATEGORY_COLOR_CLASS
+
+const getCategoryColorClass = (color?: string) => {
+  if (!color) return CATEGORY_COLOR_CLASS.gray
+  return CATEGORY_COLOR_CLASS[color as CategoryColor] ?? CATEGORY_COLOR_CLASS.gray
+}
+
 const DEVICE_TYPE_OPTIONS = [
   { value: 'router', label: '路由器', icon: '🌐' },
   { value: 'switch', label: '交换机', icon: '🔀' },
@@ -743,6 +759,7 @@ const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => 
 const StepPreview: React.FC<StepProps> = ({ formData }) => {
   const categoryOption = CATEGORY_OPTIONS.find(c => c.value === formData.category)
   const CategoryIcon = categoryOption?.icon || FileText
+  const categoryColorClass = getCategoryColorClass(categoryOption?.color)
 
   return (
     <div className="space-y-6">
@@ -750,8 +767,8 @@ const StepPreview: React.FC<StepProps> = ({ formData }) => {
       <Card>
         <CardContent className="p-6">
           <div className="flex items-start gap-4">
-            <div className={`p-3 rounded-xl bg-${categoryOption?.color || 'gray'}-100 dark:bg-${categoryOption?.color || 'gray'}-900/30`}>
-              <CategoryIcon className={`w-8 h-8 text-${categoryOption?.color || 'gray'}-600`} />
+            <div className={`p-3 rounded-xl ${categoryColorClass.bg}`}>
+              <CategoryIcon className={`w-8 h-8 ${categoryColorClass.text600}`} />
             </div>
             <div className="flex-1">
               <h4 className="text-xl font-semibold text-foreground">

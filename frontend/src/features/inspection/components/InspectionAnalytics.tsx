@@ -33,6 +33,22 @@ import {
 import { exportAnalyticsReport } from '../api/inspection.api'
 import toast from 'react-hot-toast'
 
+// Tailwind 动态拼接 class 在生产构建可能被裁剪，这里用静态映射确保样式稳定
+const METRIC_COLOR_CLASS = {
+  blue: { bg100: 'bg-blue-100', text500: 'text-blue-500', text600: 'text-blue-600' },
+  green: { bg100: 'bg-green-100', text500: 'text-green-500', text600: 'text-green-600' },
+  purple: { bg100: 'bg-purple-100', text500: 'text-purple-500', text600: 'text-purple-600' },
+  orange: { bg100: 'bg-orange-100', text500: 'text-orange-500', text600: 'text-orange-600' },
+  gray: { bg100: 'bg-gray-100', text500: 'text-gray-500', text600: 'text-gray-600' }
+} as const
+
+type MetricColor = keyof typeof METRIC_COLOR_CLASS
+
+const getMetricColorClass = (color?: string) => {
+  if (!color) return METRIC_COLOR_CLASS.gray
+  return METRIC_COLOR_CLASS[color as MetricColor] ?? METRIC_COLOR_CLASS.gray
+}
+
 // 格式化日期为友好的显示格式
 const formatDateLabel = (dateStr: string, period: 'day' | 'week' | 'month'): string => {
   try {
@@ -221,28 +237,31 @@ export const InspectionAnalytics: React.FC = () => {
             icon: BarChart3,
             color: 'orange'
           }
-        ].map((metric) => (
-          <Card key={metric.title}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">{metric.title}</p>
-                  <p className="text-2xl font-bold text-foreground mt-2">{metric.value}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    <TrendingUp className={`w-4 h-4 text-${metric.color}-500`} />
-                    <span className={`text-sm font-medium text-${metric.color}-600`}>
-                      {metric.change}
-                    </span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">vs 上周</span>
+        ].map((metric) => {
+          const colorClass = getMetricColorClass(metric.color)
+          return (
+            <Card key={metric.title}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">{metric.title}</p>
+                    <p className="text-2xl font-bold text-foreground mt-2">{metric.value}</p>
+                    <div className="flex items-center gap-1 mt-2">
+                      <TrendingUp className={`w-4 h-4 ${colorClass.text500}`} />
+                      <span className={`text-sm font-medium ${colorClass.text600}`}>
+                        {metric.change}
+                      </span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">vs 上周</span>
+                    </div>
+                  </div>
+                  <div className={`p-3 ${colorClass.bg100} rounded-lg`}>
+                    <metric.icon className={`w-6 h-6 ${colorClass.text600}`} />
                   </div>
                 </div>
-                <div className={`p-3 bg-${metric.color}-100 rounded-lg`}>
-                  <metric.icon className={`w-6 h-6 text-${metric.color}-600`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {/* 执行趋势图表 */}

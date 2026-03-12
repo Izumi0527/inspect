@@ -67,7 +67,8 @@ const mapCheckItem = (value: UnknownRecord): InspectionCheckItem => {
   const configRecord = toRecord(value.config ?? value['config'])
   const thresholdRecord = toRecord(configRecord.threshold ?? configRecord['threshold'])
 
-  const config: InspectionCheckItem['config'] = {}
+  // 以原始 config 为底座，避免 transform 丢弃后端/模板扩展字段（例如 unit、parsePattern、oid_used/oid_free 等）
+  const config: InspectionCheckItem['config'] = { ...configRecord }
 
   const oid = toString(configRecord.oid ?? configRecord['oid'])
   if (oid) {
@@ -172,9 +173,16 @@ const mapTrendPoint = (value: unknown): TrendPoint => {
 function transformTemplateData(apiData: unknown): InspectionTemplate {
   const data = toRecord(apiData)
   const category = toEnumValue(data.category, TEMPLATE_CATEGORIES, 'custom')
-  const deviceTypes = Array.isArray(data.deviceTypes)
-    ? data.deviceTypes.filter((item): item is string => typeof item === 'string')
-    : toStringArray(data['device_types'])
+  const rawDeviceTypes = data.deviceTypes ?? data['device_types']
+  let deviceTypes: string[] = []
+  if (Array.isArray(rawDeviceTypes)) {
+    deviceTypes = rawDeviceTypes.filter((item): item is string => typeof item === 'string')
+  } else if (isObject(rawDeviceTypes)) {
+    const nested = toRecord(rawDeviceTypes)
+    deviceTypes = toStringArray(nested.device_types ?? nested['device_types'])
+  } else {
+    deviceTypes = toStringArray(rawDeviceTypes)
+  }
   const checkItems = toCheckItemArray(data.checkItems ?? data['check_items'])
   // 修正: isBuiltIn 对应后端的 is_default
   const isBuiltIn = typeof data.isBuiltIn === 'boolean'
@@ -403,6 +411,19 @@ export async function fetchInspectionTemplate(id: number): Promise<InspectionTem
     console.error('获取模板详情失败:', error)
     return null
   }
+}
+
+export async function copyInspectionTemplate(id: number, name?: string): Promise<InspectionTemplate> {
+  const payload: Record<string, unknown> = {}
+  if (typeof name === 'string' && name.trim()) {
+    payload.name = name.trim()
+  }
+
+  const response = await api.post<InspectionApiResponse<unknown>>(`/inspection/templates/${id}/copy`, payload)
+  if (!response.data) {
+    throw new Error('复制模板失败')
+  }
+  return transformTemplateData(response.data)
 }
 
 export async function createInspectionTemplate(template: Omit<InspectionTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<InspectionTemplate> {

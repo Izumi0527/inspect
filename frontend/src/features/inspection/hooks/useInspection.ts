@@ -6,6 +6,7 @@ import {
   fetchInspectionStats,
   fetchInspectionTemplates,
   fetchInspectionTemplate,
+  copyInspectionTemplate,
   createInspectionTemplate,
   updateInspectionTemplate,
   deleteInspectionTemplate,
@@ -187,24 +188,7 @@ export const useCloneTemplate = () => {
 
   return useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      // 获取原模板
-      const original = await fetchInspectionTemplate(Number(id))
-      if (!original) {
-        throw new Error('原模板不存在')
-      }
-
-      // 创建副本
-      const cloneData = {
-        name,
-        description: original.description,
-        category: original.category,
-        deviceTypes: original.deviceTypes,
-        checkItems: original.checkItems,
-        isActive: true,
-        isBuiltIn: false
-      }
-
-      return createInspectionTemplate(cloneData as Omit<InspectionTemplate, 'id' | 'createdAt' | 'updatedAt'>)
+      return copyInspectionTemplate(Number(id), name)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'templates'] })

@@ -87,9 +87,21 @@ export interface CheckItemConfig {
   /** SNMP OID,仅type=snmp时使用 */
   oid?: string
 
+  /** SNMP 已用 OID（某些内置模板使用） */
+  oid_used?: string
+
+  /** SNMP 可用 OID（某些内置模板使用） */
+  oid_free?: string
+
+  /** 展示单位（例如：%/ms/MB 等） */
+  unit?: string
+
+  /** 解析模式（例如：正则表达式） */
+  parsePattern?: string
+ 
   /** SSH命令,仅type=ssh时使用 */
   command?: string
-
+ 
   /** HTTP请求URL,仅type=http时使用 */
   url?: string
 
@@ -109,6 +121,9 @@ export interface CheckItemConfig {
     /** 严重阈值 */
     critical?: number
   }
+
+  /** 允许后端/模板扩展字段透传，避免前端 transform 丢字段 */
+  [key: string]: unknown
 }
 
 /**

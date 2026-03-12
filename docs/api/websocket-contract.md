@@ -77,7 +77,7 @@
   - `data` 示例：`{ "device_id": 1, "status": "online", ... }`
 - `scan_progress`
   - 扫描进度
-  - `data` 示例：`{ "scan_id": "xxx", "progress": 30, "status": "running" }`
+  - `data` 示例：`{ "id": "123", "progress": 30, "status": "running", "timestamp": "2026-03-12T00:00:00Z" }`
 - `alert`
   - 告警通知
   - `data` 示例：`{ "alert_type": "cpu", "severity": "critical", "message": "..." }`

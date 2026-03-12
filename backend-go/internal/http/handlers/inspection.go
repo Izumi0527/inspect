@@ -617,6 +617,221 @@ func (h InspectionHandler) ToggleStrategy(c echo.Context) error {
 	return inspectionOKWithMessage(c, "策略状态已更新", buildStrategyResponse(item))
 }
 
+// =====================================================================
+// 巡检策略触发（手动/定时）与定时调度器
+// =====================================================================
+
+var errStrategyNoDevices = errors.New("策略未配置设备")
+
+func (h InspectionHandler) triggerStrategyInspections(ctx context.Context, strategyID int, trigger string, createdBy *string) ([]inspection.Inspection, *int, error) {
+	if h.Service == nil {
+		return nil, nil, fmt.Errorf("inspection service not configured")
+	}
+
+	strategy, err := h.Service.GetStrategy(ctx, strategyID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	deviceIDs := decodeJSONIntSlice(strategy.Devices)
+	if len(deviceIDs) == 0 {
+		return nil, nil, errStrategyNoDevices
+	}
+
+	templates := decodeJSONIntSlice(strategy.Templates)
+	var templateID *int
+	if len(templates) > 0 {
+		templateID = &templates[0]
+	}
+
+	suffix := "手动触发"
+	if strings.EqualFold(trigger, inspection.TriggerScheduled) {
+		suffix = "定时触发"
+	}
+	name := fmt.Sprintf("%s %s", strategy.Name, suffix)
+
+	// schedule_id 字段当前用于关联巡检策略（inspection_strategies.id），以便执行历史按策略过滤
+	inspections, err := h.Service.CreateInspections(ctx, inspection.CreateInspectionInput{
+		Name:       name,
+		TemplateID: templateID,
+		ScheduleID: &strategyID,
+		DeviceIDs:  deviceIDs,
+		Trigger:    trigger,
+		CreatedBy:  createdBy,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 异步执行巡检任务
+	go h.executeInspectionsAsync(inspections, templateID)
+	return inspections, templateID, nil
+}
+
+func (h InspectionHandler) StartStrategyScheduler(ctx context.Context) <-chan struct{} {
+	done := make(chan struct{})
+	if h.Service == nil || h.Service.DB() == nil {
+		close(done)
+		return done
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	ticker := time.NewTicker(30 * time.Second)
+	go func() {
+		defer close(done)
+		defer ticker.Stop()
+
+		// 启动即跑一轮，避免首次等待 ticker
+		h.runStrategySchedulerTick(ctx, time.Now().UTC())
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				h.runStrategySchedulerTick(ctx, time.Now().UTC())
+			}
+		}
+	}()
+
+	return done
+}
+
+func (h InspectionHandler) runStrategySchedulerTick(ctx context.Context, now time.Time) {
+	h.initializeStrategyNextRunTimes(ctx, now)
+	h.triggerDueStrategies(ctx, now)
+}
+
+func (h InspectionHandler) initializeStrategyNextRunTimes(ctx context.Context, now time.Time) {
+	db := h.Service.DB()
+	if db == nil {
+		return
+	}
+
+	var strategies []inspection.Strategy
+	if err := db.WithContext(ctx).
+		Where("type = ? AND enabled = ? AND cron IS NOT NULL AND next_run_time IS NULL", inspection.StrategyScheduled, true).
+		Find(&strategies).Error; err != nil {
+		if h.Logger != nil {
+			h.Logger.Warn("failed to list strategies for next_run_time initialization", zap.Error(err))
+		}
+		return
+	}
+
+	for _, strategy := range strategies {
+		if strategy.ID <= 0 || strategy.Cron == nil || strings.TrimSpace(*strategy.Cron) == "" {
+			continue
+		}
+
+		normalizedCron, err := inspection.NormalizeCronExpression(*strategy.Cron)
+		if err != nil {
+			if h.Logger != nil {
+				h.Logger.Warn("failed to normalize cron", zap.Int("strategy_id", strategy.ID), zap.Error(err))
+			}
+			continue
+		}
+		next, err := inspection.ComputeNextRunTime(normalizedCron, now)
+		if err != nil {
+			if h.Logger != nil {
+				h.Logger.Warn("failed to compute next_run_time", zap.Int("strategy_id", strategy.ID), zap.Error(err))
+			}
+			continue
+		}
+
+		updates := map[string]interface{}{
+			"next_run_time": next,
+			"updated_at":    now,
+		}
+		if err := db.WithContext(ctx).
+			Model(&inspection.Strategy{}).
+			Where("id = ? AND next_run_time IS NULL", strategy.ID).
+			Updates(updates).Error; err != nil {
+			if h.Logger != nil {
+				h.Logger.Warn("failed to update next_run_time", zap.Int("strategy_id", strategy.ID), zap.Error(err))
+			}
+		}
+	}
+}
+
+func (h InspectionHandler) triggerDueStrategies(ctx context.Context, now time.Time) {
+	db := h.Service.DB()
+	if db == nil {
+		return
+	}
+
+	var due []inspection.Strategy
+	if err := db.WithContext(ctx).
+		Where("type = ? AND enabled = ? AND next_run_time <= ?", inspection.StrategyScheduled, true, now).
+		Order("next_run_time asc").
+		Limit(100).
+		Find(&due).Error; err != nil {
+		if h.Logger != nil {
+			h.Logger.Warn("failed to list due strategies", zap.Error(err))
+		}
+		return
+	}
+
+	for _, strategy := range due {
+		claimed, _, err := claimDueStrategy(ctx, db, strategy, now)
+		if err != nil {
+			if h.Logger != nil {
+				h.Logger.Warn("failed to claim due strategy", zap.Int("strategy_id", strategy.ID), zap.Error(err))
+			}
+			continue
+		}
+		if !claimed {
+			continue
+		}
+
+		if _, _, err := h.triggerStrategyInspections(ctx, strategy.ID, inspection.TriggerScheduled, nil); err != nil {
+			if h.Logger != nil {
+				h.Logger.Error("failed to trigger due strategy", zap.Int("strategy_id", strategy.ID), zap.Error(err))
+			}
+		}
+	}
+}
+
+func claimDueStrategy(ctx context.Context, db *gorm.DB, strategy inspection.Strategy, now time.Time) (bool, *time.Time, error) {
+	if db == nil {
+		return false, nil, fmt.Errorf("db not configured")
+	}
+	if strategy.ID <= 0 {
+		return false, nil, fmt.Errorf("invalid strategy id")
+	}
+	if strategy.Cron == nil || strings.TrimSpace(*strategy.Cron) == "" {
+		return false, nil, fmt.Errorf("cron is required for scheduled strategy")
+	}
+
+	normalizedCron, err := inspection.NormalizeCronExpression(*strategy.Cron)
+	if err != nil {
+		return false, nil, err
+	}
+	next, err := inspection.ComputeNextRunTime(normalizedCron, now)
+	if err != nil {
+		return false, nil, err
+	}
+
+	updates := map[string]interface{}{
+		"last_run_time": now,
+		"next_run_time": next,
+		"updated_at":    now,
+	}
+
+	result := db.WithContext(ctx).
+		Model(&inspection.Strategy{}).
+		Where("id = ? AND type = ? AND enabled = ? AND next_run_time <= ?", strategy.ID, inspection.StrategyScheduled, true, now).
+		Updates(updates)
+	if result.Error != nil {
+		return false, nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return false, nil, nil
+	}
+	return true, &next, nil
+}
+
 func (h InspectionHandler) TriggerStrategy(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
@@ -631,42 +846,18 @@ func (h InspectionHandler) TriggerStrategy(c echo.Context) error {
 		return err
 	}
 
-	strategy, err := h.Service.GetStrategy(c.Request().Context(), strategyID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return echo.NewHTTPError(http.StatusNotFound, "巡检策略不存在")
-		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load strategy")
-	}
-
-	deviceIDs := decodeJSONIntSlice(strategy.Devices)
-	if len(deviceIDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "策略未配置设备")
-	}
-
-	templates := decodeJSONIntSlice(strategy.Templates)
-	var templateID *int
-	if len(templates) > 0 {
-		templateID = &templates[0]
-	}
-
 	createdBy := ""
 	if user != nil {
 		createdBy = user.ID
 	}
-	name := fmt.Sprintf("%s 手动触发", strategy.Name)
-
-	// 注意：手动触发的巡检不关联 schedule_id，因为 schedule_id 外键引用的是 inspection_schedules 表
-	// 而不是 inspection_strategies 表
-	inspections, err := h.Service.CreateInspections(c.Request().Context(), inspection.CreateInspectionInput{
-		Name:       name,
-		TemplateID: templateID,
-		ScheduleID: nil, // 手动触发不关联计划
-		DeviceIDs:  deviceIDs,
-		Trigger:    inspection.TriggerManual,
-		CreatedBy:  stringPtr(createdBy),
-	})
+	inspections, _, err := h.triggerStrategyInspections(c.Request().Context(), strategyID, inspection.TriggerManual, stringPtr(createdBy))
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "巡检策略不存在")
+		}
+		if errors.Is(err, errStrategyNoDevices) {
+			return echo.NewHTTPError(http.StatusBadRequest, "策略未配置设备")
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to trigger strategy")
 	}
 
@@ -674,9 +865,6 @@ func (h InspectionHandler) TriggerStrategy(c echo.Context) error {
 	for _, item := range inspections {
 		ids = append(ids, item.ID)
 	}
-
-	// 异步执行巡检任务
-	go h.executeInspectionsAsync(inspections, templateID)
 
 	return inspectionOKWithMessage(c, "触发策略执行成功", map[string]interface{}{
 		"message":        "触发成功，巡检任务已开始执行",
@@ -2650,7 +2838,11 @@ func buildCheckResultResponse(result inspection.Result) map[string]interface{} {
 func buildExecutionResponse(item inspection.Inspection, strategyName string) map[string]interface{} {
 	progress := computeProgress(item)
 	totalChecks := resolveTotalChecks(item, nil)
-	score := computeScore(totalChecks, resolvePassedChecks(item, nil))
+	passed := resolvePassedChecks(item, nil)
+	failed := resolveFailedChecks(item, nil)
+	warning := resolveWarningChecks(item, nil)
+	effectiveTotal := passed + failed + warning // 不把 skip 计入分母
+	score := computeScore(effectiveTotal, passed)
 
 	triggerType := inspection.TriggerManual
 	if strings.EqualFold(item.Trigger, inspection.TriggerScheduled) {
@@ -2681,9 +2873,9 @@ func buildExecutionResponse(item inspection.Inspection, strategyName string) map
 		"duration":         item.Duration,
 		"summary": map[string]interface{}{
 			"totalChecks":   totalChecks,
-			"passedChecks":  resolvePassedChecks(item, nil),
-			"failedChecks":  resolveFailedChecks(item, nil),
-			"warningChecks": resolveWarningChecks(item, nil),
+			"passedChecks":  passed,
+			"failedChecks":  failed,
+			"warningChecks": warning,
 			"score":         score,
 			"deviceResults": []interface{}{},
 		},
@@ -2695,7 +2887,8 @@ func buildExecutionSummary(item inspection.Inspection, device deviceInfo, result
 	passed := resolvePassedChecks(item, results)
 	failed := resolveFailedChecks(item, results)
 	warning := resolveWarningChecks(item, results)
-	score := computeScore(totalChecks, passed)
+	effectiveTotal := passed + failed + warning // 不把 skip 计入分母
+	score := computeScore(effectiveTotal, passed)
 	status := deriveDeviceStatus(item, passed, failed, warning)
 
 	checkResults := buildCheckResults(results)
@@ -2730,7 +2923,8 @@ func buildInspectionResultResponse(item inspection.Inspection, device deviceInfo
 	passed := resolvePassedChecks(item, results)
 	failed := resolveFailedChecks(item, results)
 	warning := resolveWarningChecks(item, results)
-	score := computeScore(totalChecks, passed)
+	effectiveTotal := passed + failed + warning // 不把 skip 计入分母
+	score := computeScore(effectiveTotal, passed)
 	status := deriveDeviceStatus(item, passed, failed, warning)
 
 	checkResults := buildCheckResults(results)
@@ -3353,12 +3547,29 @@ func buildTemplateResponse(template *inspection.Template) map[string]interface{}
 		return nil
 	}
 
-	// 解析设备类型 - 应为 []string
-	var deviceTypes []string
+	// 解析设备类型（兼容两种形态）
+	// - 推荐：["router","switch"]
+	// - 历史：{"vendors":[...],"device_types":[...]}
+	deviceTypes := []string{}
 	if len(template.DeviceTypes) > 0 {
-		if err := json.Unmarshal(template.DeviceTypes, &deviceTypes); err != nil {
-			// 回退：尝试解析为单值或其他格式
-			deviceTypes = []string{}
+		// 1) 优先按 []string 解析
+		var types []string
+		if err := json.Unmarshal(template.DeviceTypes, &types); err == nil {
+			deviceTypes = types
+		} else {
+			// 2) 回退按对象形态解析
+			var cfg inspection.DeviceTypesConfig
+			if err2 := json.Unmarshal(template.DeviceTypes, &cfg); err2 == nil {
+				deviceTypes = cfg.DeviceTypes
+			} else {
+				// 3) 最后尝试单值字符串
+				var single string
+				if err3 := json.Unmarshal(template.DeviceTypes, &single); err3 == nil {
+					if strings.TrimSpace(single) != "" {
+						deviceTypes = []string{strings.TrimSpace(single)}
+					}
+				}
+			}
 		}
 	}
 	if deviceTypes == nil {
