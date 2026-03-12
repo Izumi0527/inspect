@@ -412,7 +412,7 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/components/pages/DeviceManagement.tsx',
+    file: 'frontend/src/features/devices/components/DeviceManagementView.tsx',
     bannedPatterns: [
       /text-gray-900 dark:text-gray-100/g,
       /text-gray-600 dark:text-gray-400/g,

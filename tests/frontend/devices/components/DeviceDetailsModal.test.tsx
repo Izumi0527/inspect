@@ -171,7 +171,10 @@ describe("DeviceDetailsModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "执行健康检查" }));
 
     await waitFor(() => {
-      expect(healthCheckDevice).toHaveBeenCalledWith(1);
+      expect(healthCheckDevice).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ updateStatus: true }),
+      );
     });
 
     const currentCpuRow = screen.getByText("当前 CPU").closest("div");
