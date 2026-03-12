@@ -119,16 +119,23 @@ export function Table<T extends object>({
   }, [data, sortColumn, sortOrder])
 
   const sizeClasses: Record<'small' | 'default' | 'large', string> = {
-    small: 'text-xs',
+    small: 'text-[11px]',
     default: 'text-sm',
     large: 'text-base'
   }
 
   const cellPadding: Record<'small' | 'default' | 'large', string> = {
-    small: 'px-3 py-2',
+    small: 'px-3 py-1',
     default: 'px-4 py-3',
     large: 'px-6 py-4'
   }
+
+  const paginationPadding = size === 'small' ? 'px-3 py-1.5' : 'px-4 py-3'
+  const paginationTextSize = size === 'small' ? 'text-xs' : 'text-sm'
+  const paginationButtonSize = size === 'small' ? 'px-2.5 py-1 text-xs' : 'px-3 py-1 text-sm'
+  const headerCellGap = size === 'small' ? 'gap-1.5' : 'gap-2'
+  const emptyRowPaddingY =
+    size === 'small' ? 'py-6' : size === 'large' ? 'py-10' : 'py-8'
 
   const currentPageKeys = React.useMemo(
     () => data.map((record, index) => getRowKey(record, index)),
@@ -201,7 +208,8 @@ export function Table<T extends object>({
                     style={{ width: column.width }}
                   >
                     <div className={cn(
-                      'flex items-center gap-2',
+                      'flex items-center',
+                      headerCellGap,
                       column.align === 'center' && 'justify-center',
                       column.align === 'right' && 'justify-end'
                     )}>
@@ -238,7 +246,10 @@ export function Table<T extends object>({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={columns.length + (rowSelection ? 1 : 0)} className="text-center py-8">
+                <td
+                  colSpan={columns.length + (rowSelection ? 1 : 0)}
+                  className={cn('text-center', emptyRowPaddingY)}
+                >
                   <div className="flex items-center justify-center gap-2">
                     <motion.div
                       animate={{ rotate: 360 }}
@@ -251,7 +262,10 @@ export function Table<T extends object>({
               </tr>
             ) : sortedData.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + (rowSelection ? 1 : 0)} className="text-center py-8 text-muted-foreground">
+                <td
+                  colSpan={columns.length + (rowSelection ? 1 : 0)}
+                  className={cn('text-center text-muted-foreground', emptyRowPaddingY)}
+                >
                   暂无数据
                 </td>
               </tr>
@@ -330,25 +344,41 @@ export function Table<T extends object>({
       </div>
 
       {pagination && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border/50 bg-muted/30">
-          <div className="text-sm text-muted-foreground">
+        <div className={cn(
+          'flex flex-col gap-2 border-t border-border/50 bg-muted/30',
+          'sm:flex-row sm:items-center sm:justify-between',
+          paginationPadding
+        )}>
+          <div
+            className={cn(
+              paginationTextSize,
+              'text-muted-foreground',
+              size === 'small' ? 'hidden sm:block' : ''
+            )}
+          >
             显示第 {(pagination.current - 1) * pagination.pageSize + 1} - {Math.min(pagination.current * pagination.pageSize, pagination.total)} 条，共 {pagination.total} 条
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => pagination.onChange(pagination.current - 1, pagination.pageSize)}
               disabled={pagination.current <= 1}
-              className="px-3 py-1 text-sm text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className={cn(
+                paginationButtonSize,
+                'text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+              )}
             >
               上一页
             </button>
-            <span className="text-sm text-muted-foreground">
+            <span className={cn(paginationTextSize, 'text-muted-foreground')}>
               {pagination.current} / {Math.ceil(pagination.total / pagination.pageSize)}
             </span>
             <button
               onClick={() => pagination.onChange(pagination.current + 1, pagination.pageSize)}
               disabled={pagination.current >= Math.ceil(pagination.total / pagination.pageSize)}
-              className="px-3 py-1 text-sm text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className={cn(
+                paginationButtonSize,
+                'text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+              )}
             >
               下一页
             </button>

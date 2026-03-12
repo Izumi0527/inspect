@@ -4,8 +4,6 @@ export { DeviceIcon, StatusBadge, getDeviceTypeLabel } from './components/Device
 export { 
   useDevices, 
   useDeviceFilters, 
-  useFilteredDevices, 
-  useDeviceSummary,
   useDeviceSelection 
 } from './hooks/useDevices'
 export { 
@@ -20,7 +18,8 @@ export type {
   Device, 
   DeviceStatus, 
   DeviceType, 
-  DeviceFilters, 
+  DeviceUIFilters,
+  DeviceListQuery,
   DeviceSummary, 
   DeviceAction, 
   BulkAction 

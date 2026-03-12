@@ -233,27 +233,71 @@ func (s *Service) UpdateDevice(ctx context.Context, deviceID int, updates map[st
 		return nil, err
 	}
 
-	if ipRaw, ok := updates["ip_address"]; ok {
-		if ip, ok := ipRaw.(string); ok {
-			ip = strings.TrimSpace(ip)
-			if ip == "" {
-				return nil, fmt.Errorf("ip_address cannot be empty")
-			}
-			exists, err := s.checkIPExists(ctx, ip, deviceID)
-			if err != nil {
-				return nil, err
-			}
-			if exists {
-				return nil, fmt.Errorf("ip address already exists")
-			}
-			updates["ip_address"] = ip
+	if raw, ok := updates["name"]; ok {
+		if raw == nil {
+			return nil, fmt.Errorf("name cannot be empty")
 		}
+		text, ok := raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("name must be a string")
+		}
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return nil, fmt.Errorf("name cannot be empty")
+		}
+		updates["name"] = text
 	}
 
-	if value, ok := updates["device_type"]; ok {
-		if raw, ok := value.(string); ok {
-			updates["device_type"] = normalizeDeviceType(raw)
+	if raw, ok := updates["vendor"]; ok {
+		if raw == nil {
+			return nil, fmt.Errorf("vendor cannot be empty")
 		}
+		text, ok := raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("vendor must be a string")
+		}
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return nil, fmt.Errorf("vendor cannot be empty")
+		}
+		updates["vendor"] = text
+	}
+
+	if ipRaw, ok := updates["ip_address"]; ok {
+		if ipRaw == nil {
+			return nil, fmt.Errorf("ip_address cannot be empty")
+		}
+		ip, ok := ipRaw.(string)
+		if !ok {
+			return nil, fmt.Errorf("ip_address must be a string")
+		}
+		ip = strings.TrimSpace(ip)
+		if ip == "" {
+			return nil, fmt.Errorf("ip_address cannot be empty")
+		}
+		exists, err := s.checkIPExists(ctx, ip, deviceID)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, fmt.Errorf("ip address already exists")
+		}
+		updates["ip_address"] = ip
+	}
+
+	if raw, ok := updates["device_type"]; ok {
+		if raw == nil {
+			return nil, fmt.Errorf("device_type cannot be empty")
+		}
+		text, ok := raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("device_type must be a string")
+		}
+		normalized := normalizeDeviceType(text)
+		if strings.TrimSpace(normalized) == "" {
+			return nil, fmt.Errorf("device_type cannot be empty")
+		}
+		updates["device_type"] = normalized
 	}
 
 	if value, ok := updates["snmp_version"]; ok {

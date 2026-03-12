@@ -128,6 +128,11 @@ interface DeviceDetailsModalProps {
   device: Device | null
   loading: boolean
   onClose: () => void
+  /**
+   * 是否允许健康检查写回设备探测状态（默认 true）。
+   * 只读用户建议传 false，避免产生写库行为或触发后端权限拦截。
+   */
+  updateStatus?: boolean
 }
 
 const InfoRow = ({ label, value }: { label: string; value?: React.ReactNode }) => (
@@ -142,6 +147,7 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
   device,
   loading,
   onClose,
+  updateStatus = true,
 }) => {
   const [healthLoading, setHealthLoading] = React.useState(false)
   const [healthResult, setHealthResult] = React.useState<Record<string, unknown> | null>(null)
@@ -194,7 +200,7 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
     setHealthLoading(true)
     setHealthError(null)
     try {
-      const result = await healthCheckDevice(device.id)
+      const result = await healthCheckDevice(device.id, { updateStatus })
       setHealthResult(result)
     } catch (error) {
       const message = error instanceof Error ? error.message : '健康检查失败'

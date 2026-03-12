@@ -18,6 +18,11 @@ type PermissionService interface {
 	GetPermissionsByRole(ctx context.Context, role string) ([]string, error)
 }
 
+const (
+	authContextUserKey        = "auth.user"
+	authContextPermissionsKey = "auth.permissions"
+)
+
 func isNilPermissionService(service PermissionService) bool {
 	if service == nil {
 		return true
@@ -36,26 +41,35 @@ func requirePermission(c echo.Context, authService PermissionService, permission
 		return nil, echo.NewHTTPError(http.StatusServiceUnavailable, "auth service not configured")
 	}
 
-	token, err := readBearerToken(c)
-	if err != nil {
-		return nil, err
-	}
-
-	user, err := authService.GetActiveUserFromToken(c.Request().Context(), token)
-	if err != nil {
-		if errors.Is(err, auth.ErrUserInactive) {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, "用户已被禁用")
+	user, ok := c.Get(authContextUserKey).(*auth.UserRecord)
+	if !ok || user == nil {
+		token, err := readBearerToken(c)
+		if err != nil {
+			return nil, err
 		}
-		return nil, echo.NewHTTPError(http.StatusUnauthorized, "Could not validate credentials")
+
+		user, err = authService.GetActiveUserFromToken(c.Request().Context(), token)
+		if err != nil {
+			if errors.Is(err, auth.ErrUserInactive) {
+				return nil, echo.NewHTTPError(http.StatusBadRequest, "用户已被禁用")
+			}
+			return nil, echo.NewHTTPError(http.StatusUnauthorized, "Could not validate credentials")
+		}
+		c.Set(authContextUserKey, user)
 	}
 
 	if strings.TrimSpace(permission) == "" {
 		return user, nil
 	}
 
-	permissions, err := authService.GetPermissionsByRole(c.Request().Context(), user.Role)
-	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError, "failed to resolve permissions")
+	permissions, ok := c.Get(authContextPermissionsKey).([]string)
+	if !ok {
+		var err error
+		permissions, err = authService.GetPermissionsByRole(c.Request().Context(), user.Role)
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusInternalServerError, "failed to resolve permissions")
+		}
+		c.Set(authContextPermissionsKey, permissions)
 	}
 
 	if !hasPermission(permission, permissions) {

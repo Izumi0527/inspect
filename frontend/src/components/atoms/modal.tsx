@@ -42,6 +42,8 @@ const ModalContent = React.forwardRef<
       aria-describedby={hideDescription ? undefined : 'modal-description'}
       className={cn(
         'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-border/30 bg-card/95 backdrop-blur-xl p-6 shadow-2xl duration-200',
+        // 长内容在窄屏/低高度屏幕上需要可滚动，避免弹窗溢出导致关闭按钮不可达
+        'max-h-[calc(100vh-2rem)] overflow-y-auto',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -127,12 +129,18 @@ ModalDescription.displayName = DialogPrimitive.Description.displayName
 interface ConfirmModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
   title: string
   description?: string
   confirmText?: string
   cancelText?: string
   variant?: 'default' | 'destructive'
+  /** 外部控制确认按钮禁用状态（例如：表单未满足条件） */
+  confirmDisabled?: boolean
+  /** 外部控制取消/关闭禁用状态 */
+  cancelDisabled?: boolean
+  /** 是否在确认成功后自动关闭（默认 true） */
+  autoClose?: boolean
 }
 
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({
@@ -143,10 +151,42 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   description,
   confirmText = '确认',
   cancelText = '取消',
-  variant = 'default'
+  variant = 'default',
+  confirmDisabled = false,
+  cancelDisabled = false,
+  autoClose = true
 }) => {
+  const [confirming, setConfirming] = React.useState(false)
+
+  const handleRequestClose = React.useCallback(() => {
+    if (confirming || cancelDisabled) return
+    onClose()
+  }, [cancelDisabled, confirming, onClose])
+
+  const handleConfirm = React.useCallback(async () => {
+    if (confirming || confirmDisabled) return
+
+    setConfirming(true)
+    try {
+      await onConfirm()
+      if (autoClose) {
+        onClose()
+      }
+    } catch (error) {
+      // 保留弹窗以便用户重试
+      console.error('确认操作失败:', error)
+    } finally {
+      setConfirming(false)
+    }
+  }, [autoClose, confirmDisabled, confirming, onClose, onConfirm])
+
   return (
-    <Modal open={isOpen} onOpenChange={onClose}>
+    <Modal
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleRequestClose()
+      }}
+    >
       <ModalContent className="sm:max-w-[425px]">
         <ModalHeader>
           <ModalTitle className="flex items-center gap-2">
@@ -165,23 +205,26 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring/40 focus:ring-offset-2 transition-colors"
+            onClick={handleRequestClose}
+            disabled={confirming || cancelDisabled}
+            className={cn(
+              'px-4 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring/40 focus:ring-offset-2 transition-colors',
+              (confirming || cancelDisabled) && 'opacity-50 cursor-not-allowed'
+            )}
           >
             {cancelText}
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              onConfirm()
-              onClose()
-            }}
+            onClick={handleConfirm}
+            disabled={confirming || confirmDisabled}
             className={cn(
               'px-4 py-2 text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ml-2',
               variant === 'destructive'
                 ? 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-400'
-                : 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-ring/40'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-ring/40',
+              (confirming || confirmDisabled) && 'opacity-70 cursor-not-allowed'
             )}
           >
             {confirmText}

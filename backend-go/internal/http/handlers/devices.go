@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,7 +30,7 @@ type DevicesHandler struct {
 	SNMPCollector *devices.SNMPCollector
 	Inspection    *inspection.Service
 	Metrics       *monitoring.MetricsWriter
-	Auth          *auth.Service
+	Auth          PermissionService
 }
 
 func (h DevicesHandler) Register(group *echo.Group) {
@@ -278,8 +279,38 @@ func (h DevicesHandler) StartNetworkScan(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
 	}
-	if strings.TrimSpace(req.TargetNetwork) == "" {
+	targetNetwork := strings.TrimSpace(req.TargetNetwork)
+	if targetNetwork == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "target_network is required")
+	}
+
+	// 仅支持 IPv4 CIDR，且限制扫描规模，避免大网段导致资源耗尽。
+	_, ipNet, err := net.ParseCIDR(targetNetwork)
+	if err != nil || ipNet == nil || ipNet.IP.To4() == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid target_network")
+	}
+	ones, bits := ipNet.Mask.Size()
+	if bits != 32 {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid target_network")
+	}
+	totalHosts := 1 << (bits - ones)
+	if totalHosts > 2 {
+		totalHosts = totalHosts - 2
+	}
+	if totalHosts <= 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid target_network")
+	}
+	if totalHosts > devices.MaxScanHosts {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("target_network too large (max %d hosts)", devices.MaxScanHosts))
+	}
+
+	// 统一 scan_type 取值，未知值回落到 ping，避免“无需探测即视为可达”导致海量写库。
+	req.ScanType = strings.ToLower(strings.TrimSpace(req.ScanType))
+	if req.ScanType == "" {
+		req.ScanType = "ping"
+	}
+	if req.ScanType != "ping" && req.ScanType != "full" {
+		req.ScanType = "ping"
 	}
 
 	var createdBy *string
@@ -288,13 +319,14 @@ func (h DevicesHandler) StartNetworkScan(c echo.Context) error {
 	}
 	scanID, err := h.Scanner.StartScan(c.Request().Context(), req, createdBy)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		// StartScan 内部仍可能因 DB/执行异常失败，此处按服务端错误返回。
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to start scan")
 	}
 
 	return c.JSON(http.StatusOK, devices.NetworkScanResponse{
 		ScanID:        scanID,
 		Message:       "network scan started",
-		TargetNetwork: req.TargetNetwork,
+		TargetNetwork: targetNetwork,
 		ScanType:      req.ScanType,
 		Status:        "running",
 	})
@@ -389,6 +421,12 @@ func (h DevicesHandler) GetScanList(c echo.Context) error {
 
 	status := strings.TrimSpace(c.QueryParam("status"))
 	limit := parseIntDefault(c.QueryParam("limit"), 20)
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > maxScanListLimit {
+		limit = maxScanListLimit
+	}
 
 	scans, err := h.Scanner.ListScans(c.Request().Context(), status, limit)
 	if err != nil {
@@ -430,8 +468,14 @@ func (h DevicesHandler) StopScan(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "scan_id is required")
 	}
 
-	if !h.Scanner.StopScan(c.Request().Context(), scanID) {
-		return echo.NewHTTPError(http.StatusNotFound, "scan not found or cannot stop")
+	if err := h.Scanner.StopScanWithReason(c.Request().Context(), scanID); err != nil {
+		if errors.Is(err, devices.ErrScanNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "scan not found")
+		}
+		if errors.Is(err, devices.ErrScanNotRunning) {
+			return echo.NewHTTPError(http.StatusConflict, "scan not running")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to stop scan")
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
@@ -452,6 +496,15 @@ func (h DevicesHandler) BatchImportDevices(c echo.Context) error {
 	var req devices.DeviceBatchImportRequest
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+	if len(req.Devices) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "devices is required")
+	}
+	if len(req.Devices) > maxBatchImportDevices {
+		return echo.NewHTTPError(
+			http.StatusBadRequest,
+			fmt.Sprintf("devices too large (max %d)", maxBatchImportDevices),
+		)
 	}
 
 	createdBy := ""
@@ -619,6 +672,14 @@ func (h DevicesHandler) BatchDeleteDevices(c echo.Context) error {
 		}
 	}
 
+	deviceIDs = dedupePositiveInts(deviceIDs)
+	if len(deviceIDs) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
+	}
+	if len(deviceIDs) > maxBatchDeviceIDs {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("device_ids too large (max %d)", maxBatchDeviceIDs))
+	}
+
 	deleted := 0
 	failed := make([]map[string]interface{}, 0)
 	for _, id := range deviceIDs {
@@ -652,6 +713,11 @@ func (h DevicesHandler) BulkAction(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "device service not configured")
 	}
 
+	// 先确保请求已登录，避免匿名用户通过 400 响应探测参数校验逻辑。
+	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+		return err
+	}
+
 	payload := map[string]interface{}{}
 	if err := c.Bind(&payload); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
@@ -670,14 +736,23 @@ func (h DevicesHandler) BulkAction(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
 	}
 
+	deviceIDs = dedupePositiveInts(deviceIDs)
+	if len(deviceIDs) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
+	}
+	if len(deviceIDs) > maxBatchDeviceIDs {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("device_ids too large (max %d)", maxBatchDeviceIDs))
+	}
+
 	ctx := c.Request().Context()
-	nameMap := h.loadDeviceNameMap(ctx, deviceIDs)
 
 	switch action {
 	case "batch_delete":
+		// 先校验权限，再做任何 DB 查询，避免未授权请求触发数据库访问
 		if _, err := requirePermission(c, h.Auth, "devices:delete"); err != nil {
 			return err
 		}
+		nameMap := h.loadDeviceNameMap(ctx, deviceIDs)
 		result := h.executeBulkDelete(ctx, deviceIDs, nameMap)
 		return c.JSON(http.StatusOK, buildBulkActionResponse(result))
 	case "batch_update":
@@ -692,6 +767,7 @@ func (h DevicesHandler) BulkAction(c echo.Context) error {
 		if len(updates) == 0 {
 			return echo.NewHTTPError(http.StatusBadRequest, "no updates provided")
 		}
+		nameMap := h.loadDeviceNameMap(ctx, deviceIDs)
 		result := h.executeBulkUpdate(ctx, deviceIDs, updates, nameMap, "批量更新完成")
 		return c.JSON(http.StatusOK, buildBulkActionResponse(result))
 	case "batch_add_group":
@@ -705,12 +781,14 @@ func (h DevicesHandler) BulkAction(c echo.Context) error {
 		if !ok || groupID <= 0 {
 			return echo.NewHTTPError(http.StatusBadRequest, "group_id is required")
 		}
+		nameMap := h.loadDeviceNameMap(ctx, deviceIDs)
 		result := h.executeBulkUpdate(ctx, deviceIDs, map[string]interface{}{"group_id": groupID}, nameMap, "批量分组完成")
 		return c.JSON(http.StatusOK, buildBulkActionResponse(result))
 	case "batch_remove_group":
 		if _, err := requirePermission(c, h.Auth, "devices:update"); err != nil {
 			return err
 		}
+		nameMap := h.loadDeviceNameMap(ctx, deviceIDs)
 		result := h.executeBulkUpdate(ctx, deviceIDs, map[string]interface{}{"group_id": nil}, nameMap, "批量移除分组完成")
 		return c.JSON(http.StatusOK, buildBulkActionResponse(result))
 	case "start_inspection":
@@ -732,9 +810,14 @@ func (h DevicesHandler) BulkAction(c echo.Context) error {
 		if len(updates) == 0 {
 			return echo.NewHTTPError(http.StatusBadRequest, "no updates provided")
 		}
+		nameMap := h.loadDeviceNameMap(ctx, deviceIDs)
 		result := h.executeBulkUpdate(ctx, deviceIDs, updates, nameMap, "批量配置完成")
 		return c.JSON(http.StatusOK, buildBulkActionResponse(result))
 	default:
+		// 即便 action 不支持，也要求已登录，避免匿名探测该接口。
+		if _, err := requirePermission(c, h.Auth, ""); err != nil {
+			return err
+		}
 		return echo.NewHTTPError(http.StatusBadRequest, "unsupported action")
 	}
 }
@@ -758,6 +841,14 @@ func (h DevicesHandler) BatchUpdateDevices(c echo.Context) error {
 	}
 	if len(deviceIDs) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
+	}
+
+	deviceIDs = dedupePositiveInts(deviceIDs)
+	if len(deviceIDs) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
+	}
+	if len(deviceIDs) > maxBatchDeviceIDs {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("device_ids too large (max %d)", maxBatchDeviceIDs))
 	}
 
 	updatesRaw, ok := readUpdatesPayload(payload)
@@ -791,6 +882,13 @@ func (h DevicesHandler) HealthCheckDevice(c echo.Context) error {
 	}
 
 	updateStatus := parseBoolDefault(c.QueryParam("update_status"), true)
+	if updateStatus {
+		permissions, _ := c.Get(authContextPermissionsKey).([]string)
+		// 没有更新权限时，降级为仅探测不写回状态，避免只读用户触发写库
+		if !hasPermission("devices:update", permissions) {
+			updateStatus = false
+		}
+	}
 	device, err := h.Service.GetDeviceRecord(c.Request().Context(), deviceID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -814,8 +912,9 @@ func (h DevicesHandler) HealthCheckDevice(c echo.Context) error {
 	}
 
 	status, icmpStatus, snmpStatus := buildProbeStatuses(result)
+	statusUpdated := false
 	if updateStatus {
-		_ = h.Service.UpdateDeviceProbeStatus(
+		if err := h.Service.UpdateDeviceProbeStatus(
 			c.Request().Context(),
 			device.ID,
 			status,
@@ -824,7 +923,9 @@ func (h DevicesHandler) HealthCheckDevice(c echo.Context) error {
 			result.IcmpResponseTime,
 			conditionalLastSeen(result),
 			&result.ProbedAt,
-		)
+		); err == nil {
+			statusUpdated = true
+		}
 	}
 
 	response := map[string]interface{}{
@@ -834,6 +935,7 @@ func (h DevicesHandler) HealthCheckDevice(c echo.Context) error {
 		"status":             status,
 		"icmp_status":        icmpStatus,
 		"snmp_status":        snmpStatus,
+		"status_updated":     statusUpdated,
 		"icmp_reachable":     result.IcmpReachable,
 		"icmp_response_time": result.IcmpResponseTime,
 		"icmp_error":         result.IcmpError,
@@ -938,6 +1040,13 @@ func (h DevicesHandler) ProbeDevice(c echo.Context) error {
 	}
 
 	updateStatus := parseBoolDefault(c.QueryParam("update_status"), true)
+	if updateStatus {
+		permissions, _ := c.Get(authContextPermissionsKey).([]string)
+		// 没有更新权限时，降级为仅探测不写回状态，避免只读用户触发写库
+		if !hasPermission("devices:update", permissions) {
+			updateStatus = false
+		}
+	}
 	device, err := h.Service.GetDeviceRecord(c.Request().Context(), deviceID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -960,9 +1069,10 @@ func (h DevicesHandler) ProbeDevice(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "probe failed")
 	}
 
+	statusUpdated := false
 	if updateStatus {
 		status, icmpStatus, snmpStatus := buildProbeStatuses(result)
-		_ = h.Service.UpdateDeviceProbeStatus(
+		if err := h.Service.UpdateDeviceProbeStatus(
 			c.Request().Context(),
 			device.ID,
 			status,
@@ -971,7 +1081,9 @@ func (h DevicesHandler) ProbeDevice(c echo.Context) error {
 			result.IcmpResponseTime,
 			conditionalLastSeen(result),
 			&result.ProbedAt,
-		)
+		); err == nil {
+			statusUpdated = true
+		}
 	}
 
 	resp := devices.DeviceProbeResponse{
@@ -986,7 +1098,13 @@ func (h DevicesHandler) ProbeDevice(c echo.Context) error {
 		SnmpSystemInfo:   result.SnmpSystemInfo,
 		ProbedAt:         result.ProbedAt,
 	}
-	return c.JSON(http.StatusOK, resp)
+	return c.JSON(http.StatusOK, struct {
+		devices.DeviceProbeResponse
+		StatusUpdated bool `json:"status_updated"`
+	}{
+		DeviceProbeResponse: resp,
+		StatusUpdated:       statusUpdated,
+	})
 }
 
 func (h DevicesHandler) BatchProbeDevices(c echo.Context) error {
@@ -1005,7 +1123,36 @@ func (h DevicesHandler) BatchProbeDevices(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
 	}
 
+	maxConcurrent := req.MaxConcurrent
+	if maxConcurrent <= 0 {
+		maxConcurrent = defaultProbeConcurrent
+	}
+	if maxConcurrent > maxBatchProbeConcurrent {
+		return echo.NewHTTPError(
+			http.StatusBadRequest,
+			fmt.Sprintf("max_concurrent too large (max %d)", maxBatchProbeConcurrent),
+		)
+	}
+
 	updateStatus := parseBoolDefault(c.QueryParam("update_status"), true)
+	if updateStatus {
+		permissions, _ := c.Get(authContextPermissionsKey).([]string)
+		// 没有更新权限时，降级为仅探测不写回状态，避免只读用户触发写库
+		if !hasPermission("devices:update", permissions) {
+			updateStatus = false
+		}
+	}
+
+	req.DeviceIDs = dedupePositiveInts(req.DeviceIDs)
+	if len(req.DeviceIDs) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
+	}
+	if len(req.DeviceIDs) > maxBatchDeviceIDs {
+		return echo.NewHTTPError(
+			http.StatusBadRequest,
+			fmt.Sprintf("device_ids too large (max %d)", maxBatchDeviceIDs),
+		)
+	}
 
 	deviceRows, err := h.Service.GetDevicesByIDs(c.Request().Context(), req.DeviceIDs)
 	if err != nil {
@@ -1027,9 +1174,14 @@ func (h DevicesHandler) BatchProbeDevices(c echo.Context) error {
 		})
 	}
 
-	results := h.Probe.BatchProbeDevices(c.Request().Context(), targets, req.MaxConcurrent)
+	results := h.Probe.BatchProbeDevices(c.Request().Context(), targets, maxConcurrent)
 	response := make([]devices.DeviceProbeResponse, 0, len(results))
-	for _, result := range results {
+	updatedCount := 0
+	for _, deviceID := range req.DeviceIDs {
+		result, ok := results[deviceID]
+		if !ok {
+			continue
+		}
 		response = append(response, devices.DeviceProbeResponse{
 			DeviceID:         result.DeviceID,
 			IPAddress:        result.IPAddress,
@@ -1045,7 +1197,7 @@ func (h DevicesHandler) BatchProbeDevices(c echo.Context) error {
 
 		if updateStatus {
 			status, icmpStatus, snmpStatus := buildProbeStatuses(result)
-			_ = h.Service.UpdateDeviceProbeStatus(
+			if err := h.Service.UpdateDeviceProbeStatus(
 				c.Request().Context(),
 				result.DeviceID,
 				status,
@@ -1054,14 +1206,26 @@ func (h DevicesHandler) BatchProbeDevices(c echo.Context) error {
 				result.IcmpResponseTime,
 				conditionalLastSeen(result),
 				&result.ProbedAt,
-			)
+			); err == nil {
+				updatedCount++
+			}
 		}
 	}
 
-	return c.JSON(http.StatusOK, devices.DeviceBatchProbeResponse{
+	batchResp := devices.DeviceBatchProbeResponse{
 		Total:   len(req.DeviceIDs),
 		Probed:  len(response),
 		Results: response,
+	}
+
+	return c.JSON(http.StatusOK, struct {
+		devices.DeviceBatchProbeResponse
+		StatusUpdated      bool `json:"status_updated"`
+		StatusUpdatedCount int  `json:"status_updated_count"`
+	}{
+		DeviceBatchProbeResponse: batchResp,
+		StatusUpdated:            updateStatus && updatedCount > 0,
+		StatusUpdatedCount:       updatedCount,
 	})
 }
 
@@ -1137,11 +1301,44 @@ func buildDeviceUpdates(payload map[string]interface{}) map[string]interface{} {
 	return updates
 }
 
+const (
+	maxDevicePageSize       = 200
+	maxScanListLimit        = 200
+	maxBatchImportDevices   = 1000
+	maxBatchDeviceIDs       = 1000
+	maxPerformanceRangeDays = 365
+	// 批量探测并发上限：避免一次请求拉起过多 ping/SNMP，造成资源瞬时压垮
+	maxBatchProbeConcurrent = 50
+	defaultProbeConcurrent  = 20
+)
+
+func dedupePositiveInts(values []int) []int {
+	if len(values) == 0 {
+		return []int{}
+	}
+	seen := make(map[int]struct{}, len(values))
+	result := make([]int, 0, len(values))
+	for _, value := range values {
+		if value <= 0 {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
 func parsePageParams(c echo.Context) (int, int) {
 	page := parseIntDefault(c.QueryParam("page"), 0)
 	pageSize := parseIntDefault(c.QueryParam("page_size"), 0)
 
 	if page > 0 && pageSize > 0 {
+		if pageSize > maxDevicePageSize {
+			pageSize = maxDevicePageSize
+		}
 		return page, pageSize
 	}
 
@@ -1149,6 +1346,9 @@ func parsePageParams(c echo.Context) (int, int) {
 	limit := parseIntDefault(c.QueryParam("limit"), 100)
 	if limit <= 0 {
 		limit = 100
+	}
+	if limit > maxDevicePageSize {
+		limit = maxDevicePageSize
 	}
 	page = skip/limit + 1
 	pageSize = limit
@@ -1541,12 +1741,24 @@ func parseTimeRangeParam(raw string) (time.Time, time.Time, error) {
 	var duration time.Duration
 	switch unit {
 	case "m":
+		if amount > maxPerformanceRangeDays*24*60 {
+			return time.Time{}, time.Time{}, fmt.Errorf("时间范围过大")
+		}
 		duration = time.Minute
 	case "h":
+		if amount > maxPerformanceRangeDays*24 {
+			return time.Time{}, time.Time{}, fmt.Errorf("时间范围过大")
+		}
 		duration = time.Hour
 	case "d":
+		if amount > maxPerformanceRangeDays {
+			return time.Time{}, time.Time{}, fmt.Errorf("时间范围过大")
+		}
 		duration = 24 * time.Hour
 	case "w":
+		if amount > maxPerformanceRangeDays/7 {
+			return time.Time{}, time.Time{}, fmt.Errorf("时间范围过大")
+		}
 		duration = 7 * 24 * time.Hour
 	default:
 		return time.Time{}, time.Time{}, fmt.Errorf("时间范围无效")
@@ -1561,7 +1773,8 @@ func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
 	if h.Service == nil || h.SNMPCollector == nil || h.Metrics == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics collection service not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, "devices:read"); err != nil {
+	// 采集接口会写入监控指标数据，必须具备更新权限
+	if _, err := requirePermission(c, h.Auth, "devices:update"); err != nil {
 		return err
 	}
 
@@ -1671,7 +1884,8 @@ func (h DevicesHandler) BatchCollectMetrics(c echo.Context) error {
 	if h.Service == nil || h.SNMPCollector == nil || h.Metrics == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics collection service not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, "devices:read"); err != nil {
+	// 采集接口会写入监控指标数据，必须具备更新权限
+	if _, err := requirePermission(c, h.Auth, "devices:update"); err != nil {
 		return err
 	}
 
@@ -1687,6 +1901,17 @@ func (h DevicesHandler) BatchCollectMetrics(c echo.Context) error {
 	}
 	if req.MaxConcurrent <= 0 {
 		req.MaxConcurrent = 10
+	}
+
+	req.DeviceIDs = dedupePositiveInts(req.DeviceIDs)
+	if len(req.DeviceIDs) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
+	}
+	if len(req.DeviceIDs) > maxBatchDeviceIDs {
+		return echo.NewHTTPError(
+			http.StatusBadRequest,
+			fmt.Sprintf("device_ids too large (max %d)", maxBatchDeviceIDs),
+		)
 	}
 
 	deviceRows, err := h.Service.GetDevicesByIDs(c.Request().Context(), req.DeviceIDs)

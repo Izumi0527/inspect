@@ -44,9 +44,13 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
   const IconComponent = config.icon
   
   return (
-    <Badge variant={config.variant} className="flex items-center gap-1">
+    <Badge
+      variant={config.variant}
+      size="sm"
+      className="flex items-center gap-1 py-0.5 leading-none"
+    >
       <IconComponent className="h-3 w-3" />
-      {config.label}
+      <span className="leading-none">{config.label}</span>
     </Badge>
   )
 }

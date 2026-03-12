@@ -118,12 +118,15 @@ export interface Device {
   updated_at?: string
 }
 
-// 设备筛选接口
-export interface DeviceFilters {
+// 设备管理页筛选（仅用于前端 UI 状态）
+export interface DeviceUIFilters {
   searchQuery: string
   statusFilter: string
   typeFilter: string
-  // API使用的属性名
+}
+
+// 设备列表查询参数（用于后端 API）
+export interface DeviceListQuery {
   status?: string
   device_type?: string
   location?: string
@@ -256,6 +259,8 @@ export interface DeviceProbeResult {
   snmp_system_info?: string
   // 探测时间
   probed_at: string
+  // 后端可能附带：本次是否成功写回设备状态（update_status=true 且具备 devices:update 权限）
+  status_updated?: boolean
 }
 
 export interface DeviceBatchProbeRequest {
@@ -267,4 +272,7 @@ export interface DeviceBatchProbeResponse {
   total: number
   probed: number
   results: DeviceProbeResult[]
+  // 后端可能附带：批量探测写回信息（update_status=true 且具备 devices:update 权限）
+  status_updated?: boolean
+  status_updated_count?: number
 }

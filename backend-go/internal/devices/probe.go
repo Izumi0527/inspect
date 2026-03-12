@@ -43,18 +43,45 @@ type ProbeTarget struct {
 	Tags          interface{}
 }
 
+type ICMPProber func(ctx context.Context, ipAddress string) (bool, *float64, *string)
+
+type SNMPProber func(
+	ctx context.Context,
+	ipAddress string,
+	snmpCommunity *string,
+	snmpVersion *string,
+	snmpPort *int,
+	tags interface{},
+) (bool, *float64, *string, *string)
+
 type ProbeService struct {
 	logger   *zap.Logger
 	cache    map[int]ProbeResult
 	cacheTTL time.Duration
 	mu       sync.RWMutex
+	icmp     ICMPProber
+	snmp     SNMPProber
 }
 
 func NewProbeService(logger *zap.Logger) *ProbeService {
+	return NewProbeServiceWithProbers(logger, nil, nil)
+}
+
+// NewProbeServiceWithProbers 用于测试或特殊环境注入探测函数，避免直接依赖系统 ping/SNMP。
+// 若传入 nil，则回落使用默认实现。
+func NewProbeServiceWithProbers(logger *zap.Logger, icmpProber ICMPProber, snmpProber SNMPProber) *ProbeService {
+	if icmpProber == nil {
+		icmpProber = probeICMP
+	}
+	if snmpProber == nil {
+		snmpProber = probeSNMP
+	}
 	return &ProbeService{
 		logger:   logger,
 		cache:    make(map[int]ProbeResult),
 		cacheTTL: 30 * time.Second,
+		icmp:     icmpProber,
+		snmp:     snmpProber,
 	}
 }
 
@@ -82,11 +109,19 @@ func (s *ProbeService) ProbeDevice(
 	snmpCh := make(chan probeResultPayload, 1)
 
 	go func() {
-		reachable, response, errMsg := probeICMP(ctx, ipAddress)
+		icmpProber := s.icmp
+		if icmpProber == nil {
+			icmpProber = probeICMP
+		}
+		reachable, response, errMsg := icmpProber(ctx, ipAddress)
 		icmpCh <- probeResultPayload{reachable: reachable, responseTime: response, errorMessage: errMsg}
 	}()
 	go func() {
-		reachable, response, info, errMsg := probeSNMP(ctx, ipAddress, snmpCommunity, snmpVersion, snmpPort, tags)
+		snmpProber := s.snmp
+		if snmpProber == nil {
+			snmpProber = probeSNMP
+		}
+		reachable, response, info, errMsg := snmpProber(ctx, ipAddress, snmpCommunity, snmpVersion, snmpPort, tags)
 		snmpCh <- probeResultPayload{reachable: reachable, responseTime: response, errorMessage: errMsg, systemInfo: info}
 	}()
 

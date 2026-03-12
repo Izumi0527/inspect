@@ -10,7 +10,7 @@ import {
 import { DeviceManagementView } from "@/features/devices/components/DeviceManagementView";
 import { fetchDeviceStats } from "@/features/devices/api/devices.api";
 
-const mockLoadDevices = jest.fn();
+const mockLoadDevices = jest.fn(() => Promise.resolve());
 const mockSetError = jest.fn();
 const mockAddDevice = jest.fn();
 const mockRemoveDevice = jest.fn();
@@ -42,9 +42,19 @@ let mockDevices = [
     ...createMockDevice(1),
   },
 ];
+let mockError: string | null = null;
+let mockSearchParams = new URLSearchParams();
 
 jest.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => mockSearchParams,
+}));
+
+jest.mock("@/lib/contexts/auth-context", () => ({
+  useAuth: () => ({
+    user: {
+      permissions: ["devices:create", "devices:update", "devices:delete"],
+    },
+  }),
 }));
 
 jest.mock("react-hot-toast", () => ({
@@ -142,15 +152,34 @@ jest.mock("@/components/atoms", () => ({
     isOpen,
     title,
     description,
+    onClose,
+    onConfirm,
+    confirmText,
+    cancelText,
   }: {
     isOpen: boolean;
     title: string;
     description: string;
+    onClose: () => void;
+    onConfirm: () => void | Promise<void>;
+    confirmText?: string;
+    cancelText?: string;
   }) =>
     isOpen ? (
       <div>
         <div>{title}</div>
         <div>{description}</div>
+        <button type="button" onClick={() => onClose()}>
+          {cancelText ?? "取消"}
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            await onConfirm();
+          }}
+        >
+          {confirmText ?? "确认"}
+        </button>
       </div>
     ) : null,
   Table: ({
@@ -218,9 +247,11 @@ jest.mock("@/features/devices/components/BulkDeviceUpdate", () => ({
   BulkDeviceUpdate: ({
     isOpen,
     selectedDevices,
+    onBulkUpdate,
   }: {
     isOpen: boolean;
     selectedDevices: Array<{ id: number; name: string }>;
+    onBulkUpdate: (updates: Record<string, unknown>) => Promise<void>;
   }) =>
     isOpen ? (
       <div>
@@ -228,6 +259,12 @@ jest.mock("@/features/devices/components/BulkDeviceUpdate", () => ({
         {selectedDevices.map((device) => (
           <div key={device.id}>{device.name}</div>
         ))}
+        <button
+          type="button"
+          onClick={() => onBulkUpdate({ location: "机房-Z" })}
+        >
+          提交批量更新
+        </button>
       </div>
     ) : null,
 }));
@@ -252,7 +289,7 @@ jest.mock("@/features/devices/hooks/useDevices", () => {
       devices: mockDevices,
       total: mockDevices.length,
       loading: false,
-      error: null,
+      error: mockError,
       setError: mockSetError,
       addDevice: mockAddDevice,
       removeDevice: mockRemoveDevice,
@@ -304,7 +341,10 @@ jest.mock("@/features/devices/api/devices.api", () => ({
 describe("DeviceManagementView", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLoadDevices.mockResolvedValue(undefined);
     mockDevices = [createMockDevice(1)];
+    mockError = null;
+    mockSearchParams = new URLSearchParams();
     (fetchDeviceStats as jest.Mock).mockResolvedValue({
       total_devices: 1,
       online_devices: 1,
@@ -333,6 +373,19 @@ describe("DeviceManagementView", () => {
     });
 
     expect(fetchDeviceStats).toHaveBeenCalledTimes(2);
+  });
+
+  it("应展示与新页面一致的统计卡片文案", async () => {
+    render(<DeviceManagementView />);
+
+    await waitFor(() => {
+      expect(screen.getByText("总设备数")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("在线设备")).toBeInTheDocument();
+    expect(screen.getByText("离线设备")).toBeInTheDocument();
+    expect(screen.getByText("告警设备")).toBeInTheDocument();
+    expect(screen.getByText("总告警数")).toBeInTheDocument();
   });
 
   it("筛选变化后应清空跨页批量选择，避免旧筛选结果残留", async () => {
@@ -412,5 +465,117 @@ describe("DeviceManagementView", () => {
     expect(
       within(bulkUpdateModal as HTMLElement).getByText("edge-02"),
     ).toBeInTheDocument();
+  });
+
+  it("有数据时发生错误应展示提示条，点击重试应清空错误并重新触发加载", async () => {
+    mockError = "boom";
+
+    render(<DeviceManagementView />);
+
+    await waitFor(() => {
+      expect(screen.getByText("发生错误：boom")).toBeInTheDocument();
+    });
+
+    mockSetError.mockClear();
+    mockLoadDevices.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+
+    expect(mockSetError).toHaveBeenCalledWith(null);
+    await waitFor(() => {
+      expect(mockLoadDevices).toHaveBeenCalled();
+    });
+  });
+
+  it("批量删除确认后应调用后端接口，并提示成功", async () => {
+    const toast = (await import("react-hot-toast")).default as unknown as {
+      success: jest.Mock;
+      error: jest.Mock;
+    };
+    const { batchDeleteDevices } = await import("@/features/devices/api/devices.api");
+
+    (batchDeleteDevices as jest.Mock).mockResolvedValue({
+      success: true,
+      message: "已删除",
+      deleted_count: 1,
+      failed_count: 0,
+      failed_items: [],
+    });
+
+    render(<DeviceManagementView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择第一行" }));
+    expect(screen.getByText("已选择 1 台设备")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
+    await waitFor(() => {
+      expect(batchDeleteDevices).toHaveBeenCalledWith([1]);
+    });
+    expect(toast.success).toHaveBeenCalledWith("已删除");
+  });
+
+  it("批量更新提交后应调用后端接口并刷新", async () => {
+    const toast = (await import("react-hot-toast")).default as unknown as {
+      success: jest.Mock;
+      error: jest.Mock;
+    };
+    const { bulkUpdateDevices } = await import("@/features/devices/api/devices.api");
+
+    (bulkUpdateDevices as jest.Mock).mockResolvedValue({
+      success: true,
+      processed_count: 1,
+      failed_count: 0,
+      errors: [],
+      message: "已更新",
+    });
+
+    render(<DeviceManagementView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择第一行" }));
+    fireEvent.click(screen.getByRole("button", { name: "批量更新" }));
+    fireEvent.click(screen.getByRole("button", { name: "提交批量更新" }));
+
+    await waitFor(() => {
+      expect(bulkUpdateDevices).toHaveBeenCalledWith({
+        device_ids: [1],
+        updates: { location: "机房-Z" },
+      });
+    });
+    expect(toast.success).toHaveBeenCalledWith(
+      expect.stringContaining("已更新"),
+      expect.objectContaining({ duration: expect.any(Number) }),
+    );
+    expect(toast.success).toHaveBeenCalledWith(
+      expect.stringContaining("成功：1 台"),
+      expect.objectContaining({ duration: expect.any(Number) }),
+    );
+  });
+
+  it("从 URL search 参数初始化搜索词后，应在防抖后触发后端请求", async () => {
+    jest.useFakeTimers();
+    mockSearchParams = new URLSearchParams("search=edge");
+
+    render(<DeviceManagementView />);
+
+    // 先让初次请求完成（不关心参数）
+    await waitFor(() => {
+      expect(mockLoadDevices).toHaveBeenCalled();
+    });
+
+    // 搜索词写入筛选后，防抖 350ms 才会触发真正请求
+    await act(async () => {
+      jest.advanceTimersByTime(350);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockLoadDevices).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          search: "edge",
+        }),
+      );
+    });
   });
 });

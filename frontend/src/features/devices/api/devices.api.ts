@@ -1,13 +1,15 @@
 import { api, ApiClientError } from "@/lib/api-client";
 import {
   Device,
-  DeviceFilters,
+  DeviceListQuery,
   BulkActionType,
   BulkActionParams,
   BulkOperationResult,
   DeviceImportData,
   ImportResult,
   BulkUpdateParams,
+  DeviceProbeResult,
+  DeviceBatchProbeResponse,
 } from "../types";
 import { ApiResponse } from "@/lib/types/api-response.types";
 import type {
@@ -122,8 +124,12 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 
 const unwrapPayload = <T>(payload: unknown): T | undefined => {
   if (isObject(payload)) {
-    if ("success" in payload && payload.success === true && "data" in payload) {
-      return payload.data as T;
+    if ("success" in payload) {
+      // 仅在 success=true 时解包 data，避免把失败响应当成业务数据继续解析
+      if (payload.success === true && "data" in payload) {
+        return unwrapPayload<T>(payload.data);
+      }
+      return payload as T;
     }
     if ("data" in payload) {
       return unwrapPayload<T>(payload.data);
@@ -132,11 +138,35 @@ const unwrapPayload = <T>(payload: unknown): T | undefined => {
   return payload as T;
 };
 
+// 兼容：部分接口未来可能统一为 ApiResponse 包装；此处优先取 data，避免联调因响应外层变化而中断。
+const unwrapMaybeApiResponseData = (payload: unknown): unknown => {
+  if (isApiResponse<unknown>(payload)) {
+    return (payload as ApiResponse<unknown>).data;
+  }
+  return unwrapPayload<unknown>(payload) ?? payload;
+};
+
 const isDeviceDto = (candidate: unknown): candidate is DeviceDto =>
   isObject(candidate) &&
   typeof candidate.id === "number" &&
   typeof candidate.name === "string" &&
   typeof candidate.ip_address === "string";
+
+const isDeviceProbeResult = (candidate: unknown): candidate is DeviceProbeResult =>
+  isObject(candidate) &&
+  typeof candidate.device_id === "number" &&
+  typeof candidate.ip_address === "string" &&
+  typeof candidate.icmp_reachable === "boolean" &&
+  typeof candidate.snmp_reachable === "boolean" &&
+  typeof candidate.probed_at === "string";
+
+const isDeviceBatchProbeResponse = (
+  candidate: unknown,
+): candidate is DeviceBatchProbeResponse =>
+  isObject(candidate) &&
+  typeof candidate.total === "number" &&
+  typeof candidate.probed === "number" &&
+  Array.isArray(candidate.results);
 
 const isApiResponse = <T>(candidate: unknown): candidate is ApiResponse<T> =>
   typeof candidate === "object" &&
@@ -487,7 +517,7 @@ const extractDevices = (payload: unknown): DeviceDto[] => {
   return [];
 };
 
-const buildQueryString = (filters?: DeviceFilters) => {
+const buildQueryString = (filters?: DeviceListQuery) => {
   if (!filters) return "";
   const params = new URLSearchParams();
 
@@ -516,16 +546,17 @@ export interface FetchDevicesResult {
 }
 
 export async function fetchDevices(
-  filters?: DeviceFilters,
+  filters?: DeviceListQuery,
 ): Promise<FetchDevicesResult> {
   try {
     const payload = await api.get<unknown>(
       `/devices${buildQueryString(filters)}`,
     );
+    const unwrapped = unwrapPayload<unknown>(payload) ?? payload;
 
     // 格式1: 分页响应 {devices: [...], total: N, page: N, page_size: N}
-    if (isObject(payload) && "total" in payload) {
-      const obj = payload as Record<string, unknown>;
+    if (isObject(unwrapped) && "total" in unwrapped) {
+      const obj = unwrapped as Record<string, unknown>;
       const dtos = Array.isArray(obj.devices)
         ? (obj.devices as unknown[]).filter(isDeviceDto)
         : [];
@@ -539,7 +570,7 @@ export async function fetchDevices(
     }
 
     // 格式2: 兼容旧格式（纯数组）
-    const dtos = extractDevices(payload);
+    const dtos = extractDevices(unwrapped);
     return {
       devices: dtos.map(mapDevice),
       total: dtos.length,
@@ -659,21 +690,57 @@ export async function batchDeleteDevices(deviceIds: number[]): Promise<{
   message: string;
   deleted_count: number;
   failed_count: number;
+  failed_items?: Array<{
+    device_id: number;
+    error: string;
+  }>;
 }> {
   const payload = await api.post<unknown>("/devices/batch-delete", deviceIds);
+  const unwrapped = unwrapMaybeApiResponseData(payload);
+  const envelopeMessage =
+    isApiResponse<unknown>(payload) && typeof payload.message === "string"
+      ? payload.message
+      : "";
+  const envelopeSuccess =
+    isApiResponse<unknown>(payload) && typeof payload.success === "boolean"
+      ? payload.success
+      : undefined;
 
-  if (isObject(payload)) {
+  if (isObject(unwrapped)) {
+    const failedItemsRaw = (unwrapped as Record<string, unknown>).failed_items;
+    const failedItems = Array.isArray(failedItemsRaw)
+      ? failedItemsRaw
+          .map((item) => {
+            if (!isObject(item)) return null;
+            return {
+              device_id: Number((item as Record<string, unknown>).device_id ?? 0),
+              error: String((item as Record<string, unknown>).error ?? ""),
+            };
+          })
+          .filter(
+            (item): item is { device_id: number; error: string } => item !== null,
+          )
+      : undefined;
+
+    const rawSuccess =
+      typeof (unwrapped as Record<string, unknown>).success === "boolean"
+        ? ((unwrapped as Record<string, unknown>).success as boolean)
+        : envelopeSuccess ?? false;
+
     return {
-      success: (payload as Record<string, unknown>).success === true,
+      success: rawSuccess,
       message: String(
-        (payload as Record<string, unknown>).message ?? "批量删除完成",
+        (unwrapped as Record<string, unknown>).message ??
+          envelopeMessage ??
+          "批量删除完成",
       ),
       deleted_count: Number(
-        (payload as Record<string, unknown>).deleted_count ?? 0,
+        (unwrapped as Record<string, unknown>).deleted_count ?? 0,
       ),
       failed_count: Number(
-        (payload as Record<string, unknown>).failed_count ?? 0,
+        (unwrapped as Record<string, unknown>).failed_count ?? 0,
       ),
+      failed_items: failedItems,
     };
   }
 
@@ -682,6 +749,7 @@ export async function batchDeleteDevices(deviceIds: number[]): Promise<{
     message: "批量删除失败",
     deleted_count: 0,
     failed_count: deviceIds.length,
+    failed_items: undefined,
   };
 }
 
@@ -887,8 +955,12 @@ export async function fetchDeviceStats(): Promise<Record<string, unknown>> {
 
 export async function healthCheckDevice(
   id: number,
+  options?: { updateStatus?: boolean },
 ): Promise<Record<string, unknown>> {
-  const payload = await api.post<unknown>(`/devices/${id}/health-check`);
+  const endpoint = appendQuery(`/devices/${id}/health-check`, {
+    update_status: options?.updateStatus ?? true,
+  });
+  const payload = await api.post<unknown>(endpoint);
 
   // 兼容两种响应格式
   if (isObject(payload)) {
@@ -960,12 +1032,18 @@ const appendQuery = (
  */
 export async function probeDevice(
   deviceId: number,
-): Promise<import("../types").DeviceProbeResult> {
+  options?: { updateStatus?: boolean },
+): Promise<DeviceProbeResult> {
   try {
-    const response = await api.post<import("../types").DeviceProbeResult>(
-      `/devices/${deviceId}/probe`,
-    );
-    return response;
+    const endpoint = appendQuery(`/devices/${deviceId}/probe`, {
+      update_status: options?.updateStatus ?? true,
+    });
+    const payload = await api.post<unknown>(endpoint);
+    const unwrapped = unwrapMaybeApiResponseData(payload);
+    if (isDeviceProbeResult(unwrapped)) {
+      return unwrapped;
+    }
+    throw new Error("探测设备失败：响应格式不正确");
   } catch (error) {
     if (error instanceof ApiClientError) {
       throw new Error(error.message || "探测设备失败");
@@ -979,16 +1057,22 @@ export async function probeDevice(
  */
 export async function batchProbeDevices(
   deviceIds: number[],
-  maxConcurrent = 20,
-): Promise<import("../types").DeviceBatchProbeResponse> {
+  options?: { maxConcurrent?: number; updateStatus?: boolean },
+): Promise<DeviceBatchProbeResponse> {
   try {
-    const response = await api.post<
-      import("../types").DeviceBatchProbeResponse
-    >("/devices/batch-probe", {
+    const maxConcurrent = options?.maxConcurrent ?? 20;
+    const endpoint = appendQuery("/devices/batch-probe", {
+      update_status: options?.updateStatus ?? true,
+    });
+    const payload = await api.post<unknown>(endpoint, {
       device_ids: deviceIds,
       max_concurrent: maxConcurrent,
     });
-    return response;
+    const unwrapped = unwrapMaybeApiResponseData(payload);
+    if (isDeviceBatchProbeResponse(unwrapped)) {
+      return unwrapped;
+    }
+    throw new Error("批量探测设备失败：响应格式不正确");
   } catch (error) {
     if (error instanceof ApiClientError) {
       throw new Error(error.message || "批量探测设备失败");

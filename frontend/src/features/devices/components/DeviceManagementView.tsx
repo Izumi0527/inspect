@@ -31,9 +31,10 @@ import {
   ConfirmModal,
 } from "@/components/atoms";
 import { AppLayout } from "@/components/layout";
+import { useAuth } from "@/lib/contexts/auth-context";
 import toast from "react-hot-toast";
 
-import { Device, DeviceStatus, DeviceType } from "../types";
+import { Device, DeviceListQuery, DeviceStatus, DeviceType } from "../types";
 import { DeviceIcon, StatusBadge, getDeviceTypeLabel } from "./DeviceIcon";
 import { DeviceProbeButton } from "./DeviceProbeButton";
 import { BulkDeviceImport } from "./BulkDeviceImport";
@@ -69,6 +70,8 @@ const DEVICE_TYPES: DeviceType[] = [
   "wireless_ap",
 ];
 const DEVICE_REFRESH_INTERVAL_MS = 60_000;
+const DEFAULT_API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const isDeviceStatus = (value: unknown): value is DeviceStatus =>
   typeof value === "string" && (DEVICE_STATUSES as string[]).includes(value);
@@ -115,6 +118,16 @@ const toAlertCount = (value: unknown): number => {
 export const DeviceManagementView: React.FC = () => {
   const searchParams = useSearchParams();
   const appliedUrlSearchRef = React.useRef(false);
+  const { user } = useAuth();
+  const userPermissions = React.useMemo(
+    () => ((user?.permissions ?? []) as unknown as string[]),
+    [user?.permissions],
+  );
+  const canCreateDevice = userPermissions.includes("devices:create");
+  const canUpdateDevice = userPermissions.includes("devices:update");
+  const canDeleteDevice = userPermissions.includes("devices:delete");
+  // 探测默认会写回设备探测状态，只有具备更新权限才允许写回
+  const canPersistProbeStatus = canUpdateDevice;
 
   // 启用轮询：每60秒自动刷新设备数据（包括CPU和内存）
   const {
@@ -122,6 +135,7 @@ export const DeviceManagementView: React.FC = () => {
     total,
     loading,
     error,
+    errorStatus,
     setError,
     addDevice,
     removeDevice,
@@ -161,6 +175,7 @@ export const DeviceManagementView: React.FC = () => {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [bulkProbing, setBulkProbing] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = React.useState(false);
   const [selectedDeviceSnapshots, setSelectedDeviceSnapshots] = React.useState<
     Record<number, Device>
   >({});
@@ -256,7 +271,7 @@ export const DeviceManagementView: React.FC = () => {
       }
     }
 
-    const serverFilters: Record<string, string | number> = {
+    const serverFilters: DeviceListQuery = {
       page: currentPage,
       page_size: pageSize,
     };
@@ -266,7 +281,15 @@ export const DeviceManagementView: React.FC = () => {
     if (filters.typeFilter && filters.typeFilter !== "all")
       serverFilters.device_type = filters.typeFilter;
 
-    loadDevices(serverFilters as unknown as import("../types").DeviceFilters);
+    let canceled = false;
+    void loadDevices(serverFilters).finally(() => {
+      if (!canceled) {
+        setHasLoadedOnce(true);
+      }
+    });
+    return () => {
+      canceled = true;
+    };
   }, [
     filterSignature,
     debouncedSearch,
@@ -360,7 +383,9 @@ export const DeviceManagementView: React.FC = () => {
 
     setBulkProbing(true);
     try {
-      const result = await batchProbeDevices(selectedDevices);
+      const result = await batchProbeDevices(selectedDevices, {
+        updateStatus: canPersistProbeStatus,
+      });
       const onlineCount = result.results.filter((r) => r.icmp_reachable).length;
       const snmpSuccessCount = result.results.filter(
         (r) => r.snmp_reachable,
@@ -371,9 +396,11 @@ export const DeviceManagementView: React.FC = () => {
         { duration: 5000 },
       );
 
-      // 刷新设备列表和统计以显示最新状态
-      await loadDevices();
-      loadStats();
+      if (canPersistProbeStatus) {
+        // 刷新设备列表和统计以显示最新状态
+        await loadDevices();
+        loadStats();
+      }
       clearDeviceSelection();
     } catch (err) {
       const message = err instanceof Error ? err.message : "批量探测失败";
@@ -393,7 +420,9 @@ export const DeviceManagementView: React.FC = () => {
     const deviceIds = devices.map((d) => d.id);
     setBulkProbing(true);
     try {
-      const result = await batchProbeDevices(deviceIds);
+      const result = await batchProbeDevices(deviceIds, {
+        updateStatus: canPersistProbeStatus,
+      });
       const onlineCount = result.results.filter((r) => r.icmp_reachable).length;
       const snmpSuccessCount = result.results.filter(
         (r) => r.snmp_reachable,
@@ -404,9 +433,11 @@ export const DeviceManagementView: React.FC = () => {
         { duration: 5000 },
       );
 
-      // 刷新设备列表和统计以显示最新状态
-      await loadDevices();
-      loadStats();
+      if (canPersistProbeStatus) {
+        // 刷新设备列表和统计以显示最新状态
+        await loadDevices();
+        loadStats();
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "批量探测失败";
       toast.error(message);
@@ -423,23 +454,40 @@ export const DeviceManagementView: React.FC = () => {
       const result = await batchDeleteDevices(selectedDevices);
       if (result.success) {
         toast.success(result.message);
-        clearDeviceSelection();
-        await loadDevices();
-        loadStats();
       } else {
-        toast.error(result.message);
+        const failedPreview = result.failed_items
+          ? result.failed_items
+              .slice(0, 3)
+              .map((item) => `#${item.device_id}`)
+              .join("，")
+          : "";
+        const suffix = failedPreview
+          ? `\n失败设备（部分）：${failedPreview}${result.failed_items && result.failed_items.length > 3 ? "…" : ""}`
+          : "";
+        toast.error(`${result.message}${suffix}`);
       }
+
+      // 即使部分失败也要刷新数据：后端可能已删除部分设备
+      clearDeviceSelection();
+      await loadDevices();
+      loadStats();
+      setBulkDeleteModalOpen(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "批量删除失败";
       toast.error(message);
+      throw err;
     } finally {
       setBulkDeleting(false);
-      setBulkDeleteModalOpen(false);
     }
   };
 
   const confirmBulkUpdate = async (updates: Partial<Device>) => {
     if (selectedDevices.length === 0) return;
+
+    if (Object.keys(updates).length === 0) {
+      toast.error("请至少填写一个要更新的字段值");
+      return;
+    }
 
     setBulkUpdating(true);
     try {
@@ -448,16 +496,46 @@ export const DeviceManagementView: React.FC = () => {
         updates,
       });
 
+      const succeeded = Number(result.processed_count ?? 0);
+      const failed = Number(result.failed_count ?? 0);
+      const total = succeeded + failed;
+
+      const errorPreview = (result.errors ?? [])
+        .slice(0, 3)
+        .map((item) => {
+          const idPart =
+            typeof item.device_id === "number" ? `#${item.device_id}` : "";
+          const namePart =
+            typeof item.device_name === "string" && item.device_name.trim()
+              ? item.device_name.trim()
+              : "";
+          const label =
+            namePart && idPart ? `${namePart}（${idPart}）` : namePart || idPart;
+          return label ? `${label}：${item.error}` : item.error;
+        });
+
+      const countsLine =
+        total > 0 ? `\n成功：${succeeded} 台\n失败：${failed} 台` : "";
+      const errorSuffix =
+        errorPreview.length > 0
+          ? `\n失败原因（部分）：\n${errorPreview.join("\n")}${(result.errors ?? []).length > 3 ? "\n…" : ""}`
+          : "";
+
+      const toastMessage = `${result.message}${countsLine}${failed > 0 ? errorSuffix : ""}`;
+
       if (result.success) {
-        toast.success(result.message);
+        toast.success(toastMessage, { duration: 6000 });
       } else {
-        toast.error(result.message);
+        toast.error(toastMessage, { duration: 8000 });
       }
 
-      clearDeviceSelection();
-      setBulkUpdateModalOpen(false);
-      await loadDevices();
-      loadStats();
+      // 仅当至少有一台设备更新成功时，自动关闭弹窗并清空选择；否则保留现场便于用户修正后重试
+      if (succeeded > 0) {
+        clearDeviceSelection();
+        setBulkUpdateModalOpen(false);
+        await loadDevices();
+        loadStats();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "批量更新失败";
       toast.error(message);
@@ -523,12 +601,18 @@ export const DeviceManagementView: React.FC = () => {
   };
 
   const confirmDelete = async () => {
-    if (deviceToDelete) {
+    if (!deviceToDelete) return;
+
+    try {
       await removeDevice(deviceToDelete.id);
       setDeviceToDelete(null);
       loadStats();
+      toast.success("设备删除成功");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "删除设备失败";
+      toast.error(message);
+      throw err;
     }
-    setDeleteModalOpen(false);
   };
 
   const handleAddDevice = () => {
@@ -564,16 +648,20 @@ export const DeviceManagementView: React.FC = () => {
       title: "设备名称",
       width: "200px",
       render: (_, record) => (
-        <div className="flex items-center gap-3">
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-muted/60 dark:bg-muted flex items-center justify-center">
+        <div className="flex items-center gap-1.5">
+          <div className="flex-shrink-0 w-6 h-6 rounded-md bg-muted/60 dark:bg-muted flex items-center justify-center">
             <DeviceIcon
               type={record.device_type}
               className="h-4 w-4 text-muted-foreground dark:text-foreground/90"
             />
           </div>
           <div>
-            <div className="font-medium text-foreground">{record.name}</div>
-            <div className="text-sm text-muted-foreground">{record.ip}</div>
+            <div className="font-medium text-foreground leading-tight">
+              {record.name}
+            </div>
+            <div className="text-xs text-muted-foreground leading-tight">
+              {record.ip}
+            </div>
           </div>
         </div>
       ),
@@ -590,7 +678,7 @@ export const DeviceManagementView: React.FC = () => {
       title: "状态",
       width: "140px",
       render: (_, record) => (
-        <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-1.5">
           {/* 主状态 */}
           {isDeviceStatus(record.status) ? (
             <StatusBadge status={record.status} />
@@ -599,10 +687,10 @@ export const DeviceManagementView: React.FC = () => {
           )}
           {/* 探测状态指示器 */}
           {(record.icmp_status || record.snmp_status) && (
-            <div className="flex items-center gap-1 text-xs">
+            <div className="flex items-center gap-1 text-[10px] leading-none">
               {/* ICMP状态 */}
               <span
-                className={`inline-flex items-center px-1.5 py-0.5 rounded ${
+                className={`inline-flex items-center px-1 py-0.5 rounded ${
                   record.icmp_status === "online"
                     ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                     : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
@@ -613,7 +701,7 @@ export const DeviceManagementView: React.FC = () => {
               </span>
               {/* SNMP状态 */}
               <span
-                className={`inline-flex items-center px-1.5 py-0.5 rounded ${
+                className={`inline-flex items-center px-1 py-0.5 rounded ${
                   record.snmp_status === "success"
                     ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                     : record.snmp_status === "not_configured"
@@ -644,46 +732,66 @@ export const DeviceManagementView: React.FC = () => {
       key: "cpu_usage",
       title: "CPU使用率",
       width: "120px",
-      render: (value) => formatPercentage(value),
+      align: "right",
+      render: (value) => (
+        <span className="tabular-nums">{formatPercentage(value)}</span>
+      ),
     },
     {
       key: "memory_usage",
       title: "内存使用率",
       width: "120px",
-      render: (value) => formatPercentage(value),
+      align: "right",
+      render: (value) => (
+        <span className="tabular-nums">{formatPercentage(value)}</span>
+      ),
     },
     {
       key: "alert_count",
       title: "告警数",
       width: "80px",
+      align: "right",
       render: (value) => {
         const count = toAlertCount(value);
         return (
-          <Badge variant={count > 0 ? "error" : "secondary"}>{count}</Badge>
+          <Badge
+            variant={count > 0 ? "error" : "secondary"}
+            size="sm"
+            className="tabular-nums"
+          >
+            {count}
+          </Badge>
         );
       },
     },
     {
       key: "actions",
       title: "操作",
-      width: "200px",
+      width: "160px",
       render: (_, record) => (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 whitespace-nowrap">
           <DeviceProbeButton
             deviceId={record.id}
             deviceName={record.name}
             size="sm"
             variant="ghost"
+            hideLabel
+            updateStatus={canPersistProbeStatus}
             onProbeComplete={() => {
-              // 探测完成后刷新设备列表和统计以显示最新状态
-              loadDevices();
-              loadStats();
+              if (canPersistProbeStatus) {
+                // 探测完成后刷新设备列表和统计以显示最新状态
+                loadDevices();
+                loadStats();
+              }
             }}
           />
           <Button
             size="sm"
             variant="ghost"
             onClick={() => handleViewDevice(record)}
+            aria-label={`查看设备 ${record.name}`}
+            title="查看"
+            className="px-2"
           >
             <Eye className="h-4 w-4" />
           </Button>
@@ -691,6 +799,10 @@ export const DeviceManagementView: React.FC = () => {
             size="sm"
             variant="ghost"
             onClick={() => handleEditDevice(record)}
+            disabled={!canUpdateDevice}
+            aria-label={`编辑设备 ${record.name}`}
+            title={canUpdateDevice ? "编辑" : "需要设备更新权限"}
+            className="px-2"
           >
             <Edit className="h-4 w-4" />
           </Button>
@@ -698,6 +810,10 @@ export const DeviceManagementView: React.FC = () => {
             size="sm"
             variant="ghost"
             onClick={() => handleDeleteDevice(record)}
+            disabled={!canDeleteDevice}
+            aria-label={`删除设备 ${record.name}`}
+            title={canDeleteDevice ? "删除" : "需要设备删除权限"}
+            className="px-2"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -706,7 +822,38 @@ export const DeviceManagementView: React.FC = () => {
     },
   ];
 
-  if (error) {
+  if (error && devices.length === 0 && hasLoadedOnce) {
+    if (errorStatus === 403) {
+      return (
+        <AppLayout title="设备管理 - 无权限">
+          <div className="text-center py-12">
+            <div className="mb-6">
+              <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">
+                无权限访问设备管理
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                {error || "您没有访问该页面的权限，请联系管理员开通权限。"}
+              </p>
+              <div className="space-x-3">
+                <Button onClick={() => window.history.back()} variant="outline">
+                  返回上一页
+                </Button>
+                <Button
+                  onClick={() => {
+                    setError(null);
+                    loadDevices();
+                  }}
+                >
+                  重试加载
+                </Button>
+              </div>
+            </div>
+          </div>
+        </AppLayout>
+      );
+    }
+
     return (
       <AppLayout title="设备管理 - 错误">
         <div className="text-center py-12">
@@ -736,7 +883,9 @@ export const DeviceManagementView: React.FC = () => {
           <div className="text-sm text-muted-foreground">
             <p>可能的原因：</p>
             <ul className="mt-2 text-left inline-block">
-              <li>• 后端服务未启动 (检查 http://localhost:8000)</li>
+              <li>
+                • 后端服务未启动 (检查 {DEFAULT_API_BASE_URL}/api/v1)
+              </li>
               <li>• 网络连接问题</li>
               <li>• 数据库连接失败</li>
             </ul>
@@ -746,22 +895,27 @@ export const DeviceManagementView: React.FC = () => {
     );
   }
 
+  const isInitialLoading = !hasLoadedOnce;
+  const isRefreshing = loading && hasLoadedOnce;
+  const showEmptyState = devices.length === 0 && hasLoadedOnce && !error;
+  const showTable = devices.length > 0 || isInitialLoading;
+
   return (
     <AppLayout title="设备管理" alertCount={summary.totalAlerts}>
-      <div className="flex flex-col gap-4 h-full">
+      <div className="flex flex-col gap-1.5 h-full min-h-0">
         {/* 统计卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-1.5">
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-2.5">
               <div className="flex items-center">
-                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                  <Server className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                <div className="p-1 rounded-md bg-blue-100 dark:bg-blue-900/30">
+                  <Server className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-muted-foreground">
+                <div className="ml-2.5">
+                  <p className="text-xs font-medium text-muted-foreground leading-tight">
                     总设备数
                   </p>
-                  <p className="text-2xl font-bold text-foreground">
+                  <p className="text-lg font-bold text-foreground leading-none">
                     {summary.total}
                   </p>
                 </div>
@@ -770,16 +924,16 @@ export const DeviceManagementView: React.FC = () => {
           </Card>
 
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-2.5">
               <div className="flex items-center">
-                <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                  <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                <div className="p-1 rounded-md bg-green-100 dark:bg-green-900/30">
+                  <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-muted-foreground">
+                <div className="ml-2.5">
+                  <p className="text-xs font-medium text-muted-foreground leading-tight">
                     在线设备
                   </p>
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  <p className="text-lg font-bold text-green-600 dark:text-green-400 leading-none">
                     {summary.online}
                   </p>
                 </div>
@@ -788,16 +942,16 @@ export const DeviceManagementView: React.FC = () => {
           </Card>
 
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-2.5">
               <div className="flex items-center">
-                <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                  <Power className="h-6 w-6 text-red-600 dark:text-red-400" />
+                <div className="p-1 rounded-md bg-red-100 dark:bg-red-900/30">
+                  <Power className="h-5 w-5 text-red-600 dark:text-red-400" />
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-muted-foreground">
+                <div className="ml-2.5">
+                  <p className="text-xs font-medium text-muted-foreground leading-tight">
                     离线设备
                   </p>
-                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                  <p className="text-lg font-bold text-red-600 dark:text-red-400 leading-none">
                     {summary.offline}
                   </p>
                 </div>
@@ -806,16 +960,16 @@ export const DeviceManagementView: React.FC = () => {
           </Card>
 
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-2.5">
               <div className="flex items-center">
-                <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
-                  <AlertTriangle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
+                <div className="p-1 rounded-md bg-yellow-100 dark:bg-yellow-900/30">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    活跃告警设备
+                <div className="ml-2.5">
+                  <p className="text-xs font-medium text-muted-foreground leading-tight">
+                    告警设备
                   </p>
-                  <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                  <p className="text-lg font-bold text-yellow-600 dark:text-yellow-400 leading-none">
                     {summary.alerting}
                   </p>
                 </div>
@@ -824,16 +978,16 @@ export const DeviceManagementView: React.FC = () => {
           </Card>
 
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-2.5">
               <div className="flex items-center">
-                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                  <AlertTriangle className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                <div className="p-1 rounded-md bg-purple-100 dark:bg-purple-900/30">
+                  <AlertTriangle className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-muted-foreground">
+                <div className="ml-2.5">
+                  <p className="text-xs font-medium text-muted-foreground leading-tight">
                     总告警数
                   </p>
-                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                  <p className="text-lg font-bold text-purple-600 dark:text-purple-400 leading-none">
                     {summary.totalAlerts}
                   </p>
                 </div>
@@ -843,16 +997,25 @@ export const DeviceManagementView: React.FC = () => {
         </div>
 
         {/* 筛选和搜索 */}
-        <Card className="flex-1 flex flex-col overflow-hidden">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>设备列表</CardTitle>
-              <div className="flex items-center gap-2">
+        <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
+          <CardHeader className="p-2.5 pb-2">
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="text-sm leading-tight">设备列表</CardTitle>
+                {isRefreshing && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Activity className="h-3.5 w-3.5 animate-spin" />
+                    <span>刷新中</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-1">
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={handleProbeAll}
                   disabled={bulkProbing || devices.length === 0}
-                  className="flex items-center gap-2"
+                  className="gap-1"
                 >
                   {bulkProbing ? (
                     <Activity className="h-4 w-4 animate-spin" />
@@ -863,23 +1026,30 @@ export const DeviceManagementView: React.FC = () => {
                 </Button>
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={handleDownloadTemplate}
-                  className="flex items-center gap-2"
+                  className="gap-1"
                 >
                   <Download className="h-4 w-4" />
                   下载模板
                 </Button>
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={handleBulkImport}
-                  className="flex items-center gap-2"
+                  disabled={!canCreateDevice}
+                  title={canCreateDevice ? undefined : "需要设备新增权限"}
+                  className="gap-1"
                 >
                   <Upload className="h-4 w-4" />
                   批量导入
                 </Button>
                 <Button
                   onClick={handleAddDevice}
-                  className="flex items-center gap-2"
+                  size="sm"
+                  disabled={!canCreateDevice}
+                  title={canCreateDevice ? undefined : "需要设备新增权限"}
+                  className="gap-1"
                 >
                   <Plus className="h-4 w-4" />
                   添加设备
@@ -887,21 +1057,21 @@ export const DeviceManagementView: React.FC = () => {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="flex flex-col overflow-hidden">
-            <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              <div className="w-full sm:w-[300px]">
+          <CardContent className="flex flex-1 flex-col overflow-hidden p-2.5 pt-0 min-h-0">
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mb-1">
+              <div className="flex-1 min-w-[240px] max-w-md">
                 <Input
                   placeholder="搜索设备名称、IP或位置..."
                   value={filters.searchQuery}
                   onChange={(e) => updateFilter("searchQuery", e.target.value)}
-                  className="w-full"
+                  className="w-full h-8 text-xs leading-tight px-2.5 py-1 rounded-lg"
                 />
               </div>
               <Select
                 value={filters.statusFilter}
                 onValueChange={(value) => updateFilter("statusFilter", value)}
               >
-                <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectTrigger className="w-full sm:w-[160px] h-8 text-xs leading-tight px-2.5 py-1 rounded-lg">
                   <SelectValue placeholder="状态筛选" />
                 </SelectTrigger>
                 <SelectContent>
@@ -916,7 +1086,7 @@ export const DeviceManagementView: React.FC = () => {
                 value={filters.typeFilter}
                 onValueChange={(value) => updateFilter("typeFilter", value)}
               >
-                <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectTrigger className="w-full sm:w-[160px] h-8 text-xs leading-tight px-2.5 py-1 rounded-lg">
                   <SelectValue placeholder="类型筛选" />
                 </SelectTrigger>
                 <SelectContent>
@@ -929,17 +1099,37 @@ export const DeviceManagementView: React.FC = () => {
               </Select>
             </div>
 
+            {error && devices.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mb-1 px-2.5 py-1 bg-red-50/60 dark:bg-red-900/15 border border-border/50 rounded-md">
+                <span className="text-xs text-red-700 dark:text-red-300">
+                  发生错误：{error}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setError(null);
+                    loadDevices();
+                  }}
+                  className="h-7 px-2 text-xs"
+                >
+                  重试
+                </Button>
+              </div>
+            )}
+
             {/* 批量操作栏 */}
             {selectedDevices.length > 0 && (
-              <div className="flex items-center gap-4 mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <span className="text-sm text-blue-700 dark:text-blue-300">
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mb-1 px-2.5 py-1 bg-blue-50/60 dark:bg-blue-900/15 border border-border/50 rounded-md">
+                <span className="text-xs leading-tight text-blue-700 dark:text-blue-300">
                   已选择 {selectedDevices.length} 台设备
                 </span>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={handleBulkUpdate}
-                  disabled={bulkUpdating}
+                  disabled={bulkUpdating || !canUpdateDevice}
+                  title={canUpdateDevice ? undefined : "需要设备更新权限"}
                 >
                   批量更新
                 </Button>
@@ -948,7 +1138,7 @@ export const DeviceManagementView: React.FC = () => {
                   variant="outline"
                   onClick={handleBulkProbe}
                   disabled={bulkProbing}
-                  className="flex items-center gap-1"
+                  className="gap-1"
                 >
                   {bulkProbing ? (
                     <Activity className="h-4 w-4 animate-spin" />
@@ -961,15 +1151,18 @@ export const DeviceManagementView: React.FC = () => {
                   size="sm"
                   variant="destructive"
                   onClick={handleBulkDelete}
-                  className="flex items-center gap-1"
+                  disabled={!canDeleteDevice}
+                  title={canDeleteDevice ? undefined : "需要设备删除权限"}
+                  className="gap-1"
                 >
                   <Trash2 className="h-4 w-4" />
                   批量删除
                 </Button>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   onClick={clearDeviceSelection}
+                  className="sm:ml-auto"
                 >
                   取消选择
                 </Button>
@@ -977,29 +1170,37 @@ export const DeviceManagementView: React.FC = () => {
             )}
 
             {/* 设备表格 */}
-            <div className="overflow-y-auto">
-              {devices.length === 0 && !loading && !error && (
-                <div className="text-center py-12">
-                  <Server className="h-16 w-16 text-muted-foreground/80 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-foreground mb-2">
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {showEmptyState && (
+                <div className="text-center py-6">
+                  <Server className="h-9 w-9 text-muted-foreground/80 mx-auto mb-2" />
+                  <h3 className="text-base font-semibold text-foreground mb-2">
                     暂无设备数据
                   </h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-sm leading-tight text-muted-foreground">
                     {debouncedSearch ||
                     filters.statusFilter !== "all" ||
                     filters.typeFilter !== "all"
                       ? "当前筛选条件下没有找到匹配的设备，请尝试调整筛选条件。"
                       : "系统中还没有添加任何设备,点击上方「添加设备」按钮开始管理您的网络设备。"}
                   </p>
+                  {isRefreshing && (
+                    <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                      <Activity className="h-3.5 w-3.5 animate-spin" />
+                      <span>正在刷新...</span>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {(devices.length > 0 || loading) && (
+              {showTable && (
                 <Table
                   columns={columns}
                   data={devices}
-                  loading={loading}
+                  loading={isInitialLoading}
                   rowKey="id"
+                  size="small"
+                  className="border-0 bg-transparent backdrop-blur-none rounded-none"
                   rowSelection={{
                     selectedRowKeys: selectedDevices,
                     onChange: handleSelectionChange,
@@ -1019,7 +1220,10 @@ export const DeviceManagementView: React.FC = () => {
         {/* 删除确认对话框 */}
         <ConfirmModal
           isOpen={deleteModalOpen}
-          onClose={() => setDeleteModalOpen(false)}
+          onClose={() => {
+            setDeleteModalOpen(false);
+            setDeviceToDelete(null);
+          }}
           onConfirm={confirmDelete}
           title="删除设备"
           description={`确定要删除设备 "${deviceToDelete?.name}" 吗？此操作不可撤销。`}
@@ -1056,6 +1260,7 @@ export const DeviceManagementView: React.FC = () => {
           }}
           device={viewingDevice}
           loading={viewModalLoading}
+          updateStatus={canPersistProbeStatus}
         />
 
         <EditDeviceModal

@@ -33,6 +33,18 @@ type scanJob struct {
 	cancel context.CancelFunc
 }
 
+const (
+	// MaxScanHosts 限制单次扫描的最大主机数量，避免大网段导致内存/数据库压力过大。
+	MaxScanHosts = 4096
+)
+
+var (
+	// ErrScanNotFound 表示扫描任务不存在。
+	ErrScanNotFound = errors.New("scan not found")
+	// ErrScanNotRunning 表示扫描任务存在，但当前状态不允许停止（例如已完成/已取消）。
+	ErrScanNotRunning = errors.New("scan not running")
+)
+
 func NewScanner(db *gorm.DB, logger *zap.Logger, probe *ProbeService) *Scanner {
 	return &Scanner{
 		db:     db,
@@ -40,6 +52,18 @@ func NewScanner(db *gorm.DB, logger *zap.Logger, probe *ProbeService) *Scanner {
 		probe:  probe,
 		active: make(map[string]*scanJob),
 	}
+}
+
+func normalizeScanType(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return "ping"
+	}
+	// 未知值回落到 ping，避免“无需探测即视为可达”导致海量写库。
+	if normalized != "ping" && normalized != "full" {
+		return "ping"
+	}
+	return normalized
 }
 
 func (s *Scanner) StartScan(ctx context.Context, req NetworkScanRequest, createdBy *string) (string, error) {
@@ -56,14 +80,17 @@ func (s *Scanner) StartScan(ctx context.Context, req NetworkScanRequest, created
 	if err != nil {
 		return "", fmt.Errorf("invalid target_network")
 	}
-
-	scanID := uuid.NewString()
-	scanType := strings.TrimSpace(req.ScanType)
-	if scanType == "" {
-		scanType = "ping"
+	if ipNet == nil || ipNet.IP.To4() == nil {
+		return "", fmt.Errorf("invalid target_network")
 	}
 
+	scanID := uuid.NewString()
 	totalHosts := countHosts(ipNet)
+	if totalHosts > MaxScanHosts {
+		return "", fmt.Errorf("target_network too large")
+	}
+
+	scanType := normalizeScanType(req.ScanType)
 	ports := defaultScanPorts(req.PortScan)
 	snmpCommunities := defaultSnmpCommunities(req.SnmpScan)
 
@@ -108,11 +135,23 @@ func (s *Scanner) StopScan(ctx context.Context, scanID string) bool {
 		return false
 	}
 
+	return s.StopScanWithReason(ctx, scanID) == nil
+}
+
+// StopScanWithReason 尝试停止扫描任务；返回 nil 表示已停止或已发出停止信号。
+// 如果 scanID 不存在或状态不允许停止，会返回对应的错误，便于上层返回更准确的 HTTP 状态码。
+func (s *Scanner) StopScanWithReason(ctx context.Context, scanID string) error {
+	if s.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	cancelled := false
 	s.mu.Lock()
 	job := s.active[scanID]
 	if job != nil {
 		job.cancel()
 		delete(s.active, scanID)
+		cancelled = true
 	}
 	s.mu.Unlock()
 
@@ -121,10 +160,31 @@ func (s *Scanner) StopScan(ctx context.Context, scanID string) bool {
 		"completed_at": time.Now().UTC(),
 		"updated_at":   time.Now().UTC(),
 	}
-	if err := s.db.WithContext(ctx).Table("network_scans").Where("id = ?", scanID).Updates(update).Error; err != nil {
-		return false
+
+	tx := s.db.WithContext(ctx).
+		Table("network_scans").
+		Where("id = ? AND status = ?", scanID, "running").
+		Updates(update)
+	if tx.Error != nil {
+		return tx.Error
 	}
-	return true
+	if tx.RowsAffected > 0 {
+		return nil
+	}
+
+	// 若当前进程确实存在运行中的任务，说明停止信号已发出，最终状态将由 finalizeScan 写入。
+	if cancelled {
+		return nil
+	}
+
+	var count int64
+	if err := s.db.WithContext(ctx).Table("network_scans").Where("id = ?", scanID).Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrScanNotFound
+	}
+	return ErrScanNotRunning
 }
 
 func (s *Scanner) GetScan(ctx context.Context, scanID string) (*NetworkScan, error) {
@@ -220,10 +280,7 @@ func (s *Scanner) executeScan(ctx context.Context, scan NetworkScan, req Network
 
 	ports := defaultScanPorts(req.PortScan)
 	communities := defaultSnmpCommunities(req.SnmpScan)
-	scanType := strings.TrimSpace(req.ScanType)
-	if scanType == "" {
-		scanType = "ping"
-	}
+	scanType := normalizeScanType(req.ScanType)
 
 	hosts := make(chan string)
 	var wg sync.WaitGroup
@@ -336,7 +393,11 @@ func (s *Scanner) updateScanProgress(ctx context.Context, scanID string, totalHo
 		"progress":      progress,
 		"updated_at":    time.Now().UTC(),
 	}
-	_ = s.db.WithContext(ctx).Table("network_scans").Where("id = ?", scanID).Updates(updates).Error
+	if err := s.db.WithContext(ctx).Table("network_scans").Where("id = ?", scanID).Updates(updates).Error; err != nil {
+		if s.logger != nil {
+			s.logger.Warn("update scan progress failed", zap.Error(err), zap.String("scan_id", scanID))
+		}
+	}
 }
 
 func (s *Scanner) finalizeScan(ctx context.Context, scanID string, startedAt time.Time, totalHosts int, scanned *int64, alive *int64, found *int64, cause error) {
@@ -365,16 +426,20 @@ func (s *Scanner) finalizeScan(ctx context.Context, scanID string, startedAt tim
 	}
 
 	updates := map[string]interface{}{
-		"status":       status,
+		"status":        status,
 		"scanned_hosts": scannedCount,
-		"alive_hosts":  aliveCount,
+		"alive_hosts":   aliveCount,
 		"devices_found": foundCount,
-		"progress":     progress,
-		"completed_at": completedAt,
-		"duration":     duration,
-		"updated_at":   completedAt,
+		"progress":      progress,
+		"completed_at":  completedAt,
+		"duration":      duration,
+		"updated_at":    completedAt,
 	}
-	_ = s.db.WithContext(ctx).Table("network_scans").Where("id = ?", scanID).Updates(updates).Error
+	if err := s.db.WithContext(ctx).Table("network_scans").Where("id = ?", scanID).Updates(updates).Error; err != nil {
+		if s.logger != nil {
+			s.logger.Warn("finalize scan failed", zap.Error(err), zap.String("scan_id", scanID))
+		}
+	}
 }
 
 func defaultScanPorts(enabled bool) []int {

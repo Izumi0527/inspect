@@ -2,6 +2,7 @@ package devices
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"gorm.io/datatypes"
@@ -37,7 +38,7 @@ func encodeTags(tags interface{}) (datatypes.JSON, error) {
 			return nil, nil
 		}
 		if !json.Valid([]byte(trimmed)) {
-			return nil, nil
+			return nil, fmt.Errorf("invalid tags JSON")
 		}
 		return datatypes.JSON([]byte(trimmed)), nil
 	default:

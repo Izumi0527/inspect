@@ -55,6 +55,8 @@ func NewServer(
 	handlers.HealthHandler{Version: cfg.AppVersion}.Register(e)
 
 	api := e.Group("/api/v1")
+	// 限制请求体大小，避免批量接口/读取 raw body 被超大 payload 拖垮
+	api.Use(echomw.BodyLimit("10M"))
 	if authHandler != nil {
 		authHandler.Register(api)
 	}

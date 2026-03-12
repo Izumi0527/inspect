@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
-import { Settings, Save, AlertCircle } from 'lucide-react'
+import React, { useMemo, useState } from 'react'
+import { Save, AlertCircle } from 'lucide-react'
 import {
-  Modal,
+  SimpleModal,
   Button,
   Card,
   CardHeader,
@@ -46,6 +46,7 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
 }) => {
   const [selectedFields, setSelectedFields] = useState<Set<UpdatableDeviceField>>(new Set())
   const [updateValues, setUpdateValues] = useState<Partial<Record<UpdatableDeviceField, FieldValue>>>({})
+  const [submitError, setSubmitError] = useState<string>('')
 
   const updateFields: UpdateField[] = [
     {
@@ -91,6 +92,7 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
       newSelectedFields.add(fieldKey)
     }
     setSelectedFields(newSelectedFields)
+    setSubmitError('')
   }
 
   const handleValueChange = (fieldKey: UpdatableDeviceField, value: FieldValue) => {
@@ -98,11 +100,10 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
       ...prev,
       [fieldKey]: value
     }))
+    setSubmitError('')
   }
 
-  const handleSubmit = async () => {
-    if (selectedFields.size === 0) return
-
+  const effectiveUpdates = useMemo(() => {
     const updates: Partial<Device> = {}
     selectedFields.forEach(field => {
       const value = updateValues[field]
@@ -110,8 +111,24 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
         ;(updates as Record<UpdatableDeviceField, FieldValue>)[field] = value
       }
     })
+    return updates
+  }, [selectedFields, updateValues])
 
-    await onBulkUpdate(updates)
+  const canSubmit =
+    selectedFields.size > 0 &&
+    Object.keys(effectiveUpdates).length > 0 &&
+    !isProcessing
+
+  const handleSubmit = async () => {
+    if (selectedFields.size === 0) return
+
+    if (Object.keys(effectiveUpdates).length === 0) {
+      setSubmitError('请选择字段后，请至少填写一个字段的新值再提交。')
+      return
+    }
+
+    setSubmitError('')
+    await onBulkUpdate(effectiveUpdates)
   }
 
   const renderFieldInput = (field: UpdateField) => {
@@ -161,20 +178,16 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
   }
 
   return (
-    <Modal open={isOpen} onOpenChange={onClose}>
-      <div className="p-6">
-        {/* 标题 */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-            <Settings className="h-5 w-5 text-blue-600" />
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">批量更新设备</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              将更新 {selectedDevices.length} 个设备的属性
-            </p>
-          </div>
-        </div>
+    <SimpleModal
+      open={isOpen}
+      onClose={onClose}
+      title="批量更新设备"
+      size="4xl"
+    >
+      <div className="p-1">
+        <p className="text-sm text-muted-foreground mb-6">
+          将更新 {selectedDevices.length} 个设备的属性
+        </p>
 
         {/* 选中设备概览 */}
         <Card className="mb-6">
@@ -255,25 +268,34 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
                 <p className="text-sm text-blue-800 mb-2">
                   将对 {selectedDevices.length} 个设备执行以下更新：
                 </p>
-                <div className="space-y-1">
-                  {Array.from(selectedFields).map(field => {
-                    const fieldConfig = updateFields.find(f => f.key === field)
-                    const value = updateValues[field]
-                    if (!value || !fieldConfig) return null
-                    
-                    return (
-                      <div key={String(field)} className="text-sm text-blue-700">
-                        • {fieldConfig.label}: {String(value)}
-                      </div>
-                    )
-                  })}
-                </div>
+                {Object.keys(effectiveUpdates).length === 0 ? (
+                  <p className="text-sm text-blue-700">
+                    请选择要更新的字段，并填写新值后再提交。
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {Object.entries(effectiveUpdates).map(([fieldKey, value]) => {
+                      const fieldConfig = updateFields.find(f => String(f.key) === fieldKey)
+                      if (!fieldConfig) return null
+                      return (
+                        <div key={fieldKey} className="text-sm text-blue-700">
+                          • {fieldConfig.label}: {String(value)}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         )}
 
         {/* 底部按钮 */}
+        {submitError && (
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {submitError}
+          </div>
+        )}
         <div className="flex items-center justify-end gap-3">
           <Button
             variant="outline"
@@ -284,7 +306,14 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={isProcessing || selectedFields.size === 0}
+            disabled={!canSubmit}
+            title={
+              selectedFields.size === 0
+                ? '请选择要更新的字段'
+                : Object.keys(effectiveUpdates).length === 0
+                  ? '请填写至少一个字段的新值'
+                  : undefined
+            }
             className="min-w-[100px]"
           >
             {isProcessing ? (
@@ -298,6 +327,6 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
           </Button>
         </div>
       </div>
-    </Modal>
+    </SimpleModal>
   )
 }

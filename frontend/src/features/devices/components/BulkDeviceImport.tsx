@@ -130,6 +130,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
   const [isProcessing, setIsProcessing] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [mappingErrors, setMappingErrors] = useState<string[]>([])
+  const [uploadErrors, setUploadErrors] = useState<string[]>([])
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const mappedDevices = useMemo(() => {
@@ -157,6 +158,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
     setFieldMapping({})
     setImportResult(null)
     setMappingErrors([])
+    setUploadErrors([])
   }
 
   const handleClose = () => {
@@ -194,6 +196,15 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
     const file = event.target.files?.[0]
     if (!file) return
 
+    // 允许用户重复选择同一个文件
+    event.target.value = ''
+
+    const fileName = file.name?.toLowerCase?.() ?? ''
+    if (!fileName.endsWith('.csv')) {
+      setUploadErrors(['仅支持 CSV 文件（.csv）。请先使用“下载模板”生成模板文件。'])
+      return
+    }
+
     const reader = new FileReader()
     reader.onload = e => {
       try {
@@ -206,9 +217,16 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         setCsvData(parsed)
         setFieldMapping(defaultMapping)
         setMappingErrors([])
+        setUploadErrors([])
         setStep('mapping')
       } catch (error) {
+        const message = error instanceof Error ? error.message : 'CSV 解析失败'
         console.error('CSV 解析失败:', error)
+        setCsvData(null)
+        setFieldMapping({})
+        setMappingErrors([])
+        setUploadErrors([`${message}。请检查文件编码与分隔符（需为英文逗号“,”）。`])
+        setStep('upload')
       }
     }
     reader.readAsText(file, 'utf-8')
@@ -333,6 +351,16 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {uploadErrors.length > 0 && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 text-sm rounded-lg p-4 space-y-1">
+                {uploadErrors.map(errorMessage => (
+                  <div key={errorMessage} className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>{errorMessage}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div
               onClick={handleUploadClick}
               className="flex flex-col gap-3 border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors"

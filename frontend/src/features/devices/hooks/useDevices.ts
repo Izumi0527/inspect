@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { ApiClientError } from '@/lib/api-client'
 import { 
   Device, 
-  DeviceFilters, 
-  DeviceSummary, 
+  DeviceListQuery, 
+  DeviceUIFilters, 
   BulkActionType, 
   BulkActionParams,
   BulkOperationResult,
@@ -23,10 +24,11 @@ export function useDevices(enablePolling = true, pollingInterval = 60000) {
   const [devices, setDevices] = useState<Device[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setErrorMessage] = useState<string | null>(null)
+  const [errorStatus, setErrorStatus] = useState<number | null>(null)
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null)
   // 保存最近一次请求的筛选参数，用于轮询和操作后刷新
-  const lastFiltersRef = useRef<DeviceFilters | undefined>(undefined)
+  const lastFiltersRef = useRef<DeviceListQuery | undefined>(undefined)
   const latestRequestIdRef = useRef(0)
   const loadingRequestIdRef = useRef<number | null>(null)
   const isMountedRef = useRef(true)
@@ -39,8 +41,13 @@ export function useDevices(enablePolling = true, pollingInterval = 60000) {
     }
   }, [])
 
+  const setError = useCallback((message: string | null, status: number | null = null) => {
+    setErrorMessage(message)
+    setErrorStatus(message ? status : null)
+  }, [])
+
   // 加载设备列表
-  const loadDevices = useCallback(async (filters?: DeviceFilters, silent = false) => {
+  const loadDevices = useCallback(async (filters?: DeviceListQuery, silent = false) => {
     const requestId = ++latestRequestIdRef.current
 
     try {
@@ -48,7 +55,9 @@ export function useDevices(enablePolling = true, pollingInterval = 60000) {
         loadingRequestIdRef.current = requestId
         setLoading(true)
       }
-      setError(null)
+      if (!silent) {
+        setError(null)
+      }
       if (filters !== undefined) {
         lastFiltersRef.current = filters
       }
@@ -63,10 +72,16 @@ export function useDevices(enablePolling = true, pollingInterval = 60000) {
         return
       }
       const errorMessage = err instanceof Error ? err.message : '加载设备失败'
-      setError(errorMessage)
-      setDevices([])
-      setTotal(0)
-      console.error('设备加载失败:', err)
+      const statusCode = err instanceof ApiClientError ? err.status : null
+
+      if (!silent) {
+        setError(errorMessage, statusCode)
+        setDevices([])
+        setTotal(0)
+      } else {
+        // 静默刷新失败不应该打断用户正在查看的数据
+        console.warn('设备静默刷新失败:', err)
+      }
     } finally {
       if (!silent && isMountedRef.current && loadingRequestIdRef.current === requestId) {
         loadingRequestIdRef.current = null
@@ -95,11 +110,14 @@ export function useDevices(enablePolling = true, pollingInterval = 60000) {
   const removeDevice = useCallback(async (deviceId: number) => {
     try {
       setLoading(true)
+      setError(null)
       await deleteDevice(deviceId)
       // 服务端分页模式：重新从后端获取当前页数据
       await loadDevices(lastFiltersRef.current)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '删除设备失败')
+      const errorMessage = err instanceof Error ? err.message : '删除设备失败'
+      setError(errorMessage, err instanceof ApiClientError ? err.status : null)
+      throw err
     } finally {
       setLoading(false)
     }
@@ -193,6 +211,7 @@ export function useDevices(enablePolling = true, pollingInterval = 60000) {
     total,
     loading,
     error,
+    errorStatus,
     setError,
     loadDevices,
     addDevice,
@@ -203,13 +222,13 @@ export function useDevices(enablePolling = true, pollingInterval = 60000) {
 }
 
 export function useDeviceFilters() {
-  const [filters, setFilters] = useState<DeviceFilters>({
+  const [filters, setFilters] = useState<DeviceUIFilters>({
     searchQuery: '',
     statusFilter: 'all',
     typeFilter: 'all'
   })
 
-  const updateFilter = useCallback((key: keyof DeviceFilters, value: string) => {
+  const updateFilter = useCallback((key: keyof DeviceUIFilters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }))
   }, [])
 
@@ -226,33 +245,6 @@ export function useDeviceFilters() {
     updateFilter,
     resetFilters
   }
-}
-
-export function useFilteredDevices(devices: Device[], filters: DeviceFilters) {
-  return useMemo(() => {
-    return devices.filter(device => {
-      const matchesSearch = device.name.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
-                           device.ip.includes(filters.searchQuery) ||
-                           device.location.toLowerCase().includes(filters.searchQuery.toLowerCase())
-      
-      const matchesStatus = filters.statusFilter === 'all' || device.status === filters.statusFilter
-      const matchesType = filters.typeFilter === 'all' || device.device_type === filters.typeFilter
-      
-      return matchesSearch && matchesStatus && matchesType
-    })
-  }, [devices, filters])
-}
-
-export function useDeviceSummary(devices: Device[]): DeviceSummary {
-  return useMemo(() => {
-    const total = devices.length
-    const online = devices.filter(d => d.status === 'online').length
-    const offline = devices.filter(d => d.status === 'offline').length
-    const warning = devices.filter(d => d.status === 'warning').length
-    const totalAlerts = devices.reduce((sum, d) => sum + (d.alert_count || 0), 0)
-
-    return { total, online, offline, warning, totalAlerts }
-  }, [devices])
 }
 
 export function useDeviceSelection() {

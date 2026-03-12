@@ -40,19 +40,46 @@ PUT /api/v1/devices/:device_id
 # 删除设备
 DELETE /api/v1/devices/:device_id
 
-# 设备探测
-POST /api/v1/devices/:device_id/probe
+# 设备探测（可选写回状态）
+# - update_status=true 且具备 devices:update 权限时，后端会尝试写回设备状态
+# - 响应可能包含 status_updated
+POST /api/v1/devices/:device_id/probe?update_status=true
 
 # 批量探测
-POST /api/v1/devices/batch-probe
+# - update_status=true 且具备 devices:update 权限时，后端会尝试写回设备状态
+# - 响应可能包含 status_updated / status_updated_count
+POST /api/v1/devices/batch-probe?update_status=true
 Body: {"device_ids": [1,2,3], "max_concurrent": 20}
+
+# 批量删除（可用数组或对象两种 payload）
+POST /api/v1/devices/batch-delete
+Body: [1,2,3]
+# 或 Body: {"device_ids":[1,2,3]}
+
+# 批量更新（updates 为必填）
+POST /api/v1/devices/batch-update
+Body: {"device_ids":[1,2,3], "updates":{"location":"机房-A"}}
+
+# 批量导入
+POST /api/v1/devices/batch-import
+Body: {"devices":[{"name":"sw-01","ip_address":"192.168.1.1","device_type":"switch","vendor":"cisco"}],"auto_detect":true,"skip_duplicates":true}
+
+# 健康检查（可选写回状态）
+POST /api/v1/devices/:device_id/health-check?update_status=true
+
+# 性能数据
+GET /api/v1/devices/:device_id/performance?time_range=1h
 
 # 设备统计
 GET /api/v1/devices/statistics
 
 # 批量操作
 POST /api/v1/devices/bulk-action
-Body: {"action": "enable", "device_ids": [1,2,3]}
+# 支持的 action: batch_delete / batch_update / batch_add_group / batch_remove_group / batch_config / start_inspection
+# 批量删除
+Body: {"action": "batch_delete", "device_ids": [1,2,3]}
+# 批量更新（updates 为必填）
+Body: {"action": "batch_update", "device_ids": [1,2,3], "updates": {"location": "机房-A"}}
 ```
 
 ---

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { AlertTriangle, Trash2, Server } from 'lucide-react'
-import { Modal, Button, Card, CardContent, Badge, Loading } from '@/components/atoms'
+import { SimpleModal, Button, Card, CardContent, Badge, Loading } from '@/components/atoms'
 import { Device } from '../types'
 
 interface BulkDeviceDeleteProps {
@@ -40,20 +40,16 @@ export const BulkDeviceDelete: React.FC<BulkDeviceDeleteProps> = ({
   }
 
   return (
-    <Modal open={isOpen} onOpenChange={handleClose}>
-      <div className="p-6">
-        {/* 警告标题 */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-            <AlertTriangle className="h-6 w-6 text-red-600" />
-          </div>
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">确认批量删除</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              此操作不可撤销，请确认是否要删除以下设备。
-            </p>
-          </div>
-        </div>
+    <SimpleModal
+      open={isOpen}
+      onClose={handleClose}
+      title="确认批量删除"
+      size="4xl"
+    >
+      <div className="p-1">
+        <p className="text-sm text-muted-foreground mb-6">
+          此操作不可撤销，请确认是否要删除以下设备。
+        </p>
 
         {/* 删除统计 */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -182,6 +178,6 @@ export const BulkDeviceDelete: React.FC<BulkDeviceDeleteProps> = ({
           </Button>
         </div>
       </div>
-    </Modal>
+    </SimpleModal>
   )
 }
