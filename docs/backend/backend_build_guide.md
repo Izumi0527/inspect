@@ -22,11 +22,12 @@ go run ./cmd/api
 ### 生产环境
 
 ```powershell
-# 1. 编译生产版本
-.\scripts\development\build-backend.ps1 -Mode release
+# 1. 编译生产版本（优化）
+cd backend-go
+go build -ldflags="-s -w" -o app.exe ./cmd/api
 
-# 2. 运行编译后的程序
-.\backend-go\app.exe
+# 2. 运行编译后的程序（Windows）
+.\app.exe
 ```
 
 **优点**:
@@ -34,25 +35,7 @@ go run ./cmd/api
 - 文件体积小
 - 性能优化
 
-## 编译方式
-
-### 方式 1: 使用编译脚本（推荐）
-
-```powershell
-# 标准编译（生产版本）
-.\scripts\development\build-backend.ps1
-
-# 编译调试版本
-.\scripts\development\build-backend.ps1 -Mode debug
-
-# 交叉编译 Linux 版本
-.\scripts\development\build-backend.ps1 -Platform linux
-
-# 清理后重新编译
-.\scripts\development\build-backend.ps1 -Clean
-```
-
-### 方式 2: 手动编译
+## 编译方式（推荐：手动命令）
 
 ```powershell
 cd backend-go
@@ -81,7 +64,8 @@ $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o app ./cmd/api
 ### release 模式（生产）
 
 ```powershell
-.\scripts\development\build-backend.ps1 -Mode release
+cd backend-go
+go build -ldflags="-s -w" -o app.exe ./cmd/api
 ```
 
 **特点**:
@@ -95,7 +79,8 @@ $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o app ./cmd/api
 ### debug 模式（调试）
 
 ```powershell
-.\scripts\development\build-backend.ps1 -Mode debug
+cd backend-go
+go build -gcflags="all=-N -l" -o app-debug.exe ./cmd/api
 ```
 
 **特点**:
@@ -111,7 +96,8 @@ $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o app ./cmd/api
 ### dev 模式（开发）
 
 ```powershell
-.\scripts\development\build-backend.ps1 -Mode dev
+cd backend-go
+go build -o app.exe ./cmd/api
 ```
 
 **特点**:
@@ -121,26 +107,7 @@ $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o app ./cmd/api
 
 ## 运行方式
 
-### 方式 1: 使用启动脚本（推荐）
-
-```powershell
-# 前台运行
-.\scripts\development\start-backend-compiled.ps1
-
-# 后台运行
-.\scripts\development\start-backend-compiled.ps1 -Background
-
-# 后台运行并检查健康状态
-.\scripts\development\start-backend-compiled.ps1 -Background -CheckHealth
-```
-
-**特性**:
-- 自动检查程序是否存在
-- 显示程序信息（大小、编译时间）
-- 检查端口占用
-- 支持健康检查
-
-### 方式 2: 直接运行
+### 方式 1: 直接运行
 
 ```powershell
 # Windows
@@ -150,7 +117,7 @@ $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o app ./cmd/api
 ./backend-go/app
 ```
 
-### 方式 3: 后台运行（Windows）
+### 方式 2: 后台运行（Windows）
 
 ```powershell
 # 使用 Start-Process
@@ -165,9 +132,6 @@ nohup ./backend-go/app > app.log 2>&1 &
 ### 编译 Linux 版本
 
 ```powershell
-# 使用脚本
-.\scripts\development\build-backend.ps1 -Platform linux
-
 # 手动编译
 cd backend-go
 $env:GOOS="linux"; $env:GOARCH="amd64"
@@ -177,9 +141,6 @@ go build -ldflags="-s -w" -o app ./cmd/api
 ### 编译 macOS 版本
 
 ```powershell
-# 使用脚本
-.\scripts\development\build-backend.ps1 -Platform darwin
-
 # 手动编译
 cd backend-go
 $env:GOOS="darwin"; $env:GOARCH="amd64"
@@ -224,7 +185,7 @@ export ENV_FILE="/path/to/.env"
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 
 # Redis 配置
-REDIS_URL=redis://:dev_redis_2024@localhost:16379/0
+REDIS_URL=redis://:dev_redis_2024@localhost:16380/0
 
 # JWT 配置
 JWT_SECRET_KEY=your-secret-key
@@ -250,16 +211,19 @@ LOG_FILE=logs/backend-go/app.log
 cd backend-go
 go run ./cmd/api
 
-# 或编译后运行
-.\scripts\development\build-backend.ps1
-.\scripts\development\start-backend-compiled.ps1
+# 或编译后运行（Windows 示例）
+cd backend-go
+go build -o app.exe ./cmd/api
+.\app.exe
 ```
 
 ### 生产环境部署（Windows）
 
 ```powershell
 # 1. 编译生产版本
-.\scripts\development\build-backend.ps1 -Mode release -Clean
+cd backend-go
+go clean
+go build -ldflags="-s -w" -o app.exe ./cmd/api
 
 # 2. 复制文件到部署目录
 $deployDir = "C:\deploy\inspect-backend"
@@ -278,8 +242,9 @@ cd $deployDir
 ### 生产环境部署（Linux）
 
 ```bash
-# 1. 在 Windows 上交叉编译
-.\scripts\development\build-backend.ps1 -Platform linux -Mode release
+# 1. 在 Windows 上交叉编译（在 backend-go 目录）
+cd backend-go
+GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o app ./cmd/api
 
 # 2. 上传到 Linux 服务器
 scp backend-go/app user@server:/opt/inspect-backend/
@@ -398,9 +363,6 @@ curl http://localhost:8000/health
 
 # 使用 PowerShell
 Invoke-WebRequest http://localhost:8000/health
-
-# 使用启动脚本的健康检查
-.\scripts\development\start-backend-compiled.ps1 -Background -CheckHealth
 ```
 
 ### 健康检查响应
@@ -430,7 +392,9 @@ go mod download
 go mod tidy
 
 # 重新编译
-.\scripts\development\build-backend.ps1 -Clean
+cd backend-go
+go clean
+go build -o app.exe ./cmd/api
 ```
 
 ### 运行时错误
@@ -446,7 +410,8 @@ Get-Content .env
 Get-Content logs\backend-go\app.log -Tail 50
 
 # 使用调试版本
-.\scripts\development\build-backend.ps1 -Mode debug
+cd backend-go
+go build -gcflags="all=-N -l" -o app-debug.exe ./cmd/api
 .\backend-go\app-debug.exe
 ```
 
@@ -487,14 +452,16 @@ taskkill /PID <进程ID> /F
 
 - [后端服务说明](../backend-go/README.md)
 - [开发脚本文档](../scripts/development/README.md)
-- [环境配置指南](./ENV_CONFIGURATION_GUIDE.md)
-- [Docker 部署指南](./docker/COMPOSE_QUICK_START.md)
+- [环境配置指南](../env/env_configuration_guide.md)
+- [Docker 部署指南](../docker/compose_quick_start.md)
 
 ## 更新日志
 
+### 2026-03-12
+- 移除开发脚本封装（`build-backend.ps1`、`start-backend-compiled.ps1`），统一为 Go 官方命令示例
+- 更新编译/运行/部署示例命令，避免文档引用漂移
+
 ### 2026-01-30
-- 新增编译脚本 `build-backend.ps1`
-- 新增启动脚本 `start-backend-compiled.ps1`
 - 更新后端 README 文档
 - 统一使用 `app.exe` 作为主程序名称
 - 完善编译和部署流程文档

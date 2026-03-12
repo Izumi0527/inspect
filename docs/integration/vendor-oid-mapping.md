@@ -333,7 +333,7 @@ for (errorIndication,
 
 - [模板配置指南](./template-configuration-guide.md)
 - [最佳实践文档](./template-best-practices.md)
-- [API 文档](./api/README.md)
+- [API 文档](../api/readme.md)
 
 ---
 

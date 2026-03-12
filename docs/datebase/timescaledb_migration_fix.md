@@ -278,8 +278,8 @@ SELECT decompress_chunk(c) FROM show_chunks('device_metrics') c;
 
 - [TimescaleDB 压缩文档](https://docs.timescale.com/timescaledb/latest/how-to-guides/compression/)
 - [GORM AutoMigrate 文档](https://gorm.io/docs/migration.html)
-- [后端数据库连接修复](./BACKEND_DATABASE_CONNECTION_FIX.md)
-- [Go 模块路径修复](./GO_MODULE_FIX.md)
+- [后端数据库连接修复](../backend/backend_database_connection_fix.md)
+- [Go 模块路径修复](../backend/go_module_fix.md)
 
 ## 修复时间线
 

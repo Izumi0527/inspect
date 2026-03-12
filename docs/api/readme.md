@@ -482,7 +482,7 @@ curl -X POST "$API_URL/devices" \
 - [WebSocket协议文档](websocket-contract.md)
 - [OpenAPI规范](openapi.json)
 - [后端快速启动](../backend-go-quickstart.md)
-- [开发环境指南](../development-environment-guide.md)
+- [开发环境指南](../development/development-environment-guide.md)
 
 ---
 

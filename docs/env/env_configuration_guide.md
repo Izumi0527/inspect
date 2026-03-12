@@ -73,7 +73,7 @@
 ```bash
 NODE_ENV=development
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
-REDIS_URL=redis://:dev_redis_2024@localhost:16379/0
+REDIS_URL=redis://:dev_redis_2024@localhost:16380/0
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
@@ -183,8 +183,8 @@ Next.js 环境变量加载优先级（从高到低）：
 
 ## 相关文档
 
-- [开发环境搭建指南](./development-environment-guide.md)
-- [Docker部署指南](./docker/COMPOSE_QUICK_START.md)
+- [开发环境搭建指南](../development/development-environment-guide.md)
+- [Docker部署指南](../docker/compose_quick_start.md)
 - [数据库配置指南](./datebase/database-deployment.md)
 
 ## 更新日志

@@ -1,8 +1,8 @@
-# PostgreSQL 数据库查询脚本使用指南
+# PostgreSQL 数据库查询指南（db-query.ps1 已移除）
 
 ## 概述
 
-`db-query.ps1` 是一个功能强大的 PowerShell 脚本，专为查询运行在 Docker 容器中的 PostgreSQL 数据库而设计。该脚本支持多种查询模式和输出格式，是数据库管理和分析的理想工具。
+本仓库已收口移除 `db-query.ps1` 以减少脚本数量与文档漂移。本指南提供等价的 `psql` / `docker exec` 查询方式，适用于开发环境（容器名：`inspect-postgres-dev`，主机端口：`15500`）。
 
 ## 系统要求
 
@@ -15,35 +15,35 @@
 ### 1. 基础查询
 ```powershell
 # 查询所有表的基本信息
-.\scripts\db-query.ps1
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "\dt"
 ```
 
 ### 2. 查询特定表
 ```powershell
 # 查询 users 表，显示前 20 行数据
-.\scripts\db-query.ps1 -Table users -Limit 20
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT * FROM users LIMIT 20;"
 ```
 
 ### 3. 只显示表结构
 ```powershell
-# 只显示所有表的结构信息，不显示数据
-.\scripts\db-query.ps1 -ShowSchema
+# 查看表结构（示例：users）
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "\d+ users"
 ```
 
-## 参数详解
+## 常用命令（psql）
 
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `-Table` | 字符串 | "" | 指定要查询的表名 |
-| `-Limit` | 整数 | 10 | 限制查询的数据行数 |
-| `-Format` | 枚举 | "Console" | 输出格式：Console/CSV/JSON/HTML |
-| `-Output` | 字符串 | "" | 输出文件路径 |
-| `-CustomSQL` | 字符串 | "" | 执行自定义 SQL 查询 |
-| `-ShowSchema` | 开关 | False | 只显示表结构信息 |
-| `-ShowData` | 开关 | False | 只显示表数据 |
-| `-ShowStats` | 开关 | False | 显示表统计信息 |
-| `-Pattern` | 字符串 | "*" | 表名过滤模式（支持通配符） |
-| `-Help` | 开关 | False | 显示帮助信息 |
+> 说明：由于 `db-query.ps1` 已移除，下面给出在 `psql` 中最常用的“等价能力”。
+
+```powershell
+# 进入容器交互式 psql（推荐：不依赖本地安装 psql）
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev
+
+# 常用元命令（在 psql 交互里执行）
+#   \dt            查看表
+#   \d+ users       查看表结构
+#   \x on/off       切换扩展显示
+#   \timing on/off  统计耗时
+```
 
 ## 使用示例
 
@@ -51,104 +51,62 @@
 
 ```powershell
 # 1. 查看所有表的概览
-.\scripts\db-query.ps1
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "\dt"
 
 # 2. 查询特定表的详细信息
-.\scripts\db-query.ps1 -Table users
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT * FROM users LIMIT 50;"
 
 # 3. 查询多个表（使用模式匹配）
-.\scripts\db-query.ps1 -Pattern "*device*"
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name ILIKE '%device%';"
 
 # 4. 限制显示的数据行数
-.\scripts\db-query.ps1 -Table devices -Limit 5
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT * FROM devices LIMIT 5;"
 ```
 
 ### 结构和数据分离查询
 
 ```powershell
 # 只显示表结构
-.\scripts\db-query.ps1 -ShowSchema
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "\d+ users"
 
-# 只显示数据，不显示结构
-.\scripts\db-query.ps1 -ShowData -Limit 50
+# 只显示数据（示例：users 取前 50 行）
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT * FROM users LIMIT 50;"
 
 # 显示统计信息
-.\scripts\db-query.ps1 -ShowStats
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT datname, numbackends, xact_commit, xact_rollback FROM pg_stat_database WHERE datname = 'inspect_system_dev';"
 ```
 
 ### 文件导出示例
 
 ```powershell
 # 导出为 CSV 格式
-.\scripts\db-query.ps1 -Format CSV -Output "database_report.csv"
+docker exec -i inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "\copy (SELECT * FROM users) TO STDOUT WITH CSV HEADER" > users.csv
 
-# 导出为 JSON 格式
-.\scripts\db-query.ps1 -Format JSON -Output "database_report.json"
+# 导出为“JSON Lines”（示例：PostgreSQL 直接输出 JSON 文本）
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT row_to_json(t) FROM (SELECT * FROM users LIMIT 100) t;" > users.jsonl
 
-# 导出为 HTML 格式
-.\scripts\db-query.ps1 -Format HTML -Output "database_report.html"
-
-# 导出特定表的信息
-.\scripts\db-query.ps1 -Table users -Format HTML -Output "users_table.html"
+# 导出特定表（示例：users）
+docker exec -i inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "\copy (SELECT * FROM users) TO STDOUT WITH CSV HEADER" > users_export.csv
 ```
 
 ### 自定义 SQL 查询
 
 ```powershell
 # 执行简单的计数查询
-.\scripts\db-query.ps1 -CustomSQL "SELECT COUNT(*) FROM users"
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT COUNT(*) FROM users;"
 
 # 执行复杂的联查
-.\scripts\db-query.ps1 -CustomSQL "SELECT u.username, COUNT(d.id) as device_count FROM users u LEFT JOIN devices d ON u.id = d.created_by GROUP BY u.id, u.username"
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT u.username, COUNT(d.id) as device_count FROM users u LEFT JOIN devices d ON u.id = d.created_by GROUP BY u.id, u.username;"
 
 # 执行聚合查询
-.\scripts\db-query.ps1 -CustomSQL "SELECT device_type, COUNT(*) as count, AVG(CASE WHEN status = 'online' THEN 1 ELSE 0 END) * 100 as online_rate FROM devices GROUP BY device_type"
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT device_type, COUNT(*) as count, AVG(CASE WHEN status = 'online' THEN 1 ELSE 0 END) * 100 as online_rate FROM devices GROUP BY device_type;"
 ```
 
-## 输出格式说明
+## 导出与输出（psql）
 
-### 控制台输出（Console）
-- 彩色格式化显示
-- 表格形式展示数据
-- 实时显示执行进度
-- 包含完整的统计信息
-
-### CSV 输出
-- 标准 CSV 格式，支持 Excel 打开
-- UTF-8 编码，支持中文
-- 包含表概览和列结构信息
-
-### JSON 输出
-- 结构化 JSON 格式
-- 包含数据库信息、表详情、统计信息
-- 适合程序化处理
-
-### HTML 输出
-- 美观的网页报告
-- 响应式设计，支持移动设备
-- 包含图表和统计数据
-- 适合分享和展示
-
-## 输出信息详解
-
-### 数据表概览
-- **表名**：数据库表的名称
-- **列数**：表中列的总数
-- **行数**：表中记录的总数
-- **表大小**：表占用的磁盘空间
-
-### 表结构信息
-- **列名**：字段名称
-- **数据类型**：PostgreSQL 数据类型
-- **可空**：是否允许 NULL 值
-- **主键**：是否为主键字段
-- **默认值**：字段的默认值
-
-### 统计信息
-- **总行数**：表中记录总数
-- **表大小**：包含索引的总大小
-- **数据大小**：纯数据占用空间
-- **索引大小**：索引占用空间
+- **导出 CSV**：优先使用 `\copy ... TO STDOUT WITH CSV HEADER`，再通过 PowerShell 重定向 `>` 写入文件。
+- **导出 JSON**：可用 `row_to_json(...)` 输出 JSON 文本（适合后续程序化处理）。
+- **生成 HTML 报告**：建议用 BI/报表工具或应用侧导出（`psql` 本身不提供“美观 HTML 报告”能力）。
 
 ## 故障排除
 
@@ -190,10 +148,12 @@
 ### 批量导出所有表
 ```powershell
 # 获取所有表名并逐一导出
-$tables = (.\scripts\db-query.ps1 -CustomSQL "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'" | Where-Object { $_ -ne "" })
+$tables = docker exec -i inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -Atc "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';"
+$tables = $tables -split "`n" | Where-Object { $_ -and $_.Trim() -ne "" }
 
 foreach ($table in $tables) {
-    .\scripts\db-query.ps1 -Table $table -Format CSV -Output "export_$table.csv"
+    $file = "export_$table.csv"
+    docker exec -i inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "\copy (SELECT * FROM ""$table"") TO STDOUT WITH CSV HEADER" > $file
 }
 ```
 
@@ -201,16 +161,16 @@ foreach ($table in $tables) {
 ```powershell
 # 创建定期执行的健康检查报告
 $date = Get-Date -Format "yyyyMMdd"
-.\scripts\db-query.ps1 -ShowStats -Format HTML -Output "health_report_$date.html"
+docker exec -it inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT datname, numbackends, xact_commit, xact_rollback FROM pg_stat_database WHERE datname = 'inspect_system_dev';" > "health_report_$date.txt"
 ```
 
 ### 数据库迁移前后对比
 ```powershell
 # 迁移前
-.\scripts\db-query.ps1 -ShowSchema -Format JSON -Output "schema_before.json"
+docker exec -i inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT table_name, column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position;" > "schema_before.txt"
 
 # 迁移后
-.\scripts\db-query.ps1 -ShowSchema -Format JSON -Output "schema_after.json"
+docker exec -i inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c "SELECT table_name, column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position;" > "schema_after.txt"
 
 # 对比文件内容
 ```

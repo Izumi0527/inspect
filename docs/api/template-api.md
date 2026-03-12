@@ -531,7 +531,7 @@ const data = await response.json()
 
 - [模板配置指南](../template-configuration-guide.md)
 - [最佳实践](../template-best-practices.md)
-- [厂商 OID 映射表](../vendor-oid-mapping.md)
+- [厂商 OID 映射表](../integration/vendor-oid-mapping.md)
 
 ---
 

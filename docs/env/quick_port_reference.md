@@ -10,7 +10,7 @@
 | 后端 API | **8001** | HTTP/WebSocket | Go API（宿主机端口，容器内为 8000） |
 | Syslog 接收 | 5514 | TCP/UDP | 设备 Syslog 上报（UDP+TCP），用于日志中心与告警联动 |
 | PostgreSQL | **15500** | TCP | TimescaleDB 数据库 |
-| Redis | 16379 | TCP | 缓存服务 |
+| Redis | 16380 | TCP | 缓存服务 |
 
 ### 管理工具
 
@@ -49,11 +49,11 @@ postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 **Redis**:
 ```
 主机: localhost
-端口: 16379
+端口: 16380
 密码: dev_redis_2024
 
 连接字符串:
-redis://:dev_redis_2024@localhost:16379/0
+redis://:dev_redis_2024@localhost:16380/0
 ```
 
 ## 🔧 常用命令
@@ -62,7 +62,7 @@ redis://:dev_redis_2024@localhost:16379/0
 
 ```powershell
 # Windows
-netstat -ano | findstr "4000 8001 5514 15500 16379"
+netstat -ano | findstr "4000 8001 5514 15500 16380"
 
 # 查看具体端口
 netstat -ano | findstr "15500"

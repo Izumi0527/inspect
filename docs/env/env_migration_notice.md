@@ -111,14 +111,14 @@ EOF
 
 ## 相关文档
 
-- [环境变量配置指南](./ENV_CONFIGURATION_GUIDE.md) - 完整的配置说明
-- [开发环境搭建指南](../discuss/development-environment-guide.md)
-- [快速启动指南](./docker/COMPOSE_QUICK_START.md)
+- [环境变量配置指南](./env_configuration_guide.md) - 完整的配置说明
+- [开发环境搭建指南](../development/development-environment-guide.md)
+- [快速启动指南](../docker/compose_quick_start.md)
 
 ## 问题反馈
 
 如果在使用过程中遇到问题，请：
-1. 检查 [环境变量配置指南](./ENV_CONFIGURATION_GUIDE.md)
+1. 检查 [环境变量配置指南](./env_configuration_guide.md)
 2. 确认配置文件格式正确
 3. 验证环境变量是否生效（重启开发服务器）
 4. 联系团队技术负责人

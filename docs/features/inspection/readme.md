@@ -94,7 +94,7 @@ frontend/src/features/inspection/
 ### 文档
 ```
 docs/features/inspection/
-├── README.md                      # 本文件
+├── readme.md                      # 本文件
 ├── api-migration.md               # API 迁移说明
 ├── inspection-components.md       # 组件文档
 └── migration-complete.md          # 迁移完成报告
@@ -161,7 +161,7 @@ interface InspectionCheckItem {
 
 - [API 文档](../../api/template-api.md)
 - [WebSocket 协议](../../api/websocket-contract.md)
-- [后端 API 文档](../../api/README.md)
+- [后端 API 文档](../../api/readme.md)
 
 ## 问题反馈
 

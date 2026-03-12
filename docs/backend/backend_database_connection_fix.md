@@ -277,7 +277,7 @@ services:
 | 服务 | 容器内部端口 | 外部端口 | 说明 |
 |------|-------------|---------|------|
 | PostgreSQL | 5432 | 15500 | 数据库服务 |
-| Redis | 6379 | 16379 | 缓存服务 |
+| Redis | 6379 | 16380 | 缓存服务 |
 | 后端 API | 8000 | 8000 | Go 服务 |
 | 前端 | 3000 | 3000 | Next.js |
 
@@ -387,10 +387,10 @@ Invoke-WebRequest http://localhost:8000/health
 
 ## 相关文档
 
-- [后端编译错误修复](./BACKEND_COMPILE_FIX.md)
+- [后端编译错误修复](./backend_compile_fix.md)
 - [开发脚本说明](../scripts/development/README.md)
 - [数据库管理指南](../scripts/database/README.md)
-- [环境配置迁移说明](./ENV_MIGRATION_NOTICE.md)
+- [环境配置迁移说明](../env/env_migration_notice.md)
 
 ---
 

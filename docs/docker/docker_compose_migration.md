@@ -151,7 +151,7 @@ docker-compose -f docker-compose.prod.yml --profile with-nginx --profile monitor
 | 服务 | 容器名 | 端口映射 | 说明 |
 |------|--------|----------|------|
 | postgres | inspect-postgres-dev | 15500:5432 | TimescaleDB 数据库 |
-| redis | inspect-redis-dev | 16379:6379 | Redis 缓存 |
+| redis | inspect-redis-dev | 16380:6379 | Redis 缓存 |
 | backend | inspect-backend-dev | 8001:8000 | Go 后端服务 |
 | frontend | inspect-frontend-dev | 3000:3000 | Next.js 前端 |
 | pgadmin | inspect-pgadmin-dev | 5050:80 | 数据库管理工具 (profile: tools) |
@@ -174,7 +174,7 @@ PostgreSQL:
 
 Redis:
   - 密码: dev_redis_2024
-  - 端口: 16379
+  - 端口: 16380
 
 pgAdmin:
   - 邮箱: admin@inspect.dev
@@ -493,10 +493,10 @@ docker-compose -f docker-compose.prod.yml exec postgres \
 
 ## 📚 相关文档
 
-- [环境变量迁移指南](ENV_MIGRATION_NOTICE.md)
-- [快速端口参考](QUICK_PORT_REFERENCE.md)
-- [开发环境指南](discuss/development-environment-guide.md)
-- [数据库部署文档](docs/datebase/database-deployment.md)
+- [环境变量迁移指南](../env/env_migration_notice.md)
+- [快速端口参考](../env/quick_port_reference.md)
+- [开发环境指南](../development/development-environment-guide.md)
+- [数据库部署文档](../datebase/database-deployment.md)
 
 ## 🎉 总结
 

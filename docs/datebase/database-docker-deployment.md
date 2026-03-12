@@ -11,7 +11,7 @@
 ```mermaid
 graph TB
     A[企业级网络设备巡检系统] --> B[PostgreSQL + TimescaleDB<br/>端口:15500]
-    A --> C[Redis<br/>端口:16379]
+    A --> C[Redis<br/>端口:16380]
 
     B --> D[用户/设备/巡检/报表/指标]
     C --> E[会话缓存/热点数据/临时队列]
@@ -22,7 +22,7 @@ graph TB
 | 数据库 | 版本 | 容器名 | 内部端口 | 外部端口 | 用户名 | 密码 | 数据库名 |
 |--------|------|--------|----------|----------|--------|------|----------|
 | PostgreSQL | 16-alpine | inspect-postgres-dev | 5432 | 15500 | inspect_dev | dev_password_2024 | inspect_system_dev |
-| Redis | 7-alpine | inspect-redis-dev | 6379 | 16379 | - | dev_redis_2024 | - |
+| Redis | 7-alpine | inspect-redis-dev | 6379 | 16380 | - | dev_redis_2024 | - |
 
 > TimescaleDB 为 PostgreSQL 扩展，无需单独容器或端口。
 
@@ -32,7 +32,7 @@ graph TB
 
 ```bash
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
-REDIS_URL=redis://:dev_redis_2024@localhost:16379/0
+REDIS_URL=redis://:dev_redis_2024@localhost:16380/0
 # TimescaleDB 复用 PostgreSQL 连接，无需单独配置
 ```
 
@@ -66,7 +66,7 @@ docker-compose -f docker-compose.dev.yml up -d postgres redis
 pg_isready -h localhost -p 15500 -U inspect_dev
 
 # Redis
-redis-cli -h localhost -p 16379 -a dev_redis_2024 ping
+redis-cli -h localhost -p 16380 -a dev_redis_2024 ping
 ```
 
 ## 数据备份
@@ -76,12 +76,12 @@ redis-cli -h localhost -p 16379 -a dev_redis_2024 ping
 pg_dump -h localhost -p 15500 -U inspect_dev inspect_system_dev > backups/postgres_backup.sql
 
 # Redis 备份
-redis-cli -h localhost -p 16379 -a dev_redis_2024 --rdb backups/redis_backup.rdb
+redis-cli -h localhost -p 16380 -a dev_redis_2024 --rdb backups/redis_backup.rdb
 ```
 
 ## 故障排查
 
-- 端口占用：`15500`、`16379`
+- 端口占用：`15500`、`16380`
 - 容器状态：`docker-compose -f docker-compose.dev.yml ps`
 - 日志查看：`docker-compose -f docker-compose.dev.yml logs -f postgres redis`
 

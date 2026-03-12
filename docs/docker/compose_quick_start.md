@@ -96,7 +96,7 @@ docker system prune -a
 | 服务 | 端口 | Profile | 说明 |
 |------|------|---------|------|
 | postgres | 15500 | default | TimescaleDB |
-| redis | 16379 | default | Redis 缓存 |
+| redis | 16380 | default | Redis 缓存 |
 | backend | 8001 | default | Go 后端 |
 | frontend | 4000 | default | Next.js 前端（可通过 FRONTEND_HOST_PORT 调整） |
 | pgadmin | 5050 | tools | 数据库管理 |
@@ -122,7 +122,7 @@ docker system prune -a
 - 密码: dev_password_2024
 
 **Redis:**
-- 主机: localhost:16379
+- 主机: localhost:16380
 - 密码: dev_redis_2024
 
 **pgAdmin:**
@@ -131,9 +131,9 @@ docker system prune -a
 
 ## 📚 详细文档
 
-- [完整迁移指南](DOCKER_COMPOSE_MIGRATION.md)
-- [环境变量配置](ENV_MIGRATION_NOTICE.md)
-- [端口参考](docs/QUICK_PORT_REFERENCE.md)
+- [完整迁移指南](docker_compose_migration.md)
+- [环境变量配置](../env/env_migration_notice.md)
+- [端口参考](../env/quick_port_reference.md)
 
 ---
 

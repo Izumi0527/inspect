@@ -65,16 +65,16 @@
 
 **Files:**
 - Modify: `scripts/development/dev-start.ps1`
-- Modify: `scripts/development/diagnose.ps1`
-- Modify: `scripts/testing/run-tests.ps1`
+- Modify: `scripts/development/dev-start.ps1`（新增 `-Diagnose` 诊断模式）
+- Modify: `scripts/tests/run-tests.ps1`
 - Modify: `.env.example`
 - Modify: `README.md`
-- Modify: `discuss/development-environment-guide.md`
+- Modify: `docs/development/development-environment-guide.md`
 - (按需) Modify: `docs/datebase/database-container-setup-guide.md`
 
 **Steps:**
 1. `dev-start.ps1` 启动数据库仅依赖 `docker-compose.dev.yml`（不再要求 `docker-compose.yml`）。
-2. `diagnose.ps1` 去掉对 `docker-compose.yml` 的强依赖检查。
+2. 诊断能力合并到 `dev-start.ps1 -Diagnose`，并去掉对 `docker-compose.yml` 的强依赖检查。
 3. 修正测试脚本中 `db-manage.ps1` 的调用路径，指向 `scripts/database/db-manage.ps1`。
 4. 将文档/示例命令统一替换为：
    - 开发：`docker-compose -f docker-compose.dev.yml up -d`
@@ -96,4 +96,3 @@
    - `docker exec inspect-redis-dev redis-cli -a dev_redis_2024 ping`
 3. 再启动完整 dev：
    - `docker-compose -f docker-compose.dev.yml up -d`
-

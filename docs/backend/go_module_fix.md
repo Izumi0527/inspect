@@ -297,10 +297,10 @@ Inspect/
 
 ## 相关文档
 
-- [后端数据库连接错误修复](./BACKEND_DATABASE_CONNECTION_FIX.md)
-- [后端编译错误修复](./BACKEND_COMPILE_FIX.md)
+- [后端数据库连接错误修复](./backend_database_connection_fix.md)
+- [后端编译错误修复](./backend_compile_fix.md)
 - [开发脚本说明](../scripts/development/README.md)
-- [环境配置迁移说明](./ENV_MIGRATION_NOTICE.md)
+- [环境配置迁移说明](../env/env_migration_notice.md)
 
 ## 修复时间线
 

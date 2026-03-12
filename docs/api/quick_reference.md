@@ -483,4 +483,4 @@ curl -X POST http://localhost:8001/api/v1/devices \
 
 **文档版本**: v1.1  
 **最后更新**: 2026-01-14  
-**完整文档**: [API README](README.md)
+**完整文档**: [API 文档入口](readme.md)

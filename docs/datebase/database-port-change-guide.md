@@ -9,7 +9,7 @@
 | 服务 | 容器内部端口 | 宿主机端口 | 变更前端口 |
 |------|-------------|-----------|-----------|
 | PostgreSQL | 5432 | **15500** | 5433 |
-| Redis | 6379 | **16379** | 6380 |
+| Redis | 6379 | **16380** | 6380 |
 
 ## 🔧 端口变更步骤
 
@@ -38,7 +38,7 @@ services:
   
   redis:
     ports:
-      - "16379:6379"  # 宿主机:容器
+      - "16380:6379"  # 宿主机:容器
 ```
 
 #### 环境变量配置
@@ -47,7 +47,7 @@ services:
 
 ```bash
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
-REDIS_URL=redis://:dev_redis_2024@localhost:16379/0
+REDIS_URL=redis://:dev_redis_2024@localhost:16380/0
 ```
 
 ### 3. 启动容器
@@ -67,7 +67,7 @@ docker-compose -f docker-compose.dev.yml up -d postgres redis
 docker-compose -f docker-compose.dev.yml ps
 
 # 检查端口监听
-netstat -an | findstr "15500 16379"
+netstat -an | findstr "15500 16380"
 
 # 测试 PostgreSQL 连接
 docker exec inspect-postgres-dev pg_isready -U inspect_dev
@@ -119,7 +119,7 @@ if ($LASTEXITCODE -eq 0) {
 # Redis
 $redisTest = docker exec inspect-redis-dev redis-cli -a dev_redis_2024 ping
 if ($redisTest -eq "PONG") {
-    Write-Host "✅ Redis 连接成功 (端口 16379)" -ForegroundColor Green
+    Write-Host "✅ Redis 连接成功 (端口 16380)" -ForegroundColor Green
 } else {
     Write-Host "❌ Redis 连接失败" -ForegroundColor Red
 }
@@ -130,7 +130,7 @@ docker-compose -f docker-compose.dev.yml ps
 
 Write-Host "`n🔌 端口映射:" -ForegroundColor Cyan
 Write-Host "  PostgreSQL: localhost:15500 -> container:5432" -ForegroundColor White
-Write-Host "  Redis:      localhost:16379 -> container:6379" -ForegroundColor White
+Write-Host "  Redis:      localhost:16380 -> container:6379" -ForegroundColor White
 ```
 
 ## 🔍 连接测试命令
@@ -152,13 +152,13 @@ pg_isready -h localhost -p 15500 -U inspect_dev
 
 ```powershell
 # 使用 redis-cli 客户端
-redis-cli -h localhost -p 16379 -a dev_redis_2024
+redis-cli -h localhost -p 16380 -a dev_redis_2024
 
 # 使用 Docker 内部连接
 docker exec -it inspect-redis-dev redis-cli -a dev_redis_2024
 
 # Ping 测试
-redis-cli -h localhost -p 16379 -a dev_redis_2024 ping
+redis-cli -h localhost -p 16380 -a dev_redis_2024 ping
 ```
 
 ## 🚨 故障排查
@@ -168,11 +168,11 @@ redis-cli -h localhost -p 16379 -a dev_redis_2024 ping
 ```powershell
 # 检查端口占用
 netstat -ano | findstr "15500"
-netstat -ano | findstr "16379"
+netstat -ano | findstr "16380"
 
 # 查找占用进程
 Get-Process -Id (Get-NetTCPConnection -LocalPort 15500).OwningProcess
-Get-Process -Id (Get-NetTCPConnection -LocalPort 16379).OwningProcess
+Get-Process -Id (Get-NetTCPConnection -LocalPort 16380).OwningProcess
 
 # 停止占用进程（谨慎操作）
 Stop-Process -Id <PID> -Force
@@ -224,16 +224,15 @@ docker-compose -f docker-compose.dev.yml restart redis
 - ✅ `.env.example` - 示例配置
 
 ### 脚本文件
-- ✅ `scripts/database/db-health-check.ps1` - 健康检查
-- ✅ `scripts/database/db-query.ps1` - 数据库查询
 - ✅ `scripts/database/db-manage.ps1` - 数据库管理
+- ✅ `scripts/database/db-init-complete.ps1` - 数据库初始化（完整）
 - ✅ `scripts/development/dev-start.ps1` - 开发启动
-- ✅ `scripts/setup/setup-dev-env.ps1` - 环境设置
-- ✅ `scripts/testing/run-all-tests.ps1` - 测试运行
+- ✅ `scripts/development/setup-dev-env.ps1` - 环境设置
+- ✅ `scripts/tests/run-tests.ps1` - 测试运行
 
 ### 文档文件
 - ✅ `docs/datebase/database-docker-deployment.md` - Docker 部署文档
-- ✅ `discuss/development-environment-guide.md` - 开发环境指南
+- ✅ `docs/development/development-environment-guide.md` - 开发环境指南
 - ✅ `discuss/README.md` - 讨论文档
 
 ## 🎯 快速参考
@@ -262,7 +261,7 @@ docker exec -it inspect-redis-dev sh
 postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 
 # Redis
-redis://:dev_redis_2024@localhost:16379/0
+redis://:dev_redis_2024@localhost:16380/0
 ```
 
 ## ✅ 变更检查清单
