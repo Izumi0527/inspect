@@ -652,7 +652,7 @@ function dbseed { .\scripts\database\db-manage.ps1 seed-admin @args }
 ## 📚 相关文档
 
 - [Docker Compose 配置](../../docker-compose.dev.yml)
-- [快速端口参考](../../docs/QUICK_PORT_REFERENCE.md)
+- [快速端口参考](../../docs/env/quick_port_reference.md)
 - [环境变量配置](../../.env.example)
 - [数据库部署文档](../../docs/datebase/database-deployment.md)
 

@@ -3,7 +3,7 @@
 
 param(
     [switch]$All,           # 清理所有缓存
-    [switch]$Python,        # 仅清理 Python 缓存
+    [switch]$Backend,       # 仅清理后端缓存（Go）
     [switch]$Frontend,      # 仅清理前端缓存
     [switch]$Logs,          # 清理日志文件
     [switch]$Temp,          # 清理临时文件
@@ -20,7 +20,7 @@ $ErrorActionPreference = "Continue"
 $script:ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ScriptsRoot = Split-Path -Parent $script:ScriptPath
 $script:ProjectRoot = Split-Path -Parent $script:ScriptsRoot
-$script:BackendPath = Join-Path $script:ProjectRoot "backend"
+$script:BackendPath = Join-Path $script:ProjectRoot "backend-go"
 $script:FrontendPath = Join-Path $script:ProjectRoot "frontend"
 $script:LogsPath = Join-Path $script:ProjectRoot "logs"
 $script:TotalFreed = 0
@@ -67,8 +67,8 @@ function Show-Help {
     Write-Host "    .\clean-cache.ps1 [选项]"
     Write-Host ""
     Write-Host "清理选项:"
-    Write-Host "    -All                清理所有缓存（Python + 前端 + 日志 + 临时文件 + 项目文件）"
-    Write-Host "    -Python             仅清理 Python 缓存（__pycache__, .pyc, pytest, mypy等）"
+    Write-Host "    -All                清理所有缓存（后端 + 前端 + 日志 + 临时文件 + 项目文件）"
+    Write-Host "    -Backend            仅清理后端缓存（Go 测试/覆盖率等）"
     Write-Host "    -Frontend           仅清理前端缓存（node_modules/.cache, .next, dist等）"
     Write-Host "    -Logs               清理日志文件（超过7天的日志）"
     Write-Host "    -Temp               清理临时文件（.DS_Store, Thumbs.db, *.tmp等）"
@@ -83,7 +83,7 @@ function Show-Help {
     Write-Host "示例:"
     Write-Host "    .\clean-cache.ps1                      # 交互式选择清理项"
     Write-Host "    .\clean-cache.ps1 -All -Force          # 清理所有缓存，不确认"
-    Write-Host "    .\clean-cache.ps1 -Python              # 仅清理 Python 缓存"
+    Write-Host "    .\clean-cache.ps1 -Backend             # 仅清理后端缓存（Go）"
     Write-Host "    .\clean-cache.ps1 -ProjectFiles        # 仅清理项目特定临时文件"
     Write-Host "    .\clean-cache.ps1 -WhatIf              # 预览将要删除的内容"
     Write-Host "    .\clean-cache.ps1 -All -Verbose        # 清理所有并显示详细信息"
@@ -176,44 +176,50 @@ function Remove-CacheItem {
     }
 }
 
-# 清理 Python 缓存
-function Clear-PythonCache {
-    Write-LogStep "清理 Python 缓存..."
+# 清理后端缓存（Go）
+function Clear-BackendCache {
+    Write-LogStep "清理后端缓存（Go）..."
 
-    # __pycache__ 目录
-    Get-ChildItem -Path $script:BackendPath -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue | ForEach-Object {
-        Remove-CacheItem -Path $_.FullName -Description "Python 字节码缓存 (__pycache__)"
+    if (-not (Test-Path $script:BackendPath)) {
+        Write-LogWarning "未发现后端目录: $script:BackendPath"
+        return
     }
 
-    # .pyc 和 .pyo 文件
-    Get-ChildItem -Path $script:BackendPath -Recurse -Include "*.pyc","*.pyo" -File -ErrorAction SilentlyContinue | ForEach-Object {
-        Remove-CacheItem -Path $_.FullName -Description "Python 编译文件"
-    }
-
-    # pytest 缓存
-    $pytestCache = Join-Path $script:BackendPath ".pytest_cache"
-    if (Test-Path $pytestCache) {
-        Remove-CacheItem -Path $pytestCache -Description "pytest 测试缓存"
-    }
-
-    # mypy 缓存
-    $mypyCache = Join-Path $script:BackendPath ".mypy_cache"
-    if (Test-Path $mypyCache) {
-        Remove-CacheItem -Path $mypyCache -Description "mypy 类型检查缓存"
-    }
-
-    # 构建产物
-    $buildDirs = @("build", "dist")
-    foreach ($dir in $buildDirs) {
-        $path = Join-Path $script:BackendPath $dir
-        if (Test-Path $path) {
-            Remove-CacheItem -Path $path -Description "Python 构建产物 ($dir)"
+    # 常见 Go 覆盖率/剖析文件（仅清理当前项目目录内）
+    $backendCoverageFiles = @(
+        (Join-Path $script:BackendPath "coverage.out"),
+        (Join-Path $script:BackendPath "coverage.html"),
+        (Join-Path $script:BackendPath "cover.out"),
+        (Join-Path $script:BackendPath "cover.html")
+    )
+    foreach ($f in $backendCoverageFiles) {
+        if (Test-Path $f) {
+            Remove-CacheItem -Path $f -Description "后端覆盖率文件 ($([IO.Path]::GetFileName($f)))"
         }
     }
 
-    # .egg-info 目录
-    Get-ChildItem -Path $script:BackendPath -Recurse -Directory -Filter "*.egg-info" -ErrorAction SilentlyContinue | ForEach-Object {
-        Remove-CacheItem -Path $_.FullName -Description "Python 包信息 (.egg-info)"
+    # Go 测试/构建过程中可能产生的临时目录
+    $backendTempDirs = @(
+        (Join-Path $script:BackendPath "tmp"),
+        (Join-Path $script:BackendPath ".tmp")
+    )
+    foreach ($d in $backendTempDirs) {
+        if (Test-Path $d) {
+            Remove-CacheItem -Path $d -Description "后端临时目录 ($([IO.Path]::GetFileName($d)))"
+        }
+    }
+
+    # 清理 Go 全局缓存（不删除项目文件，可能耗时；失败则跳过）
+    try {
+        $null = Get-Command "go" -ErrorAction Stop
+        Write-LogInfo "执行: go clean -cache -testcache（清理 Go 编译/测试缓存）"
+        Push-Location $script:BackendPath
+        & go clean -cache -testcache | Out-Null
+        Pop-Location
+        Write-LogSuccess "Go 缓存清理完成（go clean）"
+    } catch {
+        try { Pop-Location } catch { }
+        Write-LogWarning "跳过 go clean（未安装 Go 或执行失败）：$($_.Exception.Message)"
     }
 }
 
@@ -331,24 +337,10 @@ function Clear-ProjectSpecificCache {
         Remove-CacheItem -Path $_.FullName -Description "TypeScript 构建信息 ($($_.Name))"
     }
 
-    # 后端覆盖率文件
-    $backendCoverage = Join-Path $script:BackendPath ".coverage"
+    # 后端覆盖率文件（Go）
+    $backendCoverage = Join-Path $script:BackendPath "coverage.out"
     if (Test-Path $backendCoverage) {
-        Remove-CacheItem -Path $backendCoverage -Description "Python 覆盖率数据 (.coverage)"
-    }
-
-    $backendHtmlCov = Join-Path $script:BackendPath "htmlcov"
-    if (Test-Path $backendHtmlCov) {
-        Remove-CacheItem -Path $backendHtmlCov -Description "Python 覆盖率报告 (htmlcov)"
-    }
-
-    # 后端运行时数据（排除 .example.json）
-    $backendDataPath = Join-Path $script:BackendPath "data"
-    if (Test-Path $backendDataPath) {
-        Get-ChildItem -Path $backendDataPath -Filter "*.json" -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -notmatch '\.example\.json$' } | ForEach-Object {
-            Remove-CacheItem -Path $_.FullName -Description "后端运行时数据 ($($_.Name))"
-        }
+        Remove-CacheItem -Path $backendCoverage -Description "后端覆盖率数据 (coverage.out)"
     }
 
     # 前端认证令牌（开发环境临时文件）
@@ -394,7 +386,7 @@ function Show-InteractiveMenu {
     Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  [1] 清理所有缓存"
-    Write-Host "  [2] 仅清理 Python 缓存"
+    Write-Host "  [2] 仅清理后端缓存（Go）"
     Write-Host "  [3] 仅清理前端缓存"
     Write-Host "  [4] 仅清理日志文件"
     Write-Host "  [5] 仅清理临时文件"
@@ -408,7 +400,7 @@ function Show-InteractiveMenu {
 
     switch ($choice) {
         "1" { $script:All = $true }
-        "2" { $script:Python = $true }
+        "2" { $script:Backend = $true }
         "3" { $script:Frontend = $true }
         "4" { $script:Logs = $true }
         "5" { $script:Temp = $true }
@@ -438,7 +430,7 @@ function Main {
     }
 
     # 如果没有指定任何选项，显示交互式菜单
-    if (-not ($All -or $Python -or $Frontend -or $Logs -or $Temp -or $ProjectFiles)) {
+    if (-not ($All -or $Backend -or $Frontend -or $Logs -or $Temp -or $ProjectFiles)) {
         Show-InteractiveMenu
     }
 
@@ -459,8 +451,8 @@ function Main {
     }
 
     # 执行清理
-    if ($All -or $Python) {
-        Clear-PythonCache
+    if ($All -or $Backend) {
+        Clear-BackendCache
     }
 
     if ($All -or $Frontend) {

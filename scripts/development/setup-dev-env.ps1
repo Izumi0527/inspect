@@ -100,6 +100,54 @@ function Invoke-CommandWithLogging {
     }
 }
 
+# 获取 Docker 容器映射到宿主机的端口（优先使用实际映射，其次读取环境变量，最后使用默认值）
+function Get-HostPort {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ContainerName,
+
+        [Parameter(Mandatory = $true)]
+        [int]$ContainerPort,
+
+        [Parameter(Mandatory = $true)]
+        [string]$EnvVarName,
+
+        [Parameter(Mandatory = $true)]
+        [int]$DefaultPort
+    )
+
+    # 1) 优先从当前 Docker 实际端口映射中解析（避免环境变量未同步导致显示错误）
+    try {
+        if (Get-Command "docker" -ErrorAction SilentlyContinue) {
+            $mapping = docker port $ContainerName "$ContainerPort/tcp" 2>$null
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($mapping)) {
+                foreach ($line in ($mapping -split "`r?`n")) {
+                    $trimmed = $line.Trim()
+                    if ($trimmed -match ":(\\d+)\\s*$") {
+                        return [int]$matches[1]
+                    }
+                }
+            }
+        }
+    } catch {
+        # 忽略解析失败，进入后续回退逻辑
+    }
+
+    # 2) 回退：读取环境变量（docker-compose.dev.yml 使用 POSTGRES_HOST_PORT/REDIS_HOST_PORT 覆盖）
+    try {
+        $raw = [System.Environment]::GetEnvironmentVariable($EnvVarName)
+        $parsed = 0
+        if (-not [string]::IsNullOrWhiteSpace($raw) -and [int]::TryParse($raw, [ref]$parsed)) {
+            return $parsed
+        }
+    } catch {
+        # 忽略
+    }
+
+    # 3) 最后回退：默认端口
+    return $DefaultPort
+}
+
 # 检查前置条件
 function Test-Prerequisites {
     Write-ColorOutput "`n🔍 检查前置条件..." "Blue"
@@ -127,7 +175,7 @@ function Test-Prerequisites {
     
     if (-not $allOk) {
         Write-ColorOutput "`n❌ 前置条件检查失败，请先安装缺失的工具" "Red"
-        Write-ColorOutput "请参考文档: docs/development-environment-guide.md" "Yellow"
+        Write-ColorOutput "请参考文档: docs/development/development-environment-guide.md" "Yellow"
         exit 1
     }
     
@@ -266,6 +314,9 @@ function Invoke-TestValidation {
 
 # 打印设置摘要
 function Show-SetupSummary {
+    $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
+
     Write-ColorOutput "`n$('=' * 60)" "Cyan"
     Write-ColorOutput "🎉 开发环境设置完成！" "Green"
     Write-ColorOutput "$('=' * 60)" "Cyan"
@@ -274,8 +325,8 @@ function Show-SetupSummary {
     Write-ColorOutput "  🎨 前端开发服务器: http://localhost:3000" "White"
     Write-ColorOutput "  🐍 后端 API 服务器: http://localhost:8000" "White"
     Write-ColorOutput "  📚 API 说明: docs/api/openapi.json" "White"
-    Write-ColorOutput "  🗄️ PostgreSQL: localhost:15500" "White"
-    Write-ColorOutput "  🔴 Redis: localhost:16379" "White"
+    Write-ColorOutput "  🗄️ PostgreSQL: localhost:$postgresHostPort" "White"
+    Write-ColorOutput "  🔴 Redis: localhost:$redisHostPort" "White"
     Write-ColorOutput "  🔧 pgAdmin: http://localhost:5050" "White"
     Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"
     

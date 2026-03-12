@@ -16,6 +16,9 @@
 .PARAMETER SkipHealthCheck
     跳过健康检查
 
+.PARAMETER Diagnose
+    仅执行开发环境诊断（不启动任何服务）
+
 .EXAMPLE
     .\dev-start.ps1
     启动所有开发服务
@@ -42,7 +45,9 @@ param(
     
     [int]$Wait = 10,
     
-    [switch]$SkipHealthCheck
+    [switch]$SkipHealthCheck,
+
+    [switch]$Diagnose
 )
 
 # 设置错误处理
@@ -68,6 +73,40 @@ function Write-ColorOutput {
     }
     
     Write-Host $Message -ForegroundColor $colorMap[$Color]
+}
+
+function Test-VerboseEnabled {
+    try {
+        if ($PSBoundParameters.ContainsKey("Verbose")) { return $true }
+    } catch { }
+    return ($VerbosePreference -ne "SilentlyContinue")
+}
+
+function Write-StatusLine {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("OK", "WARN", "ERROR", "INFO")]
+        [string]$Status,
+
+        [string]$Detail = ""
+    )
+
+    $icon = "•"
+    $color = "White"
+    switch ($Status) {
+        "OK" { $icon = "✅"; $color = "Green" }
+        "WARN" { $icon = "⚠️"; $color = "Yellow" }
+        "ERROR" { $icon = "❌"; $color = "Red" }
+        "INFO" { $icon = "ℹ️"; $color = "Cyan" }
+    }
+
+    Write-Host "$icon $Message" -ForegroundColor ([ConsoleColor]::$color)
+    if (-not [string]::IsNullOrWhiteSpace($Detail) -and (Test-VerboseEnabled)) {
+        Write-Host "   $Detail" -ForegroundColor Gray
+    }
 }
 
 # 执行命令函数
@@ -121,6 +160,10 @@ function Test-Prerequisites {
     $tools = @(
         @{ Command = "docker"; Name = "Docker" }
     )
+
+    if ($Services -in @("database", "backend", "all")) {
+        $tools += @{ Command = "docker-compose"; Name = "docker-compose" }
+    }
 
     if ($Services -in @("backend", "all")) {
         $tools += @{ Command = "go"; Name = "Go 运行时" }
@@ -334,6 +377,184 @@ NEXT_PUBLIC_ENV=development
     Write-ColorOutput "✅ 前端服务已在新窗口中启动" "Green"
 }
 
+# 开发环境诊断（原 diagnose.ps1 已合并至此脚本）
+function Invoke-DevDiagnose {
+    Write-Host ""
+    Write-ColorOutput "🔍 开发环境诊断（dev-start.ps1 -Diagnose）" "Cyan"
+    Write-ColorOutput "$('=' * 60)" "Cyan"
+
+    Write-Host ""
+    Write-ColorOutput "📦 检查必需工具..." "Blue"
+
+    $tools = @(
+        @{ Name = "Docker"; Command = "docker"; Args = "--version" },
+        @{ Name = "docker-compose"; Command = "docker-compose"; Args = "version" },
+        @{ Name = "Go"; Command = "go"; Args = "version" },
+        @{ Name = "Node.js"; Command = "node"; Args = "--version" },
+        @{ Name = "pnpm"; Command = "pnpm"; Args = "--version" }
+    )
+
+    foreach ($tool in $tools) {
+        try {
+            $cmd = Get-Command $tool.Command -ErrorAction Stop
+            $out = & $tool.Command $tool.Args 2>$null
+            Write-StatusLine -Message $tool.Name -Status "OK" -Detail ($out -join " ")
+        }
+        catch {
+            Write-StatusLine -Message $tool.Name -Status "ERROR" -Detail "未安装或不可用"
+        }
+    }
+
+    Write-Host ""
+    Write-ColorOutput "🐳 检查 Docker 服务..." "Blue"
+    try {
+        $null = & docker info 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-StatusLine -Message "Docker 服务" -Status "OK"
+        } else {
+            Write-StatusLine -Message "Docker 服务" -Status "ERROR" -Detail "Docker 未运行或无权限"
+        }
+    }
+    catch {
+        Write-StatusLine -Message "Docker 服务" -Status "ERROR" -Detail $_.Exception.Message
+    }
+
+    Write-Host ""
+    Write-ColorOutput "🗄️ 检查数据库容器与端口..." "Blue"
+    $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
+    $containers = @(
+        @{ Name = "PostgreSQL"; Container = "inspect-postgres-dev"; Port = $postgresHostPort },
+        @{ Name = "Redis"; Container = "inspect-redis-dev"; Port = $redisHostPort }
+    )
+
+    foreach ($c in $containers) {
+        try {
+            $running = docker ps --filter "name=$($c.Container)" --format "{{.Names}}" 2>$null
+            if ($running -eq $c.Container) {
+                Write-StatusLine -Message "$($c.Name) 容器" -Status "OK" -Detail "$($c.Container) 运行中"
+            } else {
+                Write-StatusLine -Message "$($c.Name) 容器" -Status "WARN" -Detail "未运行"
+            }
+        }
+        catch {
+            Write-StatusLine -Message "$($c.Name) 容器" -Status "ERROR" -Detail $_.Exception.Message
+        }
+
+        try {
+            $connection = Test-NetConnection -ComputerName localhost -Port $c.Port -WarningAction SilentlyContinue
+            if ($connection.TcpTestSucceeded) {
+                Write-StatusLine -Message "  端口 $($c.Port)" -Status "OK" -Detail "可访问"
+            } else {
+                Write-StatusLine -Message "  端口 $($c.Port)" -Status "WARN" -Detail "不可访问"
+            }
+        }
+        catch {
+            Write-StatusLine -Message "  端口 $($c.Port)" -Status "ERROR" -Detail $_.Exception.Message
+        }
+    }
+
+    Write-Host ""
+    Write-ColorOutput "📄 检查配置文件..." "Blue"
+    $configFiles = @(
+        @{ Name = "docker-compose.dev.yml"; Path = "docker-compose.dev.yml" },
+        @{ Name = "docker-compose.prod.yml"; Path = "docker-compose.prod.yml" },
+        @{ Name = "docker-compose.yml（旧版/可选）"; Path = "docker-compose.yml" },
+        @{ Name = ".env"; Path = ".env" },
+        @{ Name = ".env.development"; Path = ".env.development" },
+        @{ Name = "frontend/.env.local"; Path = "frontend/.env.local" }
+    )
+    foreach ($f in $configFiles) {
+        if (Test-Path $f.Path) {
+            Write-StatusLine -Message $f.Name -Status "OK" -Detail "存在"
+        } else {
+            Write-StatusLine -Message $f.Name -Status "WARN" -Detail "不存在"
+        }
+    }
+
+    Write-Host ""
+    Write-ColorOutput "📁 检查目录结构..." "Blue"
+    $directories = @(
+        @{ Name = "backend-go"; Path = "backend-go" },
+        @{ Name = "frontend"; Path = "frontend" },
+        @{ Name = "database"; Path = "database" },
+        @{ Name = "logs"; Path = "logs" },
+        @{ Name = "data"; Path = "data" }
+    )
+    foreach ($d in $directories) {
+        if (Test-Path $d.Path) {
+            Write-StatusLine -Message $d.Name -Status "OK" -Detail "存在"
+        } else {
+            Write-StatusLine -Message $d.Name -Status "WARN" -Detail "不存在"
+        }
+    }
+
+    Write-Host ""
+    Write-ColorOutput "🔌 检查端口占用..." "Blue"
+    $ports = @(3000, 8000, $postgresHostPort, $redisHostPort, 5050, 8081)
+    foreach ($p in $ports) {
+        try {
+            if (Get-Command "Get-NetTCPConnection" -ErrorAction SilentlyContinue) {
+                $connection = Get-NetTCPConnection -LocalPort $p -ErrorAction SilentlyContinue
+                if ($connection) {
+                    $processName = ""
+                    try {
+                        $process = Get-Process -Id $connection.OwningProcess -ErrorAction SilentlyContinue
+                        if ($process) { $processName = $process.ProcessName }
+                    } catch { }
+                    $detail = if ($processName) { "被占用（进程: $processName）" } else { "被占用" }
+                    Write-StatusLine -Message "端口 $p" -Status "WARN" -Detail $detail
+                } else {
+                    Write-StatusLine -Message "端口 $p" -Status "OK" -Detail "可用"
+                }
+            } else {
+                Write-StatusLine -Message "端口 $p" -Status "INFO" -Detail "当前系统不支持 Get-NetTCPConnection"
+            }
+        }
+        catch {
+            Write-StatusLine -Message "端口 $p" -Status "WARN" -Detail $_.Exception.Message
+        }
+    }
+
+    Write-Host ""
+    Write-ColorOutput "🌐 检查 Docker 网络..." "Blue"
+    try {
+        $networks = docker network ls --format "{{.Name}}" 2>$null
+        if ($networks -match "inspect") {
+            $inspectNetworks = $networks | Select-String "inspect"
+            foreach ($n in $inspectNetworks) {
+                Write-StatusLine -Message ("网络: {0}" -f $n) -Status "OK"
+            }
+        } else {
+            Write-StatusLine -Message "inspect 网络" -Status "INFO" -Detail "未创建（首次启动时会自动创建）"
+        }
+    }
+    catch {
+        Write-StatusLine -Message "Docker 网络" -Status "WARN" -Detail $_.Exception.Message
+    }
+
+    Write-Host ""
+    Write-ColorOutput "📊 建议操作" "Blue"
+    $dbStatus = Test-DatabaseRunning
+    if ($dbStatus.Both) {
+        Write-ColorOutput "  ✅ 数据库已运行，可直接启动后端/全量服务：" "Green"
+        Write-ColorOutput "     .\\scripts\\development\\dev-start.ps1 -Services backend" "White"
+    } elseif (-not $dbStatus.PostgreSQL -and -not $dbStatus.Redis) {
+        Write-ColorOutput "  🚀 数据库未运行，建议一键启动全量：" "Cyan"
+        Write-ColorOutput "     .\\scripts\\development\\dev-start.ps1" "White"
+    } else {
+        Write-ColorOutput "  ⚠️ 数据库部分服务运行中，建议重启：" "Yellow"
+        Write-ColorOutput "     .\\scripts\\database\\db-manage.ps1 stop" "White"
+        Write-ColorOutput "     .\\scripts\\database\\db-manage.ps1 start" "White"
+    }
+
+    Write-Host ""
+    Write-ColorOutput "📚 更多帮助:" "Yellow"
+    Write-ColorOutput "  - 开发脚本文档: .\\scripts\\development\\README.md" "White"
+    Write-ColorOutput "  - 数据库状态: .\\scripts\\database\\db-manage.ps1 status" "White"
+    Write-ColorOutput "  - 数据库健康检查: .\\scripts\\database\\db-health-check.ps1" "White"
+}
+
 # 获取 Docker 容器映射到宿主机的端口（优先使用实际映射，其次读取环境变量，最后使用默认值）
 function Get-HostPort {
     param(
@@ -392,7 +613,7 @@ function Test-ServicesHealth {
     
     # 检查数据库服务
     $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
-    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16379
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
     $dbServices = @(
         @{ Name = "PostgreSQL"; Port = $postgresHostPort; Host = "localhost" },
         @{ Name = "Redis"; Port = $redisHostPort; Host = "localhost" }
@@ -467,7 +688,7 @@ function Test-ServicesHealth {
 # 显示服务信息
 function Show-ServiceInfo {
     $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
-    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16379
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
 
     Write-ColorOutput "`n📊 开发环境服务信息:" "Blue"
     Write-ColorOutput "$('=' * 50)" "Cyan"
@@ -495,7 +716,7 @@ function Show-ServiceInfo {
     Write-ColorOutput "  停止数据库: .\scripts\database\db-manage.ps1 stop" "White"
     Write-ColorOutput "  查看日志: .\scripts\database\db-manage.ps1 logs" "White"
     Write-ColorOutput "  重置数据库: .\scripts\database\db-manage.ps1 reset" "White"
-    Write-ColorOutput "  运行测试: .\scripts\testing\run-all-tests.ps1" "White"
+    Write-ColorOutput "  运行测试: .\scripts\tests\run-tests.ps1" "White"
     Write-ColorOutput "  健康检查: Invoke-WebRequest http://localhost:8000/health" "White"
     
     Write-ColorOutput "`n💡 提示:" "Yellow"
@@ -511,6 +732,11 @@ function Main {
         Write-ColorOutput "🚀 启动企业级网络设备巡检系统开发环境" "Green"
         Write-ColorOutput "服务范围: $Services" "Cyan"
         Write-ColorOutput "$('=' * 60)" "Cyan"
+
+        if ($Diagnose) {
+            Invoke-DevDiagnose
+            return
+        }
         
         # 检查前置条件
         Test-Prerequisites
@@ -547,7 +773,7 @@ function Main {
     catch {
         Write-ColorOutput "`n❌ 开发环境启动失败: $($_.Exception.Message)" "Red"
         Write-ColorOutput "请检查错误信息并重新运行脚本" "Yellow"
-        Write-ColorOutput "或运行完整环境设置: .\scripts\setup-dev-env.ps1" "Cyan"
+        Write-ColorOutput "或运行完整环境设置: .\scripts\development\setup-dev-env.ps1" "Cyan"
         exit 1
     }
 }

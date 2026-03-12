@@ -50,12 +50,9 @@ pnpm dev
 
 | 脚本 | 功能 | 用途 |
 |------|------|------|
+| `setup-dev-env.ps1` | 一键开发环境设置脚本 | 初始化开发环境（前端/后端/数据库） |
 | `dev-start.ps1` | 统一开发环境启动工具 | 一键启动所有开发服务 |
-| `build-backend.ps1` | 后端编译工具 | 编译 Go 后端为可执行文件 |
-| `start-backend-compiled.ps1` | 启动已编译的后端 | 直接运行编译好的 app.exe |
-| `manage-go-deps.ps1` | Go 依赖管理工具 | 管理 Go 后端依赖 |
-| `diagnose.ps1` | 开发环境诊断工具 | 快速诊断环境问题 |
-| `test-db-status.ps1` | 数据库状态测试 | 检查数据库容器状态 |
+| `dev-start.ps1 -Diagnose` | 开发环境诊断 | 仅执行检查，不启动服务 |
 
 ## 🔧 详细说明
 
@@ -67,6 +64,7 @@ pnpm dev
 - `-Services` - 指定服务: database, backend, frontend, all (默认)
 - `-Wait` - 等待服务启动时间（秒，默认 10）
 - `-SkipHealthCheck` - 跳过健康检查
+- `-Diagnose` - 仅执行开发环境诊断（不启动服务）
 
 **特性**:
 - ✅ 自动检查前置条件（Docker、Go、pnpm）
@@ -88,174 +86,57 @@ pnpm dev
 
 # 跳过健康检查
 .\dev-start.ps1 -SkipHealthCheck
+
+# 仅执行诊断（不启动服务）
+.\dev-start.ps1 -Diagnose
+
+# 诊断并输出详细信息（PowerShell 通用参数）
+.\dev-start.ps1 -Diagnose -Verbose
 ```
 
 **服务信息**:
 - 🎨 前端应用: http://localhost:3000
 - 🔧 后端 API: http://localhost:8000
 - 🐘 PostgreSQL: localhost:15500
-- 🔴 Redis: localhost:16379
+- 🔴 Redis: localhost:16380
 
 ---
 
-### build-backend.ps1 - 后端编译工具 🔨
+### 后端编译与运行（手动命令）
 
-**功能**: 编译 Go 后端服务为可执行文件
+为减少脚本数量与文档漂移，本项目已将 `build-backend.ps1 / start-backend-compiled.ps1 / manage-go-deps.ps1` 收口移除。后端相关操作建议直接使用 Go 官方命令：
 
-**参数**:
-- `-Mode` - 编译模式: release (生产), debug (调试), dev (开发)
-- `-Platform` - 目标平台: windows, linux, darwin (macOS)
-- `-Output` - 输出文件名（不含扩展名，默认 app）
-- `-Clean` - 编译前清理旧文件
-
-**特性**:
-- ✅ 支持多种编译模式（生产/调试/开发）
-- ✅ 支持交叉编译（Windows/Linux/macOS）
-- ✅ 自动优化（生产模式去除调试信息）
-- ✅ 显示编译时间和文件大小
-- ✅ 智能文件命名
-
-**示例**:
 ```powershell
-# 标准编译（生产版本）
-.\build-backend.ps1
+# 开发：自动编译并运行
+cd backend-go
+go run ./cmd/api
 
-# 编译调试版本
-.\build-backend.ps1 -Mode debug
+# 生产/发布：编译并运行（Windows）
+cd backend-go
+go build -ldflags=\"-s -w\" -o app.exe ./cmd/api
+.\app.exe
 
-# 交叉编译 Linux 版本
-.\build-backend.ps1 -Platform linux
-
-# 清理后重新编译
-.\build-backend.ps1 -Clean
-
-# 自定义输出文件名
-.\build-backend.ps1 -Output myapp
+# 依赖：安装/整理/校验
+cd backend-go
+go mod download
+go mod tidy
+go mod verify
 ```
 
-**编译模式说明**:
-- `release`: 生产版本，去除调试信息，最小化文件体积
-- `debug`: 调试版本，包含完整调试符号，便于调试
-- `dev`: 开发版本，标准编译
-
-**输出文件**:
-- Windows: `app.exe` (或 `app-debug.exe`)
-- Linux/macOS: `app` (或 `app-debug`)
+更多编译/部署细节见：`docs/backend/backend_build_guide.md`。
 
 ---
 
-### start-backend-compiled.ps1 - 启动已编译的后端 🚀
+### 开发环境诊断（已合并到 dev-start.ps1）
 
-**功能**: 直接运行已编译的 app.exe 程序
+原 `diagnose.ps1` 功能已合并到 `dev-start.ps1`，使用方式如下：
 
-**参数**:
-- `-Background` - 在后台运行
-- `-CheckHealth` - 启动后检查健康状态
-
-**特性**:
-- ✅ 快速启动（无需重新编译）
-- ✅ 支持前台/后台运行
-- ✅ 自动健康检查
-- ✅ 显示程序信息（大小、编译时间）
-- ✅ 检查端口占用
-
-**示例**:
 ```powershell
-# 前台启动
-.\start-backend-compiled.ps1
+# 仅执行诊断（不启动服务）
+.\dev-start.ps1 -Diagnose
 
-# 后台启动
-.\start-backend-compiled.ps1 -Background
-
-# 启动并检查健康状态
-.\start-backend-compiled.ps1 -Background -CheckHealth
-```
-
-**使用场景**:
-- 生产环境部署
-- 快速启动测试
-- 性能测试
-- 不需要修改代码时
-
----
-
-### manage-go-deps.ps1 - Go 依赖管理
-
-**功能**: 管理 Go 后端项目依赖
-
-**操作类型**:
-- `install` - 安装所有依赖
-- `update` - 更新所有依赖到最新版本
-- `verify` - 验证依赖完整性
-- `list` - 列出当前依赖
-- `clean` - 清理模块缓存
-- `add` - 添加新依赖
-- `help` - 显示帮助信息
-
-**示例**:
-```powershell
-# 安装依赖
-.\manage-go-deps.ps1 install
-
-# 更新依赖
-.\manage-go-deps.ps1 update
-
-# 验证依赖
-.\manage-go-deps.ps1 verify
-
-# 列出依赖
-.\manage-go-deps.ps1 list
-
-# 添加依赖
-.\manage-go-deps.ps1 add github.com/gin-gonic/gin
-
-# 添加指定版本的依赖
-.\manage-go-deps.ps1 add github.com/gin-gonic/gin v1.9.1
-
-# 清理缓存
-.\manage-go-deps.ps1 clean
-```
-
----
-
-### diagnose.ps1 - 环境诊断工具 🔍
-
-**功能**: 快速诊断开发环境问题
-
-**特性**:
-- ✅ 检查必需工具（Docker、Go、Node.js、pnpm）
-- ✅ 检查 Docker 服务状态
-- ✅ 检查数据库容器运行状态
-- ✅ 检查配置文件完整性
-- ✅ 检查端口占用情况
-- ✅ 检查 Docker 网络配置
-- ✅ 提供智能建议
-
-**示例**:
-```powershell
-# 运行诊断
-.\diagnose.ps1
-
-# 显示详细信息
-.\diagnose.ps1 -Verbose
-```
-
----
-
-### test-db-status.ps1 - 数据库状态测试
-
-**功能**: 快速检查数据库容器状态
-
-**特性**:
-- ✅ 检查 PostgreSQL 容器
-- ✅ 检查 Redis 容器
-- ✅ 测试数据库连接
-- ✅ 显示所有相关容器
-
-**示例**:
-```powershell
-# 测试数据库状态
-.\test-db-status.ps1
+# 诊断并输出详细信息（PowerShell 通用参数）
+.\dev-start.ps1 -Diagnose -Verbose
 ```
 
 ## 🔄 开发工作流程
@@ -263,15 +144,17 @@ pnpm dev
 ### 首次启动
 
 ```powershell
-# 1. 运行环境诊断
-.\scripts\development\diagnose.ps1
+# 1. 运行环境诊断（不启动服务）
+.\scripts\development\dev-start.ps1 -Diagnose
 
 # 2. 确保数据库已初始化
 .\scripts\database\db-manage.ps1 start
 .\scripts\database\db-init-complete.ps1
 
-# 3. 安装 Go 依赖
-.\scripts\development\manage-go-deps.ps1 install
+# 3. 安装/整理 Go 依赖
+cd backend-go
+go mod download
+go mod tidy
 
 # 4. 启动开发环境
 .\scripts\development\dev-start.ps1
@@ -298,10 +181,10 @@ pnpm dev
 
 ```powershell
 # 1. 运行诊断工具
-.\scripts\development\diagnose.ps1 -Verbose
+.\scripts\development\dev-start.ps1 -Diagnose -Verbose
 
 # 2. 检查数据库状态
-.\scripts\development\test-db-status.ps1
+.\scripts\database\db-manage.ps1 status
 
 # 3. 查看日志
 .\scripts\database\db-manage.ps1 logs
@@ -314,14 +197,13 @@ pnpm dev
 ### 依赖管理
 
 ```powershell
-# 添加新的 Go 依赖
-.\scripts\development\manage-go-deps.ps1 add <package-name>
-
-# 更新依赖
-.\scripts\development\manage-go-deps.ps1 update
+# 添加/更新 Go 依赖（示例）
+cd backend-go
+go get <package-name>@<version>
+go mod tidy
 
 # 验证依赖
-.\scripts\development\manage-go-deps.ps1 verify
+go mod verify
 ```
 
 ## 🌐 服务访问地址
@@ -341,7 +223,7 @@ pnpm dev
 | 服务 | 地址 | 凭据 |
 |------|------|------|
 | PostgreSQL | localhost:15500 | 用户: inspect_dev<br>密码: dev_password_2024<br>数据库: inspect_system_dev |
-| Redis | localhost:16379 | 密码: dev_redis_2024 |
+| Redis | localhost:16380 | 密码: dev_redis_2024 |
 | pgAdmin | http://localhost:5050 | 数据库管理工具 |
 | Redis Commander | http://localhost:8081 | Redis 管理工具 |
 
@@ -377,10 +259,10 @@ go run ./cmd/api
 
 # 方式 2: 编译后运行
 # 编译
-.\scripts\development\build-backend.ps1
+go build -o app.exe ./cmd/api
 
 # 运行
-.\scripts\development\start-backend-compiled.ps1
+.\app.exe
 
 # 或直接运行
 .\backend-go\app.exe
@@ -398,13 +280,13 @@ go vet ./...
 **编译选项**:
 ```powershell
 # 生产版本（优化，体积小）
-.\scripts\development\build-backend.ps1 -Mode release
+go build -ldflags=\"-s -w\" -o app.exe ./cmd/api
 
 # 调试版本（包含调试符号）
-.\scripts\development\build-backend.ps1 -Mode debug
+go build -gcflags=\"all=-N -l\" -o app-debug.exe ./cmd/api
 
 # 交叉编译 Linux 版本
-.\scripts\development\build-backend.ps1 -Platform linux
+$env:GOOS=\"linux\"; $env:GOARCH=\"amd64\"; go build -o app ./cmd/api
 ```
 
 ### 前端开发
@@ -521,7 +403,7 @@ go build ./cmd/api
 # 而不是: deviceID := readInt(req, "device_id", "deviceId")
 ```
 
-**参考文档**: [后端编译错误修复说明](../../docs/BACKEND_COMPILE_FIX.md)
+**参考文档**: [后端编译错误修复说明](../../docs/backend/backend_compile_fix.md)
 
 ---
 
@@ -543,7 +425,7 @@ docker-compose -f docker-compose.dev.yml up -d postgres redis
 
 ```powershell
 # 检查数据库状态
-.\scripts\development\test-db-status.ps1
+.\scripts\database\db-manage.ps1 status
 
 # 脚本会自动检测并跳过已运行的数据库
 # 如果需要重启数据库：
@@ -557,7 +439,7 @@ docker-compose -f docker-compose.dev.yml up -d postgres redis
 
 ```powershell
 # 查看端口占用
-netstat -ano | findstr "3000 8000 15500 16379"
+netstat -ano | findstr "3000 8000 15500 16380"
 
 # 结束占用进程
 taskkill /PID <进程ID> /F
@@ -567,7 +449,7 @@ taskkill /PID <进程ID> /F
 
 ```powershell
 # 运行全面诊断
-.\scripts\development\diagnose.ps1 -Verbose
+.\scripts\development\dev-start.ps1 -Diagnose -Verbose
 
 # 检查前置条件
 docker --version
@@ -586,8 +468,10 @@ pnpm --version
 
 ```powershell
 # Go 依赖问题
-.\scripts\development\manage-go-deps.ps1 clean
-.\scripts\development\manage-go-deps.ps1 install
+cd backend-go
+go clean -modcache
+go mod download
+go mod tidy
 
 # 前端依赖问题
 cd frontend
@@ -612,25 +496,25 @@ docker exec inspect-redis-dev redis-cli -a dev_redis_2024 ping
 ```powershell
 # 启动 Docker Desktop
 # 然后运行诊断
-.\scripts\development\diagnose.ps1
+.\scripts\development\dev-start.ps1 -Diagnose
 ```
 
 ## 📚 相关文档
 
 - [数据库管理脚本](../database/README.md)
-- [测试脚本](../testing/README.md)
+- [测试脚本](../tests/README.md)
 - [后端快速启动指南](../../docs/backend-go-quickstart.md)
-- [API 文档](../../docs/api/README.md)
-- [开发环境指南](../../discuss/development-environment-guide.md)
+- [API 文档](../../docs/api/readme.md)
+- [开发环境指南](../../docs/development/development-environment-guide.md)
 
 ## 🔗 快速链接
 
 ### 文档
 
-- [API 参考](../../docs/api/QUICK_REFERENCE.md)
+- [API 参考](../../docs/api/quick_reference.md)
 - [WebSocket 协议](../../docs/api/websocket-contract.md)
 - [数据库快速启动](../../DATABASE_QUICK_START.md)
-- [端口参考](../../QUICK_PORT_REFERENCE.md)
+- [端口参考](../../docs/env/quick_port_reference.md)
 
 ### 配置文件
 
@@ -658,7 +542,7 @@ docker exec inspect-redis-dev redis-cli -a dev_redis_2024 ping
 ## 📝 最佳实践
 
 1. **使用统一启动脚本**: 优先使用 `dev-start.ps1` 启动开发环境
-2. **定期更新依赖**: 使用 `manage-go-deps.ps1 update` 保持依赖最新
+2. **定期更新依赖**: 使用 `go get -u ./...` 并执行 `go mod tidy` 保持依赖最新
 3. **代码提交前测试**: 运行测试确保代码质量
 4. **查看日志**: 遇到问题先查看日志文件
 5. **保持环境整洁**: 定期清理未使用的容器和镜像
@@ -669,8 +553,7 @@ docker exec inspect-redis-dev redis-cli -a dev_redis_2024 ping
 
 **新增功能**:
 - ✅ 智能数据库检测功能 - 自动检测并跳过已运行的数据库
-- ✅ 诊断工具 (diagnose.ps1) - 全面的环境诊断
-- ✅ 数据库状态测试 (test-db-status.ps1) - 快速检查数据库
+- ✅ 诊断模式（dev-start.ps1 -Diagnose）- 全面的环境诊断
 
 **修复问题**:
 - ✅ Docker Compose 网络配置问题 - 使用单文件完整配置
@@ -720,7 +603,7 @@ PS> .\dev-start.ps1
 
 #### 3. 诊断工具
 
-**diagnose.ps1** - 全面诊断工具:
+**dev-start.ps1 -Diagnose** - 全面诊断工具:
 - 检查必需工具（Docker、Go、Node.js、pnpm）
 - 检查 Docker 服务状态
 - 检查数据库容器状态
@@ -728,10 +611,9 @@ PS> .\dev-start.ps1
 - 检查端口占用情况
 - 提供智能建议
 
-**test-db-status.ps1** - 快速数据库检测:
+**db-manage.ps1 status** - 快速数据库检测:
 - 检查容器运行状态
-- 测试数据库连接
-- 显示所有相关容器
+- 显示容器健康状态与端口
 
 ## 📊 测试验证
 
@@ -751,8 +633,8 @@ PS> .\dev-start.ps1
 
 | 脚本 | 执行时间 | 评价 |
 |------|---------|------|
-| test-db-status.ps1 | < 2秒 | ⚡ 优秀 |
-| diagnose.ps1 | < 5秒 | ⚡ 优秀 |
+| db-manage.ps1 status | < 2秒 | ⚡ 优秀 |
+| dev-start.ps1 -Diagnose | < 5秒 | ⚡ 优秀 |
 | dev-start.ps1 (跳过) | < 3秒 | ⚡ 优秀 |
 
 ## 🎯 快速参考卡片
@@ -769,23 +651,20 @@ PS> .\dev-start.ps1
 # 只启动后端（含数据库）
 .\scripts\development\dev-start.ps1 -Services backend
 
-# 编译后端
-.\scripts\development\build-backend.ps1
+# 编译后端（手动）
+cd backend-go; go build -o app.exe ./cmd/api
 
-# 启动已编译的后端
-.\scripts\development\start-backend-compiled.ps1
-
-# 全面诊断
-.\scripts\development\diagnose.ps1
+# 全面诊断（不启动服务）
+.\scripts\development\dev-start.ps1 -Diagnose
 
 # 快速检查数据库
-.\scripts\development\test-db-status.ps1
+.\scripts\database\db-manage.ps1 status
 
 # 数据库管理
 .\scripts\database\db-manage.ps1 start|stop|status|logs
 
-# Go 依赖管理
-.\scripts\development\manage-go-deps.ps1 install|update|verify
+# Go 依赖管理（手动）
+cd backend-go; go mod download; go mod tidy; go mod verify
 ```
 
 ### 服务地址速查
@@ -795,7 +674,7 @@ PS> .\dev-start.ps1
 | 前端 | http://localhost:3000 | - |
 | 后端 | http://localhost:8000 | - |
 | PostgreSQL | localhost:15500 | inspect_dev / dev_password_2024 |
-| Redis | localhost:16379 | dev_redis_2024 |
+| Redis | localhost:16380 | dev_redis_2024 |
 
 ### 故障排查速查
 
@@ -804,17 +683,18 @@ PS> .\dev-start.ps1
 docker-compose -f docker-compose.dev.yml up -d postgres redis
 
 # 问题 2: 数据库状态检查
-.\scripts\development\test-db-status.ps1
+.\scripts\database\db-manage.ps1 status
 
 # 问题 3: 端口占用
-netstat -ano | findstr "3000 8000 15500 16379"
+netstat -ano | findstr "3000 8000 15500 16380"
 
 # 问题 4: 全面诊断
-.\scripts\development\diagnose.ps1 -Verbose
+.\scripts\development\dev-start.ps1 -Diagnose -Verbose
 
 # 问题 5: 依赖问题
-.\scripts\development\manage-go-deps.ps1 clean
-.\scripts\development\manage-go-deps.ps1 install
+cd backend-go; go clean -modcache
+cd backend-go; go mod download
+cd backend-go; go mod tidy
 ```
 
 ## 📞 获取帮助
@@ -827,5 +707,5 @@ netstat -ano | findstr "3000 8000 15500 16379"
 
 ---
 
-**最后更新**: 2026-01-27  
+**最后更新**: 2026-03-12  
 **维护者**: DevOps Team
