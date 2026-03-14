@@ -152,7 +152,7 @@ docker-compose -f docker-compose.prod.yml --profile with-nginx --profile monitor
 |------|--------|----------|------|
 | postgres | inspect-postgres-dev | 15500:5432 | TimescaleDB 数据库 |
 | redis | inspect-redis-dev | 16380:6379 | Redis 缓存 |
-| backend | inspect-backend-dev | 8001:8000 | Go 后端服务 |
+| backend | inspect-backend-dev | 38000:38000 | Go 后端服务（开发默认；可通过 BACKEND_HOST_PORT 覆盖） |
 | frontend | inspect-frontend-dev | 3000:3000 | Next.js 前端 |
 | pgadmin | inspect-pgadmin-dev | 5050:80 | 数据库管理工具 (profile: tools) |
 | redis-commander | inspect-redis-commander-dev | 8081:8081 | Redis 管理工具 (profile: tools) |

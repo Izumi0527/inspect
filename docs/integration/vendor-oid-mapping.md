@@ -331,8 +331,8 @@ for (errorIndication,
 
 ## 相关文档
 
-- [模板配置指南](./template-configuration-guide.md)
-- [最佳实践文档](./template-best-practices.md)
+- [模板配置指南](../template-configuration-guide.md)
+- [最佳实践文档](../template-best-practices.md)
 - [API 文档](../api/readme.md)
 
 ---

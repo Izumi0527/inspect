@@ -90,6 +90,10 @@ export type MonitoringSectionKey =
 export interface MonitoringSectionStatus {
   ok: boolean
   message?: string
+  /** 该分区因权限限制被隐藏（不应计入 hasPartialFailure） */
+  limitedByPermission?: boolean
+  /** 访问该分区所需的最小权限（用于提示/诊断） */
+  requiredPermission?: string
 }
 
 // 分区状态集合

@@ -140,7 +140,7 @@ go build ./cmd/api
 2026/01/29 17:00:00 Starting Inspect System API Server
 2026/01/29 17:00:00 Loading configuration from: C:\coder\Inspect\.env
 2026/01/29 17:00:00 Database URL: postgresql://inspect_dev:***@localhost:15500/inspect_system_dev
-2026/01/29 17:00:00 Server listening on 0.0.0.0:8000
+2026/01/29 17:00:00 Server listening on 0.0.0.0:38000
 ```
 
 ## 其他解决方案对比

@@ -8,7 +8,7 @@ import { TokenManager } from '@/lib/api-client'
 import { Report } from '../types'
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
 
 const resolveUrl = (urlOrPath: string): string => {
   const raw = String(urlOrPath || '').trim()

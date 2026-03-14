@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+
+	"github.com/your-org/inspect-system/backend-go/internal/authz"
 )
 
 func (s *Service) ListRoles(ctx context.Context) ([]RoleDTO, error) {
@@ -176,7 +178,7 @@ func (s *Service) ListPermissions(ctx context.Context) ([]PermissionDTO, error) 
 	for _, perm := range perms {
 		result = append(result, PermissionDTO{
 			ID:          perm.ID,
-			Name:        perm.Name,
+			Name:        authz.NormalizePermissionKey(perm.Name),
 			DisplayName: perm.DisplayName,
 			Description: perm.Description,
 			Module:      perm.Module,
@@ -250,7 +252,7 @@ func (s *Service) ListPermissionsByRoleID(ctx context.Context, roleID string) ([
 	for _, perm := range perms {
 		result = append(result, PermissionDTO{
 			ID:          perm.ID,
-			Name:        perm.Name,
+			Name:        authz.NormalizePermissionKey(perm.Name),
 			DisplayName: perm.DisplayName,
 			Description: perm.Description,
 			Module:      perm.Module,
@@ -289,7 +291,7 @@ func (s *Service) GetPermissionNamesByRole(ctx context.Context, roleName string)
 			result = append(result, row.Name)
 		}
 	}
-	return result, nil
+	return authz.NormalizePermissionList(result), nil
 }
 
 func (s *Service) ListPermissionsByRoleName(ctx context.Context, roleName string) ([]PermissionDTO, error) {
@@ -318,7 +320,7 @@ func (s *Service) ListPermissionsByRoleName(ctx context.Context, roleName string
 	for _, perm := range perms {
 		result = append(result, PermissionDTO{
 			ID:          perm.ID,
-			Name:        perm.Name,
+			Name:        authz.NormalizePermissionKey(perm.Name),
 			DisplayName: perm.DisplayName,
 			Description: perm.Description,
 			Module:      perm.Module,

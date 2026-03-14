@@ -24,7 +24,7 @@ describe('alerts.api exportAlerts', () => {
   const originalRevokeObjectURL = window.URL.revokeObjectURL
 
   beforeEach(() => {
-    process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8000'
+    process.env.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:38000'
     ;(TokenManager.getAccessToken as jest.Mock).mockReturnValue('manager-token')
 
     jest.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {

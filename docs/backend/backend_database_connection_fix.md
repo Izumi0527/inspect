@@ -156,7 +156,7 @@ go run ./cmd/api
 
 ```
 2026/01/29 16:45:00 Starting Inspect System API Server
-2026/01/29 16:45:00 Server listening on 0.0.0.0:8000
+2026/01/29 16:45:00 Server listening on 0.0.0.0:38000
 2026/01/29 16:45:00 Database connected successfully
 ```
 
@@ -367,7 +367,7 @@ Start-Sleep -Seconds 10
 go run ./backend-go/cmd/api
 
 # 6. 验证连接（在另一个终端）
-Invoke-WebRequest http://localhost:8000/health
+Invoke-WebRequest http://localhost:38000/health
 ```
 
 ### 预期结果

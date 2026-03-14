@@ -13,6 +13,8 @@ import {
   FileText
 } from 'lucide-react'
 import { Button } from '@/components/atoms'
+import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
 import { NavigationItem } from '../types'
 
 interface SidebarProps {
@@ -26,6 +28,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggle,
   currentPath = '/dashboard'
 }) => {
+  // 侧边栏入口按“最小权限”控制显示，避免用户看到无权限入口后再被路由守卫拦截（提升体验）
+  const canReadDevices = usePermission(Permission.DEVICES_READ)
+  const canReadInspections = usePermission(Permission.INSPECTIONS_READ)
+  const canReadMonitoring = usePermission(Permission.MONITORING_READ)
+  const canReadAlerts = usePermission(Permission.ALERTS_READ)
+  const canReadLogs = usePermission(Permission.SYSTEM_LOGS)
+  const canReadReports = usePermission(Permission.REPORTS_READ)
+  const canConfigSystem = usePermission(Permission.SYSTEM_CONFIG)
+
   const navItems: NavigationItem[] = [
     { name: '总览', icon: Home, href: '/dashboard' },
     { name: '设备管理', icon: Monitor, href: '/devices' },
@@ -36,6 +47,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { name: '报表分析', icon: Database, href: '/reports' },
     { name: '系统设置', icon: Settings, href: '/settings' },
   ]
+
+  const navVisibilityByHref: Record<string, boolean> = {
+    '/dashboard': true, // 仅需登录
+    '/devices': canReadDevices,
+    '/inspection': canReadInspections,
+    '/monitoring': canReadMonitoring,
+    '/alerts': canReadAlerts,
+    '/logs': canReadLogs,
+    '/reports': canReadReports,
+    '/settings': canConfigSystem,
+  }
+
+  const visibleNavItems = navItems.filter((item) => navVisibilityByHref[item.href] ?? true)
 
   return (
     <div className={`fixed inset-y-0 left-0 z-50 ${isOpen ? 'w-64' : 'w-20'} bg-card shadow-lg dark:border-r dark:border-border transform transition-all duration-300`}>
@@ -56,7 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
       
       <nav className="mt-8">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = currentPath === item.href
           
           return (

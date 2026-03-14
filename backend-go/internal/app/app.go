@@ -2,9 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
+	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -32,6 +36,32 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/traffic"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
+
+// wsAuthAdapter 将 auth.Service 适配为 ws.AccessTokenAuthorizer，避免 ws 包直接依赖 internal/auth 造成循环引用。
+type wsAuthAdapter struct {
+	Service *auth.Service
+}
+
+func (a wsAuthAdapter) AuthorizeAccessToken(ctx context.Context, accessToken string) (string, []string, error) {
+	if a.Service == nil {
+		return "", nil, ws.ErrPermissionResolveFailed
+	}
+
+	user, err := a.Service.GetActiveUserFromToken(ctx, accessToken)
+	if err != nil {
+		if errors.Is(err, auth.ErrUserInactive) {
+			return "", nil, ws.ErrUserInactive
+		}
+		return "", nil, err
+	}
+
+	permissions, err := a.Service.GetPermissionsByRole(ctx, user.Role)
+	if err != nil {
+		return "", nil, ws.ErrPermissionResolveFailed
+	}
+
+	return user.ID, permissions, nil
+}
 
 type App struct {
 	Config       config.Config
@@ -69,25 +99,42 @@ func New() (*App, error) {
 
 	redisClient, err := redisstore.NewClient(cfg)
 	if err != nil {
-		return nil, err
+		// 开发/调试环境允许无 Redis 启动：相关功能将自动降级（监控缓存、限流、健康检查等）。
+		// 生产环境仍保持“Redis 不可用则启动失败”，避免静默降级造成不可预期行为。
+		if cfg.Debug {
+			log.Warn("redis_unavailable_continue_without_redis", zap.Error(err))
+			redisClient = nil
+		} else {
+			return nil, err
+		}
 	}
 
 	wsManager := ws.NewManager()
-	wsHandler := ws.NewHandler(wsManager, log)
+	authService := auth.NewService(dbConn, cfg, log)
+	wsHandler := ws.NewHandlerWithOrigins(wsManager, wsAuthAdapter{Service: authService}, log, cfg.CorsOrigins)
 	metricsWriter := monitoring.NewMetricsWriter(dbConn, wsManager, log)
 
 	// 初始化监控数据缓存
 	cacheConfig := monitoring.DefaultCacheConfig()
+	cacheConfig.Enabled = cfg.MonitoringCacheEnabled
+	if cfg.MonitoringCacheTTL > 0 {
+		cacheConfig.SystemPerformanceTTL = cfg.MonitoringCacheTTL
+		cacheConfig.TemperatureTTL = cfg.MonitoringCacheTTL
+		cacheConfig.NetworkTrafficTTL = cfg.MonitoringCacheTTL
+	}
 	metricsCache := monitoring.NewMetricsCache(redisClient, cacheConfig, log)
 	metricsWriter.SetCache(metricsCache)
 
 	monitoringHandler := handlers.MonitoringHandler{
 		Writer:          metricsWriter,
 		ReportOutputDir: cfg.ReportOutputDir,
+		AlertService:    nil, // 稍后在 alertService 创建后注入
 	}
 
-	authService := auth.NewService(dbConn, cfg, log)
 	monitoringHandler.Auth = authService
+	monitoringHandler.DownloadTokens = handlers.NewReportDownloadTokenStore(redisClient, log)
+	monitoringHandler.DownloadTokenTTL = cfg.MonitoringReportDownloadTokenTTL
+	monitoringHandler.DownloadTokenMaxUses = cfg.MonitoringReportDownloadTokenMaxUses
 	authHandler := handlers.AuthHandler{
 		Service: authService,
 	}
@@ -131,6 +178,9 @@ func New() (*App, error) {
 		Service: escalationService,
 		Auth:    authService,
 	}
+
+	// 将告警服务注入监控中心聚合接口（用于实时告警分区）
+	monitoringHandler.AlertService = alertService
 
 	inspectionHandler := handlers.InspectionHandler{
 		Service:         inspectionService,
@@ -241,21 +291,30 @@ func New() (*App, error) {
 	)
 
 	return &App{
-		Config:       cfg,
-		Logger:       log,
-		DB:           dbConn,
-		Redis:        redisClient,
-		Echo:         server,
-		Scheduler:    schedulerService,
-		TrapListener: trapListener,
-		Syslog:       syslogReceiver,
+		Config:                    cfg,
+		Logger:                    log,
+		DB:                        dbConn,
+		Redis:                     redisClient,
+		Echo:                      server,
+		Scheduler:                 schedulerService,
+		TrapListener:              trapListener,
+		Syslog:                    syslogReceiver,
 		InspectionSchedulerCancel: inspectionSchedulerCancel,
 		InspectionSchedulerDone:   inspectionSchedulerDone,
 	}, nil
 }
 
 func (a *App) Start() error {
-	address := a.Config.Address()
+	host, port := normalizeHostPort(a.Config.ServerHost, a.Config.ServerPort)
+	listener, resolvedAddr, err := a.openHTTPListener(host, port)
+	if err != nil {
+		return err
+	}
+
+	resolvedHost, resolvedPort := splitHostPort(resolvedAddr, host, port)
+	a.Config.ServerHost = resolvedHost
+	a.Config.ServerPort = resolvedPort
+
 	if a.Logger != nil {
 		// 打印启动横幅
 		env := "production"
@@ -265,7 +324,9 @@ func (a *App) Start() error {
 		logger.PrintBanner(a.Config.AppVersion, env)
 		logger.PrintStartupInfo(a.Logger, a.Config.ServerPort, env)
 	}
-	return a.Echo.Start(address)
+
+	a.Echo.Listener = listener
+	return a.Echo.Start(resolvedAddr)
 }
 
 func (a *App) Shutdown(ctx context.Context) error {
@@ -314,6 +375,114 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func normalizeHostPort(host string, port int) (string, int) {
+	trimmedHost := strings.TrimSpace(host)
+	if trimmedHost == "" {
+		trimmedHost = "0.0.0.0"
+	}
+	if port <= 0 {
+		// 说明：Windows 上 8000/8001 等常见端口可能被系统划入 excluded port range，
+		// 导致监听报错 WSAEACCES/10013。开发环境默认使用 30000+ 端口可显著降低踩坑概率。
+		port = 38000
+	}
+	return trimmedHost, port
+}
+
+func splitHostPort(address, fallbackHost string, fallbackPort int) (string, int) {
+	host, portStr, err := net.SplitHostPort(strings.TrimSpace(address))
+	if err != nil {
+		return fallbackHost, fallbackPort
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port <= 0 {
+		return host, fallbackPort
+	}
+	return host, port
+}
+
+func (a *App) openHTTPListener(host string, port int) (net.Listener, string, error) {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	listener, err := net.Listen("tcp", addr)
+	if err == nil {
+		return listener, listener.Addr().String(), nil
+	}
+
+	// 开发环境降级：当端口被系统保留（Windows excluded port range）或被占用时，自动选择可用端口继续启动。
+	if !a.Config.Debug || !shouldFallbackListenError(err) {
+		return nil, "", err
+	}
+
+	if a.Logger != nil {
+		a.Logger.Warn("http_listen_failed_try_fallback_port",
+			zap.String("addr", addr),
+			zap.Error(err),
+		)
+	}
+
+	// 经验值：Windows 上低位端口经常落在 excluded port range，优先从 38000 起探测，避免频繁撞墙。
+	const startPort = 38000
+	const maxAttempts = 200
+	for i := 0; i < maxAttempts; i++ {
+		candidate := startPort + i
+		candidateAddr := fmt.Sprintf("%s:%d", host, candidate)
+		l, listenErr := net.Listen("tcp", candidateAddr)
+		if listenErr != nil {
+			continue
+		}
+
+		if a.Logger != nil {
+			a.Logger.Warn("http_listen_fallback_port_selected",
+				zap.Int("port", candidate),
+				zap.String("addr", candidateAddr),
+				zap.String("hint", "请同步更新前端 NEXT_PUBLIC_API_URL / NEXT_PUBLIC_WS_URL，或在 .env 中设置 SERVER_PORT"),
+			)
+		}
+
+		return l, l.Addr().String(), nil
+	}
+
+	return nil, "", err
+}
+
+func shouldFallbackListenError(err error) bool {
+	// address already in use（跨平台）
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return true
+	}
+	// permission denied（跨平台）
+	if errors.Is(err, syscall.EACCES) {
+		return true
+	}
+
+	// Windows: WSAEACCES(10013) / WSAEADDRINUSE(10048) 常见于 excluded port range 或端口占用。
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		var sysErr *os.SyscallError
+		if errors.As(opErr.Err, &sysErr) {
+			if errno, ok := sysErr.Err.(syscall.Errno); ok {
+				if int(errno) == 10013 || int(errno) == 10048 {
+					return true
+				}
+			}
+		}
+	}
+
+	lower := strings.ToLower(err.Error())
+	if strings.Contains(lower, "access permissions") {
+		return true
+	}
+	if strings.Contains(lower, "permission denied") {
+		return true
+	}
+	if strings.Contains(lower, "address already in use") {
+		return true
+	}
+	if strings.Contains(lower, "only one usage of each socket address") {
+		return true
+	}
+	return false
 }
 
 type syslogSettingGetter interface {

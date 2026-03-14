@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo } from 'react'
 import { useAuth } from '@/lib/contexts/auth-context'
+import { TokenManager } from '@/lib/api-client'
 
 // WebSocket事件类型
 export enum WebSocketEvents {
@@ -63,51 +64,75 @@ type OutgoingMessage = {
 // WebSocket管理器类
 class WebSocketManager {
   private socket: WebSocket | null = null
+  private connectPromise: Promise<void> | null = null
   private status: ConnectionStatus = ConnectionStatus.DISCONNECTED
   private eventHandlers: EventHandlerMap = new Map()
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private reconnectInterval = 5000
+  private maxReconnectInterval = 30000
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private manualClose = false
-  private lastUserId: number | null = null
+  private lastUserId: string | null = null
+
+  // 心跳：避免服务端按心跳超时清理连接（默认每 60 秒一次）。
+  private heartbeatIntervalMs = 60_000
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
   // 获取WebSocket服务器地址
-  private getWebSocketUrl(userId?: number): string {
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'
+  private getWebSocketUrl(userId?: string): string {
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://127.0.0.1:38000'
     const normalized = wsUrl.replace(/^http/i, 'ws')
-    const resolvedUserId = userId ?? this.lastUserId ?? 0
+    const resolvedUserId = (userId ?? this.lastUserId ?? '').trim() || '0'
     return `${normalized}/api/v1/ws/${resolvedUserId}`
   }
 
   // 连接到WebSocket服务器
-  connect(userId?: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (typeof window === 'undefined') {
-        reject(new Error('WebSocket 只能在浏览器环境中使用'))
-        return
+  connect(userId?: string): Promise<void> {
+    if (typeof window === 'undefined') {
+      return Promise.reject(new Error('WebSocket 只能在浏览器环境中使用'))
+    }
+
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      return Promise.resolve()
+    }
+
+    if (this.status === ConnectionStatus.CONNECTING && this.connectPromise) {
+      return this.connectPromise
+    }
+
+    this.manualClose = false
+    if (typeof userId === 'string' && userId.trim()) {
+      this.lastUserId = userId
+    }
+
+    // 触发主动 connect 时，清理可能残留的重连定时器，避免重复 connect。
+    this.clearReconnectTimer()
+    this.status = ConnectionStatus.CONNECTING
+
+    const url = this.getWebSocketUrl(userId)
+    const accessToken = TokenManager.getAccessToken()
+    if (!accessToken) {
+      this.status = ConnectionStatus.ERROR
+      return Promise.reject(new Error('缺少访问令牌，无法建立 WebSocket 连接'))
+    }
+
+    let settled = false
+    this.connectPromise = new Promise((resolve, reject) => {
+      const finalize = () => {
+        if (settled) return
+        settled = true
+        this.connectPromise = null
       }
 
-      if (this.socket?.readyState === WebSocket.OPEN) {
-        resolve()
-        return
-      }
-
-      this.manualClose = false
-      if (typeof userId === 'number') {
-        this.lastUserId = userId
-      }
-
-      this.status = ConnectionStatus.CONNECTING
-
-      const url = this.getWebSocketUrl(userId)
-      let settled = false
       let socket: WebSocket
-
       try {
-        socket = new WebSocket(url)
+        // ✅ 鉴权：使用 Sec-WebSocket-Protocol 子协议携带 token，避免 token 出现在 URL query 中。
+        // 约定：['inspect-token', '<access_token>']
+        socket = new WebSocket(url, ['inspect-token', accessToken])
       } catch (error) {
         this.status = ConnectionStatus.ERROR
+        finalize()
         reject(error instanceof Error ? error : new Error('WebSocket 初始化失败'))
         return
       }
@@ -117,9 +142,11 @@ class WebSocketManager {
       socket.onopen = () => {
         if (settled) return
         settled = true
+        this.connectPromise = null
         this.status = ConnectionStatus.CONNECTED
         this.reconnectAttempts = 0
         this.clearReconnectTimer()
+        this.startHeartbeat()
         this.dispatchEvent(WebSocketEvents.CONNECT, { status: 'connected' })
         this.dispatchEvent('connection_status', { status: 'connected' })
         resolve()
@@ -133,28 +160,39 @@ class WebSocketManager {
         this.status = ConnectionStatus.ERROR
         this.dispatchEvent(WebSocketEvents.ERROR, { status: 'error' })
         if (!settled) {
-          settled = true
+          finalize()
           reject(new Error('WebSocket 连接失败'))
         }
       }
 
       socket.onclose = (event: CloseEvent) => {
         const reason: DisconnectReason = event.reason || 'connection_closed'
+        this.stopHeartbeat()
         this.status = ConnectionStatus.DISCONNECTED
         this.dispatchEvent(WebSocketEvents.DISCONNECT, { status: 'disconnected', reason })
         this.dispatchEvent('connection_status', { status: 'disconnected', reason })
+
+        // 如果连接在握手阶段就被关闭（未触发 onopen），需要确保 connect() 不会永久挂起。
+        if (!settled) {
+          finalize()
+          reject(new Error('WebSocket 连接已关闭'))
+        }
 
         if (!this.manualClose) {
           this.handleReconnect()
         }
       }
     })
+
+    return this.connectPromise
   }
 
   // 断开连接
   disconnect(): void {
     this.manualClose = true
+    this.connectPromise = null
     this.clearReconnectTimer()
+    this.stopHeartbeat()
 
     if (this.socket) {
       this.socket.close()
@@ -416,11 +454,18 @@ class WebSocketManager {
     this.reconnectAttempts++
     console.log(`WebSocket 重连中... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
 
+    const exponentialDelay = Math.min(
+      this.reconnectInterval * 2 ** Math.max(0, this.reconnectAttempts - 1),
+      this.maxReconnectInterval
+    )
+    const jitter = Math.floor(Math.random() * 1000)
+    const delayMs = exponentialDelay + jitter
+
     this.reconnectTimer = setTimeout(() => {
       this.connect(this.lastUserId ?? undefined).catch(() => {
         // Reconnect failed, will retry
       })
-    }, this.reconnectInterval)
+    }, delayMs)
   }
 
   // 清理重连定时器
@@ -429,6 +474,26 @@ class WebSocketManager {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat()
+
+    // 首次连接立即发一次，尽快与服务端建立“活跃”状态
+    this.sendHeartbeat()
+
+    this.heartbeatTimer = setInterval(() => {
+      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+        return
+      }
+      this.sendHeartbeat()
+    }, this.heartbeatIntervalMs)
+  }
+
+  private stopHeartbeat(): void {
+    if (!this.heartbeatTimer) return
+    clearInterval(this.heartbeatTimer)
+    this.heartbeatTimer = null
   }
 
   // subscribe device monitoring
@@ -473,7 +538,7 @@ export const wsManager = new WebSocketManager()
 // WebSocket Hook
 export function useWebSocket() {
   return useMemo(() => ({
-    connect: (userId?: number) => wsManager.connect(userId),
+    connect: (userId?: string) => wsManager.connect(userId),
     disconnect: () => wsManager.disconnect(),
     on: <T = unknown>(event: string, handler: EventHandler<T>) => wsManager.on(event, handler),
     off: <T = unknown>(event: string, handler?: EventHandler<T>) => wsManager.off(event, handler),
@@ -519,6 +584,32 @@ export function useWebSocketConnection() {
     // 组件卸载时断开连接
     return () => {
       wsManager.disconnect()
+    }
+  }, [isAuthenticated, user?.id])
+
+  // 可靠性增强：窗口聚焦 / 页面可见时，如果断线则尝试重连（幂等）。
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!isAuthenticated || !user?.id) return
+
+    const tryReconnect = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      if (wsManager.isConnected()) return
+      wsManager.connect(user.id).catch(() => {})
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        tryReconnect()
+      }
+    }
+
+    window.addEventListener('focus', tryReconnect)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', tryReconnect)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [isAuthenticated, user?.id])
 

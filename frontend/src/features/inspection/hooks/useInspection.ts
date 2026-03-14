@@ -446,7 +446,7 @@ export const useGenerateReport = () => {
           // 构建完整的下载URL
           // 后端返回的是 /api/v1/reports/files/{filename}
           // 需要通过后端API访问
-          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
           const downloadUrl = result.download_url.startsWith('http') 
             ? result.download_url 
             : `${apiBaseUrl}${result.download_url}`

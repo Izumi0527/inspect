@@ -8,7 +8,8 @@ import {
   CardContent
 } from '@/components/atoms'
 import { useCreateTemplate } from '../hooks/useInspection'
-import type { InspectionTemplate, TemplateCategory } from '../types'
+import { isCheckItemTypeSupported } from '../utils/check-item-support'
+import type { InspectionTemplate, TemplateCategory, CheckItemType } from '../types'
 
 interface Props {
   onClose: () => void
@@ -19,6 +20,40 @@ interface ImportResult {
   name: string
   status: 'success' | 'failed'
   error?: string
+  warning?: string
+}
+
+const normalizeImportedCheckItemType = (
+  rawType: unknown,
+): { type: CheckItemType; warning?: string } => {
+  if (rawType === undefined || rawType === null) {
+    return { type: 'snmp' }
+  }
+  if (typeof rawType !== 'string') {
+    return { type: 'script', warning: '检查项类型不是字符串，已归一为 script' }
+  }
+
+  const normalized = rawType.trim().toLowerCase()
+  if (normalized === '') {
+    return { type: 'snmp' }
+  }
+
+  // 兼容后端/历史数据可能出现的 icmp 类型：前端统一映射为 ping
+  if (normalized === 'icmp') {
+    return { type: 'ping', warning: '检查项类型 icmp 已映射为 ping' }
+  }
+
+  if (
+    normalized === 'snmp' ||
+    normalized === 'ssh' ||
+    normalized === 'http' ||
+    normalized === 'ping' ||
+    normalized === 'script'
+  ) {
+    return { type: normalized }
+  }
+
+  return { type: 'script', warning: `未知检查项类型 '${rawType}' 已归一为 script` }
 }
 
 export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => {
@@ -117,26 +152,53 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
         }
 
         try {
-          // 构建请求数据
+          // 构建请求数据：对检查项类型做归一，并对“后端当前不执行”的类型给出提示（导入仍允许）
+          const unsupportedTypes = new Set<string>()
+          const normalizationWarnings: string[] = []
+
+          const normalizedCheckItems = template.checkItems.map((item: any) => {
+            const { type, warning } = normalizeImportedCheckItemType(item.type)
+            if (warning) normalizationWarnings.push(warning)
+            if (!isCheckItemTypeSupported(type)) unsupportedTypes.add(type)
+
+            return {
+              id: item.id || `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              name: item.name,
+              type,
+              config: item.config || {},
+              weight: item.weight || 1,
+            }
+          })
+
+          let warningMessage: string | undefined
+          if (unsupportedTypes.size > 0 || normalizationWarnings.length > 0) {
+            const parts: string[] = []
+            if (unsupportedTypes.size > 0) {
+              parts.push(`包含当前版本未支持执行的检查项类型（${Array.from(unsupportedTypes).join('、')}），执行时会跳过`)
+            }
+            if (normalizationWarnings.length > 0) {
+              const preview = normalizationWarnings.slice(0, 2).join('；')
+              const suffix = normalizationWarnings.length > 2 ? `（共 ${normalizationWarnings.length} 条）` : ''
+              parts.push(`类型归一提示：${preview}${suffix}`)
+            }
+            parts.push('建议在模板编辑中调整检查类型为 Ping/SNMP')
+            warningMessage = parts.join('。')
+          }
+
           const templateData: Partial<InspectionTemplate> = {
             name: template.name,
             description: template.description || '',
             category: (template.category || 'custom') as TemplateCategory,
             deviceTypes: template.deviceTypes,
-            checkItems: template.checkItems.map((item: any) => ({
-              id: item.id || `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              name: item.name,
-              type: item.type || 'snmp',
-              config: item.config || {},
-              weight: item.weight || 1,
-            })),
+            checkItems: normalizedCheckItems,
             isActive: template.isActive !== false,
           }
           
           await createTemplate.mutateAsync(templateData)
           results.push({
-            name: template.name,
-            status: 'success'
+            name: template.name || '未命名模板',
+            status: 'success',
+            warning: warningMessage
           })
         } catch (error) {
           results.push({
@@ -151,7 +213,9 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
 
       // 如果全部成功,自动关闭并刷新
       const allSuccess = results.every(r => r.status === 'success')
-      if (allSuccess) {
+      const hasAnyWarning = results.some(r => r.status === 'success' && !!r.warning)
+      // 有提示时保留弹窗，便于用户阅读并按建议去调整模板
+      if (allSuccess && !hasAnyWarning) {
         setTimeout(() => {
           onSuccess()
           onClose()
@@ -308,8 +372,13 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
                           }`}>
                             {result.name}
                           </p>
-                          {result.error && (
+                          {result.status === 'failed' && result.error && (
                             <p className="text-sm text-red-700 mt-1">{result.error}</p>
+                          )}
+                          {result.status === 'success' && result.warning && (
+                            <p className="text-xs text-amber-800 mt-1 whitespace-pre-wrap">
+                              提示：{result.warning}
+                            </p>
                           )}
                         </div>
                       </div>

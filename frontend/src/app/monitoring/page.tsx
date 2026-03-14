@@ -5,7 +5,8 @@ import {
   LazyWrapper,
 } from '@/components/lazy/LazyComponents'
 import { ErrorBoundary } from '@/components/error/ErrorBoundary'
-import { useRequireAuth } from '@/lib/contexts/auth-context'
+import { RouteGuard } from '@/lib/components/route-guard'
+import { Permission } from '@/lib/types/auth.types'
 
 /**
  * 监控页面
@@ -17,13 +18,12 @@ import { useRequireAuth } from '@/lib/contexts/auth-context'
 
 export default function MonitoringPage() {
   // ==================== 开发环境认证绕过 ====================
-  // 仅在开发环境启用，生产环境必须认证
-  const DISABLE_AUTH_CHECK = process.env.NEXT_PUBLIC_DISABLE_AUTH_CHECK === 'true'
-
-  // ← 传递 skipRedirect 参数，控制是否跳过自动跳转
-  const { isAuthenticated, isLoading } = useRequireAuth({
-    skipRedirect: DISABLE_AUTH_CHECK
-  })
+  // 仅在开发环境启用，生产/测试环境必须认证（避免误配置导致越权）。
+  // 注意：NEXT_PUBLIC_* 属于构建期注入，若生产构建时误设为 true，会被“固化进产物”；
+  // 因此这里额外要求 NODE_ENV=development 才允许绕过。
+  const DISABLE_AUTH_CHECK =
+    process.env.NODE_ENV === 'development' &&
+    process.env.NEXT_PUBLIC_DISABLE_AUTH_CHECK === 'true'
 
   // 开发环境跳过认证检查
   if (DISABLE_AUTH_CHECK) {
@@ -43,29 +43,13 @@ export default function MonitoringPage() {
     )
   }
 
-  // ==================== 生产环境认证检查 ====================
-  // 正在检查认证状态时显示加载状态
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
-          <p className="text-muted-foreground">验证登录状态...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // 如果未认证,将由useRequireAuth自动重定向到登录页
-  if (!isAuthenticated) {
-    return null
-  }
-
   return (
-    <ErrorBoundary>
-      <LazyWrapper>
-        <LazyMonitoringView />
-      </LazyWrapper>
-    </ErrorBoundary>
+    <RouteGuard requireAuth requiredPermissions={[Permission.MONITORING_READ]}>
+      <ErrorBoundary>
+        <LazyWrapper>
+          <LazyMonitoringView />
+        </LazyWrapper>
+      </ErrorBoundary>
+    </RouteGuard>
   )
 }

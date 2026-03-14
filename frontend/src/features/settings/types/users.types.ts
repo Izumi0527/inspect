@@ -1,5 +1,9 @@
-// 用户角色
-export type UserRole = 'admin' | 'operator' | 'viewer'
+// 内置用户角色（系统默认）
+export type BuiltInUserRole = 'admin' | 'operator' | 'viewer'
+
+// 用户角色（支持自定义角色）
+// 说明：后端角色表允许新增自定义角色，因此这里不能只限制为内置 3 种。
+export type UserRole = BuiltInUserRole | (string & {})
 
 // 用户状态
 export type UserStatus = 'active' | 'inactive' | 'locked'

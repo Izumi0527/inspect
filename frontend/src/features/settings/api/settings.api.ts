@@ -98,120 +98,61 @@ export const userManagementApi = {
   deleteUser: (id: string) =>
     httpClient.delete<void>(`/settings/users/${id}`),
 
-  // 重置用户密码 - 后端暂不支持此端点
-  resetPassword: (_id: string, _newPassword: string) =>
-    Promise.resolve(),
+  // 重置用户密码 - 后端端点: POST /settings/users/:id/change-password
+  resetPassword: async (id: string, newPassword: string) => {
+    await httpClient.post<void>(`/settings/users/${id}/change-password`, { new_password: newPassword })
+  },
 
-  // 锁定/解锁用户 - 后端暂不支持此端点
-  toggleUserLock: (_id: string, _locked: boolean) =>
-    Promise.resolve({} as User),
+  // 锁定/解锁用户 - 后端端点: POST /settings/users/:id/lock | /unlock
+  toggleUserLock: async (id: string, locked: boolean) => {
+    if (locked) {
+      await httpClient.post<void>(`/settings/users/${id}/lock`, {})
+    } else {
+      await httpClient.post<void>(`/settings/users/${id}/unlock`, {})
+    }
+    return httpClient.get<User>(`/settings/users/${id}`)
+  },
 
-  // 获取用户权限 - 后端暂不支持此端点
-  getUserPermissions: (_id: string) =>
-    Promise.resolve([] as Permission[]),
+  // 获取用户权限 - 后端端点: GET /settings/users/:id/permissions
+  getUserPermissions: (id: string) =>
+    httpClient.get<Permission[]>(`/settings/users/${id}/permissions`),
 
   // 批量操作用户 - 后端实际路由: POST /settings/users/batch
   bulkOperation: (operation: UserBulkOperation) =>
     httpClient.post<void>('/settings/users/batch', operation),
 
-  // 批量导入用户 - 后端暂不支持此端点
-  importUsers: (_importData: UserBulkImport) =>
-    Promise.resolve(),
+  // 批量导入用户 - 后端端点: POST /settings/users/import（支持 JSON 或文件）
+  importUsers: (importData: UserBulkImport) =>
+    httpClient.post('/settings/users/import', importData),
 }
 
 // 角色管理API
-// 注意: 后端暂不支持角色管理端点，返回模拟数据
 export const roleManagementApi = {
-  // 获取角色列表 - 后端暂不支持
-  getRoles: () =>
-    Promise.resolve([
-      {
-        id: '1',
-        name: 'admin',
-        displayName: '管理员',
-        description: '系统管理员',
-        permissions: [],
-        userCount: 1,
-        isBuiltIn: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: '2',
-        name: 'operator',
-        displayName: '操作员',
-        description: '普通操作员',
-        permissions: [],
-        userCount: 5,
-        isBuiltIn: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ] as Role[]),
+  // 获取角色列表 - 后端端点: GET /settings/roles
+  getRoles: () => httpClient.get<Role[]>('/settings/roles'),
 
-  // 获取角色详情 - 后端暂不支持
-  getRole: (id: string) =>
-    Promise.resolve({
-      id,
-      name: 'admin',
-      displayName: '管理员',
-      description: '',
-      permissions: [],
-      userCount: 0,
-      isBuiltIn: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    } as Role),
+  // 获取角色详情 - 后端端点: GET /settings/roles/:id
+  getRole: (id: string) => httpClient.get<Role>(`/settings/roles/${id}`),
 
-  // 创建角色 - 后端暂不支持
+  // 创建角色 - 后端端点: POST /settings/roles
   createRole: (data: Omit<Role, 'id' | 'userCount' | 'createdAt' | 'updatedAt'>) =>
-    Promise.resolve({
-      id: Date.now().toString(),
-      ...data,
-      userCount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    } as Role),
+    httpClient.post<Role>('/settings/roles', data),
 
-  // 更新角色 - 后端暂不支持
+  // 更新角色 - 后端端点: PUT /settings/roles/:id
   updateRole: (id: string, data: Partial<Role>) =>
-    Promise.resolve({
-      id,
-      name: '',
-      displayName: '',
-      description: '',
-      permissions: [],
-      userCount: 0,
-      isBuiltIn: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      ...data,
-    } as Role),
+    httpClient.put<Role>(`/settings/roles/${id}`, data),
 
-  // 删除角色 - 后端暂不支持
-  deleteRole: (_id: string) =>
-    Promise.resolve(),
+  // 删除角色 - 后端端点: DELETE /settings/roles/:id
+  deleteRole: (id: string) => httpClient.delete<void>(`/settings/roles/${id}`),
 
-  // 获取所有权限 - 后端暂不支持
-  getPermissions: () =>
-    Promise.resolve([
-      { id: '1', name: 'read', displayName: '读取', description: '读取权限', module: 'system', action: 'read', resource: '*' },
-      { id: '2', name: 'write', displayName: '写入', description: '写入权限', module: 'system', action: 'update', resource: '*' },
-    ] as Permission[]),
+  // 获取所有权限 - 后端端点: GET /settings/permissions
+  getPermissions: () => httpClient.get<Permission[]>('/settings/permissions'),
 
-  // 分配权限给角色 - 后端暂不支持
-  assignPermissions: (roleId: string, _permissionIds: string[]) =>
-    Promise.resolve({
-      id: roleId,
-      name: '',
-      displayName: '',
-      description: '',
-      permissions: [],
-      userCount: 0,
-      isBuiltIn: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    } as Role),
+  // 分配权限给角色（全量覆盖） - 后端端点: POST /settings/roles/:id/permissions
+  assignPermissions: async (roleId: string, permissionIds: string[]) => {
+    await httpClient.post(`/settings/roles/${roleId}/permissions`, { permissionIds })
+    return httpClient.get<Role>(`/settings/roles/${roleId}`)
+  },
 }
 
 // 审计日志API
@@ -254,7 +195,7 @@ export const auditLogApi = {
     const token = typeof window !== 'undefined' ? localStorage.getItem('authData') : null
     const authData = token ? JSON.parse(token) : null
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/settings/audit/logs/export`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'}/api/v1/settings/audit/logs/export`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -77,9 +77,9 @@ func (b *TrapAlertBridge) CreateTrapAlert(
 			Where("id = ?", existing.ID).
 			Updates(map[string]interface{}{
 				"last_occurred":    now,
-				"message":         message,
+				"message":          message,
 				"occurrence_count": gorm.Expr("COALESCE(occurrence_count, 0) + 1"),
-				"updated_at":      now,
+				"updated_at":       now,
 			}).Error
 	}
 
@@ -108,7 +108,7 @@ func (b *TrapAlertBridge) CreateTrapAlert(
 
 	// WebSocket 推送
 	if b.wsManager != nil {
-		b.wsManager.Broadcast(ws.Message{
+		b.wsManager.SendToRoom("alerts", ws.Message{
 			Type: ws.MessageAlert,
 			Data: map[string]interface{}{
 				"id":        alert.ID,

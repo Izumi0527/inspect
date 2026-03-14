@@ -5,9 +5,11 @@
 
 import { useState } from 'react'
 import type { InspectionCheckItem } from '../types'
+import { isCheckItemTypeSupported } from '../utils/check-item-support'
 
 // 兼容旧版 CheckItem 类型
-type CheckItem = InspectionCheckItem & {
+type CheckItem = Omit<InspectionCheckItem, 'type'> & {
+  type: string
   description?: string
   enabled?: boolean
   config?: {
@@ -45,8 +47,10 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const TYPE_LABELS: Record<string, string> = {
   snmp: 'SNMP',
+  ping: 'Ping',
   ssh: 'SSH',
   http: 'HTTP',
+  script: '脚本',
   icmp: 'ICMP',
 }
 
@@ -109,7 +113,12 @@ export function CheckItemGroup({
                     <span className="text-xs bg-gray-200 text-foreground/90 px-2 py-0.5 rounded">
                       {TYPE_LABELS[item.type] || item.type}
                     </span>
-                    {!item.enabled && (
+                    {item.type !== 'icmp' && !isCheckItemTypeSupported(item.type as any) && (
+                      <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                        未支持执行
+                      </span>
+                    )}
+                    {item.enabled === false && (
                       <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
                         已禁用
                       </span>

@@ -188,7 +188,7 @@ func (s *Service) GetPermissionsByRole(ctx context.Context, role string) ([]stri
 		result = append(result, item.Name)
 	}
 
-	return result, nil
+	return NormalizePermissionList(result), nil
 }
 
 func (s *Service) CreateAccessToken(username string, sid string, expireMinutes int) (string, int, error) {

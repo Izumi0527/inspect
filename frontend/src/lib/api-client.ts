@@ -56,7 +56,7 @@ const buildSearchParams = (params: QueryParams): URLSearchParams => {
 }
 
 // API配置
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
 const API_PREFIX = '/api/v1'
 
 // 请求超时时间

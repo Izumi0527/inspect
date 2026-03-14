@@ -5,7 +5,17 @@ import { AlertsView } from '@/features/alerts/components/AlertsView'
 const mockHandleAcknowledgeAlert = jest.fn<Promise<void>, [string, (string | undefined)?]>()
 const mockLoadAlerts = jest.fn<Promise<void>, []>()
 const mockLoadStats = jest.fn<Promise<void>, []>()
-const wsHandlers = new Map<string, (payload?: unknown) => void>()
+const mockWsHandlers = new Map<string, (payload?: unknown) => void>()
+const mockWs = {
+  isConnected: jest.fn(() => true),
+  subscribeToAlerts: jest.fn(),
+  unsubscribeFromAlerts: jest.fn(),
+}
+let mockCanReadAlerts = true
+
+jest.mock('@/lib/contexts/auth-context', () => ({
+  usePermission: () => mockCanReadAlerts,
+}))
 
 jest.mock('@/features/alerts/hooks/useAlerts', () => ({
   useAlerts: () => ({
@@ -137,12 +147,14 @@ jest.mock('@/components/ui/dropdown-menu', () => ({
 
 jest.mock('@/lib/websocket', () => ({
   WebSocketEvents: {
+    CONNECT: 'connect',
     NEW_ALERT: 'new_alert',
     ALERT_UPDATE: 'alert_update',
     ALERT_RESOLVED: 'alert_resolved',
   },
+  useWebSocket: () => mockWs,
   useWebSocketEvent: (event: string, handler: (payload?: unknown) => void) => {
-    wsHandlers.set(event, handler)
+    mockWsHandlers.set(event, handler)
   },
 }))
 
@@ -152,10 +164,33 @@ jest.mock('@/features/alerts/api/alerts.api', () => ({
 
 describe('AlertsView', () => {
   beforeEach(() => {
-    wsHandlers.clear()
+    mockWsHandlers.clear()
+    mockWs.isConnected.mockReturnValue(true)
+    mockWs.subscribeToAlerts.mockClear()
+    mockWs.unsubscribeFromAlerts.mockClear()
+    mockCanReadAlerts = true
     mockHandleAcknowledgeAlert.mockResolvedValue(undefined)
     mockLoadAlerts.mockResolvedValue(undefined)
     mockLoadStats.mockResolvedValue(undefined)
+  })
+
+  it('挂载时应订阅 alerts 房间，卸载时应取消订阅', () => {
+    const { unmount } = render(<AlertsView />)
+
+    expect(mockWs.subscribeToAlerts).toHaveBeenCalledTimes(1)
+
+    unmount()
+    expect(mockWs.unsubscribeFromAlerts).toHaveBeenCalledTimes(1)
+  })
+
+  it('无 alerts:read 权限时应显示无权限提示且不订阅房间', () => {
+    mockCanReadAlerts = false
+
+    render(<AlertsView />)
+
+    expect(screen.getByText('无权限访问告警中心')).toBeInTheDocument()
+    expect(mockWs.subscribeToAlerts).toHaveBeenCalledTimes(0)
+    expect(screen.queryByRole('button', { name: '触发单条确认' })).not.toBeInTheDocument()
   })
 
   it('单条确认后应刷新列表和统计', async () => {
@@ -179,7 +214,7 @@ describe('AlertsView', () => {
       expect(mockLoadStats).toHaveBeenCalledTimes(1)
     })
 
-    const updateHandler = wsHandlers.get('alert_update')
+    const updateHandler = mockWsHandlers.get('alert_update')
     expect(updateHandler).toBeDefined()
     await act(async () => {
       updateHandler?.({ id: '1', status: 'acknowledged' })

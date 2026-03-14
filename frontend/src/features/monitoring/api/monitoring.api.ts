@@ -1,4 +1,5 @@
-﻿import { api } from '@/lib/api-client'
+import { api, ApiClientError } from '@/lib/api-client'
+import { format } from 'date-fns'
 import {
   SystemPerformanceDataPoint,
   TemperatureDataPoint,
@@ -17,6 +18,37 @@ import {
  * 监控模块 API 接口
  * 已连接真实后端API - 支持实时数据更新
  */
+
+function normalizeAlertSeverity(raw: unknown): Alert['severity'] {
+  const normalized = String(raw ?? '').toLowerCase().trim()
+  if (normalized === 'critical') return 'critical'
+  if (normalized === 'warning') return 'warning'
+  if (normalized === 'info') return 'info'
+
+  // 兼容后端/采集侧可能出现的级别
+  if (
+    normalized === 'fatal' ||
+    normalized === 'emergency' ||
+    normalized === 'error' ||
+    normalized === 'high'
+  ) {
+    return 'critical'
+  }
+  if (normalized === 'warn' || normalized === 'medium') {
+    return 'warning'
+  }
+
+  return 'info'
+}
+
+function formatAlertTime(raw: unknown): string {
+  const date = raw instanceof Date ? raw : new Date(String(raw ?? ''))
+  if (Number.isNaN(date.getTime())) {
+    const fallback = String(raw ?? '').trim()
+    return fallback !== '' ? fallback : '-'
+  }
+  return format(date, 'yyyy-MM-dd HH:mm')
+}
 
 /**
  * 格式化带宽值（bps），自动选择合适的单位
@@ -106,8 +138,24 @@ export interface ExportMonitoringReportResponse {
   generated_at: string
   /** 下载链接 */
   download_url: string
+  /** 下载票据（大文件下载优先使用 form POST，避免 blob 占用内存） */
+  download_token?: string
+  /** 票据下载地址（用于 form POST），未提供时可回退使用 download_url */
+  download_form_url?: string
+  /** 票据过期时间（RFC3339），仅用于展示/调试 */
+  download_token_expires_at?: string
+  /** 票据最大使用次数（用于兼容断点续传/重试） */
+  download_token_max_uses?: number
   /** 状态 */
   status: string
+}
+
+export interface CheckMonitoringReportDownloadTokenResponse {
+  valid: boolean
+  message?: string
+  filename?: string
+  expires_at?: string
+  remaining_uses?: number
 }
 
 /**
@@ -119,6 +167,15 @@ export const exportMonitoringReport = async (
   params: ExportMonitoringReportParams
 ): Promise<ExportMonitoringReportResponse> => {
   return await api.post<ExportMonitoringReportResponse>('/monitoring/reports/export', params)
+}
+
+export const checkMonitoringReportDownloadToken = async (
+  token: string
+): Promise<CheckMonitoringReportDownloadTokenResponse> => {
+  return await api.post<CheckMonitoringReportDownloadTokenResponse>(
+    '/monitoring/reports/download/check',
+    { token }
+  )
 }
 
 /**
@@ -338,13 +395,19 @@ export async function fetchRealtimeAlerts(limit: number = 10): Promise<Alert[]> 
       : Array.isArray(response) ? response
       : []
 
-    return alertList.slice(0, limit).map((alert: any) => ({
-      id: alert.id ?? alert.alert_id ?? 0,
-      deviceName: alert.device_name ?? alert.device ?? alert.deviceName ?? alert.source ?? '未知设备',
-      message: alert.message ?? alert.description ?? alert.title ?? '',
-      severity: (alert.severity ?? alert.level ?? 'info') as 'critical' | 'warning' | 'info',
-      time: alert.time ?? alert.timestamp ?? alert.created_at ?? new Date().toISOString(),
-    }))
+    return alertList.slice(0, limit).map((alert: any) => {
+      const rawTime = alert.time ?? alert.timestamp ?? alert.created_at ?? new Date().toISOString()
+      const rawId = alert.id ?? alert.alert_id ?? alert.alertId ?? 0
+      const parsedId = typeof rawId === 'number' ? rawId : Number(String(rawId))
+      const id = Number.isFinite(parsedId) ? parsedId : 0
+      return {
+        id,
+        deviceName: alert.device_name ?? alert.device ?? alert.deviceName ?? alert.source ?? '未知设备',
+        message: alert.message ?? alert.description ?? alert.title ?? '',
+        severity: normalizeAlertSeverity(alert.severity ?? alert.level ?? alert.priority ?? 'info'),
+        time: formatAlertTime(rawTime),
+      }
+    })
   } catch (error) {
     console.error('获取实时告警失败:', error)
     throw error instanceof Error ? error : new Error('获取实时告警失败')
@@ -359,6 +422,329 @@ export async function fetchRealtimeAlerts(limit: number = 10): Promise<Alert[]> 
 export async function fetchMonitoringDataV2(
   timeRange: string = '24h'
 ): Promise<MonitoringDataEnvelope> {
+  const MONITORING_SECTION_KEYS: MonitoringSectionKey[] = [
+    'stats',
+    'systemPerformance',
+    'temperature',
+    'deviceStatus',
+    'availability',
+    'networkTraffic',
+    'realtimeAlerts',
+  ]
+
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+
+  const normalizeSectionStatus = (
+    key: MonitoringSectionKey,
+    raw: unknown
+  ): MonitoringSectionStates[MonitoringSectionKey] => {
+    const fallbackMessages: Record<MonitoringSectionKey, string> = {
+      stats: '统计指标加载失败',
+      systemPerformance: '系统性能数据加载失败',
+      temperature: '温度数据加载失败',
+      deviceStatus: '设备状态分布加载失败',
+      availability: '可用性数据加载失败',
+      networkTraffic: '网络流量数据加载失败',
+      realtimeAlerts: '实时告警加载失败',
+    }
+
+    if (!isRecord(raw)) {
+      return { ok: false, message: `后端响应缺少 ${key} 分区状态` }
+    }
+
+    const ok = raw.ok === true ? true : raw.ok === false ? false : false
+    const message =
+      typeof raw.message === 'string' && raw.message.trim() !== ''
+        ? raw.message.trim()
+        : ok
+          ? undefined
+          : fallbackMessages[key]
+
+    const limitedByPermission = raw.limitedByPermission === true
+    const requiredPermission =
+      typeof raw.requiredPermission === 'string' ? raw.requiredPermission.trim() : ''
+
+    return {
+      ok: limitedByPermission ? true : ok,
+      message,
+      limitedByPermission: limitedByPermission ? true : undefined,
+      requiredPermission: requiredPermission !== '' ? requiredPermission : undefined,
+    }
+  }
+
+  const normalizeMonitoringData = (raw: unknown): MonitoringDataV2 => {
+    const nowIso = new Date().toISOString()
+
+    const toNumber = (value: unknown, fallback: number): number => {
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : fallback
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (trimmed === '') return fallback
+        const parsed = Number(trimmed)
+        return Number.isFinite(parsed) ? parsed : fallback
+      }
+      return fallback
+    }
+
+    const toNonEmptyString = (value: unknown): string => {
+      if (typeof value === 'string') return value.trim()
+      if (value === null || value === undefined) return ''
+      return String(value).trim()
+    }
+
+    const normalizeTimestamp = (value: unknown): string => {
+      if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return value.toISOString()
+      }
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        const date = new Date(value)
+        if (!Number.isNaN(date.getTime())) {
+          return date.toISOString()
+        }
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (trimmed !== '') {
+          const date = new Date(trimmed)
+          if (!Number.isNaN(date.getTime())) {
+            return trimmed
+          }
+        }
+      }
+      return nowIso
+    }
+
+    if (!isRecord(raw)) {
+      return {
+        systemPerformance: [],
+        temperatureHistory: [],
+        deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
+        availability: { current: 0, target: 99.9, trend: 'stable' },
+        networkTrafficHistory: [],
+        statsV2: [],
+        realtimeAlerts: [],
+        lastUpdate: nowIso,
+      }
+    }
+
+    const normalizeTrend = (value: unknown): AvailabilityData['trend'] => {
+      const normalized = typeof value === 'string' ? value.trim().toLowerCase() : ''
+      if (normalized === 'up' || normalized === 'down' || normalized === 'stable') {
+        return normalized
+      }
+      return 'stable'
+    }
+
+    const availabilityRaw = raw.availability
+    const availability = isRecord(availabilityRaw)
+      ? {
+          current: toNumber(availabilityRaw.current, 0),
+          target: toNumber(availabilityRaw.target, 99.9),
+          trend: normalizeTrend(availabilityRaw.trend),
+          lastUpdate: isRecord(availabilityRaw) ? normalizeTimestamp(availabilityRaw.lastUpdate) : undefined,
+        }
+      : { current: 0, target: 99.9, trend: 'stable' as const }
+
+    const distRaw = raw.deviceStatusDistribution
+    const deviceStatusDistribution = isRecord(distRaw)
+      ? {
+          healthy: toNumber(distRaw.healthy, 0),
+          warning: toNumber(distRaw.warning, 0),
+          critical: toNumber(distRaw.critical, 0),
+          offline: toNumber(distRaw.offline, 0),
+        }
+      : { healthy: 0, warning: 0, critical: 0, offline: 0 }
+
+    const normalizeSystemPerformance = (value: unknown): SystemPerformanceDataPoint[] => {
+      if (!Array.isArray(value)) return []
+
+      const out: SystemPerformanceDataPoint[] = []
+      for (const item of value) {
+        if (!isRecord(item)) continue
+        out.push({
+          timestamp: normalizeTimestamp(item.timestamp ?? item.time),
+          cpu: toNumber(item.cpu ?? item.cpu_usage, 0),
+          memory: toNumber(item.memory ?? item.memory_usage, 0),
+          network: toNumber(item.network ?? item.network_traffic, 0),
+        })
+      }
+
+      return out
+    }
+
+    const normalizeTemperatureHistory = (value: unknown): TemperatureDataPoint[] => {
+      if (!Array.isArray(value)) return []
+
+      const out: TemperatureDataPoint[] = []
+      for (const item of value) {
+        if (!isRecord(item)) continue
+
+        const devicesRaw = item.devices ?? item.temperatures
+        const devices: Record<string, number> = {}
+        if (isRecord(devicesRaw)) {
+          for (const [key, rawValue] of Object.entries(devicesRaw)) {
+            const name = String(key).trim()
+            if (name === '') continue
+            const temp = toNumber(rawValue, NaN)
+            if (!Number.isFinite(temp)) continue
+            devices[name] = temp
+          }
+        }
+
+        out.push({
+          timestamp: normalizeTimestamp(item.timestamp ?? item.time),
+          devices,
+        })
+      }
+
+      return out
+    }
+
+    const normalizeNetworkTrafficHistory = (value: unknown): NetworkTrafficDataPoint[] => {
+      if (!Array.isArray(value)) return []
+
+      const out: NetworkTrafficDataPoint[] = []
+      for (const item of value) {
+        if (!isRecord(item)) continue
+        out.push({
+          timestamp: normalizeTimestamp(item.timestamp ?? item.time),
+          inbound: toNumber(item.inbound ?? item.in ?? item.rx, 0),
+          outbound: toNumber(item.outbound ?? item.out ?? item.tx, 0),
+        })
+      }
+
+      return out
+    }
+
+    const normalizeStatsV2 = (value: unknown): StatCardData[] => {
+      if (!Array.isArray(value)) return []
+
+      const out: StatCardData[] = []
+      value.forEach((item, index) => {
+        if (!isRecord(item)) return
+
+        const id = toNonEmptyString(item.id) || `stat_${index}`
+        const title = toNonEmptyString(item.title ?? item.name) || ''
+
+        const rawValue = (item as Record<string, unknown>).value
+        const normalizedValue =
+          typeof rawValue === 'number' && Number.isFinite(rawValue) ? rawValue : toNonEmptyString(rawValue)
+
+        const change = toNonEmptyString(item.change)
+        const trendRaw = toNonEmptyString(item.trend).toLowerCase()
+        const trend = trendRaw === 'up' || trendRaw === 'down' || trendRaw === 'stable' ? (trendRaw as StatCardData['trend']) : undefined
+
+        out.push({
+          id,
+          title,
+          value: normalizedValue,
+          change: change !== '' ? change : undefined,
+          trend,
+        })
+      })
+
+      return out
+    }
+
+    const normalizeRealtimeAlerts = (value: unknown): Alert[] => {
+      if (!Array.isArray(value)) return []
+
+      const out: Alert[] = []
+      for (const item of value) {
+        if (!isRecord(item)) continue
+
+        const rawTime = item.time ?? item.timestamp ?? item.created_at
+        const rawId = item.id ?? item.alert_id ?? item.alertId ?? 0
+        const parsedId = typeof rawId === 'number' ? rawId : Number(String(rawId))
+        const id = Number.isFinite(parsedId) ? parsedId : undefined
+
+        out.push({
+          id,
+          deviceName: toNonEmptyString(item.deviceName ?? item.device_name ?? item.device ?? item.source) || '未知设备',
+          message: toNonEmptyString(item.message ?? item.description ?? item.title),
+          severity: normalizeAlertSeverity(item.severity ?? item.level ?? item.priority ?? 'info'),
+          time: formatAlertTime(rawTime),
+        })
+      }
+
+      return out
+    }
+
+    return {
+      systemPerformance: normalizeSystemPerformance(raw.systemPerformance),
+      temperatureHistory: normalizeTemperatureHistory(raw.temperatureHistory),
+      deviceStatusDistribution,
+      availability,
+      networkTrafficHistory: normalizeNetworkTrafficHistory(raw.networkTrafficHistory),
+      statsV2: normalizeStatsV2(raw.statsV2),
+      realtimeAlerts: normalizeRealtimeAlerts(raw.realtimeAlerts),
+      lastUpdate: toNonEmptyString(raw.lastUpdate) || nowIso,
+    }
+  }
+
+  const normalizeEnvelope = (raw: unknown): MonitoringDataEnvelope => {
+    if (!isRecord(raw)) {
+      throw new Error('监控数据加载失败')
+    }
+
+    const sectionsRaw = raw.sections
+    const normalizedSections = MONITORING_SECTION_KEYS.reduce((acc, key) => {
+      const value = isRecord(sectionsRaw) ? sectionsRaw[key] : undefined
+      acc[key] = normalizeSectionStatus(key, value)
+      return acc
+    }, {} as MonitoringSectionStates)
+
+    const failedRaw = raw.failedSections
+    const failed = Array.isArray(failedRaw)
+      ? failedRaw.map((item) => String(item)).filter((key): key is MonitoringSectionKey => (MONITORING_SECTION_KEYS as string[]).includes(key))
+      : []
+
+    const computedFailed = MONITORING_SECTION_KEYS.filter((key) => {
+      const status = normalizedSections[key]
+      if (status.limitedByPermission) return false
+      return status.ok === false
+    })
+
+    const failedSections = failed.length > 0 ? failed : computedFailed
+    const hasPartialFailure = raw.hasPartialFailure === true || failedSections.length > 0
+    const lastUpdate =
+      typeof raw.lastUpdate === 'string' && raw.lastUpdate.trim() !== ''
+        ? raw.lastUpdate
+        : new Date().toISOString()
+
+    return {
+      data: normalizeMonitoringData(raw.data),
+      sections: normalizedSections,
+      hasPartialFailure,
+      failedSections,
+      lastUpdate,
+    }
+  }
+
+  // 优先使用后端聚合接口（减少扇出请求）；当后端尚未升级时自动回退到旧逻辑。
+  try {
+    const raw = await api.post<unknown>('/monitoring/dashboard/v2', {
+      time_range: timeRange,
+      alerts_limit: 10,
+    })
+    return normalizeEnvelope(raw)
+  } catch (error) {
+    if (error instanceof ApiClientError && error.status === 404) {
+      return await fetchMonitoringDataV2Legacy(timeRange)
+    }
+
+    console.error('获取监控数据失败:', error)
+    if (error instanceof Error && error.message.includes('监控数据加载失败')) {
+      throw error
+    }
+    throw new Error('监控数据加载失败')
+  }
+}
+
+async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<MonitoringDataEnvelope> {
   const toErrorMessage = (reason: unknown, fallback: string) => {
     if (reason instanceof Error && reason.message.trim() !== '') {
       return reason.message

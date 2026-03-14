@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { format } from 'date-fns'
 import { LineChartComponent } from '@/components/atoms/charts'
 import type { TemperatureDataPoint } from '../../types'
 
@@ -8,6 +9,8 @@ interface TemperatureChartProps {
   showLegend?: boolean
   className?: string
   temperatureThreshold?: number // 温度阈值,超过此值高亮显示
+  /** 时间范围（用于 x 轴标签格式优化） */
+  timeRange?: string
 }
 
 /**
@@ -24,7 +27,28 @@ export function TemperatureChart({
   showLegend = true,
   className,
   temperatureThreshold = 75, // 默认75°C为阈值
+  timeRange,
 }: TemperatureChartProps) {
+  const showDateOnAxis = useMemo(() => {
+    const trimmed = String(timeRange ?? '').trim().toLowerCase()
+    const match = /^(\d+)([hdw])$/.exec(trimmed)
+    if (!match) return false
+    const value = Number.parseInt(match[1], 10)
+    const unit = match[2]
+    if (!Number.isFinite(value) || value <= 0) return false
+    return !(unit === 'h' && value <= 24)
+  }, [timeRange])
+
+  const formatTimeLabel = useMemo(() => {
+    return (date: Date): string => {
+      if (Number.isNaN(date.getTime())) return '-'
+      if (!showDateOnAxis) {
+        return format(date, 'HH:mm')
+      }
+      return format(date, 'MM-dd HH:mm')
+    }
+  }, [showDateOnAxis])
+
   // 预定义的设备颜色 - 更鲜艳的配色
   const deviceColors = [
     '#8B5CF6', // 紫色
@@ -51,10 +75,7 @@ export function TemperatureChart({
     // 转换数据格式
     const transformed = data.map((point) => {
       const date = new Date(point.timestamp)
-      const timeLabel = date.toLocaleTimeString('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+      const timeLabel = formatTimeLabel(date)
 
       const dataPoint: Record<string, string | number> = {
         time: timeLabel,
@@ -72,7 +93,7 @@ export function TemperatureChart({
       chartData: transformed,
       deviceNames: limitedDeviceNames,
     }
-  }, [data])
+  }, [data, formatTimeLabel])
 
   // 配置设备温度曲线
   const lines = useMemo(() => {

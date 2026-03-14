@@ -141,7 +141,7 @@ func (b *SyslogAlertBridge) CreateSyslogAlert(ctx context.Context, input logs.Sy
 
 	// WebSocket 推送（仅新建时推送，与 Trap 行为保持一致）
 	if b.wsManager != nil {
-		b.wsManager.Broadcast(ws.Message{
+		b.wsManager.SendToRoom("alerts", ws.Message{
 			Type: ws.MessageAlert,
 			Data: map[string]interface{}{
 				"id":        alert.ID,
@@ -212,7 +212,7 @@ func (b *SyslogAlertBridge) upsertStormAlert(ctx context.Context, deviceID int, 
 
 	// 新建风暴告警也推送，方便前端即时提示。
 	if b.wsManager != nil {
-		b.wsManager.Broadcast(ws.Message{
+		b.wsManager.SendToRoom("alerts", ws.Message{
 			Type: ws.MessageAlert,
 			Data: map[string]interface{}{
 				"id":        id,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useUserManagement } from '../../hooks/useUserManagement'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,14 +22,14 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import type { User, UserRole, UserStatus } from '../../types/users.types'
+import type { BuiltInUserRole, User, UserStatus } from '../../types/users.types'
 import type { Role } from '../../types/users.types'
 import { UserFormDialog } from './UserFormDialog'
 import { UserPasswordDialog } from './UserPasswordDialog'
 import { UserPermissionsDialog } from './UserPermissionsDialog'
 
-// 角色映射
-const roleLabels: Record<UserRole, string> = {
+// 内置角色映射（后端支持自定义角色，这里仅作为兜底）
+const builtInRoleLabels: Record<BuiltInUserRole, string> = {
   admin: '管理员',
   operator: '操作员',
   viewer: '查看者',
@@ -92,6 +92,20 @@ export function UserManagement() {
         { id: 'operator', name: 'operator', displayName: '操作员', description: '普通操作员', permissions: [], userCount: 0 },
         { id: 'viewer', name: 'viewer', displayName: '只读用户', description: '只读权限', permissions: [], userCount: 0 },
       ]
+
+  const roleLabelByName = useMemo(() => {
+    const map = new Map<string, string>()
+    effectiveRoles.forEach((r) => {
+      const key = String(r.name || '').trim()
+      if (!key) return
+      map.set(key, r.displayName || key)
+    })
+    // 内置角色兜底
+    Object.entries(builtInRoleLabels).forEach(([k, v]) => {
+      if (!map.has(k)) map.set(k, v)
+    })
+    return map
+  }, [effectiveRoles])
 
   // 处理搜索
   const handleSearch = useCallback(() => {
@@ -327,7 +341,7 @@ export function UserManagement() {
                   <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
                   <td className="px-4 py-3 text-muted-foreground">{user.fullName}</td>
                   <td className="px-4 py-3">
-                    <Badge variant="secondary">{roleLabels[user.role]}</Badge>
+                    <Badge variant="secondary">{roleLabelByName.get(user.role) || user.role}</Badge>
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={user.status} />

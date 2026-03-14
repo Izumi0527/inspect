@@ -80,8 +80,12 @@ func requirePermission(c echo.Context, authService PermissionService, permission
 }
 
 func hasPermission(permission string, permissions []string) bool {
+	required := auth.NormalizePermissionName(permission)
+	if required == "" {
+		return true
+	}
 	for _, item := range permissions {
-		if item == permission {
+		if auth.NormalizePermissionName(item) == required {
 			return true
 		}
 	}

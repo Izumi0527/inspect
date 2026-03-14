@@ -1,4 +1,7 @@
+'use client'
+
 import { motion } from 'framer-motion'
+import { useRouter } from 'next/navigation'
 import { cn } from '@/utils/cn'
 import type { Alert } from '../../types'
 
@@ -32,8 +35,17 @@ export function RealTimeAlertsCard({
   maxItems = 5,
   className,
 }: RealTimeAlertsCardProps) {
+  const router = useRouter()
   const displayAlerts = alerts.slice(0, maxItems)
   const criticalCount = alerts.filter(a => a.severity === 'critical').length
+
+  const openAlertCenter = (alertId?: number) => {
+    if (typeof alertId === 'number' && Number.isFinite(alertId) && alertId > 0) {
+      router.push(`/alerts?id=${alertId}`)
+      return
+    }
+    router.push('/alerts')
+  }
 
   return (
     <motion.div
@@ -76,6 +88,15 @@ export function RealTimeAlertsCard({
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.2, delay: index * 0.04 }}
                   className="group flex cursor-pointer items-start gap-3 rounded-lg bg-muted/40 p-3 transition-colors duration-150 hover:bg-muted/60 dark:bg-card/60 dark:hover:bg-card/80"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openAlertCenter(alert.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      openAlertCenter(alert.id)
+                    }
+                  }}
                 >
                   {/* 严重程度 badge */}
                   <span className={cn(
@@ -109,7 +130,10 @@ export function RealTimeAlertsCard({
 
         {alerts.length > maxItems && (
           <div className="mt-3 border-t border-border/60 pt-3 text-center dark:border-border">
-            <button className="cursor-pointer text-sm font-medium text-primary transition-colors duration-150 hover:text-primary/80">
+            <button
+              className="cursor-pointer text-sm font-medium text-primary transition-colors duration-150 hover:text-primary/80"
+              onClick={() => openAlertCenter()}
+            >
               查看全部 {alerts.length} 条告警 →
             </button>
           </div>

@@ -1,6 +1,7 @@
 import { useQuery, UseQueryResult } from '@tanstack/react-query'
 import { fetchMonitoringDataV2 } from '../api/monitoring.api'
 import type { MonitoringDataEnvelope } from '../types'
+import { useAuth } from '@/lib/contexts/auth-context'
 
 /**
  * 监控中心 v2 自定义 Hook
@@ -51,6 +52,8 @@ interface UseMonitoringV2Options {
 export function useMonitoringV2(
   options: UseMonitoringV2Options = {}
 ): UseQueryResult<MonitoringDataEnvelope, Error> {
+  const { user } = useAuth()
+  const userCacheKey = user?.id ? `user:${user.id}` : 'user:anonymous'
   const {
     timeRange = '24h',
     refetchInterval = 120000, // 默认 2 分钟 (120秒) - 比后端采集快，确保及时获取新数据
@@ -58,10 +61,10 @@ export function useMonitoringV2(
   } = options
 
   return useQuery<MonitoringDataEnvelope, Error>({
-    queryKey: ['monitoring-v2', timeRange],
+    // 按用户隔离缓存，避免同一浏览器内切换账号时短暂展示上一账号的监控数据。
+    queryKey: ['monitoring-v2', userCacheKey, timeRange],
 
     queryFn: async () => {
-      console.log('[useMonitoringV2] Fetching data from real API, timeRange:', timeRange)
       return await fetchMonitoringDataV2(timeRange)
     },
 
@@ -80,17 +83,8 @@ export function useMonitoringV2(
     // 陈旧时间 (1 分钟后标记为陈旧)
     staleTime: 60 * 1000,
 
-    // 重试配置 - 最多重试 3 次
-    retry: (failureCount, error) => {
-      if (failureCount >= 3) return false
-
-      // 如果是网络错误，重试
-      if (error instanceof Error && error.message.includes('网络')) {
-        return true
-      }
-
-      return false
-    },
+    // 重试配置（避免与底层 HttpClient 的重试叠加过多，这里仅做一次兜底重试）
+    retry: (failureCount) => failureCount < 1,
 
     // 重试延迟（指数退避）
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),

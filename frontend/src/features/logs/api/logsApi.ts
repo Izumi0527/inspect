@@ -214,7 +214,7 @@ export async function batchDeleteLogs(logIds: number[]): Promise<{ deleted_count
  */
 export async function exportLogs(params: LogExportParams): Promise<Blob> {
   // NOTE: 后端导出接口返回的是文件流（CSV/XLSX），不能走 api-client 的 JSON 解析。
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
   const searchParams = new URLSearchParams()
 
   if (params.device_id) searchParams.append('device_id', String(params.device_id))

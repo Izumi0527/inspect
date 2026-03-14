@@ -31,6 +31,7 @@ import {
   CardContent
 } from '@/components/atoms'
 import { useCreateTemplate, useUpdateTemplate } from '../hooks/useInspection'
+import { isCheckItemTypeSupported } from '../utils/check-item-support'
 import type { InspectionTemplate, InspectionCheckItem, CheckItemType, TemplateCategory } from '../types'
 
 // ============================================================================
@@ -102,13 +103,15 @@ const DEVICE_TYPE_OPTIONS = [
   { value: 'wireless', label: '无线设备', icon: '📡' }
 ]
 
-const CHECK_TYPE_OPTIONS: { value: CheckItemType; label: string; description: string; icon: string }[] = [
-  { value: 'snmp', label: 'SNMP', description: '通过 SNMP 协议获取设备信息', icon: '📊' },
-  { value: 'ssh', label: 'SSH', description: '通过 SSH 执行命令获取信息', icon: '💻' },
-  { value: 'http', label: 'HTTP', description: '通过 HTTP 接口获取信息', icon: '🌍' },
-  { value: 'ping', label: 'Ping', description: '检测设备连通性', icon: '📶' },
-  { value: 'script', label: 'Script', description: '执行自定义脚本', icon: '📜' }
+const CHECK_TYPE_OPTIONS: { value: CheckItemType; label: string; description: string; icon: string; supported: boolean }[] = [
+  { value: 'snmp', label: 'SNMP', description: '通过 SNMP 协议获取设备信息', icon: '📊', supported: isCheckItemTypeSupported('snmp') },
+  { value: 'ping', label: 'Ping', description: '检测设备连通性', icon: '📶', supported: isCheckItemTypeSupported('ping') },
+  { value: 'ssh', label: 'SSH', description: '通过 SSH 执行命令获取信息（当前版本不执行）', icon: '💻', supported: isCheckItemTypeSupported('ssh') },
+  { value: 'http', label: 'HTTP', description: '通过 HTTP 接口获取信息（当前版本不执行）', icon: '🌍', supported: isCheckItemTypeSupported('http') },
+  { value: 'script', label: 'Script', description: '执行自定义脚本（当前版本不执行）', icon: '📜', supported: isCheckItemTypeSupported('script') }
 ]
+
+const OID_PATTERN = /^[0-9]+(\.[0-9]+)*$/
 
 // 预设检查项模板
 const PRESET_CHECK_ITEMS: Record<string, InspectionCheckItem[]> = {
@@ -119,14 +122,14 @@ const PRESET_CHECK_ITEMS: Record<string, InspectionCheckItem[]> = {
     { id: 'interfaces', name: '接口状态', type: 'snmp', weight: 2, config: { oid: '1.3.6.1.2.1.2.2.1.8' } }
   ],
   system: [
-    { id: 'cpu', name: 'CPU 负载', type: 'ssh', weight: 3, config: { command: 'top -bn1 | grep "Cpu(s)"', threshold: { warning: 70, critical: 90 } } },
-    { id: 'memory', name: '内存使用', type: 'ssh', weight: 3, config: { command: 'free -m', threshold: { warning: 80, critical: 95 } } },
-    { id: 'disk', name: '磁盘使用', type: 'ssh', weight: 2, config: { command: 'df -h', threshold: { warning: 80, critical: 90 } } }
+    { id: 'ping', name: '设备连通性', type: 'ping', weight: 1, config: {} },
+    { id: 'cpu', name: 'CPU 使用率', type: 'snmp', weight: 3, config: { threshold: { warning: 70, critical: 90 } } },
+    { id: 'memory', name: '内存使用率', type: 'snmp', weight: 3, config: { threshold: { warning: 80, critical: 95 } } },
+    { id: 'uptime', name: '系统运行时间', type: 'snmp', weight: 1, config: {} }
   ],
   security: [
-    { id: 'firewall', name: '防火墙状态', type: 'ssh', weight: 3, config: { command: 'show firewall status' } },
-    { id: 'acl', name: 'ACL 配置', type: 'ssh', weight: 2, config: { command: 'show access-lists' } },
-    { id: 'login', name: '登录尝试', type: 'ssh', weight: 2, config: { command: 'show login failures' } }
+    { id: 'ping', name: '设备连通性', type: 'ping', weight: 2, config: {} },
+    { id: 'snmp', name: 'SNMP 服务检查', type: 'snmp', weight: 2, config: {} }
   ]
 }
 
@@ -461,22 +464,40 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                   检查类型
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {CHECK_TYPE_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => onUpdate({ type: option.value, config: {} })}
-                      className={`px-3 py-2 rounded-lg border text-sm transition-all ${
-                        item.type === option.value
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700'
-                          : 'border-border hover:border-border'
-                      }`}
-                    >
-                      <span className="mr-1">{option.icon}</span>
-                      {option.label}
-                    </button>
-                  ))}
+                  {CHECK_TYPE_OPTIONS.map((option) => {
+                    const isSelected = item.type === option.value
+                    const isDisabled = !option.supported && !isSelected
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() => {
+                          if (isSelected) return
+                          onUpdate({ type: option.value, config: {} })
+                        }}
+                        className={`px-3 py-2 rounded-lg border text-sm transition-all ${
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700'
+                            : isDisabled
+                              ? 'opacity-50 cursor-not-allowed border-border'
+                              : 'border-border hover:border-border'
+                        }`}
+                      >
+                        <span className="mr-1">{option.icon}</span>
+                        {option.label}
+                        {!option.supported && (
+                          <span className="ml-1 text-xs text-amber-600">暂不支持</span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
+                {!isCheckItemTypeSupported(item.type) && (
+                  <p className="text-xs text-amber-700 mt-2">
+                    当前版本执行引擎暂不支持该检查类型，执行时将被跳过；建议改为 Ping 或 SNMP。
+                  </p>
+                )}
               </div>
 
               {/* 类型特定配置 */}
@@ -487,14 +508,14 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                   </h5>
                   <div>
                     <label className="block text-sm text-muted-foreground mb-1">
-                      OID <span className="text-red-500">*</span>
+                      OID（可选）
                     </label>
                     <Input
                       value={item.config.oid || ''}
                       onChange={(e) => updateConfig('oid', e.target.value)}
                       placeholder="例如：1.3.6.1.2.1.1.3.0"
                     />
-                    <p className="text-xs text-gray-500 mt-1">输入要查询的 SNMP OID</p>
+                    <p className="text-xs text-gray-500 mt-1">未填写也可执行；填写时仅用于格式校验与字段透传</p>
                   </div>
                   <div>
                     <label className="block text-sm text-muted-foreground mb-1">
@@ -515,6 +536,9 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                   <h5 className="font-medium text-foreground flex items-center gap-2">
                     <span>💻</span> SSH 配置
                   </h5>
+                  <p className="text-xs text-amber-700">
+                    提示：当前版本暂不执行 SSH 检查项（执行时会跳过），建议改为 Ping 或 SNMP。
+                  </p>
                   <div>
                     <label className="block text-sm text-muted-foreground mb-1">
                       执行命令 <span className="text-red-500">*</span>
@@ -544,9 +568,12 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                   <h5 className="font-medium text-foreground flex items-center gap-2">
                     <span>🌍</span> HTTP 配置
                   </h5>
+                  <p className="text-xs text-amber-700">
+                    提示：当前版本暂不执行 HTTP 检查项（执行时会跳过），建议改为 Ping 或 SNMP。
+                  </p>
                   <div>
                     <label className="block text-sm text-muted-foreground mb-1">
-                      请求 URL <span className="text-red-500">*</span>
+                      请求 URL（可选）
                     </label>
                     <Input
                       value={item.config.url || ''}
@@ -572,6 +599,9 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                   <h5 className="font-medium text-foreground flex items-center gap-2">
                     <span>📜</span> 脚本配置
                   </h5>
+                  <p className="text-xs text-amber-700">
+                    提示：当前版本暂不执行脚本检查项（执行时会跳过），建议改为 Ping 或 SNMP。
+                  </p>
                   <div>
                     <label className="block text-sm text-muted-foreground mb-1">
                       脚本内容
@@ -914,16 +944,16 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
               newErrors.checkItems = '所有检查项都必须有名称'
               break
             }
-            if (item.type === 'snmp' && !item.config.oid) {
-              newErrors.checkItems = 'SNMP 类型的检查项必须配置 OID'
-              break
+            if (item.type === 'snmp' && typeof item.config.oid === 'string') {
+              const oid = item.config.oid.trim()
+              if (oid && !OID_PATTERN.test(oid)) {
+                newErrors.checkItems = 'SNMP 类型的检查项 OID 格式无效，应由数字和点组成'
+                break
+              }
             }
-            if (item.type === 'ssh' && !item.config.command) {
-              newErrors.checkItems = 'SSH 类型的检查项必须配置命令'
-              break
-            }
-            if (item.type === 'http' && !item.config.url) {
-              newErrors.checkItems = 'HTTP 类型的检查项必须配置 URL'
+            // SSH：后端校验要求 command，避免提交后端失败
+            if (item.type === 'ssh' && !item.config.command?.trim()) {
+              newErrors.checkItems = 'SSH 类型的检查项必须配置命令（否则无法保存）'
               break
             }
             if (item.config.threshold) {

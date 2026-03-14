@@ -654,7 +654,7 @@ func (e *Evaluator) autoResolveAlert(ctx context.Context, rule AlertRule, dm dev
 	return true, nil
 }
 
-// broadcastAlert 通过 WebSocket 广播新告警
+// broadcastAlert 通过 WebSocket 推送新告警到 alerts 房间
 func (e *Evaluator) broadcastAlert(alert Alert, dm deviceLatestMetrics) {
 	if e.wsManager == nil {
 		return
@@ -672,7 +672,7 @@ func (e *Evaluator) broadcastAlert(alert Alert, dm deviceLatestMetrics) {
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	}
 
-	e.wsManager.Broadcast(ws.Message{
+	e.wsManager.SendToRoom("alerts", ws.Message{
 		Type: ws.MessageAlert,
 		Data: payload,
 	})
@@ -867,7 +867,7 @@ func (e *Evaluator) createConnectivityAlert(ctx context.Context, deviceID int, d
 
 	// WebSocket 推送
 	if e.wsManager != nil {
-		e.wsManager.Broadcast(ws.Message{
+		e.wsManager.SendToRoom("alerts", ws.Message{
 			Type: ws.MessageAlert,
 			Data: map[string]interface{}{
 				"id":        alert.ID,

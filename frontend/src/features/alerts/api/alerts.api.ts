@@ -307,7 +307,7 @@ export async function exportAlerts(params?: AlertQueryParams): Promise<void> {
     })
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
   const url = `${baseUrl}/api/v1/alerts/export${searchParams.toString() ? '?' + searchParams.toString() : ''}`
 
   try {

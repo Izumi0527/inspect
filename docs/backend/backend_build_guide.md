@@ -320,7 +320,7 @@ docker build -t inspect-backend:latest .
 # 运行容器
 docker run -d \
   --name inspect-backend \
-  -p 8000:8000 \
+  -p 38000:38000 \
   --env-file .env \
   inspect-backend:latest
 ```
@@ -359,10 +359,10 @@ export GODEBUG=gctrace=1
 
 ```powershell
 # 使用 curl
-curl http://localhost:8000/health
+curl http://localhost:38000/health
 
 # 使用 PowerShell
-Invoke-WebRequest http://localhost:8000/health
+Invoke-WebRequest http://localhost:38000/health
 ```
 
 ### 健康检查响应
@@ -419,7 +419,7 @@ go build -gcflags="all=-N -l" -o app-debug.exe ./cmd/api
 
 ```powershell
 # 查找占用端口的进程
-netstat -ano | findstr :8000
+netstat -ano | findstr :38000
 
 # 结束进程
 taskkill /PID <进程ID> /F

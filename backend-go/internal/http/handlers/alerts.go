@@ -1036,7 +1036,7 @@ func (h AlertsHandler) broadcastAlertStatus(alertID int, status string) {
 	if normalizedStatus == "" {
 		return
 	}
-	h.WS.Broadcast(ws.Message{
+	h.WS.SendToRoom("alerts", ws.Message{
 		Type: ws.MessageAlert,
 		Data: map[string]interface{}{
 			"id":        strconv.Itoa(alertID),

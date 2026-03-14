@@ -63,7 +63,9 @@ const toOptionalNumber = (value: unknown): number | undefined => {
 }
 
 const mapCheckItem = (value: UnknownRecord): InspectionCheckItem => {
-  const type = toEnumValue(value.type ?? value['type'], CHECK_ITEM_TYPES, 'script')
+  const rawType = toString(value.type ?? value['type']).trim().toLowerCase()
+  // 兼容后端/历史数据的 icmp 类型：前端统一映射为 ping
+  const type = rawType === 'icmp' ? 'ping' : toEnumValue(rawType, CHECK_ITEM_TYPES, 'script')
   const configRecord = toRecord(value.config ?? value['config'])
   const thresholdRecord = toRecord(configRecord.threshold ?? configRecord['threshold'])
 
@@ -1346,7 +1348,7 @@ export async function exportAnalyticsReport(params: {
     const endpoint = `/api/v1/inspection/analytics/export?${searchParams.toString()}`
 
     // 使用原生 fetch 处理文件下载
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${endpoint}`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'}${endpoint}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`,

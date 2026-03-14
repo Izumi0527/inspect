@@ -280,6 +280,13 @@ backend/*.dll
 backend/*.so
 backend/*.dylib
 
+# Go 编译产物（backend-go）
+backend-go/*.exe
+backend-go/*.exe~
+backend-go/*.dll
+backend-go/*.so
+backend-go/*.dylib
+
 # 运行时配置文件
 context.json
 

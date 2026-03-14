@@ -61,10 +61,7 @@ export function UserFormDialog({
 }: Props) {
   const defaultRole = useMemo<UserRole>(() => {
     const first = roles?.[0]?.name
-    if (first === 'admin' || first === 'operator' || first === 'viewer') {
-      return first
-    }
-    return 'viewer'
+    return (first as UserRole) || 'viewer'
   }, [roles])
 
   const [username, setUsername] = useState('')

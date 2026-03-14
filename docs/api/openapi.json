@@ -10409,6 +10409,34 @@
         }
       }
     },
+    "/api/v1/monitoring/reports/download": {
+      "post": {
+        "summary": "Go补充接口: POST /api/v1/monitoring/reports/download（票据下载）",
+        "operationId": "go_api_v1_monitoring_reports_download_post",
+        "tags": [
+          "实时监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/monitoring/reports/download/check": {
+      "post": {
+        "summary": "Go补充接口: POST /api/v1/monitoring/reports/download/check（票据预检）",
+        "operationId": "go_api_v1_monitoring_reports_download_check_post",
+        "tags": [
+          "实时监控"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/reports": {
       "post": {
         "summary": "Go补充接口: POST /api/v1/reports",

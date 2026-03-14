@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
+import { format } from 'date-fns'
 import { Group } from '@visx/group'
 import { AreaClosed, LinePath } from '@visx/shape'
 import { AxisBottom, AxisLeft } from '@visx/axis'
@@ -29,6 +30,8 @@ interface NetworkTrafficStackedAreaChartProps {
   data: NetworkTrafficDataPoint[]
   height?: number
   className?: string
+  /** 时间范围（用于 x 轴刻度/tooltip 时间格式优化） */
+  timeRange?: string
 }
 
 /**
@@ -40,12 +43,13 @@ interface NetworkTrafficStackedAreaChartProps {
  * - 总流量: 入站 + 出站之和（橙色线）
  *
  * Y轴单位: bps（自适应 bps/Kbps/Mbps/Gbps）
- * X轴间隔: 5分钟
+ * X轴刻度: 按时间跨度自适应（小时/12小时/天/周），避免 7d/30d 下标签过密
  */
 export function NetworkTrafficStackedAreaChart({
   data,
   height = 300,
   className,
+  timeRange,
 }: NetworkTrafficStackedAreaChartProps) {
   // 容器引用和宽度状态
   const containerRef = useRef<HTMLDivElement>(null)
@@ -83,6 +87,26 @@ export function NetworkTrafficStackedAreaChart({
     total: number
   }>()
 
+  const showDateOnAxis = useMemo(() => {
+    const trimmed = String(timeRange ?? '').trim().toLowerCase()
+    const match = /^(\d+)([hdw])$/.exec(trimmed)
+    if (!match) return false
+    const value = Number.parseInt(match[1], 10)
+    const unit = match[2]
+    if (!Number.isFinite(value) || value <= 0) return false
+    return !(unit === 'h' && value <= 24)
+  }, [timeRange])
+
+  const formatTimeLabel = useMemo(() => {
+    return (date: Date): string => {
+      if (Number.isNaN(date.getTime())) return '-'
+      if (!showDateOnAxis) {
+        return format(date, 'HH:mm')
+      }
+      return format(date, 'MM-dd HH:mm')
+    }
+  }, [showDateOnAxis])
+
   // 数据处理:将后端Mbps转为bps，计算堆叠值
   const processedData = useMemo(() => {
     return data.map((point) => {
@@ -93,7 +117,7 @@ export function NetworkTrafficStackedAreaChart({
       const totalBps = inboundBps + outboundBps
       return {
         date,
-        time: date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+        time: formatTimeLabel(date),
         inbound: inboundBps,
         outbound: outboundBps,
         total: totalBps,
@@ -104,7 +128,7 @@ export function NetworkTrafficStackedAreaChart({
         outboundTop: totalBps,
       }
     })
-  }, [data])
+  }, [data, formatTimeLabel])
 
   // Scales
   const xScale = useMemo(
@@ -264,21 +288,37 @@ export function NetworkTrafficStackedAreaChart({
               stroke={axisColor}
               tickStroke={axisColor}
               tickValues={(() => {
-                // 按5分钟间隔生成刻度
+                // 根据时间跨度生成刻度，避免 7d/30d 下刻度与标签过密
                 if (processedData.length < 2) return undefined
                 const [minTime, maxTime] = xScale.domain()
                 const ticks: Date[] = []
+                const durationMs = maxTime.getTime() - minTime.getTime()
+
+                const stepMinutes = (() => {
+                  if (durationMs <= 24 * 60 * 60 * 1000) return 60 // 24h 内：每小时一个刻度
+                  if (durationMs <= 48 * 60 * 60 * 1000) return 120
+                  if (durationMs <= 7 * 24 * 60 * 60 * 1000) return 12 * 60
+                  if (durationMs <= 30 * 24 * 60 * 60 * 1000) return 24 * 60
+                  return 7 * 24 * 60
+                })()
+
                 const start = new Date(minTime)
-                // 对齐到最近的5分钟
-                start.setMinutes(Math.ceil(start.getMinutes() / 5) * 5, 0, 0)
+                start.setSeconds(0, 0)
+                if (stepMinutes >= 60) {
+                  start.setMinutes(0)
+                }
+                if (stepMinutes >= 24 * 60) {
+                  start.setHours(0, 0, 0, 0)
+                }
+
                 const endTime = maxTime.getTime()
                 const current = new Date(start)
                 while (current.getTime() <= endTime) {
                   ticks.push(new Date(current))
-                  current.setMinutes(current.getMinutes() + 5)
+                  current.setMinutes(current.getMinutes() + stepMinutes)
                 }
                 // 如果刻度太多（超过innerWidth/60），按倍数稀疏
-                const maxTicks = Math.max(Math.floor(innerWidth / 60), 4)
+                const maxTicks = Math.max(Math.floor(innerWidth / 80), 4)
                 if (ticks.length > maxTicks) {
                   const step = Math.ceil(ticks.length / maxTicks)
                   return ticks.filter((_, i) => i % step === 0)
@@ -292,10 +332,7 @@ export function NetworkTrafficStackedAreaChart({
               })}
               tickFormat={(value) => {
                 const date = value as Date
-                return date.toLocaleTimeString('zh-CN', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })
+                return formatTimeLabel(date)
               }}
             />
             <AxisLeft

@@ -1,6 +1,6 @@
 import { TokenManager } from '@/lib/api-client'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
 
 const sanitizeFilename = (filename: string): string => {
   const trimmed = String(filename || '').trim()
@@ -49,4 +49,3 @@ export async function downloadWithAuth(urlOrPath: string, filename: string): Pro
 
   window.URL.revokeObjectURL(blobUrl)
 }
-

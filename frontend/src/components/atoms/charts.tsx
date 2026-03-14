@@ -120,12 +120,33 @@ export const LineChartComponent = <TData extends ChartDatum>({
     tooltipTop = 0,
   } = useTooltip<{ x: string; values: Array<{ name: string; value: number; color: string }> }>()
 
+  const xDomain = React.useMemo(() => {
+    const out: string[] = []
+    const seen = new Set<string>()
+    data.forEach((datum) => {
+      const value = String(datum[xKey])
+      if (seen.has(value)) return
+      seen.add(value)
+      out.push(value)
+    })
+    return out
+  }, [data, xKey])
+
   // Scales
   const xScale = scaleBand({
-    domain: data.map(d => String(d[xKey])),
+    domain: xDomain,
     range: [0, innerWidth],
     padding: 0.1,
   })
+
+  const xTickValues = React.useMemo(() => {
+    const maxTicks = Math.max(Math.floor(innerWidth / 80), 4)
+    if (xDomain.length <= maxTicks) {
+      return xDomain
+    }
+    const step = Math.ceil(xDomain.length / maxTicks)
+    return xDomain.filter((_, idx) => idx % step === 0)
+  }, [xDomain, innerWidth])
 
   const allValues = lines.flatMap(line =>
     data.map(d => Number(d[line.key]) || 0)
@@ -181,7 +202,13 @@ export const LineChartComponent = <TData extends ChartDatum>({
         <svg width={width} height={height} style={{ display: 'block' }}>
           <Group left={margin.left} top={margin.top}>
             <GridRows scale={yScale} width={innerWidth} stroke={gridColor} strokeDasharray="3,3" />
-            <GridColumns scale={xScale} height={innerHeight} stroke={gridColor} strokeDasharray="3,3" />
+            <GridColumns
+              scale={xScale}
+              height={innerHeight}
+              stroke={gridColor}
+              strokeDasharray="3,3"
+              tickValues={xTickValues}
+            />
 
             {lines.map((line, idx) => {
               const lineKey = String(line.key)
@@ -220,6 +247,7 @@ export const LineChartComponent = <TData extends ChartDatum>({
               stroke={axisColor}
               tickStroke={axisColor}
               tickLabelProps={() => ({ fill: axisColor, fontSize: 12, textAnchor: 'middle' })}
+              tickValues={xTickValues}
             />
             <AxisLeft
               scale={yScale}

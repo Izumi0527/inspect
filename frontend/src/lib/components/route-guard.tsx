@@ -36,10 +36,17 @@ function LoadingScreen() {
 // 无权限访问组件
 interface AccessDeniedProps {
   message?: string
+  requiredPermissions?: string[]
+  requiredRoles?: string[]
   onGoBack?: () => void
 }
 
-function AccessDenied({ message = '您没有权限访问此页面', onGoBack }: AccessDeniedProps) {
+function AccessDenied({
+  message = '您没有权限访问此页面',
+  requiredPermissions = [],
+  requiredRoles = [],
+  onGoBack,
+}: AccessDeniedProps) {
   const router = useRouter()
 
   return (
@@ -58,6 +65,47 @@ function AccessDenied({ message = '您没有权限访问此页面', onGoBack }: 
             <h1 className="text-2xl font-bold text-slate-800">访问被拒绝</h1>
             <p className="text-slate-600">{message}</p>
           </div>
+
+          {/* 权限/角色详情 */}
+          {(requiredRoles.length > 0 || requiredPermissions.length > 0) && (
+            <div className="rounded-xl border border-border/50 bg-muted/40 p-4 text-left">
+              {requiredRoles.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">所需角色</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {requiredRoles.map((role) => (
+                      <span
+                        key={role}
+                        className="rounded-md bg-slate-100 px-2 py-1 text-xs font-mono text-slate-800 dark:bg-slate-900/40 dark:text-slate-100"
+                      >
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {requiredPermissions.length > 0 && (
+                <div className={requiredRoles.length > 0 ? 'mt-4' : ''}>
+                  <p className="text-xs font-semibold text-slate-700">所需权限</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {requiredPermissions.map((perm) => (
+                      <span
+                        key={perm}
+                        className="rounded-md bg-slate-100 px-2 py-1 text-xs font-mono text-slate-800 dark:bg-slate-900/40 dark:text-slate-100"
+                      >
+                        {perm}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+                如需开通权限，请联系管理员为当前账号所属角色授权以上权限后再访问。
+              </p>
+            </div>
+          )}
 
           {/* 操作按钮 */}
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -178,12 +226,18 @@ export function RouteGuard({
       let message = '您没有权限访问此页面'
       
       if (requiredRoles.length > 0) {
-        message = `此页面需要 ${requiredRoles.join(' 或 ')} 角色权限`
+        message = '当前账号不满足该页面所需角色要求'
       } else if (requiredPermissions.length > 0) {
-        message = '您没有执行此操作的权限'
+        message = '当前账号缺少访问该页面所需权限'
       }
 
-      return <AccessDenied message={message} />
+      return (
+        <AccessDenied
+          message={message}
+          requiredRoles={requiredRoles}
+          requiredPermissions={requiredPermissions}
+        />
+      )
     }
 
     return <LoadingScreen />

@@ -300,7 +300,7 @@ npm run dev
 ```
 
 ### 访问地址
-- 后端 API: http://localhost:8000
+- 后端 API: http://127.0.0.1:38000
 - 前端应用: http://localhost:3000
 - 演示页面:
   - http://localhost:3000/templates-demo

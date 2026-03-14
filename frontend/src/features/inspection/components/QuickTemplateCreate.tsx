@@ -64,30 +64,31 @@ const QUICK_TEMPLATES = [
   },
   {
     id: 'firewall-security',
-    name: '防火墙安全巡检',
+    name: '防火墙基础巡检',
     category: 'security' as TemplateCategory,
-    description: '检查防火墙状态、ACL 配置、登录尝试等',
+    description: '基于 Ping/SNMP 的连通性与基础指标检查（当前版本可执行）',
     deviceTypes: ['firewall'],
     checkItems: [
-      { id: '1', name: '防火墙状态', type: 'ssh' as const, weight: 3, config: { command: 'show firewall status' } },
-      { id: '2', name: 'ACL 配置', type: 'ssh' as const, weight: 2, config: { command: 'show access-lists' } },
-      { id: '3', name: '登录尝试', type: 'ssh' as const, weight: 2, config: { command: 'show login failures' } },
-      { id: '4', name: '会话统计', type: 'ssh' as const, weight: 1, config: { command: 'show session info' } }
+      { id: '1', name: '设备连通性', type: 'ping' as const, weight: 1, config: {} },
+      { id: '2', name: 'CPU 使用率', type: 'snmp' as const, weight: 3, config: { threshold: { warning: 70, critical: 90 } } },
+      { id: '3', name: '内存使用率', type: 'snmp' as const, weight: 3, config: { threshold: { warning: 80, critical: 95 } } },
+      { id: '4', name: '系统运行时间', type: 'snmp' as const, weight: 1, config: {} },
+      { id: '5', name: '接口状态', type: 'snmp' as const, weight: 2, config: {} }
     ],
     icon: Shield,
     color: 'red'
   },
   {
     id: 'server-system',
-    name: '服务器系统巡检',
+    name: '服务器基础巡检',
     category: 'system' as TemplateCategory,
-    description: '检查服务器 CPU、内存、磁盘使用情况',
+    description: '基于 Ping/SNMP 的连通性与基础指标检查（当前版本可执行）',
     deviceTypes: ['server'],
     checkItems: [
-      { id: '1', name: 'CPU 负载', type: 'ssh' as const, weight: 3, config: { command: 'top -bn1 | grep "Cpu(s)"', threshold: { warning: 70, critical: 90 } } },
-      { id: '2', name: '内存使用', type: 'ssh' as const, weight: 3, config: { command: 'free -m', threshold: { warning: 80, critical: 95 } } },
-      { id: '3', name: '磁盘使用', type: 'ssh' as const, weight: 2, config: { command: 'df -h', threshold: { warning: 80, critical: 90 } } },
-      { id: '4', name: '进程状态', type: 'ssh' as const, weight: 1, config: { command: 'ps aux | head -20' } }
+      { id: '1', name: '设备连通性', type: 'ping' as const, weight: 1, config: {} },
+      { id: '2', name: 'CPU 使用率', type: 'snmp' as const, weight: 3, config: { threshold: { warning: 70, critical: 90 } } },
+      { id: '3', name: '内存使用率', type: 'snmp' as const, weight: 3, config: { threshold: { warning: 80, critical: 95 } } },
+      { id: '4', name: '系统运行时间', type: 'snmp' as const, weight: 1, config: {} }
     ],
     icon: Settings,
     color: 'green'

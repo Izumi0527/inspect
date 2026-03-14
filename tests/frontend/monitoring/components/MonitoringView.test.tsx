@@ -7,6 +7,10 @@ jest.mock('@/features/monitoring/hooks/useMonitoringV2', () => ({
   useMonitoringV2: jest.fn(),
 }))
 
+jest.mock('@/lib/contexts/auth-context', () => ({
+  usePermission: () => true,
+}))
+
 jest.mock('@/lib/contexts/sidebar-context', () => ({
   useSidebar: () => ({
     sidebarOpen: false,
@@ -40,6 +44,12 @@ jest.mock('@/components/atoms', () => ({
   Button: ({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) => (
     <button type="button" onClick={onClick} disabled={disabled}>{children}</button>
   ),
+  Badge: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectValue: () => <div />,
+  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectItem: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
 jest.mock('@/hooks', () => ({
@@ -101,7 +111,7 @@ describe('MonitoringView', () => {
     render(<MonitoringView />)
 
     expect(screen.getByText('监控数据不完整')).toBeInTheDocument()
-    expect(screen.getByText('网络流量数据加载失败')).toBeInTheDocument()
+    expect(screen.getByText('network failed')).toBeInTheDocument()
   })
 
   it('多个分区失败时应分别显示对应失败文案', () => {
@@ -146,12 +156,12 @@ describe('MonitoringView', () => {
     render(<MonitoringView />)
 
     expect(screen.getByText('监控数据不完整')).toBeInTheDocument()
-    expect(screen.getByText('统计指标加载失败')).toBeInTheDocument()
-    expect(screen.getByText('系统性能数据加载失败')).toBeInTheDocument()
-    expect(screen.getByText('温度数据加载失败')).toBeInTheDocument()
-    expect(screen.getByText('设备状态分布加载失败')).toBeInTheDocument()
-    expect(screen.getByText('可用性数据加载失败')).toBeInTheDocument()
-    expect(screen.getByText('网络流量数据加载失败')).toBeInTheDocument()
-    expect(screen.getByText('实时告警加载失败')).toBeInTheDocument()
+    expect(screen.getByText('stats down')).toBeInTheDocument()
+    expect(screen.getByText('perf down')).toBeInTheDocument()
+    expect(screen.getByText('temp down')).toBeInTheDocument()
+    expect(screen.getByText('device down')).toBeInTheDocument()
+    expect(screen.getByText('availability down')).toBeInTheDocument()
+    expect(screen.getByText('traffic down')).toBeInTheDocument()
+    expect(screen.getByText('alerts down')).toBeInTheDocument()
   })
 })

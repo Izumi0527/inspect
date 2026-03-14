@@ -11,19 +11,32 @@ import {
   Database,
   Bell,
   Activity,
-  ScrollText
+  ScrollText,
+  KeyRound
 } from 'lucide-react'
 import { AppLayout } from '@/components/layout'
 import { GeneralSettings } from './general/GeneralSettings'
 import { UserManagement } from './users/UserManagement'
+import { RoleManagement } from './roles/RoleManagement'
 import { SecuritySettings } from './security/SecuritySettings'
 import { AuditLogs } from './audit/AuditLogs'
 import { BackupManagement } from './backup/BackupManagement'
 import { NotificationSettings } from './notifications/NotificationSettings'
 import { MonitoringDashboard } from './monitoring/MonitoringDashboard'
 import { LogsSettings } from './logs/LogsSettings'
+import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
 
-type TabType = 'general' | 'users' | 'security' | 'audit' | 'backup' | 'notifications' | 'monitoring' | 'logs'
+type TabType =
+  | 'general'
+  | 'logs'
+  | 'users'
+  | 'roles'
+  | 'security'
+  | 'audit'
+  | 'backup'
+  | 'notifications'
+  | 'monitoring'
 
 type IconComponent = React.ComponentType<React.SVGProps<SVGSVGElement>>
 
@@ -37,6 +50,12 @@ interface TabConfig {
 export const SettingsView: React.FC = () => {
   const searchParams = useSearchParams()
 
+  // 标签页可见性（按最小权限控制，避免用户进入后再看到 403）
+  const canConfigSystem = usePermission(Permission.SYSTEM_CONFIG)
+  const canReadUsers = usePermission(Permission.USERS_READ)
+  const canReadAudit = usePermission(Permission.SYSTEM_LOGS)
+  const canReadMonitoring = usePermission(Permission.MONITORING_READ)
+
   const tabParam = useMemo(() => {
     const value = searchParams?.get('tab')
     return value ? value.trim() : ''
@@ -44,68 +63,116 @@ export const SettingsView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     const initial = tabParam as TabType
-    const allowed: TabType[] = ['general', 'users', 'security', 'audit', 'backup', 'notifications', 'monitoring', 'logs']
+    const allowed: TabType[] = [
+      'general',
+      'logs',
+      'users',
+      'roles',
+      'security',
+      'audit',
+      'backup',
+      'notifications',
+      'monitoring',
+    ]
     return allowed.includes(initial) ? initial : 'general'
   })
 
   useEffect(() => {
     const next = tabParam as TabType
-    const allowed: TabType[] = ['general', 'users', 'security', 'audit', 'backup', 'notifications', 'monitoring', 'logs']
+    const allowed: TabType[] = [
+      'general',
+      'logs',
+      'users',
+      'roles',
+      'security',
+      'audit',
+      'backup',
+      'notifications',
+      'monitoring',
+    ]
     if (allowed.includes(next) && next !== activeTab) {
       setActiveTab(next)
     }
   }, [tabParam, activeTab])
 
-  const tabs: TabConfig[] = [
-    {
-      key: 'general',
-      label: '通用配置',
-      icon: Settings,
-      description: '系统基础配置与核心参数管理'
-    },
-    {
-      key: 'logs',
-      label: '日志设置',
-      icon: ScrollText,
-      description: '日志中心的数据保留与采集策略配置'
-    },
-    {
-      key: 'users',
-      label: '用户管理',
-      icon: Users,
-      description: '系统用户账号与权限管理'
-    },
-    {
-      key: 'security',
-      label: '安全策略',
-      icon: Shield,
-      description: '密码策略、登录防护与访问控制'
-    },
-    {
-      key: 'audit',
-      label: '审计日志',
-      icon: FileText,
-      description: '系统操作记录与安全审计'
-    },
-    {
-      key: 'backup',
-      label: '备份管理',
-      icon: Database,
-      description: '数据备份、恢复与存档管理'
-    },
-    {
-      key: 'notifications',
-      label: '通知中心',
-      icon: Bell,
-      description: '告警通知渠道配置与管理'
-    },
-    {
-      key: 'monitoring',
-      label: '系统监控',
-      icon: Activity,
-      description: '系统性能监控与健康状态'
+  const tabs: TabConfig[] = useMemo(() => {
+    const all: Array<TabConfig & { visible: boolean }> = [
+      {
+        key: 'general',
+        label: '通用配置',
+        icon: Settings,
+        description: '系统基础配置与核心参数管理',
+        visible: canConfigSystem,
+      },
+      {
+        key: 'logs',
+        label: '日志设置',
+        icon: ScrollText,
+        description: '日志中心的数据保留与采集策略配置',
+        visible: canConfigSystem,
+      },
+      {
+        key: 'users',
+        label: '用户管理',
+        icon: Users,
+        description: '系统用户账号与权限管理',
+        visible: canReadUsers,
+      },
+      {
+        key: 'roles',
+        label: '角色权限',
+        icon: KeyRound,
+        description: '角色管理与权限分配（RBAC）',
+        visible: canReadUsers,
+      },
+      {
+        key: 'security',
+        label: '安全策略',
+        icon: Shield,
+        description: '密码策略、登录防护与访问控制',
+        visible: canConfigSystem,
+      },
+      {
+        key: 'audit',
+        label: '审计日志',
+        icon: FileText,
+        description: '系统操作记录与安全审计',
+        visible: canReadAudit,
+      },
+      {
+        key: 'backup',
+        label: '备份管理',
+        icon: Database,
+        description: '数据备份、恢复与存档管理',
+        visible: canConfigSystem,
+      },
+      {
+        key: 'notifications',
+        label: '通知中心',
+        icon: Bell,
+        description: '告警通知渠道配置与管理',
+        visible: canConfigSystem,
+      },
+      {
+        key: 'monitoring',
+        label: '系统监控',
+        icon: Activity,
+        description: '系统性能监控与健康状态',
+        visible: canReadMonitoring,
+      },
+    ]
+
+    return all.filter((t) => t.visible).map(({ visible: _visible, ...rest }) => rest)
+  }, [canConfigSystem, canReadUsers, canReadAudit, canReadMonitoring])
+
+  // 如果当前标签页不可见（无权限），自动切回第一个可见标签页
+  useEffect(() => {
+    if (!tabs.length) return
+    const allowed = new Set(tabs.map((t) => t.key))
+    if (!allowed.has(activeTab)) {
+      setActiveTab(tabs[0].key)
     }
-  ]
+  }, [tabs, activeTab])
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -115,6 +182,8 @@ export const SettingsView: React.FC = () => {
         return <LogsSettings />
       case 'users':
         return <UserManagement />
+      case 'roles':
+        return <RoleManagement />
       case 'security':
         return <SecuritySettings />
       case 'audit':
@@ -131,7 +200,7 @@ export const SettingsView: React.FC = () => {
   }
 
   // 需要填充高度的标签页
-  const fillHeightTabs: TabType[] = ['users', 'audit']
+  const fillHeightTabs: TabType[] = ['users', 'roles', 'audit']
   const shouldFillHeight = fillHeightTabs.includes(activeTab)
 
   return (

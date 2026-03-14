@@ -319,7 +319,7 @@ function Start-BackendService {
     
     # 启动后端开发服务器
     Write-ColorOutput "🚀 启动后端开发服务器..." "Cyan"
-    Write-ColorOutput "访问地址: http://localhost:8000" "White"
+    Write-ColorOutput "访问地址: http://127.0.0.1:38000" "White"
     Write-ColorOutput "API 说明: docs/api/openapi.json" "White"
     Write-ColorOutput "按 Ctrl+C 停止服务" "Gray"
     
@@ -356,13 +356,24 @@ function Start-FrontendService {
         Write-ColorOutput "⚠️ 前端环境配置文件不存在，创建默认配置..." "Yellow"
         
         $envContent = @"
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_WS_URL=ws://localhost:8000
+NEXT_PUBLIC_API_URL=http://127.0.0.1:38000
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:38000
 NODE_ENV=development
 NEXT_PUBLIC_ENV=development
 "@
         $envContent | Out-File -FilePath "$frontendDir\.env.local" -Encoding UTF8
         Write-ColorOutput "✅ 已创建默认前端环境配置文件" "Green"
+    } else {
+        # 仅提示不强制覆盖：避免误把本地自定义配置改掉
+        try {
+            $content = Get-Content "$frontendDir\.env.local" -Raw
+            if ($content -match "NEXT_PUBLIC_API_URL=.*:8000" -or $content -match "NEXT_PUBLIC_WS_URL=.*:8000") {
+                Write-ColorOutput "⚠️ 检测到 frontend/.env.local 仍指向 8000 端口，可能导致前端仍请求 8000" "Yellow"
+                Write-ColorOutput "   - 建议改为: NEXT_PUBLIC_API_URL=http://127.0.0.1:38000" "Gray"
+                Write-ColorOutput "   - 建议改为: NEXT_PUBLIC_WS_URL=ws://127.0.0.1:38000" "Gray"
+                Write-ColorOutput "   - 修改后请重启前端开发服务器（pnpm dev）" "Gray"
+            }
+        } catch { }
     }
     
     # 启动前端开发服务器
@@ -491,7 +502,7 @@ function Invoke-DevDiagnose {
 
     Write-Host ""
     Write-ColorOutput "🔌 检查端口占用..." "Blue"
-    $ports = @(3000, 8000, $postgresHostPort, $redisHostPort, 5050, 8081)
+    $ports = @(3000, 38000, $postgresHostPort, $redisHostPort, 5050, 8081)
     foreach ($p in $ports) {
         try {
             if (Get-Command "Get-NetTCPConnection" -ErrorAction SilentlyContinue) {
@@ -638,7 +649,7 @@ function Test-ServicesHealth {
     Start-Sleep -Seconds 5
     
     # 检查后端健康状态（带重试）
-    $backendHealthUrl = "http://localhost:8000/health"
+    $backendHealthUrl = "http://127.0.0.1:38000/health"
     $maxRetries = 3
     $retryDelay = 3
     $backendHealthy = $false
@@ -695,8 +706,8 @@ function Show-ServiceInfo {
     
     Write-ColorOutput "`n🌐 Web 服务:" "Blue"
     Write-ColorOutput "  🎨 前端应用: http://localhost:3000" "White"
-    Write-ColorOutput "  🔧 后端 API: http://localhost:8000" "White"
-    Write-ColorOutput "  💚 健康检查: http://localhost:8000/health" "White"
+    Write-ColorOutput "  🔧 后端 API: http://127.0.0.1:38000" "White"
+    Write-ColorOutput "  💚 健康检查: http://127.0.0.1:38000/health" "White"
     Write-ColorOutput "  📚 API 说明: docs/api/openapi.json" "White"
     Write-ColorOutput "  🔌 WS 约定: docs/api/websocket-contract.md" "White"
     
@@ -717,7 +728,7 @@ function Show-ServiceInfo {
     Write-ColorOutput "  查看日志: .\scripts\database\db-manage.ps1 logs" "White"
     Write-ColorOutput "  重置数据库: .\scripts\database\db-manage.ps1 reset" "White"
     Write-ColorOutput "  运行测试: .\scripts\tests\run-tests.ps1" "White"
-    Write-ColorOutput "  健康检查: Invoke-WebRequest http://localhost:8000/health" "White"
+    Write-ColorOutput "  健康检查: Invoke-WebRequest http://127.0.0.1:38000/health" "White"
     
     Write-ColorOutput "`n💡 提示:" "Yellow"
     Write-ColorOutput "  - 前端和后端服务在独立窗口中运行" "Gray"

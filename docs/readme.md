@@ -40,6 +40,9 @@
 
 ### 功能文档（按业务模块）
 - `features/`：按模块拆分（devices/inspection/settings 等）
+- 巡检模板（配置与经验沉淀）：
+  - `template-configuration-guide.md`：模板配置指南
+  - `template-best-practices.md`：模板最佳实践（阈值/命名/可维护性）
 
 ### 方案与计划（带日期的设计稿/执行计划）
 - `plans/`：阶段性计划与设计文档（建议文件名保持 `YYYY-MM-DD-<主题>.md`）

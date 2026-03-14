@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { Download, FileText, Sheet, FileSpreadsheet } from 'lucide-react'
 import { Button } from '@/components/atoms'
-import { exportMonitoringReport } from '../api/monitoring.api'
+import { TokenManager } from '@/lib/api-client'
+import { exportMonitoringReport, checkMonitoringReportDownloadToken } from '../api/monitoring.api'
 
 type ExportFormat = 'pdf' | 'excel' | 'csv'
 
@@ -22,12 +23,174 @@ const FORMAT_CONFIG: Record<ExportFormat, { label: string; icon: typeof FileText
   csv: { label: 'CSV', icon: FileSpreadsheet, iconColor: 'text-blue-500' },
 }
 
-export function ReportExportButton() {
+function resolveApiBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
+}
+
+function resolveAbsoluteUrl(rawUrl: string): string {
+  const trimmed = String(rawUrl ?? '').trim()
+  if (trimmed === '') return ''
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed
+  }
+
+  const apiBase = resolveApiBaseUrl()
+  if (apiBase.endsWith('/') && trimmed.startsWith('/')) {
+    return `${apiBase.slice(0, -1)}${trimmed}`
+  }
+  if (!apiBase.endsWith('/') && !trimmed.startsWith('/')) {
+    return `${apiBase}/${trimmed}`
+  }
+  return `${apiBase}${trimmed}`
+}
+
+function extractFilenameFromUrl(rawUrl: string): string | null {
+  const url = String(rawUrl ?? '').trim()
+  if (!url) return null
+  const withoutQuery = url.split('?')[0]
+  const parts = withoutQuery.split('/').filter(Boolean)
+  const last = parts.length > 0 ? parts[parts.length - 1] : ''
+  return last ? last : null
+}
+
+function parseFilenameFromContentDisposition(value: string | null): string | null {
+  if (!value) return null
+
+  // RFC 5987: filename*=utf-8''encoded
+  const filenameStar = /filename\*\s*=\s*([^']*)''([^;]+)/i.exec(value)
+  if (filenameStar?.[2]) {
+    try {
+      return decodeURIComponent(filenameStar[2])
+    } catch {
+      return filenameStar[2]
+    }
+  }
+
+  const filename = /filename\s*=\s*\"?([^\";]+)\"?/i.exec(value)
+  if (filename?.[1]) {
+    return filename[1]
+  }
+
+  return null
+}
+
+function triggerBrowserDownload(blob: Blob, filename: string) {
+  const objectUrl = URL.createObjectURL(blob)
+
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  anchor.rel = 'noopener'
+
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+
+  // 延迟释放 URL，避免极端情况下下载尚未开始就被回收
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+}
+
+function triggerTokenFormDownload(downloadUrl: string, token: string) {
+  const absoluteUrl = resolveAbsoluteUrl(downloadUrl)
+  if (!absoluteUrl) {
+    throw new Error('下载链接为空')
+  }
+  const ticket = String(token ?? '').trim()
+  if (!ticket) {
+    throw new Error('下载票据为空')
+  }
+
+  const frameName = `download_frame_${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const iframe = document.createElement('iframe')
+  iframe.name = frameName
+  iframe.style.display = 'none'
+
+  const form = document.createElement('form')
+  form.method = 'POST'
+  form.action = absoluteUrl
+  form.target = frameName
+  form.style.display = 'none'
+
+  // 与后端字段名兼容：同时发送 token 与 download_token
+  for (const name of ['token', 'download_token']) {
+    const input = document.createElement('input')
+    input.type = 'hidden'
+    input.name = name
+    input.value = ticket
+    form.appendChild(input)
+  }
+
+  document.body.appendChild(iframe)
+  document.body.appendChild(form)
+
+  form.submit()
+
+  // 延迟清理：避免极端情况下请求尚未发出就被移除
+  window.setTimeout(() => {
+    form.remove()
+    iframe.remove()
+  }, 30_000)
+}
+
+async function downloadWithBearerAuth(downloadUrl: string): Promise<void> {
+  const absoluteUrl = resolveAbsoluteUrl(downloadUrl)
+  if (!absoluteUrl) {
+    throw new Error('下载链接为空')
+  }
+
+  const accessToken = TokenManager.getAccessToken()
+  if (!accessToken) {
+    throw new Error('缺少访问令牌，无法下载报告')
+  }
+
+  const response = await fetch(absoluteUrl, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('下载失败：未登录或登录已过期')
+    }
+    if (response.status === 403) {
+      throw new Error('下载失败：无权限下载该报告')
+    }
+    if (response.status === 404) {
+      throw new Error('下载失败：报告文件不存在或已过期')
+    }
+    throw new Error(`下载失败：HTTP ${response.status}`)
+  }
+
+  const blob = await response.blob()
+  const filename =
+    parseFilenameFromContentDisposition(response.headers.get('content-disposition')) ||
+    extractFilenameFromUrl(absoluteUrl) ||
+    'monitoring-report'
+
+  triggerBrowserDownload(blob, filename)
+}
+
+export interface ReportExportButtonProps {
+  /** 时间范围（例如 24h/7d/30d），会透传到后端导出接口 */
+  timeRange?: string
+  /** 导出内容分区（stats/charts/alerts），会透传到后端导出接口 */
+  sections?: string[]
+}
+
+export function ReportExportButton({
+  timeRange = '24h',
+  sections = ['stats', 'charts', 'alerts'],
+}: ReportExportButtonProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [exportStatus, setExportStatus] = useState<ExportStatus>({
     isExporting: false,
   })
   const menuRef = useRef<HTMLDivElement>(null)
+  const clearMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isMountedRef = useRef(true)
 
   // 点击外部关闭菜单
   useEffect(() => {
@@ -43,6 +206,25 @@ export function ReportExportButton() {
     }
   }, [isMenuOpen])
 
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      if (clearMessageTimerRef.current) {
+        clearTimeout(clearMessageTimerRef.current)
+      }
+    }
+  }, [])
+
+  const scheduleClearMessage = (delayMs: number) => {
+    if (clearMessageTimerRef.current) {
+      clearTimeout(clearMessageTimerRef.current)
+    }
+    clearMessageTimerRef.current = setTimeout(() => {
+      if (!isMountedRef.current) return
+      setExportStatus({ isExporting: false })
+    }, delayMs)
+  }
+
   const handleExport = async (format: ExportFormat) => {
     setIsMenuOpen(false)
     setExportStatus({ isExporting: true })
@@ -50,35 +232,48 @@ export function ReportExportButton() {
     try {
       const result = await exportMonitoringReport({
         format,
-        time_range: '24h',
-        sections: ['stats', 'charts', 'alerts'],
+        time_range: timeRange,
+        sections,
       })
 
+      const downloadToken =
+        typeof result.download_token === 'string' ? result.download_token.trim() : ''
+      const downloadFormUrl =
+        typeof result.download_form_url === 'string' ? result.download_form_url.trim() : ''
+
+      if (downloadToken !== '' && downloadFormUrl !== '') {
+        // 预检：token 下载无法在前端可靠拿到 HTTP 状态，提前用鉴权接口校验可提升错误提示体验。
+        // 若预检接口不可用（网络/服务异常），仍继续尝试下载，避免误阻断。
+        let precheck: Awaited<ReturnType<typeof checkMonitoringReportDownloadToken>> | null = null
+        try {
+          precheck = await checkMonitoringReportDownloadToken(downloadToken)
+        } catch (error) {
+          console.warn('[ReportExportButton] download token precheck failed, continue download:', error)
+        }
+        if (precheck && !precheck.valid) {
+          throw new Error(precheck.message || '下载票据已过期或已使用，请重新导出')
+        }
+        triggerTokenFormDownload(downloadFormUrl, downloadToken)
+      } else if (result.download_url) {
+        await downloadWithBearerAuth(result.download_url)
+      }
+
+      if (!isMountedRef.current) return
       setExportStatus({
         isExporting: false,
         lastExport: {
           success: true,
           format,
-          message: `${FORMAT_CONFIG[format].label} 报告已生成`,
+          message: `${FORMAT_CONFIG[format].label} 报告已发起下载`,
         },
       })
 
-      // 如果返回了下载URL,拼接后端地址后打开下载
-      if (result.download_url) {
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-        const downloadUrl = result.download_url.startsWith('http')
-          ? result.download_url
-          : `${apiBase}${result.download_url}`
-        window.open(downloadUrl, '_blank')
-      }
-
       // 3秒后清除成功消息
-      setTimeout(() => {
-        setExportStatus({ isExporting: false })
-      }, 3000)
+      scheduleClearMessage(3000)
     } catch (error) {
       console.error('[ReportExportButton] Export failed:', error)
 
+      if (!isMountedRef.current) return
       setExportStatus({
         isExporting: false,
         lastExport: {
@@ -89,9 +284,7 @@ export function ReportExportButton() {
       })
 
       // 5秒后清除错误消息
-      setTimeout(() => {
-        setExportStatus({ isExporting: false })
-      }, 5000)
+      scheduleClearMessage(5000)
     }
   }
 

@@ -7,6 +7,7 @@ import {
   Card,
   CardContent
 } from '@/components/atoms'
+import { isCheckItemTypeSupported } from '../utils/check-item-support'
 import type { InspectionTemplate } from '../types'
 
 interface Props {
@@ -223,6 +224,11 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
                             <Badge variant={getCheckTypeBadgeVariant(checkItem.type)} size="sm">
                               {getCheckTypeLabel(checkItem.type)}
                             </Badge>
+                            {!isCheckItemTypeSupported(checkItem.type) && (
+                              <Badge variant="outline" size="sm">
+                                未支持执行
+                              </Badge>
+                            )}
                             <span className="text-xs text-muted-foreground">权重: {checkItem.weight || 1}</span>
                           </div>
                         </div>

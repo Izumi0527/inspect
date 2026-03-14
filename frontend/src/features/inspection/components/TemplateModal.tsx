@@ -12,6 +12,7 @@ import {
   Badge
 } from '@/components/atoms'
 import { useCreateTemplate, useUpdateTemplate } from '../hooks/useInspection'
+import { isCheckItemTypeSupported } from '../utils/check-item-support'
 import { InspectionTemplate, InspectionCheckItem } from '../types'
 
 interface Props {
@@ -119,7 +120,7 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
     const newCheckItem: InspectionCheckItem = {
       id: Date.now().toString(),
       name: '新检查项',
-      type: 'script',
+      type: 'snmp',
       config: {},
       weight: 1
     }
@@ -412,12 +413,25 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="snmp">SNMP</SelectItem>
-                              <SelectItem value="ssh">SSH</SelectItem>
-                              <SelectItem value="http">HTTP</SelectItem>
                               <SelectItem value="ping">Ping</SelectItem>
-                              <SelectItem value="script">Script</SelectItem>
+                              <SelectItem value="ssh" disabled={!isCheckItemTypeSupported('ssh') && checkItem.type !== 'ssh'}>
+                                SSH（暂不支持执行）
+                              </SelectItem>
+                              <SelectItem value="http" disabled={!isCheckItemTypeSupported('http') && checkItem.type !== 'http'}>
+                                HTTP（暂不支持执行）
+                              </SelectItem>
+                              <SelectItem value="script" disabled={!isCheckItemTypeSupported('script') && checkItem.type !== 'script'}>
+                                Script（暂不支持执行）
+                              </SelectItem>
                             </SelectContent>
                           </Select>
+                          {!isCheckItemTypeSupported(checkItem.type) && (
+                            <div className="md:col-span-2">
+                              <p className="text-xs text-amber-700">
+                                当前版本执行引擎暂不支持该检查类型，执行时将被跳过；建议改为 Ping 或 SNMP。
+                              </p>
+                            </div>
+                          )}
                         </div>
                         <Button
                           type="button"

@@ -70,7 +70,7 @@ return response.data
    - 兼容 `{ success: true, data: X }`
 
 2. **导出不走 `api-client`**，直接 `fetch(url, {Authorization})` + `blob()`：
-   - URL：`(NEXT_PUBLIC_API_URL||http://localhost:8000) + /api/v1/logs/export`
+   - URL：`(NEXT_PUBLIC_API_URL||http://127.0.0.1:38000) + /api/v1/logs/export`
    - 参数：透传过滤参数 + `format/include_raw/include_stats`
 
 3. **后端补齐 `source` 过滤**：扩展 `logs.LogFilter` 与查询构造，使 UI 过滤真实生效。

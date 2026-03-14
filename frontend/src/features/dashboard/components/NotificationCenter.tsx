@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/atoms/button'
@@ -16,6 +16,8 @@ import {
   NOTIFICATION_CATEGORIES,
 } from '@/types/notification'
 import { cn } from '@/utils/cn'
+import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
 import {
   DashboardNotificationsResult,
   dismissDashboardNotifications,
@@ -40,6 +42,14 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
   const router = useRouter()
   const queryClient = useQueryClient()
   const [activeCategory, setActiveCategory] = useState<NotificationCategoryKey>('all')
+  const canReadAlerts = usePermission(Permission.ALERTS_READ)
+
+  useEffect(() => {
+    // 无告警权限时，不允许停留在“告警”标签页（避免空白/误导交互）
+    if (!canReadAlerts && activeCategory === 'alerts') {
+      setActiveCategory('all')
+    }
+  }, [activeCategory, canReadAlerts])
 
   const limit = 20
   const windowLimit = 200
@@ -165,16 +175,31 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
     markReadMutation.mutate({ ids: [notification.id] })
 
     if (notification.link) {
+      if (!canReadAlerts && notification.link.startsWith('/alerts')) {
+        toast.error(`当前账号缺少查看告警权限（${Permission.ALERTS_READ}）`)
+        return
+      }
       router.push(notification.link)
       return
     }
 
     // 根据通知类型处理跳转
     if (notification.type === 'alert') {
+      if (!canReadAlerts) {
+        toast.error(`当前账号缺少查看告警权限（${Permission.ALERTS_READ}）`)
+        return
+      }
       // 告警类型：跳转到告警中心并传递告警 ID
       router.push(`/alerts?id=${notification.id}`)
     }
   }
+
+  const availableCategories = useMemo(() => {
+    if (canReadAlerts) return NOTIFICATION_CATEGORIES
+    return NOTIFICATION_CATEGORIES.filter((c) => c.key !== 'alerts')
+  }, [canReadAlerts])
+
+  const showViewAll = typeof onViewAll === 'function' && canReadAlerts
 
   return (
     <DropdownMenu>
@@ -215,7 +240,7 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
 
         {/* 标签页 */}
         <div className="flex items-center border-b border-border">
-          {NOTIFICATION_CATEGORIES.map((category) => {
+          {availableCategories.map((category) => {
             const isActive = activeCategory === category.key
             const count =
               category.key === 'all'
@@ -269,7 +294,7 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
         </div>
 
         {/* 底部链接 */}
-        {filteredNotifications.length > 0 && (
+        {showViewAll && filteredNotifications.length > 0 && (
           <div className="border-t border-border">
             <button
               onClick={onViewAll}

@@ -22,16 +22,41 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Download, CheckCheck, XCircle, RefreshCw, Bell, BellOff, ArrowUpDown } from 'lucide-react'
+import { Download, CheckCheck, XCircle, RefreshCw, Bell, BellOff, ArrowUpDown, AlertTriangle } from 'lucide-react'
 import { exportAlerts } from '../api/alerts.api'
-import { useWebSocketEvent } from '@/lib/websocket'
-import { WebSocketEvents } from '@/lib/websocket'
+import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
+import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
 
 const AUTO_REFRESH_INTERVAL = 30000 // 30秒
 const WS_SELF_EVENT_TTL_MS = 5000 // 本端操作后短时间内忽略同ID回推事件，避免重复刷新
 
-export const AlertsView: React.FC = () => {
+function AlertsAccessDenied() {
+  return (
+    <AppLayout title="告警中心 - 无权限" alertCount={0}>
+      <div className="text-center py-12">
+        <div className="mb-6">
+          <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">
+            无权限访问告警中心
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            当前账号缺少查看告警的权限（{Permission.ALERTS_READ}），请联系管理员开通。
+          </p>
+          <div className="space-x-3">
+            <Button onClick={() => window.history.back()} variant="outline">
+              返回上一页
+            </Button>
+          </div>
+        </div>
+      </div>
+    </AppLayout>
+  )
+}
+
+const AlertsViewContent: React.FC = () => {
   const searchParams = useSearchParams()
+  const ws = useWebSocket()
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterValues>({})
@@ -176,6 +201,26 @@ export const AlertsView: React.FC = () => {
     wsSelfEventRef.current.delete(id)
     return true
   }, [])
+
+  // WebSocket 房间订阅：告警推送已改为 `alerts` 房间，必须订阅才会收到推送。
+  const subscribeAlertsRoom = useCallback(() => {
+    if (!ws.isConnected()) return
+    ws.subscribeToAlerts()
+  }, [ws])
+
+  useEffect(() => {
+    subscribeAlertsRoom()
+
+    return () => {
+      if (!ws.isConnected()) return
+      ws.unsubscribeFromAlerts()
+    }
+  }, [subscribeAlertsRoom, ws])
+
+  const handleWsConnect = useCallback(() => {
+    subscribeAlertsRoom()
+  }, [subscribeAlertsRoom])
+  useWebSocketEvent(WebSocketEvents.CONNECT, handleWsConnect)
 
   // WebSocket 实时告警更新
   useWebSocketEvent(WebSocketEvents.NEW_ALERT, (payload) => {
@@ -439,4 +484,14 @@ export const AlertsView: React.FC = () => {
       )}
     </AppLayout>
   )
+}
+
+export const AlertsView: React.FC = () => {
+  const canReadAlerts = usePermission(Permission.ALERTS_READ)
+
+  if (!canReadAlerts) {
+    return <AlertsAccessDenied />
+  }
+
+  return <AlertsViewContent />
 }

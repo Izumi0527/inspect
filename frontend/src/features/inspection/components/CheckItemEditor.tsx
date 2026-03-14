@@ -5,12 +5,15 @@
 
 import { useState } from 'react'
 import type { InspectionCheckItem, CheckItemConfig, CheckItemType } from '../types'
+import { isCheckItemTypeSupported } from '../utils/check-item-support'
 
 interface CheckItemEditorProps {
   item?: InspectionCheckItem
   onSave: (item: InspectionCheckItem) => void
   onCancel: () => void
 }
+
+const OID_PATTERN = /^[0-9]+(\.[0-9]+)*$/
 
 export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps) {
   const [formData, setFormData] = useState<InspectionCheckItem>({
@@ -22,6 +25,7 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const isSupportedType = isCheckItemTypeSupported(formData.type)
 
   // 验证表单
   const validateForm = (): boolean => {
@@ -31,16 +35,17 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
       newErrors.name = '检查项名称不能为空'
     }
 
-    if (formData.type === 'snmp' && !formData.config.oid) {
-      newErrors.oid = 'SNMP 类型必须提供 OID'
+    // SNMP：OID 非必填，但若填写则校验格式
+    if (formData.type === 'snmp' && typeof formData.config.oid === 'string') {
+      const oid = formData.config.oid.trim()
+      if (oid && !OID_PATTERN.test(oid)) {
+        newErrors.oid = 'OID 格式无效，应由数字和点组成，例如：1.3.6.1.2.1.1.3.0'
+      }
     }
 
-    if (formData.type === 'ssh' && !formData.config.command) {
+    // SSH：后端校验仍要求 command，避免保存历史模板失败
+    if (formData.type === 'ssh' && !formData.config.command?.trim()) {
       newErrors.command = 'SSH 类型必须提供命令'
-    }
-
-    if (formData.type === 'http' && !formData.config.url) {
-      newErrors.url = 'HTTP 类型必须提供 URL'
     }
 
     // 验证阈值
@@ -125,11 +130,16 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
               className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="snmp">SNMP</option>
-              <option value="ssh">SSH</option>
-              <option value="http">HTTP</option>
               <option value="ping">Ping</option>
-              <option value="script">Script</option>
+              <option value="ssh" disabled={!isCheckItemTypeSupported('ssh')}>SSH（暂不支持执行）</option>
+              <option value="http" disabled={!isCheckItemTypeSupported('http')}>HTTP（暂不支持执行）</option>
+              <option value="script" disabled={!isCheckItemTypeSupported('script')}>Script（暂不支持执行）</option>
             </select>
+            {!isSupportedType && (
+              <p className="text-amber-600 text-sm mt-1">
+                当前版本执行引擎暂不支持该检查类型，执行时将被跳过；建议改为 Ping 或 SNMP。
+              </p>
+            )}
           </div>
 
           <div>
@@ -154,7 +164,7 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  OID <span className="text-red-500">*</span>
+                  OID（可选）
                 </label>
                 <input
                   type="text"
@@ -166,6 +176,9 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
                   placeholder="例如：1.3.6.1.2.1.1.3.0"
                 />
                 {errors.oid && <p className="text-red-500 text-sm mt-1">{errors.oid}</p>}
+                <p className="text-xs text-muted-foreground mt-1">
+                  未填写 OID 也可保存；当前版本主要支持 Ping/SNMP 的连通性与采集型检查。
+                </p>
               </div>
 
               <div>
@@ -228,7 +241,7 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  URL <span className="text-red-500">*</span>
+                  URL（可选）
                 </label>
                 <input
                   type="text"

@@ -41,15 +41,18 @@ const LazyNetworkTrafficStackedAreaChart = lazy(() =>
 interface SystemPerformanceChartWrapperProps {
   data: SystemPerformanceDataPoint[]
   height?: number
+  /** 时间范围（用于图表 x 轴刻度/标签格式优化） */
+  timeRange?: string
 }
 
 export function SystemPerformanceChartWrapper({
   data,
   height = 300,
+  timeRange,
 }: SystemPerformanceChartWrapperProps) {
   return (
     <Suspense fallback={<ChartSkeleton height={height} />}>
-      <LazySystemPerformanceChart data={data} height={height} />
+      <LazySystemPerformanceChart data={data} height={height} timeRange={timeRange} />
     </Suspense>
   )
 }
@@ -61,12 +64,15 @@ interface TemperatureChartWrapperProps {
   data: TemperatureDataPoint[]
   height?: number
   temperatureThreshold?: number
+  /** 时间范围（用于图表 x 轴刻度/标签格式优化） */
+  timeRange?: string
 }
 
 export function TemperatureChartWrapper({
   data,
   height = 300,
   temperatureThreshold = 75,
+  timeRange,
 }: TemperatureChartWrapperProps) {
   return (
     <Suspense fallback={<ChartSkeleton height={height} />}>
@@ -74,6 +80,7 @@ export function TemperatureChartWrapper({
         data={data}
         height={height}
         temperatureThreshold={temperatureThreshold}
+        timeRange={timeRange}
       />
     </Suspense>
   )
@@ -85,15 +92,18 @@ export function TemperatureChartWrapper({
 interface NetworkTrafficChartWrapperProps {
   data: NetworkTrafficDataPoint[]
   height?: number
+  /** 时间范围（用于图表 x 轴刻度/标签格式优化） */
+  timeRange?: string
 }
 
 export function NetworkTrafficChartWrapper({
   data,
   height = 300,
+  timeRange,
 }: NetworkTrafficChartWrapperProps) {
   return (
     <Suspense fallback={<ChartSkeleton height={height} />}>
-      <LazyNetworkTrafficStackedAreaChart data={data} height={height} />
+      <LazyNetworkTrafficStackedAreaChart data={data} height={height} timeRange={timeRange} />
     </Suspense>
   )
 }

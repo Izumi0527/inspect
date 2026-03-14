@@ -5,10 +5,11 @@
  * 提供全局认证状态管理和用户权限验证
  */
 
-import { createContext, useContext, useEffect, useReducer, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useReducer, useCallback, useMemo, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 import { api, TokenManager, ApiClientError } from '../api-client'
+import { normalizePermissionKey, normalizePermissionList } from '../authz/permission'
 import {
   AuthState,
   AuthContextType,
@@ -207,11 +208,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     dispatch({ type: 'UPDATE_USER', payload: userData })
   }, [])
 
+  const normalizedPermissionSet = useMemo(() => {
+    const raw = (state.user?.permissions ?? []) as unknown as string[]
+    return new Set<string>(normalizePermissionList(raw))
+  }, [state.user?.permissions])
+
   // 权限检查
   const checkPermission = useCallback((permission: Permission): boolean => {
     if (!state.user) return false
-    return state.user.permissions.includes(permission)
-  }, [state.user])
+    const required = normalizePermissionKey(String(permission))
+    if (required === '') return true
+    return normalizedPermissionSet.has(required)
+  }, [normalizedPermissionSet, state.user])
 
   // 角色检查
   const checkRole = useCallback((roles: UserRole | UserRole[]): boolean => {

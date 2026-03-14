@@ -5,7 +5,7 @@ import type {
   AuditLogQueryParams,
 } from '../types/audit.types'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
 const API_PREFIX = '/api/v1'
 
 /**

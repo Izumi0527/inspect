@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { format } from 'date-fns'
 import { LineChartComponent } from '@/components/atoms/charts'
 import type { SystemPerformanceDataPoint } from '../../types'
 
@@ -7,6 +8,8 @@ interface SystemPerformanceChartProps {
   height?: number
   showLegend?: boolean
   className?: string
+  /** 时间范围（用于 x 轴标签格式优化） */
+  timeRange?: string
 }
 
 /**
@@ -22,15 +25,33 @@ export function SystemPerformanceChart({
   height = 300,
   showLegend = true,
   className,
+  timeRange,
 }: SystemPerformanceChartProps) {
+  const showDateOnAxis = useMemo(() => {
+    const trimmed = String(timeRange ?? '').trim().toLowerCase()
+    const match = /^(\d+)([hdw])$/.exec(trimmed)
+    if (!match) return false
+    const value = Number.parseInt(match[1], 10)
+    const unit = match[2]
+    if (!Number.isFinite(value) || value <= 0) return false
+    return !(unit === 'h' && value <= 24)
+  }, [timeRange])
+
+  const formatTimeLabel = useMemo(() => {
+    return (date: Date): string => {
+      if (Number.isNaN(date.getTime())) return '-'
+      if (!showDateOnAxis) {
+        return format(date, 'HH:mm')
+      }
+      return format(date, 'MM-dd HH:mm')
+    }
+  }, [showDateOnAxis])
+
   // 数据转换:将timestamp格式化为更易读的格式
   const chartData = useMemo(() => {
     return data.map((point) => {
       const date = new Date(point.timestamp)
-      const timeLabel = date.toLocaleTimeString('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
+      const timeLabel = formatTimeLabel(date)
 
       return {
         time: timeLabel,
@@ -39,7 +60,7 @@ export function SystemPerformanceChart({
         network: point.network,
       }
     })
-  }, [data])
+  }, [data, formatTimeLabel])
 
   // 自定义 tooltip 格式化
   const formatter = (value: number | string, name: string): string => {

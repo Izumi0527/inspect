@@ -12,45 +12,50 @@ export enum UserRole {
 
 // 用户权限枚举
 export enum Permission {
+  // 用户管理权限
+  USERS_READ = 'users:read',
+  USERS_CREATE = 'users:create',
+  USERS_UPDATE = 'users:update',
+  USERS_DELETE = 'users:delete',
+
   // 设备管理权限
-  DEVICE_READ = 'device:read',
-  DEVICE_WRITE = 'device:write',
-  DEVICE_DELETE = 'device:delete',
-  DEVICE_DISCOVER = 'device:discover',
-  
+  DEVICES_READ = 'devices:read',
+  DEVICES_CREATE = 'devices:create',
+  DEVICES_UPDATE = 'devices:update',
+  DEVICES_DELETE = 'devices:delete',
+
+  // 巡检权限
+  INSPECTIONS_READ = 'inspections:read',
+  INSPECTIONS_CREATE = 'inspections:create',
+  INSPECTIONS_UPDATE = 'inspections:update',
+  INSPECTIONS_DELETE = 'inspections:delete',
+  INSPECTIONS_EXECUTE = 'inspections:execute',
+
+  // 告警权限
+  ALERTS_READ = 'alerts:read',
+  ALERTS_CREATE = 'alerts:create',
+  ALERTS_UPDATE = 'alerts:update',
+  ALERTS_DELETE = 'alerts:delete',
+
   // 监控权限
   MONITORING_READ = 'monitoring:read',
-  MONITORING_MANAGE = 'monitoring:manage',
-  
-  // 巡检权限
-  INSPECTION_READ = 'inspection:read',
-  INSPECTION_WRITE = 'inspection:write',
-  INSPECTION_EXECUTE = 'inspection:execute',
-  
-  // 告警权限
-  ALERT_READ = 'alert:read',
-  ALERT_MANAGE = 'alert:manage',
-  ALERT_RULE_MANAGE = 'alert:rule_manage',
-  
+  MONITORING_CONTROL = 'monitoring:control',
+  MONITORING_EXPORT = 'monitoring:export',
+
   // 报表权限
-  REPORT_READ = 'report:read',
-  REPORT_GENERATE = 'report:generate',
-  REPORT_EXPORT = 'report:export',
-  
-  // 用户管理权限
-  USER_READ = 'user:read',
-  USER_WRITE = 'user:write',
-  USER_DELETE = 'user:delete',
-  
+  REPORTS_READ = 'reports:read',
+  REPORTS_CREATE = 'reports:create',
+  REPORTS_UPDATE = 'reports:update',
+  REPORTS_DELETE = 'reports:delete',
+
   // 系统管理权限
-  SYSTEM_READ = 'system:read',
-  SYSTEM_MANAGE = 'system:manage',
-  SYSTEM_BACKUP = 'system:backup',
+  SYSTEM_CONFIG = 'system:config',
+  SYSTEM_LOGS = 'system:logs',
 }
 
 // 用户信息接口
 export interface User {
-  id: number
+  id: string
   username: string
   email: string
   full_name: string
