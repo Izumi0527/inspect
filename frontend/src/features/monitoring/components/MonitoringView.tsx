@@ -746,9 +746,6 @@ export function MonitoringView() {
                     <p className="text-sm font-semibold text-foreground">
                       尚未添加设备
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      添加设备并启用采集后，这里将展示实时指标与趋势图表。
-                    </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button asChild size="sm" className="cursor-pointer">
                         <Link href="/devices">去设备管理</Link>
@@ -764,7 +761,7 @@ export function MonitoringView() {
 
             {/* ── 关键指标 ── */}
             <section>
-              <SectionHeader icon={Activity} title="关键指标" description="实时系统运行概览" />
+              <SectionHeader icon={Activity} title="关键指标" />
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 {envelope?.sections.stats?.ok === false ? (
                   <div className="col-span-full rounded-xl border-2 border-dashed border-red-200 bg-red-50/60 p-8 text-center dark:border-red-800 dark:bg-red-900/10">
@@ -819,7 +816,7 @@ export function MonitoringView() {
 
             {/* ── 性能趋势 ── */}
             <section ref={chartsRef}>
-              <SectionHeader icon={TrendingUp} title="性能趋势" description={`${timeRangeLabel}系统性能与温度变化`} />
+              <SectionHeader icon={TrendingUp} title="性能趋势" />
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <Card>
                   <CardHeader className="pb-2">
@@ -882,7 +879,7 @@ export function MonitoringView() {
 
             {/* ── 状态详情 ── */}
             <section>
-              <SectionHeader icon={BarChart3} title="状态详情" description="设备分布、可用性与实时告警" />
+              <SectionHeader icon={BarChart3} title="状态详情" />
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 items-stretch">
                 {envelope?.sections.deviceStatus?.ok === false ? (
                   <SectionFailureCard
@@ -926,7 +923,7 @@ export function MonitoringView() {
 
             {/* ── 网络流量 ── */}
             <section ref={networkRef}>
-              <SectionHeader icon={Radio} title="网络流量" description={`入站、出站及总流量的${timeRangeLabel}趋势`} />
+              <SectionHeader icon={Radio} title="网络流量" />
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">流量监控</CardTitle>
