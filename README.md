@@ -182,15 +182,15 @@ services:
     volumes: ["./backend-go:/app"]
     
   frontend:         # Next.js前端 (开发模式)
-    ports: ["4000:3000"]
+    ports: ["33000:33000"]
     volumes: ["./frontend:/app"]
     
   postgres:         # TimescaleDB数据库
-    ports: ["5432:5432"]
+    ports: ["15500:5432"]
     database: inspect_system_dev
     
   redis:            # Redis缓存
-    ports: ["6379:6379"]
+    ports: ["16380:6379"]
     password: dev_redis_2024
     
   pgadmin:          # 数据库管理工具

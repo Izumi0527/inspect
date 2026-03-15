@@ -79,6 +79,13 @@ class WebSocketManager {
   private heartbeatIntervalMs = 60_000
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
+  // 订阅幂等与重连恢复：记录订阅意图，在重连后自动重放，避免“漏订阅/重复订阅”。
+  private deviceMonitoringSubscribed = false
+  private deviceMonitoringDeviceIds: number[] | undefined
+  private alertsSubscribed = false
+  private alertsSeverity: string[] | undefined
+  private inspectionTasksSubscribed = false
+
   // 获取WebSocket服务器地址
   private getWebSocketUrl(userId?: string): string {
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://127.0.0.1:38000'
@@ -149,6 +156,7 @@ class WebSocketManager {
         this.startHeartbeat()
         this.dispatchEvent(WebSocketEvents.CONNECT, { status: 'connected' })
         this.dispatchEvent('connection_status', { status: 'connected' })
+        this.replaySubscriptions()
         resolve()
       }
 
@@ -193,6 +201,13 @@ class WebSocketManager {
     this.connectPromise = null
     this.clearReconnectTimer()
     this.stopHeartbeat()
+
+    // 手动断开通常发生在退出登录/切换账号：清理订阅状态，避免下次登录复用旧订阅。
+    this.deviceMonitoringSubscribed = false
+    this.deviceMonitoringDeviceIds = undefined
+    this.alertsSubscribed = false
+    this.alertsSeverity = undefined
+    this.inspectionTasksSubscribed = false
 
     if (this.socket) {
       this.socket.close()
@@ -249,6 +264,20 @@ class WebSocketManager {
   // 是否已连接
   isConnected(): boolean {
     return this.status === ConnectionStatus.CONNECTED && this.socket?.readyState === WebSocket.OPEN
+  }
+
+  private replaySubscriptions(): void {
+    if (!this.isConnected()) return
+
+    if (this.deviceMonitoringSubscribed) {
+      this.emit('subscribe_device_monitoring', { device_ids: this.deviceMonitoringDeviceIds })
+    }
+    if (this.alertsSubscribed) {
+      this.emit('subscribe_alerts', { severity: this.alertsSeverity })
+    }
+    if (this.inspectionTasksSubscribed) {
+      this.emit('subscribe_inspection_tasks')
+    }
   }
 
   // 分发事件到注册的处理器
@@ -498,31 +527,84 @@ class WebSocketManager {
 
   // subscribe device monitoring
   subscribeToDeviceMonitoring(deviceIds?: number[]): void {
-    this.emit('subscribe_device_monitoring', { device_ids: deviceIds })
+    const normalizedDeviceIds =
+      Array.isArray(deviceIds) && deviceIds.length > 0
+        ? Array.from(new Set(deviceIds))
+            .map((id) => (typeof id === 'number' ? id : Number(String(id))))
+            .filter((id): id is number => Number.isFinite(id))
+            .sort((a, b) => a - b)
+        : undefined
+
+    const nextKey = normalizedDeviceIds ? normalizedDeviceIds.join(',') : ''
+    const prevKey = this.deviceMonitoringDeviceIds ? this.deviceMonitoringDeviceIds.join(',') : ''
+    const wasSubscribed = this.deviceMonitoringSubscribed
+
+    this.deviceMonitoringSubscribed = true
+    this.deviceMonitoringDeviceIds = normalizedDeviceIds
+
+    // 已订阅且参数未变化：不重复发送，避免服务端房间成员膨胀与重复推送。
+    if (wasSubscribed && nextKey === prevKey) return
+    if (!this.isConnected()) return
+    this.emit('subscribe_device_monitoring', { device_ids: normalizedDeviceIds })
   }
 
   // 取消subscribe device monitoring
   unsubscribeFromDeviceMonitoring(): void {
+    if (!this.deviceMonitoringSubscribed) return
+    this.deviceMonitoringSubscribed = false
+    this.deviceMonitoringDeviceIds = undefined
+    if (!this.isConnected()) return
     this.emit('unsubscribe_device_monitoring')
   }
 
   // subscribe alert notifications
   subscribeToAlerts(severity?: string[]): void {
-    this.emit('subscribe_alerts', { severity })
+    const normalizedSeverity =
+      Array.isArray(severity) && severity.length > 0
+        ? Array.from(
+            new Set(
+              severity
+                .map((item) => String(item).trim())
+                .filter((item) => item !== '')
+            )
+          ).sort()
+        : undefined
+
+    const nextKey = normalizedSeverity ? normalizedSeverity.join(',') : ''
+    const prevKey = this.alertsSeverity ? this.alertsSeverity.join(',') : ''
+    const wasSubscribed = this.alertsSubscribed
+
+    this.alertsSubscribed = true
+    this.alertsSeverity = normalizedSeverity
+
+    if (wasSubscribed && nextKey === prevKey) return
+    if (!this.isConnected()) return
+    this.emit('subscribe_alerts', { severity: normalizedSeverity })
   }
 
   // 取消subscribe alert notifications
   unsubscribeFromAlerts(): void {
+    if (!this.alertsSubscribed) return
+    this.alertsSubscribed = false
+    this.alertsSeverity = undefined
+    if (!this.isConnected()) return
     this.emit('unsubscribe_alerts')
   }
 
   // subscribe inspection tasks
   subscribeToInspectionTasks(): void {
+    const wasSubscribed = this.inspectionTasksSubscribed
+    this.inspectionTasksSubscribed = true
+    if (wasSubscribed) return
+    if (!this.isConnected()) return
     this.emit('subscribe_inspection_tasks')
   }
 
   // 取消subscribe inspection tasks
   unsubscribeFromInspectionTasks(): void {
+    if (!this.inspectionTasksSubscribed) return
+    this.inspectionTasksSubscribed = false
+    if (!this.isConnected()) return
     this.emit('unsubscribe_inspection_tasks')
   }
 

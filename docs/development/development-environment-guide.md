@@ -89,7 +89,7 @@ docker-compose -f docker-compose.dev.yml up -d
 curl http://localhost:38000/health
 
 # 前端
-curl http://localhost:3000
+curl http://localhost:33000
 
 # 数据库
 psql -h localhost -p 15500 -U inspect_dev -d inspect_system_dev

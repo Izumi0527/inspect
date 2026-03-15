@@ -266,7 +266,7 @@ Write-Host ""
 Write-Host "后续步骤:" -ForegroundColor Cyan
 Write-Host "  1. 启动后端服务（推荐）: .\scripts\development\dev-start.ps1 -Services backend" -ForegroundColor White
 Write-Host "  2. 启动前端服务（手动）: cd frontend; pnpm dev" -ForegroundColor White
-Write-Host "  3. 访问系统: http://localhost:3000" -ForegroundColor White
+Write-Host "  3. 访问系统: http://localhost:33000" -ForegroundColor White
 Write-Host ""
 Write-Host "数据库管理:" -ForegroundColor Cyan
 Write-Host "  - 查看数据库状态: .\scripts\database\db-manage.ps1 status" -ForegroundColor White

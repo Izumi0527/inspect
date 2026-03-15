@@ -296,16 +296,16 @@ go run cmd/api/main.go
 ### 前端启动
 ```bash
 cd frontend
-npm run dev
+pnpm dev
 ```
 
 ### 访问地址
 - 后端 API: http://127.0.0.1:38000
-- 前端应用: http://localhost:3000
+- 前端应用: http://localhost:33000
 - 演示页面:
-  - http://localhost:3000/templates-demo
-  - http://localhost:3000/template-editor-demo
-  - http://localhost:3000/import-export-demo
+  - http://localhost:33000/templates-demo
+  - http://localhost:33000/template-editor-demo
+  - http://localhost:33000/import-export-demo
 
 ---
 

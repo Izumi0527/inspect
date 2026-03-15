@@ -95,7 +95,7 @@ services:
       REFRESH_TOKEN_EXPIRE_DAYS: 30
 
       # CORS 配置
-      CORS_ORIGINS: '["http://localhost:${FRONTEND_HOST_PORT:-4000}", "http://127.0.0.1:${FRONTEND_HOST_PORT:-4000}"]'
+      CORS_ORIGINS: '["http://localhost:${FRONTEND_HOST_PORT:-33000}", "http://127.0.0.1:${FRONTEND_HOST_PORT:-33000}"]'
       ALLOWED_HOSTS: '["*"]'
 
       # 报表配置
@@ -147,7 +147,7 @@ services:
       - /app/node_modules
       - /app/.next
     ports:
-      - "${FRONTEND_HOST_PORT:-4000}:3000"
+      - "${FRONTEND_HOST_PORT:-33000}:33000"
     depends_on:
       - backend
     networks:
@@ -155,7 +155,7 @@ services:
     restart: unless-stopped
     command: sh -lc "pnpm install && pnpm dev"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:33000/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -62,14 +62,13 @@ function formatAlertTime(raw: unknown): string {
  * - 1001 Gbps → 1.00 Tbps
  */
 function formatBandwidthValue(bps: number): string {
-  if (bps === 0) return '0 bps'
-  if (bps < 0) return '0 bps'
+  if (!Number.isFinite(bps) || bps <= 0) return '0 bps'
 
   const units = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']
   const k = 1000 // 网络带宽使用1000进制
 
-  const i = Math.floor(Math.log(bps) / Math.log(k))
-  const unitIndex = Math.min(i, units.length - 1)
+  const rawIndex = Math.floor(Math.log(bps) / Math.log(k))
+  const unitIndex = Math.min(Math.max(rawIndex, 0), units.length - 1)
 
   const value = bps / Math.pow(k, unitIndex)
 
@@ -387,7 +386,7 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
  */
 export async function fetchRealtimeAlerts(limit: number = 10): Promise<Alert[]> {
   try {
-    const response = await api.get<any>(`/alerts/?page=1&page_size=${limit}&sort_by=created_at&sort_order=desc`)
+    const response = await api.get<any>(`/alerts?page=1&page_size=${limit}&sort_by=created_at&sort_order=desc`)
 
     // 后端返回分页对象，优先使用 alerts 数组
     const alertList = Array.isArray(response?.alerts) ? response.alerts
@@ -737,7 +736,12 @@ export async function fetchMonitoringDataV2(
     }
 
     console.error('获取监控数据失败:', error)
-    if (error instanceof Error && error.message.includes('监控数据加载失败')) {
+    // 保留后端错误状态码/类型，供页面做分级提示（401/403/5xx/超时等）。
+    if (error instanceof ApiClientError) {
+      throw error
+    }
+    // 保留浏览器网络错误（例如 Failed to fetch），供页面提示“后端未启动/网络异常”。
+    if (error instanceof Error) {
       throw error
     }
     throw new Error('监控数据加载失败')

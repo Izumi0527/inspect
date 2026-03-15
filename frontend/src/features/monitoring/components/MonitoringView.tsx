@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useMonitoringV2 } from '../hooks/useMonitoringV2'
+import type { MonitoringSectionKey } from '../types'
 import { useSidebar } from '@/lib/contexts/sidebar-context'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
@@ -22,6 +24,7 @@ import {
   SelectItem,
 } from '@/components/atoms'
 import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
+import { resolveMonitoringErrorView } from '../utils/monitoring-error'
 import {
   Server,
   Activity,
@@ -72,6 +75,16 @@ const TIME_RANGE_OPTIONS = [
   { value: '7d', label: '近7天' },
   { value: '30d', label: '近30天' },
 ]
+
+const MONITORING_SECTION_LABELS: Record<MonitoringSectionKey, string> = {
+  stats: '关键指标',
+  systemPerformance: '系统性能趋势',
+  temperature: '设备温度监控',
+  deviceStatus: '设备状态分布',
+  availability: '整体可用性',
+  networkTraffic: '网络流量',
+  realtimeAlerts: '实时告警',
+}
 
 function resolveTimeRangeLabel(timeRange: string): string {
   const resolved = TIME_RANGE_OPTIONS.find((item) => item.value === timeRange)?.label
@@ -210,13 +223,11 @@ export function MonitoringView() {
   }, [timeRange])
 
   const subscribeDeviceMonitoring = useCallback(() => {
-    if (!ws.isConnected()) return
     ws.subscribeToDeviceMonitoring()
   }, [ws])
 
   const subscribeAlertsRoom = useCallback(() => {
     if (!canReadAlerts) return
-    if (!ws.isConnected()) return
     ws.subscribeToAlerts()
   }, [canReadAlerts, ws])
 
@@ -251,9 +262,12 @@ export function MonitoringView() {
     isRefetching,
   } = useMonitoringV2({
     timeRange,
-    // WebSocket 连接时优先由推送触发刷新；断线时启用轮询兜底
-    enablePolling: !wsConnected && pageVisible,
-    refetchInterval: 120000,
+    // 轮询兜底策略：
+    // - 页面不可见：关闭轮询（避免后台无意义刷新）
+    // - WS 在线：低频轮询（防止“无推送/订阅异常”导致页面长期不更新）
+    // - WS 离线：恢复较高频轮询兜底
+    enablePolling: pageVisible,
+    refetchInterval: wsConnected ? 300000 : 120000,
   })
   refetchRef.current = refetch
 
@@ -277,14 +291,29 @@ export function MonitoringView() {
     : failedSections
   const hasEffectivePartialFailure = effectiveFailedSections.length > 0
 
+  const effectiveFailedSectionLabels = useMemo(() => {
+    return effectiveFailedSections.map((key) => MONITORING_SECTION_LABELS[key] ?? key)
+  }, [effectiveFailedSections])
+
+  const totalDeviceCount = useMemo(() => {
+    const stats = data?.statsV2
+    if (!Array.isArray(stats) || stats.length === 0) return null
+
+    const total = stats.find((item) => item.id === 'total_devices' || item.id === 'totalDevices')
+    if (!total) return null
+
+    const raw = String(total.value ?? '').trim()
+    if (raw === '') return null
+
+    const parsed = Number(raw.replace(/[^0-9-]/g, ''))
+    return Number.isFinite(parsed) ? parsed : null
+  }, [data?.statsV2])
+
   // 页面级订阅：进入监控中心才订阅 device_metrics，离开页面即退订，降低无关推送开销。
   useEffect(() => {
     if (!pageVisible) {
-      if (!ws.isConnected()) return
       ws.unsubscribeFromDeviceMonitoring()
-      if (canReadAlerts) {
-        ws.unsubscribeFromAlerts()
-      }
+      ws.unsubscribeFromAlerts()
       return
     }
 
@@ -292,13 +321,10 @@ export function MonitoringView() {
     subscribeAlertsRoom()
 
     return () => {
-      if (!ws.isConnected()) return
       ws.unsubscribeFromDeviceMonitoring()
-      if (canReadAlerts) {
-        ws.unsubscribeFromAlerts()
-      }
+      ws.unsubscribeFromAlerts()
     }
-  }, [canReadAlerts, pageVisible, subscribeAlertsRoom, subscribeDeviceMonitoring, ws])
+  }, [pageVisible, subscribeAlertsRoom, subscribeDeviceMonitoring, ws])
 
   // 推送触发“受控刷新”：合并同一轮采集产生的爆发推送，避免 refetch 风暴。
   // - debounce：等待推送“安静”一小段时间再刷新，尽量一次性拿到同一轮采集的完整数据
@@ -356,6 +382,14 @@ export function MonitoringView() {
     clearTimeout(scheduledRefetchTimerRef.current)
     scheduledRefetchTimerRef.current = null
   }, [pageVisible])
+
+  // 切换时间范围时清理 pending 定时器，避免旧 queryKey 的 refetch 泄漏。
+  useEffect(() => {
+    firstRealtimeEventAtRef.current = null
+    if (!scheduledRefetchTimerRef.current) return
+    clearTimeout(scheduledRefetchTimerRef.current)
+    scheduledRefetchTimerRef.current = null
+  }, [timeRange])
 
   // 注意：后端 device_metrics 推送会映射为多个事件，这里只监听一个，避免重复刷新。
   const handleRealtimeRefresh = useCallback((_payload: unknown) => {
@@ -426,6 +460,8 @@ export function MonitoringView() {
   }
 
   // ==================== 错误状态 ====================
+  const errorView = error ? resolveMonitoringErrorView(error) : null
+
   if (error) {
     return (
       <div className="min-h-screen bg-muted/40 dark:bg-background">
@@ -438,15 +474,42 @@ export function MonitoringView() {
                 <WifiOff className="h-7 w-7 text-red-600 dark:text-red-400" />
               </div>
               <h3 className="mb-2 text-lg font-semibold text-red-900 dark:text-red-100">
-                数据加载失败
+                {errorView?.title ?? '数据加载失败'}
               </h3>
               <p className="mb-5 text-sm text-red-700 dark:text-red-300">
-                {error.message || '无法连接到监控服务器'}
+                {errorView?.message ?? '暂时无法加载监控数据，请稍后重试。'}
               </p>
-              <Button variant="outline" onClick={() => refetch()} className="cursor-pointer">
-                <RefreshCw className="mr-2 h-4 w-4" />
-                重新加载
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                {errorView?.primaryAction?.href && (
+                  <Button asChild className="cursor-pointer">
+                    <Link href={errorView.primaryAction.href}>
+                      {errorView.primaryAction.label}
+                    </Link>
+                  </Button>
+                )}
+                {errorView?.secondaryAction?.href && (
+                  <Button asChild variant="outline" className="cursor-pointer">
+                    <Link href={errorView.secondaryAction.href}>
+                      {errorView.secondaryAction.label}
+                    </Link>
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => refetch()} className="cursor-pointer">
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  重新加载
+                </Button>
+              </div>
+
+              {errorView?.details && (
+                <details className="mt-4 rounded-lg border border-red-200 bg-white/50 p-3 text-left text-xs text-red-900 dark:border-red-800 dark:bg-red-950/20 dark:text-red-100">
+                  <summary className="cursor-pointer select-none">
+                    查看详情（仅用于排障）
+                  </summary>
+                  <pre className="mt-2 whitespace-pre-wrap break-words">
+                    {errorView.details}
+                  </pre>
+                </details>
+              )}
             </div>
           </main>
         </div>
@@ -485,7 +548,7 @@ export function MonitoringView() {
           title="监控中心"
           alertCount={
             canReadAlerts
-              ? (data?.realtimeAlerts?.filter(a => a.severity === 'critical').length ?? 0)
+              ? (data?.realtimeAlerts?.filter(a => a.severity === 'critical')?.length ?? 0)
               : 0
           }
           showSearch={false}
@@ -545,6 +608,11 @@ export function MonitoringView() {
                     <p className="mt-1 text-xs text-yellow-800 dark:text-yellow-200">
                       部分数据分区加载失败，页面已自动降级显示。
                     </p>
+                    {effectiveFailedSectionLabels.length > 0 && (
+                      <p className="mt-1 text-xs text-yellow-800 dark:text-yellow-200">
+                        失败分区：{effectiveFailedSectionLabels.join('、')}
+                      </p>
+                    )}
                     {realtimeAlertsPermissionLimited && (
                       <p className="mt-1 text-xs text-yellow-800 dark:text-yellow-200">
                         另外：实时告警因权限限制未展示。
@@ -566,6 +634,30 @@ export function MonitoringView() {
                     <p className="mt-1 text-xs text-blue-800 dark:text-blue-200">
                       当前账号缺少查看告警权限（{Permission.ALERTS_READ}），已隐藏实时告警区域。
                     </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {totalDeviceCount === 0 && (
+              <div className="rounded-xl border border-dashed border-border bg-muted/30 p-5">
+                <div className="flex items-start gap-3">
+                  <Server className="mt-0.5 h-5 w-5 text-muted-foreground" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-foreground">
+                      尚未添加设备
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      添加设备并启用采集后，这里将展示实时指标与趋势图表。
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button asChild size="sm" className="cursor-pointer">
+                        <Link href="/devices">去设备管理</Link>
+                      </Button>
+                      <Button asChild variant="outline" size="sm" className="cursor-pointer">
+                        <Link href="/settings">查看采集配置</Link>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -604,15 +696,23 @@ export function MonitoringView() {
                   <div className="col-span-full rounded-xl border-2 border-dashed border-border bg-muted/40 p-8 text-center dark:border-border dark:bg-muted/40">
                     <AlertTriangle className="mx-auto mb-4 h-10 w-10 text-yellow-500" />
                     <h3 className="mb-2 text-base font-semibold text-foreground">
-                      统计数据不可用
+                      暂无统计数据
                     </h3>
                     <p className="mb-4 text-sm text-muted-foreground">
-                      无法加载关键指标数据。可能的原因：后端API未响应、数据库无设备记录、网络连接异常
+                      尚未采集到关键指标数据。你可以先添加设备并启动采集，或稍后重试。
                     </p>
-                    <Button variant="outline" onClick={() => refetch()} className="cursor-pointer">
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      重新加载
-                    </Button>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <Button asChild className="cursor-pointer">
+                        <Link href="/devices">去设备管理</Link>
+                      </Button>
+                      <Button asChild variant="outline" className="cursor-pointer">
+                        <Link href="/settings">查看采集配置</Link>
+                      </Button>
+                      <Button variant="outline" onClick={() => refetch()} className="cursor-pointer">
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        重新加载
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>

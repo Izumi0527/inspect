@@ -4,7 +4,7 @@
   "description": "企业级网络设备巡检系统前端",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 33000",
     "build": "pnpm run type-check && next build --no-lint",
     "start": "next start",
     "lint": "next lint",

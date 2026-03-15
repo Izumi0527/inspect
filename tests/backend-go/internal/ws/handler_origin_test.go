@@ -54,7 +54,7 @@ func waitForConnections(t *testing.T, manager *ws.Manager, want int) {
 
 func TestOriginCheck_AllowsMissingOrigin(t *testing.T) {
 	manager := ws.NewManager()
-	h := ws.NewHandlerWithOrigins(manager, staticAuthorizer{userID: "u1"}, nil, []string{"http://localhost:3000"})
+	h := ws.NewHandlerWithOrigins(manager, staticAuthorizer{userID: "u1"}, nil, []string{"http://localhost:33000"})
 	server, url := startWSServer(t, h)
 	defer server.Close()
 
@@ -68,13 +68,13 @@ func TestOriginCheck_AllowsMissingOrigin(t *testing.T) {
 
 func TestOriginCheck_AllowsConfiguredOrigin(t *testing.T) {
 	manager := ws.NewManager()
-	h := ws.NewHandlerWithOrigins(manager, staticAuthorizer{userID: "u1"}, nil, []string{"http://localhost:3000"})
+	h := ws.NewHandlerWithOrigins(manager, staticAuthorizer{userID: "u1"}, nil, []string{"http://localhost:33000"})
 	server, url := startWSServer(t, h)
 	defer server.Close()
 
 	dialer := websocket.Dialer{Subprotocols: []string{"inspect-token", "test-token"}}
 	header := http.Header{}
-	header.Set("Origin", "http://localhost:3000")
+	header.Set("Origin", "http://localhost:33000")
 	conn, _, err := dialer.Dial(url, header)
 	if err != nil {
 		t.Fatalf("Dial err=%v", err)
@@ -84,7 +84,7 @@ func TestOriginCheck_AllowsConfiguredOrigin(t *testing.T) {
 
 func TestOriginCheck_DeniesUnknownOrigin(t *testing.T) {
 	manager := ws.NewManager()
-	h := ws.NewHandlerWithOrigins(manager, staticAuthorizer{userID: "u1"}, nil, []string{"http://localhost:3000"})
+	h := ws.NewHandlerWithOrigins(manager, staticAuthorizer{userID: "u1"}, nil, []string{"http://localhost:33000"})
 	server, url := startWSServer(t, h)
 	defer server.Close()
 
@@ -128,4 +128,3 @@ func TestOriginCheck_AllowsAnyWhenNoOriginsProvided(t *testing.T) {
 	}
 	_ = conn.Close()
 }
-

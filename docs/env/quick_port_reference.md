@@ -6,7 +6,7 @@
 
 | 服务 | 端口 | 协议 | 说明 |
 |------|------|------|------|
-| 前端应用 | **4000** | HTTP | Next.js（宿主机端口，可通过 FRONTEND_HOST_PORT 调整） |
+| 前端应用 | **33000** | HTTP | Next.js（宿主机端口，可通过 FRONTEND_HOST_PORT 调整） |
 | 后端 API | **38000** | HTTP/WebSocket | Go API（开发默认端口；Docker 可通过 BACKEND_HOST_PORT 覆盖） |
 | Syslog 接收 | 5514 | TCP/UDP | 设备 Syslog 上报（UDP+TCP），用于日志中心与告警联动 |
 | PostgreSQL | **15500** | TCP | TimescaleDB 数据库 |
@@ -24,7 +24,7 @@
 ### Web 服务
 
 ```
-前端应用:     http://localhost:4000
+前端应用:     http://localhost:33000
 后端 API:     http://localhost:38000
 健康检查:     http://localhost:38000/health
 WebSocket:    ws://localhost:38000
@@ -62,7 +62,7 @@ redis://:dev_redis_2024@localhost:16380/0
 
 ```powershell
 # Windows
-netstat -ano | findstr "4000 38000 5514 15500 16380"
+netstat -ano | findstr "33000 38000 5514 15500 16380"
 
 # 查看具体端口
 netstat -ano | findstr "15500"

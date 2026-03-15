@@ -50,7 +50,7 @@ type Config struct {
 	SnmpTrapHost     string `env:"SNMP_TRAP_HOST" envDefault:"0.0.0.0"`
 	SnmpTrapPort     int    `env:"SNMP_TRAP_PORT" envDefault:"162"`
 
-	CorsOriginsRaw  string `env:"CORS_ORIGINS" envDefault:"[\"http://localhost:3000\",\"http://127.0.0.1:3000\"]"`
+	CorsOriginsRaw  string `env:"CORS_ORIGINS" envDefault:"[\"http://localhost:33000\",\"http://127.0.0.1:33000\"]"`
 	AllowedHostsRaw string `env:"ALLOWED_HOSTS" envDefault:"[\"*\"]"`
 
 	CorsOrigins  []string `env:"-"`
@@ -66,7 +66,7 @@ func Load() (Config, error) {
 	}
 
 	cfg.DatabaseURL = normalizeDatabaseURL(cfg.DatabaseURL)
-	cfg.CorsOrigins = parseStringList(cfg.CorsOriginsRaw, []string{"http://localhost:3000", "http://127.0.0.1:3000"})
+	cfg.CorsOrigins = parseStringList(cfg.CorsOriginsRaw, []string{"http://localhost:33000", "http://127.0.0.1:33000"})
 	cfg.AllowedHosts = parseStringList(cfg.AllowedHostsRaw, []string{"*"})
 
 	if strings.TrimSpace(cfg.JWTSecretKey) == "" {

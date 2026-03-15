@@ -389,3 +389,5 @@ AGENTS.md
 .pnpm-store/
 .gocache/
 .gomodcache/
+
+.gotmp/

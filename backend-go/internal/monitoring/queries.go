@@ -24,6 +24,16 @@ type temperatureRow struct {
 	Value    *float64  `gorm:"column:value"`
 }
 
+// isUndefinedRelationError 用于识别“表/视图不存在”的数据库错误（SQLSTATE 42P01）。
+// 该错误在本项目中常见于：未创建 *metrics_hourly 聚合表/视图时，长时间范围查询会失败。
+func isUndefinedRelationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// gorm/driver 对底层 pg 错误的包装层级不固定，这里使用 SQLSTATE 码做最小可靠判断。
+	return strings.Contains(err.Error(), "SQLSTATE 42P01")
+}
+
 func (w *MetricsWriter) GetDevicesStatus(ctx context.Context) ([]DeviceStatusSummary, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -476,7 +486,25 @@ func (w *MetricsWriter) GetBulkMetricsHistory(
 		}
 
 		if err := query.Order("bucket ASC").Scan(&rows).Error; err != nil {
-			return nil, err
+			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
+			if !isUndefinedRelationError(err) {
+				return nil, err
+			}
+
+			fallback := w.db.WithContext(ctx).
+				Table("device_metrics").
+				Select("time_bucket('1 hour', collected_at) AS bucket, device_id, metric_name, AVG(metric_value) AS metric_value").
+				Where("collected_at >= ? AND collected_at <= ?", start, end).
+				Where("device_id IN ?", deviceIDs)
+			if len(metricNames) > 0 {
+				fallback = fallback.Where("metric_name IN ?", metricNames)
+			}
+			if err := fallback.
+				Group("bucket, device_id, metric_name").
+				Order("bucket ASC").
+				Scan(&rows).Error; err != nil {
+				return nil, err
+			}
 		}
 
 		for _, row := range rows {
@@ -646,7 +674,17 @@ func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Ti
 			Where("bucket >= ? AND bucket <= ?", start, end).
 			Order("bucket ASC").
 			Scan(&rows).Error; err != nil {
-			return nil, err
+			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
+			if !isUndefinedRelationError(err) {
+				return nil, err
+			}
+			query := fmt.Sprintf(
+				"SELECT time_bucket('%s', collected_at) AS bucket, device_id, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ? GROUP BY bucket, device_id ORDER BY bucket ASC",
+				"1 hour",
+			)
+			if err := w.db.WithContext(ctx).Raw(query, "temperature", start, end).Scan(&rows).Error; err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		interval := bucketIntervalString(bucket)
@@ -734,7 +772,35 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 			formatMetricList(allNames),
 		)
 		if err := w.db.WithContext(ctx).Raw(query, start, end).Scan(&rows).Error; err != nil {
-			return nil, err
+			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
+			if !isUndefinedRelationError(err) {
+				return nil, err
+			}
+
+			interval := "1 hour"
+			fallback := fmt.Sprintf(
+				`WITH combined_metrics AS (
+				SELECT collected_at, metric_name, metric_value FROM device_metrics
+				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)
+				UNION ALL
+				SELECT collected_at, metric_name, metric_value FROM interface_metrics
+				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)
+			)
+			SELECT time_bucket('%s', collected_at) AS bucket,
+                SUM(CASE WHEN metric_name IN (%s) THEN metric_value ELSE 0 END) AS inbound,
+                SUM(CASE WHEN metric_name IN (%s) THEN metric_value ELSE 0 END) AS outbound
+             FROM combined_metrics
+             GROUP BY bucket
+             ORDER BY bucket ASC`,
+				formatMetricList(allNames),
+				formatMetricList(allNames),
+				interval,
+				formatMetricList(inboundNames),
+				formatMetricList(outboundNames),
+			)
+			if err := w.db.WithContext(ctx).Raw(fallback, start, end, start, end).Scan(&rows).Error; err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		interval := bucketIntervalString(bucket)
@@ -815,7 +881,17 @@ func (w *MetricsWriter) querySystemMetricSeries(
 			Group("bucket").
 			Order("bucket ASC").
 			Scan(&rows).Error; err != nil {
-			return nil, err
+			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
+			if !isUndefinedRelationError(err) {
+				return nil, err
+			}
+			query := fmt.Sprintf(
+				"SELECT time_bucket('%s', collected_at) AS bucket, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ? GROUP BY bucket ORDER BY bucket ASC",
+				"1 hour",
+			)
+			if err := w.db.WithContext(ctx).Raw(query, metric, start, end).Scan(&rows).Error; err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		interval := bucketIntervalString(bucket)
@@ -839,7 +915,17 @@ func (w *MetricsWriter) querySystemMetricSeries(
 				Group("bucket").
 				Order("bucket ASC").
 				Scan(&rows).Error; err != nil {
-				return nil, err
+				// 兼容：缺少 system_metrics_hourly 时回退到动态聚合（按小时 bucket）
+				if !isUndefinedRelationError(err) {
+					return nil, err
+				}
+				query := fmt.Sprintf(
+					"SELECT time_bucket('%s', collected_at) AS bucket, AVG(metric_value) AS value FROM system_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ? GROUP BY bucket ORDER BY bucket ASC",
+					"1 hour",
+				)
+				if err := w.db.WithContext(ctx).Raw(query, metric, start, end).Scan(&rows).Error; err != nil {
+					return nil, err
+				}
 			}
 		} else {
 			interval := bucketIntervalString(bucket)
