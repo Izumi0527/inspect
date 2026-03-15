@@ -721,7 +721,8 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	}
 
 	startTime, endTime := resolveTimeRangeFromString(timeRange, 24*time.Hour)
-	lastUpdate := time.Now().UTC().Format(time.RFC3339Nano)
+	generatedAt := time.Now().UTC()
+	generatedAtRFC3339 := generatedAt.Format(time.RFC3339Nano)
 
 	// 读取权限列表（requirePermission 已写入 context 缓存）
 	permissions, _ := c.Get(authContextPermissionsKey).([]string)
@@ -923,7 +924,7 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 				value := availabilityResult.value
 				resolvedLastUpdate := strings.TrimSpace(value.LastUpdate)
 				if resolvedLastUpdate == "" {
-					resolvedLastUpdate = lastUpdate
+					resolvedLastUpdate = generatedAtRFC3339
 				}
 				return monitoringAvailabilityV2{
 					Current:    value.Current,
@@ -932,7 +933,7 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 					LastUpdate: resolvedLastUpdate,
 				}
 			}
-			return monitoringAvailabilityV2{Current: 0, Target: 99.9, Trend: "stable", LastUpdate: lastUpdate}
+			return monitoringAvailabilityV2{Current: 0, Target: 99.9, Trend: "stable", LastUpdate: generatedAtRFC3339}
 		}(),
 		NetworkTrafficHistory: func() []monitoring.NetworkTrafficPoint {
 			if sections["networkTraffic"].Ok {
@@ -942,16 +943,70 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 		}(),
 		StatsV2:        statsV2,
 		RealtimeAlerts: realtimeAlertsResult.value,
-		LastUpdate:     lastUpdate,
+		// 兼容字段：仍保留 lastUpdate，但语义应为“最新数据时间”（不是请求生成时间）。
+		LastUpdate: generatedAtRFC3339,
 	}
+
+	// 语义修正：lastUpdate 应尽量反映“最新数据时间”，用于前端做数据新鲜度提示。
+	// 规则：优先取各时序分区（性能/温度/流量）中最新的数据点时间；若均无数据，则回退为生成时间。
+	resolvedLastUpdate := resolveMonitoringDashboardLastUpdate(generatedAt, data.SystemPerformance, data.TemperatureHistory, data.NetworkTrafficHistory)
+	data.LastUpdate = resolvedLastUpdate
 
 	return c.JSON(http.StatusOK, monitoringDashboardV2Envelope{
 		Data:              data,
 		Sections:          sections,
 		HasPartialFailure: len(failedSections) > 0,
 		FailedSections:    failedSections,
-		LastUpdate:        lastUpdate,
+		LastUpdate:        resolvedLastUpdate,
 	})
+}
+
+func resolveMonitoringDashboardLastUpdate(
+	fallback time.Time,
+	systemPerformance []monitoringSystemPerformanceV2Point,
+	temperature []monitoring.TemperatureHistoryPoint,
+	networkTraffic []monitoring.NetworkTrafficPoint,
+) string {
+	candidates := make([]string, 0, 3)
+
+	if len(systemPerformance) > 0 {
+		candidates = append(candidates, systemPerformance[len(systemPerformance)-1].Timestamp)
+	}
+	if len(temperature) > 0 {
+		candidates = append(candidates, temperature[len(temperature)-1].Timestamp)
+	}
+	if len(networkTraffic) > 0 {
+		candidates = append(candidates, networkTraffic[len(networkTraffic)-1].Timestamp)
+	}
+
+	latest := time.Time{}
+	for _, raw := range candidates {
+		t, ok := parseRFC3339Timestamp(raw)
+		if !ok {
+			continue
+		}
+		if latest.IsZero() || t.After(latest) {
+			latest = t
+		}
+	}
+	if latest.IsZero() {
+		latest = fallback
+	}
+	return latest.UTC().Format(time.RFC3339Nano)
+}
+
+func parseRFC3339Timestamp(raw string) (time.Time, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return time.Time{}, false
+	}
+	if t, err := time.Parse(time.RFC3339Nano, value); err == nil {
+		return t, true
+	}
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return t, true
+	}
+	return time.Time{}, false
 }
 
 func buildSectionStatus(err error, fallback string) monitoringSectionStatus {

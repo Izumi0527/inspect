@@ -39,11 +39,23 @@ func (testMonitoringDashboardWriter) GetMonitoringStats(_ context.Context) (moni
 }
 
 func (testMonitoringDashboardWriter) GetSystemPerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []string) ([]monitoring.SystemPerformancePoint, error) {
-	return []monitoring.SystemPerformancePoint{}, nil
+	return []monitoring.SystemPerformancePoint{
+		{
+			Timestamp:      "2026-03-15T00:00:00Z",
+			CPUUsage:       1,
+			MemoryUsage:    2,
+			NetworkTraffic: 3,
+		},
+	}, nil
 }
 
 func (testMonitoringDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Time, _ time.Time) ([]monitoring.TemperatureHistoryPoint, error) {
-	return []monitoring.TemperatureHistoryPoint{}, nil
+	return []monitoring.TemperatureHistoryPoint{
+		{
+			Timestamp: "2026-03-15T01:00:00Z",
+			Devices:   map[string]float64{"device-1": 42},
+		},
+	}, nil
 }
 
 func (testMonitoringDashboardWriter) GetDeviceStatusDistribution(_ context.Context) (monitoring.DeviceStatusDistribution, error) {
@@ -60,7 +72,13 @@ func (testMonitoringDashboardWriter) GetAvailability(_ context.Context) (monitor
 }
 
 func (testMonitoringDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time) ([]monitoring.NetworkTrafficPoint, error) {
-	return []monitoring.NetworkTrafficPoint{}, nil
+	return []monitoring.NetworkTrafficPoint{
+		{
+			Timestamp: "2026-03-15T02:00:00Z",
+			Inbound:   1,
+			Outbound:  2,
+		},
+	}, nil
 }
 
 func TestGetMonitoringDashboardV2_ContractKeysAndSections(t *testing.T) {
@@ -150,5 +168,12 @@ func TestGetMonitoringDashboardV2_ContractKeysAndSections(t *testing.T) {
 	if _, ok := data["realtimeAlerts"].([]interface{}); !ok {
 		t.Fatalf("data.realtimeAlerts should be array, got %T", data["realtimeAlerts"])
 	}
-}
 
+	// lastUpdate 语义：应尽量反映“最新数据时间”，这里取系统性能/温度/流量中最新的时间点（02:00）。
+	if payload["lastUpdate"] != "2026-03-15T02:00:00Z" {
+		t.Fatalf("expected lastUpdate=2026-03-15T02:00:00Z, got %v", payload["lastUpdate"])
+	}
+	if data["lastUpdate"] != "2026-03-15T02:00:00Z" {
+		t.Fatalf("expected data.lastUpdate=2026-03-15T02:00:00Z, got %v", data["lastUpdate"])
+	}
+}

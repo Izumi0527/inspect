@@ -92,6 +92,38 @@ function resolveTimeRangeLabel(timeRange: string): string {
   return timeRange
 }
 
+function resolveMonitoringDataStaleThresholdMs(timeRange: string): number {
+  switch (timeRange) {
+    case '24h':
+      // 近24小时：按分钟级采集/聚合，容忍桶边界与网络抖动
+      return 10 * 60 * 1000
+    case '7d':
+      // 近7天：通常按小时级聚合
+      return 2 * 60 * 60 * 1000
+    case '30d':
+      // 近30天：通常按小时/天级聚合
+      // 后端默认 6 小时一个桶，为避免桶边界误报，阈值取更宽松的 12 小时。
+      return 12 * 60 * 60 * 1000
+    default:
+      return 10 * 60 * 1000
+  }
+}
+
+function formatDurationFromMs(ms: number): string {
+  const safeMs = Math.max(0, Math.floor(ms))
+  const seconds = Math.floor(safeMs / 1000)
+  if (seconds < 60) return `${seconds} 秒`
+
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} 分钟`
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时`
+
+  const days = Math.floor(hours / 24)
+  return `${days} 天`
+}
+
 /**
  * 区域标题组件 — 为每个 section 提供视觉锚点
  */
@@ -186,7 +218,8 @@ export function MonitoringView() {
   const canExportReport = usePermission(Permission.MONITORING_EXPORT)
   const canReadAlerts = usePermission(Permission.ALERTS_READ)
   const ws = useWebSocket()
-  const [wsConnected, setWsConnected] = useState(() => ws.isConnected())
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const [wsHealth, setWsHealth] = useState(() => ws.getHealthStatus())
   const [timeRange, setTimeRange] = useState<string>(() => {
     if (typeof window === 'undefined') return '24h'
     const stored = window.localStorage.getItem('monitoring:timeRange')
@@ -202,6 +235,7 @@ export function MonitoringView() {
   })
   const refetchRef = useRef<null | (() => unknown)>(null)
   const lastWsConnectRefetchAtRef = useRef<number>(0)
+  const lastStaleAutoRefetchAtRef = useRef<number>(0)
 
   // 页面不可见时暂停轮询：降低无意义的后台刷新；返回页面时 React Query 会因 focus 自动 refetch。
   useEffect(() => {
@@ -232,7 +266,8 @@ export function MonitoringView() {
   }, [canReadAlerts, ws])
 
   const handleWsConnect = useCallback(() => {
-    setWsConnected(true)
+    setNowMs(Date.now())
+    setWsHealth('connected')
     // 页面不可见时不订阅房间，避免后台接收推送与触发刷新；返回页面时会在可见性 effect 中重新订阅。
     if (!pageVisible) return
     subscribeDeviceMonitoring()
@@ -247,12 +282,30 @@ export function MonitoringView() {
   }, [pageVisible, subscribeAlertsRoom, subscribeDeviceMonitoring])
 
   const handleWsDisconnect = useCallback(() => {
-    setWsConnected(false)
+    setNowMs(Date.now())
+    setWsHealth('disconnected')
   }, [])
 
   // WebSocket 连接/断开状态监听（用于轮询兜底开关 + 重连后重新订阅）
   useWebSocketEvent(WebSocketEvents.CONNECT, handleWsConnect)
   useWebSocketEvent(WebSocketEvents.DISCONNECT, handleWsDisconnect)
+
+  // WS 健康度（stale）检测：用于识别“显示已连接但实际上已半开/无响应”的场景。
+  // 通过 wsManager 的心跳 ack（后端会回 heartbeat:ok）判断最近活跃时间。
+  useEffect(() => {
+    if (!pageVisible) return
+
+    const timer = setInterval(() => {
+      const now = Date.now()
+      setNowMs(now)
+      const next = ws.getHealthStatus()
+      setWsHealth((prev) => (prev === next ? prev : next))
+    }, 10_000)
+
+    return () => {
+      clearInterval(timer)
+    }
+  }, [pageVisible, ws])
 
   const {
     data: envelope,
@@ -267,22 +320,55 @@ export function MonitoringView() {
     // - WS 在线：低频轮询（防止“无推送/订阅异常”导致页面长期不更新）
     // - WS 离线：恢复较高频轮询兜底
     enablePolling: pageVisible,
-    refetchInterval: wsConnected ? 300000 : 120000,
+    refetchInterval: wsHealth === 'connected' ? 300000 : wsHealth === 'stale' ? 60000 : 120000,
   })
   refetchRef.current = refetch
 
+  // 当 WS 连接处于 stale（无心跳 ack）时，主动触发一次刷新，尽快恢复数据更新体验（限流）。
+  useEffect(() => {
+    if (!pageVisible) return
+    if (wsHealth !== 'stale') return
+
+    const now = Date.now()
+    if (now - lastStaleAutoRefetchAtRef.current < 30_000) return
+    lastStaleAutoRefetchAtRef.current = now
+    void refetch()
+  }, [pageVisible, refetch, wsHealth])
+
   const data = envelope?.data
-  const lastUpdateLabel = useMemo(() => {
+  const lastUpdateAt = useMemo(() => {
     const raw = envelope?.lastUpdate
     if (!raw) return null
 
     const date = raw instanceof Date ? raw : new Date(String(raw))
     if (Number.isNaN(date.getTime())) {
-      const fallback = String(raw).trim()
-      return fallback !== '' ? fallback : null
+      return null
     }
-    return date.toLocaleString()
+    return date
   }, [envelope?.lastUpdate])
+
+  const lastUpdateLabel = useMemo(() => {
+    const raw = envelope?.lastUpdate
+    if (!raw) return null
+
+    if (lastUpdateAt) {
+      return lastUpdateAt.toLocaleString()
+    }
+
+    const fallback = String(raw).trim()
+    return fallback !== '' ? fallback : null
+  }, [envelope?.lastUpdate, lastUpdateAt])
+
+  const dataStaleThresholdMs = useMemo(() => resolveMonitoringDataStaleThresholdMs(timeRange), [timeRange])
+  const dataAgeMs = useMemo(() => {
+    if (!lastUpdateAt) return null
+    return Math.max(0, nowMs - lastUpdateAt.getTime())
+  }, [lastUpdateAt, nowMs])
+  const dataAgeLabel = useMemo(() => {
+    if (dataAgeMs === null) return null
+    return formatDurationFromMs(dataAgeMs)
+  }, [dataAgeMs])
+  const isDataStale = dataAgeMs !== null && dataAgeMs > dataStaleThresholdMs
   const failedSections = envelope?.failedSections ?? []
   const realtimeAlertsPermissionLimited =
     !canReadAlerts || envelope?.sections.realtimeAlerts?.limitedByPermission === true
@@ -554,12 +640,25 @@ export function MonitoringView() {
           showSearch={false}
           actions={
             <div className="flex gap-2">
-              <Badge variant={wsConnected ? 'success' : 'warning'} size="sm" className="hidden md:inline-flex">
-                {wsConnected ? '实时连接' : '离线轮询'}
+              <Badge
+                variant={wsHealth === 'connected' ? 'success' : 'warning'}
+                size="sm"
+                className="hidden md:inline-flex"
+              >
+                {wsHealth === 'connected'
+                  ? '实时连接'
+                  : wsHealth === 'stale'
+                    ? '连接不活跃'
+                    : '离线轮询'}
               </Badge>
               {lastUpdateLabel && (
-                <Badge variant="outline" size="sm" className="hidden md:inline-flex">
+                <Badge
+                  variant={isDataStale ? 'warning' : 'outline'}
+                  size="sm"
+                  className="hidden md:inline-flex"
+                >
                   更新: {lastUpdateLabel}
+                  {isDataStale && dataAgeLabel ? `（已${dataAgeLabel}未更新）` : ''}
                 </Badge>
               )}
               <Select value={timeRange} onValueChange={setTimeRange}>

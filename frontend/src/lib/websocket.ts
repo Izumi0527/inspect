@@ -45,6 +45,8 @@ enum ConnectionStatus {
 
 type DisconnectReason = string
 
+export type WebSocketHealthStatus = 'connected' | 'stale' | 'disconnected'
+
 // 事件处理器类型
 type EventHandler<T = unknown> = (data: T) => void
 type EventHandlerMap = Map<string, EventHandler<unknown>[]>
@@ -78,6 +80,12 @@ class WebSocketManager {
   // 心跳：避免服务端按心跳超时清理连接（默认每 60 秒一次）。
   private heartbeatIntervalMs = 60_000
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+
+  // 连接健康度：用于识别“WS 显示已连接但实际上已半开/无响应”的场景。
+  // - lastMessageAt：收到任意服务端消息的时间（含 heartbeat ack）
+  // - lastHeartbeatAckAt：收到 heartbeat ack 的时间（用于更可靠的 stale 判断）
+  private lastMessageAtMs: number | null = null
+  private lastHeartbeatAckAtMs: number | null = null
 
   // 订阅幂等与重连恢复：记录订阅意图，在重连后自动重放，避免“漏订阅/重复订阅”。
   private deviceMonitoringSubscribed = false
@@ -153,6 +161,10 @@ class WebSocketManager {
         this.status = ConnectionStatus.CONNECTED
         this.reconnectAttempts = 0
         this.clearReconnectTimer()
+        // 连接建立后先标记为“近期活跃”，避免 UI 立刻误判为 stale。
+        const nowMs = Date.now()
+        this.lastMessageAtMs = nowMs
+        this.lastHeartbeatAckAtMs = nowMs
         this.startHeartbeat()
         this.dispatchEvent(WebSocketEvents.CONNECT, { status: 'connected' })
         this.dispatchEvent('connection_status', { status: 'connected' })
@@ -208,6 +220,8 @@ class WebSocketManager {
     this.alertsSubscribed = false
     this.alertsSeverity = undefined
     this.inspectionTasksSubscribed = false
+    this.lastMessageAtMs = null
+    this.lastHeartbeatAckAtMs = null
 
     if (this.socket) {
       this.socket.close()
@@ -266,6 +280,28 @@ class WebSocketManager {
     return this.status === ConnectionStatus.CONNECTED && this.socket?.readyState === WebSocket.OPEN
   }
 
+  getLastMessageAt(): number | null {
+    return this.lastMessageAtMs
+  }
+
+  getLastHeartbeatAckAt(): number | null {
+    return this.lastHeartbeatAckAtMs
+  }
+
+  getHealthStatus(nowMs: number = Date.now()): WebSocketHealthStatus {
+    if (!this.isConnected()) return 'disconnected'
+
+    const lastActiveMs = this.lastHeartbeatAckAtMs ?? this.lastMessageAtMs
+    if (!lastActiveMs) return 'stale'
+
+    // stale 阈值：以心跳间隔为基准，容忍一次抖动；避免误报。
+    const staleThresholdMs = Math.max(this.heartbeatIntervalMs * 2 + 10_000, 120_000)
+    if (nowMs - lastActiveMs > staleThresholdMs) {
+      return 'stale'
+    }
+    return 'connected'
+  }
+
   private replaySubscriptions(): void {
     if (!this.isConnected()) return
 
@@ -305,6 +341,13 @@ class WebSocketManager {
     } catch (error) {
       console.warn('WebSocket 消息解析失败:', error)
       return
+    }
+
+    // 记录服务端消息到达时间（用于 stale 判断）。
+    const nowMs = Date.now()
+    this.lastMessageAtMs = nowMs
+    if (payload.type === 'heartbeat') {
+      this.lastHeartbeatAckAtMs = nowMs
     }
 
     const messageType = payload.type
@@ -627,6 +670,9 @@ export function useWebSocket() {
     emit: (event: string, data?: unknown) => wsManager.emit(event, data),
     isConnected: () => wsManager.isConnected(),
     getStatus: () => wsManager.getStatus(),
+    getHealthStatus: () => wsManager.getHealthStatus(),
+    getLastMessageAt: () => wsManager.getLastMessageAt(),
+    getLastHeartbeatAckAt: () => wsManager.getLastHeartbeatAckAt(),
     subscribeToDeviceMonitoring: (deviceIds?: number[]) => wsManager.subscribeToDeviceMonitoring(deviceIds),
     unsubscribeFromDeviceMonitoring: () => wsManager.unsubscribeFromDeviceMonitoring(),
     subscribeToAlerts: (severity?: string[]) => wsManager.subscribeToAlerts(severity),
