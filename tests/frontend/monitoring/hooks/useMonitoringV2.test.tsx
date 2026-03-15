@@ -3,10 +3,25 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import { useMonitoringV2 } from '@/features/monitoring/hooks/useMonitoringV2'
 
+jest.mock('@/lib/contexts/auth-context', () => ({
+  useAuth: () => ({
+    user: { id: 'u-test' },
+  }),
+}))
+
 const mockGet = jest.fn()
 const mockPost = jest.fn()
 
 jest.mock('@/lib/api-client', () => ({
+  ApiClientError: class ApiClientError extends Error {
+    status: number
+
+    constructor(status: number, message?: string) {
+      super(message)
+      this.name = 'ApiClientError'
+      this.status = status
+    }
+  },
   api: {
     get: (...args: unknown[]) => mockGet(...args),
     post: (...args: unknown[]) => mockPost(...args),
@@ -32,6 +47,8 @@ describe('useMonitoringV2', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ApiClientError } = require('@/lib/api-client') as { ApiClientError: new (status: number, message?: string) => Error & { status: number } }
 
     mockGet.mockImplementation((url: string) => {
       if (url === '/monitoring/devices/distribution') {
@@ -50,6 +67,9 @@ describe('useMonitoringV2', () => {
     })
 
     mockPost.mockImplementation((url: string) => {
+      if (url === '/monitoring/dashboard/v2') {
+        return Promise.reject(new ApiClientError(404, 'not found'))
+      }
       if (url === '/monitoring/system/performance') {
         return Promise.resolve([{ timestamp: now, cpu_usage: 10, memory_usage: 20, network_traffic: 0 }])
       }

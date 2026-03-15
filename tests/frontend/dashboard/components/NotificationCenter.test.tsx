@@ -5,6 +5,10 @@ import userEvent from '@testing-library/user-event'
 
 import { NotificationCenter } from '@/features/dashboard/components/NotificationCenter'
 
+jest.mock('@/lib/contexts/auth-context', () => ({
+  usePermission: () => true,
+}))
+
 const mockFetchDashboardNotifications = jest.fn()
 const mockFetchDashboardNotificationsWithMeta = jest.fn()
 const mockMarkNotificationsRead = jest.fn()

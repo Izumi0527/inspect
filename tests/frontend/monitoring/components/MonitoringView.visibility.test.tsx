@@ -89,6 +89,7 @@ jest.mock('@/features/monitoring/components/ReportExportButton', () => ({
 const wsHandlers: Record<string, ((payload: unknown) => void) | undefined> = {}
 const ws = {
   isConnected: jest.fn(() => true),
+  getHealthStatus: jest.fn(() => 'connected'),
   subscribeToDeviceMonitoring: jest.fn(),
   unsubscribeFromDeviceMonitoring: jest.fn(),
   subscribeToAlerts: jest.fn(),

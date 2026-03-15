@@ -6,7 +6,7 @@ import { ArrowLeft, FolderOpen, FileText } from 'lucide-react'
 import { Card, CardContent, Button } from '@/components/atoms'
 
 type DocRouteParams = {
-  slug: string[]
+  slug?: string | string[]
 }
 
 async function resolveDocsRoot() {
@@ -56,7 +56,8 @@ function formatRelativePath(slug: string[]) {
   return slug.join('/').replace(/\\/g, '/')
 }
 
-export default async function DocViewerPage({ params }: { params: DocRouteParams }) {
+export default async function DocViewerPage({ params }: { params: Promise<DocRouteParams> }) {
+  const resolvedParams = await params
   const docsRoot = await resolveDocsRoot()
   if (!docsRoot) {
     return (
@@ -93,7 +94,11 @@ export default async function DocViewerPage({ params }: { params: DocRouteParams
     )
   }
 
-  const slug = Array.isArray(params.slug) ? params.slug : []
+  const slug = Array.isArray(resolvedParams?.slug)
+    ? resolvedParams.slug
+    : typeof resolvedParams?.slug === 'string'
+      ? [resolvedParams.slug]
+      : []
   if (slug.length === 0) {
     notFound()
   }

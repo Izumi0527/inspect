@@ -2,6 +2,10 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { SettingsView } from '@/features/settings/components/SettingsView'
 
+jest.mock('@/lib/contexts/auth-context', () => ({
+  usePermission: () => true,
+}))
+
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: jest.fn(),

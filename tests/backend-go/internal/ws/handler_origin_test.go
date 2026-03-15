@@ -2,6 +2,7 @@ package ws_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -127,4 +128,59 @@ func TestOriginCheck_AllowsAnyWhenNoOriginsProvided(t *testing.T) {
 		t.Fatalf("Dial err=%v", err)
 	}
 	_ = conn.Close()
+}
+
+func TestHeartbeatAck_ReturnsOk(t *testing.T) {
+	manager := ws.NewManager()
+	h := ws.NewHandlerWithOrigins(manager, staticAuthorizer{userID: "u1"}, nil, []string{"http://localhost:33000"})
+	server, url := startWSServer(t, h)
+	defer server.Close()
+
+	dialer := websocket.Dialer{Subprotocols: []string{"inspect-token", "test-token"}}
+	header := http.Header{}
+	header.Set("Origin", "http://localhost:33000")
+
+	conn, _, err := dialer.Dial(url, header)
+	if err != nil {
+		t.Fatalf("Dial err=%v", err)
+	}
+	defer conn.Close()
+
+	// 连接建立后服务端会发送一条 system_status，先读掉避免干扰。
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, _, err = conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("Read initial message err=%v", err)
+	}
+
+	if err := conn.WriteJSON(map[string]interface{}{"type": "heartbeat"}); err != nil {
+		t.Fatalf("WriteJSON heartbeat err=%v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_ = conn.SetReadDeadline(deadline)
+		_, payload, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("ReadMessage err=%v", err)
+		}
+
+		var msg struct {
+			Type string                 `json:"type"`
+			Data map[string]interface{} `json:"data"`
+		}
+		if err := json.Unmarshal(payload, &msg); err != nil {
+			t.Fatalf("Unmarshal err=%v payload=%s", err, string(payload))
+		}
+		if msg.Type != "heartbeat" {
+			// 允许未来扩展的其它 system_status 消息，继续读直到拿到 heartbeat。
+			continue
+		}
+
+		status, _ := msg.Data["status"].(string)
+		if status != "ok" {
+			t.Fatalf("期望 heartbeat status=ok，实际=%v", msg.Data["status"])
+		}
+		return
+	}
 }
