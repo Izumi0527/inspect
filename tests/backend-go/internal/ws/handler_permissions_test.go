@@ -37,17 +37,27 @@ func TestServeWS_FiltersRoomsByPermissionsAndNormalizesLegacyKeys(t *testing.T) 
 		t.Fatalf("期望 connection_details=1，got=%v", stats["connection_details"])
 	}
 
-	var subscriptions []interface{}
+	var subscriptions []string
 	for _, raw := range details {
 		row, _ := raw.(map[string]interface{})
-		subscriptions, _ = row["subscriptions"].([]interface{})
+		switch v := row["subscriptions"].(type) {
+		case []string:
+			subscriptions = append([]string{}, v...)
+		case []interface{}:
+			subscriptions = make([]string, 0, len(v))
+			for _, item := range v {
+				if s, ok := item.(string); ok {
+					subscriptions = append(subscriptions, s)
+				}
+			}
+		default:
+			subscriptions = []string{}
+		}
 	}
 
 	seen := make(map[string]struct{}, len(subscriptions))
-	for _, item := range subscriptions {
-		if s, ok := item.(string); ok {
-			seen[s] = struct{}{}
-		}
+	for _, s := range subscriptions {
+		seen[s] = struct{}{}
 	}
 
 	if _, ok := seen["alerts"]; !ok {
@@ -63,4 +73,3 @@ func TestServeWS_FiltersRoomsByPermissionsAndNormalizesLegacyKeys(t *testing.T) 
 		t.Fatalf("未知房间不应被订阅，subs=%v", subscriptions)
 	}
 }
-

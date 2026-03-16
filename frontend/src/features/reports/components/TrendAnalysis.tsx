@@ -1,7 +1,8 @@
-// @ts-nocheck
 import React, { useState, useMemo } from 'react'
 import { TrendingUp, Calendar, AlertTriangle } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, LineChartComponent } from '@/components/atoms'
+import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
 import { useTrendAnalysis, useGenerateTrendReport } from '../hooks/useReports'
 import { Loading } from '@/components/atoms/loading'
 import toast from 'react-hot-toast'
@@ -12,9 +13,15 @@ interface Props {
   searchText: string
 }
 
+type TrendChartRow = { date: string } & Record<string, number | string>
+
 export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
+  const canCreate = usePermission(Permission.REPORTS_CREATE)
   const [timeRange, setTimeRange] = useState('7d')
   const [metric, setMetric] = useState('availability')
+
+  // 指标下拉为单选：确保选择项真实影响请求与展示，避免“UI 变了但数据不变”
+  const selectedMetrics = useMemo(() => [metric], [metric])
 
   // 计算日期范围
   const dateRange = useMemo(() => {
@@ -42,8 +49,8 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
   }, [timeRange])
 
   // 获取趋势分析数据
-  const { data: trendData, isLoading, error } = useTrendAnalysis({
-    metrics: ['availability', 'performance', 'errors'],
+  const { data: trendData, isLoading, error, refetch } = useTrendAnalysis({
+    metrics: selectedMetrics,
     dateRange,
     granularity: 'day'
   })
@@ -53,10 +60,14 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
 
   // 处理生成报告
   const handleGenerateReport = async () => {
+    if (!canCreate) {
+      toast.error('暂无权限生成报表')
+      return
+    }
     try {
       const report = await generateReportMutation.mutateAsync({
         title: `趋势分析报告 - ${new Date().toLocaleDateString()}`,
-        metrics: ['availability', 'performance', 'errors'],
+        metrics: selectedMetrics,
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
         format: 'pdf',
@@ -89,20 +100,34 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
   const chartData = useMemo(() => {
     if (!trendData?.metrics || !Array.isArray(trendData.metrics)) return []
 
+    // ⚠️ 时区口径：timestamp 可能为 ISO(UTC) 或带时区偏移，不能直接 split('T')[0]，否则跨时区会出现“跨天偏移”。
+    // 本实现按“浏览器本地日期”聚合展示；如需与后端 UTC 日桶严格一致，可改为 UTC 口径。
+    const pad2 = (value: number) => String(value).padStart(2, '0')
+    const toLocalDateKey = (timestamp: string) => {
+      if (!timestamp) return ''
+      // date-only 字符串按原值返回，避免 JS 将其按 UTC 解析导致负时区偏移一天
+      if (/^\\d{4}-\\d{2}-\\d{2}$/.test(timestamp)) return timestamp
+      const date = new Date(timestamp)
+      if (Number.isNaN(date.getTime())) return String(timestamp).split('T')[0]
+      return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+    }
+
     // 从 metrics 数组中提取数据点并合并
-    const dataMap = new Map()
+    const dataMap = new Map<string, TrendChartRow>()
 
     trendData.metrics.forEach(metricData => {
       if (!metricData?.dataPoints || !Array.isArray(metricData.dataPoints)) return
       metricData.dataPoints.forEach(point => {
         if (!point?.timestamp) return
-        const date = point.timestamp.split('T')[0] // 提取日期部分
-        if (!dataMap.has(date)) {
-          dataMap.set(date, { date })
+        const date = toLocalDateKey(point.timestamp)
+        let row = dataMap.get(date)
+        if (!row) {
+          row = { date }
+          dataMap.set(date, row)
         }
         // 使用 metricName 或 name 作为键（兼容性处理）
         const key = metricData.metricName || metricData.name
-        dataMap.get(date)[key] = point.value
+        row[key] = point.value
       })
     })
 
@@ -112,12 +137,12 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
   // 搜索过滤
   const normalizedKeyword = searchText.trim().toLowerCase()
   const filteredTrendData = normalizedKeyword
-    ? chartData.filter((item) =>
-        item.date.includes(normalizedKeyword) ||
-        (item.availability?.toString().includes(normalizedKeyword)) ||
-        (item.performance?.toString().includes(normalizedKeyword)) ||
-        (item.errors?.toString().includes(normalizedKeyword))
-      )
+    ? chartData.filter((item) => {
+        if (item.date.includes(normalizedKeyword)) return true
+        return selectedMetrics.some((key) =>
+          item?.[key]?.toString().includes(normalizedKeyword)
+        )
+      })
     : chartData
 
   // 加载状态
@@ -138,6 +163,9 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
             <AlertTriangle className="w-12 h-12 mx-auto mb-2" />
             <p className="text-lg font-medium">加载趋势分析数据失败</p>
             <p className="text-sm text-muted-foreground mt-1">{error instanceof Error ? error.message : '未知错误'}</p>
+            <Button variant="outline" className="mt-4" onClick={() => refetch()}>
+              重试
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -168,12 +196,14 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
             <SelectItem value="errors">错误数</SelectItem>
           </SelectContent>
         </Select>
-        <Button
-          onClick={handleGenerateReport}
-          disabled={generateReportMutation.isPending}
-        >
-          {generateReportMutation.isPending ? '生成中...' : '生成趋势报告'}
-        </Button>
+        {canCreate && (
+          <Button
+            onClick={handleGenerateReport}
+            disabled={generateReportMutation.isPending}
+          >
+            {generateReportMutation.isPending ? '生成中...' : '生成趋势报告'}
+          </Button>
+        )}
       </div>
 
       {/* 趋势图表 */}
@@ -190,8 +220,11 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
               data={filteredTrendData}
               xKey="date"
               lines={[
-                { key: 'availability', name: '可用性 (%)', color: '#10B981' },
-                { key: 'performance', name: '性能评分', color: '#3B82F6' }
+                metric === 'errors'
+                  ? { key: 'errors', name: '错误数', color: '#EF4444' }
+                  : metric === 'performance'
+                    ? { key: 'performance', name: '性能评分', color: '#3B82F6' }
+                    : { key: 'availability', name: '可用性 (%)', color: '#10B981' }
               ]}
               height={400}
               formatter={(value) => typeof value === 'number' ? value.toFixed(2) : value}
@@ -223,7 +256,7 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
                       预测周期: {prediction.predictionPeriod}
                     </p>
                     <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                      置信水平: {(prediction.confidenceLevel * 100).toFixed(1)}%
+                      置信水平: {((prediction.confidenceLevel ?? prediction.confidence) * 100).toFixed(1)}%
                     </p>
                   </div>
                 ))

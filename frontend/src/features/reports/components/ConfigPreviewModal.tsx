@@ -1,25 +1,23 @@
-// @ts-nocheck
 import React from 'react'
-import { motion } from 'framer-motion'
 import {
-  X,
   Settings,
   AlertCircle,
   BarChart3,
   Table as TableIcon,
   Filter
 } from 'lucide-react'
-import { Badge, Button, Loading } from '@/components/atoms'
+import { Badge, Button, Loading, Modal, ModalContent, ModalTitle } from '@/components/atoms'
 import { usePreviewCustomReportConfig } from '../hooks/useReports'
+import type { CustomReportConfig, ReportParameters } from '../types'
 
 interface Props {
-  configId: number
-  parameters?: Record<string, any>
+  configId: string
+  parameters?: ReportParameters
   onClose: () => void
   onGenerate?: () => void
 }
 
-const formatDateRange = (parameters: any): string => {
+const formatDateRange = (parameters: ReportParameters | undefined): string => {
   const range = parameters?.dateRange
   const start = range?.startDate ? String(range.startDate).slice(0, 10) : ''
   const end = range?.endDate ? String(range.endDate).slice(0, 10) : ''
@@ -30,35 +28,27 @@ const formatDateRange = (parameters: any): string => {
 
 export const ConfigPreviewModal: React.FC<Props> = ({
   configId,
-  parameters = {},
+  parameters,
   onClose,
   onGenerate
 }) => {
-  const { data, isLoading, error, refetch } = usePreviewCustomReportConfig(configId, {
-    parameters,
-    limit: 100,
-  })
+  const { data, isLoading, error, refetch } = usePreviewCustomReportConfig(configId, parameters)
 
-  const previewData: any = data || null
-  const charts = Array.isArray(previewData?.charts) ? previewData.charts : []
-  const tables = Array.isArray(previewData?.tables) ? previewData.tables : []
-  const filters = Array.isArray(previewData?.filters) ? previewData.filters : []
-  const layout = previewData?.layout || {}
+  const previewData: CustomReportConfig | null = data ?? null
+  const charts = previewData?.charts ?? []
+  const tables = previewData?.tables ?? []
+  const filters = previewData?.filters ?? []
+  const layout = previewData?.layout
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-card rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-      >
+    <Modal open onOpenChange={(open) => { if (!open) onClose() }}>
+      <ModalContent className="sm:max-w-6xl p-0 flex flex-col overflow-hidden" hideDescription>
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b dark:border-border flex-shrink-0">
+        <div className="flex items-center justify-between p-6 pr-14 border-b dark:border-border flex-shrink-0">
           <div className="flex items-center gap-3">
             <Settings className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <div>
-              <h2 className="text-xl font-semibold text-foreground">配置预览</h2>
+              <ModalTitle className="text-xl font-semibold text-foreground">配置预览</ModalTitle>
               <p className="text-sm text-muted-foreground">
                 {previewData?.name || `配置 #${configId}`}
               </p>
@@ -70,9 +60,6 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                 生成完整报表
               </Button>
             )}
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X className="w-5 h-5" />
-            </Button>
           </div>
         </div>
 
@@ -91,7 +78,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                 <AlertCircle className="w-10 h-10 text-red-500 dark:text-red-400 mx-auto mb-3" />
                 <div className="text-red-600 dark:text-red-400 mb-2">加载预览失败</div>
                 <div className="text-sm text-muted-foreground mb-4">
-                  {error.message || '未知错误'}
+                  {error instanceof Error ? error.message : String(error || '未知错误')}
                 </div>
                 <Button variant="outline" onClick={() => refetch()}>
                   重试
@@ -105,7 +92,9 @@ export const ConfigPreviewModal: React.FC<Props> = ({
               {/* 提示信息 */}
               <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900/40 rounded-lg p-4">
                 <div className="text-sm text-yellow-800 dark:text-yellow-200">
-                  当前为配置结构预览（不包含真实数据行）。如需查看最终内容，请点击“生成完整报表”并下载文件。
+                  {onGenerate
+                    ? '当前为配置结构预览（不包含真实数据行）。如需查看最终内容，请点击“生成完整报表”并下载文件。'
+                    : '当前为配置结构预览（不包含真实数据行）。当前账号暂无生成完整报表权限，如需下载文件请联系管理员开通。'}
                 </div>
               </div>
 
@@ -168,7 +157,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                 </h3>
                 {charts.length > 0 ? (
                   <div className="space-y-3">
-                    {charts.map((chart: any, index: number) => (
+                    {charts.map((chart, index) => (
                       <div
                         key={chart.id || index}
                         className="bg-card border dark:border-border rounded-lg p-4"
@@ -177,10 +166,10 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                           {chart.title || `图表 ${index + 1}`}
                         </div>
                         <div className="text-sm text-muted-foreground mt-1">
-                          类型：{chart.type || '-'}，数据源：{chart.dataSource || chart.data_source || '-'}
+                          类型：{chart.type || '-'}，数据源：{chart.dataSource || '-'}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
-                          X 轴：{chart.xAxis || chart.x_axis || '-'}，Y 轴：{chart.yAxis || chart.y_axis || '-'}，
+                          X 轴：{chart.xAxis || '-'}，Y 轴：{chart.yAxis || '-'}，
                           系列：{Array.isArray(chart.series) ? chart.series.length : 0}
                         </div>
                       </div>
@@ -201,7 +190,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                 </h3>
                 {tables.length > 0 ? (
                   <div className="space-y-3">
-                    {tables.map((table: any, index: number) => (
+                    {tables.map((table, index) => (
                       <div
                         key={table.id || index}
                         className="bg-card border dark:border-border rounded-lg p-4"
@@ -210,7 +199,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                           {table.title || `表格 ${index + 1}`}
                         </div>
                         <div className="text-sm text-muted-foreground mt-1">
-                          数据源：{table.dataSource || table.data_source || '-'}，列数：
+                          数据源：{table.dataSource || '-'}，列数：
                           {Array.isArray(table.columns) ? table.columns.length : 0}
                         </div>
                       </div>
@@ -231,7 +220,7 @@ export const ConfigPreviewModal: React.FC<Props> = ({
                 </h3>
                 {filters.length > 0 ? (
                   <div className="space-y-3">
-                    {filters.map((filter: any, index: number) => (
+                    {filters.map((filter, index) => (
                       <div
                         key={filter.id || index}
                         className="bg-card border dark:border-border rounded-lg p-4"
@@ -254,8 +243,8 @@ export const ConfigPreviewModal: React.FC<Props> = ({
             </div>
           )}
         </div>
-      </motion.div>
-    </div>
+      </ModalContent>
+    </Modal>
   )
 }
 

@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import { X, Calendar, FileText, Settings, Users } from 'lucide-react'
+import { Calendar, FileText, Settings, Users } from 'lucide-react'
 import {
   Button,
+  Modal,
+  ModalContent,
+  ModalTitle,
   SimpleInput as Input,
   Select,
   SelectContent,
@@ -12,6 +14,7 @@ import {
   Badge
 } from '@/components/atoms'
 import { useGenerateInspectionReport } from '../hooks/useReports'
+import { formatDateYMD } from '@/utils/formatters'
 
 interface Props {
   onClose: () => void
@@ -43,8 +46,8 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
     category: 'custom',
     format: 'pdf',
     dateRange: {
-      startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7天前
-      endDate: new Date().toISOString().split('T')[0] // 今天
+      startDate: formatDateYMD(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)), // 7天前
+      endDate: formatDateYMD(new Date()) // 今天
     },
     deviceIdsText: '',
     includeCharts: true,
@@ -165,30 +168,20 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
   const isLoading = generateReport.isPending
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-card rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
-      >
+    <Modal open onOpenChange={(open) => { if (!open) onClose() }}>
+      <ModalContent className="sm:max-w-4xl p-0" hideDescription>
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b dark:border-border">
+        <div className="flex items-center justify-between p-6 pr-14 border-b dark:border-border">
           <div>
-            <h2 className="text-xl font-semibold text-foreground">
-              生成巡检报告
-            </h2>
+            <ModalTitle className="text-xl font-semibold text-foreground">生成巡检报告</ModalTitle>
             <p className="text-sm text-muted-foreground mt-1">
               配置报告参数并生成详细的巡检分析报告
             </p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="w-5 h-5" />
-          </Button>
         </div>
 
         {/* 表单内容 */}
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+        <form onSubmit={handleSubmit} className="p-6">
           <div className="space-y-6">
             {/* 基本信息 */}
             <div className="space-y-4">
@@ -325,19 +318,19 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                     size="sm"
                     onClick={() => {
                       let startDate: string
-                      let endDate = new Date().toISOString().split('T')[0]
+                      let endDate = formatDateYMD(new Date())
                       
                       if (typeof option.days === 'number') {
-                        startDate = new Date(Date.now() - option.days * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                        startDate = formatDateYMD(new Date(Date.now() - option.days * 24 * 60 * 60 * 1000))
                       } else if (option.days === 'month') {
                         const now = new Date()
-                        startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+                        startDate = formatDateYMD(new Date(now.getFullYear(), now.getMonth(), 1))
                       } else { // lastMonth
                         const now = new Date()
                         const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
                         const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
-                        startDate = lastMonth.toISOString().split('T')[0]
-                        endDate = lastMonthEnd.toISOString().split('T')[0]
+                        startDate = formatDateYMD(lastMonth)
+                        endDate = formatDateYMD(lastMonthEnd)
                       }
 
                       setFormData(prev => ({
@@ -443,7 +436,7 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
             {isLoading ? '生成中...' : '生成报告'}
           </Button>
         </div>
-      </motion.div>
-    </div>
+      </ModalContent>
+    </Modal>
   )
 }

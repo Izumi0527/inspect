@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useCallback, useEffect } from 'react'
 import toast from 'react-hot-toast'
@@ -311,15 +310,47 @@ export const useCreateCustomReportConfig = () => {
   })
 }
 
+export const useUpdateCustomReportConfig = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Record<string, any> }) =>
+      customReportsApi.updateCustomReportConfig(id, updates),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['reports', 'custom', 'configs'] })
+      queryClient.invalidateQueries({ queryKey: ['reports', 'custom', 'config', variables.id] })
+      toast.success('自定义报表配置已更新')
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '更新配置失败')
+    },
+  })
+}
+
+export const useDeleteCustomReportConfig = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => customReportsApi.deleteCustomReportConfig(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reports', 'custom', 'configs'] })
+      toast.success('自定义报表配置已删除')
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '删除配置失败')
+    },
+  })
+}
+
 export const useGenerateFromConfig = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: ({ configId, parameters, format }: {
-      configId: number
-      parameters?: Record<string, any>
+      configId: string
+      parameters?: ReportParameters
       format?: string
-    }) => customReportsApi.generateFromConfig(String(configId), parameters, format),
+    }) => customReportsApi.generateFromConfig(configId, parameters, format),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reports', 'list'] })
       toast.success('自定义报表生成成功')
@@ -331,17 +362,12 @@ export const useGenerateFromConfig = () => {
 }
 
 export const usePreviewCustomReportConfig = (
-  configId: number,
-  options?: { parameters?: Record<string, any>; limit?: number }
+  configId: string | null | undefined,
+  parameters?: ReportParameters
 ) => {
   return useQuery({
-    queryKey: ['reports', 'custom', 'preview', configId, options],
-    queryFn: () =>
-      customReportsApi.previewCustomReportConfig(
-        String(configId),
-        options?.parameters,
-        options?.limit
-      ),
+    queryKey: ['reports', 'custom', 'configs', configId, 'preview', parameters],
+    queryFn: () => customReportsApi.previewCustomReportConfig(String(configId), parameters),
     enabled: !!configId,
     staleTime: 30 * 1000, // 30秒缓存
   })

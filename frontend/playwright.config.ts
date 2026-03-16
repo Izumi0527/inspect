@@ -47,6 +47,12 @@ export default defineConfig({
     
     /* Navigation timeout */
     navigationTimeout: 30000,
+
+    /**
+     * 复用全局登录态（由 global-setup 生成）。
+     * 路径放在 test-results 下，避免污染仓库与便于本地清理。
+     */
+    storageState: process.env.PLAYWRIGHT_STORAGE_STATE || 'test-results/.auth/storageState.json',
   },
   
   /* Global timeout for each test */

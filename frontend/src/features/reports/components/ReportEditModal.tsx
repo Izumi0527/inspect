@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import { X, FileText } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   Button,
+  Modal,
+  ModalContent,
+  ModalTitle,
   SimpleInput as Input,
   Select,
   SelectContent,
@@ -81,24 +83,16 @@ export const ReportEditModal: React.FC<Props> = ({ report, onClose, onSuccess })
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-card rounded-xl shadow-xl max-w-2xl w-full overflow-hidden"
-      >
-        <div className="flex items-center justify-between p-6 border-b dark:border-border">
+    <Modal open onOpenChange={(open) => { if (!open) onClose() }}>
+      <ModalContent className="sm:max-w-2xl p-0" hideDescription>
+        <div className="flex items-center justify-between p-6 pr-14 border-b dark:border-border">
           <div className="flex items-center gap-3">
             <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <div>
-              <h2 className="text-xl font-semibold text-foreground">编辑巡检报表</h2>
+              <ModalTitle className="text-xl font-semibold text-foreground">编辑巡检报表</ModalTitle>
               <p className="text-sm text-muted-foreground">仅修改标题、描述与类别</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
-            <X className="w-5 h-5" />
-          </Button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -163,8 +157,8 @@ export const ReportEditModal: React.FC<Props> = ({ report, onClose, onSuccess })
             </Button>
           </div>
         </form>
-      </motion.div>
-    </div>
+      </ModalContent>
+    </Modal>
   )
 }
 

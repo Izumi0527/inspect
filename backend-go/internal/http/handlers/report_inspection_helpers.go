@@ -64,7 +64,6 @@ type inspectionDeviceInfo struct {
 	ResponseTime sql.NullFloat64 `gorm:"column:response_time"`
 	CPUUsage     sql.NullFloat64 `gorm:"column:cpu_usage"`
 	MemoryUsage  sql.NullFloat64 `gorm:"column:memory_usage"`
-	DiskUsage    sql.NullFloat64 `gorm:"column:disk_usage"`
 }
 
 type metricSummary struct {
@@ -215,7 +214,7 @@ func loadInspectionDeviceInfo(ctx context.Context, db *gorm.DB, deviceIDs []int)
 	if err := db.WithContext(ctx).
 		Table("devices AS d").
 		Select(`d.id, d.name, d.device_type, d.status, d.uptime, d.response_time,
-            d.cpu_usage, d.memory_usage, d.disk_usage, g.name AS group_name`).
+            d.cpu_usage, d.memory_usage, g.name AS group_name`).
 		Joins("LEFT JOIN device_groups g ON g.id = d.group_id").
 		Where("d.id IN ?", deviceIDs).
 		Scan(&rows).Error; err != nil {

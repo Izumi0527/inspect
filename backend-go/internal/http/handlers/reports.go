@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -168,6 +169,74 @@ func (h ReportsHandler) ListReports(c echo.Context) error {
 
 	page := parseIntWithDefault(c.QueryParam("page"), 1)
 	pageSize := parseIntWithDefault(firstNonEmpty(c.QueryParam("page_size"), c.QueryParam("pageSize")), 20)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	// status=scheduled：对外语义为“已配置定时，但尚未生成完成”，内部存储为 pending 且 schedule_id 非空。
+	// 若仅将 scheduled 映射为 pending，会导致 total/pages 不准确（包含未绑定 schedule 的 pending 报表）。
+	if strings.EqualFold(status, "scheduled") {
+		db := h.Service.DB()
+		if db == nil {
+			return echo.NewHTTPError(http.StatusServiceUnavailable, "database not configured")
+		}
+
+		query := db.WithContext(c.Request().Context()).Model(&reports.Report{}).
+			Where("status = ?", "pending").
+			Where("schedule_id IS NOT NULL")
+
+		if strings.TrimSpace(reportType) != "" {
+			normalized := normalizeReportType(reportType)
+			query = query.Where("report_type = ?", normalized)
+		}
+		if createdBy != "" {
+			query = query.Where("generated_by = ?", createdBy)
+		}
+		if startDate != nil {
+			query = query.Where("created_at >= ?", *startDate)
+		}
+		if endDate != nil {
+			query = query.Where("created_at <= ?", *endDate)
+		}
+
+		var total int64
+		if err := query.Count(&total).Error; err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load reports")
+		}
+
+		list := make([]reports.Report, 0)
+		if err := query.Order("created_at desc").
+			Offset((page - 1) * pageSize).
+			Limit(pageSize).
+			Find(&list).Error; err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load reports")
+		}
+
+		result := make([]map[string]interface{}, 0, len(list))
+		for _, item := range list {
+			result = append(result, buildReportResponse(item, nil, h.OutputDir))
+		}
+
+		pages := 0
+		if pageSize > 0 {
+			pages = int((total + int64(pageSize) - 1) / int64(pageSize))
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"success": true,
+			"data": map[string]interface{}{
+				"reports": result,
+				"total":   total,
+				"pages":   pages,
+			},
+		})
+	}
 
 	filter := reports.ListReportsFilter{
 		Page:     page,
@@ -178,12 +247,7 @@ func (h ReportsHandler) ListReports(c echo.Context) error {
 		filter.ReportType = &normalized
 	}
 	if status != "" {
-		if strings.EqualFold(status, "scheduled") {
-			pending := "pending"
-			filter.Status = &pending
-		} else {
-			filter.Status = &status
-		}
+		filter.Status = &status
 	}
 	if createdBy != "" {
 		filter.CreatedBy = &createdBy
@@ -202,9 +266,6 @@ func (h ReportsHandler) ListReports(c echo.Context) error {
 
 	result := make([]map[string]interface{}, 0, len(list))
 	for _, item := range list {
-		if status != "" && strings.EqualFold(status, "scheduled") && item.ScheduleID == nil {
-			continue
-		}
 		result = append(result, buildReportResponse(item, nil, h.OutputDir))
 	}
 
@@ -657,15 +718,23 @@ func (h ReportsHandler) DownloadReportFile(c echo.Context) error {
 	if _, err := requirePermission(c, h.Auth, "reports:read"); err != nil {
 		return err
 	}
+	if strings.TrimSpace(h.OutputDir) == "" {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report output not configured")
+	}
 	filename := strings.TrimSpace(c.Param("filename"))
 	if filename == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid filename")
 	}
-	if strings.Contains(filename, "..") {
+	if !isSafeReportFilename(filename) {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid filename")
 	}
 
-	fullPath := filepath.Join(h.OutputDir, filename)
+	outputDir := filepath.Clean(h.OutputDir)
+	fullPath := filepath.Join(outputDir, filename)
+	relPath, err := filepath.Rel(outputDir, fullPath)
+	if err != nil || strings.HasPrefix(relPath, "..") || filepath.IsAbs(relPath) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid filename")
+	}
 	if _, err := os.Stat(fullPath); err != nil {
 		if os.IsNotExist(err) {
 			return echo.NewHTTPError(http.StatusNotFound, "Report file not found")
@@ -674,6 +743,29 @@ func (h ReportsHandler) DownloadReportFile(c echo.Context) error {
 	}
 
 	return c.Attachment(fullPath, filename)
+}
+
+var safeReportFilenamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
+
+func isSafeReportFilename(filename string) bool {
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		return false
+	}
+	if filepath.VolumeName(filename) != "" {
+		// Windows 盘符/UNC 路径等均拒绝，避免 filepath.Join 被绝对路径覆盖。
+		return false
+	}
+	if strings.ContainsAny(filename, `/\`) {
+		return false
+	}
+	if strings.Contains(filename, "..") {
+		return false
+	}
+	if filepath.Base(filename) != filename {
+		return false
+	}
+	return safeReportFilenamePattern.MatchString(filename)
 }
 
 func (h ReportsHandler) ExportExcel(c echo.Context) error {
@@ -1164,6 +1256,9 @@ func (h ReportsHandler) GetStatisticsData(c echo.Context) error {
 	if _, err := requirePermission(c, h.Auth, "reports:read"); err != nil {
 		return err
 	}
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
+	}
 
 	db := h.Service.DB()
 	if db == nil {
@@ -1243,6 +1338,9 @@ func (h ReportsHandler) GetStatisticsKPI(c echo.Context) error {
 	if _, err := requirePermission(c, h.Auth, "reports:read"); err != nil {
 		return err
 	}
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
+	}
 
 	db := h.Service.DB()
 	if db == nil {
@@ -1296,6 +1394,9 @@ func (h ReportsHandler) GetStatisticsKPI(c echo.Context) error {
 func (h ReportsHandler) GetStatisticsRankings(c echo.Context) error {
 	if _, err := requirePermission(c, h.Auth, "reports:read"); err != nil {
 		return err
+	}
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
 	}
 
 	db := h.Service.DB()
@@ -1369,6 +1470,9 @@ func (h ReportsHandler) GenerateStatisticsReport(c echo.Context) error {
 func (h ReportsHandler) GetDeviceStatistics(c echo.Context) error {
 	if _, err := requirePermission(c, h.Auth, "reports:read"); err != nil {
 		return err
+	}
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
 	}
 
 	db := h.Service.DB()
@@ -1476,6 +1580,9 @@ func (h ReportsHandler) GetAlertStatistics(c echo.Context) error {
 	if _, err := requirePermission(c, h.Auth, "reports:read"); err != nil {
 		return err
 	}
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
+	}
 
 	db := h.Service.DB()
 	if db == nil {
@@ -1577,6 +1684,9 @@ func (h ReportsHandler) GetInspectionStatistics(c echo.Context) error {
 	if _, err := requirePermission(c, h.Auth, "reports:read"); err != nil {
 		return err
 	}
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
+	}
 
 	db := h.Service.DB()
 	if db == nil {
@@ -1666,6 +1776,9 @@ func (h ReportsHandler) GenerateInspectionReport(c echo.Context) error {
 func (h ReportsHandler) GetInspectionReportData(c echo.Context) error {
 	if _, err := requirePermission(c, h.Auth, "reports:read"); err != nil {
 		return err
+	}
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
 	}
 
 	db := h.Service.DB()
@@ -1802,7 +1915,7 @@ func (h ReportsHandler) GetInspectionReportData(c echo.Context) error {
 		memoryAverage := memoryStats[deviceID].Avg
 		memoryPeak := memoryStats[deviceID].Max
 
-		diskPercent := valueOrFallback(info.DiskUsage, diskStats[deviceID].Avg)
+		diskPercent := diskStats[deviceID].Avg
 		diskTotal := 0.0
 		if diskPercent > 0 {
 			diskTotal = 100
@@ -1898,6 +2011,9 @@ func (h ReportsHandler) GetInspectionReportData(c echo.Context) error {
 func (h ReportsHandler) CompareInspectionReports(c echo.Context) error {
 	if _, err := requirePermission(c, h.Auth, "reports:read"); err != nil {
 		return err
+	}
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
 	}
 
 	db := h.Service.DB()
@@ -2058,15 +2174,41 @@ func (h ReportsHandler) UpdateCustomConfig(c echo.Context) error {
 		updates["description"] = req.Description
 	}
 
-	config := map[string]interface{}{
-		"template":   req.Template,
-		"parameters": req.Parameters,
-		"charts":     req.Charts,
-		"tables":     req.Tables,
-		"filters":    req.Filters,
-		"layout":     req.Layout,
+	configUpdates := map[string]interface{}{}
+	if req.Template != nil {
+		configUpdates["template"] = req.Template
 	}
-	if len(config) > 0 {
+	if req.Parameters != nil {
+		configUpdates["parameters"] = req.Parameters
+	}
+	if req.Charts != nil {
+		configUpdates["charts"] = req.Charts
+	}
+	if req.Tables != nil {
+		configUpdates["tables"] = req.Tables
+	}
+	if req.Filters != nil {
+		configUpdates["filters"] = req.Filters
+	}
+	if req.Layout != nil {
+		configUpdates["layout"] = req.Layout
+	}
+
+	if len(configUpdates) > 0 {
+		// 仅当请求显式携带配置字段时才更新 config，并与历史配置合并，避免“只改名称却把配置清空”的数据破坏。
+		existing, err := h.Service.GetTemplate(c.Request().Context(), configID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return echo.NewHTTPError(http.StatusNotFound, "Config not found")
+			}
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load config")
+		}
+
+		config := decodeJSONMap(existing.Config)
+		for key, value := range configUpdates {
+			config[key] = value
+		}
+
 		configJSON, err := encodeJSON(config)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "invalid config payload")
@@ -2242,6 +2384,9 @@ func (h ReportsHandler) GenerateFromCustomConfig(c echo.Context) error {
 }
 
 func (h ReportsHandler) PreviewCustomConfig(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
+	}
 	if _, err := requirePermission(c, h.Auth, "reports:read"); err != nil {
 		return err
 	}

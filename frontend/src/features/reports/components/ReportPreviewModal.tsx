@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
-import { X, FileText, Download, Eye, AlertCircle, RefreshCcw } from 'lucide-react'
+import { FileText, Download, Eye, AlertCircle, RefreshCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { Button } from '@/components/atoms'
+import { Button, Modal, ModalContent, ModalTitle } from '@/components/atoms'
 import { downloadWithAuth } from '@/utils/download'
 import { getApiOrigin, TokenManager } from '@/lib/api-client'
 import { Report } from '../types'
@@ -164,19 +163,14 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-card rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
-      >
+    <Modal open onOpenChange={(open) => { if (!open) onClose() }}>
+      <ModalContent className="sm:max-w-4xl p-0" hideDescription>
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b dark:border-border">
+        <div className="flex items-center justify-between p-6 pr-14 border-b dark:border-border">
           <div className="flex items-center gap-3">
             <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             <div>
-              <h2 className="text-xl font-semibold text-foreground">{report.title}</h2>
+              <ModalTitle className="text-xl font-semibold text-foreground">{report.title || '报表预览'}</ModalTitle>
               <p className="text-sm text-muted-foreground">{report.description}</p>
             </div>
           </div>
@@ -209,14 +203,11 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
               <Download className="w-4 h-4 mr-2" />
               下载
             </Button>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X className="w-5 h-5" />
-            </Button>
           </div>
         </div>
 
         {/* 内容预览 */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+        <div className="p-6">
           {report.status !== 'completed' ? (
             <div className="bg-muted/40 rounded-lg p-8 text-center">
               <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
@@ -288,7 +279,7 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
             </div>
           )}
         </div>
-      </motion.div>
-    </div>
+      </ModalContent>
+    </Modal>
   )
 }

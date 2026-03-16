@@ -1,14 +1,17 @@
 import React, { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import { X, GitCompare, AlertCircle } from 'lucide-react'
+import { GitCompare, AlertCircle } from 'lucide-react'
 import {
   Badge,
   Button,
+  Modal,
+  ModalContent,
+  ModalTitle,
   SimpleInput as Input,
   Loading
 } from '@/components/atoms'
 import toast from 'react-hot-toast'
 import { useCompareDeviceReports } from '../hooks/useReports'
+import { formatDateYMD } from '@/utils/formatters'
 
 interface Props {
   onClose: () => void
@@ -48,8 +51,8 @@ const parseIdList = (raw: string): string[] => {
 export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
   const [deviceIdsText, setDeviceIdsText] = useState('')
   const [dateRange, setDateRange] = useState(() => {
-    const endDate = new Date().toISOString().split('T')[0]
-    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const endDate = formatDateYMD(new Date())
+    const startDate = formatDateYMD(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
     return { startDate, endDate }
   })
   const [result, setResult] = useState<unknown>(null)
@@ -101,24 +104,16 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-card rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-      >
-        <div className="flex items-center justify-between p-6 border-b dark:border-border flex-shrink-0">
+    <Modal open onOpenChange={(open) => { if (!open) onClose() }}>
+      <ModalContent className="sm:max-w-5xl p-0" hideDescription>
+        <div className="flex items-center justify-between p-6 pr-14 border-b dark:border-border flex-shrink-0">
           <div className="flex items-center gap-3">
             <GitCompare className="w-6 h-6 text-green-600 dark:text-green-400" />
             <div>
-              <h2 className="text-xl font-semibold text-foreground">设备对比</h2>
+              <ModalTitle className="text-xl font-semibold text-foreground">设备对比</ModalTitle>
               <p className="text-sm text-muted-foreground">差异以“第一个设备”为基准</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
-            <X className="w-5 h-5" />
-          </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -313,8 +308,8 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
             关闭
           </Button>
         </div>
-      </motion.div>
-    </div>
+      </ModalContent>
+    </Modal>
   )
 }
 

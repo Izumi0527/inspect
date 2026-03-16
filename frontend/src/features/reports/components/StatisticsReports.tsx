@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useState, useMemo } from 'react'
 import { BarChart3, Users, Target, Activity, Filter, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import {
@@ -17,20 +16,24 @@ import {
   BarChartComponent,
   PieChartComponent
 } from '@/components/atoms'
-import { useStatistics, useKPIData, useRankings, useGenerateStatisticsReport } from '../hooks/useReports'
+import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
+import { useStatistics, useKPIData, useRankings, useGenerateStatisticsReport, useExportToExcel } from '../hooks/useReports'
 import toast from 'react-hot-toast'
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 import { downloadWithAuth } from '@/utils/download'
+import { formatDateYMD } from '@/utils/formatters'
 
 interface Props {
   searchText: string
 }
 
 export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
+  const canCreate = usePermission(Permission.REPORTS_CREATE)
   // ==================== State Management ====================
   const [dateRange, setDateRange] = useState({
-    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0]
+    startDate: formatDateYMD(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+    endDate: formatDateYMD(new Date())
   })
   const [showFilters, setShowFilters] = useState(false)
   const [deviceTypes, setDeviceTypes] = useState<string[]>([])
@@ -54,7 +57,8 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
   const {
     data: kpiData,
     isLoading: kpiLoading,
-    error: kpiError
+    error: kpiError,
+    refetch: refetchKpi
   } = useKPIData({
     startDate: dateRange.startDate,
     endDate: dateRange.endDate,
@@ -65,7 +69,8 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
   const {
     data: rankingsData,
     isLoading: rankingsLoading,
-    error: rankingsError
+    error: rankingsError,
+    refetch: refetchRankings
   } = useRankings({
     startDate: dateRange.startDate,
     endDate: dateRange.endDate,
@@ -76,6 +81,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
   })
 
   const generateReportMutation = useGenerateStatisticsReport()
+  const exportExcelMutation = useExportToExcel()
 
   // ==================== Derived Data ====================
   const overview = statisticsData?.overview || {
@@ -203,6 +209,10 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
 
   // ==================== Event Handlers ====================
   const handleGenerateReport = async () => {
+    if (!canCreate) {
+      toast.error('暂无权限生成报表')
+      return
+    }
     try {
       const report = await generateReportMutation.mutateAsync({
         title: `统计报表_${dateRange.startDate}_${dateRange.endDate}`,
@@ -236,9 +246,98 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
     }
   }
 
-  const handleExportData = () => {
-    // TODO: 实现数据导出功能
-    toast.info('数据导出功能开发中')
+  const handleExportData = async () => {
+    if (!canCreate) {
+      toast.error('暂无权限导出数据')
+      return
+    }
+    if (!statisticsData) {
+      toast.error('暂无可导出的统计数据')
+      return
+    }
+
+    const title = `统计报表_${dateRange.startDate}_${dateRange.endDate}`
+
+    const kpiRows = kpiCards.map((card) => ({
+      metric: card.title,
+      value: card.value,
+      change: card.change
+    }))
+
+    const deviceTypeRows = deviceTypeChartData.map((item) => ({
+      deviceType: item.name,
+      count: item.count,
+      percent: overview.totalDevices > 0
+        ? Number(((item.count / overview.totalDevices) * 100).toFixed(2))
+        : 0
+    }))
+
+    const performanceRows = performanceChartData.map((item) => ({
+      level: item.name,
+      count: item.value,
+      percent: overview.totalDevices > 0
+        ? Number(((item.value / overview.totalDevices) * 100).toFixed(2))
+        : 0
+    }))
+
+    const rankingRows = rankingTableData.map((row) => ({
+      rank: row.rank,
+      name: row.name,
+      type: row.type,
+      availability: row.availability,
+      score: row.score,
+      status: row.status
+    }))
+
+    try {
+      await exportExcelMutation.mutateAsync({
+        title,
+        sheets: [
+          {
+            name: '概览KPI',
+            data: kpiRows,
+            columns: [
+              { header: '指标', key: 'metric' },
+              { header: '数值', key: 'value' },
+              { header: '变化', key: 'change' }
+            ]
+          },
+          {
+            name: '设备类型分布',
+            data: deviceTypeRows,
+            columns: [
+              { header: '设备类型', key: 'deviceType' },
+              { header: '数量', key: 'count' },
+              { header: '占比(%)', key: 'percent' }
+            ]
+          },
+          {
+            name: '性能分布',
+            data: performanceRows,
+            columns: [
+              { header: '等级', key: 'level' },
+              { header: '数量', key: 'count' },
+              { header: '占比(%)', key: 'percent' }
+            ]
+          },
+          {
+            name: '设备排行',
+            data: rankingRows,
+            columns: [
+              { header: '排名', key: 'rank' },
+              { header: '设备', key: 'name' },
+              { header: '类型', key: 'type' },
+              { header: '可用率', key: 'availability' },
+              { header: '评分', key: 'score' },
+              { header: '状态', key: 'status' }
+            ]
+          }
+        ]
+      })
+    } catch (e) {
+      console.error('导出失败:', e)
+      // toast 由 mutation hook onError 统一处理
+    }
   }
 
   const handleRefresh = () => {
@@ -322,6 +421,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
             message="无法加载 KPI 指标数据"
             error={kpiError}
             variant="warning"
+            onRetry={refetchKpi}
           />
         )}
         {rankingsError && (
@@ -330,6 +430,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
             message="无法加载设备排名数据"
             error={rankingsError}
             variant="warning"
+            onRetry={refetchRankings}
           />
         )}
       </div>
@@ -425,8 +526,8 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
                       setDeviceTypes([])
                       setLocations([])
                       setDateRange({
-                        startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                        endDate: new Date().toISOString().split('T')[0]
+                        startDate: formatDateYMD(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+                        endDate: formatDateYMD(new Date())
                       })
                     }}
                   >
@@ -448,17 +549,27 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
       </Card>
 
       {/* 操作按钮 */}
-      <div className="flex gap-2">
-        <Button
-          onClick={handleGenerateReport}
-          disabled={generateReportMutation.isPending}
-        >
-          {generateReportMutation.isPending ? '生成中...' : '生成统计报表'}
-        </Button>
-        <Button variant="outline" onClick={handleExportData}>
-          导出数据
-        </Button>
-      </div>
+      {canCreate ? (
+        <div className="flex gap-2">
+          <Button
+            onClick={handleGenerateReport}
+            disabled={generateReportMutation.isPending}
+          >
+            {generateReportMutation.isPending ? '生成中...' : '生成统计报表'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleExportData}
+            disabled={exportExcelMutation.isPending}
+          >
+            {exportExcelMutation.isPending ? '导出中...' : '导出数据'}
+          </Button>
+        </div>
+      ) : (
+        <div className="text-sm text-muted-foreground">
+          当前账号暂无生成/导出报表权限，请联系管理员开通。
+        </div>
+      )}
 
       {/* KPI 指标卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

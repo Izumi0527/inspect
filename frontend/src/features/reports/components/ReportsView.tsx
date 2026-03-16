@@ -6,7 +6,8 @@ import {
   TrendingUp,
   BarChart3,
   Settings,
-  Search
+  Search,
+  AlertTriangle
 } from 'lucide-react'
 import {
   Card,
@@ -34,6 +35,10 @@ interface TabConfig {
 
 export const ReportsView: React.FC = () => {
   const searchParams = useSearchParams()
+
+  const isMockFallbackEnabled =
+    process.env.NODE_ENV !== 'production' &&
+    process.env.NEXT_PUBLIC_REPORTS_ENABLE_MOCK === '1'
 
   const tabFromUrl = useMemo((): TabType | null => {
     const raw = String(searchParams?.get('tab') || '').toLowerCase().trim()
@@ -101,6 +106,23 @@ export const ReportsView: React.FC = () => {
   return (
     <AppLayout title="报表分析">
       <div className="flex flex-col gap-4 h-full">
+        {/* Mock 回退提示：避免验收时误判“已对接后端” */}
+        {isMockFallbackEnabled && (
+          <Card className="border-yellow-300/60 bg-yellow-50 dark:bg-yellow-900/20">
+            <CardContent className="p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 mt-0.5 text-yellow-700 dark:text-yellow-300" />
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-yellow-900 dark:text-yellow-200">
+                  当前处于 Mock 回退模式（NEXT_PUBLIC_REPORTS_ENABLE_MOCK=1）
+                </div>
+                <div className="text-xs text-yellow-900/80 dark:text-yellow-200/80">
+                  非生产环境下接口失败会回退示例/空数据，可能掩盖后端未联调问题。验收“真对接”时请关闭该开关，并以浏览器 Network/后端日志为准。
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* 快速统计卡片 */}
         {!statsLoading && stats && (
           <div className="flex gap-3">

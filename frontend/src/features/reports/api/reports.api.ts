@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { api } from '@/lib/api-client'
 import {
   AggregatedPerformanceStats,
@@ -65,6 +64,14 @@ interface ReportsApiEnvelope<T> {
   success?: boolean
   data?: T
   message?: string
+}
+
+// 统计 KPI 接口返回结构（后端为 snake_case）。
+export interface StatisticsKPIChangeData {
+  inspection_completion_rate_change: string
+  device_availability_change: string
+  avg_health_score_change: string
+  severe_issue_count_change: string
 }
 
 // 报表模块默认“强对接后端”：生产环境不允许静默使用模拟数据。
@@ -763,15 +770,15 @@ export async function getStatistics(params: {
   includeTrends?: boolean              // ✅ 改名
 }): Promise<StatisticsData> {
   try {
-    // 构建后端期望的请求体（使用snake_case）
+    // 统计类接口入参统一使用 camelCase，后端兼容解析（snake_case/camelCase）。
     const requestBody = {
-      start_date: params.startDate,
-      end_date: params.endDate,
-      device_types: params.deviceTypes,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      deviceTypes: params.deviceTypes,
       locations: params.locations,
-      device_groups: params.deviceGroups,
-      group_by: params.groupBy || 'day',
-      include_trends: params.includeTrends !== undefined ? params.includeTrends : true
+      deviceGroups: params.deviceGroups,
+      groupBy: params.groupBy || 'day',
+      includeTrends: params.includeTrends !== undefined ? params.includeTrends : true
     }
 
     const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/data', requestBody)
@@ -841,7 +848,7 @@ export async function getKPIData(params: {
   endDate: string
   deviceTypes?: string[]               // ✅ 改名为device_types对应
   comparisonPeriod?: 'previous_period' | 'previous_year'  // ✅ 对比周期
-}): Promise<unknown> {
+}): Promise<StatisticsKPIChangeData> {
   try {
     // 直接发送 camelCase 格式，依赖后端 CamelCaseModel 自动转换
     const response = await api.post<{success: boolean, data: unknown, message?: string}>(
@@ -850,7 +857,7 @@ export async function getKPIData(params: {
     )
 
     if (response.success && response.data) {
-      return response.data
+      return transformKPIChangeData(response.data)
     } else {
       throw new Error('获取KPI数据失败')
     }
@@ -873,14 +880,14 @@ export async function getRankings(params: {
   includeBottom?: boolean              // ✅ 是否包含后N名
 }): Promise<unknown> {
   try {
-    // 构建后端期望的请求体（使用snake_case）
+    // 统计类接口入参统一使用 camelCase，后端兼容解析（snake_case/camelCase）。
     const requestBody = {
-      start_date: params.startDate,
-      end_date: params.endDate,
-      ranking_type: params.rankingType || 'performance',
-      device_types: params.deviceTypes,
-      top_n: params.topN || 10,
-      include_bottom: params.includeBottom !== undefined ? params.includeBottom : true
+      startDate: params.startDate,
+      endDate: params.endDate,
+      rankingType: params.rankingType || 'performance',
+      deviceTypes: params.deviceTypes,
+      topN: params.topN || 10,
+      includeBottom: params.includeBottom !== undefined ? params.includeBottom : true
     }
 
     const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/statistics/rankings', requestBody)
@@ -1818,6 +1825,28 @@ const transformReportStatsData = (input: unknown): ReportStats => {
   }
 }
 
+const transformKPIChangeData = (input: unknown): StatisticsKPIChangeData => {
+  const data = toRecord(input)
+  return {
+    inspection_completion_rate_change: toStringSafe(
+      data.inspection_completion_rate_change ?? data.inspectionCompletionRateChange,
+      '+0%'
+    ),
+    device_availability_change: toStringSafe(
+      data.device_availability_change ?? data.deviceAvailabilityChange,
+      '+0%'
+    ),
+    avg_health_score_change: toStringSafe(
+      data.avg_health_score_change ?? data.avgHealthScoreChange,
+      '+0'
+    ),
+    severe_issue_count_change: toStringSafe(
+      data.severe_issue_count_change ?? data.severeIssueCountChange,
+      '+0'
+    ),
+  }
+}
+
 // ==================== 默认数据 ====================
 
 function getDefaultReports(): Report[] {
@@ -1900,10 +1929,12 @@ function getDefaultStatisticsData(): StatisticsData {
   return transformStatisticsData({})
 }
 
-function getDefaultKPIData(): UnknownRecord {
+function getDefaultKPIData(): StatisticsKPIChangeData {
   return {
-    kpis: [],
-    benchmarks: [],
+    inspection_completion_rate_change: '+0%',
+    device_availability_change: '+0%',
+    avg_health_score_change: '+0',
+    severe_issue_count_change: '+0',
   }
 }
 

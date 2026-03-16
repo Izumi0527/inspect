@@ -1,7 +1,9 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { useRouter } from 'next/navigation'
+import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
 import { 
   FileText, 
   Plus, 
@@ -41,6 +43,7 @@ import {
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 import { downloadWithAuth } from '@/utils/download'
 import { Report } from '../types'
+import { formatDateYMD } from '@/utils/formatters'
 import { InspectionReportModal } from './InspectionReportModal'
 import { ReportPreviewModal } from './ReportPreviewModal'
 import { ReportEditModal } from './ReportEditModal'
@@ -53,17 +56,32 @@ interface Props {
 
 export const InspectionReports: React.FC<Props> = ({ searchText }) => {
   const router = useRouter()
+  const canCreate = usePermission(Permission.REPORTS_CREATE)
+  const canUpdate = usePermission(Permission.REPORTS_UPDATE)
+  const canDelete = usePermission(Permission.REPORTS_DELETE)
+
   const [reportModal, setReportModal] = useState(false)
   const [previewReport, setPreviewReport] = useState<Report | null>(null)
   const [editingReport, setEditingReport] = useState<Report | null>(null)
   const [compareOpen, setCompareOpen] = useState(false)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+
+  // 分页：后端分页从 1 开始，默认 20 条/页
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [statusFilter, setStatusFilter] = useState('all')
   const [formatFilter, setFormatFilter] = useState('all')
   const [quickDailyLoading, setQuickDailyLoading] = useState(false)
 
+  // 当筛选条件变化时重置到第一页，避免落在空页
+  useEffect(() => {
+    setPage(1)
+  }, [searchText, statusFilter, formatFilter])
+
   const { data: reportsData, isLoading, error, refetch } = useReports({
+    page,
+    pageSize,
     type: 'inspection',
     status: statusFilter !== 'all' ? statusFilter : undefined
   })
@@ -71,6 +89,19 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
   const generateReport = useGenerateInspectionReport()
 
   const reports = reportsData?.reports || []
+  const total = useMemo(() => {
+    const serverTotal = typeof reportsData?.total === 'number' ? reportsData.total : 0
+    return Math.max(serverTotal, reports.length)
+  }, [reportsData?.total, reports.length])
+
+  // 删除/筛选后可能出现“当前页超出最后页”的情况：自动回退到最后一页，避免列表空白且无法翻页。
+  useEffect(() => {
+    if (total <= 0) return
+    const lastPage = Math.max(1, Math.ceil(total / pageSize))
+    if (page > lastPage) {
+      setPage(lastPage)
+    }
+  }, [page, pageSize, total])
 
   const handleDownloadReport = async (report: Report) => {
     try {
@@ -91,12 +122,16 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
   }
 
   const handleQuickDailyReport = async () => {
+    if (!canCreate) {
+      toast.error('暂无权限生成报表')
+      return
+    }
     if (quickDailyLoading) return
 
     try {
       setQuickDailyLoading(true)
-      const endDate = new Date().toISOString().split('T')[0]
-      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      const endDate = formatDateYMD(new Date())
+      const yesterday = formatDateYMD(new Date(Date.now() - 24 * 60 * 60 * 1000))
 
       const report = await generateReport.mutateAsync({
         title: `巡检日报_${yesterday}`,
@@ -146,13 +181,27 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
   }
 
   // 过滤报表列表
-  const filteredReports = reports.filter((report: Report) => 
-    (report.title.toLowerCase().includes(searchText.toLowerCase()) ||
-     report.description.toLowerCase().includes(searchText.toLowerCase())) &&
-    (formatFilter === 'all' || report.format === formatFilter)
-  )
+  const normalizedKeyword = searchText.trim().toLowerCase()
+  const isClientFiltering = normalizedKeyword.length > 0 || formatFilter !== 'all'
+  const filteredReports = reports.filter((report: Report) => {
+    const title = String(report?.title || '').toLowerCase()
+    const description = String(report?.description || '').toLowerCase()
+    const keywordMatched =
+      normalizedKeyword.length === 0 ||
+      title.includes(normalizedKeyword) ||
+      description.includes(normalizedKeyword)
+
+    const reportFormat = String(report?.format || '').toLowerCase()
+    const formatMatched = formatFilter === 'all' || reportFormat === formatFilter
+
+    return keywordMatched && formatMatched
+  })
 
   const handleGenerateReport = () => {
+    if (!canCreate) {
+      toast.error('暂无权限生成报表')
+      return
+    }
     setReportModal(true)
   }
 
@@ -321,22 +370,26 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
               </Button>
             </>
           )}
-          <Button
-            size="sm"
-            variant="ghost"
-            title="编辑"
-            onClick={() => setEditingReport(report)}
-          >
-            <Edit className="w-4 h-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setDeleteConfirm(report.id)}
-            title="删除"
-          >
-            <Trash2 className="w-4 h-4 text-red-500" />
-          </Button>
+          {canUpdate && (
+            <Button
+              size="sm"
+              variant="ghost"
+              title="编辑"
+              onClick={() => setEditingReport(report)}
+            >
+              <Edit className="w-4 h-4" />
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setDeleteConfirm(report.id)}
+              title="删除"
+            >
+              <Trash2 className="w-4 h-4 text-red-500" />
+            </Button>
+          )}
         </div>
       )
     }
@@ -379,7 +432,14 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="flex items-center gap-2">
           <h3 className="text-lg font-semibold text-foreground">巡检报告管理</h3>
-          <Badge variant="secondary">{filteredReports.length} 项</Badge>
+          <Badge variant="secondary">
+            {isClientFiltering ? `${filteredReports.length} / ${total}` : `${total}`} 项
+          </Badge>
+          {isClientFiltering && total > 0 && (
+            <span className="text-xs text-muted-foreground">
+              （搜索/格式筛选仅对当前页生效）
+            </span>
+          )}
         </div>
         <div className="flex gap-2">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -406,10 +466,12 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
               <SelectItem value="word">Word</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={handleGenerateReport}>
-            <Plus className="w-4 h-4 mr-2" />
-            生成报告
-          </Button>
+          {canCreate && (
+            <Button onClick={handleGenerateReport}>
+              <Plus className="w-4 h-4 mr-2" />
+              生成报告
+            </Button>
+          )}
         </div>
       </div>
 
@@ -422,7 +484,7 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
             icon: Calendar,
             color: 'blue',
             action: handleQuickDailyReport,
-            disabled: quickDailyLoading || generateReport.isPending
+            disabled: !canCreate || quickDailyLoading || generateReport.isPending
           },
           {
             title: '设备对比',
@@ -488,16 +550,31 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
       </div>
 
       {/* 报表列表 */}
-      {filteredReports.length > 0 ? (
+      {total > 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
         >
+          {isClientFiltering && filteredReports.length === 0 && (
+            <div className="text-sm text-muted-foreground mb-2">
+              本页无匹配结果，可尝试翻页或清空搜索/格式筛选。
+            </div>
+          )}
           <Table
             data={filteredReports}
             columns={columns}
             className="bg-card rounded-lg shadow-sm"
+            rowKey="id"
+            pagination={{
+              current: page,
+              pageSize,
+              total,
+              onChange: (nextPage, nextPageSize) => {
+                setPage(nextPage)
+                setPageSize(nextPageSize)
+              },
+            }}
           />
         </motion.div>
       ) : (
@@ -512,10 +589,12 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
                 </p>
               </div>
               {!searchText && (
-                <Button onClick={handleGenerateReport} className="mt-2">
-                  <Plus className="w-4 h-4 mr-2" />
-                  生成报告
-                </Button>
+                canCreate ? (
+                  <Button onClick={handleGenerateReport} className="mt-2">
+                    <Plus className="w-4 h-4 mr-2" />
+                    生成报告
+                  </Button>
+                ) : null
               )}
             </div>
           </CardContent>

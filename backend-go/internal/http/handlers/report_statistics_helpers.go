@@ -31,7 +31,6 @@ type deviceSnapshot struct {
 	ResponseTime sql.NullFloat64 `gorm:"column:response_time"`
 	CPUUsage     sql.NullFloat64 `gorm:"column:cpu_usage"`
 	MemoryUsage  sql.NullFloat64 `gorm:"column:memory_usage"`
-	DiskUsage    sql.NullFloat64 `gorm:"column:disk_usage"`
 	Location     sql.NullString  `gorm:"column:location"`
 	GroupID      sql.NullInt64   `gorm:"column:group_id"`
 }
@@ -114,12 +113,16 @@ func parseStatisticsFilters(payload map[string]interface{}) statisticsFilters {
 	if value, ok := readBool(payload, "include_trends", "includeTrends"); ok {
 		includeTrends = value
 	}
+	deviceGroups := parseIntSlice(payload["device_groups"])
+	if len(deviceGroups) == 0 {
+		deviceGroups = parseIntSlice(payload["deviceGroups"])
+	}
 	return statisticsFilters{
 		Start:         start,
 		End:           end,
 		DeviceTypes:   readStringSlice(payload, "device_types", "deviceTypes"),
 		Locations:     readStringSlice(payload, "locations", "location"),
-		DeviceGroups:  parseIntSlice(payload["device_groups"]),
+		DeviceGroups:  deviceGroups,
 		GroupBy:       groupBy,
 		IncludeTrends: includeTrends,
 	}
@@ -175,7 +178,7 @@ func parseTrendRangeFromQuery(c echo.Context) (time.Time, time.Time, string) {
 func loadDeviceSnapshots(ctx context.Context, db *gorm.DB, filters statisticsFilters) ([]deviceSnapshot, error) {
 	query := db.WithContext(ctx).
 		Table("devices").
-		Select("id, name, device_type, status, uptime, response_time, cpu_usage, memory_usage, disk_usage, location, group_id")
+		Select("id, name, device_type, status, uptime, response_time, cpu_usage, memory_usage, location, group_id")
 	query = applyDeviceFilters(query, filters)
 
 	devicesList := make([]deviceSnapshot, 0)
@@ -520,7 +523,6 @@ func resolveUtilization(agg deviceMetricAggregate, device deviceSnapshot) float6
 		agg.BandwidthUtilization,
 		device.CPUUsage,
 		device.MemoryUsage,
-		device.DiskUsage,
 	}
 	for _, candidate := range candidates {
 		if candidate.Valid {
