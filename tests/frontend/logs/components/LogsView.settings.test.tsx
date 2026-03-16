@@ -4,6 +4,10 @@ import { LogsView } from '@/features/logs/components/LogsView'
 
 const pushMock = jest.fn()
 
+jest.mock('@/lib/contexts/auth-context', () => ({
+  usePermission: () => true,
+}))
+
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: pushMock,

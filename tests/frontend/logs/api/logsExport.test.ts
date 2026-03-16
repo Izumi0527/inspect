@@ -10,6 +10,8 @@ jest.mock('@/lib/api-client', () => ({
     put: jest.fn(),
     delete: jest.fn(),
   },
+  API_PREFIX: '/api/v1',
+  getApiOrigin: () => process.env.NEXT_PUBLIC_API_URL || '',
   TokenManager: {
     getAccessToken: jest.fn(),
   },
@@ -52,5 +54,60 @@ describe('logsApi exportLogs', () => {
     const requestInit = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
     const headers = requestInit.headers as Record<string, string>
     expect(headers.Authorization).toBe('Bearer manager-token')
+  })
+
+  it('后端返回 JSON 错误时应包含状态码与 message', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ message: '权限不足' }),
+      text: async () => '',
+    } as Partial<Response>)
+
+    await expect(
+      exportLogs({
+        page: 1,
+        page_size: 20,
+        level: 'info',
+        format: 'csv',
+        include_raw: true,
+      }),
+    ).rejects.toThrow('导出失败（403）：权限不足')
+  })
+
+  it('后端返回文本错误时应包含状态码与文本内容', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      headers: { get: () => 'text/plain' },
+      text: async () => 'device_ids 超过限制',
+    } as Partial<Response>)
+
+    await expect(
+      exportLogs({
+        page: 1,
+        page_size: 20,
+        level: 'info',
+        format: 'csv',
+        include_raw: true,
+      }),
+    ).rejects.toThrow('导出失败（400）：device_ids 超过限制')
+  })
+
+  it('无 token 时不应发送空 Authorization 头', async () => {
+    ;(TokenManager.getAccessToken as jest.Mock).mockReturnValue('')
+
+    await exportLogs({
+      page: 1,
+      page_size: 20,
+      level: 'info',
+      format: 'csv',
+      include_raw: true,
+    })
+
+    const requestInit = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
+    const headers = (requestInit.headers ?? {}) as Record<string, string>
+    expect(headers.Authorization).toBeUndefined()
   })
 })

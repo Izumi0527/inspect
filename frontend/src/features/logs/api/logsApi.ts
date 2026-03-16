@@ -234,13 +234,47 @@ export async function exportLogs(params: LogExportParams): Promise<Blob> {
 
   const url = `${apiOrigin}${API_PREFIX}/logs/export${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
   const token = TokenManager.getAccessToken() || ''
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
 
   const response = await fetch(url, {
-    headers: { Authorization: token ? `Bearer ${token}` : '' },
+    headers,
   })
 
   if (!response.ok) {
-    throw new Error('导出失败')
+    const prefix = `导出失败（${response.status}）`
+    let detail = ''
+
+    try {
+      const contentType = response.headers?.get?.('content-type') || ''
+      if (contentType.includes('application/json') && typeof response.json === 'function') {
+        const data = (await response.json()) as unknown
+        if (isObject(data)) {
+          if (typeof data.message === 'string') {
+            detail = data.message
+          } else if (typeof data.error === 'string') {
+            detail = data.error
+          } else if (typeof data.detail === 'string') {
+            detail = data.detail
+          }
+        }
+      }
+
+      if (!detail && typeof response.text === 'function') {
+        detail = await response.text()
+      }
+    } catch {
+      // ignore
+    }
+
+    detail = (detail || '').trim()
+    if (detail.length > 200) {
+      detail = `${detail.slice(0, 200)}...`
+    }
+
+    throw new Error(detail ? `${prefix}：${detail}` : prefix)
   }
 
   return response.blob()

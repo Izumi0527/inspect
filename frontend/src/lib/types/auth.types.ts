@@ -51,6 +51,7 @@ export enum Permission {
   // 系统管理权限
   SYSTEM_CONFIG = 'system:config',
   SYSTEM_LOGS = 'system:logs',
+  SYSTEM_LOGS_MANAGE = 'system:logs:manage',
 }
 
 // 用户信息接口

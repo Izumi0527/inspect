@@ -171,6 +171,7 @@ func builtInPermissions() []permissionSeed {
 
 		{Name: "system:config", DisplayName: "系统配置", Description: "管理系统配置与设置", Module: "system", Action: "update", Resource: "config"},
 		{Name: "system:logs", DisplayName: "查看日志", Description: "查看系统日志与审计记录", Module: "system", Action: "read", Resource: "log"},
+		{Name: "system:logs:manage", DisplayName: "管理日志", Description: "采集/删除/管理系统日志", Module: "system", Action: "update", Resource: "log"},
 	}
 }
 
@@ -206,6 +207,7 @@ func builtInRoles(perms []permissionSeed) []roleSeed {
 		"reports:read",
 		"reports:create",
 		"system:logs",
+		"system:logs:manage",
 	}
 
 	return []roleSeed{

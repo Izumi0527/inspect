@@ -37,6 +37,12 @@ type SyslogRuntime interface {
 	Apply(ctx context.Context, cfg logs.SyslogConfig) (logs.SyslogStatus, error)
 }
 
+const (
+	logsReadPermission   = "system:logs"
+	logsManagePermission = "system:logs:manage"
+	maxExportDeviceIDs   = 200
+)
+
 func (h LogsHandler) Register(group *echo.Group) {
 	group.GET("/logs", h.ListLogs)
 	group.GET("/logs/", h.ListLogs)
@@ -63,11 +69,11 @@ func (h LogsHandler) Register(group *echo.Group) {
 }
 
 func (h LogsHandler) ListLogs(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	page, pageSize := parsePageParams(c)
@@ -86,11 +92,11 @@ func (h LogsHandler) ListLogs(c echo.Context) error {
 }
 
 func (h LogsHandler) GetDeviceLogs(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	deviceID, err := parseIDParam(c, "device_id")
@@ -116,11 +122,11 @@ func (h LogsHandler) GetDeviceLogs(c echo.Context) error {
 }
 
 func (h LogsHandler) GetRecentLogs(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	hours := parseIntDefault(c.QueryParam("hours"), 24)
@@ -136,20 +142,21 @@ func (h LogsHandler) GetRecentLogs(c echo.Context) error {
 }
 
 func (h LogsHandler) SearchLogs(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	keyword := strings.TrimSpace(c.QueryParam("keyword"))
 	if keyword == "" {
+		page, pageSize := parsePageParams(c)
 		return c.JSON(http.StatusOK, logs.LogListResponse{
 			Items:      []logs.LogItem{},
 			Total:      0,
-			Page:       1,
-			PageSize:   0,
+			Page:       page,
+			PageSize:   pageSize,
 			TotalPages: 0,
 			HasNext:    false,
 			HasPrev:    false,
@@ -172,11 +179,11 @@ func (h LogsHandler) SearchLogs(c echo.Context) error {
 }
 
 func (h LogsHandler) GetLogStatistics(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	deviceID := parseOptionalInt(c.QueryParam("device_id"))
@@ -191,11 +198,11 @@ func (h LogsHandler) GetLogStatistics(c echo.Context) error {
 }
 
 func (h LogsHandler) CollectDeviceLogs(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsManagePermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	deviceID, err := parseIDParam(c, "device_id")
@@ -244,11 +251,11 @@ func (h LogsHandler) CollectDeviceLogs(c echo.Context) error {
 }
 
 func (h LogsHandler) BatchCollectLogs(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsManagePermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	payload := map[string]interface{}{}
@@ -307,11 +314,11 @@ func BuildBatchCollectLogsResponse(result logs.BatchCollectResult) logs.BatchLog
 }
 
 func (h LogsHandler) DeleteLog(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsManagePermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	logID, err := parseIDParam(c, "log_id")
@@ -333,11 +340,11 @@ func (h LogsHandler) DeleteLog(c echo.Context) error {
 }
 
 func (h LogsHandler) BatchDeleteLogs(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsManagePermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	var req logs.DeleteLogsRequest
@@ -359,11 +366,11 @@ func (h LogsHandler) BatchDeleteLogs(c echo.Context) error {
 }
 
 func (h LogsHandler) CleanupDeviceLogs(c echo.Context) error {
-	if h.Service == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
 	if _, err := requirePermission(c, h.Auth, "system:config"); err != nil {
 		return err
+	}
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
 	}
 
 	payload := map[string]interface{}{}
@@ -428,11 +435,11 @@ func (h LogsHandler) ApplySyslogConfig(c echo.Context) error {
 }
 
 func (h LogsHandler) ListParsingRules(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsManagePermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	rows, err := h.Service.ListParsingRules(c.Request().Context())
@@ -565,11 +572,11 @@ func readSettingInt(ctx context.Context, getter SettingsGetter, key string) (int
 }
 
 func (h LogsHandler) GetParsingRule(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsManagePermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	ruleID, err := parseIDParam(c, "rule_id")
@@ -589,11 +596,11 @@ func (h LogsHandler) GetParsingRule(c echo.Context) error {
 }
 
 func (h LogsHandler) CreateParsingRule(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsManagePermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	var payload logs.ParsingRulePayload
@@ -610,11 +617,11 @@ func (h LogsHandler) CreateParsingRule(c echo.Context) error {
 }
 
 func (h LogsHandler) UpdateParsingRule(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsManagePermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	ruleID, err := parseIDParam(c, "rule_id")
@@ -639,11 +646,11 @@ func (h LogsHandler) UpdateParsingRule(c echo.Context) error {
 }
 
 func (h LogsHandler) DeleteParsingRule(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsManagePermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	ruleID, err := parseIDParam(c, "rule_id")
@@ -665,11 +672,11 @@ func (h LogsHandler) DeleteParsingRule(c echo.Context) error {
 }
 
 func (h LogsHandler) ExportDeviceLogs(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	deviceID, err := parseIDParam(c, "device_id")
@@ -700,11 +707,11 @@ func (h LogsHandler) ExportDeviceLogs(c echo.Context) error {
 }
 
 func (h LogsHandler) ExportLogs(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, logsReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	format := normalizeExportFormat(c.QueryParam("format"))
@@ -717,6 +724,9 @@ func (h LogsHandler) ExportLogs(c echo.Context) error {
 		if deviceID := parseOptionalInt(c.QueryParam("device_id")); deviceID != nil {
 			deviceIDs = append(deviceIDs, *deviceID)
 		}
+	}
+	if len(deviceIDs) > maxExportDeviceIDs {
+		return echo.NewHTTPError(http.StatusBadRequest, "device_ids exceeds limit")
 	}
 
 	allLogs := make([]logs.LogItem, 0)
@@ -909,6 +919,24 @@ func writeLogsExport(c echo.Context, format string, filename string, rows []logs
 	}
 }
 
+// sanitizeSpreadsheetCell 用于降低 CSV/Excel 导出时的“公式注入”风险。
+// 参考：当单元格以 = + - @ 等开头时，Excel 可能将其解释为公式。
+func sanitizeSpreadsheetCell(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return value
+	}
+	trimmed := strings.TrimLeft(value, " \t\r\n")
+	if trimmed == "" {
+		return value
+	}
+	switch trimmed[0] {
+	case '=', '+', '-', '@':
+		return "'" + value
+	default:
+		return value
+	}
+}
+
 func writeLogsCSV(rows []logs.LogItem, includeRaw bool) (*bytes.Buffer, error) {
 	buffer := &bytes.Buffer{}
 	_, _ = buffer.Write([]byte{0xEF, 0xBB, 0xBF})
@@ -929,14 +957,14 @@ func writeLogsCSV(rows []logs.LogItem, includeRaw bool) (*bytes.Buffer, error) {
 			translateLogLevel(row.Level),
 			translateLogFacility(row.Facility),
 			translateLogSource(row.Source),
-			row.Message,
-			emptyIfNil(row.SourceIP),
-			emptyIfNil(row.SourceProcess),
+			sanitizeSpreadsheetCell(row.Message),
+			sanitizeSpreadsheetCell(emptyIfNil(row.SourceIP)),
+			sanitizeSpreadsheetCell(emptyIfNil(row.SourceProcess)),
 			formatLogTime(row.LogTimestamp),
 			formatLogTime(row.CollectedAt),
 		}
 		if includeRaw {
-			values = append(values, emptyIfNil(row.RawMessage))
+			values = append(values, sanitizeSpreadsheetCell(emptyIfNil(row.RawMessage)))
 		}
 		if err := writer.Write(values); err != nil {
 			return nil, err
@@ -1012,14 +1040,14 @@ func writeLogsExcel(rows []logs.LogItem, includeRaw bool, stats *logs.LogStatist
 			translateLogLevel(row.Level),
 			translateLogFacility(row.Facility),
 			translateLogSource(row.Source),
-			row.Message,
-			emptyIfNil(row.SourceIP),
-			emptyIfNil(row.SourceProcess),
+			sanitizeSpreadsheetCell(row.Message),
+			sanitizeSpreadsheetCell(emptyIfNil(row.SourceIP)),
+			sanitizeSpreadsheetCell(emptyIfNil(row.SourceProcess)),
 			formatLogTime(row.LogTimestamp),
 			formatLogTime(row.CollectedAt),
 		}
 		if includeRaw {
-			values = append(values, emptyIfNil(row.RawMessage))
+			values = append(values, sanitizeSpreadsheetCell(emptyIfNil(row.RawMessage)))
 		}
 
 		for colIndex, value := range values {

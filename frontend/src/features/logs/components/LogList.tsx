@@ -22,11 +22,12 @@ interface LogListProps {
   onSelectLog: (logId: number) => void
   onSelectAll: (logIds: number[]) => void
   onClearSelection: () => void
-  onDelete: (logId: number) => void
+  onDelete?: (logId: number) => void
   onLogClick?: (log: DeviceLog) => void
   onRefresh?: () => void
   pagination: PaginationProps
   loading?: boolean
+  enableSelection?: boolean
 }
 
 export const LogList: React.FC<LogListProps> = ({
@@ -39,12 +40,17 @@ export const LogList: React.FC<LogListProps> = ({
   onLogClick,
   onRefresh,
   pagination,
-  loading = false
+  loading = false,
+  enableSelection = true
 }) => {
-  const allSelected = logs.length > 0 && logs.every(log => selectedLogs.includes(log.id))
-  const someSelected = selectedLogs.length > 0 && !allSelected
+  const selectedCountOnPage = enableSelection
+    ? logs.reduce((count, log) => count + (selectedLogs.includes(log.id) ? 1 : 0), 0)
+    : 0
+  const allSelected = enableSelection && logs.length > 0 && selectedCountOnPage === logs.length
+  const someSelected = enableSelection && selectedCountOnPage > 0 && !allSelected
 
   const handleSelectAll = () => {
+    if (!enableSelection) return
     if (allSelected) {
       onClearSelection()
     } else {
@@ -52,7 +58,7 @@ export const LogList: React.FC<LogListProps> = ({
     }
   }
 
-  const totalPages = Math.ceil(pagination.total / pagination.pageSize)
+  const totalPages = pagination.pageSize > 0 ? Math.ceil(pagination.total / pagination.pageSize) : 0
 
   // 空状态
   if (!loading && logs.length === 0) {
@@ -78,12 +84,13 @@ export const LogList: React.FC<LogListProps> = ({
       {/* 列表头部 */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/50">
         <div className="flex items-center gap-3">
-          <Checkbox
-            checked={allSelected}
-            // @ts-ignore
-            indeterminate={someSelected}
-            onCheckedChange={handleSelectAll}
-          />
+          {enableSelection && (
+            <Checkbox
+              checked={allSelected}
+              indeterminate={someSelected}
+              onCheckedChange={handleSelectAll}
+            />
+          )}
           <span className="text-sm text-muted-foreground">
             共 {pagination.total.toLocaleString()} 条日志
           </span>
@@ -121,8 +128,9 @@ export const LogList: React.FC<LogListProps> = ({
           <LogListItem
             key={log.id}
             log={log}
-            isSelected={selectedLogs.includes(log.id)}
-            onSelect={onSelectLog}
+            isSelected={enableSelection ? selectedLogs.includes(log.id) : false}
+            enableSelection={enableSelection}
+            onSelect={enableSelection ? onSelectLog : undefined}
             onDelete={onDelete}
             onClick={onLogClick}
           />

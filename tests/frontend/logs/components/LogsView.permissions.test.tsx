@@ -1,14 +1,9 @@
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { LogsView } from '@/features/logs/components/LogsView'
-import { exportLogs } from '@/features/logs/api/logsApi'
-
-jest.mock('@/features/logs/api/logsApi', () => ({
-  exportLogs: jest.fn(),
-}))
 
 jest.mock('@/lib/contexts/auth-context', () => ({
-  usePermission: () => true,
+  usePermission: () => false,
 }))
 
 jest.mock('@/features/logs/hooks/useLogs', () => ({
@@ -28,25 +23,18 @@ jest.mock('@/features/logs/hooks/useLogs', () => ({
   }),
   useLogFilters: () => ({
     filters: {
-      searchQuery: 'error',
-      levelFilter: 'info',
-      facilityFilter: 'system',
-      sourceFilter: 'syslog',
-      dateRange: { start: '2026-02-24', end: '2026-02-25' },
+      searchQuery: '',
+      levelFilter: 'all',
+      facilityFilter: 'all',
+      sourceFilter: 'all',
+      dateRange: { start: '', end: '' },
     },
     updateFilter: jest.fn(),
     resetFilters: jest.fn(),
-    queryParams: {
-      search: 'error',
-      level: 'info',
-      facility: 'system',
-      source: 'syslog',
-      start_time: '2026-02-24',
-      end_time: '2026-02-25',
-    },
+    queryParams: {},
   }),
   useLogSelection: () => ({
-    selectedLogs: [],
+    selectedLogs: [1, 2],
     toggleLog: jest.fn(),
     selectAll: jest.fn(),
     clearSelection: jest.fn(),
@@ -68,7 +56,9 @@ jest.mock('@/features/logs/components/LogStatsGrid', () => ({
 }))
 
 jest.mock('@/features/logs/components/LogFiltersBar', () => ({
-  LogFiltersBar: () => <div>filters</div>,
+  LogFiltersBar: ({ selectedCount }: { selectedCount: number }) => (
+    <div>{`selected:${selectedCount}`}</div>
+  ),
 }))
 
 jest.mock('@/features/logs/components/LogList', () => ({
@@ -100,12 +90,14 @@ jest.mock('@/components/ui/button', () => ({
     children,
     onClick,
     disabled,
+    ...props
   }: {
     children: React.ReactNode
     onClick?: () => void
     disabled?: boolean
+    [key: string]: unknown
   }) => (
-    <button type="button" disabled={disabled} onClick={onClick}>
+    <button type="button" disabled={disabled} onClick={onClick} {...props}>
       {children}
     </button>
   ),
@@ -114,7 +106,13 @@ jest.mock('@/components/ui/button', () => ({
 jest.mock('@/components/ui/dropdown-menu', () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DropdownMenuItem: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) => (
+  DropdownMenuItem: ({
+    children,
+    onClick,
+  }: {
+    children: React.ReactNode
+    onClick?: () => void
+  }) => (
     <button type="button" onClick={onClick}>
       {children}
     </button>
@@ -129,42 +127,13 @@ jest.mock('react-hot-toast', () => ({
   },
 }))
 
-describe('LogsView 导出', () => {
-  const originalCreateObjectURL = window.URL.createObjectURL
-  const originalRevokeObjectURL = window.URL.revokeObjectURL
-
-  beforeEach(() => {
-    ;(exportLogs as jest.Mock).mockResolvedValue(new Blob(['csv']))
-    window.URL.createObjectURL = jest.fn().mockReturnValue('blob:mock-url')
-    window.URL.revokeObjectURL = jest.fn()
-    jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-  })
-
-  afterEach(() => {
-    window.URL.createObjectURL = originalCreateObjectURL
-    window.URL.revokeObjectURL = originalRevokeObjectURL
-    jest.restoreAllMocks()
-  })
-
-  it('点击导出为 CSV 应调用 logsApi.exportLogs 并触发下载', async () => {
+describe('LogsView 权限分支', () => {
+  it('无 system:logs:manage 权限时应隐藏采集/批量入口，且 selectedCount=0', () => {
     render(<LogsView />)
 
-    fireEvent.click(screen.getByRole('button', { name: /导出为 CSV/i }))
-
-    await waitFor(() => {
-      expect(exportLogs).toHaveBeenCalledTimes(1)
-    })
-
-    const params = (exportLogs as jest.Mock).mock.calls[0][0] as Record<string, unknown>
-    expect(params.format).toBe('csv')
-    expect(params.include_raw).toBe(true)
-    expect(params.level).toBe('info')
-    expect(params.facility).toBe('system')
-    expect(params.search).toBe('error')
-    expect(params.start_time).toBe('2026-02-24')
-    expect(params.end_time).toBe('2026-02-25')
-
-    expect(window.URL.createObjectURL).toHaveBeenCalledTimes(1)
-    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: /采集日志/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /批量操作/i })).toBeNull()
+    expect(screen.getByText('selected:0')).toBeInTheDocument()
   })
 })
+

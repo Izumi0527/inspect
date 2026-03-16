@@ -35,7 +35,11 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
 }) => {
   const [devices, setDevices] = React.useState<Device[]>([])
   const [devicesLoading, setDevicesLoading] = React.useState(false)
+  const [devicesError, setDevicesError] = React.useState<string | null>(null)
   const [deviceSearch, setDeviceSearch] = React.useState('')
+  const [debouncedDeviceSearch, setDebouncedDeviceSearch] = React.useState('')
+  const searchTimerRef = React.useRef<NodeJS.Timeout | null>(null)
+  const [devicesReloadToken, setDevicesReloadToken] = React.useState(0)
   const [selectedDeviceIds, setSelectedDeviceIds] = React.useState<number[]>([])
 
   const [logType, setLogType] = React.useState('system')
@@ -49,11 +53,50 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
   React.useEffect(() => {
     if (!open) return
 
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+
+    const value = (deviceSearch || '').trim()
+    if (!value) {
+      setDebouncedDeviceSearch('')
+      return
+    }
+
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedDeviceSearch(value)
+    }, 350)
+
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    }
+  }, [deviceSearch, open])
+
+  const resetLocalState = React.useCallback(() => {
+    setSelectedDeviceIds([])
+    setLastResult(null)
+    setDeviceSearch('')
+    setDebouncedDeviceSearch('')
+    setDevicesError(null)
+  }, [])
+
+  React.useEffect(() => {
+    if (!open) {
+      resetLocalState()
+    }
+  }, [open, resetLocalState])
+
+  const handleRetryLoadDevices = React.useCallback(() => {
+    setDevicesReloadToken((prev) => prev + 1)
+  }, [])
+
+  React.useEffect(() => {
+    if (!open) return
+
     let canceled = false
     setDevicesLoading(true)
+    setDevicesError(null)
 
     void fetchDevices({
-      search: deviceSearch || undefined,
+      search: debouncedDeviceSearch || undefined,
       page: 1,
       page_size: 200,
     })
@@ -61,8 +104,10 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
         if (canceled) return
         setDevices(res.devices ?? [])
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (canceled) return
+        const message = error instanceof Error ? error.message : '加载设备失败'
+        setDevicesError(message || '加载设备失败')
         setDevices([])
       })
       .finally(() => {
@@ -73,7 +118,7 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
     return () => {
       canceled = true
     }
-  }, [open, deviceSearch])
+  }, [debouncedDeviceSearch, devicesReloadToken, open])
 
   const toggleDevice = (deviceId: number) => {
     setSelectedDeviceIds((prev) =>
@@ -89,13 +134,32 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
     setLastResult(null)
     const ids = [...selectedDeviceIds]
 
-    const result =
-      ids.length === 1
-        ? await onCollectSingle(ids[0], { logType, maxEntries })
-        : await onCollectBatch(ids, { logType, maxEntries, maxConcurrent })
+    try {
+      const result =
+        ids.length === 1
+          ? await onCollectSingle(ids[0], { logType, maxEntries })
+          : await onCollectBatch(ids, { logType, maxEntries, maxConcurrent })
 
-    setLastResult(result)
-    await onAfterCollect?.()
+      setLastResult(result)
+
+      // 采集可能部分成功：只要采集到日志就刷新一次列表/统计
+      if (result.success || result.collected_count > 0) {
+        await onAfterCollect?.()
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '采集失败'
+      const failed: Record<number, string> = {}
+      ids.forEach((id) => {
+        failed[id] = message
+      })
+      setLastResult({
+        success: false,
+        message,
+        collected_count: 0,
+        device_id: ids.length === 1 ? ids[0] : 0,
+        failed,
+      })
+    }
   }
 
   const renderDeviceStatus = (deviceId: number) => {
@@ -116,7 +180,15 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) return
+        if (collecting) return
+        resetLocalState()
+        onClose()
+      }}
+    >
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>采集日志</DialogTitle>
@@ -136,13 +208,24 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
               onChange={(e) => setDeviceSearch(e.target.value)}
               placeholder="搜索设备..."
               className="w-full px-3 py-2 border rounded"
+              disabled={collecting}
             />
 
             <div className="border rounded max-h-64 overflow-auto">
               {devicesLoading ? (
                 <div className="p-3 text-sm text-gray-500">加载中...</div>
+              ) : devicesError ? (
+                <div className="p-3 text-sm">
+                  <div className="text-red-600 mb-2">设备列表加载失败</div>
+                  <div className="text-gray-500 mb-3">{devicesError}</div>
+                  <Button variant="outline" size="sm" onClick={handleRetryLoadDevices} disabled={collecting}>
+                    重试
+                  </Button>
+                </div>
               ) : devices.length === 0 ? (
-                <div className="p-3 text-sm text-gray-500">暂无设备</div>
+                <div className="p-3 text-sm text-gray-500">
+                  {debouncedDeviceSearch ? '未找到匹配设备' : '暂无设备'}
+                </div>
               ) : (
                 devices.map((device) => (
                   <label
@@ -190,6 +273,7 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
                   value={logType}
                   onChange={(e) => setLogType(e.target.value)}
                   className="mt-1 w-full px-3 py-2 border rounded"
+                  disabled={collecting}
                 />
               </label>
 
@@ -198,8 +282,9 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
                 <input
                   type="number"
                   value={maxEntries}
-                  onChange={(e) => setMaxEntries(Number(e.target.value))}
+                  onChange={(e) => setMaxEntries(Math.max(1, Number(e.target.value) || 1))}
                   className="mt-1 w-full px-3 py-2 border rounded"
+                  disabled={collecting}
                 />
               </label>
 
@@ -209,8 +294,9 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
                   <input
                     type="number"
                     value={maxConcurrent}
-                    onChange={(e) => setMaxConcurrent(Number(e.target.value))}
+                    onChange={(e) => setMaxConcurrent(Math.max(1, Number(e.target.value) || 1))}
                     className="mt-1 w-full px-3 py-2 border rounded"
+                    disabled={collecting}
                   />
                 </label>
               )}
@@ -220,7 +306,14 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
               <Button onClick={handleCollect} disabled={collecting || selectedDeviceIds.length === 0}>
                 开始采集
               </Button>
-              <Button onClick={onClose} disabled={collecting}>
+              <Button
+                onClick={() => {
+                  if (collecting) return
+                  resetLocalState()
+                  onClose()
+                }}
+                disabled={collecting}
+              >
                 关闭
               </Button>
             </div>
@@ -228,11 +321,29 @@ export const LogCollectionModal: React.FC<LogCollectionModalProps> = ({
             {lastResult && (
               <div className="space-y-2 border-t pt-3">
                 <div className="text-sm font-medium">采集结果</div>
+                <div className={`text-sm ${lastResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                  {lastResult.message || (lastResult.success ? '采集成功' : '采集失败')}
+                  {typeof lastResult.collected_count === 'number' && (
+                    <span className="ml-2 text-gray-500">（共采集 {lastResult.collected_count} 条）</span>
+                  )}
+                </div>
+
+                {lastResult.collected && Object.keys(lastResult.collected).length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-500">成功明细</div>
+                    {Object.entries(lastResult.collected).map(([deviceId, count]) => (
+                      <div key={deviceId} className="text-sm text-green-600">
+                        设备 {deviceId}：{count} 条
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {lastResult.failed && Object.keys(lastResult.failed).length > 0 && (
                   <div className="space-y-1">
+                    <div className="text-xs text-gray-500">失败明细</div>
                     {Object.entries(lastResult.failed).map(([deviceId, reason]) => (
                       <div key={deviceId} className="text-sm text-red-600">
-                        {reason}
+                        设备 {deviceId}：{reason}
                       </div>
                     ))}
                   </div>

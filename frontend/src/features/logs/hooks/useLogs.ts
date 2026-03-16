@@ -1,7 +1,7 @@
 /**
  * 日志中心 Hooks
  */
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { toast } from 'react-hot-toast'
 import * as logsApi from '../api/logsApi'
 import type {
@@ -10,6 +10,10 @@ import type {
   LogQueryParams,
   LogFilters
 } from '../types'
+
+interface RequestOptions {
+  showToast?: boolean
+}
 
 /**
  * 日志列表 Hook
@@ -24,7 +28,8 @@ export function useLogs(params: LogQueryParams = {}) {
     total: 0
   })
 
-  const loadLogs = useCallback(async () => {
+  const loadLogs = useCallback(async (options: RequestOptions = {}) => {
+    const { showToast = true } = options
     setLoading(true)
     setError(null)
     try {
@@ -40,36 +45,54 @@ export function useLogs(params: LogQueryParams = {}) {
         pageSize: response?.page_size || params.page_size || 20,
         total: response?.total || 0
       })
+      return true
     } catch (err: any) {
       const message = err.message || '加载日志失败'
       setError(message)
-      toast.error(message)
+      if (showToast) {
+        toast.error(message)
+      }
+      return false
     } finally {
       setLoading(false)
     }
   }, [params])
 
   useEffect(() => {
-    loadLogs()
+    void loadLogs()
   }, [loadLogs])
 
-  const deleteLog = useCallback(async (logId: number) => {
+  const deleteLog = useCallback(async (logId: number, options: RequestOptions = {}) => {
+    const { showToast = true } = options
     try {
       await logsApi.deleteLog(logId)
-      toast.success('日志删除成功')
-      await loadLogs()
+      if (showToast) {
+        toast.success('日志删除成功')
+      }
+      await loadLogs({ showToast: false })
+      return true
     } catch (err: any) {
-      toast.error(err.message || '删除日志失败')
+      if (showToast) {
+        toast.error(err.message || '删除日志失败')
+      }
+      return false
     }
   }, [loadLogs])
 
-  const batchDeleteLogs = useCallback(async (logIds: number[]) => {
+  const batchDeleteLogs = useCallback(async (logIds: number[], options: RequestOptions = {}) => {
+    const { showToast = true } = options
     try {
       const result = await logsApi.batchDeleteLogs(logIds)
-      toast.success(`成功删除 ${result.deleted_count} 条日志`)
-      await loadLogs()
+      if (showToast) {
+        toast.success(`成功删除 ${result.deleted_count} 条日志`)
+      }
+      await loadLogs({ showToast: false })
+      return true
     } catch (err: any) {
-      toast.error(err.message || '批量删除日志失败')
+      if (showToast) {
+        toast.error(err.message || '批量删除日志失败')
+      }
+      return false
     }
   }, [loadLogs])
 
@@ -98,17 +121,19 @@ export function useLogStats(hours: number = 24) {
     try {
       const data = await logsApi.getLogStatistics(hours)
       setStats(data)
+      return true
     } catch (err: any) {
       const message = err.message || '加载日志统计失败'
       setError(message)
       // 不显示toast，避免频繁提示
+      return false
     } finally {
       setLoading(false)
     }
   }, [hours])
 
   useEffect(() => {
-    loadStats()
+    void loadStats()
   }, [loadStats])
 
   return {
@@ -130,6 +155,10 @@ export function useLogFilters() {
     sourceFilter: 'all'
   })
 
+  // 搜索防抖：避免每次按键都触发后端请求
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
+  const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
+
   const updateFilter = useCallback(<K extends keyof LogFilters>(
     key: K,
     value: LogFilters[K]
@@ -144,14 +173,33 @@ export function useLogFilters() {
       facilityFilter: 'all',
       sourceFilter: 'all'
     })
+    setDebouncedSearchQuery('')
   }, [])
+
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+
+    const value = (filters.searchQuery || '').trim()
+    if (!value) {
+      setDebouncedSearchQuery('')
+      return
+    }
+
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearchQuery(value)
+    }, 350)
+
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    }
+  }, [filters.searchQuery])
 
   // 转换为API查询参数
   const queryParams = useMemo((): LogQueryParams => {
     const params: LogQueryParams = {}
     
-    if (filters.searchQuery) {
-      params.search = filters.searchQuery
+    if (debouncedSearchQuery) {
+      params.search = debouncedSearchQuery
     }
     if (filters.levelFilter !== 'all') {
       params.level = filters.levelFilter
@@ -173,7 +221,14 @@ export function useLogFilters() {
     }
     
     return params
-  }, [filters])
+  }, [
+    debouncedSearchQuery,
+    filters.levelFilter,
+    filters.facilityFilter,
+    filters.sourceFilter,
+    filters.deviceId,
+    filters.dateRange,
+  ])
 
   return {
     filters,
@@ -203,14 +258,26 @@ export function useLogCollection() {
         log_type: options.logType || 'system',
         max_entries: options.maxEntries,
       })
-      
-      setProgress(prev => ({ ...prev, [deviceId]: 'done' }))
-      toast.success(`采集完成，获取 ${result.collected_count} 条日志`)
+
+      if (result.success) {
+        setProgress(prev => ({ ...prev, [deviceId]: 'done' }))
+        toast.success(result.message || `采集完成，获取 ${result.collected_count} 条日志`)
+      } else {
+        setProgress(prev => ({ ...prev, [deviceId]: 'error' }))
+        toast.error(result.message || '日志采集失败')
+      }
       return result
     } catch (err: any) {
+      const message = err.message || '日志采集失败'
       setProgress(prev => ({ ...prev, [deviceId]: 'error' }))
-      toast.error(err.message || '日志采集失败')
-      throw err
+      toast.error(message)
+      return {
+        success: false,
+        message,
+        collected_count: 0,
+        device_id: deviceId,
+        failed: { [deviceId]: message },
+      }
     } finally {
       setCollecting(false)
     }
@@ -235,9 +302,10 @@ export function useLogCollection() {
       const failedIds = new Set<number>(
         result.failed ? Object.keys(result.failed).map(value => Number(value)) : []
       )
+      const markAllError = failedIds.size === 0 && !result.success
 
       deviceIds.forEach(id => {
-        setProgress(prev => ({ ...prev, [id]: failedIds.has(id) ? 'error' : 'done' }))
+        setProgress(prev => ({ ...prev, [id]: markAllError || failedIds.has(id) ? 'error' : 'done' }))
       })
 
       if (result.success) {
@@ -247,11 +315,23 @@ export function useLogCollection() {
       }
       return result
     } catch (err: any) {
+      const message = err.message || '批量采集失败'
       deviceIds.forEach(id => {
         setProgress(prev => ({ ...prev, [id]: 'error' }))
       })
-      toast.error(err.message || '批量采集失败')
-      throw err
+      toast.error(message)
+
+      const failed: Record<number, string> = {}
+      deviceIds.forEach(id => {
+        failed[id] = message
+      })
+      return {
+        success: false,
+        message,
+        collected_count: 0,
+        device_id: 0,
+        failed,
+      }
     } finally {
       setCollecting(false)
     }

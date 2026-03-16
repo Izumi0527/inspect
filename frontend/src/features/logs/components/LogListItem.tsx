@@ -18,15 +18,17 @@ import { LOG_LEVEL_CONFIG, LOG_FACILITY_CONFIG } from '../types'
 
 interface LogListItemProps {
   log: DeviceLog
-  isSelected: boolean
-  onSelect: (logId: number) => void
-  onDelete: (logId: number) => void
+  isSelected?: boolean
+  enableSelection?: boolean
+  onSelect?: (logId: number) => void
+  onDelete?: (logId: number) => void
   onClick?: (log: DeviceLog) => void
 }
 
 export const LogListItem: React.FC<LogListItemProps> = ({
   log,
-  isSelected,
+  isSelected = false,
+  enableSelection = true,
   onSelect,
   onDelete,
   onClick
@@ -43,18 +45,20 @@ export const LogListItem: React.FC<LogListItemProps> = ({
     <div
       className={`
         group flex items-start gap-3 p-4 border-b border-gray-100 dark:border-gray-800
-        hover:bg-muted/40/50 transition-colors cursor-pointer
+        hover:bg-muted/40 transition-colors cursor-pointer
         ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
       `}
       onClick={() => onClick?.(log)}
     >
       {/* 选择框 */}
-      <div className="pt-1" onClick={(e) => e.stopPropagation()}>
-        <Checkbox
-          checked={isSelected}
-          onCheckedChange={() => onSelect(log.id)}
-        />
-      </div>
+      {enableSelection && onSelect && (
+        <div className="pt-1" onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={() => onSelect(log.id)}
+          />
+        </div>
+      )}
 
       {/* 日志级别标签 */}
       <div className="flex-shrink-0 pt-0.5">
@@ -102,17 +106,19 @@ export const LogListItem: React.FC<LogListItemProps> = ({
 
       {/* 操作按钮 */}
       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-gray-400 hover:text-red-600"
-          onClick={(e) => {
-            e.stopPropagation()
-            onDelete(log.id)
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        {onDelete && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-gray-400 hover:text-red-600"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(log.id)
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
         <ChevronRight className="h-4 w-4 text-gray-400" />
       </div>
     </div>

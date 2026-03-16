@@ -1,9 +1,11 @@
 /**
  * 日志中心主视图
  */
-import React, { useState, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppLayout } from '@/components/layout'
+import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
 import {
   useLogs,
   useLogStats,
@@ -38,6 +40,7 @@ import type { DeviceLog } from '../types'
 
 export const LogsView: React.FC = () => {
   const router = useRouter()
+  const canManageLogs = usePermission(Permission.SYSTEM_LOGS_MANAGE)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [selectedLog, setSelectedLog] = useState<DeviceLog | null>(null)
@@ -73,14 +76,30 @@ export const LogsView: React.FC = () => {
   } = useLogSelection()
   const { collecting, progress, collectLogs, batchCollect } = useLogCollection()
 
+  // 分页越界自愈（例如批量删除导致总页数减少）
+  const totalPages = useMemo(() => {
+    const size = pagination.pageSize || pageSize
+    if (size <= 0) return 0
+    return Math.ceil(pagination.total / size)
+  }, [pagination.pageSize, pagination.total, pageSize])
+
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages)
+      clearSelection()
+    }
+  }, [clearSelection, currentPage, totalPages])
+
   // 处理分页
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
+    clearSelection()
   }
 
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize)
     setCurrentPage(1)
+    clearSelection()
   }
 
   // 处理过滤器变更时重置页码
@@ -90,25 +109,65 @@ export const LogsView: React.FC = () => {
   ) => {
     updateFilter(key, value)
     setCurrentPage(1)
+    clearSelection()
   }
 
   // 处理批量删除
   const handleBatchDelete = async () => {
+    if (!canManageLogs) {
+      toast.error('无权限执行批量删除')
+      return
+    }
     if (selectedLogs.length === 0) {
       toast.error('请先选择要删除的日志')
       return
     }
 
     if (confirm(`确定要删除选中的 ${selectedLogs.length} 条日志吗？`)) {
-      await batchDeleteLogs(selectedLogs)
-      clearSelection()
+      const ok = await batchDeleteLogs(selectedLogs)
+      if (ok) {
+        clearSelection()
+      }
     }
+  }
+
+  // 处理单条删除
+  const handleDeleteLog = async (logId: number) => {
+    if (!canManageLogs) {
+      toast.error('无权限删除日志')
+      return
+    }
+
+    if (!confirm('确定要删除这条日志吗？')) {
+      return
+    }
+
+    await deleteLog(logId)
   }
 
   // 处理刷新
   const handleRefresh = async () => {
-    await Promise.all([loadLogs(), refreshStats()])
-    toast.success('数据已刷新')
+    const [logsOk, statsOk] = await Promise.all([
+      loadLogs({ showToast: false }),
+      refreshStats(),
+    ])
+
+    if (logsOk && statsOk) {
+      toast.success('数据已刷新')
+      return
+    }
+
+    if (logsOk && !statsOk) {
+      toast.success('日志已刷新，但统计刷新失败')
+      return
+    }
+
+    if (!logsOk && statsOk) {
+      toast.error('日志刷新失败，请重试')
+      return
+    }
+
+    toast.error('刷新失败，请重试')
   }
 
   // 处理日志点击
@@ -117,24 +176,24 @@ export const LogsView: React.FC = () => {
   }
 
   // 处理导出
-  const handleExport = async (format: 'csv' | 'excel') => {
+  const handleExport = async (format: 'csv' | 'xlsx') => {
     try {
       const blob = await exportLogsApi({
-        level: filters.levelFilter !== 'all' ? filters.levelFilter : undefined,
-        facility: filters.facilityFilter !== 'all' ? filters.facilityFilter : undefined,
-        source: filters.sourceFilter !== 'all' ? filters.sourceFilter : undefined,
-        start_time: filters.dateRange?.start,
-        end_time: filters.dateRange?.end,
-        search: filters.searchQuery || undefined,
+        level: queryParams.level,
+        facility: queryParams.facility,
+        source: queryParams.source,
+        start_time: queryParams.start_time,
+        end_time: queryParams.end_time,
+        search: queryParams.search,
         format,
         include_raw: true,
-        include_stats: format === 'excel',
+        include_stats: format === 'xlsx',
       })
 
       const downloadUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = downloadUrl
-      link.download = `logs_export_${new Date().toISOString().slice(0, 10)}.${format === 'excel' ? 'xlsx' : 'csv'}`
+      link.download = `logs_export_${new Date().toISOString().slice(0, 10)}.${format}`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -143,7 +202,8 @@ export const LogsView: React.FC = () => {
       toast.success(`日志导出成功 (${format.toUpperCase()})`)
     } catch (error) {
       console.error('Export failed:', error)
-      toast.error('导出失败，请重试')
+      const message = error instanceof Error ? error.message : '导出失败，请重试'
+      toast.error(message)
     }
   }
 
@@ -208,7 +268,7 @@ export const LogsView: React.FC = () => {
                       <Download className="h-4 w-4 mr-2" />
                       导出为 CSV
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExport('excel')}>
+                    <DropdownMenuItem onClick={() => handleExport('xlsx')}>
                       <Download className="h-4 w-4 mr-2" />
                       导出为 Excel
                     </DropdownMenuItem>
@@ -216,27 +276,20 @@ export const LogsView: React.FC = () => {
                 </DropdownMenu>
 
                 {/* 采集按钮 */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" disabled={collecting}>
-                      <Play className={`h-4 w-4 mr-2 ${collecting ? 'animate-pulse' : ''}`} />
-                      采集日志
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setCollectionOpen(true)}>
-                      <Play className="h-4 w-4 mr-2" />
-                      选择设备采集
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setCollectionOpen(true)}>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      批量采集（多选）
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                {canManageLogs && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={collecting}
+                    onClick={() => setCollectionOpen(true)}
+                  >
+                    <Play className={`h-4 w-4 mr-2 ${collecting ? 'animate-pulse' : ''}`} />
+                    采集日志
+                  </Button>
+                )}
 
                 {/* 批量操作 */}
-                {selectedLogs.length > 0 && (
+                {canManageLogs && selectedLogs.length > 0 && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm">
@@ -276,8 +329,9 @@ export const LogsView: React.FC = () => {
               onReset={() => {
                 resetFilters()
                 setCurrentPage(1)
+                clearSelection()
               }}
-              selectedCount={selectedLogs.length}
+              selectedCount={canManageLogs ? selectedLogs.length : 0}
             />
 
             {/* 日志列表 */}
@@ -291,10 +345,13 @@ export const LogsView: React.FC = () => {
                   onSelectLog={toggleLog}
                   onSelectAll={selectAll}
                   onClearSelection={clearSelection}
-                  onDelete={deleteLog}
+                  onDelete={canManageLogs ? handleDeleteLog : undefined}
                   onLogClick={handleLogClick}
-                  onRefresh={loadLogs}
+                  onRefresh={() => {
+                    void loadLogs()
+                  }}
                   loading={loading}
+                  enableSelection={canManageLogs}
                   pagination={{
                     current: pagination.page,
                     total: pagination.total,
@@ -324,7 +381,7 @@ export const LogsView: React.FC = () => {
         onCollectSingle={(deviceId, options) => collectLogs(deviceId, options)}
         onCollectBatch={(deviceIds, options) => batchCollect(deviceIds, options)}
         onAfterCollect={async () => {
-          await Promise.all([loadLogs(), refreshStats()])
+          await Promise.all([loadLogs({ showToast: false }), refreshStats()])
         }}
       />
     </AppLayout>
