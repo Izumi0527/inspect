@@ -1,6 +1,4 @@
-import { TokenManager } from '@/lib/api-client'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
+import { TokenManager, getApiOrigin } from '@/lib/api-client'
 
 const sanitizeFilename = (filename: string): string => {
   const trimmed = String(filename || '').trim()
@@ -11,8 +9,10 @@ const sanitizeFilename = (filename: string): string => {
 const resolveUrl = (urlOrPath: string): string => {
   const raw = String(urlOrPath || '').trim()
   if (/^https?:\/\//i.test(raw)) return raw
-  if (!raw.startsWith('/')) return `${API_BASE_URL}/${raw}`
-  return `${API_BASE_URL}${raw}`
+
+  const apiOrigin = getApiOrigin()
+  if (!raw.startsWith('/')) return `${apiOrigin}/${raw}`
+  return `${apiOrigin}${raw}`
 }
 
 /**

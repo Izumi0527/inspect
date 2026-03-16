@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -20,9 +21,32 @@ import (
 )
 
 type AlertsHandler struct {
-	Service *alerts.Service
+	Service AlertsService
 	Auth    PermissionService
 	WS      *ws.Manager
+}
+
+type AlertsService interface {
+	DB() *gorm.DB
+
+	ListAlerts(ctx context.Context, filter alerts.ListAlertsFilter) ([]alerts.AlertWithDevice, int64, error)
+	GetAlert(ctx context.Context, alertID int) (alerts.AlertWithDevice, error)
+	GetRecentAlerts(ctx context.Context, limit int) ([]alerts.AlertWithDevice, error)
+	GetAlertStatistics(ctx context.Context) (alerts.AlertStatistics, error)
+	ListAlertOperations(ctx context.Context, alertID int, limit int) ([]alerts.AlertOperationHistory, error)
+
+	AcknowledgeAlert(ctx context.Context, alertID int, operator alerts.Operator, note *string, assignee *string) error
+	ResolveAlert(ctx context.Context, alertID int, operator alerts.Operator, resolution *string, note *string) error
+	ReactivateAlert(ctx context.Context, alertID int, operator alerts.Operator, reason *string) error
+	DeleteAlert(ctx context.Context, alertID int) error
+	AddAlertComment(ctx context.Context, alertID int, operator alerts.Operator, comment *string) error
+	AssignAlert(ctx context.Context, alertID int, operator alerts.Operator, assignee *string) error
+
+	ListRules(ctx context.Context, filter alerts.ListRulesFilter) ([]alerts.AlertRule, error)
+	GetRule(ctx context.Context, ruleID int) (alerts.AlertRule, error)
+	CreateRule(ctx context.Context, rule *alerts.AlertRule) error
+	UpdateRule(ctx context.Context, ruleID int, updates map[string]interface{}) (alerts.AlertRule, error)
+	DeleteRule(ctx context.Context, ruleID int) error
 }
 
 func (h AlertsHandler) Register(group *echo.Group) {
@@ -31,6 +55,7 @@ func (h AlertsHandler) Register(group *echo.Group) {
 	group.GET("/alerts/statistics", h.GetAlertStatistics)
 	group.GET("/alerts/recent", h.GetRecentAlerts)
 	group.GET("/alerts/:alert_id", h.GetAlert)
+	group.GET("/alerts/:alert_id/operations", h.ListAlertOperations)
 	group.POST("/alerts/:alert_id/acknowledge", h.AcknowledgeAlert)
 	group.POST("/alerts/:alert_id/resolve", h.ResolveAlert)
 	group.POST("/alerts/:alert_id/reactivate", h.ReactivateAlert)
@@ -57,18 +82,25 @@ func (h AlertsHandler) ListAlerts(c echo.Context) error {
 	page, pageSize := parsePageParams(c)
 
 	params := c.QueryParams()
-	statusValues := parseQueryValues(params["status"])
-	severityValues := parseQueryValues(params["severity"])
-	categoryValues := parseQueryValues(params["category"])
-	deviceIDs := parseIntList(append(params["device_ids"], params["device_id"]...))
+	statusValues := parseQueryValues(append(params["status"], params["status[]"]...))
+	severityValues := parseQueryValues(append(params["severity"], params["severity[]"]...))
+	categoryValues := parseQueryValues(append(params["category"], params["category[]"]...))
+	deviceIDs := parseIntList(append(append(params["device_ids"], params["device_ids[]"]...), params["device_id"]...))
 
-	startDate, _ := parseTimeOptional(c.QueryParam("start_date"))
+	startDateRaw := c.QueryParam("start_date")
+	startDate, _ := parseTimeOptional(startDateRaw)
 	if startDate == nil {
 		startDate, _ = parseTimeOptional(c.QueryParam("start_time"))
 	}
-	endDate, _ := parseTimeOptional(c.QueryParam("end_date"))
+	endDateRaw := c.QueryParam("end_date")
+	endDate, _ := parseTimeOptional(endDateRaw)
 	if endDate == nil {
 		endDate, _ = parseTimeOptional(c.QueryParam("end_time"))
+	}
+	// 兼容 date-only：end_date=YYYY-MM-DD 视为“当天结束”，避免把当天数据排除在外。
+	if endDate != nil && isDateOnly(endDateRaw) {
+		adjusted := endDate.UTC().Add(24*time.Hour - time.Nanosecond)
+		endDate = &adjusted
 	}
 
 	filter := alerts.ListAlertsFilter{
@@ -142,6 +174,55 @@ func (h AlertsHandler) GetAlert(c echo.Context) error {
 	return c.JSON(http.StatusOK, buildAlertResponse(row))
 }
 
+func (h AlertsHandler) ListAlertOperations(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "alert service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "alerts:read"); err != nil {
+		return err
+	}
+
+	alertID, err := parseIDParam(c, "alert_id")
+	if err != nil {
+		return err
+	}
+
+	limit := parseIntDefault(c.QueryParam("limit"), 50)
+	rows, err := h.Service.ListAlertOperations(c.Request().Context(), alertID, limit)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "alert not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load alert operations")
+	}
+
+	items := make([]map[string]interface{}, 0, len(rows))
+	for _, row := range rows {
+		metadata := map[string]interface{}{}
+		if len(row.Metadata) > 0 {
+			_ = json.Unmarshal(row.Metadata, &metadata)
+		}
+
+		items = append(items, map[string]interface{}{
+			"id":              strconv.Itoa(row.ID),
+			"alert_id":        strconv.Itoa(row.AlertID),
+			"operation_type":  strings.TrimSpace(row.OperationType),
+			"operator_id":     strings.TrimSpace(row.OperatorID),
+			"operator_name":   strings.TrimSpace(row.OperatorName),
+			"operation_time":  row.OperationTime.UTC().Format(time.RFC3339),
+			"note":            row.Note,
+			"previous_status": row.PreviousStatus,
+			"new_status":      row.NewStatus,
+			"metadata":        metadata,
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"items": items,
+		"total": len(items),
+	})
+}
+
 func (h AlertsHandler) GetRecentAlerts(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "alert service not configured")
@@ -188,8 +269,12 @@ func (h AlertsHandler) GetAlertStatistics(c echo.Context) error {
 	recent := buildRecentAlerts(recentRows, 5)
 
 	recent24h := 0
+	todayCount := 0
+	yesterdayCount := 0
+	changePercent := float64(0)
 	if db := h.Service.DB(); db != nil {
-		last24h := time.Now().UTC().Add(-24 * time.Hour)
+		now := time.Now().UTC()
+		last24h := now.Add(-24 * time.Hour)
 		var count int64
 		if err := db.WithContext(c.Request().Context()).
 			Table("alerts").
@@ -198,6 +283,46 @@ func (h AlertsHandler) GetAlertStatistics(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load recent alerts stats")
 		}
 		recent24h = int(count)
+
+		// 趋势：按自然日（UTC）统计今天/昨天新增告警数，并计算变化百分比。
+		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		yesterdayStart := todayStart.Add(-24 * time.Hour)
+
+		var today int64
+		if err := db.WithContext(c.Request().Context()).
+			Table("alerts").
+			Where("COALESCE(first_occurred, created_at) >= ? AND COALESCE(first_occurred, created_at) < ?", todayStart, todayStart.Add(24*time.Hour)).
+			Count(&today).Error; err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load today alerts stats")
+		}
+		var yesterday int64
+		if err := db.WithContext(c.Request().Context()).
+			Table("alerts").
+			Where("COALESCE(first_occurred, created_at) >= ? AND COALESCE(first_occurred, created_at) < ?", yesterdayStart, todayStart).
+			Count(&yesterday).Error; err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load yesterday alerts stats")
+		}
+
+		todayCount = int(today)
+		yesterdayCount = int(yesterday)
+		if yesterdayCount == 0 {
+			if todayCount > 0 {
+				changePercent = 100
+			}
+		} else {
+			changePercent = (float64(todayCount-yesterdayCount) / float64(yesterdayCount)) * 100
+		}
+	}
+
+	trends := map[string]interface{}{
+		// 兼容字段：保留旧的 up/down/stable 结构（目前后端未实现，默认 0）。
+		"up":     0,
+		"down":   0,
+		"stable": 0,
+		// 新字段：对齐前端告警中心统计卡的趋势展示。
+		"today":     todayCount,
+		"yesterday": yesterdayCount,
+		"change":    changePercent,
 	}
 
 	response := map[string]interface{}{
@@ -210,7 +335,7 @@ func (h AlertsHandler) GetAlertStatistics(c echo.Context) error {
 		"resolved":            stats.Resolved,
 		"by_category":         stats.ByCategory,
 		"by_device":           stats.ByDevice,
-		"trends":              map[string]interface{}{"up": 0, "down": 0, "stable": 0},
+		"trends":              trends,
 		"recent":              recent,
 		"total_alerts":        stats.Total,
 		"active_alerts":       stats.Active,
@@ -421,15 +546,22 @@ func (h AlertsHandler) ExportAlerts(c echo.Context) error {
 	}
 
 	params := c.QueryParams()
-	deviceIDs := parseIntList(append(params["device_ids"], params["device_id"]...))
-	categoryValues := parseQueryValues(params["category"])
-	startDate, _ := parseTimeOptional(c.QueryParam("start_date"))
+	deviceIDs := parseIntList(append(append(params["device_ids"], params["device_ids[]"]...), params["device_id"]...))
+	categoryValues := parseQueryValues(append(params["category"], params["category[]"]...))
+	startDateRaw := c.QueryParam("start_date")
+	startDate, _ := parseTimeOptional(startDateRaw)
 	if startDate == nil {
 		startDate, _ = parseTimeOptional(c.QueryParam("start_time"))
 	}
-	endDate, _ := parseTimeOptional(c.QueryParam("end_date"))
+	endDateRaw := c.QueryParam("end_date")
+	endDate, _ := parseTimeOptional(endDateRaw)
 	if endDate == nil {
 		endDate, _ = parseTimeOptional(c.QueryParam("end_time"))
+	}
+	// 兼容 date-only：end_date=YYYY-MM-DD 视为“当天结束”，避免把当天数据排除在外。
+	if endDate != nil && isDateOnly(endDateRaw) {
+		adjusted := endDate.UTC().Add(24*time.Hour - time.Nanosecond)
+		endDate = &adjusted
 	}
 
 	sortBy := strings.TrimSpace(c.QueryParam("sort_by"))
@@ -442,8 +574,8 @@ func (h AlertsHandler) ExportAlerts(c echo.Context) error {
 	}
 
 	filter := alerts.ListAlertsFilter{
-		Statuses:   parseQueryValues(params["status"]),
-		Severities: parseQueryValues(params["severity"]),
+		Statuses:   parseQueryValues(append(params["status"], params["status[]"]...)),
+		Severities: parseQueryValues(append(params["severity"], params["severity[]"]...)),
 		Categories: categoryValues,
 		DeviceIDs:  deviceIDs,
 		StartDate:  startDate,
@@ -521,16 +653,30 @@ func BuildAlertsCSV(rows []alerts.AlertWithDevice) ([]byte, error) {
 		return nil, err
 	}
 
+	sanitizeCell := func(value string) string {
+		trimmed := strings.TrimLeft(value, " \t\r\n")
+		if trimmed == "" {
+			return value
+		}
+		switch trimmed[0] {
+		case '=', '+', '-', '@':
+			// 防止 CSV 被 Excel 打开时触发公式注入：对可疑前缀统一前置单引号。
+			return "'" + value
+		default:
+			return value
+		}
+	}
+
 	for _, row := range rows {
 		record := []string{
 			strconv.Itoa(row.ID),
-			row.Title,
-			resolveAlertDevice(row),
-			alerts.NormalizeSeverity(row.Severity),
-			alerts.NormalizeStatus(row.Status),
-			row.Category,
-			resolveAlertTimestamp(row).Format("2006-01-02 15:04:05"),
-			row.Message,
+			sanitizeCell(row.Title),
+			sanitizeCell(resolveAlertDevice(row)),
+			sanitizeCell(alerts.NormalizeSeverity(row.Severity)),
+			sanitizeCell(alerts.NormalizeStatus(row.Status)),
+			sanitizeCell(row.Category),
+			sanitizeCell(resolveAlertTimestamp(row).Format("2006-01-02 15:04:05")),
+			sanitizeCell(row.Message),
 		}
 		if err := writer.Write(record); err != nil {
 			return nil, err
@@ -849,16 +995,16 @@ func buildRecentAlerts(rows []alerts.AlertWithDevice, limit int) []map[string]in
 		if len(response) >= limit {
 			break
 		}
-		message := row.Title
-		if strings.TrimSpace(row.Message) != "" {
-			message = row.Message
+		title := strings.TrimSpace(row.Title)
+		if title == "" {
+			title = strings.TrimSpace(row.Message)
 		}
 		response = append(response, map[string]interface{}{
-			"id":          row.ID,
-			"message":     message,
-			"severity":    alerts.NormalizeSeverity(row.Severity),
-			"time":        resolveAlertTimestamp(row).Format(time.RFC3339),
-			"device_name": resolveAlertDevice(row),
+			"id":        strconv.Itoa(row.ID),
+			"title":     title,
+			"timestamp": resolveAlertTimestamp(row).Format(time.RFC3339),
+			"severity":  alerts.NormalizeSeverity(row.Severity),
+			"device":    resolveAlertDevice(row),
 		})
 	}
 	return response
@@ -1058,6 +1204,15 @@ func parseQueryValues(values []string) []string {
 		}
 	}
 	return result
+}
+
+func isDateOnly(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return false
+	}
+	_, err := time.Parse("2006-01-02", trimmed)
+	return err == nil
 }
 
 func parseIntList(values []string) []int {

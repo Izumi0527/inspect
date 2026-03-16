@@ -1,7 +1,7 @@
 /**
  * 日志中心 API 接口
  */
-import { api, TokenManager } from '@/lib/api-client'
+import { api, API_PREFIX, getApiOrigin, TokenManager } from '@/lib/api-client'
 import type {
   DeviceLog,
   LogParsingRule,
@@ -214,7 +214,7 @@ export async function batchDeleteLogs(logIds: number[]): Promise<{ deleted_count
  */
 export async function exportLogs(params: LogExportParams): Promise<Blob> {
   // NOTE: 后端导出接口返回的是文件流（CSV/XLSX），不能走 api-client 的 JSON 解析。
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
+  const apiOrigin = getApiOrigin()
   const searchParams = new URLSearchParams()
 
   if (params.device_id) searchParams.append('device_id', String(params.device_id))
@@ -232,7 +232,7 @@ export async function exportLogs(params: LogExportParams): Promise<Blob> {
   if (typeof params.include_raw === 'boolean') searchParams.append('include_raw', String(params.include_raw))
   if (typeof params.include_stats === 'boolean') searchParams.append('include_stats', String(params.include_stats))
 
-  const url = `${baseUrl}/api/v1/logs/export${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
+  const url = `${apiOrigin}${API_PREFIX}/logs/export${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
   const token = TokenManager.getAccessToken() || ''
 
   const response = await fetch(url, {

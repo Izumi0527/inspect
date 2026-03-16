@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import { api, TokenManager } from '@/lib/api-client'
+import { api, getApiOrigin, TokenManager } from '@/lib/api-client'
 import {
   fetchInspectionStats,
   fetchInspectionTemplates,
@@ -446,10 +446,10 @@ export const useGenerateReport = () => {
           // 构建完整的下载URL
           // 后端返回的是 /api/v1/reports/files/{filename}
           // 需要通过后端API访问
-          const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
+          const apiOrigin = getApiOrigin()
           const downloadUrl = result.download_url.startsWith('http') 
             ? result.download_url 
-            : `${apiBaseUrl}${result.download_url}`
+            : `${apiOrigin}${result.download_url}`
           
           console.log('[useGenerateReport] 下载URL:', downloadUrl)
           

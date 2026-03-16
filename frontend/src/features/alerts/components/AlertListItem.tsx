@@ -18,6 +18,8 @@ interface AlertListItemProps {
   alert: Alert
   isSelected: boolean
   onSelect: (id: string) => void
+  canUpdate?: boolean
+  canDelete?: boolean
   onAcknowledge?: (id: string) => void
   onResolve?: (id: string) => void
   onDelete?: (id: string) => void
@@ -33,6 +35,8 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
   alert,
   isSelected,
   onSelect,
+  canUpdate = true,
+  canDelete = true,
   onAcknowledge,
   onResolve,
   onDelete
@@ -40,6 +44,14 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
   const { getSeverityColor, getStatusColor, getStatusText } = useAlertStyles()
   const SeverityIcon = severityIcons[alert.severity]
   const [isModalOpen, setIsModalOpen] = useState(false)
+
+  const formatTimestamp = (value: string): string => {
+    const raw = String(value ?? '').trim()
+    if (!raw) return '-'
+    const date = new Date(raw)
+    if (Number.isNaN(date.getTime())) return raw
+    return date.toLocaleString('zh-CN')
+  }
 
   // 阻止复选框点击触发详情弹窗
   const handleCheckboxClick = (e: React.MouseEvent) => {
@@ -50,6 +62,13 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
   const handleButtonClick = (e: React.MouseEvent, action: () => void) => {
     e.stopPropagation()
     action()
+  }
+
+  const handleDelete = () => {
+    if (!onDelete) return
+    const ok = confirm('确定要删除此告警吗？此操作不可恢复。')
+    if (!ok) return
+    onDelete(alert.id)
   }
 
   return (
@@ -92,7 +111,7 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
               </div>
               <div className="flex items-center gap-1">
                 <Clock className="w-3 h-3" />
-                {alert.timestamp}
+                {formatTimestamp(alert.timestamp)}
               </div>
               {alert.assignee && (
                 <div className="flex items-center gap-1">
@@ -105,7 +124,7 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
         </div>
         
         <div className="flex items-center gap-2 flex-shrink-0">
-          {alert.status === 'active' && (
+          {canUpdate && alert.status === 'active' && (
             <>
               <Button
                 variant="outline"
@@ -124,13 +143,15 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
               </Button>
             </>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => handleButtonClick(e, () => onDelete?.(alert.id))}
-          >
-            <X className="w-4 h-4" />
-          </Button>
+          {canDelete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => handleButtonClick(e, handleDelete)}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -140,9 +161,9 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
       open={isModalOpen}
       onClose={() => setIsModalOpen(false)}
       alert={alert}
-      onAcknowledge={onAcknowledge}
-      onResolve={onResolve}
-      onDelete={onDelete}
+      onAcknowledge={canUpdate ? onAcknowledge : undefined}
+      onResolve={canUpdate ? onResolve : undefined}
+      onDelete={canDelete ? onDelete : undefined}
     />
   </>
   )

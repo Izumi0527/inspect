@@ -1,12 +1,9 @@
-import { httpClient, TokenManager } from '@/lib/api-client'
+import { API_PREFIX, getApiOrigin, httpClient, TokenManager } from '@/lib/api-client'
 import type {
   AuditLogListResponse,
   AuditStats,
   AuditLogQueryParams,
 } from '../types/audit.types'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
-const API_PREFIX = '/api/v1'
 
 /**
  * 审计日志 API
@@ -138,7 +135,7 @@ export const auditApi = {
 
     // 调用后端API接口（POST /api/v1/settings/audit/logs/export）
     // ✅ 兼容前后端分离部署：使用 NEXT_PUBLIC_API_URL 走后端绝对地址
-    const response = await fetch(`${API_BASE_URL}${API_PREFIX}/settings/audit/logs/export`, {
+    const response = await fetch(`${getApiOrigin()}${API_PREFIX}/settings/audit/logs/export`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

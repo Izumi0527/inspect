@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo } from 'react'
 import { useAuth } from '@/lib/contexts/auth-context'
-import { TokenManager } from '@/lib/api-client'
+import { API_PREFIX, TokenManager } from '@/lib/api-client'
 
 // WebSocket事件类型
 export enum WebSocketEvents {
@@ -63,6 +63,32 @@ type OutgoingMessage = {
   data: Record<string, unknown>
 }
 
+const DEFAULT_WS_ORIGIN = 'ws://127.0.0.1:38000'
+
+const stripTrailingSlashes = (value: string): string => value.replace(/\/+$/, '')
+
+const normalizeWsOrigin = (value: string): string => {
+  let normalized = stripTrailingSlashes(String(value ?? '').trim())
+  if (!normalized) {
+    return DEFAULT_WS_ORIGIN
+  }
+
+  // 允许把 http(s):// 配成 NEXT_PUBLIC_WS_URL，统一转换到 ws(s)://
+  normalized = normalized.replace(/^http/i, 'ws')
+  normalized = stripTrailingSlashes(normalized)
+
+  // 兼容误配：NEXT_PUBLIC_WS_URL 可能被配置为 ws(s)://host/api/v1 或 ws(s)://host/api/v1/ws
+  const wsSuffix = `${API_PREFIX}/ws`
+  while (normalized.toLowerCase().endsWith(wsSuffix)) {
+    normalized = stripTrailingSlashes(normalized.slice(0, -wsSuffix.length))
+  }
+  while (normalized.toLowerCase().endsWith(API_PREFIX)) {
+    normalized = stripTrailingSlashes(normalized.slice(0, -API_PREFIX.length))
+  }
+
+  return normalized || DEFAULT_WS_ORIGIN
+}
+
 // WebSocket管理器类
 class WebSocketManager {
   private socket: WebSocket | null = null
@@ -96,10 +122,10 @@ class WebSocketManager {
 
   // 获取WebSocket服务器地址
   private getWebSocketUrl(userId?: string): string {
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://127.0.0.1:38000'
-    const normalized = wsUrl.replace(/^http/i, 'ws')
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || DEFAULT_WS_ORIGIN
+    const normalized = normalizeWsOrigin(wsUrl)
     const resolvedUserId = (userId ?? this.lastUserId ?? '').trim() || '0'
-    return `${normalized}/api/v1/ws/${resolvedUserId}`
+    return `${normalized}${API_PREFIX}/ws/${resolvedUserId}`
   }
 
   // 连接到WebSocket服务器

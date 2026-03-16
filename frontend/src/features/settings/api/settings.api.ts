@@ -16,7 +16,7 @@ import {
   UserBulkOperation,
   UserBulkImport
 } from '../types'
-import { httpClient } from '@/lib/api-client'
+import { API_PREFIX, getApiOrigin, httpClient } from '@/lib/api-client'
 
 type ConfigValue = string | number | boolean | Record<string, unknown> | Array<unknown> | null
 
@@ -195,7 +195,7 @@ export const auditLogApi = {
     const token = typeof window !== 'undefined' ? localStorage.getItem('authData') : null
     const authData = token ? JSON.parse(token) : null
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'}/api/v1/settings/audit/logs/export`, {
+    const response = await fetch(`${getApiOrigin()}${API_PREFIX}/settings/audit/logs/export`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

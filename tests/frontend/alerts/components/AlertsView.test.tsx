@@ -12,6 +12,27 @@ const mockWs = {
   unsubscribeFromAlerts: jest.fn(),
 }
 let mockCanReadAlerts = true
+let mockAlertFilters = {
+  searchQuery: '',
+  severityFilter: 'all',
+  statusFilter: 'all',
+}
+const mockUpdateFilter = jest.fn()
+const mockResetFilters = jest.fn()
+let mockAlertsList = [
+  {
+    id: '1',
+    title: '测试告警',
+    message: '测试消息',
+    severity: 'warning',
+    status: 'active',
+    category: 'other',
+    device: '设备A',
+    timestamp: new Date(),
+  },
+]
+let mockAlertsLoading = false
+let mockAlertsError: string | null = null
 
 jest.mock('@/lib/contexts/auth-context', () => ({
   usePermission: () => mockCanReadAlerts,
@@ -19,20 +40,9 @@ jest.mock('@/lib/contexts/auth-context', () => ({
 
 jest.mock('@/features/alerts/hooks/useAlerts', () => ({
   useAlerts: () => ({
-    alerts: [
-      {
-        id: '1',
-        title: '测试告警',
-        message: '测试消息',
-        severity: 'warning',
-        status: 'active',
-        category: 'other',
-        device: '设备A',
-        timestamp: new Date(),
-      },
-    ],
-    loading: false,
-    error: null,
+    alerts: mockAlertsList,
+    loading: mockAlertsLoading,
+    error: mockAlertsError,
     pagination: {
       page: 1,
       pageSize: 10,
@@ -62,12 +72,9 @@ jest.mock('@/features/alerts/hooks/useAlerts', () => ({
     loadStats: mockLoadStats,
   }),
   useAlertFilters: () => ({
-    filters: {
-      searchQuery: '',
-      severityFilter: 'all',
-      statusFilter: 'all',
-    },
-    updateFilter: jest.fn(),
+    filters: mockAlertFilters,
+    updateFilter: mockUpdateFilter,
+    resetFilters: mockResetFilters,
   }),
   useAlertSelection: () => ({
     selectedAlerts: [],
@@ -83,7 +90,13 @@ jest.mock('@/components/layout', () => ({
 }))
 
 jest.mock('@/features/alerts/components/AlertStatsGrid', () => ({
-  AlertStatsGrid: () => <div data-testid="alert-stats-grid">stats</div>,
+  AlertStatsGrid: ({ onCardClick }: { onCardClick?: (card: string) => void }) => (
+    <div data-testid="alert-stats-grid">
+      <button type="button" onClick={() => onCardClick?.('critical')}>
+        点击严重统计卡
+      </button>
+    </div>
+  ),
 }))
 
 jest.mock('@/features/alerts/components/AlertFiltersBar', () => ({
@@ -104,6 +117,7 @@ jest.mock('@/features/alerts/components/AlertDetailModal', () => ({
 
 jest.mock('@/features/alerts/components/AdvancedFilters', () => ({
   AdvancedFilters: () => <div data-testid="advanced-filters">advanced</div>,
+  ALERT_ADVANCED_FILTERS_STORAGE_KEY: 'alert_advanced_filters',
 }))
 
 jest.mock('@/components/atoms/skeleton', () => ({
@@ -169,6 +183,27 @@ describe('AlertsView', () => {
     mockWs.subscribeToAlerts.mockClear()
     mockWs.unsubscribeFromAlerts.mockClear()
     mockCanReadAlerts = true
+    mockAlertFilters = {
+      searchQuery: '',
+      severityFilter: 'all',
+      statusFilter: 'all',
+    }
+    mockResetFilters.mockClear()
+    mockUpdateFilter.mockClear()
+    mockAlertsList = [
+      {
+        id: '1',
+        title: '测试告警',
+        message: '测试消息',
+        severity: 'warning',
+        status: 'active',
+        category: 'other',
+        device: '设备A',
+        timestamp: new Date(),
+      },
+    ]
+    mockAlertsLoading = false
+    mockAlertsError = null
     mockHandleAcknowledgeAlert.mockResolvedValue(undefined)
     mockLoadAlerts.mockResolvedValue(undefined)
     mockLoadStats.mockResolvedValue(undefined)
@@ -231,5 +266,69 @@ describe('AlertsView', () => {
       expect(mockLoadAlerts).toHaveBeenCalledTimes(2)
       expect(mockLoadStats).toHaveBeenCalledTimes(2)
     })
+  })
+
+  it('开启筛选时WS推送不应自动刷新列表，但应提示并可手动刷新/清空筛选', async () => {
+    mockAlertFilters = {
+      searchQuery: '',
+      severityFilter: 'critical',
+      statusFilter: 'all',
+    }
+
+    render(<AlertsView />)
+
+    const updateHandler = mockWsHandlers.get('alert_update')
+    expect(updateHandler).toBeDefined()
+
+    await act(async () => {
+      updateHandler?.({ id: '2', status: 'active' })
+    })
+
+    expect(mockLoadAlerts).toHaveBeenCalledTimes(0)
+    expect(mockLoadStats).toHaveBeenCalledTimes(1)
+
+    expect(screen.getByText('收到 1 条实时更新')).toBeInTheDocument()
+    expect(screen.getByText(/已开启筛选，部分更新可能被隐藏/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '清空筛选查看' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新列表' }))
+
+    await waitFor(() => {
+      expect(mockLoadAlerts).toHaveBeenCalledTimes(1)
+      expect(mockLoadStats).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('点击统计卡应映射为筛选条件并触发列表刷新', async () => {
+    render(<AlertsView />)
+
+    fireEvent.click(screen.getByRole('button', { name: '点击严重统计卡' }))
+
+    await waitFor(() => {
+      expect(mockUpdateFilter).toHaveBeenCalledWith('severityFilter', 'critical')
+    })
+  })
+
+  it('无筛选且无数据时应显示“暂无告警”空态', () => {
+    mockAlertsList = []
+
+    render(<AlertsView />)
+
+    expect(screen.getByText('暂无告警')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '清空筛选' })).not.toBeInTheDocument()
+  })
+
+  it('有筛选且无匹配时应显示“没有匹配的告警”并提供清空筛选', () => {
+    mockAlertFilters = {
+      searchQuery: '',
+      severityFilter: 'critical',
+      statusFilter: 'all',
+    }
+    mockAlertsList = []
+
+    render(<AlertsView />)
+
+    expect(screen.getByText('没有匹配的告警')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '清空筛选' })).toBeInTheDocument()
   })
 })

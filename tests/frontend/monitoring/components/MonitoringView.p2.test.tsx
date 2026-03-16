@@ -1,7 +1,7 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import { MonitoringView } from './MonitoringView'
-import type { MonitoringDataEnvelope } from '../types'
+import { MonitoringView } from '@/features/monitoring/components/MonitoringView'
+import type { MonitoringDataEnvelope } from '@/features/monitoring/types'
 
 jest.mock('@/lib/contexts/sidebar-context', () => ({
   useSidebar: () => ({
@@ -31,20 +31,20 @@ jest.mock('@/components/shared', () => ({
   StatCard: () => null,
 }))
 
-jest.mock('./cards', () => ({
+jest.mock('@/features/monitoring/components/cards', () => ({
   DeviceStatusCard: () => null,
   AvailabilityCard: () => null,
   RealTimeAlertsCard: () => null,
 }))
 
-jest.mock('./charts', () => ({
+jest.mock('@/features/monitoring/components/charts', () => ({
   SystemPerformanceChartWrapper: () => null,
   TemperatureChartWrapper: () => null,
   NetworkTrafficChartWrapper: () => null,
   ChartSkeleton: () => null,
 }))
 
-jest.mock('./ReportExportButton', () => ({
+jest.mock('@/features/monitoring/components/ReportExportButton', () => ({
   ReportExportButton: () => null,
 }))
 
@@ -52,7 +52,7 @@ jest.mock('@/hooks', () => ({
   useInView: () => ({ ref: jest.fn(), inView: true }),
 }))
 
-jest.mock('../hooks/useMonitoringV2', () => ({
+jest.mock('@/features/monitoring/hooks/useMonitoringV2', () => ({
   useMonitoringV2: jest.fn(),
 }))
 
@@ -120,7 +120,7 @@ describe('MonitoringView - WS 健康度与数据新鲜度提示（P2护栏）', 
     const envelope = buildEnvelope(lastUpdate)
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const useMonitoringV2Module = require('../hooks/useMonitoringV2') as { useMonitoringV2: jest.Mock }
+    const useMonitoringV2Module = require('@/features/monitoring/hooks/useMonitoringV2') as { useMonitoringV2: jest.Mock }
     useMonitoringV2Module.useMonitoringV2.mockReturnValue({
       data: envelope,
       isLoading: false,
@@ -149,7 +149,7 @@ describe('MonitoringView - WS 健康度与数据新鲜度提示（P2护栏）', 
     const envelope = buildEnvelope(lastUpdate)
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const useMonitoringV2Module = require('../hooks/useMonitoringV2') as { useMonitoringV2: jest.Mock }
+    const useMonitoringV2Module = require('@/features/monitoring/hooks/useMonitoringV2') as { useMonitoringV2: jest.Mock }
     useMonitoringV2Module.useMonitoringV2.mockReturnValue({
       data: envelope,
       isLoading: false,

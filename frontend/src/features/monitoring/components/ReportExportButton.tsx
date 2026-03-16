@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Download, FileText, Sheet, FileSpreadsheet } from 'lucide-react'
 import { Button } from '@/components/atoms'
-import { TokenManager } from '@/lib/api-client'
+import { getApiOrigin, TokenManager } from '@/lib/api-client'
 import { exportMonitoringReport, checkMonitoringReportDownloadToken } from '../api/monitoring.api'
 
 type ExportFormat = 'pdf' | 'excel' | 'csv'
@@ -24,7 +24,7 @@ const FORMAT_CONFIG: Record<ExportFormat, { label: string; icon: typeof FileText
 }
 
 function resolveApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
+  return getApiOrigin()
 }
 
 function resolveAbsoluteUrl(rawUrl: string): string {

@@ -1,5 +1,5 @@
 import { ApiClientError } from '@/lib/api-client'
-import { resolveMonitoringErrorView } from './monitoring-error'
+import { resolveMonitoringErrorView } from '@/features/monitoring/utils/monitoring-error'
 
 describe('resolveMonitoringErrorView', () => {
   it('401：应提示登录过期，并给出去登录入口', () => {
@@ -33,4 +33,3 @@ describe('resolveMonitoringErrorView', () => {
     expect(view.title).toBe('无法连接服务')
   })
 })
-

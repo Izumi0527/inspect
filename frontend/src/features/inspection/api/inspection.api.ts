@@ -1,4 +1,5 @@
 ﻿import { api, TokenManager } from '@/lib/api-client'
+import { getApiOrigin } from '@/lib/api-client'
 import {
   InspectionTemplate,
   InspectionExecution,
@@ -1348,7 +1349,7 @@ export async function exportAnalyticsReport(params: {
     const endpoint = `/api/v1/inspection/analytics/export?${searchParams.toString()}`
 
     // 使用原生 fetch 处理文件下载
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'}${endpoint}`, {
+    const response = await fetch(`${getApiOrigin()}${endpoint}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`,

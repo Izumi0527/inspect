@@ -1,4 +1,4 @@
-package handlers
+package handlers_test
 
 import (
 	"bytes"
@@ -11,19 +11,9 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"github.com/your-org/inspect-system/backend-go/internal/auth"
+	"github.com/your-org/inspect-system/backend-go/internal/http/handlers"
 	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
 )
-
-type testPermissionService struct{}
-
-func (testPermissionService) GetActiveUserFromToken(_ context.Context, _ string) (*auth.UserRecord, error) {
-	return &auth.UserRecord{ID: "u1", Role: "admin"}, nil
-}
-
-func (testPermissionService) GetPermissionsByRole(_ context.Context, _ string) ([]string, error) {
-	return []string{monitoringReadPermission}, nil
-}
 
 type testMonitoringDashboardWriter struct{}
 
@@ -85,17 +75,15 @@ func TestGetMonitoringDashboardV2_ContractKeysAndSections(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/monitoring/dashboard/v2", bytes.NewBufferString(`{"time_range":"24h","alerts_limit":10}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	authService, token := newAuthServiceWithPermissions(t, []string{"monitoring:read"})
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	// 直接写入用户与权限缓存，避免 requirePermission 走 token 解析分支
-	c.Set(authContextUserKey, &auth.UserRecord{ID: "u1", Role: "admin"})
 	// 故意不包含 alerts:read，验证 realtimeAlerts 分区“权限降级”契约
-	c.Set(authContextPermissionsKey, []string{monitoringReadPermission})
-
-	handler := MonitoringHandler{
+	handler := handlers.MonitoringHandler{
 		DashboardWriter: testMonitoringDashboardWriter{},
-		Auth:            testPermissionService{},
+		Auth:            authService,
 	}
 
 	if err := handler.GetMonitoringDashboardV2(c); err != nil {

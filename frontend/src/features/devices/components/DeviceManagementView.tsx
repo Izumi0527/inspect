@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { getApiOrigin } from "@/lib/api-client";
 import {
   Server,
   Plus,
@@ -70,8 +71,7 @@ const DEVICE_TYPES: DeviceType[] = [
   "wireless_ap",
 ];
 const DEVICE_REFRESH_INTERVAL_MS = 60_000;
-const DEFAULT_API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:38000";
+const DEFAULT_API_BASE_URL = getApiOrigin();
 
 const isDeviceStatus = (value: unknown): value is DeviceStatus =>
   typeof value === "string" && (DEVICE_STATUSES as string[]).includes(value);

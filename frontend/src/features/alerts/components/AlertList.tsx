@@ -1,5 +1,4 @@
 import React from 'react'
-import { Shield } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/atoms'
 import { Pagination } from '@/components/atoms/pagination'
 import { Alert } from '../types'
@@ -11,6 +10,8 @@ interface AlertListProps {
   onSelectAlert: (id: string) => void
   onSelectAll: (alertIds: string[]) => void
   onClearSelection: () => void
+  canUpdate?: boolean
+  canDelete?: boolean
   onAcknowledge?: (id: string) => void
   onResolve?: (id: string) => void
   onDelete?: (id: string) => void
@@ -30,6 +31,8 @@ export const AlertList: React.FC<AlertListProps> = ({
   onSelectAlert,
   onSelectAll,
   onClearSelection,
+  canUpdate = true,
+  canDelete = true,
   onAcknowledge,
   onResolve,
   onDelete,
@@ -57,19 +60,14 @@ export const AlertList: React.FC<AlertListProps> = ({
             alert={alert}
             isSelected={selectedAlerts.includes(alert.id)}
             onSelect={onSelectAlert}
+            canUpdate={canUpdate}
+            canDelete={canDelete}
             onAcknowledge={onAcknowledge}
             onResolve={onResolve}
             onDelete={onDelete}
           />
         ))}
       </div>
-
-      {alerts.length === 0 && (
-        <div className="text-center py-12">
-          <Shield className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-gray-400">没有找到匹配的告警</p>
-        </div>
-      )}
 
       {/* Pagination - 使用增强的分页组件 */}
       {pagination && alerts.length > 0 && (

@@ -4,17 +4,17 @@ import { X, FileText, Download, Eye, AlertCircle, RefreshCcw } from 'lucide-reac
 import toast from 'react-hot-toast'
 import { Button } from '@/components/atoms'
 import { downloadWithAuth } from '@/utils/download'
-import { TokenManager } from '@/lib/api-client'
+import { getApiOrigin, TokenManager } from '@/lib/api-client'
 import { Report } from '../types'
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
 
 const resolveUrl = (urlOrPath: string): string => {
   const raw = String(urlOrPath || '').trim()
   if (/^https?:\/\//i.test(raw)) return raw
-  if (!raw.startsWith('/')) return `${API_BASE_URL}/${raw}`
-  return `${API_BASE_URL}${raw}`
+
+  const apiOrigin = getApiOrigin()
+  if (!raw.startsWith('/')) return `${apiOrigin}/${raw}`
+  return `${apiOrigin}${raw}`
 }
 
 interface Props {

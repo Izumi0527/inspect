@@ -55,9 +55,37 @@ const buildSearchParams = (params: QueryParams): URLSearchParams => {
   return searchParams
 }
 
-// API配置
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
-const API_PREFIX = '/api/v1'
+// API 配置
+const DEFAULT_API_ORIGIN = 'http://127.0.0.1:38000'
+export const API_PREFIX = '/api/v1'
+
+const stripTrailingSlashes = (value: string): string => value.replace(/\/+$/, '')
+
+const normalizeApiOrigin = (value: string): string => {
+  let normalized = stripTrailingSlashes(String(value ?? '').trim())
+  if (!normalized) {
+    return DEFAULT_API_ORIGIN
+  }
+
+  // 兼容误配：NEXT_PUBLIC_API_URL 可能被配置为 http(s)://host/api/v1（甚至重复拼接多次）。
+  while (normalized.toLowerCase().endsWith(API_PREFIX)) {
+    normalized = stripTrailingSlashes(normalized.slice(0, -API_PREFIX.length))
+  }
+
+  return normalized || DEFAULT_API_ORIGIN
+}
+
+/**
+ * 获取后端 API Origin（不包含 /api/v1）。
+ * - 兼容 `NEXT_PUBLIC_API_URL=http(s)://host` 与 `NEXT_PUBLIC_API_URL=http(s)://host/api/v1`
+ */
+export const getApiOrigin = (): string => {
+  const raw = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_ORIGIN
+  return normalizeApiOrigin(raw)
+}
+
+/** 获取后端 API BaseUrl（包含 /api/v1）。 */
+export const getApiBaseUrl = (): string => `${getApiOrigin()}${API_PREFIX}`
 
 // 请求超时时间
 const DEFAULT_TIMEOUT = 10000
@@ -199,7 +227,7 @@ class HttpClient {
   private defaultHeaders: HeadersInit
 
   constructor() {
-    this.baseURL = `${API_BASE_URL}${API_PREFIX}`
+    this.baseURL = getApiBaseUrl()
     this.defaultHeaders = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',

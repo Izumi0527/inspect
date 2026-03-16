@@ -1,4 +1,4 @@
-import { httpClient, TokenManager } from '@/lib/api-client'
+import { API_PREFIX, getApiOrigin, httpClient, TokenManager } from '@/lib/api-client'
 import type {
   BackupConfig,
   BackupManagementResponse,
@@ -8,9 +8,6 @@ import type {
   CreateBackupRequest,
   RestoreBackupRequest,
 } from '../types/backup.types'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
-const API_PREFIX = '/api/v1'
 
 /**
  * 备份管理 API
@@ -102,7 +99,7 @@ export const backupApi = {
    * ✅ 兼容前后端分离部署：使用 NEXT_PUBLIC_API_URL 走后端绝对地址
    */
   downloadBackup: async (backupId: string, fileName: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}${API_PREFIX}/settings/backup/${backupId}/download`, {
+    const response = await fetch(`${getApiOrigin()}${API_PREFIX}/settings/backup/${backupId}/download`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${TokenManager.getAccessToken() || ''}`,

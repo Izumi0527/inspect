@@ -12,6 +12,7 @@ interface DateRange {
 interface AdvancedFiltersProps {
   onFilterChange: (filters: AdvancedFilterValues) => void
   onReset: () => void
+  value?: AdvancedFilterValues
   renderAsCard?: boolean // 是否渲染为独立Card，默认true保持向后兼容
 }
 
@@ -22,10 +23,17 @@ export interface AdvancedFilterValues {
   category?: AlertCategory[]
   deviceIds?: string[]
   dateRange?: DateRange
-  dateRangePreset?: 'today' | 'last7days' | 'last30days' | 'custom'
+  dateRangePreset?: 'all' | 'today' | 'last7days' | 'last30days' | 'custom'
 }
 
-const STORAGE_KEY = 'alert_advanced_filters'
+export const ALERT_ADVANCED_FILTERS_STORAGE_KEY = 'alert_advanced_filters'
+const STORAGE_KEY = ALERT_ADVANCED_FILTERS_STORAGE_KEY
+
+const pad2 = (value: number) => String(value).padStart(2, '0')
+
+const formatLocalDate = (date: Date): string => {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
 
 /**
  * AdvancedFilters 高级过滤组件
@@ -36,10 +44,14 @@ const STORAGE_KEY = 'alert_advanced_filters'
 export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
   onFilterChange,
   onReset,
+  value,
   renderAsCard = true // 默认true保持向后兼容
 }) => {
   const [isExpanded, setIsExpanded] = useState(false)
-  const [filters, setFilters] = useState<AdvancedFilterValues>({})
+  const [internalFilters, setInternalFilters] = useState<AdvancedFilterValues>({})
+
+  const isControlled = value !== undefined
+  const filters = isControlled ? (value ?? {}) : internalFilters
 
   // 从 localStorage 加载过滤条件
   useEffect(() => {
@@ -47,13 +59,15 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
-        setFilters(parsed)
+        if (!isControlled) {
+          setInternalFilters(parsed)
+        }
         onFilterChange(parsed)
       }
     } catch (error) {
       console.error('Failed to load saved filters:', error)
     }
-  }, [])
+  }, [isControlled, onFilterChange])
 
   // 保存过滤条件到 localStorage
   const saveFilters = (newFilters: AdvancedFilterValues) => {
@@ -70,14 +84,18 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
     value: AdvancedFilterValues[K]
   ) => {
     const newFilters = { ...filters, [key]: value }
-    setFilters(newFilters)
+    if (!isControlled) {
+      setInternalFilters(newFilters)
+    }
     saveFilters(newFilters)
     onFilterChange(newFilters)
   }
 
   // 重置所有过滤条件
   const handleReset = () => {
-    setFilters({})
+    if (!isControlled) {
+      setInternalFilters({})
+    }
     localStorage.removeItem(STORAGE_KEY)
     onReset()
   }
@@ -92,35 +110,51 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
         start.setHours(0, 0, 0, 0)
         break
       case 'last7days':
-        start.setDate(start.getDate() - 7)
+        // “最近 7 天”按自然日理解：包含今天在内的 7 天
+        start.setDate(start.getDate() - 6)
+        start.setHours(0, 0, 0, 0)
         break
       case 'last30days':
-        start.setDate(start.getDate() - 30)
+        // “最近 30 天”按自然日理解：包含今天在内的 30 天
+        start.setDate(start.getDate() - 29)
+        start.setHours(0, 0, 0, 0)
         break
       default:
         return filters.dateRange || { start: '', end: '' }
     }
 
     return {
-      start: start.toISOString().split('T')[0],
-      end: end.toISOString().split('T')[0]
+      // 注意：必须用本地日期而非 UTC（toISOString 会引入时区偏移导致日期错一天）
+      start: formatLocalDate(start),
+      end: formatLocalDate(end),
     }
   }
 
   // 处理日期范围预设变更
   const handleDateRangePresetChange = (preset: string) => {
+    if (preset === 'all') {
+      updateFilter('dateRange', undefined)
+      updateFilter('dateRangePreset', 'all')
+      return
+    }
+
     if (preset === 'custom') {
       updateFilter('dateRangePreset', 'custom')
-    } else {
-      const range = calculateDateRange(preset)
-      updateFilter('dateRange', range)
-      updateFilter('dateRangePreset', preset as any)
+      return
     }
+
+    const range = calculateDateRange(preset)
+    updateFilter('dateRange', range)
+    updateFilter('dateRangePreset', preset as any)
   }
 
   // 统计已应用的过滤条件数量
   const activeFilterCount = Object.entries(filters).filter(([key, value]) => {
     if (key === 'dateRangePreset') return false
+    if (key === 'dateRange') {
+      const range = value as DateRange | undefined
+      return !!(range?.start || range?.end)
+    }
     if (Array.isArray(value)) return value.length > 0
     if (typeof value === 'string') return value.length > 0
     if (typeof value === 'object') return Object.keys(value).length > 0
@@ -196,11 +230,11 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                   <SelectValue placeholder="选择时间范围" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">全部时间</SelectItem>
-                  <SelectItem value="today">今天</SelectItem>
-                  <SelectItem value="last7days">最近 7 天</SelectItem>
-                  <SelectItem value="last30days">最近 30 天</SelectItem>
-                  <SelectItem value="custom">自定义范围</SelectItem>
+                <SelectItem value="all">全部时间</SelectItem>
+                <SelectItem value="today">今天</SelectItem>
+                <SelectItem value="last7days">最近 7 天</SelectItem>
+                <SelectItem value="last30days">最近 30 天</SelectItem>
+                <SelectItem value="custom">自定义范围</SelectItem>
                 </SelectContent>
               </Select>
             </div>

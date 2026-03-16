@@ -13,7 +13,7 @@ import { AlertFiltersBar } from './AlertFiltersBar'
 import { AlertList } from './AlertList'
 import { AlertDetailModal } from './AlertDetailModal'
 import { SkeletonCard, SkeletonList } from '@/components/atoms/skeleton'
-import { AdvancedFilters, AdvancedFilterValues } from './AdvancedFilters'
+import { AdvancedFilters, AdvancedFilterValues, ALERT_ADVANCED_FILTERS_STORAGE_KEY } from './AdvancedFilters'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,9 +27,34 @@ import { exportAlerts } from '../api/alerts.api'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
+import { ErrorAlert } from '@/components/atoms/ErrorAlert'
 
 const AUTO_REFRESH_INTERVAL = 30000 // 30秒
 const WS_SELF_EVENT_TTL_MS = 5000 // 本端操作后短时间内忽略同ID回推事件，避免重复刷新
+
+const parseDateOnly = (value: string): { year: number; month: number; day: number } | null => {
+  const raw = String(value ?? '').trim()
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw)
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null
+  if (month < 1 || month > 12) return null
+  if (day < 1 || day > 31) return null
+  return { year, month, day }
+}
+
+const toLocalBoundaryIso = (dateOnly: string, endOfDay: boolean): string | null => {
+  const parsed = parseDateOnly(dateOnly)
+  if (!parsed) return null
+  const { year, month, day } = parsed
+  const date = endOfDay
+    ? new Date(year, month - 1, day, 23, 59, 59, 999)
+    : new Date(year, month - 1, day, 0, 0, 0, 0)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}
 
 function AlertsAccessDenied() {
   return (
@@ -57,6 +82,8 @@ function AlertsAccessDenied() {
 const AlertsViewContent: React.FC = () => {
   const searchParams = useSearchParams()
   const ws = useWebSocket()
+  const canUpdateAlerts = usePermission(Permission.ALERTS_UPDATE)
+  const canDeleteAlerts = usePermission(Permission.ALERTS_DELETE)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterValues>({})
@@ -66,10 +93,39 @@ const AlertsViewContent: React.FC = () => {
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date())
   const [sortBy, setSortBy] = useState<'timestamp' | 'severity' | 'status'>('timestamp')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [realtimePendingCount, setRealtimePendingCount] = useState(0)
+  const [realtimePendingAt, setRealtimePendingAt] = useState<Date | null>(null)
+  const [pendingRefreshAfterQueryChange, setPendingRefreshAfterQueryChange] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wsSelfEventRef = useRef<Map<string, number>>(new Map())
 
-  const { filters, updateFilter } = useAlertFilters()
+  const { filters, updateFilter, resetFilters } = useAlertFilters()
+
+  const hasActiveFilters = useMemo(() => {
+    const hasBasicSearch = String(filters.searchQuery ?? '').trim() !== ''
+    const hasBasicSeverity = String(filters.severityFilter ?? '').trim() !== '' && filters.severityFilter !== 'all'
+    const hasBasicStatus = String(filters.statusFilter ?? '').trim() !== '' && filters.statusFilter !== 'all'
+
+    const adv = advancedFilters ?? {}
+    const hasAdvSearch = String(adv.search ?? '').trim() !== ''
+    const hasAdvSeverity = Array.isArray(adv.severity) && adv.severity.length > 0
+    const hasAdvStatus = Array.isArray(adv.status) && adv.status.length > 0
+    const hasAdvCategory = Array.isArray(adv.category) && adv.category.length > 0
+    const hasAdvDeviceIds = Array.isArray(adv.deviceIds) && adv.deviceIds.length > 0
+    const hasAdvDateRange = !!(String(adv.dateRange?.start ?? '').trim() || String(adv.dateRange?.end ?? '').trim())
+
+    return (
+      hasBasicSearch ||
+      hasBasicSeverity ||
+      hasBasicStatus ||
+      hasAdvSearch ||
+      hasAdvSeverity ||
+      hasAdvStatus ||
+      hasAdvCategory ||
+      hasAdvDeviceIds ||
+      hasAdvDateRange
+    )
+  }, [advancedFilters, filters.searchQuery, filters.severityFilter, filters.statusFilter])
 
   const queryParams = useMemo(() => {
     const params: AlertQueryParams = {
@@ -112,8 +168,17 @@ const AlertsViewContent: React.FC = () => {
     }
 
     if (advancedFilters.dateRange) {
-      if (advancedFilters.dateRange.start) params.startDate = advancedFilters.dateRange.start
-      if (advancedFilters.dateRange.end) params.endDate = advancedFilters.dateRange.end
+      const startValue = String(advancedFilters.dateRange.start ?? '').trim()
+      const endValue = String(advancedFilters.dateRange.end ?? '').trim()
+
+      if (startValue) {
+        const startIso = parseDateOnly(startValue) ? toLocalBoundaryIso(startValue, false) : startValue
+        if (startIso) params.startDate = startIso
+      }
+      if (endValue) {
+        const endIso = parseDateOnly(endValue) ? toLocalBoundaryIso(endValue, true) : endValue
+        if (endIso) params.endDate = endIso
+      }
     }
 
     if (advancedFilters.deviceIds && advancedFilters.deviceIds.length > 0) {
@@ -134,7 +199,7 @@ const AlertsViewContent: React.FC = () => {
     loadAlerts
   } = useAlerts(queryParams)
 
-  const { stats, loading: statsLoading, loadStats } = useAlertStats()
+  const { stats, loading: statsLoading, error: statsError, loadStats } = useAlertStats()
   const {
     selectedAlerts,
     toggleAlert,
@@ -160,6 +225,11 @@ const AlertsViewContent: React.FC = () => {
     setLastRefreshed(new Date())
   }, [loadAlerts, loadStats])
 
+  const clearRealtimePending = useCallback(() => {
+    setRealtimePendingCount(0)
+    setRealtimePendingAt(null)
+  }, [])
+
   useEffect(() => {
     if (autoRefresh) {
       refreshTimerRef.current = setInterval(refreshAll, AUTO_REFRESH_INTERVAL)
@@ -171,8 +241,9 @@ const AlertsViewContent: React.FC = () => {
 
   // 手动刷新
   const handleManualRefresh = useCallback(async () => {
+    clearRealtimePending()
     await refreshAll()
-  }, [refreshAll])
+  }, [clearRealtimePending, refreshAll])
 
   const markSelfEvent = useCallback((id: string) => {
     const normalizedId = id.trim()
@@ -187,10 +258,17 @@ const AlertsViewContent: React.FC = () => {
     })
 
     if (!payload || typeof payload !== 'object') return false
-    const rawId = (payload as Record<string, unknown>).id
+    const data = payload as Record<string, unknown>
+    const candidates: unknown[] = [
+      data.id,
+      data.alert_id,
+      data.alertId,
+      (data.alert as Record<string, unknown> | undefined)?.id,
+    ]
+    const resolvedId = candidates.find((value) => typeof value === 'string' || typeof value === 'number')
     let id = ''
-    if (typeof rawId === 'string') id = rawId.trim()
-    if (typeof rawId === 'number' && Number.isFinite(rawId)) id = String(rawId)
+    if (typeof resolvedId === 'string') id = resolvedId.trim()
+    if (typeof resolvedId === 'number' && Number.isFinite(resolvedId)) id = String(resolvedId)
     if (!id) return false
 
     const expiresAt = wsSelfEventRef.current.get(id)
@@ -223,18 +301,95 @@ const AlertsViewContent: React.FC = () => {
   useWebSocketEvent(WebSocketEvents.CONNECT, handleWsConnect)
 
   // WebSocket 实时告警更新
-  useWebSocketEvent(WebSocketEvents.NEW_ALERT, (payload) => {
+  const handleRealtimeAlertEvent = useCallback((payload: unknown) => {
     if (shouldSkipSelfEventRefresh(payload)) return
-    refreshAll()
-  })
-  useWebSocketEvent(WebSocketEvents.ALERT_UPDATE, (payload) => {
-    if (shouldSkipSelfEventRefresh(payload)) return
-    refreshAll()
-  })
-  useWebSocketEvent(WebSocketEvents.ALERT_RESOLVED, (payload) => {
-    if (shouldSkipSelfEventRefresh(payload)) return
-    refreshAll()
-  })
+
+    // “筛选/分页/关闭自动刷新”场景下不自动刷新列表，避免破坏用户当前视图；改为提示条+手动应用。
+    const shouldAutoApply = autoRefresh && !hasActiveFilters && currentPage === 1
+    if (shouldAutoApply) {
+      void refreshAll()
+      return
+    }
+
+    setRealtimePendingCount((prev) => prev + 1)
+    setRealtimePendingAt(new Date())
+    void loadStats()
+  }, [autoRefresh, currentPage, hasActiveFilters, loadStats, refreshAll, shouldSkipSelfEventRefresh])
+
+  useWebSocketEvent(WebSocketEvents.NEW_ALERT, handleRealtimeAlertEvent)
+  useWebSocketEvent(WebSocketEvents.ALERT_UPDATE, handleRealtimeAlertEvent)
+  useWebSocketEvent(WebSocketEvents.ALERT_RESOLVED, handleRealtimeAlertEvent)
+
+  const safeSetAdvancedFiltersStorage = useCallback((next: AdvancedFilterValues) => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(ALERT_ADVANCED_FILTERS_STORAGE_KEY, JSON.stringify(next))
+    } catch (error) {
+      console.warn('保存告警高级筛选本地缓存失败:', error)
+    }
+  }, [])
+
+  const safeRemoveAdvancedFiltersStorage = useCallback(() => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.removeItem(ALERT_ADVANCED_FILTERS_STORAGE_KEY)
+    } catch (error) {
+      console.warn('清理告警高级筛选本地缓存失败:', error)
+    }
+  }, [])
+
+  const resetAdvancedFilters = useCallback(() => {
+    safeRemoveAdvancedFiltersStorage()
+    setAdvancedFilters({})
+  }, [safeRemoveAdvancedFiltersStorage])
+
+  const clearAdvancedOverrides = useCallback((options: { clearSeverity?: boolean; clearStatus?: boolean }) => {
+    const { clearSeverity, clearStatus } = options
+    if (!clearSeverity && !clearStatus) return
+
+    const hasSeverityOverride = clearSeverity && Array.isArray(advancedFilters.severity) && advancedFilters.severity.length > 0
+    const hasStatusOverride = clearStatus && Array.isArray(advancedFilters.status) && advancedFilters.status.length > 0
+    if (!hasSeverityOverride && !hasStatusOverride) return
+
+    const next: AdvancedFilterValues = {
+      ...advancedFilters,
+      ...(clearSeverity ? { severity: undefined } : {}),
+      ...(clearStatus ? { status: undefined } : {}),
+    }
+
+    setAdvancedFilters(next)
+    safeSetAdvancedFiltersStorage(next)
+  }, [advancedFilters, safeSetAdvancedFiltersStorage])
+
+  const applyRealtimeUpdates = useCallback(async () => {
+    clearRealtimePending()
+    await refreshAll()
+  }, [clearRealtimePending, refreshAll])
+
+  const requestRefreshAfterQueryChange = useCallback(() => {
+    setPendingRefreshAfterQueryChange(true)
+  }, [])
+
+  const handleClearFiltersAndView = useCallback(() => {
+    clearRealtimePending()
+    resetFilters()
+    resetAdvancedFilters()
+    setCurrentPage(1)
+    requestRefreshAfterQueryChange()
+  }, [clearRealtimePending, requestRefreshAfterQueryChange, resetAdvancedFilters, resetFilters])
+
+  const handleGoToFirstPageAndView = useCallback(() => {
+    clearRealtimePending()
+    setCurrentPage(1)
+    requestRefreshAfterQueryChange()
+  }, [clearRealtimePending, requestRefreshAfterQueryChange])
+
+  // 外部触发筛选变更后，等 queryParams 更新到位再执行一次 refreshAll，避免使用旧参数刷新。
+  useEffect(() => {
+    if (!pendingRefreshAfterQueryChange) return
+    setPendingRefreshAfterQueryChange(false)
+    void refreshAll()
+  }, [pendingRefreshAfterQueryChange, refreshAll])
 
   // 导出
   const handleExport = useCallback(async () => {
@@ -269,6 +424,18 @@ const AlertsViewContent: React.FC = () => {
   // 批量操作
   const handleBulkActionClick = async (action: AlertAction) => {
     try {
+      if ((action === 'acknowledge' || action === 'resolve' || action === 'assign' || action === 'comment') && !canUpdateAlerts) {
+        console.warn('缺少告警操作权限，已阻止批量操作:', action)
+        return
+      }
+      if (action === 'delete' && !canDeleteAlerts) {
+        console.warn('缺少告警删除权限，已阻止批量删除')
+        return
+      }
+      if (action === 'delete') {
+        const ok = confirm(`确定要删除选中的 ${selectedAlerts.length} 条告警吗？此操作不可恢复。`)
+        if (!ok) return
+      }
       selectedAlerts.forEach(markSelfEvent)
       await handleBulkAction(action)
       await refreshAll()
@@ -293,36 +460,58 @@ const AlertsViewContent: React.FC = () => {
     setCurrentPage(1)
   }
 
-  const handleAdvancedFilterChange = (newFilters: AdvancedFilterValues) => {
+  const handleAdvancedFilterChange = useCallback((newFilters: AdvancedFilterValues) => {
     setAdvancedFilters(newFilters)
     setCurrentPage(1)
-  }
+  }, [])
 
-  const handleAdvancedFilterReset = () => {
-    setAdvancedFilters({})
+  const handleAdvancedFilterReset = useCallback(() => {
+    resetAdvancedFilters()
     setCurrentPage(1)
-  }
+  }, [resetAdvancedFilters])
+
+  const applyStatFilter = useCallback((options: { severity?: 'all' | 'critical' | 'warning' | 'info'; status?: 'all' | 'active' | 'acknowledged' | 'resolved' }) => {
+    clearRealtimePending()
+
+    const { severity, status } = options
+    if (severity) {
+      updateFilter('severityFilter', severity)
+    }
+    if (status) {
+      updateFilter('statusFilter', status)
+    }
+
+    // 当高级筛选中已设置 severity/status 时，会覆盖基础筛选；这里清理覆盖项，保证“点击统计卡”必然生效。
+    clearAdvancedOverrides({ clearSeverity: !!severity, clearStatus: !!status })
+
+    setCurrentPage(1)
+  }, [clearAdvancedOverrides, clearRealtimePending, updateFilter])
+
+  const handleStatCardClick = useCallback((card: 'total' | 'critical' | 'warning' | 'info' | 'active' | 'acknowledged' | 'resolved') => {
+    switch (card) {
+      case 'total':
+        applyStatFilter({ severity: 'all', status: 'all' })
+        return
+      case 'critical':
+      case 'warning':
+      case 'info':
+        applyStatFilter({ severity: card })
+        return
+      case 'active':
+      case 'acknowledged':
+      case 'resolved':
+        applyStatFilter({ status: card })
+        return
+      default:
+        return
+    }
+  }, [applyStatFilter])
 
   const handleCloseAlertDetail = () => setSelectedAlertId(null)
 
   // 格式化最后刷新时间
   const formatLastRefreshed = () => {
     return lastRefreshed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  }
-
-  if (error) {
-    return (
-      <AppLayout title="告警中心" alertCount={stats?.active ?? 0}>
-        <div className="text-center py-12">
-          <div className="text-red-600 dark:text-red-500 mb-4">加载告警数据时出现错误</div>
-          <p className="text-gray-500 dark:text-gray-400 mb-4">{error}</p>
-          <Button variant="outline" onClick={handleManualRefresh}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            重试
-          </Button>
-        </div>
-      </AppLayout>
-    )
   }
 
   return (
@@ -337,8 +526,16 @@ const AlertsViewContent: React.FC = () => {
             <SkeletonCard lines={2} />
             <SkeletonCard lines={2} />
           </div>
+        ) : statsError ? (
+          <ErrorAlert
+            title="统计数据加载失败"
+            message="无法加载告警统计数据，请检查网络连接或稍后重试。"
+            error={statsError}
+            onRetry={loadStats}
+            variant="warning"
+          />
         ) : stats ? (
-          <AlertStatsGrid stats={stats} />
+          <AlertStatsGrid stats={stats} onCardClick={handleStatCardClick} />
         ) : null}
 
         {/* 主内容区 */}
@@ -407,21 +604,27 @@ const AlertsViewContent: React.FC = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleBulkActionClick('acknowledge')}>
-                        <CheckCheck className="h-4 w-4 mr-2" />
-                        批量确认
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleBulkActionClick('resolve')}>
-                        <CheckCheck className="h-4 w-4 mr-2" />
-                        批量解决
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleBulkActionClick('delete')}
-                        className="text-red-600"
-                      >
-                        <XCircle className="h-4 w-4 mr-2" />
-                        批量删除
-                      </DropdownMenuItem>
+                      {canUpdateAlerts && (
+                        <>
+                          <DropdownMenuItem onClick={() => handleBulkActionClick('acknowledge')}>
+                            <CheckCheck className="h-4 w-4 mr-2" />
+                            批量确认
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleBulkActionClick('resolve')}>
+                            <CheckCheck className="h-4 w-4 mr-2" />
+                            批量解决
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      {canDeleteAlerts && (
+                        <DropdownMenuItem
+                          onClick={() => handleBulkActionClick('delete')}
+                          className="text-red-600"
+                        >
+                          <XCircle className="h-4 w-4 mr-2" />
+                          批量删除
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
@@ -439,14 +642,96 @@ const AlertsViewContent: React.FC = () => {
             />
 
             <AdvancedFilters
+              value={advancedFilters}
               onFilterChange={handleAdvancedFilterChange}
               onReset={handleAdvancedFilterReset}
               renderAsCard={false}
             />
 
+            {realtimePendingCount > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Bell className="h-4 w-4 text-green-500" />
+                  <span className="font-medium text-foreground">
+                    收到 {realtimePendingCount} 条实时更新
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {hasActiveFilters
+                    ? '已开启筛选，部分更新可能被隐藏。'
+                    : currentPage !== 1
+                      ? '当前不在第一页，列表未自动刷新。'
+                      : !autoRefresh
+                        ? '已关闭自动刷新。'
+                        : '列表未自动刷新。'}
+                  {realtimePendingAt
+                    ? `（最后一条：${realtimePendingAt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}）`
+                    : null}
+                </div>
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button variant="outline" size="sm" onClick={() => void applyRealtimeUpdates()}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    刷新列表
+                  </Button>
+                  {hasActiveFilters && (
+                    <Button variant="ghost" size="sm" onClick={handleClearFiltersAndView}>
+                      清空筛选查看
+                    </Button>
+                  )}
+                  {!hasActiveFilters && currentPage !== 1 && (
+                    <Button variant="ghost" size="sm" onClick={handleGoToFirstPageAndView}>
+                      回到第一页
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={clearRealtimePending}>
+                    忽略
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-y-auto flex-1">
               {loading ? (
                 <SkeletonList count={pageSize} itemHeight="h-24" spacing="space-y-3" />
+              ) : error ? (
+                <div className="py-6">
+                  <ErrorAlert
+                    title="告警列表加载失败"
+                    message="无法加载告警列表数据，请检查网络连接或稍后重试。"
+                    error={error}
+                    onRetry={handleManualRefresh}
+                  />
+                  {hasActiveFilters && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={handleClearFiltersAndView}>
+                        清空筛选并重试
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : alerts.length === 0 ? (
+                <div className="text-center py-12">
+                  <AlertTriangle className="h-12 w-12 text-muted-foreground/80 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-foreground mb-2">
+                    {hasActiveFilters ? '没有匹配的告警' : '暂无告警'}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-6">
+                    {hasActiveFilters
+                      ? '当前筛选条件下没有匹配的告警记录，可尝试清空筛选或调整条件。'
+                      : '当前系统暂无告警记录。'}
+                  </p>
+                  <div className="flex items-center justify-center gap-2">
+                    <Button variant="outline" size="sm" onClick={handleManualRefresh}>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      刷新
+                    </Button>
+                    {hasActiveFilters && (
+                      <Button variant="ghost" size="sm" onClick={handleClearFiltersAndView}>
+                        清空筛选
+                      </Button>
+                    )}
+                  </div>
+                </div>
               ) : (
                 <AlertList
                   alerts={alerts}
@@ -454,9 +739,11 @@ const AlertsViewContent: React.FC = () => {
                   onSelectAlert={toggleAlert}
                   onSelectAll={selectAll}
                   onClearSelection={clearSelection}
-                  onAcknowledge={handleAcknowledgeAndRefresh}
-                  onResolve={handleResolveAndRefresh}
-                  onDelete={handleDeleteAndRefresh}
+                  canUpdate={canUpdateAlerts}
+                  canDelete={canDeleteAlerts}
+                  onAcknowledge={canUpdateAlerts ? handleAcknowledgeAndRefresh : undefined}
+                  onResolve={canUpdateAlerts ? handleResolveAndRefresh : undefined}
+                  onDelete={canDeleteAlerts ? handleDeleteAndRefresh : undefined}
                   pagination={{
                     current: pagination.page,
                     total: pagination.total,
@@ -475,11 +762,12 @@ const AlertsViewContent: React.FC = () => {
       {selectedAlertId && (
         <AlertDetailModal
           open={!!selectedAlertId}
+          alertId={selectedAlertId}
           alert={selectedAlert}
           onClose={handleCloseAlertDetail}
-          onAcknowledge={handleAcknowledgeAndRefresh}
-          onResolve={handleResolveAndRefresh}
-          onDelete={handleDeleteAndRefresh}
+          onAcknowledge={canUpdateAlerts ? handleAcknowledgeAndRefresh : undefined}
+          onResolve={canUpdateAlerts ? handleResolveAndRefresh : undefined}
+          onDelete={canDeleteAlerts ? handleDeleteAndRefresh : undefined}
         />
       )}
     </AppLayout>

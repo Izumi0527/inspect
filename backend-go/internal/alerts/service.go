@@ -179,6 +179,35 @@ func (s *Service) GetAlert(ctx context.Context, alertID int) (AlertWithDevice, e
 	return result, err
 }
 
+func (s *Service) ListAlertOperations(ctx context.Context, alertID int, limit int) ([]AlertOperationHistory, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	if alertID <= 0 {
+		return nil, fmt.Errorf("invalid alert_id")
+	}
+
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	rows := make([]AlertOperationHistory, 0)
+	err := s.db.WithContext(ctx).
+		Table("alert_operation_history").
+		Where("alert_id = ?", alertID).
+		Order("operation_time desc, id desc").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return rows, nil
+}
+
 func (s *Service) GetRecentAlerts(ctx context.Context, limit int) ([]AlertWithDevice, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("database not initialized")

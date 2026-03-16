@@ -13,8 +13,14 @@ jest.mock('@/lib/api-client', () => ({
     post: jest.fn(),
     delete: jest.fn(),
   },
+  API_PREFIX: '/api/v1',
   TokenManager: {
     getAccessToken: jest.fn(),
+  },
+  getApiOrigin: () => {
+    const raw = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
+    const trimmed = String(raw).trim().replace(/\/+$/, '')
+    return trimmed.replace(/\/api\/v1$/i, '')
   },
 }))
 
@@ -24,6 +30,7 @@ describe('alerts.api exportAlerts', () => {
   const originalRevokeObjectURL = window.URL.revokeObjectURL
 
   beforeEach(() => {
+    ;(global.fetch as jest.Mock).mockClear()
     process.env.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:38000'
     ;(TokenManager.getAccessToken as jest.Mock).mockReturnValue('manager-token')
 
@@ -59,5 +66,15 @@ describe('alerts.api exportAlerts', () => {
     const headers = requestInit.headers as Record<string, string>
 
     expect(headers.Authorization).toBe('Bearer manager-token')
+  })
+
+  it('当 NEXT_PUBLIC_API_URL 误配为包含 /api/v1 时，不应出现双前缀', async () => {
+    process.env.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:38000/api/v1'
+
+    await exportAlerts({ page: 1, pageSize: 20 })
+
+    const calledUrl = (global.fetch as jest.Mock).mock.calls[0][0] as string
+    expect(calledUrl).toContain('http://127.0.0.1:38000/api/v1/alerts/export')
+    expect(calledUrl).not.toContain('/api/v1/api/v1/')
   })
 })

@@ -1,5 +1,6 @@
 
-import { api, TokenManager } from '@/lib/api-client'
+import { api, ApiClientError } from '@/lib/api-client'
+import { downloadWithAuth } from '@/utils/download'
 import {
   Alert,
   AlertQueryParams,
@@ -69,6 +70,37 @@ interface RecentAlertDto {
   device?: string
 }
 
+interface AlertOperationDto {
+  id: string
+  alert_id: string
+  operation_type: string
+  operator_id: string
+  operator_name: string
+  operation_time: string
+  note?: string | null
+  previous_status?: string | null
+  new_status?: string | null
+  metadata?: Record<string, unknown>
+}
+
+interface AlertOperationsResponseDto {
+  items?: AlertOperationDto[]
+  total?: number
+}
+
+export interface AlertOperation {
+  id: string
+  alertId: string
+  operationType: string
+  operatorId: string
+  operatorName: string
+  operationTime: string
+  note?: string
+  previousStatus?: string
+  newStatus?: string
+  metadata: Record<string, unknown>
+}
+
 interface BulkActionResponseDto {
   success: boolean
 }
@@ -97,24 +129,74 @@ const toJsonValue = (value: unknown): JsonValue => {
   return String(value)
 }
 
-const transformAlert = (dto: AlertDto): Alert => ({
-  id: dto.id,
-  title: dto.title,
-  description: dto.description,
-  device: dto.device,
-  severity: dto.severity,
-  status: dto.status,
-  timestamp: dto.timestamp,
-  assignee: dto.assignee,
-  category: dto.category ?? '未分类',
-  resolution: dto.resolution,
-  createdAt: toDate(dto.created_at ?? dto.timestamp),
-  updatedAt: toDate(dto.updated_at),
-  acknowledgedAt: toDate(dto.acknowledged_at),
-  resolvedAt: toDate(dto.resolved_at),
-  tags: dto.tags ?? [],
-  metadata: dto.metadata ?? {},
-})
+const transformAlert = (dto: AlertDto): Alert => {
+  const category = typeof dto.category === 'string' && dto.category.trim()
+    ? dto.category.trim()
+    : '未分类'
+
+  const device = typeof dto.device === 'string' && dto.device.trim()
+    ? dto.device.trim()
+    : '未知设备'
+
+  const title = typeof dto.title === 'string' && dto.title.trim()
+    ? dto.title.trim()
+    : '未命名告警'
+
+  const description = typeof dto.description === 'string' && dto.description.trim()
+    ? dto.description
+    : ''
+
+  const assignee = typeof dto.assignee === 'string' && dto.assignee.trim()
+    ? dto.assignee.trim()
+    : undefined
+
+  return {
+    id: dto.id,
+    title,
+    description,
+    device,
+    severity: dto.severity,
+    status: dto.status,
+    timestamp: dto.timestamp,
+    assignee,
+    category,
+    resolution: dto.resolution,
+    createdAt: toDate(dto.created_at ?? dto.timestamp),
+    updatedAt: toDate(dto.updated_at),
+    acknowledgedAt: toDate(dto.acknowledged_at),
+    resolvedAt: toDate(dto.resolved_at),
+    tags: dto.tags ?? [],
+    metadata: dto.metadata ?? {},
+  }
+}
+
+const transformAlertOperation = (dto: AlertOperationDto): AlertOperation => {
+  const metadata =
+    dto.metadata && typeof dto.metadata === 'object' && !Array.isArray(dto.metadata)
+      ? dto.metadata
+      : {}
+
+  const note = typeof dto.note === 'string' && dto.note.trim() ? dto.note.trim() : undefined
+  const previousStatus =
+    typeof dto.previous_status === 'string' && dto.previous_status.trim()
+      ? dto.previous_status.trim()
+      : undefined
+  const newStatus =
+    typeof dto.new_status === 'string' && dto.new_status.trim() ? dto.new_status.trim() : undefined
+
+  return {
+    id: String(dto.id ?? '').trim(),
+    alertId: String(dto.alert_id ?? '').trim(),
+    operationType: String(dto.operation_type ?? '').trim(),
+    operatorId: String(dto.operator_id ?? '').trim(),
+    operatorName: String(dto.operator_name ?? '').trim(),
+    operationTime: String(dto.operation_time ?? '').trim(),
+    note,
+    previousStatus,
+    newStatus,
+    metadata,
+  }
+}
 
 const buildQueryParams = (params?: AlertQueryParams) => {
   if (!params) return undefined
@@ -155,13 +237,30 @@ export async function fetchAlerts(params?: AlertQueryParams): Promise<AlertPagin
 
 export async function fetchAlert(id: string): Promise<Alert | null> {
   try {
-    const response = await api.alerts.get(id)
+    const normalizedId = String(id ?? '').trim()
+    if (!normalizedId) return null
+
+    const response = await api.alerts.get(normalizedId)
     if (!response) return null
     return transformAlert(response as AlertDto)
   } catch (error) {
+    if (error instanceof ApiClientError && error.status === 404) {
+      return null
+    }
     console.error('获取告警详情失败:', error)
-    return null
+    throw error
   }
+}
+
+export async function fetchAlertOperations(alertId: string, limit: number = 50): Promise<AlertOperation[]> {
+  const normalizedId = String(alertId ?? '').trim()
+  if (!normalizedId) return []
+
+  const response = await api.get<AlertOperationsResponseDto>(`/alerts/${normalizedId}/operations`, {
+    params: { limit },
+  })
+  const items = response?.items ?? []
+  return items.map(transformAlertOperation).filter(item => item.id !== '' && item.operationTime !== '')
 }
 
 export async function acknowledgeAlert(id: string, assignee?: string, note?: string): Promise<boolean> {
@@ -307,28 +406,7 @@ export async function exportAlerts(params?: AlertQueryParams): Promise<void> {
     })
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
-  const url = `${baseUrl}/api/v1/alerts/export${searchParams.toString() ? '?' + searchParams.toString() : ''}`
-
-  try {
-    const token = TokenManager.getAccessToken() || ''
-    const response = await fetch(url, {
-      headers: { Authorization: token ? `Bearer ${token}` : '' },
-    })
-
-    if (!response.ok) throw new Error('导出失败')
-
-    const blob = await response.blob()
-    const downloadUrl = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = downloadUrl
-    a.download = `alerts_export_${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(downloadUrl)
-  } catch (error) {
-    console.error('导出告警失败:', error)
-    throw error
-  }
+  const endpoint = `/api/v1/alerts/export${searchParams.toString() ? '?' + searchParams.toString() : ''}`
+  const filename = `alerts_export_${new Date().toISOString().slice(0, 10)}.csv`
+  await downloadWithAuth(endpoint, filename)
 }

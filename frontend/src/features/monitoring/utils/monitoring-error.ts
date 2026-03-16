@@ -1,4 +1,4 @@
-import { ApiClientError } from '@/lib/api-client'
+import { ApiClientError, getApiOrigin } from '@/lib/api-client'
 
 export type MonitoringErrorAction = {
   label: string
@@ -14,7 +14,7 @@ export type MonitoringErrorView = {
 }
 
 export function resolveMonitoringErrorView(error: Error): MonitoringErrorView {
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:38000'
+  const apiBaseUrl = getApiOrigin()
   const details = formatMonitoringErrorDetails(error)
 
   if (error instanceof ApiClientError) {
@@ -133,4 +133,3 @@ function formatMonitoringErrorDetails(error: Error): string {
 
   return [`name=${error.name}`, `message=${error.message}`].filter(Boolean).join('\n')
 }
-
