@@ -9,7 +9,7 @@ import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { Sidebar } from '@/features/dashboard/components/Sidebar'
 import { DashboardHeader } from '@/features/dashboard'
-import { StatCard } from '@/components/shared'
+import { CompactStatCard } from '@/components/shared'
 import {
   Card,
   CardHeader,
@@ -62,12 +62,12 @@ const monitoringIconMap = {
 
 // 图标颜色映射
 const monitoringIconColorMap = {
-  total_devices: 'text-blue-600',
-  availability: 'text-green-600',
-  active_alerts: 'text-red-600',
-  avg_cpu: 'text-purple-600',
-  avg_memory: 'text-orange-600',
-  avg_network: 'text-cyan-600',
+  total_devices: 'text-blue-600 dark:text-blue-400',
+  availability: 'text-green-600 dark:text-green-400',
+  active_alerts: 'text-red-600 dark:text-red-400',
+  avg_cpu: 'text-purple-600 dark:text-purple-400',
+  avg_memory: 'text-orange-600 dark:text-orange-400',
+  avg_network: 'text-cyan-600 dark:text-cyan-400',
 }
 
 const TIME_RANGE_OPTIONS = [
@@ -772,19 +772,18 @@ export function MonitoringView() {
                     />
                   </div>
                 ) : data.statsV2 && data.statsV2.length > 0 ? (
-                  data.statsV2.map((stat, index) => {
+                  data.statsV2.map((stat) => {
                     const IconComponent = monitoringIconMap[stat.id as keyof typeof monitoringIconMap] || Server
-                    const iconColor = monitoringIconColorMap[stat.id as keyof typeof monitoringIconColorMap] || 'text-blue-600'
+                    const iconClassName = monitoringIconColorMap[stat.id as keyof typeof monitoringIconColorMap] || 'text-blue-600 dark:text-blue-400'
                     return (
-                      <StatCard
+                      <CompactStatCard
                         key={stat.id}
-                        index={index}
                         title={stat.title}
                         value={stat.value}
                         change={stat.change}
                         trend={stat.trend}
                         icon={IconComponent}
-                        iconColor={iconColor}
+                        iconClassName={iconClassName}
                       />
                     )
                   })

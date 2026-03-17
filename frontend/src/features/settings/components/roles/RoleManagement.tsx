@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { CompactStatCard } from '@/components/shared'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { ApiClientError } from '@/lib/api-client'
 import { Permission } from '@/lib/types/auth.types'
@@ -218,33 +219,24 @@ export function RoleManagement() {
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">角色总数</p>
-              <p className="text-2xl font-bold text-foreground">{stats.total}</p>
-            </div>
-            <Shield className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">内置角色</p>
-              <p className="text-2xl font-bold text-foreground">{stats.builtIn}</p>
-            </div>
-            <Badge variant="secondary">built-in</Badge>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">自定义角色</p>
-              <p className="text-2xl font-bold text-foreground">{stats.custom}</p>
-            </div>
-            <Badge variant="outline">custom</Badge>
-          </div>
-        </Card>
+        <CompactStatCard
+          title="角色总数"
+          value={stats.total}
+          icon={Shield}
+          iconClassName="text-blue-600 dark:text-blue-400"
+        />
+        <CompactStatCard
+          title="内置角色"
+          value={stats.builtIn}
+          icon={KeyRound}
+          iconClassName="text-green-600 dark:text-green-400"
+        />
+        <CompactStatCard
+          title="自定义角色"
+          value={stats.custom}
+          icon={Pencil}
+          iconClassName="text-purple-600 dark:text-purple-400"
+        />
       </div>
 
       {/* 操作栏 */}
@@ -356,4 +348,3 @@ export function RoleManagement() {
     </div>
   )
 }
-

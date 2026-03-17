@@ -33,6 +33,7 @@ jest.mock('@/features/dashboard', () => ({
 
 jest.mock('@/components/shared', () => ({
   StatCard: ({ title }: { title: string }) => <div>{title}</div>,
+  CompactStatCard: ({ title }: { title: string }) => <div>{title}</div>,
 }))
 
 jest.mock('@/components/atoms', () => ({

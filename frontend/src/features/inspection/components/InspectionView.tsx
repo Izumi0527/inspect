@@ -4,9 +4,12 @@ import {
   Calendar, 
   FileText, 
   History, 
-  BarChart3
+  BarChart3,
+  Activity,
+  Star
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { CompactStatCard } from '@/components/shared'
 import {
   Card,
   CardHeader,
@@ -76,30 +79,34 @@ export const InspectionView: React.FC = () => {
         {/* 快速统计卡片 */}
         {!statsLoading && stats && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600">{stats.totalStrategies}</div>
-                <div className="text-sm text-muted-foreground">总策略数</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-green-600">{stats.activeStrategies}</div>
-                <div className="text-sm text-muted-foreground">活跃策略</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-purple-600">{stats.todayExecutions}</div>
-                <div className="text-sm text-muted-foreground">今日执行</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-orange-600">{stats.avgScore.toFixed(1)}</div>
-                <div className="text-sm text-muted-foreground">平均评分</div>
-              </CardContent>
-            </Card>
+            <CompactStatCard
+              title="总策略数"
+              value={stats.totalStrategies}
+              icon={FileText}
+              iconClassName="text-blue-600 dark:text-blue-400"
+              valueClassName="text-blue-600 dark:text-blue-400"
+            />
+            <CompactStatCard
+              title="活跃策略"
+              value={stats.activeStrategies}
+              icon={Activity}
+              iconClassName="text-green-600 dark:text-green-400"
+              valueClassName="text-green-600 dark:text-green-400"
+            />
+            <CompactStatCard
+              title="今日执行"
+              value={stats.todayExecutions}
+              icon={History}
+              iconClassName="text-purple-600 dark:text-purple-400"
+              valueClassName="text-purple-600 dark:text-purple-400"
+            />
+            <CompactStatCard
+              title="平均评分"
+              value={stats.avgScore.toFixed(1)}
+              icon={Star}
+              iconClassName="text-orange-600 dark:text-orange-400"
+              valueClassName="text-orange-600 dark:text-orange-400"
+            />
           </div>
         )}
 

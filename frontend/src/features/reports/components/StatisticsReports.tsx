@@ -16,6 +16,7 @@ import {
   BarChartComponent,
   PieChartComponent
 } from '@/components/atoms'
+import { CompactStatCard } from '@/components/shared'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useStatistics, useKPIData, useRankings, useGenerateStatisticsReport, useExportToExcel } from '../hooks/useReports'
@@ -26,6 +27,12 @@ import { formatDateYMD } from '@/utils/formatters'
 
 interface Props {
   searchText: string
+}
+
+const resolveTrendFromChange = (change: string): 'up' | 'down' | 'stable' => {
+  if (change.trim().startsWith('+')) return 'up'
+  if (change.trim().startsWith('-')) return 'down'
+  return 'stable'
 }
 
 export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
@@ -576,25 +583,16 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
         {kpiCards.map((kpi) => {
           const colors = colorMap[kpi.color as keyof typeof colorMap]
           return (
-            <Card key={kpi.title}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">{kpi.title}</p>
-                    <p className="text-2xl font-bold text-foreground mt-2">{kpi.value}</p>
-                    <div className="flex items-center gap-1 mt-2">
-                      <span className={`text-sm font-medium ${colors.text}`}>
-                        {kpi.change}
-                      </span>
-                      <span className="text-sm text-muted-foreground">vs 上期</span>
-                    </div>
-                  </div>
-                  <div className={`p-3 ${colors.bg} rounded-lg`}>
-                    <kpi.icon className={`w-6 h-6 ${colors.icon}`} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <CompactStatCard
+              key={kpi.title}
+              title={kpi.title}
+              value={kpi.value}
+              change={kpi.change}
+              changeHint="vs 上期"
+              trend={resolveTrendFromChange(kpi.change)}
+              icon={kpi.icon}
+              iconClassName={colors.icon}
+            />
           )
         })}
       </div>

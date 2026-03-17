@@ -11,7 +11,7 @@ import {
   TrendingDown,
   Minus
 } from 'lucide-react'
-import { cn } from '@/utils/cn'
+import { CompactStatCard } from '@/components/shared'
 import { AlertStats } from '../types'
 
 export type AlertStatsCardKey =
@@ -37,119 +37,69 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats, onCardCli
   const TrendIcon = changePercent > 0 ? TrendingUp : changePercent < 0 ? TrendingDown : Minus
   const trendColor = changePercent > 0 ? 'text-red-500' : changePercent < 0 ? 'text-green-500' : 'text-gray-400'
 
-  const CardShell: React.FC<{
-    cardKey: AlertStatsCardKey
-    title: string
-    value: number
-    valueClassName?: string
-    icon: React.ReactNode
-    iconClassName?: string
-    onCardClick?: (card: AlertStatsCardKey) => void
-  }> = ({ cardKey, title, value, valueClassName, icon, iconClassName, onCardClick }) => {
-    const clickable = typeof onCardClick === 'function'
-
-    const content = (
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground mb-1">{title}</p>
-          <p className={cn('text-2xl font-bold text-foreground', valueClassName)}>
-            {value}
-          </p>
-        </div>
-        <span className={cn('w-8 h-8 inline-flex items-center justify-center', iconClassName)}>
-          {icon}
-        </span>
-      </div>
-    )
-
-    const cardClassName = cn(
-      'rounded-xl border border-border/50 bg-card/80 backdrop-blur-lg shadow-lg',
-      clickable && 'cursor-pointer hover:bg-muted/30 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40'
-    )
-
-    if (!clickable) {
-      return (
-        <div className={cardClassName}>
-          <div className="p-4">{content}</div>
-        </div>
-      )
-    }
-
-    return (
-      <button
-        type="button"
-        className={cardClassName}
-        onClick={() => onCardClick(cardKey)}
-        aria-label={`${title}：${value}`}
-      >
-        <div className="p-4">{content}</div>
-      </button>
-    )
-  }
-
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        <CardShell
-          cardKey="total"
+        <CompactStatCard
           title="总告警"
           value={stats.total}
-          icon={<Bell className="w-8 h-8 text-muted-foreground" />}
-          onCardClick={onCardClick}
+          icon={Bell}
+          iconClassName="text-muted-foreground"
+          onClick={onCardClick ? () => onCardClick('total') : undefined}
         />
 
-        <CardShell
-          cardKey="critical"
+        <CompactStatCard
           title="严重"
           value={stats.critical}
           valueClassName="text-red-600 dark:text-red-500"
-          icon={<AlertCircle className="w-8 h-8 text-red-600 dark:text-red-500" />}
-          onCardClick={onCardClick}
+          icon={AlertCircle}
+          iconClassName="text-red-600 dark:text-red-500"
+          onClick={onCardClick ? () => onCardClick('critical') : undefined}
         />
 
-        <CardShell
-          cardKey="warning"
+        <CompactStatCard
           title="警告"
           value={stats.warning}
           valueClassName="text-yellow-600 dark:text-yellow-500"
-          icon={<AlertTriangle className="w-8 h-8 text-yellow-600 dark:text-yellow-500" />}
-          onCardClick={onCardClick}
+          icon={AlertTriangle}
+          iconClassName="text-yellow-600 dark:text-yellow-500"
+          onClick={onCardClick ? () => onCardClick('warning') : undefined}
         />
 
-        <CardShell
-          cardKey="info"
+        <CompactStatCard
           title="信息"
           value={stats.info}
           valueClassName="text-blue-600 dark:text-blue-500"
-          icon={<Info className="w-8 h-8 text-blue-600 dark:text-blue-500" />}
-          onCardClick={onCardClick}
+          icon={Info}
+          iconClassName="text-blue-600 dark:text-blue-500"
+          onClick={onCardClick ? () => onCardClick('info') : undefined}
         />
 
-        <CardShell
-          cardKey="active"
+        <CompactStatCard
           title="活跃"
           value={stats.active}
           valueClassName="text-orange-600 dark:text-orange-500"
-          icon={<Shield className="w-8 h-8 text-orange-600 dark:text-orange-500" />}
-          onCardClick={onCardClick}
+          icon={Shield}
+          iconClassName="text-orange-600 dark:text-orange-500"
+          onClick={onCardClick ? () => onCardClick('active') : undefined}
         />
 
-        <CardShell
-          cardKey="acknowledged"
+        <CompactStatCard
           title="已确认"
           value={stats.acknowledged}
           valueClassName="text-yellow-700 dark:text-yellow-400"
-          icon={<Eye className="w-8 h-8 text-yellow-700 dark:text-yellow-400" />}
-          onCardClick={onCardClick}
+          icon={Eye}
+          iconClassName="text-yellow-700 dark:text-yellow-400"
+          onClick={onCardClick ? () => onCardClick('acknowledged') : undefined}
         />
 
-        <CardShell
-          cardKey="resolved"
+        <CompactStatCard
           title="已解决"
           value={stats.resolved}
           valueClassName="text-green-600 dark:text-green-500"
-          icon={<CheckCircle className="w-8 h-8 text-green-600 dark:text-green-500" />}
-          onCardClick={onCardClick}
+          icon={CheckCircle}
+          iconClassName="text-green-600 dark:text-green-500"
+          onClick={onCardClick ? () => onCardClick('resolved') : undefined}
         />
       </div>
 

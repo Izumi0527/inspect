@@ -7,8 +7,12 @@ import {
   BarChart3,
   Settings,
   Search,
-  AlertTriangle
+  AlertTriangle,
+  Calendar,
+  Clock,
+  FileType
 } from 'lucide-react'
+import { CompactStatCard } from '@/components/shared'
 import {
   Card,
   CardHeader,
@@ -126,30 +130,38 @@ export const ReportsView: React.FC = () => {
         {/* 快速统计卡片 */}
         {!statsLoading && stats && (
           <div className="flex gap-3">
-            <Card className="min-w-[120px]">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-blue-600 dark:text-blue-500">{stats.totalReports}</div>
-                <div className="text-sm text-muted-foreground">总报表数</div>
-              </CardContent>
-            </Card>
-            <Card className="min-w-[120px]">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-green-600 dark:text-green-500">{stats.generatedToday}</div>
-                <div className="text-sm text-muted-foreground">今日生成</div>
-              </CardContent>
-            </Card>
-            <Card className="min-w-[120px]">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-purple-600 dark:text-purple-500">{stats.scheduledReports}</div>
-                <div className="text-sm text-muted-foreground">定时报表</div>
-              </CardContent>
-            </Card>
-            <Card className="min-w-[120px]">
-              <CardContent className="p-4 text-center">
-                <div className="text-2xl font-bold text-orange-600 dark:text-orange-500">{stats.mostUsedFormat.toUpperCase()}</div>
-                <div className="text-sm text-muted-foreground">热门格式</div>
-              </CardContent>
-            </Card>
+            <CompactStatCard
+              className="min-w-[120px]"
+              title="总报表数"
+              value={stats.totalReports}
+              icon={FileText}
+              iconClassName="text-blue-600 dark:text-blue-400"
+              valueClassName="text-blue-600 dark:text-blue-400"
+            />
+            <CompactStatCard
+              className="min-w-[120px]"
+              title="今日生成"
+              value={stats.generatedToday}
+              icon={Calendar}
+              iconClassName="text-green-600 dark:text-green-400"
+              valueClassName="text-green-600 dark:text-green-400"
+            />
+            <CompactStatCard
+              className="min-w-[120px]"
+              title="定时报表"
+              value={stats.scheduledReports}
+              icon={Clock}
+              iconClassName="text-purple-600 dark:text-purple-400"
+              valueClassName="text-purple-600 dark:text-purple-400"
+            />
+            <CompactStatCard
+              className="min-w-[120px]"
+              title="热门格式"
+              value={stats.mostUsedFormat.toUpperCase()}
+              icon={FileType}
+              iconClassName="text-orange-600 dark:text-orange-400"
+              valueClassName="text-orange-600 dark:text-orange-400"
+            />
           </div>
         )}
 

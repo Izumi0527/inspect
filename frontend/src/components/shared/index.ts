@@ -3,3 +3,4 @@
  */
 
 export { StatCard } from './StatCard'
+export { CompactStatCard } from './CompactStatCard'

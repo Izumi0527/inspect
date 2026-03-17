@@ -1,5 +1,13 @@
 import React, { useMemo } from 'react'
-import { Card, CardContent } from '@/components/atoms'
+import {
+  Activity,
+  CheckCircle,
+  ListChecks,
+  Star,
+  XCircle,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { CompactStatCard } from '@/components/shared'
 import type { InspectionExecution } from '../types'
 
 /**
@@ -24,6 +32,14 @@ interface StatItem {
 }
 
 export const ExecutionStatsCards: React.FC<Props> = React.memo(({ executions }) => {
+  const cardMeta: Record<string, { icon: LucideIcon; className: string }> = {
+    总执行数: { icon: ListChecks, className: 'text-blue-600 dark:text-blue-400' },
+    执行中: { icon: Activity, className: 'text-blue-600 dark:text-blue-400' },
+    已完成: { icon: CheckCircle, className: 'text-green-600 dark:text-green-400' },
+    失败: { icon: XCircle, className: 'text-red-600 dark:text-red-400' },
+    平均评分: { icon: Star, className: 'text-purple-600 dark:text-purple-400' },
+  }
+
   // 使用 useMemo 缓存统计计算,只在 executions 变化时重新计算
   const stats: StatItem[] = useMemo(() => {
     // 单次遍历计算所有统计数据,避免多次过滤
@@ -76,14 +92,14 @@ export const ExecutionStatsCards: React.FC<Props> = React.memo(({ executions }) 
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
       {stats.map((item) => (
-        <Card key={item.label}>
-          <CardContent className="p-4 text-center">
-            <div className={`text-2xl font-bold ${item.colorClass}`}>
-              {item.count}
-            </div>
-            <div className="text-sm text-muted-foreground">{item.label}</div>
-          </CardContent>
-        </Card>
+        <CompactStatCard
+          key={item.label}
+          title={item.label}
+          value={item.count}
+          icon={cardMeta[item.label]?.icon ?? ListChecks}
+          iconClassName={cardMeta[item.label]?.className ?? 'text-blue-600 dark:text-blue-400'}
+          valueClassName={cardMeta[item.label]?.className ?? 'text-blue-600 dark:text-blue-400'}
+        />
       ))}
     </div>
   )

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { CompactStatCard } from '@/components/shared'
 import {
   Users,
   UserPlus,
@@ -250,42 +251,33 @@ export function UserManagement() {
       {/* 统计卡片 */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">总用户数</p>
-                <p className="text-2xl font-bold text-foreground">{stats.totalUsers}</p>
-              </div>
-              <Users className="w-8 h-8 text-blue-600" />
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">正常用户</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.activeUsers}</p>
-              </div>
-              <CheckCircle className="w-8 h-8 text-green-600" />
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">停用用户</p>
-                <p className="text-2xl font-bold text-muted-foreground">{stats.inactiveUsers}</p>
-              </div>
-              <XCircle className="w-8 h-8 text-muted-foreground" />
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">锁定用户</p>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.lockedUsers}</p>
-              </div>
-              <Lock className="w-8 h-8 text-red-600" />
-            </div>
-          </Card>
+          <CompactStatCard
+            title="总用户数"
+            value={stats.totalUsers}
+            icon={Users}
+            iconClassName="text-blue-600 dark:text-blue-400"
+          />
+          <CompactStatCard
+            title="正常用户"
+            value={stats.activeUsers}
+            icon={CheckCircle}
+            iconClassName="text-green-600 dark:text-green-400"
+            valueClassName="text-green-600 dark:text-green-400"
+          />
+          <CompactStatCard
+            title="停用用户"
+            value={stats.inactiveUsers}
+            icon={XCircle}
+            iconClassName="text-muted-foreground"
+            valueClassName="text-muted-foreground"
+          />
+          <CompactStatCard
+            title="锁定用户"
+            value={stats.lockedUsers}
+            icon={Lock}
+            iconClassName="text-red-600 dark:text-red-400"
+            valueClassName="text-red-600 dark:text-red-400"
+          />
         </div>
       )}
 

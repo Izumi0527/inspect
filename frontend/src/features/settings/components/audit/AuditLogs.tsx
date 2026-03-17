@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { FileText, Download, CheckCircle, XCircle } from 'lucide-react'
+import { CompactStatCard } from '@/components/shared'
 import { toast } from 'react-hot-toast'
 import type { AuditAction } from '../../types/audit.types'
 
@@ -82,37 +83,26 @@ export function AuditLogs() {
       {/* 统计卡片 */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">总日志数</p>
-                <p className="text-2xl font-bold text-foreground">{stats.totalLogs.toLocaleString()}</p>
-              </div>
-              <FileText className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">今日日志</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {stats.todayLogs.toLocaleString()}
-                </p>
-              </div>
-              <FileText className="w-8 h-8 text-green-600 dark:text-green-400" />
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">成功率</p>
-                <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                  {(stats.successRate * 100).toFixed(1)}%
-                </p>
-              </div>
-              <CheckCircle className="w-8 h-8 text-purple-600 dark:text-purple-400" />
-            </div>
-          </Card>
+          <CompactStatCard
+            title="总日志数"
+            value={stats.totalLogs.toLocaleString()}
+            icon={FileText}
+            iconClassName="text-blue-600 dark:text-blue-400"
+          />
+          <CompactStatCard
+            title="今日日志"
+            value={stats.todayLogs.toLocaleString()}
+            icon={FileText}
+            iconClassName="text-green-600 dark:text-green-400"
+            valueClassName="text-green-600 dark:text-green-400"
+          />
+          <CompactStatCard
+            title="成功率"
+            value={`${(stats.successRate * 100).toFixed(1)}%`}
+            icon={CheckCircle}
+            iconClassName="text-purple-600 dark:text-purple-400"
+            valueClassName="text-purple-600 dark:text-purple-400"
+          />
         </div>
       )}
 

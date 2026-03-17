@@ -1,9 +1,14 @@
 import * as React from 'react'
 import { motion } from 'framer-motion'
 import {
+  Activity,
   AlertTriangle,
+  Cpu,
+  Download,
+  Network,
   RefreshCw,
-  Download
+  Server,
+  Shield,
 } from 'lucide-react'
 import {
   Card,
@@ -17,12 +22,12 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  MetricCard,
   LineChartComponent,
   AreaChartComponent,
   PieChartComponent,
   CircularProgress
 } from '@/components/atoms'
+import { CompactStatCard } from '@/components/shared'
 
 // 生成模拟监控数据
 const generateTimeSeriesData = (points: number = 24) => {
@@ -187,58 +192,61 @@ export const MonitoringDashboard: React.FC = () => {
 
       {/* 关键指标卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-        <MetricCard
+        <CompactStatCard
           title="总设备数"
           value={overallMetrics.totalDevices}
-          color="blue"
+          icon={Server}
+          iconClassName="text-blue-600 dark:text-blue-400"
           className="lg:col-span-1"
         />
         
-        <MetricCard
+        <CompactStatCard
           title="在线设备"
           value={overallMetrics.onlineDevices}
-          color="green"
+          change="99.2%"
           trend="stable"
-          trendValue="99.2%"
+          icon={Activity}
+          iconClassName="text-green-600 dark:text-green-400"
           className="lg:col-span-1"
         />
         
-        <MetricCard
+        <CompactStatCard
           title="告警设备"
           value={overallMetrics.alertDevices}
-          color="yellow"
+          change="-2"
           trend="down"
-          trendValue="-2"
+          icon={AlertTriangle}
+          iconClassName="text-yellow-600 dark:text-yellow-400"
           className="lg:col-span-1"
         />
         
-        <MetricCard
+        <CompactStatCard
           title="可用性"
-          value={overallMetrics.availabilityRate.toFixed(1)}
-          unit="%"
-          color="purple"
+          value={`${overallMetrics.availabilityRate.toFixed(1)}%`}
+          change="+0.3%"
           trend="up"
-          trendValue="+0.3%"
+          icon={Shield}
+          iconClassName="text-purple-600 dark:text-purple-400"
           className="lg:col-span-1"
         />
         
-        <MetricCard
+        <CompactStatCard
           title="平均CPU"
-          value={overallMetrics.avgCpu.toFixed(0)}
-          unit="%"
-          color="red"
+          value={`${overallMetrics.avgCpu.toFixed(0)}%`}
+          change="+5%"
           trend="up"
-          trendValue="+5%"
+          icon={Cpu}
+          iconClassName="text-red-600 dark:text-red-400"
           className="lg:col-span-1"
         />
         
-        <MetricCard
+        <CompactStatCard
           title="总流量"
-          value={(overallMetrics.totalTraffic / 1000).toFixed(1)}
-          unit="GB"
-          color="green"
+          value={`${(overallMetrics.totalTraffic / 1000).toFixed(1)} GB`}
+          change="+12%"
           trend="up"
-          trendValue="+12%"
+          icon={Network}
+          iconClassName="text-green-600 dark:text-green-400"
           className="lg:col-span-1"
         />
       </div>

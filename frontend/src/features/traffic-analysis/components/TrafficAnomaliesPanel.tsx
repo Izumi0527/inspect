@@ -22,6 +22,7 @@ import {
   Loading,
   Input
 } from '@/components/atoms'
+import { CompactStatCard } from '@/components/shared'
 import { useTrafficAnalysis } from '../hooks/useTrafficAnalysis'
 import { TrafficAnomaly, TrafficFilter } from '../types'
 import { formatDate, formatBytes } from '@/utils/formatters'
@@ -180,42 +181,48 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
 
   const renderStatsCards = () => (
     <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
-      <Card>
-        <CardContent className="p-4 text-center">
-          <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
-          <div className="text-xs text-muted-foreground">总异常</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-4 text-center">
-          <div className="text-2xl font-bold text-red-600">{stats.critical}</div>
-          <div className="text-xs text-muted-foreground">严重</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-4 text-center">
-          <div className="text-2xl font-bold text-orange-600">{stats.high}</div>
-          <div className="text-xs text-muted-foreground">高</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-4 text-center">
-          <div className="text-2xl font-bold text-yellow-600">{stats.medium}</div>
-          <div className="text-xs text-muted-foreground">中</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-4 text-center">
-          <div className="text-2xl font-bold text-muted-foreground">{stats.low}</div>
-          <div className="text-xs text-muted-foreground">低</div>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-4 text-center">
-          <div className="text-2xl font-bold text-green-600">{stats.recent}</div>
-          <div className="text-xs text-muted-foreground">近1小时</div>
-        </CardContent>
-      </Card>
+      <CompactStatCard
+        title="总异常"
+        value={stats.total}
+        icon={AlertTriangle}
+        iconClassName="text-blue-600 dark:text-blue-400"
+        valueClassName="text-blue-600 dark:text-blue-400"
+      />
+      <CompactStatCard
+        title="严重"
+        value={stats.critical}
+        icon={Zap}
+        iconClassName="text-red-600 dark:text-red-400"
+        valueClassName="text-red-600 dark:text-red-400"
+      />
+      <CompactStatCard
+        title="高"
+        value={stats.high}
+        icon={TrendingUp}
+        iconClassName="text-orange-600 dark:text-orange-400"
+        valueClassName="text-orange-600 dark:text-orange-400"
+      />
+      <CompactStatCard
+        title="中"
+        value={stats.medium}
+        icon={AlertCircle}
+        iconClassName="text-yellow-600 dark:text-yellow-400"
+        valueClassName="text-yellow-600 dark:text-yellow-400"
+      />
+      <CompactStatCard
+        title="低"
+        value={stats.low}
+        icon={TrendingDown}
+        iconClassName="text-muted-foreground"
+        valueClassName="text-muted-foreground"
+      />
+      <CompactStatCard
+        title="近1小时"
+        value={stats.recent}
+        icon={Clock}
+        iconClassName="text-green-600 dark:text-green-400"
+        valueClassName="text-green-600 dark:text-green-400"
+      />
     </div>
   )
 

@@ -17,6 +17,7 @@ import {
   LineChartComponent,
   AreaChartComponent
 } from '@/components/atoms'
+import { CompactStatCard } from '@/components/shared'
 import { useTrafficAnalysis } from '../hooks/useTrafficAnalysis'
 import { TrafficTrend } from '../types'
 import { formatBytes } from '@/utils/formatters'
@@ -135,81 +136,53 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
   const renderStatisticsCards = () => {
     if (!statistics) return null
 
+    const maxValueClassName =
+      statistics.maxUtilization > 90
+        ? 'text-red-600 dark:text-red-400'
+        : statistics.maxUtilization > 80
+          ? 'text-yellow-600 dark:text-yellow-400'
+          : 'text-green-600 dark:text-green-400'
+
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">当前入向流量</p>
-                  <p className="text-lg font-bold text-blue-600">
-                    {formatBytes(statistics.totalCurrentIn)}
-                  </p>
-                </div>
-                <div className="p-2 bg-blue-100 rounded">
-                  <TrendingUp className="h-4 w-4 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <CompactStatCard
+            title="当前入向流量"
+            value={formatBytes(statistics.totalCurrentIn)}
+            icon={TrendingUp}
+            iconClassName="text-blue-600 dark:text-blue-400"
+            valueClassName="text-blue-600 dark:text-blue-400"
+          />
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">当前出向流量</p>
-                  <p className="text-lg font-bold text-green-600">
-                    {formatBytes(statistics.totalCurrentOut)}
-                  </p>
-                </div>
-                <div className="p-2 bg-green-100 rounded">
-                  <TrendingDown className="h-4 w-4 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <CompactStatCard
+            title="当前出向流量"
+            value={formatBytes(statistics.totalCurrentOut)}
+            icon={TrendingDown}
+            iconClassName="text-green-600 dark:text-green-400"
+            valueClassName="text-green-600 dark:text-green-400"
+          />
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">平均利用率</p>
-                  <p className="text-lg font-bold text-orange-600">
-                    {statistics.avgUtilization.toFixed(1)}%
-                  </p>
-                </div>
-                <div className="p-2 bg-orange-100 rounded">
-                  <BarChart3 className="h-4 w-4 text-orange-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <CompactStatCard
+            title="平均利用率"
+            value={`${statistics.avgUtilization.toFixed(1)}%`}
+            icon={BarChart3}
+            iconClassName="text-orange-600 dark:text-orange-400"
+            valueClassName="text-orange-600 dark:text-orange-400"
+          />
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">峰值利用率</p>
-                  <p className={`text-lg font-bold ${
-                    statistics.maxUtilization > 90 ? 'text-red-600' :
-                    statistics.maxUtilization > 80 ? 'text-yellow-600' : 'text-green-600'
-                  }`}>
-                    {statistics.maxUtilization.toFixed(1)}%
-                  </p>
-                </div>
-                <div className="p-2 bg-purple-100 rounded">
-                  <Zap className="h-4 w-4 text-purple-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <CompactStatCard
+            title="峰值利用率"
+            value={`${statistics.maxUtilization.toFixed(1)}%`}
+            icon={Zap}
+            iconClassName="text-purple-600 dark:text-purple-400"
+            valueClassName={maxValueClassName}
+          />
         </motion.div>
       </div>
     )

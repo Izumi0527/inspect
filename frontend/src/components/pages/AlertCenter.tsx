@@ -35,6 +35,7 @@ import {
   ModalFooter,
   TextArea
 } from '@/components/atoms'
+import { CompactStatCard } from '@/components/shared'
 
 // 告警严重级别
 type AlertSeverity = 'info' | 'warning' | 'critical' | 'fatal'
@@ -450,75 +451,44 @@ export const AlertCenter: React.FC = () => {
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-blue-100">
-                <Bell className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">总告警数</p>
-                <p className="text-2xl font-bold text-foreground">{statistics.total}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <CompactStatCard
+          title="总告警数"
+          value={statistics.total}
+          icon={Bell}
+          iconClassName="text-blue-600 dark:text-blue-400"
+        />
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-red-100">
-                <AlertTriangle className="h-6 w-6 text-red-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">活跃告警</p>
-                <p className="text-2xl font-bold text-red-600">{statistics.active}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <CompactStatCard
+          title="活跃告警"
+          value={statistics.active}
+          icon={AlertTriangle}
+          iconClassName="text-red-600 dark:text-red-400"
+          valueClassName="text-red-600 dark:text-red-400"
+        />
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-yellow-100">
-                <Eye className="h-6 w-6 text-yellow-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">已确认</p>
-                <p className="text-2xl font-bold text-yellow-600">{statistics.acknowledged}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <CompactStatCard
+          title="已确认"
+          value={statistics.acknowledged}
+          icon={Eye}
+          iconClassName="text-yellow-600 dark:text-yellow-400"
+          valueClassName="text-yellow-600 dark:text-yellow-400"
+        />
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-green-100">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">已解决</p>
-                <p className="text-2xl font-bold text-green-600">{statistics.resolved}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <CompactStatCard
+          title="已解决"
+          value={statistics.resolved}
+          icon={CheckCircle}
+          iconClassName="text-green-600 dark:text-green-400"
+          valueClassName="text-green-600 dark:text-green-400"
+        />
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <div className="p-2 rounded-lg bg-purple-100">
-                <X className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">严重告警</p>
-                <p className="text-2xl font-bold text-purple-600">{statistics.critical}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <CompactStatCard
+          title="严重告警"
+          value={statistics.critical}
+          icon={X}
+          iconClassName="text-purple-600 dark:text-purple-400"
+          valueClassName="text-purple-600 dark:text-purple-400"
+        />
       </div>
 
       {/* 告警列表 */}

@@ -17,6 +17,7 @@ import {
   Badge,
   Loading
 } from '@/components/atoms'
+import { CompactStatCard } from '@/components/shared'
 import { useTrafficAnalysis } from '../hooks/useTrafficAnalysis'
 import { TrafficSummary } from '../types'
 import { formatBytes, formatDate } from '@/utils/formatters'
@@ -80,19 +81,13 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">监控设备</p>
-                <p className="text-3xl font-bold text-blue-600">{summary.total_devices}</p>
-              </div>
-              <div className="p-3 bg-blue-100 rounded-full">
-                <Server className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <CompactStatCard
+          title="监控设备"
+          value={summary.total_devices}
+          icon={Server}
+          iconClassName="text-blue-600 dark:text-blue-400"
+          valueClassName="text-blue-600 dark:text-blue-400"
+        />
       </motion.div>
 
       <motion.div
@@ -100,19 +95,13 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">网络接口</p>
-                <p className="text-3xl font-bold text-green-600">{summary.total_interfaces}</p>
-              </div>
-              <div className="p-3 bg-green-100 rounded-full">
-                <Network className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <CompactStatCard
+          title="网络接口"
+          value={summary.total_interfaces}
+          icon={Network}
+          iconClassName="text-green-600 dark:text-green-400"
+          valueClassName="text-green-600 dark:text-green-400"
+        />
       </motion.div>
 
       <motion.div
@@ -120,19 +109,13 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
       >
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">活跃异常</p>
-                <p className="text-3xl font-bold text-orange-600">{summary.active_anomalies}</p>
-              </div>
-              <div className="p-3 bg-orange-100 rounded-full">
-                <AlertTriangle className="h-6 w-6 text-orange-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <CompactStatCard
+          title="活跃异常"
+          value={summary.active_anomalies}
+          icon={AlertTriangle}
+          iconClassName="text-orange-600 dark:text-orange-400"
+          valueClassName="text-orange-600 dark:text-orange-400"
+        />
       </motion.div>
 
       <motion.div
@@ -140,19 +123,13 @@ export const TrafficSummaryCards: React.FC<TrafficSummaryCardsProps> = ({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
       >
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">基线模式</p>
-                <p className="text-3xl font-bold text-purple-600">{summary.baseline_patterns}</p>
-              </div>
-              <div className="p-3 bg-purple-100 rounded-full">
-                <BarChart3 className="h-6 w-6 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <CompactStatCard
+          title="基线模式"
+          value={summary.baseline_patterns}
+          icon={BarChart3}
+          iconClassName="text-purple-600 dark:text-purple-400"
+          valueClassName="text-purple-600 dark:text-purple-400"
+        />
       </motion.div>
     </div>
   )

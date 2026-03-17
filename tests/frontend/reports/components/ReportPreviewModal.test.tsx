@@ -14,6 +14,7 @@ jest.mock('react-hot-toast', () => ({
 }))
 
 jest.mock('@/lib/api-client', () => ({
+  getApiOrigin: () => 'http://127.0.0.1:38000',
   TokenManager: {
     getAccessToken: () => mockGetAccessToken(),
   },
@@ -34,6 +35,9 @@ jest.mock('@/components/atoms', () => ({
       {children}
     </button>
   ),
+  Modal: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ModalContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  ModalTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
 describe('ReportPreviewModal', () => {

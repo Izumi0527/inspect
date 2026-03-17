@@ -3,7 +3,7 @@
  */
 import React from 'react'
 import { FileText, AlertTriangle, AlertCircle, Activity } from 'lucide-react'
-import { StatCard } from '@/components/shared'
+import { CompactStatCard } from '@/components/shared'
 import type { LogStatistics } from '../types'
 
 interface LogStatsGridProps {
@@ -20,32 +20,34 @@ export const LogStatsGrid: React.FC<LogStatsGridProps> = ({ stats }) => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <StatCard
+      <CompactStatCard
         title="总日志数"
         value={stats.total_logs.toLocaleString()}
         icon={FileText}
-        trend="stable"
+        iconClassName="text-blue-600 dark:text-blue-400"
       />
       
-      <StatCard
+      <CompactStatCard
         title="错误日志"
         value={errorCount.toLocaleString()}
         icon={AlertCircle}
-        trend={errorCount > 0 ? 'up' : 'stable'}
+        iconClassName="text-red-600 dark:text-red-400"
+        valueClassName="text-red-600 dark:text-red-400"
       />
       
-      <StatCard
+      <CompactStatCard
         title="警告日志"
         value={warningCount.toLocaleString()}
         icon={AlertTriangle}
-        trend={warningCount > 10 ? 'up' : 'stable'}
+        iconClassName="text-yellow-600 dark:text-yellow-400"
+        valueClassName="text-yellow-600 dark:text-yellow-400"
       />
       
-      <StatCard
+      <CompactStatCard
         title="涉及设备"
         value={deviceCount.toLocaleString()}
         icon={Activity}
-        trend="stable"
+        iconClassName="text-purple-600 dark:text-purple-400"
       />
     </div>
   )

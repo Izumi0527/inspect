@@ -6,7 +6,7 @@ import {
   Server,
   Shield
 } from 'lucide-react'
-import { StatCard } from '@/components/shared'
+import { CompactStatCard } from '@/components/shared'
 import { DashboardStat } from '../types'
 import { Card, CardContent } from '@/components/atoms'
 import { formatBandwidth } from '@/utils/formatters'
@@ -65,14 +65,13 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[...Array(4)].map((_, index) => (
           <Card key={index} className="animate-pulse">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20 mb-2"></div>
-                  <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-16 mb-1"></div>
-                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
+            <CardContent className="p-2.5">
+              <div className="flex items-center">
+                <div className="p-1 rounded-md bg-gray-200 dark:bg-gray-700 h-7 w-7" />
+                <div className="ml-2.5 flex-1 min-w-0">
+                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16 mb-2"></div>
+                  <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
                 </div>
-                <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
               </div>
             </CardContent>
           </Card>
@@ -93,15 +92,14 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) 
         const formattedValue = formatStatValue(stat.value, stat.unit)
 
         return (
-          <StatCard
+          <CompactStatCard
             key={index}
-            index={index}
             title={stat.title}
             value={formattedValue}
             change={stat.change}
             trend={getTrend(stat.change)}
             icon={IconComponent}
-            iconColor={stat.iconColor}
+            iconClassName={stat.iconColor}
           />
         )
       })}
