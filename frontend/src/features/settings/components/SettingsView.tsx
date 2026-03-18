@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   Settings,
   Users,
@@ -24,6 +24,7 @@ import { BackupManagement } from './backup/BackupManagement'
 import { NotificationSettings } from './notifications/NotificationSettings'
 import { MonitoringDashboard } from './monitoring/MonitoringDashboard'
 import { LogsSettings } from './logs/LogsSettings'
+import { EmptyState } from './shared/EmptyState'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 
@@ -48,6 +49,8 @@ interface TabConfig {
 }
 
 export const SettingsView: React.FC = () => {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
 
   // 标签页可见性（按最小权限控制，避免用户进入后再看到 403）
@@ -60,40 +63,6 @@ export const SettingsView: React.FC = () => {
     const value = searchParams?.get('tab')
     return value ? value.trim() : ''
   }, [searchParams])
-
-  const [activeTab, setActiveTab] = useState<TabType>(() => {
-    const initial = tabParam as TabType
-    const allowed: TabType[] = [
-      'general',
-      'logs',
-      'users',
-      'roles',
-      'security',
-      'audit',
-      'backup',
-      'notifications',
-      'monitoring',
-    ]
-    return allowed.includes(initial) ? initial : 'general'
-  })
-
-  useEffect(() => {
-    const next = tabParam as TabType
-    const allowed: TabType[] = [
-      'general',
-      'logs',
-      'users',
-      'roles',
-      'security',
-      'audit',
-      'backup',
-      'notifications',
-      'monitoring',
-    ]
-    if (allowed.includes(next) && next !== activeTab) {
-      setActiveTab(next)
-    }
-  }, [tabParam, activeTab])
 
   const tabs: TabConfig[] = useMemo(() => {
     const all: Array<TabConfig & { visible: boolean }> = [
@@ -165,14 +134,42 @@ export const SettingsView: React.FC = () => {
     return all.filter((t) => t.visible).map(({ visible: _visible, ...rest }) => rest)
   }, [canConfigSystem, canReadUsers, canReadAudit, canReadMonitoring])
 
-  // 如果当前标签页不可见（无权限），自动切回第一个可见标签页
+  const allTabKeys: TabType[] = useMemo(
+    () => [
+      'general',
+      'logs',
+      'users',
+      'roles',
+      'security',
+      'audit',
+      'backup',
+      'notifications',
+      'monitoring',
+    ],
+    []
+  )
+
+  const requestedTab: TabType | null = useMemo(() => {
+    if (!tabParam) return null
+    return allTabKeys.includes(tabParam as TabType) ? (tabParam as TabType) : null
+  }, [allTabKeys, tabParam])
+
+  const activeTab: TabType | null = useMemo(() => {
+    if (!tabs.length) return null
+    const visible = new Set(tabs.map((t) => t.key))
+    if (requestedTab && visible.has(requestedTab)) return requestedTab
+    return tabs[0].key
+  }, [requestedTab, tabs])
+
+  // 修正 URL：避免用户手动输入不可见 tab 导致“短暂渲染 + 无意义请求”
   useEffect(() => {
-    if (!tabs.length) return
-    const allowed = new Set(tabs.map((t) => t.key))
-    if (!allowed.has(activeTab)) {
-      setActiveTab(tabs[0].key)
-    }
-  }, [tabs, activeTab])
+    if (!activeTab) return
+    if (requestedTab === activeTab) return
+
+    const params = new URLSearchParams(searchParams?.toString())
+    params.set('tab', activeTab)
+    router.replace(`${pathname}?${params.toString()}`)
+  }, [activeTab, pathname, requestedTab, router, searchParams])
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -201,7 +198,22 @@ export const SettingsView: React.FC = () => {
 
   // 需要填充高度的标签页
   const fillHeightTabs: TabType[] = ['users', 'roles', 'audit']
-  const shouldFillHeight = fillHeightTabs.includes(activeTab)
+  const shouldFillHeight = activeTab ? fillHeightTabs.includes(activeTab) : false
+
+  if (!tabs.length) {
+    return (
+      <AppLayout title="系统设置">
+        <div className="p-4">
+          <div className="bg-card rounded-xl border border-border">
+            <EmptyState
+              title="暂无可访问的设置模块"
+              description="当前账号缺少系统设置相关权限，请联系管理员授权后再访问。"
+            />
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
 
   return (
     <AppLayout title="系统设置">
@@ -218,7 +230,11 @@ export const SettingsView: React.FC = () => {
                 return (
                   <motion.button
                     key={tab.key}
-                    onClick={() => setActiveTab(tab.key)}
+                    onClick={() => {
+                      const params = new URLSearchParams(searchParams?.toString())
+                      params.set('tab', tab.key)
+                      router.replace(`${pathname}?${params.toString()}`)
+                    }}
                     className={`
                       relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium
                       transition-all duration-200
@@ -246,7 +262,7 @@ export const SettingsView: React.FC = () => {
 
           {/* 标签内容 */}
           <motion.div
-            key={activeTab}
+            key={activeTab || 'empty'}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}

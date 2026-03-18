@@ -1,4 +1,5 @@
 import { httpClient } from '@/lib/api-client'
+import { requireBulkSuccess, type BulkUpdateResponse } from './bulk'
 
 export type SyslogProtocol = 'udp' | 'tcp' | 'both'
 
@@ -27,7 +28,9 @@ type BackendSettingItem = {
 function toNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string') {
-    const parsed = Number(value)
+    const trimmed = value.trim()
+    if (!trimmed) return fallback
+    const parsed = Number(trimmed)
     if (Number.isFinite(parsed)) return parsed
   }
   return fallback
@@ -135,7 +138,7 @@ export const logsSettingsApi = {
   },
 
   async saveLogsSettings(data: LogsSettings): Promise<void> {
-    await httpClient.post('/settings/general/bulk', {
+    const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', {
       settings: {
         'logs.retention_days': data.retentionDays,
         'logs.auto_cleanup_enabled': data.autoCleanupEnabled,
@@ -148,6 +151,8 @@ export const logsSettingsApi = {
         'logs.syslog.alerts.max_new_per_minute': data.syslog.alertsMaxNewPerMinute,
       },
     })
+
+    requireBulkSuccess(resp, { action: '保存日志设置配置' })
   },
 
   async getSyslogStatus(): Promise<SyslogStatus> {

@@ -21,6 +21,7 @@ export function useAuditLogs() {
     data: logsData,
     isLoading,
     error,
+    refetch,
   } = useQuery<AuditLogListResponse>({
     queryKey: ['auditLogs', queryParams],
     queryFn: () => auditApi.getAuditLogs(queryParams),
@@ -56,6 +57,7 @@ export function useAuditLogs() {
     // 状态
     isLoading,
     error,
+    refetch,
 
     // 方法
     updateQueryParams,

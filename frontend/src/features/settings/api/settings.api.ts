@@ -18,6 +18,15 @@ import {
 } from '../types'
 import { API_PREFIX, getApiOrigin, httpClient } from '@/lib/api-client'
 
+/**
+ * 历史聚合版 Settings API（已弃用）。
+ * - 新代码请优先使用 `frontend/src/features/settings/api/*.api.ts` 下的拆分 API。
+ * - 本文件中后端未实现的能力会显式抛错，避免误用造成“假成功”。
+ */
+function notSupported(feature: string): never {
+  throw new Error(`后端暂不支持此功能：${feature}`)
+}
+
 type ConfigValue = string | number | boolean | Record<string, unknown> | Array<unknown> | null
 
 type AuditLogExportFilters = Record<string, string | number | boolean | Array<string | number>>
@@ -223,11 +232,10 @@ export const backupApi = {
     httpClient.get<{ total: number; size: string }>('/settings/backup/stats'),
 
   // 获取备份详情 - 后端暂不支持
-  getBackup: (_id: string) =>
-    Promise.resolve(null as Backup | null),
+  getBackup: async (_id: string): Promise<Backup | null> => notSupported('获取备份详情'),
 
   // 创建备份 - 后端暂不支持
-  createBackup: (data: {
+  createBackup: async (_data: {
     name: string
     description?: string
     type: 'full' | 'incremental' | 'differential'
@@ -235,40 +243,26 @@ export const backupApi = {
       type: 'database' | 'config' | 'logs' | 'files'
       name: string
     }>
-  }) =>
-    Promise.resolve({
-      id: Date.now().toString(),
-      name: data.name,
-      description: data.description,
-      type: data.type,
-      status: 'creating',
-      size: 0,
-      filePath: '',
-      checksum: '',
-      includes: data.includes.map(i => ({ ...i, size: 0 })),
-      createdAt: new Date().toISOString(),
-      createdBy: 'system',
-    } as Backup),
+  }): Promise<Backup> => notSupported('创建备份'),
 
   // 删除备份 - 后端暂不支持
-  deleteBackup: (_id: string) =>
-    Promise.resolve(),
+  deleteBackup: async (_id: string): Promise<void> => notSupported('删除备份'),
 
   // 下载备份 - 后端暂不支持
   downloadBackup: async (_id: string): Promise<Blob> => {
-    return new Blob(['后端暂不支持此功能'], { type: 'text/plain' })
+    notSupported('下载备份')
   },
 
   // 恢复备份 - 后端暂不支持
-  restoreBackup: (_id: string, _options?: {
+  restoreBackup: async (_id: string, _options?: {
     overwrite?: boolean
     validateOnly?: boolean
-  }) =>
-    Promise.resolve({ success: false, message: '后端暂不支持此功能' }),
+  }): Promise<{ success: boolean; message: string }> => notSupported('恢复备份'),
 
   // 验证备份 - 后端暂不支持
-  validateBackup: (_id: string) =>
-    Promise.resolve({ valid: false, issues: ['后端暂不支持此功能'] }),
+  validateBackup: async (
+    _id: string
+  ): Promise<{ valid: boolean; issues: string[] }> => notSupported('验证备份'),
 }
 
 // 系统监控API
@@ -300,12 +294,13 @@ export const systemMonitoringApi = {
     httpClient.get<SystemInfo>('/settings/general/info'),
 
   // 重启系统服务 - 后端暂不支持此功能
-  restartService: (_serviceName: string) =>
-    Promise.resolve({ success: false, message: '后端暂不支持此功能' }),
+  restartService: async (_serviceName: string): Promise<{ success: boolean; message: string }> =>
+    notSupported('重启系统服务'),
 
   // 清理系统缓存 - 后端暂不支持此功能
-  clearCache: (_type?: 'all' | 'session' | 'data' | 'reports') =>
-    Promise.resolve({ success: false, message: '后端暂不支持此功能' }),
+  clearCache: async (
+    _type?: 'all' | 'session' | 'data' | 'reports'
+  ): Promise<{ success: boolean; message: string }> => notSupported('清理系统缓存'),
 }
 
 // 通知配置API
@@ -320,20 +315,20 @@ export const notificationApi = {
     httpClient.get<{ total: number }>('/settings/notifications/stats'),
 
   // 获取通知配置详情 - 后端暂不支持
-  getConfig: (_id: string) =>
-    Promise.resolve(null as NotificationConfig | null),
+  getConfig: async (_id: string): Promise<NotificationConfig | null> => notSupported('获取通知配置详情'),
 
   // 创建通知配置 - 后端暂不支持
-  createConfig: (data: Omit<NotificationConfig, 'id'>) =>
-    Promise.resolve({ id: '', ...data } as NotificationConfig),
+  createConfig: async (_data: Omit<NotificationConfig, 'id'>): Promise<NotificationConfig> =>
+    notSupported('创建通知配置'),
 
   // 更新通知配置 - 后端暂不支持
-  updateConfig: (_id: string, data: Partial<NotificationConfig>) =>
-    Promise.resolve(data as NotificationConfig),
+  updateConfig: async (
+    _id: string,
+    _data: Partial<NotificationConfig>
+  ): Promise<NotificationConfig> => notSupported('更新通知配置'),
 
   // 删除通知配置 - 后端暂不支持
-  deleteConfig: (_id: string) =>
-    Promise.resolve(),
+  deleteConfig: async (_id: string): Promise<void> => notSupported('删除通知配置'),
 
   // 测试邮件通知 - 后端实际路由: POST /settings/notifications/test-email
   testEmail: (recipient?: string) =>
@@ -368,8 +363,8 @@ export const securityApi = {
     httpClient.get<unknown[]>('/settings/security/sessions'),
 
   // 更新安全设置 - 后端暂不支持 PUT
-  updateSecuritySettings: (data: Partial<SecurityConfig>) =>
-    Promise.resolve(data as SecurityConfig),
+  updateSecuritySettings: async (_data: Partial<SecurityConfig>): Promise<SecurityConfig> =>
+    notSupported('更新安全设置'),
 }
 
 // 许可证API

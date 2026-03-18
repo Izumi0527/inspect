@@ -24,13 +24,19 @@ func (s *Service) GetBackupConfig(ctx context.Context) (BackupConfig, error) {
 		RetentionDays:     s.getSettingInt(ctx, "backup.retention_days", 30),
 		BackupPath:        s.getSettingString(ctx, "backup.path", filepath.ToSlash(filepath.Clean("data/backups"))),
 		IncludeDatabase:   s.getSettingBool(ctx, "backup.include_database", true),
-		IncludeFiles:      s.getSettingBool(ctx, "backup.include_files", true),
+		// 当前版本未实现文件备份/恢复能力：对外强制回显为 false，避免误导。
+		IncludeFiles:      false,
 		CompressBackup:    s.getSettingBool(ctx, "backup.compress_backup", true),
 	}
 	return cfg, nil
 }
 
 func (s *Service) UpdateBackupConfig(ctx context.Context, cfg BackupConfig, updatedBy string) error {
+	// 当前版本未实现文件备份/恢复能力：禁止写入“假能力”配置，避免后续误用。
+	if cfg.IncludeFiles {
+		return NotImplementedError{Message: "暂不支持文件备份/恢复：当前版本仅支持系统配置(settings)与可选数据库快照"}
+	}
+
 	updates := map[string]interface{}{
 		"backup.auto_backup_enabled": cfg.AutoBackupEnabled,
 		"backup.frequency":           cfg.BackupFrequency,
@@ -38,7 +44,7 @@ func (s *Service) UpdateBackupConfig(ctx context.Context, cfg BackupConfig, upda
 		"backup.retention_days":      cfg.RetentionDays,
 		"backup.path":                cfg.BackupPath,
 		"backup.include_database":    cfg.IncludeDatabase,
-		"backup.include_files":       cfg.IncludeFiles,
+		"backup.include_files":       false,
 		"backup.compress_backup":     cfg.CompressBackup,
 	}
 
@@ -146,6 +152,9 @@ func (s *Service) CreateBackup(ctx context.Context, includeDatabase bool, includ
 	if !s.isReady() {
 		return BackupRecord{}, fmt.Errorf("database not initialized")
 	}
+	if includeFiles {
+		return BackupRecord{}, NotImplementedError{Message: "暂不支持文件备份：当前仅支持备份系统配置(settings)与可选数据库快照"}
+	}
 
 	cfg, _ := s.GetBackupConfig(ctx)
 	backupDir := cfg.BackupPath
@@ -222,13 +231,30 @@ func (s *Service) CreateBackup(ctx context.Context, includeDatabase bool, includ
 	return buildBackupRecord(record), nil
 }
 
-func (s *Service) RestoreBackup(ctx context.Context, backupID string, restoreDatabase bool, restoreFiles bool) error {
+func (s *Service) RestoreBackup(ctx context.Context, backupID string, restoreDatabase bool, restoreFiles bool, updatedBy string) error {
 	if !s.isReady() {
 		return fmt.Errorf("database not initialized")
 	}
 
+	idText := strings.TrimSpace(backupID)
+	if idText == "" {
+		return gorm.ErrRecordNotFound
+	}
+	parsedID, err := strconv.Atoi(idText)
+	if err != nil || parsedID <= 0 {
+		return gorm.ErrRecordNotFound
+	}
+
+	// 当前版本仅支持恢复系统配置(settings)。数据库/文件恢复属于高风险能力，未完成前禁止“静默忽略”。
+	if restoreDatabase {
+		return NotImplementedError{Message: "暂不支持恢复数据库：当前仅支持恢复系统配置(settings)"}
+	}
+	if restoreFiles {
+		return NotImplementedError{Message: "暂不支持恢复文件：当前仅支持恢复系统配置(settings)"}
+	}
+
 	var record SystemBackup
-	if err := s.db.WithContext(ctx).Where("id = ?", backupID).Take(&record).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id = ?", parsedID).Take(&record).Error; err != nil {
 		return err
 	}
 	if record.FilePath == nil || strings.TrimSpace(*record.FilePath) == "" {
@@ -241,12 +267,18 @@ func (s *Service) RestoreBackup(ctx context.Context, backupID string, restoreDat
 	}
 
 	settingsData, _ := payload["settings"].(map[string]interface{})
-	if settingsData != nil {
-		_, _ = s.ImportConfig(ctx, settingsData, true, "")
+	if settingsData == nil {
+		return fmt.Errorf("backup payload missing settings")
 	}
 
-	_ = restoreDatabase
-	_ = restoreFiles
+	resp, err := s.ImportConfig(ctx, settingsData, true, updatedBy)
+	if err != nil {
+		return err
+	}
+
+	if len(resp.FailedKeys) > 0 {
+		return fmt.Errorf("恢复系统配置失败：%d 个配置项导入失败", len(resp.FailedKeys))
+	}
 
 	return nil
 }

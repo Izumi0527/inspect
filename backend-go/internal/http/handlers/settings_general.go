@@ -35,7 +35,7 @@ func (h SettingsHandler) GetGeneralConfigs(c echo.Context) error {
 		return err
 	}
 
-	categories := []string{"system", "notification", "email", "inspection", "report"}
+	categories := []string{"system", "notification", "email", "inspection", "report", "user_preference"}
 	items := make([]settings.SettingItem, 0)
 	for _, category := range categories {
 		list, err := h.Service.ListSettings(c.Request().Context(), category)
@@ -56,7 +56,7 @@ func (h SettingsHandler) GetGeneralStats(c echo.Context) error {
 		return err
 	}
 
-	categories := []string{"system", "notification", "email", "inspection", "report"}
+	categories := []string{"system", "notification", "email", "inspection", "report", "user_preference"}
 	stats := map[string]interface{}{"total_count": 0, "by_category": map[string]int{}}
 	byCategory := stats["by_category"].(map[string]int)
 

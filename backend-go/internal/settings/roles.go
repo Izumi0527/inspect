@@ -119,8 +119,14 @@ func (s *Service) UpdateRole(ctx context.Context, roleID string, payload map[str
 	if displayName := readString(payload, "display_name", "displayName"); displayName != "" {
 		updates["display_name"] = displayName
 	}
-	if desc := readString(payload, "description"); desc != "" {
-		updates["description"] = desc
+	// 支持“清空描述”：只要 payload 显式包含 description 字段，就应更新（允许置 NULL）。
+	if _, exists := payload["description"]; exists {
+		desc := strings.TrimSpace(readString(payload, "description"))
+		if desc == "" {
+			updates["description"] = nil
+		} else {
+			updates["description"] = desc
+		}
 	}
 	if len(updates) == 0 {
 		return s.GetRole(ctx, id)

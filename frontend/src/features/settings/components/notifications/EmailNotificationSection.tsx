@@ -87,14 +87,18 @@ export function EmailNotificationSection({ data, onChange, onTest, isTesting = f
             description="SMTP服务器端口号（通常为587或465）"
             required
           >
-            <ConfigInput
-              type="number"
-              value={data.smtpPort}
-              onChange={(value) => onChange('smtpPort', parseInt(value, 10))}
-              min={1}
-              max={65535}
-              disabled={!data.enabled}
-            />
+          <ConfigInput
+            type="number"
+            value={data.smtpPort}
+            onChange={(value) => {
+              const parsed = Number.parseInt(value, 10)
+              if (!Number.isFinite(parsed)) return
+              onChange('smtpPort', parsed)
+            }}
+            min={1}
+            max={65535}
+            disabled={!data.enabled}
+          />
           </ConfigItem>
 
           <ConfigItem

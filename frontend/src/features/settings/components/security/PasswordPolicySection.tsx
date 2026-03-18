@@ -36,7 +36,11 @@ export function PasswordPolicySection({ data, onChange }: Props) {
           <ConfigInput
             type="number"
             value={data.minLength}
-            onChange={(value) => onChange('minLength', parseInt(value, 10))}
+            onChange={(value) => {
+              const parsed = Number.parseInt(value, 10)
+              if (!Number.isFinite(parsed)) return
+              onChange('minLength', parsed)
+            }}
             min={6}
             max={32}
           />
@@ -95,7 +99,11 @@ export function PasswordPolicySection({ data, onChange }: Props) {
             <ConfigInput
               type="number"
               value={data.passwordExpireDays}
-              onChange={(value) => onChange('passwordExpireDays', parseInt(value, 10))}
+              onChange={(value) => {
+                const parsed = Number.parseInt(value, 10)
+                if (!Number.isFinite(parsed)) return
+                onChange('passwordExpireDays', parsed)
+              }}
               min={0}
               max={365}
             />
@@ -109,7 +117,11 @@ export function PasswordPolicySection({ data, onChange }: Props) {
             <ConfigInput
               type="number"
               value={data.passwordHistoryCount}
-              onChange={(value) => onChange('passwordHistoryCount', parseInt(value, 10))}
+              onChange={(value) => {
+                const parsed = Number.parseInt(value, 10)
+                if (!Number.isFinite(parsed)) return
+                onChange('passwordHistoryCount', parsed)
+              }}
               min={0}
               max={20}
             />
@@ -137,7 +149,11 @@ export function PasswordPolicySection({ data, onChange }: Props) {
             <ConfigInput
               type="number"
               value={data.maxLoginAttempts}
-              onChange={(value) => onChange('maxLoginAttempts', parseInt(value, 10))}
+              onChange={(value) => {
+                const parsed = Number.parseInt(value, 10)
+                if (!Number.isFinite(parsed)) return
+                onChange('maxLoginAttempts', parsed)
+              }}
               min={3}
               max={10}
             />
@@ -151,7 +167,11 @@ export function PasswordPolicySection({ data, onChange }: Props) {
             <ConfigInput
               type="number"
               value={data.lockoutDuration}
-              onChange={(value) => onChange('lockoutDuration', parseInt(value, 10))}
+              onChange={(value) => {
+                const parsed = Number.parseInt(value, 10)
+                if (!Number.isFinite(parsed)) return
+                onChange('lockoutDuration', parsed)
+              }}
               min={5}
               max={1440}
             />

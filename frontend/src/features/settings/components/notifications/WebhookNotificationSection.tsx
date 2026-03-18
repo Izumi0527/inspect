@@ -155,14 +155,18 @@ export function WebhookNotificationSection({ data, onChange, onTest, isTesting =
             description="Webhook 调用失败后的自动重试次数 (0-10次)"
             required
           >
-            <ConfigInput
-              type="number"
-              value={data.retryCount}
-              onChange={(value) => onChange('retryCount', parseInt(value, 10))}
-              min={0}
-              max={10}
-              disabled={!data.enabled}
-            />
+          <ConfigInput
+            type="number"
+            value={data.retryCount}
+            onChange={(value) => {
+              const parsed = Number.parseInt(value, 10)
+              if (!Number.isFinite(parsed)) return
+              onChange('retryCount', parsed)
+            }}
+            min={0}
+            max={10}
+            disabled={!data.enabled}
+          />
           </ConfigItem>
 
           <ConfigItem
@@ -170,14 +174,18 @@ export function WebhookNotificationSection({ data, onChange, onTest, isTesting =
             description="Webhook 请求的超时时间 (5-300秒)"
             required
           >
-            <ConfigInput
-              type="number"
-              value={data.timeout}
-              onChange={(value) => onChange('timeout', parseInt(value, 10))}
-              min={5}
-              max={300}
-              disabled={!data.enabled}
-            />
+          <ConfigInput
+            type="number"
+            value={data.timeout}
+            onChange={(value) => {
+              const parsed = Number.parseInt(value, 10)
+              if (!Number.isFinite(parsed)) return
+              onChange('timeout', parsed)
+            }}
+            min={5}
+            max={300}
+            disabled={!data.enabled}
+          />
           </ConfigItem>
         </div>
 

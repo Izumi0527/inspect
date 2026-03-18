@@ -6,12 +6,38 @@ import type {
   UserPreferenceConfig,
   GeneralSettingsResponse,
 } from '../types/general.types'
+import { requireBulkSuccess, type BulkUpdateResponse } from './bulk'
 
 // 后端配置项的类型
 interface BackendSetting {
   key: string
-  value: any
+  value: unknown
   category: string
+}
+
+function toNumber(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return fallback
+    const parsed = Number(trimmed)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
+}
+
+function toString(value: unknown, fallback: string): string {
+  if (typeof value === 'string') return value
+  if (value === null || value === undefined) return fallback
+  return String(value)
+}
+
+function toEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  if (typeof value !== 'string') return fallback
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return fallback
+  const match = allowed.find((item) => item.toLowerCase() === normalized)
+  return match ?? fallback
 }
 
 export const generalApi = {
@@ -23,10 +49,10 @@ export const generalApi = {
   getGeneralSettings: async (): Promise<GeneralSettingsResponse> => {
     // 获取所有配置（使用新的统一端点）
     const response = await httpClient.get<{ items: BackendSetting[]; total: number }>('/settings/general')
-    const allSettings = response.items
+    const allSettings = response.items || []
 
     // 创建一个 key-value 映射
-    const settingsMap = new Map<string, any>()
+    const settingsMap = new Map<string, unknown>()
     allSettings.forEach((setting) => {
       settingsMap.set(setting.key, setting.value)
     })
@@ -34,24 +60,24 @@ export const generalApi = {
     // 转换为结构化数据
     return {
       basicInfo: {
-        applicationName: settingsMap.get('system.application_name') || '网络设备巡检系统',
-        version: settingsMap.get('system.version') || '1.0.0',
-        timezone: settingsMap.get('system.timezone') || 'Asia/Shanghai',
+        applicationName: toString(settingsMap.get('system.application_name'), '网络设备巡检系统'),
+        version: toString(settingsMap.get('system.version'), '1.0.0'),
+        timezone: toString(settingsMap.get('system.timezone'), 'Asia/Shanghai'),
       },
       inspectionConfig: {
-        maxConcurrentTasks: settingsMap.get('inspection.max_concurrent_tasks') || 10,
-        defaultTimeout: settingsMap.get('inspection.default_timeout') || 30,
-        retryAttempts: settingsMap.get('inspection.retry_attempts') || 3,
+        maxConcurrentTasks: toNumber(settingsMap.get('inspection.max_concurrent_tasks'), 10),
+        defaultTimeout: toNumber(settingsMap.get('inspection.default_timeout'), 30),
+        retryAttempts: toNumber(settingsMap.get('inspection.retry_attempts'), 3),
       },
       reportConfig: {
-        defaultFormat: settingsMap.get('report.default_format') || 'excel',
-        maxExportRecords: settingsMap.get('report.max_export_records') || 10000,
+        defaultFormat: toEnum(settingsMap.get('report.default_format'), ['excel', 'pdf', 'csv'] as const, 'excel'),
+        maxExportRecords: toNumber(settingsMap.get('report.max_export_records'), 10000),
       },
       userPreference: {
-        theme: settingsMap.get('user_preference.theme') || 'auto',
-        language: settingsMap.get('user_preference.language') || 'zh-CN',
-        dateFormat: settingsMap.get('user_preference.date_format') || 'YYYY-MM-DD',
-        timeFormat: settingsMap.get('user_preference.time_format') || '24h',
+        theme: toEnum(settingsMap.get('user_preference.theme'), ['light', 'dark', 'auto'] as const, 'auto'),
+        language: toEnum(settingsMap.get('user_preference.language'), ['zh-CN', 'en-US'] as const, 'zh-CN'),
+        dateFormat: toString(settingsMap.get('user_preference.date_format'), 'YYYY-MM-DD'),
+        timeFormat: toEnum(settingsMap.get('user_preference.time_format'), ['12h', '24h'] as const, '24h'),
       },
     }
   },
@@ -208,7 +234,8 @@ export const generalApi = {
       'user_preference.time_format': data.userPreference.timeFormat,
     }
 
-    await httpClient.post('/settings/general/bulk', { settings })
+    const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', { settings })
+    requireBulkSuccess(resp, { action: '保存通用配置' })
   },
 
   /**

@@ -28,6 +28,9 @@ import type { Role } from '../../types/users.types'
 import { UserFormDialog } from './UserFormDialog'
 import { UserPasswordDialog } from './UserPasswordDialog'
 import { UserPermissionsDialog } from './UserPermissionsDialog'
+import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
+import { EmptyState } from '../shared/EmptyState'
 
 // 内置角色映射（后端支持自定义角色，这里仅作为兜底）
 const builtInRoleLabels: Record<BuiltInUserRole, string> = {
@@ -54,6 +57,11 @@ function formatDate(isoString: string | null): string {
 }
 
 export function UserManagement() {
+  const canRead = usePermission(Permission.USERS_READ)
+  const canCreate = usePermission(Permission.USERS_CREATE)
+  const canUpdate = usePermission(Permission.USERS_UPDATE)
+  const canDelete = usePermission(Permission.USERS_DELETE)
+
   const {
     users,
     totalCount,
@@ -115,6 +123,10 @@ export function UserManagement() {
 
   // 处理删除
   const handleDelete = async (user: User) => {
+    if (!canDelete) {
+      toast.error('需要 users:delete 权限')
+      return
+    }
     if (!window.confirm(`确定要删除用户 "${user.username}" 吗？\n\n此操作不可撤销。`)) {
       return
     }
@@ -129,6 +141,10 @@ export function UserManagement() {
 
   // 处理激活
   const handleActivate = async (user: User) => {
+    if (!canUpdate) {
+      toast.error('需要 users:update 权限')
+      return
+    }
     try {
       await activateUser(user.id)
       toast.success('用户已激活')
@@ -139,6 +155,10 @@ export function UserManagement() {
 
   // 处理停用
   const handleDeactivate = async (user: User) => {
+    if (!canUpdate) {
+      toast.error('需要 users:update 权限')
+      return
+    }
     try {
       await deactivateUser(user.id)
       toast.success('用户已停用')
@@ -149,6 +169,10 @@ export function UserManagement() {
 
   // 处理锁定
   const handleLock = async (user: User) => {
+    if (!canUpdate) {
+      toast.error('需要 users:update 权限')
+      return
+    }
     try {
       await lockUser(user.id)
       toast.success('用户已锁定')
@@ -159,6 +183,10 @@ export function UserManagement() {
 
   // 处理解锁
   const handleUnlock = async (user: User) => {
+    if (!canUpdate) {
+      toast.error('需要 users:update 权限')
+      return
+    }
     try {
       await unlockUser(user.id)
       toast.success('用户已解锁')
@@ -196,6 +224,18 @@ export function UserManagement() {
     )
   }
 
+  if (!canRead) {
+    return (
+      <div className="p-4">
+        <EmptyState
+          title="无权限查看用户管理"
+          description="需要 users:read 权限，请联系管理员开通。"
+          icon={Users}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 space-y-4 flex-1 flex flex-col min-h-0">
       <UserFormDialog
@@ -205,6 +245,10 @@ export function UserManagement() {
         isSubmitting={isCreating || isRolesLoading}
         onOpenChange={setCreateOpen}
         onCreate={async (data) => {
+          if (!canCreate) {
+            toast.error('需要 users:create 权限')
+            return
+          }
           await createUser(data)
           toast.success('用户创建成功')
         }}
@@ -222,6 +266,10 @@ export function UserManagement() {
         }}
         onCreate={async () => {}}
         onUpdate={async (userId, data) => {
+          if (!canUpdate) {
+            toast.error('需要 users:update 权限')
+            return
+          }
           await updateUser(userId, data)
           toast.success('用户已更新')
         }}
@@ -235,6 +283,10 @@ export function UserManagement() {
           if (!open) setPasswordUser(null)
         }}
         onSubmit={async (userId, newPassword) => {
+          if (!canUpdate) {
+            toast.error('需要 users:update 权限')
+            return
+          }
           await changePassword(userId, newPassword)
           toast.success('密码已重置')
         }}
@@ -299,11 +351,12 @@ export function UserManagement() {
               搜索
             </Button>
           </div>
-          <Button onClick={() => setCreateOpen(true)} disabled={isRolesLoading}>
+          <Button onClick={() => setCreateOpen(true)} disabled={!canCreate || isRolesLoading}>
             <UserPlus className="w-4 h-4 mr-2" />
             添加用户
           </Button>
         </div>
+        {!canCreate && <div className="mt-2 text-xs text-muted-foreground">创建用户需要 users:create 权限</div>}
         {rolesError && (
           <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
             {(rolesError as Error).message || '角色列表加载失败，已使用默认角色列表'}
@@ -313,116 +366,128 @@ export function UserManagement() {
 
       {/* 用户列表 */}
       <Card className="flex-1 flex flex-col min-h-0">
-        <div className="overflow-x-auto flex-1">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="px-4 py-3 text-left font-medium text-foreground/90">用户名</th>
-                <th className="px-4 py-3 text-left font-medium text-foreground/90">邮箱</th>
-                <th className="px-4 py-3 text-left font-medium text-foreground/90">姓名</th>
-                <th className="px-4 py-3 text-left font-medium text-foreground/90">角色</th>
-                <th className="px-4 py-3 text-left font-medium text-foreground/90">状态</th>
-                <th className="px-4 py-3 text-left font-medium text-foreground/90">最后登录</th>
-                <th className="px-4 py-3 text-right font-medium text-foreground/90">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {users.map((user) => (
-                <tr key={user.id} className="hover:bg-muted/60">
-                  <td className="px-4 py-3 font-medium">{user.username}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{user.fullName}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant="secondary">{roleLabelByName.get(user.role) || user.role}</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={user.status} />
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">
-                    {formatDate(user.lastLoginAt)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setPermissionsUser(user)}
-                        title="查看权限"
-                      >
-                        <Shield className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setPasswordUser(user)}
-                        title="重置密码"
-                      >
-                        <KeyRound className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditUser(user)}
-                        title="编辑用户"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      {user.status === 'locked' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleUnlock(user)}
-                          title="解锁用户"
-                        >
-                          <Unlock className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {user.status !== 'locked' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleLock(user)}
-                          title="锁定用户"
-                        >
-                          <Lock className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {user.status === 'inactive' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleActivate(user)}
-                          title="激活用户"
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {user.status === 'active' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeactivate(user)}
-                          title="停用用户"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(user)}
-                        disabled={isDeleting}
-                        title="删除用户"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </td>
+        {users.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center p-6">
+            <EmptyState title="暂无用户" description="当前筛选条件下没有匹配的用户记录。" icon={Users} />
+          </div>
+        ) : (
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/40">
+                  <th className="px-4 py-3 text-left font-medium text-foreground/90">用户名</th>
+                  <th className="px-4 py-3 text-left font-medium text-foreground/90">邮箱</th>
+                  <th className="px-4 py-3 text-left font-medium text-foreground/90">姓名</th>
+                  <th className="px-4 py-3 text-left font-medium text-foreground/90">角色</th>
+                  <th className="px-4 py-3 text-left font-medium text-foreground/90">状态</th>
+                  <th className="px-4 py-3 text-left font-medium text-foreground/90">最后登录</th>
+                  <th className="px-4 py-3 text-right font-medium text-foreground/90">操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {users.map((user) => (
+                  <tr key={user.id} className="hover:bg-muted/60">
+                    <td className="px-4 py-3 font-medium">{user.username}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{user.fullName}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant="secondary">{roleLabelByName.get(user.role) || user.role}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={user.status} />
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs">
+                      {formatDate(user.lastLoginAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPermissionsUser(user)}
+                          title="查看权限"
+                        >
+                          <Shield className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPasswordUser(user)}
+                          disabled={!canUpdate}
+                          title={canUpdate ? '重置密码' : '需要 users:update 权限'}
+                        >
+                          <KeyRound className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditUser(user)}
+                          disabled={!canUpdate}
+                          title={canUpdate ? '编辑用户' : '需要 users:update 权限'}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        {user.status === 'locked' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleUnlock(user)}
+                            disabled={!canUpdate}
+                            title={canUpdate ? '解锁用户' : '需要 users:update 权限'}
+                          >
+                            <Unlock className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {user.status !== 'locked' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleLock(user)}
+                            disabled={!canUpdate}
+                            title={canUpdate ? '锁定用户' : '需要 users:update 权限'}
+                          >
+                            <Lock className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {user.status === 'inactive' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleActivate(user)}
+                            disabled={!canUpdate}
+                            title={canUpdate ? '激活用户' : '需要 users:update 权限'}
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {user.status === 'active' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeactivate(user)}
+                            disabled={!canUpdate}
+                            title={canUpdate ? '停用用户' : '需要 users:update 权限'}
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(user)}
+                          disabled={!canDelete || isDeleting}
+                          title={canDelete ? '删除用户' : '需要 users:delete 权限'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* 分页 */}
         {totalCount > pageSize && (

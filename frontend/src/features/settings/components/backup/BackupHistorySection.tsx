@@ -149,7 +149,7 @@ export function BackupHistorySection({
   const handleRestore = async (backupId: string, fileName: string) => {
     if (
       !window.confirm(
-        `确定要恢复备份 "${fileName}" 吗？\n\n⚠️ 恢复操作将覆盖当前数据，此操作不可逆！请确保已做好准备。`
+        `确定要恢复备份 "${fileName}" 吗？\n\n⚠️ 当前版本仅支持恢复系统配置（settings），将覆盖当前配置。此操作不可逆，请谨慎操作。`
       )
     ) {
       return
@@ -157,7 +157,7 @@ export function BackupHistorySection({
 
     try {
       await onRestoreBackup(backupId)
-      toast.success('备份恢复成功！系统将重新加载')
+      toast.success('系统配置恢复成功！页面将重新加载')
       // 延迟刷新页面
       setTimeout(() => window.location.reload(), 2000)
     } catch (err) {

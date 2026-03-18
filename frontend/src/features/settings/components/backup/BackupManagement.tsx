@@ -33,12 +33,6 @@ export function BackupManagement() {
 
   // 处理保存操作
   const handleSave = useCallback(async () => {
-    // 验证：至少需要选择一项备份内容
-    if (!config.includeDatabase && !config.includeFiles) {
-      toast.error('请至少选择一项备份内容（数据库或文件）')
-      return
-    }
-
     try {
       await saveAll()
       toast.success('保存成功！备份配置已更新')
@@ -57,18 +51,18 @@ export function BackupManagement() {
   const handleCreateBackup = useCallback(async () => {
     await createBackup({
       includeDatabase: config.includeDatabase,
-      includeFiles: config.includeFiles,
+      includeFiles: false,
       description: '手动创建的备份',
     })
-  }, [createBackup, config.includeDatabase, config.includeFiles])
+  }, [createBackup, config.includeDatabase])
 
   // 处理恢复备份
   const handleRestoreBackup = useCallback(
     async (backupId: string) => {
       await restoreBackup({
         backupId,
-        restoreDatabase: true,
-        restoreFiles: true,
+        restoreDatabase: false,
+        restoreFiles: false,
       })
     },
     [restoreBackup]

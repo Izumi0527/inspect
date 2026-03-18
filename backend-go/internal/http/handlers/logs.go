@@ -429,7 +429,7 @@ func (h LogsHandler) ApplySyslogConfig(c echo.Context) error {
 
 	status, err := h.Syslog.Apply(ctx, cfg)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to apply syslog config")
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to apply syslog config: %s", err.Error()))
 	}
 	return c.JSON(http.StatusOK, status)
 }

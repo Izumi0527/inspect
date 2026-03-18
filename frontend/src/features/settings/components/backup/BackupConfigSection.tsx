@@ -31,7 +31,7 @@ export function BackupConfigSection({ data, onChange }: Props) {
       <div className="mt-6 space-y-4">
         <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
           <p className="text-sm text-blue-800">
-            ℹ️ 自动备份将在指定时间运行。建议在系统使用低峰期（如凌晨）执行备份操作。
+            提示：自动备份将在指定时间运行。建议在系统使用低峰期（如凌晨）执行备份操作。
           </p>
         </div>
 
@@ -113,6 +113,15 @@ export function BackupConfigSection({ data, onChange }: Props) {
         <div className="pt-4 border-t space-y-4">
           <div className="text-sm font-medium text-foreground/90 mb-2">备份内容</div>
 
+          <div className="bg-muted/40 border border-border rounded-md p-4">
+            <p className="text-sm text-foreground/90 mb-2">
+              <strong>系统配置（必选）</strong>：备份文件始终包含系统配置项（settings）。
+            </p>
+            <p className="text-sm text-muted-foreground">
+              你可以按需选择是否额外包含数据库快照；文件备份/恢复当前版本暂不支持。
+            </p>
+          </div>
+
           <ConfigItem
             label="包含数据库"
             description="备份所有数据库数据（推荐启用）"
@@ -124,22 +133,15 @@ export function BackupConfigSection({ data, onChange }: Props) {
           </ConfigItem>
 
           <ConfigItem
-            label="包含文件"
-            description="备份上传的文件和附件"
+            label="包含文件（暂不支持）"
+            description="当前版本暂不支持文件备份与恢复，该选项已禁用"
           >
             <ConfigSwitch
               checked={data.includeFiles}
               onCheckedChange={(checked) => onChange('includeFiles', checked)}
+              disabled={true}
             />
           </ConfigItem>
-
-          {!data.includeDatabase && !data.includeFiles && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-              <p className="text-sm text-yellow-800">
-                ⚠️ 至少需要选择一项备份内容（数据库或文件）
-              </p>
-            </div>
-          )}
         </div>
 
         {/* 压缩选项 */}

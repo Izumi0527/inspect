@@ -62,7 +62,7 @@ func (h SettingsHandler) UpdateBackupConfig(c echo.Context) error {
 		RetentionDays:     readIntWithDefault(payload, "retentionDays", "retention_days", 30),
 		BackupPath:        readStringWithDefault(payload, "backupPath", "backup_path", "data/backups"),
 		IncludeDatabase:   readBoolWithDefault(payload, "includeDatabase", "include_database", true),
-		IncludeFiles:      readBoolWithDefault(payload, "includeFiles", "include_files", true),
+		IncludeFiles:      readBoolWithDefault(payload, "includeFiles", "include_files", false),
 		CompressBackup:    readBoolWithDefault(payload, "compressBackup", "compress_backup", true),
 	}
 
@@ -73,6 +73,10 @@ func (h SettingsHandler) UpdateBackupConfig(c echo.Context) error {
 	}
 
 	if err := h.Service.UpdateBackupConfig(c.Request().Context(), config, updatedBy); err != nil {
+		var notImpl settings.NotImplementedError
+		if errors.As(err, &notImpl) {
+			return echo.NewHTTPError(http.StatusNotImplemented, err.Error())
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "更新备份配置失败")
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{"success": true, "message": "配置已更新"})
@@ -135,7 +139,7 @@ func (h SettingsHandler) createBackupInternal(c echo.Context) error {
 	_ = c.Bind(&payload)
 
 	includeDatabase := readBoolWithDefault(payload, "includeDatabase", "include_database", true)
-	includeFiles := readBoolWithDefault(payload, "includeFiles", "include_files", true)
+	includeFiles := readBoolWithDefault(payload, "includeFiles", "include_files", false)
 	description := readString(payload, "description")
 	var descPtr *string
 	if strings.TrimSpace(description) != "" {
@@ -150,6 +154,10 @@ func (h SettingsHandler) createBackupInternal(c echo.Context) error {
 
 	record, err := h.Service.CreateBackup(c.Request().Context(), includeDatabase, includeFiles, descPtr, createdBy)
 	if err != nil {
+		var notImpl settings.NotImplementedError
+		if errors.As(err, &notImpl) {
+			return echo.NewHTTPError(http.StatusNotImplemented, err.Error())
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusOK, record)
@@ -178,14 +186,27 @@ func (h SettingsHandler) restoreBackupInternal(c echo.Context, backupID string) 
 		backupID = readString(payload, "backup_id", "backupId")
 	}
 
-	restoreDatabase := readBoolWithDefault(payload, "restoreDatabase", "restore_database", true)
-	restoreFiles := readBoolWithDefault(payload, "restoreFiles", "restore_files", true)
+	restoreDatabase := readBoolWithDefault(payload, "restoreDatabase", "restore_database", false)
+	restoreFiles := readBoolWithDefault(payload, "restoreFiles", "restore_files", false)
 
 	if strings.TrimSpace(backupID) == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "backup_id is required")
 	}
 
-	if err := h.Service.RestoreBackup(c.Request().Context(), backupID, restoreDatabase, restoreFiles); err != nil {
+	user, _ := requirePermission(c, h.Auth, "")
+	updatedBy := ""
+	if user != nil {
+		updatedBy = user.ID
+	}
+
+	if err := h.Service.RestoreBackup(c.Request().Context(), backupID, restoreDatabase, restoreFiles, updatedBy); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "备份不存在")
+		}
+		var notImpl settings.NotImplementedError
+		if errors.As(err, &notImpl) {
+			return echo.NewHTTPError(http.StatusNotImplemented, err.Error())
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 

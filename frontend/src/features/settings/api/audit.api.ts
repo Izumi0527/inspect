@@ -131,7 +131,9 @@ export const auditApi = {
     // 添加可选筛选条件
     if (params.userId) requestBody.filters.user_id = params.userId
     if (params.action) requestBody.filters.action = params.action
+    if (params.resource) requestBody.filters.resource = params.resource
     if (params.status) requestBody.filters.status = params.status
+    if (params.keyword) requestBody.filters.keyword = params.keyword
 
     // 调用后端API接口（POST /api/v1/settings/audit/logs/export）
     // ✅ 兼容前后端分离部署：使用 NEXT_PUBLIC_API_URL 走后端绝对地址

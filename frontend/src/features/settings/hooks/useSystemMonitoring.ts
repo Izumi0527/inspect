@@ -106,6 +106,7 @@ export function useSystemMonitoring(autoRefresh: boolean = true) {
     data: monitoringData,
     isLoading,
     error,
+    refetch,
   } = useQuery<MonitoringResponse>({
     queryKey: ['systemMonitoring'],
     queryFn: monitoringApi.getCurrentMetrics,
@@ -131,5 +132,6 @@ export function useSystemMonitoring(autoRefresh: boolean = true) {
     // 状态
     isLoading,
     error,
+    refetch,
   }
 }

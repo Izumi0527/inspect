@@ -52,20 +52,51 @@ jest.mock('next/image', () => {
 })
 
 // Mock framer-motion
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }) => <div {...props}>{children}</div>,
-    button: ({ children, ...props }) => <button {...props}>{children}</button>,
-    span: ({ children, ...props }) => <span {...props}>{children}</span>,
-    p: ({ children, ...props }) => <p {...props}>{children}</p>,
-    tr: ({ children, ...props }) => <tr {...props}>{children}</tr>,
-    img: ({ children, ...props }) => <img {...props}>{children}</img>,
-    nav: ({ children, ...props }) => <nav {...props}>{children}</nav>,
-    aside: ({ children, ...props }) => <aside {...props}>{children}</aside>,
-  },
-  AnimatePresence: ({ children }) => <>{children}</>,
-  useReducedMotion: () => false,
-}))
+jest.mock('framer-motion', () => {
+  // 过滤 framer-motion 的专有 props，避免 React 报“未知 DOM 属性”噪音
+  // 仅用于测试环境渲染，不影响业务逻辑。
+  const stripMotionProps = (props = {}) => {
+    const {
+      layoutId,
+      layout,
+      whileHover,
+      whileTap,
+      whileDrag,
+      initial,
+      animate,
+      exit,
+      transition,
+      variants,
+      drag,
+      dragConstraints,
+      dragElastic,
+      dragMomentum,
+      onAnimationStart,
+      onAnimationComplete,
+      onUpdate,
+      ...rest
+    } = props
+    return rest
+  }
+
+  const make = (Tag) =>
+    ({ children, ...props }) => <Tag {...stripMotionProps(props)}>{children}</Tag>
+
+  return {
+    motion: {
+      div: make('div'),
+      button: make('button'),
+      span: make('span'),
+      p: make('p'),
+      tr: make('tr'),
+      img: make('img'),
+      nav: make('nav'),
+      aside: make('aside'),
+    },
+    AnimatePresence: ({ children }) => <>{children}</>,
+    useReducedMotion: () => false,
+  }
+})
 
 // Mock IntersectionObserver
 global.IntersectionObserver = class IntersectionObserver {

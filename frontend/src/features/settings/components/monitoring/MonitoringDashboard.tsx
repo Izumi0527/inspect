@@ -4,6 +4,7 @@ import { useSystemMonitoring } from '../../hooks/useSystemMonitoring'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState } from '../shared/EmptyState'
 import { formatUptime } from './uptime'
 import {
   Activity,
@@ -15,6 +16,7 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
+  AlertCircle,
 } from 'lucide-react'
 
 // 格式化文件大小
@@ -67,14 +69,41 @@ function ServiceStatusBadge({ status }: { status: 'healthy' | 'unhealthy' | 'deg
 }
 
 export function MonitoringDashboard() {
-  const { metrics, services, system, isLoading } = useSystemMonitoring(true)
+  const { metrics, services, system, isLoading, error, refetch } = useSystemMonitoring(true)
 
-  // 加载状态
-  if (isLoading || !metrics) {
+  if (error && !metrics) {
+    return (
+      <div className="p-4">
+        <EmptyState
+          icon={AlertCircle}
+          title="加载监控数据失败"
+          description={(error as Error).message || '无法连接到服务器，请稍后重试'}
+          action={{
+            label: '重试',
+            onClick: () => void refetch(),
+          }}
+        />
+      </div>
+    )
+  }
+
+  // 加载状态（优先于空态，避免闪烁）
+  if (isLoading && !metrics) {
     return (
       <div className="p-4 space-y-4">
         <Skeleton className="h-48 w-full" />
         <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
+
+  if (!metrics) {
+    return (
+      <div className="p-4">
+        <EmptyState
+          title="暂无监控数据"
+          description="未获取到系统指标数据，请稍后重试或检查监控服务状态。"
+        />
       </div>
     )
   }

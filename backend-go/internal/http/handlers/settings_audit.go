@@ -159,6 +159,8 @@ func (h SettingsHandler) ExportAuditLogs(c echo.Context) error {
 		Action:   readString(filters, "action"),
 		Status:   readString(filters, "status"),
 		Resource: readString(filters, "resource"),
+		Search:   readString(filters, "search"),
+		Keyword:  readString(filters, "keyword"),
 		StartTime: startTime,
 		EndTime:   endTime,
 	}

@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { FileText, Download, CheckCircle, XCircle } from 'lucide-react'
+import { FileText, Download, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { CompactStatCard } from '@/components/shared'
+import { EmptyState } from '../shared/EmptyState'
 import { toast } from 'react-hot-toast'
 import type { AuditAction } from '../../types/audit.types'
 
@@ -52,6 +53,8 @@ export function AuditLogs() {
     pageSize,
     stats,
     isLoading,
+    error,
+    refetch,
     updateQueryParams,
     exportLogs,
   } = useAuditLogs()
@@ -137,40 +140,62 @@ export function AuditLogs() {
 
       {/* 日志列表 */}
       <Card className="flex-1 flex flex-col min-h-0">
-        <div className="overflow-x-auto flex-1">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">时间</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">用户</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">操作</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">资源</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">详情</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">IP地址</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">状态</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {logs.map((log) => (
-                <tr key={log.id} className="hover:bg-muted/40">
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(log.createdAt)}</td>
-                  <td className="px-4 py-3 font-medium text-foreground">{log.username}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant="outline">{actionLabels[log.action]}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{log.resource}</td>
-                  <td className="px-4 py-3 text-muted-foreground max-w-xs truncate" title={log.details}>
-                    {log.details}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{log.ipAddress}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={log.status} />
-                  </td>
+        {error && !logs.length ? (
+          <div className="flex-1 flex items-center justify-center">
+            <EmptyState
+              icon={AlertCircle}
+              title="加载审计日志失败"
+              description={(error as Error).message || '无法连接到服务器，请稍后重试'}
+              action={{
+                label: '重试',
+                onClick: () => void refetch(),
+              }}
+            />
+          </div>
+        ) : !logs.length ? (
+          <div className="flex-1 flex items-center justify-center">
+            <EmptyState
+              icon={FileText}
+              title="暂无审计日志"
+              description="当前筛选条件下暂无数据，可尝试调整关键词后再查询。"
+            />
+          </div>
+        ) : (
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/40">
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">时间</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">用户</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">操作</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">资源</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">详情</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">IP地址</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">状态</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {logs.map((log) => (
+                  <tr key={log.id} className="hover:bg-muted/40">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(log.createdAt)}</td>
+                    <td className="px-4 py-3 font-medium text-foreground">{log.username}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant="outline">{actionLabels[log.action]}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{log.resource}</td>
+                    <td className="px-4 py-3 text-muted-foreground max-w-xs truncate" title={log.details}>
+                      {log.details}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{log.ipAddress}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={log.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* 分页 */}
         {totalCount > pageSize && (

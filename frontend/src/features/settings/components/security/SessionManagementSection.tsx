@@ -30,7 +30,11 @@ export function SessionManagementSection({ data, onChange }: Props) {
           <ConfigInput
             type="number"
             value={data.sessionTimeout}
-            onChange={(value) => onChange('sessionTimeout', parseInt(value, 10))}
+            onChange={(value) => {
+              const parsed = Number.parseInt(value, 10)
+              if (!Number.isFinite(parsed)) return
+              onChange('sessionTimeout', parsed)
+            }}
             min={5}
             max={1440}
           />
@@ -66,7 +70,11 @@ export function SessionManagementSection({ data, onChange }: Props) {
               <ConfigInput
                 type="number"
                 value={data.rememberMeDuration}
-                onChange={(value) => onChange('rememberMeDuration', parseInt(value, 10))}
+                onChange={(value) => {
+                  const parsed = Number.parseInt(value, 10)
+                  if (!Number.isFinite(parsed)) return
+                  onChange('rememberMeDuration', parsed)
+                }}
                 min={1}
                 max={90}
               />
@@ -80,13 +88,17 @@ export function SessionManagementSection({ data, onChange }: Props) {
             description="单个用户允许的最大同时登录会话数 (1-10)"
             required
           >
-            <ConfigInput
-              type="number"
-              value={data.maxConcurrentSessions}
-              onChange={(value) => onChange('maxConcurrentSessions', parseInt(value, 10))}
-              min={1}
-              max={10}
-            />
+          <ConfigInput
+            type="number"
+            value={data.maxConcurrentSessions}
+            onChange={(value) => {
+              const parsed = Number.parseInt(value, 10)
+              if (!Number.isFinite(parsed)) return
+              onChange('maxConcurrentSessions', parsed)
+            }}
+            min={1}
+            max={10}
+          />
           </ConfigItem>
 
           <ConfigItem

@@ -6,12 +6,87 @@ import type {
   NotificationSettingsResponse,
   TestResult,
 } from '../types/notification.types'
+import { requireBulkSuccess, type BulkUpdateResponse } from './bulk'
 
 // 后端配置项的类型
 interface BackendSetting {
   key: string
   value: any
   category: string
+}
+
+function toNumber(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return fallback
+    const parsed = Number(trimmed)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
+}
+
+function toBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase()
+    if (trimmed === 'true') return true
+    if (trimmed === 'false') return false
+  }
+  return fallback
+}
+
+function toString(value: unknown, fallback: string): string {
+  if (typeof value === 'string') return value
+  if (value === null || value === undefined) return fallback
+  return String(value)
+}
+
+function toEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  if (typeof value !== 'string') return fallback
+  const normalized = value.trim().toLowerCase()
+  if (!normalized) return fallback
+  const match = allowed.find((item) => item.toLowerCase() === normalized)
+  return match ?? fallback
+}
+
+function toStringRecord(
+  value: unknown,
+  fallback: Record<string, string>
+): Record<string, string> {
+  const normalize = (raw: unknown): Record<string, string> | null => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+    const result: Record<string, string> = {}
+    for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
+      if (!key) continue
+      if (typeof val === 'string') {
+        result[key] = val
+      } else if (val === null || val === undefined) {
+        result[key] = ''
+      } else {
+        result[key] = String(val)
+      }
+    }
+    return result
+  }
+
+  const normalized = normalize(value)
+  if (normalized) return normalized
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        const parsedNormalized = normalize(parsed)
+        if (parsedNormalized) return parsedNormalized
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  return fallback
 }
 
 export const notificationApi = {
@@ -32,66 +107,143 @@ export const notificationApi = {
       settingsMap.set(setting.key, setting.value)
     })
 
+    // 邮件配置（与后端发送侧 loadSMTPConfig 保持一致：优先新键，缺失时回退 legacy 键）
+    const smtpHostPrimary = toString(settingsMap.get('notification.email.smtp_host'), '')
+    const smtpHostLegacy = toString(settingsMap.get('email.smtp_server'), '')
+    const smtpHost = smtpHostPrimary.trim() ? smtpHostPrimary : smtpHostLegacy
+
+    const smtpPortPrimary = toNumber(settingsMap.get('notification.email.smtp_port'), 587)
+    let smtpPort = smtpPortPrimary
+    if (smtpPortPrimary === 587) {
+      const legacyPort = toNumber(settingsMap.get('email.smtp_port'), 0)
+      if (legacyPort > 0) smtpPort = legacyPort
+    }
+
+    const smtpUserPrimary = toString(settingsMap.get('notification.email.smtp_user'), '')
+    const smtpUserLegacy = toString(settingsMap.get('email.smtp_username'), '')
+    const smtpUser = smtpUserPrimary.trim() ? smtpUserPrimary : smtpUserLegacy
+
+    const smtpPasswordPrimary = toString(settingsMap.get('notification.email.smtp_password'), '')
+    const smtpPasswordLegacy = toString(settingsMap.get('email.smtp_password'), '')
+    const smtpPassword = smtpPasswordPrimary.trim() ? smtpPasswordPrimary : smtpPasswordLegacy
+
+    const senderEmailPrimary = toString(settingsMap.get('notification.email.sender_email'), '')
+    const senderEmailLegacy = toString(settingsMap.get('email.sender_email'), '')
+    const senderEmail = (senderEmailPrimary.trim() ? senderEmailPrimary : senderEmailLegacy).trim() || smtpUser
+
+    const senderNamePrimary = toString(settingsMap.get('notification.email.sender_name'), '')
+    const senderNameLegacy = toString(settingsMap.get('email.sender_name'), '')
+    const senderName = senderNamePrimary.trim() ? senderNamePrimary : senderNameLegacy
+
     // 转换为结构化数据
     return {
       emailNotification: {
-        enabled: settingsMap.get('notification.email.enabled') || false,
-        smtpHost: settingsMap.get('notification.email.smtp_host') || '',
-        smtpPort: settingsMap.get('notification.email.smtp_port') || 587,
-        smtpUser: settingsMap.get('notification.email.smtp_user') || '',
-        smtpPassword: settingsMap.get('notification.email.smtp_password') || '',
-        smtpUseTls: settingsMap.get('notification.email.smtp_use_tls') || true,
-        senderEmail: settingsMap.get('notification.email.sender_email') || '',
-        senderName: settingsMap.get('notification.email.sender_name') || '',
+        enabled: toBoolean(settingsMap.get('notification.email.enabled'), false),
+        smtpHost,
+        smtpPort,
+        smtpUser,
+        smtpPassword,
+        smtpUseTls: toBoolean(settingsMap.get('notification.email.smtp_use_tls'), true),
+        senderEmail,
+        senderName,
       },
       smsNotification: {
-        enabled: settingsMap.get('notification.sms.enabled') || false,
-        provider: settingsMap.get('notification.sms.provider') || 'aliyun',
-        apiKey: settingsMap.get('notification.sms.api_key') || '',
-        apiSecret: settingsMap.get('notification.sms.api_secret') || '',
-        signName: settingsMap.get('notification.sms.sign_name') || '',
-        templateCode: settingsMap.get('notification.sms.template_code') || '',
+        enabled: toBoolean(settingsMap.get('notification.sms.enabled'), false),
+        provider: toEnum(
+          settingsMap.get('notification.sms.provider'),
+          ['aliyun', 'tencent', 'twilio', 'custom'] as const,
+          'aliyun'
+        ),
+        apiKey: toString(settingsMap.get('notification.sms.api_key'), ''),
+        apiSecret: toString(settingsMap.get('notification.sms.api_secret'), ''),
+        signName: toString(settingsMap.get('notification.sms.sign_name'), ''),
+        templateCode: toString(settingsMap.get('notification.sms.template_code'), ''),
       },
       webhookNotification: {
-        enabled: settingsMap.get('notification.webhook.enabled') || false,
-        url: settingsMap.get('notification.webhook.url') || '',
-        method: settingsMap.get('notification.webhook.method') || 'POST',
-        headers: settingsMap.get('notification.webhook.headers') || {},
-        authType: settingsMap.get('notification.webhook.auth_type') || 'none',
-        authToken: settingsMap.get('notification.webhook.auth_token') || '',
-        retryCount: settingsMap.get('notification.webhook.retry_count') || 3,
-        timeout: settingsMap.get('notification.webhook.timeout') || 30,
+        enabled: toBoolean(settingsMap.get('notification.webhook.enabled'), false),
+        url: toString(settingsMap.get('notification.webhook.url'), ''),
+        method: toEnum(
+          settingsMap.get('notification.webhook.method'),
+          ['POST', 'PUT'] as const,
+          'POST'
+        ),
+        headers: toStringRecord(settingsMap.get('notification.webhook.headers'), {}),
+        authType: toEnum(
+          settingsMap.get('notification.webhook.auth_type'),
+          ['none', 'bearer', 'basic', 'apikey'] as const,
+          'none'
+        ),
+        authToken: toString(settingsMap.get('notification.webhook.auth_token'), ''),
+        retryCount: toNumber(settingsMap.get('notification.webhook.retry_count'), 3),
+        timeout: toNumber(settingsMap.get('notification.webhook.timeout'), 30),
       },
     }
   },
 
   /**
    * 更新邮件通知配置
-   * 注意: 后端暂不支持单独更新通知配置项
+   * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
    */
-  updateEmailNotification: async (_data: Partial<EmailNotificationConfig>): Promise<void> => {
-    console.warn('后端暂不支持单独更新通知配置项')
-    return Promise.resolve()
+  updateEmailNotification: async (data: Partial<EmailNotificationConfig>): Promise<void> => {
+    const settings: Record<string, any> = {}
+
+    if (data.enabled !== undefined) settings['notification.email.enabled'] = data.enabled
+    if (data.smtpHost !== undefined) settings['notification.email.smtp_host'] = data.smtpHost
+    if (data.smtpPort !== undefined) settings['notification.email.smtp_port'] = data.smtpPort
+    if (data.smtpUser !== undefined) settings['notification.email.smtp_user'] = data.smtpUser
+    if (data.smtpPassword !== undefined) settings['notification.email.smtp_password'] = data.smtpPassword
+    if (data.smtpUseTls !== undefined) settings['notification.email.smtp_use_tls'] = data.smtpUseTls
+    if (data.senderEmail !== undefined) settings['notification.email.sender_email'] = data.senderEmail
+    if (data.senderName !== undefined) settings['notification.email.sender_name'] = data.senderName
+
+    if (Object.keys(settings).length === 0) return
+
+    const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', { settings })
+    requireBulkSuccess(resp, { action: '保存邮件通知配置' })
   },
 
   /**
    * 更新SMS通知配置
-   * 注意: 后端暂不支持单独更新通知配置项
+   * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
    */
-  updateSmsNotification: async (_data: Partial<SmsNotificationConfig>): Promise<void> => {
-    console.warn('后端暂不支持单独更新通知配置项')
-    return Promise.resolve()
+  updateSmsNotification: async (data: Partial<SmsNotificationConfig>): Promise<void> => {
+    const settings: Record<string, any> = {}
+
+    if (data.enabled !== undefined) settings['notification.sms.enabled'] = data.enabled
+    if (data.provider !== undefined) settings['notification.sms.provider'] = data.provider
+    if (data.apiKey !== undefined) settings['notification.sms.api_key'] = data.apiKey
+    if (data.apiSecret !== undefined) settings['notification.sms.api_secret'] = data.apiSecret
+    if (data.signName !== undefined) settings['notification.sms.sign_name'] = data.signName
+    if (data.templateCode !== undefined) settings['notification.sms.template_code'] = data.templateCode
+
+    if (Object.keys(settings).length === 0) return
+
+    const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', { settings })
+    requireBulkSuccess(resp, { action: '保存短信通知配置' })
   },
 
   /**
    * 更新Webhook通知配置
-   * 注意: 后端暂不支持单独更新通知配置项
+   * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
    */
   updateWebhookNotification: async (
-    _data: Partial<WebhookNotificationConfig>
+    data: Partial<WebhookNotificationConfig>
   ): Promise<void> => {
-    console.warn('后端暂不支持单独更新通知配置项')
-    return Promise.resolve()
+    const settings: Record<string, any> = {}
+
+    if (data.enabled !== undefined) settings['notification.webhook.enabled'] = data.enabled
+    if (data.url !== undefined) settings['notification.webhook.url'] = data.url
+    if (data.method !== undefined) settings['notification.webhook.method'] = data.method
+    if (data.headers !== undefined) settings['notification.webhook.headers'] = data.headers
+    if (data.authType !== undefined) settings['notification.webhook.auth_type'] = data.authType
+    if (data.authToken !== undefined) settings['notification.webhook.auth_token'] = data.authToken || ''
+    if (data.retryCount !== undefined) settings['notification.webhook.retry_count'] = data.retryCount
+    if (data.timeout !== undefined) settings['notification.webhook.timeout'] = data.timeout
+
+    if (Object.keys(settings).length === 0) return
+
+    const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', { settings })
+    requireBulkSuccess(resp, { action: '保存Webhook通知配置' })
   },
 
   /**
@@ -129,7 +281,8 @@ export const notificationApi = {
       'notification.webhook.timeout': data.webhookNotification.timeout,
     }
 
-    await httpClient.post('/settings/general/bulk', { settings })
+    const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', { settings })
+    requireBulkSuccess(resp, { action: '保存通知中心配置' })
   },
 
   /**

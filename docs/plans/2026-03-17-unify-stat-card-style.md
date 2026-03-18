@@ -10,6 +10,21 @@
 
 ---
 
+## 执行进度（截至 2026-03-18）
+
+- [x] Task 1：失败测试（CompactStatCard 结构与样式）
+- [x] Task 2：实现 CompactStatCard（测试转绿）
+- [x] Task 3：总览页 StatsGrid 替换统计卡（保持布局不变）
+- [x] Task 4：巡检管理页 InspectionView 替换快速统计卡（保持布局不变）
+- [x] Task 5：告警中心 AlertStatsGrid 替换统计卡（保持布局不变）
+- [x] Task 6：日志中心 LogStatsGrid 替换统计卡（保持布局不变）
+- [x] Task 7：报表分析 ReportsView 替换快速统计卡（保持布局不变）
+- [x] Task 8：全量校验（类型检查 / 单测）
+- [ ] Task 9：Git 提交（可选）
+
+备注：
+- 关键产物：`frontend/src/components/shared/CompactStatCard.tsx`、`frontend/src/components/shared/__tests__/CompactStatCard.test.tsx`
+
 ### Task 1: 写失败测试（CompactStatCard 结构与样式）
 
 **Files:**
@@ -151,4 +166,3 @@ Expected: PASS
 Run:
 - `git add frontend/src docs/plans/2026-03-17-unify-stat-card-style.md`
 - `git commit -m "style(ui): 统一统计卡片单卡样式"`
-

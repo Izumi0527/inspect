@@ -30,7 +30,7 @@ export function useBackupManagement() {
     retentionDays: 30,
     backupPath: '/data/backups',
     includeDatabase: true,
-    includeFiles: true,
+    includeFiles: false,
     compressBackup: true,
   })
 
@@ -40,7 +40,8 @@ export function useBackupManagement() {
   // 同步服务器数据到本地状态
   useEffect(() => {
     if (data?.config) {
-      setConfig(data.config)
+      // 当前后端暂未实现文件备份/恢复能力，前端强制关闭该选项，避免产生误导。
+      setConfig({ ...data.config, includeFiles: false })
       setIsDirty(false)
     }
   }, [data])
@@ -92,7 +93,7 @@ export function useBackupManagement() {
   // 重置为服务器数据
   const resetAll = useCallback(() => {
     if (data?.config) {
-      setConfig(data.config)
+      setConfig({ ...data.config, includeFiles: false })
       setIsDirty(false)
     }
   }, [data])
