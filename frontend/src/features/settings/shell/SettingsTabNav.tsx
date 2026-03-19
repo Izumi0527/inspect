@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useMemo, useRef } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
 import type { SettingsTabDescriptor, SettingsTabKey } from '@/features/settings/types/shell.types'
@@ -22,15 +22,23 @@ export const SettingsTabNav: React.FC<SettingsTabNavProps> = ({
   className,
 }) => {
   const refs = useRef<Array<HTMLButtonElement | null>>([])
+  const [focusedKey, setFocusedKey] = useState<SettingsTabKey>(activeKey)
 
   const keys = useMemo(() => tabs.map((tab) => tab.key), [tabs])
 
+  useEffect(() => {
+    setFocusedKey(activeKey)
+  }, [activeKey])
+
   const focusAt = useCallback(
     (index: number) => {
+      const key = keys[index]
       const target = refs.current[index]
-      if (target) target.focus()
+      if (!key || !target) return
+      setFocusedKey(key)
+      target.focus()
     },
-    []
+    [keys]
   )
 
   const handleKeyDown = useCallback(
@@ -65,10 +73,16 @@ export const SettingsTabNav: React.FC<SettingsTabNavProps> = ({
 
   return (
     <div className={cn('p-4 border-b border-border', className)}>
-      <div role="tablist" className="flex flex-wrap gap-2">
+      <div
+        role="tablist"
+        aria-label="系统设置子模块"
+        aria-orientation="horizontal"
+        className="flex flex-wrap gap-2"
+      >
         {tabs.map((tab, index) => {
           const Icon = tab.icon
           const isActive = tab.key === activeKey
+          const isFocused = tab.key === focusedKey
 
           return (
             <motion.button
@@ -81,8 +95,9 @@ export const SettingsTabNav: React.FC<SettingsTabNavProps> = ({
               id={getTabId(tab.key)}
               aria-selected={isActive}
               aria-controls={getPanelId(tab.key)}
-              tabIndex={isActive ? 0 : -1}
+              tabIndex={isFocused ? 0 : -1}
               onKeyDown={(event) => handleKeyDown(event, index)}
+              onFocus={() => setFocusedKey(tab.key)}
               onClick={() => onSelect(tab.key)}
               className={cn(
                 'relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
@@ -93,7 +108,7 @@ export const SettingsTabNav: React.FC<SettingsTabNavProps> = ({
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
-              <Icon className="w-4 h-4" />
+              <Icon aria-hidden="true" className="w-4 h-4" />
               {tab.label}
               {isActive && (
                 <motion.div
@@ -113,4 +128,3 @@ export const settingsTabA11y = {
   getTabId,
   getPanelId,
 }
-

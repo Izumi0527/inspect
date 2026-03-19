@@ -19,6 +19,10 @@ interface ConfigSelectProps {
   onChange: (value: string) => void
   placeholder?: string
   disabled?: boolean
+  id?: string
+  'aria-label'?: string
+  'aria-describedby'?: string
+  'aria-invalid'?: boolean
   className?: string
 }
 
@@ -28,6 +32,10 @@ export function ConfigSelect({
   onChange,
   placeholder = '请选择',
   disabled = false,
+  id,
+  'aria-label': ariaLabel,
+  'aria-describedby': ariaDescribedBy,
+  'aria-invalid': ariaInvalid,
   className,
 }: ConfigSelectProps) {
   return (
@@ -36,7 +44,13 @@ export function ConfigSelect({
       onValueChange={onChange}
       disabled={disabled}
     >
-      <SelectTrigger className={className || 'max-w-md'}>
+      <SelectTrigger
+        id={id}
+        aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
+        className={className || 'max-w-md'}
+      >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

@@ -11,6 +11,10 @@ interface ConfigInputProps {
   type?: 'text' | 'number' | 'email' | 'password' | 'url' | 'time'
   min?: number
   max?: number
+  id?: string
+  'aria-label'?: string
+  'aria-describedby'?: string
+  'aria-invalid'?: boolean
   className?: string
 }
 
@@ -22,6 +26,10 @@ export function ConfigInput({
   type = 'text',
   min,
   max,
+  id,
+  'aria-label': ariaLabel,
+  'aria-describedby': ariaDescribedBy,
+  'aria-invalid': ariaInvalid,
   className,
 }: ConfigInputProps) {
   // 确保 value 始终有定义值，避免受控/非受控组件切换警告
@@ -29,6 +37,10 @@ export function ConfigInput({
 
   return (
     <Input
+      id={id}
+      aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
+      aria-invalid={ariaInvalid}
       type={type}
       value={safeValue}
       onChange={(e) => onChange?.(e.target.value)}
