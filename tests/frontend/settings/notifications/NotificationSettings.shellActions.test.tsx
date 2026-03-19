@@ -2,17 +2,17 @@ import React from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import { GeneralSettings } from '@/features/settings/components/general/GeneralSettings'
+import { NotificationSettings } from '@/features/settings/components/notifications/NotificationSettings'
 import { SettingsShellProvider } from '@/features/settings/context/SettingsShellContext'
 import { useSettingsShellState } from '@/features/settings/hooks/useSettingsShellState'
 import { SettingsToolbar } from '@/features/settings/shell/SettingsToolbar'
 
-const mockUseGeneralSettings = jest.fn()
+const mockUseNotificationSettings = jest.fn()
 const saveAllMock = jest.fn()
 const resetAllMock = jest.fn()
 
-jest.mock('@/features/settings/hooks/useGeneralSettings', () => ({
-  useGeneralSettings: () => mockUseGeneralSettings(),
+jest.mock('@/features/settings/hooks/useNotificationSettings', () => ({
+  useNotificationSettings: () => mockUseNotificationSettings(),
 }))
 
 jest.mock('react-hot-toast', () => ({
@@ -22,55 +22,35 @@ jest.mock('react-hot-toast', () => ({
   },
 }))
 
-jest.mock('@/features/settings/components/general/BasicInfoSection', () => ({
-  BasicInfoSection: () => <div>basic-info-section</div>,
+jest.mock('@/features/settings/components/notifications/EmailNotificationSection', () => ({
+  EmailNotificationSection: () => <div>email-notification-section</div>,
+}))
+jest.mock('@/features/settings/components/notifications/SmsNotificationSection', () => ({
+  SmsNotificationSection: () => <div>sms-notification-section</div>,
+}))
+jest.mock('@/features/settings/components/notifications/WebhookNotificationSection', () => ({
+  WebhookNotificationSection: () => <div>webhook-notification-section</div>,
 }))
 
-jest.mock('@/features/settings/components/general/InspectionConfigSection', () => ({
-  InspectionConfigSection: () => <div>inspection-config-section</div>,
-}))
-
-jest.mock('@/features/settings/components/general/ReportConfigSection', () => ({
-  ReportConfigSection: () => <div>report-config-section</div>,
-}))
-
-jest.mock('@/features/settings/components/general/UserPreferenceSection', () => ({
-  UserPreferenceSection: () => <div>user-preference-section</div>,
-}))
-
-describe('GeneralSettings 通用配置页操作按钮', () => {
+describe('NotificationSettings 壳层动作区迁移', () => {
   beforeEach(() => {
-    mockUseGeneralSettings.mockReturnValue({
-      basicInfo: {
-        applicationName: '网络设备巡检系统',
-        version: '1.0.0',
-        timezone: 'Asia/Shanghai',
-      },
-      inspectionConfig: {
-        maxConcurrentTasks: 10,
-        defaultTimeout: 30,
-        retryAttempts: 3,
-      },
-      reportConfig: {
-        defaultFormat: 'excel',
-        maxExportRecords: 10000,
-      },
-      userPreference: {
-        theme: 'auto',
-        language: 'zh-CN',
-        dateFormat: 'YYYY-MM-DD',
-        timeFormat: '24h',
-      },
+    mockUseNotificationSettings.mockReturnValue({
+      emailNotification: {},
+      smsNotification: {},
+      webhookNotification: {},
       isLoading: false,
       isSaving: false,
+      isTesting: false,
       isDirty: true,
       error: null,
-      updateBasicInfo: jest.fn(),
-      updateInspectionConfig: jest.fn(),
-      updateReportConfig: jest.fn(),
-      updateUserPreference: jest.fn(),
+      updateEmailNotification: jest.fn(),
+      updateSmsNotification: jest.fn(),
+      updateWebhookNotification: jest.fn(),
       saveAll: saveAllMock.mockResolvedValue(undefined),
       resetAll: resetAllMock,
+      testEmailNotification: jest.fn(),
+      testSmsNotification: jest.fn(),
+      testWebhookNotification: jest.fn(),
     })
   })
 
@@ -101,25 +81,19 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
     }
 
     render(
-      <SettingsShellProvider activeTabKey="general">
-        <GeneralSettings />
+      <SettingsShellProvider activeTabKey="notifications">
+        <NotificationSettings />
         <ShellToolbar />
       </SettingsShellProvider>
     )
-
-    expect(screen.queryByText('导出配置')).not.toBeInTheDocument()
-    expect(screen.queryByText('导入配置')).not.toBeInTheDocument()
 
     await waitFor(() => {
       expect(within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '保存' })).toBeInTheDocument()
     })
     expect(within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '重置' })).toBeInTheDocument()
-
     expect(screen.queryByText('• 有未保存的更改')).not.toBeInTheDocument()
 
-    await waitFor(() => {
-      expect(screen.getByTestId('shell-caps')).toHaveTextContent('dirty:true')
-    })
+    expect(screen.getByTestId('shell-caps')).toHaveTextContent('dirty:true')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('saving:false')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('blockLeave:true')
 
@@ -130,3 +104,4 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
     expect(resetAllMock).toHaveBeenCalled()
   })
 })
+

@@ -1,14 +1,14 @@
 'use client'
 
 import { useNotificationSettings } from '../../hooks/useNotificationSettings'
-import { ActionButtons } from '@/features/settings/components/shared/ActionButtons'
 import { EmailNotificationSection } from './EmailNotificationSection'
 import { SmsNotificationSection } from './SmsNotificationSection'
 import { WebhookNotificationSection } from './WebhookNotificationSection'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, RotateCcw, Save } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
+import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
 
 export function NotificationSettings() {
   const {
@@ -46,11 +46,40 @@ export function NotificationSettings() {
     toast.success('已重置为服务器配置')
   }, [resetAll])
 
+  const tabCapabilities = useMemo(
+    () => ({
+      dirty: isDirty,
+      saving: isSaving,
+      blockLeave: isDirty,
+      primaryActions: [
+        {
+          key: 'save',
+          label: '保存',
+          icon: <Save className="w-4 h-4 mr-2" />,
+          loading: isSaving,
+          disabled: !isDirty || isSaving,
+          onClick: handleSave,
+        },
+      ],
+      secondaryActions: [
+        {
+          key: 'reset',
+          label: '重置',
+          icon: <RotateCcw className="w-4 h-4 mr-2" />,
+          disabled: !isDirty || isSaving,
+          onClick: handleReset,
+        },
+      ],
+    }),
+    [handleSave, handleReset, isDirty, isSaving]
+  )
+
+  useSettingsTabCapabilities('notifications', tabCapabilities)
+
   // 加载状态
   if (isLoading) {
     return (
       <div>
-        <ActionButtons />
         <div className="space-y-4 p-4">
           <Skeleton className="h-96 w-full" />
           <Skeleton className="h-96 w-full" />
@@ -64,7 +93,6 @@ export function NotificationSettings() {
   if (error) {
     return (
       <div>
-        <ActionButtons />
         <div className="p-6">
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 flex items-start space-x-4">
             <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
@@ -85,13 +113,6 @@ export function NotificationSettings() {
   // 正常显示
   return (
     <div>
-      <ActionButtons
-        isDirty={isDirty}
-        isSaving={isSaving}
-        onSave={handleSave}
-        onReset={handleReset}
-      />
-
       <div className="p-4">
         <div className="divide-y divide-gray-200 dark:divide-gray-700">
           <EmailNotificationSection

@@ -55,6 +55,8 @@
 
 ### Task 1：建立壳层类型与注册表基础
 
+**进度：** ✅ 已完成（与 Task 2 合并提交：388ea5a）
+
 **Files:**
 - Create: `frontend/src/features/settings/types/shell.types.ts`
 - Create: `frontend/src/features/settings/registry/settings-tabs.tsx`
@@ -105,6 +107,8 @@ git commit -m "refactor(settings): 引入系统设置壳层类型与注册表" -
 ---
 
 ### Task 2：搭建壳层骨架与导航状态管理
+
+**进度：** ✅ 已完成（与 Task 1 合并提交：388ea5a）
 
 **Files:**
 - Create: `frontend/src/features/settings/shell/SettingsPageShell.tsx`
@@ -161,6 +165,8 @@ git commit -m "refactor(settings): 引入系统设置壳层骨架与导航状态
 
 ### Task 3：实现壳层上下文与能力上报机制
 
+**进度：** ✅ 已完成（与 Task 4 合并提交：42c153d）
+
 **Files:**
 - Create: `frontend/src/features/settings/context/SettingsShellContext.tsx`
 - Create: `frontend/src/features/settings/hooks/useSettingsTabCapabilities.ts`
@@ -213,6 +219,8 @@ git commit -m "refactor(settings): 建立壳层能力上报与离开守卫" -m "
 ---
 
 ### Task 4：实现统一 TabNav、Toolbar、Stats 与 Banner 组件
+
+**进度：** ✅ 已完成（与 Task 3 合并提交：42c153d）
 
 **Files:**
 - Create: `frontend/src/features/settings/shell/SettingsTabNav.tsx`
@@ -273,6 +281,8 @@ git commit -m "refactor(settings): 新增统一导航工具栏与统计区组件
 
 ### Task 5：迁移配置类页面到壳层动作区
 
+**进度：** 🟡 已完成实现与验证（待提交）
+
 **Files:**
 - Modify: `frontend/src/features/settings/components/general/GeneralSettings.tsx`
 - Modify: `frontend/src/features/settings/components/security/SecuritySettings.tsx`
@@ -328,6 +338,8 @@ git commit -m "refactor(settings): 配置类页面迁移到壳层动作区" -m "
 
 ### Task 6：迁移日志页与统一危险确认基础设施
 
+**进度：** ⏳ 未开始
+
 **Files:**
 - Create: `frontend/src/features/settings/shell/SettingsConfirmDialog.tsx`
 - Modify: `frontend/src/features/settings/components/logs/LogsSettings.tsx`
@@ -375,6 +387,8 @@ git commit -m "refactor(settings): 统一危险确认与日志页动作编排" -
 ---
 
 ### Task 7：迁移列表类页面的统计区与工具栏
+
+**进度：** ⏳ 未开始
 
 **Files:**
 - Modify: `frontend/src/features/settings/components/users/UserManagement.tsx`
@@ -428,6 +442,8 @@ git commit -m "refactor(settings): 列表类页面迁移统计区与工具栏" -
 
 ### Task 8：迁移监控页并统一状态横幅
 
+**进度：** ⏳ 未开始
+
 **Files:**
 - Modify: `frontend/src/features/settings/components/monitoring/MonitoringDashboard.tsx`
 - Modify: `frontend/src/features/settings/hooks/useSystemMonitoring.ts`
@@ -473,6 +489,8 @@ git commit -m "refactor(settings): 监控页接入壳层状态与工具栏" -m "
 ---
 
 ### Task 9：收敛共享组件与可访问性治理
+
+**进度：** ⏳ 未开始
 
 **Files:**
 - Modify: `frontend/src/features/settings/components/shared/EmptyState.tsx`
@@ -530,6 +548,8 @@ git commit -m "refactor(settings): 收敛共享组件并补齐可访问性" -m "
 ## 3. 综合回归任务
 
 ### Task 10：全量回归与文档同步
+
+**进度：** ⏳ 未开始
 
 **Files:**
 - Modify: `docs/features/settings/system-settings-uiux-current.md`
