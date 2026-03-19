@@ -52,7 +52,7 @@
 ### 3.1 路由入口权限与 Tab 可见性（现状策略）
 
 - 路由入口：`frontend/src/app/settings/page.tsx` 使用 `RouteGuard`，要求 `Permission.SYSTEM_CONFIG` 才能进入 `/settings`。
-- Tab 可见性：`frontend/src/features/settings/components/SettingsView.tsx` 内部按“最小权限”过滤可见 Tab（例如：用户管理/角色权限需要 `USERS_READ`，审计需要 `SYSTEM_LOGS`，监控需要 `MONITORING_READ`）。
+- Tab 可见性：壳层 `frontend/src/features/settings/shell/SettingsPageShell.tsx` 内部按“最小权限”过滤可见 Tab（例如：用户管理/角色权限需要 `USERS_READ`，审计需要 `SYSTEM_LOGS`，监控需要 `MONITORING_READ`），可见 Tab 元数据来自注册表 `frontend/src/features/settings/registry/settings-tabs.tsx`（`requiredPermissions`）。
 
 **UX 影响（重要）**
 
@@ -60,24 +60,24 @@
 
 ### 3.2 Tab 导航与深链接（`?tab=`）
 
-实现位置：`frontend/src/features/settings/components/SettingsView.tsx`。
+实现位置：`frontend/src/features/settings/shell/SettingsPageShell.tsx` + `frontend/src/features/settings/hooks/useSettingsTabNavigation.ts`（`SettingsView.tsx` 作为壳层入口适配层）。
 
 - 状态来源：读取 URL 查询参数 `tab` → 计算 `requestedTab` → 与“可见 Tab 集合”求交得到 `activeTab`。
 - URL 纠偏：当 `tab` 非法或不可见时，会自动切到首个可见 Tab，并用 `router.replace` 回写 URL（避免“短暂渲染 + 无意义请求”）。
-- 点击切换：点击 Tab 同样使用 `router.replace` 写回 `?tab=`。
+- 点击切换：用户点击 Tab 使用 `router.push` 写回 `?tab=`（使浏览器后退/前进可回到上一个 Tab）。
 - 动效：Tab 使用 `motion.button`，hover/tap 缩放；激活态有底部 indicator（`layoutId="activeTabIndicator"`），内容区切换淡入淡出。
 
 **UX 影响（重点）**
 
-- “浏览器后退键”无法回到上一个 Tab：由于使用 `replace`，Tab 切换不会进入历史栈。
+- “浏览器后退键”可回到上一个 Tab：用户点击切换使用 `push`，会进入历史栈（自动纠偏仍使用 `replace`，避免污染历史）。
 - URL 被纠偏时是“静默纠偏”：用户分享链接或手动输入无权限 Tab 时，页面会切到其它 Tab，但缺少解释提示。
 
 ### 3.3 内容区高度/滚动策略
 
-实现位置：`frontend/src/features/settings/components/SettingsView.tsx`。
+实现位置：注册表 `frontend/src/features/settings/registry/settings-tabs.tsx` 的 `scrollMode` + 壳层 `frontend/src/features/settings/shell/SettingsContentViewport.tsx`。
 
-- `users/roles/audit` 被视为“需要填充高度”的 Tab：容器设为固定高度并在内容区内部滚动（`fillHeightTabs` + `overflow-hidden`）。
-- 其它 Tab 采用自然高度随页面滚动。
+- `users/roles/audit` 使用 `scrollMode='panel'`：壳层填充高度，内容区内部滚动（更适合表格与高密度操作栏）。
+- 其它 Tab 使用 `scrollMode='page'`：自然高度随页面滚动。
 
 **UX 影响**
 
@@ -85,13 +85,10 @@
 
 ### 3.4 通用状态呈现与反馈模式（横切）
 
-配置类 Tab（general/security/backup/notifications）基本统一：
+配置类 Tab（general/security/backup/notifications）在壳层化后已统一：
 
-- 顶部粘性操作条：`frontend/src/features/settings/components/shared/ActionButtons.tsx`
-  - `isDirty` 显示“• 有未保存的更改”
-  - `isSaving` 禁用按钮并显示“保存中...”
-  - 可注入 `extraActions`（少量 Tab 使用）
-- 加载：Tab 内 `Skeleton` 占位（保留 `ActionButtons` 以稳定布局）。
+- 顶部动作区：由壳层 `SettingsToolbar` 统一渲染（子页通过 `useSettingsTabCapabilities` 上报保存/重置 actions 与 `dirty/saving/blockLeave`）。
+- 加载：Tab 内 `Skeleton` 占位（不再依赖 `ActionButtons` 占位稳定布局）。
 - 错误：Tab 内红色错误卡片（目前多为“仅展示错误，不提供重试按钮”）。
 - 成功/失败：toast（保存成功/失败、重置成功等）。
 - 危险操作：多数使用 `window.confirm`（删除/清理/恢复等）。
@@ -118,7 +115,7 @@
 
 **信息架构**
 
-- 顶部：`ActionButtons`（保存/重置、脏数据提示）。
+- 顶部：壳层 `SettingsToolbar`（保存/重置；未保存离开拦截）。
 - 内容区：`divide-y` 分隔 4 个 section：
   - `BasicInfoSection.tsx`：应用名称、系统版本（只读）、时区
   - `InspectionConfigSection.tsx`：最大并发、默认超时、失败重试
@@ -127,18 +124,18 @@
 
 **关键组件/控件**
 
-- 复用 `shared/*`：`SectionHeader`、`ConfigItem`、`ConfigInput`、`ConfigSelect`、`ActionButtons`。
+- 复用 `shared/*`：`SectionHeader`、`ConfigItem`、`ConfigInput`、`ConfigSelect`。
 - 表单编辑状态来自 `useGeneralSettings`（`frontend/src/features/settings/hooks/useGeneralSettings.ts`）：服务端数据同步到本地状态，任一字段变更直接 `isDirty=true`，保存后重置。
 
 **状态与反馈**
 
-- 加载：Skeleton（固定渲染 `ActionButtons`）。
+- 加载：Skeleton。
 - 错误：红色错误卡片（当前无“重试”按钮）。
 - 保存/重置：toast 成功/失败。
 
 **现状风险点（UI/UX）**
 
-- 切换 Tab 会卸载组件：未保存更改会丢失且无离开提示（容器层行为，见“问题清单 P0”）。
+- 未保存离开拦截：已由壳层承接（`dirty/blockLeave` 时切换 Tab 会拦截，刷新/关闭页签触发 beforeunload）。
 - 表单可访问性：`ConfigItem` 的 label 未与输入控件建立关联（见“可访问性 P0”）。
 
 ### 4.2 日志设置（logs）
@@ -227,7 +224,7 @@
 
 **信息架构**
 
-- 顶部：`ActionButtons`（保存/重置）。
+- 顶部：壳层 `SettingsToolbar`（保存/重置；未保存离开拦截）。
 - 内容区：`divide-y` 分隔 3 个 section
   - `SessionManagementSection.tsx`：会话超时、自动登出、记住我（条件展开）、最大并发、改密后强制登出
   - `PasswordPolicySection.tsx`：最小长度、复杂度要求（开关）、过期/历史、常见弱密码、登录失败锁定策略
@@ -273,7 +270,7 @@
 
 **信息架构**
 
-- 顶部：`ActionButtons`（保存/重置备份策略）。
+- 顶部：壳层 `SettingsToolbar`（保存/重置备份策略；未保存离开拦截）。
 - 内容区分两段：
   - `BackupConfigSection.tsx`：自动备份（频率/时间条件展开）、保留天数、备份路径、备份内容（数据库/文件）、压缩开关、建议说明。
   - `BackupHistorySection.tsx`：磁盘使用情况进度条（>90% 红色提示）、手动备份按钮、备份列表表格（文件名/大小/类型/状态/时间/耗时/创建者/操作）。
@@ -297,7 +294,7 @@
 
 **信息架构**
 
-- 顶部：`ActionButtons`（保存/重置）。
+- 顶部：壳层 `SettingsToolbar`（保存/重置；未保存离开拦截）。
 - 内容区：`divide-y` 分隔 3 个 section
   - `EmailNotificationSection.tsx`：SMTP + 发件人 + 测试邮件
   - `SmsNotificationSection.tsx`：provider + key/secret/sign/template + 测试短信
@@ -468,6 +465,8 @@
   - 实时监控页规范
 
 ### 4.11 框架层统一技术架构（参考报表分析页）
+
+**实施状态（截至 2026-03-20）：**已进入实施并完成阶段收口。`4.11` 的“壳层统一、内容自治”方向已在代码层落成骨架与核心能力（Tab 注册表、壳层容器、能力上报、统一顶部组件），并完成配置类页面（4 个）动作区迁移 + `Task 6~10`（危险确认、列表页工具栏/统计、监控页状态横幅、A11y 收尾），已通过 `tests/frontend/settings` 全量回归与 `pnpm -C frontend type-check` 验证。
 
 这一节回答的问题是：
 
@@ -867,6 +866,8 @@ flowchart TD
   - Tab、工具栏、搜索框、统计卡、空态、错误态、图标按钮的可访问性语义，由壳层和共享组件兜底。
 
 ### 4.12 可实施的前端重构方案（组件 / hook / 注册表 / 迁移步骤）
+
+**实施状态（截至 2026-03-20）：**`Task 1~10` 已完成开发与验证（`tests/frontend/settings` 全量回归通过 + `pnpm -C frontend type-check` 通过）。壳层统一能力已覆盖：危险确认、列表页 stats/toolbar、监控页 banners/actions、shared A11y 兜底与全量回归收口。
 
 这一节将 `4.11` 从“目标架构”继续落到“可执行重构方案”。
 
@@ -1539,6 +1540,71 @@ interface SettingsTabComponentProps {
 
 按这份方案实施时，建议不要以“重写 Settings 页面”为目标，而要以“把现有 9 个子页逐步迁移到统一壳层”作为执行原则。这样既能控制风险，也能让每一阶段都形成可验证、可回滚、可继续推进的交付物。
 
+#### 4.12.13 落地现状（截至 2026-03-20）
+
+已落地的关键构件（路径为真实落地路径）：
+
+- 类型与注册表：
+  - `frontend/src/features/settings/types/shell.types.ts`
+  - `frontend/src/features/settings/registry/settings-tabs.tsx`（9 个子分页 descriptor）
+- 壳层容器与导航：
+  - `frontend/src/features/settings/shell/SettingsPageShell.tsx`
+  - `frontend/src/features/settings/shell/SettingsWorkbenchCard.tsx`
+  - `frontend/src/features/settings/shell/SettingsContentViewport.tsx`
+  - `frontend/src/features/settings/hooks/useSettingsTabNavigation.ts`
+- 能力上报与离开拦截：
+  - `frontend/src/features/settings/context/SettingsShellContext.tsx`
+  - `frontend/src/features/settings/hooks/useSettingsTabCapabilities.ts`
+  - `frontend/src/features/settings/hooks/useSettingsShellState.ts`
+  - `frontend/src/features/settings/hooks/useSettingsLeaveGuard.ts`
+  - `frontend/src/features/settings/shell/SettingsLeaveGuard.tsx`
+- 统一顶部组件：
+  - `frontend/src/features/settings/shell/SettingsTabNav.tsx`
+  - `frontend/src/features/settings/shell/SettingsToolbar.tsx`
+  - `frontend/src/features/settings/shell/SettingsStatsStrip.tsx`
+  - `frontend/src/features/settings/shell/SettingsStatusBannerStack.tsx`
+- 配置类页面（4 个）已迁移到壳层动作区：
+  - `frontend/src/features/settings/components/general/GeneralSettings.tsx`
+  - `frontend/src/features/settings/components/security/SecuritySettings.tsx`
+  - `frontend/src/features/settings/components/notifications/NotificationSettings.tsx`
+  - `frontend/src/features/settings/components/backup/BackupManagement.tsx`
+- 危险操作统一确认（替换 settings 模块内的 `window.confirm`）：
+  - 统一组件：`frontend/src/features/settings/shell/SettingsConfirmDialog.tsx`
+  - 已接入：`frontend/src/features/settings/components/logs/LogsSettings.tsx`、`frontend/src/features/settings/components/users/UserManagement.tsx`、`frontend/src/features/settings/components/roles/RoleManagement.tsx`、`frontend/src/features/settings/components/backup/BackupHistorySection.tsx`
+- 列表类页面（3 个）统计条带与工具栏已迁移到壳层：
+  - `frontend/src/features/settings/components/users/UserManagement.tsx`
+  - `frontend/src/features/settings/components/roles/RoleManagement.tsx`
+  - `frontend/src/features/settings/components/audit/AuditLogs.tsx`
+- 监控页状态横幅与动作编排已接入壳层：
+  - `frontend/src/features/settings/components/monitoring/MonitoringDashboard.tsx`
+- 共享组件与 A11y 兜底已补齐：
+  - `frontend/src/features/settings/components/shared/ConfigItem.tsx` / `ConfigInput.tsx` / `ConfigSelect.tsx` / `ConfigSwitch.tsx` / `EmptyState.tsx`
+  - `frontend/src/features/settings/shell/SettingsTabNav.tsx`（Tab 语义 + roving tabindex）
+  - `users/roles/backup` 的 icon-only 按钮补齐 `aria-label`（避免仅依赖 title）
+
+已补齐/新增的关键单测：
+
+- 壳层：`tests/frontend/settings/shell/*`
+- 配置类迁移：
+  - `tests/frontend/settings/general/GeneralSettings.actions.test.tsx`
+  - `tests/frontend/settings/security/SecuritySettings.shellActions.test.tsx`
+  - `tests/frontend/settings/notifications/NotificationSettings.shellActions.test.tsx`
+  - `tests/frontend/settings/backup/BackupManagement.shellActions.test.tsx`
+- 日志页动作区迁移与危险确认：
+  - `tests/frontend/settings/logs/LogsSettings.shellActions.test.tsx`
+- 列表页 stats/toolbar 迁移：
+  - `tests/frontend/settings/users/UserManagement.shellToolbar.test.tsx`
+  - `tests/frontend/settings/roles/RoleManagement.shellToolbar.test.tsx`
+  - `tests/frontend/settings/audit/AuditLogs.shellToolbar.test.tsx`
+- 监控页状态横幅与动作编排：
+  - `tests/frontend/settings/monitoring/MonitoringDashboard.shellStatus.test.tsx`
+- 危险操作确认：
+  - `tests/frontend/settings/users/UserManagement.confirmDialog.test.tsx`
+  - `tests/frontend/settings/roles/RoleManagement.confirmDialog.test.tsx`
+  - `tests/frontend/settings/backup/BackupHistorySection.confirmDialog.test.tsx`
+- shared A11y：
+  - `tests/frontend/settings/shared/*`
+
 ## 5. 关键用户流程（Mermaid）
 
 ### 5.1 页面入口与 Tab 切换（现状）
@@ -1553,7 +1619,7 @@ flowchart TD
   F -- 否 --> G[纠偏到首个可见 tab + replace URL]
   F -- 是 --> H[设置 activeTab]
   H --> I[渲染对应 Tab 内容]
-  I --> J[点击 Tab 切换 -> replace ?tab=]
+  I --> J[点击 Tab 切换 -> push ?tab=]
 ```
 
 ### 5.2 配置类 Tab 的“编辑-保存”通用流程

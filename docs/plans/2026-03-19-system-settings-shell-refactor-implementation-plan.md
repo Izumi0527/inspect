@@ -281,7 +281,7 @@ git commit -m "refactor(settings): 新增统一导航工具栏与统计区组件
 
 ### Task 5：迁移配置类页面到壳层动作区
 
-**进度：** 🟡 已完成实现与验证（待提交）
+**进度：** ✅ 已完成（已提交：e02918e）
 
 **Files:**
 - Modify: `frontend/src/features/settings/components/general/GeneralSettings.tsx`
@@ -338,7 +338,7 @@ git commit -m "refactor(settings): 配置类页面迁移到壳层动作区" -m "
 
 ### Task 6：迁移日志页与统一危险确认基础设施
 
-**进度：** ⏳ 未开始
+**进度：** ✅ 已完成（已提交：81d7c65）
 
 **Files:**
 - Create: `frontend/src/features/settings/shell/SettingsConfirmDialog.tsx`
@@ -388,7 +388,7 @@ git commit -m "refactor(settings): 统一危险确认与日志页动作编排" -
 
 ### Task 7：迁移列表类页面的统计区与工具栏
 
-**进度：** ⏳ 未开始
+**进度：** ✅ 已完成（已提交：81d7c65, 113d554）
 
 **Files:**
 - Modify: `frontend/src/features/settings/components/users/UserManagement.tsx`
@@ -442,7 +442,7 @@ git commit -m "refactor(settings): 列表类页面迁移统计区与工具栏" -
 
 ### Task 8：迁移监控页并统一状态横幅
 
-**进度：** ⏳ 未开始
+**进度：** ✅ 已完成（已提交：113d554）
 
 **Files:**
 - Modify: `frontend/src/features/settings/components/monitoring/MonitoringDashboard.tsx`
@@ -490,7 +490,7 @@ git commit -m "refactor(settings): 监控页接入壳层状态与工具栏" -m "
 
 ### Task 9：收敛共享组件与可访问性治理
 
-**进度：** ⏳ 未开始
+**进度：** ✅ 已完成（已提交：d5aaa1a）
 
 **Files:**
 - Modify: `frontend/src/features/settings/components/shared/EmptyState.tsx`
@@ -549,7 +549,7 @@ git commit -m "refactor(settings): 收敛共享组件并补齐可访问性" -m "
 
 ### Task 10：全量回归与文档同步
 
-**进度：** ⏳ 未开始
+**进度：** ✅ 已完成（已通过 `pnpm -C frontend test -- --runInBand tests/frontend/settings` 与 `pnpm -C frontend type-check`）
 
 **Files:**
 - Modify: `docs/features/settings/system-settings-uiux-current.md`

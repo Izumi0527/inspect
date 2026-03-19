@@ -10,7 +10,7 @@
 
 ---
 
-## 执行进度（截至 2026-03-19）
+## 执行进度（截至 2026-03-20）
 
 - [x] P0：安全策略/通知中心布尔解析错误已修复（`false` 不再被默认值覆盖），并补齐回归单测
 - [x] P0：备份恢复/创建语义一致化（不支持能力返回 501、禁止假成功），前端 UI 与调用参数对齐
@@ -19,6 +19,7 @@
 - [x] P1：历史聚合版 `settings.api.ts` 的 stub/假成功已改为显式抛错（并加弃用说明）
 - [x] P1：备份 includeFiles（未实现能力）已被前后端一致禁用/拒绝（避免误导）
 - [x] P1：`settingsMap.get(key) || 默认值` 误覆盖 `0/""/false` 的问题已治理（general/notification 等已改为显式解析/枚举归一化），并新增 falsy 回归用例
+- [x] P1：配置类子页动作区迁移至壳层统一承载（general/security/notifications/backup 的保存/重置/离开拦截能力上报），并补齐迁移单测（参考壳层重构计划 `docs/plans/2026-03-19-system-settings-shell-refactor-implementation-plan.md`）
 
 补充说明：
 - 本文档为 Round 1（首轮）审查与修复计划，以上条目已全部完成并通过验证。
@@ -26,7 +27,8 @@
 
 验证：
 - `cd backend-go && go test ./...` ✅
-- `cd frontend && pnpm type-check && pnpm test` ✅
+- `pnpm -C frontend type-check` ✅
+- `pnpm -C frontend test -- --runInBand tests/frontend/settings` ✅
 
 ## 0. 现状结论（审查摘要）
 
@@ -164,12 +166,13 @@ flowchart TD
 - (可选) Create: `tests/frontend/settings/SettingsView.permissionsVisibility.test.tsx`
 
 **Step 1：测试（先红）**
-- 点击任一 Tab 断言 `router.replace` 被调用并包含 `tab=<key>`
+- 点击任一 Tab 断言 `router.push` 被调用并包含 `tab=<key>`
 - URL 指向不可见 Tab 时，不渲染该 Tab 组件（并纠正 URL）
 
 **Step 2：实现**
 - 去除/弱化本地 `activeTab` 状态的竞态：用 `tabParam + 可见 tabs` 推导 `effectiveTab`
-- 点击 Tab 改为 `router.replace` 更新 `?tab=`
+- 用户点击 Tab 使用 `router.push` 更新 `?tab=`（支持浏览器后退回到上一个 Tab）
+- 自动纠偏（tab 非法/不可见）使用 `router.replace`（避免污染历史栈）
 - `tabs.length===0` 渲染 EmptyState（未来放宽路由权限时也安全）
 
 **Step 3：运行相关单测**
