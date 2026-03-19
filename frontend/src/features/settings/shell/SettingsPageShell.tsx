@@ -1,7 +1,6 @@
 'use client'
 
-import React, { useMemo } from 'react'
-import { motion } from 'framer-motion'
+import React, { useCallback, useMemo } from 'react'
 import { AppLayout } from '@/components/layout'
 import { EmptyState } from '@/features/settings/components/shared/EmptyState'
 import { usePermission } from '@/lib/contexts/auth-context'
@@ -11,6 +10,14 @@ import type { SettingsTabDescriptor } from '@/features/settings/types/shell.type
 import { useSettingsTabNavigation } from '@/features/settings/hooks/useSettingsTabNavigation'
 import { SettingsWorkbenchCard } from '@/features/settings/shell/SettingsWorkbenchCard'
 import { SettingsContentViewport } from '@/features/settings/shell/SettingsContentViewport'
+import { SettingsShellProvider } from '@/features/settings/context/SettingsShellContext'
+import { useSettingsShellState } from '@/features/settings/hooks/useSettingsShellState'
+import { useSettingsLeaveGuard } from '@/features/settings/hooks/useSettingsLeaveGuard'
+import { SettingsLeaveGuard } from '@/features/settings/shell/SettingsLeaveGuard'
+import { SettingsTabNav } from '@/features/settings/shell/SettingsTabNav'
+import { SettingsToolbar } from '@/features/settings/shell/SettingsToolbar'
+import { SettingsStatsStrip } from '@/features/settings/shell/SettingsStatsStrip'
+import { SettingsStatusBannerStack } from '@/features/settings/shell/SettingsStatusBannerStack'
 
 export const SettingsPageShell: React.FC = () => {
   // 标签页可见性（按最小权限控制，避免用户进入后再看到 403）
@@ -41,9 +48,6 @@ export const SettingsPageShell: React.FC = () => {
 
   const { activeTab, onTabSelect } = useSettingsTabNavigation({ tabs: visibleTabs })
 
-  const shouldFillHeight = activeTab?.scrollMode === 'panel'
-  const ActiveTabComponent = activeTab?.component ?? null
-
   if (!visibleTabs.length) {
     return (
       <AppLayout title="系统设置">
@@ -60,49 +64,64 @@ export const SettingsPageShell: React.FC = () => {
   }
 
   return (
+    <SettingsShellProvider activeTabKey={activeTab?.key ?? null}>
+      <SettingsPageShellLayout
+        visibleTabs={visibleTabs}
+        activeTab={activeTab}
+        onTabSelect={onTabSelect}
+      />
+    </SettingsShellProvider>
+  )
+}
+
+const SettingsPageShellLayout: React.FC<{
+  visibleTabs: SettingsTabDescriptor[]
+  activeTab: SettingsTabDescriptor | null
+  onTabSelect: (tabKey: SettingsTabDescriptor['key']) => void
+}> = ({ visibleTabs, activeTab, onTabSelect }) => {
+  const { activeTabCapabilities } = useSettingsShellState()
+  const { confirmLeaveIfNeeded } = useSettingsLeaveGuard({
+    activeTab,
+    activeTabCapabilities,
+  })
+
+  const handleTabSelect = useCallback(
+    (tabKey: SettingsTabDescriptor['key']) => {
+      if (!confirmLeaveIfNeeded(tabKey)) return
+      onTabSelect(tabKey)
+    },
+    [confirmLeaveIfNeeded, onTabSelect]
+  )
+
+  const shouldFillHeight = activeTab?.scrollMode === 'panel'
+  const ActiveTabComponent = activeTab?.component ?? null
+
+  return (
     <AppLayout title="系统设置">
+      <SettingsLeaveGuard activeTab={activeTab} />
       <div
         className={`p-1 ${
           shouldFillHeight ? 'h-[calc(100vh-64px)] flex flex-col' : ''
         }`}
       >
         <SettingsWorkbenchCard fillHeight={shouldFillHeight}>
-          {/* 标签导航 */}
-          <div className="p-4 border-b border-border">
-            <div className="flex flex-wrap gap-2">
-              {visibleTabs.map((tab) => {
-                const Icon = tab.icon
-                const isActive = activeTab?.key === tab.key
+          <SettingsTabNav
+            tabs={visibleTabs}
+            activeKey={activeTab?.key ?? visibleTabs[0].key}
+            onSelect={handleTabSelect}
+          />
 
-                return (
-                  <motion.button
-                    key={tab.key}
-                    onClick={() => onTabSelect(tab.key)}
-                    className={`
-                      relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium
-                      transition-all duration-200
-                      ${
-                        isActive
-                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 shadow-sm'
-                          : 'text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400 hover:bg-muted/40'
-                      }
-                    `}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                    {isActive && (
-                      <motion.div
-                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400 rounded-full"
-                        layoutId="activeTabIndicator"
-                      />
-                    )}
-                  </motion.button>
-                )
-              })}
-            </div>
-          </div>
+          <SettingsStatusBannerStack
+            banners={activeTabCapabilities?.banners ?? []}
+          />
+
+          <SettingsStatsStrip stats={activeTabCapabilities?.stats ?? []} />
+
+          <SettingsToolbar
+            toolbar={activeTabCapabilities?.toolbar}
+            primaryActions={activeTabCapabilities?.primaryActions}
+            secondaryActions={activeTabCapabilities?.secondaryActions}
+          />
 
           {/* 标签内容 */}
           {activeTab ? (
@@ -118,4 +137,3 @@ export const SettingsPageShell: React.FC = () => {
     </AppLayout>
   )
 }
-

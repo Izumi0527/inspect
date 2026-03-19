@@ -19,6 +19,9 @@ export const SettingsContentViewport: React.FC<SettingsContentViewportProps> = (
   return (
     <motion.div
       key={tabKey}
+      role="tabpanel"
+      id={`settings-panel-${tabKey}`}
+      aria-labelledby={`settings-tab-${tabKey}`}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
@@ -31,4 +34,3 @@ export const SettingsContentViewport: React.FC<SettingsContentViewportProps> = (
     </motion.div>
   )
 }
-
