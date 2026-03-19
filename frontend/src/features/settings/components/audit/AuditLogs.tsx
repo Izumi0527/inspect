@@ -1,17 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useAuditLogs } from '../../hooks/useAuditLogs'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { FileText, Download, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
-import { CompactStatCard } from '@/components/shared'
+import { FileText, Download, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react'
 import { EmptyState } from '../shared/EmptyState'
 import { toast } from 'react-hot-toast'
 import type { AuditAction } from '../../types/audit.types'
+import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
 
 // 操作映射
 const actionLabels: Record<AuditAction, string> = {
@@ -62,14 +61,88 @@ export function AuditLogs() {
   const [keyword, setKeyword] = useState('')
 
   // 处理导出
-  const handleExport = async () => {
+  const handleExport = useCallback(async () => {
     try {
       await exportLogs()
       toast.success('审计日志导出成功！')
     } catch (err) {
       toast.error('导出失败：' + (err as Error).message)
     }
-  }
+  }, [exportLogs])
+
+  const statsStrip = useMemo(() => {
+    if (!stats) return []
+    return [
+      {
+        key: 'total-logs',
+        title: '总日志数',
+        value: stats.totalLogs.toLocaleString(),
+        icon: FileText,
+        iconClassName: 'text-blue-600 dark:text-blue-400',
+      },
+      {
+        key: 'today-logs',
+        title: '今日日志',
+        value: stats.todayLogs.toLocaleString(),
+        icon: FileText,
+        iconClassName: 'text-green-600 dark:text-green-400',
+        valueClassName: 'text-green-600 dark:text-green-400',
+      },
+      {
+        key: 'success-rate',
+        title: '成功率',
+        value: `${(stats.successRate * 100).toFixed(1)}%`,
+        icon: CheckCircle,
+        iconClassName: 'text-purple-600 dark:text-purple-400',
+        valueClassName: 'text-purple-600 dark:text-purple-400',
+      },
+    ]
+  }, [stats])
+
+  const toolbar = useMemo(
+    () => ({
+      search: {
+        value: keyword,
+        placeholder: '搜索日志...',
+        ariaLabel: '搜索审计日志',
+        onChange: setKeyword,
+        onSubmit: () => updateQueryParams({ keyword, page: 1 }),
+      },
+    }),
+    [keyword, page, updateQueryParams]
+  )
+
+  const primaryActions = useMemo(
+    () => [
+      {
+        key: 'export-logs',
+        label: '导出日志',
+        icon: <Download className="w-4 h-4 mr-2" />,
+        onClick: () => void handleExport(),
+      },
+    ],
+    [handleExport]
+  )
+
+  const secondaryActions = useMemo(
+    () => [
+      {
+        key: 'refresh',
+        label: '刷新',
+        icon: <RefreshCw className="w-4 h-4 mr-2" />,
+        disabled: Boolean(isLoading),
+        onClick: () => void refetch(),
+      },
+    ],
+    [isLoading, refetch]
+  )
+
+  useSettingsTabCapabilities('audit', {
+    stats: statsStrip,
+    toolbar,
+    primaryActions,
+    secondaryActions,
+  })
 
   // 加载状态
   if (isLoading && !logs.length) {
@@ -83,61 +156,6 @@ export function AuditLogs() {
 
   return (
     <div className="p-4 space-y-4 flex-1 flex flex-col min-h-0">
-      {/* 统计卡片 */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <CompactStatCard
-            title="总日志数"
-            value={stats.totalLogs.toLocaleString()}
-            icon={FileText}
-            iconClassName="text-blue-600 dark:text-blue-400"
-          />
-          <CompactStatCard
-            title="今日日志"
-            value={stats.todayLogs.toLocaleString()}
-            icon={FileText}
-            iconClassName="text-green-600 dark:text-green-400"
-            valueClassName="text-green-600 dark:text-green-400"
-          />
-          <CompactStatCard
-            title="成功率"
-            value={`${(stats.successRate * 100).toFixed(1)}%`}
-            icon={CheckCircle}
-            iconClassName="text-purple-600 dark:text-purple-400"
-            valueClassName="text-purple-600 dark:text-purple-400"
-          />
-        </div>
-      )}
-
-      {/* 操作栏 */}
-      <Card className="p-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex-1 flex items-center gap-2">
-            <Input
-              placeholder="搜索日志..."
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  updateQueryParams({ keyword, page: 1 })
-                }
-              }}
-              className="max-w-md"
-            />
-            <Button
-              variant="outline"
-              onClick={() => updateQueryParams({ keyword, page: 1 })}
-            >
-              搜索
-            </Button>
-          </div>
-          <Button onClick={handleExport}>
-            <Download className="w-4 h-4 mr-2" />
-            导出日志
-          </Button>
-        </div>
-      </Card>
-
       {/* 日志列表 */}
       <Card className="flex-1 flex flex-col min-h-0">
         {error && !logs.length ? (

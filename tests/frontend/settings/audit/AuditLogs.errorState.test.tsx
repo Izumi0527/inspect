@@ -2,6 +2,7 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 
 import { AuditLogs } from '@/features/settings/components/audit/AuditLogs'
+import { SettingsShellProvider } from '@/features/settings/context/SettingsShellContext'
 
 const mockUseAuditLogs = jest.fn()
 
@@ -19,15 +20,19 @@ describe('AuditLogs 错误态', () => {
       stats: null,
       isLoading: false,
       error: new Error('boom'),
+      refetch: jest.fn(),
       updateQueryParams: jest.fn(),
       exportLogs: jest.fn(),
     })
   })
 
   it('加载失败时应展示明确错误提示', () => {
-    render(<AuditLogs />)
+    render(
+      <SettingsShellProvider activeTabKey="audit">
+        <AuditLogs />
+      </SettingsShellProvider>
+    )
 
     expect(screen.getByText('加载审计日志失败')).toBeInTheDocument()
   })
 })
-

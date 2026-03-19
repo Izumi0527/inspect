@@ -1,17 +1,22 @@
 'use client'
 
+import { useCallback, useMemo, useState } from 'react'
 import { useSystemMonitoring } from '../../hooks/useSystemMonitoring'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '../shared/EmptyState'
 import { formatUptime } from './uptime'
+import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
 import {
   Activity,
   Cpu,
   HardDrive,
   MemoryStick,
   Network,
+  Pause,
+  Play,
+  RefreshCw,
   Server,
   CheckCircle,
   XCircle,
@@ -69,7 +74,68 @@ function ServiceStatusBadge({ status }: { status: 'healthy' | 'unhealthy' | 'deg
 }
 
 export function MonitoringDashboard() {
-  const { metrics, services, system, isLoading, error, refetch } = useSystemMonitoring(true)
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
+  const { metrics, services, system, isLoading, error, refetch } =
+    useSystemMonitoring(autoRefreshEnabled)
+
+  const handleRefetch = useCallback(() => {
+    void refetch?.()
+  }, [refetch])
+
+  const toggleAutoRefresh = useCallback(() => {
+    setAutoRefreshEnabled((prev) => !prev)
+  }, [])
+
+  const primaryActions = useMemo(
+    () => [
+      {
+        key: 'refetch',
+        label: error ? '重试' : '刷新',
+        icon: <RefreshCw className="w-4 h-4 mr-2" />,
+        loading: isLoading,
+        disabled: isLoading,
+        onClick: handleRefetch,
+      },
+    ],
+    [error, handleRefetch, isLoading]
+  )
+
+  const secondaryActions = useMemo(
+    () => [
+      {
+        key: 'toggle-auto-refresh',
+        label: autoRefreshEnabled ? '暂停刷新' : '恢复刷新',
+        icon: autoRefreshEnabled ? (
+          <Pause className="w-4 h-4 mr-2" />
+        ) : (
+          <Play className="w-4 h-4 mr-2" />
+        ),
+        onClick: toggleAutoRefresh,
+      },
+    ],
+    [autoRefreshEnabled, toggleAutoRefresh]
+  )
+
+  const banners = useMemo(() => {
+    if (!error || !metrics) return []
+
+    const message = (error as Error).message || '刷新失败，请稍后重试'
+    return [
+      {
+        key: 'monitoring-refresh-error',
+        tone: 'warning' as const,
+        title: '刷新失败',
+        description: `最近一次刷新失败：${message}（页面仍展示上次成功获取的数据）`,
+      },
+    ]
+  }, [error, metrics])
+
+  useSettingsTabCapabilities('monitoring', {
+    loading: Boolean(isLoading && !metrics),
+    banners,
+    primaryActions,
+    secondaryActions,
+  })
 
   if (error && !metrics) {
     return (
@@ -78,10 +144,6 @@ export function MonitoringDashboard() {
           icon={AlertCircle}
           title="加载监控数据失败"
           description={(error as Error).message || '无法连接到服务器，请稍后重试'}
-          action={{
-            label: '重试',
-            onClick: () => void refetch(),
-          }}
         />
       </div>
     )
