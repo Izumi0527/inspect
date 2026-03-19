@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { SettingsView } from '@/features/settings/components/SettingsView'
 
 const replaceMock = jest.fn()
+const pushMock = jest.fn()
 
 jest.mock('@/lib/contexts/auth-context', () => ({
   usePermission: () => true,
@@ -11,7 +12,7 @@ jest.mock('@/lib/contexts/auth-context', () => ({
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
-    push: jest.fn(),
+    push: pushMock,
     replace: replaceMock,
     prefetch: jest.fn(),
     back: jest.fn(),
@@ -57,6 +58,7 @@ jest.mock('@/features/settings/components/monitoring/MonitoringDashboard', () =>
 describe('SettingsView URL 同步', () => {
   beforeEach(() => {
     replaceMock.mockReset()
+    pushMock.mockReset()
   })
 
   it('点击 Tab 应回写 ?tab= 到 URL', async () => {
@@ -67,8 +69,7 @@ describe('SettingsView URL 同步', () => {
 
     await user.click(screen.getByText('日志设置'))
 
-    expect(replaceMock).toHaveBeenCalled()
-    expect(replaceMock.mock.calls[0][0]).toEqual(expect.stringContaining('tab=logs'))
+    expect(pushMock).toHaveBeenCalled()
+    expect(pushMock.mock.calls[0][0]).toEqual(expect.stringContaining('tab=logs'))
   })
 })
-
