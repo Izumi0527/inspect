@@ -7,9 +7,7 @@ import { toast } from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { CompactStatCard } from '@/components/shared'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { ApiClientError } from '@/lib/api-client'
 import { Permission } from '@/lib/types/auth.types'
@@ -18,6 +16,8 @@ import type { Role } from '../../types/users.types'
 import { EmptyState } from '../shared/EmptyState'
 import { RoleFormDialog } from './RoleFormDialog'
 import { RolePermissionsDialog } from './RolePermissionsDialog'
+import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
+import { SettingsConfirmDialog } from '@/features/settings/shell/SettingsConfirmDialog'
 
 const formatDateTime = (iso?: string) => {
   if (!iso) return '-'
@@ -38,6 +38,8 @@ export function RoleManagement() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editRole, setEditRole] = useState<Role | null>(null)
   const [permissionsRole, setPermissionsRole] = useState<Role | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteTargetRole, setDeleteTargetRole] = useState<Role | null>(null)
 
   const rolesQuery = useQuery<Role[]>({
     queryKey: ['settingsRoles'],
@@ -91,6 +93,77 @@ export function RoleManagement() {
     }
   }, [roles])
 
+  const statsStrip = useMemo(
+    () => [
+      {
+        key: 'total-roles',
+        title: '角色总数',
+        value: stats.total,
+        icon: Shield,
+        iconClassName: 'text-blue-600 dark:text-blue-400',
+      },
+      {
+        key: 'built-in-roles',
+        title: '内置角色',
+        value: stats.builtIn,
+        icon: KeyRound,
+        iconClassName: 'text-green-600 dark:text-green-400',
+      },
+      {
+        key: 'custom-roles',
+        title: '自定义角色',
+        value: stats.custom,
+        icon: Pencil,
+        iconClassName: 'text-purple-600 dark:text-purple-400',
+      },
+    ],
+    [stats]
+  )
+
+  const toolbar = useMemo(
+    () => ({
+      search: {
+        value: keyword,
+        placeholder: '搜索角色名称/显示名称/描述...',
+        ariaLabel: '搜索角色',
+        onChange: setKeyword,
+      },
+    }),
+    [keyword]
+  )
+
+  const primaryActions = useMemo(
+    () => [
+      {
+        key: 'create-role',
+        label: '新建角色',
+        icon: <Plus className="w-4 h-4 mr-2" />,
+        disabled: Boolean(!canCreate),
+        onClick: () => setCreateOpen(true),
+      },
+    ],
+    [canCreate]
+  )
+
+  const secondaryActions = useMemo(
+    () => [
+      {
+        key: 'refresh',
+        label: '刷新',
+        disabled: Boolean(rolesQuery.isFetching),
+        onClick: () => void rolesQuery.refetch(),
+      },
+    ],
+    [rolesQuery]
+  )
+
+  useSettingsTabCapabilities('roles', {
+    stats: canRead ? statsStrip : [],
+    toolbar: canRead ? toolbar : undefined,
+    primaryActions: canRead ? primaryActions : undefined,
+    secondaryActions: canRead ? secondaryActions : undefined,
+  })
+
   const handleDelete = useCallback(
     async (role: Role) => {
       if (!canDelete) {
@@ -102,20 +175,28 @@ export function RoleManagement() {
         return
       }
 
-      const confirmed = window.confirm(
-        `确定要删除角色 "${role.displayName || role.name}" 吗？\n\n注意：删除角色不会自动修改已绑定该角色的用户，请先确认用户角色分配策略。`
-      )
-      if (!confirmed) return
-
-      try {
-        await deleteMutation.mutateAsync(role.id)
-        toast.success('角色已删除')
-      } catch (err) {
-        toast.error('删除失败：' + (err as Error).message)
-      }
+      setDeleteTargetRole(role)
+      setDeleteDialogOpen(true)
     },
-    [canDelete, deleteMutation]
+    [canDelete]
   )
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTargetRole) return
+
+    try {
+      await deleteMutation.mutateAsync(deleteTargetRole.id)
+      toast.success('角色已删除')
+      setDeleteDialogOpen(false)
+    } catch (err) {
+      toast.error('删除失败：' + (err as Error).message)
+    }
+  }, [deleteMutation, deleteTargetRole])
+
+  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+    setDeleteDialogOpen(open)
+    if (!open) setDeleteTargetRole(null)
+  }, [])
 
   const handleCreate = useCallback(
     async (data: { name: string; displayName?: string; description?: string }) => {
@@ -217,53 +298,21 @@ export function RoleManagement() {
         }}
       />
 
-      {/* 统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <CompactStatCard
-          title="角色总数"
-          value={stats.total}
-          icon={Shield}
-          iconClassName="text-blue-600 dark:text-blue-400"
-        />
-        <CompactStatCard
-          title="内置角色"
-          value={stats.builtIn}
-          icon={KeyRound}
-          iconClassName="text-green-600 dark:text-green-400"
-        />
-        <CompactStatCard
-          title="自定义角色"
-          value={stats.custom}
-          icon={Pencil}
-          iconClassName="text-purple-600 dark:text-purple-400"
-        />
-      </div>
-
-      {/* 操作栏 */}
-      <Card className="p-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex-1 flex items-center gap-2">
-            <div className="relative flex-1 max-w-md">
-              <Input
-                placeholder="搜索角色名称/显示名称/描述..."
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                className="w-full"
-              />
-            </div>
-            <Button variant="outline" onClick={() => rolesQuery.refetch()} disabled={rolesQuery.isFetching}>
-              刷新
-            </Button>
-          </div>
-          <Button onClick={() => setCreateOpen(true)} disabled={!canCreate}>
-            <Plus className="w-4 h-4 mr-2" />
-            新建角色
-          </Button>
-        </div>
-        {!canCreate && (
-          <div className="mt-2 text-xs text-muted-foreground">创建角色需要 users:create 权限</div>
-        )}
-      </Card>
+      <SettingsConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={handleDeleteDialogOpenChange}
+        tone="danger"
+        title="确认删除角色？"
+        description={
+          deleteTargetRole
+            ? `将永久删除角色“${deleteTargetRole.displayName || deleteTargetRole.name}”。\n\n注意：删除角色不会自动修改已绑定该角色的用户，请先确认用户角色分配策略。\n\n此操作不可撤销，请谨慎操作。`
+            : '此操作不可撤销，请谨慎操作。'
+        }
+        confirmText="确认删除"
+        cancelText="取消"
+        confirmLoading={deleteMutation.isPending}
+        onConfirm={() => void handleConfirmDelete()}
+      />
 
       {/* 角色列表 */}
       <Card className="flex-1 flex flex-col min-h-0">
@@ -305,6 +354,11 @@ export function RoleManagement() {
                         variant="ghost"
                         size="sm"
                         onClick={() => setPermissionsRole(role)}
+                        aria-label={
+                          canUpdate
+                            ? `分配权限 ${role.displayName || role.name}`
+                            : `查看权限 ${role.displayName || role.name}`
+                        }
                         title={canUpdate ? '分配权限' : '查看权限（需要 users:update 才能修改）'}
                       >
                         <KeyRound className="w-4 h-4" />
@@ -314,6 +368,11 @@ export function RoleManagement() {
                         size="sm"
                         onClick={() => setEditRole(role)}
                         disabled={!canUpdate}
+                        aria-label={
+                          canUpdate
+                            ? `编辑角色 ${role.displayName || role.name}`
+                            : `编辑角色（无权限） ${role.displayName || role.name}`
+                        }
                         title={canUpdate ? '编辑角色' : '需要 users:update 权限'}
                       >
                         <Pencil className="w-4 h-4" />
@@ -323,6 +382,13 @@ export function RoleManagement() {
                         size="sm"
                         onClick={() => handleDelete(role)}
                         disabled={!canDelete || role.isBuiltIn || deleteMutation.isPending}
+                        aria-label={
+                          role.isBuiltIn
+                            ? `内置角色不可删除 ${role.displayName || role.name}`
+                            : canDelete
+                              ? `删除角色 ${role.displayName || role.name}`
+                              : `删除角色（无权限） ${role.displayName || role.name}`
+                        }
                         title={
                           role.isBuiltIn
                             ? '内置角色不可删除'

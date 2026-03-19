@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { AlertCircle, RefreshCw, Trash2, Zap } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -8,12 +8,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ActionButtons } from '@/features/settings/components/shared/ActionButtons'
 import type { SyslogProtocol, SyslogSettings } from '@/features/settings/api/logs.api'
 import { logsSettingsApi } from '@/features/settings/api/logs.api'
 import { useLogsSettings } from '@/features/settings/hooks/useLogsSettings'
+import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
+import { SettingsConfirmDialog } from '@/features/settings/shell/SettingsConfirmDialog'
 
 export const LogsSettings: React.FC = () => {
   const queryClient = useQueryClient()
@@ -44,15 +44,15 @@ export const LogsSettings: React.FC = () => {
     resetAll,
   } = useLogsSettings()
 
-  const normalizeRetentionDays = (value: number) => {
+  const normalizeRetentionDays = useCallback((value: number) => {
     const raw = Number.isFinite(value) ? value : 90
     const floored = Math.floor(raw)
     if (floored < 1) return 1
     if (floored > 3650) return 3650
     return floored
-  }
+  }, [])
 
-  const normalizeSyslog = (): SyslogSettings => {
+  const normalizeSyslog = useCallback((): SyslogSettings => {
     const protocol: SyslogProtocol =
       syslogProtocol === 'udp' || syslogProtocol === 'tcp' || syslogProtocol === 'both' ? syslogProtocol : 'both'
 
@@ -76,7 +76,15 @@ export const LogsSettings: React.FC = () => {
       alertsEnabled: Boolean(syslogAlertsEnabled),
       alertsMaxNewPerMinute,
     }
-  }
+  }, [
+    syslogAlertsEnabled,
+    syslogAlertsMaxNewPerMinute,
+    syslogEnabled,
+    syslogHost,
+    syslogMaxMessageBytes,
+    syslogPort,
+    syslogProtocol,
+  ])
 
   const syslogStatusQuery = useQuery({
     queryKey: ['syslogStatus'],
@@ -93,7 +101,15 @@ export const LogsSettings: React.FC = () => {
     },
   })
 
-  const handleSave = async () => {
+  const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false)
+  const [cleanupPending, setCleanupPending] = useState(false)
+
+  const cleanupRetentionDays = useMemo(
+    () => normalizeRetentionDays(retentionDays),
+    [normalizeRetentionDays, retentionDays]
+  )
+
+  const handleSave = useCallback(async () => {
     try {
       const normalizedRetention = normalizeRetentionDays(retentionDays)
       const normalizedSyslog = normalizeSyslog()
@@ -102,30 +118,33 @@ export const LogsSettings: React.FC = () => {
     } catch (err) {
       toast.error('保存失败：' + (err as Error).message)
     }
-  }
+  }, [normalizeRetentionDays, normalizeSyslog, retentionDays, saveAll])
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     resetAll()
     toast.success('已重置为服务器配置')
-  }
+  }, [resetAll])
 
-  const handleCleanup = async () => {
-    const normalizedRetention = normalizeRetentionDays(retentionDays)
+  const handleRequestCleanup = useCallback(() => {
+    setCleanupDialogOpen(true)
+  }, [])
 
-    const confirmed = window.confirm(
-      `将清理创建时间早于 ${normalizedRetention} 天的设备日志。\n\n此操作不可撤销，是否继续？`
-    )
-    if (!confirmed) return
-
+  const handleConfirmCleanup = useCallback(async () => {
+    setCleanupPending(true)
     try {
-      const resp = await logsSettingsApi.cleanupDeviceLogs({ retentionDays: normalizedRetention })
+      const resp = await logsSettingsApi.cleanupDeviceLogs({
+        retentionDays: cleanupRetentionDays,
+      })
       toast.success(`已清理 ${resp.deletedCount} 条设备日志`)
+      setCleanupDialogOpen(false)
     } catch (err) {
       toast.error('清理失败：' + (err as Error).message)
+    } finally {
+      setCleanupPending(false)
     }
-  }
+  }, [cleanupRetentionDays])
 
-  const handleApplySyslog = async () => {
+  const handleApplySyslog = useCallback(async () => {
     try {
       const normalizedRetention = normalizeRetentionDays(retentionDays)
       const normalizedSyslog = normalizeSyslog()
@@ -138,35 +157,97 @@ export const LogsSettings: React.FC = () => {
     } catch (err) {
       toast.error('应用失败：' + (err as Error).message)
     }
-  }
+  }, [applySyslogMutation, normalizeRetentionDays, normalizeSyslog, queryClient, retentionDays, saveAll])
+
+  const saving = Boolean(isSaving || applySyslogMutation.isPending || cleanupPending)
+  const disableSaveReset = Boolean(!isDirty || saving)
+
+  const primaryActions = useMemo(
+    () => [
+      {
+        key: 'save',
+        label: '保存',
+        icon: <Zap className="w-4 h-4 mr-2" />,
+        loading: saving,
+        disabled: disableSaveReset,
+        onClick: handleSave,
+      },
+      {
+        key: 'apply-syslog',
+        label: '应用配置',
+        icon: <Zap className="w-4 h-4 mr-2" />,
+        loading: applySyslogMutation.isPending,
+        disabled: saving,
+        onClick: handleApplySyslog,
+      },
+    ],
+    [applySyslogMutation.isPending, disableSaveReset, handleApplySyslog, handleSave, saving]
+  )
+
+  const secondaryActions = useMemo(
+    () => [
+      {
+        key: 'reset',
+        label: '重置',
+        icon: <RefreshCw className="w-4 h-4 mr-2" />,
+        disabled: disableSaveReset,
+        onClick: handleReset,
+      },
+      {
+        key: 'refresh-syslog',
+        label: '刷新状态',
+        icon: <RefreshCw className="w-4 h-4 mr-2" />,
+        disabled: Boolean(syslogStatusQuery.isFetching || applySyslogMutation.isPending),
+        onClick: () => void syslogStatusQuery.refetch(),
+      },
+      {
+        key: 'cleanup-logs',
+        label: '立即清理',
+        icon: <Trash2 className="w-4 h-4 mr-2" />,
+        variant: 'destructive' as const,
+        disabled: Boolean(saving),
+        onClick: handleRequestCleanup,
+      },
+    ],
+    [
+      applySyslogMutation.isPending,
+      disableSaveReset,
+      handleRequestCleanup,
+      handleReset,
+      saving,
+      syslogStatusQuery,
+    ]
+  )
+
+  useSettingsTabCapabilities('logs', {
+    dirty: isDirty,
+    saving,
+    blockLeave: Boolean(isDirty),
+    primaryActions,
+    secondaryActions,
+  })
 
   if (isLoading) {
     return (
-      <div>
-        <ActionButtons />
-        <div className="space-y-4 p-4">
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-40 w-full" />
-        </div>
+      <div className="space-y-4 p-4">
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-40 w-full" />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div>
-        <ActionButtons />
-        <div className="p-6">
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 flex items-start space-x-4">
-            <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="text-lg font-semibold text-red-900 dark:text-red-200 mb-2">
-                加载日志设置失败
-              </h3>
-              <p className="text-sm text-red-700 dark:text-red-300">
-                {(error as Error).message || '无法连接到服务器，请检查网络连接或稍后重试'}
-              </p>
-            </div>
+      <div className="p-6">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 flex items-start space-x-4">
+          <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-lg font-semibold text-red-900 dark:text-red-200 mb-2">
+              加载日志设置失败
+            </h3>
+            <p className="text-sm text-red-700 dark:text-red-300">
+              {(error as Error).message || '无法连接到服务器，请检查网络连接或稍后重试'}
+            </p>
           </div>
         </div>
       </div>
@@ -174,24 +255,8 @@ export const LogsSettings: React.FC = () => {
   }
 
   return (
-    <div>
-      <ActionButtons
-        isDirty={isDirty}
-        isSaving={isSaving || applySyslogMutation.isPending}
-        onSave={handleSave}
-        onReset={handleReset}
-        extraActions={[
-          {
-            label: '立即清理',
-            variant: 'destructive',
-            icon: <Trash2 className="w-4 h-4 mr-2" />,
-            onClick: handleCleanup,
-          },
-        ]}
-      />
-
-      <div className="p-4">
-        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+    <div className="p-4">
+      <div className="divide-y divide-gray-200 dark:divide-gray-700">
           <section className="py-6">
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-foreground">数据保留</h3>
@@ -360,20 +425,7 @@ export const LogsSettings: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-6 flex items-center gap-3">
-              <Button onClick={handleApplySyslog} disabled={isSaving || applySyslogMutation.isPending}>
-                <Zap className="w-4 h-4 mr-2" />
-                应用配置
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => syslogStatusQuery.refetch()}
-                disabled={syslogStatusQuery.isFetching || applySyslogMutation.isPending}
-              >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                刷新状态
-              </Button>
-            </div>
+            <p className="mt-6 text-sm text-muted-foreground">配置保存/应用/状态刷新等操作已迁移到页面顶部工具栏。</p>
 
             {syslogStatusQuery.error && (
               <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-300">
@@ -426,15 +478,24 @@ export const LogsSettings: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <Button variant="destructive" onClick={handleCleanup} disabled={isSaving}>
-                <Trash2 className="w-4 h-4 mr-2" />
-                立即清理超过保留天数的设备日志
-              </Button>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              当前保留天数为 <span className="font-mono">{cleanupRetentionDays}</span>。请使用页面顶部工具栏中的{' '}
+              <span className="font-medium text-foreground">“立即清理”</span> 操作。
+            </p>
           </section>
         </div>
-      </div>
+
+      <SettingsConfirmDialog
+        open={cleanupDialogOpen}
+        onOpenChange={setCleanupDialogOpen}
+        tone="danger"
+        title="确认立即清理设备日志？"
+        description={`将清理超过 ${cleanupRetentionDays} 天的设备日志，此操作不可恢复。`}
+        confirmText="继续清理"
+        cancelText="取消"
+        confirmLoading={cleanupPending}
+        onConfirm={() => void handleConfirmCleanup()}
+      />
     </div>
   )
 }

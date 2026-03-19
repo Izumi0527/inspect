@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { SectionHeader } from '@/features/settings/components/shared/SectionHeader'
 import { EmptyState } from '@/features/settings/components/shared/EmptyState'
+import { SettingsConfirmDialog } from '@/features/settings/shell/SettingsConfirmDialog'
 import {
   Database,
   Download,
@@ -127,6 +128,11 @@ export function BackupHistorySection({
   onDeleteBackup,
 }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmKind, setConfirmKind] = useState<'restore' | 'delete' | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; fileName: string } | null>(null)
+  const [restorePending, setRestorePending] = useState(false)
+  const [deletePending, setDeletePending] = useState(false)
 
   const handleCreateBackup = async () => {
     try {
@@ -146,38 +152,61 @@ export function BackupHistorySection({
     }
   }
 
-  const handleRestore = async (backupId: string, fileName: string) => {
-    if (
-      !window.confirm(
-        `确定要恢复备份 "${fileName}" 吗？\n\n⚠️ 当前版本仅支持恢复系统配置（settings），将覆盖当前配置。此操作不可逆，请谨慎操作。`
-      )
-    ) {
-      return
-    }
-
-    try {
-      await onRestoreBackup(backupId)
-      toast.success('系统配置恢复成功！页面将重新加载')
-      // 延迟刷新页面
-      setTimeout(() => window.location.reload(), 2000)
-    } catch (err) {
-      toast.error('备份恢复失败：' + (err as Error).message)
-    }
+  const handleRequestRestore = (backupId: string, fileName: string) => {
+    setConfirmKind('restore')
+    setConfirmTarget({ id: backupId, fileName })
+    setConfirmOpen(true)
   }
 
-  const handleDelete = async (backupId: string, fileName: string) => {
-    if (!window.confirm(`确定要删除备份 "${fileName}" 吗？\n\n此操作不可撤销。`)) {
+  const handleRequestDelete = (backupId: string, fileName: string) => {
+    setConfirmKind('delete')
+    setConfirmTarget({ id: backupId, fileName })
+    setConfirmOpen(true)
+  }
+
+  const handleConfirm = async () => {
+    if (!confirmKind || !confirmTarget) return
+
+    if (confirmKind === 'restore') {
+      setRestorePending(true)
+      try {
+        await onRestoreBackup(confirmTarget.id)
+        toast.success('系统配置恢复成功！页面将重新加载')
+        setConfirmOpen(false)
+        setTimeout(() => {
+          try {
+            window.location.reload()
+          } catch {
+            // 某些测试/非浏览器环境下不支持 reload，忽略即可
+          }
+        }, 2000)
+      } catch (err) {
+        toast.error('备份恢复失败：' + (err as Error).message)
+      } finally {
+        setRestorePending(false)
+      }
       return
     }
 
-    setDeletingId(backupId)
+    setDeletePending(true)
+    setDeletingId(confirmTarget.id)
     try {
-      await onDeleteBackup(backupId)
+      await onDeleteBackup(confirmTarget.id)
       toast.success('备份已删除')
+      setConfirmOpen(false)
     } catch (err) {
       toast.error('备份删除失败：' + (err as Error).message)
     } finally {
+      setDeletePending(false)
       setDeletingId(null)
+    }
+  }
+
+  const handleConfirmOpenChange = (open: boolean) => {
+    setConfirmOpen(open)
+    if (!open) {
+      setConfirmKind(null)
+      setConfirmTarget(null)
     }
   }
 
@@ -286,6 +315,7 @@ export function BackupHistorySection({
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDownload(backup.id, backup.fileName)}
+                            aria-label={`下载备份 ${backup.fileName}`}
                             title="下载备份"
                           >
                             <Download className="w-4 h-4" />
@@ -293,7 +323,9 @@ export function BackupHistorySection({
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleRestore(backup.id, backup.fileName)}
+                            onClick={() => handleRequestRestore(backup.id, backup.fileName)}
+                            disabled={Boolean(restorePending)}
+                            aria-label={`恢复备份 ${backup.fileName}`}
                             title="恢复备份"
                           >
                             <RotateCcw className="w-4 h-4" />
@@ -303,8 +335,9 @@ export function BackupHistorySection({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(backup.id, backup.fileName)}
-                        disabled={isDeleting && deletingId === backup.id}
+                        onClick={() => handleRequestDelete(backup.id, backup.fileName)}
+                        disabled={Boolean((isDeleting || deletePending) && deletingId === backup.id)}
+                        aria-label={`删除备份 ${backup.fileName}`}
                         title="删除备份"
                       >
                         <Trash2
@@ -319,6 +352,27 @@ export function BackupHistorySection({
           </table>
         </div>
       )}
+
+      <SettingsConfirmDialog
+        open={confirmOpen}
+        onOpenChange={handleConfirmOpenChange}
+        tone="danger"
+        title={confirmKind === 'restore' ? '确认恢复备份？' : '确认删除备份？'}
+        description={
+          confirmKind === 'restore'
+            ? confirmTarget
+              ? `将恢复备份“${confirmTarget.fileName}”。\n\n当前版本仅支持恢复系统配置（settings），将覆盖当前配置。\n\n此操作不可逆，请谨慎操作。`
+              : '当前版本仅支持恢复系统配置（settings），将覆盖当前配置。此操作不可逆，请谨慎操作。'
+            : confirmTarget
+              ? `将永久删除备份“${confirmTarget.fileName}”。\n\n此操作不可撤销，请谨慎操作。`
+              : '此操作不可撤销，请谨慎操作。'
+        }
+        confirmText={confirmKind === 'restore' ? '确认恢复' : '确认删除'}
+        cancelText="取消"
+        confirmLoading={Boolean(confirmKind === 'restore' ? restorePending : deletePending || isDeleting)}
+        confirmDisabled={Boolean(!confirmKind || !confirmTarget)}
+        onConfirm={() => void handleConfirm()}
+      />
     </div>
   )
 }

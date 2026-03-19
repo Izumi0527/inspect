@@ -5,13 +5,10 @@ import { useUserManagement } from '../../hooks/useUserManagement'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { CompactStatCard } from '@/components/shared'
 import {
   Users,
   UserPlus,
-  Search,
   Trash2,
   Lock,
   Unlock,
@@ -31,6 +28,8 @@ import { UserPermissionsDialog } from './UserPermissionsDialog'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { EmptyState } from '../shared/EmptyState'
+import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
+import { SettingsConfirmDialog } from '@/features/settings/shell/SettingsConfirmDialog'
 
 // 内置角色映射（后端支持自定义角色，这里仅作为兜底）
 const builtInRoleLabels: Record<BuiltInUserRole, string> = {
@@ -93,6 +92,59 @@ export function UserManagement() {
   const [editUser, setEditUser] = useState<User | null>(null)
   const [passwordUser, setPasswordUser] = useState<User | null>(null)
   const [permissionsUser, setPermissionsUser] = useState<User | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteTargetUser, setDeleteTargetUser] = useState<User | null>(null)
+  const [deletePending, setDeletePending] = useState(false)
+
+  const statsStrip = useMemo(() => {
+    if (!stats) return []
+    return [
+      {
+        key: 'total-users',
+        title: '总用户数',
+        value: stats.totalUsers,
+        icon: Users,
+        iconClassName: 'text-blue-600 dark:text-blue-400',
+      },
+      {
+        key: 'active-users',
+        title: '正常用户',
+        value: stats.activeUsers,
+        icon: CheckCircle,
+        iconClassName: 'text-green-600 dark:text-green-400',
+        valueClassName: 'text-green-600 dark:text-green-400',
+      },
+      {
+        key: 'inactive-users',
+        title: '停用用户',
+        value: stats.inactiveUsers,
+        icon: XCircle,
+        iconClassName: 'text-muted-foreground',
+        valueClassName: 'text-muted-foreground',
+      },
+      {
+        key: 'locked-users',
+        title: '锁定用户',
+        value: stats.lockedUsers,
+        icon: Lock,
+        iconClassName: 'text-red-600 dark:text-red-400',
+        valueClassName: 'text-red-600 dark:text-red-400',
+      },
+    ]
+  }, [stats])
+
+  const primaryActions = useMemo(
+    () => [
+      {
+        key: 'create-user',
+        label: '添加用户',
+        icon: <UserPlus className="w-4 h-4 mr-2" />,
+        disabled: Boolean(!canCreate || isRolesLoading),
+        onClick: () => setCreateOpen(true),
+      },
+    ],
+    [canCreate, isRolesLoading]
+  )
 
   const effectiveRoles: Role[] = roles.length
     ? roles
@@ -121,23 +173,54 @@ export function UserManagement() {
     updateQueryParams({ keyword, page: 1 })
   }, [keyword, updateQueryParams])
 
-  // 处理删除
-  const handleDelete = async (user: User) => {
+  const toolbar = useMemo(
+    () => ({
+      search: {
+        value: keyword,
+        placeholder: '搜索用户名、邮箱...',
+        ariaLabel: '搜索用户',
+        onChange: setKeyword,
+        onSubmit: handleSearch,
+      },
+    }),
+    [handleSearch, keyword]
+  )
+
+  useSettingsTabCapabilities('users', {
+    stats: canRead ? statsStrip : [],
+    toolbar: canRead ? toolbar : undefined,
+    primaryActions: canRead ? primaryActions : undefined,
+  })
+
+  // 处理删除（危险操作：需二次确认）
+  const handleDelete = (user: User) => {
     if (!canDelete) {
       toast.error('需要 users:delete 权限')
       return
     }
-    if (!window.confirm(`确定要删除用户 "${user.username}" 吗？\n\n此操作不可撤销。`)) {
-      return
-    }
+    setDeleteTargetUser(user)
+    setDeleteDialogOpen(true)
+  }
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTargetUser) return
+
+    setDeletePending(true)
     try {
-      await deleteUser(user.id)
+      await deleteUser(deleteTargetUser.id)
       toast.success('用户已删除')
+      setDeleteDialogOpen(false)
     } catch (err) {
       toast.error('删除失败：' + (err as Error).message)
+    } finally {
+      setDeletePending(false)
     }
   }
+
+  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+    setDeleteDialogOpen(open)
+    if (!open) setDeleteTargetUser(null)
+  }, [])
 
   // 处理激活
   const handleActivate = async (user: User) => {
@@ -300,69 +383,21 @@ export function UserManagement() {
         }}
       />
 
-      {/* 统计卡片 */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <CompactStatCard
-            title="总用户数"
-            value={stats.totalUsers}
-            icon={Users}
-            iconClassName="text-blue-600 dark:text-blue-400"
-          />
-          <CompactStatCard
-            title="正常用户"
-            value={stats.activeUsers}
-            icon={CheckCircle}
-            iconClassName="text-green-600 dark:text-green-400"
-            valueClassName="text-green-600 dark:text-green-400"
-          />
-          <CompactStatCard
-            title="停用用户"
-            value={stats.inactiveUsers}
-            icon={XCircle}
-            iconClassName="text-muted-foreground"
-            valueClassName="text-muted-foreground"
-          />
-          <CompactStatCard
-            title="锁定用户"
-            value={stats.lockedUsers}
-            icon={Lock}
-            iconClassName="text-red-600 dark:text-red-400"
-            valueClassName="text-red-600 dark:text-red-400"
-          />
-        </div>
-      )}
-
-      {/* 操作栏 */}
-      <Card className="p-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex-1 flex items-center gap-2">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground/80" />
-              <Input
-                placeholder="搜索用户名、邮箱..."
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="pl-10"
-              />
-            </div>
-            <Button onClick={handleSearch} variant="outline">
-              搜索
-            </Button>
-          </div>
-          <Button onClick={() => setCreateOpen(true)} disabled={!canCreate || isRolesLoading}>
-            <UserPlus className="w-4 h-4 mr-2" />
-            添加用户
-          </Button>
-        </div>
-        {!canCreate && <div className="mt-2 text-xs text-muted-foreground">创建用户需要 users:create 权限</div>}
-        {rolesError && (
-          <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-            {(rolesError as Error).message || '角色列表加载失败，已使用默认角色列表'}
-          </div>
-        )}
-      </Card>
+      <SettingsConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={handleDeleteDialogOpenChange}
+        tone="danger"
+        title="确认删除用户？"
+        description={
+          deleteTargetUser
+            ? `将永久删除用户“${deleteTargetUser.username}”，并移除其所有访问权限。\n\n此操作不可撤销，请谨慎操作。`
+            : '此操作不可撤销，请谨慎操作。'
+        }
+        confirmText="确认删除"
+        cancelText="取消"
+        confirmLoading={Boolean(isDeleting || deletePending)}
+        onConfirm={() => void handleConfirmDelete()}
+      />
 
       {/* 用户列表 */}
       <Card className="flex-1 flex flex-col min-h-0">
@@ -405,6 +440,7 @@ export function UserManagement() {
                           variant="ghost"
                           size="sm"
                           onClick={() => setPermissionsUser(user)}
+                          aria-label={`查看权限 ${user.username}`}
                           title="查看权限"
                         >
                           <Shield className="w-4 h-4" />
@@ -414,6 +450,11 @@ export function UserManagement() {
                           size="sm"
                           onClick={() => setPasswordUser(user)}
                           disabled={!canUpdate}
+                          aria-label={
+                            canUpdate
+                              ? `重置密码 ${user.username}`
+                              : `重置密码（无权限） ${user.username}`
+                          }
                           title={canUpdate ? '重置密码' : '需要 users:update 权限'}
                         >
                           <KeyRound className="w-4 h-4" />
@@ -423,6 +464,11 @@ export function UserManagement() {
                           size="sm"
                           onClick={() => setEditUser(user)}
                           disabled={!canUpdate}
+                          aria-label={
+                            canUpdate
+                              ? `编辑用户 ${user.username}`
+                              : `编辑用户（无权限） ${user.username}`
+                          }
                           title={canUpdate ? '编辑用户' : '需要 users:update 权限'}
                         >
                           <Pencil className="w-4 h-4" />
@@ -433,6 +479,11 @@ export function UserManagement() {
                             size="sm"
                             onClick={() => handleUnlock(user)}
                             disabled={!canUpdate}
+                            aria-label={
+                              canUpdate
+                                ? `解锁用户 ${user.username}`
+                                : `解锁用户（无权限） ${user.username}`
+                            }
                             title={canUpdate ? '解锁用户' : '需要 users:update 权限'}
                           >
                             <Unlock className="w-4 h-4" />
@@ -444,6 +495,11 @@ export function UserManagement() {
                             size="sm"
                             onClick={() => handleLock(user)}
                             disabled={!canUpdate}
+                            aria-label={
+                              canUpdate
+                                ? `锁定用户 ${user.username}`
+                                : `锁定用户（无权限） ${user.username}`
+                            }
                             title={canUpdate ? '锁定用户' : '需要 users:update 权限'}
                           >
                             <Lock className="w-4 h-4" />
@@ -455,6 +511,11 @@ export function UserManagement() {
                             size="sm"
                             onClick={() => handleActivate(user)}
                             disabled={!canUpdate}
+                            aria-label={
+                              canUpdate
+                                ? `激活用户 ${user.username}`
+                                : `激活用户（无权限） ${user.username}`
+                            }
                             title={canUpdate ? '激活用户' : '需要 users:update 权限'}
                           >
                             <CheckCircle className="w-4 h-4" />
@@ -466,6 +527,11 @@ export function UserManagement() {
                             size="sm"
                             onClick={() => handleDeactivate(user)}
                             disabled={!canUpdate}
+                            aria-label={
+                              canUpdate
+                                ? `停用用户 ${user.username}`
+                                : `停用用户（无权限） ${user.username}`
+                            }
                             title={canUpdate ? '停用用户' : '需要 users:update 权限'}
                           >
                             <XCircle className="w-4 h-4" />
@@ -476,6 +542,11 @@ export function UserManagement() {
                           size="sm"
                           onClick={() => handleDelete(user)}
                           disabled={!canDelete || isDeleting}
+                          aria-label={
+                            canDelete
+                              ? `删除用户 ${user.username}`
+                              : `删除用户（无权限） ${user.username}`
+                          }
                           title={canDelete ? '删除用户' : '需要 users:delete 权限'}
                         >
                           <Trash2 className="w-4 h-4" />
