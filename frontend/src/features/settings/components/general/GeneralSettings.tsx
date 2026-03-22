@@ -6,7 +6,7 @@ import { InspectionConfigSection } from './InspectionConfigSection'
 import { ReportConfigSection } from './ReportConfigSection'
 import { UserPreferenceSection } from './UserPreferenceSection'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertCircle, RotateCcw, Save } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useCallback } from 'react'
 import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
@@ -49,25 +49,6 @@ export function GeneralSettings() {
     dirty: isDirty,
     saving: isSaving,
     blockLeave: Boolean(isDirty),
-    primaryActions: [
-      {
-        key: 'save',
-        label: '保存',
-        icon: <Save className="w-4 h-4 mr-2" />,
-        loading: isSaving,
-        disabled: !isDirty || isSaving,
-        onClick: handleSave,
-      },
-    ],
-    secondaryActions: [
-      {
-        key: 'reset',
-        label: '重置',
-        icon: <RotateCcw className="w-4 h-4 mr-2" />,
-        disabled: !isDirty || isSaving,
-        onClick: handleReset,
-      },
-    ],
   })
 
   // 加载状态
@@ -108,7 +89,16 @@ export function GeneralSettings() {
     <div>
       <div className="p-4">
         <div className="divide-y divide-gray-200 dark:divide-gray-700">
-          <BasicInfoSection data={basicInfo} onChange={updateBasicInfo} />
+          <BasicInfoSection
+            data={basicInfo}
+            onChange={updateBasicInfo}
+            actions={{
+              isDirty,
+              isSaving,
+              onSave: handleSave,
+              onReset: handleReset,
+            }}
+          />
           <InspectionConfigSection
             data={inspectionConfig}
             onChange={updateInspectionConfig}

@@ -6,18 +6,32 @@ import { SectionHeader } from '@/features/settings/components/shared/SectionHead
 import { ConfigItem } from '@/features/settings/components/shared/ConfigItem'
 import { ConfigInput } from '@/features/settings/components/shared/ConfigInput'
 import { ConfigSwitch } from '@/features/settings/components/shared/ConfigSwitch'
-import { Mail, Send } from 'lucide-react'
+import { Mail, RotateCcw, Save, Send } from 'lucide-react'
 import type { EmailNotificationConfig } from '@/features/settings/types/notification.types'
 import { toast } from 'react-hot-toast'
+
+interface EmailNotificationActions {
+  isDirty: boolean
+  isSaving: boolean
+  onSave: () => void
+  onReset: () => void
+}
 
 interface Props {
   data: EmailNotificationConfig
   onChange: (field: keyof EmailNotificationConfig, value: any) => void
   onTest: (email: string) => Promise<{ success: boolean; message: string }>
   isTesting?: boolean
+  actions?: EmailNotificationActions
 }
 
-export function EmailNotificationSection({ data, onChange, onTest, isTesting = false }: Props) {
+export function EmailNotificationSection({
+  data,
+  onChange,
+  onTest,
+  isTesting = false,
+  actions,
+}: Props) {
   const [testEmail, setTestEmail] = useState('')
   const [isTestingLocal, setIsTestingLocal] = useState(false)
 
@@ -53,6 +67,29 @@ export function EmailNotificationSection({ data, onChange, onTest, isTesting = f
         title="邮件通知"
         description="配置 SMTP 服务器用于发送邮件通知"
         icon={Mail}
+        actions={
+          actions ? (
+            <div role="group" aria-label="邮件通知操作" className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={actions.onReset}
+                disabled={!actions.isDirty || actions.isSaving}
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                重置
+              </Button>
+              <Button
+                type="button"
+                onClick={actions.onSave}
+                disabled={!actions.isDirty || actions.isSaving}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {actions.isSaving ? '保存中...' : '保存'}
+              </Button>
+            </div>
+          ) : null
+        }
       />
 
       <div className="mt-6 space-y-4">

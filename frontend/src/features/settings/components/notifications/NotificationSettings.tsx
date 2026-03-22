@@ -5,9 +5,9 @@ import { EmailNotificationSection } from './EmailNotificationSection'
 import { SmsNotificationSection } from './SmsNotificationSection'
 import { WebhookNotificationSection } from './WebhookNotificationSection'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertCircle, RotateCcw, Save } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { useCallback, useMemo } from 'react'
+import { useCallback } from 'react'
 import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
 
 export function NotificationSettings() {
@@ -46,35 +46,11 @@ export function NotificationSettings() {
     toast.success('已重置为服务器配置')
   }, [resetAll])
 
-  const tabCapabilities = useMemo(
-    () => ({
-      dirty: isDirty,
-      saving: isSaving,
-      blockLeave: isDirty,
-      primaryActions: [
-        {
-          key: 'save',
-          label: '保存',
-          icon: <Save className="w-4 h-4 mr-2" />,
-          loading: isSaving,
-          disabled: !isDirty || isSaving,
-          onClick: handleSave,
-        },
-      ],
-      secondaryActions: [
-        {
-          key: 'reset',
-          label: '重置',
-          icon: <RotateCcw className="w-4 h-4 mr-2" />,
-          disabled: !isDirty || isSaving,
-          onClick: handleReset,
-        },
-      ],
-    }),
-    [handleSave, handleReset, isDirty, isSaving]
-  )
-
-  useSettingsTabCapabilities('notifications', tabCapabilities)
+  useSettingsTabCapabilities('notifications', {
+    dirty: isDirty,
+    saving: isSaving,
+    blockLeave: isDirty,
+  })
 
   // 加载状态
   if (isLoading) {
@@ -120,6 +96,12 @@ export function NotificationSettings() {
             onChange={updateEmailNotification}
             onTest={testEmailNotification}
             isTesting={isTesting}
+            actions={{
+              isDirty,
+              isSaving,
+              onSave: handleSave,
+              onReset: handleReset,
+            }}
           />
           <SmsNotificationSection
             data={smsNotification}

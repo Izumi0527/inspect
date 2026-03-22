@@ -5,9 +5,9 @@ import { SessionManagementSection } from './SessionManagementSection'
 import { PasswordPolicySection } from './PasswordPolicySection'
 import { AuthenticationSection } from './AuthenticationSection'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertCircle, RotateCcw, Save } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { useCallback, useMemo } from 'react'
+import { useCallback } from 'react'
 import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
 
 export function SecuritySettings() {
@@ -42,41 +42,10 @@ export function SecuritySettings() {
     toast.success('已重置为服务器配置')
   }, [resetAll])
 
-  const isActionDisabled = useMemo(() => !isDirty || isSaving, [isDirty, isSaving])
-
-  const primaryActions = useMemo(
-    () => [
-      {
-        key: 'save',
-        label: '保存',
-        icon: <Save className="w-4 h-4 mr-2" />,
-        loading: isSaving,
-        disabled: isActionDisabled,
-        onClick: handleSave,
-      },
-    ],
-    [handleSave, isActionDisabled, isSaving]
-  )
-
-  const secondaryActions = useMemo(
-    () => [
-      {
-        key: 'reset',
-        label: '重置',
-        icon: <RotateCcw className="w-4 h-4 mr-2" />,
-        disabled: isActionDisabled,
-        onClick: handleReset,
-      },
-    ],
-    [handleReset, isActionDisabled]
-  )
-
   useSettingsTabCapabilities('security', {
     dirty: isDirty,
     saving: isSaving,
     blockLeave: isDirty,
-    primaryActions,
-    secondaryActions,
   })
 
   if (isLoading) {
@@ -113,6 +82,12 @@ export function SecuritySettings() {
         <SessionManagementSection
           data={sessionManagement}
           onChange={updateSessionManagement}
+          actions={{
+            isDirty,
+            isSaving,
+            onSave: handleSave,
+            onReset: handleReset,
+          }}
         />
         <PasswordPolicySection data={passwordPolicy} onChange={updatePasswordPolicy} />
         <AuthenticationSection data={authentication} onChange={updateAuthentication} />

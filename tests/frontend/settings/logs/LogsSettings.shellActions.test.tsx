@@ -120,7 +120,7 @@ describe('LogsSettings 壳层动作区迁移', () => {
     jest.clearAllMocks()
   })
 
-  it('应通过壳层上报保存/应用/刷新/清理动作，并使用对话框确认清理', async () => {
+  it('应移除壳层按钮并将保存/应用/刷新/清理动作下移到数据保留标题同行', async () => {
     const user = userEvent.setup()
 
     const ShellToolbar: React.FC = () => {
@@ -144,36 +144,46 @@ describe('LogsSettings 壳层动作区迁移', () => {
     )
 
     await waitFor(() => {
-      expect(within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '保存' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: '数据保留' })).toBeInTheDocument()
     })
 
     const toolbar = within(screen.getByTestId('shell-toolbar'))
-    expect(toolbar.getByRole('button', { name: '重置' })).toBeInTheDocument()
-    expect(toolbar.getByRole('button', { name: '应用配置' })).toBeInTheDocument()
-    expect(toolbar.getByRole('button', { name: '刷新状态' })).toBeInTheDocument()
-    expect(toolbar.getByRole('button', { name: '立即清理' })).toBeInTheDocument()
+    expect(toolbar.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
+    expect(toolbar.queryByRole('button', { name: '重置' })).not.toBeInTheDocument()
+    expect(toolbar.queryByRole('button', { name: '应用配置' })).not.toBeInTheDocument()
+    expect(toolbar.queryByRole('button', { name: '刷新状态' })).not.toBeInTheDocument()
+    expect(toolbar.queryByRole('button', { name: '立即清理' })).not.toBeInTheDocument()
+
+    const actionGroup = screen.getByRole('group', { name: '数据保留操作' })
+    const localActions = within(actionGroup)
+    expect(localActions.getByRole('button', { name: '保存' })).toBeInTheDocument()
+    expect(localActions.getByRole('button', { name: '重置' })).toBeInTheDocument()
+    expect(localActions.getByRole('button', { name: '应用配置' })).toBeInTheDocument()
+    expect(localActions.getByRole('button', { name: '刷新状态' })).toBeInTheDocument()
+    expect(localActions.getByRole('button', { name: '立即清理' })).toBeInTheDocument()
 
     // 不应继续渲染旧的 ActionButtons 提示文本
     expect(screen.queryByText('• 有未保存的更改')).not.toBeInTheDocument()
+    expect(screen.queryByText(/页面顶部工具栏/)).not.toBeInTheDocument()
 
-    await user.click(toolbar.getByRole('button', { name: '保存' }))
+    await user.click(localActions.getByRole('button', { name: '保存' }))
     expect(saveAllMock).toHaveBeenCalled()
 
-    await user.click(toolbar.getByRole('button', { name: '重置' }))
+    await user.click(localActions.getByRole('button', { name: '重置' }))
     expect(resetAllMock).toHaveBeenCalled()
 
     const initialStatusCalls = getSyslogStatusMock.mock.calls.length
-    await user.click(toolbar.getByRole('button', { name: '刷新状态' }))
+    await user.click(localActions.getByRole('button', { name: '刷新状态' }))
     await waitFor(() => {
       expect(getSyslogStatusMock.mock.calls.length).toBeGreaterThan(initialStatusCalls)
     })
 
-    await user.click(toolbar.getByRole('button', { name: '应用配置' }))
+    await user.click(localActions.getByRole('button', { name: '应用配置' }))
     await waitFor(() => {
       expect(applySyslogConfigMock).toHaveBeenCalled()
     })
 
-    await user.click(toolbar.getByRole('button', { name: '立即清理' }))
+    await user.click(localActions.getByRole('button', { name: '立即清理' }))
     expect(cleanupDeviceLogsMock).not.toHaveBeenCalled()
 
     await waitFor(() => {

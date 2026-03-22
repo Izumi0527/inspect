@@ -7,12 +7,8 @@ import {
   BarChart3,
   Settings,
   Search,
-  AlertTriangle,
-  Calendar,
-  Clock,
-  FileType
+  AlertTriangle
 } from 'lucide-react'
-import { CompactStatCard } from '@/components/shared'
 import {
   Card,
   CardHeader,
@@ -20,7 +16,6 @@ import {
   Input
 } from '@/components/atoms'
 import { AppLayout } from '@/components/layout'
-import { useReportStats } from '../hooks/useReports'
 import { InspectionReports } from './InspectionReports'
 import { TrendAnalysis } from './TrendAnalysis'
 import { StatisticsReports } from './StatisticsReports'
@@ -56,8 +51,6 @@ export const ReportsView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabType>(tabFromUrl || 'inspection')
   const [searchText, setSearchText] = useState('')
-  
-  const { data: stats, isLoading: statsLoading } = useReportStats()
 
   useEffect(() => {
     if (tabFromUrl) {
@@ -125,44 +118,6 @@ export const ReportsView: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-        )}
-
-        {/* 快速统计卡片 */}
-        {!statsLoading && stats && (
-          <div className="flex gap-3">
-            <CompactStatCard
-              className="min-w-[120px]"
-              title="总报表数"
-              value={stats.totalReports}
-              icon={FileText}
-              iconClassName="text-blue-600 dark:text-blue-400"
-              valueClassName="text-blue-600 dark:text-blue-400"
-            />
-            <CompactStatCard
-              className="min-w-[120px]"
-              title="今日生成"
-              value={stats.generatedToday}
-              icon={Calendar}
-              iconClassName="text-green-600 dark:text-green-400"
-              valueClassName="text-green-600 dark:text-green-400"
-            />
-            <CompactStatCard
-              className="min-w-[120px]"
-              title="定时报表"
-              value={stats.scheduledReports}
-              icon={Clock}
-              iconClassName="text-purple-600 dark:text-purple-400"
-              valueClassName="text-purple-600 dark:text-purple-400"
-            />
-            <CompactStatCard
-              className="min-w-[120px]"
-              title="热门格式"
-              value={stats.mostUsedFormat.toUpperCase()}
-              icon={FileType}
-              iconClassName="text-orange-600 dark:text-orange-400"
-              valueClassName="text-orange-600 dark:text-orange-400"
-            />
-          </div>
         )}
 
         {/* 标签导航 */}

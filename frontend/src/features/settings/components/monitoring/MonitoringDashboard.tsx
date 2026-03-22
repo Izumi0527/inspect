@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useSystemMonitoring } from '../../hooks/useSystemMonitoring'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -14,9 +14,6 @@ import {
   HardDrive,
   MemoryStick,
   Network,
-  Pause,
-  Play,
-  RefreshCw,
   Server,
   CheckCircle,
   XCircle,
@@ -74,47 +71,8 @@ function ServiceStatusBadge({ status }: { status: 'healthy' | 'unhealthy' | 'deg
 }
 
 export function MonitoringDashboard() {
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
-  const { metrics, services, system, isLoading, error, refetch } =
-    useSystemMonitoring(autoRefreshEnabled)
-
-  const handleRefetch = useCallback(() => {
-    void refetch?.()
-  }, [refetch])
-
-  const toggleAutoRefresh = useCallback(() => {
-    setAutoRefreshEnabled((prev) => !prev)
-  }, [])
-
-  const primaryActions = useMemo(
-    () => [
-      {
-        key: 'refetch',
-        label: error ? '重试' : '刷新',
-        icon: <RefreshCw className="w-4 h-4 mr-2" />,
-        loading: isLoading,
-        disabled: isLoading,
-        onClick: handleRefetch,
-      },
-    ],
-    [error, handleRefetch, isLoading]
-  )
-
-  const secondaryActions = useMemo(
-    () => [
-      {
-        key: 'toggle-auto-refresh',
-        label: autoRefreshEnabled ? '暂停刷新' : '恢复刷新',
-        icon: autoRefreshEnabled ? (
-          <Pause className="w-4 h-4 mr-2" />
-        ) : (
-          <Play className="w-4 h-4 mr-2" />
-        ),
-        onClick: toggleAutoRefresh,
-      },
-    ],
-    [autoRefreshEnabled, toggleAutoRefresh]
-  )
+  const { metrics, services, system, isLoading, error } =
+    useSystemMonitoring(true)
 
   const banners = useMemo(() => {
     if (!error || !metrics) return []
@@ -133,8 +91,6 @@ export function MonitoringDashboard() {
   useSettingsTabCapabilities('monitoring', {
     loading: Boolean(isLoading && !metrics),
     banners,
-    primaryActions,
-    secondaryActions,
   })
 
   if (error && !metrics) {

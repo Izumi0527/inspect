@@ -28,7 +28,7 @@ describe('MonitoringDashboard 错误态', () => {
     })
   })
 
-  it('加载失败（无旧数据）时，应展示内容区错误态，但不展示刷新失败横幅', async () => {
+  it('加载失败（无旧数据）时，应展示内容区错误态，且不再展示重试按钮', async () => {
     const ShellFrame: React.FC = () => {
       const { activeTabCapabilities } = useSettingsShellState()
       return (
@@ -54,13 +54,17 @@ describe('MonitoringDashboard 错误态', () => {
 
     expect(screen.getByText('加载监控数据失败')).toBeInTheDocument()
     expect(screen.queryByText('刷新失败')).not.toBeInTheDocument()
-
     await waitFor(() => {
-      const retryButton = within(screen.getByTestId('shell-toolbar')).getByRole('button', {
-        name: '重试',
-      })
-      expect(retryButton).toBeInTheDocument()
-      expect(retryButton).toBeEnabled()
+      expect(screen.getByTestId('shell-toolbar')).toBeInTheDocument()
     })
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重试' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '刷新' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '暂停刷新' })
+    ).not.toBeInTheDocument()
   })
 })

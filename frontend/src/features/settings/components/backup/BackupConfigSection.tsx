@@ -5,12 +5,21 @@ import { ConfigItem } from '@/features/settings/components/shared/ConfigItem'
 import { ConfigInput } from '@/features/settings/components/shared/ConfigInput'
 import { ConfigSwitch } from '@/features/settings/components/shared/ConfigSwitch'
 import { ConfigSelect } from '@/features/settings/components/shared/ConfigSelect'
-import { Settings } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { RotateCcw, Save, Settings } from 'lucide-react'
 import type { BackupConfig } from '@/features/settings/types/backup.types'
+
+interface BackupActionProps {
+  isDirty: boolean
+  isSaving: boolean
+  onSave: () => void
+  onReset: () => void
+}
 
 interface Props {
   data: BackupConfig
   onChange: (field: keyof BackupConfig, value: any) => void
+  actions?: BackupActionProps
 }
 
 const frequencyOptions = [
@@ -19,13 +28,36 @@ const frequencyOptions = [
   { value: 'monthly', label: '每月' },
 ]
 
-export function BackupConfigSection({ data, onChange }: Props) {
+export function BackupConfigSection({ data, onChange, actions }: Props) {
   return (
     <div className="p-4">
       <SectionHeader
         title="备份策略配置"
         description="设置自动备份的频率、时间和保留策略"
         icon={Settings}
+        actions={
+          actions ? (
+            <div role="group" aria-label="备份策略操作" className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={actions.onReset}
+                disabled={!actions.isDirty || actions.isSaving}
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                重置
+              </Button>
+              <Button
+                type="button"
+                onClick={actions.onSave}
+                disabled={!actions.isDirty || actions.isSaving}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {actions.isSaving ? '保存中...' : '保存'}
+              </Button>
+            </div>
+          ) : null
+        }
       />
 
       <div className="mt-6 space-y-4">

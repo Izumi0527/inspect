@@ -1,24 +1,56 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
 import { SectionHeader } from '@/features/settings/components/shared/SectionHeader'
 import { ConfigItem } from '@/features/settings/components/shared/ConfigItem'
 import { ConfigInput } from '@/features/settings/components/shared/ConfigInput'
 import { ConfigSwitch } from '@/features/settings/components/shared/ConfigSwitch'
-import { Clock } from 'lucide-react'
+import { Clock, RotateCcw, Save } from 'lucide-react'
 import type { SessionManagementConfig } from '@/features/settings/types/security.types'
+
+interface SessionActionProps {
+  isDirty: boolean
+  isSaving: boolean
+  onSave: () => void
+  onReset: () => void
+}
 
 interface Props {
   data: SessionManagementConfig
   onChange: (field: keyof SessionManagementConfig, value: any) => void
+  actions?: SessionActionProps
 }
 
-export function SessionManagementSection({ data, onChange }: Props) {
+export function SessionManagementSection({ data, onChange, actions }: Props) {
   return (
     <div className="p-4">
       <SectionHeader
         title="会话管理"
         description="配置用户会话超时和并发控制"
         icon={Clock}
+        actions={
+          actions ? (
+            <div role="group" aria-label="会话管理操作" className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={actions.onReset}
+                disabled={!actions.isDirty || actions.isSaving}
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                重置
+              </Button>
+              <Button
+                type="button"
+                onClick={actions.onSave}
+                disabled={!actions.isDirty || actions.isSaving}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {actions.isSaving ? '保存中...' : '保存'}
+              </Button>
+            </div>
+          ) : null
+        }
       />
 
       <div className="mt-6 space-y-4">

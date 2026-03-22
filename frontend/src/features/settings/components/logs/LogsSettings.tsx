@@ -4,6 +4,7 @@ import React, { useCallback, useMemo, useState } from 'react'
 import { AlertCircle, RefreshCw, Trash2, Zap } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,6 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { SyslogProtocol, SyslogSettings } from '@/features/settings/api/logs.api'
 import { logsSettingsApi } from '@/features/settings/api/logs.api'
+import { SectionHeader } from '@/features/settings/components/shared/SectionHeader'
 import { useLogsSettings } from '@/features/settings/hooks/useLogsSettings'
 import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
 import { SettingsConfirmDialog } from '@/features/settings/shell/SettingsConfirmDialog'
@@ -161,70 +163,13 @@ export const LogsSettings: React.FC = () => {
 
   const saving = Boolean(isSaving || applySyslogMutation.isPending || cleanupPending)
   const disableSaveReset = Boolean(!isDirty || saving)
-
-  const primaryActions = useMemo(
-    () => [
-      {
-        key: 'save',
-        label: '保存',
-        icon: <Zap className="w-4 h-4 mr-2" />,
-        loading: saving,
-        disabled: disableSaveReset,
-        onClick: handleSave,
-      },
-      {
-        key: 'apply-syslog',
-        label: '应用配置',
-        icon: <Zap className="w-4 h-4 mr-2" />,
-        loading: applySyslogMutation.isPending,
-        disabled: saving,
-        onClick: handleApplySyslog,
-      },
-    ],
-    [applySyslogMutation.isPending, disableSaveReset, handleApplySyslog, handleSave, saving]
-  )
-
-  const secondaryActions = useMemo(
-    () => [
-      {
-        key: 'reset',
-        label: '重置',
-        icon: <RefreshCw className="w-4 h-4 mr-2" />,
-        disabled: disableSaveReset,
-        onClick: handleReset,
-      },
-      {
-        key: 'refresh-syslog',
-        label: '刷新状态',
-        icon: <RefreshCw className="w-4 h-4 mr-2" />,
-        disabled: Boolean(syslogStatusQuery.isFetching || applySyslogMutation.isPending),
-        onClick: () => void syslogStatusQuery.refetch(),
-      },
-      {
-        key: 'cleanup-logs',
-        label: '立即清理',
-        icon: <Trash2 className="w-4 h-4 mr-2" />,
-        variant: 'destructive' as const,
-        disabled: Boolean(saving),
-        onClick: handleRequestCleanup,
-      },
-    ],
-    [
-      applySyslogMutation.isPending,
-      disableSaveReset,
-      handleRequestCleanup,
-      handleReset,
-      saving,
-      syslogStatusQuery,
-    ]
-  )
+  const disableRefresh = Boolean(syslogStatusQuery.isFetching || applySyslogMutation.isPending)
+  const disableCleanup = Boolean(saving)
 
   useSettingsTabCapabilities('logs', {
     dirty: isDirty,
     saving,
     blockLeave: Boolean(isDirty),
-    primaryActions,
-    secondaryActions,
   })
 
   if (isLoading) {
@@ -258,12 +203,64 @@ export const LogsSettings: React.FC = () => {
     <div className="p-4">
       <div className="divide-y divide-gray-200 dark:divide-gray-700">
           <section className="py-6">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-foreground">数据保留</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                配置设备日志的自动清理策略。该配置将影响系统定时数据清理任务中的日志清理行为。
-              </p>
-            </div>
+            <SectionHeader
+              title="数据保留"
+              description="配置设备日志的自动清理策略。该配置将影响系统定时数据清理任务中的日志清理行为。"
+              icon={Zap}
+              actions={
+                <div
+                  role="group"
+                  aria-label="数据保留操作"
+                  className="flex flex-wrap items-center gap-2"
+                >
+                  <Button
+                    type="button"
+                    onClick={() => void handleSave()}
+                    disabled={disableSaveReset}
+                    loading={saving}
+                  >
+                    <Zap className="w-4 h-4 mr-2" />
+                    保存
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => void handleApplySyslog()}
+                    disabled={saving}
+                    loading={applySyslogMutation.isPending}
+                  >
+                    <Zap className="w-4 h-4 mr-2" />
+                    应用配置
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleReset}
+                    disabled={disableSaveReset}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    重置
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void syslogStatusQuery.refetch()}
+                    disabled={disableRefresh}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    刷新状态
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleRequestCleanup}
+                    disabled={disableCleanup}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    立即清理
+                  </Button>
+                </div>
+              }
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
               <div className="space-y-2">
@@ -425,7 +422,7 @@ export const LogsSettings: React.FC = () => {
               </div>
             </div>
 
-            <p className="mt-6 text-sm text-muted-foreground">配置保存/应用/状态刷新等操作已迁移到页面顶部工具栏。</p>
+            <p className="mt-6 text-sm text-muted-foreground">配置保存/应用/状态刷新等操作已调整到“数据保留”标题右侧按钮区。</p>
 
             {syslogStatusQuery.error && (
               <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-300">
@@ -479,7 +476,7 @@ export const LogsSettings: React.FC = () => {
             </div>
 
             <p className="text-sm text-muted-foreground">
-              当前保留天数为 <span className="font-mono">{cleanupRetentionDays}</span>。请使用页面顶部工具栏中的{' '}
+              当前保留天数为 <span className="font-mono">{cleanupRetentionDays}</span>。请使用“数据保留”标题右侧按钮区中的{' '}
               <span className="font-medium text-foreground">“立即清理”</span> 操作。
             </p>
           </section>

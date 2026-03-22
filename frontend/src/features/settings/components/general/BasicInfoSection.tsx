@@ -1,14 +1,24 @@
 'use client'
 
+import { RotateCcw, Save } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { SectionHeader } from '@/features/settings/components/shared/SectionHeader'
 import { ConfigItem } from '@/features/settings/components/shared/ConfigItem'
 import { ConfigInput } from '@/features/settings/components/shared/ConfigInput'
 import { ConfigSelect } from '@/features/settings/components/shared/ConfigSelect'
 import type { BasicInfoConfig } from '@/features/settings/types/general.types'
 
+interface BasicInfoSectionActions {
+  isDirty: boolean
+  isSaving: boolean
+  onSave: () => void
+  onReset: () => void
+}
+
 interface Props {
   data: BasicInfoConfig
   onChange: (field: keyof BasicInfoConfig, value: any) => void
+  actions?: BasicInfoSectionActions
 }
 
 const timezones = [
@@ -19,13 +29,40 @@ const timezones = [
   { value: 'Australia/Sydney', label: '澳大利亚东部时间 (UTC+10)' },
 ]
 
-export function BasicInfoSection({ data, onChange }: Props) {
+export function BasicInfoSection({ data, onChange, actions }: Props) {
   return (
     <div className="p-4">
       <SectionHeader
         title="基础信息"
         description="系统的基本信息配置"
         icon="Info"
+        actions={
+          actions ? (
+            <div
+              role="group"
+              aria-label="基础信息操作"
+              className="flex flex-wrap items-center gap-2"
+            >
+              <Button
+                type="button"
+                variant="outline"
+                onClick={actions.onReset}
+                disabled={!actions.isDirty || actions.isSaving}
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                重置
+              </Button>
+              <Button
+                type="button"
+                onClick={actions.onSave}
+                disabled={!actions.isDirty || actions.isSaving}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {actions.isSaving ? '保存中...' : '保存'}
+              </Button>
+            </div>
+          ) : null
+        }
       />
 
       <div className="mt-6 space-y-4">

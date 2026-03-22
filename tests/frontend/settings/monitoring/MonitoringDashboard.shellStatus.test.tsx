@@ -1,6 +1,5 @@
 import React from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 
 import { MonitoringDashboard } from '@/features/settings/components/monitoring/MonitoringDashboard'
 import { SettingsShellProvider } from '@/features/settings/context/SettingsShellContext'
@@ -24,7 +23,7 @@ describe('MonitoringDashboard 壳层状态与动作上报', () => {
     jest.clearAllMocks()
   })
 
-  it('正常状态下应上报刷新与暂停刷新动作，且不展示刷新失败横幅', async () => {
+  it('正常状态下应移除壳层刷新动作，并保持自动刷新开启', async () => {
     mockUseSystemMonitoring.mockReturnValue({
       metrics: {
         cpu: { usage: 12.3, cores: 4, temperature: 55 },
@@ -70,23 +69,23 @@ describe('MonitoringDashboard 壳层状态与动作上报', () => {
     )
 
     await waitFor(() => {
-      const refreshButton = within(screen.getByTestId('shell-toolbar')).getByRole('button', {
-        name: '刷新',
-      })
-      expect(refreshButton).toBeInTheDocument()
-      expect(refreshButton).toBeEnabled()
+      expect(screen.getByText('网络流量')).toBeInTheDocument()
     })
-    const pauseButton = within(screen.getByTestId('shell-toolbar')).getByRole('button', {
-      name: '暂停刷新',
-    })
-    expect(pauseButton).toBeInTheDocument()
-    expect(pauseButton).toBeEnabled()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '刷新' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '暂停刷新' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '恢复刷新' })
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('刷新失败')).not.toBeInTheDocument()
 
     expect(mockUseSystemMonitoring).toHaveBeenCalledWith(true)
   })
 
-  it('刷新失败但仍有旧数据时，应向壳层上报横幅与重试/暂停刷新动作', async () => {
+  it('刷新失败但仍有旧数据时，应仅上报失败横幅，且不再暴露重试或暂停刷新按钮', async () => {
     mockUseSystemMonitoring.mockReturnValue({
       metrics: {
         cpu: { usage: 12.3, cores: 4, temperature: 55 },
@@ -107,8 +106,6 @@ describe('MonitoringDashboard 壳层状态与动作上报', () => {
       error: new Error('boom'),
       refetch: refetchMock,
     })
-
-    const user = userEvent.setup()
 
     const ShellFrame: React.FC = () => {
       const { activeTabCapabilities } = useSettingsShellState()
@@ -134,42 +131,24 @@ describe('MonitoringDashboard 壳层状态与动作上报', () => {
     )
 
     await waitFor(() => {
-      const retryButton = within(screen.getByTestId('shell-toolbar')).getByRole('button', {
-        name: '重试',
-      })
-      expect(retryButton).toBeInTheDocument()
-      expect(retryButton).toBeEnabled()
+      expect(screen.getByText('刷新失败')).toBeInTheDocument()
     })
-    const pauseButton = within(screen.getByTestId('shell-toolbar')).getByRole('button', {
-      name: '暂停刷新',
-    })
-    expect(pauseButton).toBeInTheDocument()
-    expect(pauseButton).toBeEnabled()
-
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重试' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '暂停刷新' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '恢复刷新' })
+    ).not.toBeInTheDocument()
     expect(screen.getByText('刷新失败')).toBeInTheDocument()
     expect(screen.getByText(/boom/)).toBeInTheDocument()
 
-    await user.click(
-      within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '重试' })
-    )
-    expect(refetchMock).toHaveBeenCalled()
-
-    await user.click(
-      within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '暂停刷新' })
-    )
-    await waitFor(() => {
-      const resumeButton = within(screen.getByTestId('shell-toolbar')).getByRole('button', {
-        name: '恢复刷新',
-      })
-      expect(resumeButton).toBeInTheDocument()
-      expect(resumeButton).toBeEnabled()
-    })
-
     expect(mockUseSystemMonitoring).toHaveBeenCalledWith(true)
-    expect(mockUseSystemMonitoring).toHaveBeenLastCalledWith(false)
   })
 
-  it('后台刷新时应禁用刷新动作，但仍允许暂停/恢复自动刷新', async () => {
+  it('后台刷新时应继续移除壳层按钮，并保持自动刷新开启', async () => {
     mockUseSystemMonitoring.mockReturnValue({
       metrics: {
         cpu: { usage: 12.3, cores: 4, temperature: 55 },
@@ -215,18 +194,17 @@ describe('MonitoringDashboard 壳层状态与动作上报', () => {
     )
 
     await waitFor(() => {
-      const refreshButton = within(screen.getByTestId('shell-toolbar')).getByRole('button', {
-        name: '刷新',
-      })
-      expect(refreshButton).toBeInTheDocument()
-      expect(refreshButton).toBeDisabled()
+      expect(screen.getByText('网络流量')).toBeInTheDocument()
     })
-
-    const pauseButton = within(screen.getByTestId('shell-toolbar')).getByRole('button', {
-      name: '暂停刷新',
-    })
-    expect(pauseButton).toBeInTheDocument()
-    expect(pauseButton).toBeEnabled()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '刷新' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '暂停刷新' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '恢复刷新' })
+    ).not.toBeInTheDocument()
 
     expect(screen.queryByText('刷新失败')).not.toBeInTheDocument()
     expect(mockUseSystemMonitoring).toHaveBeenCalledWith(true)

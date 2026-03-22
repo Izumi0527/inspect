@@ -47,6 +47,12 @@
 ### 方案与计划（带日期的设计稿/执行计划）
 - `plans/`：阶段性计划与设计文档（建议文件名保持 `YYYY-MM-DD-<主题>.md`）
 
+### 代理协作与流程
+- `agents/readme.md`：项目级子代理体系总览
+- `agents/inspect-subagent-manifest.yaml`：5 个角色的模型配置、边界与交接清单
+- `agents/prompts/`：各角色可直接复用的提示词模板
+- `agents/project-subagent-collaboration-flow.md`：子代理协作顺序与交接规则
+
 ### 报表基线
 - `report-baseline/readme.md`：报表基线说明
 

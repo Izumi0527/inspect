@@ -4,9 +4,9 @@ import { useBackupManagement } from '../../hooks/useBackupManagement'
 import { BackupConfigSection } from './BackupConfigSection'
 import { BackupHistorySection } from './BackupHistorySection'
 import { Skeleton } from '@/components/ui/skeleton'
-import { AlertCircle, RotateCcw, Save } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { useCallback, useMemo } from 'react'
+import { useCallback } from 'react'
 import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
 
 export function BackupManagement() {
@@ -48,41 +48,11 @@ export function BackupManagement() {
   }, [resetAll])
 
   const isBusy = isSaving || isCreating || isRestoring || isDeleting
-  const isActionDisabled = useMemo(() => !isDirty || isBusy, [isBusy, isDirty])
-
-  const primaryActions = useMemo(
-    () => [
-      {
-        key: 'save',
-        label: '保存',
-        icon: <Save className="w-4 h-4 mr-2" />,
-        loading: isSaving,
-        disabled: isActionDisabled,
-        onClick: handleSave,
-      },
-    ],
-    [handleSave, isActionDisabled, isSaving]
-  )
-
-  const secondaryActions = useMemo(
-    () => [
-      {
-        key: 'reset',
-        label: '重置',
-        icon: <RotateCcw className="w-4 h-4 mr-2" />,
-        disabled: isActionDisabled,
-        onClick: handleReset,
-      },
-    ],
-    [handleReset, isActionDisabled]
-  )
 
   useSettingsTabCapabilities('backup', {
     dirty: isDirty,
     saving: isSaving,
     blockLeave: Boolean(isDirty || isRestoring),
-    primaryActions,
-    secondaryActions,
   })
 
   // 处理创建备份
@@ -140,7 +110,17 @@ export function BackupManagement() {
     <div className="p-4">
       <div className="divide-y divide-gray-200 dark:divide-gray-700">
         {/* 备份配置 */}
-        <BackupConfigSection data={config} onChange={updateConfig} />
+        <BackupConfigSection
+          data={config}
+          onChange={updateConfig}
+          actions={{
+            // 兼容旧行为：忙碌中禁用保存/重置，但仅保存时显示“保存中...”
+            isDirty: isDirty && !isBusy,
+            isSaving,
+            onSave: handleSave,
+            onReset: handleReset,
+          }}
+        />
 
         {/* 备份历史 */}
         <BackupHistorySection

@@ -23,7 +23,38 @@ jest.mock('react-hot-toast', () => ({
 }))
 
 jest.mock('@/features/settings/components/notifications/EmailNotificationSection', () => ({
-  EmailNotificationSection: () => <div>email-notification-section</div>,
+  EmailNotificationSection: (props: {
+    actions?: {
+      isDirty: boolean
+      isSaving: boolean
+      onSave: () => void
+      onReset: () => void
+    }
+  }) => (
+    <div>
+      <div>email-notification-section</div>
+      {props.actions ? (
+        <div role="group" aria-label="邮件通知操作">
+          <button
+            type="button"
+            onClick={props.actions.onReset}
+            disabled={!props.actions.isDirty || props.actions.isSaving}
+          >
+            重置
+          </button>
+          <button
+            type="button"
+            onClick={props.actions.onSave}
+            disabled={!props.actions.isDirty || props.actions.isSaving}
+          >
+            {props.actions.isSaving ? '保存中...' : '保存'}
+          </button>
+        </div>
+      ) : (
+        <div>no-local-actions</div>
+      )}
+    </div>
+  ),
 }))
 jest.mock('@/features/settings/components/notifications/SmsNotificationSection', () => ({
   SmsNotificationSection: () => <div>sms-notification-section</div>,
@@ -58,7 +89,7 @@ describe('NotificationSettings 壳层动作区迁移', () => {
     jest.clearAllMocks()
   })
 
-  it('不应直接渲染 ActionButtons，且应向壳层上报保存/重置与离开拦截能力', async () => {
+  it('应移除壳层保存/重置按钮，并将动作下移到邮件通知模块标题行', async () => {
     const user = userEvent.setup()
 
     const ShellToolbar: React.FC = () => {
@@ -88,19 +119,24 @@ describe('NotificationSettings 壳层动作区迁移', () => {
     )
 
     await waitFor(() => {
-      expect(within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '保存' })).toBeInTheDocument()
+      expect(screen.getByText('email-notification-section')).toBeInTheDocument()
     })
-    expect(within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '重置' })).toBeInTheDocument()
-    expect(screen.queryByText('• 有未保存的更改')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置' })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('group', { name: '邮件通知操作' })).toBeInTheDocument()
 
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('dirty:true')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('saving:false')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('blockLeave:true')
 
-    await user.click(within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: '保存' }))
     expect(saveAllMock).toHaveBeenCalled()
 
-    await user.click(within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '重置' }))
+    await user.click(screen.getByRole('button', { name: '重置' }))
     expect(resetAllMock).toHaveBeenCalled()
   })
 })
