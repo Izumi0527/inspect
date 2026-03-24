@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { useUserManagement } from '../../hooks/useUserManagement'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -66,7 +66,6 @@ export function UserManagement() {
     totalCount,
     page,
     pageSize,
-    stats,
     roles,
     isLoading,
     isRolesLoading,
@@ -84,10 +83,21 @@ export function UserManagement() {
     lockUser,
     unlockUser,
     error,
-    rolesError,
   } = useUserManagement()
 
   const [keyword, setKeyword] = useState('')
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 输入防抖：400ms 后自动触发搜索
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
+      updateQueryParams({ keyword, page: 1 })
+    }, 400)
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    }
+  }, [keyword, updateQueryParams])
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState<User | null>(null)
   const [passwordUser, setPasswordUser] = useState<User | null>(null)
@@ -95,43 +105,6 @@ export function UserManagement() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteTargetUser, setDeleteTargetUser] = useState<User | null>(null)
   const [deletePending, setDeletePending] = useState(false)
-
-  const statsStrip = useMemo(() => {
-    if (!stats) return []
-    return [
-      {
-        key: 'total-users',
-        title: '总用户数',
-        value: stats.totalUsers,
-        icon: Users,
-        iconClassName: 'text-blue-600 dark:text-blue-400',
-      },
-      {
-        key: 'active-users',
-        title: '正常用户',
-        value: stats.activeUsers,
-        icon: CheckCircle,
-        iconClassName: 'text-green-600 dark:text-green-400',
-        valueClassName: 'text-green-600 dark:text-green-400',
-      },
-      {
-        key: 'inactive-users',
-        title: '停用用户',
-        value: stats.inactiveUsers,
-        icon: XCircle,
-        iconClassName: 'text-muted-foreground',
-        valueClassName: 'text-muted-foreground',
-      },
-      {
-        key: 'locked-users',
-        title: '锁定用户',
-        value: stats.lockedUsers,
-        icon: Lock,
-        iconClassName: 'text-red-600 dark:text-red-400',
-        valueClassName: 'text-red-600 dark:text-red-400',
-      },
-    ]
-  }, [stats])
 
   const primaryActions = useMemo(
     () => [
@@ -187,7 +160,7 @@ export function UserManagement() {
   )
 
   useSettingsTabCapabilities('users', {
-    stats: canRead ? statsStrip : [],
+    stats: [],
     toolbar: canRead ? toolbar : undefined,
     primaryActions: canRead ? primaryActions : undefined,
   })

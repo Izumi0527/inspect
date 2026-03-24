@@ -199,6 +199,11 @@
   * {
     @apply border-border;
   }
+  html,
+  body {
+    height: 100%;
+    overflow: hidden; /* 禁止文档级滚动，统一由内部 overflow-auto 容器控制，避免双滚动条 */
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;

@@ -78,19 +78,26 @@ export function SecuritySettings() {
 
   return (
     <div className="p-4">
-      <div className="divide-y divide-gray-200 dark:divide-gray-700">
-        <SessionManagementSection
-          data={sessionManagement}
-          onChange={updateSessionManagement}
-          actions={{
-            isDirty,
-            isSaving,
-            onSave: handleSave,
-            onReset: handleReset,
-          }}
-        />
-        <PasswordPolicySection data={passwordPolicy} onChange={updatePasswordPolicy} />
-        <AuthenticationSection data={authentication} onChange={updateAuthentication} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
+        {/* 左列：密码策略（配置项最多） */}
+        <div>
+          <PasswordPolicySection data={passwordPolicy} onChange={updatePasswordPolicy} />
+        </div>
+
+        {/* 右列：会话管理 + 认证方式 */}
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          <SessionManagementSection
+            data={sessionManagement}
+            onChange={updateSessionManagement}
+            actions={{
+              isDirty,
+              isSaving,
+              onSave: handleSave,
+              onReset: handleReset,
+            }}
+          />
+          <AuthenticationSection data={authentication} onChange={updateAuthentication} />
+        </div>
       </div>
     </div>
   )

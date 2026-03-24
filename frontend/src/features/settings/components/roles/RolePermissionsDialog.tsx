@@ -25,10 +25,31 @@ interface Props {
   onOpenChange: (open: boolean) => void
 }
 
+// 模块名映射：后端英文 → 与侧边导航一致的中文
+const MODULE_LABELS: Record<string, string> = {
+  users: '用户管理',
+  devices: '设备管理',
+  inspections: '巡检管理',
+  inspection: '巡检管理',
+  alerts: '告警中心',
+  alert: '告警中心',
+  monitoring: '监控中心',
+  monitor: '监控中心',
+  logs: '日志中心',
+  log: '日志中心',
+  reports: '报表分析',
+  report: '报表分析',
+  system: '系统设置',
+  settings: '系统设置',
+}
+
+const toModuleLabel = (module: string) =>
+  MODULE_LABELS[module.toLowerCase()] || MODULE_LABELS[module] || module
+
 const groupByModule = (permissions: Permission[]) => {
   const map = new Map<string, Permission[]>()
   permissions.forEach((p) => {
-    const key = p.module || '其他'
+    const key = toModuleLabel(p.module || '其他')
     const list = map.get(key) || []
     list.push(p)
     map.set(key, list)
@@ -160,24 +181,19 @@ export function RolePermissionsDialog({ open, role, canEdit = true, onOpenChange
                     {items.map((p) => {
                       const checked = selected.has(p.id)
                       const title = p.displayName || p.name
-                      const subtitle = `${p.name} · ${p.action} · ${p.resource}`
                       return (
                         <label
                           key={p.id}
-                          className={`flex items-start gap-3 rounded-lg border border-border/60 px-3 py-2 hover:bg-muted/30 ${
+                          className={`flex items-center gap-3 rounded-lg border border-border/60 px-3 py-2 hover:bg-muted/30 ${
                             !canEdit ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'
                           }`}
-                          title={subtitle}
                         >
                           <Checkbox
                             checked={checked}
                             disabled={!canEdit || assignMutation.isPending}
                             onCheckedChange={(v) => toggle(p.id, Boolean(v))}
                           />
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium text-foreground truncate">{title}</div>
-                            <div className="text-xs text-muted-foreground truncate">{subtitle}</div>
-                          </div>
+                          <div className="text-sm font-medium text-foreground truncate">{title}</div>
                         </label>
                       )
                     })}

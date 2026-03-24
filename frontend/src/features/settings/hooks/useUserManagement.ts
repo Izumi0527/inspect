@@ -33,7 +33,7 @@ export function useUserManagement() {
   } = useQuery<UserListResponse>({
     queryKey: ['userList', queryParams],
     queryFn: () => usersApi.getUserList(queryParams),
-    staleTime: 1000 * 60 * 2, // 2分钟缓存
+    staleTime: 0, // 每次挂载/窗口聚焦时重新获取，保证最后登录时间等字段实时准确
   })
 
   // 获取用户统计

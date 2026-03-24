@@ -84,42 +84,6 @@ export function RoleManagement() {
     })
   }, [roles, keyword])
 
-  const stats = useMemo(() => {
-    const builtIn = roles.filter((r) => Boolean(r.isBuiltIn)).length
-    return {
-      total: roles.length,
-      builtIn,
-      custom: Math.max(0, roles.length - builtIn),
-    }
-  }, [roles])
-
-  const statsStrip = useMemo(
-    () => [
-      {
-        key: 'total-roles',
-        title: '角色总数',
-        value: stats.total,
-        icon: Shield,
-        iconClassName: 'text-blue-600 dark:text-blue-400',
-      },
-      {
-        key: 'built-in-roles',
-        title: '内置角色',
-        value: stats.builtIn,
-        icon: KeyRound,
-        iconClassName: 'text-green-600 dark:text-green-400',
-      },
-      {
-        key: 'custom-roles',
-        title: '自定义角色',
-        value: stats.custom,
-        icon: Pencil,
-        iconClassName: 'text-purple-600 dark:text-purple-400',
-      },
-    ],
-    [stats]
-  )
-
   const toolbar = useMemo(
     () => ({
       search: {
@@ -158,7 +122,7 @@ export function RoleManagement() {
   )
 
   useSettingsTabCapabilities('roles', {
-    stats: canRead ? statsStrip : [],
+    stats: [],
     toolbar: canRead ? toolbar : undefined,
     primaryActions: canRead ? primaryActions : undefined,
     secondaryActions: canRead ? secondaryActions : undefined,
