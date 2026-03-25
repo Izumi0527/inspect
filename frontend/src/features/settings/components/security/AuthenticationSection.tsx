@@ -34,10 +34,7 @@ export function AuthenticationSection({ data, onChange }: Props) {
   const handleToggleMfaMethod = (method: 'totp' | 'sms' | 'email') => {
     const current = data.mfaMethods || []
     if (current.includes(method)) {
-      onChange(
-        'mfaMethods',
-        current.filter((m) => m !== method)
-      )
+      onChange('mfaMethods', current.filter((m) => m !== method))
     } else {
       onChange('mfaMethods', [...current, method])
     }
@@ -46,10 +43,7 @@ export function AuthenticationSection({ data, onChange }: Props) {
   const handleToggleOAuthProvider = (provider: 'google' | 'microsoft' | 'github') => {
     const current = data.oauthProviders || []
     if (current.includes(provider)) {
-      onChange(
-        'oauthProviders',
-        current.filter((p) => p !== provider)
-      )
+      onChange('oauthProviders', current.filter((p) => p !== provider))
     } else {
       onChange('oauthProviders', [...current, provider])
     }
@@ -60,20 +54,16 @@ export function AuthenticationSection({ data, onChange }: Props) {
       toast.error('请输入IP地址')
       return
     }
-
-    // Simple IP validation
     const ipRegex = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/
     if (!ipRegex.test(newIp)) {
       toast.error('请输入有效的IP地址或CIDR格式 (例如: 192.168.1.1 或 10.0.0.0/8)')
       return
     }
-
     const current = data.ipWhitelist || []
     if (current.includes(newIp)) {
       toast.error('该IP地址已存在')
       return
     }
-
     onChange('ipWhitelist', [...current, newIp])
     setNewIp('')
     toast.success('IP地址已添加')
@@ -81,10 +71,7 @@ export function AuthenticationSection({ data, onChange }: Props) {
 
   const handleRemoveIp = (ip: string) => {
     const current = data.ipWhitelist || []
-    onChange(
-      'ipWhitelist',
-      current.filter((i) => i !== ip)
-    )
+    onChange('ipWhitelist', current.filter((i) => i !== ip))
     toast.success('IP地址已移除')
   }
 
@@ -97,7 +84,7 @@ export function AuthenticationSection({ data, onChange }: Props) {
       />
 
       <div className="mt-6 space-y-4">
-        {/* MFA配置 */}
+        {/* MFA 配置 */}
         <div className="space-y-4">
           <ConfigItem label="启用多因素认证 (MFA)" description="为用户账号添加额外的安全验证层">
             <ConfigSwitch
@@ -107,10 +94,11 @@ export function AuthenticationSection({ data, onChange }: Props) {
           </ConfigItem>
 
           {data.mfaEnabled && (
-            <>
+            /* MFA 子选项：方法选择 + 强制开关 并排 */
+            <div className="grid grid-cols-2 gap-4">
               <ConfigItem
                 label="支持的MFA方法"
-                description="选择允许用户使用的多因素认证方式"
+                description="选择允许使用的认证方式"
                 required
               >
                 <div className="flex flex-wrap gap-2">
@@ -136,16 +124,13 @@ export function AuthenticationSection({ data, onChange }: Props) {
                   onCheckedChange={(checked) => onChange('mfaRequired', checked)}
                 />
               </ConfigItem>
-            </>
+            </div>
           )}
         </div>
 
-        {/* OAuth登录 */}
+        {/* OAuth 登录 */}
         <div className="pt-4 border-t space-y-4">
-          <ConfigItem
-            label="允许OAuth登录"
-            description="允许用户使用第三方账号登录"
-          >
+          <ConfigItem label="允许OAuth登录" description="允许用户使用第三方账号登录">
             <ConfigSwitch
               checked={data.allowOAuthLogin}
               onCheckedChange={(checked) => onChange('allowOAuthLogin', checked)}
@@ -174,12 +159,9 @@ export function AuthenticationSection({ data, onChange }: Props) {
           )}
         </div>
 
-        {/* IP白名单 */}
+        {/* IP 白名单 */}
         <div className="pt-4 border-t space-y-4">
-          <ConfigItem
-            label="启用IP白名单"
-            description="只允许特定IP地址访问系统"
-          >
+          <ConfigItem label="启用IP白名单" description="只允许特定IP地址访问系统">
             <ConfigSwitch
               checked={data.ipWhitelistEnabled}
               onCheckedChange={(checked) => onChange('ipWhitelistEnabled', checked)}
@@ -198,14 +180,9 @@ export function AuthenticationSection({ data, onChange }: Props) {
                       value={newIp}
                       onChange={setNewIp}
                       placeholder="192.168.1.1 或 10.0.0.0/8"
-                      disabled={!data.ipWhitelistEnabled}
                     />
                   </div>
-                  <Button
-                    onClick={handleAddIp}
-                    disabled={!data.ipWhitelistEnabled}
-                    variant="outline"
-                  >
+                  <Button onClick={handleAddIp} variant="outline">
                     <Plus className="w-4 h-4 mr-2" />
                     添加
                   </Button>

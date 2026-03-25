@@ -50,7 +50,6 @@ export function AuditLogs() {
     totalCount,
     page,
     pageSize,
-    stats,
     isLoading,
     error,
     refetch,
@@ -69,35 +68,6 @@ export function AuditLogs() {
       toast.error('导出失败：' + (err as Error).message)
     }
   }, [exportLogs])
-
-  const statsStrip = useMemo(() => {
-    if (!stats) return []
-    return [
-      {
-        key: 'total-logs',
-        title: '总日志数',
-        value: stats.totalLogs.toLocaleString(),
-        icon: FileText,
-        iconClassName: 'text-blue-600 dark:text-blue-400',
-      },
-      {
-        key: 'today-logs',
-        title: '今日日志',
-        value: stats.todayLogs.toLocaleString(),
-        icon: FileText,
-        iconClassName: 'text-green-600 dark:text-green-400',
-        valueClassName: 'text-green-600 dark:text-green-400',
-      },
-      {
-        key: 'success-rate',
-        title: '成功率',
-        value: `${(stats.successRate * 100).toFixed(1)}%`,
-        icon: CheckCircle,
-        iconClassName: 'text-purple-600 dark:text-purple-400',
-        valueClassName: 'text-purple-600 dark:text-purple-400',
-      },
-    ]
-  }, [stats])
 
   const toolbar = useMemo(
     () => ({
@@ -138,7 +108,6 @@ export function AuditLogs() {
   )
 
   useSettingsTabCapabilities('audit', {
-    stats: statsStrip,
     toolbar,
     primaryActions,
     secondaryActions,

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useMemo, useState } from 'react'
-import { AlertCircle, RefreshCw, Trash2, Zap } from 'lucide-react'
+import { AlertCircle, Radio, RefreshCw, Trash2, Zap } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
@@ -56,19 +56,16 @@ export const LogsSettings: React.FC = () => {
 
   const normalizeSyslog = useCallback((): SyslogSettings => {
     const protocol: SyslogProtocol =
-      syslogProtocol === 'udp' || syslogProtocol === 'tcp' || syslogProtocol === 'both' ? syslogProtocol : 'both'
-
+      syslogProtocol === 'udp' || syslogProtocol === 'tcp' || syslogProtocol === 'both'
+        ? syslogProtocol
+        : 'both'
     const host = (syslogHost || '').trim() || '0.0.0.0'
-
     const rawPort = Number.isFinite(syslogPort) ? syslogPort : 5514
     const port = Math.min(65535, Math.max(1, Math.floor(rawPort)))
-
     const rawMaxBytes = Number.isFinite(syslogMaxMessageBytes) ? syslogMaxMessageBytes : 8192
     const maxMessageBytes = Math.min(1024 * 1024, Math.max(256, Math.floor(rawMaxBytes)))
-
     const rawMaxNew = Number.isFinite(syslogAlertsMaxNewPerMinute) ? syslogAlertsMaxNewPerMinute : 30
     const alertsMaxNewPerMinute = Math.min(10000, Math.max(0, Math.floor(rawMaxNew)))
-
     return {
       enabled: Boolean(syslogEnabled),
       protocol,
@@ -79,13 +76,8 @@ export const LogsSettings: React.FC = () => {
       alertsMaxNewPerMinute,
     }
   }, [
-    syslogAlertsEnabled,
-    syslogAlertsMaxNewPerMinute,
-    syslogEnabled,
-    syslogHost,
-    syslogMaxMessageBytes,
-    syslogPort,
-    syslogProtocol,
+    syslogAlertsEnabled, syslogAlertsMaxNewPerMinute, syslogEnabled,
+    syslogHost, syslogMaxMessageBytes, syslogPort, syslogProtocol,
   ])
 
   const syslogStatusQuery = useQuery({
@@ -134,9 +126,7 @@ export const LogsSettings: React.FC = () => {
   const handleConfirmCleanup = useCallback(async () => {
     setCleanupPending(true)
     try {
-      const resp = await logsSettingsApi.cleanupDeviceLogs({
-        retentionDays: cleanupRetentionDays,
-      })
+      const resp = await logsSettingsApi.cleanupDeviceLogs({ retentionDays: cleanupRetentionDays })
       toast.success(`已清理 ${resp.deletedCount} 条设备日志`)
       setCleanupDialogOpen(false)
     } catch (err) {
@@ -150,8 +140,6 @@ export const LogsSettings: React.FC = () => {
     try {
       const normalizedRetention = normalizeRetentionDays(retentionDays)
       const normalizedSyslog = normalizeSyslog()
-
-      // apply 接口从服务端 settings 读取，所以这里先保存再应用，确保即时生效。
       await saveAll({ retentionDays: normalizedRetention, syslog: normalizedSyslog })
       const status = await applySyslogMutation.mutateAsync()
       queryClient.setQueryData(['syslogStatus'], status)
@@ -201,286 +189,276 @@ export const LogsSettings: React.FC = () => {
 
   return (
     <div className="p-4">
-      <div className="divide-y divide-gray-200 dark:divide-gray-700">
-          <section className="py-6">
-            <SectionHeader
-              title="数据保留"
-              description="配置设备日志的自动清理策略。该配置将影响系统定时数据清理任务中的日志清理行为。"
-              icon={Zap}
-              actions={
-                <div
-                  role="group"
-                  aria-label="数据保留操作"
-                  className="flex flex-wrap items-center gap-2"
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
+
+        {/* 左列：数据保留 */}
+        <section className="p-4">
+          <SectionHeader
+            title="数据保留"
+            description="配置设备日志的自动清理策略，影响系统定时数据清理任务中的日志清理行为。"
+            icon={Zap}
+            actions={
+              <div role="group" aria-label="数据保留操作" className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={() => void handleSave()}
+                  disabled={disableSaveReset}
+                  loading={saving}
                 >
-                  <Button
-                    type="button"
-                    onClick={() => void handleSave()}
-                    disabled={disableSaveReset}
-                    loading={saving}
-                  >
-                    <Zap className="w-4 h-4 mr-2" />
-                    保存
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => void handleApplySyslog()}
-                    disabled={saving}
-                    loading={applySyslogMutation.isPending}
-                  >
-                    <Zap className="w-4 h-4 mr-2" />
-                    应用配置
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleReset}
-                    disabled={disableSaveReset}
-                  >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    重置
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void syslogStatusQuery.refetch()}
-                    disabled={disableRefresh}
-                  >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    刷新状态
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={handleRequestCleanup}
-                    disabled={disableCleanup}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    立即清理
-                  </Button>
-                </div>
-              }
-            />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="logs-auto-cleanup">启用自动清理</Label>
-                  <Switch
-                    id="logs-auto-cleanup"
-                    checked={autoCleanupEnabled}
-                    onCheckedChange={(value) => updateAutoCleanupEnabled(Boolean(value))}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  关闭后系统不会自动清理历史设备日志。
-                </p>
+                  <Zap className="w-4 h-4 mr-2" />
+                  保存
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleReset}
+                  disabled={disableSaveReset}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  重置
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleRequestCleanup}
+                  disabled={disableCleanup}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  立即清理
+                </Button>
               </div>
+            }
+          />
 
-              <div className="space-y-2">
-                <Label htmlFor="logs-retention-days">设备日志保留天数</Label>
-                <Input
-                  id="logs-retention-days"
-                  type="number"
-                  min={1}
-                  max={3650}
-                  value={retentionDays}
-                  onChange={(e) => updateRetentionDays(Number(e.target.value))}
+          {/* 启用自动清理 + 保留天数 并排 */}
+          <div className="mt-6 grid grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="logs-auto-cleanup">启用自动清理</Label>
+                <Switch
+                  id="logs-auto-cleanup"
+                  checked={autoCleanupEnabled}
+                  onCheckedChange={(value) => updateAutoCleanupEnabled(Boolean(value))}
                 />
-                <p className="text-xs text-muted-foreground">
-                  超过该天数的设备日志将被清理。范围 1 到 3650。
-                </p>
               </div>
-            </div>
-          </section>
-
-          <section className="py-6">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">Syslog 接收</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  开启后后端将监听设备 Syslog 上报（UDP/TCP），并写入日志中心。日志级别为 warning/error/critical 时可联动生成告警。
-                </p>
-              </div>
-              <div className="text-sm text-muted-foreground whitespace-nowrap">
-                {syslogStatusQuery.isLoading ? (
-                  '状态加载中...'
-                ) : syslogStatusQuery.data ? (
-                  syslogStatusQuery.data.running ? (
-                    <span className="text-green-700 dark:text-green-400 font-medium">运行中</span>
-                  ) : (
-                    <span className="text-foreground/90 font-medium">已停止</span>
-                  )
-                ) : (
-                  <span className="text-muted-foreground">未获取</span>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="syslog-enabled">启用 Syslog 接收</Label>
-                  <Switch
-                    id="syslog-enabled"
-                    checked={syslogEnabled}
-                    onCheckedChange={(value) => updateSyslogEnabled(Boolean(value))}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  监听地址默认为 <span className="font-mono">{syslogHost}:{syslogPort}</span>，端口默认 5514。
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="syslog-protocol">协议</Label>
-                <Select value={syslogProtocol} onValueChange={(v) => updateSyslogProtocol(v as SyslogProtocol)}>
-                  <SelectTrigger id="syslog-protocol">
-                    <SelectValue placeholder="选择协议" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="both">UDP + TCP</SelectItem>
-                    <SelectItem value="udp">仅 UDP</SelectItem>
-                    <SelectItem value="tcp">仅 TCP</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  建议默认使用 UDP + TCP，兼容更多设备。
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="syslog-host">监听地址</Label>
-                <Input
-                  id="syslog-host"
-                  value={syslogHost}
-                  onChange={(e) => updateSyslogHost(e.target.value)}
-                  placeholder="0.0.0.0"
-                />
-                <p className="text-xs text-muted-foreground">
-                  一般保持 <span className="font-mono">0.0.0.0</span> 监听所有网卡。
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="syslog-port">端口</Label>
-                <Input
-                  id="syslog-port"
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={syslogPort}
-                  onChange={(e) => updateSyslogPort(Number(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  默认端口 5514（避免与 514 冲突及权限问题）。
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="syslog-max-bytes">单条消息最大字节数</Label>
-                <Input
-                  id="syslog-max-bytes"
-                  type="number"
-                  min={256}
-                  max={1024 * 1024}
-                  value={syslogMaxMessageBytes}
-                  onChange={(e) => updateSyslogMaxMessageBytes(Number(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  用于防止超大报文占用内存，范围 256 到 1MB。
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="syslog-alerts-enabled">联动告警</Label>
-                  <Switch
-                    id="syslog-alerts-enabled"
-                    checked={syslogAlertsEnabled}
-                    onCheckedChange={(value) => updateSyslogAlertsEnabled(Boolean(value))}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  warning/error/critical 将触发告警（带去重与风暴保护）。
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="syslog-alerts-rate">每分钟最多新告警数</Label>
-                <Input
-                  id="syslog-alerts-rate"
-                  type="number"
-                  min={0}
-                  max={10000}
-                  value={syslogAlertsMaxNewPerMinute}
-                  onChange={(e) => updateSyslogAlertsMaxNewPerMinute(Number(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  0 表示不限制。超过限制会创建/更新“告警风暴”告警。
-                </p>
-              </div>
-            </div>
-
-            <p className="mt-6 text-sm text-muted-foreground">配置保存/应用/状态刷新等操作已调整到“数据保留”标题右侧按钮区。</p>
-
-            {syslogStatusQuery.error && (
-              <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-300">
-                Syslog 状态获取失败：{(syslogStatusQuery.error as Error).message || '未知错误'}
-              </div>
-            )}
-
-            {syslogStatusQuery.data && (
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl">
-                <div className="rounded-lg border border-border p-4">
-                  <div className="text-xs text-muted-foreground">接收 / 落库</div>
-                  <div className="mt-2 text-sm text-foreground">
-                    接收：<span className="font-mono">{syslogStatusQuery.data.received}</span>
-                    <br />
-                    落库：<span className="font-mono">{syslogStatusQuery.data.stored}</span>
-                  </div>
-                </div>
-                <div className="rounded-lg border border-border p-4">
-                  <div className="text-xs text-muted-foreground">丢弃</div>
-                  <div className="mt-2 text-sm text-foreground">
-                    未匹配设备：<span className="font-mono">{syslogStatusQuery.data.droppedUnmatched}</span>
-                    <br />
-                    解析丢弃：<span className="font-mono">{syslogStatusQuery.data.droppedParse}</span>
-                  </div>
-                </div>
-                <div className="rounded-lg border border-border p-4">
-                  <div className="text-xs text-muted-foreground">告警联动</div>
-                  <div className="mt-2 text-sm text-foreground">
-                    新建：<span className="font-mono">{syslogStatusQuery.data.alertsCreated}</span>
-                    <br />
-                    去重更新：<span className="font-mono">{syslogStatusQuery.data.alertsUpdated}</span>
-                    <br />
-                    限流：<span className="font-mono">{syslogStatusQuery.data.alertsRateLimited}</span>
-                  </div>
-                </div>
-                {syslogStatusQuery.data.lastError && syslogStatusQuery.data.lastError.trim() !== '' && (
-                  <div className="md:col-span-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-sm text-amber-800 dark:text-amber-200">
-                    最近错误：{syslogStatusQuery.data.lastError}
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-
-          <section className="py-6">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-foreground">手动清理</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                可立即清理超过保留天数的设备日志，用于空间回收或应急处理。
+              <p className="text-xs text-muted-foreground">
+                关闭后系统不会自动清理历史设备日志。
               </p>
             </div>
 
-            <p className="text-sm text-muted-foreground">
-              当前保留天数为 <span className="font-mono">{cleanupRetentionDays}</span>。请使用“数据保留”标题右侧按钮区中的{' '}
-              <span className="font-medium text-foreground">“立即清理”</span> 操作。
-            </p>
-          </section>
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="logs-retention-days">设备日志保留天数</Label>
+              <Input
+                id="logs-retention-days"
+                type="number"
+                min={1}
+                max={3650}
+                value={retentionDays}
+                onChange={(e) => updateRetentionDays(Number(e.target.value))}
+              />
+              <p className="text-xs text-muted-foreground">
+                超过该天数的设备日志将被清理（范围 1–3650）。
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* 右列：Syslog 接收 */}
+        <section className="p-4">
+          <SectionHeader
+            title="Syslog 接收"
+            description="开启后后端将监听设备 Syslog 上报（UDP/TCP），并写入日志中心。warning/error/critical 级别可联动生成告警。"
+            icon={Radio}
+            actions={
+              <div role="group" aria-label="Syslog 操作" className="flex flex-wrap items-center gap-2">
+                {/* 运行状态指示 */}
+                <span className="text-sm">
+                  {syslogStatusQuery.isLoading ? (
+                    <span className="text-muted-foreground">加载中...</span>
+                  ) : syslogStatusQuery.data?.running ? (
+                    <span className="text-green-700 dark:text-green-400 font-medium">运行中</span>
+                  ) : syslogStatusQuery.data ? (
+                    <span className="text-foreground/90 font-medium">已停止</span>
+                  ) : null}
+                </span>
+                <Button
+                  type="button"
+                  onClick={() => void handleApplySyslog()}
+                  disabled={saving}
+                  loading={applySyslogMutation.isPending}
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  应用配置
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void syslogStatusQuery.refetch()}
+                  disabled={disableRefresh}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  刷新状态
+                </Button>
+              </div>
+            }
+          />
+
+          {/* Syslog 配置字段：2列网格 */}
+          <div className="mt-6 grid grid-cols-2 gap-6">
+            {/* 启用开关 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="syslog-enabled">启用 Syslog 接收</Label>
+                <Switch
+                  id="syslog-enabled"
+                  checked={syslogEnabled}
+                  onCheckedChange={(value) => updateSyslogEnabled(Boolean(value))}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                监听地址默认为 <span className="font-mono">{syslogHost}:{syslogPort}</span>，端口默认 5514。
+              </p>
+            </div>
+
+            {/* 协议 */}
+            <div className="space-y-2">
+              <Label htmlFor="syslog-protocol">协议</Label>
+              <Select
+                value={syslogProtocol}
+                onValueChange={(v) => updateSyslogProtocol(v as SyslogProtocol)}
+              >
+                <SelectTrigger id="syslog-protocol">
+                  <SelectValue placeholder="选择协议" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="both">UDP + TCP</SelectItem>
+                  <SelectItem value="udp">仅 UDP</SelectItem>
+                  <SelectItem value="tcp">仅 TCP</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                建议默认使用 UDP + TCP，兼容更多设备。
+              </p>
+            </div>
+
+            {/* 监听地址 + 端口 并排 */}
+            <div className="space-y-2">
+              <Label htmlFor="syslog-host">监听地址</Label>
+              <Input
+                id="syslog-host"
+                value={syslogHost}
+                onChange={(e) => updateSyslogHost(e.target.value)}
+                placeholder="0.0.0.0"
+              />
+              <p className="text-xs text-muted-foreground">
+                一般保持 <span className="font-mono">0.0.0.0</span> 监听所有网卡。
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="syslog-port">端口</Label>
+              <Input
+                id="syslog-port"
+                type="number"
+                min={1}
+                max={65535}
+                value={syslogPort}
+                onChange={(e) => updateSyslogPort(Number(e.target.value))}
+              />
+              <p className="text-xs text-muted-foreground">
+                默认端口 5514（避免与 514 冲突及权限问题）。
+              </p>
+            </div>
+
+            {/* 最大字节数 + 联动告警开关 并排 */}
+            <div className="space-y-2">
+              <Label htmlFor="syslog-max-bytes">单条消息最大字节数</Label>
+              <Input
+                id="syslog-max-bytes"
+                type="number"
+                min={256}
+                max={1024 * 1024}
+                value={syslogMaxMessageBytes}
+                onChange={(e) => updateSyslogMaxMessageBytes(Number(e.target.value))}
+              />
+              <p className="text-xs text-muted-foreground">
+                防止超大报文占用内存，范围 256 到 1MB。
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="syslog-alerts-enabled">联动告警</Label>
+                <Switch
+                  id="syslog-alerts-enabled"
+                  checked={syslogAlertsEnabled}
+                  onCheckedChange={(value) => updateSyslogAlertsEnabled(Boolean(value))}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                warning/error/critical 将触发告警（带去重与风暴保护）。
+              </p>
+            </div>
+
+            {/* 每分钟最多新告警数（单独一行）*/}
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="syslog-alerts-rate">每分钟最多新告警数</Label>
+              <Input
+                id="syslog-alerts-rate"
+                type="number"
+                min={0}
+                max={10000}
+                value={syslogAlertsMaxNewPerMinute}
+                onChange={(e) => updateSyslogAlertsMaxNewPerMinute(Number(e.target.value))}
+                className="max-w-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                0 表示不限制。超过限制会创建/更新"告警风暴"告警。
+              </p>
+            </div>
+          </div>
+
+          {/* Syslog 状态获取错误 */}
+          {syslogStatusQuery.error && (
+            <div className="mt-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-300">
+              Syslog 状态获取失败：{(syslogStatusQuery.error as Error).message || '未知错误'}
+            </div>
+          )}
+
+          {/* Syslog 实时统计卡片 */}
+          {syslogStatusQuery.data && (
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              <div className="rounded-lg border border-border p-3">
+                <div className="text-xs text-muted-foreground mb-2">接收 / 落库</div>
+                <div className="text-sm text-foreground space-y-0.5">
+                  <div>接收：<span className="font-mono">{syslogStatusQuery.data.received}</span></div>
+                  <div>落库：<span className="font-mono">{syslogStatusQuery.data.stored}</span></div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <div className="text-xs text-muted-foreground mb-2">丢弃</div>
+                <div className="text-sm text-foreground space-y-0.5">
+                  <div>未匹配：<span className="font-mono">{syslogStatusQuery.data.droppedUnmatched}</span></div>
+                  <div>解析：<span className="font-mono">{syslogStatusQuery.data.droppedParse}</span></div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-border p-3">
+                <div className="text-xs text-muted-foreground mb-2">告警联动</div>
+                <div className="text-sm text-foreground space-y-0.5">
+                  <div>新建：<span className="font-mono">{syslogStatusQuery.data.alertsCreated}</span></div>
+                  <div>去重：<span className="font-mono">{syslogStatusQuery.data.alertsUpdated}</span></div>
+                  <div>限流：<span className="font-mono">{syslogStatusQuery.data.alertsRateLimited}</span></div>
+                </div>
+              </div>
+              {syslogStatusQuery.data.lastError && syslogStatusQuery.data.lastError.trim() !== '' && (
+                <div className="col-span-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-sm text-amber-800 dark:text-amber-200">
+                  最近错误：{syslogStatusQuery.data.lastError}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
 
       <SettingsConfirmDialog
         open={cleanupDialogOpen}

@@ -54,34 +54,39 @@ export function SessionManagementSection({ data, onChange, actions }: Props) {
       />
 
       <div className="mt-6 space-y-4">
-        <ConfigItem
-          label="会话超时时间 (分钟)"
-          description="用户无操作后自动登出的时间 (5-1440分钟)"
-          required
-        >
-          <ConfigInput
-            type="number"
-            value={data.sessionTimeout}
-            onChange={(value) => {
-              const parsed = Number.parseInt(value, 10)
-              if (!Number.isFinite(parsed)) return
-              onChange('sessionTimeout', parsed)
-            }}
-            min={5}
-            max={1440}
-          />
-        </ConfigItem>
+        {/* 会话超时时间 + 启用自动登出 - 并排 */}
+        <div className="grid grid-cols-2 gap-4">
+          <ConfigItem
+            label="会话超时时间 (分钟)"
+            description="无操作后自动登出 (5-1440分钟)"
+            required
+          >
+            <ConfigInput
+              type="number"
+              value={data.sessionTimeout}
+              onChange={(value) => {
+                const parsed = Number.parseInt(value, 10)
+                if (!Number.isFinite(parsed)) return
+                onChange('sessionTimeout', parsed)
+              }}
+              min={5}
+              max={1440}
+              className="w-full"
+            />
+          </ConfigItem>
 
-        <ConfigItem
-          label="启用自动登出"
-          description="超时后自动登出用户"
-        >
-          <ConfigSwitch
-            checked={data.autoLogoutEnabled}
-            onCheckedChange={(checked) => onChange('autoLogoutEnabled', checked)}
-          />
-        </ConfigItem>
+          <ConfigItem
+            label="启用自动登出"
+            description="超时后自动登出用户"
+          >
+            <ConfigSwitch
+              checked={data.autoLogoutEnabled}
+              onCheckedChange={(checked) => onChange('autoLogoutEnabled', checked)}
+            />
+          </ConfigItem>
+        </div>
 
+        {/* 记住我 - 保持纵向（持续时间为条件展示项） */}
         <div className="pt-4 border-t space-y-4">
           <ConfigItem
             label='启用"记住我"功能'
@@ -114,34 +119,38 @@ export function SessionManagementSection({ data, onChange, actions }: Props) {
           )}
         </div>
 
-        <div className="pt-4 border-t space-y-4">
-          <ConfigItem
-            label="最大并发会话数"
-            description="单个用户允许的最大同时登录会话数 (1-10)"
-            required
-          >
-          <ConfigInput
-            type="number"
-            value={data.maxConcurrentSessions}
-            onChange={(value) => {
-              const parsed = Number.parseInt(value, 10)
-              if (!Number.isFinite(parsed)) return
-              onChange('maxConcurrentSessions', parsed)
-            }}
-            min={1}
-            max={10}
-          />
-          </ConfigItem>
+        {/* 最大并发会话数 + 密码更改后强制登出 - 并排 */}
+        <div className="pt-4 border-t">
+          <div className="grid grid-cols-2 gap-4">
+            <ConfigItem
+              label="最大并发会话数"
+              description="单用户允许同时登录数 (1-10)"
+              required
+            >
+              <ConfigInput
+                type="number"
+                value={data.maxConcurrentSessions}
+                onChange={(value) => {
+                  const parsed = Number.parseInt(value, 10)
+                  if (!Number.isFinite(parsed)) return
+                  onChange('maxConcurrentSessions', parsed)
+                }}
+                min={1}
+                max={10}
+                className="w-full"
+              />
+            </ConfigItem>
 
-          <ConfigItem
-            label="密码更改后强制登出"
-            description="用户更改密码后，强制登出所有其他会话"
-          >
-            <ConfigSwitch
-              checked={data.forceLogoutOnPasswordChange}
-              onCheckedChange={(checked) => onChange('forceLogoutOnPasswordChange', checked)}
-            />
-          </ConfigItem>
+            <ConfigItem
+              label="密码更改后强制登出"
+              description="改密后强制登出所有其他会话"
+            >
+              <ConfigSwitch
+                checked={data.forceLogoutOnPasswordChange}
+                onCheckedChange={(checked) => onChange('forceLogoutOnPasswordChange', checked)}
+              />
+            </ConfigItem>
+          </div>
         </div>
       </div>
     </div>

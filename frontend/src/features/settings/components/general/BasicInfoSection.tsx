@@ -78,25 +78,20 @@ export function BasicInfoSection({ data, onChange, actions }: Props) {
           />
         </ConfigItem>
 
-        <ConfigItem
-          label="系统版本"
-          description="当前系统的版本号"
-          readonly
-        >
-          <ConfigInput value={data.version} disabled />
-        </ConfigItem>
+        {/* 系统版本（只读）+ 时区 并排 */}
+        <div className="grid grid-cols-2 gap-4">
+          <ConfigItem label="系统版本" description="当前系统的版本号" readonly>
+            <ConfigInput value={data.version} disabled className="w-full" />
+          </ConfigItem>
 
-        <ConfigItem
-          label="时区"
-          description="系统使用的时区，影响日志时间和任务调度"
-          required
-        >
-          <ConfigSelect
-            value={data.timezone}
-            options={timezones}
-            onChange={(value) => onChange('timezone', value)}
-          />
-        </ConfigItem>
+          <ConfigItem label="时区" description="影响日志时间和任务调度" required>
+            <ConfigSelect
+              value={data.timezone}
+              options={timezones}
+              onChange={(value) => onChange('timezone', value)}
+            />
+          </ConfigItem>
+        </div>
       </div>
     </div>
   )

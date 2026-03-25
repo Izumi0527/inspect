@@ -212,29 +212,29 @@ export function BackupHistorySection({
 
   return (
     <div className="p-4">
-      <div className="flex items-start justify-between mb-6">
-        <SectionHeader
-          title="备份历史记录"
-          description={`共 ${totalCount} 个备份文件`}
-          icon={Database}
-        />
-        <Button onClick={handleCreateBackup} disabled={isCreating}>
-          {isCreating ? (
-            <>
-              <Clock className="w-4 h-4 mr-2 animate-spin" />
-              创建中...
-            </>
-          ) : (
-            <>
-              <Plus className="w-4 h-4 mr-2" />
-              手动备份
-            </>
-          )}
-        </Button>
-      </div>
+      <SectionHeader
+        title="备份历史记录"
+        description={`共 ${totalCount} 个备份文件`}
+        icon={Database}
+        actions={
+          <Button onClick={handleCreateBackup} disabled={isCreating}>
+            {isCreating ? (
+              <>
+                <Clock className="w-4 h-4 mr-2 animate-spin" />
+                创建中...
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4 mr-2" />
+                手动备份
+              </>
+            )}
+          </Button>
+        }
+      />
 
       {/* 磁盘使用情况 */}
-      <div className="mb-6 rounded-lg border border-border bg-muted/40 p-4">
+      <div className="mt-4 mb-4 rounded-lg border border-border bg-muted/40 p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-foreground/90">磁盘使用情况</span>
           <span className="text-sm text-muted-foreground">
@@ -285,7 +285,7 @@ export function BackupHistorySection({
                 <th className="px-4 py-3 text-right font-medium text-foreground/90">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {backups.map((backup) => (
                 <tr key={backup.id} className="hover:bg-muted/40">
                   <td className="px-4 py-3">

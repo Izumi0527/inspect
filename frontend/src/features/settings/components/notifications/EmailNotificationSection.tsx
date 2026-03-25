@@ -40,12 +40,10 @@ export function EmailNotificationSection({
       toast.error('请输入测试邮箱地址')
       return
     }
-
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testEmail)) {
       toast.error('请输入有效的邮箱地址')
       return
     }
-
     setIsTestingLocal(true)
     try {
       const result = await onTest(testEmail)
@@ -94,17 +92,14 @@ export function EmailNotificationSection({
 
       <div className="mt-6 space-y-4">
         {/* 启用开关 */}
-        <ConfigItem
-          label="启用邮件通知"
-          description="开启后，系统将通过邮件发送通知"
-        >
+        <ConfigItem label="启用邮件通知" description="开启后，系统将通过邮件发送通知">
           <ConfigSwitch
             checked={data.enabled}
             onCheckedChange={(checked) => onChange('enabled', checked)}
           />
         </ConfigItem>
 
-        {/* SMTP配置 */}
+        {/* SMTP 服务器配置 */}
         <div className="pt-4 border-t space-y-4">
           <ConfigItem
             label="SMTP 服务器地址"
@@ -119,92 +114,94 @@ export function EmailNotificationSection({
             />
           </ConfigItem>
 
-          <ConfigItem
-            label="SMTP 端口"
-            description="SMTP服务器端口号（通常为587或465）"
-            required
-          >
-          <ConfigInput
-            type="number"
-            value={data.smtpPort}
-            onChange={(value) => {
-              const parsed = Number.parseInt(value, 10)
-              if (!Number.isFinite(parsed)) return
-              onChange('smtpPort', parsed)
-            }}
-            min={1}
-            max={65535}
-            disabled={!data.enabled}
-          />
-          </ConfigItem>
+          {/* SMTP 端口 + TLS 开关 并排（端口与加密协议是强关联配置）*/}
+          <div className="grid grid-cols-2 gap-4">
+            <ConfigItem
+              label="SMTP 端口"
+              description="通常为 587（TLS）或 465（SSL）"
+              required
+            >
+              <ConfigInput
+                type="number"
+                value={data.smtpPort}
+                onChange={(value) => {
+                  const parsed = Number.parseInt(value, 10)
+                  if (!Number.isFinite(parsed)) return
+                  onChange('smtpPort', parsed)
+                }}
+                min={1}
+                max={65535}
+                disabled={!data.enabled}
+                className="w-full"
+              />
+            </ConfigItem>
 
-          <ConfigItem
-            label="SMTP 用户名"
-            description="用于认证的邮箱账号"
-            required
-          >
-            <ConfigInput
-              value={data.smtpUser}
-              onChange={(value) => onChange('smtpUser', value)}
-              placeholder="user@example.com"
-              disabled={!data.enabled}
-            />
-          </ConfigItem>
+            <ConfigItem label="使用 TLS 加密" description="启用传输层安全协议（推荐）">
+              <ConfigSwitch
+                checked={data.smtpUseTls}
+                onCheckedChange={(checked) => onChange('smtpUseTls', checked)}
+                disabled={!data.enabled}
+              />
+            </ConfigItem>
+          </div>
 
-          <ConfigItem
-            label="SMTP 密码"
-            description="用于认证的邮箱密码或授权码"
-            required
-          >
-            <ConfigInput
-              type="password"
-              value={data.smtpPassword}
-              onChange={(value) => onChange('smtpPassword', value)}
-              placeholder="••••••••"
-              disabled={!data.enabled}
-            />
-          </ConfigItem>
+          {/* SMTP 用户名 + 密码 并排（凭据一对）*/}
+          <div className="grid grid-cols-2 gap-4">
+            <ConfigItem label="SMTP 用户名" description="用于认证的邮箱账号" required>
+              <ConfigInput
+                value={data.smtpUser}
+                onChange={(value) => onChange('smtpUser', value)}
+                placeholder="user@example.com"
+                disabled={!data.enabled}
+                className="w-full"
+              />
+            </ConfigItem>
 
-          <ConfigItem
-            label="使用 TLS 加密"
-            description="启用传输层安全协议（推荐）"
-          >
-            <ConfigSwitch
-              checked={data.smtpUseTls}
-              onCheckedChange={(checked) => onChange('smtpUseTls', checked)}
-              disabled={!data.enabled}
-            />
-          </ConfigItem>
+            <ConfigItem label="SMTP 密码" description="邮箱密码或授权码" required>
+              <ConfigInput
+                type="password"
+                value={data.smtpPassword}
+                onChange={(value) => onChange('smtpPassword', value)}
+                placeholder="••••••••"
+                disabled={!data.enabled}
+                className="w-full"
+              />
+            </ConfigItem>
+          </div>
         </div>
 
-        {/* 发件人信息 */}
-        <div className="pt-4 border-t space-y-4">
-          <ConfigItem
-            label="发件人邮箱"
-            description="显示在邮件发件人字段的邮箱地址"
-            required
-          >
-            <ConfigInput
-              type="email"
-              value={data.senderEmail}
-              onChange={(value) => onChange('senderEmail', value)}
-              placeholder="noreply@example.com"
-              disabled={!data.enabled}
-            />
-          </ConfigItem>
+        {/* 发件人信息：邮箱 + 名称 并排 */}
+        <div className="pt-4 border-t">
+          <div className="grid grid-cols-2 gap-4">
+            <ConfigItem
+              label="发件人邮箱"
+              description="显示在邮件发件人字段的地址"
+              required
+            >
+              <ConfigInput
+                type="email"
+                value={data.senderEmail}
+                onChange={(value) => onChange('senderEmail', value)}
+                placeholder="noreply@example.com"
+                disabled={!data.enabled}
+                className="w-full"
+              />
+            </ConfigItem>
 
-          <ConfigItem
-            label="发件人名称"
-            description="显示在邮件发件人字段的名称"
-            required
-          >
-            <ConfigInput
-              value={data.senderName}
-              onChange={(value) => onChange('senderName', value)}
-              placeholder="网络设备巡检系统"
-              disabled={!data.enabled}
-            />
-          </ConfigItem>
+            <ConfigItem
+              label="发件人名称"
+              description="显示在邮件发件人字段的名称"
+              required
+            >
+              <ConfigInput
+                value={data.senderName}
+                onChange={(value) => onChange('senderName', value)}
+                placeholder="网络设备巡检系统"
+                disabled={!data.enabled}
+                className="w-full"
+              />
+            </ConfigItem>
+          </div>
         </div>
 
         {/* 测试功能 */}

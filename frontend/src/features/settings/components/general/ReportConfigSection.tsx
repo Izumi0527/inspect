@@ -26,7 +26,8 @@ export function ReportConfigSection({ data, onChange }: Props) {
         icon="FileText"
       />
 
-      <div className="mt-6 space-y-4">
+      {/* 默认导出格式 + 最大导出记录数 并排 */}
+      <div className="mt-6 grid grid-cols-2 gap-4">
         <ConfigItem
           label="默认导出格式"
           description="报表导出时的默认文件格式"
@@ -41,7 +42,7 @@ export function ReportConfigSection({ data, onChange }: Props) {
 
         <ConfigItem
           label="最大导出记录数"
-          description="单次导出允许的最大记录数量 (1-100000)"
+          description="单次导出允许的最大数量 (1-100000)"
           required
         >
           <ConfigInput
@@ -50,6 +51,7 @@ export function ReportConfigSection({ data, onChange }: Props) {
             onChange={(value) => onChange('maxExportRecords', parseInt(value, 10))}
             min={1}
             max={100000}
+            className="w-full"
           />
         </ConfigItem>
       </div>

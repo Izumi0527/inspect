@@ -34,12 +34,10 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
       toast.error('请输入测试手机号')
       return
     }
-
     if (!/^1[3-9]\d{9}$/.test(testPhone)) {
       toast.error('请输入有效的中国大陆手机号')
       return
     }
-
     setIsTestingLocal(true)
     try {
       const result = await onTest(testPhone)
@@ -65,23 +63,16 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
 
       <div className="mt-6 space-y-4">
         {/* 启用开关 */}
-        <ConfigItem
-          label="启用短信通知"
-          description="开启后，系统将通过短信发送通知"
-        >
+        <ConfigItem label="启用短信通知" description="开启后，系统将通过短信发送通知">
           <ConfigSwitch
             checked={data.enabled}
             onCheckedChange={(checked) => onChange('enabled', checked)}
           />
         </ConfigItem>
 
-        {/* 提供商选择 */}
+        {/* 提供商 */}
         <div className="pt-4 border-t space-y-4">
-          <ConfigItem
-            label="短信服务提供商"
-            description="选择您的短信服务提供商"
-            required
-          >
+          <ConfigItem label="短信服务提供商" description="选择您的短信服务提供商" required>
             <ConfigSelect
               value={data.provider}
               options={providerOptions}
@@ -92,57 +83,54 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
             />
           </ConfigItem>
 
-          <ConfigItem
-            label="API Key / Access Key ID"
-            description={
-              data.provider === 'aliyun'
-                ? '阿里云 Access Key ID'
-                : data.provider === 'tencent'
-                ? '腾讯云 Secret ID'
-                : data.provider === 'twilio'
-                ? 'Twilio Account SID'
+          {/* API Key + API Secret 并排（凭据一对）*/}
+          <div className="grid grid-cols-2 gap-4">
+            <ConfigItem
+              label="API Key / Access Key ID"
+              description={
+                data.provider === 'aliyun' ? '阿里云 Access Key ID'
+                : data.provider === 'tencent' ? '腾讯云 Secret ID'
+                : data.provider === 'twilio' ? 'Twilio Account SID'
                 : 'API Key'
-            }
-            required
-          >
-            <ConfigInput
-              value={data.apiKey}
-              onChange={(value) => onChange('apiKey', value)}
-              placeholder={
-                data.provider === 'aliyun'
-                  ? 'LTAI...'
-                  : data.provider === 'tencent'
-                  ? 'AKIDz...'
-                  : data.provider === 'twilio'
-                  ? 'AC...'
-                  : 'your-api-key'
               }
-              disabled={!data.enabled}
-            />
-          </ConfigItem>
+              required
+            >
+              <ConfigInput
+                value={data.apiKey}
+                onChange={(value) => onChange('apiKey', value)}
+                placeholder={
+                  data.provider === 'aliyun' ? 'LTAI...'
+                  : data.provider === 'tencent' ? 'AKIDz...'
+                  : data.provider === 'twilio' ? 'AC...'
+                  : 'your-api-key'
+                }
+                disabled={!data.enabled}
+                className="w-full"
+              />
+            </ConfigItem>
 
-          <ConfigItem
-            label="API Secret / Access Key Secret"
-            description={
-              data.provider === 'aliyun'
-                ? '阿里云 Access Key Secret'
-                : data.provider === 'tencent'
-                ? '腾讯云 Secret Key'
-                : data.provider === 'twilio'
-                ? 'Twilio Auth Token'
+            <ConfigItem
+              label="API Secret / Access Key Secret"
+              description={
+                data.provider === 'aliyun' ? '阿里云 Access Key Secret'
+                : data.provider === 'tencent' ? '腾讯云 Secret Key'
+                : data.provider === 'twilio' ? 'Twilio Auth Token'
                 : 'API Secret'
-            }
-            required
-          >
-            <ConfigInput
-              type="password"
-              value={data.apiSecret}
-              onChange={(value) => onChange('apiSecret', value)}
-              placeholder="••••••••"
-              disabled={!data.enabled}
-            />
-          </ConfigItem>
+              }
+              required
+            >
+              <ConfigInput
+                type="password"
+                value={data.apiSecret}
+                onChange={(value) => onChange('apiSecret', value)}
+                placeholder="••••••••"
+                disabled={!data.enabled}
+                className="w-full"
+              />
+            </ConfigItem>
+          </div>
 
+          {/* 短信签名（条件展示，保持独行）*/}
           {data.provider !== 'twilio' && (
             <ConfigItem
               label="短信签名"
@@ -171,13 +159,10 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
               value={data.templateCode}
               onChange={(value) => onChange('templateCode', value)}
               placeholder={
-                data.provider === 'aliyun'
-                  ? 'SMS_123456789'
-                  : data.provider === 'tencent'
-                  ? '1234567'
-                  : data.provider === 'twilio'
-                  ? 'MG...'
-                  : 'template-code'
+                data.provider === 'aliyun' ? 'SMS_123456789'
+                : data.provider === 'tencent' ? '1234567'
+                : data.provider === 'twilio' ? 'MG...'
+                : 'template-code'
               }
               disabled={!data.enabled}
             />
@@ -186,10 +171,7 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
 
         {/* 测试功能 */}
         <div className="pt-4 border-t">
-          <ConfigItem
-            label="测试短信通知"
-            description="发送测试短信以验证配置是否正确"
-          >
+          <ConfigItem label="测试短信通知" description="发送测试短信以验证配置是否正确">
             <div className="flex space-x-2">
               <div className="flex-1 max-w-md">
                 <ConfigInput
