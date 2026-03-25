@@ -2,17 +2,14 @@
 import { WifiOff, ShieldOff, RefreshCw } from 'lucide-react'
 import { Button, Card, CardContent } from '@/components/atoms'
 
-export function SectionFailureContent({
-  title,
-  message,
-  onRetry,
-  className,
-}: {
+interface SectionFailureContentProps {
   title: string
   message: string
   onRetry: () => void
   className?: string
-}) {
+}
+
+export function SectionFailureContent({ title, message, onRetry, className }: SectionFailureContentProps) {
   return (
     <div className={`flex flex-col items-center justify-center text-center ${className ?? ''}`}>
       <WifiOff className="h-6 w-6 text-red-600 dark:text-red-400" />
@@ -26,15 +23,13 @@ export function SectionFailureContent({
   )
 }
 
-export function SectionFailureCard({
-  title,
-  message,
-  onRetry,
-}: {
+interface SectionFailureCardProps {
   title: string
   message: string
   onRetry: () => void
-}) {
+}
+
+export function SectionFailureCard({ title, message, onRetry }: SectionFailureCardProps) {
   return (
     <Card className="border-2 border-dashed border-red-200 bg-red-50/60 dark:border-red-800 dark:bg-red-900/10">
       <CardContent className="p-6">
@@ -44,13 +39,12 @@ export function SectionFailureCard({
   )
 }
 
-export function SectionPermissionLimitedCard({
-  title,
-  message,
-}: {
+interface SectionPermissionLimitedCardProps {
   title: string
   message: string
-}) {
+}
+
+export function SectionPermissionLimitedCard({ title, message }: SectionPermissionLimitedCardProps) {
   return (
     <Card className="border-2 border-dashed border-border bg-muted/40 dark:border-border dark:bg-muted/40">
       <CardContent className="p-6">

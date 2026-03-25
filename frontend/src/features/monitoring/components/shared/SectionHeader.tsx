@@ -1,7 +1,10 @@
 'use client'
 
+import type { ComponentType } from 'react'
+
+/** 区域标题组件 — 为每个 section 提供视觉锚点 */
 interface SectionHeaderProps {
-  icon: React.ComponentType<{ className?: string }>
+  icon: ComponentType<{ className?: string }>
   title: string
   description?: string
 }
@@ -15,7 +18,7 @@ export function SectionHeader({ icon: Icon, title, description }: SectionHeaderP
       <div>
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         {description && (
-          <p className="text-xs text-muted-foreground dark:text-muted-foreground">{description}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
         )}
       </div>
     </div>
