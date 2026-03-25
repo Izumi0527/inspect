@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useMonitoringV2 } from '../hooks/useMonitoringV2'
-import type { MonitoringSectionKey } from '../types'
 import { useSidebar } from '@/lib/contexts/sidebar-context'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
@@ -25,6 +24,13 @@ import {
 } from '@/components/atoms'
 import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
 import { resolveMonitoringErrorView } from '../utils/monitoring-error'
+import {
+  TIME_RANGE_OPTIONS,
+  MONITORING_SECTION_LABELS,
+  resolveTimeRangeLabel,
+  resolveMonitoringDataStaleThresholdMs,
+  formatDurationFromMs,
+} from '../utils/monitoring'
 import {
   Server,
   Activity,
@@ -65,63 +71,9 @@ const monitoringIconColorMap = {
   total_devices: 'text-blue-600 dark:text-blue-400',
   availability: 'text-green-600 dark:text-green-400',
   active_alerts: 'text-red-600 dark:text-red-400',
-  avg_cpu: 'text-purple-600 dark:text-purple-400',
+  avg_cpu: 'text-teal-600 dark:text-teal-400',
   avg_memory: 'text-orange-600 dark:text-orange-400',
   avg_network: 'text-cyan-600 dark:text-cyan-400',
-}
-
-const TIME_RANGE_OPTIONS = [
-  { value: '24h', label: '近24小时' },
-  { value: '7d', label: '近7天' },
-  { value: '30d', label: '近30天' },
-]
-
-const MONITORING_SECTION_LABELS: Record<MonitoringSectionKey, string> = {
-  stats: '关键指标',
-  systemPerformance: '系统性能趋势',
-  temperature: '设备温度监控',
-  deviceStatus: '设备状态分布',
-  availability: '整体可用性',
-  networkTraffic: '网络流量',
-  realtimeAlerts: '实时告警',
-}
-
-function resolveTimeRangeLabel(timeRange: string): string {
-  const resolved = TIME_RANGE_OPTIONS.find((item) => item.value === timeRange)?.label
-  if (resolved) return resolved
-  return timeRange
-}
-
-function resolveMonitoringDataStaleThresholdMs(timeRange: string): number {
-  switch (timeRange) {
-    case '24h':
-      // 近24小时：按分钟级采集/聚合，容忍桶边界与网络抖动
-      return 10 * 60 * 1000
-    case '7d':
-      // 近7天：通常按小时级聚合
-      return 2 * 60 * 60 * 1000
-    case '30d':
-      // 近30天：通常按小时/天级聚合
-      // 后端默认 6 小时一个桶，为避免桶边界误报，阈值取更宽松的 12 小时。
-      return 12 * 60 * 60 * 1000
-    default:
-      return 10 * 60 * 1000
-  }
-}
-
-function formatDurationFromMs(ms: number): string {
-  const safeMs = Math.max(0, Math.floor(ms))
-  const seconds = Math.floor(safeMs / 1000)
-  if (seconds < 60) return `${seconds} 秒`
-
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes} 分钟`
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时`
-
-  const days = Math.floor(hours / 24)
-  return `${days} 天`
 }
 
 /**
@@ -381,20 +333,6 @@ export function MonitoringView() {
     return effectiveFailedSections.map((key) => MONITORING_SECTION_LABELS[key] ?? key)
   }, [effectiveFailedSections])
 
-  const totalDeviceCount = useMemo(() => {
-    const stats = data?.statsV2
-    if (!Array.isArray(stats) || stats.length === 0) return null
-
-    const total = stats.find((item) => item.id === 'total_devices' || item.id === 'totalDevices')
-    if (!total) return null
-
-    const raw = String(total.value ?? '').trim()
-    if (raw === '') return null
-
-    const parsed = Number(raw.replace(/[^0-9-]/g, ''))
-    return Number.isFinite(parsed) ? parsed : null
-  }, [data?.statsV2])
-
   // 页面级订阅：进入监控中心才订阅 device_metrics，离开页面即退订，降低无关推送开销。
   useEffect(() => {
     if (!pageVisible) {
@@ -555,7 +493,7 @@ export function MonitoringView() {
         <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`}>
           <DashboardHeader title="监控中心" showSearch={false} />
           <main className="flex h-[calc(100vh-80px)] items-center justify-center p-5">
-            <div className="max-w-md rounded-xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-800 dark:bg-red-900/20">
+            <div className="max-w-md rounded-xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-800 dark:bg-red-950/40">
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/40">
                 <WifiOff className="h-7 w-7 text-red-600 dark:text-red-400" />
               </div>
@@ -697,7 +635,7 @@ export function MonitoringView() {
           <div className="space-y-6">
 
             {hasEffectivePartialFailure && (
-              <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
+              <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-950/40">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="mt-0.5 h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                   <div>
@@ -733,27 +671,6 @@ export function MonitoringView() {
                     <p className="mt-1 text-xs text-blue-800 dark:text-blue-200">
                       当前账号缺少查看告警权限（{Permission.ALERTS_READ}），已隐藏实时告警区域。
                     </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {totalDeviceCount === 0 && (
-              <div className="rounded-xl border border-dashed border-border bg-muted/30 p-5">
-                <div className="flex items-start gap-3">
-                  <Server className="mt-0.5 h-5 w-5 text-muted-foreground" />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-foreground">
-                      尚未添加设备
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button asChild size="sm" className="cursor-pointer">
-                        <Link href="/devices">去设备管理</Link>
-                      </Button>
-                      <Button asChild variant="outline" size="sm" className="cursor-pointer">
-                        <Link href="/settings">查看采集配置</Link>
-                      </Button>
-                    </div>
                   </div>
                 </div>
               </div>
