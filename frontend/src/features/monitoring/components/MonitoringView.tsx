@@ -55,6 +55,7 @@ import {
 } from './charts'
 import { useInView } from '@/hooks'
 import { ReportExportButton } from './ReportExportButton'
+import { SectionHeader, SectionFailureContent, SectionFailureCard, SectionPermissionLimitedCard } from './shared'
 
 // 图标映射
 const monitoringIconMap = {
@@ -74,95 +75,6 @@ const monitoringIconColorMap = {
   avg_cpu: 'text-teal-600 dark:text-teal-400',
   avg_memory: 'text-orange-600 dark:text-orange-400',
   avg_network: 'text-cyan-600 dark:text-cyan-400',
-}
-
-/**
- * 区域标题组件 — 为每个 section 提供视觉锚点
- */
-function SectionHeader({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: React.ComponentType<{ className?: string }>
-  title: string
-  description?: string
-}) {
-  return (
-    <div className="flex items-center gap-2.5 mb-3">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/20">
-        <Icon className="h-4 w-4 text-primary" />
-      </div>
-      <div>
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        {description && (
-          <p className="text-xs text-muted-foreground dark:text-muted-foreground">{description}</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SectionFailureContent({
-  title,
-  message,
-  onRetry,
-  className,
-}: {
-  title: string
-  message: string
-  onRetry: () => void
-  className?: string
-}) {
-  return (
-    <div className={`flex flex-col items-center justify-center text-center ${className ?? ''}`}>
-      <WifiOff className="h-6 w-6 text-red-600 dark:text-red-400" />
-      <p className="mt-2 text-sm font-semibold text-foreground">{title}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{message}</p>
-      <Button variant="outline" onClick={onRetry} className="mt-3 cursor-pointer">
-        <RefreshCw className="mr-2 h-4 w-4" />
-        重试
-      </Button>
-    </div>
-  )
-}
-
-function SectionFailureCard({
-  title,
-  message,
-  onRetry,
-}: {
-  title: string
-  message: string
-  onRetry: () => void
-}) {
-  return (
-    <Card className="border-2 border-dashed border-red-200 bg-red-50/60 dark:border-red-800 dark:bg-red-900/10">
-      <CardContent className="p-6">
-        <SectionFailureContent title={title} message={message} onRetry={onRetry} />
-      </CardContent>
-    </Card>
-  )
-}
-
-function SectionPermissionLimitedCard({
-  title,
-  message,
-}: {
-  title: string
-  message: string
-}) {
-  return (
-    <Card className="border-2 border-dashed border-border bg-muted/40 dark:border-border dark:bg-muted/40">
-      <CardContent className="p-6">
-        <div className="flex flex-col items-center justify-center text-center">
-          <ShieldOff className="h-6 w-6 text-muted-foreground" />
-          <p className="mt-2 text-sm font-semibold text-foreground">{title}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{message}</p>
-        </div>
-      </CardContent>
-    </Card>
-  )
 }
 
 export function MonitoringView() {
