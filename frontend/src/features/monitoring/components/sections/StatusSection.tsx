@@ -1,0 +1,73 @@
+import { BarChart3 } from 'lucide-react'
+import { SectionHeader, SectionFailureCard, SectionPermissionLimitedCard } from '../shared'
+import { DeviceStatusCard, AvailabilityCard, RealTimeAlertsCard } from '../cards'
+import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../../types'
+
+interface StatusSectionProps {
+  sectionDeviceStatus: MonitoringDataEnvelope['sections']['deviceStatus'] | undefined
+  sectionAvailability: MonitoringDataEnvelope['sections']['availability'] | undefined
+  sectionRealtimeAlerts: MonitoringDataEnvelope['sections']['realtimeAlerts'] | undefined
+  deviceStatusDistribution: MonitoringDataV2['deviceStatusDistribution']
+  availability: MonitoringDataV2['availability']
+  realtimeAlerts: MonitoringDataV2['realtimeAlerts']
+  realtimeAlertsPermissionLimited: boolean
+  requiredAlertsPermission: string
+  onRetry: () => void
+}
+
+export function StatusSection({
+  sectionDeviceStatus,
+  sectionAvailability,
+  sectionRealtimeAlerts,
+  deviceStatusDistribution,
+  availability,
+  realtimeAlerts,
+  realtimeAlertsPermissionLimited,
+  requiredAlertsPermission,
+  onRetry,
+}: StatusSectionProps) {
+  return (
+    <section>
+      <SectionHeader icon={BarChart3} title="状态详情" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 items-stretch">
+        {sectionDeviceStatus?.ok === false ? (
+          <SectionFailureCard
+            title="设备状态分布"
+            message={sectionDeviceStatus?.message ?? '设备状态分布加载失败'}
+            onRetry={onRetry}
+          />
+        ) : deviceStatusDistribution ? (
+          <DeviceStatusCard data={deviceStatusDistribution} />
+        ) : null}
+
+        {sectionAvailability?.ok === false ? (
+          <SectionFailureCard
+            title="整体可用性"
+            message={sectionAvailability?.message ?? '可用性数据加载失败'}
+            onRetry={onRetry}
+          />
+        ) : availability ? (
+          <AvailabilityCard data={availability} />
+        ) : null}
+
+        {realtimeAlertsPermissionLimited ? (
+          <SectionPermissionLimitedCard
+            title="实时告警"
+            message={
+              sectionRealtimeAlerts?.message ??
+              `当前账号缺少查看告警权限（${sectionRealtimeAlerts?.requiredPermission ?? requiredAlertsPermission}），该区域已隐藏。`
+            }
+          />
+        ) : sectionRealtimeAlerts?.ok === false ? (
+          <SectionFailureCard
+            title="实时告警"
+            message={sectionRealtimeAlerts?.message ?? '实时告警加载失败'}
+            onRetry={onRetry}
+          />
+        ) : realtimeAlerts ? (
+          <RealTimeAlertsCard alerts={realtimeAlerts} maxItems={5} />
+        ) : null}
+      </div>
+    </section>
+  )
+}
