@@ -106,4 +106,6 @@ export interface MonitoringDataEnvelope {
   hasPartialFailure: boolean
   failedSections: MonitoringSectionKey[]
   lastUpdate: Date | string
+  /** API 响应生成时间（区别于 lastUpdate 表示的最新数据点时间） */
+  generatedAt?: Date | string
 }

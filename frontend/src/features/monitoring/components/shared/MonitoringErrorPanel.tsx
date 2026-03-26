@@ -16,7 +16,7 @@ interface MonitoringErrorPanelProps {
 export function MonitoringErrorPanel({ error, onRetry }: MonitoringErrorPanelProps) {
   const ev = resolveMonitoringErrorView(error)
   return (
-    <main className="flex h-[calc(100vh-80px)] items-center justify-center p-5">
+    <main className="flex flex-1 items-center justify-center p-5">
       <div className="max-w-md rounded-xl border border-red-200 bg-red-50 p-8 text-center dark:border-red-800 dark:bg-red-950/40">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/40">
           <WifiOff className="h-7 w-7 text-red-600 dark:text-red-400" />

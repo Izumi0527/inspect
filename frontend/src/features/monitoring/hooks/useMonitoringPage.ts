@@ -41,6 +41,8 @@ export interface UseMonitoringPageResult {
   lastUpdateLabel: string | null
   isDataStale: boolean
   dataAgeLabel: string | null
+  /** API 正常响应但无新数据点（采集可能失败/设备不可达） */
+  apiOkButDataStale: boolean
   hasEffectivePartialFailure: boolean
   effectiveFailedSectionLabels: string[]
   realtimeAlertsPermissionLimited: boolean
@@ -328,6 +330,17 @@ export function useMonitoringPage(): UseMonitoringPageResult {
 
   const isDataStale = dataAgeMs !== null && dataAgeMs > dataStaleThresholdMs
 
+  // 区分"API 正常响应但数据源无新数据"与"API 不可达"
+  const apiOkButDataStale = useMemo(() => {
+    if (!isDataStale || !envelope?.generatedAt) return false
+    const generatedDate = envelope.generatedAt instanceof Date
+      ? envelope.generatedAt
+      : new Date(String(envelope.generatedAt))
+    if (Number.isNaN(generatedDate.getTime())) return false
+    // generatedAt 在 5 分钟内说明 API 仍在正常响应
+    return nowMs - generatedDate.getTime() < 5 * 60 * 1000
+  }, [isDataStale, envelope?.generatedAt, nowMs])
+
   const realtimeAlertsPermissionLimited =
     !canReadAlerts || envelope?.sections.realtimeAlerts?.limitedByPermission === true
 
@@ -365,6 +378,7 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     lastUpdateLabel,
     isDataStale,
     dataAgeLabel,
+    apiOkButDataStale,
     hasEffectivePartialFailure,
     effectiveFailedSectionLabels,
     realtimeAlertsPermissionLimited,

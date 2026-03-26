@@ -713,6 +713,10 @@ export async function fetchMonitoringDataV2(
       typeof raw.lastUpdate === 'string' && raw.lastUpdate.trim() !== ''
         ? raw.lastUpdate
         : new Date().toISOString()
+    const generatedAt =
+      typeof raw.generatedAt === 'string' && raw.generatedAt.trim() !== ''
+        ? raw.generatedAt
+        : new Date().toISOString()
 
     return {
       data: normalizeMonitoringData(raw.data),
@@ -720,6 +724,7 @@ export async function fetchMonitoringDataV2(
       hasPartialFailure,
       failedSections,
       lastUpdate,
+      generatedAt,
     }
   }
 
@@ -837,6 +842,7 @@ async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<Monitorin
       hasPartialFailure: failedSections.length > 0,
       failedSections,
       lastUpdate,
+      generatedAt: new Date().toISOString(),
     }
   } catch (error) {
     console.error('获取监控数据失败:', error)

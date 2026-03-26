@@ -10,7 +10,7 @@ interface AvailabilityCardProps {
 /**
  * 整体可用性卡片
  *
- * 包装 AvailabilityGaugeChart,添加卡片容器和标题
+ * 直接包装 AvailabilityGaugeChart，提供卡片容器和标题
  */
 export function AvailabilityCard({ data, className }: AvailabilityCardProps) {
   return (
@@ -24,8 +24,8 @@ export function AvailabilityCard({ data, className }: AvailabilityCardProps) {
         <h3 className="mb-3 text-lg font-semibold text-foreground">
           整体可用性
         </h3>
-        <div className="flex flex-1 flex-col">
-          <AvailabilityGaugeChart data={data} size={120} strokeWidth={10} />
+        <div className="flex flex-1 items-center justify-center">
+          <AvailabilityGaugeChart data={data} size={150} strokeWidth={14} />
         </div>
       </div>
     </motion.div>

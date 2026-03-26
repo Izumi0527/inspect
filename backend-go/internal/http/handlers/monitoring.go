@@ -653,6 +653,7 @@ type monitoringDashboardV2Envelope struct {
 	HasPartialFailure bool                               `json:"hasPartialFailure"`
 	FailedSections    []string                           `json:"failedSections"`
 	LastUpdate        string                             `json:"lastUpdate"`
+	GeneratedAt       string                             `json:"generatedAt"`
 }
 
 type monitoringDashboardV2Data struct {
@@ -958,6 +959,7 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 		HasPartialFailure: len(failedSections) > 0,
 		FailedSections:    failedSections,
 		LastUpdate:        resolvedLastUpdate,
+		GeneratedAt:       generatedAtRFC3339,
 	})
 }
 

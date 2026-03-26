@@ -30,9 +30,9 @@ export function MonitoringView() {
   // ── 加载态 ──────────────────────────────────────────────────────────────────
   if (page.isLoading) {
     return (
-      <div className="min-h-screen bg-muted/40 dark:bg-background">
+      <div className="h-screen bg-muted/40 dark:bg-background overflow-hidden">
         {sidebar}
-        <div className={layoutClass}>{baseHeader}<MonitoringLoadingSkeleton /></div>
+        <div className={`${layoutClass} h-full flex flex-col`}>{baseHeader}<div className="flex-1 overflow-auto"><MonitoringLoadingSkeleton /></div></div>
       </div>
     )
   }
@@ -40,9 +40,9 @@ export function MonitoringView() {
   // ── 错误态 ──────────────────────────────────────────────────────────────────
   if (page.error) {
     return (
-      <div className="min-h-screen bg-muted/40 dark:bg-background">
+      <div className="h-screen bg-muted/40 dark:bg-background overflow-hidden">
         {sidebar}
-        <div className={layoutClass}>{baseHeader}<MonitoringErrorPanel error={page.error} onRetry={page.refetch} /></div>
+        <div className={`${layoutClass} h-full flex flex-col`}>{baseHeader}<div className="flex-1 overflow-auto"><MonitoringErrorPanel error={page.error} onRetry={page.refetch} /></div></div>
       </div>
     )
   }
@@ -50,11 +50,11 @@ export function MonitoringView() {
   // ── 无数据态 ────────────────────────────────────────────────────────────────
   if (!page.data) {
     return (
-      <div className="min-h-screen bg-muted/40 dark:bg-background">
+      <div className="h-screen bg-muted/40 dark:bg-background overflow-hidden">
         {sidebar}
-        <div className={layoutClass}>
+        <div className={`${layoutClass} h-full flex flex-col`}>
           {baseHeader}
-          <main className="flex h-[calc(100vh-80px)] items-center justify-center">
+          <main className="flex flex-1 items-center justify-center">
             <div className="text-center">
               <DatabaseZap className="mx-auto mb-3 h-10 w-10 text-muted-foreground/80" />
               <p className="text-muted-foreground">无法加载监控数据</p>
@@ -67,16 +67,16 @@ export function MonitoringView() {
 
   // ── 正常渲染 ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-muted/40 dark:bg-background">
+    <div className="h-screen bg-muted/40 dark:bg-background overflow-hidden">
       {sidebar}
-      <div className={layoutClass}>
+      <div className={`${layoutClass} h-full flex flex-col`}>
         <DashboardHeader
           title="监控中心"
           alertCount={page.canReadAlerts ? (page.data.realtimeAlerts?.filter(a => a.severity === 'critical')?.length ?? 0) : 0}
           showSearch={false}
           actions={<MonitoringHeaderActions page={page} />}
         />
-        <main className="p-5">
+        <main className="flex-1 overflow-auto p-5">
           <div className="space-y-6">
 
             {/* 部分失败横幅 */}
