@@ -877,7 +877,7 @@ export const DeviceManagementView: React.FC = () => {
 
   return (
     <AppLayout title="设备管理" alertCount={summary.totalAlerts}>
-      <div className="flex flex-col gap-1.5 h-full min-h-0">
+      <div className="flex flex-col gap-4 h-full min-h-0">
         {/* 统计卡片 */}
         <DeviceStatsBar summary={summary} />
 

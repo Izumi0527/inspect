@@ -77,7 +77,7 @@ export const DeviceStatsBar: React.FC<DeviceStatsBarProps> = ({ summary }) => {
   ]
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-1.5">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
       {STAT_ITEMS.map((item, index) => {
         const Icon = item.icon
         return (

@@ -90,7 +90,7 @@ export const ExecutionStatsCards: React.FC<Props> = React.memo(({ executions }) 
   }, [executions])
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
       {stats.map((item) => (
         <CompactStatCard
           key={item.label}

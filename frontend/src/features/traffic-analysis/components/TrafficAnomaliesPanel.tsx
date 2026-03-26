@@ -180,7 +180,7 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
   }
 
   const renderStatsCards = () => (
-    <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+    <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
       <CompactStatCard
         title="总异常"
         value={stats.total}

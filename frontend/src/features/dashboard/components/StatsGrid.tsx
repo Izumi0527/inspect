@@ -62,7 +62,7 @@ const formatStatValue = (value: string, unit?: string): string => {
 export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) => {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {[...Array(4)].map((_, index) => (
           <Card key={index} className="animate-pulse">
             <CardContent className="p-2.5">

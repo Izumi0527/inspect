@@ -579,7 +579,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
       )}
 
       {/* KPI 指标卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         {kpiCards.map((kpi) => {
           const colors = colorMap[kpi.color as keyof typeof colorMap]
           return (

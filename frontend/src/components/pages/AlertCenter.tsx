@@ -450,7 +450,7 @@ export const AlertCenter: React.FC = () => {
       </div>
 
       {/* 统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
         <CompactStatCard
           title="总告警数"
           value={statistics.total}

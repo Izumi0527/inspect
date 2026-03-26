@@ -144,7 +144,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
           : 'text-green-600 dark:text-green-400'
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <CompactStatCard
             title="当前入向流量"

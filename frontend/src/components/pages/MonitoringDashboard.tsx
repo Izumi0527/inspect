@@ -191,7 +191,7 @@ export const MonitoringDashboard: React.FC = () => {
       </div>
 
       {/* 关键指标卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
         <CompactStatCard
           title="总设备数"
           value={overallMetrics.totalDevices}
