@@ -1,3 +1,5 @@
+'use client'
+
 import type { RefObject } from 'react'
 import { Radio } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/atoms'

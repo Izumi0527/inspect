@@ -1,13 +1,15 @@
+'use client'
+
 import Link from 'next/link'
 import { Activity, Server, AlertTriangle, Cpu, HardDrive, Network, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { CompactStatCard } from '@/components/shared'
 import { SectionHeader, SectionFailureContent } from '../shared'
-import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../../types'
+import type { MonitoringDataEnvelope, StatCardData } from '../../types'
 
 interface StatsSectionProps {
   section: MonitoringDataEnvelope['sections']['stats'] | undefined
-  statsV2: MonitoringDataV2['statsV2']
+  statsV2?: StatCardData[]
   onRetry: () => void
 }
 
@@ -29,7 +31,7 @@ const STATS_COLOR_MAP = {
   avg_network: 'text-cyan-600 dark:text-cyan-400',
 } as const
 
-export function StatsSection({ section, statsV2, onRetry }: StatsSectionProps) {
+export function StatsSection({ section, statsV2 = [], onRetry }: StatsSectionProps) {
   return (
     <section>
       <SectionHeader icon={Activity} title="关键指标" />
@@ -42,7 +44,7 @@ export function StatsSection({ section, statsV2, onRetry }: StatsSectionProps) {
               onRetry={onRetry}
             />
           </div>
-        ) : statsV2 && statsV2.length > 0 ? (
+        ) : statsV2.length > 0 ? (
           statsV2.map((stat) => {
             const IconComponent = STATS_ICON_MAP[stat.id as keyof typeof STATS_ICON_MAP] || Server
             const iconClassName = STATS_COLOR_MAP[stat.id as keyof typeof STATS_COLOR_MAP] || 'text-blue-600 dark:text-blue-400'

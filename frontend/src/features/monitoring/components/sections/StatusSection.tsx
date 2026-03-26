@@ -1,3 +1,5 @@
+'use client'
+
 import { BarChart3 } from 'lucide-react'
 import { SectionHeader, SectionFailureCard, SectionPermissionLimitedCard } from '../shared'
 import { DeviceStatusCard, AvailabilityCard, RealTimeAlertsCard } from '../cards'

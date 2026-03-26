@@ -1,3 +1,5 @@
+'use client'
+
 import type { RefObject } from 'react'
 import { TrendingUp } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/atoms'
