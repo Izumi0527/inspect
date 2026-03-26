@@ -74,11 +74,11 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-[#181818] dark:via-[#1f1f1f] dark:to-[#252526] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50 to-cyan-100 dark:from-[#181818] dark:via-[#1f1f1f] dark:to-[#252526] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         {/* 顶部Logo和标题区域 */}
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg">
+          <div className="mx-auto h-16 w-16 bg-gradient-to-r from-teal-600 to-cyan-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg">
             <Monitor className="h-8 w-8 text-white" />
           </div>
           <h2 className="text-3xl font-bold text-foreground mb-2">
@@ -229,8 +229,8 @@ function LoginPage() {
               className={`
                 group relative w-full flex justify-center py-3 px-4 border border-transparent
                 text-sm font-medium rounded-xl text-white
-                bg-gradient-to-r from-blue-600 to-purple-600
-                hover:from-blue-700 hover:to-purple-700
+                bg-gradient-to-r from-teal-600 to-cyan-500
+                hover:from-teal-700 hover:to-cyan-600
                 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
                 disabled:opacity-50 disabled:cursor-not-allowed
                 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]

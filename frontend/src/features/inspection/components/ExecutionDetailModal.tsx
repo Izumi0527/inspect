@@ -249,7 +249,7 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
           {activeTab === 'overview' && (
             <div className="grid grid-cols-2 gap-4">
               {/* 基本信息卡片 */}
-              <div className="col-span-2 p-4 bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+              <div className="col-span-2 p-4 bg-gradient-to-br from-teal-50 to-cyan-50 rounded-lg border border-teal-200">
                 <h3 className="text-sm font-semibold text-foreground/90 mb-3">基本信息</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div>

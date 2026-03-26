@@ -701,7 +701,7 @@ const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => 
   return (
     <div className="space-y-6">
       {/* 快速添加预设 */}
-      <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-xl">
+      <div className="p-4 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/20 rounded-xl">
         <div className="flex items-center gap-2 mb-3">
           <Zap className="w-5 h-5 text-blue-600" />
           <span className="font-medium text-foreground">快速添加预设检查项</span>

@@ -440,6 +440,6 @@ const getGradientForStatus = (status: string): string => {
     case 'critical':
       return 'from-red-500 to-pink-600'
     default:
-      return 'from-blue-500 to-purple-600'
+      return 'from-teal-500 to-cyan-600'
   }
 }

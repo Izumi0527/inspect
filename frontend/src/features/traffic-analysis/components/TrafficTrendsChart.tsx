@@ -227,7 +227,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
       } else { // trend
         return {
           lines: [
-            { key: 'trend_in', name: '入向趋势', color: '#7c3aed', strokeWidth: 2 },
+            { key: 'trend_in', name: '入向趋势', color: '#0D9488', strokeWidth: 2 },
             { key: 'trend_out', name: '出向趋势', color: '#db2777', strokeWidth: 2 }
           ]
         }

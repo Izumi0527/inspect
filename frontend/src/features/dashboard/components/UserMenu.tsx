@@ -61,7 +61,7 @@ export function UserMenu({ className }: UserMenuProps) {
             />
           ) : (
             // 否则显示首字母头像
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm font-medium">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-cyan-600 text-white text-sm font-medium">
               {avatarInitial}
             </div>
           )}

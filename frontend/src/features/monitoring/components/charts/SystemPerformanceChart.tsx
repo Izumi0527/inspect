@@ -79,7 +79,7 @@ export function SystemPerformanceChart({
     {
       key: 'cpu' as const,
       name: 'CPU',
-      color: '#8B5CF6', // 紫色
+      color: '#0D9488', // teal-600
       strokeWidth: 2.5,
     },
     {

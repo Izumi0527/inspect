@@ -115,6 +115,44 @@ describe('MonitoringView', () => {
     expect(screen.getByText('network failed')).toBeInTheDocument()
   })
 
+  it('无设备时不应显示左上角设备引导提示与操作按钮', () => {
+    ;(useMonitoringV2 as jest.Mock).mockReturnValue({
+      data: {
+        data: {
+          statsV2: [{ id: 'total_devices', title: '总设备', value: '0' }],
+          systemPerformance: [],
+          temperatureHistory: [],
+          deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
+          availability: { current: 0, target: 99.9, trend: 'stable' as const },
+          networkTrafficHistory: [],
+          realtimeAlerts: [],
+        },
+        hasPartialFailure: false,
+        failedSections: [],
+        sections: {
+          stats: { ok: true },
+          systemPerformance: { ok: true },
+          temperature: { ok: true },
+          deviceStatus: { ok: true },
+          availability: { ok: true },
+          networkTraffic: { ok: true },
+          realtimeAlerts: { ok: true },
+        },
+        lastUpdate: '2026-02-24T12:00:00.000Z',
+      },
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+      isRefetching: false,
+    })
+
+    render(<MonitoringView />)
+
+    expect(screen.queryByText('尚未添加设备')).not.toBeInTheDocument()
+    expect(screen.queryByText('去设备管理')).not.toBeInTheDocument()
+    expect(screen.queryByText('查看采集配置')).not.toBeInTheDocument()
+  })
+
   it('多个分区失败时应分别显示对应失败文案', () => {
     ;(useMonitoringV2 as jest.Mock).mockReturnValue({
       data: {

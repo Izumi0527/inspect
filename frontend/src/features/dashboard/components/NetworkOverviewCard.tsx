@@ -51,7 +51,7 @@ const getDeviceStyle = (title: string): {
   if (lowerTitle.includes('switch') || lowerTitle.includes('交换机')) {
     return {
       icon: 'Network',
-      gradient: 'from-blue-500 via-blue-600 to-indigo-600',
+      gradient: 'from-teal-500 via-teal-600 to-cyan-600',
       bgColor: 'bg-blue-50 dark:bg-blue-950/30',
       iconColor: 'text-blue-600 dark:text-blue-400'
     }
@@ -61,9 +61,9 @@ const getDeviceStyle = (title: string): {
   if (lowerTitle.includes('router') || lowerTitle.includes('路由')) {
     return {
       icon: 'Router',
-      gradient: 'from-purple-500 via-purple-600 to-pink-600',
-      bgColor: 'bg-purple-50 dark:bg-purple-950/30',
-      iconColor: 'text-purple-600 dark:text-purple-400'
+      gradient: 'from-sky-500 via-sky-600 to-blue-600',
+      bgColor: 'bg-sky-50 dark:bg-sky-950/30',
+      iconColor: 'text-sky-600 dark:text-sky-400'
     }
   }
   

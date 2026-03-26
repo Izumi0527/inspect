@@ -353,7 +353,7 @@ export function NetworkTrafficStackedAreaChart({
 
         {tooltipData && (
           <TooltipWithBounds
-            key={Math.random()}
+            key={tooltipData.time}
             top={tooltipTop}
             left={tooltipLeft}
             style={{
@@ -372,7 +372,7 @@ export function NetworkTrafficStackedAreaChart({
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-4 text-sm">
                 <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full bg-sky-500" />
+                  <div className="h-3 w-3 rounded-full bg-cyan-600" />
                   <span className="text-muted-foreground">入站:</span>
                 </div>
                 <span className="font-semibold text-foreground">
@@ -407,7 +407,7 @@ export function NetworkTrafficStackedAreaChart({
       {/* 图例 */}
       <div className="mt-4 flex items-center justify-center gap-6">
         <div className="flex items-center gap-2">
-          <div className="h-3 w-3 rounded-full bg-sky-500" />
+          <div className="h-3 w-3 rounded-full bg-cyan-600" />
           <span className="text-sm font-medium text-foreground/90">入站流量</span>
         </div>
         <div className="flex items-center gap-2">

@@ -15,12 +15,12 @@ interface RealTimeAlertsCardProps {
 const severityConfig = {
   critical: {
     dot: 'bg-red-500',
-    badge: 'bg-red-100 text-red-700 dark:bg-red-900/60 dark:text-red-300',
+    badge: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-200',
     label: '严重',
   },
   warning: {
     dot: 'bg-yellow-500',
-    badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/60 dark:text-yellow-300',
+    badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-200',
     label: '警告',
   },
   info: {
@@ -87,9 +87,10 @@ export function RealTimeAlertsCard({
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.2, delay: index * 0.04 }}
-                  className="group flex cursor-pointer items-start gap-3 rounded-lg bg-muted/40 p-3 transition-colors duration-150 hover:bg-muted/60 dark:bg-card/60 dark:hover:bg-card/80"
+                  className="group flex cursor-pointer items-start gap-3 rounded-lg bg-muted/40 p-3 transition-colors duration-150 hover:bg-muted/80 dark:bg-card/60 dark:hover:bg-card/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   role="button"
                   tabIndex={0}
+                  aria-label={`${alert.severity === 'critical' ? '严重' : alert.severity === 'warning' ? '警告' : '信息'}告警：${alert.message}，${alert.time}`}
                   onClick={() => openAlertCenter(alert.id)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
@@ -131,7 +132,8 @@ export function RealTimeAlertsCard({
         {alerts.length > maxItems && (
           <div className="mt-3 border-t border-border/60 pt-3 text-center dark:border-border">
             <button
-              className="cursor-pointer text-sm font-medium text-primary transition-colors duration-150 hover:text-primary/80"
+              className="cursor-pointer text-sm font-medium text-primary transition-colors duration-150 hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              aria-label={`查看全部 ${alerts.length} 条告警`}
               onClick={() => openAlertCenter()}
             >
               查看全部 {alerts.length} 条告警 →

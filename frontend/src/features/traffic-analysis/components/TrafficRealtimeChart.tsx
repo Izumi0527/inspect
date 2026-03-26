@@ -78,7 +78,7 @@ export const TrafficRealtimeChart: React.FC<TrafficRealtimeChartProps> = ({
   // 颜色配置
   const colors = [
     '#2563eb', '#dc2626', '#059669', '#d97706',
-    '#7c3aed', '#db2777', '#0891b2', '#65a30d'
+    '#0D9488', '#db2777', '#0891b2', '#65a30d'
   ]
 
   // 为流量图表准备线条配置

@@ -20,7 +20,7 @@ export function AvailabilityCard({ data, className }: AvailabilityCardProps) {
       transition={{ duration: 0.25, delay: 0.1 }}
       className={className}
     >
-      <div className="flex h-full flex-col rounded-xl border border-border/50 bg-card/80 p-5 shadow-lg backdrop-blur-lg">
+      <div className="flex h-full flex-col rounded-xl border border-border/50 bg-card/80 p-5 shadow-lg backdrop-blur-lg hover:bg-card/95 hover:border-border/80 transition-colors duration-150">
         <h3 className="mb-3 text-lg font-semibold text-foreground">
           整体可用性
         </h3>

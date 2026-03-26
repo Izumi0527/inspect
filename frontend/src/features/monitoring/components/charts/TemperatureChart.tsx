@@ -51,7 +51,7 @@ export function TemperatureChart({
 
   // 预定义的设备颜色 - 更鲜艳的配色
   const deviceColors = [
-    '#8B5CF6', // 紫色
+    '#0891B2', // cyan-600
     '#0EA5E9', // 天蓝色
     '#22C55E', // 绿色
     '#F59E0B', // 橙色

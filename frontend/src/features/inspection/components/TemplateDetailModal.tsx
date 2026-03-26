@@ -88,7 +88,7 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
         className="bg-card rounded-xl shadow-2xl w-full max-w-6xl max-h-[85vh] overflow-hidden flex flex-col"
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-800">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-gray-800 dark:to-gray-800">
           <div className="flex items-center gap-3">
             {getCategoryIcon(template.category)}
             <div>
