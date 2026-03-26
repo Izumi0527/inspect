@@ -1,3 +1,5 @@
+'use client'
+
 import { Card, CardContent } from '@/components/atoms'
 import { ChartSkeleton } from '../charts'
 

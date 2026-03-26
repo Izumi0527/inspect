@@ -15,14 +15,13 @@ import {
 } from './shared'
 
 // 模块级稳定引用，避免每次渲染重建 inView 配置对象
-const CHART_IN_VIEW_OPT = { threshold: 0.1, triggerOnce: true, rootMargin: '100px' }
-const NETWORK_IN_VIEW_OPT = { threshold: 0.1, triggerOnce: true, rootMargin: '100px' }
+const IN_VIEW_OPT = { threshold: 0.1, triggerOnce: true, rootMargin: '100px' }
 
 export function MonitoringView() {
   const { sidebarOpen, toggleSidebar } = useSidebar()
   const page = useMonitoringPage()
-  const { ref: chartsRef, inView: chartsInView } = useInView(CHART_IN_VIEW_OPT)
-  const { ref: networkRef, inView: networkInView } = useInView(NETWORK_IN_VIEW_OPT)
+  const { ref: chartsRef, inView: chartsInView } = useInView(IN_VIEW_OPT)
+  const { ref: networkRef, inView: networkInView } = useInView(IN_VIEW_OPT)
 
   const layoutClass = `${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300`
   const sidebar = <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} currentPath="/monitoring" />
