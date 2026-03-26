@@ -328,20 +328,21 @@ export function useMonitoringPage(): UseMonitoringPageResult {
 
   const isDataStale = dataAgeMs !== null && dataAgeMs > dataStaleThresholdMs
 
-  const failedSections = envelope?.failedSections ?? []
-
   const realtimeAlertsPermissionLimited =
     !canReadAlerts || envelope?.sections.realtimeAlerts?.limitedByPermission === true
 
-  const effectiveFailedSections = realtimeAlertsPermissionLimited
-    ? failedSections.filter((section) => section !== 'realtimeAlerts')
-    : failedSections
-
-  const hasEffectivePartialFailure = effectiveFailedSections.length > 0
-
-  const effectiveFailedSectionLabels = useMemo(() => {
-    return effectiveFailedSections.map((key) => MONITORING_SECTION_LABELS[key] ?? key)
-  }, [effectiveFailedSections])
+  const { effectiveFailedSections, effectiveFailedSectionLabels, hasEffectivePartialFailure } =
+    useMemo(() => {
+      const allFailed = envelope?.failedSections ?? []
+      const sections = realtimeAlertsPermissionLimited
+        ? allFailed.filter((section) => section !== 'realtimeAlerts')
+        : allFailed
+      return {
+        effectiveFailedSections: sections,
+        effectiveFailedSectionLabels: sections.map((key) => MONITORING_SECTION_LABELS[key] ?? key),
+        hasEffectivePartialFailure: sections.length > 0,
+      }
+    }, [envelope?.failedSections, realtimeAlertsPermissionLimited])
 
   return {
     // 状态
