@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Activity, Wifi, WifiOff, CheckCircle, XCircle, Loader2 } from 'lucide-react'
-import { Button, Badge } from '@/components/atoms'
+import { Button } from '@/components/atoms'
 import { probeDevice } from '../api/devices.api'
 import { DeviceProbeResult } from '../types'
 import toast from 'react-hot-toast'
@@ -100,65 +100,6 @@ export const DeviceProbeButton: React.FC<DeviceProbeButtonProps> = ({
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-interface DeviceProbeStatusProps {
-  result: DeviceProbeResult | null
-  loading?: boolean
-}
-
-export const DeviceProbeStatus: React.FC<DeviceProbeStatusProps> = ({
-  result,
-  loading = false
-}) => {
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2">
-        <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-        <span className="text-sm text-muted-foreground">探测中...</span>
-      </div>
-    )
-  }
-
-  if (!result) {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground/80">未探测</span>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-1">
-      {/* ICMP 状态 */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground w-12">ICMP:</span>
-        {result.icmp_reachable ? (
-          <Badge variant="success" size="sm">
-            在线 {result.icmp_response_time && `(${result.icmp_response_time.toFixed(1)}ms)`}
-          </Badge>
-        ) : (
-          <Badge variant="error" size="sm">
-            离线
-          </Badge>
-        )}
-      </div>
-
-      {/* SNMP 状态 */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground w-12">SNMP:</span>
-        {result.snmp_reachable ? (
-          <Badge variant="success" size="sm">
-            成功 {result.snmp_response_time && `(${result.snmp_response_time.toFixed(1)}ms)`}
-          </Badge>
-        ) : (
-          <Badge variant="default" size="sm">
-            {result.snmp_error || '失败'}
-          </Badge>
-        )}
-      </div>
     </div>
   )
 }

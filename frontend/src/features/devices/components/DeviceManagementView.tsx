@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { getApiOrigin } from "@/lib/api-client";
 import {
@@ -7,8 +7,6 @@ import {
   Eye,
   Edit,
   Trash2,
-  CheckCircle,
-  Power,
   AlertTriangle,
   Upload,
   Download,
@@ -38,11 +36,12 @@ import toast from "react-hot-toast";
 import { Device, DeviceListQuery, DeviceStatus, DeviceType } from "../types";
 import { DeviceIcon, StatusBadge, getDeviceTypeLabel } from "./DeviceIcon";
 import { DeviceProbeButton } from "./DeviceProbeButton";
+import { DeviceStatsBar } from "./DeviceStatsBar";
 import { BulkDeviceImport } from "./BulkDeviceImport";
 import { BulkDeviceUpdate } from "./BulkDeviceUpdate";
-import { AddDeviceModal } from "./AddDeviceModal";
-import { DeviceDetailsModal } from "./DeviceDetailsModal";
-import { EditDeviceModal } from "./EditDeviceModal";
+import { AddDeviceModal } from "./modals/AddDeviceModal";
+import { DeviceDetailsModal } from "./modals/DeviceDetailsModal";
+import { EditDeviceModal } from "./modals/EditDeviceModal";
 import {
   useDevices,
   useDeviceFilters,
@@ -63,6 +62,7 @@ const DEVICE_STATUSES: DeviceStatus[] = [
   "offline",
   "warning",
   "maintenance",
+  "unknown",
 ];
 const DEVICE_TYPES: DeviceType[] = [
   "switch",
@@ -374,50 +374,13 @@ export const DeviceManagementView: React.FC = () => {
     setBulkUpdateModalOpen(true);
   };
 
-  // 批量探测处理
-  const handleBulkProbe = async () => {
-    if (selectedDevices.length === 0) {
-      toast.error("请先选择要探测的设备");
-      return;
-    }
-
-    setBulkProbing(true);
-    try {
-      const result = await batchProbeDevices(selectedDevices, {
-        updateStatus: canPersistProbeStatus,
-      });
-      const onlineCount = result.results.filter((r) => r.icmp_reachable).length;
-      const snmpSuccessCount = result.results.filter(
-        (r) => r.snmp_reachable,
-      ).length;
-
-      toast.success(
-        `批量探测完成\n探测设备: ${result.probed}台\nICMP在线: ${onlineCount}台\nSNMP成功: ${snmpSuccessCount}台`,
-        { duration: 5000 },
-      );
-
-      if (canPersistProbeStatus) {
-        // 刷新设备列表和统计以显示最新状态
-        await loadDevices();
-        loadStats();
-      }
-      clearDeviceSelection();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "批量探测失败";
-      toast.error(message);
-    } finally {
-      setBulkProbing(false);
-    }
-  };
-
-  // 探测本页设备
-  const handleProbeAll = async () => {
-    if (devices.length === 0) {
+  // 统一探测处理（消除 handleBulkProbe 与 handleProbeAll 的重复逻辑）
+  const handleProbe = async (deviceIds: number[], label: string) => {
+    if (deviceIds.length === 0) {
       toast.error("没有可探测的设备");
       return;
     }
 
-    const deviceIds = devices.map((d) => d.id);
     setBulkProbing(true);
     try {
       const result = await batchProbeDevices(deviceIds, {
@@ -429,14 +392,16 @@ export const DeviceManagementView: React.FC = () => {
       ).length;
 
       toast.success(
-        `全部探测完成\n探测设备: ${result.probed}台\nICMP在线: ${onlineCount}台\nSNMP成功: ${snmpSuccessCount}台`,
+        `${label}完成\n探测设备: ${result.probed}台\nICMP在线: ${onlineCount}台\nSNMP成功: ${snmpSuccessCount}台`,
         { duration: 5000 },
       );
 
       if (canPersistProbeStatus) {
-        // 刷新设备列表和统计以显示最新状态
         await loadDevices();
         loadStats();
+      }
+      if (label === "批量探测") {
+        clearDeviceSelection();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "批量探测失败";
@@ -445,6 +410,16 @@ export const DeviceManagementView: React.FC = () => {
       setBulkProbing(false);
     }
   };
+
+  const handleBulkProbe = () => {
+    if (selectedDevices.length === 0) {
+      toast.error("请先选择要探测的设备");
+      return;
+    }
+    handleProbe(selectedDevices, "批量探测");
+  };
+
+  const handleProbeAll = () => handleProbe(devices.map((d) => d.id), "全部探测");
 
   const confirmBulkDelete = async () => {
     if (selectedDevices.length === 0) return;
@@ -641,8 +616,8 @@ export const DeviceManagementView: React.FC = () => {
     link.click();
   };
 
-  // 表格列定义
-  const columns: Column<Device>[] = [
+  // 表格列定义（使用 useMemo 避免每次渲染重建）
+  const columns: Column<Device>[] = useMemo(() => [
     {
       key: "name",
       title: "设备名称",
@@ -820,7 +795,7 @@ export const DeviceManagementView: React.FC = () => {
         </div>
       ),
     },
-  ];
+  ], [canPersistProbeStatus, canUpdateDevice, canDeleteDevice, loadDevices, loadStats]);
 
   if (error && devices.length === 0 && hasLoadedOnce) {
     if (errorStatus === 403) {
@@ -904,97 +879,7 @@ export const DeviceManagementView: React.FC = () => {
     <AppLayout title="设备管理" alertCount={summary.totalAlerts}>
       <div className="flex flex-col gap-1.5 h-full min-h-0">
         {/* 统计卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-1.5">
-          <Card>
-            <CardContent className="p-2.5">
-              <div className="flex items-center">
-                <div className="p-1 rounded-md bg-blue-100 dark:bg-blue-900/30">
-                  <Server className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div className="ml-2.5">
-                  <p className="text-xs font-medium text-muted-foreground leading-tight">
-                    总设备数
-                  </p>
-                  <p className="text-lg font-bold text-foreground leading-none">
-                    {summary.total}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-2.5">
-              <div className="flex items-center">
-                <div className="p-1 rounded-md bg-green-100 dark:bg-green-900/30">
-                  <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-                </div>
-                <div className="ml-2.5">
-                  <p className="text-xs font-medium text-muted-foreground leading-tight">
-                    在线设备
-                  </p>
-                  <p className="text-lg font-bold text-green-600 dark:text-green-400 leading-none">
-                    {summary.online}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-2.5">
-              <div className="flex items-center">
-                <div className="p-1 rounded-md bg-red-100 dark:bg-red-900/30">
-                  <Power className="h-5 w-5 text-red-600 dark:text-red-400" />
-                </div>
-                <div className="ml-2.5">
-                  <p className="text-xs font-medium text-muted-foreground leading-tight">
-                    离线设备
-                  </p>
-                  <p className="text-lg font-bold text-red-600 dark:text-red-400 leading-none">
-                    {summary.offline}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-2.5">
-              <div className="flex items-center">
-                <div className="p-1 rounded-md bg-yellow-100 dark:bg-yellow-900/30">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                </div>
-                <div className="ml-2.5">
-                  <p className="text-xs font-medium text-muted-foreground leading-tight">
-                    告警设备
-                  </p>
-                  <p className="text-lg font-bold text-yellow-600 dark:text-yellow-400 leading-none">
-                    {summary.alerting}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-2.5">
-              <div className="flex items-center">
-                <div className="p-1 rounded-md bg-purple-100 dark:bg-purple-900/30">
-                  <AlertTriangle className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div className="ml-2.5">
-                  <p className="text-xs font-medium text-muted-foreground leading-tight">
-                    总告警数
-                  </p>
-                  <p className="text-lg font-bold text-purple-600 dark:text-purple-400 leading-none">
-                    {summary.totalAlerts}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <DeviceStatsBar summary={summary} />
 
         {/* 筛选和搜索 */}
         <Card className="flex-1 flex flex-col overflow-hidden min-h-0">

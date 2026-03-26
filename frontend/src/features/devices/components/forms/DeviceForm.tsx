@@ -24,7 +24,7 @@ import { SNMPConfigForm } from './SNMPConfigForm'
 import {
   Device,
   DeviceType
-} from '../types'
+} from '../../types'
 
 // 设备类型映射
 const DEVICE_TYPE_OPTIONS: Array<{

@@ -2,8 +2,8 @@
 
 import React from 'react'
 import { SimpleModal } from '@/components/atoms'
-import { DeviceForm } from './DeviceForm'
-import { mapFormDataToCreatePayload, type CreateDevicePayload } from '../utils/deviceFormMapper'
+import { DeviceForm } from '../forms/DeviceForm'
+import { mapFormDataToCreatePayload, type CreateDevicePayload } from '../../utils/deviceFormMapper'
 
 interface AddDeviceModalProps {
   isOpen: boolean

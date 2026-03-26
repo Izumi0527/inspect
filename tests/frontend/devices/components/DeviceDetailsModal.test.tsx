@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { DeviceDetailsModal } from "@/features/devices/components/DeviceDetailsModal";
+import { DeviceDetailsModal } from "@/features/devices/components/modals/DeviceDetailsModal";
 import {
   healthCheckDevice,
   fetchDevicePerformance,

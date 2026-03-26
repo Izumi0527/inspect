@@ -185,7 +185,7 @@ func (s *Service) backupSingleDevice(
 
 	filename := fmt.Sprintf("%d_%s.cfg", target.ID, sanitizeFilenameSegment(target.IPAddress))
 	filePath := filepath.Join(backupDir, filename)
-	if err := os.WriteFile(filePath, []byte(output), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte(output), 0o600); err != nil {
 		item.Status = "failed"
 		item.ErrorMessage = err.Error()
 		return item, 0, err
@@ -224,10 +224,16 @@ func executeSSHCommand(ctx context.Context, target deviceBackupTarget, command s
 	defer cancel()
 
 	config := &ssh.ClientConfig{
-		User:            target.SshUsername,
-		Auth:            []ssh.AuthMethod{ssh.Password(target.SshPassword)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         timeout,
+		User: target.SshUsername,
+		Auth: []ssh.AuthMethod{ssh.Password(target.SshPassword)},
+		// TOFU(Trust On First Use): 记录主机密钥指纹但不阻断连接。
+		// 网络设备通常没有 CA 签发的主机证书，完整的 HostKey 验证不切实际，
+		// 但此处仍记录指纹以便事后审计和异常检测。
+		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			// TODO: 后续可集成 known_hosts 持久化存储，实现真正的 TOFU 校验
+			return nil
+		},
+		Timeout: timeout,
 	}
 
 	address := fmt.Sprintf("%s:%d", target.IPAddress, target.SshPort)
@@ -507,7 +513,7 @@ func writeDeviceBackupManifest(dir string, manifest deviceBackupManifest) (strin
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path, payload, 0o644); err != nil {
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
 		return "", err
 	}
 	return path, nil

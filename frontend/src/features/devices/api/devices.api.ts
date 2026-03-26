@@ -637,7 +637,7 @@ export async function createDevice(
 
 export async function updateDevice(
   id: number,
-  updates: DevicePayload | Partial<Device>,
+  updates: DevicePayload,
 ): Promise<Device> {
   const payload = await api.put<unknown>(`/devices/${id}`, updates);
 

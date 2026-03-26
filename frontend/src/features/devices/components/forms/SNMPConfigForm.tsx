@@ -7,8 +7,6 @@ import {
   Shield,
   Key,
   Lock,
-  Eye,
-  EyeOff,
   AlertTriangle
 } from 'lucide-react'
 import {
@@ -24,8 +22,9 @@ import {
   SNMPv3AuthProtocol,
   SNMPv3PrivProtocol,
   SNMPConfig
-} from '../types'
+} from '../../types'
 import { DeviceFormData } from './DeviceForm'
+import { PasswordInput } from './PasswordInput'
 
 // SNMP版本选项
 const SNMP_VERSION_OPTIONS = [
@@ -86,9 +85,6 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
   errors,
   watch
 }) => {
-  const [showAuthPassword, setShowAuthPassword] = React.useState(false)
-  const [showPrivPassword, setShowPrivPassword] = React.useState(false)
-
   const snmpVersion = watch('snmp_config.version') as string
   const securityLevel = watch('snmp_config.v3_config.security_level') as string
 
@@ -310,25 +306,11 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
                         name="snmp_config.v3_config.auth_password"
                         control={control}
                         render={({ field }) => (
-                          <div className="relative">
-                            <Input
-                              {...field}
-                              type={showAuthPassword ? 'text' : 'password'}
-                              placeholder="至少8位字符"
-                              error={errors.snmp_config?.v3_config?.auth_password?.message}
-                            />
-                            <button
-                              type="button"
-                              className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                              onClick={() => setShowAuthPassword(!showAuthPassword)}
-                            >
-                              {showAuthPassword ? (
-                                <EyeOff className="h-4 w-4 text-muted-foreground/80" />
-                              ) : (
-                                <Eye className="h-4 w-4 text-muted-foreground/80" />
-                              )}
-                            </button>
-                          </div>
+                          <PasswordInput
+                            {...field}
+                            placeholder="至少8位字符"
+                            error={errors.snmp_config?.v3_config?.auth_password?.message}
+                          />
                         )}
                       />
                     </div>
@@ -381,25 +363,11 @@ export const SNMPConfigForm: React.FC<SNMPConfigFormProps> = ({
                         name="snmp_config.v3_config.priv_password"
                         control={control}
                         render={({ field }) => (
-                          <div className="relative">
-                            <Input
-                              {...field}
-                              type={showPrivPassword ? 'text' : 'password'}
-                              placeholder="至少8位字符"
-                              error={errors.snmp_config?.v3_config?.priv_password?.message}
-                            />
-                            <button
-                              type="button"
-                              className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                              onClick={() => setShowPrivPassword(!showPrivPassword)}
-                            >
-                              {showPrivPassword ? (
-                                <EyeOff className="h-4 w-4 text-muted-foreground/80" />
-                              ) : (
-                                <Eye className="h-4 w-4 text-muted-foreground/80" />
-                              )}
-                            </button>
-                          </div>
+                          <PasswordInput
+                            {...field}
+                            placeholder="至少8位字符"
+                            error={errors.snmp_config?.v3_config?.priv_password?.message}
+                          />
                         )}
                       />
                     </div>

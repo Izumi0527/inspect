@@ -1,5 +1,5 @@
 import { Device } from '../types'
-import { DeviceFormData } from '../components/DeviceForm'
+import { DeviceFormData } from '../components/forms/DeviceForm'
 
 const vendorMap: Record<string, string> = {
   switch: 'cisco',
@@ -122,7 +122,33 @@ const buildSnmpTags = (formData: DeviceFormData, mode: 'create' | 'update') => {
   }
 }
 
-const buildCommonPayload = (formData: DeviceFormData, mode: 'create' | 'update') => {
+/** 发送给后端的设备创建/更新 payload（与后端 DeviceCreateRequest snake_case 字段名对齐） */
+interface DevicePayloadBody {
+  name: string
+  ip: string
+  ip_address: string
+  device_type: string
+  vendor: string
+  location: string
+  description: string
+  snmp_version: string
+  snmp_port: number
+  cli_protocol: string
+  tags: {
+    cli_config: ReturnType<typeof buildCliTags>
+    snmp_config: ReturnType<typeof buildSnmpTags>
+  }
+  ssh_username?: string | null
+  ssh_port?: number | null
+  ssh_password?: string
+  telnet_username?: string | null
+  telnet_port?: number | null
+  telnet_password?: string
+  enable_password?: string
+  snmp_community?: string
+}
+
+const buildCommonPayload = (formData: DeviceFormData, mode: 'create' | 'update'): DevicePayloadBody => {
   const shouldUseSSH = formData.cli_protocol === 'ssh'
   const shouldUseTelnet = formData.cli_protocol === 'telnet'
   const sshUsername = shouldUseSSH
@@ -139,7 +165,7 @@ const buildCommonPayload = (formData: DeviceFormData, mode: 'create' | 'update')
     formData.snmp_community,
   )
 
-  const payload: Record<string, unknown> = {
+  const payload: DevicePayloadBody = {
     name: formData.name,
     ip: formData.ip,
     ip_address: formData.ip,

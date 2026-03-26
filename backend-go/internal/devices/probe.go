@@ -76,13 +76,15 @@ func NewProbeServiceWithProbers(logger *zap.Logger, icmpProber ICMPProber, snmpP
 	if snmpProber == nil {
 		snmpProber = probeSNMP
 	}
-	return &ProbeService{
+	ps := &ProbeService{
 		logger:   logger,
 		cache:    make(map[int]ProbeResult),
 		cacheTTL: 30 * time.Second,
 		icmp:     icmpProber,
 		snmp:     snmpProber,
 	}
+	go ps.evictExpiredCache()
+	return ps
 }
 
 func (s *ProbeService) ProbeDevice(
@@ -209,6 +211,21 @@ func (s *ProbeService) setCache(deviceID int, result ProbeResult) {
 	s.mu.Lock()
 	s.cache[deviceID] = result
 	s.mu.Unlock()
+}
+
+// evictExpiredCache 定期清理过期缓存条目，防止 map 无限膨胀
+func (s *ProbeService) evictExpiredCache() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.mu.Lock()
+		for id, cached := range s.cache {
+			if time.Since(cached.ProbedAt) > s.cacheTTL*2 {
+				delete(s.cache, id)
+			}
+		}
+		s.mu.Unlock()
+	}
 }
 
 type probeResultPayload struct {

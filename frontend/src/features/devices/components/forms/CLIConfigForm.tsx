@@ -5,8 +5,6 @@ import { Controller, Control, FieldErrors } from 'react-hook-form'
 import {
   Terminal,
   Key,
-  Eye,
-  EyeOff,
   Shield,
   Server
 } from 'lucide-react'
@@ -21,8 +19,9 @@ import {
   CLIProtocol,
   SSHConfig,
   TelnetConfig
-} from '../types'
+} from '../../types'
 import { DeviceFormData } from './DeviceForm'
+import { PasswordInput } from './PasswordInput'
 
 // CLI协议选项
 const CLI_PROTOCOL_OPTIONS = [
@@ -48,10 +47,6 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
   errors,
   watch
 }) => {
-  const [showSSHPassword, setShowSSHPassword] = React.useState(false)
-  const [showTelnetPassword, setShowTelnetPassword] = React.useState(false)
-  const [showEnablePassword, setShowEnablePassword] = React.useState(false)
-
   const cliProtocol = watch('cli_protocol') as string
 
   return (
@@ -189,25 +184,11 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
                     name="ssh_config.password"
                     control={control}
                     render={({ field }) => (
-                      <div className="relative">
-                        <Input
-                          {...field}
-                          type={showSSHPassword ? 'text' : 'password'}
-                          placeholder="请输入SSH密码"
-                          error={errors.ssh_config?.password?.message}
-                        />
-                        <button
-                          type="button"
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                          onClick={() => setShowSSHPassword(!showSSHPassword)}
-                        >
-                          {showSSHPassword ? (
-                            <EyeOff className="h-4 w-4 text-muted-foreground/80" />
-                          ) : (
-                            <Eye className="h-4 w-4 text-muted-foreground/80" />
-                          )}
-                        </button>
-                      </div>
+                      <PasswordInput
+                        {...field}
+                        placeholder="请输入SSH密码"
+                        error={errors.ssh_config?.password?.message}
+                      />
                     )}
                   />
                 </div>
@@ -302,25 +283,11 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
                     name="telnet_config.password"
                     control={control}
                     render={({ field }) => (
-                      <div className="relative">
-                        <Input
-                          {...field}
-                          type={showTelnetPassword ? 'text' : 'password'}
-                          placeholder="请输入Telnet密码"
-                          error={errors.telnet_config?.password?.message}
-                        />
-                        <button
-                          type="button"
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                          onClick={() => setShowTelnetPassword(!showTelnetPassword)}
-                        >
-                          {showTelnetPassword ? (
-                            <EyeOff className="h-4 w-4 text-muted-foreground/80" />
-                          ) : (
-                            <Eye className="h-4 w-4 text-muted-foreground/80" />
-                          )}
-                        </button>
-                      </div>
+                      <PasswordInput
+                        {...field}
+                        placeholder="请输入Telnet密码"
+                        error={errors.telnet_config?.password?.message}
+                      />
                     )}
                   />
                 </div>
@@ -334,25 +301,11 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
                     name="telnet_config.enable_password"
                     control={control}
                     render={({ field }) => (
-                      <div className="relative">
-                        <Input
-                          {...field}
-                          type={showEnablePassword ? 'text' : 'password'}
-                          placeholder="可选：特权模式密码"
-                          error={errors.telnet_config?.enable_password?.message}
-                        />
-                        <button
-                          type="button"
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                          onClick={() => setShowEnablePassword(!showEnablePassword)}
-                        >
-                          {showEnablePassword ? (
-                            <EyeOff className="h-4 w-4 text-muted-foreground/80" />
-                          ) : (
-                            <Eye className="h-4 w-4 text-muted-foreground/80" />
-                          )}
-                        </button>
-                      </div>
+                      <PasswordInput
+                        {...field}
+                        placeholder="可选：特权模式密码"
+                        error={errors.telnet_config?.enable_password?.message}
+                      />
                     )}
                   />
                 </div>

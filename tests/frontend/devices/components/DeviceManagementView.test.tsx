@@ -269,15 +269,15 @@ jest.mock("@/features/devices/components/BulkDeviceUpdate", () => ({
     ) : null,
 }));
 
-jest.mock("@/features/devices/components/AddDeviceModal", () => ({
+jest.mock("@/features/devices/components/modals/AddDeviceModal", () => ({
   AddDeviceModal: () => null,
 }));
 
-jest.mock("@/features/devices/components/DeviceDetailsModal", () => ({
+jest.mock("@/features/devices/components/modals/DeviceDetailsModal", () => ({
   DeviceDetailsModal: () => null,
 }));
 
-jest.mock("@/features/devices/components/EditDeviceModal", () => ({
+jest.mock("@/features/devices/components/modals/EditDeviceModal", () => ({
   EditDeviceModal: () => null,
 }));
 

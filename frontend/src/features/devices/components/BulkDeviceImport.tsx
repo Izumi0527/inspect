@@ -69,13 +69,6 @@ const FIELD_DEFINITIONS: FieldDefinition[] = [
   { key: 'ssh_password', label: 'SSH 密码', required: false }
 ]
 
-const _DEVICE_TYPES: Array<{ value: DeviceType; label: string }> = [
-  { value: 'switch', label: '交换机' },
-  { value: 'router', label: '路由器' },
-  { value: 'firewall', label: '防火墙' },
-  { value: 'wireless_ap', label: '无线 AP' }
-]
-
 const HEADER_HINTS: Record<string, keyof DeviceImportData> = {
   name: 'name',
   '设备名称': 'name',
@@ -245,22 +238,6 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
 
     setMappingErrors([])
     setStep('preview')
-  }
-
-  const _downloadTemplate = () => {
-    const headerLine = '设备名称,IP地址,设备类型,厂商,位置,描述,SNMP团体字符串,SSH用户名,SSH密码'
-    const sampleLines = [
-      '核心交换机1,192.168.1.1,switch,cisco,数据中心A,核心网络设备,public,admin,',
-      '路由器网关1,192.168.1.254,router,huawei,数据中心A,主网关路由器,public,admin,',
-      '边界防火墙1,192.168.1.100,firewall,fortinet,数据中心B,边界防护设备,public,admin,'
-    ]
-    const csvContent = [headerLine, ...sampleLines].join('\r\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = '设备导入模板.csv'
-    link.click()
   }
 
   const isValidIpAddress = (candidate: string): boolean => {

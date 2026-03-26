@@ -1,5 +1,5 @@
 // 设备状态类型
-export type DeviceStatus = 'online' | 'offline' | 'warning' | 'maintenance'
+export type DeviceStatus = 'online' | 'offline' | 'warning' | 'maintenance' | 'unknown'
 
 // 设备类型枚举
 export type DeviceType = 'switch' | 'router' | 'firewall' | 'wireless_ap'

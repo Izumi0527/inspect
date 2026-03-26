@@ -102,9 +102,31 @@ type octetsCache struct {
 
 // NewSNMPCollector 创建一个新的 SNMP 采集器
 func NewSNMPCollector(logger *zap.Logger) *SNMPCollector {
-	return &SNMPCollector{
+	c := &SNMPCollector{
 		logger:     logger,
 		lastOctets: make(map[string]map[int]octetsCache),
+	}
+	go c.evictStaleOctets()
+	return c
+}
+
+// evictStaleOctets 定期清理超过 10 分钟未更新的速率缓存条目，防止 map 无限膨胀
+func (c *SNMPCollector) evictStaleOctets() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		c.mu.Lock()
+		for ip, ifMap := range c.lastOctets {
+			for idx, cache := range ifMap {
+				if time.Since(cache.timestamp) > 10*time.Minute {
+					delete(ifMap, idx)
+				}
+			}
+			if len(ifMap) == 0 {
+				delete(c.lastOctets, ip)
+			}
+		}
+		c.mu.Unlock()
 	}
 }
 

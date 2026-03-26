@@ -2,9 +2,9 @@
 
 import React from 'react'
 import { SimpleModal } from '@/components/atoms'
-import { Device } from '../types'
-import { DeviceForm } from './DeviceForm'
-import { mapFormDataToUpdatePayload, buildFormInitialData, DevicePayload } from '../utils/deviceFormMapper'
+import { Device } from '../../types'
+import { DeviceForm } from '../forms/DeviceForm'
+import { mapFormDataToUpdatePayload, buildFormInitialData, DevicePayload } from '../../utils/deviceFormMapper'
 
 interface EditDeviceModalProps {
   isOpen: boolean

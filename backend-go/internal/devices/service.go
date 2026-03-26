@@ -431,32 +431,21 @@ func (s *Service) GetDeviceStatistics(ctx context.Context) (DeviceStatistics, er
 		return DeviceStatistics{}, fmt.Errorf("database not initialized")
 	}
 
-	var total int64
-	if err := s.db.WithContext(ctx).Table("devices").Count(&total).Error; err != nil {
-		return DeviceStatistics{}, err
+	// 合并 4 次 COUNT 为 1 次条件聚合查询
+	type statusCounts struct {
+		Total   int64 `gorm:"column:total"`
+		Online  int64 `gorm:"column:online"`
+		Offline int64 `gorm:"column:offline"`
+		Warning int64 `gorm:"column:warning"`
 	}
-
-	var online int64
+	var counts statusCounts
 	if err := s.db.WithContext(ctx).
 		Table("devices").
-		Where("status = ?", "online").
-		Count(&online).Error; err != nil {
-		return DeviceStatistics{}, err
-	}
-
-	var offline int64
-	if err := s.db.WithContext(ctx).
-		Table("devices").
-		Where("status = ?", "offline").
-		Count(&offline).Error; err != nil {
-		return DeviceStatistics{}, err
-	}
-
-	var warning int64
-	if err := s.db.WithContext(ctx).
-		Table("devices").
-		Where("status = ?", "warning").
-		Count(&warning).Error; err != nil {
+		Select(`COUNT(*) as total,
+			SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) as online,
+			SUM(CASE WHEN status = 'offline' THEN 1 ELSE 0 END) as offline,
+			SUM(CASE WHEN status = 'warning' THEN 1 ELSE 0 END) as warning`).
+		Scan(&counts).Error; err != nil {
 		return DeviceStatistics{}, err
 	}
 
@@ -499,7 +488,7 @@ func (s *Service) GetDeviceStatistics(ctx context.Context) (DeviceStatistics, er
 		typeDistribution[row.DeviceType] = row.Count
 	}
 
-	return buildDeviceStatistics(total, online, offline, warning, totalAlerts, alertingDevices, typeDistribution), nil
+	return buildDeviceStatistics(counts.Total, counts.Online, counts.Offline, counts.Warning, totalAlerts, alertingDevices, typeDistribution), nil
 }
 
 func (s *Service) UpdateDeviceProbeStatus(

@@ -11,10 +11,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/atoms'
-import { Device } from '../types'
-import { healthCheckDevice, fetchDevicePerformance } from '../api/devices.api'
+import { Device } from '../../types'
+import { healthCheckDevice, fetchDevicePerformance } from '../../api/devices.api'
 import { formatDate } from '@/utils/formatters'
-import { getDeviceTypeLabel } from './DeviceIcon'
+import { getDeviceTypeLabel } from '../DeviceIcon'
 
 const PERFORMANCE_RANGES = [
   { value: '24h', label: '近24小时' },
