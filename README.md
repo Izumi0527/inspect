@@ -1,6 +1,6 @@
 # 🌐 企业级网络设备巡检系统
 
-> 后端已迁移至 Go（Echo + GORM + TimescaleDB），Python 后端已废弃，不再维护。
+> 后端已迁移至 Go（Echo + GORM + TimescaleDB）
 
 <div align="center">
 
@@ -343,6 +343,10 @@ docker-compose -f docker-compose.dev.yml ps
 # 后端: http://localhost:8001
 # pgAdmin: http://localhost:5050 (需启动 tools profile)
 # Redis Commander: http://localhost:8081 (需启动 tools profile)
+#
+# 开发环境默认测试账号:
+# 用户名: admin
+# 密码: admin123
 ```
 
 #### **方式二：本地开发启动**

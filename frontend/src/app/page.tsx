@@ -46,7 +46,7 @@ export default function HomePage() {
             <div className="mt-8 p-4 bg-blue-50/80 dark:bg-blue-900/20 backdrop-blur-sm rounded-xl border border-blue-200 dark:border-blue-700/50">
               <p className="text-sm text-blue-700 dark:text-blue-200 text-center">
                 <strong>测试账号：</strong>用户名 <code className="bg-blue-100 dark:bg-blue-900/40 px-2 py-1 rounded">admin</code>
-                密码 <code className="bg-blue-100 dark:bg-blue-900/40 px-2 py-1 rounded">Admin123!</code>
+                密码 <code className="bg-blue-100 dark:bg-blue-900/40 px-2 py-1 rounded">admin123</code>
               </p>
             </div>
           </div>

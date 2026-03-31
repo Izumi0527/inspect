@@ -95,6 +95,12 @@ curl http://localhost:33000
 psql -h localhost -p 15500 -U inspect_dev -d inspect_system_dev
 ```
 
+## 开发环境测试账号
+
+- 默认登录账号：`admin`
+- 默认登录密码：`admin123`
+- 首页与登录页的测试账号提示以此为准
+
 ## 环境变量配置
 
 后端默认读取根目录 `.env`。如需使用其他环境文件，可设置 `ENV_FILE` 指向（例如 `.env.development`），并确保相关变量可用。
