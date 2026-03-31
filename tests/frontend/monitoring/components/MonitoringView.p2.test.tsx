@@ -112,7 +112,7 @@ describe('MonitoringView - WS 健康度与数据新鲜度提示（P2护栏）', 
     jest.restoreAllMocks()
   })
 
-  it('当 WS stale 且数据超时未更新时，应展示“连接不活跃”与“已X未更新”提示', () => {
+  it('当 WS stale 且数据超时未更新时，应展示“连接不稳”与“已X未更新”提示', () => {
     const nowMs = new Date('2026-03-15T14:00:00.000Z').getTime()
     jest.spyOn(Date, 'now').mockReturnValue(nowMs)
 
@@ -135,7 +135,7 @@ describe('MonitoringView - WS 健康度与数据新鲜度提示（P2护栏）', 
 
     const { unmount } = render(<MonitoringView />)
 
-    expect(screen.getByText('连接不活跃')).toBeInTheDocument()
+    expect(screen.getByText('连接不稳')).toBeInTheDocument()
     expect(screen.getByText(/已10\s*分钟未更新/)).toBeInTheDocument()
 
     unmount()
@@ -164,7 +164,7 @@ describe('MonitoringView - WS 健康度与数据新鲜度提示（P2护栏）', 
 
     const { unmount } = render(<MonitoringView />)
 
-    expect(screen.getByText('实时连接')).toBeInTheDocument()
+    expect(screen.getByText('已连接')).toBeInTheDocument()
     expect(screen.queryByText(/未更新/)).not.toBeInTheDocument()
 
     unmount()

@@ -6,6 +6,13 @@
 import { useState } from 'react'
 import type { InspectionCheckItem, CheckItemConfig, CheckItemType } from '../types'
 import { isCheckItemTypeSupported } from '../utils/check-item-support'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface CheckItemEditorProps {
   item?: InspectionCheckItem
@@ -124,17 +131,27 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
             <label className="block text-sm font-medium mb-1">
               检查类型 <span className="text-red-500">*</span>
             </label>
-            <select
+            <Select
               value={formData.type}
-              onChange={(e) => updateField('type', e.target.value as CheckItemType)}
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onValueChange={(value) => updateField('type', value as CheckItemType)}
             >
-              <option value="snmp">SNMP</option>
-              <option value="ping">Ping</option>
-              <option value="ssh" disabled={!isCheckItemTypeSupported('ssh')}>SSH（暂不支持执行）</option>
-              <option value="http" disabled={!isCheckItemTypeSupported('http')}>HTTP（暂不支持执行）</option>
-              <option value="script" disabled={!isCheckItemTypeSupported('script')}>Script（暂不支持执行）</option>
-            </select>
+              <SelectTrigger className="w-full" aria-label="检查类型">
+                <SelectValue placeholder="请选择检查类型" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="snmp">SNMP</SelectItem>
+                <SelectItem value="ping">Ping</SelectItem>
+                <SelectItem value="ssh" disabled={!isCheckItemTypeSupported('ssh')}>
+                  SSH（暂不支持执行）
+                </SelectItem>
+                <SelectItem value="http" disabled={!isCheckItemTypeSupported('http')}>
+                  HTTP（暂不支持执行）
+                </SelectItem>
+                <SelectItem value="script" disabled={!isCheckItemTypeSupported('script')}>
+                  Script（暂不支持执行）
+                </SelectItem>
+              </SelectContent>
+            </Select>
             {!isSupportedType && (
               <p className="text-amber-600 text-sm mt-1">
                 当前版本执行引擎暂不支持该检查类型，执行时将被跳过；建议改为 Ping 或 SNMP。

@@ -17,16 +17,18 @@ import {
   CardContent,
   Button,
   Badge,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   LineChartComponent,
   AreaChartComponent,
   PieChartComponent,
   CircularProgress
 } from '@/components/atoms'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { CompactStatCard } from '@/components/shared'
 
 // 生成模拟监控数据
@@ -148,7 +150,7 @@ export const MonitoringDashboard: React.FC = () => {
         
         <div className="flex items-center gap-3">
           <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-[120px]">
+            <SelectTrigger aria-label="监控时间范围" className="w-[120px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

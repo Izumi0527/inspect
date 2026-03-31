@@ -1,6 +1,7 @@
 'use client'
 
-import { Badge, Button, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/atoms'
+import { Badge, Button } from '@/components/atoms'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { RefreshCw, Wifi, WifiOff, AlertTriangle, CheckCircle2, Clock } from 'lucide-react'
 import { TIME_RANGE_OPTIONS } from '../../utils/monitoring'
 import { type UseMonitoringPageResult } from '../../hooks/useMonitoringPage'
@@ -69,7 +70,9 @@ export function MonitoringHeaderActions({ page }: MonitoringHeaderActionsProps) 
 
       {/* 时间范围选择器 */}
       <Select value={page.timeRange} onValueChange={page.setTimeRange}>
-        <SelectTrigger className="h-9 w-28 px-3 py-2 text-sm"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="h-9 w-28 px-3 py-2 text-sm" aria-label="监控时间范围">
+          <SelectValue />
+        </SelectTrigger>
         <SelectContent>
           {TIME_RANGE_OPTIONS.map((item) => (
             <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>

@@ -4,13 +4,15 @@ import { X, FileText, Monitor, Settings, Shield, Plus, Trash2 } from 'lucide-rea
 import {
   Button,
   SimpleInput as Input,
+  Badge
+} from '@/components/atoms'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-  Badge
-} from '@/components/atoms'
+  SelectValue
+} from '@/components/ui/select'
 import { useCreateTemplate, useUpdateTemplate } from '../hooks/useInspection'
 import { isCheckItemTypeSupported } from '../utils/check-item-support'
 import { InspectionTemplate, InspectionCheckItem } from '../types'
@@ -278,7 +280,7 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
                     value={formData.category}
                     onValueChange={handleCategoryChange}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger aria-label="模板类别">
                       <SelectValue placeholder="选择模板类别" />
                     </SelectTrigger>
                     <SelectContent>
@@ -408,7 +410,7 @@ export const TemplateModal: React.FC<Props> = ({ template, onClose, onSuccess })
                             value={checkItem.type}
                             onValueChange={(value) => handleUpdateCheckItem(index, { type: value as InspectionCheckItem['type'] })}
                           >
-                            <SelectTrigger>
+                            <SelectTrigger aria-label="检查项类型">
                               <SelectValue placeholder="检查类型" />
                             </SelectTrigger>
                             <SelectContent>

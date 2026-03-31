@@ -1,7 +1,7 @@
 import React from 'react'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { Button } from './button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/utils/cn'
 
 export interface PaginationProps {
@@ -101,13 +101,13 @@ export const Pagination: React.FC<PaginationProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">每页:</span>
             <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
-              <SelectTrigger className="w-20 h-8">
+              <SelectTrigger aria-label="每页条数" className="h-8 w-[112px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {pageSizeOptions.map((size) => (
                   <SelectItem key={size} value={String(size)}>
-                    {size}
+                    {size}条/页
                   </SelectItem>
                 ))}
               </SelectContent>

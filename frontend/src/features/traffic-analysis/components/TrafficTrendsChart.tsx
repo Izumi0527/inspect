@@ -7,17 +7,13 @@ import {
   CardTitle,
   CardContent,
   Button,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Badge,
   Loading,
   LineChartComponent,
   AreaChartComponent
 } from '@/components/atoms'
 import { CompactStatCard } from '@/components/shared'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useTrafficAnalysis } from '../hooks/useTrafficAnalysis'
 import { TrafficTrend } from '../types'
 import { formatBytes } from '@/utils/formatters'
@@ -246,7 +242,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
             </CardTitle>
             <div className="flex items-center gap-2">
               <Select value={metricType} onValueChange={(value: string) => setMetricType(value as MetricType)}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-32" aria-label="流量趋势指标">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -256,7 +252,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
                 </SelectContent>
               </Select>
               <Select value={chartType} onValueChange={(value: string) => setChartType(value as ChartType)}>
-                <SelectTrigger className="w-20">
+                <SelectTrigger className="w-20" aria-label="流量图表类型">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -385,7 +381,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
                 value={selectedDevice} 
                 onValueChange={setSelectedDevice}
               >
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-48" aria-label="流量趋势设备">
                   <SelectValue placeholder="选择设备" />
                 </SelectTrigger>
                 <SelectContent>
@@ -401,7 +397,7 @@ export const TrafficTrendsChart: React.FC<TrafficTrendsChartProps> = ({
                 value={analysisHours.toString()} 
                 onValueChange={(value) => setAnalysisHours(parseInt(value))}
               >
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-32" aria-label="分析时长">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

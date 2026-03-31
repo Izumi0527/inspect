@@ -3,14 +3,24 @@
  * 用于筛选不同分类的巡检模板
  */
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+
 interface CategoryFilterProps {
   value: string
   onChange: (category: string) => void
   className?: string
 }
 
+const ALL_CATEGORY_VALUE = 'all'
+
 const CATEGORIES = [
-  { value: '', label: '全部分类' },
+  { value: ALL_CATEGORY_VALUE, label: '全部分类' },
   { value: 'network', label: '网络' },
   { value: 'system', label: '系统' },
   { value: 'security', label: '安全' },
@@ -23,18 +33,27 @@ export function CategoryFilter({ value, onChange, className = '' }: CategoryFilt
       <label htmlFor="category-filter" className="block text-sm font-medium mb-1">
         分类
       </label>
-      <select
-        id="category-filter"
-        className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+      <Select
+        value={value || ALL_CATEGORY_VALUE}
+        onValueChange={(selectedValue) =>
+          onChange(selectedValue === ALL_CATEGORY_VALUE ? '' : selectedValue)
+        }
       >
-        {CATEGORIES.map((category) => (
-          <option key={category.value} value={category.value}>
-            {category.label}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger
+          id="category-filter"
+          className="w-full"
+          aria-label="分类筛选"
+        >
+          <SelectValue placeholder="全部分类" />
+        </SelectTrigger>
+        <SelectContent>
+          {CATEGORIES.map((category) => (
+            <SelectItem key={category.value} value={category.value}>
+              {category.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }

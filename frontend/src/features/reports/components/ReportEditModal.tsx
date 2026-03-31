@@ -7,12 +7,14 @@ import {
   ModalContent,
   ModalTitle,
   SimpleInput as Input,
+} from '@/components/atoms'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue
-} from '@/components/atoms'
+} from '@/components/ui/select'
 import type { Report } from '../types'
 import { useUpdateReport } from '../hooks/useReports'
 
@@ -135,7 +137,7 @@ export const ReportEditModal: React.FC<Props> = ({ report, onClose, onSuccess })
               onValueChange={(value) => setCategory(value as ReportCategoryOption)}
               disabled={isLoading}
             >
-              <SelectTrigger>
+              <SelectTrigger aria-label="报表类别">
                 <SelectValue placeholder="选择类别" />
               </SelectTrigger>
               <SelectContent>

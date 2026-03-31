@@ -4,13 +4,15 @@ import { X, Calendar, FileText, Settings, Search } from 'lucide-react'
 import {
   Button,
   SimpleInput as Input,
+  Badge
+} from '@/components/atoms'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-  Badge
-} from '@/components/atoms'
+  SelectValue
+} from '@/components/ui/select'
 import { useCreateStrategy, useUpdateStrategy, useInspectionTemplates } from '../hooks/useInspection'
 import { useDevices } from '@/features/devices/hooks/useDevices'
 import { InspectionStrategy } from '../types'
@@ -270,7 +272,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                       策略类型 <span className="text-red-500">*</span>
                     </label>
                     <Select value={formData.type} onValueChange={handleTypeChange}>
-                      <SelectTrigger>
+                      <SelectTrigger aria-label="策略类型">
                         <SelectValue placeholder="选择策略类型" />
                       </SelectTrigger>
                       <SelectContent>
@@ -314,7 +316,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                         className={`flex-1 ${errors.cron ? 'border-red-500' : ''}`}
                       />
                       <Select onValueChange={(value) => handleInputChange('cron', value)}>
-                        <SelectTrigger className="w-36">
+                        <SelectTrigger className="w-36" aria-label="Cron 预设">
                           <SelectValue placeholder="常用预设" />
                         </SelectTrigger>
                         <SelectContent>

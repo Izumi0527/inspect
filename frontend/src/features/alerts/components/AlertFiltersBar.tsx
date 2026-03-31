@@ -1,6 +1,13 @@
 import React from 'react'
 import { Search, Filter } from 'lucide-react'
 import { Card, CardContent, Button, Input } from '@/components/atoms'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { AlertFilters, AlertAction } from '../types'
 
 interface AlertFiltersBarProps {
@@ -32,27 +39,41 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
         />
       </div>
 
-      <select
+      <Select
         value={filters.severityFilter}
-        onChange={(e) => onFilterChange('severityFilter', e.target.value)}
-        className="px-4 py-2 border border-border dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-auto sm:min-w-[180px] bg-card text-foreground"
+        onValueChange={(value) => onFilterChange('severityFilter', value)}
       >
-        <option value="all">所有严重级别</option>
-        <option value="critical">严重</option>
-        <option value="warning">警告</option>
-        <option value="info">信息</option>
-      </select>
+        <SelectTrigger
+          className="w-full sm:w-[180px]"
+          aria-label="严重级别筛选"
+        >
+          <SelectValue placeholder="严重级别" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">所有严重级别</SelectItem>
+          <SelectItem value="critical">严重</SelectItem>
+          <SelectItem value="warning">警告</SelectItem>
+          <SelectItem value="info">信息</SelectItem>
+        </SelectContent>
+      </Select>
 
-      <select
+      <Select
         value={filters.statusFilter}
-        onChange={(e) => onFilterChange('statusFilter', e.target.value)}
-        className="px-4 py-2 border border-border dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-auto sm:min-w-[150px] bg-card text-foreground"
+        onValueChange={(value) => onFilterChange('statusFilter', value)}
       >
-        <option value="all">所有状态</option>
-        <option value="active">活跃</option>
-        <option value="acknowledged">已确认</option>
-        <option value="resolved">已解决</option>
-      </select>
+        <SelectTrigger
+          className="w-full sm:w-[150px]"
+          aria-label="状态筛选"
+        >
+          <SelectValue placeholder="状态" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">所有状态</SelectItem>
+          <SelectItem value="active">活跃</SelectItem>
+          <SelectItem value="acknowledged">已确认</SelectItem>
+          <SelectItem value="resolved">已解决</SelectItem>
+        </SelectContent>
+      </Select>
     </div>
   )
 

@@ -119,35 +119,6 @@ jest.mock("@/components/atoms", () => ({
   }) => (
     <input value={value} onChange={onChange} placeholder={placeholder} />
   ),
-  Select: ({
-    value,
-    onValueChange,
-    children,
-  }: {
-    value: string;
-    onValueChange: (value: string) => void;
-    children: React.ReactNode;
-  }) => (
-    <select value={value} onChange={(event) => onValueChange(event.target.value)}>
-      {children}
-    </select>
-  ),
-  SelectContent: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  SelectItem: ({
-    value,
-    children,
-  }: {
-    value: string;
-    children: React.ReactNode;
-  }) => <option value={value}>{children}</option>,
-  SelectTrigger: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  SelectValue: ({ placeholder }: { placeholder?: string }) => (
-    <>{placeholder}</>
-  ),
   ConfirmModal: ({
     isOpen,
     title,
@@ -228,6 +199,75 @@ jest.mock("@/components/atoms", () => ({
     </div>
   ),
 }));
+
+jest.mock("@/components/ui/select", () => {
+  const React = require("react") as typeof import("react");
+
+  const SelectTrigger = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
+  SelectTrigger.displayName = "MockSelectTrigger";
+
+  const SelectContent = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
+  SelectContent.displayName = "MockSelectContent";
+
+  const SelectItem = ({ children }: { children?: React.ReactNode }) => <>{children}</>;
+  SelectItem.displayName = "MockSelectItem";
+
+  const SelectValue = ({ placeholder }: { placeholder?: string }) => <>{placeholder ?? null}</>;
+  SelectValue.displayName = "MockSelectValue";
+
+  const extractItems = (node: React.ReactNode): React.ReactElement[] =>
+    React.Children.toArray(node)
+      .filter((child): child is React.ReactElement => React.isValidElement(child))
+      .flatMap((child) => {
+        if ((child.type as { displayName?: string }).displayName === "MockSelectItem") {
+          return [child];
+        }
+
+        if (child.props?.children) {
+          return extractItems(child.props.children);
+        }
+
+        return [];
+      });
+
+  return {
+    Select: ({
+      value,
+      onValueChange,
+      children,
+    }: {
+      value?: string;
+      onValueChange?: (value: string) => void;
+      children: React.ReactNode;
+    }) => {
+      const childArray = React.Children.toArray(children).filter(React.isValidElement);
+      const trigger = childArray.find(
+        (child) =>
+          (child.type as { displayName?: string }).displayName === "MockSelectTrigger",
+      ) as React.ReactElement | undefined;
+      const items = extractItems(children);
+
+      return (
+        <select
+          value={value}
+          aria-label={trigger?.props?.["aria-label"]}
+          className={trigger?.props?.className}
+          onChange={(event) => onValueChange?.(event.target.value)}
+        >
+          {items.map((item) => (
+            <option key={item.props.value} value={item.props.value}>
+              {item.props.children}
+            </option>
+          ))}
+        </select>
+      );
+    },
+    SelectTrigger,
+    SelectContent,
+    SelectItem,
+    SelectValue,
+  };
+});
 
 jest.mock("@/features/devices/components/DeviceIcon", () => ({
   DeviceIcon: () => <div>icon</div>,
@@ -395,7 +435,7 @@ describe("DeviceManagementView", () => {
 
     expect(screen.getByText("已选择 1 台设备")).toBeInTheDocument();
 
-    fireEvent.change(screen.getAllByRole("combobox")[0], {
+    fireEvent.change(screen.getByRole("combobox", { name: "设备状态筛选" }), {
       target: { value: "online" },
     });
 
@@ -417,7 +457,7 @@ describe("DeviceManagementView", () => {
       expect(mockLoadDevices).toHaveBeenCalledTimes(2);
     });
 
-    fireEvent.change(screen.getAllByRole("combobox")[0], {
+    fireEvent.change(screen.getByRole("combobox", { name: "设备状态筛选" }), {
       target: { value: "online" },
     });
 
@@ -577,5 +617,16 @@ describe("DeviceManagementView", () => {
         }),
       );
     });
+  });
+
+  it("筛选下拉应具备明确的可访问名称", () => {
+    render(<DeviceManagementView />);
+
+    expect(
+      screen.getByRole("combobox", { name: "设备状态筛选" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "设备类型筛选" }),
+    ).toBeInTheDocument();
   });
 });

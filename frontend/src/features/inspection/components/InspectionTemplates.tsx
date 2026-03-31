@@ -37,6 +37,13 @@ import {
   SimpleInput as Input
 } from '@/components/atoms'
 import type { BadgeProps } from '@/components/atoms'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 // 导入新版 hooks 和类型（来自 inspection feature）
 import {
@@ -81,6 +88,8 @@ import { QuickTemplateCreate } from './QuickTemplateCreate'
 // 类型定义
 type SortField = 'name' | 'category' | 'createdAt' | 'updatedAt'
 type SortOrder = 'asc' | 'desc'
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 
 export const InspectionTemplates: React.FC = () => {
   // 筛选状态
@@ -697,15 +706,30 @@ export const InspectionTemplates: React.FC = () => {
             {/* 左侧：每页显示数量选择 */}
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">每页显示</span>
-              <select
-                value={pagination.page_size}
-                onChange={(e) => setPagination(p => ({ ...p, page: 1, page_size: Number(e.target.value) }))}
-                className="px-2 py-1 text-sm border border-border/70 rounded-md bg-card text-foreground/90 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <Select
+                value={String(pagination.page_size)}
+                onValueChange={(value) =>
+                  setPagination((prev) => ({
+                    ...prev,
+                    page: 1,
+                    page_size: Number(value),
+                  }))
+                }
               >
-                <option value={10}>10 条</option>
-                <option value={20}>20 条</option>
-                <option value={50}>50 条</option>
-              </select>
+                <SelectTrigger
+                  className="h-8 w-[108px] px-3 text-sm"
+                  aria-label="每页条数"
+                >
+                  <SelectValue placeholder="每页条数" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((pageSize) => (
+                    <SelectItem key={pageSize} value={String(pageSize)}>
+                      {pageSize} 条
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <span className="text-sm text-muted-foreground">
                 共 {templatesData?.total || 0} 条记录
               </span>

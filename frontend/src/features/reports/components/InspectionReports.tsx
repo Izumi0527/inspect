@@ -26,15 +26,17 @@ import {
   Badge,
   Table,
   Column,
+  ConfirmModal,
+  ErrorAlert,
+} from '@/components/atoms'
+import type { BadgeProps } from '@/components/atoms/badge'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  ConfirmModal,
-  ErrorAlert,
-} from '@/components/atoms'
-import type { BadgeProps } from '@/components/atoms/badge'
+} from '@/components/ui/select'
 import {
   useReports,
   useDeleteReport,
@@ -443,7 +445,7 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
         </div>
         <div className="flex gap-2">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-32" aria-label="报告状态筛选">
               <SelectValue placeholder="状态筛选" />
             </SelectTrigger>
             <SelectContent>
@@ -455,7 +457,7 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
             </SelectContent>
           </Select>
           <Select value={formatFilter} onValueChange={setFormatFilter}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-32" aria-label="报告格式筛选">
               <SelectValue placeholder="格式筛选" />
             </SelectTrigger>
             <SelectContent>

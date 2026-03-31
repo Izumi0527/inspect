@@ -3,14 +3,24 @@
  * 用于筛选不同厂商的巡检模板
  */
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+
 interface VendorFilterProps {
   value: string
   onChange: (vendor: string) => void
   className?: string
 }
 
+const ALL_VENDOR_VALUE = 'all'
+
 const VENDORS = [
-  { value: '', label: '全部厂商' },
+  { value: ALL_VENDOR_VALUE, label: '全部厂商' },
   { value: 'Cisco', label: 'Cisco' },
   { value: 'Huawei', label: 'Huawei' },
   { value: 'H3C', label: 'H3C' },
@@ -25,18 +35,27 @@ export function VendorFilter({ value, onChange, className = '' }: VendorFilterPr
       <label htmlFor="vendor-filter" className="block text-sm font-medium mb-1">
         厂商
       </label>
-      <select
-        id="vendor-filter"
-        className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+      <Select
+        value={value || ALL_VENDOR_VALUE}
+        onValueChange={(selectedValue) =>
+          onChange(selectedValue === ALL_VENDOR_VALUE ? '' : selectedValue)
+        }
       >
-        {VENDORS.map((vendor) => (
-          <option key={vendor.value} value={vendor.value}>
-            {vendor.label}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger
+          id="vendor-filter"
+          className="w-full"
+          aria-label="厂商筛选"
+        >
+          <SelectValue placeholder="全部厂商" />
+        </SelectTrigger>
+        <SelectContent>
+          {VENDORS.map((vendor) => (
+            <SelectItem key={vendor.value} value={vendor.value}>
+              {vendor.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }

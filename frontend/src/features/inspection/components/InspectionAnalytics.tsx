@@ -14,16 +14,18 @@ import {
   CardTitle,
   CardContent,
   Button,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   LineChartComponent,
   AreaChartComponent,
   BarChartComponent,
   PieChartComponent
 } from '@/components/atoms'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import {
   useInspectionTrends,
   useInspectionStats,
@@ -182,7 +184,7 @@ export const InspectionAnalytics: React.FC = () => {
         <div></div>
         <div className="flex gap-2">
           <Select value={timePeriod} onValueChange={handlePeriodChange}>
-            <SelectTrigger className="w-32">
+            <SelectTrigger className="w-32" aria-label="巡检分析时间周期">
               <SelectValue placeholder="时间周期" />
             </SelectTrigger>
             <SelectContent>

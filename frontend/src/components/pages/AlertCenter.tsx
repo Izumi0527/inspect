@@ -22,11 +22,6 @@ import {
   Table,
   Column,
   Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Modal,
   ModalContent,
   ModalHeader,
@@ -35,6 +30,13 @@ import {
   ModalFooter,
   TextArea
 } from '@/components/atoms'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { CompactStatCard } from '@/components/shared'
 
 // 告警严重级别
@@ -508,7 +510,7 @@ export const AlertCenter: React.FC = () => {
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[140px]">
+              <SelectTrigger aria-label="告警状态筛选" className="w-full sm:w-[140px]">
                 <SelectValue placeholder="状态" />
               </SelectTrigger>
               <SelectContent>
@@ -519,7 +521,7 @@ export const AlertCenter: React.FC = () => {
               </SelectContent>
             </Select>
             <Select value={severityFilter} onValueChange={setSeverityFilter}>
-              <SelectTrigger className="w-full sm:w-[140px]">
+              <SelectTrigger aria-label="告警严重级别筛选" className="w-full sm:w-[140px]">
                 <SelectValue placeholder="严重级别" />
               </SelectTrigger>
               <SelectContent>
@@ -531,7 +533,7 @@ export const AlertCenter: React.FC = () => {
               </SelectContent>
             </Select>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-full sm:w-[140px]">
+              <SelectTrigger aria-label="告警类别筛选" className="w-full sm:w-[140px]">
                 <SelectValue placeholder="类别" />
               </SelectTrigger>
               <SelectContent>

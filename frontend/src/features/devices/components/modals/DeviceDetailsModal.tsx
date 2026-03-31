@@ -5,12 +5,14 @@ import {
   SimpleModal,
   Badge,
   Button,
+} from '@/components/atoms'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/atoms'
+} from '@/components/ui/select'
 import { Device } from '../../types'
 import { healthCheckDevice, fetchDevicePerformance } from '../../api/devices.api'
 import { formatDate } from '@/utils/formatters'
@@ -273,7 +275,7 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <Select value={timeRange} onValueChange={setTimeRange}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-[140px]" aria-label="性能时间范围">
                   <SelectValue placeholder="选择时间范围" />
                 </SelectTrigger>
                 <SelectContent>

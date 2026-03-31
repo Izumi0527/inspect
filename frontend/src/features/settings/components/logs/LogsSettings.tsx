@@ -327,7 +327,7 @@ export const LogsSettings: React.FC = () => {
                 value={syslogProtocol}
                 onValueChange={(v) => updateSyslogProtocol(v as SyslogProtocol)}
               >
-                <SelectTrigger id="syslog-protocol">
+                <SelectTrigger id="syslog-protocol" aria-label="Syslog 协议">
                   <SelectValue placeholder="选择协议" />
                 </SelectTrigger>
                 <SelectContent>

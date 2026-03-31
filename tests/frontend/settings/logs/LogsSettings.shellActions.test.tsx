@@ -136,7 +136,7 @@ describe('LogsSettings 壳层动作区迁移', () => {
       )
     }
 
-    renderWithQuery(
+    const { container } = renderWithQuery(
       <SettingsShellProvider activeTabKey="logs">
         <LogsSettings />
         <ShellToolbar />
@@ -156,11 +156,15 @@ describe('LogsSettings 壳层动作区迁移', () => {
 
     const actionGroup = screen.getByRole('group', { name: '数据保留操作' })
     const localActions = within(actionGroup)
+    const syslogActionGroup = screen.getByRole('group', { name: 'Syslog 操作' })
+    const syslogActions = within(syslogActionGroup)
     expect(localActions.getByRole('button', { name: '保存' })).toBeInTheDocument()
     expect(localActions.getByRole('button', { name: '重置' })).toBeInTheDocument()
-    expect(localActions.getByRole('button', { name: '应用配置' })).toBeInTheDocument()
-    expect(localActions.getByRole('button', { name: '刷新状态' })).toBeInTheDocument()
     expect(localActions.getByRole('button', { name: '立即清理' })).toBeInTheDocument()
+    expect(syslogActions.getByRole('button', { name: '应用配置' })).toBeInTheDocument()
+    expect(syslogActions.getByRole('button', { name: '刷新状态' })).toBeInTheDocument()
+    expect(container.querySelector('select')).toBeNull()
+    expect(screen.getByRole('combobox', { name: 'Syslog 协议' })).toBeInTheDocument()
 
     // 不应继续渲染旧的 ActionButtons 提示文本
     expect(screen.queryByText('• 有未保存的更改')).not.toBeInTheDocument()
@@ -173,12 +177,12 @@ describe('LogsSettings 壳层动作区迁移', () => {
     expect(resetAllMock).toHaveBeenCalled()
 
     const initialStatusCalls = getSyslogStatusMock.mock.calls.length
-    await user.click(localActions.getByRole('button', { name: '刷新状态' }))
+    await user.click(syslogActions.getByRole('button', { name: '刷新状态' }))
     await waitFor(() => {
       expect(getSyslogStatusMock.mock.calls.length).toBeGreaterThan(initialStatusCalls)
     })
 
-    await user.click(localActions.getByRole('button', { name: '应用配置' }))
+    await user.click(syslogActions.getByRole('button', { name: '应用配置' }))
     await waitFor(() => {
       expect(applySyslogConfigMock).toHaveBeenCalled()
     })

@@ -6,13 +6,15 @@ import {
   ModalContent,
   ModalTitle,
   SimpleInput as Input,
+  Badge
+} from '@/components/atoms'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Badge
-} from '@/components/atoms'
+} from '@/components/ui/select'
 import { useGenerateInspectionReport } from '../hooks/useReports'
 import { formatDateYMD } from '@/utils/formatters'
 
@@ -224,7 +226,7 @@ export const InspectionReportModal: React.FC<Props> = ({ onClose, onSuccess }) =
                     value={formData.category}
                     onValueChange={(value) => handleInputChange('category', value as ReportCategoryOption)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger aria-label="报告类别">
                       <SelectValue placeholder="选择报告类别" />
                     </SelectTrigger>
                     <SelectContent>

@@ -210,7 +210,7 @@ export function UserFormDialog({
           <div className="space-y-2">
             <Label>角色</Label>
             <Select value={role} onValueChange={(value) => setRole(value as UserRole)} disabled={isSubmitting}>
-              <SelectTrigger>
+              <SelectTrigger aria-label="用户角色">
                 <SelectValue placeholder="请选择角色" />
               </SelectTrigger>
               <SelectContent>
@@ -228,7 +228,7 @@ export function UserFormDialog({
               <div className="space-y-2">
                 <Label>初始状态</Label>
                 <Select value={status} onValueChange={(value) => setStatus(value as UserStatus)} disabled={isSubmitting}>
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="用户初始状态">
                     <SelectValue placeholder="请选择状态" />
                   </SelectTrigger>
                   <SelectContent>

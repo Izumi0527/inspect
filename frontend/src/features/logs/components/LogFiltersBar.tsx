@@ -54,7 +54,7 @@ export const LogFiltersBar: React.FC<LogFiltersBarProps> = ({
           value={filters.levelFilter}
           onValueChange={(value) => onFilterChange('levelFilter', value as LogLevel | 'all')}
         >
-          <SelectTrigger className="w-[130px]">
+          <SelectTrigger className="w-[130px]" aria-label="日志级别筛选">
             <SelectValue placeholder="日志级别" />
           </SelectTrigger>
           <SelectContent>
@@ -72,7 +72,7 @@ export const LogFiltersBar: React.FC<LogFiltersBarProps> = ({
           value={filters.facilityFilter}
           onValueChange={(value) => onFilterChange('facilityFilter', value as LogFacility | 'all')}
         >
-          <SelectTrigger className="w-[130px]">
+          <SelectTrigger className="w-[130px]" aria-label="设施类型筛选">
             <SelectValue placeholder="设施类型" />
           </SelectTrigger>
           <SelectContent>
@@ -90,7 +90,7 @@ export const LogFiltersBar: React.FC<LogFiltersBarProps> = ({
           value={filters.sourceFilter}
           onValueChange={(value) => onFilterChange('sourceFilter', value as LogSource | 'all')}
         >
-          <SelectTrigger className="w-[130px]">
+          <SelectTrigger className="w-[130px]" aria-label="日志来源筛选">
             <SelectValue placeholder="日志来源" />
           </SelectTrigger>
           <SelectContent>

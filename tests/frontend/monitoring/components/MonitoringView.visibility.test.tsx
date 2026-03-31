@@ -33,6 +33,7 @@ jest.mock('@/features/dashboard', () => ({
 
 jest.mock('@/components/shared', () => ({
   StatCard: ({ title }: { title: string }) => <div>{title}</div>,
+  CompactStatCard: ({ title }: { title: string }) => <div>{title}</div>,
 }))
 
 jest.mock('@/components/atoms', () => ({
@@ -84,6 +85,19 @@ jest.mock('@/features/monitoring/components/charts', () => ({
 
 jest.mock('@/features/monitoring/components/ReportExportButton', () => ({
   ReportExportButton: () => <div>ReportExportButton</div>,
+}))
+
+jest.mock('@/features/monitoring/components/sections', () => ({
+  StatsSection: () => <div>StatsSection</div>,
+  PerformanceSection: () => <div>PerformanceSection</div>,
+  StatusSection: () => <div>StatusSection</div>,
+  NetworkSection: () => <div>NetworkSection</div>,
+}))
+
+jest.mock('@/features/monitoring/components/shared', () => ({
+  MonitoringLoadingSkeleton: () => <div>MonitoringLoadingSkeleton</div>,
+  MonitoringErrorPanel: () => <div>MonitoringErrorPanel</div>,
+  MonitoringHeaderActions: () => <div>MonitoringHeaderActions</div>,
 }))
 
 const wsHandlers: Record<string, ((payload: unknown) => void) | undefined> = {}

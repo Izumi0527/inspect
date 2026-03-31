@@ -13,15 +13,11 @@ import {
   Card,
   CardContent,
   Button,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Badge,
   Loading,
   Input
 } from '@/components/atoms'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { CompactStatCard } from '@/components/shared'
 import { useTrafficAnalysis } from '../hooks/useTrafficAnalysis'
 import { TrafficAnomaly, TrafficFilter } from '../types'
@@ -236,7 +232,7 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
               value={severityFilter || ALL_FILTER_VALUE}
               onValueChange={value => setSeverityFilter(value === ALL_FILTER_VALUE ? '' : value)}
             >
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="w-32" aria-label="异常严重程度筛选">
                 <SelectValue placeholder="严重程度" />
               </SelectTrigger>
               <SelectContent>
@@ -253,7 +249,7 @@ export const TrafficAnomaliesPanel: React.FC<TrafficAnomaliesPanelProps> = ({
               value={typeFilter || ALL_FILTER_VALUE}
               onValueChange={value => setTypeFilter(value === ALL_FILTER_VALUE ? '' : value)}
             >
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="w-36" aria-label="异常类型筛选">
                 <SelectValue placeholder="异常类型" />
               </SelectTrigger>
               <SelectContent>

@@ -15,14 +15,10 @@ import {
   Card,
   CardContent,
   Button,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Badge,
   Loading
 } from '@/components/atoms'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useTrafficAnalysis, useTrafficRealtime, useTrafficFilter } from '../hooks/useTrafficAnalysis'
 import { TrafficViewMode } from '../types'
 import { TrafficRealtimeChart } from './TrafficRealtimeChart'
@@ -174,7 +170,7 @@ export const TrafficAnalysisView: React.FC<TrafficAnalysisViewProps> = ({
                 value={refreshInterval.toString()}
                 onValueChange={(value) => setRefreshInterval(parseInt(value))}
               >
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-32" aria-label="流量刷新间隔">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

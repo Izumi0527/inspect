@@ -49,6 +49,9 @@ jest.mock("@/components/atoms", () => ({
       {children}
     </button>
   ),
+}));
+
+jest.mock("@/components/ui/select", () => ({
   Select: ({
     children,
     value,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, X, Calendar, Filter } from 'lucide-react'
-import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Card, CardContent } from '@/components/atoms'
+import { Button, Input, Card, CardContent } from '@/components/atoms'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/utils/cn'
 import { AlertSeverity, AlertStatus, AlertCategory } from '../types'
 
@@ -226,7 +227,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                 value={filters.dateRangePreset || 'all'}
                 onValueChange={handleDateRangePresetChange}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full" aria-label="高级过滤时间范围">
                   <SelectValue placeholder="选择时间范围" />
                 </SelectTrigger>
                 <SelectContent>

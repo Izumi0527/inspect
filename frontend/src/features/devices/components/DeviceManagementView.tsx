@@ -22,13 +22,15 @@ import {
   Table,
   Column,
   Input,
+  ConfirmModal,
+} from "@/components/atoms";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  ConfirmModal,
-} from "@/components/atoms";
+} from "@/components/ui/select";
 import { AppLayout } from "@/components/layout";
 import { useAuth } from "@/lib/contexts/auth-context";
 import toast from "react-hot-toast";
@@ -956,7 +958,10 @@ export const DeviceManagementView: React.FC = () => {
                 value={filters.statusFilter}
                 onValueChange={(value) => updateFilter("statusFilter", value)}
               >
-                <SelectTrigger className="w-full sm:w-[160px] h-8 text-xs leading-tight px-2.5 py-1 rounded-lg">
+                <SelectTrigger
+                  className="w-full sm:w-[160px] h-8 text-xs leading-tight px-2.5 py-1 rounded-lg"
+                  aria-label="设备状态筛选"
+                >
                   <SelectValue placeholder="状态筛选" />
                 </SelectTrigger>
                 <SelectContent>
@@ -971,7 +976,10 @@ export const DeviceManagementView: React.FC = () => {
                 value={filters.typeFilter}
                 onValueChange={(value) => updateFilter("typeFilter", value)}
               >
-                <SelectTrigger className="w-full sm:w-[160px] h-8 text-xs leading-tight px-2.5 py-1 rounded-lg">
+                <SelectTrigger
+                  className="w-full sm:w-[160px] h-8 text-xs leading-tight px-2.5 py-1 rounded-lg"
+                  aria-label="设备类型筛选"
+                >
                   <SelectValue placeholder="类型筛选" />
                 </SelectTrigger>
                 <SelectContent>

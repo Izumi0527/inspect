@@ -11,13 +11,15 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
+  Loading
+} from '@/components/atoms'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-  Loading
-} from '@/components/atoms'
+  SelectValue
+} from '@/components/ui/select'
 import { DeviceImportData, ImportResult, DeviceType } from '../types'
 
 type ImportStep = 'upload' | 'mapping' | 'preview' | 'result'
@@ -387,7 +389,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
                   setFieldMapping(prev => ({ ...prev, [header]: value as keyof DeviceImportData }))
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger aria-label={`CSV列字段映射-${header}`}>
                   <SelectValue placeholder="请选择对应字段" />
                 </SelectTrigger>
                 <SelectContent>

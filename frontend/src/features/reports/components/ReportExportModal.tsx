@@ -15,15 +15,17 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
+  Input,
+  Loading,
+  Badge
+} from '@/components/atoms'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  Input,
-  Loading,
-  Badge
-} from '@/components/atoms'
+} from '@/components/ui/select'
 
 interface ReportExportModalProps {
   isOpen: boolean
@@ -280,7 +282,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
                   setExportRequest(prev => ({ ...prev, format: value }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger aria-label="导出格式">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

@@ -1,15 +1,17 @@
 import React from 'react'
 import { Calendar, X } from 'lucide-react'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Button,
   Badge
 } from '@/components/atoms'
 import { Input } from '@/components/atoms/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 
 /**
  * 执行记录筛选器栏组件
@@ -66,7 +68,7 @@ export const ExecutionFilters: React.FC<Props> = React.memo((props) => {
       <div className="flex flex-wrap items-center gap-3">
         {/* 状态筛选 */}
         <Select value={statusFilter} onValueChange={onStatusChange}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="w-32" aria-label="执行状态筛选">
             <SelectValue placeholder="状态筛选" />
           </SelectTrigger>
           <SelectContent>

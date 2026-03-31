@@ -8,14 +8,16 @@ import {
   CardTitle,
   CardContent,
   Input,
+  Badge,
+  Loading
+} from '@/components/atoms'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
-  Badge,
-  Loading
-} from '@/components/atoms'
+  SelectValue
+} from '@/components/ui/select'
 import { Device } from '../types'
 
 interface BulkDeviceUpdateProps {
@@ -35,6 +37,11 @@ interface UpdateField {
   type: 'text' | 'select' | 'textarea'
   options?: Array<{ value: string; label: string }>
   description?: string
+}
+
+const SELECT_TRIGGER_ARIA_LABELS: Record<string, string> = {
+  device_type: '设备类型更新值',
+  status: '设备状态更新值',
 }
 
 export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
@@ -141,7 +148,7 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
             value={String(updateValues[field.key] ?? '')}
             onValueChange={(value) => handleValueChange(field.key, value as FieldValue)}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label={SELECT_TRIGGER_ARIA_LABELS[field.key] ?? `${field.label}更新值`}>
               <SelectValue placeholder={`选择${field.label}`} />
             </SelectTrigger>
             <SelectContent>

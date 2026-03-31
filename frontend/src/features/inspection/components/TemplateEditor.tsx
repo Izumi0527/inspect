@@ -6,6 +6,13 @@
 import { useState } from 'react'
 import { CheckItemEditor } from './CheckItemEditor'
 import type { InspectionTemplate, InspectionCheckItem, TemplateCategory } from '../types'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface TemplateEditorProps {
   template?: InspectionTemplate
@@ -208,16 +215,20 @@ export function TemplateEditor({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">分类</label>
-                <select
+                <Select
                   value={formData.category}
-                  onChange={(e) => updateField('category', e.target.value as TemplateCategory)}
-                  className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onValueChange={(value) => updateField('category', value as TemplateCategory)}
                 >
-                  <option value="network">网络</option>
-                  <option value="system">系统</option>
-                  <option value="security">安全</option>
-                  <option value="custom">自定义</option>
-                </select>
+                  <SelectTrigger className="w-full" aria-label="模板分类">
+                    <SelectValue placeholder="请选择分类" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="network">网络</SelectItem>
+                    <SelectItem value="system">系统</SelectItem>
+                    <SelectItem value="security">安全</SelectItem>
+                    <SelectItem value="custom">自定义</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="flex items-center">

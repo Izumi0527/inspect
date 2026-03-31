@@ -1,6 +1,20 @@
 import React, { useState, useMemo } from 'react'
 import { TrendingUp, Calendar, AlertTriangle } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardContent, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, LineChartComponent } from '@/components/atoms'
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  Button,
+  LineChartComponent
+} from '@/components/atoms'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useTrendAnalysis, useGenerateTrendReport } from '../hooks/useReports'
@@ -177,7 +191,7 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
       {/* 控制面板 */}
       <div className="flex gap-4">
         <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="w-32" aria-label="趋势时间范围">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -187,7 +201,7 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
           </SelectContent>
         </Select>
         <Select value={metric} onValueChange={setMetric}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="w-32" aria-label="趋势指标">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
