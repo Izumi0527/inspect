@@ -8,7 +8,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/atoms/select'
+} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/atoms/tabs'
 import { LoadingOverlay, PageLoading } from '@/components/atoms/loading'
 import { Table } from '@/components/atoms/table'

@@ -21,21 +21,6 @@ export {
   NotificationModal,
   SimpleModal
 } from './modal'
-export {
-  Select,
-  SelectGroup,
-  SelectValue,
-  SelectTrigger,
-  SelectContent,
-  SelectLabel,
-  SelectItem,
-  SelectSeparator,
-  SelectScrollUpButton,
-  SelectScrollDownButton,
-  MultiSelect,
-  SimpleSelect
-} from '../ui/select'
-export type { MultiSelectOption, MultiSelectProps, SimpleSelectProps } from '../ui/select'
 export { Table } from './table'
 export type { TableProps, Column } from './table'
 export {
