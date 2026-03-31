@@ -14,11 +14,10 @@ import {
 import {
   Button,
   SimpleInput as Input,
-  SimpleSelect,
-  SelectItem,
   Card,
   CardContent
 } from '@/components/atoms'
+import { SimpleSelect, SelectItem } from '@/components/ui/select'
 import { CLIConfigForm } from './CLIConfigForm'
 import { SNMPConfigForm } from './SNMPConfigForm'
 import {

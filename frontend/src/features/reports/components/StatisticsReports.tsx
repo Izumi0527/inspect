@@ -12,10 +12,10 @@ import {
   ErrorAlert,
   DateRangePicker,
   QuickDateRangeButtons,
-  MultiSelect,
   BarChartComponent,
   PieChartComponent
 } from '@/components/atoms'
+import { MultiSelect } from '@/components/ui/select'
 import { CompactStatCard } from '@/components/shared'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'

@@ -34,7 +34,8 @@ export {
   SelectScrollDownButton,
   MultiSelect,
   SimpleSelect
-} from './select'
+} from '../ui/select'
+export type { MultiSelectOption, MultiSelectProps, SimpleSelectProps } from '../ui/select'
 export { Table } from './table'
 export type { TableProps, Column } from './table'
 export {

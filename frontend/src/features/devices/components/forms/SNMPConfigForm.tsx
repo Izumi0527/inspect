@@ -11,11 +11,10 @@ import {
 } from 'lucide-react'
 import {
   SimpleInput as Input,
-  SimpleSelect,
-  SelectItem,
   Card,
   CardContent
 } from '@/components/atoms'
+import { SimpleSelect, SelectItem } from '@/components/ui/select'
 import {
   SNMPVersion,
   SNMPv3SecurityLevel,
