@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { DashboardData, DashboardConfig, RecentAlert, AlertSeverity } from '../types'
+import {
+  fetchDashboardData,
+  searchDevices
+} from '../api/dashboard.api'
 
 type DeviceSearchResult = {
   id: string
@@ -16,12 +20,6 @@ const mapDeviceSearchResult = (item: Record<string, unknown>, index: number): De
     : (typeof item.ip === 'string' ? item.ip : '未提供 IP'),
   status: typeof item.status === 'string' ? item.status : 'unknown',
 })
-import {
-  fetchDashboardData,
-  performDeviceScan,
-  generateReport,
-  searchDevices
-} from '../api/dashboard.api'
 
 // Dashboard数据管理hook
 export function useDashboardData() {
@@ -131,45 +129,6 @@ export function useDashboardAutoRefresh(callback: () => void, enabled: boolean, 
     const intervalId = setInterval(callback, interval)
     return () => clearInterval(intervalId)
   }, [callback, enabled, interval])
-}
-
-// 快速操作hook
-export function useQuickActions() {
-  const [loading, setLoading] = useState<Record<string, boolean>>({})
-  const [error, setError] = useState<string | null>(null)
-
-  const executeAction = useCallback(async (actionType: string) => {
-    try {
-      setLoading(prev => ({ ...prev, [actionType]: true }))
-      setError(null)
-
-      switch (actionType) {
-        case 'deviceScan':
-          await performDeviceScan('192.168.1.0/24') // 传递默认子网
-          break
-        case 'manualInspection':
-          break
-        case 'generateReport':
-          await generateReport('inspection-summary') // 生成巡检汇总报告
-          break
-        case 'systemConfig':
-          break
-        default:
-          throw new Error(`未知的操作类型: ${actionType}`)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '操作执行失败')
-      throw err
-    } finally {
-      setLoading(prev => ({ ...prev, [actionType]: false }))
-    }
-  }, [])
-
-  return {
-    loading,
-    error,
-    executeAction
-  }
 }
 
 // 设备搜索hook

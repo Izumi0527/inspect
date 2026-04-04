@@ -2,6 +2,7 @@
 
 import { LogOut, Settings } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,10 +26,12 @@ interface UserMenuProps {
 export function UserMenu({ className }: UserMenuProps) {
   const { user, logout } = useAuth()
   const router = useRouter()
+  const queryClient = useQueryClient()
 
   // 处理退出登录
   const handleLogout = async () => {
     await logout()
+    queryClient.clear()
   }
 
   // 处理跳转到系统设置

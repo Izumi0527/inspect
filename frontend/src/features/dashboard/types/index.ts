@@ -46,12 +46,38 @@ export interface QuickAction {
 }
 
 // 网络概览项接口
+export type NetworkOverviewStatus = 'healthy' | 'normal' | 'warning' | 'critical' | 'unknown'
+
 export interface NetworkOverviewItem {
   title: string
   description: string
   count: number
   iconName: string
   gradient: string
+  status: NetworkOverviewStatus
+}
+
+export type DashboardSectionKey =
+  | 'stats'
+  | 'statsDevices'
+  | 'statsAlerts'
+  | 'statsBandwidth'
+  | 'recentAlerts'
+  | 'networkOverview'
+
+export interface DashboardSectionStatus {
+  ok: boolean
+  message?: string
+  limitedByPermission?: boolean
+  requiredPermission?: string
+}
+
+export type DashboardSectionStates = Record<DashboardSectionKey, DashboardSectionStatus>
+
+export interface DashboardPermissions {
+  devices: boolean
+  alerts: boolean
+  monitoring: boolean
 }
 
 // Dashboard数据汇总接口
@@ -60,6 +86,8 @@ export interface DashboardData {
   recentAlerts: RecentAlert[]
   networkOverview: NetworkOverviewItem[]
   lastUpdated: Date
+  sections: DashboardSectionStates
+  permissions: DashboardPermissions
 }
 
 // Dashboard配置接口

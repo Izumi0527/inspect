@@ -27,12 +27,35 @@ type NetworkOverviewItem struct {
 	Status  string `json:"status"`
 }
 
-type OverviewResponse struct {
-	Stats           []StatCard            `json:"stats"`
-	RecentAlerts    []RecentAlert         `json:"recent_alerts"`
-	NetworkOverview []NetworkOverviewItem `json:"network_overview"`
-	LastUpdated     time.Time             `json:"last_updated"`
+type dashboardSectionStatus struct {
+	Ok                  bool    `json:"ok"`
+	Message             *string `json:"message,omitempty"`
+	LimitedByPermission bool    `json:"limitedByPermission,omitempty"`
+	RequiredPermission  string  `json:"requiredPermission,omitempty"`
 }
+
+type OverviewPermissions struct {
+	Devices    bool `json:"devices"`
+	Alerts     bool `json:"alerts"`
+	Monitoring bool `json:"monitoring"`
+}
+
+type OverviewResponse struct {
+	Stats           []StatCard                        `json:"stats"`
+	RecentAlerts    []RecentAlert                     `json:"recent_alerts"`
+	NetworkOverview []NetworkOverviewItem             `json:"network_overview"`
+	Sections        map[string]dashboardSectionStatus `json:"sections"`
+	Permissions     OverviewPermissions               `json:"permissions"`
+	LastUpdated     time.Time                         `json:"last_updated"`
+}
+
+type OverviewAccess struct {
+	CanReadDevices    bool
+	CanReadAlerts     bool
+	CanReadMonitoring bool
+}
+
+type overviewAccess = OverviewAccess
 
 type DeviceStatusSummary struct {
 	Online  int `json:"online"`
@@ -104,3 +127,12 @@ type NotificationsResponse struct {
 	UnreadCount   int            `json:"unread_count"`
 	LastUpdated   time.Time      `json:"last_updated"`
 }
+
+type NotificationAccess struct {
+	CanReadAlerts      bool
+	CanReadInspections bool
+	CanReadReports     bool
+	CanReadDevices     bool
+}
+
+type notificationAccess = NotificationAccess

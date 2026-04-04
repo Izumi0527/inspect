@@ -47,29 +47,60 @@ func NewService(
 	}
 }
 
-func (s *Service) GetOverview(ctx context.Context) (OverviewResponse, error) {
+func (s *Service) GetOverview(ctx context.Context, access OverviewAccess) (OverviewResponse, error) {
 	if s == nil || s.db == nil {
 		return OverviewResponse{}, fmt.Errorf("database not initialized")
 	}
 
-	deviceStats, err := s.getDeviceStatusSummary(ctx)
-	if err != nil {
-		return OverviewResponse{}, err
+	sections := buildDashboardSections(access)
+	deviceStats := DeviceStatusSummary{}
+	deviceStatsAvailable := false
+	if access.CanReadDevices {
+		stats, err := s.getDeviceStatusSummary(ctx)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("加载总览设备统计失败", zap.Error(err))
+			}
+			sections["statsDevices"] = buildOverviewErrorSectionStatus("设备统计加载失败")
+		} else {
+			deviceStats = stats
+			deviceStatsAvailable = true
+		}
 	}
 
-	alertStats, err := s.getAlertSummary(ctx)
-	if err != nil {
-		return OverviewResponse{}, err
+	alertStats := AlertSummary{}
+	alertStatsAvailable := false
+	if access.CanReadAlerts {
+		stats, err := s.getAlertSummary(ctx)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("加载总览告警统计失败", zap.Error(err))
+			}
+			sections["statsAlerts"] = buildOverviewErrorSectionStatus("告警统计加载失败")
+		} else {
+			alertStats = stats
+			alertStatsAvailable = true
+		}
 	}
 
 	// 查询24小时内的峰值网络流量（bps）
-	peakNetwork, hasNetwork, err := s.queryPeakNetworkMetric24h(ctx)
-	if err != nil {
-		return OverviewResponse{}, err
+	peakNetwork := 0.0
+	hasNetwork := false
+	if access.CanReadMonitoring {
+		value, ok, err := s.queryPeakNetworkMetric24h(ctx)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("加载总览带宽统计失败", zap.Error(err))
+			}
+			sections["statsBandwidth"] = buildOverviewErrorSectionStatus("带宽统计加载失败")
+		} else {
+			peakNetwork = value
+			hasNetwork = ok
+		}
 	}
 
 	systemHealth := 0.0
-	if deviceStats.Total > 0 {
+	if access.CanReadDevices && deviceStatsAvailable && deviceStats.Total > 0 {
 		systemHealth = float64(deviceStats.Online) / float64(deviceStats.Total) * 100
 	}
 
@@ -77,7 +108,7 @@ func (s *Service) GetOverview(ctx context.Context) (OverviewResponse, error) {
 	stats := []StatCard{
 		{
 			Title:     "在线设备",
-			Value:     fmt.Sprintf("%d", deviceStats.Online),
+			Value:     resolveOverviewStatValue(access.CanReadDevices, deviceStatsAvailable, fmt.Sprintf("%d", deviceStats.Online)),
 			Change:    "较昨日",
 			IconName:  "Monitor",
 			IconColor: "text-green-500",
@@ -85,7 +116,7 @@ func (s *Service) GetOverview(ctx context.Context) (OverviewResponse, error) {
 		},
 		{
 			Title:     "活跃告警",
-			Value:     fmt.Sprintf("%d", alertStats.Unacknowledged),
+			Value:     resolveOverviewStatValue(access.CanReadAlerts, alertStatsAvailable, fmt.Sprintf("%d", alertStats.Unacknowledged)),
 			Change:    "较昨日",
 			IconName:  "AlertTriangle",
 			IconColor: "text-red-500",
@@ -93,16 +124,21 @@ func (s *Service) GetOverview(ctx context.Context) (OverviewResponse, error) {
 		},
 		{
 			Title:     "峰值流量",
-			Value:     formatNetworkValueBps(peakNetwork, hasNetwork),
+			Value:     resolveOverviewStatValue(access.CanReadMonitoring, sections["statsBandwidth"].Ok, formatNetworkValueBps(peakNetwork, hasNetwork)),
 			Change:    "较昨日",
 			IconName:  "Activity",
 			IconColor: "text-blue-500",
 			Color:     "blue",
-			Unit:      &bpsUnit, // 标识此值单位为 bps，需要前端格式化
+			Unit: func() *string {
+				if !access.CanReadMonitoring {
+					return nil
+				}
+				return &bpsUnit
+			}(), // 标识此值单位为 bps，需要前端格式化
 		},
 		{
 			Title:     "系统负载",
-			Value:     formatPercent(systemHealth, 1),
+			Value:     resolveOverviewStatValue(access.CanReadDevices, deviceStatsAvailable, formatPercent(systemHealth, 1)),
 			Change:    "较昨日",
 			IconName:  "Server",
 			IconColor: "text-purple-500",
@@ -110,20 +146,38 @@ func (s *Service) GetOverview(ctx context.Context) (OverviewResponse, error) {
 		},
 	}
 
-	recentAlerts, err := s.getRecentAlerts(ctx, 5)
-	if err != nil {
-		return OverviewResponse{}, err
+	recentAlerts := []RecentAlert{}
+	if access.CanReadAlerts {
+		items, err := s.getRecentAlerts(ctx, 5)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("加载总览最近告警失败", zap.Error(err))
+			}
+			sections["recentAlerts"] = buildOverviewErrorSectionStatus("最近告警加载失败")
+		} else {
+			recentAlerts = items
+		}
 	}
 
-	networkOverview, err := s.getNetworkOverview(ctx)
-	if err != nil {
-		return OverviewResponse{}, err
+	networkOverview := []NetworkOverviewItem{}
+	if access.CanReadDevices {
+		items, err := s.getNetworkOverview(ctx)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("加载总览网络概览失败", zap.Error(err))
+			}
+			sections["networkOverview"] = buildOverviewErrorSectionStatus("网络概览加载失败")
+		} else {
+			networkOverview = items
+		}
 	}
 
 	return OverviewResponse{
 		Stats:           stats,
 		RecentAlerts:    recentAlerts,
 		NetworkOverview: networkOverview,
+		Sections:        sections,
+		Permissions:     buildOverviewPermissions(access),
 		LastUpdated:     time.Now().UTC(),
 	}, nil
 }
@@ -169,10 +223,15 @@ func (s *Service) GetBandwidthStats(ctx context.Context) (BandwidthStats, error)
 }
 
 func (s *Service) GetNotifications(ctx context.Context, limit int) (NotificationsResponse, error) {
-	return s.GetNotificationsForUser(ctx, "", limit)
+	return s.GetNotificationsForUser(ctx, "", NotificationAccess{
+		CanReadAlerts:      true,
+		CanReadInspections: true,
+		CanReadReports:     true,
+		CanReadDevices:     true,
+	}, limit)
 }
 
-func (s *Service) GetNotificationsForUser(ctx context.Context, userID string, limit int) (NotificationsResponse, error) {
+func (s *Service) GetNotificationsForUser(ctx context.Context, userID string, access NotificationAccess, limit int) (NotificationsResponse, error) {
 	if s == nil || s.db == nil {
 		return NotificationsResponse{}, fmt.Errorf("database not initialized")
 	}
@@ -184,7 +243,7 @@ func (s *Service) GetNotificationsForUser(ctx context.Context, userID string, li
 		limit = 50
 	}
 
-	candidates := s.collectNotificationCandidates(ctx, limit)
+	candidates := s.collectNotificationCandidates(ctx, limit, access)
 
 	stateByNotificationID := map[string]UserNotificationState{}
 	normalizedUserID := strings.TrimSpace(userID)
@@ -251,8 +310,8 @@ func (s *Service) MarkNotificationsRead(ctx context.Context, userID string, ids 
 				{Name: "notification_id"},
 			},
 			DoUpdates: clause.Assignments(map[string]interface{}{
-				"read_at":      now,
-				"updated_at":   now,
+				"read_at":    now,
+				"updated_at": now,
 			}),
 		}).
 		Create(&states).Error
@@ -264,10 +323,38 @@ func (s *Service) MarkNotificationsRead(ctx context.Context, userID string, ids 
 }
 
 func (s *Service) MarkAllNotificationsRead(ctx context.Context, userID string, windowLimit int) (int, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
 	normalizedLimit := normalizeNotificationWindowLimit(windowLimit)
-	candidates := s.collectNotificationCandidates(ctx, normalizedLimit)
+	candidates := s.collectNotificationCandidates(ctx, normalizedLimit, NotificationAccess{
+		CanReadAlerts:      true,
+		CanReadInspections: true,
+		CanReadReports:     true,
+		CanReadDevices:     true,
+	})
 	ids := collectUniqueNotificationIDs(candidates, normalizedLimit)
 	return s.MarkNotificationsRead(ctx, userID, ids)
+}
+
+func (s *Service) MarkAllNotificationsReadWithAccess(ctx context.Context, userID string, access NotificationAccess, windowLimit int) (int, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+	normalizedLimit := normalizeNotificationWindowLimit(windowLimit)
+	candidates := s.collectNotificationCandidates(ctx, normalizedLimit, access)
+	ids := collectUniqueNotificationIDs(candidates, normalizedLimit)
+	return s.MarkNotificationsRead(ctx, userID, ids)
+}
+
+func (s *Service) MarkNotificationsReadWithAccess(ctx context.Context, userID string, access NotificationAccess, ids []string) (int, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+
+	candidates := s.collectNotificationCandidates(ctx, actionNotificationScopeLimit(ids), access)
+	allowedIDs := filterNotificationActionIDsByAccess(ids, candidates, access)
+	return s.MarkNotificationsRead(ctx, userID, allowedIDs)
 }
 
 func (s *Service) DismissNotifications(ctx context.Context, userID string, ids []string) (int, error) {
@@ -315,38 +402,76 @@ func (s *Service) DismissNotifications(ctx context.Context, userID string, ids [
 }
 
 func (s *Service) DismissAllNotifications(ctx context.Context, userID string, windowLimit int) (int, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
 	normalizedLimit := normalizeNotificationWindowLimit(windowLimit)
-	candidates := s.collectNotificationCandidates(ctx, normalizedLimit)
+	candidates := s.collectNotificationCandidates(ctx, normalizedLimit, NotificationAccess{
+		CanReadAlerts:      true,
+		CanReadInspections: true,
+		CanReadReports:     true,
+		CanReadDevices:     true,
+	})
 	ids := collectUniqueNotificationIDs(candidates, normalizedLimit)
 	return s.DismissNotifications(ctx, userID, ids)
 }
 
-func (s *Service) collectNotificationCandidates(ctx context.Context, limit int) []notificationCandidate {
+func (s *Service) DismissAllNotificationsWithAccess(ctx context.Context, userID string, access NotificationAccess, windowLimit int) (int, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+	normalizedLimit := normalizeNotificationWindowLimit(windowLimit)
+	candidates := s.collectNotificationCandidates(ctx, normalizedLimit, access)
+	ids := collectUniqueNotificationIDs(candidates, normalizedLimit)
+	return s.DismissNotifications(ctx, userID, ids)
+}
+
+func (s *Service) DismissNotificationsWithAccess(ctx context.Context, userID string, access NotificationAccess, ids []string) (int, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+
+	candidates := s.collectNotificationCandidates(ctx, actionNotificationScopeLimit(ids), access)
+	allowedIDs := filterNotificationActionIDsByAccess(ids, candidates, access)
+	return s.DismissNotifications(ctx, userID, allowedIDs)
+}
+
+func (s *Service) collectNotificationCandidates(ctx context.Context, limit int, access NotificationAccess) []notificationCandidate {
 	candidates := make([]notificationCandidate, 0, limit*2)
 
-	alertCandidates, err := s.buildAlertNotifications(ctx, limit)
-	if err != nil && s.logger != nil {
-		s.logger.Warn("加载告警通知失败", zap.Error(err))
+	if access.CanReadAlerts {
+		alertCandidates, err := s.buildAlertNotifications(ctx, limit)
+		if err != nil && s.logger != nil {
+			s.logger.Warn("加载告警通知失败", zap.Error(err))
+		}
+		candidates = append(candidates, alertCandidates...)
 	}
-	candidates = append(candidates, alertCandidates...)
 
-	inspectionCandidates, err := s.buildInspectionNotifications(ctx, limit)
-	if err != nil && s.logger != nil {
-		s.logger.Warn("加载巡检通知失败", zap.Error(err))
+	if access.CanReadInspections {
+		inspectionCandidates, err := s.buildInspectionNotifications(ctx, limit)
+		if err != nil && s.logger != nil {
+			s.logger.Warn("加载巡检通知失败", zap.Error(err))
+		}
+		candidates = append(candidates, inspectionCandidates...)
 	}
-	candidates = append(candidates, inspectionCandidates...)
 
-	reportCandidates, err := s.buildReportNotifications(ctx, limit)
-	if err != nil && s.logger != nil {
-		s.logger.Warn("加载报表通知失败", zap.Error(err))
+	if access.CanReadReports {
+		reportCandidates, err := s.buildReportNotifications(ctx, limit)
+		if err != nil && s.logger != nil {
+			s.logger.Warn("加载报表通知失败", zap.Error(err))
+		}
+		candidates = append(candidates, reportCandidates...)
 	}
-	candidates = append(candidates, reportCandidates...)
 
-	scanCandidates, err := s.buildScanNotifications(ctx, limit)
-	if err != nil && s.logger != nil {
-		s.logger.Warn("加载扫描通知失败", zap.Error(err))
+	if access.CanReadDevices {
+		scanCandidates, err := s.buildScanNotifications(ctx, limit)
+		if err != nil && s.logger != nil {
+			s.logger.Warn("加载扫描通知失败", zap.Error(err))
+		}
+		candidates = append(candidates, scanCandidates...)
 	}
-	candidates = append(candidates, scanCandidates...)
+
+	candidates = filterNotificationCandidatesByAccess(candidates, access)
 
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].timestamp.After(candidates[j].timestamp)
@@ -560,6 +685,10 @@ func (s *Service) GetTopDevicesByAlerts(ctx context.Context, limit int) ([]TopDe
 }
 
 func (s *Service) getDeviceStatusSummary(ctx context.Context) (DeviceStatusSummary, error) {
+	if s == nil || s.db == nil {
+		return DeviceStatusSummary{}, fmt.Errorf("database not initialized")
+	}
+
 	type row struct {
 		Status string `gorm:"column:status"`
 		Count  int    `gorm:"column:count"`
@@ -591,6 +720,10 @@ func (s *Service) getDeviceStatusSummary(ctx context.Context) (DeviceStatusSumma
 }
 
 func (s *Service) getAlertSummary(ctx context.Context) (AlertSummary, error) {
+	if s == nil {
+		return AlertSummary{}, fmt.Errorf("dashboard service not initialized")
+	}
+
 	if s.alerts != nil {
 		stats, err := s.alerts.GetAlertStatistics(ctx)
 		if err == nil {
@@ -607,6 +740,10 @@ func (s *Service) getAlertSummary(ctx context.Context) (AlertSummary, error) {
 	type row struct {
 		Severity string `gorm:"column:severity"`
 		Count    int    `gorm:"column:count"`
+	}
+
+	if s.db == nil {
+		return AlertSummary{}, fmt.Errorf("database not initialized")
 	}
 
 	rows := make([]row, 0)
@@ -643,6 +780,10 @@ func (s *Service) getAlertSummary(ctx context.Context) (AlertSummary, error) {
 }
 
 func (s *Service) getRecentAlerts(ctx context.Context, limit int) ([]RecentAlert, error) {
+	if s == nil {
+		return nil, fmt.Errorf("dashboard service not initialized")
+	}
+
 	if s.alerts != nil {
 		rows, err := s.alerts.GetRecentAlerts(ctx, limit)
 		if err == nil {
@@ -660,6 +801,9 @@ func (s *Service) getRecentAlerts(ctx context.Context, limit int) ([]RecentAlert
 	}
 
 	rows := make([]row, 0)
+	if s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
 	err := s.db.WithContext(ctx).
 		Table("alerts AS a").
 		Select("a.id, a.message, a.severity, a.created_at, a.category, d.name AS device_name").
@@ -709,6 +853,10 @@ func buildRecentAlerts(rows []alerts.AlertWithDevice) []RecentAlert {
 }
 
 func (s *Service) getNetworkOverview(ctx context.Context) ([]NetworkOverviewItem, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
 	type row struct {
 		DeviceType string `gorm:"column:device_type"`
 		Status     string `gorm:"column:status"`
@@ -797,6 +945,10 @@ const MaxReasonableBandwidthBps = 10_000_000_000
 // 返回值单位为 bps (bits per second)
 // 会过滤掉超过 10 Gbps 的异常数据
 func (s *Service) queryPeakNetworkMetric24h(ctx context.Context) (float64, bool, error) {
+	if s == nil || s.db == nil {
+		return 0, false, fmt.Errorf("database not initialized")
+	}
+
 	inbound := []string{"bandwidth_in", "network_bytes_in", "throughput_in"}
 	outbound := []string{"bandwidth_out", "network_bytes_out", "throughput_out"}
 	allMetrics := append(append([]string{}, inbound...), outbound...)
@@ -870,6 +1022,10 @@ func (s *Service) queryAvgNetworkMetric(ctx context.Context) (float64, bool, err
 }
 
 func (s *Service) avgMetricList(ctx context.Context, metrics []string) (float64, int64, error) {
+	if s == nil || s.db == nil {
+		return 0, 0, fmt.Errorf("database not initialized")
+	}
+
 	type avgRow struct {
 		AvgValue    sql.NullFloat64 `gorm:"column:avg_value"`
 		SampleCount int64           `gorm:"column:sample_count"`
@@ -918,6 +1074,7 @@ func formatNetworkValue(value float64, ok bool) string {
 type notificationCandidate struct {
 	notification Notification
 	timestamp    time.Time
+	source       notificationSource
 }
 
 func (s *Service) buildAlertNotifications(ctx context.Context, limit int) ([]notificationCandidate, error) {
@@ -956,6 +1113,7 @@ func (s *Service) buildAlertNotifications(ctx context.Context, limit int) ([]not
 		result = append(result, notificationCandidate{
 			notification: notification,
 			timestamp:    notification.Timestamp,
+			source:       notificationSourceAlert,
 		})
 	}
 
@@ -963,6 +1121,10 @@ func (s *Service) buildAlertNotifications(ctx context.Context, limit int) ([]not
 }
 
 func (s *Service) buildInspectionNotifications(ctx context.Context, limit int) ([]notificationCandidate, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
 	type row struct {
 		ID           int        `gorm:"column:id"`
 		Name         *string    `gorm:"column:name"`
@@ -1013,6 +1175,7 @@ func (s *Service) buildInspectionNotifications(ctx context.Context, limit int) (
 		result = append(result, notificationCandidate{
 			notification: notification,
 			timestamp:    timestamp,
+			source:       notificationSourceInspection,
 		})
 	}
 
@@ -1020,6 +1183,10 @@ func (s *Service) buildInspectionNotifications(ctx context.Context, limit int) (
 }
 
 func (s *Service) buildReportNotifications(ctx context.Context, limit int) ([]notificationCandidate, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
 	type row struct {
 		ID           int        `gorm:"column:id"`
 		Title        string     `gorm:"column:title"`
@@ -1073,6 +1240,7 @@ func (s *Service) buildReportNotifications(ctx context.Context, limit int) ([]no
 		result = append(result, notificationCandidate{
 			notification: notification,
 			timestamp:    timestamp,
+			source:       notificationSourceReport,
 		})
 	}
 
@@ -1080,6 +1248,10 @@ func (s *Service) buildReportNotifications(ctx context.Context, limit int) ([]no
 }
 
 func (s *Service) buildScanNotifications(ctx context.Context, limit int) ([]notificationCandidate, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
 	type row struct {
 		ID            string     `gorm:"column:id"`
 		TargetNetwork string     `gorm:"column:target_network"`
@@ -1134,10 +1306,147 @@ func (s *Service) buildScanNotifications(ctx context.Context, limit int) ([]noti
 		result = append(result, notificationCandidate{
 			notification: notification,
 			timestamp:    timestamp,
+			source:       notificationSourceScan,
 		})
 	}
 
 	return result, nil
+}
+
+type notificationSource string
+
+const (
+	notificationSourceAlert      notificationSource = "alert"
+	notificationSourceInspection notificationSource = "inspection"
+	notificationSourceReport     notificationSource = "report"
+	notificationSourceScan       notificationSource = "scan"
+)
+
+func restrictedStatValue(allowed bool, value string) string {
+	if !allowed {
+		return "-"
+	}
+	return value
+}
+
+func buildOverviewPermissions(access OverviewAccess) OverviewPermissions {
+	return OverviewPermissions{
+		Devices:    access.CanReadDevices,
+		Alerts:     access.CanReadAlerts,
+		Monitoring: access.CanReadMonitoring,
+	}
+}
+
+func buildDashboardSections(access OverviewAccess) map[string]dashboardSectionStatus {
+	return map[string]dashboardSectionStatus{
+		"stats":          {Ok: true},
+		"statsDevices":   buildOverviewSectionStatus(access.CanReadDevices, "devices:read", "当前账号缺少 devices:read，设备统计已隐藏"),
+		"statsAlerts":    buildOverviewSectionStatus(access.CanReadAlerts, "alerts:read", "当前账号缺少 alerts:read，告警统计已隐藏"),
+		"statsBandwidth": buildOverviewSectionStatus(access.CanReadMonitoring, "monitoring:read", "当前账号缺少 monitoring:read，带宽统计已隐藏"),
+		"recentAlerts":   buildOverviewSectionStatus(access.CanReadAlerts, "alerts:read", "当前账号缺少 alerts:read，最近告警已隐藏"),
+		"networkOverview": buildOverviewSectionStatus(
+			access.CanReadDevices,
+			"devices:read",
+			"当前账号缺少 devices:read，网络概览已隐藏",
+		),
+	}
+}
+
+func buildOverviewSectionStatus(allowed bool, requiredPermission string, message string) dashboardSectionStatus {
+	if allowed {
+		return dashboardSectionStatus{Ok: true}
+	}
+
+	msg := message
+	return dashboardSectionStatus{
+		Ok:                  true,
+		Message:             &msg,
+		LimitedByPermission: true,
+		RequiredPermission:  requiredPermission,
+	}
+}
+
+func buildOverviewErrorSectionStatus(message string) dashboardSectionStatus {
+	msg := strings.TrimSpace(message)
+	if msg == "" {
+		msg = "分区加载失败"
+	}
+	return dashboardSectionStatus{
+		Ok:      false,
+		Message: &msg,
+	}
+}
+
+func resolveOverviewStatValue(allowed bool, available bool, value string) string {
+	if !allowed {
+		return "-"
+	}
+	if !available {
+		return "N/A"
+	}
+	return value
+}
+
+func filterNotificationCandidatesByAccess(candidates []notificationCandidate, access NotificationAccess) []notificationCandidate {
+	if len(candidates) == 0 {
+		return []notificationCandidate{}
+	}
+
+	filtered := make([]notificationCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		switch candidate.source {
+		case notificationSourceAlert:
+			if access.CanReadAlerts {
+				filtered = append(filtered, candidate)
+			}
+		case notificationSourceInspection:
+			if access.CanReadInspections {
+				filtered = append(filtered, candidate)
+			}
+		case notificationSourceReport:
+			if access.CanReadReports {
+				filtered = append(filtered, candidate)
+			}
+		case notificationSourceScan:
+			if access.CanReadDevices {
+				filtered = append(filtered, candidate)
+			}
+		default:
+			filtered = append(filtered, candidate)
+		}
+	}
+
+	return filtered
+}
+
+func filterNotificationActionIDsByAccess(ids []string, candidates []notificationCandidate, access NotificationAccess) []string {
+	filteredCandidates := filterNotificationCandidatesByAccess(candidates, access)
+	allowed := make(map[string]struct{}, len(filteredCandidates))
+	for _, candidate := range filteredCandidates {
+		id := strings.TrimSpace(candidate.notification.ID)
+		if id == "" {
+			continue
+		}
+		allowed[id] = struct{}{}
+	}
+
+	normalized := normalizeNotificationIDs(ids, 0)
+	result := make([]string, 0, len(normalized))
+	for _, id := range normalized {
+		if _, ok := allowed[id]; ok {
+			result = append(result, id)
+		}
+	}
+
+	return result
+}
+
+func actionNotificationScopeLimit(ids []string) int {
+	scoped := len(normalizeNotificationIDs(ids, 0)) * 20
+	if scoped < 200 {
+		scoped = 200
+	}
+	return normalizeNotificationWindowLimit(scoped)
 }
 
 func inspectionNotificationSummary(status string, name string, errorMessage *string) (severity string, title string, content string) {

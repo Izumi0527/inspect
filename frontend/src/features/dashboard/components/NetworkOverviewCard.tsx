@@ -116,6 +116,36 @@ const getDeviceStyle = (title: string): {
   }
 }
 
+const getNetworkStatusMeta = (status: NetworkOverviewItem['status']) => {
+  switch (status) {
+    case 'healthy':
+      return {
+        label: '健康',
+        className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+      }
+    case 'warning':
+      return {
+        label: '告警',
+        className: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+      }
+    case 'critical':
+      return {
+        label: '严重',
+        className: 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+      }
+    case 'normal':
+      return {
+        label: '正常',
+        className: 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+      }
+    default:
+      return {
+        label: '未知',
+        className: 'bg-gray-100 text-gray-700 dark:bg-gray-900/60 dark:text-gray-300',
+      }
+  }
+}
+
 export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
   overview,
   loading = false
@@ -163,6 +193,7 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
               {overview.map((item, index) => {
                 const style = getDeviceStyle(item.title)
                 const IconComponent = iconMap[style.icon]
+                const statusMeta = getNetworkStatusMeta(item.status)
 
                 return (
                   <div 
@@ -181,13 +212,23 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
                     `}>
                       {/* 渐变背景效果 */}
                       <div className={`
-                        absolute inset-0 bg-gradient-to-br ${style.gradient}
+                        absolute inset-0 bg-gradient-to-br ${item.gradient}
                         opacity-0 group-hover:opacity-10
                         transition-opacity duration-300
                       `} />
                       
                       {/* 内容 */}
                       <div className="relative flex flex-col items-center text-center">
+                        <div
+                          className={`
+                            mb-3 inline-flex items-center rounded-full px-2.5 py-1
+                            text-xs font-medium tracking-wide
+                            ${statusMeta.className}
+                          `}
+                        >
+                          {statusMeta.label}
+                        </div>
+
                         {/* 图标容器 */}
                         <div className={`
                           relative mb-4
@@ -203,7 +244,7 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
                           {/* 图标光晕效果 */}
                           <div className={`
                             absolute inset-0 rounded-2xl
-                            bg-gradient-to-br ${style.gradient}
+                            bg-gradient-to-br ${item.gradient}
                             opacity-0 group-hover:opacity-20
                             blur-xl transition-opacity duration-300
                           `} />
@@ -253,7 +294,7 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
                       {/* 装饰性元素 */}
                       <div className={`
                         absolute -top-10 -right-10 w-32 h-32
-                        rounded-full bg-gradient-to-br ${style.gradient}
+                        rounded-full bg-gradient-to-br ${item.gradient}
                         opacity-0 group-hover:opacity-10
                         blur-3xl transition-opacity duration-500
                       `} />

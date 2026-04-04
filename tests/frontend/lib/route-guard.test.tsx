@@ -117,5 +117,56 @@ describe('RouteGuard', () => {
       expect(screen.getByText('content')).toBeInTheDocument()
     })
   })
-})
 
+  it('配置任一权限命中时应允许访问', async () => {
+    mockAuth = {
+      ...mockAuth,
+      isAuthenticated: true,
+      isLoading: false,
+      user: { id: 'u1' },
+      checkPermission: (permission: Permission) => permission === Permission.ALERTS_READ,
+      checkRole: () => true,
+    }
+
+    render(
+      <RouteGuard
+        requireAuth
+        requiredAnyPermissions={[Permission.MONITORING_READ, Permission.ALERTS_READ]}
+      >
+        <div>dashboard-content</div>
+      </RouteGuard>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('dashboard-content')).toBeInTheDocument()
+    })
+  })
+
+  it('配置任一权限但全部缺失时应展示明确权限提示', async () => {
+    mockAuth = {
+      ...mockAuth,
+      isAuthenticated: true,
+      isLoading: false,
+      user: { id: 'u1' },
+      checkPermission: () => false,
+      checkRole: () => true,
+    }
+
+    render(
+      <RouteGuard
+        requireAuth
+        requiredAnyPermissions={[Permission.MONITORING_READ, Permission.ALERTS_READ]}
+      >
+        <div>dashboard-content</div>
+      </RouteGuard>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('访问被拒绝')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('当前账号缺少访问该页面所需任一权限')).toBeInTheDocument()
+    expect(screen.getByText('monitoring:read')).toBeInTheDocument()
+    expect(screen.getByText('alerts:read')).toBeInTheDocument()
+  })
+})

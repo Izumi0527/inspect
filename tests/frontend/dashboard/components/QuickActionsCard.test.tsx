@@ -1,12 +1,12 @@
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { QuickActionsCard } from '@/features/dashboard/components/QuickActionsCard'
+import { Permission } from '@/lib/types/auth.types'
 
 const mockPush = jest.fn()
-const mockExecuteAction = jest.fn()
-const mockUseQuickActions = jest.fn()
+const mockUsePermission = jest.fn()
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -19,17 +19,14 @@ jest.mock('next/navigation', () => ({
   }),
 }))
 
-jest.mock('@/features/dashboard/hooks/useDashboard', () => ({
-  useQuickActions: () => mockUseQuickActions(),
+jest.mock('@/lib/contexts/auth-context', () => ({
+  usePermission: (permission: Permission) => mockUsePermission(permission),
 }))
 
 describe('QuickActionsCard', () => {
   beforeEach(() => {
-    mockUseQuickActions.mockReturnValue({
-      loading: {},
-      error: null,
-      executeAction: mockExecuteAction,
-    })
+    mockPush.mockClear()
+    mockUsePermission.mockImplementation(() => true)
   })
 
   afterEach(() => {
@@ -41,32 +38,32 @@ describe('QuickActionsCard', () => {
     ['手动巡检', 'manualInspection', '/inspection'],
     ['生成报表', 'generateReport', '/reports'],
     ['系统配置', 'systemConfig', '/settings'],
-  ])('点击%s应触发动作并跳转到目标模块', async (buttonText, actionKey, targetPath) => {
+  ])('点击%s应只跳转到目标模块，不在首页直接触发后台动作', async (buttonText, _actionKey, targetPath) => {
     const user = userEvent.setup()
-    mockExecuteAction.mockResolvedValueOnce(undefined)
 
     render(<QuickActionsCard />)
 
     await user.click(screen.getByRole('button', { name: buttonText }))
 
-    expect(mockExecuteAction).toHaveBeenCalledWith(actionKey)
     expect(mockPush).toHaveBeenCalledWith(targetPath)
   })
 
-  it('动作执行失败时仍应完成跳转', async () => {
-    const user = userEvent.setup()
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
-    mockExecuteAction.mockRejectedValueOnce(new Error('执行失败'))
+  it('应按权限隐藏当前账号不可进入的快捷入口', () => {
+    mockUsePermission.mockImplementation((permission: Permission) => permission === Permission.REPORTS_READ)
 
     render(<QuickActionsCard />)
 
-    await user.click(screen.getByRole('button', { name: '设备扫描' }))
+    expect(screen.getByRole('button', { name: '生成报表' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '设备扫描' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '手动巡检' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '系统配置' })).not.toBeInTheDocument()
+  })
 
-    expect(mockPush).toHaveBeenCalledWith('/devices')
-    await waitFor(() => {
-      expect(consoleErrorSpy).toHaveBeenCalled()
-    })
+  it('当没有任何可用快捷入口时应展示明确空状态', () => {
+    mockUsePermission.mockImplementation(() => false)
 
-    consoleErrorSpy.mockRestore()
+    render(<QuickActionsCard />)
+
+    expect(screen.getByText('当前账号暂无可用快捷入口')).toBeInTheDocument()
   })
 })

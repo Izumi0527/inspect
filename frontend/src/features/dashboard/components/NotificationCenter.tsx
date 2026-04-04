@@ -16,7 +16,7 @@ import {
   NOTIFICATION_CATEGORIES,
 } from '@/types/notification'
 import { cn } from '@/utils/cn'
-import { usePermission } from '@/lib/contexts/auth-context'
+import { useAuth, usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import {
   DashboardNotificationsResult,
@@ -42,6 +42,7 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
   const router = useRouter()
   const queryClient = useQueryClient()
   const [activeCategory, setActiveCategory] = useState<NotificationCategoryKey>('all')
+  const { user } = useAuth()
   const canReadAlerts = usePermission(Permission.ALERTS_READ)
 
   useEffect(() => {
@@ -53,15 +54,20 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
 
   const limit = 20
   const windowLimit = 200
-  const queryKey = ['dashboardNotifications', limit] as const
+  const notificationOwner = user?.id?.trim() || 'anonymous'
+  const queryKey = ['dashboardNotifications', notificationOwner, limit] as const
 
   const {
     data,
     isLoading,
+    isError,
+    error,
+    refetch,
   } = useQuery<DashboardNotificationsResult>({
     queryKey,
     queryFn: () => fetchDashboardNotificationsWithMeta(limit),
     refetchInterval: 30_000,
+    retry: false,
   })
 
   const notifications = data?.notifications ?? []
@@ -157,6 +163,12 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
     },
   })
 
+  const disableBulkActions =
+    isLoading ||
+    isError ||
+    markReadMutation.isPending ||
+    dismissMutation.isPending
+
   // 根据当前标签筛选通知
   const filteredNotifications = useMemo(() => {
     let filtered = notifications
@@ -223,15 +235,17 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
           <h3 className="text-lg font-semibold text-foreground">通知中心</h3>
           <div className="flex items-center gap-2">
             <button
+              disabled={disableBulkActions}
               onClick={() => markReadMutation.mutate({ all: true, window_limit: windowLimit })}
-              className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+              className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               全部已读
             </button>
             <span className="text-gray-300 dark:text-muted-foreground">|</span>
             <button
+              disabled={disableBulkActions}
               onClick={() => dismissMutation.mutate({ all: true, window_limit: windowLimit })}
-              className="text-sm text-muted-foreground hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+              className="text-sm text-muted-foreground hover:text-gray-700 dark:hover:text-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               清空
             </button>
@@ -276,6 +290,24 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
         <div className="max-h-[400px] overflow-y-auto">
           {isLoading ? (
             <div className="p-4 text-center text-gray-500 dark:text-gray-400">加载中...</div>
+          ) : isError ? (
+            <div className="flex flex-col items-center justify-center py-12 px-6 text-center text-gray-500 dark:text-gray-400">
+              <ShieldCheck className="w-12 h-12 mb-3 text-amber-400 dark:text-amber-500" />
+              <p className="text-sm font-medium text-foreground">通知加载失败</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                当前无法获取最新通知，请检查网络或稍后重试。
+              </p>
+              {error instanceof Error && error.message.trim() !== '' && (
+                <p className="mt-2 text-xs text-muted-foreground/80">{error.message}</p>
+              )}
+              <button
+                onClick={() => void refetch()}
+                className="mt-4 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted/40 transition-colors"
+                aria-label="重试加载通知"
+              >
+                重试
+              </button>
+            </div>
           ) : filteredNotifications.length > 0 ? (
             filteredNotifications.map((notification) => (
               <NotificationItem

@@ -62,14 +62,9 @@ func requirePermission(c echo.Context, authService PermissionService, permission
 		return user, nil
 	}
 
-	permissions, ok := c.Get(authContextPermissionsKey).([]string)
-	if !ok {
-		var err error
-		permissions, err = authService.GetPermissionsByRole(c.Request().Context(), user.Role)
-		if err != nil {
-			return nil, echo.NewHTTPError(http.StatusInternalServerError, "failed to resolve permissions")
-		}
-		c.Set(authContextPermissionsKey, permissions)
+	permissions, err := getCurrentPermissions(c, authService, user)
+	if err != nil {
+		return nil, err
 	}
 
 	if !hasPermission(permission, permissions) {
@@ -77,6 +72,35 @@ func requirePermission(c echo.Context, authService PermissionService, permission
 	}
 
 	return user, nil
+}
+
+func getCurrentPermissions(c echo.Context, authService PermissionService, user *auth.UserRecord) ([]string, error) {
+	if permissions, ok := c.Get(authContextPermissionsKey).([]string); ok {
+		normalized := auth.NormalizePermissionList(permissions)
+		c.Set(authContextPermissionsKey, normalized)
+		return normalized, nil
+	}
+
+	if user == nil {
+		var err error
+		user, err = requirePermission(c, authService, "")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if isNilPermissionService(authService) {
+		return nil, echo.NewHTTPError(http.StatusServiceUnavailable, "auth service not configured")
+	}
+
+	permissions, err := authService.GetPermissionsByRole(c.Request().Context(), user.Role)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, "failed to resolve permissions")
+	}
+
+	normalized := auth.NormalizePermissionList(permissions)
+	c.Set(authContextPermissionsKey, normalized)
+	return normalized, nil
 }
 
 func hasPermission(permission string, permissions []string) bool {

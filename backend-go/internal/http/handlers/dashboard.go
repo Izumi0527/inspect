@@ -32,11 +32,20 @@ func (h DashboardHandler) GetOverview(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+	user, err := requirePermission(c, h.Auth, "")
+	if err != nil {
+		return err
+	}
+	permissions, err := getCurrentPermissions(c, h.Auth, user)
+	if err != nil {
 		return err
 	}
 
-	resp, err := h.Service.GetOverview(c.Request().Context())
+	resp, err := h.Service.GetOverview(c.Request().Context(), dashboard.OverviewAccess{
+		CanReadDevices:    hasPermission("devices:read", permissions),
+		CanReadAlerts:     hasPermission("alerts:read", permissions),
+		CanReadMonitoring: hasPermission("monitoring:read", permissions),
+	})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load dashboard overview")
 	}
@@ -47,7 +56,7 @@ func (h DashboardHandler) GetDeviceStatusSummary(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+	if _, err := requirePermission(c, h.Auth, "devices:read"); err != nil {
 		return err
 	}
 
@@ -62,7 +71,7 @@ func (h DashboardHandler) GetAlertSummary(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+	if _, err := requirePermission(c, h.Auth, "alerts:read"); err != nil {
 		return err
 	}
 
@@ -100,7 +109,7 @@ func (h DashboardHandler) GetSystemStatus(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+	if _, err := requirePermission(c, h.Auth, "monitoring:read"); err != nil {
 		return err
 	}
 
@@ -115,7 +124,7 @@ func (h DashboardHandler) GetTopDevicesByAlerts(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+	if _, err := requirePermission(c, h.Auth, "alerts:read"); err != nil {
 		return err
 	}
 
@@ -138,7 +147,7 @@ func (h DashboardHandler) GetRecentAlerts(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+	if _, err := requirePermission(c, h.Auth, "alerts:read"); err != nil {
 		return err
 	}
 
@@ -161,7 +170,7 @@ func (h DashboardHandler) GetNetworkOverview(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+	if _, err := requirePermission(c, h.Auth, "devices:read"); err != nil {
 		return err
 	}
 
@@ -176,7 +185,7 @@ func (h DashboardHandler) GetBandwidthStats(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+	if _, err := requirePermission(c, h.Auth, "monitoring:read"); err != nil {
 		return err
 	}
 
@@ -195,6 +204,10 @@ func (h DashboardHandler) GetNotifications(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	permissions, err := getCurrentPermissions(c, h.Auth, user)
+	if err != nil {
+		return err
+	}
 
 	limit := parseIntDefault(c.QueryParam("limit"), 20)
 	if limit <= 0 {
@@ -208,7 +221,12 @@ func (h DashboardHandler) GetNotifications(c echo.Context) error {
 	if user != nil {
 		userID = user.ID
 	}
-	resp, err := h.Service.GetNotificationsForUser(c.Request().Context(), userID, limit)
+	resp, err := h.Service.GetNotificationsForUser(c.Request().Context(), userID, dashboard.NotificationAccess{
+		CanReadAlerts:      hasPermission("alerts:read", permissions),
+		CanReadInspections: hasPermission("inspections:read", permissions),
+		CanReadReports:     hasPermission("reports:read", permissions),
+		CanReadDevices:     hasPermission("devices:read", permissions),
+	}, limit)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load notifications")
 	}
@@ -220,6 +238,10 @@ func (h DashboardHandler) MarkNotificationsRead(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
 	}
 	user, err := requirePermission(c, h.Auth, "")
+	if err != nil {
+		return err
+	}
+	permissions, err := getCurrentPermissions(c, h.Auth, user)
 	if err != nil {
 		return err
 	}
@@ -239,13 +261,23 @@ func (h DashboardHandler) MarkNotificationsRead(c echo.Context) error {
 
 	var updated int
 	if req.All {
-		n, err := h.Service.MarkAllNotificationsRead(c.Request().Context(), userID, req.WindowLimit)
+		n, err := h.Service.MarkAllNotificationsReadWithAccess(c.Request().Context(), userID, dashboard.NotificationAccess{
+			CanReadAlerts:      hasPermission("alerts:read", permissions),
+			CanReadInspections: hasPermission("inspections:read", permissions),
+			CanReadReports:     hasPermission("reports:read", permissions),
+			CanReadDevices:     hasPermission("devices:read", permissions),
+		}, req.WindowLimit)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to mark notifications read")
 		}
 		updated = n
 	} else {
-		n, err := h.Service.MarkNotificationsRead(c.Request().Context(), userID, req.IDs)
+		n, err := h.Service.MarkNotificationsReadWithAccess(c.Request().Context(), userID, dashboard.NotificationAccess{
+			CanReadAlerts:      hasPermission("alerts:read", permissions),
+			CanReadInspections: hasPermission("inspections:read", permissions),
+			CanReadReports:     hasPermission("reports:read", permissions),
+			CanReadDevices:     hasPermission("devices:read", permissions),
+		}, req.IDs)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to mark notifications read")
 		}
@@ -265,6 +297,10 @@ func (h DashboardHandler) DismissNotifications(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	permissions, err := getCurrentPermissions(c, h.Auth, user)
+	if err != nil {
+		return err
+	}
 
 	var req notificationActionRequest
 	if err := c.Bind(&req); err != nil {
@@ -281,13 +317,23 @@ func (h DashboardHandler) DismissNotifications(c echo.Context) error {
 
 	var updated int
 	if req.All {
-		n, err := h.Service.DismissAllNotifications(c.Request().Context(), userID, req.WindowLimit)
+		n, err := h.Service.DismissAllNotificationsWithAccess(c.Request().Context(), userID, dashboard.NotificationAccess{
+			CanReadAlerts:      hasPermission("alerts:read", permissions),
+			CanReadInspections: hasPermission("inspections:read", permissions),
+			CanReadReports:     hasPermission("reports:read", permissions),
+			CanReadDevices:     hasPermission("devices:read", permissions),
+		}, req.WindowLimit)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to dismiss notifications")
 		}
 		updated = n
 	} else {
-		n, err := h.Service.DismissNotifications(c.Request().Context(), userID, req.IDs)
+		n, err := h.Service.DismissNotificationsWithAccess(c.Request().Context(), userID, dashboard.NotificationAccess{
+			CanReadAlerts:      hasPermission("alerts:read", permissions),
+			CanReadInspections: hasPermission("inspections:read", permissions),
+			CanReadReports:     hasPermission("reports:read", permissions),
+			CanReadDevices:     hasPermission("devices:read", permissions),
+		}, req.IDs)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to dismiss notifications")
 		}

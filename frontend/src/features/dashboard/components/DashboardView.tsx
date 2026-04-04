@@ -21,8 +21,36 @@ export const DashboardView: React.FC = () => {
   // 分析告警数据
   const alertAnalysis = useAlertAnalysis(data?.recentAlerts || [])
 
-  // 检查是否为权限受限状态（所有stats值都是'-'表示权限问题）
-  const isPermissionLimited = data && data.stats.every(stat => stat.value === '-')
+  const permissionLimitedSections = Object.entries(data?.sections ?? {})
+    .filter(([, section]) => section.limitedByPermission)
+    .map(([key, section]) => ({
+      key,
+      requiredPermission: section.requiredPermission,
+    }))
+
+  const isPermissionLimited = permissionLimitedSections.length > 0
+  const failedSections = Object.entries(data?.sections ?? {})
+    .filter(([, section]) => !section.ok && !section.limitedByPermission)
+    .map(([key, section]) => ({
+      key,
+      message: section.message,
+    }))
+  const hasSectionFailures = failedSections.length > 0
+
+  const sectionLabels: Record<string, string> = {
+    statsDevices: '设备统计',
+    statsAlerts: '告警统计',
+    statsBandwidth: '带宽统计',
+    recentAlerts: '最近告警',
+    networkOverview: '网络概览',
+  }
+
+  const permissionLimitedSummary = permissionLimitedSections
+    .map(({ key, requiredPermission }) => {
+      const label = sectionLabels[key] ?? key
+      return requiredPermission ? `${label}（需 ${requiredPermission}）` : label
+    })
+    .join('、')
 
   // 自动刷新
   useDashboardAutoRefresh(
@@ -88,7 +116,8 @@ export const DashboardView: React.FC = () => {
                 <div className="ml-3 flex-1">
                   <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300">数据访问受限</h3>
                   <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-400">
-                    由于权限限制，无法获取完整的监控数据。如需完整访问权限，请联系系统管理员。
+                    当前账号只能查看已授权的总览分区，受限内容不会再以“空数据”伪装显示。
+                    {permissionLimitedSummary ? ` 当前受限：${permissionLimitedSummary}。` : ''}
                   </p>
                   <div className="mt-3">
                     <button
@@ -97,6 +126,37 @@ export const DashboardView: React.FC = () => {
                       className="text-sm bg-yellow-100 dark:bg-yellow-900/30 hover:bg-yellow-200 dark:hover:bg-yellow-900/50 text-yellow-800 dark:text-yellow-300 px-3 py-1 rounded-md transition-colors duration-200 disabled:opacity-50"
                     >
                       {isRefreshing ? '重试中...' : '重新尝试'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {hasSectionFailures && (
+          <div className="mx-6 mt-4 mb-0">
+            <div className="bg-rose-50 dark:bg-rose-900/20 border-l-4 border-rose-400 dark:border-rose-500 rounded-lg p-4">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-rose-500 dark:text-rose-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10A8 8 0 1110 2a8 8 0 018 8zm-8-4a.75.75 0 01.75.75v4.5a.75.75 0 01-1.5 0v-4.5A.75.75 0 0110 6zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-sm font-medium text-rose-800 dark:text-rose-300">部分分区暂时不可用</h3>
+                  <div className="mt-1 space-y-1 text-sm text-rose-700 dark:text-rose-400">
+                    {failedSections.map(({ key, message }) => (
+                      <p key={key}>{message ?? `${sectionLabels[key] ?? key}暂时不可用`}</p>
+                    ))}
+                  </div>
+                  <div className="mt-3">
+                    <button
+                      onClick={handleRetry}
+                      disabled={isRefreshing}
+                      className="text-sm bg-rose-100 dark:bg-rose-900/30 hover:bg-rose-200 dark:hover:bg-rose-900/50 text-rose-800 dark:text-rose-300 px-3 py-1 rounded-md transition-colors duration-200 disabled:opacity-50"
+                    >
+                      {isRefreshing ? '重试中...' : '重试失败分区'}
                     </button>
                   </div>
                 </div>

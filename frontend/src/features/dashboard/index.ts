@@ -11,7 +11,6 @@ export {
   useDashboardData, 
   useDashboardConfig, 
   useDashboardAutoRefresh,
-  useQuickActions,
   useDeviceSearch,
   useAlertAnalysis,
   useAlertSeverityStyles 

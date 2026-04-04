@@ -3,7 +3,10 @@ import { api } from '@/lib/api-client'
 import {
   DashboardData,
   DashboardStat,
+  DashboardSectionKey,
+  DashboardSectionStates,
   NetworkOverviewItem,
+  NetworkOverviewStatus,
   RecentAlert,
 } from '../types'
 import type { Notification, NotificationSeverity, NotificationType } from '@/types/notification'
@@ -38,6 +41,8 @@ interface DashboardOverviewDto {
   recent_alerts?: RecentAlertDto[]
   network_overview?: NetworkOverviewDto[]
   last_updated?: string
+  sections?: Record<string, unknown>
+  permissions?: Record<string, unknown>
 }
 
 interface NotificationDto {
@@ -62,6 +67,24 @@ export type DashboardNotificationsResult = {
   notifications: Notification[]
   unreadCount: number
   lastUpdated: Date
+}
+
+const DASHBOARD_SECTION_KEYS: DashboardSectionKey[] = [
+  'stats',
+  'statsDevices',
+  'statsAlerts',
+  'statsBandwidth',
+  'recentAlerts',
+  'networkOverview',
+]
+
+const DASHBOARD_SECTION_FALLBACK_MESSAGES: Record<DashboardSectionKey, string> = {
+  stats: '统计卡片加载失败',
+  statsDevices: '设备统计加载失败',
+  statsAlerts: '告警统计加载失败',
+  statsBandwidth: '带宽统计加载失败',
+  recentAlerts: '最近告警加载失败',
+  networkOverview: '网络概览加载失败',
 }
 
 export type DashboardNotificationActionPayload =
@@ -96,6 +119,68 @@ const ensureArray = <T>(value: unknown): T[] | undefined => {
   return undefined
 }
 
+const normalizeDashboardSectionStatus = (
+  key: DashboardSectionKey,
+  value: unknown
+): DashboardSectionStates[DashboardSectionKey] => {
+  if (!isObject(value)) {
+    return {
+      ok: false,
+      message: DASHBOARD_SECTION_FALLBACK_MESSAGES[key],
+    }
+  }
+
+  const ok = value.ok === true
+  const limitedByPermission = value.limitedByPermission === true
+  const requiredPermission =
+    typeof value.requiredPermission === 'string' ? value.requiredPermission.trim() : ''
+  const message =
+    typeof value.message === 'string' && value.message.trim() !== ''
+      ? value.message.trim()
+      : ok || limitedByPermission
+        ? undefined
+        : DASHBOARD_SECTION_FALLBACK_MESSAGES[key]
+
+  return {
+    ok: limitedByPermission ? true : ok,
+    message,
+    limitedByPermission: limitedByPermission ? true : undefined,
+    requiredPermission: requiredPermission !== '' ? requiredPermission : undefined,
+  }
+}
+
+const createDefaultDashboardSections = (): DashboardSectionStates => ({
+  stats: { ok: true },
+  statsDevices: { ok: true },
+  statsAlerts: { ok: true },
+  statsBandwidth: { ok: true },
+  recentAlerts: { ok: true },
+  networkOverview: { ok: true },
+})
+
+const normalizeDashboardSections = (value: unknown): DashboardSectionStates => {
+  if (!isObject(value)) {
+    return createDefaultDashboardSections()
+  }
+
+  const result = createDefaultDashboardSections()
+  DASHBOARD_SECTION_KEYS.forEach((key) => {
+    if (key in value) {
+      result[key] = normalizeDashboardSectionStatus(key, value[key])
+    }
+  })
+  return result
+}
+
+const normalizeDashboardPermissions = (value: unknown) => {
+  const raw = isObject(value) ? value : {}
+  return {
+    devices: raw.devices === true,
+    alerts: raw.alerts === true,
+    monitoring: raw.monitoring === true,
+  }
+}
+
 const severityMap: Record<string, RecentAlert['severity']> = {
   critical: 'high',
   high: 'high',
@@ -114,32 +199,46 @@ const toRecentAlert = (dto: RecentAlertDto): RecentAlert => ({
   category: dto.category,
 })
 
-const toNetworkOverviewItem = (dto: NetworkOverviewDto): NetworkOverviewItem => ({
-  title: dto.name,
-  description: `${dto.devices} 台设备`,
-  count: dto.devices,
-  iconName: getIconForNetworkType(dto.name),
-  gradient: getGradientForStatus(dto.status),
-})
+const normalizeNetworkOverviewStatus = (status: string): NetworkOverviewStatus => {
+  switch (status) {
+    case 'healthy':
+    case 'normal':
+    case 'warning':
+    case 'critical':
+      return status
+    default:
+      return 'unknown'
+  }
+}
+
+const toNetworkOverviewItem = (dto: NetworkOverviewDto): NetworkOverviewItem => {
+  const status = normalizeNetworkOverviewStatus(dto.status)
+
+  return {
+    title: dto.name,
+    description: `${dto.devices} 台设备`,
+    count: dto.devices,
+    iconName: getIconForNetworkType(dto.name),
+    gradient: getGradientForStatus(status),
+    status,
+  }
+}
 
 export async function fetchDashboardData(): Promise<DashboardData> {
-  try {
-    const payload = await api.get<unknown>('/dashboard/overview')
-    const overview = unwrapPayload<DashboardOverviewDto>(payload)
+  const payload = await api.get<unknown>('/dashboard/overview')
+  const overview = unwrapPayload<DashboardOverviewDto>(payload)
 
-    if (!overview) {
-      return getEmptyDashboardData()
-    }
+  if (!overview || !isObject(overview)) {
+    throw new Error('仪表板响应格式无效')
+  }
 
-    return {
-      stats: ensureArray<DashboardStatDto>(overview.stats)?.map(toDashboardStat) ?? getEmptyStatsData(),
-      recentAlerts: ensureArray<RecentAlertDto>(overview.recent_alerts)?.map(toRecentAlert) ?? [],
-      networkOverview: ensureArray<NetworkOverviewDto>(overview.network_overview)?.map(toNetworkOverviewItem) ?? [],
-      lastUpdated: overview.last_updated ? new Date(overview.last_updated) : new Date(),
-    }
-  } catch (error) {
-    console.warn('获取仪表板数据失败，使用空数据结构:', error)
-    return getEmptyDashboardData()
+  return {
+    stats: ensureArray<DashboardStatDto>(overview.stats)?.map(toDashboardStat) ?? getEmptyStatsData(),
+    recentAlerts: ensureArray<RecentAlertDto>(overview.recent_alerts)?.map(toRecentAlert) ?? [],
+    networkOverview: ensureArray<NetworkOverviewDto>(overview.network_overview)?.map(toNetworkOverviewItem) ?? [],
+    lastUpdated: typeof overview.last_updated === 'string' ? new Date(overview.last_updated) : new Date(),
+    sections: normalizeDashboardSections(overview.sections),
+    permissions: normalizeDashboardPermissions(overview.permissions),
   }
 }
 
@@ -230,45 +329,40 @@ export async function fetchDashboardNotifications(limit: number = 20): Promise<N
 }
 
 export async function fetchDashboardNotificationsWithMeta(limit: number = 20): Promise<DashboardNotificationsResult> {
-  try {
-    const payload = await api.get<unknown>(appendLimit('/dashboard/notifications', limit))
-    const dto = unwrapPayload<DashboardNotificationsDto | NotificationDto[]>(payload)
+  const payload = await api.get<unknown>(appendLimit('/dashboard/notifications', limit))
+  const dto = unwrapPayload<DashboardNotificationsDto | NotificationDto[]>(payload)
 
-    if (Array.isArray(dto)) {
-      const notifications = dto.map(toNotification)
-      const unreadCount = notifications.filter((n) => !n.read).length
-      return {
-        notifications,
-        unreadCount,
-        lastUpdated: new Date(),
-      }
-    }
-
-    const list = isObject(dto) ? ensureArray<NotificationDto>(dto.notifications) : undefined
-    const notifications = (list ?? []).map(toNotification)
-
-    const unreadCountValue =
-      typeof dto?.unread_count === 'number'
-        ? dto.unread_count
-        : notifications.filter((n) => !n.read).length
-
-    const lastUpdated =
-      typeof dto?.last_updated === 'string' && dto.last_updated
-        ? new Date(dto.last_updated)
-        : new Date()
-
+  if (Array.isArray(dto)) {
+    const notifications = dto.map(toNotification)
+    const unreadCount = notifications.filter((n) => !n.read).length
     return {
       notifications,
-      unreadCount: unreadCountValue,
-      lastUpdated,
-    }
-  } catch (error) {
-    console.error('获取通知失败:', error)
-    return {
-      notifications: [],
-      unreadCount: 0,
+      unreadCount,
       lastUpdated: new Date(),
     }
+  }
+
+  if (!isObject(dto)) {
+    throw new Error('通知响应格式无效')
+  }
+
+  const list = ensureArray<NotificationDto>(dto.notifications)
+  const notifications = (list ?? []).map(toNotification)
+
+  const unreadCountValue =
+    typeof dto.unread_count === 'number'
+      ? dto.unread_count
+      : notifications.filter((n) => !n.read).length
+
+  const lastUpdated =
+    typeof dto.last_updated === 'string' && dto.last_updated
+      ? new Date(dto.last_updated)
+      : new Date()
+
+  return {
+    notifications,
+    unreadCount: unreadCountValue,
+    lastUpdated,
   }
 }
 
@@ -386,6 +480,12 @@ const getEmptyDashboardData = (): DashboardData => ({
   recentAlerts: [],
   networkOverview: [],
   lastUpdated: new Date(),
+  sections: createDefaultDashboardSections(),
+  permissions: {
+    devices: false,
+    alerts: false,
+    monitoring: false,
+  },
 })
 
 const getEmptyStatsData = (): DashboardStat[] => [

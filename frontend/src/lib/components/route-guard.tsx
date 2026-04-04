@@ -133,6 +133,7 @@ interface RouteGuardProps {
   children: ReactNode
   requireAuth?: boolean
   requiredPermissions?: Permission[]
+  requiredAnyPermissions?: Permission[]
   requiredRoles?: UserRole[]
   fallback?: ReactNode
   redirectTo?: string
@@ -143,6 +144,7 @@ export function RouteGuard({
   children,
   requireAuth = true,
   requiredPermissions = [],
+  requiredAnyPermissions = [],
   requiredRoles = [],
   fallback,
   redirectTo,
@@ -194,6 +196,15 @@ export function RouteGuard({
       }
     }
 
+    // 检查任一权限
+    if (requiredAnyPermissions.length > 0) {
+      const hasAnyPermission = requiredAnyPermissions.some(permission => checkPermission(permission))
+      if (!hasAnyPermission) {
+        setIsAuthorized(false)
+        return
+      }
+    }
+
     // 所有检查都通过
     setIsAuthorized(true)
   }, [
@@ -203,6 +214,7 @@ export function RouteGuard({
     requireAuth,
     requiredRoles,
     requiredPermissions,
+    requiredAnyPermissions,
     checkPermission,
     checkRole,
     router,
@@ -229,13 +241,15 @@ export function RouteGuard({
         message = '当前账号不满足该页面所需角色要求'
       } else if (requiredPermissions.length > 0) {
         message = '当前账号缺少访问该页面所需权限'
+      } else if (requiredAnyPermissions.length > 0) {
+        message = '当前账号缺少访问该页面所需任一权限'
       }
 
       return (
         <AccessDenied
           message={message}
           requiredRoles={requiredRoles}
-          requiredPermissions={requiredPermissions}
+          requiredPermissions={requiredAnyPermissions.length > 0 ? requiredAnyPermissions : requiredPermissions}
         />
       )
     }
