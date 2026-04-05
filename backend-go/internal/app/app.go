@@ -305,7 +305,10 @@ func New() (*App, error) {
 }
 
 func (a *App) Start() error {
-	host, port := normalizeHostPort(a.Config.ServerHost, a.Config.ServerPort)
+	host, port, err := normalizeHostPort(a.Config.ServerHost, a.Config.ServerPort)
+	if err != nil {
+		return err
+	}
 	listener, resolvedAddr, err := a.openHTTPListener(host, port)
 	if err != nil {
 		return err
@@ -377,17 +380,15 @@ func (a *App) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func normalizeHostPort(host string, port int) (string, int) {
+func normalizeHostPort(host string, port int) (string, int, error) {
 	trimmedHost := strings.TrimSpace(host)
 	if trimmedHost == "" {
 		trimmedHost = "0.0.0.0"
 	}
-	if port <= 0 {
-		// 说明：Windows 上 8000/8001 等常见端口可能被系统划入 excluded port range，
-		// 导致监听报错 WSAEACCES/10013。开发环境默认使用 30000+ 端口可显著降低踩坑概率。
-		port = 38000
+	if port <= 0 || port > 65535 {
+		return "", 0, fmt.Errorf("SERVER_PORT 未配置或非法: %d", port)
 	}
-	return trimmedHost, port
+	return trimmedHost, port, nil
 }
 
 func splitHostPort(address, fallbackHost string, fallbackPort int) (string, int) {
@@ -421,11 +422,12 @@ func (a *App) openHTTPListener(host string, port int) (net.Listener, string, err
 		)
 	}
 
-	// 经验值：Windows 上低位端口经常落在 excluded port range，优先从 38000 起探测，避免频繁撞墙。
-	const startPort = 38000
 	const maxAttempts = 200
-	for i := 0; i < maxAttempts; i++ {
-		candidate := startPort + i
+	for i := 1; i <= maxAttempts; i++ {
+		candidate := port + i
+		if candidate > 65535 {
+			break
+		}
 		candidateAddr := fmt.Sprintf("%s:%d", host, candidate)
 		l, listenErr := net.Listen("tcp", candidateAddr)
 		if listenErr != nil {

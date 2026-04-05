@@ -19,7 +19,7 @@ type Config struct {
 	SecretKey  string `env:"SECRET_KEY" envDefault:"your-secret-key-change-in-production"`
 
 	ServerHost string `env:"SERVER_HOST" envDefault:"0.0.0.0"`
-	ServerPort int    `env:"SERVER_PORT" envDefault:"38000"`
+	ServerPort int    `env:"SERVER_PORT"`
 
 	DatabaseURL         string `env:"DATABASE_URL" envDefault:"postgresql://postgres:password@localhost:5432/inspect_db"`
 	DatabasePoolSize    int    `env:"DATABASE_POOL_SIZE" envDefault:"5"`

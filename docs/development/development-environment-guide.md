@@ -86,7 +86,7 @@ docker-compose -f docker-compose.dev.yml up -d
 
 ```bash
 # 后端健康检查
-curl http://localhost:38000/health
+curl http://localhost:8000/health
 
 # 前端
 curl http://localhost:33000
@@ -107,7 +107,7 @@ psql -h localhost -p 15500 -U inspect_dev -d inspect_system_dev
 
 ```env
 SERVER_HOST=0.0.0.0
-SERVER_PORT=38000
+SERVER_PORT=8000
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 REDIS_URL=redis://:dev_redis_2024@localhost:16380/0
 DB_AUTO_MIGRATE=true

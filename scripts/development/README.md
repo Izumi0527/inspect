@@ -96,7 +96,7 @@ pnpm dev
 
 **服务信息**:
 - 🎨 前端应用: http://localhost:33000
-- 🔧 后端 API: http://127.0.0.1:38000
+- 🔧 后端 API: http://127.0.0.1:8000
 - 🐘 PostgreSQL: localhost:15500
 - 🔴 Redis: localhost:16380
 
@@ -213,10 +213,10 @@ go mod verify
 | 服务 | 地址 | 说明 |
 |------|------|------|
 | 前端应用 | http://localhost:33000 | Next.js 开发服务器 |
-| 后端 API | http://127.0.0.1:38000 | Go API 服务 |
-| 健康检查 | http://127.0.0.1:38000/health | 后端健康状态 |
+| 后端 API | http://127.0.0.1:8000 | Go API 服务 |
+| 健康检查 | http://127.0.0.1:8000/health | 后端健康状态 |
 | API 文档 | docs/api/openapi.json | OpenAPI 规范 |
-| WebSocket | ws://127.0.0.1:38000 | WebSocket 连接 |
+| WebSocket | ws://127.0.0.1:8000 | WebSocket 连接 |
 
 ### 数据库服务
 
@@ -439,7 +439,7 @@ docker-compose -f docker-compose.dev.yml up -d postgres redis
 
 ```powershell
 # 查看端口占用
-netstat -ano | findstr "33000 38000 15500 16380"
+netstat -ano | findstr "33000 8000 15500 16380"
 
 # 结束占用进程
 taskkill /PID <进程ID> /F
@@ -672,7 +672,7 @@ cd backend-go; go mod download; go mod tidy; go mod verify
 | 服务 | 地址 | 凭据 |
 |------|------|------|
 | 前端 | http://localhost:33000 | - |
-| 后端 | http://127.0.0.1:38000 | - |
+| 后端 | http://127.0.0.1:8000 | - |
 | PostgreSQL | localhost:15500 | inspect_dev / dev_password_2024 |
 | Redis | localhost:16380 | dev_redis_2024 |
 
@@ -686,7 +686,7 @@ docker-compose -f docker-compose.dev.yml up -d postgres redis
 .\scripts\database\db-manage.ps1 status
 
 # 问题 3: 端口占用
-netstat -ano | findstr "33000 38000 15500 16380"
+netstat -ano | findstr "33000 8000 15500 16380"
 
 # 问题 4: 全面诊断
 .\scripts\development\dev-start.ps1 -Diagnose -Verbose

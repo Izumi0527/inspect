@@ -211,8 +211,8 @@ function New-EnvironmentFiles {
         $frontendEnvContent = @"
 # API 配置
 # Windows 环境建议使用 127.0.0.1，避免 localhost 被解析为 IPv6(::1) 导致连接失败。
-NEXT_PUBLIC_API_URL=http://127.0.0.1:38000
-NEXT_PUBLIC_WS_URL=ws://127.0.0.1:38000
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:8000
 
 # 开发配置
 NODE_ENV=development
@@ -324,7 +324,7 @@ function Show-SetupSummary {
     
     Write-ColorOutput "`n📊 服务访问地址:" "Blue"
     Write-ColorOutput "  🎨 前端开发服务器: http://localhost:33000" "White"
-    Write-ColorOutput "  🐍 后端 API 服务器: http://127.0.0.1:38000" "White"
+    Write-ColorOutput "  🐍 后端 API 服务器: http://127.0.0.1:8000" "White"
     Write-ColorOutput "  📚 API 说明: docs/api/openapi.json" "White"
     Write-ColorOutput "  🗄️ PostgreSQL: localhost:$postgresHostPort" "White"
     Write-ColorOutput "  🔴 Redis: localhost:$redisHostPort" "White"

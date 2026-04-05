@@ -156,7 +156,7 @@ go run ./cmd/api
 
 ```
 2026/01/29 16:45:00 Starting Inspect System API Server
-2026/01/29 16:45:00 Server listening on 0.0.0.0:38000
+2026/01/29 16:45:00 Server listening on 0.0.0.0:8000
 2026/01/29 16:45:00 Database connected successfully
 ```
 
@@ -278,7 +278,7 @@ services:
 |------|-------------|---------|------|
 | PostgreSQL | 5432 | 15500 | 数据库服务 |
 | Redis | 6379 | 16380 | 缓存服务 |
-| 后端 API | 38000 | 38000 | Go 服务 |
+| 后端 API | 8000 | 8000 | Go 服务 |
 | 前端 | 33000 | 33000 | Next.js |
 
 ## 故障排查
@@ -367,7 +367,7 @@ Start-Sleep -Seconds 10
 go run ./backend-go/cmd/api
 
 # 6. 验证连接（在另一个终端）
-Invoke-WebRequest http://localhost:38000/health
+Invoke-WebRequest http://localhost:8000/health
 ```
 
 ### 预期结果

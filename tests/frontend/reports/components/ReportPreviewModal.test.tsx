@@ -14,7 +14,7 @@ jest.mock('react-hot-toast', () => ({
 }))
 
 jest.mock('@/lib/api-client', () => ({
-  getApiOrigin: () => 'http://127.0.0.1:38000',
+  getApiOrigin: () => 'http://127.0.0.1:8000',
   TokenManager: {
     getAccessToken: () => mockGetAccessToken(),
   },
@@ -93,7 +93,7 @@ describe('ReportPreviewModal', () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(1)
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:38000/api/v1/reports/files/report-1.pdf',
+      'http://127.0.0.1:8000/api/v1/reports/files/report-1.pdf',
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer test-token',
@@ -144,7 +144,7 @@ describe('ReportPreviewModal', () => {
     })
 
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:38000/api/v1/reports/files/report-2.html',
+      'http://127.0.0.1:8000/api/v1/reports/files/report-2.html',
       expect.any(Object)
     )
 
@@ -155,7 +155,7 @@ describe('ReportPreviewModal', () => {
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://127.0.0.1:38000/api/v1/reports/files/report-2.pdf',
+        'http://127.0.0.1:8000/api/v1/reports/files/report-2.pdf',
         expect.any(Object)
       )
     })

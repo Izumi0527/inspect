@@ -13,7 +13,7 @@ describe('wsManager.connect', () => {
   })
 
   it('应通过 Sec-WebSocket-Protocol 子协议携带 token', async () => {
-    process.env.NEXT_PUBLIC_WS_URL = 'ws://127.0.0.1:38000'
+    process.env.NEXT_PUBLIC_WS_URL = 'ws://127.0.0.1:8000'
     jest.spyOn(TokenManager, 'getAccessToken').mockReturnValue('test-access-token')
 
     const instances: Array<{
@@ -47,7 +47,7 @@ describe('wsManager.connect', () => {
     const connectPromise = wsManager.connect('user-7')
 
     expect(WebSocketMock).toHaveBeenCalledWith(
-      'ws://127.0.0.1:38000/api/v1/ws/user-7',
+      'ws://127.0.0.1:8000/api/v1/ws/user-7',
       ['inspect-token', 'test-access-token']
     )
 

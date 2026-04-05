@@ -21,7 +21,7 @@ describe('logsApi exportLogs', () => {
   const originalApiUrl = process.env.NEXT_PUBLIC_API_URL
 
   beforeEach(() => {
-    process.env.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:38000'
+    process.env.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:8000'
     ;(TokenManager.getAccessToken as jest.Mock).mockReturnValue('manager-token')
 
     ;(global.fetch as jest.Mock).mockResolvedValue({
@@ -47,7 +47,7 @@ describe('logsApi exportLogs', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1)
 
     const url = (global.fetch as jest.Mock).mock.calls[0][0] as string
-    expect(url).toContain('http://127.0.0.1:38000/api/v1/logs/export')
+    expect(url).toContain('http://127.0.0.1:8000/api/v1/logs/export')
     expect(url).toContain('format=csv')
     expect(url).toContain('include_raw=true')
 

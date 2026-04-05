@@ -570,7 +570,7 @@ SELECT * FROM device_metrics_hourly  // 替代 device_metrics
 // ✅ 鉴权：使用 Sec-WebSocket-Protocol 子协议携带 access token，避免把 token 放到 URL query（会被中间件记录）。
 const userId = currentUser.id
 const accessToken = TokenManager.getAccessToken()
-const ws = new WebSocket(`ws://localhost:38000/api/v1/ws/${userId}`, ['inspect-token', accessToken!])
+const ws = new WebSocket(`ws://localhost:8000/api/v1/ws/${userId}`, ['inspect-token', accessToken!])
 
 ws.onopen = () => {
   // 订阅监控数据（房间：device_metrics）

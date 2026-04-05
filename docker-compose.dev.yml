@@ -69,8 +69,8 @@ services:
     environment:
       # 服务配置
       SERVER_HOST: 0.0.0.0
-      # 开发默认端口统一为 38000（避免 Windows 8000/8001 等端口被系统保留导致无法监听）
-      SERVER_PORT: 38000
+      # 开发默认端口统一为 8000；如当前机器无法监听，可通过 SERVER_PORT 覆盖
+      SERVER_PORT: 8000
       ENVIRONMENT: development
       DEBUG: "true"
       LOG_LEVEL: debug
@@ -107,8 +107,8 @@ services:
       - ./data:/app/data
       - go_cache:/go/pkg/mod
     ports:
-      # 宿主机端口默认 38000，可通过 BACKEND_HOST_PORT 覆盖
-      - "${BACKEND_HOST_PORT:-38000}:38000"
+      # 宿主机端口默认 8000，可通过 BACKEND_HOST_PORT 覆盖
+      - "${BACKEND_HOST_PORT:-8000}:8000"
       - "5514:5514"
       - "5514:5514/udp"
     depends_on:
@@ -120,7 +120,7 @@ services:
       - inspect_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:38000/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -137,8 +137,8 @@ services:
     environment:
       NODE_ENV: development
       # 说明：这里的 localhost 指浏览器访问宿主机端口（非容器内部），需与 backend 的宿主机端口一致
-      NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_HOST_PORT:-38000}
-      NEXT_PUBLIC_WS_URL: ws://localhost:${BACKEND_HOST_PORT:-38000}
+      NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_HOST_PORT:-8000}
+      NEXT_PUBLIC_WS_URL: ws://localhost:${BACKEND_HOST_PORT:-8000}
       WATCHPACK_POLLING: "true"
     volumes:
       - ./frontend:/app

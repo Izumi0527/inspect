@@ -4,7 +4,7 @@
 
 ## 基础信息
 
-- **Base URL**: `http://127.0.0.1:38000/api/v1`
+- **Base URL**: `http://127.0.0.1:8000/api/v1`
 - **认证方式**: Bearer Token
 - **Content-Type**: `application/json`
 
@@ -471,11 +471,11 @@ POST /inspection/templates/test-oid
 
 ```bash
 # 获取模板列表
-curl -X GET "http://127.0.0.1:38000/api/v1/inspection/templates?page=1&page_size=20" \
+curl -X GET "http://127.0.0.1:8000/api/v1/inspection/templates?page=1&page_size=20" \
   -H "Authorization: Bearer <your_token>"
 
 # 创建模板
-curl -X POST "http://127.0.0.1:38000/api/v1/inspection/templates" \
+curl -X POST "http://127.0.0.1:8000/api/v1/inspection/templates" \
   -H "Authorization: Bearer <your_token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -486,7 +486,7 @@ curl -X POST "http://127.0.0.1:38000/api/v1/inspection/templates" \
   }'
 
 # 复制模板
-curl -X POST "http://127.0.0.1:38000/api/v1/inspection/templates/1/copy" \
+curl -X POST "http://127.0.0.1:8000/api/v1/inspection/templates/1/copy" \
   -H "Authorization: Bearer <your_token>" \
   -H "Content-Type: application/json" \
   -d '{"name": "复制的模板"}'
@@ -496,7 +496,7 @@ curl -X POST "http://127.0.0.1:38000/api/v1/inspection/templates/1/copy" \
 
 ```javascript
 // 获取模板列表
-const response = await fetch('http://127.0.0.1:38000/api/v1/inspection/templates', {
+const response = await fetch('http://127.0.0.1:8000/api/v1/inspection/templates', {
   headers: {
     'Authorization': `Bearer ${token}`,
   },
@@ -504,7 +504,7 @@ const response = await fetch('http://127.0.0.1:38000/api/v1/inspection/templates
 const data = await response.json()
 
 // 创建模板
-const response = await fetch('http://127.0.0.1:38000/api/v1/inspection/templates', {
+const response = await fetch('http://127.0.0.1:8000/api/v1/inspection/templates', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${token}`,

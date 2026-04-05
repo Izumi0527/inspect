@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     开发环境快速启动脚本
@@ -153,6 +153,123 @@ function Invoke-CommandSafely {
     }
 }
 
+# 读取 .env 风格配置项（仅支持 KEY=VALUE 的简单场景，足够覆盖开发脚本需求）
+function Get-DotEnvValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Key,
+
+        [string]$DefaultValue = ""
+    )
+
+    if (-not (Test-Path -LiteralPath $FilePath)) {
+        return $DefaultValue
+    }
+
+    try {
+        foreach ($line in Get-Content -LiteralPath $FilePath) {
+            $trimmed = $line.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) {
+                continue
+            }
+
+            $parts = $trimmed -split "=", 2
+            if ($parts.Count -ne 2) {
+                continue
+            }
+
+            $name = $parts[0].Trim()
+            if ($name -ne $Key) {
+                continue
+            }
+
+            $value = $parts[1].Trim()
+            if ($value.Length -ge 2) {
+                $quote = $value.Substring(0, 1)
+                if (($quote -eq '"' -or $quote -eq "'") -and $value.EndsWith($quote)) {
+                    $value = $value.Substring(1, $value.Length - 2)
+                }
+            }
+
+            return $value
+        }
+    }
+    catch {
+        return $DefaultValue
+    }
+
+    return $DefaultValue
+}
+
+function Get-BackendDevConfig {
+    param(
+        [switch]$AllowMissingPort
+    )
+
+    $projectRoot = (Get-Location).Path
+    $envFilePath = Join-Path $projectRoot ".env"
+
+    $serverHost = [System.Environment]::GetEnvironmentVariable("SERVER_HOST")
+    if ([string]::IsNullOrWhiteSpace($serverHost)) {
+        $serverHost = Get-DotEnvValue -FilePath $envFilePath -Key "SERVER_HOST" -DefaultValue "127.0.0.1"
+    }
+
+    $publicHost = $serverHost
+    if ([string]::IsNullOrWhiteSpace($publicHost) -or $publicHost -in @("0.0.0.0", "::", "[::]")) {
+        $publicHost = "127.0.0.1"
+    }
+
+    $serverPortRaw = [System.Environment]::GetEnvironmentVariable("SERVER_PORT")
+    if ([string]::IsNullOrWhiteSpace($serverPortRaw)) {
+        $serverPortRaw = Get-DotEnvValue -FilePath $envFilePath -Key "SERVER_PORT"
+    }
+
+    $serverPort = 0
+    $portError = $null
+    if ([string]::IsNullOrWhiteSpace($serverPortRaw) -or -not [int]::TryParse($serverPortRaw, [ref]$serverPort) -or $serverPort -le 0 -or $serverPort -gt 65535) {
+        $portError = "根目录 .env 或环境变量中的 SERVER_PORT 未配置或非法。"
+        if (-not $AllowMissingPort) {
+            throw $portError
+        }
+    }
+
+    $apiUrl = [System.Environment]::GetEnvironmentVariable("NEXT_PUBLIC_API_URL")
+    if ([string]::IsNullOrWhiteSpace($apiUrl)) {
+        $apiUrl = Get-DotEnvValue -FilePath $envFilePath -Key "NEXT_PUBLIC_API_URL"
+    }
+    if ([string]::IsNullOrWhiteSpace($apiUrl) -and $serverPort -gt 0) {
+        $apiUrl = "http://$publicHost`:$serverPort"
+    }
+
+    $wsUrl = [System.Environment]::GetEnvironmentVariable("NEXT_PUBLIC_WS_URL")
+    if ([string]::IsNullOrWhiteSpace($wsUrl)) {
+        $wsUrl = Get-DotEnvValue -FilePath $envFilePath -Key "NEXT_PUBLIC_WS_URL"
+    }
+    if ([string]::IsNullOrWhiteSpace($wsUrl) -and $serverPort -gt 0) {
+        $wsUrl = "ws://$publicHost`:$serverPort"
+    }
+
+    $healthUrl = ""
+    if ($serverPort -gt 0) {
+        $healthUrl = "http://$publicHost`:$serverPort/health"
+    }
+
+    return @{
+        ProjectRoot = $projectRoot
+        EnvFilePath = $envFilePath
+        ServerHost  = $serverHost
+        PublicHost  = $publicHost
+        ServerPort  = $serverPort
+        ApiUrl      = $apiUrl
+        WsUrl       = $wsUrl
+        HealthUrl   = $healthUrl
+        ErrorMessage = $portError
+    }
+}
+
 # 检查前置条件
 function Test-Prerequisites {
     Write-ColorOutput "🔍 检查前置条件..." "Blue"
@@ -301,6 +418,7 @@ function Start-BackendService {
     Write-ColorOutput "`n🔧 启动后端服务..." "Blue"
     
     $backendDir = "backend-go"
+    $backendConfig = Get-BackendDevConfig
     
     # 检查后端目录
     if (-not (Test-Path $backendDir)) {
@@ -319,15 +437,14 @@ function Start-BackendService {
     
     # 启动后端开发服务器
     Write-ColorOutput "🚀 启动后端开发服务器..." "Cyan"
-    Write-ColorOutput "访问地址: http://127.0.0.1:38000" "White"
+    Write-ColorOutput "访问地址: $($backendConfig.ApiUrl)" "White"
     Write-ColorOutput "API 说明: docs/api/openapi.json" "White"
     Write-ColorOutput "按 Ctrl+C 停止服务" "Gray"
     
     # 在新窗口中启动后端服务
     # 使用 ENV_FILE 环境变量指定配置文件路径，这样可以从 backend-go 目录运行
-    $projectRoot = Get-Location
-    $envFilePath = Join-Path $projectRoot ".env"
-    $backendCommand = "`$env:ENV_FILE='$envFilePath'; cd '$projectRoot\$backendDir'; go run ./cmd/api"
+    $backendWorkDir = Join-Path $backendConfig.ProjectRoot $backendDir
+    $backendCommand = "`$env:ENV_FILE='$($backendConfig.EnvFilePath)'; cd '$backendWorkDir'; go run ./cmd/api"
     Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", $backendCommand
     
     Write-ColorOutput "✅ 后端服务已在新窗口中启动" "Green"
@@ -338,6 +455,8 @@ function Start-FrontendService {
     Write-ColorOutput "`n🎨 启动前端服务..." "Blue"
     
     $frontendDir = "frontend"
+    $frontendEnvPath = Join-Path $frontendDir ".env.local"
+    $backendConfig = Get-BackendDevConfig
     
     # 检查前端目录
     if (-not (Test-Path $frontendDir)) {
@@ -352,25 +471,28 @@ function Start-FrontendService {
     }
     
     # 检查环境配置文件
-    if (-not (Test-Path "$frontendDir\.env.local")) {
+    if (-not (Test-Path $frontendEnvPath)) {
         Write-ColorOutput "⚠️ 前端环境配置文件不存在，创建默认配置..." "Yellow"
         
         $envContent = @"
-NEXT_PUBLIC_API_URL=http://127.0.0.1:38000
-NEXT_PUBLIC_WS_URL=ws://127.0.0.1:38000
+NEXT_PUBLIC_API_URL=$($backendConfig.ApiUrl)
+NEXT_PUBLIC_WS_URL=$($backendConfig.WsUrl)
 NODE_ENV=development
 NEXT_PUBLIC_ENV=development
 "@
-        $envContent | Out-File -FilePath "$frontendDir\.env.local" -Encoding UTF8
+        $envContent | Out-File -FilePath $frontendEnvPath -Encoding UTF8
         Write-ColorOutput "✅ 已创建默认前端环境配置文件" "Green"
     } else {
         # 仅提示不强制覆盖：避免误把本地自定义配置改掉
         try {
-            $content = Get-Content "$frontendDir\.env.local" -Raw
-            if ($content -match "NEXT_PUBLIC_API_URL=.*:8000" -or $content -match "NEXT_PUBLIC_WS_URL=.*:8000") {
-                Write-ColorOutput "⚠️ 检测到 frontend/.env.local 仍指向 8000 端口，可能导致前端仍请求 8000" "Yellow"
-                Write-ColorOutput "   - 建议改为: NEXT_PUBLIC_API_URL=http://127.0.0.1:38000" "Gray"
-                Write-ColorOutput "   - 建议改为: NEXT_PUBLIC_WS_URL=ws://127.0.0.1:38000" "Gray"
+            $actualApiUrl = Get-DotEnvValue -FilePath $frontendEnvPath -Key "NEXT_PUBLIC_API_URL"
+            $actualWsUrl = Get-DotEnvValue -FilePath $frontendEnvPath -Key "NEXT_PUBLIC_WS_URL"
+            if ($actualApiUrl -ne $backendConfig.ApiUrl -or $actualWsUrl -ne $backendConfig.WsUrl) {
+                Write-ColorOutput "⚠️ 检测到 frontend/.env.local 与根 .env 中的后端地址不一致，可能导致前端请求错误地址" "Yellow"
+                Write-ColorOutput "   - 当前 NEXT_PUBLIC_API_URL=${actualApiUrl}" "Gray"
+                Write-ColorOutput "   - 当前 NEXT_PUBLIC_WS_URL=${actualWsUrl}" "Gray"
+                Write-ColorOutput "   - 建议改为: NEXT_PUBLIC_API_URL=$($backendConfig.ApiUrl)" "Gray"
+                Write-ColorOutput "   - 建议改为: NEXT_PUBLIC_WS_URL=$($backendConfig.WsUrl)" "Gray"
                 Write-ColorOutput "   - 修改后请重启前端开发服务器（pnpm dev）" "Gray"
             }
         } catch { }
@@ -502,7 +624,14 @@ function Invoke-DevDiagnose {
 
     Write-Host ""
     Write-ColorOutput "🔌 检查端口占用..." "Blue"
-    $ports = @(33000, 38000, $postgresHostPort, $redisHostPort, 5050, 8081)
+    $backendConfig = Get-BackendDevConfig -AllowMissingPort
+    $ports = @(33000, $postgresHostPort, $redisHostPort, 5050, 8081)
+    if ($backendConfig.ServerPort -gt 0) {
+        $ports += $backendConfig.ServerPort
+    } elseif (-not [string]::IsNullOrWhiteSpace($backendConfig.ErrorMessage)) {
+        Write-StatusLine -Message "后端端口配置" -Status "WARN" -Detail $backendConfig.ErrorMessage
+    }
+    $ports = @($ports | Select-Object -Unique)
     foreach ($p in $ports) {
         try {
             if (Get-Command "Get-NetTCPConnection" -ErrorAction SilentlyContinue) {
@@ -649,34 +778,39 @@ function Test-ServicesHealth {
     Start-Sleep -Seconds 5
     
     # 检查后端健康状态（带重试）
-    $backendHealthUrl = "http://127.0.0.1:38000/health"
-    $maxRetries = 3
-    $retryDelay = 3
-    $backendHealthy = $false
-    
-    for ($i = 1; $i -le $maxRetries; $i++) {
-        try {
-            $response = Invoke-WebRequest -Uri $backendHealthUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
-            if ($response.StatusCode -eq 200) {
-                $healthData = $response.Content | ConvertFrom-Json
-                Write-ColorOutput "✅ 后端 API 服务正常" "Green"
-                Write-ColorOutput "   - 状态: $($healthData.status)" "Gray"
-                Write-ColorOutput "   - 版本: $($healthData.version)" "Gray"
-                Write-ColorOutput "   - 端点: $backendHealthUrl" "Gray"
-                $backendHealthy = $true
-                break
+    $backendConfig = Get-BackendDevConfig -AllowMissingPort
+    if ($backendConfig.ServerPort -gt 0) {
+        $backendHealthUrl = $backendConfig.HealthUrl
+        $maxRetries = 3
+        $retryDelay = 3
+        $backendHealthy = $false
+
+        for ($i = 1; $i -le $maxRetries; $i++) {
+            try {
+                $response = Invoke-WebRequest -Uri $backendHealthUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+                if ($response.StatusCode -eq 200) {
+                    $healthData = $response.Content | ConvertFrom-Json
+                    Write-ColorOutput "✅ 后端 API 服务正常" "Green"
+                    Write-ColorOutput "   - 状态: $($healthData.status)" "Gray"
+                    Write-ColorOutput "   - 版本: $($healthData.version)" "Gray"
+                    Write-ColorOutput "   - 端点: $backendHealthUrl" "Gray"
+                    $backendHealthy = $true
+                    break
+                }
+            }
+            catch {
+                if ($i -lt $maxRetries) {
+                    Write-ColorOutput "⏳ 后端服务尚未就绪，等待重试 ($i/$maxRetries)..." "Yellow"
+                    Start-Sleep -Seconds $retryDelay
+                } else {
+                    Write-ColorOutput "⚠️ 后端 API 服务暂未就绪（可能仍在启动中）" "Yellow"
+                    Write-ColorOutput "   - 端点: $backendHealthUrl" "Gray"
+                    Write-ColorOutput "   - 请稍后手动检查: Invoke-WebRequest $backendHealthUrl" "Gray"
+                }
             }
         }
-        catch {
-            if ($i -lt $maxRetries) {
-                Write-ColorOutput "⏳ 后端服务尚未就绪，等待重试 ($i/$maxRetries)..." "Yellow"
-                Start-Sleep -Seconds $retryDelay
-            } else {
-                Write-ColorOutput "⚠️ 后端 API 服务暂未就绪（可能仍在启动中）" "Yellow"
-                Write-ColorOutput "   - 端点: $backendHealthUrl" "Gray"
-                Write-ColorOutput "   - 请稍后手动检查: Invoke-WebRequest $backendHealthUrl" "Gray"
-            }
-        }
+    } else {
+        Write-ColorOutput "⚠️ 跳过后端健康检查：$($backendConfig.ErrorMessage)" "Yellow"
     }
     
     # 检查前端服务
@@ -700,14 +834,19 @@ function Test-ServicesHealth {
 function Show-ServiceInfo {
     $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
     $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
+    $backendConfig = Get-BackendDevConfig -AllowMissingPort
 
     Write-ColorOutput "`n📊 开发环境服务信息:" "Blue"
     Write-ColorOutput "$('=' * 50)" "Cyan"
     
     Write-ColorOutput "`n🌐 Web 服务:" "Blue"
     Write-ColorOutput "  🎨 前端应用: http://localhost:33000" "White"
-    Write-ColorOutput "  🔧 后端 API: http://127.0.0.1:38000" "White"
-    Write-ColorOutput "  💚 健康检查: http://127.0.0.1:38000/health" "White"
+    if ($backendConfig.ServerPort -gt 0) {
+        Write-ColorOutput "  🔧 后端 API: $($backendConfig.ApiUrl)" "White"
+        Write-ColorOutput "  💚 健康检查: $($backendConfig.HealthUrl)" "White"
+    } else {
+        Write-ColorOutput "  ⚠️ 后端端口未配置: $($backendConfig.ErrorMessage)" "Yellow"
+    }
     Write-ColorOutput "  📚 API 说明: docs/api/openapi.json" "White"
     Write-ColorOutput "  🔌 WS 约定: docs/api/websocket-contract.md" "White"
     
@@ -728,7 +867,9 @@ function Show-ServiceInfo {
     Write-ColorOutput "  查看日志: .\scripts\database\db-manage.ps1 logs" "White"
     Write-ColorOutput "  重置数据库: .\scripts\database\db-manage.ps1 reset" "White"
     Write-ColorOutput "  运行测试: .\scripts\tests\run-tests.ps1" "White"
-    Write-ColorOutput "  健康检查: Invoke-WebRequest http://127.0.0.1:38000/health" "White"
+    if ($backendConfig.ServerPort -gt 0) {
+        Write-ColorOutput "  健康检查: Invoke-WebRequest $($backendConfig.HealthUrl)" "White"
+    }
     
     Write-ColorOutput "`n💡 提示:" "Yellow"
     Write-ColorOutput "  - 前端和后端服务在独立窗口中运行" "Gray"

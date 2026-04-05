@@ -74,14 +74,14 @@
 NODE_ENV=development
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 REDIS_URL=redis://:dev_redis_2024@localhost:16380/0
-NEXT_PUBLIC_API_URL=http://127.0.0.1:38000
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
 
 **前端 `.env.local` 关键配置：**
 ```bash
 # Windows 环境建议使用 127.0.0.1，避免 localhost 被解析为 IPv6(::1) 导致连接失败。
-NEXT_PUBLIC_API_URL=http://127.0.0.1:38000
-NEXT_PUBLIC_WS_URL=ws://127.0.0.1:38000
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:8000
 NEXT_PUBLIC_DISABLE_AUTH_CHECK=false
 ```
 

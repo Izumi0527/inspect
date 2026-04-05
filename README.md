@@ -178,7 +178,7 @@ user_activity_logs     // 用户活动日志 (操作审计)
 ```yaml
 services:
   backend:          # Go后端 (热重载)
-    ports: ["38000:38000"]
+    ports: ["8000:8000"]
     volumes: ["./backend-go:/app"]
     
   frontend:         # Next.js前端 (开发模式)
@@ -457,7 +457,7 @@ curl -X GET "http://localhost:8001/api/v1/traffic/summary?hours=24" \
 ```bash
 # 服务配置
 SERVER_HOST=0.0.0.0
-SERVER_PORT=38000
+SERVER_PORT=8000
 SERVER_ENV=development
 
 # 数据库配置
