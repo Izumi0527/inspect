@@ -52,7 +52,7 @@ func TestTriggerStrategy_ShouldSetScheduleID(t *testing.T) {
 			inspection.StrategyManual,
 			nil,
 			[]byte(`[100]`),
-			[]byte(`[]`),
+			[]byte(`[200]`),
 			true,
 			nil,
 			nil,
@@ -60,7 +60,7 @@ func TestTriggerStrategy_ShouldSetScheduleID(t *testing.T) {
 			now,
 		))
 
-	insertArgs := buildInspectionInsertExpectedArgs(t, gormDB, 1)
+	insertArgs := buildInspectionInsertExpectedArgs(t, gormDB, 1, 200)
 	mock.ExpectQuery(`INSERT INTO "inspections".*RETURNING "id"`).
 		WithArgs(insertArgs...).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(123))
@@ -97,7 +97,7 @@ func TestTriggerStrategy_ShouldSetScheduleID(t *testing.T) {
 	}
 }
 
-func buildInspectionInsertExpectedArgs(t *testing.T, db *gorm.DB, scheduleID int) []driver.Value {
+func buildInspectionInsertExpectedArgs(t *testing.T, db *gorm.DB, scheduleID int, templateID int) []driver.Value {
 	t.Helper()
 
 	name := "策略A 手动触发"
@@ -107,7 +107,7 @@ func buildInspectionInsertExpectedArgs(t *testing.T, db *gorm.DB, scheduleID int
 
 	item := inspection.Inspection{
 		DeviceID:   100,
-		TemplateID: nil,
+		TemplateID: &templateID,
 		ScheduleID: scheduleIDPtr,
 		Name:       &name,
 		Trigger:    inspection.TriggerManual,
@@ -127,6 +127,10 @@ func buildInspectionInsertExpectedArgs(t *testing.T, db *gorm.DB, scheduleID int
 	if err != nil {
 		t.Fatalf("find schedule_id column index: %v\nsql=%s", err, insertSQL)
 	}
+	templateIndex, err := findInsertColumnIndex(insertSQL, "template_id")
+	if err != nil {
+		t.Fatalf("find template_id column index: %v\nsql=%s", err, insertSQL)
+	}
 
 	if len(tx.Statement.Vars) == 0 {
 		t.Fatalf("dry-run insert vars is empty\nsql=%s", insertSQL)
@@ -139,7 +143,11 @@ func buildInspectionInsertExpectedArgs(t *testing.T, db *gorm.DB, scheduleID int
 	if scheduleIndex < 0 || scheduleIndex >= len(args) {
 		t.Fatalf("scheduleIndex=%d out of range, args=%d\nsql=%s", scheduleIndex, len(args), insertSQL)
 	}
+	if templateIndex < 0 || templateIndex >= len(args) {
+		t.Fatalf("templateIndex=%d out of range, args=%d\nsql=%s", templateIndex, len(args), insertSQL)
+	}
 	args[scheduleIndex] = anyIntEquals{want: int64(scheduleID)}
+	args[templateIndex] = anyIntEquals{want: int64(templateID)}
 	return args
 }
 

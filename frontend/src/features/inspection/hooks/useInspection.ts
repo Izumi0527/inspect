@@ -28,7 +28,8 @@ import {
   InspectionStrategy,
   InspectionTemplate,
   InspectionStats,
-  InspectionApiResponse
+  InspectionApiResponse,
+  InspectionAnalyticsRange
 } from '../types'
 
 // 巡检策略Hooks - 连接到真实API
@@ -366,10 +367,10 @@ export const useDeleteExecution = () => {
 }
 
 // 巡检统计Hooks
-export const useInspectionStats = (timeRange?: string) => {
+export const useInspectionStats = (params?: string | InspectionAnalyticsRange) => {
   return useQuery<InspectionStats>({
-    queryKey: ['inspection', 'stats', timeRange],
-    queryFn: () => fetchInspectionStats(timeRange),
+    queryKey: ['inspection', 'stats', params],
+    queryFn: () => fetchInspectionStats(params),
     staleTime: 2 * 60 * 1000, // 2分钟缓存
   })
 }
@@ -388,19 +389,19 @@ export const useInspectionTrends = (params: {
 }
 
 // 获取设备类型分布
-export const useDeviceDistribution = () => {
+export const useDeviceDistribution = (params?: InspectionAnalyticsRange) => {
   return useQuery({
-    queryKey: ['inspection', 'device-distribution'],
-    queryFn: () => fetchDeviceDistribution(),
+    queryKey: ['inspection', 'device-distribution', params],
+    queryFn: () => fetchDeviceDistribution(params),
     staleTime: 10 * 60 * 1000, // 10分钟缓存
   })
 }
 
 // 获取问题分布统计
-export const useProblemDistribution = () => {
+export const useProblemDistribution = (params?: InspectionAnalyticsRange) => {
   return useQuery({
-    queryKey: ['inspection', 'problem-distribution'],
-    queryFn: () => fetchProblemDistribution(),
+    queryKey: ['inspection', 'problem-distribution', params],
+    queryFn: () => fetchProblemDistribution(params),
     staleTime: 5 * 60 * 1000, // 5分钟缓存
   })
 }

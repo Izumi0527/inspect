@@ -150,9 +150,9 @@ export const InspectionView: React.FC = () => {
           </div>
         </CardHeader>
 
-        <CardContent className="flex flex-col overflow-hidden pt-4">
-          {/* 标签内容区域 */}
-          <div className="overflow-y-auto">
+        <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden pt-4">
+          {/* 标签内容区域：flex-1 min-h-0 确保高度由父容器约束，overflow-y-auto 在界内滚动 */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <motion.div
               key={activeTab}
               initial={{ opacity: 0, y: 20 }}

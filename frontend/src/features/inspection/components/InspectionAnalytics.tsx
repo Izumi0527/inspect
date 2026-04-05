@@ -6,7 +6,8 @@ import {
   Target,
   Calendar,
   Download,
-  RefreshCw
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react'
 import {
   Card,
@@ -108,14 +109,16 @@ export const InspectionAnalytics: React.FC = () => {
     setDateRange({ startDate, endDate })
   }, [timePeriod])
 
-  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useInspectionStats()
-  const { data: trends, isLoading: trendsLoading, refetch: refetchTrends } = useInspectionTrends({
+  const analyticsRange = {
     period: timePeriod,
     startDate: dateRange.startDate,
     endDate: dateRange.endDate
-  })
-  const { data: deviceDistribution, isLoading: deviceLoading, refetch: refetchDevice } = useDeviceDistribution()
-  const { data: problemDistribution, isLoading: problemLoading, refetch: refetchProblem } = useProblemDistribution()
+  }
+
+  const { data: stats, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useInspectionStats(analyticsRange)
+  const { data: trends, isLoading: trendsLoading, error: trendsError, refetch: refetchTrends } = useInspectionTrends(analyticsRange)
+  const { data: deviceDistribution, isLoading: deviceLoading, error: deviceError, refetch: refetchDevice } = useDeviceDistribution(analyticsRange)
+  const { data: problemDistribution, isLoading: problemLoading, error: problemError, refetch: refetchProblem } = useProblemDistribution(analyticsRange)
 
   // 格式化趋势数据的日期标签
   const formattedTrends = useMemo(() => {
@@ -177,6 +180,27 @@ export const InspectionAnalytics: React.FC = () => {
     )
   }
 
+  const analyticsError = statsError || trendsError || deviceError || problemError
+  if (analyticsError) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <div className="flex flex-col items-center gap-4">
+            <AlertCircle className="w-12 h-12 text-red-500" />
+            <div>
+              <h3 className="text-lg font-medium text-foreground">加载失败</h3>
+              <p className="text-muted-foreground mt-1">{analyticsError.message}</p>
+            </div>
+            <Button variant="outline" onClick={handleRefreshAll}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              重试
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* 操作栏 */}
@@ -208,7 +232,7 @@ export const InspectionAnalytics: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {[
           {
-            title: '总执行次数',
+            title: '执行次数',
             value: stats?.todayExecutions || 0,
             change: stats?.changes?.executionsChange || '0.0%',
             trend: 'up',

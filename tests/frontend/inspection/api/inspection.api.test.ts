@@ -1,4 +1,8 @@
-import { copyInspectionTemplate, fetchInspectionTemplate } from '@/features/inspection/api/inspection.api'
+import {
+  copyInspectionTemplate,
+  fetchInspectionStrategies,
+  fetchInspectionTemplate,
+} from '@/features/inspection/api/inspection.api'
 
 jest.mock('@/lib/api-client', () => ({
   api: {
@@ -87,5 +91,39 @@ describe('inspection.api copyInspectionTemplate', () => {
     expect(result.id).toBe('2')
     expect(result.name).toBe('Cisco SNMP 模板(副本)')
     expect(result.deviceTypes).toEqual(['router'])
+  })
+})
+
+describe('inspection.api fetchInspectionStrategies', () => {
+  it('应把 page/pageSize 转换为后端需要的 skip/limit 参数', async () => {
+    const { api } = jest.requireMock('@/lib/api-client') as { api: { get: jest.Mock } }
+
+    api.get.mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: 7,
+            name: '策略七',
+            description: '分页测试',
+            type: 'manual',
+            devices: [1, 2],
+            templates: [101],
+            enabled: true,
+            created_at: '2026-04-01T00:00:00Z',
+            updated_at: '2026-04-01T00:00:00Z',
+          },
+        ],
+        total: 45,
+        pages: 3,
+      },
+    })
+
+    const result = await fetchInspectionStrategies({ page: 3, pageSize: 20 })
+
+    expect(api.get).toHaveBeenCalledWith('/inspection/strategies?skip=40&limit=20')
+    expect(result.total).toBe(45)
+    expect(result.pages).toBe(3)
+    expect(result.strategies).toHaveLength(1)
+    expect(result.strategies[0].id).toBe('7')
   })
 })

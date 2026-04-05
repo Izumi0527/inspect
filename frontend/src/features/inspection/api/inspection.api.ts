@@ -11,7 +11,8 @@ import {
   DeviceInspectionResult,
   InspectionCheckItem,
   CheckResult,
-  InspectionStrategy
+  InspectionStrategy,
+  InspectionAnalyticsRange
 } from '../types'
 
 type UnknownRecord = Record<string, unknown>
@@ -393,11 +394,7 @@ export async function fetchInspectionTemplates(params?: {
     }
   } catch (error) {
     console.error('获取巡检模板失败:', error)
-    return {
-      templates: [],
-      total: 0,
-      pages: 0,
-    }
+    throw error
   }
 }
 
@@ -785,11 +782,7 @@ export async function fetchInspectionExecutions(params?: {
       console.error('[API] 获取巡检执行记录失败:', error)
     }
 
-    return {
-      items: [],
-      total: 0,
-      pages: 0,
-    }
+    throw error
   }
 }
 
@@ -970,7 +963,7 @@ export async function fetchInspectionStrategies(params?: {
     }
   } catch (error) {
     console.error('获取策略列表失败:', error)
-    return { strategies: [], total: 0, pages: 0 }
+    throw error
   }
 }
 
@@ -1233,9 +1226,23 @@ export async function downloadReport(reportId: string): Promise<string> {
 
 // ==================== 统计分析 ====================
 
-export async function fetchInspectionStats(timeRange?: string): Promise<InspectionStats> {
+export async function fetchInspectionStats(params?: string | InspectionAnalyticsRange): Promise<InspectionStats> {
   try {
-    const endpoint = timeRange ? `/inspection/stats?range=${timeRange}` : '/inspection/stats'
+    const endpoint = (() => {
+      if (!params) {
+        return '/inspection/stats'
+      }
+
+      if (typeof params === 'string') {
+        return `/inspection/stats?range=${params}`
+      }
+
+      const searchParams = new URLSearchParams()
+      searchParams.append('period', params.period)
+      if (params.startDate) searchParams.append('start_date', params.startDate)
+      if (params.endDate) searchParams.append('end_date', params.endDate)
+      return `/inspection/stats?${searchParams.toString()}`
+    })()
     const response = await api.get<InspectionApiResponse<unknown>>(endpoint)
 
     if (!response.data) {
@@ -1245,7 +1252,7 @@ export async function fetchInspectionStats(timeRange?: string): Promise<Inspecti
     return transformStatsData(response.data)
   } catch (error) {
     console.error('获取巡检统计失败:', error)
-    return transformStatsData({})
+    throw error
   }
 }
 
@@ -1273,17 +1280,31 @@ export async function fetchInspectionTrends(params: {
     return list.map(mapTrendPoint)
   } catch (error) {
     console.error('获取趋势数据失败:', error)
-    return []
+    throw error
   }
 }
 
-export async function fetchDeviceDistribution(): Promise<Array<{
+const buildAnalyticsRangeQuery = (params?: InspectionAnalyticsRange): string => {
+  if (!params) {
+    return ''
+  }
+
+  const searchParams = new URLSearchParams()
+  searchParams.append('period', params.period)
+  if (params.startDate) searchParams.append('start_date', params.startDate)
+  if (params.endDate) searchParams.append('end_date', params.endDate)
+
+  const queryString = searchParams.toString()
+  return queryString ? `?${queryString}` : ''
+}
+
+export async function fetchDeviceDistribution(params?: InspectionAnalyticsRange): Promise<Array<{
   name: string
   value: number
   color: string
 }>> {
   try {
-    const response = await api.get<InspectionApiResponse<unknown>>('/inspection/device-distribution')
+    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/device-distribution${buildAnalyticsRangeQuery(params)}`)
 
     if (!response.data) {
       throw new Error('获取设备分布失败')
@@ -1301,16 +1322,16 @@ export async function fetchDeviceDistribution(): Promise<Array<{
     })
   } catch (error) {
     console.error('获取设备分布失败:', error)
-    return []
+    throw error
   }
 }
 
-export async function fetchProblemDistribution(): Promise<Array<{
+export async function fetchProblemDistribution(params?: InspectionAnalyticsRange): Promise<Array<{
   category: string
   count: number
 }>> {
   try {
-    const response = await api.get<InspectionApiResponse<unknown>>('/inspection/problem-distribution')
+    const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/problem-distribution${buildAnalyticsRangeQuery(params)}`)
 
     if (!response.data) {
       throw new Error('获取问题分布失败')
@@ -1327,7 +1348,7 @@ export async function fetchProblemDistribution(): Promise<Array<{
     })
   } catch (error) {
     console.error('获取问题分布失败:', error)
-    return []
+    throw error
   }
 }
 

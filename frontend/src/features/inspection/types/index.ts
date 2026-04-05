@@ -58,7 +58,7 @@ export interface InspectionStrategy {
   /** 关联的设备ID列表 */
   devices: number[]
 
-  /** 使用的巡检模板ID列表 */
+  /** 使用的巡检模板ID列表，当前约束为只能包含一个模板 */
   templates: number[]
 
   /** 策略是否启用 */
@@ -418,6 +418,17 @@ export interface InspectionStats {
 
   /** 最近的执行记录 */
   recentExecutions: InspectionExecution[]
+}
+
+/**
+ * 巡检统计分析统一时间范围参数
+ *
+ * 统计卡片、趋势图、设备分布和问题分布应共用同一组参数
+ */
+export interface InspectionAnalyticsRange {
+  period: 'day' | 'week' | 'month'
+  startDate?: string
+  endDate?: string
 }
 
 // ----------------------------------------------------------------------------

@@ -325,6 +325,10 @@ func (s *Service) GetStrategy(ctx context.Context, id int) (Strategy, error) {
 }
 
 func (s *Service) CreateStrategy(ctx context.Context, payload StrategyPayload) (Strategy, error) {
+	if err := ValidateStrategyTemplateIDs(payload.Templates); err != nil {
+		return Strategy{}, err
+	}
+
 	if s == nil || s.db == nil {
 		return Strategy{}, fmt.Errorf("database not initialized")
 	}
@@ -442,9 +446,19 @@ func (s *Service) UpdateStrategy(ctx context.Context, id int, payload StrategyUp
 		}
 	}
 	if payload.Templates != nil {
+		if err := ValidateStrategyTemplateIDs(*payload.Templates); err != nil {
+			return Strategy{}, err
+		}
 		if templatesJSON, err := encodeJSON(*payload.Templates); err == nil {
 			updates["templates"] = templatesJSON
 		} else {
+			return Strategy{}, err
+		}
+	}
+
+	currentTemplates := decodeIntSlice(current.Templates)
+	if payload.Templates == nil {
+		if err := ValidateStrategyTemplateIDs(currentTemplates); err != nil {
 			return Strategy{}, err
 		}
 	}

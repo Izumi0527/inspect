@@ -17,7 +17,9 @@ import {
   Button,
   Badge,
   Table,
-  Column
+  Column,
+  Pagination,
+  ConfirmModal
 } from '@/components/atoms'
 import { 
   useInspectionStrategies, 
@@ -31,13 +33,21 @@ import { StrategyModal } from './StrategyModal'
 export const InspectionStrategies: React.FC = () => {
   const [selectedStrategy, setSelectedStrategy] = useState<InspectionStrategy | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [strategyToDelete, setStrategyToDelete] = useState<InspectionStrategy | null>(null)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   
-  const { data: strategiesData, isLoading } = useInspectionStrategies()
+  const { data: strategiesData, isLoading, error, refetch } = useInspectionStrategies({
+    page,
+    pageSize,
+  })
   const toggleStrategy = useToggleStrategy()
   const deleteStrategy = useDeleteStrategy()
   const triggerExecution = useTriggerExecution()
 
   const strategies: InspectionStrategy[] = strategiesData?.items || []
+  const totalPages = strategiesData?.pages || 1
+  const totalItems = strategiesData?.total || 0
 
   // 显示所有策略列表
   const filteredStrategies = strategies
@@ -63,9 +73,15 @@ export const InspectionStrategies: React.FC = () => {
     }
   }
 
-  const handleDeleteStrategy = async (id: string) => {
+  const handleDeleteStrategy = (strategy: InspectionStrategy) => {
+    setStrategyToDelete(strategy)
+  }
+
+  const handleConfirmDeleteStrategy = async () => {
+    if (!strategyToDelete) return
+
     try {
-      await deleteStrategy.mutateAsync(id)
+      await deleteStrategy.mutateAsync(strategyToDelete.id)
     } catch (error) {
       console.error('Delete strategy failed:', error)
     }
@@ -190,7 +206,7 @@ export const InspectionStrategies: React.FC = () => {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => handleDeleteStrategy(strategy.id)}
+            onClick={() => handleDeleteStrategy(strategy)}
             title="删除"
           >
             <Trash2 className="w-4 h-4 text-red-500" />
@@ -220,6 +236,25 @@ export const InspectionStrategies: React.FC = () => {
     )
   }
 
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <div className="flex flex-col items-center gap-4">
+            <AlertCircle className="w-12 h-12 text-red-500" />
+            <div>
+              <h3 className="text-lg font-medium text-foreground">加载失败</h3>
+              <p className="text-gray-500 dark:text-gray-400 mt-1">{error.message}</p>
+            </div>
+            <Button onClick={() => refetch()}>
+              重试
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <div className="space-y-4">
       {/* 操作栏 */}
@@ -233,17 +268,39 @@ export const InspectionStrategies: React.FC = () => {
 
       {/* 策略列表 */}
       {filteredStrategies.length > 0 ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Table
-            data={filteredStrategies}
-            columns={columns}
-            className="bg-card rounded-lg shadow-sm"
-          />
-        </motion.div>
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Table
+              data={filteredStrategies}
+              columns={columns}
+              className="bg-card rounded-lg shadow-sm"
+            />
+          </motion.div>
+
+          {totalPages > 1 && (
+            <Card>
+              <CardContent className="p-4">
+                <Pagination
+                  currentPage={page}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  pageSize={pageSize}
+                  pageSizeOptions={[10, 20, 50, 100]}
+                  onPageChange={setPage}
+                  onPageSizeChange={(nextPageSize) => {
+                    setPage(1)
+                    setPageSize(nextPageSize)
+                  }}
+                  showPageSizeSelector={true}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </>
       ) : (
         <Card>
           <CardContent className="p-8 text-center">
@@ -275,6 +332,27 @@ export const InspectionStrategies: React.FC = () => {
           }}
         />
       )}
+
+      <ConfirmModal
+        isOpen={!!strategyToDelete}
+        onClose={() => {
+          if (!deleteStrategy.isPending) {
+            setStrategyToDelete(null)
+          }
+        }}
+        onConfirm={handleConfirmDeleteStrategy}
+        title="确认删除策略"
+        description={
+          strategyToDelete
+            ? `确定要删除巡检策略“${strategyToDelete.name}”吗？删除后将无法恢复。`
+            : undefined
+        }
+        confirmText={deleteStrategy.isPending ? '删除中...' : '确认删除'}
+        cancelText="取消"
+        variant="destructive"
+        confirmDisabled={deleteStrategy.isPending}
+        cancelDisabled={deleteStrategy.isPending}
+      />
 
     </div>
   )

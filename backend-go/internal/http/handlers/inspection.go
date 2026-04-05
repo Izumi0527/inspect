@@ -496,6 +496,12 @@ func (h InspectionHandler) CreateStrategy(c echo.Context) error {
 	cron, _ := readOptionalString(payload, "cron")
 	devices := readIntSlice(payload, "devices", "device_ids", "deviceIds")
 	templates := readIntSlice(payload, "templates", "template_ids", "templateIds")
+	if err := inspection.ValidateStrategyTemplateIDs(templates); err != nil {
+		if validationErr, ok := err.(*inspection.ValidationError); ok {
+			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
 
 	enabled, ok := readBool(payload, "enabled")
 	if !ok {
@@ -512,6 +518,9 @@ func (h InspectionHandler) CreateStrategy(c echo.Context) error {
 		Enabled:     enabled,
 	})
 	if err != nil {
+		if validationErr, ok := err.(*inspection.ValidationError); ok {
+			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create strategy")
 	}
 
@@ -553,6 +562,12 @@ func (h InspectionHandler) UpdateStrategy(c echo.Context) error {
 		update.Devices = &value
 	}
 	if value, ok := readOptionalIntSlice(payload, "templates", "template_ids", "templateIds"); ok {
+		if err := inspection.ValidateStrategyTemplateIDs(value); err != nil {
+			if validationErr, ok := err.(*inspection.ValidationError); ok {
+				return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
+			}
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
 		update.Templates = &value
 	}
 	if value, ok := readBool(payload, "enabled"); ok {
@@ -563,6 +578,9 @@ func (h InspectionHandler) UpdateStrategy(c echo.Context) error {
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "巡检策略不存在")
+		}
+		if validationErr, ok := err.(*inspection.ValidationError); ok {
+			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update strategy")
 	}
@@ -622,6 +640,7 @@ func (h InspectionHandler) ToggleStrategy(c echo.Context) error {
 // =====================================================================
 
 var errStrategyNoDevices = errors.New("策略未配置设备")
+var errStrategyNoTemplates = errors.New("策略未配置模板")
 
 func (h InspectionHandler) triggerStrategyInspections(ctx context.Context, strategyID int, trigger string, createdBy *string) ([]inspection.Inspection, *int, error) {
 	if h.Service == nil {
@@ -639,10 +658,10 @@ func (h InspectionHandler) triggerStrategyInspections(ctx context.Context, strat
 	}
 
 	templates := decodeJSONIntSlice(strategy.Templates)
-	var templateID *int
-	if len(templates) > 0 {
-		templateID = &templates[0]
+	if err := inspection.ValidateStrategyTemplateIDs(templates); err != nil {
+		return nil, nil, errStrategyNoTemplates
 	}
+	templateID := &templates[0]
 
 	suffix := "手动触发"
 	if strings.EqualFold(trigger, inspection.TriggerScheduled) {
@@ -857,6 +876,12 @@ func (h InspectionHandler) TriggerStrategy(c echo.Context) error {
 		}
 		if errors.Is(err, errStrategyNoDevices) {
 			return echo.NewHTTPError(http.StatusBadRequest, "策略未配置设备")
+		}
+		if errors.Is(err, errStrategyNoTemplates) {
+			return echo.NewHTTPError(http.StatusBadRequest, "策略未配置模板")
+		}
+		if validationErr, ok := err.(*inspection.ValidationError); ok {
+			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to trigger strategy")
 	}
@@ -2111,7 +2136,10 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 		Where("enabled = ?", true).
 		Count(&activeStrategies).Error
 
-	start, end := resolveStatsRange(c.QueryParam("range"))
+	start, end, hasExplicitRange := resolveRequestedAnalyticsRange(c)
+	if !hasExplicitRange {
+		start, end = resolveStatsRange(c.QueryParam("range"))
+	}
 	previousStart := start.Add(start.Sub(end))
 	previousEnd := start
 
@@ -2232,10 +2260,17 @@ func (h InspectionHandler) GetDeviceDistribution(c echo.Context) error {
 		Count int    `gorm:"column:count"`
 	}
 	rows := make([]typeRow, 0)
-	if err := db.WithContext(c.Request().Context()).
-		Table("devices").
-		Select("device_type, COUNT(*) AS count").
-		Group("device_type").
+	query := db.WithContext(c.Request().Context()).
+		Table("inspections").
+		Select("devices.device_type AS device_type, COUNT(DISTINCT inspections.device_id) AS count").
+		Joins("JOIN devices ON devices.id = inspections.device_id")
+
+	if start, end, ok := resolveRequestedAnalyticsRange(c); ok {
+		query = query.Where("inspections.created_at >= ? AND inspections.created_at <= ?", start, end)
+	}
+
+	if err := query.
+		Group("devices.device_type").
 		Scan(&rows).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load device distribution")
 	}
@@ -2276,11 +2311,18 @@ func (h InspectionHandler) GetProblemDistribution(c echo.Context) error {
 		Count    int    `gorm:"column:count"`
 	}
 	rows := make([]row, 0)
-	if err := db.WithContext(c.Request().Context()).
+	query := db.WithContext(c.Request().Context()).
 		Table("inspection_results").
-		Select("check_item_type AS category, COUNT(*) AS count").
-		Where("status IN ?", []string{"fail", "warning"}).
-		Group("check_item_type").
+		Select("inspection_results.check_item_type AS category, COUNT(*) AS count").
+		Joins("JOIN inspections ON inspections.id = inspection_results.inspection_id")
+
+	if start, end, ok := resolveRequestedAnalyticsRange(c); ok {
+		query = query.Where("inspections.created_at >= ? AND inspections.created_at <= ?", start, end)
+	}
+
+	if err := query.
+		Where("inspection_results.status IN ?", []string{"fail", "warning"}).
+		Group("inspection_results.check_item_type").
 		Order("COUNT(*) DESC").
 		Scan(&rows).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load problem distribution")
@@ -3287,6 +3329,27 @@ func buildResultStatusFilter(statusList []string) (string, []interface{}) {
 		}
 	}
 	return strings.Join(conditions, " OR "), args
+}
+
+func resolveRequestedAnalyticsRange(c echo.Context) (time.Time, time.Time, bool) {
+	if c == nil {
+		return time.Time{}, time.Time{}, false
+	}
+
+	period := strings.TrimSpace(c.QueryParam("period"))
+	startRaw := strings.TrimSpace(c.QueryParam("start_date"))
+	endRaw := strings.TrimSpace(c.QueryParam("end_date"))
+	if period == "" && startRaw == "" && endRaw == "" {
+		return time.Time{}, time.Time{}, false
+	}
+	if period == "" {
+		period = "week"
+	}
+
+	startDate, _ := parseOptionalDate(startRaw)
+	endDate, _ := parseOptionalDate(endRaw)
+	start, end := resolveTrendRange(period, startDate, endDate)
+	return start, end, true
 }
 
 func resolveStatsRange(value string) (time.Time, time.Time) {

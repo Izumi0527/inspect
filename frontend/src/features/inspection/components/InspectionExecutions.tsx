@@ -56,7 +56,7 @@ export const InspectionExecutions: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [executionToDelete, setExecutionToDelete] = useState<InspectionExecution | null>(null)
 
-  const { data: executionsData, isLoading, refetch, isFetching } = useInspectionExecutions({
+  const { data: executionsData, isLoading, refetch, isFetching, error } = useInspectionExecutions({
     page: filters.page,
     pageSize: filters.pageSize,
     status: filters.status !== 'all' ? filters.status : undefined,
@@ -500,44 +500,46 @@ export const InspectionExecutions: React.FC = () => {
     return <ExecutionTableSkeleton rows={5} />
   }
 
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <div className="flex flex-col items-center gap-4">
+            <AlertTriangle className="w-12 h-12 text-red-500" />
+            <div>
+              <h3 className="text-lg font-medium text-foreground">加载失败</h3>
+              <p className="text-muted-foreground mt-1">{error.message}</p>
+            </div>
+            <Button onClick={() => refetch()}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              重试
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <>
       <div className="space-y-4">
-        {/* 操作栏 */}
-        <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              {hasRunningExecutions && (
-                <Badge variant="info" className="animate-pulse">
-                  有任务执行中，自动刷新已启用
-                </Badge>
-              )}
-            </div>
-            <Button 
-              variant="outline" 
-              onClick={() => refetch()}
-              disabled={isFetching}
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
-              {isFetching ? '刷新中...' : '刷新'}
-            </Button>
-          </div>
-
-          {/* 筛选器栏 */}
-          <ExecutionFilters
-            statusFilter={filters.status}
-            startDate={filters.startDate}
-            endDate={filters.endDate}
-            onStatusChange={(status) => updateFilter('status', status)}
-            onStartDateChange={(date) => updateFilter('startDate', date)}
-            onEndDateChange={(date) => updateFilter('endDate', date)}
-            onClearDateRange={handleClearDateRange}
-            onClearAllFilters={resetFilters}
-            onQuickDateFilter={handleQuickDateFilter}
-            hasDateFilter={hasDateFilter}
-            hasAnyFilter={hasAnyFilter}
-          />
-        </div>
+        {/* 筛选器栏（含刷新按钮，单行布局） */}
+        <ExecutionFilters
+          statusFilter={filters.status}
+          startDate={filters.startDate}
+          endDate={filters.endDate}
+          onStatusChange={(status) => updateFilter('status', status)}
+          onStartDateChange={(date) => updateFilter('startDate', date)}
+          onEndDateChange={(date) => updateFilter('endDate', date)}
+          onClearDateRange={handleClearDateRange}
+          onClearAllFilters={resetFilters}
+          onQuickDateFilter={handleQuickDateFilter}
+          hasDateFilter={hasDateFilter}
+          hasAnyFilter={hasAnyFilter}
+          onRefresh={refetch}
+          isFetching={isFetching}
+          hasRunningExecutions={hasRunningExecutions}
+        />
 
         {selectedExecution && (
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">

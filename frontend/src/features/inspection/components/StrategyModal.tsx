@@ -78,7 +78,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
         type: strategy.type,
         cron: strategy.cron || '0 0 2 * * ?',
         devices: [...strategy.devices],
-        templates: [...strategy.templates],
+        templates: strategy.templates.slice(0, 1),
         enabled: strategy.enabled
       })
     } else {
@@ -110,8 +110,8 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
   // 切换模板选择
   const toggleTemplate = (templateId: number) => {
     const newTemplates = formData.templates.includes(templateId)
-      ? formData.templates.filter(id => id !== templateId)
-      : [...formData.templates, templateId]
+      ? []
+      : [templateId]
     handleInputChange('templates', newTemplates)
   }
 
@@ -164,7 +164,7 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
     }
 
     if (formData.templates.length === 0) {
-      newErrors.templates = '请选择至少一个模板'
+      newErrors.templates = '请选择一个巡检模板'
     }
 
     setErrors(newErrors)
@@ -475,7 +475,8 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                               className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
                             >
                               <input
-                                type="checkbox"
+                                type="radio"
+                                name="inspection-template"
                                 checked={formData.templates.includes(Number(template.id))}
                                 onChange={() => toggleTemplate(Number(template.id))}
                                 className="rounded border-border text-blue-600 focus:ring-blue-500"

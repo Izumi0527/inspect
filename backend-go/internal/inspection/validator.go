@@ -18,6 +18,8 @@ var (
 	ErrTemplateNameRequired       = errors.New("模板名称不能为空")
 	ErrTemplateNameTooLong        = errors.New("模板名称过长")
 	ErrDuplicateTemplateName      = errors.New("模板名称已存在")
+	ErrStrategyTemplateRequired   = errors.New("策略必须配置一个巡检模板")
+	ErrStrategySingleTemplateOnly = errors.New("策略只能配置一个巡检模板")
 
 	// Check item related errors
 	ErrNoCheckItems            = errors.New("模板必须包含至少一个检查项")
@@ -40,6 +42,34 @@ var (
 	ErrSNMPConnectionFailed = errors.New("SNMP 连接失败")
 	ErrOIDQueryFailed       = errors.New("OID 查询失败")
 )
+
+// ValidateStrategyTemplateIDs 验证策略模板配置必须且只能包含一个模板。
+func ValidateStrategyTemplateIDs(templateIDs []int) error {
+	validIDs := make([]int, 0, len(templateIDs))
+	for _, id := range templateIDs {
+		if id > 0 {
+			validIDs = append(validIDs, id)
+		}
+	}
+
+	if len(validIDs) == 0 {
+		return &ValidationError{
+			Field:   "templates",
+			Message: "策略必须选择一个巡检模板",
+			Err:     ErrStrategyTemplateRequired,
+		}
+	}
+
+	if len(validIDs) > 1 {
+		return &ValidationError{
+			Field:   "templates",
+			Message: "策略仅支持选择一个巡检模板",
+			Err:     ErrStrategySingleTemplateOnly,
+		}
+	}
+
+	return nil
+}
 
 // ValidationError represents a detailed validation error with context
 type ValidationError struct {
