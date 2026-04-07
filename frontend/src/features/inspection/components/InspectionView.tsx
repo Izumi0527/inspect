@@ -94,8 +94,8 @@ export const InspectionView: React.FC = () => {
               valueClassName="text-green-600 dark:text-green-400"
             />
             <CompactStatCard
-              title="今日执行"
-              value={stats.todayExecutions}
+              title="执行次数"
+              value={stats.executionCount}
               icon={History}
               iconClassName="text-purple-600 dark:text-purple-400"
               valueClassName="text-purple-600 dark:text-purple-400"

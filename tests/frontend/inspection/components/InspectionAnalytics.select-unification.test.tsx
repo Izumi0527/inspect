@@ -134,7 +134,7 @@ describe('InspectionAnalytics 下拉统一化', () => {
   beforeEach(() => {
     ;(inspectionHooks.useInspectionStats as jest.Mock).mockReturnValue({
       data: {
-        todayExecutions: 10,
+        executionCount: 10,
         successRate: 95,
         avgScore: 88,
         activeStrategies: 3,

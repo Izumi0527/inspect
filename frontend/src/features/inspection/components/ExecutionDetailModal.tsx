@@ -46,7 +46,12 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
   const [showExportMenu, setShowExportMenu] = useState(false)
   
   // 获取完整的执行详情（包含设备结果和检查项）
-  const { data: detailedExecution, isLoading: isLoadingDetail } = useExecutionDetail(
+  const {
+    data: detailedExecution,
+    isLoading: isLoadingDetail,
+    error: detailError,
+    refetch: refetchDetail,
+  } = useExecutionDetail(
     open && initialExecution ? initialExecution.id : null
   )
   
@@ -107,6 +112,8 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
   
   // 是否正在加载详情
   const isLoading = isLoadingDetail && !detailedExecution
+  const shouldShowDetailError = Boolean(detailError) && !detailedExecution
+  const detailErrorMessage = detailError instanceof Error ? detailError.message : '执行详情加载失败'
 
   // 格式化时长
   const formatDuration = (seconds: number | undefined) => {
@@ -245,6 +252,21 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
 
         {/* 内容区域 */}
         <div className="flex-1 overflow-y-auto mt-4 space-y-4">
+          {shouldShowDetailError && (
+            <div className="p-6 bg-red-50 rounded-lg border border-red-200">
+              <div className="text-sm text-red-700">{detailErrorMessage}</div>
+              <button
+                type="button"
+                className="mt-3 px-3 py-1.5 text-sm rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
+                onClick={() => {
+                  void refetchDetail()
+                }}
+              >
+                重试加载详情
+              </button>
+            </div>
+          )}
+
           {/* 概览标签 */}
           {activeTab === 'overview' && (
             <div className="grid grid-cols-2 gap-4">

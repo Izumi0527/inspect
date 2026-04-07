@@ -311,6 +311,9 @@ export const useTriggerExecution = () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'executions'] })
       queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
       queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'trends'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'device-distribution'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'problem-distribution'] })
       toast.success(result.message || '巡检任务已启动')
     },
     onError: (error: Error) => {
@@ -358,6 +361,9 @@ export const useDeleteExecution = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'executions'] })
       queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'trends'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'device-distribution'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'problem-distribution'] })
       toast.success('执行记录已删除')
     },
     onError: (error: Error) => {
