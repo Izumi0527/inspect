@@ -52,6 +52,18 @@ const getMetricColorClass = (color?: string) => {
   return METRIC_COLOR_CLASS[color as MetricColor] ?? METRIC_COLOR_CLASS.gray
 }
 
+const getComparisonLabel = (period: 'day' | 'week' | 'month') => {
+  switch (period) {
+    case 'day':
+      return 'vs 前一日'
+    case 'month':
+      return 'vs 上月'
+    case 'week':
+    default:
+      return 'vs 上周'
+  }
+}
+
 // 格式化日期为友好的显示格式
 const formatDateLabel = (dateStr: string, period: 'day' | 'week' | 'month'): string => {
   try {
@@ -128,6 +140,7 @@ export const InspectionAnalytics: React.FC = () => {
       dateLabel: formatDateLabel(item.date, timePeriod)
     }))
   }, [trends, timePeriod])
+  const comparisonLabel = useMemo(() => getComparisonLabel(timePeriod), [timePeriod])
 
 
   const handlePeriodChange = (value: string) => {
@@ -181,6 +194,12 @@ export const InspectionAnalytics: React.FC = () => {
   }
 
   const analyticsError = statsError || trendsError || deviceError || problemError
+  const comparisonBaselineLabel = {
+    day: 'vs 前一日',
+    week: 'vs 上周',
+    month: 'vs 上月',
+  }[timePeriod]
+
   if (analyticsError) {
     return (
       <Card>
@@ -233,7 +252,7 @@ export const InspectionAnalytics: React.FC = () => {
         {[
           {
             title: '执行次数',
-            value: stats?.todayExecutions || 0,
+            value: stats?.executionCount ?? stats?.todayExecutions ?? 0,
             change: stats?.changes?.executionsChange || '0.0%',
             trend: 'up',
             icon: Activity,
@@ -277,7 +296,7 @@ export const InspectionAnalytics: React.FC = () => {
                       <span className={`text-sm font-medium ${colorClass.text600}`}>
                         {metric.change}
                       </span>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">vs 上周</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">{comparisonBaselineLabel}</span>
                     </div>
                   </div>
                   <div className={`p-3 ${colorClass.bg100} rounded-lg`}>

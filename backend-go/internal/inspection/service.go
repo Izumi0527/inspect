@@ -612,7 +612,7 @@ func (s *Service) ListInspections(ctx context.Context, filter InspectionFilter) 
 		query = query.Where("created_at >= ?", *filter.StartDate)
 	}
 	if filter.EndDate != nil {
-		query = query.Where("created_at <= ?", *filter.EndDate)
+		query = query.Where("created_at < ?", filter.EndDate.Add(24*time.Hour))
 	}
 
 	var total int64

@@ -1667,13 +1667,37 @@ func (h InspectionHandler) StartTask(c echo.Context) error {
 		return err
 	}
 
-	if _, err := h.Service.UpdateInspectionStatus(c.Request().Context(), taskID, inspection.StatusRunning, nil); err != nil {
+	task, err := h.Service.GetInspection(c.Request().Context(), taskID)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "巡检任务不存在")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to start inspection")
 	}
 
+	switch {
+	case strings.EqualFold(task.Status, inspection.StatusRunning):
+		return echo.NewHTTPError(http.StatusConflict, "巡检任务正在执行")
+	case strings.EqualFold(task.Status, inspection.StatusCompleted),
+		strings.EqualFold(task.Status, inspection.StatusCancelled),
+		strings.EqualFold(task.Status, inspection.StatusFailed),
+		strings.EqualFold(task.Status, inspection.StatusTimeout):
+		return echo.NewHTTPError(http.StatusConflict, "当前任务状态不允许启动")
+	}
+
+	var checkItems []map[string]interface{}
+	if task.TemplateID != nil {
+		template, err := h.Service.GetTemplate(c.Request().Context(), *task.TemplateID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return echo.NewHTTPError(http.StatusNotFound, "巡检模板不存在")
+			}
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection template")
+		}
+		checkItems = decodeJSONMapSlice(template.CheckItems)
+	}
+
+	go h.executeInspection(context.Background(), task, checkItems)
 	return inspectionOKWithMessage(c, "巡检任务已启动", map[string]interface{}{"id": taskID})
 }
 
@@ -1718,6 +1742,13 @@ func (h InspectionHandler) GetTaskResults(c echo.Context) error {
 	taskID, err := parseIDParam(c, "id")
 	if err != nil {
 		return err
+	}
+
+	if _, err := h.Service.GetInspection(c.Request().Context(), taskID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "巡检任务不存在")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection")
 	}
 
 	results, err := h.Service.ListResultsByInspectionID(c.Request().Context(), taskID)
@@ -1793,11 +1824,12 @@ func (h InspectionHandler) ListExecutions(c echo.Context) error {
 	if strategyID > 0 {
 		query = query.Where("schedule_id = ?", strategyID)
 	}
+	executionTimeExpr := "COALESCE(started_at, created_at)"
 	if startDate != nil {
-		query = query.Where("started_at >= ?", *startDate)
+		query = query.Where(fmt.Sprintf("%s >= ?", executionTimeExpr), *startDate)
 	}
 	if endDate != nil {
-		query = query.Where("started_at < ?", endDate.Add(24*time.Hour))
+		query = query.Where(fmt.Sprintf("%s < ?", executionTimeExpr), endDate.Add(24*time.Hour))
 	}
 
 	var total int64
@@ -1808,7 +1840,7 @@ func (h InspectionHandler) ListExecutions(c echo.Context) error {
 	offset := (page - 1) * pageSize
 	rows := make([]inspection.Inspection, 0)
 	if err := query.
-		Order("COALESCE(started_at, created_at) DESC").
+		Order(fmt.Sprintf("%s DESC", executionTimeExpr)).
 		Offset(offset).
 		Limit(pageSize).
 		Find(&rows).Error; err != nil {
@@ -2143,12 +2175,13 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 	previousStart := start.Add(start.Sub(end))
 	previousEnd := start
 
-	current := computeStatsSummary(c.Request().Context(), db, start, end)
-	previous := computeStatsSummary(c.Request().Context(), db, previousStart, previousEnd)
+	current := computeStatsSummary(c.Request().Context(), db, "started_at", start, end)
+	previous := computeStatsSummary(c.Request().Context(), db, "started_at", previousStart, previousEnd)
 
 	data := map[string]interface{}{
 		"totalStrategies":  int(totalStrategies),
 		"activeStrategies": int(activeStrategies),
+		"executionCount":   current.TotalExecutions,
 		"todayExecutions":  current.TotalExecutions,
 		"successRate":      current.SuccessRate,
 		"avgScore":         current.AvgScore,
@@ -2194,20 +2227,18 @@ func (h InspectionHandler) GetTrends(c echo.Context) error {
 		AvgScore   float64   `gorm:"column:avg_score"`
 	}
 
-	// 根据周期选择不同的日期截断方式
-	// 使用 COALESCE 处理 created_at 为 NULL 的情况，使用 started_at 或 completed_at 作为备选
-	dateExpr := "date_trunc('week', COALESCE(created_at, started_at, completed_at, NOW()))"
+	// 执行趋势统一以 started_at 为执行时间口径
+	dateExpr := "date_trunc('week', started_at)"
 	switch period {
 	case "day":
-		dateExpr = "date_trunc('day', COALESCE(created_at, started_at, completed_at, NOW()))"
+		dateExpr = "date_trunc('day', started_at)"
 	case "month":
-		dateExpr = "date_trunc('month', COALESCE(created_at, started_at, completed_at, NOW()))"
+		dateExpr = "date_trunc('month', started_at)"
 	}
 
 	rows := make([]trendRow, 0)
 
-	// 使用 COALESCE 获取有效时间字段，与 dateExpr 保持一致
-	timeCol := "COALESCE(created_at, started_at, completed_at, NOW())"
+	timeCol := "started_at"
 
 	if err := db.WithContext(c.Request().Context()).
 		Table("inspections").
@@ -2266,7 +2297,7 @@ func (h InspectionHandler) GetDeviceDistribution(c echo.Context) error {
 		Joins("JOIN devices ON devices.id = inspections.device_id")
 
 	if start, end, ok := resolveRequestedAnalyticsRange(c); ok {
-		query = query.Where("inspections.created_at >= ? AND inspections.created_at <= ?", start, end)
+		query = query.Where("inspections.started_at >= ? AND inspections.started_at <= ?", start, end)
 	}
 
 	if err := query.
@@ -2317,7 +2348,7 @@ func (h InspectionHandler) GetProblemDistribution(c echo.Context) error {
 		Joins("JOIN inspections ON inspections.id = inspection_results.inspection_id")
 
 	if start, end, ok := resolveRequestedAnalyticsRange(c); ok {
-		query = query.Where("inspections.created_at >= ? AND inspections.created_at <= ?", start, end)
+		query = query.Where("inspections.started_at >= ? AND inspections.started_at <= ?", start, end)
 	}
 
 	if err := query.
@@ -3367,21 +3398,26 @@ func resolveStatsRange(value string) (time.Time, time.Time) {
 	}
 }
 
-func computeStatsSummary(ctx context.Context, db *gorm.DB, start time.Time, end time.Time) statsSummary {
+func computeStatsSummary(ctx context.Context, db *gorm.DB, timeColumn string, start time.Time, end time.Time) statsSummary {
 	if db == nil {
 		return statsSummary{}
 	}
+	column := strings.TrimSpace(timeColumn)
+	if column == "" {
+		column = "started_at"
+	}
+	rangeCondition := fmt.Sprintf("%s >= ? AND %s <= ?", column, column)
 
 	var total int64
 	_ = db.WithContext(ctx).
 		Table("inspections").
-		Where("created_at >= ? AND created_at <= ?", start, end).
+		Where(rangeCondition, start, end).
 		Count(&total).Error
 
 	var success int64
 	_ = db.WithContext(ctx).
 		Table("inspections").
-		Where("created_at >= ? AND created_at <= ? AND status = ?", start, end, inspection.StatusCompleted).
+		Where(rangeCondition+" AND status = ?", start, end, inspection.StatusCompleted).
 		Count(&success).Error
 
 	type avgRow struct {
@@ -3391,7 +3427,7 @@ func computeStatsSummary(ctx context.Context, db *gorm.DB, start time.Time, end 
 	_ = db.WithContext(ctx).
 		Table("inspections").
 		Select("AVG(CASE WHEN total_checks > 0 THEN passed_checks::float / total_checks * 100 ELSE NULL END) AS avg_score").
-		Where("created_at >= ? AND created_at <= ? AND status = ?", start, end, inspection.StatusCompleted).
+		Where(rangeCondition+" AND status = ?", start, end, inspection.StatusCompleted).
 		Scan(&avg).Error
 
 	successRate := 0.0

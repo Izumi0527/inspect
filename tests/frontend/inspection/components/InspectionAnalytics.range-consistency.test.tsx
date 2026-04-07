@@ -136,7 +136,7 @@ describe('InspectionAnalytics 统计口径一致性', () => {
 
     ;(inspectionHooks.useInspectionStats as jest.Mock).mockReturnValue({
       data: {
-        todayExecutions: 10,
+        executionCount: 10,
         successRate: 95,
         avgScore: 88,
         activeStrategies: 3,
@@ -222,5 +222,26 @@ describe('InspectionAnalytics 统计口径一致性', () => {
 
     expect(screen.getAllByText('执行次数').length).toBeGreaterThan(0)
     expect(screen.queryByText('总执行次数')).not.toBeInTheDocument()
+  })
+
+  it('KPI 比较基线文案应随时间周期切换', async () => {
+    const user = userEvent.setup()
+    render(<InspectionAnalytics />)
+
+    expect(screen.getAllByText('vs 上周').length).toBeGreaterThan(0)
+
+    await user.click(screen.getByRole('combobox', { name: '巡检分析时间周期' }))
+    await user.click(screen.getByRole('option', { name: '按天' }))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('vs 前一日').length).toBeGreaterThan(0)
+    })
+
+    await user.click(screen.getByRole('combobox', { name: '巡检分析时间周期' }))
+    await user.click(screen.getByRole('option', { name: '按月' }))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('vs 上月').length).toBeGreaterThan(0)
+    })
   })
 })

@@ -395,8 +395,11 @@ export interface InspectionStats {
   /** 启用的策略数 */
   activeStrategies: number
 
-  /** 今日执行次数 */
-  todayExecutions: number
+  /** 执行次数（统计口径） */
+  executionCount: number
+
+  /** 兼容旧字段：今日执行次数 */
+  todayExecutions?: number
 
   /** 成功率(百分比) */
   successRate: number

@@ -312,11 +312,15 @@ function transformDeviceResultData(apiData: unknown): DeviceInspectionResult {
 function transformStatsData(apiData: unknown): InspectionStats {
   const data = toRecord(apiData)
   const changesRecord = toRecord(data.changes ?? data['changes'])
+  const executionCount = toNumber(
+    data.executionCount ?? data['executionCount'] ?? data.todayExecutions ?? data['todayExecutions']
+  )
 
   return {
     totalStrategies: toNumber(data.totalStrategies ?? data['totalStrategies']),
     activeStrategies: toNumber(data.activeStrategies ?? data['activeStrategies']),
-    todayExecutions: toNumber(data.todayExecutions ?? data['todayExecutions']),
+    executionCount,
+    todayExecutions: executionCount,
     successRate: toNumber(data.successRate ?? data['successRate']),
     avgScore: toNumber(data.avgScore ?? data['avgScore']),
     changes: {
@@ -398,7 +402,7 @@ export async function fetchInspectionTemplates(params?: {
   }
 }
 
-export async function fetchInspectionTemplate(id: number): Promise<InspectionTemplate | null> {
+export async function fetchInspectionTemplate(id: number): Promise<InspectionTemplate> {
   try {
     const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/templates/${id}`)
 
@@ -409,7 +413,7 @@ export async function fetchInspectionTemplate(id: number): Promise<InspectionTem
     return transformTemplateData(response.data)
   } catch (error) {
     console.error('获取模板详情失败:', error)
-    return null
+    throw error
   }
 }
 
@@ -507,9 +511,6 @@ export async function deleteInspectionTemplate(id: number): Promise<boolean> {
 export async function exportInspectionTemplate(id: number): Promise<Blob> {
   try {
     const template = await fetchInspectionTemplate(id)
-    if (!template) {
-      throw new Error('模板不存在')
-    }
     const jsonStr = JSON.stringify(template, null, 2)
     return new Blob([jsonStr], { type: 'application/json' })
   } catch (error) {
@@ -790,13 +791,12 @@ export async function fetchInspectionExecutions(params?: {
  * 获取单个执行记录详情
  * 包含完整的设备巡检结果和检查项数据
  */
-export async function fetchExecutionDetail(executionId: string): Promise<InspectionExecution | null> {
+export async function fetchExecutionDetail(executionId: string): Promise<InspectionExecution> {
   try {
     const response = await api.get<InspectionApiResponse<unknown>>(`/inspection/executions/${executionId}`)
     
     if (!response.data) {
-      console.error('[API] 获取执行详情失败: 无数据返回')
-      return null
+      throw new Error('[API] 获取执行详情失败: 无数据返回')
     }
 
     const execution = transformExecutionData(response.data)
@@ -806,7 +806,7 @@ export async function fetchExecutionDetail(executionId: string): Promise<Inspect
     return execution
   } catch (error) {
     console.error('[API] 获取执行详情失败:', error)
-    return null
+    throw error
   }
 }
 
