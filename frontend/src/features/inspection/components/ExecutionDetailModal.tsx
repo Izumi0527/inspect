@@ -410,109 +410,111 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                   <Loader2 className="w-12 h-12 mx-auto mb-3 animate-spin text-purple-500" />
                   <p>加载设备详情中...</p>
                 </div>
-              ) : execution.summary.deviceResults.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Server className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>暂无设备巡检结果</p>
-                </div>
-              ) : (
-                execution.summary.deviceResults.map((device) => (
-                  <div key={device.deviceId} className="bg-card rounded-lg border border-border overflow-hidden">
-                    <motion.button
-                      onClick={() => toggleDevice(device.deviceId)}
-                      className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/40/50 dark:bg-gray-800/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        {expandedDevice === device.deviceId ? (
-                          <ChevronDown className="w-5 h-5 text-gray-400" />
-                        ) : (
-                          <ChevronRight className="w-5 h-5 text-gray-400" />
-                        )}
-                        <Server className="w-5 h-5 text-purple-500" />
-                        <div className="text-left">
-                          <p className="font-medium text-foreground">{device.deviceName}</p>
-                          <p className="text-sm text-muted-foreground">{device.deviceIp || `设备ID: ${device.deviceId}`}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p className="text-sm font-medium text-foreground">评分: {device.score.toFixed(1)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {device.passedChecks}/{device.totalChecks} 通过
-                          </p>
-                        </div>
-                        <Badge
-                          className={
-                            device.status === 'success'
-                              ? 'bg-green-100 text-green-600'
-                              : device.status === 'warning'
-                              ? 'bg-yellow-100 text-yellow-600'
-                              : 'bg-red-100 text-red-600'
-                          }
-                        >
-                          {device.status}
-                        </Badge>
-                      </div>
-                    </motion.button>
-
-                    {/* 展开的检查项列表 */}
-                    {expandedDevice === device.deviceId && device.checkResults && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="border-t border-border bg-muted/40"
-                      >
-                        <div className="p-4 space-y-2">
-                          {device.checkResults.map((check, index) => {
-                            const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
-                            // 根据检查项类型确定实际值的标签
-                            const getActualValueLabel = (checkName: string): string => {
-                              const name = checkName.toLowerCase()
-                              if (name.includes('cpu') || name.includes('处理器')) return '实际值'
-                              if (name.includes('内存') || name.includes('memory')) return '实际值'
-                              if (name.includes('运行时间') || name.includes('uptime')) return '运行时间'
-                              if (name.includes('接口') || name.includes('interface') || name.includes('端口')) return '接口状态'
-                              if (name.includes('温度') || name.includes('temperature')) return '温度'
-                              if (name.includes('带宽') || name.includes('bandwidth')) return '带宽'
-                              if (name.includes('icmp') || name.includes('ping')) return '响应时间'
-                              return '实际值'
-                            }
-                            return (
-                              <div
-                                key={index}
-                                className="bg-card rounded-lg p-3 border border-border hover:border-purple-200 transition-colors"
-                              >
-                                <div className="flex items-start justify-between">
-                                  <div className="flex items-start gap-2 flex-1">
-                                    <div className={cn('mt-0.5', checkStatus.color)}>{checkStatus.icon}</div>
-                                    <div className="flex-1">
-                                      <p className="font-medium text-foreground text-sm">{check.checkItemName}</p>
-                                      {check.message && (
-                                        <p className="text-xs text-muted-foreground mt-1">{formatMessage(check.message)}</p>
-                                      )}
-                                      {(formatCheckValue(check.expectedValue) || formatCheckValue(check.actualValue)) && (
-                                        <div className="flex flex-wrap gap-4 mt-2 text-xs">
-                                          {formatCheckValue(check.actualValue) && (
-                                            <div>
-                                              <span className="text-muted-foreground">{getActualValueLabel(check.checkItemName)}: </span>
-                                              <span className="text-foreground/90 font-medium">{formatCheckValue(check.actualValue)}</span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <Badge className={cn('ml-2', checkStatus.color)}>{checkStatus.label}</Badge>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </motion.div>
-                    )}
+              ) : shouldShowDetailError ? null : (
+                execution.summary.deviceResults.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Server className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>暂无设备巡检结果</p>
                   </div>
-                ))
+                ) : (
+                  execution.summary.deviceResults.map((device) => (
+                    <div key={device.deviceId} className="bg-card rounded-lg border border-border overflow-hidden">
+                      <motion.button
+                        onClick={() => toggleDevice(device.deviceId)}
+                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/40/50 dark:bg-gray-800/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          {expandedDevice === device.deviceId ? (
+                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="w-5 h-5 text-gray-400" />
+                          )}
+                          <Server className="w-5 h-5 text-purple-500" />
+                          <div className="text-left">
+                            <p className="font-medium text-foreground">{device.deviceName}</p>
+                            <p className="text-sm text-muted-foreground">{device.deviceIp || `设备ID: ${device.deviceId}`}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-foreground">评分: {device.score.toFixed(1)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {device.passedChecks}/{device.totalChecks} 通过
+                            </p>
+                          </div>
+                          <Badge
+                            className={
+                              device.status === 'success'
+                                ? 'bg-green-100 text-green-600'
+                                : device.status === 'warning'
+                                ? 'bg-yellow-100 text-yellow-600'
+                                : 'bg-red-100 text-red-600'
+                            }
+                          >
+                            {device.status}
+                          </Badge>
+                        </div>
+                      </motion.button>
+
+                      {/* 展开的检查项列表 */}
+                      {expandedDevice === device.deviceId && device.checkResults && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="border-t border-border bg-muted/40"
+                        >
+                          <div className="p-4 space-y-2">
+                            {device.checkResults.map((check, index) => {
+                              const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
+                              // 根据检查项类型确定实际值的标签
+                              const getActualValueLabel = (checkName: string): string => {
+                                const name = checkName.toLowerCase()
+                                if (name.includes('cpu') || name.includes('处理器')) return '实际值'
+                                if (name.includes('内存') || name.includes('memory')) return '实际值'
+                                if (name.includes('运行时间') || name.includes('uptime')) return '运行时间'
+                                if (name.includes('接口') || name.includes('interface') || name.includes('端口')) return '接口状态'
+                                if (name.includes('温度') || name.includes('temperature')) return '温度'
+                                if (name.includes('带宽') || name.includes('bandwidth')) return '带宽'
+                                if (name.includes('icmp') || name.includes('ping')) return '响应时间'
+                                return '实际值'
+                              }
+                              return (
+                                <div
+                                  key={index}
+                                  className="bg-card rounded-lg p-3 border border-border hover:border-purple-200 transition-colors"
+                                >
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex items-start gap-2 flex-1">
+                                      <div className={cn('mt-0.5', checkStatus.color)}>{checkStatus.icon}</div>
+                                      <div className="flex-1">
+                                        <p className="font-medium text-foreground text-sm">{check.checkItemName}</p>
+                                        {check.message && (
+                                          <p className="text-xs text-muted-foreground mt-1">{formatMessage(check.message)}</p>
+                                        )}
+                                        {(formatCheckValue(check.expectedValue) || formatCheckValue(check.actualValue)) && (
+                                          <div className="flex flex-wrap gap-4 mt-2 text-xs">
+                                            {formatCheckValue(check.actualValue) && (
+                                              <div>
+                                                <span className="text-muted-foreground">{getActualValueLabel(check.checkItemName)}: </span>
+                                                <span className="text-foreground/90 font-medium">{formatCheckValue(check.actualValue)}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <Badge className={cn('ml-2', checkStatus.color)}>{checkStatus.label}</Badge>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
+                  ))
+                )
               )}
             </div>
           )}
@@ -525,65 +527,67 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                   <Loader2 className="w-12 h-12 mx-auto mb-3 animate-spin text-purple-500" />
                   <p>加载检查项结果中...</p>
                 </div>
-              ) : execution.summary.deviceResults.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>暂无检查项结果</p>
-                </div>
-              ) : (
-                execution.summary.deviceResults.flatMap((device) =>
-                  device.checkResults?.map((check, index) => {
-                    const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
-                    // 根据检查项类型确定实际值的标签
-                    const getActualValueLabel = (checkName: string): string => {
-                      const name = checkName.toLowerCase()
-                      if (name.includes('cpu') || name.includes('处理器')) return '实际值'
-                      if (name.includes('内存') || name.includes('memory')) return '实际值'
-                      if (name.includes('运行时间') || name.includes('uptime')) return '运行时间'
-                      if (name.includes('接口') || name.includes('interface') || name.includes('端口')) return '接口状态'
-                      if (name.includes('温度') || name.includes('temperature')) return '温度'
-                      if (name.includes('带宽') || name.includes('bandwidth')) return '带宽'
-                      if (name.includes('icmp') || name.includes('ping')) return '响应时间'
-                      return '实际值'
-                    }
-                    return (
-                      <motion.div
-                        key={`${device.deviceId}-${index}`}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="bg-card rounded-lg p-4 border border-border hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <div className={checkStatus.color}>{checkStatus.icon}</div>
-                            <span className="font-medium text-foreground">{check.checkItemName}</span>
-                          </div>
-                          <Badge className={checkStatus.color}>{checkStatus.label}</Badge>
-                        </div>
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <p>
-                            <span className="text-muted-foreground">设备: </span>
-                            {device.deviceName}
-                          </p>
-                          {check.message && (
-                            <p>
-                              <span className="text-muted-foreground">消息: </span>
-                              {formatMessage(check.message)}
-                            </p>
-                          )}
-                          {formatCheckValue(check.actualValue) && (
-                            <div className="flex gap-4 pt-2 border-t border-border/40">
-                              <div>
-                                <span className="text-muted-foreground">{getActualValueLabel(check.checkItemName)}: </span>
-                                <span className="font-medium text-foreground/90">{formatCheckValue(check.actualValue)}</span>
-                              </div>
+              ) : shouldShowDetailError ? null : (
+                execution.summary.deviceResults.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>暂无检查项结果</p>
+                  </div>
+                ) : (
+                  execution.summary.deviceResults.flatMap((device) =>
+                    device.checkResults?.map((check, index) => {
+                      const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
+                      // 根据检查项类型确定实际值的标签
+                      const getActualValueLabel = (checkName: string): string => {
+                        const name = checkName.toLowerCase()
+                        if (name.includes('cpu') || name.includes('处理器')) return '实际值'
+                        if (name.includes('内存') || name.includes('memory')) return '实际值'
+                        if (name.includes('运行时间') || name.includes('uptime')) return '运行时间'
+                        if (name.includes('接口') || name.includes('interface') || name.includes('端口')) return '接口状态'
+                        if (name.includes('温度') || name.includes('temperature')) return '温度'
+                        if (name.includes('带宽') || name.includes('bandwidth')) return '带宽'
+                        if (name.includes('icmp') || name.includes('ping')) return '响应时间'
+                        return '实际值'
+                      }
+                      return (
+                        <motion.div
+                          key={`${device.deviceId}-${index}`}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="bg-card rounded-lg p-4 border border-border hover:shadow-md transition-shadow"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className={checkStatus.color}>{checkStatus.icon}</div>
+                              <span className="font-medium text-foreground">{check.checkItemName}</span>
                             </div>
-                          )}
-                        </div>
-                      </motion.div>
-                    )
-                  })
+                            <Badge className={checkStatus.color}>{checkStatus.label}</Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <p>
+                              <span className="text-muted-foreground">设备: </span>
+                              {device.deviceName}
+                            </p>
+                            {check.message && (
+                              <p>
+                                <span className="text-muted-foreground">消息: </span>
+                                {formatMessage(check.message)}
+                              </p>
+                            )}
+                            {formatCheckValue(check.actualValue) && (
+                              <div className="flex gap-4 pt-2 border-t border-border/40">
+                                <div>
+                                  <span className="text-muted-foreground">{getActualValueLabel(check.checkItemName)}: </span>
+                                  <span className="font-medium text-foreground/90">{formatCheckValue(check.actualValue)}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )
+                    })
+                  )
                 )
               )}
             </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { 
   Calendar, 
@@ -6,14 +6,16 @@ import {
   History, 
   BarChart3,
   Activity,
-  Star
+  Star,
+  AlertCircle
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { CompactStatCard } from '@/components/shared'
 import {
   Card,
   CardHeader,
-  CardContent
+  CardContent,
+  Button
 } from '@/components/atoms'
 import { AppLayout } from '@/components/layout'
 import { useInspectionStats } from '../hooks/useInspection'
@@ -32,8 +34,27 @@ interface TabConfig {
 
 export const InspectionView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('strategies')
+  const [mountedTabs, setMountedTabs] = useState<Record<TabType, boolean>>({
+    strategies: true,
+    templates: false,
+    executions: false,
+    analytics: false,
+  })
   
-  const { data: stats, isLoading: statsLoading } = useInspectionStats()
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    error: statsError,
+    refetch: refetchStats,
+  } = useInspectionStats()
+
+  useEffect(() => {
+    setMountedTabs((current) => (
+      current[activeTab]
+        ? current
+        : { ...current, [activeTab]: true }
+    ))
+  }, [activeTab])
 
   const tabs: TabConfig[] = [
     {
@@ -58,8 +79,8 @@ export const InspectionView: React.FC = () => {
     }
   ]
 
-  const renderTabContent = () => {
-    switch (activeTab) {
+  const renderTabContent = (tab: TabType) => {
+    switch (tab) {
       case 'strategies':
         return <InspectionStrategies />
       case 'templates':
@@ -77,7 +98,23 @@ export const InspectionView: React.FC = () => {
     <AppLayout title="巡检管理">
       <div className="flex flex-col gap-4 h-full">
         {/* 快速统计卡片 */}
-        {!statsLoading && stats && (
+        {!statsLoading && statsError && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-3 text-red-600">
+                  <AlertCircle className="w-5 h-5" />
+                  <span>{statsError instanceof Error ? statsError.message : '统计加载失败'}</span>
+                </div>
+                <Button type="button" variant="outline" onClick={() => { void refetchStats() }}>
+                  重试统计
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {!statsLoading && !statsError && stats && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             <CompactStatCard
               title="总策略数"
@@ -153,15 +190,27 @@ export const InspectionView: React.FC = () => {
         <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden pt-4">
           {/* 标签内容区域：flex-1 min-h-0 确保高度由父容器约束，overflow-y-auto 在界内滚动 */}
           <div className="flex-1 min-h-0 overflow-y-auto">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              {renderTabContent()}
-            </motion.div>
+            {(Object.keys(mountedTabs) as TabType[]).map((tab) => {
+              if (!mountedTabs[tab]) {
+                return null
+              }
+
+              const isActive = activeTab === tab
+
+              return (
+                <motion.div
+                  key={tab}
+                  hidden={!isActive}
+                  aria-hidden={!isActive}
+                  initial={isActive ? { opacity: 0, y: 20 } : undefined}
+                  animate={isActive ? { opacity: 1, y: 0 } : undefined}
+                  exit={isActive ? { opacity: 0, y: -20 } : undefined}
+                  transition={isActive ? { duration: 0.2 } : undefined}
+                >
+                  {renderTabContent(tab)}
+                </motion.div>
+              )
+            })}
           </div>
         </CardContent>
       </Card>

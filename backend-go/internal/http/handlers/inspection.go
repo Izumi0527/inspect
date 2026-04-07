@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -369,26 +370,12 @@ func (h InspectionHandler) ImportTemplate(c echo.Context) error {
 	}
 	defer src.Close()
 
-	// 读取文件内容
-	data, err := json.NewDecoder(src).Token()
+	buf, err := io.ReadAll(src)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid JSON file")
+		return echo.NewHTTPError(http.StatusBadRequest, "failed to read file")
 	}
-
-	// 重新正确读取文件
-	src.Close()
-	src, _ = file.Open()
-	var buf []byte
-	buf, err = json.Marshal(data)
-	if err != nil {
-		// 改为读取原始字节
-		src.Close()
-		src, _ = file.Open()
-		buf = make([]byte, file.Size)
-		_, err = src.Read(buf)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "failed to read file")
-		}
+	if !json.Valid(buf) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid JSON file")
 	}
 
 	// 解析覆盖参数
@@ -576,11 +563,11 @@ func (h InspectionHandler) UpdateStrategy(c echo.Context) error {
 
 	item, err := h.Service.UpdateStrategy(c.Request().Context(), strategyID, update)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return echo.NewHTTPError(http.StatusNotFound, "巡检策略不存在")
-		}
 		if validationErr, ok := err.(*inspection.ValidationError); ok {
 			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "巡检策略不存在")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update strategy")
 	}
@@ -658,7 +645,10 @@ func (h InspectionHandler) triggerStrategyInspections(ctx context.Context, strat
 	}
 
 	templates := decodeJSONIntSlice(strategy.Templates)
-	if err := inspection.ValidateStrategyTemplateIDs(templates); err != nil {
+	if err := h.Service.ValidateStrategyTemplatesExist(ctx, templates); err != nil {
+		if validationErr, ok := err.(*inspection.ValidationError); ok && strings.Contains(validationErr.Field, "templates") {
+			return nil, nil, validationErr
+		}
 		return nil, nil, errStrategyNoTemplates
 	}
 	templateID := &templates[0]
@@ -871,6 +861,9 @@ func (h InspectionHandler) TriggerStrategy(c echo.Context) error {
 	}
 	inspections, _, err := h.triggerStrategyInspections(c.Request().Context(), strategyID, inspection.TriggerManual, stringPtr(createdBy))
 	if err != nil {
+		if validationErr, ok := err.(*inspection.ValidationError); ok {
+			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
+		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "巡检策略不存在")
 		}
@@ -879,9 +872,6 @@ func (h InspectionHandler) TriggerStrategy(c echo.Context) error {
 		}
 		if errors.Is(err, errStrategyNoTemplates) {
 			return echo.NewHTTPError(http.StatusBadRequest, "策略未配置模板")
-		}
-		if validationErr, ok := err.(*inspection.ValidationError); ok {
-			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to trigger strategy")
 	}
@@ -905,9 +895,17 @@ func (h InspectionHandler) executeInspectionsAsync(inspections []inspection.Insp
 	var checkItems []map[string]interface{}
 	if templateID != nil {
 		template, err := h.Service.GetTemplate(ctx, *templateID)
-		if err == nil {
-			checkItems = decodeJSONMapSlice(template.CheckItems)
+		if err != nil {
+			errMsg := "加载巡检模板失败"
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				errMsg = "巡检模板不存在"
+			}
+			for _, insp := range inspections {
+				h.markInspectionExecutionFailed(ctx, insp.ID, errMsg, 0, 0)
+			}
+			return
 		}
+		checkItems = decodeJSONMapSlice(template.CheckItems)
 	}
 
 	for _, insp := range inspections {
@@ -985,6 +983,32 @@ func normalizeInspectionCheckItems(checkItems []map[string]interface{}) []map[st
 	}
 }
 
+func (h InspectionHandler) markInspectionExecutionFailed(ctx context.Context, inspectionID int, errMsg string, completedChecks int, totalChecks int) {
+	if h.Service == nil || inspectionID <= 0 {
+		return
+	}
+	if strings.TrimSpace(errMsg) == "" {
+		errMsg = "巡检执行失败"
+	}
+
+	if _, err := h.Service.UpdateInspectionStatus(ctx, inspectionID, inspection.StatusFailed, &errMsg); err != nil {
+		if h.Logger != nil {
+			h.Logger.Error("failed to update inspection status to failed", zap.Int("inspection_id", inspectionID), zap.Error(err))
+		}
+		return
+	}
+
+	progress := 0
+	if totalChecks > 0 {
+		progress = int(math.Round(float64(completedChecks) / float64(totalChecks) * 100))
+	}
+	h.broadcastScanProgress(inspectionID, inspection.StatusFailed, progress, map[string]interface{}{
+		"message":          errMsg,
+		"completed_checks": completedChecks,
+		"total_checks":     totalChecks,
+	})
+}
+
 // executeInspection 执行单个巡检任务
 func (h InspectionHandler) executeInspection(ctx context.Context, insp inspection.Inspection, checkItems []map[string]interface{}) {
 	// 1. 更新状态为 running
@@ -1040,8 +1064,10 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	totalChecks := len(normalizedCheckItems)
 
 	// 初始化总检查数，便于前端/接口计算进度
-	if err := h.Service.UpdateInspectionStats(ctx, insp.ID, totalChecks, 0, 0, 0, 0); err != nil && h.Logger != nil {
-		h.Logger.Warn("failed to initialize inspection stats", zap.Int("inspection_id", insp.ID), zap.Error(err))
+	if err := h.Service.UpdateInspectionStats(ctx, insp.ID, totalChecks, 0, 0, 0, 0); err != nil {
+		errMsg := fmt.Sprintf("初始化巡检统计失败: %v", err)
+		h.markInspectionExecutionFailed(ctx, insp.ID, errMsg, 0, totalChecks)
+		return
 	}
 
 	// 5. 保存结果
@@ -1050,14 +1076,14 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	failedCount := 0
 	warningCount := 0
 	skippedCount := 0
+	var executionErr error
 
-	results := h.executeCheckItems(ctx, insp.ID, device, probeResult, normalizedCheckItems, func(result inspection.Result, completed int, total int) {
+	results := h.executeCheckItems(ctx, insp.ID, device, probeResult, normalizedCheckItems, func(result inspection.Result, completed int, total int) error {
 		executedCount = completed
 
 		if err := h.Service.SaveInspectionResult(ctx, &result); err != nil {
-			if h.Logger != nil {
-				h.Logger.Error("failed to save inspection result", zap.Int("inspection_id", insp.ID), zap.Error(err))
-			}
+			executionErr = fmt.Errorf("保存巡检结果失败: %w", err)
+			return executionErr
 		}
 
 		switch normalizeCheckResultStatus(result.Status) {
@@ -1072,7 +1098,10 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 		}
 
 		// 实时更新统计与进度
-		_ = h.Service.UpdateInspectionStats(ctx, insp.ID, total, passedCount, failedCount, warningCount, skippedCount)
+		if err := h.Service.UpdateInspectionStats(ctx, insp.ID, total, passedCount, failedCount, warningCount, skippedCount); err != nil {
+			executionErr = fmt.Errorf("更新巡检统计失败: %w", err)
+			return executionErr
+		}
 
 		progress := 0
 		if total > 0 {
@@ -1082,7 +1111,13 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 			"completed_checks": completed,
 			"total_checks":     total,
 		})
+		return nil
 	})
+
+	if executionErr != nil {
+		h.markInspectionExecutionFailed(ctx, insp.ID, executionErr.Error(), executedCount, totalChecks)
+		return
+	}
 
 	// 若执行过程中被取消，保留取消状态，不再覆盖为 completed
 	if h.isInspectionCancelled(ctx, insp.ID) {
@@ -1098,9 +1133,16 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	}
 
 	// 6. 更新巡检统计并完成
-	_ = h.Service.UpdateInspectionStats(ctx, insp.ID, len(results), passedCount, failedCount, warningCount, skippedCount)
-	if _, err := h.Service.UpdateInspectionStatus(ctx, insp.ID, inspection.StatusCompleted, nil); err != nil && h.Logger != nil {
-		h.Logger.Error("failed to update inspection status to completed", zap.Int("inspection_id", insp.ID), zap.Error(err))
+	if err := h.Service.UpdateInspectionStats(ctx, insp.ID, len(results), passedCount, failedCount, warningCount, skippedCount); err != nil {
+		errMsg := fmt.Sprintf("收口巡检统计失败: %v", err)
+		h.markInspectionExecutionFailed(ctx, insp.ID, errMsg, executedCount, totalChecks)
+		return
+	}
+	if _, err := h.Service.UpdateInspectionStatus(ctx, insp.ID, inspection.StatusCompleted, nil); err != nil {
+		if h.Logger != nil {
+			h.Logger.Error("failed to update inspection status to completed", zap.Int("inspection_id", insp.ID), zap.Error(err))
+		}
+		return
 	}
 	h.broadcastScanProgress(insp.ID, inspection.StatusCompleted, 100, map[string]interface{}{
 		"completed_checks": len(results),
@@ -1115,7 +1157,7 @@ func (h InspectionHandler) executeCheckItems(
 	device *devices.DeviceResponse,
 	probeResult *devices.ProbeResult,
 	checkItems []map[string]interface{},
-	onResult func(result inspection.Result, completed int, total int),
+	onResult func(result inspection.Result, completed int, total int) error,
 ) []inspection.Result {
 	results := make([]inspection.Result, 0)
 	total := len(checkItems)
@@ -1177,7 +1219,12 @@ func (h InspectionHandler) executeCheckItems(
 
 		results = append(results, result)
 		if onResult != nil {
-			onResult(result, len(results), total)
+			if err := onResult(result, len(results), total); err != nil {
+				if h.Logger != nil {
+					h.Logger.Error("inspection check callback failed", zap.Int("inspection_id", inspectionID), zap.Error(err))
+				}
+				break
+			}
 		}
 	}
 
@@ -1721,6 +1768,17 @@ func (h InspectionHandler) CancelTask(c echo.Context) error {
 		reason = "用户手动取消"
 	}
 
+	item, err := h.Service.GetInspection(c.Request().Context(), taskID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "巡检任务不存在")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection")
+	}
+	if item.Status != inspection.StatusRunning && item.Status != inspection.StatusPending {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("无法取消状态为 %s 的任务", item.Status))
+	}
+
 	if _, err := h.Service.UpdateInspectionStatus(c.Request().Context(), taskID, inspection.StatusCancelled, &reason); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "巡检任务不存在")
@@ -2158,15 +2216,19 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 	}
 
 	var totalStrategies int64
-	_ = db.WithContext(c.Request().Context()).
+	if err := db.WithContext(c.Request().Context()).
 		Table("inspection_strategies").
-		Count(&totalStrategies).Error
+		Count(&totalStrategies).Error; err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection stats")
+	}
 
 	var activeStrategies int64
-	_ = db.WithContext(c.Request().Context()).
+	if err := db.WithContext(c.Request().Context()).
 		Table("inspection_strategies").
 		Where("enabled = ?", true).
-		Count(&activeStrategies).Error
+		Count(&activeStrategies).Error; err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection stats")
+	}
 
 	start, end, hasExplicitRange := resolveRequestedAnalyticsRange(c)
 	if !hasExplicitRange {
@@ -2175,14 +2237,19 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 	previousStart := start.Add(start.Sub(end))
 	previousEnd := start
 
-	current := computeStatsSummary(c.Request().Context(), db, "started_at", start, end)
-	previous := computeStatsSummary(c.Request().Context(), db, "started_at", previousStart, previousEnd)
+	current, err := computeStatsSummary(c.Request().Context(), db, "started_at", start, end)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection stats")
+	}
+	previous, err := computeStatsSummary(c.Request().Context(), db, "started_at", previousStart, previousEnd)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection stats")
+	}
 
 	data := map[string]interface{}{
 		"totalStrategies":  int(totalStrategies),
 		"activeStrategies": int(activeStrategies),
 		"executionCount":   current.TotalExecutions,
-		"todayExecutions":  current.TotalExecutions,
 		"successRate":      current.SuccessRate,
 		"avgScore":         current.AvgScore,
 		"changes": map[string]interface{}{
@@ -2192,6 +2259,9 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 			"strategiesChange":  "0.0%",
 		},
 		"recentExecutions": []interface{}{},
+	}
+	if !hasExplicitRange {
+		data["todayExecutions"] = current.TotalExecutions
 	}
 
 	return inspectionOK(c, data)
@@ -3398,9 +3468,9 @@ func resolveStatsRange(value string) (time.Time, time.Time) {
 	}
 }
 
-func computeStatsSummary(ctx context.Context, db *gorm.DB, timeColumn string, start time.Time, end time.Time) statsSummary {
+func computeStatsSummary(ctx context.Context, db *gorm.DB, timeColumn string, start time.Time, end time.Time) (statsSummary, error) {
 	if db == nil {
-		return statsSummary{}
+		return statsSummary{}, fmt.Errorf("database not initialized")
 	}
 	column := strings.TrimSpace(timeColumn)
 	if column == "" {
@@ -3409,26 +3479,32 @@ func computeStatsSummary(ctx context.Context, db *gorm.DB, timeColumn string, st
 	rangeCondition := fmt.Sprintf("%s >= ? AND %s <= ?", column, column)
 
 	var total int64
-	_ = db.WithContext(ctx).
+	if err := db.WithContext(ctx).
 		Table("inspections").
 		Where(rangeCondition, start, end).
-		Count(&total).Error
+		Count(&total).Error; err != nil {
+		return statsSummary{}, err
+	}
 
 	var success int64
-	_ = db.WithContext(ctx).
+	if err := db.WithContext(ctx).
 		Table("inspections").
-		Where(rangeCondition+" AND status = ?", start, end, inspection.StatusCompleted).
-		Count(&success).Error
+		Where(rangeCondition+" AND status = ? AND failed_checks = 0 AND warning_checks = 0", start, end, inspection.StatusCompleted).
+		Count(&success).Error; err != nil {
+		return statsSummary{}, err
+	}
 
 	type avgRow struct {
 		AvgScore float64 `gorm:"column:avg_score"`
 	}
 	avg := avgRow{}
-	_ = db.WithContext(ctx).
+	if err := db.WithContext(ctx).
 		Table("inspections").
 		Select("AVG(CASE WHEN total_checks > 0 THEN passed_checks::float / total_checks * 100 ELSE NULL END) AS avg_score").
 		Where(rangeCondition+" AND status = ?", start, end, inspection.StatusCompleted).
-		Scan(&avg).Error
+		Scan(&avg).Error; err != nil {
+		return statsSummary{}, err
+	}
 
 	successRate := 0.0
 	if total > 0 {
@@ -3439,7 +3515,7 @@ func computeStatsSummary(ctx context.Context, db *gorm.DB, timeColumn string, st
 		TotalExecutions: int(total),
 		SuccessRate:     roundFloat(successRate, 1),
 		AvgScore:        roundFloat(avg.AvgScore, 1),
-	}
+	}, nil
 }
 
 func pctChange(current int, previous int) string {

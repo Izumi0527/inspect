@@ -244,4 +244,14 @@ describe('InspectionAnalytics 统计口径一致性', () => {
       expect(screen.getAllByText('vs 上月').length).toBeGreaterThan(0)
     })
   })
+
+  it('生成查询日期时不应依赖 toISOString，避免 UTC 错日', () => {
+    const spy = jest.spyOn(Date.prototype, 'toISOString').mockImplementation(() => {
+      throw new Error('不应依赖 toISOString 生成日期')
+    })
+
+    expect(() => render(<InspectionAnalytics />)).not.toThrow()
+
+    spy.mockRestore()
+  })
 })

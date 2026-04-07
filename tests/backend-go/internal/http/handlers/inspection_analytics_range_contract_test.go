@@ -33,16 +33,16 @@ func TestGetStats_ShouldApplyExplicitAnalyticsRange(t *testing.T) {
 	mock.ExpectQuery(`SELECT count\(\*\) FROM "inspections".*started_at >= \$1 AND started_at <= \$2`).
 		WithArgs(start, end).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(12))
-	mock.ExpectQuery(`SELECT count\(\*\) FROM "inspections".*started_at >= \$1 AND started_at <= \$2 AND status = \$3`).
+	mock.ExpectQuery(`SELECT count\(\*\) FROM "inspections".*started_at >= \$1 AND started_at <= \$2 AND status = \$3 AND failed_checks = 0 AND warning_checks = 0`).
 		WithArgs(start, end, inspection.StatusCompleted).
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(10))
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(8))
 	mock.ExpectQuery(`SELECT AVG\(CASE WHEN total_checks > 0 THEN passed_checks::float / total_checks \* 100 ELSE NULL END\) AS avg_score FROM "inspections".*started_at >= \$1 AND started_at <= \$2 AND status = \$3`).
 		WithArgs(start, end, inspection.StatusCompleted).
 		WillReturnRows(sqlmock.NewRows([]string{"avg_score"}).AddRow(91.2))
 	mock.ExpectQuery(`SELECT count\(\*\) FROM "inspections".*started_at >= \$1 AND started_at <= \$2`).
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
-	mock.ExpectQuery(`SELECT count\(\*\) FROM "inspections".*started_at >= \$1 AND started_at <= \$2 AND status = \$3`).
+	mock.ExpectQuery(`SELECT count\(\*\) FROM "inspections".*started_at >= \$1 AND started_at <= \$2 AND status = \$3 AND failed_checks = 0 AND warning_checks = 0`).
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), inspection.StatusCompleted).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`SELECT AVG\(CASE WHEN total_checks > 0 THEN passed_checks::float / total_checks \* 100 ELSE NULL END\) AS avg_score FROM "inspections".*started_at >= \$1 AND started_at <= \$2 AND status = \$3`).

@@ -3,6 +3,7 @@ package inspection
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -325,12 +326,11 @@ func (s *Service) GetStrategy(ctx context.Context, id int) (Strategy, error) {
 }
 
 func (s *Service) CreateStrategy(ctx context.Context, payload StrategyPayload) (Strategy, error) {
-	if err := ValidateStrategyTemplateIDs(payload.Templates); err != nil {
-		return Strategy{}, err
-	}
-
 	if s == nil || s.db == nil {
 		return Strategy{}, fmt.Errorf("database not initialized")
+	}
+	if err := s.ValidateStrategyTemplatesExist(ctx, payload.Templates); err != nil {
+		return Strategy{}, err
 	}
 
 	name := strings.TrimSpace(payload.Name)
@@ -446,7 +446,7 @@ func (s *Service) UpdateStrategy(ctx context.Context, id int, payload StrategyUp
 		}
 	}
 	if payload.Templates != nil {
-		if err := ValidateStrategyTemplateIDs(*payload.Templates); err != nil {
+		if err := s.ValidateStrategyTemplatesExist(ctx, *payload.Templates); err != nil {
 			return Strategy{}, err
 		}
 		if templatesJSON, err := encodeJSON(*payload.Templates); err == nil {
@@ -458,7 +458,7 @@ func (s *Service) UpdateStrategy(ctx context.Context, id int, payload StrategyUp
 
 	currentTemplates := decodeIntSlice(current.Templates)
 	if payload.Templates == nil {
-		if err := ValidateStrategyTemplateIDs(currentTemplates); err != nil {
+		if err := s.ValidateStrategyTemplatesExist(ctx, currentTemplates); err != nil {
 			return Strategy{}, err
 		}
 	}
@@ -491,6 +491,30 @@ func (s *Service) UpdateStrategy(ctx context.Context, id int, payload StrategyUp
 		return Strategy{}, err
 	}
 	return s.GetStrategy(ctx, id)
+}
+
+func (s *Service) ValidateStrategyTemplatesExist(ctx context.Context, templateIDs []int) error {
+	if err := ValidateStrategyTemplateIDs(templateIDs); err != nil {
+		return err
+	}
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	for _, templateID := range templateIDs {
+		if _, err := s.GetTemplate(ctx, templateID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return &ValidationError{
+					Field:   "templates",
+					Message: fmt.Sprintf("巡检模板 %d 不存在", templateID),
+					Err:     err,
+				}
+			}
+			return fmt.Errorf("failed to validate inspection template %d: %w", templateID, err)
+		}
+	}
+
+	return nil
 }
 
 func (s *Service) DeleteStrategy(ctx context.Context, id int) error {

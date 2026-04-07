@@ -36,10 +36,17 @@ export const InspectionStrategies: React.FC = () => {
   const [strategyToDelete, setStrategyToDelete] = useState<InspectionStrategy | null>(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+  const [typeFilter, setTypeFilter] = useState<'all' | 'manual' | 'scheduled'>('all')
+  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
   
   const { data: strategiesData, isLoading, error, refetch } = useInspectionStrategies({
     page,
     pageSize,
+    type: typeFilter === 'all' ? undefined : typeFilter,
+    enabled:
+      enabledFilter === 'all'
+        ? undefined
+        : enabledFilter === 'enabled',
   })
   const toggleStrategy = useToggleStrategy()
   const deleteStrategy = useDeleteStrategy()
@@ -55,6 +62,16 @@ export const InspectionStrategies: React.FC = () => {
   const handleCreateStrategy = () => {
     setSelectedStrategy(null)
     setIsModalOpen(true)
+  }
+
+  const handleTypeFilterChange = (nextFilter: 'all' | 'manual' | 'scheduled') => {
+    setPage(1)
+    setTypeFilter(nextFilter)
+  }
+
+  const handleEnabledFilterChange = (nextFilter: 'all' | 'enabled' | 'disabled') => {
+    setPage(1)
+    setEnabledFilter(nextFilter)
   }
 
   const handleEditStrategy = (strategy: InspectionStrategy) => {
@@ -258,8 +275,56 @@ export const InspectionStrategies: React.FC = () => {
   return (
     <div className="space-y-4">
       {/* 操作栏 */}
-      <div className="flex justify-between items-center">
-        <div></div>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={typeFilter === 'all' ? 'default' : 'outline'}
+              onClick={() => handleTypeFilterChange('all')}
+            >
+              全部类型
+            </Button>
+            <Button
+              type="button"
+              variant={typeFilter === 'manual' ? 'default' : 'outline'}
+              onClick={() => handleTypeFilterChange('manual')}
+            >
+              仅手动
+            </Button>
+            <Button
+              type="button"
+              variant={typeFilter === 'scheduled' ? 'default' : 'outline'}
+              onClick={() => handleTypeFilterChange('scheduled')}
+            >
+              仅定时
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={enabledFilter === 'all' ? 'default' : 'outline'}
+              onClick={() => handleEnabledFilterChange('all')}
+            >
+              全部状态
+            </Button>
+            <Button
+              type="button"
+              variant={enabledFilter === 'enabled' ? 'default' : 'outline'}
+              onClick={() => handleEnabledFilterChange('enabled')}
+            >
+              仅启用
+            </Button>
+            <Button
+              type="button"
+              variant={enabledFilter === 'disabled' ? 'default' : 'outline'}
+              onClick={() => handleEnabledFilterChange('disabled')}
+            >
+              仅禁用
+            </Button>
+          </div>
+        </div>
         <Button onClick={handleCreateStrategy} className="flex items-center gap-2">
           <Plus className="w-4 h-4" />
           创建策略

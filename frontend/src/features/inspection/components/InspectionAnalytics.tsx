@@ -34,6 +34,7 @@ import {
   useProblemDistribution
 } from '../hooks/useInspection'
 import { exportAnalyticsReport } from '../api/inspection.api'
+import { formatDateYMD } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 // Tailwind 动态拼接 class 在生产构建可能被裁剪，这里用静态映射确保样式稳定
@@ -91,31 +92,31 @@ const formatDateLabel = (dateStr: string, period: 'day' | 'week' | 'month'): str
 export const InspectionAnalytics: React.FC = () => {
   const [timePeriod, setTimePeriod] = useState<'day' | 'week' | 'month'>('week')
   const [dateRange, setDateRange] = useState({
-    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0]
+    startDate: formatDateYMD(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+    endDate: formatDateYMD(new Date())
   })
 
   // 根据 timePeriod 自动更新 dateRange
   useEffect(() => {
     const now = new Date()
-    const endDate = now.toISOString().split('T')[0]
+    const endDate = formatDateYMD(now)
     let startDate: string
 
     switch (timePeriod) {
       case 'day':
         // 按天显示最近7天数据
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        startDate = formatDateYMD(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000))
         break
       case 'week':
         // 按周显示最近4周数据
-        startDate = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        startDate = formatDateYMD(new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000))
         break
       case 'month':
         // 按月显示最近12个月数据
-        startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        startDate = formatDateYMD(new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000))
         break
       default:
-        startDate = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        startDate = formatDateYMD(new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000))
     }
 
     setDateRange({ startDate, endDate })
