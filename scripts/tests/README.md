@@ -34,6 +34,9 @@
 
 # 查看日志（自动扫描 logs/*.log）
 .\scripts\tests\view-logs.ps1 -Service backend-go -Tail 300
+
+# 检测 Claude / GPT / Gemini API 接口延时（bash）
+./scripts/tests/check-ai-api-latency.sh
 ```
 
 ---
@@ -94,6 +97,38 @@
 - 级别过滤：`-Level debug|info|warn|error|fatal|panic`
 - 时间范围：`-Since` / `-Until`
 - Tail/Follow：`-Tail` / `-Follow`
+
+---
+
+### 5) `check-ai-api-latency.sh`
+
+**定位**：AI 大模型 API 接口延时检测脚本（Claude / GPT / Gemini）。
+
+**主要能力**
+- 使用最小请求检查接口可达性与总耗时
+- 输出 DNS、TCP、TLS、首包等待、总耗时，并按颜色区分状态
+- 支持 `--target` 指定单一厂商，支持 `--timeout` 控制超时
+- 支持通过环境变量覆盖官方地址，兼容代理/中转接口
+
+**依赖**
+- Bash
+- curl
+- awk / sed / mktemp
+
+**必需环境变量**
+- `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
+- `GEMINI_API_KEY` 或 `GOOGLE_API_KEY`
+
+**示例**
+```bash
+export ANTHROPIC_API_KEY="sk-ant-xxx"
+export OPENAI_API_KEY="sk-xxx"
+export GEMINI_API_KEY="AIzaSy..."
+
+./scripts/tests/check-ai-api-latency.sh
+./scripts/tests/check-ai-api-latency.sh --target gpt --timeout 15
+```
 
 ---
 

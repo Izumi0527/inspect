@@ -16,6 +16,30 @@ jest.mock('@/components/atoms', () => ({
     </button>
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SmartDateRangePicker: ({
+    onStartDateChange,
+    onEndDateChange,
+  }: {
+    startDate: string
+    endDate: string
+    onStartDateChange: (date: string) => void
+    onEndDateChange: (date: string) => void
+    onClear?: () => void
+    onQuickSelect?: (range: 'today' | 'week' | 'month') => void
+  }) => (
+    <div data-testid="smart-date-range-picker">
+      <input
+        aria-label="开始日期"
+        type="date"
+        onChange={(e) => onStartDateChange(e.target.value)}
+      />
+      <input
+        aria-label="结束日期"
+        type="date"
+        onChange={(e) => onEndDateChange(e.target.value)}
+      />
+    </div>
+  ),
 }))
 
 jest.mock('@/components/ui/select', () => {
@@ -119,6 +143,9 @@ describe('ExecutionFilters 下拉统一化', () => {
         onQuickDateFilter={jest.fn()}
         hasDateFilter={false}
         hasAnyFilter={false}
+        onRefresh={jest.fn()}
+        isFetching={false}
+        hasRunningExecutions={false}
       />
     )
 

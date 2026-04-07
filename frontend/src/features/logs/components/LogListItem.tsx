@@ -110,7 +110,7 @@ export const LogListItem: React.FC<LogListItemProps> = ({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-gray-400 hover:text-red-600"
+            className="text-gray-400 hover:text-red-600"
             onClick={(e) => {
               e.stopPropagation()
               onDelete(log.id)

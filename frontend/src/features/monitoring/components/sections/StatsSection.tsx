@@ -70,13 +70,13 @@ export function StatsSection({ section, statsV2 = [], onRetry }: StatsSectionPro
               尚未采集到关键指标数据。你可以先添加设备并启动采集，或稍后重试。
             </p>
             <div className="flex flex-wrap justify-center gap-2">
-              <Button asChild className="cursor-pointer">
+              <Button asChild>
                 <Link href="/devices">去设备管理</Link>
               </Button>
-              <Button asChild variant="outline" className="cursor-pointer">
+              <Button asChild variant="outline">
                 <Link href="/settings">查看采集配置</Link>
               </Button>
-              <Button variant="outline" onClick={onRetry} className="cursor-pointer">
+              <Button variant="outline" onClick={onRetry}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 重新加载
               </Button>

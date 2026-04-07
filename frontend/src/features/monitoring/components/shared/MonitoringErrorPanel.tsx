@@ -25,16 +25,16 @@ export function MonitoringErrorPanel({ error, onRetry }: MonitoringErrorPanelPro
         <p className="mb-5 text-sm text-red-700 dark:text-red-300">{ev.message}</p>
         <div className="flex flex-wrap justify-center gap-2">
           {ev.primaryAction?.href && (
-            <Button asChild className="cursor-pointer">
+            <Button asChild>
               <Link href={ev.primaryAction.href}>{ev.primaryAction.label}</Link>
             </Button>
           )}
           {ev.secondaryAction?.href && (
-            <Button asChild variant="outline" className="cursor-pointer">
+            <Button asChild variant="outline">
               <Link href={ev.secondaryAction.href}>{ev.secondaryAction.label}</Link>
             </Button>
           )}
-          <Button variant="outline" onClick={() => onRetry()} className="cursor-pointer">
+          <Button variant="outline" onClick={() => onRetry()}>
             <RefreshCw className="mr-2 h-4 w-4" />重新加载
           </Button>
         </div>

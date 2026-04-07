@@ -89,7 +89,7 @@ export function MonitoringHeaderActions({ page }: MonitoringHeaderActionsProps) 
       )}
 
       {/* 刷新按钮 */}
-      <Button variant="outline" onClick={() => page.refetch()} disabled={page.isRefetching} className="cursor-pointer">
+      <Button variant="outline" onClick={() => page.refetch()} disabled={page.isRefetching}>
         <RefreshCw className={`w-4 h-4 mr-2 ${page.isRefetching ? 'animate-spin' : ''}`} />
         {page.isRefetching ? '刷新中...' : '刷新'}
       </Button>

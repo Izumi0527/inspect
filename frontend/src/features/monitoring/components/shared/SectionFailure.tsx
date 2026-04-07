@@ -15,7 +15,7 @@ export function SectionFailureContent({ title, message, onRetry, className }: Se
       <WifiOff className="h-6 w-6 text-red-600 dark:text-red-400" />
       <p className="mt-2 text-sm font-semibold text-foreground">{title}</p>
       <p className="mt-1 text-xs text-muted-foreground">{message}</p>
-      <Button variant="outline" onClick={onRetry} className="mt-3 cursor-pointer">
+      <Button variant="outline" onClick={onRetry} className="mt-3">
         <RefreshCw className="mr-2 h-4 w-4" />
         重试
       </Button>

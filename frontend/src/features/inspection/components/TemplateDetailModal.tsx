@@ -267,7 +267,7 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
           </Button>
           {onEdit && !template.isBuiltIn && (
             <Button size="sm" onClick={onEdit}>
-              <Edit className="w-4 h-4 mr-1.5" />
+              <Edit className="w-4 h-4 mr-1" />
               编辑模板
             </Button>
           )}
