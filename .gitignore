@@ -287,6 +287,7 @@ backend-go/*.exe~
 backend-go/*.dll
 backend-go/*.so
 backend-go/*.dylib
+backend-go/app.exe
 
 # 运行时配置文件
 context.json
