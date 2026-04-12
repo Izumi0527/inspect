@@ -47,6 +47,22 @@ const renderWithQuery = (ui: React.ReactElement) => {
 }
 
 describe('LogsSettings 页面重构', () => {
+  const removedExplanatoryCopies = [
+    '当前页面用于统一管理日志保留策略与 Syslog 接收配置',
+    '配置设备日志的自动清理策略',
+    '自动清理影响后台定时清理任务',
+    '开启后后端将监听设备 Syslog 上报',
+    '保存并应用 Syslog 会先保存当前日志设置',
+    '建议默认使用 UDP + TCP',
+    '一般保持 0.0.0.0',
+    '集中查看当前 Syslog 接收器状态',
+    '帮助快速判断采集质量',
+    '用于快速判断当前接收器最近一次异常',
+    '危险操作仅用于立即清理历史日志',
+    '建议在保存前再次确认当前输入值是否正确',
+    '与自动清理策略共用同一保留口径',
+  ]
+
   beforeEach(() => {
     mockUseLogsSettings.mockReturnValue({
       retentionDays: 90,
@@ -174,9 +190,16 @@ describe('LogsSettings 页面重构', () => {
     expect(dangerActions.getByRole('button', { name: '立即清理设备日志' })).toBeInTheDocument()
 
     expect(screen.getByText('运行状态')).toBeInTheDocument()
+    expect(screen.getByText('实时统计')).toBeInTheDocument()
     expect(screen.getByText('最近错误')).toBeInTheDocument()
-    expect(screen.getByText(/保存并应用 Syslog 会先保存当前日志设置/)).toBeInTheDocument()
+    expect(screen.queryByText(/保存并应用 Syslog 会先保存当前日志设置/)).not.toBeInTheDocument()
     expect(screen.getByText(/清理将按当前页面中的保留天数执行/)).toBeInTheDocument()
+    expect(screen.getByText(/该操作不可恢复/)).toBeInTheDocument()
+
+    for (const copy of removedExplanatoryCopies) {
+      expect(screen.queryByText(copy, { exact: false })).not.toBeInTheDocument()
+    }
+
     expect(container.querySelector('select')).toBeNull()
     expect(screen.getByRole('combobox', { name: 'Syslog 协议' })).toBeInTheDocument()
 

@@ -33,7 +33,6 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
     <section aria-label="备份策略配置" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="备份策略配置"
-        description="设置自动备份的频率、时间和保留策略"
         icon={Settings}
         actions={
           actions ? (
@@ -60,15 +59,10 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
         }
       />
 
-      <div className="mt-4 rounded-lg border border-blue-200/70 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100">
-        保存整页更改会提交当前备份策略配置。
-      </div>
-
       <div className="mt-6 space-y-4">
         {/* 启用自动备份 */}
         <ConfigItem
           label="启用自动备份"
-          description="定期自动创建系统备份，保障数据安全"
         >
           <ConfigSwitch
             checked={data.autoBackupEnabled}
@@ -79,7 +73,7 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
         {/* 备份频率 + 备份时间 并排（条件展示）*/}
         {data.autoBackupEnabled && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ConfigItem label="备份频率" description="选择自动备份的执行频率" required>
+            <ConfigItem label="备份频率" required>
               <ConfigSelect
                 value={data.backupFrequency}
                 onChange={(value) => onChange('backupFrequency', value)}
@@ -149,7 +143,6 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem
               label="包含数据库"
-              description="备份所有数据库数据（推荐启用）"
             >
               <ConfigSwitch
                 checked={data.includeDatabase}
@@ -174,21 +167,12 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
         <div className="pt-4 border-t">
           <ConfigItem
             label="压缩备份文件"
-            description="使用压缩减少存储空间占用（推荐启用）"
           >
             <ConfigSwitch
               checked={data.compressBackup}
               onCheckedChange={(checked) => onChange('compressBackup', checked)}
             />
           </ConfigItem>
-        </div>
-
-        {/* 备份建议 */}
-        <div className="pt-4 border-t">
-          <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">备份策略建议</p>
-            <p className="mt-2">建议定期验证恢复流程、监控磁盘使用，并为生产环境保留至少 30 天历史备份。</p>
-          </div>
         </div>
       </div>
     </section>

@@ -26,7 +26,6 @@ export function PasswordPolicySection({ data, onChange, actions }: Props) {
     <section aria-label="密码策略" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="密码策略"
-        description="定义账户密码强度、生命周期和登录失败防护。"
         icon={Lock}
         actions={
           actions ? (
@@ -52,10 +51,6 @@ export function PasswordPolicySection({ data, onChange, actions }: Props) {
           ) : null
         }
       />
-
-      <div className="mt-4 rounded-lg border border-blue-200/70 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100">
-        保存整页更改会同时提交当前页面中的密码策略、会话管理和认证方式配置。
-      </div>
 
       <div className="mt-6 space-y-4">
         <ConfigItem

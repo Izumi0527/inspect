@@ -53,8 +53,6 @@ jest.mock('@/features/settings/components/notifications/EmailNotificationSection
       ) : (
         <div>no-local-actions</div>
       )}
-      <div>保存整页更改会同时提交当前页面中的邮件和短信配置。</div>
-      <div>测试发送用于验证通知链路；如刚修改配置，建议先保存整页更改后再测试。</div>
     </div>
   ),
 }))
@@ -62,6 +60,11 @@ jest.mock('@/features/settings/components/notifications/SmsNotificationSection',
   SmsNotificationSection: () => <div>sms-notification-section</div>,
 }))
 describe('NotificationSettings 壳层动作区迁移', () => {
+  const removedExplanatoryCopies = [
+    '保存整页更改会同时提交当前页面中的邮件和短信配置',
+    '测试发送用于验证通知链路',
+  ]
+
   beforeEach(() => {
     mockUseNotificationSettings.mockReturnValue({
       emailNotification: { enabled: true },
@@ -129,8 +132,9 @@ describe('NotificationSettings 壳层动作区迁移', () => {
       within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置整页更改' })
     ).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: '邮件通知操作' })).toBeInTheDocument()
-    expect(screen.getByText(/保存整页更改会同时提交当前页面中的邮件和短信配置/)).toBeInTheDocument()
-    expect(screen.getByText(/测试发送用于验证通知链路/)).toBeInTheDocument()
+    for (const copy of removedExplanatoryCopies) {
+      expect(screen.queryByText(copy, { exact: false })).not.toBeInTheDocument()
+    }
     expect(screen.queryByText('webhook-notification-section')).not.toBeInTheDocument()
 
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('dirty:true')

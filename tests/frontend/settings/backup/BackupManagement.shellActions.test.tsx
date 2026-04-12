@@ -53,7 +53,6 @@ jest.mock('@/features/settings/components/backup/BackupConfigSection', () => ({
       ) : (
         <div>no-local-actions</div>
       )}
-      <div>保存整页更改会提交当前备份策略配置。</div>
     </div>
   ),
 }))
@@ -62,6 +61,10 @@ jest.mock('@/features/settings/components/backup/BackupHistorySection', () => ({
 }))
 
 describe('BackupManagement 壳层动作区迁移', () => {
+  const removedExplanatoryCopies = [
+    '保存整页更改会提交当前备份策略配置',
+  ]
+
   beforeEach(() => {
     mockUseBackupManagement.mockReturnValue({
       config: { includeDatabase: true, includeFiles: false },
@@ -133,7 +136,9 @@ describe('BackupManagement 壳层动作区迁移', () => {
       within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置整页更改' })
     ).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: '备份策略操作' })).toBeInTheDocument()
-    expect(screen.getByText(/保存整页更改会提交当前备份策略配置/)).toBeInTheDocument()
+    for (const copy of removedExplanatoryCopies) {
+      expect(screen.queryByText(copy, { exact: false })).not.toBeInTheDocument()
+    }
 
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('dirty:true')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('saving:false')

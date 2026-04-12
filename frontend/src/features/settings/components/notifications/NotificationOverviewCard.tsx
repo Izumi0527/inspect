@@ -21,16 +21,12 @@ export const NotificationOverviewCard: React.FC<NotificationOverviewCardProps> =
     <section aria-label="通知中心概览" className="rounded-xl border border-border bg-card/70 p-5 shadow-sm">
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-2">
+          <div>
             <h2 className="text-2xl font-semibold text-foreground">通知中心</h2>
-            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-              当前页面用于配置系统事件通知渠道，并通过测试验证发送链路。建议先查看各渠道启用状态，再进入具体配置与联调。
-            </p>
           </div>
           <div className="rounded-xl border border-border bg-background/80 px-4 py-3 lg:min-w-[240px]">
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">已启用渠道</p>
             <p className="mt-2 text-lg font-semibold text-foreground">{enabledCount} / 2</p>
-            <p className="mt-2 text-xs text-muted-foreground">建议保存整页后再执行测试发送。</p>
           </div>
         </div>
 

@@ -89,13 +89,8 @@ export function AuthenticationSection({ data, onChange }: Props) {
     <section aria-label="认证方式" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="认证方式"
-        description="配置多因素认证、OAuth登录和IP白名单"
         icon={ShieldCheck}
       />
-
-      <div className="mt-4 rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
-        认证方式用于增强登录验证链路与来源限制。启用 MFA、OAuth 或 IP 白名单时，建议同步检查是否存在未完成的必填配置。
-      </div>
 
       <div className="mt-6 space-y-4">
         {/* MFA 配置 */}

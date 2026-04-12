@@ -32,11 +32,8 @@ export const BackupOverviewCard: React.FC<BackupOverviewCardProps> = ({
     <section aria-label="备份管理概览" className="rounded-xl border border-border bg-card/70 p-5 shadow-sm">
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="space-y-2">
+          <div>
             <h2 className="text-2xl font-semibold text-foreground">备份管理</h2>
-            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-              当前页面用于管理备份策略、历史资产与恢复操作。建议先检查备份健康摘要，再调整策略或执行恢复、删除等运维动作。
-            </p>
           </div>
           <div className="rounded-xl border border-border bg-background/80 px-4 py-3 xl:min-w-[320px]">
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">当前备份健康度</p>

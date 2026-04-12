@@ -63,7 +63,6 @@ export function EmailNotificationSection({
     <section aria-label="邮件通知" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="邮件通知"
-        description="配置 SMTP 服务器用于发送邮件通知，并作为当前页面整页配置的保存入口。"
         icon={Mail}
         actions={
           actions ? (
@@ -89,10 +88,6 @@ export function EmailNotificationSection({
           ) : null
         }
       />
-
-      <div className="mt-4 rounded-lg border border-blue-200/70 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100">
-        保存整页更改会同时提交当前页面中的邮件和短信配置。
-      </div>
 
       <div className="mt-6 space-y-4">
         {/* 启用开关 */}
@@ -140,7 +135,7 @@ export function EmailNotificationSection({
               />
             </ConfigItem>
 
-            <ConfigItem label="使用 TLS 加密" description="启用传输层安全协议（推荐）">
+            <ConfigItem label="使用 TLS 加密" description="启用传输层安全协议">
               <ConfigSwitch
                 checked={data.smtpUseTls}
                 onCheckedChange={(checked) => onChange('smtpUseTls', checked)}
@@ -212,7 +207,6 @@ export function EmailNotificationSection({
         <div className="pt-4 border-t">
           <ConfigItem
             label="测试邮件通知"
-            description="测试发送用于验证通知链路；如刚修改配置，建议先保存整页更改后再测试。"
           >
             <div className="flex flex-col gap-2 sm:flex-row">
               <div className="flex-1 max-w-md">

@@ -17,13 +17,8 @@ export function SessionManagementSection({ data, onChange }: Props) {
     <section aria-label="会话管理" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="会话管理"
-        description="控制访问时效、并发登录与改密后的会话处置。"
         icon={Clock}
       />
-
-      <div className="mt-4 rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
-        会话策略决定用户登录后可维持多久、可同时登录多少会话，以及在密码变化后如何收口其它会话风险。
-      </div>
 
       <div className="mt-6 space-y-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

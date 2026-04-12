@@ -245,11 +245,8 @@ export const LogsSettings: React.FC = () => {
       >
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="space-y-2">
+            <div>
               <h2 className="text-2xl font-semibold text-foreground">日志设置</h2>
-              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-                当前页面用于统一管理日志保留策略与 Syslog 接收配置。配置编辑、运行状态观测和危险操作已分区展示，降低误操作与理解成本。
-              </p>
             </div>
             <div className="rounded-xl border border-border bg-background/80 px-4 py-3 xl:min-w-[280px]">
               <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
@@ -293,7 +290,6 @@ export const LogsSettings: React.FC = () => {
           >
             <SectionHeader
               title="日志保留策略"
-              description="配置设备日志的自动清理策略，影响系统定时数据清理任务中的日志清理行为。"
               icon={Zap}
               actions={
                 <div role="group" aria-label="日志保留策略操作" className="flex flex-wrap items-center gap-2">
@@ -318,10 +314,6 @@ export const LogsSettings: React.FC = () => {
                 </div>
               }
             />
-
-            <div className="mt-4 rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
-              自动清理影响后台定时清理任务；保留天数会同时影响手动清理时的默认执行范围。
-            </div>
 
             <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div className="space-y-2">
@@ -361,7 +353,6 @@ export const LogsSettings: React.FC = () => {
           >
             <SectionHeader
               title="Syslog 接收配置"
-              description="开启后后端将监听设备 Syslog 上报（UDP/TCP），并写入日志中心。warning/error/critical 级别可联动生成告警。"
               icon={Radio}
               actions={
                 <div role="group" aria-label="Syslog 接收配置操作" className="flex flex-wrap items-center gap-2">
@@ -386,10 +377,6 @@ export const LogsSettings: React.FC = () => {
                 </div>
               }
             />
-
-            <div className="mt-4 rounded-lg border border-blue-200/70 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100">
-              保存并应用 Syslog 会先保存当前日志设置，再重新加载 Syslog 接收配置，确保运行状态与表单内容保持一致。
-            </div>
 
             <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div className="space-y-2">
@@ -421,9 +408,6 @@ export const LogsSettings: React.FC = () => {
                     <SelectItem value="tcp">仅 TCP</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  建议默认使用 UDP + TCP，兼容更多设备。
-                </p>
               </div>
 
               <div className="space-y-2">
@@ -434,9 +418,6 @@ export const LogsSettings: React.FC = () => {
                   onChange={(e) => updateSyslogHost(e.target.value)}
                   placeholder="0.0.0.0"
                 />
-                <p className="text-xs text-muted-foreground">
-                  一般保持 <span className="font-mono">0.0.0.0</span> 监听所有网卡。
-                </p>
               </div>
 
               <div className="space-y-2">
@@ -509,7 +490,6 @@ export const LogsSettings: React.FC = () => {
           >
             <SectionHeader
               title="运行状态"
-              description="集中查看当前 Syslog 接收器状态、监听端口和自动刷新策略。"
               icon={Radio}
             />
 
@@ -558,7 +538,6 @@ export const LogsSettings: React.FC = () => {
           >
             <SectionHeader
               title="实时统计"
-              description="帮助快速判断采集质量、异常丢弃和告警联动情况。"
               icon={Zap}
             />
 
@@ -617,7 +596,6 @@ export const LogsSettings: React.FC = () => {
           >
             <SectionHeader
               title="最近错误"
-              description="用于快速判断当前接收器最近一次异常是否影响服务可用性。"
               icon={AlertCircle}
             />
 
@@ -636,7 +614,6 @@ export const LogsSettings: React.FC = () => {
       >
         <SectionHeader
           title="手动清理日志"
-          description="危险操作仅用于立即清理历史日志，适合磁盘空间紧张或变更清理策略后的即时回收。"
           icon={Trash2}
           actions={
             <Button
@@ -655,11 +632,8 @@ export const LogsSettings: React.FC = () => {
           <div className="rounded-lg border border-red-200/80 bg-background/80 p-4 text-sm text-muted-foreground dark:border-red-900/50">
             <p className="font-medium text-foreground">清理将按当前页面中的保留天数执行</p>
             <p className="mt-2">
-              当前执行范围：清理超过 <span className="font-mono text-foreground">{cleanupRetentionDays}</span> 天的设备日志。该操作不可恢复，建议在保存前再次确认当前输入值是否正确。
+              当前执行范围：清理超过 <span className="font-mono text-foreground">{cleanupRetentionDays}</span> 天的设备日志。该操作不可恢复。
             </p>
-          </div>
-          <div className="rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
-            与自动清理策略共用同一保留口径
           </div>
         </div>
       </section>

@@ -214,7 +214,6 @@ export function BackupHistorySection({
     <section aria-label="备份历史记录" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="备份历史记录"
-        description={`查看历史备份、磁盘占用和恢复/删除等资产操作（当前共 ${totalCount} 个备份文件）`}
         icon={Database}
         actions={
           <Button onClick={handleCreateBackup} disabled={isCreating}>
@@ -267,7 +266,6 @@ export function BackupHistorySection({
       {backups.length === 0 ? (
         <EmptyState
           title="暂无备份记录"
-          description='点击上方"手动备份"按钮创建第一个备份'
           icon={Database}
         />
       ) : (

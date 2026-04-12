@@ -40,7 +40,6 @@ jest.mock('@/features/settings/components/security/PasswordPolicySection', () =>
   }) => (
     <div>
       <div>password-policy-section</div>
-      <div>保存整页更改会同时提交当前页面中的密码策略、会话管理和认证方式配置。</div>
       {props.actions ? (
         <div role="group" aria-label="密码策略操作">
           <button
@@ -69,6 +68,10 @@ jest.mock('@/features/settings/components/security/AuthenticationSection', () =>
 }))
 
 describe('SecuritySettings 壳层动作区迁移', () => {
+  const removedExplanatoryCopies = [
+    '保存整页更改会同时提交当前页面中的密码策略、会话管理和认证方式配置',
+  ]
+
   beforeEach(() => {
     mockUseSecuritySettings.mockReturnValue({
       sessionManagement: { maxConcurrentSessions: 3 },
@@ -140,7 +143,9 @@ describe('SecuritySettings 壳层动作区迁移', () => {
       within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置整页更改' })
     ).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: '密码策略操作' })).toBeInTheDocument()
-    expect(screen.getByText(/保存整页更改会同时提交当前页面中的密码策略、会话管理和认证方式配置/)).toBeInTheDocument()
+    for (const copy of removedExplanatoryCopies) {
+      expect(screen.queryByText(copy, { exact: false })).not.toBeInTheDocument()
+    }
 
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('dirty:true')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('saving:false')

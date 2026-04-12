@@ -57,13 +57,8 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
     <section aria-label="短信通知" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="短信通知"
-        description="配置短信服务商、凭据和模板，用于发送 SMS 通知。"
         icon={MessageSquare}
       />
-
-      <div className="mt-4 rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
-        测试短信用于验证短信服务商链路；如刚修改服务商或密钥，建议先保存整页更改后再测试。
-      </div>
 
       <div className="mt-6 space-y-4">
         {/* 启用开关 */}
@@ -175,7 +170,7 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
 
         {/* 测试功能 */}
         <div className="pt-4 border-t">
-          <ConfigItem label="测试短信通知" description="发送测试短信以验证配置是否正确">
+          <ConfigItem label="测试短信通知">
             <div className="flex flex-col gap-2 sm:flex-row">
               <div className="flex-1 max-w-md">
                 <ConfigInput
