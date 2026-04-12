@@ -30,7 +30,7 @@ const frequencyOptions = [
 
 export function BackupConfigSection({ data, onChange, actions }: Props) {
   return (
-    <div className="p-4">
+    <section aria-label="备份策略配置" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="备份策略配置"
         description="设置自动备份的频率、时间和保留策略"
@@ -45,7 +45,7 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
                 disabled={!actions.isDirty || actions.isSaving}
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
-                重置
+                重置整页更改
               </Button>
               <Button
                 type="button"
@@ -53,12 +53,16 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
                 disabled={!actions.isDirty || actions.isSaving}
               >
                 <Save className="w-4 h-4 mr-2" />
-                {actions.isSaving ? '保存中...' : '保存'}
+                {actions.isSaving ? '保存中...' : '保存整页更改'}
               </Button>
             </div>
           ) : null
         }
       />
+
+      <div className="mt-4 rounded-lg border border-blue-200/70 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100">
+        保存整页更改会提交当前备份策略配置。
+      </div>
 
       <div className="mt-6 space-y-4">
         {/* 启用自动备份 */}
@@ -74,7 +78,7 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
 
         {/* 备份频率 + 备份时间 并排（条件展示）*/}
         {data.autoBackupEnabled && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem label="备份频率" description="选择自动备份的执行频率" required>
               <ConfigSelect
                 value={data.backupFrequency}
@@ -100,7 +104,7 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
 
         {/* 备份保留天数 + 备份存储路径 */}
         <div className="pt-4 border-t space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem
               label="备份保留天数"
               description="自动删除超过此天数的旧备份（1-365天）"
@@ -142,7 +146,7 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem
               label="包含数据库"
               description="备份所有数据库数据（推荐启用）"
@@ -181,17 +185,12 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
 
         {/* 备份建议 */}
         <div className="pt-4 border-t">
-          <div className="bg-muted/40 border border-border rounded-md p-4">
-            <p className="text-sm font-medium text-foreground/90 mb-2">备份建议：</p>
-            <ul className="text-sm text-muted-foreground space-y-1 ml-4 list-disc">
-              <li>定期测试备份恢复流程，确保备份文件可用</li>
-              <li>将重要备份文件复制到异地存储，防止灾难性损失</li>
-              <li>监控备份存储空间，避免磁盘满导致备份失败</li>
-              <li>生产环境建议每天备份，保留至少30天历史数据</li>
-            </ul>
+          <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">备份策略建议</p>
+            <p className="mt-2">建议定期验证恢复流程、监控磁盘使用，并为生产环境保留至少 30 天历史备份。</p>
           </div>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

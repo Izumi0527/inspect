@@ -46,7 +46,7 @@ const renderWithQuery = (ui: React.ReactElement) => {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
 }
 
-describe('LogsSettings 壳层动作区迁移', () => {
+describe('LogsSettings 页面重构', () => {
   beforeEach(() => {
     mockUseLogsSettings.mockReturnValue({
       retentionDays: 90,
@@ -120,7 +120,7 @@ describe('LogsSettings 壳层动作区迁移', () => {
     jest.clearAllMocks()
   })
 
-  it('应移除壳层按钮并将保存/应用/刷新/清理动作下移到数据保留标题同行', async () => {
+  it('应展示运行摘要、分离配置动作和危险操作区', async () => {
     const user = userEvent.setup()
 
     const ShellToolbar: React.FC = () => {
@@ -144,50 +144,64 @@ describe('LogsSettings 壳层动作区迁移', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: '数据保留' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: '日志设置' })).toBeInTheDocument()
     })
 
     const toolbar = within(screen.getByTestId('shell-toolbar'))
-    expect(toolbar.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
-    expect(toolbar.queryByRole('button', { name: '重置' })).not.toBeInTheDocument()
-    expect(toolbar.queryByRole('button', { name: '应用配置' })).not.toBeInTheDocument()
-    expect(toolbar.queryByRole('button', { name: '刷新状态' })).not.toBeInTheDocument()
-    expect(toolbar.queryByRole('button', { name: '立即清理' })).not.toBeInTheDocument()
+    expect(toolbar.queryByRole('button', { name: '保存更改' })).not.toBeInTheDocument()
+    expect(toolbar.queryByRole('button', { name: '重置更改' })).not.toBeInTheDocument()
+    expect(toolbar.queryByRole('button', { name: '保存并应用 Syslog' })).not.toBeInTheDocument()
+    expect(toolbar.queryByRole('button', { name: '刷新运行状态' })).not.toBeInTheDocument()
+    expect(toolbar.queryByRole('button', { name: '立即清理设备日志' })).not.toBeInTheDocument()
 
-    const actionGroup = screen.getByRole('group', { name: '数据保留操作' })
-    const localActions = within(actionGroup)
-    const syslogActionGroup = screen.getByRole('group', { name: 'Syslog 操作' })
-    const syslogActions = within(syslogActionGroup)
-    expect(localActions.getByRole('button', { name: '保存' })).toBeInTheDocument()
-    expect(localActions.getByRole('button', { name: '重置' })).toBeInTheDocument()
-    expect(localActions.getByRole('button', { name: '立即清理' })).toBeInTheDocument()
-    expect(syslogActions.getByRole('button', { name: '应用配置' })).toBeInTheDocument()
-    expect(syslogActions.getByRole('button', { name: '刷新状态' })).toBeInTheDocument()
+    expect(screen.getByText('当前运行摘要')).toBeInTheDocument()
+    expect(screen.getByText('接收总量')).toBeInTheDocument()
+    expect(screen.getByText('落库总量')).toBeInTheDocument()
+    expect(screen.getByText('解析丢弃')).toBeInTheDocument()
+    expect(screen.getAllByText('告警联动').length).toBeGreaterThan(0)
+
+    const retentionSection = screen.getByRole('region', { name: '日志保留策略' })
+    const retentionActions = within(retentionSection)
+    const syslogSection = screen.getByRole('region', { name: 'Syslog 接收配置' })
+    const syslogActions = within(syslogSection)
+    const dangerSection = screen.getByRole('region', { name: '手动清理日志' })
+    const dangerActions = within(dangerSection)
+
+    expect(retentionActions.getByRole('button', { name: '保存更改' })).toBeInTheDocument()
+    expect(retentionActions.getByRole('button', { name: '重置更改' })).toBeInTheDocument()
+    expect(syslogActions.getByRole('button', { name: '保存并应用 Syslog' })).toBeInTheDocument()
+    expect(syslogActions.getByRole('button', { name: '刷新运行状态' })).toBeInTheDocument()
+    expect(dangerActions.getByRole('button', { name: '立即清理设备日志' })).toBeInTheDocument()
+
+    expect(screen.getByText('运行状态')).toBeInTheDocument()
+    expect(screen.getByText('最近错误')).toBeInTheDocument()
+    expect(screen.getByText(/保存并应用 Syslog 会先保存当前日志设置/)).toBeInTheDocument()
+    expect(screen.getByText(/清理将按当前页面中的保留天数执行/)).toBeInTheDocument()
     expect(container.querySelector('select')).toBeNull()
     expect(screen.getByRole('combobox', { name: 'Syslog 协议' })).toBeInTheDocument()
 
-    // 不应继续渲染旧的 ActionButtons 提示文本
     expect(screen.queryByText('• 有未保存的更改')).not.toBeInTheDocument()
     expect(screen.queryByText(/页面顶部工具栏/)).not.toBeInTheDocument()
 
-    await user.click(localActions.getByRole('button', { name: '保存' }))
+    await user.click(retentionActions.getByRole('button', { name: '保存更改' }))
     expect(saveAllMock).toHaveBeenCalled()
 
-    await user.click(localActions.getByRole('button', { name: '重置' }))
+    await user.click(retentionActions.getByRole('button', { name: '重置更改' }))
     expect(resetAllMock).toHaveBeenCalled()
 
     const initialStatusCalls = getSyslogStatusMock.mock.calls.length
-    await user.click(syslogActions.getByRole('button', { name: '刷新状态' }))
+    await user.click(syslogActions.getByRole('button', { name: '刷新运行状态' }))
     await waitFor(() => {
       expect(getSyslogStatusMock.mock.calls.length).toBeGreaterThan(initialStatusCalls)
     })
 
-    await user.click(syslogActions.getByRole('button', { name: '应用配置' }))
+    await user.click(syslogActions.getByRole('button', { name: '保存并应用 Syslog' }))
     await waitFor(() => {
+      expect(saveAllMock).toHaveBeenCalledTimes(2)
       expect(applySyslogConfigMock).toHaveBeenCalled()
     })
 
-    await user.click(localActions.getByRole('button', { name: '立即清理' }))
+    await user.click(dangerActions.getByRole('button', { name: '立即清理设备日志' }))
     expect(cleanupDeviceLogsMock).not.toHaveBeenCalled()
 
     await waitFor(() => {

@@ -40,19 +40,20 @@ jest.mock('@/features/settings/components/backup/BackupConfigSection', () => ({
             onClick={props.actions.onReset}
             disabled={!props.actions.isDirty || props.actions.isSaving}
           >
-            重置
+            重置整页更改
           </button>
           <button
             type="button"
             onClick={props.actions.onSave}
             disabled={!props.actions.isDirty || props.actions.isSaving}
           >
-            {props.actions.isSaving ? '保存中...' : '保存'}
+            {props.actions.isSaving ? '保存中...' : '保存整页更改'}
           </button>
         </div>
       ) : (
         <div>no-local-actions</div>
       )}
+      <div>保存整页更改会提交当前备份策略配置。</div>
     </div>
   ),
 }))
@@ -88,7 +89,7 @@ describe('BackupManagement 壳层动作区迁移', () => {
     jest.clearAllMocks()
   })
 
-  it('应移除壳层保存/重置按钮，并将动作下移到备份策略模块标题行', async () => {
+  it('应展示备份摘要，并将整页保存动作下移到备份策略模块标题行', async () => {
     const user = userEvent.setup()
 
     const ShellToolbar: React.FC = () => {
@@ -120,22 +121,28 @@ describe('BackupManagement 壳层动作区迁移', () => {
     await waitFor(() => {
       expect(screen.getByText('backup-config-section')).toBeInTheDocument()
     })
+    expect(screen.getByRole('heading', { name: '备份管理' })).toBeInTheDocument()
+    expect(screen.getByText('备份总数')).toBeInTheDocument()
+    expect(screen.getByText('磁盘使用率')).toBeInTheDocument()
+    expect(screen.getByText('自动备份')).toBeInTheDocument()
+    expect(screen.getByText('保留天数')).toBeInTheDocument()
     expect(
-      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存' })
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存整页更改' })
     ).not.toBeInTheDocument()
     expect(
-      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置' })
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置整页更改' })
     ).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: '备份策略操作' })).toBeInTheDocument()
+    expect(screen.getByText(/保存整页更改会提交当前备份策略配置/)).toBeInTheDocument()
 
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('dirty:true')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('saving:false')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('blockLeave:true')
 
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: '保存整页更改' }))
     expect(saveAllMock).toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: '重置' }))
+    await user.click(screen.getByRole('button', { name: '重置整页更改' }))
     expect(resetAllMock).toHaveBeenCalled()
   })
 })

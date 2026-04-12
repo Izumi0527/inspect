@@ -2,7 +2,6 @@ import { httpClient } from '@/lib/api-client'
 import type {
   EmailNotificationConfig,
   SmsNotificationConfig,
-  WebhookNotificationConfig,
   NotificationSettingsResponse,
   TestResult,
 } from '../types/notification.types'
@@ -50,43 +49,8 @@ function toEnum<T extends string>(value: unknown, allowed: readonly T[], fallbac
   return match ?? fallback
 }
 
-function toStringRecord(
-  value: unknown,
-  fallback: Record<string, string>
-): Record<string, string> {
-  const normalize = (raw: unknown): Record<string, string> | null => {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-    const result: Record<string, string> = {}
-    for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
-      if (!key) continue
-      if (typeof val === 'string') {
-        result[key] = val
-      } else if (val === null || val === undefined) {
-        result[key] = ''
-      } else {
-        result[key] = String(val)
-      }
-    }
-    return result
-  }
-
-  const normalized = normalize(value)
-  if (normalized) return normalized
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    if (trimmed.startsWith('{')) {
-      try {
-        const parsed = JSON.parse(trimmed)
-        const parsedNormalized = normalize(parsed)
-        if (parsedNormalized) return parsedNormalized
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  return fallback
+function pruneWebhookSettings(settings: BackendSetting[]): BackendSetting[] {
+  return settings.filter((setting) => !setting.key.startsWith('notification.webhook.'))
 }
 
 export const notificationApi = {
@@ -99,7 +63,7 @@ export const notificationApi = {
     // 获取所有配置（使用新的统一端点）
     // 后端实际路由: GET /api/v1/settings/notifications/
     const response = await httpClient.get<{ items: BackendSetting[]; total: number }>('/settings/notifications/')
-    const allSettings = response.items || []
+    const allSettings = pruneWebhookSettings(response.items || [])
 
     // 创建一个 key-value 映射
     const settingsMap = new Map<string, any>()
@@ -159,24 +123,6 @@ export const notificationApi = {
         signName: toString(settingsMap.get('notification.sms.sign_name'), ''),
         templateCode: toString(settingsMap.get('notification.sms.template_code'), ''),
       },
-      webhookNotification: {
-        enabled: toBoolean(settingsMap.get('notification.webhook.enabled'), false),
-        url: toString(settingsMap.get('notification.webhook.url'), ''),
-        method: toEnum(
-          settingsMap.get('notification.webhook.method'),
-          ['POST', 'PUT'] as const,
-          'POST'
-        ),
-        headers: toStringRecord(settingsMap.get('notification.webhook.headers'), {}),
-        authType: toEnum(
-          settingsMap.get('notification.webhook.auth_type'),
-          ['none', 'bearer', 'basic', 'apikey'] as const,
-          'none'
-        ),
-        authToken: toString(settingsMap.get('notification.webhook.auth_token'), ''),
-        retryCount: toNumber(settingsMap.get('notification.webhook.retry_count'), 3),
-        timeout: toNumber(settingsMap.get('notification.webhook.timeout'), 30),
-      },
     }
   },
 
@@ -223,30 +169,6 @@ export const notificationApi = {
   },
 
   /**
-   * 更新Webhook通知配置
-   * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
-   */
-  updateWebhookNotification: async (
-    data: Partial<WebhookNotificationConfig>
-  ): Promise<void> => {
-    const settings: Record<string, any> = {}
-
-    if (data.enabled !== undefined) settings['notification.webhook.enabled'] = data.enabled
-    if (data.url !== undefined) settings['notification.webhook.url'] = data.url
-    if (data.method !== undefined) settings['notification.webhook.method'] = data.method
-    if (data.headers !== undefined) settings['notification.webhook.headers'] = data.headers
-    if (data.authType !== undefined) settings['notification.webhook.auth_type'] = data.authType
-    if (data.authToken !== undefined) settings['notification.webhook.auth_token'] = data.authToken || ''
-    if (data.retryCount !== undefined) settings['notification.webhook.retry_count'] = data.retryCount
-    if (data.timeout !== undefined) settings['notification.webhook.timeout'] = data.timeout
-
-    if (Object.keys(settings).length === 0) return
-
-    const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', { settings })
-    requireBulkSuccess(resp, { action: '保存Webhook通知配置' })
-  },
-
-  /**
    * 批量保存所有通知配置
    * ✅ 使用统一批量配置端点: POST /settings/general/bulk
    */
@@ -269,16 +191,6 @@ export const notificationApi = {
       'notification.sms.api_secret': data.smsNotification.apiSecret,
       'notification.sms.sign_name': data.smsNotification.signName,
       'notification.sms.template_code': data.smsNotification.templateCode,
-
-      // Webhook
-      'notification.webhook.enabled': data.webhookNotification.enabled,
-      'notification.webhook.url': data.webhookNotification.url,
-      'notification.webhook.method': data.webhookNotification.method,
-      'notification.webhook.headers': data.webhookNotification.headers,
-      'notification.webhook.auth_type': data.webhookNotification.authType,
-      'notification.webhook.auth_token': data.webhookNotification.authToken || '',
-      'notification.webhook.retry_count': data.webhookNotification.retryCount,
-      'notification.webhook.timeout': data.webhookNotification.timeout,
     }
 
     const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', { settings })
@@ -299,22 +211,4 @@ export const notificationApi = {
     return await httpClient.post<TestResult>('/settings/notifications/test-sms', { phone })
   },
 
-  /**
-   * 测试Webhook通知
-   */
-  testWebhookNotification: async (data: Partial<WebhookNotificationConfig> = {}): Promise<TestResult> => {
-    const payload: Record<string, any> = {}
-    if (data.url) payload.url = data.url
-    if (data.method) payload.method = data.method
-    if (data.headers) payload.headers = data.headers
-
-    // 提供一个最小的测试事件载荷
-    payload.payload = {
-      event: 'test',
-      message: '这是一个测试Webhook请求',
-      timestamp: new Date().toISOString(),
-    }
-
-    return await httpClient.post<TestResult>('/settings/notifications/test-webhook', payload)
-  },
 }

@@ -338,10 +338,6 @@ export const notificationApi = {
   testSms: (recipient?: string) =>
     httpClient.post<{ success: boolean; message: string }>('/settings/notifications/test-sms', { recipient }),
 
-  // 测试Webhook - 后端实际路由: POST /settings/notifications/test-webhook
-  testWebhook: (url?: string) =>
-    httpClient.post<{ success: boolean; message: string }>('/settings/notifications/test-webhook', { url }),
-
   // 测试通知配置 (兼容旧接口)
   testConfig: (id: string, recipient?: string) =>
     httpClient.post<{ success: boolean; message: string }>('/settings/notifications/test-email', { recipient }),

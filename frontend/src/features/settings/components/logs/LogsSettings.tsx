@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useCallback, useMemo, useState } from 'react'
-import { AlertCircle, Radio, RefreshCw, Trash2, Zap } from 'lucide-react'
+import { AlertCircle, Radio, RefreshCw, Siren, Trash2, Zap } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CompactStatCard } from '@/components/shared'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
@@ -154,6 +155,55 @@ export const LogsSettings: React.FC = () => {
   const disableRefresh = Boolean(syslogStatusQuery.isFetching || applySyslogMutation.isPending)
   const disableCleanup = Boolean(saving)
 
+  const syslogStatus = syslogStatusQuery.data
+  const syslogStatusText = syslogStatusQuery.isLoading
+    ? '状态加载中'
+    : syslogStatusQuery.error
+      ? '状态获取失败'
+      : syslogStatus?.running
+        ? '运行中'
+        : '已停止'
+
+  const syslogStatusToneClass = syslogStatusQuery.error
+    ? 'text-red-700 dark:text-red-300'
+    : syslogStatus?.running
+      ? 'text-green-700 dark:text-green-300'
+      : 'text-foreground'
+
+  const summaryStats = useMemo(
+    () => [
+      {
+        key: 'received',
+        title: '接收总量',
+        value: syslogStatus?.received ?? 0,
+        icon: Radio,
+        iconClassName: 'text-blue-600 dark:text-blue-400',
+      },
+      {
+        key: 'stored',
+        title: '落库总量',
+        value: syslogStatus?.stored ?? 0,
+        icon: Zap,
+        iconClassName: 'text-green-600 dark:text-green-400',
+      },
+      {
+        key: 'droppedParse',
+        title: '解析丢弃',
+        value: syslogStatus?.droppedParse ?? 0,
+        icon: AlertCircle,
+        iconClassName: 'text-amber-600 dark:text-amber-400',
+      },
+      {
+        key: 'alerts',
+        title: '告警联动',
+        value: (syslogStatus?.alertsCreated ?? 0) + (syslogStatus?.alertsUpdated ?? 0),
+        icon: Siren,
+        iconClassName: 'text-purple-600 dark:text-purple-400',
+      },
+    ],
+    [syslogStatus]
+  )
+
   useSettingsTabCapabilities('logs', {
     dirty: isDirty,
     saving,
@@ -189,276 +239,430 @@ export const LogsSettings: React.FC = () => {
 
   return (
     <div className="p-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
-
-        {/* 左列：数据保留 */}
-        <section className="p-4">
-          <SectionHeader
-            title="数据保留"
-            description="配置设备日志的自动清理策略，影响系统定时数据清理任务中的日志清理行为。"
-            icon={Zap}
-            actions={
-              <div role="group" aria-label="数据保留操作" className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  onClick={() => void handleSave()}
-                  disabled={disableSaveReset}
-                  loading={saving}
-                >
-                  <Zap className="w-4 h-4 mr-2" />
-                  保存
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleReset}
-                  disabled={disableSaveReset}
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  重置
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={handleRequestCleanup}
-                  disabled={disableCleanup}
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  立即清理
-                </Button>
+      <section
+        aria-label="日志设置概览"
+        className="rounded-xl border border-border bg-card/70 p-5 shadow-sm"
+      >
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold text-foreground">日志设置</h2>
+              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                当前页面用于统一管理日志保留策略与 Syslog 接收配置。配置编辑、运行状态观测和危险操作已分区展示，降低误操作与理解成本。
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-background/80 px-4 py-3 xl:min-w-[280px]">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                当前运行摘要
+              </p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">Syslog 接收器</p>
+                  <p className={`text-lg font-semibold ${syslogStatusToneClass}`}>{syslogStatusText}</p>
+                </div>
+                <div className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
+                  {syslogStatus?.config.protocol?.toUpperCase() ?? 'BOTH'}
+                </div>
               </div>
-            }
-          />
-
-          {/* 启用自动清理 + 保留天数 并排 */}
-          <div className="mt-6 grid grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="logs-auto-cleanup">启用自动清理</Label>
-                <Switch
-                  id="logs-auto-cleanup"
-                  checked={autoCleanupEnabled}
-                  onCheckedChange={(value) => updateAutoCleanupEnabled(Boolean(value))}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                关闭后系统不会自动清理历史设备日志。
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="logs-retention-days">设备日志保留天数</Label>
-              <Input
-                id="logs-retention-days"
-                type="number"
-                min={1}
-                max={3650}
-                value={retentionDays}
-                onChange={(e) => updateRetentionDays(Number(e.target.value))}
-              />
-              <p className="text-xs text-muted-foreground">
-                超过该天数的设备日志将被清理（范围 1–3650）。
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* 右列：Syslog 接收 */}
-        <section className="p-4">
-          <SectionHeader
-            title="Syslog 接收"
-            description="开启后后端将监听设备 Syslog 上报（UDP/TCP），并写入日志中心。warning/error/critical 级别可联动生成告警。"
-            icon={Radio}
-            actions={
-              <div role="group" aria-label="Syslog 操作" className="flex flex-wrap items-center gap-2">
-                {/* 运行状态指示 */}
-                <span className="text-sm">
-                  {syslogStatusQuery.isLoading ? (
-                    <span className="text-muted-foreground">加载中...</span>
-                  ) : syslogStatusQuery.data?.running ? (
-                    <span className="text-green-700 dark:text-green-400 font-medium">运行中</span>
-                  ) : syslogStatusQuery.data ? (
-                    <span className="text-foreground/90 font-medium">已停止</span>
-                  ) : null}
-                </span>
-                <Button
-                  type="button"
-                  onClick={() => void handleApplySyslog()}
-                  disabled={saving}
-                  loading={applySyslogMutation.isPending}
-                >
-                  <Zap className="w-4 h-4 mr-2" />
-                  应用配置
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void syslogStatusQuery.refetch()}
-                  disabled={disableRefresh}
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  刷新状态
-                </Button>
-              </div>
-            }
-          />
-
-          {/* Syslog 配置字段：2列网格 */}
-          <div className="mt-6 grid grid-cols-2 gap-6">
-            {/* 启用开关 */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="syslog-enabled">启用 Syslog 接收</Label>
-                <Switch
-                  id="syslog-enabled"
-                  checked={syslogEnabled}
-                  onCheckedChange={(value) => updateSyslogEnabled(Boolean(value))}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                监听地址默认为 <span className="font-mono">{syslogHost}:{syslogPort}</span>，端口默认 5514。
-              </p>
-            </div>
-
-            {/* 协议 */}
-            <div className="space-y-2">
-              <Label htmlFor="syslog-protocol">协议</Label>
-              <Select
-                value={syslogProtocol}
-                onValueChange={(v) => updateSyslogProtocol(v as SyslogProtocol)}
-              >
-                <SelectTrigger id="syslog-protocol" aria-label="Syslog 协议">
-                  <SelectValue placeholder="选择协议" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="both">UDP + TCP</SelectItem>
-                  <SelectItem value="udp">仅 UDP</SelectItem>
-                  <SelectItem value="tcp">仅 TCP</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                建议默认使用 UDP + TCP，兼容更多设备。
-              </p>
-            </div>
-
-            {/* 监听地址 + 端口 并排 */}
-            <div className="space-y-2">
-              <Label htmlFor="syslog-host">监听地址</Label>
-              <Input
-                id="syslog-host"
-                value={syslogHost}
-                onChange={(e) => updateSyslogHost(e.target.value)}
-                placeholder="0.0.0.0"
-              />
-              <p className="text-xs text-muted-foreground">
-                一般保持 <span className="font-mono">0.0.0.0</span> 监听所有网卡。
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="syslog-port">端口</Label>
-              <Input
-                id="syslog-port"
-                type="number"
-                min={1}
-                max={65535}
-                value={syslogPort}
-                onChange={(e) => updateSyslogPort(Number(e.target.value))}
-              />
-              <p className="text-xs text-muted-foreground">
-                默认端口 5514（避免与 514 冲突及权限问题）。
-              </p>
-            </div>
-
-            {/* 最大字节数 + 联动告警开关 并排 */}
-            <div className="space-y-2">
-              <Label htmlFor="syslog-max-bytes">单条消息最大字节数</Label>
-              <Input
-                id="syslog-max-bytes"
-                type="number"
-                min={256}
-                max={1024 * 1024}
-                value={syslogMaxMessageBytes}
-                onChange={(e) => updateSyslogMaxMessageBytes(Number(e.target.value))}
-              />
-              <p className="text-xs text-muted-foreground">
-                防止超大报文占用内存，范围 256 到 1MB。
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="syslog-alerts-enabled">联动告警</Label>
-                <Switch
-                  id="syslog-alerts-enabled"
-                  checked={syslogAlertsEnabled}
-                  onCheckedChange={(value) => updateSyslogAlertsEnabled(Boolean(value))}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                warning/error/critical 将触发告警（带去重与风暴保护）。
-              </p>
-            </div>
-
-            {/* 每分钟最多新告警数（单独一行）*/}
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="syslog-alerts-rate">每分钟最多新告警数</Label>
-              <Input
-                id="syslog-alerts-rate"
-                type="number"
-                min={0}
-                max={10000}
-                value={syslogAlertsMaxNewPerMinute}
-                onChange={(e) => updateSyslogAlertsMaxNewPerMinute(Number(e.target.value))}
-                className="max-w-xs"
-              />
-              <p className="text-xs text-muted-foreground">
-                0 表示不限制。超过限制会创建/更新"告警风暴"告警。
+              <p className="mt-2 text-xs text-muted-foreground">
+                最近刷新：{syslogStatus?.updatedAt ?? '暂无数据'}
               </p>
             </div>
           </div>
 
-          {/* Syslog 状态获取错误 */}
-          {syslogStatusQuery.error && (
-            <div className="mt-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-300">
-              Syslog 状态获取失败：{(syslogStatusQuery.error as Error).message || '未知错误'}
-            </div>
-          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {summaryStats.map((stat) => (
+              <CompactStatCard
+                key={stat.key}
+                title={stat.title}
+                value={stat.value}
+                icon={stat.icon}
+                iconClassName={stat.iconClassName}
+                className="bg-background/80"
+              />
+            ))}
+          </div>
+        </div>
+      </section>
 
-          {/* Syslog 实时统计卡片 */}
-          {syslogStatusQuery.data && (
-            <div className="mt-6 grid grid-cols-3 gap-3">
-              <div className="rounded-lg border border-border p-3">
-                <div className="text-xs text-muted-foreground mb-2">接收 / 落库</div>
-                <div className="text-sm text-foreground space-y-0.5">
-                  <div>接收：<span className="font-mono">{syslogStatusQuery.data.received}</span></div>
-                  <div>落库：<span className="font-mono">{syslogStatusQuery.data.stored}</span></div>
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
+        <div className="space-y-4">
+          <section
+            aria-label="日志保留策略"
+            className="rounded-xl border border-border bg-card p-5 shadow-sm"
+          >
+            <SectionHeader
+              title="日志保留策略"
+              description="配置设备日志的自动清理策略，影响系统定时数据清理任务中的日志清理行为。"
+              icon={Zap}
+              actions={
+                <div role="group" aria-label="日志保留策略操作" className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => void handleSave()}
+                    disabled={disableSaveReset}
+                    loading={saving}
+                  >
+                    <Zap className="w-4 h-4 mr-2" />
+                    保存更改
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleReset}
+                    disabled={disableSaveReset}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    重置更改
+                  </Button>
                 </div>
-              </div>
-              <div className="rounded-lg border border-border p-3">
-                <div className="text-xs text-muted-foreground mb-2">丢弃</div>
-                <div className="text-sm text-foreground space-y-0.5">
-                  <div>未匹配：<span className="font-mono">{syslogStatusQuery.data.droppedUnmatched}</span></div>
-                  <div>解析：<span className="font-mono">{syslogStatusQuery.data.droppedParse}</span></div>
-                </div>
-              </div>
-              <div className="rounded-lg border border-border p-3">
-                <div className="text-xs text-muted-foreground mb-2">告警联动</div>
-                <div className="text-sm text-foreground space-y-0.5">
-                  <div>新建：<span className="font-mono">{syslogStatusQuery.data.alertsCreated}</span></div>
-                  <div>去重：<span className="font-mono">{syslogStatusQuery.data.alertsUpdated}</span></div>
-                  <div>限流：<span className="font-mono">{syslogStatusQuery.data.alertsRateLimited}</span></div>
-                </div>
-              </div>
-              {syslogStatusQuery.data.lastError && syslogStatusQuery.data.lastError.trim() !== '' && (
-                <div className="col-span-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 text-sm text-amber-800 dark:text-amber-200">
-                  最近错误：{syslogStatusQuery.data.lastError}
-                </div>
-              )}
+              }
+            />
+
+            <div className="mt-4 rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+              自动清理影响后台定时清理任务；保留天数会同时影响手动清理时的默认执行范围。
             </div>
-          )}
-        </section>
+
+            <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="logs-auto-cleanup">启用自动清理</Label>
+                  <Switch
+                    id="logs-auto-cleanup"
+                    checked={autoCleanupEnabled}
+                    onCheckedChange={(value) => updateAutoCleanupEnabled(Boolean(value))}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  关闭后系统不会自动清理历史设备日志。
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="logs-retention-days">设备日志保留天数</Label>
+                <Input
+                  id="logs-retention-days"
+                  type="number"
+                  min={1}
+                  max={3650}
+                  value={retentionDays}
+                  onChange={(e) => updateRetentionDays(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  超过该天数的设备日志将被清理（范围 1-3650）。
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section
+            aria-label="Syslog 接收配置"
+            className="rounded-xl border border-border bg-card p-5 shadow-sm"
+          >
+            <SectionHeader
+              title="Syslog 接收配置"
+              description="开启后后端将监听设备 Syslog 上报（UDP/TCP），并写入日志中心。warning/error/critical 级别可联动生成告警。"
+              icon={Radio}
+              actions={
+                <div role="group" aria-label="Syslog 接收配置操作" className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => void handleApplySyslog()}
+                    disabled={saving}
+                    loading={applySyslogMutation.isPending}
+                  >
+                    <Zap className="w-4 h-4 mr-2" />
+                    保存并应用 Syslog
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void syslogStatusQuery.refetch()}
+                    disabled={disableRefresh}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    刷新运行状态
+                  </Button>
+                </div>
+              }
+            />
+
+            <div className="mt-4 rounded-lg border border-blue-200/70 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100">
+              保存并应用 Syslog 会先保存当前日志设置，再重新加载 Syslog 接收配置，确保运行状态与表单内容保持一致。
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="syslog-enabled">启用 Syslog 接收</Label>
+                  <Switch
+                    id="syslog-enabled"
+                    checked={syslogEnabled}
+                    onCheckedChange={(value) => updateSyslogEnabled(Boolean(value))}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  监听地址默认为 <span className="font-mono">{syslogHost}:{syslogPort}</span>，端口默认 5514。
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="syslog-protocol">协议</Label>
+                <Select
+                  value={syslogProtocol}
+                  onValueChange={(v) => updateSyslogProtocol(v as SyslogProtocol)}
+                >
+                  <SelectTrigger id="syslog-protocol" aria-label="Syslog 协议">
+                    <SelectValue placeholder="选择协议" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="both">UDP + TCP</SelectItem>
+                    <SelectItem value="udp">仅 UDP</SelectItem>
+                    <SelectItem value="tcp">仅 TCP</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  建议默认使用 UDP + TCP，兼容更多设备。
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="syslog-host">监听地址</Label>
+                <Input
+                  id="syslog-host"
+                  value={syslogHost}
+                  onChange={(e) => updateSyslogHost(e.target.value)}
+                  placeholder="0.0.0.0"
+                />
+                <p className="text-xs text-muted-foreground">
+                  一般保持 <span className="font-mono">0.0.0.0</span> 监听所有网卡。
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="syslog-port">端口</Label>
+                <Input
+                  id="syslog-port"
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={syslogPort}
+                  onChange={(e) => updateSyslogPort(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  默认端口 5514（避免与 514 冲突及权限问题）。
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="syslog-max-bytes">单条消息最大字节数</Label>
+                <Input
+                  id="syslog-max-bytes"
+                  type="number"
+                  min={256}
+                  max={1024 * 1024}
+                  value={syslogMaxMessageBytes}
+                  onChange={(e) => updateSyslogMaxMessageBytes(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  防止超大报文占用内存，范围 256 到 1MB。
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="syslog-alerts-enabled">联动告警</Label>
+                  <Switch
+                    id="syslog-alerts-enabled"
+                    checked={syslogAlertsEnabled}
+                    onCheckedChange={(value) => updateSyslogAlertsEnabled(Boolean(value))}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  warning/error/critical 将触发告警（带去重与风暴保护）。
+                </p>
+              </div>
+
+              <div className="space-y-2 lg:col-span-2">
+                <Label htmlFor="syslog-alerts-rate">每分钟最多新告警数</Label>
+                <Input
+                  id="syslog-alerts-rate"
+                  type="number"
+                  min={0}
+                  max={10000}
+                  value={syslogAlertsMaxNewPerMinute}
+                  onChange={(e) => updateSyslogAlertsMaxNewPerMinute(Number(e.target.value))}
+                  className="max-w-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  0 表示不限制。超过限制会创建或更新告警风暴告警。
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div className="space-y-4">
+          <section
+            aria-label="运行状态"
+            className="rounded-xl border border-border bg-card p-5 shadow-sm"
+          >
+            <SectionHeader
+              title="运行状态"
+              description="集中查看当前 Syslog 接收器状态、监听端口和自动刷新策略。"
+              icon={Radio}
+            />
+
+            <div className="mt-6 space-y-4 text-sm">
+              <div className="rounded-lg border border-border/60 bg-background/80 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">接收器状态</p>
+                    <p className={`mt-1 text-lg font-semibold ${syslogStatusToneClass}`}>{syslogStatusText}</p>
+                  </div>
+                  <span className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
+                    {syslogStatus?.config.protocol?.toUpperCase() ?? 'BOTH'}
+                  </span>
+                </div>
+                <dl className="mt-4 space-y-2 text-muted-foreground">
+                  <div className="flex items-center justify-between gap-3">
+                    <dt>监听地址</dt>
+                    <dd className="font-mono text-foreground">{syslogStatus?.config.host ?? syslogHost}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <dt>监听端口</dt>
+                    <dd className="font-mono text-foreground">{syslogStatus?.config.port ?? syslogPort}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <dt>刷新策略</dt>
+                    <dd className="text-foreground">运行中每 5 秒自动刷新</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <dt>最近刷新</dt>
+                    <dd className="text-foreground">{syslogStatus?.updatedAt ?? '暂无数据'}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              {syslogStatusQuery.error ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300">
+                  Syslog 状态获取失败：{(syslogStatusQuery.error as Error).message || '未知错误'}
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section
+            aria-label="实时统计"
+            className="rounded-xl border border-border bg-card p-5 shadow-sm"
+          >
+            <SectionHeader
+              title="实时统计"
+              description="帮助快速判断采集质量、异常丢弃和告警联动情况。"
+              icon={Zap}
+            />
+
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-border p-4">
+                <div className="text-xs text-muted-foreground">接收与落库</div>
+                <div className="mt-3 space-y-2 text-sm text-foreground">
+                  <div className="flex items-center justify-between gap-3">
+                    <span>接收</span>
+                    <span className="font-mono">{syslogStatus?.received ?? 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>落库</span>
+                    <span className="font-mono">{syslogStatus?.stored ?? 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border p-4">
+                <div className="text-xs text-muted-foreground">丢弃情况</div>
+                <div className="mt-3 space-y-2 text-sm text-foreground">
+                  <div className="flex items-center justify-between gap-3">
+                    <span>未匹配</span>
+                    <span className="font-mono">{syslogStatus?.droppedUnmatched ?? 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>解析失败</span>
+                    <span className="font-mono">{syslogStatus?.droppedParse ?? 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border p-4 sm:col-span-2">
+                <div className="text-xs text-muted-foreground">告警联动</div>
+                <div className="mt-3 grid grid-cols-1 gap-2 text-sm text-foreground sm:grid-cols-3">
+                  <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
+                    <span>新建</span>
+                    <span className="font-mono">{syslogStatus?.alertsCreated ?? 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
+                    <span>去重更新</span>
+                    <span className="font-mono">{syslogStatus?.alertsUpdated ?? 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2">
+                    <span>限流抑制</span>
+                    <span className="font-mono">{syslogStatus?.alertsRateLimited ?? 0}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section
+            aria-label="最近错误"
+            className="rounded-xl border border-border bg-card p-5 shadow-sm"
+          >
+            <SectionHeader
+              title="最近错误"
+              description="用于快速判断当前接收器最近一次异常是否影响服务可用性。"
+              icon={AlertCircle}
+            />
+
+            <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
+              {syslogStatus?.lastError && syslogStatus.lastError.trim() !== ''
+                ? `最近错误：${syslogStatus.lastError}`
+                : '当前未记录新的接收器错误。'}
+            </div>
+          </section>
+        </div>
       </div>
+
+      <section
+        aria-label="手动清理日志"
+        className="mt-4 rounded-xl border border-red-200/70 bg-red-50/70 p-5 shadow-sm dark:border-red-900/50 dark:bg-red-950/10"
+      >
+        <SectionHeader
+          title="手动清理日志"
+          description="危险操作仅用于立即清理历史日志，适合磁盘空间紧张或变更清理策略后的即时回收。"
+          icon={Trash2}
+          actions={
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleRequestCleanup}
+              disabled={disableCleanup}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              立即清理设备日志
+            </Button>
+          }
+        />
+
+        <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="rounded-lg border border-red-200/80 bg-background/80 p-4 text-sm text-muted-foreground dark:border-red-900/50">
+            <p className="font-medium text-foreground">清理将按当前页面中的保留天数执行</p>
+            <p className="mt-2">
+              当前执行范围：清理超过 <span className="font-mono text-foreground">{cleanupRetentionDays}</span> 天的设备日志。该操作不可恢复，建议在保存前再次确认当前输入值是否正确。
+            </p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
+            与自动清理策略共用同一保留口径
+          </div>
+        </div>
+      </section>
 
       <SettingsConfirmDialog
         open={cleanupDialogOpen}

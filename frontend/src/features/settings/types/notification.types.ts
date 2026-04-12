@@ -22,23 +22,10 @@ export interface SmsNotificationConfig {
   testPhone?: string
 }
 
-// Webhook通知配置
-export interface WebhookNotificationConfig {
-  enabled: boolean
-  url: string
-  method: 'POST' | 'PUT'
-  headers: Record<string, string>
-  authType: 'none' | 'bearer' | 'basic' | 'apikey'
-  authToken?: string
-  retryCount: number
-  timeout: number
-}
-
 // 完整的通知设置响应
 export interface NotificationSettingsResponse {
   emailNotification: EmailNotificationConfig
   smsNotification: SmsNotificationConfig
-  webhookNotification: WebhookNotificationConfig
 }
 
 // 更新请求类型
@@ -60,17 +47,6 @@ export interface UpdateSmsNotificationRequest {
   apiSecret?: string
   signName?: string
   templateCode?: string
-}
-
-export interface UpdateWebhookNotificationRequest {
-  enabled?: boolean
-  url?: string
-  method?: 'POST' | 'PUT'
-  headers?: Record<string, string>
-  authType?: 'none' | 'bearer' | 'basic' | 'apikey'
-  authToken?: string
-  retryCount?: number
-  timeout?: number
 }
 
 // 测试结果类型

@@ -40,35 +40,32 @@ jest.mock('@/features/settings/components/notifications/EmailNotificationSection
             onClick={props.actions.onReset}
             disabled={!props.actions.isDirty || props.actions.isSaving}
           >
-            重置
+            重置整页更改
           </button>
           <button
             type="button"
             onClick={props.actions.onSave}
             disabled={!props.actions.isDirty || props.actions.isSaving}
           >
-            {props.actions.isSaving ? '保存中...' : '保存'}
+            {props.actions.isSaving ? '保存中...' : '保存整页更改'}
           </button>
         </div>
       ) : (
         <div>no-local-actions</div>
       )}
+      <div>保存整页更改会同时提交当前页面中的邮件和短信配置。</div>
+      <div>测试发送用于验证通知链路；如刚修改配置，建议先保存整页更改后再测试。</div>
     </div>
   ),
 }))
 jest.mock('@/features/settings/components/notifications/SmsNotificationSection', () => ({
   SmsNotificationSection: () => <div>sms-notification-section</div>,
 }))
-jest.mock('@/features/settings/components/notifications/WebhookNotificationSection', () => ({
-  WebhookNotificationSection: () => <div>webhook-notification-section</div>,
-}))
-
 describe('NotificationSettings 壳层动作区迁移', () => {
   beforeEach(() => {
     mockUseNotificationSettings.mockReturnValue({
-      emailNotification: {},
-      smsNotification: {},
-      webhookNotification: {},
+      emailNotification: { enabled: true },
+      smsNotification: { enabled: false },
       isLoading: false,
       isSaving: false,
       isTesting: false,
@@ -76,12 +73,10 @@ describe('NotificationSettings 壳层动作区迁移', () => {
       error: null,
       updateEmailNotification: jest.fn(),
       updateSmsNotification: jest.fn(),
-      updateWebhookNotification: jest.fn(),
       saveAll: saveAllMock.mockResolvedValue(undefined),
       resetAll: resetAllMock,
       testEmailNotification: jest.fn(),
       testSmsNotification: jest.fn(),
-      testWebhookNotification: jest.fn(),
     })
   })
 
@@ -89,7 +84,7 @@ describe('NotificationSettings 壳层动作区迁移', () => {
     jest.clearAllMocks()
   })
 
-  it('应移除壳层保存/重置按钮，并将动作下移到邮件通知模块标题行', async () => {
+  it('应展示通知摘要，并将整页保存动作下移到邮件通知模块标题行', async () => {
     const user = userEvent.setup()
 
     const ShellToolbar: React.FC = () => {
@@ -121,22 +116,31 @@ describe('NotificationSettings 壳层动作区迁移', () => {
     await waitFor(() => {
       expect(screen.getByText('email-notification-section')).toBeInTheDocument()
     })
+    expect(screen.getByRole('heading', { name: '通知中心' })).toBeInTheDocument()
+    expect(screen.getByText('邮件通知')).toBeInTheDocument()
+    expect(screen.getByText('短信通知')).toBeInTheDocument()
+    expect(screen.queryByText('Webhook')).not.toBeInTheDocument()
+    expect(screen.getAllByText('已启用渠道').length).toBeGreaterThan(0)
+    expect(screen.getByText('1 / 2')).toBeInTheDocument()
     expect(
-      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存' })
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存整页更改' })
     ).not.toBeInTheDocument()
     expect(
-      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置' })
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置整页更改' })
     ).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: '邮件通知操作' })).toBeInTheDocument()
+    expect(screen.getByText(/保存整页更改会同时提交当前页面中的邮件和短信配置/)).toBeInTheDocument()
+    expect(screen.getByText(/测试发送用于验证通知链路/)).toBeInTheDocument()
+    expect(screen.queryByText('webhook-notification-section')).not.toBeInTheDocument()
 
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('dirty:true')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('saving:false')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('blockLeave:true')
 
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: '保存整页更改' }))
     expect(saveAllMock).toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: '重置' }))
+    await user.click(screen.getByRole('button', { name: '重置整页更改' }))
     expect(resetAllMock).toHaveBeenCalled()
   })
 })

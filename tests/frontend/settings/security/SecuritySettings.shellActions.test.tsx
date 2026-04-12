@@ -23,7 +23,14 @@ jest.mock('react-hot-toast', () => ({
 }))
 
 jest.mock('@/features/settings/components/security/SessionManagementSection', () => ({
-  SessionManagementSection: (props: {
+  SessionManagementSection: () => (
+    <div>
+      <div>session-management-section</div>
+    </div>
+  ),
+}))
+jest.mock('@/features/settings/components/security/PasswordPolicySection', () => ({
+  PasswordPolicySection: (props: {
     actions?: {
       isDirty: boolean
       isSaving: boolean
@@ -32,22 +39,23 @@ jest.mock('@/features/settings/components/security/SessionManagementSection', ()
     }
   }) => (
     <div>
-      <div>session-management-section</div>
+      <div>password-policy-section</div>
+      <div>保存整页更改会同时提交当前页面中的密码策略、会话管理和认证方式配置。</div>
       {props.actions ? (
-        <div role="group" aria-label="会话管理操作">
+        <div role="group" aria-label="密码策略操作">
           <button
             type="button"
             onClick={props.actions.onReset}
             disabled={!props.actions.isDirty || props.actions.isSaving}
           >
-            重置
+            重置整页更改
           </button>
           <button
             type="button"
             onClick={props.actions.onSave}
             disabled={!props.actions.isDirty || props.actions.isSaving}
           >
-            {props.actions.isSaving ? '保存中...' : '保存'}
+            {props.actions.isSaving ? '保存中...' : '保存整页更改'}
           </button>
         </div>
       ) : (
@@ -56,9 +64,6 @@ jest.mock('@/features/settings/components/security/SessionManagementSection', ()
     </div>
   ),
 }))
-jest.mock('@/features/settings/components/security/PasswordPolicySection', () => ({
-  PasswordPolicySection: () => <div>password-policy-section</div>,
-}))
 jest.mock('@/features/settings/components/security/AuthenticationSection', () => ({
   AuthenticationSection: () => <div>authentication-section</div>,
 }))
@@ -66,9 +71,15 @@ jest.mock('@/features/settings/components/security/AuthenticationSection', () =>
 describe('SecuritySettings 壳层动作区迁移', () => {
   beforeEach(() => {
     mockUseSecuritySettings.mockReturnValue({
-      sessionManagement: {},
-      passwordPolicy: {},
-      authentication: {},
+      sessionManagement: { maxConcurrentSessions: 3 },
+      passwordPolicy: {
+        minLength: 12,
+        requireUppercase: true,
+        requireLowercase: true,
+        requireNumbers: true,
+        requireSpecialChars: false,
+      },
+      authentication: { mfaEnabled: true, mfaRequired: false, ipWhitelistEnabled: true, ipWhitelist: ['10.0.0.0/8'] },
       isLoading: false,
       isSaving: false,
       isDirty: true,
@@ -85,7 +96,7 @@ describe('SecuritySettings 壳层动作区迁移', () => {
     jest.clearAllMocks()
   })
 
-  it('应移除壳层保存/重置按钮，并将动作下移到会话管理模块标题行', async () => {
+  it('应展示安全摘要，并将整页保存动作下移到密码策略模块标题行', async () => {
     const user = userEvent.setup()
 
     const ShellToolbar: React.FC = () => {
@@ -115,24 +126,30 @@ describe('SecuritySettings 壳层动作区迁移', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('session-management-section')).toBeInTheDocument()
+      expect(screen.getByText('password-policy-section')).toBeInTheDocument()
     })
+    expect(screen.getByRole('heading', { name: '安全策略' })).toBeInTheDocument()
+    expect(screen.getByText('最小密码长度')).toBeInTheDocument()
+    expect(screen.getByText('MFA 状态')).toBeInTheDocument()
+    expect(screen.getByText('IP 白名单')).toBeInTheDocument()
+    expect(screen.getByText('最大并发会话数')).toBeInTheDocument()
     expect(
-      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存' })
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存整页更改' })
     ).not.toBeInTheDocument()
     expect(
-      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置' })
+      within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置整页更改' })
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('group', { name: '会话管理操作' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: '密码策略操作' })).toBeInTheDocument()
+    expect(screen.getByText(/保存整页更改会同时提交当前页面中的密码策略、会话管理和认证方式配置/)).toBeInTheDocument()
 
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('dirty:true')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('saving:false')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('blockLeave:true')
 
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: '保存整页更改' }))
     expect(saveAllMock).toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: '重置' }))
+    await user.click(screen.getByRole('button', { name: '重置整页更改' }))
     expect(resetAllMock).toHaveBeenCalled()
   })
 })

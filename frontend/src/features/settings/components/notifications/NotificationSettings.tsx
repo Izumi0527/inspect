@@ -3,7 +3,7 @@
 import { useNotificationSettings } from '../../hooks/useNotificationSettings'
 import { EmailNotificationSection } from './EmailNotificationSection'
 import { SmsNotificationSection } from './SmsNotificationSection'
-import { WebhookNotificationSection } from './WebhookNotificationSection'
+import { NotificationOverviewCard } from './NotificationOverviewCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -14,7 +14,6 @@ export function NotificationSettings() {
   const {
     emailNotification,
     smsNotification,
-    webhookNotification,
     isLoading,
     isSaving,
     isTesting,
@@ -22,12 +21,10 @@ export function NotificationSettings() {
     error,
     updateEmailNotification,
     updateSmsNotification,
-    updateWebhookNotification,
     saveAll,
     resetAll,
     testEmailNotification,
     testSmsNotification,
-    testWebhookNotification,
   } = useNotificationSettings()
 
   const handleSave = useCallback(async () => {
@@ -79,38 +76,31 @@ export function NotificationSettings() {
 
   return (
     <div className="p-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
-        {/* 左列：邮件通知（字段最多，独占左列）*/}
-        <div>
-          <EmailNotificationSection
-            data={emailNotification}
-            onChange={updateEmailNotification}
-            onTest={testEmailNotification}
-            isTesting={isTesting}
-            actions={{
-              isDirty,
-              isSaving,
-              onSave: handleSave,
-              onReset: handleReset,
-            }}
-          />
-        </div>
+      <NotificationOverviewCard
+        emailEnabled={Boolean(emailNotification.enabled)}
+        smsEnabled={Boolean(smsNotification.enabled)}
+      />
 
-        {/* 右列：短信通知 + Webhook 通知 */}
-        <div className="divide-y divide-gray-200 dark:divide-gray-700">
-          <SmsNotificationSection
-            data={smsNotification}
-            onChange={updateSmsNotification}
-            onTest={testSmsNotification}
-            isTesting={isTesting}
-          />
-          <WebhookNotificationSection
-            data={webhookNotification}
-            onChange={updateWebhookNotification}
-            onTest={testWebhookNotification}
-            isTesting={isTesting}
-          />
-        </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 2xl:grid-cols-2">
+        <EmailNotificationSection
+          data={emailNotification}
+          onChange={updateEmailNotification}
+          onTest={testEmailNotification}
+          isTesting={isTesting}
+          actions={{
+            isDirty,
+            isSaving,
+            onSave: handleSave,
+            onReset: handleReset,
+          }}
+        />
+
+        <SmsNotificationSection
+          data={smsNotification}
+          onChange={updateSmsNotification}
+          onTest={testSmsNotification}
+          isTesting={isTesting}
+        />
       </div>
     </div>
   )

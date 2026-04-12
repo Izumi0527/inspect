@@ -12,15 +12,17 @@ interface Props {
 
 export function InspectionConfigSection({ data, onChange }: Props) {
   return (
-    <div className="p-4">
+    <section
+      aria-label="巡检配置"
+      className="rounded-xl border border-border bg-card p-5 shadow-sm"
+    >
       <SectionHeader
         title="巡检配置"
-        description="设备巡检任务的相关配置"
+        description="定义巡检任务的默认执行策略，直接影响系统任务调度与失败恢复行为。"
         icon="Search"
       />
 
       <div className="mt-6 space-y-4">
-        {/* 默认超时时间单独一行（独立意义）*/}
         <ConfigItem
           label="默认超时时间 (秒)"
           description="巡检任务的默认超时时间 (5-300秒)"
@@ -35,8 +37,11 @@ export function InspectionConfigSection({ data, onChange }: Props) {
           />
         </ConfigItem>
 
-        {/* 最大并发任务数 + 失败重试次数 并排（都是限额类数值）*/}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+          建议先设置默认超时，再根据系统容量调整并发与失败重试次数，避免高并发下重复请求放大系统负载。
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ConfigItem
             label="最大并发任务数"
             description="同时执行的任务上限 (1-50)"
@@ -68,6 +73,6 @@ export function InspectionConfigSection({ data, onChange }: Props) {
           </ConfigItem>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

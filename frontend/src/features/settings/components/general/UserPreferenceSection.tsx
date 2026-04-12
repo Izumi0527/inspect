@@ -29,16 +29,22 @@ const timeFormatOptions = [
 
 export function UserPreferenceSection({ data, onChange }: Props) {
   return (
-    <div className="p-4">
+    <section
+      aria-label="个人偏好"
+      className="rounded-xl border border-border bg-card p-5 shadow-sm"
+    >
       <SectionHeader
         title="个人偏好"
-        description="自定义您的用户界面和显示偏好"
+        description="定义系统界面与时间显示的默认偏好，帮助保持一致的展示体验。"
         icon="User"
       />
 
       <div className="mt-6 space-y-4">
-        {/* 主题模式 + 语言 并排（外观类选项）*/}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+          该区块主要影响默认显示习惯，不改变核心业务行为，适合在完成系统基础参数后再调整。
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ConfigItem label="主题模式" description="选择界面的主题外观" required>
             <ConfigSelect
               value={data.theme}
@@ -56,8 +62,7 @@ export function UserPreferenceSection({ data, onChange }: Props) {
           </ConfigItem>
         </div>
 
-        {/* 日期格式 + 时间格式 并排（时间类选项）*/}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ConfigItem label="日期格式" description="自定义日期显示格式，如 YYYY-MM-DD" required>
             <ConfigInput
               value={data.dateFormat}
@@ -76,6 +81,6 @@ export function UserPreferenceSection({ data, onChange }: Props) {
           </ConfigItem>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

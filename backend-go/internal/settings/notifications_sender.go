@@ -38,14 +38,6 @@ func (s *Service) EmailNotificationsEnabled(ctx context.Context) bool {
 	return enabled
 }
 
-// WebhookNotificationsEnabled 判断是否启用 Webhook 通知（作为全局总开关）。
-func (s *Service) WebhookNotificationsEnabled(ctx context.Context) bool {
-	if !s.isReady() {
-		return false
-	}
-	return s.getSettingBool(ctx, "notification.webhook.enabled", false)
-}
-
 func (s *Service) loadSMTPConfig(ctx context.Context) smtpConfig {
 	host := s.getSettingString(ctx, "notification.email.smtp_host", "")
 	if host == "" {
@@ -211,87 +203,6 @@ func (s *Service) SendEmail(ctx context.Context, to string, subject string, cont
 	return sendSMTP(ctx, cfg, to, subject, content)
 }
 
-type webhookConfig struct {
-	Enabled    bool
-	URL        string
-	Method     string
-	Headers    map[string]string
-	AuthType   string
-	AuthToken  string
-	RetryCount int
-	TimeoutSec int
-}
-
-func (s *Service) loadWebhookConfig(ctx context.Context) webhookConfig {
-	enabled := s.getSettingBool(ctx, "notification.webhook.enabled", false)
-	url := s.getSettingString(ctx, "notification.webhook.url", "")
-	method := strings.ToUpper(strings.TrimSpace(s.getSettingString(ctx, "notification.webhook.method", "POST")))
-	if method == "" {
-		method = "POST"
-	}
-
-	retryCount := s.getSettingInt(ctx, "notification.webhook.retry_count", 3)
-	timeoutSec := s.getSettingInt(ctx, "notification.webhook.timeout", 30)
-
-	authType := strings.TrimSpace(s.getSettingString(ctx, "notification.webhook.auth_type", "none"))
-	authToken := strings.TrimSpace(s.getSettingString(ctx, "notification.webhook.auth_token", ""))
-
-	headers := map[string]string{}
-	if item, err := s.GetSetting(ctx, "notification.webhook.headers"); err == nil && item != nil && item.Value != nil {
-		switch v := item.Value.(type) {
-		case map[string]interface{}:
-			for k, raw := range v {
-				key := strings.TrimSpace(k)
-				if key == "" {
-					continue
-				}
-				if str, ok := raw.(string); ok {
-					headers[key] = str
-				} else if raw != nil {
-					headers[key] = fmt.Sprint(raw)
-				}
-			}
-		case map[string]string:
-			for k, value := range v {
-				key := strings.TrimSpace(k)
-				if key == "" {
-					continue
-				}
-				headers[key] = value
-			}
-		case string:
-			text := strings.TrimSpace(v)
-			if text != "" {
-				tmp := map[string]interface{}{}
-				if json.Unmarshal([]byte(text), &tmp) == nil {
-					for k, raw := range tmp {
-						key := strings.TrimSpace(k)
-						if key == "" {
-							continue
-						}
-						if str, ok := raw.(string); ok {
-							headers[key] = str
-						} else if raw != nil {
-							headers[key] = fmt.Sprint(raw)
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return webhookConfig{
-		Enabled:    enabled,
-		URL:        url,
-		Method:     method,
-		Headers:    headers,
-		AuthType:   authType,
-		AuthToken:  authToken,
-		RetryCount: retryCount,
-		TimeoutSec: timeoutSec,
-	}
-}
-
 type WebhookSendInput struct {
 	URL     string
 	Method  string
@@ -303,29 +214,6 @@ type WebhookSendResult struct {
 	StatusCode     int
 	ResponseBody   string
 	ResponseTimeMs int
-}
-
-func applyAuthHeader(headers map[string]string, authType string, token string) {
-	authType = strings.ToLower(strings.TrimSpace(authType))
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return
-	}
-
-	switch authType {
-	case "bearer":
-		if _, ok := headers["Authorization"]; !ok {
-			headers["Authorization"] = fmt.Sprintf("Bearer %s", token)
-		}
-	case "basic":
-		if _, ok := headers["Authorization"]; !ok {
-			headers["Authorization"] = fmt.Sprintf("Basic %s", token)
-		}
-	case "apikey":
-		if _, ok := headers["X-API-Key"]; !ok {
-			headers["X-API-Key"] = token
-		}
-	}
 }
 
 func doWebhookOnce(ctx context.Context, client *http.Client, method string, url string, headers map[string]string, payload map[string]interface{}) (WebhookSendResult, error) {
@@ -376,24 +264,16 @@ func doWebhookOnce(ctx context.Context, client *http.Client, method string, url 
 
 // SendWebhook 使用系统配置发送 Webhook（供告警触发/测试等场景复用）。
 func (s *Service) SendWebhook(ctx context.Context, input WebhookSendInput) (WebhookSendResult, error) {
-	cfg := s.loadWebhookConfig(ctx)
-
 	url := strings.TrimSpace(input.URL)
 	if url == "" {
-		url = strings.TrimSpace(cfg.URL)
+		return WebhookSendResult{}, fmt.Errorf("Webhook地址不能为空")
 	}
 	method := strings.ToUpper(strings.TrimSpace(input.Method))
-	if method == "" {
-		method = strings.ToUpper(strings.TrimSpace(cfg.Method))
-	}
 	if method == "" {
 		method = "POST"
 	}
 
 	headers := map[string]string{}
-	for k, v := range cfg.Headers {
-		headers[k] = v
-	}
 	for k, v := range input.Headers {
 		key := strings.TrimSpace(k)
 		if key == "" {
@@ -401,14 +281,9 @@ func (s *Service) SendWebhook(ctx context.Context, input WebhookSendInput) (Webh
 		}
 		headers[key] = v
 	}
-	applyAuthHeader(headers, cfg.AuthType, cfg.AuthToken)
 
-	timeout := time.Duration(cfg.TimeoutSec) * time.Second
-	if timeout <= 0 {
-		timeout = 30 * time.Second
-	}
 	client := &http.Client{
-		Timeout: timeout,
+		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
@@ -419,9 +294,6 @@ func (s *Service) SendWebhook(ctx context.Context, input WebhookSendInput) (Webh
 	}
 
 	attempts := 1
-	if cfg.RetryCount > 0 {
-		attempts = 1 + cfg.RetryCount
-	}
 
 	var lastErr error
 	var lastResult WebhookSendResult

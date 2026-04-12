@@ -251,9 +251,6 @@ Body: {"recipient": "test@example.com"}
 POST /api/v1/settings/notifications/test-sms
 Body: {"recipient": "13800138000"}
 
-# 测试Webhook
-POST /api/v1/settings/notifications/test-webhook
-Body: {"url": "https://example.com/webhook"}
 ```
 
 ### 备份管理

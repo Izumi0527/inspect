@@ -65,3 +65,24 @@ func TestSettingsSystemRestoreRoute_ShouldRemainAvailable(t *testing.T) {
 		t.Fatalf("status=%d, want %d", rec.Code, http.StatusServiceUnavailable)
 	}
 }
+
+func TestSettingsNotificationWebhookRoute_ShouldBeRemoved(t *testing.T) {
+	e := echo.New()
+	api := e.Group("/api/v1")
+
+	h := handlers.SettingsHandler{
+		Service: nil,
+		Auth:    nil,
+	}
+	h.Register(api)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings/notifications/test-webhook", bytes.NewBufferString(`{"url":"https://example.com/webhook"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status=%d, want %d", rec.Code, http.StatusNotFound)
+	}
+}

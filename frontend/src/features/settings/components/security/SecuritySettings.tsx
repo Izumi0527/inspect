@@ -4,6 +4,7 @@ import { useSecuritySettings } from '../../hooks/useSecuritySettings'
 import { SessionManagementSection } from './SessionManagementSection'
 import { PasswordPolicySection } from './PasswordPolicySection'
 import { AuthenticationSection } from './AuthenticationSection'
+import { SecurityOverviewCard } from './SecurityOverviewCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -78,17 +79,24 @@ export function SecuritySettings() {
 
   return (
     <div className="p-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
-        {/* 左列：密码策略（配置项最多） */}
-        <div>
-          <PasswordPolicySection data={passwordPolicy} onChange={updatePasswordPolicy} />
-        </div>
+      <SecurityOverviewCard
+        minLength={passwordPolicy.minLength}
+        requireUppercase={passwordPolicy.requireUppercase}
+        requireLowercase={passwordPolicy.requireLowercase}
+        requireNumbers={passwordPolicy.requireNumbers}
+        requireSpecialChars={passwordPolicy.requireSpecialChars}
+        mfaEnabled={authentication.mfaEnabled}
+        mfaRequired={authentication.mfaRequired}
+        ipWhitelistEnabled={authentication.ipWhitelistEnabled}
+        ipWhitelistCount={authentication.ipWhitelist?.length ?? 0}
+        maxConcurrentSessions={sessionManagement.maxConcurrentSessions}
+      />
 
-        {/* 右列：会话管理 + 认证方式 */}
-        <div className="divide-y divide-gray-200 dark:divide-gray-700">
-          <SessionManagementSection
-            data={sessionManagement}
-            onChange={updateSessionManagement}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
+        <div className="space-y-4">
+          <PasswordPolicySection
+            data={passwordPolicy}
+            onChange={updatePasswordPolicy}
             actions={{
               isDirty,
               isSaving,
@@ -97,6 +105,10 @@ export function SecuritySettings() {
             }}
           />
           <AuthenticationSection data={authentication} onChange={updateAuthentication} />
+        </div>
+
+        <div className="space-y-4">
+          <SessionManagementSection data={sessionManagement} onChange={updateSessionManagement} />
         </div>
       </div>
     </div>

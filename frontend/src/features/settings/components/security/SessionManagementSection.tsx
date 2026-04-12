@@ -1,61 +1,32 @@
 'use client'
 
-import { Button } from '@/components/ui/button'
 import { SectionHeader } from '@/features/settings/components/shared/SectionHeader'
 import { ConfigItem } from '@/features/settings/components/shared/ConfigItem'
 import { ConfigInput } from '@/features/settings/components/shared/ConfigInput'
 import { ConfigSwitch } from '@/features/settings/components/shared/ConfigSwitch'
-import { Clock, RotateCcw, Save } from 'lucide-react'
+import { Clock } from 'lucide-react'
 import type { SessionManagementConfig } from '@/features/settings/types/security.types'
-
-interface SessionActionProps {
-  isDirty: boolean
-  isSaving: boolean
-  onSave: () => void
-  onReset: () => void
-}
 
 interface Props {
   data: SessionManagementConfig
   onChange: (field: keyof SessionManagementConfig, value: any) => void
-  actions?: SessionActionProps
 }
 
-export function SessionManagementSection({ data, onChange, actions }: Props) {
+export function SessionManagementSection({ data, onChange }: Props) {
   return (
-    <div className="p-4">
+    <section aria-label="会话管理" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="会话管理"
-        description="配置用户会话超时和并发控制"
+        description="控制访问时效、并发登录与改密后的会话处置。"
         icon={Clock}
-        actions={
-          actions ? (
-            <div role="group" aria-label="会话管理操作" className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={actions.onReset}
-                disabled={!actions.isDirty || actions.isSaving}
-              >
-                <RotateCcw className="w-4 h-4 mr-2" />
-                重置
-              </Button>
-              <Button
-                type="button"
-                onClick={actions.onSave}
-                disabled={!actions.isDirty || actions.isSaving}
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {actions.isSaving ? '保存中...' : '保存'}
-              </Button>
-            </div>
-          ) : null
-        }
       />
 
+      <div className="mt-4 rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+        会话策略决定用户登录后可维持多久、可同时登录多少会话，以及在密码变化后如何收口其它会话风险。
+      </div>
+
       <div className="mt-6 space-y-4">
-        {/* 会话超时时间 + 启用自动登出 - 并排 */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ConfigItem
             label="会话超时时间 (分钟)"
             description="无操作后自动登出 (5-1440分钟)"
@@ -98,6 +69,12 @@ export function SessionManagementSection({ data, onChange, actions }: Props) {
             />
           </ConfigItem>
 
+          {!data.autoLogoutEnabled && (
+            <div className="rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
+              当前已关闭自动登出，会话超时时间仅保留为预设值，不会在运行时生效。
+            </div>
+          )}
+
           {data.rememberMeEnabled && (
             <ConfigItem
               label='"记住我"持续时间 (天)'
@@ -121,7 +98,7 @@ export function SessionManagementSection({ data, onChange, actions }: Props) {
 
         {/* 最大并发会话数 + 密码更改后强制登出 - 并排 */}
         <div className="pt-4 border-t">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem
               label="最大并发会话数"
               description="单用户允许同时登录数 (1-10)"
@@ -153,6 +130,6 @@ export function SessionManagementSection({ data, onChange, actions }: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

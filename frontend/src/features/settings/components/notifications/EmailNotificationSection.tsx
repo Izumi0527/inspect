@@ -60,10 +60,10 @@ export function EmailNotificationSection({
   }
 
   return (
-    <div className="p-4">
+    <section aria-label="邮件通知" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="邮件通知"
-        description="配置 SMTP 服务器用于发送邮件通知"
+        description="配置 SMTP 服务器用于发送邮件通知，并作为当前页面整页配置的保存入口。"
         icon={Mail}
         actions={
           actions ? (
@@ -75,7 +75,7 @@ export function EmailNotificationSection({
                 disabled={!actions.isDirty || actions.isSaving}
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
-                重置
+                重置整页更改
               </Button>
               <Button
                 type="button"
@@ -83,12 +83,16 @@ export function EmailNotificationSection({
                 disabled={!actions.isDirty || actions.isSaving}
               >
                 <Save className="w-4 h-4 mr-2" />
-                {actions.isSaving ? '保存中...' : '保存'}
+                {actions.isSaving ? '保存中...' : '保存整页更改'}
               </Button>
             </div>
           ) : null
         }
       />
+
+      <div className="mt-4 rounded-lg border border-blue-200/70 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100">
+        保存整页更改会同时提交当前页面中的邮件和短信配置。
+      </div>
 
       <div className="mt-6 space-y-4">
         {/* 启用开关 */}
@@ -115,7 +119,7 @@ export function EmailNotificationSection({
           </ConfigItem>
 
           {/* SMTP 端口 + TLS 开关 并排（端口与加密协议是强关联配置）*/}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem
               label="SMTP 端口"
               description="通常为 587（TLS）或 465（SSL）"
@@ -146,7 +150,7 @@ export function EmailNotificationSection({
           </div>
 
           {/* SMTP 用户名 + 密码 并排（凭据一对）*/}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem label="SMTP 用户名" description="用于认证的邮箱账号" required>
               <ConfigInput
                 value={data.smtpUser}
@@ -172,7 +176,7 @@ export function EmailNotificationSection({
 
         {/* 发件人信息：邮箱 + 名称 并排 */}
         <div className="pt-4 border-t">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem
               label="发件人邮箱"
               description="显示在邮件发件人字段的地址"
@@ -208,9 +212,9 @@ export function EmailNotificationSection({
         <div className="pt-4 border-t">
           <ConfigItem
             label="测试邮件通知"
-            description="发送测试邮件以验证配置是否正确"
+            description="测试发送用于验证通知链路；如刚修改配置，建议先保存整页更改后再测试。"
           >
-            <div className="flex space-x-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <div className="flex-1 max-w-md">
                 <ConfigInput
                   type="email"
@@ -232,6 +236,6 @@ export function EmailNotificationSection({
           </ConfigItem>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

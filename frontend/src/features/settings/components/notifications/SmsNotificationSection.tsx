@@ -54,12 +54,16 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
   }
 
   return (
-    <div className="p-4">
+    <section aria-label="短信通知" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="短信通知"
-        description="配置短信网关用于发送 SMS 通知"
+        description="配置短信服务商、凭据和模板，用于发送 SMS 通知。"
         icon={MessageSquare}
       />
+
+      <div className="mt-4 rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+        测试短信用于验证短信服务商链路；如刚修改服务商或密钥，建议先保存整页更改后再测试。
+      </div>
 
       <div className="mt-6 space-y-4">
         {/* 启用开关 */}
@@ -84,7 +88,7 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
           </ConfigItem>
 
           {/* API Key + API Secret 并排（凭据一对）*/}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem
               label="API Key / Access Key ID"
               description={
@@ -172,7 +176,7 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
         {/* 测试功能 */}
         <div className="pt-4 border-t">
           <ConfigItem label="测试短信通知" description="发送测试短信以验证配置是否正确">
-            <div className="flex space-x-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <div className="flex-1 max-w-md">
                 <ConfigInput
                   value={testPhone}
@@ -187,12 +191,12 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
                 variant="outline"
               >
                 <Send className="w-4 h-4 mr-2" />
-                {isTestingLocal || isTesting ? '发送中...' : '发送测试短信'}
+                {isTestingLocal ? '发送中...' : isTesting ? '其他渠道测试中' : '发送测试短信'}
               </Button>
             </div>
           </ConfigItem>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

@@ -31,10 +31,13 @@ const timezones = [
 
 export function BasicInfoSection({ data, onChange, actions }: Props) {
   return (
-    <div className="p-4">
+    <section
+      aria-label="基础信息"
+      className="rounded-xl border border-border bg-card p-5 shadow-sm"
+    >
       <SectionHeader
         title="基础信息"
-        description="系统的基本信息配置"
+        description="维护系统身份信息，并作为当前页面整页配置的保存入口。"
         icon="Info"
         actions={
           actions ? (
@@ -50,7 +53,7 @@ export function BasicInfoSection({ data, onChange, actions }: Props) {
                 disabled={!actions.isDirty || actions.isSaving}
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
-                重置
+                重置整页更改
               </Button>
               <Button
                 type="button"
@@ -58,12 +61,16 @@ export function BasicInfoSection({ data, onChange, actions }: Props) {
                 disabled={!actions.isDirty || actions.isSaving}
               >
                 <Save className="w-4 h-4 mr-2" />
-                {actions.isSaving ? '保存中...' : '保存'}
+                {actions.isSaving ? '保存中...' : '保存整页更改'}
               </Button>
             </div>
           ) : null
         }
       />
+
+      <div className="mt-4 rounded-lg border border-blue-200/70 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100">
+        保存整页更改会同时提交当前页面中的基础信息、巡检配置、报表配置和个人偏好。
+      </div>
 
       <div className="mt-6 space-y-4">
         <ConfigItem
@@ -79,7 +86,7 @@ export function BasicInfoSection({ data, onChange, actions }: Props) {
         </ConfigItem>
 
         {/* 系统版本（只读）+ 时区 并排 */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ConfigItem label="系统版本" description="当前系统的版本号" readonly>
             <ConfigInput value={data.version} disabled className="w-full" />
           </ConfigItem>
@@ -93,6 +100,6 @@ export function BasicInfoSection({ data, onChange, actions }: Props) {
           </ConfigItem>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

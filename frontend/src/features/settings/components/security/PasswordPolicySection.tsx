@@ -4,22 +4,58 @@ import { SectionHeader } from '@/features/settings/components/shared/SectionHead
 import { ConfigItem } from '@/features/settings/components/shared/ConfigItem'
 import { ConfigInput } from '@/features/settings/components/shared/ConfigInput'
 import { ConfigSwitch } from '@/features/settings/components/shared/ConfigSwitch'
-import { Lock } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Lock, RotateCcw, Save } from 'lucide-react'
 import type { PasswordPolicyConfig } from '@/features/settings/types/security.types'
+
+interface PasswordPolicyActions {
+  isDirty: boolean
+  isSaving: boolean
+  onSave: () => void
+  onReset: () => void
+}
 
 interface Props {
   data: PasswordPolicyConfig
   onChange: (field: keyof PasswordPolicyConfig, value: any) => void
+  actions?: PasswordPolicyActions
 }
 
-export function PasswordPolicySection({ data, onChange }: Props) {
+export function PasswordPolicySection({ data, onChange, actions }: Props) {
   return (
-    <div className="p-4">
+    <section aria-label="密码策略" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="密码策略"
-        description="配置密码复杂度和安全要求"
+        description="定义账户密码强度、生命周期和登录失败防护。"
         icon={Lock}
+        actions={
+          actions ? (
+            <div role="group" aria-label="密码策略操作" className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={actions.onReset}
+                disabled={!actions.isDirty || actions.isSaving}
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                重置整页更改
+              </Button>
+              <Button
+                type="button"
+                onClick={actions.onSave}
+                disabled={!actions.isDirty || actions.isSaving}
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {actions.isSaving ? '保存中...' : '保存整页更改'}
+              </Button>
+            </div>
+          ) : null
+        }
       />
+
+      <div className="mt-4 rounded-lg border border-blue-200/70 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100">
+        保存整页更改会同时提交当前页面中的密码策略、会话管理和认证方式配置。
+      </div>
 
       <div className="mt-6 space-y-4">
         <ConfigItem
@@ -43,7 +79,7 @@ export function PasswordPolicySection({ data, onChange }: Props) {
         {/* 密码复杂度要求 - 2×2 网格 */}
         <div className="pt-4 border-t">
           <div className="text-sm font-medium text-foreground/90 mb-3">密码复杂度要求</div>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2">
             <ConfigItem
               label="需要大写字母"
               description="至少一个大写字母 (A-Z)"
@@ -88,7 +124,7 @@ export function PasswordPolicySection({ data, onChange }: Props) {
 
         {/* 密码过期时间 + 历史记录数量 - 并排 */}
         <div className="pt-4 border-t space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem
               label="密码过期时间 (天)"
               description="强制更改周期 (0=永不过期)"
@@ -142,7 +178,7 @@ export function PasswordPolicySection({ data, onChange }: Props) {
         {/* 登录安全 - 两个数值输入并排 */}
         <div className="pt-4 border-t">
           <div className="text-sm font-medium text-foreground/90 mb-3">登录安全</div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem
               label="最大登录尝试次数"
               description="锁定前允许的失败次数 (3-10次)"
@@ -183,6 +219,6 @@ export function PasswordPolicySection({ data, onChange }: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </section>
   )
 }

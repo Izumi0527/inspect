@@ -2,6 +2,7 @@
 
 import { useGeneralSettings } from '../../hooks/useGeneralSettings'
 import { BasicInfoSection } from './BasicInfoSection'
+import { GeneralOverviewCard } from './GeneralOverviewCard'
 import { InspectionConfigSection } from './InspectionConfigSection'
 import { ReportConfigSection } from './ReportConfigSection'
 import { UserPreferenceSection } from './UserPreferenceSection'
@@ -78,9 +79,18 @@ export function GeneralSettings() {
 
   return (
     <div className="p-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
-        {/* 左列：基础信息 + 巡检配置 */}
-        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+      <GeneralOverviewCard
+        applicationName={basicInfo.applicationName}
+        timezone={basicInfo.timezone}
+        maxConcurrentTasks={inspectionConfig.maxConcurrentTasks}
+        defaultTimeout={inspectionConfig.defaultTimeout}
+        defaultFormat={reportConfig.defaultFormat}
+        theme={userPreference.theme}
+        language={userPreference.language}
+      />
+
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
+        <div className="space-y-4">
           <BasicInfoSection
             data={basicInfo}
             onChange={updateBasicInfo}
@@ -91,14 +101,10 @@ export function GeneralSettings() {
               onReset: handleReset,
             }}
           />
-          <InspectionConfigSection
-            data={inspectionConfig}
-            onChange={updateInspectionConfig}
-          />
+          <InspectionConfigSection data={inspectionConfig} onChange={updateInspectionConfig} />
         </div>
 
-        {/* 右列：报表配置 + 个人偏好 */}
-        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+        <div className="space-y-4">
           <ReportConfigSection data={reportConfig} onChange={updateReportConfig} />
           <UserPreferenceSection data={userPreference} onChange={updateUserPreference} />
         </div>

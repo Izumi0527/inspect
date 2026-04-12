@@ -6,7 +6,6 @@ import { notificationApi } from '../api/notification.api'
 import type {
   EmailNotificationConfig,
   SmsNotificationConfig,
-  WebhookNotificationConfig,
 } from '../types/notification.types'
 
 export function useNotificationSettings() {
@@ -40,17 +39,6 @@ export function useNotificationSettings() {
     templateCode: '',
   })
 
-  const [webhookNotification, setWebhookNotification] = useState<WebhookNotificationConfig>({
-    enabled: false,
-    url: '',
-    method: 'POST',
-    headers: {},
-    authType: 'none',
-    authToken: '',
-    retryCount: 3,
-    timeout: 30,
-  })
-
   const [isDirty, setIsDirty] = useState(false)
 
   // 同步服务端数据到本地状态
@@ -58,7 +46,6 @@ export function useNotificationSettings() {
     if (data) {
       setEmailNotification(data.emailNotification)
       setSmsNotification(data.smsNotification)
-      setWebhookNotification(data.webhookNotification)
       setIsDirty(false)
     }
   }, [data])
@@ -82,11 +69,6 @@ export function useNotificationSettings() {
     mutationFn: notificationApi.testSmsNotification,
   })
 
-  // 测试Webhook通知
-  const testWebhookMutation = useMutation({
-    mutationFn: notificationApi.testWebhookNotification,
-  })
-
   // 更新方法
   const updateEmailNotification = useCallback(
     (field: keyof EmailNotificationConfig, value: any) => {
@@ -104,29 +86,19 @@ export function useNotificationSettings() {
     []
   )
 
-  const updateWebhookNotification = useCallback(
-    (field: keyof WebhookNotificationConfig, value: any) => {
-      setWebhookNotification((prev) => ({ ...prev, [field]: value }))
-      setIsDirty(true)
-    },
-    []
-  )
-
   // 保存所有
   const saveAll = useCallback(async () => {
     await saveMutation.mutateAsync({
       emailNotification,
       smsNotification,
-      webhookNotification,
     })
-  }, [emailNotification, smsNotification, webhookNotification, saveMutation])
+  }, [emailNotification, smsNotification, saveMutation])
 
   // 重置所有
   const resetAll = useCallback(() => {
     if (data) {
       setEmailNotification(data.emailNotification)
       setSmsNotification(data.smsNotification)
-      setWebhookNotification(data.webhookNotification)
       setIsDirty(false)
     }
   }, [data])
@@ -147,42 +119,19 @@ export function useNotificationSettings() {
     [testSmsMutation]
   )
 
-  // 测试Webhook通知
-  const testWebhookNotification = useCallback(async () => {
-    const headers: Record<string, string> = { ...(webhookNotification.headers || {}) }
-    const token = webhookNotification.authToken || ''
-    if (webhookNotification.authType === 'bearer' && token) {
-      headers['Authorization'] = `Bearer ${token}`
-    } else if (webhookNotification.authType === 'basic' && token) {
-      headers['Authorization'] = `Basic ${token}`
-    } else if (webhookNotification.authType === 'apikey' && token) {
-      headers['X-API-Key'] = token
-    }
-
-    return await testWebhookMutation.mutateAsync({
-      url: webhookNotification.url,
-      method: webhookNotification.method,
-      headers,
-    })
-  }, [testWebhookMutation, webhookNotification])
-
   return {
     emailNotification,
     smsNotification,
-    webhookNotification,
     isLoading,
     isSaving: saveMutation.isPending,
-    isTesting:
-      testEmailMutation.isPending || testSmsMutation.isPending || testWebhookMutation.isPending,
+    isTesting: testEmailMutation.isPending || testSmsMutation.isPending,
     isDirty,
     error,
     updateEmailNotification,
     updateSmsNotification,
-    updateWebhookNotification,
     saveAll,
     resetAll,
     testEmailNotification,
     testSmsNotification,
-    testWebhookNotification,
   }
 }

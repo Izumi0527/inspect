@@ -535,44 +535,42 @@ func (e *Evaluator) dispatchExternalNotifications(rule AlertRule, alert Alert, d
 
 		// Webhook
 		if rule.WebhookEnabled != nil && *rule.WebhookEnabled {
-			if e.settings.WebhookNotificationsEnabled(ctx) {
-				url := ""
-				if rule.WebhookURL != nil {
-					url = strings.TrimSpace(*rule.WebhookURL)
-				}
+			url := ""
+			if rule.WebhookURL != nil {
+				url = strings.TrimSpace(*rule.WebhookURL)
+			}
 
-				payload := map[string]interface{}{
-					"event":     "alert.created",
-					"timestamp": time.Now().UTC().Format(time.RFC3339),
-					"alert": map[string]interface{}{
-						"id":        alert.ID,
-						"device_id": alert.DeviceID,
-						"title":     alert.Title,
-						"message":   alert.Message,
-						"severity":  alert.Severity,
-						"category":  alert.Category,
-						"status":    alert.Status,
-					},
-					"rule": map[string]interface{}{
-						"id":   rule.ID,
-						"name": rule.Name,
-					},
-					"device": map[string]interface{}{
-						"id":   dm.DeviceID,
-						"name": dm.DeviceName,
-						"ip":   dm.IPAddress,
-						"type": dm.DeviceType,
-					},
-				}
+			payload := map[string]interface{}{
+				"event":     "alert.created",
+				"timestamp": time.Now().UTC().Format(time.RFC3339),
+				"alert": map[string]interface{}{
+					"id":        alert.ID,
+					"device_id": alert.DeviceID,
+					"title":     alert.Title,
+					"message":   alert.Message,
+					"severity":  alert.Severity,
+					"category":  alert.Category,
+					"status":    alert.Status,
+				},
+				"rule": map[string]interface{}{
+					"id":   rule.ID,
+					"name": rule.Name,
+				},
+				"device": map[string]interface{}{
+					"id":   dm.DeviceID,
+					"name": dm.DeviceName,
+					"ip":   dm.IPAddress,
+					"type": dm.DeviceType,
+				},
+			}
 
-				if _, err := e.settings.SendWebhook(ctx, settings.WebhookSendInput{
-					URL:     url,
-					Method:  "",
-					Headers: nil,
-					Payload: payload,
-				}); err != nil && e.logger != nil {
-					e.logger.Warn("send alert webhook failed", zap.Error(err))
-				}
+			if _, err := e.settings.SendWebhook(ctx, settings.WebhookSendInput{
+				URL:     url,
+				Method:  "",
+				Headers: nil,
+				Payload: payload,
+			}); err != nil && e.logger != nil {
+				e.logger.Warn("send alert webhook failed", zap.Error(err))
 			}
 		}
 	}()

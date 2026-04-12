@@ -35,12 +35,12 @@
 | 安全策略 | ✅ | ❌（伪实现） | ⚠️（仅读 + sessions 列表） | ❌（不生效） | 需补齐：保存对接 + 强制生效机制 |
 | 审计日志 | ✅ | ⚠️（导出走相对路径） | ✅ | ✅ | 需修复：导出跨域/鉴权一致性 |
 | 备份管理 | ✅ | ⚠️（下载走相对路径） | ✅ | ✅ | 需修复：下载跨域/鉴权一致性 |
-| 通知中心 | ✅ | ❌（saveAll 伪实现） | ⚠️（测试仅记录） | ❌（不发送） | 需补齐：保存对接 + 邮件/Webhook 真实发送 + 告警触发发送 |
+| 通知中心 | ✅ | ❌（saveAll 伪实现） | ⚠️（测试仅记录） | ❌（不发送） | 需补齐：保存对接 + 邮件真实发送 + 告警触发邮件发送 |
 | 系统监控 | ✅ | ✅ | ✅ | ✅ | 基本完善 |
 
 说明：
 - “⚠️”表示功能表面存在但存在关键缺口（跨域/伪实现/未执行）。
-- “落库/执行”关注：是否写入 `system_settings` / 是否实际发送邮件/Webhook / 安全策略是否在鉴权链路立即生效。
+- “落库/执行”关注：是否写入 `system_settings` / 是否实际发送邮件或短信 / 安全策略是否在鉴权链路立即生效。
 
 ---
 
@@ -145,18 +145,15 @@ flowchart TD
 ```mermaid
 flowchart TD
   A[进入通知中心Tab] --> B[GET /api/v1/settings/notifications/]
-  B --> C[渲染 Email/SMS/Webhook 配置]
+  B --> C[渲染 Email/SMS 配置]
   C --> D[用户修改配置]
   D --> E[保存]
   E --> F[POST /api/v1/settings/general/bulk 写入 notification.* / email.* keys]
   F --> G[落库 system_settings]
   C --> H[测试邮件] --> I[POST /api/v1/settings/notifications/test-email]
-  C --> J[测试Webhook] --> K[POST /api/v1/settings/notifications/test-webhook]
   I --> L[真实发送(应实现)]
-  K --> M[真实HTTP请求(应实现)]
   N[告警创建/触发] --> O[按规则发送通知]
   O --> L
-  O --> M
 ```
 
 ### 3.8 系统监控（monitoring）
@@ -175,7 +172,7 @@ flowchart TD
 
 1) **低风险高收益**：修复审计导出/备份下载的跨域与鉴权一致性（统一走 `NEXT_PUBLIC_API_URL`）。
 2) **用户管理闭环**：补齐“新增/编辑/重置密码/查看权限”等 UI，并对接 `/settings/roles` `/settings/permissions`。
-3) **通知中心闭环**：实现 `saveAll` 真正落库；实现邮件/Webhook 测试“真实发送”；在告警触发点接入发送。
+3) **通知中心闭环**：实现 `saveAll` 真正落库；实现邮件测试“真实发送”；在告警触发点接入邮件发送。
 4) **安全策略真正生效**：保存对接落库 + 在登录/刷新/鉴权链路引入会话与策略校验（并发会话/记住我/强制下线/登录锁定等按配置立即生效）。
 5) **验证与回归**：Go `go test ./...` + 前端 `npm test`/`npm run build`（按仓库实际脚本执行）确保无回归。
 
@@ -188,13 +185,13 @@ flowchart TD
 - 审计日志导出：改为使用 `NEXT_PUBLIC_API_URL` 后端绝对地址，避免前后端分离部署跨域失败。
 - 备份文件下载：改为使用 `NEXT_PUBLIC_API_URL` 后端绝对地址，避免前后端分离部署跨域失败。
 - 用户管理：补齐“新增/编辑/重置密码/查看权限”闭环；角色列表改为对接后端 `/settings/roles`。
-- 通知中心：实现 `saveAll` 真实落库（`/settings/general/bulk`）；Webhook 测试请求携带当前 URL/Headers/Method。
+- 通知中心：实现 `saveAll` 真实落库（`/settings/general/bulk`）；通知中心已移除 Webhook 配置入口。
 - 安全策略：实现 `saveAll` 真实落库（`/settings/general/bulk`）。
 
 ### 5.2 后端
 
-- 通知测试接口：邮件/Webhook 测试从“仅记录”改为“真实发送”（短信仍保留未实现提示）。
-- 告警触发通知：新建告警时异步触发邮件/Webhook 发送（遵循 `alert_rules` 的 `email_enabled/webhook_enabled` 与系统设置总开关）。
+- 通知测试接口：邮件测试从“仅记录”改为“真实发送”（短信仍保留未实现提示）；通知中心已移除 Webhook 测试接口。
+- 告警触发通知：新建告警时异步触发邮件发送（Webhook 属于告警规则独立配置，不再作为通知中心配置项维护）。
 - 安全策略即时生效（核心）：
   - 引入服务端会话（`user_sessions`）：登录创建会话；刷新令牌校验会话；登出失效；访问时校验会话有效性。
   - 支持并发会话数限制（策略调整后在下一次请求即时裁剪多余会话）。

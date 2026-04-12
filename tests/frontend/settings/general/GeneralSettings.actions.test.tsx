@@ -23,7 +23,37 @@ jest.mock('react-hot-toast', () => ({
 }))
 
 jest.mock('@/features/settings/components/general/BasicInfoSection', () => ({
-  BasicInfoSection: () => <div>basic-info-section</div>,
+  BasicInfoSection: (props: {
+    actions?: {
+      isDirty: boolean
+      isSaving: boolean
+      onSave: () => void
+      onReset: () => void
+    }
+  }) => (
+    <div>
+      <div>basic-info-section</div>
+      <div>保存整页更改会同时提交当前页面中的基础信息、巡检配置、报表配置和个人偏好。</div>
+      {props.actions ? (
+        <div>
+          <button
+            type="button"
+            disabled={!props.actions.isDirty || props.actions.isSaving}
+            onClick={props.actions.onReset}
+          >
+            重置整页更改
+          </button>
+          <button
+            type="button"
+            disabled={!props.actions.isDirty || props.actions.isSaving}
+            onClick={props.actions.onSave}
+          >
+            {props.actions.isSaving ? '保存中...' : '保存整页更改'}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  ),
 }))
 
 jest.mock('@/features/settings/components/general/InspectionConfigSection', () => ({
@@ -78,7 +108,7 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
     jest.clearAllMocks()
   })
 
-  it('不应直接渲染 ActionButtons，且应向壳层上报保存/重置与离开拦截能力', async () => {
+  it('应展示轻摘要并通过基础信息区块承载整页保存语义', async () => {
     const user = userEvent.setup()
 
     const ShellToolbar: React.FC = () => {
@@ -109,11 +139,20 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
 
     expect(screen.queryByText('导出配置')).not.toBeInTheDocument()
     expect(screen.queryByText('导入配置')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '通用配置' })).toBeInTheDocument()
+    expect(screen.getByText('当前应用名称')).toBeInTheDocument()
+    expect(screen.getByText('当前时区')).toBeInTheDocument()
+    expect(screen.getByText('默认并发任务数')).toBeInTheDocument()
+    expect(screen.getByText('默认超时时间')).toBeInTheDocument()
+    expect(screen.getByText('默认导出格式')).toBeInTheDocument()
+    expect(screen.getByText('当前主题 / 语言')).toBeInTheDocument()
 
-    await waitFor(() => {
-      expect(within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '保存' })).toBeInTheDocument()
-    })
-    expect(within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '重置' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存整页更改' })).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置整页更改' })).not.toBeInTheDocument()
+
+    expect(screen.getByRole('button', { name: '保存整页更改' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重置整页更改' })).toBeInTheDocument()
+    expect(screen.getByText(/保存整页更改会同时提交当前页面中的基础信息、巡检配置、报表配置和个人偏好/)).toBeInTheDocument()
 
     expect(screen.queryByText('• 有未保存的更改')).not.toBeInTheDocument()
 
@@ -123,10 +162,10 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('saving:false')
     expect(screen.getByTestId('shell-caps')).toHaveTextContent('blockLeave:true')
 
-    await user.click(within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: '保存整页更改' }))
     expect(saveAllMock).toHaveBeenCalled()
 
-    await user.click(within(screen.getByTestId('shell-toolbar')).getByRole('button', { name: '重置' }))
+    await user.click(screen.getByRole('button', { name: '重置整页更改' }))
     expect(resetAllMock).toHaveBeenCalled()
   })
 })

@@ -295,10 +295,9 @@
 **信息架构**
 
 - 顶部：壳层 `SettingsToolbar`（保存/重置；未保存离开拦截）。
-- 内容区：`divide-y` 分隔 3 个 section
+- 内容区：`divide-y` 分隔 2 个 section
   - `EmailNotificationSection.tsx`：SMTP + 发件人 + 测试邮件
   - `SmsNotificationSection.tsx`：provider + key/secret/sign/template + 测试短信
-  - `WebhookNotificationSection.tsx`：URL/method/auth/retry/timeout + 测试 Webhook
 
 **关键交互**
 

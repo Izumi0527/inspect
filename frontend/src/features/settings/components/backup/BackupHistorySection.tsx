@@ -73,19 +73,19 @@ function StatusBadge({ status }: { status: 'success' | 'failed' | 'in_progress' 
       variant: 'default' as const,
       icon: CheckCircle,
       label: '成功',
-      className: 'bg-green-100 text-green-800 border-green-200',
+      className: 'bg-green-100 text-green-800 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-900/50',
     },
     failed: {
       variant: 'destructive' as const,
       icon: XCircle,
       label: '失败',
-      className: 'bg-red-100 text-red-800 border-red-200',
+      className: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950/30 dark:text-red-300 dark:border-red-900/50',
     },
     in_progress: {
       variant: 'outline' as const,
       icon: Clock,
       label: '进行中',
-      className: 'bg-blue-100 text-blue-800 border-blue-200',
+      className: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-900/50',
     },
   }
 
@@ -211,10 +211,10 @@ export function BackupHistorySection({
   }
 
   return (
-    <div className="p-4">
+    <section aria-label="备份历史记录" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="备份历史记录"
-        description={`共 ${totalCount} 个备份文件`}
+        description={`查看历史备份、磁盘占用和恢复/删除等资产操作（当前共 ${totalCount} 个备份文件）`}
         icon={Database}
         actions={
           <Button onClick={handleCreateBackup} disabled={isCreating}>
@@ -255,7 +255,7 @@ export function BackupHistorySection({
         </div>
         <div className="mt-2 text-xs text-muted-foreground">
           {diskUsage.percentage > 90 && (
-            <div className="flex items-center text-red-600">
+            <div className="flex items-center text-red-600 dark:text-red-300">
               <AlertCircle className="w-4 h-4 mr-1" />
               磁盘空间不足，请及时清理旧备份
             </div>
@@ -373,6 +373,6 @@ export function BackupHistorySection({
         confirmDisabled={Boolean(!confirmKind || !confirmTarget)}
         onConfirm={() => void handleConfirm()}
       />
-    </div>
+    </section>
   )
 }

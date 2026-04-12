@@ -42,19 +42,23 @@ jest.mock('../BasicInfoSection', () => ({
             disabled={!props.actions.isDirty || props.actions.isSaving}
             onClick={props.actions.onReset}
           >
-            重置
+            重置整页更改
           </button>
           <button
             type="button"
             disabled={!props.actions.isDirty || props.actions.isSaving}
             onClick={props.actions.onSave}
           >
-            {props.actions.isSaving ? '保存中...' : '保存'}
+            {props.actions.isSaving ? '保存中...' : '保存整页更改'}
           </button>
         </div>
       ) : null}
     </div>
   ),
+}))
+
+jest.mock('../GeneralOverviewCard', () => ({
+  GeneralOverviewCard: () => <div>通用配置概览区</div>,
 }))
 
 jest.mock('../InspectionConfigSection', () => ({
@@ -109,7 +113,7 @@ describe('GeneralSettings', () => {
     })
   })
 
-  it('不再向壳层注册保存和重置动作，并将动作透传给基础信息区块', async () => {
+  it('不再向壳层注册保存和重置动作，并展示页面级概览与整页保存按钮', async () => {
     const user = userEvent.setup()
     render(<GeneralSettings />)
 
@@ -120,10 +124,12 @@ describe('GeneralSettings', () => {
     expect(capabilities.primaryActions).toBeUndefined()
     expect(capabilities.secondaryActions).toBeUndefined()
 
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    expect(screen.getByText('通用配置概览区')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '保存整页更改' }))
     expect(mockSaveAll).toHaveBeenCalledTimes(1)
 
-    await user.click(screen.getByRole('button', { name: '重置' }))
+    await user.click(screen.getByRole('button', { name: '重置整页更改' }))
     expect(mockResetAll).toHaveBeenCalledTimes(1)
   })
 })

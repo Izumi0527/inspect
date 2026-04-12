@@ -264,7 +264,6 @@ curl -X GET "http://localhost:8001/api/v1/traffic/top-talkers?limit=10" \
 | GET | `/settings/notifications` | 获取通知配置 |
 | POST | `/settings/notifications/test-email` | 测试邮件 |
 | POST | `/settings/notifications/test-sms` | 测试短信 |
-| POST | `/settings/notifications/test-webhook` | 测试Webhook |
 
 #### 安全设置
 

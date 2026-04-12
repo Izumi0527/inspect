@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { SectionHeader } from '@/features/settings/components/shared/SectionHeader'
@@ -75,13 +75,27 @@ export function AuthenticationSection({ data, onChange }: Props) {
     toast.success('IP地址已移除')
   }
 
+  const handleBadgeKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    callback: () => void
+  ) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      callback()
+    }
+  }
+
   return (
-    <div className="p-4">
+    <section aria-label="认证方式" className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <SectionHeader
         title="认证方式"
         description="配置多因素认证、OAuth登录和IP白名单"
         icon={ShieldCheck}
       />
+
+      <div className="mt-4 rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
+        认证方式用于增强登录验证链路与来源限制。启用 MFA、OAuth 或 IP 白名单时，建议同步检查是否存在未完成的必填配置。
+      </div>
 
       <div className="mt-6 space-y-4">
         {/* MFA 配置 */}
@@ -95,25 +109,27 @@ export function AuthenticationSection({ data, onChange }: Props) {
 
           {data.mfaEnabled && (
             /* MFA 子选项：方法选择 + 强制开关 并排 */
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <ConfigItem
                 label="支持的MFA方法"
                 description="选择允许使用的认证方式"
                 required
               >
-                <div className="flex flex-wrap gap-2">
-                  {mfaMethodOptions.map((option) => (
-                    <Badge
-                      key={option.value}
-                      variant={data.mfaMethods?.includes(option.value) ? 'default' : 'outline'}
-                      className="cursor-pointer px-3 py-1.5"
-                      onClick={() => handleToggleMfaMethod(option.value)}
-                    >
-                      {option.label}
-                    </Badge>
-                  ))}
-                </div>
-              </ConfigItem>
+                  <div className="flex flex-wrap gap-2">
+                    {mfaMethodOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={Boolean(data.mfaMethods?.includes(option.value))}
+                        className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm transition-colors ${data.mfaMethods?.includes(option.value) ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted'}`}
+                        onClick={() => handleToggleMfaMethod(option.value)}
+                        onKeyDown={(event) => handleBadgeKeyDown(event, () => handleToggleMfaMethod(option.value))}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </ConfigItem>
 
               <ConfigItem
                 label="强制所有用户使用MFA"
@@ -124,6 +140,12 @@ export function AuthenticationSection({ data, onChange }: Props) {
                   onCheckedChange={(checked) => onChange('mfaRequired', checked)}
                 />
               </ConfigItem>
+            </div>
+          )}
+
+          {data.mfaEnabled && (!data.mfaMethods || data.mfaMethods.length === 0) && (
+            <div className="rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
+              已启用 MFA，但尚未选择任何可用认证方式。建议至少保留一种方法，以免策略配置不完整。
             </div>
           )}
         </div>
@@ -143,19 +165,21 @@ export function AuthenticationSection({ data, onChange }: Props) {
               description="选择允许的第三方登录方式"
               required
             >
-              <div className="flex flex-wrap gap-2">
-                {oauthProviderOptions.map((option) => (
-                  <Badge
-                    key={option.value}
-                    variant={data.oauthProviders?.includes(option.value) ? 'default' : 'outline'}
-                    className="cursor-pointer px-3 py-1.5"
-                    onClick={() => handleToggleOAuthProvider(option.value)}
-                  >
-                    {option.label}
-                  </Badge>
-                ))}
-              </div>
-            </ConfigItem>
+                <div className="flex flex-wrap gap-2">
+                  {oauthProviderOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={Boolean(data.oauthProviders?.includes(option.value))}
+                      className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm transition-colors ${data.oauthProviders?.includes(option.value) ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background hover:bg-muted'}`}
+                      onClick={() => handleToggleOAuthProvider(option.value)}
+                      onKeyDown={(event) => handleBadgeKeyDown(event, () => handleToggleOAuthProvider(option.value))}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </ConfigItem>
           )}
         </div>
 
@@ -175,8 +199,8 @@ export function AuthenticationSection({ data, onChange }: Props) {
                 description="支持单个IP (192.168.1.1) 或CIDR格式 (10.0.0.0/8)"
               >
                 <div className="flex space-x-2">
-                  <div className="flex-1 max-w-md">
-                    <ConfigInput
+                    <div className="flex-1 max-w-md">
+                      <ConfigInput
                       value={newIp}
                       onChange={setNewIp}
                       placeholder="192.168.1.1 或 10.0.0.0/8"
@@ -196,8 +220,10 @@ export function AuthenticationSection({ data, onChange }: Props) {
                       <Badge key={ip} variant="secondary" className="px-3 py-1.5">
                         {ip}
                         <button
+                          type="button"
                           onClick={() => handleRemoveIp(ip)}
                           className="ml-2 hover:text-red-600"
+                          aria-label={`移除 IP ${ip}`}
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -210,6 +236,6 @@ export function AuthenticationSection({ data, onChange }: Props) {
           )}
         </div>
       </div>
-    </div>
+    </section>
   )
 }

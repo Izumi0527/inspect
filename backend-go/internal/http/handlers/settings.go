@@ -34,7 +34,6 @@ func (h SettingsHandler) Register(group *echo.Group) {
 	group.GET("/settings/notifications/stats", h.GetNotificationStats)
 	group.POST("/settings/notifications/test-email", h.TestEmail)
 	group.POST("/settings/notifications/test-sms", h.TestSMS)
-	group.POST("/settings/notifications/test-webhook", h.TestWebhook)
 
 	group.GET("/settings/security", h.GetSecurityConfigs)
 	group.GET("/settings/security/", h.GetSecurityConfigs)

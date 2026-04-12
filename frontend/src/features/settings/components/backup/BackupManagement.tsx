@@ -3,6 +3,7 @@
 import { useBackupManagement } from '../../hooks/useBackupManagement'
 import { BackupConfigSection } from './BackupConfigSection'
 import { BackupHistorySection } from './BackupHistorySection'
+import { BackupOverviewCard } from './BackupOverviewCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -108,8 +109,15 @@ export function BackupManagement() {
   // 正常显示
   return (
     <div className="p-4">
-      <div className="divide-y divide-gray-200 dark:divide-gray-700">
-        {/* 备份配置 */}
+      <BackupOverviewCard
+        totalCount={totalCount}
+        diskUsage={diskUsage}
+        autoBackupEnabled={config.autoBackupEnabled}
+        retentionDays={config.retentionDays}
+        latestBackup={backups[0]}
+      />
+
+      <div className="mt-4 space-y-4">
         <BackupConfigSection
           data={config}
           onChange={updateConfig}
@@ -122,7 +130,6 @@ export function BackupManagement() {
           }}
         />
 
-        {/* 备份历史 */}
         <BackupHistorySection
           backups={backups}
           totalCount={totalCount}
@@ -144,7 +151,7 @@ export function BackupManagement() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-blue-400"></div>
               <div>
                 <h3 className="text-lg font-semibold text-foreground">正在恢复备份...</h3>
-                <p className="text-sm text-muted-foreground mt-1">请勿关闭或刷新页面</p>
+                <p className="text-sm text-muted-foreground mt-1">请勿关闭或刷新页面，恢复完成后页面将自动刷新</p>
               </div>
             </div>
           </div>
