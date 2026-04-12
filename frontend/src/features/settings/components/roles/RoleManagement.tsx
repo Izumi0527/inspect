@@ -2,7 +2,13 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, KeyRound, Pencil, Plus, Shield, Trash2 } from 'lucide-react'
+import { AlertCircle, KeyRound, MoreHorizontal, Pencil, Plus, Shield, ShieldCheck, ShieldPlus, Trash2, Users } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { toast } from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -121,8 +127,21 @@ export function RoleManagement() {
     [rolesQuery]
   )
 
+  const statsDescriptors = useMemo(() => {
+    if (!roles.length) return []
+    const builtInCount = roles.filter((r) => r.isBuiltIn).length
+    const customCount = roles.filter((r) => !r.isBuiltIn).length
+    const totalUsers = roles.reduce((sum, r) => sum + (r.userCount ?? 0), 0)
+    return [
+      { key: 'total', title: '角色总数', value: roles.length, icon: Shield, iconClassName: 'text-blue-600 dark:text-blue-400' },
+      { key: 'builtIn', title: '内置角色', value: builtInCount, icon: ShieldCheck, iconClassName: 'text-green-600 dark:text-green-400' },
+      { key: 'custom', title: '自定义角色', value: customCount, icon: ShieldPlus, iconClassName: 'text-amber-600 dark:text-amber-400' },
+      { key: 'users', title: '关联用户数', value: totalUsers, icon: Users, iconClassName: 'text-purple-600 dark:text-purple-400' },
+    ]
+  }, [roles])
+
   useSettingsTabCapabilities('roles', {
-    stats: [],
+    stats: canRead ? statsDescriptors : [],
     toolbar: canRead ? toolbar : undefined,
     primaryActions: canRead ? primaryActions : undefined,
     secondaryActions: canRead ? secondaryActions : undefined,
@@ -313,7 +332,17 @@ export function RoleManagement() {
                     {formatDateTime(role.updatedAt)}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditRole(role)}
+                        disabled={!canUpdate}
+                        aria-label={`编辑角色 ${role.displayName || role.name}`}
+                        title={canUpdate ? '编辑角色' : '需要 users:update 权限'}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -323,46 +352,32 @@ export function RoleManagement() {
                             ? `分配权限 ${role.displayName || role.name}`
                             : `查看权限 ${role.displayName || role.name}`
                         }
-                        title={canUpdate ? '分配权限' : '查看权限（需要 users:update 才能修改）'}
+                        title={canUpdate ? '分配权限' : '查看权限'}
                       >
                         <KeyRound className="w-4 h-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditRole(role)}
-                        disabled={!canUpdate}
-                        aria-label={
-                          canUpdate
-                            ? `编辑角色 ${role.displayName || role.name}`
-                            : `编辑角色（无权限） ${role.displayName || role.name}`
-                        }
-                        title={canUpdate ? '编辑角色' : '需要 users:update 权限'}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(role)}
-                        disabled={!canDelete || role.isBuiltIn || deleteMutation.isPending}
-                        aria-label={
-                          role.isBuiltIn
-                            ? `内置角色不可删除 ${role.displayName || role.name}`
-                            : canDelete
-                              ? `删除角色 ${role.displayName || role.name}`
-                              : `删除角色（无权限） ${role.displayName || role.name}`
-                        }
-                        title={
-                          role.isBuiltIn
-                            ? '内置角色不可删除'
-                            : canDelete
-                              ? '删除角色'
-                              : '需要 users:delete 权限'
-                        }
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`更多操作 ${role.displayName || role.name}`}
+                            title="更多操作"
+                          >
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            disabled={!canDelete || role.isBuiltIn || deleteMutation.isPending}
+                            className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                            onClick={() => handleDelete(role)}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            {role.isBuiltIn ? '内置角色不可删除' : '删除角色'}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </td>
                 </tr>

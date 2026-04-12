@@ -90,14 +90,16 @@ describe('UserManagement 危险操作确认', () => {
       </SettingsShellProvider>
     )
 
-    await user.click(screen.getByTitle('删除用户'))
+    await user.click(screen.getByTitle('更多操作'))
+    await user.click(screen.getByRole('menuitem', { name: '删除用户' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(deleteUserMock).not.toHaveBeenCalled()
 
-    await user.click(screen.getByTitle('删除用户'))
+    await user.click(screen.getByTitle('更多操作'))
+    await user.click(screen.getByRole('menuitem', { name: '删除用户' }))
     await user.click(screen.getByRole('button', { name: '确认删除' }))
 
     await waitFor(() => {

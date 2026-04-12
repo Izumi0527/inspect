@@ -159,7 +159,7 @@ export function RoleFormDialog({
             />
           </div>
 
-          {error && <div className="text-sm text-red-600 dark:text-red-400">{error}</div>}
+          {error && <div role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</div>}
         </div>
 
         <DialogFooter className="pt-2">

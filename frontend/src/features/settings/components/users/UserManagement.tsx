@@ -9,6 +9,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   Users,
   UserPlus,
+  UserCheck,
+  UserX,
+  LockKeyhole,
   Trash2,
   Lock,
   Unlock,
@@ -18,7 +21,16 @@ import {
   KeyRound,
   Shield,
   AlertCircle,
+  MoreHorizontal,
+  Loader2,
 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { toast } from 'react-hot-toast'
 import type { BuiltInUserRole, User, UserStatus } from '../../types/users.types'
 import type { Role } from '../../types/users.types'
@@ -82,6 +94,7 @@ export function UserManagement() {
     deactivateUser,
     lockUser,
     unlockUser,
+    stats,
     error,
   } = useUserManagement()
 
@@ -105,6 +118,7 @@ export function UserManagement() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteTargetUser, setDeleteTargetUser] = useState<User | null>(null)
   const [deletePending, setDeletePending] = useState(false)
+  const [operatingUserId, setOperatingUserId] = useState<string | null>(null)
 
   const primaryActions = useMemo(
     () => [
@@ -159,8 +173,18 @@ export function UserManagement() {
     [handleSearch, keyword]
   )
 
+  const statsDescriptors = useMemo(() => {
+    if (!stats) return []
+    return [
+      { key: 'total', title: '总用户数', value: stats.totalUsers, icon: Users, iconClassName: 'text-blue-600 dark:text-blue-400' },
+      { key: 'active', title: '活跃用户', value: stats.activeUsers, icon: UserCheck, iconClassName: 'text-green-600 dark:text-green-400' },
+      { key: 'inactive', title: '停用用户', value: stats.inactiveUsers, icon: UserX, iconClassName: 'text-amber-600 dark:text-amber-400' },
+      { key: 'locked', title: '锁定用户', value: stats.lockedUsers, icon: LockKeyhole, iconClassName: 'text-red-600 dark:text-red-400' },
+    ]
+  }, [stats])
+
   useSettingsTabCapabilities('users', {
-    stats: [],
+    stats: canRead ? statsDescriptors : [],
     toolbar: canRead ? toolbar : undefined,
     primaryActions: canRead ? primaryActions : undefined,
   })
@@ -201,11 +225,14 @@ export function UserManagement() {
       toast.error('需要 users:update 权限')
       return
     }
+    setOperatingUserId(user.id)
     try {
       await activateUser(user.id)
       toast.success('用户已激活')
     } catch (err) {
       toast.error('激活失败：' + (err as Error).message)
+    } finally {
+      setOperatingUserId(null)
     }
   }
 
@@ -215,11 +242,14 @@ export function UserManagement() {
       toast.error('需要 users:update 权限')
       return
     }
+    setOperatingUserId(user.id)
     try {
       await deactivateUser(user.id)
       toast.success('用户已停用')
     } catch (err) {
       toast.error('停用失败：' + (err as Error).message)
+    } finally {
+      setOperatingUserId(null)
     }
   }
 
@@ -229,11 +259,14 @@ export function UserManagement() {
       toast.error('需要 users:update 权限')
       return
     }
+    setOperatingUserId(user.id)
     try {
       await lockUser(user.id)
       toast.success('用户已锁定')
     } catch (err) {
       toast.error('锁定失败：' + (err as Error).message)
+    } finally {
+      setOperatingUserId(null)
     }
   }
 
@@ -243,11 +276,14 @@ export function UserManagement() {
       toast.error('需要 users:update 权限')
       return
     }
+    setOperatingUserId(user.id)
     try {
       await unlockUser(user.id)
       toast.success('用户已解锁')
     } catch (err) {
       toast.error('解锁失败：' + (err as Error).message)
+    } finally {
+      setOperatingUserId(null)
     }
   }
 
@@ -408,7 +444,17 @@ export function UserManagement() {
                       {formatDate(user.lastLoginAt)}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditUser(user)}
+                          disabled={!canUpdate}
+                          aria-label={`编辑用户 ${user.username}`}
+                          title={canUpdate ? '编辑用户' : '需要 users:update 权限'}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -418,112 +464,76 @@ export function UserManagement() {
                         >
                           <Shield className="w-4 h-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setPasswordUser(user)}
-                          disabled={!canUpdate}
-                          aria-label={
-                            canUpdate
-                              ? `重置密码 ${user.username}`
-                              : `重置密码（无权限） ${user.username}`
-                          }
-                          title={canUpdate ? '重置密码' : '需要 users:update 权限'}
-                        >
-                          <KeyRound className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setEditUser(user)}
-                          disabled={!canUpdate}
-                          aria-label={
-                            canUpdate
-                              ? `编辑用户 ${user.username}`
-                              : `编辑用户（无权限） ${user.username}`
-                          }
-                          title={canUpdate ? '编辑用户' : '需要 users:update 权限'}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        {user.status === 'locked' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleUnlock(user)}
-                            disabled={!canUpdate}
-                            aria-label={
-                              canUpdate
-                                ? `解锁用户 ${user.username}`
-                                : `解锁用户（无权限） ${user.username}`
-                            }
-                            title={canUpdate ? '解锁用户' : '需要 users:update 权限'}
-                          >
-                            <Unlock className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {user.status !== 'locked' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleLock(user)}
-                            disabled={!canUpdate}
-                            aria-label={
-                              canUpdate
-                                ? `锁定用户 ${user.username}`
-                                : `锁定用户（无权限） ${user.username}`
-                            }
-                            title={canUpdate ? '锁定用户' : '需要 users:update 权限'}
-                          >
-                            <Lock className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {user.status === 'inactive' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleActivate(user)}
-                            disabled={!canUpdate}
-                            aria-label={
-                              canUpdate
-                                ? `激活用户 ${user.username}`
-                                : `激活用户（无权限） ${user.username}`
-                            }
-                            title={canUpdate ? '激活用户' : '需要 users:update 权限'}
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {user.status === 'active' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeactivate(user)}
-                            disabled={!canUpdate}
-                            aria-label={
-                              canUpdate
-                                ? `停用用户 ${user.username}`
-                                : `停用用户（无权限） ${user.username}`
-                            }
-                            title={canUpdate ? '停用用户' : '需要 users:update 权限'}
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(user)}
-                          disabled={!canDelete || isDeleting}
-                          aria-label={
-                            canDelete
-                              ? `删除用户 ${user.username}`
-                              : `删除用户（无权限） ${user.username}`
-                          }
-                          title={canDelete ? '删除用户' : '需要 users:delete 权限'}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={`更多操作 ${user.username}`}
+                              title="更多操作"
+                              disabled={operatingUserId === user.id}
+                            >
+                              {operatingUserId === user.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <MoreHorizontal className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              disabled={!canUpdate}
+                              onClick={() => setPasswordUser(user)}
+                            >
+                              <KeyRound className="w-4 h-4 mr-2" />
+                              重置密码
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {user.status === 'locked' ? (
+                              <DropdownMenuItem
+                                disabled={!canUpdate}
+                                onClick={() => handleUnlock(user)}
+                              >
+                                <Unlock className="w-4 h-4 mr-2" />
+                                解锁用户
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                disabled={!canUpdate}
+                                onClick={() => handleLock(user)}
+                              >
+                                <Lock className="w-4 h-4 mr-2" />
+                                锁定用户
+                              </DropdownMenuItem>
+                            )}
+                            {user.status === 'active' ? (
+                              <DropdownMenuItem
+                                disabled={!canUpdate}
+                                onClick={() => handleDeactivate(user)}
+                              >
+                                <XCircle className="w-4 h-4 mr-2" />
+                                停用用户
+                              </DropdownMenuItem>
+                            ) : user.status === 'inactive' ? (
+                              <DropdownMenuItem
+                                disabled={!canUpdate}
+                                onClick={() => handleActivate(user)}
+                              >
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                激活用户
+                              </DropdownMenuItem>
+                            ) : null}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              disabled={!canDelete || isDeleting}
+                              className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                              onClick={() => handleDelete(user)}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              删除用户
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </td>
                   </tr>
@@ -537,7 +547,7 @@ export function UserManagement() {
         {totalCount > pageSize && (
           <div className="px-4 py-3 border-t border-border flex items-center justify-between">
             <div className="text-sm text-muted-foreground">
-              共 {totalCount} 条记录，第 {page} 页
+              第 {page} 页 / 共 {Math.ceil(totalCount / pageSize)} 页（{totalCount} 条记录）
             </div>
             <div className="flex gap-2">
               <Button

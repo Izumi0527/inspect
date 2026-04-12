@@ -60,7 +60,7 @@ export const SettingsToolbar: React.FC<SettingsToolbarProps> = ({
                 if (event.key !== 'Enter') return
                 toolbar.search?.onSubmit?.()
               }}
-              className="pl-10 h-10"
+              className="pl-10 h-9 text-sm"
             />
           </div>
         )}

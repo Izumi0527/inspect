@@ -162,7 +162,7 @@ export function RolePermissionsDialog({ open, role, canEdit = true, onOpenChange
           )}
 
           {error && (
-            <div className="text-sm text-red-600 dark:text-red-400">
+            <div role="alert" className="text-sm text-red-600 dark:text-red-400">
               {(error as Error).message || '获取权限列表失败'}
             </div>
           )}
@@ -171,11 +171,32 @@ export function RolePermissionsDialog({ open, role, canEdit = true, onOpenChange
             <div className="max-h-[60vh] overflow-auto space-y-4 pr-2">
               {grouped.length === 0 && <div className="text-sm text-muted-foreground">暂无匹配的权限</div>}
 
-              {grouped.map(([module, items]) => (
+              {grouped.map(([module, items]) => {
+                const modulePermIds = items.map((p) => p.id)
+                const allChecked = modulePermIds.length > 0 && modulePermIds.every((id) => selected.has(id))
+                const someChecked = !allChecked && modulePermIds.some((id) => selected.has(id))
+
+                const toggleModule = (checked: boolean) => {
+                  setSelected((prev) => {
+                    const next = new Set(prev)
+                    modulePermIds.forEach((id) => (checked ? next.add(id) : next.delete(id)))
+                    return next
+                  })
+                }
+
+                return (
                 <div key={module} className="border border-border rounded-lg p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <div className="font-medium text-foreground">{module}</div>
-                    <Badge variant="secondary">{items.length}</Badge>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={allChecked}
+                        indeterminate={someChecked}
+                        disabled={!canEdit || assignMutation.isPending}
+                        onCheckedChange={(v) => toggleModule(v)}
+                      />
+                      <span className="font-medium text-foreground">{module}</span>
+                    </label>
+                    <Badge variant="secondary">{items.filter((p) => selected.has(p.id)).length}/{items.length}</Badge>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {items.map((p) => {
@@ -199,7 +220,8 @@ export function RolePermissionsDialog({ open, role, canEdit = true, onOpenChange
                     })}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

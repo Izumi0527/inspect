@@ -73,14 +73,16 @@ describe('RoleManagement 危险操作确认', () => {
       </SettingsShellProvider>
     )
 
-    await user.click(screen.getByTitle('删除角色'))
+    await user.click(screen.getByLabelText('更多操作 自定义'))
+    await user.click(screen.getByRole('menuitem', { name: '删除角色' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(deleteRoleMock).not.toHaveBeenCalled()
 
-    await user.click(screen.getByTitle('删除角色'))
+    await user.click(screen.getByLabelText('更多操作 自定义'))
+    await user.click(screen.getByRole('menuitem', { name: '删除角色' }))
     await user.click(screen.getByRole('button', { name: '确认删除' }))
 
     await waitFor(() => {
