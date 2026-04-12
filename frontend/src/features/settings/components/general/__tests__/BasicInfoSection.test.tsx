@@ -94,10 +94,10 @@ describe('BasicInfoSection', () => {
       screen.getByRole('group', { name: '基础信息操作' })
     ).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '重置' }))
+    await user.click(screen.getByRole('button', { name: '重置整页更改' }))
     expect(onReset).toHaveBeenCalledTimes(1)
 
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: '保存整页更改' }))
     expect(onSave).toHaveBeenCalledTimes(1)
   })
 
@@ -117,7 +117,7 @@ describe('BasicInfoSection', () => {
       />
     )
 
-    expect(screen.getByRole('button', { name: '重置' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '重置整页更改' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '保存中...' })).toBeDisabled()
   })
 })

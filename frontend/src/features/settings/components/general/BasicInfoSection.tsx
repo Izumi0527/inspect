@@ -37,7 +37,6 @@ export function BasicInfoSection({ data, onChange, actions }: Props) {
     >
       <SectionHeader
         title="基础信息"
-        description="维护系统身份信息，并作为当前页面整页配置的保存入口。"
         icon="Info"
         actions={
           actions ? (
@@ -67,10 +66,6 @@ export function BasicInfoSection({ data, onChange, actions }: Props) {
           ) : null
         }
       />
-
-      <div className="mt-4 rounded-lg border border-blue-200/70 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100">
-        保存整页更改会同时提交当前页面中的基础信息、巡检配置、报表配置和个人偏好。
-      </div>
 
       <div className="mt-6 space-y-4">
         <ConfigItem

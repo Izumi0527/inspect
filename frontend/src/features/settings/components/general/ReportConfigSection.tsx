@@ -25,13 +25,8 @@ export function ReportConfigSection({ data, onChange }: Props) {
     >
       <SectionHeader
         title="报表配置"
-        description="定义系统报表导出的默认输出策略与单次导出上限。"
         icon="FileText"
       />
-
-      <div className="mt-4 rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
-        导出格式影响下游使用习惯，记录数上限则影响单次导出等待时间与浏览器内存占用。
-      </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         <ConfigItem

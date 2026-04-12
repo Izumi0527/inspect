@@ -35,15 +35,10 @@ export function UserPreferenceSection({ data, onChange }: Props) {
     >
       <SectionHeader
         title="个人偏好"
-        description="定义系统界面与时间显示的默认偏好，帮助保持一致的展示体验。"
         icon="User"
       />
 
       <div className="mt-6 space-y-4">
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
-          该区块主要影响默认显示习惯，不改变核心业务行为，适合在完成系统基础参数后再调整。
-        </div>
-
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ConfigItem label="主题模式" description="选择界面的主题外观" required>
             <ConfigSelect

@@ -32,8 +32,6 @@ jest.mock('@/features/settings/components/general/BasicInfoSection', () => ({
     }
   }) => (
     <div>
-      <div>basic-info-section</div>
-      <div>保存整页更改会同时提交当前页面中的基础信息、巡检配置、报表配置和个人偏好。</div>
       {props.actions ? (
         <div>
           <button
@@ -108,7 +106,7 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
     jest.clearAllMocks()
   })
 
-  it('应展示轻摘要并通过基础信息区块承载整页保存语义', async () => {
+  it('应展示轻摘要并通过基础信息区块承载整页操作按钮', async () => {
     const user = userEvent.setup()
 
     const ShellToolbar: React.FC = () => {
@@ -152,7 +150,6 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
 
     expect(screen.getByRole('button', { name: '保存整页更改' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重置整页更改' })).toBeInTheDocument()
-    expect(screen.getByText(/保存整页更改会同时提交当前页面中的基础信息、巡检配置、报表配置和个人偏好/)).toBeInTheDocument()
 
     expect(screen.queryByText('• 有未保存的更改')).not.toBeInTheDocument()
 

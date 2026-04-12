@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Clock3, FileText, Globe2, LayoutTemplate, ScanSearch, Settings2 } from 'lucide-react'
+import { Clock3, FileText, Globe2, ScanSearch } from 'lucide-react'
 import { CompactStatCard } from '@/components/shared'
 
 interface GeneralOverviewCardProps {
@@ -47,11 +47,8 @@ export const GeneralOverviewCard: React.FC<GeneralOverviewCardProps> = ({
     >
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="space-y-2">
+          <div>
             <h2 className="text-2xl font-semibold text-foreground">通用配置</h2>
-            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-              当前页面用于定义系统基础行为与默认值。建议先检查摘要信息，再按模块调整系统身份、巡检策略、报表输出和界面偏好。
-            </p>
           </div>
           <div className="rounded-xl border border-border bg-background/80 px-4 py-3 xl:min-w-[300px]">
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
@@ -97,10 +94,6 @@ export const GeneralOverviewCard: React.FC<GeneralOverviewCardProps> = ({
           <div className="rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">当前主题 / 语言</span>
             <span className="ml-2">{themeLabelMap[theme]} / {languageLabelMap[language]}</span>
-          </div>
-          <div className="rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">默认行为说明</span>
-            <span className="ml-2">以下设置共同决定系统的默认执行策略与展示方式。</span>
           </div>
         </div>
       </div>

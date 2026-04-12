@@ -18,7 +18,6 @@ export function InspectionConfigSection({ data, onChange }: Props) {
     >
       <SectionHeader
         title="巡检配置"
-        description="定义巡检任务的默认执行策略，直接影响系统任务调度与失败恢复行为。"
         icon="Search"
       />
 
@@ -36,10 +35,6 @@ export function InspectionConfigSection({ data, onChange }: Props) {
             max={300}
           />
         </ConfigItem>
-
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
-          建议先设置默认超时，再根据系统容量调整并发与失败重试次数，避免高并发下重复请求放大系统负载。
-        </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ConfigItem
