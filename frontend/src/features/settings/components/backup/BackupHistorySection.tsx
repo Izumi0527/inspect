@@ -118,7 +118,6 @@ function TypeBadge({ type }: { type: 'auto' | 'manual' }) {
 
 export function BackupHistorySection({
   backups,
-  totalCount,
   diskUsage,
   isCreating,
   isDeleting,

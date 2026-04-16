@@ -53,18 +53,6 @@ const getMetricColorClass = (color?: string) => {
   return METRIC_COLOR_CLASS[color as MetricColor] ?? METRIC_COLOR_CLASS.gray
 }
 
-const getComparisonLabel = (period: 'day' | 'week' | 'month') => {
-  switch (period) {
-    case 'day':
-      return 'vs 前一日'
-    case 'month':
-      return 'vs 上月'
-    case 'week':
-    default:
-      return 'vs 上周'
-  }
-}
-
 // 格式化日期为友好的显示格式
 const formatDateLabel = (dateStr: string, period: 'day' | 'week' | 'month'): string => {
   try {
@@ -141,9 +129,6 @@ export const InspectionAnalytics: React.FC = () => {
       dateLabel: formatDateLabel(item.date, timePeriod)
     }))
   }, [trends, timePeriod])
-  const comparisonLabel = useMemo(() => getComparisonLabel(timePeriod), [timePeriod])
-
-
   const handlePeriodChange = (value: string) => {
     if (value === 'day' || value === 'week' || value === 'month') {
       setTimePeriod(value)

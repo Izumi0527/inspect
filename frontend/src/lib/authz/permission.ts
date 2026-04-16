@@ -16,26 +16,26 @@ export function normalizePermissionKey(raw: string): string {
   const parts = trimmed.split(':')
   if (parts.length !== 2) return trimmed
 
-  let module = parts[0].trim()
+  let resourceModule = parts[0].trim()
   let action = parts[1].trim()
-  if (!module || !action) return trimmed
+  if (!resourceModule || !action) return trimmed
 
   // 模块名兼容映射（历史版本可能使用单数形式）
-  switch (module) {
+  switch (resourceModule) {
     case 'user':
-      module = 'users'
+      resourceModule = 'users'
       break
     case 'device':
-      module = 'devices'
+      resourceModule = 'devices'
       break
     case 'inspection':
-      module = 'inspections'
+      resourceModule = 'inspections'
       break
     case 'alert':
-      module = 'alerts'
+      resourceModule = 'alerts'
       break
     case 'report':
-      module = 'reports'
+      resourceModule = 'reports'
       break
     default:
       break
@@ -51,7 +51,7 @@ export function normalizePermissionKey(raw: string): string {
       break
   }
 
-  return `${module}:${action}`
+  return `${resourceModule}:${action}`
 }
 
 export function normalizePermissionList(raw: Array<string>): string[] {
@@ -79,4 +79,3 @@ export function hasPermission(required: string, granted: Array<string>): boolean
   }
   return false
 }
-

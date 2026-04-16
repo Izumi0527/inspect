@@ -475,19 +475,6 @@ const toDashboardStat = (dto: DashboardStatDto): DashboardStat => ({
   unit: dto.unit, // 传递单位字段供前端格式化
 })
 
-const getEmptyDashboardData = (): DashboardData => ({
-  stats: getEmptyStatsData(),
-  recentAlerts: [],
-  networkOverview: [],
-  lastUpdated: new Date(),
-  sections: createDefaultDashboardSections(),
-  permissions: {
-    devices: false,
-    alerts: false,
-    monitoring: false,
-  },
-})
-
 const getEmptyStatsData = (): DashboardStat[] => [
   {
     title: '在线设备',

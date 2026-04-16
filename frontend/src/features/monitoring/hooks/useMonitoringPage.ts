@@ -344,7 +344,7 @@ export function useMonitoringPage(): UseMonitoringPageResult {
   const realtimeAlertsPermissionLimited =
     !canReadAlerts || envelope?.sections.realtimeAlerts?.limitedByPermission === true
 
-  const { effectiveFailedSections, effectiveFailedSectionLabels, hasEffectivePartialFailure } =
+  const { effectiveFailedSectionLabels, hasEffectivePartialFailure } =
     useMemo(() => {
       const allFailed = envelope?.failedSections ?? []
       const sections = realtimeAlertsPermissionLimited

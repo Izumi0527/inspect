@@ -8,23 +8,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import type { AuditLog, AuditAction } from '../../types/audit.types'
+import type { AuditLog } from '../../types/audit.types'
+import { actionLabels } from './audit.constants'
 
 interface Props {
   open: boolean
   log: AuditLog | null
   onOpenChange: (open: boolean) => void
-}
-
-const actionLabels: Record<AuditAction, string> = {
-  login: '登录',
-  logout: '登出',
-  create: '创建',
-  update: '更新',
-  delete: '删除',
-  export: '导出',
-  import: '导入',
-  config_change: '配置变更',
 }
 
 function formatDate(isoString: string): string {

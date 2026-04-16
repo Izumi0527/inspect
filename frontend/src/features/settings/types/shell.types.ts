@@ -25,7 +25,7 @@ export type SettingsPageKind =
 export type SettingsScrollMode = 'page' | 'panel'
 export type SettingsToolbarMode = 'shell' | 'local' | 'mixed'
 
-export interface SettingsTabComponentProps {}
+export type SettingsTabComponentProps = Record<string, never>
 
 export interface SettingsPageAction {
   key: string

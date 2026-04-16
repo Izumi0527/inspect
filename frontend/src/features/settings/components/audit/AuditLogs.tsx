@@ -2,36 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuditLogs } from '../../hooks/useAuditLogs'
+import { useDateFilters } from '@/hooks/useDateFilters'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Activity, FileText, ShieldCheck, Download, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react'
 import { EmptyState } from '../shared/EmptyState'
 import { AuditLogDetailDialog } from './AuditLogDetailDialog'
+import { AuditLogFilters } from './AuditLogFilters'
+import { actionLabels } from './audit.constants'
+import { buildAuditDateRangeQuery } from './auditDateRange'
 import { toast } from 'react-hot-toast'
 import type { AuditAction, AuditLog } from '../../types/audit.types'
 import type { SettingsStatCardDescriptor } from '@/features/settings/types/shell.types'
 import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
-
-// 操作映射（供本组件及详情弹窗共用，此处 export 供详情组件复用）
-export const actionLabels: Record<AuditAction, string> = {
-  login: '登录',
-  logout: '登出',
-  create: '创建',
-  update: '更新',
-  delete: '删除',
-  export: '导出',
-  import: '导入',
-  config_change: '配置变更',
-}
 
 // 状态Badge
 function StatusBadge({ status }: { status: 'success' | 'failed' }) {
@@ -66,6 +51,7 @@ export function AuditLogs() {
     updateQueryParams,
     exportLogs,
   } = useAuditLogs()
+  const { getDateRange } = useDateFilters()
 
   // 搜索关键词
   const [keyword, setKeyword] = useState('')
@@ -82,11 +68,11 @@ export function AuditLogs() {
   // 筛选变化时触发查询（排除初始挂载无筛选的情况）
   useEffect(() => {
     if (filterAction || filterStatus || filterStartDate || filterEndDate) {
+      const dateRangeQuery = buildAuditDateRangeQuery(filterStartDate, filterEndDate)
       updateQueryParams({
         action: filterAction || undefined,
         status: filterStatus || undefined,
-        startDate: filterStartDate ? new Date(filterStartDate).toISOString() : undefined,
-        endDate: filterEndDate ? new Date(filterEndDate + 'T23:59:59').toISOString() : undefined,
+        ...dateRangeQuery,
         page: 1,
       })
     }
@@ -110,6 +96,25 @@ export function AuditLogs() {
 
   // 是否有活跃筛选
   const hasActiveFilters = Boolean(filterAction || filterStatus || filterStartDate || filterEndDate)
+  const hasDateFilter = Boolean(filterStartDate || filterEndDate)
+
+  const handleQuickDateFilter = useCallback((range: 'today' | 'week' | 'month') => {
+    const dateRange = getDateRange(range)
+    setFilterStartDate(dateRange.startDate)
+    setFilterEndDate(dateRange.endDate)
+  }, [getDateRange])
+
+  const handleClearDateRange = useCallback(() => {
+    setFilterStartDate('')
+    setFilterEndDate('')
+    updateQueryParams({
+      action: filterAction || undefined,
+      status: filterStatus || undefined,
+      startDate: undefined,
+      endDate: undefined,
+      page: 1,
+    })
+  }, [filterAction, filterStatus, updateQueryParams])
 
   // 处理导出
   const handleExport = useCallback(async () => {
@@ -123,58 +128,32 @@ export function AuditLogs() {
 
   // 高级筛选器 JSX（注入 toolbar.filters 插槽）
   const filters = useMemo(() => (
-    <div className="flex flex-wrap items-center gap-2">
-      <Select
-        value={filterAction}
-        onValueChange={(v) => setFilterAction(v === '_all' ? '' : v as AuditAction)}
-      >
-        <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="筛选操作类型">
-          <SelectValue placeholder="操作类型" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="_all">全部操作</SelectItem>
-          {Object.entries(actionLabels).map(([value, label]) => (
-            <SelectItem key={value} value={value}>{label}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Select
-        value={filterStatus}
-        onValueChange={(v) => setFilterStatus(v === '_all' ? '' : v as 'success' | 'failed')}
-      >
-        <SelectTrigger className="h-9 w-[100px] text-sm" aria-label="筛选状态">
-          <SelectValue placeholder="状态" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="_all">全部状态</SelectItem>
-          <SelectItem value="success">成功</SelectItem>
-          <SelectItem value="failed">失败</SelectItem>
-        </SelectContent>
-      </Select>
-
-      <input
-        type="date"
-        aria-label="开始日期"
-        value={filterStartDate}
-        onChange={(e) => setFilterStartDate(e.target.value)}
-        className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
-      />
-      <input
-        type="date"
-        aria-label="结束日期"
-        value={filterEndDate}
-        onChange={(e) => setFilterEndDate(e.target.value)}
-        className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
-      />
-
-      {hasActiveFilters && (
-        <Button variant="ghost" size="sm" onClick={handleClearFilters}>
-          清除筛选
-        </Button>
-      )}
-    </div>
-  ), [filterAction, filterStatus, filterStartDate, filterEndDate, hasActiveFilters, handleClearFilters])
+    <AuditLogFilters
+      actionFilter={filterAction}
+      statusFilter={filterStatus}
+      startDate={filterStartDate}
+      endDate={filterEndDate}
+      hasDateFilter={hasDateFilter}
+      hasAnyFilter={hasActiveFilters}
+      onActionChange={setFilterAction}
+      onStatusChange={setFilterStatus}
+      onStartDateChange={setFilterStartDate}
+      onEndDateChange={setFilterEndDate}
+      onClearDateRange={handleClearDateRange}
+      onClearAllFilters={handleClearFilters}
+      onQuickDateFilter={handleQuickDateFilter}
+    />
+  ), [
+    filterAction,
+    filterStatus,
+    filterStartDate,
+    filterEndDate,
+    hasDateFilter,
+    hasActiveFilters,
+    handleClearDateRange,
+    handleClearFilters,
+    handleQuickDateFilter,
+  ])
 
   const toolbar = useMemo(
     () => ({
