@@ -34,16 +34,10 @@ import {
   Badge,
   Table,
   Column,
-  SimpleInput as Input
+  SimpleInput as Input,
+  PageSizeSelect
 } from '@/components/atoms'
 import type { BadgeProps } from '@/components/atoms'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 
 // 导入新版 hooks 和类型（来自 inspection feature）
 import {
@@ -706,30 +700,20 @@ export const InspectionTemplates: React.FC = () => {
             {/* 左侧：每页显示数量选择 */}
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">每页显示</span>
-              <Select
-                value={String(pagination.page_size)}
-                onValueChange={(value) =>
+              <PageSizeSelect
+                value={pagination.page_size}
+                options={PAGE_SIZE_OPTIONS}
+                onChange={(pageSize) =>
                   setPagination((prev) => ({
                     ...prev,
                     page: 1,
-                    page_size: Number(value),
+                    page_size: pageSize,
                   }))
                 }
-              >
-                <SelectTrigger
-                  className="h-8 w-[108px] px-3 text-sm"
-                  aria-label="每页条数"
-                >
-                  <SelectValue placeholder="每页条数" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAGE_SIZE_OPTIONS.map((pageSize) => (
-                    <SelectItem key={pageSize} value={String(pageSize)}>
-                      {pageSize} 条
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                ariaLabel="每页条数"
+                triggerClassName="h-8 w-[108px] px-3 text-sm"
+                formatOptionLabel={(pageSize) => `${pageSize} 条`}
+              />
               <span className="text-sm text-muted-foreground">
                 共 {templatesData?.total || 0} 条记录
               </span>

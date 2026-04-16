@@ -1,7 +1,7 @@
 import React from 'react'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { Button } from './button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { PageSizeSelect } from '@/components/atoms/page-size-select'
 import { cn } from '@/utils/cn'
 
 export interface PaginationProps {
@@ -77,11 +77,11 @@ export const Pagination: React.FC<PaginationProps> = ({
     onPageChange(page)
   }
 
-  const handlePageSizeChange = (newPageSize: string) => {
+  const handlePageSizeChange = (newPageSize: number) => {
     if (onPageSizeChange) {
-      onPageSizeChange(Number(newPageSize))
+      onPageSizeChange(newPageSize)
       // 调整当前页码，确保不超出范围
-      const newTotalPages = Math.ceil(totalItems / Number(newPageSize))
+      const newTotalPages = Math.ceil(totalItems / newPageSize)
       if (currentPage > newTotalPages) {
         onPageChange(newTotalPages)
       }
@@ -100,18 +100,13 @@ export const Pagination: React.FC<PaginationProps> = ({
         {showPageSizeSelector && onPageSizeChange && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">每页:</span>
-            <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
-              <SelectTrigger aria-label="每页条数" className="h-8 w-[112px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {pageSizeOptions.map((size) => (
-                  <SelectItem key={size} value={String(size)}>
-                    {size}条/页
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <PageSizeSelect
+              value={pageSize}
+              options={pageSizeOptions}
+              onChange={handlePageSizeChange}
+              ariaLabel="每页条数"
+              triggerClassName="h-8 w-[112px]"
+            />
           </div>
         )}
       </div>

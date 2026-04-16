@@ -2245,6 +2245,10 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection stats")
 	}
+	recentExecutions, err := h.loadRecentCompletedExecutions(c.Request().Context(), start, end, 7)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection stats")
+	}
 
 	data := map[string]interface{}{
 		"totalStrategies":  int(totalStrategies),
@@ -2258,7 +2262,7 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 			"avgScoreChange":    deltaChange(current.AvgScore, previous.AvgScore),
 			"strategiesChange":  "0.0%",
 		},
-		"recentExecutions": []interface{}{},
+		"recentExecutions": recentExecutions,
 	}
 	if !hasExplicitRange {
 		data["todayExecutions"] = current.TotalExecutions
@@ -3347,6 +3351,42 @@ func (h InspectionHandler) loadStrategyNames(ctx context.Context, inspections []
 		result[item.ID] = item.Name
 	}
 	return result
+}
+
+func (h InspectionHandler) loadRecentCompletedExecutions(ctx context.Context, start time.Time, end time.Time, limit int) ([]interface{}, error) {
+	db := h.Service.DB()
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	if limit <= 0 {
+		limit = 7
+	}
+
+	rows := make([]inspection.Inspection, 0, limit)
+	if err := db.WithContext(ctx).
+		Where("completed_at IS NOT NULL").
+		Where("completed_at >= ? AND completed_at <= ?", start, end).
+		Order("completed_at DESC").
+		Limit(limit).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	if len(rows) == 0 {
+		return []interface{}{}, nil
+	}
+
+	strategyNames := h.loadStrategyNames(ctx, rows)
+	userNames := h.loadUserNames(ctx, rows)
+	items := make([]interface{}, 0, len(rows))
+	for _, item := range rows {
+		strategyName := resolveStrategyName(strategyNames, item.ScheduleID, item.Name)
+		response := buildExecutionResponse(item, strategyName)
+		response["triggerUser"] = resolveUserName(userNames, item.CreatedBy)
+		items = append(items, response)
+	}
+
+	return items, nil
 }
 
 func (h InspectionHandler) loadDeviceMap(ctx context.Context, inspections []inspection.Inspection) map[int]deviceInfo {

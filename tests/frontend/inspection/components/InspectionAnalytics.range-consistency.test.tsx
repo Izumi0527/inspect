@@ -140,6 +140,7 @@ describe('InspectionAnalytics 统计口径一致性', () => {
         successRate: 95,
         avgScore: 88,
         activeStrategies: 3,
+        recentExecutions: [],
         changes: {
           executionsChange: '1.0%',
           successRateChange: '0.5%',
@@ -253,5 +254,107 @@ describe('InspectionAnalytics 统计口径一致性', () => {
     expect(() => render(<InspectionAnalytics />)).not.toThrow()
 
     spy.mockRestore()
+  })
+
+  it('最近执行详情应只展示真实执行记录，并显示精确完成时间', () => {
+    ;(inspectionHooks.useInspectionStats as jest.Mock).mockReturnValue({
+      data: {
+        executionCount: 2,
+        successRate: 95,
+        avgScore: 88,
+        activeStrategies: 3,
+        recentExecutions: [
+          {
+            id: 'exec-1',
+            strategyId: 'strategy-1',
+            strategyName: '核心巡检策略',
+            triggerType: 'manual',
+            status: 'completed',
+            progress: 100,
+            totalDevices: 1,
+            completedDevices: 1,
+            startTime: '2026-03-30T10:15:00',
+            endTime: '2026-03-30T10:20:30',
+            duration: 330,
+            summary: {
+              totalChecks: 12,
+              passedChecks: 10,
+              failedChecks: 1,
+              warningChecks: 1,
+              score: 88,
+              deviceResults: [],
+            },
+          },
+        ],
+        changes: {
+          executionsChange: '1.0%',
+          successRateChange: '0.5%',
+          avgScoreChange: '0.8%',
+          strategiesChange: '1',
+        },
+      },
+      isLoading: false,
+      refetch: jest.fn(),
+    })
+
+    ;(inspectionHooks.useInspectionTrends as jest.Mock).mockReturnValue({
+      data: [
+        {
+          date: '2026-03-01',
+          executions: 0,
+          success: 0,
+          failed: 0,
+          avgScore: 0,
+        },
+      ],
+      isLoading: false,
+      refetch: jest.fn(),
+    })
+
+    render(<InspectionAnalytics />)
+
+    expect(screen.getByText('核心巡检策略')).toBeInTheDocument()
+    expect(screen.getByText('已完成')).toBeInTheDocument()
+    expect(screen.getByText('10:20:30')).toBeInTheDocument()
+    expect(screen.queryByText('2026-03-01')).not.toBeInTheDocument()
+  })
+
+  it('当前范围没有真实执行记录时，不应回退展示趋势占位行', () => {
+    ;(inspectionHooks.useInspectionStats as jest.Mock).mockReturnValue({
+      data: {
+        executionCount: 0,
+        successRate: 0,
+        avgScore: 0,
+        activeStrategies: 3,
+        recentExecutions: [],
+        changes: {
+          executionsChange: '0.0%',
+          successRateChange: '0.0%',
+          avgScoreChange: '0.0%',
+          strategiesChange: '0',
+        },
+      },
+      isLoading: false,
+      refetch: jest.fn(),
+    })
+
+    ;(inspectionHooks.useInspectionTrends as jest.Mock).mockReturnValue({
+      data: [
+        {
+          date: '2026-03-01',
+          executions: 3,
+          success: 2,
+          failed: 1,
+          avgScore: 66,
+        },
+      ],
+      isLoading: false,
+      refetch: jest.fn(),
+    })
+
+    render(<InspectionAnalytics />)
+
+    expect(screen.getByText('当前筛选范围内暂无已完成的执行记录')).toBeInTheDocument()
+    expect(screen.queryByText('2026-03-01')).not.toBeInTheDocument()
   })
 })

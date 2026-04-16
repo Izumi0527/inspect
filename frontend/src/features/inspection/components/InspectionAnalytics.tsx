@@ -20,19 +20,14 @@ import {
   BarChartComponent,
   PieChartComponent
 } from '@/components/atoms'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
+import { SharedSelect } from '@/components/atoms/shared-select'
 import {
   useInspectionTrends,
   useInspectionStats,
   useDeviceDistribution,
   useProblemDistribution
 } from '../hooks/useInspection'
+import type { InspectionExecution } from '../types'
 import { exportAnalyticsReport } from '../api/inspection.api'
 import { formatDateYMD } from '@/utils/formatters'
 import toast from 'react-hot-toast'
@@ -47,6 +42,12 @@ const METRIC_COLOR_CLASS = {
 } as const
 
 type MetricColor = keyof typeof METRIC_COLOR_CLASS
+
+const TIME_PERIOD_OPTIONS = [
+  { value: 'day', label: '按天' },
+  { value: 'week', label: '按周' },
+  { value: 'month', label: '按月' },
+] as const
 
 const getMetricColorClass = (color?: string) => {
   if (!color) return METRIC_COLOR_CLASS.gray
@@ -74,6 +75,66 @@ const formatDateLabel = (dateStr: string, period: 'day' | 'week' | 'month'): str
     }
   } catch {
     return dateStr
+  }
+}
+
+const formatExecutionDate = (dateTime?: string): string => {
+  if (!dateTime) return '-'
+  const date = new Date(dateTime)
+  if (Number.isNaN(date.getTime())) return dateTime
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+}
+
+const formatExecutionTime = (dateTime?: string): string => {
+  if (!dateTime) return '-'
+  const date = new Date(dateTime)
+  if (Number.isNaN(date.getTime())) return dateTime
+  return date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+}
+
+const formatExecutionDuration = (duration?: number): string => {
+  if (!duration || duration <= 0) return '-'
+  const minutes = Math.floor(duration / 60)
+  const seconds = duration % 60
+  return `${minutes}分${seconds}秒`
+}
+
+const getExecutionStatusMeta = (status: InspectionExecution['status']) => {
+  switch (status) {
+    case 'completed':
+      return {
+        label: '已完成',
+        className: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400',
+      }
+    case 'failed':
+      return {
+        label: '失败',
+        className: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400',
+      }
+    case 'cancelled':
+      return {
+        label: '已取消',
+        className: 'bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-400',
+      }
+    case 'running':
+      return {
+        label: '执行中',
+        className: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400',
+      }
+    default:
+      return {
+        label: '等待中',
+        className: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400',
+      }
   }
 }
 
@@ -129,6 +190,11 @@ export const InspectionAnalytics: React.FC = () => {
       dateLabel: formatDateLabel(item.date, timePeriod)
     }))
   }, [trends, timePeriod])
+
+  const recentExecutions = useMemo(
+    () => (stats?.recentExecutions ?? []).filter(item => !!item.endTime).slice(0, 7),
+    [stats?.recentExecutions]
+  )
   const handlePeriodChange = (value: string) => {
     if (value === 'day' || value === 'week' || value === 'month') {
       setTimePeriod(value)
@@ -212,16 +278,14 @@ export const InspectionAnalytics: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div></div>
         <div className="flex gap-2">
-          <Select value={timePeriod} onValueChange={handlePeriodChange}>
-            <SelectTrigger className="w-32" aria-label="巡检分析时间周期">
-              <SelectValue placeholder="时间周期" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="day">按天</SelectItem>
-              <SelectItem value="week">按周</SelectItem>
-              <SelectItem value="month">按月</SelectItem>
-            </SelectContent>
-          </Select>
+          <SharedSelect
+            value={timePeriod}
+            onChange={handlePeriodChange}
+            options={TIME_PERIOD_OPTIONS}
+            ariaLabel="巡检分析时间周期"
+            placeholder="时间周期"
+            triggerClassName="w-32 h-9 rounded-lg px-3 border-border bg-card"
+          />
           <Button variant="outline" onClick={handleRefreshAll}>
             <RefreshCw className="w-4 h-4 mr-2" />
             刷新
@@ -398,47 +462,68 @@ export const InspectionAnalytics: React.FC = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b dark:border-gray-700">
-                  <th className="text-left p-3 dark:text-gray-300">日期</th>
-                  <th className="text-left p-3 dark:text-gray-300">执行次数</th>
-                  <th className="text-left p-3 dark:text-gray-300">成功率</th>
-                  <th className="text-left p-3 dark:text-gray-300">平均评分</th>
-                  <th className="text-left p-3 dark:text-gray-300">问题数</th>
+                  <th className="text-left p-3 dark:text-gray-300">完成时间</th>
+                  <th className="text-left p-3 dark:text-gray-300">策略名称</th>
+                  <th className="text-left p-3 dark:text-gray-300">执行状态</th>
+                  <th className="text-left p-3 dark:text-gray-300">巡检评分</th>
+                  <th className="text-left p-3 dark:text-gray-300">问题情况</th>
                 </tr>
               </thead>
               <tbody>
-                {formattedTrends.slice(-7).map((item, index) => {
-                  // 安全计算成功率，避免除以0
-                  const successRate = item.executions > 0 
-                    ? (item.success / item.executions * 100) 
-                    : 0
-                  return (
-                  <tr key={index} className="border-b dark:border-gray-700 hover:bg-muted/40">
-                    <td className="p-3">{new Date(item.date).toLocaleDateString()}</td>
-                    <td className="p-3">{item.executions}</td>
-                    <td className="p-3">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        successRate >= 90
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400'
-                          : item.executions === 0
-                          ? 'bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-400'
-                          : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400'
-                      }`}>
-                        {item.executions > 0 ? `${successRate.toFixed(1)}%` : '-'}
-                      </span>
+                {recentExecutions.length === 0 ? (
+                  <tr>
+                    <td className="p-6 text-center text-muted-foreground" colSpan={5}>
+                      当前筛选范围内暂无已完成的执行记录
                     </td>
-                    <td className="p-3">
-                      <span className={`font-medium ${
-                        item.avgScore >= 90 ? 'text-green-600' :
-                        item.avgScore >= 70 ? 'text-yellow-600' : 
-                        item.avgScore > 0 ? 'text-red-600' : 'text-gray-400'
-                      }`}>
-                        {item.avgScore > 0 ? item.avgScore : '-'}
-                      </span>
-                    </td>
-                    <td className="p-3">{item.failed}</td>
                   </tr>
-                  )
-                })}
+                ) : (
+                  recentExecutions.map((item) => {
+                    const statusMeta = getExecutionStatusMeta(item.status)
+                    const issueCount = item.summary.failedChecks + item.summary.warningChecks
+                    return (
+                      <tr key={item.id} className="border-b dark:border-gray-700 hover:bg-muted/40">
+                        <td className="p-3">
+                          <div className="font-medium text-foreground">{formatExecutionDate(item.endTime)}</div>
+                          <div className="text-xs text-muted-foreground">{formatExecutionTime(item.endTime)}</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            耗时: {formatExecutionDuration(item.duration)}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="font-medium text-foreground">{item.strategyName || '-'}</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {item.triggerType === 'scheduled' ? '定时触发' : '手动触发'}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${statusMeta.className}`}>
+                            {statusMeta.label}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <div className={`font-medium ${
+                            item.summary.score >= 90 ? 'text-green-600' :
+                            item.summary.score >= 70 ? 'text-yellow-600' :
+                            'text-red-600'
+                          }`}>
+                            {item.summary.score.toFixed(1)}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            通过 {item.summary.passedChecks}/{item.summary.totalChecks}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className={`font-medium ${issueCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {issueCount} 个问题
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            失败 {item.summary.failedChecks} / 警告 {item.summary.warningChecks}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
               </tbody>
             </table>
           </div>

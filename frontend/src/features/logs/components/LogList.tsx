@@ -5,13 +5,7 @@ import React from 'react'
 import { FileText, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
+import { PageSizeSelect } from '@/components/atoms/page-size-select'
 import { LogListItem } from './LogListItem'
 import type { DeviceLog } from '../types'
 
@@ -105,20 +99,11 @@ export const LogList: React.FC<LogListProps> = ({
 
         <div className="flex items-center gap-2">
           {/* 每页数量选择 */}
-          <Select
-            value={String(pagination.pageSize)}
-            onValueChange={(value) => pagination.onPageSizeChange(Number(value))}
-          >
-            <SelectTrigger className="h-8 w-[112px] px-3 text-sm" aria-label="每页条数">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10条/页</SelectItem>
-              <SelectItem value="20">20条/页</SelectItem>
-              <SelectItem value="50">50条/页</SelectItem>
-              <SelectItem value="100">100条/页</SelectItem>
-            </SelectContent>
-          </Select>
+          <PageSizeSelect
+            value={pagination.pageSize}
+            onChange={pagination.onPageSizeChange}
+            ariaLabel="每页条数"
+          />
 
           {onRefresh && (
             <Button

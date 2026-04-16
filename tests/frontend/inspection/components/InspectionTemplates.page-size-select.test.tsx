@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { InspectionTemplates } from '@/features/inspection/components/InspectionTemplates'
 
+const mockPageSizeSelect = jest.fn()
 const mockUseInspectionTemplates = jest.fn()
 const mockRefetch = jest.fn()
 const mockCloneTemplateMutateAsync = jest.fn()
@@ -20,6 +21,31 @@ jest.mock('framer-motion', () => ({
   },
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
+
+jest.mock(
+  '@/components/atoms/page-size-select',
+  () => ({
+    PageSizeSelect: (props: {
+      value: number
+      options?: number[]
+      onChange: (value: number) => void
+      ariaLabel?: string
+    }) => {
+      mockPageSizeSelect(props)
+      return (
+        <button
+          type="button"
+          data-testid="inspection-templates-page-size-select"
+          aria-label={props.ariaLabel}
+          onClick={() => props.onChange(50)}
+        >
+          {`页大小:${props.value}`}
+        </button>
+      )
+    },
+  }),
+  { virtual: true }
+)
 
 jest.mock('@/components/atoms', () => ({
   Card: ({
@@ -57,6 +83,24 @@ jest.mock('@/components/atoms', () => ({
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   Table: () => <div data-testid="inspection-templates-table" />,
+  PageSizeSelect: (props: {
+    value: number
+    options?: number[]
+    onChange: (value: number) => void
+    ariaLabel?: string
+  }) => {
+    mockPageSizeSelect(props)
+    return (
+      <button
+        type="button"
+        data-testid="inspection-templates-page-size-select"
+        aria-label={props.ariaLabel}
+        onClick={() => props.onChange(50)}
+      >
+        {`页大小:${props.value}`}
+      </button>
+    )
+  },
   SimpleInput: ({
     value,
     onChange,
@@ -208,6 +252,7 @@ const buildTemplate = (id: string, name: string) => ({
 
 describe('InspectionTemplates 每页条数下拉统一化', () => {
   beforeEach(() => {
+    mockPageSizeSelect.mockReset()
     mockUseInspectionTemplates.mockReset()
     mockUseInspectionTemplates.mockReturnValue({
       data: {
@@ -220,14 +265,20 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
     })
   })
 
-  it('应使用统一 Select 实现，而不是原生 select', () => {
-    const { container } = render(<InspectionTemplates />)
+  it('应通过共享 PageSizeSelect 渲染页大小下拉', () => {
+    render(<InspectionTemplates />)
 
-    expect(container.querySelector('select')).toBeNull()
-    expect(screen.getByRole('combobox', { name: '每页条数' })).toBeInTheDocument()
+    expect(screen.getByTestId('inspection-templates-page-size-select')).toBeInTheDocument()
+    expect(mockPageSizeSelect).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        value: 20,
+        options: [10, 20, 50],
+        ariaLabel: '每页条数',
+      })
+    )
   })
 
-  it('切换每页条数时，应以字符串值驱动 Select 并把分页重置到第 1 页', async () => {
+  it('切换每页条数时，应通过共享组件回传数字并把分页重置到第 1 页', async () => {
     const user = userEvent.setup()
 
     render(<InspectionTemplates />)
@@ -243,12 +294,7 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
       )
     })
 
-    await user.click(screen.getByRole('combobox', { name: '每页条数' }))
-    expect(screen.getByRole('option', { name: '10 条' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: '20 条' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: '50 条' })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('option', { name: '50 条' }))
+    await user.click(screen.getByTestId('inspection-templates-page-size-select'))
 
     await waitFor(() => {
       expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(

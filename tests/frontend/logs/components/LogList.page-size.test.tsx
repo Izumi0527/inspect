@@ -4,6 +4,33 @@ import userEvent from '@testing-library/user-event'
 import { LogList } from '@/features/logs/components/LogList'
 import type { DeviceLog } from '@/features/logs/types'
 
+const mockPageSizeSelect = jest.fn()
+
+jest.mock(
+  '@/components/atoms/page-size-select',
+  () => ({
+    PageSizeSelect: (props: {
+      value: number
+      options?: number[]
+      onChange: (value: number) => void
+      ariaLabel?: string
+    }) => {
+      mockPageSizeSelect(props)
+      return (
+        <button
+          type="button"
+          data-testid="logs-page-size-select"
+          aria-label={props.ariaLabel}
+          onClick={() => props.onChange(50)}
+        >
+          {`页大小:${props.value}`}
+        </button>
+      )
+    },
+  }),
+  { virtual: true }
+)
+
 jest.mock('@/features/logs/components/LogListItem', () => ({
   LogListItem: ({ log }: { log: DeviceLog }) => <div>{`log-${log.id}`}</div>,
 }))
@@ -136,8 +163,12 @@ const buildLog = (id: number): DeviceLog => ({
 })
 
 describe('LogList 每页条数下拉', () => {
-  it('应使用统一 Select 实现，而不是原生 select', () => {
-    const { container } = render(
+  beforeEach(() => {
+    mockPageSizeSelect.mockReset()
+  })
+
+  it('应使用共享 PageSizeSelect 实现，而不是页面内联下拉', () => {
+    render(
       <LogList
         logs={[buildLog(1), buildLog(2)]}
         selectedLogs={[]}
@@ -154,11 +185,16 @@ describe('LogList 每页条数下拉', () => {
       />
     )
 
-    expect(container.querySelector('select')).toBeNull()
-    expect(screen.getByRole('combobox', { name: '每页条数' })).toBeInTheDocument()
+    expect(screen.getByTestId('logs-page-size-select')).toBeInTheDocument()
+    expect(mockPageSizeSelect).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        value: 20,
+        ariaLabel: '每页条数',
+      })
+    )
   })
 
-  it('应展示 10/20/50/100 条选项，并在切换时触发 onPageSizeChange', async () => {
+  it('应通过共享组件触发页大小切换', async () => {
     const user = userEvent.setup()
     const onPageSizeChange = jest.fn()
     const onPageChange = jest.fn()
@@ -180,13 +216,7 @@ describe('LogList 每页条数下拉', () => {
       />
     )
 
-    await user.click(screen.getByRole('combobox', { name: '每页条数' }))
-    expect(await screen.findByRole('option', { name: '10条/页' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: '20条/页' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: '50条/页' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: '100条/页' })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('option', { name: '50条/页' }))
+    await user.click(screen.getByTestId('logs-page-size-select'))
     expect(onPageSizeChange).toHaveBeenCalledTimes(1)
     expect(onPageSizeChange).toHaveBeenCalledWith(50)
   })

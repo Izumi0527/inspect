@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event'
 import * as inspectionHooks from '@/features/inspection/hooks/useInspection'
 import { InspectionAnalytics } from '@/features/inspection/components/InspectionAnalytics'
 
+const mockSharedSelect = jest.fn()
+
 jest.mock('@/features/inspection/hooks/useInspection', () => ({
   useInspectionTrends: jest.fn(),
   useInspectionStats: jest.fn(),
@@ -46,92 +48,34 @@ jest.mock('@/components/atoms', () => ({
   PieChartComponent: () => <div>PieChartComponent</div>,
 }))
 
-jest.mock('@/components/ui/select', () => {
-  const React = require('react') as typeof import('react')
-
-  type SelectContextValue = {
-    value?: string
-    open: boolean
-    setOpen: (open: boolean) => void
-    onValueChange?: (value: string) => void
-  }
-
-  const SelectContext = React.createContext<SelectContextValue | null>(null)
-
-  const useSelectContext = () => {
-    const context = React.useContext(SelectContext)
-    if (!context) {
-      throw new Error('Select mock context is missing')
-    }
-    return context
-  }
-
-  return {
-    Select: ({
-      value,
-      onValueChange,
-      children,
-    }: {
+jest.mock(
+  '@/components/atoms/shared-select',
+  () => ({
+    SharedSelect: (props: {
       value?: string
-      onValueChange?: (value: string) => void
-      children: React.ReactNode
+      options: Array<{ value: string; label: React.ReactNode }>
+      onChange?: (value: string) => void
+      ariaLabel?: string
     }) => {
-      const [open, setOpen] = React.useState(false)
-      return (
-        <SelectContext.Provider value={{ value, open, setOpen, onValueChange }}>
-          <div>{children}</div>
-        </SelectContext.Provider>
-      )
-    },
-    SelectTrigger: ({
-      children,
-      ...props
-    }: React.ButtonHTMLAttributes<HTMLButtonElement>) => {
-      const { open, setOpen } = useSelectContext()
+      mockSharedSelect(props)
       return (
         <button
           type="button"
-          role="combobox"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-          {...props}
+          data-testid="inspection-analytics-shared-select"
+          aria-label={props.ariaLabel}
+          onClick={() => props.onChange?.('month')}
         >
-          {children}
+          {`共享下拉:${props.value}`}
         </button>
       )
     },
-    SelectValue: ({ placeholder }: { placeholder?: string }) => <>{placeholder ?? null}</>,
-    SelectContent: ({ children }: { children: React.ReactNode }) => {
-      const { open } = useSelectContext()
-      return open ? <div role="listbox">{children}</div> : null
-    },
-    SelectItem: ({
-      value,
-      children,
-    }: {
-      value: string
-      children: React.ReactNode
-    }) => {
-      const { value: currentValue, onValueChange, setOpen } = useSelectContext()
-      return (
-        <button
-          type="button"
-          role="option"
-          aria-selected={currentValue === value}
-          onClick={() => {
-            onValueChange?.(value)
-            setOpen(false)
-          }}
-        >
-          {children}
-        </button>
-      )
-    },
-  }
-})
+  }),
+  { virtual: true }
+)
 
 describe('InspectionAnalytics 下拉统一化', () => {
   beforeEach(() => {
+    mockSharedSelect.mockReset()
     ;(inspectionHooks.useInspectionStats as jest.Mock).mockReturnValue({
       data: {
         executionCount: 10,
@@ -176,15 +120,25 @@ describe('InspectionAnalytics 下拉统一化', () => {
     })
   })
 
-  it('应使用统一 Select 实现时间周期选择，并保持 period 参数更新', async () => {
+  it('应使用共享 SharedSelect 实现时间周期选择，并保持 period 参数更新', async () => {
     const user = userEvent.setup()
-    const { container } = render(<InspectionAnalytics />)
+    render(<InspectionAnalytics />)
 
-    expect(container.querySelector('select')).toBeNull()
-    expect(screen.getByRole('combobox', { name: '巡检分析时间周期' })).toBeInTheDocument()
+    expect(screen.getByTestId('inspection-analytics-shared-select')).toBeInTheDocument()
+    expect(mockSharedSelect).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        value: 'week',
+        ariaLabel: '巡检分析时间周期',
+        triggerClassName: expect.stringContaining('h-9'),
+        options: [
+          { value: 'day', label: '按天' },
+          { value: 'week', label: '按周' },
+          { value: 'month', label: '按月' },
+        ],
+      })
+    )
 
-    await user.click(screen.getByRole('combobox', { name: '巡检分析时间周期' }))
-    await user.click(screen.getByRole('option', { name: '按月' }))
+    await user.click(screen.getByTestId('inspection-analytics-shared-select'))
 
     await waitFor(() => {
       const latestCall = (inspectionHooks.useInspectionTrends as jest.Mock).mock.calls.at(-1)
