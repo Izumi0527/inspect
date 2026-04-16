@@ -9,7 +9,7 @@ import path from 'node:path'
  * - 保存 storageState 供后续用例复用
  */
 export default async function globalSetup(config: FullConfig) {
-  const baseURL = String(config.projects[0]?.use?.baseURL || 'http://localhost:33000')
+  const baseURL = String(config.projects[0]?.use?.baseURL || 'http://localhost:3000')
   const storageStatePath = process.env.PLAYWRIGHT_STORAGE_STATE
     ? String(process.env.PLAYWRIGHT_STORAGE_STATE)
     : path.join('test-results', '.auth', 'storageState.json')

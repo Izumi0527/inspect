@@ -10,7 +10,7 @@
 4) 基于审查输出问题清单（P0/P1/P2）与可执行修复计划，并落地修复与回归测试。
 
 运行端口约定（本地开发）：
-- 前端：`http://127.0.0.1:33000`
+- 前端：`http://127.0.0.1:3000`
 - 后端：`http://127.0.0.1:8000`（API 基础路径：`/api/v1`）
 
 ---
@@ -182,7 +182,7 @@ flowchart TD
 ### 8.1 环境准备
 
 - 后端启动（示例）：`cd backend-go && go run ./cmd/server`（以项目实际为准）
-- 前端启动：`pnpm -C frontend dev`（端口默认 `33000`）
+- 前端启动：`pnpm -C frontend dev`（端口默认 `3000`）
 - 三类账号/角色（推荐）：
   - viewer：仅 `system:logs`
   - operator：`system:logs` + `system:logs:manage`

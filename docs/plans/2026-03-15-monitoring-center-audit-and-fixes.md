@@ -2,7 +2,7 @@
 
 ## 0. 执行进度（更新至 2026-03-15）
 
-- ✅ 第一轮修复已完成并提交：`048fb46b`（端口统一 33000/8000、P0/P1 修复、后端缺表回退、测试与文档同步）
+- ✅ 第一轮修复已完成并提交：`048fb46b`（端口统一 3000/8000、P0/P1 修复、后端缺表回退、测试与文档同步）
 - ✅ 第二轮优化已完成并提交：`7012e5f3`（WS 连接健康度 stale + 基于 lastUpdate 的数据新鲜度提示）
 - ✅ 已验证：`pnpm -C frontend test`、`pnpm -C frontend run type-check`、`cd backend-go && go test ./internal/http/handlers -run MonitoringDashboardV2 -count=1`、`cd tests/backend-go && go test ./internal/ws -run HeartbeatAck_ReturnsOk -count=1`；浏览器打开 `/monitoring` 可正常渲染连接与更新时间徽标
 
@@ -16,7 +16,7 @@
 4) 基于审查输出问题清单（P0/P1/P2）与可执行修复方案，并落地修复与回归。
 
 运行端口约定（本地开发）：
-- 前端：`http://127.0.0.1:33000`
+- 前端：`http://127.0.0.1:3000`
 - 后端：`http://127.0.0.1:8000`（API 基础路径：`/api/v1`；WS 路径：`/api/v1/ws/:user_id`）
 
 ---
@@ -280,7 +280,7 @@ sequenceDiagram
 
 ### 7.1 验证清单（不重复启动服务）
 
-- 打开 `http://127.0.0.1:33000/monitoring`：  
+- 打开 `http://127.0.0.1:3000/monitoring`：
   - 无设备时：出现明确引导（去设备管理/采集配置/重试）。  
   - 后端未启动/断开时：错误提示应区分“无法连接/服务不可用”，不直出内部错误。  
   - 权限不足（alerts:read 缺失）时：出现“权限受限”提示，且不应触发“监控数据不完整”误报。  

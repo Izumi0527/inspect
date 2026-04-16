@@ -182,7 +182,7 @@ services:
     volumes: ["./backend-go:/app"]
     
   frontend:         # Next.js前端 (开发模式)
-    ports: ["33000:33000"]
+    ports: ["3000:3000"]
     volumes: ["./frontend:/app"]
     
   postgres:         # TimescaleDB数据库

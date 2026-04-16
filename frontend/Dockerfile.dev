@@ -8,7 +8,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 ENV NODE_ENV=development \
     NEXT_TELEMETRY_DISABLED=1
 
-EXPOSE 33000
+EXPOSE 3000
 
 # 开发模式：依赖安装到 compose 挂载的 /app/node_modules 卷中，再启动 dev server
 CMD ["sh", "-lc", "pnpm install && pnpm dev"]
