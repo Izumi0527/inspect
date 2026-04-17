@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	ErrInvalidReportFormat   = errors.New("invalid report format")
+	ErrInvalidReportFormat    = errors.New("invalid report format")
 	ErrInvalidReportTimeRange = errors.New("invalid time_range")
 )
 
@@ -776,7 +776,7 @@ func queryReportAlerts(ctx context.Context, db *gorm.DB, start time.Time, end ti
                a.created_at,
                a.last_occurred
         FROM alerts a
-        LEFT JOIN devices d ON d.id = a.device_id
+        JOIN devices d ON d.id = a.device_id
         WHERE a.created_at >= ? AND a.created_at <= ?
         ORDER BY a.created_at DESC
         LIMIT ?`

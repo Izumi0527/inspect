@@ -453,7 +453,8 @@ func (s *Service) GetDeviceStatistics(ctx context.Context) (DeviceStatistics, er
 	var totalAlerts int64
 	if err := s.db.WithContext(ctx).
 		Table("alerts").
-		Where("status IN ?", []string{"open", "acknowledged"}).
+		Joins("JOIN devices ON devices.id = alerts.device_id").
+		Where("alerts.status IN ?", []string{"open", "acknowledged"}).
 		Count(&totalAlerts).Error; err != nil {
 		totalAlerts = 0
 	}
@@ -461,8 +462,9 @@ func (s *Service) GetDeviceStatistics(ctx context.Context) (DeviceStatistics, er
 	var alertingDevices int64
 	if err := s.db.WithContext(ctx).
 		Table("alerts").
-		Select("COUNT(DISTINCT device_id)").
-		Where("status IN ?", []string{"open", "acknowledged"}).
+		Joins("JOIN devices ON devices.id = alerts.device_id").
+		Select("COUNT(DISTINCT alerts.device_id)").
+		Where("alerts.status IN ?", []string{"open", "acknowledged"}).
 		Scan(&alertingDevices).Error; err != nil {
 		alertingDevices = 0
 	}

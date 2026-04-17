@@ -34,6 +34,9 @@ export function useDevices(enablePolling = true, pollingInterval = 60000) {
   const isMountedRef = useRef(true)
 
   useEffect(() => {
+    // 开发环境下 StrictMode 会执行一次“挂载 -> 清理 -> 再挂载”，
+    // 每次进入 effect 时都要恢复挂载标记，避免后续请求结果被永久丢弃。
+    isMountedRef.current = true
     return () => {
       isMountedRef.current = false
       latestRequestIdRef.current += 1

@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 import { useDevices } from "@/features/devices/hooks/useDevices";
@@ -15,6 +16,44 @@ jest.mock("@/features/devices/api/devices.api", () => ({
 describe("useDevices", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it("应在 StrictMode 下正确结束加载并写入设备数据", async () => {
+    mockFetchDevices.mockResolvedValueOnce({
+      devices: [
+        {
+          id: 101,
+          name: "strict-mode-device",
+          ip: "10.10.10.10",
+          device_type: "switch",
+          status: "online",
+          location: "实验区",
+          last_seen: "2026-04-17T08:00:00Z",
+          uptime: "1800",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 10,
+    });
+
+    const { result } = renderHook(() => useDevices(false), {
+      wrapper: StrictMode,
+    });
+
+    await act(async () => {
+      await result.current.loadDevices({
+        page: 1,
+        page_size: 10,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.devices).toHaveLength(1);
+      expect(result.current.devices[0]?.name).toBe("strict-mode-device");
+      expect(result.current.total).toBe(1);
+    });
   });
 
   it("应忽略过期列表请求的返回结果，避免旧数据覆盖新筛选结果", async () => {

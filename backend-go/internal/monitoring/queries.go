@@ -306,8 +306,9 @@ func (w *MetricsWriter) GetMonitoringStats(ctx context.Context) (MonitoringStats
 
 	var activeAlerts int64
 	if err := w.db.WithContext(ctx).
-		Table("alerts").
-		Where("status IN ?", []string{"open", "acknowledged"}).
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
+		Where("a.status IN ?", []string{"open", "acknowledged"}).
 		Count(&activeAlerts).Error; err != nil {
 		return MonitoringStats{}, err
 	}
@@ -378,7 +379,8 @@ func (w *MetricsWriter) GetMonitoringOverview(ctx context.Context) (MonitoringOv
 
 	var totalAlerts int64
 	if err := w.db.WithContext(ctx).
-		Table("alerts").
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Count(&totalAlerts).Error; err != nil {
 		return MonitoringOverview{}, err
 	}
@@ -468,10 +470,10 @@ func (w *MetricsWriter) GetBulkMetricsHistory(
 
 	if useHourly {
 		type row struct {
-			Bucket     time.Time `gorm:"column:bucket"`
-			DeviceID   int       `gorm:"column:device_id"`
-			MetricName string    `gorm:"column:metric_name"`
-			MetricValue *float64 `gorm:"column:metric_value"`
+			Bucket      time.Time `gorm:"column:bucket"`
+			DeviceID    int       `gorm:"column:device_id"`
+			MetricName  string    `gorm:"column:metric_name"`
+			MetricValue *float64  `gorm:"column:metric_value"`
 		}
 
 		rows := make([]row, 0)
@@ -531,13 +533,13 @@ func (w *MetricsWriter) GetBulkMetricsHistory(
 	}
 
 	type row struct {
-		DeviceID      int              `gorm:"column:device_id"`
-		MetricName    string           `gorm:"column:metric_name"`
-		MetricValue   *float64         `gorm:"column:metric_value"`
-		MetricUnit    *string          `gorm:"column:metric_unit"`
-		InterfaceName *string          `gorm:"column:interface_name"`
+		DeviceID      int               `gorm:"column:device_id"`
+		MetricName    string            `gorm:"column:metric_name"`
+		MetricValue   *float64          `gorm:"column:metric_value"`
+		MetricUnit    *string           `gorm:"column:metric_unit"`
+		InterfaceName *string           `gorm:"column:interface_name"`
 		Tags          datatypes.JSONMap `gorm:"column:tags"`
-		CollectedAt   time.Time        `gorm:"column:collected_at"`
+		CollectedAt   time.Time         `gorm:"column:collected_at"`
 	}
 
 	rows := make([]row, 0)

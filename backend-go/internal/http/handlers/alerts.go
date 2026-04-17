@@ -278,7 +278,8 @@ func (h AlertsHandler) GetAlertStatistics(c echo.Context) error {
 		var count int64
 		if err := db.WithContext(c.Request().Context()).
 			Table("alerts").
-			Where("COALESCE(first_occurred, created_at) >= ?", last24h).
+			Joins("JOIN devices ON devices.id = alerts.device_id").
+			Where("COALESCE(alerts.first_occurred, alerts.created_at) >= ?", last24h).
 			Count(&count).Error; err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load recent alerts stats")
 		}
@@ -291,14 +292,16 @@ func (h AlertsHandler) GetAlertStatistics(c echo.Context) error {
 		var today int64
 		if err := db.WithContext(c.Request().Context()).
 			Table("alerts").
-			Where("COALESCE(first_occurred, created_at) >= ? AND COALESCE(first_occurred, created_at) < ?", todayStart, todayStart.Add(24*time.Hour)).
+			Joins("JOIN devices ON devices.id = alerts.device_id").
+			Where("COALESCE(alerts.first_occurred, alerts.created_at) >= ? AND COALESCE(alerts.first_occurred, alerts.created_at) < ?", todayStart, todayStart.Add(24*time.Hour)).
 			Count(&today).Error; err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load today alerts stats")
 		}
 		var yesterday int64
 		if err := db.WithContext(c.Request().Context()).
 			Table("alerts").
-			Where("COALESCE(first_occurred, created_at) >= ? AND COALESCE(first_occurred, created_at) < ?", yesterdayStart, todayStart).
+			Joins("JOIN devices ON devices.id = alerts.device_id").
+			Where("COALESCE(alerts.first_occurred, alerts.created_at) >= ? AND COALESCE(alerts.first_occurred, alerts.created_at) < ?", yesterdayStart, todayStart).
 			Count(&yesterday).Error; err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load yesterday alerts stats")
 		}

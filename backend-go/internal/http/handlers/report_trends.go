@@ -252,7 +252,7 @@ func queryDeviceMetricSeries(
 	selectExpr := fmt.Sprintf("%s AS bucket, AVG(metric_value) AS value", bucketExpr)
 
 	type row struct {
-		Bucket time.Time      `gorm:"column:bucket"`
+		Bucket time.Time       `gorm:"column:bucket"`
 		Value  sql.NullFloat64 `gorm:"column:value"`
 	}
 
@@ -322,7 +322,7 @@ func queryNetworkMetricSeries(
 	selectExpr := fmt.Sprintf("%s AS bucket, SUM(metric_value) AS value", bucketExpr)
 
 	type row struct {
-		Bucket time.Time      `gorm:"column:bucket"`
+		Bucket time.Time       `gorm:"column:bucket"`
 		Value  sql.NullFloat64 `gorm:"column:value"`
 	}
 	rows := make([]row, 0)
@@ -361,7 +361,7 @@ func queryAlertSeries(
 	granularity string,
 	deviceIDs []int,
 ) ([]trendSeriesPoint, error) {
-	bucketExpr := bucketExpression(granularity, "created_at")
+	bucketExpr := bucketExpression(granularity, "a.created_at")
 	selectExpr := fmt.Sprintf("%s AS bucket, COUNT(*) AS value", bucketExpr)
 
 	type row struct {
@@ -370,12 +370,13 @@ func queryAlertSeries(
 	}
 
 	query := db.WithContext(ctx).
-		Table("alerts").
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Select(selectExpr).
-		Where("created_at >= ? AND created_at <= ?", start, end)
+		Where("a.created_at >= ? AND a.created_at <= ?", start, end)
 
 	if len(deviceIDs) > 0 {
-		query = query.Where("device_id IN ?", deviceIDs)
+		query = query.Where("a.device_id IN ?", deviceIDs)
 	}
 
 	rows := make([]row, 0)
@@ -681,14 +682,14 @@ func buildTrendAlerts(series []trendMetricSeries, sensitivity string, limit int)
 		anomalies := detectAnomalies(item, sensitivity)
 		for _, anomaly := range anomalies {
 			alerts = append(alerts, map[string]interface{}{
-				"id":              fmt.Sprintf("%s-%s", anomaly.MetricName, anomaly.Timestamp.Format("20060102150405")),
-				"type":            "anomaly",
-				"severity":        anomaly.Severity,
-				"title":           fmt.Sprintf("%s波动异常", anomaly.DisplayName),
-				"description":     fmt.Sprintf("检测到%s在%s出现异常值", anomaly.DisplayName, anomaly.Timestamp.Format(time.RFC3339)),
+				"id":               fmt.Sprintf("%s-%s", anomaly.MetricName, anomaly.Timestamp.Format("20060102150405")),
+				"type":             "anomaly",
+				"severity":         anomaly.Severity,
+				"title":            fmt.Sprintf("%s波动异常", anomaly.DisplayName),
+				"description":      fmt.Sprintf("检测到%s在%s出现异常值", anomaly.DisplayName, anomaly.Timestamp.Format(time.RFC3339)),
 				"affected_metrics": []string{anomaly.MetricName},
-				"detected_at":     anomaly.Timestamp.Format(time.RFC3339),
-				"status":          "active",
+				"detected_at":      anomaly.Timestamp.Format(time.RFC3339),
+				"status":           "active",
 			})
 			if limit > 0 && len(alerts) >= limit {
 				return alerts

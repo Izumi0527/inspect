@@ -39,10 +39,12 @@ func TestDashboardOverviewHandler_ShouldReturnSectionFailureInsteadOfFatalPageEr
 	h, mock, cleanup := newDashboardOverviewHandler(t, []string{"alerts:read"})
 	defer cleanup()
 
-	mock.ExpectQuery(`SELECT .*FROM "alerts".*GROUP BY .*`).
+	mock.ExpectQuery(`(?is)SELECT .*COUNT\(\*\) AS count.*FROM alerts AS a JOIN devices d ON d\.id = a\.device_id.*GROUP BY .*severity.*`).
 		WillReturnRows(sqlmock.NewRows([]string{"severity", "status", "count"}).
 			AddRow("critical", "active", 3))
-	mock.ExpectQuery(`SELECT .*FROM alerts AS a .*`).
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE .*status IN .*`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`(?is)SELECT .*FROM alerts AS a JOIN devices d ON d\.id = a\.device_id.*`).
 		WillReturnError(assertiveError("recent alerts unavailable"))
 
 	ctx, rec := newEchoContextWithBody(http.MethodGet, "/api/v1/dashboard/overview", "test-token", nil)

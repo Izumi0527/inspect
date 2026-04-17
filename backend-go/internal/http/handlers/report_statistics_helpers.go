@@ -484,14 +484,15 @@ func queryAlertAggregates(ctx context.Context, db *gorm.DB, start time.Time, end
 
 	rows := make([]alertAggregate, 0)
 	query := db.WithContext(ctx).
-		Table("alerts").
-		Select(`device_id,
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
+		Select(`a.device_id AS device_id,
             COUNT(*) AS total,
-            SUM(CASE WHEN severity IN ('critical', 'error', 'fatal') THEN 1 ELSE 0 END) AS severe,
-            SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) AS resolved`).
-		Where("created_at >= ? AND created_at <= ?", start, end).
-		Where("device_id IN ?", deviceIDs).
-		Group("device_id")
+            SUM(CASE WHEN a.severity IN ('critical', 'error', 'fatal') THEN 1 ELSE 0 END) AS severe,
+            SUM(CASE WHEN a.status IN ('resolved', 'closed') THEN 1 ELSE 0 END) AS resolved`).
+		Where("a.created_at >= ? AND a.created_at <= ?", start, end).
+		Where("a.device_id IN ?", deviceIDs).
+		Group("a.device_id")
 	if err := query.Scan(&rows).Error; err != nil {
 		return nil, 0, err
 	}
@@ -870,13 +871,14 @@ func queryAlertTotals(ctx context.Context, db *gorm.DB, start time.Time, end tim
 	}
 	var result row
 	query := db.WithContext(ctx).
-		Table("alerts").
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Select(`COUNT(*) AS total,
-            SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) AS resolved,
-            SUM(CASE WHEN severity IN ('critical', 'error', 'fatal') THEN 1 ELSE 0 END) AS severe`).
-		Where("created_at >= ? AND created_at <= ?", start, end)
+            SUM(CASE WHEN a.status IN ('resolved', 'closed') THEN 1 ELSE 0 END) AS resolved,
+            SUM(CASE WHEN a.severity IN ('critical', 'error', 'fatal') THEN 1 ELSE 0 END) AS severe`).
+		Where("a.created_at >= ? AND a.created_at <= ?", start, end)
 	if len(deviceIDs) > 0 {
-		query = query.Where("device_id IN ?", deviceIDs)
+		query = query.Where("a.device_id IN ?", deviceIDs)
 	}
 	if err := query.Scan(&result).Error; err != nil {
 		return alertTotals{}, err

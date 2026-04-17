@@ -133,7 +133,7 @@ func expectDashboardNotificationSourceQueriesWithCounts(mock sqlmock.Sqlmock, co
 		)
 	}
 	if counts.Alerts > 0 {
-		mock.ExpectQuery(`SELECT .*FROM alerts AS a .*`).
+		mock.ExpectQuery(`(?is)SELECT .*FROM alerts AS a JOIN devices d ON d\.id = a\.device_id.*`).
 			WillReturnRows(alertRows)
 	}
 

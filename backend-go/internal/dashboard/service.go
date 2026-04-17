@@ -653,7 +653,7 @@ func (s *Service) GetTopDevicesByAlerts(ctx context.Context, limit int) ([]TopDe
             d.ip_address AS ip_address,
             COUNT(*) AS alert_count,
             SUM(CASE WHEN a.severity = 'critical' THEN 1 ELSE 0 END) AS critical_count`).
-		Joins("LEFT JOIN devices d ON d.id = a.device_id").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Group("a.device_id, d.name, d.ip_address").
 		Order("alert_count DESC").
 		Limit(limit).
@@ -748,9 +748,10 @@ func (s *Service) getAlertSummary(ctx context.Context) (AlertSummary, error) {
 
 	rows := make([]row, 0)
 	if err := s.db.WithContext(ctx).
-		Table("alerts").
-		Select("severity, COUNT(*) AS count").
-		Group("severity").
+		Table("alerts AS a").
+		Select("a.severity AS severity, COUNT(*) AS count").
+		Joins("JOIN devices d ON d.id = a.device_id").
+		Group("a.severity").
 		Scan(&rows).Error; err != nil {
 		return AlertSummary{}, err
 	}
@@ -770,8 +771,9 @@ func (s *Service) getAlertSummary(ctx context.Context) (AlertSummary, error) {
 
 	var active int64
 	if err := s.db.WithContext(ctx).
-		Table("alerts").
-		Where("status IN ?", []string{"open", "acknowledged"}).
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
+		Where("a.status IN ?", []string{"open", "acknowledged"}).
 		Count(&active).Error; err == nil {
 		summary.Unacknowledged = int(active)
 	}
@@ -807,7 +809,7 @@ func (s *Service) getRecentAlerts(ctx context.Context, limit int) ([]RecentAlert
 	err := s.db.WithContext(ctx).
 		Table("alerts AS a").
 		Select("a.id, a.message, a.severity, a.created_at, a.category, d.name AS device_name").
-		Joins("LEFT JOIN devices d ON d.id = a.device_id").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Order("a.created_at desc").
 		Limit(limit).
 		Scan(&rows).Error

@@ -112,7 +112,7 @@ func (s *Service) ListAlerts(ctx context.Context, filter ListAlertsFilter) ([]Al
 	query := s.db.WithContext(ctx).
 		Table("alerts AS a").
 		Select("a.*, d.name AS device_name, d.ip_address AS device_ip, r.name AS rule_name").
-		Joins("LEFT JOIN devices d ON d.id = a.device_id").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Joins("LEFT JOIN alert_rules r ON r.id = a.rule_id")
 
 	if len(filter.DeviceIDs) > 0 {
@@ -172,7 +172,7 @@ func (s *Service) GetAlert(ctx context.Context, alertID int) (AlertWithDevice, e
 	err := s.db.WithContext(ctx).
 		Table("alerts AS a").
 		Select("a.*, d.name AS device_name, d.ip_address AS device_ip, r.name AS rule_name").
-		Joins("LEFT JOIN devices d ON d.id = a.device_id").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Joins("LEFT JOIN alert_rules r ON r.id = a.rule_id").
 		Where("a.id = ?", alertID).
 		Take(&result).Error
@@ -220,7 +220,7 @@ func (s *Service) GetRecentAlerts(ctx context.Context, limit int) ([]AlertWithDe
 	err := s.db.WithContext(ctx).
 		Table("alerts AS a").
 		Select("a.*, d.name AS device_name, d.ip_address AS device_ip, r.name AS rule_name").
-		Joins("LEFT JOIN devices d ON d.id = a.device_id").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Joins("LEFT JOIN alert_rules r ON r.id = a.rule_id").
 		Order("a.last_occurred desc, a.created_at desc").
 		Limit(limit).
@@ -239,15 +239,19 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 	}
 
 	var total int64
-	if err := s.db.WithContext(ctx).Table("alerts").Count(&total).Error; err != nil {
+	if err := s.db.WithContext(ctx).
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
+		Count(&total).Error; err != nil {
 		return stats, err
 	}
 	stats.Total = int(total)
 
 	var active int64
 	if err := s.db.WithContext(ctx).
-		Table("alerts").
-		Where("status IN ?", []string{alertStatusOpen, alertStatusAcknowledged}).
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
+		Where("a.status IN ?", []string{alertStatusOpen, alertStatusAcknowledged}).
 		Count(&active).Error; err != nil {
 		return stats, err
 	}
@@ -255,8 +259,9 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 
 	var acknowledged int64
 	if err := s.db.WithContext(ctx).
-		Table("alerts").
-		Where("status = ?", alertStatusAcknowledged).
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
+		Where("a.status = ?", alertStatusAcknowledged).
 		Count(&acknowledged).Error; err != nil {
 		return stats, err
 	}
@@ -264,8 +269,9 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 
 	var resolved int64
 	if err := s.db.WithContext(ctx).
-		Table("alerts").
-		Where("status IN ?", []string{alertStatusResolved, alertStatusClosed}).
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
+		Where("a.status IN ?", []string{alertStatusResolved, alertStatusClosed}).
 		Count(&resolved).Error; err != nil {
 		return stats, err
 	}
@@ -277,9 +283,10 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 	}
 	severityRows := make([]severityRow, 0)
 	if err := s.db.WithContext(ctx).
-		Table("alerts").
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Select("severity, COUNT(*) as count").
-		Where("status IN ?", []string{alertStatusOpen, alertStatusAcknowledged}).
+		Where("a.status IN ?", []string{alertStatusOpen, alertStatusAcknowledged}).
 		Group("severity").
 		Scan(&severityRows).Error; err != nil {
 		return stats, err
@@ -301,9 +308,10 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 	}
 	categoryRows := make([]categoryRow, 0)
 	if err := s.db.WithContext(ctx).
-		Table("alerts").
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Select("category, COUNT(*) as count").
-		Where("status IN ?", []string{alertStatusOpen, alertStatusAcknowledged}).
+		Where("a.status IN ?", []string{alertStatusOpen, alertStatusAcknowledged}).
 		Group("category").
 		Scan(&categoryRows).Error; err != nil {
 		return stats, err
@@ -324,7 +332,7 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 	if err := s.db.WithContext(ctx).
 		Table("alerts AS a").
 		Select("a.device_id, d.name AS device_name, COUNT(*) as count").
-		Joins("LEFT JOIN devices d ON d.id = a.device_id").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Where("a.status IN ?", []string{alertStatusOpen, alertStatusAcknowledged}).
 		Group("a.device_id, d.name").
 		Order("count desc").

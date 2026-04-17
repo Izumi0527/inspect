@@ -1592,14 +1592,18 @@ func (h ReportsHandler) GetAlertStatistics(c echo.Context) error {
 	startTime, endTime, granularity := parseTrendRangeFromQuery(c)
 
 	var totalAlerts int64
-	_ = db.WithContext(c.Request().Context()).Table("alerts").Count(&totalAlerts)
+	_ = db.WithContext(c.Request().Context()).
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
+		Count(&totalAlerts)
 
 	severityRows := make([]struct {
 		Severity string `gorm:"column:severity"`
 		Count    int    `gorm:"column:count"`
 	}, 0)
 	_ = db.WithContext(c.Request().Context()).
-		Table("alerts").
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Select("severity, COUNT(*) AS count").
 		Group("severity").
 		Scan(&severityRows)
@@ -1614,9 +1618,10 @@ func (h ReportsHandler) GetAlertStatistics(c echo.Context) error {
 		Count    int `gorm:"column:count"`
 	}, 0)
 	_ = db.WithContext(c.Request().Context()).
-		Table("alerts").
-		Select("device_id, COUNT(*) AS count").
-		Group("device_id").
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
+		Select("a.device_id, COUNT(*) AS count").
+		Group("a.device_id").
 		Scan(&deviceRows)
 
 	byDevice := map[string]int{}
@@ -1629,11 +1634,12 @@ func (h ReportsHandler) GetAlertStatistics(c echo.Context) error {
 		AvgResolution float64 `gorm:"column:avg_resolution_time"`
 	}
 	err := db.WithContext(c.Request().Context()).
-		Table("alerts").
-		Select("COALESCE(AVG(EXTRACT(EPOCH FROM (COALESCE(resolved_at, closed_at) - created_at)) / 3600.0), 0) AS avg_resolution_time").
-		Where("created_at IS NOT NULL").
-		Where("COALESCE(resolved_at, closed_at) IS NOT NULL").
-		Where("status IN ?", []string{"resolved", "closed"}).
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
+		Select("COALESCE(AVG(EXTRACT(EPOCH FROM (COALESCE(a.resolved_at, a.closed_at) - a.created_at)) / 3600.0), 0) AS avg_resolution_time").
+		Where("a.created_at IS NOT NULL").
+		Where("COALESCE(a.resolved_at, a.closed_at) IS NOT NULL").
+		Where("a.status IN ?", []string{"resolved", "closed"}).
 		Scan(&avgRow).Error
 	if err == nil {
 		avgResolutionTime = roundFloat(avgRow.AvgResolution, 2)
@@ -1647,15 +1653,16 @@ func (h ReportsHandler) GetAlertStatistics(c echo.Context) error {
 		Severe   int64     `gorm:"column:severe"`
 	}
 	rows := make([]trendRow, 0)
-	bucketExpr := bucketExpression(granularity, "created_at")
+	bucketExpr := bucketExpression(granularity, "a.created_at")
 	selectExpr := fmt.Sprintf(`%s AS bucket,
         COUNT(*) AS total,
-        SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) AS resolved,
-        SUM(CASE WHEN severity IN ('critical', 'error', 'fatal') THEN 1 ELSE 0 END) AS severe`, bucketExpr)
+        SUM(CASE WHEN a.status IN ('resolved', 'closed') THEN 1 ELSE 0 END) AS resolved,
+        SUM(CASE WHEN a.severity IN ('critical', 'error', 'fatal') THEN 1 ELSE 0 END) AS severe`, bucketExpr)
 	_ = db.WithContext(c.Request().Context()).
-		Table("alerts").
+		Table("alerts AS a").
+		Joins("JOIN devices d ON d.id = a.device_id").
 		Select(selectExpr).
-		Where("created_at >= ? AND created_at <= ?", startTime, endTime).
+		Where("a.created_at >= ? AND a.created_at <= ?", startTime, endTime).
 		Group("bucket").
 		Order("bucket").
 		Scan(&rows)
