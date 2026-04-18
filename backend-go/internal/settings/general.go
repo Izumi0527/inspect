@@ -157,12 +157,13 @@ func (s *Service) UpsertSetting(ctx context.Context, key string, value interface
 	}
 
 	var setting SystemSetting
-	err := s.db.WithContext(ctx).
+	lookupErr := s.db.WithContext(ctx).
 		Where("key = ?", cleanKey).
 		Take(&setting).Error
-	if err != nil && !errorsIsRecordNotFound(err) {
-		return nil, err
+	if lookupErr != nil && !errorsIsRecordNotFound(lookupErr) {
+		return nil, lookupErr
 	}
+	settingMissing := errorsIsRecordNotFound(lookupErr)
 
 	dataType := strings.TrimSpace(setting.DataType)
 	if dataType == "" {
@@ -179,7 +180,7 @@ func (s *Service) UpsertSetting(ctx context.Context, key string, value interface
 	}
 
 	now := time.Now().UTC()
-	if errorsIsRecordNotFound(err) {
+	if settingMissing {
 		setting = SystemSetting{
 			Key:         cleanKey,
 			Category:    normalizeCategoryFromKey(cleanKey),
