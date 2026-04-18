@@ -111,6 +111,8 @@ export const LogListItem: React.FC<LogListItemProps> = ({
             variant="ghost"
             size="icon"
             className="text-gray-400 hover:text-red-600"
+            aria-label={`删除日志 ${log.id}`}
+            title={`删除日志 ${log.id}`}
             onClick={(e) => {
               e.stopPropagation()
               onDelete(log.id)

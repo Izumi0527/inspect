@@ -258,6 +258,12 @@ export async function exportLogs(params: LogExportParams): Promise<Blob> {
             detail = data.error
           } else if (typeof data.detail === 'string') {
             detail = data.detail
+          } else if (isObject(data.error)) {
+            if (typeof data.error.message === 'string') {
+              detail = data.error.message
+            } else if (typeof data.error.detail === 'string') {
+              detail = data.error.detail
+            }
           }
         }
       }

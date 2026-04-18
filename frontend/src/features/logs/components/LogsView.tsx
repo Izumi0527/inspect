@@ -127,6 +127,7 @@ export const LogsView: React.FC = () => {
       const ok = await batchDeleteLogs(selectedLogs)
       if (ok) {
         clearSelection()
+        await refreshStats()
       }
     }
   }
@@ -142,7 +143,10 @@ export const LogsView: React.FC = () => {
       return
     }
 
-    await deleteLog(logId)
+    const ok = await deleteLog(logId)
+    if (ok) {
+      await refreshStats()
+    }
   }
 
   // 处理刷新

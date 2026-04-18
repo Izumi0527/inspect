@@ -95,6 +95,31 @@ describe('logsApi exportLogs', () => {
     ).rejects.toThrow('导出失败（400）：device_ids 超过限制')
   })
 
+  it('后端返回嵌套 error.message 时应透出具体错误信息', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      headers: { get: () => 'application/json' },
+      json: async () => ({
+        success: false,
+        error: {
+          type: 'HTTPException',
+          message: 'no logs found',
+        },
+      }),
+      text: async () => '',
+    } as Partial<Response>)
+
+    await expect(
+      exportLogs({
+        page: 1,
+        page_size: 20,
+        format: 'csv',
+        include_raw: true,
+      }),
+    ).rejects.toThrow('导出失败（404）：no logs found')
+  })
+
   it('无 token 时不应发送空 Authorization 头', async () => {
     ;(TokenManager.getAccessToken as jest.Mock).mockReturnValue('')
 
