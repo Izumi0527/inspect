@@ -111,6 +111,25 @@ describe('AdvancedFilters 下拉统一化', () => {
     await user.click(screen.getByRole('button', { name: /高级过滤/ }))
 
     expect(container.querySelector('select')).toBeNull()
-    expect(screen.getByRole('combobox', { name: '高级过滤时间范围' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '时间范围' })).toBeInTheDocument()
+  })
+
+  it('关键词搜索输入框应绑定显式标签与 name 属性', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <AdvancedFilters
+        onFilterChange={jest.fn()}
+        onReset={jest.fn()}
+        renderAsCard={false}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: /高级过滤/ }))
+
+    const keywordInput = screen.getByRole('textbox', { name: '关键词搜索' })
+
+    expect(keywordInput).toHaveAttribute('id', 'alert-advanced-search-input')
+    expect(keywordInput).toHaveAttribute('name', 'alert-advanced-search')
   })
 })

@@ -31,17 +31,20 @@ jest.mock('@/components/atoms', () => ({
     onChange,
     placeholder,
     className,
+    ...props
   }: {
     value?: string
     onChange?: React.ChangeEventHandler<HTMLInputElement>
     placeholder?: string
     className?: string
+    [key: string]: unknown
   }) => (
     <input
       value={value}
       onChange={onChange}
       placeholder={placeholder}
       className={className}
+      {...props}
     />
   ),
 }))
@@ -188,5 +191,21 @@ describe('AlertFiltersBar 下拉统一化', () => {
     expect(screen.getByText('已选择 2 项')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '批量确认' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '批量解决' })).toBeInTheDocument()
+  })
+
+  it('搜索输入框应提供 name 与可访问标签，便于浏览器识别', () => {
+    render(
+      <AlertFiltersBar
+        filters={buildFilters()}
+        onFilterChange={jest.fn()}
+        selectedCount={0}
+        renderAsCard={false}
+      />
+    )
+
+    const searchInput = screen.getByRole('textbox', { name: '搜索告警' })
+
+    expect(searchInput).toHaveAttribute('id', 'alert-search-input')
+    expect(searchInput).toHaveAttribute('name', 'alert-search')
   })
 })

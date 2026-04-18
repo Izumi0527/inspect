@@ -30,7 +30,12 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
       <div className="relative flex-1 w-full sm:max-w-md">
         <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+        <label htmlFor="alert-search-input" className="sr-only">
+          搜索告警
+        </label>
         <Input
+          id="alert-search-input"
+          name="alert-search"
           type="text"
           placeholder="搜索告警..."
           value={filters.searchQuery}

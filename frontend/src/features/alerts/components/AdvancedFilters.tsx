@@ -48,6 +48,10 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
   value,
   renderAsCard = true // 默认true保持向后兼容
 }) => {
+  const advancedSearchInputId = 'alert-advanced-search-input'
+  const advancedDateRangeLabelId = 'alert-advanced-date-range-label'
+  const advancedDateStartInputId = 'alert-advanced-date-start'
+  const advancedDateEndInputId = 'alert-advanced-date-end'
   const [isExpanded, setIsExpanded] = useState(false)
   const [internalFilters, setInternalFilters] = useState<AdvancedFilterValues>({})
 
@@ -205,10 +209,15 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 关键词搜索 */}
             <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">
+              <label
+                htmlFor={advancedSearchInputId}
+                className="block text-sm font-medium text-muted-foreground mb-2"
+              >
                 关键词搜索
               </label>
               <Input
+                id={advancedSearchInputId}
+                name="alert-advanced-search"
                 type="text"
                 placeholder="搜索告警标题、描述或设备..."
                 value={filters.search || ''}
@@ -219,7 +228,10 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
 
             {/* 时间范围预设 */}
             <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">
+              <label
+                id={advancedDateRangeLabelId}
+                className="block text-sm font-medium text-muted-foreground mb-2"
+              >
                 <Calendar className="w-4 h-4 inline mr-1" />
                 时间范围
               </label>
@@ -227,7 +239,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                 value={filters.dateRangePreset || 'all'}
                 onValueChange={handleDateRangePresetChange}
               >
-                <SelectTrigger className="w-full" aria-label="高级过滤时间范围">
+                <SelectTrigger className="w-full" aria-labelledby={advancedDateRangeLabelId}>
                   <SelectValue placeholder="选择时间范围" />
                 </SelectTrigger>
                 <SelectContent>
@@ -245,10 +257,15 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
           {filters.dateRangePreset === 'custom' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-2">
+                <label
+                  htmlFor={advancedDateStartInputId}
+                  className="block text-sm font-medium text-muted-foreground mb-2"
+                >
                   开始日期
                 </label>
                 <Input
+                  id={advancedDateStartInputId}
+                  name="alert-advanced-date-start"
                   type="date"
                   value={filters.dateRange?.start || ''}
                   onChange={(e) =>
@@ -262,10 +279,15 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-2">
+                <label
+                  htmlFor={advancedDateEndInputId}
+                  className="block text-sm font-medium text-muted-foreground mb-2"
+                >
                   结束日期
                 </label>
                 <Input
+                  id={advancedDateEndInputId}
+                  name="alert-advanced-date-end"
                   type="date"
                   value={filters.dateRange?.end || ''}
                   onChange={(e) =>

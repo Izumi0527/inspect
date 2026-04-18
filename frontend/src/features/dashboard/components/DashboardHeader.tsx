@@ -64,7 +64,12 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
             {showSearch && (
               <div className="relative" ref={searchContainerRef}>
                 <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <label htmlFor="dashboard-device-search-input" className="sr-only">
+                  搜索设备
+                </label>
                 <Input
+                  id="dashboard-device-search-input"
+                  name="dashboard-device-search"
                   type="text"
                   placeholder="搜索设备..."
                   value={query}
