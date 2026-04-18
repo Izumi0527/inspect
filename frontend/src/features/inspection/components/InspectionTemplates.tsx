@@ -42,6 +42,7 @@ import type { BadgeProps } from '@/components/atoms'
 // 导入新版 hooks 和类型（来自 inspection feature）
 import {
   useInspectionTemplates,
+  useInspectionTemplateStats,
   useCloneTemplate,
   useDeleteTemplate,
 } from '../hooks/useInspection'
@@ -171,8 +172,29 @@ export const InspectionTemplates: React.FC = () => {
 
   // 获取模板列表
   const templates: InspectionTemplate[] = templatesData?.templates || []
+  const totalTemplates = templatesData?.total || 0
+  const needsFullTemplateStats = totalTemplates > templates.length
 
-  const totalPages = Math.ceil((templatesData?.total || 0) / pagination.page_size)
+  const { data: templateStatsData } = useInspectionTemplateStats({
+    total: totalTemplates,
+    enabled: needsFullTemplateStats,
+    category: filters.category || undefined,
+    deviceTypes: filters.deviceType ? [filters.deviceType] : undefined,
+    search: debouncedSearch || undefined,
+    vendor: filters.vendor || undefined,
+  })
+
+  const builtInTemplatesCount = needsFullTemplateStats
+    ? templateStatsData?.builtInTotal ?? 0
+    : templates.filter(template => template.isBuiltIn).length
+  const customTemplatesCount = needsFullTemplateStats
+    ? templateStatsData?.customTotal ?? 0
+    : templates.filter(template => !template.isBuiltIn).length
+  const activeTemplatesCount = needsFullTemplateStats
+    ? templateStatsData?.activeTotal ?? 0
+    : templates.filter(template => template.isActive).length
+
+  const totalPages = Math.ceil(totalTemplates / pagination.page_size)
 
   // 处理筛选变更
   const handleFilterChange = useCallback((key: keyof TemplateFilters, value: string) => {
@@ -589,7 +611,7 @@ export const InspectionTemplates: React.FC = () => {
               </div>
               <div>
                 <div className="text-2xl font-bold text-foreground">
-                  {templatesData?.total || 0}
+                  {totalTemplates}
                 </div>
                 <div className="text-sm text-muted-foreground dark:text-gray-300">全部模板</div>
               </div>
@@ -604,7 +626,7 @@ export const InspectionTemplates: React.FC = () => {
               </div>
               <div>
                 <div className="text-2xl font-bold text-foreground">
-                  {templates.filter(t => t.isBuiltIn).length}
+                  {builtInTemplatesCount}
                 </div>
                 <div className="text-sm text-muted-foreground dark:text-gray-300">内置模板</div>
               </div>
@@ -619,7 +641,7 @@ export const InspectionTemplates: React.FC = () => {
               </div>
               <div>
                 <div className="text-2xl font-bold text-foreground">
-                  {templates.filter(t => !t.isBuiltIn).length}
+                  {customTemplatesCount}
                 </div>
                 <div className="text-sm text-muted-foreground dark:text-gray-300">自定义模板</div>
               </div>
@@ -634,7 +656,7 @@ export const InspectionTemplates: React.FC = () => {
               </div>
               <div>
                 <div className="text-2xl font-bold text-foreground">
-                  {templates.filter(t => t.isActive).length}
+                  {activeTemplatesCount}
                 </div>
                 <div className="text-sm text-muted-foreground dark:text-gray-300">已启用</div>
               </div>
@@ -715,7 +737,7 @@ export const InspectionTemplates: React.FC = () => {
                 formatOptionLabel={(pageSize) => `${pageSize} 条`}
               />
               <span className="text-sm text-muted-foreground">
-                共 {templatesData?.total || 0} 条记录
+                共 {totalTemplates} 条记录
               </span>
             </div>
 

@@ -70,6 +70,7 @@ export const useCreateStrategy = () => {
     mutationFn: (data: Partial<InspectionStrategy>) => createInspectionStrategy(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
       toast.success('巡检策略创建成功')
     },
     onError: (error: Error) => {
@@ -87,6 +88,7 @@ export const useUpdateStrategy = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
       toast.success('巡检策略更新成功')
     },
     onError: (error: Error) => {
@@ -104,6 +106,7 @@ export const useDeleteStrategy = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
       toast.success('巡检策略删除成功')
     },
     onError: (error: Error) => {
@@ -123,6 +126,7 @@ export const useToggleStrategy = () => {
     },
     onSuccess: (_, { enabled }) => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
       toast.success(`策略已${enabled ? '启用' : '禁用'}`)
     },
     onError: (error: Error) => {
@@ -146,6 +150,45 @@ export const useInspectionTemplates = (params?: {
     queryKey: ['inspection', 'templates', params],
     queryFn: () => fetchInspectionTemplates(params),
     staleTime: 10 * 60 * 1000, // 10分钟缓存
+  })
+}
+
+const TEMPLATE_STATS_BATCH_SIZE = 100
+
+export const useInspectionTemplateStats = (params: {
+  total: number
+  enabled: boolean
+  category?: string
+  deviceTypes?: string[]
+  search?: string
+  vendor?: string
+}) => {
+  const { total, enabled, ...filters } = params
+
+  return useQuery({
+    queryKey: ['inspection', 'templates', 'stats', filters, total],
+    queryFn: async () => {
+      const pageCount = Math.ceil(total / TEMPLATE_STATS_BATCH_SIZE)
+      const responses = await Promise.all(
+        Array.from({ length: pageCount }, (_, index) =>
+          fetchInspectionTemplates({
+            ...filters,
+            page: index + 1,
+            pageSize: TEMPLATE_STATS_BATCH_SIZE,
+          })
+        )
+      )
+
+      const allTemplates = responses.flatMap(response => response.templates)
+
+      return {
+        builtInTotal: allTemplates.filter(template => template.isBuiltIn).length,
+        customTotal: allTemplates.filter(template => !template.isBuiltIn).length,
+        activeTotal: allTemplates.filter(template => template.isActive).length,
+      }
+    },
+    enabled: enabled && total > 0,
+    staleTime: 10 * 60 * 1000,
   })
 }
 

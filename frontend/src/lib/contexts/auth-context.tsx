@@ -274,7 +274,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     if (!state.isAuthenticated) return
 
-    const setupTokenRefresh = () => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let isCancelled = false
+
+    const setupTokenRefresh = async () => {
       const accessToken = TokenManager.getAccessToken()
       if (!accessToken) return
 
@@ -283,18 +286,39 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // 在Token过期前5分钟刷新
       const refreshTime = (payload.exp - Math.floor(Date.now() / 1000) - 300) * 1000
-      
-      if (refreshTime > 0) {
-        const timer = setTimeout(async () => {
-          await refreshToken()
-          setupTokenRefresh() // 递归设置下一次刷新
-        }, refreshTime)
 
-        return () => clearTimeout(timer)
+      if (refreshTime <= 0) {
+        try {
+          await refreshToken()
+          if (!isCancelled) {
+            await setupTokenRefresh()
+          }
+        } catch (error) {
+          console.error('Immediate token refresh failed:', error)
+        }
+        return
       }
+
+      timer = setTimeout(async () => {
+        try {
+          await refreshToken()
+          if (!isCancelled) {
+            await setupTokenRefresh()
+          }
+        } catch (error) {
+          console.error('Scheduled token refresh failed:', error)
+        }
+      }, refreshTime)
     }
 
-    return setupTokenRefresh()
+    void setupTokenRefresh()
+
+    return () => {
+      isCancelled = true
+      if (timer) {
+        clearTimeout(timer)
+      }
+    }
   }, [state.isAuthenticated, refreshToken])
 
   const contextValue: AuthContextType = {

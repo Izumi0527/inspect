@@ -5,6 +5,7 @@ import { InspectionTemplates } from '@/features/inspection/components/Inspection
 
 const mockPageSizeSelect = jest.fn()
 const mockUseInspectionTemplates = jest.fn()
+const mockUseInspectionTemplateStats = jest.fn()
 const mockRefetch = jest.fn()
 const mockCloneTemplateMutateAsync = jest.fn()
 const mockDeleteTemplateMutateAsync = jest.fn()
@@ -207,6 +208,7 @@ jest.mock('@/components/ui/select', () => {
 
 jest.mock('@/features/inspection/hooks/useInspection', () => ({
   useInspectionTemplates: (...args: unknown[]) => mockUseInspectionTemplates(...args),
+  useInspectionTemplateStats: (...args: unknown[]) => mockUseInspectionTemplateStats(...args),
   useCloneTemplate: () => ({
     isPending: false,
     mutateAsync: mockCloneTemplateMutateAsync,
@@ -237,15 +239,22 @@ jest.mock('@/features/inspection/components/QuickTemplateCreate', () => ({
   QuickTemplateCreate: () => null,
 }))
 
-const buildTemplate = (id: string, name: string) => ({
+const buildTemplate = (
+  id: string,
+  name: string,
+  overrides?: Partial<{
+    isBuiltIn: boolean
+    isActive: boolean
+  }>
+) => ({
   id,
   name,
   description: `${name} 描述`,
   category: 'network' as const,
   deviceTypes: ['router'],
   checkItems: [],
-  isBuiltIn: false,
-  isActive: true,
+  isBuiltIn: overrides?.isBuiltIn ?? false,
+  isActive: overrides?.isActive ?? true,
   createdAt: '2026-03-31T10:00:00Z',
   updatedAt: '2026-03-31T10:00:00Z',
 })
@@ -254,6 +263,7 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
   beforeEach(() => {
     mockPageSizeSelect.mockReset()
     mockUseInspectionTemplates.mockReset()
+    mockUseInspectionTemplateStats.mockReset()
     mockUseInspectionTemplates.mockReturnValue({
       data: {
         templates: [buildTemplate('1', '模板一'), buildTemplate('2', '模板二')],
@@ -261,6 +271,15 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
       },
       isLoading: false,
       refetch: mockRefetch,
+      error: null,
+    })
+    mockUseInspectionTemplateStats.mockReturnValue({
+      data: {
+        builtInTotal: 0,
+        customTotal: 2,
+        activeTotal: 2,
+      },
+      isLoading: false,
       error: null,
     })
   })
@@ -304,5 +323,45 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
         })
       )
     })
+  })
+
+  it('分页后统计卡片应基于当前筛选结果全集，而不是当前页数据', () => {
+    const pagedTemplates = Array.from({ length: 10 }, (_, index) =>
+      buildTemplate(String(index + 1), `模板${index + 1}`, {
+        isBuiltIn: true,
+        isActive: true,
+      })
+    )
+
+    mockUseInspectionTemplates.mockReturnValue({
+      data: {
+        templates: pagedTemplates,
+        total: 19,
+      },
+      isLoading: false,
+      refetch: mockRefetch,
+      error: null,
+    })
+    mockUseInspectionTemplateStats.mockReturnValue({
+      data: {
+        builtInTotal: 12,
+        customTotal: 7,
+        activeTotal: 15,
+      },
+      isLoading: false,
+      error: null,
+    })
+
+    render(<InspectionTemplates />)
+
+    expect(screen.getByText('全部模板')).toBeInTheDocument()
+    expect(screen.getByText('19')).toBeInTheDocument()
+    expect(screen.getByText('内置模板')).toBeInTheDocument()
+    expect(screen.getByText('12')).toBeInTheDocument()
+    expect(screen.getByText('自定义模板')).toBeInTheDocument()
+    expect(screen.getByText('7')).toBeInTheDocument()
+    expect(screen.getByText('已启用')).toBeInTheDocument()
+    expect(screen.getByText('15')).toBeInTheDocument()
+    expect(mockUseInspectionTemplateStats).toHaveBeenCalled()
   })
 })
