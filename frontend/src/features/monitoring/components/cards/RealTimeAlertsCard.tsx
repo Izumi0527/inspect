@@ -82,22 +82,15 @@ export function RealTimeAlertsCard({
             {displayAlerts.map((alert, index) => {
               const config = severityConfig[alert.severity]
               return (
-                <motion.div
+                <motion.button
                   key={alert.id || index}
+                  type="button"
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.2, delay: index * 0.04 }}
                   className="group flex cursor-pointer items-start gap-3 rounded-lg bg-muted/40 p-3 transition-colors duration-150 hover:bg-muted/80 dark:bg-card/60 dark:hover:bg-card/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                  role="button"
-                  tabIndex={0}
                   aria-label={`${alert.severity === 'critical' ? '严重' : alert.severity === 'warning' ? '警告' : '信息'}告警：${alert.message}，${alert.time}`}
                   onClick={() => openAlertCenter(alert.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      openAlertCenter(alert.id)
-                    }
-                  }}
                 >
                   {/* 严重程度 badge */}
                   <span className={cn(
@@ -123,7 +116,7 @@ export function RealTimeAlertsCard({
                       </span>
                     </div>
                   </div>
-                </motion.div>
+                </motion.button>
               )
             })}
           </div>
