@@ -847,6 +847,7 @@ export async function getKPIData(params: {
   startDate: string                    // ✅ 扁平化日期参数
   endDate: string
   deviceTypes?: string[]               // ✅ 改名为device_types对应
+  locations?: string[]                 // ✅ 新增位置筛选
   comparisonPeriod?: 'previous_period' | 'previous_year'  // ✅ 对比周期
 }): Promise<StatisticsKPIChangeData> {
   try {
@@ -876,6 +877,7 @@ export async function getRankings(params: {
   endDate: string
   rankingType?: 'performance' | 'reliability' | 'efficiency'  // ✅ 改名为ranking_type
   deviceTypes?: string[]               // ✅ 设备类型筛选
+  locations?: string[]                 // ✅ 位置筛选
   topN?: number                        // ✅ 改名为top_n
   includeBottom?: boolean              // ✅ 是否包含后N名
 }): Promise<unknown> {
@@ -886,6 +888,7 @@ export async function getRankings(params: {
       endDate: params.endDate,
       rankingType: params.rankingType || 'performance',
       deviceTypes: params.deviceTypes,
+      locations: params.locations,
       topN: params.topN || 10,
       includeBottom: params.includeBottom !== undefined ? params.includeBottom : true
     }

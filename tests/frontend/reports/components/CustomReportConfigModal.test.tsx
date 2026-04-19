@@ -58,23 +58,25 @@ jest.mock('@/components/atoms', () => ({
     value,
     onChange,
     placeholder,
+    ...props
   }: {
     value: string
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => void
     placeholder?: string
   }) => (
-    <input value={value} onChange={onChange} placeholder={placeholder} />
+    <input value={value} onChange={onChange} placeholder={placeholder} {...props} />
   ),
   TextArea: ({
     value,
     onChange,
     placeholder,
+    ...props
   }: {
     value: string
     onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => void
     placeholder?: string
   }) => (
-    <textarea value={value} onChange={onChange} placeholder={placeholder} />
+    <textarea value={value} onChange={onChange} placeholder={placeholder} {...props} />
   ),
 }))
 
@@ -189,5 +191,20 @@ describe('CustomReportConfigModal', () => {
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(0)
     expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(0)
     expect(onClose).toHaveBeenCalledTimes(0)
+  })
+
+  it('应为表单字段提供可访问的 label 关联与 name 属性', () => {
+    render(
+      <CustomReportConfigModal
+        isOpen
+        mode="create"
+        initialConfig={null}
+        onClose={jest.fn()}
+      />
+    )
+
+    expect(screen.getByLabelText('名称 *')).toHaveAttribute('name', 'name')
+    expect(screen.getByLabelText('描述')).toHaveAttribute('name', 'description')
+    expect(screen.getByLabelText('配置 JSON')).toHaveAttribute('name', 'configText')
   })
 })

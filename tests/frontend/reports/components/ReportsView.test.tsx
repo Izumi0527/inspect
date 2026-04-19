@@ -1,9 +1,11 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ReportsView } from '../ReportsView'
+import { ReportsView } from '@/features/reports/components/ReportsView'
 
 const mockUseReportStats = jest.fn()
+const mockReplace = jest.fn()
+let mockSearchParams = new URLSearchParams()
 
 jest.mock('@/components/layout', () => ({
   AppLayout: ({ title, children }: { title?: string; children: React.ReactNode }) => (
@@ -33,25 +35,33 @@ jest.mock('@/features/reports/hooks/useReports', () => ({
   useReportStats: (...args: unknown[]) => mockUseReportStats(...args),
 }))
 
-jest.mock('../InspectionReports', () => ({
+jest.mock('next/navigation', () => ({
+  usePathname: () => '/reports',
+  useRouter: () => ({
+    replace: mockReplace,
+  }),
+  useSearchParams: () => mockSearchParams,
+}))
+
+jest.mock('@/features/reports/components/InspectionReports', () => ({
   InspectionReports: ({ searchText }: { searchText: string }) => (
     <div>巡检报告内容:{searchText}</div>
   ),
 }))
 
-jest.mock('../TrendAnalysis', () => ({
+jest.mock('@/features/reports/components/TrendAnalysis', () => ({
   TrendAnalysis: ({ searchText }: { searchText: string }) => (
     <div>趋势分析内容:{searchText}</div>
   ),
 }))
 
-jest.mock('../StatisticsReports', () => ({
+jest.mock('@/features/reports/components/StatisticsReports', () => ({
   StatisticsReports: ({ searchText }: { searchText: string }) => (
     <div>统计报表内容:{searchText}</div>
   ),
 }))
 
-jest.mock('../CustomReports', () => ({
+jest.mock('@/features/reports/components/CustomReports', () => ({
   CustomReports: ({ searchText }: { searchText: string }) => (
     <div>自定义报表内容:{searchText}</div>
   ),
@@ -59,6 +69,8 @@ jest.mock('../CustomReports', () => ({
 
 describe('ReportsView', () => {
   beforeEach(() => {
+    mockSearchParams = new URLSearchParams()
+    mockReplace.mockReset()
     mockUseReportStats.mockReturnValue({
       data: {
         totalReports: 12,
@@ -89,5 +101,33 @@ describe('ReportsView', () => {
     await user.click(screen.getByRole('button', { name: '趋势分析' }))
 
     expect(screen.getByText('趋势分析内容:')).toBeInTheDocument()
+  })
+
+  it('点击标签后同步更新 URL 查询参数，避免刷新后回到旧标签', async () => {
+    const user = userEvent.setup()
+    mockSearchParams = new URLSearchParams('tab=custom')
+
+    render(<ReportsView />)
+
+    expect(screen.getByText('自定义报表内容:')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '巡检报告' }))
+
+    expect(screen.getByText('巡检报告内容:')).toBeInTheDocument()
+    expect(mockReplace).toHaveBeenCalledWith('/reports?tab=inspection')
+  })
+
+  it('报表搜索框应提供稳定的 name 属性，避免浏览器上报表单字段缺失标识', () => {
+    render(<ReportsView />)
+
+    expect(screen.getByPlaceholderText('搜索报表...')).toHaveAttribute('name', 'reports-search')
+  })
+
+  it('报表搜索框应绑定显式标签，避免浏览器上报无标签字段', () => {
+    render(<ReportsView />)
+
+    const label = screen.getByText('搜索报表', { selector: 'label' })
+    expect(label).toHaveAttribute('for', 'reports-search-input')
+    expect(screen.getByLabelText('搜索报表')).toHaveAttribute('id', 'reports-search-input')
   })
 })

@@ -9,6 +9,7 @@ const mockUseStatistics = jest.fn()
 const mockUseKPIData = jest.fn()
 const mockUseRankings = jest.fn()
 const mockUseCustomReportConfigs = jest.fn()
+const mockUseReportTemplates = jest.fn()
 
 jest.mock('react-hot-toast', () => ({
   __esModule: true,
@@ -30,6 +31,7 @@ jest.mock('@/features/reports/hooks/useReports', () => ({
   useExportToExcel: () => ({ isPending: false, mutateAsync: jest.fn() }),
 
   useCustomReportConfigs: (...args: unknown[]) => mockUseCustomReportConfigs(...args),
+  useReportTemplates: (...args: unknown[]) => mockUseReportTemplates(...args),
   useGenerateFromConfig: () => ({ isPending: false, mutateAsync: jest.fn() }),
   useDeleteCustomReportConfig: () => ({ isPending: false, mutateAsync: jest.fn() }),
 
@@ -146,6 +148,11 @@ describe('reports 权限控制（P1）', () => {
       isLoading: false,
       error: null,
     })
+    mockUseReportTemplates.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+    })
   })
 
   it('无 reports:create 时，统计页不应展示“生成统计报表/导出数据”按钮', () => {
@@ -173,4 +180,3 @@ describe('reports 权限控制（P1）', () => {
     expect(screen.queryByTitle('删除配置')).not.toBeInTheDocument()
   })
 })
-

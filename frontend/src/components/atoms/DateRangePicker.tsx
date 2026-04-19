@@ -50,20 +50,25 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   }
 
   const isValidRange = validateDateRange(startDate, endDate)
+  const startInputId = 'date-range-start'
+  const endInputId = 'date-range-end'
 
   return (
     <div className={`space-y-2 ${className}`}>
       {label && (
-        <label className="block text-sm font-medium text-muted-foreground">
+        <div className="block text-sm font-medium text-muted-foreground">
           <Calendar className="w-4 h-4 inline-block mr-1" />
           {label}
-        </label>
+        </div>
       )}
 
       <div className="flex items-center gap-3">
         {/* 开始日期 */}
-        <div className="flex-1">
+        <label htmlFor={startInputId} className="flex-1 space-y-1">
+          <span className="block text-xs font-medium text-muted-foreground">开始日期</span>
           <input
+            id={startInputId}
+            name="date-range-start"
             type="date"
             value={formatDateForInput(startDate)}
             onChange={(e) => onStartDateChange(e.target.value)}
@@ -77,14 +82,17 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             } ${disabled ? 'bg-muted cursor-not-allowed' : 'bg-card'}`}
             aria-label="开始日期"
           />
-        </div>
+        </label>
 
         {/* 分隔符 */}
         <span className="text-muted-foreground font-medium">至</span>
 
         {/* 结束日期 */}
-        <div className="flex-1">
+        <label htmlFor={endInputId} className="flex-1 space-y-1">
+          <span className="block text-xs font-medium text-muted-foreground">结束日期</span>
           <input
+            id={endInputId}
+            name="date-range-end"
             type="date"
             value={formatDateForInput(endDate)}
             onChange={(e) => onEndDateChange(e.target.value)}
@@ -98,7 +106,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             } ${disabled ? 'bg-muted cursor-not-allowed' : 'bg-card'}`}
             aria-label="结束日期"
           />
-        </div>
+        </label>
       </div>
 
       {/* 错误提示 */}

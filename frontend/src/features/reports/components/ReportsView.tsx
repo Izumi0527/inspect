@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   FileText,
   TrendingUp,
@@ -33,6 +33,8 @@ interface TabConfig {
 }
 
 export const ReportsView: React.FC = () => {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
 
   const isMockFallbackEnabled =
@@ -51,6 +53,14 @@ export const ReportsView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabType>(tabFromUrl || 'inspection')
   const [searchText, setSearchText] = useState('')
+
+  const handleTabChange = (nextTab: TabType) => {
+    setActiveTab(nextTab)
+
+    const nextParams = new URLSearchParams(searchParams?.toString())
+    nextParams.set('tab', nextTab)
+    router.replace(`${pathname}?${nextParams.toString()}`)
+  }
 
   useEffect(() => {
     if (tabFromUrl) {
@@ -133,7 +143,7 @@ export const ReportsView: React.FC = () => {
                 return (
                   <motion.button
                     key={tab.key}
-                    onClick={() => setActiveTab(tab.key)}
+                    onClick={() => handleTabChange(tab.key)}
                     className={`
                       relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
                       transition-all duration-200
@@ -161,9 +171,14 @@ export const ReportsView: React.FC = () => {
             {/* 搜索和操作按钮 */}
             <div className="flex gap-2">
               <div className="relative">
+                <label htmlFor="reports-search-input" className="sr-only">
+                  搜索报表
+                </label>
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground/80" />
                 <Input
+                  id="reports-search-input"
                   placeholder="搜索报表..."
+                  name="reports-search"
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   className="pl-10 w-48"

@@ -162,6 +162,7 @@ export interface MultiSelectProps {
   placeholder?: string
   className?: string
   maxDisplayItems?: number
+  triggerId?: string
 }
 
 export const MultiSelect: React.FC<MultiSelectProps> = ({
@@ -171,6 +172,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
   placeholder = '请选择...',
   className,
   maxDisplayItems = 3,
+  triggerId,
 }) => {
   const [isOpen, setIsOpen] = React.useState(false)
 
@@ -199,6 +201,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
     <div className={cn('relative', className)}>
       <motion.button
         whileTap={{ scale: 0.99 }}
+        id={triggerId}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(

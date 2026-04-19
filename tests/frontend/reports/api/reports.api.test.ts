@@ -3,6 +3,8 @@ import {
   generateTrendReport,
   generateStatisticsReport,
   generateFromConfig,
+  getKPIData,
+  getRankings,
 } from '@/features/reports/api/reports.api'
 
 const mockGet = jest.fn()
@@ -134,6 +136,65 @@ describe('reports.api 请求体适配', () => {
     })
   })
 
+  it('getKPIData 应透传位置筛选参数到后端', async () => {
+    mockPost.mockResolvedValue({
+      success: true,
+      data: {
+        inspection_completion_rate_change: '+0.0%',
+        device_availability_change: '+0.0%',
+        avg_health_score_change: '+0.0',
+        severe_issue_count_change: '+0',
+      },
+    })
+
+    await getKPIData({
+      startDate: '2026-02-01',
+      endDate: '2026-02-02',
+      deviceTypes: ['router'],
+      locations: ['A区'],
+      comparisonPeriod: 'previous_period',
+    })
+
+    const [endpoint, body] = mockPost.mock.calls[0]
+    expect(endpoint).toBe('/reports/statistics/kpi')
+    expect(body).toMatchObject({
+      startDate: '2026-02-01',
+      endDate: '2026-02-02',
+      deviceTypes: ['router'],
+      locations: ['A区'],
+      comparisonPeriod: 'previous_period',
+    })
+  })
+
+  it('getRankings 应透传位置筛选参数到后端', async () => {
+    mockPost.mockResolvedValue({
+      success: true,
+      data: [],
+    })
+
+    await getRankings({
+      startDate: '2026-02-01',
+      endDate: '2026-02-02',
+      deviceTypes: ['router'],
+      locations: ['A区'],
+      rankingType: 'performance',
+      topN: 5,
+      includeBottom: false,
+    })
+
+    const [endpoint, body] = mockPost.mock.calls[0]
+    expect(endpoint).toBe('/reports/statistics/rankings')
+    expect(body).toMatchObject({
+      startDate: '2026-02-01',
+      endDate: '2026-02-02',
+      deviceTypes: ['router'],
+      locations: ['A区'],
+      rankingType: 'performance',
+      topN: 5,
+      includeBottom: false,
+    })
+  })
+
   it('generateFromConfig 应传递 format 字段到后端', async () => {
     mockPost.mockResolvedValue({ success: true, data: {} })
 
@@ -155,4 +216,3 @@ describe('reports.api 请求体适配', () => {
     })
   })
 })
-

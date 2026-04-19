@@ -1350,13 +1350,9 @@ func (h ReportsHandler) GetStatisticsKPI(c echo.Context) error {
 	payload := map[string]interface{}{}
 	_ = c.Bind(&payload)
 
-	start, end := parseStatisticsRange(payload)
-	deviceTypes := readStringSlice(payload, "device_types", "deviceTypes")
-	filters := statisticsFilters{
-		Start:       start,
-		End:         end,
-		DeviceTypes: deviceTypes,
-	}
+	filters := parseStatisticsFilters(payload)
+	start := filters.Start
+	end := filters.End
 
 	ctx := c.Request().Context()
 	devicesList, err := loadDeviceSnapshots(ctx, db, filters)

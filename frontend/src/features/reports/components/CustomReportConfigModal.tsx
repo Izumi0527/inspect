@@ -164,16 +164,30 @@ export const CustomReportConfigModal: React.FC<Props> = ({
       <div className="space-y-4 p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <div className="text-sm font-medium text-foreground">名称 *</div>
+            <label
+              htmlFor="custom-report-config-name"
+              className="text-sm font-medium text-foreground"
+            >
+              名称 *
+            </label>
             <Input
+              id="custom-report-config-name"
+              name="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="例如：月度运营摘要"
             />
           </div>
           <div className="space-y-2">
-            <div className="text-sm font-medium text-foreground">描述</div>
+            <label
+              htmlFor="custom-report-config-description"
+              className="text-sm font-medium text-foreground"
+            >
+              描述
+            </label>
             <Input
+              id="custom-report-config-description"
+              name="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="可选：用于说明该配置的用途"
@@ -182,8 +196,15 @@ export const CustomReportConfigModal: React.FC<Props> = ({
         </div>
 
         <div className="space-y-2">
-          <div className="text-sm font-medium text-foreground">配置 JSON</div>
+          <label
+            htmlFor="custom-report-config-json"
+            className="text-sm font-medium text-foreground"
+          >
+            配置 JSON
+          </label>
           <TextArea
+            id="custom-report-config-json"
+            name="configText"
             value={configText}
             onChange={(e) => {
               setConfigText(e.target.value)

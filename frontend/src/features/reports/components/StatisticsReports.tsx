@@ -70,6 +70,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
     startDate: dateRange.startDate,
     endDate: dateRange.endDate,
     deviceTypes: deviceTypes.length > 0 ? deviceTypes : undefined,
+    locations: locations.length > 0 ? locations : undefined,
     comparisonPeriod: 'previous_period'
   })
 
@@ -82,6 +83,7 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
     startDate: dateRange.startDate,
     endDate: dateRange.endDate,
     deviceTypes: deviceTypes.length > 0 ? deviceTypes : undefined,
+    locations: locations.length > 0 ? locations : undefined,
     rankingType: 'performance',
     topN: 10,
     includeBottom: false
@@ -226,6 +228,8 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
         description: '设备统计报表',
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
+        deviceTypes: deviceTypes.length > 0 ? deviceTypes : undefined,
+        locations: locations.length > 0 ? locations : undefined,
         format: 'pdf',
         includeCharts: true,
         includeTrends: true,
@@ -349,6 +353,8 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
 
   const handleRefresh = () => {
     refetchStats()
+    refetchKpi()
+    refetchRankings()
     toast.success('数据已刷新')
   }
 
@@ -497,10 +503,14 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
                 {/* 设备类型筛选 */}
                 {deviceTypeOptions.length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-foreground/90 mb-2">
+                    <label
+                      htmlFor="statistics-device-types"
+                      className="block text-sm font-medium text-foreground/90 mb-2"
+                    >
                       设备类型
                     </label>
                     <MultiSelect
+                      triggerId="statistics-device-types"
                       options={deviceTypeOptions}
                       value={deviceTypes}
                       onChange={setDeviceTypes}
@@ -512,10 +522,14 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
                 {/* 位置筛选 */}
                 {locationOptions.length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-foreground/90 mb-2">
+                    <label
+                      htmlFor="statistics-locations"
+                      className="block text-sm font-medium text-foreground/90 mb-2"
+                    >
                       设备位置
                     </label>
                     <MultiSelect
+                      triggerId="statistics-locations"
                       options={locationOptions}
                       value={locations}
                       onChange={setLocations}
