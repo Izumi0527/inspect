@@ -30,7 +30,7 @@ func NewServer(
 ) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
-	
+
 	// 使用带日志的错误处理器
 	if logger != nil {
 		e.HTTPErrorHandler = mw.ErrorHandlerWithLogger(logger)
@@ -46,9 +46,10 @@ func NewServer(
 	}
 
 	e.Use(echomw.CORSWithConfig(echomw.CORSConfig{
-		AllowOrigins:     cfg.CorsOrigins,
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"*", "X-Request-ID"},
+		AllowOrigins: cfg.CorsOrigins,
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		// 显式放行认证与 JSON 请求所需请求头，避免浏览器对 Authorization+通配符组合发出弃用告警。
+		AllowHeaders:     []string{"Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "X-Request-ID"},
 		AllowCredentials: true,
 	}))
 
