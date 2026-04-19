@@ -29,9 +29,6 @@ const DEVICE_TYPES = [
 export function DeviceTypeFilter({ value, onChange, className = '' }: DeviceTypeFilterProps) {
   return (
     <div className={className}>
-      <label htmlFor="device-type-filter" className="block text-sm font-medium mb-1">
-        设备类型
-      </label>
       <Select
         value={value || ALL_DEVICE_TYPE_VALUE}
         onValueChange={(selectedValue) =>
@@ -40,7 +37,7 @@ export function DeviceTypeFilter({ value, onChange, className = '' }: DeviceType
       >
         <SelectTrigger
           id="device-type-filter"
-          className="w-full"
+          className={`w-full h-10 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
           aria-label="设备类型筛选"
         >
           <SelectValue placeholder="全部设备类型" />

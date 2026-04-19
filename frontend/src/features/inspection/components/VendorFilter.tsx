@@ -32,9 +32,6 @@ const VENDORS = [
 export function VendorFilter({ value, onChange, className = '' }: VendorFilterProps) {
   return (
     <div className={className}>
-      <label htmlFor="vendor-filter" className="block text-sm font-medium mb-1">
-        厂商
-      </label>
       <Select
         value={value || ALL_VENDOR_VALUE}
         onValueChange={(selectedValue) =>
@@ -43,7 +40,7 @@ export function VendorFilter({ value, onChange, className = '' }: VendorFilterPr
       >
         <SelectTrigger
           id="vendor-filter"
-          className="w-full"
+          className={`w-full h-10 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
           aria-label="厂商筛选"
         >
           <SelectValue placeholder="全部厂商" />

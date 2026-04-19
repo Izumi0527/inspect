@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
   Plus,
   Edit,
@@ -21,9 +21,6 @@ import {
   ArrowDown,
   Download,
   Upload,
-  Search,
-  Filter,
-  X,
   RefreshCw,
   Zap
 } from 'lucide-react'
@@ -34,7 +31,6 @@ import {
   Badge,
   Table,
   Column,
-  SimpleInput as Input,
   PageSizeSelect
 } from '@/components/atoms'
 import type { BadgeProps } from '@/components/atoms'
@@ -68,9 +64,7 @@ interface Pagination {
 }
 
 // 导入筛选器组件
-import { VendorFilter } from './VendorFilter'
-import { DeviceTypeFilter } from './DeviceTypeFilter'
-import { CategoryFilter } from './CategoryFilter'
+import { TemplateFiltersBar } from './TemplateFiltersBar'
 
 // 导入模态框组件
 import { TemplateDetailModal } from './TemplateDetailModal'
@@ -91,7 +85,6 @@ export const InspectionTemplates: React.FC = () => {
   const [filters, setFilters] = useState<TemplateFilters>({})
   const [searchText, setSearchText] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [showFilters, setShowFilters] = useState(false)
 
   // 搜索防抖（350ms）
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -517,89 +510,29 @@ export const InspectionTemplates: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* 操作栏 */}
-      <div className="flex flex-wrap justify-between items-center gap-4">
-        {/* 搜索框 */}
-        <div className="flex items-center gap-2 flex-1 max-w-md">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              value={searchText}
-              onChange={(e) => handleSearch(e.target.value)}
-              placeholder="搜索模板名称或描述..."
-              className="pl-10"
-            />
-          </div>
-          <Button
-            variant={showFilters ? 'primary' : 'outline'}
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            <Filter className="w-4 h-4 mr-2" />
-            筛选
-            {hasActiveFilters && (
-              <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">
-                {[filters.vendor, filters.deviceType, filters.category, searchText].filter(Boolean).length}
-              </span>
-            )}
-          </Button>
-        </div>
+      <TemplateFiltersBar
+        filters={filters}
+        searchText={searchText}
+        onFilterChange={handleFilterChange}
+        onSearchChange={handleSearch}
+        onClearAll={handleClearFilters}
+        onRefresh={refetch}
+      />
 
-        {/* 操作按钮 */}
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
-            <Upload className="w-4 h-4 mr-2" />
-            导入模板
-          </Button>
-          <Button variant="outline" onClick={() => setIsQuickCreateOpen(true)}>
-            <Zap className="w-4 h-4 mr-2" />
-            快速创建
-          </Button>
-          <Button onClick={handleCreateTemplate}>
-            <Plus className="w-4 h-4 mr-2" />
-            创建模板
-          </Button>
-        </div>
+      <div className="flex flex-wrap justify-end items-center gap-2">
+        <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+          <Upload className="w-4 h-4 mr-2" />
+          导入模板
+        </Button>
+        <Button variant="outline" onClick={() => setIsQuickCreateOpen(true)}>
+          <Zap className="w-4 h-4 mr-2" />
+          快速创建
+        </Button>
+        <Button onClick={handleCreateTemplate}>
+          <Plus className="w-4 h-4 mr-2" />
+          创建模板
+        </Button>
       </div>
-
-      {/* 筛选面板 */}
-      <AnimatePresence>
-        {showFilters && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-medium text-foreground">筛选条件</h3>
-                  {hasActiveFilters && (
-                    <Button variant="ghost" size="sm" onClick={handleClearFilters}>
-                      <X className="w-4 h-4 mr-1" />
-                      清除筛选
-                    </Button>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <VendorFilter
-                    value={filters.vendor || ''}
-                    onChange={(value) => handleFilterChange('vendor', value)}
-                  />
-                  <DeviceTypeFilter
-                    value={filters.deviceType || ''}
-                    onChange={(value) => handleFilterChange('deviceType', value)}
-                  />
-                  <CategoryFilter
-                    value={filters.category || ''}
-                    onChange={(value) => handleFilterChange('category', value)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -695,11 +628,6 @@ export const InspectionTemplates: React.FC = () => {
           >
             更新时间
             {getSortIcon('updatedAt')}
-          </Button>
-        </div>
-        <div className="ml-auto">
-          <Button variant="ghost" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
       </div>

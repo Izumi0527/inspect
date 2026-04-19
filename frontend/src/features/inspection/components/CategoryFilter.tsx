@@ -30,9 +30,6 @@ const CATEGORIES = [
 export function CategoryFilter({ value, onChange, className = '' }: CategoryFilterProps) {
   return (
     <div className={className}>
-      <label htmlFor="category-filter" className="block text-sm font-medium mb-1">
-        分类
-      </label>
       <Select
         value={value || ALL_CATEGORY_VALUE}
         onValueChange={(selectedValue) =>
@@ -41,7 +38,7 @@ export function CategoryFilter({ value, onChange, className = '' }: CategoryFilt
       >
         <SelectTrigger
           id="category-filter"
-          className="w-full"
+          className={`w-full h-10 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
           aria-label="分类筛选"
         >
           <SelectValue placeholder="全部分类" />
