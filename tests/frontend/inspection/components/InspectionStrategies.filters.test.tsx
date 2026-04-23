@@ -41,9 +41,36 @@ jest.mock('@/components/atoms', () => ({
     </button>
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
-  Table: () => <div>InspectionStrategiesTable</div>,
+  Table: ({ size }: { size?: 'small' | 'default' | 'large' }) => (
+    <div data-testid="inspection-strategies-table" data-size={size ?? 'default'}>
+      InspectionStrategiesTable
+    </div>
+  ),
   Pagination: () => null,
   ConfirmModal: () => null,
+}))
+
+jest.mock('@/components/shared', () => ({
+  CompactPageToolbar: ({
+    search,
+    filters,
+    secondaryActions,
+    primaryActions,
+    testIdPrefix,
+  }: {
+    search?: { value: string; ariaLabel: string }
+    filters?: React.ReactNode
+    secondaryActions?: Array<{ key: string; label: string }>
+    primaryActions?: Array<{ key: string; label: string }>
+    testIdPrefix?: string
+  }) => (
+    <div data-testid={`${testIdPrefix ?? 'toolbar'}-end-group`}>
+      {search ? <div>{`search:${search.ariaLabel}:${search.value}`}</div> : null}
+      {filters}
+      {secondaryActions?.map((action) => <span key={action.key}>{action.label}</span>)}
+      {primaryActions?.map((action) => <span key={action.key}>{action.label}</span>)}
+    </div>
+  ),
 }))
 
 describe('InspectionStrategies 最小筛选能力', () => {
@@ -96,5 +123,37 @@ describe('InspectionStrategies 最小筛选能力', () => {
         })
       )
     })
+  })
+
+  it('应将筛选与页面动作统一到紧凑工具栏，并恢复默认表格规格', () => {
+    mockUseInspectionStrategies.mockReturnValue({
+      data: {
+        items: [
+          {
+            id: 'strategy-1',
+            name: '核心策略',
+            description: '用于核心设备巡检',
+            type: 'scheduled',
+            enabled: true,
+            cron: '0 0 * * * ?',
+            devices: [{ id: 1 }],
+            nextRunTime: '2026-04-23T10:00:00Z',
+          },
+        ],
+        total: 1,
+        pages: 1,
+      },
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    })
+
+    render(<InspectionStrategies />)
+
+    expect(screen.getByTestId('inspection-strategies-toolbar-end-group')).toBeInTheDocument()
+    expect(screen.getByText('全部类型')).toBeInTheDocument()
+    expect(screen.getByText('全部状态')).toBeInTheDocument()
+    expect(screen.getByText('创建策略')).toBeInTheDocument()
+    expect(screen.getByTestId('inspection-strategies-table')).toHaveAttribute('data-size', 'default')
   })
 })

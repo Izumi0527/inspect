@@ -21,6 +21,7 @@ import {
   Pagination,
   ConfirmModal
 } from '@/components/atoms'
+import { CompactPageToolbar } from '@/components/shared'
 import { 
   useInspectionStrategies, 
   useToggleStrategy, 
@@ -274,62 +275,67 @@ export const InspectionStrategies: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* 操作栏 */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant={typeFilter === 'all' ? 'default' : 'outline'}
-              onClick={() => handleTypeFilterChange('all')}
-            >
-              全部类型
-            </Button>
-            <Button
-              type="button"
-              variant={typeFilter === 'manual' ? 'default' : 'outline'}
-              onClick={() => handleTypeFilterChange('manual')}
-            >
-              仅手动
-            </Button>
-            <Button
-              type="button"
-              variant={typeFilter === 'scheduled' ? 'default' : 'outline'}
-              onClick={() => handleTypeFilterChange('scheduled')}
-            >
-              仅定时
-            </Button>
+      <CompactPageToolbar
+        testIdPrefix="inspection-strategies-toolbar"
+        filters={(
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant={typeFilter === 'all' ? 'default' : 'outline'}
+                onClick={() => handleTypeFilterChange('all')}
+              >
+                全部类型
+              </Button>
+              <Button
+                type="button"
+                variant={typeFilter === 'manual' ? 'default' : 'outline'}
+                onClick={() => handleTypeFilterChange('manual')}
+              >
+                仅手动
+              </Button>
+              <Button
+                type="button"
+                variant={typeFilter === 'scheduled' ? 'default' : 'outline'}
+                onClick={() => handleTypeFilterChange('scheduled')}
+              >
+                仅定时
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant={enabledFilter === 'all' ? 'default' : 'outline'}
+                onClick={() => handleEnabledFilterChange('all')}
+              >
+                全部状态
+              </Button>
+              <Button
+                type="button"
+                variant={enabledFilter === 'enabled' ? 'default' : 'outline'}
+                onClick={() => handleEnabledFilterChange('enabled')}
+              >
+                仅启用
+              </Button>
+              <Button
+                type="button"
+                variant={enabledFilter === 'disabled' ? 'default' : 'outline'}
+                onClick={() => handleEnabledFilterChange('disabled')}
+              >
+                仅禁用
+              </Button>
+            </div>
           </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant={enabledFilter === 'all' ? 'default' : 'outline'}
-              onClick={() => handleEnabledFilterChange('all')}
-            >
-              全部状态
-            </Button>
-            <Button
-              type="button"
-              variant={enabledFilter === 'enabled' ? 'default' : 'outline'}
-              onClick={() => handleEnabledFilterChange('enabled')}
-            >
-              仅启用
-            </Button>
-            <Button
-              type="button"
-              variant={enabledFilter === 'disabled' ? 'default' : 'outline'}
-              onClick={() => handleEnabledFilterChange('disabled')}
-            >
-              仅禁用
-            </Button>
-          </div>
-        </div>
-        <Button onClick={handleCreateStrategy} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          创建策略
-        </Button>
-      </div>
+        )}
+        primaryActions={[
+          {
+            key: 'create-strategy',
+            label: '创建策略',
+            icon: <Plus className="w-4 h-4" />,
+            onClick: handleCreateStrategy,
+          },
+        ]}
+      />
 
       {/* 策略列表 */}
       {filteredStrategies.length > 0 ? (

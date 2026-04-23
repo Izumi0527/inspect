@@ -21,7 +21,6 @@ import {
   Badge,
   Table,
   Column,
-  Input,
   ConfirmModal,
 } from "@/components/atoms";
 import {
@@ -32,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AppLayout } from "@/components/layout";
+import { CompactPageToolbar } from "@/components/shared";
 import { useAuth } from "@/lib/contexts/auth-context";
 import toast from "react-hot-toast";
 
@@ -664,7 +664,7 @@ export const DeviceManagementView: React.FC = () => {
           )}
           {/* 探测状态指示器 */}
           {(record.icmp_status || record.snmp_status) && (
-            <div className="flex items-center gap-1 text-[10px] leading-none">
+            <div className="flex items-center gap-1 text-xs leading-none">
               {/* ICMP状态 */}
               <span
                 className={`inline-flex items-center px-1 py-0.5 rounded ${
@@ -885,126 +885,117 @@ export const DeviceManagementView: React.FC = () => {
 
         {/* 筛选和搜索 */}
         <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
-          <CardHeader className="p-2.5 pb-2">
-            <div className="flex items-center justify-between flex-wrap gap-1">
-              <div className="flex items-center gap-1.5">
-                <CardTitle className="text-sm leading-tight">设备列表</CardTitle>
-                {isRefreshing && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Activity className="h-3.5 w-3.5 animate-spin" />
-                    <span>刷新中</span>
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center justify-end gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleProbeAll}
-                  disabled={bulkProbing || devices.length === 0}
-                  className="gap-1"
-                >
-                  {bulkProbing ? (
+          <CardHeader className="pb-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <CardTitle>设备列表</CardTitle>
+              {isRefreshing && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Activity className="h-4 w-4 animate-spin" />
+                  <span>刷新中</span>
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col gap-3 overflow-hidden pt-0 min-h-0">
+            <CompactPageToolbar
+              testIdPrefix="devices-toolbar"
+              search={{
+                value: filters.searchQuery,
+                placeholder: "搜索设备名称、IP或位置...",
+                ariaLabel: "搜索设备",
+                onChange: (value) => updateFilter("searchQuery", value),
+              }}
+              filters={
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select
+                    value={filters.statusFilter}
+                    onValueChange={(value) => updateFilter("statusFilter", value)}
+                  >
+                    <SelectTrigger
+                      className="h-9 w-[110px] text-sm"
+                      aria-label="设备状态筛选"
+                    >
+                      <SelectValue placeholder="状态" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部状态</SelectItem>
+                      <SelectItem value="online">在线</SelectItem>
+                      <SelectItem value="offline">离线</SelectItem>
+                      <SelectItem value="warning">告警</SelectItem>
+                      <SelectItem value="maintenance">维护</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={filters.typeFilter}
+                    onValueChange={(value) => updateFilter("typeFilter", value)}
+                  >
+                    <SelectTrigger
+                      className="h-9 w-[110px] text-sm"
+                      aria-label="设备类型筛选"
+                    >
+                      <SelectValue placeholder="类型" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部类型</SelectItem>
+                      <SelectItem value="switch">交换机</SelectItem>
+                      <SelectItem value="router">路由器</SelectItem>
+                      <SelectItem value="firewall">防火墙</SelectItem>
+                      <SelectItem value="wireless_ap">无线AP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              }
+              secondaryActions={[
+                {
+                  key: "probe-current-page",
+                  label: "探测本页",
+                  icon: bulkProbing ? (
                     <Activity className="h-4 w-4 animate-spin" />
                   ) : (
                     <Activity className="h-4 w-4" />
-                  )}
-                  探测本页
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownloadTemplate}
-                  className="gap-1"
-                >
-                  <Download className="h-4 w-4" />
-                  下载模板
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleBulkImport}
-                  disabled={!canCreateDevice}
-                  title={canCreateDevice ? undefined : "需要设备新增权限"}
-                  className="gap-1"
-                >
-                  <Upload className="h-4 w-4" />
-                  批量导入
-                </Button>
-                <Button
-                  onClick={handleAddDevice}
-                  size="sm"
-                  disabled={!canCreateDevice}
-                  title={canCreateDevice ? undefined : "需要设备新增权限"}
-                  className="gap-1"
-                >
-                  <Plus className="h-4 w-4" />
-                  添加设备
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-1 flex-col overflow-hidden p-2.5 pt-0 min-h-0">
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mb-1">
-              <div className="flex-1 min-w-[240px] max-w-md">
-                <Input
-                  placeholder="搜索设备名称、IP或位置..."
-                  value={filters.searchQuery}
-                  onChange={(e) => updateFilter("searchQuery", e.target.value)}
-                  className="w-full h-8 text-xs leading-tight px-2.5 py-1 rounded-lg"
-                />
-              </div>
-              <Select
-                value={filters.statusFilter}
-                onValueChange={(value) => updateFilter("statusFilter", value)}
-              >
-                <SelectTrigger
-                  className="w-full sm:w-[160px] h-8 text-xs leading-tight px-2.5 py-1 rounded-lg"
-                  aria-label="设备状态筛选"
-                >
-                  <SelectValue placeholder="状态筛选" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部状态</SelectItem>
-                  <SelectItem value="online">在线</SelectItem>
-                  <SelectItem value="offline">离线</SelectItem>
-                  <SelectItem value="warning">告警</SelectItem>
-                  <SelectItem value="maintenance">维护</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={filters.typeFilter}
-                onValueChange={(value) => updateFilter("typeFilter", value)}
-              >
-                <SelectTrigger
-                  className="w-full sm:w-[160px] h-8 text-xs leading-tight px-2.5 py-1 rounded-lg"
-                  aria-label="设备类型筛选"
-                >
-                  <SelectValue placeholder="类型筛选" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部类型</SelectItem>
-                  <SelectItem value="switch">交换机</SelectItem>
-                  <SelectItem value="router">路由器</SelectItem>
-                  <SelectItem value="firewall">防火墙</SelectItem>
-                  <SelectItem value="wireless_ap">无线AP</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                  ),
+                  variant: "outline",
+                  disabled: bulkProbing || devices.length === 0,
+                  onClick: handleProbeAll,
+                },
+                {
+                  key: "download-template",
+                  label: "下载模板",
+                  icon: <Download className="h-4 w-4" />,
+                  variant: "outline",
+                  onClick: handleDownloadTemplate,
+                },
+                {
+                  key: "bulk-import",
+                  label: "批量导入",
+                  icon: <Upload className="h-4 w-4" />,
+                  variant: "outline",
+                  disabled: !canCreateDevice,
+                  onClick: handleBulkImport,
+                },
+              ]}
+              primaryActions={[
+                {
+                  key: "add-device",
+                  label: "添加设备",
+                  icon: <Plus className="h-4 w-4" />,
+                  disabled: !canCreateDevice,
+                  onClick: handleAddDevice,
+                },
+              ]}
+            />
 
             {error && devices.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 mb-1 px-2.5 py-1 bg-red-50/60 dark:bg-red-900/15 border border-border/50 rounded-md">
-                <span className="text-xs text-red-700 dark:text-red-300">
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-red-50/60 p-3 dark:bg-red-900/15">
+                <span className="text-sm text-red-700 dark:text-red-300">
                   发生错误：{error}
                 </span>
                 <Button
-                  size="sm"
                   variant="outline"
                   onClick={() => {
                     setError(null);
                     loadDevices();
                   }}
-                  className="h-7 px-2 text-xs"
                 >
                   重试
                 </Button>
@@ -1013,12 +1004,11 @@ export const DeviceManagementView: React.FC = () => {
 
             {/* 批量操作栏 */}
             {selectedDevices.length > 0 && (
-              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mb-1 px-2.5 py-1 bg-blue-50/60 dark:bg-blue-900/15 border border-border/50 rounded-md">
-                <span className="text-xs leading-tight text-blue-700 dark:text-blue-300">
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-blue-50/60 p-3 dark:bg-blue-900/15">
+                <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
                   已选择 {selectedDevices.length} 台设备
                 </span>
                 <Button
-                  size="sm"
                   variant="outline"
                   onClick={handleBulkUpdate}
                   disabled={bulkUpdating || !canUpdateDevice}
@@ -1027,11 +1017,9 @@ export const DeviceManagementView: React.FC = () => {
                   批量更新
                 </Button>
                 <Button
-                  size="sm"
                   variant="outline"
                   onClick={handleBulkProbe}
                   disabled={bulkProbing}
-                  className="gap-1"
                 >
                   {bulkProbing ? (
                     <Activity className="h-4 w-4 animate-spin" />
@@ -1041,7 +1029,6 @@ export const DeviceManagementView: React.FC = () => {
                   批量探测
                 </Button>
                 <Button
-                  size="sm"
                   variant="destructive"
                   onClick={handleBulkDelete}
                   disabled={!canDeleteDevice}
@@ -1052,7 +1039,6 @@ export const DeviceManagementView: React.FC = () => {
                   批量删除
                 </Button>
                 <Button
-                  size="sm"
                   variant="ghost"
                   onClick={clearDeviceSelection}
                   className="sm:ml-auto"
@@ -1092,7 +1078,7 @@ export const DeviceManagementView: React.FC = () => {
                   data={devices}
                   loading={isInitialLoading}
                   rowKey="id"
-                  size="small"
+                  size="default"
                   className="border-0 bg-transparent backdrop-blur-none rounded-none"
                   rowSelection={{
                     selectedRowKeys: selectedDevices,

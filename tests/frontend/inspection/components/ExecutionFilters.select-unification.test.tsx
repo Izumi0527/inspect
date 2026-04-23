@@ -7,11 +7,13 @@ jest.mock('@/components/atoms', () => ({
   Button: ({
     children,
     onClick,
+    className,
   }: {
     children: React.ReactNode
     onClick?: React.MouseEventHandler<HTMLButtonElement>
+    className?: string
   }) => (
-    <button type="button" onClick={onClick}>
+    <button type="button" onClick={onClick} className={className}>
       {children}
     </button>
   ),
@@ -156,5 +158,32 @@ describe('ExecutionFilters 下拉统一化', () => {
     await user.click(screen.getByRole('option', { name: '失败' }))
     expect(onStatusChange).toHaveBeenCalledWith('failed')
   })
-})
 
+  it('应使用统一紧凑工具栏规格渲染状态筛选与刷新按钮', () => {
+    render(
+      <ExecutionFilters
+        statusFilter="all"
+        startDate=""
+        endDate=""
+        onStatusChange={jest.fn()}
+        onStartDateChange={jest.fn()}
+        onEndDateChange={jest.fn()}
+        onClearDateRange={jest.fn()}
+        onClearAllFilters={jest.fn()}
+        onQuickDateFilter={jest.fn()}
+        hasDateFilter={false}
+        hasAnyFilter={false}
+        onRefresh={jest.fn()}
+        isFetching={false}
+        hasRunningExecutions={false}
+      />
+    )
+
+    const statusSelect = screen.getByRole('combobox', { name: '执行状态筛选' })
+    const refreshButton = screen.getByRole('button', { name: '刷新' })
+
+    expect(statusSelect).toHaveClass('h-9')
+    expect(statusSelect).toHaveClass('text-sm')
+    expect(refreshButton).toHaveClass('h-9')
+  })
+})

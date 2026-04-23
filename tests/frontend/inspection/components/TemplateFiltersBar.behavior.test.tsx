@@ -178,8 +178,8 @@ describe('TemplateFiltersBar', () => {
   it('筛选栏应使用紧凑触发器和搜索框样式契约', () => {
     render(<TemplateFiltersBar {...baseProps} filters={{ vendor: 'Cisco' }} />)
 
-    expect(screen.getByRole('textbox', { name: '搜索模板' })).toHaveClass('h-10')
-    expect(screen.getByRole('combobox', { name: '厂商筛选' })).toHaveClass('h-10')
+    expect(screen.getByRole('textbox', { name: '搜索模板' })).toHaveClass('h-9')
+    expect(screen.getByRole('combobox', { name: '厂商筛选' })).toHaveClass('h-9')
     expect(screen.getByRole('combobox', { name: '厂商筛选' })).toHaveClass('rounded-lg')
     expect(screen.getByRole('combobox', { name: '厂商筛选' })).toHaveClass('border-primary/50')
   })

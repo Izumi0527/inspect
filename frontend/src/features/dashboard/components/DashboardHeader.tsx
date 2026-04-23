@@ -12,7 +12,7 @@ interface DashboardHeaderProps {
   subtitle?: string
   alertCount?: number
   onSearch?: (query: string) => void
-  showSearch?: boolean              // 是否显示搜索框（默认 true）
+  showSearch?: boolean              // 是否显示搜索框（默认 false）
   actions?: React.ReactNode         // 自定义操作区域 slot
 }
 
@@ -20,7 +20,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   title = '控制台总览',
   subtitle,
   alertCount = 0,
-  showSearch = true,
+  showSearch = false,
   actions
 }) => {
   const router = useRouter()

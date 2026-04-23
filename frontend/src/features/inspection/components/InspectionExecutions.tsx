@@ -23,6 +23,7 @@ import {
   Column,
   Pagination
 } from '@/components/atoms'
+import { CompactPageToolbar } from '@/components/shared'
 import { SimpleModal } from '@/components/atoms/modal'
 import {
   useInspectionExecutions,
@@ -523,22 +524,46 @@ export const InspectionExecutions: React.FC = () => {
   return (
     <>
       <div className="space-y-4">
-        {/* 筛选器栏（含刷新按钮，单行布局） */}
-        <ExecutionFilters
-          statusFilter={filters.status}
-          startDate={filters.startDate}
-          endDate={filters.endDate}
-          onStatusChange={(status) => updateFilter('status', status)}
-          onStartDateChange={(date) => updateFilter('startDate', date)}
-          onEndDateChange={(date) => updateFilter('endDate', date)}
-          onClearDateRange={handleClearDateRange}
-          onClearAllFilters={resetFilters}
-          onQuickDateFilter={handleQuickDateFilter}
-          hasDateFilter={hasDateFilter}
-          hasAnyFilter={hasAnyFilter}
-          onRefresh={refetch}
-          isFetching={isFetching}
-          hasRunningExecutions={hasRunningExecutions}
+        <CompactPageToolbar
+          testIdPrefix="inspection-executions-toolbar"
+          filters={(
+            <ExecutionFilters
+              statusFilter={filters.status}
+              startDate={filters.startDate}
+              endDate={filters.endDate}
+              onStatusChange={(status) => updateFilter('status', status)}
+              onStartDateChange={(date) => updateFilter('startDate', date)}
+              onEndDateChange={(date) => updateFilter('endDate', date)}
+              onClearDateRange={handleClearDateRange}
+              onClearAllFilters={resetFilters}
+              onQuickDateFilter={handleQuickDateFilter}
+              hasDateFilter={hasDateFilter}
+              hasAnyFilter={hasAnyFilter}
+              onRefresh={refetch}
+              isFetching={isFetching}
+              hasRunningExecutions={hasRunningExecutions}
+              showRefresh={false}
+            />
+          )}
+          secondaryActions={[
+            {
+              key: 'refresh-executions',
+              label: isFetching ? '刷新中…' : '刷新',
+              icon: hasRunningExecutions ? (
+                <div className="relative">
+                  <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+                  <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                </div>
+              ) : (
+                <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+              ),
+              variant: 'outline',
+              disabled: isFetching,
+              onClick: () => {
+                void refetch()
+              },
+            },
+          ]}
         />
 
         {selectedExecution && (

@@ -53,7 +53,7 @@ jest.mock('@/features/inspection/components/ExecutionStatsCards', () => ({
 }))
 
 jest.mock('@/features/inspection/components/ExecutionFilters', () => ({
-  ExecutionFilters: () => <div>ExecutionFilters</div>,
+  ExecutionFilters: () => <div data-testid="inspection-executions-filters">ExecutionFilters</div>,
 }))
 
 jest.mock('@/features/inspection/components/ExecutionTableSkeleton', () => ({
@@ -91,7 +91,11 @@ jest.mock('@/components/atoms', () => ({
     </button>
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Table: () => <div>Table</div>,
+  Table: ({ size }: { size?: 'small' | 'default' | 'large' }) => (
+    <div data-testid="inspection-executions-table" data-size={size ?? 'default'}>
+      Table
+    </div>
+  ),
   Pagination: () => <div>Pagination</div>,
   Column: () => null,
 }))
@@ -123,5 +127,48 @@ describe('InspectionExecutions 错误态', () => {
 
     await user.click(screen.getByRole('button', { name: '重试' }))
     expect(refetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('正常态应展示统一筛选栏、统计卡片和默认表格规格', () => {
+    ;(inspectionHooks.useInspectionExecutions as jest.Mock).mockReturnValue({
+      data: {
+        items: [
+          {
+            id: 'exec-1',
+            strategyName: '核心巡检',
+            status: 'completed',
+            progress: 100,
+            completedDevices: 2,
+            totalDevices: 2,
+            triggerType: 'manual',
+            triggerUser: 'admin',
+            startTime: '2026-04-23T10:00:00Z',
+            duration: 120,
+            summary: {
+              score: 96,
+              passedChecks: 10,
+              totalChecks: 10,
+              failedChecks: 0,
+              warningChecks: 0,
+            },
+          },
+        ],
+        total: 1,
+        pages: 1,
+      },
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      refetch: jest.fn(),
+    })
+    ;(inspectionHooks.useStopExecution as jest.Mock).mockReturnValue({ isPending: false })
+    ;(inspectionHooks.useGenerateReport as jest.Mock).mockReturnValue({ isPending: false })
+    ;(inspectionHooks.useDeleteExecution as jest.Mock).mockReturnValue({ isPending: false })
+
+    render(<InspectionExecutions />)
+
+    expect(screen.getByTestId('inspection-executions-filters')).toBeInTheDocument()
+    expect(screen.getByText('ExecutionStatsCards')).toBeInTheDocument()
+    expect(screen.getByTestId('inspection-executions-table')).toHaveAttribute('data-size', 'default')
   })
 })

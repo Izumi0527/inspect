@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { DeviceManagementView } from '@/features/devices/components/DeviceManagementView'
 
 const mockLoadDevices = jest.fn<Promise<void>, [unknown?]>(() => Promise.resolve())
@@ -68,18 +68,29 @@ jest.mock('@/components/atoms', () => ({
     </button>
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
-  Table: () => <div>table</div>,
+  Table: ({ size }: { size?: 'small' | 'default' | 'large' }) => (
+    <div data-testid="devices-table" data-size={size ?? 'default'}>
+      table
+    </div>
+  ),
   Column: () => null,
   Input: ({
     value,
     onChange,
     placeholder,
+    className,
   }: {
     value?: string
     onChange?: React.ChangeEventHandler<HTMLInputElement>
     placeholder?: string
+    className?: string
   }) => (
-    <input value={value} onChange={onChange} placeholder={placeholder} />
+    <input
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      className={className}
+    />
   ),
   ConfirmModal: () => null,
 }))
@@ -249,10 +260,36 @@ describe('DeviceManagementView 下拉规范', () => {
     mockLoadDevices.mockResolvedValue(undefined)
   })
 
-  it('应为状态和类型筛选提供明确的可访问名称', () => {
+  it('应为状态和类型筛选提供明确的可访问名称', async () => {
     render(<DeviceManagementView />)
+
+    await waitFor(() => {
+      expect(mockLoadDevices).toHaveBeenCalled()
+    })
 
     expect(screen.getByRole('combobox', { name: '设备状态筛选' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '设备类型筛选' })).toBeInTheDocument()
+  })
+
+  it('应将搜索筛选和页面动作统一到标准工具栏规格，而不是继续使用更小一档样式', async () => {
+    render(<DeviceManagementView />)
+
+    await waitFor(() => {
+      expect(mockLoadDevices).toHaveBeenCalled()
+    })
+
+    expect(screen.getByTestId('devices-toolbar-end-group')).toBeInTheDocument()
+
+    const searchInput = screen.getByRole('textbox', { name: '搜索设备' })
+    const statusSelect = screen.getByRole('combobox', { name: '设备状态筛选' })
+    const typeSelect = screen.getByRole('combobox', { name: '设备类型筛选' })
+
+    expect(searchInput).toHaveClass('h-9')
+    expect(searchInput).toHaveClass('text-sm')
+    expect(statusSelect).toHaveClass('h-9')
+    expect(statusSelect).toHaveClass('text-sm')
+    expect(typeSelect).toHaveClass('h-9')
+    expect(typeSelect).toHaveClass('text-sm')
+    expect(screen.getByTestId('devices-table')).toHaveAttribute('data-size', 'default')
   })
 })

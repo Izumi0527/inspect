@@ -91,6 +91,56 @@ jest.mock('@/components/atoms', () => ({
   ),
 }))
 
+jest.mock('@/components/shared', () => ({
+  CompactPageToolbar: ({
+    search,
+    filters,
+    secondaryActions,
+    primaryActions,
+    testIdPrefix,
+  }: {
+    search?: {
+      ariaLabel: string
+      value: string
+      onChange?: (value: string) => void
+      placeholder?: string
+    }
+    filters?: React.ReactNode
+    secondaryActions?: Array<{ key: string; label: string; onClick?: () => void }>
+    primaryActions?: Array<{ key: string; label: string; onClick?: () => void }>
+    testIdPrefix?: string
+  }) => (
+    <div data-testid={`${testIdPrefix ?? 'toolbar'}-end-group`}>
+      {search ? (
+        <input
+          aria-label={search.ariaLabel}
+          value={search.value}
+          placeholder={search.placeholder}
+          onChange={(event) => search.onChange?.(event.target.value)}
+        />
+      ) : null}
+      {filters}
+      {secondaryActions?.map((action) => (
+        <button key={action.key} type="button" onClick={action.onClick}>
+          {action.label}
+        </button>
+      ))}
+      {primaryActions?.map((action) => (
+        <button key={action.key} type="button" onClick={action.onClick}>
+          {action.label}
+        </button>
+      ))}
+    </div>
+  ),
+  CompactStatCard: ({
+    title,
+    value,
+  }: {
+    title: string
+    value: React.ReactNode
+  }) => <div>{`${title}:${value}`}</div>,
+}))
+
 jest.mock('@/components/ui/select', () => {
   const React = require('react') as typeof import('react')
 
@@ -264,5 +314,18 @@ describe('InspectionTemplates 筛选栏重塑', () => {
 
     expect(screen.getByRole('button', { name: '清除筛选' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '刷新' })).toBeInTheDocument()
+  })
+
+  it('应将筛选、动作和统计卡片统一到共享页面规格', () => {
+    render(<InspectionTemplates />)
+
+    expect(screen.getByTestId('inspection-templates-toolbar-end-group')).toBeInTheDocument()
+    expect(screen.getByText('全部模板:2')).toBeInTheDocument()
+    expect(screen.getByText('内置模板:0')).toBeInTheDocument()
+    expect(screen.getByText('自定义模板:2')).toBeInTheDocument()
+    expect(screen.getByText('已启用:2')).toBeInTheDocument()
+    expect(screen.getByText('导入模板')).toBeInTheDocument()
+    expect(screen.getByText('快速创建')).toBeInTheDocument()
+    expect(screen.getByText('创建模板')).toBeInTheDocument()
   })
 })

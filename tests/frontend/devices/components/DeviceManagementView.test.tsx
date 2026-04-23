@@ -619,8 +619,12 @@ describe("DeviceManagementView", () => {
     });
   });
 
-  it("筛选下拉应具备明确的可访问名称", () => {
+  it("筛选下拉应具备明确的可访问名称", async () => {
     render(<DeviceManagementView />);
+
+    await waitFor(() => {
+      expect(mockLoadDevices).toHaveBeenCalled();
+    });
 
     expect(
       screen.getByRole("combobox", { name: "设备状态筛选" }),

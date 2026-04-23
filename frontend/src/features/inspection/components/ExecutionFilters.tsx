@@ -43,6 +43,7 @@ interface Props {
   onRefresh: () => void
   isFetching: boolean
   hasRunningExecutions: boolean
+  showRefresh?: boolean
 }
 
 export const ExecutionFilters: React.FC<Props> = React.memo((props) => {
@@ -61,6 +62,7 @@ export const ExecutionFilters: React.FC<Props> = React.memo((props) => {
     onRefresh,
     isFetching,
     hasRunningExecutions,
+    showRefresh = true,
   } = props
 
   const filterCount =
@@ -113,19 +115,21 @@ export const ExecutionFilters: React.FC<Props> = React.memo((props) => {
       )}
 
       {/* 刷新按钮（ml-auto 推到最右侧）*/}
-      <Button
-        variant="outline"
-        onClick={onRefresh}
-        disabled={isFetching}
-        className="ml-auto relative"
-        title={hasRunningExecutions ? '有任务执行中，自动刷新已启用' : '刷新列表'}
-      >
-        {hasRunningExecutions && (
-          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-        )}
-        <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
-        {isFetching ? '刷新中…' : '刷新'}
-      </Button>
+      {showRefresh && (
+        <Button
+          variant="outline"
+          onClick={onRefresh}
+          disabled={isFetching}
+          className="ml-auto h-9 relative"
+          title={hasRunningExecutions ? '有任务执行中，自动刷新已启用' : '刷新列表'}
+        >
+          {hasRunningExecutions && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          )}
+          <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
+          {isFetching ? '刷新中…' : '刷新'}
+        </Button>
+      )}
     </div>
   )
 })

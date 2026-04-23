@@ -40,7 +40,7 @@ export function VendorFilter({ value, onChange, className = '' }: VendorFilterPr
       >
         <SelectTrigger
           id="vendor-filter"
-          className={`w-full h-10 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
+          className={`w-full h-9 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
           aria-label="厂商筛选"
         >
           <SelectValue placeholder="全部厂商" />

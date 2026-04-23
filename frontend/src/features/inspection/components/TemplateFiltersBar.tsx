@@ -89,7 +89,7 @@ export function TemplateFiltersBar({
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="搜索模板名称或描述..."
             leftIcon={<Search className="h-4 w-4" />}
-            className="h-10 rounded-lg border-border/60 bg-card/75 px-3 text-sm shadow-sm transition-all duration-200 focus:border-primary/60 focus:bg-background"
+            className="h-9 rounded-lg border-border/60 bg-card/75 px-3 text-sm shadow-sm transition-all duration-200 focus:border-primary/60 focus:bg-background"
           />
         </div>
         <div className="grid flex-1 grid-cols-1 gap-2.5 md:grid-cols-3">
@@ -125,10 +125,10 @@ export function TemplateFiltersBar({
               </button>
             </Badge>
           ))}
-          <Button type="button" variant="ghost" size="sm" onClick={onClearAll} className="h-8 rounded-lg px-2.5 text-xs text-muted-foreground hover:text-foreground">
+          <Button type="button" variant="ghost" size="sm" onClick={onClearAll} className="h-9 rounded-lg px-3 text-sm text-muted-foreground hover:text-foreground">
             清除筛选
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onRefresh} className="h-8 rounded-lg border-border/70 bg-background/80 px-2.5 text-xs shadow-sm">
+          <Button type="button" variant="outline" size="sm" onClick={onRefresh} className="h-9 rounded-lg border-border/70 bg-background/80 px-3 text-sm shadow-sm">
             <RefreshCw className="h-3.5 w-3.5" />
             刷新
           </Button>

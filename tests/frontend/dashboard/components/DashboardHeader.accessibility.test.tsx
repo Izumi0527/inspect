@@ -47,8 +47,14 @@ jest.mock('@/features/dashboard/hooks/useDashboard', () => ({
 }))
 
 describe('DashboardHeader 可访问性', () => {
-  it('搜索输入框应提供显式标签和 name 属性', () => {
+  it('默认不应渲染搜索设备输入框', () => {
     render(<DashboardHeader title="告警中心" />)
+
+    expect(screen.queryByRole('textbox', { name: '搜索设备' })).not.toBeInTheDocument()
+  })
+
+  it('显式开启搜索时，输入框应提供显式标签和 name 属性', () => {
+    render(<DashboardHeader title="告警中心" showSearch />)
 
     const searchInput = screen.getByRole('textbox', { name: '搜索设备' })
 

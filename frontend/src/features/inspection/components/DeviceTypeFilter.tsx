@@ -37,7 +37,7 @@ export function DeviceTypeFilter({ value, onChange, className = '' }: DeviceType
       >
         <SelectTrigger
           id="device-type-filter"
-          className={`w-full h-10 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
+          className={`w-full h-9 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
           aria-label="设备类型筛选"
         >
           <SelectValue placeholder="全部设备类型" />

@@ -21,6 +21,7 @@ import {
   PieChartComponent
 } from '@/components/atoms'
 import { SharedSelect } from '@/components/atoms/shared-select'
+import { CompactPageToolbar, CompactStatCard } from '@/components/shared'
 import {
   useInspectionTrends,
   useInspectionStats,
@@ -274,10 +275,9 @@ export const InspectionAnalytics: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* 操作栏 */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4">
-        <div></div>
-        <div className="flex gap-2">
+      <CompactPageToolbar
+        testIdPrefix="inspection-analytics-toolbar"
+        customActions={(
           <SharedSelect
             value={timePeriod}
             onChange={handlePeriodChange}
@@ -286,19 +286,33 @@ export const InspectionAnalytics: React.FC = () => {
             placeholder="时间周期"
             triggerClassName="w-32 h-9 rounded-lg px-3 border-border bg-card"
           />
-          <Button variant="outline" onClick={handleRefreshAll}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            刷新
-          </Button>
-          <Button variant="outline" onClick={handleExportReport}>
-            <Download className="w-4 h-4 mr-2" />
-            导出报告
-          </Button>
-        </div>
-      </div>
+        )}
+        secondaryActions={[
+          {
+            key: 'refresh-analytics',
+            label: '刷新',
+            icon: <RefreshCw className="w-4 h-4" />,
+            variant: 'outline',
+            onClick: () => {
+              void handleRefreshAll()
+            },
+          },
+        ]}
+        primaryActions={[
+          {
+            key: 'export-analytics',
+            label: '导出报告',
+            icon: <Download className="w-4 h-4" />,
+            variant: 'outline',
+            onClick: () => {
+              void handleExportReport()
+            },
+          },
+        ]}
+      />
 
       {/* KPI 指标卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
         {[
           {
             title: '执行次数',
@@ -335,26 +349,18 @@ export const InspectionAnalytics: React.FC = () => {
         ].map((metric) => {
           const colorClass = getMetricColorClass(metric.color)
           return (
-            <Card key={metric.title}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">{metric.title}</p>
-                    <p className="text-2xl font-bold text-foreground mt-2">{metric.value}</p>
-                    <div className="flex items-center gap-1 mt-2">
-                      <TrendingUp className={`w-4 h-4 ${colorClass.text500}`} />
-                      <span className={`text-sm font-medium ${colorClass.text600}`}>
-                        {metric.change}
-                      </span>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">{comparisonBaselineLabel}</span>
-                    </div>
-                  </div>
-                  <div className={`p-3 ${colorClass.bg100} rounded-lg`}>
-                    <metric.icon className={`w-6 h-6 ${colorClass.text600}`} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <CompactStatCard
+              key={metric.title}
+              title={metric.title}
+              value={metric.value}
+              change={metric.change}
+              changeHint={comparisonBaselineLabel}
+              trend="up"
+              icon={metric.icon}
+              iconClassName={colorClass.text600}
+              iconBgClassName={`${colorClass.bg100} dark:bg-transparent`}
+              valueClassName={colorClass.text600}
+            />
           )
         })}
       </div>

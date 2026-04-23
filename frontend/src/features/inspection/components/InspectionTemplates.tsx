@@ -33,6 +33,7 @@ import {
   Column,
   PageSizeSelect
 } from '@/components/atoms'
+import { CompactPageToolbar, CompactStatCard } from '@/components/shared'
 import type { BadgeProps } from '@/components/atoms'
 
 // 导入新版 hooks 和类型（来自 inspection feature）
@@ -64,7 +65,9 @@ interface Pagination {
 }
 
 // 导入筛选器组件
-import { TemplateFiltersBar } from './TemplateFiltersBar'
+import { VendorFilter } from './VendorFilter'
+import { DeviceTypeFilter } from './DeviceTypeFilter'
+import { CategoryFilter } from './CategoryFilter'
 
 // 导入模态框组件
 import { TemplateDetailModal } from './TemplateDetailModal'
@@ -294,6 +297,40 @@ export const InspectionTemplates: React.FC = () => {
   }
 
   const hasActiveFilters = filters.vendor || filters.deviceType || filters.category || searchText
+  const activeFilters = [
+    searchText
+      ? {
+          id: 'search',
+          label: `搜索: ${searchText}`,
+          onRemove: () => setSearchText(''),
+        }
+      : null,
+    filters.vendor
+      ? {
+          id: 'vendor',
+          label: `厂商: ${filters.vendor}`,
+          onRemove: () => handleFilterChange('vendor', ''),
+        }
+      : null,
+    filters.deviceType
+      ? {
+          id: 'deviceType',
+          label: `设备类型: ${filters.deviceType}`,
+          onRemove: () => handleFilterChange('deviceType', ''),
+        }
+      : null,
+    filters.category
+      ? {
+          id: 'category',
+          label: `分类: ${getCategoryLabel(filters.category)}`,
+          onRemove: () => handleFilterChange('category', ''),
+        }
+      : null,
+  ].filter(Boolean) as Array<{
+    id: string
+    label: string
+    onRemove: () => void
+  }>
 
   // 辅助函数
   const getCategoryIcon = (category?: string) => {
@@ -305,7 +342,7 @@ export const InspectionTemplates: React.FC = () => {
     }
   }
 
-  const getCategoryLabel = (category?: string) => {
+  function getCategoryLabel(category?: string) {
     const labels: Record<string, string> = {
       network: '网络监控',
       system: '系统检查',
@@ -510,92 +547,117 @@ export const InspectionTemplates: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <TemplateFiltersBar
-        filters={filters}
-        searchText={searchText}
-        onFilterChange={handleFilterChange}
-        onSearchChange={handleSearch}
-        onClearAll={handleClearFilters}
-        onRefresh={refetch}
+      <CompactPageToolbar
+        testIdPrefix="inspection-templates-toolbar"
+        search={{
+          value: searchText,
+          placeholder: '搜索模板名称或描述...',
+          ariaLabel: '搜索模板',
+          onChange: handleSearch,
+        }}
+        filters={(
+          <div className="flex flex-wrap items-center gap-2">
+            <VendorFilter
+              value={filters.vendor || ''}
+              onChange={(value) => handleFilterChange('vendor', value)}
+            />
+            <DeviceTypeFilter
+              value={filters.deviceType || ''}
+              onChange={(value) => handleFilterChange('deviceType', value)}
+            />
+            <CategoryFilter
+              value={filters.category || ''}
+              onChange={(value) => handleFilterChange('category', value)}
+            />
+          </div>
+        )}
+        secondaryActions={[
+          {
+            key: 'refresh-templates',
+            label: '刷新',
+            icon: <RefreshCw className="w-4 h-4" />,
+            variant: 'outline',
+            onClick: () => {
+              void refetch()
+            },
+          },
+          {
+            key: 'import-template',
+            label: '导入模板',
+            icon: <Upload className="w-4 h-4" />,
+            variant: 'outline',
+            onClick: () => setIsImportModalOpen(true),
+          },
+          {
+            key: 'quick-create-template',
+            label: '快速创建',
+            icon: <Zap className="w-4 h-4" />,
+            variant: 'outline',
+            onClick: () => setIsQuickCreateOpen(true),
+          },
+        ]}
+        primaryActions={[
+          {
+            key: 'create-template',
+            label: '创建模板',
+            icon: <Plus className="w-4 h-4" />,
+            onClick: handleCreateTemplate,
+          },
+        ]}
       />
 
-      <div className="flex flex-wrap justify-end items-center gap-2">
-        <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
-          <Upload className="w-4 h-4 mr-2" />
-          导入模板
-        </Button>
-        <Button variant="outline" onClick={() => setIsQuickCreateOpen(true)}>
-          <Zap className="w-4 h-4 mr-2" />
-          快速创建
-        </Button>
-        <Button onClick={handleCreateTemplate}>
-          <Plus className="w-4 h-4 mr-2" />
-          创建模板
-        </Button>
-      </div>
+      {activeFilters.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-muted/35 p-3">
+          <Badge variant="secondary" size="sm" className="px-2 py-1 text-xs">
+            已应用 {activeFilters.length} 个
+          </Badge>
+          {activeFilters.map((filter) => (
+            <Badge key={filter.id} variant="outline" size="sm" asChild>
+              <button
+                type="button"
+                onClick={filter.onRemove}
+                aria-label={`移除 ${filter.label} 筛选`}
+                className="cursor-pointer rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-xs font-medium text-foreground/90 transition-colors hover:bg-accent/60 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                {filter.label}
+              </button>
+            </Badge>
+          ))}
+          <Button type="button" variant="ghost" size="sm" onClick={handleClearFilters} className="sm:ml-auto">
+            清除筛选
+          </Button>
+        </div>
+      )}
 
       {/* 统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-foreground">
-                  {totalTemplates}
-                </div>
-                <div className="text-sm text-muted-foreground dark:text-gray-300">全部模板</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                <Shield className="w-5 h-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-foreground">
-                  {builtInTemplatesCount}
-                </div>
-                <div className="text-sm text-muted-foreground dark:text-gray-300">内置模板</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                <Settings className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-foreground">
-                  {customTemplatesCount}
-                </div>
-                <div className="text-sm text-muted-foreground dark:text-gray-300">自定义模板</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
-                <Monitor className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-foreground">
-                  {activeTemplatesCount}
-                </div>
-                <div className="text-sm text-muted-foreground dark:text-gray-300">已启用</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <CompactStatCard
+          title="全部模板"
+          value={totalTemplates}
+          icon={FileText}
+          iconClassName="text-blue-600 dark:text-blue-400"
+        />
+        <CompactStatCard
+          title="内置模板"
+          value={builtInTemplatesCount}
+          icon={Shield}
+          iconClassName="text-green-600 dark:text-green-400"
+          valueClassName="text-green-600 dark:text-green-400"
+        />
+        <CompactStatCard
+          title="自定义模板"
+          value={customTemplatesCount}
+          icon={Settings}
+          iconClassName="text-purple-600 dark:text-purple-400"
+          valueClassName="text-purple-600 dark:text-purple-400"
+        />
+        <CompactStatCard
+          title="已启用"
+          value={activeTemplatesCount}
+          icon={Monitor}
+          iconClassName="text-orange-600 dark:text-orange-400"
+          valueClassName="text-orange-600 dark:text-orange-400"
+        />
       </div>
 
       {/* 排序选项 */}
