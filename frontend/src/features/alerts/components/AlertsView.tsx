@@ -28,6 +28,7 @@ import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
 import { ErrorAlert } from '@/components/atoms/ErrorAlert'
+import { CompactPageToolbar } from '@/components/shared'
 
 const AUTO_REFRESH_INTERVAL = 30000 // 30秒
 const WS_SELF_EVENT_TTL_MS = 5000 // 本端操作后短时间内忽略同ID回推事件，避免重复刷新
@@ -540,105 +541,112 @@ const AlertsViewContent: React.FC = () => {
 
         {/* 主内容区 */}
         <Card className="flex-1 flex flex-col overflow-hidden">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-3">
-                <CardTitle>告警列表</CardTitle>
-                <span className="text-xs text-gray-400 dark:text-gray-500">
-                  最后刷新: {formatLastRefreshed()}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {/* 自动刷新开关 */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setAutoRefresh(!autoRefresh)}
-                  title={autoRefresh ? '关闭自动刷新' : '开启自动刷新'}
-                >
-                  {autoRefresh ? (
-                    <Bell className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <BellOff className="h-4 w-4 text-gray-400" />
-                  )}
-                </Button>
-
-                {/* 手动刷新 */}
-                <Button variant="ghost" size="sm" onClick={handleManualRefresh} disabled={loading}>
-                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                </Button>
-
-                {/* 导出 */}
-                <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
-                  <Download className="h-4 w-4 mr-2" />
-                  {exporting ? '导出中...' : '导出'}
-                </Button>
-
-                {/* 排序 */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <ArrowUpDown className="h-4 w-4 mr-2" />
-                      排序
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleSortChange('timestamp')}>
-                      按时间 {sortBy === 'timestamp' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleSortChange('severity')}>
-                      按严重级别 {sortBy === 'severity' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleSortChange('status')}>
-                      按状态 {sortBy === 'status' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                {/* 批量操作 */}
-                {selectedAlerts.length > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        批量操作 ({selectedAlerts.length})
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {canUpdateAlerts && (
-                        <>
-                          <DropdownMenuItem onClick={() => handleBulkActionClick('acknowledge')}>
-                            <CheckCheck className="h-4 w-4 mr-2" />
-                            批量确认
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleBulkActionClick('resolve')}>
-                            <CheckCheck className="h-4 w-4 mr-2" />
-                            批量解决
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                      {canDeleteAlerts && (
-                        <DropdownMenuItem
-                          onClick={() => handleBulkActionClick('delete')}
-                          className="text-red-600"
-                        >
-                          <XCircle className="h-4 w-4 mr-2" />
-                          批量删除
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </div>
+          <CardHeader className="pb-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <CardTitle>告警列表</CardTitle>
+              <span className="text-xs text-gray-400 dark:text-gray-500">
+                最后刷新: {formatLastRefreshed()}
+              </span>
             </div>
           </CardHeader>
 
           <CardContent className="flex flex-col overflow-hidden pt-0">
-            <AlertFiltersBar
-              filters={filters}
-              onFilterChange={updateFilter}
-              selectedCount={selectedAlerts.length}
-              onBulkAction={handleBulkActionClick}
-              renderAsCard={false}
+            <CompactPageToolbar
+              testIdPrefix="alerts-toolbar"
+              filters={(
+                <AlertFiltersBar
+                  filters={filters}
+                  onFilterChange={updateFilter}
+                  selectedCount={selectedAlerts.length}
+                  onBulkAction={handleBulkActionClick}
+                  renderAsCard={false}
+                />
+              )}
+              secondaryActions={[
+                {
+                  key: 'toggle-auto-refresh',
+                  label: autoRefresh ? '自动刷新开' : '自动刷新关',
+                  icon: autoRefresh ? (
+                    <Bell className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <BellOff className="h-4 w-4 text-gray-400" />
+                  ),
+                  variant: 'outline',
+                  onClick: () => setAutoRefresh(!autoRefresh),
+                },
+                {
+                  key: 'refresh-alerts',
+                  label: '刷新',
+                  icon: <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />,
+                  disabled: loading,
+                  onClick: handleManualRefresh,
+                },
+              ]}
+              primaryActions={[
+                {
+                  key: 'export-alerts',
+                  label: exporting ? '导出中...' : '导出',
+                  icon: <Download className="h-4 w-4 mr-2" />,
+                  disabled: exporting,
+                  onClick: handleExport,
+                },
+              ]}
+              customActions={(
+                <>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" type="button">
+                        <ArrowUpDown className="h-4 w-4 mr-2" />
+                        排序
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleSortChange('timestamp')}>
+                        按时间 {sortBy === 'timestamp' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleSortChange('severity')}>
+                        按严重级别 {sortBy === 'severity' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleSortChange('status')}>
+                        按状态 {sortBy === 'status' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {selectedAlerts.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" type="button">
+                          批量操作 ({selectedAlerts.length})
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {canUpdateAlerts && (
+                          <>
+                            <DropdownMenuItem onClick={() => handleBulkActionClick('acknowledge')}>
+                              <CheckCheck className="h-4 w-4 mr-2" />
+                              批量确认
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleBulkActionClick('resolve')}>
+                              <CheckCheck className="h-4 w-4 mr-2" />
+                              批量解决
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                        {canDeleteAlerts && (
+                          <DropdownMenuItem
+                            onClick={() => handleBulkActionClick('delete')}
+                            className="text-red-600"
+                          >
+                            <XCircle className="h-4 w-4 mr-2" />
+                            批量删除
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </>
+              )}
             />
 
             <AdvancedFilters

@@ -27,9 +27,9 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
 }) => {
   // 筛选器内容
   const filtersContent = (
-    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-      <div className="relative flex-1 w-full sm:max-w-md">
-        <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="relative w-full sm:w-80">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/80" />
         <label htmlFor="alert-search-input" className="sr-only">
           搜索告警
         </label>
@@ -40,7 +40,7 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
           placeholder="搜索告警..."
           value={filters.searchQuery}
           onChange={(e) => onFilterChange('searchQuery', e.target.value)}
-          className="pl-10"
+          className="h-9 pl-10 text-sm"
         />
       </div>
 
@@ -49,13 +49,13 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
         onValueChange={(value) => onFilterChange('severityFilter', value)}
       >
         <SelectTrigger
-          className="w-full sm:w-[180px]"
+          className="h-9 w-[110px] text-sm"
           aria-label="严重级别筛选"
         >
           <SelectValue placeholder="严重级别" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">所有严重级别</SelectItem>
+          <SelectItem value="all">级别</SelectItem>
           <SelectItem value="critical">严重</SelectItem>
           <SelectItem value="warning">警告</SelectItem>
           <SelectItem value="info">信息</SelectItem>
@@ -67,13 +67,13 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
         onValueChange={(value) => onFilterChange('statusFilter', value)}
       >
         <SelectTrigger
-          className="w-full sm:w-[150px]"
+          className="h-9 w-[110px] text-sm"
           aria-label="状态筛选"
         >
           <SelectValue placeholder="状态" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">所有状态</SelectItem>
+          <SelectItem value="all">状态</SelectItem>
           <SelectItem value="active">活跃</SelectItem>
           <SelectItem value="acknowledged">已确认</SelectItem>
           <SelectItem value="resolved">已解决</SelectItem>
@@ -85,7 +85,7 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
   // 根据renderAsCard决定是否包裹Card
   if (renderAsCard) {
     return (
-      <Card>
+        <Card>
         <CardContent className="p-6">
           <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
             <div className="flex flex-1 gap-4 w-full lg:w-auto">
@@ -127,7 +127,7 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
 
   // 不使用Card时，直接返回内容
   return (
-    <div className="mb-6">
+    <div>
       {filtersContent}
     </div>
   )

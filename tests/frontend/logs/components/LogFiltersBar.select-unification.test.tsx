@@ -117,4 +117,34 @@ describe('LogFiltersBar 下拉统一化', () => {
     expect(screen.getByRole('combobox', { name: '设施类型筛选' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '日志来源筛选' })).toBeInTheDocument()
   })
+
+  it('应使用审计日志同款的紧凑搜索框和下拉规格', () => {
+    render(
+      <LogFiltersBar
+        filters={{
+          searchQuery: '',
+          levelFilter: 'all',
+          facilityFilter: 'all',
+          sourceFilter: 'all',
+        }}
+        onFilterChange={jest.fn()}
+        onReset={jest.fn()}
+      />
+    )
+
+    const searchInput = screen.getByPlaceholderText('搜索日志内容...')
+    const levelSelect = screen.getByRole('combobox', { name: '日志级别筛选' })
+    const facilitySelect = screen.getByRole('combobox', { name: '设施类型筛选' })
+    const sourceSelect = screen.getByRole('combobox', { name: '日志来源筛选' })
+
+    expect(searchInput).toHaveClass('pl-10')
+    expect(searchInput).toHaveClass('h-9')
+    expect(searchInput).toHaveClass('text-sm')
+    expect(levelSelect).toHaveClass('h-9')
+    expect(levelSelect).toHaveClass('text-sm')
+    expect(facilitySelect).toHaveClass('h-9')
+    expect(facilitySelect).toHaveClass('text-sm')
+    expect(sourceSelect).toHaveClass('h-9')
+    expect(sourceSelect).toHaveClass('text-sm')
+  })
 })

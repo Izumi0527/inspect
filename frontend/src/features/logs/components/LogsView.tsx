@@ -20,6 +20,7 @@ import { LogList } from './LogList'
 import { LogDetailModal } from './LogDetailModal'
 import { LogCollectionModal } from './LogCollectionModal'
 import { SkeletonCard, SkeletonList } from '@/components/atoms/skeleton'
+import { CompactPageToolbar } from '@/components/shared'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -244,98 +245,99 @@ export const LogsView: React.FC = () => {
 
         {/* 主内容卡片 */}
         <Card className="flex-1 flex flex-col overflow-hidden">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>日志列表</CardTitle>
-              <div className="flex items-center gap-2">
-                {/* 刷新按钮 */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={loading}
-                >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  刷新
-                </Button>
-
-                {/* 导出按钮 */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <Download className="h-4 w-4 mr-2" />
-                      导出
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleExport('csv')}>
-                      <Download className="h-4 w-4 mr-2" />
-                      导出为 CSV
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExport('xlsx')}>
-                      <Download className="h-4 w-4 mr-2" />
-                      导出为 Excel
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                {/* 采集按钮 */}
-                {canManageLogs && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={collecting}
-                    onClick={() => setCollectionOpen(true)}
-                  >
-                    <Play className={`h-4 w-4 mr-2 ${collecting ? 'animate-pulse' : ''}`} />
-                    采集日志
-                  </Button>
-                )}
-
-                {/* 批量操作 */}
-                {canManageLogs && selectedLogs.length > 0 && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        批量操作 ({selectedLogs.length})
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={handleBatchDelete}
-                        className="text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        批量删除
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-
-                {/* 设置按钮 */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="日志设置"
-                  onClick={() => router.push('/settings?tab=logs')}
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+          <CardHeader className="pb-0">
+            <CardTitle>日志列表</CardTitle>
           </CardHeader>
 
           <CardContent className="flex-1 flex flex-col overflow-hidden">
-            {/* 过滤器 */}
-            <LogFiltersBar
-              filters={filters}
-              onFilterChange={handleFilterChange}
-              onReset={() => {
-                resetFilters()
-                setCurrentPage(1)
-                clearSelection()
-              }}
-              selectedCount={canManageLogs ? selectedLogs.length : 0}
+            <CompactPageToolbar
+              testIdPrefix="logs-toolbar"
+              filters={(
+                <LogFiltersBar
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  onReset={() => {
+                    resetFilters()
+                    setCurrentPage(1)
+                    clearSelection()
+                  }}
+                  selectedCount={canManageLogs ? selectedLogs.length : 0}
+                  renderAsToolbar
+                />
+              )}
+              secondaryActions={[
+                {
+                  key: 'refresh-logs',
+                  label: '刷新',
+                  icon: <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />,
+                  disabled: loading,
+                  onClick: () => void handleRefresh(),
+                },
+              ]}
+              primaryActions={
+                canManageLogs
+                  ? [
+                      {
+                        key: 'collect-logs',
+                        label: '采集日志',
+                        icon: <Play className={`h-4 w-4 ${collecting ? 'animate-pulse' : ''}`} />,
+                        disabled: collecting,
+                        variant: 'outline',
+                        onClick: () => setCollectionOpen(true),
+                      },
+                    ]
+                  : []
+              }
+              customActions={(
+                <>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" type="button">
+                        <Download className="h-4 w-4 mr-2" />
+                        导出
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleExport('csv')}>
+                        <Download className="h-4 w-4 mr-2" />
+                        导出为 CSV
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleExport('xlsx')}>
+                        <Download className="h-4 w-4 mr-2" />
+                        导出为 Excel
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {canManageLogs && selectedLogs.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" type="button">
+                          批量操作 ({selectedLogs.length})
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={handleBatchDelete}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          批量删除
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    aria-label="日志设置"
+                    onClick={() => router.push('/settings?tab=logs')}
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
             />
 
             {/* 日志列表 */}

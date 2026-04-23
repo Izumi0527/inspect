@@ -208,4 +208,48 @@ describe('AlertFiltersBar 下拉统一化', () => {
     expect(searchInput).toHaveAttribute('id', 'alert-search-input')
     expect(searchInput).toHaveAttribute('name', 'alert-search')
   })
+
+  it('非 Card 模式下应收敛到紧凑工具栏规格', () => {
+    render(
+      <AlertFiltersBar
+        filters={buildFilters()}
+        onFilterChange={jest.fn()}
+        selectedCount={0}
+        renderAsCard={false}
+      />
+    )
+
+    const searchInput = screen.getByRole('textbox', { name: '搜索告警' })
+    const severitySelect = screen.getByRole('combobox', { name: '严重级别筛选' })
+    const statusSelect = screen.getByRole('combobox', { name: '状态筛选' })
+
+    expect(searchInput).toHaveClass('pl-10')
+    expect(searchInput).toHaveClass('h-9')
+    expect(searchInput).toHaveClass('text-sm')
+    expect(severitySelect).toHaveClass('h-9')
+    expect(severitySelect).toHaveClass('text-sm')
+    expect(statusSelect).toHaveClass('h-9')
+    expect(statusSelect).toHaveClass('text-sm')
+  })
+
+  it('默认筛选项文案应显示为级别和状态', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <AlertFiltersBar
+        filters={buildFilters()}
+        onFilterChange={jest.fn()}
+        selectedCount={0}
+        renderAsCard={false}
+      />
+    )
+
+    await user.click(screen.getByRole('combobox', { name: '严重级别筛选' }))
+    expect(screen.getByRole('option', { name: '级别' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '所有严重级别' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('combobox', { name: '状态筛选' }))
+    expect(screen.getByRole('option', { name: '状态' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: '所有状态' })).not.toBeInTheDocument()
+  })
 })

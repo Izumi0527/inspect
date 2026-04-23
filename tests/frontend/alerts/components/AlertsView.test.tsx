@@ -228,6 +228,12 @@ describe('AlertsView', () => {
     expect(screen.queryByRole('button', { name: '触发单条确认' })).not.toBeInTheDocument()
   })
 
+  it('应将基础筛选与页面动作收拢到同一条紧凑工具栏', () => {
+    render(<AlertsView />)
+
+    expect(screen.getByTestId('alerts-toolbar-end-group')).toBeInTheDocument()
+  })
+
   it('单条确认后应刷新列表和统计', async () => {
     render(<AlertsView />)
 

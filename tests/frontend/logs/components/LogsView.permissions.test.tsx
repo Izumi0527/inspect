@@ -135,5 +135,10 @@ describe('LogsView 权限分支', () => {
     expect(screen.queryByRole('button', { name: /批量操作/i })).toBeNull()
     expect(screen.getByText('selected:0')).toBeInTheDocument()
   })
-})
 
+  it('应将筛选栏和页面动作收敛到同一条紧凑工具栏', () => {
+    render(<LogsView />)
+
+    expect(screen.getByTestId('logs-toolbar-end-group')).toBeInTheDocument()
+  })
+})
