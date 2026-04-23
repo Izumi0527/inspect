@@ -6,14 +6,12 @@ import {
   TrendingUp,
   BarChart3,
   Settings,
-  Search,
   AlertTriangle
 } from 'lucide-react'
 import {
   Card,
   CardHeader,
-  CardContent,
-  Input
+  CardContent
 } from '@/components/atoms'
 import { AppLayout } from '@/components/layout'
 import { InspectionReports } from './InspectionReports'
@@ -93,13 +91,33 @@ export const ReportsView: React.FC = () => {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'inspection':
-        return <InspectionReports searchText={searchText} />
+        return (
+          <InspectionReports
+            searchText={searchText}
+            onSearchTextChange={setSearchText}
+          />
+        )
       case 'trends':
-        return <TrendAnalysis searchText={searchText} />
+        return (
+          <TrendAnalysis
+            searchText={searchText}
+            onSearchTextChange={setSearchText}
+          />
+        )
       case 'statistics':
-        return <StatisticsReports searchText={searchText} />
+        return (
+          <StatisticsReports
+            searchText={searchText}
+            onSearchTextChange={setSearchText}
+          />
+        )
       case 'custom':
-        return <CustomReports searchText={searchText} />
+        return (
+          <CustomReports
+            searchText={searchText}
+            onSearchTextChange={setSearchText}
+          />
+        )
       default:
         return null
     }
@@ -128,8 +146,7 @@ export const ReportsView: React.FC = () => {
         {/* 标签导航 */}
         <Card className="flex-1 flex flex-col overflow-hidden">
           <CardHeader className="pb-0">
-          <div className="flex flex-col sm:flex-row gap-3 justify-between">
-            {/* 标签按钮 */}
+          <div className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-2">
               {tabs.map((tab) => {
                 const Icon = tab.icon
@@ -161,24 +178,6 @@ export const ReportsView: React.FC = () => {
                   </motion.button>
                 )
               })}
-            </div>
-
-            {/* 搜索和操作按钮 */}
-            <div className="flex gap-2">
-              <div className="relative">
-                <label htmlFor="reports-search-input" className="sr-only">
-                  搜索报表
-                </label>
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground/80" />
-                <Input
-                  id="reports-search-input"
-                  placeholder="搜索报表..."
-                  name="reports-search"
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  className="pl-10 w-48"
-                />
-              </div>
             </div>
           </div>
         </CardHeader>

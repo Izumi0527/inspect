@@ -1,6 +1,5 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { StatisticsReports } from '@/features/reports/components/StatisticsReports'
 import { Permission } from '@/lib/types/auth.types'
 
@@ -130,22 +129,19 @@ describe('StatisticsReports 筛选控件可访问性', () => {
     })
   })
 
-  it('展开筛选后，设备类型和位置标签应关联到对应多选按钮', async () => {
-    const user = userEvent.setup()
+  it('应提供审计日志同款的紧凑搜索框，并为多选筛选器补充稳定可访问名称', () => {
     render(<StatisticsReports searchText="" />)
 
-    await user.click(screen.getByRole('button', { name: '展开' }))
+    const searchInput = screen.getByRole('textbox', { name: '搜索统计报表' })
+    const deviceTypeButton = screen.getByRole('button', { name: '筛选设备类型' })
+    const locationButton = screen.getByRole('button', { name: '筛选设备位置' })
 
-    const deviceTypeLabel = screen.getByText('设备类型', { selector: 'label' })
-    const locationLabel = screen.getByText('设备位置', { selector: 'label' })
-    const deviceTypeButton = screen.getByRole('button', { name: '设备类型' })
-    const locationButton = screen.getByRole('button', { name: '设备位置' })
-
-    expect(deviceTypeLabel).toHaveAttribute('for', 'statistics-device-types')
-    expect(locationLabel).toHaveAttribute('for', 'statistics-locations')
+    expect(searchInput).toHaveClass('pl-10')
+    expect(searchInput).toHaveClass('h-9')
+    expect(searchInput).toHaveClass('text-sm')
     expect(deviceTypeButton).toHaveAttribute('id', 'statistics-device-types')
     expect(locationButton).toHaveAttribute('id', 'statistics-locations')
-    expect(deviceTypeButton).toHaveTextContent('选择设备类型（可多选）')
-    expect(locationButton).toHaveTextContent('选择设备位置（可多选）')
+    expect(deviceTypeButton).toHaveTextContent('设备类型')
+    expect(locationButton).toHaveTextContent('设备位置')
   })
 })

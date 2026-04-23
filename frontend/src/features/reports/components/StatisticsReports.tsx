@@ -1,17 +1,17 @@
 import React, { useState, useMemo } from 'react'
-import { BarChart3, Users, Target, Activity, Filter, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
+import { BarChart3, Users, Target, Activity, RefreshCw, Download, FileText } from 'lucide-react'
 import {
   Card,
   CardHeader,
   CardTitle,
   CardContent,
   Button,
+  Badge,
   CardSkeleton,
   ChartSkeleton,
   TableSkeleton,
   ErrorAlert,
-  DateRangePicker,
-  QuickDateRangeButtons,
+  SmartDateRangePicker,
   BarChartComponent,
   PieChartComponent
 } from '@/components/atoms'
@@ -24,9 +24,11 @@ import toast from 'react-hot-toast'
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 import { downloadWithAuth } from '@/utils/download'
 import { formatDateYMD } from '@/utils/formatters'
+import { ReportsToolbar } from './shared/ReportsToolbar'
 
 interface Props {
   searchText: string
+  onSearchTextChange?: (value: string) => void
 }
 
 const resolveTrendFromChange = (change: string): 'up' | 'down' | 'stable' => {
@@ -35,14 +37,47 @@ const resolveTrendFromChange = (change: string): 'up' | 'down' | 'stable' => {
   return 'stable'
 }
 
-export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
+const getDefaultStatisticsDateRange = () => ({
+  startDate: formatDateYMD(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+  endDate: formatDateYMD(new Date())
+})
+
+const getQuickStatisticsDateRange = (range: 'today' | 'week' | 'month') => {
+  const endDate = new Date()
+  const startDate = new Date(endDate)
+
+  if (range === 'today') {
+    return {
+      startDate: formatDateYMD(startDate),
+      endDate: formatDateYMD(endDate),
+    }
+  }
+
+  if (range === 'week') {
+    const weekday = startDate.getDay()
+    const diff = weekday === 0 ? 6 : weekday - 1
+    startDate.setDate(startDate.getDate() - diff)
+    return {
+      startDate: formatDateYMD(startDate),
+      endDate: formatDateYMD(endDate),
+    }
+  }
+
+  startDate.setDate(1)
+  return {
+    startDate: formatDateYMD(startDate),
+    endDate: formatDateYMD(endDate),
+  }
+}
+
+export const StatisticsReports: React.FC<Props> = ({
+  searchText,
+  onSearchTextChange = () => undefined,
+}) => {
   const canCreate = usePermission(Permission.REPORTS_CREATE)
   // ==================== State Management ====================
-  const [dateRange, setDateRange] = useState({
-    startDate: formatDateYMD(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
-    endDate: formatDateYMD(new Date())
-  })
-  const [showFilters, setShowFilters] = useState(false)
+  const defaultDateRange = useMemo(() => getDefaultStatisticsDateRange(), [])
+  const [dateRange, setDateRange] = useState(defaultDateRange)
   const [deviceTypes, setDeviceTypes] = useState<string[]>([])
   const [locations, setLocations] = useState<string[]>([])
 
@@ -358,8 +393,14 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
     toast.success('数据已刷新')
   }
 
-  const handleQuickDateRange = (startDate: string, endDate: string) => {
-    setDateRange({ startDate, endDate })
+  const handleQuickDateRange = (range: 'today' | 'week' | 'month') => {
+    setDateRange(getQuickStatisticsDateRange(range))
+  }
+
+  const handleResetFilters = () => {
+    setDeviceTypes([])
+    setLocations([])
+    setDateRange(defaultDateRange)
   }
 
   // 可用的设备类型和位置选项
@@ -378,6 +419,15 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
       label: location
     }))
   }, [statisticsData])
+
+  const hasDateFilter =
+    dateRange.startDate !== defaultDateRange.startDate ||
+    dateRange.endDate !== defaultDateRange.endDate
+  const filterCount =
+    (deviceTypes.length > 0 ? 1 : 0) +
+    (locations.length > 0 ? 1 : 0) +
+    (hasDateFilter ? 1 : 0)
+  const hasActiveFilters = filterCount > 0
 
   // ==================== Search Filter ====================
   const normalizedKeyword = searchText.trim().toLowerCase()
@@ -453,140 +503,94 @@ export const StatisticsReports: React.FC<Props> = ({ searchText }) => {
   // ==================== Main Render ====================
   return (
     <div className="space-y-6">
-      {/* 筛选面板 */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="space-y-4">
-            {/* 筛选器标题栏 */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Filter className="w-5 h-5 text-muted-foreground" />
-                <h3 className="text-sm font-medium text-foreground">数据筛选</h3>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFilters(!showFilters)}
-              >
-                {showFilters ? (
-                  <>
-                    <ChevronUp className="w-4 h-4 mr-1" />
-                    收起
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="w-4 h-4 mr-1" />
-                    展开
-                  </>
-                )}
-              </Button>
-            </div>
+      <ReportsToolbar
+        search={{
+          value: searchText,
+          placeholder: '搜索设备类型、排名状态...',
+          ariaLabel: '搜索统计报表',
+          onChange: onSearchTextChange,
+        }}
+        filters={(
+          <div className="flex flex-wrap items-center gap-2">
+            <SmartDateRangePicker
+              startDate={dateRange.startDate}
+              endDate={dateRange.endDate}
+              onStartDateChange={(date) => setDateRange((prev) => ({ ...prev, startDate: date }))}
+              onEndDateChange={(date) => setDateRange((prev) => ({ ...prev, endDate: date }))}
+              onClear={() => setDateRange(defaultDateRange)}
+              onQuickSelect={handleQuickDateRange}
+              placeholder="选择日期范围"
+            />
 
-            {/* 筛选器内容 */}
-            {showFilters && (
-              <div className="space-y-4 pt-4 border-t">
-                {/* 日期范围选择 */}
-                <div>
-                  <DateRangePicker
-                    startDate={dateRange.startDate}
-                    endDate={dateRange.endDate}
-                    onStartDateChange={(date) => setDateRange(prev => ({ ...prev, startDate: date }))}
-                    onEndDateChange={(date) => setDateRange(prev => ({ ...prev, endDate: date }))}
-                    label="日期范围"
-                  />
-                  <QuickDateRangeButtons
-                    onRangeSelect={handleQuickDateRange}
-                    className="mt-2"
-                  />
-                </div>
+            {deviceTypeOptions.length > 0 && (
+              <MultiSelect
+                triggerId="statistics-device-types"
+                ariaLabel="筛选设备类型"
+                options={deviceTypeOptions}
+                value={deviceTypes}
+                onChange={setDeviceTypes}
+                placeholder="设备类型"
+                triggerClassName="h-9 min-w-[140px] rounded-md border-input bg-background px-3 py-2 text-sm shadow-sm backdrop-blur-none"
+                dropdownClassName="rounded-md border-border bg-popover shadow-lg backdrop-blur-none"
+              />
+            )}
 
-                {/* 设备类型筛选 */}
-                {deviceTypeOptions.length > 0 && (
-                  <div>
-                    <label
-                      htmlFor="statistics-device-types"
-                      className="block text-sm font-medium text-foreground/90 mb-2"
-                    >
-                      设备类型
-                    </label>
-                    <MultiSelect
-                      triggerId="statistics-device-types"
-                      options={deviceTypeOptions}
-                      value={deviceTypes}
-                      onChange={setDeviceTypes}
-                      placeholder="选择设备类型（可多选）"
-                    />
-                  </div>
-                )}
+            {locationOptions.length > 0 && (
+              <MultiSelect
+                triggerId="statistics-locations"
+                ariaLabel="筛选设备位置"
+                options={locationOptions}
+                value={locations}
+                onChange={setLocations}
+                placeholder="设备位置"
+                triggerClassName="h-9 min-w-[140px] rounded-md border-input bg-background px-3 py-2 text-sm shadow-sm backdrop-blur-none"
+                dropdownClassName="rounded-md border-border bg-popover shadow-lg backdrop-blur-none"
+              />
+            )}
 
-                {/* 位置筛选 */}
-                {locationOptions.length > 0 && (
-                  <div>
-                    <label
-                      htmlFor="statistics-locations"
-                      className="block text-sm font-medium text-foreground/90 mb-2"
-                    >
-                      设备位置
-                    </label>
-                    <MultiSelect
-                      triggerId="statistics-locations"
-                      options={locationOptions}
-                      value={locations}
-                      onChange={setLocations}
-                      placeholder="选择设备位置（可多选）"
-                    />
-                  </div>
-                )}
-
-                {/* 筛选操作按钮 */}
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setDeviceTypes([])
-                      setLocations([])
-                      setDateRange({
-                        startDate: formatDateYMD(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
-                        endDate: formatDateYMD(new Date())
-                      })
-                    }}
-                  >
-                    重置筛选
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRefresh}
-                  >
-                    <RefreshCw className="w-4 h-4 mr-1" />
-                    刷新数据
-                  </Button>
-                </div>
-              </div>
+            {hasActiveFilters && (
+              <>
+                <Badge variant="secondary" className="px-2 py-1 text-xs">
+                  已应用 {filterCount} 个筛选
+                </Badge>
+                <Button variant="outline" onClick={handleResetFilters}>
+                  重置筛选
+                </Button>
+              </>
             )}
           </div>
-        </CardContent>
-      </Card>
+        )}
+        secondaryActions={[
+          {
+            key: 'refresh-statistics',
+            label: '刷新数据',
+            icon: <RefreshCw className="mr-2 h-4 w-4" />,
+            onClick: handleRefresh,
+          },
+        ]}
+        primaryActions={
+          canCreate
+            ? [
+                {
+                  key: 'export-data',
+                  label: '导出数据',
+                  icon: <Download className="mr-2 h-4 w-4" />,
+                  loading: exportExcelMutation.isPending,
+                  onClick: () => void handleExportData(),
+                },
+                {
+                  key: 'generate-statistics-report',
+                  label: '生成统计报表',
+                  icon: <FileText className="mr-2 h-4 w-4" />,
+                  loading: generateReportMutation.isPending,
+                  onClick: () => void handleGenerateReport(),
+                },
+              ]
+            : []
+        }
+      />
 
-      {/* 操作按钮 */}
-      {canCreate ? (
-        <div className="flex gap-2">
-          <Button
-            onClick={handleGenerateReport}
-            disabled={generateReportMutation.isPending}
-          >
-            {generateReportMutation.isPending ? '生成中...' : '生成统计报表'}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleExportData}
-            disabled={exportExcelMutation.isPending}
-          >
-            {exportExcelMutation.isPending ? '导出中...' : '导出数据'}
-          </Button>
-        </div>
-      ) : (
+      {!canCreate && (
         <div className="text-sm text-muted-foreground">
           当前账号暂无生成/导出报表权限，请联系管理员开通。
         </div>

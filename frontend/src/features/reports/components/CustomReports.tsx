@@ -1,19 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Settings, Plus, Edit, Copy, AlertCircle, Eye, Trash2 } from 'lucide-react'
+import { Settings, Plus, Edit, Copy, AlertCircle, Eye, Trash2, RefreshCw, Wand2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, ConfirmModal, Loading, SimpleInput as Input, SimpleModal, TextArea } from '@/components/atoms'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useCreateCustomReportConfig, useCustomReportConfigs, useDeleteCustomReportConfig, useGenerateFromConfig, useReportTemplates } from '../hooks/useReports'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { ConfigPreviewModal } from './ConfigPreviewModal'
 import { CustomReportConfigModal } from './CustomReportConfigModal'
 import { downloadWithAuth } from '@/utils/download'
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 import { formatDateYMD } from '@/utils/formatters'
 import type { ChartConfig, CustomReportConfig, ReportStyles, ReportTemplate, TableConfig, TemplateSection } from '../types'
+import { ReportsToolbar } from './shared/ReportsToolbar'
 
 interface Props {
   searchText: string
+  onSearchTextChange?: (value: string) => void
 }
 
 const defaultLayout = {
@@ -386,7 +395,10 @@ const BuilderModal: React.FC<BuilderModalProps> = ({
   )
 }
 
-export const CustomReports: React.FC<Props> = ({ searchText }) => {
+export const CustomReports: React.FC<Props> = ({
+  searchText,
+  onSearchTextChange = () => undefined,
+}) => {
   const canCreate = usePermission(Permission.REPORTS_CREATE)
   const canUpdate = usePermission(Permission.REPORTS_UPDATE)
   const canDelete = usePermission(Permission.REPORTS_DELETE)
@@ -400,10 +412,21 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
   const [activeConfig, setActiveConfig] = useState<CustomReportConfig | null>(null)
   const [templateImportOpen, setTemplateImportOpen] = useState(false)
   const [builderOpen, setBuilderOpen] = useState(false)
+  const [typeFilter, setTypeFilter] = useState<'all' | 'template' | 'custom'>('all')
 
   // 使用真实 API 获取配置列表
-  const { data: configsData, isLoading, error } = useCustomReportConfigs()
-  const { data: templatesData, isLoading: templatesLoading, error: templatesError } = useReportTemplates()
+  const {
+    data: configsData,
+    isLoading,
+    error,
+    refetch: refetchConfigs,
+  } = useCustomReportConfigs()
+  const {
+    data: templatesData,
+    isLoading: templatesLoading,
+    error: templatesError,
+    refetch: refetchTemplates,
+  } = useReportTemplates()
   const createConfig = useCreateCustomReportConfig()
   const generateReport = useGenerateFromConfig()
   const deleteConfig = useDeleteCustomReportConfig()
@@ -414,12 +437,16 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
 
   // 搜索过滤
   const normalizedKeyword = searchText.trim().toLowerCase()
-  const filteredConfigs = normalizedKeyword
-    ? customConfigs.filter((config) =>
-        config.name.toLowerCase().includes(normalizedKeyword) ||
-        config.description?.toLowerCase().includes(normalizedKeyword)
-      )
-    : customConfigs
+  const filteredConfigs = customConfigs.filter((config) => {
+    const keywordMatched =
+      normalizedKeyword.length === 0 ||
+      config.name.toLowerCase().includes(normalizedKeyword) ||
+      config.description?.toLowerCase().includes(normalizedKeyword)
+
+    const typeMatched = typeFilter === 'all' || config.type === typeFilter
+
+    return keywordMatched && typeMatched
+  })
 
   // 处理生成报表
   const handleGenerate = async (configId: string) => {
@@ -540,6 +567,69 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
     setBuilderOpen(true)
   }
 
+  const handleRefresh = () => {
+    void refetchConfigs()
+    void refetchTemplates()
+    toast.success('配置列表已刷新')
+  }
+
+  const toolbar = (
+    <ReportsToolbar
+      search={{
+        value: searchText,
+        placeholder: '搜索配置名称、描述...',
+        ariaLabel: '搜索自定义报表',
+        onChange: onSearchTextChange,
+      }}
+      filters={(
+        <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as typeof typeFilter)}>
+          <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="筛选配置类型">
+            <SelectValue placeholder="配置类型" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部类型</SelectItem>
+            <SelectItem value="custom">自定义</SelectItem>
+            <SelectItem value="template">模板</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+      secondaryActions={[
+        {
+          key: 'refresh-configs',
+          label: '刷新',
+          icon: <RefreshCw className="mr-2 h-4 w-4" />,
+          onClick: handleRefresh,
+        },
+      ]}
+      primaryActions={
+        canCreate
+          ? [
+              {
+                key: 'import-template',
+                label: '导入模板',
+                icon: <Copy className="mr-2 h-4 w-4" />,
+                variant: 'outline',
+                onClick: handleImport,
+              },
+              {
+                key: 'open-builder',
+                label: '进入生成器',
+                icon: <Wand2 className="mr-2 h-4 w-4" />,
+                variant: 'outline',
+                onClick: handleOpenBuilder,
+              },
+              {
+                key: 'create-config',
+                label: '创建自定义报表',
+                icon: <Plus className="mr-2 h-4 w-4" />,
+                onClick: handleCreate,
+              },
+            ]
+          : []
+      }
+    />
+  )
+
   const modals = (
     <>
       {/* 报表预览模态框 */}
@@ -639,15 +729,8 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
   if (customConfigs.length === 0) {
     return (
       <div className="space-y-6">
-        {canCreate ? (
-          <div className="flex gap-2">
-            <Button onClick={handleCreate}>
-              <Plus className="w-4 h-4 mr-2" />
-              创建自定义报表
-            </Button>
-            <Button variant="outline" onClick={handleImport}>导入模板</Button>
-          </div>
-        ) : (
+        {toolbar}
+        {!canCreate && (
           <div className="text-sm text-muted-foreground">
             当前账号暂无创建/导入自定义报表配置权限，请联系管理员开通。
           </div>
@@ -666,14 +749,10 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
 
   return (
     <div className="space-y-6">
-      {/* 操作按钮 */}
-      {canCreate && (
-        <div className="flex gap-2">
-          <Button onClick={handleCreate}>
-            <Plus className="w-4 h-4 mr-2" />
-            创建自定义报表
-          </Button>
-          <Button variant="outline" onClick={handleImport}>导入模板</Button>
+      {toolbar}
+      {!canCreate && (
+        <div className="text-sm text-muted-foreground">
+          当前账号暂无创建/导入自定义报表配置权限，请联系管理员开通。
         </div>
       )}
 
@@ -774,7 +853,7 @@ export const CustomReports: React.FC<Props> = ({ searchText }) => {
       {filteredConfigs.length === 0 && customConfigs.length > 0 && (
         <div className="bg-muted/40 rounded-lg p-8 text-center">
           <p className="text-muted-foreground">
-            没有找到匹配 "{searchText}" 的配置
+            当前筛选条件下没有匹配的配置
           </p>
         </div>
       )}

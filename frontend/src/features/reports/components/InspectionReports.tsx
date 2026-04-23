@@ -8,7 +8,7 @@ import {
   FileText, 
   Plus, 
   Calendar, 
-  Download, 
+  Download,
   Eye, 
   Edit, 
   Trash2, 
@@ -17,7 +17,8 @@ import {
   AlertCircle,
   Play,
   CheckCircle,
-  Settings
+  Settings,
+  RefreshCw
 } from 'lucide-react'
 import {
   Card,
@@ -51,12 +52,17 @@ import { ReportPreviewModal } from './ReportPreviewModal'
 import { ReportEditModal } from './ReportEditModal'
 import { InspectionCompareModal } from './InspectionCompareModal'
 import { InspectionProblemAnalysisModal } from './InspectionProblemAnalysisModal'
+import { ReportsToolbar } from './shared/ReportsToolbar'
 
 interface Props {
   searchText: string
+  onSearchTextChange?: (value: string) => void
 }
 
-export const InspectionReports: React.FC<Props> = ({ searchText }) => {
+export const InspectionReports: React.FC<Props> = ({
+  searchText,
+  onSearchTextChange = () => undefined,
+}) => {
   const router = useRouter()
   const canCreate = usePermission(Permission.REPORTS_CREATE)
   const canUpdate = usePermission(Permission.REPORTS_UPDATE)
@@ -430,8 +436,7 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
 
   return (
     <div className="space-y-4">
-      {/* 操作栏 */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-2">
           <h3 className="text-lg font-semibold text-foreground">巡检报告管理</h3>
           <Badge variant="secondary">
@@ -443,39 +448,65 @@ export const InspectionReports: React.FC<Props> = ({ searchText }) => {
             </span>
           )}
         </div>
-        <div className="flex gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-32" aria-label="报告状态筛选">
-              <SelectValue placeholder="状态筛选" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部状态</SelectItem>
-              <SelectItem value="generating">生成中</SelectItem>
-              <SelectItem value="completed">已完成</SelectItem>
-              <SelectItem value="failed">失败</SelectItem>
-              <SelectItem value="scheduled">已计划</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={formatFilter} onValueChange={setFormatFilter}>
-            <SelectTrigger className="w-32" aria-label="报告格式筛选">
-              <SelectValue placeholder="格式筛选" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部格式</SelectItem>
-              <SelectItem value="pdf">PDF</SelectItem>
-              <SelectItem value="excel">Excel</SelectItem>
-              <SelectItem value="html">HTML</SelectItem>
-              <SelectItem value="word">Word</SelectItem>
-            </SelectContent>
-          </Select>
-          {canCreate && (
-            <Button onClick={handleGenerateReport}>
-              <Plus className="w-4 h-4 mr-2" />
-              生成报告
-            </Button>
-          )}
-        </div>
       </div>
+
+      <ReportsToolbar
+        search={{
+          value: searchText,
+          placeholder: '搜索报告标题、描述...',
+          ariaLabel: '搜索巡检报告',
+          onChange: onSearchTextChange,
+        }}
+        filters={(
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="报告状态筛选">
+                <SelectValue placeholder="状态筛选" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="generating">生成中</SelectItem>
+                <SelectItem value="completed">已完成</SelectItem>
+                <SelectItem value="failed">失败</SelectItem>
+                <SelectItem value="scheduled">已计划</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={formatFilter} onValueChange={setFormatFilter}>
+              <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="报告格式筛选">
+                <SelectValue placeholder="格式筛选" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部格式</SelectItem>
+                <SelectItem value="pdf">PDF</SelectItem>
+                <SelectItem value="excel">Excel</SelectItem>
+                <SelectItem value="html">HTML</SelectItem>
+                <SelectItem value="word">Word</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        secondaryActions={[
+          {
+            key: 'refresh-reports',
+            label: '刷新',
+            icon: <RefreshCw className="mr-2 h-4 w-4" />,
+            disabled: Boolean(isLoading),
+            onClick: () => void refetch(),
+          },
+        ]}
+        primaryActions={
+          canCreate
+            ? [
+                {
+                  key: 'generate-report',
+                  label: '生成报告',
+                  icon: <Plus className="mr-2 h-4 w-4" />,
+                  onClick: handleGenerateReport,
+                },
+              ]
+            : []
+        }
+      />
 
       {/* 快速操作卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

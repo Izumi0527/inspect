@@ -99,9 +99,7 @@ jest.mock('@/components/atoms', () => ({
       <div>{message}</div>
     </div>
   ),
-  DateRangePicker: () => <div />,
-  QuickDateRangeButtons: () => <div />,
-  MultiSelect: () => <div />,
+  SmartDateRangePicker: () => <button type="button">日期范围选择器</button>,
   BarChartComponent: () => <div />,
   PieChartComponent: () => <div />,
 
@@ -109,6 +107,34 @@ jest.mock('@/components/atoms', () => ({
     open ? <div>{children}</div> : null,
   SimpleInput: (props: React.ComponentProps<'input'>) => <input {...props} />,
   TextArea: (props: React.ComponentProps<'textarea'>) => <textarea {...props} />,
+}))
+
+jest.mock('@/components/ui/select', () => ({
+  MultiSelect: ({
+    triggerId,
+    ariaLabel,
+    placeholder,
+  }: {
+    triggerId?: string
+    ariaLabel?: string
+    placeholder?: string
+  }) => (
+    <button id={triggerId} type="button" aria-label={ariaLabel}>
+      {placeholder}
+    </button>
+  ),
+  Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectTrigger: ({
+    children,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type="button" {...props}>
+      {children}
+    </button>
+  ),
+  SelectValue: ({ placeholder }: { placeholder?: string }) => <>{placeholder ?? null}</>,
+  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectItem: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
 describe('reports 权限控制（P1）', () => {

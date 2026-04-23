@@ -149,23 +149,18 @@ describe('StatisticsReports 筛选参数透传', () => {
     const user = userEvent.setup()
     render(<StatisticsReports searchText="" />)
 
-    await user.click(screen.getByRole('button', { name: '展开' }))
-    await user.click(screen.getByRole('button', { name: '设备位置' }))
+    await user.click(screen.getByRole('button', { name: '筛选设备位置' }))
     await user.click(screen.getByRole('button', { name: 'A区' }))
 
     await waitFor(() => {
       expect(mockUseKPIData).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          startDate: '2026-03-20',
-          endDate: '2026-04-19',
           locations: ['A区'],
           comparisonPeriod: 'previous_period',
         })
       )
       expect(mockUseRankings).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          startDate: '2026-03-20',
-          endDate: '2026-04-19',
           locations: ['A区'],
           rankingType: 'performance',
           topN: 10,
@@ -179,18 +174,15 @@ describe('StatisticsReports 筛选参数透传', () => {
     const user = userEvent.setup()
     render(<StatisticsReports searchText="" />)
 
-    await user.click(screen.getByRole('button', { name: '展开' }))
-    await user.click(screen.getByRole('button', { name: '设备类型' }))
+    await user.click(screen.getByRole('button', { name: '筛选设备类型' }))
     await user.click(screen.getByRole('button', { name: 'switch' }))
-    await user.click(screen.getByRole('button', { name: '设备位置' }))
+    await user.click(screen.getByRole('button', { name: '筛选设备位置' }))
     await user.click(screen.getByRole('button', { name: 'B区' }))
     await user.click(screen.getByRole('button', { name: '生成统计报表' }))
 
     await waitFor(() => {
       expect(mockGenerateStatisticsReport).toHaveBeenCalledWith(
         expect.objectContaining({
-          startDate: '2026-03-20',
-          endDate: '2026-04-19',
           deviceTypes: ['switch'],
           locations: ['B区'],
           format: 'pdf',
@@ -206,7 +198,6 @@ describe('StatisticsReports 筛选参数透传', () => {
     const user = userEvent.setup()
     render(<StatisticsReports searchText="" />)
 
-    await user.click(screen.getByRole('button', { name: '展开' }))
     await user.click(screen.getByRole('button', { name: '刷新数据' }))
 
     expect(mockRefetchStats).toHaveBeenCalledTimes(1)

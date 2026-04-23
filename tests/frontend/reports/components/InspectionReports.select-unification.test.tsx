@@ -214,6 +214,24 @@ describe('InspectionReports 下拉规范收敛', () => {
     expect(screen.getByRole('combobox', { name: '报告格式筛选' })).toBeInTheDocument()
   })
 
+  it('应渲染审计日志同款的紧凑搜索框与筛选控件', () => {
+    render(
+      <InspectionReports
+        searchText=""
+        onSearchTextChange={jest.fn()}
+      />
+    )
+
+    const searchInput = screen.getByRole('textbox', { name: '搜索巡检报告' })
+    expect(searchInput).toHaveClass('pl-10')
+    expect(searchInput).toHaveClass('h-9')
+    expect(searchInput).toHaveClass('text-sm')
+    expect(screen.getByRole('combobox', { name: '报告状态筛选' })).toHaveClass('h-9')
+    expect(screen.getByRole('combobox', { name: '报告状态筛选' })).toHaveClass('text-sm')
+    expect(screen.getByRole('combobox', { name: '报告格式筛选' })).toHaveClass('h-9')
+    expect(screen.getByRole('combobox', { name: '报告格式筛选' })).toHaveClass('text-sm')
+  })
+
   it('切换状态筛选后，应透传到 useReports 查询参数', async () => {
     const user = userEvent.setup()
     render(<InspectionReports searchText="" />)

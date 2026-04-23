@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { TrendingUp, Calendar, AlertTriangle } from 'lucide-react'
+import { TrendingUp, Calendar, AlertTriangle, RefreshCw, FileText } from 'lucide-react'
 import {
   Card,
   CardHeader,
@@ -22,14 +22,19 @@ import { Loading } from '@/components/atoms/loading'
 import toast from 'react-hot-toast'
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 import { downloadWithAuth } from '@/utils/download'
+import { ReportsToolbar } from './shared/ReportsToolbar'
 
 interface Props {
   searchText: string
+  onSearchTextChange?: (value: string) => void
 }
 
 type TrendChartRow = { date: string } & Record<string, number | string>
 
-export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
+export const TrendAnalysis: React.FC<Props> = ({
+  searchText,
+  onSearchTextChange = () => undefined,
+}) => {
   const canCreate = usePermission(Permission.REPORTS_CREATE)
   const [timeRange, setTimeRange] = useState('7d')
   const [metric, setMetric] = useState('availability')
@@ -188,37 +193,59 @@ export const TrendAnalysis: React.FC<Props> = ({ searchText }) => {
 
   return (
     <div className="space-y-6">
-      {/* 控制面板 */}
-      <div className="flex gap-4">
-        <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger className="w-32" aria-label="趋势时间范围">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7d">最近7天</SelectItem>
-            <SelectItem value="30d">最近30天</SelectItem>
-            <SelectItem value="90d">最近90天</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={metric} onValueChange={setMetric}>
-          <SelectTrigger className="w-32" aria-label="趋势指标">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="availability">可用性</SelectItem>
-            <SelectItem value="performance">性能</SelectItem>
-            <SelectItem value="errors">错误数</SelectItem>
-          </SelectContent>
-        </Select>
-        {canCreate && (
-          <Button
-            onClick={handleGenerateReport}
-            disabled={generateReportMutation.isPending}
-          >
-            {generateReportMutation.isPending ? '生成中...' : '生成趋势报告'}
-          </Button>
+      <ReportsToolbar
+        search={{
+          value: searchText,
+          placeholder: '搜索趋势数据...',
+          ariaLabel: '搜索趋势分析',
+          onChange: onSearchTextChange,
+        }}
+        filters={(
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={timeRange} onValueChange={setTimeRange}>
+              <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="趋势时间范围">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7d">最近7天</SelectItem>
+                <SelectItem value="30d">最近30天</SelectItem>
+                <SelectItem value="90d">最近90天</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={metric} onValueChange={setMetric}>
+              <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="趋势指标">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="availability">可用性</SelectItem>
+                <SelectItem value="performance">性能</SelectItem>
+                <SelectItem value="errors">错误数</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         )}
-      </div>
+        secondaryActions={[
+          {
+            key: 'refresh-trends',
+            label: '刷新',
+            icon: <RefreshCw className="mr-2 h-4 w-4" />,
+            onClick: () => void refetch(),
+          },
+        ]}
+        primaryActions={
+          canCreate
+            ? [
+                {
+                  key: 'generate-trend-report',
+                  label: '生成趋势报告',
+                  icon: <FileText className="mr-2 h-4 w-4" />,
+                  loading: generateReportMutation.isPending,
+                  onClick: () => void handleGenerateReport(),
+                },
+              ]
+            : []
+        }
+      />
 
       {/* 趋势图表 */}
       <Card>

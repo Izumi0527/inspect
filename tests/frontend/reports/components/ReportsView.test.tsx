@@ -44,8 +44,19 @@ jest.mock('next/navigation', () => ({
 }))
 
 jest.mock('@/features/reports/components/InspectionReports', () => ({
-  InspectionReports: ({ searchText }: { searchText: string }) => (
-    <div>巡检报告内容:{searchText}</div>
+  InspectionReports: ({
+    searchText,
+    onSearchTextChange,
+  }: {
+    searchText: string
+    onSearchTextChange?: (value: string) => void
+  }) => (
+    <div>
+      <div>巡检报告内容:{searchText}</div>
+      <button type="button" onClick={() => onSearchTextChange?.('核心设备')}>
+        巡检页搜索
+      </button>
+    </div>
   ),
 }))
 
@@ -117,17 +128,12 @@ describe('ReportsView', () => {
     expect(mockReplace).toHaveBeenCalledWith('/reports?tab=inspection')
   })
 
-  it('报表搜索框应提供稳定的 name 属性，避免浏览器上报表单字段缺失标识', () => {
+  it('应将搜索状态下沉到子页面，便于四个子页复用统一工具栏', async () => {
+    const user = userEvent.setup()
     render(<ReportsView />)
 
-    expect(screen.getByPlaceholderText('搜索报表...')).toHaveAttribute('name', 'reports-search')
-  })
+    await user.click(screen.getByRole('button', { name: '巡检页搜索' }))
 
-  it('报表搜索框应绑定显式标签，避免浏览器上报无标签字段', () => {
-    render(<ReportsView />)
-
-    const label = screen.getByText('搜索报表', { selector: 'label' })
-    expect(label).toHaveAttribute('for', 'reports-search-input')
-    expect(screen.getByLabelText('搜索报表')).toHaveAttribute('id', 'reports-search-input')
+    expect(screen.getByText('巡检报告内容:核心设备')).toBeInTheDocument()
   })
 })

@@ -187,7 +187,7 @@ describe('CustomReports 自定义能力补全', () => {
 
     render(<CustomReports searchText="" />)
 
-    await user.click(screen.getByRole('button', { name: '进入生成器' }))
+    await user.click(screen.getAllByRole('button', { name: '进入生成器' })[0])
 
     expect(screen.getByRole('heading', { name: '自定义报表生成器' })).toBeInTheDocument()
     expect(screen.getByLabelText('报表名称 *')).toBeInTheDocument()

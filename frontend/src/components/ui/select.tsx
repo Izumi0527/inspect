@@ -163,6 +163,11 @@ export interface MultiSelectProps {
   className?: string
   maxDisplayItems?: number
   triggerId?: string
+  ariaLabel?: string
+  triggerClassName?: string
+  dropdownClassName?: string
+  itemClassName?: string
+  clearButtonClassName?: string
 }
 
 export const MultiSelect: React.FC<MultiSelectProps> = ({
@@ -173,6 +178,11 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
   className,
   maxDisplayItems = 3,
   triggerId,
+  ariaLabel,
+  triggerClassName,
+  dropdownClassName,
+  itemClassName,
+  clearButtonClassName,
 }) => {
   const [isOpen, setIsOpen] = React.useState(false)
 
@@ -203,13 +213,15 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
         whileTap={{ scale: 0.99 }}
         id={triggerId}
         type="button"
+        aria-label={ariaLabel}
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           'flex h-12 w-full items-center justify-between rounded-xl border border-border/50 bg-card/80 px-4 py-3 text-left text-base text-foreground backdrop-blur-lg',
           'placeholder:text-muted-foreground',
           'focus:border-primary focus:bg-background/90 focus:outline-none focus:ring-2 focus:ring-ring/30',
           'disabled:cursor-not-allowed disabled:opacity-50',
-          'hover:border-border'
+          'hover:border-border',
+          triggerClassName
         )}
       >
         <span className={cn('block truncate', value.length === 0 && 'text-muted-foreground')}>
@@ -225,7 +237,10 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
-          className="absolute z-50 mt-1 w-full rounded-xl border border-border/30 bg-popover/95 shadow-2xl backdrop-blur-xl"
+          className={cn(
+            'absolute z-50 mt-1 w-full rounded-xl border border-border/30 bg-popover/95 shadow-2xl backdrop-blur-xl',
+            dropdownClassName
+          )}
         >
           <div className="max-h-60 overflow-auto p-1">
             {options.map((option) => (
@@ -237,7 +252,8 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                 className={cn(
                   'relative flex w-full items-center space-x-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
                   'disabled:cursor-not-allowed disabled:opacity-50',
-                  'hover:bg-accent/40'
+                  'hover:bg-accent/40',
+                  itemClassName
                 )}
               >
                 <div
@@ -260,7 +276,10 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
               <button
                 type="button"
                 onClick={() => onChange([])}
-                className="w-full rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                className={cn(
+                  'w-full rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground',
+                  clearButtonClassName
+                )}
               >
                 清空选择
               </button>

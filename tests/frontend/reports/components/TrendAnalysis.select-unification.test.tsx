@@ -178,6 +178,24 @@ describe('TrendAnalysis 下拉规范收敛', () => {
     expect(screen.getByRole('combobox', { name: '趋势指标' })).toBeInTheDocument()
   })
 
+  it('应渲染审计日志同款的紧凑搜索框与筛选控件', () => {
+    render(
+      <TrendAnalysis
+        searchText=""
+        onSearchTextChange={jest.fn()}
+      />
+    )
+
+    const searchInput = screen.getByRole('textbox', { name: '搜索趋势分析' })
+    expect(searchInput).toHaveClass('pl-10')
+    expect(searchInput).toHaveClass('h-9')
+    expect(searchInput).toHaveClass('text-sm')
+    expect(screen.getByRole('combobox', { name: '趋势时间范围' })).toHaveClass('h-9')
+    expect(screen.getByRole('combobox', { name: '趋势时间范围' })).toHaveClass('text-sm')
+    expect(screen.getByRole('combobox', { name: '趋势指标' })).toHaveClass('h-9')
+    expect(screen.getByRole('combobox', { name: '趋势指标' })).toHaveClass('text-sm')
+  })
+
   it('切换指标后，应驱动图表线条配置切换', async () => {
     const user = userEvent.setup()
     render(<TrendAnalysis searchText="" />)
