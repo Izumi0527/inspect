@@ -56,6 +56,7 @@ export interface SettingsBannerDescriptor {
 }
 
 export interface SettingsToolbarDescriptor {
+  layout?: 'split' | 'start' | 'end'
   search?: {
     value: string
     placeholder?: string
@@ -73,6 +74,7 @@ export interface SettingsTabCapabilities {
   dirty?: boolean
   saving?: boolean
   blockLeave?: boolean
+  headerLayout?: 'stacked' | 'inline'
   stats?: SettingsStatCardDescriptor[]
   toolbar?: SettingsToolbarDescriptor
   banners?: SettingsBannerDescriptor[]

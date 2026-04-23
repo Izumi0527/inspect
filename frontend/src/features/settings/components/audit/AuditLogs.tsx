@@ -157,6 +157,7 @@ export function AuditLogs() {
 
   const toolbar = useMemo(
     () => ({
+      layout: 'end' as const,
       search: {
         value: keyword,
         placeholder: '搜索日志...',
@@ -223,6 +224,7 @@ export function AuditLogs() {
   }, [stats])
 
   useSettingsTabCapabilities('audit', {
+    headerLayout: 'inline',
     stats: statsDescriptors,
     toolbar,
     primaryActions,

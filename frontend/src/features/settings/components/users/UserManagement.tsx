@@ -127,6 +127,7 @@ export function UserManagement() {
         label: '添加用户',
         icon: <UserPlus className="w-4 h-4 mr-2" />,
         disabled: Boolean(!canCreate || isRolesLoading),
+        loading: Boolean(isRolesLoading),
         onClick: () => setCreateOpen(true),
       },
     ],
@@ -162,6 +163,7 @@ export function UserManagement() {
 
   const toolbar = useMemo(
     () => ({
+      layout: 'end' as const,
       search: {
         value: keyword,
         placeholder: '搜索用户名、邮箱...',
@@ -184,6 +186,7 @@ export function UserManagement() {
   }, [stats])
 
   useSettingsTabCapabilities('users', {
+    headerLayout: 'inline',
     stats: canRead ? statsDescriptors : [],
     toolbar: canRead ? toolbar : undefined,
     primaryActions: canRead ? primaryActions : undefined,

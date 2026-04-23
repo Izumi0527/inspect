@@ -29,7 +29,6 @@ interface TabConfig {
   key: TabType
   label: string
   icon: IconComponent
-  description: string
 }
 
 export const ReportsView: React.FC = () => {
@@ -72,26 +71,22 @@ export const ReportsView: React.FC = () => {
     {
       key: 'inspection',
       label: '巡检报告',
-      icon: FileText,
-      description: '生成详细的巡检报告和分析'
+      icon: FileText
     },
     {
       key: 'trends',
       label: '趋势分析',
-      icon: TrendingUp,
-      description: '设备性能趋势和预测分析'
+      icon: TrendingUp
     },
     {
       key: 'statistics',
       label: '统计报表',
-      icon: BarChart3,
-      description: '多维度数据统计和KPI分析'
+      icon: BarChart3
     },
     {
       key: 'custom',
       label: '自定义报表',
-      icon: Settings,
-      description: '灵活的自定义报表生成器'
+      icon: Settings
     }
   ]
 
@@ -185,13 +180,6 @@ export const ReportsView: React.FC = () => {
                 />
               </div>
             </div>
-          </div>
-
-          {/* 当前标签描述 */}
-          <div className="pt-2">
-            <p className="text-sm text-muted-foreground">
-              {tabs.find(tab => tab.key === activeTab)?.description}
-            </p>
           </div>
         </CardHeader>
 

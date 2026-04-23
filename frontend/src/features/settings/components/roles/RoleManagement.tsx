@@ -92,6 +92,7 @@ export function RoleManagement() {
 
   const toolbar = useMemo(
     () => ({
+      layout: 'end' as const,
       search: {
         value: keyword,
         placeholder: '搜索角色名称/显示名称/描述...',
@@ -141,6 +142,7 @@ export function RoleManagement() {
   }, [roles])
 
   useSettingsTabCapabilities('roles', {
+    headerLayout: 'inline',
     stats: canRead ? statsDescriptors : [],
     toolbar: canRead ? toolbar : undefined,
     primaryActions: canRead ? primaryActions : undefined,

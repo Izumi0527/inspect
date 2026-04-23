@@ -14,9 +14,8 @@ import { SettingsShellProvider } from '@/features/settings/context/SettingsShell
 import { useSettingsShellState } from '@/features/settings/hooks/useSettingsShellState'
 import { useSettingsLeaveGuard } from '@/features/settings/hooks/useSettingsLeaveGuard'
 import { SettingsLeaveGuard } from '@/features/settings/shell/SettingsLeaveGuard'
+import { SettingsHeaderRegion } from '@/features/settings/shell/SettingsHeaderRegion'
 import { SettingsTabNav } from '@/features/settings/shell/SettingsTabNav'
-import { SettingsToolbar } from '@/features/settings/shell/SettingsToolbar'
-import { SettingsStatsStrip } from '@/features/settings/shell/SettingsStatsStrip'
 import { SettingsStatusBannerStack } from '@/features/settings/shell/SettingsStatusBannerStack'
 
 export const SettingsPageShell: React.FC = () => {
@@ -115,9 +114,9 @@ const SettingsPageShellLayout: React.FC<{
             banners={activeTabCapabilities?.banners ?? []}
           />
 
-          <SettingsStatsStrip stats={activeTabCapabilities?.stats ?? []} />
-
-          <SettingsToolbar
+          <SettingsHeaderRegion
+            headerLayout={activeTabCapabilities?.headerLayout}
+            stats={activeTabCapabilities?.stats ?? []}
             toolbar={activeTabCapabilities?.toolbar}
             primaryActions={activeTabCapabilities?.primaryActions}
             secondaryActions={activeTabCapabilities?.secondaryActions}
