@@ -102,8 +102,8 @@ export const SettingsTabNav: React.FC<SettingsTabNavProps> = ({
               className={cn(
                 'relative flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
                 isActive
-                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 shadow-sm'
-                  : 'text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400 hover:bg-muted/40'
+                  ? 'bg-primary/10 text-primary shadow-sm dark:bg-primary/12'
+                  : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground'
               )}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -112,7 +112,7 @@ export const SettingsTabNav: React.FC<SettingsTabNavProps> = ({
               {tab.label}
               {isActive && (
                 <motion.div
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400 rounded-full"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-primary"
                   layoutId="activeTabIndicator"
                 />
               )}

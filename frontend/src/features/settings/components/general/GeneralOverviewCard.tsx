@@ -22,7 +22,7 @@ const formatLabelMap: Record<GeneralOverviewCardProps['defaultFormat'], string> 
 
 const themeLabelMap: Record<GeneralOverviewCardProps['theme'], string> = {
   light: '浅色',
-  dark: '深色',
+  dark: '暗色',
   auto: '跟随系统',
 }
 
@@ -64,29 +64,29 @@ export const GeneralOverviewCard: React.FC<GeneralOverviewCardProps> = ({
             title="当前时区"
             value={timezone}
             icon={Globe2}
-            iconClassName="text-blue-600 dark:text-blue-400"
-            className="bg-background/80"
+            iconClassName="text-sky-600 dark:text-sky-300"
+            className="border-border/60 bg-background/80"
           />
           <CompactStatCard
             title="默认并发任务数"
             value={maxConcurrentTasks}
             icon={ScanSearch}
-            iconClassName="text-green-600 dark:text-green-400"
-            className="bg-background/80"
+            iconClassName="text-emerald-600 dark:text-emerald-300"
+            className="border-border/60 bg-background/80"
           />
           <CompactStatCard
             title="默认超时时间"
             value={`${defaultTimeout}s`}
             icon={Clock3}
-            iconClassName="text-amber-600 dark:text-amber-400"
-            className="bg-background/80"
+            iconClassName="text-amber-600 dark:text-amber-300"
+            className="border-border/60 bg-background/80"
           />
           <CompactStatCard
             title="默认导出格式"
             value={formatLabelMap[defaultFormat]}
             icon={FileText}
-            iconClassName="text-purple-600 dark:text-purple-400"
-            className="bg-background/80"
+            iconClassName="text-slate-600 dark:text-slate-300"
+            className="border-border/60 bg-background/80"
           />
         </div>
 

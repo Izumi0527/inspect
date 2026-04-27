@@ -7,7 +7,6 @@ import { ThemeProvider } from 'next-themes'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '@/lib/contexts/auth-context'
 import { SidebarProvider } from '@/lib/contexts/sidebar-context'
-import { ThemeSettingsProvider } from '@/lib/contexts/theme-context'
 import { ApiClientError } from '@/lib/api-client'
 import httpInterceptor from '@/services/httpInterceptor'
 import { createLogger } from '@/lib/logger'
@@ -84,26 +83,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange={false}
     >
-      <ThemeSettingsProvider>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <WebSocketBootstrap />
-            <SidebarProvider>
-              {children}
-              <Toaster
-                position="top-right"
-                toastOptions={{
-                  duration: 4000,
-                  className:
-                    'backdrop-blur-xl rounded-2xl border border-border/40 bg-card/90 text-foreground ' +
-                    'dark:border-border/50 dark:bg-card/90 dark:text-foreground',
-                }}
-              />
-              <ReactQueryDevtools initialIsOpen={false} />
-            </SidebarProvider>
-          </AuthProvider>
-        </QueryClientProvider>
-      </ThemeSettingsProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <WebSocketBootstrap />
+          <SidebarProvider>
+            {children}
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                duration: 4000,
+                className:
+                  'rounded-2xl border border-border/40 bg-card/90 text-foreground backdrop-blur-xl',
+              }}
+            />
+            <ReactQueryDevtools initialIsOpen={false} />
+          </SidebarProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </ThemeProvider>
   )
 }

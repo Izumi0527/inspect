@@ -22,13 +22,21 @@ export interface CompactStatCardProps {
 const deriveIconBgClassName = (iconClassName?: string) => {
   const value = iconClassName ?? ''
 
-  if (value.includes('text-blue')) return 'bg-blue-100 dark:bg-blue-900/30'
-  if (value.includes('text-green')) return 'bg-green-100 dark:bg-green-900/30'
-  if (value.includes('text-red')) return 'bg-red-100 dark:bg-red-900/30'
-  if (value.includes('text-yellow')) return 'bg-yellow-100 dark:bg-yellow-900/30'
-  if (value.includes('text-purple')) return 'bg-purple-100 dark:bg-purple-900/30'
-  if (value.includes('text-orange')) return 'bg-orange-100 dark:bg-orange-900/30'
-  if (value.includes('text-cyan')) return 'bg-cyan-100 dark:bg-cyan-900/30'
+  if (value.includes('text-blue') || value.includes('text-sky')) {
+    return 'bg-sky-100/80 dark:bg-sky-500/12'
+  }
+  if (value.includes('text-green') || value.includes('text-emerald')) {
+    return 'bg-emerald-100/80 dark:bg-emerald-500/12'
+  }
+  if (value.includes('text-red')) return 'bg-red-100/80 dark:bg-red-500/12'
+  if (value.includes('text-yellow') || value.includes('text-amber')) {
+    return 'bg-amber-100/80 dark:bg-amber-500/12'
+  }
+  if (value.includes('text-purple') || value.includes('text-slate')) {
+    return 'bg-slate-200/80 dark:bg-slate-400/12'
+  }
+  if (value.includes('text-orange')) return 'bg-orange-100/80 dark:bg-orange-500/12'
+  if (value.includes('text-cyan')) return 'bg-cyan-100/80 dark:bg-cyan-500/12'
   if (value.includes('text-gray')) return 'bg-muted/60'
 
   return 'bg-muted/60'
@@ -48,7 +56,7 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
   changeHint,
   trend = 'stable',
   icon: Icon,
-  iconClassName = 'text-blue-600 dark:text-blue-400',
+  iconClassName = 'text-sky-600 dark:text-sky-300',
   iconBgClassName,
   valueClassName,
   className,
@@ -56,8 +64,8 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
   ariaLabel,
 }) => {
   const trendConfig = {
-    up: { icon: '↗', className: 'text-green-600 dark:text-green-400' },
-    down: { icon: '↘', className: 'text-red-600 dark:text-red-400' },
+    up: { icon: '↗', className: 'text-emerald-600 dark:text-emerald-300' },
+    down: { icon: '↘', className: 'text-red-600 dark:text-red-300' },
     stable: { icon: '→', className: 'text-muted-foreground' },
   } as const
 
@@ -119,7 +127,7 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
   return (
     <button
       type="button"
-      className="block w-full text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+      className="block w-full rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       onClick={onClick}
       aria-label={ariaLabel ?? deriveAriaLabel(title, value)}
     >

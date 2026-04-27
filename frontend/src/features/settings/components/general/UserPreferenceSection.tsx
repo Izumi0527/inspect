@@ -13,7 +13,7 @@ interface Props {
 
 const themeOptions = [
   { value: 'light', label: '浅色模式' },
-  { value: 'dark', label: '深色模式' },
+  { value: 'dark', label: '暗色模式' },
   { value: 'auto', label: '跟随系统' },
 ]
 
@@ -40,7 +40,7 @@ export function UserPreferenceSection({ data, onChange }: Props) {
 
       <div className="mt-6 space-y-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <ConfigItem label="主题模式" description="选择界面的主题外观" required>
+          <ConfigItem label="主题" description="选择界面的主题外观" required>
             <ConfigSelect
               value={data.theme}
               options={themeOptions}

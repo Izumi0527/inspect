@@ -15,25 +15,25 @@ const toneConfig = {
   info: {
     Icon: Info,
     className:
-      'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800/60 dark:bg-blue-900/20 dark:text-blue-100',
-    iconClassName: 'text-blue-600 dark:text-blue-300',
+      'border-sky-200/80 bg-sky-50/80 text-sky-900 dark:border-sky-400/20 dark:bg-card/92 dark:text-sky-100',
+    iconClassName: 'text-sky-600 dark:text-sky-300',
   },
   success: {
     Icon: CheckCircle,
     className:
-      'border-green-200 bg-green-50 text-green-900 dark:border-green-800/60 dark:bg-green-900/20 dark:text-green-100',
-    iconClassName: 'text-green-600 dark:text-green-300',
+      'border-emerald-200/80 bg-emerald-50/80 text-emerald-900 dark:border-emerald-400/20 dark:bg-card/92 dark:text-emerald-100',
+    iconClassName: 'text-emerald-600 dark:text-emerald-300',
   },
   warning: {
     Icon: AlertTriangle,
     className:
-      'border-yellow-200 bg-yellow-50 text-yellow-900 dark:border-yellow-800/60 dark:bg-yellow-900/20 dark:text-yellow-100',
-    iconClassName: 'text-yellow-700 dark:text-yellow-300',
+      'border-amber-200/80 bg-amber-50/80 text-amber-900 dark:border-amber-400/20 dark:bg-card/92 dark:text-amber-100',
+    iconClassName: 'text-amber-700 dark:text-amber-300',
   },
   danger: {
     Icon: AlertCircle,
     className:
-      'border-red-200 bg-red-50 text-red-900 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-100',
+      'border-red-200/80 bg-red-50/80 text-red-900 dark:border-red-400/20 dark:bg-card/92 dark:text-red-100',
     iconClassName: 'text-red-600 dark:text-red-300',
   },
 } as const

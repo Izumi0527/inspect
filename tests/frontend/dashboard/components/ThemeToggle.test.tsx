@@ -3,7 +3,6 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { ThemeToggle } from '@/components/molecules/ThemeToggle'
-import { ThemeSettingsProvider } from '@/lib/contexts/theme-context'
 
 const mockSetTheme = jest.fn()
 
@@ -18,42 +17,31 @@ jest.mock('next-themes', () => ({
 describe('ThemeToggle', () => {
   afterEach(() => {
     jest.clearAllMocks()
-    window.localStorage.clear()
-    document.documentElement.removeAttribute('data-dark-variant')
   })
 
-  it('应展示深色风格选项并包含 VS Code Dark Modern', async () => {
+  it('应展示主题入口并提供统一的暗色主题选项', async () => {
     const user = userEvent.setup()
-    render(
-      <ThemeSettingsProvider>
-        <ThemeToggle />
-      </ThemeSettingsProvider>
-    )
+    render(<ThemeToggle />)
 
-    const button = await screen.findByRole('button', { name: '主题设置' })
+    const button = await screen.findByRole('button', { name: '主题' })
     await waitFor(() => expect(button).not.toBeDisabled())
 
     await user.click(button)
 
-    expect(screen.getByText('深色风格')).toBeInTheDocument()
-    expect(screen.getByText('VS Code Dark Modern')).toBeInTheDocument()
+    expect(screen.getByText('暗色主题')).toBeInTheDocument()
+    expect(screen.queryByText('深色风格')).not.toBeInTheDocument()
+    expect(screen.queryByText('VS Code Dark Modern')).not.toBeInTheDocument()
   })
 
-  it('切换深色风格后应写入 localStorage 并更新 html 属性', async () => {
+  it('切换暗色主题后应调用 next-themes 的 setTheme', async () => {
     const user = userEvent.setup()
-    render(
-      <ThemeSettingsProvider>
-        <ThemeToggle />
-      </ThemeSettingsProvider>
-    )
+    render(<ThemeToggle />)
 
-    const button = await screen.findByRole('button', { name: '主题设置' })
+    const button = await screen.findByRole('button', { name: '主题' })
     await waitFor(() => expect(button).not.toBeDisabled())
     await user.click(button)
 
-    await user.click(screen.getByText('经典紫色风格'))
-
-    expect(window.localStorage.getItem('theme.darkVariant')).toBe('legacy')
-    expect(document.documentElement.dataset.darkVariant).toBe('legacy')
+    await user.click(screen.getByText('暗色主题'))
+    expect(mockSetTheme).toHaveBeenCalledWith('dark')
   })
 })
