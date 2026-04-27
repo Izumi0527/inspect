@@ -62,8 +62,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const visibleNavItems = navItems.filter((item) => navVisibilityByHref[item.href] ?? true)
 
   return (
-    <div className={`fixed inset-y-0 left-0 z-50 ${isOpen ? 'w-64' : 'w-20'} bg-card shadow-lg dark:border-r dark:border-border transform transition-all duration-300`}>
-      <div className="flex items-center justify-between p-4 border-b dark:border-border">
+    <div
+      className={`fixed inset-y-0 left-0 z-50 ${isOpen ? 'w-64' : 'w-20'} transform border-r border-border/60 bg-card shadow-lg transition-all duration-300`}
+    >
+      <div className="flex items-center justify-between border-b border-border/60 p-4">
         {isOpen && (
           <h1 className="text-xl font-bold bg-gradient-to-r from-teal-600 to-cyan-500 bg-clip-text text-transparent">
             巡检系统
@@ -75,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={onToggle}
           aria-label={isOpen ? '收起侧边栏' : '展开侧边栏'}
           title={isOpen ? '收起侧边栏' : '展开侧边栏'}
-          className="hover:bg-gray-100 dark:hover:bg-accent/10"
+          className="text-foreground/80 hover:bg-muted/70 hover:text-foreground"
         >
           <Menu className="w-5 h-5" />
         </Button>
@@ -89,8 +91,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Link
               key={item.name}
               href={item.href}
-              className={`flex items-center px-4 py-3 text-gray-700 dark:text-foreground hover:bg-blue-50 dark:hover:bg-accent/20 hover:text-blue-600 dark:hover:text-primary transition-colors ${
-                isActive ? 'bg-blue-50 dark:bg-accent/20 text-blue-600 dark:text-primary border-r-2 border-blue-600 dark:border-primary' : ''
+              className={`flex items-center px-4 py-3 transition-colors ${
+                isActive
+                  ? 'border-r-2 border-primary bg-primary/12 text-primary'
+                  : 'text-foreground/88 hover:bg-muted/70 hover:text-foreground'
               }`}
             >
               <item.icon className="w-6 h-6 flex-shrink-0" />

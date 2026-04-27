@@ -165,8 +165,8 @@ export const InspectionView: React.FC = () => {
                       relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
                       transition-all duration-200
                       ${isActive
-                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm'
-                        : 'text-muted-foreground hover:text-blue-600 dark:hover:text-blue-400 hover:bg-muted/40'
+                        ? 'bg-primary/10 text-primary shadow-sm dark:bg-primary/12'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
                       }
                     `}
                     whileHover={{ scale: 1.02 }}
@@ -176,7 +176,7 @@ export const InspectionView: React.FC = () => {
                     {tab.label}
                     {isActive && (
                       <motion.div
-                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full"
+                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full"
                         layoutId="activeTabIndicator"
                       />
                     )}

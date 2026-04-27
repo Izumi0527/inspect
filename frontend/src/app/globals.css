@@ -5,6 +5,9 @@
 /* 1. 导入 Tailwind CSS v4 */
 @import "tailwindcss";
 
+/* 1.1 使用 html.dark 驱动 Tailwind v4 的 dark:* 变体 */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* 2. 插件配置 */
 @plugin "@tailwindcss/forms";
 @plugin "@tailwindcss/typography";

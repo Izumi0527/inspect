@@ -8,11 +8,11 @@ dotenv.config({ path: '.env.test' })
  * @see https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: '../tests/frontend/e2e',
   
   /* Global setup and teardown */
-  globalSetup: require.resolve('./tests/e2e/setup/global-setup'),
-  globalTeardown: require.resolve('./tests/e2e/setup/global-teardown'),
+  globalSetup: require.resolve('../tests/frontend/e2e/setup/global-setup'),
+  globalTeardown: require.resolve('../tests/frontend/e2e/setup/global-teardown'),
   
   /* Run tests in files in parallel */
   fullyParallel: false, // Run sequentially for E2E tests to avoid conflicts
