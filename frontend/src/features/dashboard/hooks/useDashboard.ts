@@ -5,6 +5,16 @@ import {
   searchDevices
 } from '../api/dashboard.api'
 
+const DASHBOARD_REQUEST_DEDUPE_WINDOW_MS = 1500
+
+let dashboardDataInFlight: Promise<DashboardData> | null = null
+let dashboardDataSnapshot:
+  | {
+      data: DashboardData
+      resolvedAt: number
+    }
+  | null = null
+
 type DeviceSearchResult = {
   id: string
   name: string
@@ -21,6 +31,34 @@ const mapDeviceSearchResult = (item: Record<string, unknown>, index: number): De
   status: typeof item.status === 'string' ? item.status : 'unknown',
 })
 
+const requestDashboardData = async (force: boolean = false): Promise<DashboardData> => {
+  if (!force && dashboardDataSnapshot) {
+    const elapsed = Date.now() - dashboardDataSnapshot.resolvedAt
+    if (elapsed <= DASHBOARD_REQUEST_DEDUPE_WINDOW_MS) {
+      return dashboardDataSnapshot.data
+    }
+  }
+
+  if (!force && dashboardDataInFlight) {
+    return dashboardDataInFlight
+  }
+
+  const request = fetchDashboardData()
+    .then((dashboardData) => {
+      dashboardDataSnapshot = {
+        data: dashboardData,
+        resolvedAt: Date.now(),
+      }
+      return dashboardData
+    })
+    .finally(() => {
+      dashboardDataInFlight = null
+    })
+
+  dashboardDataInFlight = request
+  return request
+}
+
 // Dashboard数据管理hook
 export function useDashboardData() {
   const [data, setData] = useState<DashboardData | null>(null)
@@ -33,7 +71,7 @@ export function useDashboardData() {
     dataRef.current = data
   }, [data])
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (force: boolean = false) => {
     const initialLoad = dataRef.current === null
     try {
       if (initialLoad) {
@@ -42,7 +80,7 @@ export function useDashboardData() {
       } else {
         setIsRefreshing(true)
       }
-      const dashboardData = await fetchDashboardData()
+      const dashboardData = await requestDashboardData(force)
       setData(dashboardData)
     } catch (err) {
       if (initialLoad) {
@@ -64,7 +102,7 @@ export function useDashboardData() {
     try {
       setIsRefreshing(true)
       // 统一使用 fetchDashboardData() 保证数据一致性
-      const dashboardData = await fetchDashboardData()
+      const dashboardData = await requestDashboardData(true)
       setData(dashboardData)
     } catch (err) {
       console.error('刷新统计数据失败:', err)

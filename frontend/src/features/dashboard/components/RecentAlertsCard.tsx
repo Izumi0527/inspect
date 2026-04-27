@@ -72,11 +72,11 @@ export const RecentAlertsCard: React.FC<RecentAlertsCardProps> = ({
                   <span className="text-xs text-gray-500 dark:text-muted-foreground whitespace-nowrap">{alert.time}</span>
                 </div>
               ))}
-              <Link href="/alerts" passHref>
-                <Button variant="outline" className="w-full mt-4">
+              <Button asChild variant="outline" className="w-full mt-4">
+                <Link href="/alerts">
                   查看所有告警
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </>
           ) : (
             <div className="text-center py-8">

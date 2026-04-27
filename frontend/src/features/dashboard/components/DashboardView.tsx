@@ -60,7 +60,7 @@ export const DashboardView: React.FC = () => {
   )
 
   const handleRetry = () => {
-    loadData()
+    loadData(true)
   }
 
   if (error) {

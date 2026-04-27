@@ -73,6 +73,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           variant="ghost"
           size="icon"
           onClick={onToggle}
+          aria-label={isOpen ? '收起侧边栏' : '展开侧边栏'}
+          title={isOpen ? '收起侧边栏' : '展开侧边栏'}
           className="hover:bg-gray-100 dark:hover:bg-accent/10"
         >
           <Menu className="w-5 h-5" />

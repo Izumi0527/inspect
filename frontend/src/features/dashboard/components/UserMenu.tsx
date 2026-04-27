@@ -50,6 +50,8 @@ export function UserMenu({ className }: UserMenuProps) {
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
+          aria-label={`${displayName} 菜单`}
+          title={`${displayName} 菜单`}
           className={cn(
             'relative h-9 w-9 rounded-full p-0 hover:bg-gray-100 dark:hover:bg-gray-800',
             className
