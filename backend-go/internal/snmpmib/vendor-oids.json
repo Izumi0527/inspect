@@ -1,0 +1,591 @@
+{
+  "schema_version": 1,
+  "description": "Inspect SNMP runtime registry",
+  "vendors": {
+    "cisco": {
+      "display_name": "Cisco",
+      "aliases": ["cisco", "cisco_ios", "cisco_nxos"],
+      "enterprise_prefixes": ["1.3.6.1.4.1.9"]
+    },
+    "huawei": {
+      "display_name": "Huawei",
+      "aliases": ["huawei", "huawei_vrp"],
+      "enterprise_prefixes": ["1.3.6.1.4.1.2011"]
+    },
+    "h3c": {
+      "display_name": "H3C",
+      "aliases": ["h3c", "h3c_comware"],
+      "enterprise_prefixes": ["1.3.6.1.4.1.25506"]
+    },
+    "juniper": {
+      "display_name": "Juniper",
+      "aliases": ["juniper", "junos"],
+      "enterprise_prefixes": ["1.3.6.1.4.1.2636"]
+    },
+    "arista": {
+      "display_name": "Arista",
+      "aliases": ["arista", "arista_eos"],
+      "enterprise_prefixes": ["1.3.6.1.4.1.30065"]
+    },
+    "fortinet": {
+      "display_name": "Fortinet",
+      "aliases": ["fortinet", "fortigate"],
+      "enterprise_prefixes": ["1.3.6.1.4.1.12356"]
+    },
+    "linux": {
+      "display_name": "Linux",
+      "aliases": ["linux", "linux_server", "ubuntu", "centos"],
+      "enterprise_prefixes": ["1.3.6.1.4.1.2021"]
+    }
+  },
+  "common": {
+    "probe": {
+      "sys_descr": {
+        "oid": "1.3.6.1.2.1.1.1.0",
+        "method": "get",
+        "value_type": "string"
+      }
+    },
+    "system": {
+      "sys_object_id": {
+        "oid": "1.3.6.1.2.1.1.2.0",
+        "method": "get",
+        "value_type": "oid"
+      },
+      "sys_uptime": {
+        "oid": "1.3.6.1.2.1.1.3.0",
+        "method": "get",
+        "value_type": "timeticks"
+      },
+      "sys_name": {
+        "oid": "1.3.6.1.2.1.1.5.0",
+        "method": "get",
+        "value_type": "string"
+      },
+      "sys_location": {
+        "oid": "1.3.6.1.2.1.1.6.0",
+        "method": "get",
+        "value_type": "string"
+      }
+    },
+    "interfaces": {
+      "if_descr": {
+        "oid": "1.3.6.1.2.1.2.2.1.2",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
+      "if_speed": {
+        "oid": "1.3.6.1.2.1.2.2.1.5",
+        "method": "bulkwalk",
+        "value_type": "gauge32"
+      },
+      "if_in_octets": {
+        "oid": "1.3.6.1.2.1.2.2.1.10",
+        "method": "bulkwalk",
+        "value_type": "counter32"
+      },
+      "if_out_octets": {
+        "oid": "1.3.6.1.2.1.2.2.1.16",
+        "method": "bulkwalk",
+        "value_type": "counter32"
+      },
+      "if_hc_in_octets": {
+        "oid": "1.3.6.1.2.1.31.1.1.1.6",
+        "method": "bulkwalk",
+        "value_type": "counter64"
+      },
+      "if_hc_out_octets": {
+        "oid": "1.3.6.1.2.1.31.1.1.1.10",
+        "method": "bulkwalk",
+        "value_type": "counter64"
+      },
+      "if_high_speed": {
+        "oid": "1.3.6.1.2.1.31.1.1.1.15",
+        "method": "bulkwalk",
+        "value_type": "gauge32"
+      }
+    }
+  },
+  "metrics": {
+    "cpu_usage": [
+      {
+        "id": "huawei_entity_cpu",
+        "vendors": ["huawei"],
+        "method": "bulkwalk",
+        "oids": ["1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"],
+        "strategy": "walk_percent_auto",
+        "aggregate": "avg_non_zero"
+      },
+      {
+        "id": "h3c_entity_cpu",
+        "vendors": ["h3c"],
+        "method": "bulkwalk",
+        "oids": ["1.3.6.1.4.1.25506.2.6.1.1.1.1.6"],
+        "strategy": "walk_percent",
+        "aggregate": "avg_non_zero"
+      },
+      {
+        "id": "juniper_operating_cpu",
+        "vendors": ["juniper"],
+        "method": "bulkwalk",
+        "oids": ["1.3.6.1.4.1.2636.3.1.13.1.8"],
+        "strategy": "walk_percent",
+        "aggregate": "avg_non_zero"
+      },
+      {
+        "id": "arista_cpu_utilization",
+        "vendors": ["arista"],
+        "method": "get",
+        "oids": ["1.3.6.1.4.1.30065.3.1.1.1.3"],
+        "strategy": "get_percent"
+      },
+      {
+        "id": "fortinet_cpu_usage",
+        "vendors": ["fortinet"],
+        "method": "get",
+        "oids": ["1.3.6.1.4.1.12356.101.4.1.3.0"],
+        "strategy": "get_percent"
+      },
+      {
+        "id": "cisco_avg_busy_5s",
+        "vendors": ["cisco"],
+        "method": "get",
+        "oids": ["1.3.6.1.4.1.9.2.1.56.0"],
+        "strategy": "get_percent"
+      },
+      {
+        "id": "host_resources_processor_load",
+        "vendors": ["*"],
+        "method": "bulkwalk",
+        "oids": ["1.3.6.1.2.1.25.3.3.1.2"],
+        "strategy": "walk_percent",
+        "aggregate": "avg_all"
+      },
+      {
+        "id": "ucd_cpu_split",
+        "vendors": ["*"],
+        "method": "get",
+        "oids": [
+          "1.3.6.1.4.1.2021.11.9.0",
+          "1.3.6.1.4.1.2021.11.10.0",
+          "1.3.6.1.4.1.2021.11.11.0"
+        ],
+        "strategy": "get_percent_from_parts"
+      }
+    ],
+    "memory_usage": [
+      {
+        "id": "huawei_entity_memory",
+        "vendors": ["huawei"],
+        "method": "bulkwalk",
+        "oids": [
+          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7",
+          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.10"
+        ],
+        "strategy": "walk_percent_with_size_kb",
+        "aggregate": "avg_non_zero_total_sum"
+      },
+      {
+        "id": "h3c_entity_memory",
+        "vendors": ["h3c"],
+        "method": "bulkwalk",
+        "oids": [
+          "1.3.6.1.4.1.25506.2.6.1.1.1.1.8",
+          "1.3.6.1.4.1.25506.2.6.1.1.1.1.10"
+        ],
+        "strategy": "walk_percent_with_size_bytes",
+        "aggregate": "avg_non_zero_total_sum"
+      },
+      {
+        "id": "juniper_operating_memory",
+        "vendors": ["juniper"],
+        "method": "bulkwalk",
+        "oids": [
+          "1.3.6.1.4.1.2636.3.1.13.1.11",
+          "1.3.6.1.4.1.2636.3.1.13.1.10"
+        ],
+        "strategy": "walk_percent_with_size_mb",
+        "aggregate": "avg_non_zero_total_sum"
+      },
+      {
+        "id": "arista_memory_utilization",
+        "vendors": ["arista"],
+        "method": "get",
+        "oids": ["1.3.6.1.4.1.30065.3.1.2.1.3"],
+        "strategy": "get_percent"
+      },
+      {
+        "id": "fortinet_memory_usage",
+        "vendors": ["fortinet"],
+        "method": "get",
+        "oids": [
+          "1.3.6.1.4.1.12356.101.4.1.4.0",
+          "1.3.6.1.4.1.12356.101.4.1.5.0"
+        ],
+        "strategy": "get_percent_with_size_kb"
+      },
+      {
+        "id": "cisco_memory_pool",
+        "vendors": ["cisco"],
+        "method": "get",
+        "oids": [
+          "1.3.6.1.4.1.9.9.48.1.1.1.5.1",
+          "1.3.6.1.4.1.9.9.48.1.1.1.6.1"
+        ],
+        "strategy": "get_used_free_bytes"
+      },
+      {
+        "id": "host_resources_storage",
+        "vendors": ["*"],
+        "method": "composite",
+        "oids": [
+          "1.3.6.1.2.1.25.2.3.1.3",
+          "1.3.6.1.2.1.25.2.3.1.4",
+          "1.3.6.1.2.1.25.2.3.1.5",
+          "1.3.6.1.2.1.25.2.3.1.6"
+        ],
+        "strategy": "host_resources_ram_storage"
+      },
+      {
+        "id": "ucd_memory_usage",
+        "vendors": ["*"],
+        "method": "get",
+        "oids": [
+          "1.3.6.1.4.1.2021.4.5.0",
+          "1.3.6.1.4.1.2021.4.6.0"
+        ],
+        "strategy": "get_total_avail_kb"
+      }
+    ],
+    "temperature": [
+      {
+        "id": "cisco_entity_sensor_temperature",
+        "vendors": ["cisco"],
+        "method": "bulkwalk",
+        "oids": ["1.3.6.1.4.1.9.9.91.1.1.1.1.4"],
+        "strategy": "walk_max_tenths_celsius"
+      },
+      {
+        "id": "cisco_envmon_temperature",
+        "vendors": ["cisco"],
+        "method": "bulkwalk",
+        "oids": ["1.3.6.1.4.1.9.9.13.1.3.1.3"],
+        "strategy": "walk_max_celsius"
+      },
+      {
+        "id": "huawei_entity_temperature",
+        "vendors": ["huawei"],
+        "method": "bulkwalk",
+        "oids": ["1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11"],
+        "strategy": "walk_max_celsius"
+      },
+      {
+        "id": "h3c_entity_temperature",
+        "vendors": ["h3c"],
+        "method": "bulkwalk",
+        "oids": ["1.3.6.1.4.1.25506.2.6.1.1.1.1.12"],
+        "strategy": "walk_max_celsius"
+      },
+      {
+        "id": "juniper_operating_temp",
+        "vendors": ["juniper"],
+        "method": "bulkwalk",
+        "oids": ["1.3.6.1.4.1.2636.3.1.13.1.7"],
+        "strategy": "walk_max_celsius"
+      }
+    ]
+  },
+  "catalog": {
+    "huawei": {
+      "environment": [
+        {
+          "id": "hw_entity_oper_status",
+          "name": "hwEntityOperStatus",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.2",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "实体运行状态"
+        },
+        {
+          "id": "hw_entity_fan_state",
+          "name": "hwEntityFanState",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.10.1.7",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "风扇状态"
+        },
+        {
+          "id": "hw_entity_power_state",
+          "name": "hwEntityPowerState",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.11.1.3",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "电源状态"
+        },
+        {
+          "id": "hw_entity_voltage",
+          "name": "hwEntityVoltage",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.14",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "实体当前电压"
+        }
+      ],
+      "interface_monitor": [
+        {
+          "id": "hw_if_monitor_input_rate",
+          "name": "hwIfMonitorInputRate",
+          "oid": "1.3.6.1.4.1.2011.5.25.41.1.7.1.1.8",
+          "method": "bulkwalk",
+          "value_type": "gauge32",
+          "unit": "bps",
+          "description": "接口输入实时速率"
+        },
+        {
+          "id": "hw_if_monitor_output_rate",
+          "name": "hwIfMonitorOutputRate",
+          "oid": "1.3.6.1.4.1.2011.5.25.41.1.7.1.1.10",
+          "method": "bulkwalk",
+          "value_type": "gauge32",
+          "unit": "bps",
+          "description": "接口输出实时速率"
+        }
+      ],
+      "bgp": [
+        {
+          "id": "hw_bgp_peer_state",
+          "name": "hwBgpPeerState",
+          "oid": "1.3.6.1.4.1.2011.5.25.177.1.1.2.1.5",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "BGP 对等体状态"
+        },
+        {
+          "id": "hw_bgp_peer_fsm_established_time",
+          "name": "hwBgpPeerFsmEstablishedTime",
+          "oid": "1.3.6.1.4.1.2011.5.25.177.1.1.2.1.7",
+          "method": "bulkwalk",
+          "value_type": "gauge32",
+          "unit": "s",
+          "description": "BGP 会话已建立时长"
+        }
+      ],
+      "poe": [
+        {
+          "id": "hw_poe_port_consuming_power",
+          "name": "hwPoePortConsumingPower",
+          "oid": "1.3.6.1.4.1.2011.6.3.18.1.4.1.6",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "PoE 端口当前功耗"
+        },
+        {
+          "id": "hw_poe_port_peak_power",
+          "name": "hwPoePortPeakPower",
+          "oid": "1.3.6.1.4.1.2011.6.3.18.1.4.1.7",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "PoE 端口峰值功耗"
+        },
+        {
+          "id": "hw_poe_port_voltage",
+          "name": "hwPoePortVoltage",
+          "oid": "1.3.6.1.4.1.2011.6.3.18.1.4.1.8",
+          "method": "bulkwalk",
+          "value_type": "octet_string",
+          "description": "PoE 端口输出电压"
+        },
+        {
+          "id": "hw_poe_port_current",
+          "name": "hwPoePortCurrent",
+          "oid": "1.3.6.1.4.1.2011.6.3.18.1.4.1.9",
+          "method": "bulkwalk",
+          "value_type": "octet_string",
+          "description": "PoE 端口输出电流"
+        }
+      ],
+      "optical": [
+        {
+          "id": "hw_entity_optical_voltage",
+          "name": "hwEntityOpticalVoltage",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.17",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "光模块供电电压"
+        },
+        {
+          "id": "hw_entity_optical_current",
+          "name": "hwEntityOpticalCurrent",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.18",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "光模块偏置电流"
+        },
+        {
+          "id": "hw_entity_optical_rx_power",
+          "name": "hwEntityOpticalRxPower",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "光模块接收光功率"
+        },
+        {
+          "id": "hw_entity_optical_tx_power",
+          "name": "hwEntityOpticalTxPower",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.20",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "光模块发送光功率"
+        }
+      ]
+    },
+    "h3c": {
+      "environment": [
+        {
+          "id": "hh3c_power_state",
+          "name": "hh3cPowerState",
+          "oid": "1.3.6.1.4.1.25506.8.35.9.1.1.1.2",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "电源状态"
+        },
+        {
+          "id": "hh3c_fan_state",
+          "name": "hh3cFanState",
+          "oid": "1.3.6.1.4.1.25506.8.35.9.1.2.1.2",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "风扇状态"
+        },
+        {
+          "id": "hh3c_entity_current_power",
+          "name": "hh3cEntityExtCurrentPower",
+          "oid": "1.3.6.1.4.1.25506.2.6.1.3.1.1.3",
+          "method": "bulkwalk",
+          "value_type": "gauge32",
+          "unit": "mW",
+          "description": "实体当前功耗"
+        },
+        {
+          "id": "hh3c_entity_current_voltage",
+          "name": "hh3cEntityExtCurrentVoltage",
+          "oid": "1.3.6.1.4.1.25506.2.6.1.3.1.1.4",
+          "method": "bulkwalk",
+          "value_type": "gauge32",
+          "unit": "mV",
+          "description": "实体当前电压"
+        }
+      ],
+      "bgp": [
+        {
+          "id": "hh3c_bgp4v2_peer_last_error",
+          "name": "hh3cBgp4V2PeerLastErrorCodeReceived",
+          "oid": "1.3.6.1.4.1.25506.2.183.1.1.1.2",
+          "method": "bulkwalk",
+          "value_type": "octet_string",
+          "description": "BGP 对等体最近一次收到的错误码"
+        },
+        {
+          "id": "hh3c_bgp4v2_peer_state",
+          "name": "hh3cBgp4V2PeerState",
+          "oid": "1.3.6.1.4.1.25506.2.183.1.1.1.3",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "BGP 对等体状态"
+        }
+      ],
+      "poe": [
+        {
+          "id": "hh3c_main_guaranteed_power_remaining",
+          "name": "hh3cMainGuaranteedPowerRemaining",
+          "oid": "1.3.6.1.4.1.25506.2.14.2.1.4",
+          "method": "bulkwalk",
+          "value_type": "gauge32",
+          "unit": "W",
+          "description": "主 PSE 剩余保障功率"
+        },
+        {
+          "id": "hh3c_pse_port_peak_power",
+          "name": "hh3cPsePortPeakPower",
+          "oid": "1.3.6.1.4.1.25506.2.14.1.1.3",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "PoE 端口峰值功率配置"
+        }
+      ],
+      "optical": [
+        {
+          "id": "hh3c_transceiver_bias_current",
+          "name": "hh3cTransceiverBiasCurrent",
+          "oid": "1.3.6.1.4.1.25506.18.2.1.1.2",
+          "method": "bulkwalk",
+          "value_type": "gauge32",
+          "unit": "0.1uA",
+          "description": "光模块偏置电流"
+        },
+        {
+          "id": "hh3c_transceiver_voltage",
+          "name": "hh3cTransceiverVoltage",
+          "oid": "1.3.6.1.4.1.25506.18.2.1.1.4",
+          "method": "bulkwalk",
+          "value_type": "gauge32",
+          "unit": "0.1mV",
+          "description": "光模块工作电压"
+        },
+        {
+          "id": "hh3c_transceiver_cur_tx_power",
+          "name": "hh3cTransceiverCurTXPower",
+          "oid": "1.3.6.1.4.1.25506.18.2.1.1.5",
+          "method": "bulkwalk",
+          "value_type": "gauge32",
+          "unit": "0.1uW",
+          "description": "光模块当前发光功率"
+        },
+        {
+          "id": "hh3c_transceiver_cur_rx_power",
+          "name": "hh3cTransceiverCurRXPower",
+          "oid": "1.3.6.1.4.1.25506.18.2.1.1.6",
+          "method": "bulkwalk",
+          "value_type": "gauge32",
+          "unit": "0.1uW",
+          "description": "光模块当前收光功率"
+        }
+      ]
+    }
+  },
+  "trap": {
+    "core": {
+      "trap_oid": "1.3.6.1.6.3.1.1.4.1.0",
+      "sys_uptime": "1.3.6.1.2.1.1.3.0",
+      "community": "1.3.6.1.6.3.18.1.4.0",
+      "enterprise": "1.3.6.1.6.3.18.1.5.0",
+      "agent_address": "1.3.6.1.6.3.18.1.3.0"
+    },
+    "overrides": {
+      "1.3.6.1.6.3.1.1.5.1": {
+        "level": "info",
+        "facility": "system"
+      },
+      "1.3.6.1.6.3.1.1.5.2": {
+        "level": "info",
+        "facility": "system"
+      },
+      "1.3.6.1.6.3.1.1.5.3": {
+        "level": "warning",
+        "facility": "interface"
+      },
+      "1.3.6.1.6.3.1.1.5.4": {
+        "level": "info",
+        "facility": "interface"
+      },
+      "1.3.6.1.6.3.1.1.5.5": {
+        "level": "warning",
+        "facility": "security"
+      },
+      "1.3.6.1.6.3.1.1.5.6": {
+        "level": "info",
+        "facility": "snmp"
+      }
+    }
+  }
+}

@@ -10,11 +10,13 @@ import { DeviceDetailsModal } from "@/features/devices/components/modals/DeviceD
 import {
   healthCheckDevice,
   fetchDevicePerformance,
+  fetchDeviceSNMPExtensions,
 } from "@/features/devices/api/devices.api";
 
 jest.mock("@/features/devices/api/devices.api", () => ({
   healthCheckDevice: jest.fn(),
   fetchDevicePerformance: jest.fn(),
+  fetchDeviceSNMPExtensions: jest.fn(),
 }));
 
 jest.mock("@/components/atoms", () => ({
@@ -93,6 +95,12 @@ jest.mock("@/utils/formatters", () => ({
 describe("DeviceDetailsModal", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (fetchDeviceSNMPExtensions as jest.Mock).mockResolvedValue({
+      device_id: 1,
+      timestamp: null,
+      bgp_peers: [],
+      optical_transceivers: [],
+    });
   });
 
   it("应脱敏展示凭据状态，并支持健康检查与性能加载", async () => {
@@ -156,6 +164,9 @@ describe("DeviceDetailsModal", () => {
     await waitFor(() => {
       expect(fetchDevicePerformance).toHaveBeenCalledWith(1, "24h");
     });
+    await waitFor(() => {
+      expect(fetchDeviceSNMPExtensions).toHaveBeenCalledWith(1);
+    });
 
     const snmpCredentialRow = screen.getByText("SNMP 凭据状态").closest("div");
     const cliCredentialRow = screen.getByText("CLI 凭据状态").closest("div");
@@ -191,6 +202,67 @@ describe("DeviceDetailsModal", () => {
     expect(
       within(currentMemoryRow as HTMLElement).getByText("45.2%"),
     ).toBeInTheDocument();
+  });
+
+  it("存在 SNMP 扩展摘要时应展示 BGP 与光模块信息", async () => {
+    (fetchDevicePerformance as jest.Mock).mockResolvedValue({
+      current: {
+        cpu_usage: 22.5,
+        memory_usage: 35.2,
+      },
+      history: [],
+    });
+    (fetchDeviceSNMPExtensions as jest.Mock).mockResolvedValue({
+      device_id: 9,
+      timestamp: "2026-04-29T08:30:00Z",
+      bgp_peers: [
+        {
+          index: "1",
+          state_label: "established",
+          established_time_seconds: 3600,
+        },
+      ],
+      optical_transceivers: [
+        {
+          index: "10",
+          bias_current: 12.5,
+          bias_current_unit: "uA",
+          rx_power: 2.3,
+          rx_power_unit: "uW",
+        },
+      ],
+    });
+
+    render(
+      <DeviceDetailsModal
+        isOpen={true}
+        loading={false}
+        onClose={jest.fn()}
+        device={{
+          id: 9,
+          name: "core-09",
+          ip: "10.0.0.19",
+          device_type: "router",
+          status: "online",
+          location: "机房-C",
+          last_seen: "2026-04-29T08:29:00Z",
+          uptime: "3600",
+          alert_count: 0,
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(fetchDeviceSNMPExtensions).toHaveBeenCalledWith(9);
+    });
+
+    expect(screen.getByText("SNMP 扩展摘要")).toBeInTheDocument();
+    expect(screen.getByText("BGP 邻居数")).toBeInTheDocument();
+    expect(screen.getByText("光模块数量")).toBeInTheDocument();
+    expect(screen.getByText("established")).toBeInTheDocument();
+    expect(screen.getByText("3600 秒")).toBeInTheDocument();
+    expect(screen.getByText("12.5 uA")).toBeInTheDocument();
+    expect(screen.getByText("2.3 uW")).toBeInTheDocument();
   });
 
   it("切换性能时间范围后应重新请求并展示新时间范围数据", async () => {

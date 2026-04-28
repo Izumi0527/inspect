@@ -13,12 +13,9 @@ import (
 	"time"
 
 	"github.com/gosnmp/gosnmp"
+	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
 	"go.uber.org/zap"
 	"gorm.io/datatypes"
-)
-
-const (
-	snmpOIDSysDescr = "1.3.6.1.2.1.1.1.0"
 )
 
 type ProbeResult struct {
@@ -353,7 +350,13 @@ func probeSNMP(
 		return false, nil, nil, &msg
 	}
 
-	packet, err := target.Get([]string{snmpOIDSysDescr})
+	sysDescrOID, err := probeSystemDescrOID()
+	if err != nil {
+		msg := err.Error()
+		return false, nil, nil, &msg
+	}
+
+	packet, err := target.Get([]string{sysDescrOID})
 	elapsed := float64(time.Since(start).Milliseconds())
 	if err != nil {
 		msg := err.Error()
@@ -374,12 +377,26 @@ func probeSNMP(
 	return true, &elapsed, &info, nil
 }
 
+func probeSystemDescrOID() (string, error) {
+	registry, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		return "", fmt.Errorf("load SNMP MIB registry failed: %w", err)
+	}
+
+	oid := strings.TrimSpace(registry.Common.Probe.SysDescr.OID)
+	if oid == "" {
+		return "", fmt.Errorf("common.probe.sys_descr.oid is empty")
+	}
+
+	return oid, nil
+}
+
 // formatSNMPValue 将 SNMP 返回值转换为可读字符串
 func formatSNMPValue(value interface{}) string {
 	if value == nil {
 		return ""
 	}
-	
+
 	switch v := value.(type) {
 	case []byte:
 		// 将字节数组转换为字符串

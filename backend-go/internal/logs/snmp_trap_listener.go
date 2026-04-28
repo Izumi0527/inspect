@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gosnmp/gosnmp"
+	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -20,31 +21,6 @@ const (
 	defaultTrapStoreTimeout  = 5 * time.Second
 	maxTrapSummaryVars       = 6
 )
-
-const (
-	oidSnmpTrapOID       = "1.3.6.1.6.3.1.1.4.1.0"
-	oidSysUpTime         = "1.3.6.1.2.1.1.3.0"
-	oidTrapCommunity     = "1.3.6.1.6.3.18.1.4.0"
-	oidTrapEnterprise    = "1.3.6.1.6.3.18.1.5.0"
-	oidTrapAgentAddress  = "1.3.6.1.6.3.18.1.3.0"
-)
-
-var trapLevelOverrides = map[string]string{
-	"1.3.6.1.6.3.1.1.5.1": "info",
-	"1.3.6.1.6.3.1.1.5.2": "info",
-	"1.3.6.1.6.3.1.1.5.3": "warning",
-	"1.3.6.1.6.3.1.1.5.4": "info",
-	"1.3.6.1.6.3.1.1.5.5": "warning",
-	"1.3.6.1.6.3.1.1.5.6": "info",
-}
-
-var trapFacilityOverrides = map[string]string{
-	"1.3.6.1.6.3.1.1.5.3": "interface",
-	"1.3.6.1.6.3.1.1.5.4": "interface",
-	"1.3.6.1.6.3.1.1.5.5": "security",
-	"1.3.6.1.6.3.1.1.5.1": "system",
-	"1.3.6.1.6.3.1.1.5.2": "system",
-}
 
 type SNMPTrapListener struct {
 	service      *Service
@@ -295,8 +271,9 @@ func extractTrapOID(packet *gosnmp.SnmpPacket) string {
 	if packet == nil {
 		return ""
 	}
+	core := trapCoreOIDs()
 	for _, variable := range packet.Variables {
-		if variable.Name != oidSnmpTrapOID {
+		if variable.Name != core.TrapOID {
 			continue
 		}
 		return normalizeTrapValue(variable.Value)
@@ -332,11 +309,9 @@ func buildTrapLog(snapshot trapSnapshot) (string, string, string, string) {
 	level := "info"
 	facility := "snmp"
 	if snapshot.TrapOID != "" {
-		if value, ok := trapLevelOverrides[snapshot.TrapOID]; ok {
-			level = value
-		}
-		if value, ok := trapFacilityOverrides[snapshot.TrapOID]; ok {
-			facility = value
+		if overrideLevel, overrideFacility, ok := trapOverrideForOID(snapshot.TrapOID); ok {
+			level = overrideLevel
+			facility = overrideFacility
 		}
 	}
 	if level == "info" {
@@ -374,12 +349,13 @@ func buildTrapSummary(snapshot trapSnapshot) string {
 		return ""
 	}
 
+	core := trapCoreOIDs()
 	ignored := map[string]struct{}{
-		oidSnmpTrapOID:    {},
-		oidSysUpTime:      {},
-		oidTrapCommunity:  {},
-		oidTrapEnterprise: {},
-		oidTrapAgentAddress: {},
+		core.TrapOID:      {},
+		core.SysUptime:    {},
+		core.Community:    {},
+		core.Enterprise:   {},
+		core.AgentAddress: {},
 	}
 
 	parts := make([]string, 0, maxTrapSummaryVars)
@@ -440,10 +416,35 @@ func isPrintableASCII(value []byte) bool {
 }
 
 func isSensitiveTrapOID(oid string) bool {
-	switch oid {
-	case oidTrapCommunity:
-		return true
-	default:
-		return false
+	return oid == trapCoreOIDs().Community
+}
+
+func loadTrapSection() (snmpmib.TrapSection, error) {
+	registry, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		return snmpmib.TrapSection{}, fmt.Errorf("load SNMP MIB registry failed: %w", err)
 	}
+	return registry.Trap, nil
+}
+
+func trapCoreOIDs() snmpmib.TrapCoreSection {
+	section, err := loadTrapSection()
+	if err != nil {
+		return snmpmib.TrapCoreSection{}
+	}
+	return section.Core
+}
+
+func trapOverrideForOID(oid string) (string, string, bool) {
+	section, err := loadTrapSection()
+	if err != nil {
+		return "", "", false
+	}
+
+	override, ok := section.Overrides[strings.TrimSpace(oid)]
+	if !ok {
+		return "", "", false
+	}
+
+	return override.Level, override.Facility, true
 }

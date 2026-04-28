@@ -33,9 +33,22 @@ type InspectionHandler struct {
 	Settings        *settings.Service // 用于获取用户信息
 	DeviceService   *devices.Service
 	ProbeService    *devices.ProbeService
+	SNMPCollector   SNMPMetricsCollector
 	WS              *ws.Manager
 	Logger          *zap.Logger
 	ReportOutputDir string
+}
+
+type SNMPMetricsCollector interface {
+	CollectMetrics(
+		ctx context.Context,
+		ipAddress string,
+		vendor string,
+		snmpCommunity *string,
+		snmpVersion *string,
+		snmpPort *int,
+		tags interface{},
+	) (*devices.SNMPMetrics, error)
 }
 
 func (h InspectionHandler) Register(group *echo.Group) {
@@ -1163,23 +1176,7 @@ func (h InspectionHandler) executeCheckItems(
 	total := len(checkItems)
 
 	// 采集 SNMP 指标（如果设备支持 SNMP）
-	var snmpMetrics *devices.SNMPMetrics
-	if device != nil && probeResult != nil && probeResult.SnmpReachable {
-		collector := devices.NewSNMPCollector(h.Logger)
-		metrics, err := collector.CollectMetrics(
-			ctx,
-			device.IPAddress,
-			device.SnmpCommunity,
-			device.SnmpVersion,
-			device.SnmpPort,
-			nil,
-		)
-		if err == nil {
-			snmpMetrics = metrics
-		} else if h.Logger != nil {
-			h.Logger.Warn("failed to collect SNMP metrics", zap.Error(err))
-		}
-	}
+	snmpMetrics := collectInspectionSNMPMetrics(ctx, h.SNMPCollector, device, probeResult, h.Logger)
 
 	for _, item := range checkItems {
 		if h.isInspectionCancelled(ctx, inspectionID) {
@@ -1229,6 +1226,36 @@ func (h InspectionHandler) executeCheckItems(
 	}
 
 	return results
+}
+
+func collectInspectionSNMPMetrics(
+	ctx context.Context,
+	collector SNMPMetricsCollector,
+	device *devices.DeviceResponse,
+	probeResult *devices.ProbeResult,
+	logger *zap.Logger,
+) *devices.SNMPMetrics {
+	if collector == nil || device == nil || probeResult == nil || !probeResult.SnmpReachable {
+		return nil
+	}
+
+	metrics, err := collector.CollectMetrics(
+		ctx,
+		device.IPAddress,
+		device.Vendor,
+		device.SnmpCommunity,
+		device.SnmpVersion,
+		device.SnmpPort,
+		device.Tags,
+	)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("failed to collect SNMP metrics", zap.Error(err))
+		}
+		return nil
+	}
+
+	return metrics
 }
 
 // executeICMPCheck 执行 ICMP 检查

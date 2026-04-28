@@ -1,4 +1,8 @@
-import { fetchDevice, fetchDevices } from '@/features/devices/api/devices.api'
+import {
+  fetchDevice,
+  fetchDevices,
+  fetchDeviceSNMPExtensions,
+} from '@/features/devices/api/devices.api'
 
 const mockGet = jest.fn()
 
@@ -109,6 +113,30 @@ describe('devices.api fetchDevices', () => {
     expect(result?.ssh_config?.password).toBe('')
     expect((result?.tags as Record<string, any>)?.cli_config?.ssh_config?.password).toBeUndefined()
     expect((result?.tags as Record<string, any>)?.snmp_config?.v2c_config?.community).toBeUndefined()
+  })
+
+  it('应请求设备 SNMP 扩展摘要接口，并返回稳定的空数组结构', async () => {
+    mockGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        device_id: 7,
+        timestamp: '2026-04-29T08:30:00Z',
+        bgp_peers: [
+          {
+            index: '1',
+            state_label: 'established',
+          },
+        ],
+        optical_transceivers: [],
+      },
+    })
+
+    const result = await fetchDeviceSNMPExtensions(7)
+
+    expect(mockGet).toHaveBeenCalledWith('/monitoring/devices/7/snmp-extensions')
+    expect(result.device_id).toBe(7)
+    expect(result.bgp_peers).toHaveLength(1)
+    expect(result.optical_transceivers).toEqual([])
   })
 })
 

@@ -22,7 +22,8 @@ import { CLIConfigForm } from './CLIConfigForm'
 import { SNMPConfigForm } from './SNMPConfigForm'
 import {
   Device,
-  DeviceType
+  DeviceType,
+  DeviceVendor,
 } from '../../types'
 
 // 设备类型映射
@@ -37,6 +38,28 @@ const DEVICE_TYPE_OPTIONS: Array<{
   { value: 'firewall', label: '防火墙', icon: Shield, color: 'text-red-600' },
   { value: 'wireless_ap', label: '无线AP', icon: HardDrive, color: 'text-purple-600' }
 ]
+
+const VENDOR_OPTIONS: Array<{
+  value: DeviceVendor;
+  label: string;
+  hint: string;
+}> = [
+  { value: 'cisco', label: 'Cisco', hint: '交换机、路由器、AP 常见' },
+  { value: 'huawei', label: 'Huawei', hint: '华为 VRP / CloudEngine' },
+  { value: 'h3c', label: 'H3C', hint: 'H3C Comware 系列' },
+  { value: 'juniper', label: 'Juniper', hint: 'JunOS / SRX / EX' },
+  { value: 'arista', label: 'Arista', hint: 'EOS 系列交换机' },
+  { value: 'fortinet', label: 'Fortinet', hint: 'FortiGate / FortiSwitch' },
+  { value: 'linux', label: 'Linux', hint: '通用 Linux / Unix 主机' },
+  { value: 'other', label: '其他/未知', hint: '暂未内建厂商专属 OID' },
+]
+
+const DEFAULT_VENDOR_BY_DEVICE_TYPE: Record<DeviceType, DeviceVendor> = {
+  switch: 'cisco',
+  router: 'cisco',
+  firewall: 'fortinet',
+  wireless_ap: 'cisco',
+}
 
 // 表单验证 Schema
 const deviceFormSchema = z.object({
@@ -53,6 +76,7 @@ const deviceFormSchema = z.object({
       '请输入有效的IP地址'
     ),
   device_type: z.enum(['switch', 'router', 'firewall', 'wireless_ap'] as const),
+  vendor: z.enum(['cisco', 'huawei', 'h3c', 'juniper', 'arista', 'fortinet', 'linux', 'other'] as const),
   location: z
     .string()
     .max(200, '位置信息不能超过200个字符')
@@ -166,6 +190,8 @@ export const DeviceForm: React.FC<Props> = ({
       name: initialData?.name || '',
       ip: initialData?.ip || '',
       device_type: initialData?.device_type || 'switch',
+      vendor: (initialData?.vendor as DeviceVendor | undefined)
+        || DEFAULT_VENDOR_BY_DEVICE_TYPE[initialData?.device_type || 'switch'],
       location: initialData?.location || '',
       description: initialData?.description || '',
 
@@ -247,7 +273,7 @@ export const DeviceForm: React.FC<Props> = ({
 
               <div className="space-y-4">
                 {/* 第一行：必填项 */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   {/* 设备名称 */}
                   <div>
                     <label className="block text-sm font-medium text-muted-foreground mb-1">
@@ -314,6 +340,36 @@ export const DeviceForm: React.FC<Props> = ({
                     />
                     {errors.device_type && (
                       <p className="mt-1 text-sm text-red-600">{errors.device_type.message}</p>
+                    )}
+                  </div>
+
+                  {/* 设备厂商 */}
+                  <div>
+                    <label className="block text-sm font-medium text-muted-foreground mb-1">
+                      设备厂商 <span className="text-red-500">*</span>
+                    </label>
+                    <Controller
+                      name="vendor"
+                      control={control}
+                      render={({ field }) => (
+                        <SimpleSelect
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="选择设备厂商"
+                        >
+                          {VENDOR_OPTIONS.map(option => (
+                            <SelectItem key={option.value} value={option.value}>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{option.label}</span>
+                                <span className="text-xs text-muted-foreground">{option.hint}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SimpleSelect>
+                      )}
+                    />
+                    {errors.vendor && (
+                      <p className="mt-1 text-sm text-red-600">{errors.vendor.message}</p>
                     )}
                   </div>
                 </div>

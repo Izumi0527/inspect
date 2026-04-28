@@ -151,4 +151,55 @@ describe('deviceFormMapper', () => {
     expect(payload.tags.cli_config.ssh_config.password).toBeUndefined()
     expect(payload.tags.snmp_config.v2c_config.community).toBeUndefined()
   })
+
+  it('应保留用户显式选择的 vendor，而不是总按 device_type 自动覆盖', () => {
+    const payload = mapFormDataToApiPayload({
+      name: 'agg-01',
+      ip: '10.0.0.8',
+      device_type: 'switch',
+      vendor: 'huawei',
+      location: '',
+      description: '',
+      cli_protocol: 'none',
+      ssh_config: {
+        username: '',
+        password: '',
+        port: 22,
+        use_key_auth: false,
+        private_key: '',
+      },
+      telnet_config: {
+        username: '',
+        password: '',
+        port: 23,
+        enable_password: '',
+      },
+      snmp_config: {
+        version: 'v2c',
+        port: 161,
+        v2c_config: {
+          community: 'public',
+          write_community: '',
+        },
+        v3_config: {
+          username: '',
+          security_level: 'noAuthNoPriv',
+          auth_protocol: 'SHA',
+          auth_password: '',
+          priv_protocol: 'AES128',
+          priv_password: '',
+          context_name: '',
+        },
+      },
+      advanced_config: {
+        timeout: 30,
+        retry: 3,
+      },
+      snmp_community: 'public',
+      ssh_username: '',
+      ssh_password: '',
+    } as any)
+
+    expect(payload.vendor).toBe('huawei')
+  })
 })

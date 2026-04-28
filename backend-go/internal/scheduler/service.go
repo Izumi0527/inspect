@@ -36,13 +36,13 @@ const (
 )
 
 type Service struct {
-	db            *gorm.DB
-	logger        *zap.Logger
-	deviceService *devices.Service
-	probeService  *devices.ProbeService
-	scanner       *devices.Scanner
-	snmpCollector *devices.SNMPCollector
-	metricsWriter *monitoring.MetricsWriter
+	db              *gorm.DB
+	logger          *zap.Logger
+	deviceService   *devices.Service
+	probeService    *devices.ProbeService
+	scanner         *devices.Scanner
+	snmpCollector   *devices.SNMPCollector
+	metricsWriter   *monitoring.MetricsWriter
 	settingsService *settings.Service
 	trafficService  *traffic.Service
 	reportService   *reports.Service
@@ -50,11 +50,11 @@ type Service struct {
 	trapAlertBridge *alerts.TrapAlertBridge
 	logsService     *logs.Service
 	reportOutputDir string
-	redis         *redis.Client
-	checkInterval time.Duration
-	maxConcurrent int
-	parser        cron.Parser
-	limit         chan struct{}
+	redis           *redis.Client
+	checkInterval   time.Duration
+	maxConcurrent   int
+	parser          cron.Parser
+	limit           chan struct{}
 
 	mu        sync.Mutex
 	running   bool
@@ -100,13 +100,13 @@ func NewService(
 ) *Service {
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 	return &Service{
-		db:            db,
-		logger:        logger,
-		deviceService: deviceService,
-		probeService:  probeService,
-		scanner:       scanner,
-		snmpCollector: snmpCollector,
-		metricsWriter: metricsWriter,
+		db:              db,
+		logger:          logger,
+		deviceService:   deviceService,
+		probeService:    probeService,
+		scanner:         scanner,
+		snmpCollector:   snmpCollector,
+		metricsWriter:   metricsWriter,
 		settingsService: settingsService,
 		trafficService:  trafficService,
 		reportService:   reportService,
@@ -114,11 +114,11 @@ func NewService(
 		trapAlertBridge: trapAlertBridge,
 		logsService:     logsService,
 		reportOutputDir: strings.TrimSpace(reportOutputDir),
-		redis:         redis,
-		checkInterval: defaultCheckInterval,
-		maxConcurrent: defaultMaxConcurrent,
-		parser:        parser,
-		limit:         make(chan struct{}, defaultMaxConcurrent),
+		redis:           redis,
+		checkInterval:   defaultCheckInterval,
+		maxConcurrent:   defaultMaxConcurrent,
+		parser:          parser,
+		limit:           make(chan struct{}, defaultMaxConcurrent),
 	}
 }
 
@@ -390,11 +390,11 @@ func (s *Service) processDueTasks(ctx context.Context) {
 func (s *Service) executeTask(ctx context.Context, task ScheduledTask) {
 	startedAt := time.Now().UTC()
 	update := map[string]interface{}{
-		"status":      string(TaskStatusRunning),
-		"progress":    0,
-		"last_run":    startedAt,
-		"run_count":   gorm.Expr("run_count + 1"),
-		"updated_at":  startedAt,
+		"status":     string(TaskStatusRunning),
+		"progress":   0,
+		"last_run":   startedAt,
+		"run_count":  gorm.Expr("run_count + 1"),
+		"updated_at": startedAt,
 	}
 
 	result := s.db.WithContext(ctx).
@@ -467,10 +467,10 @@ func (s *Service) finishTask(
 	}
 
 	execUpdates := map[string]interface{}{
-		"finished_at":  finishedAt,
-		"status":       string(status),
-		"duration":     duration,
-		"result":       resultJSON,
+		"finished_at":   finishedAt,
+		"status":        string(status),
+		"duration":      duration,
+		"result":        resultJSON,
 		"error_message": errMsg,
 	}
 	_ = s.db.WithContext(ctx).Model(&TaskExecution{}).Where("id = ?", execution.ID).Updates(execUpdates).Error
@@ -482,10 +482,10 @@ func (s *Service) finishTask(
 	}
 
 	taskUpdates := map[string]interface{}{
-		"status":      string(status),
-		"progress":    progress,
-		"next_run":    nextRunPtr,
-		"updated_at":  finishedAt,
+		"status":        string(status),
+		"progress":      progress,
+		"next_run":      nextRunPtr,
+		"updated_at":    finishedAt,
 		"error_message": errMsg,
 	}
 	if status == TaskStatusCompleted {
@@ -712,6 +712,7 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 			metrics, err := s.snmpCollector.CollectMetrics(
 				ctx,
 				device.IPAddress,
+				device.Vendor,
 				device.SnmpCommunity,
 				device.SnmpVersion,
 				device.SnmpPort,
@@ -727,77 +728,13 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 				return
 			}
 
-			// Build metrics map for writing to database
-			metricsMap := make(map[string]monitoring.MetricValue)
-			if metrics.CPUUsage != nil {
-				unit := "%"
-				metricsMap["cpu_usage"] = monitoring.MetricValue{Value: metrics.CPUUsage, Unit: &unit}
-			}
-			if metrics.MemoryUsage != nil {
-				unit := "%"
-				metricsMap["memory_usage"] = monitoring.MetricValue{Value: metrics.MemoryUsage, Unit: &unit}
-			}
-			if metrics.Temperature != nil {
-				unit := "°C"
-				metricsMap["temperature"] = monitoring.MetricValue{Value: metrics.Temperature, Unit: &unit}
-			}
-			if metrics.Uptime != nil {
-				uptimeFloat := float64(*metrics.Uptime)
-				unit := "seconds"
-				metricsMap["uptime"] = monitoring.MetricValue{Value: &uptimeFloat, Unit: &unit}
-			}
-			if metrics.BandwidthIn != nil {
-				bwIn := *metrics.BandwidthIn // 直接存储 bps
-				unit := "bps"
-				metricsMap["bandwidth_in"] = monitoring.MetricValue{Value: &bwIn, Unit: &unit}
-			}
-			if metrics.BandwidthOut != nil {
-				bwOut := *metrics.BandwidthOut // 直接存储 bps
-				unit := "bps"
-				metricsMap["bandwidth_out"] = monitoring.MetricValue{Value: &bwOut, Unit: &unit}
-			}
-
-			// Build interface metrics
-			interfaces := make([]map[string]interface{}, 0, len(metrics.Interfaces))
-			for _, iface := range metrics.Interfaces {
-				ifaceMap := map[string]interface{}{
-					"name": iface.Name,
-				}
-				if iface.Description != "" {
-					ifaceMap["description"] = iface.Description
-				}
-				if iface.Speed != nil {
-					ifaceMap["ifHighSpeed"] = *iface.Speed
-				}
-				if iface.InOctets != nil {
-					ifaceMap["ifHCInOctets"] = *iface.InOctets
-				}
-				if iface.OutOctets != nil {
-					ifaceMap["ifHCOutOctets"] = *iface.OutOctets
-				}
-				if iface.InRate != nil {
-					ifaceMap["bandwidth_in"] = *iface.InRate // 直接存储 bps
-				}
-				if iface.OutRate != nil {
-					ifaceMap["bandwidth_out"] = *iface.OutRate // 直接存储 bps
-				}
-				interfaces = append(interfaces, ifaceMap)
-			}
-
-			// Write metrics to database
-			collectedAt := monitoring.FlexibleTime{Time: metrics.CollectedAt}
-			writeReq := monitoring.DeviceMetricsRequest{
-				DeviceID:    device.ID,
-				Metrics:     metricsMap,
-				Interfaces:  interfaces,
-				CollectedAt: &collectedAt,
-			}
+			writeReq := monitoring.BuildSNMPDeviceMetricsRequest(device.ID, metrics)
 
 			if s.logger != nil {
 				s.logger.Info("writing device metrics",
 					zap.Int("device_id", device.ID),
-					zap.Int("metrics_count", len(metricsMap)),
-					zap.Int("interfaces_count", len(interfaces)))
+					zap.Int("metrics_count", len(writeReq.Metrics)),
+					zap.Int("interfaces_count", len(writeReq.Interfaces)))
 			}
 
 			result, err := s.metricsWriter.WriteDeviceMetrics(ctx, writeReq)
@@ -806,8 +743,8 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 					if s.logger != nil {
 						s.logger.Warn("no metrics to write",
 							zap.Int("device_id", device.ID),
-							zap.Int("metrics_count", len(metricsMap)),
-							zap.Int("interfaces_count", len(interfaces)))
+							zap.Int("metrics_count", len(writeReq.Metrics)),
+							zap.Int("interfaces_count", len(writeReq.Interfaces)))
 					}
 				} else {
 					if s.logger != nil {
@@ -837,7 +774,7 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 
 		// Update progress
 		if total > 0 {
-			progress := float64(idx+1) / float64(total) * 50 + 50 // 50-100% for metrics collection
+			progress := float64(idx+1)/float64(total)*50 + 50 // 50-100% for metrics collection
 			s.updateTaskProgress(ctx, taskID, progress)
 		}
 	}
@@ -845,6 +782,7 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 	wg.Wait()
 	return collected
 }
+
 // convertLogsToAlerts queries recent warning/critical logs for a device and creates alerts
 func (s *Service) convertLogsToAlerts(ctx context.Context, deviceID int, ipAddress string) int {
 	if s.trapAlertBridge == nil || s.db == nil {
@@ -883,8 +821,6 @@ func (s *Service) convertLogsToAlerts(ctx context.Context, deviceID int, ipAddre
 
 	return created
 }
-
-
 
 func (s *Service) executeNetworkScan(ctx context.Context, task ScheduledTask) (map[string]interface{}, error) {
 	if s.scanner == nil {
@@ -989,8 +925,8 @@ func (s *Service) executeSystemHealthCheck(ctx context.Context, task ScheduledTa
 	s.updateTaskProgress(ctx, task.ID, 100)
 
 	return map[string]interface{}{
-		"health_status":       healthStatus,
-		"overall_status":      overall,
+		"health_status":        healthStatus,
+		"overall_status":       overall,
 		"unhealthy_components": unhealthy,
 	}, nil
 }
@@ -1130,9 +1066,9 @@ func (s *Service) executeDeviceBackup(ctx context.Context, task ScheduledTask) (
 	}
 
 	manifest := deviceBackupManifest{
-		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
-		RetentionDays:  retentionDays,
-		TotalDevices:   len(devicesList),
+		GeneratedAt:     time.Now().UTC().Format(time.RFC3339),
+		RetentionDays:   retentionDays,
+		TotalDevices:    len(devicesList),
 		EligibleDevices: len(targets),
 		BackedUpDevices: stats.Success,
 		FailedDevices:   stats.Failed,
@@ -1344,10 +1280,10 @@ func (s *Service) executeReportGeneration(ctx context.Context, task ScheduledTas
 	}
 
 	return map[string]interface{}{
-		"total_schedules":  len(schedules),
-		"due_schedules":    len(due),
-		"generated_count":  len(due) - failedCount,
-		"failed_count":     failedCount,
+		"total_schedules":   len(schedules),
+		"due_schedules":     len(due),
+		"generated_count":   len(due) - failedCount,
+		"failed_count":      failedCount,
 		"generated_reports": results,
 	}, nil
 }
@@ -1451,9 +1387,9 @@ func (s *Service) ensureDefaultTasks(ctx context.Context) error {
 			CronExpression: "0 1 1 * *",
 			Enabled:        true,
 			Config: map[string]interface{}{
-				"cleanup_logs":       true,
+				"cleanup_logs":        true,
 				"cleanup_old_metrics": true,
-				"retention_days":     90,
+				"retention_days":      90,
 			},
 		},
 	}

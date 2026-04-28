@@ -33,6 +33,7 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"github.com/your-org/inspect-system/backend-go/internal/scheduler"
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
+	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
 	"github.com/your-org/inspect-system/backend-go/internal/traffic"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
@@ -86,6 +87,10 @@ func New() (*App, error) {
 	log, err := logger.New(cfg)
 	if err != nil {
 		return nil, err
+	}
+
+	if _, err := snmpmib.DefaultRegistry(); err != nil {
+		return nil, fmt.Errorf("load SNMP MIB registry failed: %w", err)
 	}
 
 	dbConn, err := db.OpenPostgres(cfg)
@@ -189,6 +194,7 @@ func New() (*App, error) {
 		Settings:        settingsService,
 		DeviceService:   deviceService,
 		ProbeService:    probeService,
+		SNMPCollector:   snmpCollector,
 		WS:              wsManager,
 		Logger:          log,
 		ReportOutputDir: cfg.ReportsOutputDir,

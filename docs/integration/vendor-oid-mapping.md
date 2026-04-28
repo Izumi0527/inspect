@@ -2,6 +2,20 @@
 
 本文档整理了各主流网络设备厂商的 SNMP OID 映射表，包括标准 MIB-II OID 和厂商私有 OID。
 
+## 运行时来源说明
+
+- 当前系统的**运行时 OID 数据源**已迁移到 `backend-go/internal/snmpmib/vendor-oids.json`
+- 本文档现在主要用于**人工查阅、对照和补充资料整理**
+- 如需新增或调整设备采集 / Trap / 探测使用的 OID，请优先修改：
+  - `backend-go/internal/snmpmib/vendor-oids.json`
+- 修改完成后，再视需要同步本文档，避免“代码实际行为”和“文档说明”出现双标准
+- 方案落地说明请查看：
+  - `docs/features/devices/snmp-mib-json-registry-implementation.md`
+- 后续新增厂商与 OID 的维护规范请查看：
+  - `docs/features/devices/snmp-mib-oid-maintenance-guide.md`
+- 如需逐字段查看 `vendor-oids.json` 结构，请查看：
+  - `docs/features/devices/snmp-mib-vendor-oids-json-reference.md`
+
 ## 目录
 
 1. [标准 MIB-II OID](#标准-mib-ii-oid)
@@ -123,6 +137,13 @@ Cisco 企业 OID 前缀：`1.3.6.1.4.1.9`
 
 Huawei 企业 OID 前缀：`1.3.6.1.4.1.2011`
 
+说明：
+
+- 已运行时接入：CPU、内存、温度
+- 已运行时接入（返回摘要 + 持久化 tags）：BGP 邻居摘要、光模块诊断摘要
+- 已纳入 `backend-go/internal/snmpmib/vendor-oids.json -> catalog.huawei`：
+  接口速率、BGP、PoE、光模块诊断、环境扩展状态
+
 ### CPU 和内存
 
 | 名称 | OID | 数据类型 | 说明 |
@@ -136,28 +157,55 @@ Huawei 企业 OID 前缀：`1.3.6.1.4.1.2011`
 | 名称 | OID | 数据类型 | 说明 |
 |------|-----|----------|------|
 | hwEntityTemperature | 1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11 | INTEGER | 温度值（摄氏度） |
+| hwEntityOperStatus | 1.3.6.1.4.1.2011.5.25.31.1.1.1.1.2 | INTEGER | 实体运行状态 |
 | hwEntityFanState | 1.3.6.1.4.1.2011.5.25.31.1.1.10.1.7 | INTEGER | 风扇状态 |
 | hwEntityPowerState | 1.3.6.1.4.1.2011.5.25.31.1.1.11.1.3 | INTEGER | 电源状态 |
+| hwEntityVoltage | 1.3.6.1.4.1.2011.5.25.31.1.1.1.1.14 | INTEGER | 实体当前电压 |
 
 ### 接口扩展
 
 | 名称 | OID | 数据类型 | 说明 |
 |------|-----|----------|------|
-| hwIfMonitorInputRate | 1.3.6.1.4.1.2011.5.25.41.1.3.1.1.1 | Gauge32 | 接口输入速率（bps） |
-| hwIfMonitorOutputRate | 1.3.6.1.4.1.2011.5.25.41.1.3.1.1.2 | Gauge32 | 接口输出速率（bps） |
+| hwIfMonitorInputRate | 1.3.6.1.4.1.2011.5.25.41.1.7.1.1.8 | Gauge32 | 接口输入实时速率（bps） |
+| hwIfMonitorOutputRate | 1.3.6.1.4.1.2011.5.25.41.1.7.1.1.10 | Gauge32 | 接口输出实时速率（bps） |
 
 ### BGP
 
 | 名称 | OID | 数据类型 | 说明 |
 |------|-----|----------|------|
-| hwBgpPeerState | 1.3.6.1.4.1.2011.5.25.177.1.2.1.1.3 | INTEGER | BGP 邻居状态 |
-| hwBgpPeerFsmEstablishedTime | 1.3.6.1.4.1.2011.5.25.177.1.2.1.1.16 | Gauge32 | BGP 建立时间 |
+| hwBgpPeerState | 1.3.6.1.4.1.2011.5.25.177.1.1.2.1.5 | INTEGER | BGP 对等体状态 |
+| hwBgpPeerFsmEstablishedTime | 1.3.6.1.4.1.2011.5.25.177.1.1.2.1.7 | Gauge32 | BGP 会话已建立时长 |
+
+### PoE
+
+| 名称 | OID | 数据类型 | 说明 |
+|------|-----|----------|------|
+| hwPoePortConsumingPower | 1.3.6.1.4.1.2011.6.3.18.1.4.1.6 | INTEGER | PoE 端口当前功耗 |
+| hwPoePortPeakPower | 1.3.6.1.4.1.2011.6.3.18.1.4.1.7 | INTEGER | PoE 端口峰值功耗 |
+| hwPoePortVoltage | 1.3.6.1.4.1.2011.6.3.18.1.4.1.8 | OCTET STRING | PoE 端口输出电压 |
+| hwPoePortCurrent | 1.3.6.1.4.1.2011.6.3.18.1.4.1.9 | OCTET STRING | PoE 端口输出电流 |
+
+### 光模块诊断
+
+| 名称 | OID | 数据类型 | 说明 |
+|------|-----|----------|------|
+| hwEntityOpticalVoltage | 1.3.6.1.4.1.2011.5.25.31.1.1.1.1.17 | INTEGER | 光模块供电电压 |
+| hwEntityOpticalCurrent | 1.3.6.1.4.1.2011.5.25.31.1.1.1.1.18 | INTEGER | 光模块偏置电流 |
+| hwEntityOpticalRxPower | 1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19 | INTEGER | 光模块接收光功率 |
+| hwEntityOpticalTxPower | 1.3.6.1.4.1.2011.5.25.31.1.1.1.1.20 | INTEGER | 光模块发送光功率 |
 
 ---
 
 ## H3C OID
 
 H3C 企业 OID 前缀：`1.3.6.1.4.1.25506`
+
+说明：
+
+- 已运行时接入：CPU、内存、温度
+- 已运行时接入（返回摘要 + 持久化 tags）：BGP 邻居摘要、光模块诊断摘要
+- 已纳入 `backend-go/internal/snmpmib/vendor-oids.json -> catalog.h3c`：
+  BGP4V2、PoE 功率目录、实体电压/功耗、光模块诊断
 
 ### CPU 和内存
 
@@ -174,6 +222,31 @@ H3C 企业 OID 前缀：`1.3.6.1.4.1.25506`
 | hh3cEntityExtTemperature | 1.3.6.1.4.1.25506.2.6.1.1.1.1.12 | INTEGER | 温度值（摄氏度） |
 | hh3cFanState | 1.3.6.1.4.1.25506.8.35.9.1.2.1.2 | INTEGER | 风扇状态 |
 | hh3cPowerState | 1.3.6.1.4.1.25506.8.35.9.1.1.1.2 | INTEGER | 电源状态 |
+| hh3cEntityExtCurrentPower | 1.3.6.1.4.1.25506.2.6.1.3.1.1.3 | Gauge32 | 实体当前功耗（mW） |
+| hh3cEntityExtCurrentVoltage | 1.3.6.1.4.1.25506.2.6.1.3.1.1.4 | Gauge32 | 实体当前电压（mV） |
+
+### BGP
+
+| 名称 | OID | 数据类型 | 说明 |
+|------|-----|----------|------|
+| hh3cBgp4V2PeerLastErrorCodeReceived | 1.3.6.1.4.1.25506.2.183.1.1.1.2 | OCTET STRING | BGP 对等体最近一次收到的错误码 |
+| hh3cBgp4V2PeerState | 1.3.6.1.4.1.25506.2.183.1.1.1.3 | INTEGER | BGP 对等体状态 |
+
+### PoE
+
+| 名称 | OID | 数据类型 | 说明 |
+|------|-----|----------|------|
+| hh3cMainGuaranteedPowerRemaining | 1.3.6.1.4.1.25506.2.14.2.1.4 | Gauge32 | 主 PSE 剩余保障功率（W） |
+| hh3cPsePortPeakPower | 1.3.6.1.4.1.25506.2.14.1.1.3 | INTEGER | PoE 端口峰值功率配置 |
+
+### 光模块诊断
+
+| 名称 | OID | 数据类型 | 说明 |
+|------|-----|----------|------|
+| hh3cTransceiverBiasCurrent | 1.3.6.1.4.1.25506.18.2.1.1.2 | Gauge32 | 光模块偏置电流（0.1uA） |
+| hh3cTransceiverVoltage | 1.3.6.1.4.1.25506.18.2.1.1.4 | Gauge32 | 光模块工作电压（0.1mV） |
+| hh3cTransceiverCurTXPower | 1.3.6.1.4.1.25506.18.2.1.1.5 | Gauge32 | 光模块当前发光功率（0.1uW） |
+| hh3cTransceiverCurRXPower | 1.3.6.1.4.1.25506.18.2.1.1.6 | Gauge32 | 光模块当前收光功率（0.1uW） |
 
 ---
 
@@ -331,6 +404,9 @@ for (errorIndication,
 
 ## 相关文档
 
+- [SNMP MIB JSON Registry 落地实施说明](../features/devices/snmp-mib-json-registry-implementation.md)
+- [SNMP MIB OID 新增厂商维护指南](../features/devices/snmp-mib-oid-maintenance-guide.md)
+- [vendor-oids.json 字段逐项参考](../features/devices/snmp-mib-vendor-oids-json-reference.md)
 - [模板配置指南](../template-configuration-guide.md)
 - [最佳实践文档](../template-best-practices.md)
 - [API 文档](../api/readme.md)

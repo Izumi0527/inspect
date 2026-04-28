@@ -40,6 +40,10 @@
 
 ### 功能文档（按业务模块）
 - `features/`：按模块拆分（devices/inspection/settings 等）
+- 设备 SNMP / MIB / OID：
+  - `features/devices/snmp-mib-json-registry-implementation.md`：方案 A 的正式落地说明
+  - `features/devices/snmp-mib-oid-maintenance-guide.md`：新增厂商 OID 的维护规范、模板与校验建议
+  - `features/devices/snmp-mib-vendor-oids-json-reference.md`：`vendor-oids.json` 字段逐项说明与可复制模板
 - 巡检模板（配置与经验沉淀）：
   - `template-configuration-guide.md`：模板配置指南
   - `template-best-practices.md`：模板最佳实践（阈值/命名/可维护性）

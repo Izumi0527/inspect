@@ -1,7 +1,7 @@
 import { Device } from '../types'
 import { DeviceFormData } from '../components/forms/DeviceForm'
 
-const vendorMap: Record<string, string> = {
+const defaultVendorMap: Record<string, string> = {
   switch: 'cisco',
   router: 'cisco',
   firewall: 'fortinet',
@@ -36,6 +36,14 @@ const includeSensitiveValue = (
   if (value) return value
   if (mode === 'create') return undefined
   return undefined
+}
+
+const pickVendor = (vendor?: string | null, deviceType?: string | null) => {
+  const explicitVendor = pickText(vendor)
+  if (explicitVendor) {
+    return explicitVendor
+  }
+  return defaultVendorMap[deviceType ?? ''] || 'other'
 }
 
 const buildCliTags = (formData: DeviceFormData, mode: 'create' | 'update') => {
@@ -170,7 +178,7 @@ const buildCommonPayload = (formData: DeviceFormData, mode: 'create' | 'update')
     ip: formData.ip,
     ip_address: formData.ip,
     device_type: formData.device_type,
-    vendor: vendorMap[formData.device_type] || 'other',
+    vendor: pickVendor(formData.vendor, formData.device_type),
     location: formData.location || '',
     description: formData.description || '',
     snmp_version: snmpVersionMap[formData.snmp_config?.version ?? 'v2c'] ?? '2c',
@@ -314,6 +322,7 @@ export const buildFormInitialData = (device?: Device | null): Partial<Device> | 
 
   return {
     ...device,
+    vendor: pickVendor(device.vendor, device.device_type),
     cli_protocol: cliProtocol,
     ssh_config: sshConfig,
     telnet_config: telnetConfig,

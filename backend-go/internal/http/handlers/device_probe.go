@@ -413,6 +413,7 @@ func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
 	metrics, err := h.SNMPCollector.CollectMetrics(
 		c.Request().Context(),
 		device.IPAddress,
+		device.Vendor,
 		device.SnmpCommunity,
 		device.SnmpVersion,
 		device.SnmpPort,
@@ -423,65 +424,7 @@ func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "metrics collection failed")
 	}
 
-	// Build metrics map for writing to database
-	metricsMap := make(map[string]monitoring.MetricValue)
-	if metrics.CPUUsage != nil {
-		metricsMap["cpu_usage"] = monitoring.MetricValue{Value: metrics.CPUUsage, Unit: stringPtr("%")}
-	}
-	if metrics.MemoryUsage != nil {
-		metricsMap["memory_usage"] = monitoring.MetricValue{Value: metrics.MemoryUsage, Unit: stringPtr("%")}
-	}
-	if metrics.Temperature != nil {
-		metricsMap["temperature"] = monitoring.MetricValue{Value: metrics.Temperature, Unit: stringPtr("°C")}
-	}
-	if metrics.Uptime != nil {
-		uptimeFloat := float64(*metrics.Uptime)
-		metricsMap["uptime"] = monitoring.MetricValue{Value: &uptimeFloat, Unit: stringPtr("seconds")}
-	}
-	if metrics.BandwidthIn != nil {
-		bwIn := *metrics.BandwidthIn // 直接存储 bps
-		metricsMap["bandwidth_in"] = monitoring.MetricValue{Value: &bwIn, Unit: stringPtr("bps")}
-	}
-	if metrics.BandwidthOut != nil {
-		bwOut := *metrics.BandwidthOut // 直接存储 bps
-		metricsMap["bandwidth_out"] = monitoring.MetricValue{Value: &bwOut, Unit: stringPtr("bps")}
-	}
-
-	// Build interface metrics
-	interfaces := make([]map[string]interface{}, 0, len(metrics.Interfaces))
-	for _, iface := range metrics.Interfaces {
-		ifaceMap := map[string]interface{}{
-			"name": iface.Name,
-		}
-		if iface.Description != "" {
-			ifaceMap["description"] = iface.Description
-		}
-		if iface.Speed != nil {
-			ifaceMap["ifHighSpeed"] = *iface.Speed
-		}
-		if iface.InOctets != nil {
-			ifaceMap["ifHCInOctets"] = *iface.InOctets
-		}
-		if iface.OutOctets != nil {
-			ifaceMap["ifHCOutOctets"] = *iface.OutOctets
-		}
-		if iface.InRate != nil {
-			ifaceMap["bandwidth_in"] = *iface.InRate // 直接存储 bps
-		}
-		if iface.OutRate != nil {
-			ifaceMap["bandwidth_out"] = *iface.OutRate // 直接存储 bps
-		}
-		interfaces = append(interfaces, ifaceMap)
-	}
-
-	// Write metrics to database
-	collectedAt := monitoring.FlexibleTime{Time: metrics.CollectedAt}
-	writeReq := monitoring.DeviceMetricsRequest{
-		DeviceID:    deviceID,
-		Metrics:     metricsMap,
-		Interfaces:  interfaces,
-		CollectedAt: &collectedAt,
-	}
+	writeReq := monitoring.BuildSNMPDeviceMetricsRequest(deviceID, metrics)
 
 	result, err := h.Metrics.WriteDeviceMetrics(c.Request().Context(), writeReq)
 	if err != nil && !errors.Is(err, monitoring.ErrNoMetrics) {
@@ -564,6 +507,7 @@ func (h DevicesHandler) BatchCollectMetrics(c echo.Context) error {
 		metrics, err := h.SNMPCollector.CollectMetrics(
 			c.Request().Context(),
 			device.IPAddress,
+			device.Vendor,
 			device.SnmpCommunity,
 			device.SnmpVersion,
 			device.SnmpPort,
@@ -576,36 +520,7 @@ func (h DevicesHandler) BatchCollectMetrics(c echo.Context) error {
 			continue
 		}
 
-		// Build and write metrics
-		metricsMap := make(map[string]monitoring.MetricValue)
-		if metrics.CPUUsage != nil {
-			metricsMap["cpu_usage"] = monitoring.MetricValue{Value: metrics.CPUUsage, Unit: stringPtr("%")}
-		}
-		if metrics.MemoryUsage != nil {
-			metricsMap["memory_usage"] = monitoring.MetricValue{Value: metrics.MemoryUsage, Unit: stringPtr("%")}
-		}
-		if metrics.Temperature != nil {
-			metricsMap["temperature"] = monitoring.MetricValue{Value: metrics.Temperature, Unit: stringPtr("°C")}
-		}
-		if metrics.Uptime != nil {
-			uptimeFloat := float64(*metrics.Uptime)
-			metricsMap["uptime"] = monitoring.MetricValue{Value: &uptimeFloat, Unit: stringPtr("seconds")}
-		}
-		if metrics.BandwidthIn != nil {
-			bwIn := *metrics.BandwidthIn // 直接存储 bps
-			metricsMap["bandwidth_in"] = monitoring.MetricValue{Value: &bwIn, Unit: stringPtr("bps")}
-		}
-		if metrics.BandwidthOut != nil {
-			bwOut := *metrics.BandwidthOut // 直接存储 bps
-			metricsMap["bandwidth_out"] = monitoring.MetricValue{Value: &bwOut, Unit: stringPtr("bps")}
-		}
-
-		collectedAt := monitoring.FlexibleTime{Time: metrics.CollectedAt}
-		writeReq := monitoring.DeviceMetricsRequest{
-			DeviceID:    device.ID,
-			Metrics:     metricsMap,
-			CollectedAt: &collectedAt,
-		}
+		writeReq := monitoring.BuildSNMPDeviceMetricsRequest(device.ID, metrics)
 
 		writeResult, writeErr := h.Metrics.WriteDeviceMetrics(c.Request().Context(), writeReq)
 		if writeErr != nil && !errors.Is(writeErr, monitoring.ErrNoMetrics) {

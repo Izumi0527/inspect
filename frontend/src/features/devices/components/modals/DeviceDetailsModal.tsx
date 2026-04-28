@@ -13,8 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Device } from '../../types'
-import { healthCheckDevice, fetchDevicePerformance } from '../../api/devices.api'
+import { Device, DeviceSNMPExtensions } from '../../types'
+import {
+  healthCheckDevice,
+  fetchDevicePerformance,
+  fetchDeviceSNMPExtensions,
+} from '../../api/devices.api'
 import { formatDate } from '@/utils/formatters'
 import { getDeviceTypeLabel } from '../DeviceIcon'
 
@@ -39,6 +43,24 @@ const formatLastSeen = (lastSeen: string | undefined | null): string => {
     return '未知'
   }
   return formatDate(lastSeen, 'datetime')
+}
+
+const formatNumberWithUnit = (
+  value: number | undefined | null,
+  unit?: string | null,
+): string => {
+  if (value === undefined || value === null) {
+    return '-'
+  }
+  const formatted = Number.isInteger(value) ? String(value) : value.toFixed(1)
+  return unit ? `${formatted} ${unit}` : formatted
+}
+
+const formatDurationSeconds = (seconds: number | undefined | null): string => {
+  if (seconds === undefined || seconds === null) {
+    return '-'
+  }
+  return `${seconds} 秒`
 }
 
 const toNumber = (value: unknown): number | undefined => {
@@ -158,6 +180,9 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
   const [performanceLoading, setPerformanceLoading] = React.useState(false)
   const [performanceError, setPerformanceError] = React.useState<string | null>(null)
   const [performanceData, setPerformanceData] = React.useState<Record<string, unknown> | null>(null)
+  const [snmpExtensionsLoading, setSnmpExtensionsLoading] = React.useState(false)
+  const [snmpExtensionsError, setSnmpExtensionsError] = React.useState<string | null>(null)
+  const [snmpExtensionsData, setSnmpExtensionsData] = React.useState<DeviceSNMPExtensions | null>(null)
 
   React.useEffect(() => {
     if (!isOpen || !device) {
@@ -165,6 +190,8 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
       setHealthError(null)
       setPerformanceData(null)
       setPerformanceError(null)
+      setSnmpExtensionsData(null)
+      setSnmpExtensionsError(null)
       setTimeRange('24h')
       return
     }
@@ -172,6 +199,8 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
     let cancelled = false
     setPerformanceLoading(true)
     setPerformanceError(null)
+    setSnmpExtensionsLoading(true)
+    setSnmpExtensionsError(null)
 
     fetchDevicePerformance(device.id, timeRange)
       .then((result) => {
@@ -188,6 +217,24 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
       .finally(() => {
         if (!cancelled) {
           setPerformanceLoading(false)
+        }
+      })
+
+    fetchDeviceSNMPExtensions(device.id)
+      .then((result) => {
+        if (!cancelled) {
+          setSnmpExtensionsData(result)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : '加载 SNMP 扩展摘要失败'
+          setSnmpExtensionsError(message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSnmpExtensionsLoading(false)
         }
       })
 
@@ -228,6 +275,18 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
     const currentCpu = toNumber(currentMetrics.cpu_usage) ?? device.cpu_usage ?? null
     const currentMemory = toNumber(currentMetrics.memory_usage) ?? device.memory_usage ?? null
     const currentTemperature = toNumber(currentMetrics.temperature) ?? null
+    const snmpExtensions = snmpExtensionsData ?? {
+      device_id: device.id,
+      timestamp: null,
+      bgp_peers: [],
+      optical_transceivers: [],
+    }
+    const establishedBGPPeerCount = snmpExtensions.bgp_peers.filter(
+      (peer) => peer.state_label === 'established',
+    ).length
+    const hasSNMPExtensionDetails =
+      snmpExtensions.bgp_peers.length > 0 ||
+      snmpExtensions.optical_transceivers.length > 0
 
     return (
       <div className="space-y-6">
@@ -319,6 +378,104 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
             <InfoRow label="当前温度" value={performanceLoading ? '加载中...' : (currentTemperature != null ? `${currentTemperature.toFixed(1)}°C` : '-')} />
             <InfoRow label="性能点数" value={performanceLoading ? '加载中...' : history.length} />
           </div>
+        </div>
+
+        <div className="border rounded-xl p-4 bg-muted/40 space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-foreground/90">SNMP 扩展摘要</p>
+            <p className="text-xs text-muted-foreground">
+              展示最近一次采集到的 BGP 邻居与光模块诊断摘要
+            </p>
+          </div>
+
+          {snmpExtensionsError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {snmpExtensionsError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <InfoRow
+              label="BGP 邻居数"
+              value={snmpExtensionsLoading ? '加载中...' : snmpExtensions.bgp_peers.length}
+            />
+            <InfoRow
+              label="已建立邻居"
+              value={snmpExtensionsLoading ? '加载中...' : establishedBGPPeerCount}
+            />
+            <InfoRow
+              label="光模块数量"
+              value={snmpExtensionsLoading ? '加载中...' : snmpExtensions.optical_transceivers.length}
+            />
+            <InfoRow
+              label="最近采集时间"
+              value={snmpExtensionsLoading ? '加载中...' : formatLastSeen(snmpExtensions.timestamp)}
+            />
+          </div>
+
+          {!snmpExtensionsLoading && !hasSNMPExtensionDetails && !snmpExtensionsError && (
+            <div className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">
+              暂无 SNMP 扩展摘要
+            </div>
+          )}
+
+          {!snmpExtensionsLoading && snmpExtensions.bgp_peers.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-foreground">BGP 邻居</p>
+              <div className="space-y-2">
+                {snmpExtensions.bgp_peers.map((peer) => (
+                  <div
+                    key={`bgp-${peer.index}`}
+                    className="rounded-lg border border-border/70 bg-background/80 p-3"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <InfoRow label="索引" value={peer.index} />
+                      <InfoRow label="状态" value={peer.state_label || '-'} />
+                      <InfoRow
+                        label="建立时长"
+                        value={formatDurationSeconds(peer.established_time_seconds)}
+                      />
+                      <InfoRow label="最近错误" value={peer.last_error || '-'} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!snmpExtensionsLoading && snmpExtensions.optical_transceivers.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-foreground">光模块诊断</p>
+              <div className="space-y-2">
+                {snmpExtensions.optical_transceivers.map((item) => (
+                  <div
+                    key={`optical-${item.index}`}
+                    className="rounded-lg border border-border/70 bg-background/80 p-3"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                      <InfoRow label="索引" value={item.index} />
+                      <InfoRow
+                        label="偏置电流"
+                        value={formatNumberWithUnit(item.bias_current, item.bias_current_unit)}
+                      />
+                      <InfoRow
+                        label="接收光功率"
+                        value={formatNumberWithUnit(item.rx_power, item.rx_power_unit)}
+                      />
+                      <InfoRow
+                        label="发送光功率"
+                        value={formatNumberWithUnit(item.tx_power, item.tx_power_unit)}
+                      />
+                      <InfoRow
+                        label="工作电压"
+                        value={formatNumberWithUnit(item.voltage, item.voltage_unit)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )

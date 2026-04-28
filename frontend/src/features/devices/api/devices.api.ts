@@ -10,6 +10,7 @@ import {
   BulkUpdateParams,
   DeviceProbeResult,
   DeviceBatchProbeResponse,
+  DeviceSNMPExtensions,
 } from "../types";
 import { ApiResponse } from "@/lib/types/api-response.types";
 import type {
@@ -1010,6 +1011,53 @@ export async function fetchDevicePerformance(
   }
 
   throw new Error("获取设备性能数据失败：响应格式不正确");
+}
+
+const isSNMPBGPNeighbor = (
+  candidate: unknown,
+): candidate is DeviceSNMPExtensions["bgp_peers"][number] =>
+  isObject(candidate) && typeof candidate.index === "string";
+
+const isSNMPOpticalTransceiver = (
+  candidate: unknown,
+): candidate is DeviceSNMPExtensions["optical_transceivers"][number] =>
+  isObject(candidate) && typeof candidate.index === "string";
+
+const normalizeDeviceSNMPExtensions = (
+  deviceId: number,
+  payload: unknown,
+): DeviceSNMPExtensions => {
+  if (!isObject(payload)) {
+    return {
+      device_id: deviceId,
+      timestamp: null,
+      bgp_peers: [],
+      optical_transceivers: [],
+    };
+  }
+
+  const bgpPeers = Array.isArray(payload.bgp_peers)
+    ? payload.bgp_peers.filter(isSNMPBGPNeighbor)
+    : [];
+  const opticalTransceivers = Array.isArray(payload.optical_transceivers)
+    ? payload.optical_transceivers.filter(isSNMPOpticalTransceiver)
+    : [];
+
+  return {
+    device_id:
+      typeof payload.device_id === "number" ? payload.device_id : deviceId,
+    timestamp:
+      typeof payload.timestamp === "string" ? payload.timestamp : null,
+    bgp_peers: bgpPeers,
+    optical_transceivers: opticalTransceivers,
+  };
+};
+
+export async function fetchDeviceSNMPExtensions(
+  id: number,
+): Promise<DeviceSNMPExtensions> {
+  const payload = await api.get<unknown>(`/monitoring/devices/${id}/snmp-extensions`);
+  return normalizeDeviceSNMPExtensions(id, unwrapMaybeApiResponseData(payload));
 }
 
 const appendQuery = (

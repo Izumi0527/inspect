@@ -60,13 +60,64 @@ func TestTriggerStrategy_ShouldSetScheduleID(t *testing.T) {
 			now,
 		))
 
+	mock.ExpectQuery(`SELECT .* FROM "inspection_templates" WHERE id = \$1.*`).
+		WithArgs(200, sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id",
+			"name",
+			"description",
+			"category",
+			"device_types",
+			"check_items",
+			"is_default",
+			"is_active",
+			"created_at",
+			"updated_at",
+		}).AddRow(
+			200,
+			"模板A",
+			nil,
+			nil,
+			[]byte(`["switch"]`),
+			[]byte(`[]`),
+			false,
+			true,
+			now,
+			now,
+		))
+
 	insertArgs := buildInspectionInsertExpectedArgs(t, gormDB, 1, 200)
 	mock.ExpectQuery(`INSERT INTO "inspections".*RETURNING "id"`).
 		WithArgs(insertArgs...).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(123))
 
-	// 异步执行会先尝试读取巡检记录并更新状态；这里让首次读取就返回“未找到”
-	// 以避免触发后续的 UPDATE/结果写入等 DB 读写。
+	// goroutine 启动后会先重新读取模板，再尝试读取巡检记录更新状态；
+	// 这里让首次读取巡检记录就返回“未找到”，以避免触发后续 UPDATE/结果写入。
+	mock.ExpectQuery(`SELECT .* FROM "inspection_templates" WHERE id = \$1.*`).
+		WithArgs(200, sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id",
+			"name",
+			"description",
+			"category",
+			"device_types",
+			"check_items",
+			"is_default",
+			"is_active",
+			"created_at",
+			"updated_at",
+		}).AddRow(
+			200,
+			"模板A",
+			nil,
+			nil,
+			[]byte(`["switch"]`),
+			[]byte(`[]`),
+			false,
+			true,
+			now,
+			now,
+		))
 	mock.ExpectQuery(`SELECT .* FROM "inspections" WHERE id = \$1.*`).
 		WithArgs(123, sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{

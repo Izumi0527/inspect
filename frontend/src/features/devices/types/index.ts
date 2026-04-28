@@ -4,6 +4,17 @@ export type DeviceStatus = 'online' | 'offline' | 'warning' | 'maintenance' | 'u
 // 设备类型枚举
 export type DeviceType = 'switch' | 'router' | 'firewall' | 'wireless_ap'
 
+// 设备厂商枚举
+export type DeviceVendor =
+  | 'cisco'
+  | 'huawei'
+  | 'h3c'
+  | 'juniper'
+  | 'arista'
+  | 'fortinet'
+  | 'linux'
+  | 'other'
+
 // CLI连接协议类型
 export type CLIProtocol = 'ssh' | 'telnet' | 'none'
 
@@ -67,6 +78,33 @@ export interface SNMPConfig {
   port?: number
   v2c_config?: SNMPv2cConfig
   v3_config?: SNMPv3Config
+}
+
+export interface SNMPBGPNeighbor {
+  index: string
+  state?: number
+  state_label?: string
+  established_time_seconds?: number
+  last_error?: string
+}
+
+export interface SNMPOpticalTransceiver {
+  index: string
+  voltage?: number
+  voltage_unit?: string
+  bias_current?: number
+  bias_current_unit?: string
+  tx_power?: number
+  tx_power_unit?: string
+  rx_power?: number
+  rx_power_unit?: string
+}
+
+export interface DeviceSNMPExtensions {
+  device_id: number
+  timestamp?: string | null
+  bgp_peers: SNMPBGPNeighbor[]
+  optical_transceivers: SNMPOpticalTransceiver[]
 }
 
 // 高级连接配置接口
