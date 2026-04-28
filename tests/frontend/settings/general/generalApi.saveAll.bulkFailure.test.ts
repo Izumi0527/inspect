@@ -22,7 +22,7 @@ describe('generalApi.saveAll bulk failed_keys 处理', () => {
 
     await expect(
       generalApi.saveAll({
-        basicInfo: { applicationName: 'x', version: '1.0.0', timezone: 'Asia/Shanghai' },
+        basicInfo: { applicationName: 'x', version: '1.0.1', timezone: 'Asia/Shanghai' },
         inspectionConfig: { maxConcurrentTasks: 10, defaultTimeout: 30, retryAttempts: 3 },
         reportConfig: { defaultFormat: 'excel', maxExportRecords: 10000 },
         userPreference: { theme: 'auto', language: 'zh-CN', dateFormat: 'YYYY-MM-DD', timeFormat: '24h' },
@@ -30,4 +30,3 @@ describe('generalApi.saveAll bulk failed_keys 处理', () => {
     ).rejects.toThrow('失败')
   })
 })
-

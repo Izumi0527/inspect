@@ -15,7 +15,7 @@ import (
 type Config struct {
 	Debug      bool   `env:"DEBUG" envDefault:"false"`
 	AppName    string `env:"APP_NAME" envDefault:"Inspect System"`
-	AppVersion string `env:"APP_VERSION" envDefault:"1.0.0"`
+	AppVersion string `env:"APP_VERSION" envDefault:"1.0.1"`
 	SecretKey  string `env:"SECRET_KEY" envDefault:"your-secret-key-change-in-production"`
 
 	ServerHost string `env:"SERVER_HOST" envDefault:"0.0.0.0"`

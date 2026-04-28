@@ -1,5 +1,5 @@
 // Service Worker for PWA offline functionality
-const CACHE_NAME = 'inspect-system-v1.0.0'
+const CACHE_NAME = 'inspect-system-v1.0.1'
 const STATIC_CACHE = 'static-cache-v1'
 const DYNAMIC_CACHE = 'dynamic-cache-v1'
 

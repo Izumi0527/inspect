@@ -3,7 +3,7 @@
   "info": {
     "title": "网络设备巡检系统 API",
     "description": "企业级网络设备巡检与监控平台后端API",
-    "version": "1.0.0"
+    "version": "1.0.1"
   },
   "paths": {
     "/health": {

@@ -192,6 +192,6 @@ docker exec -i inspect-postgres-dev psql -U inspect_dev -d inspect_system_dev -c
 
 ---
 
-**版本**：1.0.0
+**版本**：1.0.1
 **最后更新**：2024年1月
 **作者**：Claude Code Assistant

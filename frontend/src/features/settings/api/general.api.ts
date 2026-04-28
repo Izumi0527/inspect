@@ -61,7 +61,7 @@ export const generalApi = {
     return {
       basicInfo: {
         applicationName: toString(settingsMap.get('system.application_name'), '网络设备巡检系统'),
-        version: toString(settingsMap.get('system.version'), '1.0.0'),
+        version: toString(settingsMap.get('system.version'), '1.0.1'),
         timezone: toString(settingsMap.get('system.timezone'), 'Asia/Shanghai'),
       },
       inspectionConfig: {

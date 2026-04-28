@@ -66,7 +66,7 @@ jest.mock('@/features/settings/components/shared/ConfigSelect', () => ({
 describe('BasicInfoSection', () => {
   const data = {
     applicationName: '网络设备巡检系统',
-    version: '1.0.0',
+    version: '1.0.1',
     timezone: 'Asia/Shanghai',
   }
 

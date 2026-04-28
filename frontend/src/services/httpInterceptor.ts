@@ -300,7 +300,7 @@ class HttpInterceptor {
 
     logger.info('HTTP拦截器已激活', {
       originalFetch: typeof this.originalFetch,
-      interceptorVersion: '1.0.0',
+      interceptorVersion: '1.0.1',
     });
   }
 

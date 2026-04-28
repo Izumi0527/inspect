@@ -416,7 +416,7 @@ func (s *Service) ListSettingGroups(ctx context.Context, includeConfigs bool) ([
 
 func (s *Service) GetSystemInfo(ctx context.Context) (SystemInfoResponse, error) {
 	appName := s.getSettingValue(ctx, "system.application_name", "网络设备巡检系统")
-	version := s.getSettingValue(ctx, "system.version", "1.0.0")
+	version := s.getSettingValue(ctx, "system.version", "1.0.1")
 	timezone := s.getSettingValue(ctx, "system.timezone", "Asia/Shanghai")
 
 	var lastBackup *time.Time

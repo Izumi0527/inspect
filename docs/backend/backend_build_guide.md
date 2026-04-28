@@ -370,7 +370,7 @@ Invoke-WebRequest http://localhost:8000/health
 ```json
 {
   "status": "healthy",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "timestamp": "2026-01-30T14:55:06Z",
   "database": "connected",
   "redis": "connected"

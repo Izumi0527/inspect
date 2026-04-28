@@ -71,7 +71,7 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
     mockUseGeneralSettings.mockReturnValue({
       basicInfo: {
         applicationName: '网络设备巡检系统',
-        version: '1.0.0',
+        version: '1.0.1',
         timezone: 'Asia/Shanghai',
       },
       inspectionConfig: {
