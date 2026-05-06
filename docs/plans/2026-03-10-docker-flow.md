@@ -64,8 +64,8 @@
 ### Task 4: 脚本与文档收口到“双 Compose”结构（消除旧引用）
 
 **Files:**
-- Modify: `scripts/development/dev-start.ps1`
-- Modify: `scripts/development/dev-start.ps1`（新增 `-Diagnose` 诊断模式）
+- Modify: `scripts/dev-start.ps1`
+- Modify: `scripts/dev-start.ps1`（新增 `-Diagnose` 诊断模式）
 - Modify: `scripts/tests/run-tests.ps1`
 - Modify: `.env.example`
 - Modify: `README.md`

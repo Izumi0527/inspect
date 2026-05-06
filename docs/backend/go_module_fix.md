@@ -71,7 +71,7 @@ func loadEnvFiles() {
 
 ### 修改启动脚本
 
-**文件**: `scripts/development/dev-start.ps1`
+**文件**: `scripts/dev-start.ps1`
 
 **修改内容**:
 
@@ -98,10 +98,10 @@ Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", $backe
 
 ```powershell
 # 启动后端服务
-.\scripts\development\dev-start.ps1 -Services backend
+.\scripts\dev-start.ps1 -Services backend
 
 # 或启动所有服务
-.\scripts\development\dev-start.ps1
+.\scripts\dev-start.ps1
 ```
 
 ### 2. 手动启动测试
@@ -158,7 +158,7 @@ go build ./cmd/api
 
 ```powershell
 # 1. 使用启动脚本（最简单）
-.\scripts\development\dev-start.ps1 -Services backend
+.\scripts\dev-start.ps1 -Services backend
 
 # 2. 手动启动（用于调试）
 $env:ENV_FILE = (Resolve-Path .env).Path
@@ -299,7 +299,7 @@ Inspect/
 
 - [后端数据库连接错误修复](./backend_database_connection_fix.md)
 - [后端编译错误修复](./backend_compile_fix.md)
-- [开发脚本说明](../../scripts/development/README.md)
+- [开发脚本说明](../../scripts/README.md)
 - [环境配置迁移说明](../env/env_migration_notice.md)
 
 ## 修复时间线

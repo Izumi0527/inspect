@@ -142,10 +142,10 @@ lsof -i :15500
 
 ```powershell
 # 一键设置开发环境
-.\scripts\development\setup-dev-env.ps1
+.\scripts\dev-start.ps1 -Setup
 
 # 启动后端（推荐：自动包含数据库检查）
-.\scripts\development\dev-start.ps1 -Services backend
+.\scripts\dev-start.ps1 -Services backend
 
 # 数据库迁移（Go）
 .\scripts\db-manage.ps1 init

@@ -73,7 +73,7 @@ DatabaseURL string `env:"DATABASE_URL" envDefault:"postgresql://postgres:passwor
 
 ### 实施方案 4 - 使用 ENV_FILE 环境变量
 
-修改 `scripts/development/dev-start.ps1` 中的后端启动命令：
+修改 `scripts/dev-start.ps1` 中的后端启动命令：
 
 **修改前**:
 ```powershell
@@ -144,10 +144,10 @@ go run ./cmd/api
 
 ```powershell
 # 启动所有服务
-.\scripts\development\dev-start.ps1
+.\scripts\dev-start.ps1
 
 # 只启动后端（包含数据库）
-.\scripts\development\dev-start.ps1 -Services backend
+.\scripts\dev-start.ps1 -Services backend
 ```
 
 ### 5. 验证连接成功
@@ -205,7 +205,7 @@ cd C:\coder\Inspect
 Test-Path .env
 
 # 3. 使用启动脚本
-.\scripts\development\dev-start.ps1
+.\scripts\dev-start.ps1
 ```
 
 ### 手动启动
@@ -328,7 +328,7 @@ docker ps --filter "name=inspect-postgres-dev"
 .\scripts\db-manage.ps1 start
 
 # 或使用启动脚本
-.\scripts\development\dev-start.ps1 -Services database
+.\scripts\dev-start.ps1 -Services database
 ```
 
 ### 问题 4: 端口被占用
@@ -388,7 +388,7 @@ Invoke-WebRequest http://localhost:8000/health
 ## 相关文档
 
 - [后端编译错误修复](./backend_compile_fix.md)
-- [开发脚本说明](../../scripts/development/README.md)
+- [开发脚本说明](../../scripts/README.md)
 - [数据库管理指南](../../scripts/README.md)
 - [环境配置迁移说明](../env/env_migration_notice.md)
 

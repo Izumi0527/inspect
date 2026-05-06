@@ -41,7 +41,7 @@ REDIS_URL=redis://:dev_redis_2024@localhost:16380/0
 ```bash
 # 启动数据库与开发辅助工具
 # Linux/macOS
-./scripts/development/dev-start.ps1
+./scripts/dev-start.ps1
 
 # 或仅启动数据库容器
 docker-compose -f docker-compose.dev.yml up -d postgres redis

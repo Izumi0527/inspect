@@ -1,18 +1,16 @@
 # UltraThink 脚本目录结构
 
 本目录包含项目当前仍在维护的脚本。数据库脚本已收敛为根目录下的
-`db-manage.ps1` / `db-manage.sh`，不再保留旧的数据库脚本子目录。
+`db-manage.ps1` / `db-manage.sh`，开发脚本已收敛为根目录下的
+`dev-start.ps1`，不再保留旧的数据库和开发脚本子目录。
 
 ## 目录结构
 
 ```text
 scripts/
+├── dev-start.ps1      # 开发环境设置、启动、诊断统一入口
 ├── db-manage.ps1       # 数据库统一管理、初始化、验证与管理员种子
 ├── db-manage.sh        # 数据库统一管理 Bash 版
-├── development/        # 开发服务脚本
-│   ├── setup-dev-env.ps1
-│   ├── dev-start.ps1
-│   └── README.md
 ├── tests/              # 测试与维护脚本
 │   ├── run-tests.ps1
 │   ├── quality-check.ps1
@@ -29,13 +27,13 @@ scripts/
 ### 环境设置
 
 ```powershell
-.\scripts\development\setup-dev-env.ps1
+.\scripts\dev-start.ps1 -Setup
 ```
 
 ### 启动开发服务
 
 ```powershell
-.\scripts\development\dev-start.ps1
+.\scripts\dev-start.ps1
 ```
 
 也可以手动启动：
@@ -47,6 +45,67 @@ go run ./cmd/api
 cd frontend
 pnpm dev
 ```
+
+## 开发环境管理
+
+统一入口：
+
+```powershell
+.\scripts\dev-start.ps1 [-Setup] [-Diagnose] [-Services <database|backend|frontend|all>]
+```
+
+常用命令：
+
+```powershell
+# 初始化完整开发环境（前置检查、配置文件、数据库、后端、前端、测试验证）
+.\scripts\dev-start.ps1 -Setup
+
+# 初始化开发环境但跳过测试验证
+.\scripts\dev-start.ps1 -Setup -SkipTests
+
+# 初始化开发环境但跳过数据库环境设置
+.\scripts\dev-start.ps1 -Setup -SkipDatabase
+
+# 启动全部开发服务
+.\scripts\dev-start.ps1
+
+# 仅启动数据库
+.\scripts\dev-start.ps1 -Services database
+
+# 启动数据库和后端
+.\scripts\dev-start.ps1 -Services backend
+
+# 仅启动前端
+.\scripts\dev-start.ps1 -Services frontend
+
+# 跳过启动后的健康检查
+.\scripts\dev-start.ps1 -SkipHealthCheck
+
+# 仅执行开发环境诊断，不启动服务
+.\scripts\dev-start.ps1 -Diagnose
+
+# 输出更详细的诊断信息
+.\scripts\dev-start.ps1 -Diagnose -Verbose
+```
+
+`dev-start.ps1 -Setup` 已合并原环境设置脚本能力：
+
+- 检查 Git、Docker、Node.js、pnpm、Go 等前置工具
+- 创建根环境文件和 `frontend/.env.local`
+- 拉取并启动数据库容器
+- 下载 Go 依赖并执行数据库迁移
+- 安装前端依赖并执行类型检查、代码检查
+- 可选执行后端和前端测试验证
+
+`dev-start.ps1` 默认启动开发服务：
+
+- `database`：启动 PostgreSQL 与 Redis
+- `backend`：启动数据库与 Go 后端 API
+- `frontend`：启动前端开发服务器
+- `all`：启动数据库、后端和前端
+
+诊断模式会检查必需工具、Docker 服务、数据库容器、配置文件、目录结构、
+端口占用和 Docker 网络，并给出下一步建议。
 
 ## 数据库管理
 
@@ -142,7 +201,7 @@ pnpm dev
 
 ## 使用建议
 
-1. 新环境优先运行 `setup-dev-env.ps1`。
+1. 新环境优先运行 `dev-start.ps1 -Setup`。
 2. 日常开发优先使用 `dev-start.ps1`。
 3. 数据库操作在 Windows PowerShell 下使用 `db-manage.ps1`，在 Bash 环境下使用 `db-manage.sh`。
 4. 提交前按改动范围运行 `run-tests.ps1` 或定向测试。

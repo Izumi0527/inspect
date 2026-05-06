@@ -451,7 +451,7 @@ taskkill /PID <进程ID> /F
 ## 相关文档
 
 - [后端服务说明](../backend-go/README.md)
-- [开发脚本文档](../../scripts/development/README.md)
+- [开发脚本文档](../../scripts/README.md)
 - [环境配置指南](../env/env_configuration_guide.md)
 - [Docker 部署指南](../docker/compose_quick_start.md)
 

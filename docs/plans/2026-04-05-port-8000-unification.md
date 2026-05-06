@@ -34,8 +34,8 @@
 ### Task 2: 统一脚本与测试中的后端地址
 
 **Files:**
-- Modify: `scripts/development/setup-dev-env.ps1`
-- Modify: `scripts/development/dev-start.ps1`
+- Modify: `scripts/dev-start.ps1 -Setup`
+- Modify: `scripts/dev-start.ps1`
 - Modify: `tests/frontend/**`
 - Modify: `frontend/src/lib/api-client.ts`
 - Modify: `frontend/src/lib/websocket.ts`
@@ -58,7 +58,7 @@
 - Modify: `README.md`
 - Modify: `backend-go/README.md`
 - Modify: `docs/**`
-- Modify: `scripts/development/README.md`
+- Modify: `scripts/README.md`
 
 **Step 1: 批量同步端口示例与说明**
 

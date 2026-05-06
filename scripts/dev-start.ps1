@@ -19,17 +19,33 @@
 .PARAMETER Diagnose
     仅执行开发环境诊断（不启动任何服务）
 
+.PARAMETER Setup
+    执行开发环境初始化（合并原环境设置脚本能力）
+
+.PARAMETER SkipPrerequisites
+    Setup 模式下跳过前置条件检查
+
+.PARAMETER SkipDatabase
+    Setup 模式下跳过数据库环境设置
+
+.PARAMETER SkipTests
+    Setup 模式下跳过测试验证
+
 .EXAMPLE
-    .\dev-start.ps1
+    .\scripts\dev-start.ps1
     启动所有开发服务
 
 .EXAMPLE
-    .\dev-start.ps1 -Services database
+    .\scripts\dev-start.ps1 -Services database
     仅启动数据库服务
 
 .EXAMPLE
-    .\dev-start.ps1 -Wait 30
+    .\scripts\dev-start.ps1 -Wait 30
     启动服务并等待30秒
+
+.EXAMPLE
+    .\scripts\dev-start.ps1 -Setup -SkipTests
+    初始化开发环境但跳过测试验证
 
 .NOTES
     文件名: dev-start.ps1
@@ -47,12 +63,24 @@ param(
     
     [switch]$SkipHealthCheck,
 
-    [switch]$Diagnose
+    [switch]$Diagnose,
+
+    [switch]$Setup,
+
+    [switch]$SkipPrerequisites,
+
+    [switch]$SkipDatabase,
+
+    [switch]$SkipTests
 )
 
 # 设置错误处理
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+$Script:ProjectRoot = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($Script:ProjectRoot)) {
+    $Script:ProjectRoot = (Get-Location).Path
+}
 
 # 颜色输出函数
 function Write-ColorOutput {
@@ -268,6 +296,211 @@ function Get-BackendDevConfig {
         HealthUrl   = $healthUrl
         ErrorMessage = $portError
     }
+}
+
+# Setup 模式：合并原环境设置脚本能力。
+function Test-SetupPrerequisites {
+    Write-ColorOutput "`n🔍 检查开发环境前置条件..." "Blue"
+
+    $prerequisites = @(
+        @{ Command = "git"; Name = "Git 版本控制" },
+        @{ Command = "docker"; Name = "Docker 容器" },
+        @{ Command = "docker-compose"; Name = "Docker Compose" },
+        @{ Command = "node"; Name = "Node.js 运行时" },
+        @{ Command = "pnpm"; Name = "pnpm 包管理器" },
+        @{ Command = "go"; Name = "Go 运行时" }
+    )
+
+    $allOk = $true
+    foreach ($prereq in $prerequisites) {
+        try {
+            $null = Get-Command $prereq.Command -ErrorAction Stop
+            Write-ColorOutput "✅ $($prereq.Name) 已安装" "Green"
+        }
+        catch {
+            Write-ColorOutput "❌ $($prereq.Name) 未安装" "Red"
+            $allOk = $false
+        }
+    }
+
+    if (-not $allOk) {
+        throw "前置条件检查失败，请先安装缺失的工具"
+    }
+
+    Write-ColorOutput "✅ 所有前置条件检查通过" "Green"
+}
+
+function New-DevelopmentEnvironmentFiles {
+    Write-ColorOutput "`n📄 创建开发环境配置文件..." "Blue"
+
+    $backendEnvCandidates = @(".env.development", ".env")
+    $backendEnvExists = $false
+    foreach ($candidate in $backendEnvCandidates) {
+        if (Test-Path $candidate) {
+            $backendEnvExists = $true
+            break
+        }
+    }
+
+    if (-not $backendEnvExists) {
+        if (Test-Path ".env.example") {
+            Copy-Item -Path ".env.example" -Destination ".env.development"
+            Write-ColorOutput "✅ 已创建后端环境配置文件: .env.development" "Green"
+        } else {
+            Write-ColorOutput "⚠️ 未找到 .env.example，跳过后端环境文件创建" "Yellow"
+        }
+    }
+
+    $frontendEnvPath = "frontend\.env.local"
+    if (-not (Test-Path $frontendEnvPath)) {
+        $backendConfig = Get-BackendDevConfig -AllowMissingPort
+        $apiUrl = if ([string]::IsNullOrWhiteSpace($backendConfig.ApiUrl)) { "http://127.0.0.1:8000" } else { $backendConfig.ApiUrl }
+        $wsUrl = if ([string]::IsNullOrWhiteSpace($backendConfig.WsUrl)) { "ws://127.0.0.1:8000" } else { $backendConfig.WsUrl }
+
+        $frontendEnvContent = @"
+# API 配置
+# Windows 环境建议使用 127.0.0.1，避免 localhost 被解析为 IPv6(::1) 导致连接失败。
+NEXT_PUBLIC_API_URL=$apiUrl
+NEXT_PUBLIC_WS_URL=$wsUrl
+
+# 开发配置
+NODE_ENV=development
+NEXT_PUBLIC_ENV=development
+"@
+        $frontendEnvContent | Out-File -FilePath $frontendEnvPath -Encoding UTF8
+        Write-ColorOutput "✅ 前端环境配置文件已创建: $frontendEnvPath" "Green"
+    } else {
+        Write-ColorOutput "ℹ️ 前端环境配置文件已存在，跳过创建: $frontendEnvPath" "Cyan"
+    }
+}
+
+function Initialize-DatabaseEnvironment {
+    Write-ColorOutput "`n🗄️ 设置数据库环境..." "Blue"
+
+    $composeFile = if (Test-Path "docker-compose.db.yml") { "docker-compose.db.yml" } else { "docker-compose.dev.yml" }
+    if (-not (Test-Path $composeFile)) {
+        throw "未找到数据库 Docker Compose 配置文件"
+    }
+
+    Invoke-CommandSafely "docker-compose -f $composeFile pull" "拉取数据库镜像"
+    Invoke-CommandSafely "docker-compose -f $composeFile up -d" "启动数据库服务"
+
+    Write-ColorOutput "⏳ 等待数据库服务启动..." "Yellow"
+    Start-Sleep -Seconds 15
+    Invoke-CommandSafely "docker-compose -f $composeFile ps" "检查数据库服务状态"
+}
+
+function Initialize-BackendEnvironment {
+    Write-ColorOutput "`n🔧 设置后端环境..." "Blue"
+
+    $backendDir = "backend-go"
+    if (-not (Test-Path $backendDir)) {
+        Write-ColorOutput "⚠️ 后端目录不存在，跳过后端环境设置" "Yellow"
+        return
+    }
+
+    $envFile = $null
+    if (Test-Path ".env.development") {
+        $envFile = (Resolve-Path ".env.development").Path
+    } elseif (Test-Path ".env") {
+        $envFile = (Resolve-Path ".env").Path
+    }
+    if ($envFile) {
+        $env:ENV_FILE = $envFile
+    }
+
+    Invoke-CommandSafely "go mod download" "下载 Go 依赖" $backendDir
+    Invoke-CommandSafely "go run ./cmd/migrate" "执行数据库迁移" $backendDir -IgnoreErrors
+}
+
+function Initialize-FrontendEnvironment {
+    Write-ColorOutput "`n🎨 设置前端环境..." "Blue"
+
+    $frontendDir = "frontend"
+    if (-not (Test-Path $frontendDir)) {
+        Write-ColorOutput "⚠️ 前端目录不存在，跳过前端环境设置" "Yellow"
+        return
+    }
+
+    Invoke-CommandSafely "pnpm install" "安装前端依赖" $frontendDir
+    Invoke-CommandSafely "pnpm run type-check" "前端类型检查" $frontendDir -IgnoreErrors
+    Invoke-CommandSafely "pnpm run lint" "前端代码检查" $frontendDir -IgnoreErrors
+}
+
+function Invoke-DevelopmentTestValidation {
+    Write-ColorOutput "`n🧪 运行开发环境测试验证..." "Blue"
+
+    if (Test-Path "backend-go") {
+        Invoke-CommandSafely "go test ./..." "后端测试" "backend-go" -IgnoreErrors
+    } else {
+        Write-ColorOutput "⚠️ 后端目录不存在，跳过后端测试" "Yellow"
+    }
+
+    if (Test-Path "frontend") {
+        Invoke-CommandSafely "pnpm test --run" "前端测试" "frontend" -IgnoreErrors
+    } else {
+        Write-ColorOutput "⚠️ 前端目录不存在，跳过前端测试" "Yellow"
+    }
+}
+
+function Show-SetupSummary {
+    $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
+    $backendConfig = Get-BackendDevConfig -AllowMissingPort
+
+    Write-ColorOutput "`n$('=' * 60)" "Cyan"
+    Write-ColorOutput "🎉 开发环境设置完成！" "Green"
+    Write-ColorOutput "$('=' * 60)" "Cyan"
+
+    Write-ColorOutput "`n📊 服务访问地址:" "Blue"
+    Write-ColorOutput "  🎨 前端开发服务器: http://localhost:3000" "White"
+    if ($backendConfig.ServerPort -gt 0) {
+        Write-ColorOutput "  🔧 后端 API 服务器: $($backendConfig.ApiUrl)" "White"
+    } else {
+        Write-ColorOutput "  ⚠️ 后端端口未配置: $($backendConfig.ErrorMessage)" "Yellow"
+    }
+    Write-ColorOutput "  📚 API 说明: docs/api/openapi.json" "White"
+    Write-ColorOutput "  🗄️ PostgreSQL: localhost:$postgresHostPort" "White"
+    Write-ColorOutput "  🔴 Redis: localhost:$redisHostPort" "White"
+    Write-ColorOutput "  🔧 pgAdmin: http://localhost:5050" "White"
+    Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"
+
+    Write-ColorOutput "`n🚀 启动开发服务器:" "Blue"
+    Write-ColorOutput "  统一入口: .\scripts\dev-start.ps1" "White"
+    Write-ColorOutput "  后端: .\scripts\dev-start.ps1 -Services backend" "White"
+    Write-ColorOutput "  前端: .\scripts\dev-start.ps1 -Services frontend" "White"
+
+    Write-ColorOutput "`n🛠️ 常用命令:" "Blue"
+    Write-ColorOutput "  数据库管理: .\scripts\db-manage.ps1 [start|stop|reset|backup]" "White"
+    Write-ColorOutput "  代码质量检查: .\scripts\tests\quality-check.ps1" "White"
+    Write-ColorOutput "  运行测试: .\scripts\tests\run-tests.ps1" "White"
+
+    Write-ColorOutput "`n📖 更多信息请查看 docs\ 目录下的文档" "Yellow"
+}
+
+function Invoke-DevelopmentSetup {
+    Write-ColorOutput "🚀 开始设置企业级网络设备巡检系统开发环境" "Green"
+    Write-ColorOutput "$('=' * 60)" "Cyan"
+
+    if (-not $SkipPrerequisites) {
+        Test-SetupPrerequisites
+    }
+
+    New-DevelopmentEnvironmentFiles
+
+    if (-not $SkipDatabase) {
+        Initialize-DatabaseEnvironment
+    }
+
+    Initialize-BackendEnvironment
+    Initialize-FrontendEnvironment
+
+    if (-not $SkipTests) {
+        Invoke-DevelopmentTestValidation
+    }
+
+    Show-SetupSummary
+    Write-ColorOutput "`n✅ 开发环境设置成功完成！" "Green"
 }
 
 # 检查前置条件
@@ -678,21 +911,21 @@ function Invoke-DevDiagnose {
     $dbStatus = Test-DatabaseRunning
     if ($dbStatus.Both) {
         Write-ColorOutput "  ✅ 数据库已运行，可直接启动后端/全量服务：" "Green"
-        Write-ColorOutput "     .\\scripts\\development\\dev-start.ps1 -Services backend" "White"
+        Write-ColorOutput "     .\scripts\dev-start.ps1 -Services backend" "White"
     } elseif (-not $dbStatus.PostgreSQL -and -not $dbStatus.Redis) {
         Write-ColorOutput "  🚀 数据库未运行，建议一键启动全量：" "Cyan"
-        Write-ColorOutput "     .\\scripts\\development\\dev-start.ps1" "White"
+        Write-ColorOutput "     .\scripts\dev-start.ps1" "White"
     } else {
         Write-ColorOutput "  ⚠️ 数据库部分服务运行中，建议重启：" "Yellow"
-        Write-ColorOutput "     .\\scripts\\database\\db-manage.ps1 stop" "White"
-        Write-ColorOutput "     .\\scripts\\database\\db-manage.ps1 start" "White"
+        Write-ColorOutput "     .\scripts\db-manage.ps1 stop" "White"
+        Write-ColorOutput "     .\scripts\db-manage.ps1 start" "White"
     }
 
     Write-Host ""
     Write-ColorOutput "📚 更多帮助:" "Yellow"
-    Write-ColorOutput "  - 开发脚本文档: .\\scripts\\development\\README.md" "White"
-    Write-ColorOutput "  - 数据库状态: .\\scripts\\database\\db-manage.ps1 status" "White"
-    Write-ColorOutput "  - 数据库状态检查: .\\scripts\\db-manage.ps1 status" "White"
+    Write-ColorOutput "  - 脚本文档: .\scripts\README.md" "White"
+    Write-ColorOutput "  - 数据库状态: .\scripts\db-manage.ps1 status" "White"
+    Write-ColorOutput "  - 数据库状态检查: .\scripts\db-manage.ps1 status" "White"
 }
 
 # 获取 Docker 容器映射到宿主机的端口（优先使用实际映射，其次读取环境变量，最后使用默认值）
@@ -881,6 +1114,13 @@ function Show-ServiceInfo {
 # 主执行函数
 function Main {
     try {
+        Set-Location $Script:ProjectRoot
+
+        if ($Setup) {
+            Invoke-DevelopmentSetup
+            return
+        }
+
         Write-ColorOutput "🚀 启动企业级网络设备巡检系统开发环境" "Green"
         Write-ColorOutput "服务范围: $Services" "Cyan"
         Write-ColorOutput "$('=' * 60)" "Cyan"
@@ -925,7 +1165,7 @@ function Main {
     catch {
         Write-ColorOutput "`n❌ 开发环境启动失败: $($_.Exception.Message)" "Red"
         Write-ColorOutput "请检查错误信息并重新运行脚本" "Yellow"
-        Write-ColorOutput "或运行完整环境设置: .\scripts\development\setup-dev-env.ps1" "Cyan"
+        Write-ColorOutput "或运行完整环境设置: .\scripts\dev-start.ps1 -Setup" "Cyan"
         exit 1
     }
 }

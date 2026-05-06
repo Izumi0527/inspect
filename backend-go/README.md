@@ -126,10 +126,10 @@ go build -o migrate.exe ./cmd/migrate
 ### 使用开发脚本（推荐）
 ```powershell
 # 启动完整开发环境（数据库 + 后端 + 前端）
-.\scripts\development\dev-start.ps1
+.\scripts\dev-start.ps1
 
 # 仅启动后端服务
-.\scripts\development\dev-start.ps1 -Services backend
+.\scripts\dev-start.ps1 -Services backend
 ```
 
 ### 直接运行
