@@ -570,14 +570,11 @@ pnpm quality
 #### **🚀 快速初始化（推荐）**
 ```bash
 # 完整数据库初始化 - 一键完成所有配置
-.\scripts\database\db-manage.ps1 init
-
-# 或者使用专用脚本
-.\scripts\database\db-init-complete.ps1
+.\scripts\db-manage.ps1 init
 
 # 分步初始化（高级用户）
-.\scripts\database\db-init-complete.ps1 -InitOnly      # 仅基础配置
-.\scripts\database\db-init-complete.ps1 -TemplatesOnly # 仅内置模板
+.\scripts\db-manage.ps1 init -InitOnly      # 仅基础配置
+.\scripts\db-manage.ps1 init -TemplatesOnly # 仅内置模板
 ```
 
 #### **📋 初始化内容**
@@ -595,8 +592,8 @@ DB_AUTO_MIGRATE=true go run ./cmd/api
 # 手动迁移
 go run ./cmd/migrate
 
-# 使用Go迁移脚本 (Windows)
-.\scripts\database\db-init-migrate-go.ps1
+# 使用统一数据库管理脚本 (Windows)
+.\scripts\db-manage.ps1 init -Force
 ```
 
 #### **TimescaleDB 特性**

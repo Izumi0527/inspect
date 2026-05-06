@@ -12,23 +12,20 @@
 
 ```powershell
 # 快速启动数据库容器
-.\scripts\database\db-quick-start.ps1
+.\scripts\db-manage.ps1 start
 ```
 
 ### 方式二：完整创建（带验证）
 
 ```powershell
 # 完整创建流程（推荐首次使用）
-.\scripts\database\db-create-containers.ps1
+.\scripts\db-manage.ps1 start
 
 # 清理旧数据并重新创建
-.\scripts\database\db-create-containers.ps1 -Clean
+.\scripts\db-manage.ps1 reset
 
-# 详细输出模式
-.\scripts\database\db-create-containers.ps1 -Verbose
-
-# 强制执行（跳过确认）
-.\scripts\database\db-create-containers.ps1 -Force
+# 再次启动会复用已有容器
+.\scripts\db-manage.ps1 start
 ```
 
 ### 方式三：手动创建
@@ -360,8 +357,8 @@ docker exec -i inspect-postgres-dev psql -U inspect_dev inspect_system_dev < bac
 
 - [Docker 部署文档](./database-docker-deployment.md)
 - [端口变更指南](./database-port-change-guide.md)
-- [数据库管理脚本](../../scripts/database/db-manage.ps1)
-- [健康检查脚本](../../scripts/database/db-health-check.ps1)
+- 数据库管理脚本：`../../scripts/db-manage.ps1`
+- 健康检查命令：`.\scripts\db-manage.ps1 status`
 
 ## 🎓 学习资源
 

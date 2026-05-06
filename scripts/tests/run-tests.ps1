@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     统一测试运行脚本 - 执行前端和后端的所有测试
@@ -367,7 +367,7 @@ function Invoke-IntegrationTests {
             $dbStatus = docker-compose ps --services --filter "status=running" 2>$null
             if (-not $dbStatus) {
                 Write-ColorOutput "?? 数据库服务未运行，启动测试数据库..." "Yellow"
-                & ".\scripts\database\db-manage.ps1" start
+                & ".\scripts\db-manage.ps1" start
                 Start-Sleep -Seconds 10
             }
         }
@@ -523,6 +523,3 @@ function Main {
 
 # 执行主函数
 Main
-
-
-

@@ -223,7 +223,7 @@ go mod tidy
 Get-Content .env
 
 # 检查数据库连接
-.\scripts\database\db-manage.ps1 status
+.\scripts\db-manage.ps1 status
 
 # 在项目根目录查看日志
 Get-Content .\logs\backend-go\app-dev.log -Tail 50

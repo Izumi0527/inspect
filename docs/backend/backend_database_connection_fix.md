@@ -325,7 +325,7 @@ docker ps --filter "name=inspect-postgres-dev"
 **解决**:
 ```powershell
 # 启动数据库
-.\scripts\database\db-manage.ps1 start
+.\scripts\db-manage.ps1 start
 
 # 或使用启动脚本
 .\scripts\development\dev-start.ps1 -Services database
@@ -352,13 +352,13 @@ taskkill /PID <进程ID> /F
 
 ```powershell
 # 1. 停止所有服务
-.\scripts\database\db-manage.ps1 stop
+.\scripts\db-manage.ps1 stop
 
 # 2. 检查配置
 Get-Content .env | Select-String "DATABASE_URL"
 
 # 3. 启动数据库
-.\scripts\database\db-manage.ps1 start
+.\scripts\db-manage.ps1 start
 
 # 4. 等待数据库就绪
 Start-Sleep -Seconds 10
@@ -388,8 +388,8 @@ Invoke-WebRequest http://localhost:8000/health
 ## 相关文档
 
 - [后端编译错误修复](./backend_compile_fix.md)
-- [开发脚本说明](../scripts/development/README.md)
-- [数据库管理指南](../scripts/database/README.md)
+- [开发脚本说明](../../scripts/development/README.md)
+- [数据库管理指南](../../scripts/README.md)
 - [环境配置迁移说明](../env/env_migration_notice.md)
 
 ---

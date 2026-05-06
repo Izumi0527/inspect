@@ -205,7 +205,7 @@ LOG_FILE=logs/backend-go/app.log
 
 ```powershell
 # 1. 启动数据库
-.\scripts\database\db-manage.ps1 start
+.\scripts\db-manage.ps1 start
 
 # 2. 使用 go run（推荐）
 cd backend-go
@@ -404,7 +404,7 @@ go build -o app.exe ./cmd/api
 Get-Content .env
 
 # 检查数据库连接
-.\scripts\database\db-manage.ps1 status
+.\scripts\db-manage.ps1 status
 
 # 查看日志
 Get-Content logs\backend-go\app.log -Tail 50
@@ -451,7 +451,7 @@ taskkill /PID <进程ID> /F
 ## 相关文档
 
 - [后端服务说明](../backend-go/README.md)
-- [开发脚本文档](../scripts/development/README.md)
+- [开发脚本文档](../../scripts/development/README.md)
 - [环境配置指南](../env/env_configuration_guide.md)
 - [Docker 部署指南](../docker/compose_quick_start.md)
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     企业级网络设备巡检系统 - 一键开发环境设置脚本
@@ -336,9 +336,9 @@ function Show-SetupSummary {
     Write-ColorOutput "  后端: cd backend-go && go run ./cmd/api" "White"
     
     Write-ColorOutput "`n🛠️ 常用命令:" "Blue"
-    Write-ColorOutput "  数据库管理: .\scripts\database\db-manage.ps1 [start|stop|reset|backup]" "White"
-    Write-ColorOutput "  代码质量检查: .\scripts\quality-check.ps1" "White"
-    Write-ColorOutput "  运行测试: .\scripts\run-tests.ps1" "White"
+    Write-ColorOutput "  数据库管理: .\scripts\db-manage.ps1 [start|stop|reset|backup]" "White"
+    Write-ColorOutput "  代码质量检查: .\scripts\tests\quality-check.ps1" "White"
+    Write-ColorOutput "  运行测试: .\scripts\tests\run-tests.ps1" "White"
     
     Write-ColorOutput "`n📖 更多信息请查看 docs\ 目录下的文档" "Yellow"
 }
@@ -387,7 +387,3 @@ function Main {
 
 # 执行主函数
 Main
-
-
-
-

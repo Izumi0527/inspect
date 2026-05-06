@@ -148,7 +148,7 @@ lsof -i :15500
 .\scripts\development\dev-start.ps1 -Services backend
 
 # 数据库迁移（Go）
-.\scripts\database\db-init-migrate-go.ps1
+.\scripts\db-manage.ps1 init
 ```
 
 ## 测试与质量

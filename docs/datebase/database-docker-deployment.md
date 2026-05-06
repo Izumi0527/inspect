@@ -51,12 +51,12 @@ docker-compose -f docker-compose.dev.yml up -d postgres redis
 
 - SQL 初始化脚本：`database/database-init-complete.sql`
 - 模板脚本：`database/builtin-templates-complete.sql`
-- 迁移与初始化脚本：`scripts/database/db-init-migrate-go.ps1`
+- 迁移与初始化脚本：`scripts/db-manage.ps1 init`
 
 建议在首次启动后执行：
 
 ```powershell
-.\scripts\database\db-init-migrate-go.ps1
+.\scripts\db-manage.ps1 init
 ```
 
 ## 健康检查

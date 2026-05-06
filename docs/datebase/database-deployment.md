@@ -57,7 +57,7 @@ CREATE EXTENSION IF NOT EXISTS "timescaledb";
 推荐使用项目提供脚本：
 
 ```powershell
-.\scripts\database\db-init-migrate-go.ps1
+.\scripts\db-manage.ps1 init
 ```
 
 ### 2. Redis

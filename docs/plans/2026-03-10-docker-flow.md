@@ -75,7 +75,7 @@
 **Steps:**
 1. `dev-start.ps1` 启动数据库仅依赖 `docker-compose.dev.yml`（不再要求 `docker-compose.yml`）。
 2. 诊断能力合并到 `dev-start.ps1 -Diagnose`，并去掉对 `docker-compose.yml` 的强依赖检查。
-3. 修正测试脚本中 `db-manage.ps1` 的调用路径，指向 `scripts/database/db-manage.ps1`。
+3. 修正测试脚本中 `db-manage.ps1` 的调用路径，指向 `scripts/db-manage.ps1`。
 4. 将文档/示例命令统一替换为：
    - 开发：`docker-compose -f docker-compose.dev.yml up -d`
    - 生产：`docker-compose -f docker-compose.prod.yml up -d`

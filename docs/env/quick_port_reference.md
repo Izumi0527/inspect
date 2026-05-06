@@ -140,10 +140,10 @@ netsh interface ipv4 show excludedportrange protocol=tcp
 
 ## 📚 相关文档
 
-- [开发环境 README](scripts/development/README.md)
-- [数据库管理 README](scripts/database/README.md)
-- [端口更新通知](docs/datebase/PORT_UPDATE_NOTICE.md)
-- [数据库容器设置指南](docs/datebase/database-container-setup-guide.md)
+- [开发环境 README](../../scripts/development/README.md)
+- [数据库管理 README](../../scripts/README.md)
+- [端口更新通知](../datebase/PORT_UPDATE_NOTICE.md)
+- [数据库容器设置指南](../datebase/database-container-setup-guide.md)
 
 ---
 

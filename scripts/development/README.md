@@ -35,7 +35,7 @@
 
 ```powershell
 # 1. 启动数据库
-.\scripts\database\db-manage.ps1 start
+.\scripts\db-manage.ps1 start
 
 # 2. 启动后端（在 backend-go 目录）
 cd backend-go
@@ -148,8 +148,8 @@ go mod verify
 .\scripts\development\dev-start.ps1 -Diagnose
 
 # 2. 确保数据库已初始化
-.\scripts\database\db-manage.ps1 start
-.\scripts\database\db-init-complete.ps1
+.\scripts\db-manage.ps1 start
+.\scripts\db-manage.ps1 init
 
 # 3. 安装/整理 Go 依赖
 cd backend-go
@@ -184,14 +184,14 @@ pnpm dev
 .\scripts\development\dev-start.ps1 -Diagnose -Verbose
 
 # 2. 检查数据库状态
-.\scripts\database\db-manage.ps1 status
+.\scripts\db-manage.ps1 status
 
 # 3. 查看日志
-.\scripts\database\db-manage.ps1 logs
+.\scripts\db-manage.ps1 logs
 
 # 4. 如果需要，重启数据库
-.\scripts\database\db-manage.ps1 stop
-.\scripts\database\db-manage.ps1 start
+.\scripts\db-manage.ps1 stop
+.\scripts\db-manage.ps1 start
 ```
 
 ### 依赖管理
@@ -233,19 +233,19 @@ go mod verify
 
 ```powershell
 # 启动数据库
-.\scripts\database\db-manage.ps1 start
+.\scripts\db-manage.ps1 start
 
 # 停止数据库
-.\scripts\database\db-manage.ps1 stop
+.\scripts\db-manage.ps1 stop
 
 # 查看状态
-.\scripts\database\db-manage.ps1 status
+.\scripts\db-manage.ps1 status
 
 # 查看日志
-.\scripts\database\db-manage.ps1 logs
+.\scripts\db-manage.ps1 logs
 
 # 备份数据库
-.\scripts\database\db-manage.ps1 backup
+.\scripts\db-manage.ps1 backup
 ```
 
 ### 后端开发
@@ -333,7 +333,7 @@ dlv debug ./cmd/api
 Get-Content .\logs\backend-go\app-dev.log -Wait
 
 # 数据库日志
-.\scripts\database\db-manage.ps1 logs
+.\scripts\db-manage.ps1 logs
 ```
 
 ## 🚨 故障排查
@@ -425,12 +425,12 @@ docker-compose -f docker-compose.dev.yml up -d postgres redis
 
 ```powershell
 # 检查数据库状态
-.\scripts\database\db-manage.ps1 status
+.\scripts\db-manage.ps1 status
 
 # 脚本会自动检测并跳过已运行的数据库
 # 如果需要重启数据库：
-.\scripts\database\db-manage.ps1 stop
-.\scripts\database\db-manage.ps1 start
+.\scripts\db-manage.ps1 stop
+.\scripts\db-manage.ps1 start
 ```
 
 **智能检测**: 脚本现在会自动检测 PostgreSQL 和 Redis 容器状态，如果已运行则跳过启动。
@@ -458,10 +458,10 @@ node --version
 pnpm --version
 
 # 检查数据库状态
-.\scripts\database\db-manage.ps1 status
+.\scripts\db-manage.ps1 status
 
 # 查看详细日志
-.\scripts\database\db-manage.ps1 logs
+.\scripts\db-manage.ps1 logs
 ```
 
 ### 依赖问题
@@ -483,8 +483,8 @@ pnpm install
 
 ```powershell
 # 重启数据库
-.\scripts\database\db-manage.ps1 stop
-.\scripts\database\db-manage.ps1 start
+.\scripts\db-manage.ps1 stop
+.\scripts\db-manage.ps1 start
 
 # 检查连接
 docker exec inspect-postgres-dev pg_isready -U inspect_dev
@@ -501,7 +501,7 @@ docker exec inspect-redis-dev redis-cli -a dev_redis_2024 ping
 
 ## 📚 相关文档
 
-- [数据库管理脚本](../database/README.md)
+- [数据库管理脚本](../README.md)
 - [测试脚本](../tests/README.md)
 - [后端快速启动指南](../../docs/backend-go-quickstart.md)
 - [API 文档](../../docs/api/readme.md)
@@ -658,10 +658,10 @@ cd backend-go; go build -o app.exe ./cmd/api
 .\scripts\development\dev-start.ps1 -Diagnose
 
 # 快速检查数据库
-.\scripts\database\db-manage.ps1 status
+.\scripts\db-manage.ps1 status
 
 # 数据库管理
-.\scripts\database\db-manage.ps1 start|stop|status|logs
+.\scripts\db-manage.ps1 start|stop|status|logs
 
 # Go 依赖管理（手动）
 cd backend-go; go mod download; go mod tidy; go mod verify
@@ -683,7 +683,7 @@ cd backend-go; go mod download; go mod tidy; go mod verify
 docker-compose -f docker-compose.dev.yml up -d postgres redis
 
 # 问题 2: 数据库状态检查
-.\scripts\database\db-manage.ps1 status
+.\scripts\db-manage.ps1 status
 
 # 问题 3: 端口占用
 netstat -ano | findstr "3000 8000 15500 16380"

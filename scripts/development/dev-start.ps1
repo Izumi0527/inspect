@@ -692,7 +692,7 @@ function Invoke-DevDiagnose {
     Write-ColorOutput "📚 更多帮助:" "Yellow"
     Write-ColorOutput "  - 开发脚本文档: .\\scripts\\development\\README.md" "White"
     Write-ColorOutput "  - 数据库状态: .\\scripts\\database\\db-manage.ps1 status" "White"
-    Write-ColorOutput "  - 数据库健康检查: .\\scripts\\database\\db-health-check.ps1" "White"
+    Write-ColorOutput "  - 数据库状态检查: .\\scripts\\db-manage.ps1 status" "White"
 }
 
 # 获取 Docker 容器映射到宿主机的端口（优先使用实际映射，其次读取环境变量，最后使用默认值）
@@ -863,9 +863,9 @@ function Show-ServiceInfo {
     Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"
     
     Write-ColorOutput "`n🛠️ 常用命令:" "Blue"
-    Write-ColorOutput "  停止数据库: .\scripts\database\db-manage.ps1 stop" "White"
-    Write-ColorOutput "  查看日志: .\scripts\database\db-manage.ps1 logs" "White"
-    Write-ColorOutput "  重置数据库: .\scripts\database\db-manage.ps1 reset" "White"
+    Write-ColorOutput "  停止数据库: .\scripts\db-manage.ps1 stop" "White"
+    Write-ColorOutput "  查看日志: .\scripts\db-manage.ps1 logs" "White"
+    Write-ColorOutput "  重置数据库: .\scripts\db-manage.ps1 reset" "White"
     Write-ColorOutput "  运行测试: .\scripts\tests\run-tests.ps1" "White"
     if ($backendConfig.ServerPort -gt 0) {
         Write-ColorOutput "  健康检查: Invoke-WebRequest $($backendConfig.HealthUrl)" "White"
@@ -932,5 +932,3 @@ function Main {
 
 # 执行主函数
 Main
-
-

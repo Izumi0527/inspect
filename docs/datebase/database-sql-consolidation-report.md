@@ -1,6 +1,6 @@
 # 数据库 SQL 整合状态报告
 
-更新时间：2026-05-06
+更新时间：2026-05-07
 
 ## 结论
 
@@ -14,13 +14,7 @@
 数据库整合状态验证已合并到脚本目录：
 
 ```powershell
-.\scripts\database\db-manage.ps1 verify
-```
-
-也可以直接调用底层初始化脚本的静态验证模式：
-
-```powershell
-.\scripts\database\db-init-complete.ps1 -VerifyOnly
+.\scripts\db-manage.ps1 verify
 ```
 
 ## 目录职责
@@ -40,7 +34,7 @@
 - 独立整合验证脚本。
 - 已过时的 legacy 文件说明。
 
-### `scripts/database/`
+### `scripts/`
 
 用于存放数据库管理和验证脚本。
 
@@ -48,9 +42,8 @@
 
 - `db-manage.ps1 init`：执行完整数据库初始化。
 - `db-manage.ps1 verify`：验证整合后的 SQL 文件、文档归档和 Docker 引用。
-- `db-init-complete.ps1 -VerifyOnly`：仅执行静态验证，不连接数据库。
-- `db-init-complete.ps1 -InitOnly`：仅执行基础初始化。
-- `db-init-complete.ps1 -TemplatesOnly`：仅执行模板初始化。
+- `db-manage.ps1 init -InitOnly`：仅执行基础初始化。
+- `db-manage.ps1 init -TemplatesOnly`：仅执行模板初始化。
 
 ### `docs/datebase/`
 
@@ -145,18 +138,17 @@
   - `database/builtin-templates-complete.sql`
   - `docker-compose.dev.yml`
   - `docker-compose.prod.yml`
-  - `scripts/database/db-init-complete.ps1`
-  - `scripts/database/db-manage.ps1`
+  - `scripts/db-manage.ps1`
 - 修改内置模板时，应运行：
 
 ```powershell
-.\scripts\database\db-manage.ps1 verify
+.\scripts\db-manage.ps1 verify
 ```
 
 - 需要验证真实数据库初始化效果时，再运行：
 
 ```powershell
-.\scripts\database\db-manage.ps1 init
+.\scripts\db-manage.ps1 init
 ```
 
 该命令会连接数据库并执行 SQL，请在确认目标环境后再运行。

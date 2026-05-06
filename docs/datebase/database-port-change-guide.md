@@ -224,8 +224,8 @@ docker-compose -f docker-compose.dev.yml restart redis
 - ✅ `.env.example` - 示例配置
 
 ### 脚本文件
-- ✅ `scripts/database/db-manage.ps1` - 数据库管理
-- ✅ `scripts/database/db-init-complete.ps1` - 数据库初始化（完整）
+- ✅ `scripts/db-manage.ps1` - 数据库管理
+- ✅ `scripts/db-manage.ps1 init` - 数据库初始化（完整）
 - ✅ `scripts/development/dev-start.ps1` - 开发启动
 - ✅ `scripts/development/setup-dev-env.ps1` - 环境设置
 - ✅ `scripts/tests/run-tests.ps1` - 测试运行

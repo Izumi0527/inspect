@@ -20,7 +20,7 @@
 .\scripts\tests\run-tests.ps1 -Target frontend -Coverage
 
 # 基础设施检查（容器状态）
-.\scripts\database\db-manage.ps1 status
+.\scripts\db-manage.ps1 status
 
 # 质量检查（不修复）
 .\scripts\tests\quality-check.ps1
@@ -135,4 +135,4 @@ export GEMINI_API_KEY="AIzaSy..."
 ## 排查建议
 
 - 前端测试提示依赖缺失：先在 `frontend` 目录执行 `pnpm install`。
-- 基础设施检查失败：先确认数据库/Redis 容器已启动（可用 `.\scripts\database\db-manage.ps1 status` 查看）。
+- 基础设施检查失败：先确认数据库/Redis 容器已启动（可用 `.\scripts\db-manage.ps1 status` 查看）。

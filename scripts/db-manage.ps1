@@ -35,28 +35,37 @@
 .PARAMETER SkipMigrate
     seed-admin 操作是否跳过数据库迁移（不推荐）
 
+.PARAMETER InitOnly
+    init 操作仅执行基础初始化，不导入内置模板
+
+.PARAMETER TemplatesOnly
+    init 操作仅导入内置模板
+
+.PARAMETER Force
+    init 操作跳过确认提示
+
 .EXAMPLE
-    .\db-manage.ps1 start
+    .\scripts\db-manage.ps1 start
     启动所有数据库服务
 
 .EXAMPLE
-    .\db-manage.ps1 init
+    .\scripts\db-manage.ps1 init
     执行完整数据库初始化
 
 .EXAMPLE
-    .\db-manage.ps1 verify
+    .\scripts\db-manage.ps1 verify
     验证数据库整合文件、文档归档和 Docker 引用
 
 .EXAMPLE
-    .\db-manage.ps1 stop -Service postgres
+    .\scripts\db-manage.ps1 stop -Service postgres
     仅停止 PostgreSQL 服务
 
 .EXAMPLE
-    .\db-manage.ps1 backup -BackupPath "backups\manual"
+    .\scripts\db-manage.ps1 backup -BackupPath "backups\manual"
     手动备份到指定路径
 
 .EXAMPLE
-    .\db-manage.ps1 seed-admin
+    .\scripts\db-manage.ps1 seed-admin
     初始化默认管理员账号与 RBAC 权限数据
 
 .NOTES
@@ -83,7 +92,12 @@ param(
     [string]$Email = "admin@admin.com",
     [string]$Role = "superadmin",
     [string]$FullName = "系统管理员",
-    [switch]$SkipMigrate
+    [switch]$SkipMigrate,
+
+    # init 参数
+    [switch]$InitOnly,
+    [switch]$TemplatesOnly,
+    [switch]$Force
 )
 
 # 设置错误处理
@@ -92,6 +106,10 @@ $ProgressPreference = "SilentlyContinue"
 
 # 脚本根目录（避免在函数内使用 $MyInvocation 导致 Path 为 $null）
 $script:ScriptRoot = $PSScriptRoot
+$script:ProjectRoot = Split-Path -Parent $script:ScriptRoot
+$script:DatabasePath = Join-Path $script:ProjectRoot "database"
+$script:InitCompleteFile = Join-Path $script:DatabasePath "database-init-complete.sql"
+$script:TemplatesCompleteFile = Join-Path $script:DatabasePath "builtin-templates-complete.sql"
 
 # 颜色输出函数
 function Write-ColorOutput {
@@ -155,8 +173,9 @@ function Get-ComposeFile {
     )
     
     foreach ($file in $composeFiles) {
-        if (Test-Path $file) {
-            return $file
+        $path = Join-Path $script:ProjectRoot $file
+        if (Test-Path $path) {
+            return $path
         }
     }
     
@@ -334,59 +353,274 @@ function Backup-DatabaseServices {
     }
 }
 
+# 数据库整合静态验证
+function Invoke-ConsolidationVerification {
+    function Test-ConsolidationCondition {
+        param(
+            [string]$Description,
+            [bool]$Condition,
+            [string]$Details = ""
+        )
+
+        $script:TotalChecksForConsolidation++
+        if ($Condition) {
+            Write-ColorOutput "[通过] $Description" "Green"
+            $script:PassedChecksForConsolidation++
+            if ($Details) {
+                Write-ColorOutput "       $Details" "DarkGray"
+            }
+        } else {
+            Write-ColorOutput "[失败] $Description" "Red"
+            $script:FailedChecksForConsolidation++
+            if ($Details) {
+                Write-ColorOutput "       $Details" "Yellow"
+            }
+        }
+    }
+
+    $script:TotalChecksForConsolidation = 0
+    $script:PassedChecksForConsolidation = 0
+    $script:FailedChecksForConsolidation = 0
+
+    Write-ColorOutput "数据库整合静态验证" "Cyan"
+    Write-ColorOutput "==================================================" "Cyan"
+
+    $docsReport = Join-Path $script:ProjectRoot "docs/datebase/database-sql-consolidation-report.md"
+    $oldReport = Join-Path $script:DatabasePath "COMPLETION_REPORT.md"
+    $oldVerifyScript = Join-Path $script:DatabasePath "verify-consolidation.ps1"
+
+    Write-ColorOutput "`n[文件结构]" "Blue"
+    Test-ConsolidationCondition "完整初始化脚本存在" (Test-Path $script:InitCompleteFile) "database/database-init-complete.sql"
+    Test-ConsolidationCondition "完整模板脚本存在" (Test-Path $script:TemplatesCompleteFile) "database/builtin-templates-complete.sql"
+    Test-ConsolidationCondition "整合报告已归档到 docs/datebase" (Test-Path $docsReport) "docs/datebase/database-sql-consolidation-report.md"
+    Test-ConsolidationCondition "database 目录不再保留旧完成报告" (-not (Test-Path $oldReport)) "COMPLETION_REPORT.md 已迁出 database/"
+    Test-ConsolidationCondition "database 目录不再保留旧验证脚本" (-not (Test-Path $oldVerifyScript)) "验证功能已合并到 scripts/db-manage.ps1"
+    Test-ConsolidationCondition "旧数据库脚本子目录已移除" (-not (Test-Path (Join-Path $script:ScriptRoot "database"))) "统一入口: scripts/db-manage.ps1"
+
+    Write-ColorOutput "`n[初始化 SQL 内容]" "Blue"
+    $initContent = ""
+    if (Test-Path $script:InitCompleteFile) {
+        $initContent = Get-Content $script:InitCompleteFile -Raw
+    }
+    Test-ConsolidationCondition "包含 PostgreSQL 扩展创建" ($initContent -match "CREATE EXTENSION IF NOT EXISTS") "uuid-ossp、pg_stat_statements、timescaledb"
+    Test-ConsolidationCondition "包含 TimescaleDB hypertable 配置" ($initContent -match "create_hypertable") "时序表初始化"
+    Test-ConsolidationCondition "包含压缩策略" ($initContent -match "add_compression_policy") "TimescaleDB 压缩策略"
+    Test-ConsolidationCondition "包含保留策略" ($initContent -match "add_retention_policy") "TimescaleDB 数据保留策略"
+    Test-ConsolidationCondition "包含带宽单位迁移" ($initContent -match "1000000\.0") "bps 到 Mbps 转换"
+
+    Write-ColorOutput "`n[模板 SQL 内容]" "Blue"
+    $templatesContent = ""
+    if (Test-Path $script:TemplatesCompleteFile) {
+        $templatesContent = Get-Content $script:TemplatesCompleteFile -Raw
+    }
+    $templateCount = ([regex]::Matches($templatesContent, "INSERT INTO inspection_templates")).Count
+    Test-ConsolidationCondition "包含 18 个内置模板插入语句" ($templateCount -eq 18) "实际数量: $templateCount"
+    foreach ($vendor in @("Cisco", "Huawei", "H3C", "Juniper", "Arista", "Fortinet")) {
+        $vendorMarker = '"vendors": ["' + $vendor + '"]'
+        $vendorCount = ([regex]::Matches($templatesContent, [regex]::Escape($vendorMarker))).Count
+        Test-ConsolidationCondition "包含 ${vendor} 设备模板" ($vendorCount -eq 3) "实际数量: $vendorCount"
+    }
+
+    Write-ColorOutput "`n[脚本与 Docker 引用]" "Blue"
+    $manageContent = if (Test-Path $PSCommandPath) { Get-Content $PSCommandPath -Raw } else { "" }
+    Test-ConsolidationCondition "db-manage.ps1 提供 verify 入口" ($manageContent -match '"verify"') "统一入口: scripts/db-manage.ps1 verify"
+
+    foreach ($composeName in @("docker-compose.dev.yml", "docker-compose.prod.yml")) {
+        $composeFile = Join-Path $script:ProjectRoot $composeName
+        $composeContent = if (Test-Path $composeFile) { Get-Content $composeFile -Raw } else { "" }
+        Test-ConsolidationCondition "$composeName 引用完整初始化脚本" ($composeContent -match "database/database-init-complete\.sql") $composeName
+        Test-ConsolidationCondition "$composeName 引用内置模板脚本" ($composeContent -match "database/builtin-templates-complete\.sql") $composeName
+    }
+
+    Write-ColorOutput "`n[验证结果]" "Blue"
+    Write-ColorOutput "总检查项: $script:TotalChecksForConsolidation" "White"
+    Write-ColorOutput "通过检查: $script:PassedChecksForConsolidation" "Green"
+    Write-ColorOutput "失败检查: $script:FailedChecksForConsolidation" $(if ($script:FailedChecksForConsolidation -eq 0) { "Green" } else { "Red" })
+
+    if ($script:FailedChecksForConsolidation -eq 0) {
+        Write-ColorOutput "`n[成功] 数据库整合静态验证通过" "Green"
+        return
+    }
+
+    throw "数据库整合静态验证未通过"
+}
+
+function Invoke-DatabaseSql {
+    param(
+        [PSCustomObject]$Connection,
+        [string]$Command,
+        [string]$File
+    )
+
+    if ($Connection.UseDocker) {
+        if ($File) {
+            $sqlContent = Get-Content $File -Raw
+            return $sqlContent | docker exec -i $Connection.DockerContainer psql -U $Connection.User -d $Connection.Database 2>&1
+        }
+        return docker exec -i $Connection.DockerContainer psql -U $Connection.User -d $Connection.Database -c $Command 2>&1
+    }
+
+    if ($File) {
+        return psql -h $Connection.Host -p $Connection.Port -U $Connection.User -d $Connection.Database -f $File 2>&1
+    }
+    return psql -h $Connection.Host -p $Connection.Port -U $Connection.User -d $Connection.Database -c $Command 2>&1
+}
+
+function Get-DatabaseConnection {
+    $dockerContainer = "inspect-postgres-dev"
+    $useDocker = $false
+
+    if (-not (Get-Command "psql" -ErrorAction SilentlyContinue)) {
+        Write-ColorOutput "[信息] 未检测到本地 psql 命令，尝试使用 Docker..." "Blue"
+        if (-not (Get-Command "docker" -ErrorAction SilentlyContinue)) {
+            throw "未检测到 psql 或 docker 命令，请安装 PostgreSQL 客户端或 Docker"
+        }
+
+        $containerStatus = docker ps --filter "name=$dockerContainer" --format "{{.Names}}" 2>&1
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($containerStatus)) {
+            throw "Docker 容器 '$dockerContainer' 未运行，请先启动数据库容器"
+        }
+
+        Write-ColorOutput "[信息] 将使用 Docker 容器执行 SQL 命令" "Blue"
+        $useDocker = $true
+    }
+
+    $envFile = Join-Path $script:ProjectRoot ".env"
+    if (-not (Test-Path $envFile)) {
+        $envFile = Join-Path $script:ProjectRoot ".env.development"
+    }
+
+    $dbHost = "localhost"
+    $dbPort = "15500"
+    $dbName = "inspect_system_dev"
+    $dbUser = "inspect_dev"
+    $dbPassword = "dev_password_2024"
+
+    if ($useDocker) {
+        $dbHost = "localhost"
+        $dbPort = "5432"
+    }
+
+    if (Test-Path $envFile) {
+        Write-ColorOutput "[信息] 读取环境文件: $envFile" "Blue"
+        foreach ($line in (Get-Content $envFile)) {
+            if ($line -match "^DB_HOST=(.+)$") { $dbHost = $matches[1] }
+            if ($line -match "^DB_PORT=(.+)$") { $dbPort = $matches[1] }
+            if ($line -match "^DB_NAME=(.+)$") { $dbName = $matches[1] }
+            if ($line -match "^DB_USER=(.+)$") { $dbUser = $matches[1] }
+            if ($line -match "^DB_PASSWORD=(.+)$") { $dbPassword = $matches[1] }
+        }
+    } else {
+        Write-ColorOutput "[警告] 未找到 .env 文件，使用默认配置" "Yellow"
+    }
+
+    [PSCustomObject]@{
+        UseDocker       = $useDocker
+        DockerContainer = $dockerContainer
+        Host            = $dbHost
+        Port            = $dbPort
+        Database        = $dbName
+        User            = $dbUser
+        Password        = $dbPassword
+    }
+}
+
 # 初始化数据库
 function Initialize-Database {
     Write-ColorOutput "`n🔧 初始化数据库..." "Blue"
-    
-    # 获取脚本路径
-    $scriptPath = $script:ScriptRoot
-    $initScript = Join-Path $scriptPath "db-init-complete.ps1"
-    
-    if (-not (Test-Path $initScript)) {
-        Write-ColorOutput "❌ 找不到初始化脚本: $initScript" "Red"
-        throw "初始化脚本不存在"
+
+    if (-not (Test-Path $script:InitCompleteFile)) {
+        throw "找不到完整初始化文件: $script:InitCompleteFile"
     }
-    
-    Write-ColorOutput "📋 执行完整数据库初始化..." "Cyan"
+    if (-not (Test-Path $script:TemplatesCompleteFile)) {
+        throw "找不到完整模板文件: $script:TemplatesCompleteFile"
+    }
+
+    Write-ColorOutput "📋 执行数据库初始化..." "Cyan"
     Write-ColorOutput "  - 基础配置（用户、权限、扩展）" "Gray"
     Write-ColorOutput "  - TimescaleDB 时序数据库配置" "Gray"
     Write-ColorOutput "  - 内置巡检模板（18个厂商模板）" "Gray"
     Write-ColorOutput "  - 测试数据种子" "Gray"
-    
+
+    $connection = Get-DatabaseConnection
+    $env:PGPASSWORD = $connection.Password
+
     try {
-        # 执行初始化脚本
-        & $initScript -Force
+        Write-ColorOutput "数据库连接信息:" "Cyan"
+        if ($connection.UseDocker) {
+            Write-ColorOutput "  连接方式: Docker 容器 ($($connection.DockerContainer))" "Gray"
+        } else {
+            Write-ColorOutput "  连接方式: 本地 psql" "Gray"
+            Write-ColorOutput "  主机: $($connection.Host)" "Gray"
+            Write-ColorOutput "  端口: $($connection.Port)" "Gray"
+        }
+        Write-ColorOutput "  数据库: $($connection.Database)" "Gray"
+        Write-ColorOutput "  用户: $($connection.User)" "Gray"
+
+        if (-not $Force) {
+            $confirmation = Read-Host "确认执行数据库初始化？(y/N)"
+            if ($confirmation -ne "y" -and $confirmation -ne "Y") {
+                Write-ColorOutput "操作已取消" "Yellow"
+                return
+            }
+        }
+
+        Write-ColorOutput "[信息] 测试数据库连接..." "Blue"
+        $testResult = Invoke-DatabaseSql -Connection $connection -Command "SELECT 1;"
+        if ($LASTEXITCODE -ne 0) {
+            throw "数据库连接失败: $testResult"
+        }
+        Write-ColorOutput "[成功] 数据库连接正常" "Green"
+
+        if (-not $TemplatesOnly) {
+            Write-ColorOutput "[信息] 执行基础数据库初始化..." "Blue"
+            $result = Invoke-DatabaseSql -Connection $connection -File $script:InitCompleteFile
+            if ($LASTEXITCODE -ne 0) {
+                throw "基础初始化失败: $result"
+            }
+            Write-ColorOutput "[成功] 基础数据库初始化完成" "Green"
+        }
+
+        if (-not $InitOnly) {
+            Write-ColorOutput "[信息] 执行内置模板初始化..." "Blue"
+            $result = Invoke-DatabaseSql -Connection $connection -File $script:TemplatesCompleteFile
+            if ($LASTEXITCODE -ne 0) {
+                throw "模板初始化失败: $result"
+            }
+            Write-ColorOutput "[成功] 内置模板初始化完成" "Green"
+        }
+
+        Write-ColorOutput "[信息] 验证初始化结果..." "Blue"
+        $tableCheck = Invoke-DatabaseSql -Connection $connection -Command "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';"
+        if ($LASTEXITCODE -eq 0) {
+            $tableCount = ($tableCheck | Select-String -Pattern "\d+" | Select-Object -First 1).Matches.Value
+            if ($tableCount) {
+                Write-ColorOutput "  数据库表数量: $tableCount" "Gray"
+            }
+        }
+
+        if (-not $InitOnly) {
+            $templateCheck = Invoke-DatabaseSql -Connection $connection -Command "SELECT COUNT(*) FROM inspection_templates WHERE is_default = true;"
+            if ($LASTEXITCODE -eq 0) {
+                $templateCount = ($templateCheck | Select-String -Pattern "\d+" | Select-Object -First 1).Matches.Value
+                if ($templateCount) {
+                    Write-ColorOutput "  内置模板数量: $templateCount" "Gray"
+                }
+            }
+        }
+
         Write-ColorOutput "✅ 数据库初始化完成" "Green"
     }
-    catch {
-        Write-ColorOutput "❌ 数据库初始化失败: $($_.Exception.Message)" "Red"
-        throw
+    finally {
+        Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
     }
 }
 
 # 验证数据库整合状态
 function Verify-DatabaseConsolidation {
     Write-ColorOutput "`n🔍 验证数据库整合状态..." "Blue"
-
-    $scriptPath = $script:ScriptRoot
-    $initScript = Join-Path $scriptPath "db-init-complete.ps1"
-
-    if (-not (Test-Path $initScript)) {
-        Write-ColorOutput "❌ 找不到初始化脚本: $initScript" "Red"
-        throw "初始化脚本不存在"
-    }
-
-    try {
-        & $initScript -VerifyOnly
-        if ($LASTEXITCODE -ne 0) {
-            throw "数据库整合验证失败，退出代码: $LASTEXITCODE"
-        }
-        Write-ColorOutput "✅ 数据库整合验证完成" "Green"
-    }
-    catch {
-        Write-ColorOutput "❌ 数据库整合验证失败: $($_.Exception.Message)" "Red"
-        throw
-    }
+    Invoke-ConsolidationVerification
+    Write-ColorOutput "✅ 数据库整合验证完成" "Green"
 }
 
 # 初始化默认管理员账号与 RBAC（原独立脚本已合并到此处）
@@ -398,8 +632,7 @@ function Seed-AdminUser {
     }
 
     # 计算项目根目录
-    $scriptsRoot = Split-Path -Parent $script:ScriptRoot
-    $projectRoot = Split-Path -Parent $scriptsRoot
+    $projectRoot = $script:ProjectRoot
     $backendPath = Join-Path $projectRoot "backend-go"
     if (-not (Test-Path $backendPath)) {
         throw "未找到后端目录: $backendPath"
