@@ -98,6 +98,7 @@ Start-Sleep -Seconds 10
 | `backup` | 备份数据 | `.\db-manage.ps1 backup` |
 | `reset` | 重置数据库 | `.\db-manage.ps1 reset` |
 | `init` | 初始化数据库 | `.\db-manage.ps1 init` |
+| `verify` | 验证数据库整合文件与引用 | `.\db-manage.ps1 verify` |
 | `seed-admin` | 初始化默认管理员账号与权限 | `.\db-manage.ps1 seed-admin` |
 
 #### 可用服务
@@ -125,6 +126,9 @@ Start-Sleep -Seconds 10
 
 # 重置数据库（危险操作，会提示确认）
 .\db-manage.ps1 reset
+
+# 验证整合后的 SQL 文件、文档和 Docker 引用
+.\db-manage.ps1 verify
 ```
 
 #### 启动后显示信息
@@ -234,6 +238,7 @@ psql -h localhost -p 15500 -U inspect_dev -d inspect_system_dev
 │  • backup  - 备份数据                                   │
 │  • reset   - 重置数据库                                 │
 │  • init    ─────────┐                                   │
+│  • verify  ─────────┤                                   │
 │                     │                                   │
 └─────────────────────┼───────────────────────────────────┘
                       │ 调用
@@ -244,6 +249,7 @@ psql -h localhost -p 15500 -U inspect_dev -d inspect_system_dev
 │                                                         │
 │  • 自动检测 Docker/本地 psql                            │
 │  • 灵活的初始化选项                                     │
+│  • 静态验证整合 SQL、文档归档和 Docker 引用              │
 │    - InitOnly: 仅基础初始化                             │
 │    - TemplatesOnly: 仅模板初始化                        │
 │    - 默认: 完整初始化                                   │

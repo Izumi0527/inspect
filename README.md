@@ -916,12 +916,10 @@ inspect-system/
 │   └── Dockerfile             # 多阶段构建
 ├── database/                   # 数据库初始化脚本
 │   ├── 🆕 database-init-complete.sql    # 完整初始化脚本（推荐）
-│   ├── 🆕 builtin-templates-complete.sql # 完整内置模板脚本
-│   ├── MIGRATION_GUIDE.md      # 迁移指南
-│   ├── CONSOLIDATION_SUMMARY.md # 整合总结
-│   └── README-inspection-templates.md # 数据库文档
+│   └── 🆕 builtin-templates-complete.sql # 完整内置模板脚本
 ├── docs/                      # 技术文档
 │   ├── api/                   # API文档
+│   ├── datebase/              # 数据库文档与整合报告
 │   ├── backend-go-quickstart.md # Go后端快速启动
 │   ├── development/development-environment-guide.md # 开发环境指南
 │   ├── device-probe-feature.md # 设备探测功能文档

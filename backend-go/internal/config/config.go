@@ -58,7 +58,7 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	loadEnvFiles()
+	envBaseDir := loadEnvFiles()
 
 	var cfg Config
 	if err := env.Parse(&cfg); err != nil {
@@ -74,7 +74,7 @@ func Load() (Config, error) {
 	}
 
 	if strings.TrimSpace(cfg.LogFile) != "" {
-		cfg.LogFile = filepath.Clean(cfg.LogFile)
+		cfg.LogFile = cleanPathFromBase(cfg.LogFile, envBaseDir)
 	}
 	if strings.TrimSpace(cfg.ReportOutputDir) != "" {
 		cfg.ReportOutputDir = filepath.Clean(cfg.ReportOutputDir)
@@ -102,7 +102,12 @@ func (c Config) SnmpTrapAddress() string {
 	return fmt.Sprintf("%s:%d", host, port)
 }
 
-func loadEnvFiles() {
+func loadEnvFiles() string {
+	baseDir := "."
+	if wd, err := os.Getwd(); err == nil {
+		baseDir = wd
+	}
+
 	envFile := strings.TrimSpace(os.Getenv("ENV_FILE"))
 	if envFile != "" {
 		envValues, err := godotenv.Read(envFile)
@@ -112,13 +117,14 @@ func loadEnvFiles() {
 					_ = os.Setenv(key, value)
 				}
 			}
+			return filepath.Dir(absOrClean(envFile))
 		}
-		return
+		return baseDir
 	}
 
 	searchDirs := []string{"."}
-	if wd, err := os.Getwd(); err == nil {
-		dir := wd
+	if baseDir != "." {
+		dir := baseDir
 		for i := 0; i < 4; i++ {
 			if i == 0 {
 				searchDirs = []string{dir}
@@ -146,15 +152,39 @@ func loadEnvFiles() {
 	// 优先级保持与历史逻辑一致：.env > .env.development > .env.production
 	if path := findFirst(".env"); path != "" {
 		_ = godotenv.Load(path)
-		return
+		return filepath.Dir(absOrClean(path))
 	}
 	if path := findFirst(".env.development"); path != "" {
 		_ = godotenv.Load(path)
-		return
+		return filepath.Dir(absOrClean(path))
 	}
 	if path := findFirst(".env.production"); path != "" {
 		_ = godotenv.Load(path)
+		return filepath.Dir(absOrClean(path))
 	}
+	return baseDir
+}
+
+func cleanPathFromBase(raw string, baseDir string) string {
+	path := strings.TrimSpace(raw)
+	if path == "" {
+		return ""
+	}
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path)
+	}
+	base := strings.TrimSpace(baseDir)
+	if base == "" {
+		base = "."
+	}
+	return filepath.Clean(filepath.Join(base, path))
+}
+
+func absOrClean(path string) string {
+	if absPath, err := filepath.Abs(path); err == nil {
+		return filepath.Clean(absPath)
+	}
+	return filepath.Clean(path)
 }
 
 func normalizeDatabaseURL(raw string) string {

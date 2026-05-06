@@ -177,6 +177,7 @@ SERVER_PORT=8000
 
 # 日志配置
 LOG_LEVEL=DEBUG
+# 相对路径按项目根目录解析，实际写入 <项目根目录>\logs\backend-go\app-dev.log
 LOG_FILE=logs/backend-go/app-dev.log
 ```
 
@@ -224,8 +225,8 @@ Get-Content .env
 # 检查数据库连接
 .\scripts\database\db-manage.ps1 status
 
-# 查看日志
-Get-Content logs\backend-go\app-dev.log -Tail 50
+# 在项目根目录查看日志
+Get-Content .\logs\backend-go\app-dev.log -Tail 50
 ```
 
 ### 端口占用

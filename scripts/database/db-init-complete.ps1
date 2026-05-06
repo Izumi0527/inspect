@@ -1,9 +1,10 @@
-# 企业级网络设备巡检系统 - 完整数据库初始化脚本
+﻿# 企业级网络设备巡检系统 - 完整数据库初始化脚本
 # 使用整合的 SQL 文件进行一次性完整初始化
 
 param(
     [switch]$InitOnly,      # 仅执行基础初始化，不包含模板
     [switch]$TemplatesOnly, # 仅执行模板初始化
+    [switch]$VerifyOnly,    # 仅验证整合文件与引用，不连接数据库
     [switch]$Force,         # 强制执行，跳过确认
     [switch]$Help
 )
@@ -18,6 +19,7 @@ if ($Help) {
     Write-Host "选项:" -ForegroundColor Cyan
     Write-Host "    -InitOnly       仅执行基础初始化（数据库配置、TimescaleDB、迁移）" -ForegroundColor White
     Write-Host "    -TemplatesOnly  仅执行模板初始化（内置巡检模板）" -ForegroundColor White
+    Write-Host "    -VerifyOnly     仅验证整合文件与引用，不连接数据库" -ForegroundColor White
     Write-Host "    -Force          强制执行，跳过确认提示" -ForegroundColor White
     Write-Host "    -Help           显示此帮助信息" -ForegroundColor White
     Write-Host ""
@@ -36,6 +38,106 @@ $script:DatabasePath = Join-Path $script:ProjectRoot "database"
 # 检查必要文件
 $initCompleteFile = Join-Path $script:DatabasePath "database-init-complete.sql"
 $templatesCompleteFile = Join-Path $script:DatabasePath "builtin-templates-complete.sql"
+
+function Invoke-ConsolidationVerification {
+    $totalChecks = 0
+    $passedChecks = 0
+    $failedChecks = 0
+
+    function Test-ConsolidationCondition {
+        param(
+            [string]$Description,
+            [bool]$Condition,
+            [string]$Details = ""
+        )
+
+        $script:TotalChecksForConsolidation++
+        if ($Condition) {
+            Write-Host "[通过] $Description" -ForegroundColor Green
+            $script:PassedChecksForConsolidation++
+            if ($Details) {
+                Write-Host "       $Details" -ForegroundColor DarkGray
+            }
+        } else {
+            Write-Host "[失败] $Description" -ForegroundColor Red
+            $script:FailedChecksForConsolidation++
+            if ($Details) {
+                Write-Host "       $Details" -ForegroundColor Yellow
+            }
+        }
+    }
+
+    $script:TotalChecksForConsolidation = 0
+    $script:PassedChecksForConsolidation = 0
+    $script:FailedChecksForConsolidation = 0
+
+    Write-Host "数据库整合静态验证" -ForegroundColor Cyan
+    Write-Host "==================================================" -ForegroundColor Cyan
+
+    $docsReport = Join-Path $script:ProjectRoot "docs/datebase/database-sql-consolidation-report.md"
+    $oldReport = Join-Path $script:DatabasePath "COMPLETION_REPORT.md"
+    $oldVerifyScript = Join-Path $script:DatabasePath "verify-consolidation.ps1"
+
+    Write-Host "`n[文件结构]" -ForegroundColor Blue
+    Test-ConsolidationCondition "完整初始化脚本存在" (Test-Path $initCompleteFile) "database/database-init-complete.sql"
+    Test-ConsolidationCondition "完整模板脚本存在" (Test-Path $templatesCompleteFile) "database/builtin-templates-complete.sql"
+    Test-ConsolidationCondition "整合报告已归档到 docs/datebase" (Test-Path $docsReport) "docs/datebase/database-sql-consolidation-report.md"
+    Test-ConsolidationCondition "database 目录不再保留旧完成报告" (-not (Test-Path $oldReport)) "COMPLETION_REPORT.md 已迁出 database/"
+    Test-ConsolidationCondition "database 目录不再保留旧验证脚本" (-not (Test-Path $oldVerifyScript)) "验证功能已合并到 scripts/database/"
+
+    Write-Host "`n[初始化 SQL 内容]" -ForegroundColor Blue
+    $initContent = ""
+    if (Test-Path $initCompleteFile) {
+        $initContent = Get-Content $initCompleteFile -Raw
+    }
+    Test-ConsolidationCondition "包含 PostgreSQL 扩展创建" ($initContent -match "CREATE EXTENSION IF NOT EXISTS") "uuid-ossp、pg_stat_statements、timescaledb"
+    Test-ConsolidationCondition "包含 TimescaleDB hypertable 配置" ($initContent -match "create_hypertable") "时序表初始化"
+    Test-ConsolidationCondition "包含压缩策略" ($initContent -match "add_compression_policy") "TimescaleDB 压缩策略"
+    Test-ConsolidationCondition "包含保留策略" ($initContent -match "add_retention_policy") "TimescaleDB 数据保留策略"
+    Test-ConsolidationCondition "包含带宽单位迁移" ($initContent -match "1000000\.0") "bps 到 Mbps 转换"
+
+    Write-Host "`n[模板 SQL 内容]" -ForegroundColor Blue
+    $templatesContent = ""
+    if (Test-Path $templatesCompleteFile) {
+        $templatesContent = Get-Content $templatesCompleteFile -Raw
+    }
+    $templateCount = ([regex]::Matches($templatesContent, "INSERT INTO inspection_templates")).Count
+    Test-ConsolidationCondition "包含 18 个内置模板插入语句" ($templateCount -eq 18) "实际数量: $templateCount"
+    foreach ($vendor in @("Cisco", "Huawei", "H3C", "Juniper", "Arista", "Fortinet")) {
+        $vendorMarker = '"vendors": ["' + $vendor + '"]'
+        $vendorCount = ([regex]::Matches($templatesContent, [regex]::Escape($vendorMarker))).Count
+        Test-ConsolidationCondition "包含 ${vendor} 设备模板" ($vendorCount -eq 3) "实际数量: $vendorCount"
+    }
+
+    Write-Host "`n[脚本与 Docker 引用]" -ForegroundColor Blue
+    $manageScript = Join-Path $script:ScriptPath "db-manage.ps1"
+    $manageContent = if (Test-Path $manageScript) { Get-Content $manageScript -Raw } else { "" }
+    Test-ConsolidationCondition "db-manage.ps1 提供 verify 入口" ($manageContent -match '"verify"') "统一入口: scripts/database/db-manage.ps1 verify"
+
+    foreach ($composeName in @("docker-compose.dev.yml", "docker-compose.prod.yml")) {
+        $composeFile = Join-Path $script:ProjectRoot $composeName
+        $composeContent = if (Test-Path $composeFile) { Get-Content $composeFile -Raw } else { "" }
+        Test-ConsolidationCondition "$composeName 引用完整初始化脚本" ($composeContent -match "database/database-init-complete\.sql") $composeName
+        Test-ConsolidationCondition "$composeName 引用内置模板脚本" ($composeContent -match "database/builtin-templates-complete\.sql") $composeName
+    }
+
+    Write-Host "`n[验证结果]" -ForegroundColor Blue
+    Write-Host "总检查项: $script:TotalChecksForConsolidation" -ForegroundColor White
+    Write-Host "通过检查: $script:PassedChecksForConsolidation" -ForegroundColor Green
+    Write-Host "失败检查: $script:FailedChecksForConsolidation" -ForegroundColor $(if ($script:FailedChecksForConsolidation -eq 0) { "Green" } else { "Red" })
+
+    if ($script:FailedChecksForConsolidation -eq 0) {
+        Write-Host "`n[成功] 数据库整合静态验证通过" -ForegroundColor Green
+        return 0
+    }
+
+    Write-Host "`n[错误] 数据库整合静态验证未通过" -ForegroundColor Red
+    return 1
+}
+
+if ($VerifyOnly) {
+    exit (Invoke-ConsolidationVerification)
+}
 
 if (-not (Test-Path $initCompleteFile)) {
     throw "找不到完整初始化文件: $initCompleteFile"

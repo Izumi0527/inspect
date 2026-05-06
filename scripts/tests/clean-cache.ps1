@@ -9,9 +9,8 @@ param(
     [switch]$Temp,             # 清理临时文件
     [switch]$ProjectFiles,     # 清理项目特定临时文件
     [switch]$GoBuild,          # 清理 Go 构建缓存与编译产物
-    [switch]$PackageCache,     # 清理包管理器缓存（pnpm + uv）
+    [switch]$PackageCache,     # 清理包管理器缓存（pnpm）
     [switch]$Playwright,       # 清理 Playwright 测试产物
-    [switch]$PythonBytecode,   # 清理 Python 字节码缓存（__pycache__ / *.pyc / *.pyo）
     [switch]$Force,            # 跳过确认直接清理
     [switch]$WhatIf,           # 预览将要删除的内容（不实际删除）
     [switch]$Verbose,          # 详细输出
@@ -83,11 +82,10 @@ function Show-Help {
     Write-Host "    -Frontend            清理前端缓存（Next.js / Turbo / ESLint / SWC 等）"
     Write-Host "    -Logs                清理日志文件（超过7天的日志，含 backend-go/logs/）"
     Write-Host "    -Temp                清理临时文件（.DS_Store / Thumbs.db / *.tmp）"
-    Write-Host "    -ProjectFiles        清理项目特定文件（context.json / lint报告 / 覆盖率等）"
-    Write-Host "    -GoBuild             清理 Go 构建缓存目录与编译产物（*.exe / .gocache 等）"
-    Write-Host "    -PackageCache        清理包管理器缓存（pnpm store / uv cache）"
+    Write-Host "    -ProjectFiles        清理项目特定文件（context.json / lint报告 / 覆盖率 / MCP 快照等）"
+    Write-Host "    -GoBuild             清理 Go 构建缓存目录与编译产物（*.exe / .gocache / backend-go/backend-go 等）"
+    Write-Host "    -PackageCache        清理包管理器缓存（pnpm store）"
     Write-Host "    -Playwright          清理 Playwright 测试产物（报告 / 测试结果 / MCP 快照）"
-    Write-Host "    -PythonBytecode      清理 Python 字节码缓存（__pycache__ / *.pyc / *.pyo）"
     Write-Host ""
     Write-Host "执行选项:"
     Write-Host "    -Force               跳过确认直接清理"
@@ -105,12 +103,12 @@ function Show-Help {
     Write-Host "    .\clean-cache.ps1 -All -Verbose           # 清理所有并显示详细信息"
     Write-Host ""
     Write-Host "说明:"
-    Write-Host "    🧹 覆盖 Go / pnpm / uv / Playwright / Python 等多类缓存"
+    Write-Host "    🧹 覆盖 Go / pnpm / Playwright 等多类缓存"
     Write-Host "    📊 显示清理前后空间统计"
     Write-Host "    🔍 支持预览模式（-WhatIf）"
     Write-Host "    ⚡ 加速开发和构建"
     Write-Host "    🛡️ 避免删除 node_modules / .git / .vscode 等重要目录"
-    Write-Host "    ⚠️ -PackageCache 会删除 pnpm/uv 缓存，下次安装需重新下载依赖"
+    Write-Host "    ⚠️ -PackageCache 会删除 pnpm 缓存，下次安装需重新下载依赖"
     Write-Host ""
 }
 
@@ -193,6 +191,52 @@ function Remove-CacheItem {
     }
 }
 
+function Remove-CacheDirectoryFiles {
+    param(
+        [string]$Path,
+        [string]$Description
+    )
+
+    if (-not (Test-Path $Path -PathType Container)) {
+        Write-LogVerbose "跳过不存在的目录: $Path"
+        return
+    }
+
+    $items = @(Get-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue)
+    $size = ($items | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+    $fileCount = $items.Count
+
+    if ($fileCount -eq 0) {
+        Write-LogVerbose "跳过无文件目录: $Path"
+        return
+    }
+
+    $sizeStr = Format-FileSize $size
+
+    if ($WhatIf) {
+        Write-Host "  [预览] ${Description}: $sizeStr ($fileCount 个文件，保留目录)" -ForegroundColor Yellow
+        return
+    }
+
+    $removedSize = 0
+    $removedFiles = 0
+    foreach ($item in $items) {
+        try {
+            Remove-Item -LiteralPath $item.FullName -Force -ErrorAction Stop
+            $removedSize += $item.Length
+            $removedFiles++
+        } catch {
+            Write-LogError "删除失败 $($item.FullName): $_"
+        }
+    }
+
+    if ($removedFiles -gt 0) {
+        Write-LogSuccess "${Description}: $(Format-FileSize $removedSize) ($removedFiles 个文件，保留目录)"
+        $script:TotalFreed += $removedSize
+        $script:TotalFiles += $removedFiles
+    }
+}
+
 # ──────────────────────────────────────────────
 # 清理后端缓存（Go）
 # ──────────────────────────────────────────────
@@ -232,6 +276,11 @@ function Clear-BackendCache {
     # 清理 Go 全局缓存（标准 GOPATH/GOCACHE 路径）
     try {
         $null = Get-Command "go" -ErrorAction Stop
+        if ($WhatIf) {
+            Write-Host "  [预览] Go 编译/测试缓存（go clean -cache -testcache）" -ForegroundColor Yellow
+            return
+        }
+
         Write-LogInfo "执行: go clean -cache -testcache（清理 Go 编译/测试缓存）"
         Push-Location $script:BackendPath
         & go clean -cache -testcache | Out-Null
@@ -412,7 +461,7 @@ function Clear-ProjectSpecificCache {
     # Playwright MCP 服务端产生的日志与快照
     $playwrightMcp = Join-Path $script:ProjectRoot ".playwright-mcp"
     if (Test-Path $playwrightMcp) {
-        Remove-CacheItem -Path $playwrightMcp -Description "Playwright MCP 快照与日志"
+        Remove-CacheDirectoryFiles -Path $playwrightMcp -Description "Playwright MCP 快照与日志"
     }
 
     # Go 临时工作目录
@@ -476,6 +525,12 @@ function Clear-GoBuildArtifacts {
         }
     }
 
+    # 后端重复输出目录（历史构建可能生成 backend-go/backend-go）
+    $backendNestedOutput = Join-Path $script:BackendPath "backend-go"
+    if (Test-Path $backendNestedOutput) {
+        Remove-CacheDirectoryFiles -Path $backendNestedOutput -Description "后端重复输出目录文件 (backend-go/backend-go)"
+    }
+
     # Go 覆盖率 / 剖析文件（根目录级别）
     $rootCoverageFiles = @(
         (Join-Path $script:ProjectRoot "coverage.out"),
@@ -491,14 +546,14 @@ function Clear-GoBuildArtifacts {
 }
 
 # ──────────────────────────────────────────────
-# 清理包管理器缓存（pnpm store / uv cache）
+# 清理包管理器缓存（pnpm store）
 # ──────────────────────────────────────────────
 
 function Clear-PackageManagerCache {
     Write-LogStep "清理包管理器缓存..."
 
     if (-not $WhatIf -and -not $Force) {
-        Write-LogWarning "即将删除 pnpm store 和 uv cache，下次安装依赖时将重新下载所有包。"
+        Write-LogWarning "即将删除 pnpm store，下次安装依赖时将重新下载所有包。"
         $confirm = Read-Host "确认清理包管理器缓存？ (Y/N)"
         if ($confirm -ne "Y" -and $confirm -ne "y") {
             Write-LogInfo "已跳过包管理器缓存清理"
@@ -507,7 +562,7 @@ function Clear-PackageManagerCache {
     }
 
     if ($WhatIf) {
-        Write-LogWarning "预览模式：包管理器缓存需要重新下载（pnpm + uv）"
+        Write-LogWarning "预览模式：包管理器缓存需要重新下载（pnpm）"
     }
 
     # pnpm store（项目根目录）
@@ -520,12 +575,6 @@ function Clear-PackageManagerCache {
     $pnpmStoreFrontend = Join-Path $script:FrontendPath ".pnpm-store"
     if (Test-Path $pnpmStoreFrontend) {
         Remove-CacheItem -Path $pnpmStoreFrontend -Description "pnpm 存储 (frontend/.pnpm-store)"
-    }
-
-    # Python uv 缓存
-    $uvCache = Join-Path $script:ProjectRoot ".uv-cache"
-    if (Test-Path $uvCache) {
-        Remove-CacheItem -Path $uvCache -Description "Python uv 缓存 (.uv-cache)"
     }
 }
 
@@ -552,37 +601,8 @@ function Clear-PlaywrightArtifacts {
     # 此处保留以支持独立 -Playwright 调用）
     $pwMcp = Join-Path $script:ProjectRoot ".playwright-mcp"
     if (Test-Path $pwMcp) {
-        Remove-CacheItem -Path $pwMcp -Description "Playwright MCP 快照与日志"
+        Remove-CacheDirectoryFiles -Path $pwMcp -Description "Playwright MCP 快照与日志"
     }
-}
-
-# ──────────────────────────────────────────────
-# 清理 Python 字节码缓存
-# ──────────────────────────────────────────────
-
-function Clear-PythonBytecode {
-    Write-LogStep "清理 Python 字节码缓存..."
-
-    # __pycache__ 目录（项目范围内，排除 node_modules 和 .git）
-    Get-ChildItem -Path $script:ProjectRoot -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch "[\\/]node_modules[\\/]" -and $_.FullName -notmatch "[\\/]\.git[\\/]" } |
-        ForEach-Object {
-            Remove-CacheItem -Path $_.FullName -Description "Python 字节码缓存 ($($_.FullName.Replace($script:ProjectRoot, '').TrimStart('\')))"
-        }
-
-    # *.pyc 编译字节码文件
-    Get-ChildItem -Path $script:ProjectRoot -Recurse -Filter "*.pyc" -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch "[\\/]node_modules[\\/]" -and $_.FullName -notmatch "[\\/]\.git[\\/]" } |
-        ForEach-Object {
-            Remove-CacheItem -Path $_.FullName -Description "Python 字节码文件 ($($_.Name))"
-        }
-
-    # *.pyo 优化字节码文件
-    Get-ChildItem -Path $script:ProjectRoot -Recurse -Filter "*.pyo" -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch "[\\/]node_modules[\\/]" -and $_.FullName -notmatch "[\\/]\.git[\\/]" } |
-        ForEach-Object {
-            Remove-CacheItem -Path $_.FullName -Description "Python 优化字节码 ($($_.Name))"
-        }
 }
 
 # ──────────────────────────────────────────────
@@ -625,19 +645,18 @@ function Show-InteractiveMenu {
     Write-Host "  [3] 仅清理前端缓存（Next.js / Turbo / ESLint / SWC）"
     Write-Host "  [4] 仅清理日志文件（logs/ + backend-go/logs/）"
     Write-Host "  [5] 仅清理临时文件（.DS_Store / Thumbs.db / *.tmp）"
-    Write-Host "  [6] 仅清理项目特定文件（lint 报告 / 覆盖率等）"
+    Write-Host "  [6] 仅清理项目特定文件（lint 报告 / 覆盖率 / MCP 快照等）"
     Write-Host "  ── 扩展清理 ──"
-    Write-Host "  [7] Go 构建缓存与编译产物（.gocache / app.exe 等）"
-    Write-Host "  [8] 包管理器缓存（pnpm store / uv cache）⚠ 需重新下载"
-    Write-Host "  [9] Playwright 测试产物（报告 / 测试结果）"
-    Write-Host "  [10] Python 字节码缓存（__pycache__ / *.pyc）"
+    Write-Host "  [7] Go 构建缓存与编译产物（.gocache / app.exe / backend-go/backend-go 等）"
+    Write-Host "  [8] 包管理器缓存（pnpm store）⚠ 需重新下载"
+    Write-Host "  [9] Playwright 测试产物（报告 / 测试结果 / MCP 快照）"
     Write-Host "  ──"
     Write-Host "  [0] 取消"
     Write-Host ""
     Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
     Write-Host ""
 
-    $choice = Read-Host "请选择 (0-10)"
+    $choice = Read-Host "请选择 (0-9)"
 
     switch ($choice) {
         "1"  { $script:All = $true }
@@ -649,7 +668,6 @@ function Show-InteractiveMenu {
         "7"  { $script:GoBuild = $true }
         "8"  { $script:PackageCache = $true }
         "9"  { $script:Playwright = $true }
-        "10" { $script:PythonBytecode = $true }
         "0"  {
             Write-LogInfo "已取消清理操作"
             exit 0
@@ -679,7 +697,7 @@ function Main {
 
     # 如果没有指定任何选项，显示交互式菜单
     $hasSelection = $All -or $Backend -or $Frontend -or $Logs -or $Temp -or $ProjectFiles `
-                    -or $GoBuild -or $PackageCache -or $Playwright -or $PythonBytecode
+                    -or $GoBuild -or $PackageCache -or $Playwright
     if (-not $hasSelection) {
         Show-InteractiveMenu
     }
@@ -731,10 +749,6 @@ function Main {
 
     if ($All -or $Playwright) {
         Clear-PlaywrightArtifacts
-    }
-
-    if ($All -or $PythonBytecode) {
-        Clear-PythonBytecode
     }
 
     # 显示摘要

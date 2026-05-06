@@ -6,9 +6,10 @@
 .DESCRIPTION
     提供数据库的启动、停止、重置、备份等管理功能
     支持 PostgreSQL（TimescaleDB）与 Redis 的统一管理
+    同时提供数据库初始化脚本的静态验证入口
 
 .PARAMETER Action
-    操作类型: start, stop, reset, backup, status, logs, init, seed-admin
+    操作类型: start, stop, reset, backup, status, logs, init, verify, seed-admin
 
 .PARAMETER Service
     指定服务: postgres, redis, all (默认)
@@ -43,6 +44,10 @@
     执行完整数据库初始化
 
 .EXAMPLE
+    .\db-manage.ps1 verify
+    验证数据库整合文件、文档归档和 Docker 引用
+
+.EXAMPLE
     .\db-manage.ps1 stop -Service postgres
     仅停止 PostgreSQL 服务
 
@@ -64,7 +69,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("start", "stop", "reset", "backup", "status", "logs", "init", "seed-admin")]
+    [ValidateSet("start", "stop", "reset", "backup", "status", "logs", "init", "verify", "seed-admin")]
     [string]$Action,
     
     [ValidateSet("postgres", "redis", "all")]
@@ -359,6 +364,31 @@ function Initialize-Database {
     }
 }
 
+# 验证数据库整合状态
+function Verify-DatabaseConsolidation {
+    Write-ColorOutput "`n🔍 验证数据库整合状态..." "Blue"
+
+    $scriptPath = $script:ScriptRoot
+    $initScript = Join-Path $scriptPath "db-init-complete.ps1"
+
+    if (-not (Test-Path $initScript)) {
+        Write-ColorOutput "❌ 找不到初始化脚本: $initScript" "Red"
+        throw "初始化脚本不存在"
+    }
+
+    try {
+        & $initScript -VerifyOnly
+        if ($LASTEXITCODE -ne 0) {
+            throw "数据库整合验证失败，退出代码: $LASTEXITCODE"
+        }
+        Write-ColorOutput "✅ 数据库整合验证完成" "Green"
+    }
+    catch {
+        Write-ColorOutput "❌ 数据库整合验证失败: $($_.Exception.Message)" "Red"
+        throw
+    }
+}
+
 # 初始化默认管理员账号与 RBAC（原独立脚本已合并到此处）
 function Seed-AdminUser {
     Write-ColorOutput "`n👤 初始化默认管理员账号与权限..." "Blue"
@@ -537,6 +567,7 @@ function Main {
             "reset" { Reset-DatabaseServices }
             "backup" { Backup-DatabaseServices }
             "init" { Initialize-Database }
+            "verify" { Verify-DatabaseConsolidation }
             "seed-admin" { Seed-AdminUser }
             "status" { Show-ServiceStatus }
             "logs" { Show-ServiceLogs }

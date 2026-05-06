@@ -329,8 +329,8 @@ dlv debug ./cmd/api
 ### 日志查看
 
 ```powershell
-# 后端日志
-Get-Content logs\backend-go\app-dev.log -Wait
+# 后端日志（在项目根目录执行）
+Get-Content .\logs\backend-go\app-dev.log -Wait
 
 # 数据库日志
 .\scripts\database\db-manage.ps1 logs
