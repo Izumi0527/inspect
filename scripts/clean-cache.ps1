@@ -21,7 +21,7 @@ $ErrorActionPreference = "Continue"
 
 # 全局变量
 $script:ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-$script:ScriptsRoot = Split-Path -Parent $script:ScriptPath
+$script:ScriptsRoot = $script:ScriptPath
 $script:ProjectRoot = Split-Path -Parent $script:ScriptsRoot
 $script:BackendPath = Join-Path $script:ProjectRoot "backend-go"
 $script:FrontendPath = Join-Path $script:ProjectRoot "frontend"
@@ -29,6 +29,29 @@ $script:LogsPath = Join-Path $script:ProjectRoot "logs"
 $script:BackendLogsPath = Join-Path $script:BackendPath "logs"
 $script:TotalFreed = 0
 $script:TotalFiles = 0
+$script:ProjectRootResolved = (Resolve-Path -LiteralPath $script:ProjectRoot).ProviderPath
+$script:Selection = [ordered]@{
+    All          = [bool]$All
+    Backend      = [bool]$Backend
+    Frontend     = [bool]$Frontend
+    Logs         = [bool]$Logs
+    Temp         = [bool]$Temp
+    ProjectFiles = [bool]$ProjectFiles
+    GoBuild      = [bool]$GoBuild
+    PackageCache = [bool]$PackageCache
+    Playwright   = [bool]$Playwright
+}
+$script:ExcludedTraversalDirectories = @(
+    ".git",
+    ".vscode",
+    ".idea",
+    "node_modules",
+    ".next",
+    "dist",
+    "build",
+    "out",
+    "vendor"
+)
 
 # ──────────────────────────────────────────────
 # 日志函数
@@ -74,7 +97,7 @@ function Show-Help {
     Write-Host "企业级网络设备巡检系统 - 缓存清理脚本" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "用法:"
-    Write-Host "    .\clean-cache.ps1 [选项]"
+    Write-Host "    .\scripts\clean-cache.ps1 [选项]"
     Write-Host ""
     Write-Host "清理选项:"
     Write-Host "    -All                 清理所有缓存（含以下全部类别）"
@@ -94,13 +117,13 @@ function Show-Help {
     Write-Host "    -Help                显示此帮助信息"
     Write-Host ""
     Write-Host "示例:"
-    Write-Host "    .\clean-cache.ps1                         # 交互式选择清理项"
-    Write-Host "    .\clean-cache.ps1 -All -Force             # 清理所有缓存，不确认"
-    Write-Host "    .\clean-cache.ps1 -GoBuild                # 仅清理 Go 构建缓存"
-    Write-Host "    .\clean-cache.ps1 -PackageCache           # 仅清理包管理器缓存"
-    Write-Host "    .\clean-cache.ps1 -Playwright             # 仅清理 Playwright 产物"
-    Write-Host "    .\clean-cache.ps1 -WhatIf                 # 预览将要删除的内容"
-    Write-Host "    .\clean-cache.ps1 -All -Verbose           # 清理所有并显示详细信息"
+    Write-Host "    .\scripts\clean-cache.ps1                         # 交互式选择清理项"
+    Write-Host "    .\scripts\clean-cache.ps1 -All -Force             # 清理所有缓存，不确认"
+    Write-Host "    .\scripts\clean-cache.ps1 -GoBuild                # 仅清理 Go 构建缓存"
+    Write-Host "    .\scripts\clean-cache.ps1 -PackageCache           # 仅清理包管理器缓存"
+    Write-Host "    .\scripts\clean-cache.ps1 -Playwright             # 仅清理 Playwright 产物"
+    Write-Host "    .\scripts\clean-cache.ps1 -WhatIf                 # 预览将要删除的内容"
+    Write-Host "    .\scripts\clean-cache.ps1 -All -Verbose           # 清理所有并显示详细信息"
     Write-Host ""
     Write-Host "说明:"
     Write-Host "    🧹 覆盖 Go / pnpm / Playwright 等多类缓存"
@@ -130,15 +153,94 @@ function Format-FileSize {
     }
 }
 
+function Get-SafeResolvedPath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) {
+        return $null
+    }
+
+    try {
+        return (Resolve-Path -LiteralPath $Path -ErrorAction Stop).ProviderPath
+    } catch {
+        Write-LogVerbose "路径解析失败，跳过: $Path"
+        return $null
+    }
+}
+
+function Test-IsSafeCachePath {
+    param([string]$Path)
+
+    $resolvedPath = Get-SafeResolvedPath -Path $Path
+    if (-not $resolvedPath) {
+        return $false
+    }
+
+    $projectRoot = $script:ProjectRootResolved.TrimEnd('\', '/')
+    $normalizedPath = $resolvedPath.TrimEnd('\', '/')
+
+    if ([string]::Equals($normalizedPath, $projectRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Write-LogError "拒绝删除项目根目录: $resolvedPath"
+        return $false
+    }
+
+    $projectPrefix = "$projectRoot\"
+    if (-not $normalizedPath.StartsWith($projectPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Write-LogError "拒绝删除项目外路径: $resolvedPath"
+        return $false
+    }
+
+    return $true
+}
+
+function Get-RelativeProjectPath {
+    param([string]$Path)
+
+    try {
+        return [IO.Path]::GetRelativePath($script:ProjectRootResolved, $Path)
+    } catch {
+        return $Path.Replace($script:ProjectRootResolved, "").TrimStart("\", "/")
+    }
+}
+
+function Get-ProjectFileItems {
+    param(
+        [string]$RootPath,
+        [string]$Filter
+    )
+
+    $resolvedRoot = Get-SafeResolvedPath -Path $RootPath
+    if (-not $resolvedRoot) {
+        return @()
+    }
+
+    $queue = [System.Collections.Generic.Queue[string]]::new()
+    $queue.Enqueue($resolvedRoot)
+
+    while ($queue.Count -gt 0) {
+        $current = $queue.Dequeue()
+
+        Get-ChildItem -LiteralPath $current -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
+            if ($script:ExcludedTraversalDirectories -contains $_.Name) {
+                Write-LogVerbose "跳过目录扫描: $($_.FullName)"
+            } else {
+                $queue.Enqueue($_.FullName)
+            }
+        }
+
+        Get-ChildItem -LiteralPath $current -Filter $Filter -File -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Get-DirectorySize {
     param([string]$Path)
 
-    if (-not (Test-Path $Path)) {
+    if (-not (Test-Path -LiteralPath $Path)) {
         return 0
     }
 
     try {
-        $size = (Get-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue |
+        $size = (Get-ChildItem -LiteralPath $Path -Recurse -File -ErrorAction SilentlyContinue |
                  Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
         return if ($size) { $size } else { 0 }
     } catch {
@@ -152,24 +254,33 @@ function Remove-CacheItem {
         [string]$Description
     )
 
-    if (-not (Test-Path $Path)) {
+    if (-not (Test-Path -LiteralPath $Path)) {
         Write-LogVerbose "跳过不存在的路径: $Path"
+        return
+    }
+
+    if (-not (Test-IsSafeCachePath -Path $Path)) {
         return
     }
 
     $size = 0
     $fileCount = 0
+    $isContainer = Test-Path -LiteralPath $Path -PathType Container
 
-    if (Test-Path $Path -PathType Container) {
-        $items = Get-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue
+    if ($isContainer) {
+        $items = @(Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction SilentlyContinue)
         $size = ($items | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
         $fileCount = $items.Count
     } else {
-        $size = (Get-Item $Path -ErrorAction SilentlyContinue).Length
+        $size = (Get-Item -LiteralPath $Path -ErrorAction SilentlyContinue).Length
         $fileCount = 1
     }
 
-    if ($size -eq 0 -and $fileCount -eq 0) {
+    if ($null -eq $size) {
+        $size = 0
+    }
+
+    if (-not $isContainer -and $fileCount -eq 0) {
         Write-LogVerbose "跳过空路径: $Path"
         return
     }
@@ -177,13 +288,15 @@ function Remove-CacheItem {
     $sizeStr = Format-FileSize $size
 
     if ($WhatIf) {
-        Write-Host "  [预览] ${Description}: $sizeStr ($fileCount 个文件)" -ForegroundColor Yellow
+        $detail = if ($isContainer -and $fileCount -eq 0) { "空目录" } else { "$fileCount 个文件" }
+        Write-Host "  [预览] ${Description}: $sizeStr ($detail)" -ForegroundColor Yellow
         return
     }
 
     try {
-        Remove-Item -Path $Path -Recurse -Force -ErrorAction Stop
-        Write-LogSuccess "${Description}: $sizeStr ($fileCount 个文件)"
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+        $detail = if ($isContainer -and $fileCount -eq 0) { "空目录" } else { "$fileCount 个文件" }
+        Write-LogSuccess "${Description}: $sizeStr ($detail)"
         $script:TotalFreed += $size
         $script:TotalFiles += $fileCount
     } catch {
@@ -197,14 +310,21 @@ function Remove-CacheDirectoryFiles {
         [string]$Description
     )
 
-    if (-not (Test-Path $Path -PathType Container)) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
         Write-LogVerbose "跳过不存在的目录: $Path"
         return
     }
 
-    $items = @(Get-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue)
+    if (-not (Test-IsSafeCachePath -Path $Path)) {
+        return
+    }
+
+    $items = @(Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction SilentlyContinue)
     $size = ($items | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
     $fileCount = $items.Count
+    if ($null -eq $size) {
+        $size = 0
+    }
 
     if ($fileCount -eq 0) {
         Write-LogVerbose "跳过无文件目录: $Path"
@@ -244,7 +364,7 @@ function Remove-CacheDirectoryFiles {
 function Clear-BackendCache {
     Write-LogStep "清理后端缓存（Go）..."
 
-    if (-not (Test-Path $script:BackendPath)) {
+    if (-not (Test-Path -LiteralPath $script:BackendPath)) {
         Write-LogWarning "未发现后端目录: $script:BackendPath"
         return
     }
@@ -257,7 +377,7 @@ function Clear-BackendCache {
         (Join-Path $script:BackendPath "cover.html")
     )
     foreach ($f in $backendCoverageFiles) {
-        if (Test-Path $f) {
+        if (Test-Path -LiteralPath $f) {
             Remove-CacheItem -Path $f -Description "后端覆盖率文件 ($([IO.Path]::GetFileName($f)))"
         }
     }
@@ -268,12 +388,13 @@ function Clear-BackendCache {
         (Join-Path $script:BackendPath ".tmp")
     )
     foreach ($d in $backendTempDirs) {
-        if (Test-Path $d) {
+        if (Test-Path -LiteralPath $d) {
             Remove-CacheItem -Path $d -Description "后端临时目录 ($([IO.Path]::GetFileName($d)))"
         }
     }
 
     # 清理 Go 全局缓存（标准 GOPATH/GOCACHE 路径）
+    $pushedLocation = $false
     try {
         $null = Get-Command "go" -ErrorAction Stop
         if ($WhatIf) {
@@ -283,12 +404,18 @@ function Clear-BackendCache {
 
         Write-LogInfo "执行: go clean -cache -testcache（清理 Go 编译/测试缓存）"
         Push-Location $script:BackendPath
+        $pushedLocation = $true
         & go clean -cache -testcache | Out-Null
-        Pop-Location
+        if ($LASTEXITCODE -ne 0) {
+            throw "go clean 退出代码: $LASTEXITCODE"
+        }
         Write-LogSuccess "Go 缓存清理完成（go clean）"
     } catch {
-        try { Pop-Location } catch { }
         Write-LogWarning "跳过 go clean（未安装 Go 或执行失败）：$($_.Exception.Message)"
+    } finally {
+        if ($pushedLocation) {
+            Pop-Location
+        }
     }
 }
 
@@ -301,13 +428,13 @@ function Clear-FrontendCache {
 
     # node_modules/.cache
     $nodeCache = Join-Path $script:FrontendPath "node_modules\.cache"
-    if (Test-Path $nodeCache) {
+    if (Test-Path -LiteralPath $nodeCache) {
         Remove-CacheItem -Path $nodeCache -Description "npm/pnpm 缓存"
     }
 
     # Next.js 构建缓存
     $nextCache = Join-Path $script:FrontendPath ".next"
-    if (Test-Path $nextCache) {
+    if (Test-Path -LiteralPath $nextCache) {
         Remove-CacheItem -Path $nextCache -Description "Next.js 构建缓存"
     }
 
@@ -315,26 +442,26 @@ function Clear-FrontendCache {
     $buildDirs = @("dist", "build", "out")
     foreach ($dir in $buildDirs) {
         $path = Join-Path $script:FrontendPath $dir
-        if (Test-Path $path) {
+        if (Test-Path -LiteralPath $path) {
             Remove-CacheItem -Path $path -Description "前端构建输出 ($dir)"
         }
     }
 
     # Turbo 缓存
     $turboCache = Join-Path $script:FrontendPath ".turbo"
-    if (Test-Path $turboCache) {
+    if (Test-Path -LiteralPath $turboCache) {
         Remove-CacheItem -Path $turboCache -Description "Turbo 构建缓存"
     }
 
     # ESLint 缓存
     $eslintCache = Join-Path $script:FrontendPath ".eslintcache"
-    if (Test-Path $eslintCache) {
+    if (Test-Path -LiteralPath $eslintCache) {
         Remove-CacheItem -Path $eslintCache -Description "ESLint 缓存"
     }
 
     # SWC (Speedy Web Compiler) 缓存
     $swcCache = Join-Path $script:FrontendPath ".swc"
-    if (Test-Path $swcCache) {
+    if (Test-Path -LiteralPath $swcCache) {
         Remove-CacheItem -Path $swcCache -Description "SWC 编译器缓存"
     }
 }
@@ -348,7 +475,7 @@ function Clear-LogFiles {
 
     # 需要扫描的日志目录列表
     $logDirs = @($script:LogsPath)
-    if (Test-Path $script:BackendLogsPath) {
+    if (Test-Path -LiteralPath $script:BackendLogsPath) {
         $logDirs += $script:BackendLogsPath
     }
 
@@ -356,12 +483,12 @@ function Clear-LogFiles {
     $foundAny = $false
 
     foreach ($logDir in $logDirs) {
-        if (-not (Test-Path $logDir)) {
+        if (-not (Test-Path -LiteralPath $logDir)) {
             Write-LogVerbose "日志目录不存在，跳过: $logDir"
             continue
         }
 
-        $oldLogs = Get-ChildItem -Path $logDir -Recurse -Include "*.log" -File -ErrorAction SilentlyContinue |
+        $oldLogs = Get-ChildItem -LiteralPath $logDir -Recurse -Include "*.log" -File -Force -ErrorAction SilentlyContinue |
                     Where-Object { $_.LastWriteTime -lt $cutoffDate }
 
         if ($oldLogs.Count -eq 0) {
@@ -371,7 +498,7 @@ function Clear-LogFiles {
 
         $foundAny = $true
         foreach ($log in $oldLogs) {
-            $relPath = $log.FullName.Replace($script:ProjectRoot, "").TrimStart("\")
+            $relPath = Get-RelativeProjectPath -Path $log.FullName
             Remove-CacheItem -Path $log.FullName -Description "旧日志文件 ($relPath)"
         }
     }
@@ -389,18 +516,19 @@ function Clear-TempFiles {
     Write-LogStep "清理临时文件..."
 
     # .DS_Store (macOS)
-    Get-ChildItem -Path $script:ProjectRoot -Recurse -Filter ".DS_Store" -File -ErrorAction SilentlyContinue | ForEach-Object {
+    Get-ProjectFileItems -RootPath $script:ProjectRoot -Filter ".DS_Store" | ForEach-Object {
         Remove-CacheItem -Path $_.FullName -Description "macOS 系统文件 (.DS_Store)"
     }
 
     # Thumbs.db (Windows)
-    Get-ChildItem -Path $script:ProjectRoot -Recurse -Filter "Thumbs.db" -File -ErrorAction SilentlyContinue | ForEach-Object {
+    Get-ProjectFileItems -RootPath $script:ProjectRoot -Filter "Thumbs.db" | ForEach-Object {
         Remove-CacheItem -Path $_.FullName -Description "Windows 缩略图 (Thumbs.db)"
     }
 
     # *.tmp 文件
-    Get-ChildItem -Path $script:ProjectRoot -Recurse -Filter "*.tmp" -File -ErrorAction SilentlyContinue | ForEach-Object {
-        Remove-CacheItem -Path $_.FullName -Description "临时文件 (*.tmp)"
+    Get-ProjectFileItems -RootPath $script:ProjectRoot -Filter "*.tmp" | ForEach-Object {
+        $relPath = Get-RelativeProjectPath -Path $_.FullName
+        Remove-CacheItem -Path $_.FullName -Description "临时文件 ($relPath)"
     }
 }
 
@@ -413,60 +541,60 @@ function Clear-ProjectSpecificCache {
 
     # 运行时配置文件
     $contextJson = Join-Path $script:ProjectRoot "context.json"
-    if (Test-Path $contextJson) {
+    if (Test-Path -LiteralPath $contextJson) {
         Remove-CacheItem -Path $contextJson -Description "运行时配置 (context.json)"
     }
 
     # 前端 Lint 报告
     $frontendLintReport = Join-Path $script:FrontendPath "lint-report.json"
-    if (Test-Path $frontendLintReport) {
+    if (Test-Path -LiteralPath $frontendLintReport) {
         Remove-CacheItem -Path $frontendLintReport -Description "ESLint 报告 (lint-report.json)"
     }
 
     $frontendLintResult = Join-Path $script:FrontendPath "lint-result.json"
-    if (Test-Path $frontendLintResult) {
+    if (Test-Path -LiteralPath $frontendLintResult) {
         Remove-CacheItem -Path $frontendLintResult -Description "ESLint 结果 (lint-result.json)"
     }
 
     # 前端覆盖率报告
     $frontendCoverageReport = Join-Path $script:FrontendPath "coverage-report"
-    if (Test-Path $frontendCoverageReport) {
+    if (Test-Path -LiteralPath $frontendCoverageReport) {
         Remove-CacheItem -Path $frontendCoverageReport -Description "前端覆盖率报告"
     }
 
     # TypeScript 构建信息
-    Get-ChildItem -Path $script:FrontendPath -Recurse -Filter "*.tsbuildinfo" -File -ErrorAction SilentlyContinue | ForEach-Object {
+    Get-ProjectFileItems -RootPath $script:FrontendPath -Filter "*.tsbuildinfo" | ForEach-Object {
         Remove-CacheItem -Path $_.FullName -Description "TypeScript 构建信息 ($($_.Name))"
     }
 
     # 后端覆盖率文件（Go）
     $backendCoverage = Join-Path $script:BackendPath "coverage.out"
-    if (Test-Path $backendCoverage) {
+    if (Test-Path -LiteralPath $backendCoverage) {
         Remove-CacheItem -Path $backendCoverage -Description "后端覆盖率数据 (coverage.out)"
     }
 
     # 前端认证令牌（开发环境临时文件）—— 仅警告，不自动删除
     $frontendAuth = Join-Path $script:FrontendPath "auth.json"
-    if (Test-Path $frontendAuth) {
+    if (Test-Path -LiteralPath $frontendAuth) {
         Write-LogWarning "发现前端认证文件 (auth.json)，如需清理请手动删除"
         Write-LogVerbose "路径: $frontendAuth"
     }
 
     # Vitest 测试缓存
     $vitestCache = Join-Path $script:FrontendPath ".vitest"
-    if (Test-Path $vitestCache) {
+    if (Test-Path -LiteralPath $vitestCache) {
         Remove-CacheItem -Path $vitestCache -Description "Vitest 测试缓存"
     }
 
     # Playwright MCP 服务端产生的日志与快照
     $playwrightMcp = Join-Path $script:ProjectRoot ".playwright-mcp"
-    if (Test-Path $playwrightMcp) {
+    if (Test-Path -LiteralPath $playwrightMcp) {
         Remove-CacheDirectoryFiles -Path $playwrightMcp -Description "Playwright MCP 快照与日志"
     }
 
     # Go 临时工作目录
     $goTmp = Join-Path $script:ProjectRoot ".gotmp"
-    if (Test-Path $goTmp) {
+    if (Test-Path -LiteralPath $goTmp) {
         Remove-CacheItem -Path $goTmp -Description "Go 临时目录 (.gotmp)"
     }
 }
@@ -484,23 +612,23 @@ function Clear-GoBuildArtifacts {
         (Join-Path $script:ProjectRoot ".gomodcache")
     )
     foreach ($d in $rootGoCaches) {
-        if (Test-Path $d) {
+        if (Test-Path -LiteralPath $d) {
             Remove-CacheItem -Path $d -Description "Go 缓存目录 ($([IO.Path]::GetFileName($d)))"
         }
     }
 
     # .cache 目录下的 Go 子缓存（go-build / go-mod）
     $cacheDir = Join-Path $script:ProjectRoot ".cache"
-    if (Test-Path $cacheDir) {
+    if (Test-Path -LiteralPath $cacheDir) {
         $goSubCaches = @("go-build", "go-mod")
         foreach ($sub in $goSubCaches) {
             $subPath = Join-Path $cacheDir $sub
-            if (Test-Path $subPath) {
+            if (Test-Path -LiteralPath $subPath) {
                 Remove-CacheItem -Path $subPath -Description "Go 缓存目录 (.cache/$sub)"
             }
         }
         # 如果 .cache 目录在清理后为空，则一并移除
-        $remaining = Get-ChildItem -Path $cacheDir -Force -ErrorAction SilentlyContinue
+        $remaining = Get-ChildItem -LiteralPath $cacheDir -Force -ErrorAction SilentlyContinue
         if (-not $remaining) {
             Remove-CacheItem -Path $cacheDir -Description "空缓存目录 (.cache)"
         }
@@ -512,7 +640,7 @@ function Clear-GoBuildArtifacts {
         (Join-Path $script:BackendPath ".gomodcache")
     )
     foreach ($d in $backendGoCaches) {
-        if (Test-Path $d) {
+        if (Test-Path -LiteralPath $d) {
             Remove-CacheItem -Path $d -Description "后端 Go 缓存目录 (backend-go/$([IO.Path]::GetFileName($d)))"
         }
     }
@@ -520,14 +648,14 @@ function Clear-GoBuildArtifacts {
     # Go 编译产物（可执行文件）
     $goExePatterns = @("*.exe")
     foreach ($pattern in $goExePatterns) {
-        Get-ChildItem -Path $script:BackendPath -Filter $pattern -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Get-ChildItem -LiteralPath $script:BackendPath -Filter $pattern -File -ErrorAction SilentlyContinue | ForEach-Object {
             Remove-CacheItem -Path $_.FullName -Description "Go 编译产物 ($($_.Name))"
         }
     }
 
     # 后端重复输出目录（历史构建可能生成 backend-go/backend-go）
     $backendNestedOutput = Join-Path $script:BackendPath "backend-go"
-    if (Test-Path $backendNestedOutput) {
+    if (Test-Path -LiteralPath $backendNestedOutput) {
         Remove-CacheDirectoryFiles -Path $backendNestedOutput -Description "后端重复输出目录文件 (backend-go/backend-go)"
     }
 
@@ -539,7 +667,7 @@ function Clear-GoBuildArtifacts {
         (Join-Path $script:ProjectRoot "cover.html")
     )
     foreach ($f in $rootCoverageFiles) {
-        if (Test-Path $f) {
+        if (Test-Path -LiteralPath $f) {
             Remove-CacheItem -Path $f -Description "Go 覆盖率文件（根目录）($([IO.Path]::GetFileName($f)))"
         }
     }
@@ -567,13 +695,13 @@ function Clear-PackageManagerCache {
 
     # pnpm store（项目根目录）
     $pnpmStoreRoot = Join-Path $script:ProjectRoot ".pnpm-store"
-    if (Test-Path $pnpmStoreRoot) {
+    if (Test-Path -LiteralPath $pnpmStoreRoot) {
         Remove-CacheItem -Path $pnpmStoreRoot -Description "pnpm 全局存储 (.pnpm-store)"
     }
 
     # pnpm store（前端目录内）
     $pnpmStoreFrontend = Join-Path $script:FrontendPath ".pnpm-store"
-    if (Test-Path $pnpmStoreFrontend) {
+    if (Test-Path -LiteralPath $pnpmStoreFrontend) {
         Remove-CacheItem -Path $pnpmStoreFrontend -Description "pnpm 存储 (frontend/.pnpm-store)"
     }
 }
@@ -587,20 +715,20 @@ function Clear-PlaywrightArtifacts {
 
     # Playwright HTML 测试报告
     $pwReport = Join-Path $script:FrontendPath "playwright-report"
-    if (Test-Path $pwReport) {
+    if (Test-Path -LiteralPath $pwReport) {
         Remove-CacheItem -Path $pwReport -Description "Playwright 测试报告"
     }
 
     # Playwright 测试结果（含认证状态、运行记录等）
     $pwResults = Join-Path $script:FrontendPath "test-results"
-    if (Test-Path $pwResults) {
+    if (Test-Path -LiteralPath $pwResults) {
         Remove-CacheItem -Path $pwResults -Description "Playwright 测试结果"
     }
 
     # Playwright MCP 服务端快照与日志（同时由 Clear-ProjectSpecificCache 覆盖，
     # 此处保留以支持独立 -Playwright 调用）
     $pwMcp = Join-Path $script:ProjectRoot ".playwright-mcp"
-    if (Test-Path $pwMcp) {
+    if (Test-Path -LiteralPath $pwMcp) {
         Remove-CacheDirectoryFiles -Path $pwMcp -Description "Playwright MCP 快照与日志"
     }
 }
@@ -659,15 +787,15 @@ function Show-InteractiveMenu {
     $choice = Read-Host "请选择 (0-9)"
 
     switch ($choice) {
-        "1"  { $script:All = $true }
-        "2"  { $script:Backend = $true }
-        "3"  { $script:Frontend = $true }
-        "4"  { $script:Logs = $true }
-        "5"  { $script:Temp = $true }
-        "6"  { $script:ProjectFiles = $true }
-        "7"  { $script:GoBuild = $true }
-        "8"  { $script:PackageCache = $true }
-        "9"  { $script:Playwright = $true }
+        "1"  { $script:Selection["All"] = $true }
+        "2"  { $script:Selection["Backend"] = $true }
+        "3"  { $script:Selection["Frontend"] = $true }
+        "4"  { $script:Selection["Logs"] = $true }
+        "5"  { $script:Selection["Temp"] = $true }
+        "6"  { $script:Selection["ProjectFiles"] = $true }
+        "7"  { $script:Selection["GoBuild"] = $true }
+        "8"  { $script:Selection["PackageCache"] = $true }
+        "9"  { $script:Selection["Playwright"] = $true }
         "0"  {
             Write-LogInfo "已取消清理操作"
             exit 0
@@ -696,8 +824,7 @@ function Main {
     }
 
     # 如果没有指定任何选项，显示交互式菜单
-    $hasSelection = $All -or $Backend -or $Frontend -or $Logs -or $Temp -or $ProjectFiles `
-                    -or $GoBuild -or $PackageCache -or $Playwright
+    $hasSelection = $script:Selection.Values -contains $true
     if (-not $hasSelection) {
         Show-InteractiveMenu
     }
@@ -719,35 +846,35 @@ function Main {
     }
 
     # 执行清理
-    if ($All -or $Backend) {
+    if ($script:Selection["All"] -or $script:Selection["Backend"]) {
         Clear-BackendCache
     }
 
-    if ($All -or $Frontend) {
+    if ($script:Selection["All"] -or $script:Selection["Frontend"]) {
         Clear-FrontendCache
     }
 
-    if ($All -or $Logs) {
+    if ($script:Selection["All"] -or $script:Selection["Logs"]) {
         Clear-LogFiles
     }
 
-    if ($All -or $Temp) {
+    if ($script:Selection["All"] -or $script:Selection["Temp"]) {
         Clear-TempFiles
     }
 
-    if ($All -or $ProjectFiles) {
+    if ($script:Selection["All"] -or $script:Selection["ProjectFiles"]) {
         Clear-ProjectSpecificCache
     }
 
-    if ($All -or $GoBuild) {
+    if ($script:Selection["All"] -or $script:Selection["GoBuild"]) {
         Clear-GoBuildArtifacts
     }
 
-    if ($All -or $PackageCache) {
+    if ($script:Selection["All"] -or $script:Selection["PackageCache"]) {
         Clear-PackageManagerCache
     }
 
-    if ($All -or $Playwright) {
+    if ($script:Selection["All"] -or $script:Selection["Playwright"]) {
         Clear-PlaywrightArtifacts
     }
 

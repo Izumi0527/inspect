@@ -228,7 +228,7 @@ docker-compose -f docker-compose.dev.yml restart redis
 - ✅ `scripts/db-manage.ps1 init` - 数据库初始化（完整）
 - ✅ `scripts/dev-start.ps1` - 开发启动
 - ✅ `scripts/dev-start.ps1 -Setup` - 环境设置
-- ✅ `scripts/tests/run-tests.ps1` - 测试运行
+- ✅ `scripts/clean-cache.ps1` - 缓存和临时产物清理
 
 ### 文档文件
 - ✅ `docs/datebase/database-docker-deployment.md` - Docker 部署文档

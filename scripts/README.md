@@ -2,21 +2,16 @@
 
 本目录包含项目当前仍在维护的脚本。数据库脚本已收敛为根目录下的
 `db-manage.ps1` / `db-manage.sh`，开发脚本已收敛为根目录下的
-`dev-start.ps1`，不再保留旧的数据库和开发脚本子目录。
+`dev-start.ps1`，测试维护目录目前仅保留缓存清理入口。
 
 ## 目录结构
 
 ```text
 scripts/
 ├── dev-start.ps1      # 开发环境设置、启动、诊断统一入口
-├── db-manage.ps1       # 数据库统一管理、初始化、验证与管理员种子
-├── db-manage.sh        # 数据库统一管理 Bash 版
-├── tests/              # 测试与维护脚本
-│   ├── run-tests.ps1
-│   ├── quality-check.ps1
-│   ├── clean-cache.ps1
-│   ├── view-logs.ps1
-│   └── README.md
+├── db-manage.ps1      # 数据库统一管理、初始化、验证与管理员种子
+├── db-manage.sh       # 数据库统一管理 Bash 版
+├── clean-cache.ps1    # 缓存、临时文件、日志和测试产物清理
 └── README.md
 ```
 
@@ -185,24 +180,77 @@ pnpm dev
 
 ## 测试与维护
 
+测试和质量检查不再通过独立封装脚本转发，按改动范围直接运行对应模块命令即可。
+缓存清理已收敛到 `scripts/clean-cache.ps1`，不再保留测试脚本子目录。
+
+### 常用验证命令
+
 ```powershell
-# 运行测试
-.\scripts\tests\run-tests.ps1
+# 后端测试
+Push-Location backend-go
+go test ./...
+Pop-Location
 
-# 代码质量检查
-.\scripts\tests\quality-check.ps1
+# 前端类型检查
+Push-Location frontend
+pnpm run type-check
+Pop-Location
 
-# 清理缓存和临时文件
-.\scripts\tests\clean-cache.ps1
+# 前端单元测试
+Push-Location frontend
+pnpm test -- --runInBand
+Pop-Location
 
-# 查看日志
-.\scripts\tests\view-logs.ps1
+# 前端 E2E 测试
+Push-Location frontend
+pnpm run test:e2e
+Pop-Location
 ```
+
+### 缓存清理
+
+```powershell
+# 交互式选择清理项
+.\scripts\clean-cache.ps1
+
+# 预览将要清理的内容，不实际删除
+.\scripts\clean-cache.ps1 -All -WhatIf
+
+# 清理所有缓存并跳过确认
+.\scripts\clean-cache.ps1 -All -Force
+
+# 仅清理前端构建缓存
+.\scripts\clean-cache.ps1 -Frontend
+
+# 仅清理 Go 构建缓存和编译产物
+.\scripts\clean-cache.ps1 -GoBuild
+
+# 仅清理 Playwright 测试报告和结果
+.\scripts\clean-cache.ps1 -Playwright
+```
+
+`clean-cache.ps1` 支持的清理目标：
+
+- `-Backend`：后端覆盖率文件、临时目录和 Go 编译/测试缓存
+- `-Frontend`：Next.js、Turbo、ESLint、SWC 和前端构建缓存
+- `-Logs`：超过 7 天的项目日志
+- `-Temp`：`.DS_Store`、`Thumbs.db`、`*.tmp`
+- `-ProjectFiles`：运行时配置、Lint 报告、覆盖率和 MCP 快照
+- `-GoBuild`：Go 项目缓存目录、编译产物和根目录覆盖率文件
+- `-PackageCache`：项目内 pnpm store
+- `-Playwright`：Playwright 报告、测试结果和 MCP 快照
+- `-All`：执行以上全部清理项
+
+安全选项：
+
+- `-WhatIf`：仅预览，不实际删除
+- `-Force`：跳过确认
+- `-Verbose`：输出详细跳过原因和路径信息
 
 ## 使用建议
 
 1. 新环境优先运行 `dev-start.ps1 -Setup`。
 2. 日常开发优先使用 `dev-start.ps1`。
 3. 数据库操作在 Windows PowerShell 下使用 `db-manage.ps1`，在 Bash 环境下使用 `db-manage.sh`。
-4. 提交前按改动范围运行 `run-tests.ps1` 或定向测试。
-5. 新增脚本时同步更新本文件和对应子目录 README。
+4. 提交前按改动范围运行后端、前端或 E2E 定向测试。
+5. 新增脚本时同步更新本文件。

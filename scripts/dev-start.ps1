@@ -472,8 +472,8 @@ function Show-SetupSummary {
 
     Write-ColorOutput "`n🛠️ 常用命令:" "Blue"
     Write-ColorOutput "  数据库管理: .\scripts\db-manage.ps1 [start|stop|reset|backup]" "White"
-    Write-ColorOutput "  代码质量检查: .\scripts\tests\quality-check.ps1" "White"
-    Write-ColorOutput "  运行测试: .\scripts\tests\run-tests.ps1" "White"
+    Write-ColorOutput "  后端测试: Push-Location backend-go; go test ./...; Pop-Location" "White"
+    Write-ColorOutput "  前端检查: Push-Location frontend; pnpm run type-check; Pop-Location" "White"
 
     Write-ColorOutput "`n📖 更多信息请查看 docs\ 目录下的文档" "Yellow"
 }
@@ -1099,7 +1099,8 @@ function Show-ServiceInfo {
     Write-ColorOutput "  停止数据库: .\scripts\db-manage.ps1 stop" "White"
     Write-ColorOutput "  查看日志: .\scripts\db-manage.ps1 logs" "White"
     Write-ColorOutput "  重置数据库: .\scripts\db-manage.ps1 reset" "White"
-    Write-ColorOutput "  运行测试: .\scripts\tests\run-tests.ps1" "White"
+    Write-ColorOutput "  后端测试: Push-Location backend-go; go test ./...; Pop-Location" "White"
+    Write-ColorOutput "  前端检查: Push-Location frontend; pnpm run type-check; Pop-Location" "White"
     if ($backendConfig.ServerPort -gt 0) {
         Write-ColorOutput "  健康检查: Invoke-WebRequest $($backendConfig.HealthUrl)" "White"
     }
