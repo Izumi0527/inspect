@@ -2,13 +2,14 @@
 
 本目录包含项目当前仍在维护的脚本。数据库脚本已收敛为根目录下的
 `db-manage.ps1` / `db-manage.sh`，开发脚本已收敛为根目录下的
-`dev-start.ps1`，测试维护目录目前仅保留缓存清理入口。
+`dev-start.ps1`，生产环境启动入口为 `prod-start.ps1`，测试维护目录目前仅保留缓存清理入口。
 
 ## 目录结构
 
 ```text
 scripts/
 ├── dev-start.ps1      # 开发环境设置、启动、诊断统一入口
+├── prod-start.ps1     # 生产环境 Docker Compose 启动、状态、日志和停止入口
 ├── db-manage.ps1      # 数据库统一管理、初始化、验证与管理员种子
 ├── db-manage.sh       # 数据库统一管理 Bash 版
 ├── clean-cache.ps1    # 缓存、临时文件、日志和测试产物清理
@@ -101,6 +102,66 @@ pnpm dev
 
 诊断模式会检查必需工具、Docker 服务、数据库容器、配置文件、目录结构、
 端口占用和 Docker 网络，并给出下一步建议。
+
+## 生产环境管理
+
+统一入口：
+
+```powershell
+.\scripts\prod-start.ps1 [-Action <start|stop|restart|status|logs|build|pull|config|down>]
+```
+
+生产脚本默认使用 `docker-compose.prod.yml`，环境变量文件优先级为：
+
+1. `-EnvFile` 显式指定的文件
+2. 根目录 `.env.production`
+3. 根目录 `.env`
+4. 当前 PowerShell 进程中的环境变量
+
+启动前会检查生产必需变量：
+
+- `POSTGRES_PASSWORD`
+- `REDIS_PASSWORD`
+- `SECRET_KEY`
+- `JWT_SECRET_KEY`
+- 启用 `-Monitoring` 时还会检查 `GRAFANA_ADMIN_PASSWORD`
+
+常用命令：
+
+```powershell
+# 启动生产核心服务
+.\scripts\prod-start.ps1
+
+# 使用指定生产环境变量文件启动
+.\scripts\prod-start.ps1 -EnvFile .env.production
+
+# 启动前拉取镜像，并重新构建本地镜像
+.\scripts\prod-start.ps1 -Pull -Build
+
+# 启用 Nginx profile（要求先准备 config/nginx 与 ssl 目录）
+.\scripts\prod-start.ps1 -WithNginx
+
+# 启用监控 profile
+.\scripts\prod-start.ps1 -Monitoring
+
+# 仅查看生产服务状态
+.\scripts\prod-start.ps1 -Action status
+
+# 查看后端日志
+.\scripts\prod-start.ps1 -Action logs -Service backend -Follow
+
+# 校验生产 Compose 配置
+.\scripts\prod-start.ps1 -Action config
+
+# 预览将要执行的 docker compose 命令，不实际执行
+.\scripts\prod-start.ps1 -DryRun
+
+# 停止生产服务
+.\scripts\prod-start.ps1 -Action stop
+```
+
+`down` 动作会移除生产容器和网络；如需删除数据卷必须显式追加
+`-RemoveVolumes`，执行前请确认已有备份。
 
 ## 数据库管理
 
@@ -251,6 +312,7 @@ Pop-Location
 
 1. 新环境优先运行 `dev-start.ps1 -Setup`。
 2. 日常开发优先使用 `dev-start.ps1`。
-3. 数据库操作在 Windows PowerShell 下使用 `db-manage.ps1`，在 Bash 环境下使用 `db-manage.sh`。
-4. 提交前按改动范围运行后端、前端或 E2E 定向测试。
-5. 新增脚本时同步更新本文件。
+3. 生产部署优先使用 `prod-start.ps1` 包装 `docker-compose.prod.yml`。
+4. 数据库操作在 Windows PowerShell 下使用 `db-manage.ps1`，在 Bash 环境下使用 `db-manage.sh`。
+5. 提交前按改动范围运行后端、前端或 E2E 定向测试。
+6. 新增脚本时同步更新本文件。

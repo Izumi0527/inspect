@@ -59,6 +59,12 @@ export JWT_SECRET_KEY="$(openssl rand -base64 64)"
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
+Windows PowerShell 环境可使用项目脚本：
+
+```powershell
+.\scripts\prod-start.ps1
+```
+
 ### 完整启动（包含 Nginx 和监控）
 ```bash
 # 设置 Grafana 密码
@@ -71,6 +77,12 @@ docker-compose -f docker-compose.prod.yml \
   up -d
 ```
 
+Windows PowerShell 环境可使用：
+
+```powershell
+.\scripts\prod-start.ps1 -WithNginx -Monitoring
+```
+
 ## 🔧 常用命令
 
 ```bash
@@ -79,6 +91,9 @@ docker-compose -f docker-compose.dev.yml restart backend
 
 # 查看特定服务日志
 docker-compose -f docker-compose.dev.yml logs -f backend
+
+# 查看生产后端日志
+.\scripts\prod-start.ps1 -Action logs -Service backend -Follow
 
 # 进入容器
 docker-compose -f docker-compose.dev.yml exec backend sh
