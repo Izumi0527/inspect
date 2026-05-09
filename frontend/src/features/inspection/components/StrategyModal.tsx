@@ -24,6 +24,8 @@ interface Props {
 }
 
 type StrategyType = 'scheduled' | 'manual'
+type ScheduleMode = 'daily' | 'weekly' | 'monthly' | 'hourly' | 'half_hourly' | 'custom'
+type WeekdayValue = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN'
 
 interface StrategyFormData {
   name: string
@@ -35,18 +37,161 @@ interface StrategyFormData {
   enabled: boolean
 }
 
+interface ScheduleFormData {
+  mode: ScheduleMode
+  time: string
+  weekday: WeekdayValue
+  monthDay: string
+}
+
+const DEFAULT_CRON = '0 0 2 * * ?'
+
+const DEFAULT_SCHEDULE: ScheduleFormData = {
+  mode: 'daily',
+  time: '02:00',
+  weekday: 'MON',
+  monthDay: '1'
+}
+
+const scheduleModeOptions: Array<{ value: Exclude<ScheduleMode, 'custom'>; label: string }> = [
+  { value: 'daily', label: '每天' },
+  { value: 'weekly', label: '每周' },
+  { value: 'monthly', label: '每月' },
+  { value: 'hourly', label: '每小时' },
+  { value: 'half_hourly', label: '每30分钟' }
+]
+
+const weekdayOptions: Array<{ value: WeekdayValue; label: string }> = [
+  { value: 'MON', label: '周一' },
+  { value: 'TUE', label: '周二' },
+  { value: 'WED', label: '周三' },
+  { value: 'THU', label: '周四' },
+  { value: 'FRI', label: '周五' },
+  { value: 'SAT', label: '周六' },
+  { value: 'SUN', label: '周日' }
+]
+
+const monthDayOptions = Array.from({ length: 28 }, (_, index) => {
+  const day = String(index + 1)
+  return { value: day, label: `${day}日` }
+})
+
 const createInitialFormState = (): StrategyFormData => ({
   name: '',
   description: '',
   type: 'scheduled',
-  cron: '0 0 2 * * ?',
+  cron: DEFAULT_CRON,
   devices: [],
   templates: [],
   enabled: true
 })
 
+const normalizeTime = (value: string): string => (/^\d{2}:\d{2}$/.test(value) ? value : DEFAULT_SCHEDULE.time)
+
+const splitTime = (value: string) => {
+  const [hour = '02', minute = '00'] = normalizeTime(value).split(':')
+  return {
+    hour: Number.parseInt(hour, 10),
+    minute: Number.parseInt(minute, 10)
+  }
+}
+
+const buildCronFromSchedule = (schedule: ScheduleFormData, fallbackCron: string): string => {
+  if (schedule.mode === 'custom') {
+    return fallbackCron || DEFAULT_CRON
+  }
+
+  if (schedule.mode === 'hourly') {
+    return '0 0 * * * ?'
+  }
+
+  if (schedule.mode === 'half_hourly') {
+    return '0 */30 * * * ?'
+  }
+
+  const { hour, minute } = splitTime(schedule.time)
+
+  if (schedule.mode === 'weekly') {
+    return `0 ${minute} ${hour} ? * ${schedule.weekday}`
+  }
+
+  if (schedule.mode === 'monthly') {
+    return `0 ${minute} ${hour} ${schedule.monthDay} * ?`
+  }
+
+  return `0 ${minute} ${hour} * * ?`
+}
+
+const parseCronToSchedule = (cron?: string): ScheduleFormData => {
+  if (!cron) return DEFAULT_SCHEDULE
+
+  const parts = cron.trim().split(/\s+/)
+  if (parts.length !== 6 || parts[0] !== '0') {
+    return { ...DEFAULT_SCHEDULE, mode: 'custom' }
+  }
+
+  const [, minute, hour, day, month, weekday] = parts
+
+  if (minute === '0' && hour === '*' && day === '*' && month === '*' && weekday === '?') {
+    return { ...DEFAULT_SCHEDULE, mode: 'hourly' }
+  }
+
+  if (minute === '*/30' && hour === '*' && day === '*' && month === '*' && weekday === '?') {
+    return { ...DEFAULT_SCHEDULE, mode: 'half_hourly' }
+  }
+
+  const hourNumber = Number.parseInt(hour, 10)
+  const minuteNumber = Number.parseInt(minute, 10)
+  const hasValidTime = Number.isInteger(hourNumber) && Number.isInteger(minuteNumber)
+  const time = hasValidTime
+    ? `${String(hourNumber).padStart(2, '0')}:${String(minuteNumber).padStart(2, '0')}`
+    : DEFAULT_SCHEDULE.time
+
+  if (hasValidTime && day === '*' && month === '*' && weekday === '?') {
+    return { ...DEFAULT_SCHEDULE, mode: 'daily', time }
+  }
+
+  if (
+    hasValidTime &&
+    day === '?' &&
+    month === '*' &&
+    weekdayOptions.some((option) => option.value === weekday)
+  ) {
+    return { ...DEFAULT_SCHEDULE, mode: 'weekly', time, weekday: weekday as WeekdayValue }
+  }
+
+  if (hasValidTime && month === '*' && weekday === '?' && monthDayOptions.some((option) => option.value === day)) {
+    return { ...DEFAULT_SCHEDULE, mode: 'monthly', time, monthDay: day }
+  }
+
+  return { ...DEFAULT_SCHEDULE, mode: 'custom' }
+}
+
+const describeSchedule = (schedule: ScheduleFormData): string => {
+  const weekday = weekdayOptions.find((option) => option.value === schedule.weekday)?.label ?? '周一'
+  const monthDay = monthDayOptions.find((option) => option.value === schedule.monthDay)?.label ?? '1日'
+
+  if (schedule.mode === 'custom') {
+    return '沿用原有执行计划'
+  }
+  if (schedule.mode === 'hourly') {
+    return '每小时整点执行'
+  }
+  if (schedule.mode === 'half_hourly') {
+    return '每30分钟执行一次'
+  }
+  if (schedule.mode === 'weekly') {
+    return `每周${weekday} ${schedule.time} 执行`
+  }
+  if (schedule.mode === 'monthly') {
+    return `每月${monthDay} ${schedule.time} 执行`
+  }
+  return `每天 ${schedule.time} 执行`
+}
+
 export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess }) => {
   const [formData, setFormData] = useState<StrategyFormData>(() => createInitialFormState())
+  const [scheduleData, setScheduleData] = useState<ScheduleFormData>(() => DEFAULT_SCHEDULE)
   const [errors, setErrors] = useState<Partial<Record<keyof StrategyFormData, string>>>({})
   const [deviceSearch, setDeviceSearch] = useState('')
   const [templateSearch, setTemplateSearch] = useState('')
@@ -72,17 +217,20 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
 
   useEffect(() => {
     if (strategy) {
+      const cron = strategy.cron || DEFAULT_CRON
       setFormData({
         name: strategy.name,
         description: strategy.description,
         type: strategy.type,
-        cron: strategy.cron || '0 0 2 * * ?',
+        cron,
         devices: [...strategy.devices],
         templates: strategy.templates.slice(0, 1),
         enabled: strategy.enabled
       })
+      setScheduleData(parseCronToSchedule(cron))
     } else {
       setFormData(createInitialFormState())
+      setScheduleData(DEFAULT_SCHEDULE)
     }
   }, [strategy])
 
@@ -96,6 +244,15 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
   const handleTypeChange = (value: string) => {
     if (value === 'scheduled' || value === 'manual') {
       handleInputChange('type', value)
+    }
+  }
+
+  const handleScheduleChange = (updates: Partial<ScheduleFormData>) => {
+    const next = { ...scheduleData, ...updates }
+    setScheduleData(next)
+    setFormData(current => ({ ...current, cron: buildCronFromSchedule(next, current.cron) }))
+    if (errors.cron) {
+      setErrors(current => ({ ...current, cron: undefined }))
     }
   }
 
@@ -153,9 +310,9 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
 
     if (formData.type === 'scheduled') {
       if (!formData.cron.trim()) {
-        newErrors.cron = '请输入Cron表达式'
+        newErrors.cron = '请选择执行时间'
       } else if (formData.cron.length > 100) {
-        newErrors.cron = 'Cron表达式不能超过100个字符'
+        newErrors.cron = '执行时间配置不能超过100个字符'
       }
     }
 
@@ -176,24 +333,20 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
     if (!validateForm()) return
 
     try {
+      const payload = {
+        ...formData,
+        cron: formData.type === 'scheduled' ? buildCronFromSchedule(scheduleData, formData.cron) : formData.cron
+      }
       if (isEditing && strategy) {
-        await updateStrategy.mutateAsync({ id: strategy.id, data: formData })
+        await updateStrategy.mutateAsync({ id: strategy.id, data: payload })
       } else {
-        await createStrategy.mutateAsync(formData)
+        await createStrategy.mutateAsync(payload)
       }
       onSuccess()
     } catch (error) {
       console.error('Save strategy failed:', error)
     }
   }
-
-  const cronPresets = [
-    { label: '每天凌晨2点', value: '0 0 2 * * ?' },
-    { label: '每小时执行', value: '0 0 * * * ?' },
-    { label: '每30分钟执行', value: '0 */30 * * * ?' },
-    { label: '每周一凌晨2点', value: '0 0 2 ? * MON' },
-    { label: '每月1号凌晨2点', value: '0 0 2 1 * ?' }
-  ]
 
   const isLoading = createStrategy.isPending || updateStrategy.isPending
 
@@ -306,31 +459,88 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                   
                   <div>
                     <label className="block text-sm font-medium text-muted-foreground mb-1">
-                      Cron表达式 <span className="text-red-500">*</span>
+                      执行频率 <span className="text-red-500">*</span>
                     </label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={formData.cron}
-                        onChange={(e) => handleInputChange('cron', e.target.value)}
-                        placeholder="0 0 2 * * ?"
-                        className={`flex-1 ${errors.cron ? 'border-red-500' : ''}`}
-                      />
-                      <Select onValueChange={(value) => handleInputChange('cron', value)}>
-                        <SelectTrigger className="w-36" aria-label="Cron 预设">
-                          <SelectValue placeholder="常用预设" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Select
+                        value={scheduleData.mode}
+                        onValueChange={(value) => handleScheduleChange({ mode: value as ScheduleMode })}
+                      >
+                        <SelectTrigger aria-label="执行频率" className={errors.cron ? 'border-red-500' : ''}>
+                          <SelectValue
+                            placeholder={
+                              scheduleData.mode === 'custom'
+                                ? '沿用原执行计划'
+                                : scheduleModeOptions.find((option) => option.value === scheduleData.mode)?.label
+                            }
+                          />
                         </SelectTrigger>
                         <SelectContent>
-                          {cronPresets.map((preset) => (
-                            <SelectItem key={preset.value} value={preset.value}>
-                              {preset.label}
+                          {scheduleData.mode === 'custom' && (
+                            <SelectItem value="custom">沿用原执行计划</SelectItem>
+                          )}
+                          {scheduleModeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+
+                      {scheduleData.mode === 'weekly' && (
+                        <Select
+                          value={scheduleData.weekday}
+                          onValueChange={(value) => handleScheduleChange({ weekday: value as WeekdayValue })}
+                        >
+                          <SelectTrigger aria-label="每周执行日">
+                            <SelectValue
+                              placeholder={weekdayOptions.find((option) => option.value === scheduleData.weekday)?.label}
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {weekdayOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+
+                      {scheduleData.mode === 'monthly' && (
+                        <Select
+                          value={scheduleData.monthDay}
+                          onValueChange={(value) => handleScheduleChange({ monthDay: value })}
+                        >
+                          <SelectTrigger aria-label="每月执行日期">
+                            <SelectValue
+                              placeholder={monthDayOptions.find((option) => option.value === scheduleData.monthDay)?.label}
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {monthDayOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+
+                      {scheduleData.mode !== 'hourly' && scheduleData.mode !== 'half_hourly' && scheduleData.mode !== 'custom' && (
+                        <Input
+                          type="time"
+                          aria-label="执行时刻"
+                          value={scheduleData.time}
+                          onChange={(e) => handleScheduleChange({ time: e.target.value })}
+                          className={errors.cron ? 'border-red-500' : ''}
+                        />
+                      )}
                     </div>
                     {errors.cron && <p className="text-xs text-red-500 mt-1">{errors.cron}</p>}
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      格式：秒 分 时 日 月 周，例如：0 0 2 * * ? 表示每天凌晨2点执行
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      {describeSchedule(scheduleData)}
+                      {scheduleData.mode === 'custom' ? '；选择上方常用频率后可改为新的执行计划。' : ''}
                     </p>
                   </div>
                 </div>

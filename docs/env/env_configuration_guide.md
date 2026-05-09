@@ -73,7 +73,7 @@
 ```bash
 NODE_ENV=development
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
-REDIS_URL=redis://:dev_redis_2024@localhost:16380/0
+REDIS_URL=redis://:dev_redis_2024@localhost:26380/0
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 ```
 

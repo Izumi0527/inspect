@@ -166,7 +166,7 @@ air
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 
 # Redis 配置
-REDIS_URL=redis://:dev_redis_2024@localhost:16380/0
+REDIS_URL=redis://:dev_redis_2024@localhost:26380/0
 
 # JWT 配置
 JWT_SECRET_KEY=your-secret-key

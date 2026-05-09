@@ -774,7 +774,7 @@ function Get-HostPort {
 # 显示服务信息
 function Show-ServiceInfo {
     $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
-    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 26380
 
     Write-ColorOutput "`n📊 服务访问地址:" "Blue"
     Write-ColorOutput "  🗄️ PostgreSQL: localhost:$postgresHostPort" "White"

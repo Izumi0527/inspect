@@ -77,10 +77,10 @@ func Load() (Config, error) {
 		cfg.LogFile = cleanPathFromBase(cfg.LogFile, envBaseDir)
 	}
 	if strings.TrimSpace(cfg.ReportOutputDir) != "" {
-		cfg.ReportOutputDir = filepath.Clean(cfg.ReportOutputDir)
+		cfg.ReportOutputDir = cleanPathFromBase(cfg.ReportOutputDir, envBaseDir)
 	}
 	if strings.TrimSpace(cfg.ReportsOutputDir) != "" {
-		cfg.ReportsOutputDir = filepath.Clean(cfg.ReportsOutputDir)
+		cfg.ReportsOutputDir = cleanPathFromBase(cfg.ReportsOutputDir, envBaseDir)
 	}
 
 	return cfg, nil

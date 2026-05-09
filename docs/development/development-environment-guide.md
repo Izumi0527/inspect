@@ -109,7 +109,7 @@ psql -h localhost -p 15500 -U inspect_dev -d inspect_system_dev
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8000
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
-REDIS_URL=redis://:dev_redis_2024@localhost:16380/0
+REDIS_URL=redis://:dev_redis_2024@localhost:26380/0
 DB_AUTO_MIGRATE=true
 TIMESCALE_ENABLED=true
 ```

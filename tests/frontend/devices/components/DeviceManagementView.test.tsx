@@ -428,6 +428,84 @@ describe("DeviceManagementView", () => {
     expect(screen.getByText("总告警数")).toBeInTheDocument();
   });
 
+  it("下载模板 CSV 应只包含一行注明模板的数据", async () => {
+    let capturedBlob: Blob | null = null;
+    const originalCreateObjectURL = URL.createObjectURL;
+    const createdAnchors: HTMLAnchorElement[] = [];
+    const originalCreateElement = document.createElement.bind(document);
+
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: jest.fn((blob: Blob) => {
+        capturedBlob = blob;
+        return "blob:device-template";
+      }),
+    });
+
+    const createElementSpy = jest
+      .spyOn(document, "createElement")
+      .mockImplementation(((tagName: string, options?: ElementCreationOptions) => {
+        const element = originalCreateElement(tagName, options);
+        if (tagName.toLowerCase() === "a") {
+          createdAnchors.push(element as HTMLAnchorElement);
+        }
+        return element;
+      }) as typeof document.createElement);
+    const clickSpy = jest
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    try {
+      render(<DeviceManagementView />);
+
+      await waitFor(() => {
+        expect(mockLoadDevices).toHaveBeenCalled();
+        expect(fetchDeviceStats).toHaveBeenCalled();
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "下载模板" }));
+
+      expect(capturedBlob).not.toBeNull();
+      expect(createdAnchors[0].download).toBe("设备导入模板.csv");
+      expect(createdAnchors[0].href).toBe("blob:device-template");
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+
+      const csvText = (
+        await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result ?? ""));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsText(capturedBlob!);
+        })
+      ).replace(/^\uFEFF/, "");
+      const rows = csvText.split("\r\n");
+
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toBe(
+        "设备名称,IP地址,设备类型,厂商,位置,描述,SNMP团体字符串,SSH用户名,SSH密码",
+      );
+      expect(rows[1]).toContain("模板");
+      expect(rows[1]).not.toContain("核心交换机1");
+      expect(rows[1]).not.toContain("路由器网关1");
+      expect(rows[1]).not.toContain("边界防火墙1");
+    } finally {
+      createElementSpy.mockRestore();
+      clickSpy.mockRestore();
+
+      if (originalCreateObjectURL) {
+        Object.defineProperty(URL, "createObjectURL", {
+          configurable: true,
+          value: originalCreateObjectURL,
+        });
+      } else {
+        Reflect.deleteProperty(URL, "createObjectURL");
+      }
+    }
+  });
+
   it("筛选变化后应清空跨页批量选择，避免旧筛选结果残留", async () => {
     render(<DeviceManagementView />);
 

@@ -77,7 +77,7 @@ postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 | 镜像 | redis:7-alpine |
 | 容器名 | inspect-redis-dev |
 | 内部端口 | 6379 |
-| 外部端口 | 16380 |
+| 外部端口 | 26380 |
 | 密码 | dev_redis_2024 |
 | 数据卷 | redis_data |
 | 持久化 | AOF (appendonly yes) |
@@ -85,7 +85,7 @@ postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 
 **连接字符串：**
 ```
-redis://:dev_redis_2024@localhost:16380/0
+redis://:dev_redis_2024@localhost:26380/0
 ```
 
 ## 🔧 数据库初始化
@@ -115,7 +115,7 @@ docker-compose -f docker-compose.dev.yml ps
 # 预期输出：
 # NAME                    STATUS              PORTS
 # inspect-postgres-dev    Up                  0.0.0.0:15500->5432/tcp
-# inspect-redis-dev       Up                  0.0.0.0:16380->6379/tcp
+# inspect-redis-dev       Up                  0.0.0.0:26380->6379/tcp
 ```
 
 ### 测试 PostgreSQL 连接
@@ -141,7 +141,7 @@ docker exec inspect-redis-dev redis-cli -a dev_redis_2024 ping
 docker exec -it inspect-redis-dev redis-cli -a dev_redis_2024
 
 # 方式 3: 从宿主机连接（需要安装 redis-cli）
-redis-cli -h localhost -p 16380 -a dev_redis_2024
+redis-cli -h localhost -p 26380 -a dev_redis_2024
 ```
 
 ### 验证 TimescaleDB 扩展
@@ -267,7 +267,7 @@ docker exec -it inspect-redis-dev redis-cli -a dev_redis_2024
 docker-compose -f docker-compose.dev.yml logs postgres redis
 
 # 检查端口占用
-netstat -ano | findstr "15500 16380"
+netstat -ano | findstr "15500 26380"
 
 # 检查 Docker 资源
 docker system df
@@ -279,7 +279,7 @@ docker system prune  # 清理未使用的资源
 ```powershell
 # 查找占用进程
 Get-Process -Id (Get-NetTCPConnection -LocalPort 15500).OwningProcess
-Get-Process -Id (Get-NetTCPConnection -LocalPort 16380).OwningProcess
+Get-Process -Id (Get-NetTCPConnection -LocalPort 26380).OwningProcess
 
 # 停止占用进程或修改端口配置
 # 编辑 docker-compose.dev.yml 修改端口映射
@@ -381,7 +381,7 @@ docker exec -i inspect-postgres-dev psql -U inspect_dev inspect_system_dev < bac
 
 创建容器前：
 - [ ] Docker 服务已启动
-- [ ] 端口 15500 和 16380 可用
+- [ ] 端口 15500 和 26380 可用
 - [ ] 初始化脚本文件存在
 - [ ] 有足够的磁盘空间
 

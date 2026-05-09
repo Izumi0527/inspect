@@ -15,6 +15,8 @@ import (
 
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
+
+	"github.com/your-org/inspect-system/backend-go/internal/reports/pdfkit"
 )
 
 var (
@@ -25,7 +27,6 @@ var (
 const (
 	defaultReportTimeRange = "24h"
 	maxReportRows          = 500
-	maxPDFLines            = 45
 )
 
 var reportTimeRangePattern = regexp.MustCompile(`^(\d+)([mhdw])$`)
@@ -483,191 +484,76 @@ func renderMonitoringReportExcel(data MonitoringReportData) ([]byte, error) {
 }
 
 func renderMonitoringReportPDF(data MonitoringReportData) ([]byte, error) {
-	lines := buildReportLines(data)
-	return buildSimplePDF(lines)
+	// Render through the shared pdfkit pipeline so monitoring PDFs match
+	// the report-center visual system (CJK fonts, hero, cards, line charts,
+	// soft tables) instead of the legacy hand-rolled PDF byte stream that
+	// could only render ASCII characters.
+	tmp, err := os.CreateTemp("", "monitoring-report-*.pdf")
+	if err != nil {
+		return nil, err
+	}
+	tmpPath := tmp.Name()
+	_ = tmp.Close()
+	defer os.Remove(tmpPath)
+
+	if err := pdfkit.RenderMonitoringPDF(tmpPath, buildMonitoringPDFInput(data)); err != nil {
+		return nil, err
+	}
+	return os.ReadFile(tmpPath)
 }
 
-func buildReportLines(data MonitoringReportData) []string {
-	lines := []string{
-		"Monitoring Report",
-		fmt.Sprintf("Generated At: %s", data.GeneratedAt.Format(time.RFC3339)),
-		fmt.Sprintf("Time Range: %s - %s", data.StartTime.Format(time.RFC3339), data.EndTime.Format(time.RFC3339)),
-		"",
+// buildMonitoringPDFInput projects MonitoringReportData onto pdfkit's
+// primitive input type. Keeping the projection in this file (and not in
+// pdfkit) means pdfkit doesn't have to depend on the monitoring package.
+func buildMonitoringPDFInput(data MonitoringReportData) pdfkit.MonitoringPDFInput {
+	input := pdfkit.MonitoringPDFInput{
+		Title:       "监控报告",
+		Subtitle:    "系统状态、性能与告警概览",
+		GeneratedAt: data.GeneratedAt,
+		TimeRange:   data.TimeRange,
+		StartTime:   data.StartTime,
+		EndTime:     data.EndTime,
+		Sections:    data.Sections,
 	}
-
-	if hasReportSection(data.Sections, "stats") {
-		lines = append(lines, "[Stats]")
-		if data.Stats == nil {
-			lines = append(lines, "No stats data")
-		} else {
-			lines = append(lines,
-				fmt.Sprintf("Total Devices: %d", data.Stats.TotalDevices),
-				fmt.Sprintf("Availability: %s%%", formatFloat(data.Stats.Availability, 2)),
-				fmt.Sprintf("Active Alerts: %d", data.Stats.ActiveAlerts),
-				fmt.Sprintf("Avg CPU: %s%%", formatFloat(data.Stats.AvgCPU, 1)),
-				fmt.Sprintf("Avg Memory: %s%%", formatFloat(data.Stats.AvgMemory, 1)),
-				fmt.Sprintf("Avg Network (Mbps): %s", formatFloat(data.Stats.AvgNetwork, 1)),
-			)
-		}
-		lines = append(lines, "")
-	}
-
-	if hasReportSection(data.Sections, "charts") {
-		lines = append(lines, "[System Performance]")
-		if len(data.SystemPerformance) == 0 {
-			lines = append(lines, "No system performance data")
-		} else {
-			perf := data.SystemPerformance
-			if len(perf) > maxReportRows {
-				perf = perf[:maxReportRows]
-			}
-			for _, point := range perf {
-				lines = append(lines, fmt.Sprintf(
-					"%s CPU:%s%% MEM:%s%% NET:%sMbps",
-					point.Timestamp,
-					formatFloat(point.CPUUsage, 2),
-					formatFloat(point.MemoryUsage, 2),
-					formatFloat(point.NetworkTraffic, 2),
-				))
-			}
-			if len(data.SystemPerformance) > maxReportRows {
-				lines = append(lines, fmt.Sprintf("Truncated to first %d rows", maxReportRows))
-			}
-		}
-		lines = append(lines, "")
-
-		lines = append(lines, "[Network Traffic]")
-		if len(data.NetworkTraffic) == 0 {
-			lines = append(lines, "No network traffic data")
-		} else {
-			traffic := data.NetworkTraffic
-			if len(traffic) > maxReportRows {
-				traffic = traffic[:maxReportRows]
-			}
-			for _, point := range traffic {
-				lines = append(lines, fmt.Sprintf(
-					"%s IN:%sMbps OUT:%sMbps",
-					point.Timestamp,
-					formatFloat(point.Inbound, 2),
-					formatFloat(point.Outbound, 2),
-				))
-			}
-			if len(data.NetworkTraffic) > maxReportRows {
-				lines = append(lines, fmt.Sprintf("Truncated to first %d rows", maxReportRows))
-			}
-		}
-		lines = append(lines, "")
-	}
-
-	if hasReportSection(data.Sections, "alerts") {
-		lines = append(lines, "[Alerts]")
-		if len(data.Alerts) == 0 {
-			lines = append(lines, "No alert records")
-		} else {
-			alerts := data.Alerts
-			if len(alerts) > maxReportRows {
-				alerts = alerts[:maxReportRows]
-			}
-			for _, alert := range alerts {
-				lines = append(lines, fmt.Sprintf(
-					"ID:%d Device:%d %s [%s/%s] %s",
-					alert.ID,
-					alert.DeviceID,
-					alert.DeviceName,
-					alert.Severity,
-					alert.Status,
-					alert.Title,
-				))
-			}
-			if len(data.Alerts) > maxReportRows {
-				lines = append(lines, fmt.Sprintf("Truncated to first %d rows", maxReportRows))
-			}
+	if data.Stats != nil {
+		input.Stats = &pdfkit.MonitoringStatsInput{
+			TotalDevices: data.Stats.TotalDevices,
+			Availability: data.Stats.Availability,
+			ActiveAlerts: data.Stats.ActiveAlerts,
+			AvgCPU:       data.Stats.AvgCPU,
+			AvgMemory:    data.Stats.AvgMemory,
+			AvgNetwork:   data.Stats.AvgNetwork,
 		}
 	}
-
-	return truncateLines(lines, maxPDFLines)
-}
-
-func buildSimplePDF(lines []string) ([]byte, error) {
-	if len(lines) == 0 {
-		lines = []string{"Monitoring Report"}
+	for _, p := range data.SystemPerformance {
+		input.SystemPerformance = append(input.SystemPerformance, pdfkit.TimeSeriesPoint{
+			Timestamp:      p.Timestamp,
+			CPUUsage:       p.CPUUsage,
+			MemoryUsage:    p.MemoryUsage,
+			NetworkTraffic: p.NetworkTraffic,
+		})
 	}
-
-	content := buildPDFContent(lines)
-	objects := make([]string, 0, 5)
-	objects = append(objects, "<< /Type /Catalog /Pages 2 0 R >>")
-	objects = append(objects, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-	objects = append(objects, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>")
-	objects = append(objects, fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content))
-	objects = append(objects, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
-
-	var buf bytes.Buffer
-	buf.WriteString("%PDF-1.4\n")
-
-	offsets := make([]int, len(objects)+1)
-	for i, obj := range objects {
-		offsets[i+1] = buf.Len()
-		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, obj)
+	for _, p := range data.NetworkTraffic {
+		input.NetworkTraffic = append(input.NetworkTraffic, pdfkit.NetworkTrafficPoint{
+			Timestamp: p.Timestamp,
+			Inbound:   p.Inbound,
+			Outbound:  p.Outbound,
+		})
 	}
-
-	startXref := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 %d\n", len(objects)+1)
-	buf.WriteString("0000000000 65535 f \n")
-	for i := 1; i <= len(objects); i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \n", offsets[i])
+	for _, a := range data.Alerts {
+		input.Alerts = append(input.Alerts, pdfkit.MonitoringAlertInput{
+			ID:           a.ID,
+			DeviceID:     a.DeviceID,
+			DeviceName:   a.DeviceName,
+			Title:        a.Title,
+			Severity:     a.Severity,
+			Status:       a.Status,
+			Message:      a.Message,
+			CreatedAt:    a.CreatedAt,
+			LastOccurred: a.LastOccurred,
+		})
 	}
-	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\n", len(objects)+1)
-	fmt.Fprintf(&buf, "startxref\n%d\n%%EOF\n", startXref)
-
-	return buf.Bytes(), nil
-}
-
-func buildPDFContent(lines []string) string {
-	var buf strings.Builder
-	buf.WriteString("BT\n/F1 12 Tf\n14 TL\n72 720 Td\n")
-	for i, line := range lines {
-		if i > 0 {
-			buf.WriteString("T* ")
-		}
-		buf.WriteString("(")
-		buf.WriteString(escapePDFString(line))
-		buf.WriteString(") Tj\n")
-	}
-	buf.WriteString("ET")
-	return buf.String()
-}
-
-func escapePDFString(raw string) string {
-	sanitized := sanitizePDFLine(raw)
-	sanitized = strings.ReplaceAll(sanitized, "\\", "\\\\")
-	sanitized = strings.ReplaceAll(sanitized, "(", "\\(")
-	sanitized = strings.ReplaceAll(sanitized, ")", "\\)")
-	return sanitized
-}
-
-func sanitizePDFLine(raw string) string {
-	if raw == "" {
-		return ""
-	}
-	var buf strings.Builder
-	buf.Grow(len(raw))
-	for _, r := range raw {
-		if r < 32 || r > 126 {
-			buf.WriteRune('?')
-			continue
-		}
-		buf.WriteRune(r)
-	}
-	return buf.String()
-}
-
-func truncateLines(lines []string, limit int) []string {
-	if limit <= 0 || len(lines) <= limit {
-		return lines
-	}
-	truncated := append([]string{}, lines[:limit-1]...)
-	truncated = append(truncated, "...(truncated)")
-	return truncated
+	return input
 }
 
 func normalizeReportSections(sections []string) []string {

@@ -94,6 +94,39 @@ describe('ReportExportButton', () => {
     expect(tokenInput!.value).toBe('ticket-123')
   })
 
+  it('React StrictMode 下 token 下载完成后应恢复按钮状态', async () => {
+    ;(exportMonitoringReport as jest.Mock).mockResolvedValue({
+      format: 'pdf',
+      time_range: '24h',
+      sections: ['stats', 'charts', 'alerts'],
+      generated_at: '2026-03-14T00:00:00.000Z',
+      download_url: '/api/v1/monitoring/reports/download/test.pdf',
+      download_form_url: '/api/v1/monitoring/reports/download',
+      download_token: 'ticket-123',
+      status: 'completed',
+    })
+
+    ;(checkMonitoringReportDownloadToken as jest.Mock).mockResolvedValue({
+      valid: true,
+    })
+
+    jest.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => {})
+
+    render(
+      <React.StrictMode>
+        <ReportExportButton />
+      </React.StrictMode>
+    )
+
+    fireEvent.click(screen.getByText('导出报告'))
+    fireEvent.click(screen.getByText('PDF'))
+
+    await waitFor(() => {
+      expect(screen.getByText('PDF 报告已发起下载')).toBeTruthy()
+    })
+    expect(screen.getByText('PDF 报告已发起下载')).not.toBeDisabled()
+  })
+
   it('download_token 预检失败时应提示错误且不发起下载', async () => {
     ;(exportMonitoringReport as jest.Mock).mockResolvedValue({
       format: 'pdf',

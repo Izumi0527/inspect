@@ -5,7 +5,7 @@ import { Button, Modal, ModalContent, ModalTitle } from '@/components/atoms'
 import { downloadWithAuth } from '@/utils/download'
 import { getApiOrigin, TokenManager } from '@/lib/api-client'
 import { Report } from '../types'
-import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
+import { downloadReport as fetchDownloadUrl, rerenderReportPdf } from '../api/reports.api'
 
 const resolveUrl = (urlOrPath: string): string => {
   const raw = String(urlOrPath || '').trim()
@@ -38,6 +38,8 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
   const [mode, setMode] = useState<PreviewMode>(() => (htmlPreviewAvailable ? 'html' : 'pdf'))
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [loadingPreview, setLoadingPreview] = useState(false)
+  const [rerenderingPdf, setRerenderingPdf] = useState(false)
+  const [freshPdfUrl, setFreshPdfUrl] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const objectUrlRef = useRef<string | null>(null)
 
@@ -64,6 +66,7 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
   }, [report.availableFormats, report.id, report.previewUrl])
 
   const ensurePdfPreviewUrl = useCallback(async (): Promise<string> => {
+    if (freshPdfUrl) return freshPdfUrl
     if (report.format === 'pdf') {
       // 主格式即 PDF：优先用后端返回的 downloadUrl，缺失时再请求一次 download 接口兜底
       if (report.downloadUrl) return report.downloadUrl
@@ -73,7 +76,7 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
       return fetchDownloadUrl(report.id, 'pdf')
     }
     throw new Error('该报表暂无 PDF 预览')
-  }, [ensureDownloadUrl, report.availableFormats, report.downloadUrl, report.format, report.id])
+  }, [ensureDownloadUrl, freshPdfUrl, report.availableFormats, report.downloadUrl, report.format, report.id])
 
   const loadPreview = useCallback(async () => {
     cleanupObjectUrl()
@@ -131,6 +134,7 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
 
   useEffect(() => {
     setDownloadUrl(report.downloadUrl ?? null)
+    setFreshPdfUrl(null)
     // 报表切换时：优先用 HTML 作为在线预览（观感更佳），否则退化到 PDF
     if (htmlPreviewAvailable) {
       setMode('html')
@@ -159,6 +163,30 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
     } catch (err) {
       console.error('下载报表失败:', err)
       toast.error('下载失败，请稍后重试')
+    }
+  }
+
+  const handleRerenderPdf = async () => {
+    if (!pdfPreviewAvailable || rerenderingPdf) return
+
+    try {
+      setRerenderingPdf(true)
+      setPreviewError(null)
+      const result = await rerenderReportPdf(report.id)
+      const nextPdfUrl = result.previewUrl || result.downloadUrl
+      setFreshPdfUrl(nextPdfUrl)
+      if (report.format === 'pdf') {
+        setDownloadUrl(result.downloadUrl)
+      }
+      setMode('pdf')
+      toast.success('PDF 已按最新模板重新生成')
+    } catch (err) {
+      console.error('重新生成 PDF 失败:', err)
+      const message = err instanceof Error ? err.message : '重新生成 PDF 失败'
+      setPreviewError(message)
+      toast.error(message)
+    } finally {
+      setRerenderingPdf(false)
     }
   }
 
@@ -198,6 +226,18 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
                   </Button>
                 )}
               </div>
+            )}
+            {report.status === 'completed' && pdfPreviewAvailable && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleRerenderPdf()}
+                disabled={rerenderingPdf || loadingPreview}
+                title="按最新 PDF 模板重新生成"
+              >
+                <RefreshCcw className={`w-4 h-4 mr-2 ${rerenderingPdf ? 'animate-spin' : ''}`} />
+                {rerenderingPdf ? '生成中' : '刷新 PDF'}
+              </Button>
             )}
             <Button variant="outline" size="sm" onClick={handleDownload}>
               <Download className="w-4 h-4 mr-2" />

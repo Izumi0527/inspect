@@ -57,9 +57,6 @@
 - `agents/prompts/`：各角色可直接复用的提示词模板
 - `agents/project-subagent-collaboration-flow.md`：子代理协作顺序与交接规则
 
-### 报表基线
-- `report-baseline/readme.md`：报表基线说明
-
 ### 环境与构建（根目录散落文档，建议后续归档）
 > 这些文件目前位于 `docs/` 根目录；建议后续按主题移动到对应子目录（见“归档建议”）。
 

@@ -498,6 +498,42 @@ export async function downloadReport(
   }
 }
 
+export interface RerenderReportPdfResult {
+  format: 'pdf'
+  downloadUrl: string
+  previewUrl: string
+  report?: Report
+}
+
+export async function rerenderReportPdf(id: string): Promise<RerenderReportPdfResult> {
+  try {
+    const response = await api.post<ReportsApiEnvelope<UnknownRecord>>(`/reports/${id}/rerender/pdf`)
+
+    if (response.success === false || !response.data) {
+      throw new Error(response.message || '重新生成 PDF 失败')
+    }
+
+    const payload = toRecord(response.data)
+    const downloadUrl = toOptionalString(payload.download_url ?? payload.downloadUrl)
+    const previewUrl = toOptionalString(payload.preview_url ?? payload.previewUrl) ?? downloadUrl
+
+    if (!downloadUrl || !previewUrl) {
+      throw new Error('重新生成 PDF 失败')
+    }
+
+    const reportPayload = payload.report === undefined ? undefined : transformReportData(payload.report)
+    return {
+      format: 'pdf',
+      downloadUrl,
+      previewUrl,
+      report: reportPayload,
+    }
+  } catch (error) {
+    console.error('重新生成 PDF 失败:', error)
+    throw error
+  }
+}
+
 export async function previewReport(id: string): Promise<UnknownRecord | null> {
   try {
     const response = await api.get<ReportsApiEnvelope<UnknownRecord>>(`/reports/${id}/preview`)
@@ -1983,6 +2019,7 @@ export const reportsApi = {
   updateReport,
   deleteReport,
   generateReport,
+  rerenderReportPdf,
   downloadReport,
   previewReport,
   cloneReport

@@ -286,6 +286,9 @@ Pop-Location
 # 仅清理 Go 构建缓存和编译产物
 .\scripts\clean-cache.ps1 -GoBuild
 
+# 仅清理历史重复报表输出目录（backend-go/backend-go）
+.\scripts\clean-cache.ps1 -ReportArtifacts
+
 # 仅清理 Playwright 测试报告和结果
 .\scripts\clean-cache.ps1 -Playwright
 ```
@@ -298,6 +301,7 @@ Pop-Location
 - `-Temp`：`.DS_Store`、`Thumbs.db`、`*.tmp`
 - `-ProjectFiles`：运行时配置、Lint 报告、覆盖率和 MCP 快照
 - `-GoBuild`：Go 项目缓存目录、编译产物和根目录覆盖率文件
+- `-ReportArtifacts`：历史重复报表输出目录（仅 `backend-go/backend-go`，不清理当前 `backend-go/data/reports`）
 - `-PackageCache`：项目内 pnpm store
 - `-Playwright`：Playwright 报告、测试结果和 MCP 快照
 - `-All`：执行以上全部清理项

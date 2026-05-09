@@ -190,7 +190,7 @@ services:
     database: inspect_system_dev
     
   redis:            # Redis缓存
-    ports: ["16380:6379"]
+    ports: ["26380:6379"]
     password: dev_redis_2024
     
   pgadmin:          # 数据库管理工具

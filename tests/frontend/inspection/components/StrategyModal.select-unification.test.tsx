@@ -5,6 +5,9 @@ import { StrategyModal } from '@/features/inspection/components/StrategyModal'
 import * as inspectionHooks from '@/features/inspection/hooks/useInspection'
 import * as deviceHooks from '@/features/devices/hooks/useDevices'
 
+const mockCreateStrategy = jest.fn()
+const mockUpdateStrategy = jest.fn()
+
 jest.mock('framer-motion', () => ({
   motion: {
     div: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
@@ -45,19 +48,21 @@ jest.mock('@/components/atoms', () => ({
     placeholder,
     className,
     maxLength,
+    ...props
   }: {
     value?: string
     onChange?: React.ChangeEventHandler<HTMLInputElement>
     placeholder?: string
     className?: string
     maxLength?: number
-  }) => (
+  } & React.InputHTMLAttributes<HTMLInputElement>) => (
     <input
       value={value}
       onChange={onChange}
       placeholder={placeholder}
       className={className}
       maxLength={maxLength}
+      {...props}
     />
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -149,13 +154,18 @@ jest.mock('@/components/ui/select', () => {
 
 describe('StrategyModal 下拉统一化', () => {
   beforeEach(() => {
+    mockCreateStrategy.mockReset()
+    mockUpdateStrategy.mockReset()
+    mockCreateStrategy.mockResolvedValue({})
+    mockUpdateStrategy.mockResolvedValue({})
+
     ;(inspectionHooks.useCreateStrategy as jest.Mock).mockReturnValue({
-      mutateAsync: jest.fn(),
+      mutateAsync: mockCreateStrategy,
       isPending: false,
     })
 
     ;(inspectionHooks.useUpdateStrategy as jest.Mock).mockReturnValue({
-      mutateAsync: jest.fn(),
+      mutateAsync: mockUpdateStrategy,
       isPending: false,
     })
 
@@ -173,7 +183,7 @@ describe('StrategyModal 下拉统一化', () => {
     })
   })
 
-  it('应使用统一 Select 实现策略类型与 Cron 预设下拉', async () => {
+  it('应使用统一 Select 实现策略类型与通俗执行频率下拉', async () => {
     const user = userEvent.setup()
     const { container } = render(
       <StrategyModal strategy={null} onClose={jest.fn()} onSuccess={jest.fn()} />
@@ -181,11 +191,44 @@ describe('StrategyModal 下拉统一化', () => {
 
     expect(container.querySelector('select')).toBeNull()
     expect(screen.getByRole('combobox', { name: '策略类型' })).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Cron 预设' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '执行频率' })).toBeInTheDocument()
+    expect(screen.getByLabelText('执行时刻')).toBeInTheDocument()
+    expect(screen.queryByText(/Cron表达式/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Cron 预设' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('combobox', { name: '策略类型' }))
     await user.click(screen.getByRole('option', { name: '手动巡检' }))
-    expect(screen.queryByRole('combobox', { name: 'Cron 预设' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: '执行频率' })).not.toBeInTheDocument()
+  })
+
+  it('创建定时策略时应通过中文执行时间配置生成 Cron 表达式', async () => {
+    const user = userEvent.setup()
+    const onSuccess = jest.fn()
+
+    render(<StrategyModal strategy={null} onClose={jest.fn()} onSuccess={onSuccess} />)
+
+    await user.type(screen.getByPlaceholderText('请输入策略名称'), '核心设备周检')
+    await user.click(screen.getByRole('checkbox', { name: /设备A/ }))
+    await user.click(screen.getByRole('radio', { name: '模板A' }))
+
+    await user.click(screen.getByRole('combobox', { name: '执行频率' }))
+    await user.click(screen.getByRole('option', { name: '每周' }))
+    await user.click(screen.getByRole('combobox', { name: '每周执行日' }))
+    await user.click(screen.getByRole('option', { name: '周三' }))
+    await user.clear(screen.getByLabelText('执行时刻'))
+    await user.type(screen.getByLabelText('执行时刻'), '09:30')
+
+    await user.click(screen.getByRole('button', { name: '创建策略' }))
+
+    expect(mockCreateStrategy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: '核心设备周检',
+        type: 'scheduled',
+        cron: '0 30 9 ? * WED',
+        devices: [1],
+        templates: [1],
+      })
+    )
+    expect(onSuccess).toHaveBeenCalled()
   })
 })
-

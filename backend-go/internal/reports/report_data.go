@@ -876,6 +876,12 @@ func resolveGenericReportTitle(reportType string, reportTitle string, reportName
 	switch normalized {
 	case "inspection_report":
 		return "巡检结果报表"
+	case "trend", "trend_report", "trend_analysis":
+		return "趋势分析报表"
+	case "statistics", "statistics_report":
+		return "统计报表"
+	case "custom", "custom_report":
+		return "自定义报表"
 	case "alert_report", "alert", "alert_summary":
 		return "告警统计报表"
 	case "performance_report", "performance":

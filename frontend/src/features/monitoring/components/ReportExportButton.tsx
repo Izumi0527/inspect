@@ -207,6 +207,7 @@ export function ReportExportButton({
   }, [isMenuOpen])
 
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
       isMountedRef.current = false
       if (clearMessageTimerRef.current) {

@@ -3,6 +3,7 @@ import {
   generateTrendReport,
   generateStatisticsReport,
   generateFromConfig,
+  rerenderReportPdf,
   getKPIData,
   getRankings,
 } from '@/features/reports/api/reports.api'
@@ -213,6 +214,27 @@ describe('reports.api 请求体适配', () => {
         dateRange: { startDate: '2026-02-01', endDate: '2026-02-02' },
       },
       format: 'pdf',
+    })
+  })
+
+  it('rerenderReportPdf 应调用单条报表 PDF 重渲染接口并返回新预览地址', async () => {
+    mockPost.mockResolvedValue({
+      success: true,
+      data: {
+        format: 'pdf',
+        download_url: '/api/v1/reports/files/report-63-new.pdf',
+        preview_url: '/api/v1/reports/files/report-63-new.pdf',
+      },
+    })
+
+    const result = await rerenderReportPdf('63')
+
+    expect(mockPost).toHaveBeenCalledWith('/reports/63/rerender/pdf')
+    expect(result).toEqual({
+      format: 'pdf',
+      downloadUrl: '/api/v1/reports/files/report-63-new.pdf',
+      previewUrl: '/api/v1/reports/files/report-63-new.pdf',
+      report: undefined,
     })
   })
 })

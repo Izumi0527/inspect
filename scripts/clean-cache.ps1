@@ -9,6 +9,7 @@ param(
     [switch]$Temp,             # 清理临时文件
     [switch]$ProjectFiles,     # 清理项目特定临时文件
     [switch]$GoBuild,          # 清理 Go 构建缓存与编译产物
+    [switch]$ReportArtifacts,  # 清理历史重复报表输出目录
     [switch]$PackageCache,     # 清理包管理器缓存（pnpm）
     [switch]$Playwright,       # 清理 Playwright 测试产物
     [switch]$Force,            # 跳过确认直接清理
@@ -31,15 +32,16 @@ $script:TotalFreed = 0
 $script:TotalFiles = 0
 $script:ProjectRootResolved = (Resolve-Path -LiteralPath $script:ProjectRoot).ProviderPath
 $script:Selection = [ordered]@{
-    All          = [bool]$All
-    Backend      = [bool]$Backend
-    Frontend     = [bool]$Frontend
-    Logs         = [bool]$Logs
-    Temp         = [bool]$Temp
-    ProjectFiles = [bool]$ProjectFiles
-    GoBuild      = [bool]$GoBuild
-    PackageCache = [bool]$PackageCache
-    Playwright   = [bool]$Playwright
+    All             = [bool]$All
+    Backend         = [bool]$Backend
+    Frontend        = [bool]$Frontend
+    Logs            = [bool]$Logs
+    Temp            = [bool]$Temp
+    ProjectFiles    = [bool]$ProjectFiles
+    GoBuild         = [bool]$GoBuild
+    ReportArtifacts = [bool]$ReportArtifacts
+    PackageCache    = [bool]$PackageCache
+    Playwright      = [bool]$Playwright
 }
 $script:ExcludedTraversalDirectories = @(
     ".git",
@@ -106,7 +108,8 @@ function Show-Help {
     Write-Host "    -Logs                清理日志文件（超过7天的日志，含 backend-go/logs/）"
     Write-Host "    -Temp                清理临时文件（.DS_Store / Thumbs.db / *.tmp）"
     Write-Host "    -ProjectFiles        清理项目特定文件（context.json / lint报告 / 覆盖率 / MCP 快照等）"
-    Write-Host "    -GoBuild             清理 Go 构建缓存目录与编译产物（*.exe / .gocache / backend-go/backend-go 等）"
+    Write-Host "    -GoBuild             清理 Go 构建缓存目录与编译产物（*.exe / .gocache 等）"
+    Write-Host "    -ReportArtifacts     清理历史重复报表输出目录（仅 backend-go/backend-go）"
     Write-Host "    -PackageCache        清理包管理器缓存（pnpm store）"
     Write-Host "    -Playwright          清理 Playwright 测试产物（报告 / 测试结果 / MCP 快照）"
     Write-Host ""
@@ -120,6 +123,7 @@ function Show-Help {
     Write-Host "    .\scripts\clean-cache.ps1                         # 交互式选择清理项"
     Write-Host "    .\scripts\clean-cache.ps1 -All -Force             # 清理所有缓存，不确认"
     Write-Host "    .\scripts\clean-cache.ps1 -GoBuild                # 仅清理 Go 构建缓存"
+    Write-Host "    .\scripts\clean-cache.ps1 -ReportArtifacts        # 仅清理历史重复报表输出目录"
     Write-Host "    .\scripts\clean-cache.ps1 -PackageCache           # 仅清理包管理器缓存"
     Write-Host "    .\scripts\clean-cache.ps1 -Playwright             # 仅清理 Playwright 产物"
     Write-Host "    .\scripts\clean-cache.ps1 -WhatIf                 # 预览将要删除的内容"
@@ -355,6 +359,32 @@ function Remove-CacheDirectoryFiles {
         $script:TotalFreed += $removedSize
         $script:TotalFiles += $removedFiles
     }
+}
+
+function Test-IsExpectedLegacyBackendOutputPath {
+    param([string]$Path)
+
+    $resolvedPath = Get-SafeResolvedPath -Path $Path
+    if (-not $resolvedPath) {
+        return $false
+    }
+
+    $expectedPath = Join-Path $script:BackendPath "backend-go"
+    try {
+        $expectedPath = [IO.Path]::GetFullPath($expectedPath)
+    } catch {
+        Write-LogError "历史重复输出目录路径解析失败: $expectedPath"
+        return $false
+    }
+
+    $normalizedActual = $resolvedPath.TrimEnd('\', '/')
+    $normalizedExpected = $expectedPath.TrimEnd('\', '/')
+    if (-not [string]::Equals($normalizedActual, $normalizedExpected, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Write-LogError "拒绝清理非预期的历史重复输出目录: $resolvedPath"
+        return $false
+    }
+
+    return $true
 }
 
 # ──────────────────────────────────────────────
@@ -653,12 +683,6 @@ function Clear-GoBuildArtifacts {
         }
     }
 
-    # 后端重复输出目录（历史构建可能生成 backend-go/backend-go）
-    $backendNestedOutput = Join-Path $script:BackendPath "backend-go"
-    if (Test-Path -LiteralPath $backendNestedOutput) {
-        Remove-CacheDirectoryFiles -Path $backendNestedOutput -Description "后端重复输出目录文件 (backend-go/backend-go)"
-    }
-
     # Go 覆盖率 / 剖析文件（根目录级别）
     $rootCoverageFiles = @(
         (Join-Path $script:ProjectRoot "coverage.out"),
@@ -671,6 +695,26 @@ function Clear-GoBuildArtifacts {
             Remove-CacheItem -Path $f -Description "Go 覆盖率文件（根目录）($([IO.Path]::GetFileName($f)))"
         }
     }
+}
+
+# ──────────────────────────────────────────────
+# 清理历史重复报表输出目录
+# ──────────────────────────────────────────────
+
+function Clear-ReportArtifacts {
+    Write-LogStep "清理历史重复报表输出目录..."
+
+    $legacyBackendOutput = Join-Path $script:BackendPath "backend-go"
+    if (-not (Test-Path -LiteralPath $legacyBackendOutput -PathType Container)) {
+        Write-LogVerbose "未发现历史重复输出目录: $legacyBackendOutput"
+        return
+    }
+
+    if (-not (Test-IsExpectedLegacyBackendOutputPath -Path $legacyBackendOutput)) {
+        return
+    }
+
+    Remove-CacheItem -Path $legacyBackendOutput -Description "历史重复后端输出目录 (backend-go/backend-go)"
 }
 
 # ──────────────────────────────────────────────
@@ -775,16 +819,17 @@ function Show-InteractiveMenu {
     Write-Host "  [5] 仅清理临时文件（.DS_Store / Thumbs.db / *.tmp）"
     Write-Host "  [6] 仅清理项目特定文件（lint 报告 / 覆盖率 / MCP 快照等）"
     Write-Host "  ── 扩展清理 ──"
-    Write-Host "  [7] Go 构建缓存与编译产物（.gocache / app.exe / backend-go/backend-go 等）"
-    Write-Host "  [8] 包管理器缓存（pnpm store）⚠ 需重新下载"
-    Write-Host "  [9] Playwright 测试产物（报告 / 测试结果 / MCP 快照）"
+    Write-Host "  [7] Go 构建缓存与编译产物（.gocache / app.exe 等）"
+    Write-Host "  [8] 历史重复报表输出目录（仅 backend-go/backend-go）"
+    Write-Host "  [9] 包管理器缓存（pnpm store）⚠ 需重新下载"
+    Write-Host "  [10] Playwright 测试产物（报告 / 测试结果 / MCP 快照）"
     Write-Host "  ──"
     Write-Host "  [0] 取消"
     Write-Host ""
     Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
     Write-Host ""
 
-    $choice = Read-Host "请选择 (0-9)"
+    $choice = Read-Host "请选择 (0-10)"
 
     switch ($choice) {
         "1"  { $script:Selection["All"] = $true }
@@ -794,8 +839,9 @@ function Show-InteractiveMenu {
         "5"  { $script:Selection["Temp"] = $true }
         "6"  { $script:Selection["ProjectFiles"] = $true }
         "7"  { $script:Selection["GoBuild"] = $true }
-        "8"  { $script:Selection["PackageCache"] = $true }
-        "9"  { $script:Selection["Playwright"] = $true }
+        "8"  { $script:Selection["ReportArtifacts"] = $true }
+        "9"  { $script:Selection["PackageCache"] = $true }
+        "10" { $script:Selection["Playwright"] = $true }
         "0"  {
             Write-LogInfo "已取消清理操作"
             exit 0
@@ -868,6 +914,10 @@ function Main {
 
     if ($script:Selection["All"] -or $script:Selection["GoBuild"]) {
         Clear-GoBuildArtifacts
+    }
+
+    if ($script:Selection["All"] -or $script:Selection["ReportArtifacts"]) {
+        Clear-ReportArtifacts
     }
 
     if ($script:Selection["All"] -or $script:Selection["PackageCache"]) {

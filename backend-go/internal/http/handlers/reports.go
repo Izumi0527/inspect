@@ -37,6 +37,7 @@ func (h ReportsHandler) Register(group *echo.Group) {
 	group.PUT("/reports/:report_id", h.UpdateReport)
 	group.DELETE("/reports/:report_id", h.DeleteReport)
 	group.POST("/reports/:report_id/generate", h.GenerateReport)
+	group.POST("/reports/:report_id/rerender/pdf", h.RerenderReportPDF)
 	group.POST("/reports/:report_id/clone", h.CloneReport)
 	group.GET("/reports/:report_id/download", h.DownloadReport)
 	group.GET("/reports/:report_id/preview", h.PreviewReport)
@@ -745,6 +746,48 @@ func (h ReportsHandler) DownloadReportFile(c echo.Context) error {
 	return c.Attachment(fullPath, filename)
 }
 
+func (h ReportsHandler) RerenderReportPDF(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "reports:update"); err != nil {
+		return err
+	}
+
+	reportID, err := parseIDParam(c, "report_id")
+	if err != nil {
+		return err
+	}
+
+	report, err := h.Service.GetReport(c.Request().Context(), reportID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "Report not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load report")
+	}
+	if report.Status != "completed" {
+		return echo.NewHTTPError(http.StatusConflict, "only completed reports can be rerendered")
+	}
+
+	updated, filePath, err := h.rerenderReportFormat(c, report, "pdf")
+	if err != nil {
+		c.Logger().Errorf("rerender report pdf failed: report_id=%d err=%v", report.ID, err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to rerender report pdf")
+	}
+
+	fileURL := buildDownloadURL(filepath.Base(filePath))
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{
+			"format":       "pdf",
+			"download_url": fileURL,
+			"preview_url":  fileURL,
+			"report":       buildReportResponse(updated, nil, h.OutputDir),
+		},
+	})
+}
+
 var safeReportFilenamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 func isSafeReportFilename(filename string) bool {
@@ -804,6 +847,10 @@ func (h ReportsHandler) ExportExcel(c echo.Context) error {
 	}
 	defer file.Close()
 
+	if _, err := file.Write([]byte("\xEF\xBB\xBF")); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to write export file")
+	}
+
 	writer := csv.NewWriter(file)
 	for _, sheet := range req.Sheets {
 		if sheet.Name != "" {
@@ -828,6 +875,9 @@ func (h ReportsHandler) ExportExcel(c echo.Context) error {
 		_ = writer.Write([]string{})
 	}
 	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to write export file")
+	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
@@ -2867,6 +2917,73 @@ func (h ReportsHandler) completeReportGeneration(c echo.Context, report reports.
 		return report, updateErr
 	}
 	return updated, nil
+}
+
+func (h ReportsHandler) rerenderReportFormat(c echo.Context, report reports.Report, format string) (reports.Report, string, error) {
+	normalized := normalizeReportFormat(format)
+	filePath, err := reports.GenerateReportFile(c.Request().Context(), h.Service.DB(), h.OutputDir, report, normalized)
+	if err != nil {
+		return report, "", err
+	}
+
+	paths := decodeJSONMap(report.FilePaths)
+	sizes := decodeJSONMap(report.FileSizes)
+	paths[normalized] = filePath
+
+	var size int64
+	if info, statErr := os.Stat(filePath); statErr == nil {
+		size = info.Size()
+	}
+	sizes[normalized] = size
+
+	formats := ensureReportFormat(decodeJSONStringSlice(report.FileFormats), normalized)
+	formatsJSON, err := encodeJSON(formats)
+	if err != nil {
+		return report, "", err
+	}
+	pathsJSON, err := encodeJSON(paths)
+	if err != nil {
+		return report, "", err
+	}
+	sizesJSON, err := encodeJSON(sizes)
+	if err != nil {
+		return report, "", err
+	}
+
+	updates := map[string]interface{}{
+		"status":        "completed",
+		"file_formats":  formatsJSON,
+		"file_paths":    pathsJSON,
+		"file_sizes":    sizesJSON,
+		"error_message": nil,
+	}
+	updated, updateErr := h.Service.UpdateReport(c.Request().Context(), report.ID, updates)
+	if updateErr != nil {
+		return report, "", updateErr
+	}
+	return updated, filePath, nil
+}
+
+func ensureReportFormat(formats []string, format string) []string {
+	normalized := normalizeReportFormat(format)
+	result := make([]string, 0, len(formats)+1)
+	seen := false
+	added := map[string]bool{}
+	for _, item := range formats {
+		value := normalizeReportFormat(item)
+		if value == "" || added[value] {
+			continue
+		}
+		if value == normalized {
+			seen = true
+		}
+		result = append(result, value)
+		added[value] = true
+	}
+	if !seen {
+		result = append(result, normalized)
+	}
+	return result
 }
 
 func (h ReportsHandler) createScheduleForReport(c echo.Context, name string, schedule *reportScheduleRequest, reportType string, format string, parameters map[string]interface{}) (reports.ReportSchedule, error) {
