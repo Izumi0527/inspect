@@ -914,13 +914,8 @@ inspect-system/
 ├── database/                   # 数据库初始化脚本
 │   ├── 🆕 database-init-complete.sql    # 完整初始化脚本（推荐）
 │   └── 🆕 builtin-templates-complete.sql # 完整内置模板脚本
-├── docs/                      # 技术文档
-│   ├── api/                   # API文档
-│   ├── datebase/              # 数据库文档与整合报告
-│   ├── backend-go-quickstart.md # Go后端快速启动
-│   ├── development/development-environment-guide.md # 开发环境指南
-│   ├── device-probe-feature.md # 设备探测功能文档
-│   └── report-templates.md    # 报表模板文档
+├── docs/                      # 文档目录（仅 PROJECT_ARCHITECTURE.md 进入版本控制）
+│   └── PROJECT_ARCHITECTURE.md # 项目详细架构文档
 ├── discuss/                   # 技术讨论与分析
 │   ├── frontend-backend-api-mismatch-analysis.md # API不匹配分析
 │   └── frontend/visx-react19-update-analysis.md # Visx升级分析
@@ -940,7 +935,7 @@ inspect-system/
 | 文档 | 描述 | 路径 |
 |------|------|------|
 | **快速启动** | Go后端快速启动指南 | `docs/backend-go-quickstart.md` |
-| **开发环境** | 完整开发环境搭建 | `docs/development/development-environment-guide.md` |
+| **项目架构** | 当前系统详细架构、模块边界、数据流与部署说明 | `docs/PROJECT_ARCHITECTURE.md` |
 | **设备探测** | 设备探测功能详解 | `docs/device-probe-feature.md` |
 | **报表模板** | 报表生成模板说明 | `docs/report-templates.md` |
 | **API文档** | RESTful API接口文档 | `docs/api/` |
@@ -1002,7 +997,7 @@ chore(scope): 简短描述
 
 - [API完整文档](docs/api/readme.md) - RESTful API使用指南
 - [API更新日志](docs/api/changelog.md) - API版本变更记录
-- [开发环境指南](docs/development/development-environment-guide.md) - 环境搭建教程
+- [项目详细架构文档](docs/PROJECT_ARCHITECTURE.md) - 当前系统架构、模块边界、数据流与部署说明
 - [后端快速启动](docs/backend-go-quickstart.md) - Go后端快速上手
 - [设备探测功能](docs/device-probe-feature.md) - 设备探测详解
 - [WebSocket协议](docs/api/websocket-contract.md) - 实时通信协议

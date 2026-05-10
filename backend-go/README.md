@@ -202,7 +202,7 @@ go clean
 
 ## 相关文档
 
-- [开发环境搭建指南](../docs/development/development-environment-guide.md)
+- [项目详细架构文档](../docs/PROJECT_ARCHITECTURE.md)
 - [API 文档](../docs/api/readme.md)
 - [数据库迁移指南](../docs/datebase/database-deployment.md)
 - [Docker 部署指南](../docs/docker/compose_quick_start.md)

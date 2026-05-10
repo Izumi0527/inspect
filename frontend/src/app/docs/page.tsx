@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { BookOpen, Code2, Workflow, Wrench } from 'lucide-react'
+import { BookOpen } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/atoms'
 import type { ComponentType } from 'react'
 
@@ -12,28 +12,10 @@ type DocEntry = {
 
 const quickLinks: DocEntry[] = [
   {
-    title: '文档索引',
-    description: '从官方索引开始阅读，按主题快速定位文档',
-    href: '/docs/readme.md',
+    title: '项目详细架构',
+    description: '系统架构、模块边界、数据流、部署与扩展规范',
+    href: '/docs/PROJECT_ARCHITECTURE.md',
     icon: BookOpen,
-  },
-  {
-    title: '开发环境搭建',
-    description: '前后端开发环境与常见问题排查',
-    href: '/docs/development/development-environment-guide.md',
-    icon: Wrench,
-  },
-  {
-    title: 'API 文档入口',
-    description: 'REST API / WebSocket 协议与变更记录',
-    href: '/docs/api/readme.md',
-    icon: Code2,
-  },
-  {
-    title: '监控数据流梳理',
-    description: '监控中心的数据流、降级策略与接口契约摘要',
-    href: '/docs/flows/monitoring-data-flow-summary.md',
-    icon: Workflow,
   },
 ]
 
@@ -45,7 +27,7 @@ export default function DocsPage() {
           <div>
             <h1 className="text-3xl font-bold text-foreground">文档中心</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              本页面用于浏览仓库内 `docs/` 目录的正式文档（部署/运维/接口/迁移/排错等）。
+              本页面用于浏览仓库内 `docs/PROJECT_ARCHITECTURE.md` 项目详细架构文档。
             </p>
           </div>
           <Link href="/">

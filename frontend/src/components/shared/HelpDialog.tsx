@@ -20,19 +20,9 @@ export function HelpDialog({ title = '帮助', content, links }: HelpDialogProps
 
   const defaultLinks = [
     {
-      title: '模板配置指南',
-      url: '/docs/template-configuration-guide.md',
-      description: '详细说明如何创建和配置巡检模板',
-    },
-    {
-      title: '最佳实践',
-      url: '/docs/template-best-practices.md',
-      description: '阈值配置、检查项组合、性能优化建议',
-    },
-    {
-      title: '厂商 OID 映射表',
-      url: '/docs/integration/vendor-oid-mapping.md',
-      description: '各厂商的 SNMP OID 参考',
+      title: '项目详细架构文档',
+      url: '/docs/PROJECT_ARCHITECTURE.md',
+      description: '查看系统模块边界、巡检/监控/报表链路与扩展规范',
     },
   ]
 
