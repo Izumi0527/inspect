@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as inspectionHooks from '@/features/inspection/hooks/useInspection'
 import { InspectionAnalytics } from '@/features/inspection/components/InspectionAnalytics'
+import { exportAnalyticsReport } from '@/features/inspection/api/inspection.api'
 
 jest.mock('@/features/inspection/hooks/useInspection', () => ({
   useInspectionTrends: jest.fn(),
@@ -223,6 +224,23 @@ describe('InspectionAnalytics 统计口径一致性', () => {
 
     expect(screen.getAllByText('执行次数').length).toBeGreaterThan(0)
     expect(screen.queryByText('总执行次数')).not.toBeInTheDocument()
+  })
+
+  it('点击导出报告时应请求 PDF 格式文件', async () => {
+    const user = userEvent.setup()
+    ;(exportAnalyticsReport as jest.Mock).mockResolvedValue(undefined)
+
+    render(<InspectionAnalytics />)
+
+    await user.click(screen.getByText('导出报告'))
+
+    await waitFor(() => {
+      expect(exportAnalyticsReport).toHaveBeenCalledWith(expect.objectContaining({
+        period: 'week',
+        formatType: 'pdf',
+        includeCharts: true,
+      }))
+    })
   })
 
   it('KPI 比较基线文案应随时间周期切换', async () => {

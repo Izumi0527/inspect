@@ -20,6 +20,7 @@ TEMP=false
 PROJECT_FILES=false
 GO_BUILD=false
 REPORT_ARTIFACTS=false
+BACKEND_DATA=false
 PACKAGE_CACHE=false
 PLAYWRIGHT=false
 FORCE=false
@@ -80,6 +81,7 @@ show_help() {
   --go-build, -GoBuild           清理 Go 构建缓存目录与编译产物（*.exe / .gocache 等）
   --report-artifacts, -ReportArtifacts
                                  清理历史重复报表输出目录（仅 backend-go/backend-go）
+  --backend-data, -BackendData   清理后端数据输出目录（backend-go/data/）
   --package-cache, -PackageCache 清理包管理器缓存（pnpm store）
   --playwright, -Playwright      清理 Playwright 测试产物（报告 / 测试结果 / MCP 快照）
 
@@ -94,6 +96,7 @@ show_help() {
   ./scripts/clean-cache.sh --all --force
   ./scripts/clean-cache.sh --go-build
   ./scripts/clean-cache.sh --report-artifacts
+  ./scripts/clean-cache.sh --backend-data
   ./scripts/clean-cache.sh --package-cache
   ./scripts/clean-cache.sh --playwright
   ./scripts/clean-cache.sh --all --what-if
@@ -312,6 +315,56 @@ remove_cache_directory_files() {
         TOTAL_FREED=$((TOTAL_FREED + removed_size))
         TOTAL_FILES=$((TOTAL_FILES + removed_files))
     fi
+}
+
+remove_cache_directory_contents() {
+    local path="$1"
+    local description="$2"
+
+    if [[ ! -d "$path" ]]; then
+        log_verbose "跳过不存在的目录: $path"
+        return
+    fi
+
+    if ! test_is_safe_cache_path "$path"; then
+        return
+    fi
+
+    if [[ -z "$(find "$path" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+        log_verbose "跳过空目录: $path"
+        return
+    fi
+
+    local size=0
+    local file_count=0
+    local directory_count=0
+    local item
+    while IFS= read -r -d '' item; do
+        size=$((size + $(file_size "$item")))
+        file_count=$((file_count + 1))
+    done < <(find "$path" -mindepth 1 -type f -print0 2>/dev/null)
+
+    while IFS= read -r -d '' item; do
+        directory_count=$((directory_count + 1))
+    done < <(find "$path" -mindepth 1 -type d -print0 2>/dev/null)
+
+    local size_str
+    size_str="$(format_file_size "$size")"
+
+    if [[ "$WHAT_IF" == true ]]; then
+        color "33" "  [预览] ${description}: $size_str ($file_count 个文件，$directory_count 个目录，保留目录)"
+        return
+    fi
+
+    while IFS= read -r -d '' item; do
+        if ! rm -rf -- "$item"; then
+            log_error "删除失败 $item"
+        fi
+    done < <(find "$path" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
+
+    log_success "${description}: $size_str ($file_count 个文件，$directory_count 个目录，保留目录)"
+    TOTAL_FREED=$((TOTAL_FREED + size))
+    TOTAL_FILES=$((TOTAL_FILES + file_count))
 }
 
 find_project_files() {
@@ -536,6 +589,18 @@ clear_report_artifacts() {
     remove_cache_item "$legacy_backend_output" "历史重复后端输出目录 (backend-go/backend-go)"
 }
 
+clear_backend_data() {
+    log_step "清理后端数据输出目录..."
+
+    local backend_data="$BACKEND_PATH/data"
+    if [[ ! -d "$backend_data" ]]; then
+        log_verbose "未发现后端数据输出目录: $backend_data"
+        return
+    fi
+
+    remove_cache_directory_contents "$backend_data" "后端数据输出目录内容 (backend-go/data/*)"
+}
+
 clear_package_manager_cache() {
     log_step "清理包管理器缓存..."
 
@@ -612,8 +677,9 @@ show_interactive_menu() {
   ── 扩展清理 ──
   [7] Go 构建缓存与编译产物（.gocache / app.exe 等）
   [8] 历史重复报表输出目录（仅 backend-go/backend-go）
-  [9] 包管理器缓存（pnpm store）需重新下载
-  [10] Playwright 测试产物（报告 / 测试结果 / MCP 快照）
+  [9] 后端数据输出目录（backend-go/data/）
+  [10] 包管理器缓存（pnpm store）需重新下载
+  [11] Playwright 测试产物（报告 / 测试结果 / MCP 快照）
   ──
   [0] 取消
 
@@ -622,7 +688,7 @@ show_interactive_menu() {
 EOF
 
     local choice
-    read -r -p "请选择 (0-10) " choice
+    read -r -p "请选择 (0-11) " choice
     case "$choice" in
         1) ALL=true ;;
         2) BACKEND=true ;;
@@ -632,8 +698,9 @@ EOF
         6) PROJECT_FILES=true ;;
         7) GO_BUILD=true ;;
         8) REPORT_ARTIFACTS=true ;;
-        9) PACKAGE_CACHE=true ;;
-        10) PLAYWRIGHT=true ;;
+        9) BACKEND_DATA=true ;;
+        10) PACKAGE_CACHE=true ;;
+        11) PLAYWRIGHT=true ;;
         0)
             log_info "已取消清理操作"
             exit 0
@@ -647,7 +714,8 @@ EOF
 has_selection() {
     [[ "$ALL" == true || "$BACKEND" == true || "$FRONTEND" == true || "$LOGS" == true ||
        "$TEMP" == true || "$PROJECT_FILES" == true || "$GO_BUILD" == true ||
-       "$REPORT_ARTIFACTS" == true || "$PACKAGE_CACHE" == true || "$PLAYWRIGHT" == true ]]
+       "$REPORT_ARTIFACTS" == true || "$BACKEND_DATA" == true ||
+       "$PACKAGE_CACHE" == true || "$PLAYWRIGHT" == true ]]
 }
 
 parse_args() {
@@ -661,6 +729,7 @@ parse_args() {
             --project-files|-ProjectFiles) PROJECT_FILES=true; shift ;;
             --go-build|-GoBuild) GO_BUILD=true; shift ;;
             --report-artifacts|-ReportArtifacts) REPORT_ARTIFACTS=true; shift ;;
+            --backend-data|-BackendData) BACKEND_DATA=true; shift ;;
             --package-cache|-PackageCache) PACKAGE_CACHE=true; shift ;;
             --playwright|-Playwright) PLAYWRIGHT=true; shift ;;
             --force|-Force) FORCE=true; shift ;;
@@ -712,6 +781,7 @@ main() {
     [[ "$ALL" == true || "$PROJECT_FILES" == true ]] && clear_project_specific_cache
     [[ "$ALL" == true || "$GO_BUILD" == true ]] && clear_go_build_artifacts
     [[ "$ALL" == true || "$REPORT_ARTIFACTS" == true ]] && clear_report_artifacts
+    [[ "$ALL" == true || "$BACKEND_DATA" == true ]] && clear_backend_data
     [[ "$ALL" == true || "$PACKAGE_CACHE" == true ]] && clear_package_manager_cache
     [[ "$ALL" == true || "$PLAYWRIGHT" == true ]] && clear_playwright_artifacts
 

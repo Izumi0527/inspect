@@ -1352,6 +1352,15 @@ export async function fetchProblemDistribution(params?: InspectionAnalyticsRange
   }
 }
 
+const formatDateTimeForReportFilename = (date: Date): string => {
+  const pad = (value: number) => String(value).padStart(2, '0')
+
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+}
+
+const buildAnalyticsReportFilename = (formatType: 'excel' | 'pdf'): string =>
+  `巡检统计分析报告_${formatDateTimeForReportFilename(new Date())}.${formatType}`
+
 export async function exportAnalyticsReport(params: {
   period: 'day' | 'week' | 'month'
   startDate?: string
@@ -1360,11 +1369,12 @@ export async function exportAnalyticsReport(params: {
   includeCharts?: boolean
 }): Promise<void> {
   try {
+    const formatType = params.formatType ?? 'pdf'
     const searchParams = new URLSearchParams()
     searchParams.append('period', params.period)
     if (params.startDate) searchParams.append('start_date', params.startDate)
     if (params.endDate) searchParams.append('end_date', params.endDate)
-    searchParams.append('format_type', params.formatType || 'excel')
+    searchParams.append('format_type', formatType)
     searchParams.append('include_charts', String(params.includeCharts ?? true))
 
     const endpoint = `/api/v1/inspection/analytics/export?${searchParams.toString()}`
@@ -1383,8 +1393,8 @@ export async function exportAnalyticsReport(params: {
 
     // 从响应头获取文件名
     const contentDisposition = response.headers.get('content-disposition')
-    let filename = `statistics_report_${new Date().getTime()}.${params.formatType || 'excel'}`
-    if (contentDisposition) {
+    let filename = buildAnalyticsReportFilename(formatType)
+    if (formatType !== 'pdf' && contentDisposition) {
       const filenameMatch = contentDisposition.match(/filename="?(.+)"?/)
       if (filenameMatch) {
         filename = decodeURIComponent(filenameMatch[1])

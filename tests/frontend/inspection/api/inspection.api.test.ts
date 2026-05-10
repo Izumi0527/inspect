@@ -1,8 +1,10 @@
 import {
   copyInspectionTemplate,
+  exportAnalyticsReport,
   fetchInspectionStrategies,
   fetchInspectionTemplate,
 } from '@/features/inspection/api/inspection.api'
+import { getApiOrigin, TokenManager } from '@/lib/api-client'
 
 jest.mock('@/lib/api-client', () => ({
   api: {
@@ -14,6 +16,7 @@ jest.mock('@/lib/api-client', () => ({
   TokenManager: {
     getAccessToken: jest.fn(),
   },
+  getApiOrigin: jest.fn(() => 'http://localhost:3000'),
 }))
 
 describe('inspection.api fetchInspectionTemplate', () => {
@@ -125,5 +128,76 @@ describe('inspection.api fetchInspectionStrategies', () => {
     expect(result.pages).toBe(3)
     expect(result.strategies).toHaveLength(1)
     expect(result.strategies[0].id).toBe('7')
+  })
+})
+
+describe('inspection.api exportAnalyticsReport', () => {
+  const originalCreateObjectURL = window.URL.createObjectURL
+  const originalRevokeObjectURL = window.URL.revokeObjectURL
+  let appendedAnchor: HTMLAnchorElement | null = null
+
+  beforeEach(() => {
+    appendedAnchor = null
+    ;(getApiOrigin as jest.Mock).mockReturnValue('http://localhost:3000')
+    ;(global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      headers: {
+        get: () => null,
+      },
+      blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
+    } as Partial<Response>)
+    ;(TokenManager.getAccessToken as jest.Mock).mockReturnValue('manager-token')
+
+    window.URL.createObjectURL = jest.fn().mockReturnValue('blob:inspection-report')
+    window.URL.revokeObjectURL = jest.fn()
+    jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const originalAppendChild = document.body.appendChild.bind(document.body)
+    jest.spyOn(document.body, 'appendChild').mockImplementation(((node: Node) => {
+      if (node instanceof HTMLAnchorElement) {
+        appendedAnchor = node
+      }
+      return originalAppendChild(node)
+    }) as typeof document.body.appendChild)
+  })
+
+  afterEach(() => {
+    window.URL.createObjectURL = originalCreateObjectURL
+    window.URL.revokeObjectURL = originalRevokeObjectURL
+    jest.restoreAllMocks()
+    jest.useRealTimers()
+  })
+
+  it('未显式指定格式时应默认请求并按中文前缀加紧凑日期时间命名 PDF 文件', async () => {
+    jest.useFakeTimers().setSystemTime(new Date(2026, 4, 10, 14, 30, 5))
+    ;(global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      headers: {
+        get: (headerName: string) =>
+          headerName.toLowerCase() === 'content-disposition'
+            ? 'attachment; filename="statistics_report_legacy.pdf"'
+            : null,
+      },
+      blob: async () => new Blob(['%PDF'], { type: 'application/pdf' }),
+    } as Partial<Response>)
+
+    await exportAnalyticsReport({
+      period: 'week',
+      startDate: '2026-03-01',
+      endDate: '2026-03-31',
+      includeCharts: true,
+    })
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    const calledUrl = (global.fetch as jest.Mock).mock.calls[0][0] as string
+    expect(calledUrl).toContain('/api/v1/inspection/analytics/export')
+    expect(calledUrl).toContain('format_type=pdf')
+    expect(calledUrl).not.toContain('format_type=excel')
+
+    const requestInit = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
+    expect(requestInit.headers).toEqual(expect.objectContaining({
+      Authorization: 'Bearer manager-token',
+    }))
+
+    expect(appendedAnchor?.download).toBe('巡检统计分析报告_20260510143005.pdf')
   })
 })

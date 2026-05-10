@@ -221,7 +221,7 @@ export const InspectionAnalytics: React.FC = () => {
         period: timePeriod,
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
-        formatType: 'excel', // 默认导出 Excel 格式
+        formatType: 'pdf',
         includeCharts: true
       })
 

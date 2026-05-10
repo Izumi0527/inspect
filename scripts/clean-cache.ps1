@@ -10,6 +10,7 @@ param(
     [switch]$ProjectFiles,     # 清理项目特定临时文件
     [switch]$GoBuild,          # 清理 Go 构建缓存与编译产物
     [switch]$ReportArtifacts,  # 清理历史重复报表输出目录
+    [switch]$BackendData,      # 清理后端数据输出目录
     [switch]$PackageCache,     # 清理包管理器缓存（pnpm）
     [switch]$Playwright,       # 清理 Playwright 测试产物
     [switch]$Force,            # 跳过确认直接清理
@@ -40,6 +41,7 @@ $script:Selection = [ordered]@{
     ProjectFiles    = [bool]$ProjectFiles
     GoBuild         = [bool]$GoBuild
     ReportArtifacts = [bool]$ReportArtifacts
+    BackendData     = [bool]$BackendData
     PackageCache    = [bool]$PackageCache
     Playwright      = [bool]$Playwright
 }
@@ -110,6 +112,7 @@ function Show-Help {
     Write-Host "    -ProjectFiles        清理项目特定文件（context.json / lint报告 / 覆盖率 / MCP 快照等）"
     Write-Host "    -GoBuild             清理 Go 构建缓存目录与编译产物（*.exe / .gocache 等）"
     Write-Host "    -ReportArtifacts     清理历史重复报表输出目录（仅 backend-go/backend-go）"
+    Write-Host "    -BackendData         清理后端数据输出目录（backend-go/data/）"
     Write-Host "    -PackageCache        清理包管理器缓存（pnpm store）"
     Write-Host "    -Playwright          清理 Playwright 测试产物（报告 / 测试结果 / MCP 快照）"
     Write-Host ""
@@ -124,6 +127,7 @@ function Show-Help {
     Write-Host "    .\scripts\clean-cache.ps1 -All -Force             # 清理所有缓存，不确认"
     Write-Host "    .\scripts\clean-cache.ps1 -GoBuild                # 仅清理 Go 构建缓存"
     Write-Host "    .\scripts\clean-cache.ps1 -ReportArtifacts        # 仅清理历史重复报表输出目录"
+    Write-Host "    .\scripts\clean-cache.ps1 -BackendData            # 仅清理后端数据输出目录"
     Write-Host "    .\scripts\clean-cache.ps1 -PackageCache           # 仅清理包管理器缓存"
     Write-Host "    .\scripts\clean-cache.ps1 -Playwright             # 仅清理 Playwright 产物"
     Write-Host "    .\scripts\clean-cache.ps1 -WhatIf                 # 预览将要删除的内容"
@@ -359,6 +363,65 @@ function Remove-CacheDirectoryFiles {
         $script:TotalFreed += $removedSize
         $script:TotalFiles += $removedFiles
     }
+}
+
+function Remove-CacheDirectoryContents {
+    param(
+        [string]$Path,
+        [string]$Description
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        Write-LogVerbose "跳过不存在的目录: $Path"
+        return
+    }
+
+    if (-not (Test-IsSafeCachePath -Path $Path)) {
+        return
+    }
+
+    $children = @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction SilentlyContinue)
+    if ($children.Count -eq 0) {
+        Write-LogVerbose "跳过空目录: $Path"
+        return
+    }
+
+    $fileItems = @()
+    $directoryCount = 0
+    foreach ($child in $children) {
+        if ($child.PSIsContainer) {
+            $directoryCount++
+            $directoryCount += @(Get-ChildItem -LiteralPath $child.FullName -Recurse -Directory -Force -ErrorAction SilentlyContinue).Count
+            $fileItems += @(Get-ChildItem -LiteralPath $child.FullName -Recurse -File -Force -ErrorAction SilentlyContinue)
+        } else {
+            $fileItems += $child
+        }
+    }
+
+    $size = ($fileItems | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+    $fileCount = $fileItems.Count
+    if ($null -eq $size) {
+        $size = 0
+    }
+
+    $sizeStr = Format-FileSize $size
+
+    if ($WhatIf) {
+        Write-Host "  [预览] ${Description}: $sizeStr ($fileCount 个文件，$directoryCount 个目录，保留目录)" -ForegroundColor Yellow
+        return
+    }
+
+    foreach ($child in $children) {
+        try {
+            Remove-Item -LiteralPath $child.FullName -Recurse -Force -ErrorAction Stop
+        } catch {
+            Write-LogError "删除失败 $($child.FullName): $_"
+        }
+    }
+
+    Write-LogSuccess "${Description}: $sizeStr ($fileCount 个文件，$directoryCount 个目录，保留目录)"
+    $script:TotalFreed += $size
+    $script:TotalFiles += $fileCount
 }
 
 function Test-IsExpectedLegacyBackendOutputPath {
@@ -718,6 +781,22 @@ function Clear-ReportArtifacts {
 }
 
 # ──────────────────────────────────────────────
+# 清理后端数据输出目录
+# ──────────────────────────────────────────────
+
+function Clear-BackendData {
+    Write-LogStep "清理后端数据输出目录..."
+
+    $backendData = Join-Path $script:BackendPath "data"
+    if (-not (Test-Path -LiteralPath $backendData -PathType Container)) {
+        Write-LogVerbose "未发现后端数据输出目录: $backendData"
+        return
+    }
+
+    Remove-CacheDirectoryContents -Path $backendData -Description "后端数据输出目录内容 (backend-go/data/*)"
+}
+
+# ──────────────────────────────────────────────
 # 清理包管理器缓存（pnpm store）
 # ──────────────────────────────────────────────
 
@@ -821,15 +900,16 @@ function Show-InteractiveMenu {
     Write-Host "  ── 扩展清理 ──"
     Write-Host "  [7] Go 构建缓存与编译产物（.gocache / app.exe 等）"
     Write-Host "  [8] 历史重复报表输出目录（仅 backend-go/backend-go）"
-    Write-Host "  [9] 包管理器缓存（pnpm store）⚠ 需重新下载"
-    Write-Host "  [10] Playwright 测试产物（报告 / 测试结果 / MCP 快照）"
+    Write-Host "  [9] 后端数据输出目录（backend-go/data/）"
+    Write-Host "  [10] 包管理器缓存（pnpm store）⚠ 需重新下载"
+    Write-Host "  [11] Playwright 测试产物（报告 / 测试结果 / MCP 快照）"
     Write-Host "  ──"
     Write-Host "  [0] 取消"
     Write-Host ""
     Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
     Write-Host ""
 
-    $choice = Read-Host "请选择 (0-10)"
+    $choice = Read-Host "请选择 (0-11)"
 
     switch ($choice) {
         "1"  { $script:Selection["All"] = $true }
@@ -840,8 +920,9 @@ function Show-InteractiveMenu {
         "6"  { $script:Selection["ProjectFiles"] = $true }
         "7"  { $script:Selection["GoBuild"] = $true }
         "8"  { $script:Selection["ReportArtifacts"] = $true }
-        "9"  { $script:Selection["PackageCache"] = $true }
-        "10" { $script:Selection["Playwright"] = $true }
+        "9"  { $script:Selection["BackendData"] = $true }
+        "10" { $script:Selection["PackageCache"] = $true }
+        "11" { $script:Selection["Playwright"] = $true }
         "0"  {
             Write-LogInfo "已取消清理操作"
             exit 0
@@ -918,6 +999,10 @@ function Main {
 
     if ($script:Selection["All"] -or $script:Selection["ReportArtifacts"]) {
         Clear-ReportArtifacts
+    }
+
+    if ($script:Selection["All"] -or $script:Selection["BackendData"]) {
+        Clear-BackendData
     }
 
     if ($script:Selection["All"] -or $script:Selection["PackageCache"]) {
