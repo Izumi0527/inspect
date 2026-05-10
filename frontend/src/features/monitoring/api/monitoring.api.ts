@@ -116,7 +116,7 @@ function resolveTimeRange(timeRange: string) {
  */
 export interface ExportMonitoringReportParams {
   /** 导出格式 */
-  format: 'pdf' | 'excel' | 'csv'
+  format: 'pdf'
   /** 时间范围 */
   time_range: string
   /** 包含的部分 */

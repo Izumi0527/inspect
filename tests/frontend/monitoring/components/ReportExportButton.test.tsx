@@ -42,6 +42,43 @@ describe('ReportExportButton', () => {
     })
   })
 
+  it('默认直接导出 PDF 且不展示 CSV/Excel 格式选项', async () => {
+    ;(exportMonitoringReport as jest.Mock).mockResolvedValue({
+      format: 'pdf',
+      time_range: '24h',
+      sections: ['stats', 'charts', 'alerts'],
+      generated_at: '2026-03-14T00:00:00.000Z',
+      download_url: '/api/v1/monitoring/reports/download/test.pdf',
+      status: 'completed',
+    })
+
+    jest.spyOn(TokenManager, 'getAccessToken').mockReturnValue('token123')
+    jest.spyOn(global, 'fetch' as any).mockResolvedValue(
+      new Response(new Blob(['ok'], { type: 'application/pdf' }), {
+        status: 200,
+        headers: {
+          'Content-Disposition': 'attachment; filename="test.pdf"',
+        },
+      }) as any
+    )
+    jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(<ReportExportButton />)
+
+    fireEvent.click(screen.getByText('导出报告'))
+
+    await waitFor(() => {
+      expect(exportMonitoringReport).toHaveBeenCalledWith({
+        format: 'pdf',
+        time_range: '24h',
+        sections: ['stats', 'charts', 'alerts'],
+      })
+    })
+
+    expect(screen.queryByText('Excel')).not.toBeInTheDocument()
+    expect(screen.queryByText('CSV')).not.toBeInTheDocument()
+  })
+
   it('后端返回 download_token 时应优先使用 form POST 触发下载（不走 blob）', async () => {
     ;(exportMonitoringReport as jest.Mock).mockResolvedValue({
       format: 'pdf',
@@ -75,7 +112,6 @@ describe('ReportExportButton', () => {
     render(<ReportExportButton />)
 
     fireEvent.click(screen.getByText('导出报告'))
-    fireEvent.click(screen.getByText('PDF'))
 
     await waitFor(() => {
       expect(submitSpy).toHaveBeenCalled()
@@ -119,7 +155,6 @@ describe('ReportExportButton', () => {
     )
 
     fireEvent.click(screen.getByText('导出报告'))
-    fireEvent.click(screen.getByText('PDF'))
 
     await waitFor(() => {
       expect(screen.getByText('PDF 报告已发起下载')).toBeTruthy()
@@ -152,11 +187,11 @@ describe('ReportExportButton', () => {
         status: 200,
       }) as any
     )
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
 
     render(<ReportExportButton />)
 
     fireEvent.click(screen.getByText('导出报告'))
-    fireEvent.click(screen.getByText('PDF'))
 
     await waitFor(() => {
       expect(screen.getByText('下载票据已过期')).toBeTruthy()
@@ -164,6 +199,10 @@ describe('ReportExportButton', () => {
 
     expect(submitSpy).not.toHaveBeenCalled()
     expect(fetchSpy).not.toHaveBeenCalled()
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[ReportExportButton] Export failed:',
+      expect.any(Error)
+    )
   })
 
   it('应携带 Authorization 头下载报告', async () => {
@@ -194,7 +233,6 @@ describe('ReportExportButton', () => {
     render(<ReportExportButton />)
 
     fireEvent.click(screen.getByText('导出报告'))
-    fireEvent.click(screen.getByText('PDF'))
 
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalled()
@@ -242,7 +280,6 @@ describe('ReportExportButton', () => {
     render(<ReportExportButton timeRange="7d" sections={['stats']} />)
 
     fireEvent.click(screen.getByText('导出报告'))
-    fireEvent.click(screen.getByText('PDF'))
 
     await waitFor(() => {
       expect(exportMonitoringReport).toHaveBeenCalled()

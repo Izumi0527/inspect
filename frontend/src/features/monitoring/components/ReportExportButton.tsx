@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Download, FileText, Sheet, FileSpreadsheet } from 'lucide-react'
+import { Download } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { getApiOrigin, TokenManager } from '@/lib/api-client'
 import { exportMonitoringReport, checkMonitoringReportDownloadToken } from '../api/monitoring.api'
 
-type ExportFormat = 'pdf' | 'excel' | 'csv'
+type ExportFormat = 'pdf'
 
 interface ExportStatus {
   isExporting: boolean
@@ -17,11 +17,7 @@ interface ExportStatus {
   }
 }
 
-const FORMAT_CONFIG: Record<ExportFormat, { label: string; icon: typeof FileText; iconColor: string }> = {
-  pdf: { label: 'PDF', icon: FileText, iconColor: 'text-red-500' },
-  excel: { label: 'Excel', icon: Sheet, iconColor: 'text-green-600' },
-  csv: { label: 'CSV', icon: FileSpreadsheet, iconColor: 'text-blue-500' },
-}
+const PDF_FORMAT_LABEL = 'PDF'
 
 function resolveApiBaseUrl(): string {
   return getApiOrigin()
@@ -184,27 +180,11 @@ export function ReportExportButton({
   timeRange = '24h',
   sections = ['stats', 'charts', 'alerts'],
 }: ReportExportButtonProps) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [exportStatus, setExportStatus] = useState<ExportStatus>({
     isExporting: false,
   })
-  const menuRef = useRef<HTMLDivElement>(null)
   const clearMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isMountedRef = useRef(true)
-
-  // 点击外部关闭菜单
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false)
-      }
-    }
-
-    if (isMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [isMenuOpen])
 
   useEffect(() => {
     isMountedRef.current = true
@@ -226,8 +206,8 @@ export function ReportExportButton({
     }, delayMs)
   }
 
-  const handleExport = async (format: ExportFormat) => {
-    setIsMenuOpen(false)
+  const handleExport = async () => {
+    const format: ExportFormat = 'pdf'
     setExportStatus({ isExporting: true })
 
     try {
@@ -265,7 +245,7 @@ export function ReportExportButton({
         lastExport: {
           success: true,
           format,
-          message: `${FORMAT_CONFIG[format].label} 报告已发起下载`,
+          message: `${PDF_FORMAT_LABEL} 报告已发起下载`,
         },
       })
 
@@ -296,42 +276,15 @@ export function ReportExportButton({
       : '导出报告'
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative">
       <Button
         variant="outline"
-        onClick={() => setIsMenuOpen(!isMenuOpen)}
+        onClick={() => void handleExport()}
         disabled={exportStatus.isExporting}
       >
         <Download className={`w-4 h-4 mr-2 ${exportStatus.isExporting ? 'animate-pulse' : ''}`} />
         {buttonLabel}
       </Button>
-
-      {/* 下拉菜单 */}
-      {isMenuOpen && !exportStatus.isExporting && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-border bg-card shadow-lg">
-          <div className="p-1">
-            <div className="border-b border-border px-3 py-2">
-              <p className="text-xs font-semibold uppercase text-muted-foreground">
-                选择格式
-              </p>
-            </div>
-            {(['pdf', 'excel', 'csv'] as ExportFormat[]).map((format) => {
-              const config = FORMAT_CONFIG[format]
-              const Icon = config.icon
-              return (
-                <button
-                  key={format}
-                  onClick={() => handleExport(format)}
-                  className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-foreground/90 transition-colors hover:bg-muted/60 dark:text-foreground/90 dark:hover:bg-muted/60"
-                >
-                  <Icon className={`h-4 w-4 ${config.iconColor}`} />
-                  <span className="font-medium">{config.label}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
