@@ -304,6 +304,7 @@ media/
 data/local/
 data/dev/
 data/test/
+/backend-go/data/
 
 # 后端运行时数据（保留示例文件）
 backend/data/*.json
