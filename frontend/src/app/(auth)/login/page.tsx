@@ -149,6 +149,7 @@ function LoginPage() {
               </label>
               <input
                 {...register('username')}
+                id="username"
                 type="text"
                 autoComplete="username"
                 className={`
@@ -172,6 +173,7 @@ function LoginPage() {
               <div className="relative">
                 <input
                   {...register('password')}
+                  id="password"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   className={`

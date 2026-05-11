@@ -66,7 +66,9 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
   } = useQuery<DashboardNotificationsResult>({
     queryKey,
     queryFn: () => fetchDashboardNotificationsWithMeta(limit),
-    refetchInterval: 30_000,
+    // 通知非强实时业务，60s 拉一次足够；标签页隐藏时停止轮询，减少无谓请求
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     retry: false,
   })
 
