@@ -63,7 +63,7 @@ type OutgoingMessage = {
   data: Record<string, unknown>
 }
 
-const DEFAULT_WS_ORIGIN = 'ws://127.0.0.1:8000'
+const DEFAULT_WS_ORIGIN = 'ws://127.0.0.1:9000'
 
 const stripTrailingSlashes = (value: string): string => value.replace(/\/+$/, '')
 

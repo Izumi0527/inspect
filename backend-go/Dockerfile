@@ -34,6 +34,6 @@ COPY --from=builder /out/inspect-api /app/inspect-api
 RUN chown -R appuser:appuser /app
 
 USER appuser
-EXPOSE 8000
+EXPOSE 9000
 
 CMD ["/app/inspect-api"]

@@ -38,7 +38,7 @@ if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
 | 服务 | 地址 |
 |------|------|
 | 前端 | `http://localhost:3000` |
-| 后端 | `http://localhost:8000` |
+| 后端 | `http://localhost:9000` |
 | PostgreSQL | `localhost:15500` |
 | Redis | `localhost:26380` |
 
@@ -164,10 +164,10 @@ pnpm test -- --runInBand
 
 ```env
 SERVER_HOST=127.0.0.1
-SERVER_PORT=8000
+SERVER_PORT=9000
 
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_WS_URL=ws://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:9000
+NEXT_PUBLIC_WS_URL=ws://localhost:9000
 
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 REDIS_URL=redis://:dev_redis_2024@127.0.0.1:26380/0
@@ -187,9 +187,9 @@ REPORTS_OUTPUT_DIR=data/reports
 | 入口 | 地址 |
 |------|------|
 | 前端页面 | `http://localhost:3000` |
-| 后端健康检查 | `http://localhost:8000/health` |
-| API 根路径 | `http://localhost:8000/api/v1` |
-| WebSocket | `ws://localhost:8000/api/v1/ws/:user_id` |
+| 后端健康检查 | `http://localhost:9000/health` |
+| API 根路径 | `http://localhost:9000/api/v1` |
+| WebSocket | `ws://localhost:9000/api/v1/ws/:user_id` |
 | pgAdmin | `http://localhost:5050` |
 | Redis Commander | `http://localhost:8081` |
 

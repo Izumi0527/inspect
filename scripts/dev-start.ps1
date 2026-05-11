@@ -354,8 +354,8 @@ function New-DevelopmentEnvironmentFiles {
     $frontendEnvPath = "frontend\.env.local"
     if (-not (Test-Path $frontendEnvPath)) {
         $backendConfig = Get-BackendDevConfig -AllowMissingPort
-        $apiUrl = if ([string]::IsNullOrWhiteSpace($backendConfig.ApiUrl)) { "http://127.0.0.1:8000" } else { $backendConfig.ApiUrl }
-        $wsUrl = if ([string]::IsNullOrWhiteSpace($backendConfig.WsUrl)) { "ws://127.0.0.1:8000" } else { $backendConfig.WsUrl }
+        $apiUrl = if ([string]::IsNullOrWhiteSpace($backendConfig.ApiUrl)) { "http://127.0.0.1:9000" } else { $backendConfig.ApiUrl }
+        $wsUrl = if ([string]::IsNullOrWhiteSpace($backendConfig.WsUrl)) { "ws://127.0.0.1:9000" } else { $backendConfig.WsUrl }
 
         $frontendEnvContent = @"
 # API 配置

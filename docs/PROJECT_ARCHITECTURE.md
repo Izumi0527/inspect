@@ -278,7 +278,7 @@ backend-go/internal/config/config.go
 
 ```env
 SERVER_HOST=127.0.0.1
-SERVER_PORT=8000
+SERVER_PORT=9000
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 REDIS_URL=redis://:dev_redis_2024@127.0.0.1:26380/0
 DB_AUTO_MIGRATE=true
@@ -372,14 +372,14 @@ frontend/src/lib/api-client.ts
 默认配置：
 
 ```text
-DEFAULT_API_ORIGIN = http://127.0.0.1:8000
+DEFAULT_API_ORIGIN = http://127.0.0.1:9000
 API_PREFIX = /api/v1
 ```
 
 推荐环境变量：
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:9000
 ```
 
 ### 6.4 WebSocket 客户端
@@ -511,7 +511,7 @@ frontend/src/lib/websocket.ts
 连接地址：
 
 ```text
-ws://localhost:8000/api/v1/ws/:user_id
+ws://localhost:9000/api/v1/ws/:user_id
 ```
 
 事件类型覆盖：
@@ -924,9 +924,9 @@ pnpm dev
 | 入口 | 地址 |
 |------|------|
 | 前端 | `http://localhost:3000` |
-| 后端健康检查 | `http://localhost:8000/health` |
-| 后端 API 根路径 | `http://localhost:8000/api/v1` |
-| WebSocket | `ws://localhost:8000/api/v1/ws/:user_id` |
+| 后端健康检查 | `http://localhost:9000/health` |
+| 后端 API 根路径 | `http://localhost:9000/api/v1` |
+| WebSocket | `ws://localhost:9000/api/v1/ws/:user_id` |
 | PostgreSQL | `localhost:15500` |
 | Redis | `localhost:26380` |
 | pgAdmin | `http://localhost:5050` |

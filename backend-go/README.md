@@ -36,7 +36,7 @@ backend-go/
   - 设备监控和数据采集
   - 报表生成和导出
   - 巡检任务调度和执行
-- **端口**: 8000（默认；如当前机器无法监听该端口，可通过 `SERVER_PORT` 改成其他可用端口）
+- **端口**: 9000（默认；如当前机器无法监听该端口，可通过 `SERVER_PORT` 改成其他可用端口）
 - **启动方式**:
   ```powershell
   # 直接运行编译后的程序
@@ -46,7 +46,7 @@ backend-go/
   cd backend-go
   go run ./cmd/api
   ```
-- **健康检查**: `http://localhost:${SERVER_PORT}/health`（例如 `http://localhost:8000/health`）
+- **健康检查**: `http://localhost:${SERVER_PORT}/health`（例如 `http://localhost:9000/health`）
 - **编译时间**: 2026-01-30 14:55:06
 - **文件大小**: ~34 MB
 
@@ -173,7 +173,7 @@ JWT_SECRET_KEY=your-secret-key
 JWT_ALGORITHM=HS256
 
 # 服务端口
-SERVER_PORT=8000
+SERVER_PORT=9000
 
 # 日志配置
 LOG_LEVEL=DEBUG
@@ -231,8 +231,8 @@ Get-Content .\logs\backend-go\app-dev.log -Tail 50
 
 ### 端口占用
 ```powershell
-# 查找占用 8000 端口的进程
-netstat -ano | findstr :8000
+# 查找占用 9000 端口的进程
+netstat -ano | findstr :9000
 
 # 结束进程（替换 PID）
 taskkill /PID <进程ID> /F

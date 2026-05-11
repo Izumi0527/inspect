@@ -17,7 +17,7 @@ func TestLoadResolvesLogFileRelativeToEnvFileDirectory(t *testing.T) {
 	}
 
 	envPath := filepath.Join(projectRoot, ".env")
-	envContent := "SERVER_PORT=8000\nLOG_FILE=logs/backend-go/app-dev.log\n"
+	envContent := "SERVER_PORT=9000\nLOG_FILE=logs/backend-go/app-dev.log\n"
 	if err := os.WriteFile(envPath, []byte(envContent), 0o644); err != nil {
 		t.Fatalf("write env file: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestLoadResolvesReportDirsRelativeToEnvFileDirectory(t *testing.T) {
 
 	envPath := filepath.Join(projectRoot, ".env")
 	envContent := strings.Join([]string{
-		"SERVER_PORT=8000",
+		"SERVER_PORT=9000",
 		"REPORT_OUTPUT_DIR=backend-go/data/reports/monitoring",
 		"REPORTS_OUTPUT_DIR=backend-go/data/reports",
 		"",

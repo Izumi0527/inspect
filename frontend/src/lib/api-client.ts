@@ -56,7 +56,7 @@ const buildSearchParams = (params: QueryParams): URLSearchParams => {
 }
 
 // API 配置
-const DEFAULT_API_ORIGIN = 'http://127.0.0.1:8000'
+const DEFAULT_API_ORIGIN = 'http://127.0.0.1:9000'
 export const API_PREFIX = '/api/v1'
 
 const stripTrailingSlashes = (value: string): string => value.replace(/\/+$/, '')

@@ -390,8 +390,8 @@ new_development_environment_files() {
     local frontend_env_path="$PROJECT_ROOT/frontend/.env.local"
     if [[ ! -f "$frontend_env_path" ]]; then
         get_backend_dev_config true
-        local api_url="${API_URL_VALUE:-http://127.0.0.1:8000}"
-        local ws_url="${WS_URL_VALUE:-ws://127.0.0.1:8000}"
+        local api_url="${API_URL_VALUE:-http://127.0.0.1:9000}"
+        local ws_url="${WS_URL_VALUE:-ws://127.0.0.1:9000}"
         mkdir -p "$PROJECT_ROOT/frontend"
         cat >"$frontend_env_path" <<EOF
 # API 配置

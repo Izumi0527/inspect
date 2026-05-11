@@ -18,7 +18,7 @@ jest.mock('@/lib/api-client', () => ({
     getAccessToken: jest.fn(),
   },
   getApiOrigin: () => {
-    const raw = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+    const raw = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:9000'
     const trimmed = String(raw).trim().replace(/\/+$/, '')
     return trimmed.replace(/\/api\/v1$/i, '')
   },
@@ -31,7 +31,7 @@ describe('alerts.api exportAlerts', () => {
 
   beforeEach(() => {
     ;(global.fetch as jest.Mock).mockClear()
-    process.env.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:8000'
+    process.env.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:9000'
     ;(TokenManager.getAccessToken as jest.Mock).mockReturnValue('manager-token')
 
     jest.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
@@ -69,12 +69,12 @@ describe('alerts.api exportAlerts', () => {
   })
 
   it('当 NEXT_PUBLIC_API_URL 误配为包含 /api/v1 时，不应出现双前缀', async () => {
-    process.env.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:8000/api/v1'
+    process.env.NEXT_PUBLIC_API_URL = 'http://127.0.0.1:9000/api/v1'
 
     await exportAlerts({ page: 1, pageSize: 20 })
 
     const calledUrl = (global.fetch as jest.Mock).mock.calls[0][0] as string
-    expect(calledUrl).toContain('http://127.0.0.1:8000/api/v1/alerts/export')
+    expect(calledUrl).toContain('http://127.0.0.1:9000/api/v1/alerts/export')
     expect(calledUrl).not.toContain('/api/v1/api/v1/')
   })
 })

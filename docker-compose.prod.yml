@@ -89,8 +89,8 @@ services:
     environment:
       # 服务配置
       SERVER_HOST: 0.0.0.0
-      # 生产环境默认仍使用 8000（通常由 Nginx 反向代理，不直接暴露宿主机端口）
-      SERVER_PORT: 8000
+      # 生产环境默认仍使用 9000（通常由 Nginx 反向代理，不直接暴露宿主机端口）
+      SERVER_PORT: 9000
       ENVIRONMENT: production
       DEBUG: "false"
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -152,7 +152,7 @@ services:
       - inspect_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9000/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
