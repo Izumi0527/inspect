@@ -496,19 +496,6 @@ export const InspectionTemplates: React.FC = () => {
     }
   ]
 
-  // 如果正在编辑模板，显示新的向导组件
-  if (isEditorOpen) {
-    return (
-      <>
-        <CreateTemplateWizard
-          template={editingTemplate}
-          onClose={handleEditorClose}
-          onSuccess={handleEditorSuccess}
-        />
-      </>
-    )
-  }
-
   // 加载状态
   if (isLoading) {
     return (
@@ -952,6 +939,15 @@ export const InspectionTemplates: React.FC = () => {
             setEditingTemplate(null)
             setIsEditorOpen(true)
           }}
+        />
+      )}
+
+      {/* 创建/编辑模板 Wizard：与其他 modal 同级渲染，让列表在背景模糊层下可见 */}
+      {isEditorOpen && (
+        <CreateTemplateWizard
+          template={editingTemplate}
+          onClose={handleEditorClose}
+          onSuccess={handleEditorSuccess}
         />
       )}
     </div>
