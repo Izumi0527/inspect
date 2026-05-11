@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react'
+import toast from 'react-hot-toast'
 import { useInspectionTemplates, useCloneTemplate, useDeleteTemplate } from '../hooks/useInspection'
 import { VendorFilter } from './VendorFilter'
 import { DeviceTypeFilter } from './DeviceTypeFilter'
@@ -90,7 +91,7 @@ export function TemplateList({
 
   // 处理导出
   const handleExport = async (_id: string) => {
-    alert('导出功能开发中...')
+    toast('导出功能开发中…', { icon: '🛠️' })
   }
 
   // 计算总页数

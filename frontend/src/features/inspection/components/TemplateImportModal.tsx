@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { X, Upload, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import toast from 'react-hot-toast'
 import {
   Button,
   Badge,
@@ -66,7 +67,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
 
   const handleFileSelect = (file: File) => {
     if (file.type !== 'application/json') {
-      alert('请选择JSON格式的文件')
+      toast.error('请选择 JSON 格式的文件')
       return
     }
 
@@ -129,7 +130,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
 
   const handleImport = async () => {
     if (!jsonContent.trim()) {
-      alert('请先上传JSON文件或粘贴JSON内容')
+      toast.error('请先上传 JSON 文件或粘贴 JSON 内容')
       return
     }
 
@@ -222,7 +223,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
         }, 1500)
       }
     } catch (error) {
-      alert('JSON格式错误: ' + (error instanceof Error ? error.message : '未知错误'))
+      toast.error('JSON 格式错误：' + (error instanceof Error ? error.message : '未知错误'))
     } finally {
       setIsImporting(false)
     }
@@ -232,7 +233,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
   const failedCount = importResults.filter(r => r.status === 'failed').length
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -240,13 +241,13 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
         className="bg-card rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-green-50 to-blue-50">
+        <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20">
           <div>
             <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
               <Upload className="w-6 h-6 text-green-600" />
               导入巡检模板
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               支持JSON格式的模板文件导入
             </p>
           </div>
@@ -269,12 +270,12 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
                   onDragLeave={handleDragLeave}
                   className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                     isDragging
-                      ? 'border-blue-500 bg-blue-50'
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                       : 'border-border hover:border-gray-400'
                   }`}
                 >
                   <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                  <p className="text-gray-700 mb-2">
+                  <p className="text-gray-700 dark:text-gray-300 mb-2">
                     拖拽JSON文件到此处,或
                     <button
                       type="button"
@@ -284,7 +285,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
                       点击选择文件
                     </button>
                   </p>
-                  <p className="text-sm text-gray-500">支持单个或多个模板的JSON格式文件</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">支持单个或多个模板的JSON格式文件</p>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -324,7 +325,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
                   <AlertCircle className="w-5 h-5 text-blue-600" />
                   JSON格式说明
                 </h3>
-                <div className="space-y-2 text-sm text-gray-700">
+                <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                   <p>• <strong>单个模板</strong>: 直接提供一个模板对象</p>
                   <p>• <strong>多个模板</strong>: 提供模板对象的数组 [&#123;...&#125;, &#123;...&#125;]</p>
                   <p>• <strong>必填字段</strong>: name, deviceTypes (至少1个), checkItems (至少1个)</p>
@@ -357,8 +358,8 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
                         key={index}
                         className={`flex items-start gap-3 p-3 rounded-lg border ${
                           result.status === 'success'
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-red-50 border-red-200'
+                            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                            : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
                         }`}
                       >
                         {result.status === 'success' ? (

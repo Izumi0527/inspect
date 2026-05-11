@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef } from 'react'
+import toast from 'react-hot-toast'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchInspectionTemplate, createInspectionTemplate } from '../api/inspection.api'
 import type { InspectionTemplate, TemplateCategory } from '../types'
@@ -111,7 +112,7 @@ export function TemplateImportExport({
 
   const handleExport = () => {
     if (!templateId) {
-      alert('请先选择要导出的模板')
+      toast.error('请先选择要导出的模板')
       return
     }
     exportMutation.mutate(templateId)

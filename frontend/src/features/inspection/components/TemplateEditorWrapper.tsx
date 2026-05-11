@@ -3,6 +3,7 @@
  * 处理 API 调用逻辑，将 TemplateEditor 与新版 API hooks 集成
  */
 
+import toast from 'react-hot-toast'
 import { useCreateTemplate, useUpdateTemplate } from '../hooks/useInspection'
 import type { InspectionTemplate } from '../types'
 import { TemplateEditor } from './TemplateEditor'
@@ -35,7 +36,7 @@ export function TemplateEditorWrapper({
       }
       onSuccess()
     } catch (error) {
-      alert(`${template ? '更新' : '创建'}模板失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      toast.error(`${template ? '更新' : '创建'}模板失败：${error instanceof Error ? error.message : '未知错误'}`)
     }
   }
 

@@ -5,6 +5,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
+import toast from 'react-hot-toast'
 import {
   Plus,
   Edit,
@@ -146,23 +147,23 @@ export const InspectionTemplates: React.FC = () => {
 
   const deleteTemplateMutation = useDeleteTemplate()
 
-  // 导出模板函数
+  // 导出模板：失败也保证释放 blob URL，避免内存泄漏
   const handleExportTemplate = async (template: InspectionTemplate) => {
+    let url: string | null = null
     try {
       const fullTemplate = await fetchInspectionTemplate(Number(template.id))
-      if (fullTemplate) {
-        const blob = new Blob([JSON.stringify(fullTemplate, null, 2)], { type: 'application/json' })
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `template-${template.name}-${Date.now()}.json`
-        document.body.appendChild(a)
-        a.click()
-        window.URL.revokeObjectURL(url)
-        document.body.removeChild(a)
-      }
+      if (!fullTemplate) return
+      const blob = new Blob([JSON.stringify(fullTemplate, null, 2)], { type: 'application/json' })
+      url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `template-${template.name}-${Date.now()}.json`
+      a.click()
     } catch (error) {
       console.error('Export template failed:', error)
+      toast.error('导出失败：' + (error instanceof Error ? error.message : '未知错误'))
+    } finally {
+      if (url) window.URL.revokeObjectURL(url)
     }
   }
 
@@ -874,8 +875,8 @@ export const InspectionTemplates: React.FC = () => {
             className="bg-card rounded-xl shadow-xl max-w-md w-full p-6"
           >
             <div className="flex items-center gap-3 mb-4">
-              <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertCircle className="w-6 h-6 text-red-600" />
+              <div className="flex-shrink-0 w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-foreground">确认删除</h3>
