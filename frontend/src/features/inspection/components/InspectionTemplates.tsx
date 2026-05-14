@@ -47,6 +47,7 @@ import {
 import {
   fetchInspectionTemplate,
 } from '../api/inspection.api'
+import { buildTemplateXlsx } from '../utils/templateExcel'
 import type { InspectionTemplate } from '../types'
 
 // 筛选和分页类型（本地定义，与新版 API 兼容）
@@ -153,11 +154,11 @@ export const InspectionTemplates: React.FC = () => {
     try {
       const fullTemplate = await fetchInspectionTemplate(Number(template.id))
       if (!fullTemplate) return
-      const blob = new Blob([JSON.stringify(fullTemplate, null, 2)], { type: 'application/json' })
+      const blob = await buildTemplateXlsx(fullTemplate)
       url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `template-${template.name}-${Date.now()}.json`
+      a.download = `${fullTemplate.name}-${Date.now()}.xlsx`
       a.click()
     } catch (error) {
       console.error('Export template failed:', error)

@@ -508,17 +508,6 @@ export async function deleteInspectionTemplate(id: number): Promise<boolean> {
   }
 }
 
-export async function exportInspectionTemplate(id: number): Promise<Blob> {
-  try {
-    const template = await fetchInspectionTemplate(id)
-    const jsonStr = JSON.stringify(template, null, 2)
-    return new Blob([jsonStr], { type: 'application/json' })
-  } catch (error) {
-    console.error('导出模板失败:', error)
-    throw error
-  }
-}
-
 // ==================== 巡检任务管理 ====================
 
 export async function fetchInspectionTasks(params?: {

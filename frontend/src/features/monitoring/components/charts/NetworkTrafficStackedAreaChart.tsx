@@ -1,5 +1,4 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { format } from 'date-fns'
 import { Group } from '@visx/group'
 import { AreaClosed, LinePath } from '@visx/shape'
 import { AxisBottom, AxisLeft } from '@visx/axis'
@@ -10,6 +9,7 @@ import { localPoint } from '@visx/event'
 import { useTooltip, TooltipWithBounds, defaultStyles } from '@visx/tooltip'
 import { LinearGradient } from '@visx/gradient'
 import { ChartContainer } from '@/components/atoms/charts'
+import { formatDateTimeMDHM, formatTimeHM } from '@/utils/formatters'
 import type { NetworkTrafficDataPoint } from '../../types'
 
 /**
@@ -101,9 +101,9 @@ export function NetworkTrafficStackedAreaChart({
     return (date: Date): string => {
       if (Number.isNaN(date.getTime())) return '-'
       if (!showDateOnAxis) {
-        return format(date, 'HH:mm')
+        return formatTimeHM(date)
       }
-      return format(date, 'MM-dd HH:mm')
+      return formatDateTimeMDHM(date)
     }
   }, [showDateOnAxis])
 

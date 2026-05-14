@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { format } from 'date-fns'
 import { LineChartComponent } from '@/components/atoms/charts'
+import { formatDateTimeMDHM, formatTimeHM } from '@/utils/formatters'
 import type { TemperatureDataPoint } from '../../types'
 
 interface TemperatureChartProps {
@@ -43,9 +43,9 @@ export function TemperatureChart({
     return (date: Date): string => {
       if (Number.isNaN(date.getTime())) return '-'
       if (!showDateOnAxis) {
-        return format(date, 'HH:mm')
+        return formatTimeHM(date)
       }
-      return format(date, 'MM-dd HH:mm')
+      return formatDateTimeMDHM(date)
     }
   }, [showDateOnAxis])
 

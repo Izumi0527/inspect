@@ -335,12 +335,6 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/devices/components/BulkDeviceDelete.tsx',
-    bannedPatterns: [
-      /text-gray-900/g,
-    ],
-  },
-  {
     file: 'frontend/src/features/traffic-analysis/components/TrafficSummaryCards.tsx',
     bannedPatterns: [
       /text-gray-900/g,
@@ -460,27 +454,27 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/devices/components/CLIConfigForm.tsx',
+    file: 'frontend/src/features/devices/components/forms/CLIConfigForm.tsx',
     bannedPatterns: [
       /text-gray-900 dark:text-gray-100/g,
       /border-gray-200 dark:border-gray-700/g,
     ],
   },
   {
-    file: 'frontend/src/features/devices/components/DeviceDetailsModal.tsx',
+    file: 'frontend/src/features/devices/components/modals/DeviceDetailsModal.tsx',
     bannedPatterns: [
       /text-gray-900 dark:text-gray-100/g,
     ],
   },
   {
-    file: 'frontend/src/features/devices/components/DeviceForm.tsx',
+    file: 'frontend/src/features/devices/components/forms/DeviceForm.tsx',
     bannedPatterns: [
       /text-gray-900 dark:text-gray-100/g,
       /bg-white dark:bg-gray-900/g,
     ],
   },
   {
-    file: 'frontend/src/features/devices/components/SNMPConfigForm.tsx',
+    file: 'frontend/src/features/devices/components/forms/SNMPConfigForm.tsx',
     bannedPatterns: [
       /text-gray-900 dark:text-gray-100/g,
       /border-gray-200 dark:border-gray-700/g,
@@ -506,12 +500,6 @@ const rules: FileRule[] = [
     file: 'frontend/src/features/inspection/components/ExecutionFilters.tsx',
     bannedPatterns: [
       /border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/g,
-    ],
-  },
-  {
-    file: 'frontend/src/features/inspection/components/TemplateImportExport.tsx',
-    bannedPatterns: [
-      /bg-white rounded-lg shadow p-6/g,
     ],
   },
   {
@@ -722,12 +710,6 @@ const rules: FileRule[] = [
     file: 'frontend/src/features/dashboard/components/UserMenu.tsx',
     bannedPatterns: [
       /text-sm font-medium text-gray-900 dark:text-white/g,
-    ],
-  },
-  {
-    file: 'frontend/src/features/devices/components/AdvancedConfigForm.tsx',
-    bannedPatterns: [
-      /text-md font-medium text-gray-900/g,
     ],
   },
   {

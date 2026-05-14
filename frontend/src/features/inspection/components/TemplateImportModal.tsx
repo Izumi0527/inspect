@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X, Upload, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { X, Upload, CheckCircle, XCircle, AlertCircle, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
   Button,
@@ -10,7 +10,13 @@ import {
 } from '@/components/atoms'
 import { useCreateTemplate } from '../hooks/useInspection'
 import { isCheckItemTypeSupported } from '../utils/check-item-support'
-import type { InspectionTemplate, TemplateCategory, CheckItemType } from '../types'
+import {
+  buildTemplateXlsx,
+  parseTemplateXlsx,
+  type ParseError,
+  type ParsedTemplate,
+} from '../utils/templateExcel'
+import type { InspectionTemplate, TemplateCategory } from '../types'
 
 interface Props {
   onClose: () => void
@@ -24,59 +30,24 @@ interface ImportResult {
   warning?: string
 }
 
-const normalizeImportedCheckItemType = (
-  rawType: unknown,
-): { type: CheckItemType; warning?: string } => {
-  if (rawType === undefined || rawType === null) {
-    return { type: 'snmp' }
-  }
-  if (typeof rawType !== 'string') {
-    return { type: 'script', warning: '检查项类型不是字符串，已归一为 script' }
-  }
-
-  const normalized = rawType.trim().toLowerCase()
-  if (normalized === '') {
-    return { type: 'snmp' }
-  }
-
-  // 兼容后端/历史数据可能出现的 icmp 类型：前端统一映射为 ping
-  if (normalized === 'icmp') {
-    return { type: 'ping', warning: '检查项类型 icmp 已映射为 ping' }
-  }
-
-  if (
-    normalized === 'snmp' ||
-    normalized === 'ssh' ||
-    normalized === 'http' ||
-    normalized === 'ping' ||
-    normalized === 'script'
-  ) {
-    return { type: normalized }
-  }
-
-  return { type: 'script', warning: `未知检查项类型 '${rawType}' 已归一为 script` }
-}
+const XLSX_EXTENSIONS = /\.xlsx$/i
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => {
   const [isDragging, setIsDragging] = useState(false)
-  const [jsonContent, setJsonContent] = useState<string>('')
+  const [pickedFile, setPickedFile] = useState<File | null>(null)
   const [importResults, setImportResults] = useState<ImportResult[]>([])
   const [isImporting, setIsImporting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const createTemplate = useCreateTemplate()
 
   const handleFileSelect = (file: File) => {
-    if (file.type !== 'application/json') {
-      toast.error('请选择 JSON 格式的文件')
+    if (!XLSX_EXTENSIONS.test(file.name) && file.type !== XLSX_MIME) {
+      toast.error('请选择 .xlsx 格式的 Excel 文件')
       return
     }
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const content = e.target?.result as string
-      setJsonContent(content)
-    }
-    reader.readAsText(file)
+    setPickedFile(file)
+    setImportResults([])
   }
 
   const handleDrop = (e: React.DragEvent) => {
@@ -109,28 +80,28 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
     fileInputRef.current?.click()
   }
 
-  const validateTemplate = (template: Partial<InspectionTemplate>): string | null => {
-    if (!template.name || typeof template.name !== 'string') {
-      return '模板名称不能为空'
+  // 下载空白模板（含示例数据 + 字段下拉 + 使用说明 Sheet）
+  const handleDownloadTemplate = async () => {
+    try {
+      const blob = await buildTemplateXlsx()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = '巡检模板导入模板.xlsx'
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('模板已下载，请在 Excel/WPS 中编辑后上传')
+    } catch (error) {
+      toast.error('模板下载失败：' + (error instanceof Error ? error.message : '未知错误'))
     }
-    if (template.name.length > 100) {
-      return '模板名称不能超过100个字符'
-    }
-    if (!template.deviceTypes || !Array.isArray(template.deviceTypes) || template.deviceTypes.length === 0) {
-      return '至少需要一个设备类型'
-    }
-    if (!template.checkItems || !Array.isArray(template.checkItems)) {
-      return '检查项必须是数组'
-    }
-    if (template.checkItems.length === 0) {
-      return '至少需要一个检查项'
-    }
-    return null
   }
 
+  const formatErrors = (errors: ParseError[]): string =>
+    errors.map(e => `[Sheet ${e.sheet} 行 ${e.row} 列 ${e.column}] ${e.message}`).join('\n')
+
   const handleImport = async () => {
-    if (!jsonContent.trim()) {
-      toast.error('请先上传 JSON 文件或粘贴 JSON 内容')
+    if (!pickedFile) {
+      toast.error('请先上传 Excel 文件')
       return
     }
 
@@ -138,92 +109,79 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
     const results: ImportResult[] = []
 
     try {
-      const data = JSON.parse(jsonContent)
-      const templates = Array.isArray(data) ? data : [data]
+      const { template, errors } = await parseTemplateXlsx(pickedFile)
 
-      for (const template of templates) {
-        const validationError = validateTemplate(template)
-        if (validationError) {
-          results.push({
-            name: template.name || '未命名模板',
-            status: 'failed',
-            error: validationError
-          })
-          continue
+      if (!template) {
+        results.push({
+          name: pickedFile.name,
+          status: 'failed',
+          error: errors.length > 0 ? formatErrors(errors) : '文件格式无效',
+        })
+        setImportResults(results)
+        return
+      }
+
+      try {
+        const unsupportedTypes = new Set<string>()
+        const warningParts: string[] = []
+
+        // 解析阶段已校验过 type 在枚举内，这里只做"执行支持度"提示
+        const normalizedCheckItems = template.checkItems.map(item => {
+          if (!isCheckItemTypeSupported(item.type)) unsupportedTypes.add(item.type)
+          return {
+            id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            name: item.name,
+            type: item.type,
+            config: item.config,
+            weight: item.weight,
+          }
+        })
+
+        if (unsupportedTypes.size > 0) {
+          warningParts.push(
+            `包含当前版本未支持执行的检查项类型（${Array.from(unsupportedTypes).join('、')}），执行时会跳过`
+          )
+        }
+        if (errors.length > 0) {
+          warningParts.push(`已忽略 ${errors.length} 个无效条目：\n${formatErrors(errors)}`)
         }
 
-        try {
-          // 构建请求数据：对检查项类型做归一，并对“后端当前不执行”的类型给出提示（导入仍允许）
-          const unsupportedTypes = new Set<string>()
-          const normalizationWarnings: string[] = []
-
-          const normalizedCheckItems = template.checkItems.map((item: any) => {
-            const { type, warning } = normalizeImportedCheckItemType(item.type)
-            if (warning) normalizationWarnings.push(warning)
-            if (!isCheckItemTypeSupported(type)) unsupportedTypes.add(type)
-
-            return {
-              id: item.id || `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              name: item.name,
-              type,
-              config: item.config || {},
-              weight: item.weight || 1,
-            }
-          })
-
-          let warningMessage: string | undefined
-          if (unsupportedTypes.size > 0 || normalizationWarnings.length > 0) {
-            const parts: string[] = []
-            if (unsupportedTypes.size > 0) {
-              parts.push(`包含当前版本未支持执行的检查项类型（${Array.from(unsupportedTypes).join('、')}），执行时会跳过`)
-            }
-            if (normalizationWarnings.length > 0) {
-              const preview = normalizationWarnings.slice(0, 2).join('；')
-              const suffix = normalizationWarnings.length > 2 ? `（共 ${normalizationWarnings.length} 条）` : ''
-              parts.push(`类型归一提示：${preview}${suffix}`)
-            }
-            parts.push('建议在模板编辑中调整检查类型为 Ping/SNMP')
-            warningMessage = parts.join('。')
-          }
-
-          const templateData: Partial<InspectionTemplate> = {
-            name: template.name,
-            description: template.description || '',
-            category: (template.category || 'custom') as TemplateCategory,
-            deviceTypes: template.deviceTypes,
-            checkItems: normalizedCheckItems,
-            isActive: template.isActive !== false,
-          }
-          
-          await createTemplate.mutateAsync(templateData)
-          results.push({
-            name: template.name || '未命名模板',
-            status: 'success',
-            warning: warningMessage
-          })
-        } catch (error) {
-          results.push({
-            name: template.name,
-            status: 'failed',
-            error: error instanceof Error ? error.message : '导入失败'
-          })
+        const templateData: Partial<InspectionTemplate> = {
+          name: template.name,
+          description: template.description,
+          category: (template.category || 'custom') as TemplateCategory,
+          deviceTypes: template.deviceTypes,
+          checkItems: normalizedCheckItems,
+          isActive: true,
         }
+
+        await createTemplate.mutateAsync(templateData)
+        results.push({
+          name: template.name,
+          status: 'success',
+          warning: warningParts.length > 0 ? warningParts.join('；') : undefined,
+        })
+      } catch (error) {
+        results.push({
+          name: template.name,
+          status: 'failed',
+          error: error instanceof Error ? error.message : '导入失败',
+        })
       }
 
       setImportResults(results)
 
-      // 如果全部成功,自动关闭并刷新
+      // 全成功且无警告：自动关闭刷新
       const allSuccess = results.every(r => r.status === 'success')
-      const hasAnyWarning = results.some(r => r.status === 'success' && !!r.warning)
-      // 有提示时保留弹窗，便于用户阅读并按建议去调整模板
-      if (allSuccess && !hasAnyWarning) {
+      const hasWarning = results.some(r => r.warning)
+      if (allSuccess && !hasWarning) {
         setTimeout(() => {
           onSuccess()
           onClose()
         }, 1500)
       }
     } catch (error) {
-      toast.error('JSON 格式错误：' + (error instanceof Error ? error.message : '未知错误'))
+      toast.error('Excel 解析失败：' + (error instanceof Error ? error.message : '未知错误'))
     } finally {
       setIsImporting(false)
     }
@@ -248,12 +206,18 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
               导入巡检模板
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              支持JSON格式的模板文件导入
+              支持 Excel (.xlsx) 格式，先下载模板再编辑上传
             </p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+              <Download className="w-4 h-4 mr-1.5" />
+              下载模板
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
 
         {/* 内容区 */}
@@ -276,7 +240,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
                 >
                   <Upload className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                   <p className="text-gray-700 dark:text-gray-300 mb-2">
-                    拖拽JSON文件到此处,或
+                    拖拽 .xlsx 文件到此处,或
                     <button
                       type="button"
                       onClick={handleClickUpload}
@@ -285,36 +249,24 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
                       点击选择文件
                     </button>
                   </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">支持单个或多个模板的JSON格式文件</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">仅支持单个模板的 Excel (.xlsx) 文件</p>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".json,application/json"
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     onChange={handleFileInputChange}
                     className="hidden"
                   />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* JSON内容编辑区 */}
-            <Card>
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-foreground">JSON内容</h3>
-                  {jsonContent && (
-                    <Badge variant="secondary">
-                      {jsonContent.length} 字符
-                    </Badge>
+                  {pickedFile && (
+                    <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-sm">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      <span className="text-foreground">{pickedFile.name}</span>
+                      <Badge variant="secondary">
+                        {(pickedFile.size / 1024).toFixed(1)} KB
+                      </Badge>
+                    </div>
                   )}
                 </div>
-
-                <textarea
-                  value={jsonContent}
-                  onChange={(e) => setJsonContent(e.target.value)}
-                  placeholder='粘贴JSON内容或上传文件&#10;示例格式:&#10;{&#10;  "name": "网络设备巡检模板",&#10;  "description": "用于网络设备的定期巡检",&#10;  "category": "network",&#10;  "deviceTypes": ["router", "switch"],&#10;  "checkItems": [&#10;    {&#10;      "id": "1",&#10;      "name": "CPU使用率检查",&#10;      "type": "snmp",&#10;      "config": {},&#10;      "weight": 1&#10;    }&#10;  ]&#10;}'
-                  className="w-full h-64 px-3 py-2 border border-border rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                />
               </CardContent>
             </Card>
 
@@ -323,13 +275,14 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
               <CardContent className="p-5">
                 <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 text-blue-600" />
-                  JSON格式说明
+                  Excel 字段说明
                 </h3>
                 <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                  <p>• <strong>单个模板</strong>: 直接提供一个模板对象</p>
-                  <p>• <strong>多个模板</strong>: 提供模板对象的数组 [&#123;...&#125;, &#123;...&#125;]</p>
-                  <p>• <strong>必填字段</strong>: name, deviceTypes (至少1个), checkItems (至少1个)</p>
-                  <p>• <strong>可选字段</strong>: description, category (默认为 custom)</p>
+                  <p>• <strong>Sheet 1 模板信息</strong>：仅 1 行数据，列含 name / description / category / deviceTypes（逗号分隔）</p>
+                  <p>• <strong>Sheet 2 检查项</strong>：≥ 1 行数据，列含 name / type / config / weight</p>
+                  <p>• <strong>下拉验证</strong>：category 与 type 列在 Excel 中已配置下拉选项</p>
+                  <p>• <strong>config 字段</strong>：JSON 字符串（可空填 <code>{`{}`}</code>），如 <code>{`{"oid":"1.3.6.1..."}`}</code></p>
+                  <p>• <strong>建议</strong>：先点击右上角"下载模板"获取示例，按格式编辑后上传</p>
                 </div>
               </CardContent>
             </Card>
@@ -369,15 +322,15 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
                         )}
                         <div className="flex-1 min-w-0">
                           <p className={`font-medium ${
-                            result.status === 'success' ? 'text-green-900' : 'text-red-900'
+                            result.status === 'success' ? 'text-green-900 dark:text-green-200' : 'text-red-900 dark:text-red-200'
                           }`}>
                             {result.name}
                           </p>
                           {result.status === 'failed' && result.error && (
-                            <p className="text-sm text-red-700 mt-1">{result.error}</p>
+                            <p className="text-sm text-red-700 dark:text-red-300 mt-1 whitespace-pre-wrap">{result.error}</p>
                           )}
                           {result.status === 'success' && result.warning && (
-                            <p className="text-xs text-amber-800 mt-1 whitespace-pre-wrap">
+                            <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 whitespace-pre-wrap">
                               提示：{result.warning}
                             </p>
                           )}
@@ -396,7 +349,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
           <Button variant="outline" onClick={onClose} disabled={isImporting}>
             {importResults.length > 0 && successCount > 0 ? '完成' : '取消'}
           </Button>
-          <Button onClick={handleImport} disabled={isImporting || !jsonContent.trim()}>
+          <Button onClick={handleImport} disabled={isImporting || !pickedFile}>
             {isImporting ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
@@ -414,3 +367,6 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
     </div>
   )
 }
+
+// 兼容历史：保留 ParsedTemplate 类型导出（其他模块可能引用）
+export type { ParsedTemplate }

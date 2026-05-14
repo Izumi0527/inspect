@@ -287,10 +287,37 @@ export function formatDateTimeYMDHMS(value: Date | string | number): string {
 }
 
 /**
+ * 将日期格式化为 YYYY-MM-DD HH:mm
+ */
+export function formatDateTimeYMDHM(value: Date | string | number): string {
+  const date = normalizeDateValue(value)
+  if (!date) return '无效日期'
+  return `${formatDateYMD(date)} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+}
+
+/**
  * 将日期格式化为 MM-DD HH:mm:ss
  */
 export function formatDateTimeMDHMS(value: Date | string | number): string {
   const date = normalizeDateValue(value)
   if (!date) return '无效日期'
   return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`
+}
+
+/**
+ * 将日期格式化为 MM-DD HH:mm
+ */
+export function formatDateTimeMDHM(value: Date | string | number): string {
+  const date = normalizeDateValue(value)
+  if (!date) return '无效日期'
+  return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+}
+
+/**
+ * 将日期格式化为 HH:mm
+ */
+export function formatTimeHM(value: Date | string | number): string {
+  const date = normalizeDateValue(value)
+  if (!date) return '无效日期'
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
 }

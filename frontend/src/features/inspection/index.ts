@@ -21,7 +21,6 @@ export {
   createInspectionTemplate,
   updateInspectionTemplate,
   deleteInspectionTemplate,
-  exportInspectionTemplate,
 } from './api/inspection.api'
 
 // Hooks导出

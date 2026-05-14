@@ -1,5 +1,5 @@
 import { api, ApiClientError } from '@/lib/api-client'
-import { format } from 'date-fns'
+import { formatDateTimeYMDHM } from '@/utils/formatters'
 import {
   SystemPerformanceDataPoint,
   TemperatureDataPoint,
@@ -47,7 +47,7 @@ function formatAlertTime(raw: unknown): string {
     const fallback = String(raw ?? '').trim()
     return fallback !== '' ? fallback : '-'
   }
-  return format(date, 'yyyy-MM-dd HH:mm')
+  return formatDateTimeYMDHM(date)
 }
 
 /**
