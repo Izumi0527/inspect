@@ -9,6 +9,7 @@
 - 测试工程：`tests/frontend/`、`tests/backend-go/`
 - 开发编排：`docker-compose.dev.yml`
 - 生产编排：`docker-compose.prod.yml`
+- GitHub 远端仓库：`https://github.com/Izumi0527/inspect`（私有仓库，默认分支 `main`）
 
 `docs/PROJECT_ARCHITECTURE.md` 是 `docs/` 目录中唯一进入版本控制的正式文档；`docs/` 下其他内容作为本地资料归档目录，不再进入版本控制。本文件作为项目级架构事实源。
 
@@ -278,7 +279,7 @@ backend-go/internal/config/config.go
 
 ```env
 SERVER_HOST=127.0.0.1
-SERVER_PORT=9000
+SERVER_PORT=9165
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 REDIS_URL=redis://:dev_redis_2024@127.0.0.1:26380/0
 DB_AUTO_MIGRATE=true
@@ -295,9 +296,11 @@ LOG_FILE=logs/backend-go/app.log
 这是一种开发环境兜底能力，不是配置替代方案。实际端口变化后必须同步：
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:<实际端口>
-NEXT_PUBLIC_WS_URL=ws://localhost:<实际端口>
+NEXT_PUBLIC_API_URL=http://127.0.0.1:<实际端口>
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:<实际端口>
 ```
+
+当前 Windows 本机联调已验证使用 `9165`，对应 `.env.example`、`frontend/.env.example` 和快速启动文档均以该端口为示例。
 
 生产环境不应依赖端口自动回退。
 
@@ -376,10 +379,13 @@ DEFAULT_API_ORIGIN = http://127.0.0.1:9000
 API_PREFIX = /api/v1
 ```
 
+其中 `DEFAULT_API_ORIGIN` 是代码内置兜底值；本机开发联调应优先使用环境变量覆盖。
+
 推荐环境变量：
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:9000
+NEXT_PUBLIC_API_URL=http://127.0.0.1:9165
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:9165
 ```
 
 ### 6.4 WebSocket 客户端
@@ -511,7 +517,7 @@ frontend/src/lib/websocket.ts
 连接地址：
 
 ```text
-ws://localhost:9000/api/v1/ws/:user_id
+ws://127.0.0.1:9165/api/v1/ws/:user_id
 ```
 
 事件类型覆盖：
@@ -924,9 +930,9 @@ pnpm dev
 | 入口 | 地址 |
 |------|------|
 | 前端 | `http://localhost:3000` |
-| 后端健康检查 | `http://localhost:9000/health` |
-| 后端 API 根路径 | `http://localhost:9000/api/v1` |
-| WebSocket | `ws://localhost:9000/api/v1/ws/:user_id` |
+| 后端健康检查 | `http://127.0.0.1:9165/health` |
+| 后端 API 根路径 | `http://127.0.0.1:9165/api/v1` |
+| WebSocket | `ws://127.0.0.1:9165/api/v1/ws/:user_id` |
 | PostgreSQL | `localhost:15500` |
 | Redis | `localhost:26380` |
 | pgAdmin | `http://localhost:5050` |

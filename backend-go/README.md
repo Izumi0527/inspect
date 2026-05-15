@@ -36,7 +36,7 @@ backend-go/
   - 设备监控和数据采集
   - 报表生成和导出
   - 巡检任务调度和执行
-- **端口**: 9000（默认；如当前机器无法监听该端口，可通过 `SERVER_PORT` 改成其他可用端口）
+- **端口**: 9165（当前 Windows 本机开发示例；如当前机器无法监听该端口，可通过 `SERVER_PORT` 改成其他可用端口）
 - **启动方式**:
   ```powershell
   # 直接运行编译后的程序
@@ -46,7 +46,7 @@ backend-go/
   cd backend-go
   go run ./cmd/api
   ```
-- **健康检查**: `http://localhost:${SERVER_PORT}/health`（例如 `http://localhost:9000/health`）
+- **健康检查**: `http://localhost:${SERVER_PORT}/health`（例如 `http://127.0.0.1:9165/health`）
 - **编译时间**: 2026-01-30 14:55:06
 - **文件大小**: ~34 MB
 
@@ -173,7 +173,7 @@ JWT_SECRET_KEY=your-secret-key
 JWT_ALGORITHM=HS256
 
 # 服务端口
-SERVER_PORT=9000
+SERVER_PORT=9165
 
 # 日志配置
 LOG_LEVEL=DEBUG
@@ -231,8 +231,11 @@ Get-Content .\logs\backend-go\app-dev.log -Tail 50
 
 ### 端口占用
 ```powershell
-# 查找占用 9000 端口的进程
-netstat -ano | findstr :9000
+# 查找占用 9165 端口的进程
+netstat -ano | findstr :9165
+
+# Windows 如怀疑端口被系统保留，可查看 TCP 排除范围
+netsh interface ipv4 show excludedportrange protocol=tcp
 
 # 结束进程（替换 PID）
 taskkill /PID <进程ID> /F
