@@ -98,6 +98,18 @@ function isTokenExpired(token: string): boolean {
   return payload.exp < currentTime
 }
 
+export function isNetworkConnectionError(error: unknown): boolean {
+  if (error instanceof TypeError && /failed to fetch/i.test(error.message)) {
+    return true
+  }
+
+  if (error instanceof Error) {
+    return /networkerror|network request failed|err_connection_refused|failed to fetch/i.test(error.message)
+  }
+
+  return false
+}
+
 // 创建认证上下文
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
@@ -134,7 +146,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       let errorMessage = '登录失败，请检查用户名和密码'
       
-      if (error instanceof ApiClientError) {
+      if (isNetworkConnectionError(error)) {
+        errorMessage = '无法连接后端服务，请确认后端已启动并检查前端 API 地址配置'
+      } else if (error instanceof ApiClientError) {
         if (error.status === 401) {
           errorMessage = '用户名或密码错误'
         } else if (error.status === 403) {
