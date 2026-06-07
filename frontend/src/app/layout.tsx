@@ -1,14 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/components/providers'
 // import { RoutePreloadManager, CriticalResourcePreloader } from '@/components/performance'
-
-const inter = Inter({ 
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-})
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -28,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="zh-CN" className={inter.variable} suppressHydrationWarning>
+    <html lang="zh-CN" suppressHydrationWarning>
       <body className="font-sans antialiased">
         {/* <CriticalResourcePreloader /> */}
         <Providers>
