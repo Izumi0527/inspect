@@ -644,9 +644,14 @@ func (s *Service) ListInspections(ctx context.Context, filter InspectionFilter) 
 		return nil, 0, err
 	}
 
+	// 白名单校验排序字段，防止 ORDER BY SQL 注入（ORDER BY 无法参数化，必须用列名白名单硬化）。
+	allowedOrderFields := map[string]bool{
+		"created_at": true, "updated_at": true, "started_at": true, "completed_at": true,
+		"scheduled_at": true, "status": true, "duration": true, "name": true, "id": true,
+	}
 	orderBy := "created_at"
-	if strings.TrimSpace(filter.OrderBy) != "" {
-		orderBy = filter.OrderBy
+	if field := strings.TrimSpace(filter.OrderBy); field != "" && allowedOrderFields[field] {
+		orderBy = field
 	}
 	if filter.OrderDesc {
 		orderBy = fmt.Sprintf("%s desc", orderBy)
