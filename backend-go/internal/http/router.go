@@ -5,6 +5,7 @@ import (
 	echomw "github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
 
+	"github.com/your-org/inspect-system/backend-go/internal/authcookie"
 	"github.com/your-org/inspect-system/backend-go/internal/config"
 	handlers "github.com/your-org/inspect-system/backend-go/internal/http/handlers"
 	mw "github.com/your-org/inspect-system/backend-go/internal/http/middleware"
@@ -49,7 +50,7 @@ func NewServer(
 		AllowOrigins: cfg.CorsOrigins,
 		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		// 显式放行认证与 JSON 请求所需请求头，避免浏览器对 Authorization+通配符组合发出弃用告警。
-		AllowHeaders:     []string{"Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "X-Request-ID"},
+		AllowHeaders:     []string{"Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "X-Request-ID", authcookie.CSRFHeader},
 		AllowCredentials: true,
 	}))
 
