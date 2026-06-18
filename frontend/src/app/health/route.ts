@@ -9,7 +9,7 @@ export function GET() {
       apiUrl: process.env.NEXT_PUBLIC_API_URL ?? null,
       wsUrl: process.env.NEXT_PUBLIC_WS_URL ?? null,
       useMockData: process.env.NEXT_PUBLIC_USE_MOCK_DATA ?? null,
-      disableAuthCheck: process.env.NEXT_PUBLIC_DISABLE_AUTH_CHECK ?? null,
+      // S6：不回显 disableAuthCheck，避免健康端点暴露认证绕过开关状态。
     },
   })
 }
