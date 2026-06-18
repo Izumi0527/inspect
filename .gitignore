@@ -413,3 +413,4 @@ AGENTS.md
 # docs 目录中仅保留正式项目架构文档进入版本控制，其余内容作为本地资料归档。
 /docs/*
 !/docs/PROJECT_ARCHITECTURE.md
+CLAUDE-FABLE-5.md
