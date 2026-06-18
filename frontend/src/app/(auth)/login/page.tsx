@@ -91,7 +91,8 @@ function LoginPage() {
 
         {/* 登录表单卡片 */}
         <div className="bg-card/80 backdrop-blur-lg rounded-2xl shadow-xl border border-border/50 p-8">
-          {/* 测试账号提示 */}
+          {/* 测试账号提示（仅非生产环境展示，避免生产暴露默认口令；生产构建时整块被 tree-shake 移除） */}
+          {process.env.NODE_ENV !== 'production' && (
           <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 rounded-xl">
             <div className="flex items-center justify-center mb-2">
               <Shield className="h-5 w-5 text-blue-600 dark:text-blue-300 mr-2" />
@@ -130,6 +131,7 @@ function LoginPage() {
               </button>
             </div>
           </div>
+          )}
 
           <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
             {/* 错误信息显示 */}
