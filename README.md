@@ -105,6 +105,14 @@ pnpm dev
 .\scripts\db-manage.ps1 seed-admin
 ```
 
+## Windows 安装包
+
+项目支持生成 Inno Setup `.exe` 安装包，安装包启动后会自动准备
+`config/.env`、创建运行目录、启动 Docker 数据库服务、等待后端完成迁移，
+并初始化默认管理员、内置角色、权限和业务种子数据。
+
+安装包说明见：[installer/README.md](installer/README.md)。
+
 ## 常用命令
 
 ### 开发环境
