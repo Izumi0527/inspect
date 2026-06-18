@@ -1,4 +1,4 @@
-import { TokenManager, getApiOrigin } from '@/lib/api-client'
+import { getApiOrigin } from '@/lib/api-client'
 
 const sanitizeFilename = (filename: string): string => {
   const trimmed = String(filename || '').trim()
@@ -16,21 +16,19 @@ const resolveUrl = (urlOrPath: string): string => {
 }
 
 /**
- * 使用 Bearer Token 进行鉴权下载，并以 blob 方式触发浏览器保存文件。
+ * 鉴权下载：以 blob 方式触发浏览器保存文件。
  *
  * 适用场景：后端下载接口需要鉴权（例如 /api/v1/reports/files/:filename）。
+ * S3：认证由 httpOnly Cookie 承载，全局 fetch 拦截器会自动注入 credentials。
  */
 export async function downloadWithAuth(urlOrPath: string, filename: string): Promise<void> {
   if (typeof window === 'undefined') {
     throw new Error('downloadWithAuth 只能在浏览器端调用')
   }
 
-  const token = TokenManager.getAccessToken() || ''
   const url = resolveUrl(urlOrPath)
 
-  const response = await fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
+  const response = await fetch(url)
 
   if (!response.ok) {
     throw new Error(`下载失败(${response.status})`)

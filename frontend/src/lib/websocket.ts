@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo } from 'react'
 import { useAuth } from '@/lib/contexts/auth-context'
-import { API_PREFIX, TokenManager } from '@/lib/api-client'
+import { API_PREFIX } from '@/lib/api-client'
 
 // WebSocket事件类型
 export enum WebSocketEvents {
@@ -152,11 +152,6 @@ class WebSocketManager {
     this.status = ConnectionStatus.CONNECTING
 
     const url = this.getWebSocketUrl(userId)
-    const accessToken = TokenManager.getAccessToken()
-    if (!accessToken) {
-      this.status = ConnectionStatus.ERROR
-      return Promise.reject(new Error('缺少访问令牌，无法建立 WebSocket 连接'))
-    }
 
     let settled = false
     this.connectPromise = new Promise((resolve, reject) => {
@@ -168,9 +163,8 @@ class WebSocketManager {
 
       let socket: WebSocket
       try {
-        // ✅ 鉴权：使用 Sec-WebSocket-Protocol 子协议携带 token，避免 token 出现在 URL query 中。
-        // 约定：['inspect-token', '<access_token>']
-        socket = new WebSocket(url, ['inspect-token', accessToken])
+        // S3：鉴权改由 httpOnly Cookie 承载，WS 握手时浏览器自动携带，无需子协议传 token。
+        socket = new WebSocket(url)
       } catch (error) {
         this.status = ConnectionStatus.ERROR
         finalize()

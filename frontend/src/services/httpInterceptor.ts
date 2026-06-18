@@ -229,40 +229,24 @@ class HttpInterceptor {
         // 记录请求开始
         this.logRequestStart(finalConfig);
 
-        // 获取认证token（使用 TokenManager 统一管理）
-        const token = TokenManager.getAccessToken();
-
-        // 调试日志：验证 token 是否获取成功
-        if (token) {
-          logger.debug('🔑 已获取认证token', {
-            requestId: finalConfig.requestId,
-            tokenLength: token.length,
-            tokenPrefix: token.substring(0, 20) + '...'
-          });
-        } else {
-          logger.warn('⚠️ 未找到认证token', {
-            requestId: finalConfig.requestId,
-            url: finalConfig.url
-          });
-        }
-
-        // 更新请求头，添加请求ID和Authorization
-        // 注意：必须使用Headers构造函数来正确复制Headers对象
-        // 使用spread operator无法正确展开Headers对象（其属性不可枚举）
+        // 更新请求头：添加请求 ID（S3：认证改由 httpOnly Cookie 承载，不再注入 Authorization）。
+        // 注意：必须使用 Headers 构造函数来正确复制 Headers 对象
+        // （spread operator 无法正确展开 Headers 对象，其属性不可枚举）。
         const enhancedHeaders = new Headers(init?.headers || {})
         enhancedHeaders.set('X-Request-ID', finalConfig.requestId || '')
 
-        // 添加认证token到请求头
-        if (token) {
-          enhancedHeaders.set('Authorization', `Bearer ${token}`)
-          logger.debug('✅ 已添加 Authorization header', {
-            requestId: finalConfig.requestId
-          });
+        // S3：状态变更请求回填 CSRF token（double-submit，与后端 csrf cookie 比对）。
+        if (finalConfig.method !== 'GET' && finalConfig.method !== 'HEAD') {
+          const csrf = TokenManager.getCSRFToken()
+          if (csrf) {
+            enhancedHeaders.set('X-CSRF-Token', csrf)
+          }
         }
 
         const enhancedInit: RequestInit = {
           ...init,
           headers: enhancedHeaders,
+          credentials: 'include',
         };
 
         // 发起实际请求

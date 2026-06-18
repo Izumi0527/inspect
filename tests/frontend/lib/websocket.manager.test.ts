@@ -1,5 +1,4 @@
 import { wsManager } from '@/lib/websocket'
-import { TokenManager } from '@/lib/api-client'
 
 describe('wsManager.connect', () => {
   const originalWebSocket = global.WebSocket
@@ -12,9 +11,9 @@ describe('wsManager.connect', () => {
     jest.restoreAllMocks()
   })
 
-  it('应通过 Sec-WebSocket-Protocol 子协议携带 token', async () => {
+  // S3：认证改由 httpOnly Cookie 承载，WS 握手时浏览器自动携带，不再用子协议传 token。
+  it('应通过 Cookie 握手认证（不再用 Sec-WebSocket-Protocol 子协议携带 token）', async () => {
     process.env.NEXT_PUBLIC_WS_URL = 'ws://127.0.0.1:9000'
-    jest.spyOn(TokenManager, 'getAccessToken').mockReturnValue('test-access-token')
 
     const instances: Array<{
       readyState: number
@@ -46,10 +45,9 @@ describe('wsManager.connect', () => {
 
     const connectPromise = wsManager.connect('user-7')
 
-    expect(WebSocketMock).toHaveBeenCalledWith(
-      'ws://127.0.0.1:9000/api/v1/ws/user-7',
-      ['inspect-token', 'test-access-token']
-    )
+    // 仅传 URL，不再有第二个子协议参数。
+    expect(WebSocketMock).toHaveBeenCalledWith('ws://127.0.0.1:9000/api/v1/ws/user-7')
+    expect(WebSocketMock.mock.calls[0]).toHaveLength(1)
 
     instances[0].readyState = WebSocketMock.OPEN
     instances[0].onopen?.()

@@ -211,13 +211,17 @@ export class TokenManager {
     localStorage.removeItem(this.AUTH_DATA_KEY)
   }
 
-  static setTokens(accessToken: string, refreshToken: string): void {
-    if (typeof window === 'undefined') return
-    this.updateAuthData({
-      token: accessToken,
-      refreshToken: refreshToken,
-      timestamp: Date.now()
-    })
+  // getCSRFToken 读取非 httpOnly 的 csrf_token Cookie，用于 double-submit 回填请求头。
+  static getCSRFToken(): string | null {
+    if (typeof document === 'undefined') return null
+    const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)
+    return match ? decodeURIComponent(match[1]) : null
+  }
+
+  // S3：token 改由后端 httpOnly Cookie 承载，前端不再存储 token（避免 XSS 窃取）。
+  // 保留方法以兼容调用方；仅清理可能残留的旧 localStorage 凭据。
+  static setTokens(_accessToken: string, _refreshToken: string): void {
+    this.clearTokens()
   }
 }
 
@@ -237,13 +241,7 @@ class HttpClient {
   // 构建请求头
   private buildHeaders(customHeaders?: HeadersInit): Headers {
     const headers = new Headers({ ...this.defaultHeaders, ...customHeaders })
-    
-    // 添加认证令牌
-    const token = TokenManager.getAccessToken()
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`)
-    }
-
+    // S3：认证改由 httpOnly Cookie 承载（随请求自动发送），前端不再注入 Authorization。
     return headers
   }
 
@@ -374,10 +372,18 @@ class HttpClient {
 
       try {
         const resolvedHeaders = this.buildHeaders(headers)
+        // S3：状态变更请求回填 CSRF token（double-submit，与后端 csrf cookie 比对）。
+        if (method !== 'GET' && method !== 'HEAD') {
+          const csrf = TokenManager.getCSRFToken()
+          if (csrf) {
+            resolvedHeaders.set('X-CSRF-Token', csrf)
+          }
+        }
         const requestConfig: RequestInit = {
           ...restConfig,
           method,
           headers: resolvedHeaders,
+          credentials: 'include',
           signal: controller.signal,
         }
 
@@ -470,10 +476,8 @@ export const api = {
       return httpClient.post<LoginResponse>('/auth/login', payload)
     },
     logout: () => httpClient.post<{ success: boolean }>('/auth/logout'),
-    refresh: () =>
-      httpClient.post<RefreshTokenResponse>('/auth/refresh', {
-        refresh_token: TokenManager.getRefreshToken(),
-      }),
+    // S3：refresh token 由 httpOnly Cookie 携带，无需在 body 传递。
+    refresh: () => httpClient.post<RefreshTokenResponse>('/auth/refresh'),
     profile: () => httpClient.get<ProfileResponse>('/auth/profile'),
     changePassword: (data: JsonRecord) => httpClient.post<UserActionResponse>('/auth/change-password', data),
   },

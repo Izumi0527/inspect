@@ -58,14 +58,15 @@ describe('alerts.api exportAlerts', () => {
     jest.restoreAllMocks()
   })
 
-  it('应使用 TokenManager 的 token 作为导出鉴权头', async () => {
+  // S3：认证改由 httpOnly Cookie 承载，导出（downloadWithAuth）不再手动注入 Authorization 头。
+  it('应发起导出请求且不再手动注入 Authorization 头（由 Cookie 认证）', async () => {
     await exportAlerts({ page: 1, pageSize: 20 })
 
     expect(global.fetch).toHaveBeenCalledTimes(1)
-    const requestInit = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
-    const headers = requestInit.headers as Record<string, string>
+    const requestInit = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit | undefined
+    const headers = (requestInit?.headers ?? {}) as Record<string, string>
 
-    expect(headers.Authorization).toBe('Bearer manager-token')
+    expect(headers.Authorization).toBeUndefined()
   })
 
   it('当 NEXT_PUBLIC_API_URL 误配为包含 /api/v1 时，不应出现双前缀', async () => {

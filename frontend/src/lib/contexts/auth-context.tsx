@@ -17,7 +17,6 @@ import {
   User,
   UserRole,
   Permission,
-  JwtPayload,
 } from '../types/auth.types'
 
 // 认证Action类型
@@ -42,7 +41,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload }
-    
+
     case 'LOGIN_SUCCESS':
       return {
         ...state,
@@ -51,7 +50,7 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         user: action.payload.user,
         error: null,
       }
-    
+
     case 'LOGOUT':
       return {
         ...state,
@@ -60,42 +59,22 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         user: null,
         error: null,
       }
-    
+
     case 'UPDATE_USER':
       return {
         ...state,
         user: state.user ? { ...state.user, ...action.payload } : null,
       }
-    
+
     case 'SET_ERROR':
       return { ...state, error: action.payload, isLoading: false }
-    
+
     case 'CLEAR_ERROR':
       return { ...state, error: null }
-    
+
     default:
       return state
   }
-}
-
-// JWT解码工具函数
-function decodeJwt(token: string): JwtPayload | null {
-  try {
-    const base64Payload = token.split('.')[1]
-    const payload = JSON.parse(atob(base64Payload))
-    return payload as JwtPayload
-  } catch {
-    return null
-  }
-}
-
-// JWT是否过期检查
-function isTokenExpired(token: string): boolean {
-  const payload = decodeJwt(token)
-  if (!payload) return true
-  
-  const currentTime = Math.floor(Date.now() / 1000)
-  return payload.exp < currentTime
 }
 
 export function isNetworkConnectionError(error: unknown): boolean {
@@ -127,13 +106,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       dispatch({ type: 'SET_LOADING', payload: true })
       dispatch({ type: 'CLEAR_ERROR' })
-      
+
       const response = await api.auth.login(credentials)
-      
-      // 保存Token
-      TokenManager.setTokens(response.access_token, response.refresh_token)
-      
-      // 更新用户状态
+
+      // S3：token 已由后端 httpOnly Cookie 设置，前端不再保存。
       dispatch({ type: 'LOGIN_SUCCESS', payload: { user: response.user } })
 
       // 首次登录或密码被重置：强制先改密。改密前后端会拒绝业务接口（403 PasswordChangeRequired）。
@@ -147,12 +123,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // 跳转到仪表板
       router.push('/dashboard')
-      
+
     } catch (error) {
       console.error('Login failed:', error)
-      
+
       let errorMessage = '登录失败，请检查用户名和密码'
-      
+
       if (isNetworkConnectionError(error)) {
         errorMessage = '无法连接后端服务，请确认后端已启动并检查前端 API 地址配置'
       } else if (error instanceof ApiClientError) {
@@ -164,7 +140,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           errorMessage = error.message
         }
       }
-      
+
       dispatch({ type: 'SET_ERROR', payload: errorMessage })
       toast.error(errorMessage)
     }
@@ -175,22 +151,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
     let apiFailed = false
     try {
       dispatch({ type: 'SET_LOADING', payload: true })
-      
-      // 调用后端登出API
+
+      // 调用后端登出API（清除 httpOnly Cookie 并失效会话）
       await api.auth.logout()
     } catch (error) {
       apiFailed = true
       console.error('Logout API failed:', error)
     } finally {
-      // 清除本地Token
+      // 清理可能残留的本地凭据
       TokenManager.clearTokens()
-      
+
       // 更新状态
       dispatch({ type: 'LOGOUT' })
-      
+
       // 跳转到登录页
       router.push('/login')
-      
+
       if (apiFailed) {
         toast('已清理本地登录态（服务端登出失败）')
       } else {
@@ -202,20 +178,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Token刷新函数
   const refreshToken = useCallback(async (): Promise<void> => {
     try {
-      const refreshToken = TokenManager.getRefreshToken()
-      if (!refreshToken) {
-        throw new Error('No refresh token available')
-      }
-
-      const response = await api.auth.refresh()
-
-      // 更新Token
-      TokenManager.setTokens(response.access_token, response.refresh_token)
-
+      // S3：refresh token 在 httpOnly Cookie 中，无需前端读取；调用后端刷新，新 Cookie 自动下发。
+      await api.auth.refresh()
     } catch (error) {
       console.error('Token refresh failed:', error)
 
-      // Token刷新失败，强制重新登录
+      // 刷新失败，强制重新登录
       TokenManager.clearTokens()
       dispatch({ type: 'LOGOUT' })
       router.push('/login')
@@ -257,94 +225,49 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // 初始化认证状态
   useEffect(() => {
     const initializeAuth = async () => {
+      // S3：前端无法读取 httpOnly Cookie，直接探测 /auth/profile（Cookie 自动携带）判断登录态。
       try {
-        const accessToken = TokenManager.getAccessToken()
-        
-        if (!accessToken) {
-          dispatch({ type: 'SET_LOADING', payload: false })
-          return
-        }
-        
-        // 检查Token是否过期
-        if (isTokenExpired(accessToken)) {
-          // 尝试刷新Token
-          try {
-            await refreshToken()
-          } catch (error) {
-            console.error('Token refresh during initialization failed:', error)
-            // 刷新失败，停止初始化
-            return
-          }
-        }
-        
-        // 获取用户信息
         const user = await api.auth.profile()
         dispatch({ type: 'LOGIN_SUCCESS', payload: { user } })
-
-        // 刷新或直接进入时，待强制改密的用户也引导到改密页（后端闸是硬保证）。
         if (user.force_password_change) {
           router.push('/change-password')
         }
+        return
+      } catch {
+        // access 可能已过期，尝试用 refresh Cookie 刷新后重试一次。
+      }
 
-      } catch (error) {
-        console.error('Auth initialization failed:', error)
+      try {
+        await api.auth.refresh()
+        const user = await api.auth.profile()
+        dispatch({ type: 'LOGIN_SUCCESS', payload: { user } })
+        if (user.force_password_change) {
+          router.push('/change-password')
+        }
+      } catch {
+        // 未登录或会话已失效。
         TokenManager.clearTokens()
         dispatch({ type: 'SET_LOADING', payload: false })
       }
     }
 
     initializeAuth()
-  }, [refreshToken, router])
+  }, [router])
 
   // 设置Token自动刷新
   useEffect(() => {
     if (!state.isAuthenticated) return
 
-    let timer: ReturnType<typeof setTimeout> | null = null
-    let isCancelled = false
+    // S3：前端无法解码 httpOnly Cookie 中的过期时间，改为固定间隔主动刷新，
+    // 间隔取短于 access token 默认有效期（30 分钟）。刷新失败由 refreshToken 内部处理登出跳转。
+    const REFRESH_INTERVAL_MS = 20 * 60 * 1000
+    const timer = setInterval(() => {
+      void refreshToken().catch(() => {
+        /* 刷新失败已在 refreshToken 内处理 */
+      })
+    }, REFRESH_INTERVAL_MS)
 
-    const setupTokenRefresh = async () => {
-      const accessToken = TokenManager.getAccessToken()
-      if (!accessToken) return
-
-      const payload = decodeJwt(accessToken)
-      if (!payload) return
-
-      // 在Token过期前5分钟刷新
-      const refreshTime = (payload.exp - Math.floor(Date.now() / 1000) - 300) * 1000
-
-      if (refreshTime <= 0) {
-        try {
-          await refreshToken()
-          if (!isCancelled) {
-            await setupTokenRefresh()
-          }
-        } catch (error) {
-          console.error('Immediate token refresh failed:', error)
-        }
-        return
-      }
-
-      timer = setTimeout(async () => {
-        try {
-          await refreshToken()
-          if (!isCancelled) {
-            await setupTokenRefresh()
-          }
-        } catch (error) {
-          console.error('Scheduled token refresh failed:', error)
-        }
-      }, refreshTime)
-    }
-
-    void setupTokenRefresh()
-
-    return () => {
-      isCancelled = true
-      if (timer) {
-        clearTimeout(timer)
-      }
-    }
+    return () => clearInterval(timer)
   }, [state.isAuthenticated, refreshToken])
 
   const contextValue: AuthContextType = {

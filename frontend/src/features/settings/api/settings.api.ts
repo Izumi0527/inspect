@@ -201,14 +201,11 @@ export const auditLogApi = {
 
   // 导出审计日志
   exportLogs: async (params: AuditLogExportParams): Promise<Blob> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authData') : null
-    const authData = token ? JSON.parse(token) : null
-
+    // S3：认证与 CSRF 由全局 fetch 拦截器统一注入（Cookie + X-CSRF-Token），无需手动读取 token。
     const response = await fetch(`${getApiOrigin()}${API_PREFIX}/settings/audit/logs/export`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(authData?.token && { 'Authorization': `Bearer ${authData.token}` })
       },
       body: JSON.stringify(params),
     })

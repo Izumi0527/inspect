@@ -1,22 +1,21 @@
 import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import { AuthProvider, useAuth } from '@/lib/contexts/auth-context'
-import { api, TokenManager } from '@/lib/api-client'
+import { api } from '@/lib/api-client'
 import { Permission, UserRole, type User } from '@/lib/types/auth.types'
 
 const mockPush = jest.fn()
+const mockRouter = { push: mockPush }
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
+  useRouter: () => mockRouter,
 }))
 
 jest.mock('react-hot-toast', () => ({
-  toast: {
+  toast: Object.assign(jest.fn(), {
     success: jest.fn(),
     error: jest.fn(),
-  },
+  }),
 }))
 
 jest.mock('@/lib/api-client', () => {
@@ -38,17 +37,6 @@ jest.mock('@/lib/api-client', () => {
 
 const profileMock = api.auth.profile as jest.MockedFunction<typeof api.auth.profile>
 const refreshMock = api.auth.refresh as jest.MockedFunction<typeof api.auth.refresh>
-
-const buildJwt = (expOffsetSeconds: number) => {
-  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-  const payload = btoa(
-    JSON.stringify({
-      sub: 'admin',
-      exp: Math.floor(Date.now() / 1000) + expOffsetSeconds,
-    })
-  )
-  return `${header}.${payload}.signature`
-}
 
 const mockUser: User = {
   id: '1',
@@ -72,23 +60,18 @@ const AuthProbe = () => {
   )
 }
 
-describe('AuthProvider 近过期 token 自动续期', () => {
+// S3：token 改由 httpOnly Cookie 承载，前端不再持有/解码 token；
+// 会话初始化改为通过 /auth/profile 探测（Cookie 自动携带），失败则用 refresh Cookie 续期重试。
+describe('AuthProvider 会话初始化（Cookie 模式）', () => {
   beforeEach(() => {
     localStorage.clear()
     mockPush.mockReset()
     profileMock.mockReset()
     refreshMock.mockReset()
-    profileMock.mockResolvedValue(mockUser)
-    refreshMock.mockResolvedValue({
-      access_token: buildJwt(1800),
-      refresh_token: buildJwt(7 * 24 * 60 * 60),
-      token_type: 'bearer',
-      expires_in: 1800,
-    })
   })
 
-  it('初始化时若 access token 剩余不足 5 分钟，也应立即刷新', async () => {
-    TokenManager.setTokens(buildJwt(120), buildJwt(7 * 24 * 60 * 60))
+  it('初始化时通过 /auth/profile 探测恢复会话（Cookie 自动携带，无需前端持有 token）', async () => {
+    profileMock.mockResolvedValue(mockUser)
 
     render(
       <AuthProvider>
@@ -100,8 +83,26 @@ describe('AuthProvider 近过期 token 自动续期', () => {
       expect(screen.getByText('authenticated')).toBeInTheDocument()
     })
 
+    expect(profileMock).toHaveBeenCalled()
+    // profile 成功则无需刷新
+    expect(refreshMock).not.toHaveBeenCalled()
+  })
+
+  it('profile 失败时用 refresh Cookie 刷新后重试一次', async () => {
+    profileMock.mockRejectedValueOnce(new Error('401')).mockResolvedValueOnce(mockUser)
+    refreshMock.mockResolvedValue({ access_token: 'x', refresh_token: 'y' })
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>
+    )
+
     await waitFor(() => {
-      expect(refreshMock).toHaveBeenCalledTimes(1)
+      expect(screen.getByText('authenticated')).toBeInTheDocument()
     })
+
+    expect(refreshMock).toHaveBeenCalledTimes(1)
+    expect(profileMock).toHaveBeenCalledTimes(2)
   })
 })
