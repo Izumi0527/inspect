@@ -12,16 +12,33 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const (
+	// minProductionSecretLength 为生产环境 JWT 签名密钥的最小字节长度。
+	minProductionSecretLength = 32
+)
+
+// placeholderSecretMarkers 列举历史默认/模板占位密钥的特征子串。
+// 生产环境若密钥包含其中任一标记，视为未替换的占位值，必须 fail-closed 拒绝启动。
+// 真实 CSPRNG 随机密钥包含这些长标记的概率可忽略，不会误伤合法密钥。
+var placeholderSecretMarkers = []string{
+	"change-in-production",
+	"change-me",
+	"on-first-start",
+	"your-secret-key",
+	"your-jwt-secret-key",
+	"your-super-secret",
+}
+
 type Config struct {
 	Debug      bool   `env:"DEBUG" envDefault:"false"`
 	AppName    string `env:"APP_NAME" envDefault:"Inspect System"`
 	AppVersion string `env:"APP_VERSION" envDefault:"1.0.1"`
-	SecretKey  string `env:"SECRET_KEY" envDefault:"your-secret-key-change-in-production"`
+	SecretKey  string `env:"SECRET_KEY"`
 
 	ServerHost string `env:"SERVER_HOST" envDefault:"0.0.0.0"`
 	ServerPort int    `env:"SERVER_PORT"`
 
-	DatabaseURL         string `env:"DATABASE_URL" envDefault:"postgresql://postgres:password@localhost:5432/inspect_db"`
+	DatabaseURL         string `env:"DATABASE_URL"`
 	DatabasePoolSize    int    `env:"DATABASE_POOL_SIZE" envDefault:"5"`
 	DatabaseMaxOverflow int    `env:"DATABASE_MAX_OVERFLOW" envDefault:"10"`
 	DatabasePoolRecycle int    `env:"DATABASE_POOL_RECYCLE" envDefault:"3600"`
@@ -35,7 +52,7 @@ type Config struct {
 	MonitoringReportDownloadTokenTTL     time.Duration `env:"MONITORING_REPORT_DOWNLOAD_TOKEN_TTL" envDefault:"5m"`
 	MonitoringReportDownloadTokenMaxUses int           `env:"MONITORING_REPORT_DOWNLOAD_TOKEN_MAX_USES" envDefault:"3"`
 
-	JWTSecretKey             string `env:"JWT_SECRET_KEY" envDefault:"your-jwt-secret-key-change-in-production"`
+	JWTSecretKey             string `env:"JWT_SECRET_KEY"`
 	JWTAlgorithm             string `env:"JWT_ALGORITHM" envDefault:"HS256"`
 	AccessTokenExpireMinutes int    `env:"ACCESS_TOKEN_EXPIRE_MINUTES" envDefault:"30"`
 	RefreshTokenExpireDays   int    `env:"REFRESH_TOKEN_EXPIRE_DAYS" envDefault:"7"`
@@ -51,7 +68,9 @@ type Config struct {
 	SnmpTrapPort     int    `env:"SNMP_TRAP_PORT" envDefault:"162"`
 
 	CorsOriginsRaw  string `env:"CORS_ORIGINS" envDefault:"[\"http://localhost:3000\",\"http://127.0.0.1:3000\"]"`
-	AllowedHostsRaw string `env:"ALLOWED_HOSTS" envDefault:"[\"*\"]"`
+	// AllowedHosts 当前未在请求链路强制启用；默认收敛为空列表，避免内置 "*" 通配默认，
+	// 后续若启用 Host 校验则从安全默认起步。
+	AllowedHostsRaw string `env:"ALLOWED_HOSTS" envDefault:"[]"`
 
 	CorsOrigins  []string `env:"-"`
 	AllowedHosts []string `env:"-"`
@@ -67,7 +86,7 @@ func Load() (Config, error) {
 
 	cfg.DatabaseURL = normalizeDatabaseURL(cfg.DatabaseURL)
 	cfg.CorsOrigins = parseStringList(cfg.CorsOriginsRaw, []string{"http://localhost:3000", "http://127.0.0.1:3000"})
-	cfg.AllowedHosts = parseStringList(cfg.AllowedHostsRaw, []string{"*"})
+	cfg.AllowedHosts = parseStringList(cfg.AllowedHostsRaw, []string{})
 
 	if strings.TrimSpace(cfg.JWTSecretKey) == "" {
 		cfg.JWTSecretKey = cfg.SecretKey
@@ -83,7 +102,43 @@ func Load() (Config, error) {
 		cfg.ReportsOutputDir = cleanPathFromBase(cfg.ReportsOutputDir, envBaseDir)
 	}
 
+	if err := cfg.validateProductionSecrets(); err != nil {
+		return Config{}, err
+	}
+
 	return cfg, nil
+}
+
+// validateProductionSecrets 在生产模式（DEBUG=false）下强制校验 JWT 签名密钥，
+// 杜绝使用空值或历史公开占位密钥签发 token 导致的认证绕过（fail-closed 纵深防御）。
+// 开发模式（DEBUG=true）保持宽松以便本地裸跑。
+func (c Config) validateProductionSecrets() error {
+	if c.Debug {
+		return nil
+	}
+
+	secret := strings.TrimSpace(c.JWTSecretKey)
+	switch {
+	case secret == "":
+		return fmt.Errorf("生产环境（DEBUG=false）必须设置 JWT_SECRET_KEY 或 SECRET_KEY，当前为空")
+	case isPlaceholderSecret(secret):
+		return fmt.Errorf("JWT 密钥仍为占位/默认值，生产环境必须替换为强随机密钥")
+	case len(secret) < minProductionSecretLength:
+		return fmt.Errorf("JWT 密钥长度不足 %d 字节，生产环境需使用足够长的强随机密钥", minProductionSecretLength)
+	}
+
+	return nil
+}
+
+// isPlaceholderSecret 判断密钥是否命中占位特征子串（大小写不敏感）。
+func isPlaceholderSecret(secret string) bool {
+	lowered := strings.ToLower(secret)
+	for _, marker := range placeholderSecretMarkers {
+		if strings.Contains(lowered, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c Config) Address() string {
