@@ -9,7 +9,7 @@ import (
 
 // GetDeviceSNMPExtensions 返回设备最近一次 SNMP 扩展摘要。
 func (h MonitoringHandler) GetDeviceSNMPExtensions(c echo.Context) error {
-	if err := h.ensurePermission(c, monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
