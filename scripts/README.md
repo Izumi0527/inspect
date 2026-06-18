@@ -289,8 +289,8 @@ Bash 版同样遵循上述优先级，最后回退到当前 Shell 进程中的�
 # 静态验证整合 SQL、文档归档和 Docker 引用
 .\scripts\db-manage.ps1 verify
 
-# 初始化默认管理员账号与 RBAC
-.\scripts\db-manage.ps1 seed-admin -Username admin -Password admin123 -Email admin@admin.com -Role superadmin
+# 初始化默认管理员账号与 RBAC（用默认口令 admin123 初始化时，首登将被强制改密；建议直接设置强口令）
+.\scripts\db-manage.ps1 seed-admin -Username admin -Password '<your-strong-password>' -Email admin@admin.com -Role superadmin
 
 # 停止服务
 .\scripts\db-manage.ps1 stop
@@ -315,8 +315,8 @@ Bash 版同样遵循上述优先级，最后回退到当前 Shell 进程中的�
 # 静态验证整合 SQL、文档归档和 Docker 引用
 ./scripts/db-manage.sh verify
 
-# 初始化默认管理员账号与 RBAC
-./scripts/db-manage.sh seed-admin --username admin --password admin123 --email admin@admin.com --role superadmin
+# 初始化默认管理员账号与 RBAC（用默认口令 admin123 初始化时，首登将被强制改密；建议直接设置强口令）
+./scripts/db-manage.sh seed-admin --username admin --password '<your-strong-password>' --email admin@admin.com --role superadmin
 ```
 
 `db-manage.ps1 init` 和 `db-manage.sh init` 均已合并原独立初始化脚本的能力：

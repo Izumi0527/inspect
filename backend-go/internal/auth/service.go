@@ -55,8 +55,10 @@ type UserRecord struct {
 	LastLoginAt    *time.Time `gorm:"column:last_login_at"`
 	LoginAttempts  *int       `gorm:"column:login_attempts"`
 	LockedUntil    *time.Time `gorm:"column:locked_until"`
-	CreatedAt      *time.Time `gorm:"column:created_at"`
-	UpdatedAt      *time.Time `gorm:"column:updated_at"`
+	// ForcePasswordChange 为 true 时，用户必须先修改密码才能访问业务接口（首登强制改密）。
+	ForcePasswordChange *bool      `gorm:"column:force_password_change"`
+	CreatedAt           *time.Time `gorm:"column:created_at"`
+	UpdatedAt           *time.Time `gorm:"column:updated_at"`
 }
 
 type UserInfo struct {
@@ -68,7 +70,9 @@ type UserInfo struct {
 	Role        string     `json:"role"`
 	Permissions []string   `json:"permissions"`
 	IsActive    bool       `json:"is_active"`
-	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
+	// ForcePasswordChange 透传给前端：为 true 时前端应引导用户先完成强制改密。
+	ForcePasswordChange bool       `json:"force_password_change"`
+	LastLoginAt         *time.Time `json:"last_login_at,omitempty"`
 	CreatedAt   *time.Time `json:"created_at,omitempty"`
 	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
 }
@@ -130,7 +134,7 @@ func (s *Service) GetUserByUsername(ctx context.Context, username string) (*User
 	var user UserRecord
 	if err := s.db.WithContext(ctx).
 		Table("users").
-		Select("id, username, email, full_name, avatar, role, is_active, hashed_password, last_login_at, login_attempts, locked_until, created_at, updated_at").
+		Select("id, username, email, full_name, avatar, role, is_active, hashed_password, last_login_at, login_attempts, locked_until, force_password_change, created_at, updated_at").
 		Where("username = ?", normalized).
 		Take(&user).Error; err != nil {
 		return nil, err
@@ -155,10 +159,11 @@ func (s *Service) BuildUserInfo(ctx context.Context, user *UserRecord) (UserInfo
 		Email:       user.Email,
 		FullName:    user.FullName,
 		Avatar:      user.Avatar,
-		Role:        user.Role,
-		Permissions: permissions,
-		IsActive:    isUserActive(user),
-		LastLoginAt: user.LastLoginAt,
+		Role:                user.Role,
+		Permissions:         permissions,
+		IsActive:            isUserActive(user),
+		ForcePasswordChange: UserMustChangePassword(user),
+		LastLoginAt:         user.LastLoginAt,
 		CreatedAt:   user.CreatedAt,
 		UpdatedAt:   user.UpdatedAt,
 	}, nil
@@ -380,6 +385,21 @@ func isUserLocked(user *UserRecord) bool {
 		return false
 	}
 	return user.LockedUntil.After(time.Now().UTC())
+}
+
+// UserMustChangePassword 判断用户是否被标记为“必须先改密”。
+// 用于全局强制改密闸与前端引导。
+func UserMustChangePassword(user *UserRecord) bool {
+	return user != nil && user.ForcePasswordChange != nil && *user.ForcePasswordChange
+}
+
+// PasswordMatches 校验明文口令是否与用户当前哈希匹配。
+// 仅做无副作用的 bcrypt 比较（不触发失败计数/锁定），供自助改密校验旧口令使用。
+func (s *Service) PasswordMatches(user *UserRecord, plain string) bool {
+	if user == nil || strings.TrimSpace(user.HashedPassword) == "" {
+		return false
+	}
+	return bcrypt.CompareHashAndPassword([]byte(user.HashedPassword), []byte(plain)) == nil
 }
 
 func (s *Service) isReady() bool {

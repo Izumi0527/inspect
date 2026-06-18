@@ -135,9 +135,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       // 更新用户状态
       dispatch({ type: 'LOGIN_SUCCESS', payload: { user: response.user } })
-      
+
+      // 首次登录或密码被重置：强制先改密。改密前后端会拒绝业务接口（403 PasswordChangeRequired）。
+      if (response.user.force_password_change) {
+        toast('首次登录，请先修改初始密码')
+        router.push('/change-password')
+        return
+      }
+
       toast.success(`欢迎回来，${response.user.full_name}！`)
-      
+
       // 跳转到仪表板
       router.push('/dashboard')
       
@@ -273,7 +280,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // 获取用户信息
         const user = await api.auth.profile()
         dispatch({ type: 'LOGIN_SUCCESS', payload: { user } })
-        
+
+        // 刷新或直接进入时，待强制改密的用户也引导到改密页（后端闸是硬保证）。
+        if (user.force_password_change) {
+          router.push('/change-password')
+        }
+
       } catch (error) {
         console.error('Auth initialization failed:', error)
         TokenManager.clearTokens()
@@ -282,7 +294,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     initializeAuth()
-  }, [refreshToken])
+  }, [refreshToken, router])
 
   // 设置Token自动刷新
   useEffect(() => {

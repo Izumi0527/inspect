@@ -170,6 +170,9 @@ func New() (*App, error) {
 	// 提前创建 settingsService：inspection/scheduler/alerts 通用依赖
 	settingsService := settings.NewService(dbConn, redisClient, cfg, log)
 
+	// 自助改密复用 settings 的改密逻辑（含密码策略、清除强制改密标志、登出会话）。
+	authHandler.Settings = settingsService
+
 	alertService := alerts.NewService(dbConn, log)
 	alertEvaluator := alerts.NewEvaluator(dbConn, wsManager, settingsService, log)
 	alertsHandler := handlers.AlertsHandler{

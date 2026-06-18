@@ -22,6 +22,10 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
 )
 
+// defaultAdminPassword 为内置默认管理员口令；使用该口令初始化时强制首登改密，
+// 与安装包 SQL 种子（installer/database/inspect-runtime-seed.sql）保持一致。
+const defaultAdminPassword = "admin123"
+
 type permissionSeed struct {
 	Name        string
 	DisplayName string
@@ -41,7 +45,7 @@ type roleSeed struct {
 
 func main() {
 	username := flag.String("username", "admin", "要初始化的用户名（默认：admin）")
-	password := flag.String("password", "admin123", "要初始化的密码（默认：admin123）")
+	password := flag.String("password", defaultAdminPassword, "要初始化的密码（默认：admin123）")
 	email := flag.String("email", "admin@admin.com", "要初始化的邮箱（默认：admin@admin.com）")
 	role := flag.String("role", "superadmin", "要初始化的角色（superadmin 会映射为 admin）")
 	fullName := flag.String("full-name", "系统管理员", "用户显示名（可选）")
@@ -98,11 +102,12 @@ func main() {
 	}
 
 	userResult, err := ensureAdminUser(ctx, database, ensureAdminUserArgs{
-		Username: *username,
-		Password: *password,
-		Email:    *email,
-		FullName: *fullName,
-		Role:     normalizedRole,
+		Username:            *username,
+		Password:            *password,
+		Email:               *email,
+		FullName:            *fullName,
+		Role:                normalizedRole,
+		ForcePasswordChange: strings.TrimSpace(*password) == defaultAdminPassword,
 	})
 	if err != nil {
 		log.Error("初始化管理员用户失败", zap.Error(err))
@@ -380,11 +385,12 @@ func ensureRolePermissions(
 }
 
 type ensureAdminUserArgs struct {
-	Username string
-	Password string
-	Email    string
-	FullName string
-	Role     string
+	Username            string
+	Password            string
+	Email               string
+	FullName            string
+	Role                string
+	ForcePasswordChange bool
 }
 
 type ensureAdminUserResult struct {
@@ -437,7 +443,7 @@ func ensureAdminUser(ctx context.Context, dbConn *gorm.DB, args ensureAdminUserA
 			IsActive:            &isActive,
 			IsSuperuser:         &isSuperuser,
 			PasswordChangedAt:   &now,
-			ForcePasswordChange: boolPtr(false),
+			ForcePasswordChange: boolPtr(args.ForcePasswordChange),
 			LoginAttempts:       intPtr(0),
 			LockedUntil:         nil,
 			CreatedAt:           &now,
@@ -464,7 +470,7 @@ func ensureAdminUser(ctx context.Context, dbConn *gorm.DB, args ensureAdminUserA
 			"is_active":            true,
 			"is_superuser":         true,
 			"password_changed_at":  now,
-			"force_password_change": false,
+			"force_password_change": args.ForcePasswordChange,
 			"login_attempts":       0,
 			"locked_until":         nil,
 			"updated_at":           now,

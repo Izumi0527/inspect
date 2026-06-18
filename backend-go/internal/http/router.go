@@ -62,6 +62,8 @@ func NewServer(
 	// 各 handler 仍各自做权限点（授权）检查。新增端点即使漏写授权也不会缺失认证。
 	if authHandler != nil && authHandler.Service != nil {
 		api.Use(mw.Authentication(authHandler.Service, publicAPIPaths()))
+		// 强制改密闸：被标记 force_password_change 的用户在改密前不能访问业务端点。
+		api.Use(mw.EnforcePasswordChange(forcePasswordChangeExemptPaths()))
 	}
 	if authHandler != nil {
 		authHandler.Register(api)
@@ -120,5 +122,18 @@ func publicAPIPaths() map[string]struct{} {
 		"/api/v1/auth/refresh":                {},
 		"/api/v1/ws/:user_id":                 {},
 		"/api/v1/monitoring/reports/download": {},
+	}
+}
+
+// forcePasswordChangeExemptPaths 列出“强制改密”用户在完成改密前仍可访问的端点
+// （echo 路由模板，含分组前缀）：改密本身、查看自身信息、登出、token 校验。
+// 其余 /api/v1 业务端点在用户改密前一律由 EnforcePasswordChange 闸返回 403。
+func forcePasswordChangeExemptPaths() map[string]struct{} {
+	return map[string]struct{}{
+		"/api/v1/auth/change-password": {},
+		"/api/v1/auth/me":              {},
+		"/api/v1/auth/profile":         {},
+		"/api/v1/auth/logout":          {},
+		"/api/v1/auth/verify":          {},
 	}
 }

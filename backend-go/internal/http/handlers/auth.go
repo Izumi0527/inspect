@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -10,8 +11,15 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/auth"
 )
 
+// PasswordChanger 为自助改密所需的最小依赖：写入新密码（含策略校验、清除强制改密标志、登出会话）。
+// *settings.Service 满足该接口。
+type PasswordChanger interface {
+	ChangePassword(ctx context.Context, userID string, newPassword string) error
+}
+
 type AuthHandler struct {
-	Service *auth.Service
+	Service  *auth.Service
+	Settings PasswordChanger
 }
 
 type loginRequest struct {
@@ -36,6 +44,7 @@ func (h AuthHandler) Register(group *echo.Group) {
 	group.POST("/auth/login", h.Login)
 	group.POST("/auth/refresh", h.RefreshToken)
 	group.POST("/auth/logout", h.Logout)
+	group.POST("/auth/change-password", h.ChangeOwnPassword)
 	group.GET("/auth/me", h.Me)
 	group.GET("/auth/profile", h.Profile)
 	group.GET("/auth/verify", h.Verify)
@@ -147,6 +156,50 @@ func (h AuthHandler) Me(c echo.Context) error {
 
 func (h AuthHandler) Profile(c echo.Context) error {
 	return h.profileResponse(c)
+}
+
+type changeOwnPasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// ChangeOwnPassword 自助改密：校验旧口令后写入新口令。
+// 复用 settings 的改密逻辑（密码策略校验、清除 force_password_change、按策略登出会话）。
+// 这是“强制改密”用户被全局闸拦截后唯一可访问的写入口（见 middleware.EnforcePasswordChange 豁免名单）。
+// 改密成功后会按安全策略登出所有会话，当前 token 随即失效，前端需引导重新登录。
+func (h AuthHandler) ChangeOwnPassword(c echo.Context) error {
+	if h.Service == nil || h.Settings == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "auth service not configured")
+	}
+
+	user, err := h.requireActiveUser(c)
+	if err != nil {
+		return err
+	}
+
+	var req changeOwnPasswordRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+	if strings.TrimSpace(req.CurrentPassword) == "" || strings.TrimSpace(req.NewPassword) == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "current_password and new_password are required")
+	}
+	if !h.Service.PasswordMatches(user, req.CurrentPassword) {
+		return echo.NewHTTPError(http.StatusBadRequest, "当前密码不正确")
+	}
+	if req.NewPassword == req.CurrentPassword {
+		return echo.NewHTTPError(http.StatusBadRequest, "新密码不能与当前密码相同")
+	}
+
+	if err := h.Settings.ChangePassword(c.Request().Context(), user.ID, req.NewPassword); err != nil {
+		// 最常见的失败为新密码不满足密码策略，归类为客户端可纠正错误（400）。
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "密码修改成功，请使用新密码重新登录",
+	})
 }
 
 func (h AuthHandler) Verify(c echo.Context) error {

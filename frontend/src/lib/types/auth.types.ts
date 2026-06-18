@@ -64,6 +64,8 @@ export interface User {
   role: UserRole
   permissions: Permission[]
   is_active: boolean
+  // 为 true 时用户必须先完成强制改密；后端会拦截改密前的业务接口。
+  force_password_change?: boolean
   last_login?: string
   created_at: string
   updated_at: string
