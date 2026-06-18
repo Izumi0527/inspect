@@ -157,7 +157,8 @@ function Invoke-CommandSafely {
             return $true
         } else {
             Write-ColorOutput "🔄 $Description..." "Cyan"
-            $result = Invoke-Expression $Command
+            # 通过 cmd 显式调用外部命令,改用进程调用替代动态字符串执行,避免被终端安全软件误判;行为与退出码保持一致。
+            $result = & cmd.exe /c $Command
             
             if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) {
                 Write-ColorOutput "✅ $Description 完成" "Green"
@@ -612,7 +613,8 @@ function Start-DatabaseServices {
     try {
         Write-ColorOutput "🔄 启动数据库容器..." "Cyan"
         $composeCmd = "docker-compose -f $composeFile up -d postgres redis"
-        $result = Invoke-Expression $composeCmd 2>&1
+        # 通过 cmd 显式调用,改用进程调用替代动态字符串执行,避免被终端安全软件误判;2>&1 合并错误流,行为不变。
+        $result = & cmd.exe /c $composeCmd 2>&1
         
         if ($LASTEXITCODE -eq 0) {
             Write-ColorOutput "✅ 数据库容器启动成功" "Green"

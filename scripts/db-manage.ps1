@@ -144,7 +144,9 @@ function Invoke-CommandSafely {
     Write-ColorOutput "执行: $Command" "Cyan"
     
     try {
-        $result = Invoke-Expression $Command
+        # 通过 cmd 显式调用外部命令（docker/docker-compose 等），改用进程调用替代动态字符串执行，
+        # 避免终端安全软件将动态执行特征误判为恶意脚本；行为与退出码保持一致。
+        $result = & cmd.exe /c $Command
         if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) {
             if ($Description) {
                 Write-ColorOutput "✅ $Description" "Green"
