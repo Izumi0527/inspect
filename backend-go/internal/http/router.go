@@ -58,6 +58,11 @@ func NewServer(
 	api := e.Group("/api/v1")
 	// 限制请求体大小，避免批量接口/读取 raw body 被超大 payload 拖垮
 	api.Use(echomw.BodyLimit("10M"))
+	// 全局认证中间件：对非白名单路由强制校验 Bearer token（认证），
+	// 各 handler 仍各自做权限点（授权）检查。新增端点即使漏写授权也不会缺失认证。
+	if authHandler != nil && authHandler.Service != nil {
+		api.Use(mw.Authentication(authHandler.Service, publicAPIPaths()))
+	}
 	if authHandler != nil {
 		authHandler.Register(api)
 	}
@@ -99,4 +104,21 @@ func NewServer(
 	}
 
 	return e
+}
+
+// publicAPIPaths 列出 /api/v1 下无需 Bearer 认证的公开端点（echo 路由模板，含分组前缀）。
+// 这些端点要么是认证引导（登录/刷新），要么使用 Bearer 以外的认证方式：
+//   - /api/v1/auth/login        登录引导，无 token
+//   - /api/v1/auth/refresh      刷新引导，携带 refresh token（在 body）而非 Bearer access token
+//   - /api/v1/ws/:user_id       WebSocket 升级，使用 Sec-WebSocket-Protocol 子协议传递 token
+//   - /api/v1/monitoring/reports/download  报表一次性下载 token（在表单），供浏览器直接下载
+//
+// 其余端点（含 /auth/logout、/auth/me、/auth/profile、/auth/verify 等）一律经全局认证中间件。
+func publicAPIPaths() map[string]struct{} {
+	return map[string]struct{}{
+		"/api/v1/auth/login":                  {},
+		"/api/v1/auth/refresh":                {},
+		"/api/v1/ws/:user_id":                 {},
+		"/api/v1/monitoring/reports/download": {},
+	}
 }

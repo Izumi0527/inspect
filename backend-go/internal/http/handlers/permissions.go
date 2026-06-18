@@ -19,7 +19,7 @@ type PermissionService interface {
 }
 
 const (
-	authContextUserKey        = "auth.user"
+	authContextUserKey        = auth.ContextUserKey
 	authContextPermissionsKey = "auth.permissions"
 )
 

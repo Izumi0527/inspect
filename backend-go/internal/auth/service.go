@@ -18,6 +18,10 @@ import (
 const (
 	accessTokenType  = "access"
 	refreshTokenType = "refresh"
+
+	// ContextUserKey 为请求上下文中存放已认证用户（*UserRecord）的统一键。
+	// 全局认证中间件与各 handler 共用，避免重复校验 token。
+	ContextUserKey = "auth.user"
 )
 
 var (
