@@ -15,6 +15,8 @@ scripts/
 ├── prod-start.sh      # 生产环境 Docker Compose 启动、状态、日志和停止入口 Bash 版
 ├── db-manage.ps1      # 数据库统一管理、初始化、验证与管理员种子
 ├── db-manage.sh       # 数据库统一管理 Bash 版
+├── test.ps1           # 测试与质量校验统一入口（后端 build+test、前端 type-check+test）
+├── test.sh            # 测试与质量校验统一入口 Bash 版
 ├── clean-cache.ps1    # 缓存、临时文件、日志和测试产物清理
 ├── clean-cache.sh     # 缓存、临时文件、日志和测试产物清理 Bash 版
 └── README.md
@@ -327,11 +329,47 @@ Bash 版同样遵循上述优先级，最后回退到当前 Shell 进程中的�
 
 ## 测试与维护
 
-测试和质量检查不再通过独立封装脚本转发，按改动范围直接运行对应模块命令即可。
-缓存清理已收敛到 `scripts/clean-cache.ps1` / `scripts/clean-cache.sh`，
-不再保留测试脚本子目录。
+测试与质量校验已收敛到统一入口 `scripts/test.ps1` / `scripts/test.sh`，
+封装后端构建+测试与前端类型检查+单元测试，并支持按范围选择。
+缓存清理收敛到 `scripts/clean-cache.ps1` / `scripts/clean-cache.sh`。
 
-### 常用验证命令
+### 测试统一入口
+
+```powershell
+# 后端 + 前端完整校验
+.\scripts\test.ps1
+
+# 仅后端（go build + backend-go 单测 + tests/backend-go 外置测试模块）
+.\scripts\test.ps1 -Scope backend
+
+# 仅前端（tsc 类型检查 + jest 单元测试）
+.\scripts\test.ps1 -Scope frontend
+
+# 跳过后端构建 / 前端类型检查
+.\scripts\test.ps1 -SkipBuild -SkipTypeCheck
+```
+
+```bash
+# 后端 + 前端完整校验
+./scripts/test.sh
+
+# 仅后端
+./scripts/test.sh --scope backend
+
+# 仅前端
+./scripts/test.sh --scope frontend
+
+# 跳过后端构建 / 前端类型检查
+./scripts/test.sh --skip-build --skip-type-check
+```
+
+> 后端测试分为两部分：`backend-go` 主模块自带的少量单测，以及
+> `tests/backend-go` 外置测试模块（契约/单元测试主体，通过 sqlmock 离线运行）。
+> 统一入口会依次执行两者。
+
+### 底层验证命令（参考）
+
+需要单独定位某模块时，可直接运行对应命令：
 
 ```powershell
 # 后端测试
