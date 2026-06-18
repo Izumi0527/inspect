@@ -101,12 +101,19 @@ func (s *Service) AuthenticateUser(ctx context.Context, username string, passwor
 	if err := bcrypt.CompareHashAndPassword([]byte(user.HashedPassword), []byte(password)); err != nil {
 		// 失败次数累加并可能触发锁定
 		policy := s.loadSecurityPolicy(ctx)
-		_ = s.onLoginFailed(ctx, user.ID, policy)
+		if accErr := s.onLoginFailed(ctx, user.ID, policy); accErr != nil && s.logger != nil {
+			// 安全相关：记账失败可能导致账户锁定策略静默失效（暴力破解防护降级），不可吞错。
+			s.logger.Warn("登录失败计数/锁定记账失败，账户锁定策略可能未生效",
+				zap.String("user_id", user.ID), zap.Error(accErr))
+		}
 		return nil, nil
 	}
 
 	// 登录成功：清理失败次数/锁定状态
-	_ = s.onLoginSucceeded(ctx, user.ID)
+	if accErr := s.onLoginSucceeded(ctx, user.ID); accErr != nil && s.logger != nil {
+		s.logger.Warn("登录成功后清理失败计数/锁定状态失败",
+			zap.String("user_id", user.ID), zap.Error(accErr))
+	}
 	return user, nil
 }
 
