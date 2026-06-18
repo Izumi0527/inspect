@@ -41,6 +41,56 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- TimescaleDB 要求 hypertable 上的 PRIMARY KEY / UNIQUE 约束必须包含分区列。
+-- 部分初始化表使用 BIGSERIAL PRIMARY KEY，转换前需要先清理不兼容约束，避免 TS103。
+CREATE OR REPLACE FUNCTION ensure_timescale_compatible_uniques(tbl text, time_col text)
+RETURNS void AS $$
+DECLARE
+    tbl_reg regclass;
+    r record;
+BEGIN
+    tbl_reg := to_regclass(tbl);
+    IF tbl_reg IS NULL THEN
+        RETURN;
+    END IF;
+
+    FOR r IN (
+        SELECT c.conname
+        FROM pg_constraint c
+        WHERE c.conrelid = tbl_reg
+          AND c.contype IN ('p','u')
+          AND NOT EXISTS (
+              SELECT 1
+              FROM unnest(c.conkey) AS k(attnum)
+              JOIN pg_attribute a
+                ON a.attrelid = c.conrelid
+               AND a.attnum = k.attnum
+              WHERE a.attname = time_col
+          )
+    ) LOOP
+        EXECUTE format('ALTER TABLE %I DROP CONSTRAINT IF EXISTS %I;', tbl, r.conname);
+    END LOOP;
+
+    FOR r IN (
+        SELECT i.relname AS index_name
+        FROM pg_index x
+        JOIN pg_class i ON i.oid = x.indexrelid
+        WHERE x.indrelid = tbl_reg
+          AND x.indisunique
+          AND NOT EXISTS (
+              SELECT 1
+              FROM unnest(x.indkey) AS k(attnum)
+              JOIN pg_attribute a
+                ON a.attrelid = x.indrelid
+               AND a.attnum = k.attnum
+              WHERE a.attname = time_col
+          )
+    ) LOOP
+        EXECUTE format('DROP INDEX IF EXISTS %I;', r.index_name);
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
 -- ==========================================
 -- 第二部分: TimescaleDB 时序数据库配置
 -- ==========================================
@@ -55,6 +105,7 @@ BEGIN
           AND table_name = 'device_metrics'
     ) THEN
         -- 创建时序表，按 collected_at 字段进行时间分区
+        PERFORM ensure_timescale_compatible_uniques('device_metrics', 'collected_at');
         PERFORM create_hypertable('device_metrics', 'collected_at', if_not_exists => TRUE);
     END IF;
 END $$;
@@ -80,6 +131,7 @@ CREATE INDEX IF NOT EXISTS idx_interface_metrics_device_iface_metric_time
     ON interface_metrics (device_id, interface_name, metric_name, collected_at DESC);
 
 -- 转换为时序表
+SELECT ensure_timescale_compatible_uniques('interface_metrics', 'collected_at');
 SELECT create_hypertable('interface_metrics', 'collected_at', if_not_exists => TRUE);
 
 -- 创建设备状态历史表 (device_status_history)
@@ -103,6 +155,7 @@ CREATE INDEX IF NOT EXISTS idx_device_status_history_status_time
     ON device_status_history (status, collected_at DESC);
 
 -- 转换为时序表
+SELECT ensure_timescale_compatible_uniques('device_status_history', 'collected_at');
 SELECT create_hypertable('device_status_history', 'collected_at', if_not_exists => TRUE);
 
 -- 创建系统指标表 (system_metrics)
@@ -128,6 +181,7 @@ CREATE INDEX IF NOT EXISTS idx_system_metrics_host_metric_time
     ON system_metrics (host, metric_name, collected_at DESC);
 
 -- 转换为时序表
+SELECT ensure_timescale_compatible_uniques('system_metrics', 'collected_at');
 SELECT create_hypertable('system_metrics', 'collected_at', if_not_exists => TRUE);
 
 -- 创建用户活动日志表 (user_activity_logs)
@@ -153,6 +207,7 @@ CREATE INDEX IF NOT EXISTS idx_user_activity_logs_resource_time
     ON user_activity_logs (resource, collected_at DESC);
 
 -- 转换为时序表
+SELECT ensure_timescale_compatible_uniques('user_activity_logs', 'collected_at');
 SELECT create_hypertable('user_activity_logs', 'collected_at', if_not_exists => TRUE);
 
 -- ==========================================
@@ -184,7 +239,7 @@ ALTER TABLE IF EXISTS device_status_history
     );
 
 -- 系统指标表压缩配置
-ALTER TABLE IF NOT EXISTS system_metrics
+ALTER TABLE IF EXISTS system_metrics
     SET (
         timescaledb.compress,
         timescaledb.compress_segmentby = 'host, metric_name',
@@ -283,12 +338,17 @@ WHERE metric_name IN (
   AND (metric_unit IS NULL OR LOWER(metric_unit) IN ('bps', 'b/s', 'bit/s'));
 
 -- 更新设备接口表
-UPDATE device_interfaces
-SET speed = ROUND(speed::numeric / 1000000.0)::bigint,
-    last_updated = COALESCE(last_updated, NOW()),
-    updated_at = NOW()
-WHERE speed IS NOT NULL
-  AND speed >= 1000000;
+DO $$
+BEGIN
+    IF to_regclass('device_interfaces') IS NOT NULL THEN
+        UPDATE device_interfaces
+        SET speed = ROUND(speed::numeric / 1000000.0)::bigint,
+            last_updated = COALESCE(last_updated, NOW()),
+            updated_at = NOW()
+        WHERE speed IS NOT NULL
+          AND speed >= 1000000;
+    END IF;
+END $$;
 
 COMMIT;
 
