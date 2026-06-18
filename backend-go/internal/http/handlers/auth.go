@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"strings"
@@ -9,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/your-org/inspect-system/backend-go/internal/auth"
+	"github.com/your-org/inspect-system/backend-go/internal/authcookie"
 )
 
 // PasswordChanger 为自助改密所需的最小依赖：写入新密码（含策略校验、清除强制改密标志、登出会话）。
@@ -17,9 +20,17 @@ type PasswordChanger interface {
 	ChangePassword(ctx context.Context, userID string, newPassword string) error
 }
 
+// CookieConfig 控制认证 Cookie 的安全属性（来自 config，由 app 装配注入）。
+type CookieConfig struct {
+	Secure   bool
+	SameSite http.SameSite
+	Domain   string
+}
+
 type AuthHandler struct {
 	Service  *auth.Service
 	Settings PasswordChanger
+	Cookie   CookieConfig
 }
 
 type loginRequest struct {
@@ -75,7 +86,7 @@ func (h AuthHandler) Login(c echo.Context) error {
 	}
 
 	rememberMe := req.RememberMe != nil && *req.RememberMe
-	accessToken, refreshToken, expiresIn, err := h.Service.IssueTokensWithSession(
+	accessToken, refreshToken, expiresIn, refreshExpiresIn, err := h.Service.IssueTokensWithSession(
 		c.Request().Context(),
 		user,
 		rememberMe,
@@ -92,6 +103,12 @@ func (h AuthHandler) Login(c echo.Context) error {
 	}
 
 	_ = h.Service.UpdateLastLogin(c.Request().Context(), user.ID, c.RealIP())
+
+	// S3：下发 httpOnly Cookie（access/refresh）+ 非 httpOnly 的 CSRF Cookie。
+	// 同时保留 body 返回 token，过渡期兼容仍读 body 的旧前端（双模式）。
+	if err := h.issueAuthCookies(c, accessToken, refreshToken, expiresIn, refreshExpiresIn); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to set auth cookies")
+	}
 
 	return c.JSON(http.StatusOK, loginResponse{
 		AccessToken:  accessToken,
@@ -111,11 +128,18 @@ func (h AuthHandler) RefreshToken(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
 	}
-	if strings.TrimSpace(req.RefreshToken) == "" {
+	// refresh token 来源：Cookie 优先（S3），fallback body（过渡期兼容）。
+	refreshTokenInput := strings.TrimSpace(req.RefreshToken)
+	if cookie, cErr := c.Cookie(authcookie.RefreshTokenCookie); cErr == nil {
+		if v := strings.TrimSpace(cookie.Value); v != "" {
+			refreshTokenInput = v
+		}
+	}
+	if refreshTokenInput == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "refresh_token is required")
 	}
 
-	accessToken, refreshToken, expiresIn, user, err := h.Service.RefreshTokensWithSession(c.Request().Context(), req.RefreshToken)
+	accessToken, refreshToken, expiresIn, refreshExpiresIn, user, err := h.Service.RefreshTokensWithSession(c.Request().Context(), refreshTokenInput)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "刷新令牌无效或已过期")
 	}
@@ -123,6 +147,11 @@ func (h AuthHandler) RefreshToken(c echo.Context) error {
 	userInfo, err := h.Service.BuildUserInfo(c.Request().Context(), user)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to build user info")
+	}
+
+	// 轮换后的 token 重新下发 Cookie。
+	if err := h.issueAuthCookies(c, accessToken, refreshToken, expiresIn, refreshExpiresIn); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to set auth cookies")
 	}
 
 	return c.JSON(http.StatusOK, loginResponse{
@@ -139,11 +168,20 @@ func (h AuthHandler) Logout(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "auth service not configured")
 	}
 
-	token, err := readBearerToken(c)
-	if err != nil {
-		return err
+	// 登出尽力失效会话并清除所有认证 Cookie（即便缺 token 也清 Cookie）。
+	token := ""
+	if cookie, cErr := c.Cookie(authcookie.AccessTokenCookie); cErr == nil {
+		token = strings.TrimSpace(cookie.Value)
 	}
-	_ = h.Service.LogoutSession(c.Request().Context(), token)
+	if token == "" {
+		if bt, bErr := readBearerToken(c); bErr == nil {
+			token = bt
+		}
+	}
+	if token != "" {
+		_ = h.Service.LogoutSession(c.Request().Context(), token)
+	}
+	h.clearAuthCookies(c)
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"message": "登出成功",
@@ -289,4 +327,73 @@ func authUserActive(user *auth.UserRecord) bool {
 		return true
 	}
 	return *user.IsActive
+}
+
+// issueAuthCookies 下发 access/refresh（httpOnly）与 csrf（非 httpOnly）Cookie。
+// maxAge 单位为秒：access 用其有效期，refresh/csrf 用 refresh 有效期。
+func (h AuthHandler) issueAuthCookies(c echo.Context, accessToken, refreshToken string, accessMaxAge, refreshMaxAge int) error {
+	csrfToken, err := generateCSRFToken()
+	if err != nil {
+		return err
+	}
+	c.SetCookie(&http.Cookie{
+		Name:     authcookie.AccessTokenCookie,
+		Value:    accessToken,
+		Path:     "/",
+		MaxAge:   accessMaxAge,
+		HttpOnly: true,
+		Secure:   h.Cookie.Secure,
+		SameSite: h.Cookie.SameSite,
+		Domain:   h.Cookie.Domain,
+	})
+	c.SetCookie(&http.Cookie{
+		Name:     authcookie.RefreshTokenCookie,
+		Value:    refreshToken,
+		Path:     authcookie.RefreshCookiePath,
+		MaxAge:   refreshMaxAge,
+		HttpOnly: true,
+		Secure:   h.Cookie.Secure,
+		SameSite: h.Cookie.SameSite,
+		Domain:   h.Cookie.Domain,
+	})
+	// CSRF cookie 非 httpOnly，供前端读取并回填 X-CSRF-Token 请求头（double-submit）。
+	c.SetCookie(&http.Cookie{
+		Name:     authcookie.CSRFCookie,
+		Value:    csrfToken,
+		Path:     "/",
+		MaxAge:   refreshMaxAge,
+		HttpOnly: false,
+		Secure:   h.Cookie.Secure,
+		SameSite: h.Cookie.SameSite,
+		Domain:   h.Cookie.Domain,
+	})
+	return nil
+}
+
+// clearAuthCookies 立即失效全部认证 Cookie（登出）。
+func (h AuthHandler) clearAuthCookies(c echo.Context) {
+	expire := func(name, path string, httpOnly bool) {
+		c.SetCookie(&http.Cookie{
+			Name:     name,
+			Value:    "",
+			Path:     path,
+			MaxAge:   -1,
+			HttpOnly: httpOnly,
+			Secure:   h.Cookie.Secure,
+			SameSite: h.Cookie.SameSite,
+			Domain:   h.Cookie.Domain,
+		})
+	}
+	expire(authcookie.AccessTokenCookie, "/", true)
+	expire(authcookie.RefreshTokenCookie, authcookie.RefreshCookiePath, true)
+	expire(authcookie.CSRFCookie, "/", false)
+}
+
+// generateCSRFToken 生成 32 字节随机 CSRF token（hex 编码）。
+func generateCSRFToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }

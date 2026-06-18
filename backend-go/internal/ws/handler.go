@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 
+	"github.com/your-org/inspect-system/backend-go/internal/authcookie"
 	"github.com/your-org/inspect-system/backend-go/internal/authz"
 )
 
@@ -122,7 +123,7 @@ func (h *Handler) Register(group *echo.Group) {
 func (h *Handler) ServeWS(c echo.Context) error {
 	req := c.Request()
 
-	token, err := readAccessTokenFromSubprotocol(req)
+	token, err := readAccessTokenFromRequest(req)
 	if err != nil {
 		return err
 	}
@@ -364,6 +365,23 @@ func hasPermission(permission string, permissions []string) bool {
 		}
 	}
 	return false
+}
+
+// readAccessTokenFromRequest 解析 WS 握手的 access token：Cookie 优先（S3 httpOnly cookie 认证，
+// 浏览器握手自动携带），fallback Sec-WebSocket-Protocol 子协议（兼容过渡期/非浏览器客户端）。
+func readAccessTokenFromRequest(r *http.Request) (string, error) {
+	if r != nil {
+		if cookie, err := r.Cookie(authcookie.AccessTokenCookie); err == nil {
+			token := strings.TrimSpace(cookie.Value)
+			if token != "" {
+				if len(token) > maxWSTokenLength {
+					return "", echo.NewHTTPError(http.StatusUnauthorized, "Token too large")
+				}
+				return token, nil
+			}
+		}
+	}
+	return readAccessTokenFromSubprotocol(r)
 }
 
 func readAccessTokenFromSubprotocol(r *http.Request) (string, error) {

@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/your-org/inspect-system/backend-go/internal/auth"
+	"github.com/your-org/inspect-system/backend-go/internal/authcookie"
 )
 
 // Authenticator 为认证中间件所需的最小依赖：根据 access token 解析有效用户。
@@ -38,7 +39,7 @@ func Authentication(authenticator Authenticator, publicPaths map[string]struct{}
 				return next(c)
 			}
 
-			token, err := bearerToken(c)
+			token, err := accessTokenFromRequest(c)
 			if err != nil {
 				return err
 			}
@@ -55,6 +56,17 @@ func Authentication(authenticator Authenticator, publicPaths map[string]struct{}
 			return next(c)
 		}
 	}
+}
+
+// accessTokenFromRequest 解析 access token：Cookie 优先（S3 httpOnly cookie 认证），
+// fallback Authorization: Bearer（兼容报表一次性 token、非浏览器客户端与过渡期前端）。
+func accessTokenFromRequest(c echo.Context) (string, error) {
+	if cookie, err := c.Cookie(authcookie.AccessTokenCookie); err == nil {
+		if v := strings.TrimSpace(cookie.Value); v != "" {
+			return v, nil
+		}
+	}
+	return bearerToken(c)
 }
 
 // bearerToken 从 Authorization 头解析 Bearer token。

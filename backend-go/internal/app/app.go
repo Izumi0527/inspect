@@ -142,6 +142,11 @@ func New() (*App, error) {
 	monitoringHandler.DownloadTokenMaxUses = cfg.MonitoringReportDownloadTokenMaxUses
 	authHandler := handlers.AuthHandler{
 		Service: authService,
+		Cookie: handlers.CookieConfig{
+			Secure:   cfg.CookieSecure,
+			SameSite: cfg.CookieSameSiteMode(),
+			Domain:   cfg.CookieDomain,
+		},
 	}
 
 	inspectionService := inspection.NewService(dbConn, log)

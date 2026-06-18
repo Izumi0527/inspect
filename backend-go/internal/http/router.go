@@ -62,6 +62,8 @@ func NewServer(
 	// 各 handler 仍各自做权限点（授权）检查。新增端点即使漏写授权也不会缺失认证。
 	if authHandler != nil && authHandler.Service != nil {
 		api.Use(mw.Authentication(authHandler.Service, publicAPIPaths()))
+		// CSRF（double-submit）：仅对携带 csrf cookie 的状态变更请求强制，兼容 Bearer 过渡前端。
+		api.Use(mw.CSRFProtection(csrfExemptPaths()))
 		// 强制改密闸：被标记 force_password_change 的用户在改密前不能访问业务端点。
 		api.Use(mw.EnforcePasswordChange(forcePasswordChangeExemptPaths()))
 	}
@@ -135,5 +137,17 @@ func forcePasswordChangeExemptPaths() map[string]struct{} {
 		"/api/v1/auth/profile":         {},
 		"/api/v1/auth/logout":          {},
 		"/api/v1/auth/verify":          {},
+	}
+}
+
+// csrfExemptPaths 列出豁免 CSRF 校验的端点（echo 路由模板，含分组前缀）：
+//   - /auth/login、/auth/refresh：认证引导，请求时尚无 csrf token；refresh 轮换不向攻击者泄露 token；
+//   - /monitoring/reports/download：浏览器原生 form POST 触发下载，无法设置自定义请求头，
+//     且自带一次性下载 token 防护。
+func csrfExemptPaths() map[string]struct{} {
+	return map[string]struct{}{
+		"/api/v1/auth/login":                  {},
+		"/api/v1/auth/refresh":                {},
+		"/api/v1/monitoring/reports/download": {},
 	}
 }

@@ -245,9 +245,9 @@ func newSessionID() string {
 	return uuid.NewString()
 }
 
-func (s *Service) IssueTokensWithSession(ctx context.Context, user *UserRecord, rememberMe bool, ip string, userAgent string) (string, string, int, error) {
+func (s *Service) IssueTokensWithSession(ctx context.Context, user *UserRecord, rememberMe bool, ip string, userAgent string) (string, string, int, int, error) {
 	if user == nil {
-		return "", "", 0, errors.New("user is nil")
+		return "", "", 0, 0, errors.New("user is nil")
 	}
 	policy := s.loadSecurityPolicy(ctx)
 
@@ -255,7 +255,7 @@ func (s *Service) IssueTokensWithSession(ctx context.Context, user *UserRecord, 
 
 	accessToken, expiresIn, err := s.CreateAccessToken(user.Username, sid, policy.SessionTimeoutMinutes)
 	if err != nil {
-		return "", "", 0, err
+		return "", "", 0, 0, err
 	}
 
 	refreshDays := s.cfg.RefreshTokenExpireDays
@@ -264,58 +264,60 @@ func (s *Service) IssueTokensWithSession(ctx context.Context, user *UserRecord, 
 	}
 	refreshToken, refreshExpiresAt, err := s.CreateRefreshToken(user.Username, sid, refreshDays)
 	if err != nil {
-		return "", "", 0, err
+		return "", "", 0, 0, err
 	}
 
 	if err := s.createSession(ctx, user.ID, sid, refreshToken, refreshExpiresAt, ip, userAgent, policy); err != nil {
-		return "", "", 0, err
+		return "", "", 0, 0, err
 	}
 
-	return accessToken, refreshToken, expiresIn, nil
+	refreshExpiresIn := int(time.Until(refreshExpiresAt).Seconds())
+	return accessToken, refreshToken, expiresIn, refreshExpiresIn, nil
 }
 
-func (s *Service) RefreshTokensWithSession(ctx context.Context, refreshToken string) (string, string, int, *UserRecord, error) {
+func (s *Service) RefreshTokensWithSession(ctx context.Context, refreshToken string) (string, string, int, int, *UserRecord, error) {
 	claims, err := s.VerifyToken(refreshToken, refreshTokenType)
 	if err != nil {
-		return "", "", 0, nil, err
+		return "", "", 0, 0, nil, err
 	}
 
 	user, err := s.GetUserByUsername(ctx, claims.Subject)
 	if err != nil {
-		return "", "", 0, nil, err
+		return "", "", 0, 0, nil, err
 	}
 	if user == nil || !isUserActive(user) {
-		return "", "", 0, nil, ErrUserInactive
+		return "", "", 0, 0, nil, ErrUserInactive
 	}
 
 	sid := strings.TrimSpace(claims.Sid)
 	if sid == "" {
-		return "", "", 0, nil, ErrTokenInvalid
+		return "", "", 0, 0, nil, ErrTokenInvalid
 	}
 
 	session, err := s.validateRefreshSession(ctx, sid, refreshToken)
 	if err != nil {
-		return "", "", 0, nil, err
+		return "", "", 0, 0, nil, err
 	}
 
 	policy := s.loadSecurityPolicy(ctx)
 
 	accessToken, expiresIn, err := s.CreateAccessToken(user.Username, sid, policy.SessionTimeoutMinutes)
 	if err != nil {
-		return "", "", 0, nil, err
+		return "", "", 0, 0, nil, err
 	}
 
 	// 刷新令牌轮换：保持原 expires_at，不做滑动延长，避免无界会话。
 	newRefreshToken, err := s.createToken(user.Username, refreshTokenType, sid, session.ExpiresAt)
 	if err != nil {
-		return "", "", 0, nil, err
+		return "", "", 0, 0, nil, err
 	}
 
 	if err := s.rotateSessionRefreshToken(ctx, sid, newRefreshToken, session.ExpiresAt); err != nil {
-		return "", "", 0, nil, err
+		return "", "", 0, 0, nil, err
 	}
 
-	return accessToken, newRefreshToken, expiresIn, user, nil
+	refreshExpiresIn := int(time.Until(session.ExpiresAt).Seconds())
+	return accessToken, newRefreshToken, expiresIn, refreshExpiresIn, user, nil
 }
 
 func (s *Service) LogoutSession(ctx context.Context, accessToken string) error {

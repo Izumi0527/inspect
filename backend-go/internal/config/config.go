@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,6 +58,12 @@ type Config struct {
 	AccessTokenExpireMinutes int    `env:"ACCESS_TOKEN_EXPIRE_MINUTES" envDefault:"30"`
 	RefreshTokenExpireDays   int    `env:"REFRESH_TOKEN_EXPIRE_DAYS" envDefault:"7"`
 
+	// 认证 Cookie 配置（S3：JWT 改 httpOnly Cookie 存储）。
+	// CookieSecure 未显式配置时由 Load() 按 DEBUG 推导（生产 true / 开发 false）。
+	CookieSecure   bool   `env:"COOKIE_SECURE"`
+	CookieSameSite string `env:"COOKIE_SAMESITE" envDefault:"Lax"`
+	CookieDomain   string `env:"COOKIE_DOMAIN" envDefault:""`
+
 	LogLevel         string `env:"LOG_LEVEL" envDefault:"INFO"`
 	LogFormat        string `env:"LOG_FORMAT" envDefault:"json"`
 	LogToConsole     bool   `env:"LOG_TO_CONSOLE" envDefault:"true"`
@@ -90,6 +97,11 @@ func Load() (Config, error) {
 
 	if strings.TrimSpace(cfg.JWTSecretKey) == "" {
 		cfg.JWTSecretKey = cfg.SecretKey
+	}
+
+	// Cookie Secure：未显式配置时，生产启用、开发关闭（兼容 http://localhost）。
+	if _, ok := os.LookupEnv("COOKIE_SECURE"); !ok {
+		cfg.CookieSecure = !cfg.Debug
 	}
 
 	if strings.TrimSpace(cfg.LogFile) != "" {
@@ -143,6 +155,18 @@ func isPlaceholderSecret(secret string) bool {
 
 func (c Config) Address() string {
 	return fmt.Sprintf("%s:%d", c.ServerHost, c.ServerPort)
+}
+
+// CookieSameSiteMode 将配置字符串转换为 http.SameSite；非法值回退 Lax。
+func (c Config) CookieSameSiteMode() http.SameSite {
+	switch strings.ToLower(strings.TrimSpace(c.CookieSameSite)) {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "none":
+		return http.SameSiteNoneMode
+	default:
+		return http.SameSiteLaxMode
+	}
 }
 
 func (c Config) SnmpTrapAddress() string {

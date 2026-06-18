@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/your-org/inspect-system/backend-go/internal/auth"
+	"github.com/your-org/inspect-system/backend-go/internal/authcookie"
 	mw "github.com/your-org/inspect-system/backend-go/internal/http/middleware"
 )
 
@@ -89,5 +90,29 @@ func TestAuthentication_WhitelistedRouteBypassesAuth(t *testing.T) {
 	rec := doRequest(newAuthTestServer(), http.MethodPost, "/api/v1/auth/login", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("白名单端点应免认证可达，实际 %d", rec.Code)
+	}
+}
+
+// S3：access token 也可来自 httpOnly Cookie（无 Authorization 头时）。
+func TestAuthentication_CookieTokenPasses(t *testing.T) {
+	e := newAuthTestServer()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/protected", nil)
+	req.AddCookie(&http.Cookie{Name: authcookie.AccessTokenCookie, Value: "valid"})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Cookie 中有效 token 应通过并 200，实际 %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+// S3：Cookie 无效 token 时不静默放行（不回退 Bearer），返回 401。
+func TestAuthentication_InvalidCookieTokenReturns401(t *testing.T) {
+	e := newAuthTestServer()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/protected", nil)
+	req.AddCookie(&http.Cookie{Name: authcookie.AccessTokenCookie, Value: "garbage"})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("Cookie 中无效 token 应 401，实际 %d", rec.Code)
 	}
 }
