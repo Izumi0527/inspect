@@ -31,6 +31,17 @@ var (
 	ErrUserLocked        = errors.New("user locked")
 )
 
+// dummyBcryptHash 为预生成的 bcrypt 哈希，用于在用户不存在/被禁用时执行等价比较，
+// 抹平登录响应时延，防止通过计时差异枚举用户名（计时侧信道）。
+var dummyBcryptHash []byte
+
+func init() {
+	// 启动时生成一次；cost 与真实口令哈希一致（DefaultCost），确保比较耗时等价。
+	if h, err := bcrypt.GenerateFromPassword([]byte("timing-equalizer-placeholder"), bcrypt.DefaultCost); err == nil {
+		dummyBcryptHash = h
+	}
+}
+
 type Service struct {
 	db     *gorm.DB
 	cfg    config.Config
@@ -89,11 +100,15 @@ func (s *Service) AuthenticateUser(ctx context.Context, username string, passwor
 	user, err := s.GetUserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// 用户不存在：执行一次等价 bcrypt 比较抹平响应时延，防止通过计时差异枚举用户名。
+			_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(password))
 			return nil, nil
 		}
 		return nil, err
 	}
 	if !isUserActive(user) {
+		// 同上：被禁用用户也执行等价比较，避免计时侧信道泄露账户状态。
+		_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(password))
 		return nil, nil
 	}
 
