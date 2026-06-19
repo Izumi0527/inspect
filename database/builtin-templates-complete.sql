@@ -84,11 +84,14 @@ INSERT INTO inspection_templates (
   'network',
   '{"vendors": ["Huawei"], "device_types": ["router"]}'::jsonb,
   '[
+    {"id": "connectivity", "name": "设备连通性", "description": "ICMP 探测设备可达性", "type": "icmp", "category": "connectivity", "weight": 8, "config": {}, "enabled": true},
+    {"id": "snmp_reachable", "name": "SNMP 服务可达", "description": "校验设备 SNMP 服务可用", "type": "snmp", "category": "connectivity", "weight": 6, "config": {}, "enabled": true},
     {"id": "cpu_usage", "name": "CPU 使用率检查", "description": "监控设备 CPU 使用率", "type": "snmp", "category": "health", "weight": 10, "config": {"oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5", "timeout": 5, "unit": "%", "threshold": {"warning": 70, "critical": 85}}, "enabled": true},
-    {"id": "memory_usage", "name": "内存使用率检查", "description": "监控设备内存使用率", "type": "snmp", "category": "health", "weight": 10, "config": {"oid": "1.3.6.1.4.1.2011.6.3.5.1.1.2", "timeout": 5, "unit": "%", "threshold": {"warning": 75, "critical": 90}}, "enabled": true},
-    {"id": "interface_status", "name": "接口状态检查", "description": "检查关键接口运行状态", "type": "snmp", "category": "performance", "weight": 9, "config": {"oid": "1.3.6.1.2.1.2.2.1.8", "timeout": 5, "expectedValue": "1"}, "enabled": true},
-    {"id": "ospf_neighbors", "name": "OSPF 邻居状态检查", "description": "验证 OSPF 邻居关系", "type": "ssh", "category": "routing", "weight": 9, "config": {"command": "display ospf peer", "timeout": 10, "parsePattern": "Full"}, "enabled": true},
-    {"id": "bgp_sessions", "name": "BGP 会话状态检查", "description": "验证 BGP 会话状态", "type": "ssh", "category": "routing", "weight": 9, "config": {"command": "display bgp peer", "timeout": 10, "parsePattern": "Established"}, "enabled": true}
+    {"id": "memory_usage", "name": "内存使用率检查", "description": "监控设备内存使用率", "type": "snmp", "category": "health", "weight": 10, "config": {"oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7", "timeout": 5, "unit": "%", "threshold": {"warning": 75, "critical": 90}}, "enabled": true},
+    {"id": "temperature", "name": "设备温度检查", "description": "监控单板/整机温度", "type": "snmp", "category": "health", "weight": 7, "config": {"oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11", "timeout": 5, "unit": "℃", "threshold": {"warning": 60, "critical": 75}}, "enabled": true},
+    {"id": "uptime", "name": "系统运行时间", "description": "读取设备运行时长", "type": "snmp", "category": "health", "weight": 4, "config": {"oid": "1.3.6.1.2.1.1.3.0"}, "enabled": true},
+    {"id": "interface_status", "name": "接口状态检查", "description": "检查关键接口运行状态", "type": "snmp", "category": "performance", "weight": 9, "config": {"oid": "1.3.6.1.2.1.2.2.1.8"}, "enabled": true},
+    {"id": "bandwidth", "name": "带宽利用率", "description": "基于接口流量评估带宽利用", "type": "snmp", "category": "performance", "weight": 7, "config": {"oid": "1.3.6.1.2.1.31.1.1.1.6"}, "enabled": true}
   ]'::jsonb,
   true, true, NOW(), NOW()
 ) ON CONFLICT DO NOTHING;
@@ -103,10 +106,14 @@ INSERT INTO inspection_templates (
   'network',
   '{"vendors": ["Huawei"], "device_types": ["switch"]}'::jsonb,
   '[
+    {"id": "connectivity", "name": "设备连通性", "description": "ICMP 探测设备可达性", "type": "icmp", "category": "connectivity", "weight": 8, "config": {}, "enabled": true},
+    {"id": "snmp_reachable", "name": "SNMP 服务可达", "description": "校验设备 SNMP 服务可用", "type": "snmp", "category": "connectivity", "weight": 6, "config": {}, "enabled": true},
     {"id": "cpu_usage", "name": "CPU 使用率检查", "description": "监控设备 CPU 使用率", "type": "snmp", "category": "health", "weight": 10, "config": {"oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5", "timeout": 5, "unit": "%", "threshold": {"warning": 70, "critical": 85}}, "enabled": true},
-    {"id": "memory_usage", "name": "内存使用率检查", "description": "监控设备内存使用率", "type": "snmp", "category": "health", "weight": 10, "config": {"oid": "1.3.6.1.4.1.2011.6.3.5.1.1.2", "timeout": 5, "unit": "%", "threshold": {"warning": 75, "critical": 90}}, "enabled": true},
-    {"id": "interface_status", "name": "接口状态检查", "description": "检查关键接口运行状态", "type": "snmp", "category": "performance", "weight": 9, "config": {"oid": "1.3.6.1.2.1.2.2.1.8", "timeout": 5, "expectedValue": "1"}, "enabled": true},
-    {"id": "port_security", "name": "端口安全配置检查", "description": "验证接入层端口安全功能", "type": "ssh", "category": "security", "weight": 8, "config": {"command": "display port-security", "timeout": 10, "parsePattern": "enable"}, "enabled": true}
+    {"id": "memory_usage", "name": "内存使用率检查", "description": "监控设备内存使用率", "type": "snmp", "category": "health", "weight": 10, "config": {"oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7", "timeout": 5, "unit": "%", "threshold": {"warning": 75, "critical": 90}}, "enabled": true},
+    {"id": "temperature", "name": "设备温度检查", "description": "监控单板/整机温度", "type": "snmp", "category": "health", "weight": 7, "config": {"oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11", "timeout": 5, "unit": "℃", "threshold": {"warning": 60, "critical": 75}}, "enabled": true},
+    {"id": "uptime", "name": "系统运行时间", "description": "读取设备运行时长", "type": "snmp", "category": "health", "weight": 4, "config": {"oid": "1.3.6.1.2.1.1.3.0"}, "enabled": true},
+    {"id": "interface_status", "name": "接口状态检查", "description": "检查关键接口运行状态", "type": "snmp", "category": "performance", "weight": 9, "config": {"oid": "1.3.6.1.2.1.2.2.1.8"}, "enabled": true},
+    {"id": "bandwidth", "name": "带宽利用率", "description": "基于接口流量评估带宽利用", "type": "snmp", "category": "performance", "weight": 7, "config": {"oid": "1.3.6.1.2.1.31.1.1.1.6"}, "enabled": true}
   ]'::jsonb,
   true, true, NOW(), NOW()
 ) ON CONFLICT DO NOTHING;

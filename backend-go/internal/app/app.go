@@ -102,6 +102,12 @@ func New() (*App, error) {
 		return nil, err
 	}
 
+	// 启动时幂等同步内置巡检模板（华为交换机/路由器等），使内置检查项随版本演进自动加载。
+	// 尽力而为：失败仅告警，不阻塞主服务启动。
+	if err := inspection.EnsureBuiltinTemplates(context.Background(), dbConn, log); err != nil && log != nil {
+		log.Warn("同步内置巡检模板失败（将继续启动）", zap.Error(err))
+	}
+
 	redisClient, err := redisstore.NewClient(cfg)
 	if err != nil {
 		// 开发/调试环境允许无 Redis 启动：相关功能将自动降级（监控缓存、限流、健康检查等）。
