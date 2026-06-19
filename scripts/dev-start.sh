@@ -255,7 +255,7 @@ dotenv_value() {
 
 get_backend_dev_config() {
     local allow_missing_port="${1:-false}"
-    local env_file_path="$PROJECT_ROOT/.env"
+    local env_file_path="$PROJECT_ROOT/.env.development"
 
     local server_host="${SERVER_HOST:-}"
     if [[ -z "$server_host" ]]; then
@@ -277,7 +277,7 @@ get_backend_dev_config() {
     if [[ "$server_port_raw" =~ ^[0-9]+$ ]] && (( server_port_raw >= 1 && server_port_raw <= 65535 )); then
         server_port="$server_port_raw"
     else
-        port_error="根目录 .env 或环境变量中的 SERVER_PORT 未配置或非法。"
+        port_error="根目录 .env.development 或环境变量中的 SERVER_PORT 未配置或非法。"
         if [[ "$allow_missing_port" != true ]]; then
             die "$port_error"
         fi
@@ -375,17 +375,22 @@ test_setup_prerequisites() {
     write_color "✅ 所有前置条件检查通过" "Green"
 }
 
+# 确保根环境配置文件存在：缺失时按 .env.example 模板生成（不再使用共享的 .env）。
+initialize_root_env_file() {
+    local target_name="$1"
+    local target_path="$PROJECT_ROOT/$target_name"
+    if [[ -f "$target_path" ]]; then
+        return 0
+    fi
+    [[ -f "$PROJECT_ROOT/.env.example" ]] || die "缺少环境模板文件 .env.example，无法生成 $target_name"
+    cp "$PROJECT_ROOT/.env.example" "$target_path"
+    write_color "✅ 已按 .env.example 生成环境配置文件: $target_name" "Green"
+}
+
 new_development_environment_files() {
     write_color $'\n📄 创建开发环境配置文件...' "Blue"
 
-    if [[ ! -f "$PROJECT_ROOT/.env.development" && ! -f "$PROJECT_ROOT/.env" ]]; then
-        if [[ -f "$PROJECT_ROOT/.env.example" ]]; then
-            cp "$PROJECT_ROOT/.env.example" "$PROJECT_ROOT/.env.development"
-            write_color "✅ 已创建后端环境配置文件: .env.development" "Green"
-        else
-            write_color "⚠️ 未找到 .env.example，跳过后端环境文件创建" "Yellow"
-        fi
-    fi
+    initialize_root_env_file ".env.development"
 
     local frontend_env_path="$PROJECT_ROOT/frontend/.env.local"
     if [[ ! -f "$frontend_env_path" ]]; then
@@ -437,8 +442,6 @@ initialize_backend_environment() {
 
     if [[ -f "$PROJECT_ROOT/.env.development" ]]; then
         export ENV_FILE="$PROJECT_ROOT/.env.development"
-    elif [[ -f "$PROJECT_ROOT/.env" ]]; then
-        export ENV_FILE="$PROJECT_ROOT/.env"
     fi
 
     run_cmd "下载 Go 依赖" "$backend_dir" false go mod download
@@ -776,7 +779,7 @@ invoke_dev_diagnose() {
 
     write_color $'\n📄 检查配置文件...' "Blue"
     local config_file
-    for config_file in docker-compose.dev.yml docker-compose.prod.yml docker-compose.yml .env .env.development frontend/.env.local; do
+    for config_file in docker-compose.dev.yml docker-compose.prod.yml docker-compose.yml .env.development .env.production frontend/.env.local; do
         if [[ -e "$PROJECT_ROOT/$config_file" ]]; then
             status_line "$config_file" "OK" "存在"
         else
@@ -962,6 +965,9 @@ main() {
         invoke_dev_diagnose
         return
     fi
+
+    # 首次启动自动按 .env.example 生成开发环境配置（不再依赖共享的 .env）
+    initialize_root_env_file ".env.development"
 
     test_prerequisites
 

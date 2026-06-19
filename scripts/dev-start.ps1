@@ -239,7 +239,7 @@ function Get-BackendDevConfig {
     )
 
     $projectRoot = (Get-Location).Path
-    $envFilePath = Join-Path $projectRoot ".env"
+    $envFilePath = Join-Path $projectRoot ".env.development"
 
     $serverHost = [System.Environment]::GetEnvironmentVariable("SERVER_HOST")
     if ([string]::IsNullOrWhiteSpace($serverHost)) {
@@ -259,7 +259,7 @@ function Get-BackendDevConfig {
     $serverPort = 0
     $portError = $null
     if ([string]::IsNullOrWhiteSpace($serverPortRaw) -or -not [int]::TryParse($serverPortRaw, [ref]$serverPort) -or $serverPort -le 0 -or $serverPort -gt 65535) {
-        $portError = "根目录 .env 或环境变量中的 SERVER_PORT 未配置或非法。"
+        $portError = "根目录 .env.development 或环境变量中的 SERVER_PORT 未配置或非法。"
         if (-not $AllowMissingPort) {
             throw $portError
         }
@@ -331,26 +331,32 @@ function Test-SetupPrerequisites {
     Write-ColorOutput "✅ 所有前置条件检查通过" "Green"
 }
 
+# 确保根环境配置文件存在：缺失时按 .env.example 模板生成（不再使用共享的 .env）。
+function Initialize-RootEnvFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$TargetFileName
+    )
+
+    $targetPath = Join-Path $Script:ProjectRoot $TargetFileName
+    if (Test-Path -LiteralPath $targetPath) {
+        return $targetPath
+    }
+
+    $examplePath = Join-Path $Script:ProjectRoot ".env.example"
+    if (-not (Test-Path -LiteralPath $examplePath)) {
+        throw "缺少环境模板文件 .env.example，无法生成 $TargetFileName"
+    }
+
+    Copy-Item -LiteralPath $examplePath -Destination $targetPath -Force
+    Write-ColorOutput "✅ 已按 .env.example 生成环境配置文件: $TargetFileName" "Green"
+    return $targetPath
+}
+
 function New-DevelopmentEnvironmentFiles {
     Write-ColorOutput "`n📄 创建开发环境配置文件..." "Blue"
 
-    $backendEnvCandidates = @(".env.development", ".env")
-    $backendEnvExists = $false
-    foreach ($candidate in $backendEnvCandidates) {
-        if (Test-Path $candidate) {
-            $backendEnvExists = $true
-            break
-        }
-    }
-
-    if (-not $backendEnvExists) {
-        if (Test-Path ".env.example") {
-            Copy-Item -Path ".env.example" -Destination ".env.development"
-            Write-ColorOutput "✅ 已创建后端环境配置文件: .env.development" "Green"
-        } else {
-            Write-ColorOutput "⚠️ 未找到 .env.example，跳过后端环境文件创建" "Yellow"
-        }
-    }
+    Initialize-RootEnvFile -TargetFileName ".env.development" | Out-Null
 
     $frontendEnvPath = "frontend\.env.local"
     if (-not (Test-Path $frontendEnvPath)) {
@@ -403,8 +409,6 @@ function Initialize-BackendEnvironment {
     $envFile = $null
     if (Test-Path ".env.development") {
         $envFile = (Resolve-Path ".env.development").Path
-    } elseif (Test-Path ".env") {
-        $envFile = (Resolve-Path ".env").Path
     }
     if ($envFile) {
         $env:ENV_FILE = $envFile
@@ -828,8 +832,8 @@ function Invoke-DevDiagnose {
         @{ Name = "docker-compose.dev.yml"; Path = "docker-compose.dev.yml" },
         @{ Name = "docker-compose.prod.yml"; Path = "docker-compose.prod.yml" },
         @{ Name = "docker-compose.yml（旧版/可选）"; Path = "docker-compose.yml" },
-        @{ Name = ".env"; Path = ".env" },
         @{ Name = ".env.development"; Path = ".env.development" },
+        @{ Name = ".env.production"; Path = ".env.production" },
         @{ Name = "frontend/.env.local"; Path = "frontend/.env.local" }
     )
     foreach ($f in $configFiles) {
@@ -1132,7 +1136,10 @@ function Main {
             Invoke-DevDiagnose
             return
         }
-        
+
+        # 首次启动自动按 .env.example 生成开发环境配置（不再依赖共享的 .env）
+        Initialize-RootEnvFile -TargetFileName ".env.development" | Out-Null
+
         # 检查前置条件
         Test-Prerequisites
         

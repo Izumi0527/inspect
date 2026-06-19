@@ -5,6 +5,9 @@
 .env
 .env.local
 .env.*.local
+# 各环境运行时配置（由 dev-start/prod-start 按 .env.example 自动生成）
+.env.development
+.env.production
 
 # 保留示例文件（版本控制中）
 !.env.example

@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     生产环境 Docker Compose 启动脚本
@@ -11,7 +11,7 @@
     执行动作：start、stop、restart、status、logs、build、pull、config、down。
 
 .PARAMETER EnvFile
-    指定生产环境变量文件。未指定时优先使用 .env.production，其次使用 .env。
+    指定生产环境变量文件。未指定时使用 .env.production（缺失时按 .env.example 自动生成）。
 
 .PARAMETER WithNginx
     启用 with-nginx profile，启动 Nginx 反向代理。
@@ -152,7 +152,7 @@ function Show-Help {
     Write-Host "  down     下线生产服务（如需删卷必须显式使用 -RemoveVolumes）"
     Write-Host ""
     Write-Host "常用选项:"
-    Write-Host "  -EnvFile <file>     指定环境变量文件，默认优先 .env.production，其次 .env"
+    Write-Host "  -EnvFile <file>     指定环境变量文件，默认使用 .env.production（缺失时按 .env.example 自动生成）"
     Write-Host "  -WithNginx          启用 with-nginx profile"
     Write-Host "  -Monitoring         启用 monitoring profile"
     Write-Host "  -Service <name[]>   限定服务，例如 backend, frontend"
@@ -230,6 +230,27 @@ function Get-ConfigValue {
     return ""
 }
 
+# 未通过 -EnvFile 指定时，确保 .env.production 存在：缺失则按 .env.example 模板生成。
+function Initialize-ProductionEnvFile {
+    if (-not [string]::IsNullOrWhiteSpace($EnvFile)) {
+        return
+    }
+
+    $productionEnv = Join-Path $Script:ProjectRoot ".env.production"
+    if (Test-Path -LiteralPath $productionEnv) {
+        return
+    }
+
+    $examplePath = Join-Path $Script:ProjectRoot ".env.example"
+    if (-not (Test-Path -LiteralPath $examplePath)) {
+        throw "缺少环境模板文件 .env.example，无法生成 .env.production"
+    }
+
+    Copy-Item -LiteralPath $examplePath -Destination $productionEnv -Force
+    Write-ColorOutput "✅ 已按 .env.example 生成生产环境配置: .env.production" "Green"
+    Write-ColorOutput "⚠️ 请先在 .env.production 中填写生产级配置（NODE_ENV=production、DEBUG=false、强随机 SECRET_KEY/JWT_SECRET_KEY、POSTGRES_PASSWORD、REDIS_PASSWORD、真实域名等）后重新运行。" "Yellow"
+}
+
 function Resolve-ProductionEnvFile {
     if (-not [string]::IsNullOrWhiteSpace($EnvFile)) {
         $candidate = if ([IO.Path]::IsPathRooted($EnvFile)) { $EnvFile } else { Join-Path $Script:ProjectRoot $EnvFile }
@@ -242,11 +263,6 @@ function Resolve-ProductionEnvFile {
     $productionEnv = Join-Path $Script:ProjectRoot ".env.production"
     if (Test-Path -LiteralPath $productionEnv) {
         return (Resolve-Path -LiteralPath $productionEnv).ProviderPath
-    }
-
-    $rootEnv = Join-Path $Script:ProjectRoot ".env"
-    if (Test-Path -LiteralPath $rootEnv) {
-        return (Resolve-Path -LiteralPath $rootEnv).ProviderPath
     }
 
     return $null
@@ -355,7 +371,7 @@ function Test-ProductionConfig {
     }
 
     if ($missing.Count -gt 0) {
-        throw "缺少生产环境必需变量: $($missing -join ', ')。请在 .env.production、.env 或系统环境变量中配置。"
+        throw "缺少生产环境必需变量: $($missing -join ', ')。请在 .env.production 或系统环境变量中配置。"
     }
 
     $weakSecrets = @()
@@ -526,6 +542,7 @@ function Main {
         return
     }
 
+    Initialize-ProductionEnvFile
     $Script:SelectedEnvFile = Resolve-ProductionEnvFile
     if ($Script:SelectedEnvFile) {
         $Script:EnvValues = Get-DotEnvMap -Path $Script:SelectedEnvFile

@@ -74,7 +74,7 @@ show_help() {
   down     下线生产服务（如需删卷必须显式使用 --remove-volumes）
 
 常用选项:
-  --env-file, -EnvFile <file>     指定环境变量文件，默认优先 .env.production，其次 .env
+  --env-file, -EnvFile <file>     指定环境变量文件，默认使用 .env.production（缺失时按 .env.example 自动生成）
   --with-nginx, -WithNginx        启用 with-nginx profile
   --monitoring, -Monitoring       启用 monitoring profile
   --service, -Service <name>      限定服务，可重复传入
@@ -243,6 +243,18 @@ get_config_value() {
     dotenv_value "$SELECTED_ENV_FILE" "$name" ""
 }
 
+# 未通过 --env-file 指定时，确保 .env.production 存在：缺失则按 .env.example 模板生成。
+# 注意：本函数在 main 中直接调用（非命令替换内），故提示信息走正常 stdout 不会污染路径捕获。
+ensure_production_env_file() {
+    [[ -n "$ENV_FILE" ]] && return 0
+    local production_env="$PROJECT_ROOT/.env.production"
+    [[ -f "$production_env" ]] && return 0
+    [[ -f "$PROJECT_ROOT/.env.example" ]] || die "缺少环境模板文件 .env.example，无法生成 .env.production"
+    cp "$PROJECT_ROOT/.env.example" "$production_env"
+    write_color "✅ 已按 .env.example 生成生产环境配置: .env.production" "Green"
+    write_color "⚠️ 请先在 .env.production 中填写生产级配置（NODE_ENV=production、DEBUG=false、强随机 SECRET_KEY/JWT_SECRET_KEY、POSTGRES_PASSWORD、REDIS_PASSWORD、真实域名等）后重新运行。" "Yellow"
+}
+
 resolve_production_env_file() {
     if [[ -n "$ENV_FILE" ]]; then
         local candidate="$ENV_FILE"
@@ -256,11 +268,6 @@ resolve_production_env_file() {
 
     if [[ -f "$PROJECT_ROOT/.env.production" ]]; then
         printf '%s\n' "$PROJECT_ROOT/.env.production"
-        return
-    fi
-
-    if [[ -f "$PROJECT_ROOT/.env" ]]; then
-        printf '%s\n' "$PROJECT_ROOT/.env"
         return
     fi
 }
@@ -356,7 +363,7 @@ test_production_config() {
     done
 
     if [[ "${#missing[@]}" -gt 0 ]]; then
-        die "缺少生产环境必需变量: ${missing[*]}。请在 .env.production、.env 或系统环境变量中配置。"
+        die "缺少生产环境必需变量: ${missing[*]}。请在 .env.production 或系统环境变量中配置。"
     fi
 
     local weak_secrets=()
@@ -525,6 +532,7 @@ main() {
         return
     fi
 
+    ensure_production_env_file
     SELECTED_ENV_FILE="$(resolve_production_env_file || true)"
 
     test_production_files
