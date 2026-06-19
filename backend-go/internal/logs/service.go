@@ -682,9 +682,9 @@ func (s *Service) storeLogEntries(ctx context.Context, entries []logEntry) (int,
 		records = append(records, record)
 	}
 
-	// 去重：同一设备重复采集会重新读取其近期日志缓冲，导致区间重叠的日志被反复入库。
-	// 按内容自然键（device_id+log_timestamp+level+facility+source+message，不含每次都变化的
-	// collected_at）过滤掉数据库已存记录与本批内部重复，只插入新日志。
+	// 去重：同一设备重复采集会重新读取其近期日志缓冲，导致内容相同的日志被反复入库。
+	// 按内容自然键过滤已存与批内重复，只插入新日志。注意：对没有可解析设备时间戳的日志
+	// （log_timestamp 会回退为采集时间），去重忽略时间、仅按内容判定，否则每次采集都会判为新行。
 	records = s.dedupeLogRecords(ctx, records)
 	if len(records) == 0 {
 		return 0, nil
@@ -700,7 +700,7 @@ func (s *Service) storeLogEntries(ctx context.Context, entries []logEntry) (int,
 // logDedupKey 为日志内容自然键，用于识别重复日志（不含 collected_at）。
 type logDedupKey struct {
 	deviceID  int
-	timestamp int64 // log_timestamp 截断到微秒后的 UnixMicro，与 Postgres 存储精度对齐
+	timestamp int64 // 真实设备时间戳的 UnixMicro；无真实时间戳时为 0（按内容去重）
 	level     string
 	facility  string
 	source    string
@@ -708,9 +708,18 @@ type logDedupKey struct {
 }
 
 func logDedupKeyOf(r DeviceLog) logDedupKey {
+	// 仅当 log_timestamp 是设备真实时间戳（与 collected_at 不同）时才纳入键。
+	// 若两者相等，说明该行没有可解析的设备时间戳、log_timestamp 回退成了采集时间，
+	// 此时按内容去重（忽略时间），避免同一行因每次采集时间不同而被反复入库。
+	lt := r.LogTimestamp.UTC().Truncate(time.Microsecond)
+	ct := r.CollectedAt.UTC().Truncate(time.Microsecond)
+	var ts int64
+	if !lt.Equal(ct) {
+		ts = lt.UnixMicro()
+	}
 	return logDedupKey{
 		deviceID:  r.DeviceID,
-		timestamp: r.LogTimestamp.UTC().Truncate(time.Microsecond).UnixMicro(),
+		timestamp: ts,
 		level:     r.Level,
 		facility:  r.Facility,
 		source:    r.Source,
@@ -738,38 +747,36 @@ func filterNewLogRecords(records []DeviceLog, existing []DeviceLog) []DeviceLog 
 	return result
 }
 
-// dedupeLogRecords 查询数据库中本批时间范围内的已存日志，结合批内去重过滤出新日志。
-// 查询失败时退化为仅批内去重，不阻塞采集主流程。
+// dedupeLogRecords 拉取数据库中“同设备 + 相同消息内容”的已存日志，结合批内去重过滤出新日志。
+// 不按 log_timestamp 限定时间窗：无真实设备时间戳的日志，其 log_timestamp 会随采集时间漂移、
+// 落在不同窗口，按时间窗查询会漏掉历史重复行。查询失败时退化为仅批内去重，不阻塞采集主流程。
 func (s *Service) dedupeLogRecords(ctx context.Context, records []DeviceLog) []DeviceLog {
 	if len(records) == 0 || s.db == nil {
 		return filterNewLogRecords(records, nil)
 	}
 
 	deviceIDSet := make(map[int]struct{})
-	var minTs, maxTs time.Time
-	for i, r := range records {
+	messageSet := make(map[string]struct{})
+	for _, r := range records {
 		deviceIDSet[r.DeviceID] = struct{}{}
-		ts := r.LogTimestamp.UTC()
-		if i == 0 || ts.Before(minTs) {
-			minTs = ts
-		}
-		if i == 0 || ts.After(maxTs) {
-			maxTs = ts
-		}
+		messageSet[r.Message] = struct{}{}
 	}
 
 	deviceIDs := make([]int, 0, len(deviceIDSet))
 	for id := range deviceIDSet {
 		deviceIDs = append(deviceIDs, id)
 	}
+	messages := make([]string, 0, len(messageSet))
+	for m := range messageSet {
+		messages = append(messages, m)
+	}
 
 	var existing []DeviceLog
 	err := s.db.WithContext(ctx).
 		Table("device_logs").
-		Select("device_id, level, facility, source, message, log_timestamp").
+		Select("device_id, level, facility, source, message, log_timestamp, collected_at").
 		Where("device_id IN ?", deviceIDs).
-		Where("log_timestamp >= ? AND log_timestamp <= ?",
-			minTs.Truncate(time.Microsecond), maxTs.Truncate(time.Microsecond)).
+		Where("message IN ?", messages).
 		Find(&existing).Error
 	if err != nil {
 		if s.logger != nil {

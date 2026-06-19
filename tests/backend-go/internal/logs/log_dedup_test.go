@@ -90,3 +90,43 @@ func TestFilterNewLogRecords(t *testing.T) {
 		}
 	})
 }
+
+// mkUnparsedLog 模拟“无可解析设备时间戳”的日志：log_timestamp 回退为 collected_at（两者相等）。
+func mkUnparsedLog(deviceID int, collectedAt time.Time, message string) logs.DeviceLog {
+	return logs.DeviceLog{
+		DeviceID:     deviceID,
+		Level:        "info",
+		Facility:     "local0",
+		Source:       "ssh",
+		Message:      message,
+		LogTimestamp: collectedAt,
+		CollectedAt:  collectedAt,
+	}
+}
+
+// TestFilterNewLogRecords_NoRealTimestamp 复现并守护本次修复：
+// 对没有真实设备时间戳的日志（log_timestamp == collected_at），两次采集时间不同也应判为重复，
+// 否则同一行会随每次采集被反复入库（截图所示问题）。
+func TestFilterNewLogRecords_NoRealTimestamp(t *testing.T) {
+	t1 := time.Date(2026, 6, 20, 2, 30, 46, 0, time.UTC)
+	t2 := time.Date(2026, 6, 20, 3, 57, 20, 0, time.UTC) // 第二次采集，时间不同
+
+	t.Run("不同采集时间的相同内容应判为重复", func(t *testing.T) {
+		existing := []logs.DeviceLog{
+			mkUnparsedLog(1, t1, "of current VTY users on line is 1."),
+			mkUnparsedLog(1, t1, "Info: Slave board is not ready."),
+		}
+		records := []logs.DeviceLog{
+			mkUnparsedLog(1, t2, "of current VTY users on line is 1."), // 与已存内容相同 → 重复
+			mkUnparsedLog(1, t2, "Info: Slave board is not ready."),     // 重复
+			mkUnparsedLog(1, t2, "The current login time is 2026-06-20 03:57:18."), // 内容不同 → 新
+		}
+		got := filterNewLogRecords(records, existing)
+		if len(got) != 1 {
+			t.Fatalf("应仅保留 1 条内容不同的新日志，实际 %d", len(got))
+		}
+		if got[0].Message != "The current login time is 2026-06-20 03:57:18." {
+			t.Fatalf("保留的应是内容不同的新日志，实际 %q", got[0].Message)
+		}
+	})
+}
