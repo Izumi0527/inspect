@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 
 # S11 —— prepare-env.ps1 DB/Redis 口令随机化静态测试。

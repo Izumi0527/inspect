@@ -1,4 +1,4 @@
-[CmdletBinding(SupportsShouldProcess = $true)]
+﻿[CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [string]$InstallRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 )
