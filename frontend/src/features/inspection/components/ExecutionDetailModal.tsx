@@ -97,12 +97,12 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
     cancelled: { color: 'text-orange-500 bg-orange-100', icon: <XCircle className="w-4 h-4" />, label: '已取消' },
   }
 
-  // 检查项状态样式
-  const checkStatusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-    pass: { color: 'text-green-600', icon: <CheckCircle2 className="w-4 h-4" />, label: '通过' },
-    warning: { color: 'text-yellow-600', icon: <AlertTriangle className="w-4 h-4" />, label: '警告' },
-    fail: { color: 'text-red-600', icon: <XCircle className="w-4 h-4" />, label: '失败' },
-    skip: { color: 'text-gray-400', icon: <Clock className="w-4 h-4" />, label: '跳过' },
+  // 检查项状态样式：color 用于图标着色，variant 决定徽标的底色+文字（保证对比度可读）
+  const checkStatusConfig: Record<string, { color: string; variant: 'success' | 'warning' | 'error' | 'secondary'; icon: React.ReactNode; label: string }> = {
+    pass: { color: 'text-green-600', variant: 'success', icon: <CheckCircle2 className="w-4 h-4" />, label: '通过' },
+    warning: { color: 'text-yellow-600', variant: 'warning', icon: <AlertTriangle className="w-4 h-4" />, label: '警告' },
+    fail: { color: 'text-red-600', variant: 'error', icon: <XCircle className="w-4 h-4" />, label: '失败' },
+    skip: { color: 'text-gray-400', variant: 'secondary', icon: <Clock className="w-4 h-4" />, label: '跳过' },
   }
 
   const currentStatus = statusConfig[execution.status] || statusConfig.pending
@@ -504,7 +504,7 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                                         )}
                                       </div>
                                     </div>
-                                    <Badge className={cn('ml-2', checkStatus.color)}>{checkStatus.label}</Badge>
+                                    <Badge variant={checkStatus.variant} className="ml-2">{checkStatus.label}</Badge>
                                   </div>
                                 </div>
                               )
@@ -562,7 +562,7 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                               <div className={checkStatus.color}>{checkStatus.icon}</div>
                               <span className="font-medium text-foreground">{check.checkItemName}</span>
                             </div>
-                            <Badge className={checkStatus.color}>{checkStatus.label}</Badge>
+                            <Badge variant={checkStatus.variant}>{checkStatus.label}</Badge>
                           </div>
                           <div className="text-sm text-muted-foreground space-y-1">
                             <p>
