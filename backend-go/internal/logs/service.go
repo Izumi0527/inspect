@@ -544,7 +544,8 @@ func (s *Service) CollectDeviceLogs(ctx context.Context, deviceID int, logType s
 		return 0, nil
 	}
 
-	return s.storeLogEntries(ctx, entries)
+	// SSH 轮询采集会反复读取设备近期日志缓冲，需按内容去重避免重复入库。
+	return s.storeLogEntriesDeduped(ctx, entries)
 }
 
 func (s *Service) BatchCollectLogs(ctx context.Context, deviceIDs []int, logType string, maxEntries int, maxConcurrent int) (BatchCollectResult, error) {
@@ -639,11 +640,8 @@ func (s *Service) getDeviceInfo(ctx context.Context, deviceID int) (deviceInfo, 
 	}, nil
 }
 
-func (s *Service) storeLogEntries(ctx context.Context, entries []logEntry) (int, error) {
-	if len(entries) == 0 {
-		return 0, nil
-	}
-
+// buildDeviceLogRecords 将采集到的 logEntry 规整为待入库的 DeviceLog 记录。
+func buildDeviceLogRecords(entries []logEntry) []DeviceLog {
 	records := make([]DeviceLog, 0, len(entries))
 	for _, entry := range entries {
 		collectedAt := entry.CollectedAt
@@ -681,10 +679,31 @@ func (s *Service) storeLogEntries(ctx context.Context, entries []logEntry) (int,
 
 		records = append(records, record)
 	}
+	return records
+}
 
-	// 去重：同一设备重复采集会重新读取其近期日志缓冲，导致内容相同的日志被反复入库。
-	// 按内容自然键过滤已存与批内重复，只插入新日志。注意：对没有可解析设备时间戳的日志
-	// （log_timestamp 会回退为采集时间），去重忽略时间、仅按内容判定，否则每次采集都会判为新行。
+// storeLogEntries 直接写入日志记录，不做去重。
+// 适用于 SNMP Trap、Syslog 等“推送型”实时事件——每条都是独立事件，按内容去重会丢失合法的重复告警。
+func (s *Service) storeLogEntries(ctx context.Context, entries []logEntry) (int, error) {
+	if len(entries) == 0 {
+		return 0, nil
+	}
+
+	records := buildDeviceLogRecords(entries)
+	if err := s.db.WithContext(ctx).Create(&records).Error; err != nil {
+		return 0, err
+	}
+	return len(records), nil
+}
+
+// storeLogEntriesDeduped 在写入前按内容自然键去重，只插入新日志。
+// 仅适用于 SSH “轮询型”采集——同一设备会反复读取其近期日志缓冲，区间重叠的内容需要去重。
+func (s *Service) storeLogEntriesDeduped(ctx context.Context, entries []logEntry) (int, error) {
+	if len(entries) == 0 {
+		return 0, nil
+	}
+
+	records := buildDeviceLogRecords(entries)
 	records = s.dedupeLogRecords(ctx, records)
 	if len(records) == 0 {
 		return 0, nil
@@ -693,7 +712,6 @@ func (s *Service) storeLogEntries(ctx context.Context, entries []logEntry) (int,
 	if err := s.db.WithContext(ctx).Create(&records).Error; err != nil {
 		return 0, err
 	}
-
 	return len(records), nil
 }
 
