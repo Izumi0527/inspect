@@ -73,7 +73,7 @@ ISCC.exe installer\inspect.iss
 安装后直接运行 `Inspect 启动服务` 即可。启动脚本会按顺序执行：
 
 - 首次启动时复制 `config/.env.example` 为 `config/.env`
-- 自动生成 `SECRET_KEY` 和 `JWT_SECRET_KEY`
+- 自动生成 `SECRET_KEY`、`JWT_SECRET_KEY`，以及 PostgreSQL/Redis 强随机口令（写入 `config/.env`）
 - 创建 `logs/`、`data/`、`data/reports/`、`data/backups/` 等运行目录
 - 使用 Docker Compose 启动 TimescaleDB/PostgreSQL 和 Redis
 - 启动 `backend/app.exe`
@@ -126,6 +126,34 @@ config/.env
 ```
 
 可根据实际数据库、Redis、端口等环境修改 `config/.env`。
+
+## 数据库与 Redis 口令（首启自动随机化）
+
+首次启动时，`prepare-env.ps1` 会用操作系统级 CSPRNG 为 PostgreSQL 与 Redis 各生成一个 64 位十六进制强随机口令并写入 `config/.env`，安装包不再随模板下发任何可知的默认数据库/Redis 口令：
+
+- `DATABASE_URL` 内嵌口令与 `POSTGRES_PASSWORD` 始终一致（由同一占位符替换保证），后端与 Postgres 容器使用同一口令；
+- `REDIS_URL` 内嵌口令与 `REDIS_PASSWORD` 同理；
+- 口令仅在占位符（`__DB_PASSWORD__` / `__REDIS_PASSWORD__`）仍存在时生成；再次启动不会改动已生成的口令（幂等）。
+
+### 存量数据卷升级（重要）
+
+PostgreSQL 只在**首次初始化空数据卷**时固化数据库用户口令，此后修改 `config/.env` 不会改变卷内已有口令。为避免“装过旧版本的机器升级后连不上库”，`prepare-env.ps1` 会检测 `data/postgres` 是否已初始化（是否存在 `PG_VERSION`）：
+
+- **全新安装**（空卷）：生成强随机口令；
+- **存量卷**（卷已初始化）：沿用既有口令以保证连库，并打印告警。
+
+如需将存量库轮换为强随机口令，请在停机维护窗口手动执行：
+
+1. 修改数据库用户口令（示例）：
+
+   ```powershell
+   docker exec -it inspect-postgres-installer psql -U inspect_dev -d inspect_system_dev -c "ALTER USER inspect_dev WITH PASSWORD '<新强随机口令>';"
+   ```
+
+2. 将同一口令同步写入 `config/.env` 的 `DATABASE_URL` 与 `POSTGRES_PASSWORD`（两处必须一致）；
+3. 重启服务。
+
+Redis 口令不固化在数据卷中（每次启动从 `--requirepass` 读取），可随时随机化，无需上述迁移步骤。
 
 ## 默认登录账号
 

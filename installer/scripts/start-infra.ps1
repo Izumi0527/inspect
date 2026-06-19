@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $composeFile = Join-Path $InstallRoot "docker-compose.installer.yml"
+$envFilePath = Join-Path $InstallRoot "config/.env"
 $requiredPostgresMajor = 16
 $requiredTimescaleVersion = "2.15.3"
 
@@ -72,6 +73,26 @@ function ConvertTo-NativeArgument {
     return '"' + $escaped + '"'
 }
 
+function Get-EnvValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [string]$DefaultValue = ""
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $DefaultValue
+    }
+
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        if ($line -match "^\s*$([regex]::Escape($Name))\s*=\s*(.*)\s*$") {
+            return $matches[1].Trim().Trim('"').Trim("'")
+        }
+    }
+
+    return $DefaultValue
+}
+
 function Assert-DatabaseRuntime {
     $serverVersion = Invoke-DockerOutput -Arguments @(
         "exec", "inspect-postgres-installer",
@@ -116,6 +137,10 @@ if ($WhatIfPreference) {
     return
 }
 
+if (-not (Test-Path -LiteralPath $envFilePath)) {
+    throw "Runtime environment file not found: $envFilePath. Run prepare-env.ps1 first to generate config/.env (it provides POSTGRES_PASSWORD/REDIS_PASSWORD for the compose stack)."
+}
+
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Docker CLI not found. Please install and start Docker Desktop, then run Inspect again."
 }
@@ -130,7 +155,7 @@ try {
 }
 
 if ($PSCmdlet.ShouldProcess($composeFile, "Start TimescaleDB/PostgreSQL and Redis")) {
-    $composeUp = Invoke-DockerCommand -Arguments @("compose", "-f", $composeFile, "--project-name", "inspect-installer", "up", "-d")
+    $composeUp = Invoke-DockerCommand -Arguments @("compose", "--env-file", $envFilePath, "-f", $composeFile, "--project-name", "inspect-installer", "up", "-d")
     if (-not [string]::IsNullOrWhiteSpace($composeUp.Output)) {
         Write-Host $composeUp.Output
     }
@@ -143,6 +168,8 @@ $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 $postgresReady = $false
 $redisReady = $false
 $lastRuntimeError = ""
+# Redis 就绪探测口令从运行时 .env 读取，与容器 --requirepass 同源（不再硬编码弱口令）。
+$redisPassword = Get-EnvValue -Path $envFilePath -Name "REDIS_PASSWORD" -DefaultValue ""
 
 while ((Get-Date) -lt $deadline) {
     if (-not $postgresReady) {
@@ -150,7 +177,7 @@ while ((Get-Date) -lt $deadline) {
         $postgresReady = ($postgresCheck.ExitCode -eq 0)
     }
     if (-not $redisReady) {
-        $redisPing = Invoke-DockerCommand -Arguments @("exec", "inspect-redis-installer", "redis-cli", "-a", "dev_redis_2024", "ping")
+        $redisPing = Invoke-DockerCommand -Arguments @("exec", "inspect-redis-installer", "redis-cli", "-a", $redisPassword, "ping")
         $redisReady = (($redisPing.ExitCode -eq 0) -and ($redisPing.Output -match "PONG"))
     }
     if ($postgresReady -and $redisReady) {
@@ -169,7 +196,7 @@ while ((Get-Date) -lt $deadline) {
 $composeStatus = ""
 $postgresLogs = ""
 try {
-    $composeStatus = Invoke-DockerOutput -Arguments @("compose", "-f", $composeFile, "--project-name", "inspect-installer", "ps")
+    $composeStatus = Invoke-DockerOutput -Arguments @("compose", "--env-file", $envFilePath, "-f", $composeFile, "--project-name", "inspect-installer", "ps")
 } catch {
     $composeStatus = $_.Exception.Message
 }
