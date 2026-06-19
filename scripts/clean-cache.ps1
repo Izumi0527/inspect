@@ -107,7 +107,7 @@ function Show-Help {
     Write-Host "    -All                 清理所有缓存（含以下全部类别）"
     Write-Host "    -Backend             清理后端缓存（Go 覆盖率 / 临时文件 / go clean）"
     Write-Host "    -Frontend            清理前端缓存（Next.js / Turbo / ESLint / SWC 等）"
-    Write-Host "    -Logs                清理日志文件（超过7天的日志，含 backend-go/logs/）"
+    Write-Host "    -Logs                清理日志文件（超过7天的 .log 与 .png 截图，含 backend-go/logs/）"
     Write-Host "    -Temp                清理临时文件（.DS_Store / Thumbs.db / *.tmp）"
     Write-Host "    -ProjectFiles        清理项目特定文件（context.json / lint报告 / 覆盖率 / MCP 快照等）"
     Write-Host "    -GoBuild             清理 Go 构建缓存目录与编译产物（*.exe / .gocache 等）"
@@ -581,23 +581,24 @@ function Clear-LogFiles {
             continue
         }
 
-        $oldLogs = Get-ChildItem -LiteralPath $logDir -Recurse -Include "*.log" -File -Force -ErrorAction SilentlyContinue |
+        $oldFiles = Get-ChildItem -LiteralPath $logDir -Recurse -Include "*.log", "*.png" -File -Force -ErrorAction SilentlyContinue |
                     Where-Object { $_.LastWriteTime -lt $cutoffDate }
 
-        if ($oldLogs.Count -eq 0) {
-            Write-LogVerbose "$logDir 中没有超过7天的日志文件"
+        if ($oldFiles.Count -eq 0) {
+            Write-LogVerbose "$logDir 中没有超过7天的日志或截图文件"
             continue
         }
 
         $foundAny = $true
-        foreach ($log in $oldLogs) {
-            $relPath = Get-RelativeProjectPath -Path $log.FullName
-            Remove-CacheItem -Path $log.FullName -Description "旧日志文件 ($relPath)"
+        foreach ($file in $oldFiles) {
+            $relPath = Get-RelativeProjectPath -Path $file.FullName
+            $kind = if ($file.Extension -ieq ".png") { "旧截图文件" } else { "旧日志文件" }
+            Remove-CacheItem -Path $file.FullName -Description "$kind ($relPath)"
         }
     }
 
     if (-not $foundAny) {
-        Write-LogInfo "没有超过7天的日志文件"
+        Write-LogInfo "没有超过7天的日志或截图文件"
     }
 }
 
@@ -894,7 +895,7 @@ function Show-InteractiveMenu {
     Write-Host "  [1] 清理所有缓存（推荐）"
     Write-Host "  [2] 仅清理后端缓存（Go 覆盖率 / go clean）"
     Write-Host "  [3] 仅清理前端缓存（Next.js / Turbo / ESLint / SWC）"
-    Write-Host "  [4] 仅清理日志文件（logs/ + backend-go/logs/）"
+    Write-Host "  [4] 仅清理日志文件（logs/ + backend-go/logs/ 的 .log/.png）"
     Write-Host "  [5] 仅清理临时文件（.DS_Store / Thumbs.db / *.tmp）"
     Write-Host "  [6] 仅清理项目特定文件（lint 报告 / 覆盖率 / MCP 快照等）"
     Write-Host "  ── 扩展清理 ──"

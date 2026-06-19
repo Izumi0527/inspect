@@ -75,7 +75,7 @@ show_help() {
   --all, -All                    清理所有缓存（含以下全部类别）
   --backend, -Backend            清理后端缓存（Go 覆盖率 / 临时文件 / go clean）
   --frontend, -Frontend          清理前端缓存（Next.js / Turbo / ESLint / SWC 等）
-  --logs, -Logs                  清理日志文件（超过7天的日志，含 backend-go/logs/）
+  --logs, -Logs                  清理日志文件（超过7天的 .log 与 .png 截图，含 backend-go/logs/）
   --temp, -Temp                  清理临时文件（.DS_Store / Thumbs.db / *.tmp）
   --project-files, -ProjectFiles 清理项目特定文件（context.json / lint报告 / 覆盖率 / MCP 快照等）
   --go-build, -GoBuild           清理 Go 构建缓存目录与编译产物（*.exe / .gocache 等）
@@ -462,16 +462,18 @@ clear_log_files() {
         while IFS= read -r -d '' log_file; do
             found_any=true
             found_in_dir=true
-            remove_cache_item "$log_file" "旧日志文件 ($(relative_project_path "$log_file"))"
-        done < <(find "$log_dir" -type f -name "*.log" -mtime +7 -print0 2>/dev/null)
+            local kind="旧日志文件"
+            [[ "$log_file" == *.png ]] && kind="旧截图文件"
+            remove_cache_item "$log_file" "$kind ($(relative_project_path "$log_file"))"
+        done < <(find "$log_dir" -type f \( -name "*.log" -o -name "*.png" \) -mtime +7 -print0 2>/dev/null)
 
         if [[ "$found_in_dir" == false ]]; then
-            log_verbose "$log_dir 中没有超过7天的日志文件"
+            log_verbose "$log_dir 中没有超过7天的日志或截图文件"
         fi
     done
 
     if [[ "$found_any" == false ]]; then
-        log_info "没有超过7天的日志文件"
+        log_info "没有超过7天的日志或截图文件"
     fi
 }
 
@@ -671,7 +673,7 @@ show_interactive_menu() {
   [1] 清理所有缓存（推荐）
   [2] 仅清理后端缓存（Go 覆盖率 / go clean）
   [3] 仅清理前端缓存（Next.js / Turbo / ESLint / SWC）
-  [4] 仅清理日志文件（logs/ + backend-go/logs/）
+  [4] 仅清理日志文件（logs/ + backend-go/logs/ 的 .log/.png）
   [5] 仅清理临时文件（.DS_Store / Thumbs.db / *.tmp）
   [6] 仅清理项目特定文件（lint 报告 / 覆盖率 / MCP 快照等）
   ── 扩展清理 ──
