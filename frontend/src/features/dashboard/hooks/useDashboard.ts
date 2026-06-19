@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { DashboardData, DashboardConfig, RecentAlert, AlertSeverity } from '../types'
 import {
   fetchDashboardData,
   searchDevices
 } from '../api/dashboard.api'
+import { ApiClientError } from '@/lib/api-client'
 
 const DASHBOARD_REQUEST_DEDUPE_WINDOW_MS = 1500
 
@@ -61,6 +63,7 @@ const requestDashboardData = async (force: boolean = false): Promise<DashboardDa
 
 // Dashboard数据管理hook
 export function useDashboardData() {
+  const router = useRouter()
   const [data, setData] = useState<DashboardData | null>(null)
   const [isInitialLoading, setIsInitialLoading] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -83,6 +86,12 @@ export function useDashboardData() {
       const dashboardData = await requestDashboardData(force)
       setData(dashboardData)
     } catch (err) {
+      // 强制改密用户访问业务接口会被后端拦截（403 PasswordChangeRequired）：直接跳改密页，
+      // 而非显示通用「无法加载数据」。这是路由守卫之外的兜底（如会话中途被管理员重置密码）。
+      if (err instanceof ApiClientError && err.type === 'PasswordChangeRequired') {
+        router.push('/change-password')
+        return
+      }
       if (initialLoad) {
         setError(err instanceof Error ? err.message : '加载Dashboard数据失败')
       } else {
@@ -95,7 +104,7 @@ export function useDashboardData() {
         setIsRefreshing(false)
       }
     }
-  }, [])
+  }, [router])
 
   // 刷新统计数据
   const refreshStats = useCallback(async () => {

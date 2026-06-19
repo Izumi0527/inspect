@@ -187,8 +187,14 @@ if ($SkipInstaller) {
     if ($LASTEXITCODE -ne 0) { throw "ISCC 编译失败（退出码 $LASTEXITCODE）" }
 
     if (-not (Test-Path -LiteralPath $OutputExe)) { throw "未生成安装包: $OutputExe" }
-    $sizeMb = "{0:N2} MB" -f ((Get-Item -LiteralPath $OutputExe).Length / 1MB)
-    Write-Ok "安装包已生成: $OutputExe ($sizeMb, v$Version)"
+
+    # 安装包名附加 版本号-日期-时间，便于区分/归档多次构建产物（ISCC 固定产出 InspectSetup.exe 后重命名）。
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $stampedExe = Join-Path (Split-Path -Parent $OutputExe) "InspectSetup-$Version-$stamp.exe"
+    Move-Item -LiteralPath $OutputExe -Destination $stampedExe -Force
+
+    $sizeMb = "{0:N2} MB" -f ((Get-Item -LiteralPath $stampedExe).Length / 1MB)
+    Write-Ok "安装包已生成: $stampedExe ($sizeMb, v$Version)"
 }
 
 Write-Host "`n[DONE] Inspect v$Version 构建完成" -ForegroundColor Green

@@ -108,10 +108,13 @@ if (Test-Path -LiteralPath $pidFile) {
     }
 }
 
+$frontendArgs = @("`"$nextCli`"", "start", "`"$frontendDir`"", "-p", "$Port", "-H", "$Hostname")
+Write-Verbose "Frontend start command: `"$node`" $($frontendArgs -join ' ')"
+
 if ($PSCmdlet.ShouldProcess($frontendDir, "Start frontend service")) {
     $process = Start-Process `
         -FilePath $node `
-        -ArgumentList @($nextCli, "start", $frontendDir, "-p", "$Port", "-H", "$Hostname") `
+        -ArgumentList $frontendArgs `
         -WorkingDirectory $frontendDir `
         -RedirectStandardOutput $stdoutLog `
         -RedirectStandardError $stderrLog `

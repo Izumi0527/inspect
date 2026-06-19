@@ -141,7 +141,12 @@ else
     "$ISCC" "/DAppVersion=$VERSION" "$iss_arg"
 
     [ -f "$OUTPUT_EXE" ] || { echo "未生成安装包: $OUTPUT_EXE" >&2; exit 1; }
-    echo "[OK] 安装包已生成: $OUTPUT_EXE (v$VERSION)"
+
+    # 安装包名附加 版本号-日期-时间，便于区分/归档多次构建产物（ISCC 固定产出 InspectSetup.exe 后重命名）。
+    STAMP="$(date +%Y%m%d-%H%M%S)"
+    STAMPED_EXE="$(dirname "$OUTPUT_EXE")/InspectSetup-$VERSION-$STAMP.exe"
+    mv -f "$OUTPUT_EXE" "$STAMPED_EXE"
+    echo "[OK] 安装包已生成: $STAMPED_EXE (v$VERSION)"
 fi
 
 printf '\n[DONE] Inspect v%s 构建完成\n' "$VERSION"

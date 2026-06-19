@@ -178,6 +178,14 @@ export function RouteGuard({
       return
     }
 
+    // 强制改密：已登录但被标记 force_password_change 的用户，除改密页本身外一律先去改密页。
+    // 与后端 EnforcePasswordChange 闸一致，避免直达 /dashboard 等业务页后被 403 卡在「无法加载数据」。
+    if (user?.force_password_change) {
+      router.push('/change-password')
+      setIsAuthorized(false)
+      return
+    }
+
     // 检查角色权限
     if (requiredRoles.length > 0) {
       const hasRole = checkRole(requiredRoles)

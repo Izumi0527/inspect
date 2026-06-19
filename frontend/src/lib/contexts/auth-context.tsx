@@ -339,14 +339,16 @@ export function withGuest<P extends object>(
   WrappedComponent: React.ComponentType<P>
 ): React.ComponentType<P> {
   return function GuestOnlyComponent(props: P) {
-    const { isAuthenticated, isLoading } = useAuth()
+    const { isAuthenticated, isLoading, user } = useAuth()
     const router = useRouter()
 
     useEffect(() => {
       if (!isLoading && isAuthenticated) {
-        router.push('/dashboard')
+        // 强制改密用户登录后必须先去改密页：login() 会先 dispatch 登录成功再 push('/change-password')，
+        // 本 effect 随之触发；若此处一律 push('/dashboard') 会覆盖改密跳转（竞态），故同样按 force_password_change 分流。
+        router.push(user?.force_password_change ? '/change-password' : '/dashboard')
       }
-    }, [isAuthenticated, isLoading, router])
+    }, [isAuthenticated, isLoading, user, router])
 
     // 如果正在加载或已认证，不渲染组件
     if (isLoading || isAuthenticated) {
