@@ -153,17 +153,49 @@ if ($SkipFrontend) {
     if (-not (Test-Path -LiteralPath (Join-Path $RuntimeFrontend "node_modules"))) {
         throw "缺少可移植前端依赖: $RuntimeFrontend\node_modules。`n该目录是版本无关的生产依赖（约 550MB），需先组装一次后再运行本脚本（参照既有 InspectRuntime 或用 pnpm 部署生产依赖至该目录）。"
     }
-    foreach ($d in @(".next", "public")) {
-        $src = Join-Path $FrontendDir $d
-        $dst = Join-Path $RuntimeFrontend $d
-        if (-not (Test-Path -LiteralPath $src)) { throw "前端产物缺失: $src" }
-        if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Recurse -Force }
-        Copy-Item -LiteralPath $src -Destination $dst -Recurse -Force
+
+    # 复制 public 目录
+    $publicSrc = Join-Path $FrontendDir "public"
+    $publicDst = Join-Path $RuntimeFrontend "public"
+    if (Test-Path -LiteralPath $publicSrc) {
+        if (Test-Path -LiteralPath $publicDst) { Remove-Item -LiteralPath $publicDst -Recurse -Force }
+        Copy-Item -LiteralPath $publicSrc -Destination $publicDst -Recurse -Force
     }
+
+    # 复制 .next 目录（排除 cache 子目录，节省约 700MB）
+    $nextSrc = Join-Path $FrontendDir ".next"
+    $nextDst = Join-Path $RuntimeFrontend ".next"
+    if (-not (Test-Path -LiteralPath $nextSrc)) { throw "前端产物缺失: $nextSrc" }
+    if (Test-Path -LiteralPath $nextDst) { Remove-Item -LiteralPath $nextDst -Recurse -Force }
+    # 使用 robocopy 排除 cache 目录（比 Copy-Item 更高效）
+    $robocopyResult = & robocopy $nextSrc $nextDst /E /XD "cache" /NFL /NDL /NJH /NJS /NC /NS /NP 2>&1
+    if ($LASTEXITCODE -gt 1) {
+        Write-Warn2 "robocopy 复制 .next 时出现警告（退出码 $LASTEXITCODE），回退使用 Copy-Item"
+        Copy-Item -LiteralPath $nextSrc -Destination $nextDst -Recurse -Force
+        # 删除 cache 目录
+        $cacheDir = Join-Path $nextDst "cache"
+        if (Test-Path -LiteralPath $cacheDir) { Remove-Item -LiteralPath $cacheDir -Recurse -Force }
+    }
+
     foreach ($f in @("package.json", "next.config.js")) {
         Copy-Item -LiteralPath (Join-Path $FrontendDir $f) -Destination (Join-Path $RuntimeFrontend $f) -Force
     }
-    Write-Ok "前端产物已更新（复用 node_modules）"
+
+    # 生成前端生产环境配置文件 .env.local
+    # 前端在生产模式下需要此文件来获取后端 API 地址
+    $frontendEnvLocal = Join-Path $RuntimeFrontend ".env.local"
+    $frontendEnvContent = @"
+# 前端生产环境配置（由 build-installer.ps1 自动生成）
+# 后端 API 地址（默认端口 9165）
+NEXT_PUBLIC_API_URL=http://127.0.0.1:9165
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:9165
+
+# 生产环境标识
+NODE_ENV=production
+NEXT_PUBLIC_ENV=production
+"@
+    Set-Content -LiteralPath $frontendEnvLocal -Value $frontendEnvContent -Encoding UTF8
+    Write-Ok "前端产物已更新（复用 node_modules，排除 .next/cache）+ .env.local 已生成"
 }
 
 if (-not (Test-Path -LiteralPath (Join-Path $RuntimeNode "node.exe"))) {

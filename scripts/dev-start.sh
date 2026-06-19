@@ -490,7 +490,7 @@ show_setup_summary() {
     write_color "============================================================" "Cyan"
 
     write_color $'\n📊 服务访问地址:' "Blue"
-    write_color "  🎨 前端开发服务器: http://localhost:3000" "White"
+    write_color "  🎨 前端开发服务器: http://localhost:13000" "White"
     if [[ "$SERVER_PORT_VALUE" -gt 0 ]]; then
         write_color "  🔧 后端 API 服务器: $API_URL_VALUE" "White"
     else
@@ -721,7 +721,7 @@ EOF
     mkdir -p "$log_dir"
 
     write_color "🚀 启动前端开发服务器..." "Cyan"
-    write_color "访问地址: http://localhost:3000" "White"
+    write_color "访问地址: http://localhost:13000" "White"
     write_color "日志文件: logs/dev/frontend.log" "Gray"
 
     (
@@ -884,7 +884,7 @@ test_services_health() {
         write_color "⚠️ 跳过后端健康检查：$PORT_ERROR_VALUE" "Yellow"
     fi
 
-    local frontend_url="http://localhost:3000"
+    local frontend_url="http://localhost:13000"
     if command_exists curl && curl -fsS --max-time 5 "$frontend_url" >/dev/null 2>&1; then
         write_color "✅ 前端应用服务正常" "Green"
         write_color "   - 端点: $frontend_url" "Gray"
@@ -905,7 +905,7 @@ show_service_info() {
     write_color "==================================================" "Cyan"
 
     write_color $'\n🌐 Web 服务:' "Blue"
-    write_color "  🎨 前端应用: http://localhost:3000" "White"
+    write_color "  🎨 前端应用: http://localhost:13000" "White"
     if [[ "$SERVER_PORT_VALUE" -gt 0 ]]; then
         write_color "  🔧 后端 API: $API_URL_VALUE" "White"
         write_color "  💚 健康检查: $HEALTH_URL_VALUE" "White"

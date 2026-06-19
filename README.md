@@ -43,7 +43,7 @@ if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
 
 | 服务 | 地址 |
 |------|------|
-| 前端 | `http://localhost:3000` |
+| 前端 | `http://localhost:13000` |
 | 后端 | `http://127.0.0.1:9165` |
 | PostgreSQL | `localhost:15500` |
 | Redis | `localhost:26380` |
@@ -199,7 +199,7 @@ REPORTS_OUTPUT_DIR=data/reports
 
 | 入口 | 地址 |
 |------|------|
-| 前端页面 | `http://localhost:3000` |
+| 前端页面 | `http://localhost:13000` |
 | 后端健康检查 | `http://127.0.0.1:9165/health` |
 | API 根路径 | `http://127.0.0.1:9165/api/v1` |
 | WebSocket | `ws://127.0.0.1:9165/api/v1/ws/:user_id` |

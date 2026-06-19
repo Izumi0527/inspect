@@ -929,7 +929,7 @@ pnpm dev
 
 | 入口 | 地址 |
 |------|------|
-| 前端 | `http://localhost:3000` |
+| 前端 | `http://localhost:13000` |
 | 后端健康检查 | `http://127.0.0.1:9165/health` |
 | 后端 API 根路径 | `http://127.0.0.1:9165/api/v1` |
 | WebSocket | `ws://127.0.0.1:9165/api/v1/ws/:user_id` |

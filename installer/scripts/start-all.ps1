@@ -1,7 +1,7 @@
 ﻿[CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [string]$InstallRoot = "",
-    [int]$FrontendPort = 3000,
+    [int]$FrontendPort = 13000,
     [string]$FrontendHostname = "0.0.0.0",
     [switch]$SkipInfra,
     [switch]$SkipDatabaseInit

@@ -1,7 +1,7 @@
 ﻿[CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [string]$InstallRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
-    [int]$Port = 3000,
+    [int]$Port = 13000,
     [string]$Hostname = "0.0.0.0",
     [int]$TimeoutSeconds = 60
 )

@@ -100,3 +100,33 @@ if ((Test-Path -LiteralPath $envFile) -and -not $WhatIfPreference) {
         Write-Host "Generated runtime secrets (SECRET_KEY/JWT_SECRET_KEY and DB/Redis passwords as needed) in config/.env"
     }
 }
+
+# 生成前端环境配置文件 frontend/.env.local
+# 前端在生产模式下需要此文件来获取后端 API 地址
+$frontendDir = Join-Path $InstallRoot "frontend"
+$frontendEnvFile = Join-Path $frontendDir ".env.local"
+if ((Test-Path -LiteralPath $frontendDir) -and -not (Test-Path -LiteralPath $frontendEnvFile)) {
+    # 从 config/.env 读取后端端口配置
+    $serverPort = "9165"
+    if ((Test-Path -LiteralPath $envFile)) {
+        $envContent = Get-Content -LiteralPath $envFile -Raw
+        if ($envContent -match '(?m)^SERVER_PORT=(\d+)') {
+            $serverPort = $Matches[1]
+        }
+    }
+
+    $frontendEnvContent = @"
+# 前端生产环境配置（由 prepare-env.ps1 自动生成）
+# 后端 API 地址
+NEXT_PUBLIC_API_URL=http://127.0.0.1:$serverPort
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:$serverPort
+
+# 生产环境标识
+NODE_ENV=production
+NEXT_PUBLIC_ENV=production
+"@
+    if ($PSCmdlet.ShouldProcess($frontendEnvFile, "Create frontend .env.local")) {
+        Set-Content -LiteralPath $frontendEnvFile -Value $frontendEnvContent -Encoding UTF8
+        Write-Host "Created frontend/.env.local with API URL pointing to port $serverPort"
+    }
+}

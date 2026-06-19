@@ -458,7 +458,7 @@ function Show-SetupSummary {
     Write-ColorOutput "$('=' * 60)" "Cyan"
 
     Write-ColorOutput "`n📊 服务访问地址:" "Blue"
-    Write-ColorOutput "  🎨 前端开发服务器: http://localhost:3000" "White"
+    Write-ColorOutput "  🎨 前端开发服务器: http://localhost:13000" "White"
     if ($backendConfig.ServerPort -gt 0) {
         Write-ColorOutput "  🔧 后端 API 服务器: $($backendConfig.ApiUrl)" "White"
     } else {
@@ -739,7 +739,7 @@ NEXT_PUBLIC_ENV=development
     
     # 启动前端开发服务器
     Write-ColorOutput "🚀 启动前端开发服务器..." "Cyan"
-    Write-ColorOutput "访问地址: http://localhost:3000" "White"
+    Write-ColorOutput "访问地址: http://localhost:13000" "White"
     Write-ColorOutput "按 Ctrl+C 停止服务" "Gray"
     
     # 在新窗口中启动前端服务
@@ -1053,7 +1053,7 @@ function Test-ServicesHealth {
     }
     
     # 检查前端服务
-    $frontendUrl = "http://localhost:3000"
+    $frontendUrl = "http://localhost:13000"
     try {
         $response = Invoke-WebRequest -Uri $frontendUrl -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
         if ($response.StatusCode -eq 200) {
@@ -1079,7 +1079,7 @@ function Show-ServiceInfo {
     Write-ColorOutput "$('=' * 50)" "Cyan"
     
     Write-ColorOutput "`n🌐 Web 服务:" "Blue"
-    Write-ColorOutput "  🎨 前端应用: http://localhost:3000" "White"
+    Write-ColorOutput "  🎨 前端应用: http://localhost:13000" "White"
     if ($backendConfig.ServerPort -gt 0) {
         Write-ColorOutput "  🔧 后端 API: $($backendConfig.ApiUrl)" "White"
         Write-ColorOutput "  💚 健康检查: $($backendConfig.HealthUrl)" "White"

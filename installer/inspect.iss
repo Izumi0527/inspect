@@ -54,7 +54,7 @@ Name: "{app}\data\backups"; Permissions: users-modify
 [Icons]
 Name: "{group}\Inspect 启动服务"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\start-all.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\inspect.ico"
 Name: "{group}\Inspect 停止服务"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\stop-all.ps1"""; WorkingDir: "{app}"
-Name: "{group}\Inspect 前端"; Filename: "http://localhost:3000"
+Name: "{group}\Inspect 前端"; Filename: "http://localhost:13000"
 Name: "{commondesktop}\Inspect 启动服务"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\start-all.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\inspect.ico"; Tasks: desktopicon
 
 [Tasks]

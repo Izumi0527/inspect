@@ -98,7 +98,7 @@ ISCC.exe installer\inspect.iss
 - 运行 `backend/app.exe`
 - 优先使用安装目录 `runtime/node.exe` 启动前端
 - 若安装目录没有 `runtime/node.exe`，再回退使用系统 `node`
-- 默认前端端口为 `3000`
+- 默认前端端口为 `13000`
 
 当前打包输入目录已包含：
 
