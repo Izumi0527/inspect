@@ -44,21 +44,16 @@ const VENDOR_OPTIONS: Array<{
   label: string;
   hint: string;
 }> = [
-  { value: 'cisco', label: 'Cisco', hint: '交换机、路由器、AP 常见' },
   { value: 'huawei', label: 'Huawei', hint: '华为 VRP / CloudEngine' },
   { value: 'h3c', label: 'H3C', hint: 'H3C Comware 系列' },
-  { value: 'juniper', label: 'Juniper', hint: 'JunOS / SRX / EX' },
-  { value: 'arista', label: 'Arista', hint: 'EOS 系列交换机' },
-  { value: 'fortinet', label: 'Fortinet', hint: 'FortiGate / FortiSwitch' },
-  { value: 'linux', label: 'Linux', hint: '通用 Linux / Unix 主机' },
   { value: 'other', label: '其他/未知', hint: '暂未内建厂商专属 OID' },
 ]
 
 const DEFAULT_VENDOR_BY_DEVICE_TYPE: Record<DeviceType, DeviceVendor> = {
-  switch: 'cisco',
-  router: 'cisco',
-  firewall: 'fortinet',
-  wireless_ap: 'cisco',
+  switch: 'huawei',
+  router: 'huawei',
+  firewall: 'other',
+  wireless_ap: 'huawei',
 }
 
 // 表单验证 Schema
@@ -76,7 +71,7 @@ const deviceFormSchema = z.object({
       '请输入有效的IP地址'
     ),
   device_type: z.enum(['switch', 'router', 'firewall', 'wireless_ap'] as const),
-  vendor: z.enum(['cisco', 'huawei', 'h3c', 'juniper', 'arista', 'fortinet', 'linux', 'other'] as const),
+  vendor: z.enum(['huawei', 'h3c', 'other'] as const),
   location: z
     .string()
     .max(200, '位置信息不能超过200个字符')

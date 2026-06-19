@@ -2,40 +2,25 @@
   "schema_version": 1,
   "description": "Inspect SNMP runtime registry",
   "vendors": {
-    "cisco": {
-      "display_name": "Cisco",
-      "aliases": ["cisco", "cisco_ios", "cisco_nxos"],
-      "enterprise_prefixes": ["1.3.6.1.4.1.9"]
-    },
     "huawei": {
       "display_name": "Huawei",
-      "aliases": ["huawei", "huawei_vrp"],
-      "enterprise_prefixes": ["1.3.6.1.4.1.2011"]
+      "aliases": [
+        "huawei",
+        "huawei_vrp"
+      ],
+      "enterprise_prefixes": [
+        "1.3.6.1.4.1.2011"
+      ]
     },
     "h3c": {
       "display_name": "H3C",
-      "aliases": ["h3c", "h3c_comware"],
-      "enterprise_prefixes": ["1.3.6.1.4.1.25506"]
-    },
-    "juniper": {
-      "display_name": "Juniper",
-      "aliases": ["juniper", "junos"],
-      "enterprise_prefixes": ["1.3.6.1.4.1.2636"]
-    },
-    "arista": {
-      "display_name": "Arista",
-      "aliases": ["arista", "arista_eos"],
-      "enterprise_prefixes": ["1.3.6.1.4.1.30065"]
-    },
-    "fortinet": {
-      "display_name": "Fortinet",
-      "aliases": ["fortinet", "fortigate"],
-      "enterprise_prefixes": ["1.3.6.1.4.1.12356"]
-    },
-    "linux": {
-      "display_name": "Linux",
-      "aliases": ["linux", "linux_server", "ubuntu", "centos"],
-      "enterprise_prefixes": ["1.3.6.1.4.1.2021"]
+      "aliases": [
+        "h3c",
+        "h3c_comware"
+      ],
+      "enterprise_prefixes": [
+        "1.3.6.1.4.1.25506"
+      ]
     }
   },
   "common": {
@@ -110,60 +95,45 @@
     "cpu_usage": [
       {
         "id": "huawei_entity_cpu",
-        "vendors": ["huawei"],
+        "vendors": [
+          "huawei"
+        ],
         "method": "bulkwalk",
-        "oids": ["1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"],
+        "oids": [
+          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
+        ],
         "strategy": "walk_percent_auto",
         "aggregate": "avg_non_zero"
       },
       {
         "id": "h3c_entity_cpu",
-        "vendors": ["h3c"],
+        "vendors": [
+          "h3c"
+        ],
         "method": "bulkwalk",
-        "oids": ["1.3.6.1.4.1.25506.2.6.1.1.1.1.6"],
+        "oids": [
+          "1.3.6.1.4.1.25506.2.6.1.1.1.1.6"
+        ],
         "strategy": "walk_percent",
         "aggregate": "avg_non_zero"
-      },
-      {
-        "id": "juniper_operating_cpu",
-        "vendors": ["juniper"],
-        "method": "bulkwalk",
-        "oids": ["1.3.6.1.4.1.2636.3.1.13.1.8"],
-        "strategy": "walk_percent",
-        "aggregate": "avg_non_zero"
-      },
-      {
-        "id": "arista_cpu_utilization",
-        "vendors": ["arista"],
-        "method": "get",
-        "oids": ["1.3.6.1.4.1.30065.3.1.1.1.3"],
-        "strategy": "get_percent"
-      },
-      {
-        "id": "fortinet_cpu_usage",
-        "vendors": ["fortinet"],
-        "method": "get",
-        "oids": ["1.3.6.1.4.1.12356.101.4.1.3.0"],
-        "strategy": "get_percent"
-      },
-      {
-        "id": "cisco_avg_busy_5s",
-        "vendors": ["cisco"],
-        "method": "get",
-        "oids": ["1.3.6.1.4.1.9.2.1.56.0"],
-        "strategy": "get_percent"
       },
       {
         "id": "host_resources_processor_load",
-        "vendors": ["*"],
+        "vendors": [
+          "*"
+        ],
         "method": "bulkwalk",
-        "oids": ["1.3.6.1.2.1.25.3.3.1.2"],
+        "oids": [
+          "1.3.6.1.2.1.25.3.3.1.2"
+        ],
         "strategy": "walk_percent",
         "aggregate": "avg_all"
       },
       {
         "id": "ucd_cpu_split",
-        "vendors": ["*"],
+        "vendors": [
+          "*"
+        ],
         "method": "get",
         "oids": [
           "1.3.6.1.4.1.2021.11.9.0",
@@ -176,7 +146,9 @@
     "memory_usage": [
       {
         "id": "huawei_entity_memory",
-        "vendors": ["huawei"],
+        "vendors": [
+          "huawei"
+        ],
         "method": "bulkwalk",
         "oids": [
           "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7",
@@ -187,7 +159,9 @@
       },
       {
         "id": "h3c_entity_memory",
-        "vendors": ["h3c"],
+        "vendors": [
+          "h3c"
+        ],
         "method": "bulkwalk",
         "oids": [
           "1.3.6.1.4.1.25506.2.6.1.1.1.1.8",
@@ -197,46 +171,10 @@
         "aggregate": "avg_non_zero_total_sum"
       },
       {
-        "id": "juniper_operating_memory",
-        "vendors": ["juniper"],
-        "method": "bulkwalk",
-        "oids": [
-          "1.3.6.1.4.1.2636.3.1.13.1.11",
-          "1.3.6.1.4.1.2636.3.1.13.1.10"
-        ],
-        "strategy": "walk_percent_with_size_mb",
-        "aggregate": "avg_non_zero_total_sum"
-      },
-      {
-        "id": "arista_memory_utilization",
-        "vendors": ["arista"],
-        "method": "get",
-        "oids": ["1.3.6.1.4.1.30065.3.1.2.1.3"],
-        "strategy": "get_percent"
-      },
-      {
-        "id": "fortinet_memory_usage",
-        "vendors": ["fortinet"],
-        "method": "get",
-        "oids": [
-          "1.3.6.1.4.1.12356.101.4.1.4.0",
-          "1.3.6.1.4.1.12356.101.4.1.5.0"
-        ],
-        "strategy": "get_percent_with_size_kb"
-      },
-      {
-        "id": "cisco_memory_pool",
-        "vendors": ["cisco"],
-        "method": "get",
-        "oids": [
-          "1.3.6.1.4.1.9.9.48.1.1.1.5.1",
-          "1.3.6.1.4.1.9.9.48.1.1.1.6.1"
-        ],
-        "strategy": "get_used_free_bytes"
-      },
-      {
         "id": "host_resources_storage",
-        "vendors": ["*"],
+        "vendors": [
+          "*"
+        ],
         "method": "composite",
         "oids": [
           "1.3.6.1.2.1.25.2.3.1.3",
@@ -248,7 +186,9 @@
       },
       {
         "id": "ucd_memory_usage",
-        "vendors": ["*"],
+        "vendors": [
+          "*"
+        ],
         "method": "get",
         "oids": [
           "1.3.6.1.4.1.2021.4.5.0",
@@ -259,38 +199,25 @@
     ],
     "temperature": [
       {
-        "id": "cisco_entity_sensor_temperature",
-        "vendors": ["cisco"],
-        "method": "bulkwalk",
-        "oids": ["1.3.6.1.4.1.9.9.91.1.1.1.1.4"],
-        "strategy": "walk_max_tenths_celsius"
-      },
-      {
-        "id": "cisco_envmon_temperature",
-        "vendors": ["cisco"],
-        "method": "bulkwalk",
-        "oids": ["1.3.6.1.4.1.9.9.13.1.3.1.3"],
-        "strategy": "walk_max_celsius"
-      },
-      {
         "id": "huawei_entity_temperature",
-        "vendors": ["huawei"],
+        "vendors": [
+          "huawei"
+        ],
         "method": "bulkwalk",
-        "oids": ["1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11"],
+        "oids": [
+          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11"
+        ],
         "strategy": "walk_max_celsius"
       },
       {
         "id": "h3c_entity_temperature",
-        "vendors": ["h3c"],
+        "vendors": [
+          "h3c"
+        ],
         "method": "bulkwalk",
-        "oids": ["1.3.6.1.4.1.25506.2.6.1.1.1.1.12"],
-        "strategy": "walk_max_celsius"
-      },
-      {
-        "id": "juniper_operating_temp",
-        "vendors": ["juniper"],
-        "method": "bulkwalk",
-        "oids": ["1.3.6.1.4.1.2636.3.1.13.1.7"],
+        "oids": [
+          "1.3.6.1.4.1.25506.2.6.1.1.1.1.12"
+        ],
         "strategy": "walk_max_celsius"
       }
     ]

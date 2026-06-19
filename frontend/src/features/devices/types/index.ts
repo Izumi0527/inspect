@@ -4,15 +4,10 @@ export type DeviceStatus = 'online' | 'offline' | 'warning' | 'maintenance' | 'u
 // 设备类型枚举
 export type DeviceType = 'switch' | 'router' | 'firewall' | 'wireless_ap'
 
-// 设备厂商枚举
+// 设备厂商枚举（仅支持 Huawei / H3C，other 作为兜底）
 export type DeviceVendor =
-  | 'cisco'
   | 'huawei'
   | 'h3c'
-  | 'juniper'
-  | 'arista'
-  | 'fortinet'
-  | 'linux'
   | 'other'
 
 // CLI连接协议类型

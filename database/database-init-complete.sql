@@ -361,37 +361,8 @@ COMMIT;
 
 BEGIN;
 
--- Cisco 路由器标准巡检模板 (示例)
-INSERT INTO inspection_templates (
-  name, description, category, device_types, check_items, 
-  is_default, is_active, created_at, updated_at
-) VALUES (
-  'Cisco 路由器标准巡检',
-  '适用于 Cisco 路由器的标准巡检模板，包含设备健康、网络性能、配置合规、安全和路由协议检查',
-  'network',
-  '{"vendors": ["Cisco"], "device_types": ["router"]}'::jsonb,
-  '[
-    {
-      "id": "cpu_usage",
-      "name": "CPU 使用率检查",
-      "description": "监控设备 CPU 使用率",
-      "type": "snmp",
-      "category": "health",
-      "weight": 10,
-      "config": {
-        "oid": "1.3.6.1.4.1.9.9.109.1.1.1.1.7",
-        "timeout": 5,
-        "unit": "%",
-        "threshold": {"warning": 70, "critical": 85}
-      },
-      "enabled": true
-    }
-  ]'::jsonb,
-  true, true, NOW(), NOW()
-) ON CONFLICT DO NOTHING;
-
--- 注意: 为了保持文件大小合理，这里仅展示一个模板示例
--- 实际部署时，请执行完整的模板插入脚本或保留原有的分离文件
+-- 内置巡检模板（Huawei / H3C）由 database/builtin-templates-complete.sql 写入，
+-- 并在后端启动时由 EnsureBuiltinTemplates 幂等同步，这里不再重复插入示例。
 
 COMMIT;
 
@@ -559,7 +530,7 @@ INSERT INTO inspection_templates (
   'Test Custom Router Template',
   'A custom router template for E2E testing',
   'custom',
-  '{"vendors": ["Cisco"], "device_types": ["router"]}'::jsonb,
+  '{"vendors": ["Huawei"], "device_types": ["router"]}'::jsonb,
   '[
     {
       "id": "test_cpu_check",
@@ -569,7 +540,7 @@ INSERT INTO inspection_templates (
       "category": "health",
       "weight": 10,
       "config": {
-        "oid": "1.3.6.1.4.1.9.9.109.1.1.1.1.7",
+        "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5",
         "timeout": 5,
         "unit": "%",
         "threshold": {"warning": 70, "critical": 85}

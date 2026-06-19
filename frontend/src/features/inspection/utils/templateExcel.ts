@@ -204,7 +204,7 @@ function buildItemsSheet(workbook: ExcelJS.Workbook, template?: InspectionTempla
       }))
     : [
         { name: 'Ping 连通性', type: 'ping', config: '{}', weight: 1 },
-        { name: 'CPU 5 分钟利用率', type: 'snmp', config: '{"oid":"1.3.6.1.4.1.9.9.109.1.1.1.1.7"}', weight: 1 },
+        { name: 'CPU 使用率', type: 'snmp', config: '{"oid":"1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"}', weight: 1 },
       ]
   rows.forEach(r => sheet.addRow(r))
 
@@ -232,7 +232,7 @@ function buildHelpSheet(workbook: ExcelJS.Workbook) {
     ['deviceTypes', '支持的设备类型，逗号分隔，如：router, switch, firewall'],
     ['检查项 name', '检查项名称，必填'],
     ['检查项 type', '类型，从下拉选择：snmp / ssh / http / ping / script'],
-    ['检查项 config', 'JSON 字符串，可空填 {}。例：{"oid":"1.3.6.1.4.1.9.9.109.1.1.1.1.7"}（Cisco CPU 5 分钟利用率）'],
+    ['检查项 config', 'JSON 字符串，可空填 {}。例：{"oid":"1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"}（Huawei CPU 使用率）'],
     ['检查项 weight', '权重数字，默认 1，越大权重越高'],
   ]
   lines.forEach((line, idx) => {

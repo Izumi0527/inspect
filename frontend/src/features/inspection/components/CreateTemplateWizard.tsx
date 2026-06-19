@@ -116,8 +116,8 @@ const OID_PATTERN = /^[0-9]+(\.[0-9]+)*$/
 // 预设检查项模板
 const PRESET_CHECK_ITEMS: Record<string, InspectionCheckItem[]> = {
   network: [
-    { id: 'cpu', name: 'CPU 使用率', type: 'snmp', weight: 3, config: { oid: '1.3.6.1.4.1.9.9.109.1.1.1.1.3.1', threshold: { warning: 70, critical: 90 } } },
-    { id: 'memory', name: '内存使用率', type: 'snmp', weight: 3, config: { oid: '1.3.6.1.4.1.9.9.48.1.1.1.6.1', threshold: { warning: 80, critical: 95 } } },
+    { id: 'cpu', name: 'CPU 使用率', type: 'snmp', weight: 3, config: { oid: '1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5', threshold: { warning: 70, critical: 90 } } },
+    { id: 'memory', name: '内存使用率', type: 'snmp', weight: 3, config: { oid: '1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7', threshold: { warning: 80, critical: 95 } } },
     { id: 'uptime', name: '系统运行时间', type: 'snmp', weight: 1, config: { oid: '1.3.6.1.2.1.1.3.0' } },
     { id: 'interfaces', name: '接口状态', type: 'snmp', weight: 2, config: { oid: '1.3.6.1.2.1.2.2.1.8' } }
   ],
@@ -163,7 +163,7 @@ const StepBasicInfo: React.FC<StepProps> = ({ formData, errors, onChange }) => {
         <Input
           value={formData.name}
           onChange={(e) => onChange('name', e.target.value)}
-          placeholder="例如：Cisco 路由器标准巡检模板"
+          placeholder="例如：Huawei 路由器标准巡检模板"
           className={errors.name ? 'border-red-500' : ''}
           maxLength={100}
         />

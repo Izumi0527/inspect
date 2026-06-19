@@ -202,17 +202,10 @@ func (s *Service) backupSingleDevice(
 }
 
 func resolveBackupCommand(vendor string, deviceType string) string {
-	normalizedVendor := strings.ToLower(strings.TrimSpace(vendor))
+	_ = vendor
 	_ = deviceType
-
-	switch normalizedVendor {
-	case "huawei", "h3c":
-		return "display current-configuration"
-	case "juniper":
-		return "show configuration"
-	default:
-		return "show running-config"
-	}
+	// 系统仅支持 Huawei(VRP) 与 H3C(Comware)，配置备份统一使用 display current-configuration。
+	return "display current-configuration"
 }
 
 func executeSSHCommand(ctx context.Context, target deviceBackupTarget, command string, timeout time.Duration) (string, error) {
@@ -412,11 +405,10 @@ func telnetSession(conn net.Conn, target deviceBackupTarget, command string, tim
 		}
 	}
 
-	// 禁用分页（适配主流厂商）
+	// 禁用分页（适配 Huawei VRP / H3C Comware）
 	noPagerCommands := []string{
-		"terminal length 0",          // Cisco
-		"screen-length 0 temporary",  // Huawei
-		"set cli screen-length 0",    // Juniper
+		"screen-length 0 temporary", // Huawei VRP
+		"screen-length disable",     // H3C Comware
 	}
 	for _, cmd := range noPagerCommands {
 		_ = writeLine(cmd)

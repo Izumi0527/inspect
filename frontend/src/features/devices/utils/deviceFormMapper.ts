@@ -2,10 +2,10 @@ import { Device } from '../types'
 import { DeviceFormData } from '../components/forms/DeviceForm'
 
 const defaultVendorMap: Record<string, string> = {
-  switch: 'cisco',
-  router: 'cisco',
-  firewall: 'fortinet',
-  wireless_ap: 'cisco',
+  switch: 'huawei',
+  router: 'huawei',
+  firewall: 'other',
+  wireless_ap: 'huawei',
 }
 
 const snmpVersionMap: Record<string, string> = {

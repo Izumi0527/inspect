@@ -201,14 +201,6 @@ func resolveVendorCommand(vendor string, logType string) string {
 	logType = normalizeLogType(logType)
 
 	commands := map[string]map[string]string{
-		"cisco": {
-			"system":    "show logging",
-			"interface": "show logging | include %LINK",
-			"security":  "show logging | include %SEC",
-			"recent":    "show logging last 100",
-			"trap":      "show logging | include %",
-			"alarm":     "show logging | include %",
-		},
 		"huawei": {
 			"system":    "display logbuffer",
 			"interface": "display logbuffer | include IF",
@@ -225,18 +217,10 @@ func resolveVendorCommand(vendor string, logType string) string {
 			"trap":      "display trapbuffer",
 			"alarm":     "display alarm active",
 		},
-		"juniper": {
-			"system":    "show log messages",
-			"interface": "show log messages | match interface",
-			"security":  "show log messages | match security",
-			"recent":    "show log messages | last 100",
-			"trap":      "show log messages | match SNMP_TRAP",
-			"alarm":     "show chassis alarms",
-		},
 	}
 
 	if commands[vendor] == nil {
-		vendor = "cisco"
+		vendor = "huawei"
 	}
 
 	return commands[vendor][logType]
@@ -291,9 +275,7 @@ func parseLogOutput(output string, deviceID int, vendor string, collectedAt time
 }
 
 var (
-	ciscoPattern   = regexp.MustCompile(`^\*?(\w+\s+\d+\s+\d+:\d+:\d+(?:\.\d+)?):?\s*%?([^:]+):\s*(.+)$`)
 	huaweiPattern  = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+\[([^\]]+)\]:\s*(.+)$`)
-	juniperPattern = regexp.MustCompile(`^(\w+\s+\d+\s+\d+:\d+:\d+)\s+(\S+)\s+([^:]+):\s*(.+)$`)
 	facilityLevelPattern = regexp.MustCompile(`[/-](\d+)[/-]`)
 )
 
@@ -301,22 +283,6 @@ func parseLogLine(line string, deviceID int, vendor string, collectedAt time.Tim
 	vendor = strings.ToLower(strings.TrimSpace(vendor))
 
 	switch vendor {
-	case "cisco":
-		if match := ciscoPattern.FindStringSubmatch(line); len(match) == 4 {
-			timestamp, facilityInfo, message := match[1], match[2], match[3]
-			logTimestamp := parseTimestamp(timestamp, "cisco", collectedAt)
-			level, facility := parseFacilityInfo(facilityInfo)
-			return &logEntry{
-				DeviceID:     deviceID,
-				Level:        level,
-				Facility:     facility,
-				Source:       "ssh",
-				Message:      strings.TrimSpace(message),
-				RawMessage:   line,
-				LogTimestamp: logTimestamp,
-				CollectedAt:  collectedAt,
-			}
-		}
 	case "huawei", "h3c":
 		if match := huaweiPattern.FindStringSubmatch(line); len(match) == 4 {
 			timestamp, facilityInfo, message := match[1], match[2], match[3]
@@ -331,27 +297,6 @@ func parseLogLine(line string, deviceID int, vendor string, collectedAt time.Tim
 				RawMessage:   line,
 				LogTimestamp: logTimestamp,
 				CollectedAt:  collectedAt,
-			}
-		}
-	case "juniper":
-		if match := juniperPattern.FindStringSubmatch(line); len(match) == 5 {
-			timestamp := match[1]
-			processInfo := match[3]
-			message := match[4]
-			logTimestamp := parseTimestamp(timestamp, "juniper", collectedAt)
-			level := detectLogLevel(message)
-			facility := detectLogFacility(message)
-			process := strings.TrimSpace(processInfo)
-			return &logEntry{
-				DeviceID:      deviceID,
-				Level:         level,
-				Facility:      facility,
-				Source:        "ssh",
-				Message:       strings.TrimSpace(message),
-				RawMessage:    line,
-				SourceProcess: &process,
-				LogTimestamp:  logTimestamp,
-				CollectedAt:   collectedAt,
 			}
 		}
 	}
@@ -506,15 +451,8 @@ func parseTimestamp(raw string, vendor string, fallback time.Time) time.Time {
 		return fallback
 	}
 
-	currentYear := time.Now().Year()
 	layouts := []string{}
 	switch vendor {
-	case "cisco", "juniper":
-		if strings.Contains(value, ".") {
-			layouts = append(layouts, "2006 Jan 2 15:04:05.000")
-		}
-		layouts = append(layouts, "2006 Jan 2 15:04:05")
-		value = fmt.Sprintf("%d %s", currentYear, value)
 	case "huawei", "h3c":
 		if strings.Contains(value, ".") {
 			layouts = append(layouts, "2006-01-02 15:04:05.000")

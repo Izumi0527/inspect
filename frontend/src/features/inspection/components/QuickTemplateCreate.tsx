@@ -54,8 +54,8 @@ const QUICK_TEMPLATES = [
     description: '包含 CPU、内存、接口状态等基础检查项',
     deviceTypes: ['router', 'switch'],
     checkItems: [
-      { id: '1', name: 'CPU 使用率', type: 'snmp' as const, weight: 3, config: { oid: '1.3.6.1.4.1.9.9.109.1.1.1.1.3.1', threshold: { warning: 70, critical: 90 } } },
-      { id: '2', name: '内存使用率', type: 'snmp' as const, weight: 3, config: { oid: '1.3.6.1.4.1.9.9.48.1.1.1.6.1', threshold: { warning: 80, critical: 95 } } },
+      { id: '1', name: 'CPU 使用率', type: 'snmp' as const, weight: 3, config: { oid: '1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5', threshold: { warning: 70, critical: 90 } } },
+      { id: '2', name: '内存使用率', type: 'snmp' as const, weight: 3, config: { oid: '1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7', threshold: { warning: 80, critical: 95 } } },
       { id: '3', name: '系统运行时间', type: 'snmp' as const, weight: 1, config: { oid: '1.3.6.1.2.1.1.3.0' } },
       { id: '4', name: '接口状态', type: 'snmp' as const, weight: 2, config: { oid: '1.3.6.1.2.1.2.2.1.8' } }
     ],

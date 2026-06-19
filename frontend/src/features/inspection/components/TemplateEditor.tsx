@@ -51,7 +51,7 @@ export function TemplateEditor({
   const [showItemEditor, setShowItemEditor] = useState(false)
 
   // 厂商和设备类型选项
-  const vendorOptions = ['Cisco', 'Huawei', 'H3C', 'Juniper', 'Arista', 'Fortinet']
+  const vendorOptions = ['Huawei', 'H3C']
   const deviceTypeOptions = ['router', 'switch', 'firewall']
 
   // 验证表单
@@ -196,7 +196,7 @@ export function TemplateEditor({
                 className={`w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   errors.name ? 'border-red-500' : ''
                 }`}
-                placeholder="例如：Cisco 路由器标准巡检"
+                placeholder="例如：Huawei 路由器标准巡检"
               />
               {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
             </div>

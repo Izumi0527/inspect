@@ -21,12 +21,8 @@ const ALL_VENDOR_VALUE = 'all'
 
 const VENDORS = [
   { value: ALL_VENDOR_VALUE, label: '全部厂商' },
-  { value: 'Cisco', label: 'Cisco' },
   { value: 'Huawei', label: 'Huawei' },
   { value: 'H3C', label: 'H3C' },
-  { value: 'Juniper', label: 'Juniper' },
-  { value: 'Arista', label: 'Arista' },
-  { value: 'Fortinet', label: 'Fortinet' },
 ]
 
 export function VendorFilter({ value, onChange, className = '' }: VendorFilterProps) {

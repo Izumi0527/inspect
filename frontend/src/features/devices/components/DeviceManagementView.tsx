@@ -605,7 +605,7 @@ export const DeviceManagementView: React.FC = () => {
     const headerLine =
       "设备名称,IP地址,设备类型,厂商,位置,描述,SNMP团体字符串,SSH用户名,SSH密码";
     const templateLine =
-      "模板设备,192.168.1.1,switch,cisco,模板位置,模板数据请按实际设备修改,public,admin,";
+      "模板设备,192.168.1.1,switch,huawei,模板位置,模板数据请按实际设备修改,public,admin,";
     const csvContent = BOM + [headerLine, templateLine].join("\r\n");
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
