@@ -218,6 +218,12 @@ func (h DevicesHandler) ProbeDevice(c echo.Context) error {
 		}
 	}
 
+	// 探测确认 SNMP 可达且具备写权限时，顺带采集并回写性能指标（CPU/内存等），
+	// 使设备列表能展示 cpu_usage/memory_usage。失败不影响探测主流程。
+	if updateStatus && result.SnmpReachable {
+		h.collectAndPersistMetrics(c, device)
+	}
+
 	resp := devices.DeviceProbeResponse{
 		DeviceID:         result.DeviceID,
 		IPAddress:        result.IPAddress,
@@ -295,7 +301,9 @@ func (h DevicesHandler) BatchProbeDevices(c echo.Context) error {
 	}
 
 	targets := make([]devices.ProbeTarget, 0, len(deviceRows))
+	deviceByID := make(map[int]devices.Device, len(deviceRows))
 	for _, device := range deviceRows {
+		deviceByID[device.ID] = device
 		targets = append(targets, devices.ProbeTarget{
 			ID:            device.ID,
 			IPAddress:     device.IPAddress,
@@ -342,6 +350,13 @@ func (h DevicesHandler) BatchProbeDevices(c echo.Context) error {
 				updatedCount++
 			}
 		}
+
+		// 同单设备探测：SNMP 可达且有写权限时顺带采集回写性能指标。
+		if updateStatus && result.SnmpReachable {
+			if device, ok := deviceByID[result.DeviceID]; ok {
+				h.collectAndPersistMetrics(c, device)
+			}
+		}
 	}
 
 	batchResp := devices.DeviceBatchProbeResponse{
@@ -359,6 +374,34 @@ func (h DevicesHandler) BatchProbeDevices(c echo.Context) error {
 		StatusUpdated:            updateStatus && updatedCount > 0,
 		StatusUpdatedCount:       updatedCount,
 	})
+}
+
+// collectAndPersistMetrics 在探测确认设备 SNMP 可达后，尽力采集 SNMP 性能指标并
+// 经 MetricsWriter 回写 devices 表的 cpu_usage/memory_usage 等列，使设备列表可展示。
+// 该操作为尽力而为：采集器/写入器未配置或采集失败时仅记录日志，不影响探测主流程。
+func (h DevicesHandler) collectAndPersistMetrics(c echo.Context, device devices.Device) {
+	if h.SNMPCollector == nil || h.Metrics == nil {
+		return
+	}
+
+	metrics, err := h.SNMPCollector.CollectMetrics(
+		c.Request().Context(),
+		device.IPAddress,
+		device.Vendor,
+		device.SnmpCommunity,
+		device.SnmpVersion,
+		device.SnmpPort,
+		device.Tags,
+	)
+	if err != nil {
+		c.Logger().Warnf("探测时采集设备指标失败 device_id=%d: %v", device.ID, err)
+		return
+	}
+
+	writeReq := monitoring.BuildSNMPDeviceMetricsRequest(device.ID, metrics)
+	if _, err := h.Metrics.WriteDeviceMetrics(c.Request().Context(), writeReq); err != nil && !errors.Is(err, monitoring.ErrNoMetrics) {
+		c.Logger().Warnf("探测时回写设备指标失败 device_id=%d: %v", device.ID, err)
+	}
 }
 
 func buildProbeStatuses(result devices.ProbeResult) (string, string, string) {
