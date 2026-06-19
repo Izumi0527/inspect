@@ -262,7 +262,8 @@ func buildDeviceUpdates(payload map[string]interface{}) map[string]interface{} {
 		}
 	}
 
-	for _, key := range []string{"snmp_community", "snmp_version", "ssh_username", "ssh_password", "cli_protocol", "telnet_username", "telnet_password", "enable_password"} {
+	// 普通配置字段：传 null/空串即按原样写入（允许清空，例如切换 CLI 协议时清除用户名）。
+	for _, key := range []string{"snmp_version", "ssh_username", "cli_protocol", "telnet_username"} {
 		if value, ok := payload[key]; ok {
 			if value == nil {
 				updates[key] = nil
@@ -271,6 +272,23 @@ func buildDeviceUpdates(payload map[string]interface{}) map[string]interface{} {
 			if text, ok := value.(string); ok {
 				updates[key] = strings.TrimSpace(text)
 			}
+		}
+	}
+
+	// 敏感凭据字段：留空（缺省 / null / 空串）一律视为"保持原值"，仅在传入非空值时才更新。
+	// 原因：详情/列表响应对这些字段脱敏后，前端编辑表单无法回填明文；若按空值写入会把
+	// 数据库里已存的 SNMP community / 各类密码误抹，进而导致 SNMP 采集与 CLI 登录失败。
+	for _, key := range []string{"snmp_community", "ssh_password", "telnet_password", "enable_password"} {
+		value, ok := payload[key]
+		if !ok {
+			continue
+		}
+		text, ok := value.(string)
+		if !ok {
+			continue
+		}
+		if trimmed := strings.TrimSpace(text); trimmed != "" {
+			updates[key] = trimmed
 		}
 	}
 

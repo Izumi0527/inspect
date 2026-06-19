@@ -703,7 +703,7 @@ func buildDeviceResponse(device Device, alertCount *int) DeviceResponse {
 		LastSeen:       device.LastSeen,
 		IsActive:       device.IsActive,
 		CreatedBy:      device.CreatedBy,
-		SnmpCommunity:  nil,
+		SnmpCommunity:  nil, // 脱敏：凭据不随列表/详情响应下发，仅存于 DB，编辑回填靠"留空=保持原值"
 		SnmpVersion:    device.SnmpVersion,
 		SnmpPort:       device.SnmpPort,
 		CliProtocol:    device.CliProtocol,
@@ -711,7 +711,7 @@ func buildDeviceResponse(device Device, alertCount *int) DeviceResponse {
 		SshPort:        device.SshPort,
 		TelnetUsername: device.TelnetUsername,
 		TelnetPort:     device.TelnetPort,
-		EnablePassword: nil,
+		EnablePassword: nil, // 脱敏：同 SnmpCommunity，不外泄明文
 		Tags:           sanitizeDeviceResponseTags(device.Tags),
 		Description:    device.Description,
 		IcmpStatus:     device.IcmpStatus,
