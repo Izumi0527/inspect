@@ -506,12 +506,32 @@ func (s *Service) CollectDeviceLogs(ctx context.Context, deviceID int, logType s
 
 	info, err := s.getDeviceInfo(ctx, deviceID)
 	if err != nil {
+		if s.logger != nil {
+			s.logger.Error("日志采集失败: 获取设备信息错误", zap.Int("device_id", deviceID), zap.Error(err))
+		}
 		return 0, err
 	}
+
+	if s.logger != nil {
+		s.logger.Info("日志采集: 设备信息",
+			zap.Int("device_id", deviceID),
+			zap.String("ip", info.IPAddress),
+			zap.String("vendor", info.Vendor),
+			zap.String("ssh_username", info.SshUsername),
+			zap.Bool("has_ssh_password", strings.TrimSpace(info.SshPassword) != ""),
+			zap.Int("ssh_port", info.SshPort))
+	}
+
 	if strings.TrimSpace(info.IPAddress) == "" {
 		return 0, ErrDeviceIPRequired
 	}
 	if strings.TrimSpace(info.SshUsername) == "" || strings.TrimSpace(info.SshPassword) == "" {
+		if s.logger != nil {
+			s.logger.Error("日志采集失败: SSH配置不完整",
+				zap.Int("device_id", deviceID),
+				zap.String("ssh_username", info.SshUsername),
+				zap.Bool("has_ssh_password", strings.TrimSpace(info.SshPassword) != ""))
+		}
 		return 0, ErrSSHNotConfigured
 	}
 

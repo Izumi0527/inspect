@@ -59,6 +59,42 @@ func (c *SSHCollector) Collect(ctx context.Context, device deviceInfo, logType s
 
 func (c *SSHCollector) connect(ctx context.Context, device deviceInfo) (*ssh.Client, error) {
 	config := &ssh.ClientConfig{
+		Config: ssh.Config{
+			// 支持旧设备的密钥交换算法（如华为、H3C等）
+			KeyExchanges: []string{
+				"diffie-hellman-group-exchange-sha256",
+				"diffie-hellman-group-exchange-sha1",
+				"diffie-hellman-group14-sha256",
+				"diffie-hellman-group14-sha1",
+				"diffie-hellman-group1-sha1",
+				"curve25519-sha256",
+				"curve25519-sha256@libssh.org",
+				"ecdh-sha2-nistp256",
+				"ecdh-sha2-nistp384",
+				"ecdh-sha2-nistp521",
+			},
+			// 支持旧设备的加密算法
+			Ciphers: []string{
+				"aes128-ctr",
+				"aes192-ctr",
+				"aes256-ctr",
+				"aes128-cbc",
+				"aes192-cbc",
+				"aes256-cbc",
+				"3des-cbc",
+				"arcfour256",
+				"arcfour128",
+			},
+			// 支持旧设备的MAC算法
+			MACs: []string{
+				"hmac-sha2-256",
+				"hmac-sha2-512",
+				"hmac-sha1",
+				"hmac-sha1-96",
+				"hmac-md5",
+				"hmac-md5-96",
+			},
+		},
 		User:            device.SshUsername,
 		Auth:            []ssh.AuthMethod{ssh.Password(device.SshPassword)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
@@ -88,22 +124,75 @@ func (c *SSHCollector) runCommand(ctx context.Context, client *ssh.Client, comma
 	}
 	defer session.Close()
 
-	var output []byte
-	done := make(chan error, 1)
+	// 请求 PTY（华为/H3C 等网络设备需要交互式终端才会输出内容）
+	modes := ssh.TerminalModes{
+		ssh.ECHO:          0,
+		ssh.TTY_OP_ISPEED: 14400,
+		ssh.TTY_OP_OSPEED: 14400,
+	}
+	if err := session.RequestPty("vt100", 24, 200, modes); err != nil {
+		// PTY 不可用，回退到 Output 方式
+		output, _ := session.Output(command)
+		return string(output), nil
+	}
+
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return "", err
+	}
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return "", err
+	}
+
+	if err := session.Shell(); err != nil {
+		return "", err
+	}
+
+	// 等待 shell 准备好（华为设备会先显示 VRP 提示符）
+	time.Sleep(1 * time.Second)
+
+	// 发送命令 + 退出标记
+	endMarker := "__CMD_END_7f3a9b2c__"
 	go func() {
-		output, err = session.CombinedOutput(command)
-		done <- err
+		defer stdin.Close()
+		time.Sleep(200 * time.Millisecond)
+		fmt.Fprintf(stdin, "%s\n", command)
+		time.Sleep(500 * time.Millisecond)
+		fmt.Fprintf(stdin, "echo %s\n", endMarker)
+		time.Sleep(200 * time.Millisecond)
+		fmt.Fprintf(stdin, "exit\n")
 	}()
 
-	select {
-	case <-ctx.Done():
-		_ = session.Close()
-		return "", ErrCollectionCanceled
-	case err := <-done:
-		if err != nil {
-			return "", fmt.Errorf("ssh command failed: %w", err)
+	// 带超时读取输出
+	var output []byte
+	buf := make([]byte, 65536)
+	readTimeout := time.After(15 * time.Second)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return string(output), ErrCollectionCanceled
+		case <-readTimeout:
+			return string(output), nil
+		default:
 		}
-		return string(output), nil
+
+		// 非阻塞检测：如果 stdout 没数据就短睡再试
+		n, err := stdout.Read(buf)
+		if n > 0 {
+			output = append(output, buf[:n]...)
+		}
+		if err != nil {
+			return string(output), nil
+		}
+
+		// 检测结束标记
+		outputStr := string(output)
+		if strings.Contains(outputStr, endMarker) {
+			idx := strings.Index(outputStr, endMarker)
+			return string(output[:idx]), nil
+		}
 	}
 }
 

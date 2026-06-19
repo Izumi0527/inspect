@@ -284,9 +284,20 @@ func (h AuthHandler) profileResponse(c echo.Context) error {
 }
 
 func (h AuthHandler) requireActiveUser(c echo.Context) (*auth.UserRecord, error) {
-	token, err := readBearerToken(c)
-	if err != nil {
-		return nil, err
+	// S3：优先从 httpOnly Cookie 读取 access token（Cookie 自动随请求携带），
+	// fallback 到 Authorization header（过渡期兼容）。
+	token := ""
+	if cookie, cErr := c.Cookie(authcookie.AccessTokenCookie); cErr == nil {
+		if v := strings.TrimSpace(cookie.Value); v != "" {
+			token = v
+		}
+	}
+	if token == "" {
+		var err error
+		token, err = readBearerToken(c)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	user, err := h.Service.GetActiveUserFromToken(c.Request().Context(), token)
