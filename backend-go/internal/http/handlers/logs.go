@@ -13,6 +13,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/xuri/excelize/v2"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 
 	"github.com/your-org/inspect-system/backend-go/internal/logs"
@@ -26,6 +27,8 @@ type LogsHandler struct {
 	Settings SettingsGetter
 	// Syslog 为可注入的运行时接收器，便于测试与运行期热更新。
 	Syslog SyslogRuntime
+	// Logger 用于结构化诊断日志输出（注入，可为 nil）。
+	Logger *zap.Logger
 }
 
 type SettingsGetter interface {
@@ -229,8 +232,14 @@ func (h LogsHandler) CollectDeviceLogs(c echo.Context) error {
 
 	count, err := h.Service.CollectDeviceLogs(c.Request().Context(), deviceID, logType, maxEntries)
 	if err != nil {
-		// 记录详细错误日志（logger 是私有字段，这里用 fmt 输出到 stderr）
-		fmt.Printf("[ERROR] 日志采集失败: device_id=%d, log_type=%s, max_entries=%d, error=%v\n", deviceID, logType, maxEntries, err)
+		// 详细错误进结构化日志（落 logs/），对客户端只返回通用文案，避免泄露内部细节。
+		if h.Logger != nil {
+			h.Logger.Error("设备日志采集失败",
+				zap.Int("device_id", deviceID),
+				zap.String("log_type", logType),
+				zap.Int("max_entries", maxEntries),
+				zap.Error(err))
+		}
 		switch {
 		case errors.Is(err, logs.ErrDeviceNotFound):
 			return echo.NewHTTPError(http.StatusNotFound, "device not found")
@@ -239,7 +248,7 @@ func (h LogsHandler) CollectDeviceLogs(c echo.Context) error {
 		case errors.Is(err, logs.ErrCollectionCanceled):
 			return echo.NewHTTPError(http.StatusRequestTimeout, "log collection canceled")
 		default:
-			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to collect logs: %v", err))
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to collect logs")
 		}
 	}
 

@@ -273,6 +273,7 @@ func New() (*App, error) {
 		Auth:     authService,
 		Settings: settingsService,
 		Syslog:   syslogReceiver,
+		Logger:   log,
 	}
 	trapListener := logs.NewSNMPTrapListener(logsService, log, cfg.SnmpTrapAddress(), cfg.SnmpTrapEnabled)
 	trapListener.SetAlertCreator(trapAlertBridge)
