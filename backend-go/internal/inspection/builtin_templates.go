@@ -21,7 +21,8 @@ type builtinTemplateSeed struct {
 	CheckItems  []map[string]interface{}
 }
 
-// huaweiInspectionCheckItems 返回华为（VRP）交换机/路由器通用的内置检查项。
+// vrpStyleCheckItems 构造 Huawei(VRP) / H3C(Comware) 通用的内置检查项；
+// 仅 CPU/内存/温度的 OID 因厂商而异（由参数传入），其余为标准 MIB-II。
 //
 // 设计约束：每一项都必须能被后端 executeCheckItems/executeSNMPCheck 真正执行——
 //   - type 仅用 icmp / snmp（ssh/http/script 当前会被后端跳过）；
@@ -29,9 +30,7 @@ type builtinTemplateSeed struct {
 //     因此名称中的关键词不可随意更改；
 //   - 带宽项命名为“带宽利用率”而非“接口带宽”，避免被“接口”分支优先匹配；
 //   - config.oid 仅用于展示与文档，真实采集 OID 由后端厂商注册表按设备厂商解析。
-//
-// CPU/内存/温度采用华为企业 OID（hwEntity 系列），其余采用标准 MIB-II。
-func huaweiInspectionCheckItems() []map[string]interface{} {
+func vrpStyleCheckItems(cpuOID, memOID, tempOID string) []map[string]interface{} {
 	return []map[string]interface{}{
 		{
 			"id": "connectivity", "name": "设备连通性", "description": "ICMP 探测设备可达性",
@@ -47,7 +46,7 @@ func huaweiInspectionCheckItems() []map[string]interface{} {
 			"id": "cpu_usage", "name": "CPU 使用率检查", "description": "监控设备 CPU 使用率",
 			"type": "snmp", "category": "health", "weight": 10,
 			"config": map[string]interface{}{
-				"oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5", "unit": "%", "timeout": 5,
+				"oid": cpuOID, "unit": "%", "timeout": 5,
 				"threshold": map[string]interface{}{"warning": 70, "critical": 85},
 			},
 			"enabled": true,
@@ -56,7 +55,7 @@ func huaweiInspectionCheckItems() []map[string]interface{} {
 			"id": "memory_usage", "name": "内存使用率检查", "description": "监控设备内存使用率",
 			"type": "snmp", "category": "health", "weight": 10,
 			"config": map[string]interface{}{
-				"oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7", "unit": "%", "timeout": 5,
+				"oid": memOID, "unit": "%", "timeout": 5,
 				"threshold": map[string]interface{}{"warning": 75, "critical": 90},
 			},
 			"enabled": true,
@@ -65,7 +64,7 @@ func huaweiInspectionCheckItems() []map[string]interface{} {
 			"id": "temperature", "name": "设备温度检查", "description": "监控单板/整机温度",
 			"type": "snmp", "category": "health", "weight": 7,
 			"config": map[string]interface{}{
-				"oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11", "unit": "℃", "timeout": 5,
+				"oid": tempOID, "unit": "℃", "timeout": 5,
 				"threshold": map[string]interface{}{"warning": 60, "critical": 75},
 			},
 			"enabled": true,
@@ -88,6 +87,24 @@ func huaweiInspectionCheckItems() []map[string]interface{} {
 	}
 }
 
+// huaweiInspectionCheckItems 华为 VRP 内置检查项（CPU/内存/温度采用 hwEntity 系列 OID）。
+func huaweiInspectionCheckItems() []map[string]interface{} {
+	return vrpStyleCheckItems(
+		"1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5",
+		"1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7",
+		"1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11",
+	)
+}
+
+// h3cInspectionCheckItems H3C Comware 内置检查项（CPU/内存/温度采用 hh3cEntityExt 系列 OID）。
+func h3cInspectionCheckItems() []map[string]interface{} {
+	return vrpStyleCheckItems(
+		"1.3.6.1.4.1.25506.2.6.1.1.1.1.6",
+		"1.3.6.1.4.1.25506.2.6.1.1.1.1.8",
+		"1.3.6.1.4.1.25506.2.6.1.1.1.1.12",
+	)
+}
+
 func builtinTemplateSeeds() []builtinTemplateSeed {
 	return []builtinTemplateSeed{
 		{
@@ -104,8 +121,25 @@ func builtinTemplateSeeds() []builtinTemplateSeed {
 			DeviceTypes: map[string]interface{}{"vendors": []string{"Huawei"}, "device_types": []string{"router"}},
 			CheckItems:  huaweiInspectionCheckItems(),
 		},
+		{
+			Name:        "H3C 交换机标准巡检",
+			Description: "适用于 H3C（Comware）交换机的标准巡检模板，覆盖连通性、设备健康（CPU/内存/温度/运行时间）与接口性能检查",
+			Category:    "network",
+			DeviceTypes: map[string]interface{}{"vendors": []string{"H3C"}, "device_types": []string{"switch"}},
+			CheckItems:  h3cInspectionCheckItems(),
+		},
+		{
+			Name:        "H3C 路由器标准巡检",
+			Description: "适用于 H3C（Comware）路由器的标准巡检模板，覆盖连通性、设备健康（CPU/内存/温度/运行时间）与接口/带宽性能检查",
+			Category:    "network",
+			DeviceTypes: map[string]interface{}{"vendors": []string{"H3C"}, "device_types": []string{"router"}},
+			CheckItems:  h3cInspectionCheckItems(),
+		},
 	}
 }
+
+// retiredBuiltinTemplateVendors 为不再支持、需在启动时清理其内置模板的历史厂商。
+var retiredBuiltinTemplateVendors = []string{"Cisco", "Juniper", "Arista", "Fortinet"}
 
 // EnsureBuiltinTemplates 在后端启动时按 name 幂等同步内置巡检模板：
 // 已存在（is_default）则更新其检查项等内容，不存在则创建。
@@ -113,6 +147,20 @@ func builtinTemplateSeeds() []builtinTemplateSeed {
 func EnsureBuiltinTemplates(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {
 	if db == nil {
 		return nil
+	}
+
+	// 清理已不再支持的历史厂商内置模板（仅删除内置 is_default，用户自建模板不动）。
+	for _, vendor := range retiredBuiltinTemplateVendors {
+		res := db.WithContext(ctx).
+			Where("is_default = ? AND name LIKE ?", true, vendor+" %").
+			Delete(&Template{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected > 0 && logger != nil {
+			logger.Info("已清理历史厂商内置模板",
+				zap.String("vendor", vendor), zap.Int64("deleted", res.RowsAffected))
+		}
 	}
 
 	for _, seed := range builtinTemplateSeeds() {
