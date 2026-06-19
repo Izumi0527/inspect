@@ -5,6 +5,11 @@ process.env.NEXT_TELEMETRY_DISABLED = process.env.NEXT_TELEMETRY_DISABLED || '1'
 const nextConfig = {
   // React Strict Mode for better development experience
   reactStrictMode: true,
+
+  // 应用版本号（构建时由 NEXT_PUBLIC_APP_VERSION 注入，未注入时回退到 package.json version）
+  env: {
+    NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || require('./package.json').version,
+  },
   
   // Experimental features for React 19
   experimental: {

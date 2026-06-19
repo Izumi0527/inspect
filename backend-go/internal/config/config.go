@@ -30,10 +30,15 @@ var placeholderSecretMarkers = []string{
 	"your-super-secret",
 }
 
+// defaultAppVersion 为应用版本号默认值，可在构建时通过
+// -ldflags "-X 'github.com/your-org/inspect-system/backend-go/internal/config.defaultAppVersion=x.y.z'" 注入。
+// 运行时环境变量 APP_VERSION 优先级更高（见 Load）。
+var defaultAppVersion = "1.1.0"
+
 type Config struct {
 	Debug      bool   `env:"DEBUG" envDefault:"false"`
 	AppName    string `env:"APP_NAME" envDefault:"Inspect System"`
-	AppVersion string `env:"APP_VERSION" envDefault:"1.0.1"`
+	AppVersion string `env:"APP_VERSION"`
 	SecretKey  string `env:"SECRET_KEY"`
 
 	ServerHost string `env:"SERVER_HOST" envDefault:"0.0.0.0"`
@@ -89,6 +94,10 @@ func Load() (Config, error) {
 	var cfg Config
 	if err := env.Parse(&cfg); err != nil {
 		return Config{}, err
+	}
+
+	if strings.TrimSpace(cfg.AppVersion) == "" {
+		cfg.AppVersion = defaultAppVersion
 	}
 
 	cfg.DatabaseURL = normalizeDatabaseURL(cfg.DatabaseURL)

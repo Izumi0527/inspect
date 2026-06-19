@@ -1,5 +1,7 @@
 #define AppName "Inspect"
-#define AppVersion "1.0.2"
+#ifndef AppVersion
+  #define AppVersion "1.1.0"
+#endif
 #define AppPublisher "Inspect Team"
 #define RuntimeRoot "..\build\installer\InspectRuntime"
 
@@ -36,6 +38,7 @@ Source: "..\database\database-init-complete.sql"; DestDir: "{app}\database"; Fla
 Source: "..\database\builtin-templates-complete.sql"; DestDir: "{app}\database"; Flags: ignoreversion
 Source: "..\config\postgres\postgresql.conf"; DestDir: "{app}\config\postgres"; Flags: ignoreversion
 Source: "scripts\*.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "..\VERSION"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
 Name: "{app}\config"; Permissions: users-modify

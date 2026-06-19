@@ -1,4 +1,4 @@
-[CmdletBinding(SupportsShouldProcess = $true)]
+﻿[CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [string]$InstallRoot = "",
     [int]$FrontendPort = 3000,
@@ -115,6 +115,11 @@ $frontendScript = Join-Path $PSScriptRoot "start-frontend.ps1"
 
 try {
     Write-StartupLog "InstallRoot: $InstallRoot"
+    $versionFile = Join-Path $InstallRoot "VERSION"
+    if (Test-Path -LiteralPath $versionFile) {
+        $inspectVersion = (Get-Content -LiteralPath $versionFile -Raw).Trim()
+        Write-StartupLog "Inspect v$inspectVersion"
+    }
     Write-StartupLog "Startup log: $script:StartupLogPath"
     if ($startupLogDir -ne (Join-Path $InstallRoot "logs")) {
         Write-StartupLog "Install logs directory is not writable. Fallback log directory: $startupLogDir" "WARN"

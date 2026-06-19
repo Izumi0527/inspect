@@ -108,6 +108,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )
         })}
       </nav>
+
+      {isOpen && (
+        <div className="absolute bottom-0 left-0 right-0 border-t border-border/60 p-4 text-center">
+          <p className="text-xs text-foreground/50">v{process.env.NEXT_PUBLIC_APP_VERSION}</p>
+        </div>
+      )}
     </div>
   )
 }
