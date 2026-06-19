@@ -682,11 +682,110 @@ func (s *Service) storeLogEntries(ctx context.Context, entries []logEntry) (int,
 		records = append(records, record)
 	}
 
+	// 去重：同一设备重复采集会重新读取其近期日志缓冲，导致区间重叠的日志被反复入库。
+	// 按内容自然键（device_id+log_timestamp+level+facility+source+message，不含每次都变化的
+	// collected_at）过滤掉数据库已存记录与本批内部重复，只插入新日志。
+	records = s.dedupeLogRecords(ctx, records)
+	if len(records) == 0 {
+		return 0, nil
+	}
+
 	if err := s.db.WithContext(ctx).Create(&records).Error; err != nil {
 		return 0, err
 	}
 
 	return len(records), nil
+}
+
+// logDedupKey 为日志内容自然键，用于识别重复日志（不含 collected_at）。
+type logDedupKey struct {
+	deviceID  int
+	timestamp int64 // log_timestamp 截断到微秒后的 UnixMicro，与 Postgres 存储精度对齐
+	level     string
+	facility  string
+	source    string
+	message   string
+}
+
+func logDedupKeyOf(r DeviceLog) logDedupKey {
+	return logDedupKey{
+		deviceID:  r.DeviceID,
+		timestamp: r.LogTimestamp.UTC().Truncate(time.Microsecond).UnixMicro(),
+		level:     r.Level,
+		facility:  r.Facility,
+		source:    r.Source,
+		message:   r.Message,
+	}
+}
+
+// filterNewLogRecords 纯函数：在已存记录 existing 的基础上，过滤 records 中与已存或批内重复的项，
+// 返回需要新插入的记录（保持原顺序）。不访问数据库，便于单测。
+func filterNewLogRecords(records []DeviceLog, existing []DeviceLog) []DeviceLog {
+	seen := make(map[logDedupKey]struct{}, len(records)+len(existing))
+	for _, e := range existing {
+		seen[logDedupKeyOf(e)] = struct{}{}
+	}
+
+	result := make([]DeviceLog, 0, len(records))
+	for _, r := range records {
+		key := logDedupKeyOf(r)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, r)
+	}
+	return result
+}
+
+// dedupeLogRecords 查询数据库中本批时间范围内的已存日志，结合批内去重过滤出新日志。
+// 查询失败时退化为仅批内去重，不阻塞采集主流程。
+func (s *Service) dedupeLogRecords(ctx context.Context, records []DeviceLog) []DeviceLog {
+	if len(records) == 0 || s.db == nil {
+		return filterNewLogRecords(records, nil)
+	}
+
+	deviceIDSet := make(map[int]struct{})
+	var minTs, maxTs time.Time
+	for i, r := range records {
+		deviceIDSet[r.DeviceID] = struct{}{}
+		ts := r.LogTimestamp.UTC()
+		if i == 0 || ts.Before(minTs) {
+			minTs = ts
+		}
+		if i == 0 || ts.After(maxTs) {
+			maxTs = ts
+		}
+	}
+
+	deviceIDs := make([]int, 0, len(deviceIDSet))
+	for id := range deviceIDSet {
+		deviceIDs = append(deviceIDs, id)
+	}
+
+	var existing []DeviceLog
+	err := s.db.WithContext(ctx).
+		Table("device_logs").
+		Select("device_id, level, facility, source, message, log_timestamp").
+		Where("device_id IN ?", deviceIDs).
+		Where("log_timestamp >= ? AND log_timestamp <= ?",
+			minTs.Truncate(time.Microsecond), maxTs.Truncate(time.Microsecond)).
+		Find(&existing).Error
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn("日志去重查询失败，本次仅做批内去重", zap.Error(err))
+		}
+		return filterNewLogRecords(records, nil)
+	}
+
+	result := filterNewLogRecords(records, existing)
+	if s.logger != nil && len(result) < len(records) {
+		s.logger.Info("日志采集去重",
+			zap.Int("collected", len(records)),
+			zap.Int("inserted", len(result)),
+			zap.Int("skipped_duplicates", len(records)-len(result)))
+	}
+	return result
 }
 
 func normalizeLogType(value string) string {

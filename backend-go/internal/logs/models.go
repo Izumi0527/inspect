@@ -4,7 +4,7 @@ import "time"
 
 type DeviceLog struct {
 	ID           int        `gorm:"primaryKey;autoIncrement"`
-	DeviceID     int        `gorm:"column:device_id;not null"`
+	DeviceID     int        `gorm:"column:device_id;not null;index:idx_device_logs_device_ts,priority:1"`
 	Level        string     `gorm:"column:level;size:20;not null"`
 	Facility     string     `gorm:"column:facility;size:50;not null"`
 	Source       string     `gorm:"column:source;size:20;not null"`
@@ -12,7 +12,7 @@ type DeviceLog struct {
 	RawMessage   *string    `gorm:"column:raw_message;type:text"`
 	SourceIP     *string    `gorm:"column:source_ip;size:45"`
 	SourceProcess *string   `gorm:"column:source_process;size:100"`
-	LogTimestamp time.Time  `gorm:"column:log_timestamp;not null"`
+	LogTimestamp time.Time  `gorm:"column:log_timestamp;not null;index:idx_device_logs_device_ts,priority:2"`
 	CollectedAt  time.Time  `gorm:"column:collected_at;not null"`
 	CreatedAt    time.Time  `gorm:"column:created_at;not null"`
 }
