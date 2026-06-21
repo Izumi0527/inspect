@@ -17,7 +17,7 @@ OutputBaseFilename=InspectSetup
 SetupIconFile=assets\inspect.ico
 Compression=lzma2
 SolidCompression=yes
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 DisableProgramGroupPage=yes
 WizardStyle=modern
@@ -64,4 +64,4 @@ Name: "desktopicon"; Description: "创建桌面启动快捷方式"; GroupDescrip
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\start-all.ps1"""; Description: "安装完成后启动 Inspect"; Flags: postinstall skipifsilent nowait unchecked
 
 [UninstallRun]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\stop-all.ps1"""; Flags: runhidden waituntilterminated
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\stop-all.ps1"""; Flags: runhidden waituntilterminated; RunOnceId: "StopInspectServices"
