@@ -86,7 +86,7 @@ class Logger {
     // 输出到控制台
     this.outputToConsole(entry);
 
-    // 发送到远程日志服务（如果配置了）
+    // 远程上报：当前为 no-op（后端端点未实现，避免静默 404）
     this.sendToRemote(entry);
   }
 
@@ -146,22 +146,10 @@ class Logger {
   /**
    * 发送到远程日志服务
    */
-  private async sendToRemote(entry: LogEntry) {
-    if (!this.isDevelopment && entry.level >= LogLevel.WARN) {
-      try {
-        // 只在生产环境发送警告和错误到后端
-        await fetch('/api/v1/logs/frontend', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(entry),
-        });
-      } catch (error) {
-        // 发送日志失败时，静默处理，避免无限循环
-        console.error('Failed to send log to remote service:', error);
-      }
-    }
+  private async sendToRemote(_entry: LogEntry) {
+    // 远程上报端点 /api/v1/logs/frontend 后端未实现，此前在生产环境会产生静默 404。
+    // 暂移除远程上报，仅保留控制台与内存日志。如需前端遥测，应接入专门的可观测平台，
+    // 或新增带限流/字段白名单/脱敏的后端摄取端点（见整改文档 P3-2 方案 A）。
   }
 
   /**
