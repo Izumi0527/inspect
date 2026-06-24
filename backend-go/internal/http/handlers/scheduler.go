@@ -62,11 +62,11 @@ func (h SchedulerHandler) Register(group *echo.Group) {
 }
 
 func (h SchedulerHandler) GetStats(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, "system:config"); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "scheduler service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	stats, err := h.Service.GetStats(c.Request().Context())
@@ -86,11 +86,11 @@ func (h SchedulerHandler) GetStats(c echo.Context) error {
 }
 
 func (h SchedulerHandler) ListTasks(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, "system:config"); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "scheduler service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	tasks, err := h.Service.ListTasks(c.Request().Context())
@@ -107,11 +107,11 @@ func (h SchedulerHandler) ListTasks(c echo.Context) error {
 }
 
 func (h SchedulerHandler) GetTask(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, "system:config"); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "scheduler service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	taskID := strings.TrimSpace(c.Param("task_id"))
@@ -127,15 +127,11 @@ func (h SchedulerHandler) GetTask(c echo.Context) error {
 }
 
 func (h SchedulerHandler) CreateTask(c echo.Context) error {
-	if h.Service == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "scheduler service not configured")
-	}
-	user, err := requirePermission(c, h.Auth, "")
-	if err != nil {
+	if _, err := requirePermission(c, h.Auth, "system:config"); err != nil {
 		return err
 	}
-	if user == nil || strings.ToLower(user.Role) != "admin" {
-		return echo.NewHTTPError(http.StatusForbidden, "Admin permission required")
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "scheduler service not configured")
 	}
 
 	var req schedulerTaskCreateRequest
@@ -169,15 +165,11 @@ func (h SchedulerHandler) CreateTask(c echo.Context) error {
 }
 
 func (h SchedulerHandler) DeleteTask(c echo.Context) error {
-	if h.Service == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "scheduler service not configured")
-	}
-	user, err := requirePermission(c, h.Auth, "")
-	if err != nil {
+	if _, err := requirePermission(c, h.Auth, "system:config"); err != nil {
 		return err
 	}
-	if user == nil || strings.ToLower(user.Role) != "admin" {
-		return echo.NewHTTPError(http.StatusForbidden, "Admin permission required")
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "scheduler service not configured")
 	}
 
 	taskID := strings.TrimSpace(c.Param("task_id"))
@@ -203,15 +195,11 @@ func (h SchedulerHandler) DisableTask(c echo.Context) error {
 }
 
 func (h SchedulerHandler) setTaskEnabled(c echo.Context, enabled bool, message string) error {
-	if h.Service == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "scheduler service not configured")
-	}
-	user, err := requirePermission(c, h.Auth, "")
-	if err != nil {
+	if _, err := requirePermission(c, h.Auth, "system:config"); err != nil {
 		return err
 	}
-	if user == nil || strings.ToLower(user.Role) != "admin" {
-		return echo.NewHTTPError(http.StatusForbidden, "Admin permission required")
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "scheduler service not configured")
 	}
 
 	taskID := strings.TrimSpace(c.Param("task_id"))
