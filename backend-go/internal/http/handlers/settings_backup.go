@@ -255,7 +255,12 @@ func (h SettingsHandler) DownloadBackup(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "备份文件不存在")
 	}
 
-	return c.Attachment(record.FilePath, record.FileName)
+	safePath, err := settings.ResolveBackupPath(record.FilePath)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "备份文件不存在")
+	}
+
+	return c.Attachment(safePath, record.FileName)
 }
 
 func (h SettingsHandler) ValidateBackup(c echo.Context) error {

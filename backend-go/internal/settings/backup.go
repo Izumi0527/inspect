@@ -16,6 +16,43 @@ import (
 	"gorm.io/gorm"
 )
 
+// defaultBackupRoot 为备份文件允许的根目录（相对工作目录）。可由只读环境变量
+// INSPECT_BACKUP_ROOT 覆盖。所有备份路径必须解析到该根目录内。
+const defaultBackupRoot = "data/backups"
+
+func backupRootDir() string {
+	if v := strings.TrimSpace(os.Getenv("INSPECT_BACKUP_ROOT")); v != "" {
+		return v
+	}
+	return defaultBackupRoot
+}
+
+// ResolveBackupPath 将 target 解析为绝对路径，并校验其位于备份根目录内：
+// 拒绝 .. 逃逸、根目录外的绝对路径与异盘符路径。空 target 返回根目录本身。
+// 用于创建/下载/恢复/删除前的统一边界校验，防止路径穿越与对污染 file_path 的信任。
+func ResolveBackupPath(target string) (string, error) {
+	absRoot, err := filepath.Abs(backupRootDir())
+	if err != nil {
+		return "", err
+	}
+	candidate := strings.TrimSpace(target)
+	if candidate == "" {
+		return absRoot, nil
+	}
+	absTarget, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(absRoot, absTarget)
+	if err != nil {
+		return "", fmt.Errorf("备份路径越界: %s", target)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("备份路径越界: %s", target)
+	}
+	return absTarget, nil
+}
+
 func (s *Service) GetBackupConfig(ctx context.Context) (BackupConfig, error) {
 	cfg := BackupConfig{
 		AutoBackupEnabled: s.getSettingBool(ctx, "backup.auto_backup_enabled", false),
@@ -157,9 +194,9 @@ func (s *Service) CreateBackup(ctx context.Context, includeDatabase bool, includ
 	}
 
 	cfg, _ := s.GetBackupConfig(ctx)
-	backupDir := cfg.BackupPath
-	if strings.TrimSpace(backupDir) == "" {
-		backupDir = "data/backups"
+	backupDir, err := ResolveBackupPath(cfg.BackupPath)
+	if err != nil {
+		return BackupRecord{}, err
 	}
 
 	if err := os.MkdirAll(backupDir, 0o755); err != nil {
@@ -261,7 +298,12 @@ func (s *Service) RestoreBackup(ctx context.Context, backupID string, restoreDat
 		return fmt.Errorf("backup file not found")
 	}
 
-	payload, err := readJSONFile(*record.FilePath)
+	safePath, err := ResolveBackupPath(*record.FilePath)
+	if err != nil {
+		return err
+	}
+
+	payload, err := readJSONFile(safePath)
 	if err != nil {
 		return err
 	}
@@ -294,7 +336,11 @@ func (s *Service) DeleteBackup(ctx context.Context, backupID string) error {
 	}
 
 	if record.FilePath != nil {
-		_ = os.Remove(*record.FilePath)
+		safePath, err := ResolveBackupPath(*record.FilePath)
+		if err != nil {
+			return err
+		}
+		_ = os.Remove(safePath)
 	}
 
 	result := s.db.WithContext(ctx).Where("id = ?", backupID).Delete(&SystemBackup{})
