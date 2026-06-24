@@ -4,12 +4,10 @@ import { render, screen } from '@testing-library/react'
 import HomePage from '@/app/page'
 
 describe('HomePage', () => {
-  it('应展示与登录页一致的测试账号密码提示', () => {
+  it('不应在公开首页暴露默认账号或固定口令', () => {
     render(<HomePage />)
 
-    expect(screen.getByText('测试账号：')).toBeInTheDocument()
-    expect(screen.getByText('admin')).toBeInTheDocument()
-    expect(screen.getByText('admin123')).toBeInTheDocument()
-    expect(screen.queryByText('Admin123!')).not.toBeInTheDocument()
+    expect(screen.queryByText('admin123')).not.toBeInTheDocument()
+    expect(screen.queryByText(/测试账号/)).not.toBeInTheDocument()
   })
 })

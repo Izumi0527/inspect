@@ -41,17 +41,9 @@ export default function HomePage() {
                 </Button>
               </Link>
             </div>
-
-            {/* 测试账号提示 */}
-            <div className="mt-8 p-4 bg-blue-50/80 dark:bg-blue-900/20 backdrop-blur-sm rounded-xl border border-blue-200 dark:border-blue-700/50">
-              <p className="text-sm text-blue-700 dark:text-blue-200 text-center">
-                <strong>测试账号：</strong>用户名 <code className="bg-blue-100 dark:bg-blue-900/40 px-2 py-1 rounded">admin</code>
-                密码 <code className="bg-blue-100 dark:bg-blue-900/40 px-2 py-1 rounded">admin123</code>
-              </p>
-            </div>
           </div>
         </div>
-        
+
         {/* Background decoration */}
         <div className="absolute inset-0 -z-10 overflow-hidden">
           <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-gradient-to-br from-teal-400 to-cyan-400 opacity-20 blur-3xl" />
