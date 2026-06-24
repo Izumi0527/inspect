@@ -245,14 +245,10 @@ func (h AuthHandler) Verify(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "auth service not configured")
 	}
 
-	token, err := readBearerToken(c)
+	// 与 Profile/Me 一致：优先 httpOnly Cookie，兼容过渡期 Bearer，统一 Cookie-only 模型。
+	user, err := h.requireActiveUser(c)
 	if err != nil {
 		return err
-	}
-
-	user, err := h.Service.GetActiveUserFromToken(c.Request().Context(), token)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Could not validate credentials")
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
