@@ -38,6 +38,7 @@ Source: "..\database\database-init-complete.sql"; DestDir: "{app}\database"; Fla
 Source: "..\database\builtin-templates-complete.sql"; DestDir: "{app}\database"; Flags: ignoreversion
 Source: "..\config\postgres\postgresql.conf"; DestDir: "{app}\config\postgres"; Flags: ignoreversion
 Source: "scripts\*.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "scripts\lib\*.ps1"; DestDir: "{app}\scripts\lib"; Flags: ignoreversion
 Source: "..\VERSION"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]

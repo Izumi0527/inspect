@@ -22,10 +22,6 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
 )
 
-// defaultAdminPassword 为内置默认管理员口令；使用该口令初始化时强制首登改密，
-// 与安装包 SQL 种子（installer/database/inspect-runtime-seed.sql）保持一致。
-const defaultAdminPassword = "admin123"
-
 type permissionSeed struct {
 	Name        string
 	DisplayName string
@@ -45,12 +41,19 @@ type roleSeed struct {
 
 func main() {
 	username := flag.String("username", "admin", "要初始化的用户名（默认：admin）")
-	password := flag.String("password", defaultAdminPassword, "要初始化的密码（默认：admin123）")
+	password := flag.String("password", "", "管理员初始口令（必填；亦可用环境变量 INSPECT_SEED_PASSWORD）")
+	forcePasswordChange := flag.Bool("force-password-change", true, "首次登录是否强制改密（默认 true）")
 	email := flag.String("email", "admin@admin.com", "要初始化的邮箱（默认：admin@admin.com）")
 	role := flag.String("role", "superadmin", "要初始化的角色（superadmin 会映射为 admin）")
 	fullName := flag.String("full-name", "系统管理员", "用户显示名（可选）")
 	skipMigrate := flag.Bool("skip-migrate", false, "跳过数据库迁移（不推荐）")
 	flag.Parse()
+
+	resolvedPassword, err := resolveSeedPassword(*password, os.Getenv("INSPECT_SEED_PASSWORD"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -103,11 +106,11 @@ func main() {
 
 	userResult, err := ensureAdminUser(ctx, database, ensureAdminUserArgs{
 		Username:            *username,
-		Password:            *password,
+		Password:            resolvedPassword,
 		Email:               *email,
 		FullName:            *fullName,
 		Role:                normalizedRole,
-		ForcePasswordChange: strings.TrimSpace(*password) == defaultAdminPassword,
+		ForcePasswordChange: *forcePasswordChange,
 	})
 	if err != nil {
 		log.Error("初始化管理员用户失败", zap.Error(err))
@@ -463,17 +466,17 @@ func ensureAdminUser(ctx context.Context, dbConn *gorm.DB, args ensureAdminUserA
 		return ensureAdminUserResult{}, err
 	default:
 		updates := map[string]interface{}{
-			"email":                email,
-			"full_name":            emptyToNil(fullName),
-			"hashed_password":      string(hashed),
-			"role":                 role,
-			"is_active":            true,
-			"is_superuser":         true,
-			"password_changed_at":  now,
+			"email":                 email,
+			"full_name":             emptyToNil(fullName),
+			"hashed_password":       string(hashed),
+			"role":                  role,
+			"is_active":             true,
+			"is_superuser":          true,
+			"password_changed_at":   now,
 			"force_password_change": args.ForcePasswordChange,
-			"login_attempts":       0,
-			"locked_until":         nil,
-			"updated_at":           now,
+			"login_attempts":        0,
+			"locked_until":          nil,
+			"updated_at":            now,
 		}
 		if err := dbConn.WithContext(ctx).Model(&settings.User{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
 			return ensureAdminUserResult{}, err

@@ -3,17 +3,18 @@
 -- ==========================================
 -- 功能：
 -- 1. 初始化内置权限、角色和角色权限关系
--- 2. 初始化默认管理员账号 admin（默认口令 admin123，首登强制改密）
+-- 2. 初始化默认管理员账号 admin（口令由安装流程随机生成并经 pgcrypto 库内哈希，首登强制改密）
 -- 3. 保持幂等，可在每次启动时重复执行
 --
 -- 注意：
 -- - 表结构由后端启动时的 GORM 迁移负责创建
--- - 这里不保存明文密码，users.hashed_password 写入 bcrypt 哈希
+-- - 不保存明文：hashed_password 由 pgcrypto 的 crypt() 对注入的随机口令(:admin_password)做 bcrypt
 -- ==========================================
 
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 WITH permission_seed(name, display_name, description, module, action, resource) AS (
     VALUES
@@ -178,7 +179,7 @@ INSERT INTO users (
     'admin',
     'admin@admin.com',
     '系统管理员',
-    '$2b$10$EGIaGEezWuCclNcdCPqAVuS7pNMAmbFfPbJRXHwOwrEMkRQM6ufeC',
+    crypt(:'admin_password', gen_salt('bf', 10)),
     'admin',
     TRUE,
     TRUE,
