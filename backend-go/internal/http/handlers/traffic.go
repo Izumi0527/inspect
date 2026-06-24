@@ -33,11 +33,11 @@ func (h TrafficHandler) Register(group *echo.Group) {
 }
 
 func (h TrafficHandler) GetTrafficSummary(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	timeRange := strings.TrimSpace(c.QueryParam("time_range"))
@@ -59,11 +59,11 @@ func (h TrafficHandler) GetTrafficSummary(c echo.Context) error {
 }
 
 func (h TrafficHandler) GetDeviceTraffic(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	deviceID, err := parseIDParam(c, "device_id")
@@ -83,11 +83,11 @@ func (h TrafficHandler) GetDeviceTraffic(c echo.Context) error {
 }
 
 func (h TrafficHandler) GetDeviceTrafficTrend(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	deviceID, err := parseIDParam(c, "device_id")
@@ -139,11 +139,11 @@ func (h TrafficHandler) GetDeviceTrafficTrend(c echo.Context) error {
 }
 
 func (h TrafficHandler) GetTopTalkers(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	limit := parseIntDefault(c.QueryParam("limit"), 10)
@@ -167,11 +167,11 @@ func (h TrafficHandler) GetTopTalkers(c echo.Context) error {
 }
 
 func (h TrafficHandler) GetBandwidthUtilization(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	var deviceID *int
@@ -200,11 +200,11 @@ func (h TrafficHandler) GetBandwidthUtilization(c echo.Context) error {
 }
 
 func (h TrafficHandler) GetHighUtilizationInterfaces(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	threshold := parseFloatDefault(c.QueryParam("threshold"), 80)
@@ -232,11 +232,11 @@ func (h TrafficHandler) GetHighUtilizationInterfaces(c echo.Context) error {
 }
 
 func (h TrafficHandler) CollectTrafficData(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringControlPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	deviceIP := strings.TrimSpace(c.QueryParam("device_ip"))
@@ -263,11 +263,11 @@ func (h TrafficHandler) CollectTrafficData(c echo.Context) error {
 }
 
 func (h TrafficHandler) GetTrafficTrends(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	deviceIP := strings.TrimSpace(c.Param("device_ip"))
@@ -288,11 +288,11 @@ func (h TrafficHandler) GetTrafficTrends(c echo.Context) error {
 }
 
 func (h TrafficHandler) GetTrafficAnomalies(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	var deviceIP *string
@@ -317,11 +317,11 @@ func (h TrafficHandler) GetTrafficAnomalies(c echo.Context) error {
 }
 
 func (h TrafficHandler) CalculateBaseline(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringControlPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	deviceIP := strings.TrimSpace(c.QueryParam("device_ip"))
@@ -349,11 +349,11 @@ func (h TrafficHandler) CalculateBaseline(c echo.Context) error {
 }
 
 func (h TrafficHandler) StartMonitoring(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringControlPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	payload := map[string]interface{}{}
@@ -377,11 +377,11 @@ func (h TrafficHandler) StartMonitoring(c echo.Context) error {
 }
 
 func (h TrafficHandler) CleanupData(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, monitoringControlPermission); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "traffic service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	olderThan := parseIntDefault(c.QueryParam("older_than_hours"), 168)
