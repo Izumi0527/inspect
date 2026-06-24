@@ -8,7 +8,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"github.com/your-org/inspect-system/backend-go/internal/auth"
 	"github.com/your-org/inspect-system/backend-go/internal/escalation"
 )
 
@@ -29,11 +28,11 @@ func (h EscalationHandler) Register(group *echo.Group) {
 }
 
 func (h EscalationHandler) ListRules(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, "alerts:read"); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	rules, err := h.Service.ListRules(c.Request().Context())
@@ -45,15 +44,11 @@ func (h EscalationHandler) ListRules(c echo.Context) error {
 }
 
 func (h EscalationHandler) CreateRule(c echo.Context) error {
-	if h.Service == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
-	}
-	user, err := requirePermission(c, h.Auth, "")
-	if err != nil {
+	if _, err := requirePermission(c, h.Auth, "alerts:update"); err != nil {
 		return err
 	}
-	if !isAdminOrOperator(user) {
-		return echo.NewHTTPError(http.StatusForbidden, "权限不足")
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
 	}
 
 	var req escalation.RuleRequest
@@ -70,15 +65,11 @@ func (h EscalationHandler) CreateRule(c echo.Context) error {
 }
 
 func (h EscalationHandler) UpdateRule(c echo.Context) error {
-	if h.Service == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
-	}
-	user, err := requirePermission(c, h.Auth, "")
-	if err != nil {
+	if _, err := requirePermission(c, h.Auth, "alerts:update"); err != nil {
 		return err
 	}
-	if !isAdminOrOperator(user) {
-		return echo.NewHTTPError(http.StatusForbidden, "权限不足")
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
 	}
 
 	ruleID := strings.TrimSpace(c.Param("rule_id"))
@@ -103,15 +94,11 @@ func (h EscalationHandler) UpdateRule(c echo.Context) error {
 }
 
 func (h EscalationHandler) DeleteRule(c echo.Context) error {
-	if h.Service == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
-	}
-	user, err := requirePermission(c, h.Auth, "")
-	if err != nil {
+	if _, err := requirePermission(c, h.Auth, "alerts:update"); err != nil {
 		return err
 	}
-	if !isAdminOrOperator(user) {
-		return echo.NewHTTPError(http.StatusForbidden, "权限不足")
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
 	}
 
 	ruleID := strings.TrimSpace(c.Param("rule_id"))
@@ -133,11 +120,11 @@ func (h EscalationHandler) DeleteRule(c echo.Context) error {
 }
 
 func (h EscalationHandler) GetStatus(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, "alerts:read"); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	alertID := strings.TrimSpace(c.Param("alert_id"))
@@ -154,15 +141,12 @@ func (h EscalationHandler) GetStatus(c echo.Context) error {
 }
 
 func (h EscalationHandler) CancelEscalation(c echo.Context) error {
-	if h.Service == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
-	}
-	user, err := requirePermission(c, h.Auth, "")
+	user, err := requirePermission(c, h.Auth, "alerts:update")
 	if err != nil {
 		return err
 	}
-	if !isAdminOrOperator(user) {
-		return echo.NewHTTPError(http.StatusForbidden, "权限不足")
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
 	}
 
 	alertID := strings.TrimSpace(c.Param("alert_id"))
@@ -195,11 +179,11 @@ func (h EscalationHandler) CancelEscalation(c echo.Context) error {
 }
 
 func (h EscalationHandler) GetStatistics(c echo.Context) error {
+	if _, err := requirePermission(c, h.Auth, "alerts:read"); err != nil {
+		return err
+	}
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, ""); err != nil {
-		return err
 	}
 
 	stats, err := h.Service.GetStatistics(c.Request().Context())
@@ -211,15 +195,11 @@ func (h EscalationHandler) GetStatistics(c echo.Context) error {
 }
 
 func (h EscalationHandler) TestEscalation(c echo.Context) error {
-	if h.Service == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
-	}
-	user, err := requirePermission(c, h.Auth, "")
-	if err != nil {
+	if _, err := requirePermission(c, h.Auth, "alerts:update"); err != nil {
 		return err
 	}
-	if user == nil || strings.ToLower(strings.TrimSpace(user.Role)) != "admin" {
-		return echo.NewHTTPError(http.StatusForbidden, "仅限管理员使用")
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "escalation service not configured")
 	}
 
 	alertID := strings.TrimSpace(c.Param("alert_id"))
@@ -247,12 +227,4 @@ func (h EscalationHandler) TestEscalation(c echo.Context) error {
 		"alert_id":      alertID,
 		"escalation_id": escalationID,
 	})
-}
-
-func isAdminOrOperator(user *auth.UserRecord) bool {
-	if user == nil {
-		return false
-	}
-	role := strings.ToLower(strings.TrimSpace(user.Role))
-	return role == "admin" || role == "operator"
 }
