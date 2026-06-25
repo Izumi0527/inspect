@@ -23,6 +23,9 @@ const customJestConfig = {
     '^@/features/(.*)$': '<rootDir>/src/features/$1',
     '^@/hooks/(.*)$': '<rootDir>/src/hooks/$1',
     '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
+    // 强制 uuid 走 CJS 主入口：jsdom 环境下 uuid@8 默认解析到 esm-browser 构建，
+    // 经 exceljs 传递引入时 babel-jest 不转译 node_modules，会触发 ESM 解析失败。
+    '^uuid$': require.resolve('uuid'),
   },
 
   // Ensure tests outside frontend root can still resolve frontend dependencies
@@ -35,6 +38,10 @@ const customJestConfig = {
     '<rootDir>/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/../tests/frontend/**/*.{test,spec}.{js,jsx,ts,tsx}',
   ],
+
+  // 排除 Playwright e2e（.spec.ts），需经 `pnpm exec playwright test` 运行，不能被 jest 捞起。
+  // 用子串匹配绝对路径（避免 <rootDir>/.. 替换后含字面 ".." 无法匹配已折叠路径）。
+  testPathIgnorePatterns: ['[/\\\\]tests[/\\\\]frontend[/\\\\]e2e[/\\\\]'],
   
   // Coverage configuration
   collectCoverageFrom: [

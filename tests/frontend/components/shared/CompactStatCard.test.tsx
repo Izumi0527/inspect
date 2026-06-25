@@ -70,7 +70,7 @@ describe('CompactStatCard', () => {
 
     const changeEl = screen.getByText('↗ +10%')
     expect(changeEl).toHaveClass('text-xs', 'font-semibold')
-    expect(changeEl).toHaveClass('text-green-600')
+    expect(changeEl).toHaveClass('text-emerald-600')
   })
 
   it('提供 changeHint 时追加提示文案', () => {

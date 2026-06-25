@@ -77,11 +77,7 @@ jest.mock('@/components/atoms', () => {
   }
 })
 
-jest.mock('@/components/shared', () => ({
-  CompactStatCard: ({ title, value }: { title: string; value: string }) => (
-    <div>{`${title}:${value}`}</div>
-  ),
-}))
+// 不再 mock @/components/shared：本测试需真实 CompactPageToolbar 渲染搜索框与筛选按钮以交互。
 
 describe('StatisticsReports 筛选参数透传', () => {
   beforeEach(() => {
