@@ -450,7 +450,7 @@ function Invoke-DevelopmentTestValidation {
 
 function Show-SetupSummary {
     $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
-    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 26380
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
     $backendConfig = Get-BackendDevConfig -AllowMissingPort
 
     Write-ColorOutput "`n$('=' * 60)" "Cyan"
@@ -794,7 +794,7 @@ function Invoke-DevDiagnose {
     Write-Host ""
     Write-ColorOutput "🗄️ 检查数据库容器与端口..." "Blue"
     $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
-    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 26380
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
     $containers = @(
         @{ Name = "PostgreSQL"; Container = "inspect-postgres-dev"; Port = $postgresHostPort },
         @{ Name = "Redis"; Container = "inspect-redis-dev"; Port = $redisHostPort }
@@ -992,7 +992,7 @@ function Test-ServicesHealth {
     
     # 检查数据库服务
     $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
-    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 26380
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
     $dbServices = @(
         @{ Name = "PostgreSQL"; Port = $postgresHostPort; Host = "localhost" },
         @{ Name = "Redis"; Port = $redisHostPort; Host = "localhost" }
@@ -1072,7 +1072,7 @@ function Test-ServicesHealth {
 # 显示服务信息
 function Show-ServiceInfo {
     $postgresHostPort = Get-HostPort -ContainerName "inspect-postgres-dev" -ContainerPort 5432 -EnvVarName "POSTGRES_HOST_PORT" -DefaultPort 15500
-    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 26380
+    $redisHostPort = Get-HostPort -ContainerName "inspect-redis-dev" -ContainerPort 6379 -EnvVarName "REDIS_HOST_PORT" -DefaultPort 16380
     $backendConfig = Get-BackendDevConfig -AllowMissingPort
 
     Write-ColorOutput "`n📊 开发环境服务信息:" "Blue"

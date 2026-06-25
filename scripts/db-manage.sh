@@ -606,7 +606,7 @@ show_service_info() {
     local postgres_host_port
     local redis_host_port
     postgres_host_port="$(get_host_port inspect-postgres-dev 5432 POSTGRES_HOST_PORT 15500)"
-    redis_host_port="$(get_host_port inspect-redis-dev 6379 REDIS_HOST_PORT 26380)"
+    redis_host_port="$(get_host_port inspect-redis-dev 6379 REDIS_HOST_PORT 16380)"
 
     section $'\n📊 服务访问地址:'
     printf '  🗄️ PostgreSQL: localhost:%s\n' "$postgres_host_port"

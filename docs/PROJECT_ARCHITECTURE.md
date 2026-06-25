@@ -281,7 +281,7 @@ backend-go/internal/config/config.go
 SERVER_HOST=127.0.0.1
 SERVER_PORT=9165
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
-REDIS_URL=redis://:dev_redis_2024@127.0.0.1:26380/0
+REDIS_URL=redis://:dev_redis_2024@127.0.0.1:16380/0
 DB_AUTO_MIGRATE=true
 TIMESCALE_ENABLED=true
 REPORT_OUTPUT_DIR=data/reports/monitoring
@@ -444,7 +444,7 @@ sequenceDiagram
 | 服务 | 容器名 | 宿主机端口 | 容器端口 |
 |------|--------|------------|----------|
 | PostgreSQL / TimescaleDB | `inspect-postgres-dev` | `15500` | `5432` |
-| Redis | `inspect-redis-dev` | `26380` | `6379` |
+| Redis | `inspect-redis-dev` | `16380` | `6379` |
 | pgAdmin | `inspect-pgadmin-dev` | `5050` | `80` |
 | Redis Commander | `inspect-redis-commander-dev` | `8081` | `8081` |
 
@@ -934,7 +934,7 @@ pnpm dev
 | 后端 API 根路径 | `http://127.0.0.1:9165/api/v1` |
 | WebSocket | `ws://127.0.0.1:9165/api/v1/ws/:user_id` |
 | PostgreSQL | `localhost:15500` |
-| Redis | `localhost:26380` |
+| Redis | `localhost:16380` |
 | pgAdmin | `http://localhost:5050` |
 | Redis Commander | `http://localhost:8081` |
 

@@ -41,7 +41,7 @@ if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
 | 前端 | `http://localhost:13000` |
 | 后端 | `http://127.0.0.1:9165` |
 | PostgreSQL | `localhost:15500` |
-| Redis | `localhost:26380` |
+| Redis | `localhost:16380` |
 
 ### 2. 使用脚本启动
 
@@ -176,7 +176,7 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:9165
 NEXT_PUBLIC_WS_URL=ws://127.0.0.1:9165
 
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
-REDIS_URL=redis://:dev_redis_2024@127.0.0.1:26380/0
+REDIS_URL=redis://:dev_redis_2024@127.0.0.1:16380/0
 
 REPORT_OUTPUT_DIR=data/reports/monitoring
 REPORTS_OUTPUT_DIR=data/reports

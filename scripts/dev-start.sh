@@ -482,7 +482,7 @@ show_setup_summary() {
     local postgres_host_port
     local redis_host_port
     postgres_host_port="$(get_host_port inspect-postgres-dev 5432 POSTGRES_HOST_PORT 15500)"
-    redis_host_port="$(get_host_port inspect-redis-dev 6379 REDIS_HOST_PORT 26380)"
+    redis_host_port="$(get_host_port inspect-redis-dev 6379 REDIS_HOST_PORT 16380)"
     get_backend_dev_config true
 
     write_color $'\n============================================================' "Cyan"
@@ -770,7 +770,7 @@ invoke_dev_diagnose() {
     local postgres_host_port
     local redis_host_port
     postgres_host_port="$(get_host_port inspect-postgres-dev 5432 POSTGRES_HOST_PORT 15500)"
-    redis_host_port="$(get_host_port inspect-redis-dev 6379 REDIS_HOST_PORT 26380)"
+    redis_host_port="$(get_host_port inspect-redis-dev 6379 REDIS_HOST_PORT 16380)"
     database_running
     [[ "$DB_POSTGRES_RUNNING" == true ]] && status_line "PostgreSQL 容器" "OK" "inspect-postgres-dev 运行中" || status_line "PostgreSQL 容器" "WARN" "未运行"
     test_tcp localhost "$postgres_host_port" && status_line "  端口 $postgres_host_port" "OK" "可访问" || status_line "  端口 $postgres_host_port" "WARN" "不可访问"
@@ -852,7 +852,7 @@ test_services_health() {
     local postgres_host_port
     local redis_host_port
     postgres_host_port="$(get_host_port inspect-postgres-dev 5432 POSTGRES_HOST_PORT 15500)"
-    redis_host_port="$(get_host_port inspect-redis-dev 6379 REDIS_HOST_PORT 26380)"
+    redis_host_port="$(get_host_port inspect-redis-dev 6379 REDIS_HOST_PORT 16380)"
 
     test_tcp localhost "$postgres_host_port" && write_color "✅ PostgreSQL 服务正常 (localhost:$postgres_host_port)" "Green" || write_color "❌ PostgreSQL 服务不可达 (localhost:$postgres_host_port)" "Red"
     test_tcp localhost "$redis_host_port" && write_color "✅ Redis 服务正常 (localhost:$redis_host_port)" "Green" || write_color "❌ Redis 服务不可达 (localhost:$redis_host_port)" "Red"
@@ -898,7 +898,7 @@ show_service_info() {
     local postgres_host_port
     local redis_host_port
     postgres_host_port="$(get_host_port inspect-postgres-dev 5432 POSTGRES_HOST_PORT 15500)"
-    redis_host_port="$(get_host_port inspect-redis-dev 6379 REDIS_HOST_PORT 26380)"
+    redis_host_port="$(get_host_port inspect-redis-dev 6379 REDIS_HOST_PORT 16380)"
     get_backend_dev_config true
 
     write_color $'\n📊 开发环境服务信息:' "Blue"

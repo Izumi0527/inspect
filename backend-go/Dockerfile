@@ -3,6 +3,9 @@ FROM golang:1.23-alpine AS development
 WORKDIR /app
 RUN apk add --no-cache git ca-certificates
 
+# GOPROXY 指向国内镜像，避免容器内拉取依赖超时（容器不继承宿主机代理/VPN）
+ENV GOPROXY=https://goproxy.cn,direct
+
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -15,6 +18,9 @@ FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 RUN apk add --no-cache git ca-certificates
+
+# GOPROXY 指向国内镜像，避免容器内拉取依赖超时（容器不继承宿主机代理/VPN）
+ENV GOPROXY=https://goproxy.cn,direct
 
 COPY go.mod go.sum ./
 RUN go mod download
