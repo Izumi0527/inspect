@@ -27,11 +27,6 @@
 | 数据库 | PostgreSQL 16、TimescaleDB 2.15.3 |
 | 缓存 | Redis 7 |
 | 报表 | PDF、Excel 等文件导出 |
-| 部署 | Docker Compose、本地前后端分离开发 |
-
-详细架构、模块边界和数据流请看：[项目详细架构文档](docs/PROJECT_ARCHITECTURE.md)。
-
-## 快速启动
 
 ### 1. 准备环境文件
 
