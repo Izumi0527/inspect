@@ -125,7 +125,7 @@ export const auditApi = {
       format: 'csv', // 支持的格式：csv, excel, json
       startDate: params.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // 默认最近30天
       endDate: params.endDate || new Date().toISOString(),
-      filters: {} as Record<string, any>,
+      filters: {} as Record<string, unknown>,
     }
 
     // 添加可选筛选条件
