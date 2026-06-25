@@ -3,7 +3,7 @@ import { FileText, Download, Eye, AlertCircle, RefreshCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button, Modal, ModalContent, ModalTitle } from '@/components/atoms'
 import { downloadWithAuth } from '@/utils/download'
-import { getApiOrigin, TokenManager } from '@/lib/api-client'
+import { authorizedDownload, getApiOrigin } from '@/lib/api-client'
 import { Report } from '../types'
 import { downloadReport as fetchDownloadUrl, rerenderReportPdf } from '../api/reports.api'
 
@@ -103,10 +103,7 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
       }
 
       const resolved = resolveUrl(urlOrPath)
-      const token = TokenManager.getAccessToken() || ''
-      const response = await fetch(resolved, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
+      const response = await authorizedDownload(resolved)
       if (!response.ok) {
         throw new Error(`预览加载失败(${response.status})`)
       }

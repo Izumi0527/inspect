@@ -1,4 +1,4 @@
-import { API_PREFIX, getApiOrigin, httpClient, TokenManager } from '@/lib/api-client'
+import { API_PREFIX, authorizedDownload, getApiOrigin, httpClient } from '@/lib/api-client'
 import type {
   BackupConfig,
   BackupManagementResponse,
@@ -99,12 +99,7 @@ export const backupApi = {
    * ✅ 兼容前后端分离部署：使用 NEXT_PUBLIC_API_URL 走后端绝对地址
    */
   downloadBackup: async (backupId: string, fileName: string): Promise<void> => {
-    const response = await fetch(`${getApiOrigin()}${API_PREFIX}/settings/backup/${backupId}/download`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${TokenManager.getAccessToken() || ''}`,
-      },
-    })
+    const response = await authorizedDownload(`${getApiOrigin()}${API_PREFIX}/settings/backup/${backupId}/download`)
 
     if (!response.ok) {
       throw new Error('下载备份文件失败')

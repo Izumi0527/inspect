@@ -1,4 +1,4 @@
-﻿import { api, TokenManager } from '@/lib/api-client'
+﻿import { api, authorizedDownload } from '@/lib/api-client'
 import { getApiOrigin } from '@/lib/api-client'
 import {
   InspectionTemplate,
@@ -1368,12 +1368,9 @@ export async function exportAnalyticsReport(params: {
 
     const endpoint = `/api/v1/inspection/analytics/export?${searchParams.toString()}`
 
-    // 使用原生 fetch 处理文件下载
-    const response = await fetch(`${getApiOrigin()}${endpoint}`, {
+    // 使用统一下载工具（Cookie 认证 + 非安全方法回填 CSRF）
+    const response = await authorizedDownload(`${getApiOrigin()}${endpoint}`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${TokenManager.getAccessToken() || ''}`,
-      },
     })
 
     if (!response.ok) {

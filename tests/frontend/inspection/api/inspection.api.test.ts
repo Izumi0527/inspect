@@ -17,6 +17,8 @@ jest.mock('@/lib/api-client', () => ({
     getAccessToken: jest.fn(),
   },
   getApiOrigin: jest.fn(() => 'http://localhost:3000'),
+  authorizedDownload: (url: string, init?: RequestInit) =>
+    (global.fetch as unknown as jest.Mock)(url, init),
 }))
 
 describe('inspection.api fetchInspectionTemplate', () => {
@@ -194,9 +196,9 @@ describe('inspection.api exportAnalyticsReport', () => {
     expect(calledUrl).not.toContain('format_type=excel')
 
     const requestInit = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
-    expect(requestInit.headers).toEqual(expect.objectContaining({
-      Authorization: 'Bearer manager-token',
-    }))
+    expect(requestInit.method).toBe('POST')
+    const headers = (requestInit.headers ?? {}) as Record<string, string>
+    expect(headers.Authorization).toBeUndefined()
 
     expect(appendedAnchor?.download).toBe('巡检统计分析报告_20260510143005.pdf')
   })

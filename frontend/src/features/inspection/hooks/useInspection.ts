@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import { api, getApiOrigin, TokenManager } from '@/lib/api-client'
+import { api, authorizedDownload, getApiOrigin } from '@/lib/api-client'
 import {
   fetchInspectionStats,
   fetchInspectionTemplates,
@@ -503,16 +503,8 @@ export const useGenerateReport = () => {
           
           console.log('[useGenerateReport] 下载URL:', downloadUrl)
           
-          // 获取token用于认证
-          const token = TokenManager.getAccessToken() || ''
-          
-          // 使用fetch下载文件（带认证）
-          const response = await fetch(downloadUrl, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          })
+          // 使用统一下载工具（Cookie 认证，随请求自动携带 httpOnly access_token）
+          const response = await authorizedDownload(downloadUrl)
           
           if (!response.ok) {
             throw new Error('下载文件失败')

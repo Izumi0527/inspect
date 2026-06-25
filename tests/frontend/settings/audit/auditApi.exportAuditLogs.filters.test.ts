@@ -3,9 +3,8 @@ const mockFetch = jest.fn()
 jest.mock('@/lib/api-client', () => ({
   API_PREFIX: '/api/v1',
   getApiOrigin: () => 'http://example.test',
-  TokenManager: {
-    getAccessToken: () => 'test-token',
-  },
+  authorizedDownload: (url: string, init?: RequestInit) =>
+    (global.fetch as unknown as jest.Mock)(url, init),
   httpClient: {
     get: jest.fn(),
   },

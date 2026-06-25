@@ -184,12 +184,14 @@ export class TokenManager {
     }
   }
 
+  /** @deprecated 认证已迁移到 httpOnly Cookie；前端不再读取 access token。下载/导出请用 authorizedDownload。 */
   static getAccessToken(): string | null {
     if (typeof window === 'undefined') return null
     const authData = this.getAuthData()
     return authData?.token || null
   }
 
+  /** @deprecated token 由后端 httpOnly Cookie 承载，前端不应再写入。 */
   static setAccessToken(token: string): void {
     if (typeof window === 'undefined') return
     this.updateAuthData({ token })
@@ -201,6 +203,7 @@ export class TokenManager {
     return authData?.refreshToken || null
   }
 
+  /** @deprecated refresh token 由后端 httpOnly Cookie 承载，前端不应再写入。 */
   static setRefreshToken(token: string): void {
     if (typeof window === 'undefined') return
     this.updateAuthData({ refreshToken: token })
@@ -223,6 +226,25 @@ export class TokenManager {
   static setTokens(_accessToken: string, _refreshToken: string): void {
     this.clearTokens()
   }
+}
+
+/**
+ * authorizedDownload 为文件下载/导出等需原生 fetch 的场景提供统一的 Cookie 认证封装：
+ * - credentials:'include' 让 httpOnly access_token cookie 随请求发送；
+ * - 非安全方法自动回填 X-CSRF-Token（double-submit，与后端 csrf cookie 比对）；
+ * - 不再发送 Authorization Bearer（已弃用 localStorage token）。
+ * 返回原始 Response，调用方自行处理 blob/stream。
+ */
+export async function authorizedDownload(url: string, init: RequestInit = {}): Promise<Response> {
+  const method = (init.method ?? 'GET').toUpperCase()
+  const headers = new Headers(init.headers)
+  if (method !== 'GET' && method !== 'HEAD') {
+    const csrf = TokenManager.getCSRFToken()
+    if (csrf) {
+      headers.set('X-CSRF-Token', csrf)
+    }
+  }
+  return fetch(url, { ...init, method, headers, credentials: 'include' })
 }
 
 // HTTP请求客户端类

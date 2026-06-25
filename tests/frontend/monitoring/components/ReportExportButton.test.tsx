@@ -205,7 +205,7 @@ describe('ReportExportButton', () => {
     )
   })
 
-  it('应携带 Authorization 头下载报告', async () => {
+  it('应通过 Cookie 凭据下载报告（不发送 Authorization）', async () => {
     ;(exportMonitoringReport as jest.Mock).mockResolvedValue({
       format: 'pdf',
       time_range: '24h',
@@ -244,15 +244,14 @@ describe('ReportExportButton', () => {
       sections: ['stats', 'charts', 'alerts'],
     })
 
-    expect(fetchSpy).toHaveBeenCalledWith(
-      'http://api.test/api/v1/monitoring/reports/download/test.pdf',
-      expect.objectContaining({
-        method: 'GET',
-        headers: expect.objectContaining({
-          Authorization: 'Bearer token123',
-        }),
-      })
+    const exportCall = fetchSpy.mock.calls.find(
+      (call) => call[0] === 'http://api.test/api/v1/monitoring/reports/download/test.pdf',
     )
+    expect(exportCall).toBeDefined()
+    const exportInit = exportCall?.[1] as RequestInit
+    expect(exportInit.method).toBe('GET')
+    expect(exportInit.credentials).toBe('include')
+    expect((exportInit.headers as Headers).get('Authorization')).toBeNull()
 
     expect(anchorClickSpy).toHaveBeenCalled()
   })

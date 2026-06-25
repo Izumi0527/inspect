@@ -1,7 +1,7 @@
 /**
  * 日志中心 API 接口
  */
-import { api, API_PREFIX, getApiOrigin, TokenManager } from '@/lib/api-client'
+import { api, API_PREFIX, authorizedDownload, getApiOrigin } from '@/lib/api-client'
 import type {
   DeviceLog,
   LogParsingRule,
@@ -233,15 +233,8 @@ export async function exportLogs(params: LogExportParams): Promise<Blob> {
   if (typeof params.include_stats === 'boolean') searchParams.append('include_stats', String(params.include_stats))
 
   const url = `${apiOrigin}${API_PREFIX}/logs/export${searchParams.toString() ? `?${searchParams.toString()}` : ''}`
-  const token = TokenManager.getAccessToken() || ''
-  const headers: Record<string, string> = {}
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
 
-  const response = await fetch(url, {
-    headers,
-  })
+  const response = await authorizedDownload(url)
 
   if (!response.ok) {
     const prefix = `导出失败（${response.status}）`

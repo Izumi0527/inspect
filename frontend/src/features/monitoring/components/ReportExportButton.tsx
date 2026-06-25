@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Download } from 'lucide-react'
 import { Button } from '@/components/atoms'
-import { getApiOrigin, TokenManager } from '@/lib/api-client'
+import { authorizedDownload, getApiOrigin } from '@/lib/api-client'
 import { exportMonitoringReport, checkMonitoringReportDownloadToken } from '../api/monitoring.api'
 
 type ExportFormat = 'pdf'
@@ -129,23 +129,14 @@ function triggerTokenFormDownload(downloadUrl: string, token: string) {
   }, 30_000)
 }
 
-async function downloadWithBearerAuth(downloadUrl: string): Promise<void> {
+async function downloadWithCookieAuth(downloadUrl: string): Promise<void> {
   const absoluteUrl = resolveAbsoluteUrl(downloadUrl)
   if (!absoluteUrl) {
     throw new Error('下载链接为空')
   }
 
-  const accessToken = TokenManager.getAccessToken()
-  if (!accessToken) {
-    throw new Error('缺少访问令牌，无法下载报告')
-  }
-
-  const response = await fetch(absoluteUrl, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
+  // Cookie 认证：httpOnly access_token 随请求自动携带，fallback 下载不再依赖 localStorage token
+  const response = await authorizedDownload(absoluteUrl)
 
   if (!response.ok) {
     if (response.status === 401) {
@@ -236,7 +227,7 @@ export function ReportExportButton({
         }
         triggerTokenFormDownload(downloadFormUrl, downloadToken)
       } else if (result.download_url) {
-        await downloadWithBearerAuth(result.download_url)
+        await downloadWithCookieAuth(result.download_url)
       }
 
       if (!isMountedRef.current) return

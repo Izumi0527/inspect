@@ -1,4 +1,4 @@
-import { API_PREFIX, getApiOrigin, httpClient, TokenManager } from '@/lib/api-client'
+import { API_PREFIX, authorizedDownload, getApiOrigin, httpClient } from '@/lib/api-client'
 import type {
   AuditLogListResponse,
   AuditStats,
@@ -137,11 +137,10 @@ export const auditApi = {
 
     // 调用后端API接口（POST /api/v1/settings/audit/logs/export）
     // ✅ 兼容前后端分离部署：使用 NEXT_PUBLIC_API_URL 走后端绝对地址
-    const response = await fetch(`${getApiOrigin()}${API_PREFIX}/settings/audit/logs/export`, {
+    const response = await authorizedDownload(`${getApiOrigin()}${API_PREFIX}/settings/audit/logs/export`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${TokenManager.getAccessToken() || ''}`,
       },
       body: JSON.stringify(requestBody),
     })

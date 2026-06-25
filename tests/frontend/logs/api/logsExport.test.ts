@@ -12,6 +12,8 @@ jest.mock('@/lib/api-client', () => ({
   },
   API_PREFIX: '/api/v1',
   getApiOrigin: () => process.env.NEXT_PUBLIC_API_URL || '',
+  authorizedDownload: (url: string, init?: RequestInit) =>
+    (global.fetch as unknown as jest.Mock)(url, init),
   TokenManager: {
     getAccessToken: jest.fn(),
   },
@@ -35,7 +37,7 @@ describe('logsApi exportLogs', () => {
     jest.restoreAllMocks()
   })
 
-  it('应使用 /api/v1/logs/export 且携带 Authorization', async () => {
+  it('应使用 /api/v1/logs/export，且不发送 Authorization（改用 Cookie）', async () => {
     await exportLogs({
       page: 1,
       page_size: 20,
@@ -51,9 +53,9 @@ describe('logsApi exportLogs', () => {
     expect(url).toContain('format=csv')
     expect(url).toContain('include_raw=true')
 
-    const requestInit = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
-    const headers = requestInit.headers as Record<string, string>
-    expect(headers.Authorization).toBe('Bearer manager-token')
+    const requestInit = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit | undefined
+    const headers = (requestInit?.headers ?? {}) as Record<string, string>
+    expect(headers.Authorization).toBeUndefined()
   })
 
   it('后端返回 JSON 错误时应包含状态码与 message', async () => {
@@ -131,8 +133,8 @@ describe('logsApi exportLogs', () => {
       include_raw: true,
     })
 
-    const requestInit = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit
-    const headers = (requestInit.headers ?? {}) as Record<string, string>
+    const requestInit = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit | undefined
+    const headers = (requestInit?.headers ?? {}) as Record<string, string>
     expect(headers.Authorization).toBeUndefined()
   })
 })

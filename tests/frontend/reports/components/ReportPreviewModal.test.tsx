@@ -17,6 +17,8 @@ jest.mock('react-hot-toast', () => ({
 
 jest.mock('@/lib/api-client', () => ({
   getApiOrigin: () => 'http://127.0.0.1:9000',
+  authorizedDownload: (url: string, init?: RequestInit) =>
+    (global.fetch as unknown as jest.Mock)(url, init),
   TokenManager: {
     getAccessToken: () => mockGetAccessToken(),
   },
@@ -101,14 +103,11 @@ describe('ReportPreviewModal', () => {
     expect(screen.getByTitle('报告预览')).toHaveAttribute('src', 'blob:mock-preview')
 
     expect(global.fetch).toHaveBeenCalledTimes(1)
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(
       'http://127.0.0.1:9000/api/v1/reports/files/report-1.pdf',
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer test-token',
-        }),
-      })
     )
+    const previewInit = (global.fetch as jest.Mock).mock.calls[0][1] as RequestInit | undefined
+    expect((previewInit?.headers as Record<string, string> | undefined)?.Authorization).toBeUndefined()
   })
 
   it('存在 previewUrl 时应默认使用 HTML 预览，并可切换到 PDF', async () => {
@@ -154,7 +153,7 @@ describe('ReportPreviewModal', () => {
 
     expect(global.fetch).toHaveBeenCalledWith(
       'http://127.0.0.1:9000/api/v1/reports/files/report-2.html',
-      expect.any(Object)
+      undefined
     )
 
     await waitFor(() => {
@@ -165,7 +164,7 @@ describe('ReportPreviewModal', () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
         'http://127.0.0.1:9000/api/v1/reports/files/report-2.pdf',
-        expect.any(Object)
+        undefined
       )
     })
   })
@@ -214,7 +213,7 @@ describe('ReportPreviewModal', () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
         'http://127.0.0.1:9000/api/v1/reports/files/report-1-old.pdf',
-        expect.any(Object)
+        undefined
       )
     })
 
@@ -226,7 +225,7 @@ describe('ReportPreviewModal', () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
         'http://127.0.0.1:9000/api/v1/reports/files/report-1-new.pdf',
-        expect.any(Object)
+        undefined
       )
     })
   })
