@@ -134,6 +134,24 @@ CREATE INDEX IF NOT EXISTS idx_interface_metrics_device_iface_metric_time
 SELECT ensure_timescale_compatible_uniques('interface_metrics', 'collected_at');
 SELECT create_hypertable('interface_metrics', 'collected_at', if_not_exists => TRUE);
 
+-- 创建设备接口当前状态表 (device_interfaces)
+-- 记录每设备每接口的当前快照（速率/字节计数/up 状态），由指标采集 UPSERT/UPDATE 维护。
+CREATE TABLE IF NOT EXISTS device_interfaces (
+    id BIGSERIAL PRIMARY KEY,
+    device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    name VARCHAR(128) NOT NULL,
+    alias VARCHAR(255),
+    speed BIGINT,
+    in_octets BIGINT,
+    out_octets BIGINT,
+    is_up BOOLEAN DEFAULT FALSE,
+    last_updated TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_device_interfaces_device_name UNIQUE (device_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_device_interfaces_device ON device_interfaces (device_id);
+
 -- 创建设备状态历史表 (device_status_history)
 CREATE TABLE IF NOT EXISTS device_status_history (
     id BIGSERIAL PRIMARY KEY,

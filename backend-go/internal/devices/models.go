@@ -70,6 +70,26 @@ func (DeviceGroup) TableName() string {
 	return "device_groups"
 }
 
+// DeviceInterface 设备接口当前状态表。此前缺失 model 与建表，
+// 导致 WriteDeviceMetrics 写接口速率时报 42P01 并回滚整笔指标写入（含 cpu/mem 快照）。
+type DeviceInterface struct {
+	ID          int        `gorm:"column:id;primaryKey"`
+	DeviceID    int        `gorm:"column:device_id;uniqueIndex:uq_device_iface"`
+	Name        string     `gorm:"column:name;uniqueIndex:uq_device_iface"`
+	Alias       *string    `gorm:"column:alias"`
+	Speed       *int64     `gorm:"column:speed"`
+	InOctets    *int64     `gorm:"column:in_octets"`
+	OutOctets   *int64     `gorm:"column:out_octets"`
+	IsUp        *bool      `gorm:"column:is_up"`
+	LastUpdated *time.Time `gorm:"column:last_updated"`
+	CreatedAt   *time.Time `gorm:"column:created_at"`
+	UpdatedAt   *time.Time `gorm:"column:updated_at"`
+}
+
+func (DeviceInterface) TableName() string {
+	return "device_interfaces"
+}
+
 type NetworkScan struct {
 	ID              string         `gorm:"column:id;primaryKey"`
 	Name            string         `gorm:"column:name"`
