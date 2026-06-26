@@ -52,4 +52,7 @@ func (h DevicesHandler) Register(group *echo.Group) {
 	group.POST("/devices/:device_id/collect-metrics", h.CollectDeviceMetrics)
 	group.POST("/devices/batch-probe", h.BatchProbeDevices)
 	group.POST("/devices/batch-collect-metrics", h.BatchCollectMetrics)
+
+	// CLI 连接测试（device_cli_test.go）
+	group.POST("/devices/cli-test", h.TestCLIConnection)
 }

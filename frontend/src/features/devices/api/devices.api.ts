@@ -983,6 +983,37 @@ export async function healthCheckDevice(
   return {};
 }
 
+export interface CliTestResult {
+  success: boolean;
+  message: string;
+  latency_ms: number;
+}
+
+// testCliConnection 测试设备 CLI（SSH/Telnet）连接连通性。
+// 使用弹窗当前填写的参数，支持新增/未保存设备；编辑已有设备时密码留空可传 device_id 回退取库内凭据。
+export async function testCliConnection(req: {
+  device_id?: number;
+  protocol: "ssh" | "telnet";
+  host: string;
+  port?: number;
+  username: string;
+  password?: string;
+  enable_password?: string;
+}): Promise<CliTestResult> {
+  const payload = await api.post<unknown>("/devices/cli-test", req);
+  if (isObject(payload)) {
+    if ("success" in payload && "data" in payload) {
+      const apiResponse = payload as unknown as ApiResponse<CliTestResult>;
+      if (apiResponse.success) {
+        return apiResponse.data as CliTestResult;
+      }
+      throw new Error(apiResponse.message || "连接测试失败");
+    }
+    return payload as unknown as CliTestResult;
+  }
+  throw new Error("连接测试响应格式不正确");
+}
+
 export async function fetchDevicePerformance(
   id: number,
   timeRange?: string,

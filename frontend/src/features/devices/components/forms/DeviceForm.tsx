@@ -420,6 +420,7 @@ export const DeviceForm: React.FC<Props> = ({
               control={control}
               errors={errors}
               watch={watch}
+              deviceId={initialData?.id}
             />
           </div>
 

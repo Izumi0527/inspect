@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { Controller, Control, FieldErrors } from 'react-hook-form'
 import {
   Terminal,
@@ -21,6 +21,7 @@ import {
 } from '../../types'
 import { DeviceFormData } from './DeviceForm'
 import { PasswordInput } from './PasswordInput'
+import { testCliConnection, type CliTestResult } from '../../api/devices.api'
 
 // CLI协议选项
 const CLI_PROTOCOL_OPTIONS = [
@@ -39,14 +40,66 @@ interface CLIConfigFormProps {
   control: Control<DeviceFormData>
   errors: FieldErrors<DeviceFormData>
   watch: (name: string) => unknown
+  deviceId?: number
 }
 
 export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
   control,
   errors,
-  watch
+  watch,
+  deviceId
 }) => {
   const cliProtocol = watch('cli_protocol') as string
+
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<CliTestResult | null>(null)
+
+  const handleTestConnection = async () => {
+    setTestResult(null)
+    const host = String((watch('ip') as string) || '').trim()
+    if (!host) {
+      setTestResult({ success: false, message: '请先填写设备 IP 地址', latency_ms: 0 })
+      return
+    }
+    const isSSH = cliProtocol === 'ssh'
+    if (isSSH && (watch('ssh_config.use_key_auth') as boolean)) {
+      setTestResult({
+        success: false,
+        message: '连接测试暂仅支持密码认证（密钥认证请改用密码或保存后另行验证）',
+        latency_ms: 0
+      })
+      return
+    }
+    setTesting(true)
+    try {
+      const result = await testCliConnection({
+        device_id: deviceId,
+        protocol: isSSH ? 'ssh' : 'telnet',
+        host,
+        port: Number(
+          (isSSH ? watch('ssh_config.port') : watch('telnet_config.port')) || (isSSH ? 22 : 23)
+        ),
+        username: String(
+          (isSSH ? watch('ssh_config.username') : watch('telnet_config.username')) || ''
+        ),
+        password: String(
+          (isSSH ? watch('ssh_config.password') : watch('telnet_config.password')) || ''
+        ),
+        enable_password: isSSH
+          ? undefined
+          : String((watch('telnet_config.enable_password') as string) || '')
+      })
+      setTestResult(result)
+    } catch (e) {
+      setTestResult({
+        success: false,
+        message: e instanceof Error ? e.message : '连接测试失败',
+        latency_ms: 0
+      })
+    } finally {
+      setTesting(false)
+    }
+  }
 
   return (
     <Card>
@@ -313,6 +366,34 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
               <div className="text-xs text-blue-600 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 p-2 rounded border border-blue-200 dark:border-blue-700">
                 <p>⚠️ 注意：Telnet协议传输数据未加密，建议仅在安全网络环境中使用</p>
               </div>
+            </div>
+          )}
+
+          {/* 连接测试 */}
+          {cliProtocol !== 'none' && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={testing}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-60"
+              >
+                <Terminal className="h-4 w-4" />
+                {testing ? '测试中…' : '测试连接'}
+              </button>
+              {testResult && (
+                <div
+                  className={`text-sm p-2 rounded border ${
+                    testResult.success
+                      ? 'text-green-700 bg-green-50 border-green-200 dark:text-green-300 dark:bg-green-900/20 dark:border-green-700'
+                      : 'text-red-700 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-900/20 dark:border-red-700'
+                  }`}
+                >
+                  {testResult.success ? '✅ ' : '❌ '}
+                  {testResult.message}
+                  {testResult.latency_ms > 0 ? `（${testResult.latency_ms}ms）` : ''}
+                </div>
+              )}
             </div>
           )}
 
