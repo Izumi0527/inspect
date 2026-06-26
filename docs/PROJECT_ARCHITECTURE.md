@@ -279,7 +279,7 @@ backend-go/internal/config/config.go
 
 ```env
 SERVER_HOST=127.0.0.1
-SERVER_PORT=9165
+SERVER_PORT=18080
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 REDIS_URL=redis://:dev_redis_2024@127.0.0.1:16380/0
 DB_AUTO_MIGRATE=true
@@ -300,7 +300,7 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:<实际端口>
 NEXT_PUBLIC_WS_URL=ws://127.0.0.1:<实际端口>
 ```
 
-当前 Windows 本机联调已验证使用 `9165`，对应 `.env.example`、`frontend/.env.example` 和快速启动文档均以该端口为示例。
+当前 Windows 本机联调已验证使用 `18080`，对应 `.env.example`、`frontend/.env.example` 和快速启动文档均以该端口为示例。
 
 生产环境不应依赖端口自动回退。
 
@@ -384,8 +384,8 @@ API_PREFIX = /api/v1
 推荐环境变量：
 
 ```env
-NEXT_PUBLIC_API_URL=http://127.0.0.1:9165
-NEXT_PUBLIC_WS_URL=ws://127.0.0.1:9165
+NEXT_PUBLIC_API_URL=http://127.0.0.1:18080
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:18080
 ```
 
 ### 6.4 WebSocket 客户端
@@ -517,7 +517,7 @@ frontend/src/lib/websocket.ts
 连接地址：
 
 ```text
-ws://127.0.0.1:9165/api/v1/ws/:user_id
+ws://127.0.0.1:18080/api/v1/ws/:user_id
 ```
 
 事件类型覆盖：
@@ -930,9 +930,9 @@ pnpm dev
 | 入口 | 地址 |
 |------|------|
 | 前端 | `http://localhost:13000` |
-| 后端健康检查 | `http://127.0.0.1:9165/health` |
-| 后端 API 根路径 | `http://127.0.0.1:9165/api/v1` |
-| WebSocket | `ws://127.0.0.1:9165/api/v1/ws/:user_id` |
+| 后端健康检查 | `http://127.0.0.1:18080/health` |
+| 后端 API 根路径 | `http://127.0.0.1:18080/api/v1` |
+| WebSocket | `ws://127.0.0.1:18080/api/v1/ws/:user_id` |
 | PostgreSQL | `localhost:15500` |
 | Redis | `localhost:16380` |
 | pgAdmin | `http://localhost:5050` |

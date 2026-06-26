@@ -39,7 +39,7 @@ if (-not (Test-Path ".env")) { Copy-Item ".env.example" ".env" }
 | 服务 | 地址 |
 |------|------|
 | 前端 | `http://localhost:13000` |
-| 后端 | `http://127.0.0.1:9165` |
+| 后端 | `http://127.0.0.1:18080` |
 | PostgreSQL | `localhost:15500` |
 | Redis | `localhost:16380` |
 
@@ -170,10 +170,10 @@ pnpm test -- --runInBand
 
 ```env
 SERVER_HOST=127.0.0.1
-SERVER_PORT=9165
+SERVER_PORT=18080
 
-NEXT_PUBLIC_API_URL=http://127.0.0.1:9165
-NEXT_PUBLIC_WS_URL=ws://127.0.0.1:9165
+NEXT_PUBLIC_API_URL=http://127.0.0.1:18080
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:18080
 
 DATABASE_URL=postgresql://inspect_dev:dev_password_2024@localhost:15500/inspect_system_dev
 REDIS_URL=redis://:dev_redis_2024@127.0.0.1:16380/0
@@ -188,16 +188,16 @@ REPORTS_OUTPUT_DIR=data/reports
 - `NEXT_PUBLIC_API_URL`
 - `NEXT_PUBLIC_WS_URL`
 
-当前 Windows 本机联调已验证使用 `9165`。如果切换到其他端口，三项配置必须同步更新并重启前后端。
+当前 Windows 本机联调已验证使用 `18080`。如果切换到其他端口，三项配置必须同步更新并重启前后端。
 
 ## 常见入口
 
 | 入口 | 地址 |
 |------|------|
 | 前端页面 | `http://localhost:13000` |
-| 后端健康检查 | `http://127.0.0.1:9165/health` |
-| API 根路径 | `http://127.0.0.1:9165/api/v1` |
-| WebSocket | `ws://127.0.0.1:9165/api/v1/ws/:user_id` |
+| 后端健康检查 | `http://127.0.0.1:18080/health` |
+| API 根路径 | `http://127.0.0.1:18080/api/v1` |
+| WebSocket | `ws://127.0.0.1:18080/api/v1/ws/:user_id` |
 | pgAdmin | `http://localhost:5050` |
 | Redis Commander | `http://localhost:8081` |
 
@@ -211,7 +211,7 @@ REPORTS_OUTPUT_DIR=data/reports
 - 生产环境必须替换 `.env.example` 中的默认密钥、数据库密码和 Redis 密码。
 - `data/`、`logs/`、`backend-go/data/` 是运行时目录，不应提交到 Git。
 - 前端请求地址和后端监听端口必须保持一致。
-- Windows 环境中如端口被系统 TCP 排除范围保留，请改用当前示例端口 `9165` 或其他可用端口，并保持前后端配置一致。
+- Windows 环境中如端口被系统 TCP 排除范围保留，请改用当前示例端口 `18080` 或其他可用端口，并保持前后端配置一致。
 - 权限最终以后端校验为准，前端隐藏入口只用于改善体验。
 - 报表和导出文件由后端写入 `data/reports` 相关目录。
 
