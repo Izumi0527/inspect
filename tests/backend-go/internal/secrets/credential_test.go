@@ -1,11 +1,15 @@
-package secrets
+package secrets_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/your-org/inspect-system/backend-go/internal/secrets"
+)
 
 const testMaster = "unit-test-master-key-0123456789"
 
 func TestCipherRoundTrip(t *testing.T) {
-	c, err := NewCipher(testMaster)
+	c, err := secrets.NewCipher(testMaster)
 	if err != nil {
 		t.Fatalf("NewCipher: %v", err)
 	}
@@ -14,7 +18,7 @@ func TestCipherRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
-	if !IsEncrypted(enc) {
+	if !secrets.IsEncrypted(enc) {
 		t.Fatalf("expected enc:v1: prefix, got %q", enc)
 	}
 	if enc == plain {
@@ -30,7 +34,7 @@ func TestCipherRoundTrip(t *testing.T) {
 }
 
 func TestDecryptPlaintextPassthrough(t *testing.T) {
-	c, _ := NewCipher(testMaster)
+	c, _ := secrets.NewCipher(testMaster)
 	// 存量明文（无前缀）必须原样返回，保证平滑兼容。
 	out, err := c.Decrypt("legacy-plaintext-pw")
 	if err != nil {
@@ -42,7 +46,7 @@ func TestDecryptPlaintextPassthrough(t *testing.T) {
 }
 
 func TestEncryptEmptyAndIdempotent(t *testing.T) {
-	c, _ := NewCipher(testMaster)
+	c, _ := secrets.NewCipher(testMaster)
 	if out, _ := c.Encrypt(""); out != "" {
 		t.Fatalf("empty string must stay empty, got %q", out)
 	}
@@ -54,8 +58,8 @@ func TestEncryptEmptyAndIdempotent(t *testing.T) {
 }
 
 func TestDecryptWrongKeyFails(t *testing.T) {
-	c1, _ := NewCipher("key-one-aaaaaaaaaaaaaaaa")
-	c2, _ := NewCipher("key-two-bbbbbbbbbbbbbbbb")
+	c1, _ := secrets.NewCipher("key-one-aaaaaaaaaaaaaaaa")
+	c2, _ := secrets.NewCipher("key-two-bbbbbbbbbbbbbbbb")
 	enc, _ := c1.Encrypt("secret")
 	if _, err := c2.Decrypt(enc); err == nil {
 		t.Fatal("expected decrypt failure with wrong key (GCM auth)")
@@ -63,7 +67,7 @@ func TestDecryptWrongKeyFails(t *testing.T) {
 }
 
 func TestNilCipherPassthrough(t *testing.T) {
-	var c *Cipher // 未配置密钥时退化为明文直通
+	var c *secrets.Cipher // 未配置密钥时退化为明文直通
 	if out, _ := c.Encrypt("x"); out != "x" {
 		t.Fatal("nil Encrypt must passthrough")
 	}
@@ -73,7 +77,7 @@ func TestNilCipherPassthrough(t *testing.T) {
 }
 
 func TestEmptyMasterRejected(t *testing.T) {
-	if _, err := NewCipher("   "); err == nil {
+	if _, err := secrets.NewCipher("   "); err == nil {
 		t.Fatal("expected error for empty master key")
 	}
 }
