@@ -607,6 +607,8 @@ func collectMemoryFromCandidates(
 			usage, total, used = collectHostResourcesMemory(client, candidate.OIDs)
 		case "get_total_avail_kb":
 			usage, total, used = collectGetTotalAvailKB(client, candidate.OIDs)
+		case "walk_mem_size_free_bytes":
+			usage, total, used = collectWalkMemSizeFree(client, candidate.OIDs)
 		}
 
 		if usage != nil || total != nil || used != nil {
@@ -987,6 +989,31 @@ func collectGetTotalAvailKB(client snmpClient, oids []string) (*float64, *int64,
 	}
 	usage := (float64(used) / float64(total)) * 100
 	return &usage, &total, &used
+}
+
+// collectWalkMemSizeFree 适配华为 hwMemoryDevTable(1.3.6.1.4.1.2011.6.3.5.1) 等
+// 仅上报“内存总量/空闲量(字节)”而不直接给使用率的旧款设备：
+// walk 总量列与空闲列后求和，按 (size-free)/size 计算使用率。
+// 用于不在 entity-extension MIB(2011.5.25.31) 上报内存的设备(如 S5700)。
+func collectWalkMemSizeFree(client snmpClient, oids []string) (*float64, *int64, *int64) {
+	if len(oids) < 2 {
+		return nil, nil, nil
+	}
+	sizeResult, err1 := client.BulkWalkAll(oids[0])
+	freeResult, err2 := client.BulkWalkAll(oids[1])
+	if err1 != nil || err2 != nil || len(sizeResult) == 0 || len(freeResult) == 0 {
+		return nil, nil, nil
+	}
+
+	totalSize := sumPositiveSizes(sizeResult, 1)
+	totalFree := sumPositiveSizes(freeResult, 1)
+	if totalSize <= 0 || totalFree < 0 || totalFree > totalSize {
+		return nil, nil, nil
+	}
+
+	used := totalSize - totalFree
+	usage := (float64(used) / float64(totalSize)) * 100
+	return &usage, &totalSize, &used
 }
 
 func collectMaxTemperature(client snmpClient, oids []string, divisor float64) *float64 {

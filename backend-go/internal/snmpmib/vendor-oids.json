@@ -99,6 +99,18 @@
   "metrics": {
     "cpu_usage": [
       {
+        "id": "huawei_cpu_dev",
+        "vendors": [
+          "huawei"
+        ],
+        "method": "bulkwalk",
+        "oids": [
+          "1.3.6.1.4.1.2011.6.3.4.1.2"
+        ],
+        "strategy": "walk_percent",
+        "aggregate": "avg_non_zero"
+      },
+      {
         "id": "huawei_entity_cpu",
         "vendors": [
           "huawei"
@@ -149,6 +161,18 @@
       }
     ],
     "memory_usage": [
+      {
+        "id": "huawei_mem_dev",
+        "vendors": [
+          "huawei"
+        ],
+        "method": "bulkwalk",
+        "oids": [
+          "1.3.6.1.4.1.2011.6.3.5.1.1.2",
+          "1.3.6.1.4.1.2011.6.3.5.1.1.3"
+        ],
+        "strategy": "walk_mem_size_free_bytes"
+      },
       {
         "id": "huawei_entity_memory",
         "vendors": [
