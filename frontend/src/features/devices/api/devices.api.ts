@@ -1000,7 +1000,9 @@ export async function testCliConnection(req: {
   password?: string;
   enable_password?: string;
 }): Promise<CliTestResult> {
-  const payload = await api.post<unknown>("/devices/cli-test", req);
+  // cli-test 后端最长约 8s（telnet 登录探测含超时）；前端给更长超时确保后端先返回结果，
+  // 避免前端默认 10s 超时先触发、把“后端仍在测”误判为连接失败。
+  const payload = await api.post<unknown>("/devices/cli-test", req, { timeout: 15000 });
   if (isObject(payload)) {
     if ("success" in payload && "data" in payload) {
       const apiResponse = payload as unknown as ApiResponse<CliTestResult>;

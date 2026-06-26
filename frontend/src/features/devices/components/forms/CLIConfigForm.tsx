@@ -22,6 +22,7 @@ import {
 import { DeviceFormData } from './DeviceForm'
 import { PasswordInput } from './PasswordInput'
 import { testCliConnection, type CliTestResult } from '../../api/devices.api'
+import { ApiClientError } from '@/lib/api-client'
 
 // CLI协议选项
 const CLI_PROTOCOL_OPTIONS = [
@@ -91,11 +92,21 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
       })
       setTestResult(result)
     } catch (e) {
-      setTestResult({
-        success: false,
-        message: e instanceof Error ? e.message : '连接测试失败',
-        latency_ms: 0
-      })
+      if (e instanceof ApiClientError && e.status === 401) {
+        // 401：登录态已失效（refresh 也未能续期）。明确提示重新登录，
+        // 避免把“认证失效”误显示为“telnet/ssh 连接失败”。
+        setTestResult({
+          success: false,
+          message: '登录状态已失效，请重新登录后再试',
+          latency_ms: 0
+        })
+      } else {
+        setTestResult({
+          success: false,
+          message: e instanceof Error ? e.message : '连接测试失败',
+          latency_ms: 0
+        })
+      }
     } finally {
       setTesting(false)
     }

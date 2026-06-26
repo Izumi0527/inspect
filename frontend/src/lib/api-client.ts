@@ -42,6 +42,13 @@ const appendQuery = (endpoint: string, params?: QueryParams): string => {
   return search ? `${endpoint}?${search}` : endpoint
 }
 
+// isAuthEndpoint 判断是否认证相关端点。这类端点（尤其 /auth/refresh、/auth/login）的 401
+// 不应触发“refresh 后重试”，否则 refresh 自身失败时会陷入递归。
+const isAuthEndpoint = (endpoint: string): boolean => {
+  const path = endpoint.split('?')[0]
+  return path.startsWith('/auth/') || path.startsWith('auth/')
+}
+
 const buildSearchParams = (params: QueryParams): URLSearchParams => {
   const searchParams = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {
@@ -251,6 +258,8 @@ export async function authorizedDownload(url: string, init: RequestInit = {}): P
 class HttpClient {
   private baseURL: string
   private defaultHeaders: HeadersInit
+  // 单飞锁：并发请求同时遇 401 时共享同一次 refresh，避免重复刷新与竞态。
+  private refreshPromise: Promise<boolean> | null = null
 
   constructor() {
     this.baseURL = getApiBaseUrl()
@@ -388,7 +397,8 @@ class HttpClient {
       ? retry
       : (method === 'GET' || method === 'HEAD' ? 3 : 0)
 
-    return this.withRetry(async () => {
+    // 单次网络请求（含超时、CSRF 回填、body 序列化）。401 自愈重试时会被再次调用。
+    const doFetch = async (): Promise<Response> => {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), timeout)
 
@@ -424,12 +434,62 @@ class HttpClient {
           }
         }
 
-        const response = await fetch(url, requestConfig)
-        return this.handleResponse<T>(response)
+        return await fetch(url, requestConfig)
       } finally {
         clearTimeout(timeoutId)
       }
+    }
+
+    return this.withRetry(async () => {
+      let response = await doFetch()
+
+      // 401 自愈：非认证端点遇 401 时，先用 refresh_token（httpOnly cookie）续期 access_token，
+      // 成功后重试一次原请求；refresh 失败才把 401 透传给 handleResponse 抛出，交由上层登出跳登录。
+      if (response.status === HttpStatus.UNAUTHORIZED && !isAuthEndpoint(endpoint)) {
+        const refreshed = await this.ensureTokenRefreshed()
+        if (refreshed) {
+          response = await doFetch()
+        }
+      }
+
+      return this.handleResponse<T>(response)
     }, resolvedRetry, retryDelay)
+  }
+
+  // ensureTokenRefreshed 单飞执行 token 续期：并发请求共享同一个 refreshPromise，
+  // 避免多个 401 各自发起 refresh 造成竞态与重复刷新。
+  private async ensureTokenRefreshed(): Promise<boolean> {
+    if (!this.refreshPromise) {
+      this.refreshPromise = this.performTokenRefresh().finally(() => {
+        this.refreshPromise = null
+      })
+    }
+    return this.refreshPromise
+  }
+
+  // performTokenRefresh 调用 /auth/refresh（refresh_token 由 httpOnly cookie 携带）续期 access_token。
+  // 直接用原生 fetch（不走 request），避免 refresh 自身的响应再次触发 401 自愈造成递归。
+  private async performTokenRefresh(): Promise<boolean> {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT)
+    try {
+      const headers = this.buildHeaders()
+      const csrf = TokenManager.getCSRFToken()
+      if (csrf) {
+        headers.set('X-CSRF-Token', csrf)
+      }
+      const response = await fetch(`${this.baseURL}/auth/refresh`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        signal: controller.signal,
+      })
+      return response.ok
+    } catch {
+      return false
+    } finally {
+      clearTimeout(timeoutId)
+    }
   }
 
   // GET请求

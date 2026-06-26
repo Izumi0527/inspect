@@ -67,28 +67,24 @@ func (w *MetricsWriter) WriteDeviceMetrics(ctx context.Context, req DeviceMetric
 	}
 
 	err := w.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 核心写入①：设备级时序指标（device_metrics）。
 		if len(deviceMetrics) > 0 {
 			// Use raw SQL to let database sequence generate IDs for TimescaleDB hypertable
 			if err := insertDeviceMetricsRaw(tx, deviceMetrics); err != nil {
 				return err
 			}
 		}
-		if len(interfaceMetrics) > 0 {
-			// Use raw SQL to let database sequence generate IDs for TimescaleDB hypertable
-			if err := insertInterfaceMetricsRaw(tx, interfaceMetrics); err != nil {
-				return err
-			}
-		}
-		if len(interfaceSpeedUpdates) > 0 {
-			if err := applyInterfaceSpeedUpdates(tx, interfaceSpeedUpdates); err != nil {
-				return err
-			}
-		}
+		// 核心写入②：devices 表 cpu_usage/memory_usage 等快照（设备管理页直接读此列）。
+		// 必须先于接口类写入落库，确保接口写入异常不会回滚掉核心快照。
 		if len(deviceUpdates) > 0 {
 			if err := tx.Table("devices").Where("id = ?", req.DeviceID).Updates(deviceUpdates).Error; err != nil {
 				return err
 			}
 		}
+		// 次要写入：接口时序指标 + device_interfaces 状态表 UPSERT + 接口速率更新。
+		// 用嵌套事务(SAVEPOINT)隔离为“尽力而为”：任一步失败仅回滚本段并记日志，
+		// 不连累上面已写入的核心快照——根治“接口写入报错导致整笔回滚、cpu/mem 丢失”的历史故障。
+		w.writeInterfaceDataBestEffort(tx, req.DeviceID, interfaceMetrics, req.Interfaces, interfaceSpeedUpdates, collectedAt)
 		return nil
 	})
 	if err != nil {
@@ -583,6 +579,116 @@ func applyInterfaceSpeedUpdates(tx *gorm.DB, updates []InterfaceSpeedUpdate) err
 			}).Error; err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// writeInterfaceDataBestEffort 以“尽力而为”方式写入接口相关数据（时序指标 + 状态表 + 速率）。
+// 整段包在嵌套事务(SAVEPOINT)中：任一步失败只回滚本段并记日志，不影响外层已写入的核心快照。
+func (w *MetricsWriter) writeInterfaceDataBestEffort(
+	tx *gorm.DB,
+	deviceID int,
+	interfaceMetrics []InterfaceMetric,
+	interfacePayload []map[string]interface{},
+	speedUpdates []InterfaceSpeedUpdate,
+	collectedAt time.Time,
+) {
+	if len(interfaceMetrics) == 0 && len(interfacePayload) == 0 && len(speedUpdates) == 0 {
+		return
+	}
+
+	err := tx.Transaction(func(itx *gorm.DB) error {
+		if len(interfaceMetrics) > 0 {
+			// Use raw SQL to let database sequence generate IDs for TimescaleDB hypertable
+			if err := insertInterfaceMetricsRaw(itx, interfaceMetrics); err != nil {
+				return err
+			}
+		}
+		if len(interfacePayload) > 0 {
+			if err := upsertDeviceInterfaces(itx, deviceID, interfacePayload, collectedAt); err != nil {
+				return err
+			}
+		}
+		if len(speedUpdates) > 0 {
+			if err := applyInterfaceSpeedUpdates(itx, speedUpdates); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil && w.logger != nil {
+		w.logger.Warn("interface data best-effort write failed; core device snapshot preserved",
+			zap.Int("device_id", deviceID), zap.Error(err))
+	}
+}
+
+// upsertDeviceInterfaces 将采集到的接口当前状态 UPSERT 到 device_interfaces。
+// 此前该表无任何 INSERT，导致 traffic 接口列表、reports 接口统计、接口速率更新长期空转。
+// speed 列交由 applyInterfaceSpeedUpdates 维护（带多来源优先级解析），此处不覆盖。
+func upsertDeviceInterfaces(tx *gorm.DB, deviceID int, interfaces []map[string]interface{}, collectedAt time.Time) error {
+	const upsertSQL = `
+INSERT INTO device_interfaces (device_id, name, alias, in_octets, out_octets, is_up, last_updated, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (device_id, name) DO UPDATE SET
+    alias = COALESCE(EXCLUDED.alias, device_interfaces.alias),
+    in_octets = EXCLUDED.in_octets,
+    out_octets = EXCLUDED.out_octets,
+    is_up = EXCLUDED.is_up,
+    last_updated = EXCLUDED.last_updated,
+    updated_at = EXCLUDED.updated_at`
+
+	for _, item := range interfaces {
+		if item == nil {
+			continue
+		}
+		name, _ := item["name"].(string)
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+
+		var alias interface{}
+		if descr, ok := item["description"].(string); ok {
+			if trimmed := strings.TrimSpace(descr); trimmed != "" {
+				alias = trimmed
+			}
+		}
+
+		if err := tx.Exec(
+			upsertSQL,
+			deviceID,
+			name,
+			alias,
+			mapInterfaceInt64(item, "ifHCInOctets"),
+			mapInterfaceInt64(item, "ifHCOutOctets"),
+			mapInterfaceBool(item, "is_up"),
+			collectedAt,
+			collectedAt,
+			collectedAt,
+		).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// mapInterfaceInt64 从接口 payload 中按 key 提取整数（兼容内存路径的 uint64/int64 与 JSON 路径的 float64）；
+// 缺失或不可解析时返回 nil（写入 NULL）。
+func mapInterfaceInt64(item map[string]interface{}, key string) interface{} {
+	value, ok := item[key]
+	if !ok {
+		return nil
+	}
+	if f, ok := coerceFloat(value); ok {
+		return int64(f)
+	}
+	return nil
+}
+
+// mapInterfaceBool 从接口 payload 中按 key 提取布尔值（仅接受真正的 bool）；缺失时返回 nil（写入 NULL）。
+func mapInterfaceBool(item map[string]interface{}, key string) interface{} {
+	if value, ok := item[key].(bool); ok {
+		return value
 	}
 	return nil
 }

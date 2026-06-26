@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
 )
 
 type logEntry struct {
@@ -59,42 +61,8 @@ func (c *SSHCollector) Collect(ctx context.Context, device deviceInfo, logType s
 
 func (c *SSHCollector) connect(ctx context.Context, device deviceInfo) (*ssh.Client, error) {
 	config := &ssh.ClientConfig{
-		Config: ssh.Config{
-			// 支持旧设备的密钥交换算法（如华为、H3C等）
-			KeyExchanges: []string{
-				"diffie-hellman-group-exchange-sha256",
-				"diffie-hellman-group-exchange-sha1",
-				"diffie-hellman-group14-sha256",
-				"diffie-hellman-group14-sha1",
-				"diffie-hellman-group1-sha1",
-				"curve25519-sha256",
-				"curve25519-sha256@libssh.org",
-				"ecdh-sha2-nistp256",
-				"ecdh-sha2-nistp384",
-				"ecdh-sha2-nistp521",
-			},
-			// 支持旧设备的加密算法
-			Ciphers: []string{
-				"aes128-ctr",
-				"aes192-ctr",
-				"aes256-ctr",
-				"aes128-cbc",
-				"aes192-cbc",
-				"aes256-cbc",
-				"3des-cbc",
-				"arcfour256",
-				"arcfour128",
-			},
-			// 支持旧设备的MAC算法
-			MACs: []string{
-				"hmac-sha2-256",
-				"hmac-sha2-512",
-				"hmac-sha1",
-				"hmac-sha1-96",
-				"hmac-md5",
-				"hmac-md5-96",
-			},
-		},
+		// 兼容华为/H3C 等老旧网络设备的密钥交换/加密/MAC 算法（Go 默认禁用部分旧算法）
+		Config:          sshutil.LegacyAlgorithms(),
 		User:            device.SshUsername,
 		Auth:            []ssh.AuthMethod{ssh.Password(device.SshPassword)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
@@ -275,7 +243,7 @@ func parseLogOutput(output string, deviceID int, vendor string, collectedAt time
 }
 
 var (
-	huaweiPattern  = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+\[([^\]]+)\]:\s*(.+)$`)
+	huaweiPattern        = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+\[([^\]]+)\]:\s*(.+)$`)
 	facilityLevelPattern = regexp.MustCompile(`[/-](\d+)[/-]`)
 )
 
@@ -314,6 +282,7 @@ func parseLogLine(line string, deviceID int, vendor string, collectedAt time.Tim
 		CollectedAt:  collectedAt,
 	}
 }
+
 // huaweiTrapPattern matches Huawei trapbuffer output lines:
 // #Sep 17 2012 17:09:47+00:00 HUAWEI LLDP/4/NBRCHGTRAP:OID: 1.0.8802.1.1.2.0.0.1 Neighbor info changed.
 var huaweiTrapPattern = regexp.MustCompile(`(?i)^#?\s*(\w+\s+\d+\s+\d{4}\s+\d{2}:\d{2}:\d{2}[^\s]*|\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[^\s]*)\s+\S+\s+(?:%%\d+)?(\w+)/(\d+)/(\w+)(?:\([a-z]\))?[:\s]+(.+)`)
@@ -342,14 +311,14 @@ func parseTrapBufferLine(line string, deviceID int, collectedAt time.Time) *logE
 	message := fmt.Sprintf("%s/%s/%s: %s", module, severityNum, trapName, description)
 
 	return &logEntry{
-		DeviceID:    deviceID,
-		Level:       level,
-		Facility:    facility,
-		Source:      "ssh",
-		Message:     message,
-		RawMessage:  line,
+		DeviceID:     deviceID,
+		Level:        level,
+		Facility:     facility,
+		Source:       "ssh",
+		Message:      message,
+		RawMessage:   line,
 		LogTimestamp: logTimestamp,
-		CollectedAt: collectedAt,
+		CollectedAt:  collectedAt,
 	}
 }
 
@@ -380,14 +349,14 @@ func parseAlarmActiveLine(line string, deviceID int, collectedAt time.Time) *log
 	message := fmt.Sprintf("[%s] %s: %s", strings.ToUpper(severity), alarmName, description)
 
 	return &logEntry{
-		DeviceID:    deviceID,
-		Level:       level,
-		Facility:    facility,
-		Source:      "ssh",
-		Message:     message,
-		RawMessage:  line,
+		DeviceID:     deviceID,
+		Level:        level,
+		Facility:     facility,
+		Source:       "ssh",
+		Message:      message,
+		RawMessage:   line,
 		LogTimestamp: collectedAt,
-		CollectedAt: collectedAt,
+		CollectedAt:  collectedAt,
 	}
 }
 
@@ -442,8 +411,6 @@ func parseTrapTimestamp(raw string, fallback time.Time) time.Time {
 
 	return fallback
 }
-
-
 
 func parseTimestamp(raw string, vendor string, fallback time.Time) time.Time {
 	value := strings.TrimSpace(strings.TrimPrefix(raw, "*"))

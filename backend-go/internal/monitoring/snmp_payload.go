@@ -116,6 +116,9 @@ func buildSNMPInterfaces(items []devices.InterfaceMetrics) []map[string]interfac
 		if iface.OutRate != nil {
 			ifaceMap["bandwidth_out"] = *iface.OutRate
 		}
+		if iface.IsUp != nil {
+			ifaceMap["is_up"] = *iface.IsUp
+		}
 		interfaces = append(interfaces, ifaceMap)
 	}
 

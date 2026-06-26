@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
 )
 
 type deviceBackupTarget struct {
@@ -217,8 +219,10 @@ func executeSSHCommand(ctx context.Context, target deviceBackupTarget, command s
 	defer cancel()
 
 	config := &ssh.ClientConfig{
-		User: target.SshUsername,
-		Auth: []ssh.AuthMethod{ssh.Password(target.SshPassword)},
+		// 兼容华为/H3C 等老旧网络设备的密钥交换/加密/MAC 算法（Go 默认禁用部分旧算法）
+		Config: sshutil.LegacyAlgorithms(),
+		User:   target.SshUsername,
+		Auth:   []ssh.AuthMethod{ssh.Password(target.SshPassword)},
 		// TOFU(Trust On First Use): 记录主机密钥指纹但不阻断连接。
 		// 网络设备通常没有 CA 签发的主机证书，完整的 HostKey 验证不切实际，
 		// 但此处仍记录指纹以便事后审计和异常检测。
@@ -498,7 +502,6 @@ func telnetCleanOutput(raw string, command string) string {
 	return strings.TrimSpace(strings.Join(cleaned, "\n"))
 }
 
-
 func writeDeviceBackupManifest(dir string, manifest deviceBackupManifest) (string, error) {
 	path := filepath.Join(dir, "manifest.json")
 	payload, err := json.MarshalIndent(manifest, "", "  ")
@@ -560,7 +563,7 @@ func extractFailedDeviceBackups(items []deviceBackupItem) []map[string]interface
 			continue
 		}
 		failed = append(failed, map[string]interface{}{
-			"device_id": item.DeviceID,
+			"device_id":  item.DeviceID,
 			"ip_address": item.IPAddress,
 			"error":      item.ErrorMessage,
 		})

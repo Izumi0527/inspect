@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
 )
 
 // Target CLI 连接测试目标参数（取自编辑弹窗当前填写值，不依赖已保存设备）。
@@ -56,30 +58,7 @@ func TestConnection(ctx context.Context, target Target, timeout time.Duration) R
 func testSSH(ctx context.Context, target Target, timeout time.Duration) error {
 	config := &ssh.ClientConfig{
 		// 兼容华为/H3C 等老旧网络设备的密钥交换/加密/MAC 算法（Go 默认禁用部分旧算法）
-		Config: ssh.Config{
-			KeyExchanges: []string{
-				"diffie-hellman-group-exchange-sha256",
-				"diffie-hellman-group-exchange-sha1",
-				"diffie-hellman-group14-sha256",
-				"diffie-hellman-group14-sha1",
-				"diffie-hellman-group1-sha1",
-				"curve25519-sha256",
-				"curve25519-sha256@libssh.org",
-				"ecdh-sha2-nistp256",
-				"ecdh-sha2-nistp384",
-				"ecdh-sha2-nistp521",
-			},
-			Ciphers: []string{
-				"aes128-ctr", "aes192-ctr", "aes256-ctr",
-				"aes128-cbc", "aes192-cbc", "aes256-cbc",
-				"3des-cbc", "arcfour256", "arcfour128",
-			},
-			MACs: []string{
-				"hmac-sha2-256", "hmac-sha2-512",
-				"hmac-sha1", "hmac-sha1-96",
-				"hmac-md5", "hmac-md5-96",
-			},
-		},
+		Config:          sshutil.LegacyAlgorithms(),
 		User:            target.Username,
 		Auth:            []ssh.AuthMethod{ssh.Password(target.Password)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 网络设备无 CA 主机证书，连接测试不做主机校验

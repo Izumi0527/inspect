@@ -42,6 +42,7 @@ type InterfaceMetrics struct {
 	OutOctets   *uint64  `json:"out_octets,omitempty"`
 	InRate      *float64 `json:"in_rate,omitempty"`  // 入站速率，单位：bps（比特每秒）
 	OutRate     *float64 `json:"out_rate,omitempty"` // 出站速率，单位：bps（比特每秒）
+	IsUp        *bool    `json:"is_up,omitempty"`    // 接口运行状态：IfOperStatus=1 为 up
 }
 
 // BGPNeighborMetrics 保存通过厂商扩展 MIB 采集到的 BGP 邻居摘要。
@@ -406,6 +407,22 @@ func (c *SNMPCollector) collectInterfaces(
 		idx := extractIndexFromOID(v.Name)
 		if iface, exists := interfaces[idx]; exists {
 			iface.Speed = &speed
+		}
+	}
+
+	// 采集接口运行状态 IfOperStatus（1=up, 2=down, ...），用于 device_interfaces.is_up
+	if statusOID := registry.Common.Interfaces.IfOperStatus.OID; statusOID != "" {
+		statusResult, _ := target.BulkWalkAll(statusOID)
+		for _, v := range statusResult {
+			status, ok := numericPDUInt64(v)
+			if !ok {
+				continue
+			}
+			idx := extractIndexFromOID(v.Name)
+			if iface, exists := interfaces[idx]; exists {
+				up := status == 1
+				iface.IsUp = &up
+			}
 		}
 	}
 

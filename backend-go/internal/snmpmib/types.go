@@ -46,6 +46,7 @@ type InterfacesSection struct {
 	IfHCInOctets  OIDDefinition `json:"if_hc_in_octets"`
 	IfHCOutOctets OIDDefinition `json:"if_hc_out_octets"`
 	IfHighSpeed   OIDDefinition `json:"if_high_speed"`
+	IfOperStatus  OIDDefinition `json:"if_oper_status"`
 }
 
 type OIDDefinition struct {
