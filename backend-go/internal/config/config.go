@@ -41,6 +41,10 @@ type Config struct {
 	AppVersion string `env:"APP_VERSION"`
 	SecretKey  string `env:"SECRET_KEY"`
 
+	// CredentialEncKey 为设备凭据（SSH/Telnet 密码等）加密的主密钥来源；
+	// 为空时回退使用 SecretKey。经 HKDF 派生独立子密钥，与 JWT 用途隔离。
+	CredentialEncKey string `env:"CREDENTIAL_ENC_KEY"`
+
 	ServerHost string `env:"SERVER_HOST" envDefault:"0.0.0.0"`
 	ServerPort int    `env:"SERVER_PORT"`
 
@@ -79,7 +83,7 @@ type Config struct {
 	SnmpTrapHost     string `env:"SNMP_TRAP_HOST" envDefault:"0.0.0.0"`
 	SnmpTrapPort     int    `env:"SNMP_TRAP_PORT" envDefault:"162"`
 
-	CorsOriginsRaw  string `env:"CORS_ORIGINS" envDefault:"[\"http://localhost:3000\",\"http://127.0.0.1:3000\"]"`
+	CorsOriginsRaw string `env:"CORS_ORIGINS" envDefault:"[\"http://localhost:3000\",\"http://127.0.0.1:3000\"]"`
 	// AllowedHosts 当前未在请求链路强制启用；默认收敛为空列表，避免内置 "*" 通配默认，
 	// 后续若启用 Host 校验则从安全默认起步。
 	AllowedHostsRaw string `env:"ALLOWED_HOSTS" envDefault:"[]"`
@@ -106,6 +110,11 @@ func Load() (Config, error) {
 
 	if strings.TrimSpace(cfg.JWTSecretKey) == "" {
 		cfg.JWTSecretKey = cfg.SecretKey
+	}
+
+	// 设备凭据加密主密钥未单独配置时回退 SecretKey（再经 HKDF 派生独立子密钥）。
+	if strings.TrimSpace(cfg.CredentialEncKey) == "" {
+		cfg.CredentialEncKey = cfg.SecretKey
 	}
 
 	// Cookie Secure：未显式配置时，生产启用、开发关闭（兼容 http://localhost）。

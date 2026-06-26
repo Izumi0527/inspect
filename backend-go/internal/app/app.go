@@ -32,6 +32,7 @@ import (
 	redisstore "github.com/your-org/inspect-system/backend-go/internal/redis"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"github.com/your-org/inspect-system/backend-go/internal/scheduler"
+	"github.com/your-org/inspect-system/backend-go/internal/secrets"
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
 	"github.com/your-org/inspect-system/backend-go/internal/traffic"
@@ -156,6 +157,20 @@ func New() (*App, error) {
 	}
 
 	inspectionService := inspection.NewService(dbConn, log)
+
+	// 初始化设备凭据加密器（CREDENTIAL_ENC_KEY 回退 SECRET_KEY，经 HKDF 派生独立子密钥）。
+	// 未配置密钥时：开发模式降级为明文并告警；生产模式拒绝启动（fail-closed）。
+	if master := strings.TrimSpace(cfg.CredentialEncKey); master != "" {
+		credCipher, cipherErr := secrets.NewCipher(master)
+		if cipherErr != nil {
+			return nil, fmt.Errorf("初始化设备凭据加密失败: %w", cipherErr)
+		}
+		devices.SetCredentialCipher(credCipher)
+	} else if cfg.Debug {
+		log.Warn("未配置 CREDENTIAL_ENC_KEY/SECRET_KEY，设备 CLI 凭据将以明文存储（仅限开发）")
+	} else {
+		return nil, fmt.Errorf("生产环境必须配置 CREDENTIAL_ENC_KEY 或 SECRET_KEY 以加密设备凭据")
+	}
 
 	deviceService := devices.NewService(dbConn, log)
 	probeService := devices.NewProbeService(log)

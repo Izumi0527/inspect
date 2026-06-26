@@ -314,6 +314,24 @@ func (s *Service) UpdateDevice(ctx context.Context, deviceID int, updates map[st
 		updates["tags"] = encoded
 	}
 
+	// CLI 凭据加密：map 形式的 Updates 不触发 Device.BeforeSave 钩子，需在此显式加密。
+	// 空串视为“不修改/未提供”，跳过（前端编辑回填遵循“留空=保持原值”）。
+	for _, key := range []string{"ssh_password", "telnet_password", "enable_password"} {
+		raw, ok := updates[key]
+		if !ok {
+			continue
+		}
+		text, ok := raw.(string)
+		if !ok || text == "" {
+			continue
+		}
+		enc, err := encryptCredential(text)
+		if err != nil {
+			return nil, err
+		}
+		updates[key] = enc
+	}
+
 	updates["updated_at"] = time.Now().UTC()
 
 	if err := s.db.WithContext(ctx).Table("devices").Where("id = ?", deviceID).Updates(updates).Error; err != nil {

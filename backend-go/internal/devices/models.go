@@ -4,6 +4,9 @@ import (
 	"time"
 
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
+
+	"github.com/your-org/inspect-system/backend-go/internal/secrets"
 )
 
 type Device struct {
@@ -53,6 +56,66 @@ type Device struct {
 
 func (Device) TableName() string {
 	return "devices"
+}
+
+// credentialCipher 为设备 CLI 凭据的加解密器，由 app 启动时经 SetCredentialCipher 注入。
+// 为 nil 时所有加解密退化为明文直通（兼容未配置密钥的开发裸跑）。
+var credentialCipher *secrets.Cipher
+
+// SetCredentialCipher 注入设备凭据加解密器（进程级，启动时设置一次）。
+func SetCredentialCipher(c *secrets.Cipher) {
+	credentialCipher = c
+}
+
+// encryptCredential 加密单个凭据字段，供 map 更新路径（不触发 GORM 钩子）显式调用。
+func encryptCredential(plaintext string) (string, error) {
+	if credentialCipher == nil {
+		return plaintext, nil
+	}
+	return credentialCipher.Encrypt(plaintext)
+}
+
+// deviceCredentialFields 返回需加解密的 CLI 凭据字段指针集合（统一维护，避免遗漏）。
+func (d *Device) deviceCredentialFields() []**string {
+	return []**string{&d.SshPassword, &d.TelnetPassword, &d.EnablePassword}
+}
+
+// BeforeSave 在 struct 写入（如 Create）前加密 CLI 凭据。
+// 幂等：空串与已加密值不变。注意 map 形式的 Updates 不触发本钩子，由 service 层显式加密。
+func (d *Device) BeforeSave(tx *gorm.DB) error {
+	if credentialCipher == nil {
+		return nil
+	}
+	for _, field := range d.deviceCredentialFields() {
+		if *field == nil {
+			continue
+		}
+		enc, err := credentialCipher.Encrypt(**field)
+		if err != nil {
+			return err
+		}
+		*field = &enc
+	}
+	return nil
+}
+
+// AfterFind 在查询后解密 CLI 凭据，使所有读取点（备份/采集/连接测试等）直接拿到明文，
+// 无需各自解密。存量明文（无前缀）原样返回，实现平滑兼容。
+func (d *Device) AfterFind(tx *gorm.DB) error {
+	if credentialCipher == nil {
+		return nil
+	}
+	for _, field := range d.deviceCredentialFields() {
+		if *field == nil {
+			continue
+		}
+		dec, err := credentialCipher.Decrypt(**field)
+		if err != nil {
+			return err
+		}
+		*field = &dec
+	}
+	return nil
 }
 
 type DeviceGroup struct {
