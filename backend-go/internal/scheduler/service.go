@@ -138,6 +138,12 @@ func (s *Service) Start() error {
 		return err
 	}
 
+	// 重置上次进程异常退出遗留的 running 任务：processDueTasks 的 status<>running
+	// 条件会永久跳过僵死任务，导致连通性探测/告警评估等调度静默停摆。
+	if err := s.recoverStaleRunningTasks(context.Background()); err != nil && s.logger != nil {
+		s.logger.Warn("恢复僵死 running 任务失败", zap.Error(err))
+	}
+
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
@@ -152,6 +158,28 @@ func (s *Service) Start() error {
 	s.mu.Unlock()
 
 	go s.run(ctx)
+	return nil
+}
+
+// recoverStaleRunningTasks 将上次进程中断遗留的 running 任务重置为 pending，
+// 避免 processDueTasks（status<>running）永久跳过它们导致调度僵死停摆。
+func (s *Service) recoverStaleRunningTasks(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	result := s.db.WithContext(ctx).
+		Model(&ScheduledTask{}).
+		Where("status = ?", string(TaskStatusRunning)).
+		Updates(map[string]interface{}{
+			"status":     string(TaskStatusPending),
+			"updated_at": time.Now().UTC(),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected > 0 && s.logger != nil {
+		s.logger.Info("已恢复僵死 running 任务", zap.Int64("count", result.RowsAffected))
+	}
 	return nil
 }
 
