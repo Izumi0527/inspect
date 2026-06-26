@@ -1352,7 +1352,7 @@ func (s *Service) ensureDefaultTasks(ctx context.Context) error {
 			CronExpression: "*/3 * * * *",
 			Enabled:        true,
 			Config: map[string]interface{}{
-				"check_connectivity": false,
+				"check_connectivity": true,
 				"collect_metrics":    true,
 				"generate_report":    false,
 			},
@@ -1503,9 +1503,16 @@ func (s *Service) updateMetricsCollectionTask(ctx context.Context, seed defaultT
 		nextRun = now.Add(3 * time.Minute)
 	}
 
+	// 同步 config（如 check_connectivity 开关）；原实现只更 cron/name，
+	// 导致已存在任务的 config 永不更新——离线/恢复探测无法对存量库生效。
+	configJSON, encErr := encodeJSON(seed.Config)
+	if encErr != nil {
+		configJSON = datatypes.JSON([]byte("{}"))
+	}
 	updates := map[string]interface{}{
 		"name":            seed.Name,
 		"cron_expression": seed.CronExpression,
+		"config":          configJSON,
 		"next_run":        nextRun,
 		"updated_at":      now,
 	}
