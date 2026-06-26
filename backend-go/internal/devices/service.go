@@ -311,12 +311,21 @@ func (s *Service) UpdateDevice(ctx context.Context, deviceID int, updates map[st
 		if err != nil {
 			return nil, err
 		}
+		// 加密 tags 内嵌套凭据（CLI 密码 / SNMP community 等）。
+		// map 更新不触发 BeforeSave 钩子，需在此显式处理。
+		if credentialCipher != nil {
+			encryptedTags, err := transformTagsCredentials(encoded, credentialCipher.Encrypt)
+			if err != nil {
+				return nil, err
+			}
+			encoded = encryptedTags
+		}
 		updates["tags"] = encoded
 	}
 
-	// CLI 凭据加密：map 形式的 Updates 不触发 Device.BeforeSave 钩子，需在此显式加密。
+	// 设备凭据加密：map 形式的 Updates 不触发 Device.BeforeSave 钩子，需在此显式加密。
 	// 空串视为“不修改/未提供”，跳过（前端编辑回填遵循“留空=保持原值”）。
-	for _, key := range []string{"ssh_password", "telnet_password", "enable_password"} {
+	for _, key := range []string{"ssh_password", "telnet_password", "enable_password", "snmp_community"} {
 		raw, ok := updates[key]
 		if !ok {
 			continue
