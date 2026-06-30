@@ -118,8 +118,8 @@ if ((Test-Path -LiteralPath $frontendDir) -and -not (Test-Path -LiteralPath $fro
     $frontendEnvContent = @"
 # 前端生产环境配置（由 prepare-env.ps1 自动生成）
 # 后端 API 地址
-NEXT_PUBLIC_API_URL=http://127.0.0.1:$serverPort
-NEXT_PUBLIC_WS_URL=ws://127.0.0.1:$serverPort
+NEXT_PUBLIC_API_URL=http://localhost:$serverPort
+NEXT_PUBLIC_WS_URL=ws://localhost:$serverPort
 
 # 生产环境标识
 NODE_ENV=production

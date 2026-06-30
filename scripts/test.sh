@@ -3,6 +3,7 @@
 # 封装后端与前端的构建/测试校验，提供单一验证入口，满足项目脚本化规范。
 #   - 后端：go build（可跳过）+ backend-go 单测 + tests/backend-go 外置测试模块
 #   - 前端：tsc 类型检查（可跳过）+ jest 单元测试
+#   - 安装包：installer 与 tests/installer PowerShell 脚本回归测试
 # 所有步骤默认全部执行并在结尾汇总；任一步骤失败则整体以非零码退出。
 
 set -uo pipefail
@@ -47,7 +48,7 @@ show_help() {
   ./scripts/test.sh [选项]
 
 选项:
-  --scope <all|backend|frontend>   校验范围，默认 all
+  --scope <all|backend|frontend|installer>   校验范围，默认 all
   --skip-build                     跳过后端 go build
   --skip-type-check                跳过前端 tsc 类型检查
   --help, -h                       显示帮助
@@ -58,7 +59,7 @@ parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --scope) [[ $# -ge 2 ]] || die "缺少 --scope 参数值"; SCOPE="$2"; shift 2 ;;
-            backend|frontend|all) SCOPE="$1"; shift ;;
+            backend|frontend|installer|all) SCOPE="$1"; shift ;;
             --skip-build) SKIP_BUILD=true; shift ;;
             --skip-type-check) SKIP_TYPE_CHECK=true; shift ;;
             --help|-h) show_help; exit 0 ;;
@@ -66,8 +67,8 @@ parse_args() {
         esac
     done
     case "$SCOPE" in
-        all|backend|frontend) ;;
-        *) die "--scope 仅支持 all、backend、frontend" ;;
+        all|backend|frontend|installer) ;;
+        *) die "--scope 仅支持 all、backend、frontend、installer" ;;
     esac
 }
 
@@ -110,6 +111,44 @@ test_frontend() {
     run_step "前端单元测试 (jest)" "$frontend_dir" pnpm test -- --runInBand
 }
 
+find_powershell_host() {
+    if command -v powershell.exe >/dev/null 2>&1; then
+        command -v powershell.exe
+        return
+    fi
+    if command -v pwsh >/dev/null 2>&1; then
+        command -v pwsh
+        return
+    fi
+    die "未找到 powershell.exe 或 pwsh，无法运行安装脚本测试"
+}
+
+test_installer() {
+    local ps_host
+    ps_host="$(find_powershell_host)"
+
+    local test_files=()
+    if [[ -d "$PROJECT_ROOT/tests/installer" ]]; then
+        while IFS= read -r -d '' file; do test_files+=("$file"); done < <(find "$PROJECT_ROOT/tests/installer" -maxdepth 1 -type f -name '*.test.ps1' -print0)
+    fi
+    if [[ -d "$PROJECT_ROOT/installer/tests" ]]; then
+        while IFS= read -r -d '' file; do test_files+=("$file"); done < <(find "$PROJECT_ROOT/installer/tests" -maxdepth 1 -type f -name '*.tests.ps1' -print0)
+    fi
+
+    if [[ "${#test_files[@]}" -eq 0 ]]; then
+        write_color "⚠️ 跳过安装脚本测试：未找到测试文件" "Yellow"
+        return
+    fi
+
+    local sorted_files=()
+    while IFS= read -r file; do sorted_files+=("$file"); done < <(printf '%s\n' "${test_files[@]}" | sort)
+
+    local test_file
+    for test_file in "${sorted_files[@]}"; do
+        run_step "安装脚本测试 ($(basename "$test_file"))" "$PROJECT_ROOT" "$ps_host" -NoProfile -ExecutionPolicy Bypass -File "$test_file"
+    done
+}
+
 main() {
     parse_args "$@"
 
@@ -119,7 +158,8 @@ main() {
     case "$SCOPE" in
         backend) test_backend ;;
         frontend) test_frontend ;;
-        all) test_backend; test_frontend ;;
+        installer) test_installer ;;
+        all) test_backend; test_frontend; test_installer ;;
     esac
 
     write_color "" "White"

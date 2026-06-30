@@ -21,6 +21,8 @@ RUNTIME_NODE="$RUNTIME_ROOT/runtime"
 ISS_FILE="$PROJECT_ROOT/installer/inspect.iss"
 OUTPUT_EXE="$PROJECT_ROOT/build/installer-output/InspectSetup.exe"
 GO_MODULE="github.com/your-org/inspect-system/backend-go"
+INSTALLER_FRONTEND_API_URL="http://localhost:9165"
+INSTALLER_FRONTEND_WS_URL="ws://localhost:9165"
 
 SKIP_BACKEND=false
 SKIP_FRONTEND=false
@@ -102,8 +104,15 @@ fi
 if [ "$SKIP_FRONTEND" = true ]; then
     echo "[WARN] 跳过前端构建（--skip-frontend）"
 else
-    step "构建前端（NEXT_PUBLIC_APP_VERSION=$VERSION）"
-    ( cd "$FRONTEND_DIR" && NEXT_PUBLIC_APP_VERSION="$VERSION" pnpm exec next build --no-lint )
+    step "构建前端（NEXT_PUBLIC_APP_VERSION=$VERSION, NEXT_PUBLIC_API_URL=$INSTALLER_FRONTEND_API_URL）"
+    # Next.js 会把 NEXT_PUBLIC_* 内联进客户端产物；安装包必须在 build 阶段注入 9165，
+    # 否则仓库 frontend/.env.local 的开发端口 18080 会被烘焙进登录页。
+    ( cd "$FRONTEND_DIR" && \
+        NEXT_PUBLIC_APP_VERSION="$VERSION" \
+        NEXT_PUBLIC_API_URL="$INSTALLER_FRONTEND_API_URL" \
+        NEXT_PUBLIC_WS_URL="$INSTALLER_FRONTEND_WS_URL" \
+        NEXT_PUBLIC_ENV="production" \
+        pnpm exec next build --no-lint )
 
     step "组装前端产物到 InspectRuntime"
     if [ ! -d "$RUNTIME_FRONTEND/node_modules" ]; then
@@ -119,7 +128,17 @@ else
     for f in package.json next.config.js; do
         cp -f "$FRONTEND_DIR/$f" "$RUNTIME_FRONTEND/$f"
     done
-    echo "[OK] 前端产物已更新（复用 node_modules）"
+    cat > "$RUNTIME_FRONTEND/.env.local" <<EOF
+# 前端生产环境配置（由 build-installer.sh 自动生成）
+# 后端 API 地址（默认端口 9165）
+NEXT_PUBLIC_API_URL=$INSTALLER_FRONTEND_API_URL
+NEXT_PUBLIC_WS_URL=$INSTALLER_FRONTEND_WS_URL
+
+# 生产环境标识
+NODE_ENV=production
+NEXT_PUBLIC_ENV=production
+EOF
+    echo "[OK] 前端产物已更新（复用 node_modules）+ .env.local 已生成"
 fi
 
 [ -f "$RUNTIME_NODE/node.exe" ] || echo "[WARN] 未找到 $RUNTIME_NODE/node.exe（安装机将回退系统 node）"

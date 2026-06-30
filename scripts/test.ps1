@@ -7,11 +7,12 @@
     封装后端与前端的构建/测试校验，提供单一验证入口，满足项目脚本化规范。
     - 后端：go build（可跳过）+ backend-go 单测 + tests/backend-go 外置测试模块
     - 前端：tsc 类型检查（可跳过）+ jest 单元测试
+    - 安装包：installer 与 tests/installer PowerShell 脚本回归测试
 
     所有步骤默认全部执行并在结尾汇总；任一步骤失败则整体以非零码退出。
 
 .PARAMETER Scope
-    校验范围：all（默认）、backend、frontend
+    校验范围：all（默认）、backend、frontend、installer
 
 .PARAMETER SkipBuild
     跳过后端 go build（仅跑测试）
@@ -35,7 +36,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet("all", "backend", "frontend")]
+    [ValidateSet("all", "backend", "frontend", "installer")]
     [string]$Scope = "all",
 
     [switch]$SkipBuild,
@@ -115,13 +116,53 @@ function Test-Frontend {
     Invoke-Step -Name "前端单元测试 (jest)" -WorkingDirectory $frontendDir -Action { & pnpm test -- --runInBand }
 }
 
+function Get-PowerShellTestHost {
+    $windowsPowerShell = Get-Command "powershell.exe" -ErrorAction SilentlyContinue
+    if ($windowsPowerShell) {
+        return $windowsPowerShell.Source
+    }
+
+    $powerShellCore = Get-Command "pwsh" -ErrorAction SilentlyContinue
+    if ($powerShellCore) {
+        return $powerShellCore.Source
+    }
+
+    throw "未找到 powershell.exe 或 pwsh，无法运行安装脚本测试"
+}
+
+function Test-Installer {
+    $testFiles = @()
+    $installerTestsDir = Join-Path $ProjectRoot "tests/installer"
+    $legacyInstallerTestsDir = Join-Path $ProjectRoot "installer/tests"
+
+    if (Test-Path -LiteralPath $installerTestsDir) {
+        $testFiles += Get-ChildItem -LiteralPath $installerTestsDir -Filter "*.test.ps1" -File
+    }
+    if (Test-Path -LiteralPath $legacyInstallerTestsDir) {
+        $testFiles += Get-ChildItem -LiteralPath $legacyInstallerTestsDir -Filter "*.tests.ps1" -File
+    }
+
+    if ($testFiles.Count -eq 0) {
+        Write-ColorOutput "⚠️ 跳过安装脚本测试：未找到测试文件" "Yellow"
+        return
+    }
+
+    $powerShellHost = Get-PowerShellTestHost
+    foreach ($testFile in ($testFiles | Sort-Object FullName)) {
+        Invoke-Step -Name "安装脚本测试 ($($testFile.Name))" -WorkingDirectory $ProjectRoot -Action {
+            & $powerShellHost -NoProfile -ExecutionPolicy Bypass -File $testFile.FullName
+        }
+    }
+}
+
 Write-ColorOutput "🧪 测试校验入口 (范围: $Scope)" "Blue"
 Write-ColorOutput ("=" * 60) "Cyan"
 
 switch ($Scope) {
     "backend" { Test-Backend }
     "frontend" { Test-Frontend }
-    "all" { Test-Backend; Test-Frontend }
+    "installer" { Test-Installer }
+    "all" { Test-Backend; Test-Frontend; Test-Installer }
 }
 
 Write-ColorOutput "`n$('=' * 60)" "Cyan"

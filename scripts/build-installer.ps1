@@ -44,6 +44,8 @@ $RuntimeNode     = Join-Path $RuntimeRoot "runtime"
 $IssFile         = Join-Path $ProjectRoot "installer/inspect.iss"
 $OutputExe       = Join-Path $ProjectRoot "build/installer-output/InspectSetup.exe"
 $GoModule        = "github.com/your-org/inspect-system/backend-go"
+$InstallerFrontendApiUrl = "http://localhost:9165"
+$InstallerFrontendWsUrl  = "ws://localhost:9165"
 
 function Write-Step { param([string]$Message) Write-Host "`n=== $Message ===" -ForegroundColor Cyan }
 function Write-Ok   { param([string]$Message) Write-Host "[OK] $Message" -ForegroundColor Green }
@@ -138,15 +140,27 @@ if ($SkipBackend) {
 if ($SkipFrontend) {
     Write-Warn2 "跳过前端构建（-SkipFrontend）"
 } else {
-    Write-Step "构建前端（NEXT_PUBLIC_APP_VERSION=$Version）"
+    Write-Step "构建前端（NEXT_PUBLIC_APP_VERSION=$Version, NEXT_PUBLIC_API_URL=$InstallerFrontendApiUrl）"
+    $previousNextPublicAppVersion = $env:NEXT_PUBLIC_APP_VERSION
+    $previousNextPublicApiUrl = $env:NEXT_PUBLIC_API_URL
+    $previousNextPublicWsUrl = $env:NEXT_PUBLIC_WS_URL
+    $previousNextPublicEnv = $env:NEXT_PUBLIC_ENV
     Push-Location $FrontendDir
     try {
         $env:NEXT_PUBLIC_APP_VERSION = $Version
+        # Next.js 会把 NEXT_PUBLIC_* 内联进客户端产物；安装包必须在 build 阶段注入 9165，
+        # 否则仓库 frontend/.env.local 的开发端口 18080 会被烘焙进登录页。
+        $env:NEXT_PUBLIC_API_URL = $InstallerFrontendApiUrl
+        $env:NEXT_PUBLIC_WS_URL = $InstallerFrontendWsUrl
+        $env:NEXT_PUBLIC_ENV = "production"
         & pnpm exec next build --no-lint
         if ($LASTEXITCODE -ne 0) { throw "next build 失败（退出码 $LASTEXITCODE）" }
     } finally {
         Pop-Location
-        Remove-Item Env:NEXT_PUBLIC_APP_VERSION -ErrorAction SilentlyContinue
+        if ($null -ne $previousNextPublicAppVersion) { $env:NEXT_PUBLIC_APP_VERSION = $previousNextPublicAppVersion } else { Remove-Item Env:NEXT_PUBLIC_APP_VERSION -ErrorAction SilentlyContinue }
+        if ($null -ne $previousNextPublicApiUrl) { $env:NEXT_PUBLIC_API_URL = $previousNextPublicApiUrl } else { Remove-Item Env:NEXT_PUBLIC_API_URL -ErrorAction SilentlyContinue }
+        if ($null -ne $previousNextPublicWsUrl) { $env:NEXT_PUBLIC_WS_URL = $previousNextPublicWsUrl } else { Remove-Item Env:NEXT_PUBLIC_WS_URL -ErrorAction SilentlyContinue }
+        if ($null -ne $previousNextPublicEnv) { $env:NEXT_PUBLIC_ENV = $previousNextPublicEnv } else { Remove-Item Env:NEXT_PUBLIC_ENV -ErrorAction SilentlyContinue }
     }
 
     Write-Step "组装前端产物到 InspectRuntime"
@@ -169,13 +183,16 @@ if ($SkipFrontend) {
     if (Test-Path -LiteralPath $nextDst) { Remove-Item -LiteralPath $nextDst -Recurse -Force }
     # 使用 robocopy 排除 cache 目录（比 Copy-Item 更高效）
     $robocopyResult = & robocopy $nextSrc $nextDst /E /XD "cache" /NFL /NDL /NJH /NJS /NC /NS /NP 2>&1
-    if ($LASTEXITCODE -gt 1) {
-        Write-Warn2 "robocopy 复制 .next 时出现警告（退出码 $LASTEXITCODE），回退使用 Copy-Item"
+    $robocopyExitCode = $LASTEXITCODE
+    if ($robocopyExitCode -gt 1) {
+        Write-Warn2 "robocopy 复制 .next 时出现警告（退出码 $robocopyExitCode），回退使用 Copy-Item"
         Copy-Item -LiteralPath $nextSrc -Destination $nextDst -Recurse -Force
         # 删除 cache 目录
         $cacheDir = Join-Path $nextDst "cache"
         if (Test-Path -LiteralPath $cacheDir) { Remove-Item -LiteralPath $cacheDir -Recurse -Force }
     }
+    # robocopy 的 1 表示“成功且复制了文件”，但会污染 PowerShell 进程退出码。
+    $global:LASTEXITCODE = 0
 
     foreach ($f in @("package.json", "next.config.js")) {
         Copy-Item -LiteralPath (Join-Path $FrontendDir $f) -Destination (Join-Path $RuntimeFrontend $f) -Force
@@ -187,8 +204,8 @@ if ($SkipFrontend) {
     $frontendEnvContent = @"
 # 前端生产环境配置（由 build-installer.ps1 自动生成）
 # 后端 API 地址（默认端口 9165）
-NEXT_PUBLIC_API_URL=http://127.0.0.1:9165
-NEXT_PUBLIC_WS_URL=ws://127.0.0.1:9165
+NEXT_PUBLIC_API_URL=$InstallerFrontendApiUrl
+NEXT_PUBLIC_WS_URL=$InstallerFrontendWsUrl
 
 # 生产环境标识
 NODE_ENV=production
