@@ -79,9 +79,16 @@ function Invoke-StartupStep {
     try {
         $output = & $Action *>&1
         foreach ($item in @($output)) {
-            if ($null -ne $item) {
-                Write-StartupLog (($item | Out-String).TrimEnd()) "OUTPUT"
+            if ($null -eq $item) {
+                continue
             }
+
+            $message = ($item | Out-String).TrimEnd()
+            if ([string]::IsNullOrEmpty($message)) {
+                continue
+            }
+
+            Write-StartupLog $message "OUTPUT"
         }
         Write-StartupLog "Step completed: $Name"
     } catch {
