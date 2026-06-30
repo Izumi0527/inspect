@@ -113,9 +113,6 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 			{"巡检状态", device.InspectionStatus},
 			{"通过率", formatPercent(device.PassRate, 1)},
 			{"问题数量", fmt.Sprintf("%d", device.IssueCount)},
-			{"CPU使用率", formatPercent(device.Performance.CPUUsage, 1)},
-			{"内存使用率", formatPercent(device.Performance.MemoryUsage, 1)},
-			{"接口状态", fmt.Sprintf("%d/%d 活跃", device.Performance.ActiveInterfaces, device.Performance.TotalInterfaces)},
 		}
 		deviceStyle := defaultPDFTableStyle(pdfHeaderStyleLight)
 		deviceStyle.TableAlign = "L"

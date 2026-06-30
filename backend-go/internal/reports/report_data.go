@@ -499,12 +499,14 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		Execution    *int    `gorm:"column:execution_time"`
 	}
 	results := make([]resultRow, 0)
-	_ = db.WithContext(ctx).
+	if err := db.WithContext(ctx).
 		Table("inspection_results").
 		Select("inspection_id, check_item_name, check_item_type, status, expected_value, actual_value, execution_time").
 		Where("inspection_id IN ?", inspectionIDs).
 		Order("inspection_id, id").
-		Scan(&results).Error
+		Scan(&results).Error; err != nil {
+		return result, err
+	}
 
 	resultsByInspection := make(map[int][]InspectionCheckResult)
 	for _, row := range results {

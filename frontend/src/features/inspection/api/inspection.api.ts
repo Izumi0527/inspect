@@ -121,6 +121,7 @@ const mapCheckItem = (value: UnknownRecord): InspectionCheckItem => {
     id: toString(value.id ?? value['id']),
     name: toString(value.name ?? value['name']),
     type,
+    metric: toString(value.metric ?? value['metric']),
     config,
     weight: toNumber(value.weight ?? value['weight'], 1),
   }
@@ -442,6 +443,7 @@ export async function createInspectionTemplate(template: Omit<InspectionTemplate
         id: item.id,
         name: item.name,
         type: item.type,
+        metric: item.metric ?? '',
         weight: item.weight,
         config: item.config,
         enabled: true
@@ -477,6 +479,7 @@ export async function updateInspectionTemplate(id: number, updates: Partial<Insp
         id: item.id,
         name: item.name,
         type: item.type,
+        metric: item.metric ?? '',
         weight: item.weight,
         config: item.config,
         enabled: true

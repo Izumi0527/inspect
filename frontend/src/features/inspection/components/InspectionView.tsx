@@ -23,6 +23,8 @@ import { InspectionStrategies } from './InspectionStrategies'
 import { InspectionTemplates } from './InspectionTemplates'
 import { InspectionExecutions } from './InspectionExecutions'
 import { InspectionAnalytics } from './InspectionAnalytics'
+import toast from 'react-hot-toast'
+import { useWebSocketEvent, WebSocketEvents, wsManager } from '@/lib/websocket'
 
 type TabType = 'strategies' | 'templates' | 'executions' | 'analytics'
 
@@ -47,6 +49,33 @@ export const InspectionView: React.FC = () => {
     error: statsError,
     refetch: refetchStats,
   } = useInspectionStats()
+
+  // 顶层订阅巡检任务事件：InspectionView 采用 tab 懒挂载，"执行历史"(InspectionExecutions)
+  // 仅在用户点开后才挂载；把完成提示放在始终在线的 View 顶层，保证触发巡检后即便停留在
+  // 任意子 tab 也能收到"完成/失败"提示。订阅方法自带幂等保护，与 Executions 内订阅可共存。
+  useEffect(() => {
+    wsManager.subscribeToInspectionTasks()
+    return () => {
+      wsManager.unsubscribeFromInspectionTasks()
+    }
+  }, [])
+
+  // 连接建立/重连时重新订阅，避免订阅丢失
+  useWebSocketEvent(WebSocketEvents.CONNECT, () => {
+    wsManager.subscribeToInspectionTasks()
+  })
+
+  // 巡检任务完成/失败时弹出提示（后端在 scan_progress 房间广播终态）
+  useWebSocketEvent(WebSocketEvents.INSPECTION_COMPLETE, (payload) => {
+    if (!payload || typeof payload !== 'object') return
+    const data = payload as Record<string, unknown>
+    const status = typeof data.status === 'string' ? data.status.toLowerCase() : ''
+    if (status === 'completed' || status === 'success') {
+      toast.success('巡检任务已完成')
+    } else if (status === 'failed' || status === 'error') {
+      toast.error('巡检任务执行失败')
+    }
+  })
 
   useEffect(() => {
     setMountedTabs((current) => (

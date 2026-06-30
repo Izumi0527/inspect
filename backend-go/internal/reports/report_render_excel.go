@@ -309,35 +309,6 @@ func writeInspectionDeviceDetailSheet(file *excelize.File, sheet string, data In
 		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+7), device.LastInspectionTime); err != nil {
 			return err
 		}
-		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+9), "性能指标"); err != nil {
-			return err
-		}
-		_ = file.SetCellStyle(sheet, fmt.Sprintf("A%d", row+9), fmt.Sprintf("A%d", row+9), styles.Section)
-		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+10), "CPU使用率:"); err != nil {
-			return err
-		}
-		_ = file.SetCellStyle(sheet, fmt.Sprintf("A%d", row+10), fmt.Sprintf("A%d", row+13), styles.Section)
-		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+10), formatPercent(device.Performance.CPUUsage, 1)); err != nil {
-			return err
-		}
-		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+11), "内存使用率:"); err != nil {
-			return err
-		}
-		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+11), formatPercent(device.Performance.MemoryUsage, 1)); err != nil {
-			return err
-		}
-		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+12), "活跃接口数:"); err != nil {
-			return err
-		}
-		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+12), fmt.Sprintf("%d", device.Performance.ActiveInterfaces)); err != nil {
-			return err
-		}
-		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+13), "接口总数:"); err != nil {
-			return err
-		}
-		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+13), fmt.Sprintf("%d", device.Performance.TotalInterfaces)); err != nil {
-			return err
-		}
 	}
 	_ = file.SetColWidth(sheet, "A", "A", 20)
 	_ = file.SetColWidth(sheet, "B", "B", 25)

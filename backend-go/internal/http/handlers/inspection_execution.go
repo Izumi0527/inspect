@@ -92,24 +92,18 @@ func (h InspectionHandler) isInspectionCancelled(ctx context.Context, inspection
 	return strings.EqualFold(item.Status, inspection.StatusCancelled) || strings.EqualFold(item.Status, inspection.StatusTimeout)
 }
 
-func normalizeInspectionCheckItems(checkItems []map[string]interface{}) []map[string]interface{} {
-	if len(checkItems) > 0 {
-		return checkItems
+// filterEnabledCheckItems 返回模板中启用的检查项。
+// 不再静默回退默认项：模板未配置/解析为空时返回空切片，由调用方将任务显式判失败，
+// 避免"模板未真正生效却照跑一套默认检查"的假象。
+func filterEnabledCheckItems(checkItems []map[string]interface{}) []map[string]interface{} {
+	filtered := make([]map[string]interface{}, 0, len(checkItems))
+	for _, item := range checkItems {
+		if enabled, ok := item["enabled"].(bool); ok && !enabled {
+			continue
+		}
+		filtered = append(filtered, item)
 	}
-
-	// 默认连通性检查项
-	return []map[string]interface{}{
-		{
-			"name":     "ICMP连通性检查",
-			"type":     "icmp",
-			"category": "connectivity",
-		},
-		{
-			"name":     "SNMP连通性检查",
-			"type":     "snmp",
-			"category": "connectivity",
-		},
-	}
+	return filtered
 }
 
 func (h InspectionHandler) markInspectionExecutionFailed(ctx context.Context, inspectionID int, errMsg string, completedChecks int, totalChecks int) {
@@ -153,15 +147,19 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	h.broadcastScanProgress(insp.ID, inspection.StatusRunning, 0, nil)
 
 	// 2. 获取设备信息
-	var device *devices.DeviceResponse
+	// 必须用 GetDeviceRecord 取完整 Device（含 AfterFind 解密后的明文凭据）：
+	// GetDeviceByID 返回对外脱敏的 DeviceResponse，其 SnmpCommunity 恒为 nil，
+	// 会导致 SNMP 探测不可达、所有 SNMP 检查项判失败，使整个巡检任务失败。
+	var device *devices.Device
 	if h.DeviceService != nil {
-		device, err = h.DeviceService.GetDeviceByID(ctx, insp.DeviceID)
-		if err != nil {
-			errMsg := fmt.Sprintf("获取设备信息失败: %v", err)
+		record, derr := h.DeviceService.GetDeviceRecord(ctx, insp.DeviceID)
+		if derr != nil {
+			errMsg := fmt.Sprintf("获取设备信息失败: %v", derr)
 			h.Service.UpdateInspectionStatus(ctx, insp.ID, inspection.StatusFailed, &errMsg)
 			h.broadcastScanProgress(insp.ID, inspection.StatusFailed, 0, map[string]interface{}{"message": errMsg})
 			return
 		}
+		device = &record
 	}
 
 	// 3. 执行探测检查
@@ -189,8 +187,13 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	}
 
 	// 4. 执行检查项并生成结果（实时保存 + 推送进度）
-	normalizedCheckItems := normalizeInspectionCheckItems(checkItems)
-	totalChecks := len(normalizedCheckItems)
+	activeCheckItems := filterEnabledCheckItems(checkItems)
+	totalChecks := len(activeCheckItems)
+	if totalChecks == 0 {
+		errMsg := "巡检模板无有效检查项，请检查所选模板的检查项配置"
+		h.markInspectionExecutionFailed(ctx, insp.ID, errMsg, 0, 0)
+		return
+	}
 
 	// 初始化总检查数，便于前端/接口计算进度
 	if err := h.Service.UpdateInspectionStats(ctx, insp.ID, totalChecks, 0, 0, 0, 0); err != nil {
@@ -207,7 +210,7 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	skippedCount := 0
 	var executionErr error
 
-	results := h.executeCheckItems(ctx, insp.ID, device, probeResult, normalizedCheckItems, func(result inspection.Result, completed int, total int) error {
+	results := h.executeCheckItems(ctx, insp.ID, device, probeResult, activeCheckItems, func(result inspection.Result, completed int, total int) error {
 		executedCount = completed
 
 		if err := h.Service.SaveInspectionResult(ctx, &result); err != nil {
@@ -283,7 +286,7 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 func (h InspectionHandler) executeCheckItems(
 	ctx context.Context,
 	inspectionID int,
-	device *devices.DeviceResponse,
+	device *devices.Device,
 	probeResult *devices.ProbeResult,
 	checkItems []map[string]interface{},
 	onResult func(result inspection.Result, completed int, total int) error,
@@ -319,10 +322,17 @@ func (h InspectionHandler) executeCheckItems(
 			h.executeICMPCheck(&result, probeResult)
 		case "snmp":
 			h.executeSNMPCheck(&result, probeResult, snmpMetrics, item)
-		default:
-			// 其他类型暂时跳过
+		case "ssh":
+			h.executeSSHCheck(ctx, &result, device, item)
+		case "http", "https":
+			h.executeHTTPCheck(ctx, &result, device, item)
+		case "script":
+			// 出于安全，不在服务器执行任意脚本；如需脚本检查请改用 SSH 命令检查。
 			result.Status = "skip"
-			result.Message = stringPtr("检查类型暂不支持")
+			result.Message = stringPtr("脚本类型检查出于安全暂不支持，请改用 SSH 命令检查")
+		default:
+			result.Status = "skip"
+			result.Message = stringPtr(fmt.Sprintf("不支持的检查类型: %s", itemType))
 		}
 
 		endTime := time.Now().UTC()
@@ -347,7 +357,7 @@ func (h InspectionHandler) executeCheckItems(
 func collectInspectionSNMPMetrics(
 	ctx context.Context,
 	collector SNMPMetricsCollector,
-	device *devices.DeviceResponse,
+	device *devices.Device,
 	probeResult *devices.ProbeResult,
 	logger *zap.Logger,
 ) *devices.SNMPMetrics {
@@ -421,55 +431,29 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 		result.ActualValue = &responseTime
 	}
 
-	// 获取检查项的名称和类别，用于确定要检查的指标类型
-	itemName := strings.ToLower(readString(checkItem, "name"))
-	itemCategory := strings.ToLower(readString(checkItem, "category"))
-
-	// 调试日志
-	if h.Logger != nil {
-		h.Logger.Debug("executeSNMPCheck: processing check item",
-			zap.String("itemName", itemName),
-			zap.String("itemCategory", itemCategory),
-			zap.Bool("hasMetrics", snmpMetrics != nil))
-	}
-
 	// 获取配置中的阈值
 	config, _ := checkItem["config"].(map[string]interface{})
 	threshold, _ := config["threshold"].(map[string]interface{})
 	warningThreshold, _ := threshold["warning"].(float64)
 	criticalThreshold, _ := threshold["critical"].(float64)
 
-	// 根据检查项名称或类别确定要检查的指标
-	// 使用更宽松的匹配规则
-	switch {
-	case strings.Contains(itemName, "cpu") || strings.Contains(itemName, "处理器") ||
-		strings.Contains(itemName, "使用率") && !strings.Contains(itemName, "内存") ||
-		itemCategory == "cpu" || itemCategory == "health" && strings.Contains(itemName, "cpu"):
+	// 按检查项的 metric 字段分派到具体指标（稳定键，不再依赖中文名称关键词，改名不影响分派）。
+	metric := strings.ToLower(strings.TrimSpace(readString(checkItem, "metric")))
+	switch metric {
+	case "cpu":
 		h.checkCPUMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
-	case strings.Contains(itemName, "内存") || strings.Contains(itemName, "memory") ||
-		itemCategory == "memory":
+	case "memory":
 		h.checkMemoryMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
-	case strings.Contains(itemName, "运行时间") || strings.Contains(itemName, "uptime") ||
-		strings.Contains(itemName, "运行") && strings.Contains(itemName, "时间") ||
-		itemCategory == "uptime":
-		h.checkUptimeMetric(result, snmpMetrics)
-	case strings.Contains(itemName, "接口") || strings.Contains(itemName, "interface") ||
-		strings.Contains(itemName, "端口") || strings.Contains(itemName, "状态") && !strings.Contains(itemName, "运行") ||
-		itemCategory == "interface" || itemCategory == "performance" && strings.Contains(itemName, "接口"):
-		h.checkInterfaceMetric(result, snmpMetrics)
-	case strings.Contains(itemName, "温度") || strings.Contains(itemName, "temperature") ||
-		itemCategory == "temperature":
+	case "temperature":
 		h.checkTemperatureMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
-	case strings.Contains(itemName, "带宽") || strings.Contains(itemName, "bandwidth") ||
-		itemCategory == "bandwidth":
+	case "uptime":
+		h.checkUptimeMetric(result, snmpMetrics)
+	case "interface":
+		h.checkInterfaceMetric(result, snmpMetrics)
+	case "bandwidth":
 		h.checkBandwidthMetric(result, snmpMetrics)
-	default:
-		// 默认：SNMP 连通性检查
-		if h.Logger != nil {
-			h.Logger.Debug("executeSNMPCheck: no match found, using default SNMP check",
-				zap.String("itemName", itemName),
-				zap.String("itemCategory", itemCategory))
-		}
+	case "reachable", "system_info", "":
+		// 仅校验 SNMP 可达性与系统信息
 		result.Status = "pass"
 		result.Message = stringPtr("SNMP服务正常")
 		if probeResult.SnmpSystemInfo != nil && *probeResult.SnmpSystemInfo != "" {
@@ -480,6 +464,9 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 			msg := fmt.Sprintf("SNMP服务正常 - %s", sysInfo)
 			result.Message = &msg
 		}
+	default:
+		result.Status = "skip"
+		result.Message = stringPtr(fmt.Sprintf("未知的 SNMP 指标: %s", metric))
 	}
 }
 

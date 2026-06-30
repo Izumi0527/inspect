@@ -141,6 +141,9 @@ export interface InspectionCheckItem {
   /** 检查项类型 */
   type: CheckItemType
 
+  /** SNMP 指标键（type=snmp 时用于后端分派：reachable/cpu/memory/temperature/uptime/interface/bandwidth）。改名不影响分派。 */
+  metric?: string
+
   /** 检查项配置,根据type不同配置项不同 */
   config: CheckItemConfig
 

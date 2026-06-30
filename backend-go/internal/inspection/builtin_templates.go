@@ -21,125 +21,128 @@ type builtinTemplateSeed struct {
 	CheckItems  []map[string]interface{}
 }
 
-// vrpStyleCheckItems 构造 Huawei(VRP) / H3C(Comware) 通用的内置检查项；
-// 仅 CPU/内存/温度的 OID 因厂商而异（由参数传入），其余为标准 MIB-II。
-//
-// 设计约束：每一项都必须能被后端 executeCheckItems/executeSNMPCheck 真正执行——
-//   - type 仅用 icmp / snmp（ssh/http/script 当前会被后端跳过）；
-//   - SNMP 项按“名称关键词”被后端分派到对应指标（cpu/内存/温度/运行时间/接口/带宽），
-//     因此名称中的关键词不可随意更改；
-//   - 带宽项命名为“带宽利用率”而非“接口带宽”，避免被“接口”分支优先匹配；
-//   - config.oid 仅用于展示与文档，真实采集 OID 由后端厂商注册表按设备厂商解析。
-func vrpStyleCheckItems(cpuOID, memOID, tempOID string) []map[string]interface{} {
-	return []map[string]interface{}{
-		{
-			"id": "connectivity", "name": "设备连通性", "description": "ICMP 探测设备可达性",
-			"type": "icmp", "category": "connectivity", "weight": 8,
-			"config": map[string]interface{}{}, "enabled": true,
-		},
-		{
-			"id": "snmp_reachable", "name": "SNMP 服务可达", "description": "校验设备 SNMP 服务可用",
-			"type": "snmp", "category": "connectivity", "weight": 6,
-			"config": map[string]interface{}{}, "enabled": true,
-		},
-		{
-			"id": "cpu_usage", "name": "CPU 使用率检查", "description": "监控设备 CPU 使用率",
-			"type": "snmp", "category": "health", "weight": 10,
-			"config": map[string]interface{}{
-				"oid": cpuOID, "unit": "%", "timeout": 5,
-				"threshold": map[string]interface{}{"warning": 70, "critical": 85},
-			},
-			"enabled": true,
-		},
-		{
-			"id": "memory_usage", "name": "内存使用率检查", "description": "监控设备内存使用率",
-			"type": "snmp", "category": "health", "weight": 10,
-			"config": map[string]interface{}{
-				"oid": memOID, "unit": "%", "timeout": 5,
-				"threshold": map[string]interface{}{"warning": 75, "critical": 90},
-			},
-			"enabled": true,
-		},
-		{
-			"id": "temperature", "name": "设备温度检查", "description": "监控单板/整机温度",
-			"type": "snmp", "category": "health", "weight": 7,
-			"config": map[string]interface{}{
-				"oid": tempOID, "unit": "℃", "timeout": 5,
-				"threshold": map[string]interface{}{"warning": 60, "critical": 75},
-			},
-			"enabled": true,
-		},
-		{
-			"id": "uptime", "name": "系统运行时间", "description": "读取设备运行时长",
-			"type": "snmp", "category": "health", "weight": 4,
-			"config": map[string]interface{}{"oid": "1.3.6.1.2.1.1.3.0"}, "enabled": true,
-		},
-		{
-			"id": "interface_status", "name": "接口状态检查", "description": "检查关键接口运行状态",
-			"type": "snmp", "category": "performance", "weight": 9,
-			"config": map[string]interface{}{"oid": "1.3.6.1.2.1.2.2.1.8"}, "enabled": true,
-		},
-		{
-			"id": "bandwidth", "name": "带宽利用率", "description": "基于接口流量评估带宽利用",
-			"type": "snmp", "category": "performance", "weight": 7,
-			"config": map[string]interface{}{"oid": "1.3.6.1.2.1.31.1.1.1.6"}, "enabled": true,
-		},
+// 内置检查项均厂商无关：模板只描述"查什么指标"(metric)，真实采集 OID 由后端 SNMP
+// 采集器按设备 vendor 经 collectorVendorProfiles 解析。执行端按 metric 字段分派，
+// 检查项名称可随意修改而不影响分派。
+
+func ckConnectivity() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "connectivity", "name": "设备连通性", "description": "ICMP 探测设备可达性",
+		"type": "icmp", "category": "connectivity", "metric": "", "weight": 8,
+		"config": map[string]interface{}{}, "enabled": true,
 	}
 }
 
-// huaweiInspectionCheckItems 华为 VRP 内置检查项（CPU/内存/温度采用 hwEntity 系列 OID）。
-func huaweiInspectionCheckItems() []map[string]interface{} {
-	return vrpStyleCheckItems(
-		"1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5",
-		"1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7",
-		"1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11",
-	)
+func ckSNMPReachable() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "snmp_reachable", "name": "SNMP 服务可达", "description": "校验设备 SNMP 服务可用",
+		"type": "snmp", "category": "connectivity", "metric": "reachable", "weight": 6,
+		"config": map[string]interface{}{}, "enabled": true,
+	}
 }
 
-// h3cInspectionCheckItems H3C Comware 内置检查项（CPU/内存/温度采用 hh3cEntityExt 系列 OID）。
-func h3cInspectionCheckItems() []map[string]interface{} {
-	return vrpStyleCheckItems(
-		"1.3.6.1.4.1.25506.2.6.1.1.1.1.6",
-		"1.3.6.1.4.1.25506.2.6.1.1.1.1.8",
-		"1.3.6.1.4.1.25506.2.6.1.1.1.1.12",
-	)
+func ckCPU() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "cpu_usage", "name": "CPU 使用率", "description": "监控设备 CPU 使用率",
+		"type": "snmp", "category": "health", "metric": "cpu", "weight": 10,
+		"config":  map[string]interface{}{"unit": "%", "threshold": map[string]interface{}{"warning": 70, "critical": 85}},
+		"enabled": true,
+	}
+}
+
+func ckMemory() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "memory_usage", "name": "内存使用率", "description": "监控设备内存使用率",
+		"type": "snmp", "category": "health", "metric": "memory", "weight": 10,
+		"config":  map[string]interface{}{"unit": "%", "threshold": map[string]interface{}{"warning": 75, "critical": 90}},
+		"enabled": true,
+	}
+}
+
+func ckTemperature() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "temperature", "name": "设备温度", "description": "监控单板/整机温度",
+		"type": "snmp", "category": "health", "metric": "temperature", "weight": 7,
+		"config":  map[string]interface{}{"unit": "C", "threshold": map[string]interface{}{"warning": 60, "critical": 75}},
+		"enabled": true,
+	}
+}
+
+func ckUptime() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "uptime", "name": "系统运行时间", "description": "读取设备运行时长",
+		"type": "snmp", "category": "health", "metric": "uptime", "weight": 4,
+		"config": map[string]interface{}{}, "enabled": true,
+	}
+}
+
+func ckInterface() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "interface_status", "name": "接口状态", "description": "检查关键接口运行状态",
+		"type": "snmp", "category": "performance", "metric": "interface", "weight": 9,
+		"config": map[string]interface{}{}, "enabled": true,
+	}
+}
+
+func ckBandwidth() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "bandwidth", "name": "带宽利用率", "description": "基于接口流量评估带宽利用",
+		"type": "snmp", "category": "performance", "metric": "bandwidth", "weight": 7,
+		"config": map[string]interface{}{}, "enabled": true,
+	}
 }
 
 func builtinTemplateSeeds() []builtinTemplateSeed {
+	deviceTypes := map[string]interface{}{"device_types": []string{"switch", "router", "firewall", "server"}}
 	return []builtinTemplateSeed{
 		{
-			Name:        "Huawei 交换机标准巡检",
-			Description: "适用于 Huawei（VRP）交换机的标准巡检模板，覆盖连通性、设备健康（CPU/内存/温度/运行时间）与接口性能检查",
+			Name:        "连通性巡检",
+			Description: "仅核对设备在线状态：ICMP 连通性 + SNMP 服务可达，用于快速确认设备是否在线。",
 			Category:    "network",
-			DeviceTypes: map[string]interface{}{"vendors": []string{"Huawei"}, "device_types": []string{"switch"}},
-			CheckItems:  huaweiInspectionCheckItems(),
+			DeviceTypes: deviceTypes,
+			CheckItems:  []map[string]interface{}{ckConnectivity(), ckSNMPReachable()},
 		},
 		{
-			Name:        "Huawei 路由器标准巡检",
-			Description: "适用于 Huawei（VRP）路由器的标准巡检模板，覆盖连通性、设备健康（CPU/内存/温度/运行时间）与接口/带宽性能检查",
+			Name:        "基础健康巡检",
+			Description: "连通性 + CPU + 内存，覆盖设备核心健康指标。",
 			Category:    "network",
-			DeviceTypes: map[string]interface{}{"vendors": []string{"Huawei"}, "device_types": []string{"router"}},
-			CheckItems:  huaweiInspectionCheckItems(),
+			DeviceTypes: deviceTypes,
+			CheckItems:  []map[string]interface{}{ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory()},
 		},
 		{
-			Name:        "H3C 交换机标准巡检",
-			Description: "适用于 H3C（Comware）交换机的标准巡检模板，覆盖连通性、设备健康（CPU/内存/温度/运行时间）与接口性能检查",
+			Name:        "标准巡检",
+			Description: "基础健康 + 温度 + 运行时间 + 接口状态，适合日常例行巡检。",
 			Category:    "network",
-			DeviceTypes: map[string]interface{}{"vendors": []string{"H3C"}, "device_types": []string{"switch"}},
-			CheckItems:  h3cInspectionCheckItems(),
+			DeviceTypes: deviceTypes,
+			CheckItems:  []map[string]interface{}{ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory(), ckTemperature(), ckUptime(), ckInterface()},
 		},
 		{
-			Name:        "H3C 路由器标准巡检",
-			Description: "适用于 H3C（Comware）路由器的标准巡检模板，覆盖连通性、设备健康（CPU/内存/温度/运行时间）与接口/带宽性能检查",
+			Name:        "全面巡检",
+			Description: "标准巡检 + 带宽利用率，覆盖全部可采集维度。",
 			Category:    "network",
-			DeviceTypes: map[string]interface{}{"vendors": []string{"H3C"}, "device_types": []string{"router"}},
-			CheckItems:  h3cInspectionCheckItems(),
+			DeviceTypes: deviceTypes,
+			CheckItems:  []map[string]interface{}{ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory(), ckTemperature(), ckUptime(), ckInterface(), ckBandwidth()},
 		},
 	}
 }
 
-// retiredBuiltinTemplateVendors 为不再支持、需在启动时清理其内置模板的历史厂商。
-var retiredBuiltinTemplateVendors = []string{"Cisco", "Juniper", "Arista", "Fortinet"}
+// allBuiltinCheckItems 枚举所有内置档位去重后的检查项（按 id 去重），
+// 供白盒测试校验"类型可执行 + SNMP 项 metric 合法"等硬约束。
+func allBuiltinCheckItems() []map[string]interface{} {
+	seen := map[string]bool{}
+	out := make([]map[string]interface{}, 0)
+	for _, seed := range builtinTemplateSeeds() {
+		for _, item := range seed.CheckItems {
+			id, _ := item["id"].(string)
+			if id != "" && seen[id] {
+				continue
+			}
+			seen[id] = true
+			out = append(out, item)
+		}
+	}
+	return out
+}
 
 // EnsureBuiltinTemplates 在后端启动时按 name 幂等同步内置巡检模板：
 // 已存在（is_default）则更新其检查项等内容，不存在则创建。
@@ -149,21 +152,24 @@ func EnsureBuiltinTemplates(ctx context.Context, db *gorm.DB, logger *zap.Logger
 		return nil
 	}
 
-	// 清理已不再支持的历史厂商内置模板（仅删除内置 is_default，用户自建模板不动）。
-	for _, vendor := range retiredBuiltinTemplateVendors {
-		res := db.WithContext(ctx).
-			Where("is_default = ? AND name LIKE ?", true, vendor+" %").
-			Delete(&Template{})
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected > 0 && logger != nil {
-			logger.Info("已清理历史厂商内置模板",
-				zap.String("vendor", vendor), zap.Int64("deleted", res.RowsAffected))
-		}
+	seeds := builtinTemplateSeeds()
+
+	// 清理所有不在当前档位清单中的旧内置模板（仅 is_default，用户自建模板不动）。
+	names := make([]string, 0, len(seeds))
+	for _, s := range seeds {
+		names = append(names, s.Name)
+	}
+	cleanup := db.WithContext(ctx).
+		Where("is_default = ? AND name NOT IN ?", true, names).
+		Delete(&Template{})
+	if cleanup.Error != nil {
+		return cleanup.Error
+	}
+	if cleanup.RowsAffected > 0 && logger != nil {
+		logger.Info("已清理过时内置巡检模板", zap.Int64("deleted", cleanup.RowsAffected))
 	}
 
-	for _, seed := range builtinTemplateSeeds() {
+	for _, seed := range seeds {
 		checkItemsJSON, err := json.Marshal(seed.CheckItems)
 		if err != nil {
 			return err

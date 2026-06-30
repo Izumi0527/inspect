@@ -142,13 +142,13 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
                 <SelectItem value="snmp">SNMP</SelectItem>
                 <SelectItem value="ping">Ping</SelectItem>
                 <SelectItem value="ssh" disabled={!isCheckItemTypeSupported('ssh')}>
-                  SSH（暂不支持执行）
+                  SSH（执行只读命令）
                 </SelectItem>
                 <SelectItem value="http" disabled={!isCheckItemTypeSupported('http')}>
-                  HTTP（暂不支持执行）
+                  HTTP（接口探测）
                 </SelectItem>
                 <SelectItem value="script" disabled={!isCheckItemTypeSupported('script')}>
-                  Script（暂不支持执行）
+                  Script（出于安全不支持）
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -179,6 +179,31 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
           {/* SNMP 配置 */}
           {formData.type === 'snmp' && (
             <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  采集指标 <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  value={formData.metric || 'reachable'}
+                  onValueChange={(value) => updateField('metric', value)}
+                >
+                  <SelectTrigger className="w-full" aria-label="采集指标">
+                    <SelectValue placeholder="请选择采集指标" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="reachable">SNMP 可达性</SelectItem>
+                    <SelectItem value="cpu">CPU 使用率</SelectItem>
+                    <SelectItem value="memory">内存使用率</SelectItem>
+                    <SelectItem value="temperature">设备温度</SelectItem>
+                    <SelectItem value="uptime">系统运行时间</SelectItem>
+                    <SelectItem value="interface">接口状态</SelectItem>
+                    <SelectItem value="bandwidth">带宽利用率</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  采集指标决定后端实际检查内容；OID 由后端按设备厂商自动解析，通常无需手填。
+                </p>
+              </div>
               <div>
                 <label className="block text-sm font-medium mb-1">
                   OID（可选）
