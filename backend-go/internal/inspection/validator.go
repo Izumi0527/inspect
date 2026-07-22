@@ -95,6 +95,7 @@ type CheckItem struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
 	Type        string                 `json:"type"`
+	Metric      string                 `json:"metric,omitempty"`
 	Category    string                 `json:"category,omitempty"`
 	Weight      float64                `json:"weight,omitempty"`
 	Config      map[string]interface{} `json:"config"`
@@ -268,6 +269,9 @@ func (v *templateValidator) ValidateCheckItem(item *CheckItem) error {
 	// Validate type-specific configuration
 	switch strings.ToLower(item.Type) {
 	case "snmp":
+		if err := validateSNMPMetric(item.Metric); err != nil {
+			return err
+		}
 		if err := v.ValidateSNMPConfig(item.Config); err != nil {
 			return err
 		}
@@ -312,6 +316,33 @@ func (v *templateValidator) ValidateCheckItemType(itemType string) error {
 	return &ValidationError{
 		Field:   "type",
 		Message: fmt.Sprintf("检查项类型 '%s' 无效，有效值为: %s", itemType, strings.Join(validTypes, ", ")),
+		Err:     ErrInvalidCheckItemType,
+	}
+}
+
+// validSNMPMetrics 与执行端 executeSNMPCheck 的 metric 分派分支一一对应，
+// 两处新增指标时必须同步修改（inspection_execution.go）。
+var validSNMPMetrics = []string{"reachable", "system_info", "cpu", "memory", "temperature", "uptime", "interface", "bandwidth"}
+
+// validateSNMPMetric 校验 SNMP 检查项的采集指标：缺失或非法的 metric 会让执行端
+// 无法分派到真实采集逻辑，历史上曾导致检查项静默退化为连通性检查并假报"通过"。
+func validateSNMPMetric(metric string) error {
+	normalized := strings.ToLower(strings.TrimSpace(metric))
+	if normalized == "" {
+		return &ValidationError{
+			Field:   "metric",
+			Message: "SNMP 检查项必须配置采集指标(metric)，有效值为: " + strings.Join(validSNMPMetrics, ", "),
+			Err:     ErrCheckItemMissingFields,
+		}
+	}
+	for _, valid := range validSNMPMetrics {
+		if normalized == valid {
+			return nil
+		}
+	}
+	return &ValidationError{
+		Field:   "metric",
+		Message: fmt.Sprintf("SNMP 检查项采集指标 '%s' 无效，有效值为: %s", metric, strings.Join(validSNMPMetrics, ", ")),
 		Err:     ErrInvalidCheckItemType,
 	}
 }
