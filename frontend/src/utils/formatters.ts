@@ -41,28 +41,13 @@ export function formatDate(
 
   switch (format) {
     case 'date':
-      return dateObj.toLocaleDateString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      })
+      return formatDateYMD(dateObj)
 
     case 'time':
-      return dateObj.toLocaleTimeString('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      })
+      return formatTimeHMS(dateObj)
 
     case 'datetime':
-      return dateObj.toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      })
+      return formatDateTimeYMDHMS(dateObj)
 
     case 'relative':
       const seconds = Math.floor(diff / 1000)
@@ -77,7 +62,7 @@ export function formatDate(
       return '刚刚'
 
     default:
-      return dateObj.toLocaleString('zh-CN')
+      return formatDateTimeYMDHMS(dateObj)
   }
 }
 
@@ -320,4 +305,13 @@ export function formatTimeHM(value: Date | string | number): string {
   const date = normalizeDateValue(value)
   if (!date) return '无效日期'
   return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+}
+
+/**
+ * 将日期格式化为 HH:mm:ss
+ */
+export function formatTimeHMS(value: Date | string | number): string {
+  const date = normalizeDateValue(value)
+  if (!date) return '无效日期'
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`
 }
