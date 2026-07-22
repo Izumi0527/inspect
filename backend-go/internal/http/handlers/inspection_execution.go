@@ -425,12 +425,6 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 		return
 	}
 
-	// 设置响应时间
-	if probeResult.SnmpResponseTime != nil {
-		responseTime := fmt.Sprintf("%.2fms", *probeResult.SnmpResponseTime)
-		result.ActualValue = &responseTime
-	}
-
 	// 获取配置中的阈值
 	config, _ := checkItem["config"].(map[string]interface{})
 	threshold, _ := config["threshold"].(map[string]interface{})
@@ -452,8 +446,12 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 		h.checkInterfaceMetric(result, snmpMetrics)
 	case "bandwidth":
 		h.checkBandwidthMetric(result, snmpMetrics)
-	case "reachable", "system_info", "":
-		// 仅校验 SNMP 可达性与系统信息
+	case "reachable", "system_info":
+		// 仅校验 SNMP 可达性与系统信息；实际值为探测响应耗时（仅此分支适用该量纲）
+		if probeResult.SnmpResponseTime != nil {
+			responseTime := fmt.Sprintf("%.2fms", *probeResult.SnmpResponseTime)
+			result.ActualValue = &responseTime
+		}
 		result.Status = "pass"
 		result.Message = stringPtr("SNMP服务正常")
 		if probeResult.SnmpSystemInfo != nil && *probeResult.SnmpSystemInfo != "" {
@@ -464,6 +462,10 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 			msg := fmt.Sprintf("SNMP服务正常 - %s", sysInfo)
 			result.Message = &msg
 		}
+	case "":
+		// 旧版模板检查项缺少 metric：显式跳过，不得静默当连通性检查报"通过"
+		result.Status = "skip"
+		result.Message = stringPtr("检查项未配置采集指标(metric)，无法执行真实采集；请编辑模板重新保存，或改用内置巡检模板")
 	default:
 		result.Status = "skip"
 		result.Message = stringPtr(fmt.Sprintf("未知的 SNMP 指标: %s", metric))
