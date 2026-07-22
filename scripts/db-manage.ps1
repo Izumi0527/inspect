@@ -35,12 +35,6 @@
 .PARAMETER SkipMigrate
     seed-admin 操作是否跳过数据库迁移（不推荐）
 
-.PARAMETER InitOnly
-    init 操作仅执行基础初始化，不导入内置模板
-
-.PARAMETER TemplatesOnly
-    init 操作仅导入内置模板
-
 .PARAMETER Force
     init 操作跳过确认提示
 
@@ -95,8 +89,6 @@ param(
     [switch]$SkipMigrate,
 
     # init 参数
-    [switch]$InitOnly,
-    [switch]$TemplatesOnly,
     [switch]$Force
 )
 
@@ -109,7 +101,6 @@ $script:ScriptRoot = $PSScriptRoot
 $script:ProjectRoot = Split-Path -Parent $script:ScriptRoot
 $script:DatabasePath = Join-Path $script:ProjectRoot "database"
 $script:InitCompleteFile = Join-Path $script:DatabasePath "database-init-complete.sql"
-$script:TemplatesCompleteFile = Join-Path $script:DatabasePath "builtin-templates-complete.sql"
 
 # 颜色输出函数
 function Write-ColorOutput {
@@ -393,7 +384,6 @@ function Invoke-ConsolidationVerification {
 
     Write-ColorOutput "`n[文件结构]" "Blue"
     Test-ConsolidationCondition "完整初始化脚本存在" (Test-Path $script:InitCompleteFile) "database/database-init-complete.sql"
-    Test-ConsolidationCondition "完整模板脚本存在" (Test-Path $script:TemplatesCompleteFile) "database/builtin-templates-complete.sql"
     Test-ConsolidationCondition "整合报告已归档到 docs/datebase" (Test-Path $docsReport) "docs/datebase/database-sql-consolidation-report.md"
     Test-ConsolidationCondition "database 目录不再保留旧完成报告" (-not (Test-Path $oldReport)) "COMPLETION_REPORT.md 已迁出 database/"
     Test-ConsolidationCondition "database 目录不再保留旧验证脚本" (-not (Test-Path $oldVerifyScript)) "验证功能已合并到 scripts/db-manage.ps1"
@@ -410,19 +400,6 @@ function Invoke-ConsolidationVerification {
     Test-ConsolidationCondition "包含保留策略" ($initContent -match "add_retention_policy") "TimescaleDB 数据保留策略"
     Test-ConsolidationCondition "包含带宽单位迁移" ($initContent -match "1000000\.0") "bps 到 Mbps 转换"
 
-    Write-ColorOutput "`n[模板 SQL 内容]" "Blue"
-    $templatesContent = ""
-    if (Test-Path $script:TemplatesCompleteFile) {
-        $templatesContent = Get-Content $script:TemplatesCompleteFile -Raw
-    }
-    $templateCount = ([regex]::Matches($templatesContent, "INSERT INTO inspection_templates")).Count
-    Test-ConsolidationCondition "包含 18 个内置模板插入语句" ($templateCount -eq 18) "实际数量: $templateCount"
-    foreach ($vendor in @("Cisco", "Huawei", "H3C", "Juniper", "Arista", "Fortinet")) {
-        $vendorMarker = '"vendors": ["' + $vendor + '"]'
-        $vendorCount = ([regex]::Matches($templatesContent, [regex]::Escape($vendorMarker))).Count
-        Test-ConsolidationCondition "包含 ${vendor} 设备模板" ($vendorCount -eq 3) "实际数量: $vendorCount"
-    }
-
     Write-ColorOutput "`n[脚本与 Docker 引用]" "Blue"
     $manageContent = if (Test-Path $PSCommandPath) { Get-Content $PSCommandPath -Raw } else { "" }
     Test-ConsolidationCondition "db-manage.ps1 提供 verify 入口" ($manageContent -match '"verify"') "统一入口: scripts/db-manage.ps1 verify"
@@ -431,7 +408,6 @@ function Invoke-ConsolidationVerification {
         $composeFile = Join-Path $script:ProjectRoot $composeName
         $composeContent = if (Test-Path $composeFile) { Get-Content $composeFile -Raw } else { "" }
         Test-ConsolidationCondition "$composeName 引用完整初始化脚本" ($composeContent -match "database/database-init-complete\.sql") $composeName
-        Test-ConsolidationCondition "$composeName 引用内置模板脚本" ($composeContent -match "database/builtin-templates-complete\.sql") $composeName
     }
 
     Write-ColorOutput "`n[验证结果]" "Blue"
@@ -534,15 +510,12 @@ function Initialize-Database {
     if (-not (Test-Path $script:InitCompleteFile)) {
         throw "找不到完整初始化文件: $script:InitCompleteFile"
     }
-    if (-not (Test-Path $script:TemplatesCompleteFile)) {
-        throw "找不到完整模板文件: $script:TemplatesCompleteFile"
-    }
 
     Write-ColorOutput "📋 执行数据库初始化..." "Cyan"
     Write-ColorOutput "  - 基础配置（用户、权限、扩展）" "Gray"
     Write-ColorOutput "  - TimescaleDB 时序数据库配置" "Gray"
-    Write-ColorOutput "  - 内置巡检模板（18个厂商模板）" "Gray"
     Write-ColorOutput "  - 测试数据种子" "Gray"
+    Write-ColorOutput "  - 内置巡检模板由后端启动时自动同步（不经 SQL 导入）" "Gray"
 
     $connection = Get-DatabaseConnection
     $env:PGPASSWORD = $connection.Password
@@ -574,23 +547,15 @@ function Initialize-Database {
         }
         Write-ColorOutput "[成功] 数据库连接正常" "Green"
 
-        if (-not $TemplatesOnly) {
-            Write-ColorOutput "[信息] 执行基础数据库初始化..." "Blue"
-            $result = Invoke-DatabaseSql -Connection $connection -File $script:InitCompleteFile
-            if ($LASTEXITCODE -ne 0) {
-                throw "基础初始化失败: $result"
-            }
-            Write-ColorOutput "[成功] 基础数据库初始化完成" "Green"
+        Write-ColorOutput "[信息] 执行基础数据库初始化..." "Blue"
+        $result = Invoke-DatabaseSql -Connection $connection -File $script:InitCompleteFile
+        if ($LASTEXITCODE -ne 0) {
+            throw "基础初始化失败: $result"
         }
-
-        if (-not $InitOnly) {
-            Write-ColorOutput "[信息] 执行内置模板初始化..." "Blue"
-            $result = Invoke-DatabaseSql -Connection $connection -File $script:TemplatesCompleteFile
-            if ($LASTEXITCODE -ne 0) {
-                throw "模板初始化失败: $result"
-            }
-            Write-ColorOutput "[成功] 内置模板初始化完成" "Green"
-        }
+        Write-ColorOutput "[成功] 基础数据库初始化完成" "Green"
+        # 内置巡检模板不再由 SQL 导入：后端启动时 EnsureBuiltinTemplates 幂等同步，
+        # SQL 种子会在后端清理旧模板后回灌过时定义（无 metric 字段），导致执行退化。
+        Write-ColorOutput "[信息] 内置巡检模板将在后端启动时自动同步" "Cyan"
 
         Write-ColorOutput "[信息] 验证初始化结果..." "Blue"
         $tableCheck = Invoke-DatabaseSql -Connection $connection -Command "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';"
@@ -598,16 +563,6 @@ function Initialize-Database {
             $tableCount = ($tableCheck | Select-String -Pattern "\d+" | Select-Object -First 1).Matches.Value
             if ($tableCount) {
                 Write-ColorOutput "  数据库表数量: $tableCount" "Gray"
-            }
-        }
-
-        if (-not $InitOnly) {
-            $templateCheck = Invoke-DatabaseSql -Connection $connection -Command "SELECT COUNT(*) FROM inspection_templates WHERE is_default = true;"
-            if ($LASTEXITCODE -eq 0) {
-                $templateCount = ($templateCheck | Select-String -Pattern "\d+" | Select-Object -First 1).Matches.Value
-                if ($templateCount) {
-                    Write-ColorOutput "  内置模板数量: $templateCount" "Gray"
-                }
             }
         }
 

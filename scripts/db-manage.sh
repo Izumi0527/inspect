@@ -5,7 +5,6 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 DATABASE_DIR="$PROJECT_ROOT/database"
 INIT_COMPLETE_FILE="$DATABASE_DIR/database-init-complete.sql"
-TEMPLATES_COMPLETE_FILE="$DATABASE_DIR/builtin-templates-complete.sql"
 
 ACTION=""
 SERVICE="all"
@@ -16,8 +15,6 @@ EMAIL="admin@admin.com"
 ROLE="superadmin"
 FULL_NAME="系统管理员"
 SKIP_MIGRATE=false
-INIT_ONLY=false
-TEMPLATES_ONLY=false
 FORCE=false
 
 color() {
@@ -69,15 +66,12 @@ Options:
       --role <value>                     seed-admin 角色
       --full-name <value>                seed-admin 显示名
       --skip-migrate                     seed-admin 跳过迁移
-      --init-only                        init 仅执行基础初始化
-      --templates-only                   init 仅导入内置模板
       --force                            init/reset 跳过确认提示
   -h, --help                             显示帮助
 
 示例:
   ./scripts/db-manage.sh start
   ./scripts/db-manage.sh init --force
-  ./scripts/db-manage.sh init --init-only
   ./scripts/db-manage.sh verify
   ./scripts/db-manage.sh logs --service postgres
   ./scripts/db-manage.sh seed-admin --username admin --password admin123
@@ -130,14 +124,6 @@ parse_args() {
                 SKIP_MIGRATE=true
                 shift
                 ;;
-            --init-only|-InitOnly)
-                INIT_ONLY=true
-                shift
-                ;;
-            --templates-only|-TemplatesOnly)
-                TEMPLATES_ONLY=true
-                shift
-                ;;
             --force|-Force)
                 FORCE=true
                 shift
@@ -160,9 +146,6 @@ parse_args() {
         postgres|redis|all) ;;
         *) die "--service 仅支持 postgres、redis、all" ;;
     esac
-    if [[ "$INIT_ONLY" == true && "$TEMPLATES_ONLY" == true ]]; then
-        die "--init-only 与 --templates-only 不能同时使用"
-    fi
 }
 
 compose_cmd() {
@@ -339,7 +322,6 @@ verify_database_consolidation() {
 
     section $'\n[文件结构]'
     check_condition "完整初始化脚本存在" "[[ -f \"\$INIT_COMPLETE_FILE\" ]]" "database/database-init-complete.sql"
-    check_condition "完整模板脚本存在" "[[ -f \"\$TEMPLATES_COMPLETE_FILE\" ]]" "database/builtin-templates-complete.sql"
     check_condition "整合报告已归档到 docs/datebase" "[[ -f \"$docs_report\" ]]" "docs/datebase/database-sql-consolidation-report.md"
     check_condition "database 目录不再保留旧完成报告" "[[ ! -f \"$old_report\" ]]" "COMPLETION_REPORT.md 已迁出 database/"
     check_condition "database 目录不再保留旧验证脚本" "[[ ! -f \"$old_verify_script\" ]]" "验证功能已合并到 scripts/db-manage.sh"
@@ -352,18 +334,6 @@ verify_database_consolidation() {
     check_condition "包含保留策略" "grep -q 'add_retention_policy' \"\$INIT_COMPLETE_FILE\"" "TimescaleDB 数据保留策略"
     check_condition "包含带宽单位迁移" "grep -q '1000000\\.0' \"\$INIT_COMPLETE_FILE\"" "bps 到 Mbps 转换"
 
-    section $'\n[模板 SQL 内容]'
-    local template_count
-    template_count="$(count_fixed "INSERT INTO inspection_templates" "$TEMPLATES_COMPLETE_FILE")"
-    check_condition "包含 18 个内置模板插入语句" "[[ \"$template_count\" == \"18\" ]]" "实际数量: $template_count"
-
-    local vendor vendor_marker vendor_count
-    for vendor in Cisco Huawei H3C Juniper Arista Fortinet; do
-        vendor_marker="\"vendors\": [\"$vendor\"]"
-        vendor_count="$(count_fixed "$vendor_marker" "$TEMPLATES_COMPLETE_FILE")"
-        check_condition "包含 ${vendor} 设备模板" "[[ \"$vendor_count\" == \"3\" ]]" "实际数量: $vendor_count"
-    done
-
     section $'\n[脚本与 Docker 引用]'
     check_condition "db-manage.sh 提供 verify 入口" "grep -q 'verify)' \"$SCRIPT_DIR/db-manage.sh\"" "统一入口: scripts/db-manage.sh verify"
 
@@ -371,7 +341,6 @@ verify_database_consolidation() {
     for compose_name in docker-compose.dev.yml docker-compose.prod.yml; do
         compose_file="$PROJECT_ROOT/$compose_name"
         check_condition "$compose_name 引用完整初始化脚本" "grep -q 'database/database-init-complete\\.sql' \"$compose_file\"" "$compose_name"
-        check_condition "$compose_name 引用内置模板脚本" "grep -q 'database/builtin-templates-complete\\.sql' \"$compose_file\"" "$compose_name"
     done
 
     section $'\n[验证结果]'
@@ -460,13 +429,12 @@ invoke_sql() {
 initialize_database() {
     section $'\n🔧 初始化数据库...'
     [[ -f "$INIT_COMPLETE_FILE" ]] || die "找不到完整初始化文件: $INIT_COMPLETE_FILE"
-    [[ -f "$TEMPLATES_COMPLETE_FILE" ]] || die "找不到完整模板文件: $TEMPLATES_COMPLETE_FILE"
 
     info "📋 执行数据库初始化..."
     muted "  - 基础配置（用户、权限、扩展）"
     muted "  - TimescaleDB 时序数据库配置"
-    muted "  - 内置巡检模板（18个厂商模板）"
     muted "  - 测试数据种子"
+    muted "  - 内置巡检模板由后端启动时自动同步（不经 SQL 导入）"
 
     get_database_connection
 
@@ -493,23 +461,15 @@ initialize_database() {
     invoke_sql "SELECT 1;" >/dev/null || die "数据库连接失败"
     success "[成功] 数据库连接正常"
 
-    if [[ "$TEMPLATES_ONLY" != true ]]; then
-        info "[信息] 执行基础数据库初始化..."
-        invoke_sql "" "$INIT_COMPLETE_FILE" >/dev/null || die "基础初始化失败"
-        success "[成功] 基础数据库初始化完成"
-    fi
-
-    if [[ "$INIT_ONLY" != true ]]; then
-        info "[信息] 执行内置模板初始化..."
-        invoke_sql "" "$TEMPLATES_COMPLETE_FILE" >/dev/null || die "模板初始化失败"
-        success "[成功] 内置模板初始化完成"
-    fi
+    info "[信息] 执行基础数据库初始化..."
+    invoke_sql "" "$INIT_COMPLETE_FILE" >/dev/null || die "基础初始化失败"
+    success "[成功] 基础数据库初始化完成"
+    # 内置巡检模板不再由 SQL 导入：后端启动时 EnsureBuiltinTemplates 幂等同步，
+    # SQL 种子会在后端清理旧模板后回灌过时定义（无 metric 字段），导致执行退化。
+    info "[信息] 内置巡检模板将在后端启动时自动同步"
 
     info "[信息] 验证初始化结果..."
     invoke_sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" || true
-    if [[ "$INIT_ONLY" != true ]]; then
-        invoke_sql "SELECT COUNT(*) FROM inspection_templates WHERE is_default = true;" || true
-    fi
 
     success "✅ 数据库初始化完成"
 }

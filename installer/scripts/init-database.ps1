@@ -13,7 +13,6 @@ $adminPassword = New-InitialAdminPassword
 $envFile = Join-Path $InstallRoot "config/.env"
 $runtimeSeedSql = Join-Path $InstallRoot "database/inspect-runtime-seed.sql"
 $databaseInitSql = Join-Path $InstallRoot "database/database-init-complete.sql"
-$templatesSql = Join-Path $InstallRoot "database/builtin-templates-complete.sql"
 
 if (-not (Test-Path -LiteralPath $envFile)) {
     if ($WhatIfPreference) {
@@ -23,10 +22,11 @@ if (-not (Test-Path -LiteralPath $envFile)) {
     }
 }
 
+# 内置巡检模板不在此处灌入：后端启动时 EnsureBuiltinTemplates 幂等同步，
+# SQL 种子会在后端清理旧模板后回灌过时定义（无 metric 字段），导致执行退化。
 $sqlFiles = @(
     @{ LocalPath = $runtimeSeedSql; ContainerPath = "/tmp/inspect-runtime-seed.sql"; Description = "Seed RBAC roles, permissions and default admin user"; Variables = @{ admin_password = $adminPassword } },
-    @{ LocalPath = $databaseInitSql; ContainerPath = "/tmp/database-init-complete.sql"; Description = "Run complete database initialization SQL"; Variables = $null },
-    @{ LocalPath = $templatesSql; ContainerPath = "/tmp/builtin-templates-complete.sql"; Description = "Run built-in inspection templates SQL"; Variables = $null }
+    @{ LocalPath = $databaseInitSql; ContainerPath = "/tmp/database-init-complete.sql"; Description = "Run complete database initialization SQL"; Variables = $null }
 )
 
 foreach ($item in $sqlFiles) {

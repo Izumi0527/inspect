@@ -35,7 +35,6 @@ Source: "docker-compose.installer.yml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "config\.env.example"; DestDir: "{app}\config"; Flags: ignoreversion onlyifdoesntexist
 Source: "database\inspect-runtime-seed.sql"; DestDir: "{app}\database"; Flags: ignoreversion
 Source: "..\database\database-init-complete.sql"; DestDir: "{app}\database"; Flags: ignoreversion
-Source: "..\database\builtin-templates-complete.sql"; DestDir: "{app}\database"; Flags: ignoreversion
 Source: "..\config\postgres\postgresql.conf"; DestDir: "{app}\config\postgres"; Flags: ignoreversion
 Source: "scripts\*.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "scripts\lib\*.ps1"; DestDir: "{app}\scripts\lib"; Flags: ignoreversion

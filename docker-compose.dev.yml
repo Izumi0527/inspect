@@ -24,7 +24,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/database-init-complete.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-      - ./database/builtin-templates-complete.sql:/docker-entrypoint-initdb.d/02-templates.sql:ro
       - ./config/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     ports:

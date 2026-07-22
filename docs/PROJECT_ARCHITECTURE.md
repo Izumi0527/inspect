@@ -452,17 +452,15 @@ sequenceDiagram
 
 ```text
 database/database-init-complete.sql
-database/builtin-templates-complete.sql
 ```
 
 开发数据库容器首次启动时会将上述 SQL 挂载到 PostgreSQL 初始化目录：
 
 ```text
 /docker-entrypoint-initdb.d/01-init.sql
-/docker-entrypoint-initdb.d/02-templates.sql
 ```
 
-Go 后端启动后还会根据 `DB_AUTO_MIGRATE=true` 执行 GORM 迁移，用于补齐模型结构和索引。
+Go 后端启动后还会根据 `DB_AUTO_MIGRATE=true` 执行 GORM 迁移，用于补齐模型结构和索引。内置巡检模板由后端启动时的 `EnsureBuiltinTemplates` 幂等同步（`backend-go/internal/inspection/builtin_templates.go` 为唯一权威来源），不再使用 SQL 种子写入。
 
 ### 7.3 数据类型分层
 

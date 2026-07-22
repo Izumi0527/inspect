@@ -373,14 +373,12 @@ COMMIT;
 -- ==========================================
 -- 第五部分: 内置巡检模板数据
 -- ==========================================
--- 注意: 由于内容过长，这里仅包含核心结构
--- 完整的模板数据请参考原始的 insert-builtin-inspection-templates*.sql 文件
--- ==========================================
 
 BEGIN;
 
--- 内置巡检模板（Huawei / H3C）由 database/builtin-templates-complete.sql 写入，
--- 并在后端启动时由 EnsureBuiltinTemplates 幂等同步，这里不再重复插入示例。
+-- 内置巡检模板不再由 SQL 种子写入：后端启动时 EnsureBuiltinTemplates 幂等同步
+-- （backend-go/internal/inspection/builtin_templates.go 为唯一权威来源），
+-- 避免双源漂移导致过时模板（无 metric 字段）在后端清理后被 SQL 回灌复活。
 
 COMMIT;
 

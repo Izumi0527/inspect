@@ -401,7 +401,6 @@ test_production_files() {
         "backend-go/Dockerfile"
         "frontend/Dockerfile.prod"
         "database/database-init-complete.sql"
-        "database/builtin-templates-complete.sql"
         "config/postgres/postgresql.conf"
     )
 
