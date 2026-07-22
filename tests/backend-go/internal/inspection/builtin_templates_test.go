@@ -27,7 +27,7 @@ func TestBuiltinCheckItems_ExecutableAndMetricValid(t *testing.T) {
 	allowedTypes := map[string]bool{"icmp": true, "ping": true, "snmp": true}
 	validMetrics := map[string]bool{
 		"reachable": true, "cpu": true, "memory": true, "temperature": true,
-		"uptime": true, "interface": true, "bandwidth": true, "system_info": true, "": true,
+		"uptime": true, "interface": true, "bandwidth": true, "system_info": true,
 	}
 
 	for _, it := range items {
