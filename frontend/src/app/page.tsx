@@ -4,8 +4,9 @@ import { Monitor, Network, Shield, TrendingUp, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 
 export default function HomePage() {
+  // html/body 全局 overflow:hidden，落地页自身作为滚动容器，否则超出视口的内容无法滚动查看
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50 to-cyan-100 dark:from-[#181818] dark:via-[#1f1f1f] dark:to-[#252526]">
+    <div className="h-screen overflow-y-auto bg-gradient-to-br from-slate-50 via-teal-50 to-cyan-100 dark:from-[#181818] dark:via-[#1f1f1f] dark:to-[#252526]">
       {/* Hero Section */}
       <section className="relative overflow-hidden px-6 pt-16 pb-24">
         <div className="mx-auto max-w-7xl">
