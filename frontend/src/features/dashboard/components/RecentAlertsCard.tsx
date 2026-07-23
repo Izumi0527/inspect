@@ -4,6 +4,7 @@ import { Shield } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/atoms'
 import { RecentAlert } from '../types'
 import { useAlertSeverityStyles } from '../hooks/useDashboard'
+import { formatDateTimeYMDHM } from '@/utils/formatters'
 
 interface RecentAlertsCardProps {
   alerts: RecentAlert[]
@@ -69,7 +70,7 @@ export const RecentAlertsCard: React.FC<RecentAlertsCardProps> = ({
                       </span>
                     )}
                   </div>
-                  <span className="text-xs text-gray-500 dark:text-muted-foreground whitespace-nowrap">{alert.time}</span>
+                  <span className="text-xs text-gray-500 dark:text-muted-foreground whitespace-nowrap">{formatDateTimeYMDHM(alert.time)}</span>
                 </div>
               ))}
               <Button asChild variant="outline" className="w-full mt-4">

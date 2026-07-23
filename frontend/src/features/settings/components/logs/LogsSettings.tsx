@@ -17,6 +17,7 @@ import { SectionHeader } from '@/features/settings/components/shared/SectionHead
 import { useLogsSettings } from '@/features/settings/hooks/useLogsSettings'
 import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
 import { SettingsConfirmDialog } from '@/features/settings/shell/SettingsConfirmDialog'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 
 export const LogsSettings: React.FC = () => {
   const queryClient = useQueryClient()
@@ -262,7 +263,7 @@ export const LogsSettings: React.FC = () => {
                 </div>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                最近刷新：{syslogStatus?.updatedAt ?? '暂无数据'}
+                最近刷新：{syslogStatus?.updatedAt ? formatDateTimeYMDHMS(syslogStatus.updatedAt) : '暂无数据'}
               </p>
             </div>
           </div>
@@ -519,7 +520,7 @@ export const LogsSettings: React.FC = () => {
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <dt>最近刷新</dt>
-                    <dd className="text-foreground">{syslogStatus?.updatedAt ?? '暂无数据'}</dd>
+                    <dd className="text-foreground">{syslogStatus?.updatedAt ? formatDateTimeYMDHMS(syslogStatus.updatedAt) : '暂无数据'}</dd>
                   </div>
                 </dl>
               </div>
