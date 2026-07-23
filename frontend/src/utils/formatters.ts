@@ -41,7 +41,8 @@ export function formatDate(
 
   switch (format) {
     case 'date':
-      return formatDateYMD(dateObj)
+      // 显示语义的日期跟随时区偏好；构造 API 参数请用 formatDateYMD（恒为本地）
+      return formatDisplayDateYMD(getDisplayParts(dateObj))
 
     case 'time':
       return formatTimeHMS(dateObj)
@@ -215,6 +216,112 @@ export function formatBandwidth(bps: number | string | null | undefined): string
 
 const pad2 = (value: number) => String(value).padStart(2, '0')
 
+// ============================================================================
+// 时间显示偏好（时区 + 12/24 小时制）
+// 由系统设置 system.timezone / user_preference.time_format 驱动，登录后经
+// useDatetimePreferencesSync 注入。未设置时回退浏览器本地时区 + 24 时制。
+// 注意：formatDateYMD 有意不受偏好影响 —— 它被日期筛选/API 参数构造使用，
+// 若随显示时区漂移会导致用户选定的日期错一天。
+// ============================================================================
+
+export interface DatetimeDisplayPreferences {
+  /** IANA 时区名（如 Asia/Shanghai）；缺省为浏览器本地时区 */
+  timeZone?: string
+  /** true = 12 小时制（上午/下午）；缺省 24 小时制 */
+  hour12?: boolean
+}
+
+let datetimeDisplayPrefs: DatetimeDisplayPreferences = {}
+
+export function setDatetimeDisplayPreferences(prefs: DatetimeDisplayPreferences): void {
+  datetimeDisplayPrefs = { ...prefs }
+}
+
+export function resetDatetimeDisplayPreferences(): void {
+  datetimeDisplayPrefs = {}
+}
+
+interface DisplayDateParts {
+  year: number
+  month: number
+  day: number
+  hour: number
+  minute: number
+  second: number
+}
+
+// Intl.DateTimeFormat 构造开销较高且格式化在列表中高频调用，按时区缓存；
+// 无效时区缓存 null，避免每次调用都抛 RangeError。
+const partsFormatterCache = new Map<string, Intl.DateTimeFormat | null>()
+
+const getPartsFormatter = (timeZone: string): Intl.DateTimeFormat | null => {
+  if (partsFormatterCache.has(timeZone)) {
+    return partsFormatterCache.get(timeZone) ?? null
+  }
+  let formatter: Intl.DateTimeFormat | null = null
+  try {
+    formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    })
+  } catch {
+    formatter = null
+  }
+  partsFormatterCache.set(timeZone, formatter)
+  return formatter
+}
+
+const getDisplayParts = (date: Date): DisplayDateParts => {
+  const timeZone = datetimeDisplayPrefs.timeZone?.trim()
+  if (timeZone) {
+    const formatter = getPartsFormatter(timeZone)
+    if (formatter) {
+      const parts: Record<string, string> = {}
+      for (const part of formatter.formatToParts(date)) {
+        parts[part.type] = part.value
+      }
+      return {
+        year: Number(parts.year),
+        month: Number(parts.month),
+        day: Number(parts.day),
+        hour: Number(parts.hour),
+        minute: Number(parts.minute),
+        second: Number(parts.second),
+      }
+    }
+  }
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: date.getDate(),
+    hour: date.getHours(),
+    minute: date.getMinutes(),
+    second: date.getSeconds(),
+  }
+}
+
+const formatDisplayTime = (parts: DisplayDateParts, withSecond: boolean): string => {
+  const tail = withSecond ? `${pad2(parts.minute)}:${pad2(parts.second)}` : pad2(parts.minute)
+  if (datetimeDisplayPrefs.hour12) {
+    const period = parts.hour < 12 ? '上午' : '下午'
+    const hour12 = parts.hour % 12 === 0 ? 12 : parts.hour % 12
+    return `${period} ${pad2(hour12)}:${tail}`
+  }
+  return `${pad2(parts.hour)}:${tail}`
+}
+
+const formatDisplayDateYMD = (parts: DisplayDateParts): string =>
+  `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`
+
+const formatDisplayDateMD = (parts: DisplayDateParts): string =>
+  `${pad2(parts.month)}-${pad2(parts.day)}`
+
 const normalizeDateValue = (value: Date | string | number): Date | null => {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value
@@ -263,55 +370,59 @@ export function formatDateYMD(value: Date | string | number): string {
 }
 
 /**
- * 将日期格式化为 YYYY-MM-DD HH:mm:ss
+ * 将日期格式化为 YYYY-MM-DD HH:mm:ss（受时区/12h 显示偏好影响）
  */
 export function formatDateTimeYMDHMS(value: Date | string | number): string {
   const date = normalizeDateValue(value)
   if (!date) return '无效日期'
-  return `${formatDateYMD(date)} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`
+  const parts = getDisplayParts(date)
+  return `${formatDisplayDateYMD(parts)} ${formatDisplayTime(parts, true)}`
 }
 
 /**
- * 将日期格式化为 YYYY-MM-DD HH:mm
+ * 将日期格式化为 YYYY-MM-DD HH:mm（受时区/12h 显示偏好影响）
  */
 export function formatDateTimeYMDHM(value: Date | string | number): string {
   const date = normalizeDateValue(value)
   if (!date) return '无效日期'
-  return `${formatDateYMD(date)} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+  const parts = getDisplayParts(date)
+  return `${formatDisplayDateYMD(parts)} ${formatDisplayTime(parts, false)}`
 }
 
 /**
- * 将日期格式化为 MM-DD HH:mm:ss
+ * 将日期格式化为 MM-DD HH:mm:ss（受时区/12h 显示偏好影响）
  */
 export function formatDateTimeMDHMS(value: Date | string | number): string {
   const date = normalizeDateValue(value)
   if (!date) return '无效日期'
-  return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`
+  const parts = getDisplayParts(date)
+  return `${formatDisplayDateMD(parts)} ${formatDisplayTime(parts, true)}`
 }
 
 /**
- * 将日期格式化为 MM-DD HH:mm
+ * 将日期格式化为 MM-DD HH:mm（受时区/12h 显示偏好影响）
  */
 export function formatDateTimeMDHM(value: Date | string | number): string {
   const date = normalizeDateValue(value)
   if (!date) return '无效日期'
-  return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+  const parts = getDisplayParts(date)
+  return `${formatDisplayDateMD(parts)} ${formatDisplayTime(parts, false)}`
 }
 
 /**
- * 将日期格式化为 HH:mm
+ * 将日期格式化为 HH:mm（受时区/12h 显示偏好影响）
  */
 export function formatTimeHM(value: Date | string | number): string {
   const date = normalizeDateValue(value)
   if (!date) return '无效日期'
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+  return formatDisplayTime(getDisplayParts(date), false)
 }
 
 /**
- * 将日期格式化为 HH:mm:ss
+ * 将日期格式化为 HH:mm:ss（受时区/12h 显示偏好影响）
  */
 export function formatTimeHMS(value: Date | string | number): string {
   const date = normalizeDateValue(value)
   if (!date) return '无效日期'
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`
+  return formatDisplayTime(getDisplayParts(date), true)
 }
