@@ -300,7 +300,7 @@ export function AuditLogs() {
                     <td className="px-4 py-3 text-xs text-muted-foreground">{formatDate(log.createdAt)}</td>
                     <td className="px-4 py-3 font-medium text-foreground">{log.username}</td>
                     <td className="px-4 py-3">
-                      <Badge variant="outline">{actionLabels[log.action]}</Badge>
+                      <Badge variant="outline">{actionLabels[log.action] || log.action}</Badge>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{log.resource}</td>
                     <td className="px-4 py-3 text-muted-foreground max-w-xs truncate" title={log.details}>
