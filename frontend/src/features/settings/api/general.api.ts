@@ -256,3 +256,16 @@ export const generalApi = {
     return httpClient.put<BackendSetting>(`/settings/general/settings/${key}`, { value })
   },
 }
+
+export interface DisplayPreferencesResponse {
+  timezone: string
+  time_format: '12h' | '24h'
+}
+
+/**
+ * 获取时间显示偏好（登录即可读，无需 system:config 权限）
+ * GET /api/v1/settings/display-preferences
+ */
+export async function fetchDisplayPreferences(): Promise<DisplayPreferencesResponse> {
+  return httpClient.get<DisplayPreferencesResponse>('/settings/display-preferences')
+}

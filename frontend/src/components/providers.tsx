@@ -11,11 +11,17 @@ import { ApiClientError } from '@/lib/api-client'
 import httpInterceptor from '@/services/httpInterceptor'
 import { createLogger } from '@/lib/logger'
 import { useWebSocketConnection } from '@/lib/websocket'
+import { useDatetimePreferencesSync } from '@/hooks/useDatetimePreferencesSync'
 
 const logger = createLogger('providers')
 
 function WebSocketBootstrap() {
   useWebSocketConnection()
+  return null
+}
+
+function DatetimePreferencesSync() {
+  useDatetimePreferencesSync()
   return null
 }
 
@@ -86,6 +92,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <WebSocketBootstrap />
+          <DatetimePreferencesSync />
           <SidebarProvider>
             {children}
             <Toaster

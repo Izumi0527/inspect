@@ -10,6 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { DATETIME_DISPLAY_PREFERENCES_QUERY_KEY } from '@/hooks/useDatetimePreferencesSync'
 import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
 
 export function GeneralSettings() {
@@ -30,14 +32,18 @@ export function GeneralSettings() {
     resetAll,
   } = useGeneralSettings()
 
+  const queryClient = useQueryClient()
+
   const handleSave = useCallback(async () => {
     try {
       await saveAll()
+      // 时区/时间制可能已变更：失效偏好缓存，让全局同步 hook 重新注入显示层
+      void queryClient.invalidateQueries({ queryKey: DATETIME_DISPLAY_PREFERENCES_QUERY_KEY })
       toast.success('保存成功！配置已更新')
     } catch (err) {
       toast.error('保存失败：' + (err as Error).message)
     }
-  }, [saveAll])
+  }, [saveAll, queryClient])
 
   const handleReset = useCallback(() => {
     resetAll()
