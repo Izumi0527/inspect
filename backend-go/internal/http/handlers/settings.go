@@ -13,6 +13,7 @@ type SettingsHandler struct {
 
 func (h SettingsHandler) Register(group *echo.Group) {
 	group.GET("/settings/health", h.GetSettingsHealth)
+	group.GET("/settings/display-preferences", h.GetDisplayPreferences)
 
 	group.GET("/settings/general", h.GetGeneralConfigs)
 	group.GET("/settings/general/stats", h.GetGeneralStats)

@@ -27,6 +27,42 @@ func (h SettingsHandler) GetSettingsHealth(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+// GetDisplayPreferences 返回登录用户可读的时间显示偏好（时区 + 12/24 小时制）。
+// 有意仅要求登录而不要求 system:config：这两项是非敏感配置，且需要对所有用户的
+// 前端时间显示生效；/settings/general 的 system:config 门槛会让普通用户 403。
+func (h SettingsHandler) GetDisplayPreferences(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "settings service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, ""); err != nil {
+		return err
+	}
+
+	ctx := c.Request().Context()
+
+	timezone := "Asia/Shanghai"
+	if item, err := h.Service.GetSetting(ctx, "system.timezone"); err == nil && item != nil {
+		if v, ok := item.Value.(string); ok && strings.TrimSpace(v) != "" {
+			timezone = strings.TrimSpace(v)
+		}
+	}
+
+	timeFormat := "24h"
+	if item, err := h.Service.GetSetting(ctx, "user_preference.time_format"); err == nil && item != nil {
+		if v, ok := item.Value.(string); ok {
+			normalized := strings.ToLower(strings.TrimSpace(v))
+			if normalized == "12h" || normalized == "24h" {
+				timeFormat = normalized
+			}
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{
+		"timezone":    timezone,
+		"time_format": timeFormat,
+	})
+}
+
 func (h SettingsHandler) GetGeneralConfigs(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "settings service not configured")
