@@ -12,7 +12,13 @@ import (
 
 	"github.com/your-org/inspect-system/backend-go/internal/auth"
 	"github.com/your-org/inspect-system/backend-go/internal/authcookie"
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 )
+
+// AuditRecorder 审计日志写入依赖（*settings.Service 满足该接口）。
+type AuditRecorder interface {
+	RecordAuditLog(ctx context.Context, entry settings.AuditEntry)
+}
 
 // PasswordChanger 为自助改密所需的最小依赖：写入新密码（含策略校验、清除强制改密标志、登出会话）。
 // *settings.Service 满足该接口。
@@ -31,6 +37,24 @@ type AuthHandler struct {
 	Service  *auth.Service
 	Settings PasswordChanger
 	Cookie   CookieConfig
+	Audit    AuditRecorder
+}
+
+// recordAuthAudit 记录认证域审计（登录/登出）；Audit 未注入时为空操作。
+func (h AuthHandler) recordAuthAudit(c echo.Context, userID, action, description, status, errMsg string) {
+	if h.Audit == nil {
+		return
+	}
+	h.Audit.RecordAuditLog(c.Request().Context(), settings.AuditEntry{
+		UserID:       userID,
+		Action:       action,
+		ResourceType: "auth",
+		Description:  description,
+		IPAddress:    c.RealIP(),
+		UserAgent:    c.Request().UserAgent(),
+		Status:       status,
+		ErrorMessage: errMsg,
+	})
 }
 
 type loginRequest struct {
@@ -77,11 +101,13 @@ func (h AuthHandler) Login(c echo.Context) error {
 	user, err := h.Service.AuthenticateUser(c.Request().Context(), req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, auth.ErrUserLocked) {
+			h.recordAuthAudit(c, "", "login", "用户 "+req.Username+" 登录被拒：账号已锁定", "failed", "账号已锁定")
 			return echo.NewHTTPError(http.StatusLocked, "账号已锁定，请稍后重试")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to authenticate user")
 	}
 	if user == nil {
+		h.recordAuthAudit(c, "", "login", "用户 "+req.Username+" 登录失败：用户名或密码错误", "failed", "用户名或密码错误")
 		return echo.NewHTTPError(http.StatusUnauthorized, "用户名或密码错误")
 	}
 
@@ -103,6 +129,8 @@ func (h AuthHandler) Login(c echo.Context) error {
 	}
 
 	_ = h.Service.UpdateLastLogin(c.Request().Context(), user.ID, c.RealIP())
+
+	h.recordAuthAudit(c, user.ID, "login", "用户 "+user.Username+" 登录成功", "success", "")
 
 	// S3：下发 httpOnly Cookie（access/refresh）+ 非 httpOnly 的 CSRF Cookie。
 	// 同时保留 body 返回 token，过渡期兼容仍读 body 的旧前端（双模式）。
@@ -179,6 +207,10 @@ func (h AuthHandler) Logout(c echo.Context) error {
 		}
 	}
 	if token != "" {
+		// 尽力解析会话用户以记录登出审计；解析不出（token 已失效）则不记录。
+		if user, uErr := h.Service.GetActiveUserFromToken(c.Request().Context(), token); uErr == nil && user != nil {
+			h.recordAuthAudit(c, user.ID, "logout", "用户 "+user.Username+" 登出", "success", "")
+		}
 		_ = h.Service.LogoutSession(c.Request().Context(), token)
 	}
 	h.clearAuthCookies(c)

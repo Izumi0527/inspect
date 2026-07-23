@@ -198,6 +198,8 @@ func New() (*App, error) {
 
 	// 自助改密复用 settings 的改密逻辑（含密码策略、清除强制改密标志、登出会话）。
 	authHandler.Settings = settingsService
+	// 登录/登出/失败尝试写入审计日志。
+	authHandler.Audit = settingsService
 
 	alertService := alerts.NewService(dbConn, log)
 	alertEvaluator := alerts.NewEvaluator(dbConn, wsManager, settingsService, log)
