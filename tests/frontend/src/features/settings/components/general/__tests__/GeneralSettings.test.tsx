@@ -1,6 +1,7 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { GeneralSettings } from '@/features/settings/components/general/GeneralSettings'
 
 const mockUseGeneralSettings = jest.fn()
@@ -115,7 +116,11 @@ describe('GeneralSettings', () => {
 
   it('不再向壳层注册保存和重置动作，并展示页面级概览与整页保存按钮', async () => {
     const user = userEvent.setup()
-    render(<GeneralSettings />)
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <GeneralSettings />
+      </QueryClientProvider>
+    )
 
     const capabilities = mockUseSettingsTabCapabilities.mock.calls[0][1]
     expect(capabilities.dirty).toBe(true)

@@ -1,6 +1,7 @@
 import React from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { GeneralSettings } from '@/features/settings/components/general/GeneralSettings'
 import { SettingsShellProvider } from '@/features/settings/context/SettingsShellContext'
@@ -129,10 +130,12 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
     }
 
     render(
-      <SettingsShellProvider activeTabKey="general">
-        <GeneralSettings />
-        <ShellToolbar />
-      </SettingsShellProvider>
+      <QueryClientProvider client={new QueryClient()}>
+        <SettingsShellProvider activeTabKey="general">
+          <GeneralSettings />
+          <ShellToolbar />
+        </SettingsShellProvider>
+      </QueryClientProvider>
     )
 
     expect(screen.queryByText('导出配置')).not.toBeInTheDocument()
