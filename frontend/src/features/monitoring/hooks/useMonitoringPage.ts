@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
@@ -306,7 +307,7 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     if (!raw) return null
 
     if (lastUpdateAt) {
-      return lastUpdateAt.toLocaleString()
+      return formatDateTimeYMDHMS(lastUpdateAt)
     }
 
     const fallback = String(raw).trim()

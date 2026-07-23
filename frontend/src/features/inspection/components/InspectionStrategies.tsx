@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { formatDateYMD, formatTimeHM } from '@/utils/formatters'
 import { motion } from 'framer-motion'
 import {
   Plus,
@@ -175,9 +176,9 @@ export const InspectionStrategies: React.FC = () => {
         <div className="text-sm">
           {strategy.nextRunTime ? (
             <div className="flex flex-col">
-              <span>{new Date(strategy.nextRunTime).toLocaleDateString()}</span>
+              <span>{formatDateYMD(strategy.nextRunTime)}</span>
               <span className="text-gray-500 dark:text-gray-400">
-                {new Date(strategy.nextRunTime).toLocaleTimeString()}
+                {formatTimeHM(strategy.nextRunTime)}
               </span>
             </div>
           ) : (

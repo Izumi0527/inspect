@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { formatDateYMD, formatTimeHMS } from '@/utils/formatters'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { useRouter } from 'next/navigation'
@@ -46,7 +47,6 @@ import {
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 import { downloadWithAuth } from '@/utils/download'
 import { Report } from '../types'
-import { formatDateYMD } from '@/utils/formatters'
 import { InspectionReportModal } from './InspectionReportModal'
 import { ReportPreviewModal } from './ReportPreviewModal'
 import { ReportEditModal } from './ReportEditModal'
@@ -325,8 +325,8 @@ export const InspectionReports: React.FC<Props> = ({
           <div className="flex items-center gap-1">
             <Calendar className="w-3 h-3 text-muted-foreground/80" />
             <span>
-              {new Date(report.parameters.dateRange.startDate).toLocaleDateString()} -
-              {new Date(report.parameters.dateRange.endDate).toLocaleDateString()}
+              {formatDateYMD(report.parameters.dateRange.startDate)} -
+              {formatDateYMD(report.parameters.dateRange.endDate)}
             </span>
           </div>
           {report.parameters.devices && (
@@ -345,10 +345,10 @@ export const InspectionReports: React.FC<Props> = ({
         <div className="flex flex-col text-sm">
           <div className="font-medium text-foreground">{report.generatedBy}</div>
           <div className="text-muted-foreground">
-            {new Date(report.createdAt).toLocaleDateString()}
+            {formatDateYMD(report.createdAt)}
           </div>
           <div className="text-muted-foreground/80 text-xs">
-            {new Date(report.createdAt).toLocaleTimeString()}
+            {formatTimeHMS(report.createdAt)}
           </div>
         </div>
       )

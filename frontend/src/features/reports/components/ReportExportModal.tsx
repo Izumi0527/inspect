@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import { motion } from 'framer-motion'
 import {
   FileText,
@@ -109,7 +110,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
       ...prev,
       report_type: template.type,
       title: template.name,
-      subtitle: `生成时间: ${new Date().toLocaleString()}`
+      subtitle: `生成时间: ${formatDateTimeYMDHMS(new Date())}`
     }))
     setCurrentStep('configure')
   }
@@ -435,7 +436,7 @@ export const ReportExportModal: React.FC<ReportExportModalProps> = ({
                 <span className="text-sm text-muted-foreground">过期时间</span>
                 <span className="text-sm font-medium">
                   {exportResult.expires_at ?
-                    new Date(exportResult.expires_at).toLocaleString() :
+                    formatDateTimeYMDHMS(exportResult.expires_at) :
                     '24小时后'
                   }
                 </span>

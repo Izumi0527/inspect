@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { formatDateYMD, formatTimeHMS, formatDateTimeYMDHMS } from '@/utils/formatters'
 import { motion } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -428,11 +429,11 @@ export const InspectionExecutions: React.FC = () => {
         <div className="flex flex-col text-sm">
           <div className="flex items-center gap-1">
             <Calendar className="w-3 h-3 text-gray-400 dark:text-gray-500" />
-            {new Date(execution.startTime).toLocaleDateString()}
+            {formatDateYMD(execution.startTime)}
           </div>
           <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
             <Clock className="w-3 h-3" />
-            {new Date(execution.startTime).toLocaleTimeString()}
+            {formatTimeHMS(execution.startTime)}
           </div>
           {execution.duration && (
             <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -576,7 +577,7 @@ export const InspectionExecutions: React.FC = () => {
               {selectedExecution.strategyName}
             </div>
             <div className="text-xs text-gray-400 dark:text-gray-500">
-              {new Date(selectedExecution.startTime).toLocaleString()}
+              {formatDateTimeYMDHMS(selectedExecution.startTime)}
             </div>
             <div className="text-sm text-gray-500 dark:text-gray-400">
               完成进度：{selectedExecution.progress}% ({selectedExecution.completedDevices}/{selectedExecution.totalDevices})
@@ -668,7 +669,7 @@ export const InspectionExecutions: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">执行时间:</span>
                   <span className="text-muted-foreground">
-                    {new Date(executionToDelete.startTime).toLocaleString()}
+                    {formatDateTimeYMDHMS(executionToDelete.startTime)}
                   </span>
                 </div>
                 <div className="flex justify-between">

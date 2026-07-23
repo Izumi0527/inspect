@@ -8,6 +8,7 @@ import {
   CardContent
 } from '@/components/atoms'
 import { isCheckItemTypeSupported } from '../utils/check-item-support'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import type { InspectionTemplate } from '../types'
 
 interface Props {
@@ -153,7 +154,7 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                         <span className="text-xs text-foreground/90">
-                          {template.createdAt ? new Date(template.createdAt).toLocaleString('zh-CN') : '-'}
+                          {template.createdAt ? formatDateTimeYMDHMS(template.createdAt) : '-'}
                         </span>
                       </div>
                     </div>
@@ -164,7 +165,7 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                         <span className="text-xs text-foreground/90">
-                          {template.updatedAt ? new Date(template.updatedAt).toLocaleString('zh-CN') : '-'}
+                          {template.updatedAt ? formatDateTimeYMDHMS(template.updatedAt) : '-'}
                         </span>
                       </div>
                     </div>

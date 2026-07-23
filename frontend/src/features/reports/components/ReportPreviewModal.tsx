@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import { FileText, Download, Eye, AlertCircle, RefreshCcw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Button, Modal, ModalContent, ModalTitle } from '@/components/atoms'
@@ -254,7 +255,7 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
               </p>
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>报告格式：{report.format.toUpperCase()}</p>
-                <p>创建时间：{new Date(report.createdAt).toLocaleString()}</p>
+                <p>创建时间：{formatDateTimeYMDHMS(report.createdAt)}</p>
                 <p>生成者：{report.generatedBy}</p>
               </div>
             </div>
@@ -266,7 +267,7 @@ export const ReportPreviewModal: React.FC<Props> = ({ report, onClose }) => {
                 当前报表未提供可用的 HTML/PDF 预览，请使用下载功能查看完整内容。
               </p>
               <div className="text-sm text-muted-foreground space-y-1">
-                <p>生成时间：{new Date(report.createdAt).toLocaleString()}</p>
+                <p>生成时间：{formatDateTimeYMDHMS(report.createdAt)}</p>
                 <p>生成者：{report.generatedBy}</p>
               </div>
             </div>

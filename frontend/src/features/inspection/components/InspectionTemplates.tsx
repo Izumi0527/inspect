@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
+import { formatDateYMD } from '@/utils/formatters'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import {
@@ -438,7 +439,7 @@ export const InspectionTemplates: React.FC = () => {
       title: '更新时间',
       render: (_value, template) => (
         <div className="text-sm text-muted-foreground dark:text-gray-300">
-          {template.updatedAt ? new Date(template.updatedAt).toLocaleDateString() : '-'}
+          {template.updatedAt ? formatDateYMD(template.updatedAt) : '-'}
         </div>
       )
     },

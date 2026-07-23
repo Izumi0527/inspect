@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import { formatDateYMD } from '@/utils/formatters'
 import { TrendingUp, Calendar, AlertTriangle, RefreshCw, FileText } from 'lucide-react'
 import {
   Card,
@@ -85,7 +86,7 @@ export const TrendAnalysis: React.FC<Props> = ({
     }
     try {
       const report = await generateReportMutation.mutateAsync({
-        title: `趋势分析报告 - ${new Date().toLocaleDateString()}`,
+        title: `趋势分析报告 - ${formatDateYMD(new Date())}`,
         metrics: selectedMetrics,
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,

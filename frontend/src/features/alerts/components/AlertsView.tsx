@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import { formatTimeHMS } from '@/utils/formatters'
 import { useSearchParams } from 'next/navigation'
 import { AppLayout } from '@/components/layout'
 import {
@@ -512,7 +513,7 @@ const AlertsViewContent: React.FC = () => {
 
   // 格式化最后刷新时间
   const formatLastRefreshed = () => {
-    return lastRefreshed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    return formatTimeHMS(lastRefreshed)
   }
 
   return (
@@ -673,7 +674,7 @@ const AlertsViewContent: React.FC = () => {
                         ? '已关闭自动刷新。'
                         : '列表未自动刷新。'}
                   {realtimePendingAt
-                    ? `（最后一条：${realtimePendingAt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}）`
+                    ? `（最后一条：${formatTimeHMS(realtimePendingAt)}）`
                     : null}
                 </div>
                 <div className="flex items-center gap-2 ml-auto">

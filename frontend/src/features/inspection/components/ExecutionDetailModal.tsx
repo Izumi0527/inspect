@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useEffect } from 'react'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CheckCircle2,
@@ -287,13 +288,13 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                   <div>
                     <span className="text-xs text-muted-foreground">开始时间</span>
                     <p className="text-sm font-medium text-foreground mt-1">
-                      {new Date(execution.startTime).toLocaleString('zh-CN')}
+                      {formatDateTimeYMDHMS(execution.startTime)}
                     </p>
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground">结束时间</span>
                     <p className="text-sm font-medium text-foreground mt-1">
-                      {execution.endTime ? new Date(execution.endTime).toLocaleString('zh-CN') : '-'}
+                      {execution.endTime ? formatDateTimeYMDHMS(execution.endTime) : '-'}
                     </p>
                   </div>
                   <div>

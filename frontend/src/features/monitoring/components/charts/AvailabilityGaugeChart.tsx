@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { TrendingUp, TrendingDown, Minus, Target } from 'lucide-react'
+import { formatDateTimeMDHM } from '@/utils/formatters'
 import type { AvailabilityData } from '../../types'
 
 interface AvailabilityGaugeChartProps {
@@ -125,10 +126,7 @@ export function AvailabilityGaugeChart({
         {data.lastUpdate && (
           <p className="text-[10px] text-muted-foreground/70">
             更新于{' '}
-            {new Date(data.lastUpdate).toLocaleString('zh-CN', {
-              month: '2-digit', day: '2-digit',
-              hour: '2-digit', minute: '2-digit',
-            })}
+            {formatDateTimeMDHM(data.lastUpdate)}
           </p>
         )}
       </div>
