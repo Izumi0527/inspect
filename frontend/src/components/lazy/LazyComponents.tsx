@@ -26,7 +26,8 @@ export const LazyMonitoringView = lazy(() =>
   }))
 )
 
-export const LazyAlertCenter = lazy(() =>
+// 名称与实际组件对齐：/alerts 路由渲染的是 features/alerts 的 AlertsView
+export const LazyAlertsView = lazy(() =>
   import('@/features/alerts/components/AlertsView').then(module => ({
     default: module.AlertsView
   }))
