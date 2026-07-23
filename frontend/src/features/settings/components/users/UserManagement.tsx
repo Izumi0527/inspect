@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { useUserManagement } from '../../hooks/useUserManagement'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -61,10 +62,10 @@ function StatusBadge({ status }: { status: UserStatus }) {
   return <Badge className={className}>{label}</Badge>
 }
 
-// 格式化日期
+// 格式化日期（统一走中央工具，空值语义保留）
 function formatDate(isoString: string | null): string {
   if (!isoString) return '从未登录'
-  return new Date(isoString).toLocaleString('zh-CN')
+  return formatDateTimeYMDHMS(isoString)
 }
 
 export function UserManagement() {

@@ -13,6 +13,7 @@ import { AuditLogDetailDialog } from './AuditLogDetailDialog'
 import { AuditLogFilters } from './AuditLogFilters'
 import { actionLabels } from './audit.constants'
 import { buildAuditDateRangeQuery } from './auditDateRange'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import { toast } from 'react-hot-toast'
 import type { AuditAction, AuditLog } from '../../types/audit.types'
 import type { SettingsStatCardDescriptor } from '@/features/settings/types/shell.types'
@@ -33,9 +34,9 @@ function StatusBadge({ status }: { status: 'success' | 'failed' }) {
   )
 }
 
-// 格式化日期
+// 格式化日期（统一走中央工具）
 function formatDate(isoString: string): string {
-  return new Date(isoString).toLocaleString('zh-CN')
+  return formatDateTimeYMDHMS(isoString)
 }
 
 export function AuditLogs() {

@@ -18,6 +18,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import type { BackupRecord } from '@/features/settings/types/backup.types'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import { toast } from 'react-hot-toast'
 
 interface Props {
@@ -45,17 +46,9 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`
 }
 
-// 格式化时间
+// 格式化时间（统一走中央工具）
 function formatDateTime(isoString: string): string {
-  const date = new Date(isoString)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
+  return formatDateTimeYMDHMS(isoString)
 }
 
 // 格式化备份耗时

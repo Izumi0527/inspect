@@ -22,6 +22,7 @@ import {
 } from '@/components/atoms'
 import { SharedSelect } from '@/components/atoms/shared-select'
 import { CompactPageToolbar, CompactStatCard } from '@/components/shared'
+import { formatDateYMD, formatTimeHMS } from '@/utils/formatters'
 import {
   useInspectionTrends,
   useInspectionStats,
@@ -30,7 +31,6 @@ import {
 } from '../hooks/useInspection'
 import type { InspectionExecution } from '../types'
 import { exportAnalyticsReport } from '../api/inspection.api'
-import { formatDateYMD } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 // Tailwind 动态拼接 class 在生产构建可能被裁剪，这里用静态映射确保样式稳定
@@ -81,25 +81,12 @@ const formatDateLabel = (dateStr: string, period: 'day' | 'week' | 'month'): str
 
 const formatExecutionDate = (dateTime?: string): string => {
   if (!dateTime) return '-'
-  const date = new Date(dateTime)
-  if (Number.isNaN(date.getTime())) return dateTime
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
+  return formatDateYMD(dateTime)
 }
 
 const formatExecutionTime = (dateTime?: string): string => {
   if (!dateTime) return '-'
-  const date = new Date(dateTime)
-  if (Number.isNaN(date.getTime())) return dateTime
-  return date.toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
+  return formatTimeHMS(dateTime)
 }
 
 const formatExecutionDuration = (duration?: number): string => {

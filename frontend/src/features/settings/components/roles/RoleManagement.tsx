@@ -24,12 +24,11 @@ import { RoleFormDialog } from './RoleFormDialog'
 import { RolePermissionsDialog } from './RolePermissionsDialog'
 import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
 import { SettingsConfirmDialog } from '@/features/settings/shell/SettingsConfirmDialog'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 
 const formatDateTime = (iso?: string) => {
   if (!iso) return '-'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('zh-CN')
+  return formatDateTimeYMDHMS(iso)
 }
 
 export function RoleManagement() {

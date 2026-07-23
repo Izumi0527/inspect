@@ -3,6 +3,7 @@
  * 当前路由 `/alerts` 实际使用 `features/alerts/components/AlertsView`。
  */
 import * as React from 'react'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import {
   AlertTriangle,
   Bell,
@@ -82,7 +83,7 @@ const formatDateTime = (value: unknown): string => {
   if (typeof value === 'string' || typeof value === 'number') {
     const date = new Date(value)
     if (!Number.isNaN(date.getTime())) {
-      return date.toLocaleString('zh-CN')
+      return formatDateTimeYMDHMS(date)
     }
   }
   return '-'

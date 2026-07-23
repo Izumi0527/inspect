@@ -10,6 +10,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import type { AuditLog } from '../../types/audit.types'
 import { actionLabels } from './audit.constants'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 
 interface Props {
   open: boolean
@@ -18,7 +19,7 @@ interface Props {
 }
 
 function formatDate(isoString: string): string {
-  return new Date(isoString).toLocaleString('zh-CN')
+  return formatDateTimeYMDHMS(isoString)
 }
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {

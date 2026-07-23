@@ -20,6 +20,7 @@ import { Alert, AlertSeverity, AlertStatus } from '../types'
 import { useAlertStyles } from '../hooks/useAlerts'
 import { addAlertComment, fetchAlert, fetchAlertOperations } from '../api/alerts.api'
 import type { AlertOperation } from '../api/alerts.api'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 
 interface AlertDetailModalProps {
   open: boolean
@@ -201,18 +202,10 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
   const severityInfo = severityConfig[alert.severity]
   const statusInfo = statusConfig[alert.status]
 
-  // 格式化时间
+  // 格式化时间（统一走中央工具，空值占位 '-'）
   const formatDate = (dateStr: string | Date | undefined) => {
     if (!dateStr) return '-'
-    const date = typeof dateStr === 'string' ? new Date(dateStr) : dateStr
-    return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
+    return formatDateTimeYMDHMS(dateStr)
   }
 
   const safeParseTimeMs = (value: string): number => {

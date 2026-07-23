@@ -13,6 +13,7 @@ import { Button } from '@/components/atoms'
 import { Alert } from '../types'
 import { useAlertStyles } from '../hooks/useAlerts'
 import { AlertDetailModal } from './AlertDetailModal'
+import { formatDateTimeYMDHMS } from '@/utils/formatters'
 
 interface AlertListItemProps {
   alert: Alert
@@ -48,9 +49,7 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
   const formatTimestamp = (value: string): string => {
     const raw = String(value ?? '').trim()
     if (!raw) return '-'
-    const date = new Date(raw)
-    if (Number.isNaN(date.getTime())) return raw
-    return date.toLocaleString('zh-CN')
+    return formatDateTimeYMDHMS(raw)
   }
 
   // 阻止复选框点击触发详情弹窗
