@@ -68,6 +68,10 @@ func NewServer(
 		// 强制改密闸：被标记 force_password_change 的用户在改密前不能访问业务端点。
 		api.Use(mw.EnforcePasswordChange(forcePasswordChangeExemptPaths()))
 	}
+	// 审计中间件：对变更类请求按路由规则自动写入审计日志（认证之后，取 context 用户）。
+	if settingsHandler != nil && settingsHandler.Service != nil {
+		api.Use(mw.AuditTrail(settingsHandler.Service))
+	}
 	if authHandler != nil {
 		authHandler.Register(api)
 	}
