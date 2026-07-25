@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/atoms'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
+import { useDisplayPreferences } from '@/hooks/useDatetimePreferencesSync'
 import { NavigationItem } from '../types'
 
 interface SidebarProps {
@@ -36,6 +37,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const canReadLogs = usePermission(Permission.SYSTEM_LOGS)
   const canReadReports = usePermission(Permission.REPORTS_READ)
   const canConfigSystem = usePermission(Permission.SYSTEM_CONFIG)
+
+  // 标题读"通用配置-应用程序名称"（display-preferences，登录即可读），未加载时回退默认
+  const { data: displayPrefs } = useDisplayPreferences()
+  const applicationName = displayPrefs?.application_name?.trim() || '巡检系统'
 
   const navItems: NavigationItem[] = [
     { name: '总览', icon: Home, href: '/dashboard' },
@@ -68,7 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex items-center justify-between border-b border-border/60 p-4">
         {isOpen && (
           <h1 className="text-xl font-bold bg-gradient-to-r from-teal-600 to-cyan-500 bg-clip-text text-transparent">
-            巡检系统
+            {applicationName}
           </h1>
         )}
         <Button

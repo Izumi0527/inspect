@@ -7,6 +7,10 @@ jest.mock('@/lib/contexts/auth-context', () => ({
   usePermission: () => true,
 }))
 
+jest.mock('@/hooks/useDatetimePreferencesSync', () => ({
+  useDisplayPreferences: () => ({ data: undefined }),
+}))
+
 describe('Dashboard Sidebar', () => {
   it('为导航项使用主题变量样式，而不是浅色硬编码类', () => {
     render(

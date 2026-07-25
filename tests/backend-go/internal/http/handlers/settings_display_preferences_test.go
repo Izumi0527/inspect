@@ -50,6 +50,7 @@ func TestGetDisplayPreferences_LoginOnlyWithoutSystemConfigPermission(t *testing
 
 	expectSettingQuery(mock, "system.timezone", "America/New_York")
 	expectSettingQuery(mock, "user_preference.time_format", "12h")
+	expectSettingQuery(mock, "system.application_name", "自定义巡检平台")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/display-preferences", nil)
 	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
@@ -70,6 +71,9 @@ func TestGetDisplayPreferences_LoginOnlyWithoutSystemConfigPermission(t *testing
 	if body["time_format"] != "12h" {
 		t.Fatalf("time_format=%q, want 12h", body["time_format"])
 	}
+	if body["application_name"] != "自定义巡检平台" {
+		t.Fatalf("application_name=%q, want 自定义巡检平台", body["application_name"])
+	}
 }
 
 func TestGetDisplayPreferences_DefaultsWhenSettingsMissing(t *testing.T) {
@@ -78,6 +82,7 @@ func TestGetDisplayPreferences_DefaultsWhenSettingsMissing(t *testing.T) {
 
 	expectSettingQuery(mock, "system.timezone", "")
 	expectSettingQuery(mock, "user_preference.time_format", "")
+	expectSettingQuery(mock, "system.application_name", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/display-preferences", nil)
 	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
@@ -95,6 +100,9 @@ func TestGetDisplayPreferences_DefaultsWhenSettingsMissing(t *testing.T) {
 	}
 	if body["time_format"] != "24h" {
 		t.Fatalf("缺省 time_format=%q, want 24h", body["time_format"])
+	}
+	if body["application_name"] != "网络设备巡检系统" {
+		t.Fatalf("缺省 application_name=%q, want 网络设备巡检系统", body["application_name"])
 	}
 }
 

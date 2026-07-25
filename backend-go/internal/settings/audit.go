@@ -20,6 +20,8 @@ type AuditQuery struct {
 	Keyword   string
 	StartTime *time.Time
 	EndTime   *time.Time
+	// Limit>0 时限制返回行数（导出场景由 report.max_export_records 驱动）。
+	Limit int
 }
 
 func (s *Service) ListAuditLogs(ctx context.Context, query AuditQuery) (AuditLogListResponse, error) {
@@ -201,6 +203,9 @@ func (s *Service) QueryAuditLogs(ctx context.Context, query AuditQuery) ([]Audit
 		querySQL += " WHERE " + filters
 	}
 	querySQL += " ORDER BY l.created_at DESC"
+	if query.Limit > 0 {
+		querySQL += fmt.Sprintf(" LIMIT %d", query.Limit)
+	}
 
 	rows := make([]struct {
 		ID           string

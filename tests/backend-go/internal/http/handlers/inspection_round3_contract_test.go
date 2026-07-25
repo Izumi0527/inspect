@@ -236,79 +236,73 @@ func TestStartTask_ShouldMarkFailedWhenSavingResultFails(t *testing.T) {
 
 	now := time.Now().UTC()
 	runningAt := now.Add(-30 * time.Second)
+	inspectionColumns := []string{
+		"id", "device_id", "template_id", "schedule_id", "name", "trigger", "status", "scheduled_at",
+		"started_at", "completed_at", "duration", "total_checks", "passed_checks", "failed_checks",
+		"warning_checks", "skipped_checks", "error_message", "error_details", "timeout", "retry_count",
+		"max_retries", "created_by", "created_at", "updated_at",
+	}
+	pendingRow := func() *sqlmock.Rows {
+		return sqlmock.NewRows(inspectionColumns).AddRow(
+			1, 101, 5, nil, "任务A", inspection.TriggerManual, inspection.StatusPending, nil,
+			nil, nil, nil, 0, 0, 0, 0, 0, nil, []byte(`{}`), nil, nil, nil, "tester", now, now,
+		)
+	}
+	runningRow := func() *sqlmock.Rows {
+		return sqlmock.NewRows(inspectionColumns).AddRow(
+			1, 101, 5, nil, "任务A", inspection.TriggerManual, inspection.StatusRunning, nil,
+			runningAt, nil, nil, 1, 0, 0, 0, 0, nil, []byte(`{}`), nil, nil, nil, "tester", now, now,
+		)
+	}
+
+	// 1. StartTask handler：读取任务（Pending）
 	mock.ExpectQuery(`SELECT .* FROM "inspections" WHERE id = \$1.*`).
 		WithArgs(1, sqlmock.AnyArg()).
+		WillReturnRows(pendingRow())
+	// 2. StartTask handler：加载模板（1 个启用的 icmp 检查项）
+	mock.ExpectQuery(`SELECT .* FROM "inspection_templates" WHERE id = \$1.*`).
+		WithArgs(5, sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "device_id", "template_id", "schedule_id", "name", "trigger", "status", "scheduled_at",
-			"started_at", "completed_at", "duration", "total_checks", "passed_checks", "failed_checks",
-			"warning_checks", "skipped_checks", "error_message", "error_details", "timeout", "retry_count",
-			"max_retries", "created_by", "created_at", "updated_at",
+			"id", "name", "description", "category", "device_types", "check_items", "is_default", "is_active", "created_at", "updated_at",
 		}).AddRow(
-			1, 101, nil, nil, "任务A", inspection.TriggerManual, inspection.StatusPending, nil,
-			nil, nil, nil, 0, 0, 0, 0, 0, nil, []byte(`{}`), nil, nil, nil, "tester", now, now,
+			5, "基础模板", nil, "basic", []byte(`[]`),
+			[]byte(`[{"name":"连通性检查","type":"icmp","enabled":true}]`),
+			false, true, now, now,
 		))
+	// 3-5. executeInspection：UpdateInspectionStatus(running) = SELECT + UPDATE + SELECT
 	mock.ExpectQuery(`SELECT .* FROM "inspections" WHERE id = \$1.*`).
 		WithArgs(1, sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "device_id", "template_id", "schedule_id", "name", "trigger", "status", "scheduled_at",
-			"started_at", "completed_at", "duration", "total_checks", "passed_checks", "failed_checks",
-			"warning_checks", "skipped_checks", "error_message", "error_details", "timeout", "retry_count",
-			"max_retries", "created_by", "created_at", "updated_at",
-		}).AddRow(
-			1, 101, nil, nil, "任务A", inspection.TriggerManual, inspection.StatusPending, nil,
-			nil, nil, nil, 0, 0, 0, 0, 0, nil, []byte(`{}`), nil, nil, nil, "tester", now, now,
-		))
+		WillReturnRows(pendingRow())
 	mock.ExpectExec(`UPDATE "inspections" SET .* WHERE id = \$[0-9]+`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`SELECT .* FROM "inspections" WHERE id = \$1.*`).
 		WithArgs(1, sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "device_id", "template_id", "schedule_id", "name", "trigger", "status", "scheduled_at",
-			"started_at", "completed_at", "duration", "total_checks", "passed_checks", "failed_checks",
-			"warning_checks", "skipped_checks", "error_message", "error_details", "timeout", "retry_count",
-			"max_retries", "created_by", "created_at", "updated_at",
-		}).AddRow(
-			1, 101, nil, nil, "任务A", inspection.TriggerManual, inspection.StatusRunning, nil,
-			runningAt, nil, nil, 0, 0, 0, 0, 0, nil, []byte(`{}`), nil, nil, nil, "tester", now, now,
-		))
-	mock.ExpectExec(`UPDATE "inspections" SET .* WHERE id = \$[0-9]+`).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+		WillReturnRows(runningRow())
+	// 6. executeInspection：isInspectionCancelled 读取当前状态
 	mock.ExpectQuery(`SELECT .* FROM "inspections" WHERE id = \$1.*`).
 		WithArgs(1, sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "device_id", "template_id", "schedule_id", "name", "trigger", "status", "scheduled_at",
-			"started_at", "completed_at", "duration", "total_checks", "passed_checks", "failed_checks",
-			"warning_checks", "skipped_checks", "error_message", "error_details", "timeout", "retry_count",
-			"max_retries", "created_by", "created_at", "updated_at",
-		}).AddRow(
-			1, 101, nil, nil, "任务A", inspection.TriggerManual, inspection.StatusRunning, nil,
-			runningAt, nil, nil, 2, 0, 0, 0, 0, nil, []byte(`{}`), nil, nil, nil, "tester", now, now,
-		))
+		WillReturnRows(runningRow())
+	// 7. executeInspection：UpdateInspectionStats 初始化总检查数
+	mock.ExpectExec(`UPDATE "inspections" SET .* WHERE id = \$[0-9]+`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	// 8. executeCheckItems：每个检查项前的 isInspectionCancelled
+	mock.ExpectQuery(`SELECT .* FROM "inspections" WHERE id = \$1.*`).
+		WithArgs(1, sqlmock.AnyArg()).
+		WillReturnRows(runningRow())
+	// 9. SaveInspectionResult 失败（本测试的核心契约：保存失败必须把任务标记为 failed）
 	mock.ExpectQuery(`INSERT INTO "inspection_results".*RETURNING "id"`).
 		WillReturnError(assertionSQLFailure{})
+	// 10-12. markInspectionExecutionFailed：UpdateInspectionStatus(failed) = SELECT + UPDATE + SELECT
 	mock.ExpectQuery(`SELECT .* FROM "inspections" WHERE id = \$1.*`).
 		WithArgs(1, sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "device_id", "template_id", "schedule_id", "name", "trigger", "status", "scheduled_at",
-			"started_at", "completed_at", "duration", "total_checks", "passed_checks", "failed_checks",
-			"warning_checks", "skipped_checks", "error_message", "error_details", "timeout", "retry_count",
-			"max_retries", "created_by", "created_at", "updated_at",
-		}).AddRow(
-			1, 101, nil, nil, "任务A", inspection.TriggerManual, inspection.StatusRunning, nil,
-			runningAt, nil, nil, 2, 0, 0, 0, 0, nil, []byte(`{}`), nil, nil, nil, "tester", now, now,
-		))
+		WillReturnRows(runningRow())
 	mock.ExpectExec(`UPDATE "inspections" SET .* WHERE id = \$[0-9]+`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`SELECT .* FROM "inspections" WHERE id = \$1.*`).
 		WithArgs(1, sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "device_id", "template_id", "schedule_id", "name", "trigger", "status", "scheduled_at",
-			"started_at", "completed_at", "duration", "total_checks", "passed_checks", "failed_checks",
-			"warning_checks", "skipped_checks", "error_message", "error_details", "timeout", "retry_count",
-			"max_retries", "created_by", "created_at", "updated_at",
-		}).AddRow(
-			1, 101, nil, nil, "任务A", inspection.TriggerManual, inspection.StatusFailed, nil,
-			runningAt, now, 30, 2, 0, 0, 0, 0, "保存巡检结果失败", []byte(`{}`), nil, nil, nil, "tester", now, now,
+		WillReturnRows(sqlmock.NewRows(inspectionColumns).AddRow(
+			1, 101, 5, nil, "任务A", inspection.TriggerManual, inspection.StatusFailed, nil,
+			runningAt, now, 30, 1, 0, 0, 0, 0, "保存巡检结果失败", []byte(`{}`), nil, nil, nil, "tester", now, now,
 		))
 
 	ctx, rec := newEchoContextWithBody(http.MethodPost, "/api/v1/inspection/tasks/1/start", token, nil)

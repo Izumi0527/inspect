@@ -7,6 +7,7 @@ import (
 	_ "unsafe"
 
 	"go.uber.org/zap"
+	"gorm.io/datatypes"
 
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	handlers "github.com/your-org/inspect-system/backend-go/internal/http/handlers"
@@ -33,28 +34,27 @@ func (f *fakeInspectionSNMPCollector) CollectMetrics(
 	return f.metrics, f.err
 }
 
+// linkname 声明必须与实际函数签名完全一致（*devices.Device）。
+// 此前声明为 *devices.DeviceResponse，依赖两个 struct 字段偏移巧合，
+// 布局漂移即静默取到零值 Tags，测试随构建产物随机失败。
+//
 //go:linkname collectInspectionSNMPMetrics github.com/your-org/inspect-system/backend-go/internal/http/handlers.collectInspectionSNMPMetrics
 func collectInspectionSNMPMetrics(
 	ctx context.Context,
 	collector handlers.SNMPMetricsCollector,
-	device *devices.DeviceResponse,
+	device *devices.Device,
 	probeResult *devices.ProbeResult,
 	logger *zap.Logger,
 ) *devices.SNMPMetrics
 
 func TestCollectInspectionSNMPMetrics_ShouldPassDeviceTagsToCollector(t *testing.T) {
-	tags := map[string]interface{}{
-		"snmp_config": map[string]interface{}{
-			"version": "v3",
-			"port":    2161.0,
-		},
-	}
+	tags := datatypes.JSON(`{"snmp_config":{"version":"v3","port":2161}}`)
 
 	collector := &fakeInspectionSNMPCollector{
 		metrics: &devices.SNMPMetrics{},
 	}
 
-	device := &devices.DeviceResponse{
+	device := &devices.Device{
 		IPAddress: "10.0.0.8",
 		Tags:      tags,
 	}

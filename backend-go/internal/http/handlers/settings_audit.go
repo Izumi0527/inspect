@@ -131,7 +131,11 @@ func (h SettingsHandler) ExportAuditLogs(c echo.Context) error {
 
 	format := strings.ToLower(readString(payload, "format"))
 	if format == "" {
-		format = "csv"
+		// 未指定格式时使用"通用配置-默认导出格式"；审计导出不支持 pdf，回退 csv。
+		format = h.Service.GetDefaultReportFormat(c.Request().Context())
+		if format == "pdf" {
+			format = "csv"
+		}
 	}
 
 	start := readString(payload, "startDate", "start_date")
@@ -163,6 +167,8 @@ func (h SettingsHandler) ExportAuditLogs(c echo.Context) error {
 		Keyword:  readString(filters, "keyword"),
 		StartTime: startTime,
 		EndTime:   endTime,
+		// 单次导出上限由"通用配置-最大导出记录数"驱动，避免全量导出拖垮服务。
+		Limit: h.Service.GetExportRecordLimit(c.Request().Context()),
 	}
 
 	logs, err := h.Service.QueryAuditLogs(c.Request().Context(), query)

@@ -601,7 +601,7 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 
 	// Step 1: Connectivity check
 	if checkConnectivity {
-		results := s.probeService.BatchProbeDevices(ctx, targets, s.maxConcurrent)
+		results := s.probeService.BatchProbeDevices(ctx, targets, s.currentMaxConcurrent(ctx))
 		for _, result := range results {
 			inspectedCount++
 			if result.IcmpReachable {
@@ -709,6 +709,16 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 	}, nil
 }
 
+// currentMaxConcurrent 返回批量设备操作（探测/采集/备份）的并发上限。
+// 动态读取"通用配置-最大并发任务数"（inspection.max_concurrent_tasks），
+// 配置缺失/非法时回退内置默认，改配置无需重启即生效。
+func (s *Service) currentMaxConcurrent(ctx context.Context) int {
+	if s.settingsService == nil {
+		return s.maxConcurrent
+	}
+	return s.settingsService.GetInspectionDefaults(ctx).MaxConcurrent
+}
+
 // collectDeviceMetrics collects detailed SNMP metrics from all devices
 func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []devices.Device, taskID string, total int) int {
 	if s.snmpCollector == nil || s.metricsWriter == nil {
@@ -716,7 +726,7 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 	}
 
 	collected := 0
-	limit := make(chan struct{}, s.maxConcurrent)
+	limit := make(chan struct{}, s.currentMaxConcurrent(ctx))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 

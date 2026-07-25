@@ -19,7 +19,11 @@ func GenerateReportFile(ctx context.Context, db *gorm.DB, outputDir string, repo
 		return "", err
 	}
 
-	normalized := normalizeFormat(format)
+	trimmedFormat := strings.TrimSpace(format)
+	if trimmedFormat == "" {
+		trimmedFormat = defaultReportFormatFromDB(ctx, db)
+	}
+	normalized := normalizeFormat(trimmedFormat)
 	ext := reportFileExtension(normalized)
 	filename := fmt.Sprintf("report-%d-%s.%s", report.ID, time.Now().UTC().Format("20060102-150405"), ext)
 	fullPath := filepath.Join(outputDir, filename)
@@ -51,6 +55,29 @@ func GenerateReportFile(ctx context.Context, db *gorm.DB, outputDir string, repo
 	default:
 		data := buildGenericReportData(report, params)
 		return writeGenericReport(fullPath, normalized, data)
+	}
+}
+
+// defaultReportFormatFromDB 读取"通用配置-默认导出格式"（report.default_format），
+// 供未显式指定格式的报表生成兜底。报表渲染尚不支持 csv，配置为 csv 时映射为
+// excel（同为表格形态）；读取失败/未配置回退 pdf（既有默认行为）。
+func defaultReportFormatFromDB(ctx context.Context, db *gorm.DB) string {
+	if db == nil {
+		return "pdf"
+	}
+	var value string
+	if err := db.WithContext(ctx).
+		Raw(`SELECT COALESCE(value, '') FROM system_settings WHERE key = 'report.default_format' LIMIT 1`).
+		Scan(&value).Error; err != nil {
+		return "pdf"
+	}
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "excel", "csv":
+		return "excel"
+	case "pdf":
+		return "pdf"
+	default:
+		return "pdf"
 	}
 }
 

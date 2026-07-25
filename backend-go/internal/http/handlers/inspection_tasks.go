@@ -227,7 +227,10 @@ func (h InspectionHandler) StartTask(c echo.Context) error {
 		checkItems = decodeJSONMapSlice(template.CheckItems)
 	}
 
-	go h.executeInspection(context.Background(), task, checkItems)
+	go func() {
+		ctx := context.Background()
+		h.executeInspection(ctx, task, checkItems, h.inspectionDefaults(ctx))
+	}()
 	return inspectionOKWithMessage(c, "巡检任务已启动", map[string]interface{}{"id": taskID})
 }
 

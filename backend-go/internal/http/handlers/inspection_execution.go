@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -13,10 +14,21 @@ import (
 
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	"github.com/your-org/inspect-system/backend-go/internal/inspection"
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
-// executeInspectionsAsync 异步执行巡检任务
+// inspectionDefaults 读取"通用配置-巡检配置"的全局默认（并发/超时/重试），
+// Settings 服务未注入时回退内置默认。
+func (h InspectionHandler) inspectionDefaults(ctx context.Context) settings.InspectionDefaults {
+	if h.Settings == nil {
+		return settings.InspectionDefaults{MaxConcurrent: 10, TimeoutSeconds: 30, RetryAttempts: 3}
+	}
+	return h.Settings.GetInspectionDefaults(ctx)
+}
+
+// executeInspectionsAsync 异步执行巡检任务。
+// 多设备任务受"最大并发任务数"（inspection.max_concurrent_tasks）约束并发执行。
 func (h InspectionHandler) executeInspectionsAsync(inspections []inspection.Inspection, templateID *int) {
 	ctx := context.Background()
 
@@ -37,9 +49,20 @@ func (h InspectionHandler) executeInspectionsAsync(inspections []inspection.Insp
 		checkItems = decodeJSONMapSlice(template.CheckItems)
 	}
 
+	defaults := h.inspectionDefaults(ctx)
+	limit := make(chan struct{}, defaults.MaxConcurrent)
+	var wg sync.WaitGroup
 	for _, insp := range inspections {
-		h.executeInspection(ctx, insp, checkItems)
+		insp := insp
+		wg.Add(1)
+		limit <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-limit }()
+			h.executeInspection(ctx, insp, checkItems, defaults)
+		}()
 	}
+	wg.Wait()
 }
 
 func (h InspectionHandler) broadcastScanProgress(inspectionID int, status string, progress int, extra map[string]interface{}) {
@@ -132,10 +155,19 @@ func (h InspectionHandler) markInspectionExecutionFailed(ctx context.Context, in
 	})
 }
 
-// executeInspection 执行单个巡检任务
-func (h InspectionHandler) executeInspection(ctx context.Context, insp inspection.Inspection, checkItems []map[string]interface{}) {
+// executeInspection 执行单个巡检任务。
+// 执行链路（探测/检查项）受任务级 Timeout（缺省为 inspection.default_timeout）约束；
+// 状态与结果落库使用 baseCtx，保证执行超时后仍能写回 timeout 状态。
+func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspection.Inspection, checkItems []map[string]interface{}, defaults settings.InspectionDefaults) {
+	timeoutSeconds := defaults.TimeoutSeconds
+	if insp.Timeout != nil && *insp.Timeout > 0 {
+		timeoutSeconds = *insp.Timeout // 任务级配置优先于全局默认
+	}
+	execCtx, cancelExec := context.WithTimeout(baseCtx, time.Duration(timeoutSeconds)*time.Second)
+	defer cancelExec()
+
 	// 1. 更新状态为 running
-	_, err := h.Service.UpdateInspectionStatus(ctx, insp.ID, inspection.StatusRunning, nil)
+	_, err := h.Service.UpdateInspectionStatus(baseCtx, insp.ID, inspection.StatusRunning, nil)
 	if err != nil {
 		if h.Logger != nil {
 			h.Logger.Error("failed to update inspection status to running", zap.Int("inspection_id", insp.ID), zap.Error(err))
@@ -152,36 +184,44 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	// 会导致 SNMP 探测不可达、所有 SNMP 检查项判失败，使整个巡检任务失败。
 	var device *devices.Device
 	if h.DeviceService != nil {
-		record, derr := h.DeviceService.GetDeviceRecord(ctx, insp.DeviceID)
+		record, derr := h.DeviceService.GetDeviceRecord(baseCtx, insp.DeviceID)
 		if derr != nil {
 			errMsg := fmt.Sprintf("获取设备信息失败: %v", derr)
-			h.Service.UpdateInspectionStatus(ctx, insp.ID, inspection.StatusFailed, &errMsg)
+			h.Service.UpdateInspectionStatus(baseCtx, insp.ID, inspection.StatusFailed, &errMsg)
 			h.broadcastScanProgress(insp.ID, inspection.StatusFailed, 0, map[string]interface{}{"message": errMsg})
 			return
 		}
 		device = &record
 	}
 
-	// 3. 执行探测检查
+	// 3. 执行探测检查；探测失败/不可达时按 inspection.retry_attempts 重试（网络抖动容错）
 	var probeResult *devices.ProbeResult
 	if h.ProbeService != nil && device != nil {
-		result, err := h.ProbeService.ProbeDevice(
-			ctx,
-			device.ID,
-			device.IPAddress,
-			device.SnmpCommunity,
-			device.SnmpVersion,
-			device.SnmpPort,
-			nil,
-			false,
-		)
-		if err == nil {
-			probeResult = &result
+		for attempt := 0; attempt <= defaults.RetryAttempts; attempt++ {
+			result, perr := h.ProbeService.ProbeDevice(
+				execCtx,
+				device.ID,
+				device.IPAddress,
+				device.SnmpCommunity,
+				device.SnmpVersion,
+				device.SnmpPort,
+				nil,
+				false,
+			)
+			if perr == nil {
+				probeResult = &result
+				if result.IcmpReachable || result.SnmpReachable {
+					break
+				}
+			}
+			if execCtx.Err() != nil {
+				break
+			}
 		}
 	}
 
 	// 如果任务已被取消，直接结束
-	if h.isInspectionCancelled(ctx, insp.ID) {
+	if h.isInspectionCancelled(baseCtx, insp.ID) {
 		h.broadcastScanProgress(insp.ID, inspection.StatusCancelled, 0, nil)
 		return
 	}
@@ -191,14 +231,14 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	totalChecks := len(activeCheckItems)
 	if totalChecks == 0 {
 		errMsg := "巡检模板无有效检查项，请检查所选模板的检查项配置"
-		h.markInspectionExecutionFailed(ctx, insp.ID, errMsg, 0, 0)
+		h.markInspectionExecutionFailed(baseCtx, insp.ID, errMsg, 0, 0)
 		return
 	}
 
 	// 初始化总检查数，便于前端/接口计算进度
-	if err := h.Service.UpdateInspectionStats(ctx, insp.ID, totalChecks, 0, 0, 0, 0); err != nil {
+	if err := h.Service.UpdateInspectionStats(baseCtx, insp.ID, totalChecks, 0, 0, 0, 0); err != nil {
 		errMsg := fmt.Sprintf("初始化巡检统计失败: %v", err)
-		h.markInspectionExecutionFailed(ctx, insp.ID, errMsg, 0, totalChecks)
+		h.markInspectionExecutionFailed(baseCtx, insp.ID, errMsg, 0, totalChecks)
 		return
 	}
 
@@ -210,10 +250,10 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	skippedCount := 0
 	var executionErr error
 
-	results := h.executeCheckItems(ctx, insp.ID, device, probeResult, activeCheckItems, func(result inspection.Result, completed int, total int) error {
+	results := h.executeCheckItems(execCtx, baseCtx, insp.ID, device, probeResult, activeCheckItems, defaults.RetryAttempts, func(result inspection.Result, completed int, total int) error {
 		executedCount = completed
 
-		if err := h.Service.SaveInspectionResult(ctx, &result); err != nil {
+		if err := h.Service.SaveInspectionResult(baseCtx, &result); err != nil {
 			executionErr = fmt.Errorf("保存巡检结果失败: %w", err)
 			return executionErr
 		}
@@ -230,7 +270,7 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 		}
 
 		// 实时更新统计与进度
-		if err := h.Service.UpdateInspectionStats(ctx, insp.ID, total, passedCount, failedCount, warningCount, skippedCount); err != nil {
+		if err := h.Service.UpdateInspectionStats(baseCtx, insp.ID, total, passedCount, failedCount, warningCount, skippedCount); err != nil {
 			executionErr = fmt.Errorf("更新巡检统计失败: %w", err)
 			return executionErr
 		}
@@ -247,12 +287,30 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	})
 
 	if executionErr != nil {
-		h.markInspectionExecutionFailed(ctx, insp.ID, executionErr.Error(), executedCount, totalChecks)
+		h.markInspectionExecutionFailed(baseCtx, insp.ID, executionErr.Error(), executedCount, totalChecks)
+		return
+	}
+
+	// 执行超时：写回 timeout 状态（用 baseCtx，不受已超时的 execCtx 影响）
+	if errors.Is(execCtx.Err(), context.DeadlineExceeded) && executedCount < totalChecks {
+		errMsg := fmt.Sprintf("巡检执行超时（%d 秒），已完成 %d/%d 项检查", timeoutSeconds, executedCount, totalChecks)
+		if _, err := h.Service.UpdateInspectionStatus(baseCtx, insp.ID, inspection.StatusTimeout, &errMsg); err != nil && h.Logger != nil {
+			h.Logger.Error("failed to update inspection status to timeout", zap.Int("inspection_id", insp.ID), zap.Error(err))
+		}
+		progress := 0
+		if totalChecks > 0 {
+			progress = int(math.Round(float64(executedCount) / float64(totalChecks) * 100))
+		}
+		h.broadcastScanProgress(insp.ID, inspection.StatusTimeout, progress, map[string]interface{}{
+			"message":          errMsg,
+			"completed_checks": executedCount,
+			"total_checks":     totalChecks,
+		})
 		return
 	}
 
 	// 若执行过程中被取消，保留取消状态，不再覆盖为 completed
-	if h.isInspectionCancelled(ctx, insp.ID) {
+	if h.isInspectionCancelled(baseCtx, insp.ID) {
 		progress := 0
 		if totalChecks > 0 {
 			progress = int(math.Round(float64(executedCount) / float64(totalChecks) * 100))
@@ -265,12 +323,12 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	}
 
 	// 6. 更新巡检统计并完成
-	if err := h.Service.UpdateInspectionStats(ctx, insp.ID, len(results), passedCount, failedCount, warningCount, skippedCount); err != nil {
+	if err := h.Service.UpdateInspectionStats(baseCtx, insp.ID, len(results), passedCount, failedCount, warningCount, skippedCount); err != nil {
 		errMsg := fmt.Sprintf("收口巡检统计失败: %v", err)
-		h.markInspectionExecutionFailed(ctx, insp.ID, errMsg, executedCount, totalChecks)
+		h.markInspectionExecutionFailed(baseCtx, insp.ID, errMsg, executedCount, totalChecks)
 		return
 	}
-	if _, err := h.Service.UpdateInspectionStatus(ctx, insp.ID, inspection.StatusCompleted, nil); err != nil {
+	if _, err := h.Service.UpdateInspectionStatus(baseCtx, insp.ID, inspection.StatusCompleted, nil); err != nil {
 		if h.Logger != nil {
 			h.Logger.Error("failed to update inspection status to completed", zap.Int("inspection_id", insp.ID), zap.Error(err))
 		}
@@ -282,63 +340,91 @@ func (h InspectionHandler) executeInspection(ctx context.Context, insp inspectio
 	})
 }
 
-// executeCheckItems 执行检查项
+// isRetryableCheckFailure 判定检查结果是否为可重试的执行错误：
+// 仅 ErrorMessage 非空的 fail 视为执行错误（连接失败/命令失败等），
+// 业务判定失败（阈值超标、期望值不匹配）不重试。
+func isRetryableCheckFailure(result inspection.Result) bool {
+	return result.Status == "fail" && result.ErrorMessage != nil
+}
+
+// executeCheckItems 执行检查项。
+// execCtx 约束真实执行（SSH/HTTP 等 I/O），超时/取消即停止后续检查；
+// baseCtx 用于取消状态查询等落库读写。ssh/http 检查出现执行错误时按
+// retryAttempts 重试（inspection.retry_attempts）。
 func (h InspectionHandler) executeCheckItems(
-	ctx context.Context,
+	execCtx context.Context,
+	baseCtx context.Context,
 	inspectionID int,
 	device *devices.Device,
 	probeResult *devices.ProbeResult,
 	checkItems []map[string]interface{},
+	retryAttempts int,
 	onResult func(result inspection.Result, completed int, total int) error,
 ) []inspection.Result {
 	results := make([]inspection.Result, 0)
 	total := len(checkItems)
 
 	// 采集 SNMP 指标（如果设备支持 SNMP）
-	snmpMetrics := collectInspectionSNMPMetrics(ctx, h.SNMPCollector, device, probeResult, h.Logger)
+	snmpMetrics := collectInspectionSNMPMetrics(execCtx, h.SNMPCollector, device, probeResult, h.Logger)
 
 	for _, item := range checkItems {
-		if h.isInspectionCancelled(ctx, inspectionID) {
+		if execCtx.Err() != nil {
+			break
+		}
+		if h.isInspectionCancelled(baseCtx, inspectionID) {
 			break
 		}
 
 		itemName := readString(item, "name")
 		itemType := readString(item, "type")
 		itemCategory := readString(item, "category")
+		normalizedType := strings.ToLower(itemType)
 
-		startTime := time.Now().UTC()
-		result := inspection.Result{
-			InspectionID:      inspectionID,
-			CheckItemName:     itemName,
-			CheckItemType:     itemType,
-			CheckItemCategory: stringPtr(itemCategory),
-			StartTime:         &startTime,
-			CreatedAt:         &startTime,
+		runOnce := func() inspection.Result {
+			startTime := time.Now().UTC()
+			result := inspection.Result{
+				InspectionID:      inspectionID,
+				CheckItemName:     itemName,
+				CheckItemType:     itemType,
+				CheckItemCategory: stringPtr(itemCategory),
+				StartTime:         &startTime,
+				CreatedAt:         &startTime,
+			}
+
+			// 根据检查类型执行检查
+			switch normalizedType {
+			case "icmp", "ping":
+				h.executeICMPCheck(&result, probeResult)
+			case "snmp":
+				h.executeSNMPCheck(&result, probeResult, snmpMetrics, item)
+			case "ssh":
+				h.executeSSHCheck(execCtx, &result, device, item)
+			case "http", "https":
+				h.executeHTTPCheck(execCtx, &result, device, item)
+			case "script":
+				// 出于安全，不在服务器执行任意脚本；如需脚本检查请改用 SSH 命令检查。
+				result.Status = "skip"
+				result.Message = stringPtr("脚本类型检查出于安全暂不支持，请改用 SSH 命令检查")
+			default:
+				result.Status = "skip"
+				result.Message = stringPtr(fmt.Sprintf("不支持的检查类型: %s", itemType))
+			}
+
+			endTime := time.Now().UTC()
+			result.EndTime = &endTime
+			execTime := int(endTime.Sub(startTime).Milliseconds())
+			result.ExecutionTime = &execTime
+			return result
 		}
 
-		// 根据检查类型执行检查
-		switch strings.ToLower(itemType) {
-		case "icmp", "ping":
-			h.executeICMPCheck(&result, probeResult)
-		case "snmp":
-			h.executeSNMPCheck(&result, probeResult, snmpMetrics, item)
-		case "ssh":
-			h.executeSSHCheck(ctx, &result, device, item)
-		case "http", "https":
-			h.executeHTTPCheck(ctx, &result, device, item)
-		case "script":
-			// 出于安全，不在服务器执行任意脚本；如需脚本检查请改用 SSH 命令检查。
-			result.Status = "skip"
-			result.Message = stringPtr("脚本类型检查出于安全暂不支持，请改用 SSH 命令检查")
-		default:
-			result.Status = "skip"
-			result.Message = stringPtr(fmt.Sprintf("不支持的检查类型: %s", itemType))
+		result := runOnce()
+		// 仅对 I/O 型检查（ssh/http）的执行错误重试；icmp/snmp 基于任务开始时的
+		// 一次性探测数据，重跑不会产生新结果。
+		if normalizedType == "ssh" || normalizedType == "http" || normalizedType == "https" {
+			for attempt := 0; attempt < retryAttempts && isRetryableCheckFailure(result) && execCtx.Err() == nil; attempt++ {
+				result = runOnce()
+			}
 		}
-
-		endTime := time.Now().UTC()
-		result.EndTime = &endTime
-		execTime := int(endTime.Sub(startTime).Milliseconds())
-		result.ExecutionTime = &execTime
 
 		results = append(results, result)
 		if onResult != nil {

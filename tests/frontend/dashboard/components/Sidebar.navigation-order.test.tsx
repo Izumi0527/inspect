@@ -9,6 +9,10 @@ jest.mock('@/lib/contexts/auth-context', () => ({
   usePermission: (permission: unknown) => mockUsePermission(permission),
 }))
 
+jest.mock('@/hooks/useDatetimePreferencesSync', () => ({
+  useDisplayPreferences: () => ({ data: undefined }),
+}))
+
 jest.mock('@/components/atoms', () => ({
   Button: ({
     children,

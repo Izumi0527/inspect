@@ -27,9 +27,9 @@ func (h SettingsHandler) GetSettingsHealth(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// GetDisplayPreferences 返回登录用户可读的时间显示偏好（时区 + 12/24 小时制）。
-// 有意仅要求登录而不要求 system:config：这两项是非敏感配置，且需要对所有用户的
-// 前端时间显示生效；/settings/general 的 system:config 门槛会让普通用户 403。
+// GetDisplayPreferences 返回登录用户可读的展示偏好（时区 + 12/24 小时制 + 应用名称）。
+// 有意仅要求登录而不要求 system:config：这几项是非敏感配置，且需要对所有用户的
+// 前端展示生效；/settings/general 的 system:config 门槛会让普通用户 403。
 func (h SettingsHandler) GetDisplayPreferences(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "settings service not configured")
@@ -57,9 +57,17 @@ func (h SettingsHandler) GetDisplayPreferences(c echo.Context) error {
 		}
 	}
 
+	applicationName := "网络设备巡检系统"
+	if item, err := h.Service.GetSetting(ctx, "system.application_name"); err == nil && item != nil {
+		if v, ok := item.Value.(string); ok && strings.TrimSpace(v) != "" {
+			applicationName = strings.TrimSpace(v)
+		}
+	}
+
 	return c.JSON(http.StatusOK, map[string]string{
-		"timezone":    timezone,
-		"time_format": timeFormat,
+		"timezone":         timezone,
+		"time_format":      timeFormat,
+		"application_name": applicationName,
 	})
 }
 
@@ -71,14 +79,33 @@ func (h SettingsHandler) GetGeneralConfigs(c echo.Context) error {
 		return err
 	}
 
-	categories := []string{"system", "notification", "email", "inspection", "report", "user_preference"}
+	// 只返回通用配置页真正消费的四个类别；notification/email 走 /settings/notifications。
+	categories := []string{"system", "inspection", "report", "user_preference"}
 	items := make([]settings.SettingItem, 0)
+	hasVersion := false
 	for _, category := range categories {
 		list, err := h.Service.ListSettings(c.Request().Context(), category)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "获取通用配置失败")
 		}
+		for _, item := range list {
+			if item.Key == "system.version" {
+				hasVersion = true
+			}
+		}
 		items = append(items, list...)
+	}
+
+	// system.version 无种子行：合成只读项，取后端二进制版本（安装包构建时注入）。
+	if !hasVersion {
+		items = append(items, settings.SettingItem{
+			Key:      "system.version",
+			Value:    h.Service.AppVersion(),
+			Category: "system",
+			Type:     "string",
+			Label:    "系统版本",
+			Readonly: true,
+		})
 	}
 
 	return c.JSON(http.StatusOK, settings.SettingListResponse{Items: items, Total: len(items)})

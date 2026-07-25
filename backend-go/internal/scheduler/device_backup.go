@@ -78,7 +78,7 @@ func (s *Service) performDeviceBackups(
 		return items, stats, nil
 	}
 
-	workers := s.maxConcurrent
+	workers := s.currentMaxConcurrent(ctx)
 	if workers <= 0 {
 		workers = 5
 	}
