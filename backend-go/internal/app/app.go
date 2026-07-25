@@ -267,6 +267,8 @@ func New() (*App, error) {
 		logsService,
 	)
 	if err := schedulerService.Start(); err != nil {
+		// 提前返回前停止巡检策略调度器，避免 context/goroutine 泄漏（go vet lostcancel）
+		inspectionSchedulerCancel()
 		return nil, err
 	}
 	schedulerHandler := handlers.SchedulerHandler{
@@ -302,6 +304,8 @@ func New() (*App, error) {
 	trapListener.SetAlertCreator(trapAlertBridge)
 
 	if err := trapListener.Start(); err != nil {
+		// 提前返回前停止巡检策略调度器，避免 context/goroutine 泄漏（go vet lostcancel）
+		inspectionSchedulerCancel()
 		return nil, err
 	}
 

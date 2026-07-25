@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -463,7 +464,8 @@ func scanPorts(ctx context.Context, ip string, ports []int) ([]int, map[string]s
 		if ctx.Err() != nil {
 			break
 		}
-		address := fmt.Sprintf("%s:%d", ip, port)
+		// net.JoinHostPort 兼容 IPv6 地址（"%s:%d" 拼接对 IPv6 无效）
+		address := net.JoinHostPort(ip, strconv.Itoa(port))
 		conn, err := net.DialTimeout("tcp", address, 2*time.Second)
 		if err == nil {
 			_ = conn.Close()

@@ -253,7 +253,6 @@ func (s *Service) GetTrafficSummary(ctx context.Context, deviceIPs []string, hou
 		}
 		deviceSummary.InterfaceCount = interfaceCount
 		deviceSummary.SampleCount = sampleCount
-		deviceSummary.LastUpdate = deviceSummary.LastUpdate
 		summary.Devices[device.IPAddress] = deviceSummary
 		summary.TotalInterfaces += interfaceCount
 		summary.TotalDevices++
