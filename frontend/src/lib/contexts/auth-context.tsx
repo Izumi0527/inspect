@@ -335,6 +335,16 @@ export function useRequireAuth(options: UseRequireAuthOptions = {}) {
 }
 
 // 访客限制高阶组件（用于登录页等）
+// 解析登录页 URL 上的 redirect 参数为安全的站内路径。
+// 仅接受以单个 "/" 开头的相对路径（拒绝 //host、/\host 等开放重定向向量）。
+function safeRedirectTarget(): string | null {
+  if (typeof window === 'undefined') return null
+  const raw = new URLSearchParams(window.location.search).get('redirect')
+  if (!raw) return null
+  if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) return null
+  return raw
+}
+
 export function withGuest<P extends object>(
   WrappedComponent: React.ComponentType<P>
 ): React.ComponentType<P> {
@@ -345,8 +355,13 @@ export function withGuest<P extends object>(
     useEffect(() => {
       if (!isLoading && isAuthenticated) {
         // 强制改密用户登录后必须先去改密页：login() 会先 dispatch 登录成功再 push('/change-password')，
-        // 本 effect 随之触发；若此处一律 push('/dashboard') 会覆盖改密跳转（竞态），故同样按 force_password_change 分流。
-        router.push(user?.force_password_change ? '/change-password' : '/dashboard')
+        // 本 effect 随之触发；若此处一律 push 默认页会覆盖改密跳转（竞态），故同样按 force_password_change 分流。
+        if (user?.force_password_change) {
+          router.push('/change-password')
+          return
+        }
+        // 登录前被路由守卫记录的原始页面（?redirect=）优先于默认落点
+        router.push(safeRedirectTarget() ?? '/dashboard')
       }
     }, [isAuthenticated, isLoading, user, router])
 

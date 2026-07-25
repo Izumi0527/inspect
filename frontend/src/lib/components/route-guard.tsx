@@ -325,30 +325,3 @@ export function withAuth<P extends object>(
     )
   }
 }
-
-// 高阶组件：仅游客访问（已登录用户会被重定向）
-export function withGuest<P extends object>(
-  Component: React.ComponentType<P>,
-  redirectTo: string = '/dashboard'
-) {
-  return function GuestOnlyComponent(props: P) {
-    const { isAuthenticated, isLoading } = useAuth()
-    const router = useRouter()
-
-    useEffect(() => {
-      if (!isLoading && isAuthenticated) {
-        router.push(redirectTo)
-      }
-    }, [isAuthenticated, isLoading, router])
-
-    if (isLoading) {
-      return <LoadingScreen />
-    }
-
-    if (isAuthenticated) {
-      return <LoadingScreen />
-    }
-
-    return <Component {...props} />
-  }
-}

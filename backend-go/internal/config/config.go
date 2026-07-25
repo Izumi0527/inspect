@@ -33,7 +33,7 @@ var placeholderSecretMarkers = []string{
 // defaultAppVersion 为应用版本号默认值，可在构建时通过
 // -ldflags "-X 'github.com/your-org/inspect-system/backend-go/internal/config.defaultAppVersion=x.y.z'" 注入。
 // 运行时环境变量 APP_VERSION 优先级更高（见 Load）。
-var defaultAppVersion = "1.1.0"
+var defaultAppVersion = "1.1.1"
 
 type Config struct {
 	Debug      bool   `env:"DEBUG" envDefault:"false"`

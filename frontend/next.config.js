@@ -2,13 +2,26 @@
 // 默认关闭 Next Telemetry，避免构建时通过 git 子进程探测项目 ID（在部分受限环境会触发 spawn EPERM）。
 process.env.NEXT_TELEMETRY_DISABLED = process.env.NEXT_TELEMETRY_DISABLED || '1'
 
+// 版本号权威源是仓库根 VERSION 文件（安装包构建经 NEXT_PUBLIC_APP_VERSION 注入同一来源）；
+// dev 下直接读 VERSION，仓库外构建（无该文件）回退 package.json version。
+function resolveAppVersion() {
+  if (process.env.NEXT_PUBLIC_APP_VERSION) return process.env.NEXT_PUBLIC_APP_VERSION
+  try {
+    const version = require('fs').readFileSync(require('path').join(__dirname, '..', 'VERSION'), 'utf8').trim()
+    if (version) return version
+  } catch {
+    // VERSION 文件不存在（独立构建前端）时走 package.json
+  }
+  return require('./package.json').version
+}
+
 const nextConfig = {
   // React Strict Mode for better development experience
   reactStrictMode: true,
 
-  // 应用版本号（构建时由 NEXT_PUBLIC_APP_VERSION 注入，未注入时回退到 package.json version）
+  // 应用版本号（构建时由 NEXT_PUBLIC_APP_VERSION 注入，未注入时回退 VERSION 文件 / package.json）
   env: {
-    NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION || require('./package.json').version,
+    NEXT_PUBLIC_APP_VERSION: resolveAppVersion(),
   },
   
   // Experimental features for React 19
