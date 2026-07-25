@@ -64,22 +64,22 @@ export function useGeneralSettings() {
   })
 
   // 更新方法
-  const updateBasicInfo = useCallback((field: keyof BasicInfoConfig, value: any) => {
+  const updateBasicInfo = useCallback(<K extends keyof BasicInfoConfig>(field: K, value: BasicInfoConfig[K]) => {
     setBasicInfo((prev) => ({ ...prev, [field]: value }))
     setIsDirty(true)
   }, [])
 
-  const updateInspectionConfig = useCallback((field: keyof InspectionConfig, value: any) => {
+  const updateInspectionConfig = useCallback(<K extends keyof InspectionConfig>(field: K, value: InspectionConfig[K]) => {
     setInspectionConfig((prev) => ({ ...prev, [field]: value }))
     setIsDirty(true)
   }, [])
 
-  const updateReportConfig = useCallback((field: keyof ReportConfig, value: any) => {
+  const updateReportConfig = useCallback(<K extends keyof ReportConfig>(field: K, value: ReportConfig[K]) => {
     setReportConfig((prev) => ({ ...prev, [field]: value }))
     setIsDirty(true)
   }, [])
 
-  const updateUserPreference = useCallback((field: keyof UserPreferenceConfig, value: any) => {
+  const updateUserPreference = useCallback(<K extends keyof UserPreferenceConfig>(field: K, value: UserPreferenceConfig[K]) => {
     setUserPreference((prev) => ({ ...prev, [field]: value }))
     setIsDirty(true)
   }, [])

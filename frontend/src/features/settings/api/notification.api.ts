@@ -10,7 +10,7 @@ import { requireBulkSuccess, type BulkUpdateResponse } from './bulk'
 // 后端配置项的类型
 interface BackendSetting {
   key: string
-  value: any
+  value: unknown
   category: string
 }
 
@@ -66,7 +66,7 @@ export const notificationApi = {
     const allSettings = pruneWebhookSettings(response.items || [])
 
     // 创建一个 key-value 映射
-    const settingsMap = new Map<string, any>()
+    const settingsMap = new Map<string, unknown>()
     allSettings.forEach((setting) => {
       settingsMap.set(setting.key, setting.value)
     })
@@ -131,7 +131,7 @@ export const notificationApi = {
    * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
    */
   updateEmailNotification: async (data: Partial<EmailNotificationConfig>): Promise<void> => {
-    const settings: Record<string, any> = {}
+    const settings: Record<string, unknown> = {}
 
     if (data.enabled !== undefined) settings['notification.email.enabled'] = data.enabled
     if (data.smtpHost !== undefined) settings['notification.email.smtp_host'] = data.smtpHost
@@ -153,7 +153,7 @@ export const notificationApi = {
    * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
    */
   updateSmsNotification: async (data: Partial<SmsNotificationConfig>): Promise<void> => {
-    const settings: Record<string, any> = {}
+    const settings: Record<string, unknown> = {}
 
     if (data.enabled !== undefined) settings['notification.sms.enabled'] = data.enabled
     if (data.provider !== undefined) settings['notification.sms.provider'] = data.provider
@@ -173,7 +173,7 @@ export const notificationApi = {
    * ✅ 使用统一批量配置端点: POST /settings/general/bulk
    */
   saveAll: async (data: NotificationSettingsResponse): Promise<void> => {
-    const settings: Record<string, any> = {
+    const settings: Record<string, unknown> = {
       // Email
       'notification.email.enabled': data.emailNotification.enabled,
       'notification.email.smtp_host': data.emailNotification.smtpHost,

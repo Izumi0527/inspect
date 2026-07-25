@@ -15,6 +15,10 @@ interface RequestOptions {
   showToast?: boolean
 }
 
+/** 从 unknown 错误对象提取展示消息（catch 参数不使用 any） */
+const errorMessage = (err: unknown, fallback: string): string =>
+  err instanceof Error && err.message ? err.message : fallback
+
 /**
  * 日志列表 Hook
  */
@@ -46,8 +50,8 @@ export function useLogs(params: LogQueryParams = {}) {
         total: response?.total || 0
       })
       return true
-    } catch (err: any) {
-      const message = err.message || '加载日志失败'
+    } catch (err) {
+      const message = errorMessage(err, '加载日志失败')
       setError(message)
       if (showToast) {
         toast.error(message)
@@ -71,9 +75,9 @@ export function useLogs(params: LogQueryParams = {}) {
       }
       await loadLogs({ showToast: false })
       return true
-    } catch (err: any) {
+    } catch (err) {
       if (showToast) {
-        toast.error(err.message || '删除日志失败')
+        toast.error(errorMessage(err, '删除日志失败'))
       }
       return false
     }
@@ -88,9 +92,9 @@ export function useLogs(params: LogQueryParams = {}) {
       }
       await loadLogs({ showToast: false })
       return true
-    } catch (err: any) {
+    } catch (err) {
       if (showToast) {
-        toast.error(err.message || '批量删除日志失败')
+        toast.error(errorMessage(err, '批量删除日志失败'))
       }
       return false
     }
@@ -122,8 +126,8 @@ export function useLogStats(hours: number = 24) {
       const data = await logsApi.getLogStatistics(hours)
       setStats(data)
       return true
-    } catch (err: any) {
-      const message = err.message || '加载日志统计失败'
+    } catch (err) {
+      const message = errorMessage(err, '加载日志统计失败')
       setError(message)
       // 不显示toast，避免频繁提示
       return false
@@ -267,8 +271,8 @@ export function useLogCollection() {
         toast.error(result.message || '日志采集失败')
       }
       return result
-    } catch (err: any) {
-      const message = err.message || '日志采集失败'
+    } catch (err) {
+      const message = errorMessage(err, '日志采集失败')
       setProgress(prev => ({ ...prev, [deviceId]: 'error' }))
       toast.error(message)
       return {
@@ -314,8 +318,8 @@ export function useLogCollection() {
         toast.error(result.message || '批量采集失败')
       }
       return result
-    } catch (err: any) {
-      const message = err.message || '批量采集失败'
+    } catch (err) {
+      const message = errorMessage(err, '批量采集失败')
       deviceIds.forEach(id => {
         setProgress(prev => ({ ...prev, [id]: 'error' }))
       })
@@ -392,7 +396,7 @@ export function useRecentLogs(hours: number = 24, limit: number = 50) {
     try {
       const data = await logsApi.getRecentLogs(hours, limit)
       setLogs(data)
-    } catch (err: any) {
+    } catch (err) {
       // 静默处理错误
       console.error('加载最近日志失败:', err)
     } finally {

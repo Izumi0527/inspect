@@ -910,7 +910,7 @@ export const InspectionTemplates: React.FC = () => {
       {/* 模板详情查看 Modal */}
       {viewingTemplate && (
         <TemplateDetailModal
-          template={viewingTemplate as any}
+          template={viewingTemplate}
           onClose={() => setViewingTemplate(null)}
           onEdit={() => {
             setEditingTemplate(viewingTemplate)

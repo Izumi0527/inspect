@@ -17,7 +17,7 @@ interface BasicInfoSectionActions {
 
 interface Props {
   data: BasicInfoConfig
-  onChange: (field: keyof BasicInfoConfig, value: any) => void
+  onChange: <K extends keyof BasicInfoConfig>(field: K, value: BasicInfoConfig[K]) => void
   actions?: BasicInfoSectionActions
 }
 

@@ -19,6 +19,25 @@ import {
  * 已连接真实后端API - 支持实时数据更新
  */
 
+/** 后端监控端点的宽松响应记录（字段名跨后端版本存在别名，逐字段收窄取值） */
+type RawRecord = Record<string, unknown>
+
+/** unknown → 有限数值，失败回退 fallback */
+function toNum(value: unknown, fallback = 0): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+/** unknown → 非空字符串，失败回退 fallback */
+function toStr(value: unknown, fallback = ''): string {
+  return typeof value === 'string' && value !== '' ? value : fallback
+}
+
+/** unknown → 可选字符串（非字符串返回 undefined） */
+function toStrOpt(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
 function normalizeAlertSeverity(raw: unknown): Alert['severity'] {
   const normalized = String(raw ?? '').toLowerCase().trim()
   if (normalized === 'critical') return 'critical'
@@ -195,11 +214,11 @@ export async function fetchSystemPerformanceHistory(
     })
 
     if (Array.isArray(response) && response.length > 0) {
-      return response.map((point: any) => ({
-        timestamp: point.timestamp || point.time || new Date().toISOString(),
-        cpu: point.cpu_usage ?? point.cpu ?? 0,
-        memory: point.memory_usage ?? point.memory ?? 0,
-        network: point.network_traffic ?? point.network ?? 0,
+      return response.map((point: RawRecord) => ({
+        timestamp: toStr(point.timestamp || point.time, new Date().toISOString()),
+        cpu: toNum(point.cpu_usage ?? point.cpu),
+        memory: toNum(point.memory_usage ?? point.memory),
+        network: toNum(point.network_traffic ?? point.network),
       }))
     }
 
@@ -227,9 +246,9 @@ export async function fetchTemperatureHistory(
     })
 
     if (Array.isArray(response) && response.length > 0) {
-      return response.map((point: any) => ({
-        timestamp: point.timestamp || point.time || new Date().toISOString(),
-        devices: point.devices || point.temperatures || {},
+      return response.map((point: RawRecord) => ({
+        timestamp: toStr(point.timestamp || point.time, new Date().toISOString()),
+        devices: (point.devices || point.temperatures || {}) as TemperatureDataPoint['devices'],
       }))
     }
 
@@ -246,13 +265,13 @@ export async function fetchTemperatureHistory(
  */
 export async function fetchDeviceStatusDistribution(): Promise<DeviceStatusDistribution> {
   try {
-    const response = await api.get<any>('/monitoring/devices/distribution')
+    const response = await api.get<RawRecord>('/monitoring/devices/distribution')
 
     return {
-      healthy: response?.healthy ?? response?.normal ?? 0,
-      warning: response?.warning ?? response?.degraded ?? 0,
-      critical: response?.critical ?? response?.error ?? response?.down ?? 0,
-      offline: response?.offline ?? response?.inactive ?? 0,
+      healthy: toNum(response?.healthy ?? response?.normal),
+      warning: toNum(response?.warning ?? response?.degraded),
+      critical: toNum(response?.critical ?? response?.error ?? response?.down),
+      offline: toNum(response?.offline ?? response?.inactive),
     }
   } catch (error) {
     console.error('获取设备状态分布失败:', error)
@@ -266,13 +285,14 @@ export async function fetchDeviceStatusDistribution(): Promise<DeviceStatusDistr
  */
 export async function fetchAvailabilityData(): Promise<AvailabilityData> {
   try {
-    const response = await api.get<any>('/monitoring/availability')
+    const response = await api.get<RawRecord>('/monitoring/availability')
+    const trend = response?.trend
 
     return {
-      current: response?.current ?? response?.availability ?? 0,
-      target: response?.target ?? response?.sla ?? 99.9,
-      trend: response?.trend ?? 'stable',
-      lastUpdate: response?.last_update ?? response?.lastUpdate ?? new Date().toISOString(),
+      current: toNum(response?.current ?? response?.availability),
+      target: toNum(response?.target ?? response?.sla, 99.9),
+      trend: trend === 'up' || trend === 'down' ? trend : 'stable',
+      lastUpdate: toStr(response?.last_update ?? response?.lastUpdate, new Date().toISOString()),
     }
   } catch (error) {
     console.error('获取可用性数据失败:', error)
@@ -297,10 +317,10 @@ export async function fetchNetworkTrafficHistory(
     })
 
     if (Array.isArray(response) && response.length > 0) {
-      return response.map((point: any) => ({
-        timestamp: point.timestamp || point.time || new Date().toISOString(),
-        inbound: point.inbound ?? point.in ?? point.rx ?? 0,
-        outbound: point.outbound ?? point.out ?? point.tx ?? 0,
+      return response.map((point: RawRecord) => ({
+        timestamp: toStr(point.timestamp || point.time, new Date().toISOString()),
+        inbound: toNum(point.inbound ?? point.in ?? point.rx),
+        outbound: toNum(point.outbound ?? point.out ?? point.tx),
       }))
     }
 
@@ -317,24 +337,28 @@ export async function fetchNetworkTrafficHistory(
  */
 export async function fetchStatsV2(): Promise<StatCardData[]> {
   try {
-    const response = await api.get<any>('/monitoring/stats')
+    const response = await api.get<unknown>('/monitoring/stats')
 
     // 如果后端返回数组，直接使用
     if (Array.isArray(response)) {
-      return response.map((stat: any, index: number) => ({
-        id: stat.id || `stat_${index}`,
-        title: stat.title || stat.name || '',
+      return response.map((stat: RawRecord, index: number) => ({
+        id: stat.id ? String(stat.id) : `stat_${index}`,
+        title: toStr(stat.title || stat.name),
         value: String(stat.value ?? '0'),
-        change: stat.change,
-        trend: stat.trend as 'up' | 'down' | 'stable' | undefined,
-        icon: stat.icon,
-        color: stat.color as any,
+        change: toStrOpt(stat.change),
+        trend:
+          stat.trend === 'up' || stat.trend === 'down' || stat.trend === 'stable'
+            ? stat.trend
+            : undefined,
+        icon: toStrOpt(stat.icon),
+        color: toStrOpt(stat.color),
       }))
     }
 
     // 如果后端返回对象，转换为数组
     if (response && typeof response === 'object') {
-      const formatPercentageValue = (value: any): number => {
+      const record = response as RawRecord
+      const formatPercentageValue = (value: unknown): number => {
         return Number(value ?? 0)
       }
 
@@ -342,32 +366,32 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
         {
           id: 'total_devices',
           title: '总设备',
-          value: String(response.total_devices ?? '0'),
+          value: String(record.total_devices ?? '0'),
         },
         {
           id: 'availability',
           title: '可用性',
-          value: `${formatPercentageValue(response.availability).toFixed(1)}%`,
+          value: `${formatPercentageValue(record.availability).toFixed(1)}%`,
         },
         {
           id: 'active_alerts',
           title: '活跃告警',
-          value: String(response.active_alerts ?? '0'),
+          value: String(record.active_alerts ?? '0'),
         },
         {
           id: 'avg_cpu',
           title: '平均 CPU',
-          value: `${formatPercentageValue(response.avg_cpu).toFixed(1)}%`,
+          value: `${formatPercentageValue(record.avg_cpu).toFixed(1)}%`,
         },
         {
           id: 'avg_memory',
           title: '平均内存',
-          value: `${formatPercentageValue(response.avg_memory).toFixed(1)}%`,
+          value: `${formatPercentageValue(record.avg_memory).toFixed(1)}%`,
         },
         {
           id: 'avg_network',
           title: '峰值流量',
-          value: formatBandwidthValue(Number(response.avg_network ?? 0)),
+          value: formatBandwidthValue(Number(record.avg_network ?? 0)),
         },
       ]
     }
@@ -386,23 +410,25 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
  */
 export async function fetchRealtimeAlerts(limit: number = 10): Promise<Alert[]> {
   try {
-    const response = await api.get<any>(`/alerts?page=1&page_size=${limit}&sort_by=created_at&sort_order=desc`)
+    const response = await api.get<unknown>(`/alerts?page=1&page_size=${limit}&sort_by=created_at&sort_order=desc`)
 
-    // 后端返回分页对象，优先使用 alerts 数组
-    const alertList = Array.isArray(response?.alerts) ? response.alerts
-      : Array.isArray(response?.recent) ? response.recent
+    // 后端返回分页对象，优先使用 alerts 数组（response 为数组时属性访问得 undefined，行为不变）
+    const record = (response ?? {}) as RawRecord
+    const alertList: unknown[] = Array.isArray(record.alerts) ? record.alerts
+      : Array.isArray(record.recent) ? record.recent
       : Array.isArray(response) ? response
       : []
 
-    return alertList.slice(0, limit).map((alert: any) => {
+    return alertList.slice(0, limit).map((alertRaw) => {
+      const alert = alertRaw as RawRecord
       const rawTime = alert.time ?? alert.timestamp ?? alert.created_at ?? new Date().toISOString()
       const rawId = alert.id ?? alert.alert_id ?? alert.alertId ?? 0
       const parsedId = typeof rawId === 'number' ? rawId : Number(String(rawId))
       const id = Number.isFinite(parsedId) ? parsedId : 0
       return {
         id,
-        deviceName: alert.device_name ?? alert.device ?? alert.deviceName ?? alert.source ?? '未知设备',
-        message: alert.message ?? alert.description ?? alert.title ?? '',
+        deviceName: toStr(alert.device_name ?? alert.device ?? alert.deviceName ?? alert.source, '未知设备'),
+        message: toStr(alert.message ?? alert.description ?? alert.title),
         severity: normalizeAlertSeverity(alert.severity ?? alert.level ?? alert.priority ?? 'info'),
         time: formatAlertTime(rawTime),
       }

@@ -45,7 +45,7 @@ export const rolesApi = {
    * POST /api/v1/settings/roles
    */
   createRole: async (data: { name: string; displayName?: string; description?: string }): Promise<Role> => {
-    const payload: Record<string, any> = {
+    const payload: Record<string, unknown> = {
       name: data.name,
     }
     if (data.displayName !== undefined) payload.displayName = data.displayName
@@ -63,7 +63,7 @@ export const rolesApi = {
     roleId: string,
     data: { displayName?: string; description?: string; name?: string }
   ): Promise<Role> => {
-    const payload: Record<string, any> = {}
+    const payload: Record<string, unknown> = {}
     if (data.name !== undefined) payload.name = data.name
     if (data.displayName !== undefined) payload.displayName = data.displayName
     if (data.description !== undefined) payload.description = data.description

@@ -13,7 +13,7 @@ import { toast } from 'react-hot-toast'
 
 interface Props {
   data: AuthenticationConfig
-  onChange: (field: keyof AuthenticationConfig, value: any) => void
+  onChange: <K extends keyof AuthenticationConfig>(field: K, value: AuthenticationConfig[K]) => void
 }
 
 const mfaMethodOptions: Array<{ value: 'totp' | 'sms' | 'email'; label: string }> = [

@@ -66,12 +66,12 @@ export function TemplateDetail({
 
   // 按类别分组检查项
   const checkItems = template.checkItems || []
-  const groupedItems = checkItems.reduce((acc: Record<string, CheckItem[]>, item: any) => {
+  const groupedItems = checkItems.reduce((acc: Record<string, CheckItem[]>, item: CheckItem) => {
     const category = item.category || 'other'
     if (!acc[category]) {
       acc[category] = []
     }
-    acc[category].push(item as CheckItem)
+    acc[category].push(item)
     return acc
   }, {} as Record<string, CheckItem[]>)
 

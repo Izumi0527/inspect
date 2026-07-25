@@ -8,7 +8,7 @@ import type { ReportConfig } from '@/features/settings/types/general.types'
 
 interface Props {
   data: ReportConfig
-  onChange: (field: keyof ReportConfig, value: any) => void
+  onChange: <K extends keyof ReportConfig>(field: K, value: ReportConfig[K]) => void
 }
 
 const formatOptions = [

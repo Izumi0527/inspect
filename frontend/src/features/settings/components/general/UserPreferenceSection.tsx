@@ -8,7 +8,7 @@ import type { UserPreferenceConfig } from '@/features/settings/types/general.typ
 
 interface Props {
   data: UserPreferenceConfig
-  onChange: (field: keyof UserPreferenceConfig, value: any) => void
+  onChange: <K extends keyof UserPreferenceConfig>(field: K, value: UserPreferenceConfig[K]) => void
 }
 
 const themeOptions = [

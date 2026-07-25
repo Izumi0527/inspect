@@ -51,6 +51,5 @@ export const useSettingsTabCapabilities = (
       clearCapabilities(tabKey)
     }
     // fingerprint 是 capabilities 的稳定快照（忽略函数/ReactElement），避免无限重渲染
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearCapabilities, fingerprint, setCapabilities, tabKey])
 }

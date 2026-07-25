@@ -18,7 +18,7 @@ interface BackupActionProps {
 
 interface Props {
   data: BackupConfig
-  onChange: (field: keyof BackupConfig, value: any) => void
+  onChange: <K extends keyof BackupConfig>(field: K, value: BackupConfig[K]) => void
   actions?: BackupActionProps
 }
 
@@ -76,7 +76,8 @@ export function BackupConfigSection({ data, onChange, actions }: Props) {
             <ConfigItem label="备份频率" required>
               <ConfigSelect
                 value={data.backupFrequency}
-                onChange={(value) => onChange('backupFrequency', value)}
+                // 选项值域由 frequencyOptions 限定，此处将 string 收窄回字段联合类型
+                onChange={(value) => onChange('backupFrequency', value as BackupConfig['backupFrequency'])}
                 options={frequencyOptions}
               />
             </ConfigItem>

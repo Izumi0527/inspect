@@ -365,7 +365,10 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
 }) => {
   const typeOption = CHECK_TYPE_OPTIONS.find(t => t.value === item.type)
 
-  const updateConfig = (key: string, value: any) => {
+  const updateConfig = <K extends keyof NonNullable<InspectionCheckItem['config']>>(
+    key: K,
+    value: NonNullable<InspectionCheckItem['config']>[K]
+  ) => {
     onUpdate({
       config: { ...item.config, [key]: value }
     })

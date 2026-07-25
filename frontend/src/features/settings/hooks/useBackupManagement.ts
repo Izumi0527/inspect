@@ -47,7 +47,7 @@ export function useBackupManagement() {
   }, [data])
 
   // 更新配置字段
-  const updateConfig = useCallback((field: keyof BackupConfig, value: any) => {
+  const updateConfig = useCallback(<K extends keyof BackupConfig>(field: K, value: BackupConfig[K]) => {
     setConfig((prev) => ({ ...prev, [field]: value }))
     setIsDirty(true)
   }, [])

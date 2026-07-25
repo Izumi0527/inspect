@@ -53,5 +53,5 @@ export interface UpdateSmsNotificationRequest {
 export interface TestResult {
   success: boolean
   message: string
-  details?: any
+  details?: unknown
 }

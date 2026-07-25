@@ -33,7 +33,8 @@ export const usersApi = {
       sortOrder,
     } = params
 
-    const queryParams: Record<string, any> = {
+    // 与 api-client 的 QueryParams 值域对齐（该类型未导出，此处用兼容联合）
+    const queryParams: Record<string, string | number | boolean | undefined> = {
       page,
       page_size: pageSize,
     }
@@ -67,8 +68,8 @@ export const usersApi = {
       username: item.username,
       email: item.email,
       fullName: item.fullName || '',
-      role: (item.role as any) || 'viewer',
-      status: (item.status as any) || 'active',
+      role: (item.role as User['role']) || 'viewer',
+      status: (item.status as User['status']) || 'active',
       lastLoginAt: item.lastLoginAt || null,
       createdAt: item.createdAt || '',
       updatedAt: item.updatedAt || '',
@@ -110,7 +111,7 @@ export const usersApi = {
    * 更新用户信息
    */
   updateUser: async (userId: string, data: UpdateUserRequest): Promise<User> => {
-    const snakeCaseData: Record<string, any> = {}
+    const snakeCaseData: Record<string, unknown> = {}
     if (data.email !== undefined) snakeCaseData.email = data.email
     if (data.fullName !== undefined) snakeCaseData.full_name = data.fullName
     if (data.role !== undefined) snakeCaseData.role = data.role

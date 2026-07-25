@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Button, SimpleInput as Input, SimpleModal, TextArea } from '@/components/atoms'
 import { useCreateCustomReportConfig, useUpdateCustomReportConfig } from '../hooks/useReports'
+import type { CustomReportConfig } from '../types'
 
 type ConfigModalMode = 'create' | 'edit' | 'copy' | 'import'
 
 interface Props {
   isOpen: boolean
   mode: ConfigModalMode
-  initialConfig?: any | null
+  initialConfig?: unknown
   onClose: () => void
 }
 
@@ -39,24 +40,26 @@ const buildDefaultConfigText = () =>
     2
   )
 
-const toRecord = (value: unknown): Record<string, any> => {
+const toRecord = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  return value as Record<string, any>
+  return value as Record<string, unknown>
 }
 
-const buildConfigTextFromInitial = (initial: any | null | undefined) =>
-  JSON.stringify(
+const buildConfigTextFromInitial = (initial: unknown) => {
+  const rec = toRecord(initial)
+  return JSON.stringify(
     {
-      template: initial?.template ?? {},
-      parameters: initial?.parameters ?? {},
-      charts: initial?.charts ?? [],
-      tables: initial?.tables ?? [],
-      filters: initial?.filters ?? [],
-      layout: initial?.layout ?? { columns: 2, sections: [] },
+      template: rec.template ?? {},
+      parameters: rec.parameters ?? {},
+      charts: rec.charts ?? [],
+      tables: rec.tables ?? [],
+      filters: rec.filters ?? [],
+      layout: rec.layout ?? { columns: 2, sections: [] },
     },
     null,
     2
   )
+}
 
 export const CustomReportConfigModal: React.FC<Props> = ({
   isOpen,
@@ -95,10 +98,11 @@ export const CustomReportConfigModal: React.FC<Props> = ({
     setConfigError(null)
 
     if (mode === 'edit' || mode === 'copy') {
+      const initialRec = toRecord(initialConfig)
       const nextName =
-        mode === 'copy' ? `${String(initialConfig?.name || '未命名配置')}（副本）` : String(initialConfig?.name || '')
+        mode === 'copy' ? `${String(initialRec.name || '未命名配置')}（副本）` : String(initialRec.name || '')
       setName(nextName)
-      setDescription(String(initialConfig?.description || ''))
+      setDescription(String(initialRec.description || ''))
       setConfigText(buildConfigTextFromInitial(initialConfig))
       return
     }
@@ -116,7 +120,7 @@ export const CustomReportConfigModal: React.FC<Props> = ({
       return
     }
 
-    let parsedConfig: Record<string, any> = {}
+    let parsedConfig: Record<string, unknown> = {}
     const rawText = String(configText || '').trim()
     if (rawText) {
       try {
@@ -127,6 +131,7 @@ export const CustomReportConfigModal: React.FC<Props> = ({
       }
     }
 
+    // 用户编辑的宽松 JSON 结构按约定形状提交，统一断言为配置类型（后端做最终校验）
     const payload = {
       name: trimmedName,
       description: description.trim(),
@@ -136,11 +141,11 @@ export const CustomReportConfigModal: React.FC<Props> = ({
       tables: Array.isArray(parsedConfig.tables) ? parsedConfig.tables : [],
       filters: Array.isArray(parsedConfig.filters) ? parsedConfig.filters : [],
       layout: parsedConfig.layout ?? { columns: 2, sections: [] },
-    }
+    } as Omit<CustomReportConfig, 'id'>
 
     try {
       if (mode === 'edit') {
-        const configId = String(initialConfig?.id || '').trim()
+        const configId = String(toRecord(initialConfig).id || '').trim()
         if (!configId) {
           toast.error('缺少配置 ID，无法更新')
           return
@@ -149,7 +154,7 @@ export const CustomReportConfigModal: React.FC<Props> = ({
         await updateMutation.mutateAsync({ id: configId, updates: payload })
       } else {
         // create / copy / import
-        await createMutation.mutateAsync(payload as any)
+        await createMutation.mutateAsync(payload)
       }
 
       onClose()

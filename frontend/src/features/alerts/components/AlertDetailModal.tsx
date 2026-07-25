@@ -450,16 +450,16 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
 
         {/* 标签页 */}
         <div className="flex gap-4 mt-4 border-b border-border">
-          {[
+          {([
             { key: 'details', label: '详情', icon: <FileText className="w-4 h-4" /> },
             { key: 'timeline', label: '时间线', icon: <Clock className="w-4 h-4" /> },
             { key: 'comments', label: '备注', icon: <MessageSquare className="w-4 h-4" /> },
-          ].map((tab) => (
+          ] as const).map((tab) => (
             <motion.button
               key={tab.key}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => setActiveTab(tab.key as any)}
+              onClick={() => setActiveTab(tab.key)}
               className={cn(
                 'flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors border-b-2',
                 activeTab === tab.key

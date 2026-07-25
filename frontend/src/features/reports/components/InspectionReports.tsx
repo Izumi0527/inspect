@@ -545,7 +545,7 @@ export const InspectionReports: React.FC<Props> = ({
           }
         ].map((item) => {
           const colors = colorMap[item.color as keyof typeof colorMap]
-          const disabled = !!(item as any).disabled
+          const disabled = !!item.disabled
           return (
             <Card
               key={item.title}

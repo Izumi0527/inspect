@@ -10,7 +10,7 @@ import { requireBulkSuccess, type BulkUpdateResponse } from './bulk'
 // 后端配置项的类型
 interface BackendSetting {
   key: string
-  value: any
+  value: unknown
   category: string
 }
 
@@ -111,7 +111,7 @@ export const securityApi = {
     const allSettings = response.items || []
 
     // 创建一个 key-value 映射
-    const settingsMap = new Map<string, any>()
+    const settingsMap = new Map<string, unknown>()
     allSettings.forEach((setting) => {
       settingsMap.set(setting.key, setting.value)
     })
@@ -165,7 +165,7 @@ export const securityApi = {
    * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
    */
   updateSessionManagement: async (data: Partial<SessionManagementConfig>): Promise<void> => {
-    const settings: Record<string, any> = {}
+    const settings: Record<string, unknown> = {}
 
     if (data.sessionTimeout !== undefined) settings['security.session.timeout'] = data.sessionTimeout
     if (data.autoLogoutEnabled !== undefined) settings['security.session.auto_logout_enabled'] = data.autoLogoutEnabled
@@ -187,7 +187,7 @@ export const securityApi = {
    * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
    */
   updatePasswordPolicy: async (data: Partial<PasswordPolicyConfig>): Promise<void> => {
-    const settings: Record<string, any> = {}
+    const settings: Record<string, unknown> = {}
 
     if (data.minLength !== undefined) settings['security.password.min_length'] = data.minLength
     if (data.requireUppercase !== undefined) settings['security.password.require_uppercase'] = data.requireUppercase
@@ -213,7 +213,7 @@ export const securityApi = {
    * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
    */
   updateAuthentication: async (data: Partial<AuthenticationConfig>): Promise<void> => {
-    const settings: Record<string, any> = {}
+    const settings: Record<string, unknown> = {}
 
     if (data.mfaEnabled !== undefined) settings['security.auth.mfa_enabled'] = data.mfaEnabled
     if (data.mfaMethods !== undefined) settings['security.auth.mfa_methods'] = data.mfaMethods
@@ -234,7 +234,7 @@ export const securityApi = {
    * ✅ 使用统一批量配置端点: POST /settings/general/bulk
    */
   saveAll: async (data: SecuritySettingsResponse): Promise<void> => {
-    const settings: Record<string, any> = {
+    const settings: Record<string, unknown> = {
       // 会话管理
       'security.session.timeout': data.sessionManagement.sessionTimeout,
       'security.session.auto_logout_enabled': data.sessionManagement.autoLogoutEnabled,

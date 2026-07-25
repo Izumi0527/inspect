@@ -14,7 +14,8 @@ import {
 } from '../api/reports.api'
 import {
   Report,
-  ReportParameters
+  ReportParameters,
+  CustomReportConfig
 } from '../types'
 
 // 报表管理Hooks
@@ -316,7 +317,7 @@ export const useUpdateCustomReportConfig = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Record<string, any> }) =>
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<CustomReportConfig> }) =>
       customReportsApi.updateCustomReportConfig(id, updates),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['reports', 'custom', 'configs'] })

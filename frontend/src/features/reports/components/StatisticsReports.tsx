@@ -161,7 +161,7 @@ export const StatisticsReports: React.FC<Props> = ({
       { name: '较差', min: 0, max: 60, color: '#EF4444', count: 0 }
     ]
 
-    statisticsData.performanceStats.byDevice.forEach((device: any) => {
+    statisticsData.performanceStats.byDevice.forEach((device: { metrics?: { availability?: number } }) => {
       const availability = device.metrics?.availability || 0
       for (const range of scoreRanges) {
         if (availability >= range.min && availability < range.max) {
@@ -182,15 +182,28 @@ export const StatisticsReports: React.FC<Props> = ({
   const rankingTableData = useMemo(() => {
     if (!rankingsData || !Array.isArray(rankingsData)) return []
 
-    return rankingsData.slice(0, 10).map((device: any, index: number) => ({
-      rank: index + 1,
-      name: device.deviceName || device.device_name || `Device-${device.deviceId}`,
-      type: device.deviceType || device.device_type || '-',
-      availability: device.metrics?.availability || 0,
-      score: device.ranking || 0,
-      status: device.metrics?.availability >= 98 ? '优秀' :
-              device.metrics?.availability >= 95 ? '良好' : '一般'
-    }))
+    // 排名接口的宽松响应结构（字段名存在 camel/snake 别名）
+    interface DeviceRankingRaw {
+      deviceId?: string | number
+      deviceName?: string
+      device_name?: string
+      deviceType?: string
+      device_type?: string
+      ranking?: number
+      metrics?: { availability?: number }
+    }
+
+    return rankingsData.slice(0, 10).map((device: DeviceRankingRaw, index: number) => {
+      const availability = device.metrics?.availability ?? 0
+      return {
+        rank: index + 1,
+        name: device.deviceName || device.device_name || `Device-${device.deviceId}`,
+        type: device.deviceType || device.device_type || '-',
+        availability,
+        score: device.ranking || 0,
+        status: availability >= 98 ? '优秀' : availability >= 95 ? '良好' : '一般'
+      }
+    })
   }, [rankingsData])
 
   // KPI 指标卡片数据

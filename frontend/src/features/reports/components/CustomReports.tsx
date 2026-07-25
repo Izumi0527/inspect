@@ -543,7 +543,7 @@ export const CustomReports: React.FC<Props> = ({
 
   const handleImportTemplate = async (template: ReportTemplate) => {
     try {
-      await createConfig.mutateAsync(buildConfigPayloadFromTemplate(template) as any)
+      await createConfig.mutateAsync(buildConfigPayloadFromTemplate(template) as Omit<CustomReportConfig, 'id'>)
       setTemplateImportOpen(false)
     } catch (error) {
       console.error('导入报表模板失败:', error)
@@ -552,7 +552,7 @@ export const CustomReports: React.FC<Props> = ({
 
   const handleSaveBuilderConfig = async (payload: Omit<CustomReportConfig, 'id'>) => {
     try {
-      await createConfig.mutateAsync(payload as any)
+      await createConfig.mutateAsync(payload)
       setBuilderOpen(false)
     } catch (error) {
       console.error('保存生成器配置失败:', error)

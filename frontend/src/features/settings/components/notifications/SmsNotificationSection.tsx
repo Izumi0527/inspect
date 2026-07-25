@@ -13,7 +13,7 @@ import { toast } from 'react-hot-toast'
 
 interface Props {
   data: SmsNotificationConfig
-  onChange: (field: keyof SmsNotificationConfig, value: any) => void
+  onChange: <K extends keyof SmsNotificationConfig>(field: K, value: SmsNotificationConfig[K]) => void
   onTest: (phone: string) => Promise<{ success: boolean; message: string }>
   isTesting?: boolean
 }

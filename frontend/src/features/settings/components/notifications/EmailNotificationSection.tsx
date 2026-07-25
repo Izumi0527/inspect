@@ -19,7 +19,7 @@ interface EmailNotificationActions {
 
 interface Props {
   data: EmailNotificationConfig
-  onChange: (field: keyof EmailNotificationConfig, value: any) => void
+  onChange: <K extends keyof EmailNotificationConfig>(field: K, value: EmailNotificationConfig[K]) => void
   onTest: (email: string) => Promise<{ success: boolean; message: string }>
   isTesting?: boolean
   actions?: EmailNotificationActions

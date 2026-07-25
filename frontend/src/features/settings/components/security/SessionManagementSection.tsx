@@ -9,7 +9,7 @@ import type { SessionManagementConfig } from '@/features/settings/types/security
 
 interface Props {
   data: SessionManagementConfig
-  onChange: (field: keyof SessionManagementConfig, value: any) => void
+  onChange: <K extends keyof SessionManagementConfig>(field: K, value: SessionManagementConfig[K]) => void
 }
 
 export function SessionManagementSection({ data, onChange }: Props) {

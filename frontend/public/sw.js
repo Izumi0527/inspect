@@ -1,5 +1,4 @@
 // Service Worker for PWA offline functionality
-const CACHE_NAME = 'inspect-system-v1.0.1'
 const STATIC_CACHE = 'static-cache-v1'
 const DYNAMIC_CACHE = 'dynamic-cache-v1'
 
@@ -73,8 +72,7 @@ self.addEventListener('activate', (event) => {
 // 拦截请求 - 缓存策略
 self.addEventListener('fetch', (event) => {
   const { request } = event
-  const url = new URL(request.url)
-  
+
   // 跳过非HTTP(S)请求
   if (request.url.startsWith('chrome-extension://') || 
       !request.url.startsWith('http')) {
@@ -212,7 +210,7 @@ async function staleWhileRevalidateStrategy(request) {
 
 // 处理消息
 self.addEventListener('message', (event) => {
-  const { type, payload } = event.data
+  const { type } = event.data
   
   switch (type) {
     case 'SKIP_WAITING':

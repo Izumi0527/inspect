@@ -1,3 +1,3 @@
 declare module '@visx/event' {
-  export const localPoint: (...args: any[]) => { x: number; y: number } | null
+  export const localPoint: (...args: unknown[]) => { x: number; y: number } | null
 }

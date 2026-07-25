@@ -15,7 +15,7 @@ interface LogEntry {
   level: LogLevel;
   module: string;
   message: string;
-  data?: any;
+  data?: unknown;
   requestId?: string;
 }
 
@@ -50,17 +50,17 @@ class Logger {
    */
   createModuleLogger(module: string) {
     return {
-      debug: (message: string, data?: any) => this.log(LogLevel.DEBUG, module, message, data),
-      info: (message: string, data?: any) => this.log(LogLevel.INFO, module, message, data),
-      warn: (message: string, data?: any) => this.log(LogLevel.WARN, module, message, data),
-      error: (message: string, data?: any) => this.log(LogLevel.ERROR, module, message, data),
+      debug: (message: string, data?: unknown) => this.log(LogLevel.DEBUG, module, message, data),
+      info: (message: string, data?: unknown) => this.log(LogLevel.INFO, module, message, data),
+      warn: (message: string, data?: unknown) => this.log(LogLevel.WARN, module, message, data),
+      error: (message: string, data?: unknown) => this.log(LogLevel.ERROR, module, message, data),
     };
   }
 
   /**
    * 核心日志记录方法
    */
-  private log(level: LogLevel, module: string, message: string, data?: any) {
+  private log(level: LogLevel, module: string, message: string, data?: unknown) {
     if (level < this.currentLevel) {
       return;
     }
@@ -209,21 +209,21 @@ class Logger {
   /**
    * 记录性能指标
    */
-  logPerformance(name: string, duration: number, details?: any) {
+  logPerformance(name: string, duration: number, details?: unknown) {
     this.log(LogLevel.INFO, 'performance', `${name} took ${duration}ms`, details);
   }
 
   /**
    * 记录用户操作
    */
-  logUserAction(action: string, details?: any) {
+  logUserAction(action: string, details?: unknown) {
     this.log(LogLevel.INFO, 'user_action', action, details);
   }
 
   /**
    * 记录API调用
    */
-  logApiCall(method: string, url: string, status: number, duration: number, details?: any) {
+  logApiCall(method: string, url: string, status: number, duration: number, details?: unknown) {
     const level = status >= 400 ? LogLevel.ERROR : LogLevel.DEBUG;
     this.log(level, 'api', `${method} ${url} ${status} (${duration}ms)`, details);
   }
@@ -240,11 +240,11 @@ export const clearRequestId = () => logger.clearRequestId();
 export const getLogs = () => logger.getLogs();
 export const clearLogs = () => logger.clearLogs();
 export const exportLogs = () => logger.exportLogs();
-export const logPerformance = (name: string, duration: number, details?: any) =>
+export const logPerformance = (name: string, duration: number, details?: unknown) =>
   logger.logPerformance(name, duration, details);
-export const logUserAction = (action: string, details?: any) =>
+export const logUserAction = (action: string, details?: unknown) =>
   logger.logUserAction(action, details);
-export const logApiCall = (method: string, url: string, status: number, duration: number, details?: any) =>
+export const logApiCall = (method: string, url: string, status: number, duration: number, details?: unknown) =>
   logger.logApiCall(method, url, status, duration, details);
 
 export default logger;

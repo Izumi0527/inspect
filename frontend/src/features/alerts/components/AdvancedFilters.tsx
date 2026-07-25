@@ -136,7 +136,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
   }
 
   // 处理日期范围预设变更
-  const handleDateRangePresetChange = (preset: string) => {
+  const handleDateRangePresetChange = (preset: NonNullable<AdvancedFilterValues['dateRangePreset']>) => {
     if (preset === 'all') {
       updateFilter('dateRange', undefined)
       updateFilter('dateRangePreset', 'all')
@@ -150,7 +150,7 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
 
     const range = calculateDateRange(preset)
     updateFilter('dateRange', range)
-    updateFilter('dateRangePreset', preset as any)
+    updateFilter('dateRangePreset', preset)
   }
 
   // 统计已应用的过滤条件数量

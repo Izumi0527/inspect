@@ -170,7 +170,8 @@ export const logsSettingsApi = {
       retention_days: options.retentionDays,
     })
 
-    const raw = (resp as any)?.deleted_count ?? (resp as any)?.deletedCount ?? 0
+    const respObj = resp as { deleted_count?: unknown; deletedCount?: unknown } | null | undefined
+    const raw = respObj?.deleted_count ?? respObj?.deletedCount ?? 0
     return { deletedCount: typeof raw === 'number' && Number.isFinite(raw) ? raw : 0 }
   },
 }

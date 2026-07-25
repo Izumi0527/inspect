@@ -88,7 +88,7 @@ export const generalApi = {
    * ✅ 使用新的统一 API 端点
    */
   updateBasicInfo: async (data: Partial<BasicInfoConfig>): Promise<void> => {
-    const updates: Array<Promise<any>> = []
+    const updates: Array<Promise<unknown>> = []
 
     if (data.applicationName !== undefined) {
       updates.push(
@@ -115,7 +115,7 @@ export const generalApi = {
    * ✅ 使用新的统一 API 端点
    */
   updateInspectionConfig: async (data: Partial<InspectionConfig>): Promise<void> => {
-    const updates: Array<Promise<any>> = []
+    const updates: Array<Promise<unknown>> = []
 
     if (data.maxConcurrentTasks !== undefined) {
       updates.push(
@@ -150,7 +150,7 @@ export const generalApi = {
    * ✅ 使用新的统一 API 端点
    */
   updateReportConfig: async (data: Partial<ReportConfig>): Promise<void> => {
-    const updates: Array<Promise<any>> = []
+    const updates: Array<Promise<unknown>> = []
 
     if (data.defaultFormat !== undefined) {
       updates.push(
@@ -177,7 +177,7 @@ export const generalApi = {
    * ✅ 使用新的统一 API 端点
    */
   updateUserPreference: async (data: Partial<UserPreferenceConfig>): Promise<void> => {
-    const updates: Array<Promise<any>> = []
+    const updates: Array<Promise<unknown>> = []
 
     if (data.theme !== undefined) {
       updates.push(
@@ -220,7 +220,7 @@ export const generalApi = {
    */
   saveAll: async (data: GeneralSettingsResponse): Promise<void> => {
     // 构建批量更新的配置对象
-    const settings: Record<string, any> = {
+    const settings: Record<string, unknown> = {
       'system.application_name': data.basicInfo.applicationName,
       'system.timezone': data.basicInfo.timezone,
       'inspection.max_concurrent_tasks': data.inspectionConfig.maxConcurrentTasks,
@@ -252,7 +252,7 @@ export const generalApi = {
    * PUT /api/v1/settings/general/settings/{key}
    * ✅ 使用新的统一 API 端点
    */
-  updateSetting: async (key: string, value: any): Promise<BackendSetting> => {
+  updateSetting: async (key: string, value: unknown): Promise<BackendSetting> => {
     return httpClient.put<BackendSetting>(`/settings/general/settings/${key}`, { value })
   },
 }

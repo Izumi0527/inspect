@@ -1,5 +1,6 @@
 import { API_PREFIX, authorizedDownload, getApiOrigin, httpClient } from '@/lib/api-client'
 import type {
+  AuditAction,
   AuditLogListResponse,
   AuditStats,
   AuditLogQueryParams,
@@ -25,7 +26,8 @@ export const auditApi = {
       keyword,
     } = params
 
-    const queryParams: Record<string, any> = {
+    // 与 api-client 的 QueryParams 值域对齐（该类型未导出，此处用兼容联合）
+    const queryParams: Record<string, string | number | boolean | undefined> = {
       page,
       page_size: pageSize,
     }
@@ -66,7 +68,7 @@ export const auditApi = {
         id: item.id,
         userId: item.user_id || '',
         username: item.username || '',
-        action: item.action as any,
+        action: item.action as AuditAction,
         resource: item.resource_type,
         resourceId: item.resource_id || undefined,
         details: item.description,
@@ -112,7 +114,7 @@ export const auditApi = {
       todayLogs: response.logs_today,
       successRate: successRate,
       topUsers: response.top_active_users,
-      topActions: response.top_actions as any,
+      topActions: response.top_actions as AuditStats['topActions'],
     }
   },
 

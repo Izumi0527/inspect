@@ -143,7 +143,7 @@ export const InspectionProblemAnalysisModal: React.FC<Props> = ({ onClose }) => 
                     </thead>
                     <tbody>
                       {problemAnalysis.length > 0 ? (
-                        problemAnalysis.map((item: any, idx: number) => (
+                        problemAnalysis.map((item, idx: number) => (
                           <tr key={item.category || idx} className="border-t dark:border-border">
                             <td className="px-4 py-2 text-sm text-foreground">
                               <div className="font-medium">{item.category || '-'}</div>
@@ -181,7 +181,7 @@ export const InspectionProblemAnalysisModal: React.FC<Props> = ({ onClose }) => 
                 <div className="p-4">
                   {recommendations.length > 0 ? (
                     <div className="space-y-3">
-                      {recommendations.map((rec: any) => (
+                      {recommendations.map((rec) => (
                         <div key={rec.id} className="border dark:border-border rounded-lg p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div>

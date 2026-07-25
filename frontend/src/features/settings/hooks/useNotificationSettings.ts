@@ -71,7 +71,7 @@ export function useNotificationSettings() {
 
   // 更新方法
   const updateEmailNotification = useCallback(
-    (field: keyof EmailNotificationConfig, value: any) => {
+    <K extends keyof EmailNotificationConfig>(field: K, value: EmailNotificationConfig[K]) => {
       setEmailNotification((prev) => ({ ...prev, [field]: value }))
       setIsDirty(true)
     },
@@ -79,7 +79,7 @@ export function useNotificationSettings() {
   )
 
   const updateSmsNotification = useCallback(
-    (field: keyof SmsNotificationConfig, value: any) => {
+    <K extends keyof SmsNotificationConfig>(field: K, value: SmsNotificationConfig[K]) => {
       setSmsNotification((prev) => ({ ...prev, [field]: value }))
       setIsDirty(true)
     },

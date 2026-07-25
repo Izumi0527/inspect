@@ -7,7 +7,7 @@ import type { InspectionConfig } from '@/features/settings/types/general.types'
 
 interface Props {
   data: InspectionConfig
-  onChange: (field: keyof InspectionConfig, value: any) => void
+  onChange: <K extends keyof InspectionConfig>(field: K, value: InspectionConfig[K]) => void
 }
 
 export function InspectionConfigSection({ data, onChange }: Props) {

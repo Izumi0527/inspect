@@ -17,8 +17,10 @@ interface Props {
   onClose: () => void
 }
 
-const toRecord = (value: unknown): Record<string, any> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as any) : {}
+const toRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
 
 const toNumberSafe = (value: unknown, fallback = 0): number => {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -79,11 +81,11 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
   }
 
   const payload = toRecord(result)
-  const devices = Array.isArray(payload.devices) ? payload.devices : []
-  const comparisons = Array.isArray(payload.comparisons) ? payload.comparisons : []
+  const devices: unknown[] = Array.isArray(payload.devices) ? payload.devices : []
+  const comparisons: unknown[] = Array.isArray(payload.comparisons) ? payload.comparisons : []
 
   const byDeviceId = useMemo(() => {
-    const map = new Map<string, any>()
+    const map = new Map<string, Record<string, unknown>>()
     for (const item of devices) {
       const rec = toRecord(item)
       const id = String(rec.device_id ?? rec.deviceId ?? '')
@@ -211,7 +213,7 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {devices.map((item: any, idx: number) => {
+                        {devices.map((item, idx: number) => {
                           const rec = toRecord(item)
                           const id = String(rec.device_id ?? rec.deviceId ?? '')
                           const metrics = toRecord(rec.metrics)
@@ -275,7 +277,7 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {comparisons.map((item: any, idx: number) => {
+                        {comparisons.map((item, idx: number) => {
                           const rec = toRecord(item)
                           const compareId = String(rec.compare_device_id ?? rec.compareDeviceId ?? '')
                           const diff = toRecord(rec.diff)

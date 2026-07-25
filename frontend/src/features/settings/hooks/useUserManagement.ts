@@ -8,6 +8,7 @@ import type {
   CreateUserRequest,
   UpdateUserRequest,
   UserQueryParams,
+  BatchOperationRequest,
 } from '../types/users.types'
 
 /**
@@ -90,7 +91,7 @@ export function useUserManagement() {
 
   // 批量操作 mutation
   const batchOperationMutation = useMutation({
-    mutationFn: (data: { userIds: string[]; operation: any }) => usersApi.batchOperation(data),
+    mutationFn: (data: BatchOperationRequest) => usersApi.batchOperation(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['userList'] })
       queryClient.invalidateQueries({ queryKey: ['userStats'] })

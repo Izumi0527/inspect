@@ -97,7 +97,7 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
         threshold: {
           warning: type === 'warning' ? numValue : prev.config.threshold?.warning,
           critical: type === 'critical' ? numValue : prev.config.threshold?.critical,
-        } as any,
+        },
       },
     }))
   }

@@ -17,7 +17,7 @@ interface PasswordPolicyActions {
 
 interface Props {
   data: PasswordPolicyConfig
-  onChange: (field: keyof PasswordPolicyConfig, value: any) => void
+  onChange: <K extends keyof PasswordPolicyConfig>(field: K, value: PasswordPolicyConfig[K]) => void
   actions?: PasswordPolicyActions
 }
 

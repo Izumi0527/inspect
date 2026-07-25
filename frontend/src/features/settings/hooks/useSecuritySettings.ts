@@ -75,19 +75,19 @@ export function useSecuritySettings() {
 
   // 更新方法
   const updateSessionManagement = useCallback(
-    (field: keyof SessionManagementConfig, value: any) => {
+    <K extends keyof SessionManagementConfig>(field: K, value: SessionManagementConfig[K]) => {
       setSessionManagement((prev) => ({ ...prev, [field]: value }))
       setIsDirty(true)
     },
     []
   )
 
-  const updatePasswordPolicy = useCallback((field: keyof PasswordPolicyConfig, value: any) => {
+  const updatePasswordPolicy = useCallback(<K extends keyof PasswordPolicyConfig>(field: K, value: PasswordPolicyConfig[K]) => {
     setPasswordPolicy((prev) => ({ ...prev, [field]: value }))
     setIsDirty(true)
   }, [])
 
-  const updateAuthentication = useCallback((field: keyof AuthenticationConfig, value: any) => {
+  const updateAuthentication = useCallback(<K extends keyof AuthenticationConfig>(field: K, value: AuthenticationConfig[K]) => {
     setAuthentication((prev) => ({ ...prev, [field]: value }))
     setIsDirty(true)
   }, [])
