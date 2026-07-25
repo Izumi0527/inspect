@@ -22,6 +22,8 @@ type Target struct {
 	Username       string
 	Password       string
 	EnablePassword string // telnet 特权密码（可选）
+	PrivateKey     string // SSH 私钥内容（可选，密钥认证；与 Password 可并存，私钥优先尝试）
+	KeyPassphrase  string // SSH 私钥口令（可选，仅配合 PrivateKey 使用）
 }
 
 // Result 连接测试结果。
@@ -55,14 +57,19 @@ func TestConnection(ctx context.Context, target Target, timeout time.Duration) R
 	return Result{Success: true, Message: "连接成功", LatencyMs: latency}
 }
 
-// dialSSHClient 建立到目标的 SSH 客户端连接（含老旧网络设备算法兼容与密码认证）。
+// dialSSHClient 建立到目标的 SSH 客户端连接（含老旧网络设备算法兼容，
+// 认证方式由已配置凭据决定：私钥优先、密码兜底，见 sshutil.BuildAuthMethods）。
 // 调用方负责 Close 返回的 client（其 Close 会一并关闭底层 TCP 连接）。
 func dialSSHClient(ctx context.Context, target Target, timeout time.Duration) (*ssh.Client, error) {
+	auth, err := sshutil.BuildAuthMethods(target.Password, target.PrivateKey, target.KeyPassphrase)
+	if err != nil {
+		return nil, err
+	}
 	config := &ssh.ClientConfig{
 		// 兼容华为/H3C 等老旧网络设备的密钥交换/加密/MAC 算法（Go 默认禁用部分旧算法）
 		Config:          sshutil.LegacyAlgorithms(),
 		User:            target.Username,
-		Auth:            []ssh.AuthMethod{ssh.Password(target.Password)},
+		Auth:            auth,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 网络设备无 CA 主机证书，不做主机校验
 		Timeout:         timeout,
 	}

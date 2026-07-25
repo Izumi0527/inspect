@@ -1043,11 +1043,16 @@ func (s *Service) executeDeviceBackup(ctx context.Context, task ScheduledTask) (
 				EnablePassword: enablePwd,
 			})
 		} else {
-			// SSH 设备（默认）
+			// SSH 设备（默认）：密码与私钥任一配置即可发起认证（密钥认证设备允许密码为空）
 			if device.SshUsername == nil || strings.TrimSpace(*device.SshUsername) == "" {
 				continue
 			}
-			if device.SshPassword == nil || strings.TrimSpace(*device.SshPassword) == "" {
+			sshPassword := ""
+			if device.SshPassword != nil {
+				sshPassword = *device.SshPassword
+			}
+			privateKey, keyPassphrase := device.SSHKeyCredentials()
+			if strings.TrimSpace(sshPassword) == "" && strings.TrimSpace(privateKey) == "" {
 				continue
 			}
 			port := 22
@@ -1055,15 +1060,17 @@ func (s *Service) executeDeviceBackup(ctx context.Context, task ScheduledTask) (
 				port = *device.SshPort
 			}
 			targets = append(targets, deviceBackupTarget{
-				ID:          device.ID,
-				Name:        device.Name,
-				IPAddress:   device.IPAddress,
-				Vendor:      device.Vendor,
-				DeviceType:  device.DeviceType,
-				CliProtocol: "ssh",
-				SshUsername: *device.SshUsername,
-				SshPassword: *device.SshPassword,
-				SshPort:     port,
+				ID:               device.ID,
+				Name:             device.Name,
+				IPAddress:        device.IPAddress,
+				Vendor:           device.Vendor,
+				DeviceType:       device.DeviceType,
+				CliProtocol:      "ssh",
+				SshUsername:      *device.SshUsername,
+				SshPassword:      sshPassword,
+				SshPrivateKey:    privateKey,
+				SshKeyPassphrase: keyPassphrase,
+				SshPort:          port,
 			})
 		}
 	}

@@ -2,6 +2,7 @@ package devices
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"gorm.io/datatypes"
@@ -136,6 +137,7 @@ func (d *Device) AfterFind(tx *gorm.DB) error {
 var tagsCredentialPaths = [][]string{
 	{"cli_config", "ssh_config", "password"},
 	{"cli_config", "ssh_config", "private_key"},
+	{"cli_config", "ssh_config", "key_passphrase"},
 	{"cli_config", "telnet_config", "password"},
 	{"cli_config", "telnet_config", "enable_password"},
 	{"snmp_config", "v2c_config", "community"},
@@ -198,6 +200,90 @@ func applyTagCredential(root map[string]interface{}, path []string, transform fu
 		*changed = true
 	}
 	return nil
+}
+
+// SSHKeyCredentials 从 tags 中提取 SSH 密钥认证凭据（私钥与口令），
+// 须在 AfterFind 解密之后调用（经 GORM 查询的 Device 已满足）。
+// 仅当 cli_config.ssh_config.use_key_auth 为 true 时返回私钥——
+// 用户在表单切回密码认证后，即使 tags 中残留私钥也不再使用。
+func (d *Device) SSHKeyCredentials() (privateKey, keyPassphrase string) {
+	if len(d.Tags) == 0 {
+		return "", ""
+	}
+	var root map[string]interface{}
+	if err := json.Unmarshal(d.Tags, &root); err != nil {
+		return "", ""
+	}
+	cliConfig, _ := root["cli_config"].(map[string]interface{})
+	sshConfig, _ := cliConfig["ssh_config"].(map[string]interface{})
+	if sshConfig == nil {
+		return "", ""
+	}
+	if useKeyAuth, _ := sshConfig["use_key_auth"].(bool); !useKeyAuth {
+		return "", ""
+	}
+	privateKey, _ = sshConfig["private_key"].(string)
+	keyPassphrase, _ = sshConfig["key_passphrase"].(string)
+	return privateKey, keyPassphrase
+}
+
+// mergeTagsCredentials 将旧 tags 中的凭据合并进新 tags：凭据键在新 tags 中缺失或为空、
+// 且其父对象存在时，继承旧值。配合前端"编辑留空=保持原值"的约定，避免 UpdateDevice
+// 整体替换 tags 时把未重新输入的密码/私钥静默抹掉（私钥仅存于 tags，没有顶层列可回退，
+// 一旦抹掉巡检/备份即认证失败）。父对象不存在视为用户放弃该配置块（如切换 CLI 协议），
+// 不继承。两侧均为明文（旧值经 AfterFind 解密、新值来自前端提交），合并后由调用方统一加密。
+func mergeTagsCredentials(newTags, oldTags datatypes.JSON) datatypes.JSON {
+	if len(newTags) == 0 || len(oldTags) == 0 {
+		return newTags
+	}
+	var newRoot, oldRoot map[string]interface{}
+	if err := json.Unmarshal(newTags, &newRoot); err != nil {
+		return newTags
+	}
+	if err := json.Unmarshal(oldTags, &oldRoot); err != nil {
+		return newTags
+	}
+
+	changed := false
+	for _, path := range tagsCredentialPaths {
+		node := navigateTagPath(newRoot, path)
+		if node == nil {
+			continue
+		}
+		key := path[len(path)-1]
+		if text, _ := node[key].(string); strings.TrimSpace(text) != "" {
+			continue // 用户输入了新凭据，保留新值
+		}
+		oldNode := navigateTagPath(oldRoot, path)
+		if oldNode == nil {
+			continue
+		}
+		if oldText, _ := oldNode[key].(string); oldText != "" {
+			node[key] = oldText
+			changed = true
+		}
+	}
+	if !changed {
+		return newTags
+	}
+	out, err := json.Marshal(newRoot)
+	if err != nil {
+		return newTags
+	}
+	return datatypes.JSON(out)
+}
+
+// navigateTagPath 沿 path（不含最后一段键名）导航到父对象，任一层不存在返回 nil。
+func navigateTagPath(root map[string]interface{}, path []string) map[string]interface{} {
+	node := root
+	for i := 0; i < len(path)-1; i++ {
+		next, ok := node[path[i]].(map[string]interface{})
+		if !ok {
+			return nil
+		}
+		node = next
+	}
+	return node
 }
 
 type DeviceGroup struct {

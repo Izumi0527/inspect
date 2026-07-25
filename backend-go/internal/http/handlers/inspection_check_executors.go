@@ -41,12 +41,17 @@ func (h InspectionHandler) executeSSHCheck(ctx context.Context, result *inspecti
 		port = *device.SshPort
 	}
 
+	// 密钥认证设备从 tags 提取私钥（AfterFind 已解密）；密码与私钥由
+	// sshutil.BuildAuthMethods 统一组合，私钥优先、密码兜底。
+	privateKey, keyPassphrase := device.SSHKeyCredentials()
 	target := cliconn.Target{
-		Protocol: "ssh",
-		Host:     device.IPAddress,
-		Port:     port,
-		Username: username,
-		Password: stringValue(device.SshPassword),
+		Protocol:      "ssh",
+		Host:          device.IPAddress,
+		Port:          port,
+		Username:      username,
+		Password:      stringValue(device.SshPassword),
+		PrivateKey:    privateKey,
+		KeyPassphrase: keyPassphrase,
 	}
 
 	output, err := cliconn.RunCommand(ctx, target, command, 10*time.Second)

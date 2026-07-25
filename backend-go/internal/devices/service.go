@@ -311,6 +311,9 @@ func (s *Service) UpdateDevice(ctx context.Context, deviceID int, updates map[st
 		if err != nil {
 			return nil, err
 		}
+		// 敏感凭据"留空=保持原值"：新 tags 中缺失/为空的凭据键从旧 tags（AfterFind 已解密）
+		// 继承，避免整体替换把未重新输入的密码/私钥抹掉（私钥仅存于 tags，无顶层列可回退）。
+		encoded = mergeTagsCredentials(encoded, device.Tags)
 		// 加密 tags 内嵌套凭据（CLI 密码 / SNMP community 等）。
 		// map 更新不触发 BeforeSave 钩子，需在此显式处理。
 		if credentialCipher != nil {

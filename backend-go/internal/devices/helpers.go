@@ -72,6 +72,7 @@ func sanitizeDeviceResponseTags(raw datatypes.JSON) interface{} {
 		if sshConfig, ok := cliConfig["ssh_config"].(map[string]interface{}); ok {
 			markConfiguredAndDelete(sshConfig, "password", "password_configured")
 			markConfiguredAndDelete(sshConfig, "private_key", "private_key_configured")
+			markConfiguredAndDelete(sshConfig, "key_passphrase", "key_passphrase_configured")
 		}
 		if telnetConfig, ok := cliConfig["telnet_config"].(map[string]interface{}); ok {
 			markConfiguredAndDelete(telnetConfig, "password", "password_configured")

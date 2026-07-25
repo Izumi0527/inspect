@@ -60,11 +60,16 @@ func (c *SSHCollector) Collect(ctx context.Context, device deviceInfo, logType s
 }
 
 func (c *SSHCollector) connect(ctx context.Context, device deviceInfo) (*ssh.Client, error) {
+	// 认证方式由已配置凭据决定：私钥优先、密码兜底（见 sshutil.BuildAuthMethods）。
+	auth, err := sshutil.BuildAuthMethods(device.SshPassword, device.SshPrivateKey, device.SshKeyPassphrase)
+	if err != nil {
+		return nil, err
+	}
 	config := &ssh.ClientConfig{
 		// 兼容华为/H3C 等老旧网络设备的密钥交换/加密/MAC 算法（Go 默认禁用部分旧算法）
 		Config:          sshutil.LegacyAlgorithms(),
 		User:            device.SshUsername,
-		Auth:            []ssh.AuthMethod{ssh.Password(device.SshPassword)},
+		Auth:            auth,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         c.Timeout,
 	}

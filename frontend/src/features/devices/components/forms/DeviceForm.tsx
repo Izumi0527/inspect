@@ -91,8 +91,10 @@ const deviceFormSchema = z.object({
     port: z.number().optional(),
     use_key_auth: z.boolean().optional(),
     private_key: z.string().optional(),
+    key_passphrase: z.string().optional(),
     password_configured: z.boolean().optional(),
-    private_key_configured: z.boolean().optional()
+    private_key_configured: z.boolean().optional(),
+    key_passphrase_configured: z.boolean().optional()
   }).optional(),
   telnet_config: z.object({
     username: z.string().optional(),
@@ -197,7 +199,8 @@ export const DeviceForm: React.FC<Props> = ({
         password: initialData?.ssh_config?.password || '',
         port: initialData?.ssh_config?.port || 22,
         use_key_auth: initialData?.ssh_config?.use_key_auth || false,
-        private_key: initialData?.ssh_config?.private_key || ''
+        private_key: initialData?.ssh_config?.private_key || '',
+        key_passphrase: initialData?.ssh_config?.key_passphrase || ''
       },
       telnet_config: {
         username: initialData?.telnet_config?.username || '',

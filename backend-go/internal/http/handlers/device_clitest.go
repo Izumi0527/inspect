@@ -11,13 +11,15 @@ import (
 )
 
 type cliTestRequest struct {
-	DeviceID       *int   `json:"device_id"` // 可选：编辑已存在设备、密码留空时用于回退取库内凭据
+	DeviceID       *int   `json:"device_id"` // 可选：编辑已存在设备、凭据留空时用于回退取库内凭据
 	Protocol       string `json:"protocol"`
 	Host           string `json:"host"`
 	Port           int    `json:"port"`
 	Username       string `json:"username"`
 	Password       string `json:"password"`
 	EnablePassword string `json:"enable_password"`
+	PrivateKey     string `json:"private_key"`    // 可选：SSH 密钥认证私钥内容
+	KeyPassphrase  string `json:"key_passphrase"` // 可选：SSH 私钥口令（配合 private_key）
 }
 
 // TestCLIConnection 测试设备 CLI（SSH/Telnet）连接连通性。
@@ -56,17 +58,26 @@ func (h DevicesHandler) TestCLIConnection(c echo.Context) error {
 
 	password := req.Password
 	enablePassword := req.EnablePassword
-	// 编辑已存在设备且密码留空：用 device_id 回退取库内凭据，避免要求用户重输密码
-	if password == "" && req.DeviceID != nil && h.Service != nil {
+	privateKey := req.PrivateKey
+	keyPassphrase := req.KeyPassphrase
+	// 编辑已存在设备且凭据留空：用 device_id 回退取库内凭据，避免要求用户重输密码/重贴私钥。
+	// 私钥与口令成组回退：用户贴了新私钥时完全使用请求值，不拿库内旧口令误配新私钥。
+	needKeyFallback := protocol == "ssh" && strings.TrimSpace(privateKey) == ""
+	if (password == "" || needKeyFallback) && req.DeviceID != nil && h.Service != nil {
 		if dev, err := h.Service.GetDeviceRecord(c.Request().Context(), *req.DeviceID); err == nil {
-			if protocol == "ssh" && dev.SshPassword != nil {
-				password = *dev.SshPassword
+			if password == "" {
+				if protocol == "ssh" && dev.SshPassword != nil {
+					password = *dev.SshPassword
+				}
+				if protocol == "telnet" && dev.TelnetPassword != nil {
+					password = *dev.TelnetPassword
+				}
+				if enablePassword == "" && dev.EnablePassword != nil {
+					enablePassword = *dev.EnablePassword
+				}
 			}
-			if protocol == "telnet" && dev.TelnetPassword != nil {
-				password = *dev.TelnetPassword
-			}
-			if enablePassword == "" && dev.EnablePassword != nil {
-				enablePassword = *dev.EnablePassword
+			if needKeyFallback {
+				privateKey, keyPassphrase = dev.SSHKeyCredentials()
 			}
 		}
 	}
@@ -80,6 +91,8 @@ func (h DevicesHandler) TestCLIConnection(c echo.Context) error {
 			Username:       req.Username,
 			Password:       password,
 			EnablePassword: enablePassword,
+			PrivateKey:     privateKey,
+			KeyPassphrase:  keyPassphrase,
 		},
 		8*time.Second,
 	)

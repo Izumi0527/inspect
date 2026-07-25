@@ -58,6 +58,7 @@ const buildCliTags = (formData: DeviceFormData, mode: 'create' | 'update') => {
     ? pickText(formData.ssh_config?.password, formData.ssh_password)
     : ''
   const sshPrivateKey = shouldUseSSH ? pickText(formData.ssh_config?.private_key) : ''
+  const sshKeyPassphrase = shouldUseSSH ? pickText(formData.ssh_config?.key_passphrase) : ''
 
   const sshConfig = shouldUseSSH
     ? {
@@ -69,6 +70,9 @@ const buildCliTags = (formData: DeviceFormData, mode: 'create' | 'update') => {
           : includeSensitiveValue(sshPassword, mode),
         private_key: useKeyAuth
           ? includeSensitiveValue(sshPrivateKey, mode)
+          : undefined,
+        key_passphrase: useKeyAuth
+          ? includeSensitiveValue(sshKeyPassphrase, mode)
           : undefined,
       }
     : undefined
@@ -258,8 +262,10 @@ export const buildFormInitialData = (device?: Device | null): Partial<Device> | 
     port: device.ssh_config?.port ?? device.ssh_port ?? 22,
     use_key_auth: device.ssh_config?.use_key_auth ?? false,
     private_key: '',
+    key_passphrase: '',
     password_configured: device.ssh_config?.password_configured ?? false,
     private_key_configured: device.ssh_config?.private_key_configured ?? false,
+    key_passphrase_configured: device.ssh_config?.key_passphrase_configured ?? false,
   }
 
   const telnetConfig: Device['telnet_config'] = {

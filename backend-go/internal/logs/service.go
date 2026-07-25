@@ -11,6 +11,8 @@ import (
 
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/your-org/inspect-system/backend-go/internal/devices"
 )
 
 const (
@@ -485,12 +487,14 @@ type BatchCollectResult struct {
 }
 
 type deviceInfo struct {
-	ID          int
-	IPAddress   string
-	Vendor      string
-	SshUsername string
-	SshPassword string
-	SshPort     int
+	ID               int
+	IPAddress        string
+	Vendor           string
+	SshUsername      string
+	SshPassword      string
+	SshPrivateKey    string // SSH 私钥内容（密钥认证设备，取自 tags，已解密）
+	SshKeyPassphrase string // SSH 私钥口令（可选，配合 SshPrivateKey）
+	SshPort          int
 }
 
 func (s *Service) CollectDeviceLogs(ctx context.Context, deviceID int, logType string, maxEntries int) (int, error) {
@@ -519,18 +523,23 @@ func (s *Service) CollectDeviceLogs(ctx context.Context, deviceID int, logType s
 			zap.String("vendor", info.Vendor),
 			zap.String("ssh_username", info.SshUsername),
 			zap.Bool("has_ssh_password", strings.TrimSpace(info.SshPassword) != ""),
+			zap.Bool("has_ssh_key", strings.TrimSpace(info.SshPrivateKey) != ""),
 			zap.Int("ssh_port", info.SshPort))
 	}
 
 	if strings.TrimSpace(info.IPAddress) == "" {
 		return 0, ErrDeviceIPRequired
 	}
-	if strings.TrimSpace(info.SshUsername) == "" || strings.TrimSpace(info.SshPassword) == "" {
+	// 密码与私钥任一配置即可发起 SSH 认证（密钥认证设备允许密码为空）。
+	hasPassword := strings.TrimSpace(info.SshPassword) != ""
+	hasKey := strings.TrimSpace(info.SshPrivateKey) != ""
+	if strings.TrimSpace(info.SshUsername) == "" || (!hasPassword && !hasKey) {
 		if s.logger != nil {
 			s.logger.Error("日志采集失败: SSH配置不完整",
 				zap.Int("device_id", deviceID),
 				zap.String("ssh_username", info.SshUsername),
-				zap.Bool("has_ssh_password", strings.TrimSpace(info.SshPassword) != ""))
+				zap.Bool("has_ssh_password", hasPassword),
+				zap.Bool("has_ssh_key", hasKey))
 		}
 		return 0, ErrSSHNotConfigured
 	}
@@ -603,21 +612,13 @@ func (s *Service) BatchCollectLogs(ctx context.Context, deviceIDs []int, logType
 }
 
 func (s *Service) getDeviceInfo(ctx context.Context, deviceID int) (deviceInfo, error) {
-	type row struct {
-		ID          int     `gorm:"column:id"`
-		IPAddress   string  `gorm:"column:ip_address"`
-		Vendor      string  `gorm:"column:vendor"`
-		SshUsername *string `gorm:"column:ssh_username"`
-		SshPassword *string `gorm:"column:ssh_password"`
-		SshPort     *int    `gorm:"column:ssh_port"`
-	}
-
-	var item row
+	// 查询完整 Device 模型以触发 AfterFind 解密钩子：此前用匿名 struct 查询不经过钩子，
+	// 凭据加密入库后此处会拿到密文导致 SSH 认证必然失败；密钥认证所需的私钥也存于 tags，
+	// 同样依赖钩子解密。
+	var dev devices.Device
 	err := s.db.WithContext(ctx).
-		Table("devices").
-		Select("id, ip_address, vendor, ssh_username, ssh_password, ssh_port").
 		Where("id = ?", deviceID).
-		Take(&item).Error
+		Take(&dev).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return deviceInfo{}, ErrDeviceNotFound
@@ -626,17 +627,20 @@ func (s *Service) getDeviceInfo(ctx context.Context, deviceID int) (deviceInfo, 
 	}
 
 	port := 22
-	if item.SshPort != nil && *item.SshPort > 0 {
-		port = *item.SshPort
+	if dev.SshPort != nil && *dev.SshPort > 0 {
+		port = *dev.SshPort
 	}
 
+	privateKey, keyPassphrase := dev.SSHKeyCredentials()
 	return deviceInfo{
-		ID:          item.ID,
-		IPAddress:   item.IPAddress,
-		Vendor:      item.Vendor,
-		SshUsername: safeString(item.SshUsername),
-		SshPassword: safeString(item.SshPassword),
-		SshPort:     port,
+		ID:               dev.ID,
+		IPAddress:        dev.IPAddress,
+		Vendor:           dev.Vendor,
+		SshUsername:      safeString(dev.SshUsername),
+		SshPassword:      safeString(dev.SshPassword),
+		SshPrivateKey:    privateKey,
+		SshKeyPassphrase: keyPassphrase,
+		SshPort:          port,
 	}, nil
 }
 

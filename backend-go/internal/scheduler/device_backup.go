@@ -18,19 +18,21 @@ import (
 )
 
 type deviceBackupTarget struct {
-	ID             int
-	Name           string
-	IPAddress      string
-	Vendor         string
-	DeviceType     string
-	CliProtocol    string
-	SshUsername    string
-	SshPassword    string
-	SshPort        int
-	TelnetUsername string
-	TelnetPassword string
-	TelnetPort     int
-	EnablePassword string
+	ID               int
+	Name             string
+	IPAddress        string
+	Vendor           string
+	DeviceType       string
+	CliProtocol      string
+	SshUsername      string
+	SshPassword      string
+	SshPrivateKey    string // SSH 私钥内容（密钥认证设备，取自 tags，已解密）
+	SshKeyPassphrase string // SSH 私钥口令（可选，配合 SshPrivateKey）
+	SshPort          int
+	TelnetUsername   string
+	TelnetPassword   string
+	TelnetPort       int
+	EnablePassword   string
 }
 
 type deviceBackupItem struct {
@@ -218,11 +220,16 @@ func executeSSHCommand(ctx context.Context, target deviceBackupTarget, command s
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// 认证方式由已配置凭据决定：私钥优先、密码兜底（见 sshutil.BuildAuthMethods）。
+	auth, err := sshutil.BuildAuthMethods(target.SshPassword, target.SshPrivateKey, target.SshKeyPassphrase)
+	if err != nil {
+		return "", err
+	}
 	config := &ssh.ClientConfig{
 		// 兼容华为/H3C 等老旧网络设备的密钥交换/加密/MAC 算法（Go 默认禁用部分旧算法）
 		Config: sshutil.LegacyAlgorithms(),
 		User:   target.SshUsername,
-		Auth:   []ssh.AuthMethod{ssh.Password(target.SshPassword)},
+		Auth:   auth,
 		// TOFU(Trust On First Use): 记录主机密钥指纹但不阻断连接。
 		// 网络设备通常没有 CA 签发的主机证书，完整的 HostKey 验证不切实际，
 		// 但此处仍记录指纹以便事后审计和异常检测。

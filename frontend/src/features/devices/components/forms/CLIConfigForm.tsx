@@ -63,14 +63,7 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
       return
     }
     const isSSH = cliProtocol === 'ssh'
-    if (isSSH && (watch('ssh_config.use_key_auth') as boolean)) {
-      setTestResult({
-        success: false,
-        message: '连接测试暂仅支持密码认证（密钥认证请改用密码或保存后另行验证）',
-        latency_ms: 0
-      })
-      return
-    }
+    const useKeyAuth = isSSH && !!(watch('ssh_config.use_key_auth') as boolean)
     setTesting(true)
     try {
       const result = await testCliConnection({
@@ -88,7 +81,14 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
         ),
         enable_password: isSSH
           ? undefined
-          : String((watch('telnet_config.enable_password') as string) || '')
+          : String((watch('telnet_config.enable_password') as string) || ''),
+        // 密钥认证：透传当前填写的私钥与口令；编辑已有设备留空时由后端按 device_id 回退取库内私钥
+        private_key: useKeyAuth
+          ? String((watch('ssh_config.private_key') as string) || '')
+          : undefined,
+        key_passphrase: useKeyAuth
+          ? String((watch('ssh_config.key_passphrase') as string) || '')
+          : undefined
       })
       setTestResult(result)
     } catch (e) {
@@ -257,31 +257,51 @@ export const CLIConfigForm: React.FC<CLIConfigFormProps> = ({
                 </div>
               ) : (
                 /* 密钥认证 */
-                <div>
-                  <label className="block text-sm font-medium text-foreground/90 mb-1">
-                    私钥内容 <span className="text-red-500">*</span>
-                  </label>
-                  <Controller
-                    name="ssh_config.private_key"
-                    control={control}
-                    render={({ field }) => (
-                      <div className="space-y-2">
-                        <textarea
-                          {...field}
-                          placeholder="请粘贴SSH私钥内容..."
-                          className="w-full px-3 py-2 border border-border rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 font-mono text-sm dark:bg-muted/80 dark:text-foreground"
-                          rows={6}
-                        />
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Key className="h-3 w-3" />
-                          支持OpenSSH、RSA、DSA格式私钥
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground/90 mb-1">
+                      私钥内容 <span className="text-red-500">*</span>
+                    </label>
+                    <Controller
+                      name="ssh_config.private_key"
+                      control={control}
+                      render={({ field }) => (
+                        <div className="space-y-2">
+                          <textarea
+                            {...field}
+                            placeholder="请粘贴SSH私钥内容..."
+                            className="w-full px-3 py-2 border border-border rounded-md shadow-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 font-mono text-sm dark:bg-muted/80 dark:text-foreground"
+                            rows={6}
+                          />
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Key className="h-3 w-3" />
+                            支持OpenSSH、RSA、DSA格式私钥
+                          </div>
+                          {errors.ssh_config?.private_key && (
+                            <p className="text-sm text-red-600">{errors.ssh_config.private_key.message}</p>
+                          )}
                         </div>
-                        {errors.ssh_config?.private_key && (
-                          <p className="text-sm text-red-600">{errors.ssh_config.private_key.message}</p>
-                        )}
-                      </div>
-                    )}
-                  />
+                      )}
+                    />
+                  </div>
+
+                  {/* 私钥口令（加密私钥时需要） */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground/90 mb-1">
+                      私钥口令
+                    </label>
+                    <Controller
+                      name="ssh_config.key_passphrase"
+                      control={control}
+                      render={({ field }) => (
+                        <PasswordInput
+                          {...field}
+                          placeholder="可选：私钥受口令保护时填写"
+                          error={errors.ssh_config?.key_passphrase?.message}
+                        />
+                      )}
+                    />
+                  </div>
                 </div>
               )}
             </div>

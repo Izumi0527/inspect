@@ -32,8 +32,10 @@ export interface SSHConfig {
   port?: number
   use_key_auth?: boolean
   private_key?: string
+  key_passphrase?: string
   password_configured?: boolean
   private_key_configured?: boolean
+  key_passphrase_configured?: boolean
 }
 
 // Telnet配置接口

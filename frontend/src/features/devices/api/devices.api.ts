@@ -327,6 +327,7 @@ const sanitizeParsedTags = (
   if (sshConfig) {
     delete sshConfig.password;
     delete sshConfig.private_key;
+    delete sshConfig.key_passphrase;
   }
   if (telnetConfig) {
     delete telnetConfig.password;
@@ -384,9 +385,13 @@ const mapDevice = (dto: DeviceDto): Device => {
     port: dto.ssh_port || sshConfigFromTags?.port || 22,
     use_key_auth: sshConfigFromTags?.use_key_auth,
     private_key: "",
+    key_passphrase: "",
     password_configured: toBoolean(sshConfigFromTags?.password_configured),
     private_key_configured: toBoolean(
       sshConfigFromTags?.private_key_configured,
+    ),
+    key_passphrase_configured: toBoolean(
+      sshConfigFromTags?.key_passphrase_configured,
     ),
   };
 
@@ -990,7 +995,7 @@ export interface CliTestResult {
 }
 
 // testCliConnection 测试设备 CLI（SSH/Telnet）连接连通性。
-// 使用弹窗当前填写的参数，支持新增/未保存设备；编辑已有设备时密码留空可传 device_id 回退取库内凭据。
+// 使用弹窗当前填写的参数，支持新增/未保存设备；编辑已有设备时密码/私钥留空可传 device_id 回退取库内凭据。
 export async function testCliConnection(req: {
   device_id?: number;
   protocol: "ssh" | "telnet";
@@ -999,6 +1004,8 @@ export async function testCliConnection(req: {
   username: string;
   password?: string;
   enable_password?: string;
+  private_key?: string;
+  key_passphrase?: string;
 }): Promise<CliTestResult> {
   // cli-test 后端最长约 8s（telnet 登录探测含超时）；前端给更长超时确保后端先返回结果，
   // 避免前端默认 10s 超时先触发、把“后端仍在测”误判为连接失败。
