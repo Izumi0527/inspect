@@ -25,11 +25,9 @@ describe('generalApi.getGeneralSettings falsy 值解析', () => {
         { key: 'report.default_format', value: 'PDF', category: 'report' },
         { key: 'report.max_export_records', value: 0, category: 'report' },
         { key: 'user_preference.theme', value: 'DARK', category: 'user_preference' },
-        { key: 'user_preference.language', value: 'en-us', category: 'user_preference' },
-        { key: 'user_preference.date_format', value: '', category: 'user_preference' },
         { key: 'user_preference.time_format', value: '12H', category: 'user_preference' },
       ],
-      total: 12,
+      total: 10,
     })
 
     const result = await generalApi.getGeneralSettings()
@@ -46,9 +44,15 @@ describe('generalApi.getGeneralSettings falsy 值解析', () => {
     expect(result.reportConfig.maxExportRecords).toBe(0)
 
     expect(result.userPreference.theme).toBe('dark')
-    expect(result.userPreference.language).toBe('en-US')
-    expect(result.userPreference.dateFormat).toBe('')
     expect(result.userPreference.timeFormat).toBe('12h')
   })
-})
 
+  it('system.version 无行时回退到全站统一版本号（非硬编码 1.0.1）', async () => {
+    mockGet.mockResolvedValue({ items: [], total: 0 })
+
+    const result = await generalApi.getGeneralSettings()
+
+    expect(result.basicInfo.version).not.toBe('1.0.1')
+    expect(result.basicInfo.version).toBe(process.env.NEXT_PUBLIC_APP_VERSION || '未知')
+  })
+})

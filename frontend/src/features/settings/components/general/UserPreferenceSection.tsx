@@ -2,7 +2,6 @@
 
 import { SectionHeader } from '@/features/settings/components/shared/SectionHeader'
 import { ConfigItem } from '@/features/settings/components/shared/ConfigItem'
-import { ConfigInput } from '@/features/settings/components/shared/ConfigInput'
 import { ConfigSelect } from '@/features/settings/components/shared/ConfigSelect'
 import type { UserPreferenceConfig } from '@/features/settings/types/general.types'
 
@@ -15,11 +14,6 @@ const themeOptions = [
   { value: 'light', label: '浅色模式' },
   { value: 'dark', label: '暗色模式' },
   { value: 'auto', label: '跟随系统' },
-]
-
-const languageOptions = [
-  { value: 'zh-CN', label: '简体中文' },
-  { value: 'en-US', label: 'English' },
 ]
 
 const timeFormatOptions = [
@@ -38,43 +32,22 @@ export function UserPreferenceSection({ data, onChange }: Props) {
         icon="User"
       />
 
-      <div className="mt-6 space-y-4">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <ConfigItem label="主题" description="选择界面的主题外观" required>
-            <ConfigSelect
-              value={data.theme}
-              options={themeOptions}
-              onChange={(value) => onChange('theme', value as 'light' | 'dark' | 'auto')}
-            />
-          </ConfigItem>
+      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <ConfigItem label="主题" description="选择界面的主题外观，保存后立即生效" required>
+          <ConfigSelect
+            value={data.theme}
+            options={themeOptions}
+            onChange={(value) => onChange('theme', value as 'light' | 'dark' | 'auto')}
+          />
+        </ConfigItem>
 
-          <ConfigItem label="语言" description="选择界面显示的语言" required>
-            <ConfigSelect
-              value={data.language}
-              options={languageOptions}
-              onChange={(value) => onChange('language', value as 'zh-CN' | 'en-US')}
-            />
-          </ConfigItem>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <ConfigItem label="日期格式" description="自定义日期显示格式，如 YYYY-MM-DD" required>
-            <ConfigInput
-              value={data.dateFormat}
-              onChange={(value) => onChange('dateFormat', value)}
-              placeholder="YYYY-MM-DD"
-              className="w-full"
-            />
-          </ConfigItem>
-
-          <ConfigItem label="时间格式" description="选择时间显示格式" required>
-            <ConfigSelect
-              value={data.timeFormat}
-              options={timeFormatOptions}
-              onChange={(value) => onChange('timeFormat', value as '12h' | '24h')}
-            />
-          </ConfigItem>
-        </div>
+        <ConfigItem label="时间格式" description="影响全站时间显示" required>
+          <ConfigSelect
+            value={data.timeFormat}
+            options={timeFormatOptions}
+            onChange={(value) => onChange('timeFormat', value as '12h' | '24h')}
+          />
+        </ConfigItem>
       </div>
     </section>
   )

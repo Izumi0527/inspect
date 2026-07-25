@@ -3,6 +3,7 @@
 import { SectionHeader } from '@/features/settings/components/shared/SectionHeader'
 import { ConfigItem } from '@/features/settings/components/shared/ConfigItem'
 import { ConfigInput } from '@/features/settings/components/shared/ConfigInput'
+import { parseIntOrNull } from '@/features/settings/utils/general-validation'
 import type { InspectionConfig } from '@/features/settings/types/general.types'
 
 interface Props {
@@ -29,8 +30,8 @@ export function InspectionConfigSection({ data, onChange }: Props) {
         >
           <ConfigInput
             type="number"
-            value={data.defaultTimeout}
-            onChange={(value) => onChange('defaultTimeout', parseInt(value, 10))}
+            value={data.defaultTimeout ?? ''}
+            onChange={(value) => onChange('defaultTimeout', parseIntOrNull(value))}
             min={5}
             max={300}
           />
@@ -44,8 +45,8 @@ export function InspectionConfigSection({ data, onChange }: Props) {
           >
             <ConfigInput
               type="number"
-              value={data.maxConcurrentTasks}
-              onChange={(value) => onChange('maxConcurrentTasks', parseInt(value, 10))}
+              value={data.maxConcurrentTasks ?? ''}
+              onChange={(value) => onChange('maxConcurrentTasks', parseIntOrNull(value))}
               min={1}
               max={50}
               className="w-full"
@@ -59,8 +60,8 @@ export function InspectionConfigSection({ data, onChange }: Props) {
           >
             <ConfigInput
               type="number"
-              value={data.retryAttempts}
-              onChange={(value) => onChange('retryAttempts', parseInt(value, 10))}
+              value={data.retryAttempts ?? ''}
+              onChange={(value) => onChange('retryAttempts', parseIntOrNull(value))}
               min={0}
               max={10}
               className="w-full"

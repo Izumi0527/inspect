@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { generalApi } from '../api/general.api'
+import { validateGeneralSettings } from '../utils/general-validation'
 import type {
   BasicInfoConfig,
   InspectionConfig,
@@ -37,8 +38,6 @@ export function useGeneralSettings() {
   })
   const [userPreference, setUserPreference] = useState<UserPreferenceConfig>({
     theme: 'auto',
-    language: 'zh-CN',
-    dateFormat: 'YYYY-MM-DD',
     timeFormat: '24h',
   })
   const [isDirty, setIsDirty] = useState(false)
@@ -84,14 +83,18 @@ export function useGeneralSettings() {
     setIsDirty(true)
   }, [])
 
-  // 保存所有
+  // 保存所有：先整页校验（数字区间/必填），不合法直接抛错给调用方 toast
   const saveAll = useCallback(async () => {
-    await saveMutation.mutateAsync({
+    const result = validateGeneralSettings({
       basicInfo,
       inspectionConfig,
       reportConfig,
       userPreference,
     })
+    if (!result.ok) {
+      throw new Error(result.errors.join('；'))
+    }
+    await saveMutation.mutateAsync(result.data)
   }, [basicInfo, inspectionConfig, reportConfig, userPreference, saveMutation])
 
   // 重置所有

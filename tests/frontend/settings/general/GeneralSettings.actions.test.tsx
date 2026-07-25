@@ -11,9 +11,14 @@ import { SettingsToolbar } from '@/features/settings/shell/SettingsToolbar'
 const mockUseGeneralSettings = jest.fn()
 const saveAllMock = jest.fn()
 const resetAllMock = jest.fn()
+const setThemeMock = jest.fn()
 
 jest.mock('@/features/settings/hooks/useGeneralSettings', () => ({
   useGeneralSettings: () => mockUseGeneralSettings(),
+}))
+
+jest.mock('next-themes', () => ({
+  useTheme: () => ({ setTheme: setThemeMock }),
 }))
 
 jest.mock('react-hot-toast', () => ({
@@ -86,8 +91,6 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
       },
       userPreference: {
         theme: 'auto',
-        language: 'zh-CN',
-        dateFormat: 'YYYY-MM-DD',
         timeFormat: '24h',
       },
       isLoading: false,
@@ -146,7 +149,7 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
     expect(screen.getByText('默认并发任务数')).toBeInTheDocument()
     expect(screen.getByText('默认超时时间')).toBeInTheDocument()
     expect(screen.getByText('默认导出格式')).toBeInTheDocument()
-    expect(screen.getByText('当前主题 / 语言')).toBeInTheDocument()
+    expect(screen.getByText('当前主题')).toBeInTheDocument()
 
     expect(within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存整页更改' })).not.toBeInTheDocument()
     expect(within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置整页更改' })).not.toBeInTheDocument()

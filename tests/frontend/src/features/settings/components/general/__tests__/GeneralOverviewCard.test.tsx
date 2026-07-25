@@ -21,16 +21,11 @@ describe('GeneralOverviewCard', () => {
         defaultTimeout={30}
         defaultFormat="excel"
         theme="dark"
-        language="zh-CN"
       />
     )
 
-    expect(screen.getByText('当前主题 / 语言')).toBeInTheDocument()
-    expect(
-      screen.getByText((_, element) => element?.textContent === '暗色 / 简体中文')
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByText((_, element) => element?.textContent === '深色 / 简体中文')
-    ).not.toBeInTheDocument()
+    expect(screen.getByText('当前主题')).toBeInTheDocument()
+    expect(screen.getByText('暗色')).toBeInTheDocument()
+    expect(screen.queryByText('深色')).not.toBeInTheDocument()
   })
 })

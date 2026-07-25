@@ -156,6 +156,11 @@ func (s *Service) UpsertSetting(ctx context.Context, key string, value interface
 		return nil, fmt.Errorf("key is required")
 	}
 
+	enforcedType, err := validateGeneralSetting(cleanKey, value)
+	if err != nil {
+		return nil, err
+	}
+
 	var setting SystemSetting
 	lookupErr := s.db.WithContext(ctx).
 		Where("key = ?", cleanKey).
@@ -165,7 +170,10 @@ func (s *Service) UpsertSetting(ctx context.Context, key string, value interface
 	}
 	settingMissing := errorsIsRecordNotFound(lookupErr)
 
-	dataType := strings.TrimSpace(setting.DataType)
+	dataType := enforcedType
+	if dataType == "" {
+		dataType = strings.TrimSpace(setting.DataType)
+	}
 	if dataType == "" {
 		dataType = inferDataType(value)
 	}
@@ -181,6 +189,9 @@ func (s *Service) UpsertSetting(ctx context.Context, key string, value interface
 
 	now := time.Now().UTC()
 	if settingMissing {
+		if err := validateNewSettingKey(cleanKey); err != nil {
+			return nil, err
+		}
 		setting = SystemSetting{
 			Key:         cleanKey,
 			Category:    normalizeCategoryFromKey(cleanKey),
@@ -231,10 +242,12 @@ func (s *Service) BulkUpdateSettings(ctx context.Context, settings map[string]in
 
 	updatedCount := 0
 	failedKeys := make([]string, 0)
+	failureReasons := make([]string, 0)
 
 	for key, value := range settings {
 		if _, err := s.UpsertSetting(ctx, key, value, updatedBy); err != nil {
 			failedKeys = append(failedKeys, key)
+			failureReasons = append(failureReasons, err.Error())
 			continue
 		}
 		updatedCount++
@@ -242,7 +255,13 @@ func (s *Service) BulkUpdateSettings(ctx context.Context, settings map[string]in
 
 	message := fmt.Sprintf("成功更新 %d 个配置项", updatedCount)
 	if len(failedKeys) > 0 {
-		message = fmt.Sprintf("成功更新 %d 个配置项，失败 %d 个", updatedCount, len(failedKeys))
+		// 把具体失败原因带回给前端 toast，最多列 3 条避免提示过长。
+		preview := failureReasons
+		if len(preview) > 3 {
+			preview = preview[:3]
+		}
+		message = fmt.Sprintf("成功更新 %d 个配置项，失败 %d 个：%s",
+			updatedCount, len(failedKeys), strings.Join(preview, "；"))
 	}
 
 	return BulkUpdateResponse{
@@ -416,7 +435,7 @@ func (s *Service) ListSettingGroups(ctx context.Context, includeConfigs bool) ([
 
 func (s *Service) GetSystemInfo(ctx context.Context) (SystemInfoResponse, error) {
 	appName := s.getSettingValue(ctx, "system.application_name", "网络设备巡检系统")
-	version := s.getSettingValue(ctx, "system.version", "1.0.1")
+	version := s.getSettingValue(ctx, "system.version", s.cfg.AppVersion)
 	timezone := s.getSettingValue(ctx, "system.timezone", "Asia/Shanghai")
 
 	var lastBackup *time.Time
@@ -434,6 +453,61 @@ func (s *Service) GetSystemInfo(ctx context.Context) (SystemInfoResponse, error)
 		Timezone:        timezone,
 		LastBackup:      lastBackup,
 	}, nil
+}
+
+// AppVersion 返回后端二进制版本号（构建时 ldflags 注入，dev 为 config 默认值）。
+func (s *Service) AppVersion() string {
+	return s.cfg.AppVersion
+}
+
+// getSettingIntInRange 读取数字配置；缺失/非法/越界时回退 fallback。
+func (s *Service) getSettingIntInRange(ctx context.Context, key string, fallback, min, max int) int {
+	item, err := s.GetSetting(ctx, key)
+	if err != nil || item == nil || item.Value == nil {
+		return fallback
+	}
+	num, ok := asInt64(item.Value)
+	if !ok {
+		return fallback
+	}
+	value := int(num)
+	if value < min || value > max {
+		return fallback
+	}
+	return value
+}
+
+// InspectionDefaults 是"通用配置-巡检配置"的全局默认值（已按合法区间钳制）。
+type InspectionDefaults struct {
+	MaxConcurrent  int
+	TimeoutSeconds int
+	RetryAttempts  int
+}
+
+// GetInspectionDefaults 返回巡检执行的全局默认参数，供 scheduler 与巡检执行器消费。
+// 区间与 generalNumericConstraints 一致，配置缺失/非法时回退内置默认。
+func (s *Service) GetInspectionDefaults(ctx context.Context) InspectionDefaults {
+	return InspectionDefaults{
+		MaxConcurrent:  s.getSettingIntInRange(ctx, "inspection.max_concurrent_tasks", 10, 1, 50),
+		TimeoutSeconds: s.getSettingIntInRange(ctx, "inspection.default_timeout", 30, 5, 300),
+		RetryAttempts:  s.getSettingIntInRange(ctx, "inspection.retry_attempts", 3, 0, 10),
+	}
+}
+
+// GetExportRecordLimit 返回单次导出允许的最大记录数（report.max_export_records）。
+func (s *Service) GetExportRecordLimit(ctx context.Context) int {
+	return s.getSettingIntInRange(ctx, "report.max_export_records", 10000, 1, 100000)
+}
+
+// GetDefaultReportFormat 返回默认导出格式（report.default_format），回退 excel。
+func (s *Service) GetDefaultReportFormat(ctx context.Context) string {
+	value := strings.ToLower(strings.TrimSpace(s.getSettingValue(ctx, "report.default_format", "excel")))
+	switch value {
+	case "excel", "pdf", "csv":
+		return value
+	default:
+		return "excel"
+	}
 }
 
 func (s *Service) getSettingValue(ctx context.Context, key string, fallback string) string {
@@ -467,6 +541,11 @@ func buildSettingItem(row SystemSetting) SettingItem {
 		Readonly:    row.IsReadonly,
 		UpdatedAt:   row.UpdatedAt,
 		UpdatedBy:   row.UpdatedBy,
+	}
+
+	// 加密配置的值不回传明文，统一掩码（当前无加密行，属防御纵深）。
+	if row.IsEncrypted && row.Value != nil {
+		item.Value = "******"
 	}
 
 	if row.ValidationRule != nil {

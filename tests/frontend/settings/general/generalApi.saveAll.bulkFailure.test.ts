@@ -22,11 +22,27 @@ describe('generalApi.saveAll bulk failed_keys 处理', () => {
 
     await expect(
       generalApi.saveAll({
-        basicInfo: { applicationName: 'x', version: '1.0.1', timezone: 'Asia/Shanghai' },
+        basicInfo: { applicationName: 'x', version: '1.1.0', timezone: 'Asia/Shanghai' },
         inspectionConfig: { maxConcurrentTasks: 10, defaultTimeout: 30, retryAttempts: 3 },
         reportConfig: { defaultFormat: 'excel', maxExportRecords: 10000 },
-        userPreference: { theme: 'auto', language: 'zh-CN', dateFormat: 'YYYY-MM-DD', timeFormat: '24h' },
+        userPreference: { theme: 'auto', timeFormat: '24h' },
       })
     ).rejects.toThrow('失败')
+  })
+
+  it('提交的 settings 不再包含已下线的 language/date_format key', async () => {
+    mockPost.mockResolvedValue({ updated_count: 9, failed_keys: [], message: 'ok' })
+
+    await generalApi.saveAll({
+      basicInfo: { applicationName: 'x', version: '1.1.0', timezone: 'Asia/Shanghai' },
+      inspectionConfig: { maxConcurrentTasks: 10, defaultTimeout: 30, retryAttempts: 3 },
+      reportConfig: { defaultFormat: 'excel', maxExportRecords: 10000 },
+      userPreference: { theme: 'auto', timeFormat: '24h' },
+    })
+
+    const payload = mockPost.mock.calls[0][1] as { settings: Record<string, unknown> }
+    expect(Object.keys(payload.settings)).not.toContain('user_preference.language')
+    expect(Object.keys(payload.settings)).not.toContain('user_preference.date_format')
+    expect(Object.keys(payload.settings)).toHaveLength(9)
   })
 })

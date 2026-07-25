@@ -4,21 +4,23 @@ export interface BasicInfoConfig {
   timezone: string
 }
 
+/**
+ * 巡检数字配置的编辑态：null 表示输入框被清空的暂态，
+ * 保存前经 validateGeneralSettings 校验拦截，不会提交到后端。
+ */
 export interface InspectionConfig {
-  maxConcurrentTasks: number
-  defaultTimeout: number
-  retryAttempts: number
+  maxConcurrentTasks: number | null
+  defaultTimeout: number | null
+  retryAttempts: number | null
 }
 
 export interface ReportConfig {
   defaultFormat: 'excel' | 'pdf' | 'csv'
-  maxExportRecords: number
+  maxExportRecords: number | null
 }
 
 export interface UserPreferenceConfig {
   theme: 'light' | 'dark' | 'auto'
-  language: 'zh-CN' | 'en-US'
-  dateFormat: string
   timeFormat: '12h' | '24h'
 }
 
@@ -29,32 +31,17 @@ export interface GeneralSettingsResponse {
   userPreference: UserPreferenceConfig
 }
 
-export interface ValidationRule {
-  min?: number
-  max?: number
-  pattern?: string
-  options?: Array<{ label: string; value: string | number }>
-}
-
-export interface UpdateBasicInfoRequest {
-  applicationName?: string
-  timezone?: string
-}
-
-export interface UpdateInspectionConfigRequest {
-  maxConcurrentTasks?: number
-  defaultTimeout?: number
-  retryAttempts?: number
-}
-
-export interface UpdateReportConfigRequest {
-  defaultFormat?: 'excel' | 'pdf' | 'csv'
-  maxExportRecords?: number
-}
-
-export interface UpdateUserPreferenceRequest {
-  theme?: 'light' | 'dark' | 'auto'
-  language?: 'zh-CN' | 'en-US'
-  dateFormat?: string
-  timeFormat?: '12h' | '24h'
+/** 通过保存前校验后的形状：数字字段收窄为非空。 */
+export interface ValidatedGeneralSettings {
+  basicInfo: BasicInfoConfig
+  inspectionConfig: {
+    maxConcurrentTasks: number
+    defaultTimeout: number
+    retryAttempts: number
+  }
+  reportConfig: {
+    defaultFormat: 'excel' | 'pdf' | 'csv'
+    maxExportRecords: number
+  }
+  userPreference: UserPreferenceConfig
 }

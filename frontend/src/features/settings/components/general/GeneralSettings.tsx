@@ -11,6 +11,7 @@ import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useTheme } from 'next-themes'
 import { DATETIME_DISPLAY_PREFERENCES_QUERY_KEY } from '@/hooks/useDatetimePreferencesSync'
 import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
 
@@ -33,17 +34,20 @@ export function GeneralSettings() {
   } = useGeneralSettings()
 
   const queryClient = useQueryClient()
+  const { setTheme } = useTheme()
 
   const handleSave = useCallback(async () => {
     try {
       await saveAll()
       // 时区/时间制可能已变更：失效偏好缓存，让全局同步 hook 重新注入显示层
       void queryClient.invalidateQueries({ queryKey: DATETIME_DISPLAY_PREFERENCES_QUERY_KEY })
+      // 主题保存后立即应用到 next-themes（'auto' 对应 next-themes 的 'system'）
+      setTheme(userPreference.theme === 'auto' ? 'system' : userPreference.theme)
       toast.success('保存成功！配置已更新')
     } catch (err) {
       toast.error('保存失败：' + (err as Error).message)
     }
-  }, [saveAll, queryClient])
+  }, [saveAll, queryClient, setTheme, userPreference.theme])
 
   const handleReset = useCallback(() => {
     resetAll()
@@ -92,7 +96,6 @@ export function GeneralSettings() {
         defaultTimeout={inspectionConfig.defaultTimeout}
         defaultFormat={reportConfig.defaultFormat}
         theme={userPreference.theme}
-        language={userPreference.language}
       />
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">

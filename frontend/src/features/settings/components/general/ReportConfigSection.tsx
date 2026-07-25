@@ -4,6 +4,7 @@ import { SectionHeader } from '@/features/settings/components/shared/SectionHead
 import { ConfigItem } from '@/features/settings/components/shared/ConfigItem'
 import { ConfigInput } from '@/features/settings/components/shared/ConfigInput'
 import { ConfigSelect } from '@/features/settings/components/shared/ConfigSelect'
+import { parseIntOrNull } from '@/features/settings/utils/general-validation'
 import type { ReportConfig } from '@/features/settings/types/general.types'
 
 interface Props {
@@ -48,8 +49,8 @@ export function ReportConfigSection({ data, onChange }: Props) {
         >
           <ConfigInput
             type="number"
-            value={data.maxExportRecords}
-            onChange={(value) => onChange('maxExportRecords', parseInt(value, 10))}
+            value={data.maxExportRecords ?? ''}
+            onChange={(value) => onChange('maxExportRecords', parseIntOrNull(value))}
             min={1}
             max={100000}
             className="w-full"

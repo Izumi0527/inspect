@@ -1,10 +1,7 @@
 import { httpClient } from '@/lib/api-client'
 import type {
-  BasicInfoConfig,
-  InspectionConfig,
-  ReportConfig,
-  UserPreferenceConfig,
   GeneralSettingsResponse,
+  ValidatedGeneralSettings,
 } from '../types/general.types'
 import { requireBulkSuccess, type BulkUpdateResponse } from './bulk'
 
@@ -40,28 +37,27 @@ function toEnum<T extends string>(value: unknown, allowed: readonly T[], fallbac
   return match ?? fallback
 }
 
+// 与登录页/侧边栏同源的版本号（next.config.js 构建时注入，回退 package.json version）
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '未知'
+
 export const generalApi = {
   /**
-   * 获取所有通用配置
-   * 从后端获取配置后，转换为结构化数据
-   * ✅ 使用新的统一 API 端点
+   * 获取所有通用配置，转换为结构化数据。
+   * system.version 数据库无种子行，回退到全站统一版本号。
    */
   getGeneralSettings: async (): Promise<GeneralSettingsResponse> => {
-    // 获取所有配置（使用新的统一端点）
     const response = await httpClient.get<{ items: BackendSetting[]; total: number }>('/settings/general')
     const allSettings = response.items || []
 
-    // 创建一个 key-value 映射
     const settingsMap = new Map<string, unknown>()
     allSettings.forEach((setting) => {
       settingsMap.set(setting.key, setting.value)
     })
 
-    // 转换为结构化数据
     return {
       basicInfo: {
         applicationName: toString(settingsMap.get('system.application_name'), '网络设备巡检系统'),
-        version: toString(settingsMap.get('system.version'), '1.0.1'),
+        version: toString(settingsMap.get('system.version'), APP_VERSION),
         timezone: toString(settingsMap.get('system.timezone'), 'Asia/Shanghai'),
       },
       inspectionConfig: {
@@ -75,151 +71,15 @@ export const generalApi = {
       },
       userPreference: {
         theme: toEnum(settingsMap.get('user_preference.theme'), ['light', 'dark', 'auto'] as const, 'auto'),
-        language: toEnum(settingsMap.get('user_preference.language'), ['zh-CN', 'en-US'] as const, 'zh-CN'),
-        dateFormat: toString(settingsMap.get('user_preference.date_format'), 'YYYY-MM-DD'),
         timeFormat: toEnum(settingsMap.get('user_preference.time_format'), ['12h', '24h'] as const, '24h'),
       },
     }
   },
 
   /**
-   * 更新基础信息
-   * ✅ 修复: 只发送 value 字段
-   * ✅ 使用新的统一 API 端点
+   * 批量保存所有配置。入参必须是 validateGeneralSettings 校验后的数据。
    */
-  updateBasicInfo: async (data: Partial<BasicInfoConfig>): Promise<void> => {
-    const updates: Array<Promise<unknown>> = []
-
-    if (data.applicationName !== undefined) {
-      updates.push(
-        httpClient.put('/settings/general/system.application_name', {
-          value: data.applicationName,  // ✅ 只发送 value
-        })
-      )
-    }
-
-    if (data.timezone !== undefined) {
-      updates.push(
-        httpClient.put('/settings/general/system.timezone', {
-          value: data.timezone,  // ✅ 只发送 value
-        })
-      )
-    }
-
-    await Promise.all(updates)
-  },
-
-  /**
-   * 更新巡检配置
-   * ✅ 修复: 只发送 value 字段
-   * ✅ 使用新的统一 API 端点
-   */
-  updateInspectionConfig: async (data: Partial<InspectionConfig>): Promise<void> => {
-    const updates: Array<Promise<unknown>> = []
-
-    if (data.maxConcurrentTasks !== undefined) {
-      updates.push(
-        httpClient.put('/settings/general/inspection.max_concurrent_tasks', {
-          value: data.maxConcurrentTasks,  // ✅ 只发送 value
-        })
-      )
-    }
-
-    if (data.defaultTimeout !== undefined) {
-      updates.push(
-        httpClient.put('/settings/general/inspection.default_timeout', {
-          value: data.defaultTimeout,  // ✅ 只发送 value
-        })
-      )
-    }
-
-    if (data.retryAttempts !== undefined) {
-      updates.push(
-        httpClient.put('/settings/general/inspection.retry_attempts', {
-          value: data.retryAttempts,  // ✅ 只发送 value
-        })
-      )
-    }
-
-    await Promise.all(updates)
-  },
-
-  /**
-   * 更新报表配置
-   * ✅ 修复: 只发送 value 字段
-   * ✅ 使用新的统一 API 端点
-   */
-  updateReportConfig: async (data: Partial<ReportConfig>): Promise<void> => {
-    const updates: Array<Promise<unknown>> = []
-
-    if (data.defaultFormat !== undefined) {
-      updates.push(
-        httpClient.put('/settings/general/report.default_format', {
-          value: data.defaultFormat,  // ✅ 只发送 value
-        })
-      )
-    }
-
-    if (data.maxExportRecords !== undefined) {
-      updates.push(
-        httpClient.put('/settings/general/report.max_export_records', {
-          value: data.maxExportRecords,  // ✅ 只发送 value
-        })
-      )
-    }
-
-    await Promise.all(updates)
-  },
-
-  /**
-   * 更新用户偏好
-   * ✅ 修复: 只发送 value 字段
-   * ✅ 使用新的统一 API 端点
-   */
-  updateUserPreference: async (data: Partial<UserPreferenceConfig>): Promise<void> => {
-    const updates: Array<Promise<unknown>> = []
-
-    if (data.theme !== undefined) {
-      updates.push(
-        httpClient.put('/settings/general/user_preference.theme', {
-          value: data.theme,  // ✅ 只发送 value
-        })
-      )
-    }
-
-    if (data.language !== undefined) {
-      updates.push(
-        httpClient.put('/settings/general/user_preference.language', {
-          value: data.language,  // ✅ 只发送 value
-        })
-      )
-    }
-
-    if (data.dateFormat !== undefined) {
-      updates.push(
-        httpClient.put('/settings/general/user_preference.date_format', {
-          value: data.dateFormat,  // ✅ 只发送 value
-        })
-      )
-    }
-
-    if (data.timeFormat !== undefined) {
-      updates.push(
-        httpClient.put('/settings/general/user_preference.time_format', {
-          value: data.timeFormat,  // ✅ 只发送 value
-        })
-      )
-    }
-
-    await Promise.all(updates)
-  },
-
-  /**
-   * 批量保存所有配置
-   * ✅ 使用新的统一 API 端点
-   */
-  saveAll: async (data: GeneralSettingsResponse): Promise<void> => {
-    // 构建批量更新的配置对象
+  saveAll: async (data: ValidatedGeneralSettings): Promise<void> => {
     const settings: Record<string, unknown> = {
       'system.application_name': data.basicInfo.applicationName,
       'system.timezone': data.basicInfo.timezone,
@@ -229,41 +89,22 @@ export const generalApi = {
       'report.default_format': data.reportConfig.defaultFormat,
       'report.max_export_records': data.reportConfig.maxExportRecords,
       'user_preference.theme': data.userPreference.theme,
-      'user_preference.language': data.userPreference.language,
-      'user_preference.date_format': data.userPreference.dateFormat,
       'user_preference.time_format': data.userPreference.timeFormat,
     }
 
     const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', { settings })
     requireBulkSuccess(resp, { action: '保存通用配置' })
   },
-
-  /**
-   * 获取单个配置（额外方法）
-   * GET /api/v1/settings/general/settings/{key}
-   * ✅ 使用新的统一 API 端点
-   */
-  getSetting: async (key: string): Promise<BackendSetting> => {
-    return httpClient.get<BackendSetting>(`/settings/general/settings/${key}`)
-  },
-
-  /**
-   * 更新单个配置（通用方法）
-   * PUT /api/v1/settings/general/settings/{key}
-   * ✅ 使用新的统一 API 端点
-   */
-  updateSetting: async (key: string, value: unknown): Promise<BackendSetting> => {
-    return httpClient.put<BackendSetting>(`/settings/general/settings/${key}`, { value })
-  },
 }
 
 export interface DisplayPreferencesResponse {
   timezone: string
   time_format: '12h' | '24h'
+  application_name: string
 }
 
 /**
- * 获取时间显示偏好（登录即可读，无需 system:config 权限）
+ * 获取展示偏好（时区/时间制/应用名称；登录即可读，无需 system:config 权限）
  * GET /api/v1/settings/display-preferences
  */
 export async function fetchDisplayPreferences(): Promise<DisplayPreferencesResponse> {

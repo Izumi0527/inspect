@@ -7,11 +7,10 @@ import { CompactStatCard } from '@/components/shared'
 interface GeneralOverviewCardProps {
   applicationName: string
   timezone: string
-  maxConcurrentTasks: number
-  defaultTimeout: number
+  maxConcurrentTasks: number | null
+  defaultTimeout: number | null
   defaultFormat: 'excel' | 'pdf' | 'csv'
   theme: 'light' | 'dark' | 'auto'
-  language: 'zh-CN' | 'en-US'
 }
 
 const formatLabelMap: Record<GeneralOverviewCardProps['defaultFormat'], string> = {
@@ -26,11 +25,6 @@ const themeLabelMap: Record<GeneralOverviewCardProps['theme'], string> = {
   auto: '跟随系统',
 }
 
-const languageLabelMap: Record<GeneralOverviewCardProps['language'], string> = {
-  'zh-CN': '简体中文',
-  'en-US': 'English',
-}
-
 export const GeneralOverviewCard: React.FC<GeneralOverviewCardProps> = ({
   applicationName,
   timezone,
@@ -38,7 +32,6 @@ export const GeneralOverviewCard: React.FC<GeneralOverviewCardProps> = ({
   defaultTimeout,
   defaultFormat,
   theme,
-  language,
 }) => {
   return (
     <section
@@ -69,14 +62,14 @@ export const GeneralOverviewCard: React.FC<GeneralOverviewCardProps> = ({
           />
           <CompactStatCard
             title="默认并发任务数"
-            value={maxConcurrentTasks}
+            value={maxConcurrentTasks ?? '—'}
             icon={ScanSearch}
             iconClassName="text-emerald-600 dark:text-emerald-300"
             className="border-border/60 bg-background/80"
           />
           <CompactStatCard
             title="默认超时时间"
-            value={`${defaultTimeout}s`}
+            value={defaultTimeout === null ? '—' : `${defaultTimeout}s`}
             icon={Clock3}
             iconClassName="text-amber-600 dark:text-amber-300"
             className="border-border/60 bg-background/80"
@@ -92,8 +85,8 @@ export const GeneralOverviewCard: React.FC<GeneralOverviewCardProps> = ({
 
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <div className="rounded-lg border border-border/60 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">当前主题 / 语言</span>
-            <span className="ml-2">{themeLabelMap[theme]} / {languageLabelMap[language]}</span>
+            <span className="font-medium text-foreground">当前主题</span>
+            <span className="ml-2">{themeLabelMap[theme]}</span>
           </div>
         </div>
       </div>

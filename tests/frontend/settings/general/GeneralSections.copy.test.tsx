@@ -14,7 +14,7 @@ import type {
 
 const basicInfo: BasicInfoConfig = {
   applicationName: '网络设备巡检系统',
-  version: '1.0.1',
+  version: '1.1.0',
   timezone: 'Asia/Shanghai',
 }
 
@@ -31,8 +31,6 @@ const reportConfig: ReportConfig = {
 
 const userPreference: UserPreferenceConfig = {
   theme: 'auto',
-  language: 'zh-CN',
-  dateFormat: 'YYYY-MM-DD',
   timeFormat: '24h',
 }
 
@@ -49,6 +47,9 @@ const removedExplanatoryCopies = [
   '导出格式影响下游使用习惯',
   '定义系统界面与时间显示的默认偏好，帮助保持一致的展示体验',
   '该区块主要影响默认显示习惯',
+  // 已下线的假开关（无 i18n 框架 / 无消费方），不应再出现
+  '语言',
+  '日期格式',
 ]
 
 const retainedFunctionalCopies = [
@@ -58,7 +59,7 @@ const retainedFunctionalCopies = [
   '默认并发任务数',
   '默认超时时间',
   '默认导出格式',
-  '当前主题 / 语言',
+  '当前主题',
   '基础信息',
   '巡检配置',
   '报表配置',
@@ -73,8 +74,6 @@ const retainedFunctionalCopies = [
   '失败重试次数',
   '最大导出记录数',
   '主题',
-  '语言',
-  '日期格式',
   '时间格式',
 ]
 
@@ -89,7 +88,6 @@ describe('GeneralSettings 通用配置页说明文案', () => {
           defaultTimeout={inspectionConfig.defaultTimeout}
           defaultFormat={reportConfig.defaultFormat}
           theme={userPreference.theme}
-          language={userPreference.language}
         />
         <BasicInfoSection
           data={basicInfo}
@@ -114,5 +112,21 @@ describe('GeneralSettings 通用配置页说明文案', () => {
     for (const copy of retainedFunctionalCopies) {
       expect(screen.getAllByText(copy, { exact: false }).length).toBeGreaterThan(0)
     }
+  })
+
+  it('数字配置为空态（null）时概览显示占位符而非 NaN', () => {
+    render(
+      <GeneralOverviewCard
+        applicationName={basicInfo.applicationName}
+        timezone={basicInfo.timezone}
+        maxConcurrentTasks={null}
+        defaultTimeout={null}
+        defaultFormat={reportConfig.defaultFormat}
+        theme={userPreference.theme}
+      />
+    )
+
+    expect(screen.queryByText('NaN', { exact: false })).not.toBeInTheDocument()
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2)
   })
 })
