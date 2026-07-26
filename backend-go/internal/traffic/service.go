@@ -818,7 +818,7 @@ type trafficPoint struct {
 
 func (s *Service) queryNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time) ([]trafficPoint, error) {
 	if s.monitoring != nil {
-		points, err := s.monitoring.GetNetworkTrafficHistory(ctx, start, end)
+		points, err := s.monitoring.GetNetworkTrafficHistory(ctx, start, end, nil)
 		if err == nil {
 			result := make([]trafficPoint, 0, len(points))
 			for _, point := range points {

@@ -212,7 +212,8 @@ func (w *MetricsWriter) SetDeviceMonitoring(ctx context.Context, deviceID int, e
 	return nil
 }
 
-func (w *MetricsWriter) GetDeviceStatusDistribution(ctx context.Context) (DeviceStatusDistribution, error) {
+// GetDeviceStatusDistribution 统计设备状态分布；deviceIDs 非空时仅统计所选设备。
+func (w *MetricsWriter) GetDeviceStatusDistribution(ctx context.Context, deviceIDs []int) (DeviceStatusDistribution, error) {
 	if w.db == nil {
 		return DeviceStatusDistribution{}, fmt.Errorf("database not initialized")
 	}
@@ -223,10 +224,14 @@ func (w *MetricsWriter) GetDeviceStatusDistribution(ctx context.Context) (Device
 	}
 
 	rows := make([]statusRow, 0)
-	if err := w.db.WithContext(ctx).
+	query := w.db.WithContext(ctx).
 		Table("devices").
 		Select("status, COUNT(*) as count").
-		Where("is_active = ?", true).
+		Where("is_active = ?", true)
+	if len(deviceIDs) > 0 {
+		query = query.Where("id IN ?", deviceIDs)
+	}
+	if err := query.
 		Group("status").
 		Scan(&rows).Error; err != nil {
 		return DeviceStatusDistribution{}, err
@@ -249,24 +254,14 @@ func (w *MetricsWriter) GetDeviceStatusDistribution(ctx context.Context) (Device
 	return dist, nil
 }
 
-func (w *MetricsWriter) GetAvailability(ctx context.Context) (AvailabilitySnapshot, error) {
+// GetAvailability 计算整体可用性；deviceIDs 非空时仅统计所选设备。
+func (w *MetricsWriter) GetAvailability(ctx context.Context, deviceIDs []int) (AvailabilitySnapshot, error) {
 	if w.db == nil {
 		return AvailabilitySnapshot{}, fmt.Errorf("database not initialized")
 	}
 
-	var total int64
-	if err := w.db.WithContext(ctx).
-		Table("devices").
-		Where("is_active = ?", true).
-		Count(&total).Error; err != nil {
-		return AvailabilitySnapshot{}, err
-	}
-
-	var online int64
-	if err := w.db.WithContext(ctx).
-		Table("devices").
-		Where("is_active = ? AND status = ?", true, "online").
-		Count(&online).Error; err != nil {
+	total, online, err := countActiveAndOnlineDevices(ctx, w.db, deviceIDs)
+	if err != nil {
 		return AvailabilitySnapshot{}, err
 	}
 
@@ -283,57 +278,43 @@ func (w *MetricsWriter) GetAvailability(ctx context.Context) (AvailabilitySnapsh
 	}, nil
 }
 
-func (w *MetricsWriter) GetMonitoringStats(ctx context.Context) (MonitoringStats, error) {
+// GetMonitoringStats 返回监控中心统计卡数据；deviceIDs 非空时仅统计所选设备。
+// CPU/内存口径为"最近一轮采集"：取每台设备新鲜窗口内最近一次采集值再求跨设备平均，
+// 无新鲜样本时回退 devices 表快照平均（避免采集暂停时卡片清零）。
+func (w *MetricsWriter) GetMonitoringStats(ctx context.Context, deviceIDs []int) (MonitoringStats, error) {
 	if w.db == nil {
 		return MonitoringStats{}, fmt.Errorf("database not initialized")
 	}
 
-	var total int64
-	if err := w.db.WithContext(ctx).
-		Table("devices").
-		Where("is_active = ?", true).
-		Count(&total).Error; err != nil {
-		return MonitoringStats{}, err
-	}
-
-	var online int64
-	if err := w.db.WithContext(ctx).
-		Table("devices").
-		Where("is_active = ? AND status = ?", true, "online").
-		Count(&online).Error; err != nil {
+	total, online, err := countActiveAndOnlineDevices(ctx, w.db, deviceIDs)
+	if err != nil {
 		return MonitoringStats{}, err
 	}
 
 	var activeAlerts int64
-	if err := w.db.WithContext(ctx).
+	alertsQuery := w.db.WithContext(ctx).
 		Table("alerts AS a").
 		Joins("JOIN devices d ON d.id = a.device_id").
-		Where("a.status IN ?", []string{"open", "acknowledged"}).
-		Count(&activeAlerts).Error; err != nil {
+		Where("a.status IN ?", []string{"open", "acknowledged"})
+	if len(deviceIDs) > 0 {
+		alertsQuery = alertsQuery.Where("a.device_id IN ?", deviceIDs)
+	}
+	if err := alertsQuery.Count(&activeAlerts).Error; err != nil {
 		return MonitoringStats{}, err
 	}
 
-	avgCPU, err := avgDeviceColumn(ctx, w.db, "cpu_usage")
+	avgCPU, err := latestSampleAverageWithFallback(ctx, w.db, "cpu_usage", deviceIDs)
 	if err != nil {
 		return MonitoringStats{}, err
 	}
 
-	avgMemory, err := avgDeviceColumn(ctx, w.db, "memory_usage")
+	avgMemory, err := latestSampleAverageWithFallback(ctx, w.db, "memory_usage", deviceIDs)
 	if err != nil {
 		return MonitoringStats{}, err
-	}
-
-	// 修正：如果值超过 100%，说明数据库中存储的是错误的值（被放大了 100 倍）
-	// 这种情况下需要除以 100 来修正
-	if avgCPU > 100 {
-		avgCPU = avgCPU / 100
-	}
-	if avgMemory > 100 {
-		avgMemory = avgMemory / 100
 	}
 
 	// 查询24小时内的峰值网络流量（bps）
-	peakNetwork, _, err := peakNetworkMetric24h(ctx, w.db)
+	peakNetwork, _, err := peakNetworkMetric24h(ctx, w.db, deviceIDs)
 	if err != nil {
 		return MonitoringStats{}, err
 	}
@@ -385,7 +366,7 @@ func (w *MetricsWriter) GetMonitoringOverview(ctx context.Context) (MonitoringOv
 		return MonitoringOverview{}, err
 	}
 
-	avgResponse, err := avgDeviceColumn(ctx, w.db, "response_time")
+	avgResponse, err := avgDeviceColumn(ctx, w.db, "response_time", nil)
 	if err != nil {
 		return MonitoringOverview{}, err
 	}
@@ -582,11 +563,14 @@ func (w *MetricsWriter) GetBulkMetricsHistory(
 	return points, nil
 }
 
+// GetSystemPerformanceHistory 查询性能趋势时序；deviceIDs 非空时仅聚合所选设备
+// （此时不再回退主机级 system_metrics，因其无设备维度）。
 func (w *MetricsWriter) GetSystemPerformanceHistory(
 	ctx context.Context,
 	start time.Time,
 	end time.Time,
 	metrics []string,
+	deviceIDs []int,
 ) ([]SystemPerformancePoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -599,7 +583,7 @@ func (w *MetricsWriter) GetSystemPerformanceHistory(
 
 	// 尝试从缓存获取
 	if w.cache != nil {
-		if cached, found := w.cache.GetSystemPerformance(ctx, start, end, metricSet); found {
+		if cached, found := w.cache.GetSystemPerformance(ctx, start, end, metricSet, deviceIDs); found {
 			return cached, nil
 		}
 	}
@@ -608,16 +592,16 @@ func (w *MetricsWriter) GetSystemPerformanceHistory(
 	series := make(map[time.Time]*SystemPerformancePoint)
 
 	for _, metric := range metricSet {
-		values, err := w.querySystemMetricSeries(ctx, start, end, metric, bucket)
+		values, err := w.querySystemMetricSeries(ctx, start, end, metric, bucket, deviceIDs)
 		if err != nil {
 			return nil, err
 		}
 		if metric == "network_traffic" && len(values) == 0 {
-			inbound, err := w.querySystemMetricSeries(ctx, start, end, "network_bytes_in", bucket)
+			inbound, err := w.querySystemMetricSeries(ctx, start, end, "network_bytes_in", bucket, deviceIDs)
 			if err != nil {
 				return nil, err
 			}
-			outbound, err := w.querySystemMetricSeries(ctx, start, end, "network_bytes_out", bucket)
+			outbound, err := w.querySystemMetricSeries(ctx, start, end, "network_bytes_out", bucket, deviceIDs)
 			if err != nil {
 				return nil, err
 			}
@@ -646,20 +630,21 @@ func (w *MetricsWriter) GetSystemPerformanceHistory(
 
 	// 写入缓存
 	if w.cache != nil {
-		w.cache.SetSystemPerformance(ctx, start, end, metricSet, result)
+		w.cache.SetSystemPerformance(ctx, start, end, metricSet, deviceIDs, result)
 	}
 
 	return result, nil
 }
 
-func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time) ([]TemperatureHistoryPoint, error) {
+// GetTemperatureHistory 查询设备温度时序；deviceIDs 非空时仅返回所选设备。
+func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]TemperatureHistoryPoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
 	// 尝试从缓存获取
 	if w.cache != nil {
-		if cached, found := w.cache.GetTemperature(ctx, start, end); found {
+		if cached, found := w.cache.GetTemperature(ctx, start, end, deviceIDs); found {
 			return cached, nil
 		}
 	}
@@ -667,13 +652,22 @@ func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Ti
 	bucket := bucketSizeForRange(start, end)
 	useHourly := bucket >= time.Hour
 
+	deviceFilter := ""
+	if len(deviceIDs) > 0 {
+		deviceFilter = " AND device_id IN (?)"
+	}
+
 	rows := make([]temperatureRow, 0)
 	if useHourly {
-		if err := w.db.WithContext(ctx).
+		hourlyQuery := w.db.WithContext(ctx).
 			Table("device_metrics_hourly").
 			Select("bucket, device_id, avg_value AS value").
 			Where("metric_name = ?", "temperature").
-			Where("bucket >= ? AND bucket <= ?", start, end).
+			Where("bucket >= ? AND bucket <= ?", start, end)
+		if len(deviceIDs) > 0 {
+			hourlyQuery = hourlyQuery.Where("device_id IN ?", deviceIDs)
+		}
+		if err := hourlyQuery.
 			Order("bucket ASC").
 			Scan(&rows).Error; err != nil {
 			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
@@ -681,20 +675,30 @@ func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Ti
 				return nil, err
 			}
 			query := fmt.Sprintf(
-				"SELECT time_bucket('%s', collected_at) AS bucket, device_id, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ? GROUP BY bucket, device_id ORDER BY bucket ASC",
+				"SELECT time_bucket('%s', collected_at) AS bucket, device_id, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket, device_id ORDER BY bucket ASC",
 				"1 hour",
+				deviceFilter,
 			)
-			if err := w.db.WithContext(ctx).Raw(query, "temperature", start, end).Scan(&rows).Error; err != nil {
+			args := []interface{}{"temperature", start, end}
+			if len(deviceIDs) > 0 {
+				args = append(args, deviceIDs)
+			}
+			if err := w.db.WithContext(ctx).Raw(query, args...).Scan(&rows).Error; err != nil {
 				return nil, err
 			}
 		}
 	} else {
 		interval := bucketIntervalString(bucket)
 		query := fmt.Sprintf(
-			"SELECT time_bucket('%s', collected_at) AS bucket, device_id, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ? GROUP BY bucket, device_id ORDER BY bucket ASC",
+			"SELECT time_bucket('%s', collected_at) AS bucket, device_id, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket, device_id ORDER BY bucket ASC",
 			interval,
+			deviceFilter,
 		)
-		if err := w.db.WithContext(ctx).Raw(query, "temperature", start, end).Scan(&rows).Error; err != nil {
+		args := []interface{}{"temperature", start, end}
+		if len(deviceIDs) > 0 {
+			args = append(args, deviceIDs)
+		}
+		if err := w.db.WithContext(ctx).Raw(query, args...).Scan(&rows).Error; err != nil {
 			return nil, err
 		}
 	}
@@ -728,20 +732,21 @@ func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Ti
 
 	// 写入缓存
 	if w.cache != nil {
-		w.cache.SetTemperature(ctx, start, end, result)
+		w.cache.SetTemperature(ctx, start, end, deviceIDs, result)
 	}
 
 	return result, nil
 }
 
-func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time) ([]NetworkTrafficPoint, error) {
+// GetNetworkTrafficHistory 查询网络流量时序；deviceIDs 非空时仅聚合所选设备。
+func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]NetworkTrafficPoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
 	// 尝试从缓存获取
 	if w.cache != nil {
-		if cached, found := w.cache.GetNetworkTraffic(ctx, start, end); found {
+		if cached, found := w.cache.GetNetworkTraffic(ctx, start, end, deviceIDs); found {
 			return cached, nil
 		}
 	}
@@ -752,6 +757,11 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 	inboundNames := []string{"bandwidth_in", "network_bytes_in", "throughput_in"}
 	outboundNames := []string{"bandwidth_out", "network_bytes_out", "throughput_out"}
 	allNames := append(append([]string{}, inboundNames...), outboundNames...)
+
+	deviceFilter := ""
+	if len(deviceIDs) > 0 {
+		deviceFilter = " AND device_id IN (?)"
+	}
 
 	type row struct {
 		Bucket   time.Time `gorm:"column:bucket"`
@@ -766,14 +776,19 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
                 SUM(CASE WHEN metric_name IN (%s) THEN avg_value ELSE 0 END) AS inbound,
                 SUM(CASE WHEN metric_name IN (%s) THEN avg_value ELSE 0 END) AS outbound
              FROM device_metrics_hourly
-             WHERE bucket >= ? AND bucket <= ? AND metric_name IN (%s)
+             WHERE bucket >= ? AND bucket <= ? AND metric_name IN (%s)%s
              GROUP BY bucket
              ORDER BY bucket ASC`,
 			formatMetricList(inboundNames),
 			formatMetricList(outboundNames),
 			formatMetricList(allNames),
+			deviceFilter,
 		)
-		if err := w.db.WithContext(ctx).Raw(query, start, end).Scan(&rows).Error; err != nil {
+		hourlyArgs := []interface{}{start, end}
+		if len(deviceIDs) > 0 {
+			hourlyArgs = append(hourlyArgs, deviceIDs)
+		}
+		if err := w.db.WithContext(ctx).Raw(query, hourlyArgs...).Scan(&rows).Error; err != nil {
 			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
 			if !isUndefinedRelationError(err) {
 				return nil, err
@@ -783,10 +798,10 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 			fallback := fmt.Sprintf(
 				`WITH combined_metrics AS (
 				SELECT collected_at, metric_name, metric_value FROM device_metrics
-				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)
+				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)%s
 				UNION ALL
 				SELECT collected_at, metric_name, metric_value FROM interface_metrics
-				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)
+				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)%s
 			)
 			SELECT time_bucket('%s', collected_at) AS bucket,
                 SUM(CASE WHEN metric_name IN (%s) THEN metric_value ELSE 0 END) AS inbound,
@@ -795,12 +810,22 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
              GROUP BY bucket
              ORDER BY bucket ASC`,
 				formatMetricList(allNames),
+				deviceFilter,
 				formatMetricList(allNames),
+				deviceFilter,
 				interval,
 				formatMetricList(inboundNames),
 				formatMetricList(outboundNames),
 			)
-			if err := w.db.WithContext(ctx).Raw(fallback, start, end, start, end).Scan(&rows).Error; err != nil {
+			fallbackArgs := []interface{}{start, end}
+			if len(deviceIDs) > 0 {
+				fallbackArgs = append(fallbackArgs, deviceIDs)
+			}
+			fallbackArgs = append(fallbackArgs, start, end)
+			if len(deviceIDs) > 0 {
+				fallbackArgs = append(fallbackArgs, deviceIDs)
+			}
+			if err := w.db.WithContext(ctx).Raw(fallback, fallbackArgs...).Scan(&rows).Error; err != nil {
 				return nil, err
 			}
 		}
@@ -810,10 +835,10 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 		query := fmt.Sprintf(
 			`WITH combined_metrics AS (
 				SELECT collected_at, metric_name, metric_value FROM device_metrics
-				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)
+				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)%s
 				UNION ALL
 				SELECT collected_at, metric_name, metric_value FROM interface_metrics
-				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)
+				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)%s
 			)
 			SELECT time_bucket('%s', collected_at) AS bucket,
                 SUM(CASE WHEN metric_name IN (%s) THEN metric_value ELSE 0 END) AS inbound,
@@ -822,12 +847,22 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
              GROUP BY bucket
              ORDER BY bucket ASC`,
 			formatMetricList(allNames),
+			deviceFilter,
 			formatMetricList(allNames),
+			deviceFilter,
 			interval,
 			formatMetricList(inboundNames),
 			formatMetricList(outboundNames),
 		)
-		if err := w.db.WithContext(ctx).Raw(query, start, end, start, end).Scan(&rows).Error; err != nil {
+		rawArgs := []interface{}{start, end}
+		if len(deviceIDs) > 0 {
+			rawArgs = append(rawArgs, deviceIDs)
+		}
+		rawArgs = append(rawArgs, start, end)
+		if len(deviceIDs) > 0 {
+			rawArgs = append(rawArgs, deviceIDs)
+		}
+		if err := w.db.WithContext(ctx).Raw(query, rawArgs...).Scan(&rows).Error; err != nil {
 			return nil, err
 		}
 	}
@@ -851,7 +886,7 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 
 	// 写入缓存
 	if w.cache != nil {
-		w.cache.SetNetworkTraffic(ctx, start, end, points)
+		w.cache.SetNetworkTraffic(ctx, start, end, deviceIDs, points)
 	}
 
 	return points, nil
@@ -863,6 +898,7 @@ func (w *MetricsWriter) querySystemMetricSeries(
 	end time.Time,
 	metric string,
 	bucket time.Duration,
+	deviceIDs []int,
 ) (map[time.Time]float64, error) {
 	useHourly := bucket >= time.Hour
 
@@ -873,13 +909,29 @@ func (w *MetricsWriter) querySystemMetricSeries(
 
 	rows := make([]row, 0)
 
+	deviceFilter := ""
+	if len(deviceIDs) > 0 {
+		deviceFilter = " AND device_id IN (?)"
+	}
+	buildArgs := func() []interface{} {
+		args := []interface{}{metric, start, end}
+		if len(deviceIDs) > 0 {
+			args = append(args, deviceIDs)
+		}
+		return args
+	}
+
 	// First try device_metrics table (aggregated from all devices)
 	if useHourly {
-		if err := w.db.WithContext(ctx).
+		hourlyQuery := w.db.WithContext(ctx).
 			Table("device_metrics_hourly").
 			Select("bucket, AVG(avg_value) AS value").
 			Where("metric_name = ?", metric).
-			Where("bucket >= ? AND bucket <= ?", start, end).
+			Where("bucket >= ? AND bucket <= ?", start, end)
+		if len(deviceIDs) > 0 {
+			hourlyQuery = hourlyQuery.Where("device_id IN ?", deviceIDs)
+		}
+		if err := hourlyQuery.
 			Group("bucket").
 			Order("bucket ASC").
 			Scan(&rows).Error; err != nil {
@@ -888,26 +940,29 @@ func (w *MetricsWriter) querySystemMetricSeries(
 				return nil, err
 			}
 			query := fmt.Sprintf(
-				"SELECT time_bucket('%s', collected_at) AS bucket, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ? GROUP BY bucket ORDER BY bucket ASC",
+				"SELECT time_bucket('%s', collected_at) AS bucket, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket ORDER BY bucket ASC",
 				"1 hour",
+				deviceFilter,
 			)
-			if err := w.db.WithContext(ctx).Raw(query, metric, start, end).Scan(&rows).Error; err != nil {
+			if err := w.db.WithContext(ctx).Raw(query, buildArgs()...).Scan(&rows).Error; err != nil {
 				return nil, err
 			}
 		}
 	} else {
 		interval := bucketIntervalString(bucket)
 		query := fmt.Sprintf(
-			"SELECT time_bucket('%s', collected_at) AS bucket, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ? GROUP BY bucket ORDER BY bucket ASC",
+			"SELECT time_bucket('%s', collected_at) AS bucket, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket ORDER BY bucket ASC",
 			interval,
+			deviceFilter,
 		)
-		if err := w.db.WithContext(ctx).Raw(query, metric, start, end).Scan(&rows).Error; err != nil {
+		if err := w.db.WithContext(ctx).Raw(query, buildArgs()...).Scan(&rows).Error; err != nil {
 			return nil, err
 		}
 	}
 
-	// If no data from device_metrics, fallback to system_metrics
-	if len(rows) == 0 {
+	// If no data from device_metrics, fallback to system_metrics.
+	// 设备筛选时跳过：system_metrics 是主机级指标，无设备维度，回退会造成"筛选无效"的假数据。
+	if len(rows) == 0 && len(deviceIDs) == 0 {
 		if useHourly {
 			if err := w.db.WithContext(ctx).
 				Table("system_metrics_hourly").
@@ -1043,13 +1098,96 @@ func shouldUseHourlyAggregate(start time.Time, end time.Time) bool {
 	return end.Sub(start) >= 48*time.Hour
 }
 
-func avgDeviceColumn(ctx context.Context, db *gorm.DB, column string) (float64, error) {
-	var avg sql.NullFloat64
+// latestSampleWindow 统计卡"最近一轮采集"的新鲜窗口（约 3 个默认采集周期）。
+const latestSampleWindow = 15 * time.Minute
+
+// countActiveAndOnlineDevices 统计活跃设备总数与在线数；deviceIDs 非空时限定范围。
+func countActiveAndOnlineDevices(ctx context.Context, db *gorm.DB, deviceIDs []int) (int64, int64, error) {
+	var total int64
+	totalQuery := db.WithContext(ctx).
+		Table("devices").
+		Where("is_active = ?", true)
+	if len(deviceIDs) > 0 {
+		totalQuery = totalQuery.Where("id IN ?", deviceIDs)
+	}
+	if err := totalQuery.Count(&total).Error; err != nil {
+		return 0, 0, err
+	}
+
+	var online int64
+	onlineQuery := db.WithContext(ctx).
+		Table("devices").
+		Where("is_active = ? AND status = ?", true, "online")
+	if len(deviceIDs) > 0 {
+		onlineQuery = onlineQuery.Where("id IN ?", deviceIDs)
+	}
+	if err := onlineQuery.Count(&online).Error; err != nil {
+		return 0, 0, err
+	}
+
+	return total, online, nil
+}
+
+// latestSampleAverageWithFallback 取"每台设备最近一次采集值的平均"；
+// 新鲜窗口内无任何样本时回退到 devices 表快照平均。
+func latestSampleAverageWithFallback(ctx context.Context, db *gorm.DB, metric string, deviceIDs []int) (float64, error) {
+	value, samples, err := latestMetricAverage(ctx, db, metric, deviceIDs, latestSampleWindow)
+	if err != nil {
+		return 0, err
+	}
+	if samples == 0 {
+		column := metric
+		value, err = avgDeviceColumn(ctx, db, column, deviceIDs)
+		if err != nil {
+			return 0, err
+		}
+	}
+	// 修正：如果值超过 100%，说明存储的是被放大 100 倍的错误历史数据
+	if value > 100 {
+		value = value / 100
+	}
+	return value, nil
+}
+
+// latestMetricAverage 对每台设备取窗口内最近一次采集值（DISTINCT ON），再求跨设备平均。
+func latestMetricAverage(ctx context.Context, db *gorm.DB, metric string, deviceIDs []int, window time.Duration) (float64, int64, error) {
+	sub := db.WithContext(ctx).
+		Table("device_metrics").
+		Select("DISTINCT ON (device_id) device_id, metric_value").
+		Where("metric_name = ?", metric).
+		Where("collected_at >= ?", time.Now().UTC().Add(-window)).
+		Order("device_id, collected_at DESC")
+	if len(deviceIDs) > 0 {
+		sub = sub.Where("device_id IN ?", deviceIDs)
+	}
+
+	type avgRow struct {
+		AvgValue    sql.NullFloat64 `gorm:"column:avg_value"`
+		SampleCount int64           `gorm:"column:sample_count"`
+	}
+	var avg avgRow
 	if err := db.WithContext(ctx).
+		Table("(?) AS latest_samples", sub).
+		Select("AVG(metric_value) AS avg_value, COUNT(*) AS sample_count").
+		Scan(&avg).Error; err != nil {
+		return 0, 0, err
+	}
+	if avg.AvgValue.Valid {
+		return avg.AvgValue.Float64, avg.SampleCount, nil
+	}
+	return 0, avg.SampleCount, nil
+}
+
+func avgDeviceColumn(ctx context.Context, db *gorm.DB, column string, deviceIDs []int) (float64, error) {
+	var avg sql.NullFloat64
+	query := db.WithContext(ctx).
 		Table("devices").
 		Select(fmt.Sprintf("AVG(%s) AS avg_value", column)).
-		Where("is_active = ?", true).
-		Scan(&avg).Error; err != nil {
+		Where("is_active = ?", true)
+	if len(deviceIDs) > 0 {
+		query = query.Where("id IN ?", deviceIDs)
+	}
+	if err := query.Scan(&avg).Error; err != nil {
 		return 0, err
 	}
 	if avg.Valid {
@@ -1094,8 +1232,8 @@ const MaxReasonableBandwidthBps = 10_000_000_000
 
 // peakNetworkMetric24h 查询24小时内的峰值网络流量（入站+出站的最大值）
 // 返回值单位为 bps (bits per second，比特每秒)
-// 会过滤掉超过 10 Gbps 的异常数据
-func peakNetworkMetric24h(ctx context.Context, db *gorm.DB) (float64, bool, error) {
+// 会过滤掉超过 10 Gbps 的异常数据；deviceIDs 非空时仅统计所选设备
+func peakNetworkMetric24h(ctx context.Context, db *gorm.DB, deviceIDs []int) (float64, bool, error) {
 	inbound := []string{"bandwidth_in", "network_bytes_in", "throughput_in"}
 	outbound := []string{"bandwidth_out", "network_bytes_out", "throughput_out"}
 	allMetrics := append(append([]string{}, inbound...), outbound...)
@@ -1108,39 +1246,46 @@ func peakNetworkMetric24h(ctx context.Context, db *gorm.DB) (float64, bool, erro
 
 	var peak peakRow
 
+	deviceFilter := ""
+	args := []interface{}{
+		inbound, MaxReasonableBandwidthBps,
+		outbound, MaxReasonableBandwidthBps,
+		allMetrics,
+		MaxReasonableBandwidthBps,
+	}
+	if len(deviceIDs) > 0 {
+		deviceFilter = " AND device_id IN (?)"
+		args = append(args, deviceIDs)
+	}
+
 	// 使用子查询：先按时间点聚合入站和出站流量，然后取最大值
 	// 过滤掉超过 10 Gbps 的异常数据（可能是历史错误数据）
-	query := `
+	query := fmt.Sprintf(`
 		WITH time_buckets AS (
-			SELECT 
+			SELECT
 				time_bucket('5 minutes', collected_at) AS bucket,
 				SUM(CASE WHEN metric_name IN (?) AND metric_value < ? THEN metric_value ELSE 0 END) AS inbound,
 				SUM(CASE WHEN metric_name IN (?) AND metric_value < ? THEN metric_value ELSE 0 END) AS outbound
 			FROM device_metrics
 			WHERE metric_name IN (?)
 			AND collected_at >= NOW() - INTERVAL '24 hours'
-			AND metric_value < ?
+			AND metric_value < ?%s
 			GROUP BY bucket
 		)
-		SELECT 
+		SELECT
 			MAX(inbound + outbound) AS peak_value,
 			COUNT(*) AS sample_count
 		FROM time_buckets
 		WHERE inbound + outbound > 0
-	`
+	`, deviceFilter)
 
-	if err := db.WithContext(ctx).Raw(query,
-		inbound, MaxReasonableBandwidthBps,
-		outbound, MaxReasonableBandwidthBps,
-		allMetrics,
-		MaxReasonableBandwidthBps,
-	).Scan(&peak).Error; err != nil {
+	if err := db.WithContext(ctx).Raw(query, args...).Scan(&peak).Error; err != nil {
 		return 0, false, err
 	}
 
 	if peak.SampleCount == 0 || !peak.PeakValue.Valid {
 		// 没有数据，尝试使用 bandwidth_utilization 作为兜底
-		fallbackPeak, fallbackCount, err := maxMetricList24h(ctx, db, []string{"bandwidth_utilization"})
+		fallbackPeak, fallbackCount, err := maxMetricList24h(ctx, db, []string{"bandwidth_utilization"}, deviceIDs)
 		if err != nil {
 			return 0, false, err
 		}
@@ -1156,19 +1301,22 @@ func peakNetworkMetric24h(ctx context.Context, db *gorm.DB) (float64, bool, erro
 	return peakValue, true, nil
 }
 
-// maxMetricList24h 查询24小时内指定指标的最大值
-func maxMetricList24h(ctx context.Context, db *gorm.DB, metrics []string) (float64, int64, error) {
+// maxMetricList24h 查询24小时内指定指标的最大值；deviceIDs 非空时仅统计所选设备
+func maxMetricList24h(ctx context.Context, db *gorm.DB, metrics []string, deviceIDs []int) (float64, int64, error) {
 	type maxRow struct {
 		MaxValue    sql.NullFloat64 `gorm:"column:max_value"`
 		SampleCount int64           `gorm:"column:sample_count"`
 	}
 	var max maxRow
-	if err := db.WithContext(ctx).
+	query := db.WithContext(ctx).
 		Table("device_metrics").
 		Select("MAX(metric_value) AS max_value, COUNT(*) AS sample_count").
 		Where("metric_name IN ?", metrics).
-		Where("collected_at >= NOW() - INTERVAL '24 hours'").
-		Scan(&max).Error; err != nil {
+		Where("collected_at >= NOW() - INTERVAL '24 hours'")
+	if len(deviceIDs) > 0 {
+		query = query.Where("device_id IN ?", deviceIDs)
+	}
+	if err := query.Scan(&max).Error; err != nil {
 		return 0, 0, err
 	}
 	if max.MaxValue.Valid {

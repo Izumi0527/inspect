@@ -111,7 +111,7 @@ func (w *MetricsWriter) ExportMonitoringReport(
 	}
 
 	if hasReportSection(sections, "stats") {
-		stats, err := w.GetMonitoringStats(ctx)
+		stats, err := w.GetMonitoringStats(ctx, nil)
 		if err != nil {
 			return MonitoringReportExportResult{}, err
 		}
@@ -119,11 +119,11 @@ func (w *MetricsWriter) ExportMonitoringReport(
 	}
 
 	if hasReportSection(sections, "charts") {
-		perf, err := w.GetSystemPerformanceHistory(ctx, start, end, nil)
+		perf, err := w.GetSystemPerformanceHistory(ctx, start, end, nil, nil)
 		if err != nil {
 			return MonitoringReportExportResult{}, err
 		}
-		traffic, err := w.GetNetworkTrafficHistory(ctx, start, end)
+		traffic, err := w.GetNetworkTrafficHistory(ctx, start, end, nil)
 		if err != nil {
 			return MonitoringReportExportResult{}, err
 		}

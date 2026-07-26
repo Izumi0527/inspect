@@ -23,14 +23,20 @@ func TestGetMonitoringStats_ShouldExcludeDeletedDeviceAlerts(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE .*status IN .*`).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	// CPU：最新采集样本查询（窗口内无样本）→ 回退 devices 快照平均
+	mock.ExpectQuery(`(?is)SELECT AVG\(metric_value\) AS avg_value, COUNT\(\*\) AS sample_count FROM \(SELECT DISTINCT ON \(device_id\).*metric_name = \$1.*\) AS latest_samples`).
+		WillReturnRows(sqlmock.NewRows([]string{"avg_value", "sample_count"}).AddRow(nil, 0))
 	mock.ExpectQuery(`SELECT AVG\(cpu_usage\) AS avg_value FROM "devices" WHERE is_active = \$1`).
 		WillReturnRows(sqlmock.NewRows([]string{"avg_value"}).AddRow(nil))
+	// 内存：同上
+	mock.ExpectQuery(`(?is)SELECT AVG\(metric_value\) AS avg_value, COUNT\(\*\) AS sample_count FROM \(SELECT DISTINCT ON \(device_id\).*metric_name = \$1.*\) AS latest_samples`).
+		WillReturnRows(sqlmock.NewRows([]string{"avg_value", "sample_count"}).AddRow(nil, 0))
 	mock.ExpectQuery(`SELECT AVG\(memory_usage\) AS avg_value FROM "devices" WHERE is_active = \$1`).
 		WillReturnRows(sqlmock.NewRows([]string{"avg_value"}).AddRow(nil))
 	mock.ExpectQuery(`(?is)WITH time_buckets AS .*FROM device_metrics.*`).
 		WillReturnRows(sqlmock.NewRows([]string{"peak_value", "sample_count"}).AddRow(0.0, 1))
 
-	stats, err := writer.GetMonitoringStats(context.Background())
+	stats, err := writer.GetMonitoringStats(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("GetMonitoringStats() error = %v", err)
 	}

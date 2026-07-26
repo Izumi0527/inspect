@@ -17,7 +17,7 @@ import (
 
 type testMonitoringDashboardWriter struct{}
 
-func (testMonitoringDashboardWriter) GetMonitoringStats(_ context.Context) (monitoring.MonitoringStats, error) {
+func (testMonitoringDashboardWriter) GetMonitoringStats(_ context.Context, _ []int) (monitoring.MonitoringStats, error) {
 	return monitoring.MonitoringStats{
 		TotalDevices: 1,
 		Availability: 99.9,
@@ -28,7 +28,7 @@ func (testMonitoringDashboardWriter) GetMonitoringStats(_ context.Context) (moni
 	}, nil
 }
 
-func (testMonitoringDashboardWriter) GetSystemPerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []string) ([]monitoring.SystemPerformancePoint, error) {
+func (testMonitoringDashboardWriter) GetSystemPerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []string, _ []int) ([]monitoring.SystemPerformancePoint, error) {
 	return []monitoring.SystemPerformancePoint{
 		{
 			Timestamp:      "2026-03-15T00:00:00Z",
@@ -39,7 +39,7 @@ func (testMonitoringDashboardWriter) GetSystemPerformanceHistory(_ context.Conte
 	}, nil
 }
 
-func (testMonitoringDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Time, _ time.Time) ([]monitoring.TemperatureHistoryPoint, error) {
+func (testMonitoringDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.TemperatureHistoryPoint, error) {
 	return []monitoring.TemperatureHistoryPoint{
 		{
 			Timestamp: "2026-03-15T01:00:00Z",
@@ -48,11 +48,11 @@ func (testMonitoringDashboardWriter) GetTemperatureHistory(_ context.Context, _ 
 	}, nil
 }
 
-func (testMonitoringDashboardWriter) GetDeviceStatusDistribution(_ context.Context) (monitoring.DeviceStatusDistribution, error) {
+func (testMonitoringDashboardWriter) GetDeviceStatusDistribution(_ context.Context, _ []int) (monitoring.DeviceStatusDistribution, error) {
 	return monitoring.DeviceStatusDistribution{Healthy: 1, Warning: 0, Critical: 0, Offline: 0}, nil
 }
 
-func (testMonitoringDashboardWriter) GetAvailability(_ context.Context) (monitoring.AvailabilitySnapshot, error) {
+func (testMonitoringDashboardWriter) GetAvailability(_ context.Context, _ []int) (monitoring.AvailabilitySnapshot, error) {
 	return monitoring.AvailabilitySnapshot{
 		Current:    99.9,
 		Target:     99.9,
@@ -61,7 +61,7 @@ func (testMonitoringDashboardWriter) GetAvailability(_ context.Context) (monitor
 	}, nil
 }
 
-func (testMonitoringDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time) ([]monitoring.NetworkTrafficPoint, error) {
+func (testMonitoringDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.NetworkTrafficPoint, error) {
 	return []monitoring.NetworkTrafficPoint{
 		{
 			Timestamp: "2026-03-15T02:00:00Z",

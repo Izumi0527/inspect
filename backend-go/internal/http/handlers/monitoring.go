@@ -32,12 +32,12 @@ type MonitoringHandler struct {
 }
 
 type monitoringDashboardWriter interface {
-	GetMonitoringStats(ctx context.Context) (monitoring.MonitoringStats, error)
-	GetSystemPerformanceHistory(ctx context.Context, start time.Time, end time.Time, metrics []string) ([]monitoring.SystemPerformancePoint, error)
-	GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time) ([]monitoring.TemperatureHistoryPoint, error)
-	GetDeviceStatusDistribution(ctx context.Context) (monitoring.DeviceStatusDistribution, error)
-	GetAvailability(ctx context.Context) (monitoring.AvailabilitySnapshot, error)
-	GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time) ([]monitoring.NetworkTrafficPoint, error)
+	GetMonitoringStats(ctx context.Context, deviceIDs []int) (monitoring.MonitoringStats, error)
+	GetSystemPerformanceHistory(ctx context.Context, start time.Time, end time.Time, metrics []string, deviceIDs []int) ([]monitoring.SystemPerformancePoint, error)
+	GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.TemperatureHistoryPoint, error)
+	GetDeviceStatusDistribution(ctx context.Context, deviceIDs []int) (monitoring.DeviceStatusDistribution, error)
+	GetAvailability(ctx context.Context, deviceIDs []int) (monitoring.AvailabilitySnapshot, error)
+	GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.NetworkTrafficPoint, error)
 }
 
 func (h MonitoringHandler) dashboardWriter() monitoringDashboardWriter {
@@ -290,7 +290,7 @@ func (h MonitoringHandler) GetDeviceStatusDistribution(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
 
-	result, err := h.Writer.GetDeviceStatusDistribution(c.Request().Context())
+	result, err := h.Writer.GetDeviceStatusDistribution(c.Request().Context(), parseDeviceIDsQueryParam(c.QueryParam("device_ids")))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query status distribution")
 	}
@@ -305,7 +305,7 @@ func (h MonitoringHandler) GetAvailability(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
 
-	result, err := h.Writer.GetAvailability(c.Request().Context())
+	result, err := h.Writer.GetAvailability(c.Request().Context(), parseDeviceIDsQueryParam(c.QueryParam("device_ids")))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query availability")
 	}
@@ -321,7 +321,7 @@ func (h MonitoringHandler) GetMonitoringStats(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
 	}
 
-	result, err := writer.GetMonitoringStats(c.Request().Context())
+	result, err := writer.GetMonitoringStats(c.Request().Context(), parseDeviceIDsQueryParam(c.QueryParam("device_ids")))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query monitoring stats")
 	}
@@ -476,7 +476,7 @@ func (h MonitoringHandler) GetSystemPerformanceHistory(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	result, err := h.Writer.GetSystemPerformanceHistory(c.Request().Context(), startTime, endTime, normalizeMetricList(req.Metrics))
+	result, err := h.Writer.GetSystemPerformanceHistory(c.Request().Context(), startTime, endTime, normalizeMetricList(req.Metrics), sanitizeDeviceIDs(req.DeviceIDs))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query system performance")
 	}
@@ -502,7 +502,7 @@ func (h MonitoringHandler) GetDeviceTemperatureHistory(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	result, err := h.Writer.GetTemperatureHistory(c.Request().Context(), startTime, endTime)
+	result, err := h.Writer.GetTemperatureHistory(c.Request().Context(), startTime, endTime, sanitizeDeviceIDs(req.DeviceIDs))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query temperature history")
 	}
@@ -528,7 +528,7 @@ func (h MonitoringHandler) GetNetworkTrafficHistory(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	result, err := h.Writer.GetNetworkTrafficHistory(c.Request().Context(), startTime, endTime)
+	result, err := h.Writer.GetNetworkTrafficHistory(c.Request().Context(), startTime, endTime, sanitizeDeviceIDs(req.DeviceIDs))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query network traffic history")
 	}
@@ -630,10 +630,12 @@ func (h MonitoringHandler) ExportMonitoringReport(c echo.Context) error {
 }
 
 type monitoringDashboardV2Request struct {
-	// 时间范围：例如 24h / 7d / 30d，默认 24h
+	// 时间范围：例如 1h / 12h / 24h / 3d / 7d，默认 24h
 	TimeRange string `json:"time_range"`
 	// 实时告警数量上限，默认 10（无告警权限时自动降级）
 	AlertsLimit int `json:"alerts_limit"`
+	// 设备筛选：为空表示全部设备
+	DeviceIDs []int `json:"device_ids"`
 }
 
 type monitoringSectionStatus struct {
@@ -717,6 +719,8 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 		alertsLimit = 50
 	}
 
+	deviceIDs := sanitizeDeviceIDs(req.DeviceIDs)
+
 	startTime, endTime := resolveTimeRangeFromString(timeRange, 24*time.Hour)
 	generatedAt := time.Now().UTC()
 	generatedAtRFC3339 := generatedAt.Format(time.RFC3339Nano)
@@ -746,7 +750,7 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		value, err := writer.GetMonitoringStats(c.Request().Context())
+		value, err := writer.GetMonitoringStats(c.Request().Context(), deviceIDs)
 		statsResult = result[monitoring.MonitoringStats]{value: value, err: err}
 	}()
 
@@ -758,6 +762,7 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 			startTime,
 			endTime,
 			[]string{"cpu_usage", "memory_usage", "network_traffic"},
+			deviceIDs,
 		)
 		if err != nil {
 			systemPerfResult = result[[]monitoringSystemPerformanceV2Point]{value: []monitoringSystemPerformanceV2Point{}, err: err}
@@ -778,28 +783,28 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		value, err := writer.GetTemperatureHistory(c.Request().Context(), startTime, endTime)
+		value, err := writer.GetTemperatureHistory(c.Request().Context(), startTime, endTime, deviceIDs)
 		tempResult = result[[]monitoring.TemperatureHistoryPoint]{value: value, err: err}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		value, err := writer.GetDeviceStatusDistribution(c.Request().Context())
+		value, err := writer.GetDeviceStatusDistribution(c.Request().Context(), deviceIDs)
 		deviceStatusResult = result[monitoring.DeviceStatusDistribution]{value: value, err: err}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		value, err := writer.GetAvailability(c.Request().Context())
+		value, err := writer.GetAvailability(c.Request().Context(), deviceIDs)
 		availabilityResult = result[monitoring.AvailabilitySnapshot]{value: value, err: err}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		value, err := writer.GetNetworkTrafficHistory(c.Request().Context(), startTime, endTime)
+		value, err := writer.GetNetworkTrafficHistory(c.Request().Context(), startTime, endTime, deviceIDs)
 		networkTrafficResult = result[[]monitoring.NetworkTrafficPoint]{value: value, err: err}
 	}()
 
@@ -819,6 +824,7 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 		rows, _, err := h.AlertService.ListAlerts(c.Request().Context(), alerts.ListAlertsFilter{
 			Page:      1,
 			PageSize:  alertsLimit,
+			DeviceIDs: deviceIDs,
 			SortBy:    "created_at",
 			SortOrder: "desc",
 		})
@@ -1051,14 +1057,61 @@ func buildStatsV2(stats monitoring.MonitoringStats) []monitoringV2StatCardData {
 	avgMemory := safeFloat(stats.AvgMemory)
 	peakNetworkBps := safeFloat(stats.AvgNetwork)
 
+	// CPU/内存口径为"最近一轮采集"（多设备时为各设备最新采集值的平均），
+	// 因此标题不再使用"平均 CPU/平均内存"。
 	return []monitoringV2StatCardData{
 		{ID: "total_devices", Title: "总设备", Value: strconv.Itoa(stats.TotalDevices)},
 		{ID: "availability", Title: "可用性", Value: fmt.Sprintf("%.1f%%", availability)},
 		{ID: "active_alerts", Title: "活跃告警", Value: strconv.Itoa(stats.ActiveAlerts)},
-		{ID: "avg_cpu", Title: "平均 CPU", Value: fmt.Sprintf("%.1f%%", avgCPU)},
-		{ID: "avg_memory", Title: "平均内存", Value: fmt.Sprintf("%.1f%%", avgMemory)},
+		{ID: "avg_cpu", Title: "CPU使用率", Value: fmt.Sprintf("%.1f%%", avgCPU)},
+		{ID: "avg_memory", Title: "内存使用率", Value: fmt.Sprintf("%.1f%%", avgMemory)},
 		{ID: "avg_network", Title: "峰值流量", Value: formatBandwidthValue(peakNetworkBps)},
 	}
+}
+
+// sanitizeDeviceIDs 归一化设备筛选参数：去非正数、去重、保序、上限 200。
+func sanitizeDeviceIDs(raw []int) []int {
+	if len(raw) == 0 {
+		return nil
+	}
+	const maxDeviceFilter = 200
+	seen := make(map[int]struct{}, len(raw))
+	out := make([]int, 0, len(raw))
+	for _, id := range raw {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+		if len(out) >= maxDeviceFilter {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// parseDeviceIDsQueryParam 解析逗号分隔的 device_ids 查询参数（GET 端点用）。
+func parseDeviceIDsQueryParam(raw string) []int {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil
+	}
+	parts := strings.Split(trimmed, ",")
+	ids := make([]int, 0, len(parts))
+	for _, part := range parts {
+		value, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil {
+			continue
+		}
+		ids = append(ids, value)
+	}
+	return sanitizeDeviceIDs(ids)
 }
 
 func safeFloat(value float64) float64 {

@@ -292,6 +292,8 @@ type TimeRangeRequest struct {
 	StartTime *FlexibleTime `json:"start_time"`
 	EndTime   *FlexibleTime `json:"end_time"`
 	Metrics   []string      `json:"metrics"`
+	// DeviceIDs 非空时仅查询所选设备（监控中心设备筛选）
+	DeviceIDs []int `json:"device_ids"`
 }
 
 type MonitoringToggleRequest struct {

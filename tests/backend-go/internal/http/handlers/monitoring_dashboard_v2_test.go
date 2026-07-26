@@ -6,7 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,27 +33,27 @@ type stubDashboardWriter struct {
 	networkTrafficErr error
 }
 
-func (s stubDashboardWriter) GetMonitoringStats(_ context.Context) (monitoring.MonitoringStats, error) {
+func (s stubDashboardWriter) GetMonitoringStats(_ context.Context, _ []int) (monitoring.MonitoringStats, error) {
 	return s.stats, s.statsErr
 }
 
-func (s stubDashboardWriter) GetSystemPerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []string) ([]monitoring.SystemPerformancePoint, error) {
+func (s stubDashboardWriter) GetSystemPerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []string, _ []int) ([]monitoring.SystemPerformancePoint, error) {
 	return s.systemPerf, s.systemPerfErr
 }
 
-func (s stubDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Time, _ time.Time) ([]monitoring.TemperatureHistoryPoint, error) {
+func (s stubDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.TemperatureHistoryPoint, error) {
 	return s.temperature, s.temperatureErr
 }
 
-func (s stubDashboardWriter) GetDeviceStatusDistribution(_ context.Context) (monitoring.DeviceStatusDistribution, error) {
+func (s stubDashboardWriter) GetDeviceStatusDistribution(_ context.Context, _ []int) (monitoring.DeviceStatusDistribution, error) {
 	return s.deviceStatus, s.deviceStatusErr
 }
 
-func (s stubDashboardWriter) GetAvailability(_ context.Context) (monitoring.AvailabilitySnapshot, error) {
+func (s stubDashboardWriter) GetAvailability(_ context.Context, _ []int) (monitoring.AvailabilitySnapshot, error) {
 	return s.availability, s.availabilityErr
 }
 
-func (s stubDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time) ([]monitoring.NetworkTrafficPoint, error) {
+func (s stubDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.NetworkTrafficPoint, error) {
 	return s.networkTraffic, s.networkTrafficErr
 }
 
@@ -295,3 +297,112 @@ func TestMonitoringHandler_GetMonitoringStats_MasksActiveAlertsWithoutPermission
 	}
 }
 
+
+// recordingDashboardWriter 记录各分区实际收到的 deviceIDs，用于验证筛选参数透传。
+type recordingDashboardWriter struct {
+	stubDashboardWriter
+
+	mu               sync.Mutex
+	statsDeviceIDs   []int
+	perfDeviceIDs    []int
+	tempDeviceIDs    []int
+	distDeviceIDs    []int
+	availDeviceIDs   []int
+	trafficDeviceIDs []int
+}
+
+func (r *recordingDashboardWriter) GetMonitoringStats(ctx context.Context, deviceIDs []int) (monitoring.MonitoringStats, error) {
+	r.mu.Lock()
+	r.statsDeviceIDs = append([]int(nil), deviceIDs...)
+	r.mu.Unlock()
+	return r.stubDashboardWriter.GetMonitoringStats(ctx, deviceIDs)
+}
+
+func (r *recordingDashboardWriter) GetSystemPerformanceHistory(ctx context.Context, start time.Time, end time.Time, metrics []string, deviceIDs []int) ([]monitoring.SystemPerformancePoint, error) {
+	r.mu.Lock()
+	r.perfDeviceIDs = append([]int(nil), deviceIDs...)
+	r.mu.Unlock()
+	return r.stubDashboardWriter.GetSystemPerformanceHistory(ctx, start, end, metrics, deviceIDs)
+}
+
+func (r *recordingDashboardWriter) GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.TemperatureHistoryPoint, error) {
+	r.mu.Lock()
+	r.tempDeviceIDs = append([]int(nil), deviceIDs...)
+	r.mu.Unlock()
+	return r.stubDashboardWriter.GetTemperatureHistory(ctx, start, end, deviceIDs)
+}
+
+func (r *recordingDashboardWriter) GetDeviceStatusDistribution(ctx context.Context, deviceIDs []int) (monitoring.DeviceStatusDistribution, error) {
+	r.mu.Lock()
+	r.distDeviceIDs = append([]int(nil), deviceIDs...)
+	r.mu.Unlock()
+	return r.stubDashboardWriter.GetDeviceStatusDistribution(ctx, deviceIDs)
+}
+
+func (r *recordingDashboardWriter) GetAvailability(ctx context.Context, deviceIDs []int) (monitoring.AvailabilitySnapshot, error) {
+	r.mu.Lock()
+	r.availDeviceIDs = append([]int(nil), deviceIDs...)
+	r.mu.Unlock()
+	return r.stubDashboardWriter.GetAvailability(ctx, deviceIDs)
+}
+
+func (r *recordingDashboardWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.NetworkTrafficPoint, error) {
+	r.mu.Lock()
+	r.trafficDeviceIDs = append([]int(nil), deviceIDs...)
+	r.mu.Unlock()
+	return r.stubDashboardWriter.GetNetworkTrafficHistory(ctx, start, end, deviceIDs)
+}
+
+func TestMonitoringHandler_GetMonitoringDashboardV2_DeviceIDsPassthrough(t *testing.T) {
+	e := echo.New()
+	authService, token := newAuthServiceWithPermissions(t, []string{"monitoring:read"})
+
+	writer := &recordingDashboardWriter{
+		stubDashboardWriter: stubDashboardWriter{
+			stats:          monitoring.MonitoringStats{TotalDevices: 2},
+			systemPerf:     []monitoring.SystemPerformancePoint{},
+			temperature:    []monitoring.TemperatureHistoryPoint{},
+			deviceStatus:   monitoring.DeviceStatusDistribution{Healthy: 2},
+			availability:   monitoring.AvailabilitySnapshot{Current: 100, Target: 99.9, Trend: "stable"},
+			networkTraffic: []monitoring.NetworkTrafficPoint{},
+		},
+	}
+
+	h := handlers.MonitoringHandler{
+		DashboardWriter: writer,
+		Auth:            authService,
+	}
+
+	// 含重复、非法（负数）ID：期望归一化为 [2, 1] 后透传到所有分区
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/monitoring/dashboard/v2", strings.NewReader(`{"time_range":"1h","device_ids":[2,1,2,-3]}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.GetMonitoringDashboardV2(c); err != nil {
+		e.HTTPErrorHandler(err, c)
+	}
+
+	res := rec.Result()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("期望 200，实际=%d body=%s", res.StatusCode, rec.Body.String())
+	}
+
+	want := []int{2, 1}
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	got := map[string][]int{
+		"stats":          writer.statsDeviceIDs,
+		"systemPerf":     writer.perfDeviceIDs,
+		"temperature":    writer.tempDeviceIDs,
+		"deviceStatus":   writer.distDeviceIDs,
+		"availability":   writer.availDeviceIDs,
+		"networkTraffic": writer.trafficDeviceIDs,
+	}
+	for section, ids := range got {
+		if !reflect.DeepEqual(ids, want) {
+			t.Fatalf("分区 %s 收到 deviceIDs=%v，期望 %v", section, ids, want)
+		}
+	}
+}
