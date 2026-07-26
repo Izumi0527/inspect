@@ -10,6 +10,7 @@ import { useTooltip, TooltipWithBounds, defaultStyles } from '@visx/tooltip'
 import { LinearGradient } from '@visx/gradient'
 import { ChartContainer } from '@/components/atoms/charts'
 import { formatDateTimeMDHM, formatTimeHM } from '@/utils/formatters'
+import { resolveTickStepMinutes } from '../../utils/monitoring'
 import type { NetworkTrafficDataPoint } from '../../types'
 
 /**
@@ -288,14 +289,19 @@ export function NetworkTrafficStackedAreaChart({
               stroke={axisColor}
               tickStroke={axisColor}
               tickValues={(() => {
-                // 根据时间跨度生成刻度，避免 7d/30d 下刻度与标签过密
+                // 刻度步长优先按时间范围（1h→5min，以此类推，每档约 12 个刻度）；
+                // 无 timeRange 时按数据跨度兜底，避免标签过密
                 if (processedData.length < 2) return undefined
                 const [minTime, maxTime] = xScale.domain()
                 const ticks: Date[] = []
                 const durationMs = maxTime.getTime() - minTime.getTime()
 
                 const stepMinutes = (() => {
-                  if (durationMs <= 24 * 60 * 60 * 1000) return 60 // 24h 内：每小时一个刻度
+                  const normalized = String(timeRange ?? '').trim()
+                  if (normalized !== '') {
+                    return resolveTickStepMinutes(normalized)
+                  }
+                  if (durationMs <= 24 * 60 * 60 * 1000) return 60
                   if (durationMs <= 48 * 60 * 60 * 1000) return 120
                   if (durationMs <= 7 * 24 * 60 * 60 * 1000) return 12 * 60
                   if (durationMs <= 30 * 24 * 60 * 60 * 1000) return 24 * 60
@@ -306,6 +312,9 @@ export function NetworkTrafficStackedAreaChart({
                 start.setSeconds(0, 0)
                 if (stepMinutes >= 60) {
                   start.setMinutes(0)
+                } else {
+                  // 分钟级步长：对齐到步长边界（如 5 分钟），保证刻度落在采集点上
+                  start.setMinutes(Math.floor(start.getMinutes() / stepMinutes) * stepMinutes)
                 }
                 if (stepMinutes >= 24 * 60) {
                   start.setHours(0, 0, 0, 0)
@@ -314,7 +323,9 @@ export function NetworkTrafficStackedAreaChart({
                 const endTime = maxTime.getTime()
                 const current = new Date(start)
                 while (current.getTime() <= endTime) {
-                  ticks.push(new Date(current))
+                  if (current.getTime() >= minTime.getTime()) {
+                    ticks.push(new Date(current))
+                  }
                   current.setMinutes(current.getMinutes() + stepMinutes)
                 }
                 // 如果刻度太多（超过innerWidth/60），按倍数稀疏

@@ -1,6 +1,6 @@
 'use client'
 
-import type { RefObject } from 'react'
+import type { Ref } from 'react'
 import { TrendingUp } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/atoms'
 import { SectionHeader, SectionFailureContent } from '../shared'
@@ -12,7 +12,7 @@ import {
 import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../../types'
 
 interface PerformanceSectionProps {
-  sectionRef: RefObject<HTMLDivElement | null>
+  sectionRef: Ref<HTMLDivElement>
   chartsInView: boolean
   sectionSystemPerformance: MonitoringDataEnvelope['sections']['systemPerformance'] | undefined
   sectionTemperature: MonitoringDataEnvelope['sections']['temperature'] | undefined

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, RefObject } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 interface UseInViewOptions {
   /**
@@ -33,9 +33,9 @@ interface UseInViewOptions {
 
 interface UseInViewReturn {
   /**
-   * 需要绑定到目标元素的 ref
+   * 需要绑定到目标元素的 ref（callback ref：元素挂载/卸载时触发重新观察）
    */
-  ref: RefObject<HTMLDivElement | null>
+  ref: (node: HTMLDivElement | null) => void
 
   /**
    * 元素是否在视口内
@@ -48,6 +48,11 @@ interface UseInViewReturn {
  *
  * @description
  * 用于检测元素是否进入视口,常用于图片/组件懒加载
+ *
+ * 实现说明：必须使用 callback ref + state 保存元素。
+ * 若用 RefObject，当组件首帧走"加载骨架"分支（目标元素未渲染）时，
+ * effect 已经执行完且依赖不变，后续元素挂载也不会重新 observe，
+ * 导致 inView 永远为 false、懒加载内容永远不出现。
  *
  * @example
  * ```tsx
@@ -74,10 +79,13 @@ export function useInView(options: UseInViewOptions = {}): UseInViewReturn {
   } = options
 
   const [inView, setInView] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [element, setElement] = useState<HTMLDivElement | null>(null)
+
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    setElement(node)
+  }, [])
 
   useEffect(() => {
-    const element = ref.current
     if (!element) return
 
     // 检查浏览器是否支持 IntersectionObserver
@@ -96,7 +104,7 @@ export function useInView(options: UseInViewOptions = {}): UseInViewReturn {
           setInView(isIntersecting)
 
           // 如果只触发一次且已经进入视口,停止观察
-          if (isIntersecting && triggerOnce && element) {
+          if (isIntersecting && triggerOnce) {
             observer.unobserve(element)
           }
         })
@@ -112,11 +120,9 @@ export function useInView(options: UseInViewOptions = {}): UseInViewReturn {
 
     // 清理函数
     return () => {
-      if (element) {
-        observer.unobserve(element)
-      }
+      observer.unobserve(element)
     }
-  }, [root, rootMargin, threshold, triggerOnce])
+  }, [element, root, rootMargin, threshold, triggerOnce])
 
   return { ref, inView }
 }

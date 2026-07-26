@@ -56,6 +56,10 @@ jest.mock('@/features/monitoring/hooks/useMonitoringV2', () => ({
   useMonitoringV2: jest.fn(),
 }))
 
+jest.mock('@/features/monitoring/hooks/useMonitoringDevices', () => ({
+  useMonitoringDevices: () => ({ data: [], isLoading: false, error: null }),
+}))
+
 jest.mock('@/lib/websocket', () => {
   const mockWs = {
     getHealthStatus: jest.fn(),

@@ -81,4 +81,21 @@ describe('monitoring.api', () => {
     expect(envelope.sections.realtimeAlerts.limitedByPermission).toBe(true)
     expect(Array.isArray(envelope.data.realtimeAlerts)).toBe(true)
   })
+
+  it('fetchMonitoringDataV2: 选择设备时应在请求体透传 device_ids', async () => {
+    mockedApi.post.mockResolvedValue({
+      data: {},
+      sections: {},
+      hasPartialFailure: false,
+      failedSections: [],
+      lastUpdate: '2026-03-15T00:00:00Z',
+    })
+
+    await fetchMonitoringDataV2('1h', [3, 7])
+    expect(mockedApi.post).toHaveBeenCalledWith('/monitoring/dashboard/v2', {
+      time_range: '1h',
+      alerts_limit: 10,
+      device_ids: [3, 7],
+    })
+  })
 })

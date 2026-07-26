@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { LineChartComponent } from '@/components/atoms/charts'
 import { formatDateTimeMDHM, formatTimeHM } from '@/utils/formatters'
+import { resolveTickStepMinutes, selectTimeTickLabels } from '../../utils/monitoring'
 import type { SystemPerformanceDataPoint } from '../../types'
 
 interface SystemPerformanceChartProps {
@@ -61,6 +62,12 @@ export function SystemPerformanceChart({
       }
     })
   }, [data, formatTimeLabel])
+
+  // X 轴刻度：按时间范围取步长（1h→5min，以此类推），保证每档约 12 个刻度
+  const xTickValues = useMemo(() => {
+    if (!timeRange) return undefined
+    return selectTimeTickLabels(data, resolveTickStepMinutes(timeRange), formatTimeLabel)
+  }, [data, formatTimeLabel, timeRange])
 
   // 自定义 tooltip 格式化
   const formatter = (value: number | string, name: string): string => {
@@ -127,6 +134,7 @@ export function SystemPerformanceChart({
         lines={lines}
         height={height}
         formatter={formatter}
+        xTickValues={xTickValues}
       />
       {showLegend && <Legend />}
     </div>

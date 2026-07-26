@@ -10,6 +10,7 @@ import {
   Alert,
   MonitoringDataV2,
   MonitoringDataEnvelope,
+  MonitoringDeviceOption,
   MonitoringSectionKey,
   MonitoringSectionStates,
 } from '../types'
@@ -380,12 +381,12 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
         },
         {
           id: 'avg_cpu',
-          title: '平均 CPU',
+          title: 'CPU使用率',
           value: `${formatPercentageValue(record.avg_cpu).toFixed(1)}%`,
         },
         {
           id: 'avg_memory',
-          title: '平均内存',
+          title: '内存使用率',
           value: `${formatPercentageValue(record.avg_memory).toFixed(1)}%`,
         },
         {
@@ -440,12 +441,42 @@ export async function fetchRealtimeAlerts(limit: number = 10): Promise<Alert[]> 
 }
 
 /**
+ * 获取监控设备列表（设备筛选下拉数据源）
+ */
+export async function fetchMonitoringDevices(): Promise<MonitoringDeviceOption[]> {
+  try {
+    const response = await api.get<unknown>('/monitoring/devices')
+    if (!Array.isArray(response)) return []
+
+    const out: MonitoringDeviceOption[] = []
+    for (const item of response) {
+      const record = (item ?? {}) as RawRecord
+      const id = toNum(record.id, NaN)
+      if (!Number.isFinite(id) || id <= 0) continue
+      out.push({
+        id,
+        name: toStr(record.name, `设备#${id}`),
+        ipAddress: toStr(record.ip_address ?? record.ipAddress),
+        status: toStr(record.status, 'unknown'),
+        isMonitored: record.is_monitored === true || record.isMonitored === true,
+      })
+    }
+    return out
+  } catch (error) {
+    console.error('获取监控设备列表失败:', error)
+    throw error instanceof Error ? error : new Error('获取监控设备列表失败')
+  }
+}
+
+/**
  * 获取完整的监控数据 (一次性获取所有数据)
  * @param timeRange - 时间范围
+ * @param deviceIds - 设备筛选（空数组/缺省 = 全部设备）
  * @returns 监控数据
  */
 export async function fetchMonitoringDataV2(
-  timeRange: string = '24h'
+  timeRange: string = '1h',
+  deviceIds: number[] = []
 ): Promise<MonitoringDataEnvelope> {
   const MONITORING_SECTION_KEYS: MonitoringSectionKey[] = [
     'stats',
@@ -759,10 +790,12 @@ export async function fetchMonitoringDataV2(
     const raw = await api.post<unknown>('/monitoring/dashboard/v2', {
       time_range: timeRange,
       alerts_limit: 10,
+      ...(deviceIds.length > 0 ? { device_ids: deviceIds } : {}),
     })
     return normalizeEnvelope(raw)
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 404) {
+      // 旧后端不支持聚合接口，也不支持设备筛选，回退为全量数据
       return await fetchMonitoringDataV2Legacy(timeRange)
     }
 

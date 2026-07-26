@@ -56,6 +56,15 @@ export interface StatCardData {
   color?: string
 }
 
+// 监控设备选项（设备筛选下拉，来自 GET /monitoring/devices）
+export interface MonitoringDeviceOption {
+  id: number
+  name: string
+  ipAddress: string
+  status: string
+  isMonitored: boolean
+}
+
 // 监控数据汇总接口
 export interface MonitoringDataV2 {
   // 系统性能历史

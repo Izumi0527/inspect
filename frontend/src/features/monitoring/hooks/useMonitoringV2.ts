@@ -32,9 +32,15 @@ import { useAuth } from '@/lib/contexts/auth-context'
 interface UseMonitoringV2Options {
   /**
    * 时间范围
-   * @default '24h'
+   * @default '1h'
    */
   timeRange?: string
+
+  /**
+   * 设备筛选（空数组 = 全部设备）
+   * @default []
+   */
+  deviceIds?: number[]
 
   /**
    * 轮询间隔（毫秒）
@@ -55,17 +61,20 @@ export function useMonitoringV2(
   const { user } = useAuth()
   const userCacheKey = user?.id ? `user:${user.id}` : 'user:anonymous'
   const {
-    timeRange = '24h',
+    timeRange = '1h',
+    deviceIds = [],
     refetchInterval = 120000, // 默认 2 分钟 (120秒) - 比后端采集快，确保及时获取新数据
     enablePolling = true,
   } = options
 
+  const deviceCacheKey = deviceIds.length > 0 ? deviceIds.join(',') : 'all'
+
   return useQuery<MonitoringDataEnvelope, Error>({
     // 按用户隔离缓存，避免同一浏览器内切换账号时短暂展示上一账号的监控数据。
-    queryKey: ['monitoring-v2', userCacheKey, timeRange],
+    queryKey: ['monitoring-v2', userCacheKey, timeRange, deviceCacheKey],
 
     queryFn: async () => {
-      return await fetchMonitoringDataV2(timeRange)
+      return await fetchMonitoringDataV2(timeRange, deviceIds)
     },
 
     // 轮询配置

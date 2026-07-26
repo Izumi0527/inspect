@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { LineChartComponent } from '@/components/atoms/charts'
 import { formatDateTimeMDHM, formatTimeHM } from '@/utils/formatters'
+import { resolveTickStepMinutes, selectTimeTickLabels } from '../../utils/monitoring'
 import type { TemperatureDataPoint } from '../../types'
 
 interface TemperatureChartProps {
@@ -95,6 +96,12 @@ export function TemperatureChart({
     }
   }, [data, formatTimeLabel])
 
+  // X 轴刻度：按时间范围取步长（1h→5min，以此类推）
+  const xTickValues = useMemo(() => {
+    if (!timeRange) return undefined
+    return selectTimeTickLabels(data, resolveTickStepMinutes(timeRange), formatTimeLabel)
+  }, [data, formatTimeLabel, timeRange])
+
   // 配置设备温度曲线
   const lines = useMemo(() => {
     return deviceNames.map((deviceName, index) => ({
@@ -163,6 +170,7 @@ export function TemperatureChart({
         lines={lines}
         height={height}
         formatter={formatter}
+        xTickValues={xTickValues}
       />
       {showLegend && <Legend />}
 

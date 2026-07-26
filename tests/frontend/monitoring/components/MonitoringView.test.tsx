@@ -7,6 +7,10 @@ jest.mock('@/features/monitoring/hooks/useMonitoringV2', () => ({
   useMonitoringV2: jest.fn(),
 }))
 
+jest.mock('@/features/monitoring/hooks/useMonitoringDevices', () => ({
+  useMonitoringDevices: () => ({ data: [], isLoading: false, error: null }),
+}))
+
 jest.mock('@/lib/contexts/auth-context', () => ({
   usePermission: () => true,
 }))

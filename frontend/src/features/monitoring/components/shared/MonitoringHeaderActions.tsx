@@ -6,6 +6,7 @@ import { RefreshCw, Wifi, WifiOff, AlertTriangle, CheckCircle2, Clock } from 'lu
 import { TIME_RANGE_OPTIONS } from '../../utils/monitoring'
 import { type UseMonitoringPageResult } from '../../hooks/useMonitoringPage'
 import { ReportExportButton } from '../ReportExportButton'
+import { DeviceFilterSelect } from './DeviceFilterSelect'
 
 interface MonitoringHeaderActionsProps {
   page: UseMonitoringPageResult
@@ -67,6 +68,9 @@ export function MonitoringHeaderActions({ page }: MonitoringHeaderActionsProps) 
 
       {/* 数据新鲜度 */}
       {freshnessBadge}
+
+      {/* 设备筛选 */}
+      <DeviceFilterSelect deviceIds={page.deviceIds} onChange={page.setDeviceIds} />
 
       {/* 时间范围选择器 */}
       <Select value={page.timeRange} onValueChange={page.setTimeRange}>

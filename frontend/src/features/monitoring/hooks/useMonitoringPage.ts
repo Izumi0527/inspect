@@ -8,6 +8,7 @@ import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocke
 import { useMonitoringV2 } from './useMonitoringV2'
 import {
   TIME_RANGE_OPTIONS,
+  DEFAULT_TIME_RANGE,
   MONITORING_SECTION_LABELS,
   resolveTimeRangeLabel,
   resolveMonitoringDataStaleThresholdMs,
@@ -26,6 +27,9 @@ export interface UseMonitoringPageResult {
   timeRange: string
   setTimeRange: (value: string) => void
   timeRangeLabel: string
+  /** 设备筛选（空数组 = 全部设备） */
+  deviceIds: number[]
+  setDeviceIds: (ids: number[]) => void
   wsHealth: 'connected' | 'stale' | 'disconnected'
   pageVisible: boolean
   // 权限
@@ -56,18 +60,39 @@ export function useMonitoringPage(): UseMonitoringPageResult {
 
   // ── 时间范围（持久化到 localStorage）──────────────────────────────────────
   const [timeRange, setTimeRange] = useState<string>(() => {
-    if (typeof window === 'undefined') return '24h'
+    if (typeof window === 'undefined') return DEFAULT_TIME_RANGE
     const stored = window.localStorage.getItem('monitoring:timeRange')
     if (stored && TIME_RANGE_OPTIONS.some((item) => item.value === stored)) {
       return stored
     }
-    return '24h'
+    return DEFAULT_TIME_RANGE
   })
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     window.localStorage.setItem('monitoring:timeRange', timeRange)
   }, [timeRange])
+
+  // ── 设备筛选（持久化到 localStorage，空数组 = 全部设备）───────────────────
+  const [deviceIds, setDeviceIds] = useState<number[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const stored = window.localStorage.getItem('monitoring:deviceIds')
+      if (!stored) return []
+      const parsed: unknown = JSON.parse(stored)
+      if (!Array.isArray(parsed)) return []
+      return parsed
+        .map((item) => (typeof item === 'number' ? item : Number(String(item))))
+        .filter((id): id is number => Number.isFinite(id) && id > 0)
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('monitoring:deviceIds', JSON.stringify(deviceIds))
+  }, [deviceIds])
 
   // ── 页面可见性 ─────────────────────────────────────────────────────────────
   // 页面不可见时暂停轮询：降低无意义的后台刷新；返回页面时 React Query 会因 focus 自动 refetch。
@@ -126,6 +151,7 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     isRefetching,
   } = useMonitoringV2({
     timeRange,
+    deviceIds,
     // 轮询兜底策略：
     // - 页面不可见：关闭轮询（避免后台无意义刷新）
     // - WS 在线：低频轮询（防止"无推送/订阅异常"导致页面长期不更新）
@@ -137,8 +163,8 @@ export function useMonitoringPage(): UseMonitoringPageResult {
 
   // ── WS 订阅回调 ────────────────────────────────────────────────────────────
   const subscribeDeviceMonitoring = useCallback(() => {
-    ws.subscribeToDeviceMonitoring()
-  }, [ws])
+    ws.subscribeToDeviceMonitoring(deviceIds.length > 0 ? deviceIds : undefined)
+  }, [deviceIds, ws])
 
   const subscribeAlertsRoom = useCallback(() => {
     if (!canReadAlerts) return
@@ -255,13 +281,13 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     scheduledRefetchTimerRef.current = null
   }, [pageVisible])
 
-  // 切换时间范围时清理 pending 定时器，避免旧 queryKey 的 refetch 泄漏。
+  // 切换时间范围/设备筛选时清理 pending 定时器，避免旧 queryKey 的 refetch 泄漏。
   useEffect(() => {
     firstRealtimeEventAtRef.current = null
     if (!scheduledRefetchTimerRef.current) return
     clearTimeout(scheduledRefetchTimerRef.current)
     scheduledRefetchTimerRef.current = null
-  }, [timeRange])
+  }, [timeRange, deviceIds])
 
   // ── WS 事件处理 ────────────────────────────────────────────────────────────
   // 注意：后端 device_metrics 推送会映射为多个事件，这里只监听一个，避免重复刷新。
@@ -363,6 +389,8 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     timeRange,
     setTimeRange,
     timeRangeLabel,
+    deviceIds,
+    setDeviceIds,
     wsHealth,
     pageVisible,
     // 权限

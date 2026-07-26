@@ -8,6 +8,10 @@ jest.mock('@/features/monitoring/components/ReportExportButton', () => ({
   ReportExportButton: () => <div>导出按钮</div>,
 }))
 
+jest.mock('@/features/monitoring/components/shared/DeviceFilterSelect', () => ({
+  DeviceFilterSelect: () => <div>设备筛选</div>,
+}))
+
 jest.mock('@/components/atoms', () => ({
   Badge: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Button: ({
@@ -125,9 +129,11 @@ jest.mock('@/components/ui/select', () => {
 })
 
 const buildPage = (overrides: Partial<UseMonitoringPageResult> = {}): UseMonitoringPageResult => ({
-  timeRange: '24h',
+  timeRange: '1h',
   setTimeRange: jest.fn(),
-  timeRangeLabel: '近24小时',
+  timeRangeLabel: '近1小时',
+  deviceIds: [],
+  setDeviceIds: jest.fn(),
   wsHealth: 'connected',
   pageVisible: true,
   canExportReport: false,
@@ -156,7 +162,7 @@ describe('MonitoringHeaderActions 下拉统一化', () => {
     expect(screen.getByRole('combobox', { name: '监控时间范围' })).toBeInTheDocument()
   })
 
-  it('切换时间范围时应保持 setTimeRange 回调契约', async () => {
+  it('切换时间范围时应保持 setTimeRange 回调契约（五档选项）', async () => {
     const user = userEvent.setup()
     const setTimeRange = jest.fn()
     render(
@@ -166,9 +172,11 @@ describe('MonitoringHeaderActions 下拉统一化', () => {
     )
 
     await user.click(screen.getByRole('combobox', { name: '监控时间范围' }))
+    expect(screen.getByRole('option', { name: '近1小时' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '近12小时' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: '近24小时' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '近3天' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: '近7天' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: '近30天' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('option', { name: '近7天' }))
     expect(setTimeRange).toHaveBeenCalledWith('7d')

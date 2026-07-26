@@ -3,3 +3,4 @@ export { SectionFailureContent, SectionFailureCard, SectionPermissionLimitedCard
 export { MonitoringLoadingSkeleton } from './MonitoringLoadingSkeleton'
 export { MonitoringErrorPanel } from './MonitoringErrorPanel'
 export { MonitoringHeaderActions } from './MonitoringHeaderActions'
+export { DeviceFilterSelect } from './DeviceFilterSelect'

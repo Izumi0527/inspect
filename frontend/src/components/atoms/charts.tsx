@@ -72,6 +72,8 @@ interface LineChartProps<TData extends ChartDatum> {
   subtitle?: string
   className?: string
   formatter?: TooltipFormatter
+  /** 显式 X 轴刻度（domain 值）；未提供时按宽度自动稀疏 */
+  xTickValues?: string[]
 }
 
 export const LineChartComponent = <TData extends ChartDatum>({
@@ -82,7 +84,8 @@ export const LineChartComponent = <TData extends ChartDatum>({
   title,
   subtitle,
   className,
-  formatter
+  formatter,
+  xTickValues
 }: LineChartProps<TData>) => {
   // 容器引用和宽度状态 - 响应式宽度
   const containerRef = React.useRef<HTMLDivElement>(null)
@@ -139,14 +142,29 @@ export const LineChartComponent = <TData extends ChartDatum>({
     padding: 0.1,
   })
 
-  const xTickValues = React.useMemo(() => {
-    const maxTicks = Math.max(Math.floor(innerWidth / 80), 4)
-    if (xDomain.length <= maxTicks) {
+  const xTickValuesResolved = React.useMemo(() => {
+    // 优先使用调用方给定的显式刻度（仅保留 domain 内存在的值），
+    // 超出可容纳数量时仍做稀疏兜底，避免窄屏标签重叠。
+    const maxTicks = Math.max(Math.floor(innerWidth / 40), 4)
+    if (xTickValues && xTickValues.length > 0) {
+      const domainSet = new Set(xDomain)
+      const explicit = xTickValues.filter((value) => domainSet.has(value))
+      if (explicit.length > 0) {
+        if (explicit.length <= maxTicks) {
+          return explicit
+        }
+        const step = Math.ceil(explicit.length / maxTicks)
+        return explicit.filter((_, idx) => idx % step === 0)
+      }
+    }
+
+    const autoMaxTicks = Math.max(Math.floor(innerWidth / 80), 4)
+    if (xDomain.length <= autoMaxTicks) {
       return xDomain
     }
-    const step = Math.ceil(xDomain.length / maxTicks)
+    const step = Math.ceil(xDomain.length / autoMaxTicks)
     return xDomain.filter((_, idx) => idx % step === 0)
-  }, [xDomain, innerWidth])
+  }, [xDomain, innerWidth, xTickValues])
 
   const allValues = lines.flatMap(line =>
     data.map(d => Number(d[line.key]) || 0)
@@ -207,7 +225,7 @@ export const LineChartComponent = <TData extends ChartDatum>({
               height={innerHeight}
               stroke={gridColor}
               strokeDasharray="3,3"
-              tickValues={xTickValues}
+              tickValues={xTickValuesResolved}
             />
 
             {lines.map((line, idx) => {
@@ -247,7 +265,7 @@ export const LineChartComponent = <TData extends ChartDatum>({
               stroke={axisColor}
               tickStroke={axisColor}
               tickLabelProps={() => ({ fill: axisColor, fontSize: 12, textAnchor: 'middle' })}
-              tickValues={xTickValues}
+              tickValues={xTickValuesResolved}
             />
             <AxisLeft
               scale={yScale}

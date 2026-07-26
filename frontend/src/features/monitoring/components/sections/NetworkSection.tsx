@@ -1,6 +1,6 @@
 'use client'
 
-import type { RefObject } from 'react'
+import type { Ref } from 'react'
 import { Radio } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/atoms'
 import { SectionHeader, SectionFailureContent } from '../shared'
@@ -8,7 +8,7 @@ import { NetworkTrafficChartWrapper, ChartSkeleton } from '../charts'
 import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../../types'
 
 interface NetworkSectionProps {
-  sectionRef: RefObject<HTMLDivElement | null>
+  sectionRef: Ref<HTMLDivElement>
   networkInView: boolean
   sectionNetworkTraffic: MonitoringDataEnvelope['sections']['networkTraffic'] | undefined
   networkTrafficHistory: MonitoringDataV2['networkTrafficHistory']
