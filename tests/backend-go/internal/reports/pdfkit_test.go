@@ -113,11 +113,11 @@ func TestRenderMonitoringPDF_StructurallyValid(t *testing.T) {
 
 	stats := &pdfkit.MonitoringStatsInput{
 		TotalDevices: 42,
-		Availability: 99.91,
 		ActiveAlerts: 3,
 		AvgCPU:       38.5,
 		AvgMemory:    61.2,
-		AvgNetwork:   12.7,
+		PeakOutbound: 12_266_000,
+		PeakInbound:  2_818_000,
 	}
 	input := pdfkit.MonitoringPDFInput{
 		Title:     "监控报告",

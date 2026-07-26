@@ -42,9 +42,10 @@ func (h DashboardHandler) GetOverview(c echo.Context) error {
 	}
 
 	resp, err := h.Service.GetOverview(c.Request().Context(), dashboard.OverviewAccess{
-		CanReadDevices:    hasPermission("devices:read", permissions),
-		CanReadAlerts:     hasPermission("alerts:read", permissions),
-		CanReadMonitoring: hasPermission("monitoring:read", permissions),
+		CanReadDevices:     hasPermission("devices:read", permissions),
+		CanReadAlerts:      hasPermission("alerts:read", permissions),
+		CanReadMonitoring:  hasPermission("monitoring:read", permissions),
+		CanReadInspections: hasPermission("inspections:read", permissions),
 	})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load dashboard overview")

@@ -4,7 +4,6 @@ import {
   SystemPerformanceDataPoint,
   TemperatureDataPoint,
   DeviceStatusDistribution,
-  AvailabilityData,
   NetworkTrafficDataPoint,
   StatCardData,
   Alert,
@@ -281,27 +280,6 @@ export async function fetchDeviceStatusDistribution(): Promise<DeviceStatusDistr
 }
 
 /**
- * 获取整体可用性数据
- * @returns 可用性数据
- */
-export async function fetchAvailabilityData(): Promise<AvailabilityData> {
-  try {
-    const response = await api.get<RawRecord>('/monitoring/availability')
-    const trend = response?.trend
-
-    return {
-      current: toNum(response?.current ?? response?.availability),
-      target: toNum(response?.target ?? response?.sla, 99.9),
-      trend: trend === 'up' || trend === 'down' ? trend : 'stable',
-      lastUpdate: toStr(response?.last_update ?? response?.lastUpdate, new Date().toISOString()),
-    }
-  } catch (error) {
-    console.error('获取可用性数据失败:', error)
-    throw error instanceof Error ? error : new Error('获取可用性数据失败')
-  }
-}
-
-/**
  * 获取网络流量历史数据
  * @param timeRange - 时间范围
  * @returns 网络流量历史数据点数组
@@ -370,11 +348,6 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
           value: String(record.total_devices ?? '0'),
         },
         {
-          id: 'availability',
-          title: '可用性',
-          value: `${formatPercentageValue(record.availability).toFixed(1)}%`,
-        },
-        {
           id: 'active_alerts',
           title: '活跃告警',
           value: String(record.active_alerts ?? '0'),
@@ -390,9 +363,14 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
           value: `${formatPercentageValue(record.avg_memory).toFixed(1)}%`,
         },
         {
-          id: 'avg_network',
-          title: '峰值流量',
-          value: formatBandwidthValue(Number(record.avg_network ?? 0)),
+          id: 'peak_outbound',
+          title: '上行流量',
+          value: formatBandwidthValue(Number(record.peak_outbound ?? 0)),
+        },
+        {
+          id: 'peak_inbound',
+          title: '下行流量',
+          value: formatBandwidthValue(Number(record.peak_inbound ?? 0)),
         },
       ]
     }
@@ -483,7 +461,6 @@ export async function fetchMonitoringDataV2(
     'systemPerformance',
     'temperature',
     'deviceStatus',
-    'availability',
     'networkTraffic',
     'realtimeAlerts',
   ]
@@ -500,7 +477,6 @@ export async function fetchMonitoringDataV2(
       systemPerformance: '系统性能数据加载失败',
       temperature: '温度数据加载失败',
       deviceStatus: '设备状态分布加载失败',
-      availability: '可用性数据加载失败',
       networkTraffic: '网络流量数据加载失败',
       realtimeAlerts: '实时告警加载失败',
     }
@@ -578,31 +554,12 @@ export async function fetchMonitoringDataV2(
         systemPerformance: [],
         temperatureHistory: [],
         deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
-        availability: { current: 0, target: 99.9, trend: 'stable' },
         networkTrafficHistory: [],
         statsV2: [],
         realtimeAlerts: [],
         lastUpdate: nowIso,
       }
     }
-
-    const normalizeTrend = (value: unknown): AvailabilityData['trend'] => {
-      const normalized = typeof value === 'string' ? value.trim().toLowerCase() : ''
-      if (normalized === 'up' || normalized === 'down' || normalized === 'stable') {
-        return normalized
-      }
-      return 'stable'
-    }
-
-    const availabilityRaw = raw.availability
-    const availability = isRecord(availabilityRaw)
-      ? {
-          current: toNumber(availabilityRaw.current, 0),
-          target: toNumber(availabilityRaw.target, 99.9),
-          trend: normalizeTrend(availabilityRaw.trend),
-          lastUpdate: isRecord(availabilityRaw) ? normalizeTimestamp(availabilityRaw.lastUpdate) : undefined,
-        }
-      : { current: 0, target: 99.9, trend: 'stable' as const }
 
     const distRaw = raw.deviceStatusDistribution
     const deviceStatusDistribution = isRecord(distRaw)
@@ -733,7 +690,6 @@ export async function fetchMonitoringDataV2(
       systemPerformance: normalizeSystemPerformance(raw.systemPerformance),
       temperatureHistory: normalizeTemperatureHistory(raw.temperatureHistory),
       deviceStatusDistribution,
-      availability,
       networkTrafficHistory: normalizeNetworkTrafficHistory(raw.networkTrafficHistory),
       statsV2: normalizeStatsV2(raw.statsV2),
       realtimeAlerts: normalizeRealtimeAlerts(raw.realtimeAlerts),
@@ -825,7 +781,6 @@ async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<Monitorin
       systemPerformance,
       temperatureHistory,
       deviceStatusDistribution,
-      availability,
       networkTrafficHistory,
       statsV2,
       realtimeAlerts,
@@ -833,7 +788,6 @@ async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<Monitorin
       fetchSystemPerformanceHistory(timeRange),
       fetchTemperatureHistory(timeRange),
       fetchDeviceStatusDistribution(),
-      fetchAvailabilityData(),
       fetchNetworkTrafficHistory(timeRange),
       fetchStatsV2(),
       fetchRealtimeAlerts(10),
@@ -858,10 +812,6 @@ async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<Monitorin
         ok: deviceStatusDistribution.status === 'fulfilled',
         message: deviceStatusDistribution.status === 'rejected' ? toErrorMessage(deviceStatusDistribution.reason, '设备状态分布加载失败') : undefined,
       },
-      availability: {
-        ok: availability.status === 'fulfilled',
-        message: availability.status === 'rejected' ? toErrorMessage(availability.reason, '可用性数据加载失败') : undefined,
-      },
       networkTraffic: {
         ok: networkTrafficHistory.status === 'fulfilled',
         message: networkTrafficHistory.status === 'rejected' ? toErrorMessage(networkTrafficHistory.reason, '网络流量数据加载失败') : undefined,
@@ -884,10 +834,6 @@ async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<Monitorin
         deviceStatusDistribution.status === 'fulfilled'
           ? deviceStatusDistribution.value
           : { healthy: 0, warning: 0, critical: 0, offline: 0 },
-      availability:
-        availability.status === 'fulfilled'
-          ? availability.value
-          : { current: 0, target: 99.9, trend: 'stable' },
       networkTrafficHistory:
         networkTrafficHistory.status === 'fulfilled' ? networkTrafficHistory.value : [],
       statsV2: statsV2.status === 'fulfilled' ? statsV2.value : [],

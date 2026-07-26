@@ -3,5 +3,4 @@
  */
 
 export { DeviceStatusCard } from './DeviceStatusCard'
-export { AvailabilityCard } from './AvailabilityCard'
 export { RealTimeAlertsCard } from './RealTimeAlertsCard'

@@ -35,9 +35,10 @@ type dashboardSectionStatus struct {
 }
 
 type OverviewPermissions struct {
-	Devices    bool `json:"devices"`
-	Alerts     bool `json:"alerts"`
-	Monitoring bool `json:"monitoring"`
+	Devices     bool `json:"devices"`
+	Alerts      bool `json:"alerts"`
+	Monitoring  bool `json:"monitoring"`
+	Inspections bool `json:"inspections"`
 }
 
 type OverviewResponse struct {
@@ -50,9 +51,10 @@ type OverviewResponse struct {
 }
 
 type OverviewAccess struct {
-	CanReadDevices    bool
-	CanReadAlerts     bool
-	CanReadMonitoring bool
+	CanReadDevices     bool
+	CanReadAlerts      bool
+	CanReadMonitoring  bool
+	CanReadInspections bool
 }
 
 type overviewAccess = OverviewAccess

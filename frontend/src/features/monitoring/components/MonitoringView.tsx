@@ -122,10 +122,8 @@ export function MonitoringView() {
             />
             <StatusSection
               sectionDeviceStatus={page.envelope?.sections.deviceStatus}
-              sectionAvailability={page.envelope?.sections.availability}
               sectionRealtimeAlerts={page.envelope?.sections.realtimeAlerts}
               deviceStatusDistribution={page.data.deviceStatusDistribution}
-              availability={page.data.availability}
               realtimeAlerts={page.data.realtimeAlerts}
               realtimeAlertsPermissionLimited={page.realtimeAlertsPermissionLimited}
               requiredAlertsPermission={Permission.ALERTS_READ}

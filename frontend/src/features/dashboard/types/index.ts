@@ -62,6 +62,7 @@ export type DashboardSectionKey =
   | 'statsDevices'
   | 'statsAlerts'
   | 'statsBandwidth'
+  | 'statsInspections'
   | 'recentAlerts'
   | 'networkOverview'
 
@@ -78,6 +79,7 @@ export interface DashboardPermissions {
   devices: boolean
   alerts: boolean
   monitoring: boolean
+  inspections: boolean
 }
 
 // Dashboard数据汇总接口

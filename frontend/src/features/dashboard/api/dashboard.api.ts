@@ -74,6 +74,7 @@ const DASHBOARD_SECTION_KEYS: DashboardSectionKey[] = [
   'statsDevices',
   'statsAlerts',
   'statsBandwidth',
+  'statsInspections',
   'recentAlerts',
   'networkOverview',
 ]
@@ -83,6 +84,7 @@ const DASHBOARD_SECTION_FALLBACK_MESSAGES: Record<DashboardSectionKey, string> =
   statsDevices: '设备统计加载失败',
   statsAlerts: '告警统计加载失败',
   statsBandwidth: '带宽统计加载失败',
+  statsInspections: '巡检统计加载失败',
   recentAlerts: '最近告警加载失败',
   networkOverview: '网络概览加载失败',
 }
@@ -154,6 +156,7 @@ const createDefaultDashboardSections = (): DashboardSectionStates => ({
   statsDevices: { ok: true },
   statsAlerts: { ok: true },
   statsBandwidth: { ok: true },
+  statsInspections: { ok: true },
   recentAlerts: { ok: true },
   networkOverview: { ok: true },
 })
@@ -178,6 +181,7 @@ const normalizeDashboardPermissions = (value: unknown) => {
     devices: raw.devices === true,
     alerts: raw.alerts === true,
     monitoring: raw.monitoring === true,
+    inspections: raw.inspections === true,
   }
 }
 
@@ -493,18 +497,26 @@ const getEmptyStatsData = (): DashboardStat[] => [
     color: 'gray',
   },
   {
-    title: '峰值流量',
+    title: '上行流量',
     value: '-',
     change: '',
-    iconName: 'Activity',
+    iconName: 'Upload',
     iconColor: 'text-gray-400',
     color: 'gray',
   },
   {
-    title: '系统负载',
+    title: '下行流量',
     value: '-',
     change: '',
-    iconName: 'Server',
+    iconName: 'Download',
+    iconColor: 'text-gray-400',
+    color: 'gray',
+  },
+  {
+    title: '巡检成功率',
+    value: '-',
+    change: '',
+    iconName: 'ClipboardCheck',
     iconColor: 'text-gray-400',
     color: 'gray',
   },

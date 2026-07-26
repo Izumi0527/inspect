@@ -12,10 +12,8 @@ import (
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
-)
 
-const (
-	defaultAvailabilityTarget = 99.9
+	"github.com/your-org/inspect-system/backend-go/internal/devices"
 )
 
 type temperatureRow struct {
@@ -254,40 +252,23 @@ func (w *MetricsWriter) GetDeviceStatusDistribution(ctx context.Context, deviceI
 	return dist, nil
 }
 
-// GetAvailability 计算整体可用性；deviceIDs 非空时仅统计所选设备。
-func (w *MetricsWriter) GetAvailability(ctx context.Context, deviceIDs []int) (AvailabilitySnapshot, error) {
-	if w.db == nil {
-		return AvailabilitySnapshot{}, fmt.Errorf("database not initialized")
-	}
-
-	total, online, err := countActiveAndOnlineDevices(ctx, w.db, deviceIDs)
-	if err != nil {
-		return AvailabilitySnapshot{}, err
-	}
-
-	availability := 100.0
-	if total > 0 {
-		availability = float64(online) / float64(total) * 100
-	}
-
-	return AvailabilitySnapshot{
-		Current:    roundFloat(availability, 2),
-		Target:     defaultAvailabilityTarget,
-		Trend:      "stable",
-		LastUpdate: time.Now().UTC().Format(time.RFC3339Nano),
-	}, nil
-}
-
 // GetMonitoringStats 返回监控中心统计卡数据；deviceIDs 非空时仅统计所选设备。
 // CPU/内存口径为"最近一轮采集"：取每台设备新鲜窗口内最近一次采集值再求跨设备平均，
 // 无新鲜样本时回退 devices 表快照平均（避免采集暂停时卡片清零）。
+// 上/下行为 24 小时分向峰值（bps），与总览页共用 PeakNetworkMetrics24h 口径。
 func (w *MetricsWriter) GetMonitoringStats(ctx context.Context, deviceIDs []int) (MonitoringStats, error) {
 	if w.db == nil {
 		return MonitoringStats{}, fmt.Errorf("database not initialized")
 	}
 
-	total, online, err := countActiveAndOnlineDevices(ctx, w.db, deviceIDs)
-	if err != nil {
+	var total int64
+	totalQuery := w.db.WithContext(ctx).
+		Table("devices").
+		Where("is_active = ?", true)
+	if len(deviceIDs) > 0 {
+		totalQuery = totalQuery.Where("id IN ?", deviceIDs)
+	}
+	if err := totalQuery.Count(&total).Error; err != nil {
 		return MonitoringStats{}, err
 	}
 
@@ -313,15 +294,10 @@ func (w *MetricsWriter) GetMonitoringStats(ctx context.Context, deviceIDs []int)
 		return MonitoringStats{}, err
 	}
 
-	// 查询24小时内的峰值网络流量（bps）
-	peakNetwork, _, err := peakNetworkMetric24h(ctx, w.db, deviceIDs)
+	// 查询24小时内的分向峰值网络流量（bps），统一走共享峰值查询
+	peakSnapshot, err := PeakNetworkMetrics24h(ctx, w.db, deviceIDs)
 	if err != nil {
 		return MonitoringStats{}, err
-	}
-
-	availability := 100.0
-	if total > 0 {
-		availability = float64(online) / float64(total) * 100
 	}
 
 	// devices 表中的 cpu_usage 和 memory_usage 已经是百分比格式（0-100）
@@ -329,11 +305,11 @@ func (w *MetricsWriter) GetMonitoringStats(ctx context.Context, deviceIDs []int)
 
 	return MonitoringStats{
 		TotalDevices: int(total),
-		Availability: roundFloat(availability, 2),
 		ActiveAlerts: int(activeAlerts),
 		AvgCPU:       roundFloat(avgCPU, 1),
 		AvgMemory:    roundFloat(avgMemory, 1),
-		AvgNetwork:   roundFloat(peakNetwork, 1), // 24小时峰值流量（bps）
+		PeakOutbound: roundFloat(peakSnapshot.Outbound, 1),
+		PeakInbound:  roundFloat(peakSnapshot.Inbound, 1),
 	}, nil
 }
 
@@ -1101,31 +1077,10 @@ func shouldUseHourlyAggregate(start time.Time, end time.Time) bool {
 // latestSampleWindow 统计卡"最近一轮采集"的新鲜窗口（约 3 个默认采集周期）。
 const latestSampleWindow = 15 * time.Minute
 
-// countActiveAndOnlineDevices 统计活跃设备总数与在线数；deviceIDs 非空时限定范围。
-func countActiveAndOnlineDevices(ctx context.Context, db *gorm.DB, deviceIDs []int) (int64, int64, error) {
-	var total int64
-	totalQuery := db.WithContext(ctx).
-		Table("devices").
-		Where("is_active = ?", true)
-	if len(deviceIDs) > 0 {
-		totalQuery = totalQuery.Where("id IN ?", deviceIDs)
-	}
-	if err := totalQuery.Count(&total).Error; err != nil {
-		return 0, 0, err
-	}
-
-	var online int64
-	onlineQuery := db.WithContext(ctx).
-		Table("devices").
-		Where("is_active = ? AND status = ?", true, "online")
-	if len(deviceIDs) > 0 {
-		onlineQuery = onlineQuery.Where("id IN ?", deviceIDs)
-	}
-	if err := onlineQuery.Count(&online).Error; err != nil {
-		return 0, 0, err
-	}
-
-	return total, online, nil
+// LatestMetricAverageWithFallback 导出"最近一轮采集均值"口径查询，供总览等模块复用：
+// 每台设备新鲜窗口内最近一次采集值求跨设备平均，窗口内无样本时回退 devices 表快照平均。
+func LatestMetricAverageWithFallback(ctx context.Context, db *gorm.DB, metric string, deviceIDs []int) (float64, error) {
+	return latestSampleAverageWithFallback(ctx, db, metric, deviceIDs)
 }
 
 // latestSampleAverageWithFallback 取"每台设备最近一次采集值的平均"；
@@ -1196,60 +1151,44 @@ func avgDeviceColumn(ctx context.Context, db *gorm.DB, column string, deviceIDs 
 	return 0, nil
 }
 
-func avgNetworkMetric(ctx context.Context, db *gorm.DB) (float64, bool, error) {
-	inbound := []string{"bandwidth_in", "network_bytes_in", "throughput_in"}
-	outbound := []string{"bandwidth_out", "network_bytes_out", "throughput_out"}
+// MaxReasonableBandwidthBps 最大合理带宽阈值：10 Gbps。
+// 权威定义在 devices 包（采集端拒绝异常速率），此处转发导出供查询端
+// 过滤历史脏数据及 dashboard 等消费方引用，避免多包各自钉死数值。
+const MaxReasonableBandwidthBps = devices.MaxReasonableBandwidthBps
 
-	inboundValue, inboundCount, err := avgMetricList(ctx, db, inbound)
-	if err != nil {
-		return 0, false, err
-	}
-	outboundValue, outboundCount, err := avgMetricList(ctx, db, outbound)
-	if err != nil {
-		return 0, false, err
-	}
-
-	if inboundCount+outboundCount == 0 {
-		fallbackValue, fallbackCount, err := avgMetricList(ctx, db, []string{"bandwidth_utilization"})
-		if err != nil {
-			return 0, false, err
-		}
-		if fallbackCount > 0 {
-			// 采集端直出带宽利用率作为兜底值，后续可结合接口速率折算为真实带宽
-			return fallbackValue, true, nil
-		}
-	}
-
-	sum := inboundValue + outboundValue
-
-	// 返回 bytes (bps / 8)，不再转换为 Mbps
-	return bpsToBytes(sum), false, nil
+// PeakNetworkSnapshot 24小时峰值流量快照（单位 bps）
+type PeakNetworkSnapshot struct {
+	Inbound  float64 // 下行(入站)5分钟桶峰值
+	Outbound float64 // 上行(出站)5分钟桶峰值
+	Combined float64 // 入站+出站合并桶峰值（监控中心统计卡口径）
+	HasData  bool    // 24小时窗口内是否存在有效带宽采样
 }
 
-// MaxReasonableBandwidthBps 最大合理带宽阈值：10 Gbps = 10,000,000,000 bps
-// 超过此值的数据被视为异常数据（可能是历史错误数据）
-const MaxReasonableBandwidthBps = 10_000_000_000
+// PeakNetworkMetrics24h 查询24小时内的峰值网络流量，一次产出分向与合并口径，
+// 总览（上/下行卡）与监控中心（峰值流量卡）共用，调整桶宽/异常阈值只改此处。
+// 返回值单位为 bps；会过滤掉超过 10 Gbps 的异常数据；deviceIDs 非空时仅统计所选设备。
+func PeakNetworkMetrics24h(ctx context.Context, db *gorm.DB, deviceIDs []int) (PeakNetworkSnapshot, error) {
+	if db == nil {
+		return PeakNetworkSnapshot{}, fmt.Errorf("database not initialized")
+	}
 
-// peakNetworkMetric24h 查询24小时内的峰值网络流量（入站+出站的最大值）
-// 返回值单位为 bps (bits per second，比特每秒)
-// 会过滤掉超过 10 Gbps 的异常数据；deviceIDs 非空时仅统计所选设备
-func peakNetworkMetric24h(ctx context.Context, db *gorm.DB, deviceIDs []int) (float64, bool, error) {
 	inbound := []string{"bandwidth_in", "network_bytes_in", "throughput_in"}
 	outbound := []string{"bandwidth_out", "network_bytes_out", "throughput_out"}
 	allMetrics := append(append([]string{}, inbound...), outbound...)
 
-	// 查询24小时内每个时间点的入站+出站总和的最大值
 	type peakRow struct {
-		PeakValue   sql.NullFloat64 `gorm:"column:peak_value"`
-		SampleCount int64           `gorm:"column:sample_count"`
+		PeakInbound  sql.NullFloat64 `gorm:"column:peak_inbound"`
+		PeakOutbound sql.NullFloat64 `gorm:"column:peak_outbound"`
+		PeakCombined sql.NullFloat64 `gorm:"column:peak_combined"`
+		SampleCount  int64           `gorm:"column:sample_count"`
 	}
 
 	var peak peakRow
 
 	deviceFilter := ""
 	args := []interface{}{
-		inbound, MaxReasonableBandwidthBps,
-		outbound, MaxReasonableBandwidthBps,
+		inbound,
+		outbound,
 		allMetrics,
 		MaxReasonableBandwidthBps,
 	}
@@ -1258,14 +1197,14 @@ func peakNetworkMetric24h(ctx context.Context, db *gorm.DB, deviceIDs []int) (fl
 		args = append(args, deviceIDs)
 	}
 
-	// 使用子查询：先按时间点聚合入站和出站流量，然后取最大值
+	// 使用子查询：先按 5 分钟桶分方向聚合流量，再取各口径的桶峰值
 	// 过滤掉超过 10 Gbps 的异常数据（可能是历史错误数据）
 	query := fmt.Sprintf(`
 		WITH time_buckets AS (
 			SELECT
 				time_bucket('5 minutes', collected_at) AS bucket,
-				SUM(CASE WHEN metric_name IN (?) AND metric_value < ? THEN metric_value ELSE 0 END) AS inbound,
-				SUM(CASE WHEN metric_name IN (?) AND metric_value < ? THEN metric_value ELSE 0 END) AS outbound
+				SUM(CASE WHEN metric_name IN (?) THEN metric_value ELSE 0 END) AS inbound,
+				SUM(CASE WHEN metric_name IN (?) THEN metric_value ELSE 0 END) AS outbound
 			FROM device_metrics
 			WHERE metric_name IN (?)
 			AND collected_at >= NOW() - INTERVAL '24 hours'
@@ -1273,76 +1212,33 @@ func peakNetworkMetric24h(ctx context.Context, db *gorm.DB, deviceIDs []int) (fl
 			GROUP BY bucket
 		)
 		SELECT
-			MAX(inbound + outbound) AS peak_value,
+			MAX(inbound) AS peak_inbound,
+			MAX(outbound) AS peak_outbound,
+			MAX(inbound + outbound) AS peak_combined,
 			COUNT(*) AS sample_count
 		FROM time_buckets
 		WHERE inbound + outbound > 0
 	`, deviceFilter)
 
 	if err := db.WithContext(ctx).Raw(query, args...).Scan(&peak).Error; err != nil {
-		return 0, false, err
+		return PeakNetworkSnapshot{}, err
 	}
 
-	if peak.SampleCount == 0 || !peak.PeakValue.Valid {
-		// 没有数据，尝试使用 bandwidth_utilization 作为兜底
-		fallbackPeak, fallbackCount, err := maxMetricList24h(ctx, db, []string{"bandwidth_utilization"}, deviceIDs)
-		if err != nil {
-			return 0, false, err
-		}
-		if fallbackCount > 0 {
-			return fallbackPeak, true, nil
-		}
-		return 0, false, nil
+	if peak.SampleCount == 0 {
+		return PeakNetworkSnapshot{}, nil
 	}
 
-	// 数据库中存储的带宽值是 bps，直接返回
-	peakValue := peak.PeakValue.Float64
-
-	return peakValue, true, nil
-}
-
-// maxMetricList24h 查询24小时内指定指标的最大值；deviceIDs 非空时仅统计所选设备
-func maxMetricList24h(ctx context.Context, db *gorm.DB, metrics []string, deviceIDs []int) (float64, int64, error) {
-	type maxRow struct {
-		MaxValue    sql.NullFloat64 `gorm:"column:max_value"`
-		SampleCount int64           `gorm:"column:sample_count"`
+	snapshot := PeakNetworkSnapshot{HasData: true}
+	if peak.PeakInbound.Valid {
+		snapshot.Inbound = peak.PeakInbound.Float64
 	}
-	var max maxRow
-	query := db.WithContext(ctx).
-		Table("device_metrics").
-		Select("MAX(metric_value) AS max_value, COUNT(*) AS sample_count").
-		Where("metric_name IN ?", metrics).
-		Where("collected_at >= NOW() - INTERVAL '24 hours'")
-	if len(deviceIDs) > 0 {
-		query = query.Where("device_id IN ?", deviceIDs)
+	if peak.PeakOutbound.Valid {
+		snapshot.Outbound = peak.PeakOutbound.Float64
 	}
-	if err := query.Scan(&max).Error; err != nil {
-		return 0, 0, err
+	if peak.PeakCombined.Valid {
+		snapshot.Combined = peak.PeakCombined.Float64
 	}
-	if max.MaxValue.Valid {
-		return max.MaxValue.Float64, max.SampleCount, nil
-	}
-	return 0, max.SampleCount, nil
-}
-
-func avgMetricList(ctx context.Context, db *gorm.DB, metrics []string) (float64, int64, error) {
-	type avgRow struct {
-		AvgValue    sql.NullFloat64 `gorm:"column:avg_value"`
-		SampleCount int64           `gorm:"column:sample_count"`
-	}
-	var avg avgRow
-	if err := db.WithContext(ctx).
-		Table("device_metrics").
-		Select("AVG(metric_value) AS avg_value, COUNT(*) AS sample_count").
-		Where("metric_name IN ?", metrics).
-		Where("collected_at >= NOW() - INTERVAL '1 hour'").
-		Scan(&avg).Error; err != nil {
-		return 0, 0, err
-	}
-	if avg.AvgValue.Valid {
-		return avg.AvgValue.Float64, avg.SampleCount, nil
-	}
-	return 0, avg.SampleCount, nil
+	return snapshot, nil
 }
 
 func flattenSystemSeries(series map[time.Time]*SystemPerformancePoint) []SystemPerformancePoint {

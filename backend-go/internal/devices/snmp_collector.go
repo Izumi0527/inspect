@@ -31,6 +31,8 @@ type SNMPMetrics struct {
 }
 
 // MaxReasonableBandwidthBps 最大合理带宽：10 Gbps = 10,000,000,000 bps
+// 全项目唯一权威定义：采集端用于拒绝异常速率写入；monitoring 包转发导出，
+// 供查询端过滤历史脏数据及 dashboard 等消费方引用。
 const MaxReasonableBandwidthBps = 10_000_000_000
 
 // InterfaceMetrics 保存每个接口的指标

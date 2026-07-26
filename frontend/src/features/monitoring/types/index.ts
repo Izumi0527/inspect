@@ -20,14 +20,6 @@ export interface DeviceStatusDistribution {
   offline: number
 }
 
-// 整体可用性数据
-export interface AvailabilityData {
-  current: number // 当前可用性 0-100
-  target: number // 目标可用性(如99.9)
-  trend: 'up' | 'down' | 'stable'
-  lastUpdate?: Date | string
-}
-
 // 网络流量历史数据点(堆叠面积图)
 export interface NetworkTrafficDataPoint {
   timestamp: Date | string
@@ -73,8 +65,6 @@ export interface MonitoringDataV2 {
   temperatureHistory: TemperatureDataPoint[]
   // 设备状态分布
   deviceStatusDistribution: DeviceStatusDistribution
-  // 整体可用性
-  availability: AvailabilityData
   // 网络流量历史
   networkTrafficHistory: NetworkTrafficDataPoint[]
   // 统计卡片数据(6个)
@@ -91,7 +81,6 @@ export type MonitoringSectionKey =
   | 'systemPerformance'
   | 'temperature'
   | 'deviceStatus'
-  | 'availability'
   | 'networkTraffic'
   | 'realtimeAlerts'
 

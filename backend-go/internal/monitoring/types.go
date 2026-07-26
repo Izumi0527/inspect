@@ -199,11 +199,11 @@ type HistoryPoint struct {
 
 type MonitoringStats struct {
 	TotalDevices int     `json:"total_devices"`
-	Availability float64 `json:"availability"`
 	ActiveAlerts int     `json:"active_alerts"`
 	AvgCPU       float64 `json:"avg_cpu"`
 	AvgMemory    float64 `json:"avg_memory"`
-	AvgNetwork   float64 `json:"avg_network"`
+	PeakOutbound float64 `json:"peak_outbound"` // 24小时上行(出站)峰值，bps
+	PeakInbound  float64 `json:"peak_inbound"`  // 24小时下行(入站)峰值，bps
 }
 
 type DeviceStatusSummary struct {
@@ -228,13 +228,6 @@ type DeviceStatusDistribution struct {
 	Warning  int `json:"warning"`
 	Critical int `json:"critical"`
 	Offline  int `json:"offline"`
-}
-
-type AvailabilitySnapshot struct {
-	Current    float64 `json:"current"`
-	Target     float64 `json:"target"`
-	Trend      string  `json:"trend"`
-	LastUpdate string  `json:"last_update,omitempty"`
 }
 
 type SystemPerformancePoint struct {

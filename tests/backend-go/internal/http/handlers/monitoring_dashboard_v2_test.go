@@ -27,8 +27,6 @@ type stubDashboardWriter struct {
 	temperatureErr    error
 	deviceStatus      monitoring.DeviceStatusDistribution
 	deviceStatusErr   error
-	availability      monitoring.AvailabilitySnapshot
-	availabilityErr   error
 	networkTraffic    []monitoring.NetworkTrafficPoint
 	networkTrafficErr error
 }
@@ -47,10 +45,6 @@ func (s stubDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Tim
 
 func (s stubDashboardWriter) GetDeviceStatusDistribution(_ context.Context, _ []int) (monitoring.DeviceStatusDistribution, error) {
 	return s.deviceStatus, s.deviceStatusErr
-}
-
-func (s stubDashboardWriter) GetAvailability(_ context.Context, _ []int) (monitoring.AvailabilitySnapshot, error) {
-	return s.availability, s.availabilityErr
 }
 
 func (s stubDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.NetworkTrafficPoint, error) {
@@ -87,16 +81,15 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_AlertsLimitedByPermission(t 
 		DashboardWriter: stubDashboardWriter{
 			stats: monitoring.MonitoringStats{
 				TotalDevices: 3,
-				Availability: 99.9,
 				ActiveAlerts: 7,
 				AvgCPU:       1.2,
 				AvgMemory:    3.4,
-				AvgNetwork:   1000,
+				PeakOutbound: 1000,
+				PeakInbound:  2000,
 			},
 			systemPerf:     []monitoring.SystemPerformancePoint{},
 			temperature:    []monitoring.TemperatureHistoryPoint{},
 			deviceStatus:   monitoring.DeviceStatusDistribution{Healthy: 1, Warning: 0, Critical: 0, Offline: 2},
-			availability:   monitoring.AvailabilitySnapshot{Current: 99.9, Target: 99.9, Trend: "stable"},
 			networkTraffic: []monitoring.NetworkTrafficPoint{},
 		},
 		Auth: authService,
@@ -164,16 +157,15 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_PartialFailureTemperature(t 
 		DashboardWriter: stubDashboardWriter{
 			stats: monitoring.MonitoringStats{
 				TotalDevices: 3,
-				Availability: 99.9,
 				ActiveAlerts: 7,
 				AvgCPU:       1.2,
 				AvgMemory:    3.4,
-				AvgNetwork:   1000,
+				PeakOutbound: 1000,
+				PeakInbound:  2000,
 			},
 			systemPerf:     []monitoring.SystemPerformancePoint{},
 			temperatureErr: errors.New("temperature query failed"),
 			deviceStatus:   monitoring.DeviceStatusDistribution{Healthy: 1, Warning: 0, Critical: 0, Offline: 2},
-			availability:   monitoring.AvailabilitySnapshot{Current: 99.9, Target: 99.9, Trend: "stable"},
 			networkTraffic: []monitoring.NetworkTrafficPoint{},
 		},
 		Auth: authService,
@@ -231,7 +223,6 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_AllAccessibleSectionsFailed_
 			systemPerfErr:     errors.New("perf failed"),
 			temperatureErr:    errors.New("temp failed"),
 			deviceStatusErr:   errors.New("status failed"),
-			availabilityErr:   errors.New("availability failed"),
 			networkTrafficErr: errors.New("network failed"),
 		},
 		Auth: authService,
@@ -264,11 +255,11 @@ func TestMonitoringHandler_GetMonitoringStats_MasksActiveAlertsWithoutPermission
 		DashboardWriter: stubDashboardWriter{
 			stats: monitoring.MonitoringStats{
 				TotalDevices: 3,
-				Availability: 99.9,
 				ActiveAlerts: 9,
 				AvgCPU:       1.2,
 				AvgMemory:    3.4,
-				AvgNetwork:   1000,
+				PeakOutbound: 1000,
+				PeakInbound:  2000,
 			},
 		},
 		Auth: authService,
@@ -307,7 +298,6 @@ type recordingDashboardWriter struct {
 	perfDeviceIDs    []int
 	tempDeviceIDs    []int
 	distDeviceIDs    []int
-	availDeviceIDs   []int
 	trafficDeviceIDs []int
 }
 
@@ -339,13 +329,6 @@ func (r *recordingDashboardWriter) GetDeviceStatusDistribution(ctx context.Conte
 	return r.stubDashboardWriter.GetDeviceStatusDistribution(ctx, deviceIDs)
 }
 
-func (r *recordingDashboardWriter) GetAvailability(ctx context.Context, deviceIDs []int) (monitoring.AvailabilitySnapshot, error) {
-	r.mu.Lock()
-	r.availDeviceIDs = append([]int(nil), deviceIDs...)
-	r.mu.Unlock()
-	return r.stubDashboardWriter.GetAvailability(ctx, deviceIDs)
-}
-
 func (r *recordingDashboardWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.NetworkTrafficPoint, error) {
 	r.mu.Lock()
 	r.trafficDeviceIDs = append([]int(nil), deviceIDs...)
@@ -363,7 +346,6 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_DeviceIDsPassthrough(t *test
 			systemPerf:     []monitoring.SystemPerformancePoint{},
 			temperature:    []monitoring.TemperatureHistoryPoint{},
 			deviceStatus:   monitoring.DeviceStatusDistribution{Healthy: 2},
-			availability:   monitoring.AvailabilitySnapshot{Current: 100, Target: 99.9, Trend: "stable"},
 			networkTraffic: []monitoring.NetworkTrafficPoint{},
 		},
 	}
@@ -397,7 +379,6 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_DeviceIDsPassthrough(t *test
 		"systemPerf":     writer.perfDeviceIDs,
 		"temperature":    writer.tempDeviceIDs,
 		"deviceStatus":   writer.distDeviceIDs,
-		"availability":   writer.availDeviceIDs,
 		"networkTraffic": writer.trafficDeviceIDs,
 	}
 	for section, ids := range got {

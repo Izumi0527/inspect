@@ -84,6 +84,20 @@ describe('dashboard.api generateReport', () => {
     expect(result.networkOverview[0]?.status).toBe('critical')
   })
 
+  it('应解析 statsInspections 分区失败状态', async () => {
+    mockGet.mockResolvedValueOnce({
+      stats: [],
+      recent_alerts: [],
+      network_overview: [],
+      sections: { statsInspections: { ok: false, message: '巡检统计加载失败' } },
+    })
+
+    const result = await fetchDashboardData()
+
+    expect(result.sections.statsInspections.ok).toBe(false)
+    expect(result.sections.statsInspections.message).toBe('巡检统计加载失败')
+  })
+
   it('总览接口失败时应向上抛错，而不是吞成空数据', async () => {
     mockGet.mockRejectedValueOnce(new Error('dashboard failed'))
 

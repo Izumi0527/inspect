@@ -41,6 +41,7 @@ export const DashboardView: React.FC = () => {
     statsDevices: '设备统计',
     statsAlerts: '告警统计',
     statsBandwidth: '带宽统计',
+    statsInspections: '巡检统计',
     recentAlerts: '最近告警',
     networkOverview: '网络概览',
   }

@@ -611,9 +611,6 @@ export const api = {
     stats: () => httpClient.get('/monitoring/stats'),
     // 新增: 设备状态分布
     distribution: () => httpClient.get('/monitoring/devices/distribution'),
-    // 新增: 可用性统计
-    availability: (params?: QueryParams) =>
-      httpClient.get(appendQuery('/monitoring/availability', params)),
     metrics: (deviceId: number, timeRange?: string) =>
       httpClient.get(
         appendQuery(`/monitoring/devices/${deviceId}/metrics`,

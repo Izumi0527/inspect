@@ -2,15 +2,13 @@
 
 import { BarChart3 } from 'lucide-react'
 import { SectionHeader, SectionFailureCard, SectionPermissionLimitedCard } from '../shared'
-import { DeviceStatusCard, AvailabilityCard, RealTimeAlertsCard } from '../cards'
+import { DeviceStatusCard, RealTimeAlertsCard } from '../cards'
 import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../../types'
 
 interface StatusSectionProps {
   sectionDeviceStatus: MonitoringDataEnvelope['sections']['deviceStatus'] | undefined
-  sectionAvailability: MonitoringDataEnvelope['sections']['availability'] | undefined
   sectionRealtimeAlerts: MonitoringDataEnvelope['sections']['realtimeAlerts'] | undefined
   deviceStatusDistribution: MonitoringDataV2['deviceStatusDistribution']
-  availability: MonitoringDataV2['availability']
   realtimeAlerts: MonitoringDataV2['realtimeAlerts']
   realtimeAlertsPermissionLimited: boolean
   requiredAlertsPermission: string
@@ -19,10 +17,8 @@ interface StatusSectionProps {
 
 export function StatusSection({
   sectionDeviceStatus,
-  sectionAvailability,
   sectionRealtimeAlerts,
   deviceStatusDistribution,
-  availability,
   realtimeAlerts,
   realtimeAlertsPermissionLimited,
   requiredAlertsPermission,
@@ -31,7 +27,7 @@ export function StatusSection({
   return (
     <section>
       <SectionHeader icon={BarChart3} title="状态详情" />
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 items-stretch">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 items-stretch">
         {sectionDeviceStatus?.ok === false ? (
           <SectionFailureCard
             title="设备状态分布"
@@ -40,16 +36,6 @@ export function StatusSection({
           />
         ) : deviceStatusDistribution ? (
           <DeviceStatusCard data={deviceStatusDistribution} />
-        ) : null}
-
-        {sectionAvailability?.ok === false ? (
-          <SectionFailureCard
-            title="整体可用性"
-            message={sectionAvailability?.message ?? '可用性数据加载失败'}
-            onRetry={onRetry}
-          />
-        ) : availability ? (
-          <AvailabilityCard data={availability} />
         ) : null}
 
         {realtimeAlertsPermissionLimited ? (

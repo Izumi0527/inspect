@@ -17,13 +17,13 @@ func TestMonitoringHandler_ReadEndpointPermission(t *testing.T) {
 	readAllowedAuth, allowedToken := newAuthServiceWithPermissions(t, []string{"monitoring:read"})
 
 	h := handlers.MonitoringHandler{Auth: readDeniedAuth}
-	ctx := newEchoContext(http.MethodGet, "/api/v1/monitoring/availability", deniedToken)
-	err := h.GetAvailability(ctx)
+	ctx := newEchoContext(http.MethodGet, "/api/v1/monitoring/stats", deniedToken)
+	err := h.GetMonitoringStats(ctx)
 	assertHTTPErrorCode(t, err, http.StatusForbidden)
 
 	h = handlers.MonitoringHandler{Auth: readAllowedAuth}
-	ctx = newEchoContext(http.MethodGet, "/api/v1/monitoring/availability", allowedToken)
-	err = h.GetAvailability(ctx)
+	ctx = newEchoContext(http.MethodGet, "/api/v1/monitoring/stats", allowedToken)
+	err = h.GetMonitoringStats(ctx)
 	assertHTTPErrorCode(t, err, http.StatusServiceUnavailable)
 }
 

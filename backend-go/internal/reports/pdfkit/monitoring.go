@@ -31,11 +31,11 @@ type MonitoringPDFInput struct {
 // MonitoringStatsInput captures the high-level KPI block.
 type MonitoringStatsInput struct {
 	TotalDevices int
-	Availability float64
 	ActiveAlerts int
 	AvgCPU       float64
 	AvgMemory    float64
-	AvgNetwork   float64
+	PeakOutbound float64 // 24小时上行(出站)峰值，bps
+	PeakInbound  float64 // 24小时下行(入站)峰值，bps
 }
 
 // TimeSeriesPoint is one (timestamp, cpu/mem/net) sample for the system
@@ -147,16 +147,32 @@ func renderMonitoringStats(pdf *gofpdf.Fpdf, stats *MonitoringStatsInput) {
 	}
 	// 6 列单行布局：A4 174mm 可用宽 / 6 张约 26mm 宽，正好放下 6 个 KPI；
 	// 旧的 4+2 布局让第二行右侧 2 列空白，破坏视觉秩序。彩虹色相
-	// (indigo/emerald/danger/amber/indigo-light/emerald) 让每个指标
+	// (indigo/danger/amber/indigo-light/primary/emerald) 让每个指标
 	// 类型一眼可辨。
 	WriteStatCardRow(pdf, []StatCard{
 		{Label: "设备总数", Value: fmt.Sprintf("%d", stats.TotalDevices), Color: ColorPrimary},
-		{Label: "可用性", Value: fmt.Sprintf("%.2f%%", stats.Availability), Color: ColorSuccess},
 		{Label: "活跃告警", Value: fmt.Sprintf("%d", stats.ActiveAlerts), Color: ColorDanger},
 		{Label: "平均CPU", Value: fmt.Sprintf("%.1f%%", stats.AvgCPU), Color: ColorAmber500},
 		{Label: "平均内存", Value: fmt.Sprintf("%.1f%%", stats.AvgMemory), Color: ColorIndigo400},
-		{Label: "平均网络", Value: fmt.Sprintf("%.1f Mbps", stats.AvgNetwork), Color: ColorEmerald500},
+		{Label: "上行流量峰值", Value: formatBandwidthBps(stats.PeakOutbound), Color: ColorSuccess},
+		{Label: "下行流量峰值", Value: formatBandwidthBps(stats.PeakInbound), Color: ColorEmerald500},
 	}, 6)
+}
+
+// formatBandwidthBps 将 bps 值格式化为人类可读带宽（与前端 formatBandwidth 分段一致）
+func formatBandwidthBps(bps float64) string {
+	switch {
+	case bps < 0:
+		return "0.0 bps"
+	case bps < 1_000:
+		return fmt.Sprintf("%.1f bps", bps)
+	case bps < 1_000_000:
+		return fmt.Sprintf("%.1f Kbps", bps/1_000)
+	case bps < 1_000_000_000:
+		return fmt.Sprintf("%.1f Mbps", bps/1_000_000)
+	default:
+		return fmt.Sprintf("%.1f Gbps", bps/1_000_000_000)
+	}
 }
 
 func renderMonitoringCharts(pdf *gofpdf.Fpdf, perf []TimeSeriesPoint, traffic []NetworkTrafficPoint) {

@@ -83,33 +83,63 @@ func (s *Service) GetOverview(ctx context.Context, access OverviewAccess) (Overv
 		}
 	}
 
-	// 查询24小时内的峰值网络流量（bps）
-	peakNetwork := 0.0
+	// 查询24小时内上行/下行各自的峰值网络流量（bps），与监控中心共用统一查询口径
+	peakInbound := 0.0
+	peakOutbound := 0.0
 	hasNetwork := false
 	if access.CanReadMonitoring {
-		value, ok, err := s.queryPeakNetworkMetric24h(ctx)
+		snapshot, err := monitoring.PeakNetworkMetrics24h(ctx, s.db, nil)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Warn("加载总览带宽统计失败", zap.Error(err))
 			}
 			sections["statsBandwidth"] = buildOverviewErrorSectionStatus("带宽统计加载失败")
 		} else {
-			peakNetwork = value
-			hasNetwork = ok
+			peakInbound = snapshot.Inbound
+			peakOutbound = snapshot.Outbound
+			hasNetwork = snapshot.HasData
 		}
 	}
 
-	systemHealth := 0.0
-	if access.CanReadDevices && deviceStatsAvailable && deviceStats.Total > 0 {
-		systemHealth = float64(deviceStats.Online) / float64(deviceStats.Total) * 100
+	// 巡检成功率：24小时窗口内已结束任务(完成/失败/超时)中完成的占比；取消与运行中不计入
+	inspectionRate := 0.0
+	hasInspections := false
+	if access.CanReadInspections {
+		rate, ok, err := s.queryInspectionSuccessRate24h(ctx)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("加载总览巡检统计失败", zap.Error(err))
+			}
+			sections["statsInspections"] = buildOverviewErrorSectionStatus("巡检统计加载失败")
+		} else {
+			inspectionRate = rate
+			hasInspections = ok
+		}
+	}
+
+	// 副文案使用真实口径描述；数据不可用（无权限/查询失败）时置空，前端自动隐藏该行。
+	// 不做"较昨日"类对比：系统无历史快照数据源，伪造对比文案会误导用户。
+	deviceChange := ""
+	if access.CanReadDevices && deviceStatsAvailable {
+		deviceChange = fmt.Sprintf("共 %d 台", deviceStats.Total)
+	}
+	alertChange := ""
+	if access.CanReadAlerts && alertStatsAvailable {
+		alertChange = "待处理"
 	}
 
 	bpsUnit := "bps"
+	monitoringUnit := func() *string {
+		if !access.CanReadMonitoring {
+			return nil
+		}
+		return &bpsUnit
+	}() // 标识此值单位为 bps，需要前端格式化
 	stats := []StatCard{
 		{
 			Title:     "在线设备",
 			Value:     resolveOverviewStatValue(access.CanReadDevices, deviceStatsAvailable, fmt.Sprintf("%d", deviceStats.Online)),
-			Change:    "较昨日",
+			Change:    deviceChange,
 			IconName:  "Monitor",
 			IconColor: "text-green-500",
 			Color:     "green",
@@ -117,30 +147,34 @@ func (s *Service) GetOverview(ctx context.Context, access OverviewAccess) (Overv
 		{
 			Title:     "活跃告警",
 			Value:     resolveOverviewStatValue(access.CanReadAlerts, alertStatsAvailable, fmt.Sprintf("%d", alertStats.Unacknowledged)),
-			Change:    "较昨日",
+			Change:    alertChange,
 			IconName:  "AlertTriangle",
 			IconColor: "text-red-500",
 			Color:     "red",
 		},
 		{
-			Title:     "峰值流量",
-			Value:     resolveOverviewStatValue(access.CanReadMonitoring, sections["statsBandwidth"].Ok, formatNetworkValueBps(peakNetwork, hasNetwork)),
-			Change:    "较昨日",
-			IconName:  "Activity",
+			Title:     "上行流量",
+			Value:     resolveOverviewStatValue(access.CanReadMonitoring, sections["statsBandwidth"].Ok, formatNetworkValueBps(peakOutbound, hasNetwork)),
+			Change:    "24小时峰值",
+			IconName:  "Upload",
 			IconColor: "text-blue-500",
 			Color:     "blue",
-			Unit: func() *string {
-				if !access.CanReadMonitoring {
-					return nil
-				}
-				return &bpsUnit
-			}(), // 标识此值单位为 bps，需要前端格式化
+			Unit:      monitoringUnit,
 		},
 		{
-			Title:     "系统负载",
-			Value:     resolveOverviewStatValue(access.CanReadDevices, deviceStatsAvailable, formatPercent(systemHealth, 1)),
-			Change:    "较昨日",
-			IconName:  "Server",
+			Title:     "下行流量",
+			Value:     resolveOverviewStatValue(access.CanReadMonitoring, sections["statsBandwidth"].Ok, formatNetworkValueBps(peakInbound, hasNetwork)),
+			Change:    "24小时峰值",
+			IconName:  "Download",
+			IconColor: "text-cyan-500",
+			Color:     "cyan",
+			Unit:      monitoringUnit,
+		},
+		{
+			Title:     "巡检成功率",
+			Value:     resolveOverviewStatValue(access.CanReadInspections, sections["statsInspections"].Ok, formatInspectionRate(inspectionRate, hasInspections)),
+			Change:    "近24小时",
+			IconName:  "ClipboardCheck",
 			IconColor: "text-purple-500",
 			Color:     "purple",
 		},
@@ -939,90 +973,6 @@ func resolveAlertTime(alert alerts.AlertWithDevice) string {
 	return time.Now().UTC().Format(time.RFC3339)
 }
 
-// MaxReasonableBandwidthBps 最大合理带宽阈值：10 Gbps = 10,000,000,000 bps
-// 超过此值的数据被视为异常数据（可能是历史错误数据）
-const MaxReasonableBandwidthBps = 10_000_000_000
-
-// queryPeakNetworkMetric24h 查询24小时内的峰值网络流量（入站+出站的最大值）
-// 返回值单位为 bps (bits per second)
-// 会过滤掉超过 10 Gbps 的异常数据
-func (s *Service) queryPeakNetworkMetric24h(ctx context.Context) (float64, bool, error) {
-	if s == nil || s.db == nil {
-		return 0, false, fmt.Errorf("database not initialized")
-	}
-
-	inbound := []string{"bandwidth_in", "network_bytes_in", "throughput_in"}
-	outbound := []string{"bandwidth_out", "network_bytes_out", "throughput_out"}
-	allMetrics := append(append([]string{}, inbound...), outbound...)
-
-	type peakRow struct {
-		PeakValue   sql.NullFloat64 `gorm:"column:peak_value"`
-		SampleCount int64           `gorm:"column:sample_count"`
-	}
-
-	var peak peakRow
-
-	// 使用子查询：先按时间点聚合入站和出站流量，然后取最大值
-	// 过滤掉超过 10 Gbps 的异常数据
-	query := `
-		WITH time_buckets AS (
-			SELECT 
-				time_bucket('5 minutes', collected_at) AS bucket,
-				SUM(CASE WHEN metric_name IN (?) AND metric_value < ? THEN metric_value ELSE 0 END) AS inbound,
-				SUM(CASE WHEN metric_name IN (?) AND metric_value < ? THEN metric_value ELSE 0 END) AS outbound
-			FROM device_metrics
-			WHERE metric_name IN (?)
-			AND collected_at >= NOW() - INTERVAL '24 hours'
-			AND metric_value < ?
-			GROUP BY bucket
-		)
-		SELECT 
-			MAX(inbound + outbound) AS peak_value,
-			COUNT(*) AS sample_count
-		FROM time_buckets
-		WHERE inbound + outbound > 0
-	`
-
-	if err := s.db.WithContext(ctx).Raw(query,
-		inbound, MaxReasonableBandwidthBps,
-		outbound, MaxReasonableBandwidthBps,
-		allMetrics,
-		MaxReasonableBandwidthBps,
-	).Scan(&peak).Error; err != nil {
-		return 0, false, err
-	}
-
-	if peak.SampleCount == 0 || !peak.PeakValue.Valid {
-		return 0, false, nil
-	}
-
-	return peak.PeakValue.Float64, true, nil
-}
-
-func (s *Service) queryAvgNetworkMetric(ctx context.Context) (float64, bool, error) {
-	avgInbound, inboundCount, err := s.avgMetricList(ctx, []string{"bandwidth_in", "network_bytes_in", "throughput_in"})
-	if err != nil {
-		return 0, false, err
-	}
-	avgOutbound, outboundCount, err := s.avgMetricList(ctx, []string{"bandwidth_out", "network_bytes_out", "throughput_out"})
-	if err != nil {
-		return 0, false, err
-	}
-
-	if inboundCount+outboundCount == 0 {
-		fallbackValue, fallbackCount, err := s.avgMetricList(ctx, []string{"bandwidth_utilization"})
-		if err != nil {
-			return 0, false, err
-		}
-		if fallbackCount > 0 {
-			return fallbackValue, true, nil
-		}
-		return 0, false, nil
-	}
-
-	return avgInbound + avgOutbound, true, nil
-}
-
 func (s *Service) avgMetricList(ctx context.Context, metrics []string) (float64, int64, error) {
 	if s == nil || s.db == nil {
 		return 0, 0, fmt.Errorf("database not initialized")
@@ -1033,13 +983,13 @@ func (s *Service) avgMetricList(ctx context.Context, metrics []string) (float64,
 		SampleCount int64           `gorm:"column:sample_count"`
 	}
 	var avg avgRow
-	// 过滤掉超过 10 Gbps 的异常数据
+	// 过滤掉超过 10 Gbps 的异常数据（阈值与 monitoring 包共用同一常量）
 	if err := s.db.WithContext(ctx).
 		Table("device_metrics").
 		Select("AVG(metric_value) AS avg_value, COUNT(*) AS sample_count").
 		Where("metric_name IN ?", metrics).
 		Where("collected_at >= NOW() - INTERVAL '1 hour'").
-		Where("metric_value < ?", MaxReasonableBandwidthBps).
+		Where("metric_value < ?", monitoring.MaxReasonableBandwidthBps).
 		Scan(&avg).Error; err != nil {
 		return 0, 0, err
 	}
@@ -1065,12 +1015,42 @@ func formatNetworkValueBps(value float64, ok bool) string {
 	return fmt.Sprintf("%.0f", value)
 }
 
-// formatNetworkValue 将网络值格式化为 Mbps（已弃用，保留以向后兼容）
-func formatNetworkValue(value float64, ok bool) string {
+// queryInspectionSuccessRate24h 24小时窗口内已结束巡检(完成/失败/超时)的任务级成功率
+// 返回 (成功率百分比, 是否存在已结束巡检, 错误)；cancelled 与运行中任务不计入分母
+func (s *Service) queryInspectionSuccessRate24h(ctx context.Context) (float64, bool, error) {
+	if s == nil || s.db == nil {
+		return 0, false, fmt.Errorf("database not initialized")
+	}
+
+	type rateRow struct {
+		Finished  int64 `gorm:"column:finished"`
+		Succeeded int64 `gorm:"column:succeeded"`
+	}
+	var row rateRow
+	// 时间锚点沿用巡检通知的口径：completed_at 优先，回退 updated_at
+	query := `
+		SELECT
+			COUNT(*) AS finished,
+			SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS succeeded
+		FROM inspections
+		WHERE status IN ('completed','failed','timeout')
+		AND COALESCE(completed_at, updated_at) >= NOW() - INTERVAL '24 hours'
+	`
+	if err := s.db.WithContext(ctx).Raw(query).Scan(&row).Error; err != nil {
+		return 0, false, err
+	}
+	if row.Finished == 0 {
+		return 0, false, nil
+	}
+	return float64(row.Succeeded) / float64(row.Finished) * 100, true, nil
+}
+
+// formatInspectionRate 无已结束巡检时显示 N/A，避免 0%/100% 误导
+func formatInspectionRate(rate float64, ok bool) string {
 	if !ok {
 		return "N/A"
 	}
-	return fmt.Sprintf("%.1f Mbps", value)
+	return formatPercent(rate, 1)
 }
 
 type notificationCandidate struct {
@@ -1324,18 +1304,12 @@ const (
 	notificationSourceScan       notificationSource = "scan"
 )
 
-func restrictedStatValue(allowed bool, value string) string {
-	if !allowed {
-		return "-"
-	}
-	return value
-}
-
 func buildOverviewPermissions(access OverviewAccess) OverviewPermissions {
 	return OverviewPermissions{
-		Devices:    access.CanReadDevices,
-		Alerts:     access.CanReadAlerts,
-		Monitoring: access.CanReadMonitoring,
+		Devices:     access.CanReadDevices,
+		Alerts:      access.CanReadAlerts,
+		Monitoring:  access.CanReadMonitoring,
+		Inspections: access.CanReadInspections,
 	}
 }
 
@@ -1345,6 +1319,11 @@ func buildDashboardSections(access OverviewAccess) map[string]dashboardSectionSt
 		"statsDevices":   buildOverviewSectionStatus(access.CanReadDevices, "devices:read", "当前账号缺少 devices:read，设备统计已隐藏"),
 		"statsAlerts":    buildOverviewSectionStatus(access.CanReadAlerts, "alerts:read", "当前账号缺少 alerts:read，告警统计已隐藏"),
 		"statsBandwidth": buildOverviewSectionStatus(access.CanReadMonitoring, "monitoring:read", "当前账号缺少 monitoring:read，带宽统计已隐藏"),
+		"statsInspections": buildOverviewSectionStatus(
+			access.CanReadInspections,
+			"inspections:read",
+			"当前账号缺少 inspections:read，巡检统计已隐藏",
+		),
 		"recentAlerts":   buildOverviewSectionStatus(access.CanReadAlerts, "alerts:read", "当前账号缺少 alerts:read，最近告警已隐藏"),
 		"networkOverview": buildOverviewSectionStatus(
 			access.CanReadDevices,

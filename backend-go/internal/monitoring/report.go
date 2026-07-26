@@ -199,11 +199,11 @@ func renderMonitoringReportCSV(data MonitoringReportData) ([]byte, error) {
 			writeRow("暂无统计数据")
 		} else {
 			writeRow("设备总数", strconv.Itoa(data.Stats.TotalDevices))
-			writeRow("可用性(%)", formatFloat(data.Stats.Availability, 2))
 			writeRow("活跃告警", strconv.Itoa(data.Stats.ActiveAlerts))
 			writeRow("平均CPU(%)", formatFloat(data.Stats.AvgCPU, 1))
 			writeRow("平均内存(%)", formatFloat(data.Stats.AvgMemory, 1))
-			writeRow("平均网络", formatFloat(data.Stats.AvgNetwork, 1))
+			writeRow("上行流量峰值(bps)", formatFloat(data.Stats.PeakOutbound, 1))
+			writeRow("下行流量峰值(bps)", formatFloat(data.Stats.PeakInbound, 1))
 		}
 		writeRow()
 	}
@@ -345,9 +345,6 @@ func renderMonitoringReportExcel(data MonitoringReportData) ([]byte, error) {
 			if err := writeRow("设备总数", strconv.Itoa(data.Stats.TotalDevices)); err != nil {
 				return nil, err
 			}
-			if err := writeRow("可用性(%)", formatFloat(data.Stats.Availability, 2)); err != nil {
-				return nil, err
-			}
 			if err := writeRow("活跃告警", strconv.Itoa(data.Stats.ActiveAlerts)); err != nil {
 				return nil, err
 			}
@@ -357,7 +354,10 @@ func renderMonitoringReportExcel(data MonitoringReportData) ([]byte, error) {
 			if err := writeRow("平均内存(%)", formatFloat(data.Stats.AvgMemory, 1)); err != nil {
 				return nil, err
 			}
-			if err := writeRow("平均网络", formatFloat(data.Stats.AvgNetwork, 1)); err != nil {
+			if err := writeRow("上行流量峰值(bps)", formatFloat(data.Stats.PeakOutbound, 1)); err != nil {
+				return nil, err
+			}
+			if err := writeRow("下行流量峰值(bps)", formatFloat(data.Stats.PeakInbound, 1)); err != nil {
 				return nil, err
 			}
 		}
@@ -518,11 +518,11 @@ func buildMonitoringPDFInput(data MonitoringReportData) pdfkit.MonitoringPDFInpu
 	if data.Stats != nil {
 		input.Stats = &pdfkit.MonitoringStatsInput{
 			TotalDevices: data.Stats.TotalDevices,
-			Availability: data.Stats.Availability,
 			ActiveAlerts: data.Stats.ActiveAlerts,
 			AvgCPU:       data.Stats.AvgCPU,
 			AvgMemory:    data.Stats.AvgMemory,
-			AvgNetwork:   data.Stats.AvgNetwork,
+			PeakOutbound: data.Stats.PeakOutbound,
+			PeakInbound:  data.Stats.PeakInbound,
 		}
 	}
 	for _, p := range data.SystemPerformance {

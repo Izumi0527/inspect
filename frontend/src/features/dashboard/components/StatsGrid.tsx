@@ -4,7 +4,10 @@ import {
   AlertTriangle,
   Activity,
   Server,
-  Shield
+  Shield,
+  Upload,
+  Download,
+  ClipboardCheck
 } from 'lucide-react'
 import { CompactStatCard } from '@/components/shared'
 import { DashboardStat } from '../types'
@@ -22,7 +25,10 @@ const iconMap = {
   AlertTriangle,
   Activity,
   Server,
-  Shield
+  Shield,
+  Upload,
+  Download,
+  ClipboardCheck
 }
 
 // 从 change 字符串推断 trend
@@ -62,8 +68,8 @@ const formatStatValue = (value: string, unit?: string): string => {
 export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) => {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        {[...Array(4)].map((_, index) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+        {[...Array(5)].map((_, index) => (
           <Card key={index} className="animate-pulse">
             <CardContent className="p-2.5">
               <div className="flex items-center">
@@ -81,7 +87,7 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) 
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
       {stats.map((stat, index) => {
         const IconComponent = iconMap[stat.iconName as keyof typeof iconMap]
 

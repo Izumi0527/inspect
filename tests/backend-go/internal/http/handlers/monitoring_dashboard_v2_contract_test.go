@@ -20,11 +20,11 @@ type testMonitoringDashboardWriter struct{}
 func (testMonitoringDashboardWriter) GetMonitoringStats(_ context.Context, _ []int) (monitoring.MonitoringStats, error) {
 	return monitoring.MonitoringStats{
 		TotalDevices: 1,
-		Availability: 99.9,
 		ActiveAlerts: 3,
 		AvgCPU:       1,
 		AvgMemory:    2,
-		AvgNetwork:   0.5,
+		PeakOutbound: 12266,
+		PeakInbound:  2818,
 	}, nil
 }
 
@@ -50,15 +50,6 @@ func (testMonitoringDashboardWriter) GetTemperatureHistory(_ context.Context, _ 
 
 func (testMonitoringDashboardWriter) GetDeviceStatusDistribution(_ context.Context, _ []int) (monitoring.DeviceStatusDistribution, error) {
 	return monitoring.DeviceStatusDistribution{Healthy: 1, Warning: 0, Critical: 0, Offline: 0}, nil
-}
-
-func (testMonitoringDashboardWriter) GetAvailability(_ context.Context, _ []int) (monitoring.AvailabilitySnapshot, error) {
-	return monitoring.AvailabilitySnapshot{
-		Current:    99.9,
-		Target:     99.9,
-		Trend:      "stable",
-		LastUpdate: "2026-03-15T00:00:00Z",
-	}, nil
 }
 
 func (testMonitoringDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.NetworkTrafficPoint, error) {
@@ -114,11 +105,14 @@ func TestGetMonitoringDashboardV2_ContractKeysAndSections(t *testing.T) {
 		t.Fatalf("sections should be object, got %T", payload["sections"])
 	}
 
-	requiredSectionKeys := []string{"stats", "systemPerformance", "temperature", "deviceStatus", "availability", "networkTraffic", "realtimeAlerts"}
+	requiredSectionKeys := []string{"stats", "systemPerformance", "temperature", "deviceStatus", "networkTraffic", "realtimeAlerts"}
 	for _, key := range requiredSectionKeys {
 		if _, ok := sections[key]; !ok {
 			t.Fatalf("missing sections key: %s", key)
 		}
+	}
+	if _, ok := sections["availability"]; ok {
+		t.Fatalf("sections should not contain removed key: availability")
 	}
 
 	realtime, ok := sections["realtimeAlerts"].(map[string]interface{})
@@ -147,14 +141,44 @@ func TestGetMonitoringDashboardV2_ContractKeysAndSections(t *testing.T) {
 	if !ok {
 		t.Fatalf("data should be object, got %T", payload["data"])
 	}
-	requiredDataKeys := []string{"systemPerformance", "temperatureHistory", "deviceStatusDistribution", "availability", "networkTrafficHistory", "statsV2", "realtimeAlerts", "lastUpdate"}
+	requiredDataKeys := []string{"systemPerformance", "temperatureHistory", "deviceStatusDistribution", "networkTrafficHistory", "statsV2", "realtimeAlerts", "lastUpdate"}
 	for _, key := range requiredDataKeys {
 		if _, ok := data[key]; !ok {
 			t.Fatalf("missing data key: %s", key)
 		}
 	}
+	if _, ok := data["availability"]; ok {
+		t.Fatalf("data should not contain removed key: availability")
+	}
 	if _, ok := data["realtimeAlerts"].([]interface{}); !ok {
 		t.Fatalf("data.realtimeAlerts should be array, got %T", data["realtimeAlerts"])
+	}
+
+	// statsV2 六卡契约：可用性卡移除，峰值流量拆分为上行/下行
+	statsV2, ok := data["statsV2"].([]interface{})
+	if !ok {
+		t.Fatalf("data.statsV2 should be array, got %T", data["statsV2"])
+	}
+	wantStatIDs := []string{"total_devices", "active_alerts", "avg_cpu", "avg_memory", "peak_outbound", "peak_inbound"}
+	if len(statsV2) != len(wantStatIDs) {
+		t.Fatalf("statsV2 length = %d, want %d", len(statsV2), len(wantStatIDs))
+	}
+	for i, want := range wantStatIDs {
+		card, ok := statsV2[i].(map[string]interface{})
+		if !ok {
+			t.Fatalf("statsV2[%d] should be object, got %T", i, statsV2[i])
+		}
+		if card["id"] != want {
+			t.Fatalf("statsV2[%d].id = %v, want %s", i, card["id"], want)
+		}
+	}
+	upstreamCard := statsV2[4].(map[string]interface{})
+	if upstreamCard["title"] != "上行流量" || upstreamCard["value"] != "12.3 Kbps" {
+		t.Fatalf("upstream card = %v, want title 上行流量 value 12.3 Kbps", upstreamCard)
+	}
+	downstreamCard := statsV2[5].(map[string]interface{})
+	if downstreamCard["title"] != "下行流量" || downstreamCard["value"] != "2.82 Kbps" {
+		t.Fatalf("downstream card = %v, want title 下行流量 value 2.82 Kbps", downstreamCard)
 	}
 
 	// lastUpdate 语义：应尽量反映“最新数据时间”，这里取系统性能/温度/流量中最新的时间点（02:00）。

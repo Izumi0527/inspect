@@ -16,7 +16,6 @@ export const MONITORING_SECTION_LABELS: Record<MonitoringSectionKey, string> = {
   systemPerformance: '系统性能趋势',
   temperature: '设备温度监控',
   deviceStatus: '设备状态分布',
-  availability: '整体可用性',
   networkTraffic: '网络流量',
   realtimeAlerts: '实时告警',
 }

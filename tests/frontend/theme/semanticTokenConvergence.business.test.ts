@@ -545,14 +545,6 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/monitoring/components/cards/AvailabilityCard.tsx',
-    bannedPatterns: [
-      /border-gray-200\/50/g,
-      /bg-white\/80/g,
-      /text-gray-900 dark:text-foreground/g,
-    ],
-  },
-  {
     file: 'frontend/src/features/inspection/components/TemplateList.tsx',
     bannedPatterns: [
       /bg-white p-4 rounded-lg shadow/g,
@@ -750,16 +742,6 @@ const rules: FileRule[] = [
     file: 'frontend/src/features/logs/components/LogsView.tsx',
     bannedPatterns: [
       /border border-gray-200 dark:border-gray-700 rounded-lg/g,
-    ],
-  },
-  {
-    file: 'frontend/src/features/monitoring/components/charts/AvailabilityGaugeChart.tsx',
-    bannedPatterns: [
-      /font-medium text-gray-900 dark:text-gray-100/g,
-      /text-gray-600/g,
-      /bg-gray-50/g,
-      /text-gray-600 dark:text-gray-400/g,
-      /bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400/g,
     ],
   },
   {

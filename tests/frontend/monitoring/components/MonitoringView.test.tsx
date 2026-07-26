@@ -101,7 +101,6 @@ describe('MonitoringView', () => {
           systemPerformance: { ok: true },
           temperature: { ok: true },
           deviceStatus: { ok: true },
-          availability: { ok: true },
           networkTraffic: { ok: false, message: 'network failed' },
           realtimeAlerts: { ok: true },
         },
@@ -127,7 +126,6 @@ describe('MonitoringView', () => {
           systemPerformance: [],
           temperatureHistory: [],
           deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
-          availability: { current: 0, target: 99.9, trend: 'stable' as const },
           networkTrafficHistory: [],
           realtimeAlerts: [],
         },
@@ -138,7 +136,6 @@ describe('MonitoringView', () => {
           systemPerformance: { ok: true },
           temperature: { ok: true },
           deviceStatus: { ok: true },
-          availability: { ok: true },
           networkTraffic: { ok: true },
           realtimeAlerts: { ok: true },
         },
@@ -165,7 +162,6 @@ describe('MonitoringView', () => {
           systemPerformance: [],
           temperatureHistory: [],
           deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
-          availability: { current: 0, target: 99.9, trend: 'stable' as const },
           networkTrafficHistory: [],
           realtimeAlerts: [],
         },
@@ -175,7 +171,6 @@ describe('MonitoringView', () => {
           'systemPerformance',
           'temperature',
           'deviceStatus',
-          'availability',
           'networkTraffic',
           'realtimeAlerts',
         ],
@@ -184,7 +179,6 @@ describe('MonitoringView', () => {
           systemPerformance: { ok: false, message: 'perf down' },
           temperature: { ok: false, message: 'temp down' },
           deviceStatus: { ok: false, message: 'device down' },
-          availability: { ok: false, message: 'availability down' },
           networkTraffic: { ok: false, message: 'traffic down' },
           realtimeAlerts: { ok: false, message: 'alerts down' },
         },
@@ -203,7 +197,6 @@ describe('MonitoringView', () => {
     expect(screen.getByText('perf down')).toBeInTheDocument()
     expect(screen.getByText('temp down')).toBeInTheDocument()
     expect(screen.getByText('device down')).toBeInTheDocument()
-    expect(screen.getByText('availability down')).toBeInTheDocument()
     expect(screen.getByText('traffic down')).toBeInTheDocument()
     expect(screen.getByText('alerts down')).toBeInTheDocument()
   })

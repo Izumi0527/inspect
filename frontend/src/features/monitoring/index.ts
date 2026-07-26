@@ -12,7 +12,6 @@ export type {
   SystemPerformanceDataPoint,
   TemperatureDataPoint,
   DeviceStatusDistribution,
-  AvailabilityData,
   NetworkTrafficDataPoint,
   StatCardData,
   Alert,

@@ -8,7 +8,6 @@ export { SystemPerformanceChart } from './SystemPerformanceChart'
 export { NetworkTrafficStackedAreaChart } from './NetworkTrafficStackedAreaChart'
 export { TemperatureChart } from './TemperatureChart'
 export { DeviceStatusPieChart } from './DeviceStatusPieChart'
-export { AvailabilityGaugeChart } from './AvailabilityGaugeChart'
 export { ChartSkeleton } from './ChartSkeleton'
 
 // 懒加载包装器(用于代码分割)

@@ -19,8 +19,6 @@ func TestGetMonitoringStats_ShouldExcludeDeletedDeviceAlerts(t *testing.T) {
 
 	mock.ExpectQuery(`SELECT count\(\*\) FROM "devices" WHERE is_active = \$1`).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
-	mock.ExpectQuery(`SELECT count\(\*\) FROM "devices" WHERE is_active = \$1 AND status = \$2`).
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE .*status IN .*`).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	// CPU：最新采集样本查询（窗口内无样本）→ 回退 devices 快照平均
@@ -34,7 +32,8 @@ func TestGetMonitoringStats_ShouldExcludeDeletedDeviceAlerts(t *testing.T) {
 	mock.ExpectQuery(`SELECT AVG\(memory_usage\) AS avg_value FROM "devices" WHERE is_active = \$1`).
 		WillReturnRows(sqlmock.NewRows([]string{"avg_value"}).AddRow(nil))
 	mock.ExpectQuery(`(?is)WITH time_buckets AS .*FROM device_metrics.*`).
-		WillReturnRows(sqlmock.NewRows([]string{"peak_value", "sample_count"}).AddRow(0.0, 1))
+		WillReturnRows(sqlmock.NewRows([]string{"peak_inbound", "peak_outbound", "peak_combined", "sample_count"}).
+			AddRow(0.0, 0.0, 0.0, 1))
 
 	stats, err := writer.GetMonitoringStats(context.Background(), nil)
 	if err != nil {

@@ -36,7 +36,6 @@ type monitoringDashboardWriter interface {
 	GetSystemPerformanceHistory(ctx context.Context, start time.Time, end time.Time, metrics []string, deviceIDs []int) ([]monitoring.SystemPerformancePoint, error)
 	GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.TemperatureHistoryPoint, error)
 	GetDeviceStatusDistribution(ctx context.Context, deviceIDs []int) (monitoring.DeviceStatusDistribution, error)
-	GetAvailability(ctx context.Context, deviceIDs []int) (monitoring.AvailabilitySnapshot, error)
 	GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.NetworkTrafficPoint, error)
 }
 
@@ -66,7 +65,6 @@ func (h MonitoringHandler) Register(group *echo.Group) {
 	group.GET("/monitoring/devices", h.ListMonitoringDevices)
 	group.GET("/monitoring/devices/status", h.GetDevicesStatus)
 	group.GET("/monitoring/devices/distribution", h.GetDeviceStatusDistribution)
-	group.GET("/monitoring/availability", h.GetAvailability)
 	group.GET("/monitoring/stats", h.GetMonitoringStats)
 	group.GET("/monitoring/stats/service", h.GetMonitoringServiceStats)
 	group.GET("/monitoring/overview", h.GetMonitoringOverview)
@@ -293,21 +291,6 @@ func (h MonitoringHandler) GetDeviceStatusDistribution(c echo.Context) error {
 	result, err := h.Writer.GetDeviceStatusDistribution(c.Request().Context(), parseDeviceIDsQueryParam(c.QueryParam("device_ids")))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query status distribution")
-	}
-	return c.JSON(http.StatusOK, result)
-}
-
-func (h MonitoringHandler) GetAvailability(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
-		return err
-	}
-	if h.Writer == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
-	}
-
-	result, err := h.Writer.GetAvailability(c.Request().Context(), parseDeviceIDsQueryParam(c.QueryParam("device_ids")))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query availability")
 	}
 	return c.JSON(http.StatusOK, result)
 }
@@ -658,18 +641,10 @@ type monitoringDashboardV2Data struct {
 	SystemPerformance        []monitoringSystemPerformanceV2Point `json:"systemPerformance"`
 	TemperatureHistory       []monitoring.TemperatureHistoryPoint `json:"temperatureHistory"`
 	DeviceStatusDistribution monitoring.DeviceStatusDistribution  `json:"deviceStatusDistribution"`
-	Availability             monitoringAvailabilityV2             `json:"availability"`
 	NetworkTrafficHistory    []monitoring.NetworkTrafficPoint     `json:"networkTrafficHistory"`
 	StatsV2                  []monitoringV2StatCardData           `json:"statsV2"`
 	RealtimeAlerts           []monitoringV2RealtimeAlert          `json:"realtimeAlerts"`
 	LastUpdate               string                               `json:"lastUpdate"`
-}
-
-type monitoringAvailabilityV2 struct {
-	Current    float64 `json:"current"`
-	Target     float64 `json:"target"`
-	Trend      string  `json:"trend"`
-	LastUpdate string  `json:"lastUpdate,omitempty"`
 }
 
 type monitoringSystemPerformanceV2Point struct {
@@ -740,7 +715,6 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 		systemPerfResult     result[[]monitoringSystemPerformanceV2Point]
 		tempResult           result[[]monitoring.TemperatureHistoryPoint]
 		deviceStatusResult   result[monitoring.DeviceStatusDistribution]
-		availabilityResult   result[monitoring.AvailabilitySnapshot]
 		networkTrafficResult result[[]monitoring.NetworkTrafficPoint]
 		realtimeAlertsResult result[[]monitoringV2RealtimeAlert]
 	)
@@ -792,13 +766,6 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 		defer wg.Done()
 		value, err := writer.GetDeviceStatusDistribution(c.Request().Context(), deviceIDs)
 		deviceStatusResult = result[monitoring.DeviceStatusDistribution]{value: value, err: err}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		value, err := writer.GetAvailability(c.Request().Context(), deviceIDs)
-		availabilityResult = result[monitoring.AvailabilitySnapshot]{value: value, err: err}
 	}()
 
 	wg.Add(1)
@@ -865,7 +832,6 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 		"systemPerformance": buildSectionStatus(systemPerfResult.err, "系统性能数据加载失败"),
 		"temperature":       buildSectionStatus(tempResult.err, "温度数据加载失败"),
 		"deviceStatus":      buildSectionStatus(deviceStatusResult.err, "设备状态分布加载失败"),
-		"availability":      buildSectionStatus(availabilityResult.err, "可用性数据加载失败"),
 		"networkTraffic":    buildSectionStatus(networkTrafficResult.err, "网络流量数据加载失败"),
 		"realtimeAlerts": func() monitoringSectionStatus {
 			if realtimeAlertsLimitedByPermission {
@@ -881,7 +847,7 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 		}(),
 	}
 
-	orderedKeys := []string{"stats", "systemPerformance", "temperature", "deviceStatus", "availability", "networkTraffic", "realtimeAlerts"}
+	orderedKeys := []string{"stats", "systemPerformance", "temperature", "deviceStatus", "networkTraffic", "realtimeAlerts"}
 	failedSections := make([]string, 0)
 	effectiveSectionCount := 0
 	for _, key := range orderedKeys {
@@ -921,22 +887,6 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 				return deviceStatusResult.value
 			}
 			return monitoring.DeviceStatusDistribution{Healthy: 0, Warning: 0, Critical: 0, Offline: 0}
-		}(),
-		Availability: func() monitoringAvailabilityV2 {
-			if sections["availability"].Ok {
-				value := availabilityResult.value
-				resolvedLastUpdate := strings.TrimSpace(value.LastUpdate)
-				if resolvedLastUpdate == "" {
-					resolvedLastUpdate = generatedAtRFC3339
-				}
-				return monitoringAvailabilityV2{
-					Current:    value.Current,
-					Target:     value.Target,
-					Trend:      value.Trend,
-					LastUpdate: resolvedLastUpdate,
-				}
-			}
-			return monitoringAvailabilityV2{Current: 0, Target: 99.9, Trend: "stable", LastUpdate: generatedAtRFC3339}
 		}(),
 		NetworkTrafficHistory: func() []monitoring.NetworkTrafficPoint {
 			if sections["networkTraffic"].Ok {
@@ -1052,20 +1002,20 @@ func resolveTimeRangeFromString(timeRange string, fallback time.Duration) (time.
 }
 
 func buildStatsV2(stats monitoring.MonitoringStats) []monitoringV2StatCardData {
-	availability := safeFloat(stats.Availability)
 	avgCPU := safeFloat(stats.AvgCPU)
 	avgMemory := safeFloat(stats.AvgMemory)
-	peakNetworkBps := safeFloat(stats.AvgNetwork)
+	peakOutbound := safeFloat(stats.PeakOutbound)
+	peakInbound := safeFloat(stats.PeakInbound)
 
-	// CPU/内存口径为"最近一轮采集"（多设备时为各设备最新采集值的平均），
-	// 因此标题不再使用"平均 CPU/平均内存"。
+	// CPU/内存口径为"最近一轮采集"（多设备时为各设备最新采集值的平均）；
+	// 上/下行为 24 小时分向峰值（bps），与总览页共用同一查询口径。
 	return []monitoringV2StatCardData{
 		{ID: "total_devices", Title: "总设备", Value: strconv.Itoa(stats.TotalDevices)},
-		{ID: "availability", Title: "可用性", Value: fmt.Sprintf("%.1f%%", availability)},
 		{ID: "active_alerts", Title: "活跃告警", Value: strconv.Itoa(stats.ActiveAlerts)},
 		{ID: "avg_cpu", Title: "CPU使用率", Value: fmt.Sprintf("%.1f%%", avgCPU)},
 		{ID: "avg_memory", Title: "内存使用率", Value: fmt.Sprintf("%.1f%%", avgMemory)},
-		{ID: "avg_network", Title: "峰值流量", Value: formatBandwidthValue(peakNetworkBps)},
+		{ID: "peak_outbound", Title: "上行流量", Value: formatBandwidthValue(peakOutbound)},
+		{ID: "peak_inbound", Title: "下行流量", Value: formatBandwidthValue(peakInbound)},
 	}
 }
 

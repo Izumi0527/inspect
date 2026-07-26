@@ -24,19 +24,27 @@ import { fetchMonitoringDataV2, fetchRealtimeAlerts, fetchStatsV2 } from '@/feat
 const mockedApi = api as unknown as { get: jest.Mock; post: jest.Mock }
 
 describe('monitoring.api', () => {
-  it('fetchStatsV2: 支持 0<bps<1 的带宽格式化', async () => {
+  it('fetchStatsV2: 六卡结构且支持 0<bps<1 的带宽格式化', async () => {
     mockedApi.get.mockResolvedValue({
       total_devices: 1,
-      availability: 99.9,
       active_alerts: 2,
       avg_cpu: 1,
       avg_memory: 1,
-      avg_network: 0.5,
+      peak_outbound: 0.5,
+      peak_inbound: 12266,
     })
 
     const stats = await fetchStatsV2()
-    const peak = stats.find((item) => item.id === 'avg_network')
-    expect(peak?.value).toBe('0.50 bps')
+    expect(stats.map((item) => item.id)).toEqual([
+      'total_devices',
+      'active_alerts',
+      'avg_cpu',
+      'avg_memory',
+      'peak_outbound',
+      'peak_inbound',
+    ])
+    expect(stats.find((item) => item.id === 'peak_outbound')?.value).toBe('0.50 bps')
+    expect(stats.find((item) => item.id === 'peak_inbound')?.value).toBe('12.3 Kbps')
   })
 
   it('fetchRealtimeAlerts: 使用无尾斜杠的 /alerts 查询', async () => {
@@ -54,7 +62,6 @@ describe('monitoring.api', () => {
         systemPerformance: [],
         temperatureHistory: [],
         deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
-        availability: { current: 0, target: 99.9, trend: 'stable', lastUpdate: '2026-03-15T00:00:00Z' },
         networkTrafficHistory: [],
         statsV2: [],
         lastUpdate: '2026-03-15T00:00:00Z',
@@ -64,7 +71,6 @@ describe('monitoring.api', () => {
         systemPerformance: { ok: true },
         temperature: { ok: true },
         deviceStatus: { ok: true },
-        availability: { ok: true },
         networkTraffic: { ok: true },
         realtimeAlerts: { ok: true, limitedByPermission: true, requiredPermission: 'alerts:read' },
       },

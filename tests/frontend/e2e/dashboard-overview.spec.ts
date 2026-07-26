@@ -17,7 +17,7 @@ const dashboardOverviewPayload = {
     {
       title: '在线设备',
       value: '-',
-      change: '较昨日',
+      change: '',
       iconName: 'Monitor',
       iconColor: 'text-green-500',
       color: 'green',
@@ -25,24 +25,32 @@ const dashboardOverviewPayload = {
     {
       title: '活跃告警',
       value: '-',
-      change: '较昨日',
+      change: '',
       iconName: 'AlertTriangle',
       iconColor: 'text-red-500',
       color: 'red',
     },
     {
-      title: '峰值流量',
+      title: '上行流量',
       value: '-',
-      change: '较昨日',
-      iconName: 'Activity',
+      change: '24小时峰值',
+      iconName: 'Upload',
       iconColor: 'text-blue-500',
       color: 'blue',
     },
     {
-      title: '系统负载',
+      title: '下行流量',
       value: '-',
-      change: '较昨日',
-      iconName: 'Server',
+      change: '24小时峰值',
+      iconName: 'Download',
+      iconColor: 'text-cyan-500',
+      color: 'cyan',
+    },
+    {
+      title: '巡检成功率',
+      value: '-',
+      change: '',
+      iconName: 'ClipboardCheck',
       iconColor: 'text-purple-500',
       color: 'purple',
     },
@@ -54,6 +62,7 @@ const dashboardOverviewPayload = {
     devices: false,
     alerts: false,
     monitoring: false,
+    inspections: false,
   },
   sections: {
     stats: { ok: true },
@@ -71,6 +80,11 @@ const dashboardOverviewPayload = {
       ok: true,
       limitedByPermission: true,
       requiredPermission: 'monitoring:read',
+    },
+    statsInspections: {
+      ok: true,
+      limitedByPermission: true,
+      requiredPermission: 'inspections:read',
     },
     recentAlerts: {
       ok: false,
@@ -107,7 +121,7 @@ const fullAccessOverviewPayload = {
     {
       title: '在线设备',
       value: '18',
-      change: '+2',
+      change: '共 19 台',
       iconName: 'Monitor',
       iconColor: 'text-green-500',
       color: 'green',
@@ -115,25 +129,34 @@ const fullAccessOverviewPayload = {
     {
       title: '活跃告警',
       value: '2',
-      change: '-1',
+      change: '待处理',
       iconName: 'AlertTriangle',
       iconColor: 'text-red-500',
       color: 'red',
     },
     {
-      title: '峰值流量',
-      value: '125000000',
-      change: '+5%',
-      iconName: 'Activity',
+      title: '上行流量',
+      value: '86000000',
+      change: '24小时峰值',
+      iconName: 'Upload',
       iconColor: 'text-blue-500',
       color: 'blue',
       unit: 'bps',
     },
     {
-      title: '系统负载',
-      value: '99.0%',
-      change: '稳定',
-      iconName: 'Server',
+      title: '下行流量',
+      value: '125000000',
+      change: '24小时峰值',
+      iconName: 'Download',
+      iconColor: 'text-cyan-500',
+      color: 'cyan',
+      unit: 'bps',
+    },
+    {
+      title: '巡检成功率',
+      value: '87.5%',
+      change: '近24小时',
+      iconName: 'ClipboardCheck',
       iconColor: 'text-purple-500',
       color: 'purple',
     },
@@ -160,12 +183,14 @@ const fullAccessOverviewPayload = {
     devices: true,
     alerts: true,
     monitoring: true,
+    inspections: true,
   },
   sections: {
     stats: { ok: true },
     statsDevices: { ok: true },
     statsAlerts: { ok: true },
     statsBandwidth: { ok: true },
+    statsInspections: { ok: true },
     recentAlerts: { ok: true },
     networkOverview: { ok: true },
   },
@@ -323,6 +348,17 @@ test.describe('Dashboard 总览浏览器回归', () => {
     await expect(page.getByRole('heading', { name: '控制台总览' })).toBeVisible()
     await expect(page.getByText('数据访问受限')).toHaveCount(0)
     await expect(page.getByText('部分分区暂时不可用')).toHaveCount(0)
+
+    // 统计行应为 5 卡新结构：峰值流量拆分上/下行，巡检成功率替代系统负载/CPU
+    await expect(page.getByText('上行流量')).toBeVisible()
+    await expect(page.getByText('下行流量')).toBeVisible()
+    await expect(page.getByText('巡检成功率')).toBeVisible()
+    await expect(page.getByText('86.0 Mbps')).toBeVisible()
+    await expect(page.getByText('125.0 Mbps')).toBeVisible()
+    await expect(page.getByText('87.5%')).toBeVisible()
+    await expect(page.getByText('峰值流量')).toHaveCount(0)
+    await expect(page.getByText('系统负载')).toHaveCount(0)
+    await expect(page.getByText('CPU使用率')).toHaveCount(0)
 
     await expect(page.getByRole('button', { name: '设备扫描' })).toBeVisible()
     await expect(page.getByRole('button', { name: '手动巡检' })).toBeVisible()

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Activity, Server, AlertTriangle, Cpu, HardDrive, Network, RefreshCw } from 'lucide-react'
+import { Activity, Server, AlertTriangle, Cpu, HardDrive, Upload, Download, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { CompactStatCard } from '@/components/shared'
 import { SectionHeader, SectionFailureContent } from '../shared'
@@ -15,20 +15,20 @@ interface StatsSectionProps {
 
 const STATS_ICON_MAP = {
   total_devices: Server,
-  availability: Activity,
   active_alerts: AlertTriangle,
   avg_cpu: Cpu,
   avg_memory: HardDrive,
-  avg_network: Network,
+  peak_outbound: Upload,
+  peak_inbound: Download,
 } as const
 
 const STATS_COLOR_MAP = {
   total_devices: 'text-blue-600 dark:text-blue-400',
-  availability: 'text-green-600 dark:text-green-400',
   active_alerts: 'text-red-600 dark:text-red-400',
   avg_cpu: 'text-teal-600 dark:text-teal-400',
   avg_memory: 'text-orange-600 dark:text-orange-400',
-  avg_network: 'text-cyan-600 dark:text-cyan-400',
+  peak_outbound: 'text-blue-600 dark:text-blue-400',
+  peak_inbound: 'text-cyan-600 dark:text-cyan-400',
 } as const
 
 export function StatsSection({ section, statsV2 = [], onRetry }: StatsSectionProps) {
