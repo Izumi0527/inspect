@@ -2,7 +2,7 @@
 -- 企业级网络设备巡检系统数据库完整初始化脚本
 -- ==========================================
 -- 功能: 整合所有数据库初始化、迁移和数据种子脚本
--- 包含: 基础初始化、TimescaleDB配置、内置模板、测试数据、带宽单位迁移
+-- 包含: 基础初始化、TimescaleDB配置、告警规则、带宽单位迁移、历史测试数据清理
 -- 执行顺序: PostgreSQL容器启动后一次性执行
 -- 幂等性: 支持重复执行，不会产生重复数据或错误
 -- 维护: 替代原有的多个分散SQL文件，统一管理
@@ -531,65 +531,27 @@ INSERT INTO alert_rules (
 ) ON CONFLICT DO NOTHING;
 
 -- ==========================================
--- 第七部分: 测试数据种子
+-- 第七部分: 历史测试数据清理
 -- ==========================================
 
--- 清理现有测试数据
-DELETE FROM inspection_templates WHERE is_default = false AND name LIKE '%Test%';
-
--- 插入测试模板
-INSERT INTO inspection_templates (
-  name, description, category, device_types, check_items, 
-  is_default, is_active, created_at, updated_at
-) VALUES 
-(
-  'Test Custom Router Template',
-  'A custom router template for E2E testing',
-  'custom',
-  '{"vendors": ["Huawei"], "device_types": ["router"]}'::jsonb,
-  '[
-    {
-      "id": "test_cpu_check",
-      "name": "Test CPU Check",
-      "description": "Test CPU usage check",
-      "type": "snmp",
-      "category": "health",
-      "weight": 10,
-      "config": {
-        "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5",
-        "timeout": 5,
-        "unit": "%",
-        "threshold": {"warning": 70, "critical": 85}
-      },
-      "enabled": true
-    }
-  ]'::jsonb,
-  false, true, NOW(), NOW()
-),
-(
-  'Test Custom Switch Template',
-  'A custom switch template for E2E testing',
-  'custom',
-  '{"vendors": ["Huawei"], "device_types": ["switch"]}'::jsonb,
-  '[
-    {
-      "id": "test_interface_status",
-      "name": "Test Interface Status",
-      "description": "Test interface status check",
-      "type": "snmp",
-      "category": "performance",
-      "weight": 8,
-      "config": {
-        "oid": "1.3.6.1.2.1.2.2.1.8",
-        "timeout": 5,
-        "expectedValue": "1"
-      },
-      "enabled": true
-    }
-  ]'::jsonb,
-  false, true, NOW(), NOW()
-)
-ON CONFLICT DO NOTHING;
+-- E2E 测试模板（Test Custom Router/Switch Template）曾由本脚本作为测试种子灌入，
+-- 随安装包分发后会出现在生产环境的巡检模板列表中，属于不应交付的测试残留。
+-- 此处只做幂等精确清理，不再插入任何测试数据。
+--
+-- 说明:
+-- 1. 不使用 name LIKE '%Test%' 之类的宽泛条件，避免误删用户自建的同类命名模板。
+-- 2. 本脚本存在两条执行路径: docker-entrypoint-initdb.d（容器首启，表尚未由后端
+--    AutoMigrate 建出）与 installer/scripts/init-database.ps1（表已存在）。
+--    故用 to_regclass 守卫，表不存在时静默跳过，避免首启路径报错中断后续语句。
+DO $$
+BEGIN
+    IF to_regclass('public.inspection_templates') IS NOT NULL THEN
+        DELETE FROM inspection_templates
+        WHERE is_default = false
+          AND name IN ('Test Custom Router Template', 'Test Custom Switch Template');
+    END IF;
+END
+$$;
 
 -- ==========================================
 -- 初始化完成信息
@@ -599,7 +561,7 @@ SELECT
     current_database() as database_name,
     current_user as user_name,
     'TimescaleDB enabled with compression and retention policies' as timescaledb_status,
-    'Built-in inspection templates loaded' as templates_status,
+    'Built-in inspection templates synced by backend at startup' as templates_status,
     'Bandwidth units migrated to Mbps' as migration_status,
     (SELECT COUNT(*) FROM alert_rules WHERE is_active = true) as active_alert_rules_count;
 
@@ -610,14 +572,15 @@ SELECT
 -- ✅ TimescaleDB 时序数据库配置完成
 -- ✅ 数据压缩和保留策略配置完成
 -- ✅ 网络带宽单位迁移完成 (bps → Mbps)
--- ✅ 内置巡检模板加载完成 (需要完整版本)
+-- ✅ 内置巡检模板由后端 EnsureBuiltinTemplates 同步（不经本脚本导入）
 -- ✅ 默认告警规则初始化完成 (6条规则)
--- ✅ 测试数据种子创建完成
--- 
+-- ✅ 历史 E2E 测试模板清理完成
+--
 -- 注意事项:
 -- 1. 本脚本整合了原有的多个SQL文件功能
--- 2. 内置模板部分因篇幅限制仅包含示例，实际使用时需要完整版本
+-- 2. 内置模板唯一权威来源为 backend-go/internal/inspection/builtin_templates.go
 -- 3. 支持幂等执行，可以安全地重复运行
 -- 4. TimescaleDB 功能需要确保扩展已正确安装
 -- 5. 告警规则包含: CPU、内存、温度、设备离线等监控
+-- 6. 本脚本不得再引入任何测试种子数据（会随安装包分发到生产环境）
 -- ==========================================

@@ -514,7 +514,7 @@ function Initialize-Database {
     Write-ColorOutput "📋 执行数据库初始化..." "Cyan"
     Write-ColorOutput "  - 基础配置（用户、权限、扩展）" "Gray"
     Write-ColorOutput "  - TimescaleDB 时序数据库配置" "Gray"
-    Write-ColorOutput "  - 测试数据种子" "Gray"
+    Write-ColorOutput "  - 历史 E2E 测试数据清理" "Gray"
     Write-ColorOutput "  - 内置巡检模板由后端启动时自动同步（不经 SQL 导入）" "Gray"
 
     $connection = Get-DatabaseConnection

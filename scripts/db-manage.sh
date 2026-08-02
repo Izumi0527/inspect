@@ -433,7 +433,7 @@ initialize_database() {
     info "📋 执行数据库初始化..."
     muted "  - 基础配置（用户、权限、扩展）"
     muted "  - TimescaleDB 时序数据库配置"
-    muted "  - 测试数据种子"
+    muted "  - 历史 E2E 测试数据清理"
     muted "  - 内置巡检模板由后端启动时自动同步（不经 SQL 导入）"
 
     get_database_connection
