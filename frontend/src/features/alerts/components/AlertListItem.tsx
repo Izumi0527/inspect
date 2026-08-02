@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   AlertCircle,
   AlertTriangle,
@@ -7,9 +7,11 @@ import {
   Clock,
   User,
   CheckCircle,
+  Lightbulb,
   X
 } from 'lucide-react'
 import { Button } from '@/components/atoms'
+import { humanizeAlertCategory, translateToPlainLanguage } from '@/lib/plain-language'
 import { Alert } from '../types'
 import { useAlertStyles } from '../hooks/useAlerts'
 import { AlertDetailModal } from './AlertDetailModal'
@@ -45,6 +47,21 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
   const { getSeverityColor, getStatusColor, getStatusText } = useAlertStyles()
   const SeverityIcon = severityIcons[alert.severity]
   const [isModalOpen, setIsModalOpen] = useState(false)
+
+  const plain = useMemo(
+    () => translateToPlainLanguage({
+      message: alert.description,
+      level: alert.severity,
+      facility: alert.category,
+      deviceName: alert.device,
+    }),
+    [alert.description, alert.severity, alert.category, alert.device],
+  )
+
+  // null 表示用户尚未手动切换，此时跟随翻译结果：
+  // 未命中规则时兜底文案信息量很低，直接把原文亮出来才有意义。
+  const [rawOverride, setRawOverride] = useState<boolean | null>(null)
+  const showRaw = rawOverride ?? !plain.matched
 
   const formatTimestamp = (value: string): string => {
     const raw = String(value ?? '').trim()
@@ -97,11 +114,29 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
                 {getStatusText(alert.status)}
               </span>
               <span className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-800 text-muted-foreground rounded-full">
-                {alert.category}
+                {humanizeAlertCategory(alert.category)}
               </span>
             </div>
 
-            <p className="text-sm text-muted-foreground mb-2">{alert.description}</p>
+            <div className="mb-2 space-y-1.5">
+              {/* 人话解读 */}
+              <p className="text-sm text-foreground/90 leading-relaxed">{plain.summary}</p>
+
+              {/* 处置建议：告警需要尽快处置，故在列表层即给出而非藏进详情 */}
+              {plain.suggestion && (
+                <p className="text-xs text-muted-foreground flex items-start gap-1.5 leading-relaxed">
+                  <Lightbulb className="w-3 h-3 mt-0.5 flex-shrink-0 text-amber-500" />
+                  <span>建议：{plain.suggestion}</span>
+                </p>
+              )}
+
+              {/* 设备原文：默认收起 */}
+              {showRaw && (
+                <p className="p-2 rounded bg-muted/60 text-xs text-muted-foreground font-mono break-all whitespace-pre-wrap">
+                  {alert.description}
+                </p>
+              )}
+            </div>
 
             <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
               <div className="flex items-center gap-1">
@@ -118,6 +153,20 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
                   {alert.assignee}
                 </div>
               )}
+
+              {/* 原文就地切换：不打开详情弹窗 */}
+              <button
+                type="button"
+                aria-expanded={showRaw}
+                aria-label={showRaw ? `收起告警 ${alert.id} 的原始信息` : `展开告警 ${alert.id} 的原始信息`}
+                className="underline underline-offset-2 hover:text-foreground transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setRawOverride(!showRaw)
+                }}
+              >
+                {showRaw ? '收起原文' : '原文'}
+              </button>
             </div>
           </div>
         </div>

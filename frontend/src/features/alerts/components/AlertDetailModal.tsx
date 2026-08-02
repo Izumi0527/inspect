@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   AlertTriangle,
@@ -15,6 +15,8 @@ import {
   XCircle
 } from 'lucide-react'
 import { SimpleModal, Badge, Button } from '@/components/atoms'
+import { PlainLanguageCard, RawInfoDisclosure } from '@/components/shared'
+import { humanizeAlertCategory, translateToPlainLanguage } from '@/lib/plain-language'
 import { cn } from '@/utils/cn'
 import { Alert, AlertSeverity, AlertStatus } from '../types'
 import { useAlertStyles } from '../hooks/useAlerts'
@@ -155,13 +157,27 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
     }
   }, [activeTab, effectiveAlertId, open, operationsReloadNonce])
 
+  // 必须在 `if (!alert)` 之前调用，否则违反 React hooks 的调用顺序约束
+  const plain = useMemo(
+    () => (alert
+      ? translateToPlainLanguage({
+          message: alert.description,
+          level: alert.severity,
+          facility: alert.category,
+          deviceName: alert.device,
+        })
+      : null),
+    [alert],
+  )
+
   const ariaLabel = alert?.title
     ? `告警详情 - ${alert.title}`
     : normalizedAlertId
       ? `告警详情 - ${normalizedAlertId}`
       : '告警详情'
 
-  if (!alert) {
+  // plain 与 alert 同生共死：alert 非空时 plain 必非空，此处并列判断只为满足类型收窄
+  if (!alert || !plain) {
     return (
       <SimpleModal open={open} onClose={onClose} size="3xl" ariaLabel={ariaLabel}>
         <div className="p-6">
@@ -478,13 +494,16 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
           {/* 详情标签 */}
           {activeTab === 'details' && (
             <div className="space-y-4">
-              {/* 告警描述 */}
+              {/* 人话解读：置于最前，用户最关心「发生了什么、该怎么办」 */}
+              <PlainLanguageCard result={plain} />
+
+              {/* 原始告警信息：默认折叠，翻译未命中时自动展开 */}
               <div className="p-4 bg-muted/40 rounded-lg border border-border">
-                <h3 className="text-sm font-semibold text-foreground/90 mb-2 flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  告警描述
-                </h3>
-                <p className="text-sm text-foreground/90 whitespace-pre-wrap">{alert.description}</p>
+                <RawInfoDisclosure label="查看原始告警信息" defaultOpen={!plain.matched}>
+                  <p className="text-sm text-foreground/90 whitespace-pre-wrap font-mono break-all">
+                    {alert.description}
+                  </p>
+                </RawInfoDisclosure>
               </div>
 
               {/* 基本信息 */}
@@ -502,7 +521,7 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
                     <FileText className="w-4 h-4 text-muted-foreground" />
                     <div>
                       <span className="text-xs text-muted-foreground block">分类</span>
-                      <p className="text-sm font-medium text-foreground">{alert.category || '未分类'}</p>
+                      <p className="text-sm font-medium text-foreground">{humanizeAlertCategory(alert.category)}</p>
                     </div>
                   </div>
                   {alert.assignee && (

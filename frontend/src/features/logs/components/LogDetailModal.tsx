@@ -1,7 +1,9 @@
 /**
  * 日志详情弹窗
+ *
+ * 顶部给出人话解读，设备原文收进折叠区，仅在需要时展开。
  */
-import React from 'react'
+import React, { useMemo } from 'react'
 import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import {
   Server,
@@ -19,6 +21,8 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { PlainLanguageCard, RawInfoDisclosure } from '@/components/shared'
+import { translateToPlainLanguage } from '@/lib/plain-language'
 import { toast } from 'react-hot-toast'
 import type { DeviceLog } from '../types'
 import { LOG_LEVEL_CONFIG, LOG_FACILITY_CONFIG, LOG_SOURCE_CONFIG } from '../types'
@@ -34,7 +38,20 @@ export const LogDetailModal: React.FC<LogDetailModalProps> = ({
   log,
   onClose
 }) => {
-  if (!log) return null
+  // 必须在 early return 之前调用，否则违反 React hooks 的调用顺序约束
+  const plain = useMemo(
+    () => (log
+      ? translateToPlainLanguage({
+          message: log.message,
+          level: log.level,
+          facility: log.facility,
+          deviceName: log.device_name,
+        })
+      : null),
+    [log],
+  )
+
+  if (!log || !plain) return null
 
   const levelConfig = LOG_LEVEL_CONFIG[log.level] || LOG_LEVEL_CONFIG.info
   const facilityConfig = LOG_FACILITY_CONFIG[log.facility] || LOG_FACILITY_CONFIG.other
@@ -67,6 +84,9 @@ export const LogDetailModal: React.FC<LogDetailModalProps> = ({
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
+          {/* 人话解读：置于最前，用户最关心「发生了什么」 */}
+          <PlainLanguageCard result={plain} />
+
           {/* 基本信息 */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
@@ -121,47 +141,52 @@ export const LogDetailModal: React.FC<LogDetailModalProps> = ({
             )}
           </div>
 
-          {/* 日志消息 */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-muted-foreground">
-                日志消息
-              </label>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => copyToClipboard(log.message, '日志消息')}
-              >
-                <Copy className="h-4 w-4 mr-1" />
-                复制
-              </Button>
-            </div>
-            <div className="bg-muted/40 rounded-lg p-4 font-mono text-sm break-all whitespace-pre-wrap">
-              {log.message}
-            </div>
-          </div>
+          {/* 原始采集信息：默认折叠。翻译未命中时自动展开——那时原文才是唯一有效信息 */}
+          <RawInfoDisclosure label="查看原始采集信息" defaultOpen={!plain.matched}>
+            <div className="space-y-4">
+              {/* 日志消息 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-muted-foreground">
+                    日志消息
+                  </label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copyToClipboard(log.message, '日志消息')}
+                  >
+                    <Copy className="h-4 w-4 mr-1" />
+                    复制
+                  </Button>
+                </div>
+                <div className="bg-muted/40 rounded-lg p-4 font-mono text-sm break-all whitespace-pre-wrap">
+                  {log.message}
+                </div>
+              </div>
 
-          {/* 原始消息 */}
-          {log.raw_message && log.raw_message !== log.message && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-muted-foreground">
-                  原始消息
-                </label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => copyToClipboard(log.raw_message!, '原始消息')}
-                >
-                  <Copy className="h-4 w-4 mr-1" />
-                  复制
-                </Button>
-              </div>
-              <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4 font-mono text-xs break-all whitespace-pre-wrap text-muted-foreground">
-                {log.raw_message}
-              </div>
+              {/* 原始消息 */}
+              {log.raw_message && log.raw_message !== log.message && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-muted-foreground">
+                      原始消息
+                    </label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyToClipboard(log.raw_message!, '原始消息')}
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      复制
+                    </Button>
+                  </div>
+                  <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-4 font-mono text-xs break-all whitespace-pre-wrap text-muted-foreground">
+                    {log.raw_message}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </RawInfoDisclosure>
 
           {/* 时间信息 */}
           <div className="border-t border-border pt-4">
