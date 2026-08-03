@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, X, Calendar, Filter } from 'lucide-react'
-import { Button, Input, Card, CardContent } from '@/components/atoms'
+import {
+  Button,
+  Input,
+  Card,
+  CardContent,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '@/components/atoms'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/utils/cn'
 import { AlertSeverity, AlertStatus, AlertCategory } from '../types'
@@ -168,43 +176,38 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
 
   // 高级过滤器内容
   const filtersContent = (
-    <>
-      {/* 头部：展开/收起按钮 */}
-      <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Filter className="w-4 h-4" />
-          <span>高级过滤</span>
-          {activeFilterCount > 0 && (
-            <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
-              {activeFilterCount}
-            </span>
-          )}
-          {isExpanded ? (
-            <ChevronUp className="w-4 h-4" />
-          ) : (
-            <ChevronDown className="w-4 h-4" />
-          )}
-        </button>
-
-        {activeFilterCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleReset}
-            className="text-gray-500 hover:text-gray-700"
+    <div className="flex items-center justify-between">
+      <Popover open={isExpanded} onOpenChange={setIsExpanded}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
-            <X className="w-4 h-4 mr-1" />
-            清除全部
-          </Button>
-        )}
-      </div>
+            <Filter className="w-4 h-4" />
+            <span>高级过滤</span>
+            {activeFilterCount > 0 && (
+              <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                {activeFilterCount}
+              </span>
+            )}
+            {isExpanded ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </button>
+        </PopoverTrigger>
 
-      {/* 过滤条件面板 */}
-      {isExpanded && (
-        <div className="space-y-4 pt-4 border-t border-border">
+        {/*
+          筛选面板渲染在 Portal 中，不占据文档流：
+          展开时覆盖在告警列表之上，列表位置保持不动 —— 这是本次改造的核心。
+          限高并允许滚动，避免条件过多时超出视口；嵌套的 Select 浮层同样走 Portal，
+          不受这里的 overflow 裁剪影响。
+        */}
+        <PopoverContent
+          aria-label="高级过滤条件"
+          className="w-[min(46rem,calc(100vw-2rem))] max-h-[min(32rem,calc(100vh-10rem))] overflow-y-auto space-y-4"
+        >
           {/* 第一行：关键词搜索 + 时间范围 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* 关键词搜索 */}
@@ -425,9 +428,22 @@ export const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
               </Button>
             </div>
           </div>
-        </div>
+        </PopoverContent>
+      </Popover>
+
+      {/* 「清除全部」置于浮层之外，收起状态下也能一键清空 */}
+      {activeFilterCount > 0 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleReset}
+          className="text-gray-500 hover:text-gray-700"
+        >
+          <X className="w-4 h-4 mr-1" />
+          清除全部
+        </Button>
       )}
-    </>
+    </div>
   )
 
   // 根据renderAsCard决定是否包裹Card

@@ -45,3 +45,4 @@ export { LoadingSkeleton, CardSkeleton, TableSkeleton, ChartSkeleton } from './L
 export { ErrorAlert, InlineError } from './ErrorAlert'
 export { DateRangePicker, QuickDateRangeButtons } from './DateRangePicker'
 export { SmartDateRangePicker } from './SmartDateRangePicker'
+export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from './popover'

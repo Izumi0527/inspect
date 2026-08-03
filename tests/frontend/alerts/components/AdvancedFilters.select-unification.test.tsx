@@ -3,15 +3,52 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AdvancedFilters } from '@/features/alerts/components/AdvancedFilters'
 
-jest.mock('@/components/atoms', () => ({
-  Button: ({
-    children,
-    ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props}>{children}</button>,
-  Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-  Card: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  CardContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}))
+jest.mock('@/components/atoms', () => {
+  const React = require('react') as typeof import('react')
+
+  const PopoverContext = React.createContext<{
+    open: boolean
+    onOpenChange: (open: boolean) => void
+  }>({ open: false, onOpenChange: () => {} })
+
+  return {
+    Button: ({
+      children,
+      ...props
+    }: React.ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" {...props}>{children}</button>,
+    Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+    Card: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    CardContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+
+    // Popover 的轻量替身：只模拟开合行为，不走 Portal。
+    // 本用例聚焦 Select 统一化与表单可访问性；浮层的挂载位置
+    // 由 AdvancedFilters.popover.test.tsx 用真实组件验证。
+    Popover: ({
+      open,
+      onOpenChange,
+      children,
+    }: {
+      open: boolean
+      onOpenChange: (open: boolean) => void
+      children: React.ReactNode
+    }) => (
+      <PopoverContext.Provider value={{ open, onOpenChange }}>
+        <div>{children}</div>
+      </PopoverContext.Provider>
+    ),
+    PopoverTrigger: ({ children }: { children: React.ReactElement }) => {
+      const { open, onOpenChange } = React.useContext(PopoverContext)
+      return React.cloneElement(children, {
+        onClick: () => onOpenChange(!open),
+        'aria-expanded': open,
+      } as React.HTMLAttributes<HTMLElement>)
+    },
+    PopoverContent: ({ children }: { children: React.ReactNode }) => {
+      const { open } = React.useContext(PopoverContext)
+      return open ? <div>{children}</div> : null
+    },
+  }
+})
 
 jest.mock('@/components/ui/select', () => {
   const React = require('react') as typeof import('react')
