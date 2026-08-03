@@ -11,12 +11,16 @@
  * ## 模板占位
  * - `{device}` 设备名，缺省回退为「该设备」
  * - `{1}`~`{9}` 捕获组原样填充
- * - `{1:iface}` 捕获组经接口名词典转换（GigabitEthernet0/0/1 → 千兆网口 0/0/1）
+ * - `{1:iface}` 捕获组附加接口类型注解（GigabitEthernet0/0/1 → 同名 +（千兆以太口））
  * - `{1:state}` 捕获组经状态词词典转换
  *
  * ## 文案原则
- * - summary 说清「发生了什么」+「对我有什么影响」，不堆术语
- * - suggestion 给普通人能直接执行的动作，不写「请检查配置」这种空话
+ * - **title**：行业标准术语 + 状态词，控制在 10 字内，与设备侧用词保持一致
+ * - **summary**：先陈述技术事实（协议层、状态迁移、越限项），再说明业务影响
+ * - **suggestion**：动词开头的排查动作，能给出具体命令的直接给出
+ *
+ * 措辞面向网络运维人员，采用规范术语（链路、协议、门限、收敛、表项等），
+ * 不使用「网线插着」「上网变慢」这类生活化表述。
  */
 
 import type { PlainLanguageRule } from './types'
@@ -26,151 +30,151 @@ const IFACE = '([A-Za-z][\\w\\-/.:]*)'
 
 export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // ==========================================
-  // 接口类
+  // 接口与链路
   // ==========================================
   {
-    // 必须排在「接口断开」之前：其报文同样含 Interface X + down
+    // 必须排在「接口链路 Down」之前：其报文同样含 Interface X + down
     id: 'line-protocol-down',
     pattern: new RegExp(`line protocol[\\s\\S]{0,40}?interface\\s+${IFACE}[\\s\\S]{0,60}?\\bdown\\b`, 'i'),
-    title: '线路不通',
-    summary: '{device} 的 {1:iface} 网线插着，但数据传不过去，通常是两端设置不一致或线路本身有问题。',
-    suggestion: '请联系网络管理员核对线路两端的设置；若是自行更换过网线，建议换一根测试。',
+    title: '链路协议 Down',
+    summary: '{device} 的 {1:iface} 物理层为 Up 但数据链路层协议为 Down，报文无法转发，多因两端封装类型、VLAN 或双工模式不匹配。',
+    suggestion: '核对链路两端的封装与 VLAN 配置是否一致；通过 display interface 查看 CRC 与错包统计，排除线缆质量问题。',
     tone: 'warning',
   },
   {
     id: 'interface-down',
     pattern: new RegExp(`interface\\s+${IFACE}[\\s\\S]{0,60}?\\bdown\\b`, 'i'),
-    title: '网络接口断开',
-    summary: '{device} 的 {1:iface} 已断开连接，接在这个口上的设备将无法上网。',
-    suggestion: '请检查该端口的网线是否松动或脱落，以及对端的电脑、摄像头等设备是否已关机。',
+    title: '接口链路 Down',
+    summary: '{device} 的 {1:iface} 链路状态变为 Down，该端口下联设备将失去网络连通性。',
+    suggestion: '检查端口物理连接与光/电模块状态，确认对端设备运行正常；通过 display interface 查看端口统计与错包情况。',
     tone: 'warning',
   },
   {
     id: 'interface-up',
     pattern: new RegExp(`interface\\s+${IFACE}[\\s\\S]{0,60}?\\bup\\b`, 'i'),
-    title: '网络接口已恢复',
-    summary: '{device} 的 {1:iface} 已重新连接，网络恢复正常。',
+    title: '接口链路 Up',
+    summary: '{device} 的 {1:iface} 链路状态恢复为 Up，端口转发功能已恢复。',
     tone: 'success',
   },
   {
     id: 'interface-flapping',
     pattern: /(?:flap|flapping)/i,
-    title: '网络接口不稳定',
-    summary: '{device} 的某个网口在短时间内反复断开又连上，网络会时好时坏。',
-    suggestion: '这种情况多半是网线接触不良或水晶头氧化，建议重新插拔网线，必要时更换网线。',
+    title: '接口链路震荡',
+    summary: '{device} 存在端口在短时间内反复 Up/Down，链路不稳定将引发转发表频繁刷新与业务抖动。',
+    suggestion: '检查线缆接头接触状态与光模块收发功率是否越限；必要时配置端口 Damping 抑制震荡。',
     tone: 'warning',
   },
   {
     id: 'transceiver-fault',
     pattern: /(?:transceiver|sfp|optical|光模块)[\s\S]{0,40}?(?:fail|error|absent|abnormal|invalid|不在位|异常)/i,
     title: '光模块异常',
-    summary: '{device} 的光纤模块出现异常，可能未插好、型号不兼容或已损坏。',
-    suggestion: '请确认光模块是否插紧；若刚更换过模块，请核对型号是否与设备匹配。',
+    summary: '{device} 的光模块状态异常，可能为未在位、型号不兼容或器件失效。',
+    suggestion: '确认模块在位且与设备型号匹配；通过 display transceiver 核对收发功率是否处于告警门限内。',
     tone: 'warning',
   },
 
   // ==========================================
-  // 安全类
+  // 安全与接入
   // ==========================================
   {
     id: 'login-failed',
     pattern: /(?:failed to login|login failed|authentication (?:failed|failure)|auth fail|authorization failed|登录失败)/i,
-    title: '有人登录设备失败',
-    summary: '有人尝试登录 {device} 但密码不正确。',
-    suggestion: '如果不是自己或同事在操作，可能有人在猜测密码，建议尽快修改设备密码并限制可登录的来源地址。',
+    title: '用户认证失败',
+    summary: '{device} 收到管理登录请求但认证未通过。',
+    suggestion: '核实是否为运维人员误操作；若来源地址异常或短时间内多次出现，应按口令爆破处理，及时更换口令并用 ACL 限制管理接入源。',
     tone: 'warning',
   },
   {
     id: 'login-success',
     pattern: /(?:login success|logged in|login successfully|登录成功)/i,
-    title: '有人登录了设备',
-    summary: '有人成功登录了 {device}。',
+    title: '用户登录成功',
+    summary: '有用户成功登录 {device} 的管理界面。',
     tone: 'info',
   },
   {
     id: 'user-logout',
     pattern: /(?:logout|logged out|log out|disconnect(?:ed)? from|退出登录)/i,
-    title: '用户已退出设备',
-    summary: '有人结束了对 {device} 的操作并退出登录。',
+    title: '用户登出',
+    summary: '用户已断开与 {device} 的管理连接。',
     tone: 'info',
   },
   {
     id: 'acl-deny',
     pattern: /(?:acl|access.?list|firewall)[\s\S]{0,40}?(?:deny|denied|drop|blocked)/i,
-    title: '访问被安全策略拦截',
-    summary: '{device} 按照既定的安全规则，拦截了一次网络访问。',
-    suggestion: '若是正常业务被拦截，请联系网络管理员调整放行规则。',
+    title: 'ACL 策略拦截',
+    summary: '{device} 依据已配置的访问控制策略丢弃了报文。',
+    suggestion: '若为正常业务被拦截，核对 ACL 规则内容与匹配顺序，按需调整放行策略。',
     tone: 'info',
   },
   {
     id: 'port-security-violation',
     pattern: /port.?security[\s\S]{0,40}?violat/i,
-    title: '有未授权设备接入',
-    summary: '{device} 上有未经许可的设备试图接入网络，已被阻止。',
-    suggestion: '请确认是否有同事私自接入了交换机或路由器；若是新设备需要接入，请联系管理员登记。',
+    title: '端口安全违规',
+    summary: '{device} 检测到未授权 MAC 接入，已按端口安全策略阻断该端口或丢弃报文。',
+    suggestion: '核实该 MAC 是否为合法终端；如需接入，将其加入端口安全允许列表或调整 MAC 学习上限。',
     tone: 'warning',
   },
 
   // ==========================================
-  // 路由类
+  // 路由
   // ==========================================
   {
     id: 'ospf-neighbor-down',
     pattern: /ospf[\s\S]{0,60}?(?:down|loading|init|nbr_chg)/i,
-    title: '路由邻居中断',
-    summary: '{device} 与相邻的网络设备失去了路由联系，部分网络可能绕路或不通。',
-    suggestion: '请检查两台设备之间的链路是否正常；若链路正常仍不恢复，需联系网络管理员排查。',
+    title: 'OSPF 邻居 Down',
+    summary: '{device} 与邻居路由器的 OSPF 邻接关系中断，相关网段路由将被撤销，流量可能绕行或不可达。',
+    suggestion: '检查互联链路状态与接口 OSPF 配置（区域号、认证方式、Hello/Dead 定时器）；通过 display ospf peer 确认邻居状态机停留阶段。',
     tone: 'warning',
   },
   {
     id: 'ospf-neighbor-up',
     pattern: /ospf[\s\S]{0,60}?(?:full|adjacency.{0,20}up)/i,
-    title: '路由邻居已恢复',
-    summary: '{device} 与相邻网络设备的路由联系已恢复正常。',
+    title: 'OSPF 邻居建立',
+    summary: '{device} 与邻居路由器的 OSPF 邻接关系已达成 Full 状态，路由收敛完成。',
     tone: 'success',
   },
   {
     id: 'bgp-neighbor-down',
     pattern: /bgp[\s\S]{0,60}?(?:down|idle|closed|连接断开)/i,
-    title: '外部路由连接中断',
-    summary: '{device} 与外部网络的路由连接已断开，访问外网或分支机构可能受影响。',
-    suggestion: '若涉及专线或互联网出口，建议同时联系线路运营商确认线路状态。',
+    title: 'BGP 邻居 Down',
+    summary: '{device} 的 BGP 对等体会话中断，经该邻居学习的路由将被撤销，跨域互联或出口流量受影响。',
+    suggestion: '检查互联链路与 BGP 配置（AS 号、对等体地址、MD5 认证）；若涉及运营商专线，同步联系承建方核查线路状态。',
     tone: 'critical',
   },
   {
     id: 'route-flap',
     pattern: /route[\s\S]{0,30}?flap/i,
-    title: '路由不稳定',
-    summary: '{device} 的网络路径在频繁变化，访问可能时快时慢或偶尔中断。',
-    suggestion: '通常由线路不稳定引起，建议联系网络管理员检查上游线路质量。',
+    title: '路由震荡',
+    summary: '{device} 的路由表项频繁变更，将引发反复收敛，造成转发路径不稳定与瞬时丢包。',
+    suggestion: '定位震荡源接口或邻居并检查其链路质量；必要时启用路由抑制（Damping）降低震荡扩散。',
     tone: 'warning',
   },
 
   // ==========================================
-  // 交换类
+  // 二层交换
   // ==========================================
   {
     id: 'stp-topology-change',
     pattern: /(?:stp|spanning.?tree|mstp|rstp)[\s\S]{0,40}?(?:topo|topology|change)/i,
-    title: '网络结构发生变化',
-    summary: '{device} 检测到网络连接结构改变，通常是有设备接入、移除或重启导致，期间可能短暂断网。',
-    suggestion: '若无人变动设备却频繁出现，建议排查是否有网线接错形成回路。',
+    title: 'STP 拓扑变更',
+    summary: '{device} 检测到生成树拓扑发生变化，将触发 MAC 表刷新，期间可能出现短暂转发中断。',
+    suggestion: '确认是否有设备接入、退出或重启；若无变更却频繁触发，排查链路震荡与非法环路。',
     tone: 'info',
   },
   {
     id: 'loop-detected',
     pattern: /loop(?:back)?[\s\S]{0,30}?(?:detect|found|发现|检测)/i,
-    title: '检测到网络回路',
-    summary: '{device} 发现网线被接成了环状回路，这会导致整个网络变慢甚至瘫痪。',
-    suggestion: '请检查是否有网线两端插在了同一台交换机上，或两台交换机之间接了多根网线。',
+    title: '二层环路',
+    summary: '{device} 检测到二层环路，广播报文将被无限复制，可迅速耗尽链路带宽与设备转发资源。',
+    suggestion: '立即定位并断开成环链路；核查是否存在交换机级联成环或用户私接设备，确认生成树协议已正常启用。',
     tone: 'critical',
   },
   {
     id: 'mac-move',
     pattern: /mac[\s\S]{0,40}?(?:move|moved|flapping|drift|漂移)/i,
-    title: '设备接入位置异常变动',
-    summary: '{device} 发现同一台设备在不同网口之间反复出现，通常是网络存在回路或有人频繁换插网线。',
-    suggestion: '请检查近期是否有网线改动；若无人操作，需排查是否存在回路。',
+    title: 'MAC 地址漂移',
+    summary: '{device} 发现同一 MAC 地址在不同端口间反复迁移，通常由二层环路或终端频繁改接引起。',
+    suggestion: '核对该 MAC 对应终端的实际接入位置；若无接线变更，优先排查环路与生成树配置。',
     tone: 'warning',
   },
 
@@ -180,109 +184,109 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   {
     id: 'temperature-high',
     pattern: /(?:temperature|temp|overtemp|温度)[\s\S]{0,40}?(?:alarm|high|exceed|over|too high|过高|告警)/i,
-    title: '设备温度过高',
-    summary: '{device} 的温度已超过安全范围，长时间高温会导致设备损坏或自动关机。',
-    suggestion: '请检查机房或机柜的空调是否正常、设备散热口是否被遮挡、周围是否堆放了杂物。',
+    title: '温度越限',
+    summary: '{device} 的温度传感器读数超过告警门限，持续高温将触发降频保护甚至整机下电。',
+    suggestion: '检查机房空调与机柜风道，确认进出风口无遮挡、防尘网无积尘；同时核查风扇模块运行状态。',
     tone: 'critical',
   },
   {
     id: 'fan-fault',
     pattern: /fan[\s\S]{0,40}?(?:fail|absent|abnormal|stop|error|故障)/i,
-    title: '散热风扇故障',
-    summary: '{device} 的散热风扇停转或已被拔出，设备可能因过热而损坏。',
-    suggestion: '请尽快检查风扇模块是否插好；若风扇确已损坏，需联系供应商更换。',
+    title: '风扇故障',
+    summary: '{device} 的风扇模块停转或不在位，散热能力下降，存在因过温导致器件损坏的风险。',
+    suggestion: '确认风扇模块在位且供电正常；确属硬件失效需尽快更换，更换前持续关注设备温度。',
     tone: 'critical',
   },
   {
     id: 'power-fault',
     pattern: /power[\s\S]{0,40}?(?:fail|absent|down|abnormal|off|故障)/i,
     title: '电源模块故障',
-    summary: '{device} 的一路电源出现故障或被断开，若剩余电源也失效，设备将直接关机。',
-    suggestion: '请检查电源线是否插紧、机柜插排是否有电；双电源设备建议尽快恢复另一路供电。',
+    summary: '{device} 的一路电源模块失效或输入中断，冗余能力已丧失，剩余电源再故障将导致整机下电。',
+    suggestion: '检查该路电源的输入线缆与 PDU 供电状态；冗余电源设备应尽快恢复另一路，避免形成单点。',
     tone: 'critical',
   },
   {
     id: 'board-fault',
     pattern: /(?:board|card|slot|单板)[\s\S]{0,40}?(?:fail|offline|abnormal|remove|error|故障)/i,
-    title: '板卡异常',
-    summary: '{device} 上的某块业务板卡离线或工作异常，该板卡上的所有网口都会失效。',
-    suggestion: '请确认板卡是否被人拔出；若未动过硬件，建议联系供应商进一步检测。',
+    title: '单板故障',
+    summary: '{device} 的业务单板离线或功能异常，该单板承载的所有端口与业务将中断。',
+    suggestion: '确认单板在位且插接到位；若无硬件操作记录，收集单板日志并联系厂商定位。',
     tone: 'critical',
   },
 
   // ==========================================
-  // 性能类
+  // 性能与容量
   // ==========================================
   {
     id: 'cpu-high',
     pattern: /cpu[\s\S]{0,40}?(?:high|usage|threshold|exceed|overload|过高|使用率)/i,
-    title: '设备运算负载过高',
-    summary: '{device} 的处理器长时间处于繁忙状态，可能导致网络变慢或管理界面卡顿。',
-    suggestion: '常见原因是网络中有异常流量或病毒，建议联系网络管理员查看是哪台设备在大量发包。',
+    title: 'CPU 利用率超阈值',
+    summary: '{device} 的 CPU 占用率持续超过告警门限，可能导致协议报文处理延迟、路由收敛变慢与管理通道响应迟滞。',
+    suggestion: '定位高占用任务，排查是否存在广播风暴、攻击流量或异常协议报文上送；必要时配置 CPCAR 限速保护控制平面。',
     tone: 'warning',
   },
   {
     id: 'memory-high',
     pattern: /(?:memory|mem)[\s\S]{0,40}?(?:high|usage|threshold|exceed|low|insufficient|不足|过高)/i,
-    title: '设备内存不足',
-    summary: '{device} 的可用内存偏低，若继续下降可能导致设备重启或部分功能失效。',
-    suggestion: '建议择期重启设备释放内存；若频繁出现，需联系供应商确认是否需要升级设备。',
+    title: '内存利用率超阈值',
+    summary: '{device} 的内存占用超过告警门限，可用内存不足将影响表项容量与新业务建立。',
+    suggestion: '核查路由表、MAC 表、ARP 表规模是否异常增长；排除攻击导致的表项膨胀，必要时评估设备容量规格。',
     tone: 'warning',
   },
   {
     id: 'traffic-threshold',
     pattern: /(?:bandwidth|traffic|utilization|流量|带宽)[\s\S]{0,40}?(?:threshold|exceed|high|超过|超限)/i,
-    title: '网络流量超出阈值',
-    summary: '{device} 的网络流量已超过设定的警戒线，上网速度可能明显变慢。',
-    suggestion: '请确认当前是否有大文件传输、视频会议或备份任务；若属日常业务量增长，建议评估扩容。',
+    title: '接口流量超阈值',
+    summary: '{device} 的接口流量超过设定门限，链路接近饱和时将出现排队时延与丢包。',
+    suggestion: '确认是否为备份、视频会议等突发业务；若属常态增长，考虑链路扩容或部署链路聚合分担流量。',
     tone: 'warning',
   },
 
   // ==========================================
-  // 系统类
+  // 系统运行
   // ==========================================
   {
     id: 'device-reboot',
     pattern: /(?:reboot|restart|system.{0,10}start|startup|power.?on|重启|启动)/i,
-    title: '设备已重启',
-    summary: '{device} 完成了一次重启，重启期间经过该设备的网络会中断。',
-    suggestion: '若无人手动重启，可能是断电或设备故障导致，建议检查供电是否稳定。',
+    title: '设备重启',
+    summary: '{device} 发生重启，重启期间流经该设备的业务全部中断。',
+    suggestion: '核对是否为计划内操作；若非人为触发，检查供电稳定性并收集重启前日志定位复位原因。',
     tone: 'warning',
   },
   {
     id: 'config-changed',
     pattern: /(?:config_i|cmdrecord|configured from|configuration.{0,20}(?:change|save|modif)|配置(?:变更|保存|修改))/i,
-    title: '设备配置被修改',
-    summary: '有人修改了 {device} 的设置。',
-    suggestion: '如果不是计划内的变更，建议确认操作人及改动内容，必要时恢复到之前的配置。',
+    title: '配置变更',
+    summary: '{device} 的运行配置被修改。',
+    suggestion: '核对该变更是否在维护窗口内且经过审批；若为非计划变更，比对配置差异并按需回退。',
     tone: 'info',
   },
   {
     id: 'ntp-fault',
     pattern: /ntp[\s\S]{0,40}?(?:fail|lost|unsync|not synchronized|失步|不同步)/i,
-    title: '设备时间不准',
-    summary: '{device} 无法与时间服务器同步，设备上记录的时间可能不准确，会影响日志排查。',
-    suggestion: '请联系网络管理员检查时间服务器地址是否可达。',
+    title: 'NTP 时钟失步',
+    summary: '{device} 与 NTP 服务器失去同步，本地时间可能产生偏差，将影响日志时序与跨设备故障关联分析。',
+    suggestion: '检查 NTP 服务器地址可达性与认证配置；确认中间设备未拦截 NTP 报文。',
     tone: 'info',
   },
 
   // ==========================================
-  // 告警特有（由本系统自身产生，非设备原文）
+  // 本系统自身产生（非设备原文）
   // ==========================================
   {
     id: 'alert-storm',
     pattern: /(?:告警风暴|触发限流保护|alert storm|rate.?limit)/i,
-    title: '告警数量异常激增',
-    summary: '{device} 在短时间内产生了大量告警，系统已自动限流以免刷屏。',
-    suggestion: '这通常意味着设备出现了较严重的问题，建议优先排查该设备，或直接联系网络管理员。',
+    title: '告警风暴',
+    summary: '{device} 在短时间内产生大量告警，已触发限流保护，后续同类告警将被抑制。',
+    suggestion: '告警密集通常指向严重故障，应优先排查该设备的硬件状态与链路情况，而非逐条处理单点告警。',
     tone: 'critical',
   },
   {
     id: 'device-offline',
     pattern: /(?:device.{0,20}(?:offline|unreachable)|设备(?:离线|失联|无响应)|response_time|no response|ping.{0,20}(?:fail|timeout))/i,
-    title: '设备失去联系',
-    summary: '系统已经联系不上 {device}，它可能已断电、断网或发生故障。',
-    suggestion: '请到现场确认设备电源指示灯是否亮起、网线是否插好；若设备正常，请检查到该设备的链路。',
+    title: '设备失联',
+    summary: '系统已无法与 {device} 建立管理连接，设备可能已下电、上行链路中断或系统异常。',
+    suggestion: '现场确认设备供电与指示灯状态；若设备运行正常，排查管理链路与网管通道的连通性。',
     tone: 'critical',
   },
 ]

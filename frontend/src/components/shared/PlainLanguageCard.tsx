@@ -7,6 +7,7 @@
 import React from 'react'
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, Lightbulb } from 'lucide-react'
 import type { PlainLanguageResult, PlainTone } from '@/lib/plain-language'
+import { RawInfoDisclosure } from './RawInfoDisclosure'
 
 /**
  * 语气 → 图标与配色。
@@ -71,6 +72,26 @@ export const PlainLanguageCard: React.FC<PlainLanguageCardProps> = ({ result, cl
             <span className="font-medium">建议：</span>
             {result.suggestion}
           </p>
+        </div>
+      )}
+
+      {/*
+        告警标识：厂商对这条告警的精确定义，供需要核对的人展开查看。
+        默认折叠 —— 对多数使用者，上面的人话已经够用。
+      */}
+      {result.trap && (
+        <div className="mt-3 pt-3 border-t border-border/60">
+          <RawInfoDisclosure label="告警标识">
+            <div className="space-y-1.5">
+              <p className="font-mono text-xs text-muted-foreground break-all">
+                {result.trap.name} · {result.trap.oid}
+              </p>
+              <p className="text-sm text-foreground/80 leading-relaxed">
+                <span className="text-muted-foreground">厂商说明：</span>
+                {result.trap.detail ?? result.trap.label}
+              </p>
+            </div>
+          </RawInfoDisclosure>
         </div>
       )}
     </div>

@@ -24,9 +24,12 @@ export {
   toneFromLevel,
 } from './dictionary'
 export { PLAIN_LANGUAGE_RULES } from './rules'
+export { TRAP_OID_DICTIONARY } from './trap-oids'
+export type { TrapOIDEntry } from './trap-oids'
 export type {
   PlainLanguageInput,
   PlainLanguageResult,
   PlainLanguageRule,
   PlainTone,
+  TrapIdentity,
 } from './types'

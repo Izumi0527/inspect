@@ -162,6 +162,7 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
     () => (alert
       ? translateToPlainLanguage({
           message: alert.description,
+          title: alert.title,
           level: alert.severity,
           facility: alert.category,
           deviceName: alert.device,

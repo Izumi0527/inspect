@@ -24,15 +24,16 @@ const baseAlert: Alert = {
   category: 'connectivity',
 }
 
-describe('AlertListItem 人话化展示', () => {
-  it('应展示人话摘要与处置建议，并隐藏设备原文', () => {
+describe('AlertListItem 解读展示', () => {
+  it('应展示解读摘要与处置建议，并隐藏设备原文', () => {
     const { container } = render(
       <AlertListItem alert={baseAlert} isSelected={false} onSelect={jest.fn()} />,
     )
 
-    expect(container.textContent).toContain('千兆网口 0/0/1')
+    // 接口名保留原始命名并附类型注解
+    expect(container.textContent).toContain('GigabitEthernet0/0/1（千兆以太口）')
     expect(container.textContent).toContain('建议：')
-    expect(container.textContent).toContain('网线')
+    expect(container.textContent).toContain('display interface')
 
     // 原文默认不出现
     expect(container.textContent).not.toContain('IF_STATE')

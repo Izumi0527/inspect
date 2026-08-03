@@ -22,6 +22,12 @@ export type PlainTone = 'critical' | 'warning' | 'info' | 'success'
 export interface PlainLanguageInput {
   /** 待翻译的原始消息（日志的 message / 告警的 description） */
   message: string
+  /**
+   * 告警标题。仅用于兜底提取 Trap OID —— 正常情况下 message 已含 OID
+   * （形如 `SNMP Trap <OID> | 摘要`），但告警标题里也带一份
+   * （形如 `[WARNING] 设备 - SNMP Trap 接口告警 (<OID>)`），可作为退路。
+   */
+  title?: string
   /** 原始级别，用于兜底翻译时判定语气 */
   level?: string
   /** 设施分类，用于兜底翻译时判定所属领域 */
@@ -30,6 +36,23 @@ export interface PlainLanguageInput {
   deviceName?: string
   /** 来源进程，兜底时作为补充线索 */
   process?: string
+}
+
+/**
+ * 识别出的 Trap OID 标识。
+ *
+ * 用途是「精确说明这条告警对应设备的哪一项」，与人话解读互补：
+ * 人话负责可读性，本字段负责可核对性。
+ */
+export interface TrapIdentity {
+  /** 完整 OID，如 1.3.6.1.4.1.2011.5.25.219.2.2.3 */
+  oid: string
+  /** 英文节点名，如 hwBoardFail */
+  name: string
+  /** 中文告警名（简短） */
+  label: string
+  /** 完整官方含义；仅当 label 为截断版时提供 */
+  detail?: string
 }
 
 /** 翻译结果 */
@@ -54,6 +77,13 @@ export interface PlainLanguageResult {
   matched: boolean
   /** 命中的规则 ID，便于排查「为什么翻译成这样」 */
   ruleId?: string
+  /**
+   * 识别出的 Trap OID 标识；消息中不含可识别 OID 时为 undefined。
+   *
+   * 注意它不参与 title/summary 的决定 —— 官方含义常比人话规则更晦涩
+   * （如 linkDown 的 ifOperStatus 表述），故仅在正则完全未命中时才用它兜底。
+   */
+  trap?: TrapIdentity
 }
 
 /** 单条翻译规则 */

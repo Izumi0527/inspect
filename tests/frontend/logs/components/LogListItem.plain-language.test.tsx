@@ -25,14 +25,15 @@ const baseLog: DeviceLog = {
   created_at: '2026-08-02T10:00:02+08:00',
 }
 
-describe('LogListItem 人话化展示', () => {
-  it('应展示人话解读，并把设备原文隐藏起来', () => {
+describe('LogListItem 解读展示', () => {
+  it('应展示解读结果，并把设备原文隐藏起来', () => {
     const { container } = render(<LogListItem log={baseLog} enableSelection={false} />)
 
-    // 人话解读可见
-    expect(screen.getByText('网络接口断开')).toBeInTheDocument()
-    expect(container.textContent).toContain('千兆网口 0/0/1')
-    expect(container.textContent).toContain('无法上网')
+    // 解读结果可见
+    expect(screen.getByText('接口链路 Down')).toBeInTheDocument()
+    // 接口名保留原始命名并附类型注解
+    expect(container.textContent).toContain('GigabitEthernet0/0/1（千兆以太口）')
+    expect(container.textContent).toContain('失去网络连通性')
 
     // 设备原文默认不出现
     expect(container.textContent).not.toContain('IF_STATE')
@@ -58,7 +59,7 @@ describe('LogListItem 人话化展示', () => {
     expect(onClick).not.toHaveBeenCalled()
   })
 
-  it('无法翻译的日志应直接展示原文，而不是把用户晾在无用的兜底文案上', () => {
+  it('无法解析的日志应直接展示原文，而不是把用户晾在无用的兜底文案上', () => {
     const unknownLog: DeviceLog = {
       ...baseLog,
       id: 7002,
@@ -68,7 +69,7 @@ describe('LogListItem 人话化展示', () => {
 
     const { container } = render(<LogListItem log={unknownLog} enableSelection={false} />)
 
-    expect(container.textContent).toContain('无法自动解读')
+    expect(container.textContent).toContain('暂无匹配的解析规则')
     expect(container.textContent).toContain('UNKNOWN_EVENT')
   })
 

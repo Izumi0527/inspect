@@ -11,46 +11,48 @@
 import type { PlainTone } from './types'
 
 /**
- * 接口类型前缀 → 中文说法。
+ * 接口类型前缀 → 类型注解。
+ *
+ * 统一使用「以太口」而非「电口/光口」：GE 口既可接双绞线也可插光模块，
+ * 仅凭端口名无法判定物理介质，标注「电口」会在光口场景下给出错误信息。
  *
  * 顺序敏感：长前缀必须排在短前缀之前。
  * 例如 TenGigabitEthernet 若排在 GigabitEthernet 之后，
- * 由于前者包含后者的子串，万兆口会被误译成千兆口。
- * 同理 M-Ethernet（管理口）必须先于 Ethernet。
+ * 由于前者包含后者的子串，万兆口会被误注解为千兆口。
+ * 同理 M-Ethernet（带外管理口）必须先于 Ethernet。
  */
 const INTERFACE_TYPE_RULES: ReadonlyArray<{ pattern: RegExp; label: string }> = [
-  { pattern: /^(?:100GE|HundredGigE)/i, label: '100G 网口' },
-  { pattern: /^(?:40GE|FortyGigE)/i, label: '40G 网口' },
-  { pattern: /^(?:TenGigabitEthernet|TenGigE|XGigabitEthernet|XGE|10GE)/i, label: '万兆网口' },
-  { pattern: /^M-?(?:GigabitEthernet|Ethernet|Eth)/i, label: '管理网口' },
-  { pattern: /^(?:GigabitEthernet|GigE|GE)/i, label: '千兆网口' },
-  { pattern: /^(?:FastEthernet|FE)/i, label: '百兆网口' },
-  { pattern: /^(?:Eth-?Trunk|Port-?channel|Po)/i, label: '聚合链路' },
-  { pattern: /^Vlanif/i, label: 'VLAN 虚拟接口' },
-  { pattern: /^Loopback/i, label: '环回接口' },
-  { pattern: /^Tunnel/i, label: '隧道接口' },
+  { pattern: /^(?:100GE|HundredGigE)/i, label: '100G 以太口' },
+  { pattern: /^(?:40GE|FortyGigE)/i, label: '40G 以太口' },
+  { pattern: /^(?:TenGigabitEthernet|TenGigE|XGigabitEthernet|XGE|10GE)/i, label: '万兆以太口' },
+  { pattern: /^M-?(?:GigabitEthernet|Ethernet|Eth)/i, label: '带外管理口' },
+  { pattern: /^(?:GigabitEthernet|GigE|GE)/i, label: '千兆以太口' },
+  { pattern: /^(?:FastEthernet|FE)/i, label: '百兆以太口' },
+  { pattern: /^(?:Eth-?Trunk|Port-?channel|Po)/i, label: '链路聚合口' },
+  { pattern: /^Vlanif/i, label: 'VLAN 虚接口' },
+  { pattern: /^Loopback/i, label: '环回口' },
+  { pattern: /^Tunnel/i, label: '隧道口' },
   { pattern: /^NULL/i, label: '空接口' },
-  { pattern: /^Ethernet/i, label: '以太网口' },
+  { pattern: /^Ethernet/i, label: '以太口' },
 ]
 
 /**
- * 把接口名转成人话，保留槽位/端口编号。
+ * 为接口名附加类型注解，保留设备侧原始命名。
  *
- * 编号（如 0/0/1 表示 0 槽 0 子卡 1 端口）刻意保留：
- * 运维要靠它定位到具体的物理接口，简化成「1 号口」反而让人找不着。
+ * 原始名必须原样保留 —— 运维需要拿它与 `display interface` 输出、拓扑图、
+ * 巡检报告逐字对照，替换成中文描述会切断这条线索。
  *
- * @example humanizeInterfaceName('GigabitEthernet0/0/1') // '千兆网口 0/0/1'
- * @example humanizeInterfaceName('Eth-Trunk1')           // '聚合链路 1'
+ * @example humanizeInterfaceName('GigabitEthernet0/0/1') // 'GigabitEthernet0/0/1（千兆以太口）'
+ * @example humanizeInterfaceName('Eth-Trunk1')           // 'Eth-Trunk1（链路聚合口）'
+ * @example humanizeInterfaceName('Xyz9/9')               // 'Xyz9/9' —— 无法识别则不强行注解
  */
 export function humanizeInterfaceName(raw: string): string {
   const text = String(raw ?? '').trim()
   if (!text) return ''
 
   for (const rule of INTERFACE_TYPE_RULES) {
-    const match = rule.pattern.exec(text)
-    if (!match) continue
-    const suffix = text.slice(match[0].length).trim()
-    return suffix ? `${rule.label} ${suffix}` : rule.label
+    if (!rule.pattern.test(text)) continue
+    return `${text}（${rule.label}）`
   }
 
   // 无法识别的命名原样返回，不强行猜测

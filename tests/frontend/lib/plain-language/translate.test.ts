@@ -22,10 +22,11 @@ describe('translateToPlainLanguage 接口类', () => {
 
     expect(result.matched).toBe(true)
     expect(result.ruleId).toBe('interface-down')
-    expect(result.title).toBe('网络接口断开')
+    expect(result.title).toBe('接口链路 Down')
     expect(result.summary).toContain('核心交换机')
-    expect(result.summary).toContain('千兆网口 0/0/1')
-    expect(result.summary).toContain('无法上网')
+    // 接口名保留设备侧原始命名，便于与 display interface 输出对照
+    expect(result.summary).toContain('GigabitEthernet0/0/1（千兆以太口）')
+    expect(result.summary).toContain('失去网络连通性')
     expect(result.suggestion).toBeDefined()
     expect(result.tone).toBe('warning')
   })
@@ -37,7 +38,7 @@ describe('translateToPlainLanguage 接口类', () => {
     })
 
     expect(result.ruleId).toBe('interface-down')
-    expect(result.summary).toContain('千兆网口 0/1')
+    expect(result.summary).toContain('GigabitEthernet0/1（千兆以太口）')
   })
 
   it('思科 %LINEPROTO 报文含 Interface+down，但必须优先命中更精确的线路规则', () => {
@@ -49,7 +50,7 @@ describe('translateToPlainLanguage 接口类', () => {
     })
 
     expect(result.ruleId).toBe('line-protocol-down')
-    expect(result.title).toBe('线路不通')
+    expect(result.title).toBe('链路协议 Down')
   })
 
   it('接口 UP 应为 success 语气，且不被 UPDOWN 中的 DOWN 误判', () => {
@@ -66,7 +67,7 @@ describe('translateToPlainLanguage 接口类', () => {
 })
 
 describe('translateToPlainLanguage 安全与硬件类', () => {
-  it('SSH 登录失败应给出改密码的处置建议', () => {
+  it('SSH 登录失败应给出口令处置建议', () => {
     const result = translateToPlainLanguage({
       message: '%%01SSH/4/SSH_FAIL(l)[2]:Failed to login through SSH.',
       level: 'warning',
@@ -75,8 +76,8 @@ describe('translateToPlainLanguage 安全与硬件类', () => {
     })
 
     expect(result.ruleId).toBe('login-failed')
-    expect(result.title).toBe('有人登录设备失败')
-    expect(result.suggestion).toContain('修改设备密码')
+    expect(result.title).toBe('用户认证失败')
+    expect(result.suggestion).toContain('更换口令')
     expect(result.tone).toBe('warning')
   })
 
@@ -116,7 +117,7 @@ describe('translateToPlainLanguage 兜底与占位', () => {
     expect(result.ruleId).toBeUndefined()
     // 兜底不编造解释，也不给无依据的建议
     expect(result.suggestion).toBeUndefined()
-    expect(result.summary).toContain('无法自动解读')
+    expect(result.summary).toContain('暂无匹配的解析规则')
     // 仍应带上领域信息，让用户至少知道是哪方面的事
     expect(result.summary).toContain('网络接口')
   })
@@ -134,7 +135,7 @@ describe('translateToPlainLanguage 兜底与占位', () => {
     })
 
     expect(abnormal.title).toBe('系统运行异常')
-    expect(normal.title).toBe('系统运行信息')
+    expect(normal.title).toBe('系统运行事件')
   })
 
   it('deviceName 缺省时应回退为「该设备」而不是留空', () => {
@@ -151,7 +152,7 @@ describe('translateToPlainLanguage 兜底与占位', () => {
     const result = translateToPlainLanguage({ message: '   ' })
 
     expect(result.matched).toBe(false)
-    expect(result.title).toBe('空白消息')
+    expect(result.title).toBe('空消息')
   })
 
   it('重复调用同一规则应稳定命中（防正则 lastIndex 残留）', () => {
@@ -170,21 +171,27 @@ describe('translateToPlainLanguage 兜底与占位', () => {
 
 describe('humanizeInterfaceName', () => {
   it.each([
-    ['GigabitEthernet0/0/1', '千兆网口 0/0/1'],
-    ['TenGigabitEthernet1/0/2', '万兆网口 1/0/2'],
-    ['Eth-Trunk1', '聚合链路 1'],
-    ['Vlanif10', 'VLAN 虚拟接口 10'],
-    ['Loopback0', '环回接口 0'],
-  ])('%s 应译为 %s', (raw, expected) => {
+    ['GigabitEthernet0/0/1', 'GigabitEthernet0/0/1（千兆以太口）'],
+    ['TenGigabitEthernet1/0/2', 'TenGigabitEthernet1/0/2（万兆以太口）'],
+    ['Eth-Trunk1', 'Eth-Trunk1（链路聚合口）'],
+    ['Vlanif10', 'Vlanif10（VLAN 虚接口）'],
+    ['Loopback0', 'Loopback0（环回口）'],
+  ])('%s 应注解为 %s', (raw, expected) => {
     expect(humanizeInterfaceName(raw)).toBe(expected)
+  })
+
+  it('必须保留设备侧原始接口名，便于与 display interface 输出对照', () => {
+    const result = humanizeInterfaceName('GigabitEthernet0/0/1')
+    expect(result.startsWith('GigabitEthernet0/0/1')).toBe(true)
   })
 
   it('万兆口不应被千兆规则抢先匹配', () => {
     // TenGigabitEthernet 字面包含 GigabitEthernet，靠规则顺序保证正确
-    expect(humanizeInterfaceName('TenGigabitEthernet0/0/1')).not.toContain('千兆')
+    expect(humanizeInterfaceName('TenGigabitEthernet0/0/1')).toContain('万兆以太口')
+    expect(humanizeInterfaceName('TenGigabitEthernet0/0/1')).not.toContain('（千兆')
   })
 
-  it('无法识别的接口命名应原样保留，不强行猜测', () => {
+  it('无法识别的接口命名应原样保留，不强行注解', () => {
     expect(humanizeInterfaceName('Xyz9/9')).toBe('Xyz9/9')
   })
 })

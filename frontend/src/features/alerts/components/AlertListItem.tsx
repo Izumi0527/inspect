@@ -51,11 +51,12 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
   const plain = useMemo(
     () => translateToPlainLanguage({
       message: alert.description,
+      title: alert.title,
       level: alert.severity,
       facility: alert.category,
       deviceName: alert.device,
     }),
-    [alert.description, alert.severity, alert.category, alert.device],
+    [alert.description, alert.title, alert.severity, alert.category, alert.device],
   )
 
   // null 表示用户尚未手动切换，此时跟随翻译结果：
@@ -120,7 +121,18 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
 
             <div className="mb-2 space-y-1.5">
               {/* 人话解读 */}
-              <p className="text-sm text-foreground/90 leading-relaxed">{plain.summary}</p>
+              <p className="text-sm text-foreground/90 leading-relaxed">
+                {plain.summary}
+                {/* 厂商告警节点名，供专业人员快速核对；完整 OID 放在 title 悬浮提示里，不占版面 */}
+                {plain.trap && (
+                  <span
+                    className="ml-1.5 font-mono text-xs text-muted-foreground"
+                    title={`${plain.trap.label} · ${plain.trap.oid}`}
+                  >
+                    {plain.trap.name}
+                  </span>
+                )}
+              </p>
 
               {/* 处置建议：告警需要尽快处置，故在列表层即给出而非藏进详情 */}
               {plain.suggestion && (
