@@ -19,10 +19,35 @@ scripts/
 ├── test.sh            # 测试与质量校验统一入口 Bash 版
 ├── clean-cache.ps1    # 缓存、临时文件、日志和测试产物清理
 ├── clean-cache.sh     # 缓存、临时文件、日志和测试产物清理 Bash 版
+├── deploy-ubuntu.sh   # Ubuntu 生产环境一键原生部署（无 Docker，仅 Linux 目标）
 └── README.md
 ```
 
 > Python 后端相关脚本已迁移至 `legacy/scripts/`，仅保留历史参考。
+
+> `deploy-ubuntu.sh` 是**目标平台专用**脚本，运行于待部署的 Ubuntu 主机而非开发机，
+> 因此不提供 `.ps1` 对应版本。详见 [docs/deployment/ubuntu-production.md](../docs/deployment/ubuntu-production.md)。
+
+## Ubuntu 生产部署（原生，无 Docker）
+
+在目标 Ubuntu 服务器上执行，全部组件以 systemd 托管，不使用容器：
+
+```bash
+# 完整部署
+sudo ./scripts/deploy-ubuntu.sh --domain inspect.example.com -y
+
+# 预演，不做任何实际改动
+sudo ./scripts/deploy-ubuntu.sh --domain inspect.example.com --dry-run
+
+# 仅重新构建并重启应用（升级场景）
+sudo ./scripts/deploy-ubuntu.sh --domain inspect.example.com --steps backend,frontend
+
+# 独立数据盘 + 不装监控组件
+sudo ./scripts/deploy-ubuntu.sh --domain inspect.example.com \
+     --pg-data-disk /dev/sdb --skip-monitoring
+```
+
+脚本幂等，可重复执行。生成的所有密码写入 `/opt/inspect/config/credentials.txt`（权限 600）。
 
 ## 快速开始
 
