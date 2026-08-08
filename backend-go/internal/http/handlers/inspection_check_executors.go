@@ -24,6 +24,13 @@ func (h InspectionHandler) executeSSHCheck(ctx context.Context, result *inspecti
 
 	config, _ := item["config"].(map[string]interface{})
 	command := strings.TrimSpace(readString(config, "command"))
+	// 参考标准：配置了期望子串则以其为判定依据，否则命令成功执行即通过
+	expect := strings.TrimSpace(readString(config, "expect"))
+	if expect != "" {
+		result.ExpectedValue = stringPtr(fmt.Sprintf("输出包含「%s」", expect))
+	} else {
+		result.ExpectedValue = stringPtr("命令执行成功")
+	}
 	if command == "" {
 		result.Status = "skip"
 		result.Message = stringPtr("SSH 检查未配置 command")
@@ -70,7 +77,6 @@ func (h InspectionHandler) executeSSHCheck(ctx context.Context, result *inspecti
 	}
 	result.ActualValue = &trimmed
 
-	expect := strings.TrimSpace(readString(config, "expect"))
 	if expect == "" {
 		result.Status = "pass"
 		result.Message = stringPtr("SSH 命令执行成功")
@@ -106,6 +112,11 @@ func (h InspectionHandler) executeHTTPCheck(ctx context.Context, result *inspect
 	expectStatus := 0
 	if v, ok := config["expect_status"].(float64); ok {
 		expectStatus = int(v)
+	}
+	if expectStatus > 0 {
+		result.ExpectedValue = stringPtr(fmt.Sprintf("HTTP 状态码 = %d", expectStatus))
+	} else {
+		result.ExpectedValue = stringPtr("HTTP 状态码 2xx/3xx")
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)

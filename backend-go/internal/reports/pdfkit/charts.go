@@ -10,10 +10,39 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/golang/freetype/truetype"
 	"github.com/phpdave11/gofpdf"
 	chart "github.com/wcharczuk/go-chart/v2"
 	"github.com/wcharczuk/go-chart/v2/drawing"
 )
+
+// chartFontOnce/chartCJKFont cache the parsed CJK truetype font for chart
+// rendering. go-chart's built-in default font (Roboto) has no CJK glyphs, so
+// without this injection every Chinese chart title / slice label / legend
+// entry renders as .notdef boxes.
+var (
+	chartFontOnce sync.Once
+	chartCJKFont  *truetype.Font
+)
+
+// chartFont returns the parsed CJK font, or nil when no CJK font could be
+// loaded — go-chart treats a nil Style.Font as "use default", so degraded
+// environments keep producing charts (ASCII text intact, CJK boxed) instead
+// of failing the whole report.
+func chartFont() *truetype.Font {
+	chartFontOnce.Do(func() {
+		raw, err := CJKFontBytes()
+		if err != nil {
+			return
+		}
+		parsed, err := truetype.Parse(raw)
+		if err != nil {
+			return
+		}
+		chartCJKFont = parsed
+	})
+	return chartCJKFont
+}
 
 // Default render dimensions for chart PNGs. Chosen so that, when scaled
 // down to ~70-90mm wide in the PDF, the resulting raster still looks crisp
@@ -78,6 +107,7 @@ func RenderDonutChart(spec DonutSpec) ([]byte, error) {
 				StrokeWidth: 2,
 				FontColor:   toDrawing(ColorText),
 				FontSize:    12,
+				Font:        chartFont(),
 			},
 		})
 	}
@@ -90,6 +120,7 @@ func RenderDonutChart(spec DonutSpec) ([]byte, error) {
 		Title:  spec.Title,
 		Width:  w,
 		Height: h,
+		Font:   chartFont(),
 		Background: chart.Style{
 			Padding: chart.Box{Top: 12, Bottom: 12, Left: 12, Right: 12},
 		},
@@ -150,6 +181,7 @@ func RenderBarChart(spec BarSpec) ([]byte, error) {
 				StrokeColor: toDrawing(c),
 				FontColor:   toDrawing(ColorText),
 				FontSize:    11,
+				Font:        chartFont(),
 			},
 		})
 	}
@@ -161,17 +193,20 @@ func RenderBarChart(spec BarSpec) ([]byte, error) {
 		Title:  spec.Title,
 		Width:  w,
 		Height: h,
+		Font:   chartFont(),
 		Background: chart.Style{
 			Padding: chart.Box{Top: 16, Bottom: 24, Left: 16, Right: 16},
 		},
 		XAxis: chart.Style{
 			FontColor: toDrawing(ColorTextMuted),
 			FontSize:  10,
+			Font:      chartFont(),
 		},
 		YAxis: chart.YAxis{
 			Style: chart.Style{
 				FontColor: toDrawing(ColorTextMuted),
 				FontSize:  10,
+				Font:      chartFont(),
 			},
 		},
 		Bars: bars,
@@ -264,6 +299,7 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 				FillColor:   toDrawingAlpha(c, 24),
 				FontColor:   toDrawing(ColorText),
 				FontSize:    11,
+				Font:        chartFont(),
 			},
 		})
 	}
@@ -272,6 +308,7 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 		Style: chart.Style{
 			FontColor: toDrawing(ColorTextMuted),
 			FontSize:  9,
+			Font:      chartFont(),
 		},
 	}
 	if len(spec.XLabels) > 0 {
@@ -297,6 +334,7 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 		Title:  spec.Title,
 		Width:  w,
 		Height: h,
+		Font:   chartFont(),
 		Background: chart.Style{
 			Padding: chart.Box{Top: 24, Bottom: 30, Left: 24, Right: 24},
 		},
@@ -305,6 +343,7 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 			Style: chart.Style{
 				FontColor: toDrawing(ColorTextMuted),
 				FontSize:  10,
+				Font:      chartFont(),
 			},
 		},
 		Series: chartSeries,
@@ -314,6 +353,7 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 			chart.LegendThin(&line, chart.Style{
 				FontColor: toDrawing(ColorText),
 				FontSize:  10,
+				Font:      chartFont(),
 			}),
 		}
 	}

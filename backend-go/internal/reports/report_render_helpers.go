@@ -34,6 +34,116 @@ func formatDurationSeconds(seconds int) string {
 	return fmt.Sprintf("%d 秒", seconds)
 }
 
+// ---------------------------------------------------------------------------
+// 报告展示层中文化映射。数据库与 API 契约仍存英文枚举（switch / huawei /
+// pass / completed …），仅在渲染时翻译；未识别的取值原样返回，避免把
+// 型号、自定义分类等误翻。网络协议 / 采集方式（ICMP、SNMP、CLI …）按
+// 用户约定保留英文原文，只做标准大写规范化。
+// ---------------------------------------------------------------------------
+
+func localizeDeviceType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "switch":
+		return "交换机"
+	case "router":
+		return "路由器"
+	case "firewall":
+		return "防火墙"
+	case "server":
+		return "服务器"
+	case "ap", "access_point", "wireless":
+		return "无线AP"
+	case "load_balancer", "loadbalancer", "lb":
+		return "负载均衡"
+	default:
+		return strings.TrimSpace(value)
+	}
+}
+
+func localizeVendor(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "huawei":
+		return "华为"
+	case "cisco":
+		return "思科"
+	case "ruijie":
+		return "锐捷"
+	case "zte":
+		return "中兴"
+	case "h3c":
+		return "H3C"
+	case "juniper":
+		return "Juniper"
+	default:
+		return strings.TrimSpace(value)
+	}
+}
+
+// localizeStatusWord 覆盖巡检执行状态（completed / running …）、设备状态
+// （online / offline …）与检查项状态（pass / fail / warning / skip）。两套
+// 枚举无键冲突，合并一个字典让所有「状态」列共用一个翻译入口。
+func localizeStatusWord(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "pass", "passed", "success", "ok":
+		return "通过"
+	case "fail", "failed":
+		return "失败"
+	case "warning", "warn":
+		return "警告"
+	case "skip", "skipped":
+		return "跳过"
+	case "error":
+		return "错误"
+	case "completed", "complete", "done":
+		return "已完成"
+	case "running", "in_progress":
+		return "执行中"
+	case "pending", "waiting":
+		return "待执行"
+	case "cancelled", "canceled":
+		return "已取消"
+	case "timeout":
+		return "超时"
+	case "online", "active", "up":
+		return "在线"
+	case "offline", "inactive", "down":
+		return "离线"
+	case "maintenance":
+		return "维护中"
+	case "unknown":
+		return "未知"
+	default:
+		return strings.TrimSpace(value)
+	}
+}
+
+// localizeProtocolTerm 把采集方式 / 协议名规范为标准大写写法（保留英文，
+// 不翻译），如 icmp → ICMP、snmp → SNMP。未识别的取值原样返回。
+func localizeProtocolTerm(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "icmp":
+		return "ICMP"
+	case "snmp":
+		return "SNMP"
+	case "cli":
+		return "CLI"
+	case "ssh":
+		return "SSH"
+	case "telnet":
+		return "Telnet"
+	case "ping":
+		return "PING"
+	case "http":
+		return "HTTP"
+	case "https":
+		return "HTTPS"
+	case "api":
+		return "API"
+	default:
+		return strings.TrimSpace(value)
+	}
+}
+
 func formatHours(value float64) string {
 	if value < 0 {
 		value = 0
@@ -117,6 +227,29 @@ func formatValueForReport(value interface{}) string {
 		}
 	}
 	return fmt.Sprintf("%v", value)
+}
+
+// localizeIntMapKeys 用 fn 翻译计数 map 的键（如设备类型分布的
+// switch/router → 交换机/路由器）；翻译后键相同的条目数值合并。
+func localizeIntMapKeys(values map[string]int, fn func(string) string) map[string]int {
+	if len(values) == 0 {
+		return values
+	}
+	out := make(map[string]int, len(values))
+	for key, count := range values {
+		out[fn(key)] += count
+	}
+	return out
+}
+
+// localizeStrings 返回逐项翻译后的新切片，供 preferred 排序表与翻译后的
+// map 键保持一致。
+func localizeStrings(values []string, fn func(string) string) []string {
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		out = append(out, fn(v))
+	}
+	return out
 }
 
 func sortedKeys(values map[string]interface{}) []string {

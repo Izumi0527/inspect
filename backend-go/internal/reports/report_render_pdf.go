@@ -11,9 +11,8 @@ import (
 )
 
 // pdfFontName routes through pdfkit.FontFamilyCJK so all SetFont calls in
-// this file pick up the Tailwind-aligned font registration done by
-// pdfkit.RegisterFonts. The legacy "report" alias is also registered there
-// for any caller that still passes the old string literal.
+// this file pick up the font registration done by pdfkit.RegisterFonts
+// (regular + true-bold CJK faces resolved per host).
 const (
 	pdfFontName    = pdfkit.FontFamilyCJK
 	pdfTitleSize   = 18
@@ -24,6 +23,9 @@ const (
 	pdfBottomMM    = 15.0
 	pdfTopOffsetMM = 1.6
 	pdfTableLineMM = 0.14
+	// pdfMaxWrapLines 限制换行列单格最多展开的行数，防止异常超长的采集
+	// 输出把一行撑到整页；到达上限后末行以省略号收尾。
+	pdfMaxWrapLines = 6
 )
 
 func writeInspectionPDF(path string, data InspectionReportData) error {
@@ -77,7 +79,10 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 	pdfkit.ProgressBar(pdf, "通过率", data.SummaryStats.PassRate, pdfkit.PassRateColor(data.SummaryStats.PassRate))
 	embedInspectionDonut(pdf, data.SummaryStats)
 
-	addPDFPage(pdf)
+	// 旧版此处无条件 addPDFPage，设备很少甚至为空时首页下半页整片留白。
+	// 改为仅在当前页放不下「节标题 + 概览表头 + 约 4 行」时才换页；更长的
+	// 概览表依赖 writePDFTable 的跨页表头重绘自然续页。
+	ensurePDFSpace(pdf, 48)
 	pdf.Ln(1)
 	writePDFSectionTitle(pdf, "设备巡检详情")
 	if len(data.Devices) == 0 {
@@ -89,8 +94,8 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 		overviewRows = append(overviewRows, []string{
 			fallbackPDFValue(device.DeviceName),
 			fallbackPDFValue(device.IPAddress),
-			fallbackPDFValue(device.DeviceType),
-			fallbackPDFValue(device.InspectionStatus),
+			fallbackPDFValue(localizeDeviceType(device.DeviceType)),
+			fallbackPDFValue(localizeStatusWord(device.InspectionStatus)),
 			formatPercent(device.PassRate, 1),
 			fmt.Sprintf("%d", device.IssueCount),
 		})
@@ -101,16 +106,19 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 	pdf.Ln(9)
 
 	for _, device := range data.Devices {
+		// 小节标题 + 属性表头 + 前两行合计约 35mm；不够就先换页，避免
+		// 「设备: xxx」标题孤悬页底而表格全部落到下一页。
+		ensurePDFSpace(pdf, 42)
 		writePDFSubSectionTitle(pdf, fmt.Sprintf("设备: %s", device.DeviceName))
 		deviceRows := [][]string{
 			{"IP地址", device.IPAddress},
-			{"设备类型", device.DeviceType},
-			{"厂商", device.Vendor},
+			{"设备类型", localizeDeviceType(device.DeviceType)},
+			{"厂商", localizeVendor(device.Vendor)},
 			{"型号", device.Model},
 			{"软件版本", device.SoftwareVersion},
 			{"运行时长", device.Uptime},
 			{"最近巡检", device.LastInspectionTime},
-			{"巡检状态", device.InspectionStatus},
+			{"巡检状态", localizeStatusWord(device.InspectionStatus)},
 			{"通过率", formatPercent(device.PassRate, 1)},
 			{"问题数量", fmt.Sprintf("%d", device.IssueCount)},
 		}
@@ -122,19 +130,23 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 			resultRows := make([][]string, 0, len(device.CheckResults))
 			for idx, result := range device.CheckResults {
 				if idx >= 12 {
-					resultRows = append(resultRows, []string{"已截断", fmt.Sprintf("仅展示前%d条检查结果", 12), "", ""})
+					resultRows = append(resultRows, []string{"已截断", fmt.Sprintf("仅展示前%d条检查结果", 12), "", "", ""})
 					break
 				}
 				resultRows = append(resultRows, []string{
 					result.CheckItemName,
-					result.CheckItemType,
-					result.Status,
+					localizeProtocolTerm(result.CheckItemType),
+					localizeStatusWord(result.Status),
+					fallbackPDFValue(result.ExpectedValue),
 					result.ActualValue,
 				})
 			}
 			resultStyle := defaultPDFTableStyle(pdfHeaderStyleBlue)
 			resultStyle.BodyAlign = "L"
-			writePDFTable(pdf, []string{"检查项", "类型", "状态", "实际值"}, resultRows, []float64{45.7, 30.5, 20.3, 45.7}, resultStyle)
+			// "参考标准"（index 3）与"实际值"（index 4）都可能是长文本
+			//（阈值区间说明 / 原始采集输出），启用换行完整展示，不截断。
+			resultStyle.WrapColumns = []int{3, 4}
+			writePDFTable(pdf, []string{"检查项", "类型", "状态", "参考标准", "实际值"}, resultRows, []float64{38, 16, 13, 37, 38.2}, resultStyle)
 		}
 		pdf.Ln(10)
 	}
@@ -179,10 +191,14 @@ func writeStatisticsPDF(path string, data StatisticsReportData) error {
 	overviewStyle.TableAlign = "L"
 	writePDFTable(pdf, []string{"统计项", "数值"}, overview, []float64{68, 48}, overviewStyle)
 
-	addPDFPage(pdf)
+	ensurePDFSpace(pdf, 110)
 	writePDFSectionTitle(pdf, "设备类型分布")
-	embedDistributionBar(pdf, "设备类型占比", data.Distribution.ByType, []string{"switch", "router", "firewall", "server"})
-	rows := buildIntDistributionRows(data.Distribution.ByType, []string{"switch", "router", "firewall", "server"}, "暂无设备类型分布数据")
+	// 类型分布的 key 是英文枚举（switch/router/…），图表与表格展示前先
+	// 翻译；preferred 顺序表同步翻译以维持固定排序。
+	typeCounts := localizeIntMapKeys(data.Distribution.ByType, localizeDeviceType)
+	typePreferred := localizeStrings([]string{"switch", "router", "firewall", "server"}, localizeDeviceType)
+	embedDistributionBar(pdf, "设备类型占比", typeCounts, typePreferred)
+	rows := buildIntDistributionRows(typeCounts, typePreferred, "暂无设备类型分布数据")
 	distributionStyle := defaultPDFTableStyle(pdfHeaderStyleLight)
 	distributionStyle.BodyAlign = "L"
 	writePDFTable(pdf, []string{"设备类型", "数量"}, rows, []float64{76.2, 50.8}, distributionStyle)
@@ -201,7 +217,7 @@ func writeStatisticsPDF(path string, data StatisticsReportData) error {
 			if idx >= 10 {
 				break
 			}
-			topRows = append(topRows, []string{device.DeviceName, device.DeviceType, formatFloat(device.Score, 1)})
+			topRows = append(topRows, []string{device.DeviceName, localizeDeviceType(device.DeviceType), formatFloat(device.Score, 1)})
 		}
 		topStyle := defaultPDFTableStyle(pdfHeaderStyleBlue)
 		topStyle.BodyAlign = "C"
@@ -209,7 +225,7 @@ func writeStatisticsPDF(path string, data StatisticsReportData) error {
 	}
 
 	if len(data.Performance.ByDevice) > 0 {
-		addPDFPage(pdf)
+		ensurePDFSpace(pdf, 64)
 		writePDFSectionTitle(pdf, "性能指标明细")
 		performanceRows := make([][]string, 0, len(data.Performance.ByDevice))
 		for idx, item := range data.Performance.ByDevice {
@@ -273,8 +289,8 @@ func writeDeviceSummaryPDF(path string, data DeviceSummaryData) error {
 			rows = append(rows, []string{
 				device.Name,
 				device.IP,
-				device.DeviceType,
-				device.Status,
+				localizeDeviceType(device.DeviceType),
+				localizeStatusWord(device.Status),
 				device.Location,
 			})
 		}
@@ -560,6 +576,10 @@ type pdfTableStyle struct {
 	HeaderBorder       string
 	BodyBorder         string
 	TableAlign         string
+	// WrapColumns 列出的列索引启用自动换行：单元格按列宽拆行、行高随
+	// 行数增长（上限 pdfMaxWrapLines），完整展示长文本；未列出的列保持
+	// 单行 + 截断省略号。
+	WrapColumns []int
 }
 
 var (
@@ -613,6 +633,64 @@ func addPDFPage(pdf *gofpdf.Fpdf) {
 	if pdfTopOffsetMM != 0 {
 		pdf.SetY(pdf.GetY() + pdfTopOffsetMM)
 	}
+}
+
+// ensurePDFSpace starts a new page when fewer than needMM millimeters remain
+// above the bottom margin. Callers use it before section titles / sub-tables
+// so a heading is never orphaned at the very bottom of a page, and small
+// reports are no longer forced onto a mostly-blank extra page.
+func ensurePDFSpace(pdf *gofpdf.Fpdf, needMM float64) {
+	_, pageH := pdf.GetPageSize()
+	if pdf.GetY()+needMM > pageH-pdfBottomMM {
+		addPDFPage(pdf)
+	}
+}
+
+// truncatePDFText shortens text with a trailing ellipsis until it fits
+// maxWidth at the currently-set font. gofpdf's CellFormat neither wraps nor
+// clips, so untruncated long values (device names, raw check outputs) would
+// otherwise be drawn straight across the neighbouring columns.
+func truncatePDFText(pdf *gofpdf.Fpdf, text string, maxWidth float64) string {
+	if maxWidth <= 0 || pdf.GetStringWidth(text) <= maxWidth {
+		return text
+	}
+	const ellipsis = "…"
+	runes := []rune(text)
+	for len(runes) > 0 {
+		runes = runes[:len(runes)-1]
+		candidate := string(runes) + ellipsis
+		if pdf.GetStringWidth(candidate) <= maxWidth {
+			return candidate
+		}
+	}
+	return ellipsis
+}
+
+// splitPDFTextLines wraps text into lines no wider than maxWidth using the
+// currently-set font, breaking on rune boundaries. gofpdf's own SplitText
+// walks the string byte-by-byte (designed for cp1252 fonts) and may break
+// inside a multi-byte CJK sequence, swallowing one byte at the break point —
+// a Chinese character silently disappears from the output. Width accumulates
+// per rune, which matches full-string measurement since gofpdf applies no
+// kerning.
+func splitPDFTextLines(pdf *gofpdf.Fpdf, text string, maxWidth float64) []string {
+	if text == "" {
+		return []string{""}
+	}
+	lines := make([]string, 0, 2)
+	var current strings.Builder
+	lineWidth := 0.0
+	for _, r := range text {
+		runeWidth := pdf.GetStringWidth(string(r))
+		if current.Len() > 0 && maxWidth > 0 && lineWidth+runeWidth > maxWidth {
+			lines = append(lines, current.String())
+			current.Reset()
+			lineWidth = 0
+		}
+		current.WriteRune(r)
+		lineWidth += runeWidth
+	}
+	return append(lines, current.String())
 }
 
 func writePDFTitle(pdf *gofpdf.Fpdf, title string) {
@@ -715,35 +793,50 @@ func writePDFTable(pdf *gofpdf.Fpdf, headers []string, rows [][]string, colWidth
 	pdf.SetLineWidth(pdfTableLineMM)
 	defer pdf.SetLineWidth(prevLineWidth)
 
-	pdf.SetDrawColor(style.BorderColor[0], style.BorderColor[1], style.BorderColor[2])
-	pdf.SetFont(pdfFontName, style.Header.FontStyle, style.Header.FontSize)
-	pdf.SetFillColor(style.Header.FillColor[0], style.Header.FillColor[1], style.Header.FillColor[2])
-	pdf.SetTextColor(style.Header.TextColor[0], style.Header.TextColor[1], style.Header.TextColor[2])
-	pdf.SetX(startX)
 	headerBorder := style.HeaderBorder
 	if headerBorder == "" {
 		headerBorder = "1"
 	}
-	for i, header := range headers {
-		if i >= len(colWidths) {
-			break
-		}
-		pdf.CellFormat(colWidths[i], style.HeaderHeight, header, headerBorder, 0, style.Header.Align, true, 0, "")
-	}
-	pdf.Ln(-1)
-	pdf.SetFont(pdfFontName, "", style.BodyFontSize)
-	pdf.SetTextColor(style.BodyTextColor[0], style.BodyTextColor[1], style.BodyTextColor[2])
 	bodyBorder := style.BodyBorder
 	if bodyBorder == "" {
 		bodyBorder = "1"
 	}
-	for rowIndex, row := range rows {
+	// cellPadMM approximates gofpdf's built-in 1mm cell margin on both sides;
+	// truncation targets the width actually available to glyphs.
+	const cellPadMM = 2.2
+
+	// renderHeader also runs after every manual page break so multi-page
+	// tables repeat their column headers instead of continuing "naked".
+	renderHeader := func() {
+		pdf.SetDrawColor(style.BorderColor[0], style.BorderColor[1], style.BorderColor[2])
+		pdf.SetFont(pdfFontName, style.Header.FontStyle, style.Header.FontSize)
+		pdf.SetFillColor(style.Header.FillColor[0], style.Header.FillColor[1], style.Header.FillColor[2])
+		pdf.SetTextColor(style.Header.TextColor[0], style.Header.TextColor[1], style.Header.TextColor[2])
 		pdf.SetX(startX)
-		fill := style.BodyFillColor
-		if rowIndex%2 == 1 && !isZeroColor(style.AlternateFillColor) {
-			fill = style.AlternateFillColor
+		for i, header := range headers {
+			if i >= len(colWidths) {
+				break
+			}
+			pdf.CellFormat(colWidths[i], style.HeaderHeight, truncatePDFText(pdf, header, colWidths[i]-cellPadMM), headerBorder, 0, style.Header.Align, true, 0, "")
 		}
-		pdf.SetFillColor(fill[0], fill[1], fill[2])
+		pdf.Ln(-1)
+		pdf.SetFont(pdfFontName, "", style.BodyFontSize)
+		pdf.SetTextColor(style.BodyTextColor[0], style.BodyTextColor[1], style.BodyTextColor[2])
+	}
+	renderHeader()
+
+	wrapSet := make(map[int]bool, len(style.WrapColumns))
+	for _, idx := range style.WrapColumns {
+		wrapSet[idx] = true
+	}
+
+	_, pageH := pdf.GetPageSize()
+	breakLimit := pageH - pdfBottomMM
+	for rowIndex, row := range rows {
+		// 先按列拆行并计算本行动态行高：换行列按列宽 SplitText 展开
+		// （封顶 pdfMaxWrapLines 行，超出末行加省略号），普通列单行截断。
+		cellLines := make([][]string, len(headers))
+		maxLines := 1
 		for i := range headers {
 			if i >= len(colWidths) {
 				break
@@ -752,12 +845,69 @@ func writePDFTable(pdf *gofpdf.Fpdf, headers []string, rows [][]string, colWidth
 			if i < len(row) {
 				value = row[i]
 			}
-			pdf.CellFormat(colWidths[i], style.BodyHeight, value, bodyBorder, 0, style.BodyAlign, true, 0, "")
+			value = sanitizePDFCellText(value)
+			textWidth := colWidths[i] - cellPadMM
+			if wrapSet[i] {
+				split := splitPDFTextLines(pdf, value, textWidth)
+				if len(split) > pdfMaxWrapLines {
+					last := split[pdfMaxWrapLines-1]
+					split = split[:pdfMaxWrapLines]
+					split[pdfMaxWrapLines-1] = truncatePDFText(pdf, last+"…", textWidth)
+				}
+				cellLines[i] = split
+				if len(split) > maxLines {
+					maxLines = len(split)
+				}
+			} else {
+				cellLines[i] = []string{truncatePDFText(pdf, value, textWidth)}
+			}
 		}
-		pdf.Ln(-1)
+		rowH := float64(maxLines) * style.BodyHeight
+
+		// 手动分页：整行放不下就先换页并重绘表头。否则 gofpdf 的自动分页
+		// 会在绘制某个单元格时才触发，导致新页丢表头、居中表格的行首
+		// 退回左边距，产生错位。
+		if pdf.GetY()+rowH > breakLimit {
+			addPDFPage(pdf)
+			renderHeader()
+		}
+		rowY := pdf.GetY()
+		fill := style.BodyFillColor
+		if rowIndex%2 == 1 && !isZeroColor(style.AlternateFillColor) {
+			fill = style.AlternateFillColor
+		}
+		pdf.SetFillColor(fill[0], fill[1], fill[2])
+		x := startX
+		for i := range headers {
+			if i >= len(colWidths) {
+				break
+			}
+			// 先画整格底色+边框（空文本），再在格内逐行写字；单行内容在
+			// 多行高度的行里垂直居中。
+			pdf.SetXY(x, rowY)
+			pdf.CellFormat(colWidths[i], rowH, "", bodyBorder, 0, "", true, 0, "")
+			offsetY := (rowH - float64(len(cellLines[i]))*style.BodyHeight) / 2
+			for li, line := range cellLines[i] {
+				pdf.SetXY(x, rowY+offsetY+float64(li)*style.BodyHeight)
+				pdf.CellFormat(colWidths[i], style.BodyHeight, line, "", 0, style.BodyAlign, false, 0, "")
+			}
+			x += colWidths[i]
+		}
+		pdf.SetY(rowY + rowH)
 	}
 	pdf.SetTextColor(0, 0, 0)
 	pdf.SetFont(pdfFontName, "", pdfBodySize)
+}
+
+// sanitizePDFCellText flattens control characters for single-line table
+// cells: CellFormat renders "\n" as a glyphless box instead of breaking the
+// line, so multi-line check outputs collapse to "line1 line2 …" here.
+func sanitizePDFCellText(value string) string {
+	if !strings.ContainsAny(value, "\r\n\t") {
+		return value
+	}
+	replacer := strings.NewReplacer("\r\n", " ", "\r", " ", "\n", " ", "\t", " ")
+	return strings.Join(strings.Fields(replacer.Replace(value)), " ")
 }
 
 func tableStartX(pdf *gofpdf.Fpdf, totalWidth float64, align string) float64 {

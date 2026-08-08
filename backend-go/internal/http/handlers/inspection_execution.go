@@ -472,6 +472,7 @@ func collectInspectionSNMPMetrics(
 
 // executeICMPCheck 执行 ICMP 检查
 func (h InspectionHandler) executeICMPCheck(result *inspection.Result, probeResult *devices.ProbeResult) {
+	result.ExpectedValue = stringPtr("ICMP 可达")
 	if probeResult == nil {
 		result.Status = "skip"
 		result.Message = stringPtr("无法执行探测")
@@ -496,6 +497,10 @@ func (h InspectionHandler) executeICMPCheck(result *inspection.Result, probeResu
 
 // executeSNMPCheck 执行 SNMP 检查
 func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResult *devices.ProbeResult, snmpMetrics *devices.SNMPMetrics, checkItem map[string]interface{}) {
+	// 顶层探测失败时尚未进入 metric 分支，参考标准先落"SNMP 响应正常"
+	//（此时判定依据正是 SNMP 必须可达）；进入具体 metric 分支后由各
+	// checkXxxMetric 覆盖为该指标的合理范围。
+	result.ExpectedValue = stringPtr("SNMP 响应正常")
 	if probeResult == nil {
 		result.Status = "skip"
 		result.Message = stringPtr("无法执行探测")
@@ -560,6 +565,15 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 
 // checkCPUMetric 检查 CPU 使用率
 func (h InspectionHandler) checkCPUMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64) {
+	// 先补齐默认阈值再写入参考标准：无论采集成败，结果里都带判定依据
+	if warningThreshold == 0 {
+		warningThreshold = 70
+	}
+	if criticalThreshold == 0 {
+		criticalThreshold = 90
+	}
+	result.ExpectedValue = stringPtr(fmt.Sprintf("< %.0f%%（警告 ≥%.0f%%，故障 ≥%.0f%%）", warningThreshold, warningThreshold, criticalThreshold))
+
 	if metrics == nil || metrics.CPUUsage == nil {
 		result.Status = "skip"
 		result.Message = stringPtr("无法获取CPU使用率数据")
@@ -569,14 +583,6 @@ func (h InspectionHandler) checkCPUMetric(result *inspection.Result, metrics *de
 	cpuUsage := *metrics.CPUUsage
 	actualValue := fmt.Sprintf("%.1f%%", cpuUsage)
 	result.ActualValue = &actualValue
-
-	// 设置默认阈值
-	if warningThreshold == 0 {
-		warningThreshold = 70
-	}
-	if criticalThreshold == 0 {
-		criticalThreshold = 90
-	}
 
 	if cpuUsage >= criticalThreshold {
 		result.Status = "fail"
@@ -595,6 +601,14 @@ func (h InspectionHandler) checkCPUMetric(result *inspection.Result, metrics *de
 
 // checkMemoryMetric 检查内存使用率
 func (h InspectionHandler) checkMemoryMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64) {
+	if warningThreshold == 0 {
+		warningThreshold = 80
+	}
+	if criticalThreshold == 0 {
+		criticalThreshold = 95
+	}
+	result.ExpectedValue = stringPtr(fmt.Sprintf("< %.0f%%（警告 ≥%.0f%%，故障 ≥%.0f%%）", warningThreshold, warningThreshold, criticalThreshold))
+
 	if metrics == nil || metrics.MemoryUsage == nil {
 		result.Status = "skip"
 		result.Message = stringPtr("无法获取内存使用率数据")
@@ -604,14 +618,6 @@ func (h InspectionHandler) checkMemoryMetric(result *inspection.Result, metrics 
 	memUsage := *metrics.MemoryUsage
 	actualValue := fmt.Sprintf("%.1f%%", memUsage)
 	result.ActualValue = &actualValue
-
-	// 设置默认阈值
-	if warningThreshold == 0 {
-		warningThreshold = 80
-	}
-	if criticalThreshold == 0 {
-		criticalThreshold = 95
-	}
 
 	if memUsage >= criticalThreshold {
 		result.Status = "fail"
@@ -628,8 +634,13 @@ func (h InspectionHandler) checkMemoryMetric(result *inspection.Result, metrics 
 	}
 }
 
-// checkUptimeMetric 检查系统运行时间
+// checkUptimeMetric 检查系统运行时间。
+// 运行时间过短通常意味着设备近期发生过（可能非计划的）重启，因此不再
+// 无条件通过：不足 24 小时判警告，提示管理员确认重启原因。
 func (h InspectionHandler) checkUptimeMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
+	const uptimeWarningSeconds = 24 * 3600
+	result.ExpectedValue = stringPtr("≥ 24 小时（过短提示近期重启）")
+
 	if metrics == nil || metrics.Uptime == nil {
 		result.Status = "skip"
 		result.Message = stringPtr("无法获取系统运行时间数据")
@@ -652,13 +663,24 @@ func (h InspectionHandler) checkUptimeMetric(result *inspection.Result, metrics 
 	}
 
 	result.ActualValue = &uptimeStr
+	if uptime < uptimeWarningSeconds {
+		result.Status = "warning"
+		msg := fmt.Sprintf("系统运行时间仅 %s，设备可能近期发生过重启，请确认是否为计划内操作", uptimeStr)
+		result.Message = &msg
+		return
+	}
 	result.Status = "pass"
 	msg := fmt.Sprintf("系统运行时间: %s", uptimeStr)
 	result.Message = &msg
 }
 
-// checkInterfaceMetric 检查接口状态
+// checkInterfaceMetric 检查接口状态。
+// 优先采用 IfOperStatus（IsUp）统计真实 UP 接口数；旧采集数据或部分设备
+// 缺失该字段时回退"有流量计数即视为活跃"的启发式。全部接口 DOWN/无流量
+// 时判警告——设备虽可达，但业务口全停很可能是异常。
 func (h InspectionHandler) checkInterfaceMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
+	result.ExpectedValue = stringPtr("UP 接口数 ≥ 1")
+
 	if metrics == nil || len(metrics.Interfaces) == 0 {
 		result.Status = "skip"
 		result.Message = stringPtr("无法获取接口状态数据")
@@ -666,23 +688,51 @@ func (h InspectionHandler) checkInterfaceMetric(result *inspection.Result, metri
 	}
 
 	totalInterfaces := len(metrics.Interfaces)
-	activeInterfaces := 0
+	upInterfaces := 0
+	upKnown := false
+	activeByTraffic := 0
 	for _, iface := range metrics.Interfaces {
-		// 如果有流量数据，认为接口是活跃的
+		if iface.IsUp != nil {
+			upKnown = true
+			if *iface.IsUp {
+				upInterfaces++
+			}
+		}
 		if iface.InOctets != nil || iface.OutOctets != nil {
-			activeInterfaces++
+			activeByTraffic++
 		}
 	}
 
-	actualValue := fmt.Sprintf("%d/%d", activeInterfaces, totalInterfaces)
+	active := upInterfaces
+	descriptor := "UP"
+	if !upKnown {
+		active = activeByTraffic
+		descriptor = "活跃"
+	}
+
+	actualValue := fmt.Sprintf("%d/%d", active, totalInterfaces)
 	result.ActualValue = &actualValue
+	if active == 0 {
+		result.Status = "warning"
+		msg := fmt.Sprintf("所有接口均非 %s 状态 (共%d个)，请确认设备业务是否正常", descriptor, totalInterfaces)
+		result.Message = &msg
+		return
+	}
 	result.Status = "pass"
-	msg := fmt.Sprintf("接口状态正常: %d个活跃接口 (共%d个)", activeInterfaces, totalInterfaces)
+	msg := fmt.Sprintf("接口状态正常: %d个%s接口 (共%d个)", active, descriptor, totalInterfaces)
 	result.Message = &msg
 }
 
 // checkTemperatureMetric 检查温度
 func (h InspectionHandler) checkTemperatureMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64) {
+	if warningThreshold == 0 {
+		warningThreshold = 60
+	}
+	if criticalThreshold == 0 {
+		criticalThreshold = 75
+	}
+	result.ExpectedValue = stringPtr(fmt.Sprintf("< %.0f°C（警告 ≥%.0f°C，故障 ≥%.0f°C）", warningThreshold, warningThreshold, criticalThreshold))
+
 	if metrics == nil || metrics.Temperature == nil {
 		result.Status = "skip"
 		result.Message = stringPtr("无法获取温度数据")
@@ -692,14 +742,6 @@ func (h InspectionHandler) checkTemperatureMetric(result *inspection.Result, met
 	temp := *metrics.Temperature
 	actualValue := fmt.Sprintf("%.1f°C", temp)
 	result.ActualValue = &actualValue
-
-	// 设置默认阈值
-	if warningThreshold == 0 {
-		warningThreshold = 60
-	}
-	if criticalThreshold == 0 {
-		criticalThreshold = 75
-	}
 
 	if temp >= criticalThreshold {
 		result.Status = "fail"
@@ -716,8 +758,15 @@ func (h InspectionHandler) checkTemperatureMetric(result *inspection.Result, met
 	}
 }
 
-// checkBandwidthMetric 检查带宽使用
+// checkBandwidthMetric 检查带宽使用。
+// 有接口速率（ifSpeed）数据时按「单接口速率 / 接口容量」计算峰值接口
+// 利用率并按 70% / 90% 阈值判定，使"带宽利用率"名副其实；缺少速率数据
+// 时退化为流量速率采集展示（无法计算利用率，不设阈值）。
 func (h InspectionHandler) checkBandwidthMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
+	const bandwidthWarningPercent, bandwidthCriticalPercent = 70.0, 90.0
+	result.ExpectedValue = stringPtr(fmt.Sprintf("峰值接口利用率 < %.0f%%（警告 ≥%.0f%%，故障 ≥%.0f%%）",
+		bandwidthWarningPercent, bandwidthWarningPercent, bandwidthCriticalPercent))
+
 	if metrics == nil || (metrics.BandwidthIn == nil && metrics.BandwidthOut == nil) {
 		result.Status = "skip"
 		result.Message = stringPtr("无法获取带宽数据")
@@ -744,9 +793,51 @@ func (h InspectionHandler) checkBandwidthMetric(result *inspection.Result, metri
 		return fmt.Sprintf("%.0f bps", bps)
 	}
 
-	actualValue := fmt.Sprintf("入: %s, 出: %s", formatBandwidth(inBw), formatBandwidth(outBw))
+	// 逐接口计算利用率（速率/容量）取峰值。Speed 单位为 Mbps，速率为 bps。
+	peakUtil := -1.0 // < 0 表示无任何接口具备速率数据，无法计算
+	peakName := ""
+	for _, iface := range metrics.Interfaces {
+		if iface.Speed == nil || *iface.Speed <= 0 {
+			continue
+		}
+		capacityBps := float64(*iface.Speed) * 1_000_000
+		for _, rate := range []*float64{iface.InRate, iface.OutRate} {
+			if rate == nil {
+				continue
+			}
+			util := *rate / capacityBps * 100
+			if util > peakUtil {
+				peakUtil = util
+				peakName = iface.Name
+			}
+		}
+	}
+
+	if peakUtil < 0 {
+		// 无接口速率数据：如实降级为采集性检查，参考标准同步改写以免误导
+		result.ExpectedValue = stringPtr("完成流量速率采集（接口速率未知，无法计算利用率）")
+		actualValue := fmt.Sprintf("入: %s, 出: %s", formatBandwidth(inBw), formatBandwidth(outBw))
+		result.ActualValue = &actualValue
+		result.Status = "pass"
+		msg := fmt.Sprintf("带宽速率采集成功 - 入站: %s, 出站: %s", formatBandwidth(inBw), formatBandwidth(outBw))
+		result.Message = &msg
+		return
+	}
+
+	actualValue := fmt.Sprintf("入: %s, 出: %s; 峰值接口利用率 %.1f%%", formatBandwidth(inBw), formatBandwidth(outBw), peakUtil)
 	result.ActualValue = &actualValue
-	result.Status = "pass"
-	msg := fmt.Sprintf("带宽使用正常 - 入站: %s, 出站: %s", formatBandwidth(inBw), formatBandwidth(outBw))
-	result.Message = &msg
+	switch {
+	case peakUtil >= bandwidthCriticalPercent:
+		result.Status = "fail"
+		msg := fmt.Sprintf("接口 %s 利用率 %.1f%% 超过故障阈值 %.0f%%，链路可能拥塞", peakName, peakUtil, bandwidthCriticalPercent)
+		result.Message = &msg
+	case peakUtil >= bandwidthWarningPercent:
+		result.Status = "warning"
+		msg := fmt.Sprintf("接口 %s 利用率 %.1f%% 超过警告阈值 %.0f%%，请关注流量趋势", peakName, peakUtil, bandwidthWarningPercent)
+		result.Message = &msg
+	default:
+		result.Status = "pass"
+		msg := fmt.Sprintf("带宽使用正常 - 入站: %s, 出站: %s, 峰值接口利用率 %.1f%%", formatBandwidth(inBw), formatBandwidth(outBw), peakUtil)
+		result.Message = &msg
+	}
 }

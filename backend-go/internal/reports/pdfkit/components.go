@@ -103,7 +103,9 @@ func WriteHeroBanner(pdf *gofpdf.Fpdf, hero HeroBanner) {
 		pdf.CellFormat(usableW-badgeW-25, 6, subtitle, "", 1, "L", false, 0, "")
 	}
 
-	// Chips（仅在有 chips 时渲染，置于 hero 底部）
+	// Chips（仅在有 chips 时渲染，置于 hero 底部）。宽度用 GetStringWidth
+	// 实测（旧版 24+runes*1.4 估算对「中文+长时间戳」严重偏大，导致
+	// 「通过率」chip 被整个丢弃）。
 	if len(hero.Chips) > 0 {
 		chipY := y + height - 11
 		chipX := x + 12
@@ -113,7 +115,7 @@ func WriteHeroBanner(pdf *gofpdf.Fpdf, hero HeroBanner) {
 			if text == "" {
 				continue
 			}
-			w := 24.0 + float64(len([]rune(text)))*1.4
+			w := pdf.GetStringWidth(text) + 8 // 左右各 4mm 内边距
 			if chipX+w > x+usableW-badgeW-6 {
 				break
 			}
@@ -211,11 +213,14 @@ func WriteStatCardRow(pdf *gofpdf.Fpdf, cards []StatCard, columns int) {
 		pdf.SetTextColor(ColorTextMuted[0], ColorTextMuted[1], ColorTextMuted[2])
 		pdf.CellFormat(cardW-10, 4.5, strings.TrimSpace(card.Label), "", 1, "L", false, 0, "")
 
-		// Big value
+		// Big value — 按内容选字体（含 CJK 时不能用 Latin 面，Inter/Arial
+		// 没有汉字字形，"3 秒" 会渲染成方框），并按卡宽自适应缩字号，
+		// 避免长值（如完整时间戳）溢出卡片被右侧邻卡覆盖。
+		value := fallback(card.Value, "-")
 		pdf.SetX(x + 5)
-		pdf.SetFont(FontFamilyLatin, "B", 16)
+		fitFontSize(pdf, value, textFontFamily(value), "B", 16, 9, cardW-10)
 		pdf.SetTextColor(ColorText[0], ColorText[1], ColorText[2])
-		pdf.CellFormat(cardW-10, 8, fallback(card.Value, "-"), "", 1, "L", false, 0, "")
+		pdf.CellFormat(cardW-10, 8, value, "", 1, "L", false, 0, "")
 
 		// Hint
 		if hint := strings.TrimSpace(card.Hint); hint != "" {
@@ -487,4 +492,35 @@ func fallback(value, fallbackValue string) string {
 		return fallbackValue
 	}
 	return v
+}
+
+// textFontFamily returns FontFamilyCJK when the text contains any codepoint
+// beyond Latin-1 (CJK ideographs, fullwidth punctuation, dashes, …). The
+// dedicated Latin faces (Inter / Arial / DejaVu) carry no CJK glyphs, so
+// mixed strings like "3 秒" must be rendered with the CJK family to avoid
+// .notdef boxes.
+func textFontFamily(text string) string {
+	for _, r := range text {
+		if r > 0x00FF {
+			return FontFamilyCJK
+		}
+	}
+	return FontFamilyLatin
+}
+
+// fitFontSize steps the font size down (0.5pt at a time, floored at minSize)
+// until text fits maxWidth with the given family/style. The font stays set
+// at the returned size so callers can draw immediately afterwards.
+func fitFontSize(pdf *gofpdf.Fpdf, text, family, style string, size, minSize, maxWidth float64) float64 {
+	if minSize > size {
+		minSize = size
+	}
+	for ; size > minSize; size -= 0.5 {
+		pdf.SetFont(family, style, size)
+		if maxWidth <= 0 || pdf.GetStringWidth(text) <= maxWidth {
+			return size
+		}
+	}
+	pdf.SetFont(family, style, minSize)
+	return minSize
 }

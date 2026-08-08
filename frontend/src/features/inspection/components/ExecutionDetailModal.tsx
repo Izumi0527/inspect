@@ -501,6 +501,12 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                                                 <span className="text-foreground/90 font-medium">{formatCheckValue(check.actualValue)}</span>
                                               </div>
                                             )}
+                                            {formatCheckValue(check.expectedValue) && (
+                                              <div>
+                                                <span className="text-muted-foreground">参考标准: </span>
+                                                <span className="text-foreground/70">{formatCheckValue(check.expectedValue)}</span>
+                                              </div>
+                                            )}
                                           </div>
                                         )}
                                       </div>
@@ -576,12 +582,20 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                                 {formatMessage(check.message)}
                               </p>
                             )}
-                            {formatCheckValue(check.actualValue) && (
-                              <div className="flex gap-4 pt-2 border-t border-border/40">
-                                <div>
-                                  <span className="text-muted-foreground">{getActualValueLabel(check.checkItemName)}: </span>
-                                  <span className="font-medium text-foreground/90">{formatCheckValue(check.actualValue)}</span>
-                                </div>
+                            {(formatCheckValue(check.actualValue) || formatCheckValue(check.expectedValue)) && (
+                              <div className="flex flex-wrap gap-4 pt-2 border-t border-border/40">
+                                {formatCheckValue(check.actualValue) && (
+                                  <div>
+                                    <span className="text-muted-foreground">{getActualValueLabel(check.checkItemName)}: </span>
+                                    <span className="font-medium text-foreground/90">{formatCheckValue(check.actualValue)}</span>
+                                  </div>
+                                )}
+                                {formatCheckValue(check.expectedValue) && (
+                                  <div>
+                                    <span className="text-muted-foreground">参考标准: </span>
+                                    <span className="text-foreground/70">{formatCheckValue(check.expectedValue)}</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

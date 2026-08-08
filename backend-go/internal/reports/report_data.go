@@ -447,11 +447,22 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		        i.total_checks, i.passed_checks, i.failed_checks, i.warning_checks,
 		        d.name AS device_name, d.ip_address, d.device_type, d.vendor, d.model,
 		        d.firmware_version, d.uptime, d.cpu_usage, d.memory_usage`).
-		Joins("LEFT JOIN devices d ON d.id = i.device_id").
-		Where("(i.completed_at BETWEEN ? AND ?) OR (i.created_at BETWEEN ? AND ?)", start, end, start, end)
+		Joins("LEFT JOIN devices d ON d.id = i.device_id")
 
-	if len(deviceIDs) > 0 {
-		query = query.Where("i.device_id IN ?", deviceIDs)
+	// 执行记录页面按「单次执行」出报告：task_id 即 inspections.id，精确
+	// 定位该行，不受时间窗口约束。旧逻辑只按时间范围（默认最近 24h）过
+	// 滤，同窗口内多次执行的 total/passed 会被统计摘要全部累加（执行 5
+	// 次 8 项检查就显示 40 项）；窗口外的历史执行则查不到数据、产出全 0
+	// 报告。仅在未指定 task_id 的汇总场景（报表中心/调度器）保留时间窗
+	// 口 + 设备过滤。
+	taskID := toInt(params["task_id"])
+	if taskID > 0 {
+		query = query.Where("i.id = ?", taskID)
+	} else {
+		query = query.Where("(i.completed_at BETWEEN ? AND ?) OR (i.created_at BETWEEN ? AND ?)", start, end, start, end)
+		if len(deviceIDs) > 0 {
+			query = query.Where("i.device_id IN ?", deviceIDs)
+		}
 	}
 
 	rows := make([]inspectionRow, 0)
@@ -1044,12 +1055,12 @@ func formatUptimeSeconds(value *int) string {
 	days := seconds / 86400
 	hours := (seconds % 86400) / 3600
 	if days > 0 {
-		return fmt.Sprintf("%d days", days)
+		return fmt.Sprintf("%d 天", days)
 	}
 	if hours > 0 {
-		return fmt.Sprintf("%d hours", hours)
+		return fmt.Sprintf("%d 小时", hours)
 	}
-	return fmt.Sprintf("%d seconds", seconds)
+	return fmt.Sprintf("%d 秒", seconds)
 }
 
 func coalesceTime(times ...*time.Time) time.Time {
