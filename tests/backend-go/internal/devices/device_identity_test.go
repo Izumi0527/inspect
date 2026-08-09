@@ -23,10 +23,30 @@ func TestParseDeviceIdentityFromSysDescr(t *testing.T) {
 		wantVersion string
 	}{
 		{
+			name:        "华为 S5700-28C-HI 真机：首行完整型号优先于括号内系列简称",
+			sysDescr:    "S5700-28C-HI \r\nHuawei Versatile Routing Platform Software \r\n VRP (R) software,Version 3.30 (S5700 V200R001C00) \r\n Copyright (C) 2007 Huawei Technologies Co., Ltd.",
+			wantModel:   "S5700-28C-HI",
+			wantVersion: "V200R001C00",
+		},
+		{
+			// 生产路径上 sysDescr 会先过 formatSNMPValue，换行被压成空格，
+			// 解析必须对这种"单行化"形态同样成立——最初漏了这一层导致线上仍取到简称。
+			name:        "华为真机经 formatSNMPValue 单行化后仍取完整型号",
+			sysDescr:    "S5700-28C-HI   Huawei Versatile Routing Platform Software    VRP (R) software,Version 3.30 (S5700 V200R001C00)   Copyright (C) 2007 Huawei Technologies Co., Ltd.",
+			wantModel:   "S5700-28C-HI",
+			wantVersion: "V200R001C00",
+		},
+		{
 			name:        "华为 VRP：括号内型号与版本成对出现",
 			sysDescr:    "Huawei Versatile Routing Platform Software VRP (R) software, Version 5.170 (S5700-28P-LI-AC V200R019C00SPC500) Copyright (C) 2007 Huawei Technologies Co., Ltd.",
 			wantModel:   "S5700-28P-LI-AC",
 			wantVersion: "V200R019C00SPC500",
+		},
+		{
+			name:        "首行是无板型后缀的普通单词时不当型号",
+			sysDescr:    "Huawei\r\nVersatile Routing Platform Software V200R010C00SPC300",
+			wantModel:   "",
+			wantVersion: "V200R010C00SPC300",
 		},
 		{
 			name:        "华为 VRP：无括号配对时只回填 VRP 版本号",

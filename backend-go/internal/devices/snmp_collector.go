@@ -618,6 +618,10 @@ var (
 	sysDescrModelVersionRe = regexp.MustCompile(`\(([A-Za-z][A-Za-z0-9][A-Za-z0-9\-_/.]{1,40})\s+(V\d+R\d+[A-Za-z0-9]*)\)`)
 	sysDescrVRPVersionRe   = regexp.MustCompile(`\b(V\d+R\d+[A-Za-z0-9]*)\b`)
 	sysDescrVersionRe      = regexp.MustCompile(`(?i)\bversion\s+([A-Za-z0-9][A-Za-z0-9._-]{0,30})`)
+	// 型号样式：字母开头、无空格、且至少含一段 -/_ 分隔的后缀（板型标识），
+	// 例如 S5700-28C-HI、AR2220-S。要求分隔后缀是为了把 "Linux"、"Huawei"
+	// 这类首行普通单词挡在外面。
+	sysDescrModelLineRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*(?:[-_/][A-Za-z0-9]+)+$`)
 	// entPhysicalSoftwareRev 常见形如 "Version 3.30 V200R001C00"，
 	// 开头的 "Version" 是描述词而非版本内容，去掉后档案更干净。
 	identityVersionPrefixRe = regexp.MustCompile(`(?i)^\s*(software\s+version|version|ver)\s*[:：]?\s*`)
@@ -641,26 +645,58 @@ func sanitizeIdentityValue(value string) string {
 // parseDeviceIdentityFromSysDescr 从 sysDescr 兜底提取型号与软件版本。
 // 纯函数，便于测试。只在能高置信匹配时才返回型号——sysDescr 是自由文本，
 // 宁可留空让用户手填，也不要往设备档案里写一个猜错的型号。
+//
+// 型号优先取开头：华为 VRP 的 sysDescr 常把**带板型后缀的完整型号**放在最前
+// （"S5700-28C-HI\r\nHuawei Versatile Routing Platform..."），而括号内的
+// "(S5700 V200R001C00)" 只是产品系列简称。实测 S5700-28C-HI 上
+// entPhysicalModelName 整列为空，sysDescr 开头是唯一能拿到完整型号的来源。
 func parseDeviceIdentityFromSysDescr(sysDescr string) (model string, version string) {
 	text := strings.TrimSpace(sysDescr)
 	if text == "" {
 		return "", ""
 	}
 
+	model = extractModelFromSysDescrHead(text)
+
 	if m := sysDescrModelVersionRe.FindStringSubmatch(text); len(m) == 3 {
-		model = strings.TrimSpace(m[1])
-		version = strings.TrimSpace(m[2])
-		return model, version
+		if model == "" {
+			model = strings.TrimSpace(m[1])
+		}
+		return model, strings.TrimSpace(m[2])
 	}
 
-	// 型号无法可信提取时只回填版本
 	if m := sysDescrVRPVersionRe.FindStringSubmatch(text); len(m) == 2 {
-		return "", strings.TrimSpace(m[1])
+		return model, strings.TrimSpace(m[1])
 	}
 	if m := sysDescrVersionRe.FindStringSubmatch(text); len(m) == 2 {
-		return "", strings.TrimSpace(strings.TrimRight(m[1], ",;"))
+		return model, strings.TrimSpace(strings.TrimRight(m[1], ",;"))
 	}
-	return "", ""
+	return model, ""
+}
+
+// extractModelFromSysDescrHead 在 sysDescr 开头形如型号时返回它，否则返回空。
+//
+// 取"首个空白分隔的 token"而非严格意义的首行：sysDescr 经 formatSNMPValue
+// 会把 \r\n 压成空格（probe.go 为单行展示做的清洗），换行边界已不可依赖，
+// 但完整型号仍稳定处在最前。Cisco/Linux 那类开头是普通单词（"Cisco"、"Linux"）
+// 的设备会因缺少 -/_ 板型后缀而落空，回退其它策略。
+func extractModelFromSysDescrHead(sysDescr string) string {
+	head := sysDescr
+	if idx := strings.IndexAny(head, "\r\n"); idx >= 0 {
+		head = head[:idx]
+	}
+	fields := strings.Fields(head)
+	if len(fields) == 0 {
+		return ""
+	}
+	candidate := fields[0]
+	if len(candidate) < 2 || len(candidate) > 40 {
+		return ""
+	}
+	if !sysDescrModelLineRe.MatchString(candidate) {
+		return ""
+	}
+	return candidate
 }
 
 // firstNonEmptyWalkValue 返回 walk 结果中第一个非空字符串值。
