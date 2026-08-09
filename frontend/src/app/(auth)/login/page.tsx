@@ -208,6 +208,7 @@ function LoginPage() {
               <div className="flex items-center">
                 <input
                   {...register('remember_me')}
+                  id="remember_me"
                   type="checkbox"
                   className="h-4 w-4 text-blue-600 dark:text-blue-300 focus:ring-blue-500 border-input rounded"
                 />
