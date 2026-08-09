@@ -197,7 +197,8 @@ export function CheckItemEditor({ item, onSave, onCancel }: CheckItemEditorProps
                     <SelectItem value="temperature">设备温度</SelectItem>
                     <SelectItem value="uptime">系统运行时间</SelectItem>
                     <SelectItem value="interface">接口状态</SelectItem>
-                    <SelectItem value="bandwidth">带宽利用率</SelectItem>
+                    <SelectItem value="interface_utilization">接口利用率</SelectItem>
+                    <SelectItem value="bandwidth">带宽吞吐量</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground mt-1">

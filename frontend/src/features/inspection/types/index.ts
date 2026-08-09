@@ -141,7 +141,7 @@ export interface InspectionCheckItem {
   /** 检查项类型 */
   type: CheckItemType
 
-  /** SNMP 指标键（type=snmp 时用于后端分派：reachable/cpu/memory/temperature/uptime/interface/bandwidth）。改名不影响分派。 */
+  /** SNMP 指标键（type=snmp 时用于后端分派：reachable/cpu/memory/temperature/uptime/interface/interface_utilization/bandwidth）。改名不影响分派。 */
   metric?: string
 
   /** 检查项配置,根据type不同配置项不同 */
@@ -218,6 +218,41 @@ export interface CheckResult {
 
   /** 执行耗时(毫秒) */
   executionTime: number
+
+  /** 检查项结构化明细，按 kind 分派渲染；目前仅接口利用率检查项会返回 */
+  details?: InterfaceUtilizationDetails
+}
+
+/** 单个接口的利用率明细 */
+export interface InterfaceUtilizationEntry {
+  name: string
+  /** 取值更高的方向："入" 或 "出" */
+  direction: string
+  percent: number
+  speed_mbps: number
+  in_rate_bps?: number
+  out_rate_bps?: number
+  is_up?: boolean
+}
+
+/** 无法计算利用率的接口及原因 */
+export interface InterfaceUtilizationSkipped {
+  name: string
+  reason: string
+}
+
+/** 接口利用率检查项的完整明细（后端 inspection_results.details） */
+export interface InterfaceUtilizationDetails {
+  kind: 'interface_utilization'
+  total: number
+  evaluated: number
+  over_warning: number
+  over_critical: number
+  warning_threshold: number
+  critical_threshold: number
+  /** 已评估接口，按利用率降序 */
+  interfaces: InterfaceUtilizationEntry[]
+  skipped: InterfaceUtilizationSkipped[]
 }
 
 /**

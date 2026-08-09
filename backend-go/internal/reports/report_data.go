@@ -2,6 +2,7 @@ package reports
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -61,6 +62,53 @@ type InspectionCheckResult struct {
 	ExpectedValue string
 	ActualValue   string
 	ExecutionTime int
+	// InterfaceUtilization 仅接口利用率检查项非空，用于在报告中输出逐接口明细表
+	InterfaceUtilization *InterfaceUtilizationReport
+}
+
+// InterfaceUtilizationEntryReport 报告中的单接口利用率行
+type InterfaceUtilizationEntryReport struct {
+	Name       string   `json:"name"`
+	Direction  string   `json:"direction"`
+	Percent    float64  `json:"percent"`
+	SpeedMbps  int64    `json:"speed_mbps"`
+	InRateBps  *float64 `json:"in_rate_bps"`
+	OutRateBps *float64 `json:"out_rate_bps"`
+}
+
+// InterfaceUtilizationSkippedReport 未参与评估的接口及原因
+type InterfaceUtilizationSkippedReport struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
+// InterfaceUtilizationReport 对应 inspection_results.details 中 kind=interface_utilization 的载荷
+type InterfaceUtilizationReport struct {
+	Kind              string                              `json:"kind"`
+	Total             int                                 `json:"total"`
+	Evaluated         int                                 `json:"evaluated"`
+	OverWarning       int                                 `json:"over_warning"`
+	OverCritical      int                                 `json:"over_critical"`
+	WarningThreshold  float64                             `json:"warning_threshold"`
+	CriticalThreshold float64                             `json:"critical_threshold"`
+	Interfaces        []InterfaceUtilizationEntryReport   `json:"interfaces"`
+	Skipped           []InterfaceUtilizationSkippedReport `json:"skipped"`
+}
+
+// parseInterfaceUtilizationDetails 解析检查项明细。
+// 非接口利用率或格式不符时返回 nil，报告退回只渲染摘要行，不因一条脏数据中断出报。
+func parseInterfaceUtilizationDetails(raw *string) *InterfaceUtilizationReport {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil
+	}
+	var payload InterfaceUtilizationReport
+	if err := json.Unmarshal([]byte(*raw), &payload); err != nil {
+		return nil
+	}
+	if payload.Kind != "interface_utilization" {
+		return nil
+	}
+	return &payload
 }
 
 type StatisticsReportData struct {
@@ -508,11 +556,12 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		Expected     *string `gorm:"column:expected_value"`
 		Actual       *string `gorm:"column:actual_value"`
 		Execution    *int    `gorm:"column:execution_time"`
+		Details      *string `gorm:"column:details"`
 	}
 	results := make([]resultRow, 0)
 	if err := db.WithContext(ctx).
 		Table("inspection_results").
-		Select("inspection_id, check_item_name, check_item_type, status, expected_value, actual_value, execution_time").
+		Select("inspection_id, check_item_name, check_item_type, status, expected_value, actual_value, execution_time, details").
 		Where("inspection_id IN ?", inspectionIDs).
 		Order("inspection_id, id").
 		Scan(&results).Error; err != nil {
@@ -522,12 +571,13 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 	resultsByInspection := make(map[int][]InspectionCheckResult)
 	for _, row := range results {
 		result := InspectionCheckResult{
-			CheckItemName: row.Name,
-			CheckItemType: row.Type,
-			Status:        row.Status,
-			ExpectedValue: defaultStringPtr(row.Expected),
-			ActualValue:   defaultStringPtr(row.Actual),
-			ExecutionTime: defaultIntPtr(row.Execution),
+			CheckItemName:        row.Name,
+			CheckItemType:        row.Type,
+			Status:               row.Status,
+			ExpectedValue:        defaultStringPtr(row.Expected),
+			ActualValue:          defaultStringPtr(row.Actual),
+			ExecutionTime:        defaultIntPtr(row.Execution),
+			InterfaceUtilization: parseInterfaceUtilizationDetails(row.Details),
 		}
 		resultsByInspection[row.InspectionID] = append(resultsByInspection[row.InspectionID], result)
 	}

@@ -11,6 +11,7 @@ import {
   DeviceInspectionResult,
   InspectionCheckItem,
   CheckResult,
+  InterfaceUtilizationDetails,
   InspectionStrategy,
   InspectionAnalyticsRange
 } from '../types'
@@ -142,6 +143,51 @@ const mapCheckResult = (value: UnknownRecord): CheckResult => {
     expectedValue: expectedValue || undefined,
     message: message || undefined,
     executionTime: toNumber(value.executionTime ?? value['execution_time']),
+    details: mapInterfaceUtilizationDetails(value.details ?? value['details']),
+  }
+}
+
+/**
+ * 解析检查项结构化明细。后端按 kind 区分类型，目前只有接口利用率一种；
+ * 形状不符时返回 undefined，让 UI 退回纯文本展示而不是崩在渲染层。
+ */
+const mapInterfaceUtilizationDetails = (raw: unknown): InterfaceUtilizationDetails | undefined => {
+  if (!isObject(raw)) return undefined
+  const record = raw as UnknownRecord
+  if (record.kind !== 'interface_utilization') return undefined
+
+  const interfaces = Array.isArray(record.interfaces)
+    ? record.interfaces.filter(isObject).map(item => {
+        const entry = item as UnknownRecord
+        return {
+          name: toString(entry.name),
+          direction: toString(entry.direction),
+          percent: toNumber(entry.percent),
+          speed_mbps: toNumber(entry.speed_mbps),
+          in_rate_bps: entry.in_rate_bps === undefined ? undefined : toNumber(entry.in_rate_bps),
+          out_rate_bps: entry.out_rate_bps === undefined ? undefined : toNumber(entry.out_rate_bps),
+          is_up: typeof entry.is_up === 'boolean' ? entry.is_up : undefined,
+        }
+      })
+    : []
+
+  const skipped = Array.isArray(record.skipped)
+    ? record.skipped.filter(isObject).map(item => {
+        const entry = item as UnknownRecord
+        return { name: toString(entry.name), reason: toString(entry.reason) }
+      })
+    : []
+
+  return {
+    kind: 'interface_utilization',
+    total: toNumber(record.total),
+    evaluated: toNumber(record.evaluated),
+    over_warning: toNumber(record.over_warning),
+    over_critical: toNumber(record.over_critical),
+    warning_threshold: toNumber(record.warning_threshold, 70),
+    critical_threshold: toNumber(record.critical_threshold, 90),
+    interfaces,
+    skipped,
   }
 }
 

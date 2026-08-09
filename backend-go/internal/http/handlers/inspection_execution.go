@@ -2,14 +2,17 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
@@ -535,6 +538,8 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 		h.checkUptimeMetric(result, snmpMetrics)
 	case "interface":
 		h.checkInterfaceMetric(result, snmpMetrics)
+	case "interface_utilization":
+		h.checkInterfaceUtilizationMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
 	case "bandwidth":
 		h.checkBandwidthMetric(result, snmpMetrics)
 	case "reachable", "system_info":
@@ -758,18 +763,250 @@ func (h InspectionHandler) checkTemperatureMetric(result *inspection.Result, met
 	}
 }
 
-// checkBandwidthMetric 检查带宽使用。
-// 有接口速率（ifSpeed）数据时按「单接口速率 / 接口容量」计算峰值接口
-// 利用率并按 70% / 90% 阈值判定，使"带宽利用率"名副其实；缺少速率数据
-// 时退化为流量速率采集展示（无法计算利用率，不设阈值）。
+// utilizationTopOffenderLimit 高负载接口明细的展示上限：
+// 检查结果会进入 PDF 报告的定宽表格，过长会被截断，取前 3 个足以定位。
+const utilizationTopOffenderLimit = 3
+
+// interfaceUtilizationEntry 单个接口的利用率快照，取入/出方向中更高的一侧。
+type interfaceUtilizationEntry struct {
+	Name       string   `json:"name"`
+	Direction  string   `json:"direction"` // "入" 或 "出"
+	Percent    float64  `json:"percent"`
+	SpeedMbps  int64    `json:"speed_mbps"`
+	InRateBps  *float64 `json:"in_rate_bps,omitempty"`
+	OutRateBps *float64 `json:"out_rate_bps,omitempty"`
+	IsUp       *bool    `json:"is_up,omitempty"`
+}
+
+// interfaceUtilizationSkipped 无法计算利用率的接口及其原因，
+// 与已评估接口一并落库，避免"29 个接口只看到 2 行"造成的困惑。
+type interfaceUtilizationSkipped struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
+// interfaceUtilizationSummary 全设备接口利用率汇总。
+type interfaceUtilizationSummary struct {
+	Total        int // 采集到的接口总数
+	Evaluated    int // 具备容量与速率样本、可计算利用率的接口数
+	Peak         interfaceUtilizationEntry
+	OverWarning  int
+	OverCritical int
+	Entries      []interfaceUtilizationEntry // 全部已评估接口，按利用率降序
+	Skipped      []interfaceUtilizationSkipped
+	TopOffenders []interfaceUtilizationEntry // 达到警告阈值的接口，最多 utilizationTopOffenderLimit 个（供消息摘要）
+}
+
+// interfaceDisplayName 返回接口的可读名称。
+// 采集端把 Name 固定写成 "if<索引>"，真实接口名（GigabitEthernet0/0/1 等）在 Description，
+// 因此优先取 Description，否则结果里只会出现 "if3" 这类无从定位的编号。
+func interfaceDisplayName(iface devices.InterfaceMetrics) string {
+	if descr := strings.TrimSpace(iface.Description); descr != "" {
+		return descr
+	}
+	return strings.TrimSpace(iface.Name)
+}
+
+// summarizeInterfaceUtilization 逐接口计算带宽利用率并汇总。
+// 纯函数（不依赖 handler/DB/网络），便于表驱动测试。
+//
+// 接口被排除在评估之外的三种情形：
+//  1. IsUp 明确为 false —— DOWN 口的利用率无意义，其状态由"接口状态"检查项负责；
+//     IsUp 为 nil（旧采集数据未带 ifOperStatus）时不过滤，避免整机漏评估。
+//  2. Speed 缺失或非正 —— 没有容量就没有分母（Loopback/NULL 口通常落在这里）。
+//  3. InRate 与 OutRate 均缺失 —— 速率由两次 octets 采样差分得出，首轮采集尚无基线。
+func summarizeInterfaceUtilization(interfaces []devices.InterfaceMetrics, warning, critical float64) interfaceUtilizationSummary {
+	summary := interfaceUtilizationSummary{Total: len(interfaces)}
+	entries := make([]interfaceUtilizationEntry, 0, len(interfaces))
+
+	for _, iface := range interfaces {
+		name := interfaceDisplayName(iface)
+		if iface.IsUp != nil && !*iface.IsUp {
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "接口未 UP"})
+			continue
+		}
+		if iface.Speed == nil || *iface.Speed <= 0 {
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "无接口容量（未上报速率）"})
+			continue
+		}
+		if iface.InRate == nil && iface.OutRate == nil {
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "无速率样本（尚未形成差分基线）"})
+			continue
+		}
+
+		// Speed 单位为 Mbps，速率单位为 bps
+		capacityBps := float64(*iface.Speed) * 1_000_000
+		entry := interfaceUtilizationEntry{
+			Name:       name,
+			Percent:    -1,
+			SpeedMbps:  *iface.Speed,
+			InRateBps:  iface.InRate,
+			OutRateBps: iface.OutRate,
+			IsUp:       iface.IsUp,
+		}
+		for _, sample := range []struct {
+			rate      *float64
+			direction string
+		}{{iface.InRate, "入"}, {iface.OutRate, "出"}} {
+			if sample.rate == nil {
+				continue
+			}
+			if util := *sample.rate / capacityBps * 100; util > entry.Percent {
+				entry.Percent = util
+				entry.Direction = sample.direction
+			}
+		}
+		if entry.Percent < 0 {
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "无速率样本（尚未形成差分基线）"})
+			continue
+		}
+
+		summary.Evaluated++
+		entries = append(entries, entry)
+		if entry.Percent >= critical {
+			summary.OverCritical++
+		}
+		if entry.Percent >= warning {
+			summary.OverWarning++
+		}
+	}
+
+	if len(entries) == 0 {
+		return summary
+	}
+
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Percent > entries[j].Percent })
+	summary.Entries = entries
+	summary.Peak = entries[0]
+	for _, entry := range entries {
+		if entry.Percent < warning || len(summary.TopOffenders) >= utilizationTopOffenderLimit {
+			break
+		}
+		summary.TopOffenders = append(summary.TopOffenders, entry)
+	}
+
+	return summary
+}
+
+// formatUtilizationOffenders 把高负载接口渲染成 "GE0/0/1 出 92.3%、GE0/0/2 入 78.1%" 形式。
+func formatUtilizationOffenders(entries []interfaceUtilizationEntry, total int) string {
+	parts := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		parts = append(parts, fmt.Sprintf("%s %s %.1f%%", entry.Name, entry.Direction, entry.Percent))
+	}
+	text := strings.Join(parts, "、")
+	if total > len(entries) {
+		text += fmt.Sprintf(" 等 %d 个", total)
+	}
+	return text
+}
+
+// buildInterfaceUtilizationDetails 把接口利用率汇总序列化进 result.details。
+// 已评估接口按利用率降序，未评估接口附原因，消费方（执行详情弹窗、PDF 报告）
+// 可直接渲染成完整表格而无需二次计算。
+func buildInterfaceUtilizationDetails(summary interfaceUtilizationSummary, warning, critical float64) datatypes.JSON {
+	payload := map[string]interface{}{
+		"kind":               "interface_utilization",
+		"total":              summary.Total,
+		"evaluated":          summary.Evaluated,
+		"over_warning":       summary.OverWarning,
+		"over_critical":      summary.OverCritical,
+		"warning_threshold":  warning,
+		"critical_threshold": critical,
+		"interfaces":         summary.Entries,
+		"skipped":            summary.Skipped,
+	}
+	if summary.Entries == nil {
+		payload["interfaces"] = []interfaceUtilizationEntry{}
+	}
+	if summary.Skipped == nil {
+		payload["skipped"] = []interfaceUtilizationSkipped{}
+	}
+
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil
+	}
+	return datatypes.JSON(encoded)
+}
+
+// checkInterfaceUtilizationMetric 检查逐接口带宽利用率。
+// 与"带宽吞吐量"分工：本项回答"哪些链路快满了"，带宽项只回答"总共跑了多少流量"。
+// 无法计算时判 skip 而非 pass —— 假通过会在链路真拥塞时掩盖问题。
+func (h InspectionHandler) checkInterfaceUtilizationMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64) {
+	// 先补默认阈值再写参考标准：无论采集成败，结果里都带判定依据
+	if warningThreshold == 0 {
+		warningThreshold = 70
+	}
+	if criticalThreshold == 0 {
+		criticalThreshold = 90
+	}
+	result.ExpectedValue = stringPtr(fmt.Sprintf("各接口利用率 < %.0f%%（警告 ≥%.0f%%，故障 ≥%.0f%%）",
+		warningThreshold, warningThreshold, criticalThreshold))
+
+	if metrics == nil || len(metrics.Interfaces) == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取接口数据")
+		return
+	}
+
+	summary := summarizeInterfaceUtilization(metrics.Interfaces, warningThreshold, criticalThreshold)
+	// 全量接口明细落 details（jsonb）：前端执行详情与 PDF 报告据此渲染完整表格，
+	// ActualValue/Message 只承载摘要，避免长文本撑爆定宽表格。
+	result.Details = buildInterfaceUtilizationDetails(summary, warningThreshold, criticalThreshold)
+
+	if summary.Evaluated == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr(fmt.Sprintf(
+			"采集到 %d 个接口，但均缺少速率基线或接口容量，无法计算利用率（设备需被监控采集覆盖 ≥1 轮，且接口需上报 ifHighSpeed/ifSpeed）",
+			summary.Total))
+		return
+	}
+
+	actualValue := fmt.Sprintf("峰值 %.1f%%（%s %s）；%d/%d 接口超阈值",
+		summary.Peak.Percent, summary.Peak.Name, summary.Peak.Direction, summary.OverWarning, summary.Evaluated)
+	result.ActualValue = &actualValue
+
+	switch {
+	case summary.OverCritical > 0:
+		result.Status = "fail"
+		result.Message = stringPtr(fmt.Sprintf("%d 个接口利用率达到故障阈值 %.0f%%，链路可能拥塞：%s",
+			summary.OverCritical, criticalThreshold, formatUtilizationOffenders(summary.TopOffenders, summary.OverWarning)))
+	case summary.OverWarning > 0:
+		result.Status = "warning"
+		result.Message = stringPtr(fmt.Sprintf("%d 个接口利用率超过警告阈值 %.0f%%，请关注流量趋势：%s",
+			summary.OverWarning, warningThreshold, formatUtilizationOffenders(summary.TopOffenders, summary.OverWarning)))
+	default:
+		result.Status = "pass"
+		result.Message = stringPtr(fmt.Sprintf("接口利用率正常：已评估 %d/%d 个接口，峰值 %s %s %.1f%%",
+			summary.Evaluated, summary.Total, summary.Peak.Name, summary.Peak.Direction, summary.Peak.Percent))
+	}
+}
+
+// checkBandwidthMetric 采集设备入/出方向总吞吐量。
+// 利用率判定已移交 checkInterfaceUtilizationMetric，本项只做速率采集展示，不设阈值。
+// 速率由两次 octets 采样差分得出，尚无基线时如实判 skip —— 此前恒 pass 会把
+// "还没有基线"报成"0 bps 且通过"。
 func (h InspectionHandler) checkBandwidthMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
-	const bandwidthWarningPercent, bandwidthCriticalPercent = 70.0, 90.0
-	result.ExpectedValue = stringPtr(fmt.Sprintf("峰值接口利用率 < %.0f%%（警告 ≥%.0f%%，故障 ≥%.0f%%）",
-		bandwidthWarningPercent, bandwidthWarningPercent, bandwidthCriticalPercent))
+	result.ExpectedValue = stringPtr("完成入/出方向流量速率采集")
 
 	if metrics == nil || (metrics.BandwidthIn == nil && metrics.BandwidthOut == nil) {
 		result.Status = "skip"
 		result.Message = stringPtr("无法获取带宽数据")
+		return
+	}
+
+	// 采集端恒会写入 BandwidthIn/Out（首轮为 0），因此必须回看接口是否真有速率样本
+	hasRateSample := false
+	for _, iface := range metrics.Interfaces {
+		if iface.InRate != nil || iface.OutRate != nil {
+			hasRateSample = true
+			break
+		}
+	}
+	if !hasRateSample {
+		result.Status = "skip"
+		result.Message = stringPtr("尚无流量速率基线（速率由两次采样差分得出，设备需被监控采集覆盖 ≥1 轮）")
 		return
 	}
 
@@ -793,51 +1030,9 @@ func (h InspectionHandler) checkBandwidthMetric(result *inspection.Result, metri
 		return fmt.Sprintf("%.0f bps", bps)
 	}
 
-	// 逐接口计算利用率（速率/容量）取峰值。Speed 单位为 Mbps，速率为 bps。
-	peakUtil := -1.0 // < 0 表示无任何接口具备速率数据，无法计算
-	peakName := ""
-	for _, iface := range metrics.Interfaces {
-		if iface.Speed == nil || *iface.Speed <= 0 {
-			continue
-		}
-		capacityBps := float64(*iface.Speed) * 1_000_000
-		for _, rate := range []*float64{iface.InRate, iface.OutRate} {
-			if rate == nil {
-				continue
-			}
-			util := *rate / capacityBps * 100
-			if util > peakUtil {
-				peakUtil = util
-				peakName = iface.Name
-			}
-		}
-	}
-
-	if peakUtil < 0 {
-		// 无接口速率数据：如实降级为采集性检查，参考标准同步改写以免误导
-		result.ExpectedValue = stringPtr("完成流量速率采集（接口速率未知，无法计算利用率）")
-		actualValue := fmt.Sprintf("入: %s, 出: %s", formatBandwidth(inBw), formatBandwidth(outBw))
-		result.ActualValue = &actualValue
-		result.Status = "pass"
-		msg := fmt.Sprintf("带宽速率采集成功 - 入站: %s, 出站: %s", formatBandwidth(inBw), formatBandwidth(outBw))
-		result.Message = &msg
-		return
-	}
-
-	actualValue := fmt.Sprintf("入: %s, 出: %s; 峰值接口利用率 %.1f%%", formatBandwidth(inBw), formatBandwidth(outBw), peakUtil)
+	actualValue := fmt.Sprintf("入: %s, 出: %s", formatBandwidth(inBw), formatBandwidth(outBw))
 	result.ActualValue = &actualValue
-	switch {
-	case peakUtil >= bandwidthCriticalPercent:
-		result.Status = "fail"
-		msg := fmt.Sprintf("接口 %s 利用率 %.1f%% 超过故障阈值 %.0f%%，链路可能拥塞", peakName, peakUtil, bandwidthCriticalPercent)
-		result.Message = &msg
-	case peakUtil >= bandwidthWarningPercent:
-		result.Status = "warning"
-		msg := fmt.Sprintf("接口 %s 利用率 %.1f%% 超过警告阈值 %.0f%%，请关注流量趋势", peakName, peakUtil, bandwidthWarningPercent)
-		result.Message = &msg
-	default:
-		result.Status = "pass"
-		msg := fmt.Sprintf("带宽使用正常 - 入站: %s, 出站: %s, 峰值接口利用率 %.1f%%", formatBandwidth(inBw), formatBandwidth(outBw), peakUtil)
-		result.Message = &msg
-	}
+	result.Status = "pass"
+	result.Message = stringPtr(fmt.Sprintf("带宽吞吐量采集成功 - 入站: %s, 出站: %s",
+		formatBandwidth(inBw), formatBandwidth(outBw)))
 }

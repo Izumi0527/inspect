@@ -84,9 +84,22 @@ func ckInterface() map[string]interface{} {
 	}
 }
 
+// ckInterfaceUtilization 逐接口利用率检查：与 ckBandwidth 职责分离——
+// 本项负责"哪些链路快满了"的判定，ckBandwidth 只负责"设备总共跑了多少流量"的展示。
+func ckInterfaceUtilization() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "interface_utilization", "name": "接口利用率", "description": "逐接口计算入/出方向带宽利用率，识别高负载链路",
+		"type": "snmp", "category": "performance", "metric": "interface_utilization", "weight": 8,
+		"config":  map[string]interface{}{"unit": "%", "threshold": map[string]interface{}{"warning": 70, "critical": 90}},
+		"enabled": true,
+	}
+}
+
+// ckBandwidth 仅做设备总吞吐量采集展示，利用率判定已移交 ckInterfaceUtilization。
+// id/metric 保持 "bandwidth" 不变：用户从内置模板复制出的自建模板靠 metric 分派，改键会失效。
 func ckBandwidth() map[string]interface{} {
 	return map[string]interface{}{
-		"id": "bandwidth", "name": "带宽利用率", "description": "基于接口流量评估带宽利用",
+		"id": "bandwidth", "name": "带宽吞吐量", "description": "统计设备入/出方向总流量速率",
 		"type": "snmp", "category": "performance", "metric": "bandwidth", "weight": 7,
 		"config": map[string]interface{}{}, "enabled": true,
 	}
@@ -111,17 +124,17 @@ func builtinTemplateSeeds() []builtinTemplateSeed {
 		},
 		{
 			Name:        "标准巡检",
-			Description: "基础健康 + 温度 + 运行时间 + 接口状态，适合日常例行巡检。",
+			Description: "基础健康 + 温度 + 运行时间 + 接口状态与利用率，适合日常例行巡检。",
 			Category:    "network",
 			DeviceTypes: deviceTypes,
-			CheckItems:  []map[string]interface{}{ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory(), ckTemperature(), ckUptime(), ckInterface()},
+			CheckItems:  []map[string]interface{}{ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory(), ckTemperature(), ckUptime(), ckInterface(), ckInterfaceUtilization()},
 		},
 		{
 			Name:        "全面巡检",
-			Description: "标准巡检 + 带宽利用率，覆盖全部可采集维度。",
+			Description: "标准巡检 + 带宽吞吐量，覆盖全部可采集维度。",
 			Category:    "network",
 			DeviceTypes: deviceTypes,
-			CheckItems:  []map[string]interface{}{ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory(), ckTemperature(), ckUptime(), ckInterface(), ckBandwidth()},
+			CheckItems:  []map[string]interface{}{ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory(), ckTemperature(), ckUptime(), ckInterface(), ckInterfaceUtilization(), ckBandwidth()},
 		},
 	}
 }

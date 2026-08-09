@@ -322,7 +322,7 @@ func (v *templateValidator) ValidateCheckItemType(itemType string) error {
 
 // validSNMPMetrics 与执行端 executeSNMPCheck 的 metric 分派分支一一对应，
 // 两处新增指标时必须同步修改（inspection_execution.go）。
-var validSNMPMetrics = []string{"reachable", "system_info", "cpu", "memory", "temperature", "uptime", "interface", "bandwidth"}
+var validSNMPMetrics = []string{"reachable", "system_info", "cpu", "memory", "temperature", "uptime", "interface", "interface_utilization", "bandwidth"}
 
 // validateSNMPMetric 校验 SNMP 检查项的采集指标：缺失或非法的 metric 会让执行端
 // 无法分派到真实采集逻辑，历史上曾导致检查项静默退化为连通性检查并假报"通过"。

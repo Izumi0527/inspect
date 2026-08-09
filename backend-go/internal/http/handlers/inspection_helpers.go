@@ -291,7 +291,7 @@ func buildCheckResults(results []inspection.Result) []map[string]interface{} {
 }
 
 func buildCheckResultResponse(result inspection.Result) map[string]interface{} {
-	return map[string]interface{}{
+	payload := map[string]interface{}{
 		"checkItemId":   fmt.Sprintf("%d", result.ID),
 		"checkItemName": result.CheckItemName,
 		"checkItemType": result.CheckItemType,
@@ -301,6 +301,18 @@ func buildCheckResultResponse(result inspection.Result) map[string]interface{} {
 		"message":       result.Message,
 		"executionTime": result.ExecutionTime,
 	}
+
+	// details 是检查项的结构化明细（如接口利用率逐接口清单）。
+	// 原样透传 jsonb，消费方按 details.kind 分派渲染；解析失败则整体省略，
+	// 不让一条脏数据影响其余字段。
+	if len(result.Details) > 0 {
+		var decoded interface{}
+		if err := json.Unmarshal(result.Details, &decoded); err == nil {
+			payload["details"] = decoded
+		}
+	}
+
+	return payload
 }
 
 func buildExecutionResponse(item inspection.Inspection, strategyName string) map[string]interface{} {

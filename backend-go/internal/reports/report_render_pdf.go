@@ -147,6 +147,11 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 			//（阈值区间说明 / 原始采集输出），启用换行完整展示，不截断。
 			resultStyle.WrapColumns = []int{3, 4}
 			writePDFTable(pdf, []string{"检查项", "类型", "状态", "参考标准", "实际值"}, resultRows, []float64{38, 16, 13, 37, 38.2}, resultStyle)
+
+			// 接口利用率检查项带逐接口明细：单独出一张表，避免把长清单塞进上表的定宽单元格
+			for _, result := range device.CheckResults {
+				writeInterfaceUtilizationPDFTable(pdf, result)
+			}
 		}
 		pdf.Ln(10)
 	}
@@ -724,8 +729,77 @@ func writePDFSectionTitle(pdf *gofpdf.Fpdf, title string) {
 	pdf.Ln(2)
 }
 
-func writePDFSubSectionTitle(pdf *gofpdf.Fpdf, title string) {
-	pdf.SetFont(pdfFontName, "B", pdfBodySize)
+// formatBandwidthPDF 把 bps 速率渲染成易读单位；缺采样时显示 "-"。
+func formatBandwidthPDF(bps *float64) string {
+	if bps == nil {
+		return "-"
+	}
+	value := *bps
+	switch {
+	case value >= 1_000_000_000:
+		return fmt.Sprintf("%.2f Gbps", value/1_000_000_000)
+	case value >= 1_000_000:
+		return fmt.Sprintf("%.2f Mbps", value/1_000_000)
+	case value >= 1_000:
+		return fmt.Sprintf("%.2f Kbps", value/1_000)
+	default:
+		return fmt.Sprintf("%.0f bps", value)
+	}
+}
+
+// writeInterfaceUtilizationPDFTable 为「接口利用率」检查项输出逐接口明细表。
+// 上层的 5 列检查结果表只能容纳一行摘要，接口清单必须单独成表才不会被截断。
+// 未参与评估的接口附原因一并列出，避免"29 个接口只看到 2 行"的困惑。
+func writeInterfaceUtilizationPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.InterfaceUtilization
+	if detail == nil || (len(detail.Interfaces) == 0 && len(detail.Skipped) == 0) {
+		return
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐接口明细（已评估 %d/%d）",
+		result.CheckItemName, detail.Evaluated, detail.Total))
+
+	if len(detail.Interfaces) > 0 {
+		rows := make([][]string, 0, len(detail.Interfaces))
+		for _, entry := range detail.Interfaces {
+			percent := fmt.Sprintf("%.2f%%", entry.Percent)
+			if entry.Percent > 0 && entry.Percent < 0.01 {
+				percent = "<0.01%"
+			}
+			rows = append(rows, []string{
+				entry.Name,
+				entry.Direction,
+				percent,
+				fmt.Sprintf("%d Mbps", entry.SpeedMbps),
+				formatBandwidthPDF(entry.InRateBps),
+				formatBandwidthPDF(entry.OutRateBps),
+			})
+		}
+		style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+		style.BodyAlign = "L"
+		style.WrapColumns = []int{0}
+		writePDFTable(pdf,
+			[]string{"接口", "峰值方向", "利用率", "带宽容量", "入向速率", "出向速率"},
+			rows, []float64{40, 18, 20, 22, 21.2, 21}, style)
+	}
+
+	if len(detail.Skipped) > 0 {
+		pdf.Ln(3)
+		ensurePDFSpace(pdf, 25)
+		rows := make([][]string, 0, len(detail.Skipped))
+		for _, item := range detail.Skipped {
+			rows = append(rows, []string{item.Name, item.Reason})
+		}
+		style := defaultPDFTableStyle(pdfHeaderStyleLight)
+		style.BodyAlign = "L"
+		style.WrapColumns = []int{0, 1}
+		writePDFTable(pdf, []string{"未评估接口", "原因"}, rows, []float64{60, 82.2}, style)
+	}
+}
+
+func writePDFSubSectionTitle(pdf *gofpdf.Fpdf, title string) {	pdf.SetFont(pdfFontName, "B", pdfBodySize)
 	pdf.SetTextColor(pdfColorText[0], pdfColorText[1], pdfColorText[2])
 	pdf.CellFormat(0, 7, title, "", 1, "L", false, 0, "")
 	pdf.SetTextColor(0, 0, 0)

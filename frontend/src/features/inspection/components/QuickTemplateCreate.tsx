@@ -79,25 +79,7 @@ const QUICK_TEMPLATES = [
     id: 'standard',
     name: '标准巡检',
     category: 'network' as TemplateCategory,
-    description: '基础健康 + 温度 + 运行时间 + 接口状态，适合日常例行巡检',
-    deviceTypes: ['router', 'switch', 'firewall', 'server'],
-    checkItems: [
-      { id: '1', name: '设备连通性', type: 'ping' as const, metric: '', weight: 8, config: {} },
-      { id: '2', name: 'SNMP 服务可达', type: 'snmp' as const, metric: 'reachable', weight: 6, config: {} },
-      { id: '3', name: 'CPU 使用率', type: 'snmp' as const, metric: 'cpu', weight: 10, config: { threshold: { warning: 70, critical: 85 } } },
-      { id: '4', name: '内存使用率', type: 'snmp' as const, metric: 'memory', weight: 10, config: { threshold: { warning: 75, critical: 90 } } },
-      { id: '5', name: '设备温度', type: 'snmp' as const, metric: 'temperature', weight: 7, config: { threshold: { warning: 60, critical: 75 } } },
-      { id: '6', name: '系统运行时间', type: 'snmp' as const, metric: 'uptime', weight: 4, config: {} },
-      { id: '7', name: '接口状态', type: 'snmp' as const, metric: 'interface', weight: 9, config: {} }
-    ],
-    icon: Shield,
-    color: 'green'
-  },
-  {
-    id: 'full',
-    name: '全面巡检',
-    category: 'network' as TemplateCategory,
-    description: '标准巡检 + 带宽利用率，覆盖全部可采集维度',
+    description: '基础健康 + 温度 + 运行时间 + 接口状态与利用率，适合日常例行巡检',
     deviceTypes: ['router', 'switch', 'firewall', 'server'],
     checkItems: [
       { id: '1', name: '设备连通性', type: 'ping' as const, metric: '', weight: 8, config: {} },
@@ -107,7 +89,27 @@ const QUICK_TEMPLATES = [
       { id: '5', name: '设备温度', type: 'snmp' as const, metric: 'temperature', weight: 7, config: { threshold: { warning: 60, critical: 75 } } },
       { id: '6', name: '系统运行时间', type: 'snmp' as const, metric: 'uptime', weight: 4, config: {} },
       { id: '7', name: '接口状态', type: 'snmp' as const, metric: 'interface', weight: 9, config: {} },
-      { id: '8', name: '带宽利用率', type: 'snmp' as const, metric: 'bandwidth', weight: 7, config: {} }
+      { id: '8', name: '接口利用率', type: 'snmp' as const, metric: 'interface_utilization', weight: 8, config: { threshold: { warning: 70, critical: 90 } } }
+    ],
+    icon: Shield,
+    color: 'green'
+  },
+  {
+    id: 'full',
+    name: '全面巡检',
+    category: 'network' as TemplateCategory,
+    description: '标准巡检 + 带宽吞吐量，覆盖全部可采集维度',
+    deviceTypes: ['router', 'switch', 'firewall', 'server'],
+    checkItems: [
+      { id: '1', name: '设备连通性', type: 'ping' as const, metric: '', weight: 8, config: {} },
+      { id: '2', name: 'SNMP 服务可达', type: 'snmp' as const, metric: 'reachable', weight: 6, config: {} },
+      { id: '3', name: 'CPU 使用率', type: 'snmp' as const, metric: 'cpu', weight: 10, config: { threshold: { warning: 70, critical: 85 } } },
+      { id: '4', name: '内存使用率', type: 'snmp' as const, metric: 'memory', weight: 10, config: { threshold: { warning: 75, critical: 90 } } },
+      { id: '5', name: '设备温度', type: 'snmp' as const, metric: 'temperature', weight: 7, config: { threshold: { warning: 60, critical: 75 } } },
+      { id: '6', name: '系统运行时间', type: 'snmp' as const, metric: 'uptime', weight: 4, config: {} },
+      { id: '7', name: '接口状态', type: 'snmp' as const, metric: 'interface', weight: 9, config: {} },
+      { id: '8', name: '接口利用率', type: 'snmp' as const, metric: 'interface_utilization', weight: 8, config: { threshold: { warning: 70, critical: 90 } } },
+      { id: '9', name: '带宽吞吐量', type: 'snmp' as const, metric: 'bandwidth', weight: 7, config: {} }
     ],
     icon: Zap,
     color: 'red'

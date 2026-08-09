@@ -16,8 +16,12 @@ func allBuiltinCheckItems() []map[string]interface{}
 
 // TestBuiltinCheckItems_ExecutableAndMetricValid 守护内置检查项的硬约束：
 //  1. type 只能是 icmp/ping/snmp（其余类型会被后端 executeCheckItems 跳过）；
-//  2. snmp 项必须带合法 metric（reachable/cpu/memory/temperature/uptime/interface/bandwidth），
-//     后端 executeSNMPCheck 按 metric 分派，名称可随意修改而不影响分派。
+//  2. snmp 项必须带合法 metric（reachable/cpu/memory/temperature/uptime/interface/
+//     interface_utilization/bandwidth），后端 executeSNMPCheck 按 metric 分派，
+//     名称可随意修改而不影响分派。
+//
+// 新增 metric 时这里是第三处需要同步的清单，另两处为 internal/inspection/validator.go
+// 的 validSNMPMetrics 与 internal/http/handlers/inspection_execution.go 的分派分支。
 func TestBuiltinCheckItems_ExecutableAndMetricValid(t *testing.T) {
 	items := allBuiltinCheckItems()
 	if len(items) < 5 {
@@ -27,7 +31,8 @@ func TestBuiltinCheckItems_ExecutableAndMetricValid(t *testing.T) {
 	allowedTypes := map[string]bool{"icmp": true, "ping": true, "snmp": true}
 	validMetrics := map[string]bool{
 		"reachable": true, "cpu": true, "memory": true, "temperature": true,
-		"uptime": true, "interface": true, "bandwidth": true, "system_info": true,
+		"uptime": true, "interface": true, "interface_utilization": true,
+		"bandwidth": true, "system_info": true,
 	}
 
 	for _, it := range items {
@@ -45,7 +50,7 @@ func TestBuiltinCheckItems_ExecutableAndMetricValid(t *testing.T) {
 	}
 
 	// 覆盖度：内置档位应覆盖全部核心指标。
-	wantMetrics := []string{"reachable", "cpu", "memory", "temperature", "uptime", "interface", "bandwidth"}
+	wantMetrics := []string{"reachable", "cpu", "memory", "temperature", "uptime", "interface", "interface_utilization", "bandwidth"}
 	got := map[string]bool{}
 	for _, it := range items {
 		if m, ok := it["metric"].(string); ok {

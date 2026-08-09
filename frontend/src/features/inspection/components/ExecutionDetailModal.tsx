@@ -22,6 +22,7 @@ import { SimpleModal } from '@/components/atoms/modal'
 import { Badge } from '@/components/atoms/badge'
 import { cn } from '@/utils/cn'
 import { useGenerateReport, useExecutionDetail } from '../hooks/useInspection'
+import { InterfaceUtilizationTable } from './InterfaceUtilizationTable'
 import type { InspectionExecution, ReportFormat } from '../types'
 
 interface ExecutionDetailModalProps {
@@ -36,6 +37,24 @@ const reportFormats: { value: ReportFormat; label: string; icon: React.ReactNode
   { value: 'excel', label: 'Excel', icon: <FileSpreadsheet className="w-4 h-4" />, description: '适合数据分析' },
   { value: 'word', label: 'Word', icon: <File className="w-4 h-4" />, description: '适合编辑修改' },
 ]
+
+/**
+ * 根据检查项名称推断"实际值"该用什么标签展示。
+ * 注意匹配顺序：「利用率」必须先于「接口」判断，否则"接口利用率"会命中接口分支、
+ * 被错标成"接口状态: 92.3%"。
+ */
+const getActualValueLabel = (checkName: string): string => {
+  const name = checkName.toLowerCase()
+  if (name.includes('cpu') || name.includes('处理器')) return '实际值'
+  if (name.includes('内存') || name.includes('memory')) return '实际值'
+  if (name.includes('运行时间') || name.includes('uptime')) return '运行时间'
+  if (name.includes('利用率') || name.includes('utilization')) return '利用率'
+  if (name.includes('接口') || name.includes('interface') || name.includes('端口')) return '接口状态'
+  if (name.includes('温度') || name.includes('temperature')) return '温度'
+  if (name.includes('带宽') || name.includes('吞吐') || name.includes('bandwidth')) return '带宽'
+  if (name.includes('icmp') || name.includes('ping')) return '响应时间'
+  return '实际值'
+}
 
 export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
   open,
@@ -468,18 +487,6 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                           <div className="p-4 space-y-2">
                             {device.checkResults.map((check, index) => {
                               const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
-                              // 根据检查项类型确定实际值的标签
-                              const getActualValueLabel = (checkName: string): string => {
-                                const name = checkName.toLowerCase()
-                                if (name.includes('cpu') || name.includes('处理器')) return '实际值'
-                                if (name.includes('内存') || name.includes('memory')) return '实际值'
-                                if (name.includes('运行时间') || name.includes('uptime')) return '运行时间'
-                                if (name.includes('接口') || name.includes('interface') || name.includes('端口')) return '接口状态'
-                                if (name.includes('温度') || name.includes('temperature')) return '温度'
-                                if (name.includes('带宽') || name.includes('bandwidth')) return '带宽'
-                                if (name.includes('icmp') || name.includes('ping')) return '响应时间'
-                                return '实际值'
-                              }
                               return (
                                 <div
                                   key={index}
@@ -508,6 +515,9 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                                               </div>
                                             )}
                                           </div>
+                                        )}
+                                        {check.details?.kind === 'interface_utilization' && (
+                                          <InterfaceUtilizationTable details={check.details} />
                                         )}
                                       </div>
                                     </div>
@@ -544,18 +554,6 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                   execution.summary.deviceResults.flatMap((device) =>
                     device.checkResults?.map((check, index) => {
                       const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
-                      // 根据检查项类型确定实际值的标签
-                      const getActualValueLabel = (checkName: string): string => {
-                        const name = checkName.toLowerCase()
-                        if (name.includes('cpu') || name.includes('处理器')) return '实际值'
-                        if (name.includes('内存') || name.includes('memory')) return '实际值'
-                        if (name.includes('运行时间') || name.includes('uptime')) return '运行时间'
-                        if (name.includes('接口') || name.includes('interface') || name.includes('端口')) return '接口状态'
-                        if (name.includes('温度') || name.includes('temperature')) return '温度'
-                        if (name.includes('带宽') || name.includes('bandwidth')) return '带宽'
-                        if (name.includes('icmp') || name.includes('ping')) return '响应时间'
-                        return '实际值'
-                      }
                       return (
                         <motion.div
                           key={`${device.deviceId}-${index}`}
@@ -597,6 +595,9 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                                   </div>
                                 )}
                               </div>
+                            )}
+                            {check.details?.kind === 'interface_utilization' && (
+                              <InterfaceUtilizationTable details={check.details} />
                             )}
                           </div>
                         </motion.div>
