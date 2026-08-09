@@ -1097,6 +1097,10 @@ func formatRange(start time.Time, end time.Time) string {
 	return fmt.Sprintf("%s ~ %s", start.Format("2006-01-02"), end.Format("2006-01-02"))
 }
 
+// formatUptimeSeconds 把运行时长（秒）渲染为「N 天 N 小时 N 分钟」。
+// 精确到分钟：此前 days>0 只输出天数、hours>0 只输出小时，"12 天" 这种粒度
+// 无法判断设备是否刚重启过，运维核对重启时间时必须看到分钟。
+// 不足 1 分钟仍显示秒，避免刚重启的设备显示成"0 分钟"。
 func formatUptimeSeconds(value *int) string {
 	if value == nil || *value <= 0 {
 		return ""
@@ -1104,13 +1108,18 @@ func formatUptimeSeconds(value *int) string {
 	seconds := *value
 	days := seconds / 86400
 	hours := (seconds % 86400) / 3600
-	if days > 0 {
-		return fmt.Sprintf("%d 天", days)
+	minutes := (seconds % 3600) / 60
+
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%d 天 %d 小时 %d 分钟", days, hours, minutes)
+	case hours > 0:
+		return fmt.Sprintf("%d 小时 %d 分钟", hours, minutes)
+	case minutes > 0:
+		return fmt.Sprintf("%d 分钟", minutes)
+	default:
+		return fmt.Sprintf("%d 秒", seconds)
 	}
-	if hours > 0 {
-		return fmt.Sprintf("%d 小时", hours)
-	}
-	return fmt.Sprintf("%d 秒", seconds)
 }
 
 func coalesceTime(times ...*time.Time) time.Time {
