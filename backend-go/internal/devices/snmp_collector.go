@@ -3,6 +3,7 @@ package devices
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -23,8 +24,10 @@ type SNMPMetrics struct {
 	BGPPeers            []BGPNeighborMetrics        `json:"bgp_peers,omitempty"`
 	OpticalTransceivers []OpticalTransceiverMetrics `json:"optical_transceivers,omitempty"`
 	Uptime              *int64                      `json:"uptime,omitempty"`
-	BandwidthIn         *float64                    `json:"bandwidth_in,omitempty"`  // 入站带宽，单位：bps（比特每秒）
-	BandwidthOut        *float64                    `json:"bandwidth_out,omitempty"` // 出站带宽，单位：bps（比特每秒）
+	Model               *string                     `json:"model,omitempty"`            // 设备型号，如 S5700-28P-LI-AC
+	FirmwareVersion     *string                     `json:"firmware_version,omitempty"` // 软件/固件版本，如 V200R019C00SPC500
+	BandwidthIn         *float64                    `json:"bandwidth_in,omitempty"`     // 入站带宽，单位：bps（比特每秒）
+	BandwidthOut        *float64                    `json:"bandwidth_out,omitempty"`    // 出站带宽，单位：bps（比特每秒）
 	Interfaces          []InterfaceMetrics          `json:"interfaces,omitempty"`
 	CollectedAt         time.Time                   `json:"collected_at"`
 	CollectionTime      float64                     `json:"collection_time_ms"`
@@ -230,6 +233,14 @@ func (c *SNMPCollector) CollectMetrics(
 		c.logger.Debug("collected optical transceivers", zap.Int("count", len(metrics.OpticalTransceivers)))
 	}
 
+	// 采集设备型号与软件版本（低频变化的静态属性，用于回填设备档案）
+	c.collectDeviceIdentity(target, metrics, registry)
+	if c.logger != nil && (metrics.Model != nil || metrics.FirmwareVersion != nil) {
+		c.logger.Debug("collected device identity",
+			zap.Stringp("model", metrics.Model),
+			zap.Stringp("firmware_version", metrics.FirmwareVersion))
+	}
+
 	// 采集接口指标
 	c.collectInterfaces(target, ipAddress, metrics, registry)
 	if c.logger != nil {
@@ -412,6 +423,10 @@ func (c *SNMPCollector) collectInterfaces(
 		}
 	}
 
+	// ifHighSpeed（Mbps，RFC2863）是首选；不上报该 OID 的老设备回退 ifSpeed（bps）补齐，
+	// 否则这些接口会因缺少容量基线而无法参与利用率评估。
+	collectLegacyIfSpeed(target, interfaces, registry)
+
 	// 采集接口运行状态 IfOperStatus（1=up, 2=down, ...），用于 device_interfaces.is_up
 	if statusOID := registry.Common.Interfaces.IfOperStatus.OID; statusOID != "" {
 		statusResult, _ := target.BulkWalkAll(statusOID)
@@ -550,6 +565,170 @@ func (c *SNMPCollector) collectInterfaces(
 	for _, iface := range interfaces {
 		metrics.Interfaces = append(metrics.Interfaces, *iface)
 	}
+}
+
+// legacyIfSpeedCapMbps 是 ifSpeed（32 位 Gauge，单位 bps）能表达的速率上限约 4.29Gbps
+// 换算成 Mbps 的取值。达到该量级说明数值已被 32 位封顶（万兆及以上接口的典型表现），
+// 此时按封顶值计算利用率会虚高数倍，宁可不写入速率——让该接口判"无法评估"，
+// 也好过误报链路拥塞。
+const legacyIfSpeedCapMbps = 4294
+
+// collectLegacyIfSpeed 用 ifSpeed 补齐 ifHighSpeed 未覆盖的接口速率。
+// 仅在确有接口缺速率时才发起额外 walk，避免给正常设备增加一次无谓的 SNMP 往返。
+func collectLegacyIfSpeed(target snmpClient, interfaces map[int]*InterfaceMetrics, registry *snmpmib.Registry) {
+	speedOID := registry.Common.Interfaces.IfSpeed.OID
+	if speedOID == "" {
+		return
+	}
+
+	needFallback := false
+	for _, iface := range interfaces {
+		if iface.Speed == nil {
+			needFallback = true
+			break
+		}
+	}
+	if !needFallback {
+		return
+	}
+
+	legacyResult, _ := target.BulkWalkAll(speedOID)
+	for _, v := range legacyResult {
+		bps, ok := numericPDUInt64(v)
+		if !ok || bps <= 0 {
+			continue
+		}
+		idx := extractIndexFromOID(v.Name)
+		iface, exists := interfaces[idx]
+		if !exists || iface.Speed != nil {
+			continue
+		}
+		mbps := bps / 1_000_000
+		if mbps <= 0 || mbps >= legacyIfSpeedCapMbps {
+			continue
+		}
+		iface.Speed = &mbps
+	}
+}
+
+// 从 sysDescr 兜底解析型号与版本的模式。
+// 华为 VRP 典型串："...Software VRP (R) software, Version 5.170 (S5700-28P-LI-AC V200R019C00SPC500) Copyright..."
+// 括号内「型号 版本」成对出现，是可信度最高的兜底来源。
+var (
+	sysDescrModelVersionRe = regexp.MustCompile(`\(([A-Za-z][A-Za-z0-9][A-Za-z0-9\-_/.]{1,40})\s+(V\d+R\d+[A-Za-z0-9]*)\)`)
+	sysDescrVRPVersionRe   = regexp.MustCompile(`\b(V\d+R\d+[A-Za-z0-9]*)\b`)
+	sysDescrVersionRe      = regexp.MustCompile(`(?i)\bversion\s+([A-Za-z0-9][A-Za-z0-9._-]{0,30})`)
+	// entPhysicalSoftwareRev 常见形如 "Version 3.30 V200R001C00"，
+	// 开头的 "Version" 是描述词而非版本内容，去掉后档案更干净。
+	identityVersionPrefixRe = regexp.MustCompile(`(?i)^\s*(software\s+version|version|ver)\s*[:：]?\s*`)
+)
+
+// sanitizeIdentityValue 清理设备自报字符串的冗余前缀与空白。
+// 只剥离描述性前缀，不改写版本内容本身；剥离后为空则保留原值，
+// 避免把一个信息量虽低但真实的取值抹成空。
+func sanitizeIdentityValue(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	cleaned := strings.TrimSpace(identityVersionPrefixRe.ReplaceAllString(trimmed, ""))
+	if cleaned == "" {
+		return trimmed
+	}
+	return cleaned
+}
+
+// parseDeviceIdentityFromSysDescr 从 sysDescr 兜底提取型号与软件版本。
+// 纯函数，便于测试。只在能高置信匹配时才返回型号——sysDescr 是自由文本，
+// 宁可留空让用户手填，也不要往设备档案里写一个猜错的型号。
+func parseDeviceIdentityFromSysDescr(sysDescr string) (model string, version string) {
+	text := strings.TrimSpace(sysDescr)
+	if text == "" {
+		return "", ""
+	}
+
+	if m := sysDescrModelVersionRe.FindStringSubmatch(text); len(m) == 3 {
+		model = strings.TrimSpace(m[1])
+		version = strings.TrimSpace(m[2])
+		return model, version
+	}
+
+	// 型号无法可信提取时只回填版本
+	if m := sysDescrVRPVersionRe.FindStringSubmatch(text); len(m) == 2 {
+		return "", strings.TrimSpace(m[1])
+	}
+	if m := sysDescrVersionRe.FindStringSubmatch(text); len(m) == 2 {
+		return "", strings.TrimSpace(strings.TrimRight(m[1], ",;"))
+	}
+	return "", ""
+}
+
+// firstNonEmptyWalkValue 返回 walk 结果中第一个非空字符串值。
+// ENTITY-MIB 会把每个物理实体（机框/单板/风扇/光模块）都列一行，多数行的
+// 型号与版本字段为空，取首个非空值即整机或主控信息。
+func firstNonEmptyWalkValue(client snmpClient, oid string) string {
+	if strings.TrimSpace(oid) == "" {
+		return ""
+	}
+	rows, err := client.BulkWalkAll(oid)
+	if err != nil {
+		return ""
+	}
+	for _, v := range rows {
+		if v.Type != gosnmp.OctetString {
+			continue
+		}
+		if value := strings.TrimSpace(formatSNMPValue(v.Value)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// collectDeviceIdentity 采集设备型号与软件版本。
+// 优先 ENTITY-MIB（标准、结构化），缺失时回退解析 sysDescr。
+func (c *SNMPCollector) collectDeviceIdentity(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry) {
+	model := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalModelName.OID)
+	version := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalSoftwareRev.OID)
+
+	if model == "" || version == "" {
+		if descr := c.readSysDescr(target, registry); descr != "" {
+			fallbackModel, fallbackVersion := parseDeviceIdentityFromSysDescr(descr)
+			if model == "" {
+				model = fallbackModel
+			}
+			if version == "" {
+				version = fallbackVersion
+			}
+		}
+	}
+
+	// 仍为空时回退 entPhysicalDescr（部分设备只填这一列）
+	if model == "" {
+		model = firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalDescr.OID)
+	}
+
+	if model != "" {
+		model = sanitizeIdentityValue(model)
+		metrics.Model = &model
+	}
+	if version != "" {
+		version = sanitizeIdentityValue(version)
+		metrics.FirmwareVersion = &version
+	}
+}
+
+// readSysDescr 读取 sysDescr（1.3.6.1.2.1.1.1.0），失败返回空串。
+func (c *SNMPCollector) readSysDescr(target snmpClient, registry *snmpmib.Registry) string {
+	oid := strings.TrimSpace(registry.Common.Probe.SysDescr.OID)
+	if oid == "" {
+		return ""
+	}
+	packet, err := target.Get([]string{oid})
+	if err != nil || packet == nil || len(packet.Variables) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(formatSNMPValue(packet.Variables[0].Value))
 }
 
 func collectCPUFromCandidates(

@@ -154,6 +154,14 @@ type DeviceMetricsRequest struct {
 	Metrics     map[string]MetricValue   `json:"metrics"`
 	Interfaces  []map[string]interface{} `json:"interfaces,omitempty"`
 	Tags        map[string]interface{}   `json:"tags,omitempty"`
+	// Identity 是设备型号/版本这类静态属性，与时序指标不同：只在取值变化时回填设备档案
+	Identity *DeviceIdentity `json:"identity,omitempty"`
+}
+
+// DeviceIdentity 设备静态标识属性（SNMP 采集所得）
+type DeviceIdentity struct {
+	Model           string `json:"model,omitempty"`
+	FirmwareVersion string `json:"firmware_version,omitempty"`
 }
 
 type SystemMetricsRequest struct {

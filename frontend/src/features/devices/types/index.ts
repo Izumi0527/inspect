@@ -127,6 +127,11 @@ export interface Device {
   alert_count?: number
   description?: string
 
+  // 设备档案（由 SNMP 采集自动回填，用户也可手工填写型号）
+  model?: string
+  serial_number?: string
+  firmware_version?: string
+
   // 探测状态字段
   icmp_status?: 'online' | 'offline' | null
   snmp_status?: 'success' | 'failed' | 'not_configured' | null

@@ -81,6 +81,9 @@ func (w *MetricsWriter) WriteDeviceMetrics(ctx context.Context, req DeviceMetric
 				return err
 			}
 		}
+		// 核心写入③：设备档案静态属性（型号/软件版本）。
+		// 与快照分开：仅当采集值与库中不同才写，避免每轮采集都刷新 updated_at。
+		writeDeviceIdentityIfChanged(tx, req.DeviceID, req.Identity, w.logger)
 		// 次要写入：接口时序指标 + device_interfaces 状态表 UPSERT + 接口速率更新。
 		// 用嵌套事务(SAVEPOINT)隔离为“尽力而为”：任一步失败仅回滚本段并记日志，
 		// 不连累上面已写入的核心快照——根治“接口写入报错导致整笔回滚、cpu/mem 丢失”的历史故障。
@@ -446,6 +449,38 @@ type InterfaceSpeedUpdate struct {
 	InterfaceName string
 	SpeedMbps     int64
 	UpdatedAt     time.Time
+}
+
+// writeDeviceIdentityIfChanged 把采集到的型号/软件版本回填设备档案。
+//
+// 只写差异：WHERE 子句带 "值为空或与新值不同" 的条件，取值稳定时不产生任何 UPDATE，
+// 因此不会让每 3 分钟一轮的采集持续刷新 devices.updated_at。
+// 失败仅记日志——设备档案是锦上添花，不能连累已落库的核心指标快照。
+func writeDeviceIdentityIfChanged(tx *gorm.DB, deviceID int, identity *DeviceIdentity, logger *zap.Logger) {
+	if identity == nil || deviceID <= 0 {
+		return
+	}
+
+	apply := func(column, value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		// 条件写成单个带括号的表达式：拆成两个 Where 会生成
+		// "id = ? AND col IS NULL OR col <> ?"，AND 优先级高于 OR，
+		// 会退化成"更新所有取值不同的设备"——多设备环境下是跨设备误写。
+		err := tx.Table("devices").
+			Where(fmt.Sprintf("id = ? AND (%s IS NULL OR %s <> ?)", column, column), deviceID, value).
+			Update(column, value).Error
+		if err != nil && logger != nil {
+			logger.Warn("write_device_identity_failed",
+				zap.Int("device_id", deviceID),
+				zap.String("column", column),
+				zap.Error(err))
+		}
+	}
+
+	apply("model", identity.Model)
+	apply("firmware_version", identity.FirmwareVersion)
 }
 
 func extractInterfaceSpeedUpdates(deviceID int, interfaces []map[string]interface{}, collectedAt time.Time) []InterfaceSpeedUpdate {

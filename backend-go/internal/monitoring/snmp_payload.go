@@ -39,6 +39,18 @@ func BuildSNMPDeviceMetricsRequest(deviceID int, metrics *devices.SNMPMetrics) D
 
 	req.Interfaces = buildSNMPInterfaces(metrics.Interfaces)
 
+	// 型号/版本是静态属性，不进时序指标表，单独走设备档案回填
+	identity := DeviceIdentity{}
+	if metrics.Model != nil {
+		identity.Model = *metrics.Model
+	}
+	if metrics.FirmwareVersion != nil {
+		identity.FirmwareVersion = *metrics.FirmwareVersion
+	}
+	if identity.Model != "" || identity.FirmwareVersion != "" {
+		req.Identity = &identity
+	}
+
 	if tags := buildSNMPExtensionTags(metrics); len(tags) > 0 {
 		req.Tags = tags
 	}

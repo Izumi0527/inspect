@@ -305,6 +305,8 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
           <InfoRow label="运行状态" value={<Badge variant="outline">{device.status}</Badge>} />
           <InfoRow label="IP 地址" value={device.ip} />
           <InfoRow label="所在位置" value={device.location || '未设置'} />
+          <InfoRow label="设备型号" value={device.model || '未采集到'} />
+          <InfoRow label="软件版本" value={device.firmware_version || '未采集到'} />
           <InfoRow label="CPU 使用率" value={formatPercentageValue(currentCpu)} />
           <InfoRow label="内存使用率" value={formatPercentageValue(currentMemory)} />
           <InfoRow label="最近在线时间" value={formatLastSeen(device.last_seen)} />

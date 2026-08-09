@@ -51,6 +51,21 @@
         "oid": "1.3.6.1.2.1.1.6.0",
         "method": "get",
         "value_type": "string"
+      },
+      "ent_physical_descr": {
+        "oid": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
+      "ent_physical_model_name": {
+        "oid": "1.3.6.1.2.1.47.1.1.1.1.13",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
+      "ent_physical_software_rev": {
+        "oid": "1.3.6.1.2.1.47.1.1.1.1.10",
+        "method": "bulkwalk",
+        "value_type": "string"
       }
     },
     "interfaces": {

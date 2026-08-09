@@ -36,6 +36,11 @@ type SystemSection struct {
 	SysUptime   OIDDefinition `json:"sys_uptime"`
 	SysName     OIDDefinition `json:"sys_name"`
 	SysLocation OIDDefinition `json:"sys_location"`
+	// ENTITY-MIB(RFC 4133) 物理实体表，用于采集设备型号与软件版本。
+	// 整机通常是实体表中 entPhysicalClass=chassis 的那一行，实践中取首个非空值即可。
+	EntPhysicalDescr       OIDDefinition `json:"ent_physical_descr"`
+	EntPhysicalModelName   OIDDefinition `json:"ent_physical_model_name"`
+	EntPhysicalSoftwareRev OIDDefinition `json:"ent_physical_software_rev"`
 }
 
 type InterfacesSection struct {

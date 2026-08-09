@@ -25,6 +25,8 @@ interface DeviceDto {
   device_type: string;
   vendor?: string;
   model?: string;
+  serial_number?: string;
+  firmware_version?: string;
   group_id?: number | null;
   status?: string;
   is_active?: boolean;
@@ -486,6 +488,9 @@ const mapDevice = (dto: DeviceDto): Device => {
     alert_count: dto.alert_count ?? 0,
     description: dto.description ?? "",
     vendor: dto.vendor ?? "",
+    model: dto.model ?? "",
+    serial_number: dto.serial_number ?? "",
+    firmware_version: dto.firmware_version ?? "",
     snmp_community: "",
     snmp_version: dto.snmp_version ?? snmpConfig?.version,
     ssh_username: dto.ssh_username ?? "",
