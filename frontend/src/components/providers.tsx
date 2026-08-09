@@ -57,11 +57,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
     },
   }))
 
-  // 初始化HTTP拦截器
+  // 记录应用启动信息。
+  // 注意：HTTP 拦截器已在模块加载时完成安装（见 services/httpInterceptor.ts 末尾），
+  // 不能挪回这里——本 effect 属于父组件，会晚于子组件 AuthProvider 发出的首个请求。
   useEffect(() => {
     // 检查是否在浏览器环境中
     if (typeof window === 'undefined') {
-      logger.warn('应用程序在非浏览器环境中初始化，跳过HTTP拦截器')
       return
     }
 
@@ -71,8 +72,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
       timestamp: new Date().toISOString(),
     })
 
-    // 手动初始化HTTP拦截器
-    httpInterceptor.initialize()
     const stats = httpInterceptor.getStats()
     logger.info('HTTP拦截器状态', stats)
 

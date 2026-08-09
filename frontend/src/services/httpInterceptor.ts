@@ -321,6 +321,16 @@ class HttpInterceptor {
 // 创建全局拦截器实例
 const httpInterceptor = new HttpInterceptor();
 
+// 模块加载即安装：patch window.fetch 是不隶属任何组件生命周期的全局副作用。
+// 若延后到 Providers 的 useEffect 中安装，React 的 effect 执行顺序（子先于父）会让
+// 子组件 AuthProvider 在自身 effect 中发出的首个请求（/auth/profile）早于安装完成，
+// 从而绕过 X-Request-ID 注入与请求日志。模块求值必定早于渲染，渲染又早于 effect，
+// 因此在此安装可覆盖包括首个请求在内的全部 fetch。
+// SSR 下 window 不存在，跳过安装（避免服务端反复打印“无法在非浏览器环境中初始化”）。
+if (typeof window !== 'undefined') {
+  httpInterceptor.initialize();
+}
+
 // 导出便捷方法
 export const setInterceptorHooks = (hooks: InterceptorHooks) => httpInterceptor.setHooks(hooks);
 export const restoreOriginalFetch = () => httpInterceptor.restore();
