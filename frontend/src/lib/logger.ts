@@ -224,7 +224,13 @@ class Logger {
    * 记录API调用
    */
   logApiCall(method: string, url: string, status: number, duration: number, details?: unknown) {
-    const level = status >= 400 ? LogLevel.ERROR : LogLevel.DEBUG;
+    // 分级须与 httpInterceptor.logRequestComplete 保持一致，否则同一个响应会产生两条级别矛盾的日志。
+    // 5xx 是服务端故障，需要介入 → ERROR；
+    // 4xx 是请求侧的预期内结果（未登录探测 401、无权限 403、资源不存在 404）→ WARN。
+    // 4xx 若记为 ERROR 会走 console.error：未登录访问落地页时 AuthProvider 探测登录态必然拿到 401，
+    // 会被 Next.js dev overlay 捕获成 Issue 徽章，把正常流程渲染成页面报错。
+    const level =
+      status >= 500 ? LogLevel.ERROR : status >= 400 ? LogLevel.WARN : LogLevel.DEBUG;
     this.log(level, 'api', `${method} ${url} ${status} (${duration}ms)`, details);
   }
 }
