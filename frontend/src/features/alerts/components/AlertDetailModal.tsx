@@ -24,6 +24,22 @@ import { addAlertComment, fetchAlert, fetchAlertOperations } from '../api/alerts
 import type { AlertOperation } from '../api/alerts.api'
 import { formatDateTimeYMDHMS } from '@/utils/formatters'
 
+// 附加信息键名的中文标签，键集合与后端 buildAlertMetadata（handlers/alerts.go）对齐
+const METADATA_LABELS: Record<string, string> = {
+  device_ip: '设备IP',
+  occurrence_count: '发生次数',
+  metric_name: '监控指标',
+  current_value: '当前值',
+  threshold_value: '告警阈值',
+  notification_count: '通知次数',
+  escalation_level: '升级级别',
+  reactivated_at: '重新激活时间',
+  reactivation_reason: '重新激活原因',
+}
+
+// 纯内部标识对运维无操作价值，不在弹窗展示
+const HIDDEN_METADATA_KEYS = new Set(['rule_id'])
+
 interface AlertDetailModalProps {
   open: boolean
   onClose: () => void
@@ -395,6 +411,18 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
     return metaComment !== '' || note !== ''
   })
 
+  // 附加信息：过滤内部标识键，键名经 METADATA_LABELS 映射为中文
+  const metadataEntries = Object.entries(alert.metadata ?? {}).filter(
+    ([key]) => !HIDDEN_METADATA_KEYS.has(key)
+  )
+
+  const formatMetadataValue = (key: string, value: unknown): string => {
+    // reactivated_at 为后端序列化的 RFC3339 字符串，走中央时间格式化
+    if (key === 'reactivated_at' && typeof value === 'string') return formatDate(value)
+    if (typeof value === 'object' && value !== null) return JSON.stringify(value, null, 2)
+    return String(value)
+  }
+
   // 处理操作
   const handleAcknowledge = () => {
     if (onAcknowledge) {
@@ -451,8 +479,7 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
               </div>
             </div>
             <div className="flex-1">
-              <h2 className="text-xl font-semibold text-foreground mb-1">{alert.title}</h2>
-              <p className="text-sm text-muted-foreground">ID: {alert.id}</p>
+              <h2 className="text-xl font-semibold text-foreground">{alert.title}</h2>
             </div>
           </div>
           <div className="flex flex-col gap-2 items-end">
@@ -570,15 +597,15 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
               )}
 
               {/* 元数据（如果有） */}
-              {alert.metadata && Object.keys(alert.metadata).length > 0 && (
+              {metadataEntries.length > 0 && (
                 <div className="p-4 bg-card rounded-lg border border-border">
                   <h3 className="text-sm font-semibold text-foreground/90 mb-2">附加信息</h3>
                   <div className="space-y-2">
-                    {Object.entries(alert.metadata).map(([key, value]) => (
+                    {metadataEntries.map(([key, value]) => (
                       <div key={key} className="flex items-start gap-2 text-sm">
-                        <span className="text-muted-foreground min-w-24">{key}:</span>
+                        <span className="text-muted-foreground min-w-24">{METADATA_LABELS[key] ?? key}:</span>
                         <span className="text-foreground/90 font-medium break-all">
-                          {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                          {formatMetadataValue(key, value)}
                         </span>
                       </div>
                     ))}

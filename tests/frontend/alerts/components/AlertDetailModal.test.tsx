@@ -164,4 +164,41 @@ describe('AlertDetailModal 深链详情加载', () => {
     expect(await screen.findByText('告警确认')).toBeInTheDocument()
     expect(await screen.findByText(/由 张三 确认/)).toBeInTheDocument()
   })
+
+  it('头部不展示内部 ID，附加信息键名展示为中文且隐藏 rule_id', async () => {
+    render(
+      <AlertDetailModal
+        open={true}
+        onClose={jest.fn()}
+        alert={{
+          id: '664',
+          title: '接口告警',
+          description: 'desc',
+          device: '设备A',
+          severity: 'critical',
+          status: 'active',
+          timestamp: new Date().toISOString(),
+          category: 'connectivity',
+          tags: [],
+          metadata: { device_ip: '192.168.20.1', occurrence_count: 36, rule_id: 3 },
+        }}
+      />,
+    )
+
+    expect(await screen.findByText('接口告警')).toBeInTheDocument()
+
+    // 头部不再显示 "ID: 664" 一类内部标识
+    expect(screen.queryByText(/ID: 664/)).not.toBeInTheDocument()
+
+    // 附加信息键名映射为中文
+    expect(screen.getByText('设备IP:')).toBeInTheDocument()
+    expect(screen.getByText('192.168.20.1')).toBeInTheDocument()
+    expect(screen.getByText('发生次数:')).toBeInTheDocument()
+    expect(screen.getByText('36')).toBeInTheDocument()
+
+    // 原始英文键与内部 rule_id 不再出现
+    expect(screen.queryByText(/device_ip/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/occurrence_count/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/rule_id/)).not.toBeInTheDocument()
+  })
 })
