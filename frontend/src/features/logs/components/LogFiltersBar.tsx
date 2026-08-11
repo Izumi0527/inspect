@@ -2,9 +2,8 @@
  * 日志过滤器栏
  */
 import React from 'react'
-import { Search, Filter, X } from 'lucide-react'
+import { Search, Filter } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
@@ -18,7 +17,6 @@ import { LOG_LEVEL_CONFIG, LOG_FACILITY_CONFIG, LOG_SOURCE_CONFIG } from '../typ
 interface LogFiltersBarProps {
   filters: LogFilters
   onFilterChange: <K extends keyof LogFilters>(key: K, value: LogFilters[K]) => void
-  onReset: () => void
   selectedCount?: number
   renderAsToolbar?: boolean
 }
@@ -26,16 +24,9 @@ interface LogFiltersBarProps {
 export const LogFiltersBar: React.FC<LogFiltersBarProps> = ({
   filters,
   onFilterChange,
-  onReset,
   selectedCount = 0,
   renderAsToolbar = false,
 }) => {
-  const hasActiveFilters = 
-    filters.searchQuery ||
-    filters.levelFilter !== 'all' ||
-    filters.facilityFilter !== 'all' ||
-    filters.sourceFilter !== 'all'
-
   return (
     <div className={renderAsToolbar ? '' : 'mb-4 space-y-3'}>
       <div className="flex flex-wrap items-center gap-2">
@@ -103,18 +94,6 @@ export const LogFiltersBar: React.FC<LogFiltersBarProps> = ({
             ))}
           </SelectContent>
         </Select>
-
-        {/* 重置过滤器 */}
-        {hasActiveFilters && (
-          <Button
-            variant="outline"
-            onClick={onReset}
-            className="h-9"
-          >
-            <X className="h-4 w-4 mr-1" />
-            清除过滤
-          </Button>
-        )}
 
         {renderAsToolbar && selectedCount > 0 && (
           <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-600 dark:bg-blue-900/20 dark:text-blue-300">

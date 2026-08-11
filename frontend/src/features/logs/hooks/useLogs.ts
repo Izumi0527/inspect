@@ -170,16 +170,6 @@ export function useLogFilters() {
     setFilters(prev => ({ ...prev, [key]: value }))
   }, [])
 
-  const resetFilters = useCallback(() => {
-    setFilters({
-      searchQuery: '',
-      levelFilter: 'all',
-      facilityFilter: 'all',
-      sourceFilter: 'all'
-    })
-    setDebouncedSearchQuery('')
-  }, [])
-
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
 
@@ -237,7 +227,6 @@ export function useLogFilters() {
   return {
     filters,
     updateFilter,
-    resetFilters,
     queryParams
   }
 }

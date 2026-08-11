@@ -108,7 +108,6 @@ describe('LogFiltersBar 下拉统一化', () => {
           sourceFilter: 'all',
         }}
         onFilterChange={jest.fn()}
-        onReset={jest.fn()}
       />
     )
 
@@ -128,7 +127,6 @@ describe('LogFiltersBar 下拉统一化', () => {
           sourceFilter: 'all',
         }}
         onFilterChange={jest.fn()}
-        onReset={jest.fn()}
       />
     )
 

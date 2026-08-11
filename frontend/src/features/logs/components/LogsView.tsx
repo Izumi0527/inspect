@@ -48,7 +48,7 @@ export const LogsView: React.FC = () => {
   const [collectionOpen, setCollectionOpen] = useState(false)
 
   // 获取过滤器状态
-  const { filters, updateFilter, resetFilters, queryParams } = useLogFilters()
+  const { filters, updateFilter, queryParams } = useLogFilters()
 
   // 构建完整查询参数
   const fullQueryParams = useMemo(() => ({
@@ -256,11 +256,6 @@ export const LogsView: React.FC = () => {
                 <LogFiltersBar
                   filters={filters}
                   onFilterChange={handleFilterChange}
-                  onReset={() => {
-                    resetFilters()
-                    setCurrentPage(1)
-                    clearSelection()
-                  }}
                   selectedCount={canManageLogs ? selectedLogs.length : 0}
                   renderAsToolbar
                 />
