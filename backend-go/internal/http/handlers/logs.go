@@ -64,6 +64,11 @@ func (h LogsHandler) Register(group *echo.Group) {
 	group.GET("/logs/syslog/status", h.GetSyslogStatus)
 	group.POST("/logs/syslog/apply", h.ApplySyslogConfig)
 
+	// TODO(未接通): 以下解析规则接口只做 log_parsing_rules 表的增删改查，
+	// 采集与 Syslog 解析链路（logs.parseLogOutput / logs.ParseSyslogMessage）
+	// 均不读取该表 —— 在此配置规则不会对任何日志的解析结果产生影响。
+	// 日志的可读化目前由前端 lib/plain-language 的规则表承担。
+	// 后续要么将本表接入解析链路，要么连同表一起移除，不宜长期保持现状。
 	group.GET("/logs/parsing-rules", h.ListParsingRules)
 	group.GET("/logs/parsing-rules/:rule_id", h.GetParsingRule)
 	group.POST("/logs/parsing-rules", h.CreateParsingRule)

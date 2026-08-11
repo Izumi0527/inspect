@@ -27,6 +27,11 @@ type DeviceLogWithDevice struct {
 	DeviceIP   *string `gorm:"column:device_ip"`
 }
 
+// LogParsingRule 对应 log_parsing_rules 表。
+//
+// TODO(未接通): 该表当前只有 CRUD，没有任何消费方 —— parseLogOutput 与
+// ParseSyslogMessage 都不读取它，配置的规则不会影响任何日志的解析结果。
+// 日志可读化实际由前端 lib/plain-language 的规则表承担。
 type LogParsingRule struct {
 	ID              int        `gorm:"primaryKey;autoIncrement"`
 	Name            string     `gorm:"column:name;size:100;not null;unique"`
