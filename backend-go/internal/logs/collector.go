@@ -226,7 +226,7 @@ func parseLogOutput(output string, deviceID int, vendor string, collectedAt time
 			break
 		}
 		line = strings.TrimSpace(line)
-		if line == "" || isHeaderLine(line) {
+		if line == "" || isHeaderLine(line) || isDeviceEchoNoise(line) {
 			continue
 		}
 
@@ -544,6 +544,57 @@ func isHeaderLine(line string) bool {
 	}
 
 	if isLineSeparator(trimmed, '-') || isLineSeparator(trimmed, '=') {
+		return true
+	}
+
+	return false
+}
+
+var (
+	// ansiEscapePattern 匹配 ANSI CSI 控制序列，如 \x1b[42D（光标左移 42 列）。
+	// 华为设备在分页提示后用它擦除提示符，采集到的原始回显中会残留。
+	ansiEscapePattern = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
+
+	// devicePromptPattern 匹配 CLI 提示符连同其后的命令回显，如 `<SW>display alarm active`。
+	// 要求 `<` 后紧跟字母 —— 否则会误吃 syslog 的优先级前缀 `<34>`。
+	devicePromptPattern = regexp.MustCompile(`^<[A-Za-z][^>]{0,31}>`)
+
+	// alarmLegendPattern 匹配 `display alarm active` 输出顶部的字段图例，
+	// 形如 `E=ID, F=Name, G=Level, H=State` 与 `A/B/C/D/E/F/G/H/I/J`。
+	alarmLegendPattern = regexp.MustCompile(`^[A-Z]=|^[A-Z](?:/[A-Z])+$`)
+)
+
+// isDeviceEchoNoise 判定该行是否为设备交互回显或命令输出装饰，而非日志正文。
+//
+// SSH 采集的流程是「登录设备 → 执行命令 → 抓取回显」，设备在命令输出之外
+// 还会回显登录横幅、命令提示符、分页提示与表格图例。它们不携带任何设备运行信息，
+// 却因 parseLogLine 对任意非空行都会兜底建条而被逐条入库 ——
+// 治理前占入库量的四分之一以上，既抬高统计卡数字，也让日志列表充斥无意义条目。
+//
+// 判定刻意保持收敛，只识别已在真实采集数据中确认存在的固定回显：
+// 真实日志被静默丢弃，比残留噪声更难被发现。
+func isDeviceEchoNoise(line string) bool {
+	stripped := strings.TrimSpace(ansiEscapePattern.ReplaceAllString(line, ""))
+
+	// 整行只有光标控制序列，剥离后不剩任何内容
+	if stripped == "" {
+		return true
+	}
+	// 分页提示符：`---- More ----`
+	if strings.Contains(stripped, "---- More ----") {
+		return true
+	}
+	// 登录横幅：`The current login time is 2026-08-10 23:39:16.`
+	if strings.HasPrefix(stripped, "The current login time is") {
+		return true
+	}
+	// VTY 用户数横幅：设备按终端宽度折行，故首行与续行都要认
+	if strings.HasPrefix(stripped, "Info: The max number of VTY users is") ||
+		strings.HasPrefix(stripped, "of current VTY users on line is") {
+		return true
+	}
+	// 命令提示符回显与告警表图例
+	if devicePromptPattern.MatchString(stripped) || alarmLegendPattern.MatchString(stripped) {
 		return true
 	}
 
