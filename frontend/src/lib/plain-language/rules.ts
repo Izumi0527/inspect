@@ -33,6 +33,26 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // 接口与链路
   // ==========================================
   {
+    // 华为 VRP 格式：`Interface 11 turned into DOWN state.(…InterfaceName GigabitEthernet0/0/6)`
+    // 必须排在下方通用接口规则之前 —— 通用规则的接口名模式要求字母开头，
+    // 而华为在 Interface 后跟的是接口索引号，真正的接口名在括号内的 InterfaceName 字段。
+    // 该格式同样出现在告警缓冲区行（`…/0x502001/linkDown/Critical/Start/OID … turned into DOWN state…`），
+    // 故这一条规则同时覆盖两种来源。
+    id: 'huawei-interface-down',
+    pattern: /turned into DOWN state[\s\S]{0,160}?InterfaceName[=\s]+([\w\-/.:]+)/i,
+    title: '接口链路 Down',
+    summary: '{device} 的 {1:iface} 链路状态变为 Down，该端口下联设备将失去网络连通性。',
+    suggestion: '检查端口物理连接与光/电模块状态，确认对端设备运行正常；通过 display interface 查看端口统计与错包情况。',
+    tone: 'warning',
+  },
+  {
+    id: 'huawei-interface-up',
+    pattern: /turned into UP state[\s\S]{0,160}?InterfaceName[=\s]+([\w\-/.:]+)/i,
+    title: '接口链路 Up',
+    summary: '{device} 的 {1:iface} 链路状态恢复为 Up，端口转发功能已恢复。',
+    tone: 'success',
+  },
+  {
     // 必须排在「接口链路 Down」之前：其报文同样含 Interface X + down
     id: 'line-protocol-down',
     pattern: new RegExp(`line protocol[\\s\\S]{0,40}?interface\\s+${IFACE}[\\s\\S]{0,60}?\\bdown\\b`, 'i'),
@@ -77,8 +97,27 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // 安全与接入
   // ==========================================
   {
+    // 华为 VRP：`A user login fail. (UserIndex=34, UserName=VTY, UserIP=192.168.20.2, …)`
+    // 必须排在「用户登录成功」之前 —— 设备标识 VTYUSERLOGINFAIL 字面包含 VTYUSERLOGIN，
+    // 顺序写反会把认证失败读成登录成功，属于安全事件的方向性误判。
+    id: 'huawei-user-login-fail',
+    pattern: /user login fail[\s\S]{0,80}?UserName=([^,)\s]+)[\s\S]{0,60}?UserIP=([^,)\s]+)/i,
+    title: '用户认证失败',
+    summary: '{device} 收到来自 {2} 的管理登录请求，账号 {1} 认证未通过。',
+    suggestion: '核实是否为运维人员误操作；若来源地址异常或短时间内多次出现，应按口令爆破处理，及时更换口令并用 ACL 限制管理接入源。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：`A user login. (UserIndex=34, UserName=admin, UserIP=192.168.20.2, …)`
+    id: 'huawei-user-login',
+    pattern: /user login\.[\s\S]{0,80}?UserName=([^,)\s]+)[\s\S]{0,60}?UserIP=([^,)\s]+)/i,
+    title: '用户登录成功',
+    summary: '账号 {1} 从 {2} 成功登录 {device} 的管理界面。',
+    tone: 'info',
+  },
+  {
     id: 'login-failed',
-    pattern: /(?:failed to login|login failed|authentication (?:failed|failure)|auth fail|authorization failed|登录失败)/i,
+    pattern: /(?:failed to login|login fail(?:ed|ure)?|authentication (?:failed|failure)|auth fail|authorization failed|登录失败)/i,
     title: '用户认证失败',
     summary: '{device} 收到管理登录请求但认证未通过。',
     suggestion: '核实是否为运维人员误操作；若来源地址异常或短时间内多次出现，应按口令爆破处理，及时更换口令并用 ACL 限制管理接入源。',
@@ -154,6 +193,16 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // 二层交换
   // ==========================================
   {
+    // 华为 VRP：`The port has been set to forwarding state. (…PortName=GigabitEthernet0/0/1)`
+    // 排在「STP 拓扑变更」之前：两者同属 MSTP 报文，此条更具体且能给出端口名。
+    id: 'mstp-port-forwarding',
+    pattern: /set to forwarding state[\s\S]{0,160}?PortName=([\w\-/.:]+)/i,
+    title: '端口进入转发状态',
+    summary: '{device} 的 {1:iface} 在生成树重新计算后进入 Forwarding 状态，该端口恢复转发业务报文。',
+    suggestion: '单次出现属拓扑收敛的正常结果；若同一端口反复切换，应排查链路震荡与生成树参数配置。',
+    tone: 'info',
+  },
+  {
     id: 'stp-topology-change',
     pattern: /(?:stp|spanning.?tree|mstp|rstp)[\s\S]{0,40}?(?:topo|topology|change)/i,
     title: 'STP 拓扑变更',
@@ -182,6 +231,17 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // 硬件与环境
   // ==========================================
   {
+    // 必须排在「温度越限」之前 —— 华为 SRM/3/TEMPFALLINGALARM 报文中 TEMP 与 ALARM
+    // 仅相隔 7 个字符，会被下方高温规则抢先命中，把「低于门限」读成「持续高温」，
+    // 得到与事实完全相反的结论。
+    id: 'temperature-below-threshold',
+    pattern: /(?:TEMPFALLING|temp(?:erature)?[\s\S]{0,40}?below[\s\S]{0,30}?threshold|温度[\s\S]{0,10}?(?:低于|过低))/i,
+    title: '温度低于门限',
+    summary: '{device} 的温度传感器读数低于设定门限，多因机房制冷过量或传感器读数异常引起。',
+    suggestion: '核对机房空调设定温度与送风量；若设备所处环境温度正常，通过 display temperature 确认该传感器读数是否可信。',
+    tone: 'warning',
+  },
+  {
     id: 'temperature-high',
     pattern: /(?:temperature|temp|overtemp|温度)[\s\S]{0,40}?(?:alarm|high|exceed|over|too high|过高|告警)/i,
     title: '温度越限',
@@ -191,7 +251,8 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   },
   {
     id: 'fan-fault',
-    pattern: /fan[\s\S]{0,40}?(?:fail|absent|abnormal|stop|error|故障)/i,
+    // loss/lost 覆盖华为 SRM/3/ENTITYINVALID 的 `Fan loss.` 表述
+    pattern: /fan[\s\S]{0,40}?(?:fail|absent|abnormal|stop|error|loss|lost|故障|丢失)/i,
     title: '风扇故障',
     summary: '{device} 的风扇模块停转或不在位，散热能力下降，存在因过温导致器件损坏的风险。',
     suggestion: '确认风扇模块在位且供电正常；确属硬件失效需尽快更换，更换前持续关注设备温度。',
