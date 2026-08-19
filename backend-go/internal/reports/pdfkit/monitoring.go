@@ -82,7 +82,7 @@ func RenderMonitoringPDF(path string, input MonitoringPDFInput) error {
 		return err
 	}
 	pdf.SetFooterFunc(func() {
-		PageFooter(pdf, "Inspect Monitoring Center", pdf.PageNo())
+		PageFooter(pdf, "巡检系统 · 监控中心", pdf.PageNo())
 	})
 	pdf.AddPage()
 	pdf.SetFont(FontFamilyCJK, "", FontBody)
@@ -114,8 +114,8 @@ func RenderMonitoringPDF(path string, input MonitoringPDFInput) error {
 	WriteHeroBanner(pdf, HeroBanner{
 		Title:    title,
 		Subtitle: subtitle,
-		Brand:    "INSPECT",
-		Tagline:  "Monitoring Center",
+		Brand:    "巡检系统",
+		Tagline:  "监控中心",
 		Chips:    chips,
 	})
 	pdf.Ln(SpaceMD)

@@ -141,11 +141,11 @@ func WriteCoverPage(pdf *gofpdf.Fpdf, data CoverPage) {
 	// Brand block bottom-right
 	brand := strings.TrimSpace(data.Brand)
 	if brand == "" {
-		brand = "INSPECT"
+		brand = "巡检系统"
 	}
 	tagline := strings.TrimSpace(data.Tagline)
 	if tagline == "" {
-		tagline = "Report Center"
+		tagline = "报告中心"
 	}
 	pdf.SetDrawColor(ColorPrimary[0], ColorPrimary[1], ColorPrimary[2])
 	pdf.SetLineWidth(0.6)

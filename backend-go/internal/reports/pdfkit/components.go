@@ -62,11 +62,11 @@ func WriteHeroBanner(pdf *gofpdf.Fpdf, hero HeroBanner) {
 	// 右侧白色徽章（圆角 5mm + primary 描边）
 	brand := strings.TrimSpace(hero.Brand)
 	if brand == "" {
-		brand = "INSPECT"
+		brand = "巡检系统"
 	}
 	tagline := strings.TrimSpace(hero.Tagline)
 	if tagline == "" {
-		tagline = "Report Center"
+		tagline = "报告中心"
 	}
 	badgeW := 44.0
 	badgeX := x + usableW - badgeW - 3
@@ -78,12 +78,15 @@ func WriteHeroBanner(pdf *gofpdf.Fpdf, hero HeroBanner) {
 	pdf.RoundedRect(badgeX, badgeY, badgeW, badgeH, 5, "0123", "FD")
 	pdf.SetLineWidth(0.2)
 	pdf.SetTextColor(ColorPrimaryStrong[0], ColorPrimaryStrong[1], ColorPrimaryStrong[2])
-	pdf.SetFont(FontFamilyLatin, "B", 15)
+	// 徽章文案按内容选字体：FontFamilyLatin（Inter/Arial/DejaVu）没有 CJK
+	// 码点，中文品牌名会整体渲染成 .notdef 方框。字号同时按徽章宽度自适应，
+	// 汉字比等量拉丁字母宽得多，固定 15pt 会溢出白色圆角徽章。
 	pdf.SetXY(badgeX, badgeY+badgeH/2-5.5)
+	fitFontSize(pdf, brand, textFontFamily(brand), "B", 15, 9, badgeW-4)
 	pdf.CellFormat(badgeW, 6.5, brand, "", 1, "C", false, 0, "")
-	pdf.SetFont(FontFamilyLatin, "", 8)
 	pdf.SetTextColor(ColorTextMuted[0], ColorTextMuted[1], ColorTextMuted[2])
 	pdf.SetX(badgeX)
+	fitFontSize(pdf, tagline, textFontFamily(tagline), "", 8, 6, badgeW-4)
 	pdf.CellFormat(badgeW, 4, tagline, "", 0, "C", false, 0, "")
 
 	// 标题（字号 22pt，CJK Bold）
@@ -461,7 +464,7 @@ func EmptyStateWithHint(pdf *gofpdf.Fpdf, message, hint string) {
 // 远低于"中文字符变方框"。
 func PageFooter(pdf *gofpdf.Fpdf, brand string, pageNo int) {
 	if strings.TrimSpace(brand) == "" {
-		brand = "Inspect Report Center"
+		brand = "巡检系统 · 报告中心"
 	}
 	pageW, pageH := pdf.GetPageSize()
 	left, _, right, _ := pdf.GetMargins()

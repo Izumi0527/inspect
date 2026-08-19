@@ -29,13 +29,17 @@ var (
 	ColorEmerald500 = Color{16, 185, 129}
 	ColorEmerald600 = Color{5, 150, 105}
 
+	ColorAmber100 = Color{254, 243, 199}
 	ColorAmber400 = Color{251, 191, 36}
 	ColorAmber500 = Color{245, 158, 11}
 	ColorAmber600 = Color{217, 119, 6}
 
+	ColorRose100 = Color{255, 228, 230}
 	ColorRose400 = Color{251, 113, 133}
 	ColorRose500 = Color{244, 63, 94}
 	ColorRose600 = Color{225, 29, 72}
+
+	ColorEmerald50 = Color{236, 253, 245}
 
 	ColorSlate50  = Color{248, 250, 252}
 	ColorSlate100 = Color{241, 245, 249}
