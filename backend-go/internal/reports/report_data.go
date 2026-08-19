@@ -29,7 +29,125 @@ type InspectionSummaryStats struct {
 	FailedChecks  int
 	WarningChecks int
 	ErrorChecks   int
+	// SkippedChecks / UnknownChecks 是「统计摘要对不上」的根因补位：旧版
+	// 只统计 通过/警告/失败/错误 四类，明细里 skipped 或状态词未识别的
+	// 检查项既不计入任何一类、又被设备问题数的 `status != pass` 口径算作
+	// 问题，于是出现「只看到 1 个告警却显示 2 个问题点」。
+	SkippedChecks int
+	UnknownChecks int
 	PassRate      float64
+}
+
+// AbnormalChecks 返回需要人工关注的检查项数（跳过项不算问题）。设备
+// IssueCount 与异常清单行数都以此为准，保证三处口径一致。
+func (s InspectionSummaryStats) AbnormalChecks() int {
+	return s.WarningChecks + s.FailedChecks + s.ErrorChecks + s.UnknownChecks
+}
+
+// 检查项状态归一枚举。数据库里同一语义有多种写法（pass/passed/ok、
+// fail/failed、warn/warning…），统计前必须先收敛，否则同一状态会同时
+// 落进「已识别」和「未识别」两个桶。
+const (
+	checkStatusPass    = "pass"
+	checkStatusWarning = "warning"
+	checkStatusFailed  = "failed"
+	checkStatusError   = "error"
+	checkStatusSkipped = "skipped"
+	checkStatusUnknown = "unknown"
+)
+
+// normalizeCheckStatus 把检查项状态收敛到六个枚举之一。空值与无法识别
+// 的取值一律归入 unknown —— 宁可在报告里显式暴露「未知 N 项」，也不要
+// 让它悄悄消失在总数与分项之间的差额里。
+func normalizeCheckStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "pass", "passed", "success", "ok", "normal":
+		return checkStatusPass
+	case "warning", "warn":
+		return checkStatusWarning
+	case "fail", "failed", "timeout":
+		return checkStatusFailed
+	case "error":
+		return checkStatusError
+	case "skip", "skipped", "not_applicable", "n/a":
+		return checkStatusSkipped
+	default:
+		return checkStatusUnknown
+	}
+}
+
+// reconcileInspectionSummary 用检查项明细重算统计摘要与各设备问题数，
+// 让报告内部自洽。
+//
+// 旧实现有两个独立数据源：统计摘要累加 inspections 表的汇总列，设备
+// 问题数遍历 inspection_results 明细。两者由不同代码路径写入，既不保证
+// 同步、状态词汇也不对齐，导致「总检查项 9 = 通过 7 + 警告 1 + 失败 0」
+// 这种缺一项的算式，以及同一次巡检「1 个告警 / 2 个问题点」的矛盾。
+//
+// 明细可用时以明细为唯一事实来源，恒等式 总数 = 各分项之和 必然成立；
+// 明细缺失（汇总类报告只取到聚合行）时保留原汇总列，仅补齐 PassRate。
+func reconcileInspectionSummary(data *InspectionReportData) {
+	if data == nil {
+		return
+	}
+
+	totalDetails := 0
+	summary := InspectionSummaryStats{}
+	for i := range data.Devices {
+		device := &data.Devices[i]
+		deviceSummary := InspectionSummaryStats{}
+		for _, item := range device.CheckResults {
+			switch normalizeCheckStatus(item.Status) {
+			case checkStatusPass:
+				deviceSummary.PassedChecks++
+			case checkStatusWarning:
+				deviceSummary.WarningChecks++
+			case checkStatusFailed:
+				deviceSummary.FailedChecks++
+			case checkStatusError:
+				deviceSummary.ErrorChecks++
+			case checkStatusSkipped:
+				deviceSummary.SkippedChecks++
+			default:
+				deviceSummary.UnknownChecks++
+			}
+		}
+		deviceSummary.TotalChecks = len(device.CheckResults)
+		totalDetails += deviceSummary.TotalChecks
+
+		if deviceSummary.TotalChecks > 0 {
+			device.IssueCount = deviceSummary.AbnormalChecks()
+			// 通过率分母剔除跳过项：未执行的检查既不该算通过，也不该
+			// 拉低通过率。全部跳过时记 0%，避免除零。
+			evaluated := deviceSummary.TotalChecks - deviceSummary.SkippedChecks
+			if evaluated > 0 {
+				device.PassRate = float64(deviceSummary.PassedChecks) / float64(evaluated) * 100
+			} else {
+				device.PassRate = 0
+			}
+		}
+
+		summary.TotalChecks += deviceSummary.TotalChecks
+		summary.PassedChecks += deviceSummary.PassedChecks
+		summary.WarningChecks += deviceSummary.WarningChecks
+		summary.FailedChecks += deviceSummary.FailedChecks
+		summary.ErrorChecks += deviceSummary.ErrorChecks
+		summary.SkippedChecks += deviceSummary.SkippedChecks
+		summary.UnknownChecks += deviceSummary.UnknownChecks
+	}
+
+	if totalDetails == 0 {
+		if data.SummaryStats.PassRate == 0 && data.SummaryStats.TotalChecks > 0 {
+			data.SummaryStats.PassRate = float64(data.SummaryStats.PassedChecks) / float64(data.SummaryStats.TotalChecks) * 100
+		}
+		return
+	}
+
+	evaluated := summary.TotalChecks - summary.SkippedChecks
+	if evaluated > 0 {
+		summary.PassRate = float64(summary.PassedChecks) / float64(evaluated) * 100
+	}
+	data.SummaryStats = summary
 }
 
 type InspectionDeviceData struct {
@@ -190,9 +308,16 @@ type GenericReportData struct {
 func buildInspectionReportData(ctx context.Context, db *gorm.DB, report Report, params map[string]interface{}) (InspectionReportData, error) {
 	payload := findPayload(params, "inspection_data", "report_data")
 	if len(payload) > 0 {
-		return parseInspectionReportPayload(payload), nil
+		data := parseInspectionReportPayload(payload)
+		reconcileInspectionSummary(&data)
+		return data, nil
 	}
-	return buildInspectionReportDataFromDB(ctx, db, report, params)
+	data, err := buildInspectionReportDataFromDB(ctx, db, report, params)
+	if err != nil {
+		return data, err
+	}
+	reconcileInspectionSummary(&data)
+	return data, nil
 }
 
 func buildStatisticsReportData(ctx context.Context, db *gorm.DB, report Report, params map[string]interface{}) (StatisticsReportData, error) {
