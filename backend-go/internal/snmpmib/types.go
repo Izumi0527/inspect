@@ -25,6 +25,14 @@ type CommonSection struct {
 	Probe      ProbeSection      `json:"probe"`
 	System     SystemSection     `json:"system"`
 	Interfaces InterfacesSection `json:"interfaces"`
+	Ethernet   EthernetSection   `json:"ethernet"`
+}
+
+// EthernetSection 承载 EtherLike-MIB 的以太网专有指标。
+// 与 InterfacesSection 分开：后者是 IF-MIB（所有接口类型通用），
+// 本节仅对以太网口有意义，非以太网设备取不到属预期。
+type EthernetSection struct {
+	Dot3DuplexStatus OIDDefinition `json:"dot3_duplex_status"`
 }
 
 type ProbeSection struct {
@@ -52,6 +60,16 @@ type InterfacesSection struct {
 	IfHCOutOctets OIDDefinition `json:"if_hc_out_octets"`
 	IfHighSpeed   OIDDefinition `json:"if_high_speed"`
 	IfOperStatus  OIDDefinition `json:"if_oper_status"`
+
+	// 以下为接口健康类 OID。它们都是可选的：registry 里为空时采集端跳过，
+	// 对应检查项判 skip 而非 fail——老设备或精简 agent 不上报属预期。
+	IfAdminStatus  OIDDefinition `json:"if_admin_status"`
+	IfInErrors     OIDDefinition `json:"if_in_errors"`
+	IfOutErrors    OIDDefinition `json:"if_out_errors"`
+	IfInDiscards   OIDDefinition `json:"if_in_discards"`
+	IfOutDiscards  OIDDefinition `json:"if_out_discards"`
+	IfInUcastPkts  OIDDefinition `json:"if_in_ucast_pkts"`
+	IfOutUcastPkts OIDDefinition `json:"if_out_ucast_pkts"`
 }
 
 type OIDDefinition struct {

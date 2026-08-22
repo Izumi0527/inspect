@@ -12,14 +12,14 @@ import (
 // Validation error types
 var (
 	// Template related errors
-	ErrTemplateNotFound           = errors.New("模板不存在")
+	ErrTemplateNotFound            = errors.New("模板不存在")
 	ErrCannotModifyBuiltInTemplate = errors.New("不能修改内置模板")
 	ErrCannotDeleteBuiltInTemplate = errors.New("不能删除内置模板")
-	ErrTemplateNameRequired       = errors.New("模板名称不能为空")
-	ErrTemplateNameTooLong        = errors.New("模板名称过长")
-	ErrDuplicateTemplateName      = errors.New("模板名称已存在")
-	ErrStrategyTemplateRequired   = errors.New("策略必须配置一个巡检模板")
-	ErrStrategySingleTemplateOnly = errors.New("策略只能配置一个巡检模板")
+	ErrTemplateNameRequired        = errors.New("模板名称不能为空")
+	ErrTemplateNameTooLong         = errors.New("模板名称过长")
+	ErrDuplicateTemplateName       = errors.New("模板名称已存在")
+	ErrStrategyTemplateRequired    = errors.New("策略必须配置一个巡检模板")
+	ErrStrategySingleTemplateOnly  = errors.New("策略只能配置一个巡检模板")
 
 	// Check item related errors
 	ErrNoCheckItems            = errors.New("模板必须包含至少一个检查项")
@@ -322,7 +322,14 @@ func (v *templateValidator) ValidateCheckItemType(itemType string) error {
 
 // validSNMPMetrics 与执行端 executeSNMPCheck 的 metric 分派分支一一对应，
 // 两处新增指标时必须同步修改（inspection_execution.go）。
-var validSNMPMetrics = []string{"reachable", "system_info", "cpu", "memory", "temperature", "uptime", "interface", "interface_utilization", "bandwidth"}
+var validSNMPMetrics = []string{
+	"reachable", "system_info", "cpu", "memory", "temperature", "uptime",
+	"interface", "interface_utilization", "bandwidth",
+	// 接口健康类（标准 IF-MIB / EtherLike-MIB，全厂商通用）
+	"interface_errors", "interface_discards", "interface_admin_status", "interface_duplex",
+	// 硬件部件与专项（厂商 catalog，采不到时检查项判 skip）
+	"fan_status", "power_status", "poe", "optical_power", "bgp_peers", "firmware_version",
+}
 
 // validateSNMPMetric 校验 SNMP 检查项的采集指标：缺失或非法的 metric 会让执行端
 // 无法分派到真实采集逻辑，历史上曾导致检查项静默退化为连通性检查并假报"通过"。

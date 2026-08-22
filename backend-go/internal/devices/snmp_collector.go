@@ -23,6 +23,8 @@ type SNMPMetrics struct {
 	Temperature         *float64                    `json:"temperature,omitempty"`
 	BGPPeers            []BGPNeighborMetrics        `json:"bgp_peers,omitempty"`
 	OpticalTransceivers []OpticalTransceiverMetrics `json:"optical_transceivers,omitempty"`
+	Components          []ComponentStatusMetrics    `json:"components,omitempty"`
+	PoE                 PoEMetrics                  `json:"poe,omitempty"`
 	Uptime              *int64                      `json:"uptime,omitempty"`
 	Model               *string                     `json:"model,omitempty"`            // 设备型号，如 S5700-28P-LI-AC
 	FirmwareVersion     *string                     `json:"firmware_version,omitempty"` // 软件/固件版本，如 V200R019C00SPC500
@@ -48,6 +50,27 @@ type InterfaceMetrics struct {
 	InRate      *float64 `json:"in_rate,omitempty"`  // 入站速率，单位：bps（比特每秒）
 	OutRate     *float64 `json:"out_rate,omitempty"` // 出站速率，单位：bps（比特每秒）
 	IsUp        *bool    `json:"is_up,omitempty"`    // 接口运行状态：IfOperStatus=1 为 up
+
+	// AdminUp 是管理状态（ifAdminStatus=1 为 up）。与 IsUp 配合才能区分
+	// 「人为 shutdown」（admin down）与「链路故障」（admin up 但 oper down）——
+	// 只看 IsUp 会把运维主动关闭的端口也报成异常。
+	AdminUp *bool `json:"admin_up,omitempty"`
+
+	// 错包与丢弃是两类不同的问题：错包（Errors）指向物理层劣化——光衰、跳线
+	// 老化、接头氧化、电磁干扰；丢弃（Discards）指向缓冲区溢出、QoS 队列丢弃
+	// 或 ACL 拒绝，即拥塞与配置问题。合成一个指标会让配置问题被当成线路问题查。
+	// 均为设备上电以来的累计计数器，比率的分母是 UcastPkts。
+	InErrors     *uint64 `json:"in_errors,omitempty"`
+	OutErrors    *uint64 `json:"out_errors,omitempty"`
+	InDiscards   *uint64 `json:"in_discards,omitempty"`
+	OutDiscards  *uint64 `json:"out_discards,omitempty"`
+	InUcastPkts  *uint64 `json:"in_ucast_pkts,omitempty"`
+	OutUcastPkts *uint64 `json:"out_ucast_pkts,omitempty"`
+
+	// DuplexStatus 取自 EtherLike-MIB 的 dot3StatsDuplexStatus：
+	// 1=unknown、2=halfDuplex、3=fullDuplex。千兆口协商成半双工是经典故障，
+	// 会同时引发大量错包与性能腰斩——它解释的正是 InErrors 升高的原因。
+	DuplexStatus *int `json:"duplex_status,omitempty"`
 }
 
 // BGPNeighborMetrics 保存通过厂商扩展 MIB 采集到的 BGP 邻居摘要。
@@ -70,6 +93,39 @@ type OpticalTransceiverMetrics struct {
 	TxPowerUnit     string   `json:"tx_power_unit,omitempty"`
 	RxPower         *float64 `json:"rx_power,omitempty"`
 	RxPowerUnit     string   `json:"rx_power_unit,omitempty"`
+}
+
+// ComponentStatusMetrics 保存风扇、电源、单板等部件的状态。
+//
+// State 是**厂商原始状态码**，采集端刻意不做正常/异常判定：状态码语义因厂商
+// 甚至型号而异（华为 hwEntityFanState 与 H3C hh3cFanState 的取值含义并不一致），
+// 在采集端硬编码判定等于把一个未经实测确认的假设埋进最底层。判定放在检查项层，
+// 那里可以按模板 config 覆盖映射表，且未知状态码判 skip 而非 fail——
+// 宁可不判，也不能把正常设备报成故障，或反过来把故障报成正常。
+type ComponentStatusMetrics struct {
+	Index string `json:"index"`
+	// Kind 取 fan / power / board，由 catalog 条目 ID 推断
+	Kind  string `json:"kind"`
+	State *int64 `json:"state,omitempty"`
+}
+
+// PoEPortMetrics 保存单个 PoE 端口的供电数据。
+type PoEPortMetrics struct {
+	Index          string   `json:"index"`
+	ConsumingPower *float64 `json:"consuming_power,omitempty"`
+	PeakPower      *float64 `json:"peak_power,omitempty"`
+	Unit           string   `json:"unit,omitempty"`
+}
+
+// PoEMetrics 保存设备的 PoE 供电概况。
+//
+// 两类数据不可互相替代：RemainingPower（PSE 剩余保障功率）回答「还能再接几个 AP」，
+// Ports 回答「哪个口在吃电」。厂商支持度不同——H3C 上报剩余功率，华为只有端口功率，
+// 因此检查项需要按可得数据分别处理。
+type PoEMetrics struct {
+	Ports          []PoEPortMetrics `json:"ports,omitempty"`
+	RemainingPower *float64         `json:"remaining_power,omitempty"`
+	RemainingUnit  string           `json:"remaining_unit,omitempty"`
 }
 
 type snmpClient interface {
@@ -233,6 +289,18 @@ func (c *SNMPCollector) CollectMetrics(
 		c.logger.Debug("collected optical transceivers", zap.Int("count", len(metrics.OpticalTransceivers)))
 	}
 
+	// 采集风扇、电源、单板状态：硬件基础健康，比 CPU/内存更早暴露物理隐患
+	c.collectComponents(target, metrics, registry, vendor)
+	if c.logger != nil && len(metrics.Components) > 0 {
+		c.logger.Debug("collected components", zap.Int("count", len(metrics.Components)))
+	}
+
+	// 采集 PoE 供电概况（仅 PoE 交换机有数据）
+	c.collectPoE(target, metrics, registry, vendor)
+	if c.logger != nil && (len(metrics.PoE.Ports) > 0 || metrics.PoE.RemainingPower != nil) {
+		c.logger.Debug("collected poe", zap.Int("ports", len(metrics.PoE.Ports)))
+	}
+
 	// 采集设备型号与软件版本（低频变化的静态属性，用于回填设备档案）
 	c.collectDeviceIdentity(target, metrics, registry)
 	if c.logger != nil && (metrics.Model != nil || metrics.FirmwareVersion != nil) {
@@ -380,6 +448,58 @@ func (c *SNMPCollector) collectOptical(
 	)
 }
 
+// walkInterfaceValues 按接口索引 walk 一个 OID，并用 assign 把值写入对应接口。
+//
+// OID 为空（registry 未定义该项）或 walk 失败时静默返回：接口健康类 OID 都是
+// 可选能力，老设备与精简 agent 不上报属预期，不应影响其余字段的采集，更不该
+// 让整个接口采集中断。
+//
+// 抽出此函数是新增 8 个接口 OID 的前提——逐个内联展开会让 collectInterfaces
+// 从 200 行涨到 300 行以上，且 8 段代码只有赋值目标不同。
+func walkInterfaceValues(
+	target snmpClient,
+	oid string,
+	interfaces map[int]*InterfaceMetrics,
+	assign func(iface *InterfaceMetrics, value uint64),
+) {
+	if strings.TrimSpace(oid) == "" {
+		return
+	}
+	result, err := target.BulkWalkAll(oid)
+	if err != nil {
+		return
+	}
+	for _, v := range result {
+		idx := extractIndexFromOID(v.Name)
+		iface, exists := interfaces[idx]
+		if !exists {
+			continue
+		}
+		assign(iface, gosnmp.ToBigInt(v.Value).Uint64())
+	}
+}
+
+// collectComponents 采集风扇、电源、单板的原始状态码（catalog 分类 environment）。
+// 仅华为与 H3C 定义了对应 OID，其他厂商采不到属预期，由检查项判 skip。
+func (c *SNMPCollector) collectComponents(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+) {
+	metrics.Components = collectComponentsFromCatalog(target, registry.CatalogEntries(vendor, "environment"))
+}
+
+// collectPoE 采集 PoE 供电概况（catalog 分类 poe）。非 PoE 设备返回零值。
+func (c *SNMPCollector) collectPoE(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+) {
+	metrics.PoE = collectPoEFromCatalog(target, registry.CatalogEntries(vendor, "poe"))
+}
+
 func (c *SNMPCollector) collectInterfaces(
 	target snmpClient,
 	ipAddress string,
@@ -442,6 +562,45 @@ func (c *SNMPCollector) collectInterfaces(
 			}
 		}
 	}
+
+	// 接口健康类指标。四类数据回答四个不同问题：
+	// admin 状态区分「人为 shutdown」与「链路故障」；错包指向物理层劣化；
+	// 丢弃指向拥塞与 ACL/QoS 配置；双工解释错包为何升高（半双工协商失败）。
+	// 包计数是错包率与丢弃率的分母。
+	ifaceOIDs := registry.Common.Interfaces
+	walkInterfaceValues(target, ifaceOIDs.IfAdminStatus.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {
+		up := value == 1
+		iface.AdminUp = &up
+	})
+	walkInterfaceValues(target, ifaceOIDs.IfInErrors.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {
+		v := value
+		iface.InErrors = &v
+	})
+	walkInterfaceValues(target, ifaceOIDs.IfOutErrors.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {
+		v := value
+		iface.OutErrors = &v
+	})
+	walkInterfaceValues(target, ifaceOIDs.IfInDiscards.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {
+		v := value
+		iface.InDiscards = &v
+	})
+	walkInterfaceValues(target, ifaceOIDs.IfOutDiscards.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {
+		v := value
+		iface.OutDiscards = &v
+	})
+	walkInterfaceValues(target, ifaceOIDs.IfInUcastPkts.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {
+		v := value
+		iface.InUcastPkts = &v
+	})
+	walkInterfaceValues(target, ifaceOIDs.IfOutUcastPkts.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {
+		v := value
+		iface.OutUcastPkts = &v
+	})
+	// 双工取自 EtherLike-MIB（非 IF-MIB），仅以太网口有意义，其余接口取不到属预期
+	walkInterfaceValues(target, registry.Common.Ethernet.Dot3DuplexStatus.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {
+		duplex := int(value)
+		iface.DuplexStatus = &duplex
+	})
 
 	now := time.Now()
 	inResult, _ := target.BulkWalkAll(registry.Common.Interfaces.IfHCInOctets.OID)
@@ -975,6 +1134,158 @@ func collectOpticalTransceiversFromCatalog(
 	}
 
 	return result
+}
+
+// componentKindFromCatalogID 从 catalog 条目 ID 推断部件类型。
+// 华为与 H3C 的条目 ID 都含 fan / power 字样，用关键词匹配比逐厂商枚举更耐改名。
+func componentKindFromCatalogID(id string) string {
+	normalized := normalizeCollectorToken(id)
+	switch {
+	case strings.Contains(normalized, "fan"):
+		return "fan"
+	// oper_status 是单板/实体运行状态，须先于 power 判断：
+	// 华为条目 hw_entity_oper_status 不含 power 字样，但顺序错了容易被后续规则误收。
+	case strings.Contains(normalized, "oper_status"):
+		return "board"
+	case strings.Contains(normalized, "power_state"):
+		return "power"
+	}
+	return ""
+}
+
+// collectComponentsFromCatalog 采集风扇、电源、单板的原始状态码。
+//
+// 只处理状态类条目（fan_state / power_state / oper_status），catalog 里同分类下的
+// 电压、功率等数值条目不在此列——它们是量测值不是状态，混进来会让"部件是否正常"
+// 的判定失去意义。
+func collectComponentsFromCatalog(
+	client snmpClient,
+	entries []snmpmib.CatalogOID,
+) []ComponentStatusMetrics {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	components := make([]ComponentStatusMetrics, 0)
+	for _, entry := range entries {
+		kind := componentKindFromCatalogID(entry.ID)
+		if kind == "" {
+			continue
+		}
+		oid := strings.TrimSpace(entry.OID)
+		if oid == "" {
+			continue
+		}
+
+		result, err := client.BulkWalkAll(oid)
+		if err != nil || len(result) == 0 {
+			continue
+		}
+
+		for _, variable := range result {
+			state, ok := numericPDUInt64(variable)
+			if !ok {
+				continue
+			}
+			index := extractOIDIndexSuffix(variable.Name, oid)
+			if index == "" {
+				index = strings.TrimSpace(variable.Name)
+			}
+			value := state
+			components = append(components, ComponentStatusMetrics{
+				Index: index,
+				Kind:  kind,
+				State: &value,
+			})
+		}
+	}
+
+	if len(components) == 0 {
+		return nil
+	}
+	sort.Slice(components, func(i, j int) bool {
+		if components[i].Kind != components[j].Kind {
+			return components[i].Kind < components[j].Kind
+		}
+		return components[i].Index < components[j].Index
+	})
+	return components
+}
+
+// collectPoEFromCatalog 采集 PoE 端口功率与 PSE 剩余保障功率。
+//
+// 厂商支持度不同：H3C 上报剩余保障功率（可直接回答"还能再接几个 AP"），
+// 华为只有端口级消耗功率（只能回答"哪个口在吃电"）。两者都采，由检查项
+// 按实际可得的数据决定判定方式。
+func collectPoEFromCatalog(
+	client snmpClient,
+	entries []snmpmib.CatalogOID,
+) PoEMetrics {
+	metrics := PoEMetrics{}
+	if len(entries) == 0 {
+		return metrics
+	}
+
+	ports := make(map[string]*PoEPortMetrics)
+	order := make([]string, 0)
+
+	for _, entry := range entries {
+		oid := strings.TrimSpace(entry.OID)
+		if oid == "" {
+			continue
+		}
+		result, err := client.BulkWalkAll(oid)
+		if err != nil || len(result) == 0 {
+			continue
+		}
+
+		normalizedID := normalizeCollectorToken(entry.ID)
+		for _, variable := range result {
+			value, ok := numericPDUValue(variable)
+			if !ok {
+				continue
+			}
+			normalizedValue, normalizedUnit := normalizeCatalogNumericValue(value, entry.Unit)
+
+			// 剩余保障功率是设备级指标，不归属任何端口
+			if strings.Contains(normalizedID, "remaining") {
+				v := normalizedValue
+				metrics.RemainingPower = &v
+				metrics.RemainingUnit = normalizedUnit
+				continue
+			}
+
+			index := extractOIDIndexSuffix(variable.Name, oid)
+			if index == "" {
+				index = strings.TrimSpace(variable.Name)
+			}
+			port := ports[index]
+			if port == nil {
+				port = &PoEPortMetrics{Index: index}
+				ports[index] = port
+				order = append(order, index)
+			}
+			v := normalizedValue
+			switch {
+			case strings.Contains(normalizedID, "peak_power"):
+				port.PeakPower = &v
+			case strings.Contains(normalizedID, "power"):
+				port.ConsumingPower = &v
+			}
+			if normalizedUnit != "" {
+				port.Unit = normalizedUnit
+			}
+		}
+	}
+
+	if len(order) > 0 {
+		sort.Strings(order)
+		metrics.Ports = make([]PoEPortMetrics, 0, len(order))
+		for _, index := range order {
+			metrics.Ports = append(metrics.Ports, *ports[index])
+		}
+	}
+	return metrics
 }
 
 func applyBGPCatalogValue(

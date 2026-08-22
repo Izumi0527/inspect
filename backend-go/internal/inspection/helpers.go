@@ -131,10 +131,21 @@ func normalizeTrigger(raw string) string {
 	}
 }
 
+// CheckStatusNotApplicable 表示该检查项不适用于当前设备类型（如交换机上的 BGP、
+// 路由器上的 PoE）。它既不是通过也不是失败，不计入异常，也不计入通过率分母。
+//
+// 与 skip 的区别：skip 是"该查但没查成"（采集失败、缺少基线），需要运维关注；
+// not_applicable 是"这台设备根本没有这个特性"，属于预期内的正常情况。
+const CheckStatusNotApplicable = "not_applicable"
+
+// normalizeCheckResultStatus 归一化检查结果状态，是落库前的最后一道关。
+//
+// 注意 default 分支落 fail：写入未登记的状态值会被静默转成"失败"，不报错也无日志。
+// 新增状态枚举时**必须先改这里再写入**，否则设备完全健康却报一堆失败。
 func normalizeCheckResultStatus(raw string) string {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	switch value {
-	case "pass", "fail", "warning", "skip":
+	case "pass", "fail", "warning", "skip", CheckStatusNotApplicable:
 		return value
 	case "error":
 		return "fail"

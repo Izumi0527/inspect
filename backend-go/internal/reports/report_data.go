@@ -13,13 +13,23 @@ import (
 )
 
 type InspectionReportData struct {
-	InspectionName     string
-	InspectionID       string
-	InspectionTime     string
-	Status             string
-	ExecutionDuration  int
-	SummaryStats       InspectionSummaryStats
-	Devices            []InspectionDeviceData
+	InspectionName    string
+	InspectionID      string
+	InspectionTime    string
+	Status            string
+	ExecutionDuration int
+	SummaryStats      InspectionSummaryStats
+	Devices           []InspectionDeviceData
+	// TemplateName 本次采用的巡检模板名。跨模板聚合时为空——
+	// 此时用 TemplateCount 说明「汇总自 N 种模板」，而不是随便挑一个来代表。
+	TemplateName string
+	// TemplateCount 本次数据涉及的不同模板数，0 表示模板信息不可得
+	// （历史记录 template_id 为 NULL）。
+	TemplateCount int
+	// CoveredMetrics / UncoveredMetrics 由 summarizeTemplateCoverage 从模板
+	// check_items 推导，两者同时为空表示覆盖范围不可得，渲染层须整段省略。
+	CoveredMetrics     []string
+	UncoveredMetrics   []string
 	GeneratedTimestamp string
 }
 
@@ -35,7 +45,12 @@ type InspectionSummaryStats struct {
 	// 问题，于是出现「只看到 1 个告警却显示 2 个问题点」。
 	SkippedChecks int
 	UnknownChecks int
-	PassRate      float64
+	// NotApplicableChecks 是因设备类型不适用而未执行的检查项（交换机上的 BGP、
+	// 路由器上的 PoE）。与 SkippedChecks 的区别是关键：skip 是"该查却没查成"，
+	// 需要运维关注、要压低通过率；不适用是"这台设备根本没这个特性"，属预期内，
+	// 既不算异常也不进通过率分母。
+	NotApplicableChecks int
+	PassRate            float64
 }
 
 // AbnormalChecks 返回需要人工关注的检查项数（跳过项不算问题）。设备
@@ -54,6 +69,10 @@ const (
 	checkStatusError   = "error"
 	checkStatusSkipped = "skipped"
 	checkStatusUnknown = "unknown"
+	// checkStatusNotApplicable 与 skipped 分开：前者是设备天然没有该特性，
+	// 后者是采集失败或缺基线。混在一起会让"这台设备没有光模块"和
+	// "光模块数据采集失败"在报告里长得一模一样。
+	checkStatusNotApplicable = "not_applicable"
 )
 
 // normalizeCheckStatus 把检查项状态收敛到六个枚举之一。空值与无法识别
@@ -69,8 +88,10 @@ func normalizeCheckStatus(status string) string {
 		return checkStatusFailed
 	case "error":
 		return checkStatusError
-	case "skip", "skipped", "not_applicable", "n/a":
+	case "skip", "skipped":
 		return checkStatusSkipped
+	case "not_applicable", "n/a", "na":
+		return checkStatusNotApplicable
 	default:
 		return checkStatusUnknown
 	}
@@ -108,6 +129,8 @@ func reconcileInspectionSummary(data *InspectionReportData) {
 				deviceSummary.ErrorChecks++
 			case checkStatusSkipped:
 				deviceSummary.SkippedChecks++
+			case checkStatusNotApplicable:
+				deviceSummary.NotApplicableChecks++
 			default:
 				deviceSummary.UnknownChecks++
 			}
@@ -117,9 +140,12 @@ func reconcileInspectionSummary(data *InspectionReportData) {
 
 		if deviceSummary.TotalChecks > 0 {
 			device.IssueCount = deviceSummary.AbnormalChecks()
-			// 通过率分母剔除跳过项：未执行的检查既不该算通过，也不该
-			// 拉低通过率。全部跳过时记 0%，避免除零。
-			evaluated := deviceSummary.TotalChecks - deviceSummary.SkippedChecks
+			// 通过率分母同时剔除跳过项与不适用项：前者未执行成功，后者设备
+			// 天然没有该特性，都不该算通过、也不该拉低通过率。若把不适用计入
+			// 分母，一台健康交换机跑全面巡检会因 BGP 不适用而从 100% 掉到 75%——
+			// 运维看到的是"设备有问题"，实际是"统计口径有问题"。
+			// 分母为 0 时记 0%，避免除零。
+			evaluated := deviceSummary.TotalChecks - deviceSummary.SkippedChecks - deviceSummary.NotApplicableChecks
 			if evaluated > 0 {
 				device.PassRate = float64(deviceSummary.PassedChecks) / float64(evaluated) * 100
 			} else {
@@ -134,6 +160,7 @@ func reconcileInspectionSummary(data *InspectionReportData) {
 		summary.ErrorChecks += deviceSummary.ErrorChecks
 		summary.SkippedChecks += deviceSummary.SkippedChecks
 		summary.UnknownChecks += deviceSummary.UnknownChecks
+		summary.NotApplicableChecks += deviceSummary.NotApplicableChecks
 	}
 
 	if totalDetails == 0 {
@@ -143,7 +170,7 @@ func reconcileInspectionSummary(data *InspectionReportData) {
 		return
 	}
 
-	evaluated := summary.TotalChecks - summary.SkippedChecks
+	evaluated := summary.TotalChecks - summary.SkippedChecks - summary.NotApplicableChecks
 	if evaluated > 0 {
 		summary.PassRate = float64(summary.PassedChecks) / float64(evaluated) * 100
 	}
@@ -180,8 +207,31 @@ type InspectionCheckResult struct {
 	ExpectedValue string
 	ActualValue   string
 	ExecutionTime int
+	// 以下明细字段互斥，至多一个非空：details 列的载荷用顶层 kind 区分类型，
+	// 一条检查结果只会命中其中一种。渲染由 writeCheckDetailTables 统一分派。
+	//
 	// InterfaceUtilization 仅接口利用率检查项非空，用于在报告中输出逐接口明细表
 	InterfaceUtilization *InterfaceUtilizationReport
+	// InterfaceRatio 承载接口错包率与丢弃率——两者载荷结构相同，只是 kind 不同
+	InterfaceRatio *InterfaceRatioReport
+	// OpticalPower 承载光模块逐模块收发光与诊断量
+	OpticalPower *OpticalPowerReport
+	// BGPPeers 承载逐邻居状态与会话稳定性
+	BGPPeers *BGPPeersReport
+	// ComponentStatus 承载逐风扇/电源部件的原始状态码与判定
+	ComponentStatus *ComponentStatusReport
+	// Threshold 本次实际生效的判定阈值，与上面五种明细正交——
+	// 带阈值的检查项无论有没有逐项明细，details 里都会带 threshold 字段。
+	// inspection_results 表没有阈值列，报告要说明「按什么口径判的」只能靠它。
+	Threshold *CheckThresholdReport
+}
+
+// CheckThresholdReport 是一个检查项本次生效的阈值口径。
+type CheckThresholdReport struct {
+	Metric   string  `json:"metric"`
+	Warning  float64 `json:"warning"`
+	Critical float64 `json:"critical"`
+	Unit     string  `json:"unit"`
 }
 
 // InterfaceUtilizationEntryReport 报告中的单接口利用率行
@@ -227,6 +277,206 @@ func parseInterfaceUtilizationDetails(raw *string) *InterfaceUtilizationReport {
 		return nil
 	}
 	return &payload
+}
+
+// ---------------------------------------------------------------------------
+// 其余四类结构化明细
+//
+// 全部沿用同一套契约：顶层 kind 区分类型，解析失败或 kind 不匹配返回 nil，
+// 报告退回只渲染摘要行。details 列历史上存过手工写入的自由文本，
+// 解析器必须扛得住非 JSON 输入而不是让整份报告出不来。
+// ---------------------------------------------------------------------------
+
+// InterfaceRatioEntryReport 报告中的单接口计数器比率行。
+//
+// Count 与 Packets 是原始值，必须与 Percent 一起给出：累计比率会被历史上
+// 一次性故障长期拉高，只看「1.2%」无法区分持续劣化与三年前的一次抖动。
+type InterfaceRatioEntryReport struct {
+	Name      string  `json:"name"`
+	Direction string  `json:"direction"`
+	Percent   float64 `json:"percent"`
+	Count     uint64  `json:"count"`
+	Packets   uint64  `json:"packets"`
+}
+
+// InterfaceRatioReport 对应 details 中 kind=interface_errors / interface_discards 的载荷。
+// 两者结构完全相同，只有表头文案不同，共用一个类型。
+type InterfaceRatioReport struct {
+	Kind              string                              `json:"kind"`
+	Total             int                                 `json:"total"`
+	Evaluated         int                                 `json:"evaluated"`
+	OverWarning       int                                 `json:"over_warning"`
+	OverCritical      int                                 `json:"over_critical"`
+	WarningThreshold  float64                             `json:"warning_threshold"`
+	CriticalThreshold float64                             `json:"critical_threshold"`
+	Interfaces        []InterfaceRatioEntryReport         `json:"interfaces"`
+	Skipped           []InterfaceUtilizationSkippedReport `json:"skipped"`
+}
+
+func parseInterfaceRatioDetails(raw *string) *InterfaceRatioReport {
+	payload, ok := decodeDetailsPayload[InterfaceRatioReport](raw, "interface_errors", "interface_discards")
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
+// OpticalModuleEntryReport 报告中的单光模块行。
+//
+// 诊断量用指针：厂商对 DDM 的支持参差不齐，多数只给收光。缺失与 0 必须可区分，
+// 否则报告会把「未上报电压」渲染成「电压 0V」这个明确错误的结论。
+type OpticalModuleEntryReport struct {
+	Index           string   `json:"index"`
+	Verdict         string   `json:"verdict"`
+	RxPower         float64  `json:"rx_power"`
+	RxPowerUnit     string   `json:"rx_power_unit"`
+	TxPower         *float64 `json:"tx_power"`
+	TxPowerUnit     string   `json:"tx_power_unit"`
+	Voltage         *float64 `json:"voltage"`
+	VoltageUnit     string   `json:"voltage_unit"`
+	BiasCurrent     *float64 `json:"bias_current"`
+	BiasCurrentUnit string   `json:"bias_current_unit"`
+}
+
+// OpticalPowerReport 对应 details 中 kind=optical_power 的载荷。
+type OpticalPowerReport struct {
+	Kind              string                              `json:"kind"`
+	Total             int                                 `json:"total"`
+	Evaluated         int                                 `json:"evaluated"`
+	OverWarning       int                                 `json:"over_warning"`
+	OverCritical      int                                 `json:"over_critical"`
+	WarningThreshold  float64                             `json:"warning_threshold"`
+	CriticalThreshold float64                             `json:"critical_threshold"`
+	Modules           []OpticalModuleEntryReport          `json:"modules"`
+	Skipped           []InterfaceUtilizationSkippedReport `json:"skipped"`
+}
+
+func parseOpticalPowerDetails(raw *string) *OpticalPowerReport {
+	payload, ok := decodeDetailsPayload[OpticalPowerReport](raw, "optical_power")
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
+// BGPPeerEntryReport 报告中的单 BGP 邻居行。
+type BGPPeerEntryReport struct {
+	Index              string `json:"index"`
+	Verdict            string `json:"verdict"`
+	State              *int   `json:"state"`
+	StateLabel         string `json:"state_label"`
+	EstablishedSeconds *int64 `json:"established_seconds"`
+	LastError          string `json:"last_error"`
+}
+
+// BGPPeersReport 对应 details 中 kind=bgp_peers 的载荷。
+type BGPPeersReport struct {
+	Kind        string `json:"kind"`
+	Total       int    `json:"total"`
+	Established int    `json:"established"`
+	Down        int    `json:"down"`
+	Flapping    int    `json:"flapping"`
+	// FlappingThresholdSeconds 是震荡判定线。「建立时长 120 秒」本身不说明问题，
+	// 报告要能写出「低于 N 秒视为近期重建」才是完整结论。
+	FlappingThresholdSeconds int64                `json:"flapping_threshold_seconds"`
+	Peers                    []BGPPeerEntryReport `json:"peers"`
+}
+
+func parseBGPPeersDetails(raw *string) *BGPPeersReport {
+	payload, ok := decodeDetailsPayload[BGPPeersReport](raw, "bgp_peers")
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
+// ComponentStatusEntryReport 报告中的单部件行，State 保留厂商原始状态码。
+type ComponentStatusEntryReport struct {
+	Index   string `json:"index"`
+	Kind    string `json:"kind"`
+	Verdict string `json:"verdict"`
+	State   *int64 `json:"state"`
+}
+
+// ComponentStatusReport 对应 details 中 kind=component_status 的载荷。
+type ComponentStatusReport struct {
+	Kind          string `json:"kind"`
+	ComponentKind string `json:"component_kind"`
+	Label         string `json:"label"`
+	Total         int    `json:"total"`
+	Normal        int    `json:"normal"`
+	Abnormal      int    `json:"abnormal"`
+	Unknown       int    `json:"unknown"`
+	// NormalStates / AbnormalStates 回显本次生效的判定依据。状态码语义因厂商
+	// 而异，只给「码 77，未知」运维无从下手；连同「本次按正常={1}、异常={2}
+	// 判的」一起给出，才能据此校准模板配置。
+	NormalStates   []float64                    `json:"normal_states"`
+	AbnormalStates []float64                    `json:"abnormal_states"`
+	Components     []ComponentStatusEntryReport `json:"components"`
+}
+
+func parseComponentStatusDetails(raw *string) *ComponentStatusReport {
+	payload, ok := decodeDetailsPayload[ComponentStatusReport](raw, "component_status")
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
+// detailsKindProbe 只取顶层 kind，用于在完整反序列化前判断载荷类型。
+type detailsKindProbe struct {
+	Kind string `json:"kind"`
+}
+
+// decodeDetailsPayload 校验 kind 后反序列化 details 载荷。
+// 空值、非 JSON、kind 不在 wantKinds 内一律返回 ok=false。
+func decodeDetailsPayload[T any](raw *string, wantKinds ...string) (*T, bool) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil, false
+	}
+	var probe detailsKindProbe
+	if err := json.Unmarshal([]byte(*raw), &probe); err != nil {
+		return nil, false
+	}
+	matched := false
+	for _, kind := range wantKinds {
+		if probe.Kind == kind {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return nil, false
+	}
+	var payload T
+	if err := json.Unmarshal([]byte(*raw), &payload); err != nil {
+		return nil, false
+	}
+	return &payload, true
+}
+
+// parseCheckResultDetails 按 kind 把 details 载荷分派到对应的明细字段。
+// 五种载荷互斥，至多命中一种；都不命中时全部为 nil，报告只渲染摘要行。
+func parseCheckResultDetails(raw *string, result *InspectionCheckResult) {
+	// 阈值与明细正交：带阈值的检查项无论有没有逐项明细，载荷里都会带
+	// threshold 字段（thresholdDetailsPayload 合并进各类载荷）。因此先单独取，
+	// 不能塞进下面的 kind 分派——那样只有命中某一种明细的检查项才拿得到阈值。
+	result.Threshold = parseCheckThreshold(raw)
+
+	result.InterfaceUtilization = parseInterfaceUtilizationDetails(raw)
+	if result.InterfaceUtilization != nil {
+		return
+	}
+	if result.InterfaceRatio = parseInterfaceRatioDetails(raw); result.InterfaceRatio != nil {
+		return
+	}
+	if result.OpticalPower = parseOpticalPowerDetails(raw); result.OpticalPower != nil {
+		return
+	}
+	if result.BGPPeers = parseBGPPeersDetails(raw); result.BGPPeers != nil {
+		return
+	}
+	result.ComponentStatus = parseComponentStatusDetails(raw)
 }
 
 type StatisticsReportData struct {
@@ -612,6 +862,10 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		Uptime        *int       `gorm:"column:uptime"`
 		CPUUsage      *float64   `gorm:"column:cpu_usage"`
 		MemoryUsage   *float64   `gorm:"column:memory_usage"`
+		// TemplateName / TemplateItems 用于推导覆盖范围声明。LEFT JOIN 而非 JOIN：
+		// 历史记录的 template_id 可能为 NULL，内连接会让这些巡检整条消失。
+		TemplateName  *string `gorm:"column:template_name"`
+		TemplateItems *string `gorm:"column:template_check_items"`
 	}
 
 	query := db.WithContext(ctx).
@@ -619,8 +873,10 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		Select(`i.id, i.device_id, i.name, i.status, i.duration, i.completed_at, i.created_at,
 		        i.total_checks, i.passed_checks, i.failed_checks, i.warning_checks,
 		        d.name AS device_name, d.ip_address, d.device_type, d.vendor, d.model,
-		        d.firmware_version, d.uptime, d.cpu_usage, d.memory_usage`).
-		Joins("LEFT JOIN devices d ON d.id = i.device_id")
+		        d.firmware_version, d.uptime, d.cpu_usage, d.memory_usage,
+		        t.name AS template_name, t.check_items AS template_check_items`).
+		Joins("LEFT JOIN devices d ON d.id = i.device_id").
+		Joins("LEFT JOIN inspection_templates t ON t.id = i.template_id")
 
 	// 执行记录页面按「单次执行」出报告：task_id 即 inspections.id，精确
 	// 定位该行，不受时间窗口约束。旧逻辑只按时间范围（默认最近 24h）过
@@ -696,14 +952,14 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 	resultsByInspection := make(map[int][]InspectionCheckResult)
 	for _, row := range results {
 		result := InspectionCheckResult{
-			CheckItemName:        row.Name,
-			CheckItemType:        row.Type,
-			Status:               row.Status,
-			ExpectedValue:        defaultStringPtr(row.Expected),
-			ActualValue:          defaultStringPtr(row.Actual),
-			ExecutionTime:        defaultIntPtr(row.Execution),
-			InterfaceUtilization: parseInterfaceUtilizationDetails(row.Details),
+			CheckItemName: row.Name,
+			CheckItemType: row.Type,
+			Status:        row.Status,
+			ExpectedValue: defaultStringPtr(row.Expected),
+			ActualValue:   defaultStringPtr(row.Actual),
+			ExecutionTime: defaultIntPtr(row.Execution),
 		}
+		parseCheckResultDetails(row.Details, &result)
 		resultsByInspection[row.InspectionID] = append(resultsByInspection[row.InspectionID], result)
 	}
 
@@ -746,6 +1002,15 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		summary.PassRate = float64(summary.PassedChecks) / float64(summary.TotalChecks) * 100
 	}
 	result.SummaryStats = summary
+
+	templateRefs := make([]templateRef, 0, len(rows))
+	for _, row := range rows {
+		templateRefs = append(templateRefs, templateRef{
+			Name:       defaultStringPtr(row.TemplateName),
+			CheckItems: defaultStringPtr(row.TemplateItems),
+		})
+	}
+	applyTemplateCoverage(&result, templateRefs)
 
 	devices := make([]InspectionDeviceData, 0, len(latestByDevice))
 	for _, deviceID := range deviceIDsUnique {
@@ -1367,4 +1632,81 @@ func defaultFloatPtr(value *float64) float64 {
 		return 0
 	}
 	return *value
+}
+
+// templateRef 是一条巡检记录关联的模板信息，从查询结果里剥离出来，
+// 好让覆盖范围推导不依赖查询函数内的局部行类型。
+type templateRef struct {
+	Name       string
+	CheckItems string
+}
+
+// applyTemplateCoverage 推导本次报告的模板归属与覆盖范围。
+//
+// 三种情形分别处理，区分它们是这段代码的全部意义所在：
+//   - 模板信息不可得（历史记录 template_id 为 NULL）：TemplateCount 记 0，
+//     渲染层据此整段省略声明。绝不能当成「什么都没查」。
+//   - 单一模板：给出模板名与覆盖/未覆盖维度。
+//   - 跨模板聚合（报表中心按时间窗口聚合，各设备跑的档位不同）：只报模板种类数，
+//     不给覆盖范围——各档位覆盖维度不同，挑任一个来代表全部都是错的。
+func applyTemplateCoverage(data *InspectionReportData, refs []templateRef) {
+	if data == nil {
+		return
+	}
+
+	names := make(map[string]string, 4) // 模板名 -> 该模板的 check_items
+	for _, ref := range refs {
+		name := strings.TrimSpace(ref.Name)
+		if name == "" {
+			continue
+		}
+		if _, seen := names[name]; !seen {
+			names[name] = ref.CheckItems
+		}
+	}
+
+	data.TemplateCount = len(names)
+	if len(names) != 1 {
+		return
+	}
+	for name, checkItems := range names {
+		data.TemplateName = name
+		data.CoveredMetrics, data.UncoveredMetrics = summarizeTemplateCoverage([]byte(checkItems))
+	}
+}
+
+// checkThresholdEnvelope 对应 details 载荷里的阈值片段，
+// 由执行端 thresholdDetailsPayload 写入，各类 kind 共有。
+type checkThresholdEnvelope struct {
+	Metric    string `json:"metric"`
+	Threshold *struct {
+		Warning  float64 `json:"warning"`
+		Critical float64 `json:"critical"`
+		Unit     string  `json:"unit"`
+	} `json:"threshold"`
+}
+
+// parseCheckThreshold 从 details 载荷里取出本次生效的判定阈值。
+//
+// 不校验 kind：threshold 字段在 kind=threshold 的纯阈值载荷与各类明细载荷里
+// 都存在。metric 为空则视为不可用——没有指标名的阈值无法归入任何维度，
+// 报告写出来是「 70/85%」这样的残句。
+func parseCheckThreshold(raw *string) *CheckThresholdReport {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil
+	}
+	var envelope checkThresholdEnvelope
+	if err := json.Unmarshal([]byte(*raw), &envelope); err != nil {
+		return nil
+	}
+	metric := strings.TrimSpace(envelope.Metric)
+	if metric == "" || envelope.Threshold == nil {
+		return nil
+	}
+	return &CheckThresholdReport{
+		Metric:   metric,
+		Warning:  envelope.Threshold.Warning,
+		Critical: envelope.Threshold.Critical,
+		Unit:     envelope.Threshold.Unit,
+	}
 }

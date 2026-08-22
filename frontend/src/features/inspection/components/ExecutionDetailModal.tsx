@@ -8,6 +8,7 @@ import {
   XCircle,
   AlertTriangle,
   Clock,
+  MinusCircle,
   Server,
   Activity,
   ChevronDown,
@@ -23,6 +24,7 @@ import { Badge } from '@/components/atoms/badge'
 import { cn } from '@/utils/cn'
 import { useGenerateReport, useExecutionDetail } from '../hooks/useInspection'
 import { InterfaceUtilizationTable } from './InterfaceUtilizationTable'
+import { CheckDetailTables } from './CheckDetailTables'
 import type { InspectionExecution, ReportFormat } from '../types'
 
 interface ExecutionDetailModalProps {
@@ -123,6 +125,9 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
     warning: { color: 'text-yellow-600', variant: 'warning', icon: <AlertTriangle className="w-4 h-4" />, label: '警告' },
     fail: { color: 'text-red-600', variant: 'error', icon: <XCircle className="w-4 h-4" />, label: '失败' },
     skip: { color: 'text-gray-400', variant: 'secondary', icon: <Clock className="w-4 h-4" />, label: '跳过' },
+    // 不适用与跳过分开呈现：前者设备天然没这个特性、无需处理，
+    // 后者是该查却没查成、要跟进。用同一个标签会让运维分不清要不要动手。
+    not_applicable: { color: 'text-gray-300', variant: 'secondary', icon: <MinusCircle className="w-4 h-4" />, label: '不适用' },
   }
 
   const currentStatus = statusConfig[execution.status] || statusConfig.pending
@@ -516,8 +521,10 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                                             )}
                                           </div>
                                         )}
-                                        {check.details?.kind === 'interface_utilization' && (
+                                        {check.details?.kind === 'interface_utilization' ? (
                                           <InterfaceUtilizationTable details={check.details} />
+                                        ) : (
+                                          check.details && <CheckDetailTables details={check.details} />
                                         )}
                                       </div>
                                     </div>
@@ -596,8 +603,10 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                                 )}
                               </div>
                             )}
-                            {check.details?.kind === 'interface_utilization' && (
+                            {check.details?.kind === 'interface_utilization' ? (
                               <InterfaceUtilizationTable details={check.details} />
+                            ) : (
+                              check.details && <CheckDetailTables details={check.details} />
                             )}
                           </div>
                         </motion.div>

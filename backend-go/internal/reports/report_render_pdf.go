@@ -176,9 +176,10 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 			resultStyle.RowFills, resultStyle.RowAccents = checkResultRowTints(resultRows, 2)
 			writePDFTable(pdf, []string{"检查项", "类型", "状态", "参考标准", "实际值"}, resultRows, []float64{38, 16, 13, 37, 38.2}, resultStyle)
 
-			// 接口利用率检查项带逐接口明细：单独出一张表，避免把长清单塞进上表的定宽单元格
+			// 明细型检查项各自出一张表：上表的定宽单元格塞不下长清单，
+			// 也无法承载逐项的原始值与判定依据。
 			for _, result := range device.CheckResults {
-				writeInterfaceUtilizationPDFTable(pdf, result)
+				writeCheckDetailTables(pdf, result)
 			}
 		}
 		pdf.Ln(10)
@@ -582,10 +583,14 @@ func genericReportFieldLabel(key string) string {
 	}
 }
 
+// pdfEmptyValuePlaceholder 是表格里「无此数据」的统一占位符。
+// 缺失必须与 0 可区分：「未上报电压」和「电压 0V」是两个完全不同的结论。
+const pdfEmptyValuePlaceholder = "-"
+
 func fallbackPDFValue(value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" || trimmed == "{}" {
-		return "-"
+		return pdfEmptyValuePlaceholder
 	}
 	return trimmed
 }
@@ -842,6 +847,250 @@ func writeInterfaceUtilizationPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckR
 	}
 }
 
+// writeCheckDetailTables 按明细类型分派渲染。
+// 五种载荷互斥，一条检查结果至多命中一种；都不命中时什么也不画。
+func writeCheckDetailTables(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	writeInterfaceUtilizationPDFTable(pdf, result)
+	writeInterfaceRatioPDFTable(pdf, result)
+	writeOpticalPowerPDFTable(pdf, result)
+	writeBGPPeersPDFTable(pdf, result)
+	writeComponentStatusPDFTable(pdf, result)
+}
+
+// writeDetailSkippedPDFTable 输出「未参与评估的对象及原因」表。
+// 错包与光模块共用：两者都会因设备未上报某个计数器而跳过部分对象，
+// 不列出来就会出现「29 个接口只看到 2 行」的困惑。
+func writeDetailSkippedPDFTable(pdf *gofpdf.Fpdf, header string, skipped []InterfaceUtilizationSkippedReport) {
+	if len(skipped) == 0 {
+		return
+	}
+	pdf.Ln(3)
+	ensurePDFSpace(pdf, 25)
+	rows := make([][]string, 0, len(skipped))
+	for _, item := range skipped {
+		rows = append(rows, []string{item.Name, item.Reason})
+	}
+	style := defaultPDFTableStyle(pdfHeaderStyleLight)
+	style.BodyAlign = "L"
+	style.WrapColumns = []int{0, 1}
+	writePDFTable(pdf, []string{header, "原因"}, rows, []float64{60, 82.2}, style)
+}
+
+// formatDetailPercent 格式化比率。极小的非零值显示成 "<0.01%" 而不是 "0.00%"：
+// 后者会把「有错包但很少」误传成「一个错包都没有」。
+func formatDetailPercent(percent float64) string {
+	if percent > 0 && percent < 0.01 {
+		return "<0.01%"
+	}
+	return fmt.Sprintf("%.2f%%", percent)
+}
+
+// formatOptionalFloat 渲染可缺失的诊断量。
+// 缺失显示为占位符而非 0——「未上报电压」和「电压 0V」是两个完全不同的结论。
+func formatOptionalFloat(value *float64, unit string, precision int) string {
+	if value == nil {
+		return pdfEmptyValuePlaceholder
+	}
+	text := formatFloat(*value, precision)
+	if unit != "" {
+		return text + unit
+	}
+	return text
+}
+
+// writeInterfaceRatioPDFTable 为「接口错包率 / 丢弃率」输出逐接口明细表。
+//
+// 同时给出比率与原始计数：累计比率会被历史上一次性故障长期拉高，
+// 只看比率无法区分「持续劣化」与「三年前抖过一次」，原始包数才是判断依据。
+func writeInterfaceRatioPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.InterfaceRatio
+	if detail == nil || (len(detail.Interfaces) == 0 && len(detail.Skipped) == 0) {
+		return
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐接口明细（已评估 %d/%d，警告线 %s，故障线 %s）",
+		result.CheckItemName, detail.Evaluated, detail.Total,
+		formatDetailPercent(detail.WarningThreshold), formatDetailPercent(detail.CriticalThreshold)))
+
+	if len(detail.Interfaces) > 0 {
+		rows := make([][]string, 0, len(detail.Interfaces))
+		for _, entry := range detail.Interfaces {
+			rows = append(rows, []string{
+				entry.Name,
+				entry.Direction,
+				formatDetailPercent(entry.Percent),
+				fmt.Sprintf("%d", entry.Count),
+				fmt.Sprintf("%d", entry.Packets),
+			})
+		}
+		style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+		style.BodyAlign = "L"
+		style.WrapColumns = []int{0}
+		writePDFTable(pdf,
+			[]string{"接口", "峰值方向", "比率", "计数", "包数"},
+			rows, []float64{46, 20, 22, 27, 27.2}, style)
+	}
+
+	writeDetailSkippedPDFTable(pdf, "未评估接口", detail.Skipped)
+}
+
+// writeOpticalPowerPDFTable 为「光模块光功率」输出逐模块明细表。
+//
+// 电压与偏置电流一并列出，是为了区分光衰的两种成因：偏置电流升高而发光下降
+// 指向激光器老化（换模块），否则指向链路侧衰耗（查光纤）。
+func writeOpticalPowerPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.OpticalPower
+	if detail == nil || (len(detail.Modules) == 0 && len(detail.Skipped) == 0) {
+		return
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐模块明细（已评估 %d/%d，警告线 %sdBm，故障线 %sdBm）",
+		result.CheckItemName, detail.Evaluated, detail.Total,
+		formatFloat(detail.WarningThreshold, 1), formatFloat(detail.CriticalThreshold, 1)))
+
+	if len(detail.Modules) > 0 {
+		rows := make([][]string, 0, len(detail.Modules))
+		for _, module := range detail.Modules {
+			unit := module.RxPowerUnit
+			if unit == "" {
+				unit = "dBm"
+			}
+			rows = append(rows, []string{
+				module.Index,
+				localizeStatusWord(module.Verdict),
+				formatFloat(module.RxPower, 1) + unit,
+				formatOptionalFloat(module.TxPower, module.TxPowerUnit, 1),
+				formatOptionalFloat(module.Voltage, module.VoltageUnit, 2),
+				formatOptionalFloat(module.BiasCurrent, module.BiasCurrentUnit, 1),
+			})
+		}
+		style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+		style.BodyAlign = "L"
+		style.WrapColumns = []int{0}
+		style.RowFills, style.RowAccents = checkResultRowTints(rows, 1)
+		writePDFTable(pdf,
+			[]string{"模块", "判定", "收光", "发光", "电压", "偏置电流"},
+			rows, []float64{36, 16, 22, 22, 22, 24.2}, style)
+	}
+
+	writeDetailSkippedPDFTable(pdf, "未评估模块", detail.Skipped)
+}
+
+// writeBGPPeersPDFTable 为「BGP 邻居状态」输出逐邻居明细表。
+func writeBGPPeersPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.BGPPeers
+	if detail == nil || len(detail.Peers) == 0 {
+		return
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐邻居明细（共 %d 个，已建立 %d，未建立 %d，近期重建 %d）",
+		result.CheckItemName, detail.Total, detail.Established, detail.Down, detail.Flapping))
+
+	rows := make([][]string, 0, len(detail.Peers))
+	for _, peer := range detail.Peers {
+		rows = append(rows, []string{
+			peer.Index,
+			localizeStatusWord(peer.Verdict),
+			formatBGPPeerState(peer),
+			fallbackPDFValue(formatSessionUptime(peer.EstablishedSeconds)),
+			fallbackPDFValue(peer.LastError),
+		})
+	}
+	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+	style.BodyAlign = "L"
+	style.WrapColumns = []int{0, 4}
+	style.RowFills, style.RowAccents = checkResultRowTints(rows, 1)
+	writePDFTable(pdf,
+		[]string{"邻居", "判定", "会话状态", "建立时长", "最后错误"},
+		rows, []float64{32, 16, 26, 28, 40.2}, style)
+
+	if detail.FlappingThresholdSeconds > 0 {
+		writePDFRightAligned(pdf, fmt.Sprintf("判定口径：建立时长低于 %s 视为近期重建",
+			formatSessionUptime(&detail.FlappingThresholdSeconds)))
+	}
+}
+
+// formatSessionUptime 把 *int64 秒数适配到 formatUptimeSeconds(*int)。
+// BGP 的建立时长来自 SNMP Gauge32，采集端存为 int64；
+// 名字不叫 formatDurationSeconds 是因为那个名字已被「执行时长」占用，
+// 且那个函数只输出裸秒数，语义与「跑了 10 天」的会话时长不同。
+func formatSessionUptime(value *int64) string {
+	if value == nil {
+		return ""
+	}
+	seconds := int(*value)
+	return formatUptimeSeconds(&seconds)
+}
+
+// formatBGPPeerState 渲染邻居会话状态。
+// 优先用厂商上报的状态标签；缺失时回落到原始状态码——码本身也是信息，
+// 显示成空白等于把「设备报了个我们不认识的状态」这条事实抹掉。
+func formatBGPPeerState(peer BGPPeerEntryReport) string {
+	if label := strings.TrimSpace(peer.StateLabel); label != "" {
+		return label
+	}
+	if peer.State != nil {
+		return fmt.Sprintf("状态码 %d", *peer.State)
+	}
+	return pdfEmptyValuePlaceholder
+}
+
+// writeComponentStatusPDFTable 为「风扇 / 电源状态」输出逐部件明细表。
+//
+// 表尾附上本次生效的状态码集合：状态码语义因厂商甚至型号而异，
+// 报告只说「码 77 未知」运维无从下手，给出判定依据才能据此校准模板配置。
+func writeComponentStatusPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.ComponentStatus
+	if detail == nil || len(detail.Components) == 0 {
+		return
+	}
+
+	label := strings.TrimSpace(detail.Label)
+	if label == "" {
+		label = "部件"
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐%s明细（共 %d 个，正常 %d，异常 %d，状态码未知 %d）",
+		result.CheckItemName, label, detail.Total, detail.Normal, detail.Abnormal, detail.Unknown))
+
+	rows := make([][]string, 0, len(detail.Components))
+	for _, component := range detail.Components {
+		state := pdfEmptyValuePlaceholder
+		if component.State != nil {
+			state = fmt.Sprintf("%d", *component.State)
+		}
+		rows = append(rows, []string{component.Index, localizeStatusWord(component.Verdict), state})
+	}
+	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+	style.BodyAlign = "L"
+	style.WrapColumns = []int{0}
+	style.RowFills, style.RowAccents = checkResultRowTints(rows, 1)
+	writePDFTable(pdf, []string{"编号", "判定", "原始状态码"}, rows, []float64{50, 40, 52.2}, style)
+
+	writePDFRightAligned(pdf, fmt.Sprintf("判定依据：正常状态码 %s，异常状态码 %s，其余不作判定",
+		formatStateCodeSet(detail.NormalStates), formatStateCodeSet(detail.AbnormalStates)))
+}
+
+// formatStateCodeSet 把状态码集合渲染成 "1、2" 形式。
+func formatStateCodeSet(codes []float64) string {
+	if len(codes) == 0 {
+		return "未配置"
+	}
+	parts := make([]string, 0, len(codes))
+	for _, code := range codes {
+		parts = append(parts, formatFloat(code, 0))
+	}
+	return strings.Join(parts, "、")
+}
+
 func writePDFSubSectionTitle(pdf *gofpdf.Fpdf, title string) {
 	pdf.SetFont(pdfFontName, "B", pdfBodySize)
 	pdf.SetTextColor(pdfColorText[0], pdfColorText[1], pdfColorText[2])
@@ -1008,16 +1257,18 @@ func writePDFTable(pdf *gofpdf.Fpdf, headers []string, rows [][]string, colWidth
 			pdf.SetXY(x, rowY)
 			pdf.CellFormat(colWidths[i], rowH, "", bodyBorder, 0, "", true, 0, "")
 			offsetY := (rowH - float64(len(cellLines[i]))*style.BodyHeight) / 2
+			// 让开行强调条：条最后绘制且压在格上，首列文本不缩进会被裁掉半个字。
+			indent := bodyCellTextIndent(style.RowAccents, rowIndex, i)
 			for li, line := range cellLines[i] {
-				pdf.SetXY(x, rowY+offsetY+float64(li)*style.BodyHeight)
-				pdf.CellFormat(colWidths[i], style.BodyHeight, line, "", 0, style.BodyAlign, false, 0, "")
+				pdf.SetXY(x+indent, rowY+offsetY+float64(li)*style.BodyHeight)
+				pdf.CellFormat(colWidths[i]-indent, style.BodyHeight, line, "", 0, style.BodyAlign, false, 0, "")
 			}
 			x += colWidths[i]
 		}
 		// 色条最后画，压在左侧单元格边框上，形成实心强调条。
 		if accent, ok := rowTint(style.RowAccents, rowIndex); ok {
 			pdf.SetFillColor(accent[0], accent[1], accent[2])
-			pdf.Rect(startX, rowY, 1.5, rowH, "F")
+			pdf.Rect(startX, rowY, pdfAccentBarWidth, rowH, "F")
 		}
 		pdf.SetY(rowY + rowH)
 	}
@@ -1273,7 +1524,7 @@ func classifyInspectionStatusLabel(label string) (inspectionIssueSeverity, bool)
 		return classifyInspectionStatus(checkStatusWarning)
 	case "未知":
 		return classifyInspectionStatus(checkStatusUnknown)
-	case "通过", "跳过", "":
+	case "通过", "跳过", "不适用", "":
 		return inspectionIssueSeverity{}, false
 	default:
 		return classifyInspectionStatus(label)
@@ -1406,6 +1657,11 @@ func buildInspectionSummaryCards(stats InspectionSummaryStats) []pdfkit.StatCard
 	if stats.SkippedChecks > 0 {
 		cards = append(cards, pdfkit.StatCard{Label: "跳过", Value: fmt.Sprintf("%d", stats.SkippedChecks), Color: pdfkit.ColorSlate500})
 	}
+	// 不适用与跳过分卡展示：前者是设备天然没这个特性（无需处理），
+	// 后者是该查却没查成（要跟进），合成一张卡会让运维分不清要不要动手。
+	if stats.NotApplicableChecks > 0 {
+		cards = append(cards, pdfkit.StatCard{Label: "不适用", Value: fmt.Sprintf("%d", stats.NotApplicableChecks), Color: pdfkit.ColorSlate400})
+	}
 	if stats.UnknownChecks > 0 {
 		cards = append(cards, pdfkit.StatCard{Label: "未知", Value: fmt.Sprintf("%d", stats.UnknownChecks), Color: pdfkit.ColorSlate600})
 	}
@@ -1427,13 +1683,25 @@ func describeInspectionTally(stats InspectionSummaryStats) string {
 	appendPart("失败", stats.FailedChecks)
 	appendPart("错误", stats.ErrorChecks)
 	appendPart("跳过", stats.SkippedChecks)
+	appendPart("不适用", stats.NotApplicableChecks)
 	appendPart("未知", stats.UnknownChecks)
 	if len(parts) == 0 {
 		return "暂无检查项数据"
 	}
 	tally := fmt.Sprintf("口径：总检查项 %d = %s", stats.TotalChecks, strings.Join(parts, " + "))
+	// 跳过与不适用都不进通过率分母，但成因不同，分别说明才好让运维知道
+	// 哪些需要跟进（跳过要查凭据与 MIB 支持度，不适用什么都不用做）。
+	excluded := make([]string, 0, 2)
 	if stats.SkippedChecks > 0 {
-		tally += fmt.Sprintf("；通过率分母已剔除跳过项（按 %d 项计）", stats.TotalChecks-stats.SkippedChecks)
+		excluded = append(excluded, fmt.Sprintf("跳过 %d 项", stats.SkippedChecks))
+	}
+	if stats.NotApplicableChecks > 0 {
+		excluded = append(excluded, fmt.Sprintf("设备不适用 %d 项", stats.NotApplicableChecks))
+	}
+	if len(excluded) > 0 {
+		tally += fmt.Sprintf("；通过率分母已剔除%s（按 %d 项计）",
+			strings.Join(excluded, "与"),
+			stats.TotalChecks-stats.SkippedChecks-stats.NotApplicableChecks)
 	}
 	return tally
 }
@@ -1457,7 +1725,17 @@ func inspectionHealthGrade(stats InspectionSummaryStats) (grade string, accent [
 // 异常构成、最需优先处理的对象。全部由实际统计驱动，不写死话术。
 func buildInspectionNarrative(data InspectionReportData) []string {
 	stats := data.SummaryStats
-	lines := make([]string, 0, 5)
+	lines := make([]string, 0, 7)
+
+	// 覆盖范围与判定口径放在最前：它们限定了后面所有数字的解读边界。
+	// 放到通过率之后，读者已经先形成了「设备全面健康」的结论，再补充
+	// 「其实有 17 个维度没查」为时已晚。
+	if scope := describeInspectionScope(data); scope != "" {
+		lines = append(lines, scope)
+	}
+	if policy := describeInspectionThresholdPolicy(data); policy != "" {
+		lines = append(lines, policy)
+	}
 
 	lines = append(lines, fmt.Sprintf(
 		"本次巡检覆盖 %d 台设备、%d 个检查项，通过 %d 项，通过率 %s。",
@@ -1660,4 +1938,153 @@ func writeInspectionConclusion(pdf *gofpdf.Fpdf, data InspectionReportData) {
 	writePDFRightAlignedColored(pdf,
 		"以上建议为通用处置方向，实际操作请结合现场环境与厂商文档执行。",
 		pdfColorMuted)
+}
+
+// ---------------------------------------------------------------------------
+// 覆盖范围与判定口径声明
+// ---------------------------------------------------------------------------
+
+// describeInspectionScope 生成覆盖范围声明，是「巡检情况说明」的首句。
+//
+// 检查项扩到 19 项后，模板之间覆盖差异很大：连通性巡检只查 2 项，全部通过时
+// 报告会显示「通过率 100% / 整体结论：健康 / 无待处理事项」。缺了这句声明，
+// 读者据此得出的结论是「设备全面健康」，而 CPU、内存、接口实际一项未查。
+// 这句话把「通过率 100%」从「设备全面健康」限定回「所查项目均正常」。
+//
+// 契约：TemplateCount 为 0 表示模板信息不可得（历史记录 template_id 为 NULL），
+// 整句省略，不凭空生成声明。
+func describeInspectionScope(data InspectionReportData) string {
+	if data.TemplateCount > 1 {
+		return fmt.Sprintf(
+			"本次报告汇总自 %d 种巡检模板，各模板的覆盖维度与判定阈值并不一致，通过率不宜直接横向比较。",
+			data.TemplateCount)
+	}
+
+	name := strings.TrimSpace(data.TemplateName)
+	if name == "" {
+		return ""
+	}
+
+	covered := len(data.CoveredMetrics)
+	uncovered := len(data.UncoveredMetrics)
+	if covered == 0 && uncovered == 0 {
+		return ""
+	}
+
+	var sentence string
+	if uncovered == 0 {
+		sentence = fmt.Sprintf("本次采用「%s」，覆盖全部 %d 个可采集维度。", name, covered)
+	} else {
+		sentence = fmt.Sprintf(
+			"本次采用「%s」，覆盖 %s 共 %d 个维度；%s 共 %d 个维度不在本次巡检范围内，其状态未经核查。",
+			name,
+			strings.Join(data.CoveredMetrics, "、"), covered,
+			strings.Join(data.UncoveredMetrics, "、"), uncovered)
+	}
+
+	// 「未覆盖」（模板里就没有）与「不适用」（模板里有但设备类型不匹配）是两件事：
+	// 前者是模板选择问题，后者是设备本身没有这个特性。分开讲才解释得清
+	// 「19 项模板为什么只跑出 17 条结果」。
+	if names := notApplicableCheckNames(data); len(names) > 0 {
+		sentence += fmt.Sprintf("另有 %s 因设备类型不适用而未执行，不计入通过率。",
+			strings.Join(names, "、"))
+	}
+	return sentence
+}
+
+// notApplicableCheckNames 汇总因设备类型不适用而未执行的检查项名，去重后按首次出现排序。
+func notApplicableCheckNames(data InspectionReportData) []string {
+	seen := make(map[string]bool)
+	names := make([]string, 0, 4)
+	for _, device := range data.Devices {
+		for _, check := range device.CheckResults {
+			if normalizeCheckStatus(check.Status) != checkStatusNotApplicable {
+				continue
+			}
+			name := strings.TrimSpace(check.CheckItemName)
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// describeInspectionThresholdPolicy 生成判定口径说明：列出本次实际生效的阈值。
+//
+// 必要性：同一台 CPU 72% 的设备，阈值 70/85 判警告、阈值 80/95 判通过。
+// 两份报告并排看会自相矛盾，而矛盾的根源——口径不同——在报告里必须写出来
+// 才解释得通。inspection_results 表没有阈值列，这些值只能经 details 透传。
+//
+// 两种情况保持沉默：没有任何带阈值的检查项（如纯连通性巡检），
+// 以及同一指标出现互不相同的阈值（跨模板聚合，口径本就不统一，
+// 此时任选其一去解释全部结果只会误导）。
+func describeInspectionThresholdPolicy(data InspectionReportData) string {
+	effective := make(map[string]CheckThresholdReport, len(inspectionDimensions))
+	for _, device := range data.Devices {
+		for _, check := range device.CheckResults {
+			threshold := check.Threshold
+			if threshold == nil || strings.TrimSpace(threshold.Metric) == "" {
+				continue
+			}
+			prev, seen := effective[threshold.Metric]
+			if !seen {
+				effective[threshold.Metric] = *threshold
+				continue
+			}
+			if prev.Warning != threshold.Warning || prev.Critical != threshold.Critical {
+				return ""
+			}
+		}
+	}
+	if len(effective) == 0 {
+		return ""
+	}
+
+	// 按 inspectionDimensions 的顺序输出，与覆盖范围声明保持同一维度次序。
+	parts := make([]string, 0, len(effective))
+	for _, dim := range inspectionDimensions {
+		threshold, ok := effective[dim.Metric]
+		if !ok {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s %g/%g%s",
+			dim.Label, threshold.Warning, threshold.Critical, thresholdUnitLabel(threshold.Unit)))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("本次判定口径（警告/故障）：%s。", strings.Join(parts, "，"))
+}
+
+// thresholdUnitLabel 补齐温度单位的度符号。执行端存的是裸 "C"，
+// 直接印出来是「温度 60/70C」，读起来像型号而不是摄氏度。
+func thresholdUnitLabel(unit string) string {
+	if strings.TrimSpace(unit) == "C" {
+		return "°C"
+	}
+	return unit
+}
+
+// pdfAccentBarWidth 行强调条宽度（毫米）。
+const pdfAccentBarWidth = 1.5
+
+// bodyCellTextIndent 返回单元格文本相对格左边的额外缩进。
+//
+// 强调条是一条实心矩形，为了压住单元格左边框而在整行绘制完之后才画。
+// 首列文本只有 gofpdf 默认约 1mm 的内边距，比条宽窄，于是被压在条下。
+// 中文首字因字形左边距较大恰好躲开，所以这个缺陷长期没暴露——直到部件编号
+// 「0.3」、邻居 IP「10.0.0.3」这类以数字起头的标识列出现，首字被裁掉半个。
+//
+// 只对有强调条的行的首列生效：其余情况返回 0，保持既有报告的排版不变。
+func bodyCellTextIndent(accents [][3]int, rowIndex, colIndex int) float64 {
+	if colIndex != 0 {
+		return 0
+	}
+	if _, ok := rowTint(accents, rowIndex); !ok {
+		return 0
+	}
+	return pdfAccentBarWidth
 }
