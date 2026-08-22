@@ -20,6 +20,11 @@
 .PARAMETER SkipTypeCheck
     跳过前端 tsc 类型检查（仅跑 jest）
 
+.PARAMETER Package
+    仅测试指定 Go 包（相对模块根的路径模式，如 ./internal/devices/...）。
+    供 TDD 循环取得秒级反馈；指定后跳过 go build 与全量用例，并在主模块与
+    外置测试模块中各自探测该包是否存在，不存在的一侧跳过而非报错。
+
 .EXAMPLE
     .\scripts\test.ps1
     执行后端与前端的完整校验
@@ -41,7 +46,9 @@ param(
 
     [switch]$SkipBuild,
 
-    [switch]$SkipTypeCheck
+    [switch]$SkipTypeCheck,
+
+    [string]$Package = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -96,9 +103,50 @@ function Invoke-Step {
     }
 }
 
+# Invoke-GoPackageTest 在指定模块内运行单个包的测试。
+# 先用 go list 探测包是否属于该模块：-Package 场景下主模块与外置测试模块
+# 通常只有一侧包含目标包，另一侧「无匹配包」是预期情况，不应计为失败。
+function Invoke-GoPackageTest {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [Parameter(Mandatory = $true)][string]$Pattern
+    )
+
+    if (-not (Test-Path -LiteralPath $WorkingDirectory)) {
+        return
+    }
+
+    $found = $null
+    $originalLocation = Get-Location
+    try {
+        Set-Location -LiteralPath $WorkingDirectory
+        $found = & go list $Pattern 2>$null
+    }
+    catch {
+        $found = $null
+    }
+    finally {
+        Set-Location $originalLocation
+    }
+
+    if (-not $found) {
+        Write-ColorOutput "⏭️ 跳过 $Name：模块内无匹配包 ($Pattern)" "Gray"
+        return
+    }
+
+    Invoke-Step -Name $Name -WorkingDirectory $WorkingDirectory -Action { & go test $Pattern -count=1 }
+}
+
 function Test-Backend {
     $backendDir = Join-Path $ProjectRoot "backend-go"
     $testsDir = Join-Path $ProjectRoot "tests/backend-go"
+
+    if ($Package) {
+        Invoke-GoPackageTest -Name "后端主模块测试 ($Package)" -WorkingDirectory $backendDir -Pattern $Package
+        Invoke-GoPackageTest -Name "后端外置测试模块 ($Package)" -WorkingDirectory $testsDir -Pattern $Package
+        return
+    }
 
     if (-not $SkipBuild) {
         Invoke-Step -Name "后端构建 (go build ./...)" -WorkingDirectory $backendDir -Action { & go build ./... }
