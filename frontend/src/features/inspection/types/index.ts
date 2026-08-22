@@ -15,8 +15,15 @@ export type TriggerType = 'scheduled' | 'manual'
 /** 检查项类型 */
 export type CheckItemType = 'snmp' | 'ssh' | 'http' | 'ping' | 'script'
 
-/** 检查结果状态 */
-export type CheckStatus = 'pass' | 'warning' | 'fail' | 'skip'
+/**
+ * 检查结果状态
+ *
+ * not_applicable 表示该检查项不适用于当前设备类型（交换机上的 BGP、路由器上的
+ * PoE）。它与 skip 的区别决定了运维要不要动手：skip 是「该查却没查成」，需要
+ * 核对凭据或 MIB 支持度；not_applicable 是「设备天然没这个特性」，无需处理，
+ * 也不计入通过率分母。
+ */
+export type CheckStatus = 'pass' | 'warning' | 'fail' | 'skip' | 'not_applicable'
 
 /** 设备巡检状态 */
 export type DeviceStatus = 'success' | 'warning' | 'error' | 'offline'

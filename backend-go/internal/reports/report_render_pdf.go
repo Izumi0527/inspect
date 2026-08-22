@@ -1273,7 +1273,7 @@ func classifyInspectionStatusLabel(label string) (inspectionIssueSeverity, bool)
 		return classifyInspectionStatus(checkStatusWarning)
 	case "未知":
 		return classifyInspectionStatus(checkStatusUnknown)
-	case "通过", "跳过", "":
+	case "通过", "跳过", "不适用", "":
 		return inspectionIssueSeverity{}, false
 	default:
 		return classifyInspectionStatus(label)
@@ -1406,6 +1406,11 @@ func buildInspectionSummaryCards(stats InspectionSummaryStats) []pdfkit.StatCard
 	if stats.SkippedChecks > 0 {
 		cards = append(cards, pdfkit.StatCard{Label: "跳过", Value: fmt.Sprintf("%d", stats.SkippedChecks), Color: pdfkit.ColorSlate500})
 	}
+	// 不适用与跳过分卡展示：前者是设备天然没这个特性（无需处理），
+	// 后者是该查却没查成（要跟进），合成一张卡会让运维分不清要不要动手。
+	if stats.NotApplicableChecks > 0 {
+		cards = append(cards, pdfkit.StatCard{Label: "不适用", Value: fmt.Sprintf("%d", stats.NotApplicableChecks), Color: pdfkit.ColorSlate400})
+	}
 	if stats.UnknownChecks > 0 {
 		cards = append(cards, pdfkit.StatCard{Label: "未知", Value: fmt.Sprintf("%d", stats.UnknownChecks), Color: pdfkit.ColorSlate600})
 	}
@@ -1427,13 +1432,25 @@ func describeInspectionTally(stats InspectionSummaryStats) string {
 	appendPart("失败", stats.FailedChecks)
 	appendPart("错误", stats.ErrorChecks)
 	appendPart("跳过", stats.SkippedChecks)
+	appendPart("不适用", stats.NotApplicableChecks)
 	appendPart("未知", stats.UnknownChecks)
 	if len(parts) == 0 {
 		return "暂无检查项数据"
 	}
 	tally := fmt.Sprintf("口径：总检查项 %d = %s", stats.TotalChecks, strings.Join(parts, " + "))
+	// 跳过与不适用都不进通过率分母，但成因不同，分别说明才好让运维知道
+	// 哪些需要跟进（跳过要查凭据与 MIB 支持度，不适用什么都不用做）。
+	excluded := make([]string, 0, 2)
 	if stats.SkippedChecks > 0 {
-		tally += fmt.Sprintf("；通过率分母已剔除跳过项（按 %d 项计）", stats.TotalChecks-stats.SkippedChecks)
+		excluded = append(excluded, fmt.Sprintf("跳过 %d 项", stats.SkippedChecks))
+	}
+	if stats.NotApplicableChecks > 0 {
+		excluded = append(excluded, fmt.Sprintf("设备不适用 %d 项", stats.NotApplicableChecks))
+	}
+	if len(excluded) > 0 {
+		tally += fmt.Sprintf("；通过率分母已剔除%s（按 %d 项计）",
+			strings.Join(excluded, "与"),
+			stats.TotalChecks-stats.SkippedChecks-stats.NotApplicableChecks)
 	}
 	return tally
 }

@@ -25,7 +25,7 @@ const DEVICE_STATUSES = ['success', 'warning', 'error', 'offline'] as const
 const TRIGGER_TYPES = ['scheduled', 'manual'] as const
 
 const CHECK_ITEM_TYPES = ['snmp', 'ssh', 'http', 'ping', 'script'] as const
-const CHECK_RESULT_STATUSES = ['pass', 'warning', 'fail', 'skip'] as const
+const CHECK_RESULT_STATUSES = ['pass', 'warning', 'fail', 'skip', 'not_applicable'] as const
 
 const isObject = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value)

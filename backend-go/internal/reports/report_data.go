@@ -35,7 +35,12 @@ type InspectionSummaryStats struct {
 	// 问题，于是出现「只看到 1 个告警却显示 2 个问题点」。
 	SkippedChecks int
 	UnknownChecks int
-	PassRate      float64
+	// NotApplicableChecks 是因设备类型不适用而未执行的检查项（交换机上的 BGP、
+	// 路由器上的 PoE）。与 SkippedChecks 的区别是关键：skip 是"该查却没查成"，
+	// 需要运维关注、要压低通过率；不适用是"这台设备根本没这个特性"，属预期内，
+	// 既不算异常也不进通过率分母。
+	NotApplicableChecks int
+	PassRate            float64
 }
 
 // AbnormalChecks 返回需要人工关注的检查项数（跳过项不算问题）。设备
@@ -54,6 +59,10 @@ const (
 	checkStatusError   = "error"
 	checkStatusSkipped = "skipped"
 	checkStatusUnknown = "unknown"
+	// checkStatusNotApplicable 与 skipped 分开：前者是设备天然没有该特性，
+	// 后者是采集失败或缺基线。混在一起会让"这台设备没有光模块"和
+	// "光模块数据采集失败"在报告里长得一模一样。
+	checkStatusNotApplicable = "not_applicable"
 )
 
 // normalizeCheckStatus 把检查项状态收敛到六个枚举之一。空值与无法识别
@@ -69,8 +78,10 @@ func normalizeCheckStatus(status string) string {
 		return checkStatusFailed
 	case "error":
 		return checkStatusError
-	case "skip", "skipped", "not_applicable", "n/a":
+	case "skip", "skipped":
 		return checkStatusSkipped
+	case "not_applicable", "n/a", "na":
+		return checkStatusNotApplicable
 	default:
 		return checkStatusUnknown
 	}
@@ -108,6 +119,8 @@ func reconcileInspectionSummary(data *InspectionReportData) {
 				deviceSummary.ErrorChecks++
 			case checkStatusSkipped:
 				deviceSummary.SkippedChecks++
+			case checkStatusNotApplicable:
+				deviceSummary.NotApplicableChecks++
 			default:
 				deviceSummary.UnknownChecks++
 			}
@@ -117,9 +130,12 @@ func reconcileInspectionSummary(data *InspectionReportData) {
 
 		if deviceSummary.TotalChecks > 0 {
 			device.IssueCount = deviceSummary.AbnormalChecks()
-			// 通过率分母剔除跳过项：未执行的检查既不该算通过，也不该
-			// 拉低通过率。全部跳过时记 0%，避免除零。
-			evaluated := deviceSummary.TotalChecks - deviceSummary.SkippedChecks
+			// 通过率分母同时剔除跳过项与不适用项：前者未执行成功，后者设备
+			// 天然没有该特性，都不该算通过、也不该拉低通过率。若把不适用计入
+			// 分母，一台健康交换机跑全面巡检会因 BGP 不适用而从 100% 掉到 75%——
+			// 运维看到的是"设备有问题"，实际是"统计口径有问题"。
+			// 分母为 0 时记 0%，避免除零。
+			evaluated := deviceSummary.TotalChecks - deviceSummary.SkippedChecks - deviceSummary.NotApplicableChecks
 			if evaluated > 0 {
 				device.PassRate = float64(deviceSummary.PassedChecks) / float64(evaluated) * 100
 			} else {
@@ -134,6 +150,7 @@ func reconcileInspectionSummary(data *InspectionReportData) {
 		summary.ErrorChecks += deviceSummary.ErrorChecks
 		summary.SkippedChecks += deviceSummary.SkippedChecks
 		summary.UnknownChecks += deviceSummary.UnknownChecks
+		summary.NotApplicableChecks += deviceSummary.NotApplicableChecks
 	}
 
 	if totalDetails == 0 {
@@ -143,7 +160,7 @@ func reconcileInspectionSummary(data *InspectionReportData) {
 		return
 	}
 
-	evaluated := summary.TotalChecks - summary.SkippedChecks
+	evaluated := summary.TotalChecks - summary.SkippedChecks - summary.NotApplicableChecks
 	if evaluated > 0 {
 		summary.PassRate = float64(summary.PassedChecks) / float64(evaluated) * 100
 	}

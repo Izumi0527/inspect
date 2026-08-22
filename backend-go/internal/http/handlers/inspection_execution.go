@@ -132,6 +132,136 @@ func filterEnabledCheckItems(checkItems []map[string]interface{}) []map[string]i
 	return filtered
 }
 
+// checkItemDeviceTypes 读取检查项声明的适用设备类型。
+// 返回空切片表示未声明，即适用于全部设备——存量模板与用户自建模板都没有
+// 这个字段，缺省必须是"适用"而不是"不适用"，否则升级后所有检查项全部停摆。
+func checkItemDeviceTypes(item map[string]interface{}) []string {
+	raw, ok := item["device_types"]
+	if !ok || raw == nil {
+		return nil
+	}
+
+	appendValue := func(out []string, value interface{}) []string {
+		text, isString := value.(string)
+		if !isString {
+			return out
+		}
+		text = strings.ToLower(strings.TrimSpace(text))
+		if text == "" {
+			return out
+		}
+		return append(out, text)
+	}
+
+	switch list := raw.(type) {
+	case []string:
+		out := make([]string, 0, len(list))
+		for _, v := range list {
+			out = appendValue(out, v)
+		}
+		return out
+	case []interface{}:
+		// jsonb 反序列化后是 []interface{}，这是实际运行时最常见的形态
+		out := make([]string, 0, len(list))
+		for _, v := range list {
+			out = appendValue(out, v)
+		}
+		return out
+	}
+	return nil
+}
+
+// buildNotApplicableResult 为「不适用于当前设备类型」的检查项生成一条结果。
+//
+// 不适用项不做任何采集，但仍要落一条记录：报告需要说清「这台设备没查 PoE 是
+// 因为它不是交换机」，而不是让这一项凭空消失——凭空消失会让同一模板在不同
+// 设备上的检查项数对不上，读者无从判断是漏查还是不适用。
+func buildNotApplicableResult(inspectionID int, item map[string]interface{}, deviceType string) inspection.Result {
+	now := time.Now().UTC()
+	itemName := readString(item, "name")
+	itemType := readString(item, "type")
+	itemCategory := readString(item, "category")
+
+	declared := checkItemDeviceTypes(item)
+	scope := strings.Join(declared, "、")
+	if scope == "" {
+		scope = "特定设备类型"
+	}
+	shown := strings.TrimSpace(deviceType)
+	if shown == "" {
+		shown = "未知"
+	}
+
+	return inspection.Result{
+		InspectionID:      inspectionID,
+		CheckItemName:     itemName,
+		CheckItemType:     itemType,
+		CheckItemCategory: stringPtr(itemCategory),
+		Status:            inspection.CheckStatusNotApplicable,
+		ExpectedValue:     stringPtr(fmt.Sprintf("适用于 %s", scope)),
+		Message:           stringPtr(fmt.Sprintf("该检查项适用于 %s，当前设备类型为 %s，未执行", scope, shown)),
+		StartTime:         &now,
+		EndTime:           &now,
+		CreatedAt:         &now,
+	}
+}
+
+// knownDeviceTypes 是设备档案中合法的设备类型，与 inspection/builtin_templates.go
+// 的模板 device_types 对齐。
+//
+// 只有设备类型确实落在此集合内时才按检查项声明过滤。出现集合外的值说明设备档案
+// 数据异常（自动发现尚未归类、手工录入笔误）或系统新增了设备类型而此处漏同步——
+// 两种情况都全部执行而非静默跳过：漏检的代价远大于多跑一次采集，且真正不适用的
+// 项采不到数据自然会 skip。
+var knownDeviceTypes = map[string]bool{
+	"switch":   true,
+	"router":   true,
+	"firewall": true,
+	"server":   true,
+}
+
+// splitCheckItemsByApplicability 按设备类型把启用的检查项分成可执行与不适用两组。
+//
+// BGP 只对路由器与防火墙有意义，PoE 只对交换机有意义。不做这层过滤的话，一台
+// 交换机跑全面巡检会产出一串采集不到的结果，真正的异常淹没在噪声里。
+//
+// 两个刻意的宽松取向：
+//   - 检查项未声明 device_types 时视为适用全部（向后兼容存量模板）
+//   - 设备自身 device_type 缺失或无法识别时全部执行（自动发现尚未归类的设备，
+//     漏查一项的代价远大于多跑一次采集，且采不到自然会 skip）
+func splitCheckItemsByApplicability(
+	checkItems []map[string]interface{},
+	deviceType string,
+) (applicable []map[string]interface{}, notApplicable []map[string]interface{}) {
+	enabled := filterEnabledCheckItems(checkItems)
+	normalizedDevice := strings.ToLower(strings.TrimSpace(deviceType))
+
+	applicable = make([]map[string]interface{}, 0, len(enabled))
+	notApplicable = make([]map[string]interface{}, 0)
+
+	for _, item := range enabled {
+		declared := checkItemDeviceTypes(item)
+		if len(declared) == 0 || normalizedDevice == "" || !knownDeviceTypes[normalizedDevice] {
+			applicable = append(applicable, item)
+			continue
+		}
+
+		matched := false
+		for _, dt := range declared {
+			if dt == normalizedDevice {
+				matched = true
+				break
+			}
+		}
+		if matched {
+			applicable = append(applicable, item)
+			continue
+		}
+		notApplicable = append(notApplicable, item)
+	}
+	return applicable, notApplicable
+}
+
 func (h InspectionHandler) markInspectionExecutionFailed(ctx context.Context, inspectionID int, errMsg string, completedChecks int, totalChecks int) {
 	if h.Service == nil || inspectionID <= 0 {
 		return
@@ -230,8 +360,17 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 	}
 
 	// 4. 执行检查项并生成结果（实时保存 + 推送进度）
-	activeCheckItems := filterEnabledCheckItems(checkItems)
-	totalChecks := len(activeCheckItems)
+	// 按设备类型分流：BGP 只对路由器/防火墙有意义、PoE 只对交换机有意义，
+	// 不适用项不做采集但仍落一条 not_applicable 记录，保证同一模板在不同设备上
+	// 的检查项总数一致，读者不必猜是漏查还是不适用。
+	// device 在部分调用路径上可能为 nil（设备记录缺失时仍会走到这里），
+	// 取不到设备类型就按"不确定就都查"处理，与未知设备类型的口径一致。
+	deviceType := ""
+	if device != nil {
+		deviceType = device.DeviceType
+	}
+	activeCheckItems, notApplicableItems := splitCheckItemsByApplicability(checkItems, deviceType)
+	totalChecks := len(activeCheckItems) + len(notApplicableItems)
 	if totalChecks == 0 {
 		errMsg := "巡检模板无有效检查项，请检查所选模板的检查项配置"
 		h.markInspectionExecutionFailed(baseCtx, insp.ID, errMsg, 0, 0)
@@ -253,8 +392,24 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 	skippedCount := 0
 	var executionErr error
 
-	results := h.executeCheckItems(execCtx, baseCtx, insp.ID, device, probeResult, activeCheckItems, defaults.RetryAttempts, func(result inspection.Result, completed int, total int) error {
-		executedCount = completed
+	// 不适用项无需采集，先行落库并计入已完成，进度条不会因它们停顿。
+	// 它们不计入 passed/failed/warning/skipped 任何一类——既不是通过也不是失败，
+	// 更不是"该查没查成"，统计口径由报告层从明细还原。
+	for _, item := range notApplicableItems {
+		result := buildNotApplicableResult(insp.ID, item, deviceType)
+		if err := h.Service.SaveInspectionResult(baseCtx, &result); err != nil {
+			h.markInspectionExecutionFailed(baseCtx, insp.ID, fmt.Sprintf("保存巡检结果失败: %v", err), executedCount, totalChecks)
+			return
+		}
+		executedCount++
+	}
+	notApplicableCount := executedCount
+
+	results := h.executeCheckItems(execCtx, baseCtx, insp.ID, device, probeResult, activeCheckItems, defaults.RetryAttempts, func(result inspection.Result, completed int, _ int) error {
+		// executeCheckItems 只统计自己那批的进度，加回先落库的不适用项才是整体进度。
+		// 回调传入的 total 只是可执行项数，一律忽略、改用 totalChecks，
+		// 否则进度会停在「可执行项数 / 总项数」而永远到不了 100%。
+		executedCount = notApplicableCount + completed
 
 		if err := h.Service.SaveInspectionResult(baseCtx, &result); err != nil {
 			executionErr = fmt.Errorf("保存巡检结果失败: %w", err)
@@ -273,18 +428,18 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 		}
 
 		// 实时更新统计与进度
-		if err := h.Service.UpdateInspectionStats(baseCtx, insp.ID, total, passedCount, failedCount, warningCount, skippedCount); err != nil {
+		if err := h.Service.UpdateInspectionStats(baseCtx, insp.ID, totalChecks, passedCount, failedCount, warningCount, skippedCount); err != nil {
 			executionErr = fmt.Errorf("更新巡检统计失败: %w", err)
 			return executionErr
 		}
 
 		progress := 0
-		if total > 0 {
-			progress = int(math.Round(float64(completed) / float64(total) * 100))
+		if totalChecks > 0 {
+			progress = int(math.Round(float64(executedCount) / float64(totalChecks) * 100))
 		}
 		h.broadcastScanProgress(insp.ID, inspection.StatusRunning, progress, map[string]interface{}{
-			"completed_checks": completed,
-			"total_checks":     total,
+			"completed_checks": executedCount,
+			"total_checks":     totalChecks,
 		})
 		return nil
 	})

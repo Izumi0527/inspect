@@ -92,6 +92,8 @@ func localizeStatusWord(value string) string {
 		return "警告"
 	case "skip", "skipped":
 		return "跳过"
+	case "not_applicable", "n/a", "na":
+		return "不适用"
 	case "error":
 		return "错误"
 	case "completed", "complete", "done":
