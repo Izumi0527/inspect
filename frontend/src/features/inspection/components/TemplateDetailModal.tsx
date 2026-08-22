@@ -118,10 +118,10 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
         </div>
 
         {/* 内容区 - 横向两栏布局 */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 flex flex-col">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:flex-1 lg:min-h-0 lg:grid-rows-[minmax(0,1fr)]">
             {/* 左侧：基本信息 + 设备类型 */}
-            <div className="space-y-4">
+            <div className="space-y-4 lg:min-h-0 lg:overflow-y-auto">
               {/* 基本信息卡片 */}
               <Card className="border border-border">
                 <CardContent className="p-4">
@@ -197,15 +197,15 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
             </div>
 
             {/* 右侧：检查项配置 */}
-            <Card className="border border-border h-fit max-h-[calc(85vh-180px)] flex flex-col">
-              <CardContent className="p-4 flex flex-col h-full">
+            <Card className="border border-border flex flex-col overflow-hidden">
+              <CardContent className="p-4 flex flex-col flex-1 min-h-0">
                 <h3 className="text-base font-semibold text-foreground mb-3 flex items-center gap-2 flex-shrink-0">
                   <Settings className="w-4 h-4 text-green-600" />
                   检查项配置
                   <span className="text-xs font-normal text-muted-foreground">({template.checkItems?.length || 0} 项)</span>
                 </h3>
                 {template.checkItems && template.checkItems.length > 0 ? (
-                  <div className="space-y-2 overflow-y-auto flex-1 pr-1">
+                  <div className="space-y-2 overflow-y-auto flex-1 min-h-0 pr-1">
                     {template.checkItems.map((checkItem, index) => (
                       <motion.div
                         key={checkItem.id || index}
