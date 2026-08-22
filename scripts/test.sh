@@ -108,7 +108,7 @@ test_frontend() {
     if [[ "$SKIP_TYPE_CHECK" != true ]]; then
         run_step "前端类型检查 (tsc --noEmit)" "$frontend_dir" pnpm run type-check
     fi
-    run_step "前端单元测试 (jest)" "$frontend_dir" pnpm test -- --runInBand
+    run_step "前端单元测试 (jest)" "$frontend_dir" pnpm test --runInBand
 }
 
 find_powershell_host() {

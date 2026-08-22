@@ -161,7 +161,7 @@ function Test-Frontend {
     if (-not $SkipTypeCheck) {
         Invoke-Step -Name "前端类型检查 (tsc --noEmit)" -WorkingDirectory $frontendDir -Action { & pnpm run type-check }
     }
-    Invoke-Step -Name "前端单元测试 (jest)" -WorkingDirectory $frontendDir -Action { & pnpm test -- --runInBand }
+    Invoke-Step -Name "前端单元测试 (jest)" -WorkingDirectory $frontendDir -Action { & pnpm test --runInBand }
 }
 
 function Get-PowerShellTestHost {
