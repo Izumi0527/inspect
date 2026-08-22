@@ -105,6 +105,132 @@ func ckBandwidth() map[string]interface{} {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// 接口健康类检查项（标准 IF-MIB / EtherLike-MIB，全厂商通用，不限设备类型）
+// ---------------------------------------------------------------------------
+
+// ckInterfaceErrors 接口错包率。错包是物理层劣化的直接证据——光衰、跳线老化、
+// 接头氧化、电磁干扰，这类问题在 SNMP 上没有别的指标能替代。
+// 阈值按累计比率设定：0.01% 已属偏高，0.1% 说明链路明显有问题。
+func ckInterfaceErrors() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "interface_errors", "name": "接口错包率", "description": "逐接口统计收发错包占比，识别物理层劣化的链路",
+		"type": "snmp", "category": "performance", "metric": "interface_errors", "weight": 9,
+		"config":  map[string]interface{}{"unit": "%", "threshold": map[string]interface{}{"warning": 0.01, "critical": 0.1}},
+		"enabled": true,
+	}
+}
+
+// ckInterfaceDiscards 接口丢弃率。与错包是两类问题：丢弃指向缓冲区溢出、
+// QoS 队列丢弃或 ACL 拒绝，即拥塞与配置问题。分开检查才能让运维知道
+// 该去换光模块还是该去查策略。
+func ckInterfaceDiscards() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "interface_discards", "name": "接口丢弃率", "description": "逐接口统计报文丢弃占比，识别拥塞与策略丢包",
+		"type": "snmp", "category": "performance", "metric": "interface_discards", "weight": 8,
+		"config":  map[string]interface{}{"unit": "%", "threshold": map[string]interface{}{"warning": 0.1, "critical": 1}},
+		"enabled": true,
+	}
+}
+
+// ckInterfaceAdminStatus 接口管理状态一致性。admin up 但 oper down 才是真故障，
+// admin down 是运维主动关闭。本项补上了「接口状态」检查缺失的这一半信息。
+func ckInterfaceAdminStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "interface_admin_status", "name": "接口状态一致性", "description": "区分人为关闭与链路故障，仅对配置为启用却未运行的接口告警",
+		"type": "snmp", "category": "performance", "metric": "interface_admin_status", "weight": 9,
+		"config": map[string]interface{}{}, "enabled": true,
+	}
+}
+
+// ckInterfaceDuplex 接口双工模式。与错包检查互补：错包说「有问题」，
+// 双工说「为什么」——千兆口协商成半双工会同时引发大量错包与性能腰斩。
+func ckInterfaceDuplex() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "interface_duplex", "name": "接口双工模式", "description": "检测高速接口是否误协商为半双工",
+		"type": "snmp", "category": "performance", "metric": "interface_duplex", "weight": 6,
+		"config": map[string]interface{}{}, "enabled": true,
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 硬件部件与设备专项检查项
+//
+// device_types 声明适用设备类型，执行端据此过滤：不适用的项不做采集，
+// 直接落一条 not_applicable 结果，既不算通过也不算失败，不进通过率分母。
+// ---------------------------------------------------------------------------
+
+// ckFanStatus 风扇状态。单风扇故障导致散热余量不足，等温度检查发现时
+// 设备往往已在劣化。仅网络设备的 catalog 定义了对应 OID。
+func ckFanStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "fan_status", "name": "风扇状态", "description": "检查风扇模块运行状态，识别散热能力下降",
+		"type": "snmp", "category": "health", "metric": "fan_status", "weight": 8,
+		"device_types": []string{"switch", "router", "firewall"},
+		"config":       map[string]interface{}{},
+		"enabled":      true,
+	}
+}
+
+// ckPowerStatus 电源状态。单电源运行时任何一次市电抖动都会导致宕机，
+// 冗余是否还在是比 CPU 高低更要紧的事。
+func ckPowerStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "power_status", "name": "电源状态", "description": "检查电源模块运行状态，识别冗余失效",
+		"type": "snmp", "category": "health", "metric": "power_status", "weight": 9,
+		"device_types": []string{"switch", "router", "firewall"},
+		"config":       map[string]interface{}{},
+		"enabled":      true,
+	}
+}
+
+// ckPoEStatus PoE 供电余量。预算耗尽后新接的 AP 与 IP 话机直接不上电，
+// 现象诡异难查。仅交换机适用。
+func ckPoEStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "poe_status", "name": "PoE 供电余量", "description": "检查 PoE 剩余保障功率与端口供电情况",
+		"type": "snmp", "category": "health", "metric": "poe", "weight": 6,
+		"device_types": []string{"switch"},
+		"config":       map[string]interface{}{"unit": "W", "threshold": map[string]interface{}{"warning": 30, "critical": 10}},
+		"enabled":      true,
+	}
+}
+
+// ckOpticalPower 光模块收发光功率。光衰比错包更早暴露链路劣化，
+// 是提前更换光模块的依据。判定方向与其他阈值相反——越低越危险。
+func ckOpticalPower() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "optical_power", "name": "光模块光功率", "description": "检查光模块收光功率是否跌出正常区间",
+		"type": "snmp", "category": "health", "metric": "optical_power", "weight": 8,
+		"device_types": []string{"switch", "router", "firewall"},
+		"config":       map[string]interface{}{"unit": "dBm", "threshold": map[string]interface{}{"warning": -25, "critical": -30}},
+		"enabled":      true,
+	}
+}
+
+// ckBGPPeers BGP 邻居状态。邻居断开直接造成路由黑洞；Established 但建立
+// 时长很短则说明会话在反复重建，比单纯断开更隐蔽。仅路由器与防火墙适用。
+func ckBGPPeers() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "bgp_peers", "name": "BGP 邻居状态", "description": "检查 BGP 邻居是否全部建立且会话稳定",
+		"type": "snmp", "category": "performance", "metric": "bgp_peers", "weight": 10,
+		"device_types": []string{"router", "firewall"},
+		"config":       map[string]interface{}{},
+		"enabled":      true,
+	}
+}
+
+// ckFirmwareVersion 设备型号与固件版本。恒判通过，仅采集展示——版本是否合规
+// 取决于厂商推荐列表与安全公告，这些信息不在系统内，硬编码判定规则会很快过期。
+// 作用是让报告自带版本清单，便于事后比对。
+func ckFirmwareVersion() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "firmware_version", "name": "型号与固件版本", "description": "采集设备型号与固件版本，供版本基线比对",
+		"type": "snmp", "category": "health", "metric": "firmware_version", "weight": 3,
+		"config": map[string]interface{}{}, "enabled": true,
+	}
+}
+
 func builtinTemplateSeeds() []builtinTemplateSeed {
 	deviceTypes := map[string]interface{}{"device_types": []string{"switch", "router", "firewall", "server"}}
 	return []builtinTemplateSeed{
@@ -117,24 +243,38 @@ func builtinTemplateSeeds() []builtinTemplateSeed {
 		},
 		{
 			Name:        "基础健康巡检",
-			Description: "连通性 + CPU + 内存，覆盖设备核心健康指标。",
+			Description: "连通性 + CPU + 内存 + 风扇与电源，覆盖设备核心健康指标。硬件部件与 CPU/内存同级：风扇故障或电源冗余失效比负载偏高更紧急。",
 			Category:    "network",
 			DeviceTypes: deviceTypes,
-			CheckItems:  []map[string]interface{}{ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory()},
+			CheckItems: []map[string]interface{}{
+				ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory(),
+				ckFanStatus(), ckPowerStatus(),
+			},
 		},
 		{
 			Name:        "标准巡检",
-			Description: "基础健康 + 温度 + 运行时间 + 接口状态与利用率，适合日常例行巡检。",
+			Description: "基础健康 + 温度 + 运行时间 + 接口状态、利用率、错包率、丢弃率、状态一致性与双工模式，适合日常例行巡检。接口物理层健康是日常巡检最大的盲区。",
 			Category:    "network",
 			DeviceTypes: deviceTypes,
-			CheckItems:  []map[string]interface{}{ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory(), ckTemperature(), ckUptime(), ckInterface(), ckInterfaceUtilization()},
+			CheckItems: []map[string]interface{}{
+				ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory(),
+				ckFanStatus(), ckPowerStatus(),
+				ckTemperature(), ckUptime(), ckInterface(), ckInterfaceUtilization(),
+				ckInterfaceErrors(), ckInterfaceDiscards(), ckInterfaceAdminStatus(), ckInterfaceDuplex(),
+			},
 		},
 		{
 			Name:        "全面巡检",
-			Description: "标准巡检 + 带宽吞吐量，覆盖全部可采集维度。",
+			Description: "标准巡检 + 带宽吞吐量 + PoE 供电、光模块光功率、BGP 邻居与固件版本，覆盖全部可采集维度。部分检查项仅适用于特定设备类型，在其他设备上会标记为不适用而非失败。",
 			Category:    "network",
 			DeviceTypes: deviceTypes,
-			CheckItems:  []map[string]interface{}{ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory(), ckTemperature(), ckUptime(), ckInterface(), ckInterfaceUtilization(), ckBandwidth()},
+			CheckItems: []map[string]interface{}{
+				ckConnectivity(), ckSNMPReachable(), ckCPU(), ckMemory(),
+				ckFanStatus(), ckPowerStatus(),
+				ckTemperature(), ckUptime(), ckInterface(), ckInterfaceUtilization(),
+				ckInterfaceErrors(), ckInterfaceDiscards(), ckInterfaceAdminStatus(), ckInterfaceDuplex(),
+				ckBandwidth(), ckPoEStatus(), ckOpticalPower(), ckBGPPeers(), ckFirmwareVersion(),
+			},
 		},
 	}
 }

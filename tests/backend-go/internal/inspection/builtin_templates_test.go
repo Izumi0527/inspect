@@ -33,6 +33,12 @@ func TestBuiltinCheckItems_ExecutableAndMetricValid(t *testing.T) {
 		"reachable": true, "cpu": true, "memory": true, "temperature": true,
 		"uptime": true, "interface": true, "interface_utilization": true,
 		"bandwidth": true, "system_info": true,
+		// 接口健康类（标准 IF-MIB / EtherLike-MIB）
+		"interface_errors": true, "interface_discards": true,
+		"interface_admin_status": true, "interface_duplex": true,
+		// 硬件部件与设备专项
+		"fan_status": true, "power_status": true, "poe": true,
+		"optical_power": true, "bgp_peers": true, "firmware_version": true,
 	}
 
 	for _, it := range items {
@@ -50,7 +56,12 @@ func TestBuiltinCheckItems_ExecutableAndMetricValid(t *testing.T) {
 	}
 
 	// 覆盖度：内置档位应覆盖全部核心指标。
-	wantMetrics := []string{"reachable", "cpu", "memory", "temperature", "uptime", "interface", "interface_utilization", "bandwidth"}
+	wantMetrics := []string{
+		"reachable", "cpu", "memory", "temperature", "uptime", "interface",
+		"interface_utilization", "bandwidth",
+		"interface_errors", "interface_discards", "interface_admin_status", "interface_duplex",
+		"fan_status", "power_status", "poe", "optical_power", "bgp_peers", "firmware_version",
+	}
 	got := map[string]bool{}
 	for _, it := range items {
 		if m, ok := it["metric"].(string); ok {

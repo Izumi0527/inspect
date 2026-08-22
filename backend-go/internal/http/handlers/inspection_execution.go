@@ -695,6 +695,26 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 		h.checkInterfaceMetric(result, snmpMetrics)
 	case "interface_utilization":
 		h.checkInterfaceUtilizationMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+	case "interface_errors":
+		h.checkInterfaceErrorsMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+	case "interface_discards":
+		h.checkInterfaceDiscardsMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+	case "interface_admin_status":
+		h.checkInterfaceAdminStatusMetric(result, snmpMetrics)
+	case "interface_duplex":
+		h.checkInterfaceDuplexMetric(result, snmpMetrics)
+	case "fan_status":
+		h.checkComponentStatusMetric(result, snmpMetrics, config, "fan", "风扇")
+	case "power_status":
+		h.checkComponentStatusMetric(result, snmpMetrics, config, "power", "电源")
+	case "poe":
+		h.checkPoEMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+	case "optical_power":
+		h.checkOpticalPowerMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+	case "bgp_peers":
+		h.checkBGPPeersMetric(result, snmpMetrics)
+	case "firmware_version":
+		h.checkFirmwareVersionMetric(result, snmpMetrics)
 	case "bandwidth":
 		h.checkBandwidthMetric(result, snmpMetrics)
 	case "reachable", "system_info":
@@ -1083,6 +1103,740 @@ func buildInterfaceUtilizationDetails(summary interfaceUtilizationSummary, warni
 		return nil
 	}
 	return datatypes.JSON(encoded)
+}
+
+// thresholdDetailsPayload 生成阈值口径的 details 载荷片段，是所有带阈值检查项的公共部分。
+//
+// 报告需要说明「本次按什么口径判的」：同一指标在不同模板下阈值可能不同，
+// 而 inspection_results 表没有阈值列，只能经 details 透传。
+// 传入的必须是补齐默认后**实际生效**的值，写 0 会让报告出现「按 0/0 判定」。
+func thresholdDetailsPayload(metric string, warning, critical float64, unit string) map[string]interface{} {
+	return map[string]interface{}{
+		"metric": metric,
+		"threshold": map[string]interface{}{
+			"warning":  warning,
+			"critical": critical,
+			"unit":     unit,
+		},
+	}
+}
+
+// buildThresholdDetails 把阈值口径单独写成一份 details，
+// 用于没有逐项明细的检查项；有明细的检查项在自己的载荷里合并同样的字段。
+func buildThresholdDetails(metric string, warning, critical float64, unit string) datatypes.JSON {
+	payload := thresholdDetailsPayload(metric, warning, critical, unit)
+	payload["kind"] = "threshold"
+
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil
+	}
+	return datatypes.JSON(encoded)
+}
+
+// ---------------------------------------------------------------------------
+// 部件状态（风扇 / 电源）
+// ---------------------------------------------------------------------------
+
+// 部件状态码的默认映射。
+//
+// 这是整套检查里最需要谨慎的地方：MIB registry 只记录了 OID 与中文描述
+// （「风扇状态」），取值含义无从查证，且华为与 H3C 的编码并不一致。默认值按
+// 通用约定取 1=正常、2=异常，但**实际部署应按设备实测校准**，模板 config 的
+//
+// 关键约束：落在两个集合之外的状态码判 skip，绝不猜。猜成异常会误报；猜成正常
+// 更糟——故障设备被报成健康，静默失效直到设备真的挂掉。
+var (
+	defaultComponentNormalStates   = []float64{1}
+	defaultComponentAbnormalStates = []float64{2}
+)
+
+// componentStateCodes 从模板 config 读取状态码集合，未配置时返回默认值。
+func componentStateCodes(config map[string]interface{}, key string, fallback []float64) []float64 {
+	raw, ok := config[key]
+	if !ok || raw == nil {
+		return fallback
+	}
+	list, ok := raw.([]interface{})
+	if !ok {
+		return fallback
+	}
+	codes := make([]float64, 0, len(list))
+	for _, item := range list {
+		if value, ok := toFloatValue(item); ok {
+			codes = append(codes, value)
+		}
+	}
+	if len(codes) == 0 {
+		return fallback
+	}
+	return codes
+}
+
+// toFloatValue 兼容 jsonb 反序列化出的多种数值形态。
+func toFloatValue(raw interface{}) (float64, bool) {
+	switch v := raw.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	}
+	return 0, false
+}
+
+func containsFloat(list []float64, want float64) bool {
+	for _, v := range list {
+		if v == want {
+			return true
+		}
+	}
+	return false
+}
+
+// checkComponentStatusMetric 是风扇与电源检查的共同实现。
+func (h InspectionHandler) checkComponentStatusMetric(
+	result *inspection.Result,
+	metrics *devices.SNMPMetrics,
+	config map[string]interface{},
+	kind, label string,
+) {
+	normalStates := componentStateCodes(config, "normal_states", defaultComponentNormalStates)
+	abnormalStates := componentStateCodes(config, "abnormal_states", defaultComponentAbnormalStates)
+	result.ExpectedValue = stringPtr(fmt.Sprintf("全部%s状态码应属于正常集合 %v", label, normalStates))
+
+	if metrics == nil || len(metrics.Components) == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr(fmt.Sprintf("设备未上报%s状态（该厂商或型号可能不支持对应 MIB）", label))
+		return
+	}
+
+	total, normal, abnormal, unknown := 0, 0, 0, 0
+	abnormalIndexes := make([]string, 0)
+	unknownCodes := make([]string, 0)
+	for _, component := range metrics.Components {
+		if component.Kind != kind || component.State == nil {
+			continue
+		}
+		total++
+		state := float64(*component.State)
+		switch {
+		case containsFloat(normalStates, state):
+			normal++
+		case containsFloat(abnormalStates, state):
+			abnormal++
+			abnormalIndexes = append(abnormalIndexes, component.Index)
+		default:
+			unknown++
+			unknownCodes = append(unknownCodes, fmt.Sprintf("%s(码 %d)", component.Index, *component.State))
+		}
+	}
+
+	if total == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr(fmt.Sprintf("设备未上报%s状态（该厂商或型号可能不支持对应 MIB）", label))
+		return
+	}
+
+	actual := fmt.Sprintf("共 %d 个%s：正常 %d，异常 %d，状态码未知 %d", total, label, normal, abnormal, unknown)
+	result.ActualValue = &actual
+
+	if abnormal > 0 {
+		result.Status = "fail"
+		result.Message = stringPtr(fmt.Sprintf("%d 个%s处于异常状态（编号 %s），请现场确认并准备备件",
+			abnormal, label, strings.Join(abnormalIndexes, "、")))
+		return
+	}
+
+	// 全部落在未知码上时不作判定：状态码语义未经实测确认，猜正常等于把故障
+	// 设备报成健康。显式判 skip 并给出原始码，让运维据此校准模板配置。
+	if normal == 0 && unknown > 0 {
+		result.Status = "skip"
+		result.Message = stringPtr(fmt.Sprintf(
+			"%s状态码不在已知集合内，无法判定：%s；请按设备实际取值在模板中配置 normal_states / abnormal_states",
+			label, strings.Join(unknownCodes, "、")))
+		return
+	}
+
+	result.Status = "pass"
+	message := fmt.Sprintf("%d 个%s状态正常", normal, label)
+	if unknown > 0 {
+		message += fmt.Sprintf("；另有 %d 个状态码未知（%s），未参与判定",
+			unknown, strings.Join(unknownCodes, "、"))
+	}
+	result.Message = stringPtr(message)
+}
+
+// ---------------------------------------------------------------------------
+// PoE 供电
+// ---------------------------------------------------------------------------
+
+// checkPoEMetric 检查 PoE 供电余量。
+//
+// 分厂商降级：H3C 上报 PSE 剩余保障功率，可直接判定「还能不能再接设备」；
+// 华为只上报端口消耗功率、没有系统额定总功率，算不出使用率，此时退化为纯展示
+// ——硬判会是无根据的猜测。定位与「带宽吞吐量」项相同。
+func (h InspectionHandler) checkPoEMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warning, critical float64) {
+	if warning == 0 {
+		warning = 30
+	}
+	if critical == 0 {
+		critical = 10
+	}
+	result.ExpectedValue = stringPtr(fmt.Sprintf("PSE 剩余保障功率 > %gW（警告 <=%gW，故障 <=%gW）", warning, warning, critical))
+
+	if metrics == nil || (len(metrics.PoE.Ports) == 0 && metrics.PoE.RemainingPower == nil) {
+		result.Status = "skip"
+		result.Message = stringPtr("设备未上报 PoE 供电数据（非 PoE 设备或不支持对应 MIB）")
+		return
+	}
+
+	totalConsuming := 0.0
+	for _, port := range metrics.PoE.Ports {
+		if port.ConsumingPower != nil {
+			totalConsuming += *port.ConsumingPower
+		}
+	}
+
+	if metrics.PoE.RemainingPower == nil {
+		// 只有端口功率：纯展示
+		result.ExpectedValue = stringPtr("仅采集展示（该设备未上报 PSE 剩余保障功率，无法计算供电余量）")
+		actual := fmt.Sprintf("%d 个端口在供电，合计消耗 %.1f", len(metrics.PoE.Ports), totalConsuming)
+		result.ActualValue = &actual
+		result.Status = "pass"
+		result.Message = stringPtr(fmt.Sprintf(
+			"已采集 %d 个 PoE 端口功率；该设备未上报剩余保障功率，无法判定供电余量，仅作展示", len(metrics.PoE.Ports)))
+		return
+	}
+
+	remaining := *metrics.PoE.RemainingPower
+	unit := metrics.PoE.RemainingUnit
+	if unit == "" {
+		unit = "W"
+	}
+	actual := fmt.Sprintf("剩余保障功率 %.1f%s；%d 个端口在供电", remaining, unit, len(metrics.PoE.Ports))
+	result.ActualValue = &actual
+
+	switch {
+	case remaining <= critical:
+		result.Status = "fail"
+		result.Message = stringPtr(fmt.Sprintf(
+			"PoE 剩余保障功率仅 %.1f%s，已低于故障阈值 %g%s，新接入的 AP 或 IP 话机将无法上电",
+			remaining, unit, critical, unit))
+	case remaining <= warning:
+		result.Status = "warning"
+		result.Message = stringPtr(fmt.Sprintf(
+			"PoE 剩余保障功率 %.1f%s，低于警告阈值 %g%s，扩容前请评估供电预算",
+			remaining, unit, warning, unit))
+	default:
+		result.Status = "pass"
+		result.Message = stringPtr(fmt.Sprintf("PoE 剩余保障功率 %.1f%s，供电余量充足", remaining, unit))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 光模块光功率
+// ---------------------------------------------------------------------------
+
+// checkOpticalPowerMetric 检查光模块收发光功率。
+//
+// 与其他阈值检查方向相反：光功率是**越低越危险**，判定用「低于阈值告警」。
+// 光衰比错包更早暴露链路劣化，是提前更换光模块的依据。
+func (h InspectionHandler) checkOpticalPowerMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warning, critical float64) {
+	// 默认区间取通用光模块的可接受下限；不同型号差异较大，模板可覆盖
+	if warning == 0 {
+		warning = -25
+	}
+	if critical == 0 {
+		critical = -30
+	}
+	result.ExpectedValue = stringPtr(fmt.Sprintf("收光功率 > %gdBm（警告 <=%gdBm，故障 <=%gdBm）", warning, warning, critical))
+	result.Details = buildThresholdDetails("optical_power", warning, critical, "dBm")
+
+	if metrics == nil || len(metrics.OpticalTransceivers) == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("设备未上报光模块诊断数据（纯电口设备或不支持 DDM）")
+		return
+	}
+
+	evaluated, low, critLow := 0, 0, 0
+	offenders := make([]string, 0)
+	worst := 0.0
+	worstName := ""
+	for _, module := range metrics.OpticalTransceivers {
+		if module.RxPower == nil {
+			continue
+		}
+		evaluated++
+		rx := *module.RxPower
+		if evaluated == 1 || rx < worst {
+			worst = rx
+			worstName = module.Index
+		}
+		switch {
+		case rx <= critical:
+			critLow++
+			low++
+			offenders = append(offenders, fmt.Sprintf("%s(%.1fdBm)", module.Index, rx))
+		case rx <= warning:
+			low++
+			offenders = append(offenders, fmt.Sprintf("%s(%.1fdBm)", module.Index, rx))
+		}
+	}
+
+	if evaluated == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr(fmt.Sprintf("采集到 %d 个光模块，但均未上报收光功率", len(metrics.OpticalTransceivers)))
+		return
+	}
+
+	actual := fmt.Sprintf("已评估 %d 个光模块；最低收光 %.1fdBm（%s）；超限 %d 个", evaluated, worst, worstName, low)
+	result.ActualValue = &actual
+
+	shown := offenders
+	if len(shown) > utilizationTopOffenderLimit {
+		shown = shown[:utilizationTopOffenderLimit]
+	}
+
+	switch {
+	case critLow > 0:
+		result.Status = "fail"
+		result.Message = stringPtr(fmt.Sprintf(
+			"%d 个光模块收光功率低于故障阈值 %gdBm，链路随时可能中断：%s",
+			critLow, critical, strings.Join(shown, "、")))
+	case low > 0:
+		result.Status = "warning"
+		result.Message = stringPtr(fmt.Sprintf(
+			"%d 个光模块收光功率低于警告阈值 %gdBm，建议排查光纤衰耗或准备更换模块：%s",
+			low, warning, strings.Join(shown, "、")))
+	default:
+		result.Status = "pass"
+		result.Message = stringPtr(fmt.Sprintf("已评估 %d 个光模块，收光功率均在正常区间（最低 %.1fdBm）", evaluated, worst))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// BGP 邻居
+// ---------------------------------------------------------------------------
+
+// bgpEstablishedState 是 BGP FSM 的 established 状态码（RFC 4271）。
+const bgpEstablishedState = 6
+
+// bgpFlappingThresholdSeconds 判定「近期震荡」的建立时长下限。
+// 会话建立不足一小时，说明它在巡检窗口内刚重建过。
+const bgpFlappingThresholdSeconds = 3600
+
+// checkBGPPeersMetric 检查 BGP 邻居状态。
+//
+// 两类问题都要抓：非 Established 的邻居直接造成路由黑洞；而 Established 但
+// 建立时长很短的邻居说明会话在反复重建——后者更隐蔽，巡检那一刻看着正常，
+// 实际一直在震荡。
+func (h InspectionHandler) checkBGPPeersMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
+	result.ExpectedValue = stringPtr("全部 BGP 邻居处于 Established 且会话稳定")
+
+	if metrics == nil || len(metrics.BGPPeers) == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("设备未上报 BGP 邻居信息（未配置 BGP 或不支持对应 MIB）")
+		return
+	}
+
+	total := len(metrics.BGPPeers)
+	down := make([]string, 0)
+	flapping := make([]string, 0)
+	for _, peer := range metrics.BGPPeers {
+		if peer.State == nil {
+			continue
+		}
+		if *peer.State != bgpEstablishedState {
+			label := strings.TrimSpace(peer.StateLabel)
+			if label == "" {
+				label = fmt.Sprintf("状态码 %d", *peer.State)
+			}
+			down = append(down, fmt.Sprintf("%s(%s)", peer.Index, label))
+			continue
+		}
+		if peer.EstablishedTime != nil && *peer.EstablishedTime < bgpFlappingThresholdSeconds {
+			flapping = append(flapping, fmt.Sprintf("%s(%d 秒)", peer.Index, *peer.EstablishedTime))
+		}
+	}
+
+	actual := fmt.Sprintf("共 %d 个邻居；未建立 %d 个，近期重建 %d 个", total, len(down), len(flapping))
+	result.ActualValue = &actual
+
+	if len(down) > 0 {
+		result.Status = "fail"
+		result.Message = stringPtr(fmt.Sprintf(
+			"%d 个 BGP 邻居未处于 Established，相关路由不可用：%s", len(down), strings.Join(down, "、")))
+		return
+	}
+	if len(flapping) > 0 {
+		result.Status = "warning"
+		result.Message = stringPtr(fmt.Sprintf(
+			"%d 个邻居建立时间不足 1 小时，会话可能在反复重建：%s", len(flapping), strings.Join(flapping, "、")))
+		return
+	}
+
+	result.Status = "pass"
+	result.Message = stringPtr(fmt.Sprintf("%d 个 BGP 邻居均处于 Established 且会话稳定", total))
+}
+
+// ---------------------------------------------------------------------------
+// 固件版本
+// ---------------------------------------------------------------------------
+
+// checkFirmwareVersionMetric 采集设备型号与固件版本。
+//
+// 恒判 pass，只做展示不做判定：版本是否合规取决于厂商推荐版本列表与安全公告，
+// 这些信息不在系统内，硬编码判定规则会很快过期。作用是让巡检报告自带版本清单，
+// 便于事后比对。
+func (h InspectionHandler) checkFirmwareVersionMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
+	result.ExpectedValue = stringPtr("仅采集展示，不做合规判定")
+
+	if metrics == nil || (metrics.Model == nil && metrics.FirmwareVersion == nil) {
+		result.Status = "skip"
+		result.Message = stringPtr("未采集到设备型号与固件版本")
+		return
+	}
+
+	model := "未知"
+	if metrics.Model != nil && strings.TrimSpace(*metrics.Model) != "" {
+		model = strings.TrimSpace(*metrics.Model)
+	}
+	version := "未知"
+	if metrics.FirmwareVersion != nil && strings.TrimSpace(*metrics.FirmwareVersion) != "" {
+		version = strings.TrimSpace(*metrics.FirmwareVersion)
+	}
+
+	actual := fmt.Sprintf("%s / %s", model, version)
+	result.ActualValue = &actual
+	result.Status = "pass"
+	result.Message = stringPtr(fmt.Sprintf("型号 %s，固件版本 %s；请对照厂商推荐版本与安全公告自行评估", model, version))
+}
+
+// ---------------------------------------------------------------------------
+// 接口健康类检查（错包 / 丢弃 / 管理状态 / 双工）
+// ---------------------------------------------------------------------------
+
+// interfaceRatioEntry 单个接口的计数器比率明细。
+type interfaceRatioEntry struct {
+	Name      string  `json:"name"`
+	Direction string  `json:"direction"`
+	Percent   float64 `json:"percent"`
+	Count     uint64  `json:"count"`
+	Packets   uint64  `json:"packets"`
+}
+
+// interfaceRatioSummary 逐接口计数器比率统计，错包与丢弃共用。
+type interfaceRatioSummary struct {
+	Total        int
+	Evaluated    int
+	OverWarning  int
+	OverCritical int
+	Peak         interfaceRatioEntry
+	Entries      []interfaceRatioEntry
+	Skipped      []interfaceUtilizationSkipped
+}
+
+// summarizeInterfaceCounterRatio 逐接口计算「计数器 / (计数器 + 包数)」的累计比率。
+//
+// 用累计比率而非采样速率：巡检是周期性体检而非实时监控，「这个口自上电以来错了
+// 千分之三」正是体检该给的结论；且累计比率不依赖上次采样基线，首轮就能出结果。
+// 代价是历史一次性故障会长期留痕，因此 details 里同时给出原始计数与包数，
+// 让读者能自行判断是陈年旧账还是正在恶化。
+//
+// pick 返回该接口入/出方向的计数器与包数，nil 表示该方向无数据。
+func summarizeInterfaceCounterRatio(
+	interfaces []devices.InterfaceMetrics,
+	warning, critical float64,
+	pick func(devices.InterfaceMetrics) (inCount, outCount, inPkts, outPkts *uint64),
+) interfaceRatioSummary {
+	summary := interfaceRatioSummary{Total: len(interfaces)}
+	entries := make([]interfaceRatioEntry, 0, len(interfaces))
+
+	for _, iface := range interfaces {
+		name := strings.TrimSpace(iface.Description)
+		if name == "" {
+			name = strings.TrimSpace(iface.Name)
+		}
+
+		inCount, outCount, inPkts, outPkts := pick(iface)
+		if inCount == nil && outCount == nil {
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "设备未上报该计数器"})
+			continue
+		}
+
+		best := interfaceRatioEntry{Name: name, Percent: -1}
+		evaluate := func(direction string, count, pkts *uint64) {
+			if count == nil || pkts == nil {
+				return
+			}
+			total := *count + *pkts
+			if total == 0 {
+				return
+			}
+			percent := float64(*count) / float64(total) * 100
+			if percent > best.Percent {
+				best = interfaceRatioEntry{
+					Name: name, Direction: direction, Percent: percent,
+					Count: *count, Packets: *pkts,
+				}
+			}
+		}
+		evaluate("入", inCount, inPkts)
+		evaluate("出", outCount, outPkts)
+
+		if best.Percent < 0 {
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "无包计数样本，无法计算比率"})
+			continue
+		}
+
+		summary.Evaluated++
+		entries = append(entries, best)
+		if best.Percent >= critical {
+			summary.OverCritical++
+			summary.OverWarning++
+		} else if best.Percent >= warning {
+			summary.OverWarning++
+		}
+		if best.Percent > summary.Peak.Percent {
+			summary.Peak = best
+		}
+	}
+
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Percent > entries[j].Percent })
+	summary.Entries = entries
+	return summary
+}
+
+// buildInterfaceRatioDetails 生成错包/丢弃的逐接口明细载荷。
+func buildInterfaceRatioDetails(kind string, summary interfaceRatioSummary, warning, critical float64) datatypes.JSON {
+	payload := map[string]interface{}{
+		"kind":               kind,
+		"total":              summary.Total,
+		"evaluated":          summary.Evaluated,
+		"over_warning":       summary.OverWarning,
+		"over_critical":      summary.OverCritical,
+		"warning_threshold":  warning,
+		"critical_threshold": critical,
+		"interfaces":         summary.Entries,
+		"skipped":            summary.Skipped,
+	}
+	if summary.Entries == nil {
+		payload["interfaces"] = []interfaceRatioEntry{}
+	}
+	if summary.Skipped == nil {
+		payload["skipped"] = []interfaceUtilizationSkipped{}
+	}
+	for key, value := range thresholdDetailsPayload(kind, warning, critical, "%") {
+		payload[key] = value
+	}
+
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil
+	}
+	return datatypes.JSON(encoded)
+}
+
+// checkInterfaceCounterRatio 是错包率与丢弃率检查的共同实现。
+func (h InspectionHandler) checkInterfaceCounterRatio(
+	result *inspection.Result,
+	metrics *devices.SNMPMetrics,
+	warningThreshold, criticalThreshold float64,
+	kind, label string,
+	defaultWarning, defaultCritical float64,
+	pick func(devices.InterfaceMetrics) (inCount, outCount, inPkts, outPkts *uint64),
+) {
+	if warningThreshold == 0 {
+		warningThreshold = defaultWarning
+	}
+	if criticalThreshold == 0 {
+		criticalThreshold = defaultCritical
+	}
+	result.ExpectedValue = stringPtr(fmt.Sprintf("各接口%s < %g%%（警告 >=%g%%，故障 >=%g%%）",
+		label, warningThreshold, warningThreshold, criticalThreshold))
+	result.Details = buildThresholdDetails(kind, warningThreshold, criticalThreshold, "%")
+
+	if metrics == nil || len(metrics.Interfaces) == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取接口数据")
+		return
+	}
+
+	summary := summarizeInterfaceCounterRatio(metrics.Interfaces, warningThreshold, criticalThreshold, pick)
+	result.Details = buildInterfaceRatioDetails(kind, summary, warningThreshold, criticalThreshold)
+
+	// 一个接口都算不出比率时判 skip 而非 pass：假通过会让持续劣化的链路
+	// 在报告里显示「正常」，等业务受影响才被发现。
+	if summary.Evaluated == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr(fmt.Sprintf(
+			"采集到 %d 个接口，但均未上报%s计数器或缺少包计数样本，无法计算比率", summary.Total, label))
+		return
+	}
+
+	actual := fmt.Sprintf("峰值 %.4f%%（%s %s方向）；%d/%d 接口超阈值",
+		summary.Peak.Percent, summary.Peak.Name, summary.Peak.Direction, summary.OverWarning, summary.Evaluated)
+	result.ActualValue = &actual
+
+	switch {
+	case summary.OverCritical > 0:
+		result.Status = "fail"
+		result.Message = stringPtr(fmt.Sprintf("%d 个接口%s达到故障阈值 %g%%，峰值 %s（%.4f%%）",
+			summary.OverCritical, label, criticalThreshold, summary.Peak.Name, summary.Peak.Percent))
+	case summary.OverWarning > 0:
+		result.Status = "warning"
+		result.Message = stringPtr(fmt.Sprintf("%d 个接口%s超过警告阈值 %g%%，峰值 %s（%.4f%%）",
+			summary.OverWarning, label, warningThreshold, summary.Peak.Name, summary.Peak.Percent))
+	default:
+		result.Status = "pass"
+		result.Message = stringPtr(fmt.Sprintf("已评估 %d/%d 个接口，%s均在阈值内（峰值 %.4f%%）",
+			summary.Evaluated, summary.Total, label, summary.Peak.Percent))
+	}
+}
+
+// checkInterfaceErrorsMetric 接口错包率。错包指向物理层劣化——光衰、跳线老化、
+// 接头氧化、电磁干扰，是这类问题在 SNMP 上的唯一直接证据。
+func (h InspectionHandler) checkInterfaceErrorsMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warning, critical float64) {
+	h.checkInterfaceCounterRatio(result, metrics, warning, critical, "interface_errors", "错包率", 0.01, 0.1,
+		func(iface devices.InterfaceMetrics) (*uint64, *uint64, *uint64, *uint64) {
+			return iface.InErrors, iface.OutErrors, iface.InUcastPkts, iface.OutUcastPkts
+		})
+}
+
+// checkInterfaceDiscardsMetric 接口丢弃率。与错包是两类问题：丢弃指向缓冲区
+// 溢出、QoS 队列丢弃或 ACL 拒绝，即拥塞与配置问题。一个口错包为零却大量丢弃，
+// 说明线路是好的、该查的是队列与策略——合并成一个指标会让运维去换光模块。
+func (h InspectionHandler) checkInterfaceDiscardsMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warning, critical float64) {
+	h.checkInterfaceCounterRatio(result, metrics, warning, critical, "interface_discards", "丢弃率", 0.1, 1,
+		func(iface devices.InterfaceMetrics) (*uint64, *uint64, *uint64, *uint64) {
+			return iface.InDiscards, iface.OutDiscards, iface.InUcastPkts, iface.OutUcastPkts
+		})
+}
+
+// checkInterfaceAdminStatusMetric 接口管理状态与运行状态的一致性。
+//
+// admin up 但 oper down 才是真故障；admin down 是运维主动关闭，不该告警。
+// 现有「接口状态」检查只看 oper，把人为 shutdown 的端口也报成警告——久而久之
+// 运维学会忽略这类告警，真故障也一起被忽略。
+func (h InspectionHandler) checkInterfaceAdminStatusMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
+	result.ExpectedValue = stringPtr("管理状态为 up 的接口应同时处于运行状态")
+
+	if metrics == nil || len(metrics.Interfaces) == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取接口数据")
+		return
+	}
+
+	evaluated, adminDown := 0, 0
+	broken := make([]string, 0)
+	for _, iface := range metrics.Interfaces {
+		if iface.AdminUp == nil {
+			continue
+		}
+		evaluated++
+		if !*iface.AdminUp {
+			adminDown++
+			continue
+		}
+		if iface.IsUp != nil && !*iface.IsUp {
+			name := strings.TrimSpace(iface.Description)
+			if name == "" {
+				name = strings.TrimSpace(iface.Name)
+			}
+			broken = append(broken, name)
+		}
+	}
+
+	if evaluated == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("设备未上报接口管理状态（ifAdminStatus），无法区分人为关闭与链路故障")
+		return
+	}
+
+	actual := fmt.Sprintf("已评估 %d 个接口；异常 %d 个，人为关闭 %d 个", evaluated, len(broken), adminDown)
+	result.ActualValue = &actual
+
+	if len(broken) > 0 {
+		result.Status = "fail"
+		shown := broken
+		if len(shown) > utilizationTopOffenderLimit {
+			shown = shown[:utilizationTopOffenderLimit]
+		}
+		result.Message = stringPtr(fmt.Sprintf(
+			"%d 个接口配置为启用但实际未运行（链路故障或对端异常）：%s",
+			len(broken), strings.Join(shown, "、")))
+		return
+	}
+
+	result.Status = "pass"
+	result.Message = stringPtr(fmt.Sprintf(
+		"已启用的接口均正常运行；另有 %d 个接口为人为关闭状态，不计异常", adminDown))
+}
+
+// checkInterfaceDuplexMetric 接口双工模式。
+//
+// 与错包检查互补：错包说「有问题」，双工说「为什么」。千兆口协商成半双工会同时
+// 引发大量错包与性能腰斩，两项一起告警时运维就知道该去核对两端速率双工配置。
+func (h InspectionHandler) checkInterfaceDuplexMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
+	result.ExpectedValue = stringPtr("速率 >=100Mbps 的在用接口应工作在全双工模式")
+
+	if metrics == nil || len(metrics.Interfaces) == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取接口数据")
+		return
+	}
+
+	evaluated := 0
+	half := make([]string, 0)
+	for _, iface := range metrics.Interfaces {
+		if iface.DuplexStatus == nil {
+			continue
+		}
+		// 没链路时双工状态无意义，纳入只会产生噪声
+		if iface.IsUp != nil && !*iface.IsUp {
+			continue
+		}
+		// 低速端口半双工属正常工作模式，不告警
+		if iface.Speed != nil && *iface.Speed < 100 {
+			continue
+		}
+		evaluated++
+		if *iface.DuplexStatus == 2 {
+			name := strings.TrimSpace(iface.Description)
+			if name == "" {
+				name = strings.TrimSpace(iface.Name)
+			}
+			half = append(half, name)
+		}
+	}
+
+	if evaluated == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("设备未上报接口双工模式（dot3StatsDuplexStatus），或无符合条件的在用以太网口")
+		return
+	}
+
+	actual := fmt.Sprintf("已评估 %d 个接口；半双工 %d 个", evaluated, len(half))
+	result.ActualValue = &actual
+
+	if len(half) > 0 {
+		result.Status = "warning"
+		shown := half
+		if len(shown) > utilizationTopOffenderLimit {
+			shown = shown[:utilizationTopOffenderLimit]
+		}
+		result.Message = stringPtr(fmt.Sprintf(
+			"%d 个高速接口工作在半双工模式，通常是两端速率/双工协商失败，会引发大量错包与性能下降：%s",
+			len(half), strings.Join(shown, "、")))
+		return
+	}
+
+	result.Status = "pass"
+	result.Message = stringPtr(fmt.Sprintf("已评估 %d 个接口，均工作在全双工模式", evaluated))
 }
 
 // checkInterfaceUtilizationMetric 检查逐接口带宽利用率。

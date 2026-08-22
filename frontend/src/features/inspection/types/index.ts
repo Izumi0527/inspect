@@ -148,8 +148,26 @@ export interface InspectionCheckItem {
   /** 检查项类型 */
   type: CheckItemType
 
-  /** SNMP 指标键（type=snmp 时用于后端分派：reachable/cpu/memory/temperature/uptime/interface/interface_utilization/bandwidth）。改名不影响分派。 */
+  /**
+   * SNMP 指标键，type=snmp 时用于后端分派。改名不影响分派。
+   *
+   * 基础：reachable / system_info / cpu / memory / temperature / uptime /
+   *       interface / interface_utilization / bandwidth
+   * 接口健康：interface_errors / interface_discards / interface_admin_status /
+   *           interface_duplex（标准 IF-MIB 与 EtherLike-MIB，全厂商通用）
+   * 部件与专项：fan_status / power_status / poe / optical_power / bgp_peers /
+   *             firmware_version（依赖厂商 catalog，采不到时判 skip）
+   */
   metric?: string
+
+  /**
+   * 适用设备类型。未声明表示适用全部设备（存量模板均无此字段）。
+   *
+   * 执行端据此过滤：不适用的检查项不做采集，直接落一条 not_applicable 结果，
+   * 既不算通过也不算失败，且不计入通过率分母——否则一台健康交换机跑全面巡检
+   * 会因 BGP 不适用而通过率骤降。
+   */
+  deviceTypes?: string[]
 
   /** 检查项配置,根据type不同配置项不同 */
   config: CheckItemConfig
