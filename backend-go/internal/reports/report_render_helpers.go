@@ -335,3 +335,106 @@ func normalizeReportTitle(title string, fallback string) string {
 	}
 	return fallback
 }
+
+// ---------------------------------------------------------------------------
+// 巡检覆盖范围
+// ---------------------------------------------------------------------------
+
+// inspectionDimension 描述一个可巡检维度：Metric 是执行端的分派键，Label 是报告展示名。
+type inspectionDimension struct {
+	Metric string
+	Label  string
+}
+
+// inspectionDimensions 是全部可采集维度的清单，顺序即报告中的呈现顺序，
+// 与 inspection 包内置检查项的 metric 一一对应（19 项）。
+//
+// **这是新增 metric 的第五处同步点**：漏加会让该维度被永远算作「未覆盖」，
+// 报告于是在已经查过的情况下平白给出「某某维度未核查」的免责声明。
+// 另外四处是 inspection_execution.go 的分派分支、validator.go 的
+// validSNMPMetrics、外置测试 builtin_templates_test.go 的两个清单、
+// 以及前端 types/index.ts 的 metric 文档注释。
+var inspectionDimensions = []inspectionDimension{
+	{Metric: "connectivity", Label: "连通性"},
+	{Metric: "reachable", Label: "SNMP 可达"},
+	{Metric: "cpu", Label: "CPU"},
+	{Metric: "memory", Label: "内存"},
+	{Metric: "fan_status", Label: "风扇状态"},
+	{Metric: "power_status", Label: "电源状态"},
+	{Metric: "temperature", Label: "温度"},
+	{Metric: "uptime", Label: "运行时长"},
+	{Metric: "interface", Label: "接口状态"},
+	{Metric: "interface_utilization", Label: "接口利用率"},
+	{Metric: "interface_errors", Label: "接口错包率"},
+	{Metric: "interface_discards", Label: "接口丢弃率"},
+	{Metric: "interface_admin_status", Label: "接口管理状态"},
+	{Metric: "interface_duplex", Label: "接口双工模式"},
+	{Metric: "bandwidth", Label: "带宽吞吐量"},
+	{Metric: "poe", Label: "PoE 供电"},
+	{Metric: "optical_power", Label: "光模块光功率"},
+	{Metric: "bgp_peers", Label: "BGP 邻居"},
+	{Metric: "firmware_version", Label: "固件版本"},
+}
+
+// checkItemDimensionKey 把一个检查项归一到维度键。
+// ICMP/PING 类检查项没有 metric（执行端按 type 分派），统一归到 connectivity。
+func checkItemDimensionKey(item map[string]interface{}) string {
+	typ, _ := item["type"].(string)
+	switch strings.ToLower(strings.TrimSpace(typ)) {
+	case "icmp", "ping":
+		return "connectivity"
+	}
+	metric, _ := item["metric"].(string)
+	return strings.ToLower(strings.TrimSpace(metric))
+}
+
+// summarizeTemplateCoverage 从巡检模板的 check_items 推导本次覆盖与未覆盖的维度。
+//
+// 覆盖范围取自模板定义而非执行结果，这是刻意的：覆盖范围要回答的是「这个模板
+// 打算查什么」，某一项执行失败或跳过仍属于覆盖范围内（只是没查成，那由异常清单
+// 负责呈现）。inspection_results 表也确实没有 metric 列，无从反推。
+//
+// 读不到模板信息时返回空，由渲染层跳过覆盖范围声明——绝不能把「读不到模板」
+// 当成「什么都没查」，那会让历史报告（template_id 为 NULL）平白多出一句
+// 「全部 19 个维度未核查」，比不写更误导。
+func summarizeTemplateCoverage(checkItems []byte) (covered []string, uncovered []string) {
+	if len(checkItems) == 0 {
+		return nil, nil
+	}
+
+	var items []map[string]interface{}
+	if err := json.Unmarshal(checkItems, &items); err != nil || len(items) == 0 {
+		return nil, nil
+	}
+
+	present := make(map[string]bool, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		// enabled 缺失视为启用（与执行端 filterEnabledCheckItems 的口径一致）；
+		// 显式停用的项不会被执行，算进覆盖范围就等于声称查过了。
+		if enabled, ok := item["enabled"].(bool); ok && !enabled {
+			continue
+		}
+		if key := checkItemDimensionKey(item); key != "" {
+			present[key] = true
+		}
+	}
+
+	covered = make([]string, 0, len(inspectionDimensions))
+	uncovered = make([]string, 0, len(inspectionDimensions))
+	for _, dim := range inspectionDimensions {
+		if present[dim.Metric] {
+			covered = append(covered, dim.Label)
+			continue
+		}
+		uncovered = append(uncovered, dim.Label)
+	}
+	// 模板存在但没有任何一项落在已知维度上，与读不到模板同样处理：
+	// 此时 uncovered 会是全部 19 项，输出出去就是那句误导性的免责声明。
+	if len(covered) == 0 {
+		return nil, nil
+	}
+	return covered, uncovered
+}

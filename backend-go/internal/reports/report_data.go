@@ -13,13 +13,23 @@ import (
 )
 
 type InspectionReportData struct {
-	InspectionName     string
-	InspectionID       string
-	InspectionTime     string
-	Status             string
-	ExecutionDuration  int
-	SummaryStats       InspectionSummaryStats
-	Devices            []InspectionDeviceData
+	InspectionName    string
+	InspectionID      string
+	InspectionTime    string
+	Status            string
+	ExecutionDuration int
+	SummaryStats      InspectionSummaryStats
+	Devices           []InspectionDeviceData
+	// TemplateName 本次采用的巡检模板名。跨模板聚合时为空——
+	// 此时用 TemplateCount 说明「汇总自 N 种模板」，而不是随便挑一个来代表。
+	TemplateName string
+	// TemplateCount 本次数据涉及的不同模板数，0 表示模板信息不可得
+	// （历史记录 template_id 为 NULL）。
+	TemplateCount int
+	// CoveredMetrics / UncoveredMetrics 由 summarizeTemplateCoverage 从模板
+	// check_items 推导，两者同时为空表示覆盖范围不可得，渲染层须整段省略。
+	CoveredMetrics     []string
+	UncoveredMetrics   []string
 	GeneratedTimestamp string
 }
 
@@ -210,6 +220,18 @@ type InspectionCheckResult struct {
 	BGPPeers *BGPPeersReport
 	// ComponentStatus 承载逐风扇/电源部件的原始状态码与判定
 	ComponentStatus *ComponentStatusReport
+	// Threshold 本次实际生效的判定阈值，与上面五种明细正交——
+	// 带阈值的检查项无论有没有逐项明细，details 里都会带 threshold 字段。
+	// inspection_results 表没有阈值列，报告要说明「按什么口径判的」只能靠它。
+	Threshold *CheckThresholdReport
+}
+
+// CheckThresholdReport 是一个检查项本次生效的阈值口径。
+type CheckThresholdReport struct {
+	Metric   string  `json:"metric"`
+	Warning  float64 `json:"warning"`
+	Critical float64 `json:"critical"`
+	Unit     string  `json:"unit"`
 }
 
 // InterfaceUtilizationEntryReport 报告中的单接口利用率行
@@ -436,6 +458,11 @@ func decodeDetailsPayload[T any](raw *string, wantKinds ...string) (*T, bool) {
 // parseCheckResultDetails 按 kind 把 details 载荷分派到对应的明细字段。
 // 五种载荷互斥，至多命中一种；都不命中时全部为 nil，报告只渲染摘要行。
 func parseCheckResultDetails(raw *string, result *InspectionCheckResult) {
+	// 阈值与明细正交：带阈值的检查项无论有没有逐项明细，载荷里都会带
+	// threshold 字段（thresholdDetailsPayload 合并进各类载荷）。因此先单独取，
+	// 不能塞进下面的 kind 分派——那样只有命中某一种明细的检查项才拿得到阈值。
+	result.Threshold = parseCheckThreshold(raw)
+
 	result.InterfaceUtilization = parseInterfaceUtilizationDetails(raw)
 	if result.InterfaceUtilization != nil {
 		return
@@ -835,6 +862,10 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		Uptime        *int       `gorm:"column:uptime"`
 		CPUUsage      *float64   `gorm:"column:cpu_usage"`
 		MemoryUsage   *float64   `gorm:"column:memory_usage"`
+		// TemplateName / TemplateItems 用于推导覆盖范围声明。LEFT JOIN 而非 JOIN：
+		// 历史记录的 template_id 可能为 NULL，内连接会让这些巡检整条消失。
+		TemplateName  *string `gorm:"column:template_name"`
+		TemplateItems *string `gorm:"column:template_check_items"`
 	}
 
 	query := db.WithContext(ctx).
@@ -842,8 +873,10 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		Select(`i.id, i.device_id, i.name, i.status, i.duration, i.completed_at, i.created_at,
 		        i.total_checks, i.passed_checks, i.failed_checks, i.warning_checks,
 		        d.name AS device_name, d.ip_address, d.device_type, d.vendor, d.model,
-		        d.firmware_version, d.uptime, d.cpu_usage, d.memory_usage`).
-		Joins("LEFT JOIN devices d ON d.id = i.device_id")
+		        d.firmware_version, d.uptime, d.cpu_usage, d.memory_usage,
+		        t.name AS template_name, t.check_items AS template_check_items`).
+		Joins("LEFT JOIN devices d ON d.id = i.device_id").
+		Joins("LEFT JOIN inspection_templates t ON t.id = i.template_id")
 
 	// 执行记录页面按「单次执行」出报告：task_id 即 inspections.id，精确
 	// 定位该行，不受时间窗口约束。旧逻辑只按时间范围（默认最近 24h）过
@@ -969,6 +1002,15 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		summary.PassRate = float64(summary.PassedChecks) / float64(summary.TotalChecks) * 100
 	}
 	result.SummaryStats = summary
+
+	templateRefs := make([]templateRef, 0, len(rows))
+	for _, row := range rows {
+		templateRefs = append(templateRefs, templateRef{
+			Name:       defaultStringPtr(row.TemplateName),
+			CheckItems: defaultStringPtr(row.TemplateItems),
+		})
+	}
+	applyTemplateCoverage(&result, templateRefs)
 
 	devices := make([]InspectionDeviceData, 0, len(latestByDevice))
 	for _, deviceID := range deviceIDsUnique {
@@ -1590,4 +1632,81 @@ func defaultFloatPtr(value *float64) float64 {
 		return 0
 	}
 	return *value
+}
+
+// templateRef 是一条巡检记录关联的模板信息，从查询结果里剥离出来，
+// 好让覆盖范围推导不依赖查询函数内的局部行类型。
+type templateRef struct {
+	Name       string
+	CheckItems string
+}
+
+// applyTemplateCoverage 推导本次报告的模板归属与覆盖范围。
+//
+// 三种情形分别处理，区分它们是这段代码的全部意义所在：
+//   - 模板信息不可得（历史记录 template_id 为 NULL）：TemplateCount 记 0，
+//     渲染层据此整段省略声明。绝不能当成「什么都没查」。
+//   - 单一模板：给出模板名与覆盖/未覆盖维度。
+//   - 跨模板聚合（报表中心按时间窗口聚合，各设备跑的档位不同）：只报模板种类数，
+//     不给覆盖范围——各档位覆盖维度不同，挑任一个来代表全部都是错的。
+func applyTemplateCoverage(data *InspectionReportData, refs []templateRef) {
+	if data == nil {
+		return
+	}
+
+	names := make(map[string]string, 4) // 模板名 -> 该模板的 check_items
+	for _, ref := range refs {
+		name := strings.TrimSpace(ref.Name)
+		if name == "" {
+			continue
+		}
+		if _, seen := names[name]; !seen {
+			names[name] = ref.CheckItems
+		}
+	}
+
+	data.TemplateCount = len(names)
+	if len(names) != 1 {
+		return
+	}
+	for name, checkItems := range names {
+		data.TemplateName = name
+		data.CoveredMetrics, data.UncoveredMetrics = summarizeTemplateCoverage([]byte(checkItems))
+	}
+}
+
+// checkThresholdEnvelope 对应 details 载荷里的阈值片段，
+// 由执行端 thresholdDetailsPayload 写入，各类 kind 共有。
+type checkThresholdEnvelope struct {
+	Metric    string `json:"metric"`
+	Threshold *struct {
+		Warning  float64 `json:"warning"`
+		Critical float64 `json:"critical"`
+		Unit     string  `json:"unit"`
+	} `json:"threshold"`
+}
+
+// parseCheckThreshold 从 details 载荷里取出本次生效的判定阈值。
+//
+// 不校验 kind：threshold 字段在 kind=threshold 的纯阈值载荷与各类明细载荷里
+// 都存在。metric 为空则视为不可用——没有指标名的阈值无法归入任何维度，
+// 报告写出来是「 70/85%」这样的残句。
+func parseCheckThreshold(raw *string) *CheckThresholdReport {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil
+	}
+	var envelope checkThresholdEnvelope
+	if err := json.Unmarshal([]byte(*raw), &envelope); err != nil {
+		return nil
+	}
+	metric := strings.TrimSpace(envelope.Metric)
+	if metric == "" || envelope.Threshold == nil {
+		return nil
+	}
+	return &CheckThresholdReport{
+		Metric:   metric,
+		Warning:  envelope.Threshold.Warning,
+		Critical: envelope.Threshold.Critical,
+		Unit:     envelope.Threshold.Unit,
+	}
 }

@@ -1723,7 +1723,17 @@ func inspectionHealthGrade(stats InspectionSummaryStats) (grade string, accent [
 // 异常构成、最需优先处理的对象。全部由实际统计驱动，不写死话术。
 func buildInspectionNarrative(data InspectionReportData) []string {
 	stats := data.SummaryStats
-	lines := make([]string, 0, 5)
+	lines := make([]string, 0, 7)
+
+	// 覆盖范围与判定口径放在最前：它们限定了后面所有数字的解读边界。
+	// 放到通过率之后，读者已经先形成了「设备全面健康」的结论，再补充
+	// 「其实有 17 个维度没查」为时已晚。
+	if scope := describeInspectionScope(data); scope != "" {
+		lines = append(lines, scope)
+	}
+	if policy := describeInspectionThresholdPolicy(data); policy != "" {
+		lines = append(lines, policy)
+	}
 
 	lines = append(lines, fmt.Sprintf(
 		"本次巡检覆盖 %d 台设备、%d 个检查项，通过 %d 项，通过率 %s。",
@@ -1926,4 +1936,132 @@ func writeInspectionConclusion(pdf *gofpdf.Fpdf, data InspectionReportData) {
 	writePDFRightAlignedColored(pdf,
 		"以上建议为通用处置方向，实际操作请结合现场环境与厂商文档执行。",
 		pdfColorMuted)
+}
+
+// ---------------------------------------------------------------------------
+// 覆盖范围与判定口径声明
+// ---------------------------------------------------------------------------
+
+// describeInspectionScope 生成覆盖范围声明，是「巡检情况说明」的首句。
+//
+// 检查项扩到 19 项后，模板之间覆盖差异很大：连通性巡检只查 2 项，全部通过时
+// 报告会显示「通过率 100% / 整体结论：健康 / 无待处理事项」。缺了这句声明，
+// 读者据此得出的结论是「设备全面健康」，而 CPU、内存、接口实际一项未查。
+// 这句话把「通过率 100%」从「设备全面健康」限定回「所查项目均正常」。
+//
+// 契约：TemplateCount 为 0 表示模板信息不可得（历史记录 template_id 为 NULL），
+// 整句省略，不凭空生成声明。
+func describeInspectionScope(data InspectionReportData) string {
+	if data.TemplateCount > 1 {
+		return fmt.Sprintf(
+			"本次报告汇总自 %d 种巡检模板，各模板的覆盖维度与判定阈值并不一致，通过率不宜直接横向比较。",
+			data.TemplateCount)
+	}
+
+	name := strings.TrimSpace(data.TemplateName)
+	if name == "" {
+		return ""
+	}
+
+	covered := len(data.CoveredMetrics)
+	uncovered := len(data.UncoveredMetrics)
+	if covered == 0 && uncovered == 0 {
+		return ""
+	}
+
+	var sentence string
+	if uncovered == 0 {
+		sentence = fmt.Sprintf("本次采用「%s」，覆盖全部 %d 个可采集维度。", name, covered)
+	} else {
+		sentence = fmt.Sprintf(
+			"本次采用「%s」，覆盖 %s 共 %d 个维度；%s 共 %d 个维度不在本次巡检范围内，其状态未经核查。",
+			name,
+			strings.Join(data.CoveredMetrics, "、"), covered,
+			strings.Join(data.UncoveredMetrics, "、"), uncovered)
+	}
+
+	// 「未覆盖」（模板里就没有）与「不适用」（模板里有但设备类型不匹配）是两件事：
+	// 前者是模板选择问题，后者是设备本身没有这个特性。分开讲才解释得清
+	// 「19 项模板为什么只跑出 17 条结果」。
+	if names := notApplicableCheckNames(data); len(names) > 0 {
+		sentence += fmt.Sprintf("另有 %s 因设备类型不适用而未执行，不计入通过率。",
+			strings.Join(names, "、"))
+	}
+	return sentence
+}
+
+// notApplicableCheckNames 汇总因设备类型不适用而未执行的检查项名，去重后按首次出现排序。
+func notApplicableCheckNames(data InspectionReportData) []string {
+	seen := make(map[string]bool)
+	names := make([]string, 0, 4)
+	for _, device := range data.Devices {
+		for _, check := range device.CheckResults {
+			if normalizeCheckStatus(check.Status) != checkStatusNotApplicable {
+				continue
+			}
+			name := strings.TrimSpace(check.CheckItemName)
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// describeInspectionThresholdPolicy 生成判定口径说明：列出本次实际生效的阈值。
+//
+// 必要性：同一台 CPU 72% 的设备，阈值 70/85 判警告、阈值 80/95 判通过。
+// 两份报告并排看会自相矛盾，而矛盾的根源——口径不同——在报告里必须写出来
+// 才解释得通。inspection_results 表没有阈值列，这些值只能经 details 透传。
+//
+// 两种情况保持沉默：没有任何带阈值的检查项（如纯连通性巡检），
+// 以及同一指标出现互不相同的阈值（跨模板聚合，口径本就不统一，
+// 此时任选其一去解释全部结果只会误导）。
+func describeInspectionThresholdPolicy(data InspectionReportData) string {
+	effective := make(map[string]CheckThresholdReport, len(inspectionDimensions))
+	for _, device := range data.Devices {
+		for _, check := range device.CheckResults {
+			threshold := check.Threshold
+			if threshold == nil || strings.TrimSpace(threshold.Metric) == "" {
+				continue
+			}
+			prev, seen := effective[threshold.Metric]
+			if !seen {
+				effective[threshold.Metric] = *threshold
+				continue
+			}
+			if prev.Warning != threshold.Warning || prev.Critical != threshold.Critical {
+				return ""
+			}
+		}
+	}
+	if len(effective) == 0 {
+		return ""
+	}
+
+	// 按 inspectionDimensions 的顺序输出，与覆盖范围声明保持同一维度次序。
+	parts := make([]string, 0, len(effective))
+	for _, dim := range inspectionDimensions {
+		threshold, ok := effective[dim.Metric]
+		if !ok {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s %g/%g%s",
+			dim.Label, threshold.Warning, threshold.Critical, thresholdUnitLabel(threshold.Unit)))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("本次判定口径（警告/故障）：%s。", strings.Join(parts, "，"))
+}
+
+// thresholdUnitLabel 补齐温度单位的度符号。执行端存的是裸 "C"，
+// 直接印出来是「温度 60/70C」，读起来像型号而不是摄氏度。
+func thresholdUnitLabel(unit string) string {
+	if strings.TrimSpace(unit) == "C" {
+		return "°C"
+	}
+	return unit
 }
