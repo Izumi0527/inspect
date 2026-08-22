@@ -481,7 +481,8 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 	}
 
 	// 6. 更新巡检统计并完成
-	if err := h.Service.UpdateInspectionStats(baseCtx, insp.ID, len(results), passedCount, failedCount, warningCount, skippedCount); err != nil {
+	finalTotal := reconcileExecutedTotal(notApplicableCount, len(results))
+	if err := h.Service.UpdateInspectionStats(baseCtx, insp.ID, finalTotal, passedCount, failedCount, warningCount, skippedCount); err != nil {
 		errMsg := fmt.Sprintf("收口巡检统计失败: %v", err)
 		h.markInspectionExecutionFailed(baseCtx, insp.ID, errMsg, executedCount, totalChecks)
 		return
@@ -493,9 +494,23 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 		return
 	}
 	h.broadcastScanProgress(insp.ID, inspection.StatusCompleted, 100, map[string]interface{}{
-		"completed_checks": len(results),
-		"total_checks":     len(results),
+		"completed_checks": finalTotal,
+		"total_checks":     finalTotal,
 	})
+}
+
+// reconcileExecutedTotal 返回收口时应写回 inspections.total_checks 的值。
+//
+// 必须把不适用项加回来：executeCheckItems 只返回**可执行那批**的结果，
+// 而初始化时写入的总数是「可执行 + 不适用」。收口只写 len(results) 会把正确的
+// 总数覆盖成偏小的值——库里 19 条结果、total_checks 却是 18，执行历史显示
+// 「通过 11/18」。这行在不适用项引入之前是对的（那时 results 就是全部），
+// 分流之后漏改，且它离分流点有一百多行，看不出关联。
+//
+// 保留「按实际结果数收口」而非直接写 totalChecks，是为了让执行过程中若真有
+// 结果缺失时总数如实反映，不虚报没跑过的检查项。
+func reconcileExecutedTotal(notApplicableCount, executedResultCount int) int {
+	return notApplicableCount + executedResultCount
 }
 
 // isRetryableCheckFailure 判定检查结果是否为可重试的执行错误：

@@ -19,6 +19,11 @@ func splitCheckItemsByApplicability(checkItems []map[string]interface{}, deviceT
 //go:linkname buildCheckResultResponse github.com/your-org/inspect-system/backend-go/internal/http/handlers.buildCheckResultResponse
 func buildCheckResultResponse(result inspection.Result) map[string]interface{}
 
+// reconcileExecutedTotal 收口时应写回 inspections.total_checks 的值。
+//
+//go:linkname reconcileExecutedTotal github.com/your-org/inspect-system/backend-go/internal/http/handlers.reconcileExecutedTotal
+func reconcileExecutedTotal(notApplicableCount, executedResultCount int) int
+
 var _ = handlers.InspectionHandler{}
 
 func itemWithDeviceTypes(id string, deviceTypes ...string) map[string]interface{} {
@@ -191,5 +196,45 @@ func TestBuildCheckResultResponse_UnknownStatusFallsBackToFail(t *testing.T) {
 	payload := buildCheckResultResponse(inspection.Result{Status: "某种没见过的状态"})
 	if got := payload["status"]; got != "fail" {
 		t.Errorf("未知状态 = %v，want fail", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 收口统计的总数口径
+// ---------------------------------------------------------------------------
+
+// TestReconcileExecutedTotal_CountsNotApplicable 收口总数必须含不适用项。
+//
+// 真实缺陷：初始化时 total_checks 写的是「可执行 + 不适用」= 19，收口那一次
+// 却只写 len(results)（executeCheckItems 只返回可执行那批）= 18，把正确值覆盖了。
+// 于是库里有 19 条结果、total_checks 却是 18，执行历史显示「通过 11/18」。
+//
+// 这行代码在不适用项引入之前是对的——那时 results 就是全部。分流之后漏改，
+// 而它离分流点有一百多行，看不出关联。
+func TestReconcileExecutedTotal_CountsNotApplicable(t *testing.T) {
+	// 一台交换机跑全面巡检：18 项可执行，BGP 因设备类型不适用
+	if got := reconcileExecutedTotal(1, 18); got != 19 {
+		t.Errorf("收口总数 = %d，want 19（18 项可执行 + 1 项不适用）", got)
+	}
+}
+
+// TestReconcileExecutedTotal_MatchesInitialTotal 收口总数须与初始化时的总数一致。
+//
+// 这是本条的核心不变式：初始化写 len(active)+len(notApplicable)，收口若换一套
+// 算法，两者就会不一致，而覆盖发生在最后，用户看到的永远是错的那个。
+func TestReconcileExecutedTotal_MatchesInitialTotal(t *testing.T) {
+	cases := []struct{ active, notApplicable int }{
+		{18, 1}, // 交换机跑全面巡检
+		{19, 0}, // 路由器跑全面巡检，无不适用项
+		{2, 0},  // 连通性巡检
+		{0, 3},  // 极端情况：全部不适用
+	}
+
+	for _, tc := range cases {
+		initial := tc.active + tc.notApplicable
+		if got := reconcileExecutedTotal(tc.notApplicable, tc.active); got != initial {
+			t.Errorf("可执行 %d + 不适用 %d：收口总数 = %d，want %d（与初始化一致）",
+				tc.active, tc.notApplicable, got, initial)
+		}
 	}
 }
