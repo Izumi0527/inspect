@@ -24,6 +24,7 @@ import { Badge } from '@/components/atoms/badge'
 import { cn } from '@/utils/cn'
 import { useGenerateReport, useExecutionDetail } from '../hooks/useInspection'
 import { InterfaceUtilizationTable } from './InterfaceUtilizationTable'
+import { CheckDetailTables } from './CheckDetailTables'
 import type { InspectionExecution, ReportFormat } from '../types'
 
 interface ExecutionDetailModalProps {
@@ -520,8 +521,10 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                                             )}
                                           </div>
                                         )}
-                                        {check.details?.kind === 'interface_utilization' && (
+                                        {check.details?.kind === 'interface_utilization' ? (
                                           <InterfaceUtilizationTable details={check.details} />
+                                        ) : (
+                                          check.details && <CheckDetailTables details={check.details} />
                                         )}
                                       </div>
                                     </div>
@@ -600,8 +603,10 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                                 )}
                               </div>
                             )}
-                            {check.details?.kind === 'interface_utilization' && (
+                            {check.details?.kind === 'interface_utilization' ? (
                               <InterfaceUtilizationTable details={check.details} />
+                            ) : (
+                              check.details && <CheckDetailTables details={check.details} />
                             )}
                           </div>
                         </motion.div>

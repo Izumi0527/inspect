@@ -245,7 +245,7 @@ export interface CheckResult {
   executionTime: number
 
   /** 检查项结构化明细，按 kind 分派渲染；目前仅接口利用率检查项会返回 */
-  details?: InterfaceUtilizationDetails
+  details?: CheckResultDetails
 }
 
 /** 单个接口的利用率明细 */
@@ -279,6 +279,145 @@ export interface InterfaceUtilizationDetails {
   interfaces: InterfaceUtilizationEntry[]
   skipped: InterfaceUtilizationSkipped[]
 }
+
+/**
+ * 逐行判定结果。
+ *
+ * 刻意复用检查结果的状态词表而非另造「正常 / 异常 / 未知」：
+ * 状态标签映射已经存在，复用等于零新增映射；每多一套词表，
+ * 就要在 PDF 与前端两处各维护一份，一处漏改就会出现
+ * 「行判定与整项状态自相矛盾」。
+ */
+export type CheckDetailVerdict = 'pass' | 'warning' | 'fail' | 'skip'
+
+/** 单接口的计数器比率明细（错包 / 丢弃共用） */
+export interface InterfaceRatioEntry {
+  name: string
+  /** 比率更高的方向："入" 或 "出" */
+  direction: string
+  percent: number
+  /** 错包数或丢弃数原始值 */
+  count: number
+  /** 同方向的包数原始值 */
+  packets: number
+}
+
+/**
+ * 接口错包率 / 丢弃率明细。
+ *
+ * count 与 packets 必须与 percent 一起给出：累计比率会被历史上一次性故障
+ * 长期拉高，只看「1.2%」无法区分持续劣化与三年前抖过一次。
+ */
+export interface InterfaceRatioDetails {
+  kind: 'interface_errors' | 'interface_discards'
+  total: number
+  evaluated: number
+  over_warning: number
+  over_critical: number
+  warning_threshold: number
+  critical_threshold: number
+  /** 已评估接口，按比率降序 */
+  interfaces: InterfaceRatioEntry[]
+  skipped: InterfaceUtilizationSkipped[]
+}
+
+/**
+ * 单光模块明细。
+ *
+ * 诊断量可缺失：厂商对 DDM 的支持参差不齐，多数只给收光。缺失保持 undefined
+ * 而非 0——「未上报电压」和「电压 0V」是两个完全不同的结论。
+ */
+export interface OpticalModuleEntry {
+  index: string
+  verdict: CheckDetailVerdict
+  rx_power: number
+  rx_power_unit: string
+  tx_power?: number
+  tx_power_unit?: string
+  voltage?: number
+  voltage_unit?: string
+  bias_current?: number
+  bias_current_unit?: string
+}
+
+/** 光模块光功率明细，按收光升序（最差在前） */
+export interface OpticalPowerDetails {
+  kind: 'optical_power'
+  total: number
+  evaluated: number
+  over_warning: number
+  over_critical: number
+  warning_threshold: number
+  critical_threshold: number
+  modules: OpticalModuleEntry[]
+  skipped: InterfaceUtilizationSkipped[]
+}
+
+/** 单 BGP 邻居明细 */
+export interface BGPPeerEntry {
+  index: string
+  verdict: CheckDetailVerdict
+  /** 厂商上报的原始状态码，6 = Established */
+  state?: number
+  state_label?: string
+  established_seconds?: number
+  /** 排障起点：hold timer expired 指向链路，authentication failure 指向配置 */
+  last_error?: string
+}
+
+/** BGP 邻居明细，按 fail / warning / skip / pass 排序 */
+export interface BGPPeersDetails {
+  kind: 'bgp_peers'
+  total: number
+  established: number
+  down: number
+  flapping: number
+  /** 震荡判定线：建立时长低于此值视为近期重建 */
+  flapping_threshold_seconds: number
+  peers: BGPPeerEntry[]
+}
+
+/** 单部件（风扇 / 电源）明细，state 是厂商原始状态码 */
+export interface ComponentStatusEntry {
+  index: string
+  kind: string
+  verdict: CheckDetailVerdict
+  state?: number
+}
+
+/**
+ * 风扇 / 电源状态明细。
+ *
+ * normal_states / abnormal_states 回显本次生效的判定依据：状态码语义因厂商
+ * 甚至型号而异，只给「码 77，未知」运维无从下手，连同判定集合一起给出，
+ * 才能据此校准模板配置。
+ */
+export interface ComponentStatusDetails {
+  kind: 'component_status'
+  /** 部件类别：fan / power / board */
+  component_kind: string
+  label: string
+  total: number
+  normal: number
+  abnormal: number
+  unknown: number
+  normal_states: number[]
+  abnormal_states: number[]
+  components: ComponentStatusEntry[]
+}
+
+/**
+ * 检查项结构化明细。
+ *
+ * 后端用顶层 kind 区分载荷类型，五种互斥。这里做成可辨识联合，
+ * 消费方写 `details.kind === 'optical_power'` 即可自动收窄类型。
+ */
+export type CheckResultDetails =
+  | InterfaceUtilizationDetails
+  | InterfaceRatioDetails
+  | OpticalPowerDetails
+  | BGPPeersDetails
+  | ComponentStatusDetails
 
 /**
  * 设备巡检结果接口

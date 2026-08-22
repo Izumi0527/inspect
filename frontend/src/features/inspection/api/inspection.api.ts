@@ -12,6 +12,13 @@ import {
   InspectionCheckItem,
   CheckResult,
   InterfaceUtilizationDetails,
+  InterfaceUtilizationSkipped,
+  CheckDetailVerdict,
+  CheckResultDetails,
+  InterfaceRatioDetails,
+  OpticalPowerDetails,
+  BGPPeersDetails,
+  ComponentStatusDetails,
   InspectionStrategy,
   InspectionAnalyticsRange
 } from '../types'
@@ -143,13 +150,12 @@ const mapCheckResult = (value: UnknownRecord): CheckResult => {
     expectedValue: expectedValue || undefined,
     message: message || undefined,
     executionTime: toNumber(value.executionTime ?? value['execution_time']),
-    details: mapInterfaceUtilizationDetails(value.details ?? value['details']),
+    details: mapCheckResultDetails(value.details ?? value['details']),
   }
 }
 
 /**
- * 解析检查项结构化明细。后端按 kind 区分类型，目前只有接口利用率一种；
- * 形状不符时返回 undefined，让 UI 退回纯文本展示而不是崩在渲染层。
+ * 解析接口利用率明细。形状不符时返回 undefined。
  */
 const mapInterfaceUtilizationDetails = (raw: unknown): InterfaceUtilizationDetails | undefined => {
   if (!isObject(raw)) return undefined
@@ -189,6 +195,142 @@ const mapInterfaceUtilizationDetails = (raw: unknown): InterfaceUtilizationDetai
     interfaces,
     skipped,
   }
+}
+
+/** 解析未参与评估的对象清单，形状不符时退化为空数组。 */
+const mapSkippedEntries = (raw: unknown): InterfaceUtilizationSkipped[] =>
+  toRecordArray(raw).map(entry => ({ name: toString(entry.name), reason: toString(entry.reason) }))
+
+/** 逐行判定词，无法识别时按 skip 处理——不猜正常也不猜异常。 */
+const toVerdict = (raw: unknown): CheckDetailVerdict =>
+  toEnumValue(raw, ['pass', 'warning', 'fail', 'skip'] as const, 'skip')
+
+/**
+ * 解析接口错包率 / 丢弃率明细。两者载荷同构，只有 kind 与表头文案不同。
+ */
+const mapInterfaceRatioDetails = (record: UnknownRecord): InterfaceRatioDetails | undefined => {
+  const kind = record.kind
+  if (kind !== 'interface_errors' && kind !== 'interface_discards') return undefined
+
+  return {
+    kind,
+    total: toNumber(record.total),
+    evaluated: toNumber(record.evaluated),
+    over_warning: toNumber(record.over_warning),
+    over_critical: toNumber(record.over_critical),
+    warning_threshold: toNumber(record.warning_threshold),
+    critical_threshold: toNumber(record.critical_threshold),
+    interfaces: toRecordArray(record.interfaces).map(entry => ({
+      name: toString(entry.name),
+      direction: toString(entry.direction),
+      percent: toNumber(entry.percent),
+      count: toNumber(entry.count),
+      packets: toNumber(entry.packets),
+    })),
+    skipped: mapSkippedEntries(record.skipped),
+  }
+}
+
+/**
+ * 解析光模块明细。
+ *
+ * 诊断量用 toOptionalNumber 而非 toNumber：厂商对 DDM 的支持参差不齐，
+ * 缺失字段若落成 0，报告会把「未上报电压」渲染成「电压 0V」这个明确错误的结论。
+ */
+const mapOpticalPowerDetails = (record: UnknownRecord): OpticalPowerDetails | undefined => {
+  if (record.kind !== 'optical_power') return undefined
+
+  return {
+    kind: 'optical_power',
+    total: toNumber(record.total),
+    evaluated: toNumber(record.evaluated),
+    over_warning: toNumber(record.over_warning),
+    over_critical: toNumber(record.over_critical),
+    warning_threshold: toNumber(record.warning_threshold),
+    critical_threshold: toNumber(record.critical_threshold),
+    modules: toRecordArray(record.modules).map(entry => ({
+      index: toString(entry.index),
+      verdict: toVerdict(entry.verdict),
+      rx_power: toNumber(entry.rx_power),
+      rx_power_unit: toString(entry.rx_power_unit, 'dBm'),
+      tx_power: toOptionalNumber(entry.tx_power),
+      tx_power_unit: toString(entry.tx_power_unit) || undefined,
+      voltage: toOptionalNumber(entry.voltage),
+      voltage_unit: toString(entry.voltage_unit) || undefined,
+      bias_current: toOptionalNumber(entry.bias_current),
+      bias_current_unit: toString(entry.bias_current_unit) || undefined,
+    })),
+    skipped: mapSkippedEntries(record.skipped),
+  }
+}
+
+/** 解析 BGP 邻居明细。 */
+const mapBGPPeersDetails = (record: UnknownRecord): BGPPeersDetails | undefined => {
+  if (record.kind !== 'bgp_peers') return undefined
+
+  return {
+    kind: 'bgp_peers',
+    total: toNumber(record.total),
+    established: toNumber(record.established),
+    down: toNumber(record.down),
+    flapping: toNumber(record.flapping),
+    flapping_threshold_seconds: toNumber(record.flapping_threshold_seconds),
+    peers: toRecordArray(record.peers).map(entry => ({
+      index: toString(entry.index),
+      verdict: toVerdict(entry.verdict),
+      state: toOptionalNumber(entry.state),
+      state_label: toString(entry.state_label) || undefined,
+      established_seconds: toOptionalNumber(entry.established_seconds),
+      last_error: toString(entry.last_error) || undefined,
+    })),
+  }
+}
+
+/** 解析风扇 / 电源部件状态明细。 */
+const mapComponentStatusDetails = (record: UnknownRecord): ComponentStatusDetails | undefined => {
+  if (record.kind !== 'component_status') return undefined
+
+  const toStateCodes = (raw: unknown): number[] =>
+    Array.isArray(raw)
+      ? raw.map(toOptionalNumber).filter((item): item is number => item !== undefined)
+      : []
+
+  return {
+    kind: 'component_status',
+    component_kind: toString(record.component_kind),
+    label: toString(record.label),
+    total: toNumber(record.total),
+    normal: toNumber(record.normal),
+    abnormal: toNumber(record.abnormal),
+    unknown: toNumber(record.unknown),
+    normal_states: toStateCodes(record.normal_states),
+    abnormal_states: toStateCodes(record.abnormal_states),
+    components: toRecordArray(record.components).map(entry => ({
+      index: toString(entry.index),
+      kind: toString(entry.kind),
+      verdict: toVerdict(entry.verdict),
+      state: toOptionalNumber(entry.state),
+    })),
+  }
+}
+
+/**
+ * 按 kind 分派解析检查项结构化明细。
+ *
+ * 五种载荷互斥，至多命中一种；都不命中时返回 undefined，
+ * 让 UI 退回纯文本展示而不是崩在渲染层——details 列历史上存过手工写入的自由文本。
+ */
+const mapCheckResultDetails = (raw: unknown): CheckResultDetails | undefined => {
+  if (!isObject(raw)) return undefined
+  const record = raw as UnknownRecord
+
+  return (
+    mapInterfaceUtilizationDetails(record) ??
+    mapInterfaceRatioDetails(record) ??
+    mapOpticalPowerDetails(record) ??
+    mapBGPPeersDetails(record) ??
+    mapComponentStatusDetails(record)
+  )
 }
 
 const toCheckItemArray = (value: unknown): InspectionCheckItem[] => {
