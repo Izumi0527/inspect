@@ -430,10 +430,19 @@ func buildInspectionResultResponse(item inspection.Inspection, device deviceInfo
 	}
 }
 
+// normalizeCheckResultStatus 归一化检查结果状态，供 API 响应透传。
+//
+// **与 inspection.normalizeCheckResultStatus 是两份独立实现，新增状态必须同改两处。**
+// 历史事故：给 not_applicable 加枚举时只改了 inspection 那份，这份漏改，
+// 于是库里存「不适用」、API 吐「失败」——default 分支不报错也无日志，
+// 前端徽章显示红色「失败」而消息里写着「未执行」，单元测试全绿也发现不了。
+//
+// default 仍落 fail 是刻意保留的兜底：出现未登记状态说明写入端有 bug，
+// 显示成「失败」促使人去查，显示成「通过」则会把问题藏起来。
 func normalizeCheckResultStatus(raw string) string {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	switch value {
-	case "pass", "fail", "warning", "skip":
+	case "pass", "fail", "warning", "skip", inspection.CheckStatusNotApplicable:
 		return value
 	case "error":
 		return "fail"

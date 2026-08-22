@@ -5,12 +5,19 @@ import (
 	_ "unsafe"
 
 	handlers "github.com/your-org/inspect-system/backend-go/internal/http/handlers"
+	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 )
 
 // splitCheckItemsByApplicability 按设备类型把启用的检查项分成可执行与不适用两组。
 //
 //go:linkname splitCheckItemsByApplicability github.com/your-org/inspect-system/backend-go/internal/http/handlers.splitCheckItemsByApplicability
 func splitCheckItemsByApplicability(checkItems []map[string]interface{}, deviceType string) ([]map[string]interface{}, []map[string]interface{})
+
+// buildCheckResultResponse 是执行详情 API 的检查结果序列化入口，
+// 前端拿到的每条检查项都出自这里。
+//
+//go:linkname buildCheckResultResponse github.com/your-org/inspect-system/backend-go/internal/http/handlers.buildCheckResultResponse
+func buildCheckResultResponse(result inspection.Result) map[string]interface{}
 
 var _ = handlers.InspectionHandler{}
 
@@ -138,5 +145,51 @@ func TestSplitByApplicability_CaseInsensitive(t *testing.T) {
 		if len(applicable) != 1 {
 			t.Errorf("设备类型 %q 应匹配 Switch，实际可执行 %v", deviceType, itemIDs(applicable))
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// API 响应的状态透传
+// ---------------------------------------------------------------------------
+
+// TestBuildCheckResultResponse_PreservesNotApplicable 不适用状态必须原样透传给前端。
+//
+// 这条锁的是一个真实事故：normalizeCheckResultStatus 在 inspection 与 handlers
+// 两个包里各有一份，且 default 分支都返回 fail。给 not_applicable 加枚举时只改了
+// inspection 那份，handlers 这份漏改，于是库里存的是「不适用」、API 吐出来的是
+// 「失败」——不报错、无日志，前端徽章显示红色「失败」，而消息里写着「未执行」。
+// 端到端跑通之前，单元测试全绿也发现不了。
+func TestBuildCheckResultResponse_PreservesNotApplicable(t *testing.T) {
+	payload := buildCheckResultResponse(inspection.Result{
+		CheckItemName: "BGP 邻居状态",
+		CheckItemType: "snmp",
+		Status:        "not_applicable",
+	})
+
+	if got := payload["status"]; got != "not_applicable" {
+		t.Errorf("status = %v，want not_applicable（被静默转成 %v 会让不适用显示成失败）", got, got)
+	}
+}
+
+// TestBuildCheckResultResponse_KeepsKnownStatuses 其余已知状态原样透传。
+func TestBuildCheckResultResponse_KeepsKnownStatuses(t *testing.T) {
+	for _, status := range []string{"pass", "fail", "warning", "skip"} {
+		t.Run(status, func(t *testing.T) {
+			payload := buildCheckResultResponse(inspection.Result{Status: status})
+			if got := payload["status"]; got != status {
+				t.Errorf("status = %v，want %s", got, status)
+			}
+		})
+	}
+}
+
+// TestBuildCheckResultResponse_UnknownStatusFallsBackToFail 未登记状态仍落 fail。
+//
+// 这是刻意保留的兜底：出现未知状态说明写入端有 bug，显示成「失败」促使人去查，
+// 显示成「通过」则会把问题藏起来。
+func TestBuildCheckResultResponse_UnknownStatusFallsBackToFail(t *testing.T) {
+	payload := buildCheckResultResponse(inspection.Result{Status: "某种没见过的状态"})
+	if got := payload["status"]; got != "fail" {
+		t.Errorf("未知状态 = %v，want fail", got)
 	}
 }
