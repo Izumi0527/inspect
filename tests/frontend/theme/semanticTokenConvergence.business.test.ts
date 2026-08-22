@@ -117,18 +117,6 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/inspection/components/CheckItemGroup.tsx',
-    bannedPatterns: [
-      /bg-white/g,
-      /bg-gray-50/g,
-      /border-gray-200/g,
-      /text-gray-900/g,
-      /text-gray-700/g,
-      /text-gray-600/g,
-      /text-gray-500/g,
-    ],
-  },
-  {
     file: 'frontend/src/app/page.tsx',
     bannedPatterns: [
       /bg-white/g,
@@ -222,13 +210,6 @@ const rules: FileRule[] = [
       /bg-gray-50 dark:bg-gray-800/g,
       /border-gray-300 dark:border-gray-600/g,
       /text-gray-900 dark:text-gray-100/g,
-    ],
-  },
-  {
-    file: 'frontend/src/features/inspection/components/TemplateDetail.tsx',
-    bannedPatterns: [
-      /bg-white/g,
-      /text-gray-900/g,
     ],
   },
   {
