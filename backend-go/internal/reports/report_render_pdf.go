@@ -176,9 +176,10 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 			resultStyle.RowFills, resultStyle.RowAccents = checkResultRowTints(resultRows, 2)
 			writePDFTable(pdf, []string{"检查项", "类型", "状态", "参考标准", "实际值"}, resultRows, []float64{38, 16, 13, 37, 38.2}, resultStyle)
 
-			// 接口利用率检查项带逐接口明细：单独出一张表，避免把长清单塞进上表的定宽单元格
+			// 明细型检查项各自出一张表：上表的定宽单元格塞不下长清单，
+			// 也无法承载逐项的原始值与判定依据。
 			for _, result := range device.CheckResults {
-				writeInterfaceUtilizationPDFTable(pdf, result)
+				writeCheckDetailTables(pdf, result)
 			}
 		}
 		pdf.Ln(10)
@@ -582,10 +583,14 @@ func genericReportFieldLabel(key string) string {
 	}
 }
 
+// pdfEmptyValuePlaceholder 是表格里「无此数据」的统一占位符。
+// 缺失必须与 0 可区分：「未上报电压」和「电压 0V」是两个完全不同的结论。
+const pdfEmptyValuePlaceholder = "-"
+
 func fallbackPDFValue(value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" || trimmed == "{}" {
-		return "-"
+		return pdfEmptyValuePlaceholder
 	}
 	return trimmed
 }
@@ -840,6 +845,250 @@ func writeInterfaceUtilizationPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckR
 		style.WrapColumns = []int{0, 1}
 		writePDFTable(pdf, []string{"未评估接口", "原因"}, rows, []float64{60, 82.2}, style)
 	}
+}
+
+// writeCheckDetailTables 按明细类型分派渲染。
+// 五种载荷互斥，一条检查结果至多命中一种；都不命中时什么也不画。
+func writeCheckDetailTables(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	writeInterfaceUtilizationPDFTable(pdf, result)
+	writeInterfaceRatioPDFTable(pdf, result)
+	writeOpticalPowerPDFTable(pdf, result)
+	writeBGPPeersPDFTable(pdf, result)
+	writeComponentStatusPDFTable(pdf, result)
+}
+
+// writeDetailSkippedPDFTable 输出「未参与评估的对象及原因」表。
+// 错包与光模块共用：两者都会因设备未上报某个计数器而跳过部分对象，
+// 不列出来就会出现「29 个接口只看到 2 行」的困惑。
+func writeDetailSkippedPDFTable(pdf *gofpdf.Fpdf, header string, skipped []InterfaceUtilizationSkippedReport) {
+	if len(skipped) == 0 {
+		return
+	}
+	pdf.Ln(3)
+	ensurePDFSpace(pdf, 25)
+	rows := make([][]string, 0, len(skipped))
+	for _, item := range skipped {
+		rows = append(rows, []string{item.Name, item.Reason})
+	}
+	style := defaultPDFTableStyle(pdfHeaderStyleLight)
+	style.BodyAlign = "L"
+	style.WrapColumns = []int{0, 1}
+	writePDFTable(pdf, []string{header, "原因"}, rows, []float64{60, 82.2}, style)
+}
+
+// formatDetailPercent 格式化比率。极小的非零值显示成 "<0.01%" 而不是 "0.00%"：
+// 后者会把「有错包但很少」误传成「一个错包都没有」。
+func formatDetailPercent(percent float64) string {
+	if percent > 0 && percent < 0.01 {
+		return "<0.01%"
+	}
+	return fmt.Sprintf("%.2f%%", percent)
+}
+
+// formatOptionalFloat 渲染可缺失的诊断量。
+// 缺失显示为占位符而非 0——「未上报电压」和「电压 0V」是两个完全不同的结论。
+func formatOptionalFloat(value *float64, unit string, precision int) string {
+	if value == nil {
+		return pdfEmptyValuePlaceholder
+	}
+	text := formatFloat(*value, precision)
+	if unit != "" {
+		return text + unit
+	}
+	return text
+}
+
+// writeInterfaceRatioPDFTable 为「接口错包率 / 丢弃率」输出逐接口明细表。
+//
+// 同时给出比率与原始计数：累计比率会被历史上一次性故障长期拉高，
+// 只看比率无法区分「持续劣化」与「三年前抖过一次」，原始包数才是判断依据。
+func writeInterfaceRatioPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.InterfaceRatio
+	if detail == nil || (len(detail.Interfaces) == 0 && len(detail.Skipped) == 0) {
+		return
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐接口明细（已评估 %d/%d，警告线 %s，故障线 %s）",
+		result.CheckItemName, detail.Evaluated, detail.Total,
+		formatDetailPercent(detail.WarningThreshold), formatDetailPercent(detail.CriticalThreshold)))
+
+	if len(detail.Interfaces) > 0 {
+		rows := make([][]string, 0, len(detail.Interfaces))
+		for _, entry := range detail.Interfaces {
+			rows = append(rows, []string{
+				entry.Name,
+				entry.Direction,
+				formatDetailPercent(entry.Percent),
+				fmt.Sprintf("%d", entry.Count),
+				fmt.Sprintf("%d", entry.Packets),
+			})
+		}
+		style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+		style.BodyAlign = "L"
+		style.WrapColumns = []int{0}
+		writePDFTable(pdf,
+			[]string{"接口", "峰值方向", "比率", "计数", "包数"},
+			rows, []float64{46, 20, 22, 27, 27.2}, style)
+	}
+
+	writeDetailSkippedPDFTable(pdf, "未评估接口", detail.Skipped)
+}
+
+// writeOpticalPowerPDFTable 为「光模块光功率」输出逐模块明细表。
+//
+// 电压与偏置电流一并列出，是为了区分光衰的两种成因：偏置电流升高而发光下降
+// 指向激光器老化（换模块），否则指向链路侧衰耗（查光纤）。
+func writeOpticalPowerPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.OpticalPower
+	if detail == nil || (len(detail.Modules) == 0 && len(detail.Skipped) == 0) {
+		return
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐模块明细（已评估 %d/%d，警告线 %sdBm，故障线 %sdBm）",
+		result.CheckItemName, detail.Evaluated, detail.Total,
+		formatFloat(detail.WarningThreshold, 1), formatFloat(detail.CriticalThreshold, 1)))
+
+	if len(detail.Modules) > 0 {
+		rows := make([][]string, 0, len(detail.Modules))
+		for _, module := range detail.Modules {
+			unit := module.RxPowerUnit
+			if unit == "" {
+				unit = "dBm"
+			}
+			rows = append(rows, []string{
+				module.Index,
+				localizeStatusWord(module.Verdict),
+				formatFloat(module.RxPower, 1) + unit,
+				formatOptionalFloat(module.TxPower, module.TxPowerUnit, 1),
+				formatOptionalFloat(module.Voltage, module.VoltageUnit, 2),
+				formatOptionalFloat(module.BiasCurrent, module.BiasCurrentUnit, 1),
+			})
+		}
+		style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+		style.BodyAlign = "L"
+		style.WrapColumns = []int{0}
+		style.RowFills, style.RowAccents = checkResultRowTints(rows, 1)
+		writePDFTable(pdf,
+			[]string{"模块", "判定", "收光", "发光", "电压", "偏置电流"},
+			rows, []float64{36, 16, 22, 22, 22, 24.2}, style)
+	}
+
+	writeDetailSkippedPDFTable(pdf, "未评估模块", detail.Skipped)
+}
+
+// writeBGPPeersPDFTable 为「BGP 邻居状态」输出逐邻居明细表。
+func writeBGPPeersPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.BGPPeers
+	if detail == nil || len(detail.Peers) == 0 {
+		return
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐邻居明细（共 %d 个，已建立 %d，未建立 %d，近期重建 %d）",
+		result.CheckItemName, detail.Total, detail.Established, detail.Down, detail.Flapping))
+
+	rows := make([][]string, 0, len(detail.Peers))
+	for _, peer := range detail.Peers {
+		rows = append(rows, []string{
+			peer.Index,
+			localizeStatusWord(peer.Verdict),
+			formatBGPPeerState(peer),
+			fallbackPDFValue(formatSessionUptime(peer.EstablishedSeconds)),
+			fallbackPDFValue(peer.LastError),
+		})
+	}
+	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+	style.BodyAlign = "L"
+	style.WrapColumns = []int{0, 4}
+	style.RowFills, style.RowAccents = checkResultRowTints(rows, 1)
+	writePDFTable(pdf,
+		[]string{"邻居", "判定", "会话状态", "建立时长", "最后错误"},
+		rows, []float64{32, 16, 26, 28, 40.2}, style)
+
+	if detail.FlappingThresholdSeconds > 0 {
+		writePDFRightAligned(pdf, fmt.Sprintf("判定口径：建立时长低于 %s 视为近期重建",
+			formatSessionUptime(&detail.FlappingThresholdSeconds)))
+	}
+}
+
+// formatSessionUptime 把 *int64 秒数适配到 formatUptimeSeconds(*int)。
+// BGP 的建立时长来自 SNMP Gauge32，采集端存为 int64；
+// 名字不叫 formatDurationSeconds 是因为那个名字已被「执行时长」占用，
+// 且那个函数只输出裸秒数，语义与「跑了 10 天」的会话时长不同。
+func formatSessionUptime(value *int64) string {
+	if value == nil {
+		return ""
+	}
+	seconds := int(*value)
+	return formatUptimeSeconds(&seconds)
+}
+
+// formatBGPPeerState 渲染邻居会话状态。
+// 优先用厂商上报的状态标签；缺失时回落到原始状态码——码本身也是信息，
+// 显示成空白等于把「设备报了个我们不认识的状态」这条事实抹掉。
+func formatBGPPeerState(peer BGPPeerEntryReport) string {
+	if label := strings.TrimSpace(peer.StateLabel); label != "" {
+		return label
+	}
+	if peer.State != nil {
+		return fmt.Sprintf("状态码 %d", *peer.State)
+	}
+	return pdfEmptyValuePlaceholder
+}
+
+// writeComponentStatusPDFTable 为「风扇 / 电源状态」输出逐部件明细表。
+//
+// 表尾附上本次生效的状态码集合：状态码语义因厂商甚至型号而异，
+// 报告只说「码 77 未知」运维无从下手，给出判定依据才能据此校准模板配置。
+func writeComponentStatusPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.ComponentStatus
+	if detail == nil || len(detail.Components) == 0 {
+		return
+	}
+
+	label := strings.TrimSpace(detail.Label)
+	if label == "" {
+		label = "部件"
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐%s明细（共 %d 个，正常 %d，异常 %d，状态码未知 %d）",
+		result.CheckItemName, label, detail.Total, detail.Normal, detail.Abnormal, detail.Unknown))
+
+	rows := make([][]string, 0, len(detail.Components))
+	for _, component := range detail.Components {
+		state := pdfEmptyValuePlaceholder
+		if component.State != nil {
+			state = fmt.Sprintf("%d", *component.State)
+		}
+		rows = append(rows, []string{component.Index, localizeStatusWord(component.Verdict), state})
+	}
+	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+	style.BodyAlign = "L"
+	style.WrapColumns = []int{0}
+	style.RowFills, style.RowAccents = checkResultRowTints(rows, 1)
+	writePDFTable(pdf, []string{"编号", "判定", "原始状态码"}, rows, []float64{50, 40, 52.2}, style)
+
+	writePDFRightAligned(pdf, fmt.Sprintf("判定依据：正常状态码 %s，异常状态码 %s，其余不作判定",
+		formatStateCodeSet(detail.NormalStates), formatStateCodeSet(detail.AbnormalStates)))
+}
+
+// formatStateCodeSet 把状态码集合渲染成 "1、2" 形式。
+func formatStateCodeSet(codes []float64) string {
+	if len(codes) == 0 {
+		return "未配置"
+	}
+	parts := make([]string, 0, len(codes))
+	for _, code := range codes {
+		parts = append(parts, formatFloat(code, 0))
+	}
+	return strings.Join(parts, "、")
 }
 
 func writePDFSubSectionTitle(pdf *gofpdf.Fpdf, title string) {

@@ -1134,6 +1134,43 @@ func buildThresholdDetails(metric string, warning, critical float64, unit string
 	return datatypes.JSON(encoded)
 }
 
+// 逐行明细的判定词表刻意复用检查结果的状态词（pass / warning / fail / skip），
+// 而不是另造一套「正常 / 异常 / 未知」。PDF 的 localizeStatusWord 与前端的
+// 状态标签已经能本地化这套词，复用等于零新增映射——每多一套词表，就要在
+// PDF 与前端两处各维护一份，且一处漏改就会出现「行判定与整项状态自相矛盾」。
+const (
+	rowVerdictPass    = "pass"
+	rowVerdictWarning = "warning"
+	rowVerdictFail    = "fail"
+	rowVerdictSkip    = "skip"
+)
+
+// rowVerdictRank 给逐行判定排序权重，最坏优先。
+// 报告表格在超长时会截断，留下的必须是需要处理的那几行。
+func rowVerdictRank(verdict string) int {
+	switch verdict {
+	case rowVerdictFail:
+		return 0
+	case rowVerdictWarning:
+		return 1
+	case rowVerdictSkip:
+		return 2
+	default:
+		return 3
+	}
+}
+
+// encodeDetailsPayload 把明细载荷编码成 details 列的值。
+// 编码失败时返回 nil 而非半截 JSON——写坏的 details 会让报告端解析崩溃，
+// 而 nil 只是退回纯文本展示。
+func encodeDetailsPayload(payload map[string]interface{}) datatypes.JSON {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil
+	}
+	return datatypes.JSON(encoded)
+}
+
 // ---------------------------------------------------------------------------
 // 部件状态（风扇 / 电源）
 // ---------------------------------------------------------------------------
@@ -1197,6 +1234,100 @@ func containsFloat(list []float64, want float64) bool {
 	return false
 }
 
+// componentStatusEntry 是部件状态明细的一行。
+// State 保留厂商原始状态码——报告要能展示「码 77」这个事实本身，
+// 运维据此才能校准模板配置。
+type componentStatusEntry struct {
+	Index   string `json:"index"`
+	Kind    string `json:"kind"`
+	Verdict string `json:"verdict"`
+	State   *int64 `json:"state,omitempty"`
+}
+
+// componentStatusSummary 单类部件（风扇或电源）的状态汇总。
+type componentStatusSummary struct {
+	Total           int
+	Normal          int
+	Abnormal        int
+	Unknown         int
+	AbnormalIndexes []string
+	UnknownCodes    []string
+	Entries         []componentStatusEntry
+}
+
+// summarizeComponentStatus 按 kind 过滤并逐部件判定状态码。
+//
+// 必须按 kind 过滤：Components 是所有部件的混合清单，风扇与电源两个检查项
+// 共用它。不过滤会让风扇明细里混进电源行，且计数与摘要对不上。
+func summarizeComponentStatus(
+	components []devices.ComponentStatusMetrics,
+	kind string,
+	normalStates, abnormalStates []float64,
+) componentStatusSummary {
+	summary := componentStatusSummary{
+		AbnormalIndexes: make([]string, 0),
+		UnknownCodes:    make([]string, 0),
+	}
+	entries := make([]componentStatusEntry, 0, len(components))
+
+	for _, component := range components {
+		if component.Kind != kind || component.State == nil {
+			continue
+		}
+		summary.Total++
+		state := float64(*component.State)
+		entry := componentStatusEntry{Index: component.Index, Kind: component.Kind, State: component.State}
+
+		switch {
+		case containsFloat(normalStates, state):
+			summary.Normal++
+			entry.Verdict = rowVerdictPass
+		case containsFloat(abnormalStates, state):
+			summary.Abnormal++
+			entry.Verdict = rowVerdictFail
+			summary.AbnormalIndexes = append(summary.AbnormalIndexes, component.Index)
+		default:
+			summary.Unknown++
+			entry.Verdict = rowVerdictSkip
+			summary.UnknownCodes = append(summary.UnknownCodes, fmt.Sprintf("%s(码 %d)", component.Index, *component.State))
+		}
+		entries = append(entries, entry)
+	}
+
+	sort.SliceStable(entries, func(i, j int) bool {
+		return rowVerdictRank(entries[i].Verdict) < rowVerdictRank(entries[j].Verdict)
+	})
+	summary.Entries = entries
+	return summary
+}
+
+// buildComponentStatusDetails 生成部件状态的逐部件明细载荷。
+//
+// 载荷同时回显本次生效的状态码集合：只给「码 77，未知」运维无从下手，
+// 连同「本次按正常={1}、异常={2} 判的」一起给出，才能据此校准模板配置。
+func buildComponentStatusDetails(
+	summary componentStatusSummary,
+	kind, label string,
+	normalStates, abnormalStates []float64,
+) datatypes.JSON {
+	payload := map[string]interface{}{
+		"kind":            "component_status",
+		"component_kind":  kind,
+		"label":           label,
+		"total":           summary.Total,
+		"normal":          summary.Normal,
+		"abnormal":        summary.Abnormal,
+		"unknown":         summary.Unknown,
+		"normal_states":   normalStates,
+		"abnormal_states": abnormalStates,
+		"components":      summary.Entries,
+	}
+	if summary.Entries == nil {
+		payload["components"] = []componentStatusEntry{}
+	}
+	return encodeDetailsPayload(payload)
+}
+
 // checkComponentStatusMetric 是风扇与电源检查的共同实现。
 func (h InspectionHandler) checkComponentStatusMetric(
 	result *inspection.Result,
@@ -1214,26 +1345,11 @@ func (h InspectionHandler) checkComponentStatusMetric(
 		return
 	}
 
-	total, normal, abnormal, unknown := 0, 0, 0, 0
-	abnormalIndexes := make([]string, 0)
-	unknownCodes := make([]string, 0)
-	for _, component := range metrics.Components {
-		if component.Kind != kind || component.State == nil {
-			continue
-		}
-		total++
-		state := float64(*component.State)
-		switch {
-		case containsFloat(normalStates, state):
-			normal++
-		case containsFloat(abnormalStates, state):
-			abnormal++
-			abnormalIndexes = append(abnormalIndexes, component.Index)
-		default:
-			unknown++
-			unknownCodes = append(unknownCodes, fmt.Sprintf("%s(码 %d)", component.Index, *component.State))
-		}
-	}
+	summary := summarizeComponentStatus(metrics.Components, kind, normalStates, abnormalStates)
+	result.Details = buildComponentStatusDetails(summary, kind, label, normalStates, abnormalStates)
+
+	total, normal, abnormal, unknown := summary.Total, summary.Normal, summary.Abnormal, summary.Unknown
+	abnormalIndexes, unknownCodes := summary.AbnormalIndexes, summary.UnknownCodes
 
 	if total == 0 {
 		result.Status = "skip"
@@ -1341,6 +1457,126 @@ func (h InspectionHandler) checkPoEMetric(result *inspection.Result, metrics *de
 // 光模块光功率
 // ---------------------------------------------------------------------------
 
+// opticalModuleEntry 是光模块明细的一行。
+//
+// 电压与偏置电流不是凑数：收光偏低有链路侧（光纤衰耗、接头脏污）与模块侧
+// （激光器老化）两种成因，偏置电流升高而发光下降指向后者。这是「换模块」
+// 还是「查光纤」的判断依据，只给一个收光值无从区分。
+type opticalModuleEntry struct {
+	Index           string   `json:"index"`
+	Verdict         string   `json:"verdict"`
+	RxPower         float64  `json:"rx_power"`
+	RxPowerUnit     string   `json:"rx_power_unit"`
+	TxPower         *float64 `json:"tx_power,omitempty"`
+	TxPowerUnit     string   `json:"tx_power_unit,omitempty"`
+	Voltage         *float64 `json:"voltage,omitempty"`
+	VoltageUnit     string   `json:"voltage_unit,omitempty"`
+	BiasCurrent     *float64 `json:"bias_current,omitempty"`
+	BiasCurrentUnit string   `json:"bias_current_unit,omitempty"`
+}
+
+// opticalPowerSummary 光模块收光功率汇总。
+type opticalPowerSummary struct {
+	Total        int
+	Evaluated    int
+	OverWarning  int // 低于警告阈值（含低于故障阈值的）
+	OverCritical int
+	Worst        float64
+	WorstName    string
+	Entries      []opticalModuleEntry
+	Skipped      []interfaceUtilizationSkipped
+	Offenders    []string // 供消息摘要，已按最坏优先排序
+}
+
+// summarizeOpticalModules 逐模块判定收光功率。
+//
+// 与其他阈值检查方向相反：光功率越低越危险，判定用「低于阈值告警」。
+func summarizeOpticalModules(modules []devices.OpticalTransceiverMetrics, warning, critical float64) opticalPowerSummary {
+	summary := opticalPowerSummary{Total: len(modules)}
+	entries := make([]opticalModuleEntry, 0, len(modules))
+
+	for _, module := range modules {
+		if module.RxPower == nil {
+			// 未上报收光的模块必须留痕：直接丢弃会让「采到 8 个只评了 3 个」
+			// 在报告里变成「3 个模块均正常」的假全景。
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{
+				Name: module.Index, Reason: "设备未上报收光功率（该模块不支持 DDM 或未插入光纤）",
+			})
+			continue
+		}
+
+		rx := *module.RxPower
+		summary.Evaluated++
+		if summary.Evaluated == 1 || rx < summary.Worst {
+			summary.Worst = rx
+			summary.WorstName = module.Index
+		}
+
+		verdict := rowVerdictPass
+		switch {
+		case rx <= critical:
+			verdict = rowVerdictFail
+			summary.OverCritical++
+			summary.OverWarning++
+		case rx <= warning:
+			verdict = rowVerdictWarning
+			summary.OverWarning++
+		}
+
+		unit := module.RxPowerUnit
+		if unit == "" {
+			// 采集端已把各厂商量纲归一到 dBm，缺省时按判定单位补齐，
+			// 否则报告里会出现没有单位的裸数字。
+			unit = "dBm"
+		}
+		entries = append(entries, opticalModuleEntry{
+			Index: module.Index, Verdict: verdict,
+			RxPower: rx, RxPowerUnit: unit,
+			TxPower: module.TxPower, TxPowerUnit: module.TxPowerUnit,
+			Voltage: module.Voltage, VoltageUnit: module.VoltageUnit,
+			BiasCurrent: module.BiasCurrent, BiasCurrentUnit: module.BiasCurrentUnit,
+		})
+	}
+
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].RxPower < entries[j].RxPower })
+	summary.Entries = entries
+
+	offenders := make([]string, 0, summary.OverWarning)
+	for _, entry := range entries {
+		if entry.Verdict == rowVerdictPass {
+			continue
+		}
+		offenders = append(offenders, fmt.Sprintf("%s(%.1f%s)", entry.Index, entry.RxPower, entry.RxPowerUnit))
+	}
+	summary.Offenders = offenders
+	return summary
+}
+
+// buildOpticalPowerDetails 生成光模块的逐模块明细载荷。
+func buildOpticalPowerDetails(summary opticalPowerSummary, warning, critical float64) datatypes.JSON {
+	payload := map[string]interface{}{
+		"kind":               "optical_power",
+		"total":              summary.Total,
+		"evaluated":          summary.Evaluated,
+		"over_warning":       summary.OverWarning,
+		"over_critical":      summary.OverCritical,
+		"warning_threshold":  warning,
+		"critical_threshold": critical,
+		"modules":            summary.Entries,
+		"skipped":            summary.Skipped,
+	}
+	if summary.Entries == nil {
+		payload["modules"] = []opticalModuleEntry{}
+	}
+	if summary.Skipped == nil {
+		payload["skipped"] = []interfaceUtilizationSkipped{}
+	}
+	for key, value := range thresholdDetailsPayload("optical_power", warning, critical, "dBm") {
+		payload[key] = value
+	}
+	return encodeDetailsPayload(payload)
+}
+
 // checkOpticalPowerMetric 检查光模块收发光功率。
 //
 // 与其他阈值检查方向相反：光功率是**越低越危险**，判定用「低于阈值告警」。
@@ -1362,59 +1598,39 @@ func (h InspectionHandler) checkOpticalPowerMetric(result *inspection.Result, me
 		return
 	}
 
-	evaluated, low, critLow := 0, 0, 0
-	offenders := make([]string, 0)
-	worst := 0.0
-	worstName := ""
-	for _, module := range metrics.OpticalTransceivers {
-		if module.RxPower == nil {
-			continue
-		}
-		evaluated++
-		rx := *module.RxPower
-		if evaluated == 1 || rx < worst {
-			worst = rx
-			worstName = module.Index
-		}
-		switch {
-		case rx <= critical:
-			critLow++
-			low++
-			offenders = append(offenders, fmt.Sprintf("%s(%.1fdBm)", module.Index, rx))
-		case rx <= warning:
-			low++
-			offenders = append(offenders, fmt.Sprintf("%s(%.1fdBm)", module.Index, rx))
-		}
-	}
+	summary := summarizeOpticalModules(metrics.OpticalTransceivers, warning, critical)
+	result.Details = buildOpticalPowerDetails(summary, warning, critical)
 
-	if evaluated == 0 {
+	if summary.Evaluated == 0 {
 		result.Status = "skip"
-		result.Message = stringPtr(fmt.Sprintf("采集到 %d 个光模块，但均未上报收光功率", len(metrics.OpticalTransceivers)))
+		result.Message = stringPtr(fmt.Sprintf("采集到 %d 个光模块，但均未上报收光功率", summary.Total))
 		return
 	}
 
-	actual := fmt.Sprintf("已评估 %d 个光模块；最低收光 %.1fdBm（%s）；超限 %d 个", evaluated, worst, worstName, low)
+	actual := fmt.Sprintf("已评估 %d 个光模块；最低收光 %.1fdBm（%s）；超限 %d 个",
+		summary.Evaluated, summary.Worst, summary.WorstName, summary.OverWarning)
 	result.ActualValue = &actual
 
-	shown := offenders
+	shown := summary.Offenders
 	if len(shown) > utilizationTopOffenderLimit {
 		shown = shown[:utilizationTopOffenderLimit]
 	}
 
 	switch {
-	case critLow > 0:
+	case summary.OverCritical > 0:
 		result.Status = "fail"
 		result.Message = stringPtr(fmt.Sprintf(
 			"%d 个光模块收光功率低于故障阈值 %gdBm，链路随时可能中断：%s",
-			critLow, critical, strings.Join(shown, "、")))
-	case low > 0:
+			summary.OverCritical, critical, strings.Join(shown, "、")))
+	case summary.OverWarning > 0:
 		result.Status = "warning"
 		result.Message = stringPtr(fmt.Sprintf(
 			"%d 个光模块收光功率低于警告阈值 %gdBm，建议排查光纤衰耗或准备更换模块：%s",
-			low, warning, strings.Join(shown, "、")))
+			summary.OverWarning, warning, strings.Join(shown, "、")))
 	default:
 		result.Status = "pass"
-		result.Message = stringPtr(fmt.Sprintf("已评估 %d 个光模块，收光功率均在正常区间（最低 %.1fdBm）", evaluated, worst))
+		result.Message = stringPtr(fmt.Sprintf("已评估 %d 个光模块，收光功率均在正常区间（最低 %.1fdBm）",
+			summary.Evaluated, summary.Worst))
 	}
 }
 
@@ -1428,6 +1644,96 @@ const bgpEstablishedState = 6
 // bgpFlappingThresholdSeconds 判定「近期震荡」的建立时长下限。
 // 会话建立不足一小时，说明它在巡检窗口内刚重建过。
 const bgpFlappingThresholdSeconds = 3600
+
+// bgpPeerEntry 是 BGP 邻居明细的一行。
+//
+// LastError 是排障的起点：「hold timer expired」指向链路质量或设备负载，
+// 「authentication failure」指向配置。这条信息只有 BGP MIB 有，
+// 丢了就得登设备现查。
+type bgpPeerEntry struct {
+	Index              string `json:"index"`
+	Verdict            string `json:"verdict"`
+	State              *int   `json:"state,omitempty"`
+	StateLabel         string `json:"state_label,omitempty"`
+	EstablishedSeconds *int64 `json:"established_seconds,omitempty"`
+	LastError          string `json:"last_error,omitempty"`
+}
+
+// bgpPeersSummary BGP 邻居汇总。
+type bgpPeersSummary struct {
+	Total       int
+	Established int
+	Down        []string
+	Flapping    []string
+	Entries     []bgpPeerEntry
+}
+
+// summarizeBGPPeers 逐邻居判定状态。
+func summarizeBGPPeers(peers []devices.BGPNeighborMetrics) bgpPeersSummary {
+	summary := bgpPeersSummary{
+		Total:    len(peers),
+		Down:     make([]string, 0),
+		Flapping: make([]string, 0),
+	}
+	entries := make([]bgpPeerEntry, 0, len(peers))
+
+	for _, peer := range peers {
+		entry := bgpPeerEntry{
+			Index: peer.Index, State: peer.State, StateLabel: strings.TrimSpace(peer.StateLabel),
+			EstablishedSeconds: peer.EstablishedTime,
+		}
+		if peer.LastError != nil {
+			entry.LastError = strings.TrimSpace(*peer.LastError)
+		}
+
+		switch {
+		case peer.State == nil:
+			// 未上报状态码的邻居不作判定，但要在明细里留一行：
+			// total 计了它，清单里却没有会让读者以为报告漏了。
+			entry.Verdict = rowVerdictSkip
+		case *peer.State != bgpEstablishedState:
+			entry.Verdict = rowVerdictFail
+			label := entry.StateLabel
+			if label == "" {
+				label = fmt.Sprintf("状态码 %d", *peer.State)
+			}
+			summary.Down = append(summary.Down, fmt.Sprintf("%s(%s)", peer.Index, label))
+		default:
+			summary.Established++
+			entry.Verdict = rowVerdictPass
+			if peer.EstablishedTime != nil && *peer.EstablishedTime < bgpFlappingThresholdSeconds {
+				entry.Verdict = rowVerdictWarning
+				summary.Flapping = append(summary.Flapping, fmt.Sprintf("%s(%d 秒)", peer.Index, *peer.EstablishedTime))
+			}
+		}
+		entries = append(entries, entry)
+	}
+
+	sort.SliceStable(entries, func(i, j int) bool {
+		return rowVerdictRank(entries[i].Verdict) < rowVerdictRank(entries[j].Verdict)
+	})
+	summary.Entries = entries
+	return summary
+}
+
+// buildBGPPeersDetails 生成 BGP 邻居的逐邻居明细载荷。
+func buildBGPPeersDetails(summary bgpPeersSummary) datatypes.JSON {
+	payload := map[string]interface{}{
+		"kind":        "bgp_peers",
+		"total":       summary.Total,
+		"established": summary.Established,
+		"down":        len(summary.Down),
+		"flapping":    len(summary.Flapping),
+		// 「建立时长 120 秒」本身不说明问题，得知道判定线在哪。
+		// 报告要能写出「低于 3600 秒视为近期重建」，这个常量必须随载荷下发。
+		"flapping_threshold_seconds": bgpFlappingThresholdSeconds,
+		"peers":                      summary.Entries,
+	}
+	if summary.Entries == nil {
+		payload["peers"] = []bgpPeerEntry{}
+	}
+	return encodeDetailsPayload(payload)
+}
 
 // checkBGPPeersMetric 检查 BGP 邻居状态。
 //
@@ -1443,25 +1749,12 @@ func (h InspectionHandler) checkBGPPeersMetric(result *inspection.Result, metric
 		return
 	}
 
-	total := len(metrics.BGPPeers)
-	down := make([]string, 0)
-	flapping := make([]string, 0)
-	for _, peer := range metrics.BGPPeers {
-		if peer.State == nil {
-			continue
-		}
-		if *peer.State != bgpEstablishedState {
-			label := strings.TrimSpace(peer.StateLabel)
-			if label == "" {
-				label = fmt.Sprintf("状态码 %d", *peer.State)
-			}
-			down = append(down, fmt.Sprintf("%s(%s)", peer.Index, label))
-			continue
-		}
-		if peer.EstablishedTime != nil && *peer.EstablishedTime < bgpFlappingThresholdSeconds {
-			flapping = append(flapping, fmt.Sprintf("%s(%d 秒)", peer.Index, *peer.EstablishedTime))
-		}
-	}
+	summary := summarizeBGPPeers(metrics.BGPPeers)
+	result.Details = buildBGPPeersDetails(summary)
+
+	total := summary.Total
+	down := summary.Down
+	flapping := summary.Flapping
 
 	actual := fmt.Sprintf("共 %d 个邻居；未建立 %d 个，近期重建 %d 个", total, len(down), len(flapping))
 	result.ActualValue = &actual

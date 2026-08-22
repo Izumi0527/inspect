@@ -197,8 +197,19 @@ type InspectionCheckResult struct {
 	ExpectedValue string
 	ActualValue   string
 	ExecutionTime int
+	// 以下明细字段互斥，至多一个非空：details 列的载荷用顶层 kind 区分类型，
+	// 一条检查结果只会命中其中一种。渲染由 writeCheckDetailTables 统一分派。
+	//
 	// InterfaceUtilization 仅接口利用率检查项非空，用于在报告中输出逐接口明细表
 	InterfaceUtilization *InterfaceUtilizationReport
+	// InterfaceRatio 承载接口错包率与丢弃率——两者载荷结构相同，只是 kind 不同
+	InterfaceRatio *InterfaceRatioReport
+	// OpticalPower 承载光模块逐模块收发光与诊断量
+	OpticalPower *OpticalPowerReport
+	// BGPPeers 承载逐邻居状态与会话稳定性
+	BGPPeers *BGPPeersReport
+	// ComponentStatus 承载逐风扇/电源部件的原始状态码与判定
+	ComponentStatus *ComponentStatusReport
 }
 
 // InterfaceUtilizationEntryReport 报告中的单接口利用率行
@@ -244,6 +255,201 @@ func parseInterfaceUtilizationDetails(raw *string) *InterfaceUtilizationReport {
 		return nil
 	}
 	return &payload
+}
+
+// ---------------------------------------------------------------------------
+// 其余四类结构化明细
+//
+// 全部沿用同一套契约：顶层 kind 区分类型，解析失败或 kind 不匹配返回 nil，
+// 报告退回只渲染摘要行。details 列历史上存过手工写入的自由文本，
+// 解析器必须扛得住非 JSON 输入而不是让整份报告出不来。
+// ---------------------------------------------------------------------------
+
+// InterfaceRatioEntryReport 报告中的单接口计数器比率行。
+//
+// Count 与 Packets 是原始值，必须与 Percent 一起给出：累计比率会被历史上
+// 一次性故障长期拉高，只看「1.2%」无法区分持续劣化与三年前的一次抖动。
+type InterfaceRatioEntryReport struct {
+	Name      string  `json:"name"`
+	Direction string  `json:"direction"`
+	Percent   float64 `json:"percent"`
+	Count     uint64  `json:"count"`
+	Packets   uint64  `json:"packets"`
+}
+
+// InterfaceRatioReport 对应 details 中 kind=interface_errors / interface_discards 的载荷。
+// 两者结构完全相同，只有表头文案不同，共用一个类型。
+type InterfaceRatioReport struct {
+	Kind              string                              `json:"kind"`
+	Total             int                                 `json:"total"`
+	Evaluated         int                                 `json:"evaluated"`
+	OverWarning       int                                 `json:"over_warning"`
+	OverCritical      int                                 `json:"over_critical"`
+	WarningThreshold  float64                             `json:"warning_threshold"`
+	CriticalThreshold float64                             `json:"critical_threshold"`
+	Interfaces        []InterfaceRatioEntryReport         `json:"interfaces"`
+	Skipped           []InterfaceUtilizationSkippedReport `json:"skipped"`
+}
+
+func parseInterfaceRatioDetails(raw *string) *InterfaceRatioReport {
+	payload, ok := decodeDetailsPayload[InterfaceRatioReport](raw, "interface_errors", "interface_discards")
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
+// OpticalModuleEntryReport 报告中的单光模块行。
+//
+// 诊断量用指针：厂商对 DDM 的支持参差不齐，多数只给收光。缺失与 0 必须可区分，
+// 否则报告会把「未上报电压」渲染成「电压 0V」这个明确错误的结论。
+type OpticalModuleEntryReport struct {
+	Index           string   `json:"index"`
+	Verdict         string   `json:"verdict"`
+	RxPower         float64  `json:"rx_power"`
+	RxPowerUnit     string   `json:"rx_power_unit"`
+	TxPower         *float64 `json:"tx_power"`
+	TxPowerUnit     string   `json:"tx_power_unit"`
+	Voltage         *float64 `json:"voltage"`
+	VoltageUnit     string   `json:"voltage_unit"`
+	BiasCurrent     *float64 `json:"bias_current"`
+	BiasCurrentUnit string   `json:"bias_current_unit"`
+}
+
+// OpticalPowerReport 对应 details 中 kind=optical_power 的载荷。
+type OpticalPowerReport struct {
+	Kind              string                              `json:"kind"`
+	Total             int                                 `json:"total"`
+	Evaluated         int                                 `json:"evaluated"`
+	OverWarning       int                                 `json:"over_warning"`
+	OverCritical      int                                 `json:"over_critical"`
+	WarningThreshold  float64                             `json:"warning_threshold"`
+	CriticalThreshold float64                             `json:"critical_threshold"`
+	Modules           []OpticalModuleEntryReport          `json:"modules"`
+	Skipped           []InterfaceUtilizationSkippedReport `json:"skipped"`
+}
+
+func parseOpticalPowerDetails(raw *string) *OpticalPowerReport {
+	payload, ok := decodeDetailsPayload[OpticalPowerReport](raw, "optical_power")
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
+// BGPPeerEntryReport 报告中的单 BGP 邻居行。
+type BGPPeerEntryReport struct {
+	Index              string `json:"index"`
+	Verdict            string `json:"verdict"`
+	State              *int   `json:"state"`
+	StateLabel         string `json:"state_label"`
+	EstablishedSeconds *int64 `json:"established_seconds"`
+	LastError          string `json:"last_error"`
+}
+
+// BGPPeersReport 对应 details 中 kind=bgp_peers 的载荷。
+type BGPPeersReport struct {
+	Kind        string `json:"kind"`
+	Total       int    `json:"total"`
+	Established int    `json:"established"`
+	Down        int    `json:"down"`
+	Flapping    int    `json:"flapping"`
+	// FlappingThresholdSeconds 是震荡判定线。「建立时长 120 秒」本身不说明问题，
+	// 报告要能写出「低于 N 秒视为近期重建」才是完整结论。
+	FlappingThresholdSeconds int64                `json:"flapping_threshold_seconds"`
+	Peers                    []BGPPeerEntryReport `json:"peers"`
+}
+
+func parseBGPPeersDetails(raw *string) *BGPPeersReport {
+	payload, ok := decodeDetailsPayload[BGPPeersReport](raw, "bgp_peers")
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
+// ComponentStatusEntryReport 报告中的单部件行，State 保留厂商原始状态码。
+type ComponentStatusEntryReport struct {
+	Index   string `json:"index"`
+	Kind    string `json:"kind"`
+	Verdict string `json:"verdict"`
+	State   *int64 `json:"state"`
+}
+
+// ComponentStatusReport 对应 details 中 kind=component_status 的载荷。
+type ComponentStatusReport struct {
+	Kind          string `json:"kind"`
+	ComponentKind string `json:"component_kind"`
+	Label         string `json:"label"`
+	Total         int    `json:"total"`
+	Normal        int    `json:"normal"`
+	Abnormal      int    `json:"abnormal"`
+	Unknown       int    `json:"unknown"`
+	// NormalStates / AbnormalStates 回显本次生效的判定依据。状态码语义因厂商
+	// 而异，只给「码 77，未知」运维无从下手；连同「本次按正常={1}、异常={2}
+	// 判的」一起给出，才能据此校准模板配置。
+	NormalStates   []float64                    `json:"normal_states"`
+	AbnormalStates []float64                    `json:"abnormal_states"`
+	Components     []ComponentStatusEntryReport `json:"components"`
+}
+
+func parseComponentStatusDetails(raw *string) *ComponentStatusReport {
+	payload, ok := decodeDetailsPayload[ComponentStatusReport](raw, "component_status")
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
+// detailsKindProbe 只取顶层 kind，用于在完整反序列化前判断载荷类型。
+type detailsKindProbe struct {
+	Kind string `json:"kind"`
+}
+
+// decodeDetailsPayload 校验 kind 后反序列化 details 载荷。
+// 空值、非 JSON、kind 不在 wantKinds 内一律返回 ok=false。
+func decodeDetailsPayload[T any](raw *string, wantKinds ...string) (*T, bool) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return nil, false
+	}
+	var probe detailsKindProbe
+	if err := json.Unmarshal([]byte(*raw), &probe); err != nil {
+		return nil, false
+	}
+	matched := false
+	for _, kind := range wantKinds {
+		if probe.Kind == kind {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return nil, false
+	}
+	var payload T
+	if err := json.Unmarshal([]byte(*raw), &payload); err != nil {
+		return nil, false
+	}
+	return &payload, true
+}
+
+// parseCheckResultDetails 按 kind 把 details 载荷分派到对应的明细字段。
+// 五种载荷互斥，至多命中一种；都不命中时全部为 nil，报告只渲染摘要行。
+func parseCheckResultDetails(raw *string, result *InspectionCheckResult) {
+	result.InterfaceUtilization = parseInterfaceUtilizationDetails(raw)
+	if result.InterfaceUtilization != nil {
+		return
+	}
+	if result.InterfaceRatio = parseInterfaceRatioDetails(raw); result.InterfaceRatio != nil {
+		return
+	}
+	if result.OpticalPower = parseOpticalPowerDetails(raw); result.OpticalPower != nil {
+		return
+	}
+	if result.BGPPeers = parseBGPPeersDetails(raw); result.BGPPeers != nil {
+		return
+	}
+	result.ComponentStatus = parseComponentStatusDetails(raw)
 }
 
 type StatisticsReportData struct {
@@ -713,14 +919,14 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 	resultsByInspection := make(map[int][]InspectionCheckResult)
 	for _, row := range results {
 		result := InspectionCheckResult{
-			CheckItemName:        row.Name,
-			CheckItemType:        row.Type,
-			Status:               row.Status,
-			ExpectedValue:        defaultStringPtr(row.Expected),
-			ActualValue:          defaultStringPtr(row.Actual),
-			ExecutionTime:        defaultIntPtr(row.Execution),
-			InterfaceUtilization: parseInterfaceUtilizationDetails(row.Details),
+			CheckItemName: row.Name,
+			CheckItemType: row.Type,
+			Status:        row.Status,
+			ExpectedValue: defaultStringPtr(row.Expected),
+			ActualValue:   defaultStringPtr(row.Actual),
+			ExecutionTime: defaultIntPtr(row.Execution),
 		}
+		parseCheckResultDetails(row.Details, &result)
 		resultsByInspection[row.InspectionID] = append(resultsByInspection[row.InspectionID], result)
 	}
 
