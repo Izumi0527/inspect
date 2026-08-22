@@ -1257,16 +1257,18 @@ func writePDFTable(pdf *gofpdf.Fpdf, headers []string, rows [][]string, colWidth
 			pdf.SetXY(x, rowY)
 			pdf.CellFormat(colWidths[i], rowH, "", bodyBorder, 0, "", true, 0, "")
 			offsetY := (rowH - float64(len(cellLines[i]))*style.BodyHeight) / 2
+			// 让开行强调条：条最后绘制且压在格上，首列文本不缩进会被裁掉半个字。
+			indent := bodyCellTextIndent(style.RowAccents, rowIndex, i)
 			for li, line := range cellLines[i] {
-				pdf.SetXY(x, rowY+offsetY+float64(li)*style.BodyHeight)
-				pdf.CellFormat(colWidths[i], style.BodyHeight, line, "", 0, style.BodyAlign, false, 0, "")
+				pdf.SetXY(x+indent, rowY+offsetY+float64(li)*style.BodyHeight)
+				pdf.CellFormat(colWidths[i]-indent, style.BodyHeight, line, "", 0, style.BodyAlign, false, 0, "")
 			}
 			x += colWidths[i]
 		}
 		// 色条最后画，压在左侧单元格边框上，形成实心强调条。
 		if accent, ok := rowTint(style.RowAccents, rowIndex); ok {
 			pdf.SetFillColor(accent[0], accent[1], accent[2])
-			pdf.Rect(startX, rowY, 1.5, rowH, "F")
+			pdf.Rect(startX, rowY, pdfAccentBarWidth, rowH, "F")
 		}
 		pdf.SetY(rowY + rowH)
 	}
@@ -2064,4 +2066,25 @@ func thresholdUnitLabel(unit string) string {
 		return "°C"
 	}
 	return unit
+}
+
+// pdfAccentBarWidth 行强调条宽度（毫米）。
+const pdfAccentBarWidth = 1.5
+
+// bodyCellTextIndent 返回单元格文本相对格左边的额外缩进。
+//
+// 强调条是一条实心矩形，为了压住单元格左边框而在整行绘制完之后才画。
+// 首列文本只有 gofpdf 默认约 1mm 的内边距，比条宽窄，于是被压在条下。
+// 中文首字因字形左边距较大恰好躲开，所以这个缺陷长期没暴露——直到部件编号
+// 「0.3」、邻居 IP「10.0.0.3」这类以数字起头的标识列出现，首字被裁掉半个。
+//
+// 只对有强调条的行的首列生效：其余情况返回 0，保持既有报告的排版不变。
+func bodyCellTextIndent(accents [][3]int, rowIndex, colIndex int) float64 {
+	if colIndex != 0 {
+		return 0
+	}
+	if _, ok := rowTint(accents, rowIndex); !ok {
+		return 0
+	}
+	return pdfAccentBarWidth
 }

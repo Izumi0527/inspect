@@ -32,6 +32,9 @@ func parseComponentStatusDetails(raw *string) *reports.ComponentStatusReport
 //go:linkname writeInspectionPDF github.com/your-org/inspect-system/backend-go/internal/reports.writeInspectionPDF
 func writeInspectionPDF(path string, data reports.InspectionReportData) error
 
+//go:linkname bodyCellTextIndent github.com/your-org/inspect-system/backend-go/internal/reports.bodyCellTextIndent
+func bodyCellTextIndent(accents [][3]int, rowIndex, colIndex int) float64
+
 func rawJSON(s string) *string { return &s }
 
 // ---------------------------------------------------------------------------
@@ -397,4 +400,50 @@ func renderInspectionPDFSize(t *testing.T, data reports.InspectionReportData, na
 		t.Fatalf("Stat(%q) error = %v", path, err)
 	}
 	return info.Size()
+}
+
+// ---------------------------------------------------------------------------
+// 行强调条与首列文本的位置冲突
+// ---------------------------------------------------------------------------
+
+// TestBodyCellTextIndent_AvoidsAccentBar 有强调条的行，首列文本必须让开条宽。
+//
+// 端到端验证时发现的真实缺陷：强调条是一条 1.5mm 宽的实心矩形，为了压住单元格
+// 左边框而在最后绘制。首列文本只有 gofpdf 默认约 1mm 的内边距，于是被压在条下。
+// 中文首字因字形左边距较大恰好躲开，所以这个缺陷一直没暴露——直到部件编号
+// 「0.3」、邻居 IP「10.0.0.3」这类以数字起头的标识列出现，首字被裁掉半个。
+func TestBodyCellTextIndent_AvoidsAccentBar(t *testing.T) {
+	accents := [][3]int{{220, 38, 38}}
+
+	if got := bodyCellTextIndent(accents, 0, 0); got < 1.5 {
+		t.Errorf("有强调条的行首列缩进 = %v，应不小于条宽 1.5mm", got)
+	}
+}
+
+// TestBodyCellTextIndent_OnlyFirstColumn 非首列不缩进，强调条只在最左侧。
+func TestBodyCellTextIndent_OnlyFirstColumn(t *testing.T) {
+	accents := [][3]int{{220, 38, 38}}
+
+	if got := bodyCellTextIndent(accents, 0, 1); got != 0 {
+		t.Errorf("非首列不应缩进，实际 %v", got)
+	}
+}
+
+// TestBodyCellTextIndent_NoAccentNoIndent 无强调条的行保持原有排版。
+//
+// 绝大多数表格没有强调条，无端多缩进 1.5mm 会让列宽计算与既有报告不一致。
+func TestBodyCellTextIndent_NoAccentNoIndent(t *testing.T) {
+	cases := map[string][][3]int{
+		"无强调条列表": nil,
+		"该行为零值":  {{0, 0, 0}},
+		"行索引越界":  {},
+	}
+
+	for name, accents := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := bodyCellTextIndent(accents, 0, 0); got != 0 {
+				t.Errorf("无强调条时不应缩进，实际 %v", got)
+			}
+		})
+	}
 }
