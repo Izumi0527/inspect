@@ -226,6 +226,7 @@ func (h ReportsHandler) GetTrendAnalysis(c echo.Context) error {
 			"metrics":     payload,
 			"predictions": predictions,
 			"alerts":      alerts,
+			"alerts_meta": buildTrendAlertsMeta(series),
 		},
 	})
 }
