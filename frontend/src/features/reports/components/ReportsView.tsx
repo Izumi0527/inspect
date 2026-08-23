@@ -49,7 +49,22 @@ export const ReportsView: React.FC = () => {
   }, [searchParams])
 
   const [activeTab, setActiveTab] = useState<TabType>(tabFromUrl || 'inspection')
-  const [searchText, setSearchText] = useState('')
+
+  // 搜索关键词按标签页隔离：四个子页的搜索语义互不相同
+  // （报告标题 / 趋势数据 / 设备类型 / 配置名称），
+  // 共用一个值会把上一个页签的关键词带过来，造成“我的数据怎么没了”的误判。
+  const [searchTextByTab, setSearchTextByTab] = useState<Record<TabType, string>>({
+    inspection: '',
+    trends: '',
+    statistics: '',
+    custom: '',
+  })
+
+  const searchText = searchTextByTab[activeTab]
+
+  const setSearchText = (value: string) => {
+    setSearchTextByTab((prev) => ({ ...prev, [activeTab]: value }))
+  }
 
   const handleTabChange = (nextTab: TabType) => {
     setActiveTab(nextTab)

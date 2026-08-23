@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, ConfirmModal, Loading, SimpleInput as Input, SimpleModal, TextArea } from '@/components/atoms'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
-import { useCreateCustomReportConfig, useCustomReportConfigs, useDeleteCustomReportConfig, useGenerateFromConfig, useReportTemplates } from '../hooks/useReports'
+import { useCreateCustomReportConfig, useCustomReportConfigs, useDeleteCustomReportConfig, useGenerateFromConfig } from '../hooks/useReports'
 import {
   Select,
   SelectContent,
@@ -16,8 +16,8 @@ import { ConfigPreviewModal } from './ConfigPreviewModal'
 import { CustomReportConfigModal } from './CustomReportConfigModal'
 import { downloadWithAuth } from '@/utils/download'
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
-import { formatDateYMD } from '@/utils/formatters'
-import type { ChartConfig, CustomReportConfig, ReportStyles, ReportTemplate, TableConfig, TemplateSection } from '../types'
+import { formatDateTimeYMDHM, formatDateYMD } from '@/utils/formatters'
+import type { ChartConfig, CustomReportConfig, ReportStyles, TableConfig, TemplateSection } from '../types'
 import { ReportsToolbar } from './shared/ReportsToolbar'
 
 interface Props {
@@ -51,53 +51,6 @@ const defaultReportStyles: ReportStyles = {
   },
 }
 
-const createTemplateTables = (template: ReportTemplate): TableConfig[] => {
-  const visibleSections = template.sections
-    .filter((section) => section.visible !== false)
-    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
-
-  if (visibleSections.length === 0) {
-    return []
-  }
-
-  return [
-    {
-      id: `table-${template.id}`,
-      title: `${template.name}结构清单`,
-      dataSource: 'template_sections',
-      columns: [
-        { key: 'title', title: '区块名称', type: 'text' },
-        { key: 'type', title: '区块类型', type: 'text' },
-        { key: 'order', title: '排序', type: 'number' },
-      ],
-      pagination: false,
-      exportable: true,
-    },
-  ]
-}
-
-const buildConfigPayloadFromTemplate = (template: ReportTemplate) => ({
-  name: `${template.name}（导入）`,
-  description: `从模板库导入：${template.name}`,
-  template: {
-    id: template.id,
-    name: template.name,
-    type: template.type,
-    sections: template.sections,
-    styles: template.styles,
-  },
-  parameters: {
-    dateRange: { startDate: '', endDate: '' },
-    includeCharts: true,
-    includeDetailData: false,
-    includeRecommendations: true,
-  },
-  charts: [] as ChartConfig[],
-  tables: createTemplateTables(template),
-  filters: [],
-  layout: defaultLayout,
-})
-
 const defaultBuilderCharts: ChartConfig[] = [
   {
     id: 'inspection-trend',
@@ -124,86 +77,6 @@ const defaultBuilderTables: TableConfig[] = [
     exportable: true,
   },
 ]
-
-interface TemplateImportModalProps {
-  open: boolean
-  onClose: () => void
-  templates: ReportTemplate[]
-  isLoading: boolean
-  error: unknown
-  isSubmitting: boolean
-  onImport: (template: ReportTemplate) => void
-}
-
-const TemplateImportModal: React.FC<TemplateImportModalProps> = ({
-  open,
-  onClose,
-  templates,
-  isLoading,
-  error,
-  isSubmitting,
-  onImport,
-}) => (
-  <SimpleModal open={open} onClose={onClose} title="从模板库导入" size="3xl">
-    <div className="space-y-4 p-6">
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-200">
-        选择已有报表模板后，系统会自动转换为自定义报表配置，后续可继续编辑、预览并生成文件。
-      </div>
-
-      {isLoading && (
-        <div className="flex items-center justify-center py-8">
-          <Loading />
-          <span className="ml-2 text-muted-foreground">加载模板库中...</span>
-        </div>
-      )}
-
-      {!isLoading && !!error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-200">
-          模板库加载失败，请稍后重试。
-        </div>
-      )}
-
-      {!isLoading && !error && templates.length === 0 && (
-        <div className="rounded-lg bg-muted/40 p-8 text-center text-muted-foreground">
-          暂无可导入模板，请先在报表模板接口中创建模板。
-        </div>
-      )}
-
-      {!isLoading && !error && templates.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {templates.map((template) => (
-            <div key={template.id} className="rounded-lg border border-border bg-card p-4">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="font-medium text-foreground">{template.name}</div>
-                <Badge variant={template.type === 'standard' ? 'primary' : 'secondary'}>
-                  {template.type === 'standard' ? '标准模板' : '自定义模板'}
-                </Badge>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                包含 {template.sections.length} 个区块，可导入为可编辑配置。
-              </div>
-              <div className="mt-4 flex justify-end">
-                <Button
-                  size="sm"
-                  onClick={() => onImport(template)}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? '导入中...' : '导入此模板'}
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex justify-end pt-2">
-        <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
-          取消
-        </Button>
-      </div>
-    </div>
-  </SimpleModal>
-)
 
 interface BuilderModalProps {
   open: boolean
@@ -408,9 +281,8 @@ export const CustomReports: React.FC<Props> = ({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
   const [configModalOpen, setConfigModalOpen] = useState(false)
-  const [configModalMode, setConfigModalMode] = useState<'create' | 'edit' | 'copy' | 'import'>('create')
+  const [configModalMode, setConfigModalMode] = useState<'create' | 'edit' | 'copy'>('create')
   const [activeConfig, setActiveConfig] = useState<CustomReportConfig | null>(null)
-  const [templateImportOpen, setTemplateImportOpen] = useState(false)
   const [builderOpen, setBuilderOpen] = useState(false)
   const [typeFilter, setTypeFilter] = useState<'all' | 'template' | 'custom'>('all')
 
@@ -421,19 +293,12 @@ export const CustomReports: React.FC<Props> = ({
     error,
     refetch: refetchConfigs,
   } = useCustomReportConfigs()
-  const {
-    data: templatesData,
-    isLoading: templatesLoading,
-    error: templatesError,
-    refetch: refetchTemplates,
-  } = useReportTemplates()
   const createConfig = useCreateCustomReportConfig()
   const generateReport = useGenerateFromConfig()
   const deleteConfig = useDeleteCustomReportConfig()
 
   // 提取配置列表
   const customConfigs = configsData || []
-  const reportTemplates = templatesData || []
 
   // 搜索过滤
   const normalizedKeyword = searchText.trim().toLowerCase()
@@ -527,27 +392,9 @@ export const CustomReports: React.FC<Props> = ({
     setConfigModalOpen(true)
   }
 
-  // 处理导入模板
-  const handleImport = () => {
-    if (!canCreate) {
-      toast.error('暂无权限导入模板')
-      return
-    }
-    setTemplateImportOpen(true)
-  }
-
   // 处理预览配置
   const handlePreview = (configId: string) => {
     setPreviewConfigId(configId)
-  }
-
-  const handleImportTemplate = async (template: ReportTemplate) => {
-    try {
-      await createConfig.mutateAsync(buildConfigPayloadFromTemplate(template) as Omit<CustomReportConfig, 'id'>)
-      setTemplateImportOpen(false)
-    } catch (error) {
-      console.error('导入报表模板失败:', error)
-    }
   }
 
   const handleSaveBuilderConfig = async (payload: Omit<CustomReportConfig, 'id'>) => {
@@ -569,7 +416,6 @@ export const CustomReports: React.FC<Props> = ({
 
   const handleRefresh = () => {
     void refetchConfigs()
-    void refetchTemplates()
     toast.success('配置列表已刷新')
   }
 
@@ -604,13 +450,6 @@ export const CustomReports: React.FC<Props> = ({
       primaryActions={
         canCreate
           ? [
-              {
-                key: 'import-template',
-                label: '导入模板',
-                icon: <Copy className="mr-2 h-4 w-4" />,
-                variant: 'outline',
-                onClick: handleImport,
-              },
               {
                 key: 'open-builder',
                 label: '进入生成器',
@@ -662,16 +501,6 @@ export const CustomReports: React.FC<Props> = ({
           setConfigModalOpen(false)
           setActiveConfig(null)
         }}
-      />
-
-      <TemplateImportModal
-        open={templateImportOpen}
-        onClose={() => setTemplateImportOpen(false)}
-        templates={reportTemplates}
-        isLoading={templatesLoading}
-        error={templatesError}
-        isSubmitting={createConfig.isPending}
-        onImport={handleImportTemplate}
       />
 
       <BuilderModal
@@ -732,15 +561,28 @@ export const CustomReports: React.FC<Props> = ({
         {toolbar}
         {!canCreate && (
           <div className="text-sm text-muted-foreground">
-            当前账号暂无创建/导入自定义报表配置权限，请联系管理员开通。
+            当前账号暂无创建自定义报表配置权限，请联系管理员开通。
           </div>
         )}
         <div className="bg-muted/40 rounded-lg p-8 text-center">
           <Settings className="w-12 h-12 text-muted-foreground/80 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-foreground mb-2">暂无报表配置</h3>
           <p className="text-muted-foreground mb-4">
-            创建您的第一个自定义报表配置，或从模板库导入。
+            创建第一个自定义报表配置，或使用向导快速生成常用配置。
           </p>
+          {/* 空状态必须自带操作入口：这里是用户最需要被引导的时刻 */}
+          {canCreate && (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button onClick={handleCreate}>
+                <Plus className="mr-2 h-4 w-4" />
+                创建自定义报表
+              </Button>
+              <Button variant="outline" onClick={handleOpenBuilder}>
+                <Wand2 className="mr-2 h-4 w-4" />
+                进入生成器
+              </Button>
+            </div>
+          )}
         </div>
         {modals}
       </div>
@@ -752,7 +594,7 @@ export const CustomReports: React.FC<Props> = ({
       {toolbar}
       {!canCreate && (
         <div className="text-sm text-muted-foreground">
-          当前账号暂无创建/导入自定义报表配置权限，请联系管理员开通。
+          当前账号暂无创建自定义报表配置权限，请联系管理员开通。
         </div>
       )}
 
@@ -767,7 +609,9 @@ export const CustomReports: React.FC<Props> = ({
                     <Settings className="w-4 h-4" />
                     {config.name}
                   </CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">{config.description}</p>
+                  {config.description && (
+                    <p className="text-sm text-muted-foreground mt-1">{config.description}</p>
+                  )}
                 </div>
                 <Badge variant={config.type === 'template' ? 'primary' : 'secondary'}>
                   {config.type === 'template' ? '模板' : '自定义'}
@@ -778,7 +622,8 @@ export const CustomReports: React.FC<Props> = ({
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">最后使用：</span>
-                  <span>{config.lastUsed || '从未使用'}</span>
+                  {/* 时间展示统一走 utils/formatters，避免各页面各自格式化导致口径不一致 */}
+                  <span>{config.lastUsed ? formatDateTimeYMDHM(config.lastUsed) : '从未使用'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">使用次数：</span>
@@ -857,23 +702,6 @@ export const CustomReports: React.FC<Props> = ({
           </p>
         </div>
       )}
-
-      {/* 报表生成器 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>报表生成器入口</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="bg-muted/40 rounded-lg p-8 text-center">
-            <Settings className="w-12 h-12 text-muted-foreground/80 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-foreground mb-2">报表生成器</h3>
-            <p className="text-muted-foreground mb-4">
-              使用向导快速生成常用自定义报表配置，保存后可继续编辑 JSON 细节。
-            </p>
-            <Button onClick={handleOpenBuilder}>进入生成器</Button>
-          </div>
-        </CardContent>
-      </Card>
 
       {modals}
     </div>
