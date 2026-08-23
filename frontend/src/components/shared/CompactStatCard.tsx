@@ -9,7 +9,17 @@ export interface CompactStatCardProps {
   value: React.ReactNode
   change?: string
   changeHint?: string
+  /** 数值方向：决定箭头朝向（↗ 上升 / ↘ 下降 / → 持平） */
   trend?: 'up' | 'down' | 'stable'
+  /**
+   * 变化的好坏：决定涨跌文字的配色。
+   *
+   * 默认由 trend 推导（上升=正面），适用于「越高越好」的指标。
+   * 对故障率、错误数这类「越低越好」的指标显式传 'negative'，
+   * 即可做到「箭头照实反映数值上升，颜色照实反映这是坏消息」，
+   * 避免出现箭头向下却配正数这类自相矛盾的呈现。
+   */
+  sentiment?: 'positive' | 'negative' | 'neutral'
   icon: LucideIcon
   iconClassName?: string
   iconBgClassName?: string
@@ -55,6 +65,7 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
   change,
   changeHint,
   trend = 'stable',
+  sentiment,
   icon: Icon,
   iconClassName = 'text-sky-600 dark:text-sky-300',
   iconBgClassName,
@@ -63,10 +74,27 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
   onClick,
   ariaLabel,
 }) => {
+  // 箭头只表达数值方向，配色单独由 sentiment 决定
+  const trendArrow = {
+    up: '↗',
+    down: '↘',
+    stable: '→',
+  } as const
+
+  const sentimentClassName = {
+    positive: 'text-emerald-600 dark:text-emerald-300',
+    negative: 'text-red-600 dark:text-red-300',
+    neutral: 'text-muted-foreground',
+  } as const
+
+  // 未显式指定 sentiment 时沿用原有约定（上升=正面），保持既有调用方行为不变
+  const resolvedSentiment =
+    sentiment ?? (trend === 'up' ? 'positive' : trend === 'down' ? 'negative' : 'neutral')
+
   const trendConfig = {
-    up: { icon: '↗', className: 'text-emerald-600 dark:text-emerald-300' },
-    down: { icon: '↘', className: 'text-red-600 dark:text-red-300' },
-    stable: { icon: '→', className: 'text-muted-foreground' },
+    up: { icon: trendArrow.up, className: sentimentClassName[resolvedSentiment] },
+    down: { icon: trendArrow.down, className: sentimentClassName[resolvedSentiment] },
+    stable: { icon: trendArrow.stable, className: sentimentClassName[resolvedSentiment] },
   } as const
 
   const card = (
