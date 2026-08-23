@@ -242,6 +242,10 @@ func buildDeviceDistribution(ctx context.Context, db *gorm.DB, devices []deviceS
 	byType := map[string]int{}
 	byLocation := map[string]int{}
 	groupCounts := map[int]int{}
+	// 「类型 × 状态」交叉分布：by_type 与 by_status 都是一维聚合，
+	// 前端若想按类型展示在线/离线构成，只能用全局在线率去摊分，那会造出并不存在的分布。
+	// 这里在同一次遍历中直接产出交叉维度，不引入额外查询。
+	byTypeStatus := map[string]map[string]int{}
 
 	for _, device := range devices {
 		deviceType := strings.TrimSpace(device.DeviceType)
@@ -249,6 +253,15 @@ func buildDeviceDistribution(ctx context.Context, db *gorm.DB, devices []deviceS
 			deviceType = "未设置"
 		}
 		byType[deviceType]++
+
+		status := strings.TrimSpace(device.Status)
+		if status == "" {
+			status = "unknown"
+		}
+		if byTypeStatus[deviceType] == nil {
+			byTypeStatus[deviceType] = map[string]int{}
+		}
+		byTypeStatus[deviceType][status]++
 
 		location := "未设置"
 		if device.Location.Valid && strings.TrimSpace(device.Location.String) != "" {
@@ -281,9 +294,10 @@ func buildDeviceDistribution(ctx context.Context, db *gorm.DB, devices []deviceS
 	}
 
 	return map[string]interface{}{
-		"by_type":     byType,
-		"by_group":    byGroup,
-		"by_location": byLocation,
+		"by_type":        byType,
+		"by_group":       byGroup,
+		"by_location":    byLocation,
+		"by_type_status": byTypeStatus,
 	}, nil
 }
 

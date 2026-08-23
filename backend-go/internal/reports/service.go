@@ -155,6 +155,29 @@ func (s *Service) ListTemplates(ctx context.Context, reportType *string) ([]Repo
 	return templates, nil
 }
 
+// ListTemplateLibrary 返回可复用的报表模板库条目。
+//
+// 自定义报表配置与报表模板共用 report_templates 表，靠 report_type 区分：
+// report_type='custom' 是用户在「自定义报表」页创建的个人配置，由 ListCustomConfigs 负责；
+// 其余类型才属于可供复用的模板库。
+// 不做这层区分时，模板库会把用户自己的配置当成「可导入的模板」列出来，
+// 使「导入模板」退化为「复制自己的配置」。
+func (s *Service) ListTemplateLibrary(ctx context.Context) ([]ReportTemplate, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	var templates []ReportTemplate
+	if err := s.db.WithContext(ctx).
+		Model(&ReportTemplate{}).
+		Where("report_type IS NULL OR report_type <> ?", "custom").
+		Order("created_at desc").
+		Find(&templates).Error; err != nil {
+		return nil, err
+	}
+	return templates, nil
+}
+
 func (s *Service) GetTemplate(ctx context.Context, id int) (ReportTemplate, error) {
 	if s == nil || s.db == nil {
 		return ReportTemplate{}, fmt.Errorf("database not initialized")

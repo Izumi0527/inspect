@@ -196,6 +196,22 @@ export interface TrendAnalysisData {
   metrics: TrendMetric[]  // 改为数组类型，支持动态指标
   predictions: PredictionData[]
   alerts: TrendAlertData[]
+  /**
+   * 异常检测的执行情况。
+   * 空 alerts 有两种含义——检测已执行但未发现异常，或采样点不足未执行，
+   * 该字段用于区分二者，避免把「未检测」呈现为「一切正常」。
+   */
+  alertsMeta?: TrendAlertsMeta
+}
+
+// 趋势告警检测元信息
+export interface TrendAlertsMeta {
+  /** 是否真正执行了异常检测 */
+  evaluated: boolean
+  /** 执行检测所需的最少采样点数 */
+  minPointsRequired: number
+  /** 当前区间内各指标的最大采样点数 */
+  actualPoints: number
 }
 
 // 趋势指标
@@ -257,6 +273,8 @@ export interface StatisticsData {
     byGroup: Record<string, number>
     byStatus: Record<string, number>
     byLocation: Record<string, number>
+    /** 「类型 × 状态」交叉分布：外层键为设备类型，内层为该类型下各状态的设备数 */
+    byTypeStatus: Record<string, Record<string, number>>
   }
   performanceStats: {
     byDevice: DevicePerformanceStats[]

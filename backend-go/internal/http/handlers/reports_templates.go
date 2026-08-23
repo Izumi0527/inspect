@@ -19,7 +19,7 @@ func (h ReportsHandler) ListTemplates(c echo.Context) error {
 		return err
 	}
 
-	templates, err := h.Service.ListTemplates(c.Request().Context(), nil)
+	templates, err := h.Service.ListTemplateLibrary(c.Request().Context())
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load templates")
 	}

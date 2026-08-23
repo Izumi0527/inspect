@@ -31,11 +31,48 @@ interface Props {
   onSearchTextChange?: (value: string) => void
 }
 
+/**
+ * 由变化量字符串推导数值方向（仅方向，不含好坏判断）。
+ *
+ * 好坏由调用方通过 CompactStatCard 的 sentiment 单独表达：
+ * 这样「严重问题数 +332」可以照实显示为上升箭头，同时用红色标明是负面变化。
+ */
 const resolveTrendFromChange = (change: string): 'up' | 'down' | 'stable' => {
-  if (change.trim().startsWith('+')) return 'up'
-  if (change.trim().startsWith('-')) return 'down'
-  return 'stable'
+  const trimmed = change.trim()
+  const isPositive = trimmed.startsWith('+')
+  const isNegative = trimmed.startsWith('-')
+  if (!isPositive && !isNegative) return 'stable'
+
+  // 变化量为 0（如 "+0" / "-0.0%"）时按持平处理，避免无变化被读成有变化
+  if (/^[+-]0+(\.0+)?%?$/.test(trimmed)) return 'stable'
+
+  return isPositive ? 'up' : 'down'
 }
+
+/** 结合数值方向与指标极性，判断这次变化是正面还是负面 */
+const resolveSentiment = (
+  trend: 'up' | 'down' | 'stable',
+  higherIsBetter: boolean
+): 'positive' | 'negative' | 'neutral' => {
+  if (trend === 'stable') return 'neutral'
+  const rising = trend === 'up'
+  return rising === higherIsBetter ? 'positive' : 'negative'
+}
+
+/** 设备状态的展示元数据；未知状态回退为原始值 + 中性色 */
+const DEVICE_STATUS_META: Record<string, { label: string; color: string }> = {
+  online: { label: '在线', color: '#10B981' },
+  offline: { label: '离线', color: '#EF4444' },
+  warning: { label: '告警', color: '#F59E0B' },
+  error: { label: '故障', color: '#DC2626' },
+  unknown: { label: '未知', color: '#6B7280' },
+}
+
+const resolveStatusLabel = (status: string) => DEVICE_STATUS_META[status]?.label ?? status
+const resolveStatusColor = (status: string) => DEVICE_STATUS_META[status]?.color ?? '#6B7280'
+
+/** 类型分布柱状图的一行：固定的名称/总数，外加按状态动态展开的分段列 */
+type DeviceTypeChartRow = { name: string; count: number } & Record<string, string | number>
 
 const getDefaultStatisticsDateRange = () => ({
   startDate: formatDateYMD(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
@@ -139,16 +176,53 @@ export const StatisticsReports: React.FC<Props> = ({
     avgScore: 0
   }
 
-  // 设备类型分布数据（用于柱状图）
+  // 设备类型分布数据
+  //
+  // 后端 by_type_status 提供「类型 × 状态」真实交叉分布，可直接堆叠展示；
+  // 该字段缺失时（例如后端未升级）退化为总数单柱，
+  // 绝不用全局在线率去摊分——那会造出并不存在的分布。
   const deviceTypeChartData = useMemo(() => {
-    if (!statisticsData?.deviceDistribution?.byType) return []
+    const byType = statisticsData?.deviceDistribution?.byType
+    if (!byType) return []
 
-    return Object.entries(statisticsData.deviceDistribution.byType).map(([name, count]) => {
-      const online = Math.round(count * (overview.activeDevices / overview.totalDevices || 1))
-      const offline = count - online
-      return { name, count, online, offline }
+    const byTypeStatus = statisticsData?.deviceDistribution?.byTypeStatus ?? {}
+
+    return Object.entries(byType).map(([name, count]) => {
+      const row: DeviceTypeChartRow = { name, count }
+      Object.entries(byTypeStatus[name] ?? {}).forEach(([status, value]) => {
+        row[status] = value
+      })
+      return row
     })
-  }, [statisticsData, overview])
+  }, [statisticsData])
+
+  // 交叉分布中实际出现过的状态集合，决定堆叠柱的分段
+  const deviceTypeStatusKeys = useMemo(() => {
+    const byTypeStatus = statisticsData?.deviceDistribution?.byTypeStatus
+    if (!byTypeStatus) return []
+
+    const keys = new Set<string>()
+    Object.values(byTypeStatus).forEach((statuses) => {
+      Object.entries(statuses).forEach(([status, count]) => {
+        if (count > 0) keys.add(status)
+      })
+    })
+    return Array.from(keys).sort()
+  }, [statisticsData])
+
+  // 设备状态分布数据（后端 by_status 的真实值）
+  const deviceStatusChartData = useMemo(() => {
+    const byStatus = statisticsData?.deviceDistribution?.byStatus
+    if (!byStatus) return []
+
+    return Object.entries(byStatus)
+      .filter(([, count]) => count > 0)
+      .map(([status, count]) => ({
+        name: resolveStatusLabel(status),
+        value: count,
+        color: resolveStatusColor(status),
+      }))
+  }, [statisticsData])
 
   // 性能评级分布数据（用于饼图）
   const performanceChartData = useMemo(() => {
@@ -164,7 +238,13 @@ export const StatisticsReports: React.FC<Props> = ({
     statisticsData.performanceStats.byDevice.forEach((device: { metrics?: { availability?: number } }) => {
       const availability = device.metrics?.availability || 0
       for (const range of scoreRanges) {
-        if (availability >= range.min && availability < range.max) {
+        // 末档（优秀）取闭区间：可用性恰为 100 的设备必须归入优秀，
+        // 否则会因 `< 100` 落空而被静默丢弃，导致「后端有数据、饼图显示暂无数据」。
+        const isTopRange = range.max === 100
+        const matched = isTopRange
+          ? availability >= range.min && availability <= range.max
+          : availability >= range.min && availability < range.max
+        if (matched) {
           range.count++
           break
         }
@@ -207,61 +287,64 @@ export const StatisticsReports: React.FC<Props> = ({
   }, [rankingsData])
 
   // KPI 指标卡片数据
+  //
+  // 字段对齐说明：后端 /statistics/kpi 只返回 4 个变化量字段，
+  // 且各自有明确语义。此处只把**语义匹配**的变化量贴到对应卡片上；
+  // 无匹配变化量的卡片（如设备总数这类存量指标）不显示变化率，
+  // 避免出现「1 台设备增长 50%」这类由字段错配产生的误导性数字。
   const kpiCards = useMemo(() => {
     return [
       {
         title: '设备总数',
         value: String(overview.totalDevices),
-        change: kpiData?.inspection_completion_rate_change || '+0',
+        // 存量指标，后端无对应变化量字段，不展示涨跌
+        change: '',
+        changeHint: '',
+        higherIsBetter: true,
         icon: Users,
         color: 'blue'
       },
       {
         title: '在线率',
         value: `${((overview.activeDevices / overview.totalDevices || 0) * 100).toFixed(1)}%`,
-        change: kpiData?.device_availability_change || '+0%',
+        change: kpiData?.device_availability_change || '',
+        changeHint: 'vs 上期',
+        higherIsBetter: true,
         icon: Activity,
         color: 'green'
       },
       {
-        title: '平均评分',
+        // 该值来自 inspection_results.score 的均值，与排名表的「性能评分」
+        // （由响应时间/可用性等指标算出）是两个不同概念，标题需写明以免被当成同一口径。
+        title: '平均巡检评分',
         value: overview.avgScore.toFixed(1),
-        change: kpiData?.avg_health_score_change || '+0',
+        change: kpiData?.avg_health_score_change || '',
+        changeHint: 'vs 上期',
+        higherIsBetter: true,
         icon: Target,
         color: 'purple'
       },
       {
         title: '故障率',
         value: `${((overview.errorDevices / overview.totalDevices || 0) * 100).toFixed(1)}%`,
-        change: kpiData?.severe_issue_count_change || '-0%',
+        // 后端无「故障率变化」字段，此处展示的是严重问题数的变化，
+        // 因此用 changeHint 显式标注量纲来源，避免与百分比主值混淆。
+        change: kpiData?.severe_issue_count_change || '',
+        changeHint: '严重问题数 vs 上期',
+        // 故障相关指标越低越好，上升应显示为负面
+        higherIsBetter: false,
         icon: BarChart3,
         color: 'red'
       }
     ]
   }, [overview, kpiData])
 
-  // 颜色映射对象 - 解决动态类名问题
+  // KPI 卡片图标配色映射（仅图标着色，卡片底色由 CompactStatCard 统一控制）
   const colorMap = {
-    blue: {
-      bg: 'bg-blue-100 dark:bg-blue-900/20',
-      text: 'text-blue-600 dark:text-blue-400',
-      icon: 'text-blue-600 dark:text-blue-400'
-    },
-    green: {
-      bg: 'bg-green-100 dark:bg-green-900/20',
-      text: 'text-green-600 dark:text-green-400',
-      icon: 'text-green-600 dark:text-green-400'
-    },
-    purple: {
-      bg: 'bg-purple-100 dark:bg-purple-900/20',
-      text: 'text-purple-600 dark:text-purple-400',
-      icon: 'text-purple-600 dark:text-purple-400'
-    },
-    red: {
-      bg: 'bg-red-100 dark:bg-red-900/20',
-      text: 'text-red-600 dark:text-red-400',
-      icon: 'text-red-600 dark:text-red-400'
-    }
+    blue: { icon: 'text-blue-600 dark:text-blue-400' },
+    green: { icon: 'text-green-600 dark:text-green-400' },
+    purple: { icon: 'text-purple-600 dark:text-purple-400' },
+    red: { icon: 'text-red-600 dark:text-red-400' }
   }
 
   // ==================== Event Handlers ====================
@@ -453,6 +536,10 @@ export const StatisticsReports: React.FC<Props> = ({
     ? performanceChartData.filter((item) => item.name.toLowerCase().includes(normalizedKeyword))
     : performanceChartData
 
+  const filteredStatusChartData = normalizedKeyword
+    ? deviceStatusChartData.filter((item) => item.name.toLowerCase().includes(normalizedKeyword))
+    : deviceStatusChartData
+
   const filteredRankingData = normalizedKeyword
     ? rankingTableData.filter((item) =>
         item.name.toLowerCase().includes(normalizedKeyword) ||
@@ -613,14 +700,16 @@ export const StatisticsReports: React.FC<Props> = ({
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         {kpiCards.map((kpi) => {
           const colors = colorMap[kpi.color as keyof typeof colorMap]
+          const trend = resolveTrendFromChange(kpi.change)
           return (
             <CompactStatCard
               key={kpi.title}
               title={kpi.title}
               value={kpi.value}
               change={kpi.change}
-              changeHint="vs 上期"
-              trend={resolveTrendFromChange(kpi.change)}
+              changeHint={kpi.changeHint}
+              trend={trend}
+              sentiment={resolveSentiment(trend, kpi.higherIsBetter)}
               icon={kpi.icon}
               iconClassName={colors.icon}
             />
@@ -628,8 +717,8 @@ export const StatisticsReports: React.FC<Props> = ({
         })}
       </div>
 
-      {/* 统计图表 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* 统计图表：类型 / 状态 / 性能三个同级分布图并排，避免 2 列布局下末位单卡留白 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         <Card>
           <CardHeader>
             <CardTitle>设备类型分布</CardTitle>
@@ -643,11 +732,36 @@ export const StatisticsReports: React.FC<Props> = ({
               <BarChartComponent
                 data={filteredDeviceChartData}
                 xKey="name"
-                bars={[
-                  { key: 'online', name: '在线', color: '#10B981', stackId: 'a' },
-                  { key: 'offline', name: '离线', color: '#EF4444', stackId: 'a' }
-                ]}
+                bars={
+                  deviceTypeStatusKeys.length > 0
+                    ? deviceTypeStatusKeys.map((status) => ({
+                        key: status,
+                        name: resolveStatusLabel(status),
+                        color: resolveStatusColor(status),
+                        stackId: 'a',
+                      }))
+                    : [{ key: 'count', name: '设备数量', color: '#3B82F6' }]
+                }
                 height={300}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>设备状态分布</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {filteredStatusChartData.length === 0 ? (
+              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                暂无数据
+              </div>
+            ) : (
+              <PieChartComponent
+                data={filteredStatusChartData}
+                height={300}
+                outerRadius={100}
               />
             )}
           </CardContent>
@@ -690,7 +804,9 @@ export const StatisticsReports: React.FC<Props> = ({
                     <th className="text-left p-3">设备名称</th>
                     <th className="text-left p-3">类型</th>
                     <th className="text-left p-3">可用性</th>
-                    <th className="text-left p-3">性能评分</th>
+                    <th className="text-left p-3" title="由可用性、响应时间等运行指标综合计算，与「平均巡检评分」口径不同">
+                      性能评分
+                    </th>
                     <th className="text-left p-3">状态</th>
                   </tr>
                 </thead>
@@ -706,10 +822,10 @@ export const StatisticsReports: React.FC<Props> = ({
                         <span
                           className={`px-2 py-1 rounded text-xs font-medium ${
                             item.status === '优秀'
-                              ? 'bg-green-100 text-green-800'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
                               : item.status === '良好'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-yellow-100 text-yellow-800'
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                              : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
                           }`}
                         >
                           {item.status}

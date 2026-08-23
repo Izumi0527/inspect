@@ -151,35 +151,19 @@ describe('CustomReports 自定义能力补全', () => {
     mockCreateMutateAsync.mockResolvedValue({})
   })
 
-  it('点击导入模板应展示模板库并可将模板导入为自定义配置', async () => {
-    const user = userEvent.setup()
-
+  it('不应再提供「导入模板」入口，避免与「复制配置」重复', () => {
     render(<CustomReports searchText="" />)
 
-    await user.click(screen.getByRole('button', { name: '导入模板' }))
+    // 后端 ListTemplates 无过滤返回 report_templates 全表，而自定义配置写入的是同一张表，
+    // 「导入模板」实际等价于复制用户自己的配置，能力与卡片上的「复制配置」完全重叠。
+    expect(screen.queryByRole('button', { name: '导入模板' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '复制配置' })).toBeInTheDocument()
+  })
 
-    expect(screen.getByRole('heading', { name: '从模板库导入' })).toBeInTheDocument()
-    expect(screen.getByText('月度运营模板')).toBeInTheDocument()
+  it('「进入生成器」入口应唯一，不重复渲染', () => {
+    render(<CustomReports searchText="" />)
 
-    await user.click(screen.getByRole('button', { name: '导入此模板' }))
-
-    await waitFor(() => {
-      expect(mockCreateMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: '月度运营模板（导入）',
-          template: expect.objectContaining({
-            id: 'tpl-1',
-            name: '月度运营模板',
-          }),
-          charts: [],
-          tables: expect.any(Array),
-          filters: [],
-          layout: expect.objectContaining({
-            columns: 2,
-          }),
-        })
-      )
-    })
+    expect(screen.getAllByRole('button', { name: '进入生成器' })).toHaveLength(1)
   })
 
   it('进入生成器应打开配置向导并能保存新配置', async () => {
@@ -187,7 +171,7 @@ describe('CustomReports 自定义能力补全', () => {
 
     render(<CustomReports searchText="" />)
 
-    await user.click(screen.getAllByRole('button', { name: '进入生成器' })[0])
+    await user.click(screen.getByRole('button', { name: '进入生成器' }))
 
     expect(screen.getByRole('heading', { name: '自定义报表生成器' })).toBeInTheDocument()
     expect(screen.getByLabelText('报表名称 *')).toBeInTheDocument()

@@ -27,6 +27,7 @@ import {
   TableConfig,
   TemplateSection,
   TrendAlertData,
+  TrendAlertsMeta,
   TrendAnalysisData,
   TrendMetric
 } from '../types'
@@ -146,6 +147,18 @@ const toNumberRecord = (value: unknown): Record<string, number> => {
     if (Number.isFinite(num)) {
       acc[key] = num
     }
+    return acc
+  }, {})
+}
+
+/** 两层嵌套的计数映射（如「设备类型 → 状态 → 数量」），逐层做安全转换 */
+const toNestedNumberRecord = (value: unknown): Record<string, Record<string, number>> => {
+  if (!isRecord(value)) {
+    return {}
+  }
+
+  return Object.entries(value).reduce<Record<string, Record<string, number>>>((acc, [key, val]) => {
+    acc[key] = toNumberRecord(val)
     return acc
   }, {})
 }
@@ -1586,6 +1599,20 @@ const transformTrendAnalysisData = (input: unknown): TrendAnalysisData => {
     metrics: metricsArray,  // 直接返回数组
     predictions: mapRecordArray(data.predictions, transformPredictionData),
     alerts: mapRecordArray(data.alerts, transformTrendAlertData),
+    alertsMeta: transformTrendAlertsMeta(data.alertsMeta ?? data['alerts_meta']),
+  }
+}
+
+/** 异常检测元信息；后端未返回该字段时为 undefined，调用方需按「未知」处理 */
+const transformTrendAlertsMeta = (input: unknown): TrendAlertsMeta | undefined => {
+  if (!isRecord(input)) {
+    return undefined
+  }
+  const data = toRecord(input)
+  return {
+    evaluated: toBooleanSafe(data.evaluated, false),
+    minPointsRequired: toNumberSafe(data.minPointsRequired ?? data['min_points_required']),
+    actualPoints: toNumberSafe(data.actualPoints ?? data['actual_points']),
   }
 }
 
@@ -1668,6 +1695,9 @@ const transformStatisticsData = (input: unknown): StatisticsData => {
       byGroup: toNumberRecord(deviceDistribution.byGroup ?? deviceDistribution['by_group']),
       byStatus: toNumberRecord(deviceDistribution.byStatus ?? deviceDistribution['by_status']),
       byLocation: toNumberRecord(deviceDistribution.byLocation ?? deviceDistribution['by_location']),
+      byTypeStatus: toNestedNumberRecord(
+        deviceDistribution.byTypeStatus ?? deviceDistribution['by_type_status']
+      ),
     },
     performanceStats: {
       byDevice: mapRecordArray(performanceStats.byDevice ?? performanceStats['by_device'], transformDevicePerformanceStats),

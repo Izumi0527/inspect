@@ -676,6 +676,31 @@ func predictionRecommendation(metric string, predicted float64) string {
 	}
 }
 
+// minAnomalyDetectionPoints 是异常检测所需的最少采样点数。
+// 检测基于 z-score（均值/标准差），样本过少时标准差不稳定，会产生大量误报，
+// 因此低于该阈值时直接跳过检测而不是放宽判据。
+const minAnomalyDetectionPoints = 6
+
+// buildTrendAlertsMeta 说明本次告警检测的执行情况。
+//
+// 「没有告警」有两种截然不同的含义：检测跑了但没发现异常，或样本不足压根没跑。
+// 前端只拿到空数组无法区分二者，会把「未检测」误呈现为「一切正常」，
+// 因此这里把判据随响应一起返回。
+func buildTrendAlertsMeta(series []trendMetricSeries) map[string]interface{} {
+	maxPoints := 0
+	for _, item := range series {
+		if len(item.Points) > maxPoints {
+			maxPoints = len(item.Points)
+		}
+	}
+
+	return map[string]interface{}{
+		"evaluated":           maxPoints >= minAnomalyDetectionPoints,
+		"min_points_required": minAnomalyDetectionPoints,
+		"actual_points":       maxPoints,
+	}
+}
+
 func buildTrendAlerts(series []trendMetricSeries, sensitivity string, limit int) []map[string]interface{} {
 	alerts := make([]map[string]interface{}, 0)
 	for _, item := range series {
@@ -701,7 +726,7 @@ func buildTrendAlerts(series []trendMetricSeries, sensitivity string, limit int)
 
 func detectAnomalies(series trendMetricSeries, sensitivity string) []trendAnomaly {
 	points := series.Points
-	if len(points) < 6 {
+	if len(points) < minAnomalyDetectionPoints {
 		return []trendAnomaly{}
 	}
 	values := make([]float64, 0, len(points))

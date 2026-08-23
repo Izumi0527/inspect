@@ -562,7 +562,54 @@ func (s *Service) UpdateDeviceProbeStatus(
 	if result.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound
 	}
+
+	collectedAt := time.Now().UTC()
+	if lastProbeTime != nil {
+		collectedAt = lastProbeTime.UTC()
+	}
+	s.appendDeviceStatusHistory(ctx, deviceID, status, responseTime, collectedAt)
+
 	return nil
+}
+
+// appendDeviceStatusHistory 记录一条设备状态历史快照。
+//
+// device_status_history 是可用性趋势的唯一数据源：没有历史记录，
+// 趋势接口只能退化成「当前值」单点，折线图画不出任何趋势。
+//
+// 采用尽力而为语义：历史是派生数据，写入失败只记日志，
+// 绝不让它导致设备状态本身更新失败。
+// device_ip 通过子查询从 devices 取，既省去调用方传参，
+// 又能在设备已被删除时自然跳过插入（外键安全）。
+func (s *Service) appendDeviceStatusHistory(
+	ctx context.Context,
+	deviceID int,
+	status string,
+	responseTime *float64,
+	collectedAt time.Time,
+) {
+	if s.db == nil {
+		return
+	}
+
+	var responseTimeValue interface{}
+	if responseTime != nil {
+		responseTimeValue = *responseTime
+	}
+
+	if err := s.db.WithContext(ctx).Exec(`
+		INSERT INTO device_status_history (device_id, device_ip, status, response_time, collected_at)
+		SELECT id, ip_address, ?, ?, ?
+		FROM devices
+		WHERE id = ?
+	`, status, responseTimeValue, collectedAt, deviceID).Error; err != nil {
+		if s.logger != nil {
+			s.logger.Warn("append device status history failed",
+				zap.Int("device_id", deviceID),
+				zap.String("status", status),
+				zap.Error(err))
+		}
+	}
 }
 
 func (s *Service) ListActiveDevices(ctx context.Context) ([]Device, error) {

@@ -148,16 +148,19 @@ describe('TrendAnalysis 下拉规范收敛', () => {
     mockUseTrendAnalysis.mockReset()
     mockUseTrendAnalysis.mockReturnValue({
       data: {
+        // 折线图至少需要 2 个数据点才能成图，单点场景另有专门用例覆盖
         metrics: [
           {
-            metricName: 'availability',
+            metricName: 'capacity',
             dataPoints: [
-              { timestamp: '2026-03-31T10:00:00Z', value: 99.8 },
+              { timestamp: '2026-03-30T10:00:00Z', value: 71.2 },
+              { timestamp: '2026-03-31T10:00:00Z', value: 72.5 },
             ],
           },
           {
             metricName: 'errors',
             dataPoints: [
+              { timestamp: '2026-03-30T10:00:00Z', value: 5 },
               { timestamp: '2026-03-31T10:00:00Z', value: 3 },
             ],
           },
@@ -200,7 +203,7 @@ describe('TrendAnalysis 下拉规范收敛', () => {
     const user = userEvent.setup()
     render(<TrendAnalysis searchText="" />)
 
-    expect(screen.getByText('line-keys:availability')).toBeInTheDocument()
+    expect(screen.getByText('line-keys:capacity')).toBeInTheDocument()
 
     await user.click(screen.getByRole('combobox', { name: '趋势指标' }))
     await user.click(screen.getByRole('option', { name: '错误数' }))
@@ -208,6 +211,41 @@ describe('TrendAnalysis 下拉规范收敛', () => {
     await waitFor(() => {
       expect(screen.getByText('line-keys:errors')).toBeInTheDocument()
     })
+  })
+
+  it('指标下拉不应提供后端无采集数据的「性能」选项', async () => {
+    const user = userEvent.setup()
+    render(<TrendAnalysis searchText="" />)
+
+    await user.click(screen.getByRole('combobox', { name: '趋势指标' }))
+
+    // performance 映射后端 response_time，该指标当前未采集，恒返回空序列
+    expect(screen.queryByRole('option', { name: '性能' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '容量使用' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'CPU使用率' })).toBeInTheDocument()
+  })
+
+  it('数据点不足 2 个时，应给出明确提示而不是渲染空白坐标系', () => {
+    mockUseTrendAnalysis.mockReturnValue({
+      data: {
+        metrics: [
+          {
+            metricName: 'capacity',
+            dataPoints: [{ timestamp: '2026-03-31T10:00:00Z', value: 72.5 }],
+          },
+        ],
+        predictions: [],
+        alerts: [],
+      },
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    })
+
+    render(<TrendAnalysis searchText="" />)
+
+    expect(screen.getByText('数据点不足，暂时无法呈现趋势')).toBeInTheDocument()
+    expect(screen.queryByText(/^line-keys:/)).not.toBeInTheDocument()
   })
 
   it('切换时间范围后，应触发 useTrendAnalysis 参数更新', async () => {
