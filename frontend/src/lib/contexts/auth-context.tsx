@@ -5,8 +5,8 @@
  * 提供全局认证状态管理和用户权限验证
  */
 
-import { createContext, useContext, useEffect, useReducer, useCallback, useMemo, ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { createContext, useContext, useEffect, useReducer, useCallback, useMemo, useRef, ReactNode } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 import { api, TokenManager, ApiClientError } from '../api-client'
 import { normalizePermissionKey, normalizePermissionList } from '../authz/permission'
@@ -89,6 +89,22 @@ export function isNetworkConnectionError(error: unknown): boolean {
   return false
 }
 
+// 公开路由：无需登录即可访问，挂载时不做认证探测。
+// 未登录访客在这些页面上原本会连收两个 401（/auth/profile 与 /auth/refresh），
+// 既拖慢首屏又让控制台常态化报错，掩盖真实问题。
+//
+// 注意：/login 不属于公开路由。withGuest 依赖探测结果把已登录用户送回 dashboard，
+// 若跳过探测，该重定向会永久失效。
+const PUBLIC_ROUTE_PREFIXES = ['/docs', '/health'] as const
+
+export function isPublicRoute(pathname: string | null): boolean {
+  if (!pathname) return false
+  if (pathname === '/') return true
+  return PUBLIC_ROUTE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  )
+}
+
 // 创建认证上下文
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
@@ -100,6 +116,9 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [state, dispatch] = useReducer(authReducer, initialState)
   const router = useRouter()
+  const pathname = usePathname()
+  // 认证探测的生命周期：pending 尚未处理，skipped 停在公开页（已置 isLoading=false），done 已探测。
+  const authProbeRef = useRef<'pending' | 'skipped' | 'done'>('pending')
 
   // 登录函数
   const login = useCallback(async (credentials: LoginCredentials) => {
@@ -222,8 +241,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
     dispatch({ type: 'CLEAR_ERROR' })
   }, [])
 
-  // 初始化认证状态
+  // 初始化认证状态。
+  // 依赖 pathname 而非只依赖 router：公开页跳过探测后，一旦导航到受保护页或 /login，
+  // 本 effect 会随 pathname 重跑并补上探测，withGuest / useRequireAuth 的判定不受影响。
   useEffect(() => {
+    if (authProbeRef.current === 'done') return
+
+    if (isPublicRoute(pathname)) {
+      // 公开页不探测，但要结束 loading，否则消费 isLoading 的组件会一直停在加载态。
+      if (authProbeRef.current === 'pending') {
+        authProbeRef.current = 'skipped'
+        dispatch({ type: 'SET_LOADING', payload: false })
+      }
+      return
+    }
+
+    authProbeRef.current = 'done'
+
     const initializeAuth = async () => {
       // S3：前端无法读取 httpOnly Cookie，直接探测 /auth/profile（Cookie 自动携带）判断登录态。
       try {
@@ -252,7 +286,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     initializeAuth()
-  }, [router])
+  }, [pathname, router])
 
   // 设置Token自动刷新
   useEffect(() => {
