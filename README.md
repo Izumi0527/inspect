@@ -63,6 +63,8 @@ Bash 环境：
 
 ### 3. 手动启动
 
+日常开发请优先使用上一节的脚本方式；手动启动仅用于脚本不可用或排查启动问题时。
+
 先启动数据库和 Redis：
 
 ```powershell
@@ -125,26 +127,26 @@ pnpm dev
 .\scripts\db-manage.ps1 seed-admin
 ```
 
-### 后端检查
+### 测试与质量校验
+
+测试与类型检查已收敛到统一入口，覆盖后端 `go build` + 单测、前端 `tsc` 类型检查 +
+Jest 单测，以及安装包脚本回归：
 
 ```powershell
-Set-Location "backend-go"
-go test ./...
+.\scripts\test.ps1                     # 全量
+.\scripts\test.ps1 -Scope backend      # 仅后端
+.\scripts\test.ps1 -Scope frontend     # 仅前端
+.\scripts\test.ps1 -Scope installer    # 仅安装包脚本
+
+# TDD 快速反馈：只跑指定 Go 包，跳过 go build 与全量用例
+.\scripts\test.ps1 -Package ./internal/devices/...
 ```
 
-仓库级后端测试：
+Bash 环境：
 
-```powershell
-Set-Location "tests/backend-go"
-go test ./...
-```
-
-### 前端检查
-
-```powershell
-Set-Location "frontend"
-pnpm run type-check
-pnpm test -- --runInBand
+```bash
+./scripts/test.sh --scope frontend
+./scripts/test.sh --skip-build --skip-type-check
 ```
 
 ## 脚本文档索引
@@ -153,6 +155,7 @@ pnpm test -- --runInBand
 - `scripts/dev-start.ps1` / `scripts/dev-start.sh`：开发环境诊断、初始化和启动。
 - `scripts/prod-start.ps1` / `scripts/prod-start.sh`：生产环境 Docker Compose 启动、停止、状态和日志。
 - `scripts/db-manage.ps1` / `scripts/db-manage.sh`：数据库启动、初始化、验证、备份和默认管理员账号。
+- `scripts/test.ps1` / `scripts/test.sh`：测试与质量校验统一入口（后端 build + 单测、前端类型检查 + 单测）。
 - `scripts/clean-cache.ps1` / `scripts/clean-cache.sh`：清理缓存、日志、测试产物和运行时数据。
 
 最常用入口：
@@ -161,6 +164,7 @@ pnpm test -- --runInBand
 .\scripts\dev-start.ps1 -Diagnose
 .\scripts\dev-start.ps1 -Setup
 .\scripts\db-manage.ps1 status
+.\scripts\test.ps1
 .\scripts\clean-cache.ps1 -WhatIf
 ```
 
@@ -223,6 +227,8 @@ REPORTS_OUTPUT_DIR=data/reports
 
 Made with ❤️ by Izumi0527
 
-**项目版本**: v1.0.1 | **API版本**: v1.0.1 | **最后更新**: 2026-05-16
+**项目版本**: v1.1.1 | **API版本**: v1.1.1 | **最后更新**: 2026-08-26
+
+版本号权威源为仓库根 `VERSION` 文件
 
 </div>
