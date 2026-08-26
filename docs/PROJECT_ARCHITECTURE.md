@@ -217,7 +217,8 @@ Echo 服务统一配置：
 - `Recover()`：防止 panic 直接中断进程。
 - `RequestTracking`：为请求补充追踪上下文。
 - `RequestLogger`：结构化记录请求日志。
-- `CORSWithConfig`：显式允许 `Authorization`、`Content-Type`、`X-Request-ID` 等请求头。
+- `CORSWithConfig`：`AllowCredentials: true`（Cookie 认证必需），并显式放行
+  `Authorization`、`Content-Type`、`X-Request-ID` 与 CSRF 请求头。
 - `/health`：健康检查。
 - `/api/v1`：所有业务 API 的根路径。
 - `BodyLimit("10M")`：限制请求体，避免超大 payload 拖垮服务。
@@ -401,17 +402,17 @@ frontend/src/lib/websocket.ts
 - 从 `NEXT_PUBLIC_WS_URL` 解析 WebSocket Origin。
 - 统一拼接 `/api/v1/ws/:user_id`。
 - 将 `http/https` 误配自动转换为 `ws/wss`。
-- 通过 WebSocket 子协议传递访问令牌。
 - 维护连接状态、心跳、重连、订阅恢复。
 - 支持设备监控、告警、巡检任务等实时事件。
 
-令牌传递方式：
+握手鉴权方式：
 
 ```typescript
-new WebSocket(url, ['inspect-token', accessToken])
+// 鉴权由 httpOnly Cookie 承载，握手时浏览器自动携带，无需子协议传递令牌
+new WebSocket(url)
 ```
 
-这种方式避免把 token 放进 URL 查询参数，降低日志泄露风险。
+令牌不经过 JS，既避免 XSS 窃取，也不会落入 URL 查询参数或访问日志。
 
 ### 6.5 前端数据流
 
@@ -596,10 +597,35 @@ frontend/src/lib/contexts/auth-context
 基本机制：
 
 - 用户通过 `/api/v1/auth/login` 登录。
-- 后端签发访问令牌和刷新令牌。
-- 前端将令牌保存在浏览器本地认证数据中。
-- API 请求使用 `Authorization: Bearer <token>`。
-- WebSocket 使用 `Sec-WebSocket-Protocol` 子协议携带 token。
+- 后端签发访问令牌和刷新令牌，均以 httpOnly Cookie 下发；前端不存储、也无法读取。
+- API 请求由浏览器自动携带 Cookie；非 httpOnly 的 `csrf_token` Cookie 由前端读取后
+  回填请求头，构成 double-submit 校验。
+- WebSocket 握手同样依赖 Cookie 自动携带，不再使用子协议传递令牌。
+- 前端无法解码 Cookie 中的过期时间，改为按固定间隔（短于 access token 有效期）主动刷新。
+
+`TokenManager` 的 `setAccessToken` / `setRefreshToken` 已标记废弃，
+`setTokens` 仅用于清理可能残留的旧 localStorage 凭据。文件下载等需原生 fetch 的场景
+统一走 `authorizedDownload`（`credentials: 'include'`）。
+
+**公开路由与认证探测**
+
+`AuthProvider` 挂载时通过 `/api/v1/auth/profile` 探测登录态（Cookie 自动携带），
+失败则用 refresh Cookie 续期后重试一次。以下公开路由跳过该探测，
+避免未登录访客在公开页连收两个 401、污染控制台并拖慢首屏：
+
+| 路由 | 说明 |
+|------|------|
+| `/` | 落地页 |
+| `/docs`、`/docs/*` | 文档中心 |
+| `/health`、`/health/*` | 健康检查页 |
+
+维护约束（`frontend/src/lib/contexts/auth-context.tsx`）：
+
+- `/login` 不属于公开路由。`withGuest` 依赖探测结果把已登录用户送回 dashboard，
+  跳过探测会让该重定向永久失效。
+- 探测所在 effect 必须依赖 `pathname`。客户端导航不会重挂 `AuthProvider`，
+  离开公开路由时需由 pathname 变化触发补探测。
+- 新增公开路由需同步 `PUBLIC_ROUTE_PREFIXES`，并确认该页面不消费 `useAuth`。
 
 ### 10.2 权限控制
 
@@ -609,7 +635,7 @@ frontend/src/lib/contexts/auth-context
 
 - 所有敏感操作必须在 handler 或 service 层校验认证与权限。
 - WebSocket 订阅也需要权限解析。
-- CORS 必须显式允许认证头，避免浏览器预检失败。
+- CORS 必须开启 `AllowCredentials` 并放行 CSRF 请求头，否则 Cookie 认证与预检会失败。
 - 生产环境必须替换 `.env.example` 中所有默认密钥和密码。
 
 ### 10.3 输入和文件边界
@@ -794,12 +820,13 @@ sequenceDiagram
   User->>FE: 输入用户名和密码
   FE->>Auth: POST /api/v1/auth/login
   Auth->>DB: 查询用户与角色
-  Auth-->>FE: access token + refresh token
-  FE->>FE: 保存认证数据
-  FE->>Auth: GET /api/v1/auth/me
+  Auth-->>FE: Set-Cookie: access_token / refresh_token（httpOnly）
+  FE->>Auth: GET /api/v1/auth/profile（Cookie 自动携带）
   Auth-->>FE: 用户信息和权限
   FE->>FE: 渲染可访问页面
 ```
+
+公开路由（`/`、`/docs*`、`/health*`）跳过上述探测，详见 10.1。
 
 ### 14.2 设备监控指标写入
 
@@ -949,6 +976,7 @@ pnpm dev
 - `backend-go/internal/http/router.go`
 - `frontend/src/lib/api-client.ts`
 - `frontend/src/lib/websocket.ts`
+- `frontend/src/lib/contexts/auth-context.tsx`
 - `scripts/dev-start.ps1`
 - `scripts/dev-start.sh`
 

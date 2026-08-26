@@ -7,8 +7,12 @@ import { Permission, UserRole, type User } from '@/lib/types/auth.types'
 const mockPush = jest.fn()
 const mockRouter = { push: mockPush }
 
+// AuthProvider 依据 pathname 决定是否做认证探测（公开页跳过），故需连同 usePathname 一起 mock。
+let mockPathname = '/dashboard'
+
 jest.mock('next/navigation', () => ({
   useRouter: () => mockRouter,
+  usePathname: () => mockPathname,
 }))
 
 jest.mock('react-hot-toast', () => ({
@@ -68,6 +72,7 @@ describe('AuthProvider 会话初始化（Cookie 模式）', () => {
     mockPush.mockReset()
     profileMock.mockReset()
     refreshMock.mockReset()
+    mockPathname = '/dashboard'
   })
 
   it('初始化时通过 /auth/profile 探测恢复会话（Cookie 自动携带，无需前端持有 token）', async () => {
@@ -104,5 +109,70 @@ describe('AuthProvider 会话初始化（Cookie 模式）', () => {
 
     expect(refreshMock).toHaveBeenCalledTimes(1)
     expect(profileMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('公开页不应触发认证探测，避免未登录访客连收两个 401', async () => {
+    mockPathname = '/'
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>
+    )
+
+    // 不探测也必须结束 loading，否则消费 isLoading 的组件会一直停在加载态
+    await waitFor(() => {
+      expect(screen.getByText('ready')).toBeInTheDocument()
+    })
+
+    expect(screen.getByText('anonymous')).toBeInTheDocument()
+    expect(profileMock).not.toHaveBeenCalled()
+    expect(refreshMock).not.toHaveBeenCalled()
+  })
+
+  it('/login 不属于公开页，仍应探测，否则 withGuest 无法把已登录用户送回 dashboard', async () => {
+    mockPathname = '/login'
+    profileMock.mockResolvedValue(mockUser)
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('authenticated')).toBeInTheDocument()
+    })
+
+    expect(profileMock).toHaveBeenCalled()
+  })
+
+  it('离开公开页后应补上探测（客户端导航不会重挂 Provider）', async () => {
+    mockPathname = '/'
+    profileMock.mockResolvedValue(mockUser)
+
+    const { rerender } = render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('ready')).toBeInTheDocument()
+    })
+    expect(profileMock).not.toHaveBeenCalled()
+
+    // 模拟客户端导航：pathname 变化，Provider 未卸载
+    mockPathname = '/login'
+    rerender(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('authenticated')).toBeInTheDocument()
+    })
+    expect(profileMock).toHaveBeenCalledTimes(1)
   })
 })
