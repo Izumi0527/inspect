@@ -1,0 +1,106 @@
+# 发布流水线：推送 v* tag 时构建 Linux 后端产物并创建 GitHub Release
+#
+# 产物: inspect_<version>_linux_{amd64,arm64}.tar.gz + 同名 .sha256
+# 构建逻辑一律走 scripts/build-release.sh，保证 CI 与本地产物一致（可本地复现）。
+#
+# 不含前端产物：NEXT_PUBLIC_API_URL / NEXT_PUBLIC_WS_URL 在 next build 阶段内联进客户端
+# bundle，预编译会把构建机域名烤死，前端仍由 deploy-ubuntu.sh 在目标机按域名构建。
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '手动构建的版本号（留空则读取 VERSION 文件）'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建发布产物
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
+
+      - name: 解析版本号并校验与 tag 一致
+        id: ver
+        run: |
+          set -euo pipefail
+          file_version="$(tr -d ' \t\r\n' < VERSION)"
+          input_version="${{ github.event.inputs.version }}"
+          version="${input_version:-$file_version}"
+
+          # tag 触发时强制 tag 与 VERSION 文件一致，防止发布版本号漂移
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag_version="${GITHUB_REF_NAME#v}"
+            if [[ "$tag_version" != "$file_version" ]]; then
+              echo "::error::tag ${GITHUB_REF_NAME} 与 VERSION 文件 (${file_version}) 不一致，请先同步 VERSION 再打 tag"
+              exit 1
+            fi
+            version="$file_version"
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "解析到版本号: ${version}"
+
+      - name: 构建 amd64 与 arm64 产物
+        run: ./scripts/build-release.sh --arch amd64,arm64 --version '${{ steps.ver.outputs.version }}'
+
+      - name: 校验产物完整性
+        run: |
+          set -euo pipefail
+          cd build/release
+          for f in *.tar.gz; do
+            sha256sum -c "${f}.sha256"
+            tar -tzf "$f" | grep -q 'bin/inspect-api' || { echo "::error::${f} 缺少 bin/inspect-api"; exit 1; }
+            tar -tzf "$f" | grep -q 'database/database-init-complete.sql' || { echo "::error::${f} 缺少初始化 SQL"; exit 1; }
+          done
+          ls -lh
+
+      - name: 上传构建产物（供非 tag 场景下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: inspect-linux-${{ steps.ver.outputs.version }}
+          path: |
+            build/release/*.tar.gz
+            build/release/*.sha256
+          retention-days: 14
+
+      - name: 创建 GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          notes_file="$(mktemp)"
+          cat > "$notes_file" <<NOTES
+          ## 安装
+
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/refs/tags/${GITHUB_REF_NAME}/scripts/install.sh | sudo INSPECT_REF=${GITHUB_REF_NAME} bash -s -- --domain inspect.example.com
+          \`\`\`
+
+          ## 产物说明
+
+          附件为 Linux 后端静态二进制（\`bin/inspect-api\`，CGO_ENABLED=0）与数据库初始化 SQL，
+          附 \`.sha256\` 校验和。前端不预编译（客户端 bundle 内联域名），由部署脚本在目标机按实际域名构建。
+          NOTES
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "v${VERSION}" \
+            --notes-file "$notes_file" \
+            build/release/*.tar.gz build/release/*.sha256

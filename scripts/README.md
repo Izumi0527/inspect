@@ -20,13 +20,96 @@ scripts/
 ├── clean-cache.ps1    # 缓存、临时文件、日志和测试产物清理
 ├── clean-cache.sh     # 缓存、临时文件、日志和测试产物清理 Bash 版
 ├── deploy-ubuntu.sh   # Ubuntu 生产环境一键原生部署（无 Docker，仅 Linux 目标）
+├── install.sh         # 远程一键安装引导（curl | bash，校验系统后移交 deploy-ubuntu.sh）
+├── uninstall.sh       # Ubuntu 卸载（默认保留数据库与备份，--purge-data 才彻底删除）
+├── build-release.sh   # 构建 Linux 发布产物（后端静态二进制 + SQL + sha256）
+├── build-release.ps1  # 构建 Linux 发布产物 PowerShell 版
 └── README.md
 ```
 
 > Python 后端相关脚本已迁移至 `legacy/scripts/`，仅保留历史参考。
 
-> `deploy-ubuntu.sh` 是**目标平台专用**脚本，运行于待部署的 Ubuntu 主机而非开发机，
-> 因此不提供 `.ps1` 对应版本。详见 [docs/deployment/ubuntu-production.md](../docs/deployment/ubuntu-production.md)。
+> `deploy-ubuntu.sh`、`install.sh`、`uninstall.sh` 是**目标平台专用**脚本，运行于待部署的
+> Ubuntu 主机而非开发机，因此不提供 `.ps1` 对应版本。详见 [docs/deployment/ubuntu-production.md](../docs/deployment/ubuntu-production.md)。
+
+## 远程一键安装（install.sh）
+
+面向「拿到一台干净 Ubuntu，什么都还没有」的场景，无需先克隆仓库：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Izumi0527/inspect/main/scripts/install.sh   | sudo bash -s -- --domain inspect.example.com
+```
+
+`install.sh` 只做四件事，不含任何部署逻辑：
+
+1. 校验 root 权限、Ubuntu 发行版、CPU 架构；
+2. 按需安装 `git` / `curl`；
+3. 将源码同步到中转目录 `/usr/local/src/inspect`（可用 `INSPECT_STAGE_DIR` 覆盖）；
+4. 以 `exec` 移交 `deploy-ubuntu.sh`，原样透传所有参数。
+
+设计要点：
+
+- **源码落在中转目录，而非 `/opt/inspect/app`**。后者由 `deploy-ubuntu.sh` 以 `inspect`
+  用户身份管理，若提前以 root 在该处建立 git 仓库，后续 `sudo -u inspect git pull` 会因属主
+  不符而失败。中转目录使 `PROJECT_ROOT != APP_SRC` 成立，从而命中脚本内既有的
+  `cp -a` + `chown` 源码落地分支。
+- **移交时显式 `< /dev/tty`**。管道执行下 stdin 已被脚本自身占用且读空，
+  `deploy-ubuntu.sh` 的 `confirm()` 会直接读到 EOF，导致格式化数据盘等高危操作被静默确认。
+- **无控制终端时拒绝执行**，除非显式传入 `--yes` / `--dry-run` / `--help`。
+- **全部逻辑包在 `main()` 内、最后一行才调用**，避免脚本未完整下载即执行到一半。
+
+版本锁定（生产推荐）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Izumi0527/inspect/refs/tags/v1.1.1/scripts/install.sh   | sudo INSPECT_REF=v1.1.1 bash -s -- --domain inspect.example.com --yes
+```
+
+> `raw.githubusercontent.com` 存在约 5 分钟 CDN 缓存，脚本推送后不会立即生效；
+> 调试期可加 `-H 'Cache-Control: no-cache'`。
+
+## 卸载（uninstall.sh）
+
+```bash
+# 预演：打印将要执行的全部操作，不做任何改动
+sudo ./scripts/uninstall.sh --dry-run
+
+# 默认卸载：停服务、删单元与站点、删源码与构建产物；保留数据库、config、backups
+sudo ./scripts/uninstall.sh
+
+# 彻底删除：额外删掉数据库、凭据、备份与 inspect 系统用户（需键入 DELETE 二次确认）
+sudo ./scripts/uninstall.sh --purge-data
+```
+
+分级设计：默认卸载是**可逆的**（重新部署即可恢复服务，数据仍在），破坏性操作必须同时满足
+「显式传 `--purge-data`」与「手工键入 DELETE」两个条件，`--yes` 可跳过后者。
+
+刻意不自动处理的部分：`postgresql` / `redis` / `nginx` / `nodejs` / `go` 等共享软件包不卸载，
+`/etc/fstab` 的 pgdata 挂载项不修改，数据盘不卸载也不格式化——脚本执行完会打印残留清单，
+由人工决策。`--purge-monitoring` 与 `--reset-firewall` 分别处理监控组件与本项目新增的
+ufw 规则（5514/tcp、5514/udp、162/udp；不触碰 22 / 80 / 443）。
+
+## 发布产物（build-release）
+
+供 GitHub Release 使用，构建逻辑与 CI 共用同一脚本，可本地复现：
+
+```bash
+./scripts/build-release.sh --arch amd64,arm64
+```
+
+```powershell
+.\scripts\build-release.ps1 -Arch amd64,arm64
+```
+
+产出 `build/release/inspect_<version>_linux_<arch>.tar.gz` 及同名 `.sha256`，内含
+`bin/inspect-api`（`CGO_ENABLED=0` 静态二进制，版本号经 `-ldflags` 注入）、
+`database/database-init-complete.sql`、`VERSION`、`LICENSE`。
+
+> **不含前端产物**。`NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_WS_URL` 在 `next build` 阶段被内联进
+> 客户端 bundle（见 `frontend/next.config.js` 的 `env` 与 `frontend/src/lib/api-client.ts`），
+> 预编译会把构建机域名烤死，因此前端仍由 `deploy-ubuntu.sh` 在目标机按实际域名构建。
+
+推送 `v*` tag 触发 `.github/workflows/release.yml`，流水线会校验 tag 与 `VERSION` 文件一致
+（不一致直接失败），构建双架构产物、校验 sha256 与包内关键文件，再创建 Release。
 
 ## Ubuntu 生产部署（原生，无 Docker）
 

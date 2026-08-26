@@ -99,6 +99,46 @@ pnpm dev
 .\scripts\db-manage.ps1 seed-admin
 ```
 
+## 一键安装（Ubuntu 生产环境）
+
+在干净的 Ubuntu Server LTS 上，单条命令完成原生部署（PostgreSQL 16 + Redis + 后端 + 前端 + Nginx）：
+
+```bash
+# 推荐：先审阅脚本再执行
+curl -fsSL https://raw.githubusercontent.com/Izumi0527/inspect/main/scripts/install.sh -o install.sh
+less install.sh
+sudo bash install.sh --domain inspect.example.com
+```
+
+```bash
+# 一键形态（脚本会保留交互确认）
+curl -fsSL https://raw.githubusercontent.com/Izumi0527/inspect/main/scripts/install.sh \
+  | sudo bash -s -- --domain inspect.example.com
+```
+
+生产环境建议锁定版本，避免装到未发布的主干提交：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Izumi0527/inspect/refs/tags/v1.1.1/scripts/install.sh \
+  | sudo INSPECT_REF=v1.1.1 bash -s -- --domain inspect.example.com --yes
+```
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `INSPECT_REF` | `main` | 要部署的分支或 tag |
+| `INSPECT_STAGE_DIR` | `/usr/local/src/inspect` | 源码中转目录 |
+
+说明：
+
+- `install.sh` 只做引导（校验系统、拉取源码、移交），全部部署动作由
+  [`scripts/deploy-ubuntu.sh`](scripts/deploy-ubuntu.sh) 执行，其参数（`--steps`、`--from`、
+  `--skip-monitoring`、`--dry-run`、`--yes` 等）可直接透传。
+- 首次执行前可加 `--dry-run` 预演全部步骤，不产生任何变更。
+- 无控制终端（CI、无人值守）时必须显式追加 `--yes`，否则脚本拒绝执行。
+- 完整部署文档见 `docs/deployment/ubuntu-production.md`。
+- 卸载：`sudo ./scripts/uninstall.sh --dry-run` 预演，`sudo ./scripts/uninstall.sh` 卸载应用并保留
+  数据库与备份，`--purge-data` 才彻底删除数据（需二次键入 DELETE 确认）。
+
 ## Windows 安装包
 
 项目支持生成 Inno Setup `.exe` 安装包，安装包启动后会自动准备
@@ -152,6 +192,10 @@ Bash 环境：
 ## 脚本文档索引
 
 - [脚本总览](scripts/README.md)：查看所有维护中的脚本、参数和示例。
+- `scripts/install.sh`：远程一键安装引导（`curl | bash`），校验环境后移交 `deploy-ubuntu.sh`。
+- `scripts/deploy-ubuntu.sh`：Ubuntu 生产环境原生部署（无 Docker，目标平台专用，无 `.ps1` 版本）。
+- `scripts/uninstall.sh`：Ubuntu 卸载（默认保留数据库与备份，`--purge-data` 才彻底删除）。
+- `scripts/build-release.ps1` / `scripts/build-release.sh`：构建 Linux 发布产物（后端静态二进制 + SQL + sha256）。
 - `scripts/dev-start.ps1` / `scripts/dev-start.sh`：开发环境诊断、初始化和启动。
 - `scripts/prod-start.ps1` / `scripts/prod-start.sh`：生产环境 Docker Compose 启动、停止、状态和日志。
 - `scripts/db-manage.ps1` / `scripts/db-manage.sh`：数据库启动、初始化、验证、备份和默认管理员账号。
