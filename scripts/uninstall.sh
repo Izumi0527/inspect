@@ -105,8 +105,9 @@ usage() {
 
 默认行为（不带任何 purge 选项）:
   停止并移除 inspect-backend / inspect-frontend 服务、Nginx 站点与自签证书、
-  logrotate 与 sysctl 配置、Redis 配置块、备份 cron，删除源码与构建产物；
-  保留数据库、/opt/inspect/config 与 /opt/inspect/backups。
+  logrotate / sysctl / apt 重试配置、Redis 配置块、备份 cron，删除源码与构建产物；
+  保留数据库、/opt/inspect/config、/opt/inspect/backups 与中转目录
+  /usr/local/src/inspect（本脚本自身所在处，保证可重复执行）。
 
 始终不会自动执行:
   卸载 postgresql / redis / nginx / nodejs / go 等共享软件包；
@@ -219,6 +220,12 @@ remove_ops_config() {
         run rm -f /etc/logrotate.d/inspect
     fi
 
+    # deploy-ubuntu.sh 步骤 1 写入的 apt 重试配置（整文件由本项目创建，直接删除）
+    if [[ -f /etc/apt/apt.conf.d/99-inspect-retries ]]; then
+        info "  删除 /etc/apt/apt.conf.d/99-inspect-retries"
+        run rm -f /etc/apt/apt.conf.d/99-inspect-retries
+    fi
+
     if [[ -f /etc/sysctl.d/99-inspect.conf ]]; then
         info "  删除 /etc/sysctl.d/99-inspect.conf"
         run rm -f /etc/sysctl.d/99-inspect.conf
@@ -240,12 +247,19 @@ remove_app_files() {
     step_banner "步骤 4/7  删除源码与构建产物"
 
     local d
-    for d in "$APP_SRC" "$APP_BIN" "$APP_LOGS" "$APP_ROOT/data" "$STAGE_DIR"; do
+    for d in "$APP_SRC" "$APP_BIN" "$APP_LOGS" "$APP_ROOT/data"; do
         if [[ -e "$d" ]]; then
             info "  删除 $d"
             run rm -rf "$d"
         fi
     done
+
+    # 中转目录刻意保留：本脚本自身就在其中（install.sh 克隆到此处），删掉它等于在执行过程中
+    # 删除自己——bash 惰性读取脚本文件，可能导致执行截断；且用户随后无法再次运行卸载
+    # （例如先默认卸载、稍后再 --purge-data），只能重新下载。它仅占数十 MB，交由人工决定。
+    if [[ -d "$STAGE_DIR" ]]; then
+        warn "已保留一键安装中转目录: ${STAGE_DIR}（含本卸载脚本；确认无需重跑后可手工 rm -rf 该目录）"
+    fi
 
     if [[ "$PURGE_DATA" != true ]]; then
         [[ -d "$APP_CONF" ]] && warn "已保留配置与凭据: $APP_CONF（含 credentials.txt）"
@@ -368,6 +382,9 @@ print_residue() {
             如需回收，请先确认磁盘内容后手工处理。
 
   时间同步  chrony（系统级服务，未改动）
+
+  中转目录  /usr/local/src/inspect（install.sh 克隆的源码，含本卸载脚本自身）
+            确认不再需要重跑卸载后:  rm -rf /usr/local/src/inspect
 RESIDUE
 }
 

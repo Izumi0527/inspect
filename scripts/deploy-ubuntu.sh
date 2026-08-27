@@ -31,6 +31,11 @@ PROM_VERSION="2.53.2"
 
 REPO_URL="https://github.com/Izumi0527/inspect.git"
 
+# 网络重试参数：跨境链路对 packagecloud / go.dev / nodesource 偶发 TLS 超时，
+# 显式限定单次超时并重试，优于默认行为下长时间挂死后一次性失败。
+WGET_RETRY_OPTS="--tries=3 --timeout=30"
+CURL_RETRY_OPTS="--retry 3 --retry-delay 2 --connect-timeout 15"
+
 BACKEND_PORT=9000
 FRONTEND_PORT=13000
 GRAFANA_PORT=3001
@@ -328,16 +333,28 @@ preflight() {
 step_system() {
     step_banner "步骤 1/8  系统基础配置"
 
+    # 必须先于任何 apt 操作：跨境链路瞬时超时会让 apt-get update 直接失败，
+    # 默认无重试，一次抖动就导致整步失败（TimescaleDB 仓库尤其易触发）。
+    info "→ 配置 apt 重试与超时"
+    write_managed_block /etc/apt/apt.conf.d/99-inspect-retries "INSPECT" "$(cat <<'APTCONF'
+Acquire::Retries "3";
+Acquire::http::Timeout "30";
+Acquire::https::Timeout "30";
+APTCONF
+)"
+
     info "→ 更新软件包索引并安装基础工具"
     run_sh "DEBIAN_FRONTEND=noninteractive apt-get update -qq"
     run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
         curl wget gnupg lsb-release ca-certificates apt-transport-https \
         software-properties-common build-essential git jq unzip \
-        htop net-tools chrony openssl acl"
+        htop net-tools chrony cron openssl acl"
 
     info "→ 配置时区与时间同步"
     run timedatectl set-timezone Asia/Shanghai
     run systemctl enable --now chrony
+    # 每日数据库备份靠 cron 触发；不依赖 apt 自动启动服务（容器/精简镜像下不会启动）
+    run systemctl enable --now cron
 
     info "→ 创建运行账户与目录"
     if ! id "$APP_USER" &>/dev/null; then
@@ -462,23 +479,34 @@ step_postgres() {
     run_sh "/usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y"
 
     info "→ 添加 TimescaleDB 仓库"
+    # 取发行版代号用 /etc/os-release 而非 lsb_release：后者依赖 lsb-release 包，该包由步骤 1 安装，
+    # 而 --dry-run 会跳过安装、此处的命令替换却是无条件真实执行的，会让预演直接崩在这一行。
     local codename
-    codename="$(lsb_release -cs)"
+    codename="$(. /etc/os-release 2>/dev/null && printf '%s' "${VERSION_CODENAME:-noble}")"
     run_sh "echo 'deb https://packagecloud.io/timescale/timescaledb/ubuntu/ ${codename} main' \
         > /etc/apt/sources.list.d/timescaledb.list"
-    run_sh "wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey \
-        | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg"
+    run_sh "wget --quiet ${WGET_RETRY_OPTS} -O - https://packagecloud.io/timescale/timescaledb/gpgkey \
+        | gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg"
     run_sh "DEBIAN_FRONTEND=noninteractive apt-get update -qq"
+
+    # 判定候选版本是否存在。必须先取输出再匹配，不能用 `apt-cache ... | grep -q`：
+    # grep -q 命中即退出，向上游 apt-cache 发 SIGPIPE，在 set -o pipefail 下整条管道
+    # 返回 141，被误判为「无此包」——包其实一直存在。同类陷阱见 gen_secret() 的注释。
+    has_timescale_candidate() {
+        local policy
+        policy="$(apt-cache policy "timescaledb-2-postgresql-${PG_VERSION}" 2>/dev/null || true)"
+        [[ "$policy" == *"Candidate: "[0-9]* ]]
+    }
 
     # 关键校验：新发行版代号的 TimescaleDB 仓库可能尚未发布，需回退
     if [[ "$DRY_RUN" != true ]]; then
-        if ! apt-cache policy "timescaledb-2-postgresql-${PG_VERSION}" 2>/dev/null | grep -q 'Candidate: [0-9]'; then
+        if ! has_timescale_candidate; then
             warn "TimescaleDB 仓库无 ${codename} 对应包，回退到 noble (24.04) 仓库（二进制兼容）"
             echo "deb https://packagecloud.io/timescale/timescaledb/ubuntu/ noble main" \
                 >/etc/apt/sources.list.d/timescaledb.list
             DEBIAN_FRONTEND=noninteractive apt-get update -qq
-            apt-cache policy "timescaledb-2-postgresql-${PG_VERSION}" | grep -q 'Candidate: [0-9]' \
-                || die "TimescaleDB 包不可用，请检查网络或手动指定仓库代号"
+            has_timescale_candidate \
+                || die "TimescaleDB 包不可用：仓库 ${codename} 与 noble 均无 timescaledb-2-postgresql-${PG_VERSION} 候选版本。请检查网络、密钥环 /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg 是否有效，或手动指定仓库代号"
         fi
     fi
 
@@ -673,6 +701,15 @@ ensure_source() {
         info "  克隆源码仓库"
         run_sh "sudo -u ${APP_USER} git clone ${REPO_URL} ${APP_SRC}"
     fi
+
+    # 源码树内的运行时目录必须在此创建（不能提前到步骤 1：git clone 要求目标目录为空）。
+    # 仓库不跟踪 data/（内容全部被 gitignore），全新克隆后该目录不存在，而 systemd 单元的
+    # ReadWritePaths 要求列出的路径已存在，否则启动即 226/NAMESPACE，且报错只提
+    # "Failed to set up mount namespacing"，完全不提示是哪个目录缺失。
+    # 后端的 REPORT_OUTPUT_DIR / REPORTS_OUTPUT_DIR 是相对 WorkingDirectory=$APP_SRC 的
+    # 相对路径，确实需要该目录可写。
+    run mkdir -p "$APP_SRC/data/reports/monitoring"
+    run chown -R "$APP_USER:$APP_USER" "$APP_SRC/data"
 }
 
 # ==========================================
@@ -685,7 +722,7 @@ step_backend() {
     if [[ -x /usr/local/go/bin/go ]] && /usr/local/go/bin/go version 2>/dev/null | grep -q "go${GO_VERSION}"; then
         dim "  Go ${GO_VERSION} 已安装，跳过"
     else
-        run_sh "wget -q -O /tmp/go.tar.gz https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
+        run_sh "wget -q ${WGET_RETRY_OPTS} -O /tmp/go.tar.gz https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
         run_sh "rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tar.gz && rm -f /tmp/go.tar.gz"
         run_sh "echo 'export PATH=\$PATH:/usr/local/go/bin' > /etc/profile.d/go.sh"
     fi
@@ -777,12 +814,33 @@ ENVEOF
     run chown "$APP_USER:$APP_USER" "${APP_BIN}/inspect-api"
     run chmod 755 "${APP_BIN}/inspect-api"
 
-    info "→ 初始化数据库结构（幂等）"
-    if [[ "$DRY_RUN" != true ]]; then
+    # 初始化 SQL 需要执行两次，这不是冗余：
+    #   第一次（此处）建立不依赖后端的表与 hypertable；
+    #   第二次（后端健康检查通过后）建立 device_status_history / user_activity_logs——
+    #   它们分别外键引用 devices(id) / users(id)，而这两张表由后端 GORM AutoMigrate 创建，
+    #   在后端首次启动前并不存在，此时建表必然失败，进而导致对应 hypertable 缺失、
+    #   紧随其后的策略 DO 块整块中止（实测为 3/5 hypertable、2/10 策略）。
+    # SQL 全程使用 IF NOT EXISTS / if_not_exists => TRUE，重复执行安全。
+    apply_init_sql() {
+        if [[ "$DRY_RUN" == true ]]; then
+            dim "[dry-run] 执行 database-init-complete.sql"
+            return 0
+        fi
+        local log="${APP_LOGS}/db-init.log"
         PGPASSWORD="$db_pass" psql -h 127.0.0.1 -U inspect_user -d inspect_system \
-            -v ON_ERROR_STOP=0 -q -f "${APP_SRC}/database/database-init-complete.sql" >/dev/null 2>&1 \
-            || warn "初始化 SQL 存在告警，请在 verify 步骤确认 hypertable 与策略"
-    fi
+            -v ON_ERROR_STOP=0 -q -f "${APP_SRC}/database/database-init-complete.sql" >"$log" 2>&1 \
+            || warn "初始化 SQL 返回非零，详见 $log"
+        # 原实现把输出重定向到 /dev/null 2>&1，错误全部被吞掉，排查时毫无线索；改为留档
+        local errs
+        errs="$(grep -ci '^ERROR' "$log" 2>/dev/null || true)"
+        if [[ "${errs:-0}" -gt 0 ]]; then
+            dim "  初始化 SQL 有 ${errs} 条 ERROR（详见 $log）"
+        fi
+        return 0
+    }
+
+    info "→ 初始化数据库结构（幂等，首轮）"
+    apply_init_sql
 
     info "→ 安装 systemd 单元 inspect-backend.service"
     if [[ "$DRY_RUN" != true ]]; then
@@ -846,6 +904,10 @@ UNITEOF
         [[ "$ok" == true ]] || die "后端健康检查失败，请查看 journalctl -u inspect-backend -n 100"
     fi
 
+    # 后端已完成 GORM 迁移，devices / users 就位，此时补建外键依赖它们的时序表与策略
+    info "→ 初始化数据库结构（幂等，补齐外键依赖表）"
+    apply_init_sql
+
     success "后端已启动"
 }
 
@@ -859,11 +921,14 @@ step_frontend() {
     if command -v node &>/dev/null && node -v | grep -q "^v${NODE_MAJOR}\."; then
         dim "  Node ${NODE_MAJOR} 已安装，跳过"
     else
-        run_sh "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -"
+        run_sh "curl -fsSL ${CURL_RETRY_OPTS} https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -"
         run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs"
     fi
     run_sh "corepack enable"
-    run_sh "corepack prepare pnpm@${PNPM_VERSION} --activate"
+    # corepack 的版本激活记录写在 COREPACK_HOME（默认 $HOME/.cache/node/corepack），按用户隔离。
+    # 前端构建以 ${APP_USER} + HOME=${APP_ROOT} 执行，若在 root 下激活则构建时读不到该记录，
+    # corepack 会退化为下载“最新版”pnpm（当前 11.x 要求 Node>=22），在 Node 20 上直接崩溃。
+    run_sh "sudo -u ${APP_USER} env HOME=${APP_ROOT} corepack prepare pnpm@${PNPM_VERSION} --activate"
 
     info "→ 准备源码"
     ensure_source
@@ -980,7 +1045,21 @@ GRAFANA
 )
     fi
 
-    info "→ 写入站点配置"
+    # nginx 1.25.1 起才提供独立的 `http2 on;` 指令；Ubuntu 24.04 自带 1.24.0 只认旧写法
+    # `listen ... http2`，直接写 http2 on 会导致 nginx -t 报 unknown directive 而整步失败。
+    # 反之在 1.25+ 上用旧写法只会产生弃用警告，因此按实际版本分派而非二选一。
+    local http2_listen="" http2_directive=""
+    local nginx_ver
+    local nginx_banner
+    nginx_banner="$(nginx -v 2>&1 || true)"   # 形如: nginx version: nginx/1.24.0 (Ubuntu)
+    nginx_ver="${nginx_banner##*nginx/}"
+    nginx_ver="${nginx_ver%% *}"
+    if [[ -n "$nginx_ver" ]] && dpkg --compare-versions "$nginx_ver" ge 1.25.1; then
+        http2_directive="    http2 on;"
+    else
+        http2_listen=" http2"
+    fi
+    info "→ 写入站点配置（nginx ${nginx_ver:-未知}）"
     if [[ "$DRY_RUN" != true ]]; then
         cat >/etc/nginx/sites-available/inspect <<NGINXEOF
 upstream inspect_backend  { server 127.0.0.1:${BACKEND_PORT}; keepalive 32; }
@@ -993,8 +1072,8 @@ server {
 }
 
 server {
-    listen 443 ssl;
-    http2 on;
+    listen 443 ssl${http2_listen};
+${http2_directive}
     server_name ${DOMAIN};
 
     ssl_certificate     /etc/nginx/ssl/inspect.crt;
@@ -1061,7 +1140,9 @@ NGINXEOF
 
     run nginx -t
     run systemctl enable nginx
-    run systemctl reload nginx
+    # reload 对未运行的服务会直接失败（容器内 policy-rc.d 阻止 apt 自动启动，或上次部署后
+    # 被手工 stop 过）；reload-or-restart 未运行时启动、运行中时热重载，两种状态都成立。
+    run systemctl reload-or-restart nginx
 
     success "Nginx 已配置"
 }
@@ -1082,7 +1163,7 @@ step_monitoring() {
     if command -v prometheus &>/dev/null && prometheus --version 2>&1 | grep -q "$PROM_VERSION"; then
         dim "  Prometheus ${PROM_VERSION} 已安装，跳过"
     else
-        run_sh "wget -q -O /tmp/prom.tar.gz \
+        run_sh "wget -q ${WGET_RETRY_OPTS} -O /tmp/prom.tar.gz \
             https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
         run_sh "tar -xzf /tmp/prom.tar.gz -C /tmp"
         run_sh "id prometheus &>/dev/null || useradd -rs /bin/false prometheus"
@@ -1139,7 +1220,7 @@ PROMUNIT
 
     info "→ 安装 Grafana"
     run mkdir -p /etc/apt/keyrings
-    run_sh "wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor -o /etc/apt/keyrings/grafana.gpg --yes"
+    run_sh "wget -q ${WGET_RETRY_OPTS} -O - https://apt.grafana.com/gpg.key | gpg --dearmor -o /etc/apt/keyrings/grafana.gpg --yes"
     run_sh "echo 'deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main' \
         > /etc/apt/sources.list.d/grafana.list"
     run_sh "DEBIAN_FRONTEND=noninteractive apt-get update -qq"

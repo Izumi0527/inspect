@@ -83,6 +83,10 @@ sudo ./scripts/uninstall.sh --purge-data
 分级设计：默认卸载是**可逆的**（重新部署即可恢复服务，数据仍在），破坏性操作必须同时满足
 「显式传 `--purge-data`」与「手工键入 DELETE」两个条件，`--yes` 可跳过后者。
 
+中转目录 `/usr/local/src/inspect` 刻意不删除：卸载脚本自身就在其中，删掉它等于在执行过程中
+删除自己（bash 惰性读取脚本文件，可能导致执行截断），且用户随后无法再次运行卸载——例如先做
+默认卸载、稍后才决定 `--purge-data`。该目录会在残留清单中列出，由人工决定何时 `rm -rf`。
+
 刻意不自动处理的部分：`postgresql` / `redis` / `nginx` / `nodejs` / `go` 等共享软件包不卸载，
 `/etc/fstab` 的 pgdata 挂载项不修改，数据盘不卸载也不格式化——脚本执行完会打印残留清单，
 由人工决策。`--purge-monitoring` 与 `--reset-firewall` 分别处理监控组件与本项目新增的
