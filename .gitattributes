@@ -1,0 +1,9 @@
+# 显式声明行尾，避免 Windows 开发机的 core.autocrlf 把面向 Linux 的脚本以 CRLF 入库。
+# 触发过的真实故障：Windows 上 git archive 会注入 CRLF，导致 Linux 执行时报
+# /usr/bin/env: 'bash\r': No such file or directory。
+# 仓库现有 blob 全为 LF，因此这些声明对历史文件是恒等变换，不产生 renormalization。
+# .ps1 刻意不声明 eol：现有 26 个文件的 blob 与工作区均为 LF，PowerShell 对 LF 无障碍；
+# 声明 eol=crlf 只会在下次检出时制造无意义的工作区变更（其 UTF-8 BOM 要求与行尾无关）。
+*.sh    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
