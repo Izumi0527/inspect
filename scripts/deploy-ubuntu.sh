@@ -1105,6 +1105,11 @@ GRAFANA
     nginx_banner="$(nginx -v 2>&1 || true)"   # 形如: nginx version: nginx/1.24.0 (Ubuntu)
     nginx_ver="${nginx_banner##*nginx/}"
     nginx_ver="${nginx_ver%% *}"
+    # nginx 尚未安装时（如 --dry-run），nginx_banner 是 shell 的 "command not found"
+    # 文本，其中并不含 "nginx/"，## 不匹配便原样返回而非置空，因此仅判非空拦不住它：
+    # 会把脚本路径当版本号喂给 dpkg（报 bad syntax），并让下方 :-未知 的兜底失效。
+    # 故在此显式校验版本号格式，提取失败一律归一为空。
+    [[ "$nginx_ver" =~ ^[0-9]+(\.[0-9]+)*$ ]] || nginx_ver=""
     if [[ -n "$nginx_ver" ]] && dpkg --compare-versions "$nginx_ver" ge 1.25.1; then
         http2_directive="    http2 on;"
     else
