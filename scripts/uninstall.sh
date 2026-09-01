@@ -183,7 +183,10 @@ remove_nginx() {
         run rm -f /etc/nginx/sites-available/inspect
     fi
     local f
-    for f in /etc/nginx/ssl/inspect.crt /etc/nginx/ssl/inspect.key; do
+    # 含 .bak.<时间戳>：重新签发 SAN 证书时会留下旧证书副本，一并清理。
+    # glob 无匹配时 bash 保留字面量，下方 -f 判断会跳过，无需 nullglob。
+    for f in /etc/nginx/ssl/inspect.crt /etc/nginx/ssl/inspect.key \
+             /etc/nginx/ssl/inspect.crt.bak.* /etc/nginx/ssl/inspect.key.bak.*; do
         if [[ -f "$f" ]]; then
             info "  删除 $f"
             run rm -f "$f"

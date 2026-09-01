@@ -1010,6 +1010,40 @@ UNITEOF
 }
 
 # ==========================================
+# TLS 证书
+# ==========================================
+# build_cert_san 按目标主机形态构造 X.509 subjectAltName。
+# X.509 对 IP 与域名使用不同的条目类型（IP: / DNS:），类型填错等同于未填。
+# Chrome 58+ 起已完全忽略证书 CN 字段，仅凭 SAN 判定身份是否匹配，
+# 因此缺少 SAN 的证书即便 CN 正确，浏览器一样判为身份不符。
+build_cert_san() {
+    local host="$1"
+    if [[ "$host" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+        printf 'IP:%s,IP:127.0.0.1,DNS:localhost' "$host"
+    else
+        printf 'DNS:%s,DNS:localhost,IP:127.0.0.1' "$host"
+    fi
+}
+
+# cert_san_covers 判断已有证书的 SAN 是否覆盖目标主机，用于区分三种情形：
+# 无证书（签发）、旧版本遗留的无 SAN 证书（重新签发）、
+# 运维手工放置且已覆盖目标主机的证书（保留，不得覆盖）。
+cert_san_covers() {
+    local cert="$1" host="$2" san escaped
+    [[ -f "$cert" ]] || return 1
+    san="$(openssl x509 -in "$cert" -noout -ext subjectAltName 2>/dev/null)" || return 1
+    [[ -n "$san" ]] || return 1
+    escaped="${host//./\\.}"
+    # openssl 回显的条目名是 "IP Address:"，与输入侧的 "IP:" 写法不同，不能直接比对。
+    # 尾部断言用于排除前缀误命中（如 192.168.1.10 命中 192.168.1.100）。
+    if [[ "$host" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+        grep -qE "IP Address:${escaped}([^0-9]|$)" <<<"$san"
+    else
+        grep -qiE "DNS:${escaped}([^0-9A-Za-z.-]|$)" <<<"$san"
+    fi
+}
+
+# ==========================================
 # 步骤 6: Nginx
 # ==========================================
 step_nginx() {
@@ -1018,16 +1052,33 @@ step_nginx() {
     info "→ 安装 Nginx"
     run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nginx"
 
-    info "→ 生成自签证书（公网环境请改用 certbot）"
+    info "→ 准备自签证书（含 SAN；公网域名环境建议改用 certbot）"
     run mkdir -p /etc/nginx/ssl
-    if [[ "$DRY_RUN" != true && ! -f /etc/nginx/ssl/inspect.crt ]]; then
-        openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-            -keyout /etc/nginx/ssl/inspect.key \
-            -out /etc/nginx/ssl/inspect.crt \
-            -subj "/CN=${DOMAIN}" >/dev/null 2>&1
-        chmod 600 /etc/nginx/ssl/inspect.key
+    local ssl_cert=/etc/nginx/ssl/inspect.crt
+    local ssl_key=/etc/nginx/ssl/inspect.key
+    local cert_san
+    cert_san="$(build_cert_san "$DOMAIN")"
+    if [[ "$DRY_RUN" == true ]]; then
+        dim "[dry-run] 签发自签证书 subjectAltName=${cert_san}"
+    elif cert_san_covers "$ssl_cert" "$DOMAIN"; then
+        dim "  已有证书的 SAN 已覆盖 ${DOMAIN}，保留不动"
     else
-        dim "  证书已存在，跳过"
+        local cert_stamp cert_err
+        if [[ -f "$ssl_cert" ]]; then
+            cert_stamp="$(date +%Y%m%d%H%M%S)"
+            warn "已有证书未覆盖 ${DOMAIN}（旧版本无 SAN，或访问地址已变更），备份后重新签发"
+            mv "$ssl_cert" "${ssl_cert}.bak.${cert_stamp}"
+            if [[ -f "$ssl_key" ]]; then
+                mv "$ssl_key" "${ssl_key}.bak.${cert_stamp}"
+            fi
+        fi
+        info "  subjectAltName=${cert_san}"
+        if ! cert_err="$(openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+                -keyout "$ssl_key" -out "$ssl_cert" \
+                -subj "/CN=${DOMAIN}" -addext "subjectAltName=${cert_san}" 2>&1)"; then
+            die "自签证书生成失败：${cert_err}"
+        fi
+        chmod 600 "$ssl_key"
     fi
 
     local grafana_block=""
@@ -1386,6 +1437,17 @@ step_verify() {
 访问地址   : https://${DOMAIN}
 默认账号   : admin （首次登录强制修改密码）
 凭据文件   : ${CRED_FILE}  (权限 600，请妥善备份)
+
+消除浏览器证书警告（脚本签发的是自签证书，客户端需导入一次；
+若已换用受信任 CA 签发的证书则忽略本节）:
+  1. 取回证书（在客户端机器执行）
+       scp root@${DOMAIN}:/etc/nginx/ssl/inspect.crt .
+  2. 导入系统信任库
+       Windows : certutil -addstore -f Root inspect.crt      （管理员 PowerShell）
+       macOS   : sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain inspect.crt
+       Ubuntu  : sudo cp inspect.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates
+     Firefox 使用独立证书库，需在 设置 → 隐私与安全 → 证书 → 查看证书 → 颁发机构 中导入
+  3. 重启浏览器后访问 https://${DOMAIN}
 
 常用命令:
   systemctl status inspect-backend inspect-frontend

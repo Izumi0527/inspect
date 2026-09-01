@@ -139,6 +139,43 @@ curl -fsSL https://raw.githubusercontent.com/Izumi0527/inspect/refs/tags/v1.1.1/
 - 卸载：`sudo ./scripts/uninstall.sh --dry-run` 预演，`sudo ./scripts/uninstall.sh` 卸载应用并保留
   数据库与备份，`--purge-data` 才彻底删除数据（需二次键入 DELETE 确认）。
 
+### 无域名部署（仅 IP）
+
+`--domain` 同样接受 IP，脚本不校验域名格式：
+
+```bash
+sudo bash install.sh --domain 192.168.1.100
+```
+
+- 必须填客户端实际可达的地址，不能填 `127.0.0.1`。
+- `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_WS_URL` 在**构建期**写入前端产物，服务器换 IP 后只改
+  `.env` 不生效，需重跑 `sudo ./scripts/deploy-ubuntu.sh --domain <新IP> --steps frontend,nginx`。
+  建议为服务器配置静态 IP。
+
+### 消除浏览器证书警告
+
+脚本签发的自签证书已包含 `subjectAltName`（覆盖目标主机、`127.0.0.1` 与 `localhost`）。
+但自签证书不在系统信任链内，客户端仍需导入一次，否则每次访问都提示「不安全」：
+
+```bash
+# 1. 在客户端机器取回证书
+scp root@192.168.1.100:/etc/nginx/ssl/inspect.crt .
+
+# 2. 导入系统信任库（按客户端系统三选一）
+certutil -addstore -f Root inspect.crt                       # Windows，管理员 PowerShell
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain inspect.crt          # macOS
+sudo cp inspect.crt /usr/local/share/ca-certificates/ \
+  && sudo update-ca-certificates                             # Ubuntu
+```
+
+Firefox 使用独立证书库，需在 `设置 → 隐私与安全 → 证书 → 查看证书 → 颁发机构` 中导入。
+导入后重启浏览器生效；部署结束时脚本也会打印同样的指引。
+
+若已持有受信任 CA 签发的证书，在部署前放到 `/etc/nginx/ssl/inspect.crt` 与 `inspect.key`，
+脚本检测到其 SAN 已覆盖目标主机便会保留不动；反之（例如旧版本遗留的无 SAN 证书）会备份
+旧文件并重新签发。
+
 ## Windows 安装包
 
 项目支持生成 Inno Setup `.exe` 安装包，安装包启动后会自动准备
