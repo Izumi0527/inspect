@@ -36,10 +36,35 @@ REPO_URL="https://github.com/Izumi0527/inspect.git"
 WGET_RETRY_OPTS="--tries=3 --timeout=30"
 CURL_RETRY_OPTS="--retry 3 --retry-delay 2 --connect-timeout 15"
 
+# 依赖镜像源。默认国内源：本系统主要部署于国内内网，官方源在此不可达
+# （实测 proxy.golang.org 解析到 Google IP，全部模块 i/o timeout）。
+# 境外部署用 --goproxy / --npm-registry，或同名环境变量覆盖。
+GOPROXY_URL="${GOPROXY_URL:-https://goproxy.cn,direct}"
+NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
+
+# 二进制下载源。与 GOPROXY 是两回事：GOPROXY 管 Go「模块」下载，
+# 这里管 Go「工具链」本身和 Prometheus 的 tar 包——两者在国内均实测超时
+# （go.dev 与 github.com/*/releases/download 都不可达）。
+GO_DL_BASE="${GO_DL_BASE:-https://mirrors.aliyun.com/golang}"
+# GitHub 下载前缀，置空即直连 github.com。境外部署: --gh-proxy ''
+GH_PROXY="${GH_PROXY:-https://ghfast.top/}"
+
+# 单条命令的墙钟超时上限（秒）。必须外挂硬超时：apt 的 Acquire::Timeout 只管
+# 「空闲无数据」不管总时长，慢速链路（几 KB/s）永不触发，表现为静默挂死。
+CMD_TIMEOUT="${CMD_TIMEOUT:-1800}"
+BUILD_TIMEOUT="${BUILD_TIMEOUT:-3600}"
+
+# apt 前端锁等待上限。新装机上 unattended-upgrades 常在后台持有 dpkg 锁，
+# apt 默认无限期等待，且安静模式会把 "Waiting for cache lock" 提示一并吞掉。
+APT_OPTS="-o DPkg::Lock::Timeout=300"
+
 BACKEND_PORT=9000
 FRONTEND_PORT=13000
 GRAFANA_PORT=3001
-PROM_PORT=9090
+# Prometheus 自身的监听端口。此前该变量被同时当作「后端 metrics 端口」，
+# 而 service 里又硬编码监听 9091，导致抓取目标指向无人监听的 9090，
+# job inspect-backend 恒为 down —— 一个变量背两种语义的典型后果。
+PROM_PORT=9091
 
 ALL_STEPS=(system postgres redis backend frontend nginx monitoring verify)
 
@@ -56,6 +81,10 @@ BUILD_MEM_MB=4096
 DRY_RUN=false
 ASSUME_YES=false
 HELP=false
+
+# 运行期状态：供中断提示定位与总耗时统计
+CURRENT_STEP=""
+DEPLOY_START_TS=0
 
 # ==========================================
 # 输出helper
@@ -88,13 +117,55 @@ step_banner() {
     color "35" "═══════════════════════════════════════════════════════════"
 }
 
+# 秒数格式化为 XmYYs
+fmt_dur() { printf '%dm%02ds' $(( $1 / 60 )) $(( $1 % 60 )); }
+
+# 带硬超时执行。本脚本对「命令返回错误」防御完备，却对「命令永不返回」
+# 毫无防御——后者才是部署卡死的实际形态（apt 等 dpkg 锁 / 镜像慢速传输）。
+# 用法: with_timeout <秒> <描述> <命令...>
+with_timeout() {
+    local secs="$1" desc="$2"
+    shift 2
+    local rc=0
+    timeout --signal=TERM --kill-after=30 "$secs" "$@" || rc=$?
+    if [[ $rc -eq 124 || $rc -eq 137 ]]; then
+        error "命令超过 ${secs}s 未完成，已强制终止:"
+        error "  ${desc}"
+        error "  常见原因: apt 等待 dpkg 锁、镜像源慢速传输、DNS 解析挂起"
+        error "  可用环境变量放宽: CMD_TIMEOUT / BUILD_TIMEOUT（单位秒）"
+    fi
+    return $rc
+}
+
+# 心跳。长步骤执行期间定期报告已用时，让「慢」与「死」可区分——
+# 这是原脚本最缺的一环：apt 下载期间完全静默，用户无从判断该等还是该中断。
+HEARTBEAT_PID=""
+heartbeat_start() {
+    local label="$1"
+    (
+        local n=0
+        while true; do
+            sleep 60
+            n=$(( n + 1 ))
+            color "90" "    … ${label} 进行中，已用 ${n} 分钟"
+        done
+    ) &
+    HEARTBEAT_PID=$!
+}
+heartbeat_stop() {
+    [[ -n "$HEARTBEAT_PID" ]] || return 0
+    kill "$HEARTBEAT_PID" 2>/dev/null || true
+    wait "$HEARTBEAT_PID" 2>/dev/null || true
+    HEARTBEAT_PID=""
+}
+
 # 执行命令；--dry-run 时仅打印
 run() {
     if [[ "$DRY_RUN" == true ]]; then
         dim "[dry-run] $*"
         return 0
     fi
-    "$@"
+    with_timeout "$CMD_TIMEOUT" "$*" "$@"
 }
 
 # 执行 shell 片段（含管道/重定向）
@@ -103,7 +174,16 @@ run_sh() {
         dim "[dry-run] $*"
         return 0
     fi
-    bash -c "$*"
+    with_timeout "$CMD_TIMEOUT" "$*" bash -c "$*"
+}
+
+# 长耗时构建专用（go build / pnpm install / next build）：超时上限更宽
+run_build() {
+    if [[ "$DRY_RUN" == true ]]; then
+        dim "[dry-run] $*"
+        return 0
+    fi
+    with_timeout "$BUILD_TIMEOUT" "$*" bash -c "$*"
 }
 
 confirm() {
@@ -190,6 +270,14 @@ show_help() {
   --skip-monitoring        跳过 Prometheus + Grafana（节省约 2.4 GB 内存）
   --skip-firewall          跳过 ufw 防火墙配置
   --build-mem <MB>         前端构建内存上限，默认 4096
+  --goproxy <URL>          Go 模块代理，默认 https://goproxy.cn,direct
+                           境外部署改用 https://proxy.golang.org,direct
+  --npm-registry <URL>     npm 源，默认 https://registry.npmmirror.com
+                           境外部署改用 https://registry.npmjs.org
+  --go-mirror <URL>        Go 工具链下载前缀，默认 https://mirrors.aliyun.com/golang
+                           境外部署改用 https://go.dev/dl
+  --gh-proxy <URL>         GitHub 下载加速前缀，默认 https://ghfast.top/
+                           境外部署传空串 '' 直连 github.com
   --yes, -y                跳过所有交互确认
   --dry-run                仅打印将要执行的操作，不做任何改动
   --help, -h               显示帮助
@@ -220,6 +308,11 @@ show_help() {
 
 说明:
   - 脚本幂等，可重复执行
+  - 单命令硬超时: CMD_TIMEOUT（默认 1800s）/ BUILD_TIMEOUT（默认 3600s）
+  - 任一步骤失败或被 Ctrl+C 中断，都会提示可用 --from <step> 从该步续跑
+  - 境外服务器一次性切回官方源:
+      --goproxy https://proxy.golang.org,direct --npm-registry https://registry.npmjs.org \
+      --go-mirror https://go.dev/dl --gh-proxy ''
   - 生成的所有密码写入 /opt/inspect/config/credentials.txt (权限 600)
   - 详细部署说明见 docs/deployment/ubuntu-production.md
 EOF
@@ -233,6 +326,10 @@ parse_args() {
             --from)            FROM_STEP="${2:-}"; shift 2 ;;
             --pg-data-disk)    PG_DATA_DISK="${2:-}"; shift 2 ;;
             --build-mem)       BUILD_MEM_MB="${2:-}"; shift 2 ;;
+            --goproxy)         GOPROXY_URL="${2:-}"; shift 2 ;;
+            --npm-registry)    NPM_REGISTRY="${2:-}"; shift 2 ;;
+            --go-mirror)       GO_DL_BASE="${2:-}"; shift 2 ;;
+            --gh-proxy)        GH_PROXY="${2:-}"; shift 2 ;;
             --skip-monitoring) SKIP_MONITORING=true; shift ;;
             --skip-firewall)   SKIP_FIREWALL=true; shift ;;
             --dry-run)         DRY_RUN=true; shift ;;
@@ -344,8 +441,8 @@ APTCONF
 )"
 
     info "→ 更新软件包索引并安装基础工具"
-    run_sh "DEBIAN_FRONTEND=noninteractive apt-get update -qq"
-    run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+    run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} update -q"
+    run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} install -y -q \
         curl wget gnupg lsb-release ca-certificates apt-transport-https \
         software-properties-common build-essential git jq unzip \
         htop net-tools chrony cron openssl acl"
@@ -412,7 +509,7 @@ LIMITS
         dim "  已指定 --skip-firewall，跳过防火墙配置"
     else
         info "→ 配置 ufw 防火墙"
-        run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ufw"
+        run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} install -y -q ufw"
         run ufw --force default deny incoming
         run ufw --force default allow outgoing
         run ufw allow 22/tcp comment 'SSH'
@@ -475,7 +572,7 @@ step_postgres() {
     mount_pg_disk
 
     info "→ 添加 PGDG 官方仓库"
-    run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq postgresql-common"
+    run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} install -y -q postgresql-common"
     run_sh "/usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y"
 
     info "→ 添加 TimescaleDB 仓库"
@@ -487,7 +584,7 @@ step_postgres() {
         > /etc/apt/sources.list.d/timescaledb.list"
     run_sh "wget --quiet ${WGET_RETRY_OPTS} -O - https://packagecloud.io/timescale/timescaledb/gpgkey \
         | gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg"
-    run_sh "DEBIAN_FRONTEND=noninteractive apt-get update -qq"
+    run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} update -q"
 
     # 判定候选版本是否存在。必须先取输出再匹配，不能用 `apt-cache ... | grep -q`：
     # grep -q 命中即退出，向上游 apt-cache 发 SIGPIPE，在 set -o pipefail 下整条管道
@@ -504,14 +601,14 @@ step_postgres() {
             warn "TimescaleDB 仓库无 ${codename} 对应包，回退到 noble (24.04) 仓库（二进制兼容）"
             echo "deb https://packagecloud.io/timescale/timescaledb/ubuntu/ noble main" \
                 >/etc/apt/sources.list.d/timescaledb.list
-            DEBIAN_FRONTEND=noninteractive apt-get update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} update -q
             has_timescale_candidate \
                 || die "TimescaleDB 包不可用：仓库 ${codename} 与 noble 均无 timescaledb-2-postgresql-${PG_VERSION} 候选版本。请检查网络、密钥环 /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg 是否有效，或手动指定仓库代号"
         fi
     fi
 
     info "→ 安装 PostgreSQL 与 TimescaleDB"
-    run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+    run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} install -y -q \
         postgresql-${PG_VERSION} postgresql-client-${PG_VERSION} \
         timescaledb-2-postgresql-${PG_VERSION} timescaledb-tools"
 
@@ -643,7 +740,7 @@ step_redis() {
     step_banner "步骤 3/8  Redis 7"
 
     info "→ 安装 Redis"
-    run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq redis-server"
+    run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} install -y -q redis-server"
 
     local redis_pass
     if [[ "$DRY_RUN" == true ]]; then
@@ -722,7 +819,8 @@ step_backend() {
     if [[ -x /usr/local/go/bin/go ]] && /usr/local/go/bin/go version 2>/dev/null | grep -q "go${GO_VERSION}"; then
         dim "  Go ${GO_VERSION} 已安装，跳过"
     else
-        run_sh "wget -q ${WGET_RETRY_OPTS} -O /tmp/go.tar.gz https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
+        run_sh "wget -q ${WGET_RETRY_OPTS} -O /tmp/go.tar.gz \
+            ${GO_DL_BASE}/go${GO_VERSION}.linux-amd64.tar.gz"
         run_sh "rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tar.gz && rm -f /tmp/go.tar.gz"
         run_sh "echo 'export PATH=\$PATH:/usr/local/go/bin' > /etc/profile.d/go.sh"
     fi
@@ -791,8 +889,10 @@ SNMP_TRAP_ENABLED=true
 SNMP_TRAP_HOST=0.0.0.0
 SNMP_TRAP_PORT=162
 
-ENABLE_METRICS=true
-METRICS_PORT=${PROM_PORT}
+# 后端当前未实现 Prometheus exporter（go.mod 无 client_golang、路由无 /metrics），
+# 故置 false；原先还有一行 METRICS_PORT 指向 Prometheus 自身端口，属语义错误已移除。
+# 后端实现 exporter 后：改回 true、补 METRICS_PORT，并在 prometheus.yml 恢复抓取 job。
+ENABLE_METRICS=false
 HEALTH_CHECK_ENABLED=true
 HEALTH_CHECK_INTERVAL=30
 ENVEOF
@@ -802,12 +902,17 @@ ENVEOF
 
     info "→ 编译后端（CGO_ENABLED=0 静态二进制）"
     # 必须显式传 HOME/GOCACHE：sudo 默认重置环境，Go 的构建缓存默认落在
-    # $HOME/.cache/go-build，HOME 缺失或不可写会导致构建失败
-    run_sh "sudo -u ${APP_USER} env \
+    # $HOME/.cache/go-build，HOME 缺失或不可写会导致构建失败。
+    # GOPROXY 同理必须显式传：不传则走默认 proxy.golang.org（Google IP），
+    # 国内实测全部模块 i/o timeout，且 sudo 会把外部导出的同名变量丢掉。
+    # PATH 写死而非继承 $PATH：env 按空格分词，继承来的 PATH 一旦含空格路径
+    # （如 WSL 注入的 /mnt/c/Program Files/...）会被拆断，报 127。
+    run_build "sudo -u ${APP_USER} env \
         HOME=${APP_ROOT} \
         GOCACHE=${APP_ROOT}/.cache/go-build \
         GOMODCACHE=${APP_ROOT}/.cache/go-mod \
-        PATH=/usr/local/go/bin:\$PATH \
+        GOPROXY=${GOPROXY_URL} \
+        PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
         CGO_ENABLED=0 \
         go -C ${APP_SRC}/backend-go build -ldflags='-s -w' -o ${APP_BIN}/inspect-api.new ./cmd/api"
     run mv "${APP_BIN}/inspect-api.new" "${APP_BIN}/inspect-api"
@@ -922,13 +1027,15 @@ step_frontend() {
         dim "  Node ${NODE_MAJOR} 已安装，跳过"
     else
         run_sh "curl -fsSL ${CURL_RETRY_OPTS} https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash -"
-        run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs"
+        run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} install -y -q nodejs"
     fi
     run_sh "corepack enable"
     # corepack 的版本激活记录写在 COREPACK_HOME（默认 $HOME/.cache/node/corepack），按用户隔离。
     # 前端构建以 ${APP_USER} + HOME=${APP_ROOT} 执行，若在 root 下激活则构建时读不到该记录，
     # corepack 会退化为下载“最新版”pnpm（当前 11.x 要求 Node>=22），在 Node 20 上直接崩溃。
-    run_sh "sudo -u ${APP_USER} env HOME=${APP_ROOT} corepack prepare pnpm@${PNPM_VERSION} --activate"
+    run_sh "sudo -u ${APP_USER} env HOME=${APP_ROOT} \
+        COREPACK_NPM_REGISTRY=${NPM_REGISTRY} \
+        corepack prepare pnpm@${PNPM_VERSION} --activate"
 
     info "→ 准备源码"
     ensure_source
@@ -945,9 +1052,11 @@ FEEOF
     fi
 
     info "→ 安装依赖并构建（构建期是内存峰值，上限 ${BUILD_MEM_MB} MB）"
-    run_sh "cd ${APP_SRC}/frontend && sudo -u ${APP_USER} env HOME=${APP_ROOT} \
+    run_build "cd ${APP_SRC}/frontend && sudo -u ${APP_USER} env HOME=${APP_ROOT} \
+        npm_config_registry=${NPM_REGISTRY} \
         pnpm install --frozen-lockfile --silent"
-    run_sh "cd ${APP_SRC}/frontend && sudo -u ${APP_USER} env HOME=${APP_ROOT} \
+    run_build "cd ${APP_SRC}/frontend && sudo -u ${APP_USER} env HOME=${APP_ROOT} \
+        npm_config_registry=${NPM_REGISTRY} \
         NODE_OPTIONS='--max-old-space-size=${BUILD_MEM_MB}' NEXT_TELEMETRY_DISABLED=1 \
         pnpm run build"
 
@@ -1050,7 +1159,7 @@ step_nginx() {
     step_banner "步骤 6/8  Nginx 反向代理"
 
     info "→ 安装 Nginx"
-    run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nginx"
+    run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} install -y -q nginx"
 
     info "→ 准备自签证书（含 SAN；公网域名环境建议改用 certbot）"
     run mkdir -p /etc/nginx/ssl
@@ -1220,7 +1329,7 @@ step_monitoring() {
         dim "  Prometheus ${PROM_VERSION} 已安装，跳过"
     else
         run_sh "wget -q ${WGET_RETRY_OPTS} -O /tmp/prom.tar.gz \
-            https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
+            ${GH_PROXY}https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
         run_sh "tar -xzf /tmp/prom.tar.gz -C /tmp"
         run_sh "id prometheus &>/dev/null || useradd -rs /bin/false prometheus"
         run mkdir -p /etc/prometheus /var/lib/prometheus
@@ -1236,16 +1345,18 @@ global:
   evaluation_interval: 30s
 
 scrape_configs:
-  - job_name: 'inspect-backend'
-    static_configs:
-      - targets: ['127.0.0.1:${PROM_PORT}']
-
+  # 此处原有 inspect-backend job，因后端尚未实现 Prometheus exporter 而移除
+  # （go.mod 无 client_golang 依赖，路由中也无 /metrics）。待后端实现后恢复:
+  #   - job_name: 'inspect-backend'
+  #     static_configs:
+  #       - targets: ['127.0.0.1:<后端 metrics 端口>']
   - job_name: 'node'
     static_configs:
       - targets: ['127.0.0.1:9100']
 PROMEOF
 
-        cat >/etc/systemd/system/prometheus.service <<'PROMUNIT'
+        # 非 quoted heredoc: 需展开 ${PROM_PORT}；本段内无其他 $ 变量，安全
+        cat >/etc/systemd/system/prometheus.service <<PROMUNIT
 [Unit]
 Description=Prometheus
 After=network-online.target
@@ -1259,7 +1370,7 @@ ExecStart=/usr/local/bin/prometheus \
   --config.file=/etc/prometheus/prometheus.yml \
   --storage.tsdb.path=/var/lib/prometheus \
   --storage.tsdb.retention.time=30d \
-  --web.listen-address=127.0.0.1:9091 \
+  --web.listen-address=127.0.0.1:${PROM_PORT} \
   --web.enable-lifecycle
 Restart=always
 RestartSec=5s
@@ -1270,17 +1381,20 @@ PROMUNIT
         chown -R prometheus:prometheus /etc/prometheus /var/lib/prometheus
     fi
 
-    run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq prometheus-node-exporter"
+    run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} install -y -q prometheus-node-exporter"
     run systemctl daemon-reload
-    run systemctl enable --now prometheus prometheus-node-exporter
+    run systemctl enable prometheus prometheus-node-exporter
+    # 必须 restart 而非 --now：本步骤每次重写 prometheus.yml 与 unit，
+    # 而 --now 对已运行的服务是 no-op，会导致配置变更永不生效。
+    run systemctl restart prometheus prometheus-node-exporter
 
     info "→ 安装 Grafana"
     run mkdir -p /etc/apt/keyrings
     run_sh "wget -q ${WGET_RETRY_OPTS} -O - https://apt.grafana.com/gpg.key | gpg --dearmor -o /etc/apt/keyrings/grafana.gpg --yes"
     run_sh "echo 'deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main' \
         > /etc/apt/sources.list.d/grafana.list"
-    run_sh "DEBIAN_FRONTEND=noninteractive apt-get update -qq"
-    run_sh "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq grafana"
+    run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} update -q"
+    run_sh "DEBIAN_FRONTEND=noninteractive apt-get ${APT_OPTS} install -y -q grafana"
 
     write_managed_block /etc/grafana/grafana.ini "INSPECT" "$(cat <<GRAFANAINI
 [server]
@@ -1304,7 +1418,9 @@ GRAFANAINI
         record_credential "GRAFANA_ADMIN_PASSWORD=${gf_pass}"
     fi
 
-    run systemctl enable --now grafana-server
+    run systemctl enable grafana-server
+    # 同上：本步骤每次重写 grafana.ini，需 restart 才能生效
+    run systemctl restart grafana-server
     if [[ "$DRY_RUN" != true ]]; then
         sleep 5
         grafana-cli admin reset-admin-password "$gf_pass" >/dev/null 2>&1 || \
@@ -1429,11 +1545,11 @@ step_verify() {
     echo
     if [[ $failed -eq 0 ]]; then
         color "32" "═══════════════════════════════════════════════════════════"
-        success "部署完成，全部检查项通过"
+        success "验收通过，全部检查项均正常"
         color "32" "═══════════════════════════════════════════════════════════"
     else
         color "31" "═══════════════════════════════════════════════════════════"
-        error "部署完成，但有 ${failed} 项检查未通过，请查看上方输出"
+        error "验收未通过：${failed} 项检查失败，请查看上方输出"
         color "31" "═══════════════════════════════════════════════════════════"
     fi
 
@@ -1471,6 +1587,60 @@ SUMMARY
 # ==========================================
 # 主流程
 # ==========================================
+# 信号处理。原脚本无任何 trap：Ctrl+C 后静默死亡，不告知停在哪一步、
+# 系统处于何种状态、能否续跑——而此时 systemd 单元/用户/fstab 可能已写入。
+on_signal() {
+    local sig="$1"
+    heartbeat_stop
+    echo
+    error "部署被 ${sig} 中断"
+    if [[ -n "$CURRENT_STEP" ]]; then
+        error "  中断于步骤: ${CURRENT_STEP}（该步可能只完成了一半）"
+        error "  修复后可从该步续跑:"
+        error "    sudo ${SCRIPT_DIR}/deploy-ubuntu.sh --domain ${DOMAIN:-<域名>} --from ${CURRENT_STEP}"
+    fi
+    exit 130
+}
+
+# 执行单个步骤：登记当前步骤名、挂心跳、统计耗时、失败时给出续跑指引
+run_step() {
+    local key="$1" fn="$2"
+    should_run "$key" || return 0
+
+    CURRENT_STEP="$key"
+    local t0 rc=0
+    t0=$(date +%s)
+    heartbeat_start "步骤 ${key}"
+    "$fn" || rc=$?
+    heartbeat_stop
+    local elapsed=$(( $(date +%s) - t0 ))
+
+    if [[ $rc -ne 0 ]]; then
+        error "步骤 ${key} 失败（已用 $(fmt_dur "$elapsed")），退出码 ${rc}"
+        error "  修复后可从该步续跑:"
+        error "    sudo ${SCRIPT_DIR}/deploy-ubuntu.sh --domain ${DOMAIN} --from ${key}"
+        exit "$rc"
+    fi
+    dim "  [步骤 ${key} 用时 $(fmt_dur "$elapsed")]"
+}
+
+# 收尾横幅。必须独立于 step_verify：完成信号与验收结果是两件事，
+# 原先绑在一起，导致 --dry-run / --steps 跳过验收时一句提示都没有。
+final_banner() {
+    local total=$(( $(date +%s) - DEPLOY_START_TS ))
+    echo
+    if [[ "$DRY_RUN" == true ]]; then
+        color "33" "═══════════════════════════════════════════════════════════"
+        warn "预演完成（--dry-run），未做任何实际改动 · 用时 $(fmt_dur "$total")"
+        color "33" "═══════════════════════════════════════════════════════════"
+    else
+        color "32" "═══════════════════════════════════════════════════════════"
+        success "全部步骤执行完毕 · 总用时 $(fmt_dur "$total")"
+        color "32" "═══════════════════════════════════════════════════════════"
+    fi
+    dim "  已执行步骤: ${SELECTED_STEPS[*]}"
+}
+
 main() {
     parse_args "$@"
 
@@ -1479,19 +1649,24 @@ main() {
         exit 0
     fi
 
+    DEPLOY_START_TS=$(date +%s)
+    trap 'on_signal SIGINT' INT
+    trap 'on_signal SIGTERM' TERM
+
     mapfile -t SELECTED_STEPS < <(resolve_steps)
 
     preflight
 
-    if should_run system;     then step_system;     fi
-    if should_run postgres;   then step_postgres;   fi
-    if should_run redis;      then step_redis;      fi
-    if should_run backend;    then step_backend;    fi
-    if should_run frontend;   then step_frontend;   fi
-    if should_run nginx;      then step_nginx;      fi
-    if should_run monitoring; then step_monitoring; fi
-    if should_run verify;     then step_verify;     fi
+    run_step system     step_system
+    run_step postgres   step_postgres
+    run_step redis      step_redis
+    run_step backend    step_backend
+    run_step frontend   step_frontend
+    run_step nginx      step_nginx
+    run_step monitoring step_monitoring
+    run_step verify     step_verify
 
+    final_banner
     exit 0
 }
 

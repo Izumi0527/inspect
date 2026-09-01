@@ -59,9 +59,12 @@ main() {
     command -v curl >/dev/null 2>&1 || missing+=(curl ca-certificates)
     if [[ ${#missing[@]} -gt 0 ]]; then
         info "安装引导依赖: ${missing[*]}"
-        DEBIAN_FRONTEND=noninteractive apt-get update -qq \
+        # -o DPkg::Lock::Timeout: 新装机上 unattended-upgrades 常在后台持有
+        # dpkg 锁，apt 默认无限期等待且安静模式会吞掉等待提示，表现为静默挂死。
+        DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update -q \
             || die "apt-get update 失败，请检查网络与 apt 源"
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${missing[@]}" \
+        DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 \
+            install -y -q "${missing[@]}" \
             || die "安装 ${missing[*]} 失败"
     fi
 
