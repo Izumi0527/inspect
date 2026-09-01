@@ -416,4 +416,6 @@ AGENTS.md
 # docs 目录中仅保留正式项目架构文档进入版本控制，其余内容作为本地资料归档。
 /docs/*
 !/docs/PROJECT_ARCHITECTURE.md
+# discuss 目录存放讨论记录、评审与临时方案，同样作为本地资料归档，不进版本控制。
+/discuss/
 CLAUDE-FABLE-5.md
