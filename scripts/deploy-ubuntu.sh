@@ -436,6 +436,54 @@ preflight() {
 }
 
 # ==========================================
+# apt / dpkg 环境准备
+# ==========================================
+# 必须由 main 直接调用，而非并入 step_system：用 --from postgres 之类续跑时会跳过
+# system 步骤，而 postgres 同样大量装包，一样会踩到下面这两个坑。
+prepare_apt_env() {
+    if [[ "$DRY_RUN" == true ]]; then
+        dim "[dry-run] 准备 apt 环境（关闭 man-db 触发器、暂停自动更新）"
+        return 0
+    fi
+
+    # man-db 触发器会在装包后重建整个 man 索引，实测在低 IO 机器上可占用 20 分钟
+    # 以上，而对服务器部署毫无价值。它是「dpkg 已打印 Setting up / Processing
+    # triggers，apt 却迟迟不返回」的首要原因——进程没有死，只是在跑 mandb。
+    if command -v debconf-set-selections >/dev/null 2>&1; then
+        echo 'man-db man-db/auto-update boolean false' | debconf-set-selections 2>/dev/null || true
+        dim "  已关闭 man-db 自动索引重建"
+    fi
+
+    # unattended-upgrades 与部署争抢 dpkg 锁。APT_OPTS 里的 DPkg::Lock::Timeout
+    # 只覆盖「等锁」这一段；对端持锁跑 trigger 期间本进程依旧是静默等待，
+    # 从输出上无从判断是慢还是死。部署期间先停掉它，结束后由系统自行恢复。
+    if systemctl is-active --quiet unattended-upgrades 2>/dev/null; then
+        info "→ 暂停 unattended-upgrades（部署期间避免争抢 dpkg 锁）"
+        systemctl stop unattended-upgrades >/dev/null 2>&1 || true
+    fi
+
+    # 把「静默等锁」变成可见进度：装包前先等现存 apt/dpkg 进程退出。
+    # fuser 来自 psmisc，缺失时直接跳过——apt 自身仍有 Lock::Timeout 兜底。
+    if command -v fuser >/dev/null 2>&1; then
+        local waited=0
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+            [[ $waited -eq 0 ]] && info "→ 等待其他 apt/dpkg 进程释放锁"
+            sleep 5
+            waited=$((waited + 5))
+            if [[ $waited -ge 300 ]]; then
+                warn "dpkg 锁被占用已 ${waited}s，继续执行（apt 自身仍会重试等待）"
+                break
+            fi
+        done
+        if [[ $waited -gt 0 && $waited -lt 300 ]]; then
+            dim "  等待 ${waited}s 后锁已释放"
+        fi
+    fi
+
+    return 0
+}
+
+# ==========================================
 # 步骤 1: 系统基础配置
 # ==========================================
 step_system() {
@@ -1622,7 +1670,16 @@ run_step() {
     local t0 rc=0
     t0=$(date +%s)
     heartbeat_start "步骤 ${key}"
-    "$fn" || rc=$?
+    # 必须写成「先 set +e，子 shell 独立成句，再取 $?」这一形式，不可简写。
+    # 若写作 "$fn" || rc=$?，bash 会在整个 $fn 内部抑制 set -e：步骤中任何命令
+    # 失败都被静默跳过、函数最终仍返回 0，失败的部署会被判定为成功。实测中
+    # apt-get install 被 1800s 超时杀死后，postgres 步骤仍一路执行到底。
+    # 该抑制还会穿透子 shell，故 ( set -e; "$fn" ) || rc=$? 同样无效——子 shell
+    # 一旦处于 || 左侧便同样被抑制。步骤间状态经 CRED_FILE 落盘传递，隔离无副作用。
+    set +e
+    ( set -e; "$fn" )
+    rc=$?
+    set -e
     heartbeat_stop
     local elapsed=$(( $(date +%s) - t0 ))
 
@@ -1676,6 +1733,7 @@ main() {
     mapfile -t SELECTED_STEPS < <(resolve_steps)
 
     preflight
+    prepare_apt_env
 
     run_step system     step_system
     run_step postgres   step_postgres
