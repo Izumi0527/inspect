@@ -186,10 +186,21 @@ run_build() {
     with_timeout "$BUILD_TIMEOUT" "$*" bash -c "$*"
 }
 
+# 交互确认。不可交互时必须立即失败而非等待——「/dev/tty 是终端」不等于
+# 「本进程在前台进程组」，后台场景下 read 会收到 SIGTTIN 而被停止（State: T），
+# 表现为永久静默挂起，与本脚本要消灭的失败形态完全一致。
 confirm() {
     [[ "$ASSUME_YES" == true ]] && return 0
     [[ "$DRY_RUN" == true ]] && return 0
     local prompt="$1"
+
+    if [[ ! -t 0 ]] \
+        || [[ "$(ps -o stat= -p $$ 2>/dev/null)" != *+* ]]; then
+        error "需要交互确认，但当前 stdin 不可交互: ${prompt}"
+        error "  请追加 --yes 显式确认，或改在交互式终端中执行"
+        return 1
+    fi
+
     read -r -p "$prompt [y/N] " reply
     [[ "$reply" =~ ^[Yy]$ ]]
 }
@@ -1647,6 +1658,15 @@ main() {
     if [[ "$HELP" == true ]]; then
         show_help
         exit 0
+    fi
+
+    # 非交互模式下彻底断开 stdin。此时 confirm() 不读输入，而 apt 的 postinst
+    # 若继承到 /dev/tty 且本进程不在前台进程组，读取时会收到 SIGTTIN 被停止
+    # （State: T / wchan: do_signal_stop），表现为永久静默挂起。
+    # install.sh 已在交接处规避，但本脚本也可能被 CI、ssh host cmd 直接调用，
+    # 故在此再兜一层——防御要放在被绕不过去的位置。
+    if [[ "$ASSUME_YES" == true || "$DRY_RUN" == true ]]; then
+        exec </dev/null
     fi
 
     DEPLOY_START_TS=$(date +%s)
