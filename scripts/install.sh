@@ -18,8 +18,10 @@
 #   2. 源码克隆到中转目录而非 /opt/inspect/app：后者由 deploy-ubuntu.sh 以 inspect 用户身份
 #      管理，若在此处预先以 root 克隆，后续 `sudo -u inspect git pull` 会因属主不符而失败。
 #   3. 全部逻辑包在 main() 内、最后一行才调用：确保脚本未完整下载时不会执行到一半。
-#   4. 交接时显式 `< /dev/tty` 重定向：管道执行下 stdin 已被脚本自身占用且读空，
-#      deploy-ubuntu.sh 的 confirm() 会直接读到 EOF，静默跳过高危操作确认。
+#   4. 交接前「先判非交互意图，再判终端」，顺序不可颠倒：显式 `< /dev/tty` 的本意是让
+#      管道执行下的 confirm() 读到真实输入（stdin 已被脚本自身读空），但「/dev/tty 可
+#      打开」不等于「进程在前台进程组」。CI、nohup、ssh host cmd 等后台场景下把 stdin
+#      接过去，子进程一读就收到 SIGTTIN 被停止（State: T），表现为永久静默挂起。
 
 set -euo pipefail
 
@@ -94,24 +96,31 @@ main() {
     [[ -f "$deploy" ]] || die "未找到部署脚本: ${deploy}（仓库结构可能已变更）"
 
     # ---------- 交接给部署脚本 ----------
-    # 有可用控制终端时把 stdin 接回终端，保留 deploy-ubuntu.sh 的交互确认；
-    # 无终端（CI、无人值守）时要求调用方显式声明非交互意图，避免高危操作被静默确认。
-    if (exec 3</dev/tty) 2>/dev/null; then
-        info "移交部署脚本: scripts/deploy-ubuntu.sh $*"
-        exec bash "$deploy" "$@" </dev/tty
-    fi
-
+    # 已声明非交互意图的，直接断开 stdin 交接，不碰 /dev/tty。
+    # 这一分支必须在终端检测之前：这些参数下 confirm() 根本不读 stdin，
+    # 而把 stdin 接到 /dev/tty 反而会在后台进程组场景把 apt 的 postinst 挂死。
+    # 用 </dev/null 而非原样继承：curl|bash 下 stdin 已被读空，显式给 EOF 更确定。
     local arg
     for arg in "$@"; do
         case "$arg" in
             -y|--yes|--dry-run|-h|--help)
-                warn "未检测到控制终端，以非交互模式继续"
-                exec bash "$deploy" "$@"
+                info "移交部署脚本（非交互）: scripts/deploy-ubuntu.sh $*"
+                exec bash "$deploy" "$@" </dev/null
                 ;;
         esac
     done
 
-    die "未检测到控制终端，且未指定 --yes；请追加 --yes 显式确认非交互部署（或先用 --dry-run 预演）"
+    # 需要交互确认：既要 /dev/tty 可打开，还要本进程处于该终端的前台进程组，
+    # 否则子进程读 stdin 会触发 SIGTTIN 停止。ps 的 stat 字段含 '+' 即前台。
+    # ps 不可用时该判断为假，落到下方 die，属安全降级——宁可要求显式 --yes，
+    # 也不能静默挂起。
+    if (exec 3</dev/tty) 2>/dev/null \
+        && [[ "$(ps -o stat= -p $$ 2>/dev/null)" == *+* ]]; then
+        info "移交部署脚本: scripts/deploy-ubuntu.sh $*"
+        exec bash "$deploy" "$@" </dev/tty
+    fi
+
+    die "未检测到可交互的控制终端（或当前不在前台进程组）；请追加 --yes 显式确认非交互部署（或先用 --dry-run 预演）"
 }
 
 main "$@"
