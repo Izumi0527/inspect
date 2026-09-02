@@ -33,8 +33,10 @@ REPO_URL="https://github.com/Izumi0527/inspect.git"
 
 # 网络重试参数：跨境链路对 packagecloud / go.dev / nodesource 偶发 TLS 超时，
 # 显式限定单次超时并重试，优于默认行为下长时间挂死后一次性失败。
+# --max-time 必须有：--connect-timeout 只管 TCP 连接建立，TLS 握手卡死与
+# 慢速传输（涓流）不在其内，与 wget 的 FETCH_TIMEOUT 同一逻辑。
 WGET_RETRY_OPTS="--tries=3 --timeout=30"
-CURL_RETRY_OPTS="--retry 3 --retry-delay 2 --connect-timeout 15"
+CURL_RETRY_OPTS="--retry 3 --retry-delay 2 --connect-timeout 15 --max-time 120"
 
 # 依赖镜像源。默认国内源：本系统主要部署于国内内网，官方源在此不可达
 # （实测 proxy.golang.org 解析到 Google IP，全部模块 i/o timeout）。
@@ -45,9 +47,27 @@ NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 # 二进制下载源。与 GOPROXY 是两回事：GOPROXY 管 Go「模块」下载，
 # 这里管 Go「工具链」本身和 Prometheus 的 tar 包——两者在国内均实测超时
 # （go.dev 与 github.com/*/releases/download 都不可达）。
-GO_DL_BASE="${GO_DL_BASE:-https://mirrors.aliyun.com/golang}"
+#
+# GO_DL_BASE 置空（默认）时使用下方内置镜像链自动回退；显式指定（--go-mirror）
+# 则置于链首，失败后仍依次回退内置链。链的顺序即适用环境顺序：国内镜像在前，
+# 官方源殿后——真实故障是海外 VPS 访问阿里云镜像涓流传输，wget --timeout=30
+# 只管 connect/read 对此永不触发，-q 又吞掉了全部进度，表现即「安装 Go」后
+# 静默假死 30 分钟直到外层超时。多源回退让单一链路故障不再致命。
+GO_DL_BASE="${GO_DL_BASE:-}"
+# 链内成员须逐一实测可达（wget --spider 校验 200）再写入：华为云 /golang/ 已改
+# 401、清华/腾讯路径 404、中科大 403，均不可用；南京大学实测 200。
+GO_DL_MIRRORS=(
+    "https://mirrors.aliyun.com/golang"
+    "https://mirror.nju.edu.cn/golang"
+    "https://go.dev/dl"
+)
 # GitHub 下载前缀，置空即直连 github.com。境外部署: --gh-proxy ''
 GH_PROXY="${GH_PROXY:-https://ghfast.top/}"
+
+# 单一下载源的总时长上限（秒）。wget --timeout 只覆盖连接/读空闲，DNS 挂起、
+# TLS 握手卡死、涓流传输都不在其内，必须外挂硬超时把「死源」变成「换源」。
+# 70MB 的 tar 包按 128KB/s 慢速链路约需 570s，故默认 600。
+FETCH_TIMEOUT="${FETCH_TIMEOUT:-600}"
 
 # 单条命令的墙钟超时上限（秒）。必须外挂硬超时：apt 的 Acquire::Timeout 只管
 # 「空闲无数据」不管总时长，慢速链路（几 KB/s）永不触发，表现为静默挂死。
@@ -178,22 +198,48 @@ run() {
     with_timeout "$CMD_TIMEOUT" "$*" "$@"
 }
 
-# 执行 shell 片段（含管道/重定向）
+# 执行 shell 片段（含管道/重定向）。必须显式 -o pipefail：父 shell 的该选项
+# 不跨 bash -c 继承（实测 set -euo pipefail 下 bash -c 'false | echo hi' 返回 0），
+# 否则 nodesource 的 curl | bash 在 curl 下载失败时被空输入的 bash - 判为成功，
+# 静默跳过 Node 20 源配置，apt 随即装上 Ubuntu 自带的 Node 18 继续构建。
 run_sh() {
     if [[ "$DRY_RUN" == true ]]; then
         dim "[dry-run] $*"
         return 0
     fi
-    with_timeout "$CMD_TIMEOUT" "$*" bash -c "$*"
+    with_timeout "$CMD_TIMEOUT" "$*" bash -o pipefail -c "$*"
 }
 
-# 长耗时构建专用（go build / pnpm install / next build）：超时上限更宽
+# 长耗时构建专用（go build / pnpm install / next build）：超时上限更宽。
+# pipefail 理由同 run_sh。
 run_build() {
     if [[ "$DRY_RUN" == true ]]; then
         dim "[dry-run] $*"
         return 0
     fi
-    with_timeout "$BUILD_TIMEOUT" "$*" bash -c "$*"
+    with_timeout "$BUILD_TIMEOUT" "$*" bash -o pipefail -c "$*"
+}
+
+# 多源依次尝试的文件下载。三条硬约束，均来自真实故障：
+# 1) 进度可见——-q 连进度条一并吞掉，用户无从区分慢与死（Go 步骤假死截图）；
+# 2) 单源限时 FETCH_TIMEOUT——wget --timeout 只管连接/读空闲，DNS 挂起与
+#    涓流传输永不触发，死源必须被外挂超时打断后换源，而非挂到外层 1800s；
+# 3) 失败自动回退下一源——镜像链路故障不该让整个部署失败。
+# 用法: fetch_file <目标路径> <URL> [<URL>...]
+fetch_file() {
+    local dest="$1"; shift
+    local url rc=1
+    for url in "$@"; do
+        info "  ↓ ${url}"
+        if run_sh "timeout ${FETCH_TIMEOUT} wget -q --show-progress ${WGET_RETRY_OPTS} -O '${dest}' '${url}'"; then
+            rc=0
+            break
+        fi
+        rm -f "$dest" 2>/dev/null || true
+        warn "  该源下载失败，回退下一源（如有）"
+    done
+    [[ $rc -eq 0 ]] || die "所有下载源均失败，最后尝试: $*
+  可用 --go-mirror / --gh-proxy 指定源；跨境涓流链路可放大 FETCH_TIMEOUT（秒）"
 }
 
 # 交互确认。不可交互时必须立即失败而非等待——「/dev/tty 是终端」不等于
@@ -295,10 +341,10 @@ show_help() {
                            境外部署改用 https://proxy.golang.org,direct
   --npm-registry <URL>     npm 源，默认 https://registry.npmmirror.com
                            境外部署改用 https://registry.npmjs.org
-  --go-mirror <URL>        Go 工具链下载前缀，默认 https://mirrors.aliyun.com/golang
-                           境外部署改用 https://go.dev/dl
-  --gh-proxy <URL>         GitHub 下载加速前缀，默认 https://ghfast.top/
-                           境外部署传空串 '' 直连 github.com
+  --go-mirror <URL>        Go 工具链下载源，置于回退链首。内置链: 阿里云 → 南大 → go.dev，
+                           失败自动换源；默认无需指定
+  --gh-proxy <URL>         GitHub 下载加速前缀，默认 https://ghfast.top/，
+                           失败自动回退直连；境外部署可不指定
   --yes, -y                跳过所有交互确认
   --dry-run                仅打印将要执行的操作，不做任何改动
   --help, -h               显示帮助
@@ -330,10 +376,10 @@ show_help() {
 说明:
   - 脚本幂等，可重复执行
   - 单命令硬超时: CMD_TIMEOUT（默认 1800s）/ BUILD_TIMEOUT（默认 3600s）
+  - 文件下载单源限时: FETCH_TIMEOUT（默认 600s），超时自动换下一源
   - 任一步骤失败或被 Ctrl+C 中断，都会提示可用 --from <step> 从该步续跑
   - 境外服务器一次性切回官方源:
-      --goproxy https://proxy.golang.org,direct --npm-registry https://registry.npmjs.org \
-      --go-mirror https://go.dev/dl --gh-proxy ''
+      --goproxy https://proxy.golang.org,direct --npm-registry https://registry.npmjs.org
   - 生成的所有密码写入 /opt/inspect/config/credentials.txt (权限 600)
   - 详细部署说明见 docs/deployment/ubuntu-production.md
 EOF
@@ -888,8 +934,19 @@ step_backend() {
     if [[ -x /usr/local/go/bin/go ]] && /usr/local/go/bin/go version 2>/dev/null | grep -q "go${GO_VERSION}"; then
         dim "  Go ${GO_VERSION} 已安装，跳过"
     else
-        run_sh "wget -q ${WGET_RETRY_OPTS} -O /tmp/go.tar.gz \
-            ${GO_DL_BASE}/go${GO_VERSION}.linux-amd64.tar.gz"
+        local go_tar="go${GO_VERSION}.linux-amd64.tar.gz"
+        # 自定义源置首，内置链去重殿后——阿里云链路故障（海外涓流）时自动
+        # 落到华为云/官方源，不再单源等死
+        local -a go_urls=()
+        [[ -n "$GO_DL_BASE" ]] && go_urls+=("${GO_DL_BASE}/${go_tar}")
+        local m
+        for m in "${GO_DL_MIRRORS[@]}"; do
+            [[ " ${go_urls[*]:-} " != *" ${m}/${go_tar} " ]] && go_urls+=("${m}/${go_tar}")
+        done
+        fetch_file /tmp/go.tar.gz "${go_urls[@]}"
+        # gzip -t 读全量校验 CRC：<1s，把「半截文件」的归因停在下载阶段，
+        # 而不是让 tar 报一句含糊的 unexpected EOF
+        run_sh "gzip -t /tmp/go.tar.gz"
         run_sh "rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tar.gz && rm -f /tmp/go.tar.gz"
         run_sh "echo 'export PATH=\$PATH:/usr/local/go/bin' > /etc/profile.d/go.sh"
     fi
@@ -988,6 +1045,22 @@ ENVEOF
     run chown "$APP_USER:$APP_USER" "${APP_BIN}/inspect-api"
     run chmod 755 "${APP_BIN}/inspect-api"
 
+    # seed 工具随主程序一起编译：数据库里没有任何环节会自动创建 admin 账户
+    # （database-init-complete.sql 只插业务数据，cmd/api 启动只做 GORM 建表迁移），
+    # 若部署后不显式执行 seed，登录页将无账号可登，而 verify 只查进程与 /health，
+    # 全绿通过也暴露不了。历史版本曾因此出现「部署成功却无人能登录」。
+    run_build "sudo -u ${APP_USER} env \
+        HOME=${APP_ROOT} \
+        GOCACHE=${APP_ROOT}/.cache/go-build \
+        GOMODCACHE=${APP_ROOT}/.cache/go-mod \
+        GOPROXY=${GOPROXY_URL} \
+        PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+        CGO_ENABLED=0 \
+        go -C ${APP_SRC}/backend-go build -ldflags='-s -w' -o ${APP_BIN}/inspect-seed.new ./cmd/seed"
+    run mv "${APP_BIN}/inspect-seed.new" "${APP_BIN}/inspect-seed"
+    run chown "$APP_USER:$APP_USER" "${APP_BIN}/inspect-seed"
+    run chmod 755 "${APP_BIN}/inspect-seed"
+
     # 初始化 SQL 需要执行两次，这不是冗余：
     #   第一次（此处）建立不依赖后端的表与 hypertable；
     #   第二次（后端健康检查通过后）建立 device_status_history / user_activity_logs——
@@ -1082,6 +1155,29 @@ UNITEOF
     info "→ 初始化数据库结构（幂等，补齐外键依赖表）"
     apply_init_sql
 
+    info "→ 初始化管理员账户"
+    local admin_pass
+    if grep -q '^ADMIN_PASSWORD=' "$CRED_FILE" 2>/dev/null; then
+        admin_pass="$(grep '^ADMIN_PASSWORD=' "$CRED_FILE" | tail -1 | cut -d= -f2-)"
+        dim "  复用已生成的管理员密码"
+    elif [[ "$DRY_RUN" == true ]]; then
+        admin_pass="<generated>"
+    else
+        # 16 位：初始口令在首次登录时强制修改，无需 32 位长驻强度
+        admin_pass="$(gen_secret 16)"
+        record_credential "ADMIN_PASSWORD=${admin_pass}"
+    fi
+    if [[ "$DRY_RUN" != true ]]; then
+        # 密码经环境变量传递而非 --password 参数：argv 对同机所有用户经 ps 可见，
+        # environ 仅 root 可读。--skip-migrate：后端健康检查已通过 = 迁移已完成，
+        # 再跑一次只会与运行中的服务竞争表锁。seed 对已存在的 admin 是按提供的
+        # 口令 UPDATE（含 hashed_password），重跑部署复用同一密码故幂等无害。
+        run_sh "sudo -u ${APP_USER} env HOME=${APP_ROOT} ENV_FILE=${ENV_FILE} \
+            INSPECT_SEED_PASSWORD='${admin_pass}' ${APP_BIN}/inspect-seed --skip-migrate" \
+            || die "admin 初始化失败（口令已写入 ${CRED_FILE} 的 ADMIN_PASSWORD，可修复后重跑本步）"
+        dim "  账号 admin 已就绪（首次登录强制修改密码）"
+    fi
+
     success "后端已启动"
 }
 
@@ -1121,9 +1217,11 @@ FEEOF
     fi
 
     info "→ 安装依赖并构建（构建期是内存峰值，上限 ${BUILD_MEM_MB} MB）"
+    # pnpm install 不可加 --silent：几百 MB 依赖下载期间必须可见进度，
+    # 否则与 Go 工具链下载一样「慢与死不可区分」（--silent 连 reporter 一并静音）
     run_build "cd ${APP_SRC}/frontend && sudo -u ${APP_USER} env HOME=${APP_ROOT} \
         npm_config_registry=${NPM_REGISTRY} \
-        pnpm install --frozen-lockfile --silent"
+        pnpm install --frozen-lockfile"
     run_build "cd ${APP_SRC}/frontend && sudo -u ${APP_USER} env HOME=${APP_ROOT} \
         npm_config_registry=${NPM_REGISTRY} \
         NODE_OPTIONS='--max-old-space-size=${BUILD_MEM_MB}' NEXT_TELEMETRY_DISABLED=1 \
@@ -1397,8 +1495,13 @@ step_monitoring() {
     if command -v prometheus &>/dev/null && prometheus --version 2>&1 | grep -q "$PROM_VERSION"; then
         dim "  Prometheus ${PROM_VERSION} 已安装，跳过"
     else
-        run_sh "wget -q ${WGET_RETRY_OPTS} -O /tmp/prom.tar.gz \
-            ${GH_PROXY}https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
+        # 与 Go 工具链同一故障面：代理源挂死不能阻断部署，代理失败回退直连
+        local prom_url="https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/prometheus-${PROM_VERSION}.linux-amd64.tar.gz"
+        local -a prom_urls=()
+        [[ -n "$GH_PROXY" ]] && prom_urls+=("${GH_PROXY}${prom_url}")
+        prom_urls+=("${prom_url}")
+        fetch_file /tmp/prom.tar.gz "${prom_urls[@]}"
+        run_sh "gzip -t /tmp/prom.tar.gz"
         run_sh "tar -xzf /tmp/prom.tar.gz -C /tmp"
         run_sh "id prometheus &>/dev/null || useradd -rs /bin/false prometheus"
         run mkdir -p /etc/prometheus /var/lib/prometheus
@@ -1590,6 +1693,14 @@ step_verify() {
     check "HTTPS 入口"     curl -fskS --max-time 5 -o /dev/null "https://127.0.0.1/"
 
     echo
+    info "账户状态:"
+    # 进程与端点全绿不代表能登录：admin 行由 seed 步骤写入，缺失时部署必须在此显形，
+    # 而不是等用户拿「默认账号」登录失败才被发现
+    check "admin 账户已初始化" \
+        sudo -u postgres psql -d inspect_system -tAc \
+        "SELECT 1 FROM users WHERE username='admin' AND is_active" | grep -q 1
+
+    echo
     info "数据库扩展与时序策略:"
     local ext_count job_count ht_count
     ext_count=$(sudo -u postgres psql -d inspect_system -tAc \
@@ -1626,7 +1737,7 @@ step_verify() {
 
 访问地址   : https://${DOMAIN}
 默认账号   : admin （首次登录强制修改密码）
-凭据文件   : ${CRED_FILE}  (权限 600，请妥善备份)
+初始密码   : 见 ${CRED_FILE} 中 ADMIN_PASSWORD 字段 (权限 600，请妥善备份)
 
 消除浏览器证书警告（脚本签发的是自签证书，客户端需导入一次；
 若已换用受信任 CA 签发的证书则忽略本节）:
