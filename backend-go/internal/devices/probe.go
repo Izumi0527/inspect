@@ -312,11 +312,14 @@ func probeSNMP(
 	}
 
 	start := time.Now()
+	// 超时/重试与 SNMPCollector.createSNMPTarget 保持一致：二者面对同一批设备，
+	// 参数不一致会出现「探测失败而指标采集成功」的矛盾表现。慢速设备（CPU 高、
+	// 链路抖动）3s×1 次重试不够。
 	target := &gosnmp.GoSNMP{
 		Target:  ipAddress,
 		Port:    config.port,
-		Timeout: 3 * time.Second,
-		Retries: 1,
+		Timeout: 5 * time.Second,
+		Retries: 2,
 	}
 
 	switch config.version {

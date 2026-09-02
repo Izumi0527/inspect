@@ -1121,9 +1121,13 @@ ExecStart=${APP_BIN}/inspect-api
 Restart=always
 RestartSec=5s
 
-# 绑定 162/udp 特权端口，无需 root
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# 绑定 162/udp 特权端口；CAP_NET_RAW 供探测的系统 ping 使用——Ubuntu 的 ping
+# 依赖自身 file capability (cap_net_raw=ep)，而单元 NoNewPrivileges=true 会屏蔽
+# exec 时的 file capability，实测报「missing cap_net_raw+p capability or setuid」，
+# 探测的 ICMP 永远失败。Ambient 能力随 exec 保留（NNP 下同样生效），由服务进程
+# 直接持有，不依赖 ping 二进制的特权位。
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_RAW
 
 # 并发 SSH/SNMP 连接需要充足句柄
 LimitNOFILE=65536

@@ -303,6 +303,17 @@ grep -q "admin 账户已初始化" "$TARGET" \
     && ok "verify 显式检查 admin 账户" \
     || ng "verify 不检查 admin" "账户缺失被进程全绿掩盖，用户登录失败才发现"
 
+printf '\n\033[36m服务单元权限\033[0m\n'
+
+# ---------- 用例 20：后端单元必须携带 CAP_NET_RAW ----------
+# 探测经 exec.CommandContext 调系统 ping；Ubuntu 的 ping 依赖自身 file capability
+# (cap_net_raw=ep)，而单元 NoNewPrivileges=true 会屏蔽 exec 时的 file capability
+# （WSL systemd 实测报 missing cap_net_raw+p capability or setuid），探测 ICMP 永远
+# 失败。必须由服务进程以 Ambient 能力直接持有 cap_net_raw。
+grep -q 'AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW' "$TARGET" \
+    && ok "后端单元 Ambient 携带 CAP_NET_RAW（探测 ping 可用）" \
+    || ng "后端单元缺少 CAP_NET_RAW" "NoNewPrivileges 屏蔽 ping 的 file capability，探测 ICMP 必然失败"
+
 printf '\n'
 if [[ "$FAIL" -gt 0 ]]; then
     printf '\033[31m失败 %d 项\033[0m，通过 %d 项\n' "$FAIL" "$PASS"
