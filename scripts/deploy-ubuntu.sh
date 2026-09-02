@@ -122,12 +122,22 @@ fmt_dur() { printf '%dm%02ds' $(( $1 / 60 )) $(( $1 % 60 )); }
 
 # 带硬超时执行。本脚本对「命令返回错误」防御完备，却对「命令永不返回」
 # 毫无防御——后者才是部署卡死的实际形态（apt 等 dpkg 锁 / 镜像慢速传输）。
+#
+# --foreground 不可省略：GNU timeout 默认 setpgid(0,0) 把被管命令挪进新的
+# 后台进程组（控制终端的前台组仍是本脚本所在组）。apt 在 dpkg 收尾时会
+# tcsetattr 恢复终端属性，而后台进程组一旦 tcsetattr，内核即对其发送
+# SIGTTOU；apt 不屏蔽该信号被就地停住，timeout 自己却忽略 SIGTTOU/SIGTTIN
+# 照常等待——表现为「输出全部打完便静默假死」，直到 secs 超时才被唤醒
+# 强杀（真实故障：redis 步骤打印完 Processing triggers 后停摆 2 分钟以上）。
+# 加 --foreground 让命令留在前台进程组，SIGTTOU/SIGTTIN 一并消除；代价是
+# 超时信号只送达直接子进程（bash -c），孙进程会成为孤儿——但超时本就是
+# 异常路径，让 apt 跑完收尾远好于留一个停止状态占着 dpkg 锁的僵尸。
 # 用法: with_timeout <秒> <描述> <命令...>
 with_timeout() {
     local secs="$1" desc="$2"
     shift 2
     local rc=0
-    timeout --signal=TERM --kill-after=30 "$secs" "$@" || rc=$?
+    timeout --foreground --signal=TERM --kill-after=30 "$secs" "$@" || rc=$?
     if [[ $rc -eq 124 || $rc -eq 137 ]]; then
         error "命令超过 ${secs}s 未完成，已强制终止:"
         error "  ${desc}"

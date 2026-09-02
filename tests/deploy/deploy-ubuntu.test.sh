@@ -19,6 +19,7 @@ PASS=0
 FAIL=0
 ok() { PASS=$((PASS + 1)); printf '  \033[32m✓\033[0m %s\n' "$1"; }
 ng() { FAIL=$((FAIL + 1)); printf '  \033[31m✗\033[0m %s\n' "$1"; [[ $# -gt 1 ]] && printf '      %s\n' "$2"; }
+skip() { printf '  \033[90m- %s（跳过：%s）\033[0m\n' "$1" "$2"; }
 
 [[ -f "$TARGET" ]] || { printf '未找到被测脚本: %s\n' "$TARGET" >&2; exit 1; }
 
@@ -106,13 +107,53 @@ printf '\n\033[36mapt 环境准备\033[0m\n'
 # ---------- 用例 4：man-db 触发器必须被关闭 ----------
 grep -q 'man-db/auto-update boolean false' "$TARGET" \
     && ok "已禁用 man-db 自动索引重建" \
-    || ng "未禁用 man-db 触发器" "它是 apt 装完却不返回的首要原因"
+    || ng "未禁用 man-db 触发器" "装包后会重建整个 man 索引，对服务器部署毫无价值"
 
 # ---------- 用例 5：准备逻辑必须在 main 中被调用 ----------
 # 只放进 step_system 是不够的：--from postgres 续跑会跳过该步骤。
 grep -qE '^\s+prepare_apt_env' "$TARGET" \
     && ok "prepare_apt_env 在 main 中被调用（--from 续跑同样生效）" \
     || ng "prepare_apt_env 未在 main 中调用"
+
+printf '\n\033[36m超时包装与终端作业控制\033[0m\n'
+
+# ---------- 用例 6：with_timeout 不得把命令放进后台进程组 ----------
+# GNU timeout 默认 setpgid(0,0) 新建进程组，被管命令却仍继承控制终端。后台进程组
+# 对终端做 tcsetattr 会被内核以 SIGTTOU 停止（读终端则是 SIGTTIN），而 timeout 自身
+# 忽略这两个信号不受影响。apt 在 dpkg 结束后恰会 tcsetattr(stdin) 恢复终端且不屏蔽
+# SIGTTOU——交互模式下它在打印完 Processing triggers 之后静默停住，直到 1800s 超时
+# 才被唤醒杀死。静态断言 --foreground 标志，所有平台都能跑。
+grep -qE '^\s+timeout\s+--foreground\b' "$TARGET" \
+    && ok "with_timeout 使用 timeout --foreground（不新建后台进程组）" \
+    || ng "with_timeout 未使用 --foreground" "被管命令位于后台进程组，apt 收尾 tcsetattr 会触发 SIGTTOU 静默停摆"
+
+# ---------- 用例 7：pty 下行为复现 ----------
+# 用 script(1) 分配 pty 并让被测 shell 成为其前台进程组，再经 with_timeout 执行
+# stty -echo——它对 stdin 做的 tcsetattr 与 apt 收尾完全相同。有缺陷时 stty 被停住，
+# 直到 6s 超时才返回 124；正确实现瞬间返回 0。
+WT_SRC="$(extract_fn with_timeout)"
+if [[ -z "$WT_SRC" ]]; then
+    ng "未能提取 with_timeout() 定义"
+elif ! command -v script >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
+    skip "pty 下 tcsetattr 不触发 SIGTTOU 停止" "缺少 script(1)/timeout(1)，请在 Linux/WSL 下运行"
+else
+    probe="$(mktemp)"
+    {
+        printf '%s\n' "$WT_SRC"
+        printf '%s\n' 'error() { :; }'
+        printf '%s\n' 't0=$(date +%s)'
+        printf '%s\n' 'with_timeout 6 "stty probe" stty -echo; rc=$?'
+        printf '%s\n' 'stty echo 2>/dev/null'
+        printf '%s\n' 'echo "PROBE rc=$rc elapsed=$(( $(date +%s) - t0 ))s"'
+    } >"$probe"
+    out="$(timeout -s KILL 20 script -qec "bash '$probe'" /dev/null </dev/null 2>&1 | tr -d '\r')"
+    rm -f "$probe"
+    if grep -q 'PROBE rc=0 ' <<<"$out"; then
+        ok "pty 下经 with_timeout 执行 tcsetattr 立即返回 0"
+    else
+        ng "pty 下经 with_timeout 执行 tcsetattr 未正常返回" "$(grep 'PROBE' <<<"$out" || echo "$out")"
+    fi
+fi
 
 printf '\n'
 if [[ "$FAIL" -gt 0 ]]; then
