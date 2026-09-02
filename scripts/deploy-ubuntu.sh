@@ -1027,6 +1027,11 @@ ENVEOF
     fi
 
     info "→ 编译后端（CGO_ENABLED=0 静态二进制）"
+    # 版本注入：与 build-release.sh 同一 ldflags -X 机制。原生部署此前无任何
+    # 注入，/health 永远返回 config.go 硬编码的 1.1.1——upgrade-ubuntu.sh 的
+    # 版本对比与升级断言都依赖真实的 /health version。VERSION 文件是版本权威源。
+    local app_ver
+    app_ver="$(cat "$APP_SRC/VERSION" 2>/dev/null || echo 0.0.0)"
     # 必须显式传 HOME/GOCACHE：sudo 默认重置环境，Go 的构建缓存默认落在
     # $HOME/.cache/go-build，HOME 缺失或不可写会导致构建失败。
     # GOPROXY 同理必须显式传：不传则走默认 proxy.golang.org（Google IP），
@@ -1040,7 +1045,9 @@ ENVEOF
         GOPROXY=${GOPROXY_URL} \
         PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
         CGO_ENABLED=0 \
-        go -C ${APP_SRC}/backend-go build -ldflags='-s -w' -o ${APP_BIN}/inspect-api.new ./cmd/api"
+        go -C ${APP_SRC}/backend-go build \
+        -ldflags=\"-s -w -X github.com/your-org/inspect-system/backend-go/internal/config.defaultAppVersion=${app_ver}\" \
+        -o ${APP_BIN}/inspect-api.new ./cmd/api"
     run mv "${APP_BIN}/inspect-api.new" "${APP_BIN}/inspect-api"
     run chown "$APP_USER:$APP_USER" "${APP_BIN}/inspect-api"
     run chmod 755 "${APP_BIN}/inspect-api"
@@ -1056,7 +1063,9 @@ ENVEOF
         GOPROXY=${GOPROXY_URL} \
         PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
         CGO_ENABLED=0 \
-        go -C ${APP_SRC}/backend-go build -ldflags='-s -w' -o ${APP_BIN}/inspect-seed.new ./cmd/seed"
+        go -C ${APP_SRC}/backend-go build \
+        -ldflags=\"-s -w -X github.com/your-org/inspect-system/backend-go/internal/config.defaultAppVersion=${app_ver}\" \
+        -o ${APP_BIN}/inspect-seed.new ./cmd/seed"
     run mv "${APP_BIN}/inspect-seed.new" "${APP_BIN}/inspect-seed"
     run chown "$APP_USER:$APP_USER" "${APP_BIN}/inspect-seed"
     run chmod 755 "${APP_BIN}/inspect-seed"

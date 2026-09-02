@@ -20,6 +20,7 @@ scripts/
 ├── clean-cache.ps1    # 缓存、临时文件、日志和测试产物清理
 ├── clean-cache.sh     # 缓存、临时文件、日志和测试产物清理 Bash 版
 ├── deploy-ubuntu.sh   # Ubuntu 生产环境一键原生部署（无 Docker，仅 Linux 目标）
+├── upgrade-ubuntu.sh  # Ubuntu 已部署机器的版本升级（备份/版本对比/注入构建/失败自动回滚）
 ├── install.sh         # 远程一键安装引导（curl | bash，校验系统后移交 deploy-ubuntu.sh）
 ├── uninstall.sh       # Ubuntu 卸载（默认保留数据库与备份，--purge-data 才彻底删除）
 ├── build-release.sh   # 构建 Linux 发布产物（后端静态二进制 + SQL + sha256）
@@ -29,8 +30,22 @@ scripts/
 
 > Python 后端相关脚本已迁移至 `legacy/scripts/`，仅保留历史参考。
 
-> `deploy-ubuntu.sh`、`install.sh`、`uninstall.sh` 是**目标平台专用**脚本，运行于待部署的
+> `deploy-ubuntu.sh`、`upgrade-ubuntu.sh`、`install.sh`、`uninstall.sh` 是**目标平台专用**脚本，运行于待部署的
 > Ubuntu 主机而非开发机，因此不提供 `.ps1` 对应版本。详见 [docs/deployment/ubuntu-production.md](../docs/deployment/ubuntu-production.md)。
+
+## 版本升级（upgrade-ubuntu.sh）
+
+面向「已按 deploy-ubuntu.sh 部署、需要升级应用版本」的机器：
+
+```bash
+sudo /opt/inspect/app/scripts/upgrade-ubuntu.sh                  # 升级到 main 最新
+sudo /opt/inspect/app/scripts/upgrade-ubuntu.sh --version v1.2.0 # 指定 tag/分支/commit
+sudo /opt/inspect/app/scripts/upgrade-ubuntu.sh --dry-run        # 预演
+```
+
+流程：版本对比 → 升级前 `pg_dump` 备份 → 更新源码 → 注入版本号构建前后端
+（后端原子替换，旧二进制保留为 `inspect-api.prev`）→ 重启 → `/health` 版本断言；
+验证失败自动还原旧二进制并恢复服务。`.env`/`credentials.txt` 与数据库全程保留。
 
 ## 远程一键安装（install.sh）
 
