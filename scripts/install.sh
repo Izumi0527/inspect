@@ -70,22 +70,60 @@ main() {
             || die "安装 ${missing[*]} 失败"
     fi
 
+    # ---------- git 网络操作封装 ----------
+    # 跨境链路对 github.com 偶发 TLS 中断（GnuTLS -110 / schannel 握手失败），与
+    # deploy-ubuntu.sh 中 CURL_RETRY_OPTS 应对的是同一类问题，此处为 git 补齐等价防护。
+    # 按失败原因分流：网络抖动重试有意义，ref 不存在则重试多少次都是徒劳，且必须
+    # 把 git 的原始报错透传给用户，不替他臆断原因（否则会把排查引向错误方向）。
+    # 返回码：0=成功；1=网络故障且重试耗尽；2=其余原因（原始报错已写入 stderr）。
+    git_net_run() {
+        local what="$1"; shift
+        local max=3 attempt delay out
+        for ((attempt = 1; attempt <= max; attempt++)); do
+            if out="$("$@" 2>&1)"; then
+                return 0
+            fi
+            # 仅在命中已知网络特征时才重试；识别不出的一律原样透传，宁可不重试也不误导
+            if ! grep -qiE 'gnutls|schannel|openssl|ssl_read|ssl connect|ssl/tls|could not resolve|failed to connect|connection (reset|refused|timed out)|operation timed out|network is unreachable|early eof|rpc failed|transfer closed|empty reply|timed out after' <<<"$out"; then
+                printf '%s\n' "$out" >&2
+                return 2
+            fi
+            if [[ "$attempt" -lt "$max" ]]; then
+                delay=$((attempt * 3))
+                warn "${what}失败（网络原因，第 ${attempt}/${max} 次），${delay}s 后重试"
+                sleep "$delay"
+            else
+                printf '%s\n' "$out" >&2
+            fi
+        done
+        return 1
+    }
+
     # ---------- 同步源码到中转目录 ----------
     info "同步源码 → ${STAGE_DIR} (ref: ${REF})"
     if [[ -e "$STAGE_DIR" && ! -d "$STAGE_DIR/.git" ]]; then
         die "${STAGE_DIR} 已存在且不是 git 仓库，请先移除或改用 INSPECT_STAGE_DIR 指定其他目录"
     fi
 
+    local sync_rc=0
     if [[ -d "$STAGE_DIR/.git" ]]; then
         git -C "$STAGE_DIR" remote set-url origin "$REPO_URL"
-        git -C "$STAGE_DIR" fetch --depth 1 origin "$REF" \
-            || die "拉取 ref '${REF}' 失败，请确认分支或 tag 是否存在"
+        git_net_run "拉取 ref '${REF}'" git -C "$STAGE_DIR" fetch --depth 1 origin "$REF" || sync_rc=$?
+        case "$sync_rc" in
+            0) ;;
+            1) die "拉取 ref '${REF}' 失败：与 GitHub 的连接不稳定，重试 3 次仍未成功；请检查网络或代理后重新执行" ;;
+            *) die "拉取 ref '${REF}' 失败，git 原始报错见上；若提示 couldn't find remote ref，说明该分支或 tag 在远端不存在" ;;
+        esac
         git -C "$STAGE_DIR" reset --hard FETCH_HEAD >/dev/null
         git -C "$STAGE_DIR" clean -fdx >/dev/null
     else
         mkdir -p "$(dirname "$STAGE_DIR")"
-        git clone --depth 1 --branch "$REF" "$REPO_URL" "$STAGE_DIR" \
-            || die "克隆失败，请确认网络可访问 GitHub 且 ref '${REF}' 存在"
+        git_net_run "克隆仓库" git clone --depth 1 --branch "$REF" "$REPO_URL" "$STAGE_DIR" || sync_rc=$?
+        case "$sync_rc" in
+            0) ;;
+            1) die "克隆仓库失败：与 GitHub 的连接不稳定，重试 3 次仍未成功；请检查网络或代理后重新执行" ;;
+            *) die "克隆失败，git 原始报错见上；若提示 Remote branch not found，说明 ref '${REF}' 在远端不存在" ;;
+        esac
     fi
 
     local head_sha

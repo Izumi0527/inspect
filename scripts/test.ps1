@@ -8,11 +8,12 @@
     - 后端：go build（可跳过）+ backend-go 单测 + tests/backend-go 外置测试模块
     - 前端：tsc 类型检查（可跳过）+ jest 单元测试
     - 安装包：installer 与 tests/installer PowerShell 脚本回归测试
+    - 部署脚本：tests/deploy 下 install.sh 等 Bash 脚本回归测试
 
     所有步骤默认全部执行并在结尾汇总；任一步骤失败则整体以非零码退出。
 
 .PARAMETER Scope
-    校验范围：all（默认）、backend、frontend、installer
+    校验范围：all（默认）、backend、frontend、installer、deploy
 
 .PARAMETER SkipBuild
     跳过后端 go build（仅跑测试）
@@ -41,7 +42,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet("all", "backend", "frontend", "installer")]
+    [ValidateSet("all", "backend", "frontend", "installer", "deploy")]
     [string]$Scope = "all",
 
     [switch]$SkipBuild,
@@ -206,11 +207,60 @@ function Test-Installer {
 Write-ColorOutput "🧪 测试校验入口 (范围: $Scope)" "Blue"
 Write-ColorOutput ("=" * 60) "Cyan"
 
+function Get-BashTestHost {
+    # System32\bash.exe 是 WSL 启动器，它把 C:\ 路径当作 Linux 路径解释，
+    # 与 Git Bash 语义不同，必须排除，否则测试会以令人费解的方式失败。
+    $found = @(
+        (Join-Path $env:ProgramFiles "Git\bin\bash.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "Git\bin\bash.exe")
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+
+    if ($found) {
+        return $found
+    }
+
+    $fromPath = Get-Command "bash.exe" -ErrorAction SilentlyContinue
+    if ($fromPath -and $fromPath.Source -notlike '*\System32\*') {
+        return $fromPath.Source
+    }
+
+    return $null
+}
+
+function Test-Deploy {
+    $deployTestsDir = Join-Path $ProjectRoot "tests/deploy"
+    if (-not (Test-Path -LiteralPath $deployTestsDir)) {
+        Write-ColorOutput "⚠️ 跳过部署脚本测试：未找到 tests/deploy 目录" "Yellow"
+        return
+    }
+
+    $testFiles = @(Get-ChildItem -LiteralPath $deployTestsDir -Filter "*.test.sh" -File)
+    if ($testFiles.Count -eq 0) {
+        Write-ColorOutput "⚠️ 跳过部署脚本测试：未找到测试文件" "Yellow"
+        return
+    }
+
+    $bashExe = Get-BashTestHost
+    if (-not $bashExe) {
+        Write-ColorOutput "⚠️ 跳过部署脚本测试：未找到 Git Bash（System32\bash.exe 为 WSL 启动器，不适用）" "Yellow"
+        return
+    }
+
+    foreach ($testFile in ($testFiles | Sort-Object FullName)) {
+        # Git Bash 的 dirname 不识别反斜杠，传反斜杠路径会让被测脚本算错项目根目录
+        $posixPath = $testFile.FullName.Replace('\', '/')
+        Invoke-Step -Name "部署脚本测试 ($($testFile.Name))" -WorkingDirectory $ProjectRoot -Action {
+            & $bashExe $posixPath
+        }
+    }
+}
+
 switch ($Scope) {
     "backend" { Test-Backend }
     "frontend" { Test-Frontend }
     "installer" { Test-Installer }
-    "all" { Test-Backend; Test-Frontend; Test-Installer }
+    "deploy" { Test-Deploy }
+    "all" { Test-Backend; Test-Frontend; Test-Installer; Test-Deploy }
 }
 
 Write-ColorOutput "`n$('=' * 60)" "Cyan"
