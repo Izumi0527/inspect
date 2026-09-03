@@ -28,11 +28,13 @@ less install.sh
 sudo bash install.sh --domain inspect.example.com
 ```
 
-生产环境建议锁定版本，避免装到未发布的主干提交：
+生产环境建议锁定版本，避免装到未发布的主干提交。仓库以根目录 `VERSION` 文件作为版本权威源，
+锁定 ref 支持分支、tag 或 commit 短 hash（尚未打 tag 时用 commit 即可）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Izumi0527/inspect/refs/tags/v1.1.1/scripts/install.sh \
-  | sudo INSPECT_REF=v1.1.1 bash -s -- --domain inspect.example.com --yes
+# 锁定到某个 commit（示例为 1.1.4 版本提交）
+curl -fsSL https://raw.githubusercontent.com/Izumi0527/inspect/3358ef7/scripts/install.sh \
+  | sudo INSPECT_REF=3358ef7 bash -s -- --domain inspect.example.com --yes
 ```
 
 | 环境变量 | 默认值 | 说明 |
@@ -82,6 +84,31 @@ Firefox 使用独立证书库，需在 `设置 → 隐私与安全 → 证书 �
 
 若已持有受信任 CA 签发的证书，在部署前放到 `/etc/nginx/ssl/inspect.crt` 与 `inspect.key`，
 脚本检测到其 SAN 已覆盖目标主机便会保留不动。
+
+### 版本升级（已部署环境）
+
+已按 `deploy-ubuntu.sh` 完成部署的机器，使用 [`scripts/upgrade-ubuntu.sh`](scripts/upgrade-ubuntu.sh)
+升级版本并更新代码，目标默认 `main` 最新：
+
+```bash
+sudo ./scripts/upgrade-ubuntu.sh                    # 升级到 main 最新
+sudo ./scripts/upgrade-ubuntu.sh --version v1.1.4   # 锁定到指定 tag / 分支 / commit
+sudo ./scripts/upgrade-ubuntu.sh --dry-run          # 仅打印将执行的操作，不产生任何变更
+sudo ./scripts/upgrade-ubuntu.sh --force            # 目标与当前一致时仍强制重建
+sudo ./scripts/upgrade-ubuntu.sh --yes              # CI/无终端场景必须显式 --yes
+```
+
+升级流程：探测当前版本 → 拉取目标 ref → 数据库备份 → 更新源码 → 注入版本号构建前后端 →
+原子替换二进制 → 重启 → **以 `/health` 返回的 version 是否等于目标版本作为升级成功依据**。
+后端健康检查或版本断言失败时自动回滚旧二进制并恢复服务。
+
+- 版本号权威源为仓库根 `VERSION` 文件：发布新版本时先更新该文件并提交，构建时经 ldflags
+  注入后端 `/health`、经 `NEXT_PUBLIC_APP_VERSION` 注入前端。
+- 升级前自动执行 `pg_dump` 备份到 `/opt/inspect/backups/postgres/`（`--skip-backup` 可跳过，
+  不建议在生产环境使用）；数据库结构变更由后端启动迁移自动完成。
+- 源码更新使用 `git reset --hard`，`/opt/inspect/app/data` 等运行时数据目录不受影响；
+  旧版后端二进制保留于 `/opt/inspect/bin/inspect-api.prev`，确认稳定后可删除。
+- 本地开发环境更新代码只需 `git pull` 后重启前后端服务。
 
 ### Windows 安装包
 
@@ -184,6 +211,7 @@ REDIS_URL=redis://:dev_redis_2024@127.0.0.1:16380/0
 | 脚本 | 用途 |
 |------|------|
 | `install.sh` / `deploy-ubuntu.sh` / `uninstall.sh` | Ubuntu 生产环境安装、部署与卸载（原生，无 Docker） |
+| `upgrade-ubuntu.sh` | Ubuntu 已部署环境的版本升级与代码更新（备份、构建、健康检查、失败自动回滚） |
 | `prod-start.*` | 生产环境 Docker Compose 启动、停止、状态与日志 |
 | `dev-start.*` / `db-manage.*` | 开发环境启动、数据库管理 |
 | `test.*` / `clean-cache.*` | 测试质量校验、清理缓存与运行时数据 |
@@ -203,7 +231,7 @@ REDIS_URL=redis://:dev_redis_2024@127.0.0.1:16380/0
 
 Made with ❤️ by Izumi0527
 
-**项目版本**: v1.1.1 | **API版本**: v1.1.1 | **最后更新**: 2026-08-26
+**项目版本**: v1.1.4 | **API版本**: v1.1.4 | **最后更新**: 2026-09-03
 
 版本号权威源为仓库根 `VERSION` 文件
 
