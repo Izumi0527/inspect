@@ -50,3 +50,18 @@ type LogParsingRule struct {
 func (LogParsingRule) TableName() string {
 	return "log_parsing_rules"
 }
+
+// DeviceSSHHostKey 记录设备 SSH 主机密钥指纹，用于 TOFU（首次信任）校验：
+// 首次连接时记录指纹，后续连接指纹不一致则拒绝，防止中间人伪装设备收割凭据。
+type DeviceSSHHostKey struct {
+	ID          int       `gorm:"primaryKey;autoIncrement"`
+	DeviceID    int       `gorm:"column:device_id;not null;uniqueIndex"`
+	Fingerprint string    `gorm:"column:fingerprint;size:128;not null"`
+	Algorithm   string    `gorm:"column:algorithm;size:50"`
+	CreatedAt   time.Time `gorm:"column:created_at;not null"`
+	UpdatedAt   time.Time `gorm:"column:updated_at;not null"`
+}
+
+func (DeviceSSHHostKey) TableName() string {
+	return "device_ssh_host_keys"
+}

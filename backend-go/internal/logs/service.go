@@ -283,12 +283,16 @@ func (s *Service) ListParsingRules(ctx context.Context) ([]LogParsingRule, error
 	return rows, nil
 }
 
+// ErrInvalidParsingRule 表示解析规则载荷校验失败，其错误信息可直接返回给客户端；
+// 其余错误（如数据库错误）不应透传原始信息，避免泄露内部细节。
+var ErrInvalidParsingRule = errors.New("invalid parsing rule")
+
 func (s *Service) CreateParsingRule(ctx context.Context, payload ParsingRulePayload) (LogParsingRule, error) {
 	if s == nil || s.db == nil {
 		return LogParsingRule{}, fmt.Errorf("database not initialized")
 	}
 	if strings.TrimSpace(payload.Name) == "" || strings.TrimSpace(payload.Vendor) == "" || strings.TrimSpace(payload.Pattern) == "" {
-		return LogParsingRule{}, fmt.Errorf("name, vendor and pattern are required")
+		return LogParsingRule{}, fmt.Errorf("%w: name, vendor and pattern are required", ErrInvalidParsingRule)
 	}
 
 	isActive := true
@@ -429,11 +433,22 @@ func (s *Service) buildLogQuery(ctx context.Context, filter LogFilter) *gorm.DB 
 		query = query.Where("l.log_timestamp <= ?", *filter.EndTime)
 	}
 	if filter.Search != nil && strings.TrimSpace(*filter.Search) != "" {
-		pattern := "%" + strings.TrimSpace(*filter.Search) + "%"
+		// 转义 LIKE 通配符，避免用户输入的 % / _ 被解释为通配符拖慢查询、扩大匹配范围
+		pattern := "%" + escapeLikePattern(strings.TrimSpace(*filter.Search)) + "%"
 		query = query.Where("(l.message ILIKE ? OR l.raw_message ILIKE ?)", pattern, pattern)
 	}
 
 	return query
+}
+
+// escapeLikePattern 转义 SQL LIKE/ILIKE 模式中的通配符与转义符。
+// PostgreSQL 默认以反斜杠作为 LIKE 的转义字符。
+func escapeLikePattern(raw string) string {
+	return strings.NewReplacer(
+		`\`, `\\`,
+		`%`, `\%`,
+		`_`, `\_`,
+	).Replace(raw)
 }
 
 func normalizeFilter(filter LogFilter) LogFilter {
@@ -544,7 +559,7 @@ func (s *Service) CollectDeviceLogs(ctx context.Context, deviceID int, logType s
 		return 0, ErrSSHNotConfigured
 	}
 
-	collector := NewSSHCollector()
+	collector := NewSSHCollector(s.db, s.logger)
 	entries, err := collector.Collect(ctx, info, logType, maxEntries)
 	if err != nil {
 		return 0, err

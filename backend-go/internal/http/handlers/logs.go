@@ -6,7 +6,9 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +46,10 @@ const (
 	logsReadPermission   = "system:logs"
 	logsManagePermission = "system:logs:manage"
 	maxExportDeviceIDs   = 200
+	// exportBatchSize 导出分批拉取的批大小，与 service 层单次查询上限（maxLogLimit）一致。
+	exportBatchSize = 1000
+	// exportMaxRows 单次导出的安全上限，防止无界导出拖垮后端。
+	exportMaxRows = 50000
 )
 
 func (h LogsHandler) Register(group *echo.Group) {
@@ -219,7 +225,10 @@ func (h LogsHandler) CollectDeviceLogs(c echo.Context) error {
 	}
 
 	payload := map[string]interface{}{}
-	_ = c.Bind(&payload)
+	// 空 body（io.EOF）合法；非法 JSON 返回 400，不再静默按默认值处理。
+	if err := c.Bind(&payload); err != nil && !errors.Is(err, io.EOF) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
 	if value, ok := payload["device_id"]; ok {
 		if parsed, ok := toInt(value); ok && parsed > 0 && parsed != deviceID {
 			return echo.NewHTTPError(http.StatusBadRequest, "device_id mismatch")
@@ -282,6 +291,10 @@ func (h LogsHandler) BatchCollectLogs(c echo.Context) error {
 	deviceIDs := parseIntListFromPayload(payload["device_ids"])
 	if len(deviceIDs) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
+	}
+	// 与导出端点的 device_ids 上限保持一致，防止超大列表拖垮后端。
+	if len(deviceIDs) > maxExportDeviceIDs {
+		return echo.NewHTTPError(http.StatusBadRequest, "device_ids exceeds limit")
 	}
 
 	logType := readString(payload, "log_type", "logType")
@@ -382,7 +395,8 @@ func (h LogsHandler) BatchDeleteLogs(c echo.Context) error {
 }
 
 func (h LogsHandler) CleanupDeviceLogs(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth, "system:config"); err != nil {
+	// 清理属于日志管理操作，但设置页（system:config）也提供该入口，故任一权限即可。
+	if _, err := requireAnyPermission(c, h.Auth, "system:config", logsManagePermission); err != nil {
 		return err
 	}
 	if h.Service == nil {
@@ -390,7 +404,10 @@ func (h LogsHandler) CleanupDeviceLogs(c echo.Context) error {
 	}
 
 	payload := map[string]interface{}{}
-	_ = c.Bind(&payload)
+	// 空 body（io.EOF）合法；非法 JSON 返回 400，不再静默按默认值处理。
+	if err := c.Bind(&payload); err != nil && !errors.Is(err, io.EOF) {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
 
 	before := readString(payload, "beforeDate", "before_date", "before")
 	retentionDays, hasRetention := readInt(payload, "retentionDays", "retention_days", "days")
@@ -626,7 +643,19 @@ func (h LogsHandler) CreateParsingRule(c echo.Context) error {
 
 	rule, err := h.Service.CreateParsingRule(c.Request().Context(), payload)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		switch {
+		case errors.Is(err, logs.ErrInvalidParsingRule):
+			// 载荷校验错误可直接透传给客户端
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		case errors.Is(err, gorm.ErrDuplicatedKey):
+			return echo.NewHTTPError(http.StatusBadRequest, "parsing rule name already exists")
+		default:
+			// 数据库等内部错误不透传原始信息，避免泄露内部细节
+			if h.Logger != nil {
+				h.Logger.Error("创建解析规则失败", zap.Error(err))
+			}
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to create parsing rule")
+		}
 	}
 
 	return c.JSON(http.StatusOK, rule)
@@ -705,21 +734,21 @@ func (h LogsHandler) ExportDeviceLogs(c echo.Context) error {
 	startTime, _ := parseTimeOptional(c.QueryParam("start_time"))
 	endTime, _ := parseTimeOptional(c.QueryParam("end_time"))
 
-	filter := buildLogFilter(c, 0, 10000)
+	filter := buildLogFilter(c, 0, exportBatchSize)
 	filter.DeviceID = &deviceID
 	filter.StartTime = startTime
 	filter.EndTime = endTime
 
-	rows, total, err := h.Service.ListLogs(c.Request().Context(), filter)
+	allItems, err := h.fetchLogsForExport(c.Request().Context(), filter)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to export logs")
 	}
-	if total == 0 {
+	if len(allItems) == 0 {
 		return echo.NewHTTPError(http.StatusNotFound, "no logs found")
 	}
 
 	filename := buildLogExportFilename(format, fmt.Sprintf("Device_%d", deviceID), startTime, endTime)
-	return writeLogsExport(c, format, filename, buildLogItems(rows), includeRaw, nil)
+	return writeLogsExport(c, format, filename, allItems, includeRaw, nil)
 }
 
 func (h LogsHandler) ExportLogs(c echo.Context) error {
@@ -749,28 +778,25 @@ func (h LogsHandler) ExportLogs(c echo.Context) error {
 
 	if len(deviceIDs) > 0 {
 		for _, id := range deviceIDs {
-			filter := buildLogFilter(c, 0, 10000)
+			filter := buildLogFilter(c, 0, exportBatchSize)
 			filter.DeviceID = &id
 			filter.StartTime = startTime
 			filter.EndTime = endTime
-			rows, _, err := h.Service.ListLogs(c.Request().Context(), filter)
+			items, err := h.fetchLogsForExport(c.Request().Context(), filter)
 			if err != nil {
 				return echo.NewHTTPError(http.StatusInternalServerError, "failed to export logs")
 			}
-			allLogs = append(allLogs, buildLogItems(rows)...)
+			allLogs = append(allLogs, items...)
 		}
 	} else {
-		filter := buildLogFilter(c, 0, 10000)
+		filter := buildLogFilter(c, 0, exportBatchSize)
 		filter.StartTime = startTime
 		filter.EndTime = endTime
-		rows, total, err := h.Service.ListLogs(c.Request().Context(), filter)
+		items, err := h.fetchLogsForExport(c.Request().Context(), filter)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to export logs")
 		}
-		if total == 0 {
-			return echo.NewHTTPError(http.StatusNotFound, "no logs found")
-		}
-		allLogs = append(allLogs, buildLogItems(rows)...)
+		allLogs = append(allLogs, items...)
 	}
 
 	if len(allLogs) == 0 {
@@ -787,6 +813,28 @@ func (h LogsHandler) ExportLogs(c echo.Context) error {
 
 	filename := buildLogExportFilename(format, "", startTime, endTime)
 	return writeLogsExport(c, format, filename, allLogs, includeRaw, stats)
+}
+
+// fetchLogsForExport 按批循环拉取日志用于导出。
+// service 层 ListLogs 的单次查询上限为 1000 条（normalizeFilter 强制截断），
+// 直接传入更大的 limit 会被静默截断导致导出丢数据，因此这里以递增 skip
+// 分批拉取，直到取完或达到导出安全上限。
+func (h LogsHandler) fetchLogsForExport(ctx context.Context, filter logs.LogFilter) ([]logs.LogItem, error) {
+	all := make([]logs.LogItem, 0)
+	for skip := 0; skip < exportMaxRows; skip += exportBatchSize {
+		batch := filter
+		batch.Skip = skip
+		batch.Limit = exportBatchSize
+		rows, total, err := h.Service.ListLogs(ctx, batch)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, buildLogItems(rows)...)
+		if len(rows) < exportBatchSize || int64(skip+len(rows)) >= total {
+			break
+		}
+	}
+	return all, nil
 }
 
 func buildLogFilter(c echo.Context, skip int, limit int) logs.LogFilter {
@@ -916,6 +964,21 @@ func buildLogExportFilename(format string, deviceName string, startTime *time.Ti
 	return baseName + ".csv"
 }
 
+// contentDispositionAttachment 构造符合 RFC 6266/RFC 5987 的附件头：
+// filename 提供 ASCII 回退名，filename* 提供 UTF-8 百分号编码的原名，
+// 避免中文文件名在部分浏览器/代理上乱码。
+func contentDispositionAttachment(filename string) string {
+	var fallback strings.Builder
+	for _, r := range filename {
+		if r > 32 && r < 128 && !strings.ContainsRune(`\/:*?"<>|`, r) {
+			fallback.WriteRune(r)
+		} else {
+			fallback.WriteRune('_')
+		}
+	}
+	return fmt.Sprintf("attachment; filename=%q; filename*=UTF-8''%s", fallback.String(), url.PathEscape(filename))
+}
+
 func writeLogsExport(c echo.Context, format string, filename string, rows []logs.LogItem, includeRaw bool, stats *logs.LogStatistics) error {
 	switch format {
 	case "xlsx":
@@ -923,14 +986,14 @@ func writeLogsExport(c echo.Context, format string, filename string, rows []logs
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to export logs")
 		}
-		c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+		c.Response().Header().Set("Content-Disposition", contentDispositionAttachment(filename))
 		return c.Blob(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer.Bytes())
 	default:
 		buffer, err := writeLogsCSV(rows, includeRaw)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to export logs")
 		}
-		c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+		c.Response().Header().Set("Content-Disposition", contentDispositionAttachment(filename))
 		return c.Blob(http.StatusOK, "text/csv", buffer.Bytes())
 	}
 }

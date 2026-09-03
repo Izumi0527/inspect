@@ -68,6 +68,7 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 
 		&logs.DeviceLog{},
 		&logs.LogParsingRule{},
+		&logs.DeviceSSHHostKey{},
 
 		&reports.ReportTemplate{},
 		&reports.ReportSchedule{},

@@ -89,7 +89,10 @@ type SyslogReceiver struct {
 
 	alertCreator atomic.Value // syslogAlertCreatorBox
 
-	mu         sync.Mutex
+	mu sync.Mutex
+	// applyMu 串行化 Apply 的 Stop→启动→回滚流程：并发 Apply 交错执行
+	// 可能导致监听器双启动或配置写入错序。
+	applyMu    sync.Mutex
 	running    bool
 	config     SyslogConfig
 	cancel     context.CancelFunc
@@ -173,6 +176,11 @@ func (r *SyslogReceiver) Apply(ctx context.Context, cfg SyslogConfig) (SyslogSta
 	if r == nil {
 		return SyslogStatus{}, fmt.Errorf("syslog receiver not initialized")
 	}
+
+	// 全程持锁：并发调用 Apply 时避免 Stop→startWithConfig 交错执行。
+	r.applyMu.Lock()
+	defer r.applyMu.Unlock()
+
 	cfg = normalizeSyslogConfig(cfg)
 
 	r.mu.Lock()

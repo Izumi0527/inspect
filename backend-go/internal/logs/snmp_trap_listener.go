@@ -8,6 +8,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gosnmp/gosnmp"
@@ -20,7 +21,25 @@ const (
 	defaultTrapListenTimeout = 3 * time.Second
 	defaultTrapStoreTimeout  = 5 * time.Second
 	maxTrapSummaryVars       = 6
+	// maxConcurrentTrapPersist 同时落库的 Trap 上限，超出部分丢弃并计数，
+	// 防止 Trap 风暴下 goroutine 与 DB 连接失控。
+	maxConcurrentTrapPersist = 16
 )
+
+// trapAlertCreatorBox 包装接口值，保证 atomic.Value 存储的具体类型始终一致
+// （与 SyslogReceiver 的 alertCreator 处理方式一致）。
+type trapAlertCreatorBox struct {
+	creator TrapAlertCreator
+}
+
+// TrapListenerStatus 描述 Trap 监听器的运行状态与统计信息，供诊断与状态接口透出。
+type TrapListenerStatus struct {
+	Running     bool
+	Enabled     bool
+	Address     string
+	DroppedBusy uint64
+	LastError   string
+}
 
 type SNMPTrapListener struct {
 	service      *Service
@@ -30,7 +49,10 @@ type SNMPTrapListener struct {
 	listener     *gosnmp.TrapListener
 	running      bool
 	mu           sync.Mutex
-	alertCreator TrapAlertCreator
+	alertCreator atomic.Value // trapAlertCreatorBox
+	persistSlots chan struct{}
+	droppedBusy  atomic.Uint64
+	lastError    atomic.Value // string
 }
 
 // TrapAlertCreator 用于将 SNMP Trap 转换为告警的回调接口
@@ -66,17 +88,18 @@ type trapPayload struct {
 
 func NewSNMPTrapListener(service *Service, logger *zap.Logger, addr string, enabled bool) *SNMPTrapListener {
 	return &SNMPTrapListener{
-		service: service,
-		logger:  logger,
-		addr:    strings.TrimSpace(addr),
-		enabled: enabled,
+		service:      service,
+		logger:       logger,
+		addr:         strings.TrimSpace(addr),
+		enabled:      enabled,
+		persistSlots: make(chan struct{}, maxConcurrentTrapPersist),
 	}
 }
 
-// SetAlertCreator 设置告警创建回调
+// SetAlertCreator 设置告警创建回调（原子存储，可与 handleTrap 回调并发调用）
 func (l *SNMPTrapListener) SetAlertCreator(creator TrapAlertCreator) {
 	if l != nil {
-		l.alertCreator = creator
+		l.alertCreator.Store(trapAlertCreatorBox{creator: creator})
 	}
 }
 
@@ -124,8 +147,30 @@ func (l *SNMPTrapListener) Start() error {
 		l.running = true
 		l.mu.Unlock()
 		if l.logger != nil {
-			l.logger.Info("SNMP Trap监听启动超时，继续等待", zap.String("addr", l.addr))
+			l.logger.Info("SNMP Trap监听启动超时，继续后台等待就绪", zap.String("addr", l.addr))
 		}
+		// 守护等待 Listen 的最终结果：失败时回滚运行状态并记录错误，
+		// 避免端口实际未监听但状态仍显示"已运行"。
+		go func() {
+			err := <-errCh
+			if err == nil {
+				return
+			}
+			l.mu.Lock()
+			stillRunning := l.running && l.listener == listener
+			if stillRunning {
+				l.running = false
+				l.listener = nil
+			}
+			l.mu.Unlock()
+			if stillRunning {
+				l.setError(err)
+				if l.logger != nil {
+					l.logger.Error("SNMP Trap监听启动失败",
+						zap.String("addr", l.addr), zap.Error(err))
+				}
+			}
+		}()
 		return nil
 	}
 }
@@ -172,7 +217,23 @@ func (l *SNMPTrapListener) handleTrap(packet *gosnmp.SnmpPacket, addr *net.UDPAd
 		return
 	}
 
-	go l.persistTrap(snapshot)
+	// 有界并发：超出槽位的 Trap 直接丢弃并计数，避免风暴下 goroutine 无限增长。
+	select {
+	case l.persistSlots <- struct{}{}:
+	default:
+		dropped := l.droppedBusy.Add(1)
+		if l.logger != nil {
+			l.logger.Warn("SNMP Trap处理并发已达上限，丢弃本次上报",
+				zap.String("source_ip", snapshot.SourceIP),
+				zap.Uint64("dropped_busy_total", dropped))
+		}
+		return
+	}
+
+	go func() {
+		defer func() { <-l.persistSlots }()
+		l.persistTrap(snapshot)
+	}()
 }
 
 func (l *SNMPTrapListener) persistTrap(snapshot trapSnapshot) {
@@ -212,10 +273,14 @@ func (l *SNMPTrapListener) persistTrap(snapshot trapSnapshot) {
 	}
 
 	// 对 warning/critical/error 级别的 Trap 自动创建告警
-	if l.alertCreator != nil && (level == "warning" || level == "critical" || level == "error") {
+	var alertCreator TrapAlertCreator
+	if box, ok := l.alertCreator.Load().(trapAlertCreatorBox); ok {
+		alertCreator = box.creator
+	}
+	if alertCreator != nil && (level == "warning" || level == "critical" || level == "error") {
 		alertCtx, alertCancel := context.WithTimeout(context.Background(), defaultTrapStoreTimeout)
 		defer alertCancel()
-		if alertErr := l.alertCreator.CreateTrapAlert(alertCtx, deviceID, level, facility, message, snapshot.TrapOID, snapshot.SourceIP); alertErr != nil {
+		if alertErr := alertCreator.CreateTrapAlert(alertCtx, deviceID, level, facility, message, snapshot.TrapOID, snapshot.SourceIP); alertErr != nil {
 			if l.logger != nil {
 				l.logger.Warn("SNMP Trap创建告警失败", zap.Error(alertErr), zap.Int("device_id", deviceID))
 			}
@@ -226,6 +291,35 @@ func (l *SNMPTrapListener) persistTrap(snapshot trapSnapshot) {
 				zap.String("trap_oid", snapshot.TrapOID))
 		}
 	}
+}
+
+// setError 记录最近一次监听器错误，供 Status 透出。
+func (l *SNMPTrapListener) setError(err error) {
+	if l == nil || err == nil {
+		return
+	}
+	l.lastError.Store(err.Error())
+}
+
+// Status 返回监听器当前运行状态与统计信息。
+func (l *SNMPTrapListener) Status() TrapListenerStatus {
+	if l == nil {
+		return TrapListenerStatus{}
+	}
+	l.mu.Lock()
+	running := l.running
+	l.mu.Unlock()
+
+	status := TrapListenerStatus{
+		Running:     running,
+		Enabled:     l.enabled,
+		Address:     l.addr,
+		DroppedBusy: l.droppedBusy.Load(),
+	}
+	if lastErr, ok := l.lastError.Load().(string); ok {
+		status.LastError = strings.TrimSpace(lastErr)
+	}
+	return status
 }
 
 func (l *SNMPTrapListener) findDeviceIDByIP(ctx context.Context, ip string) (int, error) {

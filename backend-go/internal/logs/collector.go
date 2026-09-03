@@ -2,16 +2,22 @@ package logs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"regexp"
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
+	"gorm.io/gorm"
 
 	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
 )
+
+// defaultCommandReadTimeout 单条命令输出的最长读取等待，超时后返回已收到的内容。
+const defaultCommandReadTimeout = 15 * time.Second
 
 type logEntry struct {
 	DeviceID      int
@@ -28,10 +34,21 @@ type logEntry struct {
 
 type SSHCollector struct {
 	Timeout time.Duration
+	// hostKeys 用于主机密钥 TOFU 校验，nil 时退化为不校验（仅测试场景）。
+	hostKeys *hostKeyStore
+	logger   *zap.Logger
 }
 
-func NewSSHCollector() *SSHCollector {
-	return &SSHCollector{Timeout: 30 * time.Second}
+// NewSSHCollector 构造 SSH 采集器；db 非 nil 时启用主机密钥指纹校验。
+func NewSSHCollector(db *gorm.DB, logger *zap.Logger) *SSHCollector {
+	collector := &SSHCollector{Timeout: 30 * time.Second}
+	if db != nil {
+		collector.hostKeys = &hostKeyStore{db: db, logger: logger}
+	}
+	if logger != nil {
+		collector.logger = logger
+	}
+	return collector
 }
 
 func (c *SSHCollector) Collect(ctx context.Context, device deviceInfo, logType string, maxEntries int) ([]logEntry, error) {
@@ -70,7 +87,7 @@ func (c *SSHCollector) connect(ctx context.Context, device deviceInfo) (*ssh.Cli
 		Config:          sshutil.LegacyAlgorithms(),
 		User:            device.SshUsername,
 		Auth:            auth,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: c.hostKeyCallback(device),
 		Timeout:         c.Timeout,
 	}
 
@@ -88,6 +105,85 @@ func (c *SSHCollector) connect(ctx context.Context, device deviceInfo) (*ssh.Cli
 	}
 
 	return ssh.NewClient(clientConn, chans, reqs), nil
+}
+
+// hostKeyCallback 返回 TOFU（首次信任）主机密钥校验回调：
+// 首次连接记录指纹，之后指纹不一致则拒绝连接，防止中间人伪装设备收割凭据。
+func (c *SSHCollector) hostKeyCallback(device deviceInfo) ssh.HostKeyCallback {
+	if c.hostKeys == nil {
+		if c.logger != nil {
+			c.logger.Warn("SSH主机密钥校验未启用（未配置指纹存储），连接不受中间人保护",
+				zap.Int("device_id", device.ID))
+		}
+		return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			return nil
+		}
+	}
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := c.hostKeys.verifyOrRecord(ctx, device.ID, key); err != nil {
+			if c.logger != nil {
+				c.logger.Error("SSH主机密钥校验失败",
+					zap.Int("device_id", device.ID),
+					zap.String("host", hostname),
+					zap.Error(err))
+			}
+			return err
+		}
+		return nil
+	}
+}
+
+// hostKeyStore 基于 device_ssh_host_keys 表的主机密钥指纹存储。
+type hostKeyStore struct {
+	db     *gorm.DB
+	logger *zap.Logger
+}
+
+// verifyOrRecord 校验设备主机密钥指纹：首次连接记录（TOFU），不一致则拒绝。
+// 若确认为合法变更（如设备重装系统），删除对应设备的指纹记录后下次连接会重新记录。
+func (s *hostKeyStore) verifyOrRecord(ctx context.Context, deviceID int, key ssh.PublicKey) error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+
+	fingerprint := ssh.FingerprintSHA256(key)
+	var record DeviceSSHHostKey
+	err := s.db.WithContext(ctx).Where("device_id = ?", deviceID).Take(&record).Error
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		// 首次连接：记录指纹。并发首连可能撞唯一索引，失败时重查比对兜底。
+		createErr := s.db.WithContext(ctx).Create(&DeviceSSHHostKey{
+			DeviceID:    deviceID,
+			Fingerprint: fingerprint,
+			Algorithm:   key.Type(),
+		}).Error
+		if createErr != nil {
+			var existing DeviceSSHHostKey
+			if reErr := s.db.WithContext(ctx).Where("device_id = ?", deviceID).Take(&existing).Error; reErr == nil {
+				if existing.Fingerprint == fingerprint {
+					return nil
+				}
+				return fmt.Errorf("设备 %d 的 SSH 主机密钥指纹与已有记录不一致", deviceID)
+			}
+			return fmt.Errorf("记录主机密钥指纹失败: %w", createErr)
+		}
+		if s.logger != nil {
+			s.logger.Info("SSH主机密钥指纹已记录（首次信任）",
+				zap.Int("device_id", deviceID),
+				zap.String("fingerprint", fingerprint),
+				zap.String("algorithm", key.Type()))
+		}
+		return nil
+	case err != nil:
+		return fmt.Errorf("查询主机密钥指纹失败: %w", err)
+	case record.Fingerprint != fingerprint:
+		return fmt.Errorf("设备 %d 的 SSH 主机密钥指纹发生变化（记录: %s，当前: %s），已拒绝连接；若确认为合法变更请删除该设备的指纹记录后重试",
+			deviceID, record.Fingerprint, fingerprint)
+	default:
+		return nil
+	}
 }
 
 func (c *SSHCollector) runCommand(ctx context.Context, client *ssh.Client, command string) (string, error) {
@@ -122,14 +218,12 @@ func (c *SSHCollector) runCommand(ctx context.Context, client *ssh.Client, comma
 		return "", err
 	}
 
-	// 等待 shell 准备好（华为设备会先显示 VRP 提示符）
-	time.Sleep(1 * time.Second)
-
-	// 发送命令 + 退出标记
+	// 等待 shell 准备好（华为设备会先显示 VRP 提示符），再发送命令 + 退出标记。
+	// 放入后台 goroutine，让主循环立即开始读输出，避免整体多等一个固定间隔。
 	endMarker := "__CMD_END_7f3a9b2c__"
 	go func() {
 		defer stdin.Close()
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(1 * time.Second)
 		fmt.Fprintf(stdin, "%s\n", command)
 		time.Sleep(500 * time.Millisecond)
 		fmt.Fprintf(stdin, "echo %s\n", endMarker)
@@ -137,27 +231,50 @@ func (c *SSHCollector) runCommand(ctx context.Context, client *ssh.Client, comma
 		fmt.Fprintf(stdin, "exit\n")
 	}()
 
-	// 带超时读取输出
-	var output []byte
-	buf := make([]byte, 65536)
-	readTimeout := time.After(15 * time.Second)
+	// 带超时读取输出。
+	// stdout.Read 是阻塞调用，若与超时/取消判断放在同一个循环里，无数据时
+	// Read 会永久挂起导致超时与 ctx 取消都失效，因此把读取移入独立
+	// goroutine，数据经 channel 交给主循环统一裁决。
+	type readChunk struct {
+		data []byte
+	}
+	readCh := make(chan readChunk)
+	readDone := make(chan struct{})
+	defer close(readDone)
+	go func() {
+		buf := make([]byte, 65536)
+		for {
+			n, err := stdout.Read(buf)
+			if n > 0 {
+				chunk := make([]byte, n)
+				copy(chunk, buf[:n])
+				select {
+				case readCh <- readChunk{data: chunk}:
+				case <-readDone:
+					return
+				}
+			}
+			if err != nil {
+				close(readCh)
+				return
+			}
+		}
+	}()
 
+	var output []byte
+	readTimeout := time.After(defaultCommandReadTimeout)
 	for {
 		select {
 		case <-ctx.Done():
 			return string(output), ErrCollectionCanceled
 		case <-readTimeout:
 			return string(output), nil
-		default:
-		}
-
-		// 非阻塞检测：如果 stdout 没数据就短睡再试
-		n, err := stdout.Read(buf)
-		if n > 0 {
-			output = append(output, buf[:n]...)
-		}
-		if err != nil {
-			return string(output), nil
+		case chunk, ok := <-readCh:
+			if !ok {
+				// 会话输出已结束（命令执行完退出）
+				return string(output), nil
+			}
+			output = append(output, chunk.data...)
 		}
 
 		// 检测结束标记
