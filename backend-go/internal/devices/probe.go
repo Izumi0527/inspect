@@ -3,6 +3,7 @@ package devices
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -104,6 +105,7 @@ func (s *ProbeService) ProbeDevice(
 		}
 	}
 
+	start := time.Now()
 	icmpCh := make(chan probeResultPayload, 1)
 	snmpCh := make(chan probeResultPayload, 1)
 
@@ -124,8 +126,10 @@ func (s *ProbeService) ProbeDevice(
 		snmpCh <- probeResultPayload{reachable: reachable, responseTime: response, errorMessage: errMsg, systemInfo: info}
 	}()
 
-	icmpResult := <-icmpCh
-	snmpResult := <-snmpCh
+	// gosnmp 不接收 context，慢腿只会跑满自身超时（最坏 15s）。调用方（前端）断开后
+	// 不再陪它等：已完成的腿保留结果，未完成的腿标记为放弃。两个通道都带缓冲，被
+	// 遗弃的 goroutine 结束时不会阻塞。
+	icmpResult, snmpResult, cancelled := awaitProbeLegs(ctx, icmpCh, snmpCh)
 
 	result := ProbeResult{
 		DeviceID:         deviceID,
@@ -140,14 +144,104 @@ func (s *ProbeService) ProbeDevice(
 		ProbedAt:         time.Now().UTC(),
 	}
 
+	if cancelled {
+		// 半截结果不进缓存：30s 内的下一次带缓存探测会拿到假的「SNMP 失败」
+		s.logProbeAbandoned(result, time.Since(start))
+		return result, nil
+	}
+
+	s.logProbeResult(result, time.Since(start))
 	s.setCache(deviceID, result)
 	return result, nil
+}
+
+// probeAbandonedMessage 是探测腿因调用方取消而未等到结果时填入的错误文本。
+const probeAbandonedMessage = "probe abandoned: request cancelled before completion"
+
+// awaitProbeLegs 等待两条探测腿，ctx 取消时立即返回：已到达的结果原样保留，
+// 未到达的腿填入 probeAbandonedMessage。返回值 cancelled 表示是否有腿被放弃。
+func awaitProbeLegs(
+	ctx context.Context,
+	icmpCh <-chan probeResultPayload,
+	snmpCh <-chan probeResultPayload,
+) (icmp probeResultPayload, snmp probeResultPayload, cancelled bool) {
+	abandoned := probeAbandonedMessage
+	icmp = probeResultPayload{errorMessage: &abandoned}
+	snmp = probeResultPayload{errorMessage: &abandoned}
+	icmpDone, snmpDone := false, false
+
+	for !icmpDone || !snmpDone {
+		select {
+		case r := <-icmpCh:
+			icmp, icmpDone = r, true
+		case r := <-snmpCh:
+			snmp, snmpDone = r, true
+		case <-ctx.Done():
+			// 取消瞬间可能已有结果就绪，再各做一次非阻塞收取，尽量少丢已算出的结论
+			if !icmpDone {
+				select {
+				case r := <-icmpCh:
+					icmp, icmpDone = r, true
+				default:
+				}
+			}
+			if !snmpDone {
+				select {
+				case r := <-snmpCh:
+					snmp, snmpDone = r, true
+				default:
+				}
+			}
+			return icmp, snmp, !icmpDone || !snmpDone
+		}
+	}
+	return icmp, snmp, false
+}
+
+func (s *ProbeService) logProbeAbandoned(result ProbeResult, elapsed time.Duration) {
+	if s.logger == nil {
+		return
+	}
+	s.logger.Debug("device probe abandoned: context cancelled",
+		zap.Int("device_id", result.DeviceID),
+		zap.String("ip", result.IPAddress),
+		zap.Bool("icmp_reachable", result.IcmpReachable),
+		zap.Stringp("icmp_error", result.IcmpError),
+		zap.Bool("snmp_reachable", result.SnmpReachable),
+		zap.Stringp("snmp_error", result.SnmpError),
+		zap.Int64("total_ms", elapsed.Milliseconds()),
+	)
+}
+
+// logProbeResult 记录单次探测的完整结论。ping 无法执行（缺 CAP_NET_RAW、二进制缺失）
+// 是运行环境问题而非设备离线，必须以 Warn 浮出；设备真离线是常态，只进 Debug，
+// 否则批量探测几百台离线设备会把日志淹没。
+func (s *ProbeService) logProbeResult(result ProbeResult, elapsed time.Duration) {
+	if s.logger == nil {
+		return
+	}
+	fields := []zap.Field{
+		zap.Int("device_id", result.DeviceID),
+		zap.String("ip", result.IPAddress),
+		zap.Bool("icmp_reachable", result.IcmpReachable),
+		zap.Float64p("icmp_ms", result.IcmpResponseTime),
+		zap.Stringp("icmp_error", result.IcmpError),
+		zap.Bool("snmp_reachable", result.SnmpReachable),
+		zap.Float64p("snmp_ms", result.SnmpResponseTime),
+		zap.Stringp("snmp_error", result.SnmpError),
+		zap.Int64("total_ms", elapsed.Milliseconds()),
+	}
+	if isPingExecFailure(result.IcmpError) {
+		s.logger.Warn("ping cannot execute in service environment (not a device outage)", fields...)
+	}
+	s.logger.Debug("device probe completed", fields...)
 }
 
 func (s *ProbeService) BatchProbeDevices(ctx context.Context, targets []ProbeTarget, maxConcurrent int) map[int]ProbeResult {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 20
 	}
+	start := time.Now()
 	limit := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
 	mu := sync.Mutex{}
@@ -185,6 +279,26 @@ func (s *ProbeService) BatchProbeDevices(ctx context.Context, targets []ProbeTar
 	}
 
 	wg.Wait()
+
+	if s.logger != nil {
+		icmpUp, snmpUp := 0, 0
+		for _, r := range results {
+			if r.IcmpReachable {
+				icmpUp++
+			}
+			if r.SnmpReachable {
+				snmpUp++
+			}
+		}
+		s.logger.Info("batch probe completed",
+			zap.Int("total", len(targets)),
+			zap.Int("probed", len(results)),
+			zap.Int("icmp_reachable", icmpUp),
+			zap.Int("snmp_reachable", snmpUp),
+			zap.Int("max_concurrent", maxConcurrent),
+			zap.Int64("total_ms", time.Since(start).Milliseconds()),
+		)
+	}
 	return results
 }
 
@@ -232,6 +346,10 @@ type probeResultPayload struct {
 	systemInfo   *string
 }
 
+// pingExecFailurePrefix 标记「ping 命令自身无法执行」类错误（缺 CAP_NET_RAW、二进制缺失），
+// 与设备是否在线无关。前端原样展示，运维凭此前缀分辨环境问题与设备离线。
+var pingExecFailurePrefix = "ping 无法执行（请检查服务运行环境）: "
+
 func probeICMP(ctx context.Context, ipAddress string) (bool, *float64, *string) {
 	start := time.Now()
 	args := pingArgs(ipAddress)
@@ -240,10 +358,7 @@ func probeICMP(ctx context.Context, ipAddress string) (bool, *float64, *string) 
 	elapsedMs := float64(time.Since(start).Milliseconds())
 
 	if err != nil {
-		msg := strings.TrimSpace(string(output))
-		if msg == "" {
-			msg = err.Error()
-		}
+		msg := icmpErrorMessage(err, string(output), runtime.GOOS)
 		return false, nil, &msg
 	}
 
@@ -252,6 +367,31 @@ func probeICMP(ctx context.Context, ipAddress string) (bool, *float64, *string) 
 		responseTime = &elapsedMs
 	}
 	return true, responseTime, nil
+}
+
+// icmpErrorMessage 把 ping 的失败归为两类：命令无法执行加前缀标记；目标无响应保持原始输出。
+// 「无法执行」= *exec.Error（找不到二进制），或 Linux iputils 退出码 2（权限/参数错误；
+// 退出码 1 才是发出去了没收到回复）。退出码语义随实现而异——BSD/macOS 的 ping 用 2 表示
+// 无响应，Windows 只有 0/1——所以只在 goos == "linux" 时把 2 判为执行失败。
+func icmpErrorMessage(err error, output string, goos string) string {
+	msg := strings.TrimSpace(output)
+	if msg == "" {
+		msg = err.Error()
+	}
+
+	var execErr *exec.Error
+	if errors.As(err, &execErr) {
+		return pingExecFailurePrefix + msg
+	}
+	var exitErr *exec.ExitError
+	if goos == "linux" && errors.As(err, &exitErr) && exitErr.ExitCode() == 2 {
+		return pingExecFailurePrefix + msg
+	}
+	return msg
+}
+
+func isPingExecFailure(errMsg *string) bool {
+	return errMsg != nil && strings.HasPrefix(*errMsg, pingExecFailurePrefix)
 }
 
 func pingArgs(ipAddress string) []string {

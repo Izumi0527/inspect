@@ -143,6 +143,112 @@ grep -q 'bash -o pipefail -c' "$TARGET" \
     && ok "run_sh/run_build 显式 pipefail" \
     || ng "run_sh 缺少 pipefail" "管道左侧失败会被空输入吞掉"
 
+printf '\n\033[36m单元能力兜底（deploy 侧的单元修复必须随升级落地）\033[0m\n'
+
+# ---------- 用例 12：升级必须补齐后端单元 CAP_NET_RAW ----------
+# 主单元由 deploy-ubuntu.sh 渲染、本脚本不重写；284cf2c 之后才携带 CAP_NET_RAW，
+# 走升级路径的机器仍在旧单元下运行，探测 exec ping 报 Operation not permitted。
+# 判定依据必须是 systemctl show 的实际生效值：drop-in 与主单元任一携带都算已修。
+EC_SRC="$(extract_fn ensure_backend_unit_caps)"
+if [[ -z "$EC_SRC" ]]; then
+    ng "缺少 ensure_backend_unit_caps()" "升级路径不补齐 CAP_NET_RAW，deploy 侧的修复永远到不了真实环境"
+else
+    ok "存在 ensure_backend_unit_caps() 阶段"
+    grep -q 'systemctl show' <<<"$EC_SRC" \
+        && ok "以 systemctl show 实际生效值判定能力" \
+        || ng "未用 systemctl show 判定能力" "grep 单元文件文本会漏掉 drop-in 形态"
+
+    # 12a：缺 cap_net_raw → 写入 drop-in（Ambient + Bounding 两行）并 daemon-reload
+    caps_tmp="$(mktemp -d)"
+    probe="$(mktemp)"
+    {
+        printf 'DRY_RUN=false\nBACKEND_UNIT=inspect-backend\n'
+        printf 'BACKEND_UNIT_DROPIN_DIR=%q\n' "$caps_tmp/inspect-backend.service.d"
+        printf 'BACKEND_UNIT_DROPIN=%q\n' "$caps_tmp/inspect-backend.service.d/10-net-raw.conf"
+        printf 'step_banner() { :; }; info() { :; }; success() { :; }; warn() { :; }; dim() { :; }\n'
+        printf 'die() { echo "DIE:$*"; exit 99; }\n'
+        printf 'run() { "$@"; }\n'
+        printf 'systemctl() { case "$*" in *show*) echo "cap_net_bind_service";; *daemon-reload*) echo "RELOADED";; esac; }\n'
+        printf '%s\n' "$EC_SRC"
+        printf 'ensure_backend_unit_caps\n'
+    } >"$probe"
+    out="$(bash "$probe" 2>&1)"; rc=$?
+    rm -f "$probe"
+    dropin="$caps_tmp/inspect-backend.service.d/10-net-raw.conf"
+    if [[ $rc -eq 0 && -f "$dropin" ]] \
+        && grep -q '^AmbientCapabilities=.*CAP_NET_RAW' "$dropin" \
+        && grep -q '^CapabilityBoundingSet=.*CAP_NET_RAW' "$dropin"; then
+        ok "缺 cap_net_raw 时写入 drop-in（Ambient + Bounding 均含 CAP_NET_RAW）"
+    else
+        ng "缺 cap_net_raw 时未正确写入 drop-in" "rc=$rc out=$out"
+    fi
+    grep -q 'RELOADED' <<<"$out" \
+        && ok "写入 drop-in 后执行 daemon-reload" \
+        || ng "写入 drop-in 后未 daemon-reload" "新能力不会生效"
+    rm -rf "$caps_tmp"
+
+    # 12b：已持有 cap_net_raw → 不写 drop-in、不 reload
+    caps_tmp="$(mktemp -d)"
+    probe="$(mktemp)"
+    {
+        printf 'DRY_RUN=false\nBACKEND_UNIT=inspect-backend\n'
+        printf 'BACKEND_UNIT_DROPIN_DIR=%q\n' "$caps_tmp/inspect-backend.service.d"
+        printf 'BACKEND_UNIT_DROPIN=%q\n' "$caps_tmp/inspect-backend.service.d/10-net-raw.conf"
+        printf 'step_banner() { :; }; info() { :; }; success() { :; }; warn() { :; }; dim() { :; }\n'
+        printf 'die() { echo "DIE:$*"; exit 99; }\n'
+        printf 'run() { "$@"; }\n'
+        printf 'systemctl() { case "$*" in *show*) echo "cap_net_bind_service cap_net_raw";; *daemon-reload*) echo "RELOADED";; esac; }\n'
+        printf '%s\n' "$EC_SRC"
+        printf 'ensure_backend_unit_caps\n'
+    } >"$probe"
+    out="$(bash "$probe" 2>&1)"; rc=$?
+    rm -f "$probe"
+    if [[ $rc -eq 0 && ! -e "$caps_tmp/inspect-backend.service.d/10-net-raw.conf" ]] && ! grep -q 'RELOADED' <<<"$out"; then
+        ok "已持有 cap_net_raw 时不写 drop-in、不 reload（幂等）"
+    else
+        ng "已持有 cap_net_raw 时仍写 drop-in 或 reload" "rc=$rc out=$out"
+    fi
+    rm -rf "$caps_tmp"
+
+    # 12c：dry-run 只打印不落盘
+    caps_tmp="$(mktemp -d)"
+    probe="$(mktemp)"
+    {
+        printf 'DRY_RUN=true\nBACKEND_UNIT=inspect-backend\n'
+        printf 'BACKEND_UNIT_DROPIN_DIR=%q\n' "$caps_tmp/inspect-backend.service.d"
+        printf 'BACKEND_UNIT_DROPIN=%q\n' "$caps_tmp/inspect-backend.service.d/10-net-raw.conf"
+        printf 'step_banner() { :; }; info() { :; }; success() { :; }; warn() { :; }; dim() { echo "DIM:$*"; }\n'
+        printf 'die() { echo "DIE:$*"; exit 99; }\n'
+        printf 'run() { if [[ "$DRY_RUN" == true ]]; then echo "DRYRUN:$*"; return 0; fi; "$@"; }\n'
+        printf 'systemctl() { case "$*" in *show*) echo "cap_net_bind_service";; *daemon-reload*) echo "RELOADED";; esac; }\n'
+        printf '%s\n' "$EC_SRC"
+        printf 'ensure_backend_unit_caps\n'
+    } >"$probe"
+    out="$(bash "$probe" 2>&1)"; rc=$?
+    rm -f "$probe"
+    if [[ $rc -eq 0 && ! -e "$caps_tmp/inspect-backend.service.d/10-net-raw.conf" ]] && ! grep -q '^RELOADED' <<<"$out"; then
+        ok "dry-run 不落盘、不 reload"
+    else
+        ng "dry-run 仍落盘或 reload" "rc=$rc out=$out"
+    fi
+    rm -rf "$caps_tmp"
+fi
+
+# ---------- 用例 13：能力兜底必须位于重启之前 ----------
+# 重启后再补能力等于白补：单元能力只在进程启动时套用，需要二次重启。
+MAIN_SRC="$(extract_fn main)"
+if [[ -z "$MAIN_SRC" ]]; then
+    ng "未能提取 main() 定义"
+else
+    ec_line="$(grep -n 'ensure_backend_unit_caps' <<<"$MAIN_SRC" | head -1 | cut -d: -f1)"
+    rv_line="$(grep -n 'restart_and_verify' <<<"$MAIN_SRC" | head -1 | cut -d: -f1)"
+    if [[ -n "$ec_line" && -n "$rv_line" && "$ec_line" -lt "$rv_line" ]]; then
+        ok "main 中 ensure_backend_unit_caps 位于 restart_and_verify 之前"
+    else
+        ng "main 未在重启前调用 ensure_backend_unit_caps" "ec_line=${ec_line:-无} rv_line=${rv_line:-无}"
+    fi
+fi
+
 printf '\n'
 if [[ "$FAIL" -gt 0 ]]; then
     printf '\033[31m失败 %d 项\033[0m，通过 %d 项\n' "$FAIL" "$PASS"

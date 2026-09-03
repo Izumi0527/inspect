@@ -1120,6 +1120,20 @@ const appendQuery = (
   return query ? `${endpoint}?${query}` : endpoint;
 };
 
+// 探测请求超时须覆盖后端最坏耗时，否则 httpClient 默认 10s 会先 abort，把后端已算出
+// 的 ICMP 结果与错误原因一起吞掉，用户只看到「探测失败」。后端 ProbeDevice 要等
+// ICMP（ping -W 3）与 SNMP（probeSNMP Timeout 5s × (1+2 次重试)）都结束，单设备最坏约 15s。
+const PROBE_WORST_CASE_MS = 15000;
+const PROBE_TIMEOUT_MS = PROBE_WORST_CASE_MS * 2;
+// 批量探测按并发轮次放大：每轮最坏 15s，外加 10s 处理余量；封顶 2 分钟避免大批量挂成永久等待。
+const BATCH_PROBE_TIMEOUT_MAX_MS = 120000;
+const BATCH_PROBE_TIMEOUT_SLACK_MS = 10000;
+
+export const batchProbeTimeoutMs = (deviceCount: number, maxConcurrent: number): number => {
+  const rounds = Math.max(1, Math.ceil(deviceCount / Math.max(1, maxConcurrent)));
+  return Math.min(BATCH_PROBE_TIMEOUT_MAX_MS, rounds * PROBE_WORST_CASE_MS + BATCH_PROBE_TIMEOUT_SLACK_MS);
+};
+
 /**
  * 探测单个设备的连接状态
  */
@@ -1131,7 +1145,7 @@ export async function probeDevice(
     const endpoint = appendQuery(`/devices/${deviceId}/probe`, {
       update_status: options?.updateStatus ?? true,
     });
-    const payload = await api.post<unknown>(endpoint);
+    const payload = await api.post<unknown>(endpoint, undefined, { timeout: PROBE_TIMEOUT_MS });
     const unwrapped = unwrapMaybeApiResponseData(payload);
     if (isDeviceProbeResult(unwrapped)) {
       return unwrapped;
@@ -1157,10 +1171,14 @@ export async function batchProbeDevices(
     const endpoint = appendQuery("/devices/batch-probe", {
       update_status: options?.updateStatus ?? true,
     });
-    const payload = await api.post<unknown>(endpoint, {
-      device_ids: deviceIds,
-      max_concurrent: maxConcurrent,
-    });
+    const payload = await api.post<unknown>(
+      endpoint,
+      {
+        device_ids: deviceIds,
+        max_concurrent: maxConcurrent,
+      },
+      { timeout: batchProbeTimeoutMs(deviceIds.length, maxConcurrent) },
+    );
     const unwrapped = unwrapMaybeApiResponseData(payload);
     if (isDeviceBatchProbeResponse(unwrapped)) {
       return unwrapped;

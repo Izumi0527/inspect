@@ -99,7 +99,7 @@ sudo ./scripts/upgrade-ubuntu.sh --yes              # CI/无终端场景必须�
 ```
 
 升级流程：探测当前版本 → 拉取目标 ref → 数据库备份 → 更新源码 → 注入版本号构建前后端 →
-原子替换二进制 → 重启 → **以 `/health` 返回的 version 是否等于目标版本作为升级成功依据**。
+原子替换二进制 → 校验后端单元能力（缺 `CAP_NET_RAW` 则写 drop-in 补齐，否则设备探测的 ping 无法执行）→ 重启 → **以 `/health` 返回的 version 是否等于目标版本作为升级成功依据**。
 后端健康检查或版本断言失败时自动回滚旧二进制并恢复服务。
 
 - 版本号权威源为仓库根 `VERSION` 文件：发布新版本时先更新该文件并提交，构建时经 ldflags
@@ -109,6 +109,10 @@ sudo ./scripts/upgrade-ubuntu.sh --yes              # CI/无终端场景必须�
 - 源码更新使用 `git reset --hard`，`/opt/inspect/app/data` 等运行时数据目录不受影响；
   旧版后端二进制保留于 `/opt/inspect/bin/inspect-api.prev`，确认稳定后可删除。
 - 本地开发环境更新代码只需 `git pull` 后重启前后端服务。
+- 设备探测排障：页面上探测结果会直接附带失败原因；后端在 `LOG_LEVEL=debug` 下会记录每次探测的
+  ICMP/SNMP 结论与耗时（`/opt/inspect/logs/backend/app.log`），ping 无法执行会以 WARN 浮出。
+  「手工 ping 正常但探测判离线」先查 `systemctl show inspect-backend -p AmbientCapabilities`
+  是否含 `cap_net_raw`。
 
 ### Windows 安装包
 

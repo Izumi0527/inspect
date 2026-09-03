@@ -31,6 +31,11 @@ FRONTEND_PORT=13000
 BACKEND_UNIT="inspect-backend"
 FRONTEND_UNIT="inspect-frontend"
 
+# 后端单元能力兜底的 drop-in。主单元由 deploy-ubuntu.sh 渲染、本脚本不重写，
+# 单元层面的修复（如探测 ping 所需的 CAP_NET_RAW）要靠 drop-in 才能随升级落地。
+BACKEND_UNIT_DROPIN_DIR="/etc/systemd/system/${BACKEND_UNIT}.service.d"
+BACKEND_UNIT_DROPIN="${BACKEND_UNIT_DROPIN_DIR}/10-net-raw.conf"
+
 # 与 build-release.sh / deploy-ubuntu.sh 保持一致的注入路径与构建环境默认值
 GO_CONFIG_PKG="github.com/your-org/inspect-system/backend-go/internal/config"
 GOPROXY_URL="${GOPROXY_URL:-https://goproxy.cn,direct}"
@@ -286,6 +291,42 @@ build_frontend() {
     success "前端构建完成"
 }
 
+# 探测（devices/probe.go）经 exec 调系统 ping；Ubuntu 的 ping 无 setuid、仅靠文件能力
+# cap_net_raw=ep，而 net.ipv4.ping_group_range 默认关闭。单元 CapabilityBoundingSet 若不含
+# CAP_NET_RAW，exec 后 permitted 集合为空；即便放开 bounding，NoNewPrivileges 也会把
+# exec 新获得的能力压回父进程集合——两道屏蔽都要靠 Ambient 能力绕过，实测报
+# 「ping: socket: Operation not permitted」。
+# 判定用 systemctl show 的实际生效值（drop-in 与主单元任一携带都算已修），不 grep 单元文本。
+ensure_backend_unit_caps() {
+    step_banner "校验后端单元能力"
+
+    local ambient
+    ambient="$(systemctl show "$BACKEND_UNIT" -p AmbientCapabilities --value 2>/dev/null || true)"
+    if [[ "$ambient" == *cap_net_raw* ]]; then
+        success "后端单元已持有 cap_net_raw（探测 ping 可用）"
+        return 0
+    fi
+
+    warn "后端单元缺少 cap_net_raw：服务进程无法执行 ping，设备探测 ICMP 必然判离线"
+    info "→ 写入 drop-in ${BACKEND_UNIT_DROPIN}（不改动 deploy 渲染的主单元）"
+    if [[ "$DRY_RUN" == true ]]; then
+        dim "[dry-run] mkdir -p ${BACKEND_UNIT_DROPIN_DIR} && 写入 AmbientCapabilities/CapabilityBoundingSet 含 CAP_NET_RAW"
+        dim "[dry-run] systemctl daemon-reload"
+        return 0
+    fi
+
+    mkdir -p "$BACKEND_UNIT_DROPIN_DIR"
+    cat >"$BACKEND_UNIT_DROPIN" <<'DROPIN'
+[Service]
+# 由 upgrade-ubuntu.sh 写入：探测经 exec 调系统 ping，Ubuntu 的 ping 仅靠 cap_net_raw
+# 文件能力，NoNewPrivileges + 受限 CapabilityBoundingSet 会将其屏蔽。两项与主单元合并生效。
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_RAW
+DROPIN
+    run systemctl daemon-reload
+    success "已补齐 CAP_NET_RAW（随后的重启即生效）"
+}
+
 rollback_and_die() {
     error "升级验证失败，正在回滚后端二进制……"
     if [[ -f "$PREV_BIN" ]]; then
@@ -365,7 +406,8 @@ usage() {
 用法: sudo ./scripts/upgrade-ubuntu.sh [选项]
 
 流程: 探测当前版本 → 拉取目标版本 → 升级前数据库备份 → 更新源码 →
-      注入版本号构建前后端 → 原子替换 → 重启 → /health 版本断言；
+      注入版本号构建前后端 → 原子替换 → 校验后端单元能力（缺 CAP_NET_RAW 则写
+      drop-in 补齐）→ 重启 → /health 版本断言；
       后端验证失败时自动回滚旧二进制并恢复服务。
 
 选项:
@@ -423,6 +465,7 @@ main() {
     update_source
     build_backend
     build_frontend
+    ensure_backend_unit_caps
     restart_and_verify
     final_banner
 }

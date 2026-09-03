@@ -17,6 +17,37 @@ interface DeviceProbeButtonProps {
   updateStatus?: boolean
 }
 
+const PROBE_ERROR_MAX_LENGTH = 80
+
+/**
+ * 取后端探测错误文本的首行并截断。ping 的失败输出常是多行（错误 + 提示），
+ * SNMP 错误也可能带长堆栈，原样塞进 toast 会把关键信息挤出可视区。
+ */
+export const summarizeProbeError = (
+  error?: string | null,
+  maxLength: number = PROBE_ERROR_MAX_LENGTH,
+): string | null => {
+  if (!error) return null
+  const firstLine = error.split(/\r?\n/).find((line) => line.trim() !== '')?.trim() ?? ''
+  if (!firstLine) return null
+  return firstLine.length > maxLength ? `${firstLine.slice(0, maxLength)}…` : firstLine
+}
+
+/** 生成单条探测结论文本：状态 + 耗时 + （失败时）原因。 */
+const describeProbeLeg = (
+  reachable: boolean,
+  labels: { ok: string; fail: string },
+  responseTime?: number,
+  error?: string | null,
+): string => {
+  const timing = responseTime ? ` (${responseTime.toFixed(1)}ms)` : ''
+  const reason = reachable ? null : summarizeProbeError(error)
+  return `${reachable ? labels.ok : labels.fail}${timing}${reason ? ` — ${reason}` : ''}`
+}
+
+const ICMP_LABELS = { ok: '在线', fail: '离线' }
+const SNMP_LABELS = { ok: '成功', fail: '失败' }
+
 export const DeviceProbeButton: React.FC<DeviceProbeButtonProps> = ({
   deviceId,
   deviceName,
@@ -34,17 +65,21 @@ export const DeviceProbeButton: React.FC<DeviceProbeButtonProps> = ({
     try {
       const probeResult = await probeDevice(deviceId, { updateStatus })
       setResult(probeResult)
-      
+
       if (onProbeComplete) {
         onProbeComplete(probeResult)
       }
 
-      // 显示探测结果
-      const icmpStatus = probeResult.icmp_reachable ? '在线' : '离线'
-      const snmpStatus = probeResult.snmp_reachable ? '成功' : '失败'
-      
+      // 显示探测结果；失败时附后端返回的原因，让「离线」能区分设备真离线与服务环境问题
+      const icmpText = describeProbeLeg(
+        probeResult.icmp_reachable, ICMP_LABELS, probeResult.icmp_response_time, probeResult.icmp_error,
+      )
+      const snmpText = describeProbeLeg(
+        probeResult.snmp_reachable, SNMP_LABELS, probeResult.snmp_response_time, probeResult.snmp_error,
+      )
+
       toast.success(
-        `设备 ${deviceName} 探测完成\nICMP: ${icmpStatus}${probeResult.icmp_response_time ? ` (${probeResult.icmp_response_time.toFixed(1)}ms)` : ''}\nSNMP: ${snmpStatus}${probeResult.snmp_response_time ? ` (${probeResult.snmp_response_time.toFixed(1)}ms)` : ''}`,
+        `设备 ${deviceName} 探测完成\nICMP: ${icmpText}\nSNMP: ${snmpText}`,
         { duration: 4000 }
       )
     } catch (error) {
@@ -82,7 +117,7 @@ export const DeviceProbeButton: React.FC<DeviceProbeButtonProps> = ({
       {result && !probing && (
         <div className="flex items-center gap-1">
           {/* ICMP 状态 */}
-          <div title={`ICMP ${result.icmp_reachable ? '在线' : '离线'}${result.icmp_response_time ? ` (${result.icmp_response_time.toFixed(1)}ms)` : ''}`}>
+          <div title={`ICMP ${describeProbeLeg(result.icmp_reachable, ICMP_LABELS, result.icmp_response_time, result.icmp_error)}`}>
             {result.icmp_reachable ? (
               <Wifi className="h-4 w-4 text-green-500" />
             ) : (
@@ -91,7 +126,7 @@ export const DeviceProbeButton: React.FC<DeviceProbeButtonProps> = ({
           </div>
 
           {/* SNMP 状态 */}
-          <div title={`SNMP ${result.snmp_reachable ? '成功' : '失败'}${result.snmp_response_time ? ` (${result.snmp_response_time.toFixed(1)}ms)` : ''}`}>
+          <div title={`SNMP ${describeProbeLeg(result.snmp_reachable, SNMP_LABELS, result.snmp_response_time, result.snmp_error)}`}>
             {result.snmp_reachable ? (
               <CheckCircle className="h-4 w-4 text-green-500" />
             ) : (

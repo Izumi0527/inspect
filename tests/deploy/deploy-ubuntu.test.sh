@@ -306,13 +306,20 @@ grep -q "admin 账户已初始化" "$TARGET" \
 printf '\n\033[36m服务单元权限\033[0m\n'
 
 # ---------- 用例 20：后端单元必须携带 CAP_NET_RAW ----------
-# 探测经 exec.CommandContext 调系统 ping；Ubuntu 的 ping 依赖自身 file capability
-# (cap_net_raw=ep)，而单元 NoNewPrivileges=true 会屏蔽 exec 时的 file capability
-# （WSL systemd 实测报 missing cap_net_raw+p capability or setuid），探测 ICMP 永远
-# 失败。必须由服务进程以 Ambient 能力直接持有 cap_net_raw。
+# 探测经 exec.CommandContext 调系统 ping；Ubuntu 的 ping 仅靠文件能力 cap_net_raw=ep 且
+# ping_group_range 默认关闭。CapabilityBoundingSet 不含 CAP_NET_RAW 时 exec 后 permitted 为空，
+# NoNewPrivileges 再把 exec 新获得的能力压回父进程集合（systemd-run 实测报 missing
+# cap_net_raw+p capability or setuid），探测 ICMP 永远失败。Ambient + Bounding 两项都要含。
 grep -q 'AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW' "$TARGET" \
     && ok "后端单元 Ambient 携带 CAP_NET_RAW（探测 ping 可用）" \
-    || ng "后端单元缺少 CAP_NET_RAW" "NoNewPrivileges 屏蔽 ping 的 file capability，探测 ICMP 必然失败"
+    || ng "后端单元缺少 CAP_NET_RAW" "bounding 与 NoNewPrivileges 屏蔽 ping 的文件能力，探测 ICMP 必然失败"
+
+# ---------- 用例 21：基础工具必须显式安装 iputils-ping ----------
+# 探测硬依赖系统 ping 二进制；Ubuntu server 默认带，但最小化镜像/云镜像可能没有，
+# 缺失时 exec 报 executable file not found，设备探测全部判离线。
+grep -q 'iputils-ping' "$TARGET" \
+    && ok "基础工具显式安装 iputils-ping（探测的系统 ping 依赖）" \
+    || ng "未显式安装 iputils-ping" "最小化镜像缺 ping 时探测 ICMP 全部失败"
 
 printf '\n'
 if [[ "$FAIL" -gt 0 ]]; then
