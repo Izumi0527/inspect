@@ -171,3 +171,90 @@ export function toneFromLevel(raw: string | undefined | null): PlainTone {
       return 'info'
   }
 }
+
+/**
+ * 华为 VRP 日志模块名 → 中文名。
+ *
+ * 对应 `%%01IFNET/4/IF_STATE_CHANGE(l)` 结构化头中的模块名，覆盖华为 S 系列
+ * 交换机 logbuffer 的高频模块（模块命名参照 docs/vendor 下华为 S 系列产品
+ * 文档的 MIB 章节）。未收录的模块不强行翻译，原样展示 —— 错误的模块名
+ * 比陌生的模块名更具误导性。
+ */
+const VRP_MODULE_LABELS: Readonly<Record<string, string>> = {
+  // 接口与链路
+  IFNET: '接口管理',
+  ERRDOWN: '错误关闭口',
+  MSTP: '生成树协议',
+  L2IF: '二层接口',
+  L2IFPDT: '二层接口',
+  TRUNK: '链路聚合',
+  ETHTRUNK: '链路聚合',
+  LLDP: '链路层发现',
+  POE: '以太网供电',
+  POEPDT: '以太网供电',
+  ETHPORT: '以太网端口',
+  // 二层交换
+  VLAN: '虚拟局域网',
+  L2: '二层交换',
+  STACK: '设备堆叠',
+  STACKM: '设备堆叠',
+  CSS: '集群交换',
+  IGSP: 'IGMP Snooping',
+  MACLIMIT: 'MAC 地址限制',
+  // 路由
+  RM: '路由管理',
+  IPV6RM: 'IPv6 路由管理',
+  OSPF: 'OSPF 路由',
+  BGP: 'BGP 路由',
+  RIP: 'RIP 路由',
+  ISIS: 'IS-IS 路由',
+  ND: 'IPv6 邻居发现',
+  PIM: '组播路由',
+  IGMP: '组播管理',
+  MLD: '组播侦听发现',
+  // 安全与接入
+  AAA: 'AAA 认证',
+  AM: '地址管理',
+  LINE: '用户线管理',
+  ARPSPI: 'ARP 防攻击',
+  DHCP: 'DHCP 服务',
+  DHCPSNP: 'DHCP Snooping',
+  IPSG: 'IP 源防护',
+  PORTSEC: '端口安全',
+  PKI: '公钥基础设施',
+  SSL: 'SSL 安全',
+  // 远程登录
+  SSH: 'SSH 远程登录',
+  SFTP: 'SFTP 文件传输',
+  SCP: 'SCP 文件传输',
+  TELNET: 'Telnet 远程登录',
+  FTP: 'FTP 文件传输',
+  TFTP: 'TFTP 文件传输',
+  NETCONF: 'NETCONF 网管',
+  // 网管与系统
+  SNMP: 'SNMP 网管',
+  SYSTEM: '系统运行',
+  SHELL: '命令行接口',
+  CONFIGURATION: '配置管理',
+  VFS: '文件系统',
+  OPS: '运维脚本',
+  LICENSE: 'License 管理',
+  UPDATE: '软件升级',
+  PATCH: '补丁管理',
+  RESTART: '系统重启',
+  IC: '信息中心',
+  SRM: '系统资源管理',
+  DEV: '设备管理',
+  ENV: '环境监控',
+  NTP: 'NTP 时钟',
+}
+
+/**
+ * 取华为 VRP 模块的中文名，未收录时返回 undefined（不强行翻译）。
+ * 模块名大小写不敏感匹配，返回时保留词典中的规范写法。
+ */
+export function describeVRPModule(raw: string | undefined | null): string | undefined {
+  const text = String(raw ?? '').trim().toUpperCase()
+  if (!text) return undefined
+  return VRP_MODULE_LABELS[text]
+}

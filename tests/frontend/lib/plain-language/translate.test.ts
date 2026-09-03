@@ -138,6 +138,36 @@ describe('translateToPlainLanguage 兜底与占位', () => {
     expect(normal.title).toBe('系统运行事件')
   })
 
+  it('华为日志带已收录模块头时，兜底应指明模块与事件名', () => {
+    // 规则表未覆盖 VFS 文件删除事件，但 %%01VFS 头是可识别的结构化信息：
+    // 兜底必须比笼统的「设备上报一条信息」更有操作价值
+    const result = translateToPlainLanguage({
+      message: '%%01VFS/6/VFS_FILE_DELETE(l)[3]:Delete file flash:/backup.cfg successfully.',
+      level: 'info',
+      facility: 'system',
+      deviceName: '核心交换机',
+    })
+
+    expect(result.matched).toBe(false)
+    expect(result.title).toBe('文件系统（VFS）')
+    expect(result.summary).toContain('文件系统')
+    expect(result.summary).toContain('VFS_FILE_DELETE')
+    // 级别数字 6 应译为「信息」级别词
+    expect(result.summary).toContain('信息')
+    expect(result.summary).toContain('核心交换机')
+  })
+
+  it('华为日志模块未收录时仍走通用兜底，不强行翻译模块名', () => {
+    const result = translateToPlainLanguage({
+      message: '%%01XYZMOD/4/SOME_EVENT(l):Vendor specific payload.',
+      level: 'warning',
+      facility: 'system',
+    })
+
+    expect(result.matched).toBe(false)
+    expect(result.title).toBe('系统运行异常')
+  })
+
   it('deviceName 缺省时应回退为「该设备」而不是留空', () => {
     const result = translateToPlainLanguage({
       message: '%%01IFNET/4/IF_STATE(l)[0]:Interface GigabitEthernet0/0/1 has turned into DOWN state.',

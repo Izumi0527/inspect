@@ -7,6 +7,7 @@
 import {
   describeFacility,
   describeLevel,
+  describeVRPModule,
   humanizeInterfaceName,
   humanizeState,
   toneFromLevel,
@@ -109,6 +110,54 @@ function buildFromTrap(trap: TrapIdentity, deviceName: string): PlainLanguageRes
   }
 }
 
+/**
+ * 华为 VRP logbuffer 结构化头识别模式：
+ * `%%01IFNET/4/IF_STATE_CHANGE(l)[231]:Interface 6 turned into …`
+ * 其中 01 为格式版本号，随后依次是模块名、级别数字（0-7）、助记符。
+ */
+const VRP_LOGHEADER_PATTERN = /%%\d{2}([A-Za-z0-9_]+)\/(\d)\/([A-Za-z0-9_-]+)(?:\([a-z]\))?/
+
+/** VRP 级别数字 → 中文级别词（0-7：紧急/告警/严重/错误/警告/通知/信息/调试） */
+const VRP_LEVEL_NUMBERS: Readonly<Record<string, string>> = {
+  '0': '紧急',
+  '1': '告警',
+  '2': '严重',
+  '3': '错误',
+  '4': '警告',
+  '5': '通知',
+  '6': '信息',
+  '7': '调试',
+}
+
+interface VRPLogHeader {
+  module: string
+  label: string
+  mnemonic: string
+  levelDescription: string
+}
+
+/**
+ * 从消息中识别华为 VRP logbuffer 结构化头并翻译模块名。
+ *
+ * 命中后兜底翻译不再说笼统的「设备异常」，而是能指明「接口管理（IFNET）
+ * 模块」与具体事件名（助记符）—— 助记符可直接对照华为文档检索，是运维
+ * 排障最有用的线索。未命中返回 undefined。
+ */
+function resolveVRPLogHeader(message: string): VRPLogHeader | undefined {
+  const match = VRP_LOGHEADER_PATTERN.exec(message)
+  if (!match) return undefined
+
+  const label = describeVRPModule(match[1])
+  if (!label) return undefined
+
+  return {
+    module: match[1],
+    label,
+    mnemonic: match[3],
+    levelDescription: VRP_LEVEL_NUMBERS[match[2]] ?? '未知级别',
+  }
+}
+
 /** 按占位符声明的转换器加工捕获组 */
 function applyTransform(value: string, transform?: string): string {
   switch (transform) {
@@ -142,13 +191,28 @@ function renderTemplate(template: string, match: RegExpExecArray, deviceName: st
  * 刻意保持诚实 —— 明确说明无匹配规则并引导查看原文，
  * 而不是编造一个看似合理的解释。同时 matched 为 false，
  * 调用方应据此直接展示原文而非折叠。
+ *
+ * 华为 VRP 日志带结构化头时（%%01模块/级别/助记符），兜底文案会指明
+ * 模块与事件名 —— 助记符是查阅华为文档的关键词，远比笼统的
+ * 「设备上报一条信息」可操作。
  */
 function buildFallback(input: PlainLanguageInput, deviceName: string): PlainLanguageResult {
+  const message = String(input?.message ?? '').trim()
   const facility = describeFacility(input.facility)
   const level = describeLevel(input.level)
   const isAbnormal = ['warning', 'error', 'critical'].includes(
     String(input.level ?? '').trim().toLowerCase(),
   )
+  const vrpHeader = resolveVRPLogHeader(message)
+
+  if (vrpHeader) {
+    return {
+      title: `${vrpHeader.label}（${vrpHeader.module}）`,
+      summary: `${deviceName} 的${vrpHeader.label}模块上报一条${vrpHeader.levelDescription}级别信息（事件 ${vrpHeader.mnemonic}），暂无该事件的专项解读规则。原始内容完整保留在下方，可按「${vrpHeader.module}/${vrpHeader.mnemonic}」查阅华为文档或据此进一步排查。`,
+      tone: toneFromLevel(input.level),
+      matched: false,
+    }
+  }
 
   return {
     title: `${facility}${isAbnormal ? '异常' : '事件'}`,

@@ -33,6 +33,26 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // 接口与链路
   // ==========================================
   {
+    // 华为 VRP：`ERRDOWN/4/ERRDOWN_DOWNNOTIFY: The interface ... changes to the error-down state`
+    // Error-Down 是端口级保护动作，语义与普通链路 Down 不同，必须最先判断。
+    id: 'huawei-error-down',
+    pattern: /error.?down/i,
+    title: '端口因错误被关闭',
+    summary: '{device} 的端口触发 Error-Down 保护被自动关闭（常见原因：CRC 错包超限、链路震荡、BPDU 冲突或收发光功率异常）。',
+    suggestion: '通过 display error-down recovery 查看恢复状态与触发原因；排除故障后等待自动恢复，或执行 error-down recovery 手动恢复。',
+    tone: 'critical',
+  },
+  {
+    // 华为 VRP：`TRUNK/4/ETHTRUNK_DOWN: The Eth-Trunk 1 went down`
+    // 必须排在通用接口规则之前：聚合口 Down 的影响面是全部成员链路。
+    id: 'huawei-ethtrunk-down',
+    pattern: new RegExp(`eth-?trunk[\\s\\S]{0,60}?\\bdown\\b`, 'i'),
+    title: '链路聚合口 Down',
+    summary: '{device} 的 Eth-Trunk 链路聚合口状态变为 Down，经该聚合口转发的全部流量将切换或中断。',
+    suggestion: '通过 display eth-trunk 查看成员口状态；检查各成员链路是否正常、两端聚合模式与负载分担配置是否一致。',
+    tone: 'warning',
+  },
+  {
     // 华为 VRP 格式：`Interface 11 turned into DOWN state.(…InterfaceName GigabitEthernet0/0/6)`
     // 必须排在下方通用接口规则之前 —— 通用规则的接口名模式要求字母开头，
     // 而华为在 Interface 后跟的是接口索引号，真正的接口名在括号内的 InterfaceName 字段。
@@ -85,6 +105,33 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     tone: 'warning',
   },
   {
+    // 华为 VRP：`LLDP/4/NBRCHGTRAP: OID … Neighbor info changed.`
+    id: 'huawei-lldp-neighbor-change',
+    pattern: /neighbor(?:\s+info(?:rmation)?)?\s+chang/i,
+    title: 'LLDP 邻居变化',
+    summary: '{device} 通过 LLDP 感知到直连邻居发生变更（新接入、退出或信息更新），拓扑信息已刷新。',
+    suggestion: '确认是否有设备接入或调整；若非计划内变更，核对下联设备身份，防止私接设备接入网络。',
+    tone: 'info',
+  },
+  {
+    // 光功率越限必须排在「光模块异常」之前：越限是量化的性能问题，给出具体排查项
+    id: 'huawei-optical-power',
+    pattern: /\b(?:rx|tx|optical)[\s\S]{0,20}?power[\s\S]{0,30}?(?:exceed|high|low|over|under|越限|过高|过低)/i,
+    title: '光功率越限',
+    summary: '{device} 的光模块收发功率超出正常门限，轻则误码率升高，重则链路中断。',
+    suggestion: '通过 display transceiver 查看收发光功率；检查光纤弯折、接头污染与光模块老化，必要时更换模块或清洁尾纤。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：`POE/4/POEPOWERABSENT: … PoE power is absent`
+    id: 'huawei-poe-fault',
+    pattern: /\bpoe[\s\S]{0,40}?(?:fail|abnormal|power.?off|dying|overload|disconnect|异常)/i,
+    title: 'PoE 供电异常',
+    summary: '{device} 的 PoE 接口供电出现异常，下联的 AP、摄像头等受电设备可能断电重启。',
+    suggestion: '通过 display poe power-state 查看端口供电状态；核对受电设备功率是否超出端口与整机预算，排除线缆接触不良。',
+    tone: 'warning',
+  },
+  {
     id: 'transceiver-fault',
     pattern: /(?:transceiver|sfp|optical|光模块)[\s\S]{0,40}?(?:fail|error|absent|abnormal|invalid|不在位|异常)/i,
     title: '光模块异常',
@@ -96,6 +143,52 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // ==========================================
   // 安全与接入
   // ==========================================
+  {
+    // 华为 VRP logbuffer：`SSH/5/SSH_FAIL: Failed to login. (UserName=admin, IpAddress=10.1.1.1, …)`
+    // 必须排在通用「用户认证失败」之前：能提取来源 IP，可操作性更强。
+    id: 'huawei-ssh-login-fail',
+    pattern: /failed to login[\s\S]{0,120}?IpAddress=([^,)\s]+)/i,
+    title: 'SSH 登录失败',
+    summary: '{device} 收到来自 {1} 的 SSH 登录请求但认证未通过。',
+    suggestion: '核实是否为运维人员误操作；若来源地址异常或短时间内多次出现，应按口令爆破处理，及时更换口令并用 ACL 限制管理接入源。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP logbuffer：`SSH/5/SSH_USER_LOGIN: The user successfully logs in. (UserName=admin, UserAddress=10.1.1.1)`
+    id: 'huawei-ssh-login-success',
+    pattern: /successfully logs?\s?in[\s\S]{0,120}?(?:UserAddress|IpAddress)=([^,)\s]+)/i,
+    title: 'SSH 登录成功',
+    summary: '账号从 {1} 成功登录 {device} 的 SSH 管理界面。',
+    suggestion: '核对登录账号与来源地址是否为计划内运维行为；非预期来源应立即核查并考虑修改口令。',
+    tone: 'info',
+  },
+  {
+    // 华为 VRP：`AAA/6/AAA_AUTHEN_FAIL: Authen fail. (UserName=xx, AuthenFailReason=…)`
+    id: 'huawei-aaa-authen-fail',
+    pattern: /authen(?:tication)?\s+fail[\s\S]{0,120}?UserName=([^,)\s]+)/i,
+    title: 'AAA 认证失败',
+    summary: '{device} 的 AAA 接入认证未通过，账号 {1} 无法完成认证。',
+    suggestion: '结合日志中的 AuthenFailReason 确认失败原因（口令错误、账号锁定或服务器不可达）；检查 RADIUS/TACACS 服务器状态与共享密钥配置。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：`ARPSPI/4/ARPS_DROP: … ARP speed exceed … discarded`
+    id: 'huawei-arp-attack',
+    pattern: /\barp[\s\S]{0,40}?(?:attack|flood|speed.?limit|discard|suppr)/i,
+    title: 'ARP 攻击防护',
+    summary: '{device} 检测到 ARP 报文异常（超速或伪造），已按防攻击策略限速或丢弃。',
+    suggestion: '通过 display arp attack 相关命令查看攻击源接口与 MAC；定位发送异常 ARP 的终端，确认是否存在病毒或 ARP 欺骗行为。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：`DHCPSNP/4/illegalUser: … discarded the illegal DHCP reply`
+    id: 'huawei-dhcp-protect',
+    pattern: /dhcp[\s\S]{0,40}?(?:attack|discard|illegal|exceed)/i,
+    title: 'DHCP 防护触发',
+    summary: '{device} 丢弃了非法 DHCP 报文（可能为私接 DHCP 服务器或超速请求），已按 Snooping 与防攻击策略处理。',
+    suggestion: '确认网络内是否存在私接 DHCP 服务器；通过 display dhcp snooping 查看丢弃统计与信任口配置。',
+    tone: 'warning',
+  },
   {
     // 华为 VRP：`A user login fail. (UserIndex=34, UserName=VTY, UserIP=192.168.20.2, …)`
     // 必须排在「用户登录成功」之前 —— 设备标识 VTYUSERLOGINFAIL 字面包含 VTYUSERLOGIN，
@@ -226,10 +319,50 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     suggestion: '核对该 MAC 对应终端的实际接入位置；若无接线变更，优先排查环路与生成树配置。',
     tone: 'warning',
   },
+  {
+    // 华为 VRP：`MACLIMIT/4/MAC_LIMITADDR_EXCEED: The MAC address learning limit … is reached`
+    // 与 MAC 漂移共用 mac 前缀锚点，锚定词不同互不干扰。
+    id: 'huawei-mac-limit',
+    pattern: /mac[\s\S]{0,60}?(?:limit[\s\S]{0,20}?(?:reached|exceed)|reach[\s\S]{0,20}?limit|exceed[\s\S]{0,20}?limit|table[\s\S]{0,20}?full)/i,
+    title: 'MAC 地址学习超限',
+    summary: '{device} 的 MAC 地址学习达到配置上限，新终端的 MAC 无法继续学习，其流量将按未知单播处理。',
+    suggestion: '通过 display mac-address 查看表项规模；确认是终端规模增长还是 MAC 攻击导致，必要时调整接口 MAC 学习上限。',
+    tone: 'warning',
+  },
 
   // ==========================================
   // 硬件与环境
   // ==========================================
+  {
+    // 华为 VRP：`SRM/4/POWERNORMAL: Power … resumed`、`SRM/4/FANNORMAL: Fan resumed`、
+    // `SRM/4/TEMPRECOVERALARM: temperature below resume threshold`
+    // 恢复类必须排在所有硬件故障与温度门限规则之前 —— 「below resume threshold」
+    // 含 below/threshold 字样，会被温度门限规则抢先读成低温告警。
+    id: 'huawei-hardware-recover',
+    pattern: /(?:temperature|fan|power|电源|风扇|温度)[\s\S]{0,40}?(?:resume|recover|restore|normal|解除|恢复)/i,
+    title: '硬件状态恢复',
+    summary: '{device} 的电源/风扇/温度相关告警已解除，硬件状态恢复正常。',
+    tone: 'success',
+  },
+  {
+    // 必须排在「单板故障」与「单板已插入」之前：unregister 字面包含 register，
+    // 顺序写反会把拔出读成插入。
+    id: 'huawei-board-removed',
+    pattern: /(?:board|card|单板)[\s\S]{0,50}?(?:pull(?:ed)?\s*out|removed|unregister|deregister|not\s+online)/i,
+    title: '单板被拔出',
+    summary: '{device} 检测到单板被拔出或离线，该单板承载的端口与业务全部中断。',
+    suggestion: '确认是否为计划内操作；若非人为拔出，检查单板插接与固定状态，警惕单板故障自动退出并收集日志定位。',
+    tone: 'critical',
+  },
+  {
+    // 华为 VRP：`DEV/4/BOARD_INSERT: Board … has been inserted`、`DEV/4/BOARD_ONLINE`
+    id: 'huawei-board-inserted',
+    pattern: /(?:board|card|单板)[\s\S]{0,50}?(?:plug(?:ged)?\s*in|insert|registered|上电|注册)/i,
+    title: '单板已插入',
+    summary: '{device} 检测到新单板插入并注册成功，端口能力发生变化。',
+    suggestion: '确认单板型号与配置符合预期；单板注册后相关端口需重新确认配置与连线状态。',
+    tone: 'info',
+  },
   {
     // 必须排在「温度越限」之前 —— 华为 SRM/3/TEMPFALLINGALARM 报文中 TEMP 与 ALARM
     // 仅相隔 7 个字符，会被下方高温规则抢先命中，把「低于门限」读成「持续高温」，
@@ -306,6 +439,53 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // ==========================================
   // 系统运行
   // ==========================================
+  {
+    // 华为 VRP：`LICENSE/4/LICENSE_ALARM: … will expire` 等
+    id: 'huawei-license-alarm',
+    pattern: /license[\s\S]{0,40}?(?:expire|invalid|insufficient|exceed|near|alarm)/i,
+    title: 'License 异常',
+    summary: '{device} 的 License 出现到期、失效或容量不足告警，受控功能可能随时被停用。',
+    suggestion: '通过 display license 查看授权状态与有效期；按需申请新的 License 文件并在维护窗口内激活。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：`FIB/6/FIBENTRYSUFFICIENT?`、`RM/4/IPV4_ROUTEMAX` 等表项容量事件
+    id: 'huawei-entry-exceed',
+    // 锚点词与匹配距离刻意收紧：arp/entry 等子串常见于普通句式，
+    // 且 successfully 中含字面 full，必须加词边界防止普通事件被误读为表项超限
+    pattern: /\b(?:entr(?:y|ies)|fib|arp|route)\b[\s\S]{0,20}?\b(?:exceed|full|reach)\b/i,
+    title: '转发表项超限',
+    summary: '{device} 的转发表项（MAC/ARP/路由等）使用达到上限，新表项无法学习或下发，相关业务可能中断。',
+    suggestion: '确认表项增长是否为业务扩张所致；排查是否存在扫描或攻击导致表项膨胀，必要时评估设备规格或调整老化时间。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：`IC/4/LOGHOST_FAIL: Connect to log host … failed`
+    id: 'huawei-loghost-unreachable',
+    pattern: /(?:loghost|log host|log server|syslog)[\s\S]{0,40}?(?:fail|unreach|down|cannot|lose|invalid)/i,
+    title: '日志服务器不可达',
+    summary: '{device} 无法向日志服务器正常发送日志，日志外发链路中断。',
+    suggestion: '检查日志服务器地址可达性与路由；确认信息中心通道与源接口配置，恢复后补齐关键时段日志。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：`UPDATE/6/PATCH_ACTIVATE`、`PATCH/6/PATCH_RUN` 等
+    id: 'huawei-patch-activate',
+    pattern: /patch[\s\S]{0,40}?(?:activ|deactiv|load|run|fail)|upgrade[\s\S]{0,40}?(?:start|success|fail|complete)/i,
+    title: '系统升级与补丁',
+    summary: '{device} 正在执行软件升级或补丁加载操作，期间可能出现短暂的管理中断。',
+    suggestion: '确认操作在维护窗口内执行；升级期间避免断电，完成后通过 display version 核对运行版本。',
+    tone: 'info',
+  },
+  {
+    // 华为 VRP：`STACKM/4/STACK_MEMBER_CHANGE`、`CSS/4/CSSMASTEREXCHANGED` 等
+    id: 'huawei-stack-change',
+    pattern: /(?:stack|css)[\s\S]{0,40}?(?:change|switch|master|fail|split|merge|exchang)/i,
+    title: '堆叠/集群状态变化',
+    summary: '{device} 的堆叠（CSS）状态发生变更（主备切换、成员加入退出或分裂合并），拓扑角色已重新选举。',
+    suggestion: '通过 display stack 查看堆叠拓扑与角色；确认切换是否符合预期，排查堆叠线缆与链路状态。',
+    tone: 'warning',
+  },
   {
     id: 'device-reboot',
     pattern: /(?:reboot|restart|system.{0,10}start|startup|power.?on|重启|启动)/i,

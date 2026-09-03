@@ -316,6 +316,26 @@ func resolveVendorCommand(vendor string, logType string) string {
 	return commands[vendor][logType]
 }
 
+// ParseLogLineForTest 提供可测试的日志行解析入口（内部复用 parseLogLine），
+// 返回导出模型以便独立测试模块断言字段；生产路径仍直接使用 parseLogLine。
+func ParseLogLineForTest(line string, deviceID int, vendor string, collectedAt time.Time) *DeviceLog {
+	entry := parseLogLine(line, deviceID, vendor, collectedAt)
+	if entry == nil {
+		return nil
+	}
+	raw := entry.RawMessage
+	return &DeviceLog{
+		DeviceID:     entry.DeviceID,
+		Level:        entry.Level,
+		Facility:     entry.Facility,
+		Source:       entry.Source,
+		Message:      entry.Message,
+		RawMessage:   &raw,
+		LogTimestamp: entry.LogTimestamp,
+		CollectedAt:  entry.CollectedAt,
+	}
+}
+
 func parseLogOutput(output string, deviceID int, vendor string, collectedAt time.Time, maxEntries int) []logEntry {
 	lines := strings.Split(output, "\n")
 	entries := make([]logEntry, 0, maxEntries)
@@ -369,11 +389,81 @@ var (
 	facilityLevelPattern = regexp.MustCompile(`[/-](\d+)[/-]`)
 )
 
+// huaweiLogbufferPattern 匹配华为 VRP display logbuffer 的标准行结构：
+//
+//	2025-03-10 08:12:33+08:00 HUAWEI-S5720 %%01IFNET/4/IF_STATE(l)[231]:Interface 6 turned into DOWN state.(...)
+//	Mar 10 2025 08:12:33 HUAWEI %%01SSH/5/SSH_FAIL(l):Failed to login. (UserName=admin, IpAddress=10.1.1.1)
+//
+// 头部含模块名、级别数字（0-7）与助记符，是日志最重要的结构化信息；
+// 此前仅支持 H3C 风格的 `[模块/级别/助记符]:` 头，VRP 行整体落入兜底分支，
+// message 连同时间戳、主机名、%% 头一起入库，级别与设施只能靠关键词猜测。
+var huaweiLogbufferPattern = regexp.MustCompile(
+	`^((?:\w{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}[^\s]*)\s+(\S+)\s+%%\d{2}([A-Za-z0-9_]+)/(\d)/([A-Za-z0-9_-]+)(?:\([a-z]\))?(?:\[\d+\])?:\s*(.+)$`)
+
+// vrpModuleFacilities 华为 VRP 常见日志模块 → 本系统 facility 值域映射。
+// 映射结果必须落在 normalizeFacility 认可的值域内
+// （system/interface/security/routing/switching/snmp/ssh/other），
+// 否则入库时会被归一化掉。模块清单参照华为 S 系列产品文档中的模块命名。
+var vrpModuleFacilities = map[string]string{
+	// 接口与链路
+	"ifnet": "interface", "if_pdt": "interface", "errdown": "interface",
+	"mstp": "interface", "l2if": "interface", "l2ifpdt": "interface",
+	"trunk": "interface", "ethtrunk": "interface", "lldp": "interface",
+	"poe": "interface", "poepdt": "interface", "ethport": "interface",
+	// 二层交换
+	"vlan": "switching", "l2": "switching", "stack": "switching",
+	"stackm": "switching", "css": "switching", "igsp": "switching",
+	"maclimit": "switching",
+	// 路由
+	"rm": "routing", "ipv6rm": "routing", "ospf": "routing", "bgp": "routing",
+	"rip": "routing", "isis": "routing", "nd": "routing", "pim": "routing",
+	"igmp": "routing", "mld": "routing", "mrib": "routing", "msvc": "routing",
+	// 安全与接入
+	"aaa": "security", "am": "security", "line": "security",
+	"arpspi": "security", "dhcp": "security", "dhcpsnp": "security",
+	"ipsg": "security", "portsec": "security", "pki": "security",
+	"ssl": "security", "sec": "security", "8021x": "security",
+	// 远程登录与文件传输
+	"ssh": "ssh", "sftp": "ssh", "scp": "ssh", "telnet": "ssh",
+	"ftp": "ssh", "tftp": "ssh", "netconf": "ssh",
+	// 网管
+	"snmp": "snmp",
+	// 系统运行（含 SRM 硬件资源管理——设施值域无 hardware，归 system）
+	"system": "system", "shell": "system", "configuration": "system",
+	"vfs": "system", "ops": "system", "license": "system",
+	"update": "system", "patch": "system", "restart": "system",
+	"ic": "system", "srm": "system", "dev": "system", "env": "system",
+}
+
+// vrpModuleToFacility 按 VRP 模块名精确映射设施；未收录的模块退回
+// detectLogFacility 对消息正文做启发式判断。
+func vrpModuleToFacility(module string, message string) string {
+	if facility, ok := vrpModuleFacilities[strings.ToLower(strings.TrimSpace(module))]; ok {
+		return facility
+	}
+	return detectLogFacility(message)
+}
+
 func parseLogLine(line string, deviceID int, vendor string, collectedAt time.Time) *logEntry {
 	vendor = strings.ToLower(strings.TrimSpace(vendor))
 
 	switch vendor {
 	case "huawei", "h3c":
+		// 华为 VRP logbuffer 结构化头优先：%%01模块/级别/助记符(l)[序号]:
+		// 组：1=时间戳 2=主机名 3=模块 4=级别数字 5=助记符 6=消息正文
+		if match := huaweiLogbufferPattern.FindStringSubmatch(line); len(match) == 7 {
+			logTimestamp := parseTrapTimestamp(match[1], collectedAt)
+			return &logEntry{
+				DeviceID:     deviceID,
+				Level:        mapVRPSeverity(match[4]),
+				Facility:     vrpModuleToFacility(match[3], match[6]),
+				Source:       "ssh",
+				Message:      strings.TrimSpace(match[6]),
+				RawMessage:   line,
+				LogTimestamp: logTimestamp,
+				CollectedAt:  collectedAt,
+			}
+		}
 		if match := huaweiPattern.FindStringSubmatch(line); len(match) == 4 {
 			timestamp, facilityInfo, message := match[1], match[2], match[3]
 			logTimestamp := parseTimestamp(timestamp, "huawei", collectedAt)

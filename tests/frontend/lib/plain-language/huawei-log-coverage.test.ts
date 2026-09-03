@@ -29,6 +29,25 @@ const SAMPLES = {
     'SRM/3/ENTITYINVALID: OID 1.3.6.1.4.1.2011.5.25.129.2.1.9 Fan loss.(EntityPhysicalIndex=603979777, BaseTrapSeverity=3, BaseTrapProbableCause=67591, BaseTrapEventType=5)',
   tempFalling:
     'SRM/3/TEMPFALLINGALARM: OID 1.3.6.1.4.1.2011.5.25.129.2.2.3 temperature below minor threshold .(EntityPhysicalIndex=603979777, BaseThresholdEntry_entPhysicalIndex=603979777)',
+
+  // ============================================
+  // display logbuffer 结构化解析后的正文形态
+  // （后端 collector 已解出 %%01模块/级别/助记符 头，message 只含正文）
+  // ============================================
+  logbufferSshFail:
+    'Failed to login. (UserName=admin, IpAddress=10.1.1.99, VpnName=_public_)',
+  logbufferSshSuccess:
+    'The user successfully logs in. (UserName=netops, UserAddress=192.168.20.10, VpnName=_public_)',
+  logbufferErrorDown:
+    'The interface GigabitEthernet0/0/8 changes to the error-down state. (Reason=CRC-ERROR-DOWN)',
+  logbufferInterfaceDown:
+    'Interface 6 turned into DOWN state.(InterfaceIndex=6, InterfaceName=GigabitEthernet0/0/22)',
+  logbufferPowerRecover:
+    'Power 1 has resumed. (EntityPhysicalIndex=603979809, BaseTrapSeverity=1)',
+  logbufferAaaFail:
+    'Authen fail. (UserName=test01, AuthenFailReason=Password has expired)',
+  logbufferArpAttack:
+    'The ARP packet speed exceed the configured speed limit. (SourceIp=10.1.1.5, DiscardNumber=1024)',
 } as const
 
 const translate = (message: string, level: string, facility: string) =>
@@ -119,6 +138,66 @@ describe('华为 VRP 日志人话解读覆盖', () => {
       expect(text).not.toContain('过高')
       expect(text).not.toContain('越限')
       expect(text).toContain('低于')
+    })
+  })
+
+  describe('logbuffer 正文（后端结构化解析后）', () => {
+    it('SSH 登录失败应提取来源地址', () => {
+      const result = translate(SAMPLES.logbufferSshFail, 'warning', 'ssh')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-ssh-login-fail')
+      expect(result.summary).toContain('10.1.1.99')
+      expect(result.tone).toBe('warning')
+      expect(result.suggestion).toBeTruthy()
+    })
+
+    it('SSH 登录成功应识别来源并保持信息语气', () => {
+      const result = translate(SAMPLES.logbufferSshSuccess, 'info', 'ssh')
+
+      expect(result.matched).toBe(true)
+      expect(result.summary).toContain('192.168.20.10')
+      expect(result.tone).toBe('info')
+    })
+
+    it('Error-Down 应识别为端口保护关闭而非普通链路 Down', () => {
+      const result = translate(SAMPLES.logbufferErrorDown, 'warning', 'interface')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-error-down')
+      expect(result.tone).toBe('critical')
+      expect(result.summary).toContain('Error-Down')
+    })
+
+    it('接口 Down 正文应给出真实接口名', () => {
+      const result = translate(SAMPLES.logbufferInterfaceDown, 'warning', 'interface')
+
+      expect(result.matched).toBe(true)
+      expect(result.summary).toContain('GigabitEthernet0/0/22')
+    })
+
+    it('电源恢复应判为恢复而非故障', () => {
+      const result = translate(SAMPLES.logbufferPowerRecover, 'info', 'system')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-hardware-recover')
+      expect(result.tone).toBe('success')
+    })
+
+    it('AAA 认证失败应给出账号与失败原因指引', () => {
+      const result = translate(SAMPLES.logbufferAaaFail, 'warning', 'security')
+
+      expect(result.matched).toBe(true)
+      expect(result.summary).toContain('test01')
+      expect(result.tone).toBe('warning')
+    })
+
+    it('ARP 攻击防护应识别为告警', () => {
+      const result = translate(SAMPLES.logbufferArpAttack, 'warning', 'security')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-arp-attack')
+      expect(result.tone).toBe('warning')
     })
   })
 })
