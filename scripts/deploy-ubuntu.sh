@@ -1047,7 +1047,7 @@ ENVEOF
         PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
         CGO_ENABLED=0 \
         go -C ${APP_SRC}/backend-go build \
-        -ldflags=\"-s -w -X github.com/your-org/inspect-system/backend-go/internal/config.defaultAppVersion=${app_ver}\" \
+        -ldflags=\"-s -w -X github.com/your-org/inspect-system/backend-go/internal/config.buildInjectedVersion=${app_ver}\" \
         -o ${APP_BIN}/inspect-api.new ./cmd/api"
     run mv "${APP_BIN}/inspect-api.new" "${APP_BIN}/inspect-api"
     run chown "$APP_USER:$APP_USER" "${APP_BIN}/inspect-api"
@@ -1065,7 +1065,7 @@ ENVEOF
         PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
         CGO_ENABLED=0 \
         go -C ${APP_SRC}/backend-go build \
-        -ldflags=\"-s -w -X github.com/your-org/inspect-system/backend-go/internal/config.defaultAppVersion=${app_ver}\" \
+        -ldflags=\"-s -w -X github.com/your-org/inspect-system/backend-go/internal/config.buildInjectedVersion=${app_ver}\" \
         -o ${APP_BIN}/inspect-seed.new ./cmd/seed"
     run mv "${APP_BIN}/inspect-seed.new" "${APP_BIN}/inspect-seed"
     run chown "$APP_USER:$APP_USER" "${APP_BIN}/inspect-seed"

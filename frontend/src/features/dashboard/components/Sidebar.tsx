@@ -17,6 +17,7 @@ import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useDisplayPreferences } from '@/hooks/useDatetimePreferencesSync'
 import { NavigationItem } from '../types'
+import { APP_VERSION } from '@/lib/app-version'
 
 interface SidebarProps {
   isOpen: boolean
@@ -116,7 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {isOpen && (
         <div className="absolute bottom-0 left-0 right-0 border-t border-border/60 p-4 text-center">
-          <p className="text-xs text-foreground/50">v{process.env.NEXT_PUBLIC_APP_VERSION}</p>
+          <p className="text-xs text-foreground/50">v{APP_VERSION}</p>
         </div>
       )}
     </div>

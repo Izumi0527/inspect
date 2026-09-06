@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     以仓库根 VERSION 文件为唯一版本真相源，在构建时分发版本号：
-      - 后端：go build -ldflags 注入 internal/config.defaultAppVersion
+      - 后端：go build -ldflags 注入 internal/config.buildInjectedVersion
       - 前端：NEXT_PUBLIC_APP_VERSION 环境变量注入 next build
       - 安装包：ISCC /DAppVersion 覆盖
     复用既有 InspectRuntime/frontend/node_modules 与 runtime/node.exe（版本无关，体量大）。
@@ -127,7 +127,7 @@ if ($SkipBackend) {
 } else {
     Write-Step "编译后端 app.exe（注入版本 $Version）"
     New-Item -ItemType Directory -Force -Path $RuntimeBackend | Out-Null
-    $ldflags = "-s -w -X $GoModule/internal/config.defaultAppVersion=$Version"
+    $ldflags = "-s -w -X $GoModule/internal/config.buildInjectedVersion=$Version"
     Push-Location $BackendDir
     try {
         & go build -ldflags $ldflags -o (Join-Path $RuntimeBackend "app.exe") ./cmd/api

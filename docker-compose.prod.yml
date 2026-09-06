@@ -84,6 +84,9 @@ services:
       context: ./backend-go
       dockerfile: Dockerfile
       target: release
+      # APP_VERSION 由 prod-start.sh 从仓库根 VERSION 导出（单一权威源）
+      args:
+        APP_VERSION: ${APP_VERSION:-}
     container_name: inspect-backend-prod
     environment:
       # 服务配置
@@ -173,6 +176,8 @@ services:
       args:
         NODE_ENV: production
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.yourdomain.com}
+        # 构建上下文内 ../VERSION 不可达，必须显式注入（否则回落 package.json 兜底值）
+        NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:-}
     container_name: inspect-frontend-prod
     environment:
       NODE_ENV: production

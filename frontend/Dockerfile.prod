@@ -19,10 +19,15 @@ COPY . .
 
 ARG NODE_ENV=production
 ARG NEXT_PUBLIC_API_URL
+# 应用版本注入（权威源：仓库根 VERSION，经 compose build args 传入）。
+# 构建上下文仅含 frontend/，next.config.js 回退读取的 ../VERSION 不可达，
+# 不注入会让页面版本回落到 package.json 兜底值——登录页/侧边栏/设置页均展示它。
+ARG NEXT_PUBLIC_APP_VERSION
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
-    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION}
 
 RUN pnpm build
 

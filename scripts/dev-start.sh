@@ -667,6 +667,9 @@ start_backend_service() {
     write_color "API 说明: docs/api/openapi.json" "White"
     write_color "日志文件: logs/dev/backend.log" "Gray"
 
+    # 版本号无需构建注入：裸 go run 场景由 config 包在运行时向上查找仓库根
+    # VERSION 文件动态兜底（见 internal/config/version.go），bump 版本零维护。
+
     (
         cd "$backend_dir"
         ENV_FILE="$ENV_FILE_PATH_VALUE" nohup go run ./cmd/api >"$log_dir/backend.log" 2>&1 &

@@ -30,10 +30,7 @@ var placeholderSecretMarkers = []string{
 	"your-super-secret",
 }
 
-// defaultAppVersion 为应用版本号默认值，可在构建时通过
-// -ldflags "-X 'github.com/your-org/inspect-system/backend-go/internal/config.defaultAppVersion=x.y.z'" 注入。
-// 运行时环境变量 APP_VERSION 优先级更高（见 Load）。
-var defaultAppVersion = "1.1.1"
+// defaultAppVersion 的定义与版本解析回退链见 version.go（本文件不再直接持有版本常量）。
 
 type Config struct {
 	Debug      bool   `env:"DEBUG" envDefault:"false"`
@@ -101,7 +98,8 @@ func Load() (Config, error) {
 	}
 
 	if strings.TrimSpace(cfg.AppVersion) == "" {
-		cfg.AppVersion = defaultAppVersion
+		// 版本回退链与各来源语义见 version.go 文件头注释
+		cfg.AppVersion = resolveAppVersion(cfg.AppVersion, ".")
 	}
 
 	cfg.DatabaseURL = normalizeDatabaseURL(cfg.DatabaseURL)

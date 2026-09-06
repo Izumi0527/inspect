@@ -62,7 +62,7 @@ foreach ($a in $Arch) {
     try {
         Push-Location $BackendDir
         & go build -trimpath `
-            -ldflags "-s -w -X '$GoModule/internal/config.defaultAppVersion=$Version'" `
+            -ldflags "-s -w -X '$GoModule/internal/config.buildInjectedVersion=$Version'" `
             -o (Join-Path $stage 'bin\inspect-api') ./cmd/api
         if ($LASTEXITCODE -ne 0) { Fail "go build 失败 (arch=$arch)" }
     } finally {

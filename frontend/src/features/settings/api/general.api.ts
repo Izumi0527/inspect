@@ -1,4 +1,5 @@
 import { httpClient } from '@/lib/api-client'
+import { APP_VERSION } from '@/lib/app-version'
 import type {
   GeneralSettingsResponse,
   ValidatedGeneralSettings,
@@ -37,8 +38,7 @@ function toEnum<T extends string>(value: unknown, allowed: readonly T[], fallbac
   return match ?? fallback
 }
 
-// 与登录页/侧边栏同源的版本号（next.config.js 构建时注入，回退 package.json version）
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || '未知'
+// 版本号统一来自 src/lib/app-version.ts（与登录页/侧边栏共用同一口径）
 
 export const generalApi = {
   /**

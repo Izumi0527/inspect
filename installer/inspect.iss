@@ -1,6 +1,6 @@
 #define AppName "Inspect"
 #ifndef AppVersion
-  #define AppVersion "1.1.0"
+  #define AppVersion "1.1.5" // 兜底值：正常构建由 build-installer 经 /DAppVersion 注入仓库根 VERSION，须保持一致
 #endif
 #define AppPublisher "Inspect Team"
 #define RuntimeRoot "..\build\installer\InspectRuntime"

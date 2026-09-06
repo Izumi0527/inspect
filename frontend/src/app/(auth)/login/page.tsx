@@ -13,6 +13,7 @@ import { z } from 'zod'
 import { Eye, EyeOff, Loader2, Shield, Monitor, AlertCircle } from 'lucide-react'
 import { useAuth, withGuest } from '@/lib/contexts/auth-context'
 import { LoginCredentials } from '@/lib/types/auth.types'
+import { APP_VERSION } from '@/lib/app-version'
 
 // 登录表单验证Schema
 const loginSchema = z.object({
@@ -270,7 +271,7 @@ function LoginPage() {
         {/* 系统信息 */}
         <div className="text-center">
           <p className="text-xs text-slate-500 dark:text-gray-400">
-            企业级网络设备巡检与监控平台 v{process.env.NEXT_PUBLIC_APP_VERSION}
+            企业级网络设备巡检与监控平台 v{APP_VERSION}
           </p>
           <p className="text-xs text-slate-400 dark:text-gray-500 mt-1">
             基于 React 19 + Next.js 15 构建

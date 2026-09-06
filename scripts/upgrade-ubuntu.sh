@@ -11,7 +11,7 @@
 #   备份、换代码、换二进制/构建产物、验证版本，其余一概不碰。
 #
 # 版本号约定：仓库根 VERSION 文件是版本权威源（README 声明），构建时经
-# ldflags 注入 backend-go/internal/config.defaultAppVersion、经
+# ldflags 注入 backend-go/internal/config.buildInjectedVersion、经
 # NEXT_PUBLIC_APP_VERSION 注入前端，升级成功与否以 /health 返回的 version
 # 是否等于目标版本号为准。
 # ============================================
@@ -263,7 +263,7 @@ build_backend() {
         PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
         CGO_ENABLED=0 \
         go -C ${APP_SRC}/backend-go build \
-        -ldflags=\"-s -w -X ${GO_CONFIG_PKG}.defaultAppVersion=${NEW_VERSION}\" \
+        -ldflags=\"-s -w -X ${GO_CONFIG_PKG}.buildInjectedVersion=${NEW_VERSION}\" \
         -o ${APP_BIN}/inspect-api.new ./cmd/api" \
         || die "后端构建失败（旧版服务仍在运行，未受影响）"
 

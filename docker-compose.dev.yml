@@ -64,6 +64,9 @@ services:
       context: ./backend-go
       dockerfile: Dockerfile
       target: development
+      # 与生产同一权威源（仓库根 VERSION）；development 阶段经 APP_VERSION 环境变量生效
+      args:
+        APP_VERSION: ${APP_VERSION:-}
     container_name: inspect-backend-dev
     environment:
       # 服务配置

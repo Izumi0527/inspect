@@ -2,7 +2,7 @@
 # 构建 Windows 安装包（一键，Bash 版）：编译后端、构建前端、组装运行时、Inno Setup 打包。
 #
 # 以仓库根 VERSION 为唯一版本真相源，在构建时分发版本号：
-#   - 后端：go build -ldflags 注入 internal/config.defaultAppVersion
+#   - 后端：go build -ldflags 注入 internal/config.buildInjectedVersion
 #   - 前端：NEXT_PUBLIC_APP_VERSION 环境变量注入 next build
 #   - 安装包：ISCC /DAppVersion 覆盖
 # 复用既有 InspectRuntime/frontend/node_modules 与 runtime/node.exe（版本无关，体量大）。
@@ -97,7 +97,7 @@ if [ "$SKIP_BACKEND" = true ]; then
 else
     step "编译后端 app.exe（注入版本 $VERSION）"
     mkdir -p "$RUNTIME_BACKEND"
-    ( cd "$BACKEND_DIR" && go build -ldflags "-s -w -X $GO_MODULE/internal/config.defaultAppVersion=$VERSION" -o "$RUNTIME_BACKEND/app.exe" ./cmd/api )
+    ( cd "$BACKEND_DIR" && go build -ldflags "-s -w -X $GO_MODULE/internal/config.buildInjectedVersion=$VERSION" -o "$RUNTIME_BACKEND/app.exe" ./cmd/api )
     echo "[OK] 后端编译完成: $RUNTIME_BACKEND/app.exe"
 fi
 

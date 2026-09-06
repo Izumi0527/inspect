@@ -81,7 +81,7 @@ build_one() {
     ( cd "$BACKEND_DIR" && \
       CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
       go build -trimpath \
-        -ldflags "-s -w -X '${GO_MODULE}/internal/config.defaultAppVersion=${VERSION}'" \
+        -ldflags "-s -w -X '${GO_MODULE}/internal/config.buildInjectedVersion=${VERSION}'" \
         -o "$stage/bin/inspect-api" ./cmd/api )
 
     cp "$PROJECT_ROOT/database/database-init-complete.sql" "$stage/database/"

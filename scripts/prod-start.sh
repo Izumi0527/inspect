@@ -7,6 +7,13 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose.prod.yml"
 
+# 应用版本注入 docker build args（backend ldflags / 前端 NEXT_PUBLIC_APP_VERSION）。
+# 权威源是仓库根 VERSION，与 build-release.sh、deploy-ubuntu.sh 保持同一口径；
+# compose 中 ${APP_VERSION:-0.0.0} 在外部直接调用 docker compose 时退化为占位值。
+APP_VERSION="$(tr -d ' \t\r\n' < "$PROJECT_ROOT/VERSION" 2>/dev/null || true)"
+APP_VERSION="${APP_VERSION:-0.0.0}"
+export APP_VERSION
+
 ACTION="start"
 ENV_FILE=""
 WITH_NGINX=false
