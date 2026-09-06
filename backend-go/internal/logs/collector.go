@@ -400,6 +400,13 @@ var (
 var huaweiLogbufferPattern = regexp.MustCompile(
 	`^((?:\w{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}[^\s]*)\s+(\S+)\s+%%\d{2}([A-Za-z0-9_]+)/(\d)/([A-Za-z0-9_-]+)(?:\([a-z]\))?(?:\[\d+\])?:\s*(.+)$`)
 
+// huaweiLegacyLogbufferPattern 匹配华为 VRP 日志行去掉版本头后的变体：
+// 设备执行 undo info-center logbuf version 后，logbuffer 行不再带 %%01 版本前缀，
+// 形如 `2025-03-10 08:12:33+08:00 HUAWEI SSH/5/SSH_FAIL(l)[7]:Failed to login.`
+// 其余结构与标准行一致，须在标准模式匹配失败后兜底尝试。
+var huaweiLegacyLogbufferPattern = regexp.MustCompile(
+	`^((?:\w{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}[^\s]*)\s+(\S+)\s+([A-Za-z0-9_]+)/(\d)/([A-Za-z0-9_-]+)(?:\([a-z]\))?(?:\[\d+\])?:\s*(.+)$`)
+
 // vrpModuleFacilities 华为 VRP 常见日志模块 → 本系统 facility 值域映射。
 // 映射结果必须落在 normalizeFacility 认可的值域内
 // （system/interface/security/routing/switching/snmp/ssh/other），
@@ -433,6 +440,30 @@ var vrpModuleFacilities = map[string]string{
 	"vfs": "system", "ops": "system", "license": "system",
 	"update": "system", "patch": "system", "restart": "system",
 	"ic": "system", "srm": "system", "dev": "system", "env": "system",
+	// 以下按 docs/vendor 华为 S 系列产品文档 MIB 清单补充的模块族
+	// （HUAWEI-XXX-MIB 与 VRP 日志模块同名对应）
+	// 接口与链路
+	"dldp": "interface", "ethoam": "interface", "etrunk": "interface",
+	// 路由（BFD 为路由协议快速故障检测，随会话 Down 撤销路由，归 routing）
+	"bfd": "routing",
+	// 二层交换环网与 MAC 漂移
+	"erps": "switching", "rrpp": "switching", "vbst": "switching",
+	"mflp": "switching", "smartlink": "switching",
+	// 安全与接入认证
+	"nac": "security", "authen": "security", "radius": "security",
+	"hwtacacs": "security", "portal": "security", "macauth": "security",
+	"usa": "security", "savi": "security",
+	// 系统运行
+	"ntp": "system", "cpu": "system", "memory": "system",
+	"fib": "system", "flash": "system", "gtl": "system",
+	"infocenter": "system", "syslog": "system", "sysman": "system",
+	"energymngt": "system", "netstream": "system", "ptp": "system",
+	"dns": "system", "nqa": "system", "dad": "system",
+	"datasync": "system", "autodiagnose": "system",
+	"easyoperation": "system", "trng": "system", "configman": "system",
+	"wlan": "system", "capwap": "system",
+	// Web 网管属远程管理面，与 ssh/telnet 同归远程登录
+	"http": "ssh",
 }
 
 // vrpModuleToFacility 按 VRP 模块名精确映射设施；未收录的模块退回
@@ -452,6 +483,22 @@ func parseLogLine(line string, deviceID int, vendor string, collectedAt time.Tim
 		// 华为 VRP logbuffer 结构化头优先：%%01模块/级别/助记符(l)[序号]:
 		// 组：1=时间戳 2=主机名 3=模块 4=级别数字 5=助记符 6=消息正文
 		if match := huaweiLogbufferPattern.FindStringSubmatch(line); len(match) == 7 {
+			logTimestamp := parseTrapTimestamp(match[1], collectedAt)
+			return &logEntry{
+				DeviceID:     deviceID,
+				Level:        mapVRPSeverity(match[4]),
+				Facility:     vrpModuleToFacility(match[3], match[6]),
+				Source:       "ssh",
+				Message:      strings.TrimSpace(match[6]),
+				RawMessage:   line,
+				LogTimestamp: logTimestamp,
+				CollectedAt:  collectedAt,
+			}
+		}
+		// 无版本头变体（undo info-center logbuf version 后）：
+		// `2025-03-10 08:12:33+08:00 HUAWEI SSH/5/SSH_FAIL(l):Failed to login.`
+		// 组序与标准模式一致。主机名位置被 \S+ 消化，正文从模块头之后截取。
+		if match := huaweiLegacyLogbufferPattern.FindStringSubmatch(line); len(match) == 7 {
 			logTimestamp := parseTrapTimestamp(match[1], collectedAt)
 			return &logEntry{
 				DeviceID:     deviceID,

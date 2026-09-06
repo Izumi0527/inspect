@@ -33,6 +33,19 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // 接口与链路
   // ==========================================
   {
+    // 华为 VRP：`ERRDOWN/4/ERRDOWN_DOWNRECOVER: The interface ... leaves the error-down state`
+    // 必须排在 huawei-error-down 之前：恢复报文同样含 error-down 字样，
+    // 否则会被故障规则抢先读成 critical。恢复报文存在两种语序：
+    // 「leaves/recovers from the error-down state」「recovers from error-down」，
+    // 因此 recover 与 error-down 双向各留 60 字符窗口。
+    id: 'huawei-error-down-recover',
+    pattern: /leaves the error.?down state|recover(?:s|ed)?[\s\S]{0,60}?error.?down|error.?down[\s\S]{0,60}?(?:recover|resume|解除|恢复)/i,
+    title: '端口错误关闭恢复',
+    summary: '{device} 的端口已从 Error-Down 保护状态自动恢复，转发功能重新可用。',
+    suggestion: '确认触发 Error-Down 的根因（CRC 错包、链路震荡等）已排除，避免端口反复进入保护状态。',
+    tone: 'success',
+  },
+  {
     // 华为 VRP：`ERRDOWN/4/ERRDOWN_DOWNNOTIFY: The interface ... changes to the error-down state`
     // Error-Down 是端口级保护动作，语义与普通链路 Down 不同，必须最先判断。
     id: 'huawei-error-down',
@@ -114,9 +127,29 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     tone: 'info',
   },
   {
-    // 光功率越限必须排在「光模块异常」之前：越限是量化的性能问题，给出具体排查项
+    // 华为 VRP：`LLDP/6/NBRADD: New neighbor added. (IfIndex=…, PortName=…, SysName=…)`
+    // 必须与邻居变化规则相邻放置：两类报文都以 neighbor 锚定、措辞互斥，无抢跑风险。
+    id: 'huawei-lldp-neighbor-add',
+    pattern: /new neighbor added|neighbor[\s\S]{0,30}?\badded\b/i,
+    title: 'LLDP 新邻居接入',
+    summary: '{device} 通过 LLDP 发现新的直连邻居并完成信息学习，拓扑已更新。',
+    suggestion: '结合日志中的 PortName 与 SysName 核对新接入设备身份；若非计划内接入，确认是否存在私接设备。',
+    tone: 'info',
+  },
+  {
+    // 华为 VRP：`LLDP/6/NBRDELETE: Neighbor deleted. (IfIndex=…, PortName=…)`
+    id: 'huawei-lldp-neighbor-delete',
+    pattern: /neighbor[\s\S]{0,30}?\bdeleted\b/i,
+    title: 'LLDP 邻居移除',
+    summary: '{device} 的直连邻居信息被移除，对应端口已感知不到原邻居设备。',
+    suggestion: '确认对端设备是否计划内下电或迁移；若非计划操作，检查对端供电与链路状态。',
+    tone: 'info',
+  },
+  {
+    // 光功率越限必须排在「光模块异常」之前：越限是量化的性能问题，给出具体排查项。
+    // abnormal 覆盖 hwOpticalPowerAbnormal（光功率异常）的正文表述。
     id: 'huawei-optical-power',
-    pattern: /\b(?:rx|tx|optical)[\s\S]{0,20}?power[\s\S]{0,30}?(?:exceed|high|low|over|under|越限|过高|过低)/i,
+    pattern: /\b(?:rx|tx|optical)[\s\S]{0,20}?power[\s\S]{0,30}?(?:exceed|high|low|over|under|abnormal|越限|过高|过低)/i,
     title: '光功率越限',
     summary: '{device} 的光模块收发功率超出正常门限，轻则误码率升高，重则链路中断。',
     suggestion: '通过 display transceiver 查看收发光功率；检查光纤弯折、接头污染与光模块老化，必要时更换模块或清洁尾纤。',
@@ -137,6 +170,16 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     title: '光模块异常',
     summary: '{device} 的光模块状态异常，可能为未在位、型号不兼容或器件失效。',
     suggestion: '确认模块在位且与设备型号匹配；通过 display transceiver 核对收发功率是否处于告警门限内。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：`SRM/3/HALFDUPLEXALARM` 对应 hwPortPhysicalEthHalfDuplexAlarm，
+    // 接口工作在半双工模式时冲突域内会持续产生碰撞，几乎必然伴随错包与丢包。
+    id: 'huawei-duplex-mismatch',
+    pattern: /half.?duplex|双工不匹配/i,
+    title: '接口双工不匹配',
+    summary: '{device} 的端口工作在半双工模式，与对端全双工不匹配将导致冲突、错包与性能劣化。',
+    suggestion: '通过 display interface 查看端口双工与速率；两端统一配置为自协商或固定全双工。',
     tone: 'warning',
   },
 
@@ -334,12 +377,22 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // 硬件与环境
   // ==========================================
   {
+    // 华为 VRP：hwEntityDyingGasp，设备检测到输入电源中断后依靠内部储能
+    // 发出的最后告警，属于整机即将断电的最高优先级硬件事件。
+    id: 'huawei-dying-gasp',
+    pattern: /dying.?gasp|掉电告急/i,
+    title: '设备掉电告急',
+    summary: '{device} 检测到输入电源中断并上报 Dying Gasp 告急，设备即将断电下电。',
+    suggestion: '立即现场核查供电（PDU、电源线、空开）是否中断；恢复供电后确认设备自启并检查业务状态。',
+    tone: 'critical',
+  },
+  {
     // 华为 VRP：`SRM/4/POWERNORMAL: Power … resumed`、`SRM/4/FANNORMAL: Fan resumed`、
     // `SRM/4/TEMPRECOVERALARM: temperature below resume threshold`
     // 恢复类必须排在所有硬件故障与温度门限规则之前 —— 「below resume threshold」
     // 含 below/threshold 字样，会被温度门限规则抢先读成低温告警。
     id: 'huawei-hardware-recover',
-    pattern: /(?:temperature|fan|power|电源|风扇|温度)[\s\S]{0,40}?(?:resume|recover|restore|normal|解除|恢复)/i,
+    pattern: /(?:temperature|fan|power|voltage|humidity|电源|风扇|温度|电压|湿度)[\s\S]{0,40}?(?:resume|recover|restore|normal|解除|恢复)/i,
     title: '硬件状态恢复',
     summary: '{device} 的电源/风扇/温度相关告警已解除，硬件状态恢复正常。',
     tone: 'success',
@@ -364,6 +417,16 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     tone: 'info',
   },
   {
+    // 华为 VRP：hwEntityOnline 对应的 `Board … is online` 恢复事件。
+    // 必须排在 huawei-board-removed 之后：「not online」要先被拔出规则命中；
+    // 而 is online 不含 fail/offline 等词，也不会误触单板故障规则。
+    id: 'huawei-board-online',
+    pattern: /board[\s\S]{0,40}?\bis online\b/i,
+    title: '单板已上线',
+    summary: '{device} 的单板已重新注册上线，其承载端口与业务恢复正常。',
+    tone: 'success',
+  },
+  {
     // 必须排在「温度越限」之前 —— 华为 SRM/3/TEMPFALLINGALARM 报文中 TEMP 与 ALARM
     // 仅相隔 7 个字符，会被下方高温规则抢先命中，把「低于门限」读成「持续高温」，
     // 得到与事实完全相反的结论。
@@ -381,6 +444,17 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     summary: '{device} 的温度传感器读数超过告警门限，持续高温将触发降频保护甚至整机下电。',
     suggestion: '检查机房空调与机柜风道，确认进出风口无遮挡、防尘网无积尘；同时核查风扇模块运行状态。',
     tone: 'critical',
+  },
+  {
+    // 华为 VRP：电压/湿度类环境传感器越限（hwBaseThresholdType 3/2）。
+    // 必须排在 huawei-hardware-recover 之后：恢复报文（…resumed）不含 alarm/exceed
+    // 字样，互不干扰；但「below resume threshold」类恢复报文要先被恢复规则吃掉。
+    id: 'huawei-env-sensor',
+    pattern: /(?:voltage|humidity|电压|湿度)[\s\S]{0,40}?(?:alarm|exceed|abnormal|high|low|过高|过低|越限)/i,
+    title: '环境传感器越限',
+    summary: '{device} 的电压/湿度环境传感器读数超出正常门限，可能影响设备供电或器件寿命。',
+    suggestion: '通过 display environment 查看传感器读数；核查机房供电电压与空调湿度设定，排除环境异常。',
+    tone: 'warning',
   },
   {
     id: 'fan-fault',
@@ -413,7 +487,9 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // ==========================================
   {
     id: 'cpu-high',
-    pattern: /cpu[\s\S]{0,40}?(?:high|usage|threshold|exceed|overload|过高|使用率)/i,
+    // rising/reached 覆盖 hwCPUUtilizationRisingAlarm 的
+    // 「CPU utilization rising alarm」正文表述
+    pattern: /cpu[\s\S]{0,40}?(?:high|usage|threshold|exceed|overload|rising|reached|过高|使用率)/i,
     title: 'CPU 利用率超阈值',
     summary: '{device} 的 CPU 占用率持续超过告警门限，可能导致协议报文处理延迟、路由收敛变慢与管理通道响应迟滞。',
     suggestion: '定位高占用任务，排查是否存在广播风暴、攻击流量或异常协议报文上送；必要时配置 CPCAR 限速保护控制平面。',
@@ -433,6 +509,36 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     title: '接口流量超阈值',
     summary: '{device} 的接口流量超过设定门限，链路接近饱和时将出现排队时延与丢包。',
     suggestion: '确认是否为备份、视频会议等突发业务；若属常态增长，考虑链路扩容或部署链路聚合分担流量。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：端口 CRC 错包数超门限（hwBaseThresholdType=7 portCrcError），
+    // CRC 持续增长几乎都指向线缆/光模块/对端硬件问题。
+    id: 'huawei-crc-exceed',
+    pattern: /\bcrc\b[\s\S]{0,60}?(?:exceed|threshold|alarm|越限|告警)/i,
+    title: '端口 CRC 错包越限',
+    summary: '{device} 的端口 CRC 错包数超过门限，链路物理层质量劣化，将造成重传与业务丢包。',
+    suggestion: '通过 display interface 查看 CRC 统计；优先更换线缆或光模块，排除端口硬件故障。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：端口广播/组播报文超门限触发抑制（hwBaseThresholdType=8 portBroadcast）
+    id: 'huawei-broadcast-exceed',
+    pattern: /\bbroadcast[\s\S]{0,60}?(?:exceed|threshold|alarm|suppress|风暴)/i,
+    title: '广播报文超阈值',
+    summary: '{device} 的端口广播报文比例超过设定门限，已触发风暴抑制；广播过量将挤占业务带宽。',
+    suggestion: '定位广播源终端或是否存在环路；通过 display interface 查看广播统计，必要时启用广播抑制与环路检测。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：hwFIBOverloadSuspend 等四节点，转发表项超限后接口板挂起或停止学习。
+    // 必须排在 huawei-entry-exceed 之前：其报文措辞是 fib + overload，
+    // entry-exceed 的锚点词（exceed/full/reach）匹配不上，需要专门规则给出影响说明。
+    id: 'huawei-fib-overload',
+    pattern: /\bfib\b[\s\S]{0,40}?(?:overload|超限)|overload[\s\S]{0,40}?(?:suspend|forward)/i,
+    title: '转发表超限保护',
+    summary: '{device} 的转发表项容量超限触发保护：相关单板停止学习新表项或清空转发表，端口转发受影响。',
+    suggestion: '通过 display fib statistics 查看表项规模；评估路由规模是否超出设备规格，必要时调整规格或更换设备。',
     tone: 'warning',
   },
 
@@ -478,13 +584,32 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     tone: 'info',
   },
   {
-    // 华为 VRP：`STACKM/4/STACK_MEMBER_CHANGE`、`CSS/4/CSSMASTEREXCHANGED` 等
+    // 华为 VRP：`STACKM/4/STACK_MEMBER_CHANGE`、`CSS/4/CSSMASTEREXCHANGED`、
+    // `STACKM/4/STACKLINKDOWN`（堆叠口 Down）等
     id: 'huawei-stack-change',
-    pattern: /(?:stack|css)[\s\S]{0,40}?(?:change|switch|master|fail|split|merge|exchang)/i,
+    pattern: /(?:stack|css)[\s\S]{0,40}?(?:change|switch|master|fail|split|merge|exchang|down)/i,
     title: '堆叠/集群状态变化',
     summary: '{device} 的堆叠（CSS）状态发生变更（主备切换、成员加入退出或分裂合并），拓扑角色已重新选举。',
     suggestion: '通过 display stack 查看堆叠拓扑与角色；确认切换是否符合预期，排查堆叠线缆与链路状态。',
     tone: 'warning',
+  },
+  {
+    // 华为 VRP：Flash/存储空间不足（FLASH-MAN-MIB 对应的存储告警）
+    id: 'huawei-flash-full',
+    pattern: /\b(?:disk|flash|storage)\b[\s\S]{0,40}?\b(?:full|insufficient|low)\b/i,
+    title: '存储空间不足',
+    summary: '{device} 的存储介质（Flash/磁盘）可用空间不足，日志、补丁与配置文件可能无法继续写入。',
+    suggestion: '通过 dir 命令查看存储占用；清理过期的日志文件与旧版本软件，必要时扩容存储介质。',
+    tone: 'warning',
+  },
+  {
+    // 华为 VRP：hwSysClockChangedNotification，命令行修改系统时钟
+    id: 'huawei-clock-change',
+    pattern: /clock[\s\S]{0,30}?(?:chang|adjust|set|改变|调整)/i,
+    title: '系统时钟变更',
+    summary: '{device} 的系统时钟被修改，该时间点前后的日志时序与时间关联分析可能受影响。',
+    suggestion: '核对是否为计划内操作；确认 NTP 同步正常，避免时钟漂移影响日志排序与跨设备定位。',
+    tone: 'info',
   },
   {
     id: 'device-reboot',
@@ -496,7 +621,8 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   },
   {
     id: 'config-changed',
-    pattern: /(?:config_i|cmdrecord|configured from|configuration.{0,20}(?:change|save|modif)|配置(?:变更|保存|修改))/i,
+    // save.{0,15}configuration 覆盖 `Save configuration successfully.` 等保存操作
+    pattern: /(?:config_i|cmdrecord|configured from|configuration.{0,20}(?:change|save|modif)|save.{0,15}configuration|配置(?:变更|保存|修改))/i,
     title: '配置变更',
     summary: '{device} 的运行配置被修改。',
     suggestion: '核对该变更是否在维护窗口内且经过审批；若为非计划变更，比对配置差异并按需回退。',

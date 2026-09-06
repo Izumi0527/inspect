@@ -5,8 +5,10 @@
  */
 
 import {
+  describeBaseTrapSeverity,
   describeFacility,
   describeLevel,
+  describeThresholdType,
   describeVRPModule,
   humanizeInterfaceName,
   humanizeState,
@@ -186,6 +188,38 @@ function renderTemplate(template: string, match: RegExpExecArray, deviceName: st
 }
 
 /**
+ * 从消息中提取华为实体告警绑定变量的补充线索。
+ *
+ * 字段定义来自 docs/vendor 华为产品文档：
+ * - `BaseTrapSeverity=N`（1.16.3.1 hwBaseTrapSeverity，1 已恢复 ~ 6 警告）
+ * - `hwBaseThresholdType=N`（1.16.4.1，温度/湿度/电压等 8 类监控对象）
+ * - `EntPhysicalName=…` 告警关联器件名
+ * - `ReasonDescription=…` / `BaseTrapReasonDescr=…` 厂商给出的原因描述
+ *
+ * SRM 等实体类日志的兜底文案据此把裸数字还原成厂商语义，
+ * 未携带这些字段的日志返回空数组，不产生噪音。
+ */
+function extractBaseTrapHints(message: string): string[] {
+  const hints: string[] = []
+
+  const severity = /BaseTrapSeverity=(\d)/.exec(message)?.[1]
+  const severityLabel = describeBaseTrapSeverity(severity)
+  if (severity && severityLabel) hints.push(`厂商告警级别：${severityLabel}（${severity}）`)
+
+  const thresholdType = /hwBaseThresholdType=(\d)/.exec(message)?.[1]
+  const thresholdLabel = describeThresholdType(thresholdType)
+  if (thresholdType && thresholdLabel) hints.push(`监控对象：${thresholdLabel}`)
+
+  const entity = /EntPhysicalName=([^,)]+)/.exec(message)?.[1]
+  if (entity?.trim()) hints.push(`关联器件：${entity.trim()}`)
+
+  const reason = /(?:ReasonDescription|BaseTrapReasonDescr)=([^,)]+)/.exec(message)?.[1]
+  if (reason?.trim()) hints.push(`厂商原因：${reason.trim()}`)
+
+  return hints
+}
+
+/**
  * 兜底翻译：没有任何规则命中、且 OID 也未收录时使用。
  *
  * 刻意保持诚实 —— 明确说明无匹配规则并引导查看原文，
@@ -194,7 +228,8 @@ function renderTemplate(template: string, match: RegExpExecArray, deviceName: st
  *
  * 华为 VRP 日志带结构化头时（%%01模块/级别/助记符），兜底文案会指明
  * 模块与事件名 —— 助记符是查阅华为文档的关键词，远比笼统的
- * 「设备上报一条信息」可操作。
+ * 「设备上报一条信息」可操作；正文携带实体告警绑定变量时，
+ * 还会附上厂商告警级别、监控对象与关联器件等文档枚举语义。
  */
 function buildFallback(input: PlainLanguageInput, deviceName: string): PlainLanguageResult {
   const message = String(input?.message ?? '').trim()
@@ -204,11 +239,13 @@ function buildFallback(input: PlainLanguageInput, deviceName: string): PlainLang
     String(input.level ?? '').trim().toLowerCase(),
   )
   const vrpHeader = resolveVRPLogHeader(message)
+  const hints = extractBaseTrapHints(message)
+  const hintSentence = hints.length ? `${hints.join('；')}。` : ''
 
   if (vrpHeader) {
     return {
       title: `${vrpHeader.label}（${vrpHeader.module}）`,
-      summary: `${deviceName} 的${vrpHeader.label}模块上报一条${vrpHeader.levelDescription}级别信息（事件 ${vrpHeader.mnemonic}），暂无该事件的专项解读规则。原始内容完整保留在下方，可按「${vrpHeader.module}/${vrpHeader.mnemonic}」查阅华为文档或据此进一步排查。`,
+      summary: `${deviceName} 的${vrpHeader.label}模块上报一条${vrpHeader.levelDescription}级别信息（事件 ${vrpHeader.mnemonic}）。${hintSentence}暂无该事件的专项解读规则。原始内容完整保留在下方，可按「${vrpHeader.module}/${vrpHeader.mnemonic}」查阅华为文档或据此进一步排查。`,
       tone: toneFromLevel(input.level),
       matched: false,
     }
@@ -216,7 +253,7 @@ function buildFallback(input: PlainLanguageInput, deviceName: string): PlainLang
 
   return {
     title: `${facility}${isAbnormal ? '异常' : '事件'}`,
-    summary: `${deviceName} 上报一条${facility}相关的${level}信息，暂无匹配的解析规则。原始内容见下方，可据此进一步排查或提交厂商分析。`,
+    summary: `${deviceName} 上报一条${facility}相关的${level}信息。${hintSentence}暂无匹配的解析规则。原始内容见下方，可据此进一步排查或提交厂商分析。`,
     tone: toneFromLevel(input.level),
     matched: false,
   }

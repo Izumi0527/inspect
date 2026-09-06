@@ -48,6 +48,50 @@ const SAMPLES = {
     'Authen fail. (UserName=test01, AuthenFailReason=Password has expired)',
   logbufferArpAttack:
     'The ARP packet speed exceed the configured speed limit. (SourceIp=10.1.1.5, DiscardNumber=1024)',
+
+  // ============================================
+  // 第二批：按 docs/vendor 华为产品文档告警节点定义扩充的事件
+  // ============================================
+  errorDownRecover:
+    'The interface GigabitEthernet0/0/8 leaves the error-down state. (Reason=CRC-ERROR-DOWN)',
+  errorDownRecoverAlt:
+    'The interface GigabitEthernet0/0/8 recovers from error-down state. (Reason=LINK-FLAP-DOWN)',
+  crcExceed:
+    'The number of CRC error packets on the interface exceeds the alarm threshold. (InterfaceName=GigabitEthernet0/0/2)',
+  broadcastExceed:
+    'Broadcast packets on the interface exceed the suppress threshold. (InterfaceName=GigabitEthernet0/0/4)',
+  cpuRising:
+    'The CPU utilization has reached the rising alarm threshold. (CpuUsage=85%)',
+  halfDuplex:
+    'The interface GigabitEthernet0/0/3 works in half duplex mode.',
+  dyingGasp:
+    'Dying gasp is detected. (EntityPhysicalIndex=603979809)',
+  flashInsufficient:
+    'The storage space of flash: is insufficient.',
+  clockChanged:
+    'The system clock changed. (OldTime=2026-09-07 10:00:00, NewTime=2026-09-07 11:00:00)',
+  fibOverload:
+    'The FIB forwarding entries overload, the forwarding entries are cleared.',
+  stackLinkDown:
+    'The stack port 1 goes down.',
+  boardOnline:
+    'Board 1 is online.',
+  configSave:
+    'Save configuration successfully.',
+
+  // LLDP 邻居三类事件（HUAWEI-LLDP-MIB）：变化/接入/移除
+  lldpNeighborChange:
+    'LLDP/4/NBRCHGTRAP: OID 1.0.8802.1.1.2.0.0.1 Neighbor info changed.',
+  lldpNeighborAdd:
+    'LLDP/6/NBRADD: OID 1.0.8802.1.1.2.0.0.1 New neighbor added. (IfIndex=4, PortName=GigabitEthernet0/0/5, SysName=AGG-SW)',
+  lldpNeighborDelete:
+    'LLDP/6/NBRDELETE: OID 1.0.8802.1.1.2.0.0.1 Neighbor deleted. (IfIndex=4, PortName=GigabitEthernet0/0/5)',
+
+  // 实体告警绑定变量兜底：无专项规则时，兜底文案应还原文档枚举语义
+  baseTrapFallback:
+    'OID 1.3.6.1.4.1.2011.5.25.129.2.3.88 humidity sensor state changed.(EntityPhysicalIndex=603979777, BaseTrapSeverity=3, BaseTrapProbableCause=70656, EntPhysicalName=MPU Board 0)',
+  baseTrapVrpFallback:
+    '%%01SRM/4/HW_BASETRAP(l)[5]:Voltage sensor state changed.(EntityPhysicalIndex=603979777, BaseTrapSeverity=6, BaseThresholdEntry_hwBaseThresholdType=3, EntPhysicalName=MPU Board 0)',
 } as const
 
 const translate = (message: string, level: string, facility: string) =>
@@ -116,6 +160,34 @@ describe('华为 VRP 日志人话解读覆盖', () => {
       expect(result.matched).toBe(true)
       expect(result.title).not.toBe('修复建议')
       expect(result.summary).toContain('GigabitEthernet0/0/1')
+    })
+  })
+
+  describe('LLDP 邻居（HUAWEI-LLDP-MIB）', () => {
+    it('邻居信息变化应命中既有变化规则', () => {
+      const result = translate(SAMPLES.lldpNeighborChange, 'info', 'interface')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-lldp-neighbor-change')
+      expect(result.tone).toBe('info')
+    })
+
+    it('新邻居接入应有专项规则，不再退化为兜底', () => {
+      const result = translate(SAMPLES.lldpNeighborAdd, 'info', 'interface')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-lldp-neighbor-add')
+      expect(result.summary).toContain('新')
+      expect(result.suggestion).toBeTruthy()
+    })
+
+    it('邻居移除应有专项规则并提示核查对端', () => {
+      const result = translate(SAMPLES.lldpNeighborDelete, 'info', 'interface')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-lldp-neighbor-delete')
+      expect(result.summary).toContain('移除')
+      expect(result.suggestion).toBeTruthy()
     })
   })
 
@@ -198,6 +270,139 @@ describe('华为 VRP 日志人话解读覆盖', () => {
       expect(result.matched).toBe(true)
       expect(result.ruleId).toBe('huawei-arp-attack')
       expect(result.tone).toBe('warning')
+    })
+  })
+
+  describe('Error-Down 恢复（文档 hwERRORDOWN 节点）', () => {
+    it('恢复报文不得被误读为端口保护关闭', () => {
+      const result = translate(SAMPLES.errorDownRecover, 'warning', 'interface')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-error-down-recover')
+      expect(result.tone).toBe('success')
+      expect(result.summary).toContain('恢复')
+    })
+
+    it('recover 在前、error-down 在后的语序同样应识别为恢复', () => {
+      const result = translate(SAMPLES.errorDownRecoverAlt, 'warning', 'interface')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-error-down-recover')
+      expect(result.tone).toBe('success')
+    })
+  })
+
+  describe('性能门限类（文档 hwBaseThresholdTable 枚举）', () => {
+    it('CRC 错包越限应给出物理层排查建议', () => {
+      const result = translate(SAMPLES.crcExceed, 'warning', 'interface')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-crc-exceed')
+      expect(result.tone).toBe('warning')
+    })
+
+    it('广播报文超阈值应识别风暴抑制场景', () => {
+      const result = translate(SAMPLES.broadcastExceed, 'warning', 'interface')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-broadcast-exceed')
+      expect(result.tone).toBe('warning')
+    })
+
+    it('CPU 利用率 rising 告警应命中 CPU 超阈值规则', () => {
+      const result = translate(SAMPLES.cpuRising, 'warning', 'system')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('cpu-high')
+      expect(result.tone).toBe('warning')
+    })
+
+    it('转发表超限保护应区别于普通表项超限', () => {
+      const result = translate(SAMPLES.fibOverload, 'warning', 'system')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-fib-overload')
+      expect(result.tone).toBe('warning')
+    })
+  })
+
+  describe('硬件与环境扩充（文档 HUAWEI-ENTITY-TRAP-MIB 告警节点）', () => {
+    it('半双工模式应识别为双工不匹配', () => {
+      const result = translate(SAMPLES.halfDuplex, 'warning', 'interface')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-duplex-mismatch')
+      expect(result.tone).toBe('warning')
+    })
+
+    it('Dying Gasp 应判为最高优先级掉电告急', () => {
+      const result = translate(SAMPLES.dyingGasp, 'critical', 'system')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-dying-gasp')
+      expect(result.tone).toBe('critical')
+    })
+
+    it('单板上线应判为恢复而非故障', () => {
+      const result = translate(SAMPLES.boardOnline, 'info', 'system')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-board-online')
+      expect(result.tone).toBe('success')
+    })
+  })
+
+  describe('系统运行扩充', () => {
+    it('存储空间不足应给出清理建议', () => {
+      const result = translate(SAMPLES.flashInsufficient, 'warning', 'system')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-flash-full')
+      expect(result.tone).toBe('warning')
+    })
+
+    it('系统时钟变更应为信息级别并提示日志时序影响', () => {
+      const result = translate(SAMPLES.clockChanged, 'info', 'system')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-clock-change')
+      expect(result.tone).toBe('info')
+    })
+
+    it('堆叠口 Down 应命中堆叠状态规则', () => {
+      const result = translate(SAMPLES.stackLinkDown, 'warning', 'switching')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-stack-change')
+      expect(result.tone).toBe('warning')
+    })
+
+    it('保存配置应命中配置变更规则', () => {
+      const result = translate(SAMPLES.configSave, 'info', 'system')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('config-changed')
+      expect(result.tone).toBe('info')
+    })
+  })
+
+  describe('实体告警绑定变量兜底（文档 hwBaseTrapSeverity 等枚举）', () => {
+    it('无专项规则时兜底应还原厂商告警级别与关联器件', () => {
+      const result = translate(SAMPLES.baseTrapFallback, 'error', 'system')
+
+      expect(result.matched).toBe(false)
+      expect(result.summary).toContain('厂商告警级别：严重（3）')
+      expect(result.summary).toContain('关联器件：MPU Board 0')
+    })
+
+    it('带 VRP 结构化头的兜底应同时还原监控对象枚举', () => {
+      const result = translate(SAMPLES.baseTrapVrpFallback, 'warning', 'system')
+
+      expect(result.matched).toBe(false)
+      expect(result.title).toContain('系统资源管理')
+      expect(result.summary).toContain('厂商告警级别：警告（6）')
+      expect(result.summary).toContain('监控对象：电压传感器')
+      expect(result.summary).toContain('HW_BASETRAP')
     })
   })
 })

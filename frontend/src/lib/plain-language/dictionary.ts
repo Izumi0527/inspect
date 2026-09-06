@@ -212,6 +212,7 @@ const VRP_MODULE_LABELS: Readonly<Record<string, string>> = {
   PIM: '组播路由',
   IGMP: '组播管理',
   MLD: '组播侦听发现',
+  BFD: 'BFD 链路检测',
   // 安全与接入
   AAA: 'AAA 认证',
   AM: '地址管理',
@@ -223,6 +224,14 @@ const VRP_MODULE_LABELS: Readonly<Record<string, string>> = {
   PORTSEC: '端口安全',
   PKI: '公钥基础设施',
   SSL: 'SSL 安全',
+  NAC: '网络接入控制',
+  AUTHEN: '接入认证',
+  RADIUS: 'RADIUS 认证',
+  HWTACACS: 'TACACS 认证',
+  PORTAL: 'Portal 认证',
+  MACAUTH: 'MAC 认证',
+  USA: '用户安全审计',
+  SAVI: '源地址验证',
   // 远程登录
   SSH: 'SSH 远程登录',
   SFTP: 'SFTP 文件传输',
@@ -247,6 +256,40 @@ const VRP_MODULE_LABELS: Readonly<Record<string, string>> = {
   DEV: '设备管理',
   ENV: '环境监控',
   NTP: 'NTP 时钟',
+  // 以下对应 docs/vendor 华为 S 系列产品文档 MIB 清单中的模块族
+  // 接口与链路
+  DLDP: '单向链路检测',
+  ETHOAM: '以太网 OAM',
+  ETRUNK: 'E-Trunk 主备',
+  // 二层交换
+  ERPS: '环网保护',
+  RRPP: '快速环网',
+  VBST: 'VBST 生成树',
+  MFLP: 'MAC 漂移检测',
+  SMARTLINK: 'Smart Link 主备',
+  // 系统运行
+  CPU: 'CPU 监控',
+  MEMORY: '内存监控',
+  FIB: '转发表管理',
+  FLASH: 'Flash 存储',
+  GTL: 'License 管理',
+  INFOCENTER: '信息中心',
+  SYSLOG: '系统日志',
+  SYSMAN: '系统管理',
+  ENERGYMNGT: '能耗管理',
+  NETSTREAM: 'NetStream 流统计',
+  PTP: '精密时钟',
+  DNS: '域名解析',
+  NQA: '网络质量分析',
+  DAD: '双活检测',
+  DATASYNC: '数据同步',
+  AUTODIAGNOSE: '自动诊断',
+  EASYOPERATION: '简易运维',
+  TRNG: '随机数生成',
+  CONFIGMAN: '配置管理',
+  WLAN: '无线接入',
+  CAPWAP: '无线接入控制',
+  HTTP: 'Web 网管',
 }
 
 /**
@@ -257,4 +300,54 @@ export function describeVRPModule(raw: string | undefined | null): string | unde
   const text = String(raw ?? '').trim().toUpperCase()
   if (!text) return undefined
   return VRP_MODULE_LABELS[text]
+}
+
+/**
+ * 实体告警绑定变量 BaseTrapSeverity → 中文级别。
+ *
+ * 枚举取值来自 docs/vendor 华为产品文档 hwBaseTrapSeverity 节点定义：
+ * cleared(1) / indeterminate(2) / critical(3) / major(4) / minor(5) / warning(6)。
+ * SRM 等实体告警日志正文以 `BaseTrapSeverity=N` 携带该字段，兜底翻译据此
+ * 把裸数字还原成厂商定义的级别。
+ */
+const BASE_TRAP_SEVERITY_LABELS: Readonly<Record<string, string>> = {
+  '1': '已恢复',
+  '2': '未定',
+  '3': '严重',
+  '4': '重要',
+  '5': '次要',
+  '6': '警告',
+}
+
+export function describeBaseTrapSeverity(raw: string | number | undefined | null): string | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined
+  const key = String(raw).trim()
+  if (!/^\d$/.test(key)) return undefined
+  return BASE_TRAP_SEVERITY_LABELS[key]
+}
+
+/**
+ * 实体告警绑定变量 hwBaseThresholdType → 监控对象中文名。
+ *
+ * 枚举取值来自 docs/vendor 华为产品文档 hwBaseThresholdTable 定义：
+ * 1 温度 / 2 湿度 / 3 电压 / 4 电流 / 5 电源传感器、
+ * 6 端口流量 / 7 端口 CRC 错包 / 8 端口广播报文。
+ * 真实日志形如 `hwBaseThresholdType=1`，兜底翻译据此说明「监控的是哪类对象」。
+ */
+const THRESHOLD_TYPE_LABELS: Readonly<Record<string, string>> = {
+  '1': '温度传感器',
+  '2': '湿度传感器',
+  '3': '电压传感器',
+  '4': '电流传感器',
+  '5': '电源传感器',
+  '6': '端口流量',
+  '7': '端口 CRC 错包',
+  '8': '端口广播报文',
+}
+
+export function describeThresholdType(raw: string | number | undefined | null): string | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined
+  const key = String(raw).trim()
+  if (!/^\d$/.test(key)) return undefined
+  return THRESHOLD_TYPE_LABELS[key]
 }
