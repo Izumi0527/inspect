@@ -103,6 +103,8 @@ services:
       # 报表配置
       REPORT_OUTPUT_DIR: data/reports/monitoring
       REPORTS_OUTPUT_DIR: data/reports
+      # PDF 无系统字体时从内存加载内嵌 Noto Sans SC，Windows 与 Ubuntu
+      # 共用此配置，无须挂载宿主机字体。自定义方法见 README 的 PDF 报告字体说明。
     volumes:
       - ./backend-go:/app
       - ./logs:/app/logs

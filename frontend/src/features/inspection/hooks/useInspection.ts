@@ -551,7 +551,25 @@ export const useGenerateReport = () => {
       }
     },
     onError: (error: Error) => {
-      toast.error(error.message || '生成报告失败')
+      // 后端部分失败分支返回英文技术文案（如 PDF 渲染环境缺字体的
+      // "failed to generate report"），直接 toast 会暴露原始错误。
+      // 已知文案映射为中文；未识别的英文文案统一用通用提示兜底，
+      // 原始信息保留在 console 供排查。
+      const knownMessages: Record<string, string> = {
+        'failed to generate report': '巡检报告生成失败，请稍后重试或联系管理员',
+        'failed to export analytics': '统计报表导出失败，请稍后重试或联系管理员',
+        'failed to create report': '巡检报告创建失败，请稍后重试或联系管理员',
+        'report service not configured': '报告服务未配置，请联系管理员',
+        'report output not configured': '报告输出目录未配置，请联系管理员'
+      }
+      const rawMessage = (error.message || '').trim()
+      const friendly = knownMessages[rawMessage] ?? (
+        !rawMessage || /^[\x20-\x7E]+$/.test(rawMessage)
+          ? '巡检报告生成失败，请稍后重试或联系管理员'
+          : rawMessage
+      )
+      console.error('[useGenerateReport] 报告生成失败，原始错误:', rawMessage)
+      toast.error(friendly)
     },
   })
 }

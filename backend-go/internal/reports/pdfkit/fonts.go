@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/phpdave11/gofpdf"
+
+	"github.com/your-org/inspect-system/backend-go/assets"
 )
 
 // Font family identifiers that callers pass to pdf.SetFont(name, style, size).
@@ -16,11 +18,9 @@ const (
 	FontFamilyLatin = "latin"
 )
 
-// FontPaths captures the resolved on-disk locations of the CJK and Latin
-// font files, regular and bold. Latin may be empty — RegisterFonts will alias
-// the Latin family to the CJK file so SetFont(FontFamilyLatin, ...) keeps
-// working. Bold paths always resolve (falling back to the regular file) so
-// the "B" style never fails, it just may not look heavier than regular.
+// FontPaths 保存外部字体路径。CJK 为空表示从内存加载内嵌 Noto Sans SC；
+// 缺失的中文粗体回退到中文常规体，拉丁常规体回退到中文常规体，
+// 拉丁粗体回退到拉丁常规体。零值可直接用于没有系统字体的部署环境。
 type FontPaths struct {
 	CJK       string
 	CJKBold   string
@@ -38,18 +38,15 @@ type FontPaths struct {
 //   - REPORT_PDF_FONT_LATIN_PATH      (optional)
 //   - REPORT_PDF_FONT_LATIN_BOLD_PATH (optional)
 //
-// If no CJK font is found anywhere, an error is returned — every report
-// produced by this codebase contains Chinese text, so a missing CJK face
-// is a fatal config issue and should be surfaced immediately.
+// 中文字体按环境变量、系统候选的顺序查找；均不存在时保留空路径，
+// 注册时直接从内存使用内嵌字体。Windows、Ubuntu 24.04 和精简容器
+// 共用此回退方式，不需要创建或复用临时字体文件。
 func ResolveFontPaths() (FontPaths, error) {
 	cjkOverrides := []string{
 		envOverride("REPORT_PDF_FONT_CJK_PATH"),
 		envOverride("REPORT_PDF_FONT_PATH"),
 	}
-	cjk, err := pickFirstExisting(append(cjkOverrides, cjkCandidates()...)...)
-	if err != nil {
-		return FontPaths{}, fmt.Errorf("未找到可用的PDF中文字体，请设置 REPORT_PDF_FONT_CJK_PATH: %w", err)
-	}
+	cjk, _ := pickFirstExisting(append(cjkOverrides, cjkCandidates()...)...)
 
 	// Bold falls back to the regular face — rendering stays correct, the
 	// headings just lose weight contrast on hosts without a bold CJK .ttf.
@@ -81,21 +78,41 @@ func RegisterFonts(pdf *gofpdf.Fpdf) error {
 	if err != nil {
 		return err
 	}
-	pdf.AddUTF8Font(FontFamilyCJK, "", paths.CJK)
-	pdf.AddUTF8Font(FontFamilyCJK, "B", paths.CJKBold)
+	return RegisterFontsWithPaths(pdf, paths)
+}
 
-	latin := paths.Latin
-	if strings.TrimSpace(latin) == "" {
-		// Without a dedicated Latin face we fall back to the CJK font so
-		// SetFont(FontFamilyLatin, ...) calls remain valid.
-		latin = paths.CJK
+// RegisterFontsWithPaths 按给定路径注册四个字面，空路径使用内嵌字体。
+// 字体解析失败立即返回错误，供报告处理器记录原因并终止本次生成。
+func RegisterFontsWithPaths(pdf *gofpdf.Fpdf, paths FontPaths) error {
+	cjk := strings.TrimSpace(paths.CJK)
+	cjkBold := strings.TrimSpace(paths.CJKBold)
+	if cjkBold == "" {
+		cjkBold = cjk
 	}
-	latinBold := paths.LatinBold
-	if strings.TrimSpace(latinBold) == "" {
+	latin := strings.TrimSpace(paths.Latin)
+	if latin == "" {
+		latin = cjk
+	}
+	latinBold := strings.TrimSpace(paths.LatinBold)
+	if latinBold == "" {
 		latinBold = latin
 	}
-	pdf.AddUTF8Font(FontFamilyLatin, "", latin)
-	pdf.AddUTF8Font(FontFamilyLatin, "B", latinBold)
+
+	for _, face := range []struct{ family, style, path string }{
+		{FontFamilyCJK, "", cjk},
+		{FontFamilyCJK, "B", cjkBold},
+		{FontFamilyLatin, "", latin},
+		{FontFamilyLatin, "B", latinBold},
+	} {
+		if face.path == "" {
+			pdf.AddUTF8FontFromBytes(face.family, face.style, assets.EmbeddedNotoSansSC())
+		} else {
+			pdf.AddUTF8Font(face.family, face.style, face.path)
+		}
+		if err := pdf.Error(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -107,6 +124,9 @@ func CJKFontBytes() ([]byte, error) {
 	paths, err := ResolveFontPaths()
 	if err != nil {
 		return nil, err
+	}
+	if paths.CJK == "" {
+		return assets.EmbeddedNotoSansSC(), nil
 	}
 	return os.ReadFile(paths.CJK)
 }
@@ -131,9 +151,9 @@ func pickFirstExisting(candidates ...string) (string, error) {
 // systems. Only .ttf files are listed because gofpdf v1.4.3's UTF8 font
 // loader (utf8fontfile.go:106) explicitly rejects .ttc (TrueType
 // Collection) and .otf (PostScript-outlined OpenType) — see error
-// "not supported". If a host only has .ttc fonts (e.g. macOS PingFang),
-// operators must extract a .ttf face and point REPORT_PDF_FONT_CJK_PATH
-// at it. Order matters — earlier entries win when both exist.
+// "not supported". 只有 .ttc/.otf 的主机直接使用内嵌字体；需要自定义
+// 字体时，再通过 REPORT_PDF_FONT_CJK_PATH 指向兼容的 .ttf。
+// Order matters — earlier entries win when both exist.
 //
 // simsunb.ttf (SimSun-ExtB) MUST NOT be listed: it only covers the CJK
 // Extension B block of rare ideographs and contains none of the common
@@ -151,11 +171,9 @@ func cjkCandidates() []string {
 		`C:\Windows\Fonts\simfang.ttf`,
 		`C:\Windows\Fonts\simkai.ttf`,
 
-		// Linux — WenQuanYi MicroHei / ZenHei ship as .ttc on most
-		// distros; we still list a few common .ttf locations that some
-		// minimal images expose. Production deployments should install
-		// fonts-noto-cjk and convert NotoSansCJK to .ttf, then use
-		// REPORT_PDF_FONT_CJK_PATH to point here.
+		// Ubuntu 的文泉驿、Noto CJK 软件包常提供 .ttc，不能直接交给
+		// gofpdf。仅探测兼容的 .ttf；没有这些文件时使用内嵌字体，
+		// 无须额外安装字体包或从字体集合中提取字面。
 		`/usr/share/fonts/truetype/wqy/wqy-microhei.ttf`,
 		`/usr/share/fonts/truetype/wqy/wqy-zenhei.ttf`,
 		`/usr/share/fonts/truetype/arphic/uming.ttf`,

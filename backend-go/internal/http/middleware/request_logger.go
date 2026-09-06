@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -14,6 +15,14 @@ func RequestLogger(logger *zap.Logger) echo.MiddlewareFunc {
 			err := next(c)
 
 			status := c.Response().Status
+			if err != nil && !c.Response().Committed {
+				// 错误响应尚未写出，采用项目 ErrorHandler 的状态码规则。
+				// 这里只解析状态，原错误仍交给外层处理，避免重复写响应。
+				status = http.StatusInternalServerError
+				if httpErr, ok := err.(*echo.HTTPError); ok {
+					status = httpErr.Code
+				}
+			}
 			latency := time.Since(start)
 			requestID := GetRequestID(c.Request().Context())
 
@@ -35,7 +44,7 @@ func RequestLogger(logger *zap.Logger) echo.MiddlewareFunc {
 				fields = append(fields, zap.Error(err))
 			}
 
-			// 根据状态码选择日志级别
+			// 根据最终 HTTP 状态分级，客户端错误保留为 Warn。
 			switch {
 			case status >= 500:
 				logger.Error("❌ HTTP Request Failed", fields...)

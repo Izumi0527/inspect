@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
@@ -326,7 +327,8 @@ func (h InspectionHandler) ExportAnalytics(c echo.Context) error {
 
 	filePath, err := reports.GenerateReportFile(c.Request().Context(), h.Reports.DB(), h.ReportOutputDir, report, format)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to export analytics")
+		h.logReportFailure("导出统计报表失败", report.ID, format, err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to export analytics").SetInternal(err)
 	}
 
 	filename := filepath.Base(filePath)
@@ -444,16 +446,20 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 	}
 
 	if err := h.Reports.CreateReport(c.Request().Context(), &report); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create report")
+		h.logReportFailure("创建巡检报告记录失败", report.ID, format, err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create report").SetInternal(err)
 	}
 
 	filePath, err := reports.GenerateReportFile(c.Request().Context(), h.Reports.DB(), h.ReportOutputDir, report, format)
 	if err != nil {
+		// 底层错误必须同时落到日志与数据库：历史教训是只写 reports.error_message，
+		// 运维侧从日志完全看不到真实原因（如宿主机缺中文字体），排障只能靠查库。
+		h.logReportFailure("生成巡检报告失败", report.ID, format, err)
 		_, _ = h.Reports.UpdateReport(c.Request().Context(), report.ID, map[string]interface{}{
 			"status":        "failed",
 			"error_message": err.Error(),
 		})
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to generate report")
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to generate report").SetInternal(err)
 	}
 
 	fileFormats, _ := encodeJSON([]string{format})
@@ -478,6 +484,20 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 		"report_id":    fmt.Sprintf("%d", report.ID),
 		"download_url": downloadURL,
 	})
+}
+
+// logReportFailure 统一记录报告生成失败的底层错误。Logger 可能为 nil
+// （测试或未装配场景），此时静默跳过——错误仍会经 SetInternal 保留在
+// echo 错误链与 reports.error_message 中。
+func (h InspectionHandler) logReportFailure(action string, reportID int, format string, err error) {
+	if h.Logger == nil {
+		return
+	}
+	h.Logger.Error(action,
+		zap.Int("report_id", reportID),
+		zap.String("format", format),
+		zap.Error(err),
+	)
 }
 
 func (h InspectionHandler) GetInspectionReportStatus(c echo.Context) error {
