@@ -44,8 +44,9 @@ func (h InspectionHandler) executeInspectionsAsync(inspections []inspection.Insp
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				errMsg = "巡检模板不存在"
 			}
-			for _, insp := range inspections {
-				h.markInspectionExecutionFailed(ctx, insp.ID, errMsg, 0, 0)
+			tracker := NewBatchProgressTracker(len(inspections))
+			for i, insp := range inspections {
+				h.markInspectionExecutionFailed(ctx, h.newProgressReporter(insp, tracker, i), insp.ID, errMsg, 0, 0)
 			}
 			return
 		}
@@ -55,21 +56,141 @@ func (h InspectionHandler) executeInspectionsAsync(inspections []inspection.Insp
 	defaults := h.inspectionDefaults(ctx)
 	limit := make(chan struct{}, defaults.MaxConcurrent)
 	var wg sync.WaitGroup
-	for _, insp := range inspections {
+	// tracker 维护每台设备最近一次上报的状态/进度，把单设备事件折算为批次事件
+	tracker := NewBatchProgressTracker(len(inspections))
+	for i, insp := range inspections {
 		insp := insp
+		report := h.newProgressReporter(insp, tracker, i)
 		wg.Add(1)
 		limit <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-limit }()
-			h.executeInspection(ctx, insp, checkItems, defaults)
+			h.executeInspection(ctx, insp, checkItems, defaults, report)
 		}()
 	}
 	wg.Wait()
 }
 
+// inspectionProgressReporter 巡检进度广播函数：单设备状态/进度广播入口。
+type inspectionProgressReporter func(status string, progress int, extra map[string]interface{})
+
+// newProgressReporter 构建进度广播器。
+// 批次执行时以 batch_id 作为广播 id（与执行历史列表返回的执行 id 一致），
+// 并把单设备事件折算为批次事件（见 aggregateProgressEvents / BatchProgressTracker），
+// 避免多设备并发广播同一 id 时进度来回跳变、完成 toast 每台各弹一次。
+// 无批次（单设备巡检）时退化为原进度，按单设备数字 id 广播。
+// 已知边界：升级重启瞬间仍在执行的历史批次（无 batch_id）按单设备数字 id 广播，
+// 与列表的代表行 id（MIN(id)）可能不一致，进度推送短暂失配——新执行的批次不受影响。
+func (h InspectionHandler) newProgressReporter(insp inspection.Inspection, tracker *BatchProgressTracker, index int) inspectionProgressReporter {
+	batchID := strings.TrimSpace(insp.BatchID)
+	return func(status string, progress int, extra map[string]interface{}) {
+		if tracker != nil && batchID != "" {
+			aggStatus, aggProgress := tracker.Update(index, status, progress)
+			h.broadcastScanProgressRaw(batchID, aggStatus, aggProgress, extra)
+			return
+		}
+		if batchID != "" {
+			h.broadcastScanProgressRaw(batchID, status, progress, extra)
+			return
+		}
+		h.broadcastScanProgress(insp.ID, status, progress, extra)
+	}
+}
+
+// BatchProgressTracker 记录批内每台设备最近一次上报的状态/进度，
+// 并发安全：每次 Update 后返回折算到批次级的 (状态, 进度)。
+type BatchProgressTracker struct {
+	mu         sync.Mutex
+	statuses   []string
+	progresses []int
+}
+
+// NewBatchProgressTracker 为 n 台设备创建批次进度折算器；n <= 0 时返回 nil（退化为原样广播）。
+func NewBatchProgressTracker(n int) *BatchProgressTracker {
+	if n <= 0 {
+		return nil
+	}
+	return &BatchProgressTracker{
+		statuses:   make([]string, n),
+		progresses: make([]int, n),
+	}
+}
+
+// Update 记录第 index 台设备的状态/进度，返回折算后的批次状态与进度。
+// index 越界时原样透传（防御：执行入口与上报方批次数不一致）。
+func (t *BatchProgressTracker) Update(index int, status string, progress int) (string, int) {
+	if t == nil {
+		return status, progress
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if index < 0 || index >= len(t.statuses) {
+		return status, progress
+	}
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 100 {
+		progress = 100
+	}
+	t.statuses[index] = status
+	t.progresses[index] = progress
+	return aggregateProgressEvents(t.statuses, t.progresses)
+}
+
+// aggregateProgressEvents 把每台设备最近一次上报的状态/进度折算为批次级进度事件。
+// 纯函数（不依赖 handler/DB/网络），便于表驱动测试。
+//
+// 评审 H1 口径：设备终态 ≠ 批次终态。只要还有设备未到终态，批次一律广播 running，
+// 否则完成 toast 会每台各弹一次、进度随单台完成来回跳变；
+// 最后一台落终态时才广播聚合终态（复用批次状态优先级 aggregateStatusFlags）。
+// 进度 = Σ(终态记 100，未终态记自身进度) / N，未上报的设备按 0 计。
+func aggregateProgressEvents(statuses []string, progresses []int) (string, int) {
+	if len(statuses) == 0 {
+		return inspection.StatusPending, 0
+	}
+	normalized := make([]string, len(statuses))
+	sum := 0
+	allTerminal := true
+	for i, status := range statuses {
+		s := strings.ToLower(strings.TrimSpace(status))
+		normalized[i] = s
+		progress := 0
+		if i < len(progresses) {
+			progress = progresses[i]
+		}
+		if progress < 0 {
+			progress = 0
+		}
+		if progress > 100 {
+			progress = 100
+		}
+		if resolveCompletedDevices(s) > 0 {
+			sum += 100
+		} else {
+			allTerminal = false
+			sum += progress
+		}
+	}
+	if allTerminal {
+		return aggregateStatusFlags(normalized), 100
+	}
+	return inspection.StatusRunning, int(math.Round(float64(sum) / float64(len(normalized))))
+}
+
 func (h InspectionHandler) broadcastScanProgress(inspectionID int, status string, progress int, extra map[string]interface{}) {
 	if h.WS == nil || inspectionID <= 0 {
+		return
+	}
+	h.broadcastScanProgressRaw(fmt.Sprintf("%d", inspectionID), status, progress, extra)
+}
+
+// broadcastScanProgressRaw 以字符串 id 广播巡检进度。
+// 执行批次场景下 id 为 batch_id（UUID），与执行历史列表返回的执行 id 保持一致，
+// 前端 WebSocket 进度匹配才不会落空。
+func (h InspectionHandler) broadcastScanProgressRaw(id string, status string, progress int, extra map[string]interface{}) {
+	if h.WS == nil || strings.TrimSpace(id) == "" {
 		return
 	}
 
@@ -86,7 +207,7 @@ func (h InspectionHandler) broadcastScanProgress(inspectionID int, status string
 	}
 
 	payload := map[string]interface{}{
-		"id":        fmt.Sprintf("%d", inspectionID),
+		"id":        id,
 		"status":    normalizedStatus,
 		"progress":  progress,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
@@ -262,7 +383,7 @@ func splitCheckItemsByApplicability(
 	return applicable, notApplicable
 }
 
-func (h InspectionHandler) markInspectionExecutionFailed(ctx context.Context, inspectionID int, errMsg string, completedChecks int, totalChecks int) {
+func (h InspectionHandler) markInspectionExecutionFailed(ctx context.Context, report inspectionProgressReporter, inspectionID int, errMsg string, completedChecks int, totalChecks int) {
 	if h.Service == nil || inspectionID <= 0 {
 		return
 	}
@@ -281,17 +402,26 @@ func (h InspectionHandler) markInspectionExecutionFailed(ctx context.Context, in
 	if totalChecks > 0 {
 		progress = int(math.Round(float64(completedChecks) / float64(totalChecks) * 100))
 	}
-	h.broadcastScanProgress(inspectionID, inspection.StatusFailed, progress, map[string]interface{}{
+	extra := map[string]interface{}{
 		"message":          errMsg,
 		"completed_checks": completedChecks,
 		"total_checks":     totalChecks,
-	})
+	}
+	if report != nil {
+		report(inspection.StatusFailed, progress, extra)
+		return
+	}
+	h.broadcastScanProgress(inspectionID, inspection.StatusFailed, progress, extra)
 }
 
 // executeInspection 执行单个巡检任务。
 // 执行链路（探测/检查项）受任务级 Timeout（缺省为 inspection.default_timeout）约束；
 // 状态与结果落库使用 baseCtx，保证执行超时后仍能写回 timeout 状态。
-func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspection.Inspection, checkItems []map[string]interface{}, defaults settings.InspectionDefaults) {
+// report 为批次化进度广播器（见 newProgressReporter），由批量执行入口注入；可为 nil。
+func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspection.Inspection, checkItems []map[string]interface{}, defaults settings.InspectionDefaults, report inspectionProgressReporter) {
+	if report == nil {
+		report = h.newProgressReporter(insp, nil, 0)
+	}
 	timeoutSeconds := defaults.TimeoutSeconds
 	if insp.Timeout != nil && *insp.Timeout > 0 {
 		timeoutSeconds = *insp.Timeout // 任务级配置优先于全局默认
@@ -309,7 +439,7 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 	}
 
 	// 广播开始执行（进度 0%）
-	h.broadcastScanProgress(insp.ID, inspection.StatusRunning, 0, nil)
+	report(inspection.StatusRunning, 0, nil)
 
 	// 2. 获取设备信息
 	// 必须用 GetDeviceRecord 取完整 Device（含 AfterFind 解密后的明文凭据）：
@@ -321,7 +451,7 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 		if derr != nil {
 			errMsg := fmt.Sprintf("获取设备信息失败: %v", derr)
 			h.Service.UpdateInspectionStatus(baseCtx, insp.ID, inspection.StatusFailed, &errMsg)
-			h.broadcastScanProgress(insp.ID, inspection.StatusFailed, 0, map[string]interface{}{"message": errMsg})
+			report(inspection.StatusFailed, 0, map[string]interface{}{"message": errMsg})
 			return
 		}
 		device = &record
@@ -355,7 +485,7 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 
 	// 如果任务已被取消，直接结束
 	if h.isInspectionCancelled(baseCtx, insp.ID) {
-		h.broadcastScanProgress(insp.ID, inspection.StatusCancelled, 0, nil)
+		report(inspection.StatusCancelled, 0, nil)
 		return
 	}
 
@@ -373,14 +503,14 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 	totalChecks := len(activeCheckItems) + len(notApplicableItems)
 	if totalChecks == 0 {
 		errMsg := "巡检模板无有效检查项，请检查所选模板的检查项配置"
-		h.markInspectionExecutionFailed(baseCtx, insp.ID, errMsg, 0, 0)
+		h.markInspectionExecutionFailed(baseCtx, report, insp.ID, errMsg, 0, 0)
 		return
 	}
 
 	// 初始化总检查数，便于前端/接口计算进度
 	if err := h.Service.UpdateInspectionStats(baseCtx, insp.ID, totalChecks, 0, 0, 0, 0); err != nil {
 		errMsg := fmt.Sprintf("初始化巡检统计失败: %v", err)
-		h.markInspectionExecutionFailed(baseCtx, insp.ID, errMsg, 0, totalChecks)
+		h.markInspectionExecutionFailed(baseCtx, report, insp.ID, errMsg, 0, totalChecks)
 		return
 	}
 
@@ -398,7 +528,7 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 	for _, item := range notApplicableItems {
 		result := buildNotApplicableResult(insp.ID, item, deviceType)
 		if err := h.Service.SaveInspectionResult(baseCtx, &result); err != nil {
-			h.markInspectionExecutionFailed(baseCtx, insp.ID, fmt.Sprintf("保存巡检结果失败: %v", err), executedCount, totalChecks)
+			h.markInspectionExecutionFailed(baseCtx, report, insp.ID, fmt.Sprintf("保存巡检结果失败: %v", err), executedCount, totalChecks)
 			return
 		}
 		executedCount++
@@ -437,7 +567,7 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 		if totalChecks > 0 {
 			progress = int(math.Round(float64(executedCount) / float64(totalChecks) * 100))
 		}
-		h.broadcastScanProgress(insp.ID, inspection.StatusRunning, progress, map[string]interface{}{
+		report(inspection.StatusRunning, progress, map[string]interface{}{
 			"completed_checks": executedCount,
 			"total_checks":     totalChecks,
 		})
@@ -445,7 +575,7 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 	})
 
 	if executionErr != nil {
-		h.markInspectionExecutionFailed(baseCtx, insp.ID, executionErr.Error(), executedCount, totalChecks)
+		h.markInspectionExecutionFailed(baseCtx, report, insp.ID, executionErr.Error(), executedCount, totalChecks)
 		return
 	}
 
@@ -459,7 +589,7 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 		if totalChecks > 0 {
 			progress = int(math.Round(float64(executedCount) / float64(totalChecks) * 100))
 		}
-		h.broadcastScanProgress(insp.ID, inspection.StatusTimeout, progress, map[string]interface{}{
+		report(inspection.StatusTimeout, progress, map[string]interface{}{
 			"message":          errMsg,
 			"completed_checks": executedCount,
 			"total_checks":     totalChecks,
@@ -473,7 +603,7 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 		if totalChecks > 0 {
 			progress = int(math.Round(float64(executedCount) / float64(totalChecks) * 100))
 		}
-		h.broadcastScanProgress(insp.ID, inspection.StatusCancelled, progress, map[string]interface{}{
+		report(inspection.StatusCancelled, progress, map[string]interface{}{
 			"completed_checks": executedCount,
 			"total_checks":     totalChecks,
 		})
@@ -484,7 +614,7 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 	finalTotal := reconcileExecutedTotal(notApplicableCount, len(results))
 	if err := h.Service.UpdateInspectionStats(baseCtx, insp.ID, finalTotal, passedCount, failedCount, warningCount, skippedCount); err != nil {
 		errMsg := fmt.Sprintf("收口巡检统计失败: %v", err)
-		h.markInspectionExecutionFailed(baseCtx, insp.ID, errMsg, executedCount, totalChecks)
+		h.markInspectionExecutionFailed(baseCtx, report, insp.ID, errMsg, executedCount, totalChecks)
 		return
 	}
 	if _, err := h.Service.UpdateInspectionStatus(baseCtx, insp.ID, inspection.StatusCompleted, nil); err != nil {
@@ -493,7 +623,7 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 		}
 		return
 	}
-	h.broadcastScanProgress(insp.ID, inspection.StatusCompleted, 100, map[string]interface{}{
+	report(inspection.StatusCompleted, 100, map[string]interface{}{
 		"completed_checks": finalTotal,
 		"total_checks":     finalTotal,
 	})

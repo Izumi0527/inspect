@@ -229,7 +229,7 @@ func (h InspectionHandler) StartTask(c echo.Context) error {
 
 	go func() {
 		ctx := context.Background()
-		h.executeInspection(ctx, task, checkItems, h.inspectionDefaults(ctx))
+		h.executeInspection(ctx, task, checkItems, h.inspectionDefaults(ctx), nil)
 	}()
 	return inspectionOKWithMessage(c, "巡检任务已启动", map[string]interface{}{"id": taskID})
 }
@@ -361,46 +361,55 @@ func (h InspectionHandler) ListExecutions(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not initialized")
 	}
 
+	// 执行历史按"执行批次"聚合：一次策略执行（多台设备）展示为一条记录。
+	// 状态与日期筛选是"批内各设备取值可能不同"的条件，必须放在批次级 HAVING
+	// 而非行级 WHERE——否则会把同一批次截断成部分设备，列表与详情的设备数对不上。
+	// 策略筛选（schedule_id）批内取值一致，保留行级 WHERE。
 	query := db.WithContext(c.Request().Context()).Model(&inspection.Inspection{})
-	if len(statusList) > 0 {
-		query = query.Where("status IN ?", statusList)
-	}
 	if strategyID > 0 {
 		query = query.Where("schedule_id = ?", strategyID)
 	}
-	executionTimeExpr := "COALESCE(started_at, created_at)"
-	if startDate != nil {
-		query = query.Where(fmt.Sprintf("%s >= ?", executionTimeExpr), *startDate)
-	}
-	if endDate != nil {
-		query = query.Where(fmt.Sprintf("%s < ?", executionTimeExpr), endDate.Add(24*time.Hour))
+
+	var having *executionGroupHaving
+	if len(statusList) > 0 || startDate != nil || endDate != nil {
+		exprParts := make([]string, 0, 3)
+		havingArgs := make([]interface{}, 0, len(statusList)+2)
+		if len(statusList) > 0 {
+			// 批内任一设备处于所选状态即视为命中，返回完整批次
+			exprParts = append(exprParts, "bool_or(status IN (?))")
+			havingArgs = append(havingArgs, statusList)
+		}
+		if startDate != nil {
+			exprParts = append(exprParts, "MIN(COALESCE(started_at, created_at)) >= ?")
+			havingArgs = append(havingArgs, *startDate)
+		}
+		if endDate != nil {
+			exprParts = append(exprParts, "MIN(COALESCE(started_at, created_at)) < ?")
+			havingArgs = append(havingArgs, endDate.Add(24*time.Hour))
+		}
+		having = &executionGroupHaving{
+			expr: strings.Join(exprParts, " AND "),
+			args: havingArgs,
+		}
 	}
 
-	var total int64
-	if err := query.Count(&total).Error; err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to count executions")
-	}
-
-	offset := (page - 1) * pageSize
-	rows := make([]inspection.Inspection, 0)
-	if err := query.
-		Order(fmt.Sprintf("%s DESC", executionTimeExpr)).
-		Offset(offset).
-		Limit(pageSize).
-		Find(&rows).Error; err != nil {
+	groups, total, err := h.queryExecutionGroups(c.Request().Context(), query,
+		"start_time DESC, min_id DESC", page, pageSize, having)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load executions")
 	}
 
-	strategyNames := h.loadStrategyNames(c.Request().Context(), rows)
-	userNames := h.loadUserNames(c.Request().Context(), rows)
+	// 汇总本页全部记录，批量加载策略名与用户名映射
+	allRows := make([]inspection.Inspection, 0, len(groups)*4)
+	for _, group := range groups {
+		allRows = append(allRows, group.rows...)
+	}
+	strategyNames := h.loadStrategyNames(c.Request().Context(), allRows)
+	userNames := h.loadUserNames(c.Request().Context(), allRows)
 
-	items := make([]map[string]interface{}, 0, len(rows))
-	for _, item := range rows {
-		strategyName := resolveStrategyName(strategyNames, item.ScheduleID, item.Name)
-		response := buildExecutionResponse(item, strategyName)
-		// 将用户ID转换为用户名
-		response["triggerUser"] = resolveUserName(userNames, item.CreatedBy)
-		items = append(items, response)
+	items := make([]map[string]interface{}, 0, len(groups))
+	for _, group := range groups {
+		items = append(items, buildBatchExecutionResponse(group.rows, strategyNames, userNames))
 	}
 
 	return inspectionOK(c, map[string]interface{}{
@@ -418,46 +427,53 @@ func (h InspectionHandler) GetExecution(c echo.Context) error {
 		return err
 	}
 
-	executionID, err := parseIDParam(c, "id")
-	if err != nil {
-		return err
+	// 执行 id 既可能是批次 UUID（新批次），也可能是批次代表记录的数字 ID（历史批次）
+	idParam := strings.TrimSpace(c.Param("id"))
+	if idParam == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid execution id")
 	}
 
-	item, err := h.Service.GetInspection(c.Request().Context(), executionID)
+	db := h.Service.DB()
+	if db == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not initialized")
+	}
+
+	rows, err := h.resolveExecutionBatchRows(c.Request().Context(), db, idParam)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load execution")
 	}
+	if len(rows) == 0 {
+		return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
+	}
 
-	strategyNames := h.loadStrategyNames(c.Request().Context(), []inspection.Inspection{item})
-	userNames := h.loadUserNames(c.Request().Context(), []inspection.Inspection{item})
-	results, _ := h.Service.ListResultsByInspectionID(c.Request().Context(), item.ID)
-	deviceInfo := h.loadDeviceInfo(c.Request().Context(), item.DeviceID)
+	representative := rows[0]
+
+	strategyNames := h.loadStrategyNames(c.Request().Context(), rows)
+	userNames := h.loadUserNames(c.Request().Context(), rows)
+	resultsByInspection, _ := h.loadResultsMap(c.Request().Context(), rows)
+	deviceMap := h.loadDeviceMap(c.Request().Context(), rows)
 
 	// 调试日志
 	if h.Logger != nil {
 		h.Logger.Info("GetExecution debug",
-			zap.Int("execution_id", item.ID),
-			zap.Int("device_id", item.DeviceID),
-			zap.Int("device_info_id", deviceInfo.ID),
-			zap.String("device_name", deviceInfo.Name),
-			zap.Int("results_count", len(results)),
+			zap.String("execution_id", idParam),
+			zap.String("batch_id", representative.BatchID),
+			zap.Int("batch_size", len(rows)),
+			zap.Int("results_count", len(resultsByInspection)),
 		)
 	}
 
-	strategyName := resolveStrategyName(strategyNames, item.ScheduleID, item.Name)
-	response := buildExecutionResponse(item, strategyName)
-	// 将用户ID转换为用户名
-	response["triggerUser"] = resolveUserName(userNames, item.CreatedBy)
-	response["summary"] = buildExecutionSummary(item, deviceInfo, results)
+	response := buildBatchExecutionResponse(rows, strategyNames, userNames)
+	response["summary"] = buildBatchExecutionSummary(rows, deviceMap, resultsByInspection)
 
 	return inspectionOK(c, response)
 }
 
 // StopExecution 处理 POST /api/v1/inspection/executions/:id/stop 请求
-// 停止正在执行的巡检任务
+// 停止正在执行的巡检任务（按批次：批内全部运行中/等待中的设备记录一并取消）
 func (h InspectionHandler) StopExecution(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
@@ -466,13 +482,17 @@ func (h InspectionHandler) StopExecution(c echo.Context) error {
 		return err
 	}
 
-	executionID, err := parseIDParam(c, "id")
-	if err != nil {
-		return err
+	idParam := strings.TrimSpace(c.Param("id"))
+	if idParam == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid execution id")
 	}
 
-	// 获取执行记录
-	item, err := h.Service.GetInspection(c.Request().Context(), executionID)
+	db := h.Service.DB()
+	if db == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not initialized")
+	}
+
+	rows, err := h.resolveExecutionBatchRows(c.Request().Context(), db, idParam)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
@@ -480,30 +500,37 @@ func (h InspectionHandler) StopExecution(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load execution")
 	}
 
-	// 检查状态是否可以停止
-	if item.Status != inspection.StatusRunning && item.Status != inspection.StatusPending {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("无法停止状态为 %s 的任务", item.Status))
-	}
-
-	// 更新状态为已取消
+	// 仅取消运行中/等待中的记录；已终态的记录保持原状态。
+	// 单条 UPDATE 原子完成（WHERE 带状态过滤），快照后刚好完成的记录不会被误取消。
 	cancelMsg := "用户手动取消"
-	updated, err := h.Service.UpdateInspectionStatus(c.Request().Context(), executionID, inspection.StatusCancelled, &cancelMsg)
+	ids := make([]int, 0, len(rows))
+	for _, item := range rows {
+		ids = append(ids, item.ID)
+	}
+	cancelled, err := h.Service.CancelInspectionsByIDs(c.Request().Context(), ids, cancelMsg)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to stop execution")
 	}
+	if cancelled == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("无法停止状态为 %s 的任务", aggregateExecutionStatuses(rows)))
+	}
 
-	h.broadcastScanProgress(executionID, inspection.StatusCancelled, computeProgress(updated), map[string]interface{}{
+	// 以批次对外 id 广播取消事件（与执行历史列表的 id 一致）。
+	// 评审 L2：不能直接回显入参 idParam——按历史批次成员行 id 调用时，广播的
+	// id 与列表的代表行 id（批内最小 ID）不一致，前端进度匹配会落空。
+	broadcastID := executionBatchDisplayID(rows)
+	h.broadcastScanProgressRaw(broadcastID, inspection.StatusCancelled, 0, map[string]interface{}{
 		"message": cancelMsg,
 	})
 
 	return inspectionOKWithMessage(c, "巡检任务已停止", map[string]interface{}{
-		"id":     executionID,
+		"id":     broadcastID,
 		"status": inspection.StatusCancelled,
 	})
 }
 
 // DeleteExecution 处理 DELETE /api/v1/inspection/executions/:id 请求
-// 删除巡检执行记录及其相关结果
+// 删除巡检执行记录及其相关结果（按批次：批内全部设备记录一并删除）
 func (h InspectionHandler) DeleteExecution(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
@@ -512,27 +539,17 @@ func (h InspectionHandler) DeleteExecution(c echo.Context) error {
 		return err
 	}
 
-	executionID, err := parseIDParam(c, "id")
-	if err != nil {
-		return err
+	idParam := strings.TrimSpace(c.Param("id"))
+	if idParam == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid execution id")
 	}
 
-	// 获取执行记录
-	item, err := h.Service.GetInspection(c.Request().Context(), executionID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
-		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load execution")
+	db := h.Service.DB()
+	if db == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not initialized")
 	}
 
-	// 检查状态是否可以删除（不能删除正在执行的任务）
-	if item.Status == inspection.StatusRunning {
-		return echo.NewHTTPError(http.StatusBadRequest, "无法删除正在执行的任务，请先停止任务")
-	}
-
-	// 删除执行记录（包括相关的结果数据）
-	err = h.Service.DeleteInspection(c.Request().Context(), executionID)
+	rows, err := h.resolveExecutionBatchRows(c.Request().Context(), db, idParam)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
@@ -540,8 +557,26 @@ func (h InspectionHandler) DeleteExecution(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete execution")
 	}
 
+	// 检查状态是否可以删除（不能删除正在执行的任务）
+	for _, item := range rows {
+		if item.Status == inspection.StatusRunning {
+			return echo.NewHTTPError(http.StatusBadRequest, "无法删除正在执行的任务，请先停止任务")
+		}
+	}
+
+	ids := make([]int, 0, len(rows))
+	for _, item := range rows {
+		ids = append(ids, item.ID)
+	}
+	if err := h.Service.DeleteInspectionsByIDs(c.Request().Context(), ids); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete execution")
+	}
+
 	return inspectionOKWithMessage(c, "执行记录已删除", map[string]interface{}{
-		"id": executionID,
+		"id": idParam,
 	})
 }
 

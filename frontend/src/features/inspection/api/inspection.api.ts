@@ -1347,6 +1347,8 @@ export async function triggerStrategyExecution(id: string): Promise<{ message: s
 
 export async function generateInspectionReport(params: {
   task_id?: number
+  /** 执行批次 id（批次 UUID 或执行历史列表返回的执行 id），按整批出报告，优先于 task_id */
+  execution_id?: string
   device_ids?: number[]
   start_date?: string
   end_date?: string

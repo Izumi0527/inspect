@@ -49,14 +49,16 @@ func TestGetStats_ShouldApplyExplicitAnalyticsRange(t *testing.T) {
 	mock.ExpectQuery(`SELECT AVG\(CASE WHEN total_checks > 0 THEN passed_checks::float / total_checks \* 100 ELSE NULL END\) AS avg_score FROM "inspections".*started_at >= \$1 AND started_at <= \$2 AND status = \$3`).
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), inspection.StatusCompleted).
 		WillReturnRows(sqlmock.NewRows([]string{"avg_score"}).AddRow(0))
-	mock.ExpectQuery(`SELECT \* FROM "inspections".*completed_at IS NOT NULL.*completed_at >= \$1 AND completed_at <= \$2.*ORDER BY completed_at DESC.*LIMIT \$3`).
+	// 最近已完成执行按批次聚合：先对分组键去重计数，再按分组键取最近 7 个批次。
+	// 完成时间窗口为批次级条件（HAVING MAX(completed_at)），保证返回完整批次；
+	// 行级不再过滤 completed_at（评审 M1：运行中批次会被行级 WHERE 截断成部分设备），
+	// 「批次是否完成」由 HAVING COUNT(*) = COUNT(completed_at) 表达。
+	mock.ExpectQuery(`SELECT count\(\*\) FROM \(SELECT CASE WHEN batch_id.*AS group_key FROM "inspections".*GROUP BY CASE WHEN batch_id.*HAVING COUNT\(\*\) = COUNT\(completed_at\) AND MAX\(completed_at\) >= \$1 AND MAX\(completed_at\) <= \$2\) AS grouped_executions`).
+		WithArgs(start, end).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`SELECT CASE WHEN batch_id.*AS group_key, MIN\(id\) AS min_id.*HAVING COUNT\(\*\) = COUNT\(completed_at\) AND MAX\(completed_at\) >= \$1 AND MAX\(completed_at\) <= \$2.*ORDER BY MAX\(completed_at\) DESC, min_id DESC`).
 		WithArgs(start, end, 7).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "device_id", "template_id", "schedule_id", "name", "trigger", "status",
-			"scheduled_at", "started_at", "completed_at", "duration", "total_checks", "passed_checks",
-			"failed_checks", "warning_checks", "skipped_checks", "error_message", "error_details",
-			"timeout", "retry_count", "max_retries", "created_by", "created_at", "updated_at",
-		}))
+		WillReturnRows(sqlmock.NewRows([]string{"group_key", "min_id", "start_time"}))
 
 	ctx, rec := newEchoContextWithBody(
 		http.MethodGet,
@@ -227,17 +229,27 @@ func TestGetStats_ShouldReturnRecentCompletedExecutionsWithPreciseCompletedTime(
 	mock.ExpectQuery(`SELECT AVG\(CASE WHEN total_checks > 0 THEN passed_checks::float / total_checks \* 100 ELSE NULL END\) AS avg_score FROM "inspections".*started_at >= \$1 AND started_at <= \$2 AND status = \$3`).
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), inspection.StatusCompleted).
 		WillReturnRows(sqlmock.NewRows([]string{"avg_score"}).AddRow(0))
-	mock.ExpectQuery(`SELECT \* FROM "inspections".*completed_at IS NOT NULL.*completed_at >= \$1 AND completed_at <= \$2.*ORDER BY completed_at DESC.*LIMIT \$3`).
+	// 最近已完成执行按批次聚合：计数 → 批次键 → 批内记录 → 策略名
+	inspectionColumns := []string{
+		"id", "device_id", "template_id", "schedule_id", "name", "trigger", "status",
+		"scheduled_at", "started_at", "completed_at", "duration", "total_checks", "passed_checks",
+		"failed_checks", "warning_checks", "skipped_checks", "error_message", "error_details",
+		"timeout", "retry_count", "max_retries", "created_by", "created_at", "updated_at",
+	}
+	mock.ExpectQuery(`SELECT count\(\*\) FROM \(SELECT CASE WHEN batch_id.*AS group_key FROM "inspections".*GROUP BY CASE WHEN batch_id.*HAVING COUNT\(\*\) = COUNT\(completed_at\) AND MAX\(completed_at\) >= \$1 AND MAX\(completed_at\) <= \$2\) AS grouped_executions`).
+		WithArgs(start, end).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectQuery(`SELECT CASE WHEN batch_id.*AS group_key, MIN\(id\) AS min_id.*HAVING COUNT\(\*\) = COUNT\(completed_at\) AND MAX\(completed_at\) >= \$1 AND MAX\(completed_at\) <= \$2.*ORDER BY MAX\(completed_at\) DESC, min_id DESC`).
 		WithArgs(start, end, 7).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"id", "device_id", "template_id", "schedule_id", "name", "trigger", "status",
-			"scheduled_at", "started_at", "completed_at", "duration", "total_checks", "passed_checks",
-			"failed_checks", "warning_checks", "skipped_checks", "error_message", "error_details",
-			"timeout", "retry_count", "max_retries", "created_by", "created_at", "updated_at",
-		}).AddRow(
+		WillReturnRows(sqlmock.NewRows([]string{"group_key", "min_id", "start_time"}).
+			AddRow("g1", 101, startedAt))
+	// 行回查：base 无行级 WHERE（评审 M1），IN 参数为 $1
+	mock.ExpectQuery(`SELECT \*, CASE WHEN batch_id.*AS group_key FROM "inspections" WHERE CASE WHEN batch_id.*IN \(\$1\)`).
+		WithArgs("g1").
+		WillReturnRows(sqlmock.NewRows(append(inspectionColumns, "group_key")).AddRow(
 			101, 1, nil, scheduleID, nil, inspection.TriggerManual, inspection.StatusCompleted,
 			nil, startedAt, completedAt, 300, 10, 9, 1, 0, 0, nil, []byte(`{}`),
-			nil, nil, nil, nil, startedAt, completedAt,
+			nil, nil, nil, nil, startedAt, completedAt, "g1",
 		))
 	mock.ExpectQuery(`SELECT id, name FROM "inspection_strategies" WHERE id IN \(\$1\)`).
 		WithArgs(scheduleID).

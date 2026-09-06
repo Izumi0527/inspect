@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -128,6 +129,9 @@ type CreateInspectionInput struct {
 	Trigger     string
 	ScheduledAt *time.Time
 	CreatedBy   *string
+	// BatchID 执行批次标识：一次调用创建的多设备记录共享同一批次。
+	// 留空时由 CreateInspections 自动生成 UUID，保证"一次执行一个批次"。
+	BatchID string
 }
 
 func NewService(db *gorm.DB, logger *zap.Logger) *Service {
@@ -581,6 +585,13 @@ func (s *Service) CreateInspections(ctx context.Context, payload CreateInspectio
 	now := time.Now().UTC()
 	name := strings.TrimSpace(payload.Name)
 
+	// 一次 CreateInspections 调用视为一次执行批次：多台设备共享同一 batch_id，
+	// 执行历史按批次聚合展示。调用方未指定时自动生成。
+	batchID := strings.TrimSpace(payload.BatchID)
+	if batchID == "" {
+		batchID = uuid.NewString()
+	}
+
 	inspections := make([]Inspection, 0, len(payload.DeviceIDs))
 	for _, deviceID := range payload.DeviceIDs {
 		if deviceID <= 0 {
@@ -590,6 +601,7 @@ func (s *Service) CreateInspections(ctx context.Context, payload CreateInspectio
 			DeviceID:    deviceID,
 			TemplateID:  payload.TemplateID,
 			ScheduleID:  payload.ScheduleID,
+			BatchID:     batchID,
 			Name:        &name,
 			Trigger:     trigger,
 			Status:      StatusPending,
@@ -703,6 +715,101 @@ func (s *Service) DeleteInspection(ctx context.Context, id int) error {
 
 		return nil
 	})
+}
+
+// DeleteInspectionsByIDs 批量删除巡检执行记录及其相关的结果数据（事务内）。
+// 用于按执行批次删除：一次策略执行会产生多条同 batch_id 的记录。
+func (s *Service) DeleteInspectionsByIDs(ctx context.Context, ids []int) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	if len(ids) == 0 {
+		return gorm.ErrRecordNotFound
+	}
+
+	// 使用事务确保数据一致性
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 首先删除相关的巡检结果
+		if err := tx.Where("inspection_id IN ?", ids).Delete(&Result{}).Error; err != nil {
+			return fmt.Errorf("failed to delete inspection results: %w", err)
+		}
+
+		// 然后删除巡检记录本身
+		result := tx.Where("id IN ?", ids).Delete(&Inspection{})
+		if result.Error != nil {
+			return fmt.Errorf("failed to delete inspection: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+
+		return nil
+	})
+}
+
+// CancelInspectionsByIDs 将指定巡检记录中仍处于运行中/等待中的记录批量置为已取消，
+// 返回实际取消的记录数。
+//
+// 单条 UPDATE 原子完成：WHERE 里带状态过滤，快照之后刚好完成的记录不会被
+// 误覆盖成"已取消"；也避免逐条取消时中途失败造成批次内部分取消。
+func (s *Service) CancelInspectionsByIDs(ctx context.Context, ids []int, reason string) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	now := time.Now().UTC()
+	result := s.db.WithContext(ctx).Model(&Inspection{}).
+		Where("id IN ?", ids).
+		Where("status IN ?", []string{StatusRunning, StatusPending}).
+		Updates(map[string]interface{}{
+			"status":        StatusCancelled,
+			"error_message": reason,
+			"completed_at":  now,
+			"updated_at":    now,
+			// 与 UpdateInspectionStatus 的取消语义一致：已开始的记录补记耗时
+			"duration": gorm.Expr("CASE WHEN started_at IS NOT NULL THEN GREATEST(0, EXTRACT(EPOCH FROM (now() - started_at))::int) ELSE duration END"),
+		})
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
+}
+
+// BackfillLegacyBatchIDs 为历史巡检记录回填执行批次标识（幂等，单条 UPDATE 原子完成）。
+//
+// batch_id 列晚于数据引入：历史行没有批次标识，执行历史靠「策略+名称+精确创建时间」
+// 在查询时归并（同一次触发的行由循环外同一个时间戳生成，created_at 精确相同）。
+// 本回填按完全相同的分组语义（GROUP BY schedule_id, name, created_at，NULL 同组）
+// 为每个历史批次写入确定性标识 'legacy-<批内最小ID>'：
+//   - 幂等：仅处理 batch_id 为空的行，重复执行零副作用；
+//   - 收益：回填后详情/停止/删除按 batch_id 索引直达，不再依赖三条件扫描；
+//   - 安全：查询侧 CASE 分组键保留兜底，回填未执行（如迁移被关闭）时行为不变。
+func (s *Service) BackfillLegacyBatchIDs(ctx context.Context) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+
+	result := s.db.WithContext(ctx).Exec(`
+WITH legacy_groups AS (
+    SELECT MIN(id) AS min_id, schedule_id, name, created_at
+    FROM inspections
+    WHERE batch_id IS NULL OR batch_id = ''
+    GROUP BY schedule_id, name, created_at
+)
+UPDATE inspections i
+SET batch_id = 'legacy-' || lg.min_id::text
+FROM legacy_groups lg
+WHERE (i.batch_id IS NULL OR i.batch_id = '')
+  AND i.schedule_id IS NOT DISTINCT FROM lg.schedule_id
+  AND i.name IS NOT DISTINCT FROM lg.name
+  AND i.created_at IS NOT DISTINCT FROM lg.created_at`)
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
 }
 
 func (s *Service) UpdateInspectionStatus(ctx context.Context, id int, status string, errorMessage *string) (Inspection, error) {

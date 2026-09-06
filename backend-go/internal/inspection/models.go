@@ -47,6 +47,7 @@ type Inspection struct {
 	DeviceID     int            `gorm:"column:device_id"`
 	TemplateID   *int           `gorm:"column:template_id"`
 	ScheduleID   *int           `gorm:"column:schedule_id"`
+	BatchID      string         `gorm:"column:batch_id;index"`
 	Name         *string        `gorm:"column:name"`
 	Trigger      string         `gorm:"column:trigger"`
 	Status       string         `gorm:"column:status"`

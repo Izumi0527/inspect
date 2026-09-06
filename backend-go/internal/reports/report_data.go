@@ -878,16 +878,23 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		Joins("LEFT JOIN devices d ON d.id = i.device_id").
 		Joins("LEFT JOIN inspection_templates t ON t.id = i.template_id")
 
-	// 执行记录页面按「单次执行」出报告：task_id 即 inspections.id，精确
-	// 定位该行，不受时间窗口约束。旧逻辑只按时间范围（默认最近 24h）过
-	// 滤，同窗口内多次执行的 total/passed 会被统计摘要全部累加（执行 5
-	// 次 8 项检查就显示 40 项）；窗口外的历史执行则查不到数据、产出全 0
-	// 报告。仅在未指定 task_id 的汇总场景（报表中心/调度器）保留时间窗
-	// 口 + 设备过滤。
+	// 执行记录页面按「单次执行（整批）」出报告：params["inspection_ids"] 是
+	// handler 把 execution_id（批次 UUID 或代表行数字 id）经批次展开得到的
+	// inspections 行 id 列表，按 i.id IN ? 精确取行，不受时间窗口约束。
+	// 历史教训：旧逻辑只按时间范围（默认最近 24h）过滤，同窗口内多次执行的
+	// total/passed 会被统计摘要全部累加（执行 5 次 8 项检查就显示 40 项）；
+	// 窗口外的历史执行则查不到数据、产出全 0 报告。task_id 单值分支保留兼容
+	// 未升级的旧报告载荷；仅在两者都未指定的汇总场景（报表中心/调度器）保留
+	// 时间窗口 + 设备过滤。
+	// scopeInspectionIDs 只作行级过滤，与下方查询结果收集用的 inspectionIDs 无关。
+	scopeInspectionIDs := parseIDList(params["inspection_ids"])
 	taskID := toInt(params["task_id"])
-	if taskID > 0 {
+	switch {
+	case len(scopeInspectionIDs) > 0:
+		query = query.Where("i.id IN ?", scopeInspectionIDs)
+	case taskID > 0:
 		query = query.Where("i.id = ?", taskID)
-	} else {
+	default:
 		query = query.Where("(i.completed_at BETWEEN ? AND ?) OR (i.created_at BETWEEN ? AND ?)", start, end, start, end)
 		if len(deviceIDs) > 0 {
 			query = query.Where("i.device_id IN ?", deviceIDs)

@@ -486,7 +486,9 @@ export const useGenerateReport = () => {
       
       try {
         const result = await generateInspectionReport({
-          task_id: parseInt(executionId, 10),
+          // 执行 id 原样传字符串：批次 UUID 与回填后的 legacy-<id> 都不是数字，
+          // parseInt 会得到 NaN，后端只好退回 24h 时间窗，导出报告与所选批次无关
+          execution_id: executionId,
           format: format === 'html' ? 'pdf' : format, // html 暂不支持，转为 pdf
           template: type
         })

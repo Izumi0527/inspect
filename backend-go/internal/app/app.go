@@ -158,6 +158,14 @@ func New() (*App, error) {
 
 	inspectionService := inspection.NewService(dbConn, log)
 
+	// 为历史巡检记录回填执行批次标识（幂等，仅处理 batch_id 为空的行）。
+	// 失败不阻塞启动：执行历史仍按「策略+名称+精确创建时间」查询时归并兜底。
+	if backfilled, err := inspectionService.BackfillLegacyBatchIDs(context.Background()); err != nil {
+		log.Warn("巡检执行批次历史数据回填失败，执行历史将按查询时归并兜底", zap.Error(err))
+	} else if backfilled > 0 {
+		log.Info("已为历史巡检记录回填执行批次标识", zap.Int64("rows", backfilled))
+	}
+
 	// 初始化设备凭据加密器（CREDENTIAL_ENC_KEY 回退 SECRET_KEY，经 HKDF 派生独立子密钥）。
 	// 未配置密钥时：开发模式降级为明文并告警；生产模式拒绝启动（fail-closed）。
 	if master := strings.TrimSpace(cfg.CredentialEncKey); master != "" {

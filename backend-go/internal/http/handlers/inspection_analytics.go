@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -335,6 +336,38 @@ func (h InspectionHandler) ExportAnalytics(c echo.Context) error {
 	return c.File(filePath)
 }
 
+// resolveReportInspectionIDs 把报告生成载荷中的执行标识解析为整批 inspections 行 id。
+// 优先读 execution_id（批次 UUID 或执行历史列表返回的代表行数字 id，均可能非数字）；
+// 为空时兼容旧调用方，把 task_id 的十进制字符串同样当作执行 id 展开——
+// task_id 语义早已是"单次执行"（可能多台设备），必须展开成整批而非单行。
+// 未指定任何执行标识时返回 (nil, nil)，报告保持按时间窗/设备过滤的汇总口径。
+func (h InspectionHandler) resolveReportInspectionIDs(ctx context.Context, payload map[string]interface{}) ([]int, error) {
+	executionID := ""
+	if value, ok := readOptionalString(payload, "execution_id", "executionId"); ok && value != nil {
+		executionID = *value
+	}
+	if executionID == "" {
+		if taskID, ok := readOptionalInt(payload, "task_id", "taskId"); ok && taskID != nil && *taskID > 0 {
+			executionID = fmt.Sprintf("%d", *taskID)
+		}
+	}
+	if executionID == "" {
+		return nil, nil
+	}
+	if h.Service == nil || h.Service.DB() == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	rows, err := h.resolveExecutionBatchRows(ctx, h.Service.DB(), executionID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int, 0, len(rows))
+	for _, item := range rows {
+		ids = append(ids, item.ID)
+	}
+	return ids, nil
+}
+
 func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
@@ -363,6 +396,19 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 		format = "pdf"
 	}
 
+	// 评审 H2：执行历史导出的是「整批」报告。execution_id（批次 UUID 或代表行
+	// 数字 id）展开为整批行 id 写入 params["inspection_ids"]，报告数据源据此
+	// 精确取行；不再依赖前端把执行 id parseInt 成 task_id——批次 UUID 与回填
+	// 后的 legacy-<id> 都不是数字，parseInt 落空会让报告退回 24h 时间窗，
+	// 与所选批次完全无关。
+	inspectionIDs, err := h.resolveReportInspectionIDs(c.Request().Context(), payload)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to resolve execution for report")
+	}
+
 	start, _ := parseTimeOptional(stringValue(startDate))
 	end, _ := parseTimeOptional(stringValue(endDate))
 	if start == nil || end == nil {
@@ -376,6 +422,9 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 			"startDate": start.Format(time.RFC3339),
 			"endDate":   end.Format(time.RFC3339),
 		},
+	}
+	if len(inspectionIDs) > 0 {
+		params["inspection_ids"] = inspectionIDs
 	}
 	if taskID != nil {
 		params["task_id"] = *taskID

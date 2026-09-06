@@ -704,28 +704,36 @@ func (h InspectionHandler) loadRecentCompletedExecutions(ctx context.Context, st
 		limit = 7
 	}
 
-	rows := make([]inspection.Inspection, 0, limit)
-	if err := db.WithContext(ctx).
-		Where("completed_at IS NOT NULL").
-		Where("completed_at >= ? AND completed_at <= ?", start, end).
-		Order("completed_at DESC").
-		Limit(limit).
-		Find(&rows).Error; err != nil {
+	// 与执行历史一致：按执行批次聚合，仪表盘最近执行不会因多设备出现重复行。
+	// 「批次已完成」是批次级判定，放 HAVING（COUNT(*) = COUNT(completed_at)：
+	// 批内全部行都有完成时间）表达，不再用行级 WHERE 过滤——行级过滤会把
+	// 运行中的批次截断成部分设备，列表与详情的设备数自相矛盾（评审 M1）。
+	// 时间窗口按批内最晚完成时间判定，保证返回完整批次。
+	// 注意：选中列别名 start_time 是"批次最早开始时间"，而此处排序口径是
+	// "批次最晚完成时间"（MAX(completed_at)）——两者语义不同但同为聚合表达式，均为刻意行为。
+	query := db.WithContext(ctx).Model(&inspection.Inspection{})
+	having := &executionGroupHaving{
+		expr: "COUNT(*) = COUNT(completed_at) AND MAX(completed_at) >= ? AND MAX(completed_at) <= ?",
+		args: []interface{}{start, end},
+	}
+	groups, _, err := h.queryExecutionGroups(ctx, query, "MAX(completed_at) DESC, min_id DESC", 1, limit, having)
+	if err != nil {
 		return nil, err
 	}
 
-	if len(rows) == 0 {
+	if len(groups) == 0 {
 		return []interface{}{}, nil
 	}
 
-	strategyNames := h.loadStrategyNames(ctx, rows)
-	userNames := h.loadUserNames(ctx, rows)
-	items := make([]interface{}, 0, len(rows))
-	for _, item := range rows {
-		strategyName := resolveStrategyName(strategyNames, item.ScheduleID, item.Name)
-		response := buildExecutionResponse(item, strategyName)
-		response["triggerUser"] = resolveUserName(userNames, item.CreatedBy)
-		items = append(items, response)
+	allRows := make([]inspection.Inspection, 0, len(groups)*4)
+	for _, group := range groups {
+		allRows = append(allRows, group.rows...)
+	}
+	strategyNames := h.loadStrategyNames(ctx, allRows)
+	userNames := h.loadUserNames(ctx, allRows)
+	items := make([]interface{}, 0, len(groups))
+	for _, group := range groups {
+		items = append(items, buildBatchExecutionResponse(group.rows, strategyNames, userNames))
 	}
 
 	return items, nil
