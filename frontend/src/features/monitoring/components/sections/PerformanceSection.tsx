@@ -1,6 +1,6 @@
 'use client'
 
-import type { Ref } from 'react'
+import { useState, type Ref } from 'react'
 import { TrendingUp } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/atoms'
 import { SectionHeader, SectionFailureContent } from '../shared'
@@ -9,6 +9,7 @@ import {
   TemperatureChartWrapper,
   ChartSkeleton,
 } from '../charts'
+import { PerformanceMetricLegend, type PerformanceMetricKey } from '../charts/PerformanceMetricLegend'
 import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../../types'
 
 interface PerformanceSectionProps {
@@ -32,13 +33,37 @@ export function PerformanceSection({
   timeRange,
   onRetry,
 }: PerformanceSectionProps) {
+  const [hiddenMetrics, setHiddenMetrics] = useState<ReadonlySet<PerformanceMetricKey>>(new Set())
+  const toggleMetric = (metric: PerformanceMetricKey) => {
+    setHiddenMetrics((prev) => {
+      const next = new Set(prev)
+      if (next.has(metric)) {
+        next.delete(metric)
+      } else {
+        next.add(metric)
+      }
+      return next
+    })
+  }
+
+  const showPerformanceChart =
+    chartsInView &&
+    sectionSystemPerformance?.ok !== false &&
+    !!systemPerformance &&
+    systemPerformance.length > 0
+
   return (
     <section ref={sectionRef}>
       <SectionHeader icon={TrendingUp} title="性能趋势" />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">系统性能趋势</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">系统性能趋势</CardTitle>
+              {showPerformanceChart && (
+                <PerformanceMetricLegend hiddenMetrics={hiddenMetrics} onToggle={toggleMetric} />
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {chartsInView ? (
@@ -49,8 +74,13 @@ export function PerformanceSection({
                   onRetry={onRetry}
                   className="h-64"
                 />
-              ) : systemPerformance && systemPerformance.length > 0 ? (
-                <SystemPerformanceChartWrapper data={systemPerformance} height={280} timeRange={timeRange} />
+              ) : showPerformanceChart ? (
+                <SystemPerformanceChartWrapper
+                  data={systemPerformance}
+                  height={280}
+                  timeRange={timeRange}
+                  hiddenMetrics={hiddenMetrics}
+                />
               ) : (
                 <div className="flex h-64 items-center justify-center">
                   <p className="text-sm text-muted-foreground">暂无性能数据</p>

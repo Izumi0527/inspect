@@ -1,9 +1,13 @@
-// 系统性能历史数据点
+// 单台设备在一个时间桶内的 CPU/内存均值（0-100）
+export interface DevicePerformanceValue {
+  cpu: number
+  memory: number
+}
+
+// 系统性能历史数据点（按设备区分：deviceName -> CPU/内存）
 export interface SystemPerformanceDataPoint {
   timestamp: Date | string
-  cpu: number // 0-100
-  memory: number // 0-100
-  network: number // Mbps
+  devices: Record<string, DevicePerformanceValue>
 }
 
 // 设备温度历史数据点

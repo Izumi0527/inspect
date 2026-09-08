@@ -66,6 +66,8 @@ interface LineChartProps<TData extends ChartDatum> {
     name?: string
     color?: string
     strokeWidth?: number
+    /** SVG 虚线样式（如 "6 4"），缺省为实线 */
+    strokeDasharray?: string
   }>
   height?: number
   title?: string
@@ -240,6 +242,7 @@ export const LineChartComponent = <TData extends ChartDatum>({
                   y={(d) => yScale(Number(d[line.key]) || 0)}
                   stroke={color}
                   strokeWidth={line.strokeWidth || 2}
+                  strokeDasharray={line.strokeDasharray}
                   curve={curveMonotoneX}
                 />
               )

@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { ChartSkeleton } from '../charts/ChartSkeleton'
+import type { PerformanceMetricKey } from '../charts/PerformanceMetricLegend'
 import type {
   SystemPerformanceDataPoint,
   TemperatureDataPoint,
@@ -43,16 +44,24 @@ interface SystemPerformanceChartWrapperProps {
   height?: number
   /** 时间范围（用于图表 x 轴刻度/标签格式优化） */
   timeRange?: string
+  /** 被用户隐藏的指标（由卡片标题右侧的指标图例控制） */
+  hiddenMetrics?: ReadonlySet<PerformanceMetricKey>
 }
 
 export function SystemPerformanceChartWrapper({
   data,
   height = 300,
   timeRange,
+  hiddenMetrics,
 }: SystemPerformanceChartWrapperProps) {
   return (
     <Suspense fallback={<ChartSkeleton height={height} />}>
-      <LazySystemPerformanceChart data={data} height={height} timeRange={timeRange} />
+      <LazySystemPerformanceChart
+        data={data}
+        height={height}
+        timeRange={timeRange}
+        hiddenMetrics={hiddenMetrics}
+      />
     </Suspense>
   )
 }

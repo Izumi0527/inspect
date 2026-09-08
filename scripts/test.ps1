@@ -26,6 +26,10 @@
     供 TDD 循环取得秒级反馈；指定后跳过 go build 与全量用例，并在主模块与
     外置测试模块中各自探测该包是否存在，不存在的一侧跳过而非报错。
 
+.PARAMETER TestPath
+    仅运行路径匹配该正则的前端 jest 用例（如 tests/frontend/monitoring）。
+    与 -Package 同一用途：供前端 TDD 循环取得秒级反馈；指定后跳过 tsc 类型检查。
+
 .EXAMPLE
     .\scripts\test.ps1
     执行后端与前端的完整校验
@@ -49,7 +53,9 @@ param(
 
     [switch]$SkipTypeCheck,
 
-    [string]$Package = ""
+    [string]$Package = "",
+
+    [string]$TestPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -158,6 +164,11 @@ function Test-Backend {
 
 function Test-Frontend {
     $frontendDir = Join-Path $ProjectRoot "frontend"
+
+    if ($TestPath) {
+        Invoke-Step -Name "前端单元测试 (jest: $TestPath)" -WorkingDirectory $frontendDir -Action { & pnpm test --runInBand $TestPath }
+        return
+    }
 
     if (-not $SkipTypeCheck) {
         Invoke-Step -Name "前端类型检查 (tsc --noEmit)" -WorkingDirectory $frontendDir -Action { & pnpm run type-check }

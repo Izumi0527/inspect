@@ -104,4 +104,78 @@ describe('monitoring.api', () => {
       device_ids: [3, 7],
     })
   })
+
+  it('fetchMonitoringDataV2: systemPerformance 按设备归一化为 devices:{名称:{cpu,memory}}，非法值被过滤', async () => {
+    mockedApi.post.mockResolvedValue({
+      data: {
+        systemPerformance: [
+          {
+            timestamp: '2026-09-06T12:00:00Z',
+            devices: {
+              'SW-01': { cpu: 12.5, memory: 40 },
+              'SW-02': { cpu: '20', memory: 'n/a' },
+              '': { cpu: 1, memory: 1 },
+              'BROKEN': 'not-an-object',
+            },
+          },
+          { timestamp: '2026-09-06T12:05:00Z' },
+          'garbage',
+        ],
+      },
+      sections: {},
+      hasPartialFailure: false,
+      failedSections: [],
+      lastUpdate: '2026-09-06T12:05:00Z',
+    })
+
+    const envelope = await fetchMonitoringDataV2('1h')
+    expect(envelope.data.systemPerformance).toEqual([
+      {
+        timestamp: '2026-09-06T12:00:00Z',
+        devices: {
+          'SW-01': { cpu: 12.5, memory: 40 },
+          'SW-02': { cpu: 20, memory: 0 },
+        },
+      },
+      { timestamp: '2026-09-06T12:05:00Z', devices: {} },
+    ])
+  })
+
+  it('fetchMonitoringDataV2: 旧版后端（v2 404）回退时，性能趋势分区应标记失败并提示升级', async () => {
+    const { ApiClientError } = jest.requireMock('@/lib/api-client') as {
+      ApiClientError: new (status: number, message?: string) => Error
+    }
+    mockedApi.post.mockImplementation((url: string) => {
+      if (url === '/monitoring/dashboard/v2') {
+        return Promise.reject(new ApiClientError(404, 'not found'))
+      }
+      if (url === '/monitoring/devices/temperature') {
+        return Promise.resolve([{ timestamp: '2026-09-06T12:00:00Z', devices: { edge: 40 } }])
+      }
+      if (url === '/monitoring/network/traffic/history') {
+        return Promise.resolve([])
+      }
+      return Promise.reject(new Error(`unexpected POST: ${url}`))
+    })
+    mockedApi.get.mockImplementation((url: string) => {
+      if (url === '/monitoring/devices/distribution') {
+        return Promise.resolve({ healthy: 1, warning: 0, critical: 0, offline: 0 })
+      }
+      if (url === '/monitoring/stats') {
+        return Promise.resolve({ total_devices: 1, active_alerts: 0, avg_cpu: 10, avg_memory: 20 })
+      }
+      if (url.startsWith('/alerts')) {
+        return Promise.resolve({ alerts: [] })
+      }
+      return Promise.reject(new Error(`unexpected GET: ${url}`))
+    })
+
+    const envelope = await fetchMonitoringDataV2('1h')
+    expect(envelope.data.systemPerformance).toEqual([])
+    expect(envelope.sections.systemPerformance.ok).toBe(false)
+    expect(envelope.sections.systemPerformance.message).toContain('升级')
+    expect(envelope.failedSections).toContain('systemPerformance')
+    // 旧端点只有跨设备聚合值，给不出设备名，不应再请求它
+    expect(mockedApi.post).not.toHaveBeenCalledWith('/monitoring/system/performance', expect.anything())
+  })
 })

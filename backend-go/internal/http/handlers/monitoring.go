@@ -33,7 +33,7 @@ type MonitoringHandler struct {
 
 type monitoringDashboardWriter interface {
 	GetMonitoringStats(ctx context.Context, deviceIDs []int) (monitoring.MonitoringStats, error)
-	GetSystemPerformanceHistory(ctx context.Context, start time.Time, end time.Time, metrics []string, deviceIDs []int) ([]monitoring.SystemPerformancePoint, error)
+	GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.DevicePerformancePoint, error)
 	GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.TemperatureHistoryPoint, error)
 	GetDeviceStatusDistribution(ctx context.Context, deviceIDs []int) (monitoring.DeviceStatusDistribution, error)
 	GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.NetworkTrafficPoint, error)
@@ -638,20 +638,13 @@ type monitoringDashboardV2Envelope struct {
 }
 
 type monitoringDashboardV2Data struct {
-	SystemPerformance        []monitoringSystemPerformanceV2Point `json:"systemPerformance"`
+	SystemPerformance        []monitoring.DevicePerformancePoint  `json:"systemPerformance"`
 	TemperatureHistory       []monitoring.TemperatureHistoryPoint `json:"temperatureHistory"`
 	DeviceStatusDistribution monitoring.DeviceStatusDistribution  `json:"deviceStatusDistribution"`
 	NetworkTrafficHistory    []monitoring.NetworkTrafficPoint     `json:"networkTrafficHistory"`
 	StatsV2                  []monitoringV2StatCardData           `json:"statsV2"`
 	RealtimeAlerts           []monitoringV2RealtimeAlert          `json:"realtimeAlerts"`
 	LastUpdate               string                               `json:"lastUpdate"`
-}
-
-type monitoringSystemPerformanceV2Point struct {
-	Timestamp string  `json:"timestamp"`
-	CPU       float64 `json:"cpu"`
-	Memory    float64 `json:"memory"`
-	Network   float64 `json:"network"`
 }
 
 type monitoringV2StatCardData struct {
@@ -712,7 +705,7 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 
 	var (
 		statsResult          result[monitoring.MonitoringStats]
-		systemPerfResult     result[[]monitoringSystemPerformanceV2Point]
+		systemPerfResult     result[[]monitoring.DevicePerformancePoint]
 		tempResult           result[[]monitoring.TemperatureHistoryPoint]
 		deviceStatusResult   result[monitoring.DeviceStatusDistribution]
 		networkTrafficResult result[[]monitoring.NetworkTrafficPoint]
@@ -731,27 +724,12 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		points, err := writer.GetSystemPerformanceHistory(
-			c.Request().Context(),
-			startTime,
-			endTime,
-			[]string{"cpu_usage", "memory_usage", "network_traffic"},
-			deviceIDs,
-		)
+		points, err := writer.GetDevicePerformanceHistory(c.Request().Context(), startTime, endTime, deviceIDs)
 		if err != nil {
-			systemPerfResult = result[[]monitoringSystemPerformanceV2Point]{value: []monitoringSystemPerformanceV2Point{}, err: err}
+			systemPerfResult = result[[]monitoring.DevicePerformancePoint]{value: []monitoring.DevicePerformancePoint{}, err: err}
 			return
 		}
-		out := make([]monitoringSystemPerformanceV2Point, 0, len(points))
-		for _, point := range points {
-			out = append(out, monitoringSystemPerformanceV2Point{
-				Timestamp: point.Timestamp,
-				CPU:       point.CPUUsage,
-				Memory:    point.MemoryUsage,
-				Network:   point.NetworkTraffic,
-			})
-		}
-		systemPerfResult = result[[]monitoringSystemPerformanceV2Point]{value: out, err: nil}
+		systemPerfResult = result[[]monitoring.DevicePerformancePoint]{value: points, err: nil}
 	}()
 
 	wg.Add(1)
@@ -917,7 +895,7 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 
 func resolveMonitoringDashboardLastUpdate(
 	fallback time.Time,
-	systemPerformance []monitoringSystemPerformanceV2Point,
+	systemPerformance []monitoring.DevicePerformancePoint,
 	temperature []monitoring.TemperatureHistoryPoint,
 	networkTraffic []monitoring.NetworkTrafficPoint,
 ) string {

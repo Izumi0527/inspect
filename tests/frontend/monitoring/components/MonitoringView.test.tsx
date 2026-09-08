@@ -87,7 +87,7 @@ describe('MonitoringView', () => {
       data: {
         data: {
           statsV2: [{ id: 'total_devices', title: '总设备', value: '1' }],
-          systemPerformance: [{ timestamp: '2026-02-24T12:00:00.000Z', cpu: 10, memory: 20, network: 1 }],
+          systemPerformance: [{ timestamp: '2026-02-24T12:00:00.000Z', devices: { edge: { cpu: 10, memory: 20 } } }],
           temperatureHistory: [{ timestamp: '2026-02-24T12:00:00.000Z', devices: { edge: 45 } }],
           deviceStatusDistribution: { healthy: 1, warning: 0, critical: 0, offline: 0 },
           availability: { current: 99.9, target: 99.9, trend: 'stable' as const },

@@ -15,6 +15,7 @@ PROJECT_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 SCOPE="all"
 SKIP_BUILD=false
 SKIP_TYPE_CHECK=false
+TEST_PATH=""
 FAILURES=()
 
 color() {
@@ -52,6 +53,7 @@ show_help() {
   --scope <all|backend|frontend|installer|deploy>   校验范围，默认 all
   --skip-build                     跳过后端 go build
   --skip-type-check                跳过前端 tsc 类型检查
+  --test-path <正则>               仅运行路径匹配的前端 jest 用例（TDD 快速反馈，跳过 tsc）
   --help, -h                       显示帮助
 EOF
 }
@@ -63,6 +65,7 @@ parse_args() {
             backend|frontend|installer|deploy|all) SCOPE="$1"; shift ;;
             --skip-build) SKIP_BUILD=true; shift ;;
             --skip-type-check) SKIP_TYPE_CHECK=true; shift ;;
+            --test-path) [[ $# -ge 2 ]] || die "缺少 --test-path 参数值"; TEST_PATH="$2"; shift 2 ;;
             --help|-h) show_help; exit 0 ;;
             *) die "未知参数: $1" ;;
         esac
@@ -105,6 +108,11 @@ test_backend() {
 
 test_frontend() {
     local frontend_dir="$PROJECT_ROOT/frontend"
+
+    if [[ -n "$TEST_PATH" ]]; then
+        run_step "前端单元测试 (jest: $TEST_PATH)" "$frontend_dir" pnpm test --runInBand "$TEST_PATH"
+        return
+    fi
 
     if [[ "$SKIP_TYPE_CHECK" != true ]]; then
         run_step "前端类型检查 (tsc --noEmit)" "$frontend_dir" pnpm run type-check

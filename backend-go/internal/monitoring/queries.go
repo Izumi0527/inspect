@@ -683,7 +683,11 @@ func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Ti
 		return []TemperatureHistoryPoint{}, nil
 	}
 
-	deviceNames, err := w.lookupDeviceNames(ctx, rows)
+	rowDeviceIDs := make([]int, 0, len(rows))
+	for _, row := range rows {
+		rowDeviceIDs = append(rowDeviceIDs, row.DeviceID)
+	}
+	deviceNames, err := w.lookupDeviceNames(ctx, uniqueDeviceIDs(rowDeviceIDs))
 	if err != nil {
 		return nil, err
 	}
@@ -709,6 +713,121 @@ func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Ti
 	// 写入缓存
 	if w.cache != nil {
 		w.cache.SetTemperature(ctx, start, end, deviceIDs, result)
+	}
+
+	return result, nil
+}
+
+// devicePerformanceMetrics 是按设备性能趋势固定采集的两项指标（网络不再纳入该图）。
+var devicePerformanceMetrics = []string{"cpu_usage", "memory_usage"}
+
+type devicePerformanceRow struct {
+	Bucket     time.Time `gorm:"column:bucket"`
+	DeviceID   int       `gorm:"column:device_id"`
+	MetricName string    `gorm:"column:metric_name"`
+	Value      *float64  `gorm:"column:value"`
+}
+
+// GetDevicePerformanceHistory 查询按设备区分的 CPU/内存趋势；deviceIDs 非空时仅返回所选设备。
+// 与聚合版 GetSystemPerformanceHistory 不同：不回退主机级 system_metrics（按设备视图无处挂载）。
+func (w *MetricsWriter) GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]DevicePerformancePoint, error) {
+	if w.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	if w.cache != nil {
+		if cached, found := w.cache.GetDevicePerformance(ctx, start, end, deviceIDs); found {
+			return cached, nil
+		}
+	}
+
+	bucket := bucketSizeForRange(start, end)
+	useHourly := bucket >= time.Hour
+
+	deviceFilter := ""
+	if len(deviceIDs) > 0 {
+		deviceFilter = " AND device_id IN (?)"
+	}
+	buildArgs := func() []interface{} {
+		args := []interface{}{devicePerformanceMetrics, start, end}
+		if len(deviceIDs) > 0 {
+			args = append(args, deviceIDs)
+		}
+		return args
+	}
+	rawBucketQuery := func(interval string) string {
+		return fmt.Sprintf(
+			"SELECT time_bucket('%s', collected_at) AS bucket, device_id, metric_name, AVG(metric_value) AS value FROM device_metrics WHERE metric_name IN (?) AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC",
+			interval,
+			deviceFilter,
+		)
+	}
+
+	rows := make([]devicePerformanceRow, 0)
+	if useHourly {
+		hourlyQuery := w.db.WithContext(ctx).
+			Table("device_metrics_hourly").
+			Select("bucket, device_id, metric_name, avg_value AS value").
+			Where("metric_name IN ?", devicePerformanceMetrics).
+			Where("bucket >= ? AND bucket <= ?", start, end)
+		if len(deviceIDs) > 0 {
+			hourlyQuery = hourlyQuery.Where("device_id IN ?", deviceIDs)
+		}
+		if err := hourlyQuery.Order("bucket ASC").Scan(&rows).Error; err != nil {
+			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
+			if !isUndefinedRelationError(err) {
+				return nil, err
+			}
+			if err := w.db.WithContext(ctx).Raw(rawBucketQuery("1 hour"), buildArgs()...).Scan(&rows).Error; err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		if err := w.db.WithContext(ctx).Raw(rawBucketQuery(bucketIntervalString(bucket)), buildArgs()...).Scan(&rows).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	if len(rows) == 0 {
+		return []DevicePerformancePoint{}, nil
+	}
+
+	rowDeviceIDs := make([]int, 0, len(rows))
+	for _, row := range rows {
+		rowDeviceIDs = append(rowDeviceIDs, row.DeviceID)
+	}
+	deviceNames, err := w.lookupDeviceNames(ctx, uniqueDeviceIDs(rowDeviceIDs))
+	if err != nil {
+		return nil, err
+	}
+
+	points := make(map[time.Time]map[string]DevicePerformanceValue)
+	for _, row := range rows {
+		if row.Value == nil {
+			continue
+		}
+		name := deviceNames[row.DeviceID]
+		if name == "" {
+			name = fmt.Sprintf("device_%d", row.DeviceID)
+		}
+		bucket := row.Bucket.UTC()
+		if points[bucket] == nil {
+			points[bucket] = make(map[string]DevicePerformanceValue)
+		}
+		value := points[bucket][name]
+		switch row.MetricName {
+		case "cpu_usage":
+			value.CPU = *row.Value
+		case "memory_usage":
+			value.Memory = *row.Value
+		}
+		points[bucket][name] = value
+	}
+
+	result := flattenDevicePerformanceSeries(points)
+
+	if w.cache != nil {
+		w.cache.SetDevicePerformance(ctx, start, end, deviceIDs, result)
 	}
 
 	return result, nil
@@ -1265,17 +1384,7 @@ func flattenSystemSeries(series map[time.Time]*SystemPerformancePoint) []SystemP
 	return result
 }
 
-func (w *MetricsWriter) lookupDeviceNames(ctx context.Context, rows []temperatureRow) (map[int]string, error) {
-	deviceIDs := make([]int, 0)
-	seen := make(map[int]struct{})
-	for _, row := range rows {
-		if _, ok := seen[row.DeviceID]; ok {
-			continue
-		}
-		seen[row.DeviceID] = struct{}{}
-		deviceIDs = append(deviceIDs, row.DeviceID)
-	}
-
+func (w *MetricsWriter) lookupDeviceNames(ctx context.Context, deviceIDs []int) (map[int]string, error) {
 	if len(deviceIDs) == 0 {
 		return map[int]string{}, nil
 	}
@@ -1327,6 +1436,48 @@ func flattenTemperatureSeries(points map[time.Time]map[string]float64) []Tempera
 	}
 
 	return result
+}
+
+func flattenDevicePerformanceSeries(points map[time.Time]map[string]DevicePerformanceValue) []DevicePerformancePoint {
+	if len(points) == 0 {
+		return []DevicePerformancePoint{}
+	}
+
+	keys := make([]time.Time, 0, len(points))
+	for ts := range points {
+		keys = append(keys, ts)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].Before(keys[j])
+	})
+
+	result := make([]DevicePerformancePoint, 0, len(keys))
+	for _, ts := range keys {
+		devices := points[ts]
+		if devices == nil {
+			continue
+		}
+		result = append(result, DevicePerformancePoint{
+			Timestamp: ts.UTC().Format(time.RFC3339Nano),
+			Devices:   devices,
+		})
+	}
+
+	return result
+}
+
+// uniqueDeviceIDs 按首次出现顺序去重，供设备名查询使用。
+func uniqueDeviceIDs(ids []int) []int {
+	seen := make(map[int]struct{}, len(ids))
+	out := make([]int, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 func formatMetricList(metrics []string) string {

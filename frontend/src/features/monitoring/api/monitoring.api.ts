@@ -197,39 +197,6 @@ export const checkMonitoringReportDownloadToken = async (
 }
 
 /**
- * 获取系统性能历史数据
- * @param timeRange - 时间范围 (24h, 7d, 30d)
- * @returns 系统性能数据点数组
- */
-export async function fetchSystemPerformanceHistory(
-  timeRange: string = '24h'
-): Promise<SystemPerformanceDataPoint[]> {
-  try {
-    const { start, end } = resolveTimeRange(timeRange)
-
-    const response = await api.post('/monitoring/system/performance', {
-      start_time: start,
-      end_time: end,
-      metrics: ['cpu_usage', 'memory_usage', 'network_traffic'],
-    })
-
-    if (Array.isArray(response) && response.length > 0) {
-      return response.map((point: RawRecord) => ({
-        timestamp: toStr(point.timestamp || point.time, new Date().toISOString()),
-        cpu: toNum(point.cpu_usage ?? point.cpu),
-        memory: toNum(point.memory_usage ?? point.memory),
-        network: toNum(point.network_traffic ?? point.network),
-      }))
-    }
-
-    return []
-  } catch (error) {
-    console.error('获取系统性能历史失败:', error)
-    throw error instanceof Error ? error : new Error('获取系统性能历史失败')
-  }
-}
-
-/**
  * 获取设备温度历史数据
  * @param timeRange - 时间范围
  * @returns 温度历史数据点数组
@@ -577,11 +544,23 @@ export async function fetchMonitoringDataV2(
       const out: SystemPerformanceDataPoint[] = []
       for (const item of value) {
         if (!isRecord(item)) continue
+
+        const devicesRaw = item.devices
+        const devices: SystemPerformanceDataPoint['devices'] = {}
+        if (isRecord(devicesRaw)) {
+          for (const [key, rawValue] of Object.entries(devicesRaw)) {
+            const name = String(key).trim()
+            if (name === '' || !isRecord(rawValue)) continue
+            devices[name] = {
+              cpu: toNumber(rawValue.cpu, 0),
+              memory: toNumber(rawValue.memory, 0),
+            }
+          }
+        }
+
         out.push({
           timestamp: normalizeTimestamp(item.timestamp ?? item.time),
-          cpu: toNumber(item.cpu ?? item.cpu_usage, 0),
-          memory: toNumber(item.memory ?? item.memory_usage, 0),
-          network: toNumber(item.network ?? item.network_traffic, 0),
+          devices,
         })
       }
 
@@ -778,14 +757,12 @@ async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<Monitorin
 
   try {
     const [
-      systemPerformance,
       temperatureHistory,
       deviceStatusDistribution,
       networkTrafficHistory,
       statsV2,
       realtimeAlerts,
     ] = await Promise.allSettled([
-      fetchSystemPerformanceHistory(timeRange),
       fetchTemperatureHistory(timeRange),
       fetchDeviceStatusDistribution(),
       fetchNetworkTrafficHistory(timeRange),
@@ -800,9 +777,10 @@ async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<Monitorin
         ok: statsV2.status === 'fulfilled',
         message: statsV2.status === 'rejected' ? toErrorMessage(statsV2.reason, '统计指标加载失败') : undefined,
       },
+      // 旧端点 /monitoring/system/performance 只有跨设备聚合值，无法按设备区分，直接标记不可用
       systemPerformance: {
-        ok: systemPerformance.status === 'fulfilled',
-        message: systemPerformance.status === 'rejected' ? toErrorMessage(systemPerformance.reason, '系统性能数据加载失败') : undefined,
+        ok: false,
+        message: '当前后端版本不支持按设备展示性能趋势，请升级后端',
       },
       temperature: {
         ok: temperatureHistory.status === 'fulfilled',
@@ -828,7 +806,7 @@ async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<Monitorin
     }
 
     const data: MonitoringDataV2 = {
-      systemPerformance: systemPerformance.status === 'fulfilled' ? systemPerformance.value : [],
+      systemPerformance: [],
       temperatureHistory: temperatureHistory.status === 'fulfilled' ? temperatureHistory.value : [],
       deviceStatusDistribution:
         deviceStatusDistribution.status === 'fulfilled'

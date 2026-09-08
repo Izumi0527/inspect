@@ -21,8 +21,8 @@ import (
 type stubDashboardWriter struct {
 	stats             monitoring.MonitoringStats
 	statsErr          error
-	systemPerf        []monitoring.SystemPerformancePoint
-	systemPerfErr     error
+	devicePerf        []monitoring.DevicePerformancePoint
+	devicePerfErr     error
 	temperature       []monitoring.TemperatureHistoryPoint
 	temperatureErr    error
 	deviceStatus      monitoring.DeviceStatusDistribution
@@ -35,8 +35,8 @@ func (s stubDashboardWriter) GetMonitoringStats(_ context.Context, _ []int) (mon
 	return s.stats, s.statsErr
 }
 
-func (s stubDashboardWriter) GetSystemPerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []string, _ []int) ([]monitoring.SystemPerformancePoint, error) {
-	return s.systemPerf, s.systemPerfErr
+func (s stubDashboardWriter) GetDevicePerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.DevicePerformancePoint, error) {
+	return s.devicePerf, s.devicePerfErr
 }
 
 func (s stubDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.TemperatureHistoryPoint, error) {
@@ -87,7 +87,7 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_AlertsLimitedByPermission(t 
 				PeakOutbound: 1000,
 				PeakInbound:  2000,
 			},
-			systemPerf:     []monitoring.SystemPerformancePoint{},
+			devicePerf:     []monitoring.DevicePerformancePoint{},
 			temperature:    []monitoring.TemperatureHistoryPoint{},
 			deviceStatus:   monitoring.DeviceStatusDistribution{Healthy: 1, Warning: 0, Critical: 0, Offline: 2},
 			networkTraffic: []monitoring.NetworkTrafficPoint{},
@@ -163,7 +163,7 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_PartialFailureTemperature(t 
 				PeakOutbound: 1000,
 				PeakInbound:  2000,
 			},
-			systemPerf:     []monitoring.SystemPerformancePoint{},
+			devicePerf:     []monitoring.DevicePerformancePoint{},
 			temperatureErr: errors.New("temperature query failed"),
 			deviceStatus:   monitoring.DeviceStatusDistribution{Healthy: 1, Warning: 0, Critical: 0, Offline: 2},
 			networkTraffic: []monitoring.NetworkTrafficPoint{},
@@ -220,7 +220,7 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_AllAccessibleSectionsFailed_
 	h := handlers.MonitoringHandler{
 		DashboardWriter: stubDashboardWriter{
 			statsErr:          errors.New("stats failed"),
-			systemPerfErr:     errors.New("perf failed"),
+			devicePerfErr:     errors.New("perf failed"),
 			temperatureErr:    errors.New("temp failed"),
 			deviceStatusErr:   errors.New("status failed"),
 			networkTrafficErr: errors.New("network failed"),
@@ -308,11 +308,11 @@ func (r *recordingDashboardWriter) GetMonitoringStats(ctx context.Context, devic
 	return r.stubDashboardWriter.GetMonitoringStats(ctx, deviceIDs)
 }
 
-func (r *recordingDashboardWriter) GetSystemPerformanceHistory(ctx context.Context, start time.Time, end time.Time, metrics []string, deviceIDs []int) ([]monitoring.SystemPerformancePoint, error) {
+func (r *recordingDashboardWriter) GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.DevicePerformancePoint, error) {
 	r.mu.Lock()
 	r.perfDeviceIDs = append([]int(nil), deviceIDs...)
 	r.mu.Unlock()
-	return r.stubDashboardWriter.GetSystemPerformanceHistory(ctx, start, end, metrics, deviceIDs)
+	return r.stubDashboardWriter.GetDevicePerformanceHistory(ctx, start, end, deviceIDs)
 }
 
 func (r *recordingDashboardWriter) GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.TemperatureHistoryPoint, error) {
@@ -343,7 +343,7 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_DeviceIDsPassthrough(t *test
 	writer := &recordingDashboardWriter{
 		stubDashboardWriter: stubDashboardWriter{
 			stats:          monitoring.MonitoringStats{TotalDevices: 2},
-			systemPerf:     []monitoring.SystemPerformancePoint{},
+			devicePerf:     []monitoring.DevicePerformancePoint{},
 			temperature:    []monitoring.TemperatureHistoryPoint{},
 			deviceStatus:   monitoring.DeviceStatusDistribution{Healthy: 2},
 			networkTraffic: []monitoring.NetworkTrafficPoint{},

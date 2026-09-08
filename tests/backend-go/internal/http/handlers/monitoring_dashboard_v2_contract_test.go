@@ -28,13 +28,14 @@ func (testMonitoringDashboardWriter) GetMonitoringStats(_ context.Context, _ []i
 	}, nil
 }
 
-func (testMonitoringDashboardWriter) GetSystemPerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []string, _ []int) ([]monitoring.SystemPerformancePoint, error) {
-	return []monitoring.SystemPerformancePoint{
+func (testMonitoringDashboardWriter) GetDevicePerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.DevicePerformancePoint, error) {
+	return []monitoring.DevicePerformancePoint{
 		{
-			Timestamp:      "2026-03-15T00:00:00Z",
-			CPUUsage:       1,
-			MemoryUsage:    2,
-			NetworkTraffic: 3,
+			Timestamp: "2026-03-15T00:00:00Z",
+			Devices: map[string]monitoring.DevicePerformanceValue{
+				"device-1": {CPU: 1, Memory: 2},
+				"device-2": {CPU: 3, Memory: 4},
+			},
 		},
 	}, nil
 }
@@ -152,6 +153,35 @@ func TestGetMonitoringDashboardV2_ContractKeysAndSections(t *testing.T) {
 	}
 	if _, ok := data["realtimeAlerts"].([]interface{}); !ok {
 		t.Fatalf("data.realtimeAlerts should be array, got %T", data["realtimeAlerts"])
+	}
+
+	// systemPerformance 按设备区分：每个点为 {timestamp, devices:{设备名:{cpu,memory}}}，不再有聚合 cpu/network 字段
+	systemPerformance, ok := data["systemPerformance"].([]interface{})
+	if !ok || len(systemPerformance) != 1 {
+		t.Fatalf("data.systemPerformance should be array of 1 point, got %v", data["systemPerformance"])
+	}
+	perfPoint, ok := systemPerformance[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("systemPerformance[0] should be object, got %T", systemPerformance[0])
+	}
+	if perfPoint["timestamp"] != "2026-03-15T00:00:00Z" {
+		t.Fatalf("systemPerformance[0].timestamp = %v, want 2026-03-15T00:00:00Z", perfPoint["timestamp"])
+	}
+	for _, removed := range []string{"cpu", "memory", "network"} {
+		if _, exists := perfPoint[removed]; exists {
+			t.Fatalf("systemPerformance[0] should not contain aggregated key %q", removed)
+		}
+	}
+	perfDevices, ok := perfPoint["devices"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("systemPerformance[0].devices should be object, got %T", perfPoint["devices"])
+	}
+	device2, ok := perfDevices["device-2"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("systemPerformance[0].devices.device-2 should be object, got %v", perfDevices["device-2"])
+	}
+	if device2["cpu"] != float64(3) || device2["memory"] != float64(4) {
+		t.Fatalf("device-2 = %v, want cpu=3 memory=4", device2)
 	}
 
 	// statsV2 六卡契约：可用性卡移除，峰值流量拆分为上行/下行

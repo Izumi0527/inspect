@@ -250,6 +250,18 @@ type TemperatureHistoryPoint struct {
 	Devices   map[string]float64 `json:"devices"`
 }
 
+// DevicePerformanceValue 单台设备在一个时间桶内的 CPU/内存均值（百分比）。
+type DevicePerformanceValue struct {
+	CPU    float64 `json:"cpu"`
+	Memory float64 `json:"memory"`
+}
+
+// DevicePerformancePoint 性能趋势按设备区分的时序点：设备名 → CPU/内存。
+type DevicePerformancePoint struct {
+	Timestamp string                            `json:"timestamp"`
+	Devices   map[string]DevicePerformanceValue `json:"devices"`
+}
+
 type NetworkTrafficPoint struct {
 	Timestamp string  `json:"timestamp"`
 	Inbound   float64 `json:"inbound"`
