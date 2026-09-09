@@ -70,9 +70,6 @@ describe('useMonitoringV2', () => {
       if (url === '/monitoring/dashboard/v2') {
         return Promise.reject(new ApiClientError(404, 'not found'))
       }
-      if (url === '/monitoring/system/performance') {
-        return Promise.resolve([{ timestamp: now, cpu_usage: 10, memory_usage: 20, network_traffic: 0 }])
-      }
       if (url === '/monitoring/devices/temperature') {
         return Promise.resolve([{ timestamp: now, devices: { edge: 40 } }])
       }

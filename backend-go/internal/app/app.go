@@ -130,7 +130,7 @@ func New() (*App, error) {
 	cacheConfig := monitoring.DefaultCacheConfig()
 	cacheConfig.Enabled = cfg.MonitoringCacheEnabled
 	if cfg.MonitoringCacheTTL > 0 {
-		cacheConfig.SystemPerformanceTTL = cfg.MonitoringCacheTTL
+		cacheConfig.DevicePerformanceTTL = cfg.MonitoringCacheTTL
 		cacheConfig.TemperatureTTL = cfg.MonitoringCacheTTL
 		cacheConfig.NetworkTrafficTTL = cfg.MonitoringCacheTTL
 	}

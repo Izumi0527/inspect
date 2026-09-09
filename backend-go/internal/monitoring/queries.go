@@ -539,80 +539,6 @@ func (w *MetricsWriter) GetBulkMetricsHistory(
 	return points, nil
 }
 
-// GetSystemPerformanceHistory 查询性能趋势时序；deviceIDs 非空时仅聚合所选设备
-// （此时不再回退主机级 system_metrics，因其无设备维度）。
-func (w *MetricsWriter) GetSystemPerformanceHistory(
-	ctx context.Context,
-	start time.Time,
-	end time.Time,
-	metrics []string,
-	deviceIDs []int,
-) ([]SystemPerformancePoint, error) {
-	if w.db == nil {
-		return nil, fmt.Errorf("database not initialized")
-	}
-
-	metricSet := normalizeMetrics(metrics, []string{"cpu_usage", "memory_usage", "network_traffic"})
-	if len(metricSet) == 0 {
-		metricSet = []string{"cpu_usage", "memory_usage", "network_traffic"}
-	}
-
-	// 尝试从缓存获取
-	if w.cache != nil {
-		if cached, found := w.cache.GetSystemPerformance(ctx, start, end, metricSet, deviceIDs); found {
-			return cached, nil
-		}
-	}
-
-	bucket := bucketSizeForRange(start, end)
-	series := make(map[time.Time]*SystemPerformancePoint)
-
-	for _, metric := range metricSet {
-		values, err := w.querySystemMetricSeries(ctx, start, end, metric, bucket, deviceIDs)
-		if err != nil {
-			return nil, err
-		}
-		if metric == "network_traffic" && len(values) == 0 {
-			inbound, err := w.querySystemMetricSeries(ctx, start, end, "network_bytes_in", bucket, deviceIDs)
-			if err != nil {
-				return nil, err
-			}
-			outbound, err := w.querySystemMetricSeries(ctx, start, end, "network_bytes_out", bucket, deviceIDs)
-			if err != nil {
-				return nil, err
-			}
-			values = mergeSeries(inbound, outbound)
-		}
-		for ts, value := range values {
-			point := series[ts]
-			if point == nil {
-				point = &SystemPerformancePoint{
-					Timestamp: ts.UTC().Format(time.RFC3339Nano),
-				}
-				series[ts] = point
-			}
-			switch metric {
-			case "cpu_usage":
-				point.CPUUsage = value
-			case "memory_usage":
-				point.MemoryUsage = value
-			case "network_traffic":
-				point.NetworkTraffic = bpsToMbps(value)
-			}
-		}
-	}
-
-	result := flattenSystemSeries(series)
-
-	// 写入缓存
-	if w.cache != nil {
-		w.cache.SetSystemPerformance(ctx, start, end, metricSet, deviceIDs, result)
-	}
-
-	return result, nil
-}
-
-// GetTemperatureHistory 查询设备温度时序；deviceIDs 非空时仅返回所选设备。
 func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]TemperatureHistoryPoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -729,7 +655,7 @@ type devicePerformanceRow struct {
 }
 
 // GetDevicePerformanceHistory 查询按设备区分的 CPU/内存趋势；deviceIDs 非空时仅返回所选设备。
-// 与聚合版 GetSystemPerformanceHistory 不同：不回退主机级 system_metrics（按设备视图无处挂载）。
+// 故意不回退主机级 system_metrics：按设备视图无处挂载。
 func (w *MetricsWriter) GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]DevicePerformancePoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -987,121 +913,6 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 	return points, nil
 }
 
-func (w *MetricsWriter) querySystemMetricSeries(
-	ctx context.Context,
-	start time.Time,
-	end time.Time,
-	metric string,
-	bucket time.Duration,
-	deviceIDs []int,
-) (map[time.Time]float64, error) {
-	useHourly := bucket >= time.Hour
-
-	type row struct {
-		Bucket time.Time `gorm:"column:bucket"`
-		Value  *float64  `gorm:"column:value"`
-	}
-
-	rows := make([]row, 0)
-
-	deviceFilter := ""
-	if len(deviceIDs) > 0 {
-		deviceFilter = " AND device_id IN (?)"
-	}
-	buildArgs := func() []interface{} {
-		args := []interface{}{metric, start, end}
-		if len(deviceIDs) > 0 {
-			args = append(args, deviceIDs)
-		}
-		return args
-	}
-
-	// First try device_metrics table (aggregated from all devices)
-	if useHourly {
-		hourlyQuery := w.db.WithContext(ctx).
-			Table("device_metrics_hourly").
-			Select("bucket, AVG(avg_value) AS value").
-			Where("metric_name = ?", metric).
-			Where("bucket >= ? AND bucket <= ?", start, end)
-		if len(deviceIDs) > 0 {
-			hourlyQuery = hourlyQuery.Where("device_id IN ?", deviceIDs)
-		}
-		if err := hourlyQuery.
-			Group("bucket").
-			Order("bucket ASC").
-			Scan(&rows).Error; err != nil {
-			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
-			if !isUndefinedRelationError(err) {
-				return nil, err
-			}
-			query := fmt.Sprintf(
-				"SELECT time_bucket('%s', collected_at) AS bucket, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket ORDER BY bucket ASC",
-				"1 hour",
-				deviceFilter,
-			)
-			if err := w.db.WithContext(ctx).Raw(query, buildArgs()...).Scan(&rows).Error; err != nil {
-				return nil, err
-			}
-		}
-	} else {
-		interval := bucketIntervalString(bucket)
-		query := fmt.Sprintf(
-			"SELECT time_bucket('%s', collected_at) AS bucket, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket ORDER BY bucket ASC",
-			interval,
-			deviceFilter,
-		)
-		if err := w.db.WithContext(ctx).Raw(query, buildArgs()...).Scan(&rows).Error; err != nil {
-			return nil, err
-		}
-	}
-
-	// If no data from device_metrics, fallback to system_metrics.
-	// 设备筛选时跳过：system_metrics 是主机级指标，无设备维度，回退会造成"筛选无效"的假数据。
-	if len(rows) == 0 && len(deviceIDs) == 0 {
-		if useHourly {
-			if err := w.db.WithContext(ctx).
-				Table("system_metrics_hourly").
-				Select("bucket, AVG(avg_value) AS value").
-				Where("metric_name = ?", metric).
-				Where("bucket >= ? AND bucket <= ?", start, end).
-				Group("bucket").
-				Order("bucket ASC").
-				Scan(&rows).Error; err != nil {
-				// 兼容：缺少 system_metrics_hourly 时回退到动态聚合（按小时 bucket）
-				if !isUndefinedRelationError(err) {
-					return nil, err
-				}
-				query := fmt.Sprintf(
-					"SELECT time_bucket('%s', collected_at) AS bucket, AVG(metric_value) AS value FROM system_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ? GROUP BY bucket ORDER BY bucket ASC",
-					"1 hour",
-				)
-				if err := w.db.WithContext(ctx).Raw(query, metric, start, end).Scan(&rows).Error; err != nil {
-					return nil, err
-				}
-			}
-		} else {
-			interval := bucketIntervalString(bucket)
-			query := fmt.Sprintf(
-				"SELECT time_bucket('%s', collected_at) AS bucket, AVG(metric_value) AS value FROM system_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ? GROUP BY bucket ORDER BY bucket ASC",
-				interval,
-			)
-			if err := w.db.WithContext(ctx).Raw(query, metric, start, end).Scan(&rows).Error; err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	result := make(map[time.Time]float64, len(rows))
-	for _, row := range rows {
-		if row.Value == nil {
-			continue
-		}
-		result[row.Bucket.UTC()] = *row.Value
-	}
-
-	return result, nil
-}
-
 func normalizeDeviceStatus(status string) string {
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "online", "healthy", "normal", "ok":
@@ -1163,27 +974,6 @@ func bucketIntervalString(bucket time.Duration) string {
 		return fmt.Sprintf("%d hours", hours)
 	}
 	return fmt.Sprintf("%d minutes", minutes)
-}
-
-func normalizeMetrics(metrics []string, allowed []string) []string {
-	if len(metrics) == 0 {
-		return nil
-	}
-	allowedSet := make(map[string]struct{}, len(allowed))
-	for _, name := range allowed {
-		allowedSet[name] = struct{}{}
-	}
-	result := make([]string, 0, len(metrics))
-	for _, metric := range metrics {
-		normalized := NormalizeMetricName(metric)
-		if normalized == "" {
-			continue
-		}
-		if _, ok := allowedSet[normalized]; ok {
-			result = append(result, normalized)
-		}
-	}
-	return result
 }
 
 func shouldUseHourlyAggregate(start time.Time, end time.Time) bool {
@@ -1360,30 +1150,6 @@ func PeakNetworkMetrics24h(ctx context.Context, db *gorm.DB, deviceIDs []int) (P
 	return snapshot, nil
 }
 
-func flattenSystemSeries(series map[time.Time]*SystemPerformancePoint) []SystemPerformancePoint {
-	if len(series) == 0 {
-		return []SystemPerformancePoint{}
-	}
-
-	keys := make([]time.Time, 0, len(series))
-	for ts := range series {
-		keys = append(keys, ts)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		return keys[i].Before(keys[j])
-	})
-
-	result := make([]SystemPerformancePoint, 0, len(keys))
-	for _, ts := range keys {
-		point := series[ts]
-		if point == nil {
-			continue
-		}
-		result = append(result, *point)
-	}
-	return result
-}
-
 // lookupDeviceNames 返回设备 ID → 展示名。devices.name 无唯一约束，重名设备若以名字作字典键
 // 会互相覆盖，因此对全表同名的设备追加唯一的 IP 作区分（"核心交换机 (10.0.0.2)"）。
 // 按全表而非本次结果集判重，保证同一设备的标签不随时间范围/筛选跳变。
@@ -1503,19 +1269,4 @@ func formatMetricList(metrics []string) string {
 func roundFloat(value float64, precision int) float64 {
 	pow := math.Pow(10, float64(precision))
 	return math.Round(value*pow) / pow
-}
-
-func mergeSeries(a map[time.Time]float64, b map[time.Time]float64) map[time.Time]float64 {
-	if len(a) == 0 && len(b) == 0 {
-		return map[time.Time]float64{}
-	}
-
-	result := make(map[time.Time]float64)
-	for ts, value := range a {
-		result[ts] = value
-	}
-	for ts, value := range b {
-		result[ts] = result[ts] + value
-	}
-	return result
 }

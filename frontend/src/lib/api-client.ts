@@ -626,13 +626,10 @@ export const api = {
       httpClient.get(appendQuery('/monitoring/historical', params)),
     // 新增: 批量设备历史
     bulkHistory: (deviceIds: number[], params?: QueryParams) =>
-      httpClient.post('/monitoring/devices/historical', { 
-        device_ids: deviceIds, 
-        ...params 
+      httpClient.post('/monitoring/devices/historical', {
+        device_ids: deviceIds,
+        ...params
       }),
-    // 新增: 系统性能历史
-    systemPerformance: (params?: QueryParams) =>
-      httpClient.post('/monitoring/system/performance', params),
     // 新增: 网络流量历史
     networkTrafficHistory: (params?: QueryParams) =>
       httpClient.post('/monitoring/network/traffic/history', params),

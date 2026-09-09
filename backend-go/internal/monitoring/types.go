@@ -238,13 +238,6 @@ type DeviceStatusDistribution struct {
 	Offline  int `json:"offline"`
 }
 
-type SystemPerformancePoint struct {
-	Timestamp      string  `json:"timestamp"`
-	CPUUsage       float64 `json:"cpu_usage"`
-	MemoryUsage    float64 `json:"memory_usage"`
-	NetworkTraffic float64 `json:"network_traffic"`
-}
-
 type TemperatureHistoryPoint struct {
 	Timestamp string             `json:"timestamp"`
 	Devices   map[string]float64 `json:"devices"`

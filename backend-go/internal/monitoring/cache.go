@@ -15,8 +15,8 @@ import (
 
 // CacheConfig 缓存配置
 type CacheConfig struct {
-	// 系统性能历史数据缓存时间（默认 2 分钟）
-	SystemPerformanceTTL time.Duration
+	// 按设备性能趋势数据缓存时间（默认 2 分钟）
+	DevicePerformanceTTL time.Duration
 	// 设备温度历史数据缓存时间（默认 2 分钟）
 	TemperatureTTL time.Duration
 	// 网络流量历史数据缓存时间（默认 2 分钟）
@@ -28,7 +28,7 @@ type CacheConfig struct {
 // DefaultCacheConfig 返回默认缓存配置
 func DefaultCacheConfig() CacheConfig {
 	return CacheConfig{
-		SystemPerformanceTTL: 2 * time.Minute,
+		DevicePerformanceTTL: 2 * time.Minute,
 		TemperatureTTL:       2 * time.Minute,
 		NetworkTrafficTTL:    2 * time.Minute,
 		Enabled:              true,
@@ -68,10 +68,6 @@ func deviceIDsCacheKey(deviceIDs []int) string {
 	return strings.Join(parts, ",")
 }
 
-func (c *MetricsCache) systemPerformanceKey(start, end time.Time, metrics []string, deviceIDs []int) string {
-	return fmt.Sprintf("monitoring:system_performance:%d:%d:%v:dev=%s", start.Unix(), end.Unix(), metrics, deviceIDsCacheKey(deviceIDs))
-}
-
 func (c *MetricsCache) temperatureKey(start, end time.Time, deviceIDs []int) string {
 	return fmt.Sprintf("monitoring:temperature:%d:%d:dev=%s", start.Unix(), end.Unix(), deviceIDsCacheKey(deviceIDs))
 }
@@ -82,52 +78,6 @@ func (c *MetricsCache) devicePerformanceKey(start, end time.Time, deviceIDs []in
 
 func (c *MetricsCache) networkTrafficKey(start, end time.Time, deviceIDs []int) string {
 	return fmt.Sprintf("monitoring:network_traffic:%d:%d:dev=%s", start.Unix(), end.Unix(), deviceIDsCacheKey(deviceIDs))
-}
-
-// GetSystemPerformance 获取缓存的系统性能数据
-func (c *MetricsCache) GetSystemPerformance(ctx context.Context, start, end time.Time, metrics []string, deviceIDs []int) ([]SystemPerformancePoint, bool) {
-	if !c.config.Enabled || c.redis == nil {
-		return nil, false
-	}
-
-	key := c.systemPerformanceKey(start, end, metrics, deviceIDs)
-	data, err := c.redis.Get(ctx, key).Bytes()
-	if err != nil {
-		if err != redis.Nil {
-			c.logger.Warn("failed to get system performance from cache", zap.Error(err))
-		}
-		return nil, false
-	}
-
-	var result []SystemPerformancePoint
-	if err := json.Unmarshal(data, &result); err != nil {
-		c.logger.Warn("failed to unmarshal system performance cache", zap.Error(err))
-		return nil, false
-	}
-
-	c.logger.Debug("system performance cache hit", zap.String("key", key))
-	return result, true
-}
-
-// SetSystemPerformance 设置系统性能数据缓存
-func (c *MetricsCache) SetSystemPerformance(ctx context.Context, start, end time.Time, metrics []string, deviceIDs []int, data []SystemPerformancePoint) {
-	if !c.config.Enabled || c.redis == nil {
-		return
-	}
-
-	key := c.systemPerformanceKey(start, end, metrics, deviceIDs)
-	encoded, err := json.Marshal(data)
-	if err != nil {
-		c.logger.Warn("failed to marshal system performance for cache", zap.Error(err))
-		return
-	}
-
-	if err := c.redis.Set(ctx, key, encoded, c.config.SystemPerformanceTTL).Err(); err != nil {
-		c.logger.Warn("failed to set system performance cache", zap.Error(err))
-		return
-	}
-
-	c.logger.Debug("system performance cached", zap.String("key", key), zap.Duration("ttl", c.config.SystemPerformanceTTL))
 }
 
 // GetTemperature 获取缓存的温度数据
@@ -201,7 +151,7 @@ func (c *MetricsCache) GetDevicePerformance(ctx context.Context, start, end time
 	return result, true
 }
 
-// SetDevicePerformance 设置按设备性能趋势数据缓存（与系统性能分区共用 TTL）
+// SetDevicePerformance 设置按设备性能趋势数据缓存
 func (c *MetricsCache) SetDevicePerformance(ctx context.Context, start, end time.Time, deviceIDs []int, data []DevicePerformancePoint) {
 	if !c.config.Enabled || c.redis == nil {
 		return
@@ -214,12 +164,12 @@ func (c *MetricsCache) SetDevicePerformance(ctx context.Context, start, end time
 		return
 	}
 
-	if err := c.redis.Set(ctx, key, encoded, c.config.SystemPerformanceTTL).Err(); err != nil {
+	if err := c.redis.Set(ctx, key, encoded, c.config.DevicePerformanceTTL).Err(); err != nil {
 		c.logger.Warn("failed to set device performance cache", zap.Error(err))
 		return
 	}
 
-	c.logger.Debug("device performance cached", zap.String("key", key), zap.Duration("ttl", c.config.SystemPerformanceTTL))
+	c.logger.Debug("device performance cached", zap.String("key", key), zap.Duration("ttl", c.config.DevicePerformanceTTL))
 }
 
 // GetNetworkTraffic 获取缓存的网络流量数据

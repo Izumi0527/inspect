@@ -71,7 +71,6 @@ func (h MonitoringHandler) Register(group *echo.Group) {
 	group.GET("/monitoring/status", h.GetSystemStatus)
 	group.GET("/monitoring/reports/download/:filename", h.DownloadMonitoringReport)
 	group.POST("/monitoring/devices/historical", h.GetBulkDeviceMetricsHistory)
-	group.POST("/monitoring/system/performance", h.GetSystemPerformanceHistory)
 	group.POST("/monitoring/devices/temperature", h.GetDeviceTemperatureHistory)
 	group.POST("/monitoring/network/traffic/history", h.GetNetworkTrafficHistory)
 	group.POST("/monitoring/reports/export", h.ExportMonitoringReport)
@@ -439,32 +438,6 @@ func (h MonitoringHandler) GetBulkDeviceMetricsHistory(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, points)
-}
-
-func (h MonitoringHandler) GetSystemPerformanceHistory(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
-		return err
-	}
-	if h.Writer == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
-	}
-
-	var req monitoring.TimeRangeRequest
-	if err := c.Bind(&req); err != nil && !errors.Is(err, io.EOF) {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
-	}
-
-	startTime, endTime, err := resolveTimeRange(req.StartTime, req.EndTime, 24*time.Hour)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-	}
-
-	result, err := h.Writer.GetSystemPerformanceHistory(c.Request().Context(), startTime, endTime, normalizeMetricList(req.Metrics), sanitizeDeviceIDs(req.DeviceIDs))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query system performance")
-	}
-
-	return c.JSON(http.StatusOK, result)
 }
 
 func (h MonitoringHandler) GetDeviceTemperatureHistory(c echo.Context) error {
