@@ -338,13 +338,38 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 		xAxis.Ticks = ticks
 	}
 
+	legendStyle := chart.Style{
+		FontColor: toDrawing(ColorText),
+		FontSize:  10,
+		Font:      chartFont(),
+	}
+	// 顶部内边距要容纳标题与换行图例：go-chart 把标题固定画在图片顶部，
+	// 若绘图区紧贴其下，标题与图例会压在曲线上。
+	topPadding := 24
+	legendTop := 0
+	if len(chartSeries) > 1 {
+		probe, err := chart.PNG(w, h)
+		if err != nil {
+			return nil, fmt.Errorf("line chart legend probe: %w", err)
+		}
+		if spec.Title != "" {
+			probe.SetFont(chartFont())
+			probe.SetFontSize(chart.DefaultTitleFontSize)
+			legendTop = chart.DefaultTitleTop + probe.MeasureText(spec.Title).Height() + legendRowGap
+		} else {
+			legendTop = legendRowGap
+		}
+		rows, rowHeight := measureLegendRows(probe, legendStyle, chartSeries, w-2*legendSidePadding)
+		topPadding = legendTop + len(rows)*(rowHeight+legendRowGap) + legendRowGap
+	}
+
 	line := chart.Chart{
 		Title:  spec.Title,
 		Width:  w,
 		Height: h,
 		Font:   chartFont(),
 		Background: chart.Style{
-			Padding: chart.Box{Top: 24, Bottom: 30, Left: 24, Right: 24},
+			Padding: chart.Box{Top: topPadding, Bottom: 30, Left: 24, Right: 24},
 		},
 		XAxis: xAxis,
 		YAxis: chart.YAxis{
@@ -357,13 +382,7 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 		Series: chartSeries,
 	}
 	if len(chartSeries) > 1 {
-		line.Elements = []chart.Renderable{
-			chart.LegendThin(&line, chart.Style{
-				FontColor: toDrawing(ColorText),
-				FontSize:  10,
-				Font:      chartFont(),
-			}),
-		}
+		line.Elements = []chart.Renderable{legendWrapped(&line, legendTop, legendStyle)}
 	}
 
 	buf := bytes.NewBuffer(nil)
@@ -373,6 +392,91 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 	out := buf.Bytes()
 	cachePut(key, out)
 	return out, nil
+}
+
+// =========================================================================
+// 换行图例：go-chart 自带的 LegendThin 单行不换行，系列多（如 5 台设备 × CPU/内存）
+// 时会溢出右边界；Legend/LegendLeft 是画在绘图区内部的竖排框，会遮住数据。
+// 这里把图例按宽度贪心换行，画在标题与绘图区之间预留的顶部内边距里。
+// =========================================================================
+
+const (
+	legendSwatchLength = 24 // 色样线段长度（px）
+	legendSwatchGap    = 6  // 色样与文字间距（px）
+	legendItemGap      = 16 // 图例项之间的间距（px）
+	legendRowGap       = 6  // 图例行间距（px）
+	legendSidePadding  = 24 // 与图片左右边缘的距离（px），与绘图区左右内边距一致
+)
+
+// wrapLegendRows 按宽度贪心换行，返回每行包含的图例项下标；单项超宽独占一行，不丢弃。
+func wrapLegendRows(itemWidths []int, maxWidth int, itemGap int) [][]int {
+	rows := make([][]int, 0)
+	current := make([]int, 0)
+	used := 0
+	for i, width := range itemWidths {
+		if len(current) > 0 && used+itemGap+width > maxWidth {
+			rows = append(rows, current)
+			current = make([]int, 0)
+			used = 0
+		}
+		if len(current) > 0 {
+			used += itemGap
+		}
+		current = append(current, i)
+		used += width
+	}
+	if len(current) > 0 {
+		rows = append(rows, current)
+	}
+	return rows
+}
+
+// measureLegendRows 用真实字体量出每个图例项宽度并换行，返回行分组与单行文字高度。
+func measureLegendRows(r chart.Renderer, style chart.Style, series []chart.Series, maxWidth int) ([][]int, int) {
+	r.SetFont(style.GetFont())
+	r.SetFontSize(style.GetFontSize())
+	widths := make([]int, len(series))
+	rowHeight := 0
+	for i, s := range series {
+		box := r.MeasureText(s.GetName())
+		widths[i] = legendSwatchLength + legendSwatchGap + box.Width()
+		if box.Height() > rowHeight {
+			rowHeight = box.Height()
+		}
+	}
+	return wrapLegendRows(widths, maxWidth, legendItemGap), rowHeight
+}
+
+// legendWrapped 返回自动换行的细图例：色样沿用系列的颜色与线型（虚线可辨），
+// 从图片顶部 top 像素处逐行向下绘制，横向范围与绘图区对齐。
+func legendWrapped(c *chart.Chart, top int, style chart.Style) chart.Renderable {
+	return func(r chart.Renderer, cb chart.Box, _ chart.Style) {
+		rows, rowHeight := measureLegendRows(r, style, c.Series, cb.Right-cb.Left)
+		y := top
+		for _, row := range rows {
+			x := cb.Left
+			baseline := y + rowHeight
+			for _, idx := range row {
+				s := c.Series[idx]
+				lineStyle := s.GetStyle()
+				r.SetStrokeColor(lineStyle.GetStrokeColor())
+				r.SetStrokeWidth(lineStyle.GetStrokeWidth())
+				r.SetStrokeDashArray(lineStyle.GetStrokeDashArray())
+				swatchY := baseline - rowHeight/2
+				r.MoveTo(x, swatchY)
+				r.LineTo(x+legendSwatchLength, swatchY)
+				r.Stroke()
+
+				x += legendSwatchLength + legendSwatchGap
+				r.SetFont(style.GetFont())
+				r.SetFontSize(style.GetFontSize())
+				r.SetFontColor(style.GetFontColor())
+				r.Text(s.GetName(), x, baseline)
+				x += r.MeasureText(s.GetName()).Width() + legendItemGap
+			}
+			y += rowHeight + legendRowGap
+		}
+	}
 }
 
 // EmbedChart registers and draws a PNG chart inside the PDF. The image is
