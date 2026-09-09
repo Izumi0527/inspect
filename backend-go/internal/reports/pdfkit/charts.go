@@ -337,19 +337,21 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 	legendStyle := chart.Style{
 		FontColor: toDrawing(ColorText),
 		FontSize:  10,
-		Font:      chartFont(),
+		Font:      legendFont(),
 	}
 	// 顶部内边距要容纳标题与换行图例：go-chart 把标题固定画在图片顶部，
 	// 若绘图区紧贴其下，标题与图例会压在曲线上。
 	topPadding := 24
 	legendTop := 0
 	if len(chartSeries) > 1 {
-		probe, err := chart.PNG(w, h)
+		// 量文字不需要画布，1×1 即可；DPI 必须与 Chart.Render 一致（drawing 包默认 96，chart 包 92）
+		probe, err := chart.PNG(1, 1)
 		if err != nil {
 			return nil, fmt.Errorf("line chart legend probe: %w", err)
 		}
+		probe.SetDPI(chart.DefaultDPI)
 		if spec.Title != "" {
-			probe.SetFont(chartFont())
+			probe.SetFont(legendFont())
 			probe.SetFontSize(chart.DefaultTitleFontSize)
 			legendTop = chart.DefaultTitleTop + probe.MeasureText(spec.Title).Height() + legendRowGap
 		} else {
@@ -414,6 +416,16 @@ const (
 	legendSidePadding  = 24 // 与图片左右边缘的距离（px），与绘图区左右内边距一致
 )
 
+// legendFont 返回图例字体：优先 CJK；无 CJK 字体的降级环境回退 go-chart 默认字体
+// （与 Chart 对 nil Font 的处理一致），否则 MeasureText 返回零盒，图例文字与预留空间会一起消失。
+func legendFont() *truetype.Font {
+	if f := chartFont(); f != nil {
+		return f
+	}
+	f, _ := chart.GetDefaultFont()
+	return f
+}
+
 // wrapLegendRows 按宽度贪心换行，返回每行包含的图例项下标；单项超宽独占一行，不丢弃。
 func wrapLegendRows(itemWidths []int, maxWidth int, itemGap int) [][]int {
 	rows := make([][]int, 0)
@@ -454,13 +466,16 @@ func measureLegendRows(r chart.Renderer, style chart.Style, series []chart.Serie
 }
 
 // legendWrapped 返回自动换行的细图例：色样沿用系列的颜色与线型（虚线可辨），
-// 从图片顶部 top 像素处逐行向下绘制，横向范围与绘图区对齐。
+// 从图片顶部 top 像素处逐行向下绘制。横向按整图宽度（扣除两侧留白）换行，与预留
+// 顶部内边距时的探针口径一致；不能用渲染期传入的画布盒，它已被坐标轴标签压窄，
+// 会多折出一行而压到曲线上。
 func legendWrapped(c *chart.Chart, top int, style chart.Style) chart.Renderable {
-	return func(r chart.Renderer, cb chart.Box, _ chart.Style) {
-		rows, rowHeight := measureLegendRows(r, style, c.Series, cb.Right-cb.Left)
+	return func(r chart.Renderer, _ chart.Box, _ chart.Style) {
+		rows, rowHeight := measureLegendRows(r, style, c.Series, c.GetWidth()-2*legendSidePadding)
+		r.SetFontColor(style.GetFontColor())
 		y := top
 		for _, row := range rows {
-			x := cb.Left
+			x := legendSidePadding
 			baseline := y + rowHeight
 			for _, idx := range row {
 				s := c.Series[idx]
@@ -474,9 +489,6 @@ func legendWrapped(c *chart.Chart, top int, style chart.Style) chart.Renderable 
 				r.Stroke()
 
 				x += legendSwatchLength + legendSwatchGap
-				r.SetFont(style.GetFont())
-				r.SetFontSize(style.GetFontSize())
-				r.SetFontColor(style.GetFontColor())
 				r.Text(s.GetName(), x, baseline)
 				x += r.MeasureText(s.GetName()).Width() + legendItemGap
 			}
