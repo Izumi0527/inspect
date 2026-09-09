@@ -7,3 +7,6 @@
 *.sh    text eol=lf
 *.yml   text eol=lf
 *.yaml  text eol=lf
+# Go 源码以 LF 检出：gofmt 的规范输出是 LF，CRLF 检出会让 gofmt -l 把全仓文件都报成"未格式化"，
+# 真正的格式偏差被淹没；scripts/test.* 的 gofmt 门禁依赖此声明。
+*.go    text eol=lf
