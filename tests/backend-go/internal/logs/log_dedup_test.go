@@ -130,3 +130,53 @@ func TestFilterNewLogRecords_NoRealTimestamp(t *testing.T) {
 		}
 	})
 }
+
+func mkSourcedLog(source string, ts time.Time, message string) logs.DeviceLog {
+	return logs.DeviceLog{
+		DeviceID:     1,
+		Level:        "warning",
+		Facility:     "interface",
+		Source:       source,
+		Message:      message,
+		LogTimestamp: ts,
+		CollectedAt:  ts.Add(90 * time.Second), // 采集时刻晚于设备时间，确保 log_timestamp 被视为真实时间
+	}
+}
+
+// TestFilterNewLogRecords_TrapPolledAfterLiveTrap 守护跨来源去重：
+// 同一条 Trap 先被监听器实时收到（snmp_trap，时间=收到时刻），再被 nlmLogTable 轮询读回
+// （snmp，时间=设备记录时刻），两者消息相同、时间相差数秒，应视为同一事件只保留一条。
+func TestFilterNewLogRecords_TrapPolledAfterLiveTrap(t *testing.T) {
+	base := time.Date(2026, 9, 9, 3, 0, 0, 0, time.UTC)
+	const msg = "SNMP Trap 1.3.6.1.6.3.1.1.5.3 | ifIndex.12=12; ifOperStatus.12=down(2)"
+
+	t.Run("五分钟内同消息的实时 Trap 与轮询 Trap 视为重复", func(t *testing.T) {
+		existing := []logs.DeviceLog{mkSourcedLog("snmp_trap", base.Add(4*time.Second), msg)}
+		records := []logs.DeviceLog{mkSourcedLog("snmp", base, msg)}
+		if got := filterNewLogRecords(records, existing); len(got) != 0 {
+			t.Fatalf("轮询读回的同一 Trap 应被去重，实际保留 %d", len(got))
+		}
+		// 反向：先轮询后实时
+		existing = []logs.DeviceLog{mkSourcedLog("snmp", base, msg)}
+		records = []logs.DeviceLog{mkSourcedLog("snmp_trap", base.Add(2*time.Minute), msg)}
+		if got := filterNewLogRecords(records, existing); len(got) != 0 {
+			t.Fatalf("实时收到的同一 Trap 应被去重，实际保留 %d", len(got))
+		}
+	})
+
+	t.Run("超过五分钟视为再次发生", func(t *testing.T) {
+		existing := []logs.DeviceLog{mkSourcedLog("snmp_trap", base, msg)}
+		records := []logs.DeviceLog{mkSourcedLog("snmp", base.Add(6*time.Minute), msg)}
+		if got := filterNewLogRecords(records, existing); len(got) != 1 {
+			t.Fatalf("间隔超窗应视为新事件，实际保留 %d", len(got))
+		}
+	})
+
+	t.Run("SSH 来源不参与跨来源折叠", func(t *testing.T) {
+		existing := []logs.DeviceLog{mkSourcedLog("ssh", base, msg)}
+		records := []logs.DeviceLog{mkSourcedLog("snmp", base.Add(time.Second), msg)}
+		if got := filterNewLogRecords(records, existing); len(got) != 1 {
+			t.Fatalf("SSH 与 SNMP 的消息格式本就不同，不应按时间窗折叠，实际保留 %d", len(got))
+		}
+	})
+}

@@ -331,34 +331,7 @@ func (c *SNMPCollector) CollectMetrics(
 }
 
 func (c *SNMPCollector) createSNMPTarget(ipAddress string, config snmpConfig) *gosnmp.GoSNMP {
-	target := &gosnmp.GoSNMP{
-		Target:  ipAddress,
-		Port:    config.port,
-		Timeout: 5 * time.Second,
-		Retries: 2,
-	}
-
-	switch config.version {
-	case "1":
-		target.Version = gosnmp.Version1
-		target.Community = config.community
-	case "2c":
-		target.Version = gosnmp.Version2c
-		target.Community = config.community
-	case "3":
-		target.Version = gosnmp.Version3
-		target.SecurityModel = gosnmp.UserSecurityModel
-		target.MsgFlags = config.securityLevel
-		target.SecurityParameters = &gosnmp.UsmSecurityParameters{
-			UserName:                 config.username,
-			AuthenticationProtocol:   config.authProtocol,
-			AuthenticationPassphrase: config.authKey,
-			PrivacyProtocol:          config.privProtocol,
-			PrivacyPassphrase:        config.privKey,
-		}
-	}
-
-	return target
+	return newSNMPTarget(ipAddress, config)
 }
 
 func (c *SNMPCollector) collectUptime(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry) {

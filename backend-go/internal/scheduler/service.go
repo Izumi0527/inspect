@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
+	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
 	"github.com/your-org/inspect-system/backend-go/internal/traffic"
 )
 
@@ -643,18 +645,12 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 		}
 	}
 
-	// Step 4: Collect alarm logs via SSH (trapbuffer + alarm active) and convert to alerts
+	// Step 4: Collect alarm logs (trapbuffer + alarm active) and convert to alerts.
+	// 采集路径由 logs.Service 决定：有 SNMP 凭据先走 nlmLogTable / hwAlarmActiveTable，
+	// 失败或无数据再回退 SSH；此前只处理「有 SSH 用户名+密码」的设备，密钥认证与仅 SNMP 的设备被整台跳过。
 	trapAlertsCreated := 0
 	if s.logsService != nil && s.trapAlertBridge != nil {
 		for _, device := range devicesList {
-			// 只对有 SSH 凭据的设备采集告警日志
-			if device.SshUsername == nil || strings.TrimSpace(*device.SshUsername) == "" {
-				continue
-			}
-			if device.SshPassword == nil || strings.TrimSpace(*device.SshPassword) == "" {
-				continue
-			}
-
 			// 采集 trapbuffer
 			trapCount, trapErr := s.logsService.CollectDeviceLogs(ctx, device.ID, "trap", 200)
 			if trapErr != nil {
@@ -849,8 +845,9 @@ func (s *Service) convertLogsToAlerts(ctx context.Context, deviceID int, ipAddre
 
 	created := 0
 	for _, log := range recentLogs {
+		trapOID, facility := alertIdentityFromLog(log.Message, log.Facility)
 		alertErr := s.trapAlertBridge.CreateTrapAlert(
-			ctx, deviceID, log.Level, log.Facility, log.Message, "", ipAddress,
+			ctx, deviceID, log.Level, facility, log.Message, trapOID, ipAddress,
 		)
 		if alertErr == nil {
 			created++
@@ -858,6 +855,25 @@ func (s *Service) convertLogsToAlerts(ctx context.Context, deviceID int, ipAddre
 	}
 
 	return created
+}
+
+// logMessageOIDPattern 匹配消息中的告警 OID：至少 6 段数字，避免把 IP 地址当成 OID。
+var logMessageOIDPattern = regexp.MustCompile(`\b\d+(?:\.\d+){5,}\b`)
+
+// alertIdentityFromLog 从告警日志正文提取 Trap OID 作为告警去重与标题标识，并在知识库收录该 OID 时
+// 以知识库设施覆盖日志设施——日志入库时 hardware/configuration 已被折成 system，
+// 只有按 OID 反查才能让硬件告警分到 hardware 分类。
+func alertIdentityFromLog(message string, facility string) (string, string) {
+	oid := logMessageOIDPattern.FindString(message)
+	if oid == "" {
+		return "", facility
+	}
+	if catalog, err := snmpmib.DefaultAlarmCatalog(); err == nil {
+		if def, ok := catalog.LookupTrap(oid); ok && def.Facility != "" {
+			return oid, def.Facility
+		}
+	}
+	return oid, facility
 }
 
 func (s *Service) executeNetworkScan(ctx context.Context, task ScheduledTask) (map[string]interface{}, error) {

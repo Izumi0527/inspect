@@ -510,6 +510,36 @@ type deviceInfo struct {
 	SshPrivateKey    string // SSH 私钥内容（密钥认证设备，取自 tags，已解密）
 	SshKeyPassphrase string // SSH 私钥口令（可选，配合 SshPrivateKey）
 	SshPort          int
+	// SNMP 凭据原样透传给 devices.NewSNMPClient 解析（含 tags.snmp_config 内的 v3 参数）
+	SnmpCommunity *string
+	SnmpVersion   *string
+	SnmpPort      *int
+	Tags          interface{}
+}
+
+// hasSSHCredentials 密码与私钥任一配置即可发起 SSH 认证（密钥认证设备允许密码为空）。
+func (d deviceInfo) hasSSHCredentials() bool {
+	hasPassword := strings.TrimSpace(d.SshPassword) != ""
+	hasKey := strings.TrimSpace(d.SshPrivateKey) != ""
+	return strings.TrimSpace(d.SshUsername) != "" && (hasPassword || hasKey)
+}
+
+// hasSNMPCredentials 以 devices.NewSNMPClient 能否构造为准（v1/v2c 看团体字，v3 看 tags），
+// 不再各自解析一遍 tags 造成口径分叉；构造不涉及网络。
+func (d deviceInfo) hasSNMPCredentials() bool {
+	_, err := devices.NewSNMPClient(d.IPAddress, d.SnmpCommunity, d.SnmpVersion, d.SnmpPort, d.Tags)
+	return err == nil
+}
+
+// logCollector 是一条采集路径（SSH 命令回显 / SNMP MIB 表）的抽象，便于替换与测试。
+type logCollector interface {
+	Collect(ctx context.Context, device deviceInfo, logType string, maxEntries int) ([]logEntry, error)
+}
+
+// snmpEquivalentLogTypes 有 SNMP 等价物的日志类型（见 snmp_collector.go 顶部说明）；
+// 其余类型（logbuffer 文本）没有任何 MIB 暴露，只能 SSH。
+func snmpEquivalentLogType(logType string) bool {
+	return logType == "trap" || logType == "alarm"
 }
 
 func (s *Service) CollectDeviceLogs(ctx context.Context, deviceID int, logType string, maxEntries int) (int, error) {
@@ -530,46 +560,116 @@ func (s *Service) CollectDeviceLogs(ctx context.Context, deviceID int, logType s
 		}
 		return 0, err
 	}
+	if strings.TrimSpace(info.IPAddress) == "" {
+		return 0, ErrDeviceIPRequired
+	}
 
+	hasSNMP := info.hasSNMPCredentials()
+	hasSSH := info.hasSSHCredentials()
 	if s.logger != nil {
 		s.logger.Info("日志采集: 设备信息",
 			zap.Int("device_id", deviceID),
 			zap.String("ip", info.IPAddress),
 			zap.String("vendor", info.Vendor),
-			zap.String("ssh_username", info.SshUsername),
-			zap.Bool("has_ssh_password", strings.TrimSpace(info.SshPassword) != ""),
-			zap.Bool("has_ssh_key", strings.TrimSpace(info.SshPrivateKey) != ""),
-			zap.Int("ssh_port", info.SshPort))
+			zap.String("log_type", logType),
+			zap.Bool("has_snmp", hasSNMP),
+			zap.Bool("has_ssh", hasSSH))
 	}
 
-	if strings.TrimSpace(info.IPAddress) == "" {
-		return 0, ErrDeviceIPRequired
-	}
-	// 密码与私钥任一配置即可发起 SSH 认证（密钥认证设备允许密码为空）。
-	hasPassword := strings.TrimSpace(info.SshPassword) != ""
-	hasKey := strings.TrimSpace(info.SshPrivateKey) != ""
-	if strings.TrimSpace(info.SshUsername) == "" || (!hasPassword && !hasKey) {
-		if s.logger != nil {
-			s.logger.Error("日志采集失败: SSH配置不完整",
-				zap.Int("device_id", deviceID),
-				zap.String("ssh_username", info.SshUsername),
-				zap.Bool("has_ssh_password", hasPassword),
-				zap.Bool("has_ssh_key", hasKey))
-		}
-		return 0, ErrSSHNotConfigured
-	}
-
-	collector := NewSSHCollector(s.db, s.logger)
-	entries, err := collector.Collect(ctx, info, logType, maxEntries)
+	entries, path, err := s.collectEntries(ctx, info, logType, maxEntries, hasSNMP, hasSSH,
+		NewSNMPLogCollector(s.logger), NewSSHCollector(s.db, s.logger))
 	if err != nil {
+		if errors.Is(err, ErrSSHNotConfigured) && s.logger != nil {
+			s.logger.Error("日志采集失败: 设备既无可用 SNMP 凭据也无 SSH 凭据",
+				zap.Int("device_id", deviceID), zap.String("log_type", logType))
+		}
 		return 0, err
+	}
+	if s.logger != nil {
+		s.logger.Info("日志采集完成",
+			zap.Int("device_id", deviceID),
+			zap.String("log_type", logType),
+			zap.String("collect_path", path),
+			zap.Int("entries", len(entries)))
 	}
 	if len(entries) == 0 {
 		return 0, nil
 	}
 
-	// SSH 轮询采集会反复读取设备近期日志缓冲，需按内容去重避免重复入库。
+	// 轮询采集（无论 SSH 还是 SNMP）会反复读取设备近期缓冲，需按内容去重避免重复入库。
 	return s.storeLogEntriesDeduped(ctx, entries)
+}
+
+// collectEntries 决定并执行采集路径，返回条目与实际走的路径（snmp / ssh / ssh_fallback）。
+//
+// 策略：有 SNMP 等价物的类型（trap/alarm）且设备有 SNMP 凭据时先走 SNMP；SNMP 出错或无数据
+// 且有 SSH 凭据则回退 SSH。「无数据」也回退，是因为 hwAlarmActiveTable 对非 Trap 主机读到空表、
+// nlmLogTable 未开启，都与设备真的没有告警无法区分——回退后行为与改造前一致，不会更差。
+// 其余类型只走 SSH。
+func (s *Service) collectEntries(
+	ctx context.Context,
+	info deviceInfo,
+	logType string,
+	maxEntries int,
+	hasSNMP bool,
+	hasSSH bool,
+	snmp logCollector,
+	ssh logCollector,
+) ([]logEntry, string, error) {
+	if !snmpEquivalentLogType(logType) || !hasSNMP {
+		if !hasSSH {
+			return nil, "", ErrSSHNotConfigured
+		}
+		entries, err := ssh.Collect(ctx, info, logType, maxEntries)
+		return entries, "ssh", err
+	}
+
+	entries, snmpErr := snmp.Collect(ctx, info, logType, maxEntries)
+	if snmpErr == nil && len(entries) > 0 {
+		return entries, "snmp", nil
+	}
+	if !hasSSH {
+		return nil, "snmp", snmpErr
+	}
+	if snmpErr != nil && s != nil && s.logger != nil {
+		s.logger.Warn("SNMP 采集失败，回退 SSH",
+			zap.Int("device_id", info.ID), zap.String("log_type", logType), zap.Error(snmpErr))
+	}
+	entries, err := ssh.Collect(ctx, info, logType, maxEntries)
+	return entries, "ssh_fallback", err
+}
+
+// stubCollector 用固定条数/错误模拟一条采集路径，仅供 CollectPathForTest。
+type stubCollector struct {
+	run func() (int, error)
+}
+
+func (c stubCollector) Collect(_ context.Context, device deviceInfo, _ string, _ int) ([]logEntry, error) {
+	count, err := c.run()
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]logEntry, count)
+	for i := range entries {
+		entries[i] = logEntry{DeviceID: device.ID, Message: fmt.Sprintf("stub-%d", i)}
+	}
+	return entries, nil
+}
+
+// CollectPathForTest 以可注入的采集函数走与 CollectDeviceLogs 完全相同的路径决策（collectEntries），
+// 返回 (条数, 路径, 错误)。生产路径不使用。
+func CollectPathForTest(
+	ctx context.Context,
+	logType string,
+	hasSNMP bool,
+	hasSSH bool,
+	snmp func() (int, error),
+	ssh func() (int, error),
+) (int, string, error) {
+	var svc *Service
+	entries, path, err := svc.collectEntries(ctx, deviceInfo{ID: 1, IPAddress: "127.0.0.1"},
+		normalizeLogType(logType), 100, hasSNMP, hasSSH, stubCollector{run: snmp}, stubCollector{run: ssh})
+	return len(entries), path, err
 }
 
 func (s *Service) BatchCollectLogs(ctx context.Context, deviceIDs []int, logType string, maxEntries int, maxConcurrent int) (BatchCollectResult, error) {
@@ -656,6 +756,10 @@ func (s *Service) getDeviceInfo(ctx context.Context, deviceID int) (deviceInfo, 
 		SshPrivateKey:    privateKey,
 		SshKeyPassphrase: keyPassphrase,
 		SshPort:          port,
+		SnmpCommunity:    dev.SnmpCommunity,
+		SnmpVersion:      dev.SnmpVersion,
+		SnmpPort:         dev.SnmpPort,
+		Tags:             dev.Tags,
 	}, nil
 }
 
@@ -764,21 +868,59 @@ func logDedupKeyOf(r DeviceLog) logDedupKey {
 	}
 }
 
+// trapCrossSourceWindow 同一条 Trap 被监听器实时收到（snmp_trap，时间=收到时刻）与被
+// nlmLogTable 轮询读回（snmp，时间=设备记录时刻）之间允许的时间差；超过则视为再次发生。
+const trapCrossSourceWindow = 5 * time.Minute
+
+// isTrapSource 参与跨来源折叠的两种 Trap 来源；SSH trapbuffer 的消息格式与之不同，不参与。
+func isTrapSource(source string) bool {
+	return source == "snmp" || source == "snmp_trap"
+}
+
 // filterNewLogRecords 纯函数：在已存记录 existing 的基础上，过滤 records 中与已存或批内重复的项，
 // 返回需要新插入的记录（保持原顺序）。不访问数据库，便于单测。
+//
+// 除精确自然键外，snmp 与 snmp_trap 两种来源之间按「同设备 + 同消息 + 时间差 ≤ 5 分钟」折叠。
 func filterNewLogRecords(records []DeviceLog, existing []DeviceLog) []DeviceLog {
 	seen := make(map[logDedupKey]struct{}, len(records)+len(existing))
+	trapSeen := make(map[string][]time.Time)
+	trapKey := func(r DeviceLog) string { return fmt.Sprintf("%d\x00%s", r.DeviceID, r.Message) }
+	remember := func(r DeviceLog) {
+		seen[logDedupKeyOf(r)] = struct{}{}
+		if isTrapSource(r.Source) {
+			key := trapKey(r)
+			trapSeen[key] = append(trapSeen[key], r.LogTimestamp.UTC())
+		}
+	}
+	nearbyTrap := func(r DeviceLog) bool {
+		if !isTrapSource(r.Source) {
+			return false
+		}
+		for _, ts := range trapSeen[trapKey(r)] {
+			diff := r.LogTimestamp.UTC().Sub(ts)
+			if diff < 0 {
+				diff = -diff
+			}
+			if diff <= trapCrossSourceWindow {
+				return true
+			}
+		}
+		return false
+	}
+
 	for _, e := range existing {
-		seen[logDedupKeyOf(e)] = struct{}{}
+		remember(e)
 	}
 
 	result := make([]DeviceLog, 0, len(records))
 	for _, r := range records {
-		key := logDedupKeyOf(r)
-		if _, dup := seen[key]; dup {
+		if _, dup := seen[logDedupKeyOf(r)]; dup {
 			continue
 		}
-		seen[key] = struct{}{}
+		if nearbyTrap(r) {
+			continue
+		}
+		remember(r)
 		result = append(result, r)
 	}
 	return result
@@ -871,7 +1013,7 @@ func normalizeFacility(value string) string {
 
 func normalizeSource(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "ssh", "syslog", "snmp_trap", "manual":
+	case "ssh", "syslog", "snmp_trap", "snmp", "manual":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "ssh"

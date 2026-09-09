@@ -9,7 +9,7 @@ export type LogLevel = 'debug' | 'info' | 'warning' | 'error' | 'critical'
 export type LogFacility = 'system' | 'interface' | 'security' | 'routing' | 'switching' | 'snmp' | 'ssh' | 'other'
 
 // 日志来源枚举
-export type LogSource = 'syslog' | 'ssh' | 'snmp_trap' | 'manual'
+export type LogSource = 'syslog' | 'ssh' | 'snmp' | 'snmp_trap' | 'manual'
 
 // 日志记录
 export interface DeviceLog {
@@ -142,6 +142,7 @@ export const LOG_FACILITY_CONFIG: Record<LogFacility, { label: string; icon: str
 export const LOG_SOURCE_CONFIG: Record<LogSource, { label: string }> = {
   syslog: { label: 'Syslog' },
   ssh: { label: 'SSH采集' },
+  snmp: { label: 'SNMP采集' },
   snmp_trap: { label: 'SNMP Trap' },
   manual: { label: '手动导入' }
 }

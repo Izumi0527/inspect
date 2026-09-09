@@ -189,6 +189,10 @@ func mapFacilityLabel(facility string) string {
 		return "系统告警"
 	case "snmp":
 		return "SNMP告警"
+	case "hardware", "environment":
+		return "硬件告警"
+	case "configuration", "config":
+		return "配置告警"
 	default:
 		return "设备告警"
 	}
