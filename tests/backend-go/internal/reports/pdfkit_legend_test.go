@@ -10,6 +10,19 @@ import (
 //go:linkname wrapLegendRows github.com/your-org/inspect-system/backend-go/internal/reports/pdfkit.wrapLegendRows
 func wrapLegendRows(itemWidths []int, maxWidth int, itemGap int) [][]int
 
+//go:linkname lineChartTickStep github.com/your-org/inspect-system/backend-go/internal/reports/pdfkit.lineChartTickStep
+func lineChartTickStep(pointCount int) int
+
+// X 轴最多约 8 个刻度：步长必须向上取整，否则 9-15 个点时步长为 1、标签全画会互相重叠。
+func TestLineChartTickStep_CeilsToAtMostEightLabels(t *testing.T) {
+	cases := map[int]int{0: 1, 1: 1, 8: 1, 9: 2, 12: 2, 16: 2, 17: 3, 288: 36}
+	for points, want := range cases {
+		if got := lineChartTickStep(points); got != want {
+			t.Fatalf("lineChartTickStep(%d) = %d, want %d", points, got, want)
+		}
+	}
+}
+
 // 图例项按宽度贪心换行：一行放不下就另起一行；单项超宽也必须独占一行而不是被丢弃。
 func TestWrapLegendRows_GreedyWrapKeepsOrderAndNeverDrops(t *testing.T) {
 	rows := wrapLegendRows([]int{100, 100, 100, 100, 100}, 320, 10)

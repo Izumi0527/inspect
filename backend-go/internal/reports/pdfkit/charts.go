@@ -321,14 +321,10 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 	}
 	if len(spec.XLabels) > 0 {
 		ticks := make([]chart.Tick, 0, len(spec.XLabels))
+		step := lineChartTickStep(maxLen)
 		for i, label := range spec.XLabels {
 			if i >= maxLen {
 				break
-			}
-			// Show at most ~8 labels to avoid overlap on dense series.
-			step := maxLen / 8
-			if step <= 0 {
-				step = 1
 			}
 			if i%step != 0 {
 				continue
@@ -392,6 +388,16 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 	out := buf.Bytes()
 	cachePut(key, out)
 	return out, nil
+}
+
+// lineChartTickStep 返回 X 轴刻度抽样步长，使标签最多约 8 个；向上取整，
+// 否则 9-15 个点时步长为 1、标签全画会互相重叠。
+func lineChartTickStep(pointCount int) int {
+	step := (pointCount + 7) / 8
+	if step < 1 {
+		return 1
+	}
+	return step
 }
 
 // =========================================================================
