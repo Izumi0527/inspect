@@ -76,4 +76,3 @@ func (alertsServiceStub) UpdateRule(_ context.Context, _ int, _ map[string]inter
 func (alertsServiceStub) DeleteRule(_ context.Context, _ int) error {
 	return nil
 }
-

@@ -30,4 +30,3 @@ func TestComputeNextRunTime_ShouldMoveToNextDayWhenPast(t *testing.T) {
 		t.Fatalf("next = %s, want %s", got.Format(time.RFC3339), want.Format(time.RFC3339))
 	}
 }
-

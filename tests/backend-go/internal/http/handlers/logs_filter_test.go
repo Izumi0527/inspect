@@ -23,4 +23,3 @@ func TestBuildLogFilter_ShouldIncludeSource(t *testing.T) {
 		t.Fatalf("filter.Source=%q, want syslog", *filter.Source)
 	}
 }
-

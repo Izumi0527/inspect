@@ -122,11 +122,11 @@ func TestCoverage_SkipsDisabledItems(t *testing.T) {
 // 「全部 19 个维度未核查」的免责声明——比不写更误导。
 func TestCoverage_UnreadableTemplateYieldsNothing(t *testing.T) {
 	cases := map[string][]byte{
-		"nil":      nil,
-		"空数组":      []byte(`[]`),
-		"非 JSON":   []byte(`模板已删除`),
-		"全部停用":     []byte(`[{"id":"cpu","type":"snmp","metric":"cpu","enabled":false}]`),
-		"无可识别维度":   []byte(`[{"id":"x","type":"snmp","metric":"unknown_metric"}]`),
+		"nil":     nil,
+		"空数组":     []byte(`[]`),
+		"非 JSON":  []byte(`模板已删除`),
+		"全部停用":    []byte(`[{"id":"cpu","type":"snmp","metric":"cpu","enabled":false}]`),
+		"无可识别维度":  []byte(`[{"id":"x","type":"snmp","metric":"unknown_metric"}]`),
 		"JSON 对象": []byte(`{"items":[]}`),
 	}
 

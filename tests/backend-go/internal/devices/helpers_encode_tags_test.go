@@ -29,4 +29,3 @@ func TestEncodeTags_ValidJSONString_ShouldReturnJSON(t *testing.T) {
 		t.Fatalf("encodeTags = %s, want %s", string(encoded), raw)
 	}
 }
-

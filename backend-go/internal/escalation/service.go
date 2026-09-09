@@ -26,18 +26,18 @@ var (
 )
 
 type Service struct {
-	db            *gorm.DB
-	logger        *zap.Logger
-	mu            sync.Mutex
-	rules         []Rule
-	rulesLoaded   bool
+	db                 *gorm.DB
+	logger             *zap.Logger
+	mu                 sync.Mutex
+	rules              []Rule
+	rulesLoaded        bool
 	escalationsByAlert map[string]*Escalation
 }
 
 func NewService(db *gorm.DB, logger *zap.Logger) *Service {
 	return &Service{
-		db:            db,
-		logger:        logger,
+		db:                 db,
+		logger:             logger,
 		escalationsByAlert: make(map[string]*Escalation),
 	}
 }

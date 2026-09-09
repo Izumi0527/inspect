@@ -69,8 +69,8 @@ type dashboardV2Envelope struct {
 		TemperatureHistory []interface{}         `json:"temperatureHistory"`
 	} `json:"data"`
 	Sections          map[string]dashboardV2SectionStatus `json:"sections"`
-	HasPartialFailure bool                               `json:"hasPartialFailure"`
-	FailedSections    []string                           `json:"failedSections"`
+	HasPartialFailure bool                                `json:"hasPartialFailure"`
+	FailedSections    []string                            `json:"failedSections"`
 }
 
 func TestMonitoringHandler_GetMonitoringDashboardV2_AlertsLimitedByPermission(t *testing.T) {
@@ -287,7 +287,6 @@ func TestMonitoringHandler_GetMonitoringStats_MasksActiveAlertsWithoutPermission
 		t.Fatalf("期望 active_alerts 被遮蔽为 0，got=%d", out.ActiveAlerts)
 	}
 }
-
 
 // recordingDashboardWriter 记录各分区实际收到的 deviceIDs，用于验证筛选参数透传。
 type recordingDashboardWriter struct {

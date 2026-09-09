@@ -152,10 +152,10 @@ func TestRenderMonitoringPDF_StructurallyValid(t *testing.T) {
 		PeakInbound:  2_818_000,
 	}
 	input := pdfkit.MonitoringPDFInput{
-		Title:     "监控报告",
-		TimeRange: "24h",
-		Sections:  []string{"stats", "charts", "alerts"},
-		Stats:     stats,
+		Title:             "监控报告",
+		TimeRange:         "24h",
+		Sections:          []string{"stats", "charts", "alerts"},
+		Stats:             stats,
 		PerformanceLabels: []string{"2026-05-09T08:00:00Z", "2026-05-09T09:00:00Z", "2026-05-09T10:00:00Z"},
 		DevicePerformance: []pdfkit.DevicePerformanceSeries{
 			{Name: "SW-01", CPU: []float64{30, 42, 51}, Memory: []float64{50, 58, 64}},

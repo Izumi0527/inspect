@@ -159,12 +159,12 @@ func (h SettingsHandler) ExportAuditLogs(c echo.Context) error {
 	}
 
 	query := settings.AuditQuery{
-		UserID:   readString(filters, "user_id", "userId"),
-		Action:   readString(filters, "action"),
-		Status:   readString(filters, "status"),
-		Resource: readString(filters, "resource"),
-		Search:   readString(filters, "search"),
-		Keyword:  readString(filters, "keyword"),
+		UserID:    readString(filters, "user_id", "userId"),
+		Action:    readString(filters, "action"),
+		Status:    readString(filters, "status"),
+		Resource:  readString(filters, "resource"),
+		Search:    readString(filters, "search"),
+		Keyword:   readString(filters, "keyword"),
 		StartTime: startTime,
 		EndTime:   endTime,
 		// 单次导出上限由"通用配置-最大导出记录数"驱动，避免全量导出拖垮服务。

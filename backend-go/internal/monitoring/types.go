@@ -57,10 +57,10 @@ func parseTimeString(raw string) (time.Time, error) {
 }
 
 type MetricValue struct {
-	Value     *float64     `json:"value,omitempty"`
-	Unit      *string      `json:"unit,omitempty"`
+	Value     *float64      `json:"value,omitempty"`
+	Unit      *string       `json:"unit,omitempty"`
 	Timestamp *FlexibleTime `json:"timestamp,omitempty"`
-	Text      *string      `json:"text,omitempty"`
+	Text      *string       `json:"text,omitempty"`
 }
 
 func (m *MetricValue) UnmarshalJSON(b []byte) error {
@@ -165,10 +165,10 @@ type DeviceIdentity struct {
 }
 
 type SystemMetricsRequest struct {
-	Host        string                   `json:"host"`
-	CollectedAt *FlexibleTime            `json:"collected_at,omitempty"`
-	Metrics     map[string]MetricValue   `json:"metrics"`
-	Tags        map[string]interface{}   `json:"tags,omitempty"`
+	Host        string                 `json:"host"`
+	CollectedAt *FlexibleTime          `json:"collected_at,omitempty"`
+	Metrics     map[string]MetricValue `json:"metrics"`
+	Tags        map[string]interface{} `json:"tags,omitempty"`
 }
 
 type DeviceMetricsResponse struct {
@@ -186,11 +186,11 @@ type DeviceMetricsResponse struct {
 }
 
 type MetricsHistoryResponse struct {
-	DeviceID    int           `json:"device_id"`
-	StartTime   time.Time     `json:"start_time"`
-	EndTime     time.Time     `json:"end_time"`
+	DeviceID    int            `json:"device_id"`
+	StartTime   time.Time      `json:"start_time"`
+	EndTime     time.Time      `json:"end_time"`
 	DataPoints  []HistoryPoint `json:"data_points"`
-	MetricNames []string      `json:"metric_names"`
+	MetricNames []string       `json:"metric_names"`
 }
 
 type HistoryPoint struct {

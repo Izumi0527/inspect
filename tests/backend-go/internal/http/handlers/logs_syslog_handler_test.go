@@ -76,15 +76,15 @@ func TestLogsHandler_ApplySyslogConfig_ShouldReadSettingsAndApply(t *testing.T) 
 
 	receiver := &fakeSyslogRuntime{}
 	h := handlers.LogsHandler{
-		Auth:     adminAuth,
-		Syslog:   receiver,
+		Auth:   adminAuth,
+		Syslog: receiver,
 		Settings: fakeSettingsGetter{values: map[string]interface{}{
-			"logs.syslog.enabled":                  true,
-			"logs.syslog.protocol":                 "both",
-			"logs.syslog.host":                     "0.0.0.0",
-			"logs.syslog.port":                     5514,
-			"logs.syslog.max_message_bytes":        8192,
-			"logs.syslog.alerts.enabled":           true,
+			"logs.syslog.enabled":                   true,
+			"logs.syslog.protocol":                  "both",
+			"logs.syslog.host":                      "0.0.0.0",
+			"logs.syslog.port":                      5514,
+			"logs.syslog.max_message_bytes":         8192,
+			"logs.syslog.alerts.enabled":            true,
 			"logs.syslog.alerts.max_new_per_minute": 30,
 		}},
 	}

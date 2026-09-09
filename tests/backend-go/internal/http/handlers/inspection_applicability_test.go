@@ -62,9 +62,9 @@ func containsID(items []map[string]interface{}, want string) bool {
 // 跑全面巡检会产出一堆采集不到的项，真正的异常被淹没在噪声里。
 func TestSplitByApplicability_FiltersByDeviceType(t *testing.T) {
 	items := []map[string]interface{}{
-		itemWithDeviceTypes("cpu"),                             // 未声明 = 适用全部
-		itemWithDeviceTypes("bgp", "router", "firewall"),       // 交换机不适用
-		itemWithDeviceTypes("poe", "switch"),                   // 交换机适用
+		itemWithDeviceTypes("cpu"),                       // 未声明 = 适用全部
+		itemWithDeviceTypes("bgp", "router", "firewall"), // 交换机不适用
+		itemWithDeviceTypes("poe", "switch"),             // 交换机适用
 	}
 
 	applicable, notApplicable := splitCheckItemsByApplicability(items, "switch")

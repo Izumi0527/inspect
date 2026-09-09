@@ -15,7 +15,7 @@ import (
 )
 
 // resolveReportInspectionIDs 是报告生成载荷解析的未导出方法，经 go:linkname 桥接做白盒测试
-//（沿用本仓库约定，接收者作为第一个参数传入）。
+// （沿用本仓库约定，接收者作为第一个参数传入）。
 //
 //go:linkname resolveReportInspectionIDs github.com/your-org/inspect-system/backend-go/internal/http/handlers.InspectionHandler.resolveReportInspectionIDs
 func resolveReportInspectionIDs(h handlers.InspectionHandler, ctx context.Context, payload map[string]interface{}) ([]int, error)

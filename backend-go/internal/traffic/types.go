@@ -51,30 +51,30 @@ type TrafficInterfaceSummary struct {
 
 type TrafficDeviceSummary struct {
 	Interfaces     map[string]TrafficInterfaceSummary `json:"interfaces"`
-	InterfaceCount int                               `json:"interface_count"`
-	LastUpdate     string                            `json:"last_update"`
-	SampleCount    int                               `json:"sample_count"`
+	InterfaceCount int                                `json:"interface_count"`
+	LastUpdate     string                             `json:"last_update"`
+	SampleCount    int                                `json:"sample_count"`
 }
 
 type TrafficSummary struct {
-	TotalDevices    int                               `json:"total_devices"`
-	TotalInterfaces int                               `json:"total_interfaces"`
-	ActiveAnomalies int                               `json:"active_anomalies"`
-	BaselinePatterns int                              `json:"baseline_patterns"`
-	Devices         map[string]TrafficDeviceSummary   `json:"devices"`
+	TotalDevices     int                             `json:"total_devices"`
+	TotalInterfaces  int                             `json:"total_interfaces"`
+	ActiveAnomalies  int                             `json:"active_anomalies"`
+	BaselinePatterns int                             `json:"baseline_patterns"`
+	Devices          map[string]TrafficDeviceSummary `json:"devices"`
 }
 
 type TrafficCollectionResponse struct {
-	Success     bool           `json:"success"`
-	DeviceIP    string         `json:"device_ip"`
+	Success     bool            `json:"success"`
+	DeviceIP    string          `json:"device_ip"`
 	Metrics     []TrafficMetric `json:"metrics"`
-	CollectedAt string         `json:"collected_at"`
+	CollectedAt string          `json:"collected_at"`
 }
 
 type TrafficAnomaliesResponse struct {
-	Success    bool             `json:"success"`
-	Anomalies  []TrafficAnomaly `json:"anomalies"`
-	TotalCount int              `json:"total_count"`
+	Success     bool             `json:"success"`
+	Anomalies   []TrafficAnomaly `json:"anomalies"`
+	TotalCount  int              `json:"total_count"`
 	QueryParams struct {
 		DeviceIP *string `json:"device_ip,omitempty"`
 		Severity *string `json:"severity,omitempty"`
@@ -93,21 +93,21 @@ type TrafficTrendsResponse struct {
 }
 
 type TrafficMonitoringConfig struct {
-	DeviceIPs            []string `json:"device_ips"`
-	AnalysisPeriodHours  int      `json:"analysis_period_hours"`
-	EnableAnomalyDetection bool   `json:"enable_anomaly_detection"`
-	StartedAt            string   `json:"started_at"`
+	DeviceIPs              []string `json:"device_ips"`
+	AnalysisPeriodHours    int      `json:"analysis_period_hours"`
+	EnableAnomalyDetection bool     `json:"enable_anomaly_detection"`
+	StartedAt              string   `json:"started_at"`
 }
 
 type TrafficBaseline struct {
-	DeviceIP        string  `json:"device_ip"`
-	Interface       string  `json:"interface"`
-	Hours           int     `json:"hours"`
-	SampleCount     int     `json:"sample_count"`
-	AvgIn           float64 `json:"avg_in"`
-	AvgOut          float64 `json:"avg_out"`
-	AvgUtilization  float64 `json:"avg_utilization"`
-	LastSeen        *string `json:"last_seen,omitempty"`
+	DeviceIP       string  `json:"device_ip"`
+	Interface      string  `json:"interface"`
+	Hours          int     `json:"hours"`
+	SampleCount    int     `json:"sample_count"`
+	AvgIn          float64 `json:"avg_in"`
+	AvgOut         float64 `json:"avg_out"`
+	AvgUtilization float64 `json:"avg_utilization"`
+	LastSeen       *string `json:"last_seen,omitempty"`
 }
 
 type TrafficBaselineResponse struct {
@@ -116,10 +116,10 @@ type TrafficBaselineResponse struct {
 }
 
 type NetworkTrafficMetric struct {
-	Value      string   `json:"value"`
-	Percentage float64  `json:"percentage"`
-	Current    float64  `json:"current,omitempty"`
-	Peak       float64  `json:"peak,omitempty"`
+	Value      string    `json:"value"`
+	Percentage float64   `json:"percentage"`
+	Current    float64   `json:"current,omitempty"`
+	Peak       float64   `json:"peak,omitempty"`
 	Data       []float64 `json:"data,omitempty"`
 }
 
@@ -130,7 +130,7 @@ type NetworkTrafficSummaryResponse struct {
 		Value      string  `json:"value"`
 		Percentage float64 `json:"percentage"`
 	} `json:"packetLoss"`
-	PeakTime *string        `json:"peakTime,omitempty"`
+	PeakTime *string         `json:"peakTime,omitempty"`
 	Summary  *TrafficSummary `json:"summary,omitempty"`
 }
 
@@ -146,13 +146,13 @@ type InterfaceTrafficResponse struct {
 }
 
 type DeviceTrafficResponse struct {
-	DeviceID     int                       `json:"device_id"`
-	DeviceName   string                    `json:"device_name"`
-	IPAddress    string                    `json:"ip_address"`
-	TotalInRate  float64                   `json:"total_in_rate"`
-	TotalOutRate float64                   `json:"total_out_rate"`
+	DeviceID     int                        `json:"device_id"`
+	DeviceName   string                     `json:"device_name"`
+	IPAddress    string                     `json:"ip_address"`
+	TotalInRate  float64                    `json:"total_in_rate"`
+	TotalOutRate float64                    `json:"total_out_rate"`
 	Interfaces   []InterfaceTrafficResponse `json:"interfaces"`
-	Timestamp    string                    `json:"timestamp"`
+	Timestamp    string                     `json:"timestamp"`
 }
 
 type TrafficTrendDataPoint struct {
@@ -162,32 +162,32 @@ type TrafficTrendDataPoint struct {
 }
 
 type TrafficTrendResponse struct {
-	DeviceID       int                   `json:"device_id"`
-	InterfaceIndex *string               `json:"interface_index,omitempty"`
-	StartTime      string                `json:"start_time"`
-	EndTime        string                `json:"end_time"`
-	Interval       string                `json:"interval"`
+	DeviceID       int                     `json:"device_id"`
+	InterfaceIndex *string                 `json:"interface_index,omitempty"`
+	StartTime      string                  `json:"start_time"`
+	EndTime        string                  `json:"end_time"`
+	Interval       string                  `json:"interval"`
 	DataPoints     []TrafficTrendDataPoint `json:"data_points"`
 }
 
 type TopTalkersResponse struct {
-	DeviceID     int     `json:"device_id"`
-	DeviceName   string  `json:"device_name"`
-	IPAddress    string  `json:"ip_address"`
+	DeviceID      int     `json:"device_id"`
+	DeviceName    string  `json:"device_name"`
+	IPAddress     string  `json:"ip_address"`
 	InterfaceName *string `json:"interface_name,omitempty"`
-	InRate       float64 `json:"in_rate"`
-	OutRate      float64 `json:"out_rate"`
-	TotalRate    float64 `json:"total_rate"`
+	InRate        float64 `json:"in_rate"`
+	OutRate       float64 `json:"out_rate"`
+	TotalRate     float64 `json:"total_rate"`
 }
 
 type BandwidthUtilizationResponse struct {
-	DeviceID            int     `json:"device_id"`
-	DeviceName          string  `json:"device_name"`
-	InterfaceIndex      string  `json:"interface_index"`
-	InterfaceName       string  `json:"interface_name"`
-	Speed               int64   `json:"speed"`
-	InUtilization       float64 `json:"in_utilization"`
-	OutUtilization      float64 `json:"out_utilization"`
-	PeakInUtilization   float64 `json:"peak_in_utilization"`
-	PeakOutUtilization  float64 `json:"peak_out_utilization"`
+	DeviceID           int     `json:"device_id"`
+	DeviceName         string  `json:"device_name"`
+	InterfaceIndex     string  `json:"interface_index"`
+	InterfaceName      string  `json:"interface_name"`
+	Speed              int64   `json:"speed"`
+	InUtilization      float64 `json:"in_utilization"`
+	OutUtilization     float64 `json:"out_utilization"`
+	PeakInUtilization  float64 `json:"peak_in_utilization"`
+	PeakOutUtilization float64 `json:"peak_out_utilization"`
 }

@@ -34,4 +34,3 @@ func TestManagerHasPermission_NormalizesLegacyPermissionKeys(t *testing.T) {
 		t.Fatalf("未授予 system:config 时不应通过权限校验")
 	}
 }
-

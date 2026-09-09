@@ -46,4 +46,3 @@ func TestBuildBatchCollectLogsResponse_ShouldIncludeCollectedAndFailedDetails(t 
 		t.Fatalf("json missing failed field")
 	}
 }
-

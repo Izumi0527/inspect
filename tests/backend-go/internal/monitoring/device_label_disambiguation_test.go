@@ -29,7 +29,7 @@ func TestGetDevicePerformanceHistory_DuplicateDeviceNames_GetIPSuffix(t *testing
 			AddRow(start, 2, "cpu_usage", 20.0).
 			AddRow(start, 3, "cpu_usage", 30.0))
 
-	mock.ExpectQuery(deviceLabelQueryPattern + `\$1,\$2,\$3\)`).
+	mock.ExpectQuery(deviceLabelQueryPattern+`\$1,\$2,\$3\)`).
 		WithArgs(1, 2, 3).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "name_count"}).
 			AddRow(1, "核心交换机", "10.0.0.1", 2).
@@ -75,7 +75,7 @@ func TestGetTemperatureHistory_DuplicateDeviceNames_GetIPSuffix(t *testing.T) {
 			AddRow(start, 1, 41.0).
 			AddRow(start, 2, 43.0))
 
-	mock.ExpectQuery(deviceLabelQueryPattern + `\$1,\$2\)`).
+	mock.ExpectQuery(deviceLabelQueryPattern+`\$1,\$2\)`).
 		WithArgs(1, 2).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "name_count"}).
 			AddRow(1, "核心交换机", "10.0.0.1", 2).

@@ -88,7 +88,7 @@ func (h MonitoringHandler) Register(group *echo.Group) {
 }
 
 func (h MonitoringHandler) GetDeviceMetrics(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -117,7 +117,7 @@ func (h MonitoringHandler) GetDeviceMetrics(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetDeviceMetricsHistory(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -160,7 +160,7 @@ func (h MonitoringHandler) GetDeviceMetricsHistory(c echo.Context) error {
 }
 
 func (h MonitoringHandler) WriteDeviceMetrics(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringControlPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringControlPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -199,7 +199,7 @@ func (h MonitoringHandler) WriteDeviceMetrics(c echo.Context) error {
 }
 
 func (h MonitoringHandler) WriteSystemMetrics(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringControlPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringControlPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -227,7 +227,7 @@ func (h MonitoringHandler) WriteSystemMetrics(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetDevicesStatus(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -242,7 +242,7 @@ func (h MonitoringHandler) GetDevicesStatus(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetDeviceStatus(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -265,7 +265,7 @@ func (h MonitoringHandler) GetDeviceStatus(c echo.Context) error {
 }
 
 func (h MonitoringHandler) ListMonitoringDevices(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -280,7 +280,7 @@ func (h MonitoringHandler) ListMonitoringDevices(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetDeviceStatusDistribution(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -295,7 +295,7 @@ func (h MonitoringHandler) GetDeviceStatusDistribution(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetMonitoringStats(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	writer := h.dashboardWriter()
@@ -318,7 +318,7 @@ func (h MonitoringHandler) GetMonitoringStats(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetMonitoringServiceStats(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -335,7 +335,7 @@ func (h MonitoringHandler) GetMonitoringServiceStats(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetMonitoringOverview(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -350,7 +350,7 @@ func (h MonitoringHandler) GetMonitoringOverview(c echo.Context) error {
 }
 
 func (h MonitoringHandler) StartMonitoringService(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringControlPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringControlPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -367,7 +367,7 @@ func (h MonitoringHandler) StartMonitoringService(c echo.Context) error {
 }
 
 func (h MonitoringHandler) StopMonitoringService(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringControlPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringControlPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -384,7 +384,7 @@ func (h MonitoringHandler) StopMonitoringService(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetSystemStatus(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -399,7 +399,7 @@ func (h MonitoringHandler) GetSystemStatus(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetBulkDeviceMetricsHistory(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -441,7 +441,7 @@ func (h MonitoringHandler) GetBulkDeviceMetricsHistory(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetDeviceTemperatureHistory(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -467,7 +467,7 @@ func (h MonitoringHandler) GetDeviceTemperatureHistory(c echo.Context) error {
 }
 
 func (h MonitoringHandler) GetNetworkTrafficHistory(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -493,7 +493,7 @@ func (h MonitoringHandler) GetNetworkTrafficHistory(c echo.Context) error {
 }
 
 func (h MonitoringHandler) ExportMonitoringReport(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringExportPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringExportPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -637,7 +637,7 @@ type monitoringV2RealtimeAlert struct {
 }
 
 func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	writer := h.dashboardWriter()
@@ -1075,7 +1075,7 @@ func resolveDashboardAlertDevice(row alerts.AlertWithDevice) string {
 }
 
 func (h MonitoringHandler) DownloadMonitoringReport(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringExportPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringExportPermission); err != nil {
 		return err
 	}
 	if strings.TrimSpace(h.ReportOutputDir) == "" {
@@ -1172,7 +1172,7 @@ type checkReportDownloadTokenResponse struct {
 }
 
 func (h MonitoringHandler) CheckMonitoringReportDownloadToken(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringExportPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringExportPermission); err != nil {
 		return err
 	}
 	if h.DownloadTokens == nil {
@@ -1251,7 +1251,7 @@ func (h MonitoringHandler) StopDeviceMonitoring(c echo.Context) error {
 }
 
 func (h MonitoringHandler) updateDeviceMonitoring(c echo.Context, enabled bool) error {
-	if _, err := requirePermission(c, h.Auth,monitoringControlPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringControlPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {
@@ -1287,7 +1287,7 @@ func (h MonitoringHandler) updateDeviceMonitoring(c echo.Context, enabled bool) 
 }
 
 func (h MonitoringHandler) GetMonitoringHistorical(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth,monitoringReadPermission); err != nil {
+	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err
 	}
 	if h.Writer == nil {

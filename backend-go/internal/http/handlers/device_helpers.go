@@ -194,4 +194,3 @@ func parseTimeRangeParam(raw string) (time.Time, time.Time, error) {
 	start := end.Add(-time.Duration(amount) * duration)
 	return start, end, nil
 }
-

@@ -36,4 +36,3 @@ func TestLogsHandler_ManageEndpoints_Permission(t *testing.T) {
 	err = h.DeleteLog(ctx)
 	assertHTTPErrorCode(t, err, http.StatusServiceUnavailable)
 }
-

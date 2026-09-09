@@ -22,4 +22,3 @@ func TestLegacyPermissionKeyMappings(t *testing.T) {
 		}
 	})
 }
-

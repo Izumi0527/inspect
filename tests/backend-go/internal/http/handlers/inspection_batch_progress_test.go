@@ -9,7 +9,7 @@ import (
 )
 
 // aggregateProgressEvents 是批次进度折算的未导出纯函数，经 go:linkname 桥接做白盒测试
-//（沿用本仓库约定）。
+// （沿用本仓库约定）。
 //
 //go:linkname aggregateProgressEvents github.com/your-org/inspect-system/backend-go/internal/http/handlers.aggregateProgressEvents
 func aggregateProgressEvents(statuses []string, progresses []int) (string, int)

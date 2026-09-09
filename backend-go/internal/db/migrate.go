@@ -189,7 +189,8 @@ func quoteSQLLiteral(value string) string {
 //
 // TimescaleDB 规则：任何 UNIQUE/PRIMARY KEY 都必须包含分区列（这里是 collected_at）。
 // 若表上存在不包含分区列的唯一约束（最常见是 id 主键），create_hypertable 会报 TS103：
-//   ERROR: cannot create a unique index without the column "collected_at" (used in partitioning)
+//
+//	ERROR: cannot create a unique index without the column "collected_at" (used in partitioning)
 //
 // 该函数是幂等的：重复执行不会报错。
 func ensureTimescaleCompatibleUniques(db *gorm.DB, table string, timeColumn string, logger *zap.Logger) error {

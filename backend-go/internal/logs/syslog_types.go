@@ -15,7 +15,7 @@ type SyslogConfig struct {
 
 // SyslogStatus 表示 Syslog 接收器的当前状态与统计信息。
 type SyslogStatus struct {
-	Running bool        `json:"running"`
+	Running bool         `json:"running"`
 	Config  SyslogConfig `json:"config"`
 
 	Received         uint64 `json:"received"`
@@ -23,11 +23,10 @@ type SyslogStatus struct {
 	DroppedUnmatched uint64 `json:"dropped_unmatched"`
 	DroppedParse     uint64 `json:"dropped_parse"`
 
-	AlertsCreated      uint64 `json:"alerts_created"`
-	AlertsUpdated      uint64 `json:"alerts_updated"`
-	AlertsRateLimited  uint64 `json:"alerts_rate_limited"`
+	AlertsCreated     uint64 `json:"alerts_created"`
+	AlertsUpdated     uint64 `json:"alerts_updated"`
+	AlertsRateLimited uint64 `json:"alerts_rate_limited"`
 
 	LastError string    `json:"last_error,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
-

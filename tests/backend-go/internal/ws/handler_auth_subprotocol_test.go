@@ -85,4 +85,3 @@ func TestServeWS_SubprotocolTokenTooLarge(t *testing.T) {
 		t.Fatalf("期望错误信息包含 token，got=%v", httpErr.Message)
 	}
 }
-

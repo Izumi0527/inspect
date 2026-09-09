@@ -108,19 +108,19 @@ func New(cfg config.Config) (*zap.Logger, error) {
 // buildColoredEncoder 创建彩色控制台编码器
 func buildColoredEncoder() zapcore.Encoder {
 	cfg := zapcore.EncoderConfig{
-		TimeKey:        "time",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "caller",
-		FunctionKey:    zapcore.OmitKey,
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    coloredLevelEncoder,
-		EncodeTime:     coloredTimeEncoder,
-		EncodeDuration: zapcore.StringDurationEncoder,
-		EncodeCaller:   coloredCallerEncoder,
-		EncodeName:     coloredNameEncoder,
+		TimeKey:          "time",
+		LevelKey:         "level",
+		NameKey:          "logger",
+		CallerKey:        "caller",
+		FunctionKey:      zapcore.OmitKey,
+		MessageKey:       "msg",
+		StacktraceKey:    "stacktrace",
+		LineEnding:       zapcore.DefaultLineEnding,
+		EncodeLevel:      coloredLevelEncoder,
+		EncodeTime:       coloredTimeEncoder,
+		EncodeDuration:   zapcore.StringDurationEncoder,
+		EncodeCaller:     coloredCallerEncoder,
+		EncodeName:       coloredNameEncoder,
 		ConsoleSeparator: " | ",
 	}
 	return zapcore.NewConsoleEncoder(cfg)

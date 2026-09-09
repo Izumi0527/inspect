@@ -3,13 +3,13 @@ package handlers_test
 import (
 	"context"
 	"testing"
-	_ "unsafe"
 	"time"
+	_ "unsafe"
 
 	"github.com/DATA-DOG/go-sqlmock"
 
-	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	_ "github.com/your-org/inspect-system/backend-go/internal/http/handlers"
+	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"gorm.io/gorm"
 )
 
@@ -64,4 +64,3 @@ func TestStrategyScheduler_ClaimDueStrategy_ShouldBeIdempotent(t *testing.T) {
 		t.Fatalf("sqlmock expectations: %v", err)
 	}
 }
-

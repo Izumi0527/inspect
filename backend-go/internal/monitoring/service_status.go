@@ -21,23 +21,23 @@ const (
 )
 
 type MonitoringServiceStatsResponse struct {
-	IsRunning         bool    `json:"is_running"`
-	MonitorInterval   int     `json:"monitor_interval"`
-	TotalDevices      int     `json:"total_devices"`
-	ActiveDevices     int     `json:"active_devices"`
-	MonitoringTasks   int     `json:"monitoring_tasks"`
-	MetricsStoreConnected bool `json:"influxdb_connected"`
-	LastCheck         *string `json:"last_check,omitempty"`
-	Error             *string `json:"error,omitempty"`
+	IsRunning             bool    `json:"is_running"`
+	MonitorInterval       int     `json:"monitor_interval"`
+	TotalDevices          int     `json:"total_devices"`
+	ActiveDevices         int     `json:"active_devices"`
+	MonitoringTasks       int     `json:"monitoring_tasks"`
+	MetricsStoreConnected bool    `json:"influxdb_connected"`
+	LastCheck             *string `json:"last_check,omitempty"`
+	Error                 *string `json:"error,omitempty"`
 }
 
 func (w *MetricsWriter) GetMonitoringServiceStats(ctx context.Context) (MonitoringServiceStatsResponse, error) {
 	stats := MonitoringServiceStatsResponse{
-		IsRunning:         defaultMonitoringEnabled,
-		MonitorInterval:   defaultMonitoringInterval,
-		TotalDevices:      0,
-		ActiveDevices:     0,
-		MonitoringTasks:   0,
+		IsRunning:             defaultMonitoringEnabled,
+		MonitorInterval:       defaultMonitoringInterval,
+		TotalDevices:          0,
+		ActiveDevices:         0,
+		MonitoringTasks:       0,
 		MetricsStoreConnected: false,
 	}
 	if w == nil || w.db == nil {

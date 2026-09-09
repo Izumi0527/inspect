@@ -43,7 +43,7 @@ func TestFilterNewLogRecords(t *testing.T) {
 	t.Run("内容相同但采集时间不同的已存记录视为重复被过滤", func(t *testing.T) {
 		existing := []logs.DeviceLog{mkLog(1, base, "info", "link up")}
 		records := []logs.DeviceLog{
-			mkLog(1, base, "info", "link up"),                 // 与 existing 内容相同 → 重复
+			mkLog(1, base, "info", "link up"),                  // 与 existing 内容相同 → 重复
 			mkLog(1, base.Add(time.Second), "info", "link up"), // 时间不同 → 新
 		}
 		got := filterNewLogRecords(records, existing)
@@ -117,8 +117,8 @@ func TestFilterNewLogRecords_NoRealTimestamp(t *testing.T) {
 			mkUnparsedLog(1, t1, "Info: Slave board is not ready."),
 		}
 		records := []logs.DeviceLog{
-			mkUnparsedLog(1, t2, "of current VTY users on line is 1."), // 与已存内容相同 → 重复
-			mkUnparsedLog(1, t2, "Info: Slave board is not ready."),     // 重复
+			mkUnparsedLog(1, t2, "of current VTY users on line is 1."),             // 与已存内容相同 → 重复
+			mkUnparsedLog(1, t2, "Info: Slave board is not ready."),                // 重复
 			mkUnparsedLog(1, t2, "The current login time is 2026-06-20 03:57:18."), // 内容不同 → 新
 		}
 		got := filterNewLogRecords(records, existing)

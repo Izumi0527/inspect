@@ -29,7 +29,7 @@ func TestExportMonitoringReportCSV_ChartsSection_ListsPerformancePerDevice(t *te
 			AddRow(bucket, 1, "memory_usage", 40.0).
 			AddRow(bucket, 2, "cpu_usage", 20.0).
 			AddRow(bucket, 2, "memory_usage", 50.0))
-	mock.ExpectQuery(deviceLabelQueryPattern + `\$1,\$2\)`).
+	mock.ExpectQuery(deviceLabelQueryPattern+`\$1,\$2\)`).
 		WithArgs(1, 2).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "name_count"}).
 			AddRow(1, "SW-01", "10.0.0.1", 1).

@@ -317,7 +317,7 @@ func parseImportUsersPayload(c echo.Context) ([]settings.ImportUserPayload, bool
 		}
 
 		forceValue, hasForce := parseBoolValue(readString(map[string]interface{}{
-			"forcePasswordChange": c.FormValue("forcePasswordChange"),
+			"forcePasswordChange":   c.FormValue("forcePasswordChange"),
 			"force_password_change": c.FormValue("force_password_change"),
 		}, "forcePasswordChange", "force_password_change"))
 
@@ -389,12 +389,12 @@ func decodeImportUsers(value interface{}) ([]settings.ImportUserPayload, error) 
 			forceValue = &parsed
 		}
 		users = append(users, settings.ImportUserPayload{
-			Username: readString(item, "username"),
-			Email:    readString(item, "email"),
-			FullName: readString(item, "full_name", "fullName"),
-			Role:     normalizeUserRole(readString(item, "role")),
-			Password: readString(item, "password"),
-			Status:   normalizeUserStatus(readString(item, "status")),
+			Username:            readString(item, "username"),
+			Email:               readString(item, "email"),
+			FullName:            readString(item, "full_name", "fullName"),
+			Role:                normalizeUserRole(readString(item, "role")),
+			Password:            readString(item, "password"),
+			Status:              normalizeUserStatus(readString(item, "status")),
 			ForcePasswordChange: forceValue,
 		})
 	}
@@ -511,51 +511,51 @@ func decodeImportUsersCSV(data []byte) ([]settings.ImportUserPayload, error) {
 }
 
 var userImportHeaderAlias = map[string]string{
-	"username": "username",
+	"username":  "username",
 	"user_name": "username",
-	"user": "username",
-	"account": "username",
-	"login": "username",
-	"用户": "username",
-	"用户名": "username",
-	"账号": "username",
-	"登录名": "username",
+	"user":      "username",
+	"account":   "username",
+	"login":     "username",
+	"用户":        "username",
+	"用户名":       "username",
+	"账号":        "username",
+	"登录名":       "username",
 
-	"email": "email",
+	"email":         "email",
 	"email_address": "email",
-	"mail": "email",
-	"邮箱": "email",
-	"邮箱地址": "email",
-	"电子邮箱": "email",
+	"mail":          "email",
+	"邮箱":            "email",
+	"邮箱地址":          "email",
+	"电子邮箱":          "email",
 
-	"fullname": "fullName",
-	"full_name": "fullName",
+	"fullname":   "fullName",
+	"full_name":  "fullName",
 	"fullnamecn": "fullName",
-	"姓名": "fullName",
-	"真实姓名": "fullName",
-	"昵称": "fullName",
+	"姓名":         "fullName",
+	"真实姓名":       "fullName",
+	"昵称":         "fullName",
 
 	"role": "role",
-	"角色": "role",
+	"角色":   "role",
 	"权限角色": "role",
 
 	"password": "password",
-	"passwd": "password",
-	"pwd": "password",
-	"密码": "password",
+	"passwd":   "password",
+	"pwd":      "password",
+	"密码":       "password",
 
 	"status": "status",
-	"状态": "status",
-	"账号状态": "status",
-	"启用状态": "status",
+	"状态":     "status",
+	"账号状态":   "status",
+	"启用状态":   "status",
 
-	"forcepasswordchange": "forcePasswordChange",
+	"forcepasswordchange":   "forcePasswordChange",
 	"force_password_change": "forcePasswordChange",
-	"force_password": "forcePasswordChange",
-	"force_password_reset": "forcePasswordChange",
-	"强制改密": "forcePasswordChange",
-	"强制修改密码": "forcePasswordChange",
-	"首次改密": "forcePasswordChange",
+	"force_password":        "forcePasswordChange",
+	"force_password_reset":  "forcePasswordChange",
+	"强制改密":                  "forcePasswordChange",
+	"强制修改密码":                "forcePasswordChange",
+	"首次改密":                  "forcePasswordChange",
 }
 
 func normalizeCSVHeader(header string) string {

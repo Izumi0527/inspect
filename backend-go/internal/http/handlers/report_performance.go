@@ -308,4 +308,3 @@ func benchmarkStatus(actual float64, target float64) string {
 	}
 	return "critical"
 }
-

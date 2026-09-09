@@ -17,15 +17,15 @@ import (
 )
 
 const (
-	defaultTrafficHours   = 24
-	minSamplesForAnomaly  = 30
-	spikeMultiplier       = 3.0
-	dropThreshold         = 0.3
-	highUtilization       = 90.0
-	criticalUtilization   = 95.0
-	errorThresholdHigh    = 100.0
-	errorThresholdMedium  = 50.0
-	errorThresholdLow     = 10.0
+	defaultTrafficHours  = 24
+	minSamplesForAnomaly = 30
+	spikeMultiplier      = 3.0
+	dropThreshold        = 0.3
+	highUtilization      = 90.0
+	criticalUtilization  = 95.0
+	errorThresholdHigh   = 100.0
+	errorThresholdMedium = 50.0
+	errorThresholdLow    = 10.0
 )
 
 type Service struct {
@@ -35,9 +35,9 @@ type Service struct {
 }
 
 type DeviceRow struct {
-	ID        int     `gorm:"column:id"`
-	Name      string  `gorm:"column:name"`
-	IPAddress string  `gorm:"column:ip_address"`
+	ID        int    `gorm:"column:id"`
+	Name      string `gorm:"column:name"`
+	IPAddress string `gorm:"column:ip_address"`
 }
 
 func NewService(db *gorm.DB, monitoringWriter *monitoring.MetricsWriter, logger *zap.Logger) *Service {
@@ -408,9 +408,9 @@ func (s *Service) GetTrafficTrend(
 	allNames := append(append([]string{}, inboundNames...), outboundNames...)
 
 	type row struct {
-		Bucket  time.Time `gorm:"column:bucket"`
-		Inbound *float64  `gorm:"column:inbound"`
-		Outbound *float64 `gorm:"column:outbound"`
+		Bucket   time.Time `gorm:"column:bucket"`
+		Inbound  *float64  `gorm:"column:inbound"`
+		Outbound *float64  `gorm:"column:outbound"`
 	}
 
 	query := fmt.Sprintf(
@@ -567,7 +567,7 @@ func (s *Service) GetBandwidthUtilization(ctx context.Context, deviceID *int, th
 	}
 
 	type resultItem struct {
-		Item   BandwidthUtilizationResponse
+		Item    BandwidthUtilizationResponse
 		MaxUtil float64
 	}
 
@@ -662,10 +662,10 @@ func (s *Service) SaveMonitoringConfig(ctx context.Context, deviceIPs []string, 
 	}
 
 	config := TrafficMonitoringConfig{
-		DeviceIPs:            deviceIPs,
-		AnalysisPeriodHours:  hours,
+		DeviceIPs:              deviceIPs,
+		AnalysisPeriodHours:    hours,
 		EnableAnomalyDetection: enableAnomaly,
-		StartedAt:            time.Now().UTC().Format(time.RFC3339),
+		StartedAt:              time.Now().UTC().Format(time.RFC3339),
 	}
 
 	raw, err := json.Marshal(config)
@@ -715,14 +715,14 @@ func (s *Service) CalculateBaseline(ctx context.Context, deviceIP string, iface 
 	}
 
 	var (
-		inSum   float64
-		outSum  float64
-		utilSum float64
-		inCount int
-		outCount int
-		utilCount int
+		inSum       float64
+		outSum      float64
+		utilSum     float64
+		inCount     int
+		outCount    int
+		utilCount   int
 		sampleCount int
-		lastSeen time.Time
+		lastSeen    time.Time
 	)
 
 	for _, row := range rows {
@@ -1264,7 +1264,7 @@ func resolveTimeRange(raw string, fallback time.Duration) (time.Time, time.Time)
 	if strings.HasSuffix(raw, "d") {
 		value := strings.TrimSuffix(raw, "d")
 		if parsed, err := time.ParseDuration(value + "h"); err == nil {
-			return end.Add(-parsed*24), end
+			return end.Add(-parsed * 24), end
 		}
 	}
 

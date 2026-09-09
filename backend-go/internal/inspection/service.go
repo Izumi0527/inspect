@@ -1239,7 +1239,7 @@ func (s *Service) Import(ctx context.Context, data []byte, overwrite bool) (*Tem
 	}
 
 	// Create new template
-	template.ID = 0 // Reset ID for new record
+	template.ID = 0            // Reset ID for new record
 	template.IsDefault = false // Imported templates are never built-in
 	if err := s.Create(ctx, &template); err != nil {
 		return nil, err
@@ -1257,7 +1257,6 @@ func (s *Service) Validate(ctx context.Context, template *Template) error {
 
 	return s.validator.ValidateTemplate(ctx, template)
 }
-
 
 // SaveInspectionResult 保存巡检结果
 func (s *Service) SaveInspectionResult(ctx context.Context, result *Result) error {

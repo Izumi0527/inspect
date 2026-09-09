@@ -14,9 +14,9 @@ func (s *Service) GetSystemHealth(ctx context.Context) (SystemHealthResponse, er
 	metrics, _ := s.collectMetrics(ctx)
 
 	resources := SystemResourceHealth{
-		CPU: ResourceStatus{Status: usageStatus(metrics.CPU.Usage), Usage: metrics.CPU.Usage},
-		Memory: ResourceStatus{Status: usageStatus(metrics.Memory.Usage), Usage: metrics.Memory.Usage},
-		Disk: ResourceStatus{Status: usageStatus(metrics.Disk.Usage), Usage: metrics.Disk.Usage},
+		CPU:      ResourceStatus{Status: usageStatus(metrics.CPU.Usage), Usage: metrics.CPU.Usage},
+		Memory:   ResourceStatus{Status: usageStatus(metrics.Memory.Usage), Usage: metrics.Memory.Usage},
+		Disk:     ResourceStatus{Status: usageStatus(metrics.Disk.Usage), Usage: metrics.Disk.Usage},
 		Database: DatabaseStatus{Status: "normal", Connections: 0},
 	}
 

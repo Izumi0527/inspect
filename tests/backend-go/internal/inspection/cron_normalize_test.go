@@ -27,4 +27,3 @@ func TestNormalizeCronExpression_QuartzToFiveFields(t *testing.T) {
 		}
 	}
 }
-

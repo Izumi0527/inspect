@@ -73,19 +73,19 @@ type UserRecord struct {
 }
 
 type UserInfo struct {
-	ID          string     `json:"id"`
-	Username    string     `json:"username"`
-	Email       string     `json:"email"`
-	FullName    *string    `json:"full_name,omitempty"`
-	Avatar      *string    `json:"avatar,omitempty"`
-	Role        string     `json:"role"`
-	Permissions []string   `json:"permissions"`
-	IsActive    bool       `json:"is_active"`
+	ID          string   `json:"id"`
+	Username    string   `json:"username"`
+	Email       string   `json:"email"`
+	FullName    *string  `json:"full_name,omitempty"`
+	Avatar      *string  `json:"avatar,omitempty"`
+	Role        string   `json:"role"`
+	Permissions []string `json:"permissions"`
+	IsActive    bool     `json:"is_active"`
 	// ForcePasswordChange 透传给前端：为 true 时前端应引导用户先完成强制改密。
 	ForcePasswordChange bool       `json:"force_password_change"`
 	LastLoginAt         *time.Time `json:"last_login_at,omitempty"`
-	CreatedAt   *time.Time `json:"created_at,omitempty"`
-	UpdatedAt   *time.Time `json:"updated_at,omitempty"`
+	CreatedAt           *time.Time `json:"created_at,omitempty"`
+	UpdatedAt           *time.Time `json:"updated_at,omitempty"`
 }
 
 func NewService(db *gorm.DB, cfg config.Config, logger *zap.Logger) *Service {
@@ -169,18 +169,18 @@ func (s *Service) BuildUserInfo(ctx context.Context, user *UserRecord) (UserInfo
 	}
 
 	return UserInfo{
-		ID:          user.ID,
-		Username:    user.Username,
-		Email:       user.Email,
-		FullName:    user.FullName,
-		Avatar:      user.Avatar,
+		ID:                  user.ID,
+		Username:            user.Username,
+		Email:               user.Email,
+		FullName:            user.FullName,
+		Avatar:              user.Avatar,
 		Role:                user.Role,
 		Permissions:         permissions,
 		IsActive:            isUserActive(user),
 		ForcePasswordChange: UserMustChangePassword(user),
 		LastLoginAt:         user.LastLoginAt,
-		CreatedAt:   user.CreatedAt,
-		UpdatedAt:   user.UpdatedAt,
+		CreatedAt:           user.CreatedAt,
+		UpdatedAt:           user.UpdatedAt,
 	}, nil
 }
 

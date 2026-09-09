@@ -4,8 +4,8 @@ import (
 	"testing"
 	_ "unsafe"
 
-	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	_ "github.com/your-org/inspect-system/backend-go/internal/http/handlers"
+	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"gorm.io/datatypes"
 )
 
@@ -45,4 +45,3 @@ func stringSliceContains(items []string, want string) bool {
 	}
 	return false
 }
-

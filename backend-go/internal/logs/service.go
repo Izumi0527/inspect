@@ -147,10 +147,10 @@ func (s *Service) GetLogStatistics(ctx context.Context, deviceID *int, hours int
 	}
 
 	stats := LogStatistics{
-		ByLevel:       map[string]int64{},
-		ByFacility:    map[string]int64{},
-		ByDevice:      map[int]int64{},
-		Trends:        map[string]int64{},
+		ByLevel:        map[string]int64{},
+		ByFacility:     map[string]int64{},
+		ByDevice:       map[int]int64{},
+		Trends:         map[string]int64{},
 		TimeRangeHours: hours,
 	}
 

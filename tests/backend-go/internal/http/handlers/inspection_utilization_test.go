@@ -11,7 +11,7 @@ import (
 )
 
 // 两个检查函数都是 InspectionHandler 的未导出值方法，经 go:linkname 桥接做白盒测试
-//（沿用本仓库约定），接收者作为第一个参数传入。
+// （沿用本仓库约定），接收者作为第一个参数传入。
 //
 //go:linkname checkInterfaceUtilizationMetric github.com/your-org/inspect-system/backend-go/internal/http/handlers.InspectionHandler.checkInterfaceUtilizationMetric
 func checkInterfaceUtilizationMetric(h handlers.InspectionHandler, result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64)
@@ -205,7 +205,7 @@ func TestInterfaceUtilizationDetailsCoverAllInterfaces(t *testing.T) {
 }
 
 // 峰值方向取入/出中更高的一侧，接口名优先取 Description
-//（采集端把 Name 固定写成 "if<索引>"，用 Name 会输出无从定位的编号）。
+// （采集端把 Name 固定写成 "if<索引>"，用 Name 会输出无从定位的编号）。
 func TestInterfaceUtilizationPeakDirectionAndNaming(t *testing.T) {
 	h := handlers.InspectionHandler{}
 

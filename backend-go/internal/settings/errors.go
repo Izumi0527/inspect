@@ -9,4 +9,3 @@ type NotImplementedError struct {
 func (e NotImplementedError) Error() string {
 	return e.Message
 }
-

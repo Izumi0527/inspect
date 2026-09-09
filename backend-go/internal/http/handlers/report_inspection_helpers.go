@@ -20,29 +20,29 @@ type inspectionReportFilters struct {
 }
 
 type inspectionRow struct {
-	ID           int             `gorm:"column:id"`
-	DeviceID     int             `gorm:"column:device_id"`
-	Status       string          `gorm:"column:status"`
-	Duration     sql.NullInt64   `gorm:"column:duration"`
-	TotalChecks  sql.NullInt64   `gorm:"column:total_checks"`
-	PassedChecks sql.NullInt64   `gorm:"column:passed_checks"`
-	FailedChecks sql.NullInt64   `gorm:"column:failed_checks"`
-	WarningChecks sql.NullInt64  `gorm:"column:warning_checks"`
-	StartedAt    *time.Time      `gorm:"column:started_at"`
-	CompletedAt  *time.Time      `gorm:"column:completed_at"`
-	CreatedAt    *time.Time      `gorm:"column:created_at"`
+	ID            int           `gorm:"column:id"`
+	DeviceID      int           `gorm:"column:device_id"`
+	Status        string        `gorm:"column:status"`
+	Duration      sql.NullInt64 `gorm:"column:duration"`
+	TotalChecks   sql.NullInt64 `gorm:"column:total_checks"`
+	PassedChecks  sql.NullInt64 `gorm:"column:passed_checks"`
+	FailedChecks  sql.NullInt64 `gorm:"column:failed_checks"`
+	WarningChecks sql.NullInt64 `gorm:"column:warning_checks"`
+	StartedAt     *time.Time    `gorm:"column:started_at"`
+	CompletedAt   *time.Time    `gorm:"column:completed_at"`
+	CreatedAt     *time.Time    `gorm:"column:created_at"`
 }
 
 type inspectionResultRow struct {
-	ID             int            `gorm:"column:id"`
-	InspectionID   int            `gorm:"column:inspection_id"`
-	CheckItemName  string         `gorm:"column:check_item_name"`
-	CheckItemType  string         `gorm:"column:check_item_type"`
-	Status         string         `gorm:"column:status"`
-	Message        sql.NullString `gorm:"column:message"`
-	ExpectedValue  sql.NullString `gorm:"column:expected_value"`
-	ActualValue    sql.NullString `gorm:"column:actual_value"`
-	CreatedAt      time.Time      `gorm:"column:created_at"`
+	ID            int            `gorm:"column:id"`
+	InspectionID  int            `gorm:"column:inspection_id"`
+	CheckItemName string         `gorm:"column:check_item_name"`
+	CheckItemType string         `gorm:"column:check_item_type"`
+	Status        string         `gorm:"column:status"`
+	Message       sql.NullString `gorm:"column:message"`
+	ExpectedValue sql.NullString `gorm:"column:expected_value"`
+	ActualValue   sql.NullString `gorm:"column:actual_value"`
+	CreatedAt     time.Time      `gorm:"column:created_at"`
 }
 
 type inspectionSummary struct {
@@ -73,12 +73,12 @@ type metricSummary struct {
 }
 
 type inspectionDeviceAggregate struct {
-	DeviceID      int            `gorm:"column:device_id"`
-	Executions    int64          `gorm:"column:executions"`
-	TotalChecks   int64          `gorm:"column:total_checks"`
-	PassedChecks  int64          `gorm:"column:passed_checks"`
-	FailedChecks  int64          `gorm:"column:failed_checks"`
-	WarningChecks int64          `gorm:"column:warning_checks"`
+	DeviceID      int             `gorm:"column:device_id"`
+	Executions    int64           `gorm:"column:executions"`
+	TotalChecks   int64           `gorm:"column:total_checks"`
+	PassedChecks  int64           `gorm:"column:passed_checks"`
+	FailedChecks  int64           `gorm:"column:failed_checks"`
+	WarningChecks int64           `gorm:"column:warning_checks"`
 	AvgDuration   sql.NullFloat64 `gorm:"column:avg_duration"`
 }
 
@@ -358,13 +358,13 @@ func buildExecutionTrends(ctx context.Context, db *gorm.DB, filters inspectionRe
 			avgScore = float64(row.PassedChecks) / float64(row.TotalChecks) * 100
 		}
 		trends = append(trends, map[string]interface{}{
-			"date":                 row.Bucket.Format(time.RFC3339),
-			"total_executions":     row.Total,
+			"date":                  row.Bucket.Format(time.RFC3339),
+			"total_executions":      row.Total,
 			"successful_executions": row.Completed,
-			"failed_executions":    row.Failed,
-			"avg_score":            roundFloat(avgScore, 2),
-			"avg_duration":         roundFloat(avgDuration, 2),
-			"device_count":         row.DeviceCount,
+			"failed_executions":     row.Failed,
+			"avg_score":             roundFloat(avgScore, 2),
+			"avg_duration":          roundFloat(avgDuration, 2),
+			"device_count":          row.DeviceCount,
 		})
 	}
 	return trends, nil
@@ -681,15 +681,15 @@ func buildInspectionComparisonData(
 			"device_type": info.DeviceType,
 			"status":      info.Status,
 			"metrics": map[string]interface{}{
-				"total_executions": agg.Executions,
-				"total_checks":     agg.TotalChecks,
-				"passed_checks":    agg.PassedChecks,
-				"failed_checks":    agg.FailedChecks,
-				"warning_checks":   agg.WarningChecks,
-				"pass_rate":        roundFloat(passRate, 2),
-				"avg_score":        roundFloat(avgScore, 2),
-				"avg_duration":     roundFloat(avgDuration, 2),
-				"availability":     roundFloat(availability, 2),
+				"total_executions":  agg.Executions,
+				"total_checks":      agg.TotalChecks,
+				"passed_checks":     agg.PassedChecks,
+				"failed_checks":     agg.FailedChecks,
+				"warning_checks":    agg.WarningChecks,
+				"pass_rate":         roundFloat(passRate, 2),
+				"avg_score":         roundFloat(avgScore, 2),
+				"avg_duration":      roundFloat(avgDuration, 2),
+				"availability":      roundFloat(availability, 2),
 				"avg_response_time": roundFloat(avgResponse, 2),
 			},
 		})
@@ -743,11 +743,11 @@ func buildDeviceComparisons(devices []map[string]interface{}) []map[string]inter
 		target := devices[i]
 		targetMetrics, _ := target["metrics"].(map[string]interface{})
 		diff := map[string]interface{}{
-			"pass_rate":        diffFloat(targetMetrics["pass_rate"], baseMetrics["pass_rate"]),
-			"avg_score":        diffFloat(targetMetrics["avg_score"], baseMetrics["avg_score"]),
-			"availability":     diffFloat(targetMetrics["availability"], baseMetrics["availability"]),
+			"pass_rate":         diffFloat(targetMetrics["pass_rate"], baseMetrics["pass_rate"]),
+			"avg_score":         diffFloat(targetMetrics["avg_score"], baseMetrics["avg_score"]),
+			"availability":      diffFloat(targetMetrics["availability"], baseMetrics["availability"]),
 			"avg_response_time": diffFloat(targetMetrics["avg_response_time"], baseMetrics["avg_response_time"]),
-			"failed_checks":    diffFloat(targetMetrics["failed_checks"], baseMetrics["failed_checks"]),
+			"failed_checks":     diffFloat(targetMetrics["failed_checks"], baseMetrics["failed_checks"]),
 		}
 		comparisons = append(comparisons, map[string]interface{}{
 			"base_device_id":    baseID,

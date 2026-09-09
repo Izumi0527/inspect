@@ -90,4 +90,3 @@ func newGormDBWithSqlmock(t *testing.T) (*gorm.DB, sqlmock.Sqlmock, func()) {
 	}
 	return gormDB, mock, cleanup
 }
-

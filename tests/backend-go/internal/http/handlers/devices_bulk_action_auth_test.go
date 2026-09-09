@@ -21,4 +21,3 @@ func TestDevicesHandler_BulkAction_ShouldRequireLoginBeforePayloadValidation(t *
 	err := h.BulkAction(ctx)
 	assertHTTPErrorCode(t, err, http.StatusUnauthorized)
 }
-

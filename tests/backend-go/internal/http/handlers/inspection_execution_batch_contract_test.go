@@ -198,8 +198,8 @@ func TestGetExecution_ShouldReturnMultiDeviceSummary(t *testing.T) {
 
 	var payload struct {
 		Data struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
+			ID      string `json:"id"`
+			Status  string `json:"status"`
 			Summary struct {
 				TotalChecks   int `json:"totalChecks"`
 				PassedChecks  int `json:"passedChecks"`
@@ -361,8 +361,8 @@ func TestGetExecution_ShouldExpandLegacyBatchByNumericID(t *testing.T) {
 
 	var payload struct {
 		Data struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
+			ID      string `json:"id"`
+			Status  string `json:"status"`
 			Summary struct {
 				DeviceResults []struct {
 					DeviceID string `json:"deviceId"`

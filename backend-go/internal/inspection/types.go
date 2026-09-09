@@ -19,4 +19,3 @@ const (
 	StrategyManual    = "manual"
 	StrategyScheduled = "scheduled"
 )
-

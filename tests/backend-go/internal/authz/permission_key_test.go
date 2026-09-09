@@ -57,4 +57,3 @@ func TestNormalizePermissionKeys_DeduplicateAndSort(t *testing.T) {
 		}
 	}
 }
-

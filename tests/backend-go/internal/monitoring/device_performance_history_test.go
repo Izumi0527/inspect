@@ -33,7 +33,7 @@ func TestGetDevicePerformanceHistory_MinuteBucket_GroupsByDeviceAndMetric(t *tes
 			AddRow(bucket1, 2, "memory_usage", 50.0).
 			AddRow(bucket2, 1, "cpu_usage", 12.0))
 
-	mock.ExpectQuery(deviceLabelQueryPattern + `\$1,\$2\)`).
+	mock.ExpectQuery(deviceLabelQueryPattern+`\$1,\$2\)`).
 		WithArgs(1, 2).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "name_count"}).
 			AddRow(1, "SW-01", "10.0.0.1", 1).

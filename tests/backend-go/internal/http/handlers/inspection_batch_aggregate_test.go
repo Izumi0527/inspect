@@ -14,7 +14,7 @@ import (
 )
 
 // aggregateExecutionStatuses 是批次状态聚合的未导出函数，经 go:linkname 桥接做白盒测试
-//（沿用本仓库约定）。
+// （沿用本仓库约定）。
 //
 //go:linkname aggregateExecutionStatuses github.com/your-org/inspect-system/backend-go/internal/http/handlers.aggregateExecutionStatuses
 func aggregateExecutionStatuses(rows []inspection.Inspection) string

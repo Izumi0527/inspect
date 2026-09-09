@@ -7,24 +7,24 @@ import (
 )
 
 type SystemSetting struct {
-	ID             int             `gorm:"column:id;primaryKey;autoIncrement"`
-	Key            string          `gorm:"column:key;size:100;not null;unique"`
-	Value          *string         `gorm:"column:value"`
-	Category       string          `gorm:"column:category;size:20;not null"`
-	Level          string          `gorm:"column:level;size:20"`
-	Description    *string         `gorm:"column:description"`
-	DataType       string          `gorm:"column:data_type;size:20"`
-	IsRequired     bool            `gorm:"column:is_required"`
-	IsEncrypted    bool            `gorm:"column:is_encrypted"`
-	IsReadonly     bool            `gorm:"column:is_readonly"`
-	ValidationRule *string         `gorm:"column:validation_rule;size:200"`
-	DefaultValue   *string         `gorm:"column:default_value"`
-	MinValue       *float64        `gorm:"column:min_value"`
-	MaxValue       *float64        `gorm:"column:max_value"`
-	AllowedValues  datatypes.JSON  `gorm:"column:allowed_values"`
-	UpdatedBy      *string         `gorm:"column:updated_by;size:36"`
-	CreatedAt      *time.Time      `gorm:"column:created_at"`
-	UpdatedAt      *time.Time      `gorm:"column:updated_at"`
+	ID             int            `gorm:"column:id;primaryKey;autoIncrement"`
+	Key            string         `gorm:"column:key;size:100;not null;unique"`
+	Value          *string        `gorm:"column:value"`
+	Category       string         `gorm:"column:category;size:20;not null"`
+	Level          string         `gorm:"column:level;size:20"`
+	Description    *string        `gorm:"column:description"`
+	DataType       string         `gorm:"column:data_type;size:20"`
+	IsRequired     bool           `gorm:"column:is_required"`
+	IsEncrypted    bool           `gorm:"column:is_encrypted"`
+	IsReadonly     bool           `gorm:"column:is_readonly"`
+	ValidationRule *string        `gorm:"column:validation_rule;size:200"`
+	DefaultValue   *string        `gorm:"column:default_value"`
+	MinValue       *float64       `gorm:"column:min_value"`
+	MaxValue       *float64       `gorm:"column:max_value"`
+	AllowedValues  datatypes.JSON `gorm:"column:allowed_values"`
+	UpdatedBy      *string        `gorm:"column:updated_by;size:36"`
+	CreatedAt      *time.Time     `gorm:"column:created_at"`
+	UpdatedAt      *time.Time     `gorm:"column:updated_at"`
 }
 
 func (SystemSetting) TableName() string {

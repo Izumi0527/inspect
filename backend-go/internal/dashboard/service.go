@@ -1324,7 +1324,7 @@ func buildDashboardSections(access OverviewAccess) map[string]dashboardSectionSt
 			"inspections:read",
 			"当前账号缺少 inspections:read，巡检统计已隐藏",
 		),
-		"recentAlerts":   buildOverviewSectionStatus(access.CanReadAlerts, "alerts:read", "当前账号缺少 alerts:read，最近告警已隐藏"),
+		"recentAlerts": buildOverviewSectionStatus(access.CanReadAlerts, "alerts:read", "当前账号缺少 alerts:read，最近告警已隐藏"),
 		"networkOverview": buildOverviewSectionStatus(
 			access.CanReadDevices,
 			"devices:read",

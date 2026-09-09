@@ -305,11 +305,11 @@ func (m *Manager) Stats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_connections":   len(m.connections),
-		"unique_users":        len(m.userConnections),
-		"active_rooms":        len(m.roomConnections),
-		"messages_sent":       atomic.LoadInt64(&m.messageCount),
-		"connection_details":  details,
+		"total_connections":  len(m.connections),
+		"unique_users":       len(m.userConnections),
+		"active_rooms":       len(m.roomConnections),
+		"messages_sent":      atomic.LoadInt64(&m.messageCount),
+		"connection_details": details,
 	}
 }
 

@@ -178,7 +178,7 @@ func (s *Service) GetAuditStats(ctx context.Context) (AuditStatsResponse, error)
 	stats.TopActiveUsers = s.topAuditUsers(ctx)
 	stats.TopActions = s.topAuditActions(ctx)
 
-	failed := s.countAuditLogs(ctx, "status <> ?", []interface{}{ "success" })
+	failed := s.countAuditLogs(ctx, "status <> ?", []interface{}{"success"})
 	stats.FailedOperationsCount = failed
 	if stats.TotalLogs > 0 {
 		stats.FailedOperationsRate = float64(failed) / float64(stats.TotalLogs) * 100

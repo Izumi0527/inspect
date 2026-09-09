@@ -4,8 +4,8 @@ import (
 	"testing"
 	_ "unsafe"
 
-	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	_ "github.com/your-org/inspect-system/backend-go/internal/http/handlers"
+	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 )
 
 //go:linkname buildExecutionResponse github.com/your-org/inspect-system/backend-go/internal/http/handlers.buildExecutionResponse
@@ -47,4 +47,3 @@ func TestComputeScore_ShouldIgnoreSkipped(t *testing.T) {
 		t.Fatalf("summary[score] = %d, want 100", score)
 	}
 }
-

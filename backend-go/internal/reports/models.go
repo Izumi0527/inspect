@@ -30,25 +30,25 @@ func (ReportTemplate) TableName() string {
 }
 
 type ReportSchedule struct {
-	ID            int            `gorm:"column:id;primaryKey"`
-	Name          string         `gorm:"column:name"`
-	Description   *string        `gorm:"column:description"`
-	TemplateID    int            `gorm:"column:template_id"`
-	CronExpression string        `gorm:"column:cron_expression"`
-	Timezone      *string        `gorm:"column:timezone"`
-	DataRange     datatypes.JSON `gorm:"column:data_range;type:jsonb"`
-	DeviceFilters datatypes.JSON `gorm:"column:device_filters;type:jsonb"`
-	OutputFormats datatypes.JSON `gorm:"column:output_formats;type:jsonb"`
-	Recipients    datatypes.JSON `gorm:"column:recipients;type:jsonb"`
-	IsActive      bool           `gorm:"column:is_active"`
-	LastRun       *time.Time     `gorm:"column:last_run"`
-	NextRun       *time.Time     `gorm:"column:next_run"`
-	TotalRuns     int            `gorm:"column:total_runs"`
-	SuccessRuns   int            `gorm:"column:successful_runs"`
-	FailedRuns    int            `gorm:"column:failed_runs"`
-	CreatedBy     *string        `gorm:"column:created_by"`
-	CreatedAt     *time.Time     `gorm:"column:created_at"`
-	UpdatedAt     *time.Time     `gorm:"column:updated_at"`
+	ID             int            `gorm:"column:id;primaryKey"`
+	Name           string         `gorm:"column:name"`
+	Description    *string        `gorm:"column:description"`
+	TemplateID     int            `gorm:"column:template_id"`
+	CronExpression string         `gorm:"column:cron_expression"`
+	Timezone       *string        `gorm:"column:timezone"`
+	DataRange      datatypes.JSON `gorm:"column:data_range;type:jsonb"`
+	DeviceFilters  datatypes.JSON `gorm:"column:device_filters;type:jsonb"`
+	OutputFormats  datatypes.JSON `gorm:"column:output_formats;type:jsonb"`
+	Recipients     datatypes.JSON `gorm:"column:recipients;type:jsonb"`
+	IsActive       bool           `gorm:"column:is_active"`
+	LastRun        *time.Time     `gorm:"column:last_run"`
+	NextRun        *time.Time     `gorm:"column:next_run"`
+	TotalRuns      int            `gorm:"column:total_runs"`
+	SuccessRuns    int            `gorm:"column:successful_runs"`
+	FailedRuns     int            `gorm:"column:failed_runs"`
+	CreatedBy      *string        `gorm:"column:created_by"`
+	CreatedAt      *time.Time     `gorm:"column:created_at"`
+	UpdatedAt      *time.Time     `gorm:"column:updated_at"`
 }
 
 func (ReportSchedule) TableName() string {

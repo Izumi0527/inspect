@@ -3,20 +3,20 @@ package logs
 import "time"
 
 type LogItem struct {
-	ID           int        `json:"id"`
-	DeviceID     int        `json:"device_id"`
-	DeviceName   *string    `json:"device_name,omitempty"`
-	DeviceIP     *string    `json:"device_ip,omitempty"`
-	Level        string     `json:"level"`
-	Facility     string     `json:"facility"`
-	Source       string     `json:"source"`
-	Message      string     `json:"message"`
-	RawMessage   *string    `json:"raw_message,omitempty"`
-	SourceIP     *string    `json:"source_ip,omitempty"`
+	ID            int       `json:"id"`
+	DeviceID      int       `json:"device_id"`
+	DeviceName    *string   `json:"device_name,omitempty"`
+	DeviceIP      *string   `json:"device_ip,omitempty"`
+	Level         string    `json:"level"`
+	Facility      string    `json:"facility"`
+	Source        string    `json:"source"`
+	Message       string    `json:"message"`
+	RawMessage    *string   `json:"raw_message,omitempty"`
+	SourceIP      *string   `json:"source_ip,omitempty"`
 	SourceProcess *string   `json:"source_process,omitempty"`
-	LogTimestamp time.Time  `json:"log_timestamp"`
-	CollectedAt  time.Time  `json:"collected_at"`
-	CreatedAt    time.Time  `json:"created_at"`
+	LogTimestamp  time.Time `json:"log_timestamp"`
+	CollectedAt   time.Time `json:"collected_at"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type LogListResponse struct {
@@ -30,12 +30,12 @@ type LogListResponse struct {
 }
 
 type LogStatistics struct {
-	TotalLogs     int64            `json:"total_logs"`
-	ByLevel       map[string]int64 `json:"by_level"`
-	ByFacility    map[string]int64 `json:"by_facility"`
-	ByDevice      map[int]int64    `json:"by_device"`
-	Trends        map[string]int64 `json:"trends"`
-	TimeRangeHours int             `json:"time_range_hours"`
+	TotalLogs      int64            `json:"total_logs"`
+	ByLevel        map[string]int64 `json:"by_level"`
+	ByFacility     map[string]int64 `json:"by_facility"`
+	ByDevice       map[int]int64    `json:"by_device"`
+	Trends         map[string]int64 `json:"trends"`
+	TimeRangeHours int              `json:"time_range_hours"`
 }
 
 type LogCollectionResponse struct {

@@ -43,4 +43,3 @@ func TestValidateSNMPConfig_ShouldRejectInvalidOIDUsed(t *testing.T) {
 		t.Fatalf("ValidationError.Field = %q, want %q", ve.Field, "config.oid_used")
 	}
 }
-

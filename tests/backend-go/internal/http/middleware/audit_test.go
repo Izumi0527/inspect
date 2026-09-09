@@ -113,10 +113,10 @@ func TestAuditTrail_ExcludedRoutesAndReadsAreNotRecorded(t *testing.T) {
 	sink := &fakeAuditSink{}
 	e := newAuditTestServer(sink)
 
-	doReq(e, http.MethodGet, "/api/v1/devices")                 // 读操作
-	doReq(e, http.MethodGet, "/api/v1/templates/1/export")      // GET 导出也应记录？——GET 不拦截，导出走 GET 的由业务层考虑
-	doReq(e, http.MethodPost, "/api/v1/devices/batch-probe")    // 探测排除
-	doReq(e, http.MethodPost, "/api/v1/auth/refresh")           // auth 排除
+	doReq(e, http.MethodGet, "/api/v1/devices")              // 读操作
+	doReq(e, http.MethodGet, "/api/v1/templates/1/export")   // GET 导出也应记录？——GET 不拦截，导出走 GET 的由业务层考虑
+	doReq(e, http.MethodPost, "/api/v1/devices/batch-probe") // 探测排除
+	doReq(e, http.MethodPost, "/api/v1/auth/refresh")        // auth 排除
 
 	if entries := sink.all(); len(entries) != 0 {
 		t.Fatalf("读操作/排除路由不应记审计，实际 %d 条: %+v", len(entries), entries)

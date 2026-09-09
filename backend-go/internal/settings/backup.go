@@ -62,8 +62,8 @@ func (s *Service) GetBackupConfig(ctx context.Context) (BackupConfig, error) {
 		BackupPath:        s.getSettingString(ctx, "backup.path", filepath.ToSlash(filepath.Clean("data/backups"))),
 		IncludeDatabase:   s.getSettingBool(ctx, "backup.include_database", true),
 		// 当前版本未实现文件备份/恢复能力：对外强制回显为 false，避免误导。
-		IncludeFiles:      false,
-		CompressBackup:    s.getSettingBool(ctx, "backup.compress_backup", true),
+		IncludeFiles:   false,
+		CompressBackup: s.getSettingBool(ctx, "backup.compress_backup", true),
 	}
 	return cfg, nil
 }

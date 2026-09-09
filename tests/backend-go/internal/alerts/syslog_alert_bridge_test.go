@@ -174,4 +174,3 @@ func TestSyslogAlertBridge_RateLimit_ShouldCreateOrUpdateStormAlert(t *testing.T
 		t.Fatalf("alerts=%d, want 2 (one specific + one storm)", len(store.alerts))
 	}
 }
-

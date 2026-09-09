@@ -49,4 +49,3 @@ func TestParseSyslogMessage_RFC3164_ShouldExtractProcessAndMessage(t *testing.T)
 		t.Fatalf("Timestamp is zero, want parsed timestamp")
 	}
 }
-
