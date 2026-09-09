@@ -156,10 +156,10 @@ func TestRenderMonitoringPDF_StructurallyValid(t *testing.T) {
 		TimeRange: "24h",
 		Sections:  []string{"stats", "charts", "alerts"},
 		Stats:     stats,
-		SystemPerformance: []pdfkit.TimeSeriesPoint{
-			{Timestamp: "2026-05-09T08:00:00Z", CPUUsage: 30, MemoryUsage: 50, NetworkTraffic: 8},
-			{Timestamp: "2026-05-09T09:00:00Z", CPUUsage: 42, MemoryUsage: 58, NetworkTraffic: 12},
-			{Timestamp: "2026-05-09T10:00:00Z", CPUUsage: 51, MemoryUsage: 64, NetworkTraffic: 15},
+		PerformanceLabels: []string{"2026-05-09T08:00:00Z", "2026-05-09T09:00:00Z", "2026-05-09T10:00:00Z"},
+		DevicePerformance: []pdfkit.DevicePerformanceSeries{
+			{Name: "SW-01", CPU: []float64{30, 42, 51}, Memory: []float64{50, 58, 64}},
+			{Name: "SW-02", CPU: []float64{12, 18, 25}, Memory: []float64{40, 41, 43}},
 		},
 	}
 

@@ -10,7 +10,7 @@ import (
 
 // MonitoringPDFInput is the data carrier the monitoring package hands off
 // to pdfkit when producing a monitoring report PDF. It mirrors the fields
-// the monitoring service already exposes (Stats / SystemPerformance /
+// the monitoring service already exposes (Stats / DevicePerformance /
 // NetworkTraffic / Alerts) but expressed in primitive types so pdfkit has
 // no compile-time dependency on the monitoring package.
 type MonitoringPDFInput struct {
@@ -22,8 +22,11 @@ type MonitoringPDFInput struct {
 	EndTime     time.Time
 	Sections    []string // which sections to render: stats / charts / alerts
 
-	Stats             *MonitoringStatsInput
-	SystemPerformance []TimeSeriesPoint
+	Stats *MonitoringStatsInput
+	// PerformanceLabels 性能趋势 X 轴时间戳（RFC3339），与每台设备的 CPU/Memory 等长
+	PerformanceLabels []string
+	// DevicePerformance 按设备的 CPU/内存序列；缺测点已由调用方补 0
+	DevicePerformance []DevicePerformanceSeries
 	NetworkTraffic    []NetworkTrafficPoint
 	Alerts            []MonitoringAlertInput
 }
@@ -38,13 +41,11 @@ type MonitoringStatsInput struct {
 	PeakInbound  float64 // 24小时下行(入站)峰值，bps
 }
 
-// TimeSeriesPoint is one (timestamp, cpu/mem/net) sample for the system
-// performance chart.
-type TimeSeriesPoint struct {
-	Timestamp      string // pre-formatted label for the X axis
-	CPUUsage       float64
-	MemoryUsage    float64
-	NetworkTraffic float64
+// DevicePerformanceSeries 一台设备的 CPU/内存时序（百分比）。
+type DevicePerformanceSeries struct {
+	Name   string
+	CPU    []float64
+	Memory []float64
 }
 
 // NetworkTrafficPoint is one (timestamp, in, out) sample.
@@ -128,7 +129,7 @@ func RenderMonitoringPDF(path string, input MonitoringPDFInput) error {
 	}
 
 	if hasSection(sections, "charts") {
-		renderMonitoringCharts(pdf, input.SystemPerformance, input.NetworkTraffic)
+		renderMonitoringCharts(pdf, input.PerformanceLabels, input.DevicePerformance, input.NetworkTraffic)
 		pdf.Ln(SpaceMD)
 	}
 
@@ -175,30 +176,37 @@ func formatBandwidthBps(bps float64) string {
 	}
 }
 
-func renderMonitoringCharts(pdf *gofpdf.Fpdf, perf []TimeSeriesPoint, traffic []NetworkTrafficPoint) {
+// 与页面一致：最多绘制 5 台设备（颜色 = 设备、线型 = 指标），更多设备只在标题提示
+const maxPDFPerformanceDevices = 5
+
+var devicePerformancePalette = []Color{ColorPrimary, ColorSuccess, ColorAmber500, ColorRose500, ColorIndigo300}
+
+func renderMonitoringCharts(pdf *gofpdf.Fpdf, perfLabels []string, devices []DevicePerformanceSeries, traffic []NetworkTrafficPoint) {
 	SectionTitle(pdf, "性能趋势")
-	if len(perf) == 0 {
-		EmptyStateWithHint(pdf, "暂无系统性能数据", "请扩大时间范围或检查 Agent 上报状态")
+	if len(devices) == 0 || len(perfLabels) == 0 {
+		EmptyStateWithHint(pdf, "暂无系统性能数据", "请扩大时间范围或检查设备采集状态")
 	} else {
-		labels := make([]string, len(perf))
-		cpuValues := make([]float64, len(perf))
-		memValues := make([]float64, len(perf))
-		netValues := make([]float64, len(perf))
-		for i, p := range perf {
-			labels[i] = shortenTimestamp(p.Timestamp)
-			cpuValues[i] = p.CPUUsage
-			memValues[i] = p.MemoryUsage
-			netValues[i] = p.NetworkTraffic
+		shown := devices
+		if len(shown) > maxPDFPerformanceDevices {
+			shown = shown[:maxPDFPerformanceDevices]
 		}
-		spec := LineSpec{
-			Title:   "CPU / 内存 / 网络",
-			XLabels: labels,
-			Series: []LineSeries{
-				{Name: "CPU%", Color: ColorPrimary, Values: cpuValues},
-				{Name: "Memory%", Color: ColorIndigo400, Values: memValues},
-				{Name: "Network", Color: ColorEmerald500, Values: netValues},
-			},
+		labels := make([]string, len(perfLabels))
+		for i, ts := range perfLabels {
+			labels[i] = shortenTimestamp(ts)
 		}
+		series := make([]LineSeries, 0, len(shown)*2)
+		for i, dev := range shown {
+			color := devicePerformancePalette[i%len(devicePerformancePalette)]
+			series = append(series,
+				LineSeries{Name: dev.Name + " CPU", Color: color, Values: dev.CPU},
+				LineSeries{Name: dev.Name + " 内存", Color: color, Values: dev.Memory, DashArray: []float64{6, 4}},
+			)
+		}
+		title := "CPU（实线）/ 内存（虚线），单位 %"
+		if len(devices) > len(shown) {
+			title = fmt.Sprintf("%s · 显示 %d/%d 台设备", title, len(shown), len(devices))
+		}
+		spec := LineSpec{Title: title, XLabels: labels, Series: series, NoFill: true}
 		if png, err := RenderLineChart(spec); err == nil {
 			pageW, _ := pdf.GetPageSize()
 			left, _, right, _ := pdf.GetMargins()

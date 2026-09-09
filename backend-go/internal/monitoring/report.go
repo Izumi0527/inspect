@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -53,7 +54,7 @@ type MonitoringReportData struct {
 	EndTime           time.Time
 	Sections          []string
 	Stats             *MonitoringStats
-	SystemPerformance []SystemPerformancePoint
+	DevicePerformance []DevicePerformancePoint
 	NetworkTraffic    []NetworkTrafficPoint
 	Alerts            []MonitoringReportAlert
 }
@@ -119,7 +120,7 @@ func (w *MetricsWriter) ExportMonitoringReport(
 	}
 
 	if hasReportSection(sections, "charts") {
-		perf, err := w.GetSystemPerformanceHistory(ctx, start, end, nil, nil)
+		perf, err := w.GetDevicePerformanceHistory(ctx, start, end, nil)
 		if err != nil {
 			return MonitoringReportExportResult{}, err
 		}
@@ -127,7 +128,7 @@ func (w *MetricsWriter) ExportMonitoringReport(
 		if err != nil {
 			return MonitoringReportExportResult{}, err
 		}
-		data.SystemPerformance = perf
+		data.DevicePerformance = perf
 		data.NetworkTraffic = traffic
 	}
 
@@ -210,23 +211,19 @@ func renderMonitoringReportCSV(data MonitoringReportData) ([]byte, error) {
 
 	if hasReportSection(data.Sections, "charts") {
 		writeRow("系统性能历史")
-		if len(data.SystemPerformance) == 0 {
+		perfRows := flattenDevicePerformanceRows(data.DevicePerformance)
+		if len(perfRows) == 0 {
 			writeRow("暂无系统性能数据")
 		} else {
-			writeRow("timestamp", "cpu_usage", "memory_usage", "network_traffic")
-			perf := data.SystemPerformance
-			if len(perf) > maxReportRows {
-				perf = perf[:maxReportRows]
+			writeRow("timestamp", "device_name", "cpu_usage", "memory_usage")
+			shown := perfRows
+			if len(shown) > maxReportRows {
+				shown = shown[:maxReportRows]
 			}
-			for _, point := range perf {
-				writeRow(
-					point.Timestamp,
-					formatFloat(point.CPUUsage, 2),
-					formatFloat(point.MemoryUsage, 2),
-					formatFloat(point.NetworkTraffic, 2),
-				)
+			for _, row := range shown {
+				writeRow(row...)
 			}
-			if len(data.SystemPerformance) > maxReportRows {
+			if len(perfRows) > maxReportRows {
 				writeRow("已截断", fmt.Sprintf("仅保留前%d条", maxReportRows))
 			}
 		}
@@ -370,29 +367,29 @@ func renderMonitoringReportExcel(data MonitoringReportData) ([]byte, error) {
 		if err := writeRow("系统性能历史"); err != nil {
 			return nil, err
 		}
-		if len(data.SystemPerformance) == 0 {
+		perfRows := flattenDevicePerformanceRows(data.DevicePerformance)
+		if len(perfRows) == 0 {
 			if err := writeRow("暂无系统性能数据"); err != nil {
 				return nil, err
 			}
 		} else {
-			if err := writeRow("timestamp", "cpu_usage", "memory_usage", "network_traffic"); err != nil {
+			if err := writeRow("timestamp", "device_name", "cpu_usage", "memory_usage"); err != nil {
 				return nil, err
 			}
-			perf := data.SystemPerformance
-			if len(perf) > maxReportRows {
-				perf = perf[:maxReportRows]
+			shown := perfRows
+			if len(shown) > maxReportRows {
+				shown = shown[:maxReportRows]
 			}
-			for _, point := range perf {
-				if err := writeRow(
-					point.Timestamp,
-					formatFloat(point.CPUUsage, 2),
-					formatFloat(point.MemoryUsage, 2),
-					formatFloat(point.NetworkTraffic, 2),
-				); err != nil {
+			for _, row := range shown {
+				cells := make([]interface{}, len(row))
+				for i, cell := range row {
+					cells[i] = cell
+				}
+				if err := writeRow(cells...); err != nil {
 					return nil, err
 				}
 			}
-			if len(data.SystemPerformance) > maxReportRows {
+			if len(perfRows) > maxReportRows {
 				if err := writeRow("已截断", fmt.Sprintf("仅保留前%d条", maxReportRows)); err != nil {
 					return nil, err
 				}
@@ -525,14 +522,7 @@ func buildMonitoringPDFInput(data MonitoringReportData) pdfkit.MonitoringPDFInpu
 			PeakInbound:  data.Stats.PeakInbound,
 		}
 	}
-	for _, p := range data.SystemPerformance {
-		input.SystemPerformance = append(input.SystemPerformance, pdfkit.TimeSeriesPoint{
-			Timestamp:      p.Timestamp,
-			CPUUsage:       p.CPUUsage,
-			MemoryUsage:    p.MemoryUsage,
-			NetworkTraffic: p.NetworkTraffic,
-		})
-	}
+	input.PerformanceLabels, input.DevicePerformance = projectDevicePerformance(data.DevicePerformance)
 	for _, p := range data.NetworkTraffic {
 		input.NetworkTraffic = append(input.NetworkTraffic, pdfkit.NetworkTrafficPoint{
 			Timestamp: p.Timestamp,
@@ -701,4 +691,66 @@ func queryReportAlerts(ctx context.Context, db *gorm.DB, start time.Time, end ti
 
 func formatFloat(value float64, precision int) string {
 	return strconv.FormatFloat(value, 'f', precision, 64)
+}
+
+// flattenDevicePerformanceRows 把按时间组织的点展开为 (timestamp, device_name, cpu, memory) 行，
+// 同一时间桶内按设备名排序，保证 CSV/Excel 输出稳定。
+func flattenDevicePerformanceRows(points []DevicePerformancePoint) [][]string {
+	rows := make([][]string, 0, len(points))
+	for _, point := range points {
+		names := make([]string, 0, len(point.Devices))
+		for name := range point.Devices {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			value := point.Devices[name]
+			rows = append(rows, []string{
+				point.Timestamp,
+				name,
+				formatFloat(value.CPU, 2),
+				formatFloat(value.Memory, 2),
+			})
+		}
+	}
+	return rows
+}
+
+// projectDevicePerformance 把按时间组织的点转成按设备组织的序列供 pdfkit 绘线：
+// 时间轴取全部时间桶，某设备在某桶无数据补 0（与页面图表一致）；设备按名称排序使渲染结果稳定。
+func projectDevicePerformance(points []DevicePerformancePoint) ([]string, []pdfkit.DevicePerformanceSeries) {
+	if len(points) == 0 {
+		return nil, nil
+	}
+	nameSet := make(map[string]struct{})
+	for _, point := range points {
+		for name := range point.Devices {
+			nameSet[name] = struct{}{}
+		}
+	}
+	names := make([]string, 0, len(nameSet))
+	for name := range nameSet {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	labels := make([]string, len(points))
+	series := make([]pdfkit.DevicePerformanceSeries, len(names))
+	for i, name := range names {
+		series[i] = pdfkit.DevicePerformanceSeries{
+			Name:   name,
+			CPU:    make([]float64, len(points)),
+			Memory: make([]float64, len(points)),
+		}
+	}
+	for ti, point := range points {
+		labels[ti] = point.Timestamp
+		for i, name := range names {
+			if value, ok := point.Devices[name]; ok {
+				series[i].CPU[ti] = value.CPU
+				series[i].Memory[ti] = value.Memory
+			}
+		}
+	}
+	return labels, series
 }
