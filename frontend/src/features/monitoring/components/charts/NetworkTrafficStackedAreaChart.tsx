@@ -9,8 +9,7 @@ import { localPoint } from '@visx/event'
 import { useTooltip, TooltipWithBounds, defaultStyles } from '@visx/tooltip'
 import { LinearGradient } from '@visx/gradient'
 import { ChartContainer } from '@/components/atoms/charts'
-import { formatDateTimeMDHM, formatTimeHM } from '@/utils/formatters'
-import { resolveTickStepMinutes } from '../../utils/monitoring'
+import { resolveTickStepMinutes, resolveTimeAxisLabelFormatter } from '../../utils/monitoring'
 import type { NetworkTrafficDataPoint } from '../../types'
 
 /**
@@ -88,25 +87,7 @@ export function NetworkTrafficStackedAreaChart({
     total: number
   }>()
 
-  const showDateOnAxis = useMemo(() => {
-    const trimmed = String(timeRange ?? '').trim().toLowerCase()
-    const match = /^(\d+)([hdw])$/.exec(trimmed)
-    if (!match) return false
-    const value = Number.parseInt(match[1], 10)
-    const unit = match[2]
-    if (!Number.isFinite(value) || value <= 0) return false
-    return !(unit === 'h' && value <= 24)
-  }, [timeRange])
-
-  const formatTimeLabel = useMemo(() => {
-    return (date: Date): string => {
-      if (Number.isNaN(date.getTime())) return '-'
-      if (!showDateOnAxis) {
-        return formatTimeHM(date)
-      }
-      return formatDateTimeMDHM(date)
-    }
-  }, [showDateOnAxis])
+  const formatTimeLabel = useMemo(() => resolveTimeAxisLabelFormatter(timeRange), [timeRange])
 
   // 数据处理:将后端Mbps转为bps，计算堆叠值
   const processedData = useMemo(() => {

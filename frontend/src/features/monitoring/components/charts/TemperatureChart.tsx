@@ -1,7 +1,11 @@
 import { useMemo } from 'react'
 import { LineChartComponent } from '@/components/atoms/charts'
-import { formatDateTimeMDHM, formatTimeHM } from '@/utils/formatters'
-import { resolveTickStepMinutes, selectTimeTickLabels } from '../../utils/monitoring'
+import {
+  DEVICE_SERIES_COLORS,
+  resolveTickStepMinutes,
+  resolveTimeAxisLabelFormatter,
+  selectTimeTickLabels,
+} from '../../utils/monitoring'
 import type { TemperatureDataPoint } from '../../types'
 
 interface TemperatureChartProps {
@@ -30,34 +34,7 @@ export function TemperatureChart({
   temperatureThreshold = 75, // 默认75°C为阈值
   timeRange,
 }: TemperatureChartProps) {
-  const showDateOnAxis = useMemo(() => {
-    const trimmed = String(timeRange ?? '').trim().toLowerCase()
-    const match = /^(\d+)([hdw])$/.exec(trimmed)
-    if (!match) return false
-    const value = Number.parseInt(match[1], 10)
-    const unit = match[2]
-    if (!Number.isFinite(value) || value <= 0) return false
-    return !(unit === 'h' && value <= 24)
-  }, [timeRange])
-
-  const formatTimeLabel = useMemo(() => {
-    return (date: Date): string => {
-      if (Number.isNaN(date.getTime())) return '-'
-      if (!showDateOnAxis) {
-        return formatTimeHM(date)
-      }
-      return formatDateTimeMDHM(date)
-    }
-  }, [showDateOnAxis])
-
-  // 预定义的设备颜色 - 更鲜艳的配色
-  const deviceColors = [
-    '#0891B2', // cyan-600
-    '#0EA5E9', // 天蓝色
-    '#22C55E', // 绿色
-    '#F59E0B', // 橙色
-    '#EF4444', // 红色
-  ]
+  const formatTimeLabel = useMemo(() => resolveTimeAxisLabelFormatter(timeRange), [timeRange])
 
   // 数据转换:将时间戳和设备温度展平
   const { chartData, deviceNames } = useMemo(() => {
@@ -107,7 +84,7 @@ export function TemperatureChart({
     return deviceNames.map((deviceName, index) => ({
       key: deviceName,
       name: deviceName,
-      color: deviceColors[index % deviceColors.length],
+      color: DEVICE_SERIES_COLORS[index % DEVICE_SERIES_COLORS.length],
       strokeWidth: 2.5,
     }))
   }, [deviceNames])

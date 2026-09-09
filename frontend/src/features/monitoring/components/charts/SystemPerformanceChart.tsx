@@ -1,7 +1,11 @@
 import { useMemo } from 'react'
 import { LineChartComponent } from '@/components/atoms/charts'
-import { formatDateTimeMDHM, formatTimeHM } from '@/utils/formatters'
-import { resolveTickStepMinutes, selectTimeTickLabels } from '../../utils/monitoring'
+import {
+  DEVICE_SERIES_COLORS,
+  resolveTickStepMinutes,
+  resolveTimeAxisLabelFormatter,
+  selectTimeTickLabels,
+} from '../../utils/monitoring'
 import { PERFORMANCE_METRICS, type PerformanceMetricKey } from './PerformanceMetricLegend'
 import type { SystemPerformanceDataPoint } from '../../types'
 
@@ -18,15 +22,6 @@ interface SystemPerformanceChartProps {
 
 /** 最多绘制的设备数（避免 2 条/台 的曲线过于拥挤，更多设备请用页面顶部设备筛选） */
 const MAX_DEVICES = 5
-
-/** 预定义的设备颜色（与温度图一致，颜色 = 设备） */
-const DEVICE_COLORS = [
-  '#0891B2', // cyan-600
-  '#0EA5E9', // 天蓝色
-  '#22C55E', // 绿色
-  '#F59E0B', // 橙色
-  '#EF4444', // 红色
-]
 
 const EMPTY_HIDDEN: ReadonlySet<PerformanceMetricKey> = new Set()
 
@@ -45,25 +40,7 @@ export function SystemPerformanceChart({
   timeRange,
   hiddenMetrics = EMPTY_HIDDEN,
 }: SystemPerformanceChartProps) {
-  const showDateOnAxis = useMemo(() => {
-    const trimmed = String(timeRange ?? '').trim().toLowerCase()
-    const match = /^(\d+)([hdw])$/.exec(trimmed)
-    if (!match) return false
-    const value = Number.parseInt(match[1], 10)
-    const unit = match[2]
-    if (!Number.isFinite(value) || value <= 0) return false
-    return !(unit === 'h' && value <= 24)
-  }, [timeRange])
-
-  const formatTimeLabel = useMemo(() => {
-    return (date: Date): string => {
-      if (Number.isNaN(date.getTime())) return '-'
-      if (!showDateOnAxis) {
-        return formatTimeHM(date)
-      }
-      return formatDateTimeMDHM(date)
-    }
-  }, [showDateOnAxis])
+  const formatTimeLabel = useMemo(() => resolveTimeAxisLabelFormatter(timeRange), [timeRange])
 
   // 数据转换：每台设备的 cpu/memory 展平为 `${设备名}:cpu` / `${设备名}:memory` 列
   const { chartData, deviceNames } = useMemo(() => {
@@ -98,7 +75,7 @@ export function SystemPerformanceChart({
     return selectTimeTickLabels(data, resolveTickStepMinutes(timeRange), formatTimeLabel)
   }, [data, formatTimeLabel, timeRange])
 
-  const colorOf = (deviceIndex: number) => DEVICE_COLORS[deviceIndex % DEVICE_COLORS.length]
+  const colorOf = (deviceIndex: number) => DEVICE_SERIES_COLORS[deviceIndex % DEVICE_SERIES_COLORS.length]
 
   // 曲线 = 设备 × 可见指标
   const lines = useMemo(() => {

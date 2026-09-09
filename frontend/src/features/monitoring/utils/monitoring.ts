@@ -1,3 +1,4 @@
+import { formatDateTimeMDHM, formatTimeHM } from '@/utils/formatters'
 import type { MonitoringSectionKey } from '../types'
 
 export const TIME_RANGE_OPTIONS = [
@@ -101,6 +102,35 @@ export function selectTimeTickLabels(
     labels.push(format(new Date(time)))
   }
   return labels
+}
+
+/** 设备曲线调色板（颜色 = 设备），温度图与性能图共用，最多 5 台 */
+export const DEVICE_SERIES_COLORS: readonly string[] = [
+  '#0891B2', // cyan-600
+  '#0EA5E9', // 天蓝色
+  '#22C55E', // 绿色
+  '#F59E0B', // 橙色
+  '#EF4444', // 红色
+]
+
+/**
+ * X 轴时间标签格式：范围不超过 24h 只显示 时:分；更长范围带上 月/日，避免跨天刻度歧义。
+ * 缺省或非法范围按不超过 24h 处理。
+ */
+export function resolveTimeAxisLabelFormatter(timeRange: string | undefined): (date: Date) => string {
+  const showDate = shouldShowDateOnTimeAxis(timeRange)
+  return (date: Date): string => {
+    if (Number.isNaN(date.getTime())) return '-'
+    return showDate ? formatDateTimeMDHM(date) : formatTimeHM(date)
+  }
+}
+
+function shouldShowDateOnTimeAxis(timeRange: string | undefined): boolean {
+  const match = /^(\d+)([hdw])$/.exec(String(timeRange ?? '').trim().toLowerCase())
+  if (!match) return false
+  const value = Number.parseInt(match[1], 10)
+  if (!Number.isFinite(value) || value <= 0) return false
+  return !(match[2] === 'h' && value <= 24)
 }
 
 export function formatDurationFromMs(ms: number): string {
