@@ -631,9 +631,16 @@ func (s *Service) collectEntries(
 	if !hasSSH {
 		return nil, "snmp", snmpErr
 	}
-	if snmpErr != nil && s != nil && s.logger != nil {
-		s.logger.Warn("SNMP 采集失败，回退 SSH",
-			zap.Int("device_id", info.ID), zap.String("log_type", logType), zap.Error(snmpErr))
+	if s != nil && s.logger != nil {
+		if snmpErr != nil {
+			s.logger.Warn("SNMP 采集失败，回退 SSH",
+				zap.Int("device_id", info.ID), zap.String("log_type", logType), zap.Error(snmpErr))
+		} else {
+			// 实测 S5700 V200R001：未执行 snmp-agent notification-log enable 时 nlmLogTable 恒为空；
+			// 本机不是设备的 snmp-agent target-host 时 hwAlarmActiveTable 也读不到——两者都表现为空表。
+			s.logger.Info("SNMP 采集无数据（设备未开启 notification-log 或本机非其 Trap 主机），回退 SSH",
+				zap.Int("device_id", info.ID), zap.String("log_type", logType))
+		}
 	}
 	entries, err := ssh.Collect(ctx, info, logType, maxEntries)
 	return entries, "ssh_fallback", err
@@ -880,24 +887,32 @@ func isTrapSource(source string) bool {
 // filterNewLogRecords 纯函数：在已存记录 existing 的基础上，过滤 records 中与已存或批内重复的项，
 // 返回需要新插入的记录（保持原顺序）。不访问数据库，便于单测。
 //
-// 除精确自然键外，snmp 与 snmp_trap 两种来源之间按「同设备 + 同消息 + 时间差 ≤ 5 分钟」折叠。
+// 除精确自然键外，snmp 与 snmp_trap 两种来源之间按「同设备 + 同消息 + 时间差 ≤ 5 分钟」折叠；
+// 同一来源内不折叠——同一接口 1 分钟内两次 linkDown 是两次真实事件，只是时间戳不同。
 func filterNewLogRecords(records []DeviceLog, existing []DeviceLog) []DeviceLog {
+	type trapSeenAt struct {
+		source string
+		at     time.Time
+	}
 	seen := make(map[logDedupKey]struct{}, len(records)+len(existing))
-	trapSeen := make(map[string][]time.Time)
+	trapSeen := make(map[string][]trapSeenAt)
 	trapKey := func(r DeviceLog) string { return fmt.Sprintf("%d\x00%s", r.DeviceID, r.Message) }
 	remember := func(r DeviceLog) {
 		seen[logDedupKeyOf(r)] = struct{}{}
 		if isTrapSource(r.Source) {
 			key := trapKey(r)
-			trapSeen[key] = append(trapSeen[key], r.LogTimestamp.UTC())
+			trapSeen[key] = append(trapSeen[key], trapSeenAt{source: r.Source, at: r.LogTimestamp.UTC()})
 		}
 	}
 	nearbyTrap := func(r DeviceLog) bool {
 		if !isTrapSource(r.Source) {
 			return false
 		}
-		for _, ts := range trapSeen[trapKey(r)] {
-			diff := r.LogTimestamp.UTC().Sub(ts)
+		for _, prev := range trapSeen[trapKey(r)] {
+			if prev.source == r.Source {
+				continue
+			}
+			diff := r.LogTimestamp.UTC().Sub(prev.at)
 			if diff < 0 {
 				diff = -diff
 			}

@@ -414,26 +414,27 @@ func buildTrapLog(snapshot trapSnapshot) (string, string, string, string) {
 	message := buildTrapMessage(snapshot)
 	level := "info"
 	facility := "snmp"
-	decided := false
+	levelDecided, facilityDecided := false, false
 	if snapshot.TrapOID != "" {
 		if overrideLevel, overrideFacility, ok := trapOverrideForOID(snapshot.TrapOID); ok {
-			level, facility, decided = overrideLevel, overrideFacility, true
+			level, facility = overrideLevel, overrideFacility
+			levelDecided, facilityDecided = true, true
 		}
 	}
 	catalog := alarmCatalog()
-	if !decided && catalog != nil {
+	if !levelDecided && catalog != nil {
 		if def, ok := catalog.LookupTrap(snapshot.TrapOID); ok {
-			level, facility, decided = def.Level, def.Facility, true
+			level, facility = def.Level, def.Facility
+			levelDecided, facilityDecided = true, true
 		}
 		if severity, ok := catalog.SeverityFromVarbinds(trapVarValues(snapshot.Variables)); ok {
-			level = severity
-			if !decided {
-				decided = true
-			}
+			level, levelDecided = severity, true
 		}
 	}
-	if !decided {
+	if !levelDecided {
 		level = detectLogLevel(message)
+	}
+	if !facilityDecided {
 		if detected := detectLogFacility(message); detected != "system" {
 			facility = detected
 		}

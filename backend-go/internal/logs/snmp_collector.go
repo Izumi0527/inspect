@@ -21,6 +21,8 @@ import (
 // 依据华为 S 系列产品文档（MIB 参考）：
 //   - NOTIFICATION-LOG-MIB nlmLogTable / nlmLogVariableTable（§1.166）：设备已发出的 Trap 日志，
 //     含时间、Trap OID 与变量绑定，「该表对读取没有限制」——即 display trapbuffer 的 SNMP 等价物；
+//     但 nlmConfigLogTable 不支持 SNMP 创建，设备须先执行 snmp-agent notification-log enable，
+//     否则该表恒为空（实测 S5700-28C-HI V200R001C00）；
 //   - HUAWEI-ALARM-MIB hwAlarmActiveTable（§1.13.4.3）：活动告警表，「只能读取 Trap 主机的数据」，
 //     本系统 IP 未配置为设备 snmp-agent target-host 时读到空表，由服务层回退 SSH；
 //   - display logbuffer 的文本内容在文档中没有任何 MIB 暴露（HUAWEI-INFOCENTER-MIB 仅配置项），
@@ -222,9 +224,17 @@ func parseNotificationLogPDUs(logPDUs, varPDUs []gosnmp.SnmpPDU, deviceID int, c
 			value = cell.values[column]
 		}
 		if value == "" {
-			for _, v := range cell.values {
-				value = v
-				break
+			// 类型列缺失或未知：取列号最小的那个值列，保证结果可复现
+			columns := make([]string, 0, len(cell.values))
+			for column := range cell.values {
+				columns = append(columns, column)
+			}
+			sort.Slice(columns, func(i, j int) bool { return lastIndexSegment(columns[i]) < lastIndexSegment(columns[j]) })
+			for _, column := range columns {
+				if cell.values[column] != "" {
+					value = cell.values[column]
+					break
+				}
 			}
 		}
 		r.vars = append(r.vars, trapVar{OID: cell.id, Type: "nlm:" + cell.valueType, Value: value})

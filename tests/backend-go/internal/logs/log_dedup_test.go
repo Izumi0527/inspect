@@ -172,6 +172,14 @@ func TestFilterNewLogRecords_TrapPolledAfterLiveTrap(t *testing.T) {
 		}
 	})
 
+	t.Run("同一来源内相同消息不同时间戳是两次真实事件，不折叠", func(t *testing.T) {
+		existing := []logs.DeviceLog{mkSourcedLog("snmp", base, msg)}
+		records := []logs.DeviceLog{mkSourcedLog("snmp", base.Add(time.Minute), msg)}
+		if got := filterNewLogRecords(records, existing); len(got) != 1 {
+			t.Fatalf("同为 snmp 来源的两次 linkDown 应各保留一条，实际保留 %d", len(got))
+		}
+	})
+
 	t.Run("SSH 来源不参与跨来源折叠", func(t *testing.T) {
 		existing := []logs.DeviceLog{mkSourcedLog("ssh", base, msg)}
 		records := []logs.DeviceLog{mkSourcedLog("snmp", base.Add(time.Second), msg)}
