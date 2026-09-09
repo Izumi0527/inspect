@@ -353,7 +353,7 @@ func buildTrapSnapshot(packet *gosnmp.SnmpPacket, addr *net.UDPAddr) trapSnapsho
 		return snapshot
 	}
 
-	snapshot.Enterprise = strings.TrimSpace(packet.Enterprise)
+	snapshot.Enterprise = snmpmib.NormalizeOID(packet.Enterprise)
 	snapshot.Version = fmt.Sprintf("%v", packet.Version)
 	snapshot.PDUType = fmt.Sprintf("%v", packet.PDUType)
 	snapshot.TrapOID = extractTrapOID(packet)
@@ -361,18 +361,21 @@ func buildTrapSnapshot(packet *gosnmp.SnmpPacket, addr *net.UDPAddr) trapSnapsho
 	return snapshot
 }
 
+// extractTrapOID 取 snmpTrapOID.0 的值作为 Trap 标识；v1 Trap 无此变量时退回 enterprise。
+// gosnmp 解码出的 Name 与 OID 型 Value 均带前导点，比较与返回前都要归一，
+// 否则注册表（无前导点）永远匹配不上。
 func extractTrapOID(packet *gosnmp.SnmpPacket) string {
 	if packet == nil {
 		return ""
 	}
 	core := trapCoreOIDs()
 	for _, variable := range packet.Variables {
-		if variable.Name != core.TrapOID {
+		if snmpmib.NormalizeOID(variable.Name) != core.TrapOID {
 			continue
 		}
-		return normalizeTrapValue(variable.Value)
+		return snmpmib.NormalizeOID(normalizeTrapValue(variable.Value))
 	}
-	enterprise := strings.TrimSpace(packet.Enterprise)
+	enterprise := snmpmib.NormalizeOID(packet.Enterprise)
 	if enterprise != "" {
 		if packet.PDUType == gosnmp.Trap {
 			return fmt.Sprintf("%s (generic=%d specific=%d)", enterprise, packet.GenericTrap, packet.SpecificTrap)
@@ -386,11 +389,15 @@ func buildTrapVars(vars []gosnmp.SnmpPDU) []trapVar {
 	result := make([]trapVar, 0, len(vars))
 	for _, variable := range vars {
 		value := normalizeTrapValue(variable.Value)
-		if isSensitiveTrapOID(variable.Name) {
+		if variable.Type == gosnmp.ObjectIdentifier {
+			value = snmpmib.NormalizeOID(value)
+		}
+		name := snmpmib.NormalizeOID(variable.Name)
+		if isSensitiveTrapOID(name) {
 			value = "***"
 		}
 		result = append(result, trapVar{
-			OID:   variable.Name,
+			OID:   name,
 			Type:  fmt.Sprintf("%v", variable.Type),
 			Value: value,
 		})
@@ -398,20 +405,35 @@ func buildTrapVars(vars []gosnmp.SnmpPDU) []trapVar {
 	return result
 }
 
+// buildTrapLog 由快照得出日志正文、级别、设施与原文。
+//
+// 级别/设施判定顺序：注册表手工覆盖 → 设备随 Trap 携带的严重级别变量
+// （hwBaseTrapSeverity / hwAlarmSeverity，设备说什么就是什么）→ 华为告警知识库按 OID 的
+// 默认判定 → 消息关键词兜底。前两级来源于人或设备，后两级是推断，故顺序不可调换。
 func buildTrapLog(snapshot trapSnapshot) (string, string, string, string) {
 	message := buildTrapMessage(snapshot)
 	level := "info"
 	facility := "snmp"
+	decided := false
 	if snapshot.TrapOID != "" {
 		if overrideLevel, overrideFacility, ok := trapOverrideForOID(snapshot.TrapOID); ok {
-			level = overrideLevel
-			facility = overrideFacility
+			level, facility, decided = overrideLevel, overrideFacility, true
 		}
 	}
-	if level == "info" {
-		level = detectLogLevel(message)
+	catalog := alarmCatalog()
+	if !decided && catalog != nil {
+		if def, ok := catalog.LookupTrap(snapshot.TrapOID); ok {
+			level, facility, decided = def.Level, def.Facility, true
+		}
+		if severity, ok := catalog.SeverityFromVarbinds(trapVarValues(snapshot.Variables)); ok {
+			level = severity
+			if !decided {
+				decided = true
+			}
+		}
 	}
-	if facility == "snmp" {
+	if !decided {
+		level = detectLogLevel(message)
 		if detected := detectLogFacility(message); detected != "system" {
 			facility = detected
 		}
@@ -419,6 +441,15 @@ func buildTrapLog(snapshot trapSnapshot) (string, string, string, string) {
 
 	raw := buildTrapRaw(snapshot)
 	return message, level, facility, raw
+}
+
+// trapVarValues 把变量列表压成 OID → 值，供知识库按 OID 查严重级别变量。
+func trapVarValues(vars []trapVar) map[string]string {
+	values := make(map[string]string, len(vars))
+	for _, variable := range vars {
+		values[variable.OID] = variable.Value
+	}
+	return values
 }
 
 func buildTrapMessage(snapshot trapSnapshot) string {
@@ -452,17 +483,76 @@ func buildTrapSummary(snapshot trapSnapshot) string {
 		core.AgentAddress: {},
 	}
 
+	catalog := alarmCatalog()
 	parts := make([]string, 0, maxTrapSummaryVars)
 	for _, variable := range snapshot.Variables {
 		if _, ok := ignored[variable.OID]; ok {
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("%s=%s", variable.OID, variable.Value))
+		parts = append(parts, fmt.Sprintf("%s=%s", describeTrapVarName(catalog, variable.OID), describeTrapVarValue(catalog, variable.OID, variable.Value)))
 		if len(parts) >= maxTrapSummaryVars {
 			break
 		}
 	}
 	return strings.Join(parts, "; ")
+}
+
+// describeTrapVarName 把变量实例 OID 渲染成「名称.实例」；知识库未收录时原样返回。
+func describeTrapVarName(catalog *snmpmib.AlarmCatalog, oid string) string {
+	node, instance, ok := catalog.LookupNode(oid)
+	if !ok {
+		return oid
+	}
+	if instance == "" {
+		return node.Name
+	}
+	return node.Name + "." + instance
+}
+
+// describeTrapVarValue 把整数枚举渲染成「名(值)」，如 cleared(1)、down(2)；其余原样。
+func describeTrapVarValue(catalog *snmpmib.AlarmCatalog, oid string, value string) string {
+	node, _, ok := catalog.LookupNode(oid)
+	if !ok || len(node.Enum) == 0 {
+		return value
+	}
+	if name, found := node.Enum[strings.TrimSpace(value)]; found {
+		return fmt.Sprintf("%s(%s)", name, strings.TrimSpace(value))
+	}
+	return value
+}
+
+// alarmCatalog 返回华为告警知识库；加载失败时返回 nil，各查找方法对 nil 接收者安全，
+// 解析退化为知识库接入前的行为而不中断 Trap 处理。
+func alarmCatalog() *snmpmib.AlarmCatalog {
+	catalog, err := snmpmib.DefaultAlarmCatalog()
+	if err != nil {
+		return nil
+	}
+	return catalog
+}
+
+// TrapLogForTest 是 buildTrapLog 的导出快照，供外置测试断言解析契约。
+type TrapLogForTest struct {
+	TrapOID  string
+	Message  string
+	Level    string
+	Facility string
+	Raw      string
+}
+
+// BuildTrapLogForTest 走与监听器 OnNewTrap 完全相同的快照与解析路径
+// （buildTrapSnapshot → buildTrapLog），生产路径不使用。
+func BuildTrapLogForTest(packet *gosnmp.SnmpPacket, sourceIP string) TrapLogForTest {
+	addr := &net.UDPAddr{IP: net.ParseIP(sourceIP)}
+	snapshot := buildTrapSnapshot(packet, addr)
+	message, level, facility, raw := buildTrapLog(snapshot)
+	return TrapLogForTest{
+		TrapOID:  snapshot.TrapOID,
+		Message:  message,
+		Level:    level,
+		Facility: facility,
+		Raw:      raw,
+	}
 }
 
 func buildTrapRaw(snapshot trapSnapshot) string {
