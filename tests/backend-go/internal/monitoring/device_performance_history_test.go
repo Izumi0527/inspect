@@ -33,11 +33,11 @@ func TestGetDevicePerformanceHistory_MinuteBucket_GroupsByDeviceAndMetric(t *tes
 			AddRow(bucket1, 2, "memory_usage", 50.0).
 			AddRow(bucket2, 1, "cpu_usage", 12.0))
 
-	mock.ExpectQuery(`(?is)SELECT id, name FROM "devices" WHERE id IN \(\$1,\$2\)`).
+	mock.ExpectQuery(deviceLabelQueryPattern + `\$1,\$2\)`).
 		WithArgs(1, 2).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).
-			AddRow(1, "SW-01").
-			AddRow(2, "SW-02"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "name_count"}).
+			AddRow(1, "SW-01", "10.0.0.1", 1).
+			AddRow(2, "SW-02", "10.0.0.2", 1))
 
 	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, []int{1, 2})
 	if err != nil {
@@ -94,9 +94,9 @@ func TestGetDevicePerformanceHistory_HourlyBucket_FallsBackWhenHourlyTableMissin
 			AddRow(bucket, 7, "cpu_usage", 33.0).
 			AddRow(bucket, 7, "memory_usage", 66.0))
 
-	mock.ExpectQuery(`(?is)SELECT id, name FROM "devices" WHERE id IN \(\$1\)`).
+	mock.ExpectQuery(deviceLabelQueryPattern + `\$1\)`).
 		WithArgs(7).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow(7, "CORE-A"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "name_count"}).AddRow(7, "CORE-A", "10.0.0.7", 1))
 
 	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil)
 	if err != nil {

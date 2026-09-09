@@ -1384,27 +1384,36 @@ func flattenSystemSeries(series map[time.Time]*SystemPerformancePoint) []SystemP
 	return result
 }
 
+// lookupDeviceNames 返回设备 ID → 展示名。devices.name 无唯一约束，重名设备若以名字作字典键
+// 会互相覆盖，因此对全表同名的设备追加唯一的 IP 作区分（"核心交换机 (10.0.0.2)"）。
+// 按全表而非本次结果集判重，保证同一设备的标签不随时间范围/筛选跳变。
 func (w *MetricsWriter) lookupDeviceNames(ctx context.Context, deviceIDs []int) (map[int]string, error) {
 	if len(deviceIDs) == 0 {
 		return map[int]string{}, nil
 	}
 
-	type deviceNameRow struct {
-		ID   int    `gorm:"column:id"`
-		Name string `gorm:"column:name"`
+	type deviceLabelRow struct {
+		ID        int    `gorm:"column:id"`
+		Name      string `gorm:"column:name"`
+		IPAddress string `gorm:"column:ip_address"`
+		NameCount int    `gorm:"column:name_count"`
 	}
 
-	nameRows := make([]deviceNameRow, 0)
-	if err := w.db.WithContext(ctx).
-		Table("devices").
-		Select("id, name").
-		Where("id IN ?", deviceIDs).
-		Scan(&nameRows).Error; err != nil {
+	rows := make([]deviceLabelRow, 0, len(deviceIDs))
+	query := `SELECT d.id, d.name, d.ip_address, COALESCE(c.name_count, 1) AS name_count
+FROM devices d
+LEFT JOIN (SELECT name, COUNT(*) AS name_count FROM devices GROUP BY name) c ON c.name = d.name
+WHERE d.id IN (?)`
+	if err := w.db.WithContext(ctx).Raw(query, deviceIDs).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 
-	names := make(map[int]string, len(nameRows))
-	for _, row := range nameRows {
+	names := make(map[int]string, len(rows))
+	for _, row := range rows {
+		if row.Name != "" && row.NameCount > 1 && row.IPAddress != "" {
+			names[row.ID] = fmt.Sprintf("%s (%s)", row.Name, row.IPAddress)
+			continue
+		}
 		names[row.ID] = row.Name
 	}
 	return names, nil
