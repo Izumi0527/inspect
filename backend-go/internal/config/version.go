@@ -19,7 +19,7 @@ import (
 //     版本一致性契约测试守护，漏改会在 go test 阶段失败。
 
 // defaultAppVersion 为编译期兜底版本号，语义见文件头注释。
-var defaultAppVersion = "1.1.5"
+var defaultAppVersion = "1.1.6"
 
 // buildInjectedVersion 由构建脚本经 ldflags 注入，空串表示「本次构建未注入」。
 // 与 defaultAppVersion 分离是为了能可靠区分「构建注入的真版本」与「源码兜底值」：
