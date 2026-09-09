@@ -611,6 +611,8 @@ type monitoringDashboardV2Envelope struct {
 }
 
 type monitoringDashboardV2Data struct {
+	// systemPerformance 是前端分区 id（类型/分区键/回退逻辑均绑定），指「系统性能趋势」分区
+	// 而非聚合方式；数据已按设备区分，勿为对齐元素类型而改动此键名
 	SystemPerformance        []monitoring.DevicePerformancePoint  `json:"systemPerformance"`
 	TemperatureHistory       []monitoring.TemperatureHistoryPoint `json:"temperatureHistory"`
 	DeviceStatusDistribution monitoring.DeviceStatusDistribution  `json:"deviceStatusDistribution"`
