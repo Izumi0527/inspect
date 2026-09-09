@@ -55,7 +55,7 @@ flowchart TB
 | 业务服务层 | `backend-go/internal/*` | 设备、监控、巡检、报表、告警、设置、日志、流量分析等领域逻辑 |
 | 数据访问层 | `backend-go/internal/db`、GORM 模型 | PostgreSQL 连接、迁移、事务、查询和 TimescaleDB 支撑 |
 | 缓存与实时层 | `backend-go/internal/redis`、`backend-go/internal/ws` | Redis 客户端、监控缓存、下载票据、WebSocket 连接与广播 |
-| 外部协议层 | `devices`、`logs`、`snmpmib` | SNMP、Trap、Syslog、设备探测、厂商 OID 注册表 |
+| 外部协议层 | `devices`、`logs`、`snmpmib` | SNMP、Trap、Syslog、设备探测、厂商 OID 注册表、华为告警知识库（`huawei-alarms.json`，由 `scripts/mib/extract-huawei-alarms.py` 从产品文档生成） |
 | 运行与部署层 | `docker-compose.*.yml`、`scripts/` | 容器编排、开发启动、数据库管理、缓存清理 |
 
 ## 3. 技术栈
@@ -133,7 +133,7 @@ C:\Coder\Inspect
 │  ├─ internal/alerts/         告警、告警评估、Trap/Syslog 桥接
 │  ├─ internal/settings/       系统设置、通知、备份、监控配置
 │  ├─ internal/dashboard/      首页聚合和通知状态
-│  ├─ internal/logs/           系统日志、Syslog、SNMP Trap
+│  ├─ internal/logs/           系统日志、Syslog、SNMP Trap、设备告警缓冲采集（SNMP 优先、SSH 兜底）
 │  ├─ internal/traffic/        流量分析
 │  ├─ internal/ws/             WebSocket 连接、权限、广播
 │  ├─ internal/snmpmib/        SNMP MIB / 厂商 OID 注册表
@@ -201,6 +201,13 @@ backend-go/internal/app/app.go
 - `settings.Service` 是多个模块读取系统配置的共享依赖。
 - `scheduler.Service` 统一执行周期性任务、设备扫描、指标采集、报表和告警评估。
 - `logs.SyslogReceiver` 与 `logs.SNMPTrapListener` 接收外部日志与 Trap。
+- `logs.Service.CollectDeviceLogs` 主动采集设备告警缓冲：`trap`/`alarm` 两类先走 SNMP
+  （NOTIFICATION-LOG-MIB `nlmLogTable`、HUAWEI-ALARM-MIB `hwAlarmActiveTable`），失败或空表回退 SSH
+  （`display trapbuffer` / `display alarm active`）；`display logbuffer` 文本无 MIB 等价物，
+  `system`/`interface`/`security`/`recent` 四类只走 SSH。设备侧前置：`snmp-agent notification-log enable`
+  （否则 `nlmLogTable` 恒空），本系统 IP 须为设备 `snmp-agent target-host`（否则活动告警表读空）。
+- Trap 级别/设施判定顺序：注册表 `trap.overrides` → 设备携带的 `hwBaseTrapSeverity`/`hwAlarmSeverity`
+  → 华为告警知识库（`snmpmib.AlarmCatalog`）→ 消息关键词。
 
 这种装配方式的特点是：业务包之间尽量通过服务接口和构造函数连接，避免包级全局状态；存在循环风险的地方使用适配器，例如 `wsAuthAdapter` 将认证服务适配给 WebSocket 鉴权。
 
