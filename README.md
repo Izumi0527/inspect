@@ -201,8 +201,6 @@ REDIS_URL=redis://:dev_redis_2024@127.0.0.1:16380/0
 | 后端健康检查 | `http://127.0.0.1:18080/health` |
 | API 根路径 | `http://127.0.0.1:18080/api/v1` |
 | WebSocket | `ws://127.0.0.1:18080/api/v1/ws/:user_id` |
-| pgAdmin | `http://localhost:5050` |
-| Redis Commander | `http://localhost:8081` |
 
 ## 更多文档
 

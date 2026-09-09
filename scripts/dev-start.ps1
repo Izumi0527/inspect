@@ -467,8 +467,6 @@ function Show-SetupSummary {
     Write-ColorOutput "  📚 API 说明: docs/api/openapi.json" "White"
     Write-ColorOutput "  🗄️ PostgreSQL: localhost:$postgresHostPort" "White"
     Write-ColorOutput "  🔴 Redis: localhost:$redisHostPort" "White"
-    Write-ColorOutput "  🔧 pgAdmin: http://localhost:5050" "White"
-    Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"
 
     Write-ColorOutput "`n🚀 启动开发服务器:" "Blue"
     Write-ColorOutput "  统一入口: .\scripts\dev-start.ps1" "White"
@@ -1096,10 +1094,6 @@ function Show-ServiceInfo {
     Write-ColorOutput "    - 密码: dev_password_2024" "Gray"
     Write-ColorOutput "  🔴 Redis: localhost:$redisHostPort" "White"
     Write-ColorOutput "    - 密码: dev_redis_2024" "Gray"
-    
-    Write-ColorOutput "`n🔧 管理工具:" "Blue"
-    Write-ColorOutput "  🔧 pgAdmin: http://localhost:5050" "White"
-    Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"
     
     Write-ColorOutput "`n🛠️ 常用命令:" "Blue"
     Write-ColorOutput "  停止数据库: .\scripts\db-manage.ps1 stop" "White"

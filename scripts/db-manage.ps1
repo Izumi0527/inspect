@@ -740,8 +740,6 @@ function Show-ServiceInfo {
     Write-ColorOutput "    - 数据库: inspect_system_dev" "Gray"
     Write-ColorOutput "  🔴 Redis: localhost:$redisHostPort" "White"
     Write-ColorOutput "    - 密码: dev_redis_2024" "Gray"
-    Write-ColorOutput "  🔧 pgAdmin: http://localhost:5050" "White"
-    Write-ColorOutput "  🔧 Redis Commander: http://localhost:8081" "White"
 }
 
 # 主执行函数

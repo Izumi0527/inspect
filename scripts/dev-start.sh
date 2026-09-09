@@ -499,8 +499,6 @@ show_setup_summary() {
     write_color "  📚 API 说明: docs/api/openapi.json" "White"
     write_color "  🗄️ PostgreSQL: localhost:$postgres_host_port" "White"
     write_color "  🔴 Redis: localhost:$redis_host_port" "White"
-    write_color "  🔧 pgAdmin: http://localhost:5050" "White"
-    write_color "  🔧 Redis Commander: http://localhost:8081" "White"
 
     write_color $'\n🚀 启动开发服务器:' "Blue"
     write_color "  统一入口: ./scripts/dev-start.sh" "White"
@@ -925,10 +923,6 @@ show_service_info() {
     write_color "    - 密码: dev_password_2024" "Gray"
     write_color "  🔴 Redis: localhost:$redis_host_port" "White"
     write_color "    - 密码: dev_redis_2024" "Gray"
-
-    write_color $'\n🔧 管理工具:' "Blue"
-    write_color "  🔧 pgAdmin: http://localhost:5050" "White"
-    write_color "  🔧 Redis Commander: http://localhost:8081" "White"
 
     write_color $'\n🛠️ 常用命令:' "Blue"
     write_color "  停止数据库: ./scripts/db-manage.sh stop" "White"

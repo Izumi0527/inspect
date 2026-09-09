@@ -575,8 +575,6 @@ show_service_info() {
     muted "    - 数据库: inspect_system_dev"
     printf '  🔴 Redis: localhost:%s\n' "$redis_host_port"
     muted "    - 密码: dev_redis_2024"
-    printf '  🔧 pgAdmin: http://localhost:5050\n'
-    printf '  🔧 Redis Commander: http://localhost:8081\n'
 }
 
 main() {

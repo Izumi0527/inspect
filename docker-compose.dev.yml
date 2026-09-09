@@ -165,42 +165,6 @@ services:
       retries: 3
       start_period: 60s
 
-  # ===== pgAdmin 数据库管理工具 =====
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: inspect-pgadmin-dev
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@inspect.dev
-      PGADMIN_DEFAULT_PASSWORD: dev_admin_2024
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres
-    networks:
-      - inspect_network
-    restart: unless-stopped
-    profiles:
-      - tools
-
-  # ===== Redis Commander 缓存管理工具 =====
-  redis-commander:
-    image: rediscommander/redis-commander:latest
-    container_name: inspect-redis-commander-dev
-    environment:
-      REDIS_HOSTS: local:redis:6379:0:dev_redis_2024
-    ports:
-      - "8081:8081"
-    depends_on:
-      - redis
-    networks:
-      - inspect_network
-    restart: unless-stopped
-    profiles:
-      - tools
-
 # ===== 数据卷定义 =====
 volumes:
   postgres_data:
@@ -208,6 +172,4 @@ volumes:
   redis_data:
     driver: local
   go_cache:
-    driver: local
-  pgadmin_data:
     driver: local

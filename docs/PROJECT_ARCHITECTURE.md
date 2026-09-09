@@ -446,8 +446,6 @@ sequenceDiagram
 |------|--------|------------|----------|
 | PostgreSQL / TimescaleDB | `inspect-postgres-dev` | `15500` | `5432` |
 | Redis | `inspect-redis-dev` | `16380` | `6379` |
-| pgAdmin | `inspect-pgadmin-dev` | `5050` | `80` |
-| Redis Commander | `inspect-redis-commander-dev` | `8081` | `8081` |
 
 ### 7.2 初始化文件
 
@@ -663,15 +661,12 @@ docker-compose.dev.yml
 | `redis` | Redis 缓存 |
 | `backend` | Go API，挂载 `backend-go/`、`logs/`、`data/` |
 | `frontend` | Next.js 开发服务器，挂载 `frontend/` |
-| `pgadmin` | 数据库管理工具，tools profile |
-| `redis-commander` | Redis 管理工具，tools profile |
 
 常用命令：
 
 ```powershell
 docker-compose -f "docker-compose.dev.yml" up -d postgres redis
 docker-compose -f "docker-compose.dev.yml" up -d --build backend frontend
-docker-compose -f "docker-compose.dev.yml" --profile tools up -d pgadmin redis-commander
 ```
 
 ### 11.2 本地分离开发
@@ -960,8 +955,6 @@ pnpm dev
 | WebSocket | `ws://127.0.0.1:18080/api/v1/ws/:user_id` |
 | PostgreSQL | `localhost:15500` |
 | Redis | `localhost:16380` |
-| pgAdmin | `http://localhost:5050` |
-| Redis Commander | `http://localhost:8081` |
 
 ## 18. 文档维护规则
 
