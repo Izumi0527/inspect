@@ -337,4 +337,40 @@ describe('AlertsView', () => {
     expect(screen.getByText('没有匹配的告警')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '清空筛选' })).toBeInTheDocument()
   })
+
+  it('默认活跃视图不算“已开启筛选”：WS 推送仍自动刷新列表', async () => {
+    mockAlertFilters = {
+      searchQuery: '',
+      severityFilter: 'all',
+      statusFilter: 'active',
+    }
+
+    render(<AlertsView />)
+
+    const updateHandler = mockWsHandlers.get('alert_update')
+    expect(updateHandler).toBeDefined()
+    await act(async () => {
+      updateHandler?.({ id: '2', status: 'active' })
+    })
+
+    await waitFor(() => {
+      expect(mockLoadAlerts).toHaveBeenCalledTimes(1)
+    })
+    expect(screen.queryByText(/已开启筛选，部分更新可能被隐藏/)).not.toBeInTheDocument()
+  })
+
+  it('默认活跃视图无数据时应提示“暂无活跃告警”并可切换到全部', () => {
+    mockAlertFilters = {
+      searchQuery: '',
+      severityFilter: 'all',
+      statusFilter: 'active',
+    }
+    mockAlertsList = []
+
+    render(<AlertsView />)
+
+    expect(screen.getByText('暂无活跃告警')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '查看全部告警' }))
+    expect(mockUpdateFilter).toHaveBeenCalledWith('statusFilter', 'all')
+  })
 })

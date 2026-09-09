@@ -33,6 +33,14 @@ export interface AlertFilters {
   assigneeFilter?: string
 }
 
+// 告警中心默认视图：只看活跃告警。打开页面先看还没处理的，而不是被历史的已解决记录淹没；
+// 它是「默认视图」而非「用户筛选」——判断是否已开启筛选时须把它排除（见 AlertsView）。
+export const DEFAULT_ALERT_FILTERS: Readonly<AlertFilters> = Object.freeze({
+  searchQuery: '',
+  severityFilter: 'all',
+  statusFilter: 'active',
+})
+
 export interface AlertStats {
   total: number
   critical: number

@@ -9,7 +9,7 @@ import {
   useAlertSelection
 } from '../hooks/useAlerts'
 import { AlertStatsGrid } from './AlertStatsGrid'
-import { AlertAction, AlertQueryParams } from '../types'
+import { AlertAction, AlertQueryParams, DEFAULT_ALERT_FILTERS } from '../types'
 import { AlertFiltersBar } from './AlertFiltersBar'
 import { AlertList } from './AlertList'
 import { AlertDetailModal } from './AlertDetailModal'
@@ -106,7 +106,10 @@ const AlertsViewContent: React.FC = () => {
   const hasActiveFilters = useMemo(() => {
     const hasBasicSearch = String(filters.searchQuery ?? '').trim() !== ''
     const hasBasicSeverity = String(filters.severityFilter ?? '').trim() !== '' && filters.severityFilter !== 'all'
-    const hasBasicStatus = String(filters.statusFilter ?? '').trim() !== '' && filters.statusFilter !== 'all'
+    // 默认视图（活跃）不算用户筛选：否则首屏就会显示「已开启筛选」并关闭实时自动刷新
+    const statusValue = String(filters.statusFilter ?? '').trim()
+    const hasBasicStatus =
+      statusValue !== '' && statusValue !== 'all' && statusValue !== DEFAULT_ALERT_FILTERS.statusFilter
 
     const adv = advancedFilters ?? {}
     const hasAdvSearch = String(adv.search ?? '').trim() !== ''
@@ -128,6 +131,8 @@ const AlertsViewContent: React.FC = () => {
       hasAdvDateRange
     )
   }, [advancedFilters, filters.searchQuery, filters.severityFilter, filters.statusFilter])
+
+  const isDefaultActiveView = filters.statusFilter === DEFAULT_ALERT_FILTERS.statusFilter
 
   const queryParams = useMemo(() => {
     const params: AlertQueryParams = {
@@ -722,12 +727,14 @@ const AlertsViewContent: React.FC = () => {
                 <div className="text-center py-12">
                   <AlertTriangle className="h-12 w-12 text-muted-foreground/80 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-foreground mb-2">
-                    {hasActiveFilters ? '没有匹配的告警' : '暂无告警'}
+                    {hasActiveFilters ? '没有匹配的告警' : isDefaultActiveView ? '暂无活跃告警' : '暂无告警'}
                   </h3>
                   <p className="text-sm text-muted-foreground mb-6">
                     {hasActiveFilters
                       ? '当前筛选条件下没有匹配的告警记录，可尝试清空筛选或调整条件。'
-                      : '当前系统暂无告警记录。'}
+                      : isDefaultActiveView
+                        ? '当前没有待处理的告警；已确认或已解决的记录可切换到「全部」查看。'
+                        : '当前系统暂无告警记录。'}
                   </p>
                   <div className="flex items-center justify-center gap-2">
                     <Button variant="outline" size="sm" onClick={handleManualRefresh}>
@@ -737,6 +744,11 @@ const AlertsViewContent: React.FC = () => {
                     {hasActiveFilters && (
                       <Button variant="ghost" size="sm" onClick={handleClearFiltersAndView}>
                         清空筛选
+                      </Button>
+                    )}
+                    {!hasActiveFilters && isDefaultActiveView && (
+                      <Button variant="ghost" size="sm" onClick={() => updateFilter('statusFilter', 'all')}>
+                        查看全部告警
                       </Button>
                     )}
                   </div>

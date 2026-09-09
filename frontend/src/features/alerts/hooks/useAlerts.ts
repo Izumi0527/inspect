@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Alert, AlertFilters, AlertStats, AlertQueryParams, AlertSeverity, AlertStatus, AlertAction } from '../types'
+import { Alert, AlertFilters, AlertStats, AlertQueryParams, AlertSeverity, AlertStatus, AlertAction, DEFAULT_ALERT_FILTERS } from '../types'
 import { 
   fetchAlerts, 
   fetchAlertStats, 
@@ -129,22 +129,14 @@ export function useAlertStats() {
 
 // 告警筛选hook
 export function useAlertFilters() {
-  const [filters, setFilters] = useState<AlertFilters>({
-    searchQuery: '',
-    severityFilter: 'all',
-    statusFilter: 'all'
-  })
+  const [filters, setFilters] = useState<AlertFilters>({ ...DEFAULT_ALERT_FILTERS })
 
   const updateFilter = useCallback((key: keyof AlertFilters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }))
   }, [])
 
   const resetFilters = useCallback(() => {
-    setFilters({
-      searchQuery: '',
-      severityFilter: 'all',
-      statusFilter: 'all'
-    })
+    setFilters({ ...DEFAULT_ALERT_FILTERS })
   }, [])
 
   return {
