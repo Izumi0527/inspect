@@ -193,6 +193,25 @@ REDIS_URL=redis://:dev_redis_2024@127.0.0.1:16380/0
 > 后端端口变更时，`SERVER_PORT`、`NEXT_PUBLIC_API_URL`、`NEXT_PUBLIC_WS_URL` **三项必须同步
 > 修改并重启前后端**。Windows 上若端口被系统 TCP 排除范围保留，改用 `18080` 或其他可用端口。
 
+### PDF 报告字体
+
+Windows、Ubuntu 24.04 和容器共用同一套字体回退逻辑：**显式配置的字体 → 系统兼容字体 → 内嵌 Noto Sans SC**。Windows 缺少等线、黑体等字体，或 Ubuntu 未安装中文字体时，无须额外安装字体包或挂载宿主机字体目录。
+
+内嵌字体直接从内存加载，正文和图表共用中文字体来源，不依赖临时目录或遗留字体缓存。报告输出目录 `REPORTS_OUTPUT_DIR` 仍需具备写权限。缺少专用粗体或拉丁字体时自动复用相应的常规字体。
+
+需要自定义时，可配置以下环境变量并重启后端：
+
+| 变量 | 用途 |
+| --- | --- |
+| `REPORT_PDF_FONT_CJK_PATH` | 中文常规字体 |
+| `REPORT_PDF_FONT_CJK_BOLD_PATH` | 中文粗体 |
+| `REPORT_PDF_FONT_LATIN_PATH` | 拉丁常规字体 |
+| `REPORT_PDF_FONT_LATIN_BOLD_PATH` | 拉丁粗体 |
+
+旧配置 `REPORT_PDF_FONT_PATH` 继续支持，优先级低于 `REPORT_PDF_FONT_CJK_PATH`。路径必须对后端进程可读，字体须为兼容的 TrueType `.ttf`，中文字体须包含报告使用的汉字。gofpdf 不支持 `.ttc` 字体集合或带 PostScript 轮廓的 `.otf`；Ubuntu 的 Noto CJK 字体集合不能直接作为配置路径，使用内嵌字体即可。
+
+容器需要自定义字体时，在本地 Compose 覆盖文件中同时配置只读字体挂载和容器内路径，公共配置不依赖 Windows 绝对路径。内嵌字体资源及 SIL Open Font License 1.1 许可证位于 `backend-go/assets/fonts/`。
+
 ## 常见入口
 
 | 入口 | 地址 |

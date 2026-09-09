@@ -117,8 +117,10 @@ else
 fi
 
 # ---------- 用例 8：版本号必须注入构建 ----------
-grep -q 'defaultAppVersion' "$TARGET" \
-    && ok "后端构建注入 defaultAppVersion（与 build-release.sh 同机制）" \
+# 注入目标由构建脚本经 ldflags -X 覆盖 config 包的 buildInjectedVersion
+# （与 build-release.sh 同机制）；defaultAppVersion 是源码兜底值，不由脚本注入。
+grep -q 'buildInjectedVersion' "$TARGET" \
+    && ok "后端构建注入 buildInjectedVersion（与 build-release.sh 同机制）" \
     || ng "后端构建未注入版本号" "/health 版本断言将失真"
 grep -q 'NEXT_PUBLIC_APP_VERSION' "$TARGET" \
     && ok "前端构建注入 NEXT_PUBLIC_APP_VERSION" \
