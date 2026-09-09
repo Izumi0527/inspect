@@ -145,6 +145,24 @@ function Invoke-GoPackageTest {
     Invoke-Step -Name $Name -WorkingDirectory $WorkingDirectory -Action { & go test $Pattern -count=1 }
 }
 
+# Invoke-GoFmtCheck 把 gofmt -l 变成门禁：它列出未格式化文件时退出码仍为 0，须自行判空。
+# 依赖 .gitattributes 的 `*.go text eol=lf`，否则 Windows 上 CRLF 检出会让全仓文件都被报出。
+function Invoke-GoFmtCheck {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [Parameter(Mandatory = $true)][string[]]$Paths
+    )
+
+    Invoke-Step -Name $Name -WorkingDirectory $WorkingDirectory -Action {
+        $unformatted = @(& gofmt -l @Paths)
+        if ($unformatted.Count -gt 0) {
+            $unformatted | ForEach-Object { Write-ColorOutput "   未格式化: $_" "Yellow" }
+            throw "$($unformatted.Count) 个文件未经 gofmt 格式化，请运行 gofmt -w"
+        }
+    }
+}
+
 function Test-Backend {
     $backendDir = Join-Path $ProjectRoot "backend-go"
     $testsDir = Join-Path $ProjectRoot "tests/backend-go"
@@ -155,6 +173,8 @@ function Test-Backend {
         return
     }
 
+    Invoke-GoFmtCheck -Name "后端格式检查 (gofmt -l)" -WorkingDirectory $backendDir -Paths @("./cmd", "./internal")
+    Invoke-GoFmtCheck -Name "外置测试格式检查 (gofmt -l)" -WorkingDirectory $testsDir -Paths @(".")
     if (-not $SkipBuild) {
         Invoke-Step -Name "后端构建 (go build ./...)" -WorkingDirectory $backendDir -Action { & go build ./... }
     }

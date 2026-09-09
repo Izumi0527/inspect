@@ -95,10 +95,26 @@ run_step() {
     fi
 }
 
+# gofmt -l 列出未格式化文件时退出码仍为 0，须自行判空才能当门禁。
+# 依赖 .gitattributes 的 `*.go text eol=lf`，否则 Windows 上 CRLF 检出会让全仓文件都被报出。
+gofmt_check() {
+    local unformatted
+    unformatted="$(gofmt -l "$@")"
+    if [[ -n "$unformatted" ]]; then
+        while IFS= read -r file; do
+            printf '   未格式化: %s\n' "$file"
+        done <<< "$unformatted"
+        echo "文件未经 gofmt 格式化，请运行 gofmt -w"
+        return 1
+    fi
+}
+
 test_backend() {
     local backend_dir="$PROJECT_ROOT/backend-go"
     local tests_dir="$PROJECT_ROOT/tests/backend-go"
 
+    run_step "后端格式检查 (gofmt -l)" "$backend_dir" gofmt_check ./cmd ./internal
+    run_step "外置测试格式检查 (gofmt -l)" "$tests_dir" gofmt_check .
     if [[ "$SKIP_BUILD" != true ]]; then
         run_step "后端构建 (go build ./...)" "$backend_dir" go build ./...
     fi
