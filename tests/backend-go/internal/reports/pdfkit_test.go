@@ -80,6 +80,38 @@ func TestRenderLineChart_ProducesPNG(t *testing.T) {
 	}
 }
 
+// 线型与填充必须参与渲染缓存键：同数据不同样式若得到相同 PNG，说明第二次渲染命中了第一次的缓存。
+func TestRenderLineChart_DashAndNoFill_ChangeOutputAndCacheKey(t *testing.T) {
+	base := pdfkit.LineSpec{
+		Title:   "缓存键测试",
+		XLabels: []string{"t1", "t2", "t3"},
+		Series: []pdfkit.LineSeries{
+			{Name: "SW-01 CPU", Color: pdfkit.ColorPrimary, Values: []float64{10, 20, 30}},
+			{Name: "SW-01 内存", Color: pdfkit.ColorPrimary, Values: []float64{40, 42, 41}},
+		},
+	}
+	plain, err := pdfkit.RenderLineChart(base)
+	if err != nil {
+		t.Fatalf("RenderLineChart(plain) error = %v", err)
+	}
+
+	styled := base
+	styled.NoFill = true
+	styled.Series = append([]pdfkit.LineSeries(nil), base.Series...)
+	styled.Series[1].DashArray = []float64{6, 4}
+	dashed, err := pdfkit.RenderLineChart(styled)
+	if err != nil {
+		t.Fatalf("RenderLineChart(styled) error = %v", err)
+	}
+
+	if !isPNG(dashed) {
+		t.Fatalf("styled render did not produce PNG bytes")
+	}
+	if bytes.Equal(plain, dashed) {
+		t.Fatalf("虚线/无填充样式未影响输出：疑似 hashSpec 未纳入 DashArray/NoFill，命中了旧缓存")
+	}
+}
+
 // TestRenderDonutChart_CacheReturnsSameBytes proves that calling the
 // renderer twice with the same spec returns the exact same byte slice
 // (not a new render). This guards against accidental cache-key drift.

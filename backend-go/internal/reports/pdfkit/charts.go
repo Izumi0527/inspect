@@ -226,6 +226,8 @@ type LineSeries struct {
 	Name   string
 	Color  Color
 	Values []float64
+	// DashArray 非空时按 SVG 语义绘制虚线（如 {6, 4}），用于同色系列区分指标
+	DashArray []float64
 }
 
 // LineSpec describes a multi-series time-series line chart. XLabels gives
@@ -237,6 +239,8 @@ type LineSpec struct {
 	XLabels  []string
 	WidthPx  int
 	HeightPx int
+	// NoFill 关闭线下半透明面积填充；系列较多时填充互相遮盖反而降低可读性
+	NoFill bool
 }
 
 // RenderLineChart renders the spec to PNG bytes. Suitable for performance
@@ -289,18 +293,22 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 				ys = append(ys, ys[len(ys)-1])
 			}
 		}
+		style := chart.Style{
+			StrokeColor:     toDrawing(c),
+			StrokeWidth:     2.2,
+			StrokeDashArray: s.DashArray,
+			FontColor:       toDrawing(ColorText),
+			FontSize:        11,
+			Font:            chartFont(),
+		}
+		if !spec.NoFill {
+			style.FillColor = toDrawingAlpha(c, 24)
+		}
 		chartSeries = append(chartSeries, chart.ContinuousSeries{
 			Name:    s.Name,
 			XValues: xValues,
 			YValues: ys,
-			Style: chart.Style{
-				StrokeColor: toDrawing(c),
-				StrokeWidth: 2.2,
-				FillColor:   toDrawingAlpha(c, 24),
-				FontColor:   toDrawing(ColorText),
-				FontSize:    11,
-				Font:        chartFont(),
-			},
+			Style:   style,
 		})
 	}
 
@@ -458,12 +466,12 @@ func hashSpec(kind string, spec interface{}) string {
 			fmt.Fprintf(h, "%s=%g/%v;", b.Label, b.Value, b.Color)
 		}
 	case LineSpec:
-		fmt.Fprintf(h, "%s|%d|%d|", v.Title, v.WidthPx, v.HeightPx)
+		fmt.Fprintf(h, "%s|%d|%d|nofill=%t|", v.Title, v.WidthPx, v.HeightPx, v.NoFill)
 		labels := append([]string(nil), v.XLabels...)
 		sort.Strings(labels)
 		fmt.Fprintf(h, "labels=%v|", labels)
 		for _, s := range v.Series {
-			fmt.Fprintf(h, "%s/%v=%v;", s.Name, s.Color, s.Values)
+			fmt.Fprintf(h, "%s/%v/dash=%v=%v;", s.Name, s.Color, s.DashArray, s.Values)
 		}
 	default:
 		fmt.Fprintf(h, "%v", v)
