@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/your-org/inspect-system/backend-go/internal/devices"
 )
 
 // 网络流量指标名，设备级（device_metrics）与接口级（interface_metrics）共用：
@@ -32,11 +34,12 @@ type interfaceTrafficRow struct {
 	Outbound *float64  `gorm:"column:outbound"`
 }
 
-// GetDeviceInterfaceTraffic 查询单台设备的上行/下行流量时序（Mbps）。
-// interfaceName 为空时汇总当前全部 UP 接口，否则只取该接口。
+// GetDeviceInterfaceTraffic 查询单台设备某个物理接口的上行/下行流量时序（Mbps）。
+// 接口列表只含当前 UP 的物理口（Vlanif/LoopBack/NULL/Console/Eth-Trunk 等逻辑口剔除，
+// 它们的流量已体现在物理口上）；interfaceName 为空时默认取列表首个，没有可选接口则返回空序列。
 //
-// 聚合顺序是先按 (接口, 时间桶) 取 AVG 再跨接口 SUM：采集周期与桶宽不对齐时同一桶内会落入
-// 多个样本，直接 SUM 会把这些桶成倍放大；速率类指标在桶内取均值才是正确口径。
+// 桶内先按接口 AVG 再输出：采集周期与桶宽不对齐时同一桶内会落入多个样本，
+// 直接 SUM 会把这些桶成倍放大；速率类指标在桶内取均值才是正确口径。
 func (w *MetricsWriter) GetDeviceInterfaceTraffic(ctx context.Context, deviceID int, start time.Time, end time.Time, interfaceName string) (DeviceInterfaceTraffic, error) {
 	if w.db == nil {
 		return DeviceInterfaceTraffic{}, fmt.Errorf("database not initialized")
@@ -58,7 +61,6 @@ func (w *MetricsWriter) GetDeviceInterfaceTraffic(ctx context.Context, deviceID 
 	}
 	sortInterfacesByIndex(upRows)
 
-	upNames := make([]string, 0, len(upRows))
 	for _, row := range upRows {
 		name := strings.TrimSpace(row.Name)
 		if name == "" {
@@ -68,33 +70,30 @@ func (w *MetricsWriter) GetDeviceInterfaceTraffic(ctx context.Context, deviceID 
 		if row.Alias != nil && strings.TrimSpace(*row.Alias) != "" {
 			label = strings.TrimSpace(*row.Alias)
 		}
+		if devices.IsLogicalInterface(label) {
+			continue
+		}
 		result.Interfaces = append(result.Interfaces, InterfaceTrafficInterface{Name: name, Label: label, SpeedMbps: row.Speed})
-		upNames = append(upNames, name)
 	}
 
-	interfaceClause := "IN (?)"
-	args := []interface{}{deviceID, start, end}
-	if interfaceName != "" {
-		interfaceClause = "= ?"
-		args = append(args, interfaceName)
-	} else {
-		if len(upNames) == 0 {
+	if interfaceName == "" {
+		if len(result.Interfaces) == 0 {
 			return result, nil
 		}
-		args = append(args, upNames)
+		interfaceName = result.Interfaces[0].Name
+		result.Interface = interfaceName
 	}
 
 	query := fmt.Sprintf(
-		`SELECT bucket, SUM(inbound) AS inbound, SUM(outbound) AS outbound FROM (SELECT time_bucket('%s', collected_at) AS bucket, interface_name, AVG(CASE WHEN metric_name IN (%s) THEN metric_value END) AS inbound, AVG(CASE WHEN metric_name IN (%s) THEN metric_value END) AS outbound FROM interface_metrics WHERE device_id = ? AND collected_at >= ? AND collected_at <= ? AND metric_name IN (%s) AND interface_name %s GROUP BY bucket, interface_name) AS per_interface GROUP BY bucket ORDER BY bucket ASC`,
+		`SELECT bucket, SUM(inbound) AS inbound, SUM(outbound) AS outbound FROM (SELECT time_bucket('%s', collected_at) AS bucket, interface_name, AVG(CASE WHEN metric_name IN (%s) THEN metric_value END) AS inbound, AVG(CASE WHEN metric_name IN (%s) THEN metric_value END) AS outbound FROM interface_metrics WHERE device_id = ? AND collected_at >= ? AND collected_at <= ? AND metric_name IN (%s) AND interface_name = ? GROUP BY bucket, interface_name) AS per_interface GROUP BY bucket ORDER BY bucket ASC`,
 		bucketIntervalString(bucketSizeForRange(start, end)),
 		formatMetricList(networkInboundMetricNames),
 		formatMetricList(networkOutboundMetricNames),
 		formatMetricList(networkAllMetricNames()),
-		interfaceClause,
 	)
 
 	rows := make([]interfaceTrafficRow, 0)
-	if err := w.db.WithContext(ctx).Raw(query, args...).Scan(&rows).Error; err != nil {
+	if err := w.db.WithContext(ctx).Raw(query, deviceID, start, end, interfaceName).Scan(&rows).Error; err != nil {
 		return DeviceInterfaceTraffic{}, err
 	}
 

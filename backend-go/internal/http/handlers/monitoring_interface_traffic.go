@@ -8,8 +8,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// GetDeviceInterfaceTraffic 返回单台设备当前 UP 接口的上行/下行流量时序（监控中心流量卡接口视图）。
-// query：start_time/end_time（缺省近 24h）、interface（device_interfaces.name，空 = 全部 UP 接口汇总）。
+// GetDeviceInterfaceTraffic 返回单台设备某个物理 UP 接口的上行/下行流量时序（监控中心流量卡接口视图）。
+// query：start_time/end_time（缺省近 24h）、interface（device_interfaces.name，空 = 首个物理 UP 口）。
 func (h MonitoringHandler) GetDeviceInterfaceTraffic(c echo.Context) error {
 	if _, err := requirePermission(c, h.Auth, monitoringReadPermission); err != nil {
 		return err

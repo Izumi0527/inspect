@@ -261,7 +261,7 @@ type NetworkTrafficPoint struct {
 	Outbound  float64 `json:"outbound"`
 }
 
-// InterfaceTrafficInterface 单台设备当前处于 UP 状态的接口（接口流量视图的选择项）。
+// InterfaceTrafficInterface 单台设备当前处于 UP 状态的物理接口（接口流量视图的选择项，逻辑口已剔除）。
 // Name 是采集内部名（if<ifIndex>），Label 取 ifDescr 别名，缺省回退 Name。
 type InterfaceTrafficInterface struct {
 	Name      string `json:"name"`
@@ -269,8 +269,8 @@ type InterfaceTrafficInterface struct {
 	SpeedMbps *int64 `json:"speed_mbps,omitempty"`
 }
 
-// DeviceInterfaceTraffic 按设备（可选单接口）的上行/下行流量时序，Points 单位 Mbps。
-// Interface 为空表示 Points 是当前全部 UP 接口的逐桶汇总。
+// DeviceInterfaceTraffic 单台设备某个物理接口的上行/下行流量时序，Points 单位 Mbps。
+// Interface 是实际采用的接口（请求未指定时取 Interfaces 首个），无可选接口时为空且 Points 为空。
 type DeviceInterfaceTraffic struct {
 	DeviceID   int                         `json:"device_id"`
 	Interface  string                      `json:"interface"`

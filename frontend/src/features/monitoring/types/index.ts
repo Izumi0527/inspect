@@ -31,7 +31,7 @@ export interface NetworkTrafficDataPoint {
   outbound: number // Mbps
 }
 
-// 单台设备当前 UP 的接口（流量卡接口选择器的选项）
+// 单台设备当前 UP 的物理接口（流量卡接口选择器的选项；Vlanif/LoopBack/NULL/Console 等逻辑口不返回）
 export interface DeviceInterfaceOption {
   /** 采集内部名（if<ifIndex>），也是接口流量查询的 interface 参数 */
   name: string
@@ -43,7 +43,7 @@ export interface DeviceInterfaceOption {
 // 单台设备（可选单接口）的上行/下行流量时序，来自 GET /monitoring/devices/:id/interface-traffic
 export interface DeviceInterfaceTraffic {
   deviceId: number
-  /** 已选接口名；空字符串 = 全部 UP 接口逐桶汇总 */
+  /** 实际采用的接口名；请求未指定时为列表首个物理口，无可选接口时为空字符串 */
   interface: string
   interfaces: DeviceInterfaceOption[]
   points: NetworkTrafficDataPoint[]

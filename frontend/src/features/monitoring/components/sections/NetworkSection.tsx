@@ -9,8 +9,6 @@ import { useMonitoringDevices } from '../../hooks/useMonitoringDevices'
 import { useDeviceInterfaceTraffic } from '../../hooks/useDeviceInterfaceTraffic'
 import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../../types'
 
-/** Radix Select 不允许空字符串作为选项值，用哨兵表示「全部接口」 */
-const ALL_INTERFACES = '__all__'
 const CHART_HEIGHT = 260
 
 interface NetworkSectionProps {
@@ -29,7 +27,8 @@ interface NetworkSectionProps {
 /**
  * 流量监控卡
  *
- * - 单设备视图：接口选择器（全部 UP 接口汇总 / 单个接口），数据来自 /monitoring/devices/:id/interface-traffic
+ * - 单设备视图：物理 UP 接口选择器（逻辑口不列出），数据来自 /monitoring/devices/:id/interface-traffic；
+ *   selectedInterface 为空表示跟随后端默认（列表首个物理口）
  * - 聚合视图：全部设备或多选时沿用 v2 的跨设备聚合曲线
  * 两种视图都只画上行/下行两条序列。
  */
@@ -47,7 +46,7 @@ export function NetworkSection({
   const { data: devices = [] } = useMonitoringDevices()
 
   const [selectedInterface, setSelectedInterface] = useState('')
-  // 换设备后接口列表不同，回到「全部接口」
+  // 换设备后接口列表不同，回到后端默认接口
   useEffect(() => {
     setSelectedInterface('')
   }, [singleDeviceId])
@@ -60,13 +59,16 @@ export function NetworkSection({
   })
   const upInterfaces = useMemo(() => interfaceTraffic.data?.interfaces ?? [], [interfaceTraffic.data])
 
-  // 已选接口不再 UP（从列表消失）时回到「全部接口」，避免选择器显示空值
+  // 已选接口不再 UP（从列表消失）时回到后端默认接口，避免选择器显示空值
   useEffect(() => {
     if (selectedInterface === '' || !interfaceTraffic.data) return
     if (!upInterfaces.some((item) => item.name === selectedInterface)) {
       setSelectedInterface('')
     }
   }, [interfaceTraffic.data, selectedInterface, upInterfaces])
+
+  // 选择器显示值：用户未选时显示后端实际采用的接口（响应里的 interface）
+  const activeInterface = selectedInterface !== '' ? selectedInterface : (interfaceTraffic.data?.interface ?? '')
 
   const scopeLabel = useMemo(() => {
     if (singleDeviceId !== null) {
@@ -94,7 +96,7 @@ export function NetworkSection({
     if (upInterfaces.length === 0) {
       return (
         <div className="flex h-48 items-center justify-center">
-          <p className="text-sm text-muted-foreground">该设备当前没有 UP 状态的接口</p>
+          <p className="text-sm text-muted-foreground">该设备当前没有 UP 状态的物理接口</p>
         </div>
       )
     }
@@ -130,17 +132,11 @@ export function NetworkSection({
             <CardTitle className="text-base">流量监控</CardTitle>
             <span className="truncate text-sm text-muted-foreground">{scopeLabel}</span>
             {singleDeviceId !== null ? (
-              <Select
-                value={selectedInterface === '' ? ALL_INTERFACES : selectedInterface}
-                onValueChange={(value) => setSelectedInterface(value === ALL_INTERFACES ? '' : value)}
-              >
+              <Select value={activeInterface} onValueChange={setSelectedInterface}>
                 <SelectTrigger className="h-8 w-auto min-w-40 max-w-64 px-3 py-1 text-sm" aria-label="接口选择">
-                  <SelectValue placeholder="全部接口" />
+                  <SelectValue placeholder="选择接口" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL_INTERFACES}>
-                    {interfaceTraffic.data ? `全部接口（${upInterfaces.length} 个 UP）` : '全部接口'}
-                  </SelectItem>
                   {upInterfaces.map((item) => (
                     <SelectItem key={item.name} value={item.name}>
                       {item.label}

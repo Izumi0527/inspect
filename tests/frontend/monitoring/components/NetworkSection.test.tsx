@@ -41,10 +41,10 @@ const aggregatePoints: NetworkTrafficDataPoint[] = [
 
 const interfaceTraffic: DeviceInterfaceTraffic = {
   deviceId: 6,
-  interface: '',
+  interface: 'if6',
   interfaces: [
-    { name: 'if5', label: 'Vlanif1', speedMbps: 1000 },
     { name: 'if6', label: 'GigabitEthernet0/0/1', speedMbps: 1000 },
+    { name: 'if7', label: 'GigabitEthernet0/0/2', speedMbps: 1000 },
   ],
   points: [{ timestamp: '2026-09-10T02:00:00Z', inbound: 0.5, outbound: 0.25 }],
 }
@@ -86,7 +86,7 @@ describe('NetworkSection（流量监控卡）', () => {
     mockUseDeviceInterfaceTraffic.mockReturnValue(queryResult())
   })
 
-  it('勾选单台设备时展示该设备的 UP 接口选择器，默认「全部接口」', async () => {
+  it('勾选单台设备时展示物理 UP 接口选择器，默认显示后端选中的首个物理口，无「全部接口」项', async () => {
     const user = userEvent.setup()
     renderSection([6])
 
@@ -94,13 +94,16 @@ describe('NetworkSection（流量监控卡）', () => {
       expect.objectContaining({ deviceId: 6, timeRange: '1h', interfaceName: '' })
     )
     expect(screen.getByText(/核心交换机/)).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '接口选择' })).toHaveTextContent('GigabitEthernet0/0/1')
     expect(screen.getByTestId('traffic-chart')).toHaveTextContent('1 points')
 
     await user.click(screen.getByRole('combobox', { name: '接口选择' }))
     const listbox = screen.getByRole('listbox')
-    expect(within(listbox).getByRole('option', { name: '全部接口（2 个 UP）' })).toBeInTheDocument()
-    expect(within(listbox).getByRole('option', { name: 'Vlanif1' })).toBeInTheDocument()
-    expect(within(listbox).getByRole('option', { name: 'GigabitEthernet0/0/1' })).toBeInTheDocument()
+    expect(within(listbox).queryByRole('option', { name: /全部接口/ })).not.toBeInTheDocument()
+    expect(within(listbox).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'GigabitEthernet0/0/1',
+      'GigabitEthernet0/0/2',
+    ])
   })
 
   it('切换到某个接口后按该接口重新查询', async () => {
@@ -108,10 +111,10 @@ describe('NetworkSection（流量监控卡）', () => {
     renderSection([6])
 
     await user.click(screen.getByRole('combobox', { name: '接口选择' }))
-    await user.click(screen.getByRole('option', { name: 'GigabitEthernet0/0/1' }))
+    await user.click(screen.getByRole('option', { name: 'GigabitEthernet0/0/2' }))
 
     expect(mockUseDeviceInterfaceTraffic).toHaveBeenLastCalledWith(
-      expect.objectContaining({ deviceId: 6, interfaceName: 'if6' })
+      expect.objectContaining({ deviceId: 6, interfaceName: 'if7' })
     )
   })
 
@@ -132,13 +135,13 @@ describe('NetworkSection（流量监控卡）', () => {
     expect(screen.getByTestId('traffic-chart')).toHaveTextContent('2 points')
   })
 
-  it('单设备没有 UP 接口时给出明确空态', () => {
+  it('单设备没有 UP 物理接口时给出明确空态', () => {
     mockUseDeviceInterfaceTraffic.mockReturnValue(
-      queryResult({ data: { ...interfaceTraffic, interfaces: [], points: [] } })
+      queryResult({ data: { ...interfaceTraffic, interface: '', interfaces: [], points: [] } })
     )
     renderSection([6])
 
-    expect(screen.getByText('该设备当前没有 UP 状态的接口')).toBeInTheDocument()
+    expect(screen.getByText('该设备当前没有 UP 状态的物理接口')).toBeInTheDocument()
     expect(screen.queryByTestId('traffic-chart')).not.toBeInTheDocument()
   })
 

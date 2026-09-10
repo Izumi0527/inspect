@@ -386,10 +386,10 @@ export async function fetchMonitoringDevices(): Promise<MonitoringDeviceOption[]
 }
 
 /**
- * 获取单台设备当前 UP 接口的上行/下行流量时序（流量卡接口视图）
+ * 获取单台设备某个物理 UP 接口的上行/下行流量时序（流量卡接口视图）
  * @param deviceId - 设备 ID
  * @param timeRange - 时间范围（1h/24h/7d…）
- * @param interfaceName - 接口采集名（if<idx>）；空 = 全部 UP 接口汇总
+ * @param interfaceName - 接口采集名（if<idx>）；空 = 由后端取首个物理 UP 口
  */
 export async function fetchDeviceInterfaceTraffic(
   deviceId: number,

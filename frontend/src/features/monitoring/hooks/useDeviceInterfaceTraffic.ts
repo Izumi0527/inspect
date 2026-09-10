@@ -10,7 +10,7 @@ interface UseDeviceInterfaceTrafficOptions {
   /** 单台设备 ID；null = 未处于单设备视图，不发起请求 */
   deviceId: number | null
   timeRange: string
-  /** 接口采集名（if<idx>）；空 = 全部 UP 接口汇总 */
+  /** 接口采集名（if<idx>）；空 = 由后端取首个物理 UP 口 */
   interfaceName: string
   /** 页面可见时才轮询（与 v2 聚合查询同步） */
   enablePolling?: boolean
