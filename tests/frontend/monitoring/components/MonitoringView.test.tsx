@@ -50,6 +50,9 @@ jest.mock('@/components/atoms', () => ({
     <button type="button" onClick={onClick} disabled={disabled}>{children}</button>
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Popover: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PopoverTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  PopoverContent: () => null,
   Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SelectValue: () => <div />,
