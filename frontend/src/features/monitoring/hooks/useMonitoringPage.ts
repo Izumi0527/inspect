@@ -1,11 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
 import { useMonitoringV2 } from './useMonitoringV2'
+import { INTERFACE_TRAFFIC_QUERY_KEY } from './useDeviceInterfaceTraffic'
 import {
   TIME_RANGE_OPTIONS,
   DEFAULT_TIME_RANGE,
@@ -57,6 +59,7 @@ export function useMonitoringPage(): UseMonitoringPageResult {
   const canExportReport = usePermission(Permission.MONITORING_EXPORT)
   const canReadAlerts = usePermission(Permission.ALERTS_READ)
   const ws = useWebSocket()
+  const queryClient = useQueryClient()
 
   // ── 时间范围（持久化到 localStorage）──────────────────────────────────────
   const [timeRange, setTimeRange] = useState<string>(() => {
@@ -147,7 +150,7 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     data: envelope,
     isLoading,
     error,
-    refetch,
+    refetch: refetchV2,
     isRefetching,
   } = useMonitoringV2({
     timeRange,
@@ -159,6 +162,12 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     enablePolling: pageVisible,
     refetchInterval: wsHealth === 'connected' ? 300000 : wsHealth === 'stale' ? 60000 : 120000,
   })
+
+  // 页面级刷新 = v2 聚合数据 + 流量卡的接口流量查询（后者是独立查询，不在 v2 包络内）
+  const refetch = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: [INTERFACE_TRAFFIC_QUERY_KEY] })
+    return refetchV2()
+  }, [queryClient, refetchV2])
   refetchRef.current = refetch
 
   // ── WS 订阅回调 ────────────────────────────────────────────────────────────
@@ -374,15 +383,20 @@ export function useMonitoringPage(): UseMonitoringPageResult {
   const { effectiveFailedSectionLabels, hasEffectivePartialFailure } =
     useMemo(() => {
       const allFailed = envelope?.failedSections ?? []
-      const sections = realtimeAlertsPermissionLimited
-        ? allFailed.filter((section) => section !== 'realtimeAlerts')
-        : allFailed
+      // 恰好勾选 1 台设备时流量卡走独立的接口流量查询，v2 的 networkTraffic 分区不再被渲染，
+      // 其失败不应计入页面降级提示（接口流量自身的失败在卡片内展示）
+      const singleDeviceView = deviceIds.length === 1
+      const sections = allFailed.filter((section) => {
+        if (section === 'realtimeAlerts' && realtimeAlertsPermissionLimited) return false
+        if (section === 'networkTraffic' && singleDeviceView) return false
+        return true
+      })
       return {
         effectiveFailedSections: sections,
         effectiveFailedSectionLabels: sections.map((key) => MONITORING_SECTION_LABELS[key] ?? key),
         hasEffectivePartialFailure: sections.length > 0,
       }
-    }, [envelope?.failedSections, realtimeAlertsPermissionLimited])
+    }, [deviceIds.length, envelope?.failedSections, realtimeAlertsPermissionLimited])
 
   return {
     // 状态

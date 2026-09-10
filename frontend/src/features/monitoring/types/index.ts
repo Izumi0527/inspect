@@ -24,11 +24,29 @@ export interface DeviceStatusDistribution {
   offline: number
 }
 
-// 网络流量历史数据点(堆叠面积图)
+// 网络流量历史数据点（上行 = outbound、下行 = inbound）
 export interface NetworkTrafficDataPoint {
   timestamp: Date | string
   inbound: number // Mbps
   outbound: number // Mbps
+}
+
+// 单台设备当前 UP 的接口（流量卡接口选择器的选项）
+export interface DeviceInterfaceOption {
+  /** 采集内部名（if<ifIndex>），也是接口流量查询的 interface 参数 */
+  name: string
+  /** ifDescr 别名，缺省回退 name */
+  label: string
+  speedMbps?: number
+}
+
+// 单台设备（可选单接口）的上行/下行流量时序，来自 GET /monitoring/devices/:id/interface-traffic
+export interface DeviceInterfaceTraffic {
+  deviceId: number
+  /** 已选接口名；空字符串 = 全部 UP 接口逐桶汇总 */
+  interface: string
+  interfaces: DeviceInterfaceOption[]
+  points: NetworkTrafficDataPoint[]
 }
 
 // 单个告警

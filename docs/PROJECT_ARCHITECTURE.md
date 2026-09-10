@@ -208,6 +208,11 @@ backend-go/internal/app/app.go
   （否则 `nlmLogTable` 恒空），本系统 IP 须为设备 `snmp-agent target-host`（否则活动告警表读空）。
 - Trap 级别/设施判定顺序：注册表 `trap.overrides` → 设备携带的 `hwBaseTrapSeverity`/`hwAlarmSeverity`
   → 华为告警知识库（`snmpmib.AlarmCatalog`）→ 消息关键词。
+- 监控中心流量卡有两条数据路径：页面设备筛选为「全部设备/多选」时沿用 dashboard v2 的
+  `networkTrafficHistory` 跨设备聚合；恰好勾选 1 台设备时改走
+  `GET /monitoring/devices/{id}/interface-traffic`（`monitoring.MetricsWriter.GetDeviceInterfaceTraffic`），
+  只读 `interface_metrics` + `device_interfaces.is_up`，先按 (接口, 时间桶) `AVG` 再跨接口 `SUM`，
+  可按单个 UP 接口过滤；接口显示名取 `device_interfaces.alias`（ifDescr），查询参数用采集名 `if<ifIndex>`。
 
 这种装配方式的特点是：业务包之间尽量通过服务接口和构造函数连接，避免包级全局状态；存在循环风险的地方使用适配器，例如 `wsAuthAdapter` 将认证服务适配给 WebSocket 鉴权。
 

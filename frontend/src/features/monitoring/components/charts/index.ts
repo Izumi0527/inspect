@@ -5,7 +5,7 @@
  */
 
 export { SystemPerformanceChart } from './SystemPerformanceChart'
-export { NetworkTrafficStackedAreaChart } from './NetworkTrafficStackedAreaChart'
+export { InterfaceTrafficChart, TrafficSeriesLegend } from './InterfaceTrafficChart'
 export { TemperatureChart } from './TemperatureChart'
 export { DeviceStatusPieChart } from './DeviceStatusPieChart'
 export { ChartSkeleton } from './ChartSkeleton'
@@ -14,5 +14,5 @@ export { ChartSkeleton } from './ChartSkeleton'
 export {
   SystemPerformanceChartWrapper,
   TemperatureChartWrapper,
-  NetworkTrafficChartWrapper,
+  InterfaceTrafficChartWrapper,
 } from './LazyCharts'

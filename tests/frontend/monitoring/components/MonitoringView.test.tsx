@@ -1,4 +1,5 @@
 import React from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { MonitoringView } from '@/features/monitoring/components/MonitoringView'
 import { useMonitoringV2 } from '@/features/monitoring/hooks/useMonitoringV2'
@@ -9,6 +10,17 @@ jest.mock('@/features/monitoring/hooks/useMonitoringV2', () => ({
 
 jest.mock('@/features/monitoring/hooks/useMonitoringDevices', () => ({
   useMonitoringDevices: () => ({ data: [], isLoading: false, error: null }),
+}))
+
+jest.mock('@/features/monitoring/hooks/useDeviceInterfaceTraffic', () => ({
+  INTERFACE_TRAFFIC_QUERY_KEY: 'monitoring-interface-traffic',
+  useDeviceInterfaceTraffic: () => ({
+    data: undefined,
+    isPending: true,
+    isPlaceholderData: false,
+    error: null,
+    refetch: jest.fn(),
+  }),
 }))
 
 jest.mock('@/lib/contexts/auth-context', () => ({
@@ -76,13 +88,24 @@ jest.mock('@/features/monitoring/components/cards', () => ({
 jest.mock('@/features/monitoring/components/charts', () => ({
   SystemPerformanceChartWrapper: () => <div>SystemPerformanceChartWrapper</div>,
   TemperatureChartWrapper: () => <div>TemperatureChartWrapper</div>,
-  NetworkTrafficChartWrapper: () => <div>NetworkTrafficChartWrapper</div>,
+  InterfaceTrafficChartWrapper: () => <div>InterfaceTrafficChartWrapper</div>,
+  TrafficSeriesLegend: () => <ul aria-label="流量序列图例" />,
   ChartSkeleton: () => <div>ChartSkeleton</div>,
 }))
 
 jest.mock('@/features/monitoring/components/ReportExportButton', () => ({
   ReportExportButton: () => <div>ReportExportButton</div>,
 }))
+
+// 页面 hook 依赖 QueryClient（刷新时失效接口流量查询），渲染时统一包一层 Provider
+function renderView() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MonitoringView />
+    </QueryClientProvider>
+  )
+}
 
 describe('MonitoringView', () => {
   it('存在分区失败时应显示全局不完整提示和分区错误占位', () => {
@@ -115,7 +138,7 @@ describe('MonitoringView', () => {
       isRefetching: false,
     })
 
-    render(<MonitoringView />)
+    renderView()
 
     expect(screen.getByText('监控数据不完整')).toBeInTheDocument()
     expect(screen.getByText('network failed')).toBeInTheDocument()
@@ -150,7 +173,7 @@ describe('MonitoringView', () => {
       isRefetching: false,
     })
 
-    render(<MonitoringView />)
+    renderView()
 
     expect(screen.queryByText('尚未添加设备')).not.toBeInTheDocument()
     expect(screen.queryByText('去设备管理')).not.toBeInTheDocument()
@@ -186,7 +209,7 @@ describe('MonitoringView', () => {
       isRefetching: false,
     })
 
-    render(<MonitoringView />)
+    renderView()
 
     expect(screen.queryByRole('heading', { name: '关键指标' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '性能趋势' })).not.toBeInTheDocument()
@@ -234,7 +257,7 @@ describe('MonitoringView', () => {
       isRefetching: false,
     })
 
-    render(<MonitoringView />)
+    renderView()
 
     expect(screen.getByText('监控数据不完整')).toBeInTheDocument()
     expect(screen.getByText('stats down')).toBeInTheDocument()

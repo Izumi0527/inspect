@@ -1,5 +1,6 @@
 import { api, ApiClientError } from '@/lib/api-client'
 import { formatDateTimeYMDHM } from '@/utils/formatters'
+import { formatBandwidthValue } from '../utils/monitoring'
 import {
   SystemPerformanceDataPoint,
   TemperatureDataPoint,
@@ -7,6 +8,8 @@ import {
   NetworkTrafficDataPoint,
   StatCardData,
   Alert,
+  DeviceInterfaceTraffic,
+  DeviceInterfaceOption,
   MonitoringDataV2,
   MonitoringDataEnvelope,
   MonitoringDeviceOption,
@@ -67,37 +70,6 @@ function formatAlertTime(raw: unknown): string {
     return fallback !== '' ? fallback : '-'
   }
   return formatDateTimeYMDHM(date)
-}
-
-/**
- * 格式化带宽值（bps），自动选择合适的单位
- * @param bps - bits per second (比特每秒)
- * @returns 格式化后的字符串，如 "1.5 Kbps", "2.3 Mbps", "1.2 Gbps"
- *
- * 转换规则（使用1000进制，网络带宽标准）：
- * - 1001 bps → 1.00 Kbps (超过1000时进位)
- * - 1001 Kbps → 1.00 Mbps
- * - 1001 Mbps → 1.00 Gbps
- * - 1001 Gbps → 1.00 Tbps
- */
-function formatBandwidthValue(bps: number): string {
-  if (!Number.isFinite(bps) || bps <= 0) return '0 bps'
-
-  const units = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']
-  const k = 1000 // 网络带宽使用1000进制
-
-  const rawIndex = Math.floor(Math.log(bps) / Math.log(k))
-  const unitIndex = Math.min(Math.max(rawIndex, 0), units.length - 1)
-
-  const value = bps / Math.pow(k, unitIndex)
-
-  if (value >= 100) {
-    return `${value.toFixed(0)} ${units[unitIndex]}`
-  } else if (value >= 10) {
-    return `${value.toFixed(1)} ${units[unitIndex]}`
-  } else {
-    return `${value.toFixed(2)} ${units[unitIndex]}`
-  }
 }
 
 function resolveTimeRange(timeRange: string) {
@@ -410,6 +382,57 @@ export async function fetchMonitoringDevices(): Promise<MonitoringDeviceOption[]
   } catch (error) {
     console.error('获取监控设备列表失败:', error)
     throw error instanceof Error ? error : new Error('获取监控设备列表失败')
+  }
+}
+
+/**
+ * 获取单台设备当前 UP 接口的上行/下行流量时序（流量卡接口视图）
+ * @param deviceId - 设备 ID
+ * @param timeRange - 时间范围（1h/24h/7d…）
+ * @param interfaceName - 接口采集名（if<idx>）；空 = 全部 UP 接口汇总
+ */
+export async function fetchDeviceInterfaceTraffic(
+  deviceId: number,
+  timeRange: string,
+  interfaceName: string = ''
+): Promise<DeviceInterfaceTraffic> {
+  const { start, end } = resolveTimeRange(timeRange)
+  const params = new URLSearchParams({ start_time: start, end_time: end })
+  if (interfaceName !== '') {
+    params.set('interface', interfaceName)
+  }
+
+  const response = await api.get<unknown>(`/monitoring/devices/${deviceId}/interface-traffic?${params.toString()}`)
+  const record = (response && typeof response === 'object' ? response : {}) as RawRecord
+
+  const interfaces: DeviceInterfaceOption[] = []
+  if (Array.isArray(record.interfaces)) {
+    for (const item of record.interfaces) {
+      const raw = (item ?? {}) as RawRecord
+      const name = toStr(raw.name)
+      if (name === '') continue
+      const speed = Number(raw.speed_mbps)
+      interfaces.push({
+        name,
+        label: toStr(raw.label, name),
+        speedMbps: Number.isFinite(speed) && speed > 0 ? speed : undefined,
+      })
+    }
+  }
+
+  const points: NetworkTrafficDataPoint[] = Array.isArray(record.points)
+    ? record.points.map((point: RawRecord) => ({
+        timestamp: toStr(point.timestamp, new Date().toISOString()),
+        inbound: toNum(point.inbound),
+        outbound: toNum(point.outbound),
+      }))
+    : []
+
+  return {
+    deviceId: toNum(record.device_id, deviceId),
+    interface: toStr(record.interface),
+    interfaces,
+    points,
   }
 }
 

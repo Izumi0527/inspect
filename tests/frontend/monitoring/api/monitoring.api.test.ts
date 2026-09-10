@@ -19,7 +19,12 @@ jest.mock('@/lib/api-client', () => {
 })
 
 import { api } from '@/lib/api-client'
-import { fetchMonitoringDataV2, fetchRealtimeAlerts, fetchStatsV2 } from '@/features/monitoring/api/monitoring.api'
+import {
+  fetchDeviceInterfaceTraffic,
+  fetchMonitoringDataV2,
+  fetchRealtimeAlerts,
+  fetchStatsV2,
+} from '@/features/monitoring/api/monitoring.api'
 
 const mockedApi = api as unknown as { get: jest.Mock; post: jest.Mock }
 
@@ -177,5 +182,43 @@ describe('monitoring.api', () => {
     expect(envelope.failedSections).toContain('systemPerformance')
     // 旧端点只有跨设备聚合值，给不出设备名，不应再请求它
     expect(mockedApi.post).not.toHaveBeenCalledWith('/monitoring/system/performance', expect.anything())
+  })
+
+  it('fetchDeviceInterfaceTraffic: 按设备与接口拼接查询参数，并归一化响应（label 缺省回退 name）', async () => {
+    mockedApi.get.mockReset()
+    mockedApi.get.mockResolvedValue({
+      device_id: 6,
+      interface: 'if6',
+      interfaces: [
+        { name: 'if6', label: 'GigabitEthernet0/0/1', speed_mbps: 1000 },
+        { name: 'if1' },
+        { name: '' },
+      ],
+      points: [{ timestamp: '2026-09-10T02:00:00Z', inbound: 2.5, outbound: '0.5' }],
+    })
+
+    const result = await fetchDeviceInterfaceTraffic(6, '1h', 'if6')
+
+    expect(mockedApi.get).toHaveBeenCalledTimes(1)
+    expect(mockedApi.get.mock.calls[0][0]).toMatch(
+      /^\/monitoring\/devices\/6\/interface-traffic\?start_time=[^&]+&end_time=[^&]+&interface=if6$/
+    )
+    expect(result.deviceId).toBe(6)
+    expect(result.interface).toBe('if6')
+    expect(result.interfaces).toEqual([
+      { name: 'if6', label: 'GigabitEthernet0/0/1', speedMbps: 1000 },
+      { name: 'if1', label: 'if1', speedMbps: undefined },
+    ])
+    expect(result.points).toEqual([{ timestamp: '2026-09-10T02:00:00Z', inbound: 2.5, outbound: 0.5 }])
+  })
+
+  it('fetchDeviceInterfaceTraffic: 未指定接口时不带 interface 参数；非对象响应归一化为空列表', async () => {
+    mockedApi.get.mockReset()
+    mockedApi.get.mockResolvedValue(null)
+
+    const result = await fetchDeviceInterfaceTraffic(6, '24h')
+
+    expect(mockedApi.get.mock.calls[0][0]).not.toContain('interface=')
+    expect(result).toEqual({ deviceId: 6, interface: '', interfaces: [], points: [] })
   })
 })

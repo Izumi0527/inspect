@@ -260,7 +260,7 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/monitoring/components/charts/NetworkTrafficStackedAreaChart.tsx',
+    file: 'frontend/src/features/monitoring/components/charts/InterfaceTrafficChart.tsx',
     bannedPatterns: [
       /border-gray-200 pt-2 dark:border-gray-700/g,
       /text-gray-900 dark:text-gray-100/g,

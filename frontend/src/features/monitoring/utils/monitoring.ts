@@ -147,3 +147,28 @@ export function formatDurationFromMs(ms: number): string {
   const days = Math.floor(hours / 24)
   return `${days} 天`
 }
+
+/**
+ * 格式化带宽值（bps），按 1000 进制自动选择 bps/Kbps/Mbps/Gbps/Tbps：
+ * 1001 bps → "1.00 Kbps"，12266 bps → "12.3 Kbps"，≥100 时不带小数。
+ * 非有限数或 ≤ 0 统一显示 "0 bps"。
+ */
+export function formatBandwidthValue(bps: number): string {
+  if (!Number.isFinite(bps) || bps <= 0) return '0 bps'
+
+  const units = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']
+  const k = 1000
+
+  const rawIndex = Math.floor(Math.log(bps) / Math.log(k))
+  const unitIndex = Math.min(Math.max(rawIndex, 0), units.length - 1)
+
+  const value = bps / Math.pow(k, unitIndex)
+
+  if (value >= 100) {
+    return `${value.toFixed(0)} ${units[unitIndex]}`
+  } else if (value >= 10) {
+    return `${value.toFixed(1)} ${units[unitIndex]}`
+  } else {
+    return `${value.toFixed(2)} ${units[unitIndex]}`
+  }
+}

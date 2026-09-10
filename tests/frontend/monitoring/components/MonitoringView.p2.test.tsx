@@ -1,4 +1,5 @@
 import React from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { MonitoringView } from '@/features/monitoring/components/MonitoringView'
 import type { MonitoringDataEnvelope } from '@/features/monitoring/types'
@@ -40,7 +41,8 @@ jest.mock('@/features/monitoring/components/cards', () => ({
 jest.mock('@/features/monitoring/components/charts', () => ({
   SystemPerformanceChartWrapper: () => null,
   TemperatureChartWrapper: () => null,
-  NetworkTrafficChartWrapper: () => null,
+  InterfaceTrafficChartWrapper: () => null,
+  TrafficSeriesLegend: () => null,
   ChartSkeleton: () => null,
 }))
 
@@ -58,6 +60,17 @@ jest.mock('@/features/monitoring/hooks/useMonitoringV2', () => ({
 
 jest.mock('@/features/monitoring/hooks/useMonitoringDevices', () => ({
   useMonitoringDevices: () => ({ data: [], isLoading: false, error: null }),
+}))
+
+jest.mock('@/features/monitoring/hooks/useDeviceInterfaceTraffic', () => ({
+  INTERFACE_TRAFFIC_QUERY_KEY: 'monitoring-interface-traffic',
+  useDeviceInterfaceTraffic: () => ({
+    data: undefined,
+    isPending: true,
+    isPlaceholderData: false,
+    error: null,
+    refetch: jest.fn(),
+  }),
 }))
 
 jest.mock('@/lib/websocket', () => {
@@ -105,6 +118,16 @@ const buildEnvelope = (lastUpdate: string): MonitoringDataEnvelope => ({
   lastUpdate,
 })
 
+// 页面 hook 依赖 QueryClient（刷新时失效接口流量查询），渲染时统一包一层 Provider
+function renderView() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MonitoringView />
+    </QueryClientProvider>
+  )
+}
+
 describe('MonitoringView - WS 健康度与数据新鲜度提示（P2护栏）', () => {
   beforeEach(() => {
     jest.useFakeTimers()
@@ -137,7 +160,7 @@ describe('MonitoringView - WS 健康度与数据新鲜度提示（P2护栏）', 
     const wsModule = require('@/lib/websocket') as { __mockWs: { getHealthStatus: jest.Mock } }
     wsModule.__mockWs.getHealthStatus.mockReturnValue('stale')
 
-    const { unmount } = render(<MonitoringView />)
+    const { unmount } = renderView()
 
     expect(screen.getByText('连接不稳')).toBeInTheDocument()
     expect(screen.getByText(/已10\s*分钟未更新/)).toBeInTheDocument()
@@ -166,7 +189,7 @@ describe('MonitoringView - WS 健康度与数据新鲜度提示（P2护栏）', 
     const wsModule = require('@/lib/websocket') as { __mockWs: { getHealthStatus: jest.Mock } }
     wsModule.__mockWs.getHealthStatus.mockReturnValue('connected')
 
-    const { unmount } = render(<MonitoringView />)
+    const { unmount } = renderView()
 
     expect(screen.getByText('已连接')).toBeInTheDocument()
     expect(screen.queryByText(/未更新/)).not.toBeInTheDocument()

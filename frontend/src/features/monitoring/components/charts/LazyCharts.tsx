@@ -29,10 +29,10 @@ const LazyTemperatureChart = lazy(() =>
   }))
 )
 
-// 网络流量图表(懒加载)
-const LazyNetworkTrafficStackedAreaChart = lazy(() =>
-  import('../charts/NetworkTrafficStackedAreaChart').then((module) => ({
-    default: module.NetworkTrafficStackedAreaChart,
+// 接口流量图表(懒加载)
+const LazyInterfaceTrafficChart = lazy(() =>
+  import('../charts/InterfaceTrafficChart').then((module) => ({
+    default: module.InterfaceTrafficChart,
   }))
 )
 
@@ -96,23 +96,25 @@ export function TemperatureChartWrapper({
 }
 
 /**
- * 网络流量图表包装器
+ * 接口流量图表包装器
  */
-interface NetworkTrafficChartWrapperProps {
+interface InterfaceTrafficChartWrapperProps {
   data: NetworkTrafficDataPoint[]
   height?: number
   /** 时间范围（用于图表 x 轴刻度/标签格式优化） */
   timeRange?: string
+  className?: string
 }
 
-export function NetworkTrafficChartWrapper({
+export function InterfaceTrafficChartWrapper({
   data,
-  height = 300,
+  height = 280,
   timeRange,
-}: NetworkTrafficChartWrapperProps) {
+  className,
+}: InterfaceTrafficChartWrapperProps) {
   return (
     <Suspense fallback={<ChartSkeleton height={height} />}>
-      <LazyNetworkTrafficStackedAreaChart data={data} height={height} timeRange={timeRange} />
+      <LazyInterfaceTrafficChart data={data} height={height} timeRange={timeRange} className={className} />
     </Suspense>
   )
 }

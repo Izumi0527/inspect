@@ -1,4 +1,5 @@
 import React from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, waitFor, act } from '@testing-library/react'
 import { MonitoringView } from '@/features/monitoring/components/MonitoringView'
 import { useMonitoringV2 } from '@/features/monitoring/hooks/useMonitoringV2'
@@ -79,7 +80,8 @@ jest.mock('@/features/monitoring/components/cards', () => ({
 jest.mock('@/features/monitoring/components/charts', () => ({
   SystemPerformanceChartWrapper: () => <div>SystemPerformanceChartWrapper</div>,
   TemperatureChartWrapper: () => <div>TemperatureChartWrapper</div>,
-  NetworkTrafficChartWrapper: () => <div>NetworkTrafficChartWrapper</div>,
+  InterfaceTrafficChartWrapper: () => <div>NetworkTrafficChartWrapper</div>,
+  TrafficSeriesLegend: () => <div>NetworkTrafficChartWrapper</div>,
   ChartSkeleton: () => <div>ChartSkeleton</div>,
 }))
 
@@ -124,6 +126,16 @@ jest.mock('@/lib/websocket', () => ({
     wsHandlers[event] = handler
   },
 }))
+
+// 页面 hook 依赖 QueryClient（刷新时失效接口流量查询），渲染时统一包一层 Provider
+function renderView() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MonitoringView />
+    </QueryClientProvider>
+  )
+}
 
 describe('MonitoringView 可见性与 WS 行为', () => {
   let visibilityState = 'hidden'
@@ -174,7 +186,7 @@ describe('MonitoringView 可见性与 WS 行为', () => {
   })
 
   it('页面不可见时应退订 WS 房间且不订阅', async () => {
-    render(<MonitoringView />)
+    renderView()
 
     await waitFor(() => {
       expect(ws.unsubscribeFromDeviceMonitoring).toHaveBeenCalled()
@@ -186,7 +198,7 @@ describe('MonitoringView 可见性与 WS 行为', () => {
   })
 
   it('页面从不可见切回可见时，应订阅 WS 房间', async () => {
-    render(<MonitoringView />)
+    renderView()
 
     await waitFor(() => {
       expect(ws.unsubscribeFromDeviceMonitoring).toHaveBeenCalled()
@@ -235,7 +247,7 @@ describe('MonitoringView 可见性与 WS 行为', () => {
       isRefetching: false,
     })
 
-    render(<MonitoringView />)
+    renderView()
 
     await waitFor(() => {
       expect(wsHandlers.network_stats_update).toBeDefined()
@@ -281,7 +293,7 @@ describe('MonitoringView 可见性与 WS 行为', () => {
       isRefetching: false,
     })
 
-    render(<MonitoringView />)
+    renderView()
 
     await waitFor(() => {
       expect(wsHandlers.connect).toBeDefined()

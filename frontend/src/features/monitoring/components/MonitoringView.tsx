@@ -131,9 +131,10 @@ export function MonitoringView() {
             />
             <NetworkSection
               sectionRef={networkRef} networkInView={networkInView}
+              deviceIds={page.deviceIds} timeRange={page.timeRange} pageVisible={page.pageVisible}
               sectionNetworkTraffic={page.envelope?.sections.networkTraffic}
               networkTrafficHistory={page.data.networkTrafficHistory}
-              timeRange={page.timeRange} onRetry={page.refetch}
+              onRetry={page.refetch}
             />
 
           </div>
