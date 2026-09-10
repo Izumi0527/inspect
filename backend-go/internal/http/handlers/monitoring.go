@@ -59,6 +59,7 @@ func (h MonitoringHandler) Register(group *echo.Group) {
 	group.GET("/monitoring/devices/:device_id/metrics", h.GetDeviceMetrics)
 	group.GET("/monitoring/devices/:device_id/snmp-extensions", h.GetDeviceSNMPExtensions)
 	group.GET("/monitoring/devices/:device_id/history", h.GetDeviceMetricsHistory)
+	group.GET("/monitoring/devices/:device_id/interface-traffic", h.GetDeviceInterfaceTraffic)
 	group.GET("/monitoring/devices/:device_id/status", h.GetDeviceStatus)
 	group.GET("/monitoring/devices/:device_id/current", h.GetDeviceMetrics)
 	group.GET("/monitoring/historical", h.GetMonitoringHistorical)

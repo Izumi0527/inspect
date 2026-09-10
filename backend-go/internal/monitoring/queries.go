@@ -775,9 +775,9 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 	bucket := bucketSizeForRange(start, end)
 	useHourly := bucket >= time.Hour
 
-	inboundNames := []string{"bandwidth_in", "network_bytes_in", "throughput_in"}
-	outboundNames := []string{"bandwidth_out", "network_bytes_out", "throughput_out"}
-	allNames := append(append([]string{}, inboundNames...), outboundNames...)
+	inboundNames := networkInboundMetricNames
+	outboundNames := networkOutboundMetricNames
+	allNames := networkAllMetricNames()
 
 	deviceFilter := ""
 	if len(deviceIDs) > 0 {
