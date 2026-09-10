@@ -157,6 +157,47 @@ describe('MonitoringView', () => {
     expect(screen.queryByText('查看采集配置')).not.toBeInTheDocument()
   })
 
+  it('页面不再渲染「关键指标 / 性能趋势 / 状态详情 / 网络流量」区块标题', () => {
+    ;(useMonitoringV2 as jest.Mock).mockReturnValue({
+      data: {
+        data: {
+          statsV2: [{ id: 'total_devices', title: '总设备', value: '1' }],
+          systemPerformance: [],
+          temperatureHistory: [],
+          deviceStatusDistribution: { healthy: 1, warning: 0, critical: 0, offline: 0 },
+          networkTrafficHistory: [],
+          realtimeAlerts: [],
+        },
+        hasPartialFailure: false,
+        failedSections: [],
+        sections: {
+          stats: { ok: true },
+          systemPerformance: { ok: true },
+          temperature: { ok: true },
+          deviceStatus: { ok: true },
+          networkTraffic: { ok: true },
+          realtimeAlerts: { ok: true },
+        },
+        lastUpdate: '2026-02-24T12:00:00.000Z',
+      },
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+      isRefetching: false,
+    })
+
+    render(<MonitoringView />)
+
+    expect(screen.queryByRole('heading', { name: '关键指标' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '性能趋势' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '状态详情' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '网络流量' })).not.toBeInTheDocument()
+    // 卡片自身的标题保留，用户仍能识别每张卡
+    expect(screen.getByText('系统性能趋势')).toBeInTheDocument()
+    expect(screen.getByText('设备温度监控')).toBeInTheDocument()
+    expect(screen.getByText('流量监控')).toBeInTheDocument()
+  })
+
   it('多个分区失败时应分别显示对应失败文案', () => {
     ;(useMonitoringV2 as jest.Mock).mockReturnValue({
       data: {

@@ -1,7 +1,6 @@
 'use client'
 
-import { BarChart3 } from 'lucide-react'
-import { SectionHeader, SectionFailureCard, SectionPermissionLimitedCard } from '../shared'
+import { SectionFailureCard, SectionPermissionLimitedCard } from '../shared'
 import { DeviceStatusCard, RealTimeAlertsCard } from '../cards'
 import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../../types'
 
@@ -26,7 +25,6 @@ export function StatusSection({
 }: StatusSectionProps) {
   return (
     <section>
-      <SectionHeader icon={BarChart3} title="状态详情" />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 items-stretch">
         {sectionDeviceStatus?.ok === false ? (
           <SectionFailureCard

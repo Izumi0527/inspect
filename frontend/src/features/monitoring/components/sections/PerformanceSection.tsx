@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, type Ref } from 'react'
-import { TrendingUp } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/atoms'
-import { SectionHeader, SectionFailureContent } from '../shared'
+import { SectionFailureContent } from '../shared'
 import {
   SystemPerformanceChartWrapper,
   TemperatureChartWrapper,
@@ -54,7 +53,6 @@ export function PerformanceSection({
 
   return (
     <section ref={sectionRef}>
-      <SectionHeader icon={TrendingUp} title="性能趋势" />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">

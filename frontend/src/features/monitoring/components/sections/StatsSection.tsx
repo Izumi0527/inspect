@@ -1,10 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { Activity, Server, AlertTriangle, Cpu, HardDrive, Upload, Download, RefreshCw } from 'lucide-react'
+import { Server, AlertTriangle, Cpu, HardDrive, Upload, Download, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { CompactStatCard } from '@/components/shared'
-import { SectionHeader, SectionFailureContent } from '../shared'
+import { SectionFailureContent } from '../shared'
 import type { MonitoringDataEnvelope, StatCardData } from '../../types'
 
 interface StatsSectionProps {
@@ -34,7 +34,6 @@ const STATS_COLOR_MAP = {
 export function StatsSection({ section, statsV2 = [], onRetry }: StatsSectionProps) {
   return (
     <section>
-      <SectionHeader icon={Activity} title="关键指标" />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {section?.ok === false ? (
           <div className="col-span-full rounded-xl border-2 border-dashed border-red-200 bg-red-50/60 p-8 text-center dark:border-red-800 dark:bg-red-900/10">

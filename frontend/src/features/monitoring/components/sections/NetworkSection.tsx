@@ -1,9 +1,8 @@
 'use client'
 
 import type { Ref } from 'react'
-import { Radio } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/atoms'
-import { SectionHeader, SectionFailureContent } from '../shared'
+import { SectionFailureContent } from '../shared'
 import { NetworkTrafficChartWrapper, ChartSkeleton } from '../charts'
 import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../../types'
 
@@ -26,7 +25,6 @@ export function NetworkSection({
 }: NetworkSectionProps) {
   return (
     <section ref={sectionRef}>
-      <SectionHeader icon={Radio} title="网络流量" />
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">流量监控</CardTitle>
