@@ -515,7 +515,7 @@ export const useGenerateReport = () => {
           // 获取文件blob
           const blob = await response.blob()
           
-          // 从Content-Disposition获取文件名，或使用默认名称
+          // 文件名优先级：后端规范名（巡检报告_<执行名>_<时间>）> Content-Disposition 磁盘名 > 兜底
           const contentDisposition = response.headers.get('Content-Disposition')
           let filename = `inspection_report_${executionId}.${format}`
           if (contentDisposition) {
@@ -523,6 +523,9 @@ export const useGenerateReport = () => {
             if (filenameMatch && filenameMatch[1]) {
               filename = filenameMatch[1].replace(/['"]/g, '')
             }
+          }
+          if (result.file_name) {
+            filename = result.file_name
           }
           
           // 创建下载链接

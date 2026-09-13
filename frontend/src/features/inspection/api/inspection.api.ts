@@ -1345,6 +1345,13 @@ export async function triggerStrategyExecution(id: string): Promise<{ message: s
 
 // ==================== 巡检报告 ====================
 
+export interface GenerateInspectionReportResult {
+  report_id: string
+  download_url?: string
+  /** 后端规范化的下载文件名（巡检报告_<执行名称>_<时间>.<ext>），磁盘名仍在 download_url */
+  file_name?: string
+}
+
 export async function generateInspectionReport(params: {
   task_id?: number
   /** 执行批次 id（批次 UUID 或执行历史列表返回的执行 id），按整批出报告，优先于 task_id */
@@ -1354,9 +1361,15 @@ export async function generateInspectionReport(params: {
   end_date?: string
   format?: 'excel' | 'pdf' | 'word'
   template?: string
-}): Promise<{ report_id: string; download_url?: string }> {
+}): Promise<GenerateInspectionReportResult> {
   try {
-    const response = await api.post<InspectionApiResponse<{ report_id: string; download_url?: string }>>('/inspection/reports/generate', params)
+    // PDF 渲染是同步阻塞接口（整批设备 + 图表 + 字体解析），默认 10s 在小规格服务器上不够；
+    // 超时抛出的 AbortError 会被映射成通用失败提示，而后端其实仍在生成。
+    const response = await api.post<InspectionApiResponse<GenerateInspectionReportResult>>(
+      '/inspection/reports/generate',
+      params,
+      { timeout: 120_000 }
+    )
 
     if (!response.data) {
       throw new Error('生成报告失败')

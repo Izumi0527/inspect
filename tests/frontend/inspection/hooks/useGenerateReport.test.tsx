@@ -114,4 +114,37 @@ describe('巡检报告生成与错误提示', () => {
       client.clear()
     }
   })
+
+  it('后端返回 file_name 时应优先于 Content-Disposition 的磁盘名', async () => {
+    const friendly = '巡检报告_手动巡检_20260911_120608.pdf'
+    ;(generateInspectionReport as jest.Mock).mockResolvedValueOnce({
+      report_id: 'report-test',
+      download_url: '/api/v1/reports/files/report-1-20260911-040608.pdf',
+      file_name: friendly,
+    })
+    ;(authorizedDownload as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      blob: async () => new Blob(['%PDF-1.4\n'], { type: 'application/pdf' }),
+      headers: new Headers({ 'Content-Disposition': 'attachment; filename="report-1-20260911-040608.pdf"' }),
+    })
+    const originalCreate = URL.createObjectURL
+    const originalRevoke = URL.revokeObjectURL
+    URL.createObjectURL = jest.fn(() => 'blob:report-test')
+    URL.revokeObjectURL = jest.fn()
+    let downloadedFilename = ''
+    jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloadedFilename = this.download
+    })
+    const { result, client } = renderReportHook()
+    try {
+      await act(async () => {
+        await result.current.mutateAsync(request)
+      })
+      expect(downloadedFilename).toBe(friendly)
+    } finally {
+      URL.createObjectURL = originalCreate
+      URL.revokeObjectURL = originalRevoke
+      client.clear()
+    }
+  })
 })
