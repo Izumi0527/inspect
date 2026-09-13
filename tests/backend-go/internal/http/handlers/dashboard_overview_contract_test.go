@@ -109,7 +109,7 @@ func TestDashboardOverviewHandler_ShouldSplitPeakTrafficAndExposeInspectionCard(
 	defer cleanup()
 
 	// 方向峰值查询：24小时窗口内下行(入站)峰值 2Mbps、上行(出站)峰值 1Mbps
-	mock.ExpectQuery(`(?is)WITH time_buckets AS.*MAX\(inbound\) AS peak_inbound.*MAX\(outbound\) AS peak_outbound.*`).
+	mock.ExpectQuery(`(?is)WITH per_device AS.*time_buckets AS.*MAX\(inbound\) AS peak_inbound.*MAX\(outbound\) AS peak_outbound.*`).
 		WillReturnRows(sqlmock.NewRows([]string{"peak_inbound", "peak_outbound", "peak_combined", "sample_count"}).
 			AddRow(2_000_000.0, 1_000_000.0, 3_000_000.0, 12))
 

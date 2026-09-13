@@ -34,8 +34,8 @@ func TestExportMonitoringReportCSV_ChartsSection_ListsPerformancePerDevice(t *te
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "name_count"}).
 			AddRow(1, "SW-01", "10.0.0.1", 1).
 			AddRow(2, "SW-02", "10.0.0.2", 1))
-	// 网络流量查询（保持原逻辑，返回空）
-	mock.ExpectQuery(`(?is)WITH combined_metrics AS.*`).
+	// 网络流量查询：只读 device_metrics，桶内按设备 AVG 再跨设备 SUM（返回空）
+	mock.ExpectQuery(`(?is)SELECT bucket, SUM\(inbound\) AS inbound, SUM\(outbound\) AS outbound FROM \(SELECT time_bucket\('5 minutes', collected_at\) AS bucket, device_id, AVG\(.*FROM device_metrics WHERE .*GROUP BY bucket, device_id\) AS per_device GROUP BY bucket ORDER BY bucket ASC`).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "inbound", "outbound"}))
 
 	result, err := writer.ExportMonitoringReport(context.Background(), monitoring.MonitoringReportExportRequest{

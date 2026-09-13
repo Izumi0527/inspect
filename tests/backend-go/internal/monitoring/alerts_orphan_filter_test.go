@@ -31,7 +31,7 @@ func TestGetMonitoringStats_ShouldExcludeDeletedDeviceAlerts(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"avg_value", "sample_count"}).AddRow(nil, 0))
 	mock.ExpectQuery(`SELECT AVG\(memory_usage\) AS avg_value FROM "devices" WHERE is_active = \$1`).
 		WillReturnRows(sqlmock.NewRows([]string{"avg_value"}).AddRow(nil))
-	mock.ExpectQuery(`(?is)WITH time_buckets AS .*FROM device_metrics.*`).
+	mock.ExpectQuery(`(?is)WITH per_device AS .*FROM device_metrics.*`).
 		WillReturnRows(sqlmock.NewRows([]string{"peak_inbound", "peak_outbound", "peak_combined", "sample_count"}).
 			AddRow(0.0, 0.0, 0.0, 1))
 

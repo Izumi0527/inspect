@@ -14,7 +14,7 @@ func TestPeakNetworkMetrics24h_ShouldParseDirectionalAndCombinedPeaks(t *testing
 	db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
 	defer cleanup()
 
-	mock.ExpectQuery(`(?is)WITH time_buckets AS.*MAX\(inbound\) AS peak_inbound.*MAX\(outbound\) AS peak_outbound.*MAX\(inbound \+ outbound\) AS peak_combined.*`).
+	mock.ExpectQuery(`(?is)WITH per_device AS.*time_buckets AS.*MAX\(inbound\) AS peak_inbound.*MAX\(outbound\) AS peak_outbound.*MAX\(COALESCE\(inbound, 0\) \+ COALESCE\(outbound, 0\)\) AS peak_combined.*`).
 		WillReturnRows(sqlmock.NewRows([]string{"peak_inbound", "peak_outbound", "peak_combined", "sample_count"}).
 			AddRow(2818.0, 12266.0, 15084.0, 24))
 
@@ -44,7 +44,7 @@ func TestPeakNetworkMetrics24h_ShouldReportNoDataWhenWindowEmpty(t *testing.T) {
 	db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
 	defer cleanup()
 
-	mock.ExpectQuery(`(?is)WITH time_buckets AS.*FROM device_metrics.*`).
+	mock.ExpectQuery(`(?is)WITH per_device AS.*FROM device_metrics.*`).
 		WillReturnRows(sqlmock.NewRows([]string{"peak_inbound", "peak_outbound", "peak_combined", "sample_count"}).
 			AddRow(nil, nil, nil, 0))
 

@@ -759,6 +759,26 @@ func (w *MetricsWriter) GetDevicePerformanceHistory(ctx context.Context, start t
 	return result, nil
 }
 
+// aggregateTrafficQuery 生成多设备聚合流量 SQL（参数顺序：start, end[, deviceIDs]）。
+// 只读 device_metrics：设备级 bandwidth_* 已是采集器按接口累加的结果，再并上
+// interface_metrics 会 ×2。同一（桶, 设备）内多个样本取 AVG——速率是瞬时量，采集周期
+// 与桶宽不对齐时 SUM 会把双样本桶放大一倍形成锯齿；跨设备再 SUM 得总吞吐。
+func aggregateTrafficQuery(interval string, deviceFilter string) string {
+	return fmt.Sprintf(
+		`SELECT bucket, SUM(inbound) AS inbound, SUM(outbound) AS outbound FROM (`+
+			`SELECT time_bucket('%s', collected_at) AS bucket, device_id, `+
+			`AVG(CASE WHEN metric_name IN (%s) THEN metric_value END) AS inbound, `+
+			`AVG(CASE WHEN metric_name IN (%s) THEN metric_value END) AS outbound `+
+			`FROM device_metrics WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)%s `+
+			`GROUP BY bucket, device_id) AS per_device GROUP BY bucket ORDER BY bucket ASC`,
+		interval,
+		formatMetricList(networkInboundMetricNames),
+		formatMetricList(networkOutboundMetricNames),
+		formatMetricList(networkAllMetricNames()),
+		deviceFilter,
+	)
+}
+
 // GetNetworkTrafficHistory 查询网络流量时序；deviceIDs 非空时仅聚合所选设备。
 func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]NetworkTrafficPoint, error) {
 	if w.db == nil {
@@ -816,33 +836,8 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 			}
 
 			interval := "1 hour"
-			fallback := fmt.Sprintf(
-				`WITH combined_metrics AS (
-				SELECT collected_at, metric_name, metric_value FROM device_metrics
-				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)%s
-				UNION ALL
-				SELECT collected_at, metric_name, metric_value FROM interface_metrics
-				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)%s
-			)
-			SELECT time_bucket('%s', collected_at) AS bucket,
-                SUM(CASE WHEN metric_name IN (%s) THEN metric_value ELSE 0 END) AS inbound,
-                SUM(CASE WHEN metric_name IN (%s) THEN metric_value ELSE 0 END) AS outbound
-             FROM combined_metrics
-             GROUP BY bucket
-             ORDER BY bucket ASC`,
-				formatMetricList(allNames),
-				deviceFilter,
-				formatMetricList(allNames),
-				deviceFilter,
-				interval,
-				formatMetricList(inboundNames),
-				formatMetricList(outboundNames),
-			)
+			fallback := aggregateTrafficQuery(interval, deviceFilter)
 			fallbackArgs := []interface{}{start, end}
-			if len(deviceIDs) > 0 {
-				fallbackArgs = append(fallbackArgs, deviceIDs)
-			}
-			fallbackArgs = append(fallbackArgs, start, end)
 			if len(deviceIDs) > 0 {
 				fallbackArgs = append(fallbackArgs, deviceIDs)
 			}
@@ -851,35 +846,8 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 			}
 		}
 	} else {
-		interval := bucketIntervalString(bucket)
-		// Query from both device_metrics and interface_metrics tables using UNION ALL
-		query := fmt.Sprintf(
-			`WITH combined_metrics AS (
-				SELECT collected_at, metric_name, metric_value FROM device_metrics
-				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)%s
-				UNION ALL
-				SELECT collected_at, metric_name, metric_value FROM interface_metrics
-				WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)%s
-			)
-			SELECT time_bucket('%s', collected_at) AS bucket,
-                SUM(CASE WHEN metric_name IN (%s) THEN metric_value ELSE 0 END) AS inbound,
-                SUM(CASE WHEN metric_name IN (%s) THEN metric_value ELSE 0 END) AS outbound
-             FROM combined_metrics
-             GROUP BY bucket
-             ORDER BY bucket ASC`,
-			formatMetricList(allNames),
-			deviceFilter,
-			formatMetricList(allNames),
-			deviceFilter,
-			interval,
-			formatMetricList(inboundNames),
-			formatMetricList(outboundNames),
-		)
+		query := aggregateTrafficQuery(bucketIntervalString(bucket), deviceFilter)
 		rawArgs := []interface{}{start, end}
-		if len(deviceIDs) > 0 {
-			rawArgs = append(rawArgs, deviceIDs)
-		}
-		rawArgs = append(rawArgs, start, end)
 		if len(deviceIDs) > 0 {
 			rawArgs = append(rawArgs, deviceIDs)
 		}
@@ -1106,27 +1074,31 @@ func PeakNetworkMetrics24h(ctx context.Context, db *gorm.DB, deviceIDs []int) (P
 		args = append(args, deviceIDs)
 	}
 
-	// 使用子查询：先按 5 分钟桶分方向聚合流量，再取各口径的桶峰值
-	// 过滤掉超过 10 Gbps 的异常数据（可能是历史错误数据）
+	// 先按（5 分钟桶, 设备）取速率均值（桶内多样本 SUM 会成倍放大），再跨设备 SUM，
+	// 最后取各口径的桶峰值。过滤掉超过 10 Gbps 的异常数据（可能是历史错误数据）。
 	query := fmt.Sprintf(`
-		WITH time_buckets AS (
+		WITH per_device AS (
 			SELECT
 				time_bucket('5 minutes', collected_at) AS bucket,
-				SUM(CASE WHEN metric_name IN (?) THEN metric_value ELSE 0 END) AS inbound,
-				SUM(CASE WHEN metric_name IN (?) THEN metric_value ELSE 0 END) AS outbound
+				device_id,
+				AVG(CASE WHEN metric_name IN (?) THEN metric_value END) AS inbound,
+				AVG(CASE WHEN metric_name IN (?) THEN metric_value END) AS outbound
 			FROM device_metrics
 			WHERE metric_name IN (?)
 			AND collected_at >= NOW() - INTERVAL '24 hours'
 			AND metric_value < ?%s
-			GROUP BY bucket
+			GROUP BY bucket, device_id
+		),
+		time_buckets AS (
+			SELECT bucket, SUM(inbound) AS inbound, SUM(outbound) AS outbound FROM per_device GROUP BY bucket
 		)
 		SELECT
 			MAX(inbound) AS peak_inbound,
 			MAX(outbound) AS peak_outbound,
-			MAX(inbound + outbound) AS peak_combined,
+			MAX(COALESCE(inbound, 0) + COALESCE(outbound, 0)) AS peak_combined,
 			COUNT(*) AS sample_count
 		FROM time_buckets
-		WHERE inbound + outbound > 0
+		WHERE COALESCE(inbound, 0) + COALESCE(outbound, 0) > 0
 	`, deviceFilter)
 
 	if err := db.WithContext(ctx).Raw(query, args...).Scan(&peak).Error; err != nil {
