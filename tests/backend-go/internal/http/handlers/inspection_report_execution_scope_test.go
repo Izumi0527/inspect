@@ -14,11 +14,27 @@ import (
 	"gorm.io/gorm"
 )
 
-// resolveReportInspectionIDs 是报告生成载荷解析的未导出方法，经 go:linkname 桥接做白盒测试
+// resolveReportInspectionRows 是报告生成载荷解析的未导出方法，经 go:linkname 桥接做白盒测试
 // （沿用本仓库约定，接收者作为第一个参数传入）。
 //
-//go:linkname resolveReportInspectionIDs github.com/your-org/inspect-system/backend-go/internal/http/handlers.InspectionHandler.resolveReportInspectionIDs
-func resolveReportInspectionIDs(h handlers.InspectionHandler, ctx context.Context, payload map[string]interface{}) ([]int, error)
+//go:linkname resolveReportInspectionRows github.com/your-org/inspect-system/backend-go/internal/http/handlers.InspectionHandler.resolveReportInspectionRows
+func resolveReportInspectionRows(h handlers.InspectionHandler, ctx context.Context, payload map[string]interface{}) ([]inspection.Inspection, error)
+
+// resolveReportInspectionIDs 把整批行压成 id 列表，既有用例只关心行 id 与顺序。
+func resolveReportInspectionIDs(h handlers.InspectionHandler, ctx context.Context, payload map[string]interface{}) ([]int, error) {
+	rows, err := resolveReportInspectionRows(h, ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		return nil, nil
+	}
+	ids := make([]int, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	return ids, nil
+}
 
 // 评审 H2 口径：报告导出按「整批」取行。
 // 前端原先把批次 UUID 传给 task_id，parseInt 失败后端落回 24h 时间窗，导出报告与所选批次完全无关；

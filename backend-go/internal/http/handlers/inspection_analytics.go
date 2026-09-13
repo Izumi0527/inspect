@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 )
 
@@ -338,12 +339,12 @@ func (h InspectionHandler) ExportAnalytics(c echo.Context) error {
 	return c.File(filePath)
 }
 
-// resolveReportInspectionIDs 把报告生成载荷中的执行标识解析为整批 inspections 行 id。
+// resolveReportInspectionRows 把报告生成载荷中的执行标识解析为整批 inspections 行。
 // 优先读 execution_id（批次 UUID 或执行历史列表返回的代表行数字 id，均可能非数字）；
 // 为空时兼容旧调用方，把 task_id 的十进制字符串同样当作执行 id 展开——
 // task_id 语义早已是"单次执行"（可能多台设备），必须展开成整批而非单行。
 // 未指定任何执行标识时返回 (nil, nil)，报告保持按时间窗/设备过滤的汇总口径。
-func (h InspectionHandler) resolveReportInspectionIDs(ctx context.Context, payload map[string]interface{}) ([]int, error) {
+func (h InspectionHandler) resolveReportInspectionRows(ctx context.Context, payload map[string]interface{}) ([]inspection.Inspection, error) {
 	executionID := ""
 	if value, ok := readOptionalString(payload, "execution_id", "executionId"); ok && value != nil {
 		executionID = *value
@@ -359,15 +360,28 @@ func (h InspectionHandler) resolveReportInspectionIDs(ctx context.Context, paylo
 	if h.Service == nil || h.Service.DB() == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
-	rows, err := h.resolveExecutionBatchRows(ctx, h.Service.DB(), executionID)
-	if err != nil {
-		return nil, err
+	return h.resolveExecutionBatchRows(ctx, h.Service.DB(), executionID)
+}
+
+// executionDisplayName 取批次首行的执行名称，用于下载文件名。
+func executionDisplayName(rows []inspection.Inspection) string {
+	if len(rows) == 0 {
+		return ""
 	}
-	ids := make([]int, 0, len(rows))
-	for _, item := range rows {
-		ids = append(ids, item.ID)
+	return stringValue(rows[0].Name)
+}
+
+// executionDisplayTime 取批次首行的开始时间（缺失则创建时间，再缺失用当前时间）。
+func executionDisplayTime(rows []inspection.Inspection) time.Time {
+	if len(rows) > 0 {
+		if rows[0].StartedAt != nil && !rows[0].StartedAt.IsZero() {
+			return *rows[0].StartedAt
+		}
+		if rows[0].CreatedAt != nil && !rows[0].CreatedAt.IsZero() {
+			return *rows[0].CreatedAt
+		}
 	}
-	return ids, nil
+	return time.Now()
 }
 
 func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
@@ -403,12 +417,16 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 	// 精确取行；不再依赖前端把执行 id parseInt 成 task_id——批次 UUID 与回填
 	// 后的 legacy-<id> 都不是数字，parseInt 落空会让报告退回 24h 时间窗，
 	// 与所选批次完全无关。
-	inspectionIDs, err := h.resolveReportInspectionIDs(c.Request().Context(), payload)
+	batchRows, err := h.resolveReportInspectionRows(c.Request().Context(), payload)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to resolve execution for report")
+	}
+	inspectionIDs := make([]int, 0, len(batchRows))
+	for _, row := range batchRows {
+		inspectionIDs = append(inspectionIDs, row.ID)
 	}
 
 	start, _ := parseTimeOptional(stringValue(startDate))
@@ -483,6 +501,8 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 	return inspectionOK(c, map[string]interface{}{
 		"report_id":    fmt.Sprintf("%d", report.ID),
 		"download_url": downloadURL,
+		// 面向用户的下载文件名；磁盘名保持 ASCII 安全以适配 /reports/files/:filename 路由
+		"file_name": reports.BuildInspectionReportFileName(executionDisplayName(batchRows), executionDisplayTime(batchRows), format),
 	})
 }
 
