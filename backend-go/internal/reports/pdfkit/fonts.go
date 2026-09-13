@@ -1,6 +1,7 @@
 package pdfkit
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
 	"strings"
@@ -104,16 +105,62 @@ func RegisterFontsWithPaths(pdf *gofpdf.Fpdf, paths FontPaths) error {
 		{FontFamilyLatin, "", latin},
 		{FontFamilyLatin, "B", latinBold},
 	} {
-		if face.path == "" {
-			pdf.AddUTF8FontFromBytes(face.family, face.style, assets.EmbeddedNotoSansSC())
-		} else {
-			pdf.AddUTF8Font(face.family, face.style, face.path)
-		}
-		if err := pdf.Error(); err != nil {
+		// gofpdf.AddUTF8Font 内部用 path.Join(fontpath, file) 拼路径，Linux 绝对路径
+		// 的前导 "/" 会被吃掉变成相对路径（Windows 的 C:\ 不含正斜杠故侥幸正常）。
+		// 因此字体文件一律自己读成字节再注册，不把路径交给 gofpdf。
+		raw, err := fontBytes(face.path)
+		if err != nil {
 			return err
+		}
+		// AddUTF8FontFromBytes 与 AddUTF8Font 不对称：字节入口解析失败只打印到
+		// stdout、不设置错误标志，字体会静默缺席直到 SetFont 才报 "undefined font"。
+		// 这里先校验 TrueType 头，再用 SetFont 探针确认字体确实已注册。
+		if err := validateTrueTypeHeader(raw, face.path); err != nil {
+			return err
+		}
+		pdf.AddUTF8FontFromBytes(face.family, face.style, raw)
+		pdf.SetFont(face.family, face.style, 10)
+		if err := pdf.Error(); err != nil {
+			return fmt.Errorf("注册PDF字体 %s/%s 失败（%s）: %w", face.family, face.style, describeFontSource(face.path), err)
 		}
 	}
 	return nil
+}
+
+// validateTrueTypeHeader 复刻 gofpdf 的头部判定：只接受 0x00010000 与 'true'，
+// 拒绝 OTTO（.otf）、ttcf（.ttc）及任意非字体内容。
+func validateTrueTypeHeader(raw []byte, path string) error {
+	if len(raw) < 4 {
+		return fmt.Errorf("PDF字体文件过短（%s）", describeFontSource(path))
+	}
+	tag := binary.BigEndian.Uint32(raw[:4])
+	switch tag {
+	case 0x00010000, 0x74727565: // 0x00010000 / 'true'
+		return nil
+	case 0x4F54544F, 0x74746366: // 'OTTO' / 'ttcf'
+		return fmt.Errorf("PDF字体 %s 为 .otf/.ttc 格式，gofpdf 仅支持 .ttf", describeFontSource(path))
+	default:
+		return fmt.Errorf("PDF字体 %s 不是 TrueType 文件", describeFontSource(path))
+	}
+}
+
+func describeFontSource(path string) string {
+	if path == "" {
+		return "内嵌 Noto Sans SC"
+	}
+	return path
+}
+
+// fontBytes 返回字体文件内容；空路径表示使用内嵌 Noto Sans SC。
+func fontBytes(path string) ([]byte, error) {
+	if path == "" {
+		return assets.EmbeddedNotoSansSC(), nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("读取PDF字体 %s 失败: %w", path, err)
+	}
+	return raw, nil
 }
 
 // CJKFontBytes returns the raw bytes of the resolved CJK regular font.
@@ -125,10 +172,7 @@ func CJKFontBytes() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if paths.CJK == "" {
-		return assets.EmbeddedNotoSansSC(), nil
-	}
-	return os.ReadFile(paths.CJK)
+	return fontBytes(paths.CJK)
 }
 
 func envOverride(name string) string {
