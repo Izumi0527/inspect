@@ -45,6 +45,7 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 		&settings.SystemBackup{},
 		&settings.User{},
 		&settings.UserSession{},
+		&settings.UserPasswordHistory{},
 		&settings.Role{},
 		&settings.Permission{},
 		&settings.RolePermission{},

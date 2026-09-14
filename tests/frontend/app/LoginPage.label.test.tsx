@@ -9,7 +9,12 @@
  * 因此可作为该缺陷的精确护栏。
  */
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+
+const mockLoginOptions = jest.fn()
+jest.mock('@/lib/api-client', () => ({
+  api: { auth: { loginOptions: () => mockLoginOptions() } },
+}))
 
 jest.mock('@/lib/contexts/auth-context', () => ({
   useAuth: () => ({
@@ -24,6 +29,10 @@ jest.mock('@/lib/contexts/auth-context', () => ({
 
 import LoginPage from '@/app/(auth)/login/page'
 
+beforeEach(() => {
+  mockLoginOptions.mockResolvedValue({ remember_me_enabled: true })
+})
+
 describe('登录表单标签关联', () => {
   it('「记住我」复选框必须能通过其可见标签定位', () => {
     render(<LoginPage />)
@@ -36,5 +45,21 @@ describe('登录表单标签关联', () => {
 
     expect(screen.getByLabelText('用户名')).toHaveAttribute('type', 'text')
     expect(screen.getByLabelText('密码')).toBeInTheDocument()
+  })
+
+  it('安全策略关闭"记住我"时不渲染该复选框', async () => {
+    mockLoginOptions.mockResolvedValue({ remember_me_enabled: false })
+    render(<LoginPage />)
+
+    await waitFor(() => expect(mockLoginOptions).toHaveBeenCalled())
+    await waitFor(() => expect(screen.queryByLabelText('记住我')).not.toBeInTheDocument())
+  })
+
+  it('读取策略失败时保留复选框（后端会按策略忽略勾选）', async () => {
+    mockLoginOptions.mockRejectedValue(new Error('network'))
+    render(<LoginPage />)
+
+    await waitFor(() => expect(mockLoginOptions).toHaveBeenCalled())
+    expect(screen.getByLabelText('记住我')).toBeInTheDocument()
   })
 })

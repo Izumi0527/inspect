@@ -43,11 +43,6 @@ export function useSecuritySettings() {
   })
 
   const [authentication, setAuthentication] = useState<AuthenticationConfig>({
-    mfaEnabled: false,
-    mfaMethods: ['totp'],
-    mfaRequired: false,
-    allowOAuthLogin: false,
-    oauthProviders: [],
     ipWhitelistEnabled: false,
     ipWhitelist: [],
   })

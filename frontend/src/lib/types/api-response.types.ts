@@ -33,6 +33,11 @@ export interface LoginResponse {
   user: User
 }
 
+// 登录页在认证前读取的策略开关（GET /auth/login-options）
+export interface LoginOptionsResponse {
+  remember_me_enabled: boolean
+}
+
 export interface RefreshTokenResponse {
   access_token: string
   refresh_token: string

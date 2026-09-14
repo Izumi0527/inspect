@@ -246,6 +246,11 @@ func (h SettingsHandler) bulkUpdateSettings(c echo.Context) error {
 		updatedBy = user.ID
 	}
 
+	// IP 白名单自锁防护：启用且当前访问 IP 不在列表内时拒绝整批保存。
+	if err := h.Service.ValidateIPAllowlistChange(c.Request().Context(), settingsMap, c.RealIP()); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
 	resp, err := h.Service.BulkUpdateSettings(c.Request().Context(), settingsMap, updatedBy)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "批量更新配置失败")
@@ -393,6 +398,11 @@ func (h SettingsHandler) SystemSettingsUpdate(c echo.Context) error {
 	updatedBy := ""
 	if user != nil {
 		updatedBy = user.ID
+	}
+
+	// IP 白名单自锁防护：启用且当前访问 IP 不在列表内时拒绝整批保存。
+	if err := h.Service.ValidateIPAllowlistChange(c.Request().Context(), settingsMap, c.RealIP()); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	resp, err := h.Service.BulkUpdateSettings(c.Request().Context(), settingsMap, updatedBy)

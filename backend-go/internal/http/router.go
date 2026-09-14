@@ -32,6 +32,11 @@ func NewServer(
 	e := echo.New()
 	e.HideBanner = true
 
+	// 来源 IP 提取：仅当直连对端是本机回环（同机 nginx 反代）时才信任 X-Real-IP，
+	// 其余情况一律取 TCP 对端地址。默认实现会无条件相信 X-Forwarded-For，
+	// 会让 IP 白名单、审计日志与登录 IP 被任意请求头伪造。
+	e.IPExtractor = echo.ExtractIPFromRealIPHeader(echo.TrustLinkLocal(false), echo.TrustPrivateNet(false))
+
 	// 使用带日志的错误处理器
 	if logger != nil {
 		e.HTTPErrorHandler = mw.ErrorHandlerWithLogger(logger)
@@ -59,6 +64,10 @@ func NewServer(
 	api := e.Group("/api/v1")
 	// 限制请求体大小，避免批量接口/读取 raw body 被超大 payload 拖垮
 	api.Use(echomw.BodyLimit("10M"))
+	// IP 白名单（安全策略）：挂在认证之前，未登录请求（含登录端点）同样受限。
+	if settingsHandler != nil && settingsHandler.Service != nil {
+		api.Use(mw.IPAllowlist(settingsHandler.Service))
+	}
 	// 全局认证中间件：对非白名单路由强制校验 Bearer token（认证），
 	// 各 handler 仍各自做权限点（授权）检查。新增端点即使漏写授权也不会缺失认证。
 	if authHandler != nil && authHandler.Service != nil {
@@ -118,6 +127,7 @@ func NewServer(
 // publicAPIPaths 列出 /api/v1 下无需 Bearer 认证的公开端点（echo 路由模板，含分组前缀）。
 // 这些端点要么是认证引导（登录/刷新），要么使用 Bearer 以外的认证方式：
 //   - /api/v1/auth/login        登录引导，无 token
+//   - /api/v1/auth/login-options 登录页在认证前读取的策略开关（“记住我”是否可用）
 //   - /api/v1/auth/refresh      刷新引导，携带 refresh token（在 body）而非 Bearer access token
 //   - /api/v1/ws/:user_id       WebSocket 升级，使用 Sec-WebSocket-Protocol 子协议传递 token
 //   - /api/v1/monitoring/reports/download  报表一次性下载 token（在表单），供浏览器直接下载
@@ -126,6 +136,7 @@ func NewServer(
 func publicAPIPaths() map[string]struct{} {
 	return map[string]struct{}{
 		"/api/v1/auth/login":                  {},
+		"/api/v1/auth/login-options":          {},
 		"/api/v1/auth/refresh":                {},
 		"/api/v1/ws/:user_id":                 {},
 		"/api/v1/monitoring/reports/download": {},

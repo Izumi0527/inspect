@@ -6,6 +6,7 @@ import { SecuritySettings } from '@/features/settings/components/security/Securi
 import { SettingsShellProvider } from '@/features/settings/context/SettingsShellContext'
 import { useSettingsShellState } from '@/features/settings/hooks/useSettingsShellState'
 import { SettingsToolbar } from '@/features/settings/shell/SettingsToolbar'
+import { toast } from 'react-hot-toast'
 
 const mockUseSecuritySettings = jest.fn()
 const saveAllMock = jest.fn()
@@ -74,15 +75,27 @@ describe('SecuritySettings 壳层动作区迁移', () => {
 
   beforeEach(() => {
     mockUseSecuritySettings.mockReturnValue({
-      sessionManagement: { maxConcurrentSessions: 3 },
+      sessionManagement: {
+        sessionTimeout: 30,
+        autoLogoutEnabled: true,
+        rememberMeEnabled: true,
+        rememberMeDuration: 7,
+        maxConcurrentSessions: 3,
+        forceLogoutOnPasswordChange: true,
+      },
       passwordPolicy: {
         minLength: 12,
         requireUppercase: true,
         requireLowercase: true,
         requireNumbers: true,
         requireSpecialChars: false,
+        passwordExpireDays: 90,
+        passwordHistoryCount: 5,
+        preventCommonPasswords: true,
+        maxLoginAttempts: 5,
+        lockoutDuration: 15,
       },
-      authentication: { mfaEnabled: true, mfaRequired: false, ipWhitelistEnabled: true, ipWhitelist: ['10.0.0.0/8'] },
+      authentication: { ipWhitelistEnabled: true, ipWhitelist: ['10.0.0.0/8'] },
       isLoading: false,
       isSaving: false,
       isDirty: true,
@@ -133,7 +146,8 @@ describe('SecuritySettings 壳层动作区迁移', () => {
     })
     expect(screen.getByRole('heading', { name: '安全策略' })).toBeInTheDocument()
     expect(screen.getByText('最小密码长度')).toBeInTheDocument()
-    expect(screen.getByText('MFA 状态')).toBeInTheDocument()
+    expect(screen.getByText('密码有效期')).toBeInTheDocument()
+    expect(screen.getByText('登录失败锁定')).toBeInTheDocument()
     expect(screen.getByText('IP 白名单')).toBeInTheDocument()
     expect(screen.getByText('最大并发会话数')).toBeInTheDocument()
     expect(
@@ -157,5 +171,23 @@ describe('SecuritySettings 壳层动作区迁移', () => {
     await user.click(screen.getByRole('button', { name: '重置整页更改' }))
     expect(resetAllMock).toHaveBeenCalled()
   })
-})
 
+  it('数字越界时拦截保存并提示，不调用 saveAll', async () => {
+    const user = userEvent.setup()
+    const current = mockUseSecuritySettings()
+    mockUseSecuritySettings.mockReturnValue({
+      ...current,
+      passwordPolicy: { ...current.passwordPolicy, minLength: 40 },
+    })
+
+    render(
+      <SettingsShellProvider activeTabKey="security">
+        <SecuritySettings />
+      </SettingsShellProvider>
+    )
+
+    await user.click(await screen.findByRole('button', { name: '保存整页更改' }))
+    expect(saveAllMock).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('最小密码长度必须在 6-32 之间'))
+  })
+})

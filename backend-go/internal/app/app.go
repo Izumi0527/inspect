@@ -203,6 +203,13 @@ func New() (*App, error) {
 	// 提前创建 settingsService：inspection/scheduler/alerts 通用依赖
 	settingsService := settings.NewService(dbConn, redisClient, cfg, log)
 
+	// 清理旧版安全策略页写入、后端从未消费的 MFA/OAuth 配置残留（幂等，失败不阻塞启动）。
+	if removed, err := settingsService.PurgeLegacySecuritySettings(context.Background()); err != nil {
+		log.Warn("清理遗留安全策略配置失败", zap.Error(err))
+	} else if removed > 0 {
+		log.Info("已清理遗留安全策略配置行", zap.Int64("rows", removed))
+	}
+
 	// 自助改密复用 settings 的改密逻辑（含密码策略、清除强制改密标志、登出会话）。
 	authHandler.Settings = settingsService
 	// 登录/登出/失败尝试写入审计日志。

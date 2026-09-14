@@ -24,11 +24,6 @@ const passwordPolicy: PasswordPolicyConfig = {
 }
 
 const authentication: AuthenticationConfig = {
-  mfaEnabled: true,
-  mfaMethods: ['totp'],
-  mfaRequired: false,
-  allowOAuthLogin: true,
-  oauthProviders: ['github'],
   ipWhitelistEnabled: true,
   ipWhitelist: ['10.0.0.0/8'],
 }
@@ -51,18 +46,23 @@ const removedExplanatoryCopies = [
   '认证方式用于增强登录验证链路',
   '控制访问时效、并发登录与改密后的会话处置',
   '会话策略决定用户登录后可维持多久',
+  // 后端未实现的能力不得以可配置项形式出现在页面上
+  '多因素认证',
+  'MFA',
+  'OAuth',
 ]
 
 const retainedFunctionalCopies = [
   '安全策略',
   '当前安全基线',
   '最小密码长度',
-  'MFA 状态',
+  '密码有效期',
   'IP 白名单',
+  '登录失败锁定',
   '最大并发会话数',
   '密码复杂度要求',
   '密码策略',
-  '认证方式',
+  '访问控制',
   '会话管理',
   '保存整页更改',
   '重置整页更改',
@@ -81,8 +81,9 @@ describe('SecuritySettings 安全策略页说明文案', () => {
           requireLowercase={passwordPolicy.requireLowercase}
           requireNumbers={passwordPolicy.requireNumbers}
           requireSpecialChars={passwordPolicy.requireSpecialChars}
-          mfaEnabled={authentication.mfaEnabled}
-          mfaRequired={authentication.mfaRequired}
+          passwordExpireDays={passwordPolicy.passwordExpireDays}
+          maxLoginAttempts={passwordPolicy.maxLoginAttempts}
+          lockoutDuration={passwordPolicy.lockoutDuration}
           ipWhitelistEnabled={authentication.ipWhitelistEnabled}
           ipWhitelistCount={authentication.ipWhitelist.length}
           maxConcurrentSessions={sessionManagement.maxConcurrentSessions}

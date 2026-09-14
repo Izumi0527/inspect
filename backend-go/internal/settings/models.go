@@ -104,6 +104,18 @@ func (UserSession) TableName() string {
 	return "user_sessions"
 }
 
+// UserPasswordHistory 记录用户改密前的旧口令哈希，供“禁止重复使用最近 N 次密码”策略比对。
+type UserPasswordHistory struct {
+	ID             string     `gorm:"column:id;size:36;primaryKey"`
+	UserID         string     `gorm:"column:user_id;size:36;index"`
+	HashedPassword string     `gorm:"column:hashed_password;size:255"`
+	CreatedAt      *time.Time `gorm:"column:created_at"`
+}
+
+func (UserPasswordHistory) TableName() string {
+	return "user_password_history"
+}
+
 type Role struct {
 	ID          string     `gorm:"column:id;size:36;primaryKey"`
 	Name        string     `gorm:"column:name;size:50;unique"`

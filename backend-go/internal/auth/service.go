@@ -66,6 +66,8 @@ type UserRecord struct {
 	LastLoginAt    *time.Time `gorm:"column:last_login_at"`
 	LoginAttempts  *int       `gorm:"column:login_attempts"`
 	LockedUntil    *time.Time `gorm:"column:locked_until"`
+	// PasswordChangedAt 为最近一次改密时间；为空时按 CreatedAt 计算密码是否过期。
+	PasswordChangedAt *time.Time `gorm:"column:password_changed_at"`
 	// ForcePasswordChange 为 true 时，用户必须先修改密码才能访问业务接口（首登强制改密）。
 	ForcePasswordChange *bool      `gorm:"column:force_password_change"`
 	CreatedAt           *time.Time `gorm:"column:created_at"`
@@ -133,6 +135,11 @@ func (s *Service) AuthenticateUser(ctx context.Context, username string, passwor
 		s.logger.Warn("登录成功后清理失败计数/锁定状态失败",
 			zap.String("user_id", user.ID), zap.Error(accErr))
 	}
+	// 密码有效期（安全策略：security.password.password_expire_days）：过期则要求先改密。
+	if expErr := s.enforcePasswordExpiry(ctx, user, s.loadSecurityPolicy(ctx)); expErr != nil && s.logger != nil {
+		s.logger.Warn("标记密码过期用户为强制改密失败，密码有效期策略可能未生效",
+			zap.String("user_id", user.ID), zap.Error(expErr))
+	}
 	return user, nil
 }
 
@@ -149,7 +156,7 @@ func (s *Service) GetUserByUsername(ctx context.Context, username string) (*User
 	var user UserRecord
 	if err := s.db.WithContext(ctx).
 		Table("users").
-		Select("id, username, email, full_name, avatar, role, is_active, hashed_password, last_login_at, login_attempts, locked_until, force_password_change, created_at, updated_at").
+		Select("id, username, email, full_name, avatar, role, is_active, hashed_password, last_login_at, login_attempts, locked_until, password_changed_at, force_password_change, created_at, updated_at").
 		Where("username = ?", normalized).
 		Take(&user).Error; err != nil {
 		return nil, err

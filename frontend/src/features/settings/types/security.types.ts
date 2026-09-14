@@ -22,15 +22,10 @@ export interface PasswordPolicyConfig {
   lockoutDuration: number // 账户锁定时长（分钟）
 }
 
-// 认证方式配置
+// 访问控制配置
 export interface AuthenticationConfig {
-  mfaEnabled: boolean // 是否启用多因素认证
-  mfaMethods: Array<'totp' | 'sms' | 'email'> // 支持的MFA方法
-  mfaRequired: boolean // 是否强制所有用户使用MFA
-  allowOAuthLogin: boolean // 是否允许OAuth登录
-  oauthProviders: Array<'google' | 'microsoft' | 'github'> // 支持的OAuth提供商
   ipWhitelistEnabled: boolean // 是否启用IP白名单
-  ipWhitelist: string[] // IP白名单列表
+  ipWhitelist: string[] // IP白名单列表（单 IP 或 CIDR）
 }
 
 // 完整的安全设置响应
@@ -38,37 +33,4 @@ export interface SecuritySettingsResponse {
   sessionManagement: SessionManagementConfig
   passwordPolicy: PasswordPolicyConfig
   authentication: AuthenticationConfig
-}
-
-// 更新请求类型
-export interface UpdateSessionManagementRequest {
-  sessionTimeout?: number
-  autoLogoutEnabled?: boolean
-  rememberMeEnabled?: boolean
-  rememberMeDuration?: number
-  maxConcurrentSessions?: number
-  forceLogoutOnPasswordChange?: boolean
-}
-
-export interface UpdatePasswordPolicyRequest {
-  minLength?: number
-  requireUppercase?: boolean
-  requireLowercase?: boolean
-  requireNumbers?: boolean
-  requireSpecialChars?: boolean
-  passwordExpireDays?: number
-  passwordHistoryCount?: number
-  preventCommonPasswords?: boolean
-  maxLoginAttempts?: number
-  lockoutDuration?: number
-}
-
-export interface UpdateAuthenticationRequest {
-  mfaEnabled?: boolean
-  mfaMethods?: Array<'totp' | 'sms' | 'email'>
-  mfaRequired?: boolean
-  allowOAuthLogin?: boolean
-  oauthProviders?: Array<'google' | 'microsoft' | 'github'>
-  ipWhitelistEnabled?: boolean
-  ipWhitelist?: string[]
 }

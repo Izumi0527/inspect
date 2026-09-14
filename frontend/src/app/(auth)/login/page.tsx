@@ -14,6 +14,7 @@ import { Eye, EyeOff, Loader2, Shield, Monitor, AlertCircle } from 'lucide-react
 import { useAuth, withGuest } from '@/lib/contexts/auth-context'
 import { LoginCredentials } from '@/lib/types/auth.types'
 import { APP_VERSION } from '@/lib/app-version'
+import { api } from '@/lib/api-client'
 
 // 登录表单验证Schema
 const loginSchema = z.object({
@@ -30,6 +31,8 @@ type LoginFormData = z.infer<typeof loginSchema>
 
 function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
+  // 安全策略关闭"记住我"时隐藏复选框；读取失败保留（后端会按策略忽略勾选）。
+  const [rememberMeEnabled, setRememberMeEnabled] = useState(true)
   const { login, isLoading, error, clearError } = useAuth()
 
   const {
@@ -51,6 +54,21 @@ function LoginPage() {
   useEffect(() => {
     setFocus('username')
   }, [setFocus])
+
+  useEffect(() => {
+    let cancelled = false
+    api.auth
+      .loginOptions()
+      .then((options) => {
+        if (!cancelled) setRememberMeEnabled(options.remember_me_enabled)
+      })
+      .catch(() => {
+        // 读取失败保持默认可见
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // 清除错误信息
   useEffect(() => {
@@ -206,17 +224,21 @@ function LoginPage() {
 
             {/* 记住我选项 */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  {...register('remember_me')}
-                  id="remember_me"
-                  type="checkbox"
-                  className="h-4 w-4 text-blue-600 dark:text-blue-300 focus:ring-blue-500 border-input rounded"
-                />
-                <label htmlFor="remember_me" className="ml-2 block text-sm text-slate-700 dark:text-gray-300">
-                  记住我
-                </label>
-              </div>
+              {rememberMeEnabled ? (
+                <div className="flex items-center">
+                  <input
+                    {...register('remember_me')}
+                    id="remember_me"
+                    type="checkbox"
+                    className="h-4 w-4 text-blue-600 dark:text-blue-300 focus:ring-blue-500 border-input rounded"
+                  />
+                  <label htmlFor="remember_me" className="ml-2 block text-sm text-slate-700 dark:text-gray-300">
+                    记住我
+                  </label>
+                </div>
+              ) : (
+                <div />
+              )}
 
               <div className="text-sm">
                 <Link

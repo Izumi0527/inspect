@@ -18,6 +18,8 @@ type securityPolicy struct {
 	MaxLoginAttempts            int
 	LockoutDurationMinutes      int
 	PasswordMinLength           int
+	// PasswordExpireDays 为 0 表示永不过期。
+	PasswordExpireDays int
 }
 
 func (s *Service) loadSecurityPolicy(ctx context.Context) securityPolicy {
@@ -32,6 +34,7 @@ func (s *Service) loadSecurityPolicy(ctx context.Context) securityPolicy {
 		MaxLoginAttempts:            5,
 		LockoutDurationMinutes:      15,
 		PasswordMinLength:           8,
+		PasswordExpireDays:          90,
 	}
 
 	if !s.isReady() {
@@ -48,6 +51,7 @@ func (s *Service) loadSecurityPolicy(ctx context.Context) securityPolicy {
 		"security.password.min_length",
 		"security.password.max_login_attempts",
 		"security.password.lockout_duration",
+		"security.password.password_expire_days",
 	}
 	settings := s.getSettingValues(ctx, keys)
 
@@ -61,8 +65,54 @@ func (s *Service) loadSecurityPolicy(ctx context.Context) securityPolicy {
 	policy.PasswordMinLength = clampInt(getSettingIntFromMap(settings, "security.password.min_length", policy.PasswordMinLength), 6, 128)
 	policy.MaxLoginAttempts = clampInt(getSettingIntFromMap(settings, "security.password.max_login_attempts", policy.MaxLoginAttempts), 1, 20)
 	policy.LockoutDurationMinutes = clampInt(getSettingIntFromMap(settings, "security.password.lockout_duration", policy.LockoutDurationMinutes), 1, 1440)
+	policy.PasswordExpireDays = clampInt(getSettingIntFromMap(settings, "security.password.password_expire_days", policy.PasswordExpireDays), 0, 365)
 
 	return policy
+}
+
+// RememberMeEnabled 返回“记住我”是否被安全策略允许（供登录页在认证前读取）。
+func (s *Service) RememberMeEnabled(ctx context.Context) bool {
+	return s.loadSecurityPolicy(ctx).RememberMeEnabled
+}
+
+// passwordExpired 判断用户密码是否超过策略有效期：以 password_changed_at（缺省回退
+// created_at）起算，超过 expireDays 天即过期；expireDays<=0 表示永不过期；两时间都缺失
+// 时无法判定，按未过期处理。
+func passwordExpired(user *UserRecord, expireDays int, now time.Time) bool {
+	if user == nil || expireDays <= 0 {
+		return false
+	}
+	base := user.PasswordChangedAt
+	if base == nil {
+		base = user.CreatedAt
+	}
+	if base == nil {
+		return false
+	}
+	return now.After(base.Add(time.Duration(expireDays) * 24 * time.Hour))
+}
+
+// enforcePasswordExpiry 在登录成功后检查密码有效期：已过期则把用户标记为必须改密，
+// 后续由 EnforcePasswordChange 闸与前端引导接管。已标记的用户不重复写库。
+func (s *Service) enforcePasswordExpiry(ctx context.Context, user *UserRecord, policy securityPolicy) error {
+	if user == nil || UserMustChangePassword(user) {
+		return nil
+	}
+	if !passwordExpired(user, policy.PasswordExpireDays, time.Now().UTC()) {
+		return nil
+	}
+	flag := true
+	user.ForcePasswordChange = &flag
+	if !s.isReady() {
+		return nil
+	}
+	return s.db.WithContext(ctx).
+		Table("users").
+		Where("id = ?", user.ID).
+		Updates(map[string]interface{}{
+			"force_password_change": true,
+			"updated_at":            time.Now().UTC(),
+		}).Error
 }
 
 type settingRow struct {

@@ -18,6 +18,7 @@ type securityPolicy struct {
 	MaxLoginAttempts            int
 	LockoutDurationMinutes      int
 	PasswordMinLength           int
+	PasswordExpireDays          int
 }
 
 //go:linkname getSettingIntFromMap github.com/your-org/inspect-system/backend-go/internal/auth.getSettingIntFromMap
@@ -95,5 +96,8 @@ func TestLoadSecurityPolicyDefaultsWhenServiceNotReady(t *testing.T) {
 	}
 	if policy.LockoutDurationMinutes != 15 {
 		t.Fatalf("expected default lockout duration 15, got %d", policy.LockoutDurationMinutes)
+	}
+	if policy.PasswordExpireDays != 90 {
+		t.Fatalf("expected default password expire days 90, got %d", policy.PasswordExpireDays)
 	}
 }

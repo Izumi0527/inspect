@@ -1,10 +1,5 @@
 import { httpClient } from '@/lib/api-client'
-import type {
-  SessionManagementConfig,
-  PasswordPolicyConfig,
-  AuthenticationConfig,
-  SecuritySettingsResponse,
-} from '../types/security.types'
+import type { SecuritySettingsResponse } from '../types/security.types'
 import { requireBulkSuccess, type BulkUpdateResponse } from './bulk'
 
 // 后端配置项的类型
@@ -56,48 +51,6 @@ function toStringArray(value: unknown, fallback: string[]): string[] {
   return fallback
 }
 
-function toEnumArray<T extends string>(
-  value: unknown,
-  allowed: readonly T[],
-  fallback: T[]
-): T[] {
-  const allowedSet = new Set<string>(allowed)
-
-  const normalize = (raw: unknown): string => {
-    if (typeof raw !== 'string') return ''
-    return raw.trim().toLowerCase()
-  }
-
-  const pick = (items: unknown[]): T[] => {
-    const result: T[] = []
-    for (const item of items) {
-      const v = normalize(item)
-      if (!v) continue
-      if (allowedSet.has(v)) result.push(v as T)
-    }
-    return result.length ? result : fallback
-  }
-
-  if (Array.isArray(value)) return pick(value)
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim()
-    if (trimmed.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(trimmed)
-        if (Array.isArray(parsed)) return pick(parsed)
-      } catch {
-        // ignore
-      }
-    }
-    // 兼容逗号分隔
-    if (trimmed.includes(',')) return pick(trimmed.split(','))
-    return pick([trimmed])
-  }
-
-  return fallback
-}
-
 export const securityApi = {
   /**
    * 获取所有安全配置
@@ -141,92 +94,10 @@ export const securityApi = {
         lockoutDuration: toNumber(settingsMap.get('security.password.lockout_duration'), 15),
       },
       authentication: {
-        mfaEnabled: toBoolean(settingsMap.get('security.auth.mfa_enabled'), false),
-        mfaMethods: toEnumArray<'totp' | 'sms' | 'email'>(
-          settingsMap.get('security.auth.mfa_methods'),
-          ['totp', 'sms', 'email'],
-          ['totp']
-        ),
-        mfaRequired: toBoolean(settingsMap.get('security.auth.mfa_required'), false),
-        allowOAuthLogin: toBoolean(settingsMap.get('security.auth.allow_oauth_login'), false),
-        oauthProviders: toEnumArray<'google' | 'microsoft' | 'github'>(
-          settingsMap.get('security.auth.oauth_providers'),
-          ['google', 'microsoft', 'github'],
-          []
-        ),
         ipWhitelistEnabled: toBoolean(settingsMap.get('security.auth.ip_whitelist_enabled'), false),
         ipWhitelist: toStringArray(settingsMap.get('security.auth.ip_whitelist'), []),
       },
     }
-  },
-
-  /**
-   * 更新会话管理配置
-   * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
-   */
-  updateSessionManagement: async (data: Partial<SessionManagementConfig>): Promise<void> => {
-    const settings: Record<string, unknown> = {}
-
-    if (data.sessionTimeout !== undefined) settings['security.session.timeout'] = data.sessionTimeout
-    if (data.autoLogoutEnabled !== undefined) settings['security.session.auto_logout_enabled'] = data.autoLogoutEnabled
-    if (data.rememberMeEnabled !== undefined) settings['security.session.remember_me_enabled'] = data.rememberMeEnabled
-    if (data.rememberMeDuration !== undefined) settings['security.session.remember_me_duration'] = data.rememberMeDuration
-    if (data.maxConcurrentSessions !== undefined) settings['security.session.max_concurrent_sessions'] = data.maxConcurrentSessions
-    if (data.forceLogoutOnPasswordChange !== undefined) {
-      settings['security.session.force_logout_on_password_change'] = data.forceLogoutOnPasswordChange
-    }
-
-    if (Object.keys(settings).length === 0) return
-
-    const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', { settings })
-    requireBulkSuccess(resp, { action: '保存会话管理配置' })
-  },
-
-  /**
-   * 更新密码策略配置
-   * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
-   */
-  updatePasswordPolicy: async (data: Partial<PasswordPolicyConfig>): Promise<void> => {
-    const settings: Record<string, unknown> = {}
-
-    if (data.minLength !== undefined) settings['security.password.min_length'] = data.minLength
-    if (data.requireUppercase !== undefined) settings['security.password.require_uppercase'] = data.requireUppercase
-    if (data.requireLowercase !== undefined) settings['security.password.require_lowercase'] = data.requireLowercase
-    if (data.requireNumbers !== undefined) settings['security.password.require_numbers'] = data.requireNumbers
-    if (data.requireSpecialChars !== undefined) settings['security.password.require_special_chars'] = data.requireSpecialChars
-    if (data.passwordExpireDays !== undefined) settings['security.password.password_expire_days'] = data.passwordExpireDays
-    if (data.passwordHistoryCount !== undefined) settings['security.password.password_history_count'] = data.passwordHistoryCount
-    if (data.preventCommonPasswords !== undefined) {
-      settings['security.password.prevent_common_passwords'] = data.preventCommonPasswords
-    }
-    if (data.maxLoginAttempts !== undefined) settings['security.password.max_login_attempts'] = data.maxLoginAttempts
-    if (data.lockoutDuration !== undefined) settings['security.password.lockout_duration'] = data.lockoutDuration
-
-    if (Object.keys(settings).length === 0) return
-
-    const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', { settings })
-    requireBulkSuccess(resp, { action: '保存密码策略配置' })
-  },
-
-  /**
-   * 更新认证配置
-   * ✅ 单独更新同样走 bulk（与 saveAll 语义一致，避免 stub/假成功）
-   */
-  updateAuthentication: async (data: Partial<AuthenticationConfig>): Promise<void> => {
-    const settings: Record<string, unknown> = {}
-
-    if (data.mfaEnabled !== undefined) settings['security.auth.mfa_enabled'] = data.mfaEnabled
-    if (data.mfaMethods !== undefined) settings['security.auth.mfa_methods'] = data.mfaMethods
-    if (data.mfaRequired !== undefined) settings['security.auth.mfa_required'] = data.mfaRequired
-    if (data.allowOAuthLogin !== undefined) settings['security.auth.allow_oauth_login'] = data.allowOAuthLogin
-    if (data.oauthProviders !== undefined) settings['security.auth.oauth_providers'] = data.oauthProviders
-    if (data.ipWhitelistEnabled !== undefined) settings['security.auth.ip_whitelist_enabled'] = data.ipWhitelistEnabled
-    if (data.ipWhitelist !== undefined) settings['security.auth.ip_whitelist'] = data.ipWhitelist
-
-    if (Object.keys(settings).length === 0) return
-
-    const resp = await httpClient.post<BulkUpdateResponse>('/settings/general/bulk', { settings })
-    requireBulkSuccess(resp, { action: '保存认证配置' })
   },
 
   /**
@@ -256,12 +127,7 @@ export const securityApi = {
       'security.password.max_login_attempts': data.passwordPolicy.maxLoginAttempts,
       'security.password.lockout_duration': data.passwordPolicy.lockoutDuration,
 
-      // 认证配置
-      'security.auth.mfa_enabled': data.authentication.mfaEnabled,
-      'security.auth.mfa_methods': data.authentication.mfaMethods,
-      'security.auth.mfa_required': data.authentication.mfaRequired,
-      'security.auth.allow_oauth_login': data.authentication.allowOAuthLogin,
-      'security.auth.oauth_providers': data.authentication.oauthProviders,
+      // 访问控制
       'security.auth.ip_whitelist_enabled': data.authentication.ipWhitelistEnabled,
       'security.auth.ip_whitelist': data.authentication.ipWhitelist,
     }

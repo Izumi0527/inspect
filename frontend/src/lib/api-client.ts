@@ -5,6 +5,7 @@
 
 import {
   LoginResponse,
+  LoginOptionsResponse,
   RefreshTokenResponse,
   ProfileResponse,
   AlertsListResponse,
@@ -557,6 +558,8 @@ export const api = {
       }
       return httpClient.post<LoginResponse>('/auth/login', payload)
     },
+    // 登录页在认证前读取的策略开关（公开端点）。
+    loginOptions: () => httpClient.get<LoginOptionsResponse>('/auth/login-options'),
     logout: () => httpClient.post<{ success: boolean }>('/auth/logout'),
     // S3：refresh token 由 httpOnly Cookie 携带，无需在 body 传递。
     refresh: () => httpClient.post<RefreshTokenResponse>('/auth/refresh'),

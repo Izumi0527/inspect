@@ -10,6 +10,7 @@ import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useCallback } from 'react'
 import { useSettingsTabCapabilities } from '@/features/settings/hooks/useSettingsTabCapabilities'
+import { validateSecuritySettings } from '@/features/settings/utils/security-validation'
 
 export function SecuritySettings() {
   const {
@@ -27,15 +28,20 @@ export function SecuritySettings() {
     resetAll,
   } = useSecuritySettings()
 
-  // 处理保存操作
+  // 处理保存操作：先做整页校验，越界或配置不完整时不发请求
   const handleSave = useCallback(async () => {
+    const validation = validateSecuritySettings({ sessionManagement, passwordPolicy, authentication })
+    if (!validation.ok) {
+      toast.error(validation.errors.join('；'))
+      return
+    }
     try {
       await saveAll()
       toast.success('保存成功！配置已更新')
     } catch (err) {
       toast.error('保存失败：' + (err as Error).message)
     }
-  }, [saveAll])
+  }, [saveAll, sessionManagement, passwordPolicy, authentication])
 
   // 处理重置操作
   const handleReset = useCallback(() => {
@@ -85,8 +91,9 @@ export function SecuritySettings() {
         requireLowercase={passwordPolicy.requireLowercase}
         requireNumbers={passwordPolicy.requireNumbers}
         requireSpecialChars={passwordPolicy.requireSpecialChars}
-        mfaEnabled={authentication.mfaEnabled}
-        mfaRequired={authentication.mfaRequired}
+        passwordExpireDays={passwordPolicy.passwordExpireDays}
+        maxLoginAttempts={passwordPolicy.maxLoginAttempts}
+        lockoutDuration={passwordPolicy.lockoutDuration}
         ipWhitelistEnabled={authentication.ipWhitelistEnabled}
         ipWhitelistCount={authentication.ipWhitelist?.length ?? 0}
         maxConcurrentSessions={sessionManagement.maxConcurrentSessions}

@@ -77,6 +77,7 @@ type refreshTokenRequest struct {
 
 func (h AuthHandler) Register(group *echo.Group) {
 	group.POST("/auth/login", h.Login)
+	group.GET("/auth/login-options", h.LoginOptions)
 	group.POST("/auth/refresh", h.RefreshToken)
 	group.POST("/auth/logout", h.Logout)
 	group.POST("/auth/change-password", h.ChangeOwnPassword)
@@ -144,6 +145,16 @@ func (h AuthHandler) Login(c echo.Context) error {
 		TokenType:    "bearer",
 		ExpiresIn:    expiresIn,
 		User:         userInfo,
+	})
+}
+
+// LoginOptions 返回登录页在认证前需要的策略开关（公开端点，无敏感信息）。
+func (h AuthHandler) LoginOptions(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "auth service not configured")
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"remember_me_enabled": h.Service.RememberMeEnabled(c.Request().Context()),
 	})
 }
 

@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"regexp"
@@ -22,6 +23,16 @@ var generalNumericConstraints = map[string]generalNumericConstraint{
 	"inspection.default_timeout":      {Min: 5, Max: 300, Label: "默认超时时间"},
 	"inspection.retry_attempts":       {Min: 0, Max: 10, Label: "失败重试次数"},
 	"report.max_export_records":       {Min: 1, Max: 100000, Label: "最大导出记录数"},
+
+	// 安全策略数字项：区间与前端 SECURITY_NUMERIC_RULES 及各输入框 min/max 保持同步。
+	"security.session.timeout":                 {Min: 5, Max: 1440, Label: "会话超时时间"},
+	"security.session.remember_me_duration":    {Min: 1, Max: 90, Label: "记住我持续时间"},
+	"security.session.max_concurrent_sessions": {Min: 1, Max: 10, Label: "最大并发会话数"},
+	"security.password.min_length":             {Min: 6, Max: 32, Label: "最小密码长度"},
+	"security.password.password_expire_days":   {Min: 0, Max: 365, Label: "密码过期时间"},
+	"security.password.password_history_count": {Min: 0, Max: 20, Label: "密码历史记录数量"},
+	"security.password.max_login_attempts":     {Min: 3, Max: 10, Label: "最大登录尝试次数"},
+	"security.password.lockout_duration":       {Min: 5, Max: 1440, Label: "账户锁定时长"},
 }
 
 var generalEnumConstraints = map[string][]string{
@@ -112,7 +123,33 @@ func validateGeneralSetting(key string, value interface{}) (enforcedType string,
 			return "", fmt.Errorf("应用程序名称（%s）不能超过 %d 个字符", key, applicationNameMaxLength)
 		}
 		return "string", nil
+	case ipAllowlistKey:
+		if _, err := parseIPAllowlistEntries(value); err != nil {
+			return "", err
+		}
+		return "json", nil
 	}
 
 	return "", nil
+}
+
+// legacySecuritySettingKeys 是旧版安全策略页写入、但后端从未消费的配置键
+// （MFA / OAuth 未实现）；前端已删除对应 UI，启动时清理残留行。
+var legacySecuritySettingKeys = []string{
+	"security.auth.mfa_enabled",
+	"security.auth.mfa_methods",
+	"security.auth.mfa_required",
+	"security.auth.allow_oauth_login",
+	"security.auth.oauth_providers",
+}
+
+// PurgeLegacySecuritySettings 删除 legacySecuritySettingKeys 对应的配置行，返回删除数；幂等。
+func (s *Service) PurgeLegacySecuritySettings(ctx context.Context) (int64, error) {
+	if !s.isReady() {
+		return 0, fmt.Errorf("database not initialized")
+	}
+	result := s.db.WithContext(ctx).
+		Where("key IN ?", legacySecuritySettingKeys).
+		Delete(&SystemSetting{})
+	return result.RowsAffected, result.Error
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -270,6 +271,11 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, newPassword
 	if err := s.validatePasswordPolicy(ctx, newPassword); err != nil {
 		return err
 	}
+	// 安全策略：禁止重复使用最近 N 次密码（security.password.password_history_count）
+	oldHash, err := s.rejectRecentPasswordReuse(ctx, id, newPassword)
+	if err != nil {
+		return err
+	}
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
@@ -289,6 +295,10 @@ func (s *Service) ChangePassword(ctx context.Context, userID string, newPassword
 	}
 	if result.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound
+	}
+
+	if archiveErr := s.archivePasswordHash(ctx, id, oldHash); archiveErr != nil && s.logger != nil {
+		s.logger.Warn("旧密码哈希归档失败，密码历史策略可能漏判一次", zap.String("user_id", id), zap.Error(archiveErr))
 	}
 
 	// 安全策略：密码更改后强制登出所有会话（立即生效）
