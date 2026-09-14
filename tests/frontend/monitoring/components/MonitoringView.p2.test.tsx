@@ -15,7 +15,7 @@ jest.mock('@/lib/contexts/auth-context', () => ({
   usePermission: () => false,
 }))
 
-jest.mock('@/features/dashboard/components/Sidebar', () => ({
+jest.mock('@/features/dashboard/components/layout/Sidebar', () => ({
   Sidebar: () => null,
 }))
 

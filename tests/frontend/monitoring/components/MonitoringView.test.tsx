@@ -34,7 +34,7 @@ jest.mock('@/lib/contexts/sidebar-context', () => ({
   }),
 }))
 
-jest.mock('@/features/dashboard/components/Sidebar', () => ({
+jest.mock('@/features/dashboard/components/layout/Sidebar', () => ({
   Sidebar: () => <div data-testid="sidebar">sidebar</div>,
 }))
 

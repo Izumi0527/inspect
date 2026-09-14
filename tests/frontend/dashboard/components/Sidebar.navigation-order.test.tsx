@@ -1,7 +1,7 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 
-import { Sidebar } from '@/features/dashboard/components/Sidebar'
+import { Sidebar } from '@/features/dashboard/components/layout/Sidebar'
 
 const mockUsePermission = jest.fn()
 

@@ -16,7 +16,7 @@ import { Button } from '@/components/atoms'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useDisplayPreferences } from '@/hooks/useDatetimePreferencesSync'
-import { NavigationItem } from '../types'
+import { NavigationItem } from '../../types'
 import { APP_VERSION } from '@/lib/app-version'
 
 interface SidebarProps {

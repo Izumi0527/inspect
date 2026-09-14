@@ -1,7 +1,7 @@
 'use client'
 
 import { useSidebar } from '@/lib/contexts/sidebar-context'
-import { Sidebar } from '@/features/dashboard/components/Sidebar'
+import { Sidebar } from '@/features/dashboard/components/layout/Sidebar'
 import { DashboardHeader } from '@/features/dashboard'
 import { DatabaseZap, AlertTriangle } from 'lucide-react'
 import { useInView } from '@/hooks'

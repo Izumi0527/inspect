@@ -31,7 +31,7 @@ jest.mock('@/features/dashboard/components/NotificationCenter', () => ({
   NotificationCenter: () => <div data-testid="notification-center" />,
 }))
 
-jest.mock('@/features/dashboard/components/UserMenu', () => ({
+jest.mock('@/features/dashboard/components/layout/UserMenu', () => ({
   UserMenu: () => <div data-testid="user-menu" />,
 }))
 

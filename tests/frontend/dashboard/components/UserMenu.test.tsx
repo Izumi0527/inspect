@@ -2,7 +2,7 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-import { UserMenu } from '@/features/dashboard/components/UserMenu'
+import { UserMenu } from '@/features/dashboard/components/layout/UserMenu'
 
 const mockLogout = jest.fn()
 const mockPush = jest.fn()

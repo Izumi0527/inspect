@@ -5,7 +5,7 @@ import { Button, Input } from '@/components/atoms'
 import { ThemeToggle } from '@/components/molecules'
 import { useDeviceSearch } from '../hooks/useDashboard'
 import { NotificationCenter } from './NotificationCenter'
-import { UserMenu } from './UserMenu'
+import { UserMenu } from './layout/UserMenu'
 
 interface DashboardHeaderProps {
   title?: string

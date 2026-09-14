@@ -634,13 +634,13 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/dashboard/components/Sidebar.tsx',
+    file: 'frontend/src/features/dashboard/components/layout/Sidebar.tsx',
     bannedPatterns: [
       /bg-white dark:bg-card/g,
     ],
   },
   {
-    file: 'frontend/src/features/dashboard/components/UserMenu.tsx',
+    file: 'frontend/src/features/dashboard/components/layout/UserMenu.tsx',
     bannedPatterns: [
       /text-sm font-medium text-gray-900 dark:text-white/g,
     ],

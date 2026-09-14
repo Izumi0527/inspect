@@ -1,6 +1,6 @@
 // Dashboard模块的统一导出入口
 export { DashboardView } from './components/DashboardView'
-export { Sidebar } from './components/Sidebar'
+export { Sidebar } from './components/layout/Sidebar'
 export { DashboardHeader } from './components/DashboardHeader'
 export { StatsGrid } from './components/StatsGrid'
 export { ActiveAlertsCard } from './components/ActiveAlertsCard'
