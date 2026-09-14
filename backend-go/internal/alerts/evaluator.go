@@ -649,7 +649,25 @@ func (e *Evaluator) autoResolveAlert(ctx context.Context, rule AlertRule, dm dev
 		return false, err
 	}
 
+	e.broadcastAlertResolved(existing.ID)
 	return true, nil
+}
+
+// broadcastAlertResolved 自动恢复后向 alerts 房间推送 resolved 状态，
+// 与手动处理告警的广播契约一致（前端按 status 映射为 alert_resolved 事件）。
+func (e *Evaluator) broadcastAlertResolved(alertID int) {
+	if e.wsManager == nil {
+		return
+	}
+
+	e.wsManager.SendToRoom("alerts", ws.Message{
+		Type: ws.MessageAlert,
+		Data: map[string]interface{}{
+			"id":        alertID,
+			"status":    alertStatusResolved,
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+		},
+	})
 }
 
 // broadcastAlert 通过 WebSocket 推送新告警到 alerts 房间
@@ -904,7 +922,7 @@ func (e *Evaluator) resolveConnectivityAlert(ctx context.Context, deviceID int) 
 	}
 
 	now := time.Now().UTC()
-	return true, e.db.WithContext(ctx).
+	if err := e.db.WithContext(ctx).
 		Table("alerts").
 		Where("id = ?", existing.ID).
 		Updates(map[string]interface{}{
@@ -913,7 +931,12 @@ func (e *Evaluator) resolveConnectivityAlert(ctx context.Context, deviceID int) 
 			"resolved_by":     "system",
 			"resolution_note": "设备恢复在线，系统自动解决",
 			"updated_at":      now,
-		}).Error
+		}).Error; err != nil {
+		return true, err
+	}
+
+	e.broadcastAlertResolved(existing.ID)
+	return true, nil
 }
 
 // metricNameAliases 指标名称别名映射
