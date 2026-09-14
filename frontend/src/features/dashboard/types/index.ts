@@ -57,6 +57,40 @@ export interface NetworkOverviewItem {
   status: NetworkOverviewStatus
 }
 
+// 网络拓扑：节点 = 台账设备，链路 = LLDP 邻居关系
+export type TopologyNodeStatus = 'online' | 'offline' | 'warning' | 'unknown'
+
+export interface TopologyNode {
+  id: number
+  name: string
+  ip: string
+  // 用户填写的档案类型
+  deviceType: string
+  // SNMP 识别出的类型（可能缺失）；展示层优先取它
+  detectedType?: string
+  vendor: string
+  model: string
+  firmwareVersion: string
+  status: TopologyNodeStatus
+  // LLDP 看到但台账里没有的邻居数（终端、未纳管设备）
+  unmanagedNeighbors: number
+}
+
+export interface TopologyLink {
+  id: string
+  source: number
+  target: number
+  sourcePort: string
+  targetPort: string
+  // false 表示只有 source 一侧看见了对端
+  bidirectional: boolean
+}
+
+export interface NetworkTopology {
+  nodes: TopologyNode[]
+  links: TopologyLink[]
+}
+
 export type DashboardSectionKey =
   | 'stats'
   | 'statsDevices'
@@ -88,6 +122,7 @@ export interface DashboardData {
   // 实时告警：仅当前活跃（open/acknowledged）的告警
   activeAlerts: RecentAlert[]
   networkOverview: NetworkOverviewItem[]
+  networkTopology: NetworkTopology
   lastUpdated: Date
   sections: DashboardSectionStates
   permissions: DashboardPermissions

@@ -198,6 +198,7 @@ export const DashboardView: React.FC = () => {
             <div className="flex-1 flex flex-col">
               <NetworkOverviewCard
                 overview={data?.networkOverview || []}
+                topology={data?.networkTopology ?? { nodes: [], links: [] }}
                 loading={isInitialLoading}
               />
             </div>

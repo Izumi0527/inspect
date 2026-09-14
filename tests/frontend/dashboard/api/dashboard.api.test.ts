@@ -103,6 +103,59 @@ describe('dashboard.api generateReport', () => {
     expect(result.sections.statsInspections.message).toBe('巡检统计加载失败')
   })
 
+  it('应把 network_topology 映射为节点与链路，缺失时给空拓扑', async () => {
+    mockGet.mockResolvedValueOnce({
+      stats: [],
+      active_alerts: [],
+      network_overview: [],
+      network_topology: {
+        nodes: [
+          {
+            id: 1,
+            name: 'core',
+            ip: '10.0.0.1',
+            device_type: 'switch',
+            detected_type: 'router',
+            vendor: 'huawei',
+            model: 'S12700',
+            firmware_version: 'V200R019',
+            status: 'online',
+            unmanaged_neighbors: 2,
+          },
+          { id: 2, name: 'acc', ip: '10.0.0.2', device_type: 'switch', status: 'weird', unmanaged_neighbors: 0 },
+        ],
+        links: [
+          { id: '1:G1|2:', source: 1, target: 2, source_port: 'G1', target_port: '', bidirectional: false },
+        ],
+      },
+    })
+
+    const result = await fetchDashboardData()
+
+    expect(result.networkTopology.nodes).toHaveLength(2)
+    expect(result.networkTopology.nodes[0]).toEqual({
+      id: 1,
+      name: 'core',
+      ip: '10.0.0.1',
+      deviceType: 'switch',
+      detectedType: 'router',
+      vendor: 'huawei',
+      model: 'S12700',
+      firmwareVersion: 'V200R019',
+      status: 'online',
+      unmanagedNeighbors: 2,
+    })
+    expect(result.networkTopology.nodes[1]?.status).toBe('unknown')
+    expect(result.networkTopology.nodes[1]?.detectedType).toBeUndefined()
+    expect(result.networkTopology.links).toEqual([
+      { id: '1:G1|2:', source: 1, target: 2, sourcePort: 'G1', targetPort: '', bidirectional: false },
+    ])
+
+    mockGet.mockResolvedValueOnce({ stats: [], active_alerts: [], network_overview: [] })
+    const fallback = await fetchDashboardData()
+    expect(fallback.networkTopology).toEqual({ nodes: [], links: [] })
+  })
+
   it('总览接口失败时应向上抛错，而不是吞成空数据', async () => {
     mockGet.mockRejectedValueOnce(new Error('dashboard failed'))
 

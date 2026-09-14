@@ -59,6 +59,7 @@ describe('useDashboardData', () => {
       ],
       activeAlerts: [],
       networkOverview: [],
+      networkTopology: { nodes: [], links: [] },
       lastUpdated: new Date('2026-04-27T08:10:00.000Z'),
       sections: {
         stats: { ok: true },

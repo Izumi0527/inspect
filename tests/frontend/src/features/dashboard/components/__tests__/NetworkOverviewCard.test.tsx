@@ -4,10 +4,10 @@ import { NetworkOverviewCard } from '@/features/dashboard/components/NetworkOver
 import type { NetworkOverviewItem } from '@/features/dashboard/types'
 
 describe('NetworkOverviewCard', () => {
-  it('为不同状态渲染更有辨识度的状态说明，避免与设备数量重复', () => {
+  it('图例条同时给出状态标签与台数，且不再重复渲染「N 台设备」描述', () => {
     const overview: NetworkOverviewItem[] = [
       {
-        title: '核心交换机',
+        title: 'switch',
         description: '8 台设备',
         count: 8,
         iconName: 'Network',
@@ -15,7 +15,7 @@ describe('NetworkOverviewCard', () => {
         status: 'critical',
       },
       {
-        title: '无线 AP',
+        title: 'ap',
         description: '16 台设备',
         count: 16,
         iconName: 'Wifi',
@@ -24,9 +24,15 @@ describe('NetworkOverviewCard', () => {
       },
     ]
 
-    render(<NetworkOverviewCard overview={overview} />)
+    render(<NetworkOverviewCard overview={overview} topology={{ nodes: [], links: [] }} />)
 
-    expect(screen.getByText('需要立即处理当前链路异常')).toBeInTheDocument()
-    expect(screen.getByText('运行稳定，暂无异常波动')).toBeInTheDocument()
+    const legend = screen.getByRole('list', { name: '网络概览设备类型图例' })
+    expect(legend).toHaveTextContent('交换机')
+    expect(legend).toHaveTextContent('严重')
+    expect(legend).toHaveTextContent('8 台')
+    expect(legend).toHaveTextContent('无线 AP')
+    expect(legend).toHaveTextContent('健康')
+    expect(legend).toHaveTextContent('16 台')
+    expect(screen.queryByText('8 台设备')).not.toBeInTheDocument()
   })
 })

@@ -76,6 +76,7 @@ describe('DashboardView', () => {
         stats: [],
         activeAlerts: [],
         networkOverview: [],
+        networkTopology: { nodes: [], links: [] },
         lastUpdated: new Date('2026-04-03T00:00:00.000Z'),
         permissions: {
           devices: true,

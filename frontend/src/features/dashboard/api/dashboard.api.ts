@@ -7,7 +7,11 @@ import {
   DashboardSectionStates,
   NetworkOverviewItem,
   NetworkOverviewStatus,
+  NetworkTopology,
   RecentAlert,
+  TopologyLink,
+  TopologyNode,
+  TopologyNodeStatus,
 } from '../types'
 import type { Notification, NotificationSeverity, NotificationType } from '@/types/notification'
 
@@ -36,10 +40,38 @@ interface NetworkOverviewDto {
   status: string
 }
 
+interface TopologyNodeDto {
+  id: number
+  name?: string
+  ip?: string
+  device_type?: string
+  detected_type?: string
+  vendor?: string
+  model?: string
+  firmware_version?: string
+  status?: string
+  unmanaged_neighbors?: number
+}
+
+interface TopologyLinkDto {
+  id?: string
+  source: number
+  target: number
+  source_port?: string
+  target_port?: string
+  bidirectional?: boolean
+}
+
+interface NetworkTopologyDto {
+  nodes?: TopologyNodeDto[]
+  links?: TopologyLinkDto[]
+}
+
 interface DashboardOverviewDto {
   stats?: DashboardStatDto[]
   active_alerts?: RecentAlertDto[]
   network_overview?: NetworkOverviewDto[]
+  network_topology?: NetworkTopologyDto
   last_updated?: string
   sections?: Record<string, unknown>
   permissions?: Record<string, unknown>
@@ -228,6 +260,55 @@ const toNetworkOverviewItem = (dto: NetworkOverviewDto): NetworkOverviewItem => 
   }
 }
 
+const normalizeTopologyNodeStatus = (status: unknown): TopologyNodeStatus => {
+  switch (status) {
+    case 'online':
+    case 'offline':
+    case 'warning':
+      return status
+    default:
+      return 'unknown'
+  }
+}
+
+const toTopologyNode = (dto: TopologyNodeDto): TopologyNode => {
+  const detected = typeof dto.detected_type === 'string' ? dto.detected_type.trim() : ''
+  return {
+    id: Number(dto.id),
+    name: dto.name?.trim() || dto.ip?.trim() || `设备 ${dto.id}`,
+    ip: dto.ip ?? '',
+    deviceType: dto.device_type ?? '',
+    detectedType: detected !== '' ? detected : undefined,
+    vendor: dto.vendor ?? '',
+    model: dto.model ?? '',
+    firmwareVersion: dto.firmware_version ?? '',
+    status: normalizeTopologyNodeStatus(dto.status),
+    unmanagedNeighbors: typeof dto.unmanaged_neighbors === 'number' ? dto.unmanaged_neighbors : 0,
+  }
+}
+
+const toTopologyLink = (dto: TopologyLinkDto): TopologyLink => ({
+  id: dto.id ?? `${dto.source}-${dto.target}`,
+  source: Number(dto.source),
+  target: Number(dto.target),
+  sourcePort: dto.source_port ?? '',
+  targetPort: dto.target_port ?? '',
+  bidirectional: dto.bidirectional === true,
+})
+
+const createEmptyTopology = (): NetworkTopology => ({ nodes: [], links: [] })
+
+const toNetworkTopology = (dto: unknown): NetworkTopology => {
+  if (!isObject(dto)) {
+    return createEmptyTopology()
+  }
+  const topology = dto as NetworkTopologyDto
+  return {
+    nodes: ensureArray<TopologyNodeDto>(topology.nodes)?.map(toTopologyNode) ?? [],
+    links: ensureArray<TopologyLinkDto>(topology.links)?.map(toTopologyLink) ?? [],
+  }
+}
+
 export async function fetchDashboardData(): Promise<DashboardData> {
   const payload = await api.get<unknown>('/dashboard/overview')
   const overview = unwrapPayload<DashboardOverviewDto>(payload)
@@ -240,6 +321,7 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     stats: ensureArray<DashboardStatDto>(overview.stats)?.map(toDashboardStat) ?? getEmptyStatsData(),
     activeAlerts: ensureArray<RecentAlertDto>(overview.active_alerts)?.map(toRecentAlert) ?? [],
     networkOverview: ensureArray<NetworkOverviewDto>(overview.network_overview)?.map(toNetworkOverviewItem) ?? [],
+    networkTopology: toNetworkTopology(overview.network_topology),
     lastUpdated: typeof overview.last_updated === 'string' ? new Date(overview.last_updated) : new Date(),
     sections: normalizeDashboardSections(overview.sections),
     permissions: normalizeDashboardPermissions(overview.permissions),
@@ -283,6 +365,16 @@ export async function fetchNetworkOverview(): Promise<NetworkOverviewItem[]> {
   } catch (error) {
     console.error('获取网络概览失败:', error)
     return []
+  }
+}
+
+export async function fetchNetworkTopology(): Promise<NetworkTopology> {
+  try {
+    const payload = await api.get<unknown>('/dashboard/network-topology')
+    return toNetworkTopology(unwrapPayload<NetworkTopologyDto>(payload))
+  } catch (error) {
+    console.error('获取网络拓扑失败:', error)
+    return createEmptyTopology()
   }
 }
 
