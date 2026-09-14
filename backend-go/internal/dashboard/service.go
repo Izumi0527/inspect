@@ -194,6 +194,7 @@ func (s *Service) GetOverview(ctx context.Context, access OverviewAccess) (Overv
 	}
 
 	networkOverview := []NetworkOverviewItem{}
+	var networkTopology *NetworkTopology
 	if access.CanReadDevices {
 		items, err := s.getNetworkOverview(ctx)
 		if err != nil {
@@ -204,12 +205,24 @@ func (s *Service) GetOverview(ctx context.Context, access OverviewAccess) (Overv
 		} else {
 			networkOverview = items
 		}
+
+		// 拓扑与类型计数同属「网络概览」分区，任一失败都把该分区标为不可用
+		topology, err := s.getNetworkTopology(ctx)
+		if err != nil {
+			if s.logger != nil {
+				s.logger.Warn("加载总览网络拓扑失败", zap.Error(err))
+			}
+			sections["networkOverview"] = buildOverviewErrorSectionStatus("网络拓扑加载失败")
+		} else {
+			networkTopology = &topology
+		}
 	}
 
 	return OverviewResponse{
 		Stats:           stats,
 		ActiveAlerts:    activeAlerts,
 		NetworkOverview: networkOverview,
+		NetworkTopology: networkTopology,
 		Sections:        sections,
 		Permissions:     buildOverviewPermissions(access),
 		LastUpdated:     time.Now().UTC(),
@@ -234,6 +247,10 @@ func (s *Service) GetActiveAlerts(ctx context.Context, limit int) ([]RecentAlert
 
 func (s *Service) GetNetworkOverview(ctx context.Context) ([]NetworkOverviewItem, error) {
 	return s.getNetworkOverview(ctx)
+}
+
+func (s *Service) GetNetworkTopology(ctx context.Context) (NetworkTopology, error) {
+	return s.getNetworkTopology(ctx)
 }
 
 func (s *Service) GetBandwidthStats(ctx context.Context) (BandwidthStats, error) {

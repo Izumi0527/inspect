@@ -27,6 +27,40 @@ type NetworkOverviewItem struct {
 	Status  string `json:"status"`
 }
 
+// TopologyNode 是拓扑图上的一台台账设备。
+// DeviceType 是用户填写的档案类型，DetectedType 是 SNMP 识别结果（可能为空）；
+// 两者并列下发，由前端决定展示优先级并在不一致时同时标注。
+type TopologyNode struct {
+	ID              int    `json:"id"`
+	Name            string `json:"name"`
+	IP              string `json:"ip"`
+	DeviceType      string `json:"device_type"`
+	DetectedType    string `json:"detected_type,omitempty"`
+	Vendor          string `json:"vendor,omitempty"`
+	Model           string `json:"model,omitempty"`
+	FirmwareVersion string `json:"firmware_version,omitempty"`
+	Status          string `json:"status"`
+	// UnmanagedNeighbors 是该设备 LLDP 看到但台账里没有的邻居数（终端、未纳管设备）
+	UnmanagedNeighbors int `json:"unmanaged_neighbors"`
+}
+
+// TopologyLink 是两台台账设备之间的一条 LLDP 链路。
+// Bidirectional=false 表示只有 Source 一侧看见了对端（对端未开 LLDP 或未采集）。
+type TopologyLink struct {
+	ID            string `json:"id"`
+	Source        int    `json:"source"`
+	Target        int    `json:"target"`
+	SourcePort    string `json:"source_port,omitempty"`
+	TargetPort    string `json:"target_port,omitempty"`
+	Bidirectional bool   `json:"bidirectional"`
+}
+
+type NetworkTopology struct {
+	Nodes       []TopologyNode `json:"nodes"`
+	Links       []TopologyLink `json:"links"`
+	GeneratedAt time.Time      `json:"generated_at"`
+}
+
 type dashboardSectionStatus struct {
 	Ok                  bool    `json:"ok"`
 	Message             *string `json:"message,omitempty"`
@@ -45,6 +79,7 @@ type OverviewResponse struct {
 	Stats           []StatCard                        `json:"stats"`
 	ActiveAlerts    []RecentAlert                     `json:"active_alerts"`
 	NetworkOverview []NetworkOverviewItem             `json:"network_overview"`
+	NetworkTopology *NetworkTopology                  `json:"network_topology,omitempty"`
 	Sections        map[string]dashboardSectionStatus `json:"sections"`
 	Permissions     OverviewPermissions               `json:"permissions"`
 	LastUpdated     time.Time                         `json:"last_updated"`

@@ -22,6 +22,7 @@ func (h DashboardHandler) Register(group *echo.Group) {
 	group.GET("/dashboard/top-devices-by-alerts", h.GetTopDevicesByAlerts)
 	group.GET("/dashboard/recent-alerts", h.GetRecentAlerts)
 	group.GET("/dashboard/network-overview", h.GetNetworkOverview)
+	group.GET("/dashboard/network-topology", h.GetNetworkTopology)
 	group.GET("/dashboard/bandwidth-stats", h.GetBandwidthStats)
 	group.GET("/dashboard/notifications", h.GetNotifications)
 	group.POST("/dashboard/notifications/read", h.MarkNotificationsRead)
@@ -178,6 +179,21 @@ func (h DashboardHandler) GetNetworkOverview(c echo.Context) error {
 	resp, err := h.Service.GetNetworkOverview(c.Request().Context())
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load network overview")
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h DashboardHandler) GetNetworkTopology(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "devices:read"); err != nil {
+		return err
+	}
+
+	resp, err := h.Service.GetNetworkTopology(c.Request().Context())
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load network topology")
 	}
 	return c.JSON(http.StatusOK, resp)
 }
