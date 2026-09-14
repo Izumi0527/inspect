@@ -55,7 +55,9 @@ describe('dashboard.api generateReport', () => {
           color: 'green',
         },
       ],
-      recent_alerts: [],
+      active_alerts: [
+        { id: 9, device: 'core-sw', message: 'CPU 过高', severity: 'critical', time: '2026-02-27T00:00:00.000Z' },
+      ],
       network_overview: [
         {
           name: '核心交换机',
@@ -66,7 +68,7 @@ describe('dashboard.api generateReport', () => {
       last_updated: '2026-02-27T00:00:00.000Z',
       sections: {
         stats: { ok: true },
-        recentAlerts: {
+        activeAlerts: {
           ok: true,
           limitedByPermission: true,
           requiredPermission: 'alerts:read',
@@ -77,8 +79,11 @@ describe('dashboard.api generateReport', () => {
 
     const result = await fetchDashboardData()
 
-    expect(result.sections.recentAlerts.limitedByPermission).toBe(true)
-    expect(result.sections.recentAlerts.requiredPermission).toBe('alerts:read')
+    expect(result.activeAlerts).toEqual([
+      { id: 9, device: 'core-sw', message: 'CPU 过高', severity: 'high', time: '2026-02-27T00:00:00.000Z', category: undefined },
+    ])
+    expect(result.sections.activeAlerts.limitedByPermission).toBe(true)
+    expect(result.sections.activeAlerts.requiredPermission).toBe('alerts:read')
     expect(result.sections.networkOverview.ok).toBe(false)
     expect(result.sections.networkOverview.message).toBe('设备概览加载失败')
     expect(result.networkOverview[0]?.status).toBe('critical')
@@ -87,7 +92,7 @@ describe('dashboard.api generateReport', () => {
   it('应解析 statsInspections 分区失败状态', async () => {
     mockGet.mockResolvedValueOnce({
       stats: [],
-      recent_alerts: [],
+      active_alerts: [],
       network_overview: [],
       sections: { statsInspections: { ok: false, message: '巡检统计加载失败' } },
     })

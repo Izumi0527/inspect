@@ -43,7 +43,7 @@ type OverviewPermissions struct {
 
 type OverviewResponse struct {
 	Stats           []StatCard                        `json:"stats"`
-	RecentAlerts    []RecentAlert                     `json:"recent_alerts"`
+	ActiveAlerts    []RecentAlert                     `json:"active_alerts"`
 	NetworkOverview []NetworkOverviewItem             `json:"network_overview"`
 	Sections        map[string]dashboardSectionStatus `json:"sections"`
 	Permissions     OverviewPermissions               `json:"permissions"`

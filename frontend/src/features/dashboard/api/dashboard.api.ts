@@ -38,7 +38,7 @@ interface NetworkOverviewDto {
 
 interface DashboardOverviewDto {
   stats?: DashboardStatDto[]
-  recent_alerts?: RecentAlertDto[]
+  active_alerts?: RecentAlertDto[]
   network_overview?: NetworkOverviewDto[]
   last_updated?: string
   sections?: Record<string, unknown>
@@ -75,7 +75,7 @@ const DASHBOARD_SECTION_KEYS: DashboardSectionKey[] = [
   'statsAlerts',
   'statsBandwidth',
   'statsInspections',
-  'recentAlerts',
+  'activeAlerts',
   'networkOverview',
 ]
 
@@ -85,7 +85,7 @@ const DASHBOARD_SECTION_FALLBACK_MESSAGES: Record<DashboardSectionKey, string> =
   statsAlerts: '告警统计加载失败',
   statsBandwidth: '带宽统计加载失败',
   statsInspections: '巡检统计加载失败',
-  recentAlerts: '最近告警加载失败',
+  activeAlerts: '实时告警加载失败',
   networkOverview: '网络概览加载失败',
 }
 
@@ -157,7 +157,7 @@ const createDefaultDashboardSections = (): DashboardSectionStates => ({
   statsAlerts: { ok: true },
   statsBandwidth: { ok: true },
   statsInspections: { ok: true },
-  recentAlerts: { ok: true },
+  activeAlerts: { ok: true },
   networkOverview: { ok: true },
 })
 
@@ -238,7 +238,7 @@ export async function fetchDashboardData(): Promise<DashboardData> {
 
   return {
     stats: ensureArray<DashboardStatDto>(overview.stats)?.map(toDashboardStat) ?? getEmptyStatsData(),
-    recentAlerts: ensureArray<RecentAlertDto>(overview.recent_alerts)?.map(toRecentAlert) ?? [],
+    activeAlerts: ensureArray<RecentAlertDto>(overview.active_alerts)?.map(toRecentAlert) ?? [],
     networkOverview: ensureArray<NetworkOverviewDto>(overview.network_overview)?.map(toNetworkOverviewItem) ?? [],
     lastUpdated: typeof overview.last_updated === 'string' ? new Date(overview.last_updated) : new Date(),
     sections: normalizeDashboardSections(overview.sections),

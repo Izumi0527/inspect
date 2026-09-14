@@ -6,14 +6,15 @@ import { RecentAlert } from '../types'
 import { useAlertSeverityStyles } from '../hooks/useDashboard'
 import { formatDateTimeYMDHM } from '@/utils/formatters'
 
-interface RecentAlertsCardProps {
+interface ActiveAlertsCardProps {
   alerts: RecentAlert[]
   loading?: boolean
 }
 
-export const RecentAlertsCard: React.FC<RecentAlertsCardProps> = ({ 
-  alerts, 
-  loading = false 
+// 实时告警：只展示当前活跃（open/acknowledged）的告警，告警被解决或自动恢复后即从列表消失
+export const ActiveAlertsCard: React.FC<ActiveAlertsCardProps> = ({
+  alerts,
+  loading = false
 }) => {
   const { getSeverityColor } = useAlertSeverityStyles()
 
@@ -23,7 +24,7 @@ export const RecentAlertsCard: React.FC<RecentAlertsCardProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-red-600" />
-            最近告警
+            实时告警
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -51,7 +52,7 @@ export const RecentAlertsCard: React.FC<RecentAlertsCardProps> = ({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Shield className="w-5 h-5 text-red-600" />
-          最近告警
+          实时告警
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -82,7 +83,7 @@ export const RecentAlertsCard: React.FC<RecentAlertsCardProps> = ({
           ) : (
             <div className="text-center py-8">
               <Shield className="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-              <p className="text-gray-500 dark:text-muted-foreground">暂无最近告警</p>
+              <p className="text-gray-500 dark:text-muted-foreground">当前无活跃告警</p>
             </div>
           )}
         </div>

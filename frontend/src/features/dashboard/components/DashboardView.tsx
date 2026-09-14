@@ -3,13 +3,16 @@ import {
   useDashboardData,
   useDashboardConfig,
   useDashboardAutoRefresh,
+  useDashboardAlertRealtimeRefresh,
   useAlertAnalysis
 } from '../hooks/useDashboard'
 import { useSidebar } from '@/lib/contexts/sidebar-context'
+import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
 import { Sidebar } from './Sidebar'
 import { DashboardHeader } from './DashboardHeader'
 import { StatsGrid } from './StatsGrid'
-import { RecentAlertsCard } from './RecentAlertsCard'
+import { ActiveAlertsCard } from './ActiveAlertsCard'
 import { QuickActionsCard } from './QuickActionsCard'
 import { NetworkOverviewCard } from './NetworkOverviewCard'
 
@@ -19,7 +22,7 @@ export const DashboardView: React.FC = () => {
   const { config } = useDashboardConfig() // 仅用于自动刷新配置
 
   // 分析告警数据
-  const alertAnalysis = useAlertAnalysis(data?.recentAlerts || [])
+  const alertAnalysis = useAlertAnalysis(data?.activeAlerts || [])
 
   const permissionLimitedSections = Object.entries(data?.sections ?? {})
     .filter(([, section]) => section.limitedByPermission)
@@ -42,7 +45,7 @@ export const DashboardView: React.FC = () => {
     statsAlerts: '告警统计',
     statsBandwidth: '带宽统计',
     statsInspections: '巡检统计',
-    recentAlerts: '最近告警',
+    activeAlerts: '实时告警',
     networkOverview: '网络概览',
   }
 
@@ -59,6 +62,10 @@ export const DashboardView: React.FC = () => {
     config.autoRefresh,
     config.refreshInterval
   )
+
+  // 实时告警：告警新增/处理/自动恢复推送后即时刷新，不必等轮询
+  const canReadAlerts = usePermission(Permission.ALERTS_READ)
+  useDashboardAlertRealtimeRefresh(refreshStats, canReadAlerts)
 
   const handleRetry = () => {
     loadData(true)
@@ -177,9 +184,9 @@ export const DashboardView: React.FC = () => {
 
             {/* Secondary Cards - Horizontal Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Recent Alerts */}
-              <RecentAlertsCard
-                alerts={data?.recentAlerts || []}
+              {/* Active Alerts */}
+              <ActiveAlertsCard
+                alerts={data?.activeAlerts || []}
                 loading={isInitialLoading}
               />
 

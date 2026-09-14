@@ -57,7 +57,7 @@ describe('useDashboardData', () => {
           color: 'green',
         },
       ],
-      recentAlerts: [],
+      activeAlerts: [],
       networkOverview: [],
       lastUpdated: new Date('2026-04-27T08:10:00.000Z'),
       sections: {
@@ -65,7 +65,7 @@ describe('useDashboardData', () => {
         statsDevices: { ok: true },
         statsAlerts: { ok: true },
         statsBandwidth: { ok: true },
-        recentAlerts: { ok: true },
+        activeAlerts: { ok: true },
         networkOverview: { ok: true },
       },
       permissions: {

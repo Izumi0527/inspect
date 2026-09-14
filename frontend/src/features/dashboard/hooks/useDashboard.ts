@@ -6,8 +6,12 @@ import {
   searchDevices
 } from '../api/dashboard.api'
 import { ApiClientError } from '@/lib/api-client'
+import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
 
 const DASHBOARD_REQUEST_DEDUPE_WINDOW_MS = 1500
+
+// 一轮告警评估可能连发多条新增/恢复推送，合并为一次总览刷新
+const ALERT_REFRESH_DEBOUNCE_MS = 2000
 
 let dashboardDataInFlight: Promise<DashboardData> | null = null
 let dashboardDataSnapshot:
@@ -176,6 +180,45 @@ export function useDashboardAutoRefresh(callback: () => void, enabled: boolean, 
     const intervalId = setInterval(callback, interval)
     return () => clearInterval(intervalId)
   }, [callback, enabled, interval])
+}
+
+// 实时告警的动态刷新：订阅 alerts 房间，告警新增/处理/解决（含系统自动恢复）推送后刷新总览，
+// 让已恢复的告警不必等待 60s 轮询就从卡片消失。enabled 为 false（无 alerts:read）时不订阅也不刷新。
+export function useDashboardAlertRealtimeRefresh(refresh: () => void, enabled: boolean) {
+  const ws = useWebSocket()
+  const refreshRef = useRef(refresh)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    refreshRef.current = refresh
+  }, [refresh])
+
+  useEffect(() => {
+    if (!enabled) return
+    ws.subscribeToAlerts()
+    return () => {
+      ws.unsubscribeFromAlerts()
+    }
+  }, [enabled, ws])
+
+  const handleAlertEvent = useCallback(() => {
+    if (!enabled) return
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null
+      refreshRef.current()
+    }, ALERT_REFRESH_DEBOUNCE_MS)
+  }, [enabled])
+
+  useWebSocketEvent(WebSocketEvents.NEW_ALERT, handleAlertEvent)
+  useWebSocketEvent(WebSocketEvents.ALERT_UPDATE, handleAlertEvent)
+  useWebSocketEvent(WebSocketEvents.ALERT_RESOLVED, handleAlertEvent)
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
 }
 
 // 设备搜索hook

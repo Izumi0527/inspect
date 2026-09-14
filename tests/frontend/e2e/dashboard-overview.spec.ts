@@ -55,7 +55,7 @@ const dashboardOverviewPayload = {
       color: 'purple',
     },
   ],
-  recent_alerts: [],
+  active_alerts: [],
   network_overview: [],
   last_updated: '2026-04-03T00:00:00.000Z',
   permissions: {
@@ -86,9 +86,9 @@ const dashboardOverviewPayload = {
       limitedByPermission: true,
       requiredPermission: 'inspections:read',
     },
-    recentAlerts: {
+    activeAlerts: {
       ok: false,
-      message: '最近告警加载失败',
+      message: '实时告警加载失败',
     },
     networkOverview: {
       ok: false,
@@ -161,7 +161,7 @@ const fullAccessOverviewPayload = {
       color: 'purple',
     },
   ],
-  recent_alerts: [
+  active_alerts: [
     {
       id: 101,
       device: 'core-sw-01',
@@ -191,7 +191,7 @@ const fullAccessOverviewPayload = {
     statsAlerts: { ok: true },
     statsBandwidth: { ok: true },
     statsInspections: { ok: true },
-    recentAlerts: { ok: true },
+    activeAlerts: { ok: true },
     networkOverview: { ok: true },
   },
 }
@@ -236,7 +236,7 @@ test.describe('Dashboard 总览浏览器回归', () => {
     await expect(page.getByRole('heading', { name: '控制台总览' })).toBeVisible()
     await expect(page.getByText('数据访问受限')).toBeVisible()
     await expect(page.getByText('部分分区暂时不可用')).toBeVisible()
-    await expect(page.getByText('最近告警加载失败')).toBeVisible()
+    await expect(page.getByText('实时告警加载失败')).toBeVisible()
     await expect(page.getByText('网络概览加载失败')).toBeVisible()
 
     await expect(page.getByRole('button', { name: '生成报表' })).toBeVisible()

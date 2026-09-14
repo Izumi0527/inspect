@@ -180,16 +180,16 @@ func (s *Service) GetOverview(ctx context.Context, access OverviewAccess) (Overv
 		},
 	}
 
-	recentAlerts := []RecentAlert{}
+	activeAlerts := []RecentAlert{}
 	if access.CanReadAlerts {
-		items, err := s.getRecentAlerts(ctx, 5)
+		items, err := s.getActiveAlerts(ctx, 5)
 		if err != nil {
 			if s.logger != nil {
-				s.logger.Warn("加载总览最近告警失败", zap.Error(err))
+				s.logger.Warn("加载总览实时告警失败", zap.Error(err))
 			}
-			sections["recentAlerts"] = buildOverviewErrorSectionStatus("最近告警加载失败")
+			sections["activeAlerts"] = buildOverviewErrorSectionStatus("实时告警加载失败")
 		} else {
-			recentAlerts = items
+			activeAlerts = items
 		}
 	}
 
@@ -208,7 +208,7 @@ func (s *Service) GetOverview(ctx context.Context, access OverviewAccess) (Overv
 
 	return OverviewResponse{
 		Stats:           stats,
-		RecentAlerts:    recentAlerts,
+		ActiveAlerts:    activeAlerts,
 		NetworkOverview: networkOverview,
 		Sections:        sections,
 		Permissions:     buildOverviewPermissions(access),
@@ -226,6 +226,10 @@ func (s *Service) GetAlertSummary(ctx context.Context) (AlertSummary, error) {
 
 func (s *Service) GetRecentAlerts(ctx context.Context, limit int) ([]RecentAlert, error) {
 	return s.getRecentAlerts(ctx, limit)
+}
+
+func (s *Service) GetActiveAlerts(ctx context.Context, limit int) ([]RecentAlert, error) {
+	return s.getActiveAlerts(ctx, limit)
 }
 
 func (s *Service) GetNetworkOverview(ctx context.Context) ([]NetworkOverviewItem, error) {
@@ -870,6 +874,24 @@ func (s *Service) getRecentAlerts(ctx context.Context, limit int) ([]RecentAlert
 	return response, nil
 }
 
+// getActiveAlerts 只取仍在活跃中的告警（open/acknowledged）：告警一旦被解决或关闭（含系统自动恢复），
+// 就不再出现在总览「实时告警」里。与 getRecentAlerts（历史最近、供通知中心复用）语义不同。
+func (s *Service) getActiveAlerts(ctx context.Context, limit int) ([]RecentAlert, error) {
+	if s == nil || s.alerts == nil {
+		return nil, fmt.Errorf("alert service not initialized")
+	}
+
+	rows, _, err := s.alerts.ListAlerts(ctx, alerts.ListAlertsFilter{
+		Page:     1,
+		PageSize: limit,
+		Statuses: []string{"open", "acknowledged"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return buildRecentAlerts(rows), nil
+}
+
 func buildRecentAlerts(rows []alerts.AlertWithDevice) []RecentAlert {
 	response := make([]RecentAlert, 0, len(rows))
 	for _, item := range rows {
@@ -1324,7 +1346,7 @@ func buildDashboardSections(access OverviewAccess) map[string]dashboardSectionSt
 			"inspections:read",
 			"当前账号缺少 inspections:read，巡检统计已隐藏",
 		),
-		"recentAlerts": buildOverviewSectionStatus(access.CanReadAlerts, "alerts:read", "当前账号缺少 alerts:read，最近告警已隐藏"),
+		"activeAlerts": buildOverviewSectionStatus(access.CanReadAlerts, "alerts:read", "当前账号缺少 alerts:read，实时告警已隐藏"),
 		"networkOverview": buildOverviewSectionStatus(
 			access.CanReadDevices,
 			"devices:read",

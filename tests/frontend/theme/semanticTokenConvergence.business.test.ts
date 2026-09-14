@@ -628,7 +628,7 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/dashboard/components/RecentAlertsCard.tsx',
+    file: 'frontend/src/features/dashboard/components/ActiveAlertsCard.tsx',
     bannedPatterns: [
       /font-medium text-gray-900 dark:text-foreground/g,
     ],

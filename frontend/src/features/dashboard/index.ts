@@ -3,7 +3,7 @@ export { DashboardView } from './components/DashboardView'
 export { Sidebar } from './components/Sidebar'
 export { DashboardHeader } from './components/DashboardHeader'
 export { StatsGrid } from './components/StatsGrid'
-export { RecentAlertsCard } from './components/RecentAlertsCard'
+export { ActiveAlertsCard } from './components/ActiveAlertsCard'
 export { QuickActionsCard } from './components/QuickActionsCard'
 export { NetworkOverviewCard } from './components/NetworkOverviewCard'
 

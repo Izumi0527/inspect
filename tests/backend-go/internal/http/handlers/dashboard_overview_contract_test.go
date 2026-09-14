@@ -8,6 +8,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"go.uber.org/zap"
 
+	"github.com/your-org/inspect-system/backend-go/internal/alerts"
 	"github.com/your-org/inspect-system/backend-go/internal/dashboard"
 	"github.com/your-org/inspect-system/backend-go/internal/http/handlers"
 )
@@ -25,7 +26,8 @@ func newDashboardOverviewHandler(t *testing.T, permissions []string) (handlers.D
 	t.Helper()
 
 	gormDB, mock, cleanup := newGormDBWithSqlmock(t)
-	service := dashboard.NewService(gormDB, nil, nil, nil, nil, zap.NewNop())
+	// 总览实时告警经 alerts.Service.ListAlerts 查询，需注入真实告警服务才能走到 SQL 层
+	service := dashboard.NewService(gormDB, alerts.NewService(gormDB, zap.NewNop()), nil, nil, nil, zap.NewNop())
 	return handlers.DashboardHandler{
 		Service: service,
 		Auth: notificationContractAuthService{
@@ -44,8 +46,8 @@ func TestDashboardOverviewHandler_ShouldReturnSectionFailureInsteadOfFatalPageEr
 			AddRow("critical", "active", 3))
 	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE .*status IN .*`).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
-	mock.ExpectQuery(`(?is)SELECT .*FROM alerts AS a JOIN devices d ON d\.id = a\.device_id.*`).
-		WillReturnError(assertiveError("recent alerts unavailable"))
+	mock.ExpectQuery(`(?is)SELECT .*FROM alerts AS a JOIN devices d ON d\.id = a\.device_id.*status IN .*`).
+		WillReturnError(assertiveError("active alerts unavailable"))
 
 	ctx, rec := newEchoContextWithBody(http.MethodGet, "/api/v1/dashboard/overview", "test-token", nil)
 
@@ -61,12 +63,15 @@ func TestDashboardOverviewHandler_ShouldReturnSectionFailureInsteadOfFatalPageEr
 		t.Fatalf("json.Unmarshal response: %v", err)
 	}
 
-	section := resp.Sections["recentAlerts"]
+	section, ok := resp.Sections["activeAlerts"]
+	if !ok {
+		t.Fatalf("sections should contain activeAlerts, got %v", resp.Sections)
+	}
 	if section.Ok {
-		t.Fatalf("recentAlerts.ok = true, want false")
+		t.Fatalf("activeAlerts.ok = true, want false")
 	}
 	if section.Message == nil || *section.Message == "" {
-		t.Fatalf("recentAlerts.message should not be empty")
+		t.Fatalf("activeAlerts.message should not be empty")
 	}
 
 	// 活跃告警数据可用时，副文案应为真实口径"待处理"（而非无对比数据的"较昨日"）

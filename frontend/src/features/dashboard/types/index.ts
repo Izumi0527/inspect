@@ -63,7 +63,7 @@ export type DashboardSectionKey =
   | 'statsAlerts'
   | 'statsBandwidth'
   | 'statsInspections'
-  | 'recentAlerts'
+  | 'activeAlerts'
   | 'networkOverview'
 
 export interface DashboardSectionStatus {
@@ -85,7 +85,8 @@ export interface DashboardPermissions {
 // Dashboard数据汇总接口
 export interface DashboardData {
   stats: DashboardStat[]
-  recentAlerts: RecentAlert[]
+  // 实时告警：仅当前活跃（open/acknowledged）的告警
+  activeAlerts: RecentAlert[]
   networkOverview: NetworkOverviewItem[]
   lastUpdated: Date
   sections: DashboardSectionStates
