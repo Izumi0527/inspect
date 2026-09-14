@@ -156,12 +156,36 @@ type DeviceMetricsRequest struct {
 	Tags        map[string]interface{}   `json:"tags,omitempty"`
 	// Identity 是设备型号/版本这类静态属性，与时序指标不同：只在取值变化时回填设备档案
 	Identity *DeviceIdentity `json:"identity,omitempty"`
+	// Neighbors 是 LLDP 邻居表快照。用指针区分「本轮已采集（可能为空，需清空旧行）」
+	// 与「未采集（LLDP 不可读，保留旧行）」——切片长度表达不了这两种语义。
+	Neighbors *NeighborsPayload `json:"neighbors,omitempty"`
 }
 
 // DeviceIdentity 设备静态标识属性（SNMP 采集所得）
 type DeviceIdentity struct {
 	Model           string `json:"model,omitempty"`
 	FirmwareVersion string `json:"firmware_version,omitempty"`
+	// DetectedDeviceType 是 SNMP 识别出的类型，只回填 detected_device_type 列，不覆盖用户填写的 device_type
+	DetectedDeviceType string `json:"detected_device_type,omitempty"`
+}
+
+// NeighborsPayload 承载一轮采集得到的全部 LLDP 邻居，写入时整体替换该设备的旧邻居行。
+type NeighborsPayload struct {
+	Items []NeighborPayload `json:"items"`
+}
+
+// NeighborPayload 是一条 LLDP 邻居（与 devices.NeighborMetrics 字段一致，作为写入契约独立定义）。
+type NeighborPayload struct {
+	LocalPortNum     int    `json:"local_port_num"`
+	LocalPortID      string `json:"local_port_id,omitempty"`
+	LocalPortDesc    string `json:"local_port_desc,omitempty"`
+	RemoteChassisID  string `json:"remote_chassis_id"`
+	RemotePortID     string `json:"remote_port_id,omitempty"`
+	RemotePortDesc   string `json:"remote_port_desc,omitempty"`
+	RemoteSysName    string `json:"remote_sys_name,omitempty"`
+	RemoteSysDesc    string `json:"remote_sys_desc,omitempty"`
+	RemoteMgmtIP     string `json:"remote_mgmt_ip,omitempty"`
+	RemoteCapEnabled string `json:"remote_cap_enabled,omitempty"`
 }
 
 type SystemMetricsRequest struct {

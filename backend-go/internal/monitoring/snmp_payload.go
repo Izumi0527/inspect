@@ -39,7 +39,7 @@ func BuildSNMPDeviceMetricsRequest(deviceID int, metrics *devices.SNMPMetrics) D
 
 	req.Interfaces = buildSNMPInterfaces(metrics.Interfaces)
 
-	// 型号/版本是静态属性，不进时序指标表，单独走设备档案回填
+	// 型号/版本/识别类型是静态属性，不进时序指标表，单独走设备档案回填
 	identity := DeviceIdentity{}
 	if metrics.Model != nil {
 		identity.Model = *metrics.Model
@@ -47,8 +47,16 @@ func BuildSNMPDeviceMetricsRequest(deviceID int, metrics *devices.SNMPMetrics) D
 	if metrics.FirmwareVersion != nil {
 		identity.FirmwareVersion = *metrics.FirmwareVersion
 	}
-	if identity.Model != "" || identity.FirmwareVersion != "" {
+	if metrics.DetectedType != nil {
+		identity.DetectedDeviceType = *metrics.DetectedType
+	}
+	if identity.Model != "" || identity.FirmwareVersion != "" || identity.DetectedDeviceType != "" {
 		req.Identity = &identity
+	}
+
+	// LLDP 表可读才下发邻居快照（哪怕为空）；不可读时保持 nil，写入端保留旧邻居
+	if metrics.LLDPAvailable {
+		req.Neighbors = &NeighborsPayload{Items: buildNeighborPayloads(metrics.Neighbors)}
 	}
 
 	if tags := buildSNMPExtensionTags(metrics); len(tags) > 0 {
@@ -135,6 +143,25 @@ func buildSNMPInterfaces(items []devices.InterfaceMetrics) []map[string]interfac
 	}
 
 	return interfaces
+}
+
+func buildNeighborPayloads(items []devices.NeighborMetrics) []NeighborPayload {
+	payloads := make([]NeighborPayload, 0, len(items))
+	for _, n := range items {
+		payloads = append(payloads, NeighborPayload{
+			LocalPortNum:     n.LocalPortNum,
+			LocalPortID:      n.LocalPortID,
+			LocalPortDesc:    n.LocalPortDesc,
+			RemoteChassisID:  n.RemoteChassisID,
+			RemotePortID:     n.RemotePortID,
+			RemotePortDesc:   n.RemotePortDesc,
+			RemoteSysName:    n.RemoteSysName,
+			RemoteSysDesc:    n.RemoteSysDesc,
+			RemoteMgmtIP:     n.RemoteMgmtIP,
+			RemoteCapEnabled: n.RemoteCapEnabled,
+		})
+	}
+	return payloads
 }
 
 func stringPtr(value string) *string {

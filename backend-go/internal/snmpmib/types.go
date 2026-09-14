@@ -26,6 +26,26 @@ type CommonSection struct {
 	System     SystemSection     `json:"system"`
 	Interfaces InterfacesSection `json:"interfaces"`
 	Ethernet   EthernetSection   `json:"ethernet"`
+	LLDP       LLDPSection       `json:"lldp"`
+}
+
+// LLDPSection 承载 LLDP-MIB(IEEE 802.1AB, 1.0.8802.1.1.2) 的邻居发现 OID。
+// lldpRemTable 索引为 TimeMark.LocalPortNum.RemIndex；
+// lldpRemManAddrTable 在其后再接 AddrSubtype.AddrLen.Addr...，管理地址藏在索引里而非值里。
+// 各项均可选：设备未启用 LLDP 或 SNMP 视图未放行时采集端跳过，不影响其他指标。
+type LLDPSection struct {
+	LocSysCapEnabled    OIDDefinition `json:"loc_sys_cap_enabled"`
+	LocPortID           OIDDefinition `json:"loc_port_id"`
+	LocPortDesc         OIDDefinition `json:"loc_port_desc"`
+	RemChassisIDSubtype OIDDefinition `json:"rem_chassis_id_subtype"`
+	RemChassisID        OIDDefinition `json:"rem_chassis_id"`
+	RemPortIDSubtype    OIDDefinition `json:"rem_port_id_subtype"`
+	RemPortID           OIDDefinition `json:"rem_port_id"`
+	RemPortDesc         OIDDefinition `json:"rem_port_desc"`
+	RemSysName          OIDDefinition `json:"rem_sys_name"`
+	RemSysDesc          OIDDefinition `json:"rem_sys_desc"`
+	RemSysCapEnabled    OIDDefinition `json:"rem_sys_cap_enabled"`
+	RemManAddrIfSubtype OIDDefinition `json:"rem_man_addr_if_subtype"`
 }
 
 // EthernetSection 承载 EtherLike-MIB 的以太网专有指标。
@@ -44,6 +64,9 @@ type SystemSection struct {
 	SysUptime   OIDDefinition `json:"sys_uptime"`
 	SysName     OIDDefinition `json:"sys_name"`
 	SysLocation OIDDefinition `json:"sys_location"`
+	// sysServices 是 OSI 层能力位图：bit1(0x02)=数据链路层(L2)、bit2(0x04)=网络层(L3)。
+	// 作为设备分类的最后兜底信号，可靠度低于 LLDP 能力位与产品线关键字。
+	SysServices OIDDefinition `json:"sys_services"`
 	// ENTITY-MIB(RFC 4133) 物理实体表，用于采集设备型号与软件版本。
 	// 整机通常是实体表中 entPhysicalClass=chassis 的那一行，实践中取首个非空值即可。
 	EntPhysicalDescr       OIDDefinition `json:"ent_physical_descr"`

@@ -56,6 +56,7 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 		&devices.NetworkScan{},
 		&devices.DiscoveredDevice{},
 		&devices.DeviceInterface{},
+		&devices.DeviceNeighbor{},
 
 		&alerts.Alert{},
 		&alerts.AlertRule{},

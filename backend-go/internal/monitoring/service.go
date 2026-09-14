@@ -88,6 +88,8 @@ func (w *MetricsWriter) WriteDeviceMetrics(ctx context.Context, req DeviceMetric
 		// 用嵌套事务(SAVEPOINT)隔离为“尽力而为”：任一步失败仅回滚本段并记日志，
 		// 不连累上面已写入的核心快照——根治“接口写入报错导致整笔回滚、cpu/mem 丢失”的历史故障。
 		w.writeInterfaceDataBestEffort(tx, req.DeviceID, interfaceMetrics, req.Interfaces, interfaceSpeedUpdates, collectedAt)
+		// 次要写入：LLDP 邻居全量替换（拓扑连线数据源），同样尽力而为。
+		w.writeNeighborsBestEffort(tx, req.DeviceID, req.Neighbors, collectedAt)
 		return nil
 	})
 	if err != nil {
@@ -481,6 +483,63 @@ func writeDeviceIdentityIfChanged(tx *gorm.DB, deviceID int, identity *DeviceIde
 
 	apply("model", identity.Model)
 	apply("firmware_version", identity.FirmwareVersion)
+	apply("detected_device_type", identity.DetectedDeviceType)
+}
+
+// writeNeighborsBestEffort 以「先删后插」全量替换设备的 LLDP 邻居行。
+//
+// LLDP 表是设备的当前视图，不做老化：邻居消失就该从表里消失。payload 为 nil 表示本轮
+// 没读到 LLDP 表（不支持/未放行），此时不动旧行——否则一次 SNMP 超时就会把拓扑连线清空。
+// 整段包在 SAVEPOINT 里：失败只回滚本段并记日志，不连累已写入的核心快照。
+func (w *MetricsWriter) writeNeighborsBestEffort(tx *gorm.DB, deviceID int, payload *NeighborsPayload, collectedAt time.Time) {
+	if payload == nil || deviceID <= 0 {
+		return
+	}
+
+	const insertSQL = `INSERT INTO device_neighbors (device_id, local_port_num, local_port_id, local_port_desc, remote_chassis_id, remote_port_id, remote_port_desc, remote_sys_name, remote_sys_desc, remote_mgmt_ip, remote_cap_enabled, collected_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	err := tx.Transaction(func(itx *gorm.DB) error {
+		if err := itx.Exec(`DELETE FROM device_neighbors WHERE device_id = ?`, deviceID).Error; err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		for _, n := range payload.Items {
+			if strings.TrimSpace(n.RemoteChassisID) == "" && strings.TrimSpace(n.RemoteSysName) == "" {
+				continue
+			}
+			if err := itx.Exec(insertSQL,
+				deviceID,
+				n.LocalPortNum,
+				nullIfBlank(n.LocalPortID),
+				nullIfBlank(n.LocalPortDesc),
+				strings.TrimSpace(n.RemoteChassisID),
+				nullIfBlank(n.RemotePortID),
+				nullIfBlank(n.RemotePortDesc),
+				nullIfBlank(n.RemoteSysName),
+				nullIfBlank(n.RemoteSysDesc),
+				nullIfBlank(n.RemoteMgmtIP),
+				nullIfBlank(n.RemoteCapEnabled),
+				collectedAt,
+				now,
+			).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil && w.logger != nil {
+		w.logger.Warn("neighbor data best-effort write failed; core device snapshot preserved",
+			zap.Int("device_id", deviceID), zap.Error(err))
+	}
+}
+
+// nullIfBlank 把空白字符串转为 SQL NULL，避免邻居表里堆满空串。
+func nullIfBlank(value string) interface{} {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return trimmed
 }
 
 func extractInterfaceSpeedUpdates(deviceID int, interfaces []map[string]interface{}, collectedAt time.Time) []InterfaceSpeedUpdate {

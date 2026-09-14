@@ -12,48 +12,51 @@ import (
 )
 
 type Device struct {
-	ID              int            `gorm:"column:id;primaryKey"`
-	Name            string         `gorm:"column:name"`
-	IPAddress       string         `gorm:"column:ip_address;unique"`
-	Hostname        *string        `gorm:"column:hostname"`
-	MacAddress      *string        `gorm:"column:mac_address"`
-	DeviceType      string         `gorm:"column:device_type"`
-	Vendor          string         `gorm:"column:vendor"`
-	Model           *string        `gorm:"column:model"`
-	SerialNumber    *string        `gorm:"column:serial_number"`
-	FirmwareVersion *string        `gorm:"column:firmware_version"`
-	Location        *string        `gorm:"column:location"`
-	GroupID         *int           `gorm:"column:group_id"`
-	Status          string         `gorm:"column:status"`
-	IsActive        bool           `gorm:"column:is_active"`
-	IsMonitored     bool           `gorm:"column:is_monitored"`
-	MonitorInterval int            `gorm:"column:monitor_interval"`
-	SnmpVersion     *string        `gorm:"column:snmp_version"`
-	SnmpCommunity   *string        `gorm:"column:snmp_community"`
-	SnmpPort        *int           `gorm:"column:snmp_port"`
-	CliProtocol     *string        `gorm:"column:cli_protocol"`
-	SshUsername     *string        `gorm:"column:ssh_username"`
-	SshPassword     *string        `gorm:"column:ssh_password"`
-	SshPort         *int           `gorm:"column:ssh_port"`
-	TelnetUsername  *string        `gorm:"column:telnet_username"`
-	TelnetPassword  *string        `gorm:"column:telnet_password"`
-	TelnetPort      *int           `gorm:"column:telnet_port"`
-	EnablePassword  *string        `gorm:"column:enable_password"`
-	IcmpStatus      *string        `gorm:"column:icmp_status"`
-	SnmpStatus      *string        `gorm:"column:snmp_status"`
-	LastProbeTime   *time.Time     `gorm:"column:last_probe_time"`
-	CPUUsage        *float64       `gorm:"column:cpu_usage"`
-	MemoryUsage     *float64       `gorm:"column:memory_usage"`
-	Temperature     *float64       `gorm:"column:temperature"`
-	Uptime          *int64         `gorm:"column:uptime"`
-	ResponseTime    *float64       `gorm:"column:response_time"`
-	LastSeen        *time.Time     `gorm:"column:last_seen"`
-	AlertCount      *int           `gorm:"column:alert_count"`
-	Description     *string        `gorm:"column:description"`
-	Tags            datatypes.JSON `gorm:"column:tags;type:jsonb"`
-	CreatedBy       *string        `gorm:"column:created_by"`
-	CreatedAt       *time.Time     `gorm:"column:created_at"`
-	UpdatedAt       *time.Time     `gorm:"column:updated_at"`
+	ID         int     `gorm:"column:id;primaryKey"`
+	Name       string  `gorm:"column:name"`
+	IPAddress  string  `gorm:"column:ip_address;unique"`
+	Hostname   *string `gorm:"column:hostname"`
+	MacAddress *string `gorm:"column:mac_address"`
+	DeviceType string  `gorm:"column:device_type"`
+	// DetectedDeviceType 是 SNMP 自动识别的类型（switch/router/firewall/ap），
+	// 与用户填写的 DeviceType 并存：识别结果不覆盖台账，拓扑展示优先取它。
+	DetectedDeviceType *string        `gorm:"column:detected_device_type"`
+	Vendor             string         `gorm:"column:vendor"`
+	Model              *string        `gorm:"column:model"`
+	SerialNumber       *string        `gorm:"column:serial_number"`
+	FirmwareVersion    *string        `gorm:"column:firmware_version"`
+	Location           *string        `gorm:"column:location"`
+	GroupID            *int           `gorm:"column:group_id"`
+	Status             string         `gorm:"column:status"`
+	IsActive           bool           `gorm:"column:is_active"`
+	IsMonitored        bool           `gorm:"column:is_monitored"`
+	MonitorInterval    int            `gorm:"column:monitor_interval"`
+	SnmpVersion        *string        `gorm:"column:snmp_version"`
+	SnmpCommunity      *string        `gorm:"column:snmp_community"`
+	SnmpPort           *int           `gorm:"column:snmp_port"`
+	CliProtocol        *string        `gorm:"column:cli_protocol"`
+	SshUsername        *string        `gorm:"column:ssh_username"`
+	SshPassword        *string        `gorm:"column:ssh_password"`
+	SshPort            *int           `gorm:"column:ssh_port"`
+	TelnetUsername     *string        `gorm:"column:telnet_username"`
+	TelnetPassword     *string        `gorm:"column:telnet_password"`
+	TelnetPort         *int           `gorm:"column:telnet_port"`
+	EnablePassword     *string        `gorm:"column:enable_password"`
+	IcmpStatus         *string        `gorm:"column:icmp_status"`
+	SnmpStatus         *string        `gorm:"column:snmp_status"`
+	LastProbeTime      *time.Time     `gorm:"column:last_probe_time"`
+	CPUUsage           *float64       `gorm:"column:cpu_usage"`
+	MemoryUsage        *float64       `gorm:"column:memory_usage"`
+	Temperature        *float64       `gorm:"column:temperature"`
+	Uptime             *int64         `gorm:"column:uptime"`
+	ResponseTime       *float64       `gorm:"column:response_time"`
+	LastSeen           *time.Time     `gorm:"column:last_seen"`
+	AlertCount         *int           `gorm:"column:alert_count"`
+	Description        *string        `gorm:"column:description"`
+	Tags               datatypes.JSON `gorm:"column:tags;type:jsonb"`
+	CreatedBy          *string        `gorm:"column:created_by"`
+	CreatedAt          *time.Time     `gorm:"column:created_at"`
+	UpdatedAt          *time.Time     `gorm:"column:updated_at"`
 }
 
 func (Device) TableName() string {
@@ -319,6 +322,31 @@ type DeviceInterface struct {
 
 func (DeviceInterface) TableName() string {
 	return "device_interfaces"
+}
+
+// DeviceNeighbor 是 LLDP 邻居表的一行：本设备某端口看到的对端。
+//
+// 每轮采集全量替换该设备的行；对端设备的解析放在查询时（按管理 IP / sysName / 机箱 MAC 匹配），
+// 不存外键，避免设备改 IP 或改名后残留陈旧关联。
+type DeviceNeighbor struct {
+	ID               int        `gorm:"column:id;primaryKey"`
+	DeviceID         int        `gorm:"column:device_id;index"`
+	LocalPortNum     int        `gorm:"column:local_port_num"`
+	LocalPortID      *string    `gorm:"column:local_port_id"`
+	LocalPortDesc    *string    `gorm:"column:local_port_desc"`
+	RemoteChassisID  string     `gorm:"column:remote_chassis_id"`
+	RemotePortID     *string    `gorm:"column:remote_port_id"`
+	RemotePortDesc   *string    `gorm:"column:remote_port_desc"`
+	RemoteSysName    *string    `gorm:"column:remote_sys_name"`
+	RemoteSysDesc    *string    `gorm:"column:remote_sys_desc"`
+	RemoteMgmtIP     *string    `gorm:"column:remote_mgmt_ip"`
+	RemoteCapEnabled *string    `gorm:"column:remote_cap_enabled"`
+	CollectedAt      time.Time  `gorm:"column:collected_at"`
+	CreatedAt        *time.Time `gorm:"column:created_at"`
+}
+
+func (DeviceNeighbor) TableName() string {
+	return "device_neighbors"
 }
 
 type NetworkScan struct {

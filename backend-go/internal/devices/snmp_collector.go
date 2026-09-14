@@ -28,11 +28,18 @@ type SNMPMetrics struct {
 	Uptime              *int64                      `json:"uptime,omitempty"`
 	Model               *string                     `json:"model,omitempty"`            // 设备型号，如 S5700-28P-LI-AC
 	FirmwareVersion     *string                     `json:"firmware_version,omitempty"` // 软件/固件版本，如 V200R019C00SPC500
-	BandwidthIn         *float64                    `json:"bandwidth_in,omitempty"`     // 入站带宽，单位：bps（比特每秒）
-	BandwidthOut        *float64                    `json:"bandwidth_out,omitempty"`    // 出站带宽，单位：bps（比特每秒）
-	Interfaces          []InterfaceMetrics          `json:"interfaces,omitempty"`
-	CollectedAt         time.Time                   `json:"collected_at"`
-	CollectionTime      float64                     `json:"collection_time_ms"`
+	// DetectedType 是按 sysDescr / LLDP 能力位 / sysServices 推断的设备类型（switch/router/firewall/ap），
+	// 只回填 devices.detected_device_type，不覆盖用户填写的 device_type；推断不出为 nil。
+	DetectedType *string `json:"detected_type,omitempty"`
+	// Neighbors 是 LLDP 邻居表；LLDPAvailable=false 表示本轮没读到该表（不支持/未放行），
+	// 写入端据此保留旧邻居而不是清空——两者语义不同，不能只看切片长度。
+	Neighbors      []NeighborMetrics  `json:"neighbors,omitempty"`
+	LLDPAvailable  bool               `json:"lldp_available,omitempty"`
+	BandwidthIn    *float64           `json:"bandwidth_in,omitempty"`  // 入站带宽，单位：bps（比特每秒）
+	BandwidthOut   *float64           `json:"bandwidth_out,omitempty"` // 出站带宽，单位：bps（比特每秒）
+	Interfaces     []InterfaceMetrics `json:"interfaces,omitempty"`
+	CollectedAt    time.Time          `json:"collected_at"`
+	CollectionTime float64            `json:"collection_time_ms"`
 }
 
 // MaxReasonableBandwidthBps 最大合理带宽：10 Gbps = 10,000,000,000 bps
@@ -307,6 +314,18 @@ func (c *SNMPCollector) CollectMetrics(
 		c.logger.Debug("collected device identity",
 			zap.Stringp("model", metrics.Model),
 			zap.Stringp("firmware_version", metrics.FirmwareVersion))
+	}
+
+	// 推断设备类型（交换机/路由器/防火墙/AP），放在 identity 之后以复用已解析的型号
+	c.collectDeviceClassification(target, metrics, registry)
+	if c.logger != nil && metrics.DetectedType != nil {
+		c.logger.Debug("collected device classification", zap.Stringp("detected_type", metrics.DetectedType))
+	}
+
+	// 采集 LLDP 邻居（拓扑连线数据源）
+	c.collectNeighbors(target, metrics, registry)
+	if c.logger != nil && metrics.LLDPAvailable {
+		c.logger.Debug("collected lldp neighbors", zap.Int("count", len(metrics.Neighbors)))
 	}
 
 	// 采集接口指标
@@ -897,6 +916,48 @@ func (c *SNMPCollector) readSysDescr(target snmpClient, registry *snmpmib.Regist
 		return ""
 	}
 	return strings.TrimSpace(formatSNMPValue(packet.Variables[0].Value))
+}
+
+// collectDeviceClassification 采集设备分类信号并推断类型。
+// 各信号独立获取、缺失即置零值：老设备没有 LLDP、精简 agent 不上报 sysServices 都属预期。
+func (c *SNMPCollector) collectDeviceClassification(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry) {
+	sysDescr := c.readSysDescr(target, registry)
+
+	sysServices := 0
+	if oid := strings.TrimSpace(registry.Common.System.SysServices.OID); oid != "" {
+		if packet, err := target.Get([]string{oid}); err == nil && packet != nil && len(packet.Variables) > 0 {
+			if value, ok := numericPDUInt64(packet.Variables[0]); ok {
+				sysServices = int(value)
+			}
+		}
+	}
+
+	var lldpCaps []byte
+	if oid := strings.TrimSpace(registry.Common.LLDP.LocSysCapEnabled.OID); oid != "" {
+		if packet, err := target.Get([]string{oid}); err == nil && packet != nil && len(packet.Variables) > 0 {
+			if raw, ok := packet.Variables[0].Value.([]byte); ok {
+				lldpCaps = raw
+			}
+		}
+	}
+
+	model := ""
+	if metrics.Model != nil {
+		model = *metrics.Model
+	}
+	if detected := classifyDeviceType(sysDescr, model, sysServices, lldpCaps); detected != "" {
+		metrics.DetectedType = &detected
+	}
+}
+
+// collectNeighbors 采集 LLDP 邻居表；不可读时保持 LLDPAvailable=false。
+func (c *SNMPCollector) collectNeighbors(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry) {
+	neighbors, ok := collectLLDPNeighbors(target, registry.Common.LLDP)
+	if !ok {
+		return
+	}
+	metrics.Neighbors = neighbors
+	metrics.LLDPAvailable = true
 }
 
 func collectCPUFromCandidates(

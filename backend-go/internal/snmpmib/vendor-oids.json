@@ -52,6 +52,11 @@
         "method": "get",
         "value_type": "string"
       },
+      "sys_services": {
+        "oid": "1.3.6.1.2.1.1.7.0",
+        "method": "get",
+        "value_type": "integer"
+      },
       "ent_physical_descr": {
         "oid": "1.3.6.1.2.1.47.1.1.1.1.2",
         "method": "bulkwalk",
@@ -148,6 +153,68 @@
     "ethernet": {
       "dot3_duplex_status": {
         "oid": "1.3.6.1.2.1.10.7.2.1.19",
+        "method": "bulkwalk",
+        "value_type": "integer"
+      }
+    },
+    "lldp": {
+      "loc_sys_cap_enabled": {
+        "oid": "1.0.8802.1.1.2.1.3.6.0",
+        "method": "get",
+        "value_type": "bits"
+      },
+      "loc_port_id": {
+        "oid": "1.0.8802.1.1.2.1.3.7.1.3",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
+      "loc_port_desc": {
+        "oid": "1.0.8802.1.1.2.1.3.7.1.4",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
+      "rem_chassis_id_subtype": {
+        "oid": "1.0.8802.1.1.2.1.4.1.1.4",
+        "method": "bulkwalk",
+        "value_type": "integer"
+      },
+      "rem_chassis_id": {
+        "oid": "1.0.8802.1.1.2.1.4.1.1.5",
+        "method": "bulkwalk",
+        "value_type": "octets"
+      },
+      "rem_port_id_subtype": {
+        "oid": "1.0.8802.1.1.2.1.4.1.1.6",
+        "method": "bulkwalk",
+        "value_type": "integer"
+      },
+      "rem_port_id": {
+        "oid": "1.0.8802.1.1.2.1.4.1.1.7",
+        "method": "bulkwalk",
+        "value_type": "octets"
+      },
+      "rem_port_desc": {
+        "oid": "1.0.8802.1.1.2.1.4.1.1.8",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
+      "rem_sys_name": {
+        "oid": "1.0.8802.1.1.2.1.4.1.1.9",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
+      "rem_sys_desc": {
+        "oid": "1.0.8802.1.1.2.1.4.1.1.10",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
+      "rem_sys_cap_enabled": {
+        "oid": "1.0.8802.1.1.2.1.4.1.1.12",
+        "method": "bulkwalk",
+        "value_type": "bits"
+      },
+      "rem_man_addr_if_subtype": {
+        "oid": "1.0.8802.1.1.2.1.4.2.1.3",
         "method": "bulkwalk",
         "value_type": "integer"
       }
