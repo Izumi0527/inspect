@@ -25,8 +25,6 @@ type stubDashboardWriter struct {
 	devicePerfErr     error
 	temperature       []monitoring.TemperatureHistoryPoint
 	temperatureErr    error
-	deviceStatus      monitoring.DeviceStatusDistribution
-	deviceStatusErr   error
 	networkTraffic    []monitoring.NetworkTrafficPoint
 	networkTrafficErr error
 }
@@ -41,10 +39,6 @@ func (s stubDashboardWriter) GetDevicePerformanceHistory(_ context.Context, _ ti
 
 func (s stubDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.TemperatureHistoryPoint, error) {
 	return s.temperature, s.temperatureErr
-}
-
-func (s stubDashboardWriter) GetDeviceStatusDistribution(_ context.Context, _ []int) (monitoring.DeviceStatusDistribution, error) {
-	return s.deviceStatus, s.deviceStatusErr
 }
 
 func (s stubDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.NetworkTrafficPoint, error) {
@@ -65,7 +59,6 @@ type dashboardV2StatCard struct {
 type dashboardV2Envelope struct {
 	Data struct {
 		StatsV2            []dashboardV2StatCard `json:"statsV2"`
-		RealtimeAlerts     []interface{}         `json:"realtimeAlerts"`
 		TemperatureHistory []interface{}         `json:"temperatureHistory"`
 	} `json:"data"`
 	Sections          map[string]dashboardV2SectionStatus `json:"sections"`
@@ -73,7 +66,7 @@ type dashboardV2Envelope struct {
 	FailedSections    []string                            `json:"failedSections"`
 }
 
-func TestMonitoringHandler_GetMonitoringDashboardV2_AlertsLimitedByPermission(t *testing.T) {
+func TestMonitoringHandler_GetMonitoringDashboardV2_MasksActiveAlertsWithoutAlertsRead(t *testing.T) {
 	e := echo.New()
 	authService, token := newAuthServiceWithPermissions(t, []string{"monitoring:read"})
 
@@ -89,7 +82,6 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_AlertsLimitedByPermission(t 
 			},
 			devicePerf:     []monitoring.DevicePerformancePoint{},
 			temperature:    []monitoring.TemperatureHistoryPoint{},
-			deviceStatus:   monitoring.DeviceStatusDistribution{Healthy: 1, Warning: 0, Critical: 0, Offline: 2},
 			networkTraffic: []monitoring.NetworkTrafficPoint{},
 		},
 		Auth: authService,
@@ -121,16 +113,9 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_AlertsLimitedByPermission(t 
 	if len(envelope.FailedSections) != 0 {
 		t.Fatalf("期望 failedSections 为空，got=%v", envelope.FailedSections)
 	}
-
-	realtimeStatus, ok := envelope.Sections["realtimeAlerts"]
-	if !ok {
-		t.Fatalf("期望包含 realtimeAlerts 分区状态")
-	}
-	if !realtimeStatus.Ok || !realtimeStatus.LimitedByPermission || realtimeStatus.RequiredPermission != "alerts:read" {
-		t.Fatalf("期望 realtimeAlerts=Ok 且 LimitedByPermission=true，got=%+v", realtimeStatus)
-	}
-	if len(envelope.Data.RealtimeAlerts) != 0 {
-		t.Fatalf("期望 realtimeAlerts 数据为空，got=%v", envelope.Data.RealtimeAlerts)
+	// 实时告警模块已移除：缺少 alerts:read 时不再需要「权限受限分区」，也不得残留该分区键
+	if _, ok := envelope.Sections["realtimeAlerts"]; ok {
+		t.Fatalf("realtimeAlerts 分区已移除，不应再出现在 sections 中")
 	}
 
 	var activeAlertsValue *string
@@ -165,7 +150,6 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_PartialFailureTemperature(t 
 			},
 			devicePerf:     []monitoring.DevicePerformancePoint{},
 			temperatureErr: errors.New("temperature query failed"),
-			deviceStatus:   monitoring.DeviceStatusDistribution{Healthy: 1, Warning: 0, Critical: 0, Offline: 2},
 			networkTraffic: []monitoring.NetworkTrafficPoint{},
 		},
 		Auth: authService,
@@ -222,7 +206,6 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_AllAccessibleSectionsFailed_
 			statsErr:          errors.New("stats failed"),
 			devicePerfErr:     errors.New("perf failed"),
 			temperatureErr:    errors.New("temp failed"),
-			deviceStatusErr:   errors.New("status failed"),
 			networkTrafficErr: errors.New("network failed"),
 		},
 		Auth: authService,
@@ -296,7 +279,6 @@ type recordingDashboardWriter struct {
 	statsDeviceIDs   []int
 	perfDeviceIDs    []int
 	tempDeviceIDs    []int
-	distDeviceIDs    []int
 	trafficDeviceIDs []int
 }
 
@@ -321,13 +303,6 @@ func (r *recordingDashboardWriter) GetTemperatureHistory(ctx context.Context, st
 	return r.stubDashboardWriter.GetTemperatureHistory(ctx, start, end, deviceIDs)
 }
 
-func (r *recordingDashboardWriter) GetDeviceStatusDistribution(ctx context.Context, deviceIDs []int) (monitoring.DeviceStatusDistribution, error) {
-	r.mu.Lock()
-	r.distDeviceIDs = append([]int(nil), deviceIDs...)
-	r.mu.Unlock()
-	return r.stubDashboardWriter.GetDeviceStatusDistribution(ctx, deviceIDs)
-}
-
 func (r *recordingDashboardWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.NetworkTrafficPoint, error) {
 	r.mu.Lock()
 	r.trafficDeviceIDs = append([]int(nil), deviceIDs...)
@@ -344,7 +319,6 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_DeviceIDsPassthrough(t *test
 			stats:          monitoring.MonitoringStats{TotalDevices: 2},
 			devicePerf:     []monitoring.DevicePerformancePoint{},
 			temperature:    []monitoring.TemperatureHistoryPoint{},
-			deviceStatus:   monitoring.DeviceStatusDistribution{Healthy: 2},
 			networkTraffic: []monitoring.NetworkTrafficPoint{},
 		},
 	}
@@ -377,7 +351,6 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_DeviceIDsPassthrough(t *test
 		"stats":          writer.statsDeviceIDs,
 		"systemPerf":     writer.perfDeviceIDs,
 		"temperature":    writer.tempDeviceIDs,
-		"deviceStatus":   writer.distDeviceIDs,
 		"networkTraffic": writer.trafficDeviceIDs,
 	}
 	for section, ids := range got {

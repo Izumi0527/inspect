@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react'
 import { useMonitoringPage } from '@/features/monitoring/hooks/useMonitoringPage'
 import { useMonitoringV2 } from '@/features/monitoring/hooks/useMonitoringV2'
 import { INTERFACE_TRAFFIC_QUERY_KEY } from '@/features/monitoring/hooks/useDeviceInterfaceTraffic'
+import { useWebSocketEvent } from '@/lib/websocket'
 import type { MonitoringDataEnvelope } from '@/features/monitoring/types'
 
 jest.mock('@/features/monitoring/hooks/useMonitoringV2', () => ({
@@ -13,6 +14,9 @@ jest.mock('@/features/monitoring/hooks/useMonitoringV2', () => ({
 jest.mock('@/lib/contexts/auth-context', () => ({
   usePermission: () => true,
 }))
+
+const subscribeToAlerts = jest.fn()
+const unsubscribeFromAlerts = jest.fn()
 
 jest.mock('@/lib/websocket', () => ({
   WebSocketEvents: {
@@ -27,8 +31,8 @@ jest.mock('@/lib/websocket', () => ({
     getHealthStatus: () => 'connected',
     subscribeToDeviceMonitoring: jest.fn(),
     unsubscribeFromDeviceMonitoring: jest.fn(),
-    subscribeToAlerts: jest.fn(),
-    unsubscribeFromAlerts: jest.fn(),
+    subscribeToAlerts,
+    unsubscribeFromAlerts,
   }),
   useWebSocketEvent: jest.fn(),
 }))
@@ -37,19 +41,15 @@ const buildEnvelope = (failedSections: MonitoringDataEnvelope['failedSections'])
   data: {
     systemPerformance: [],
     temperatureHistory: [],
-    deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
     networkTrafficHistory: [],
     statsV2: [],
-    realtimeAlerts: [],
     lastUpdate: '2026-09-10T02:00:00.000Z',
   },
   sections: {
     stats: { ok: true },
     systemPerformance: { ok: true },
     temperature: { ok: true },
-    deviceStatus: { ok: true },
     networkTraffic: { ok: !failedSections.includes('networkTraffic'), message: 'traffic down' },
-    realtimeAlerts: { ok: true },
   },
   hasPartialFailure: failedSections.length > 0,
   failedSections,
@@ -69,6 +69,9 @@ describe('useMonitoringPage', () => {
   beforeEach(() => {
     localStorage.clear()
     v2Refetch.mockReset()
+    subscribeToAlerts.mockReset()
+    unsubscribeFromAlerts.mockReset()
+    ;(useWebSocketEvent as jest.Mock).mockReset()
     ;(useMonitoringV2 as jest.Mock).mockReturnValue({
       data: buildEnvelope([]),
       isLoading: false,
@@ -76,6 +79,14 @@ describe('useMonitoringPage', () => {
       refetch: v2Refetch,
       isRefetching: false,
     })
+  })
+
+  it('实时告警模块已移除：监控页不订阅 alerts 房间，也不监听告警事件', () => {
+    renderPage(new QueryClient())
+
+    expect(subscribeToAlerts).not.toHaveBeenCalled()
+    const listenedEvents = (useWebSocketEvent as jest.Mock).mock.calls.map(([event]) => event)
+    expect(listenedEvents).toEqual(expect.not.arrayContaining(['new_alert', 'alert_update', 'alert_resolved']))
   })
 
   it('页面 refetch 同时刷新 v2 聚合数据与接口流量查询', () => {

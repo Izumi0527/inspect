@@ -359,18 +359,6 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/monitoring/components/cards/RealTimeAlertsCard.tsx',
-    bannedPatterns: [
-      /border-gray-200\/50/g,
-      /bg-white\/80/g,
-      /text-gray-900 dark:text-foreground/g,
-      /text-gray-900 dark:text-white/g,
-      /dark:bg-gray-900\/60/g,
-      /dark:hover:bg-gray-800\/80/g,
-      /dark:border-gray-800/g,
-    ],
-  },
-  {
     file: 'frontend/src/components/shared/HelpDialog.tsx',
     bannedPatterns: [
       /bg-white/g,
@@ -509,20 +497,6 @@ const rules: FileRule[] = [
     bannedPatterns: [
       /border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800/g,
       /border-b border-gray-200 px-3 py-2 dark:border-gray-700/g,
-    ],
-  },
-  {
-    file: 'frontend/src/features/monitoring/components/charts/DeviceStatusPieChart.tsx',
-    bannedPatterns: [
-      /text-gray-900 dark:text-gray-100/g,
-    ],
-  },
-  {
-    file: 'frontend/src/features/monitoring/components/cards/DeviceStatusCard.tsx',
-    bannedPatterns: [
-      /border-gray-200\/50/g,
-      /bg-white\/80/g,
-      /text-gray-900 dark:text-foreground/g,
     ],
   },
   {

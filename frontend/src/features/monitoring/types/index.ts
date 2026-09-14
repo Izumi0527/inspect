@@ -16,14 +16,6 @@ export interface TemperatureDataPoint {
   devices: Record<string, number> // deviceName -> temperature (℃)
 }
 
-// 设备状态分布(聚合统计)
-export interface DeviceStatusDistribution {
-  healthy: number
-  warning: number
-  critical: number
-  offline: number
-}
-
 // 网络流量历史数据点（上行 = outbound、下行 = inbound）
 export interface NetworkTrafficDataPoint {
   timestamp: Date | string
@@ -47,16 +39,6 @@ export interface DeviceInterfaceTraffic {
   interface: string
   interfaces: DeviceInterfaceOption[]
   points: NetworkTrafficDataPoint[]
-}
-
-// 单个告警
-export interface Alert {
-  id?: number
-  severity: 'critical' | 'warning' | 'info'
-  deviceName: string
-  message: string
-  time: string
-  timestamp?: Date | string
 }
 
 // 统计卡片数据
@@ -85,14 +67,10 @@ export interface MonitoringDataV2 {
   systemPerformance: SystemPerformanceDataPoint[]
   // 温度历史
   temperatureHistory: TemperatureDataPoint[]
-  // 设备状态分布
-  deviceStatusDistribution: DeviceStatusDistribution
   // 网络流量历史
   networkTrafficHistory: NetworkTrafficDataPoint[]
   // 统计卡片数据(6个)
   statsV2?: StatCardData[]
-  // 实时告警列表
-  realtimeAlerts?: Alert[]
   // 最后更新时间
   lastUpdate?: Date | string
 }
@@ -102,9 +80,7 @@ export type MonitoringSectionKey =
   | 'stats'
   | 'systemPerformance'
   | 'temperature'
-  | 'deviceStatus'
   | 'networkTraffic'
-  | 'realtimeAlerts'
 
 // 单个分区状态
 export interface MonitoringSectionStatus {

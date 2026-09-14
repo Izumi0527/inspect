@@ -32,12 +32,6 @@ jest.mock('@/components/shared', () => ({
   StatCard: () => null,
 }))
 
-jest.mock('@/features/monitoring/components/cards', () => ({
-  DeviceStatusCard: () => null,
-  AvailabilityCard: () => null,
-  RealTimeAlertsCard: () => null,
-}))
-
 jest.mock('@/features/monitoring/components/charts', () => ({
   SystemPerformanceChartWrapper: () => null,
   TemperatureChartWrapper: () => null,
@@ -97,21 +91,17 @@ const buildEnvelope = (lastUpdate: string): MonitoringDataEnvelope => ({
   data: {
     systemPerformance: [],
     temperatureHistory: [],
-    deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
     availability: { current: 0, target: 99.9, trend: 'stable', lastUpdate },
     networkTrafficHistory: [],
     statsV2: [],
-    realtimeAlerts: [],
     lastUpdate,
   },
   sections: {
     stats: { ok: true },
     systemPerformance: { ok: true },
     temperature: { ok: true },
-    deviceStatus: { ok: true },
     availability: { ok: true },
     networkTraffic: { ok: true },
-    realtimeAlerts: { ok: true },
   },
   hasPartialFailure: false,
   failedSections: [],

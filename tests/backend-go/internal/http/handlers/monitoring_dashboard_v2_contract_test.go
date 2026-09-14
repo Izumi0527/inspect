@@ -49,10 +49,6 @@ func (testMonitoringDashboardWriter) GetTemperatureHistory(_ context.Context, _ 
 	}, nil
 }
 
-func (testMonitoringDashboardWriter) GetDeviceStatusDistribution(_ context.Context, _ []int) (monitoring.DeviceStatusDistribution, error) {
-	return monitoring.DeviceStatusDistribution{Healthy: 1, Warning: 0, Critical: 0, Offline: 0}, nil
-}
-
 func (testMonitoringDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.NetworkTrafficPoint, error) {
 	return []monitoring.NetworkTrafficPoint{
 		{
@@ -65,14 +61,13 @@ func (testMonitoringDashboardWriter) GetNetworkTrafficHistory(_ context.Context,
 
 func TestGetMonitoringDashboardV2_ContractKeysAndSections(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/monitoring/dashboard/v2", bytes.NewBufferString(`{"time_range":"24h","alerts_limit":10}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/monitoring/dashboard/v2", bytes.NewBufferString(`{"time_range":"24h"}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	authService, token := newAuthServiceWithPermissions(t, []string{"monitoring:read"})
 	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	// 故意不包含 alerts:read，验证 realtimeAlerts 分区“权限降级”契约
 	handler := handlers.MonitoringHandler{
 		DashboardWriter: testMonitoringDashboardWriter{},
 		Auth:            authService,
@@ -106,53 +101,36 @@ func TestGetMonitoringDashboardV2_ContractKeysAndSections(t *testing.T) {
 		t.Fatalf("sections should be object, got %T", payload["sections"])
 	}
 
-	requiredSectionKeys := []string{"stats", "systemPerformance", "temperature", "deviceStatus", "networkTraffic", "realtimeAlerts"}
+	requiredSectionKeys := []string{"stats", "systemPerformance", "temperature", "networkTraffic"}
 	for _, key := range requiredSectionKeys {
 		if _, ok := sections[key]; !ok {
 			t.Fatalf("missing sections key: %s", key)
 		}
 	}
-	if _, ok := sections["availability"]; ok {
-		t.Fatalf("sections should not contain removed key: availability")
-	}
-
-	realtime, ok := sections["realtimeAlerts"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("sections.realtimeAlerts should be object, got %T", sections["realtimeAlerts"])
-	}
-	if realtime["limitedByPermission"] != true {
-		t.Fatalf("expected realtimeAlerts.limitedByPermission=true, got %v", realtime["limitedByPermission"])
-	}
-	if realtime["requiredPermission"] != "alerts:read" {
-		t.Fatalf("expected realtimeAlerts.requiredPermission=alerts:read, got %v", realtime["requiredPermission"])
-	}
-
-	// 权限受限分区不应进入 failedSections
-	failed, ok := payload["failedSections"].([]interface{})
-	if !ok {
-		t.Fatalf("failedSections should be array, got %T", payload["failedSections"])
-	}
-	for _, item := range failed {
-		if s, ok := item.(string); ok && s == "realtimeAlerts" {
-			t.Fatalf("realtimeAlerts should not be in failedSections when limited by permission")
+	// 设备状态分布与实时告警模块已从监控中心移除，聚合端点不再输出对应分区
+	for _, removed := range []string{"availability", "deviceStatus", "realtimeAlerts"} {
+		if _, ok := sections[removed]; ok {
+			t.Fatalf("sections should not contain removed key: %s", removed)
 		}
+	}
+	if _, ok := payload["failedSections"].([]interface{}); !ok {
+		t.Fatalf("failedSections should be array, got %T", payload["failedSections"])
 	}
 
 	data, ok := payload["data"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("data should be object, got %T", payload["data"])
 	}
-	requiredDataKeys := []string{"systemPerformance", "temperatureHistory", "deviceStatusDistribution", "networkTrafficHistory", "statsV2", "realtimeAlerts", "lastUpdate"}
+	requiredDataKeys := []string{"systemPerformance", "temperatureHistory", "networkTrafficHistory", "statsV2", "lastUpdate"}
 	for _, key := range requiredDataKeys {
 		if _, ok := data[key]; !ok {
 			t.Fatalf("missing data key: %s", key)
 		}
 	}
-	if _, ok := data["availability"]; ok {
-		t.Fatalf("data should not contain removed key: availability")
-	}
-	if _, ok := data["realtimeAlerts"].([]interface{}); !ok {
-		t.Fatalf("data.realtimeAlerts should be array, got %T", data["realtimeAlerts"])
+	for _, removed := range []string{"availability", "deviceStatusDistribution", "realtimeAlerts"} {
+		if _, ok := data[removed]; ok {
+			t.Fatalf("data should not contain removed key: %s", removed)
+		}
 	}
 
 	// systemPerformance 按设备区分：每个点为 {timestamp, devices:{设备名:{cpu,memory}}}，不再有聚合 cpu/network 字段

@@ -51,17 +51,11 @@ describe('useMonitoringV2', () => {
     const { ApiClientError } = require('@/lib/api-client') as { ApiClientError: new (status: number, message?: string) => Error & { status: number } }
 
     mockGet.mockImplementation((url: string) => {
-      if (url === '/monitoring/devices/distribution') {
-        return Promise.resolve({ healthy: 1, warning: 0, critical: 0, offline: 0 })
-      }
       if (url === '/monitoring/availability') {
         return Promise.resolve({ current: 99.9, target: 99.9, trend: 'stable', last_update: now })
       }
       if (url === '/monitoring/stats') {
         return Promise.resolve({ total_devices: 1, availability: 99.9, active_alerts: 0, avg_cpu: 10, avg_memory: 20, avg_network: 0 })
-      }
-      if (url.startsWith('/alerts/')) {
-        return Promise.resolve({ alerts: [] })
       }
       return Promise.reject(new Error(`unexpected GET: ${url}`))
     })
@@ -93,5 +87,6 @@ describe('useMonitoringV2', () => {
     expect(result.current.data?.hasPartialFailure).toBe(true)
     expect(result.current.data?.sections.networkTraffic.ok).toBe(false)
     expect(result.current.data?.failedSections).toContain('networkTraffic')
+    expect(result.current.data?.failedSections).toEqual(expect.not.arrayContaining(['deviceStatus', 'realtimeAlerts']))
   })
 })

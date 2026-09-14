@@ -52,7 +52,6 @@ export interface UseMonitoringPageResult {
   apiOkButDataStale: boolean
   hasEffectivePartialFailure: boolean
   effectiveFailedSectionLabels: string[]
-  realtimeAlertsPermissionLimited: boolean
 }
 
 export function useMonitoringPage(): UseMonitoringPageResult {
@@ -175,11 +174,6 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     ws.subscribeToDeviceMonitoring(deviceIds.length > 0 ? deviceIds : undefined)
   }, [deviceIds, ws])
 
-  const subscribeAlertsRoom = useCallback(() => {
-    if (!canReadAlerts) return
-    ws.subscribeToAlerts()
-  }, [canReadAlerts, ws])
-
   // ── WS connect/disconnect 处理 ─────────────────────────────────────────────
   const handleWsConnect = useCallback(() => {
     setNowMs(Date.now())
@@ -187,7 +181,6 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     // 页面不可见时不订阅房间，避免后台接收推送与触发刷新；返回页面时会在可见性 effect 中重新订阅。
     if (!pageVisible) return
     subscribeDeviceMonitoring()
-    subscribeAlertsRoom()
 
     // WS 连接建立后主动触发一次首轮刷新，避免"连接成功但短期无推送"导致页面长期不更新。
     const now = Date.now()
@@ -195,7 +188,7 @@ export function useMonitoringPage(): UseMonitoringPageResult {
       lastWsConnectRefetchAtRef.current = now
       void refetchRef.current?.()
     }
-  }, [pageVisible, subscribeAlertsRoom, subscribeDeviceMonitoring])
+  }, [pageVisible, subscribeDeviceMonitoring])
 
   const handleWsDisconnect = useCallback(() => {
     setNowMs(Date.now())
@@ -223,18 +216,15 @@ export function useMonitoringPage(): UseMonitoringPageResult {
   useEffect(() => {
     if (!pageVisible) {
       ws.unsubscribeFromDeviceMonitoring()
-      ws.unsubscribeFromAlerts()
       return
     }
 
     subscribeDeviceMonitoring()
-    subscribeAlertsRoom()
 
     return () => {
       ws.unsubscribeFromDeviceMonitoring()
-      ws.unsubscribeFromAlerts()
     }
-  }, [pageVisible, subscribeAlertsRoom, subscribeDeviceMonitoring, ws])
+  }, [pageVisible, subscribeDeviceMonitoring, ws])
 
   // ── 受控刷新（debounce + max wait）────────────────────────────────────────
   // 推送触发"受控刷新"：合并同一轮采集产生的爆发推送，避免 refetch 风暴。
@@ -310,19 +300,6 @@ export function useMonitoringPage(): UseMonitoringPageResult {
 
   useWebSocketEvent(WebSocketEvents.NETWORK_STATS_UPDATE, handleRealtimeRefresh)
 
-  const handleAlertRealtimeRefresh = useCallback(
-    (_payload: unknown) => {
-      if (!canReadAlerts) return
-      if (!pageVisible) return
-      refetchDebounced()
-    },
-    [canReadAlerts, pageVisible, refetchDebounced]
-  )
-
-  useWebSocketEvent(WebSocketEvents.NEW_ALERT, handleAlertRealtimeRefresh)
-  useWebSocketEvent(WebSocketEvents.ALERT_UPDATE, handleAlertRealtimeRefresh)
-  useWebSocketEvent(WebSocketEvents.ALERT_RESOLVED, handleAlertRealtimeRefresh)
-
   // ── 计算值 ─────────────────────────────────────────────────────────────────
   const timeRangeLabel = useMemo(() => resolveTimeRangeLabel(timeRange), [timeRange])
 
@@ -377,9 +354,6 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     return nowMs - generatedDate.getTime() < 5 * 60 * 1000
   }, [isDataStale, envelope?.generatedAt, nowMs])
 
-  const realtimeAlertsPermissionLimited =
-    !canReadAlerts || envelope?.sections.realtimeAlerts?.limitedByPermission === true
-
   const { effectiveFailedSectionLabels, hasEffectivePartialFailure } =
     useMemo(() => {
       const allFailed = envelope?.failedSections ?? []
@@ -387,7 +361,6 @@ export function useMonitoringPage(): UseMonitoringPageResult {
       // 其失败不应计入页面降级提示（接口流量自身的失败在卡片内展示）
       const singleDeviceView = deviceIds.length === 1
       const sections = allFailed.filter((section) => {
-        if (section === 'realtimeAlerts' && realtimeAlertsPermissionLimited) return false
         if (section === 'networkTraffic' && singleDeviceView) return false
         return true
       })
@@ -396,7 +369,7 @@ export function useMonitoringPage(): UseMonitoringPageResult {
         effectiveFailedSectionLabels: sections.map((key) => MONITORING_SECTION_LABELS[key] ?? key),
         hasEffectivePartialFailure: sections.length > 0,
       }
-    }, [deviceIds.length, envelope?.failedSections, realtimeAlertsPermissionLimited])
+    }, [deviceIds.length, envelope?.failedSections])
 
   return {
     // 状态
@@ -424,6 +397,5 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     apiOkButDataStale,
     hasEffectivePartialFailure,
     effectiveFailedSectionLabels,
-    realtimeAlertsPermissionLimited,
   }
 }

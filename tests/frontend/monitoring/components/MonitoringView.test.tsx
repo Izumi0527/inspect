@@ -79,12 +79,6 @@ jest.mock('@/hooks', () => ({
   }),
 }))
 
-jest.mock('@/features/monitoring/components/cards', () => ({
-  DeviceStatusCard: () => <div>DeviceStatusCard</div>,
-  AvailabilityCard: () => <div>AvailabilityCard</div>,
-  RealTimeAlertsCard: () => <div>RealTimeAlertsCard</div>,
-}))
-
 jest.mock('@/features/monitoring/components/charts', () => ({
   SystemPerformanceChartWrapper: () => <div>SystemPerformanceChartWrapper</div>,
   TemperatureChartWrapper: () => <div>TemperatureChartWrapper</div>,
@@ -115,10 +109,8 @@ describe('MonitoringView', () => {
           statsV2: [{ id: 'total_devices', title: '总设备', value: '1' }],
           systemPerformance: [{ timestamp: '2026-02-24T12:00:00.000Z', devices: { edge: { cpu: 10, memory: 20 } } }],
           temperatureHistory: [{ timestamp: '2026-02-24T12:00:00.000Z', devices: { edge: 45 } }],
-          deviceStatusDistribution: { healthy: 1, warning: 0, critical: 0, offline: 0 },
           availability: { current: 99.9, target: 99.9, trend: 'stable' as const },
           networkTrafficHistory: [],
-          realtimeAlerts: [],
         },
         hasPartialFailure: true,
         failedSections: ['networkTraffic'],
@@ -126,9 +118,7 @@ describe('MonitoringView', () => {
           stats: { ok: true },
           systemPerformance: { ok: true },
           temperature: { ok: true },
-          deviceStatus: { ok: true },
           networkTraffic: { ok: false, message: 'network failed' },
-          realtimeAlerts: { ok: true },
         },
         lastUpdate: '2026-02-24T12:00:00.000Z',
       },
@@ -151,9 +141,7 @@ describe('MonitoringView', () => {
           statsV2: [{ id: 'total_devices', title: '总设备', value: '0' }],
           systemPerformance: [],
           temperatureHistory: [],
-          deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
           networkTrafficHistory: [],
-          realtimeAlerts: [],
         },
         hasPartialFailure: false,
         failedSections: [],
@@ -161,9 +149,7 @@ describe('MonitoringView', () => {
           stats: { ok: true },
           systemPerformance: { ok: true },
           temperature: { ok: true },
-          deviceStatus: { ok: true },
           networkTraffic: { ok: true },
-          realtimeAlerts: { ok: true },
         },
         lastUpdate: '2026-02-24T12:00:00.000Z',
       },
@@ -187,9 +173,7 @@ describe('MonitoringView', () => {
           statsV2: [{ id: 'total_devices', title: '总设备', value: '1' }],
           systemPerformance: [],
           temperatureHistory: [],
-          deviceStatusDistribution: { healthy: 1, warning: 0, critical: 0, offline: 0 },
           networkTrafficHistory: [],
-          realtimeAlerts: [],
         },
         hasPartialFailure: false,
         failedSections: [],
@@ -197,9 +181,7 @@ describe('MonitoringView', () => {
           stats: { ok: true },
           systemPerformance: { ok: true },
           temperature: { ok: true },
-          deviceStatus: { ok: true },
           networkTraffic: { ok: true },
-          realtimeAlerts: { ok: true },
         },
         lastUpdate: '2026-02-24T12:00:00.000Z',
       },
@@ -219,6 +201,9 @@ describe('MonitoringView', () => {
     expect(screen.getByText('系统性能趋势')).toBeInTheDocument()
     expect(screen.getByText('设备温度监控')).toBeInTheDocument()
     expect(screen.getByText('流量监控')).toBeInTheDocument()
+    // 设备状态分布与实时告警模块已从监控中心移除
+    expect(screen.queryByText('设备状态分布')).not.toBeInTheDocument()
+    expect(screen.queryByText('实时告警')).not.toBeInTheDocument()
   })
 
   it('多个分区失败时应分别显示对应失败文案', () => {
@@ -228,26 +213,20 @@ describe('MonitoringView', () => {
           statsV2: [],
           systemPerformance: [],
           temperatureHistory: [],
-          deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
           networkTrafficHistory: [],
-          realtimeAlerts: [],
         },
         hasPartialFailure: true,
         failedSections: [
           'stats',
           'systemPerformance',
           'temperature',
-          'deviceStatus',
           'networkTraffic',
-          'realtimeAlerts',
         ],
         sections: {
           stats: { ok: false, message: 'stats down' },
           systemPerformance: { ok: false, message: 'perf down' },
           temperature: { ok: false, message: 'temp down' },
-          deviceStatus: { ok: false, message: 'device down' },
           networkTraffic: { ok: false, message: 'traffic down' },
-          realtimeAlerts: { ok: false, message: 'alerts down' },
         },
         lastUpdate: '2026-02-24T12:00:00.000Z',
       },
@@ -263,8 +242,6 @@ describe('MonitoringView', () => {
     expect(screen.getByText('stats down')).toBeInTheDocument()
     expect(screen.getByText('perf down')).toBeInTheDocument()
     expect(screen.getByText('temp down')).toBeInTheDocument()
-    expect(screen.getByText('device down')).toBeInTheDocument()
     expect(screen.getByText('traffic down')).toBeInTheDocument()
-    expect(screen.getByText('alerts down')).toBeInTheDocument()
   })
 })

@@ -1,13 +1,12 @@
 'use client'
 
 import { useSidebar } from '@/lib/contexts/sidebar-context'
-import { Permission } from '@/lib/types/auth.types'
 import { Sidebar } from '@/features/dashboard/components/Sidebar'
 import { DashboardHeader } from '@/features/dashboard'
-import { DatabaseZap, AlertTriangle, ShieldOff } from 'lucide-react'
+import { DatabaseZap, AlertTriangle } from 'lucide-react'
 import { useInView } from '@/hooks'
 import { useMonitoringPage } from '../hooks/useMonitoringPage'
-import { StatsSection, PerformanceSection, StatusSection, NetworkSection } from './sections'
+import { StatsSection, PerformanceSection, NetworkSection } from './sections'
 import {
   MonitoringLoadingSkeleton,
   MonitoringErrorPanel,
@@ -72,7 +71,6 @@ export function MonitoringView() {
       <div className={`${layoutClass} h-full flex flex-col`}>
         <DashboardHeader
           title="监控中心"
-          alertCount={page.canReadAlerts ? (page.data.realtimeAlerts?.filter(a => a.severity === 'critical')?.length ?? 0) : 0}
           showSearch={false}
           actions={<MonitoringHeaderActions page={page} />}
         />
@@ -90,22 +88,6 @@ export function MonitoringView() {
                     {page.effectiveFailedSectionLabels.length > 0 && (
                       <p className="mt-1 text-xs text-yellow-800 dark:text-yellow-200">失败分区：{page.effectiveFailedSectionLabels.join('、')}</p>
                     )}
-                    {page.realtimeAlertsPermissionLimited && (
-                      <p className="mt-1 text-xs text-yellow-800 dark:text-yellow-200">另外：实时告警因权限限制未展示。</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 权限受限横幅 */}
-            {!page.hasEffectivePartialFailure && page.realtimeAlertsPermissionLimited && (
-              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
-                <div className="flex items-start gap-3">
-                  <ShieldOff className="mt-0.5 h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  <div>
-                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">部分数据因权限限制未展示</p>
-                    <p className="mt-1 text-xs text-blue-800 dark:text-blue-200">当前账号缺少查看告警权限（{Permission.ALERTS_READ}），已隐藏实时告警区域。</p>
                   </div>
                 </div>
               </div>
@@ -119,15 +101,6 @@ export function MonitoringView() {
               systemPerformance={page.data.systemPerformance}
               temperatureHistory={page.data.temperatureHistory}
               timeRange={page.timeRange} onRetry={page.refetch}
-            />
-            <StatusSection
-              sectionDeviceStatus={page.envelope?.sections.deviceStatus}
-              sectionRealtimeAlerts={page.envelope?.sections.realtimeAlerts}
-              deviceStatusDistribution={page.data.deviceStatusDistribution}
-              realtimeAlerts={page.data.realtimeAlerts}
-              realtimeAlertsPermissionLimited={page.realtimeAlertsPermissionLimited}
-              requiredAlertsPermission={Permission.ALERTS_READ}
-              onRetry={page.refetch}
             />
             <NetworkSection
               sectionRef={networkRef} networkInView={networkInView}

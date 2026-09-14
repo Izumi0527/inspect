@@ -16,7 +16,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
-	"github.com/your-org/inspect-system/backend-go/internal/alerts"
 	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
 )
 
@@ -25,7 +24,6 @@ type MonitoringHandler struct {
 	DashboardWriter      monitoringDashboardWriter
 	ReportOutputDir      string
 	Auth                 PermissionService
-	AlertService         *alerts.Service
 	DownloadTokens       *ReportDownloadTokenStore
 	DownloadTokenTTL     time.Duration
 	DownloadTokenMaxUses int
@@ -35,7 +33,6 @@ type monitoringDashboardWriter interface {
 	GetMonitoringStats(ctx context.Context, deviceIDs []int) (monitoring.MonitoringStats, error)
 	GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.DevicePerformancePoint, error)
 	GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.TemperatureHistoryPoint, error)
-	GetDeviceStatusDistribution(ctx context.Context, deviceIDs []int) (monitoring.DeviceStatusDistribution, error)
 	GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.NetworkTrafficPoint, error)
 }
 
@@ -589,8 +586,6 @@ func (h MonitoringHandler) ExportMonitoringReport(c echo.Context) error {
 type monitoringDashboardV2Request struct {
 	// 时间范围：例如 1h / 12h / 24h / 3d / 7d，默认 24h
 	TimeRange string `json:"time_range"`
-	// 实时告警数量上限，默认 10（无告警权限时自动降级）
-	AlertsLimit int `json:"alerts_limit"`
 	// 设备筛选：为空表示全部设备
 	DeviceIDs []int `json:"device_ids"`
 }
@@ -614,27 +609,17 @@ type monitoringDashboardV2Envelope struct {
 type monitoringDashboardV2Data struct {
 	// systemPerformance 是前端分区 id（类型/分区键/回退逻辑均绑定），指「系统性能趋势」分区
 	// 而非聚合方式；数据已按设备区分，勿为对齐元素类型而改动此键名
-	SystemPerformance        []monitoring.DevicePerformancePoint  `json:"systemPerformance"`
-	TemperatureHistory       []monitoring.TemperatureHistoryPoint `json:"temperatureHistory"`
-	DeviceStatusDistribution monitoring.DeviceStatusDistribution  `json:"deviceStatusDistribution"`
-	NetworkTrafficHistory    []monitoring.NetworkTrafficPoint     `json:"networkTrafficHistory"`
-	StatsV2                  []monitoringV2StatCardData           `json:"statsV2"`
-	RealtimeAlerts           []monitoringV2RealtimeAlert          `json:"realtimeAlerts"`
-	LastUpdate               string                               `json:"lastUpdate"`
+	SystemPerformance     []monitoring.DevicePerformancePoint  `json:"systemPerformance"`
+	TemperatureHistory    []monitoring.TemperatureHistoryPoint `json:"temperatureHistory"`
+	NetworkTrafficHistory []monitoring.NetworkTrafficPoint     `json:"networkTrafficHistory"`
+	StatsV2               []monitoringV2StatCardData           `json:"statsV2"`
+	LastUpdate            string                               `json:"lastUpdate"`
 }
 
 type monitoringV2StatCardData struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
 	Value string `json:"value"`
-}
-
-type monitoringV2RealtimeAlert struct {
-	ID         int    `json:"id"`
-	Severity   string `json:"severity"`
-	DeviceName string `json:"deviceName"`
-	Message    string `json:"message"`
-	Time       string `json:"time"`
 }
 
 func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
@@ -655,13 +640,6 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	if timeRange == "" {
 		timeRange = "24h"
 	}
-	alertsLimit := req.AlertsLimit
-	if alertsLimit <= 0 {
-		alertsLimit = 10
-	}
-	if alertsLimit > 50 {
-		alertsLimit = 50
-	}
 
 	deviceIDs := sanitizeDeviceIDs(req.DeviceIDs)
 
@@ -672,7 +650,6 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	// 读取权限列表（requirePermission 已写入 context 缓存）
 	permissions, _ := c.Get(authContextPermissionsKey).([]string)
 	canReadAlerts := hasPermission("alerts:read", permissions)
-	realtimeAlertsLimitedByPermission := !canReadAlerts
 
 	type result[T any] struct {
 		value T
@@ -683,9 +660,7 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 		statsResult          result[monitoring.MonitoringStats]
 		systemPerfResult     result[[]monitoring.DevicePerformancePoint]
 		tempResult           result[[]monitoring.TemperatureHistoryPoint]
-		deviceStatusResult   result[monitoring.DeviceStatusDistribution]
 		networkTrafficResult result[[]monitoring.NetworkTrafficPoint]
-		realtimeAlertsResult result[[]monitoringV2RealtimeAlert]
 	)
 
 	wg := sync.WaitGroup{}
@@ -718,58 +693,8 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		value, err := writer.GetDeviceStatusDistribution(c.Request().Context(), deviceIDs)
-		deviceStatusResult = result[monitoring.DeviceStatusDistribution]{value: value, err: err}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
 		value, err := writer.GetNetworkTrafficHistory(c.Request().Context(), startTime, endTime, deviceIDs)
 		networkTrafficResult = result[[]monitoring.NetworkTrafficPoint]{value: value, err: err}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if realtimeAlertsLimitedByPermission {
-			// 权限限制不应被视为“分区失败”，因此这里不返回错误，由 sections 标记为受限即可。
-			realtimeAlertsResult = result[[]monitoringV2RealtimeAlert]{value: []monitoringV2RealtimeAlert{}, err: nil}
-			return
-		}
-		if h.AlertService == nil {
-			realtimeAlertsResult = result[[]monitoringV2RealtimeAlert]{value: []monitoringV2RealtimeAlert{}, err: fmt.Errorf("告警服务未配置")}
-			return
-		}
-
-		rows, _, err := h.AlertService.ListAlerts(c.Request().Context(), alerts.ListAlertsFilter{
-			Page:      1,
-			PageSize:  alertsLimit,
-			DeviceIDs: deviceIDs,
-			SortBy:    "created_at",
-			SortOrder: "desc",
-		})
-		if err != nil {
-			realtimeAlertsResult = result[[]monitoringV2RealtimeAlert]{value: []monitoringV2RealtimeAlert{}, err: err}
-			return
-		}
-
-		out := make([]monitoringV2RealtimeAlert, 0, len(rows))
-		for _, row := range rows {
-			msg := strings.TrimSpace(row.Title)
-			if strings.TrimSpace(row.Message) != "" {
-				msg = row.Message
-			}
-			out = append(out, monitoringV2RealtimeAlert{
-				ID:         row.ID,
-				Severity:   alerts.NormalizeSeverity(row.Severity),
-				DeviceName: resolveDashboardAlertDevice(row),
-				Message:    msg,
-				Time:       resolveDashboardAlertTimestamp(row).Format("2006-01-02 15:04"),
-			})
-		}
-
-		realtimeAlertsResult = result[[]monitoringV2RealtimeAlert]{value: out, err: nil}
 	}()
 
 	wg.Wait()
@@ -785,23 +710,10 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 		"stats":             buildSectionStatus(statsResult.err, "统计指标加载失败"),
 		"systemPerformance": buildSectionStatus(systemPerfResult.err, "系统性能数据加载失败"),
 		"temperature":       buildSectionStatus(tempResult.err, "温度数据加载失败"),
-		"deviceStatus":      buildSectionStatus(deviceStatusResult.err, "设备状态分布加载失败"),
 		"networkTraffic":    buildSectionStatus(networkTrafficResult.err, "网络流量数据加载失败"),
-		"realtimeAlerts": func() monitoringSectionStatus {
-			if realtimeAlertsLimitedByPermission {
-				msg := "缺少告警查看权限（alerts:read），已自动隐藏"
-				return monitoringSectionStatus{
-					Ok:                  true,
-					Message:             &msg,
-					LimitedByPermission: true,
-					RequiredPermission:  "alerts:read",
-				}
-			}
-			return buildSectionStatus(realtimeAlertsResult.err, "实时告警加载失败")
-		}(),
 	}
 
-	orderedKeys := []string{"stats", "systemPerformance", "temperature", "deviceStatus", "networkTraffic", "realtimeAlerts"}
+	orderedKeys := []string{"stats", "systemPerformance", "temperature", "networkTraffic"}
 	failedSections := make([]string, 0)
 	effectiveSectionCount := 0
 	for _, key := range orderedKeys {
@@ -836,20 +748,13 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 			}
 			return []monitoring.TemperatureHistoryPoint{}
 		}(),
-		DeviceStatusDistribution: func() monitoring.DeviceStatusDistribution {
-			if sections["deviceStatus"].Ok {
-				return deviceStatusResult.value
-			}
-			return monitoring.DeviceStatusDistribution{Healthy: 0, Warning: 0, Critical: 0, Offline: 0}
-		}(),
 		NetworkTrafficHistory: func() []monitoring.NetworkTrafficPoint {
 			if sections["networkTraffic"].Ok {
 				return networkTrafficResult.value
 			}
 			return []monitoring.NetworkTrafficPoint{}
 		}(),
-		StatsV2:        statsV2,
-		RealtimeAlerts: realtimeAlertsResult.value,
+		StatsV2: statsV2,
 		// 兼容字段：仍保留 lastUpdate，但语义应为“最新数据时间”（不是请求生成时间）。
 		LastUpdate: generatedAtRFC3339,
 	}
@@ -1047,32 +952,6 @@ func formatBandwidthValue(bps float64) string {
 	default:
 		return fmt.Sprintf("%.2f %s", value, units[unitIndex])
 	}
-}
-
-func resolveDashboardAlertTimestamp(row alerts.AlertWithDevice) time.Time {
-	if row.LastOccurred != nil && !row.LastOccurred.IsZero() {
-		return row.LastOccurred.UTC()
-	}
-	if row.FirstOccurred != nil && !row.FirstOccurred.IsZero() {
-		return row.FirstOccurred.UTC()
-	}
-	if row.CreatedAt != nil && !row.CreatedAt.IsZero() {
-		return row.CreatedAt.UTC()
-	}
-	return time.Now().UTC()
-}
-
-func resolveDashboardAlertDevice(row alerts.AlertWithDevice) string {
-	if row.DeviceName != nil && strings.TrimSpace(*row.DeviceName) != "" {
-		return strings.TrimSpace(*row.DeviceName)
-	}
-	if row.DeviceIP != nil && strings.TrimSpace(*row.DeviceIP) != "" {
-		return strings.TrimSpace(*row.DeviceIP)
-	}
-	if row.DeviceID > 0 {
-		return "设备#" + strconv.Itoa(row.DeviceID)
-	}
-	return "未知设备"
 }
 
 func (h MonitoringHandler) DownloadMonitoringReport(c echo.Context) error {

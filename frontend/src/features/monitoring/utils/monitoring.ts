@@ -16,9 +16,7 @@ export const MONITORING_SECTION_LABELS: Record<MonitoringSectionKey, string> = {
   stats: '关键指标',
   systemPerformance: '系统性能趋势',
   temperature: '设备温度监控',
-  deviceStatus: '设备状态分布',
   networkTraffic: '网络流量',
-  realtimeAlerts: '实时告警',
 }
 
 export function resolveTimeRangeLabel(timeRange: string): string {

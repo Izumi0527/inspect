@@ -150,7 +150,6 @@ const buildPage = (overrides: Partial<UseMonitoringPageResult> = {}): UseMonitor
   apiOkButDataStale: false,
   hasEffectivePartialFailure: false,
   effectiveFailedSectionLabels: [],
-  realtimeAlertsPermissionLimited: false,
   ...overrides,
 })
 

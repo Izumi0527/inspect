@@ -88,7 +88,7 @@ export function MonitoringHeaderActions({ page }: MonitoringHeaderActionsProps) 
       {page.canExportReport && (
         <ReportExportButton
           timeRange={page.timeRange}
-          sections={page.realtimeAlertsPermissionLimited ? ['stats', 'charts'] : ['stats', 'charts', 'alerts']}
+          sections={page.canReadAlerts ? ['stats', 'charts', 'alerts'] : ['stats', 'charts']}
         />
       )}
 

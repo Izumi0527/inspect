@@ -11,9 +11,7 @@ export { exportMonitoringReport } from './api/monitoring.api'
 export type {
   SystemPerformanceDataPoint,
   TemperatureDataPoint,
-  DeviceStatusDistribution,
   NetworkTrafficDataPoint,
   StatCardData,
-  Alert,
   MonitoringDataV2,
 } from './types'

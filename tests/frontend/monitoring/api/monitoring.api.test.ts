@@ -22,7 +22,6 @@ import { api } from '@/lib/api-client'
 import {
   fetchDeviceInterfaceTraffic,
   fetchMonitoringDataV2,
-  fetchRealtimeAlerts,
   fetchStatsV2,
 } from '@/features/monitoring/api/monitoring.api'
 
@@ -52,21 +51,11 @@ describe('monitoring.api', () => {
     expect(stats.find((item) => item.id === 'peak_inbound')?.value).toBe('12.3 Kbps')
   })
 
-  it('fetchRealtimeAlerts: 使用无尾斜杠的 /alerts 查询', async () => {
-    mockedApi.get.mockResolvedValue({ alerts: [] })
-
-    await fetchRealtimeAlerts(10)
-    expect(mockedApi.get).toHaveBeenCalledWith(
-      '/alerts?page=1&page_size=10&sort_by=created_at&sort_order=desc'
-    )
-  })
-
-  it('fetchMonitoringDataV2: v2 聚合响应可被归一化（缺失 realtimeAlerts 也不应崩溃）', async () => {
+  it('fetchMonitoringDataV2: v2 聚合响应归一化为四个分区，不再请求实时告警数量', async () => {
     mockedApi.post.mockResolvedValue({
       data: {
         systemPerformance: [],
         temperatureHistory: [],
-        deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
         networkTrafficHistory: [],
         statsV2: [],
         lastUpdate: '2026-03-15T00:00:00Z',
@@ -75,9 +64,7 @@ describe('monitoring.api', () => {
         stats: { ok: true },
         systemPerformance: { ok: true },
         temperature: { ok: true },
-        deviceStatus: { ok: true },
         networkTraffic: { ok: true },
-        realtimeAlerts: { ok: true, limitedByPermission: true, requiredPermission: 'alerts:read' },
       },
       hasPartialFailure: false,
       failedSections: [],
@@ -87,10 +74,10 @@ describe('monitoring.api', () => {
     const envelope = await fetchMonitoringDataV2('24h')
     expect(mockedApi.post).toHaveBeenCalledWith('/monitoring/dashboard/v2', {
       time_range: '24h',
-      alerts_limit: 10,
     })
-    expect(envelope.sections.realtimeAlerts.limitedByPermission).toBe(true)
-    expect(Array.isArray(envelope.data.realtimeAlerts)).toBe(true)
+    expect(Object.keys(envelope.sections).sort()).toEqual(['networkTraffic', 'stats', 'systemPerformance', 'temperature'])
+    expect(envelope.data).not.toHaveProperty('deviceStatusDistribution')
+    expect(envelope.data).not.toHaveProperty('realtimeAlerts')
   })
 
   it('fetchMonitoringDataV2: 选择设备时应在请求体透传 device_ids', async () => {
@@ -105,7 +92,6 @@ describe('monitoring.api', () => {
     await fetchMonitoringDataV2('1h', [3, 7])
     expect(mockedApi.post).toHaveBeenCalledWith('/monitoring/dashboard/v2', {
       time_range: '1h',
-      alerts_limit: 10,
       device_ids: [3, 7],
     })
   })
@@ -163,14 +149,8 @@ describe('monitoring.api', () => {
       return Promise.reject(new Error(`unexpected POST: ${url}`))
     })
     mockedApi.get.mockImplementation((url: string) => {
-      if (url === '/monitoring/devices/distribution') {
-        return Promise.resolve({ healthy: 1, warning: 0, critical: 0, offline: 0 })
-      }
       if (url === '/monitoring/stats') {
         return Promise.resolve({ total_devices: 1, active_alerts: 0, avg_cpu: 10, avg_memory: 20 })
-      }
-      if (url.startsWith('/alerts')) {
-        return Promise.resolve({ alerts: [] })
       }
       return Promise.reject(new Error(`unexpected GET: ${url}`))
     })
@@ -182,6 +162,9 @@ describe('monitoring.api', () => {
     expect(envelope.failedSections).toContain('systemPerformance')
     // 旧端点只有跨设备聚合值，给不出设备名，不应再请求它
     expect(mockedApi.post).not.toHaveBeenCalledWith('/monitoring/system/performance', expect.anything())
+    // 设备状态分布与实时告警模块已移除，回退路径也不再请求它们
+    expect(mockedApi.get).not.toHaveBeenCalledWith('/monitoring/devices/distribution')
+    expect(mockedApi.get.mock.calls.some(([url]) => String(url).startsWith('/alerts'))).toBe(false)
   })
 
   it('fetchDeviceInterfaceTraffic: 按设备与接口拼接查询参数，并归一化响应（label 缺省回退 name）', async () => {

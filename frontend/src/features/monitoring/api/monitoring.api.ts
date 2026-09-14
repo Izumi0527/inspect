@@ -1,13 +1,10 @@
 import { api, ApiClientError } from '@/lib/api-client'
-import { formatDateTimeYMDHM } from '@/utils/formatters'
 import { formatBandwidthValue } from '../utils/monitoring'
 import {
   SystemPerformanceDataPoint,
   TemperatureDataPoint,
-  DeviceStatusDistribution,
   NetworkTrafficDataPoint,
   StatCardData,
-  Alert,
   DeviceInterfaceTraffic,
   DeviceInterfaceOption,
   MonitoringDataV2,
@@ -39,37 +36,6 @@ function toStr(value: unknown, fallback = ''): string {
 /** unknown → 可选字符串（非字符串返回 undefined） */
 function toStrOpt(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
-}
-
-function normalizeAlertSeverity(raw: unknown): Alert['severity'] {
-  const normalized = String(raw ?? '').toLowerCase().trim()
-  if (normalized === 'critical') return 'critical'
-  if (normalized === 'warning') return 'warning'
-  if (normalized === 'info') return 'info'
-
-  // 兼容后端/采集侧可能出现的级别
-  if (
-    normalized === 'fatal' ||
-    normalized === 'emergency' ||
-    normalized === 'error' ||
-    normalized === 'high'
-  ) {
-    return 'critical'
-  }
-  if (normalized === 'warn' || normalized === 'medium') {
-    return 'warning'
-  }
-
-  return 'info'
-}
-
-function formatAlertTime(raw: unknown): string {
-  const date = raw instanceof Date ? raw : new Date(String(raw ?? ''))
-  if (Number.isNaN(date.getTime())) {
-    const fallback = String(raw ?? '').trim()
-    return fallback !== '' ? fallback : '-'
-  }
-  return formatDateTimeYMDHM(date)
 }
 
 function resolveTimeRange(timeRange: string) {
@@ -199,26 +165,6 @@ export async function fetchTemperatureHistory(
 }
 
 /**
- * 获取设备状态分布
- * @returns 设备状态分布统计
- */
-export async function fetchDeviceStatusDistribution(): Promise<DeviceStatusDistribution> {
-  try {
-    const response = await api.get<RawRecord>('/monitoring/devices/distribution')
-
-    return {
-      healthy: toNum(response?.healthy ?? response?.normal),
-      warning: toNum(response?.warning ?? response?.degraded),
-      critical: toNum(response?.critical ?? response?.error ?? response?.down),
-      offline: toNum(response?.offline ?? response?.inactive),
-    }
-  } catch (error) {
-    console.error('获取设备状态分布失败:', error)
-    throw error instanceof Error ? error : new Error('获取设备状态分布失败')
-  }
-}
-
-/**
  * 获取网络流量历史数据
  * @param timeRange - 时间范围
  * @returns 网络流量历史数据点数组
@@ -322,42 +268,6 @@ export async function fetchStatsV2(): Promise<StatCardData[]> {
 }
 
 /**
- * 获取实时告警列表
- * @param limit - 返回数量限制
- * @returns 告警数组
- */
-export async function fetchRealtimeAlerts(limit: number = 10): Promise<Alert[]> {
-  try {
-    const response = await api.get<unknown>(`/alerts?page=1&page_size=${limit}&sort_by=created_at&sort_order=desc`)
-
-    // 后端返回分页对象，优先使用 alerts 数组（response 为数组时属性访问得 undefined，行为不变）
-    const record = (response ?? {}) as RawRecord
-    const alertList: unknown[] = Array.isArray(record.alerts) ? record.alerts
-      : Array.isArray(record.recent) ? record.recent
-      : Array.isArray(response) ? response
-      : []
-
-    return alertList.slice(0, limit).map((alertRaw) => {
-      const alert = alertRaw as RawRecord
-      const rawTime = alert.time ?? alert.timestamp ?? alert.created_at ?? new Date().toISOString()
-      const rawId = alert.id ?? alert.alert_id ?? alert.alertId ?? 0
-      const parsedId = typeof rawId === 'number' ? rawId : Number(String(rawId))
-      const id = Number.isFinite(parsedId) ? parsedId : 0
-      return {
-        id,
-        deviceName: toStr(alert.device_name ?? alert.device ?? alert.deviceName ?? alert.source, '未知设备'),
-        message: toStr(alert.message ?? alert.description ?? alert.title),
-        severity: normalizeAlertSeverity(alert.severity ?? alert.level ?? alert.priority ?? 'info'),
-        time: formatAlertTime(rawTime),
-      }
-    })
-  } catch (error) {
-    console.error('获取实时告警失败:', error)
-    throw error instanceof Error ? error : new Error('获取实时告警失败')
-  }
-}
-
-/**
  * 获取监控设备列表（设备筛选下拉数据源）
  */
 export async function fetchMonitoringDevices(): Promise<MonitoringDeviceOption[]> {
@@ -450,9 +360,7 @@ export async function fetchMonitoringDataV2(
     'stats',
     'systemPerformance',
     'temperature',
-    'deviceStatus',
     'networkTraffic',
-    'realtimeAlerts',
   ]
 
   const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -466,9 +374,7 @@ export async function fetchMonitoringDataV2(
       stats: '统计指标加载失败',
       systemPerformance: '系统性能数据加载失败',
       temperature: '温度数据加载失败',
-      deviceStatus: '设备状态分布加载失败',
       networkTraffic: '网络流量数据加载失败',
-      realtimeAlerts: '实时告警加载失败',
     }
 
     if (!isRecord(raw)) {
@@ -543,23 +449,11 @@ export async function fetchMonitoringDataV2(
       return {
         systemPerformance: [],
         temperatureHistory: [],
-        deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
         networkTrafficHistory: [],
         statsV2: [],
-        realtimeAlerts: [],
         lastUpdate: nowIso,
       }
     }
-
-    const distRaw = raw.deviceStatusDistribution
-    const deviceStatusDistribution = isRecord(distRaw)
-      ? {
-          healthy: toNumber(distRaw.healthy, 0),
-          warning: toNumber(distRaw.warning, 0),
-          critical: toNumber(distRaw.critical, 0),
-          offline: toNumber(distRaw.offline, 0),
-        }
-      : { healthy: 0, warning: 0, critical: 0, offline: 0 }
 
     const normalizeSystemPerformance = (value: unknown): SystemPerformanceDataPoint[] => {
       if (!Array.isArray(value)) return []
@@ -664,37 +558,11 @@ export async function fetchMonitoringDataV2(
       return out
     }
 
-    const normalizeRealtimeAlerts = (value: unknown): Alert[] => {
-      if (!Array.isArray(value)) return []
-
-      const out: Alert[] = []
-      for (const item of value) {
-        if (!isRecord(item)) continue
-
-        const rawTime = item.time ?? item.timestamp ?? item.created_at
-        const rawId = item.id ?? item.alert_id ?? item.alertId ?? 0
-        const parsedId = typeof rawId === 'number' ? rawId : Number(String(rawId))
-        const id = Number.isFinite(parsedId) ? parsedId : undefined
-
-        out.push({
-          id,
-          deviceName: toNonEmptyString(item.deviceName ?? item.device_name ?? item.device ?? item.source) || '未知设备',
-          message: toNonEmptyString(item.message ?? item.description ?? item.title),
-          severity: normalizeAlertSeverity(item.severity ?? item.level ?? item.priority ?? 'info'),
-          time: formatAlertTime(rawTime),
-        })
-      }
-
-      return out
-    }
-
     return {
       systemPerformance: normalizeSystemPerformance(raw.systemPerformance),
       temperatureHistory: normalizeTemperatureHistory(raw.temperatureHistory),
-      deviceStatusDistribution,
       networkTrafficHistory: normalizeNetworkTrafficHistory(raw.networkTrafficHistory),
       statsV2: normalizeStatsV2(raw.statsV2),
-      realtimeAlerts: normalizeRealtimeAlerts(raw.realtimeAlerts),
       lastUpdate: toNonEmptyString(raw.lastUpdate) || nowIso,
     }
   }
@@ -747,7 +615,6 @@ export async function fetchMonitoringDataV2(
   try {
     const raw = await api.post<unknown>('/monitoring/dashboard/v2', {
       time_range: timeRange,
-      alerts_limit: 10,
       ...(deviceIds.length > 0 ? { device_ids: deviceIds } : {}),
     })
     return normalizeEnvelope(raw)
@@ -781,16 +648,12 @@ async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<Monitorin
   try {
     const [
       temperatureHistory,
-      deviceStatusDistribution,
       networkTrafficHistory,
       statsV2,
-      realtimeAlerts,
     ] = await Promise.allSettled([
       fetchTemperatureHistory(timeRange),
-      fetchDeviceStatusDistribution(),
       fetchNetworkTrafficHistory(timeRange),
       fetchStatsV2(),
-      fetchRealtimeAlerts(10),
     ])
 
     const lastUpdate = new Date().toISOString()
@@ -809,17 +672,9 @@ async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<Monitorin
         ok: temperatureHistory.status === 'fulfilled',
         message: temperatureHistory.status === 'rejected' ? toErrorMessage(temperatureHistory.reason, '温度数据加载失败') : undefined,
       },
-      deviceStatus: {
-        ok: deviceStatusDistribution.status === 'fulfilled',
-        message: deviceStatusDistribution.status === 'rejected' ? toErrorMessage(deviceStatusDistribution.reason, '设备状态分布加载失败') : undefined,
-      },
       networkTraffic: {
         ok: networkTrafficHistory.status === 'fulfilled',
         message: networkTrafficHistory.status === 'rejected' ? toErrorMessage(networkTrafficHistory.reason, '网络流量数据加载失败') : undefined,
-      },
-      realtimeAlerts: {
-        ok: realtimeAlerts.status === 'fulfilled',
-        message: realtimeAlerts.status === 'rejected' ? toErrorMessage(realtimeAlerts.reason, '实时告警加载失败') : undefined,
       },
     }
 
@@ -831,14 +686,9 @@ async function fetchMonitoringDataV2Legacy(timeRange: string): Promise<Monitorin
     const data: MonitoringDataV2 = {
       systemPerformance: [],
       temperatureHistory: temperatureHistory.status === 'fulfilled' ? temperatureHistory.value : [],
-      deviceStatusDistribution:
-        deviceStatusDistribution.status === 'fulfilled'
-          ? deviceStatusDistribution.value
-          : { healthy: 0, warning: 0, critical: 0, offline: 0 },
       networkTrafficHistory:
         networkTrafficHistory.status === 'fulfilled' ? networkTrafficHistory.value : [],
       statsV2: statsV2.status === 'fulfilled' ? statsV2.value : [],
-      realtimeAlerts: realtimeAlerts.status === 'fulfilled' ? realtimeAlerts.value : [],
       lastUpdate,
     }
 

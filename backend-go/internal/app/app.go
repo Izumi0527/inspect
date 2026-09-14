@@ -140,7 +140,6 @@ func New() (*App, error) {
 	monitoringHandler := handlers.MonitoringHandler{
 		Writer:          metricsWriter,
 		ReportOutputDir: cfg.ReportOutputDir,
-		AlertService:    nil, // 稍后在 alertService 创建后注入
 	}
 
 	monitoringHandler.Auth = authService
@@ -222,9 +221,6 @@ func New() (*App, error) {
 		Service: escalationService,
 		Auth:    authService,
 	}
-
-	// 将告警服务注入监控中心聚合接口（用于实时告警分区）
-	monitoringHandler.AlertService = alertService
 
 	inspectionHandler := handlers.InspectionHandler{
 		Service:         inspectionService,

@@ -71,12 +71,6 @@ jest.mock('@/hooks', () => ({
   }),
 }))
 
-jest.mock('@/features/monitoring/components/cards', () => ({
-  DeviceStatusCard: () => <div>DeviceStatusCard</div>,
-  AvailabilityCard: () => <div>AvailabilityCard</div>,
-  RealTimeAlertsCard: () => <div>RealTimeAlertsCard</div>,
-}))
-
 jest.mock('@/features/monitoring/components/charts', () => ({
   SystemPerformanceChartWrapper: () => <div>SystemPerformanceChartWrapper</div>,
   TemperatureChartWrapper: () => <div>TemperatureChartWrapper</div>,
@@ -92,7 +86,6 @@ jest.mock('@/features/monitoring/components/ReportExportButton', () => ({
 jest.mock('@/features/monitoring/components/sections', () => ({
   StatsSection: () => <div>StatsSection</div>,
   PerformanceSection: () => <div>PerformanceSection</div>,
-  StatusSection: () => <div>StatusSection</div>,
   NetworkSection: () => <div>NetworkSection</div>,
 }))
 
@@ -160,10 +153,8 @@ describe('MonitoringView 可见性与 WS 行为', () => {
           statsV2: [],
           systemPerformance: [],
           temperatureHistory: [],
-          deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
           availability: { current: 0, target: 99.9, trend: 'stable' as const },
           networkTrafficHistory: [],
-          realtimeAlerts: [],
         },
         hasPartialFailure: false,
         failedSections: [],
@@ -171,10 +162,8 @@ describe('MonitoringView 可见性与 WS 行为', () => {
           stats: { ok: true },
           systemPerformance: { ok: true },
           temperature: { ok: true },
-          deviceStatus: { ok: true },
           availability: { ok: true },
           networkTraffic: { ok: true },
-          realtimeAlerts: { ok: true },
         },
         lastUpdate: '2026-02-24T12:00:00.000Z',
       },
@@ -185,19 +174,19 @@ describe('MonitoringView 可见性与 WS 行为', () => {
     })
   })
 
-  it('页面不可见时应退订 WS 房间且不订阅', async () => {
+  it('页面不可见时应退订设备监控房间且不订阅；告警房间已不由监控页管理', async () => {
     renderView()
 
     await waitFor(() => {
       expect(ws.unsubscribeFromDeviceMonitoring).toHaveBeenCalled()
-      expect(ws.unsubscribeFromAlerts).toHaveBeenCalled()
     })
 
     expect(ws.subscribeToDeviceMonitoring).not.toHaveBeenCalled()
     expect(ws.subscribeToAlerts).not.toHaveBeenCalled()
+    expect(ws.unsubscribeFromAlerts).not.toHaveBeenCalled()
   })
 
-  it('页面从不可见切回可见时，应订阅 WS 房间', async () => {
+  it('页面从不可见切回可见时，应订阅设备监控房间但不订阅告警房间', async () => {
     renderView()
 
     await waitFor(() => {
@@ -211,8 +200,8 @@ describe('MonitoringView 可见性与 WS 行为', () => {
 
     await waitFor(() => {
       expect(ws.subscribeToDeviceMonitoring).toHaveBeenCalled()
-      expect(ws.subscribeToAlerts).toHaveBeenCalled()
     })
+    expect(ws.subscribeToAlerts).not.toHaveBeenCalled()
   })
 
   it('页面不可见时，推送事件不应触发 refetch', async () => {
@@ -223,10 +212,8 @@ describe('MonitoringView 可见性与 WS 行为', () => {
           statsV2: [],
           systemPerformance: [],
           temperatureHistory: [],
-          deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
           availability: { current: 0, target: 99.9, trend: 'stable' as const },
           networkTrafficHistory: [],
-          realtimeAlerts: [],
         },
         hasPartialFailure: false,
         failedSections: [],
@@ -234,10 +221,8 @@ describe('MonitoringView 可见性与 WS 行为', () => {
           stats: { ok: true },
           systemPerformance: { ok: true },
           temperature: { ok: true },
-          deviceStatus: { ok: true },
           availability: { ok: true },
           networkTraffic: { ok: true },
-          realtimeAlerts: { ok: true },
         },
         lastUpdate: '2026-02-24T12:00:00.000Z',
       },
@@ -269,10 +254,8 @@ describe('MonitoringView 可见性与 WS 行为', () => {
           statsV2: [],
           systemPerformance: [],
           temperatureHistory: [],
-          deviceStatusDistribution: { healthy: 0, warning: 0, critical: 0, offline: 0 },
           availability: { current: 0, target: 99.9, trend: 'stable' as const },
           networkTrafficHistory: [],
-          realtimeAlerts: [],
         },
         hasPartialFailure: false,
         failedSections: [],
@@ -280,10 +263,8 @@ describe('MonitoringView 可见性与 WS 行为', () => {
           stats: { ok: true },
           systemPerformance: { ok: true },
           temperature: { ok: true },
-          deviceStatus: { ok: true },
           availability: { ok: true },
           networkTraffic: { ok: true },
-          realtimeAlerts: { ok: true },
         },
         lastUpdate: '2026-02-24T12:00:00.000Z',
       },
