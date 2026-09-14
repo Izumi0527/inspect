@@ -87,10 +87,6 @@ export function SecuritySettings() {
     <div className="p-4">
       <SecurityOverviewCard
         minLength={passwordPolicy.minLength}
-        requireUppercase={passwordPolicy.requireUppercase}
-        requireLowercase={passwordPolicy.requireLowercase}
-        requireNumbers={passwordPolicy.requireNumbers}
-        requireSpecialChars={passwordPolicy.requireSpecialChars}
         passwordExpireDays={passwordPolicy.passwordExpireDays}
         maxLoginAttempts={passwordPolicy.maxLoginAttempts}
         lockoutDuration={passwordPolicy.lockoutDuration}
@@ -111,11 +107,11 @@ export function SecuritySettings() {
               onReset: handleReset,
             }}
           />
-          <AuthenticationSection data={authentication} onChange={updateAuthentication} />
         </div>
 
         <div className="space-y-4">
           <SessionManagementSection data={sessionManagement} onChange={updateSessionManagement} />
+          <AuthenticationSection data={authentication} onChange={updateAuthentication} />
         </div>
       </div>
     </div>

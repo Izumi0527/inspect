@@ -144,7 +144,8 @@ describe('SecuritySettings 壳层动作区迁移', () => {
     await waitFor(() => {
       expect(screen.getByText('password-policy-section')).toBeInTheDocument()
     })
-    expect(screen.getByRole('heading', { name: '安全策略' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '安全策略' })).not.toBeInTheDocument()
+    expect(screen.queryByText('当前安全基线')).not.toBeInTheDocument()
     expect(screen.getByText('最小密码长度')).toBeInTheDocument()
     expect(screen.getByText('密码有效期')).toBeInTheDocument()
     expect(screen.getByText('登录失败锁定')).toBeInTheDocument()
@@ -189,5 +190,20 @@ describe('SecuritySettings 壳层动作区迁移', () => {
     await user.click(await screen.findByRole('button', { name: '保存整页更改' }))
     expect(saveAllMock).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('最小密码长度必须在 6-32 之间'))
+  })
+
+  it('访问控制区块位于右列会话管理之下，而非左列密码策略之下', () => {
+    render(
+      <SettingsShellProvider activeTabKey="security">
+        <SecuritySettings />
+      </SettingsShellProvider>
+    )
+
+    const session = screen.getByText('session-management-section')
+    const access = screen.getByText('authentication-section')
+    const password = screen.getByText('password-policy-section')
+    expect(session.closest('.space-y-4')).toBe(access.closest('.space-y-4'))
+    expect(password.closest('.space-y-4')).not.toBe(access.closest('.space-y-4'))
+    expect(session.compareDocumentPosition(access) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
