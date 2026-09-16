@@ -524,6 +524,28 @@ export const LogsSettings: React.FC = () => {
                   0 表示不限制。超过限制会创建或更新告警风暴告警。
                 </p>
               </div>
+
+              {/* 改拉为推：接收器出厂关闭且设备默认不推送，运维配置接收器时就应看到设备侧对接命令 */}
+              <div className="space-y-2 lg:col-span-2 rounded-lg border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">设备侧对接（华为 VRP，H3C 类似）</p>
+                <p>
+                  Syslog 推送：
+                  <code className="ml-1 rounded bg-muted px-1 py-0.5 font-mono">
+                    info-center loghost &lt;本系统IP&gt; port {syslogPort}
+                  </code>
+                </p>
+                <p>
+                  Trap 推送：
+                  <code className="ml-1 rounded bg-muted px-1 py-0.5 font-mono">
+                    snmp-agent target-host trap address udp-domain &lt;本系统IP&gt; params securityname &lt;团体字&gt;
+                  </code>
+                  ，并在后端环境变量中设置 SNMP_TRAP_ENABLED=true。
+                </p>
+                <p>
+                  设备开始推送后，定时任务不再为已推送的设备登录 SSH 读取 trapbuffer；
+                  Docker 等 NAT 部署请通过 LOCAL_IP_ADDRESSES 告知本系统在设备眼中的 IP。
+                </p>
+              </div>
             </div>
           </section>
         </div>

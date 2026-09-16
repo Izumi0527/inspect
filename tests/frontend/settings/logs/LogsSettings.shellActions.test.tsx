@@ -138,6 +138,19 @@ describe('LogsSettings 页面重构', () => {
     jest.clearAllMocks()
   })
 
+  // 改拉为推（任务 A）：接收器出厂关闭且设备默认不推送，运维配置接收器时就应看到设备侧对接命令
+  it('应展示设备侧 Syslog / Trap 对接命令与本系统 IP 说明', () => {
+    renderWithQuery(
+      <SettingsShellProvider activeTabKey="logs">
+        <LogsSettings />
+      </SettingsShellProvider>
+    )
+
+    expect(screen.getByText(/info-center loghost/)).toBeInTheDocument()
+    expect(screen.getByText(/snmp-agent target-host/)).toBeInTheDocument()
+    expect(screen.getByText(/SNMP_TRAP_ENABLED/)).toBeInTheDocument()
+  })
+
   it('应展示运行摘要、分离配置动作和危险操作区', async () => {
     const user = userEvent.setup()
 
