@@ -10,7 +10,7 @@ const sampleLog: DeviceLog = {
   device_ip: '10.0.0.8',
   level: 'error',
   facility: 'system',
-  source: 'manual',
+  source: 'ssh',
   message: 'Chrome MCP 自动化测试日志：删除按钮可访问性验证',
   raw_message: '<34>Apr 18 20:30:00 inspect test message',
   source_ip: '127.0.0.1',

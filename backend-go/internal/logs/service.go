@@ -1192,7 +1192,7 @@ func normalizeFacility(value string) string {
 
 func normalizeSource(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "ssh", "syslog", "snmp_trap", "snmp", "manual":
+	case "ssh", "syslog", "snmp_trap", "snmp":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "ssh"

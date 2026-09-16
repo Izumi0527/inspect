@@ -1196,8 +1196,6 @@ func translateLogSource(source string) string {
 		return "Syslog接收"
 	case "trap":
 		return "SNMP Trap"
-	case "manual":
-		return "手动录入"
 	default:
 		return source
 	}
