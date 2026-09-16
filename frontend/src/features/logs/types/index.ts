@@ -27,6 +27,8 @@ export interface DeviceLog {
   log_timestamp: string
   collected_at: string
   created_at: string
+  // 由本系统自身的 SSH 登录/采集活动在设备上触发的会话日志，列表默认隐藏
+  self_generated?: boolean
 }
 
 // 日志解析规则
@@ -66,6 +68,8 @@ export interface LogQueryParams {
   end_time?: string
   page?: number
   page_size?: number
+  // 为 true 时包含本系统自身活动触发的日志（后端默认排除）
+  include_self?: boolean
 }
 
 // 日志导出参数（导出接口返回 Blob 文件流）
@@ -110,6 +114,7 @@ export interface LogFilters {
   levelFilter: LogLevel | 'all'
   facilityFilter: LogFacility | 'all'
   sourceFilter: LogSource | 'all'
+  includeSelf?: boolean
   deviceId?: number
   dateRange?: {
     start?: string

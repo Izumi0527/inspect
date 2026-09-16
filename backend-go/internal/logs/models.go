@@ -15,6 +15,8 @@ type DeviceLog struct {
 	LogTimestamp  time.Time `gorm:"column:log_timestamp;not null;index:idx_device_logs_device_ts,priority:2"`
 	CollectedAt   time.Time `gorm:"column:collected_at;not null"`
 	CreatedAt     time.Time `gorm:"column:created_at;not null"`
+	// SelfGenerated 由本系统自身的登录/采集活动在设备上触发的会话日志（见 self_activity.go），查询默认排除。
+	SelfGenerated bool `gorm:"column:self_generated;not null;default:false"`
 }
 
 func (DeviceLog) TableName() string {

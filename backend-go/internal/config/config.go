@@ -79,6 +79,9 @@ type Config struct {
 	SnmpTrapEnabled  bool   `env:"SNMP_TRAP_ENABLED" envDefault:"false"`
 	SnmpTrapHost     string `env:"SNMP_TRAP_HOST" envDefault:"0.0.0.0"`
 	SnmpTrapPort     int    `env:"SNMP_TRAP_PORT" envDefault:"162"`
+	// LocalIPAddresses 本系统在设备眼中的 IP（逗号分隔），用于识别设备日志里本系统自身的登录活动；
+	// 本机接口地址会自动探测，容器 bridge 网络等 NAT 场景需在此补充宿主机 IP。
+	LocalIPAddresses []string `env:"LOCAL_IP_ADDRESSES" envSeparator:","`
 
 	CorsOriginsRaw string `env:"CORS_ORIGINS" envDefault:"[\"http://localhost:3000\",\"http://127.0.0.1:3000\"]"`
 	// AllowedHosts 当前未在请求链路强制启用；默认收敛为空列表，避免内置 "*" 通配默认，

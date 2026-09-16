@@ -48,6 +48,9 @@ curl -fsSL https://raw.githubusercontent.com/Izumi0527/inspect/3358ef7/scripts/i
 - 首次执行前建议加 `--dry-run` 预演，不产生任何变更；CI 等无终端场景必须显式加 `--yes`。
 - 卸载：`sudo ./scripts/uninstall.sh` 停服务并保留数据库与备份，`--purge-data` 才彻底删除
   （需二次键入 DELETE 确认）。
+- 日志中心会识别设备日志里本系统自己的 SSH 登录记录并默认隐藏，本机 IP 自动探测；
+  Docker bridge 等 NAT 部署需在后端环境变量 `LOCAL_IP_ADDRESSES` 填写设备看到的宿主机 IP。
+  设备侧开启 Syslog / Trap 推送后（命令见"系统设置 → 日志设置"），定时任务不再登录设备读取 trapbuffer。
 
 ### 无域名部署（仅 IP）
 

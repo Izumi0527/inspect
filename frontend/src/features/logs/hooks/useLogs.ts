@@ -156,7 +156,8 @@ export function useLogFilters() {
     searchQuery: '',
     levelFilter: 'all',
     facilityFilter: 'all',
-    sourceFilter: 'all'
+    sourceFilter: 'all',
+    includeSelf: false,
   })
 
   // 搜索防抖：避免每次按键都触发后端请求
@@ -213,6 +214,9 @@ export function useLogFilters() {
     if (filters.dateRange?.end) {
       params.end_time = filters.dateRange.end
     }
+    if (filters.includeSelf) {
+      params.include_self = true
+    }
     
     return params
   }, [
@@ -220,6 +224,7 @@ export function useLogFilters() {
     filters.levelFilter,
     filters.facilityFilter,
     filters.sourceFilter,
+    filters.includeSelf,
     filters.deviceId,
     filters.dateRange,
   ])

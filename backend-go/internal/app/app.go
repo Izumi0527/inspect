@@ -253,6 +253,7 @@ func New() (*App, error) {
 	trafficService := traffic.NewService(dbConn, metricsWriter, log)
 
 	logsService := logs.NewService(dbConn, log)
+	logsService.SetLocalIPs(cfg.LocalIPAddresses)
 
 	// 创建 Trap 告警桥接器（scheduler 和 trapListener 都需要）
 	trapAlertBridge := alerts.NewTrapAlertBridge(dbConn, wsManager, log)

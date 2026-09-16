@@ -62,7 +62,8 @@ export async function getDeviceLogs(
       source: params.source,
       search: params.search,
       start_time: params.start_time,
-      end_time: params.end_time
+      end_time: params.end_time,
+      include_self: params.include_self || undefined
     }
   })
   return unwrapPayload<LogListResponse>(payload)
@@ -82,7 +83,8 @@ export async function getAllLogs(params: LogQueryParams = {}): Promise<LogListRe
       source: params.source,
       search: params.search,
       start_time: params.start_time,
-      end_time: params.end_time
+      end_time: params.end_time,
+      include_self: params.include_self || undefined
     }
   })
   return unwrapPayload<LogListResponse>(payload)

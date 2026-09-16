@@ -23,3 +23,19 @@ func TestBuildLogFilter_ShouldIncludeSource(t *testing.T) {
 		t.Fatalf("filter.Source=%q, want syslog", *filter.Source)
 	}
 }
+
+func TestBuildLogFilter_ShouldParseIncludeSelf(t *testing.T) {
+	e := echo.New()
+
+	req := httptest.NewRequest("GET", "/api/v1/logs?include_self=true", nil)
+	filter := handlers.BuildLogFilter(e.NewContext(req, httptest.NewRecorder()), 0, 100)
+	if !filter.IncludeSelf {
+		t.Fatal("include_self=true 时 filter.IncludeSelf 应为 true")
+	}
+
+	req = httptest.NewRequest("GET", "/api/v1/logs", nil)
+	filter = handlers.BuildLogFilter(e.NewContext(req, httptest.NewRecorder()), 0, 100)
+	if filter.IncludeSelf {
+		t.Fatal("未传 include_self 时应默认排除本系统自身活动")
+	}
+}

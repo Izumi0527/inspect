@@ -17,6 +17,7 @@ type LogItem struct {
 	LogTimestamp  time.Time `json:"log_timestamp"`
 	CollectedAt   time.Time `json:"collected_at"`
 	CreatedAt     time.Time `json:"created_at"`
+	SelfGenerated bool      `json:"self_generated"`
 }
 
 type LogListResponse struct {

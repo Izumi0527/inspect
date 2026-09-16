@@ -4,6 +4,7 @@
 import React from 'react'
 import { Search, Filter } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -94,6 +95,20 @@ export const LogFiltersBar: React.FC<LogFiltersBarProps> = ({
             ))}
           </SelectContent>
         </Select>
+
+        {/* 本系统自身的 SSH 登录记录默认隐藏，勾选后包含 */}
+        <label
+          htmlFor="logs-include-self"
+          className="flex h-9 cursor-pointer items-center gap-2 text-sm text-muted-foreground"
+        >
+          <Checkbox
+            id="logs-include-self"
+            aria-label="显示本系统活动"
+            checked={Boolean(filters.includeSelf)}
+            onCheckedChange={(checked) => onFilterChange('includeSelf', checked === true)}
+          />
+          显示本系统活动
+        </label>
 
         {renderAsToolbar && selectedCount > 0 && (
           <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs text-blue-600 dark:bg-blue-900/20 dark:text-blue-300">

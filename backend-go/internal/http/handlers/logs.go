@@ -869,6 +869,7 @@ func buildLogFilter(c echo.Context, skip int, limit int) logs.LogFilter {
 	if search != "" {
 		filter.Search = &search
 	}
+	filter.IncludeSelf = parseBoolDefault(c.QueryParam("include_self"), false)
 
 	return filter
 }
@@ -916,6 +917,7 @@ func buildLogItems(rows []logs.DeviceLogWithDevice) []logs.LogItem {
 			LogTimestamp:  row.LogTimestamp,
 			CollectedAt:   row.CollectedAt,
 			CreatedAt:     row.CreatedAt,
+			SelfGenerated: row.SelfGenerated,
 		})
 	}
 	return items

@@ -128,6 +128,13 @@ export const LogListItem: React.FC<LogListItemProps> = ({
             {formatTime(log.log_timestamp)}
           </span>
 
+          {/* 本系统自身的登录/采集活动 */}
+          {log.self_generated && (
+            <Badge variant="outline" className="h-5 px-1.5 text-[11px] font-normal">
+              本系统
+            </Badge>
+          )}
+
           {/* 来源进程 */}
           {log.source_process && (
             <span className="text-gray-400">

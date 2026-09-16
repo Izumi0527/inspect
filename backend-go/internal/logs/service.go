@@ -23,6 +23,9 @@ const (
 type Service struct {
 	db     *gorm.DB
 	logger *zap.Logger
+	// selfMatcher 识别本系统自身活动触发的设备日志（见 self_activity.go）；
+	// 本机 IP 默认自动探测，SetLocalIPs 可补充设备眼中的宿主机地址。
+	selfMatcher *SelfActivityMatcher
 }
 
 type LogFilter struct {
@@ -35,13 +38,24 @@ type LogFilter struct {
 	Search    *string
 	Skip      int
 	Limit     int
+	// IncludeSelf 为 true 时包含本系统自身活动触发的日志（self_generated），默认排除。
+	IncludeSelf bool
 }
 
 func NewService(db *gorm.DB, logger *zap.Logger) *Service {
 	return &Service{
-		db:     db,
-		logger: logger,
+		db:          db,
+		logger:      logger,
+		selfMatcher: NewSelfActivityMatcher(detectLocalIPs()),
 	}
+}
+
+// SetLocalIPs 在自动探测的本机地址之外补充本系统在设备眼中的 IP（容器 NAT 场景下探测不到宿主机 IP）。
+func (s *Service) SetLocalIPs(extra []string) {
+	if s == nil {
+		return
+	}
+	s.selfMatcher = NewSelfActivityMatcher(append(detectLocalIPs(), extra...))
 }
 
 func (s *Service) ListLogs(ctx context.Context, filter LogFilter) ([]DeviceLogWithDevice, int64, error) {
@@ -141,7 +155,8 @@ func (s *Service) GetLogStatistics(ctx context.Context, deviceID *int, hours int
 	}
 
 	start := time.Now().Add(-time.Duration(hours) * time.Hour)
-	base := s.db.WithContext(ctx).Table("device_logs").Where("log_timestamp >= ?", start)
+	// 统计表达"设备真实活动"，本系统自身活动恒排除
+	base := s.db.WithContext(ctx).Table("device_logs").Where("log_timestamp >= ?", start).Where("self_generated = ?", false)
 	if deviceID != nil {
 		base = base.Where("device_id = ?", *deviceID)
 	}
@@ -452,6 +467,9 @@ func (s *Service) buildLogQuery(ctx context.Context, filter LogFilter) *gorm.DB 
 		// 转义 LIKE 通配符，避免用户输入的 % / _ 被解释为通配符拖慢查询、扩大匹配范围
 		pattern := "%" + escapeLikePattern(strings.TrimSpace(*filter.Search)) + "%"
 		query = query.Where("(l.message ILIKE ? OR l.raw_message ILIKE ?)", pattern, pattern)
+	}
+	if !filter.IncludeSelf {
+		query = query.Where("l.self_generated = ?", false)
 	}
 
 	return query
@@ -964,6 +982,7 @@ func (s *Service) storeLogEntries(ctx context.Context, entries []logEntry) (int,
 	}
 
 	records := buildDeviceLogRecords(entries)
+	markSelfGenerated(records, s.selfMatcher)
 	if err := s.db.WithContext(ctx).Create(&records).Error; err != nil {
 		return 0, err
 	}
@@ -978,6 +997,7 @@ func (s *Service) storeLogEntriesDeduped(ctx context.Context, entries []logEntry
 	}
 
 	records := buildDeviceLogRecords(entries)
+	markSelfGenerated(records, s.selfMatcher)
 	records = s.dedupeLogRecords(ctx, records)
 	if len(records) == 0 {
 		return 0, nil

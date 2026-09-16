@@ -57,6 +57,20 @@ describe('logsApi 响应解包兼容', () => {
     expect(result.items[0].id).toBe(1)
   })
 
+  it('getAllLogs 应把 include_self 透传给后端（默认不传，即排除本系统自身活动）', async () => {
+    mockGet.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, total_pages: 0, has_next: false, has_prev: false })
+
+    await getAllLogs({ page: 1, page_size: 20, include_self: true })
+    expect(mockGet).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ params: expect.objectContaining({ include_self: true }) })
+    )
+
+    await getAllLogs({ page: 1, page_size: 20 })
+    const [, options] = mockGet.mock.calls[mockGet.mock.calls.length - 1]
+    expect(options.params.include_self).toBeUndefined()
+  })
+
   it('getAllLogs 应兼容 {data:...} 包装返回', async () => {
     mockGet.mockResolvedValue({
       data: {
