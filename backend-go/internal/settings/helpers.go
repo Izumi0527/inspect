@@ -198,6 +198,7 @@ func generateSettingLabel(key string) string {
 		"report.max_export_records":            "最大导出记录数",
 		"logs.auto_cleanup_enabled":            "启用日志自动清理",
 		"logs.retention_days":                  "设备日志保留天数",
+		"logs.polling.interval_minutes":        "设备日志轮询间隔",
 		"security.password.min_length":         "密码最小长度",
 		"security.password.max_login_attempts": "最大登录尝试次数",
 		"backup.auto_backup_enabled":           "启用自动备份",

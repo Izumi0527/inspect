@@ -16,6 +16,7 @@ export function useLogsSettings() {
 
   const [retentionDays, setRetentionDays] = useState<number>(90)
   const [autoCleanupEnabled, setAutoCleanupEnabled] = useState<boolean>(true)
+  const [pollingIntervalMinutes, setPollingIntervalMinutes] = useState<number>(15)
   const [syslogEnabled, setSyslogEnabled] = useState<boolean>(false)
   const [syslogProtocol, setSyslogProtocol] = useState<SyslogProtocol>('both')
   const [syslogHost, setSyslogHost] = useState<string>('0.0.0.0')
@@ -29,6 +30,7 @@ export function useLogsSettings() {
     if (!data) return
     setRetentionDays(data.retentionDays)
     setAutoCleanupEnabled(data.autoCleanupEnabled)
+    setPollingIntervalMinutes(data.pollingIntervalMinutes)
     setSyslogEnabled(data.syslog.enabled)
     setSyslogProtocol(data.syslog.protocol)
     setSyslogHost(data.syslog.host)
@@ -54,6 +56,11 @@ export function useLogsSettings() {
 
   const updateAutoCleanupEnabled = useCallback((value: boolean) => {
     setAutoCleanupEnabled(value)
+    setIsDirty(true)
+  }, [])
+
+  const updatePollingIntervalMinutes = useCallback((value: number) => {
+    setPollingIntervalMinutes(value)
     setIsDirty(true)
   }, [])
 
@@ -97,6 +104,7 @@ export function useLogsSettings() {
       overrides?: Partial<{
         retentionDays: number
         autoCleanupEnabled: boolean
+        pollingIntervalMinutes: number
         syslog: Partial<SyslogSettings>
       }>
     ) => {
@@ -112,6 +120,7 @@ export function useLogsSettings() {
       await saveMutation.mutateAsync({
         retentionDays: overrides?.retentionDays ?? retentionDays,
         autoCleanupEnabled: overrides?.autoCleanupEnabled ?? autoCleanupEnabled,
+        pollingIntervalMinutes: overrides?.pollingIntervalMinutes ?? pollingIntervalMinutes,
         syslog,
       })
     },
@@ -119,6 +128,7 @@ export function useLogsSettings() {
       saveMutation,
       retentionDays,
       autoCleanupEnabled,
+      pollingIntervalMinutes,
       syslogEnabled,
       syslogProtocol,
       syslogHost,
@@ -133,6 +143,7 @@ export function useLogsSettings() {
     if (!data) return
     setRetentionDays(data.retentionDays)
     setAutoCleanupEnabled(data.autoCleanupEnabled)
+    setPollingIntervalMinutes(data.pollingIntervalMinutes)
     setSyslogEnabled(data.syslog.enabled)
     setSyslogProtocol(data.syslog.protocol)
     setSyslogHost(data.syslog.host)
@@ -146,6 +157,7 @@ export function useLogsSettings() {
   return {
     retentionDays,
     autoCleanupEnabled,
+    pollingIntervalMinutes,
     syslogEnabled,
     syslogProtocol,
     syslogHost,
@@ -159,6 +171,7 @@ export function useLogsSettings() {
     isSaving: saveMutation.isPending,
     updateRetentionDays,
     updateAutoCleanupEnabled,
+    updatePollingIntervalMinutes,
     updateSyslogEnabled,
     updateSyslogProtocol,
     updateSyslogHost,

@@ -24,6 +24,7 @@ export const LogsSettings: React.FC = () => {
   const {
     retentionDays,
     autoCleanupEnabled,
+    pollingIntervalMinutes,
     syslogEnabled,
     syslogProtocol,
     syslogHost,
@@ -37,6 +38,7 @@ export const LogsSettings: React.FC = () => {
     error,
     updateRetentionDays,
     updateAutoCleanupEnabled,
+    updatePollingIntervalMinutes,
     updateSyslogEnabled,
     updateSyslogProtocol,
     updateSyslogHost,
@@ -53,6 +55,15 @@ export const LogsSettings: React.FC = () => {
     const floored = Math.floor(raw)
     if (floored < 1) return 1
     if (floored > 3650) return 3650
+    return floored
+  }, [])
+
+  // 区间与后端 generalNumericConstraints["logs.polling.interval_minutes"] 保持同步
+  const normalizePollingInterval = useCallback((value: number) => {
+    const raw = Number.isFinite(value) ? value : 15
+    const floored = Math.floor(raw)
+    if (floored < 1) return 1
+    if (floored > 1440) return 1440
     return floored
   }, [])
 
@@ -109,12 +120,16 @@ export const LogsSettings: React.FC = () => {
     try {
       const normalizedRetention = normalizeRetentionDays(retentionDays)
       const normalizedSyslog = normalizeSyslog()
-      await saveAll({ retentionDays: normalizedRetention, syslog: normalizedSyslog })
+      await saveAll({
+        retentionDays: normalizedRetention,
+        pollingIntervalMinutes: normalizePollingInterval(pollingIntervalMinutes),
+        syslog: normalizedSyslog,
+      })
       toast.success('保存成功！日志设置已更新')
     } catch (err) {
       toast.error('保存失败：' + (err as Error).message)
     }
-  }, [normalizeRetentionDays, normalizeSyslog, retentionDays, saveAll])
+  }, [normalizePollingInterval, normalizeRetentionDays, normalizeSyslog, pollingIntervalMinutes, retentionDays, saveAll])
 
   const handleReset = useCallback(() => {
     resetAll()
@@ -142,14 +157,27 @@ export const LogsSettings: React.FC = () => {
     try {
       const normalizedRetention = normalizeRetentionDays(retentionDays)
       const normalizedSyslog = normalizeSyslog()
-      await saveAll({ retentionDays: normalizedRetention, syslog: normalizedSyslog })
+      await saveAll({
+        retentionDays: normalizedRetention,
+        pollingIntervalMinutes: normalizePollingInterval(pollingIntervalMinutes),
+        syslog: normalizedSyslog,
+      })
       const status = await applySyslogMutation.mutateAsync()
       queryClient.setQueryData(['syslogStatus'], status)
       toast.success('Syslog 配置已应用')
     } catch (err) {
       toast.error('应用失败：' + (err as Error).message)
     }
-  }, [applySyslogMutation, normalizeRetentionDays, normalizeSyslog, queryClient, retentionDays, saveAll])
+  }, [
+    applySyslogMutation,
+    normalizePollingInterval,
+    normalizeRetentionDays,
+    normalizeSyslog,
+    pollingIntervalMinutes,
+    queryClient,
+    retentionDays,
+    saveAll,
+  ])
 
   const saving = Boolean(isSaving || applySyslogMutation.isPending || cleanupPending)
   const disableSaveReset = Boolean(!isDirty || saving)
@@ -343,6 +371,22 @@ export const LogsSettings: React.FC = () => {
                 />
                 <p className="text-xs text-muted-foreground">
                   超过该天数的设备日志将被清理（范围 1-3650）。
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="logs-polling-interval">设备日志轮询间隔（分钟）</Label>
+                <Input
+                  id="logs-polling-interval"
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={pollingIntervalMinutes}
+                  onChange={(e) => updatePollingIntervalMinutes(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  定时任务读取设备 trapbuffer / 告警缓冲的最小间隔（范围 1-1440）。轮询需 SSH 登录设备，
+                  每次登录都会在设备上留下一条登录日志，间隔越短这类噪声越多。
                 </p>
               </div>
             </div>

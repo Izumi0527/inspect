@@ -223,6 +223,22 @@ func (s *Service) GetLogStatistics(ctx context.Context, deviceID *int, hours int
 	return stats, nil
 }
 
+// HasPushedTrapsSince 报告 since 之后是否收到过该设备主动推送的 Trap（source=snmp_trap）。
+// 调度器据此跳过 trapbuffer 的 SSH 轮询：设备已在推送时再登录设备读一遍只会制造登录噪声。
+func (s *Service) HasPushedTrapsSince(ctx context.Context, deviceID int, since time.Time) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, fmt.Errorf("database not initialized")
+	}
+	var count int64
+	err := s.db.WithContext(ctx).Table("device_logs").
+		Where("device_id = ? AND source = ? AND log_timestamp >= ?", deviceID, "snmp_trap", since).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (s *Service) DeleteLog(ctx context.Context, logID int) (bool, error) {
 	if s == nil || s.db == nil {
 		return false, fmt.Errorf("database not initialized")
@@ -536,32 +552,233 @@ type logCollector interface {
 	Collect(ctx context.Context, device deviceInfo, logType string, maxEntries int) ([]logEntry, error)
 }
 
+// logRequest 是一次采集中的一个日志类型及其条数上限。
+type logRequest struct {
+	LogType    string
+	MaxEntries int
+}
+
+// logGroupCollector 能在一次会话内完成多个类型的采集（SSH 会话合并）。
+type logGroupCollector interface {
+	CollectMany(ctx context.Context, device deviceInfo, requests []logRequest) (map[string][]logEntry, error)
+}
+
+// LogRequest 是对外的采集请求（日志类型 + 条数上限），供调度器一轮合并多类型采集。
+type LogRequest struct {
+	LogType    string
+	MaxEntries int
+}
+
+// LogGroupResult 是多类型采集中单个类型的结果；Path 为 snmp / ssh / ssh_fallback。
+type LogGroupResult struct {
+	Count int
+	Path  string
+	Err   error
+}
+
 // snmpEquivalentLogTypes 有 SNMP 等价物的日志类型（见 snmp_collector.go 顶部说明）；
 // 其余类型（logbuffer 文本）没有任何 MIB 暴露，只能 SSH。
 func snmpEquivalentLogType(logType string) bool {
 	return logType == "trap" || logType == "alarm"
 }
 
+// CollectDeviceLogs 采集单个日志类型，是 CollectDeviceLogGroup 的一元形式。
 func (s *Service) CollectDeviceLogs(ctx context.Context, deviceID int, logType string, maxEntries int) (int, error) {
-	if s == nil || s.db == nil {
-		return 0, fmt.Errorf("database not initialized")
-	}
-	if deviceID <= 0 {
-		return 0, fmt.Errorf("invalid device_id")
+	results := s.CollectDeviceLogGroup(ctx, deviceID, []LogRequest{{LogType: logType, MaxEntries: maxEntries}})
+	result := results[normalizeLogType(logType)]
+	return result.Count, result.Err
+}
+
+// collectOutcome 是 collectEntryGroup 中单个类型的结果。
+type collectOutcome struct {
+	entries []logEntry
+	path    string
+	err     error
+}
+
+// collectEntryGroup 对同一设备的多个日志类型决定并执行采集路径。
+//
+// 策略：有 SNMP 等价物的类型（trap/alarm）且设备有 SNMP 凭据时先走 SNMP；SNMP 出错或无数据
+// 且有 SSH 凭据则回退 SSH。「无数据」也回退，是因为 hwAlarmActiveTable 对非 Trap 主机读到空表、
+// nlmLogTable 未开启，都与设备真的没有告警无法区分——回退后行为与改造前一致，不会更差。
+// 其余类型只走 SSH。所有需要 SSH 的类型汇总后只开一次会话：每次登录都会在设备上留下
+// 一条登录日志并在下一轮被采回，会话数直接决定自制噪声的数量。
+func (s *Service) collectEntryGroup(
+	ctx context.Context,
+	info deviceInfo,
+	requests []logRequest,
+	hasSNMP bool,
+	hasSSH bool,
+	snmp logCollector,
+	ssh logGroupCollector,
+) map[string]collectOutcome {
+	outcomes := make(map[string]collectOutcome, len(requests))
+	pending := make([]logRequest, 0, len(requests))
+
+	for _, req := range requests {
+		logType := req.LogType
+		if !snmpEquivalentLogType(logType) || !hasSNMP {
+			if !hasSSH {
+				outcomes[logType] = collectOutcome{err: ErrSSHNotConfigured}
+				continue
+			}
+			outcomes[logType] = collectOutcome{path: "ssh"}
+			pending = append(pending, req)
+			continue
+		}
+
+		entries, snmpErr := snmp.Collect(ctx, info, logType, req.MaxEntries)
+		if snmpErr == nil && len(entries) > 0 {
+			outcomes[logType] = collectOutcome{entries: entries, path: "snmp"}
+			continue
+		}
+		if !hasSSH {
+			outcomes[logType] = collectOutcome{path: "snmp", err: snmpErr}
+			continue
+		}
+		if s != nil && s.logger != nil {
+			if snmpErr != nil {
+				s.logger.Warn("SNMP 采集失败，回退 SSH",
+					zap.Int("device_id", info.ID), zap.String("log_type", logType), zap.Error(snmpErr))
+			} else {
+				// 实测 S5700 V200R001：未执行 snmp-agent notification-log enable 时 nlmLogTable 恒为空；
+				// 本机不是设备的 snmp-agent target-host 时 hwAlarmActiveTable 也读不到——两者都表现为空表。
+				s.logger.Info("SNMP 采集无数据（设备未开启 notification-log 或本机非其 Trap 主机），回退 SSH",
+					zap.Int("device_id", info.ID), zap.String("log_type", logType))
+			}
+		}
+		outcomes[logType] = collectOutcome{path: "ssh_fallback"}
+		pending = append(pending, req)
 	}
 
-	logType = normalizeLogType(logType)
-	maxEntries = normalizeMaxEntries(maxEntries)
+	if len(pending) == 0 {
+		return outcomes
+	}
+	results, err := ssh.CollectMany(ctx, info, pending)
+	for _, req := range pending {
+		outcome := outcomes[req.LogType]
+		if err != nil {
+			outcome.err = err
+		} else {
+			outcome.entries = results[req.LogType]
+		}
+		outcomes[req.LogType] = outcome
+	}
+	return outcomes
+}
+
+// CollectPathForTest 是 CollectGroupPathForTest 的单类型形式，返回 (条数, 路径, 错误)。生产路径不使用。
+func CollectPathForTest(
+	ctx context.Context,
+	logType string,
+	hasSNMP bool,
+	hasSSH bool,
+	snmp func() (int, error),
+	ssh func() (int, error),
+) (int, string, error) {
+	results, _ := CollectGroupPathForTest(ctx, []string{logType}, hasSNMP, hasSSH,
+		func(string) (int, error) { return snmp() }, func(string) (int, error) { return ssh() })
+	result := results[normalizeLogType(logType)]
+	return result.Count, result.Path, result.Err
+}
+
+// stubGroupCollector 按类型返回固定条数/错误并统计会话次数，仅供 CollectGroupPathForTest。
+type stubGroupCollector struct {
+	run      func(logType string) (int, error)
+	sessions *int
+}
+
+func (c stubGroupCollector) Collect(_ context.Context, device deviceInfo, logType string, _ int) ([]logEntry, error) {
+	count, err := c.run(logType)
+	if err != nil {
+		return nil, err
+	}
+	entries := make([]logEntry, count)
+	for i := range entries {
+		entries[i] = logEntry{DeviceID: device.ID, Message: fmt.Sprintf("stub-%s-%d", logType, i)}
+	}
+	return entries, nil
+}
+
+func (c stubGroupCollector) CollectMany(ctx context.Context, device deviceInfo, requests []logRequest) (map[string][]logEntry, error) {
+	*c.sessions++
+	results := make(map[string][]logEntry, len(requests))
+	for _, req := range requests {
+		entries, err := c.Collect(ctx, device, req.LogType, req.MaxEntries)
+		if err != nil {
+			return nil, err
+		}
+		results[req.LogType] = entries
+	}
+	return results, nil
+}
+
+// CollectGroupPathForTest 以可注入的采集函数走与 CollectDeviceLogGroup 完全相同的路径决策
+// （collectEntryGroup），返回每个类型的结果与实际打开的 SSH 会话数。生产路径不使用。
+func CollectGroupPathForTest(
+	ctx context.Context,
+	logTypes []string,
+	hasSNMP bool,
+	hasSSH bool,
+	snmp func(logType string) (int, error),
+	ssh func(logType string) (int, error),
+) (map[string]LogGroupResult, int) {
+	requests := make([]logRequest, 0, len(logTypes))
+	for _, logType := range logTypes {
+		requests = append(requests, logRequest{LogType: normalizeLogType(logType), MaxEntries: 100})
+	}
+	sessions := 0
+	var svc *Service
+	outcomes := svc.collectEntryGroup(ctx, deviceInfo{ID: 1, IPAddress: "127.0.0.1"}, requests, hasSNMP, hasSSH,
+		stubGroupCollector{run: snmp}, stubGroupCollector{run: ssh, sessions: &sessions})
+	return groupResultsOf(outcomes), sessions
+}
+
+func groupResultsOf(outcomes map[string]collectOutcome) map[string]LogGroupResult {
+	results := make(map[string]LogGroupResult, len(outcomes))
+	for logType, outcome := range outcomes {
+		results[logType] = LogGroupResult{Count: len(outcome.entries), Path: outcome.path, Err: outcome.err}
+	}
+	return results
+}
+
+// CollectDeviceLogGroup 在一轮内采集同一设备的多个日志类型，需要 SSH 的类型共用一次会话。
+// 返回按类型的入库条数、路径与错误；设备级错误（找不到设备、无 IP）作用于所有类型。
+func (s *Service) CollectDeviceLogGroup(ctx context.Context, deviceID int, requests []LogRequest) map[string]LogGroupResult {
+	results := make(map[string]LogGroupResult, len(requests))
+	failAll := func(err error) map[string]LogGroupResult {
+		for _, req := range requests {
+			results[normalizeLogType(req.LogType)] = LogGroupResult{Err: err}
+		}
+		return results
+	}
+	if s == nil || s.db == nil {
+		return failAll(fmt.Errorf("database not initialized"))
+	}
+	if deviceID <= 0 {
+		return failAll(fmt.Errorf("invalid device_id"))
+	}
+	if len(requests) == 0 {
+		return results
+	}
 
 	info, err := s.getDeviceInfo(ctx, deviceID)
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Error("日志采集失败: 获取设备信息错误", zap.Int("device_id", deviceID), zap.Error(err))
 		}
-		return 0, err
+		return failAll(err)
 	}
 	if strings.TrimSpace(info.IPAddress) == "" {
-		return 0, ErrDeviceIPRequired
+		return failAll(ErrDeviceIPRequired)
+	}
+
+	internal := make([]logRequest, 0, len(requests))
+	logTypes := make([]string, 0, len(requests))
+	for _, req := range requests {
+		logType := normalizeLogType(req.LogType)
+		internal = append(internal, logRequest{LogType: logType, MaxEntries: normalizeMaxEntries(req.MaxEntries)})
+		logTypes = append(logTypes, logType)
 	}
 
 	hasSNMP := info.hasSNMPCredentials()
@@ -571,112 +788,39 @@ func (s *Service) CollectDeviceLogs(ctx context.Context, deviceID int, logType s
 			zap.Int("device_id", deviceID),
 			zap.String("ip", info.IPAddress),
 			zap.String("vendor", info.Vendor),
-			zap.String("log_type", logType),
+			zap.Strings("log_types", logTypes),
 			zap.Bool("has_snmp", hasSNMP),
 			zap.Bool("has_ssh", hasSSH))
 	}
-
-	entries, path, err := s.collectEntries(ctx, info, logType, maxEntries, hasSNMP, hasSSH,
+	outcomes := s.collectEntryGroup(ctx, info, internal, hasSNMP, hasSSH,
 		NewSNMPLogCollector(s.logger), NewSSHCollector(s.db, s.logger))
-	if err != nil {
-		if errors.Is(err, ErrSSHNotConfigured) && s.logger != nil {
-			s.logger.Error("日志采集失败: 设备既无可用 SNMP 凭据也无 SSH 凭据",
-				zap.Int("device_id", deviceID), zap.String("log_type", logType))
+
+	for logType, outcome := range outcomes {
+		result := LogGroupResult{Path: outcome.path, Err: outcome.err}
+		if outcome.err == nil && len(outcome.entries) > 0 {
+			// 轮询采集会反复读取设备近期缓冲，需按内容去重避免重复入库。
+			count, storeErr := s.storeLogEntriesDeduped(ctx, outcome.entries)
+			result.Count = count
+			result.Err = storeErr
 		}
-		return 0, err
-	}
-	if s.logger != nil {
-		s.logger.Info("日志采集完成",
-			zap.Int("device_id", deviceID),
-			zap.String("log_type", logType),
-			zap.String("collect_path", path),
-			zap.Int("entries", len(entries)))
-	}
-	if len(entries) == 0 {
-		return 0, nil
-	}
-
-	// 轮询采集（无论 SSH 还是 SNMP）会反复读取设备近期缓冲，需按内容去重避免重复入库。
-	return s.storeLogEntriesDeduped(ctx, entries)
-}
-
-// collectEntries 决定并执行采集路径，返回条目与实际走的路径（snmp / ssh / ssh_fallback）。
-//
-// 策略：有 SNMP 等价物的类型（trap/alarm）且设备有 SNMP 凭据时先走 SNMP；SNMP 出错或无数据
-// 且有 SSH 凭据则回退 SSH。「无数据」也回退，是因为 hwAlarmActiveTable 对非 Trap 主机读到空表、
-// nlmLogTable 未开启，都与设备真的没有告警无法区分——回退后行为与改造前一致，不会更差。
-// 其余类型只走 SSH。
-func (s *Service) collectEntries(
-	ctx context.Context,
-	info deviceInfo,
-	logType string,
-	maxEntries int,
-	hasSNMP bool,
-	hasSSH bool,
-	snmp logCollector,
-	ssh logCollector,
-) ([]logEntry, string, error) {
-	if !snmpEquivalentLogType(logType) || !hasSNMP {
-		if !hasSSH {
-			return nil, "", ErrSSHNotConfigured
+		if s.logger != nil {
+			switch {
+			case errors.Is(result.Err, ErrSSHNotConfigured):
+				s.logger.Error("日志采集失败: 设备既无可用 SNMP 凭据也无 SSH 凭据",
+					zap.Int("device_id", deviceID), zap.String("log_type", logType))
+			case result.Err != nil:
+				s.logger.Warn("日志采集失败",
+					zap.Int("device_id", deviceID), zap.String("log_type", logType),
+					zap.String("collect_path", result.Path), zap.Error(result.Err))
+			default:
+				s.logger.Info("日志采集完成",
+					zap.Int("device_id", deviceID), zap.String("log_type", logType),
+					zap.String("collect_path", result.Path), zap.Int("entries", result.Count))
+			}
 		}
-		entries, err := ssh.Collect(ctx, info, logType, maxEntries)
-		return entries, "ssh", err
+		results[logType] = result
 	}
-
-	entries, snmpErr := snmp.Collect(ctx, info, logType, maxEntries)
-	if snmpErr == nil && len(entries) > 0 {
-		return entries, "snmp", nil
-	}
-	if !hasSSH {
-		return nil, "snmp", snmpErr
-	}
-	if s != nil && s.logger != nil {
-		if snmpErr != nil {
-			s.logger.Warn("SNMP 采集失败，回退 SSH",
-				zap.Int("device_id", info.ID), zap.String("log_type", logType), zap.Error(snmpErr))
-		} else {
-			// 实测 S5700 V200R001：未执行 snmp-agent notification-log enable 时 nlmLogTable 恒为空；
-			// 本机不是设备的 snmp-agent target-host 时 hwAlarmActiveTable 也读不到——两者都表现为空表。
-			s.logger.Info("SNMP 采集无数据（设备未开启 notification-log 或本机非其 Trap 主机），回退 SSH",
-				zap.Int("device_id", info.ID), zap.String("log_type", logType))
-		}
-	}
-	entries, err := ssh.Collect(ctx, info, logType, maxEntries)
-	return entries, "ssh_fallback", err
-}
-
-// stubCollector 用固定条数/错误模拟一条采集路径，仅供 CollectPathForTest。
-type stubCollector struct {
-	run func() (int, error)
-}
-
-func (c stubCollector) Collect(_ context.Context, device deviceInfo, _ string, _ int) ([]logEntry, error) {
-	count, err := c.run()
-	if err != nil {
-		return nil, err
-	}
-	entries := make([]logEntry, count)
-	for i := range entries {
-		entries[i] = logEntry{DeviceID: device.ID, Message: fmt.Sprintf("stub-%d", i)}
-	}
-	return entries, nil
-}
-
-// CollectPathForTest 以可注入的采集函数走与 CollectDeviceLogs 完全相同的路径决策（collectEntries），
-// 返回 (条数, 路径, 错误)。生产路径不使用。
-func CollectPathForTest(
-	ctx context.Context,
-	logType string,
-	hasSNMP bool,
-	hasSSH bool,
-	snmp func() (int, error),
-	ssh func() (int, error),
-) (int, string, error) {
-	var svc *Service
-	entries, path, err := svc.collectEntries(ctx, deviceInfo{ID: 1, IPAddress: "127.0.0.1"},
-		normalizeLogType(logType), 100, hasSNMP, hasSSH, stubCollector{run: snmp}, stubCollector{run: ssh})
-	return len(entries), path, err
+	return results
 }
 
 func (s *Service) BatchCollectLogs(ctx context.Context, deviceIDs []int, logType string, maxEntries int, maxConcurrent int) (BatchCollectResult, error) {

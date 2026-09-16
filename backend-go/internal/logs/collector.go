@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"regexp"
 	"strings"
@@ -16,8 +17,14 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
 )
 
-// defaultCommandReadTimeout 单条命令输出的最长读取等待，超时后返回已收到的内容。
-const defaultCommandReadTimeout = 15 * time.Second
+// 交互节奏：等 shell 就绪 / 命令发出后到结束标记 / 退出前的停顿，以及单条命令输出的最长读取等待
+// （超时后返回已收到的内容）。设为变量以便测试缩短。
+var (
+	shellReadyDelay    = 1 * time.Second
+	commandSettleDelay = 500 * time.Millisecond
+	sessionExitDelay   = 200 * time.Millisecond
+	commandReadTimeout = 15 * time.Second
+)
 
 type logEntry struct {
 	DeviceID      int
@@ -51,14 +58,19 @@ func NewSSHCollector(db *gorm.DB, logger *zap.Logger) *SSHCollector {
 	return collector
 }
 
-func (c *SSHCollector) Collect(ctx context.Context, device deviceInfo, logType string, maxEntries int) ([]logEntry, error) {
-	if maxEntries <= 0 {
-		maxEntries = 100
-	}
-
-	command := resolveVendorCommand(device.Vendor, logType)
-	if strings.TrimSpace(command) == "" {
-		return nil, fmt.Errorf("log command not configured")
+// CollectMany 在一次 SSH 会话内依次执行多个日志类型的命令，按类型返回解析结果。
+// 每次登录都会在设备 logbuffer/trapbuffer 留下一条登录记录并在下一轮被采回，
+// 会话数直接决定自制噪声的数量，故同一设备的多类采集必须共用一个会话。
+func (c *SSHCollector) CollectMany(ctx context.Context, device deviceInfo, requests []logRequest) (map[string][]logEntry, error) {
+	// 第 0 条是关分页前导命令，其输出不参与解析
+	commands := make([]string, 0, len(requests)+1)
+	commands = append(commands, resolveVendorPrelude(device.Vendor))
+	for _, req := range requests {
+		command := resolveVendorCommand(device.Vendor, req.LogType)
+		if strings.TrimSpace(command) == "" {
+			return nil, fmt.Errorf("log command not configured for %q", req.LogType)
+		}
+		commands = append(commands, command)
 	}
 
 	client, err := c.connect(ctx, device)
@@ -67,13 +79,21 @@ func (c *SSHCollector) Collect(ctx context.Context, device deviceInfo, logType s
 	}
 	defer client.Close()
 
-	output, err := c.runCommand(ctx, client, command)
+	outputs, err := c.runCommands(ctx, client, commands)
 	if err != nil {
 		return nil, err
 	}
 
 	collectedAt := time.Now().UTC()
-	return parseLogOutput(output, device.ID, device.Vendor, collectedAt, maxEntries), nil
+	results := make(map[string][]logEntry, len(requests))
+	for i, req := range requests {
+		maxEntries := req.MaxEntries
+		if maxEntries <= 0 {
+			maxEntries = 100
+		}
+		results[req.LogType] = parseLogOutput(outputs[i+1], device.ID, device.Vendor, collectedAt, maxEntries)
+	}
+	return results, nil
 }
 
 func (c *SSHCollector) connect(ctx context.Context, device deviceInfo) (*ssh.Client, error) {
@@ -186,10 +206,18 @@ func (s *hostKeyStore) verifyOrRecord(ctx context.Context, deviceID int, key ssh
 	}
 }
 
-func (c *SSHCollector) runCommand(ctx context.Context, client *ssh.Client, command string) (string, error) {
+// runCommands 在同一个 shell 会话内顺序执行多条命令，返回与 commands 一一对应的输出段。
+// 每条命令后追加一行结束标记，读到第 i 个标记才发送第 i+1 条命令，避免多条命令的输入
+// 在设备分页提示下互相吞字；某条命令等待超时则其余命令不再发送，对应输出段为空。
+func (c *SSHCollector) runCommands(ctx context.Context, client *ssh.Client, commands []string) ([]string, error) {
+	outputs := make([]string, len(commands))
+	if len(commands) == 0 {
+		return outputs, nil
+	}
+
 	session, err := client.NewSession()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer session.Close()
 
@@ -200,34 +228,71 @@ func (c *SSHCollector) runCommand(ctx context.Context, client *ssh.Client, comma
 		ssh.TTY_OP_OSPEED: 14400,
 	}
 	if err := session.RequestPty("vt100", 24, 200, modes); err != nil {
-		// PTY 不可用，回退到 Output 方式
-		output, _ := session.Output(command)
-		return string(output), nil
+		// PTY 不可用，回退到 Output 方式（每条命令独立会话）
+		_ = session.Close()
+		for i, command := range commands {
+			outputs[i], _ = c.outputWithoutPty(client, command)
+		}
+		return outputs, nil
 	}
 
 	stdin, err := session.StdinPipe()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	stdout, err := session.StdoutPipe()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if err := session.Shell(); err != nil {
-		return "", err
+		return nil, err
 	}
 
-	// 等待 shell 准备好（华为设备会先显示 VRP 提示符），再发送命令 + 退出标记。
+	return runShellCommands(ctx, stdin, stdout, commands)
+}
+
+// runShellCommands 在已就绪的交互 shell 上顺序执行多条命令，返回与 commands 一一对应的输出段。
+// 每条命令后追加一行结束标记（设备会回显输入行，标记正是靠回显被读到），读到第 i 个标记
+// 才发送第 i+1 条命令；某条命令等待超时则其余命令不再发送，对应输出段为空。
+func runShellCommands(ctx context.Context, stdin io.WriteCloser, stdout io.Reader, commands []string) ([]string, error) {
+	outputs := make([]string, len(commands))
+	if len(commands) == 0 {
+		return outputs, nil
+	}
+
+	marker := func(i int) string { return fmt.Sprintf("__CMD_END_7f3a9b2c_%d__", i) }
+
+	// 等待 shell 准备好（华为设备会先显示 VRP 提示符），再发送命令 + 结束标记。
 	// 放入后台 goroutine，让主循环立即开始读输出，避免整体多等一个固定间隔。
-	endMarker := "__CMD_END_7f3a9b2c__"
+	// next 由主循环在读到第 i 个标记后写入，写端据此推进到第 i+1 条命令；
+	// 全部命令完成后主循环等 writerDone，保证 exit 真正发出、设备记录一次正常登出而非 TCP 断连。
+	next := make(chan struct{}, len(commands))
+	readDone := make(chan struct{})
+	writerDone := make(chan struct{})
+	defer close(readDone)
 	go func() {
+		defer close(writerDone)
 		defer stdin.Close()
-		time.Sleep(1 * time.Second)
-		fmt.Fprintf(stdin, "%s\n", command)
-		time.Sleep(500 * time.Millisecond)
-		fmt.Fprintf(stdin, "echo %s\n", endMarker)
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(shellReadyDelay)
+		for i, command := range commands {
+			if i > 0 {
+				select {
+				case <-next:
+				case <-readDone:
+					return
+				}
+			}
+			fmt.Fprintf(stdin, "%s\n", command)
+			time.Sleep(commandSettleDelay)
+			fmt.Fprintf(stdin, "echo %s\n", marker(i))
+		}
+		select {
+		case <-next:
+		case <-readDone:
+			return
+		}
+		time.Sleep(sessionExitDelay)
 		fmt.Fprintf(stdin, "exit\n")
 	}()
 
@@ -239,8 +304,6 @@ func (c *SSHCollector) runCommand(ctx context.Context, client *ssh.Client, comma
 		data []byte
 	}
 	readCh := make(chan readChunk)
-	readDone := make(chan struct{})
-	defer close(readDone)
 	go func() {
 		buf := make([]byte, 65536)
 		for {
@@ -262,28 +325,57 @@ func (c *SSHCollector) runCommand(ctx context.Context, client *ssh.Client, comma
 	}()
 
 	var output []byte
-	readTimeout := time.After(defaultCommandReadTimeout)
+	cursor := 0
+	current := 0
+	readTimeout := time.After(commandReadTimeout)
 	for {
 		select {
 		case <-ctx.Done():
-			return string(output), ErrCollectionCanceled
+			outputs[current] = string(output[cursor:])
+			return outputs, ErrCollectionCanceled
 		case <-readTimeout:
-			return string(output), nil
+			outputs[current] = string(output[cursor:])
+			return outputs, nil
 		case chunk, ok := <-readCh:
 			if !ok {
 				// 会话输出已结束（命令执行完退出）
-				return string(output), nil
+				outputs[current] = string(output[cursor:])
+				return outputs, nil
 			}
 			output = append(output, chunk.data...)
 		}
 
-		// 检测结束标记
-		outputStr := string(output)
-		if strings.Contains(outputStr, endMarker) {
-			idx := strings.Index(outputStr, endMarker)
-			return string(output[:idx]), nil
+		// 检测当前命令的结束标记；每条命令各自享有完整的读取预算
+		for current < len(commands) {
+			idx := strings.Index(string(output[cursor:]), marker(current))
+			if idx < 0 {
+				break
+			}
+			outputs[current] = string(output[cursor : cursor+idx])
+			cursor += idx + len(marker(current))
+			current++
+			next <- struct{}{}
+			readTimeout = time.After(commandReadTimeout)
+		}
+		if current >= len(commands) {
+			select {
+			case <-writerDone:
+			case <-ctx.Done():
+			case <-time.After(sessionExitDelay + commandSettleDelay):
+			}
+			return outputs, nil
 		}
 	}
+}
+
+func (c *SSHCollector) outputWithoutPty(client *ssh.Client, command string) (string, error) {
+	session, err := client.NewSession()
+	if err != nil {
+		return "", err
+	}
+	defer session.Close()
+	output, err := session.Output(command)
+	return string(output), err
 }
 
 func resolveVendorCommand(vendor string, logType string) string {
@@ -314,6 +406,18 @@ func resolveVendorCommand(vendor string, logType string) string {
 	}
 
 	return commands[vendor][logType]
+}
+
+// resolveVendorPrelude 返回会话开头先执行的关分页命令（仅对本会话生效，不改设备配置）。
+// 多条命令共用一个 shell 后，分页提示会吞掉后续输入，结束标记永远读不到，
+// 第二条命令就永远发不出去；关分页也让缓冲内容不再依赖误触按键翻页才被采全。
+func resolveVendorPrelude(vendor string) string {
+	switch strings.ToLower(strings.TrimSpace(vendor)) {
+	case "h3c":
+		return "screen-length disable"
+	default:
+		return "screen-length 0 temporary"
+	}
 }
 
 // ParseLogLineForTest 提供可测试的日志行解析入口（内部复用 parseLogLine），

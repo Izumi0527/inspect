@@ -20,6 +20,7 @@ describe('logsSettingsApi', () => {
     mockGet.mockResolvedValue([
       { key: 'logs.retention_days', value: 30, category: 'logs' },
       { key: 'logs.auto_cleanup_enabled', value: false, category: 'logs' },
+      { key: 'logs.polling.interval_minutes', value: 30, category: 'logs' },
       { key: 'logs.syslog.enabled', value: true, category: 'logs' },
       { key: 'logs.syslog.protocol', value: 'udp', category: 'logs' },
       { key: 'logs.syslog.host', value: '0.0.0.0', category: 'logs' },
@@ -35,6 +36,7 @@ describe('logsSettingsApi', () => {
     expect(mockGet).toHaveBeenCalledWith('/settings/general/settings?category=logs')
     expect(result.retentionDays).toBe(30)
     expect(result.autoCleanupEnabled).toBe(false)
+    expect(result.pollingIntervalMinutes).toBe(30)
     expect(result.syslog.enabled).toBe(true)
     expect(result.syslog.protocol).toBe('udp')
     expect(result.syslog.host).toBe('0.0.0.0')
@@ -51,6 +53,7 @@ describe('logsSettingsApi', () => {
 
     expect(result.retentionDays).toBe(90)
     expect(result.autoCleanupEnabled).toBe(true)
+    expect(result.pollingIntervalMinutes).toBe(15)
     expect(result.syslog.enabled).toBe(false)
     expect(result.syslog.protocol).toBe('both')
     expect(result.syslog.host).toBe('0.0.0.0')
@@ -66,6 +69,7 @@ describe('logsSettingsApi', () => {
     await logsSettingsApi.saveLogsSettings({
       retentionDays: 7,
       autoCleanupEnabled: true,
+      pollingIntervalMinutes: 20,
       syslog: {
         enabled: true,
         protocol: 'both',
@@ -82,6 +86,7 @@ describe('logsSettingsApi', () => {
       settings: {
         'logs.retention_days': 7,
         'logs.auto_cleanup_enabled': true,
+        'logs.polling.interval_minutes': 20,
         'logs.syslog.enabled': true,
         'logs.syslog.protocol': 'both',
         'logs.syslog.host': '0.0.0.0',

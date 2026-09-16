@@ -16,6 +16,8 @@ export interface SyslogSettings {
 export interface LogsSettings {
   retentionDays: number
   autoCleanupEnabled: boolean
+  // 设备日志（trapbuffer / alarm active）SSH 轮询的最小间隔（分钟），每次轮询都会在设备上留下登录日志
+  pollingIntervalMinutes: number
   syslog: SyslogSettings
 }
 
@@ -133,6 +135,7 @@ export const logsSettingsApi = {
     return {
       retentionDays: toNumber(map.get('logs.retention_days'), 90),
       autoCleanupEnabled: toBoolean(map.get('logs.auto_cleanup_enabled'), true),
+      pollingIntervalMinutes: toNumber(map.get('logs.polling.interval_minutes'), 15),
       syslog: normalizeSyslogSettings(map),
     }
   },
@@ -142,6 +145,7 @@ export const logsSettingsApi = {
       settings: {
         'logs.retention_days': data.retentionDays,
         'logs.auto_cleanup_enabled': data.autoCleanupEnabled,
+        'logs.polling.interval_minutes': data.pollingIntervalMinutes,
         'logs.syslog.enabled': data.syslog.enabled,
         'logs.syslog.protocol': data.syslog.protocol,
         'logs.syslog.host': data.syslog.host,

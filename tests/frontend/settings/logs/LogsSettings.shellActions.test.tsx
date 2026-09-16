@@ -67,6 +67,7 @@ describe('LogsSettings 页面重构', () => {
     mockUseLogsSettings.mockReturnValue({
       retentionDays: 90,
       autoCleanupEnabled: true,
+      pollingIntervalMinutes: 15,
       syslogEnabled: true,
       syslogProtocol: 'both',
       syslogHost: '0.0.0.0',
@@ -80,6 +81,7 @@ describe('LogsSettings 页面重构', () => {
       error: null,
       updateRetentionDays: jest.fn(),
       updateAutoCleanupEnabled: jest.fn(),
+      updatePollingIntervalMinutes: jest.fn(),
       updateSyslogEnabled: jest.fn(),
       updateSyslogProtocol: jest.fn(),
       updateSyslogHost: jest.fn(),

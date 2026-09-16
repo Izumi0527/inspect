@@ -24,6 +24,9 @@ var generalNumericConstraints = map[string]generalNumericConstraint{
 	"inspection.retry_attempts":       {Min: 0, Max: 10, Label: "失败重试次数"},
 	"report.max_export_records":       {Min: 1, Max: 100000, Label: "最大导出记录数"},
 
+	// 设备日志轮询间隔：区间与前端 LogsSettings 输入框 min/max 保持同步。
+	"logs.polling.interval_minutes": {Min: 1, Max: 1440, Label: "设备日志轮询间隔"},
+
 	// 安全策略数字项：区间与前端 SECURITY_NUMERIC_RULES 及各输入框 min/max 保持同步。
 	"security.session.timeout":                 {Min: 5, Max: 1440, Label: "会话超时时间"},
 	"security.session.remember_me_duration":    {Min: 1, Max: 90, Label: "记住我持续时间"},

@@ -35,7 +35,22 @@ import (
 const (
 	defaultCheckInterval = 60 * time.Second
 	defaultMaxConcurrent = 10
+	// defaultLogPollingInterval 设备日志轮询的默认最小间隔（logs.polling.interval_minutes 未配置时）。
+	defaultLogPollingInterval = 15 * time.Minute
+	// trapPushEvidenceWindow 判定"设备已在推送 Trap"的回看窗口：窗口内收到过该设备的 snmp_trap 记录，
+	// 本轮就不再登录设备读 trapbuffer；设备停止推送后最多一个窗口即恢复轮询。
+	trapPushEvidenceWindow = 24 * time.Hour
 )
+
+// alarmLogRequests 返回一轮告警日志采集的请求列表：设备已在推送 Trap 时省去 trap 类型
+// （内容已由推送送达），alarm 是活动告警的状态快照，推送不能替代，照常采集。
+func alarmLogRequests(trapsPushed bool) []logs.LogRequest {
+	requests := make([]logs.LogRequest, 0, 2)
+	if !trapsPushed {
+		requests = append(requests, logs.LogRequest{LogType: "trap", MaxEntries: 200})
+	}
+	return append(requests, logs.LogRequest{LogType: "alarm", MaxEntries: 100})
+}
 
 type Service struct {
 	db              *gorm.DB
@@ -63,6 +78,59 @@ type Service struct {
 	cancel    context.CancelFunc
 	done      chan struct{}
 	startedAt time.Time
+
+	// lastLogPollAt 上次设备日志轮询时刻（进程内），配合 logs.polling.interval_minutes 限频；
+	// 重启后归零即立刻轮询一次，可接受。
+	logPollMu     sync.Mutex
+	lastLogPollAt time.Time
+}
+
+// logPollingIntervalFrom 解析配置表中的轮询间隔（分钟），形态可能是 int / int64 / float64 / 字符串；
+// 缺失、非数字或超出 1-1440 分钟时回落默认值。
+func logPollingIntervalFrom(value interface{}) time.Duration {
+	minutes := 0
+	switch v := value.(type) {
+	case int:
+		minutes = v
+	case int64:
+		minutes = int(v)
+	case float64:
+		minutes = int(v)
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil {
+			return defaultLogPollingInterval
+		}
+		minutes = parsed
+	default:
+		return defaultLogPollingInterval
+	}
+	if minutes < 1 || minutes > 1440 {
+		return defaultLogPollingInterval
+	}
+	return time.Duration(minutes) * time.Minute
+}
+
+// logPollDue 判断距上次轮询是否已满间隔；从未轮询过则立即轮询。
+func logPollDue(last time.Time, now time.Time, interval time.Duration) bool {
+	return last.IsZero() || now.Sub(last) >= interval
+}
+
+// claimLogPoll 在满足间隔时占用本轮日志轮询并返回 true，否则返回 false（本轮跳过）。
+func (s *Service) claimLogPoll(ctx context.Context, now time.Time) bool {
+	interval := defaultLogPollingInterval
+	if s.settingsService != nil {
+		if item, err := s.settingsService.GetSetting(ctx, "logs.polling.interval_minutes"); err == nil && item != nil {
+			interval = logPollingIntervalFrom(item.Value)
+		}
+	}
+	s.logPollMu.Lock()
+	defer s.logPollMu.Unlock()
+	if !logPollDue(s.lastLogPollAt, now, interval) {
+		return false
+	}
+	s.lastLogPollAt = now
+	return true
 }
 
 type CreateTaskInput struct {
@@ -648,34 +716,30 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 	// Step 4: Collect alarm logs (trapbuffer + alarm active) and convert to alerts.
 	// 采集路径由 logs.Service 决定：有 SNMP 凭据先走 nlmLogTable / hwAlarmActiveTable，
 	// 失败或无数据再回退 SSH；此前只处理「有 SSH 用户名+密码」的设备，密钥认证与仅 SNMP 的设备被整台跳过。
+	// 两类日志在同一轮内共用一次 SSH 会话：每次登录都会在设备上留下登录日志并被下一轮采回；
+	// 同理按 logs.polling.interval_minutes 限频，指标采集仍按任务 cron 走。
 	trapAlertsCreated := 0
-	if s.logsService != nil && s.trapAlertBridge != nil {
+	if s.logsService != nil && s.trapAlertBridge != nil && s.claimLogPoll(ctx, time.Now()) {
 		for _, device := range devicesList {
-			// 采集 trapbuffer
-			trapCount, trapErr := s.logsService.CollectDeviceLogs(ctx, device.ID, "trap", 200)
-			if trapErr != nil {
-				if s.logger != nil {
-					s.logger.Debug("trap log collection failed",
-						zap.Int("device_id", device.ID), zap.Error(trapErr))
-				}
-			} else if trapCount > 0 {
-				if s.logger != nil {
-					s.logger.Info("trap logs collected",
-						zap.Int("device_id", device.ID), zap.Int("count", trapCount))
-				}
+			trapsPushed, evidenceErr := s.logsService.HasPushedTrapsSince(ctx, device.ID, time.Now().Add(-trapPushEvidenceWindow))
+			if evidenceErr != nil && s.logger != nil {
+				s.logger.Debug("trap push evidence lookup failed", zap.Int("device_id", device.ID), zap.Error(evidenceErr))
 			}
-
-			// 采集 alarm active
-			alarmCount, alarmErr := s.logsService.CollectDeviceLogs(ctx, device.ID, "alarm", 100)
-			if alarmErr != nil {
-				if s.logger != nil {
-					s.logger.Debug("alarm log collection failed",
-						zap.Int("device_id", device.ID), zap.Error(alarmErr))
-				}
-			} else if alarmCount > 0 {
-				if s.logger != nil {
-					s.logger.Info("alarm logs collected",
-						zap.Int("device_id", device.ID), zap.Int("count", alarmCount))
+			if trapsPushed && s.logger != nil {
+				s.logger.Debug("device pushes traps, skip trapbuffer polling", zap.Int("device_id", device.ID))
+			}
+			results := s.logsService.CollectDeviceLogGroup(ctx, device.ID, alarmLogRequests(trapsPushed))
+			for logType, result := range results {
+				if result.Err != nil {
+					if s.logger != nil {
+						s.logger.Debug(logType+" log collection failed",
+							zap.Int("device_id", device.ID), zap.Error(result.Err))
+					}
+				} else if result.Count > 0 {
+					if s.logger != nil {
+						s.logger.Info(logType+" logs collected",
+							zap.Int("device_id", device.ID), zap.Int("count", result.Count))
+					}
 				}
 			}
 
