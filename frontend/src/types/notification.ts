@@ -13,6 +13,11 @@ export type NotificationType = 'alert' | 'system'
 export type NotificationSeverity = 'critical' | 'warning' | 'info' | 'success'
 
 /**
+ * 告警通知的处理状态（仅告警类型携带）；与 severity 是独立维度
+ */
+export type NotificationAlertStatus = 'active' | 'acknowledged' | 'resolved'
+
+/**
  * 通知分类标签
  */
 export type NotificationCategoryKey = 'all' | 'alerts' | 'system'
@@ -35,6 +40,8 @@ export interface Notification {
   read: boolean
   /** 严重级别（告警类型专用） */
   severity?: NotificationSeverity
+  /** 告警处理状态（告警类型专用） */
+  status?: NotificationAlertStatus
   /** 关联链接 */
   link?: string
   /** 关联设备名称 */

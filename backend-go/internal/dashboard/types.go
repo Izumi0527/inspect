@@ -20,6 +20,7 @@ type RecentAlert struct {
 	Device   string  `json:"device"`
 	Message  string  `json:"message"`
 	Severity string  `json:"severity"`
+	Status   string  `json:"status"` // active | acknowledged | resolved（alerts.NormalizeStatus 归一后）
 	Time     string  `json:"time"`
 	Category *string `json:"category,omitempty"`
 }
@@ -158,6 +159,7 @@ type Notification struct {
 	Timestamp time.Time `json:"timestamp"`
 	Read      bool      `json:"read"`               // 由前端本地已读集合覆盖，此处默认 false
 	Severity  *string   `json:"severity,omitempty"` // critical | warning | info | success
+	Status    *string   `json:"status,omitempty"`   // 仅告警：active | acknowledged | resolved；与 severity 是独立维度
 	Link      *string   `json:"link,omitempty"`
 	Device    *string   `json:"device,omitempty"`
 }

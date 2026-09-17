@@ -852,6 +852,7 @@ func (s *Service) getRecentAlerts(ctx context.Context, limit int) ([]RecentAlert
 		ID         int       `gorm:"column:id"`
 		Message    string    `gorm:"column:message"`
 		Severity   string    `gorm:"column:severity"`
+		Status     string    `gorm:"column:status"`
 		CreatedAt  time.Time `gorm:"column:created_at"`
 		DeviceName *string   `gorm:"column:device_name"`
 		Category   *string   `gorm:"column:category"`
@@ -863,7 +864,7 @@ func (s *Service) getRecentAlerts(ctx context.Context, limit int) ([]RecentAlert
 	}
 	err := s.db.WithContext(ctx).
 		Table("alerts AS a").
-		Select("a.id, a.message, a.severity, a.created_at, a.category, d.name AS device_name").
+		Select("a.id, a.message, a.severity, a.status, a.created_at, a.category, d.name AS device_name").
 		Joins("JOIN devices d ON d.id = a.device_id").
 		Order("a.created_at desc").
 		Limit(limit).
@@ -883,6 +884,7 @@ func (s *Service) getRecentAlerts(ctx context.Context, limit int) ([]RecentAlert
 			Device:   deviceName,
 			Message:  item.Message,
 			Severity: strings.ToLower(strings.TrimSpace(item.Severity)),
+			Status:   alerts.NormalizeStatus(item.Status),
 			Time:     item.CreatedAt.Format(time.RFC3339),
 			Category: item.Category,
 		})
@@ -920,6 +922,7 @@ func buildRecentAlerts(rows []alerts.AlertWithDevice) []RecentAlert {
 			Device:   deviceName,
 			Message:  item.Message,
 			Severity: strings.ToLower(strings.TrimSpace(item.Severity)),
+			Status:   alerts.NormalizeStatus(item.Status),
 			Time:     timestamp,
 			Category: &category,
 		})
@@ -1112,6 +1115,7 @@ func (s *Service) buildAlertNotifications(ctx context.Context, limit int) ([]not
 		}
 
 		severity := strings.ToLower(strings.TrimSpace(alert.Severity))
+		status := alerts.NormalizeStatus(alert.Status)
 		link := fmt.Sprintf("/alerts?id=%d", alert.ID)
 		device := strings.TrimSpace(alert.Device)
 		if device == "" {
@@ -1127,6 +1131,7 @@ func (s *Service) buildAlertNotifications(ctx context.Context, limit int) ([]not
 			Timestamp: parsedTime.UTC(),
 			Read:      false,
 			Severity:  &severity,
+			Status:    &status,
 			Link:      &link,
 			Device:    &device,
 		}

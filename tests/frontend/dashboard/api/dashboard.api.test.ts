@@ -177,4 +177,19 @@ describe('dashboard.api generateReport', () => {
     await fetchDashboardNotificationsWithMeta(20)
     expect(mockGet).toHaveBeenLastCalledWith('/dashboard/notifications?limit=20')
   })
+
+  it('通知接口应解析告警状态字段，非法值与缺失值都归为 undefined', async () => {
+    mockGet.mockResolvedValue({
+      notifications: [
+        { id: 'alert-1', type: 'alert', title: 'a', content: '', timestamp: '2026-09-18T00:00:00Z', status: 'resolved' },
+        { id: 'alert-2', type: 'alert', title: 'b', content: '', timestamp: '2026-09-18T00:00:00Z', status: 'ACKNOWLEDGED' },
+        { id: 'alert-3', type: 'alert', title: 'c', content: '', timestamp: '2026-09-18T00:00:00Z', status: 'bogus' },
+        { id: 'report-1', type: 'system', title: 'd', content: '', timestamp: '2026-09-18T00:00:00Z' },
+      ],
+      unread_count: 4,
+    })
+
+    const result = await fetchDashboardNotificationsWithMeta(20)
+    expect(result.notifications.map((n) => n.status)).toEqual(['resolved', 'acknowledged', undefined, undefined])
+  })
 })

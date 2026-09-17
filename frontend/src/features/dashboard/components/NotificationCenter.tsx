@@ -4,11 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/atoms/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@/components/atoms/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/atoms/popover'
 import { NotificationItem } from './NotificationItem'
 import {
   Notification,
@@ -195,8 +191,10 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
   const showViewAll = typeof onViewAll === 'function' && canReadAlerts && activeCategory !== 'system'
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
+    // 面板含标签页、批量按钮与通知列表，是复合面板而非菜单：DropdownMenu 会拦截 Tab、
+    // 只让 menuitem 参与方向键导航，用 Popover 才能让面板内所有控件被键盘到达
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
@@ -211,10 +209,11 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
             </span>
           )}
         </Button>
-      </DropdownMenuTrigger>
+      </PopoverTrigger>
 
-      <DropdownMenuContent
+      <PopoverContent
         align="end"
+        aria-label="通知中心"
         className="w-[400px] max-h-[600px] p-0 overflow-hidden"
       >
         {/* 标题栏 */}
@@ -311,13 +310,13 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
                 setOpen(false)
                 onViewAll()
               }}
-              className="w-full py-3 text-center text-sm text-blue-600 dark:text-blue-400 hover:bg-muted/40/50 transition-colors"
+              className="w-full py-3 text-center text-sm text-blue-600 dark:text-blue-400 hover:bg-muted/40 transition-colors"
             >
               前往告警中心
             </button>
           </div>
         )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverContent>
+    </Popover>
   )
 }

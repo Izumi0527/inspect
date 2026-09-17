@@ -13,7 +13,12 @@ import {
   TopologyNode,
   TopologyNodeStatus,
 } from '../types'
-import type { Notification, NotificationSeverity, NotificationType } from '@/types/notification'
+import type {
+  Notification,
+  NotificationAlertStatus,
+  NotificationSeverity,
+  NotificationType,
+} from '@/types/notification'
 
 interface DashboardStatDto {
   title: string
@@ -85,6 +90,7 @@ interface NotificationDto {
   timestamp: string
   read?: boolean
   severity?: string
+  status?: string
   link?: string
   device?: string
 }
@@ -385,6 +391,14 @@ const normalizeNotificationSeverity = (value: unknown): NotificationSeverity => 
   return 'info'
 }
 
+const normalizeNotificationAlertStatus = (value: unknown): NotificationAlertStatus | undefined => {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (normalized === 'active' || normalized === 'acknowledged' || normalized === 'resolved') {
+    return normalized
+  }
+  return undefined
+}
+
 const normalizeNotificationType = (value: unknown): NotificationType => {
   if (value === 'alert' || value === 'system') {
     return value
@@ -400,6 +414,7 @@ const toNotification = (dto: NotificationDto): Notification => ({
   timestamp: dto.timestamp,
   read: Boolean(dto.read),
   severity: dto.severity ? normalizeNotificationSeverity(dto.severity) : undefined,
+  status: normalizeNotificationAlertStatus(dto.status),
   link: typeof dto.link === 'string' ? dto.link : undefined,
   device: typeof dto.device === 'string' ? dto.device : undefined,
 })

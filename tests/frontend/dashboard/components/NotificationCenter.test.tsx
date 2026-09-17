@@ -305,4 +305,40 @@ describe('NotificationCenter', () => {
 
     expect(screen.queryByText('前往告警中心')).not.toBeInTheDocument()
   })
+
+  it('通知项应是可用键盘触发的按钮：Enter 标记已读并跳转', async () => {
+    const user = userEvent.setup()
+    mockFetchDashboardNotificationsWithMeta.mockResolvedValue({
+      notifications: [buildNotification()],
+      unreadCount: 1,
+      lastUpdated: new Date(),
+    })
+
+    renderWithQuery(<NotificationCenter />)
+    await openBell(user)
+
+    const item = await screen.findByRole('button', { name: /告警：core-sw-01/ })
+    expect(item.className).not.toMatch(/\/\d+\/\d+/)
+
+    item.focus()
+    await user.keyboard('{Enter}')
+
+    expect(mockMarkNotificationsRead).toHaveBeenCalledWith({ ids: ['alert-7'] })
+    expect(mockPush).toHaveBeenCalledWith('/alerts?id=7')
+  })
+
+  it('面板应是带名称的 dialog，批量操作与标签页可通过 Tab 到达', async () => {
+    const user = userEvent.setup()
+    renderWithQuery(<NotificationCenter />)
+    await openBell(user)
+
+    expect(screen.getByRole('dialog', { name: '通知中心' })).toBeInTheDocument()
+
+    const reachable = new Set<string>()
+    for (let i = 0; i < 6; i += 1) {
+      await user.tab()
+      reachable.add(document.activeElement?.textContent?.trim() ?? '')
+    }
+    expect([...reachable]).toEqual(expect.arrayContaining(['全部已读', '清空', '全部', '告警', '消息']))
+  })
 })
