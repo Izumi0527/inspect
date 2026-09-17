@@ -167,4 +167,14 @@ describe('dashboard.api generateReport', () => {
 
     await expect(fetchDashboardNotificationsWithMeta()).rejects.toThrow('notifications failed')
   })
+
+  it('通知接口应把标签页类型作为 type 查询参数下发，不传时只带 limit', async () => {
+    mockGet.mockResolvedValue({ notifications: [], unread_count: 0 })
+
+    await fetchDashboardNotificationsWithMeta(20, 'system')
+    expect(mockGet).toHaveBeenLastCalledWith('/dashboard/notifications?limit=20&type=system')
+
+    await fetchDashboardNotificationsWithMeta(20)
+    expect(mockGet).toHaveBeenLastCalledWith('/dashboard/notifications?limit=20')
+  })
 })

@@ -226,6 +226,11 @@ func (h DashboardHandler) GetNotifications(c echo.Context) error {
 		return err
 	}
 
+	scope, ok := dashboard.ParseNotificationTypeFilter(c.QueryParam("type"))
+	if !ok {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid notification type")
+	}
+
 	limit := parseIntDefault(c.QueryParam("limit"), 20)
 	if limit <= 0 {
 		limit = 20
@@ -238,12 +243,8 @@ func (h DashboardHandler) GetNotifications(c echo.Context) error {
 	if user != nil {
 		userID = user.ID
 	}
-	resp, err := h.Service.GetNotificationsForUser(c.Request().Context(), userID, dashboard.NotificationAccess{
-		CanReadAlerts:      hasPermission("alerts:read", permissions),
-		CanReadInspections: hasPermission("inspections:read", permissions),
-		CanReadReports:     hasPermission("reports:read", permissions),
-		CanReadDevices:     hasPermission("devices:read", permissions),
-	}, limit)
+	access := notificationAccessFromPermissions(permissions).ScopedToType(scope)
+	resp, err := h.Service.GetNotificationsForUser(c.Request().Context(), userID, access, limit)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load notifications")
 	}
@@ -263,12 +264,9 @@ func (h DashboardHandler) MarkNotificationsRead(c echo.Context) error {
 		return err
 	}
 
-	var req notificationActionRequest
-	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
-	}
-	if !req.All && len(req.IDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "ids or all required")
+	req, access, err := bindNotificationAction(c, permissions)
+	if err != nil {
+		return err
 	}
 
 	userID := ""
@@ -278,23 +276,13 @@ func (h DashboardHandler) MarkNotificationsRead(c echo.Context) error {
 
 	var updated int
 	if req.All {
-		n, err := h.Service.MarkAllNotificationsReadWithAccess(c.Request().Context(), userID, dashboard.NotificationAccess{
-			CanReadAlerts:      hasPermission("alerts:read", permissions),
-			CanReadInspections: hasPermission("inspections:read", permissions),
-			CanReadReports:     hasPermission("reports:read", permissions),
-			CanReadDevices:     hasPermission("devices:read", permissions),
-		}, req.WindowLimit)
+		n, err := h.Service.MarkAllNotificationsReadWithAccess(c.Request().Context(), userID, access, req.WindowLimit)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to mark notifications read")
 		}
 		updated = n
 	} else {
-		n, err := h.Service.MarkNotificationsReadWithAccess(c.Request().Context(), userID, dashboard.NotificationAccess{
-			CanReadAlerts:      hasPermission("alerts:read", permissions),
-			CanReadInspections: hasPermission("inspections:read", permissions),
-			CanReadReports:     hasPermission("reports:read", permissions),
-			CanReadDevices:     hasPermission("devices:read", permissions),
-		}, req.IDs)
+		n, err := h.Service.MarkNotificationsReadWithAccess(c.Request().Context(), userID, access, req.IDs)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to mark notifications read")
 		}
@@ -319,12 +307,9 @@ func (h DashboardHandler) DismissNotifications(c echo.Context) error {
 		return err
 	}
 
-	var req notificationActionRequest
-	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
-	}
-	if !req.All && len(req.IDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "ids or all required")
+	req, access, err := bindNotificationAction(c, permissions)
+	if err != nil {
+		return err
 	}
 
 	userID := ""
@@ -334,23 +319,13 @@ func (h DashboardHandler) DismissNotifications(c echo.Context) error {
 
 	var updated int
 	if req.All {
-		n, err := h.Service.DismissAllNotificationsWithAccess(c.Request().Context(), userID, dashboard.NotificationAccess{
-			CanReadAlerts:      hasPermission("alerts:read", permissions),
-			CanReadInspections: hasPermission("inspections:read", permissions),
-			CanReadReports:     hasPermission("reports:read", permissions),
-			CanReadDevices:     hasPermission("devices:read", permissions),
-		}, req.WindowLimit)
+		n, err := h.Service.DismissAllNotificationsWithAccess(c.Request().Context(), userID, access, req.WindowLimit)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to dismiss notifications")
 		}
 		updated = n
 	} else {
-		n, err := h.Service.DismissNotificationsWithAccess(c.Request().Context(), userID, dashboard.NotificationAccess{
-			CanReadAlerts:      hasPermission("alerts:read", permissions),
-			CanReadInspections: hasPermission("inspections:read", permissions),
-			CanReadReports:     hasPermission("reports:read", permissions),
-			CanReadDevices:     hasPermission("devices:read", permissions),
-		}, req.IDs)
+		n, err := h.Service.DismissNotificationsWithAccess(c.Request().Context(), userID, access, req.IDs)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to dismiss notifications")
 		}
@@ -366,4 +341,30 @@ type notificationActionRequest struct {
 	IDs         []string `json:"ids"`
 	All         bool     `json:"all"`
 	WindowLimit int      `json:"window_limit"`
+	// Type 与 all 组合时把"全部已读 / 清空"限定在当前标签页（alert / system），空串表示不限。
+	Type string `json:"type"`
+}
+
+func notificationAccessFromPermissions(permissions []string) dashboard.NotificationAccess {
+	return dashboard.NotificationAccess{
+		CanReadAlerts:      hasPermission("alerts:read", permissions),
+		CanReadInspections: hasPermission("inspections:read", permissions),
+		CanReadReports:     hasPermission("reports:read", permissions),
+		CanReadDevices:     hasPermission("devices:read", permissions),
+	}
+}
+
+func bindNotificationAction(c echo.Context, permissions []string) (notificationActionRequest, dashboard.NotificationAccess, error) {
+	var req notificationActionRequest
+	if err := c.Bind(&req); err != nil {
+		return req, dashboard.NotificationAccess{}, echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+	if !req.All && len(req.IDs) == 0 {
+		return req, dashboard.NotificationAccess{}, echo.NewHTTPError(http.StatusBadRequest, "ids or all required")
+	}
+	scope, ok := dashboard.ParseNotificationTypeFilter(req.Type)
+	if !ok {
+		return req, dashboard.NotificationAccess{}, echo.NewHTTPError(http.StatusBadRequest, "invalid notification type")
+	}
+	return req, notificationAccessFromPermissions(permissions).ScopedToType(scope), nil
 }

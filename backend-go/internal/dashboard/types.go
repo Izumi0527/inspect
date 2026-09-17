@@ -1,6 +1,9 @@
 package dashboard
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type StatCard struct {
 	Title     string  `json:"title"`
@@ -170,6 +173,37 @@ type NotificationAccess struct {
 	CanReadInspections bool
 	CanReadReports     bool
 	CanReadDevices     bool
+}
+
+// 通知中心标签页对应的类型作用域；空串表示不限类型。
+const (
+	NotificationTypeAlert  = "alert"
+	NotificationTypeSystem = "system"
+)
+
+// ParseNotificationTypeFilter 校验前端传入的 type：空串表示全部，其余只接受 alert / system。
+func ParseNotificationTypeFilter(raw string) (string, bool) {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	switch value {
+	case "", NotificationTypeAlert, NotificationTypeSystem:
+		return value, true
+	default:
+		return "", false
+	}
+}
+
+// ScopedToType 把权限视图收窄到某个标签页：告警页只保留告警源，消息页去掉告警源。
+// 候选收集、全部已读、清空都以 NotificationAccess 决定要查哪些源，因此收窄权限即收窄作用域。
+func (a NotificationAccess) ScopedToType(notificationType string) NotificationAccess {
+	switch notificationType {
+	case NotificationTypeAlert:
+		return NotificationAccess{CanReadAlerts: a.CanReadAlerts}
+	case NotificationTypeSystem:
+		a.CanReadAlerts = false
+		return a
+	default:
+		return a
+	}
 }
 
 type notificationAccess = NotificationAccess

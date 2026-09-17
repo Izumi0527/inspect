@@ -79,9 +79,10 @@ export const SEVERITY_COLORS: Record<NotificationSeverity, string> = {
 
 /**
  * 通知分类配置常量
+ * type 为该标签页向后端请求时的类型作用域；“全部”不带作用域。
  */
-export const NOTIFICATION_CATEGORIES: Array<{ key: NotificationCategoryKey; label: string }> = [
+export const NOTIFICATION_CATEGORIES: Array<{ key: NotificationCategoryKey; label: string; type?: NotificationType }> = [
   { key: 'all', label: '全部' },
-  { key: 'alerts', label: '告警' },
-  { key: 'system', label: '消息' },
+  { key: 'alerts', label: '告警', type: 'alert' },
+  { key: 'system', label: '消息', type: 'system' },
 ]

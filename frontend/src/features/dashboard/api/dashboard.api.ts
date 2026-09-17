@@ -123,7 +123,7 @@ const DASHBOARD_SECTION_FALLBACK_MESSAGES: Record<DashboardSectionKey, string> =
 
 export type DashboardNotificationActionPayload =
   | { ids: string[] }
-  | { all: true; window_limit?: number }
+  | { all: true; window_limit?: number; type?: NotificationType }
 
 type DashboardNotificationActionResponse = {
   updated?: number
@@ -424,8 +424,15 @@ export async function fetchDashboardNotifications(limit: number = 20): Promise<N
   }
 }
 
-export async function fetchDashboardNotificationsWithMeta(limit: number = 20): Promise<DashboardNotificationsResult> {
-  const payload = await api.get<unknown>(appendLimit('/dashboard/notifications', limit))
+export async function fetchDashboardNotificationsWithMeta(
+  limit: number = 20,
+  type?: NotificationType
+): Promise<DashboardNotificationsResult> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (type) {
+    params.set('type', type)
+  }
+  const payload = await api.get<unknown>(`/dashboard/notifications?${params.toString()}`)
   const dto = unwrapPayload<DashboardNotificationsDto | NotificationDto[]>(payload)
 
   if (Array.isArray(dto)) {
