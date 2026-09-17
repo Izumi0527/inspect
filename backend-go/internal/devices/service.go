@@ -132,7 +132,7 @@ func (s *Service) CreateDevice(ctx context.Context, req DeviceCreateRequest, cre
 	name := strings.TrimSpace(req.Name)
 	ip := strings.TrimSpace(req.IPAddress)
 	deviceType := normalizeDeviceType(req.DeviceType)
-	vendor := strings.TrimSpace(req.Vendor)
+	vendor := strings.ToLower(strings.TrimSpace(req.Vendor))
 	if name == "" || ip == "" || deviceType == "" || vendor == "" {
 		return nil, fmt.Errorf("name, ip_address, device_type, vendor are required")
 	}
@@ -174,11 +174,7 @@ func (s *Service) CreateDevice(ctx context.Context, req DeviceCreateRequest, cre
 		telnetPort = &value
 	}
 
-	cliProtocol := req.CliProtocol
-	if cliProtocol == nil || strings.TrimSpace(*cliProtocol) == "" {
-		value := defaultCliProtocol
-		cliProtocol = &value
-	}
+	cliProtocol := resolveCliProtocol(req)
 
 	tags, err := encodeTags(req.Tags)
 	if err != nil {
@@ -196,7 +192,7 @@ func (s *Service) CreateDevice(ctx context.Context, req DeviceCreateRequest, cre
 		SnmpCommunity:   snmpCommunity,
 		SnmpVersion:     &snmpVersion,
 		SnmpPort:        snmpPort,
-		CliProtocol:     cliProtocol,
+		CliProtocol:     &cliProtocol,
 		SshUsername:     req.SshUsername,
 		SshPassword:     req.SshPassword,
 		SshPort:         sshPort,
@@ -749,6 +745,24 @@ func applyDeviceFilters(db *gorm.DB, deviceType string, status string, groupID *
 		db = db.Where("(name ILIKE ? OR ip_address ILIKE ? OR location ILIKE ? OR description ILIKE ?)", pattern, pattern, pattern, pattern)
 	}
 	return db
+}
+
+// resolveCliProtocol 决定新建设备的 CLI 协议：显式给出则采用；否则按已提供的 CLI 凭据
+// 推断（SSH 优先于 Telnet）。批量导入模板只填用户名/密码不填协议，若一律落 none，
+// 这些凭据在巡检里永远不会被使用，编辑保存时还会被表单按 none 抹掉。
+func resolveCliProtocol(req DeviceCreateRequest) string {
+	if req.CliProtocol != nil {
+		if value := strings.ToLower(strings.TrimSpace(*req.CliProtocol)); value != "" {
+			return value
+		}
+	}
+	if req.SshUsername != nil && strings.TrimSpace(*req.SshUsername) != "" {
+		return "ssh"
+	}
+	if req.TelnetUsername != nil && strings.TrimSpace(*req.TelnetUsername) != "" {
+		return "telnet"
+	}
+	return defaultCliProtocol
 }
 
 func sanitizeSnmpVersion(value string) string {

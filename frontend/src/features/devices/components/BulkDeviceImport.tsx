@@ -20,7 +20,17 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
-import { DeviceImportData, ImportResult, DeviceType } from '../types'
+import { DeviceImportData, ImportResult } from '../types'
+import {
+  IMPORT_FIELD_DEFINITIONS,
+  ImportFieldKey,
+  ParsedCsv,
+  RawImportRow,
+  buildImportDevice,
+  decodeCsvBytes,
+  detectImportField,
+  parseCsv,
+} from '../utils/deviceImportCsv'
 
 type ImportStep = 'upload' | 'mapping' | 'preview' | 'result'
 
@@ -30,98 +40,53 @@ interface BulkDeviceImportProps {
   onImport: (devices: DeviceImportData[]) => Promise<ImportResult>
 }
 
-interface ParsedCSVData {
-  headers: string[]
-  rows: string[][]
-}
-
-interface FieldDefinition {
-  key: keyof DeviceImportData
-  label: string
-  required: boolean
-}
-
-const DEVICE_TYPE_ALIASES: Record<string, DeviceType> = {
-  switch: 'switch',
-  router: 'router',
-  firewall: 'firewall',
-  wirelessap: 'wireless_ap',
-  wireless_ap: 'wireless_ap',
-  accesspoint: 'wireless_ap',
-  ap: 'wireless_ap',
-}
-
-const normalizeDeviceType = (value?: string | DeviceType): DeviceType => {
-  if (!value) {
-    return 'switch'
-  }
-  const normalized = value.toString().toLowerCase().replace(/[^a-z0-9]/g, '')
-  return DEVICE_TYPE_ALIASES[normalized] ?? 'switch'
-}
-
-const FIELD_DEFINITIONS: FieldDefinition[] = [
-  { key: 'name', label: '设备名称', required: true },
-  { key: 'ip', label: 'IP 地址', required: true },
-  { key: 'device_type', label: '设备类型', required: true },
-  { key: 'vendor', label: '厂商', required: false },
-  { key: 'location', label: '位置', required: false },
-  { key: 'description', label: '描述', required: false },
-  { key: 'snmp_community', label: 'SNMP 团体字符串', required: false },
-  { key: 'ssh_username', label: 'SSH 用户名', required: false },
-  { key: 'ssh_password', label: 'SSH 密码', required: false }
-]
-
-const HEADER_HINTS: Record<string, keyof DeviceImportData> = {
-  name: 'name',
-  '设备名称': 'name',
-  ip: 'ip',
-  'ip地址': 'ip',
-  'ip 地址': 'ip',
-  device_type: 'device_type',
-  '设备类型': 'device_type',
-  type: 'device_type',
-  vendor: 'vendor',
-  '厂商': 'vendor',
-  '厂牌': 'vendor',
-  location: 'location',
-  '位置': 'location',
-  description: 'description',
-  '描述': 'description',
-  snmp: 'snmp_community',
-  'snmp 团体字符串': 'snmp_community',
-  snmp_community: 'snmp_community',
-  'ssh 用户名': 'ssh_username',
-  ssh_username: 'ssh_username',
-  'ssh 密码': 'ssh_password',
-  ssh_password: 'ssh_password'
-}
+type FieldMapping = Record<string, ImportFieldKey | ''>
 
 const UNMAPPED_FIELD_VALUE = '__unmapped__'
 
-const normalizeDevice = (partial: Partial<DeviceImportData>): DeviceImportData => ({
-  name: partial.name ?? '',
-  ip: partial.ip ?? '',
-  device_type: normalizeDeviceType(partial.device_type),
-  vendor: typeof partial.vendor === 'string' && partial.vendor.trim().length > 0 ? partial.vendor.trim() : undefined,
-  location: partial.location ?? '',
-  description: partial.description ?? '',
-  snmp_community: partial.snmp_community ?? '',
-  ssh_username: partial.ssh_username ?? '',
-  ssh_password: partial.ssh_password ?? ''
-})
+const CLI_PROTOCOL_LABELS: Record<NonNullable<DeviceImportData['cli_protocol']>, string> = {
+  ssh: 'SSH',
+  telnet: 'Telnet',
+  none: '无',
+}
 
-const detectField = (header: string): keyof DeviceImportData | '' => {
-  const normalized = header.toLowerCase().replace(/\s+/g, '')
-  const matchedEntry = Object.entries(HEADER_HINTS).find(([key]) =>
-    normalized.includes(key.toLowerCase().replace(/\s+/g, ''))
-  )
-  return matchedEntry ? matchedEntry[1] : ''
+const isValidIpAddress = (candidate: string): boolean => {
+  const value = candidate.trim()
+  if (!value) return false
+
+  const ipv4Segment = '(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)'
+  const ipv4Pattern = new RegExp(`^${ipv4Segment}(\\.${ipv4Segment}){3}$`)
+  if (ipv4Pattern.test(value)) return true
+
+  // 简化的 IPv6 校验：允许常见的 :: 压缩形式；不做过度严格校验，避免误伤合法地址
+  if (value.includes(':')) {
+    const ipv6Pattern = /^[0-9a-fA-F:]+$/
+    if (!ipv6Pattern.test(value)) return false
+    if (value.split(':').length > 9) return false
+    return true
+  }
+
+  return false
+}
+
+/** 行级校验：必填、IP 格式，以及"选了 CLI 协议却没给用户名"这类会让巡检必然失败的组合。 */
+export const validateImportDevice = (device: DeviceImportData): string[] => {
+  const errors: string[] = []
+  if (!device.name.trim()) errors.push('设备名称不能为空')
+  if (!device.ip.trim()) {
+    errors.push('IP 地址不能为空')
+  } else if (!isValidIpAddress(device.ip)) {
+    errors.push('IP 地址格式不正确')
+  }
+  if (device.cli_protocol === 'ssh' && !device.ssh_username) errors.push('CLI 协议为 SSH 时必须填写 SSH 用户名')
+  if (device.cli_protocol === 'telnet' && !device.telnet_username) errors.push('CLI 协议为 Telnet 时必须填写 Telnet 用户名')
+  return errors
 }
 
 export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onClose, onImport }) => {
   const [step, setStep] = useState<ImportStep>('upload')
-  const [csvData, setCsvData] = useState<ParsedCSVData | null>(null)
-  const [fieldMapping, setFieldMapping] = useState<Record<string, keyof DeviceImportData | ''>>({})
+  const [csvData, setCsvData] = useState<ParsedCsv | null>(null)
+  const [fieldMapping, setFieldMapping] = useState<FieldMapping>({})
   const [isProcessing, setIsProcessing] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [mappingErrors, setMappingErrors] = useState<string[]>([])
@@ -131,19 +96,14 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
   const mappedDevices = useMemo(() => {
     if (!csvData) return []
     return csvData.rows.map(row => {
-      const partial: Partial<DeviceImportData> = {}
+      const raw: RawImportRow = {}
       csvData.headers.forEach((header, index) => {
         const target = fieldMapping[header]
         if (target) {
-          const rawValue = row[index]?.trim() ?? ''
-          if (target === 'device_type') {
-            partial.device_type = normalizeDeviceType(rawValue)
-          } else {
-            partial[target] = rawValue as never
-          }
+          raw[target] = row[index] ?? ''
         }
       })
-      return normalizeDevice(partial)
+      return buildImportDevice(raw)
     })
   }, [csvData, fieldMapping])
 
@@ -166,27 +126,6 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
     fileInputRef.current?.click()
   }
 
-  const parseCSV = (content: string): ParsedCSVData => {
-    const lines = content
-      .split('\n')
-      .map(line => line.replace(/\r$/, ''))
-      .filter(line => line.trim().length > 0)
-
-    if (lines.length <= 1) {
-      throw new Error('CSV 内容为空或缺少数据行')
-    }
-
-    const headers = lines[0]
-      .split(',')
-      .map(cell => cell.trim().replace(/^"|"$/g, ''))
-
-    const rows = lines.slice(1).map(line =>
-      line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''))
-    )
-
-    return { headers, rows }
-  }
-
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -203,11 +142,12 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
     const reader = new FileReader()
     reader.onload = e => {
       try {
-        const content = (e.target?.result ?? '') as string
-        const parsed = parseCSV(content)
-        const defaultMapping: Record<string, keyof DeviceImportData | ''> = {}
+        const buffer = e.target?.result
+        const bytes = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : new Uint8Array()
+        const parsed = parseCsv(decodeCsvBytes(bytes))
+        const defaultMapping: FieldMapping = {}
         parsed.headers.forEach(header => {
-          defaultMapping[header] = detectField(header)
+          defaultMapping[header] = detectImportField(header)
         })
         setCsvData(parsed)
         setFieldMapping(defaultMapping)
@@ -224,41 +164,37 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         setStep('upload')
       }
     }
-    reader.readAsText(file, 'utf-8')
+    // 按字节读取再自行判定编码：Excel 另存的 ANSI(GBK) CSV 用 readAsText('utf-8') 会全部乱码
+    reader.readAsArrayBuffer(file)
   }, [])
 
   const handleMappingConfirm = () => {
-    const missing = FIELD_DEFINITIONS
+    const mappedKeys = Object.values(fieldMapping)
+    const missing = IMPORT_FIELD_DEFINITIONS
       .filter(field => field.required)
-      .filter(field => !Object.values(fieldMapping).includes(field.key))
-      .map(field => field.label)
+      .filter(field => !mappedKeys.includes(field.key))
+      .map(field => `缺少必填字段映射：${field.label}`)
 
-    if (missing.length > 0) {
-      setMappingErrors(missing.map(label => `缺少必填字段映射：${label}`))
+    const seen = new Map<ImportFieldKey, string[]>()
+    Object.entries(fieldMapping).forEach(([header, key]) => {
+      if (!key) return
+      seen.set(key, [...(seen.get(key) ?? []), header])
+    })
+    const duplicated = Array.from(seen.entries())
+      .filter(([, headers]) => headers.length > 1)
+      .map(([key, headers]) => {
+        const label = IMPORT_FIELD_DEFINITIONS.find(field => field.key === key)?.label ?? key
+        return `字段「${label}」被多列同时映射：${headers.join('、')}`
+      })
+
+    const problems = [...missing, ...duplicated]
+    if (problems.length > 0) {
+      setMappingErrors(problems)
       return
     }
 
     setMappingErrors([])
     setStep('preview')
-  }
-
-  const isValidIpAddress = (candidate: string): boolean => {
-    const value = candidate.trim()
-    if (!value) return false
-
-    const ipv4Segment = '(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)'
-    const ipv4Pattern = new RegExp(`^${ipv4Segment}(\\.${ipv4Segment}){3}$`)
-    if (ipv4Pattern.test(value)) return true
-
-    // 简化的 IPv6 校验：允许常见的 :: 压缩形式；不做过度严格校验，避免误伤合法地址
-    if (value.includes(':')) {
-      const ipv6Pattern = /^[0-9a-fA-F:]+$/
-      if (!ipv6Pattern.test(value)) return false
-      if (value.split(':').length > 9) return false
-      return true
-    }
-
-    return false
   }
 
   const handleImport = async () => {
@@ -267,14 +203,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
       // 前置校验：避免后端 422 导致整批失败
       const validationErrors = mappedDevices
         .map((device, index) => {
-          const errors: string[] = []
-          if (!device.name.trim()) errors.push('设备名称不能为空')
-          if (!device.ip.trim()) {
-            errors.push('IP 地址不能为空')
-          } else if (!isValidIpAddress(device.ip)) {
-            errors.push('IP 地址格式不正确')
-          }
-
+          const errors = validateImportDevice(device)
           return errors.length > 0
             ? { row: index + 2, data: device, error: errors.join('；') }
             : null
@@ -346,7 +275,10 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
             >
               <FileText className="h-10 w-10 mx-auto text-blue-500" />
               <div className="text-sm text-muted-foreground">
-                点击上传或将文件拖拽到此区域，支持 CSV 格式。请先使用主界面的"下载模板"按钮获取模板文件。
+                点击上传 CSV 文件（UTF-8 或 Excel 另存的 ANSI 编码均可）。请先使用主界面的"下载模板"按钮获取模板文件。
+              </div>
+              <div className="text-xs text-muted-foreground">
+                设备类型可填 switch/router/firewall/ap 或中文；厂商可填 huawei/h3c/other 或中文；CLI 协议留空时按填写的 SSH/Telnet 用户名自动判断。
               </div>
             </div>
           </div>
@@ -371,7 +303,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
           ))}
         </div>
       )}
-      <div className="space-y-4">
+      <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
         {csvData?.headers.map(header => (
           <div key={header} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
             <div>
@@ -380,13 +312,13 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
             </div>
             <div className="md:col-span-2">
               <Select
-                value={fieldMapping[header] ?? ''}
+                value={fieldMapping[header] || UNMAPPED_FIELD_VALUE}
                 onValueChange={value => {
                   if (value === UNMAPPED_FIELD_VALUE) {
                     setFieldMapping(prev => ({ ...prev, [header]: '' }))
                     return
                   }
-                  setFieldMapping(prev => ({ ...prev, [header]: value as keyof DeviceImportData }))
+                  setFieldMapping(prev => ({ ...prev, [header]: value as ImportFieldKey }))
                 }}
               >
                 <SelectTrigger aria-label={`CSV列字段映射-${header}`}>
@@ -394,7 +326,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={UNMAPPED_FIELD_VALUE}>不映射（忽略该列）</SelectItem>
-                  {FIELD_DEFINITIONS.map(field => (
+                  {IMPORT_FIELD_DEFINITIONS.map(field => (
                     <SelectItem key={field.key} value={field.key}>
                       {field.label}
                       {field.required ? '（必填）' : ''}
@@ -419,6 +351,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
 
   const renderPreviewStep = () => {
     const previewDevices = mappedDevices
+    const columns = ['名称', 'IP 地址', '类型', '厂商', 'SNMP', 'CLI', '位置']
     return (
       <div className="space-y-6">
         <ModalHeader>
@@ -432,26 +365,33 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
         </div>
         <div className="border border-border rounded-lg overflow-hidden">
           <div className="grid grid-cols-7 bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground">
-            <span>名称</span>
-            <span>IP 地址</span>
-            <span>类型</span>
-            <span>位置</span>
-            <span>描述</span>
-            <span>SNMP 团体字符串</span>
-            <span>SSH 用户名</span>
+            {columns.map(column => (
+              <span key={column}>{column}</span>
+            ))}
           </div>
           <div className="max-h-64 overflow-y-auto divide-y">
-            {previewDevices.map((device, index) => (
-              <div key={`${device.name || device.ip || 'device'}-${index}`} className="grid grid-cols-7 px-4 py-2 text-xs text-foreground/90">
-                <span>{device.name || '-'}</span>
-                <span>{device.ip || '-'}</span>
-                <span>{device.device_type}</span>
-                <span>{device.location || '-'}</span>
-                <span className="truncate" title={device.description ?? ''}>{device.description || '-'}</span>
-                <span>{device.snmp_community || '-'}</span>
-                <span>{device.ssh_username || '-'}</span>
-              </div>
-            ))}
+            {previewDevices.map((device, index) => {
+              const snmpSummary = device.snmp_version === 'v3'
+                ? 'v3'
+                : `v2c · ${device.snmp_community ? '已填团体串' : '默认 public'}`
+              const cliUser = device.cli_protocol === 'ssh'
+                ? device.ssh_username
+                : device.cli_protocol === 'telnet'
+                  ? device.telnet_username
+                  : ''
+              const cliSummary = `${CLI_PROTOCOL_LABELS[device.cli_protocol ?? 'none']}${cliUser ? ` · ${cliUser}` : ''}`
+              return (
+                <div key={`${device.name || device.ip || 'device'}-${index}`} className="grid grid-cols-7 px-4 py-2 text-xs text-foreground/90">
+                  <span className="truncate" title={device.name}>{device.name || '-'}</span>
+                  <span>{device.ip || '-'}</span>
+                  <span>{device.device_type}</span>
+                  <span>{device.vendor}</span>
+                  <span>{snmpSummary}</span>
+                  <span className="truncate" title={cliSummary}>{cliSummary}</span>
+                  <span className="truncate" title={device.location ?? ''}>{device.location || '-'}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
         <div className="flex justify-end gap-3">

@@ -187,7 +187,7 @@ export interface DeviceSummary {
 // 设备操作类型
 export type DeviceAction = 'view' | 'edit' | 'delete' | 'inspect' | 'clone' | 'export'
 
-// 设备导入/导出相关类型
+// 设备导入/导出相关类型（CSV 一行归一化后的结果，字段与后端 DeviceCreateRequest 平铺对齐）
 export interface DeviceImportData {
   name: string
   ip: string
@@ -196,17 +196,18 @@ export interface DeviceImportData {
   location?: string
   description?: string
 
-  // 连接配置 - 新增字段
-  cli_protocol?: CLIProtocol
-  ssh_config?: SSHConfig
-  telnet_config?: TelnetConfig
-  snmp_config?: SNMPConfig
-  advanced_config?: AdvancedConfig
-
-  // 兼容性字段 - 保持向后兼容
+  snmp_version?: SNMPVersion
+  snmp_port?: number
   snmp_community?: string
+
+  cli_protocol?: CLIProtocol
   ssh_username?: string
   ssh_password?: string
+  ssh_port?: number
+  telnet_username?: string
+  telnet_password?: string
+  telnet_port?: number
+  enable_password?: string
 }
 
 // CSV导入结果

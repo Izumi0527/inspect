@@ -99,6 +99,7 @@ interface DeviceCreateRequestDto {
   group_id?: number;
   snmp_community?: string;
   snmp_version?: string;
+  snmp_port?: number;
   cli_protocol?: string;
   ssh_username?: string;
   ssh_password?: string;
@@ -284,18 +285,72 @@ const mapImportDeviceToBackendCreate = (
   device: DeviceImportData,
 ): DeviceCreateRequestDto => {
   const vendor = typeof device.vendor === "string" ? device.vendor.trim() : "";
+  const cliProtocol = device.cli_protocol ?? "none";
+  const snmpVersion = device.snmp_version ?? "v2c";
+  const snmpPort = device.snmp_port ?? 161;
+  const sshPort = device.ssh_port ?? 22;
+  const telnetPort = device.telnet_port ?? 23;
 
-  return {
+  // 与单台新增（deviceFormMapper.buildCommonPayload）保持同一份结构：顶层列供探测/采集
+  // 读取，tags 供编辑表单回填协议/端口/版本。旧实现只发顶层凭据不发协议与 tags，
+  // 导入的设备在编辑页显示为"无 CLI"，保存一次即把 SSH 用户名抹掉。
+  const request: DeviceCreateRequestDto = {
     name: device.name,
     ip_address: device.ip.trim(),
     device_type: mapImportDeviceTypeToBackend(device.device_type),
     vendor: vendor || "other",
     location: device.location?.trim() || undefined,
     description: device.description?.trim() || undefined,
-    snmp_community: device.snmp_community?.trim() || undefined,
-    ssh_username: device.ssh_username?.trim() || undefined,
-    ssh_password: device.ssh_password || undefined,
+    snmp_version: snmpVersion === "v3" ? "3" : "2c",
+    snmp_port: snmpPort,
+    snmp_community:
+      snmpVersion === "v3" ? undefined : device.snmp_community?.trim() || undefined,
+    cli_protocol: cliProtocol,
+    tags: {
+      cli_config: {
+        cli_protocol: cliProtocol,
+        ssh_config:
+          cliProtocol === "ssh"
+            ? {
+                username: device.ssh_username?.trim() || undefined,
+                port: sshPort,
+                use_key_auth: false,
+                password: device.ssh_password || undefined,
+              }
+            : undefined,
+        telnet_config:
+          cliProtocol === "telnet"
+            ? {
+                username: device.telnet_username?.trim() || undefined,
+                port: telnetPort,
+                password: device.telnet_password || undefined,
+                enable_password: device.enable_password || undefined,
+              }
+            : undefined,
+      },
+      snmp_config: {
+        version: snmpVersion,
+        port: snmpPort,
+        v2c_config:
+          snmpVersion === "v3"
+            ? undefined
+            : { community: device.snmp_community?.trim() || undefined },
+      },
+    },
   };
+
+  if (cliProtocol === "ssh") {
+    request.ssh_username = device.ssh_username?.trim() || undefined;
+    request.ssh_password = device.ssh_password || undefined;
+    request.ssh_port = sshPort;
+  } else if (cliProtocol === "telnet") {
+    request.telnet_username = device.telnet_username?.trim() || undefined;
+    request.telnet_password = device.telnet_password || undefined;
+    request.telnet_port = telnetPort;
+    request.enable_password = device.enable_password || undefined;
+  }
+
+  return request;
 };
 
 const cloneJsonValue = <T>(value: T): T => {
