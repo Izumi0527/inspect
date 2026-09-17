@@ -12,10 +12,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gosnmp/gosnmp"
 	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
 	"go.uber.org/zap"
+	"golang.org/x/text/encoding/simplifiedchinese"
 	"gorm.io/datatypes"
 )
 
@@ -358,15 +360,28 @@ func probeICMP(ctx context.Context, ipAddress string) (bool, *float64, *string) 
 	elapsedMs := float64(time.Since(start).Milliseconds())
 
 	if err != nil {
-		msg := icmpErrorMessage(err, string(output), runtime.GOOS)
+		msg := icmpErrorMessage(err, decodePingOutput(output), runtime.GOOS)
 		return false, nil, &msg
 	}
 
-	responseTime := parsePingTime(string(output))
+	responseTime := parsePingTime(decodePingOutput(output))
 	if responseTime == nil {
 		responseTime = &elapsedMs
 	}
 	return true, responseTime, nil
+}
+
+// decodePingOutput 把 ping 的原始输出转为 UTF-8。Windows 的 ping 按控制台代码页输出
+// （中文系统为 GBK），直接当 UTF-8 用会让探测失败原因变成乱码；合法 UTF-8 原样返回。
+func decodePingOutput(output []byte) string {
+	if utf8.Valid(output) {
+		return string(output)
+	}
+	decoded, err := simplifiedchinese.GBK.NewDecoder().Bytes(output)
+	if err != nil {
+		return string(output)
+	}
+	return string(decoded)
 }
 
 // icmpErrorMessage 把 ping 的失败归为两类：命令无法执行加前缀标记；目标无响应保持原始输出。

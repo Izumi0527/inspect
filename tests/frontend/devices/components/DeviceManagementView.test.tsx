@@ -485,8 +485,10 @@ describe("DeviceManagementView", () => {
 
       expect(rows).toHaveLength(2);
       expect(rows[0]).toBe(
-        "设备名称,IP地址,设备类型,厂商,位置,描述,SNMP团体字符串,SSH用户名,SSH密码",
+        "设备名称,IP地址,设备类型,厂商,位置,描述,SNMP版本,SNMP端口,SNMP团体字符串,CLI协议,SSH用户名,SSH密码,SSH端口,Telnet用户名,Telnet密码,Telnet端口,Enable密码",
       );
+      // 示例行列数必须与表头一致，否则 Excel 打开后列会错位
+      expect(rows[1].split(",")).toHaveLength(rows[0].split(",").length);
       expect(rows[1]).toContain("模板");
       expect(rows[1]).not.toContain("核心交换机1");
       expect(rows[1]).not.toContain("路由器网关1");

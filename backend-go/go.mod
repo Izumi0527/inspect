@@ -19,6 +19,7 @@ require (
 	github.com/xuri/excelize/v2 v2.8.1
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.24.0
+	golang.org/x/text v0.16.0
 	gorm.io/datatypes v1.2.4
 	gorm.io/driver/postgres v1.5.9
 	gorm.io/gorm v1.25.12
@@ -58,7 +59,6 @@ require (
 	golang.org/x/net v0.25.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
-	golang.org/x/text v0.16.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect
 	gorm.io/driver/sqlite v1.5.7 // indirect

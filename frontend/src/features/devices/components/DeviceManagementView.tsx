@@ -58,6 +58,14 @@ import {
   bulkUpdateDevices,
 } from "../api/devices.api";
 import type { DevicePayload } from "../utils/deviceFormMapper";
+import {
+  IMPORT_TEMPLATE_EXAMPLE_ROW,
+  IMPORT_TEMPLATE_HEADERS,
+} from "../utils/deviceImportCsv";
+import { summarizeBatchProbe } from "../utils/probeSummary";
+
+// 批量探测结果 toast 中最多逐台列出的失败条数，其余在列表状态列可见
+const PROBE_TOAST_MAX_FAILURES = 5;
 
 const DEVICE_STATUSES: DeviceStatus[] = [
   "online",
@@ -388,15 +396,38 @@ export const DeviceManagementView: React.FC = () => {
       const result = await batchProbeDevices(deviceIds, {
         updateStatus: canPersistProbeStatus,
       });
-      const onlineCount = result.results.filter((r) => r.icmp_reachable).length;
-      const snmpSuccessCount = result.results.filter(
-        (r) => r.snmp_reachable,
-      ).length;
-
-      toast.success(
-        `${label}完成\n探测设备: ${result.probed}台\nICMP在线: ${onlineCount}台\nSNMP成功: ${snmpSuccessCount}台`,
-        { duration: 5000 },
+      const summary = summarizeBatchProbe(
+        result,
+        new Map(devices.map((d) => [d.id, d.name])),
+        PROBE_TOAST_MAX_FAILURES,
       );
+
+      const lines = [
+        `${label}完成`,
+        `探测设备: ${result.probed}台`,
+        `ICMP在线: ${summary.onlineCount}台`,
+        `SNMP成功: ${summary.snmpSuccessCount}台`,
+      ];
+      if (summary.missingCount > 0) {
+        lines.push(`未返回结果: ${summary.missingCount}台`);
+      }
+      const hasFailures = summary.failures.length > 0;
+      if (hasFailures) {
+        lines.push("失败明细:");
+        summary.failures.forEach((item) =>
+          lines.push(`· ${item.name}: ${item.reason}`),
+        );
+        if (summary.hiddenFailureCount > 0) {
+          lines.push(`· 另有 ${summary.hiddenFailureCount} 台失败，请看列表状态列`);
+        }
+      }
+
+      // 有失败时用普通 toast 而非成功态，且停留更久以便阅读明细
+      if (hasFailures) {
+        toast(lines.join("\n"), { duration: 8000, icon: "⚠️" });
+      } else {
+        toast.success(lines.join("\n"), { duration: 5000 });
+      }
 
       if (canPersistProbeStatus) {
         await loadDevices();
@@ -421,7 +452,7 @@ export const DeviceManagementView: React.FC = () => {
     handleProbe(selectedDevices, "批量探测");
   };
 
-  const handleProbeAll = () => handleProbe(devices.map((d) => d.id), "全部探测");
+  const handleProbeAll = () => handleProbe(devices.map((d) => d.id), "探测本页");
 
   const confirmBulkDelete = async () => {
     if (selectedDevices.length === 0) return;
@@ -602,11 +633,11 @@ export const DeviceManagementView: React.FC = () => {
 
   const handleDownloadTemplate = () => {
     const BOM = "\uFEFF"; // UTF-8 BOM - 让 Excel 正确识别 UTF-8 编码
-    const headerLine =
-      "设备名称,IP地址,设备类型,厂商,位置,描述,SNMP团体字符串,SSH用户名,SSH密码";
-    const templateLine =
-      "模板设备,192.168.1.1,switch,huawei,模板位置,模板数据请按实际设备修改,public,admin,";
-    const csvContent = BOM + [headerLine, templateLine].join("\r\n");
+    const csvContent =
+      BOM +
+      [IMPORT_TEMPLATE_HEADERS.join(","), IMPORT_TEMPLATE_EXAMPLE_ROW.join(",")].join(
+        "\r\n",
+      );
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
