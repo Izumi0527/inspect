@@ -22,7 +22,7 @@ import {
   fetchDashboardNotificationsWithMeta,
   markDashboardNotificationsRead,
 } from '../api/dashboard.api'
-import { useDashboardAlertRealtimeRefresh } from '../hooks/useDashboard'
+import { useNotificationCenterRealtimeRefresh } from '../hooks/useDashboard'
 import { QueryKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 
@@ -116,8 +116,8 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
     void queryClient.invalidateQueries({ queryKey: ownerQueryKey })
   }
 
-  // 告警新增/处理/解决推送后立即刷新徽章与列表，不必等 60s 轮询
-  useDashboardAlertRealtimeRefresh(invalidateNotifications, canReadAlerts)
+  // 告警新增/处理/解决、巡检/报表/扫描进入终态的推送到达后立即刷新徽章与列表，不必等 60s 轮询
+  useNotificationCenterRealtimeRefresh(invalidateNotifications, canReadAlerts)
 
   const applyOptimistic = async (
     payload: DashboardNotificationActionPayload,

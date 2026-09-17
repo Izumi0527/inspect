@@ -44,9 +44,9 @@ jest.mock('@/features/dashboard/api/dashboard.api', () => ({
 }))
 
 jest.mock('@/features/dashboard/hooks/useDashboard', () => ({
-  useDashboardAlertRealtimeRefresh: (refresh: () => void, enabled: boolean) => {
+  useNotificationCenterRealtimeRefresh: (refresh: () => void, canReadAlerts: boolean) => {
     capturedRealtimeRefresh = refresh
-    capturedRealtimeEnabled = enabled
+    capturedRealtimeEnabled = canReadAlerts
   },
 }))
 
@@ -268,7 +268,7 @@ describe('NotificationCenter', () => {
     expect(mockPush).toHaveBeenCalledWith('/alerts?id=7')
   })
 
-  it('告警实时事件应触发通知重新拉取，且订阅受告警权限门控', async () => {
+  it('实时事件（告警房间 + notifications 房间）应触发通知重新拉取，告警房间受权限门控', async () => {
     renderWithQuery(<NotificationCenter />)
 
     await waitFor(() => {

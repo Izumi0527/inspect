@@ -155,7 +155,7 @@ func New() (*App, error) {
 		},
 	}
 
-	inspectionService := inspection.NewService(dbConn, log)
+	inspectionService := inspection.NewService(dbConn, log).WithNotifier(wsManager)
 
 	// 为历史巡检记录回填执行批次标识（幂等，仅处理 batch_id 为空的行）。
 	// 失败不阻塞启动：执行历史仍按「策略+名称+精确创建时间」查询时归并兜底。
@@ -182,7 +182,7 @@ func New() (*App, error) {
 	deviceService := devices.NewService(dbConn, log)
 	probeService := devices.NewProbeService(log)
 	snmpCollector := devices.NewSNMPCollector(log)
-	scanner := devices.NewScanner(dbConn, log, probeService)
+	scanner := devices.NewScanner(dbConn, log, probeService).WithNotifier(wsManager)
 	devicesHandler := handlers.DevicesHandler{
 		Service:       deviceService,
 		Scanner:       scanner,
@@ -193,7 +193,7 @@ func New() (*App, error) {
 		Auth:          authService,
 	}
 
-	reportService := reports.NewService(dbConn, log)
+	reportService := reports.NewService(dbConn, log).WithNotifier(wsManager)
 	reportHandler := handlers.ReportsHandler{
 		Service:   reportService,
 		Auth:      authService,

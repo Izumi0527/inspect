@@ -20,6 +20,8 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
 type Scanner struct {
@@ -28,6 +30,8 @@ type Scanner struct {
 	probe  *ProbeService
 	mu     sync.Mutex
 	active map[string]*scanJob
+	// notifier 为空时终态不推送（单测/脚本场景），由装配层注入 ws.Manager
+	notifier ws.RoomPublisher
 }
 
 type scanJob struct {
@@ -53,6 +57,14 @@ func NewScanner(db *gorm.DB, logger *zap.Logger, probe *ProbeService) *Scanner {
 		probe:  probe,
 		active: make(map[string]*scanJob),
 	}
+}
+
+// WithNotifier 注入通知房间发布器：扫描落终态后向 notifications 房间推送变更事件。
+func (s *Scanner) WithNotifier(publisher ws.RoomPublisher) *Scanner {
+	if s != nil {
+		s.notifier = publisher
+	}
+	return s
 }
 
 func normalizeScanType(value string) string {
@@ -440,7 +452,14 @@ func (s *Scanner) finalizeScan(ctx context.Context, scanID string, startedAt tim
 		if s.logger != nil {
 			s.logger.Warn("finalize scan failed", zap.Error(err), zap.String("scan_id", scanID))
 		}
+		return
 	}
+
+	ws.PublishNotificationChange(s.notifier, ws.NotificationChange{
+		Source: ws.NotificationSourceScan,
+		ID:     scanID,
+		Status: status,
+	})
 }
 
 func defaultScanPorts(enabled bool) []int {

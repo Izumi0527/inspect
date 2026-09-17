@@ -182,10 +182,8 @@ export function useDashboardAutoRefresh(callback: () => void, enabled: boolean, 
   }, [callback, enabled, interval])
 }
 
-// 实时告警的动态刷新：订阅 alerts 房间，告警新增/处理/解决（含系统自动恢复）推送后刷新总览，
-// 让已恢复的告警不必等待 60s 轮询就从卡片消失。enabled 为 false（无 alerts:read）时不订阅也不刷新。
-export function useDashboardAlertRealtimeRefresh(refresh: () => void, enabled: boolean) {
-  const ws = useWebSocket()
+// 把连发的实时事件合并成一次刷新：返回稳定的触发函数，卸载时清掉未触发的定时器。
+function useDebouncedRefresh(refresh: () => void) {
   const refreshRef = useRef(refresh)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -194,31 +192,63 @@ export function useDashboardAlertRealtimeRefresh(refresh: () => void, enabled: b
   }, [refresh])
 
   useEffect(() => {
-    if (!enabled) return
-    ws.subscribeToAlerts()
     return () => {
-      ws.unsubscribeFromAlerts()
+      if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [enabled, ws])
+  }, [])
 
-  const handleAlertEvent = useCallback(() => {
-    if (!enabled) return
+  return useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       timerRef.current = null
       refreshRef.current()
     }, ALERT_REFRESH_DEBOUNCE_MS)
-  }, [enabled])
+  }, [])
+}
+
+// 实时告警的动态刷新：订阅 alerts 房间，告警新增/处理/解决（含系统自动恢复）推送后刷新总览，
+// 让已恢复的告警不必等待 60s 轮询就从卡片消失。enabled 为 false（无 alerts:read）时不订阅也不刷新。
+export function useDashboardAlertRealtimeRefresh(refresh: () => void, enabled: boolean) {
+  const ws = useWebSocket()
+  const trigger = useDebouncedRefresh(refresh)
+
+  useEffect(() => {
+    if (!enabled) return
+    return ws.subscribeToAlerts()
+  }, [enabled, ws])
+
+  const handleAlertEvent = useCallback(() => {
+    if (!enabled) return
+    trigger()
+  }, [enabled, trigger])
 
   useWebSocketEvent(WebSocketEvents.NEW_ALERT, handleAlertEvent)
   useWebSocketEvent(WebSocketEvents.ALERT_UPDATE, handleAlertEvent)
   useWebSocketEvent(WebSocketEvents.ALERT_RESOLVED, handleAlertEvent)
+}
+
+// 顶栏通知中心的实时刷新：告警房间受 alerts:read 门控；notifications 房间（巡检/报表/扫描终态信号）
+// 不含业务数据、任何登录用户都可订阅，因此始终订阅。两路事件共用一个防抖，避免同一轮变更刷新两次。
+export function useNotificationCenterRealtimeRefresh(refresh: () => void, canReadAlerts: boolean) {
+  const ws = useWebSocket()
+  const trigger = useDebouncedRefresh(refresh)
 
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }
-  }, [])
+    if (!canReadAlerts) return
+    return ws.subscribeToAlerts()
+  }, [canReadAlerts, ws])
+
+  useEffect(() => ws.subscribeToNotifications(), [ws])
+
+  const handleAlertEvent = useCallback(() => {
+    if (!canReadAlerts) return
+    trigger()
+  }, [canReadAlerts, trigger])
+
+  useWebSocketEvent(WebSocketEvents.NEW_ALERT, handleAlertEvent)
+  useWebSocketEvent(WebSocketEvents.ALERT_UPDATE, handleAlertEvent)
+  useWebSocketEvent(WebSocketEvents.ALERT_RESOLVED, handleAlertEvent)
+  useWebSocketEvent(WebSocketEvents.NOTIFICATION_UPDATE, trigger)
 }
 
 // 设备搜索hook

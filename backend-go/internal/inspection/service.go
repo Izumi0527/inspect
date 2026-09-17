@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
 const (
@@ -23,6 +25,8 @@ type Service struct {
 	db        *gorm.DB
 	logger    *zap.Logger
 	validator TemplateValidator
+	// notifier 为空时终态不推送（单测/脚本场景），由装配层注入 ws.Manager
+	notifier ws.RoomPublisher
 }
 
 // TemplateService defines the interface for template management operations
@@ -142,6 +146,14 @@ func NewService(db *gorm.DB, logger *zap.Logger) *Service {
 	// Initialize validator with the service
 	service.validator = NewTemplateValidator(service)
 	return service
+}
+
+// WithNotifier 注入通知房间发布器：巡检写入终态后向 notifications 房间推送变更事件。
+func (s *Service) WithNotifier(publisher ws.RoomPublisher) *Service {
+	if s != nil {
+		s.notifier = publisher
+	}
+	return s
 }
 
 func (s *Service) DB() *gorm.DB {
@@ -833,7 +845,7 @@ func (s *Service) UpdateInspectionStatus(ctx context.Context, id int, status str
 		updates["started_at"] = now
 	}
 
-	if status == StatusCompleted || status == StatusFailed || status == StatusCancelled || status == StatusTimeout {
+	if isTerminalInspectionStatus(status) {
 		if inspection.CompletedAt == nil {
 			updates["completed_at"] = now
 		}
@@ -854,7 +866,19 @@ func (s *Service) UpdateInspectionStatus(ctx context.Context, id int, status str
 		return Inspection{}, err
 	}
 
+	if isTerminalInspectionStatus(status) {
+		ws.PublishNotificationChange(s.notifier, ws.NotificationChange{
+			Source: ws.NotificationSourceInspection,
+			ID:     fmt.Sprintf("%d", id),
+			Status: status,
+		})
+	}
+
 	return s.GetInspection(ctx, id)
+}
+
+func isTerminalInspectionStatus(status string) bool {
+	return status == StatusCompleted || status == StatusFailed || status == StatusCancelled || status == StatusTimeout
 }
 
 func (s *Service) ListResultsByInspectionIDs(ctx context.Context, inspectionIDs []int) ([]Result, error) {

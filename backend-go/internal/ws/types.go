@@ -11,6 +11,7 @@ const (
 	MessageUserNotice    MessageType = "user_notification"
 	MessageDeviceMetrics MessageType = "device_metrics"
 	MessageError         MessageType = "error"
+	MessageNotification  MessageType = "notification"
 )
 
 type ClientMessage struct {

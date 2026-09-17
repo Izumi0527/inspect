@@ -10,6 +10,8 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+
+	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
 const (
@@ -20,6 +22,8 @@ const (
 type Service struct {
 	db     *gorm.DB
 	logger *zap.Logger
+	// notifier 为空时终态不推送（单测/脚本场景），由装配层注入 ws.Manager
+	notifier ws.RoomPublisher
 }
 
 type ListReportsFilter struct {
@@ -37,6 +41,14 @@ func NewService(db *gorm.DB, logger *zap.Logger) *Service {
 		db:     db,
 		logger: logger,
 	}
+}
+
+// WithNotifier 注入通知房间发布器：报表生成成功/失败落库后向 notifications 房间推送变更事件。
+func (s *Service) WithNotifier(publisher ws.RoomPublisher) *Service {
+	if s != nil {
+		s.notifier = publisher
+	}
+	return s
 }
 
 func (s *Service) DB() *gorm.DB {
@@ -128,7 +140,25 @@ func (s *Service) UpdateReport(ctx context.Context, id int, updates map[string]i
 	if err := s.db.WithContext(ctx).Model(&Report{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return Report{}, err
 	}
+
+	if status, ok := updates["status"].(string); ok && isTerminalReportStatus(status) {
+		ws.PublishNotificationChange(s.notifier, ws.NotificationChange{
+			Source: ws.NotificationSourceReport,
+			ID:     fmt.Sprintf("%d", id),
+			Status: status,
+		})
+	}
 	return s.GetReport(ctx, id)
+}
+
+// 与通知中心 buildReportNotifications 的入选状态保持一致：只有这两个状态会成为一条系统消息
+func isTerminalReportStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "completed", "failed":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) DeleteReport(ctx context.Context, id int) error {

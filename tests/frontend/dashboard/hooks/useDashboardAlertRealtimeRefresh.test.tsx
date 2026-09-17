@@ -1,8 +1,8 @@
 import { act, renderHook } from '@testing-library/react'
 import { useDashboardAlertRealtimeRefresh } from '@/features/dashboard/hooks/useDashboard'
 
+const releaseAlertsLease = jest.fn()
 const subscribeToAlerts = jest.fn()
-const unsubscribeFromAlerts = jest.fn()
 const registeredHandlers = new Map<string, (payload: unknown) => void>()
 
 jest.mock('next/navigation', () => ({
@@ -15,7 +15,7 @@ jest.mock('@/lib/websocket', () => ({
     ALERT_UPDATE: 'alert_update',
     ALERT_RESOLVED: 'alert_resolved',
   },
-  useWebSocket: () => ({ subscribeToAlerts, unsubscribeFromAlerts }),
+  useWebSocket: () => ({ subscribeToAlerts }),
   useWebSocketEvent: (event: string, handler: (payload: unknown) => void) => {
     registeredHandlers.set(event, handler)
   },
@@ -25,20 +25,21 @@ describe('useDashboardAlertRealtimeRefresh', () => {
   beforeEach(() => {
     jest.useFakeTimers()
     registeredHandlers.clear()
-    subscribeToAlerts.mockReset()
-    unsubscribeFromAlerts.mockReset()
+    // jest 配置 resetMocks，模块级 mock 的实现每个用例前都会被清掉，须在此重设
+    subscribeToAlerts.mockImplementation(() => releaseAlertsLease)
   })
 
   afterEach(() => {
     jest.useRealTimers()
   })
 
-  it('有告警权限时订阅 alerts 房间，卸载时退订', () => {
+  it('有告警权限时申请 alerts 房间租约，卸载时释放自己的租约', () => {
     const { unmount } = renderHook(() => useDashboardAlertRealtimeRefresh(jest.fn(), true))
 
     expect(subscribeToAlerts).toHaveBeenCalledTimes(1)
+    expect(releaseAlertsLease).not.toHaveBeenCalled()
     unmount()
-    expect(unsubscribeFromAlerts).toHaveBeenCalledTimes(1)
+    expect(releaseAlertsLease).toHaveBeenCalledTimes(1)
   })
 
   it('告警解决事件在防抖后触发一次刷新；一轮连发多事件只刷新一次', () => {

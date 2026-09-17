@@ -327,6 +327,9 @@ func requiredPermissionForRoom(room string) (string, bool) {
 		return "monitoring:read", true
 	case "scan_progress":
 		return "inspections:read", true
+	case RoomNotifications:
+		// 只推"有变更"信号，不含业务数据：已登录即可订阅（空权限键在 hasPermission / HasPermission 中恒为通过）
+		return "", true
 	default:
 		return "", false
 	}

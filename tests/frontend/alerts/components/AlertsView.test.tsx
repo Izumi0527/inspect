@@ -6,10 +6,10 @@ const mockHandleAcknowledgeAlert = jest.fn<Promise<void>, [string, (string | und
 const mockLoadAlerts = jest.fn<Promise<void>, []>()
 const mockLoadStats = jest.fn<Promise<void>, []>()
 const mockWsHandlers = new Map<string, (payload?: unknown) => void>()
+const mockReleaseAlertsLease = jest.fn()
 const mockWs = {
   isConnected: jest.fn(() => true),
   subscribeToAlerts: jest.fn(),
-  unsubscribeFromAlerts: jest.fn(),
 }
 let mockCanReadAlerts = true
 let mockAlertFilters = {
@@ -180,8 +180,7 @@ describe('AlertsView', () => {
   beforeEach(() => {
     mockWsHandlers.clear()
     mockWs.isConnected.mockReturnValue(true)
-    mockWs.subscribeToAlerts.mockClear()
-    mockWs.unsubscribeFromAlerts.mockClear()
+    mockWs.subscribeToAlerts.mockImplementation(() => mockReleaseAlertsLease)
     mockCanReadAlerts = true
     mockAlertFilters = {
       searchQuery: '',
@@ -209,13 +208,23 @@ describe('AlertsView', () => {
     mockLoadStats.mockResolvedValue(undefined)
   })
 
-  it('挂载时应订阅 alerts 房间，卸载时应取消订阅', () => {
+  it('挂载时应申请 alerts 房间租约，卸载时只释放自己的租约', () => {
     const { unmount } = render(<AlertsView />)
 
     expect(mockWs.subscribeToAlerts).toHaveBeenCalledTimes(1)
+    expect(mockReleaseAlertsLease).not.toHaveBeenCalled()
 
     unmount()
-    expect(mockWs.unsubscribeFromAlerts).toHaveBeenCalledTimes(1)
+    expect(mockReleaseAlertsLease).toHaveBeenCalledTimes(1)
+  })
+
+  it('尚未连接时也应申请租约，由管理器在连接建立后重放，而不是靠页面自己监听 connect', () => {
+    mockWs.isConnected.mockReturnValue(false)
+
+    render(<AlertsView />)
+
+    expect(mockWs.subscribeToAlerts).toHaveBeenCalledTimes(1)
+    expect(mockWsHandlers.has('connect')).toBe(false)
   })
 
   it('无 alerts:read 权限时应显示无权限提示且不订阅房间', () => {

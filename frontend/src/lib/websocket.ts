@@ -33,6 +33,9 @@ export enum WebSocketEvents {
   // 系统事件
   SYSTEM_STATUS_UPDATE = 'system_status_update',
   USER_ACTIVITY = 'user_activity',
+
+  // 通知中心：某个来源（巡检/报表/扫描）有记录进入终态，只是"该刷新了"的信号
+  NOTIFICATION_UPDATE = 'notification_update',
 }
 
 // 连接状态
@@ -116,8 +119,11 @@ class WebSocketManager {
   // 订阅幂等与重连恢复：记录订阅意图，在重连后自动重放，避免“漏订阅/重复订阅”。
   private deviceMonitoringSubscribed = false
   private deviceMonitoringDeviceIds: number[] | undefined
-  private alertsSubscribed = false
+  // alerts 房间可能同时被多个组件订阅（告警页、总览、顶栏通知中心），用租约集合而非布尔量：
+  // 首份租约申请时发 subscribe，最后一份释放时才发 unsubscribe，任一方卸载不会掐掉别人的订阅。
+  private alertsLeases = new Set<symbol>()
   private alertsSeverity: string[] | undefined
+  private notificationsLeases = new Set<symbol>()
   private inspectionTasksSubscribed = false
 
   // 获取WebSocket服务器地址
@@ -237,8 +243,9 @@ class WebSocketManager {
     // 手动断开通常发生在退出登录/切换账号：清理订阅状态，避免下次登录复用旧订阅。
     this.deviceMonitoringSubscribed = false
     this.deviceMonitoringDeviceIds = undefined
-    this.alertsSubscribed = false
+    this.alertsLeases.clear()
     this.alertsSeverity = undefined
+    this.notificationsLeases.clear()
     this.inspectionTasksSubscribed = false
     this.lastMessageAtMs = null
     this.lastHeartbeatAckAtMs = null
@@ -328,8 +335,11 @@ class WebSocketManager {
     if (this.deviceMonitoringSubscribed) {
       this.emit('subscribe_device_monitoring', { device_ids: this.deviceMonitoringDeviceIds })
     }
-    if (this.alertsSubscribed) {
+    if (this.alertsLeases.size > 0) {
       this.emit('subscribe_alerts', { severity: this.alertsSeverity })
+    }
+    if (this.notificationsLeases.size > 0) {
+      this.emit('subscribe_notifications')
     }
     if (this.inspectionTasksSubscribed) {
       this.emit('subscribe_inspection_tasks')
@@ -403,6 +413,8 @@ class WebSocketManager {
         ]
       case 'user_notification':
         return [WebSocketEvents.USER_ACTIVITY]
+      case 'notification':
+        return [WebSocketEvents.NOTIFICATION_UPDATE]
       case 'error':
         return [WebSocketEvents.ERROR]
       default:
@@ -508,6 +520,16 @@ class WebSocketManager {
         return {
           type: 'unsubscribe',
           data: { room: 'alerts', ...payload },
+        }
+      case 'subscribe_notifications':
+        return {
+          type: 'subscribe',
+          data: { room: 'notifications' },
+        }
+      case 'unsubscribe_notifications':
+        return {
+          type: 'unsubscribe',
+          data: { room: 'notifications' },
         }
       case 'subscribe_inspection_tasks':
         return {
@@ -620,8 +642,8 @@ class WebSocketManager {
     this.emit('unsubscribe_device_monitoring')
   }
 
-  // subscribe alert notifications
-  subscribeToAlerts(severity?: string[]): void {
+  // 申请 alerts 房间租约，返回幂等的释放函数。未连接时只登记意图，连接建立后由 replaySubscriptions 补发。
+  subscribeToAlerts(severity?: string[]): () => void {
     const normalizedSeverity =
       Array.isArray(severity) && severity.length > 0
         ? Array.from(
@@ -635,23 +657,42 @@ class WebSocketManager {
 
     const nextKey = normalizedSeverity ? normalizedSeverity.join(',') : ''
     const prevKey = this.alertsSeverity ? this.alertsSeverity.join(',') : ''
-    const wasSubscribed = this.alertsSubscribed
+    const hadLeases = this.alertsLeases.size > 0
 
-    this.alertsSubscribed = true
+    const lease = Symbol('alerts-lease')
+    this.alertsLeases.add(lease)
     this.alertsSeverity = normalizedSeverity
 
-    if (wasSubscribed && nextKey === prevKey) return
-    if (!this.isConnected()) return
-    this.emit('subscribe_alerts', { severity: normalizedSeverity })
+    // 已有租约且过滤条件未变：不重复发送，避免服务端房间成员膨胀与重复推送。
+    if (!(hadLeases && nextKey === prevKey) && this.isConnected()) {
+      this.emit('subscribe_alerts', { severity: normalizedSeverity })
+    }
+
+    return () => {
+      if (!this.alertsLeases.delete(lease)) return
+      if (this.alertsLeases.size > 0) return
+      this.alertsSeverity = undefined
+      if (!this.isConnected()) return
+      this.emit('unsubscribe_alerts')
+    }
   }
 
-  // 取消subscribe alert notifications
-  unsubscribeFromAlerts(): void {
-    if (!this.alertsSubscribed) return
-    this.alertsSubscribed = false
-    this.alertsSeverity = undefined
-    if (!this.isConnected()) return
-    this.emit('unsubscribe_alerts')
+  // 申请 notifications 房间租约（通知中心系统消息变更信号），返回幂等的释放函数；语义同 subscribeToAlerts。
+  subscribeToNotifications(): () => void {
+    const hadLeases = this.notificationsLeases.size > 0
+    const lease = Symbol('notifications-lease')
+    this.notificationsLeases.add(lease)
+
+    if (!hadLeases && this.isConnected()) {
+      this.emit('subscribe_notifications')
+    }
+
+    return () => {
+      if (!this.notificationsLeases.delete(lease)) return
+      if (this.notificationsLeases.size > 0) return
+      if (!this.isConnected()) return
+      this.emit('unsubscribe_notifications')
+    }
   }
 
   // subscribe inspection tasks
@@ -696,7 +737,7 @@ export function useWebSocket() {
     subscribeToDeviceMonitoring: (deviceIds?: number[]) => wsManager.subscribeToDeviceMonitoring(deviceIds),
     unsubscribeFromDeviceMonitoring: () => wsManager.unsubscribeFromDeviceMonitoring(),
     subscribeToAlerts: (severity?: string[]) => wsManager.subscribeToAlerts(severity),
-    unsubscribeFromAlerts: () => wsManager.unsubscribeFromAlerts(),
+    subscribeToNotifications: () => wsManager.subscribeToNotifications(),
     subscribeToInspectionTasks: () => wsManager.subscribeToInspectionTasks(),
     unsubscribeFromInspectionTasks: () => wsManager.unsubscribeFromInspectionTasks(),
   }), [])

@@ -287,25 +287,9 @@ const AlertsViewContent: React.FC = () => {
     return true
   }, [])
 
-  // WebSocket 房间订阅：告警推送已改为 `alerts` 房间，必须订阅才会收到推送。
-  const subscribeAlertsRoom = useCallback(() => {
-    if (!ws.isConnected()) return
-    ws.subscribeToAlerts()
-  }, [ws])
-
-  useEffect(() => {
-    subscribeAlertsRoom()
-
-    return () => {
-      if (!ws.isConnected()) return
-      ws.unsubscribeFromAlerts()
-    }
-  }, [subscribeAlertsRoom, ws])
-
-  const handleWsConnect = useCallback(() => {
-    subscribeAlertsRoom()
-  }, [subscribeAlertsRoom])
-  useWebSocketEvent(WebSocketEvents.CONNECT, handleWsConnect)
+  // WebSocket 房间订阅：告警推送走 `alerts` 房间。租约由管理器托管——未连接时登记意图、
+  // 连接建立后自动重放，页面无需自己监听 connect 事件；卸载只释放本页租约，不影响其他订阅者。
+  useEffect(() => ws.subscribeToAlerts(), [ws])
 
   // WebSocket 实时告警更新
   const handleRealtimeAlertEvent = useCallback((payload: unknown) => {
