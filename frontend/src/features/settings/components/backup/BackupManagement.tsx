@@ -117,7 +117,7 @@ export function BackupManagement() {
         latestBackup={backups[0]}
       />
 
-      <div className="mt-4 space-y-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] xl:items-start">
         <BackupConfigSection
           data={config}
           onChange={updateConfig}

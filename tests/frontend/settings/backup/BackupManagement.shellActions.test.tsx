@@ -124,6 +124,12 @@ describe('BackupManagement 壳层动作区迁移', () => {
     await waitFor(() => {
       expect(screen.getByText('backup-config-section')).toBeInTheDocument()
     })
+    // 策略配置与历史记录在宽屏下左右两栏并排，历史记录含 8 列表格故占更宽一侧
+    const configSection = screen.getByText('backup-config-section').parentElement
+    const historySection = screen.getByText('backup-history-section')
+    expect(configSection?.parentElement).toBe(historySection.parentElement)
+    expect(historySection.parentElement).toHaveClass('xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]')
+    expect(configSection?.nextElementSibling).toBe(historySection)
     expect(screen.getByRole('heading', { name: '备份管理' })).toBeInTheDocument()
     expect(screen.getByText('备份总数')).toBeInTheDocument()
     expect(screen.getByText('磁盘使用率')).toBeInTheDocument()
