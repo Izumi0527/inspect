@@ -119,12 +119,13 @@ describe('NotificationSettings 壳层动作区迁移', () => {
     await waitFor(() => {
       expect(screen.getByText('email-notification-section')).toBeInTheDocument()
     })
-    expect(screen.getByRole('heading', { name: '通知中心' })).toBeInTheDocument()
-    expect(screen.getByText('邮件通知')).toBeInTheDocument()
-    expect(screen.getByText('短信通知')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '通知中心' })).not.toBeInTheDocument()
+    // 顶部概览卡与各渠道启用开关信息重复，已整体移除
+    expect(screen.queryByRole('region', { name: '通知中心概览' })).not.toBeInTheDocument()
     expect(screen.queryByText('Webhook')).not.toBeInTheDocument()
-    expect(screen.getAllByText('已启用渠道').length).toBeGreaterThan(0)
-    expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    expect(screen.queryByText('已启用渠道')).not.toBeInTheDocument()
+    expect(screen.queryByText('1 个')).not.toBeInTheDocument()
+    expect(screen.queryByText('1 / 2')).not.toBeInTheDocument()
     expect(
       within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存整页更改' })
     ).not.toBeInTheDocument()

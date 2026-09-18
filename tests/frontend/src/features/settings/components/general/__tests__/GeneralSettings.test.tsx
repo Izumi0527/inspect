@@ -58,10 +58,6 @@ jest.mock('@/features/settings/components/general/BasicInfoSection', () => ({
   ),
 }))
 
-jest.mock('@/features/settings/components/general/GeneralOverviewCard', () => ({
-  GeneralOverviewCard: () => <div>通用配置概览区</div>,
-}))
-
 jest.mock('@/features/settings/components/general/InspectionConfigSection', () => ({
   InspectionConfigSection: () => <div>巡检配置区块</div>,
 }))
@@ -128,8 +124,6 @@ describe('GeneralSettings', () => {
     expect(capabilities.blockLeave).toBe(true)
     expect(capabilities.primaryActions).toBeUndefined()
     expect(capabilities.secondaryActions).toBeUndefined()
-
-    expect(screen.getByText('通用配置概览区')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '保存整页更改' }))
     expect(mockSaveAll).toHaveBeenCalledTimes(1)

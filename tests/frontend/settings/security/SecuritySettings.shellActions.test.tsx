@@ -145,12 +145,12 @@ describe('SecuritySettings 壳层动作区迁移', () => {
       expect(screen.getByText('password-policy-section')).toBeInTheDocument()
     })
     expect(screen.queryByRole('heading', { name: '安全策略' })).not.toBeInTheDocument()
+    // 顶部概览卡与表单字段信息重复，已整体移除
+    expect(screen.queryByRole('region', { name: '安全策略概览' })).not.toBeInTheDocument()
     expect(screen.queryByText('当前安全基线')).not.toBeInTheDocument()
-    expect(screen.getByText('最小密码长度')).toBeInTheDocument()
-    expect(screen.getByText('密码有效期')).toBeInTheDocument()
-    expect(screen.getByText('登录失败锁定')).toBeInTheDocument()
-    expect(screen.getByText('IP 白名单')).toBeInTheDocument()
-    expect(screen.getByText('最大并发会话数')).toBeInTheDocument()
+    expect(screen.queryByText('密码有效期')).not.toBeInTheDocument()
+    expect(screen.queryByText('登录失败锁定')).not.toBeInTheDocument()
+    expect(screen.queryByText('IP 白名单')).not.toBeInTheDocument()
     expect(
       within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存整页更改' })
     ).not.toBeInTheDocument()

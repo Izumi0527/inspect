@@ -3,7 +3,6 @@
 import { useNotificationSettings } from '../../hooks/useNotificationSettings'
 import { EmailNotificationSection } from './EmailNotificationSection'
 import { SmsNotificationSection } from './SmsNotificationSection'
-import { NotificationOverviewCard } from './NotificationOverviewCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -76,12 +75,7 @@ export function NotificationSettings() {
 
   return (
     <div className="p-4">
-      <NotificationOverviewCard
-        emailEnabled={Boolean(emailNotification.enabled)}
-        smsEnabled={Boolean(smsNotification.enabled)}
-      />
-
-      <div className="mt-4 grid grid-cols-1 gap-4 2xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
         <EmailNotificationSection
           data={emailNotification}
           onChange={updateEmailNotification}

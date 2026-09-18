@@ -3,7 +3,6 @@
 import { useBackupManagement } from '../../hooks/useBackupManagement'
 import { BackupConfigSection } from './BackupConfigSection'
 import { BackupHistorySection } from './BackupHistorySection'
-import { BackupOverviewCard } from './BackupOverviewCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -109,15 +108,7 @@ export function BackupManagement() {
   // 正常显示
   return (
     <div className="p-4">
-      <BackupOverviewCard
-        totalCount={totalCount}
-        diskUsage={diskUsage}
-        autoBackupEnabled={config.autoBackupEnabled}
-        retentionDays={config.retentionDays}
-        latestBackup={backups[0]}
-      />
-
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] xl:items-start">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] xl:items-start">
         <BackupConfigSection
           data={config}
           onChange={updateConfig}

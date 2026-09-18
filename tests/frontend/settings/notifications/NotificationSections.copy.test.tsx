@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react'
 
 import { EmailNotificationSection } from '@/features/settings/components/notifications/EmailNotificationSection'
-import { NotificationOverviewCard } from '@/features/settings/components/notifications/NotificationOverviewCard'
 import { SmsNotificationSection } from '@/features/settings/components/notifications/SmsNotificationSection'
 import type {
   EmailNotificationConfig,
@@ -38,14 +37,16 @@ const removedExplanatoryCopies = [
   '配置短信服务商、凭据和模板，用于发送 SMS 通知',
   '测试短信用于验证短信服务商链路',
   '发送测试短信以验证配置是否正确',
+  // 顶部概览卡与各渠道启用开关信息重复，已整体移除
+  '通知中心',
+  '2 / 2',
+  '已启用渠道',
+  '2 个',
 ]
 
 const retainedFunctionalCopies = [
-  '通知中心',
-  '已启用渠道',
   '邮件通知',
   '短信通知',
-  '2 / 2',
   '启用邮件通知',
   'SMTP 服务器地址',
   'SMTP 端口',
@@ -74,7 +75,6 @@ describe('NotificationSettings 通知中心页说明文案', () => {
   it('不展示页面导览、测试建议和保存语义说明文案', () => {
     render(
       <div>
-        <NotificationOverviewCard emailEnabled={true} smsEnabled={true} />
         <EmailNotificationSection
           data={emailNotification}
           onChange={jest.fn()}

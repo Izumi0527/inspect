@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react'
 
 import { BackupConfigSection } from '@/features/settings/components/backup/BackupConfigSection'
 import { BackupHistorySection } from '@/features/settings/components/backup/BackupHistorySection'
-import { BackupOverviewCard } from '@/features/settings/components/backup/BackupOverviewCard'
 import type { BackupConfig } from '@/features/settings/types/backup.types'
 
 const config: BackupConfig = {
@@ -34,16 +33,17 @@ const removedExplanatoryCopies = [
   '建议定期验证恢复流程',
   '查看历史备份、磁盘占用和恢复/删除等资产操作',
   '点击上方"手动备份"按钮创建第一个备份',
-]
-
-const retainedFunctionalCopies = [
+  // 顶部概览卡与表单/历史记录信息重复，已整体移除
   '备份管理',
   '当前备份健康度',
   '备份总数',
   '磁盘使用率',
+  '最近备份状态',
+]
+
+const retainedFunctionalCopies = [
   '自动备份',
   '保留天数',
-  '最近备份状态',
   '备份策略配置',
   '启用自动备份',
   '备份频率',
@@ -68,12 +68,6 @@ describe('BackupManagement 备份管理页说明文案', () => {
   it('不展示页面导览、推荐建议和保存语义说明文案', () => {
     render(
       <div>
-        <BackupOverviewCard
-          totalCount={0}
-          diskUsage={diskUsage}
-          autoBackupEnabled={config.autoBackupEnabled}
-          retentionDays={config.retentionDays}
-        />
         <BackupConfigSection
           data={config}
           onChange={jest.fn()}

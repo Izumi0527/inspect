@@ -4,7 +4,6 @@ import { useSecuritySettings } from '../../hooks/useSecuritySettings'
 import { SessionManagementSection } from './SessionManagementSection'
 import { PasswordPolicySection } from './PasswordPolicySection'
 import { AuthenticationSection } from './AuthenticationSection'
-import { SecurityOverviewCard } from './SecurityOverviewCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -85,17 +84,7 @@ export function SecuritySettings() {
 
   return (
     <div className="p-4">
-      <SecurityOverviewCard
-        minLength={passwordPolicy.minLength}
-        passwordExpireDays={passwordPolicy.passwordExpireDays}
-        maxLoginAttempts={passwordPolicy.maxLoginAttempts}
-        lockoutDuration={passwordPolicy.lockoutDuration}
-        ipWhitelistEnabled={authentication.ipWhitelistEnabled}
-        ipWhitelistCount={authentication.ipWhitelist?.length ?? 0}
-        maxConcurrentSessions={sessionManagement.maxConcurrentSessions}
-      />
-
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
         <div className="space-y-4">
           <PasswordPolicySection
             data={passwordPolicy}

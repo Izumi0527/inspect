@@ -130,11 +130,13 @@ describe('BackupManagement 壳层动作区迁移', () => {
     expect(configSection?.parentElement).toBe(historySection.parentElement)
     expect(historySection.parentElement).toHaveClass('xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]')
     expect(configSection?.nextElementSibling).toBe(historySection)
-    expect(screen.getByRole('heading', { name: '备份管理' })).toBeInTheDocument()
-    expect(screen.getByText('备份总数')).toBeInTheDocument()
-    expect(screen.getByText('磁盘使用率')).toBeInTheDocument()
-    expect(screen.getByText('自动备份')).toBeInTheDocument()
-    expect(screen.getByText('保留天数')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '备份管理' })).not.toBeInTheDocument()
+    // 顶部概览卡与表单/历史记录信息重复，已整体移除
+    expect(screen.queryByRole('region', { name: '备份管理概览' })).not.toBeInTheDocument()
+    expect(screen.queryByText('当前备份健康度')).not.toBeInTheDocument()
+    expect(screen.queryByText('备份总数')).not.toBeInTheDocument()
+    expect(screen.queryByText('磁盘使用率')).not.toBeInTheDocument()
+    expect(screen.queryByText('最近备份状态')).not.toBeInTheDocument()
     expect(
       within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存整页更改' })
     ).not.toBeInTheDocument()

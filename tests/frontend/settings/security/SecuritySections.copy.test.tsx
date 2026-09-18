@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react'
 
 import { AuthenticationSection } from '@/features/settings/components/security/AuthenticationSection'
 import { PasswordPolicySection } from '@/features/settings/components/security/PasswordPolicySection'
-import { SecurityOverviewCard } from '@/features/settings/components/security/SecurityOverviewCard'
 import { SessionManagementSection } from '@/features/settings/components/security/SessionManagementSection'
 import type {
   AuthenticationConfig,
@@ -46,9 +45,12 @@ const removedExplanatoryCopies = [
   '认证方式用于增强登录验证链路',
   '控制访问时效、并发登录与改密后的会话处置',
   '会话策略决定用户登录后可维持多久',
-  // 概览卡顶部标题行与统计卡信息重复，已移除
+  // 顶部概览卡与表单字段信息重复，已整体移除
   '当前安全基线',
   '密码最小长度',
+  '密码有效期',
+  '登录失败锁定',
+  'IP 白名单',
   // 后端未实现的能力不得以可配置项形式出现在页面上
   '多因素认证',
   'MFA',
@@ -57,9 +59,6 @@ const removedExplanatoryCopies = [
 
 const retainedFunctionalCopies = [
   '最小密码长度',
-  '密码有效期',
-  'IP 白名单',
-  '登录失败锁定',
   '最大并发会话数',
   '密码复杂度要求',
   '密码策略',
@@ -76,15 +75,6 @@ describe('SecuritySettings 安全策略页说明文案', () => {
   it('不展示页面导览、区块用途和保存语义说明文案', () => {
     render(
       <div>
-        <SecurityOverviewCard
-          minLength={passwordPolicy.minLength}
-          passwordExpireDays={passwordPolicy.passwordExpireDays}
-          maxLoginAttempts={passwordPolicy.maxLoginAttempts}
-          lockoutDuration={passwordPolicy.lockoutDuration}
-          ipWhitelistEnabled={authentication.ipWhitelistEnabled}
-          ipWhitelistCount={authentication.ipWhitelist.length}
-          maxConcurrentSessions={sessionManagement.maxConcurrentSessions}
-        />
         <PasswordPolicySection
           data={passwordPolicy}
           onChange={jest.fn()}

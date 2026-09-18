@@ -143,13 +143,13 @@ describe('GeneralSettings 通用配置页操作按钮', () => {
 
     expect(screen.queryByText('导出配置')).not.toBeInTheDocument()
     expect(screen.queryByText('导入配置')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '通用配置' })).toBeInTheDocument()
-    expect(screen.getByText('当前应用名称')).toBeInTheDocument()
-    expect(screen.getByText('当前时区')).toBeInTheDocument()
-    expect(screen.getByText('默认并发任务数')).toBeInTheDocument()
-    expect(screen.getByText('默认超时时间')).toBeInTheDocument()
-    expect(screen.getByText('默认导出格式')).toBeInTheDocument()
-    expect(screen.getByText('当前主题')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '通用配置' })).not.toBeInTheDocument()
+    // 顶部概览卡与表单字段信息重复，已整体移除
+    expect(screen.queryByRole('region', { name: '通用配置概览' })).not.toBeInTheDocument()
+    expect(screen.queryByText('当前应用名称')).not.toBeInTheDocument()
+    expect(screen.queryByText('当前时区')).not.toBeInTheDocument()
+    expect(screen.queryByText('默认并发任务数')).not.toBeInTheDocument()
+    expect(screen.queryByText('当前主题')).not.toBeInTheDocument()
 
     expect(within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '保存整页更改' })).not.toBeInTheDocument()
     expect(within(screen.getByTestId('shell-toolbar')).queryByRole('button', { name: '重置整页更改' })).not.toBeInTheDocument()

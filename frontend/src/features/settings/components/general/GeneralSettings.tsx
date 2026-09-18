@@ -2,7 +2,6 @@
 
 import { useGeneralSettings } from '../../hooks/useGeneralSettings'
 import { BasicInfoSection } from './BasicInfoSection'
-import { GeneralOverviewCard } from './GeneralOverviewCard'
 import { InspectionConfigSection } from './InspectionConfigSection'
 import { ReportConfigSection } from './ReportConfigSection'
 import { UserPreferenceSection } from './UserPreferenceSection'
@@ -89,16 +88,7 @@ export function GeneralSettings() {
 
   return (
     <div className="p-4">
-      <GeneralOverviewCard
-        applicationName={basicInfo.applicationName}
-        timezone={basicInfo.timezone}
-        maxConcurrentTasks={inspectionConfig.maxConcurrentTasks}
-        defaultTimeout={inspectionConfig.defaultTimeout}
-        defaultFormat={reportConfig.defaultFormat}
-        theme={userPreference.theme}
-      />
-
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.95fr)]">
         <div className="space-y-4">
           <BasicInfoSection
             data={basicInfo}

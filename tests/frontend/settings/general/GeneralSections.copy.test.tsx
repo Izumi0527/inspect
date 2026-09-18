@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react'
 
 import { BasicInfoSection } from '@/features/settings/components/general/BasicInfoSection'
-import { GeneralOverviewCard } from '@/features/settings/components/general/GeneralOverviewCard'
 import { InspectionConfigSection } from '@/features/settings/components/general/InspectionConfigSection'
 import { ReportConfigSection } from '@/features/settings/components/general/ReportConfigSection'
 import { UserPreferenceSection } from '@/features/settings/components/general/UserPreferenceSection'
@@ -50,16 +49,17 @@ const removedExplanatoryCopies = [
   // 已下线的假开关（无 i18n 框架 / 无消费方），不应再出现
   '语言',
   '日期格式',
-]
-
-const retainedFunctionalCopies = [
+  // 顶部概览卡与表单字段信息重复，已整体移除
   '通用配置',
   '当前应用名称',
   '当前时区',
   '默认并发任务数',
+  '当前主题',
+]
+
+const retainedFunctionalCopies = [
   '默认超时时间',
   '默认导出格式',
-  '当前主题',
   '基础信息',
   '巡检配置',
   '报表配置',
@@ -81,14 +81,6 @@ describe('GeneralSettings 通用配置页说明文案', () => {
   it('不展示页面导览、区块用途和建议性说明文案', () => {
     render(
       <div>
-        <GeneralOverviewCard
-          applicationName={basicInfo.applicationName}
-          timezone={basicInfo.timezone}
-          maxConcurrentTasks={inspectionConfig.maxConcurrentTasks}
-          defaultTimeout={inspectionConfig.defaultTimeout}
-          defaultFormat={reportConfig.defaultFormat}
-          theme={userPreference.theme}
-        />
         <BasicInfoSection
           data={basicInfo}
           onChange={jest.fn()}
@@ -112,21 +104,5 @@ describe('GeneralSettings 通用配置页说明文案', () => {
     for (const copy of retainedFunctionalCopies) {
       expect(screen.getAllByText(copy, { exact: false }).length).toBeGreaterThan(0)
     }
-  })
-
-  it('数字配置为空态（null）时概览显示占位符而非 NaN', () => {
-    render(
-      <GeneralOverviewCard
-        applicationName={basicInfo.applicationName}
-        timezone={basicInfo.timezone}
-        maxConcurrentTasks={null}
-        defaultTimeout={null}
-        defaultFormat={reportConfig.defaultFormat}
-        theme={userPreference.theme}
-      />
-    )
-
-    expect(screen.queryByText('NaN', { exact: false })).not.toBeInTheDocument()
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2)
   })
 })
