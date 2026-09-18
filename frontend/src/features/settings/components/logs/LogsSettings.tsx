@@ -1,10 +1,9 @@
 'use client'
 
 import React, { useCallback, useMemo, useState } from 'react'
-import { AlertCircle, Radio, RefreshCw, Siren, Trash2, Zap } from 'lucide-react'
+import { AlertCircle, Radio, RefreshCw, Trash2, Zap } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CompactStatCard } from '@/components/shared'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
@@ -199,40 +198,6 @@ export const LogsSettings: React.FC = () => {
       ? 'text-green-700 dark:text-green-300'
       : 'text-foreground'
 
-  const summaryStats = useMemo(
-    () => [
-      {
-        key: 'received',
-        title: '接收总量',
-        value: syslogStatus?.received ?? 0,
-        icon: Radio,
-        iconClassName: 'text-blue-600 dark:text-blue-400',
-      },
-      {
-        key: 'stored',
-        title: '落库总量',
-        value: syslogStatus?.stored ?? 0,
-        icon: Zap,
-        iconClassName: 'text-green-600 dark:text-green-400',
-      },
-      {
-        key: 'droppedParse',
-        title: '解析丢弃',
-        value: syslogStatus?.droppedParse ?? 0,
-        icon: AlertCircle,
-        iconClassName: 'text-amber-600 dark:text-amber-400',
-      },
-      {
-        key: 'alerts',
-        title: '告警联动',
-        value: (syslogStatus?.alertsCreated ?? 0) + (syslogStatus?.alertsUpdated ?? 0),
-        icon: Siren,
-        iconClassName: 'text-purple-600 dark:text-purple-400',
-      },
-    ],
-    [syslogStatus]
-  )
-
   useSettingsTabCapabilities('logs', {
     dirty: isDirty,
     saving,
@@ -268,50 +233,7 @@ export const LogsSettings: React.FC = () => {
 
   return (
     <div className="p-4">
-      <section
-        aria-label="日志设置概览"
-        className="rounded-xl border border-border bg-card/70 p-5 shadow-sm"
-      >
-        <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-foreground">日志设置</h2>
-            </div>
-            <div className="rounded-xl border border-border bg-background/80 px-4 py-3 xl:min-w-[280px]">
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                当前运行摘要
-              </p>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm text-muted-foreground">Syslog 接收器</p>
-                  <p className={`text-lg font-semibold ${syslogStatusToneClass}`}>{syslogStatusText}</p>
-                </div>
-                <div className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
-                  {syslogStatus?.config.protocol?.toUpperCase() ?? 'BOTH'}
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                最近刷新：{syslogStatus?.updatedAt ? formatDateTimeYMDHMS(syslogStatus.updatedAt) : '暂无数据'}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {summaryStats.map((stat) => (
-              <CompactStatCard
-                key={stat.key}
-                title={stat.title}
-                value={stat.value}
-                icon={stat.icon}
-                iconClassName={stat.iconClassName}
-                className="bg-background/80"
-              />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
         <div className="space-y-4">
           <section
             aria-label="日志保留策略"
@@ -672,38 +594,36 @@ export const LogsSettings: React.FC = () => {
                 : '当前未记录新的接收器错误。'}
             </div>
           </section>
+
+          <section
+            aria-label="手动清理日志"
+            className="rounded-xl border border-red-200/70 bg-red-50/70 p-5 shadow-sm dark:border-red-900/50 dark:bg-red-950/10"
+          >
+            <SectionHeader
+              title="手动清理日志"
+              icon={Trash2}
+              actions={
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleRequestCleanup}
+                  disabled={disableCleanup}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  立即清理设备日志
+                </Button>
+              }
+            />
+
+            <div className="mt-6 rounded-lg border border-red-200/80 bg-background/80 p-4 text-sm text-muted-foreground dark:border-red-900/50">
+              <p className="font-medium text-foreground">清理将按当前页面中的保留天数执行</p>
+              <p className="mt-2">
+                当前执行范围：清理超过 <span className="font-mono text-foreground">{cleanupRetentionDays}</span> 天的设备日志。该操作不可恢复。
+              </p>
+            </div>
+          </section>
         </div>
       </div>
-
-      <section
-        aria-label="手动清理日志"
-        className="mt-4 rounded-xl border border-red-200/70 bg-red-50/70 p-5 shadow-sm dark:border-red-900/50 dark:bg-red-950/10"
-      >
-        <SectionHeader
-          title="手动清理日志"
-          icon={Trash2}
-          actions={
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleRequestCleanup}
-              disabled={disableCleanup}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              立即清理设备日志
-            </Button>
-          }
-        />
-
-        <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="rounded-lg border border-red-200/80 bg-background/80 p-4 text-sm text-muted-foreground dark:border-red-900/50">
-            <p className="font-medium text-foreground">清理将按当前页面中的保留天数执行</p>
-            <p className="mt-2">
-              当前执行范围：清理超过 <span className="font-mono text-foreground">{cleanupRetentionDays}</span> 天的设备日志。该操作不可恢复。
-            </p>
-          </div>
-        </div>
-      </section>
 
       <SettingsConfirmDialog
         open={cleanupDialogOpen}

@@ -151,7 +151,7 @@ describe('LogsSettings 页面重构', () => {
     expect(screen.getByText(/SNMP_TRAP_ENABLED/)).toBeInTheDocument()
   })
 
-  it('应展示运行摘要、分离配置动作和危险操作区', async () => {
+  it('应展示运行状态与实时统计、分离配置动作和危险操作区', async () => {
     const user = userEvent.setup()
 
     const ShellToolbar: React.FC = () => {
@@ -175,8 +175,11 @@ describe('LogsSettings 页面重构', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: '日志设置' })).toBeInTheDocument()
+      expect(screen.getByRole('region', { name: '日志保留策略' })).toBeInTheDocument()
     })
+    expect(screen.queryByRole('heading', { name: '日志设置' })).not.toBeInTheDocument()
+    // 顶部概览统计卡与右侧「实时统计」区块数据重复，已移除
+    expect(screen.queryByRole('region', { name: '日志设置概览' })).not.toBeInTheDocument()
 
     const toolbar = within(screen.getByTestId('shell-toolbar'))
     expect(toolbar.queryByRole('button', { name: '保存更改' })).not.toBeInTheDocument()
@@ -185,11 +188,10 @@ describe('LogsSettings 页面重构', () => {
     expect(toolbar.queryByRole('button', { name: '刷新运行状态' })).not.toBeInTheDocument()
     expect(toolbar.queryByRole('button', { name: '立即清理设备日志' })).not.toBeInTheDocument()
 
-    expect(screen.getByText('当前运行摘要')).toBeInTheDocument()
-    expect(screen.getByText('接收总量')).toBeInTheDocument()
-    expect(screen.getByText('落库总量')).toBeInTheDocument()
-    expect(screen.getByText('解析丢弃')).toBeInTheDocument()
-    expect(screen.getAllByText('告警联动').length).toBeGreaterThan(0)
+    expect(screen.queryByText('当前运行摘要')).not.toBeInTheDocument()
+    expect(screen.queryByText('接收总量')).not.toBeInTheDocument()
+    expect(screen.queryByText('落库总量')).not.toBeInTheDocument()
+    expect(screen.queryByText('解析丢弃')).not.toBeInTheDocument()
 
     const retentionSection = screen.getByRole('region', { name: '日志保留策略' })
     const retentionActions = within(retentionSection)
@@ -205,8 +207,17 @@ describe('LogsSettings 页面重构', () => {
     expect(dangerActions.getByRole('button', { name: '立即清理设备日志' })).toBeInTheDocument()
 
     expect(screen.getByText('运行状态')).toBeInTheDocument()
-    expect(screen.getByText('实时统计')).toBeInTheDocument()
     expect(screen.getByText('最近错误')).toBeInTheDocument()
+    // 危险操作区放在右栏「最近错误」之后，与之共用同一个父容器
+    const recentErrorSection = screen.getByRole('region', { name: '最近错误' })
+    expect(dangerSection.parentElement).toBe(recentErrorSection.parentElement)
+    expect(recentErrorSection.nextElementSibling).toBe(dangerSection)
+
+    const statsSection = within(screen.getByRole('region', { name: '实时统计' }))
+    for (const label of ['接收', '落库', '未匹配', '解析失败', '告警联动', '新建', '去重更新', '限流抑制']) {
+      expect(statsSection.getByText(label)).toBeInTheDocument()
+    }
+    expect(screen.getAllByText('告警联动')).toHaveLength(1)
     expect(screen.queryByText(/保存并应用 Syslog 会先保存当前日志设置/)).not.toBeInTheDocument()
     expect(screen.getByText(/清理将按当前页面中的保留天数执行/)).toBeInTheDocument()
     expect(screen.getByText(/该操作不可恢复/)).toBeInTheDocument()
