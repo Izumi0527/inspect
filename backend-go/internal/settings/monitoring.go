@@ -322,6 +322,19 @@ func (s *Service) collectSystemInfo(ctx context.Context) SystemInfo {
 		uptime = int64(info.Uptime)
 	}
 
+	// gopsutil 在 Windows 上把产品名（含版本）放进 Platform，而在 Linux 上只给出小写发行版 ID
+	// 与 lsb-release 的主版本号；改读 os-release 的 NAME/VERSION 才能与 Windows 展示对等。
+	if runtime.GOOS == "linux" {
+		if content, err := os.ReadFile(filepath.Join(hostEtcDir(), "os-release")); err == nil {
+			if name, version := parseOSRelease(string(content)); name != "" {
+				platformName = name
+				if version != "" {
+					osVersion = version
+				}
+			}
+		}
+	}
+
 	processUptime := int64(time.Since(s.processStart).Seconds())
 
 	return SystemInfo{
@@ -332,6 +345,37 @@ func (s *Service) collectSystemInfo(ctx context.Context) SystemInfo {
 		Uptime:        uptime,
 		ProcessUptime: processUptime,
 	}
+}
+
+// hostEtcDir 与 gopsutil 一样尊重 HOST_ETC（容器挂载宿主机 /etc 时使用），保证两处读到同一份文件。
+func hostEtcDir() string {
+	if dir := os.Getenv("HOST_ETC"); dir != "" {
+		return dir
+	}
+	return "/etc"
+}
+
+// parseOSRelease 解析 os-release 格式（KEY=value，value 可带单/双引号），
+// 返回 NAME 与 VERSION；VERSION 缺失时回退 VERSION_ID。任一项缺失返回空串。
+func parseOSRelease(content string) (name string, version string) {
+	values := map[string]string{}
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, found := strings.Cut(line, "=")
+		if !found {
+			continue
+		}
+		values[strings.TrimSpace(key)] = strings.Trim(strings.TrimSpace(value), `"'`)
+	}
+	name = values["NAME"]
+	version = values["VERSION"]
+	if version == "" {
+		version = values["VERSION_ID"]
+	}
+	return name, version
 }
 
 func (s *Service) storeMetrics(ctx context.Context, metrics MonitoringMetrics, hostname string) {

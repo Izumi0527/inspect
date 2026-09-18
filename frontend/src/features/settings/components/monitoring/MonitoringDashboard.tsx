@@ -143,6 +143,9 @@ export function MonitoringDashboard() {
             <div>
               <p className="text-sm text-muted-foreground">操作系统</p>
               <p className="font-medium">{system.platform}</p>
+              {system.osVersion ? (
+                <p className="text-xs text-muted-foreground">{system.osVersion}</p>
+              ) : null}
             </div>
             <div>
               <p className="text-sm text-muted-foreground">系统运行时间</p>
