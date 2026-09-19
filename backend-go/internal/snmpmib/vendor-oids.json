@@ -10,7 +10,12 @@
       ],
       "enterprise_prefixes": [
         "1.3.6.1.4.1.2011"
-      ]
+      ],
+      "lldp_enable": {
+        "oid": "1.3.6.1.4.1.2011.5.25.134.1.1.1.0",
+        "method": "get",
+        "value_type": "integer"
+      }
     },
     "h3c": {
       "display_name": "H3C",
@@ -71,6 +76,11 @@
         "oid": "1.3.6.1.2.1.47.1.1.1.1.10",
         "method": "bulkwalk",
         "value_type": "string"
+      },
+      "dot1d_base_bridge_address": {
+        "oid": "1.3.6.1.2.1.17.1.1.0",
+        "method": "get",
+        "value_type": "octets"
       }
     },
     "interfaces": {
@@ -158,6 +168,16 @@
       }
     },
     "lldp": {
+      "loc_chassis_id_subtype": {
+        "oid": "1.0.8802.1.1.2.1.3.1.0",
+        "method": "get",
+        "value_type": "integer"
+      },
+      "loc_chassis_id": {
+        "oid": "1.0.8802.1.1.2.1.3.2.0",
+        "method": "get",
+        "value_type": "octets"
+      },
       "loc_sys_cap_enabled": {
         "oid": "1.0.8802.1.1.2.1.3.6.0",
         "method": "get",

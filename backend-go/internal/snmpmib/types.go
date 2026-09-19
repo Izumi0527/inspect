@@ -19,6 +19,10 @@ type Vendor struct {
 	DisplayName        string   `json:"display_name"`
 	Aliases            []string `json:"aliases"`
 	EnterprisePrefixes []string `json:"enterprise_prefixes"`
+	// LLDPEnable 是厂商私有 MIB 里的 LLDP 全局开关（华为 hwLldpEnable：1=enabled、2=disabled）。
+	// 它位于企业子树、在缺省 SNMP 视图内可读，因此即使 LLDP-MIB(1.0.8802) 被视图拒绝也能
+	// 判断「设备根本没开 LLDP」；未核实的厂商留空。
+	LLDPEnable OIDDefinition `json:"lldp_enable,omitempty"`
 }
 
 type CommonSection struct {
@@ -33,7 +37,13 @@ type CommonSection struct {
 // lldpRemTable 索引为 TimeMark.LocalPortNum.RemIndex；
 // lldpRemManAddrTable 在其后再接 AddrSubtype.AddrLen.Addr...，管理地址藏在索引里而非值里。
 // 各项均可选：设备未启用 LLDP 或 SNMP 视图未放行时采集端跳过，不影响其他指标。
+//
+// 1.0.8802 不在 internet(1.3.6.1) 之下，华为等设备的缺省视图不包含它；被视图拒绝时 walk
+// 得到 0 行且无错误，与「表可读但无邻居」不可区分。LocChassisID 标量因此兼作可读性探针：
+// 返回 NoSuchObject/NoSuchInstance 即整个子树不可读。
 type LLDPSection struct {
+	LocChassisIDSubtype OIDDefinition `json:"loc_chassis_id_subtype"`
+	LocChassisID        OIDDefinition `json:"loc_chassis_id"`
 	LocSysCapEnabled    OIDDefinition `json:"loc_sys_cap_enabled"`
 	LocPortID           OIDDefinition `json:"loc_port_id"`
 	LocPortDesc         OIDDefinition `json:"loc_port_desc"`
@@ -72,6 +82,9 @@ type SystemSection struct {
 	EntPhysicalDescr       OIDDefinition `json:"ent_physical_descr"`
 	EntPhysicalModelName   OIDDefinition `json:"ent_physical_model_name"`
 	EntPhysicalSoftwareRev OIDDefinition `json:"ent_physical_software_rev"`
+	// BRIDGE-MIB 桥 MAC。华为/H3C 的 LLDP 机箱 ID（macAddress 子类型）就是桥 MAC，且它在缺省
+	// 视图内可读，用作 lldpLocChassisId 不可读时的设备身份兜底，让别的设备上报的邻居能匹配回本机。
+	Dot1dBaseBridgeAddress OIDDefinition `json:"dot1d_base_bridge_address"`
 }
 
 type InterfacesSection struct {

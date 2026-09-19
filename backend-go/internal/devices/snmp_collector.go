@@ -33,8 +33,16 @@ type SNMPMetrics struct {
 	DetectedType *string `json:"detected_type,omitempty"`
 	// Neighbors 是 LLDP 邻居表；LLDPAvailable=false 表示本轮没读到该表（不支持/未放行），
 	// 写入端据此保留旧邻居而不是清空——两者语义不同，不能只看切片长度。
-	Neighbors      []NeighborMetrics  `json:"neighbors,omitempty"`
-	LLDPAvailable  bool               `json:"lldp_available,omitempty"`
+	Neighbors     []NeighborMetrics `json:"neighbors,omitempty"`
+	LLDPAvailable bool              `json:"lldp_available,omitempty"`
+	// LLDPStatus 是 LLDP 可用性判定（ok/mib_unreachable/disabled），空值表示本轮无结论；回填 devices.lldp_status。
+	LLDPStatus LLDPStatus `json:"lldp_status,omitempty"`
+	// SysName / ChassisID 是设备自身的 LLDP 身份：sysName.0 与 lldpLocChassisId（不可读时退回
+	// dot1dBaseBridgeAddress，华为的 LLDP 机箱 ID 就是桥 MAC）。回填 devices.detected_sys_name /
+	// detected_chassis_id，让拓扑组装能把别的设备上报的邻居匹配回本机——台账名是中文、
+	// LLDP 管理地址取到别的 VLANIF 时，这是唯一能对上的键。
+	SysName        *string            `json:"sys_name,omitempty"`
+	ChassisID      *string            `json:"chassis_id,omitempty"`
 	BandwidthIn    *float64           `json:"bandwidth_in,omitempty"`  // 入站带宽，单位：bps（比特每秒）
 	BandwidthOut   *float64           `json:"bandwidth_out,omitempty"` // 出站带宽，单位：bps（比特每秒）
 	Interfaces     []InterfaceMetrics `json:"interfaces,omitempty"`
@@ -322,10 +330,13 @@ func (c *SNMPCollector) CollectMetrics(
 		c.logger.Debug("collected device classification", zap.Stringp("detected_type", metrics.DetectedType))
 	}
 
-	// 采集 LLDP 邻居（拓扑连线数据源）
-	c.collectNeighbors(target, metrics, registry)
-	if c.logger != nil && metrics.LLDPAvailable {
-		c.logger.Debug("collected lldp neighbors", zap.Int("count", len(metrics.Neighbors)))
+	// 采集 LLDP 邻居（拓扑连线数据源）与设备自身 LLDP 身份
+	c.collectNeighbors(target, metrics, registry, vendor)
+	if c.logger != nil {
+		c.logger.Debug("collected lldp",
+			zap.String("status", string(metrics.LLDPStatus)),
+			zap.Bool("available", metrics.LLDPAvailable),
+			zap.Int("count", len(metrics.Neighbors)))
 	}
 
 	// 采集接口指标
@@ -950,14 +961,61 @@ func (c *SNMPCollector) collectDeviceClassification(target snmpClient, metrics *
 	}
 }
 
-// collectNeighbors 采集 LLDP 邻居表；不可读时保持 LLDPAvailable=false。
-func (c *SNMPCollector) collectNeighbors(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry) {
-	neighbors, ok := collectLLDPNeighbors(target, registry.Common.LLDP)
-	if !ok {
-		return
+// collectNeighbors 采集 LLDP 邻居与设备自身的 LLDP 身份。
+// 只有 LLDP-MIB 判定可读（ok）时才下发邻居快照；mib_unreachable/disabled/未知 都保留旧邻居。
+func (c *SNMPCollector) collectNeighbors(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry, vendor string) {
+	vendorEnableOID := ""
+	if item, ok := registry.Vendors[registry.ResolveVendor(vendor)]; ok {
+		vendorEnableOID = item.LLDPEnable.OID
 	}
-	metrics.Neighbors = neighbors
-	metrics.LLDPAvailable = true
+
+	result := collectLLDP(target, registry.Common.LLDP, vendorEnableOID)
+	metrics.LLDPStatus = result.Status
+	if result.Status == LLDPStatusOK {
+		metrics.Neighbors = result.Neighbors
+		metrics.LLDPAvailable = true
+	}
+
+	if name := readStringScalar(target, registry.Common.System.SysName.OID); name != "" {
+		metrics.SysName = &name
+	}
+	chassisID := result.LocalChassisID
+	if chassisID == "" {
+		chassisID = readBridgeMAC(target, registry.Common.System.Dot1dBaseBridgeAddress.OID)
+	}
+	if chassisID != "" {
+		metrics.ChassisID = &chassisID
+	}
+}
+
+// readStringScalar GET 单个字符串标量，失败或不可读返回空串。
+func readStringScalar(client snmpClient, oid string) string {
+	oid = strings.TrimSpace(oid)
+	if oid == "" {
+		return ""
+	}
+	packet, err := client.Get([]string{oid})
+	if err != nil || packet == nil || len(packet.Variables) == 0 || isNoSuchPDU(packet.Variables[0]) {
+		return ""
+	}
+	return strings.TrimSpace(formatSNMPValue(packet.Variables[0].Value))
+}
+
+// readBridgeMAC 读取 dot1dBaseBridgeAddress 并转成小写冒号十六进制；非 6 字节视为无效。
+func readBridgeMAC(client snmpClient, oid string) string {
+	oid = strings.TrimSpace(oid)
+	if oid == "" {
+		return ""
+	}
+	packet, err := client.Get([]string{oid})
+	if err != nil || packet == nil || len(packet.Variables) == 0 {
+		return ""
+	}
+	raw, ok := packet.Variables[0].Value.([]byte)
+	if !ok || len(raw) != 6 {
+		return ""
+	}
+	return formatMACBytes(raw)
 }
 
 func collectCPUFromCandidates(

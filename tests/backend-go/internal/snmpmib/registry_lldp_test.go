@@ -43,3 +43,30 @@ func TestDefaultRegistry_ContainsLLDPAndSysServices(t *testing.T) {
 		t.Fatalf("loc_sys_cap_enabled oid = %q", lldp.LocSysCapEnabled.OID)
 	}
 }
+
+// TestDefaultRegistry_ContainsLLDPReachabilityAndIdentityOIDs 区分「视图未放行」与「无邻居」
+// 依赖 LLDP-MIB 标量探针（lldpLocChassisId）与厂商全局开关（华为 hwLldpEnable 在缺省视图内可读）；
+// 设备自身身份匹配依赖桥 MAC（dot1dBaseBridgeAddress，华为 LLDP 机箱 ID 即桥 MAC）。
+func TestDefaultRegistry_ContainsLLDPReachabilityAndIdentityOIDs(t *testing.T) {
+	registry, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry() error = %v", err)
+	}
+
+	lldp := registry.Common.LLDP
+	if lldp.LocChassisIDSubtype.OID != "1.0.8802.1.1.2.1.3.1.0" {
+		t.Fatalf("loc_chassis_id_subtype oid = %q", lldp.LocChassisIDSubtype.OID)
+	}
+	if lldp.LocChassisID.OID != "1.0.8802.1.1.2.1.3.2.0" || lldp.LocChassisID.Method != "get" {
+		t.Fatalf("loc_chassis_id = %+v", lldp.LocChassisID)
+	}
+	if got := registry.Common.System.Dot1dBaseBridgeAddress.OID; got != "1.3.6.1.2.1.17.1.1.0" {
+		t.Fatalf("dot1d_base_bridge_address oid = %q", got)
+	}
+	if got := registry.Vendors["huawei"].LLDPEnable.OID; got != "1.3.6.1.4.1.2011.5.25.134.1.1.1.0" {
+		t.Fatalf("vendors.huawei.lldp_enable oid = %q", got)
+	}
+	if got := registry.Vendors["h3c"].LLDPEnable.OID; got != "" {
+		t.Fatalf("h3c 未核实过全局开关 OID，不应配置，got %q", got)
+	}
+}
