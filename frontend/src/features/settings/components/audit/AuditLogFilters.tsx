@@ -93,7 +93,7 @@ export const AuditLogFilters: React.FC<Props> = React.memo((props) => {
         onEndDateChange={onEndDateChange}
         onClear={onClearDateRange}
         onQuickSelect={onQuickDateFilter}
-        placeholder="选择日期范围"
+        placeholder="日期"
       />
 
       {hasAnyFilter && (

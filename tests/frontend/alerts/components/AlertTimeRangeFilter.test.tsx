@@ -27,7 +27,7 @@ describe('AlertTimeRangeFilter', () => {
     render(<AlertTimeRangeFilter onFilterChange={jest.fn()} onReset={jest.fn()} />)
 
     expect(screen.getByRole('button', { name: '日期范围选择器' })).toBeInTheDocument()
-    expect(screen.getByText('时间范围')).toBeInTheDocument()
+    expect(screen.getByText('日期')).toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })

@@ -3,6 +3,7 @@
  */
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { toast } from 'react-hot-toast'
+import { toLocalDayBoundaryIso } from '@/utils/dateRangeQuery'
 import * as logsApi from '../api/logsApi'
 import type {
   DeviceLog,
@@ -208,16 +209,18 @@ export function useLogFilters() {
     if (filters.deviceId) {
       params.device_id = filters.deviceId
     }
-    if (filters.dateRange?.start) {
-      params.start_time = filters.dateRange.start
+    const startTime = toLocalDayBoundaryIso(filters.startDate ?? '', false)
+    const endTime = toLocalDayBoundaryIso(filters.endDate ?? '', true)
+    if (startTime) {
+      params.start_time = startTime
     }
-    if (filters.dateRange?.end) {
-      params.end_time = filters.dateRange.end
+    if (endTime) {
+      params.end_time = endTime
     }
     if (filters.includeSelf) {
       params.include_self = true
     }
-    
+
     return params
   }, [
     debouncedSearchQuery,
@@ -226,7 +229,8 @@ export function useLogFilters() {
     filters.sourceFilter,
     filters.includeSelf,
     filters.deviceId,
-    filters.dateRange,
+    filters.startDate,
+    filters.endDate,
   ])
 
   return {

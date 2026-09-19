@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { formatTimeHMS } from '@/utils/formatters'
+import { toLocalDayBoundaryIso } from '@/utils/dateRangeQuery'
 import { useSearchParams } from 'next/navigation'
 import { AppLayout } from '@/components/layout'
 import {
@@ -33,30 +34,6 @@ import { CompactPageToolbar } from '@/components/shared'
 
 const AUTO_REFRESH_INTERVAL = 30000 // 30秒
 const WS_SELF_EVENT_TTL_MS = 5000 // 本端操作后短时间内忽略同ID回推事件，避免重复刷新
-
-const parseDateOnly = (value: string): { year: number; month: number; day: number } | null => {
-  const raw = String(value ?? '').trim()
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw)
-  if (!match) return null
-  const year = Number(match[1])
-  const month = Number(match[2])
-  const day = Number(match[3])
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null
-  if (month < 1 || month > 12) return null
-  if (day < 1 || day > 31) return null
-  return { year, month, day }
-}
-
-const toLocalBoundaryIso = (dateOnly: string, endOfDay: boolean): string | null => {
-  const parsed = parseDateOnly(dateOnly)
-  if (!parsed) return null
-  const { year, month, day } = parsed
-  const date = endOfDay
-    ? new Date(year, month - 1, day, 23, 59, 59, 999)
-    : new Date(year, month - 1, day, 0, 0, 0, 0)
-  if (Number.isNaN(date.getTime())) return null
-  return date.toISOString()
-}
 
 function AlertsAccessDenied() {
   return (
@@ -154,17 +131,10 @@ const AlertsViewContent: React.FC = () => {
     }
 
     if (timeRangeFilter.dateRange) {
-      const startValue = String(timeRangeFilter.dateRange.start ?? '').trim()
-      const endValue = String(timeRangeFilter.dateRange.end ?? '').trim()
-
-      if (startValue) {
-        const startIso = parseDateOnly(startValue) ? toLocalBoundaryIso(startValue, false) : startValue
-        if (startIso) params.startDate = startIso
-      }
-      if (endValue) {
-        const endIso = parseDateOnly(endValue) ? toLocalBoundaryIso(endValue, true) : endValue
-        if (endIso) params.endDate = endIso
-      }
+      const startIso = toLocalDayBoundaryIso(timeRangeFilter.dateRange.start, false)
+      const endIso = toLocalDayBoundaryIso(timeRangeFilter.dateRange.end, true)
+      if (startIso) params.startDate = startIso
+      if (endIso) params.endDate = endIso
     }
 
     return params

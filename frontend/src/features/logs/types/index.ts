@@ -116,10 +116,9 @@ export interface LogFilters {
   sourceFilter: LogSource | 'all'
   includeSelf?: boolean
   deviceId?: number
-  dateRange?: {
-    start?: string
-    end?: string
-  }
+  // YYYY-MM-DD 本地自然日，由 useLogFilters 转为查询参数的边界时间
+  startDate?: string
+  endDate?: string
 }
 
 // 日志级别配置

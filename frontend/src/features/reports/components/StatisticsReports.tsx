@@ -619,7 +619,7 @@ export const StatisticsReports: React.FC<Props> = ({
               onEndDateChange={(date) => setDateRange((prev) => ({ ...prev, endDate: date }))}
               onClear={() => setDateRange(defaultDateRange)}
               onQuickSelect={handleQuickDateRange}
-              placeholder="选择日期范围"
+              placeholder="日期"
             />
 
             {deviceTypeOptions.length > 0 && (

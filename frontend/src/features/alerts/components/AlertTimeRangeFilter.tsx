@@ -87,7 +87,7 @@ export const AlertTimeRangeFilter: React.FC<AlertTimeRangeFilterProps> = ({
       onEndDateChange={(date) => applyRange({ end: date })}
       onClear={handleClear}
       onQuickSelect={handleQuickSelect}
-      placeholder="时间范围"
+      placeholder="日期"
     />
   )
 }

@@ -5,6 +5,8 @@ import React from 'react'
 import { Search, Filter } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
+import { SmartDateRangePicker } from '@/components/atoms'
+import { useDateFilters } from '@/hooks/useDateFilters'
 import {
   Select,
   SelectContent,
@@ -28,6 +30,19 @@ export const LogFiltersBar: React.FC<LogFiltersBarProps> = ({
   selectedCount = 0,
   renderAsToolbar = false,
 }) => {
+  const { getDateRange } = useDateFilters()
+
+  const handleQuickDateSelect = (range: 'today' | 'week' | 'month') => {
+    const { startDate, endDate } = getDateRange(range)
+    onFilterChange('startDate', startDate)
+    onFilterChange('endDate', endDate)
+  }
+
+  const handleClearDateRange = () => {
+    onFilterChange('startDate', '')
+    onFilterChange('endDate', '')
+  }
+
   return (
     <div className={renderAsToolbar ? '' : 'mb-4 space-y-3'}>
       <div className="flex flex-wrap items-center gap-2">
@@ -95,6 +110,17 @@ export const LogFiltersBar: React.FC<LogFiltersBarProps> = ({
             ))}
           </SelectContent>
         </Select>
+
+        {/* 日期范围 */}
+        <SmartDateRangePicker
+          startDate={filters.startDate ?? ''}
+          endDate={filters.endDate ?? ''}
+          onStartDateChange={(date) => onFilterChange('startDate', date)}
+          onEndDateChange={(date) => onFilterChange('endDate', date)}
+          onClear={handleClearDateRange}
+          onQuickSelect={handleQuickDateSelect}
+          placeholder="日期"
+        />
 
         {/* 本系统自身的 SSH 登录记录默认隐藏，勾选后包含 */}
         <label
