@@ -104,3 +104,58 @@ func TestBuildNetworkTopology_NoNeighborsStillListsAllNodes(t *testing.T) {
 		t.Fatalf("Links 应为非 nil 空切片，JSON 才会输出 [] 而非 null")
 	}
 }
+
+// TestBuildNetworkTopology_MatchesDetectedIdentityAndCarriesLLDPStatus 生产台账名是中文、
+// hostname/mac 为空、LLDP 管理地址取到别的 VLANIF 时，对端只能靠采集回填的 detected_sys_name /
+// detected_chassis_id 匹配；节点同时下发 lldp_status 供前端解释为什么没有链路。
+func TestBuildNetworkTopology_MatchesDetectedIdentityAndCarriesLLDPStatus(t *testing.T) {
+	devices := []dashboard.TopologyDevice{
+		{ID: 1, Name: "16F汇聚交换机", IP: "192.168.100.1", DetectedSysName: "16F-HJ-SW", DetectedChassisID: "4c:1f:cc:1a:07:48", LLDPStatus: "ok", Status: "online"},
+		{ID: 2, Name: "16F接入交换机2", IP: "192.168.100.2", DetectedChassisID: "4C-1F-CC-1A-07-50", LLDPStatus: "mib_unreachable", Status: "online"},
+		{ID: 3, Name: "16F门禁交换机", IP: "192.168.100.3", LLDPStatus: "disabled", Status: "online"},
+	}
+	neighbors := []dashboard.TopologyNeighbor{
+		// 汇聚看见接入 2：管理地址是对端别的 VLANIF、sysName 与台账名不同，只有机箱 MAC 能对上
+		{DeviceID: 1, LocalPort: "GigabitEthernet0/0/1", RemoteChassisID: "4c:1f:cc:1a:07:50", RemotePortID: "GigabitEthernet0/0/24", RemoteSysName: "16F-JR-SW2", RemoteMgmtIP: "192.168.10.2"},
+		// 接入 2（视图未放行时旧行仍在）看见汇聚：靠 sysName 对上 detected_sys_name
+		{DeviceID: 2, LocalPort: "GigabitEthernet0/0/24", RemoteChassisID: "4c:1f:cc:1a:07:48", RemotePortID: "GigabitEthernet0/0/1", RemoteSysName: "16f-hj-sw", RemoteMgmtIP: "192.168.10.1"},
+	}
+
+	got := dashboard.BuildNetworkTopology(devices, neighbors)
+
+	if len(got.Links) != 1 || !got.Links[0].Bidirectional || got.Links[0].Source != 1 || got.Links[0].Target != 2 {
+		t.Fatalf("links = %+v, want 1 条 1↔2 双向链路", got.Links)
+	}
+	if got.Nodes[0].UnmanagedNeighbors != 0 || got.Nodes[1].UnmanagedNeighbors != 0 {
+		t.Fatalf("靠识别身份匹配成功后不应计入未纳管: %+v", got.Nodes)
+	}
+	if got.Nodes[0].LLDPStatus != "ok" || got.Nodes[1].LLDPStatus != "mib_unreachable" || got.Nodes[2].LLDPStatus != "disabled" {
+		t.Fatalf("节点应携带 lldp_status: %+v", got.Nodes)
+	}
+}
+
+// TestBuildNetworkTopology_UserEnteredIdentityBeatsDetectedAcrossDevices 用户填写的台账名/MAC
+// 必须优先于任何设备的采集值：ID 更小的设备采到的 sysName 与另一台设备的台账名撞车时，
+// 邻居要匹配到台账名所属的那台，而不是按 ID 顺序先到先得。
+func TestBuildNetworkTopology_UserEnteredIdentityBeatsDetectedAcrossDevices(t *testing.T) {
+	devices := []dashboard.TopologyDevice{
+		{ID: 1, Name: "core", IP: "10.0.0.1", DetectedSysName: "acc-1", DetectedChassisID: "00:00:00:00:00:02", Status: "online"},
+		{ID: 2, Name: "acc-1", IP: "10.0.0.2", MAC: "00:00:00:00:00:02", Status: "online"},
+		{ID: 3, Name: "fw", IP: "10.0.0.3", Status: "online"},
+	}
+	neighbors := []dashboard.TopologyNeighbor{
+		{DeviceID: 3, LocalPort: "eth1", RemoteChassisID: "x", RemoteSysName: "acc-1"},
+		{DeviceID: 3, LocalPort: "eth2", RemoteChassisID: "00:00:00:00:00:02"},
+	}
+
+	got := dashboard.BuildNetworkTopology(devices, neighbors)
+
+	if len(got.Links) != 2 {
+		t.Fatalf("links = %+v, want 2", got.Links)
+	}
+	for _, link := range got.Links {
+		if !(link.Source == 2 && link.Target == 3) && !(link.Source == 3 && link.Target == 2) {
+			t.Fatalf("邻居应匹配到台账名/MAC 所属的设备 2，got %+v", link)
+		}
+	}
+}

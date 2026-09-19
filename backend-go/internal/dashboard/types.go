@@ -46,6 +46,9 @@ type TopologyNode struct {
 	Status          string `json:"status"`
 	// UnmanagedNeighbors 是该设备 LLDP 看到但台账里没有的邻居数（终端、未纳管设备）
 	UnmanagedNeighbors int `json:"unmanaged_neighbors"`
+	// LLDPStatus 是采集端对该设备 LLDP 可用性的判定：ok / mib_unreachable（SNMP 视图未放行 1.0.8802）/
+	// disabled（设备未全局启用）；空表示尚未采集出结论。前端据此把「没有链路」解释成可操作的原因。
+	LLDPStatus string `json:"lldp_status,omitempty"`
 }
 
 // TopologyLink 是两台台账设备之间的一条 LLDP 链路。

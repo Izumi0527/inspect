@@ -10,18 +10,23 @@ import (
 )
 
 // TopologyDevice 是拓扑组装的设备输入（devices 表投影）。
+// DetectedSysName / DetectedChassisID 是采集回填的设备自身 LLDP 身份，与用户填写的 Hostname / MAC
+// 并列参与匹配：台账名是中文、LLDP 管理地址取到别的 VLANIF 时，它们是对端能对上的唯一键。
 type TopologyDevice struct {
-	ID              int
-	Name            string
-	Hostname        string
-	IP              string
-	MAC             string
-	DeviceType      string
-	DetectedType    string
-	Vendor          string
-	Model           string
-	FirmwareVersion string
-	Status          string
+	ID                int
+	Name              string
+	Hostname          string
+	IP                string
+	MAC               string
+	DetectedSysName   string
+	DetectedChassisID string
+	LLDPStatus        string
+	DeviceType        string
+	DetectedType      string
+	Vendor            string
+	Model             string
+	FirmwareVersion   string
+	Status            string
 }
 
 // TopologyNeighbor 是拓扑组装的邻居输入（device_neighbors 表投影）。
@@ -43,7 +48,7 @@ type halfLink struct {
 }
 
 // BuildNetworkTopology 把台账设备与 LLDP 邻居行组装成拓扑：
-//   - 对端按「管理 IP → sysName/hostname（忽略大小写）→ 机箱 MAC（归一化）」三级匹配台账；
+//   - 对端按「管理 IP → sysName/hostname/识别 sysName（忽略大小写）→ 机箱 MAC/识别机箱 ID（归一化）」三级匹配台账；
 //   - 两侧互见的邻居合并为一条 Bidirectional 链路，端口以各自本端上报为准；
 //   - 只有一侧看见时保留为单向链路，对端端口取该侧宣告值；
 //   - 未匹配到台账的邻居只计入 UnmanagedNeighbors，不入图；自环忽略。
@@ -71,20 +76,40 @@ func BuildNetworkTopology(devices []TopologyDevice, neighbors []TopologyNeighbor
 			Model:           strings.TrimSpace(d.Model),
 			FirmwareVersion: strings.TrimSpace(d.FirmwareVersion),
 			Status:          strings.ToLower(strings.TrimSpace(d.Status)),
+			LLDPStatus:      strings.TrimSpace(d.LLDPStatus),
 		})
 		if ip := strings.TrimSpace(d.IP); ip != "" {
 			byIP[ip] = d.ID
 		}
-		if name := strings.ToLower(strings.TrimSpace(d.Name)); name != "" {
-			byName[name] = d.ID
-		}
-		if host := strings.ToLower(strings.TrimSpace(d.Hostname)); host != "" {
-			if _, exists := byName[host]; !exists {
-				byName[host] = d.ID
+	}
+
+	// 名称与 MAC 索引按层级分轮建立：台账名 > hostname > 采集 sysName，台账 MAC > 采集机箱 ID。
+	// 逐设备建索引会退化成「ID 小者先到先得」，让某台设备的采集值抢走另一台设备的台账名。
+	nameTiers := []func(TopologyDevice) string{
+		func(d TopologyDevice) string { return d.Name },
+		func(d TopologyDevice) string { return d.Hostname },
+		func(d TopologyDevice) string { return d.DetectedSysName },
+	}
+	for _, tier := range nameTiers {
+		for _, d := range sorted {
+			if name := strings.ToLower(strings.TrimSpace(tier(d))); name != "" {
+				if _, exists := byName[name]; !exists {
+					byName[name] = d.ID
+				}
 			}
 		}
-		if mac := normalizeMAC(d.MAC); mac != "" {
-			byMAC[mac] = d.ID
+	}
+	macTiers := []func(TopologyDevice) string{
+		func(d TopologyDevice) string { return d.MAC },
+		func(d TopologyDevice) string { return d.DetectedChassisID },
+	}
+	for _, tier := range macTiers {
+		for _, d := range sorted {
+			if mac := normalizeMAC(tier(d)); mac != "" {
+				if _, exists := byMAC[mac]; !exists {
+					byMAC[mac] = d.ID
+				}
+			}
 		}
 	}
 
@@ -264,6 +289,9 @@ func (s *Service) getNetworkTopology(ctx context.Context) (NetworkTopology, erro
 		Hostname           *string `gorm:"column:hostname"`
 		IPAddress          string  `gorm:"column:ip_address"`
 		MacAddress         *string `gorm:"column:mac_address"`
+		DetectedSysName    *string `gorm:"column:detected_sys_name"`
+		DetectedChassisID  *string `gorm:"column:detected_chassis_id"`
+		LLDPStatus         *string `gorm:"column:lldp_status"`
 		DeviceType         string  `gorm:"column:device_type"`
 		DetectedDeviceType *string `gorm:"column:detected_device_type"`
 		Vendor             string  `gorm:"column:vendor"`
@@ -274,7 +302,7 @@ func (s *Service) getNetworkTopology(ctx context.Context) (NetworkTopology, erro
 	deviceRows := make([]deviceRow, 0)
 	if err := s.db.WithContext(ctx).
 		Table("devices").
-		Select("id, name, hostname, ip_address, mac_address, device_type, detected_device_type, vendor, model, firmware_version, status").
+		Select("id, name, hostname, ip_address, mac_address, detected_sys_name, detected_chassis_id, lldp_status, device_type, detected_device_type, vendor, model, firmware_version, status").
 		Order("id").
 		Scan(&deviceRows).Error; err != nil {
 		return NetworkTopology{}, err
@@ -301,17 +329,20 @@ func (s *Service) getNetworkTopology(ctx context.Context) (NetworkTopology, erro
 	devices := make([]TopologyDevice, 0, len(deviceRows))
 	for _, row := range deviceRows {
 		devices = append(devices, TopologyDevice{
-			ID:              row.ID,
-			Name:            row.Name,
-			Hostname:        derefString(row.Hostname),
-			IP:              row.IPAddress,
-			MAC:             derefString(row.MacAddress),
-			DeviceType:      row.DeviceType,
-			DetectedType:    derefString(row.DetectedDeviceType),
-			Vendor:          row.Vendor,
-			Model:           derefString(row.Model),
-			FirmwareVersion: derefString(row.FirmwareVersion),
-			Status:          row.Status,
+			ID:                row.ID,
+			Name:              row.Name,
+			Hostname:          derefString(row.Hostname),
+			IP:                row.IPAddress,
+			MAC:               derefString(row.MacAddress),
+			DetectedSysName:   derefString(row.DetectedSysName),
+			DetectedChassisID: derefString(row.DetectedChassisID),
+			LLDPStatus:        derefString(row.LLDPStatus),
+			DeviceType:        row.DeviceType,
+			DetectedType:      derefString(row.DetectedDeviceType),
+			Vendor:            row.Vendor,
+			Model:             derefString(row.Model),
+			FirmwareVersion:   derefString(row.FirmwareVersion),
+			Status:            row.Status,
 		})
 	}
 
