@@ -1,5 +1,5 @@
 import React from 'react'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { AlertsView } from '@/features/alerts/components/AlertsView'
 
 const mockHandleAcknowledgeAlert = jest.fn<Promise<void>, [string, (string | undefined)?]>()
@@ -115,9 +115,9 @@ jest.mock('@/features/alerts/components/AlertDetailModal', () => ({
   AlertDetailModal: () => null,
 }))
 
-jest.mock('@/features/alerts/components/AdvancedFilters', () => ({
-  AdvancedFilters: () => <div data-testid="advanced-filters">advanced</div>,
-  ALERT_ADVANCED_FILTERS_STORAGE_KEY: 'alert_advanced_filters',
+jest.mock('@/features/alerts/components/AlertTimeRangeFilter', () => ({
+  AlertTimeRangeFilter: () => <div data-testid="time-range-filter">time-range</div>,
+  ALERT_TIME_RANGE_FILTER_STORAGE_KEY: 'alert_time_range_filter',
 }))
 
 jest.mock('@/components/atoms/skeleton', () => ({
@@ -241,6 +241,13 @@ describe('AlertsView', () => {
     render(<AlertsView />)
 
     expect(screen.getByTestId('alerts-toolbar-end-group')).toBeInTheDocument()
+  })
+
+  it('时间范围筛选入口应收进紧凑工具栏，不再独占一行', () => {
+    render(<AlertsView />)
+
+    const toolbar = screen.getByTestId('alerts-toolbar-end-group')
+    expect(within(toolbar).getByTestId('time-range-filter')).toBeInTheDocument()
   })
 
   it('单条确认后应刷新列表和统计', async () => {

@@ -14,7 +14,7 @@ import { AlertFiltersBar } from './AlertFiltersBar'
 import { AlertList } from './AlertList'
 import { AlertDetailModal } from './AlertDetailModal'
 import { SkeletonCard, SkeletonList } from '@/components/atoms/skeleton'
-import { AdvancedFilters, AdvancedFilterValues, ALERT_ADVANCED_FILTERS_STORAGE_KEY } from './AdvancedFilters'
+import { AlertTimeRangeFilter, AlertTimeRangeFilterValues, ALERT_TIME_RANGE_FILTER_STORAGE_KEY } from './AlertTimeRangeFilter'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -88,7 +88,7 @@ const AlertsViewContent: React.FC = () => {
   const canDeleteAlerts = usePermission(Permission.ALERTS_DELETE)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterValues>({})
+  const [timeRangeFilter, setTimeRangeFilter] = useState<AlertTimeRangeFilterValues>({})
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [exporting, setExporting] = useState(false)
@@ -111,26 +111,13 @@ const AlertsViewContent: React.FC = () => {
     const hasBasicStatus =
       statusValue !== '' && statusValue !== 'all' && statusValue !== DEFAULT_ALERT_FILTERS.statusFilter
 
-    const adv = advancedFilters ?? {}
-    const hasAdvSearch = String(adv.search ?? '').trim() !== ''
-    const hasAdvSeverity = Array.isArray(adv.severity) && adv.severity.length > 0
-    const hasAdvStatus = Array.isArray(adv.status) && adv.status.length > 0
-    const hasAdvCategory = Array.isArray(adv.category) && adv.category.length > 0
-    const hasAdvDeviceIds = Array.isArray(adv.deviceIds) && adv.deviceIds.length > 0
-    const hasAdvDateRange = !!(String(adv.dateRange?.start ?? '').trim() || String(adv.dateRange?.end ?? '').trim())
-
-    return (
-      hasBasicSearch ||
-      hasBasicSeverity ||
-      hasBasicStatus ||
-      hasAdvSearch ||
-      hasAdvSeverity ||
-      hasAdvStatus ||
-      hasAdvCategory ||
-      hasAdvDeviceIds ||
-      hasAdvDateRange
+    const hasTimeRange = !!(
+      String(timeRangeFilter.dateRange?.start ?? '').trim() ||
+      String(timeRangeFilter.dateRange?.end ?? '').trim()
     )
-  }, [advancedFilters, filters.searchQuery, filters.severityFilter, filters.statusFilter])
+
+    return hasBasicSearch || hasBasicSeverity || hasBasicStatus || hasTimeRange
+  }, [timeRangeFilter, filters.searchQuery, filters.severityFilter, filters.statusFilter])
 
   const isDefaultActiveView = filters.statusFilter === DEFAULT_ALERT_FILTERS.statusFilter
 
@@ -142,13 +129,11 @@ const AlertsViewContent: React.FC = () => {
       sortOrder
     }
 
-    if (filters.searchQuery || advancedFilters.search) {
-      params.search = advancedFilters.search || filters.searchQuery
+    if (filters.searchQuery) {
+      params.search = filters.searchQuery
     }
 
-    if (advancedFilters.severity && advancedFilters.severity.length > 0) {
-      params.severity = advancedFilters.severity
-    } else if (filters.severityFilter && filters.severityFilter !== 'all') {
+    if (filters.severityFilter && filters.severityFilter !== 'all') {
       if (
         filters.severityFilter === 'critical' ||
         filters.severityFilter === 'warning' ||
@@ -158,9 +143,7 @@ const AlertsViewContent: React.FC = () => {
       }
     }
 
-    if (advancedFilters.status && advancedFilters.status.length > 0) {
-      params.status = advancedFilters.status
-    } else if (filters.statusFilter && filters.statusFilter !== 'all') {
+    if (filters.statusFilter && filters.statusFilter !== 'all') {
       if (
         filters.statusFilter === 'active' ||
         filters.statusFilter === 'acknowledged' ||
@@ -170,13 +153,9 @@ const AlertsViewContent: React.FC = () => {
       }
     }
 
-    if (advancedFilters.category && advancedFilters.category.length > 0) {
-      params.category = advancedFilters.category
-    }
-
-    if (advancedFilters.dateRange) {
-      const startValue = String(advancedFilters.dateRange.start ?? '').trim()
-      const endValue = String(advancedFilters.dateRange.end ?? '').trim()
+    if (timeRangeFilter.dateRange) {
+      const startValue = String(timeRangeFilter.dateRange.start ?? '').trim()
+      const endValue = String(timeRangeFilter.dateRange.end ?? '').trim()
 
       if (startValue) {
         const startIso = parseDateOnly(startValue) ? toLocalBoundaryIso(startValue, false) : startValue
@@ -188,12 +167,8 @@ const AlertsViewContent: React.FC = () => {
       }
     }
 
-    if (advancedFilters.deviceIds && advancedFilters.deviceIds.length > 0) {
-      params.deviceIds = advancedFilters.deviceIds
-    }
-
     return params
-  }, [currentPage, pageSize, filters, advancedFilters, sortBy, sortOrder])
+  }, [currentPage, pageSize, filters, timeRangeFilter, sortBy, sortOrder])
 
   const {
     alerts,
@@ -311,46 +286,19 @@ const AlertsViewContent: React.FC = () => {
   useWebSocketEvent(WebSocketEvents.ALERT_UPDATE, handleRealtimeAlertEvent)
   useWebSocketEvent(WebSocketEvents.ALERT_RESOLVED, handleRealtimeAlertEvent)
 
-  const safeSetAdvancedFiltersStorage = useCallback((next: AdvancedFilterValues) => {
+  const safeRemoveTimeRangeFilterStorage = useCallback(() => {
     if (typeof window === 'undefined') return
     try {
-      localStorage.setItem(ALERT_ADVANCED_FILTERS_STORAGE_KEY, JSON.stringify(next))
+      localStorage.removeItem(ALERT_TIME_RANGE_FILTER_STORAGE_KEY)
     } catch (error) {
-      console.warn('保存告警高级筛选本地缓存失败:', error)
+      console.warn('清理告警时间范围筛选本地缓存失败:', error)
     }
   }, [])
 
-  const safeRemoveAdvancedFiltersStorage = useCallback(() => {
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.removeItem(ALERT_ADVANCED_FILTERS_STORAGE_KEY)
-    } catch (error) {
-      console.warn('清理告警高级筛选本地缓存失败:', error)
-    }
-  }, [])
-
-  const resetAdvancedFilters = useCallback(() => {
-    safeRemoveAdvancedFiltersStorage()
-    setAdvancedFilters({})
-  }, [safeRemoveAdvancedFiltersStorage])
-
-  const clearAdvancedOverrides = useCallback((options: { clearSeverity?: boolean; clearStatus?: boolean }) => {
-    const { clearSeverity, clearStatus } = options
-    if (!clearSeverity && !clearStatus) return
-
-    const hasSeverityOverride = clearSeverity && Array.isArray(advancedFilters.severity) && advancedFilters.severity.length > 0
-    const hasStatusOverride = clearStatus && Array.isArray(advancedFilters.status) && advancedFilters.status.length > 0
-    if (!hasSeverityOverride && !hasStatusOverride) return
-
-    const next: AdvancedFilterValues = {
-      ...advancedFilters,
-      ...(clearSeverity ? { severity: undefined } : {}),
-      ...(clearStatus ? { status: undefined } : {}),
-    }
-
-    setAdvancedFilters(next)
-    safeSetAdvancedFiltersStorage(next)
-  }, [advancedFilters, safeSetAdvancedFiltersStorage])
+  const resetTimeRangeFilter = useCallback(() => {
+    safeRemoveTimeRangeFilterStorage()
+    setTimeRangeFilter({})
+  }, [safeRemoveTimeRangeFilterStorage])
 
   const applyRealtimeUpdates = useCallback(async () => {
     clearRealtimePending()
@@ -364,10 +312,10 @@ const AlertsViewContent: React.FC = () => {
   const handleClearFiltersAndView = useCallback(() => {
     clearRealtimePending()
     resetFilters()
-    resetAdvancedFilters()
+    resetTimeRangeFilter()
     setCurrentPage(1)
     requestRefreshAfterQueryChange()
-  }, [clearRealtimePending, requestRefreshAfterQueryChange, resetAdvancedFilters, resetFilters])
+  }, [clearRealtimePending, requestRefreshAfterQueryChange, resetTimeRangeFilter, resetFilters])
 
   const handleGoToFirstPageAndView = useCallback(() => {
     clearRealtimePending()
@@ -451,15 +399,15 @@ const AlertsViewContent: React.FC = () => {
     setCurrentPage(1)
   }
 
-  const handleAdvancedFilterChange = useCallback((newFilters: AdvancedFilterValues) => {
-    setAdvancedFilters(newFilters)
+  const handleTimeRangeFilterChange = useCallback((newFilters: AlertTimeRangeFilterValues) => {
+    setTimeRangeFilter(newFilters)
     setCurrentPage(1)
   }, [])
 
-  const handleAdvancedFilterReset = useCallback(() => {
-    resetAdvancedFilters()
+  const handleTimeRangeFilterReset = useCallback(() => {
+    resetTimeRangeFilter()
     setCurrentPage(1)
-  }, [resetAdvancedFilters])
+  }, [resetTimeRangeFilter])
 
   const applyStatFilter = useCallback((options: { severity?: 'all' | 'critical' | 'warning' | 'info'; status?: 'all' | 'active' | 'acknowledged' | 'resolved' }) => {
     clearRealtimePending()
@@ -472,11 +420,8 @@ const AlertsViewContent: React.FC = () => {
       updateFilter('statusFilter', status)
     }
 
-    // 当高级筛选中已设置 severity/status 时，会覆盖基础筛选；这里清理覆盖项，保证“点击统计卡”必然生效。
-    clearAdvancedOverrides({ clearSeverity: !!severity, clearStatus: !!status })
-
     setCurrentPage(1)
-  }, [clearAdvancedOverrides, clearRealtimePending, updateFilter])
+  }, [clearRealtimePending, updateFilter])
 
   const handleStatCardClick = useCallback((card: 'total' | 'critical' | 'warning' | 'info' | 'active' | 'acknowledged' | 'resolved') => {
     switch (card) {
@@ -540,7 +485,7 @@ const AlertsViewContent: React.FC = () => {
             </div>
           </CardHeader>
 
-          <CardContent className="flex flex-col overflow-hidden pt-0">
+          <CardContent className="flex flex-col gap-3 overflow-hidden pt-0">
             <CompactPageToolbar
               testIdPrefix="alerts-toolbar"
               filters={(
@@ -583,6 +528,12 @@ const AlertsViewContent: React.FC = () => {
               ]}
               customActions={(
                 <>
+                  <AlertTimeRangeFilter
+                    value={timeRangeFilter}
+                    onFilterChange={handleTimeRangeFilterChange}
+                    onReset={handleTimeRangeFilterReset}
+                  />
+
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" type="button">
@@ -639,15 +590,8 @@ const AlertsViewContent: React.FC = () => {
               )}
             />
 
-            <AdvancedFilters
-              value={advancedFilters}
-              onFilterChange={handleAdvancedFilterChange}
-              onReset={handleAdvancedFilterReset}
-              renderAsCard={false}
-            />
-
             {realtimePendingCount > 0 && (
-              <div className="mt-2 flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <Bell className="h-4 w-4 text-green-500" />
                   <span className="font-medium text-foreground">

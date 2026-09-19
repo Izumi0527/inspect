@@ -230,7 +230,7 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/alerts/components/AdvancedFilters.tsx',
+    file: 'frontend/src/features/alerts/components/AlertTimeRangeFilter.tsx',
     bannedPatterns: [
       /border-gray-200 dark:border-gray-700/g,
       /bg-white dark:bg-gray-800/g,
@@ -604,7 +604,7 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/alerts/components/AdvancedFilters.tsx',
+    file: 'frontend/src/features/alerts/components/AlertTimeRangeFilter.tsx',
     bannedPatterns: [
       /text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors/g,
     ],

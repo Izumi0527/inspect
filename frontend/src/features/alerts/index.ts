@@ -5,7 +5,7 @@ export { AlertFiltersBar } from './components/AlertFiltersBar'
 export { AlertList } from './components/AlertList'
 export { AlertListItem } from './components/AlertListItem'
 export { AlertDetailModal } from './components/AlertDetailModal'
-export { AdvancedFilters } from './components/AdvancedFilters'
+export { AlertTimeRangeFilter } from './components/AlertTimeRangeFilter'
 
 export {
   useAlerts,
