@@ -72,11 +72,11 @@ export const ExecutionFilters: React.FC<Props> = React.memo((props) => {
     <div className="flex flex-wrap items-center gap-3">
       {/* 状态筛选 */}
       <Select value={statusFilter} onValueChange={onStatusChange}>
-        <SelectTrigger className="w-32 h-9 text-sm rounded-lg px-3 border-border bg-card" aria-label="执行状态筛选">
+        <SelectTrigger className="w-auto gap-2 h-9 text-sm rounded-lg px-3 border-border bg-card" aria-label="执行状态筛选">
           <SelectValue placeholder="状态筛选" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">全部状态</SelectItem>
+          <SelectItem value="all">状态</SelectItem>
           <SelectItem value="running">执行中</SelectItem>
           <SelectItem value="completed">已完成</SelectItem>
           <SelectItem value="failed">失败</SelectItem>

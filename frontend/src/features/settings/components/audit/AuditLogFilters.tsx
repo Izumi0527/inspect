@@ -57,11 +57,11 @@ export const AuditLogFilters: React.FC<Props> = React.memo((props) => {
           onActionChange(value === '_all' ? '' : (value as AuditAction))
         }
       >
-        <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="筛选操作类型">
+        <SelectTrigger className="h-9 w-auto gap-2 text-sm" aria-label="筛选操作类型">
           <SelectValue placeholder="操作类型" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="_all">全部操作</SelectItem>
+          <SelectItem value="_all">操作</SelectItem>
           {Object.entries(actionLabels).map(([value, label]) => (
             <SelectItem key={value} value={value}>
               {label}
@@ -76,11 +76,11 @@ export const AuditLogFilters: React.FC<Props> = React.memo((props) => {
           onStatusChange(value === '_all' ? '' : (value as 'success' | 'failed'))
         }
       >
-        <SelectTrigger className="h-9 w-[100px] text-sm" aria-label="筛选状态">
+        <SelectTrigger className="h-9 w-auto gap-2 text-sm" aria-label="筛选状态">
           <SelectValue placeholder="状态" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="_all">全部状态</SelectItem>
+          <SelectItem value="_all">状态</SelectItem>
           <SelectItem value="success">成功</SelectItem>
           <SelectItem value="failed">失败</SelectItem>
         </SelectContent>

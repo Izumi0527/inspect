@@ -53,7 +53,7 @@ export const AlertList: React.FC<AlertListProps> = ({
   // 列表内容
   const listContent = (
     <>
-      <div className="space-y-4">
+      <div className="space-y-2">
         {alerts.map((alert) => (
           <AlertListItem
             key={alert.id}

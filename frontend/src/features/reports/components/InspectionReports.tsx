@@ -460,11 +460,11 @@ export const InspectionReports: React.FC<Props> = ({
         filters={(
           <div className="flex flex-wrap items-center gap-2">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="报告状态筛选">
+              <SelectTrigger className="h-9 w-auto gap-2 text-sm" aria-label="报告状态筛选">
                 <SelectValue placeholder="状态筛选" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="all">状态</SelectItem>
                 <SelectItem value="generating">生成中</SelectItem>
                 <SelectItem value="completed">已完成</SelectItem>
                 <SelectItem value="failed">失败</SelectItem>
@@ -472,11 +472,11 @@ export const InspectionReports: React.FC<Props> = ({
               </SelectContent>
             </Select>
             <Select value={formatFilter} onValueChange={setFormatFilter}>
-              <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="报告格式筛选">
+              <SelectTrigger className="h-9 w-auto gap-2 text-sm" aria-label="报告格式筛选">
                 <SelectValue placeholder="格式筛选" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部格式</SelectItem>
+                <SelectItem value="all">格式</SelectItem>
                 <SelectItem value="pdf">PDF</SelectItem>
                 <SelectItem value="excel">Excel</SelectItem>
                 <SelectItem value="html">HTML</SelectItem>

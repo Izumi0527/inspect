@@ -20,7 +20,7 @@ interface CategoryFilterProps {
 const ALL_CATEGORY_VALUE = 'all'
 
 const CATEGORIES = [
-  { value: ALL_CATEGORY_VALUE, label: '全部分类' },
+  { value: ALL_CATEGORY_VALUE, label: '分类' },
   { value: 'network', label: '网络' },
   { value: 'system', label: '系统' },
   { value: 'security', label: '安全' },
@@ -38,10 +38,10 @@ export function CategoryFilter({ value, onChange, className = '' }: CategoryFilt
       >
         <SelectTrigger
           id="category-filter"
-          className={`w-full h-9 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
+          className={`w-auto gap-2 h-9 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
           aria-label="分类筛选"
         >
-          <SelectValue placeholder="全部分类" />
+          <SelectValue placeholder="分类" />
         </SelectTrigger>
         <SelectContent>
           {CATEGORIES.map((category) => (

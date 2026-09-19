@@ -49,7 +49,7 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
         onValueChange={(value) => onFilterChange('severityFilter', value)}
       >
         <SelectTrigger
-          className="h-9 w-[110px] text-sm"
+          className="h-9 w-auto gap-2 text-sm"
           aria-label="严重级别筛选"
         >
           <SelectValue placeholder="严重级别" />
@@ -67,7 +67,7 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
         onValueChange={(value) => onFilterChange('statusFilter', value)}
       >
         <SelectTrigger
-          className="h-9 w-[110px] text-sm"
+          className="h-9 w-auto gap-2 text-sm"
           aria-label="状态筛选"
         >
           <SelectValue placeholder="状态" />

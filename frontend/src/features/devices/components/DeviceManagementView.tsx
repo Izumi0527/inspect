@@ -452,7 +452,7 @@ export const DeviceManagementView: React.FC = () => {
     handleProbe(selectedDevices, "批量探测");
   };
 
-  const handleProbeAll = () => handleProbe(devices.map((d) => d.id), "探测本页");
+  const handleProbeAll = () => handleProbe(devices.map((d) => d.id), "探测");
 
   const confirmBulkDelete = async () => {
     if (selectedDevices.length === 0) return;
@@ -940,13 +940,13 @@ export const DeviceManagementView: React.FC = () => {
                     onValueChange={(value) => updateFilter("statusFilter", value)}
                   >
                     <SelectTrigger
-                      className="h-9 w-[110px] text-sm"
+                      className="h-9 w-auto gap-2 text-sm"
                       aria-label="设备状态筛选"
                     >
                       <SelectValue placeholder="状态" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">全部状态</SelectItem>
+                      <SelectItem value="all">状态</SelectItem>
                       <SelectItem value="online">在线</SelectItem>
                       <SelectItem value="offline">离线</SelectItem>
                       <SelectItem value="warning">告警</SelectItem>
@@ -958,13 +958,13 @@ export const DeviceManagementView: React.FC = () => {
                     onValueChange={(value) => updateFilter("typeFilter", value)}
                   >
                     <SelectTrigger
-                      className="h-9 w-[110px] text-sm"
+                      className="h-9 w-auto gap-2 text-sm"
                       aria-label="设备类型筛选"
                     >
                       <SelectValue placeholder="类型" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">全部类型</SelectItem>
+                      <SelectItem value="all">类型</SelectItem>
                       <SelectItem value="switch">交换机</SelectItem>
                       <SelectItem value="router">路由器</SelectItem>
                       <SelectItem value="firewall">防火墙</SelectItem>
@@ -976,7 +976,7 @@ export const DeviceManagementView: React.FC = () => {
               secondaryActions={[
                 {
                   key: "probe-current-page",
-                  label: "探测本页",
+                  label: "探测",
                   icon: bulkProbing ? (
                     <Activity className="h-4 w-4 animate-spin" />
                   ) : (

@@ -165,11 +165,12 @@ describe('TemplateFiltersBar', () => {
   }
 
   it('默认应隐藏厂商设备类型分类等字段标题，仅保留可访问名称', () => {
-    render(<TemplateFiltersBar {...baseProps} />)
+    const { container } = render(<TemplateFiltersBar {...baseProps} />)
 
-    expect(screen.queryByText('厂商')).not.toBeInTheDocument()
-    expect(screen.queryByText('设备类型')).not.toBeInTheDocument()
-    expect(screen.queryByText('分类')).not.toBeInTheDocument()
+    // 字段标题以 <label for=...> 形式呈现；下拉默认项文字本身就是「厂商」等字样，不能靠文本判断
+    expect(
+      container.querySelector('label[for="vendor-filter"], label[for="device-type-filter"], label[for="category-filter"]'),
+    ).toBeNull()
     expect(screen.getByRole('combobox', { name: '厂商筛选' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '设备类型筛选' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '分类筛选' })).toBeInTheDocument()

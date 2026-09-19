@@ -62,11 +62,11 @@ export const LogFiltersBar: React.FC<LogFiltersBarProps> = ({
           value={filters.levelFilter}
           onValueChange={(value) => onFilterChange('levelFilter', value as LogLevel | 'all')}
         >
-          <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="日志级别筛选">
+          <SelectTrigger className="h-9 w-auto gap-2 text-sm" aria-label="日志级别筛选">
             <SelectValue placeholder="日志级别" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部级别</SelectItem>
+            <SelectItem value="all">级别</SelectItem>
             {Object.entries(LOG_LEVEL_CONFIG).map(([key, config]) => (
               <SelectItem key={key} value={key}>
                 <span className={config.color}>{config.label}</span>
@@ -80,11 +80,11 @@ export const LogFiltersBar: React.FC<LogFiltersBarProps> = ({
           value={filters.facilityFilter}
           onValueChange={(value) => onFilterChange('facilityFilter', value as LogFacility | 'all')}
         >
-          <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="设施类型筛选">
+          <SelectTrigger className="h-9 w-auto gap-2 text-sm" aria-label="设施类型筛选">
             <SelectValue placeholder="设施类型" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部设施</SelectItem>
+            <SelectItem value="all">设施</SelectItem>
             {Object.entries(LOG_FACILITY_CONFIG).map(([key, config]) => (
               <SelectItem key={key} value={key}>
                 {config.label}
@@ -98,11 +98,11 @@ export const LogFiltersBar: React.FC<LogFiltersBarProps> = ({
           value={filters.sourceFilter}
           onValueChange={(value) => onFilterChange('sourceFilter', value as LogSource | 'all')}
         >
-          <SelectTrigger className="h-9 w-[110px] text-sm" aria-label="日志来源筛选">
+          <SelectTrigger className="h-9 w-auto gap-2 text-sm" aria-label="日志来源筛选">
             <SelectValue placeholder="日志来源" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部来源</SelectItem>
+            <SelectItem value="all">来源</SelectItem>
             {Object.entries(LOG_SOURCE_CONFIG).map(([key, config]) => (
               <SelectItem key={key} value={key}>
                 {config.label}

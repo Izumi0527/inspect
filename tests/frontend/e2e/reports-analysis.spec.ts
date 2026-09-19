@@ -31,7 +31,7 @@ test.describe('报表分析（/reports）按钮覆盖', () => {
     await expect(page.getByText('Mock 回退模式')).toHaveCount(0)
 
     // 状态筛选（触发后端列表查询）
-    await page.getByRole('combobox').filter({ hasText: '全部状态' }).click()
+    await page.getByRole('combobox').filter({ hasText: '状态' }).click()
     await Promise.all([
       waitForApiOk(page, 'GET', '/api/v1/reports?'),
       page.getByRole('option', { name: '已完成' }).click(),
@@ -39,10 +39,10 @@ test.describe('报表分析（/reports）按钮覆盖', () => {
 
     // 恢复全部状态
     await page.getByRole('combobox').filter({ hasText: '已完成' }).click()
-    await page.getByRole('option', { name: '全部状态' }).click()
+    await page.getByRole('option', { name: '状态' }).click()
 
     // 格式筛选（当前为前端本页过滤，不要求触发后端请求）
-    await page.getByRole('combobox').filter({ hasText: '全部格式' }).click()
+    await page.getByRole('combobox').filter({ hasText: '格式' }).click()
     await page.getByRole('option', { name: 'PDF' }).click()
 
     // 快捷卡片：快速日报（触发生成 + 下载）

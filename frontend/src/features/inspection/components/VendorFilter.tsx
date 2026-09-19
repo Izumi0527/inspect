@@ -20,7 +20,7 @@ interface VendorFilterProps {
 const ALL_VENDOR_VALUE = 'all'
 
 const VENDORS = [
-  { value: ALL_VENDOR_VALUE, label: '全部厂商' },
+  { value: ALL_VENDOR_VALUE, label: '厂商' },
   { value: 'Huawei', label: 'Huawei' },
   { value: 'H3C', label: 'H3C' },
 ]
@@ -36,10 +36,10 @@ export function VendorFilter({ value, onChange, className = '' }: VendorFilterPr
       >
         <SelectTrigger
           id="vendor-filter"
-          className={`w-full h-9 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
+          className={`w-auto gap-2 h-9 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
           aria-label="厂商筛选"
         >
-          <SelectValue placeholder="全部厂商" />
+          <SelectValue placeholder="厂商" />
         </SelectTrigger>
         <SelectContent>
           {VENDORS.map((vendor) => (

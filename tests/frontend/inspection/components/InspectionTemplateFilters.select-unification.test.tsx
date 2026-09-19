@@ -98,7 +98,7 @@ describe('巡检模板筛选下拉统一化', () => {
     expect(container.querySelector('select')).toBeNull()
 
     await user.click(screen.getByRole('combobox', { name: '厂商筛选' }))
-    expect(screen.getByRole('option', { name: '全部厂商' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '厂商' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Huawei' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('option', { name: 'Huawei' }))
@@ -113,7 +113,7 @@ describe('巡检模板筛选下拉统一化', () => {
     expect(container.querySelector('select')).toBeNull()
 
     await user.click(screen.getByRole('combobox', { name: '设备类型筛选' }))
-    expect(screen.getByRole('option', { name: '全部设备类型' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '设备类型' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: '防火墙' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('option', { name: '防火墙' }))
@@ -128,7 +128,7 @@ describe('巡检模板筛选下拉统一化', () => {
     expect(container.querySelector('select')).toBeNull()
 
     await user.click(screen.getByRole('combobox', { name: '分类筛选' }))
-    expect(screen.getByRole('option', { name: '全部分类' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '分类' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: '安全' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('option', { name: '安全' }))

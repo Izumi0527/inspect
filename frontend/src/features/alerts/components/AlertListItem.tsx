@@ -7,7 +7,6 @@ import {
   Clock,
   User,
   CheckCircle,
-  Lightbulb,
   X
 } from 'lucide-react'
 import { Button } from '@/components/atoms'
@@ -34,6 +33,12 @@ const severityIcons = {
   info: Info
 }
 
+/**
+ * 告警列表项（紧凑两行）
+ *
+ * 列表只放"扫一眼就要知道"的信息：标题、状态、分类、设备、时间与一行摘要。
+ * 处置建议、原文全文等细节由详情弹窗承载，点击卡片任意位置打开。
+ */
 export const AlertListItem: React.FC<AlertListItemProps> = ({
   alert,
   isSelected,
@@ -59,10 +64,8 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
     [alert.description, alert.title, alert.severity, alert.category, alert.device],
   )
 
-  // null 表示用户尚未手动切换，此时跟随翻译结果：
-  // 未命中规则时兜底文案信息量很低，直接把原文亮出来才有意义。
-  const [rawOverride, setRawOverride] = useState<boolean | null>(null)
-  const showRaw = rawOverride ?? !plain.matched
+  // 未命中规则时兜底摘要信息量很低，直接用原文首行更有意义
+  const summary = plain.matched ? plain.summary : alert.description
 
   const formatTimestamp = (value: string): string => {
     const raw = String(value ?? '').trim()
@@ -91,140 +94,100 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
   return (
     <>
       <div
-        className={`border dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer ${getSeverityColor(alert.severity)}`}
+        className={`border dark:border-gray-700 rounded-lg px-4 py-2.5 hover:shadow-md transition-shadow cursor-pointer ${getSeverityColor(alert.severity)}`}
         onClick={() => setIsModalOpen(true)}
       >
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-3 flex-1">
-          <input
-            type="checkbox"
-            className="mt-1 rounded"
-            checked={isSelected}
-            onChange={() => onSelect(alert.id)}
-            onClick={handleCheckboxClick}
-          />
-          <SeverityIcon className={`w-5 h-5 mt-0.5 ${
-            alert.severity === 'critical' ? 'text-red-600' :
-            alert.severity === 'warning' ? 'text-yellow-600' : 'text-blue-600'
-          }`} />
-          
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <h3 className="font-semibold text-foreground">{alert.title}</h3>
-              <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(alert.status)}`}>
-                {getStatusText(alert.status)}
-              </span>
-              <span className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-800 text-muted-foreground rounded-full">
-                {humanizeAlertCategory(alert.category)}
-              </span>
-            </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <input
+              type="checkbox"
+              className="rounded flex-shrink-0"
+              checked={isSelected}
+              onChange={() => onSelect(alert.id)}
+              onClick={handleCheckboxClick}
+            />
+            <SeverityIcon className={`w-5 h-5 flex-shrink-0 ${
+              alert.severity === 'critical' ? 'text-red-600' :
+              alert.severity === 'warning' ? 'text-yellow-600' : 'text-blue-600'
+            }`} />
 
-            <div className="mb-2 space-y-1.5">
-              {/* 人话解读 */}
-              <p className="text-sm text-foreground/90 leading-relaxed">
-                {plain.summary}
-                {/* 厂商告警节点名，供专业人员快速核对；完整 OID 放在 title 悬浮提示里，不占版面 */}
-                {plain.trap && (
-                  <span
-                    className="ml-1.5 font-mono text-xs text-muted-foreground"
-                    title={`${plain.trap.label} · ${plain.trap.oid}`}
-                  >
-                    {plain.trap.name}
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <h3 className="font-semibold text-foreground truncate" title={alert.title}>
+                  {alert.title}
+                </h3>
+                <span className={`px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 ${getStatusColor(alert.status)}`}>
+                  {getStatusText(alert.status)}
+                </span>
+                <span className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-800 text-muted-foreground rounded-full flex-shrink-0">
+                  {humanizeAlertCategory(alert.category)}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 min-w-0">
+                <span className="flex items-center gap-1 flex-shrink-0">
+                  <Shield className="w-3 h-3" />
+                  {alert.device}
+                </span>
+                <span className="flex items-center gap-1 flex-shrink-0">
+                  <Clock className="w-3 h-3" />
+                  {formatTimestamp(alert.timestamp)}
+                </span>
+                {alert.assignee && (
+                  <span className="flex items-center gap-1 flex-shrink-0">
+                    <User className="w-3 h-3" />
+                    {alert.assignee}
                   </span>
                 )}
-              </p>
-
-              {/* 处置建议：告警需要尽快处置，故在列表层即给出而非藏进详情 */}
-              {plain.suggestion && (
-                <p className="text-xs text-muted-foreground flex items-start gap-1.5 leading-relaxed">
-                  <Lightbulb className="w-3 h-3 mt-0.5 flex-shrink-0 text-amber-500" />
-                  <span>建议：{plain.suggestion}</span>
-                </p>
-              )}
-
-              {/* 设备原文：默认收起 */}
-              {showRaw && (
-                <p className="p-2 rounded bg-muted/60 text-xs text-muted-foreground font-mono break-all whitespace-pre-wrap">
-                  {alert.description}
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
-              <div className="flex items-center gap-1">
-                <Shield className="w-3 h-3" />
-                {alert.device}
+                <span className="flex-1 min-w-0 truncate text-foreground/80" title={summary}>
+                  {summary}
+                </span>
               </div>
-              <div className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {formatTimestamp(alert.timestamp)}
-              </div>
-              {alert.assignee && (
-                <div className="flex items-center gap-1">
-                  <User className="w-3 h-3" />
-                  {alert.assignee}
-                </div>
-              )}
-
-              {/* 原文就地切换：不打开详情弹窗 */}
-              <button
-                type="button"
-                aria-expanded={showRaw}
-                aria-label={showRaw ? `收起告警 ${alert.id} 的原始信息` : `展开告警 ${alert.id} 的原始信息`}
-                className="underline underline-offset-2 hover:text-foreground transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setRawOverride(!showRaw)
-                }}
-              >
-                {showRaw ? '收起原文' : '原文'}
-              </button>
             </div>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {canUpdate && alert.status === 'active' && (
-            <>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {canUpdate && alert.status === 'active' && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => handleButtonClick(e, () => onAcknowledge?.(alert.id))}
+                >
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  确认
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => handleButtonClick(e, () => onResolve?.(alert.id))}
+                >
+                  解决
+                </Button>
+              </>
+            )}
+            {canDelete && (
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                onClick={(e) => handleButtonClick(e, () => onAcknowledge?.(alert.id))}
+                onClick={(e) => handleButtonClick(e, handleDelete)}
               >
-                <CheckCircle className="w-4 h-4 mr-1" />
-                确认
+                <X className="w-4 h-4" />
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => handleButtonClick(e, () => onResolve?.(alert.id))}
-              >
-                解决
-              </Button>
-            </>
-          )}
-          {canDelete && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => handleButtonClick(e, handleDelete)}
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          )}
+            )}
+          </div>
         </div>
       </div>
-    </div>
 
-    {/* 详情弹窗 */}
-    <AlertDetailModal
-      open={isModalOpen}
-      onClose={() => setIsModalOpen(false)}
-      alert={alert}
-      onAcknowledge={canUpdate ? onAcknowledge : undefined}
-      onResolve={canUpdate ? onResolve : undefined}
-      onDelete={canDelete ? onDelete : undefined}
-    />
-  </>
+      {/* 详情弹窗：处置建议、原文等细节在此查看 */}
+      <AlertDetailModal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        alert={alert}
+        onAcknowledge={canUpdate ? onAcknowledge : undefined}
+        onResolve={canUpdate ? onResolve : undefined}
+        onDelete={canDelete ? onDelete : undefined}
+      />
+    </>
   )
 }

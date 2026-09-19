@@ -604,7 +604,7 @@ const AlertsViewContent: React.FC = () => {
 
             <div className="overflow-y-auto flex-1">
               {loading ? (
-                <SkeletonList count={pageSize} itemHeight="h-24" spacing="space-y-3" />
+                <SkeletonList count={pageSize} itemHeight="h-16" spacing="space-y-2" />
               ) : error ? (
                 <div className="py-6">
                   <ErrorAlert
