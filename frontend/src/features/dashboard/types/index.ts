@@ -60,6 +60,9 @@ export interface NetworkOverviewItem {
 // 网络拓扑：节点 = 台账设备，链路 = LLDP 邻居关系
 export type TopologyNodeStatus = 'online' | 'offline' | 'warning' | 'unknown'
 
+// 采集端对设备 LLDP 可用性的判定：ok / SNMP 视图未放行 1.0.8802 / 设备未全局启用
+export type TopologyLLDPStatus = 'ok' | 'mib_unreachable' | 'disabled'
+
 export interface TopologyNode {
   id: number
   name: string
@@ -74,6 +77,8 @@ export interface TopologyNode {
   status: TopologyNodeStatus
   // LLDP 看到但台账里没有的邻居数（终端、未纳管设备）
   unmanagedNeighbors: number
+  // 缺失表示尚未采集出结论
+  lldpStatus?: TopologyLLDPStatus
 }
 
 export interface TopologyLink {

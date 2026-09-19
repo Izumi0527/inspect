@@ -121,8 +121,9 @@ describe('dashboard.api generateReport', () => {
             firmware_version: 'V200R019',
             status: 'online',
             unmanaged_neighbors: 2,
+            lldp_status: 'mib_unreachable',
           },
-          { id: 2, name: 'acc', ip: '10.0.0.2', device_type: 'switch', status: 'weird', unmanaged_neighbors: 0 },
+          { id: 2, name: 'acc', ip: '10.0.0.2', device_type: 'switch', status: 'weird', unmanaged_neighbors: 0, lldp_status: 'bogus' },
         ],
         links: [
           { id: '1:G1|2:', source: 1, target: 2, source_port: 'G1', target_port: '', bidirectional: false },
@@ -144,9 +145,11 @@ describe('dashboard.api generateReport', () => {
       firmwareVersion: 'V200R019',
       status: 'online',
       unmanagedNeighbors: 2,
+      lldpStatus: 'mib_unreachable',
     })
     expect(result.networkTopology.nodes[1]?.status).toBe('unknown')
     expect(result.networkTopology.nodes[1]?.detectedType).toBeUndefined()
+    expect(result.networkTopology.nodes[1]?.lldpStatus).toBeUndefined()
     expect(result.networkTopology.links).toEqual([
       { id: '1:G1|2:', source: 1, target: 2, sourcePort: 'G1', targetPort: '', bidirectional: false },
     ])

@@ -14,7 +14,7 @@ import {
   TbCloudNetwork,
 } from 'react-icons/tb'
 
-import type { NetworkOverviewItem, TopologyNodeStatus } from '../../types'
+import type { NetworkOverviewItem, TopologyLLDPStatus, TopologyNodeStatus } from '../../types'
 
 // 网络概览卡片与拓扑图共用的图标、配色与文案元数据。
 // 拓扑节点与类型图例必须长得一样，否则用户无法把"图例里的交换机"和"图上的交换机"对上。
@@ -239,3 +239,25 @@ export const getTopologyNodeStatusMeta = (status: TopologyNodeStatus) => {
       return { label: '未知', dotClassName: 'fill-gray-400', badgeClassName: 'bg-gray-100 text-gray-700 dark:bg-gray-900/60 dark:text-gray-300' }
   }
 }
+
+// LLDP 采集判定的展示文案。华为 S 系列的缺省 SNMP 视图只含 internet(1.3.6.1)，LLDP-MIB(1.0.8802)
+// 在视图外，这是生产环境「开了 LLDP 却没有链路」最常见的原因，所以把设备侧命令直接给到运维。
+export const getTopologyLLDPStatusMeta = (status: TopologyLLDPStatus | undefined) => {
+  switch (status) {
+    case 'ok':
+      return { label: '正常', badgeClassName: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' }
+    case 'mib_unreachable':
+      return { label: 'SNMP 视图未放行', badgeClassName: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }
+    case 'disabled':
+      return { label: '设备未启用', badgeClassName: 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' }
+    default:
+      return { label: '尚未采集', badgeClassName: 'bg-gray-100 text-gray-700 dark:bg-gray-900/60 dark:text-gray-300' }
+  }
+}
+
+export const HUAWEI_LLDP_VIEW_COMMANDS = [
+  'snmp-agent mib-view included iso-view iso',
+  'snmp-agent community read <community> mib-view iso-view',
+] as const
+
+export const HUAWEI_LLDP_ENABLE_COMMAND = 'lldp enable'

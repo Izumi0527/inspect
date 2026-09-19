@@ -10,6 +10,7 @@ import {
   NetworkTopology,
   RecentAlert,
   TopologyLink,
+  TopologyLLDPStatus,
   TopologyNode,
   TopologyNodeStatus,
 } from '../types'
@@ -56,6 +57,7 @@ interface TopologyNodeDto {
   firmware_version?: string
   status?: string
   unmanaged_neighbors?: number
+  lldp_status?: string
 }
 
 interface TopologyLinkDto {
@@ -277,8 +279,20 @@ const normalizeTopologyNodeStatus = (status: unknown): TopologyNodeStatus => {
   }
 }
 
+const normalizeTopologyLLDPStatus = (status: unknown): TopologyLLDPStatus | undefined => {
+  switch (status) {
+    case 'ok':
+    case 'mib_unreachable':
+    case 'disabled':
+      return status
+    default:
+      return undefined
+  }
+}
+
 const toTopologyNode = (dto: TopologyNodeDto): TopologyNode => {
   const detected = typeof dto.detected_type === 'string' ? dto.detected_type.trim() : ''
+  const lldpStatus = normalizeTopologyLLDPStatus(dto.lldp_status)
   return {
     id: Number(dto.id),
     name: dto.name?.trim() || dto.ip?.trim() || `设备 ${dto.id}`,
@@ -290,6 +304,7 @@ const toTopologyNode = (dto: TopologyNodeDto): TopologyNode => {
     firmwareVersion: dto.firmware_version ?? '',
     status: normalizeTopologyNodeStatus(dto.status),
     unmanagedNeighbors: typeof dto.unmanaged_neighbors === 'number' ? dto.unmanaged_neighbors : 0,
+    ...(lldpStatus ? { lldpStatus } : {}),
   }
 }
 
