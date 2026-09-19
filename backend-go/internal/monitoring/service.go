@@ -453,7 +453,7 @@ type InterfaceSpeedUpdate struct {
 	UpdatedAt     time.Time
 }
 
-// writeDeviceIdentityIfChanged 把采集到的型号/软件版本回填设备档案。
+// writeDeviceIdentityIfChanged 把采集到的型号/软件版本/LLDP 身份与状态回填设备档案。
 //
 // 只写差异：WHERE 子句带 "值为空或与新值不同" 的条件，取值稳定时不产生任何 UPDATE，
 // 因此不会让每 3 分钟一轮的采集持续刷新 devices.updated_at。
@@ -484,6 +484,9 @@ func writeDeviceIdentityIfChanged(tx *gorm.DB, deviceID int, identity *DeviceIde
 	apply("model", identity.Model)
 	apply("firmware_version", identity.FirmwareVersion)
 	apply("detected_device_type", identity.DetectedDeviceType)
+	apply("detected_sys_name", identity.SysName)
+	apply("detected_chassis_id", identity.ChassisID)
+	apply("lldp_status", identity.LLDPStatus)
 }
 
 // writeNeighborsBestEffort 以「先删后插」全量替换设备的 LLDP 邻居行。

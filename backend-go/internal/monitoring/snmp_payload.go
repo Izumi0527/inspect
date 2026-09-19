@@ -50,7 +50,14 @@ func BuildSNMPDeviceMetricsRequest(deviceID int, metrics *devices.SNMPMetrics) D
 	if metrics.DetectedType != nil {
 		identity.DetectedDeviceType = *metrics.DetectedType
 	}
-	if identity.Model != "" || identity.FirmwareVersion != "" || identity.DetectedDeviceType != "" {
+	if metrics.SysName != nil {
+		identity.SysName = *metrics.SysName
+	}
+	if metrics.ChassisID != nil {
+		identity.ChassisID = *metrics.ChassisID
+	}
+	identity.LLDPStatus = string(metrics.LLDPStatus)
+	if identity != (DeviceIdentity{}) {
 		req.Identity = &identity
 	}
 

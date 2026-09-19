@@ -167,6 +167,12 @@ type DeviceIdentity struct {
 	FirmwareVersion string `json:"firmware_version,omitempty"`
 	// DetectedDeviceType 是 SNMP 识别出的类型，只回填 detected_device_type 列，不覆盖用户填写的 device_type
 	DetectedDeviceType string `json:"detected_device_type,omitempty"`
+	// SysName / ChassisID 是设备自身的 LLDP 身份（sysName、LLDP 机箱 ID 或桥 MAC），只回填
+	// detected_sys_name / detected_chassis_id，不覆盖用户填写的 hostname / mac_address；拓扑组装用它们匹配邻居。
+	SysName   string `json:"sys_name,omitempty"`
+	ChassisID string `json:"chassis_id,omitempty"`
+	// LLDPStatus 是采集端对 LLDP 可用性的判定（ok/mib_unreachable/disabled），空值表示本轮无结论、不更新。
+	LLDPStatus string `json:"lldp_status,omitempty"`
 }
 
 // NeighborsPayload 承载一轮采集得到的全部 LLDP 邻居，写入时整体替换该设备的旧邻居行。

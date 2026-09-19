@@ -68,6 +68,57 @@ func TestBuildSNMPDeviceMetricsRequest_NeighborsAndDetectedType(t *testing.T) {
 			t.Fatalf("payload = %+v\nwant %+v", got, want)
 		}
 	})
+
+	t.Run("LLDP 状态与设备自身身份进入 Identity，视图未放行时 Neighbors 仍为 nil", func(t *testing.T) {
+		req := monitoring.BuildSNMPDeviceMetricsRequest(3, &devices.SNMPMetrics{
+			LLDPStatus:  devices.LLDPStatusMIBUnreachable,
+			SysName:     strPtr("16F-HJ-SW"),
+			ChassisID:   strPtr("4c:1f:cc:1a:07:48"),
+			CollectedAt: time.Now(),
+		})
+		if req.Neighbors != nil {
+			t.Fatalf("Neighbors = %+v, want nil", req.Neighbors)
+		}
+		if req.Identity == nil {
+			t.Fatalf("Identity 应携带 LLDP 状态与身份")
+		}
+		if req.Identity.LLDPStatus != "mib_unreachable" || req.Identity.SysName != "16F-HJ-SW" || req.Identity.ChassisID != "4c:1f:cc:1a:07:48" {
+			t.Fatalf("Identity = %+v", req.Identity)
+		}
+	})
+}
+
+// TestWriteDeviceMetrics_WritesLLDPIdentityColumnsOnlyWhenChanged LLDP 状态与识别身份沿用
+// 「只写差异」的回填路径，落到 lldp_status / detected_sys_name / detected_chassis_id 三列。
+func TestWriteDeviceMetrics_WritesLLDPIdentityColumnsOnlyWhenChanged(t *testing.T) {
+	db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
+	defer cleanup()
+
+	writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
+	cpu := 1.0
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`UPDATE "devices" SET "cpu_usage"`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`UPDATE "devices" SET "detected_sys_name"=\$1 WHERE id = \$2 AND \(detected_sys_name IS NULL OR detected_sys_name <> \$3\)`).
+		WithArgs("16F-HJ-SW", 9, "16F-HJ-SW").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`UPDATE "devices" SET "detected_chassis_id"=\$1 WHERE id = \$2 AND \(detected_chassis_id IS NULL OR detected_chassis_id <> \$3\)`).
+		WithArgs("4c:1f:cc:1a:07:48", 9, "4c:1f:cc:1a:07:48").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`UPDATE "devices" SET "lldp_status"=\$1 WHERE id = \$2 AND \(lldp_status IS NULL OR lldp_status <> \$3\)`).
+		WithArgs("mib_unreachable", 9, "mib_unreachable").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	if _, err := writer.WriteDeviceMetrics(context.Background(), monitoring.DeviceMetricsRequest{
+		DeviceID: 9,
+		Metrics:  map[string]monitoring.MetricValue{"cpu_usage": {Value: &cpu}},
+		Identity: &monitoring.DeviceIdentity{SysName: "16F-HJ-SW", ChassisID: "4c:1f:cc:1a:07:48", LLDPStatus: "mib_unreachable"},
+	}); err != nil {
+		t.Fatalf("WriteDeviceMetrics() error = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
 }
 
 // TestWriteDeviceMetrics_ReplacesNeighborsInSavepoint 邻居写入是「先删后插」的全量替换，
