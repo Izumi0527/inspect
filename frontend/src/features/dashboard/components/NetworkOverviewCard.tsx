@@ -15,18 +15,20 @@ interface NetworkOverviewCardProps {
   overview: NetworkOverviewItem[]
   topology: NetworkTopology
   loading?: boolean
+  // 有 devices:update 的用户可拖动节点并保存共享布局
+  canEditLayout?: boolean
 }
 
 const CardShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <Card className="flex flex-1 flex-col overflow-hidden">
-    <CardHeader>
+  <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <CardHeader className="pb-3">
       <CardTitle className="flex items-center gap-2">
         <Network className="h-5 w-5 text-blue-600" />
         网络概览
       </CardTitle>
     </CardHeader>
-    <CardContent className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto">{children}</div>
+    <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
     </CardContent>
   </Card>
 )
@@ -35,6 +37,7 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
   overview,
   topology,
   loading = false,
+  canEditLayout = false,
 }) => {
   if (loading) {
     return (
@@ -80,7 +83,7 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
 
   return (
     <CardShell>
-      <div className="flex flex-col gap-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
         {overview.length > 0 && (
           <ul
             className="flex flex-wrap items-center gap-2"
@@ -114,7 +117,7 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
           </ul>
         )}
 
-        <NetworkTopologyGraph topology={topology} />
+        <NetworkTopologyGraph topology={topology} canEditLayout={canEditLayout} />
       </div>
     </CardShell>
   )

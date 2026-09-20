@@ -101,6 +101,7 @@ interface TopologyLayoutDto {
 interface DashboardOverviewDto {
   stats?: DashboardStatDto[]
   active_alerts?: RecentAlertDto[]
+  active_alerts_total?: number
   network_overview?: NetworkOverviewDto[]
   network_topology?: NetworkTopologyDto
   last_updated?: string
@@ -407,9 +408,13 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     throw new Error('仪表板响应格式无效')
   }
 
+  const activeAlerts = ensureArray<RecentAlertDto>(overview.active_alerts)?.map(toRecentAlert) ?? []
   return {
     stats: ensureArray<DashboardStatDto>(overview.stats)?.map(toDashboardStat) ?? getEmptyStatsData(),
-    activeAlerts: ensureArray<RecentAlertDto>(overview.active_alerts)?.map(toRecentAlert) ?? [],
+    activeAlerts,
+    activeAlertsTotal: isFiniteNumber(overview.active_alerts_total) && overview.active_alerts_total >= activeAlerts.length
+      ? overview.active_alerts_total
+      : activeAlerts.length,
     networkOverview: ensureArray<NetworkOverviewDto>(overview.network_overview)?.map(toNetworkOverviewItem) ?? [],
     networkTopology: toNetworkTopology(overview.network_topology),
     lastUpdated: typeof overview.last_updated === 'string' ? new Date(overview.last_updated) : new Date(),

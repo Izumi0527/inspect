@@ -67,6 +67,9 @@ export const DashboardView: React.FC = () => {
   const canReadAlerts = usePermission(Permission.ALERTS_READ)
   useDashboardAlertRealtimeRefresh(refreshStats, canReadAlerts)
 
+  // 拓扑布局是团队共享视图，只有可改设备的人才能保存
+  const canEditTopologyLayout = usePermission(Permission.DEVICES_UPDATE)
+
   const handleRetry = () => {
     loadData(true)
   }
@@ -173,34 +176,42 @@ export const DashboardView: React.FC = () => {
           </div>
         )}
 
-        {/* Main Content */}
-        <main className="p-4 flex-1 overflow-auto">
-          <div className="flex flex-col gap-4 h-full">
+        {/* Main Content：桌面端按视口高度铺满，第二行随窗口高度伸缩；窄屏退化为纵向堆叠可滚动 */}
+        <main className="min-h-0 flex-1 overflow-auto p-4">
+          <div className="flex min-h-full flex-col gap-4 lg:h-full">
             {/* Stats Grid */}
             <StatsGrid
               stats={data?.stats || []}
               loading={isInitialLoading}
             />
 
-            {/* Secondary Cards - Horizontal Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Active Alerts */}
-              <ActiveAlertsCard
-                alerts={data?.activeAlerts || []}
-                loading={isInitialLoading}
-              />
+            <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-3">
+              {/* 左列：网络概览（无限画布） */}
+              <div
+                data-testid="dashboard-primary-column"
+                className="flex min-h-[560px] flex-col lg:col-span-2 lg:min-h-0"
+              >
+                <NetworkOverviewCard
+                  overview={data?.networkOverview || []}
+                  topology={data?.networkTopology ?? { nodes: [], links: [] }}
+                  loading={isInitialLoading}
+                  canEditLayout={canEditTopologyLayout}
+                />
+              </div>
 
-              {/* Quick Actions */}
-              <QuickActionsCard />
-            </div>
-
-            {/* Main Content Card - Expands to bottom */}
-            <div className="flex-1 flex flex-col">
-              <NetworkOverviewCard
-                overview={data?.networkOverview || []}
-                topology={data?.networkTopology ?? { nodes: [], links: [] }}
-                loading={isInitialLoading}
-              />
+              {/* 右列：快捷入口在上，实时告警紧贴其下并占满剩余高度 */}
+              <div
+                data-testid="dashboard-secondary-column"
+                className="flex flex-col gap-4 lg:min-h-0"
+              >
+                <QuickActionsCard />
+                <ActiveAlertsCard
+                  alerts={data?.activeAlerts || []}
+                  total={data?.activeAlertsTotal}
+                  loading={isInitialLoading}
+                  className="lg:min-h-0 lg:flex-1"
+                />
+              </div>
             </div>
           </div>
 

@@ -153,8 +153,10 @@ export interface DashboardPermissions {
 // Dashboard数据汇总接口
 export interface DashboardData {
   stats: DashboardStat[]
-  // 实时告警：仅当前活跃（open/acknowledged）的告警
+  // 实时告警：仅当前活跃（open/acknowledged）的告警，按预览上限截断
   activeAlerts: RecentAlert[]
+  // 活跃告警总数（不受截断影响）
+  activeAlertsTotal: number
   networkOverview: NetworkOverviewItem[]
   networkTopology: NetworkTopology
   lastUpdated: Date

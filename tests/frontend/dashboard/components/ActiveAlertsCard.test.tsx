@@ -43,3 +43,38 @@ describe('ActiveAlertsCard', () => {
     expect(within(link).queryByRole('button')).not.toBeInTheDocument()
   })
 })
+
+describe('ActiveAlertsCard 预览上限', () => {
+  const manyAlerts: RecentAlert[] = Array.from({ length: 25 }, (_, index) => ({
+    id: index + 1,
+    device: `dev-${index + 1}`,
+    message: `告警 ${index + 1}`,
+    severity: 'medium',
+    time: '2026-09-20T01:00:00Z',
+  }))
+
+  it('只是快速预览：最多渲染 20 条，底部按钮标出总数并固定在滚动区之外', () => {
+    render(<ActiveAlertsCard alerts={manyAlerts} total={25} />)
+
+    const list = screen.getByTestId('active-alerts-list')
+    expect(within(list).getAllByTestId('active-alert-item')).toHaveLength(20)
+    expect(screen.queryByText('dev-21')).not.toBeInTheDocument()
+    expect(list.className).toContain('overflow-y-auto')
+
+    const link = screen.getByRole('link', { name: /查看所有告警/ })
+    expect(link).toHaveTextContent('共 25 条')
+    expect(list.contains(link)).toBe(false)
+  })
+
+  it('标题旁显示活跃告警总数（后端截断后的总数），而不是预览条数', () => {
+    render(<ActiveAlertsCard alerts={manyAlerts.slice(0, 20)} total={25} />)
+    expect(screen.getByTestId('active-alerts-count')).toHaveTextContent('25')
+    expect(screen.getByRole('link', { name: /查看所有告警/ })).toHaveTextContent('共 25 条')
+  })
+
+  it('未传总数时以列表长度为准', () => {
+    render(<ActiveAlertsCard alerts={manyAlerts.slice(0, 3)} />)
+    expect(screen.getByTestId('active-alerts-count')).toHaveTextContent('3')
+    expect(screen.getByRole('link', { name: '查看所有告警' })).toBeInTheDocument()
+  })
+})

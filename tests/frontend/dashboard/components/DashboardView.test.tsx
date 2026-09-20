@@ -38,16 +38,24 @@ jest.mock('@/features/dashboard/components/StatsGrid', () => ({
   StatsGrid: () => <div data-testid="stats-grid" />,
 }))
 
+const mockActiveAlertsCard = jest.fn()
 jest.mock('@/features/dashboard/components/ActiveAlertsCard', () => ({
-  ActiveAlertsCard: () => <div data-testid="active-alerts-card" />,
+  ActiveAlertsCard: (props: Record<string, unknown>) => {
+    mockActiveAlertsCard(props)
+    return <div data-testid="active-alerts-card" />
+  },
 }))
 
 jest.mock('@/features/dashboard/components/QuickActionsCard', () => ({
   QuickActionsCard: () => <div data-testid="quick-actions-card" />,
 }))
 
+const mockNetworkOverviewCard = jest.fn()
 jest.mock('@/features/dashboard/components/NetworkOverviewCard', () => ({
-  NetworkOverviewCard: () => <div data-testid="network-overview-card" />,
+  NetworkOverviewCard: (props: Record<string, unknown>) => {
+    mockNetworkOverviewCard(props)
+    return <div data-testid="network-overview-card" />
+  },
 }))
 
 describe('DashboardView', () => {
@@ -107,5 +115,50 @@ describe('DashboardView', () => {
     expect(screen.getByText('网络概览加载失败')).toBeInTheDocument()
     // 实时告警依赖告警推送刷新：有 alerts:read 时以总览刷新函数接入告警事件联动
     expect(mockUseDashboardAlertRealtimeRefresh).toHaveBeenCalledWith(refreshStats, true)
+  })
+
+  it('网络概览占左列，右列是快捷入口在上、实时告警在下，并把编辑权限传给网络概览', () => {
+    mockUseDashboardData.mockReturnValue({
+      data: {
+        stats: [],
+        activeAlerts: [],
+        activeAlertsTotal: 25,
+        networkOverview: [],
+        networkTopology: { nodes: [], links: [] },
+        lastUpdated: new Date('2026-09-20T00:00:00.000Z'),
+        permissions: { devices: true, alerts: true, monitoring: true },
+        sections: {
+          stats: { ok: true },
+          statsDevices: { ok: true },
+          statsAlerts: { ok: true },
+          statsBandwidth: { ok: true },
+          activeAlerts: { ok: true },
+          networkOverview: { ok: true },
+        },
+      },
+      isInitialLoading: false,
+      isRefreshing: false,
+      error: null,
+      refreshStats: jest.fn(),
+      loadData: jest.fn(),
+    })
+
+    render(<DashboardView />)
+
+    const primary = screen.getByTestId('dashboard-primary-column')
+    const secondary = screen.getByTestId('dashboard-secondary-column')
+    expect(primary).toContainElement(screen.getByTestId('network-overview-card'))
+    expect(secondary).toContainElement(screen.getByTestId('quick-actions-card'))
+    expect(secondary).toContainElement(screen.getByTestId('active-alerts-card'))
+    // 快捷入口在实时告警上方
+    expect(
+      screen.getByTestId('quick-actions-card').compareDocumentPosition(screen.getByTestId('active-alerts-card'))
+      & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    // 布局改动：网络概览左列占两栏
+    expect(primary.className).toContain('lg:col-span-2')
+
+    expect(mockNetworkOverviewCard).toHaveBeenCalledWith(expect.objectContaining({ canEditLayout: true }))
+    expect(mockActiveAlertsCard).toHaveBeenCalledWith(expect.objectContaining({ total: 25 }))
   })
 })

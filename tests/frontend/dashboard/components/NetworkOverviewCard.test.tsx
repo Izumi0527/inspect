@@ -46,4 +46,12 @@ describe('NetworkOverviewCard', () => {
     render(<NetworkOverviewCard overview={[]} topology={{ nodes: [], links: [] }} />)
     expect(screen.getByText('暂无网络概览数据')).toBeInTheDocument()
   })
+
+  it('canEditLayout 透传给拓扑图：有权限时显示保存布局按钮', () => {
+    const { rerender } = render(<NetworkOverviewCard overview={[]} topology={topology} />)
+    expect(screen.queryByRole('button', { name: '保存布局' })).not.toBeInTheDocument()
+
+    rerender(<NetworkOverviewCard overview={[]} topology={topology} canEditLayout />)
+    expect(screen.getByRole('button', { name: '保存布局' })).toBeInTheDocument()
+  })
 })

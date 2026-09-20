@@ -106,6 +106,23 @@ describe('dashboard.api generateReport', () => {
     expect(result.sections.statsInspections.message).toBe('巡检统计加载失败')
   })
 
+  it('应解析 active_alerts_total；缺失时退回为列表长度', async () => {
+    mockGet.mockResolvedValueOnce({
+      stats: [],
+      active_alerts: [{ id: 1, device: 'a', message: 'm', severity: 'info', time: '2026-09-20T00:00:00Z' }],
+      active_alerts_total: 25,
+      network_overview: [],
+    })
+    expect((await fetchDashboardData()).activeAlertsTotal).toBe(25)
+
+    mockGet.mockResolvedValueOnce({
+      stats: [],
+      active_alerts: [{ id: 1, device: 'a', message: 'm', severity: 'info', time: '2026-09-20T00:00:00Z' }],
+      network_overview: [],
+    })
+    expect((await fetchDashboardData()).activeAlertsTotal).toBe(1)
+  })
+
   it('应把 network_topology 映射为节点与链路，缺失时给空拓扑', async () => {
     mockGet.mockResolvedValueOnce({
       stats: [],
