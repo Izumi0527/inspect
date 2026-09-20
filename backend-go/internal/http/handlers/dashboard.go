@@ -23,6 +23,7 @@ func (h DashboardHandler) Register(group *echo.Group) {
 	group.GET("/dashboard/recent-alerts", h.GetRecentAlerts)
 	group.GET("/dashboard/network-overview", h.GetNetworkOverview)
 	group.GET("/dashboard/network-topology", h.GetNetworkTopology)
+	group.PUT("/dashboard/network-topology/layout", h.PutNetworkTopologyLayout)
 	group.GET("/dashboard/bandwidth-stats", h.GetBandwidthStats)
 	group.GET("/dashboard/notifications", h.GetNotifications)
 	group.POST("/dashboard/notifications/read", h.MarkNotificationsRead)
@@ -196,6 +197,39 @@ func (h DashboardHandler) GetNetworkTopology(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load network topology")
 	}
 	return c.JSON(http.StatusOK, resp)
+}
+
+// PutNetworkTopologyLayout 整份覆盖全局拓扑布局。布局是运维团队共享的视图，改动需要 devices:update。
+func (h DashboardHandler) PutNetworkTopologyLayout(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
+	}
+	user, err := requirePermission(c, h.Auth, "devices:update")
+	if err != nil {
+		return err
+	}
+
+	var req dashboard.TopologyLayout
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+	if _, err := dashboard.NormalizeTopologyLayout(req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid topology layout: "+err.Error())
+	}
+
+	// 展示用操作人：用户名可读，ID 只在没有用户名时兜底
+	updatedBy := ""
+	if user != nil {
+		updatedBy = user.Username
+		if updatedBy == "" {
+			updatedBy = user.ID
+		}
+	}
+	layout, err := h.Service.SaveTopologyLayout(c.Request().Context(), req, updatedBy)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to save topology layout")
+	}
+	return c.JSON(http.StatusOK, layout)
 }
 
 func (h DashboardHandler) GetBandwidthStats(c echo.Context) error {

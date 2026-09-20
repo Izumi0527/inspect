@@ -207,7 +207,7 @@ func (s *Service) GetOverview(ctx context.Context, access OverviewAccess) (Overv
 		}
 
 		// 拓扑与类型计数同属「网络概览」分区，任一失败都把该分区标为不可用
-		topology, err := s.getNetworkTopology(ctx)
+		topology, err := s.getNetworkTopologyWithLayout(ctx)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Warn("加载总览网络拓扑失败", zap.Error(err))
@@ -250,7 +250,24 @@ func (s *Service) GetNetworkOverview(ctx context.Context) ([]NetworkOverviewItem
 }
 
 func (s *Service) GetNetworkTopology(ctx context.Context) (NetworkTopology, error) {
-	return s.getNetworkTopology(ctx)
+	return s.getNetworkTopologyWithLayout(ctx)
+}
+
+// getNetworkTopologyWithLayout 在拓扑上附带已保存的画布布局；布局读取失败只记日志不拖垮拓扑。
+func (s *Service) getNetworkTopologyWithLayout(ctx context.Context) (NetworkTopology, error) {
+	topology, err := s.getNetworkTopology(ctx)
+	if err != nil {
+		return NetworkTopology{}, err
+	}
+	layout, err := s.getTopologyLayout(ctx)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn("加载拓扑布局失败", zap.Error(err))
+		}
+		return topology, nil
+	}
+	topology.Layout = layout
+	return topology, nil
 }
 
 func (s *Service) GetBandwidthStats(ctx context.Context) (BandwidthStats, error) {

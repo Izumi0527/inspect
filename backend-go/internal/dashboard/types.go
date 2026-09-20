@@ -63,9 +63,11 @@ type TopologyLink struct {
 }
 
 type NetworkTopology struct {
-	Nodes       []TopologyNode `json:"nodes"`
-	Links       []TopologyLink `json:"links"`
-	GeneratedAt time.Time      `json:"generated_at"`
+	Nodes []TopologyNode `json:"nodes"`
+	Links []TopologyLink `json:"links"`
+	// Layout 是用户保存的画布布局；没保存过为 nil，前端自动分层布局
+	Layout      *TopologyLayout `json:"layout,omitempty"`
+	GeneratedAt time.Time       `json:"generated_at"`
 }
 
 type dashboardSectionStatus struct {

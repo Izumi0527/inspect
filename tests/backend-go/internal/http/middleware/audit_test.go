@@ -51,6 +51,7 @@ func newAuditTestServer(sink *fakeAuditSink) *echo.Echo {
 	api.GET("/templates/:id/export", ok)
 	api.POST("/settings/audit/logs/export", ok)
 	api.PUT("/settings/general/settings/:key", ok)
+	api.PUT("/dashboard/network-topology/layout", ok)
 	api.GET("/devices", ok)
 	api.POST("/devices/batch-probe", ok)
 	api.POST("/auth/refresh", ok)
@@ -83,6 +84,7 @@ func TestAuditTrail_MutatingRequestsAreRecorded(t *testing.T) {
 		{http.MethodPost, "/api/v1/templates/import", "import", "inspection_template", ""},
 		{http.MethodPost, "/api/v1/settings/audit/logs/export", "export", "setting", ""},
 		{http.MethodPut, "/api/v1/settings/general/settings/system.timezone", "config_change", "setting", ""},
+		{http.MethodPut, "/api/v1/dashboard/network-topology/layout", "update", "topology_layout", ""},
 	}
 
 	for _, tc := range cases {

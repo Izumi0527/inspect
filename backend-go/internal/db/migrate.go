@@ -77,6 +77,7 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 		&reports.Report{},
 
 		&dashboard.UserNotificationState{},
+		&dashboard.TopologyLayoutRecord{},
 
 		&scheduler.ScheduledTask{},
 		&scheduler.TaskExecution{},

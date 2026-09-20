@@ -36,6 +36,7 @@ var auditResourceRules = []auditResourceRule{
 	{"/roles", "role", "角色"},
 	{"/settings", "setting", "系统设置"},
 	{"/logs", "log", "日志"},
+	{"/dashboard/network-topology", "topology_layout", "拓扑布局"},
 }
 
 var auditActionLabels = map[string]string{
