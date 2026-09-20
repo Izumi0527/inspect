@@ -85,13 +85,15 @@ type OverviewPermissions struct {
 }
 
 type OverviewResponse struct {
-	Stats           []StatCard                        `json:"stats"`
-	ActiveAlerts    []RecentAlert                     `json:"active_alerts"`
-	NetworkOverview []NetworkOverviewItem             `json:"network_overview"`
-	NetworkTopology *NetworkTopology                  `json:"network_topology,omitempty"`
-	Sections        map[string]dashboardSectionStatus `json:"sections"`
-	Permissions     OverviewPermissions               `json:"permissions"`
-	LastUpdated     time.Time                         `json:"last_updated"`
+	Stats        []StatCard    `json:"stats"`
+	ActiveAlerts []RecentAlert `json:"active_alerts"`
+	// ActiveAlertsTotal 是活跃告警总数；ActiveAlerts 只是按预览上限截断的前若干条
+	ActiveAlertsTotal int                               `json:"active_alerts_total"`
+	NetworkOverview   []NetworkOverviewItem             `json:"network_overview"`
+	NetworkTopology   *NetworkTopology                  `json:"network_topology,omitempty"`
+	Sections          map[string]dashboardSectionStatus `json:"sections"`
+	Permissions       OverviewPermissions               `json:"permissions"`
+	LastUpdated       time.Time                         `json:"last_updated"`
 }
 
 type OverviewAccess struct {

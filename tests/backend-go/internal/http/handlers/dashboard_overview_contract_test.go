@@ -204,3 +204,40 @@ func TestDashboardOverviewHandler_InspectionCardShouldShowNAWhenNoFinishedRuns(t
 		t.Fatalf("sqlmock expectations not met: %v", err)
 	}
 }
+
+// 实时告警是预览：列表按上限截断，但活跃总数要单独下发，前端才能标出「共 N 条」并把徽标显示成真实数量。
+func TestDashboardOverviewHandler_ShouldExposeActiveAlertsTotalBeyondPreview(t *testing.T) {
+	h, mock, cleanup := newDashboardOverviewHandler(t, []string{"alerts:read"})
+	defer cleanup()
+
+	// 告警统计走 alerts.Service 的多条 COUNT 失败后回退到本包的分组查询；这里只精确匹配
+	// ListAlerts 的计数与列表两条 SQL（带 LEFT JOIN alert_rules），其余查询不设期望即失败回退
+	mock.MatchExpectationsInOrder(false)
+	mock.ExpectQuery(`(?is)SELECT .*COUNT\(\*\) AS count.*FROM alerts AS a JOIN devices d ON d\.id = a\.device_id.*GROUP BY .*severity.*`).
+		WillReturnRows(sqlmock.NewRows([]string{"severity", "status", "count"}).AddRow("warning", "active", 25))
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE a\.status IN \(\$1,\$2\)`).
+		WithArgs("open", "acknowledged").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(25))
+	mock.ExpectQuery(`(?is)SELECT a\.\*, d\.name AS device_name.*WHERE a\.status IN \(\$1,\$2\) ORDER BY .*LIMIT \$3`).
+		WithArgs("open", "acknowledged", 20).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "message", "severity", "status"}))
+
+	ctx, rec := newEchoContextWithBody(http.MethodGet, "/api/v1/dashboard/overview", "test-token", nil)
+	if err := h.GetOverview(ctx); err != nil {
+		t.Fatalf("GetOverview returned error: %v", err)
+	}
+
+	var resp struct {
+		ActiveAlerts      []json.RawMessage `json:"active_alerts"`
+		ActiveAlertsTotal int               `json:"active_alerts_total"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal response: %v", err)
+	}
+	if resp.ActiveAlertsTotal != 25 {
+		t.Fatalf("active_alerts_total = %d, want 25", resp.ActiveAlertsTotal)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}

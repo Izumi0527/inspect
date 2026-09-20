@@ -18,6 +18,10 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/scheduler"
 )
 
+// overviewActiveAlertsLimit 是总览实时告警预览的条数上限：卡片在视口内滚动，4K 屏能放下的条数
+// 就是这个数，与前端 ActiveAlertsCard 的 PREVIEW_LIMIT 保持一致。
+const overviewActiveAlertsLimit = 20
+
 type Service struct {
 	db         *gorm.DB
 	alerts     *alerts.Service
@@ -181,8 +185,9 @@ func (s *Service) GetOverview(ctx context.Context, access OverviewAccess) (Overv
 	}
 
 	activeAlerts := []RecentAlert{}
+	activeAlertsTotal := 0
 	if access.CanReadAlerts {
-		items, err := s.getActiveAlerts(ctx, 5)
+		items, total, err := s.getActiveAlerts(ctx, overviewActiveAlertsLimit)
 		if err != nil {
 			if s.logger != nil {
 				s.logger.Warn("加载总览实时告警失败", zap.Error(err))
@@ -190,6 +195,7 @@ func (s *Service) GetOverview(ctx context.Context, access OverviewAccess) (Overv
 			sections["activeAlerts"] = buildOverviewErrorSectionStatus("实时告警加载失败")
 		} else {
 			activeAlerts = items
+			activeAlertsTotal = total
 		}
 	}
 
@@ -219,13 +225,14 @@ func (s *Service) GetOverview(ctx context.Context, access OverviewAccess) (Overv
 	}
 
 	return OverviewResponse{
-		Stats:           stats,
-		ActiveAlerts:    activeAlerts,
-		NetworkOverview: networkOverview,
-		NetworkTopology: networkTopology,
-		Sections:        sections,
-		Permissions:     buildOverviewPermissions(access),
-		LastUpdated:     time.Now().UTC(),
+		Stats:             stats,
+		ActiveAlerts:      activeAlerts,
+		ActiveAlertsTotal: activeAlertsTotal,
+		NetworkOverview:   networkOverview,
+		NetworkTopology:   networkTopology,
+		Sections:          sections,
+		Permissions:       buildOverviewPermissions(access),
+		LastUpdated:       time.Now().UTC(),
 	}, nil
 }
 
@@ -241,7 +248,7 @@ func (s *Service) GetRecentAlerts(ctx context.Context, limit int) ([]RecentAlert
 	return s.getRecentAlerts(ctx, limit)
 }
 
-func (s *Service) GetActiveAlerts(ctx context.Context, limit int) ([]RecentAlert, error) {
+func (s *Service) GetActiveAlerts(ctx context.Context, limit int) ([]RecentAlert, int, error) {
 	return s.getActiveAlerts(ctx, limit)
 }
 
@@ -912,20 +919,21 @@ func (s *Service) getRecentAlerts(ctx context.Context, limit int) ([]RecentAlert
 
 // getActiveAlerts 只取仍在活跃中的告警（open/acknowledged）：告警一旦被解决或关闭（含系统自动恢复），
 // 就不再出现在总览「实时告警」里。与 getRecentAlerts（历史最近、供通知中心复用）语义不同。
-func (s *Service) getActiveAlerts(ctx context.Context, limit int) ([]RecentAlert, error) {
+// 第二个返回值是活跃告警总数（不受 limit 截断），供前端在预览之外标出「共 N 条」。
+func (s *Service) getActiveAlerts(ctx context.Context, limit int) ([]RecentAlert, int, error) {
 	if s == nil || s.alerts == nil {
-		return nil, fmt.Errorf("alert service not initialized")
+		return nil, 0, fmt.Errorf("alert service not initialized")
 	}
 
-	rows, _, err := s.alerts.ListAlerts(ctx, alerts.ListAlertsFilter{
+	rows, total, err := s.alerts.ListAlerts(ctx, alerts.ListAlertsFilter{
 		Page:     1,
 		PageSize: limit,
 		Statuses: []string{"open", "acknowledged"},
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return buildRecentAlerts(rows), nil
+	return buildRecentAlerts(rows), int(total), nil
 }
 
 func buildRecentAlerts(rows []alerts.AlertWithDevice) []RecentAlert {

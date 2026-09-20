@@ -22,19 +22,23 @@ func TestGetActiveAlerts_OnlyQueriesOpenAndAcknowledged(t *testing.T) {
 
 	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a .*WHERE a\.status IN \(\$1,\$2\)`).
 		WithArgs("open", "acknowledged").
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(9))
 	mock.ExpectQuery(`(?is)SELECT a\.\*, d\.name AS device_name.*WHERE a\.status IN \(\$1,\$2\) ORDER BY a\.last_occurred desc, a\.created_at desc LIMIT \$3`).
 		WithArgs("open", "acknowledged", 5).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"id", "device_id", "title", "message", "category", "severity", "status", "device_name", "device_ip", "rule_name",
 		}).AddRow(7, 1, "[CRITICAL] core-sw - CPU", "CPU 过高", "performance", "critical", "open", "core-sw", "10.0.0.1", "cpu-rule"))
 
-	items, err := service.GetActiveAlerts(context.Background(), 5)
+	items, total, err := service.GetActiveAlerts(context.Background(), 5)
 	if err != nil {
 		t.Fatalf("GetActiveAlerts() error = %v", err)
 	}
 	if len(items) != 1 {
 		t.Fatalf("GetActiveAlerts() items = %d, want 1", len(items))
+	}
+	// 总数来自计数查询而不是截断后的条数
+	if total != 9 {
+		t.Fatalf("GetActiveAlerts() total = %d, want 9", total)
 	}
 	if items[0].ID != 7 || items[0].Device != "core-sw" || items[0].Severity != "critical" || items[0].Message != "CPU 过高" {
 		t.Fatalf("GetActiveAlerts() item = %+v", items[0])
@@ -50,7 +54,7 @@ func TestGetActiveAlerts_WithoutAlertServiceReturnsError(t *testing.T) {
 	defer cleanup()
 
 	service := dashboard.NewService(db, nil, nil, nil, nil, zap.NewNop())
-	if _, err := service.GetActiveAlerts(context.Background(), 5); err == nil {
+	if _, _, err := service.GetActiveAlerts(context.Background(), 5); err == nil {
 		t.Fatalf("GetActiveAlerts() expected error without alert service")
 	}
 }
