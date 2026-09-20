@@ -94,6 +94,35 @@ export interface TopologyLink {
 export interface NetworkTopology {
   nodes: TopologyNode[]
   links: TopologyLink[]
+  // 用户保存的画布布局；没保存过为 undefined，走自动分层布局
+  layout?: SavedTopologyLayout
+}
+
+// 画布坐标系下的一点（非屏幕像素）
+export interface TopologyPoint {
+  x: number
+  y: number
+}
+
+export interface TopologyNodePosition extends TopologyPoint {
+  deviceId: number
+}
+
+// 画布视口：平移量与缩放倍数
+export interface TopologyViewport extends TopologyPoint {
+  k: number
+}
+
+// 提交保存的布局
+export interface TopologyLayoutInput {
+  positions: TopologyNodePosition[]
+  viewport?: TopologyViewport
+}
+
+// 后端落库后的布局（全系统共享一份）
+export interface SavedTopologyLayout extends TopologyLayoutInput {
+  updatedAt?: string
+  updatedBy?: string
 }
 
 export type DashboardSectionKey =

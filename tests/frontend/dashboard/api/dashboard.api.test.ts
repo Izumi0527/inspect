@@ -2,15 +2,18 @@ import {
   fetchDashboardData,
   fetchDashboardNotificationsWithMeta,
   generateReport,
+  saveTopologyLayout,
 } from '@/features/dashboard/api/dashboard.api'
 
 const mockPost = jest.fn()
 const mockGet = jest.fn()
+const mockPut = jest.fn()
 
 jest.mock('@/lib/api-client', () => ({
   api: {
     get: (...args: unknown[]) => mockGet(...args),
     post: (...args: unknown[]) => mockPost(...args),
+    put: (...args: unknown[]) => mockPut(...args),
   },
 }))
 
@@ -157,6 +160,70 @@ describe('dashboard.api generateReport', () => {
     mockGet.mockResolvedValueOnce({ stats: [], active_alerts: [], network_overview: [] })
     const fallback = await fetchDashboardData()
     expect(fallback.networkTopology).toEqual({ nodes: [], links: [] })
+  })
+
+  it('应把 network_topology.layout 映射为已保存布局，非法坐标条目丢弃，缺失时不带 layout', async () => {
+    mockGet.mockResolvedValueOnce({
+      stats: [],
+      active_alerts: [],
+      network_overview: [],
+      network_topology: {
+        nodes: [],
+        links: [],
+        layout: {
+          positions: [
+            { device_id: 1, x: 10, y: 20 },
+            { device_id: 'bad', x: 1, y: 2 },
+            { device_id: 2, x: 'nan', y: 2 },
+          ],
+          viewport: { x: 5, y: 6, k: 1.5 },
+          updated_at: '2026-09-20T10:00:00Z',
+          updated_by: 'u-1',
+        },
+      },
+    })
+
+    const result = await fetchDashboardData()
+    expect(result.networkTopology.layout).toEqual({
+      positions: [{ deviceId: 1, x: 10, y: 20 }],
+      viewport: { x: 5, y: 6, k: 1.5 },
+      updatedAt: '2026-09-20T10:00:00Z',
+      updatedBy: 'u-1',
+    })
+
+    mockGet.mockResolvedValueOnce({
+      stats: [],
+      active_alerts: [],
+      network_overview: [],
+      network_topology: { nodes: [], links: [] },
+    })
+    const withoutLayout = await fetchDashboardData()
+    expect(withoutLayout.networkTopology.layout).toBeUndefined()
+  })
+
+  it('saveTopologyLayout 以后端字段名 PUT 到布局端点，并把响应映射回前端结构', async () => {
+    mockPut.mockResolvedValueOnce({
+      positions: [{ device_id: 3, x: 1, y: 2 }],
+      viewport: { x: 0, y: 0, k: 1 },
+      updated_at: '2026-09-20T11:00:00Z',
+      updated_by: 'u-2',
+    })
+
+    const saved = await saveTopologyLayout({
+      positions: [{ deviceId: 3, x: 1, y: 2 }],
+      viewport: { x: 0, y: 0, k: 1 },
+    })
+
+    expect(mockPut).toHaveBeenCalledWith('/dashboard/network-topology/layout', {
+      positions: [{ device_id: 3, x: 1, y: 2 }],
+      viewport: { x: 0, y: 0, k: 1 },
+    })
+    expect(saved).toEqual({
+      positions: [{ deviceId: 3, x: 1, y: 2 }],
+      viewport: { x: 0, y: 0, k: 1 },
+      updatedAt: '2026-09-20T11:00:00Z',
+      updatedBy: 'u-2',
+    })
   })
 
   it('总览接口失败时应向上抛错，而不是吞成空数据', async () => {

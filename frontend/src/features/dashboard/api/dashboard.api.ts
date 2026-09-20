@@ -9,10 +9,14 @@ import {
   NetworkOverviewStatus,
   NetworkTopology,
   RecentAlert,
+  SavedTopologyLayout,
+  TopologyLayoutInput,
   TopologyLink,
   TopologyLLDPStatus,
   TopologyNode,
+  TopologyNodePosition,
   TopologyNodeStatus,
+  TopologyViewport,
 } from '../types'
 import type {
   Notification,
@@ -72,6 +76,26 @@ interface TopologyLinkDto {
 interface NetworkTopologyDto {
   nodes?: TopologyNodeDto[]
   links?: TopologyLinkDto[]
+  layout?: TopologyLayoutDto
+}
+
+interface TopologyNodePositionDto {
+  device_id: number
+  x: number
+  y: number
+}
+
+interface TopologyViewportDto {
+  x: number
+  y: number
+  k: number
+}
+
+interface TopologyLayoutDto {
+  positions?: TopologyNodePositionDto[]
+  viewport?: TopologyViewportDto
+  updated_at?: string
+  updated_by?: string
 }
 
 interface DashboardOverviewDto {
@@ -319,15 +343,60 @@ const toTopologyLink = (dto: TopologyLinkDto): TopologyLink => ({
 
 const createEmptyTopology = (): NetworkTopology => ({ nodes: [], links: [] })
 
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value)
+
+const toTopologyViewport = (dto: unknown): TopologyViewport | undefined => {
+  if (!isObject(dto)) return undefined
+  const { x, y, k } = dto
+  if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(k) || k <= 0) return undefined
+  return { x, y, k }
+}
+
+// 坐标条目逐条校验：一条坏数据只丢弃自己，不让整份布局失效
+const toSavedTopologyLayout = (dto: unknown): SavedTopologyLayout | undefined => {
+  if (!isObject(dto)) return undefined
+  const layout = dto as TopologyLayoutDto
+  const positions = (ensureArray<unknown>(layout.positions) ?? []).flatMap((item): TopologyNodePosition[] => {
+    if (!isObject(item)) return []
+    const { device_id: deviceId, x, y } = item
+    if (!isFiniteNumber(deviceId) || deviceId <= 0 || !isFiniteNumber(x) || !isFiniteNumber(y)) return []
+    return [{ deviceId, x, y }]
+  })
+  const viewport = toTopologyViewport(layout.viewport)
+  return {
+    positions,
+    ...(viewport ? { viewport } : {}),
+    ...(typeof layout.updated_at === 'string' ? { updatedAt: layout.updated_at } : {}),
+    ...(typeof layout.updated_by === 'string' && layout.updated_by !== '' ? { updatedBy: layout.updated_by } : {}),
+  }
+}
+
 const toNetworkTopology = (dto: unknown): NetworkTopology => {
   if (!isObject(dto)) {
     return createEmptyTopology()
   }
   const topology = dto as NetworkTopologyDto
+  const layout = toSavedTopologyLayout(topology.layout)
   return {
     nodes: ensureArray<TopologyNodeDto>(topology.nodes)?.map(toTopologyNode) ?? [],
     links: ensureArray<TopologyLinkDto>(topology.links)?.map(toTopologyLink) ?? [],
+    ...(layout ? { layout } : {}),
   }
+}
+
+// 保存拓扑布局：整份覆盖全局布局，需要 devices:update 权限
+export async function saveTopologyLayout(layout: TopologyLayoutInput): Promise<SavedTopologyLayout> {
+  const body: TopologyLayoutDto = {
+    positions: layout.positions.map(({ deviceId, x, y }) => ({ device_id: deviceId, x, y })),
+    ...(layout.viewport ? { viewport: layout.viewport } : {}),
+  }
+  const payload = await api.put<unknown>('/dashboard/network-topology/layout', body)
+  const saved = toSavedTopologyLayout(unwrapPayload<TopologyLayoutDto>(payload))
+  if (!saved) {
+    throw new Error('拓扑布局保存响应格式无效')
+  }
+  return saved
 }
 
 export async function fetchDashboardData(): Promise<DashboardData> {
