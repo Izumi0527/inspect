@@ -17,6 +17,8 @@ scripts/
 ├── db-manage.sh       # 数据库统一管理 Bash 版
 ├── test.ps1           # 测试与质量校验统一入口（后端 build+test、前端 type-check+test）
 ├── test.sh            # 测试与质量校验统一入口 Bash 版
+├── e2e.ps1            # 前端 E2E 测试入口（playwright，需后端在线）
+├── e2e.sh             # 前端 E2E 测试入口 Bash 版
 ├── clean-cache.ps1    # 缓存、临时文件、日志和测试产物清理
 ├── clean-cache.sh     # 缓存、临时文件、日志和测试产物清理 Bash 版
 ├── deploy-ubuntu.sh   # Ubuntu 生产环境一键原生部署（无 Docker，仅 Linux 目标）
@@ -493,6 +495,34 @@ Bash 版同样遵循上述优先级，最后回退到当前 Shell 进程中的�
 > 后端测试分为两部分：`backend-go` 主模块自带的少量单测，以及
 > `tests/backend-go` 外置测试模块（契约/单元测试主体，通过 sqlmock 离线运行）。
 > 统一入口会依次执行两者。
+
+### 前端 E2E 入口
+
+E2E（`tests/frontend/e2e`，playwright）不在 `test.*` 默认范围内：它需要真实后端登录、
+会拉起浏览器，耗时与单元测试不在一个量级。单独入口 `scripts/e2e.ps1` / `scripts/e2e.sh`：
+
+- 前置检查后端健康端点（默认 `http://localhost:18080/health`，可用
+  `INSPECT_BACKEND_HEALTH_URL` 覆盖）；后端未启动时直接失败并提示先跑 `dev-start`
+- 自动确保 chromium 与 `@playwright/test` 版本匹配（`playwright install` 幂等，已装即秒过）
+- 前端 dev server 由 `frontend/playwright.config.ts` 的 `webServer` 自动拉起或复用
+- 其余参数原样透传给 `playwright test`
+
+```powershell
+.\scripts\e2e.ps1                       # 全部用例
+.\scripts\e2e.ps1 --ui                  # UI 模式
+.\scripts\e2e.ps1 --headed --grep 总览  # 有头模式 + 标题过滤
+.\scripts\e2e.ps1 -SkipBackendCheck --list
+```
+
+```bash
+./scripts/e2e.sh
+./scripts/e2e.sh --ui
+./scripts/e2e.sh --headed --grep 总览
+./scripts/e2e.sh --skip-backend-check --list
+```
+
+失败报告在 `frontend/playwright-report/index.html`，登录态缓存在
+`frontend/test-results/.auth/`，两者均已 gitignore。
 
 ### 底层验证命令（参考）
 
