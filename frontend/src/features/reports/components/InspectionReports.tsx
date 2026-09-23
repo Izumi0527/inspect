@@ -329,7 +329,7 @@ export const InspectionReports: React.FC<Props> = ({
               {formatDateYMD(report.parameters.dateRange.endDate)}
             </span>
           </div>
-          {report.parameters.devices && (
+          {report.parameters.devices && report.parameters.devices.length > 0 && (
             <div className="flex items-center gap-1 mt-1">
               <Users className="w-3 h-3 text-muted-foreground/80" />
               <span>{report.parameters.devices.length} 个设备</span>

@@ -194,6 +194,15 @@ func New() (*App, error) {
 	}
 
 	reportService := reports.NewService(dbConn, log).WithNotifier(wsManager)
+
+	// 为历史巡检报告回填 device_ids（幂等，仅处理缺失的行）。
+	// 失败不阻塞启动：只影响报表列表「参数范围」的设备数展示。
+	if backfilled, err := reportService.BackfillInspectionReportDeviceIDs(context.Background()); err != nil {
+		log.Warn("巡检报告设备范围历史数据回填失败，报表列表将不展示这些报告的设备数", zap.Error(err))
+	} else if backfilled > 0 {
+		log.Info("已为历史巡检报告回填设备范围", zap.Int64("rows", backfilled))
+	}
+
 	reportHandler := handlers.ReportsHandler{
 		Service:   reportService,
 		Auth:      authService,

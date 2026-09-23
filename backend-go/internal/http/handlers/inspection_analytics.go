@@ -12,6 +12,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"github.com/your-org/inspect-system/backend-go/internal/inspection"
@@ -384,6 +385,45 @@ func executionDisplayTime(rows []inspection.Inspection) time.Time {
 	return time.Now()
 }
 
+// inspectionReportParams 巡检报告落库到 reports.device_filters 的生成参数，
+// 报告数据源与报表列表「参数范围」按这些 JSON 键读取。
+type inspectionReportParams struct {
+	DateRange     inspectionReportDateRange `json:"dateRange"`
+	InspectionIDs []int                     `json:"inspection_ids,omitempty"`
+	TaskID        *int                      `json:"task_id,omitempty"`
+	DeviceIDs     []int                     `json:"device_ids,omitempty"`
+}
+
+type inspectionReportDateRange struct {
+	StartDate string `json:"startDate"`
+	EndDate   string `json:"endDate"`
+}
+
+// encodeInspectionReportParams 组装并编码巡检报告的生成参数。
+// 按批次出报告时数据源只按 inspection_ids 取行、不按设备过滤，报告实际覆盖的
+// 就是批内各行的设备，device_ids 以此落库——执行历史导出从不传 device_ids，
+// 不落库时列表会把整批报告显示成「0 个设备」。
+func encodeInspectionReportParams(start, end time.Time, batchRows []inspection.Inspection, taskID *int, deviceIDs []int) (datatypes.JSON, error) {
+	params := inspectionReportParams{
+		DateRange: inspectionReportDateRange{
+			StartDate: start.Format(time.RFC3339),
+			EndDate:   end.Format(time.RFC3339),
+		},
+		TaskID:    taskID,
+		DeviceIDs: deviceIDs,
+	}
+	if len(batchRows) > 0 {
+		params.InspectionIDs = make([]int, 0, len(batchRows))
+		batchDeviceIDs := make([]int, 0, len(batchRows))
+		for _, row := range batchRows {
+			params.InspectionIDs = append(params.InspectionIDs, row.ID)
+			batchDeviceIDs = append(batchDeviceIDs, row.DeviceID)
+		}
+		params.DeviceIDs = uniqueIntSlice(batchDeviceIDs)
+	}
+	return encodeJSON(params)
+}
+
 func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
@@ -424,10 +464,6 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to resolve execution for report")
 	}
-	inspectionIDs := make([]int, 0, len(batchRows))
-	for _, row := range batchRows {
-		inspectionIDs = append(inspectionIDs, row.ID)
-	}
 
 	start, _ := parseTimeOptional(stringValue(startDate))
 	end, _ := parseTimeOptional(stringValue(endDate))
@@ -437,22 +473,7 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 		end = ptrTime(now)
 	}
 
-	params := map[string]interface{}{
-		"dateRange": map[string]interface{}{
-			"startDate": start.Format(time.RFC3339),
-			"endDate":   end.Format(time.RFC3339),
-		},
-	}
-	if len(inspectionIDs) > 0 {
-		params["inspection_ids"] = inspectionIDs
-	}
-	if taskID != nil {
-		params["task_id"] = *taskID
-	}
-	if len(deviceIDs) > 0 {
-		params["device_ids"] = deviceIDs
-	}
-	paramsJSON, _ := encodeJSON(params)
+	paramsJSON, _ := encodeInspectionReportParams(*start, *end, batchRows, taskID, deviceIDs)
 
 	report := reports.Report{
 		Title:         "巡检报告",

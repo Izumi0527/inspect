@@ -168,6 +168,50 @@ func (s *Service) DeleteReport(ctx context.Context, id int) error {
 	return s.db.WithContext(ctx).Delete(&Report{}, id).Error
 }
 
+// BackfillInspectionReportDeviceIDs 为历史巡检报告回填 device_filters.device_ids（幂等，单条 UPDATE 原子完成）。
+//
+// 执行历史导出的报告曾只落库 inspection_ids（更早为 task_id），报表列表「参数范围」
+// 读取的 device_ids 缺失，整批报告因此显示成「0 个设备」：
+//   - 口径：与报告数据源一致，inspection_ids 优先、task_id 兜底，取对应巡检行的设备；
+//   - 幂等：仅处理 device_ids 不是数组的巡检报告，重复执行零副作用；
+//   - 巡检行已被删除的报告无从推导，保持原样（前端不展示设备数）。
+func (s *Service) BackfillInspectionReportDeviceIDs(ctx context.Context) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+
+	result := s.db.WithContext(ctx).Exec(`
+WITH report_scope AS (
+    SELECT r.id AS report_id,
+           CASE
+               WHEN jsonb_typeof(r.device_filters -> 'inspection_ids') = 'array'
+                   THEN r.device_filters -> 'inspection_ids'
+               WHEN jsonb_typeof(r.device_filters -> 'task_id') = 'number'
+                   THEN jsonb_build_array(r.device_filters -> 'task_id')
+           END AS inspection_ids
+    FROM reports r
+    WHERE r.report_type = 'inspection'
+      AND jsonb_typeof(r.device_filters -> 'device_ids') IS DISTINCT FROM 'array'
+),
+report_devices AS (
+    SELECT s.report_id,
+           jsonb_agg(DISTINCT i.device_id ORDER BY i.device_id) AS device_ids
+    FROM report_scope s
+    CROSS JOIN LATERAL jsonb_array_elements_text(s.inspection_ids) AS scoped(inspection_id)
+    JOIN inspections i ON i.id = scoped.inspection_id::bigint
+    WHERE i.device_id > 0
+    GROUP BY s.report_id
+)
+UPDATE reports r
+SET device_filters = r.device_filters || jsonb_build_object('device_ids', d.device_ids)
+FROM report_devices d
+WHERE r.id = d.report_id`)
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
+}
+
 func (s *Service) ListTemplates(ctx context.Context, reportType *string) ([]ReportTemplate, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("database not initialized")

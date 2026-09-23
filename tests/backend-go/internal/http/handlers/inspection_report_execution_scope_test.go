@@ -2,7 +2,9 @@ package handlers_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 	_ "unsafe"
@@ -11,6 +13,7 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/http/handlers"
 	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"go.uber.org/zap"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -132,6 +135,95 @@ func TestResolveReportInspectionIDs_NoExecutionFieldsReturnsNil(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
+// encodeInspectionReportParams 返回落库到 reports.device_filters 的报告参数 JSON，经 go:linkname 桥接。
+// 参数结构体未导出，按仓库约定改测其落库 JSON 契约——报告数据源与报表列表「参数范围」读的就是它。
+//
+//go:linkname encodeInspectionReportParams github.com/your-org/inspect-system/backend-go/internal/http/handlers.encodeInspectionReportParams
+func encodeInspectionReportParams(start, end time.Time, batchRows []inspection.Inspection, taskID *int, deviceIDs []int) (datatypes.JSON, error)
+
+// persistedReportParams 报告参数的落库 JSON 契约（报告数据源与报表列表按这些键读取）。
+type persistedReportParams struct {
+	DateRange struct {
+		StartDate string `json:"startDate"`
+		EndDate   string `json:"endDate"`
+	} `json:"dateRange"`
+	InspectionIDs []int `json:"inspection_ids"`
+	TaskID        *int  `json:"task_id"`
+	DeviceIDs     []int `json:"device_ids"`
+}
+
+var reportParamsStart = time.Date(2026, 9, 6, 13, 0, 0, 0, time.UTC)
+
+func persistReportParams(t *testing.T, batchRows []inspection.Inspection, taskID *int, deviceIDs []int) persistedReportParams {
+	t.Helper()
+	raw, err := encodeInspectionReportParams(reportParamsStart, reportParamsStart.Add(24*time.Hour), batchRows, taskID, deviceIDs)
+	if err != nil {
+		t.Fatalf("encodeInspectionReportParams: %v", err)
+	}
+	var params persistedReportParams
+	if err := json.Unmarshal(raw, &params); err != nil {
+		t.Fatalf("unmarshal %s: %v", raw, err)
+	}
+	return params
+}
+
+// 报表列表「参数范围」按落库参数的 device_ids 展示设备数。执行历史导出只传 execution_id，
+// 整批报告覆盖的设备（批内各行的设备）必须一并落库，否则列表恒显示「0 个设备」。
+func TestInspectionReportParams_BatchExportRecordsBatchDevices(t *testing.T) {
+	rows := []inspection.Inspection{
+		{ID: 41, DeviceID: 6},
+		{ID: 42, DeviceID: 7},
+		{ID: 43, DeviceID: 6},
+	}
+
+	params := persistReportParams(t, rows, nil, nil)
+
+	if !reflect.DeepEqual(params.DeviceIDs, []int{6, 7}) {
+		t.Fatalf("device_ids = %#v, want []int{6, 7}（批内设备去重、保持批内顺序）", params.DeviceIDs)
+	}
+	if !reflect.DeepEqual(params.InspectionIDs, []int{41, 42, 43}) {
+		t.Fatalf("inspection_ids = %#v, want []int{41, 42, 43}", params.InspectionIDs)
+	}
+}
+
+// 批次模式下数据源只按 inspection_ids 取行、不按设备过滤，报告实际覆盖整批设备；
+// 落库的 device_ids 必须描述这一真实范围，而不是调用方附带的、并未生效的设备列表。
+func TestInspectionReportParams_BatchScopeOverridesRequestedDevices(t *testing.T) {
+	rows := []inspection.Inspection{{ID: 41, DeviceID: 6}, {ID: 42, DeviceID: 7}}
+
+	params := persistReportParams(t, rows, nil, []int{9})
+
+	if !reflect.DeepEqual(params.DeviceIDs, []int{6, 7}) {
+		t.Fatalf("device_ids = %#v, want []int{6, 7}（以批次实际覆盖的设备为准）", params.DeviceIDs)
+	}
+}
+
+// 未指定执行批次的汇总口径：调用方指定的设备就是数据源的过滤条件，原样落库。
+func TestInspectionReportParams_SummaryModeKeepsRequestedDevices(t *testing.T) {
+	params := persistReportParams(t, nil, nil, []int{9})
+
+	if !reflect.DeepEqual(params.DeviceIDs, []int{9}) {
+		t.Fatalf("device_ids = %#v, want []int{9}", params.DeviceIDs)
+	}
+	if params.InspectionIDs != nil {
+		t.Fatalf("汇总口径不应写 inspection_ids，got %#v", params.InspectionIDs)
+	}
+}
+
+// 时间窗与 task_id 的键名必须与报告数据源的读取口径一致，键名漂移会让报告静默退回默认时间窗。
+func TestInspectionReportParams_PersistsDateRangeAndTaskID(t *testing.T) {
+	taskID := 41
+
+	params := persistReportParams(t, nil, &taskID, nil)
+
+	if params.DateRange.StartDate != "2026-09-06T13:00:00Z" || params.DateRange.EndDate != "2026-09-07T13:00:00Z" {
+		t.Fatalf("dateRange = %+v, want 2026-09-06T13:00:00Z ~ 2026-09-07T13:00:00Z", params.DateRange)
+	}
+	if params.TaskID == nil || *params.TaskID != 41 {
+		t.Fatalf("task_id = %v, want 41", params.TaskID)
 	}
 }
 
