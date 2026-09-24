@@ -72,7 +72,6 @@ type Report struct {
 	FileFormats    datatypes.JSON `gorm:"column:file_formats;type:jsonb"`
 	FilePaths      datatypes.JSON `gorm:"column:file_paths;type:jsonb"`
 	FileSizes      datatypes.JSON `gorm:"column:file_sizes;type:jsonb"`
-	TotalDevices   int            `gorm:"column:total_devices"`
 	DataPoints     int            `gorm:"column:data_points"`
 	GenerationTime *int           `gorm:"column:generation_time"`
 	ErrorMessage   *string        `gorm:"column:error_message"`

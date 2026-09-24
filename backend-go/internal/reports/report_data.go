@@ -194,10 +194,8 @@ type InspectionDeviceData struct {
 }
 
 type InspectionPerformanceMetrics struct {
-	CPUUsage         float64
-	MemoryUsage      float64
-	ActiveInterfaces int
-	TotalInterfaces  int
+	CPUUsage    float64
+	MemoryUsage float64
 }
 
 type InspectionCheckResult struct {
@@ -655,10 +653,8 @@ func parseInspectionReportPayload(payload map[string]interface{}) InspectionRepo
 			PassRate:           toFloat(deviceMap["pass_rate"]),
 			IssueCount:         toInt(deviceMap["issue_count"]),
 			Performance: InspectionPerformanceMetrics{
-				CPUUsage:         toFloat(perf["cpu_usage"]),
-				MemoryUsage:      toFloat(perf["memory_usage"]),
-				ActiveInterfaces: toInt(perf["active_interfaces"]),
-				TotalInterfaces:  toInt(perf["total_interfaces"]),
+				CPUUsage:    toFloat(perf["cpu_usage"]),
+				MemoryUsage: toFloat(perf["memory_usage"]),
 			},
 		}
 
@@ -916,26 +912,6 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		inspectionIDs = append(inspectionIDs, row.ID)
 	}
 
-	type ifaceRow struct {
-		DeviceID int `gorm:"column:device_id"`
-		Active   int `gorm:"column:active"`
-		Total    int `gorm:"column:total"`
-	}
-	ifaceStats := map[int]ifaceRow{}
-	if len(deviceIDs) > 0 {
-		ifaceRows := make([]ifaceRow, 0)
-		if err := db.WithContext(ctx).
-			Table("device_interfaces").
-			Select("device_id, SUM(CASE WHEN is_up THEN 1 ELSE 0 END) AS active, COUNT(*) AS total").
-			Where("device_id IN ?", deviceIDs).
-			Group("device_id").
-			Scan(&ifaceRows).Error; err == nil {
-			for _, row := range ifaceRows {
-				ifaceStats[row.DeviceID] = row
-			}
-		}
-	}
-
 	type resultRow struct {
 		InspectionID int     `gorm:"column:inspection_id"`
 		Name         string  `gorm:"column:check_item_name"`
@@ -1044,7 +1020,6 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 			passRate = float64(passed) / float64(len(checks)) * 100
 		}
 
-		iface := ifaceStats[deviceID]
 		devices = append(devices, InspectionDeviceData{
 			DeviceName:         defaultStringPtr(row.DeviceName),
 			IPAddress:          defaultStringPtr(row.IPAddress),
@@ -1058,10 +1033,8 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 			PassRate:           passRate,
 			IssueCount:         issueCount,
 			Performance: InspectionPerformanceMetrics{
-				CPUUsage:         defaultFloatPtr(row.CPUUsage),
-				MemoryUsage:      defaultFloatPtr(row.MemoryUsage),
-				ActiveInterfaces: iface.Active,
-				TotalInterfaces:  iface.Total,
+				CPUUsage:    defaultFloatPtr(row.CPUUsage),
+				MemoryUsage: defaultFloatPtr(row.MemoryUsage),
 			},
 			CheckResults: checks,
 		})
