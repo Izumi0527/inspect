@@ -333,7 +333,7 @@ const transformReportData = (input: unknown): Report => {
 
 }
 
-// ==================== 报表绠＄悊 API ====================
+// ==================== 报表管理 API ====================
 
 export async function fetchReports(params?: {
   page?: number
@@ -365,11 +365,11 @@ export async function fetchReports(params?: {
     const response = await api.get<ReportsApiEnvelope<UnknownRecord>>(endpoint)
 
     if (response.success === false) {
-      throw new Error(response.message || '获取报表鍒楄〃失败')
+      throw new Error(response.message || '获取报表列表失败')
     }
 
     if (!response.data) {
-      throw new Error('获取报表鍒楄〃失败')
+      throw new Error('获取报表列表失败')
     }
 
     const payload = toRecord(response.data)
@@ -383,7 +383,7 @@ export async function fetchReports(params?: {
       pages: toNumberSafe(payload.pages),
     }
   } catch (error) {
-    console.error('获取报表鍒楄〃失败:', error)
+    console.error('获取报表列表失败:', error)
     if (shouldUseMockFallback()) {
       return {
         reports: getDefaultReports(),
@@ -400,16 +400,16 @@ export async function fetchReport(id: string): Promise<Report | null> {
     const response = await api.get<ReportsApiEnvelope<UnknownRecord>>(`/reports/${id}`)
 
     if (response.success === false) {
-      throw new Error(response.message || '获取报表璇︽儏失败')
+      throw new Error(response.message || '获取报表详情失败')
     }
 
     if (!response.data) {
-      throw new Error('获取报表璇︽儏失败')
+      throw new Error('获取报表详情失败')
     }
 
     return transformReportData(response.data)
   } catch (error) {
-    console.error('获取报表璇︽儏失败:', error)
+    console.error('获取报表详情失败:', error)
     if (shouldUseMockFallback()) {
       return null
     }
@@ -494,19 +494,19 @@ export async function downloadReport(
     const response = await api.get<ReportsApiEnvelope<UnknownRecord>>(`/reports/${id}/download${suffix}`)
 
     if (response.success === false || !response.data) {
-      throw new Error(response.message || '获取涓嬭浇閾炬帴失败')
+      throw new Error(response.message || '获取下载链接失败')
     }
 
     const payload = toRecord(response.data)
     const url = toOptionalString(payload.download_url ?? payload.downloadUrl)
 
     if (!url) {
-      throw new Error('获取涓嬭浇閾炬帴失败')
+      throw new Error('获取下载链接失败')
     }
 
     return url
   } catch (error) {
-    console.error('获取涓嬭浇閾炬帴失败:', error)
+    console.error('获取下载链接失败:', error)
     throw error
   }
 }
@@ -574,12 +574,12 @@ export async function cloneReport(id: string, title: string): Promise<Report> {
     const response = await api.post<ReportsApiEnvelope<UnknownRecord>>(`/reports/${id}/clone`, { title })
 
     if (response.success === false || !response.data) {
-      throw new Error(response.message || '未命名报表')
+      throw new Error(response.message || '复制报表失败')
     }
 
     return transformReportData(response.data)
   } catch (error) {
-    console.error('澶嶅埗报表失败:', error)
+    console.error('复制报表失败:', error)
     throw error
   }
 }
@@ -716,7 +716,7 @@ export async function getTrendAnalysis(params: {
   }
 }
 
-// 生成瓒嬪娍报告
+// 生成趋势报告
 export async function generateTrendReport(reportData: {
   title: string
   metrics: string[]
@@ -748,10 +748,10 @@ export async function generateTrendReport(reportData: {
     if (response.success && response.data) {
       return transformReportData(response.data)
     } else {
-      throw new Error('生成瓒嬪娍报告失败')
+      throw new Error('生成趋势报告失败')
     }
   } catch (error) {
-    console.error('生成瓒嬪娍报告失败:', error)
+    console.error('生成趋势报告失败:', error)
     throw error
   }
 }
@@ -1083,9 +1083,9 @@ export async function previewCustomReportConfig(configId: string, parameters?: R
   }
 }
 
-// ==================== 报表妯℃澘 API ====================
+// ==================== 报表模板 API ====================
 
-// 获取妯℃澘鍒楄〃
+// 获取模板列表
 export async function fetchReportTemplates(): Promise<ReportTemplate[]> {
   try {
     const response = await api.get<{success: boolean, data: unknown, message?: string}>('/reports/templates')
@@ -1094,9 +1094,9 @@ export async function fetchReportTemplates(): Promise<ReportTemplate[]> {
       return mapRecordArray(response.data, transformReportTemplateData)
     }
 
-    throw new Error('获取报表妯℃澘鍒楄〃失败')
+    throw new Error('获取报表模板列表失败')
   } catch (error) {
-    console.error('获取报表妯℃澘鍒楄〃失败:', error)
+    console.error('获取报表模板列表失败:', error)
     if (shouldUseMockFallback()) {
       return getDefaultReportTemplates()
     }
@@ -1104,7 +1104,7 @@ export async function fetchReportTemplates(): Promise<ReportTemplate[]> {
   }
 }
 
-// 获取妯℃澘璇︽儏
+// 获取模板详情
 export async function fetchReportTemplate(id: string): Promise<ReportTemplate | null> {
   try {
     const response = await api.get<{success: boolean, data: unknown, message?: string}>(`/reports/templates/${id}`)
@@ -1112,10 +1112,10 @@ export async function fetchReportTemplate(id: string): Promise<ReportTemplate | 
     if (response.success && response.data) {
       return transformReportTemplateData(response.data)
     } else {
-      throw new Error('获取报表妯℃澘璇︽儏失败')
+      throw new Error('获取报表模板详情失败')
     }
   } catch (error) {
-    console.error('获取报表妯℃澘璇︽儏失败:', error)
+    console.error('获取报表模板详情失败:', error)
     if (shouldUseMockFallback()) {
       return null
     }
@@ -1123,7 +1123,7 @@ export async function fetchReportTemplate(id: string): Promise<ReportTemplate | 
   }
 }
 
-// 创建妯℃澘
+// 创建模板
 export async function createReportTemplate(templateData: Omit<ReportTemplate, 'id'>): Promise<ReportTemplate> {
   try {
     const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/templates', templateData)
@@ -1131,15 +1131,15 @@ export async function createReportTemplate(templateData: Omit<ReportTemplate, 'i
     if (response.success && response.data) {
       return transformReportTemplateData(response.data)
     } else {
-      throw new Error('创建报表妯℃澘失败')
+      throw new Error('创建报表模板失败')
     }
   } catch (error) {
-    console.error('创建报表妯℃澘失败:', error)
+    console.error('创建报表模板失败:', error)
     throw error
   }
 }
 
-// 更新妯℃澘
+// 更新模板
 export async function updateReportTemplate(id: string, updates: Partial<ReportTemplate>): Promise<ReportTemplate> {
   try {
     const response = await api.put<{success: boolean, data: unknown, message?: string}>(`/reports/templates/${id}`, updates)
@@ -1147,27 +1147,27 @@ export async function updateReportTemplate(id: string, updates: Partial<ReportTe
     if (response.success && response.data) {
       return transformReportTemplateData(response.data)
     } else {
-      throw new Error('更新报表妯℃澘失败')
+      throw new Error('更新报表模板失败')
     }
   } catch (error) {
-    console.error('更新报表妯℃澘失败:', error)
+    console.error('更新报表模板失败:', error)
     throw error
   }
 }
 
-// 删除妯℃澘
+// 删除模板
 export async function deleteReportTemplate(id: string): Promise<boolean> {
   try {
     const response = await api.delete<{success: boolean, message?: string}>(`/reports/templates/${id}`)
     
     return response.success
   } catch (error) {
-    console.error('删除报表妯℃澘失败:', error)
+    console.error('删除报表模板失败:', error)
     throw error
   }
 }
 
-// 澶嶅埗妯℃澘
+// 复制模板
 export async function cloneReportTemplate(id: string, name: string): Promise<ReportTemplate> {
   try {
     const response = await api.post<{success: boolean, data: unknown, message?: string}>(`/reports/templates/${id}/clone`, { name })
@@ -1175,15 +1175,15 @@ export async function cloneReportTemplate(id: string, name: string): Promise<Rep
     if (response.success && response.data) {
       return transformReportTemplateData(response.data)
     } else {
-      throw new Error('澶嶅埗报表妯℃澘失败')
+      throw new Error('复制报表模板失败')
     }
   } catch (error) {
-    console.error('澶嶅埗报表妯℃澘失败:', error)
+    console.error('复制报表模板失败:', error)
     throw error
   }
 }
 
-// ==================== 瀵煎嚭 API ====================
+// ==================== 导出 API ====================
 
 // 导出Excel
 export async function exportToExcel(data: {
@@ -1296,7 +1296,7 @@ export async function fetchReportStats(): Promise<ReportStats> {
   }
 }
 
-// 获取浣跨敤分析
+// 获取使用分析
 export async function getUsageAnalysis(params: {
   dateRange: {
     startDate: string
@@ -1309,10 +1309,10 @@ export async function getUsageAnalysis(params: {
     if (response.success && response.data) {
       return response.data
     } else {
-      throw new Error('获取浣跨敤分析失败')
+      throw new Error('获取使用分析失败')
     }
   } catch (error) {
-    console.error('获取浣跨敤分析失败:', error)
+    console.error('获取使用分析失败:', error)
     if (shouldUseMockFallback()) {
       return getDefaultUsageAnalysis()
     }
@@ -1320,7 +1320,7 @@ export async function getUsageAnalysis(params: {
   }
 }
 
-// 获取鎬ц兘鎸囨爣
+// 获取性能指标
 export async function getPerformanceMetrics(): Promise<PerformanceMetricsResult> {
   try {
     const response = await api.get<ReportsApiEnvelope<unknown>>('/reports/stats/performance')
@@ -2040,7 +2040,7 @@ function getDefaultPerformanceMetrics(): PerformanceMetricsResult {
   }
 }
 
-// ==================== API 瀵硅薄瀵煎嚭 ====================
+// ==================== API 对象导出 ====================
 
 export const reportsApi = {
   fetchReports,
