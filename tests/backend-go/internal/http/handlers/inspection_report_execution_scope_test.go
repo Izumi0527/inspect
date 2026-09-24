@@ -245,3 +245,51 @@ func TestResolveReportInspectionIDs_UnknownExecutionIDIsNotFound(t *testing.T) {
 		t.Fatalf("sqlmock expectations not met: %v", err)
 	}
 }
+
+//go:linkname resolveInspectionReportWindow github.com/your-org/inspect-system/backend-go/internal/http/handlers.resolveInspectionReportWindow
+func resolveInspectionReportWindow(start, end *time.Time, batchRows []inspection.Inspection, now time.Time) (*time.Time, *time.Time)
+
+var reportWindowNow = time.Date(2026, 9, 24, 8, 0, 0, 0, time.UTC)
+
+func reportWindowAt(day, hour int) *time.Time {
+	t := time.Date(2026, 8, day, hour, 0, 0, 0, time.UTC)
+	return &t
+}
+
+// 执行历史导出不传起止时间：落库时间范围取批内最早开始到最晚结束，
+// 而不是导出时刻前 24h——否则 08-22 执行的批次在列表里显示成 09-23 ~ 09-24。
+func TestInspectionReportWindow_BatchExportUsesBatchSpan(t *testing.T) {
+	rows := []inspection.Inspection{
+		{ID: 41, StartedAt: reportWindowAt(22, 10), CompletedAt: reportWindowAt(22, 11)},
+		{ID: 42, StartedAt: reportWindowAt(22, 9), CompletedAt: reportWindowAt(22, 12)},
+		// 未开始的行按创建时间兜底
+		{ID: 43, CreatedAt: reportWindowAt(22, 8)},
+	}
+
+	start, end := resolveInspectionReportWindow(nil, nil, rows, reportWindowNow)
+
+	if !start.Equal(*reportWindowAt(22, 8)) || !end.Equal(*reportWindowAt(22, 12)) {
+		t.Fatalf("window = %s ~ %s, want 2026-08-22 08:00 ~ 12:00", start, end)
+	}
+}
+
+// 调用方显式给出起止时间时以调用方为准。
+func TestInspectionReportWindow_ExplicitRangeWins(t *testing.T) {
+	rows := []inspection.Inspection{{ID: 41, StartedAt: reportWindowAt(22, 10)}}
+	from, to := reportWindowAt(1, 0), reportWindowAt(2, 0)
+
+	start, end := resolveInspectionReportWindow(from, to, rows, reportWindowNow)
+
+	if start != from || end != to {
+		t.Fatalf("window = %s ~ %s, want explicit range", start, end)
+	}
+}
+
+// 既无显式范围、也没有批次时间可推导时，退回最近 24h。
+func TestInspectionReportWindow_FallsBackToLast24h(t *testing.T) {
+	start, end := resolveInspectionReportWindow(nil, nil, []inspection.Inspection{{ID: 41}}, reportWindowNow)
+
+	if !start.Equal(reportWindowNow.Add(-24*time.Hour)) || !end.Equal(reportWindowNow) {
+		t.Fatalf("window = %s ~ %s, want last 24h", start, end)
+	}
+}

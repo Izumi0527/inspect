@@ -748,3 +748,49 @@ func (h ReportsHandler) computeStorageUsage(ctx context.Context, db *gorm.DB) (i
 	}
 	return total, nil
 }
+
+// attachReportCreatorNames 把 generated_by（用户 UUID）解析成可读名称写入 created_by_name
+// （全名优先、否则用户名）。报表列表原先直接显示 UUID；按页一次批量查询，不逐条查。
+// 用户已删除或查询失败时不写该键，由前端兜底。
+func attachReportCreatorNames(ctx context.Context, db *gorm.DB, items []map[string]interface{}) {
+	if db == nil {
+		return
+	}
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		if id, ok := item["generated_by"].(*string); ok && id != nil && strings.TrimSpace(*id) != "" {
+			ids = append(ids, *id)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+
+	type creatorRow struct {
+		ID       string  `gorm:"column:id"`
+		Username string  `gorm:"column:username"`
+		FullName *string `gorm:"column:full_name"`
+	}
+	rows := make([]creatorRow, 0, len(ids))
+	if err := db.WithContext(ctx).Table("users").
+		Select("id, username, full_name").
+		Where("id IN ?", ids).
+		Scan(&rows).Error; err != nil {
+		return
+	}
+	names := make(map[string]string, len(rows))
+	for _, row := range rows {
+		if row.FullName != nil && strings.TrimSpace(*row.FullName) != "" {
+			names[row.ID] = strings.TrimSpace(*row.FullName)
+		} else {
+			names[row.ID] = row.Username
+		}
+	}
+	for _, item := range items {
+		if id, ok := item["generated_by"].(*string); ok && id != nil {
+			if name, found := names[*id]; found {
+				item["created_by_name"] = name
+			}
+		}
+	}
+}

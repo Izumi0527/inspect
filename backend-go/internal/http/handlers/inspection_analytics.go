@@ -424,6 +424,29 @@ func encodeInspectionReportParams(start, end time.Time, batchRows []inspection.I
 	return encodeJSON(params)
 }
 
+// resolveInspectionReportWindow 决定报告落库的时间范围（报表列表按它展示日期）。
+// 调用方显式给出起止时间时原样使用；按批次导出时取批内最早开始到最晚结束——
+// 执行历史导出从不传起止时间，若退回「导出时刻前 24h」，数周前执行的批次在列表里
+// 会显示成导出当天的日期；两者都没有时才用最近 24h。
+func resolveInspectionReportWindow(start, end *time.Time, batchRows []inspection.Inspection, now time.Time) (*time.Time, *time.Time) {
+	if start != nil && end != nil {
+		return start, end
+	}
+	var batchStart, batchEnd *time.Time
+	for _, row := range batchRows {
+		if t := firstTime(row.StartedAt, row.CreatedAt); t != nil && (batchStart == nil || t.Before(*batchStart)) {
+			batchStart = t
+		}
+		if t := firstTime(row.CompletedAt, firstTime(row.StartedAt, row.CreatedAt)); t != nil && (batchEnd == nil || t.After(*batchEnd)) {
+			batchEnd = t
+		}
+	}
+	if batchStart != nil && batchEnd != nil {
+		return batchStart, batchEnd
+	}
+	return ptrTime(now.Add(-24 * time.Hour)), ptrTime(now)
+}
+
 func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
@@ -434,7 +457,8 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 	if strings.TrimSpace(h.ReportOutputDir) == "" {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "report output not configured")
 	}
-	if _, err := requirePermission(c, h.Auth, "inspections:read"); err != nil {
+	user, err := requirePermission(c, h.Auth, "inspections:read")
+	if err != nil {
 		return err
 	}
 
@@ -467,11 +491,7 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 
 	start, _ := parseTimeOptional(stringValue(startDate))
 	end, _ := parseTimeOptional(stringValue(endDate))
-	if start == nil || end == nil {
-		now := time.Now().UTC()
-		start = ptrTime(now.Add(-24 * time.Hour))
-		end = ptrTime(now)
-	}
+	start, end = resolveInspectionReportWindow(start, end, batchRows, time.Now().UTC())
 
 	paramsJSON, _ := encodeInspectionReportParams(*start, *end, batchRows, taskID, deviceIDs)
 
@@ -482,6 +502,7 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 		EndDate:       *end,
 		DeviceFilters: paramsJSON,
 		Status:        "generating",
+		GeneratedBy:   &user.ID,
 	}
 
 	if err := h.Reports.CreateReport(c.Request().Context(), &report); err != nil {

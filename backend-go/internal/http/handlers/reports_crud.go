@@ -81,6 +81,7 @@ func (h ReportsHandler) ListReports(c echo.Context) error {
 		for _, item := range list {
 			result = append(result, buildReportResponse(item, nil, h.OutputDir))
 		}
+		attachReportCreatorNames(c.Request().Context(), db, result)
 
 		pages := 0
 		if pageSize > 0 {
@@ -127,6 +128,7 @@ func (h ReportsHandler) ListReports(c echo.Context) error {
 	for _, item := range list {
 		result = append(result, buildReportResponse(item, nil, h.OutputDir))
 	}
+	attachReportCreatorNames(c.Request().Context(), h.Service.DB(), result)
 
 	pages := 0
 	if pageSize > 0 {
@@ -171,9 +173,12 @@ func (h ReportsHandler) GetReport(c echo.Context) error {
 		}
 	}
 
+	data := buildReportResponse(report, schedule, h.OutputDir)
+	attachReportCreatorNames(c.Request().Context(), h.Service.DB(), []map[string]interface{}{data})
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
-		"data":    buildReportResponse(report, schedule, h.OutputDir),
+		"data":    data,
 	})
 }
 

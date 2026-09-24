@@ -318,9 +318,11 @@ const transformReportData = (input: unknown): Report => {
     format: toEnumValue(data.format, REPORT_FORMATS, 'pdf'),
     createdAt,
     updatedAt,
+    // 后端 generated_by 是用户 UUID，只作筛选用；展示走后端解析好的 created_by_name。
+    // 无创建人 = 系统生成；有 UUID 但解析不到（用户已删除）不回显 UUID。
     generatedBy: toStringSafe(
-      data.generatedBy ?? data['generated_by'] ?? data['created_by'] ?? data['creator'],
-      '系统'
+      data['created_by_name'],
+      toOptionalString(data['generated_by'] ?? data['created_by']) ? '未知用户' : '系统'
     ),
     filePath: toOptionalString(data.filePath ?? data['file_path']),
     fileSize: fileSize === undefined ? undefined : fileSize,
