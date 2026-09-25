@@ -354,19 +354,55 @@ func (s *Service) UpdateDevice(ctx context.Context, deviceID int, updates map[st
 	return &response, nil
 }
 
+// DeleteDevice 物理删除设备。删除前在同一事务里把该设备尚无快照的历史巡检补上设备快照：
+// 巡检报告的设备身份原先只靠 LEFT JOIN 当前 devices 表，设备一删历史报告就一片空白；
+// 快照失败则整体回滚、不删设备。
 func (s *Service) DeleteDevice(ctx context.Context, deviceID int) error {
 	if s.db == nil {
 		return fmt.Errorf("database not initialized")
 	}
 
-	result := s.db.WithContext(ctx).Table("devices").Where("id = ?", deviceID).Delete(&Device{})
-	if result.Error != nil {
-		return result.Error
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := snapshotDevicesIntoInspections(tx, "i.device_id = ? AND i.device_snapshot IS NULL", deviceID).Error; err != nil {
+			return fmt.Errorf("保存历史巡检的设备快照失败: %w", err)
+		}
+		result := tx.Table("devices").Where("id = ?", deviceID).Delete(&Device{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+}
+
+// SnapshotDeviceForInspection 在巡检执行时把设备当下的身份写入该巡检行（覆盖写），
+// 报告据此展示「巡检那一刻」的设备信息，不再随设备改名、删除而变化。
+func (s *Service) SnapshotDeviceForInspection(ctx context.Context, inspectionID int) error {
+	if s.db == nil {
+		return fmt.Errorf("database not initialized")
 	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
+	return snapshotDevicesIntoInspections(s.db.WithContext(ctx), "i.id = ?", inspectionID).Error
+}
+
+// BackfillInspectionDeviceSnapshots 为快照机制上线前、设备仍存在的历史巡检补快照（幂等）。
+// 设备已删除的行无从补起，报告对其标注「已删除设备」。
+func (s *Service) BackfillInspectionDeviceSnapshots(ctx context.Context) (int64, error) {
+	if s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
 	}
-	return nil
+	result := snapshotDevicesIntoInspections(s.db.WithContext(ctx), "i.device_snapshot IS NULL")
+	return result.RowsAffected, result.Error
+}
+
+// snapshotDevicesIntoInspections 是设备快照的唯一写入口。键名是报告数据源按 ->> 读取的
+// 契约（reports.buildInspectionReportDataFromDB），改键须两处同步。
+func snapshotDevicesIntoInspections(db *gorm.DB, scope string, args ...interface{}) *gorm.DB {
+	return db.Exec(`UPDATE inspections AS i SET device_snapshot = jsonb_build_object(`+
+		`'name', d.name, 'ip_address', d.ip_address, 'device_type', d.device_type, 'vendor', d.vendor, `+
+		`'model', d.model, 'firmware_version', d.firmware_version, 'uptime', d.uptime) `+
+		`FROM devices AS d WHERE d.id = i.device_id AND `+scope, args...)
 }
 
 func (s *Service) BatchCreateDevices(

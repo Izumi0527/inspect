@@ -72,9 +72,14 @@ func TestGetDeviceStatistics_ShouldIgnoreAlertsOfDeletedDevices(t *testing.T) {
 
 	service := devices.NewService(db, zap.NewNop())
 
+	mock.ExpectBegin()
+	mock.ExpectExec(`UPDATE inspections AS i SET device_snapshot`).
+		WithArgs(7).
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`DELETE FROM "devices" WHERE id = \$1`).
 		WithArgs(7).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	mock.ExpectQuery(`(?i)SELECT COUNT\(\*\) as total,\s*SUM\(CASE WHEN status = 'online' THEN 1 ELSE 0 END\) as online,\s*SUM\(CASE WHEN status = 'offline' THEN 1 ELSE 0 END\) as offline,\s*SUM\(CASE WHEN status = 'warning' THEN 1 ELSE 0 END\) as warning FROM "devices"`).
 		WillReturnRows(sqlmock.NewRows([]string{"total", "online", "offline", "warning"}).AddRow(0, 0, 0, 0))

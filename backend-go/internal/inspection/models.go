@@ -66,8 +66,11 @@ type Inspection struct {
 	RetryCount    *int           `gorm:"column:retry_count"`
 	MaxRetries    *int           `gorm:"column:max_retries"`
 	CreatedBy     *string        `gorm:"column:created_by"`
-	CreatedAt     *time.Time     `gorm:"column:created_at"`
-	UpdatedAt     *time.Time     `gorm:"column:updated_at"`
+	// DeviceSnapshot 巡检执行时的设备身份（name/ip_address/device_type/vendor/model/
+	// firmware_version/uptime），由 devices 包唯一写入；报告优先读它，设备删除后仍可追溯。
+	DeviceSnapshot datatypes.JSON `gorm:"column:device_snapshot;type:jsonb"`
+	CreatedAt      *time.Time     `gorm:"column:created_at"`
+	UpdatedAt      *time.Time     `gorm:"column:updated_at"`
 }
 
 func (Inspection) TableName() string {

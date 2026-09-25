@@ -203,6 +203,14 @@ func New() (*App, error) {
 		log.Info("已为历史巡检报告回填设备范围", zap.Int64("rows", backfilled))
 	}
 
+	// 为快照机制上线前、设备仍存在的历史巡检补设备快照（幂等）。失败不阻塞启动：
+	// 只影响这些设备日后被删除时，其历史报告能否还原设备身份。
+	if snapshotted, err := deviceService.BackfillInspectionDeviceSnapshots(context.Background()); err != nil {
+		log.Warn("历史巡检设备快照回填失败", zap.Error(err))
+	} else if snapshotted > 0 {
+		log.Info("已为历史巡检回填设备快照", zap.Int64("rows", snapshotted))
+	}
+
 	reportHandler := handlers.ReportsHandler{
 		Service:   reportService,
 		Auth:      authService,

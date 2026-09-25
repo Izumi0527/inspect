@@ -862,14 +862,25 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		// 历史记录的 template_id 可能为 NULL，内连接会让这些巡检整条消失。
 		TemplateName  *string `gorm:"column:template_name"`
 		TemplateItems *string `gorm:"column:template_check_items"`
+		// IdentityLost 为 true 表示设备已被物理删除且巡检行无快照，身份字段全为 NULL、无从还原。
+		IdentityLost bool `gorm:"column:identity_lost"`
 	}
 
+	// 设备身份逐字段「快照优先、当前设备表兜底」：快照记录巡检那一刻的设备，
+	// 设备改名/删除都不影响历史报告；快照机制上线前的行没有快照，退回当前设备表。
+	// 快照键名由 devices.snapshotDevicesIntoInspections 写入，两处须同步。
 	query := db.WithContext(ctx).
 		Table("inspections AS i").
 		Select(`i.id, i.device_id, i.name, i.status, i.duration, i.completed_at, i.created_at,
 		        i.total_checks, i.passed_checks, i.failed_checks, i.warning_checks,
-		        d.name AS device_name, d.ip_address, d.device_type, d.vendor, d.model,
-		        d.firmware_version, d.uptime, d.cpu_usage, d.memory_usage,
+		        COALESCE(i.device_snapshot->>'name', d.name) AS device_name,
+		        COALESCE(i.device_snapshot->>'ip_address', d.ip_address) AS ip_address,
+		        COALESCE(i.device_snapshot->>'device_type', d.device_type) AS device_type,
+		        COALESCE(i.device_snapshot->>'vendor', d.vendor) AS vendor,
+		        COALESCE(i.device_snapshot->>'model', d.model) AS model,
+		        COALESCE(i.device_snapshot->>'firmware_version', d.firmware_version) AS firmware_version,
+		        COALESCE((i.device_snapshot->>'uptime')::bigint, d.uptime) AS uptime,
+		        d.cpu_usage, d.memory_usage, (d.id IS NULL AND i.device_snapshot IS NULL) AS identity_lost,
 		        t.name AS template_name, t.check_items AS template_check_items`).
 		Joins("LEFT JOIN devices d ON d.id = i.device_id").
 		Joins("LEFT JOIN inspection_templates t ON t.id = i.template_id")
@@ -1038,6 +1049,7 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 			},
 			CheckResults: checks,
 		})
+		markDeletedInspectionDevice(&devices[len(devices)-1], deviceID, row.IdentityLost)
 	}
 	result.Devices = devices
 
@@ -1465,6 +1477,30 @@ func formatRange(start time.Time, end time.Time) string {
 		return ""
 	}
 	return fmt.Sprintf("%s ~ %s", start.Format("2006-01-02"), end.Format("2006-01-02"))
+}
+
+// deletedDeviceField 设备身份无从还原时各字段的占位文案。
+const deletedDeviceField = "设备已删除"
+
+// markDeletedInspectionDevice 为身份无从还原的设备补上可读标注。快照机制上线前的历史行没有快照，
+// 设备一删身份字段全为空，报告若照常输出会是一排空白或「-」，读者只会以为报告坏了。
+// 有快照或设备仍在时字段为空就是巡检那一刻未采集到，原样保留：
+// 否则同一份历史报告在删设备前后内容不同，违背快照不随删除变化的初衷。
+func markDeletedInspectionDevice(device *InspectionDeviceData, deviceID int, identityLost bool) {
+	if device == nil || !identityLost {
+		return
+	}
+	if strings.TrimSpace(device.DeviceName) == "" {
+		device.DeviceName = fmt.Sprintf("已删除设备（ID %d）", deviceID)
+	}
+	for _, field := range []*string{
+		&device.IPAddress, &device.DeviceType, &device.Vendor,
+		&device.Model, &device.SoftwareVersion, &device.Uptime,
+	} {
+		if strings.TrimSpace(*field) == "" {
+			*field = deletedDeviceField
+		}
+	}
 }
 
 // formatUptimeSeconds 把运行时长（秒）渲染为「N 天 N 小时 N 分钟」。

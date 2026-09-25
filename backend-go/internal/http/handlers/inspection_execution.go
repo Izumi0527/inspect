@@ -455,6 +455,10 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 			return
 		}
 		device = &record
+		// 快照失败不阻断巡检：只影响设备日后被删除时报告能否还原设备身份。
+		if serr := h.DeviceService.SnapshotDeviceForInspection(baseCtx, insp.ID); serr != nil && h.Logger != nil {
+			h.Logger.Warn("保存巡检设备快照失败", zap.Int("inspection_id", insp.ID), zap.Error(serr))
+		}
 	}
 
 	// 3. 执行探测检查；探测失败/不可达时按 inspection.retry_attempts 重试（网络抖动容错）
