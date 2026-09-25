@@ -374,6 +374,7 @@ jest.mock("@/features/devices/api/devices.api", () => ({
   fetchDeviceStats: jest.fn(),
   updateDevice: jest.fn(),
   batchDeleteDevices: jest.fn(),
+  fetchDeviceInspectionCount: jest.fn(),
   batchProbeDevices: jest.fn(),
   bulkUpdateDevices: jest.fn(),
 }));
@@ -605,6 +606,21 @@ describe("DeviceManagementView", () => {
     await waitFor(() => {
       expect(mockLoadDevices).toHaveBeenCalled();
     });
+  });
+
+  it("批量删除确认框应提示所选设备的巡检记录会保留设备信息", async () => {
+    const { fetchDeviceInspectionCount } = await import("@/features/devices/api/devices.api");
+    (fetchDeviceInspectionCount as jest.Mock).mockResolvedValue(12);
+
+    render(<DeviceManagementView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择第一行" }));
+    fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
+
+    expect(
+      await screen.findByText(/该设备有 12 条巡检记录，删除后这些记录和巡检报告仍会保留/)
+    ).toBeInTheDocument();
+    expect(fetchDeviceInspectionCount).toHaveBeenCalledWith([1]);
   });
 
   it("批量删除确认后应调用后端接口，并提示成功", async () => {

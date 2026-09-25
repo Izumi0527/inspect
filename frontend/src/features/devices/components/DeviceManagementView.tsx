@@ -49,6 +49,7 @@ import {
   useDeviceFilters,
   useDeviceSelection,
 } from "../hooks/useDevices";
+import { useDeleteImpactNotice } from "../hooks/useDeleteImpactNotice";
 import {
   fetchDevice,
   fetchDeviceStats,
@@ -184,6 +185,11 @@ export const DeviceManagementView: React.FC = () => {
   const [bulkUpdateModalOpen, setBulkUpdateModalOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkUpdating, setBulkUpdating] = useState(false);
+  const singleDeleteNotice = useDeleteImpactNotice(
+    deviceToDelete ? [deviceToDelete.id] : [],
+    deleteModalOpen
+  );
+  const bulkDeleteNotice = useDeleteImpactNotice(selectedDevices, bulkDeleteModalOpen);
   const [bulkProbing, setBulkProbing] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = React.useState(false);
   const [selectedDeviceSnapshots, setSelectedDeviceSnapshots] = React.useState<
@@ -1133,7 +1139,7 @@ export const DeviceManagementView: React.FC = () => {
           }}
           onConfirm={confirmDelete}
           title="删除设备"
-          description={`确定要删除设备 "${deviceToDelete?.name}" 吗？此操作不可撤销。`}
+          description={`确定要删除设备 "${deviceToDelete?.name}" 吗？此操作不可撤销。${singleDeleteNotice}`}
           confirmText="删除"
           cancelText="取消"
           variant="destructive"
@@ -1145,7 +1151,7 @@ export const DeviceManagementView: React.FC = () => {
           onClose={() => setBulkDeleteModalOpen(false)}
           onConfirm={confirmBulkDelete}
           title="批量删除设备"
-          description={`确定要删除选中的 ${selectedDevices.length} 台设备吗？此操作不可撤销。`}
+          description={`确定要删除选中的 ${selectedDevices.length} 台设备吗？此操作不可撤销。${bulkDeleteNotice}`}
           confirmText={bulkDeleting ? "删除中..." : "确认删除"}
           cancelText="取消"
           variant="destructive"

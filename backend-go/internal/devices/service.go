@@ -377,6 +377,19 @@ func (s *Service) DeleteDevice(ctx context.Context, deviceID int) error {
 	})
 }
 
+// CountInspections 统计所选设备的巡检记录总数，供删除确认框提示删除影响。
+func (s *Service) CountInspections(ctx context.Context, deviceIDs []int) (int64, error) {
+	if s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+	if len(deviceIDs) == 0 {
+		return 0, nil
+	}
+	var count int64
+	err := s.db.WithContext(ctx).Table("inspections").Where("device_id IN ?", deviceIDs).Count(&count).Error
+	return count, err
+}
+
 // SnapshotDeviceForInspection 在巡检执行时把设备当下的身份写入该巡检行（覆盖写），
 // 报告据此展示「巡检那一刻」的设备信息，不再随设备改名、删除而变化。
 func (s *Service) SnapshotDeviceForInspection(ctx context.Context, inspectionID int) error {

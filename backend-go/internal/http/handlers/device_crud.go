@@ -233,6 +233,24 @@ func (h DevicesHandler) GetDeviceStatistics(c echo.Context) error {
 	return c.JSON(http.StatusOK, stats)
 }
 
+// GetDeviceInspectionCount 返回所选设备（ids=1,2,3）的巡检记录总数。删除确认框据此告知：
+// 这些记录与报告会保留删除时的设备信息，但设备本身不可恢复。只需 devices:read，
+// 能删设备的用户一定能看到这条提示。
+func (h DevicesHandler) GetDeviceInspectionCount(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "device service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "devices:read"); err != nil {
+		return err
+	}
+
+	count, err := h.Service.CountInspections(c.Request().Context(), parseIntList(splitCommaList(c.QueryParam("ids"))))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to count inspections")
+	}
+	return c.JSON(http.StatusOK, map[string]int64{"count": count})
+}
+
 func buildDeviceUpdates(payload map[string]interface{}) map[string]interface{} {
 	updates := map[string]interface{}{}
 

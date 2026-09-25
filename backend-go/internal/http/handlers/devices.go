@@ -30,6 +30,7 @@ func (h DevicesHandler) Register(group *echo.Group) {
 	group.GET("/devices/groups", h.GetDeviceGroups)
 	group.GET("/devices/search", h.SearchDevices)
 	group.GET("/devices/statistics", h.GetDeviceStatistics)
+	group.GET("/devices/inspection-count", h.GetDeviceInspectionCount)
 
 	// 扫描（device_scan.go）
 	group.POST("/devices/scan", h.StartNetworkScan)

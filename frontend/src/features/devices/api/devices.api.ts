@@ -1019,6 +1019,14 @@ export async function fetchDeviceStats(): Promise<Record<string, unknown>> {
   throw new Error("获取设备统计失败：响应格式不正确");
 }
 
+/** 所选设备的巡检记录总数，供删除确认框提示删除影响。后端返回裸对象 { count }。 */
+export async function fetchDeviceInspectionCount(deviceIds: number[]): Promise<number> {
+  const payload = await api.get<unknown>(
+    `/devices/inspection-count?ids=${deviceIds.join(",")}`
+  );
+  return isObject(payload) && typeof payload.count === "number" ? payload.count : 0;
+}
+
 export async function healthCheckDevice(
   id: number,
   options?: { updateStatus?: boolean },

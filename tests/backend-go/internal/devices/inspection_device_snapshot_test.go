@@ -97,3 +97,40 @@ func TestDeleteDevice_SnapshotFailureAbortsDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// 删除确认框据此提示「所选设备共有 N 条巡检记录」。
+func TestCountInspections_CountsAcrossSelectedDevices(t *testing.T) {
+	db, mock, cleanup := newDevicesGormDBWithSQLMock(t)
+	defer cleanup()
+	service := devices.NewService(db, zap.NewNop())
+
+	mock.ExpectQuery(`SELECT count\(\*\) FROM "inspections" WHERE device_id IN \(\$1,\$2\)`).
+		WithArgs(6, 17).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(29))
+
+	count, err := service.CountInspections(context.Background(), []int{6, 17})
+	if err != nil {
+		t.Fatalf("CountInspections: %v", err)
+	}
+	if count != 29 {
+		t.Fatalf("count = %d, want 29", count)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// 未选设备时不查库，直接返回 0。
+func TestCountInspections_EmptySelectionNoQuery(t *testing.T) {
+	db, mock, cleanup := newDevicesGormDBWithSQLMock(t)
+	defer cleanup()
+	service := devices.NewService(db, zap.NewNop())
+
+	count, err := service.CountInspections(context.Background(), nil)
+	if err != nil || count != 0 {
+		t.Fatalf("count = %d, err = %v, want 0, nil", count, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
