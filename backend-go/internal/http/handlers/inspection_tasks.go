@@ -142,7 +142,8 @@ func (h InspectionHandler) CreateTask(c echo.Context) error {
 	// 交换机模板只巡检交换机：创建前拦截类型不符的设备，免得生成注定失败的巡检记录。
 	if templateID != nil {
 		if err := h.Service.ValidateTemplateDeviceTypes(c.Request().Context(), *templateID, deviceIDs); err != nil {
-			if validationErr, ok := err.(*inspection.ValidationError); ok {
+			var validationErr *inspection.ValidationError
+			if errors.As(err, &validationErr) {
 				return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 			}
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to validate device types")

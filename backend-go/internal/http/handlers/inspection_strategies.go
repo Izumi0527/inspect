@@ -104,7 +104,8 @@ func (h InspectionHandler) CreateStrategy(c echo.Context) error {
 	devices := readIntSlice(payload, "devices", "device_ids", "deviceIds")
 	templates := readIntSlice(payload, "templates", "template_ids", "templateIds")
 	if err := inspection.ValidateStrategyTemplateIDs(templates); err != nil {
-		if validationErr, ok := err.(*inspection.ValidationError); ok {
+		var validationErr *inspection.ValidationError
+		if errors.As(err, &validationErr) {
 			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 		}
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -125,7 +126,8 @@ func (h InspectionHandler) CreateStrategy(c echo.Context) error {
 		Enabled:     enabled,
 	})
 	if err != nil {
-		if validationErr, ok := err.(*inspection.ValidationError); ok {
+		var validationErr *inspection.ValidationError
+		if errors.As(err, &validationErr) {
 			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create strategy")
@@ -170,7 +172,8 @@ func (h InspectionHandler) UpdateStrategy(c echo.Context) error {
 	}
 	if value, ok := readOptionalIntSlice(payload, "templates", "template_ids", "templateIds"); ok {
 		if err := inspection.ValidateStrategyTemplateIDs(value); err != nil {
-			if validationErr, ok := err.(*inspection.ValidationError); ok {
+			var validationErr *inspection.ValidationError
+			if errors.As(err, &validationErr) {
 				return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 			}
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -183,7 +186,8 @@ func (h InspectionHandler) UpdateStrategy(c echo.Context) error {
 
 	item, err := h.Service.UpdateStrategy(c.Request().Context(), strategyID, update)
 	if err != nil {
-		if validationErr, ok := err.(*inspection.ValidationError); ok {
+		var validationErr *inspection.ValidationError
+		if errors.As(err, &validationErr) {
 			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -266,7 +270,8 @@ func (h InspectionHandler) triggerStrategyInspections(ctx context.Context, strat
 
 	templates := decodeJSONIntSlice(strategy.Templates)
 	if err := h.Service.ValidateStrategyTemplatesExist(ctx, templates); err != nil {
-		if validationErr, ok := err.(*inspection.ValidationError); ok && strings.Contains(validationErr.Field, "templates") {
+		var validationErr *inspection.ValidationError
+		if errors.As(err, &validationErr) && strings.Contains(validationErr.Field, "templates") {
 			return nil, nil, validationErr
 		}
 		return nil, nil, errStrategyNoTemplates
@@ -481,7 +486,8 @@ func (h InspectionHandler) TriggerStrategy(c echo.Context) error {
 	}
 	inspections, _, err := h.triggerStrategyInspections(c.Request().Context(), strategyID, inspection.TriggerManual, stringPtr(createdBy))
 	if err != nil {
-		if validationErr, ok := err.(*inspection.ValidationError); ok {
+		var validationErr *inspection.ValidationError
+		if errors.As(err, &validationErr) {
 			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {

@@ -121,7 +121,8 @@ func (h InspectionHandler) CreateTemplate(c echo.Context) error {
 
 	// 创建模板
 	if err := h.Service.Create(c.Request().Context(), template); err != nil {
-		if validationErr, ok := err.(*inspection.ValidationError); ok {
+		var validationErr *inspection.ValidationError
+		if errors.As(err, &validationErr) {
 			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to create template: %v", err))
@@ -164,7 +165,8 @@ func (h InspectionHandler) UpdateTemplate(c echo.Context) error {
 		if errors.Is(err, inspection.ErrCannotModifyBuiltInTemplate) {
 			return echo.NewHTTPError(http.StatusForbidden, "不能修改内置模板")
 		}
-		if validationErr, ok := err.(*inspection.ValidationError); ok {
+		var validationErr *inspection.ValidationError
+		if errors.As(err, &validationErr) {
 			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to update template: %v", err))
@@ -318,7 +320,8 @@ func (h InspectionHandler) ImportTemplate(c echo.Context) error {
 	// 导入模板
 	imported, err := h.Service.Import(c.Request().Context(), buf, overwrite)
 	if err != nil {
-		if validationErr, ok := err.(*inspection.ValidationError); ok {
+		var validationErr *inspection.ValidationError
+		if errors.As(err, &validationErr) {
 			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to import template: %v", err))

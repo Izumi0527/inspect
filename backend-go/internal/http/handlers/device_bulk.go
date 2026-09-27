@@ -445,7 +445,8 @@ func (h DevicesHandler) executeStartInspection(
 	if templateID != nil {
 		if err := h.Inspection.ValidateTemplateDeviceTypes(ctx, *templateID, deviceIDs); err != nil {
 			message := "巡检任务创建失败"
-			if validationErr, ok := err.(*inspection.ValidationError); ok {
+			var validationErr *inspection.ValidationError
+			if errors.As(err, &validationErr) {
 				message = validationErr.Message
 			}
 			return bulkActionResult{
