@@ -2045,7 +2045,9 @@ func summarizeInterfaceCounterRatio(
 		} else if best.Percent >= warning {
 			summary.OverWarning++
 		}
-		if best.Percent > summary.Peak.Percent {
+		// 首个可评估接口即作为初始峰值：全部为 0% 时若只比较大小，峰值会停留在零值，
+		// 实际值里输出「（ 方向）」这样没有接口名的空壳。
+		if summary.Evaluated == 1 || best.Percent > summary.Peak.Percent {
 			summary.Peak = best
 		}
 	}
@@ -2122,8 +2124,13 @@ func (h InspectionHandler) checkInterfaceCounterRatio(
 		return
 	}
 
-	actual := fmt.Sprintf("峰值 %.4f%%（%s %s方向）；%d/%d 接口超阈值",
-		summary.Peak.Percent, summary.Peak.Name, summary.Peak.Direction, summary.OverWarning, summary.Evaluated)
+	// 峰值为 0 时两个方向都是 0，方向是随手取的，不写
+	peakWhere := summary.Peak.Name
+	if summary.Peak.Percent > 0 {
+		peakWhere += " " + summary.Peak.Direction + "方向"
+	}
+	actual := fmt.Sprintf("峰值 %.4f%%（%s）；%d/%d 接口超阈值",
+		summary.Peak.Percent, peakWhere, summary.OverWarning, summary.Evaluated)
 	result.ActualValue = &actual
 
 	switch {
@@ -2167,7 +2174,7 @@ func (h InspectionHandler) checkInterfaceDiscardsMetric(result *inspection.Resul
 // 现有「接口状态」检查只看 oper，把人为 shutdown 的端口也报成警告——久而久之
 // 运维学会忽略这类告警，真故障也一起被忽略。
 func (h InspectionHandler) checkInterfaceAdminStatusMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
-	result.ExpectedValue = stringPtr("管理状态为 up 的接口应同时处于运行状态")
+	result.ExpectedValue = stringPtr("曾承载流量的已启用接口应保持运行（空闲口与人为关闭不计异常）")
 
 	if metrics == nil || len(metrics.Interfaces) == 0 {
 		result.Status = "skip"
@@ -2175,10 +2182,16 @@ func (h InspectionHandler) checkInterfaceAdminStatusMetric(result *inspection.Re
 		return
 	}
 
-	evaluated, adminDown := 0, 0
+	evaluated, adminDown, idle := 0, 0, 0
 	broken := make([]string, 0)
 	for _, iface := range metrics.Interfaces {
-		if iface.AdminUp == nil {
+		name := strings.TrimSpace(iface.Description)
+		if name == "" {
+			name = strings.TrimSpace(iface.Name)
+		}
+		// 逻辑口（Vlanif、LoopBack、NULL、Eth-Trunk…）的运行状态取决于成员口，
+		// 成员口自身已被评估，重复计入只会制造噪声。
+		if iface.AdminUp == nil || devices.IsLogicalInterface(name) {
 			continue
 		}
 		evaluated++
@@ -2186,22 +2199,26 @@ func (h InspectionHandler) checkInterfaceAdminStatusMetric(result *inspection.Re
 			adminDown++
 			continue
 		}
-		if iface.IsUp != nil && !*iface.IsUp {
-			name := strings.TrimSpace(iface.Description)
-			if name == "" {
-				name = strings.TrimSpace(iface.Name)
-			}
+		if iface.IsUp == nil || *iface.IsUp {
+			continue
+		}
+		// admin up 且 oper down：自开机以来有过流量的才是「原本在用、现已中断」的链路；
+		// 从未有流量的是未接线的空闲口——接入交换机默认全部端口开启，按故障判会让
+		// 每台接入交换机都过不了巡检。计数器断链后不清零，是可靠的在用证据。
+		if interfaceHasTrafficHistory(iface) {
 			broken = append(broken, name)
+		} else {
+			idle++
 		}
 	}
 
 	if evaluated == 0 {
 		result.Status = "skip"
-		result.Message = stringPtr("设备未上报接口管理状态（ifAdminStatus），无法区分人为关闭与链路故障")
+		result.Message = stringPtr("设备未上报物理接口的管理状态（ifAdminStatus），无法区分人为关闭与链路故障")
 		return
 	}
 
-	actual := fmt.Sprintf("已评估 %d 个接口；异常 %d 个，人为关闭 %d 个", evaluated, len(broken), adminDown)
+	actual := fmt.Sprintf("已评估 %d 个接口；中断 %d 个，空闲 %d 个，人为关闭 %d 个", evaluated, len(broken), idle, adminDown)
 	result.ActualValue = &actual
 
 	if len(broken) > 0 {
@@ -2211,14 +2228,25 @@ func (h InspectionHandler) checkInterfaceAdminStatusMetric(result *inspection.Re
 			shown = shown[:utilizationTopOffenderLimit]
 		}
 		result.Message = stringPtr(fmt.Sprintf(
-			"%d 个接口配置为启用但实际未运行（链路故障或对端异常）：%s",
+			"%d 个接口曾承载流量、现已中断（链路故障或对端异常）：%s",
 			len(broken), strings.Join(shown, "、")))
 		return
 	}
 
 	result.Status = "pass"
 	result.Message = stringPtr(fmt.Sprintf(
-		"已启用的接口均正常运行；另有 %d 个接口为人为关闭状态，不计异常", adminDown))
+		"已启用且在用的接口均正常运行；另有 %d 个从未有流量的空闲口、%d 个人为关闭的接口，不计异常", idle, adminDown))
+}
+
+// interfaceHasTrafficHistory 判断接口自开机以来是否承载过流量：
+// 收发字节数或单播包数任一大于 0 即是（部分设备只上报其中一类计数器）。
+func interfaceHasTrafficHistory(iface devices.InterfaceMetrics) bool {
+	for _, counter := range []*uint64{iface.InOctets, iface.OutOctets, iface.InUcastPkts, iface.OutUcastPkts} {
+		if counter != nil && *counter > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // checkInterfaceDuplexMetric 接口双工模式。

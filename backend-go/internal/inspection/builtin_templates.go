@@ -133,11 +133,11 @@ func ckInterfaceDiscards() map[string]interface{} {
 	}
 }
 
-// ckInterfaceAdminStatus 接口管理状态一致性。admin up 但 oper down 才是真故障，
-// admin down 是运维主动关闭。本项补上了「接口状态」检查缺失的这一半信息。
+// ckInterfaceAdminStatus 接口管理状态一致性。admin up 但 oper down 且曾有流量才是真故障，
+// 从未有流量的是空闲口，admin down 是运维主动关闭。本项补上了「接口状态」检查缺失的这一半信息。
 func ckInterfaceAdminStatus() map[string]interface{} {
 	return map[string]interface{}{
-		"id": "interface_admin_status", "name": "接口状态一致性", "description": "区分人为关闭与链路故障，仅对配置为启用却未运行的接口告警",
+		"id": "interface_admin_status", "name": "接口状态一致性", "description": "识别曾经承载流量、现已中断的接口；人为关闭与从未接线的接口不计异常",
 		"type": "snmp", "category": "performance", "metric": "interface_admin_status", "weight": 9,
 		"config": map[string]interface{}{}, "enabled": true,
 	}

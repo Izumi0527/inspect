@@ -239,6 +239,94 @@ func TestInterfaceAdminStatus_NoDataSkips(t *testing.T) {
 	}
 }
 
+// TestInterfaceAdminStatus_NeverUsedPortIsIdle 自开机以来从未有流量的启用端口是空闲口，不是故障。
+//
+// 接入交换机默认全部端口开启，未接线的口恒为 admin up / oper down。实验室 S5700 的
+// 24 个空闲口曾因此被整体判为失败——按旧口径，任何一台接入交换机都过不了巡检。
+func TestInterfaceAdminStatus_NeverUsedPortIsIdle(t *testing.T) {
+	idle := devices.InterfaceMetrics{
+		Name: "if13", Description: "GigabitEthernet0/0/13",
+		AdminUp: boolPtr(true), IsUp: boolPtr(false),
+		InOctets: u64(0), OutOctets: u64(0), InUcastPkts: u64(0), OutUcastPkts: u64(0),
+	}
+	noCounters := devices.InterfaceMetrics{
+		Name: "if14", Description: "GigabitEthernet0/0/14",
+		AdminUp: boolPtr(true), IsUp: boolPtr(false),
+	}
+
+	result := runMetricCheck(t, "interface_admin_status", &devices.SNMPMetrics{
+		Interfaces: []devices.InterfaceMetrics{idle, noCounters, healthyPort("GigabitEthernet0/0/1")},
+	}, nil)
+
+	if result.Status != "pass" {
+		t.Fatalf("从未有流量的空闲口不应判异常，实际 %q（消息：%v）", result.Status, result.Message)
+	}
+	if result.ActualValue == nil || !strings.Contains(*result.ActualValue, "空闲 2 个") {
+		t.Fatalf("实际值应统计空闲口数量，got %v", result.ActualValue)
+	}
+}
+
+// TestInterfaceAdminStatus_BrokenLinkWithTrafficHistoryFails 曾承载流量、现已中断的端口才是链路故障。
+// 计数器自开机累计、断链后不清零，所以「有过流量」是可靠的「这条链路原本在用」的证据。
+func TestInterfaceAdminStatus_BrokenLinkWithTrafficHistoryFails(t *testing.T) {
+	broken := devices.InterfaceMetrics{
+		Name: "if2", Description: "GigabitEthernet0/0/2",
+		AdminUp: boolPtr(true), IsUp: boolPtr(false),
+		InOctets: u64(123456789), OutOctets: u64(0),
+	}
+
+	result := runMetricCheck(t, "interface_admin_status", &devices.SNMPMetrics{
+		Interfaces: []devices.InterfaceMetrics{broken, healthyPort("GigabitEthernet0/0/1")},
+	}, nil)
+
+	if result.Status != "fail" {
+		t.Fatalf("曾有流量的端口中断应判 fail，实际 %q", result.Status)
+	}
+	if result.Message == nil || !strings.Contains(*result.Message, "GigabitEthernet0/0/2") {
+		t.Fatalf("消息应点名中断的端口，got %v", result.Message)
+	}
+}
+
+// TestInterfaceAdminStatus_LogicalInterfacesIgnored Vlanif、LoopBack、NULL 等逻辑口不参与判定：
+// Vlanif 在成员口全部断开时会 oper down，但那是成员口的问题，已由成员口本身反映。
+func TestInterfaceAdminStatus_LogicalInterfacesIgnored(t *testing.T) {
+	vlanif := devices.InterfaceMetrics{
+		Name: "if40", Description: "Vlanif10",
+		AdminUp: boolPtr(true), IsUp: boolPtr(false),
+		InUcastPkts: u64(5000), OutUcastPkts: u64(5000),
+	}
+
+	result := runMetricCheck(t, "interface_admin_status", &devices.SNMPMetrics{
+		Interfaces: []devices.InterfaceMetrics{vlanif, healthyPort("GigabitEthernet0/0/1")},
+	}, nil)
+
+	if result.Status != "pass" {
+		t.Fatalf("逻辑口不应判异常，实际 %q（消息：%v）", result.Status, result.Message)
+	}
+	if result.ActualValue == nil || !strings.Contains(*result.ActualValue, "已评估 1 个接口") {
+		t.Fatalf("逻辑口不计入评估数，got %v", result.ActualValue)
+	}
+}
+
+// TestInterfaceErrors_ZeroPeakNamesInterface 全部接口错包率为 0 时，峰值也要标出接口与方向，
+// 不能输出「（ 方向）」这样的空壳（实验室 S5700 的巡检结果曾如此）。
+func TestInterfaceErrors_ZeroPeakNamesInterface(t *testing.T) {
+	result := runMetricCheck(t, "interface_errors", &devices.SNMPMetrics{
+		Interfaces: []devices.InterfaceMetrics{healthyPort("GigabitEthernet0/0/1")},
+	}, nil)
+
+	if result.ActualValue == nil {
+		t.Fatal("实际值不应为空")
+	}
+	if strings.Contains(*result.ActualValue, "（ ") || !strings.Contains(*result.ActualValue, "GigabitEthernet0/0/1") {
+		t.Fatalf("峰值应标出接口名，got %q", *result.ActualValue)
+	}
+	// 峰值为 0 时收发两个方向都是 0，写「入方向」是随手取的，不如不写
+	if strings.Contains(*result.ActualValue, "方向") {
+		t.Fatalf("峰值为 0 时不应标方向，got %q", *result.ActualValue)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // 接口双工模式
 // ---------------------------------------------------------------------------
