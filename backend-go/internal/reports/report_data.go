@@ -218,7 +218,9 @@ type InspectionCheckResult struct {
 	BGPPeers *BGPPeersReport
 	// ComponentStatus 承载逐风扇/电源部件的原始状态码与判定
 	ComponentStatus *ComponentStatusReport
-	// Threshold 本次实际生效的判定阈值，与上面五种明细正交——
+	// DiskUsage 承载服务器逐分区磁盘使用率
+	DiskUsage *DiskUsageReport
+	// Threshold 本次实际生效的判定阈值，与上面六种明细正交——
 	// 带阈值的检查项无论有没有逐项明细，details 里都会带 threshold 字段。
 	// inspection_results 表没有阈值列，报告要说明「按什么口径判的」只能靠它。
 	Threshold *CheckThresholdReport
@@ -421,6 +423,37 @@ func parseComponentStatusDetails(raw *string) *ComponentStatusReport {
 	return payload
 }
 
+// DiskUsageEntryReport 报告中的单分区行。容量与已用字节数一并保留：只给「95%」
+// 看不出是 10 GB 的系统盘还是 10 TB 的数据盘，两者的处置紧迫程度完全不同。
+type DiskUsageEntryReport struct {
+	Name       string  `json:"name"`
+	TotalBytes int64   `json:"total_bytes"`
+	UsedBytes  int64   `json:"used_bytes"`
+	Percent    float64 `json:"percent"`
+	Verdict    string  `json:"verdict"`
+}
+
+// DiskUsageReport 对应 details 中 kind=disk_usage 的载荷（服务器逐分区磁盘使用率）。
+type DiskUsageReport struct {
+	Kind              string                              `json:"kind"`
+	Total             int                                 `json:"total"`
+	Evaluated         int                                 `json:"evaluated"`
+	OverWarning       int                                 `json:"over_warning"`
+	OverCritical      int                                 `json:"over_critical"`
+	WarningThreshold  float64                             `json:"warning_threshold"`
+	CriticalThreshold float64                             `json:"critical_threshold"`
+	Disks             []DiskUsageEntryReport              `json:"disks"`
+	Skipped           []InterfaceUtilizationSkippedReport `json:"skipped"`
+}
+
+func parseDiskUsageDetails(raw *string) *DiskUsageReport {
+	payload, ok := decodeDetailsPayload[DiskUsageReport](raw, "disk_usage")
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
 // detailsKindProbe 只取顶层 kind，用于在完整反序列化前判断载荷类型。
 type detailsKindProbe struct {
 	Kind string `json:"kind"`
@@ -454,7 +487,7 @@ func decodeDetailsPayload[T any](raw *string, wantKinds ...string) (*T, bool) {
 }
 
 // parseCheckResultDetails 按 kind 把 details 载荷分派到对应的明细字段。
-// 五种载荷互斥，至多命中一种；都不命中时全部为 nil，报告只渲染摘要行。
+// 六种载荷互斥，至多命中一种；都不命中时全部为 nil，报告只渲染摘要行。
 func parseCheckResultDetails(raw *string, result *InspectionCheckResult) {
 	// 阈值与明细正交：带阈值的检查项无论有没有逐项明细，载荷里都会带
 	// threshold 字段（thresholdDetailsPayload 合并进各类载荷）。因此先单独取，
@@ -472,6 +505,9 @@ func parseCheckResultDetails(raw *string, result *InspectionCheckResult) {
 		return
 	}
 	if result.BGPPeers = parseBGPPeersDetails(raw); result.BGPPeers != nil {
+		return
+	}
+	if result.DiskUsage = parseDiskUsageDetails(raw); result.DiskUsage != nil {
 		return
 	}
 	result.ComponentStatus = parseComponentStatusDetails(raw)

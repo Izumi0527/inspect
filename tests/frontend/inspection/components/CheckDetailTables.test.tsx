@@ -5,6 +5,7 @@ import { CheckDetailTables } from '@/features/inspection/components/CheckDetailT
 import type {
   BGPPeersDetails,
   ComponentStatusDetails,
+  DiskUsageDetails,
   InterfaceRatioDetails,
   OpticalPowerDetails,
 } from '@/features/inspection/types'
@@ -182,6 +183,43 @@ describe('部件状态明细表', () => {
     // 给出判定集合才能据此校准模板配置
     expect(screen.getByText(/正常状态码/)).toBeInTheDocument()
     expect(screen.getByText(/异常状态码/)).toBeInTheDocument()
+  })
+})
+
+describe('磁盘分区明细表', () => {
+  const details: DiskUsageDetails = {
+    kind: 'disk_usage',
+    total: 3,
+    evaluated: 2,
+    over_warning: 1,
+    over_critical: 1,
+    warning_threshold: 80,
+    critical_threshold: 90,
+    disks: [
+      { name: '/data', total_bytes: 536870912000, used_bytes: 510027366400, percent: 95, verdict: 'fail' },
+      { name: '/', total_bytes: 53687091200, used_bytes: 24159191040, percent: 45, verdict: 'pass' },
+    ],
+    skipped: [{ name: '/snap/core/16928', reason: '伪文件系统或只读镜像，不参与判定' }],
+  }
+
+  // 只给「95%」看不出是 10 GB 的系统盘还是 500 GB 的数据盘，处置紧迫程度完全不同
+  it('展开后逐分区列出使用率、已用与容量', async () => {
+    render(<CheckDetailTables details={details} />)
+    expect(screen.queryByText('/data')).not.toBeInTheDocument()
+
+    await expand(/磁盘分区明细/)
+
+    expect(screen.getByText('/data')).toBeInTheDocument()
+    expect(screen.getByText('95.0%')).toBeInTheDocument()
+    expect(screen.getByText('475.0 GB')).toBeInTheDocument()
+    expect(screen.getByText('500.0 GB')).toBeInTheDocument()
+    expect(screen.getByText('异常')).toBeInTheDocument()
+  })
+
+  it('展开后列出未参与判定的分区及原因', async () => {
+    render(<CheckDetailTables details={details} />)
+    await expand(/磁盘分区明细/)
+    expect(screen.getByText('/snap/core/16928')).toBeInTheDocument()
   })
 })
 

@@ -13,6 +13,7 @@ import { fetchExecutionDetail } from '@/features/inspection/api/inspection.api'
 import type {
   BGPPeersDetails,
   ComponentStatusDetails,
+  DiskUsageDetails,
   InterfaceRatioDetails,
   OpticalPowerDetails,
 } from '@/features/inspection/types'
@@ -85,6 +86,30 @@ describe('检查项明细解析', () => {
     expect(ratio.interfaces[0].count).toBe(1200)
     expect(ratio.interfaces[0].packets).toBe(98800)
     expect(ratio.skipped).toHaveLength(1)
+  })
+
+  it('应解析服务器磁盘分区明细并保留容量与已用字节数', async () => {
+    const details = await parseDetails({
+      kind: 'disk_usage',
+      total: 3,
+      evaluated: 2,
+      over_warning: 1,
+      over_critical: 1,
+      warning_threshold: 80,
+      critical_threshold: 90,
+      disks: [
+        { name: '/data', total_bytes: 536870912000, used_bytes: 510027366400, percent: 95, verdict: 'fail' },
+        { name: '/', total_bytes: 53687091200, used_bytes: 24159191040, percent: 45, verdict: 'pass' },
+      ],
+      skipped: [{ name: '/snap/core/16928', reason: '伪文件系统或只读镜像，不参与判定' }],
+    })
+
+    expect(details?.kind).toBe('disk_usage')
+    const disk = details as DiskUsageDetails
+    expect(disk.disks[0]).toEqual({
+      name: '/data', total_bytes: 536870912000, used_bytes: 510027366400, percent: 95, verdict: 'fail',
+    })
+    expect(disk.skipped).toHaveLength(1)
   })
 
   it('应把丢弃率视为与错包率同构的载荷', async () => {

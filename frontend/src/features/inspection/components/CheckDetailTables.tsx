@@ -1,5 +1,5 @@
 /**
- * 检查项明细表（错包/丢弃、光模块、BGP 邻居、部件状态）
+ * 检查项明细表（错包/丢弃、光模块、BGP 邻居、部件状态、磁盘分区）
  *
  * 巡检执行器把逐项结果写进 inspection_results.details，顶层 kind 区分载荷类型。
  * 本组件按 kind 分派渲染，接口利用率因带进度条自定义渲染，仍由
@@ -15,6 +15,7 @@ import type {
   CheckDetailVerdict,
   CheckResultDetails,
   ComponentStatusDetails,
+  DiskUsageDetails,
   InterfaceRatioDetails,
   InterfaceUtilizationSkipped,
   OpticalPowerDetails,
@@ -69,6 +70,18 @@ const formatSeconds = (seconds: number | undefined): string => {
   if (hours > 0) return minutes > 0 ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`
   if (minutes > 0) return `${minutes} 分钟`
   return `${seconds} 秒`
+}
+
+/** 字节数按 1024 进制说成人话（465.8 GB），与 PDF 报告的 formatDetailBytes 口径一致 */
+const formatBytes = (bytes: number): string => {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit++
+  }
+  return unit === 0 ? `${bytes} B` : `${value.toFixed(1)} ${units[unit]}`
 }
 
 /** 折叠外壳：标题行常驻，内容按需展开 */
@@ -303,6 +316,46 @@ const ComponentStatusTable = ({ details }: { details: ComponentStatusDetails }) 
   )
 }
 
+const DiskUsageTable = ({ details }: { details: DiskUsageDetails }) => {
+  if (details.disks.length === 0 && details.skipped.length === 0) return null
+
+  return (
+    <Disclosure
+      summary={`磁盘分区明细（已评估 ${details.evaluated}/${details.total} 个分区${
+        details.over_warning > 0 ? `，${details.over_warning} 个超阈值` : ''
+      }）`}
+    >
+      {details.disks.length > 0 ? (
+        <DetailTable headers={['挂载点', '判定', '使用率', '已用', '容量']}>
+          {details.disks.map((disk) => (
+            <tr key={disk.name} className="border-b border-border/60 last:border-0">
+              <td className="py-1.5 pr-3 font-medium text-foreground/90 break-all">{disk.name}</td>
+              <VerdictCell verdict={disk.verdict} />
+              <td className={cn('py-1.5 pr-3 whitespace-nowrap font-medium tabular-nums', VERDICT_TONES[disk.verdict])}>
+                {disk.percent.toFixed(1)}%
+              </td>
+              <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap tabular-nums">
+                {formatBytes(disk.used_bytes)}
+              </td>
+              <td className="py-1.5 text-muted-foreground whitespace-nowrap tabular-nums">
+                {formatBytes(disk.total_bytes)}
+              </td>
+            </tr>
+          ))}
+        </DetailTable>
+      ) : (
+        <p className="text-xs text-muted-foreground">本次没有可评估的磁盘分区。</p>
+      )}
+
+      <CriteriaNote>
+        判定口径：已用 / 容量，警告线 {details.warning_threshold}%，故障线 {details.critical_threshold}%
+      </CriteriaNote>
+
+      <SkippedList label="未参与判定的分区" items={details.skipped} />
+    </Disclosure>
+  )
+}
+
 interface CheckDetailTablesProps {
   details: CheckResultDetails
 }
@@ -322,6 +375,8 @@ export function CheckDetailTables({ details }: CheckDetailTablesProps) {
       return <BGPPeersTable details={details} />
     case 'component_status':
       return <ComponentStatusTable details={details} />
+    case 'disk_usage':
+      return <DiskUsageTable details={details} />
     default:
       return null
   }

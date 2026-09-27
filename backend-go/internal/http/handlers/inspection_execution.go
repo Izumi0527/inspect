@@ -864,6 +864,8 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 		h.checkBGPPeersMetric(result, snmpMetrics)
 	case "firmware_version":
 		h.checkFirmwareVersionMetric(result, snmpMetrics)
+	case "disk_usage":
+		h.checkDiskUsageMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
 	case "bandwidth":
 		h.checkBandwidthMetric(result, snmpMetrics)
 	case "reachable", "system_info":
@@ -2331,6 +2333,179 @@ func (h InspectionHandler) checkInterfaceUtilizationMetric(result *inspection.Re
 		result.Status = "pass"
 		result.Message = stringPtr(fmt.Sprintf("接口利用率正常：已评估 %d/%d 个接口，峰值 %s %s %.1f%%",
 			summary.Evaluated, summary.Total, summary.Peak.Name, summary.Peak.Direction, summary.Peak.Percent))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 磁盘使用率（服务器，HOST-RESOURCES-MIB hrStorageFixedDisk）
+// ---------------------------------------------------------------------------
+
+// pseudoMountTrees 连同自身在内都不参与判定的挂载点：snap 的 squashfs 只读镜像恒为 100%，
+// /run、/dev、/sys、/proc 是 tmpfs/devtmpfs 等内存或内核文件系统，按「写满」判定毫无意义。
+// /mnt/wsl、/mnt/wslg、/usr/lib/wsl 是 WSL 的运行时挂载（含 Docker Desktop 的只读 ISO 镜像），
+// net-snmp 分不出文件系统类型，一律报成固定磁盘；真实服务器上不存在这些路径。
+var pseudoMountTrees = []string{"/snap", "/run", "/dev", "/sys", "/proc", "/mnt/wsl", "/mnt/wslg", "/usr/lib/wsl"}
+
+// containerMountRoots 只排除其下的子挂载：每个容器各有一个 overlay 挂载，数量随容器增减，
+// 且与宿主分区重复计量；而独立挂载的 /var/lib/docker 本身是真实数据盘，必须参与判定。
+var containerMountRoots = []string{"/var/lib/docker", "/var/lib/kubelet", "/var/lib/containers"}
+
+// diskSkipReason 返回分区不参与判定的原因，参与判定时返回空串。
+func diskSkipReason(disk devices.DiskMetrics) string {
+	mount := strings.TrimSpace(disk.Mount)
+	for _, tree := range pseudoMountTrees {
+		if mount == tree || strings.HasPrefix(mount, tree+"/") {
+			return "伪文件系统或只读镜像，不参与判定"
+		}
+	}
+	for _, root := range containerMountRoots {
+		if strings.HasPrefix(mount, root+"/") {
+			return "容器运行时挂载，与宿主分区重复计量，不参与判定"
+		}
+	}
+	if disk.TotalBytes <= 0 {
+		return "容量为 0，无法计算使用率"
+	}
+	return ""
+}
+
+// diskUsageEntry 是单个分区的判定结果，JSON 字段即 details.disks[] 的契约。
+type diskUsageEntry struct {
+	Name       string  `json:"name"`
+	TotalBytes int64   `json:"total_bytes"`
+	UsedBytes  int64   `json:"used_bytes"`
+	Percent    float64 `json:"percent"`
+	Verdict    string  `json:"verdict"`
+}
+
+type diskUsageSummary struct {
+	Total        int
+	Evaluated    int
+	OverWarning  int
+	OverCritical int
+	// Entries 按最坏优先排序：先按判定（fail→warning→pass），同判定按使用率降序
+	Entries []diskUsageEntry
+	Skipped []interfaceUtilizationSkipped
+}
+
+// summarizeDiskUsage 逐分区计算使用率并判定。纯函数，便于测试。
+func summarizeDiskUsage(disks []devices.DiskMetrics, warning, critical float64) diskUsageSummary {
+	summary := diskUsageSummary{
+		Total:   len(disks),
+		Entries: make([]diskUsageEntry, 0, len(disks)),
+		Skipped: make([]interfaceUtilizationSkipped, 0),
+	}
+	for _, disk := range disks {
+		if reason := diskSkipReason(disk); reason != "" {
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: disk.Mount, Reason: reason})
+			continue
+		}
+		percent := float64(disk.UsedBytes) / float64(disk.TotalBytes) * 100
+		verdict := rowVerdictPass
+		switch {
+		case percent >= critical:
+			verdict = rowVerdictFail
+			summary.OverCritical++
+			summary.OverWarning++
+		case percent >= warning:
+			verdict = rowVerdictWarning
+			summary.OverWarning++
+		}
+		summary.Evaluated++
+		summary.Entries = append(summary.Entries, diskUsageEntry{
+			Name: disk.Mount, TotalBytes: disk.TotalBytes, UsedBytes: disk.UsedBytes,
+			Percent: percent, Verdict: verdict,
+		})
+	}
+
+	sort.SliceStable(summary.Entries, func(i, j int) bool {
+		left, right := summary.Entries[i], summary.Entries[j]
+		if rowVerdictRank(left.Verdict) != rowVerdictRank(right.Verdict) {
+			return rowVerdictRank(left.Verdict) < rowVerdictRank(right.Verdict)
+		}
+		return left.Percent > right.Percent
+	})
+	return summary
+}
+
+func buildDiskUsageDetails(summary diskUsageSummary, warning, critical float64) datatypes.JSON {
+	payload := map[string]interface{}{
+		"kind":               "disk_usage",
+		"total":              summary.Total,
+		"evaluated":          summary.Evaluated,
+		"over_warning":       summary.OverWarning,
+		"over_critical":      summary.OverCritical,
+		"warning_threshold":  warning,
+		"critical_threshold": critical,
+		"disks":              summary.Entries,
+		"skipped":            summary.Skipped,
+	}
+	for key, value := range thresholdDetailsPayload("disk_usage", warning, critical, "%") {
+		payload[key] = value
+	}
+	return encodeDetailsPayload(payload)
+}
+
+// formatDiskOffenders 列出超阈值的分区（最多 utilizationTopOffenderLimit 个），其余汇总计数。
+func formatDiskOffenders(entries []diskUsageEntry, overWarning int) string {
+	parts := make([]string, 0, utilizationTopOffenderLimit)
+	for _, entry := range entries {
+		if entry.Verdict == rowVerdictPass || len(parts) >= utilizationTopOffenderLimit {
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s %.1f%%", entry.Name, entry.Percent))
+	}
+	text := strings.Join(parts, "、")
+	if overWarning > len(parts) {
+		text += fmt.Sprintf(" 等 %d 个分区", overWarning)
+	}
+	return text
+}
+
+// checkDiskUsageMetric 逐分区检查磁盘使用率。没有可评估的分区时判 skip 而非 pass：
+// 假通过会掩盖真的写满。逐分区明细落 details，ActualValue/Message 只放摘要。
+func (h InspectionHandler) checkDiskUsageMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64) {
+	if warningThreshold == 0 {
+		warningThreshold = 80
+	}
+	if criticalThreshold == 0 {
+		criticalThreshold = 90
+	}
+	result.ExpectedValue = stringPtr(fmt.Sprintf("各分区使用率 < %.0f%%（警告 ≥%.0f%%，故障 ≥%.0f%%）",
+		warningThreshold, warningThreshold, criticalThreshold))
+
+	if metrics == nil || len(metrics.Disks) == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("设备未上报磁盘分区（需开启 SNMP 并放行 HOST-RESOURCES-MIB 的 hrStorage 表）")
+		return
+	}
+
+	summary := summarizeDiskUsage(metrics.Disks, warningThreshold, criticalThreshold)
+	result.Details = buildDiskUsageDetails(summary, warningThreshold, criticalThreshold)
+
+	if summary.Evaluated == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr(fmt.Sprintf("采集到 %d 个分区，但均为伪文件系统、容器挂载或容量为 0，无可评估的磁盘", summary.Total))
+		return
+	}
+
+	peak := summary.Entries[0]
+	actualValue := fmt.Sprintf("峰值 %.1f%%（%s）；%d/%d 分区超阈值", peak.Percent, peak.Name, summary.OverWarning, summary.Evaluated)
+	result.ActualValue = &actualValue
+
+	switch {
+	case summary.OverCritical > 0:
+		result.Status = "fail"
+		result.Message = stringPtr(fmt.Sprintf("%d 个分区使用率达到故障阈值 %.0f%%，请尽快清理或扩容：%s",
+			summary.OverCritical, criticalThreshold, formatDiskOffenders(summary.Entries, summary.OverWarning)))
+	case summary.OverWarning > 0:
+		result.Status = "warning"
+		result.Message = stringPtr(fmt.Sprintf("%d 个分区使用率超过警告阈值 %.0f%%，请关注增长趋势：%s",
+			summary.OverWarning, warningThreshold, formatDiskOffenders(summary.Entries, summary.OverWarning)))
+	default:
+		result.Status = "pass"
+		result.Message = stringPtr(fmt.Sprintf("磁盘使用率正常：已评估 %d/%d 个分区，峰值 %s %.1f%%",
+			summary.Evaluated, summary.Total, peak.Name, peak.Percent))
 	}
 }
 

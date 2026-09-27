@@ -19,6 +19,7 @@ import {
   OpticalPowerDetails,
   BGPPeersDetails,
   ComponentStatusDetails,
+  DiskUsageDetails,
   InspectionStrategy,
   InspectionAnalyticsRange
 } from '../types'
@@ -314,10 +315,32 @@ const mapComponentStatusDetails = (record: UnknownRecord): ComponentStatusDetail
   }
 }
 
+const mapDiskUsageDetails = (record: UnknownRecord): DiskUsageDetails | undefined => {
+  if (record.kind !== 'disk_usage') return undefined
+
+  return {
+    kind: 'disk_usage',
+    total: toNumber(record.total),
+    evaluated: toNumber(record.evaluated),
+    over_warning: toNumber(record.over_warning),
+    over_critical: toNumber(record.over_critical),
+    warning_threshold: toNumber(record.warning_threshold),
+    critical_threshold: toNumber(record.critical_threshold),
+    disks: toRecordArray(record.disks).map(entry => ({
+      name: toString(entry.name),
+      total_bytes: toNumber(entry.total_bytes),
+      used_bytes: toNumber(entry.used_bytes),
+      percent: toNumber(entry.percent),
+      verdict: toVerdict(entry.verdict),
+    })),
+    skipped: mapSkippedEntries(record.skipped),
+  }
+}
+
 /**
  * 按 kind 分派解析检查项结构化明细。
  *
- * 五种载荷互斥，至多命中一种；都不命中时返回 undefined，
+ * 六种载荷互斥，至多命中一种；都不命中时返回 undefined，
  * 让 UI 退回纯文本展示而不是崩在渲染层——details 列历史上存过手工写入的自由文本。
  */
 const mapCheckResultDetails = (raw: unknown): CheckResultDetails | undefined => {
@@ -329,7 +352,8 @@ const mapCheckResultDetails = (raw: unknown): CheckResultDetails | undefined => 
     mapInterfaceRatioDetails(record) ??
     mapOpticalPowerDetails(record) ??
     mapBGPPeersDetails(record) ??
-    mapComponentStatusDetails(record)
+    mapComponentStatusDetails(record) ??
+    mapDiskUsageDetails(record)
   )
 }
 

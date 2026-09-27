@@ -855,6 +855,61 @@ func writeCheckDetailTables(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
 	writeOpticalPowerPDFTable(pdf, result)
 	writeBGPPeersPDFTable(pdf, result)
 	writeComponentStatusPDFTable(pdf, result)
+	writeDiskUsagePDFTable(pdf, result)
+}
+
+// writeDiskUsagePDFTable 输出服务器逐分区磁盘使用率明细，最坏的分区在前（执行端已排序）。
+func writeDiskUsagePDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.DiskUsage
+	if detail == nil || (len(detail.Disks) == 0 && len(detail.Skipped) == 0) {
+		return
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - 逐分区明细（已评估 %d/%d，警告线 %s，故障线 %s）",
+		result.CheckItemName, detail.Evaluated, detail.Total,
+		formatDetailPercent(detail.WarningThreshold), formatDetailPercent(detail.CriticalThreshold)))
+
+	if len(detail.Disks) > 0 {
+		rows := make([][]string, 0, len(detail.Disks))
+		for _, disk := range detail.Disks {
+			rows = append(rows, []string{
+				disk.Name,
+				localizeStatusWord(disk.Verdict),
+				formatDetailPercent(disk.Percent),
+				formatDetailBytes(disk.UsedBytes),
+				formatDetailBytes(disk.TotalBytes),
+			})
+		}
+		style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+		style.BodyAlign = "L"
+		style.WrapColumns = []int{0}
+		style.RowFills, style.RowAccents = checkResultRowTints(rows, 1)
+		writePDFTable(pdf,
+			[]string{"挂载点", "判定", "使用率", "已用", "容量"},
+			rows, []float64{50, 20, 22, 25, 25.2}, style)
+	}
+
+	writeDetailSkippedPDFTable(pdf, "未评估分区", detail.Skipped)
+}
+
+// formatDetailBytes 把字节数格式化为 1024 进制的可读容量（如 465.8 GB）。
+func formatDetailBytes(bytes int64) string {
+	if bytes < 0 {
+		return pdfEmptyValuePlaceholder
+	}
+	units := []string{"B", "KB", "MB", "GB", "TB", "PB"}
+	value := float64(bytes)
+	unit := 0
+	for value >= 1024 && unit < len(units)-1 {
+		value /= 1024
+		unit++
+	}
+	if unit == 0 {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	return fmt.Sprintf("%.1f %s", value, units[unit])
 }
 
 // writeDetailSkippedPDFTable 输出「未参与评估的对象及原因」表。

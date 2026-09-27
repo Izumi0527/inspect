@@ -157,6 +157,7 @@ export interface InspectionCheckItem {
    *           interface_duplex（标准 IF-MIB 与 EtherLike-MIB，全厂商通用）
    * 部件与专项：fan_status / power_status / poe / optical_power / bgp_peers /
    *             firmware_version（依赖厂商 catalog，采不到时判 skip）
+   * 主机专项：disk_usage（HOST-RESOURCES-MIB，服务器模板使用）
    */
   metric?: string
 
@@ -406,10 +407,34 @@ export interface ComponentStatusDetails {
   components: ComponentStatusEntry[]
 }
 
+/** 服务器单个磁盘分区的判定结果；容量与已用为字节数 */
+export interface DiskUsageEntry {
+  name: string
+  total_bytes: number
+  used_bytes: number
+  percent: number
+  verdict: CheckDetailVerdict
+}
+
+/** 服务器逐分区磁盘使用率明细（HOST-RESOURCES-MIB hrStorageFixedDisk） */
+export interface DiskUsageDetails {
+  kind: 'disk_usage'
+  total: number
+  evaluated: number
+  over_warning: number
+  over_critical: number
+  warning_threshold: number
+  critical_threshold: number
+  /** 最坏优先排序：先按判定（异常→警告→正常），同判定按使用率降序 */
+  disks: DiskUsageEntry[]
+  /** 伪文件系统、容器挂载与容量为 0 的分区，不参与判定 */
+  skipped: InterfaceUtilizationSkipped[]
+}
+
 /**
  * 检查项结构化明细。
  *
- * 后端用顶层 kind 区分载荷类型，五种互斥。这里做成可辨识联合，
+ * 后端用顶层 kind 区分载荷类型，六种互斥。这里做成可辨识联合，
  * 消费方写 `details.kind === 'optical_power'` 即可自动收窄类型。
  */
 export type CheckResultDetails =
@@ -418,6 +443,7 @@ export type CheckResultDetails =
   | OpticalPowerDetails
   | BGPPeersDetails
   | ComponentStatusDetails
+  | DiskUsageDetails
 
 /**
  * 设备巡检结果接口

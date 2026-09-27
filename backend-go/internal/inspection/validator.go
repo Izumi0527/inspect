@@ -329,6 +329,8 @@ var validSNMPMetrics = []string{
 	"interface_errors", "interface_discards", "interface_admin_status", "interface_duplex",
 	// 硬件部件与专项（厂商 catalog，采不到时检查项判 skip）
 	"fan_status", "power_status", "poe", "optical_power", "bgp_peers", "firmware_version",
+	// 主机专项（HOST-RESOURCES-MIB，服务器模板使用）
+	"disk_usage",
 }
 
 // validateSNMPMetric 校验 SNMP 检查项的采集指标：缺失或非法的 metric 会让执行端
