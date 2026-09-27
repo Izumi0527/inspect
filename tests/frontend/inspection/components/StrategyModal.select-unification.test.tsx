@@ -171,13 +171,20 @@ describe('StrategyModal 下拉统一化', () => {
 
     ;(inspectionHooks.useInspectionTemplates as jest.Mock).mockReturnValue({
       data: {
-        templates: [{ id: '1', name: '模板A', isBuiltIn: false }],
+        templates: [
+          { id: '1', name: '模板A', isBuiltIn: false, deviceTypes: ['switch'] },
+          { id: '2', name: '路由器巡检', isBuiltIn: true, deviceTypes: ['router'] },
+        ],
       },
       isLoading: false,
     })
 
     ;(deviceHooks.useDevices as jest.Mock).mockReturnValue({
-      devices: [{ id: 1, name: '设备A', ip: '10.0.0.1' }],
+      devices: [
+        { id: 1, name: '设备A', ip: '10.0.0.1', device_type: 'switch' },
+        { id: 2, name: '出口路由器', ip: '10.0.0.2', device_type: 'router' },
+        { id: 3, name: '办公区AP', ip: '10.0.0.3', device_type: 'wireless_ap' },
+      ],
       loading: false,
       loadDevices: jest.fn(),
     })
@@ -208,8 +215,8 @@ describe('StrategyModal 下拉统一化', () => {
     render(<StrategyModal strategy={null} onClose={jest.fn()} onSuccess={onSuccess} />)
 
     await user.type(screen.getByPlaceholderText('请输入策略名称'), '核心设备周检')
+    await user.click(screen.getByRole('radio', { name: /模板A/ }))
     await user.click(screen.getByRole('checkbox', { name: /设备A/ }))
-    await user.click(screen.getByRole('radio', { name: '模板A' }))
 
     await user.click(screen.getByRole('combobox', { name: '执行频率' }))
     await user.click(screen.getByRole('option', { name: '每周' }))
@@ -230,5 +237,56 @@ describe('StrategyModal 下拉统一化', () => {
       })
     )
     expect(onSuccess).toHaveBeenCalled()
+  })
+
+  // 交换机模板只巡检交换机：设备列表按所选模板的适用类型过滤，并用中文标出类型
+  it('先选模板，设备列表只列出适用类型的设备', async () => {
+    const user = userEvent.setup()
+    render(<StrategyModal strategy={null} onClose={jest.fn()} onSuccess={jest.fn()} />)
+
+    expect(screen.getByText('请先选择巡检模板')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /设备A/ })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /模板A/ }))
+
+    expect(screen.getByRole('checkbox', { name: /设备A/ })).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /出口路由器/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /办公区AP/ })).not.toBeInTheDocument()
+  })
+
+  it('模板选项标出适用设备类型', () => {
+    render(<StrategyModal strategy={null} onClose={jest.fn()} onSuccess={jest.fn()} />)
+    expect(screen.getByRole('radio', { name: /模板A/ }).closest('label')).toHaveTextContent('交换机')
+  })
+
+  it('切换模板时移除类型不符的已选设备并提示', async () => {
+    const user = userEvent.setup()
+    render(<StrategyModal strategy={null} onClose={jest.fn()} onSuccess={jest.fn()} />)
+
+    await user.click(screen.getByRole('radio', { name: /模板A/ }))
+    await user.click(screen.getByRole('checkbox', { name: /设备A/ }))
+    await user.click(screen.getByRole('radio', { name: /路由器巡检/ }))
+
+    expect(screen.getByText(/已移除 1 台与「路由器巡检」适用类型（路由器）不符的设备/)).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /出口路由器/ })).not.toBeChecked()
+  })
+
+  it('编辑存量策略时，含类型不符的设备不能保存', async () => {
+    const user = userEvent.setup()
+    render(
+      <StrategyModal
+        strategy={{
+          id: '9', name: '混合策略', description: '', type: 'manual', devices: [1, 2], templates: [1],
+          enabled: true, createdAt: '', updatedAt: '',
+        }}
+        onClose={jest.fn()}
+        onSuccess={jest.fn()}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '保存修改' }))
+
+    expect(screen.getByText(/出口路由器（路由器）/)).toBeInTheDocument()
+    expect(mockUpdateStrategy).not.toHaveBeenCalled()
   })
 })

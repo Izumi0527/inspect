@@ -160,15 +160,6 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/inspection/components/TemplateModal.tsx',
-    bannedPatterns: [
-      /bg-white dark:bg-gray-800/g,
-      /bg-gray-50 dark:bg-gray-700/g,
-      /border-gray-200 dark:border-gray-600/g,
-      /text-gray-900 dark:text-gray-100/g,
-    ],
-  },
-  {
     file: 'frontend/src/features/inspection/components/StrategyModal.tsx',
     bannedPatterns: [
       /bg-white dark:bg-gray-800/g,
@@ -500,12 +491,6 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/inspection/components/TemplateList.tsx',
-    bannedPatterns: [
-      /bg-white p-4 rounded-lg shadow/g,
-    ],
-  },
-  {
     file: 'frontend/src/features/devices/components/BulkDeviceImport.tsx',
     bannedPatterns: [
       /text-gray-900 dark:text-gray-100/g,
@@ -646,12 +631,6 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/inspection/components/CheckItemEditor.tsx',
-    bannedPatterns: [
-      /bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto/g,
-    ],
-  },
-  {
     file: 'frontend/src/features/inspection/components/ExecutionEmptyState.tsx',
     bannedPatterns: [
       /text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2/g,
@@ -667,18 +646,6 @@ const rules: FileRule[] = [
     file: 'frontend/src/features/inspection/components/InspectionAnalytics.tsx',
     bannedPatterns: [
       /text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2/g,
-    ],
-  },
-  {
-    file: 'frontend/src/features/inspection/components/TemplateCard.tsx',
-    bannedPatterns: [
-      /bg-white hover:bg-gray-50 hover:shadow-sm/g,
-    ],
-  },
-  {
-    file: 'frontend/src/features/inspection/components/TemplateEditor.tsx',
-    bannedPatterns: [
-      /bg-white rounded-lg shadow-lg p-6 max-w-4xl mx-auto/g,
     ],
   },
   {

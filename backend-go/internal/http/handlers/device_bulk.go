@@ -441,6 +441,23 @@ func (h DevicesHandler) executeStartInspection(
 		templateID = &value
 	}
 
+	// 交换机模板只巡检交换机：创建前拦截类型不符的设备，免得生成注定失败的巡检记录。
+	if templateID != nil {
+		if err := h.Inspection.ValidateTemplateDeviceTypes(ctx, *templateID, deviceIDs); err != nil {
+			message := "巡检任务创建失败"
+			if validationErr, ok := err.(*inspection.ValidationError); ok {
+				message = validationErr.Message
+			}
+			return bulkActionResult{
+				Success:   false,
+				Processed: 0,
+				Failed:    len(deviceIDs),
+				Errors:    buildBulkErrors(deviceIDs, nil, message),
+				Message:   message,
+			}
+		}
+	}
+
 	createdBy := ""
 	if user != nil {
 		createdBy = user.ID

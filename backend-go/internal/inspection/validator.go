@@ -20,12 +20,14 @@ var (
 	ErrDuplicateTemplateName       = errors.New("模板名称已存在")
 	ErrStrategyTemplateRequired    = errors.New("策略必须配置一个巡检模板")
 	ErrStrategySingleTemplateOnly  = errors.New("策略只能配置一个巡检模板")
+	ErrDeviceTypeMismatch          = errors.New("设备类型与模板适用类型不符")
 
 	// Check item related errors
 	ErrNoCheckItems            = errors.New("模板必须包含至少一个检查项")
 	ErrInvalidCheckItemsFormat = errors.New("检查项格式无效")
 	ErrCheckItemMissingFields  = errors.New("检查项缺少必需字段")
 	ErrInvalidCheckItemType    = errors.New("检查项类型无效")
+	ErrInvalidDeviceTypes      = errors.New("模板适用设备类型无效")
 
 	// Configuration related errors
 	ErrOIDRequired      = errors.New("SNMP 检查项必须包含 OID")
@@ -165,6 +167,10 @@ func (v *templateValidator) ValidateTemplate(ctx context.Context, template *Temp
 		return err
 	}
 
+	if err := validateTemplateDeviceTypes(template); err != nil {
+		return err
+	}
+
 	// Parse and validate check items
 	var checkItems []CheckItem
 	if err := json.Unmarshal(template.CheckItems, &checkItems); err != nil {
@@ -180,6 +186,35 @@ func (v *templateValidator) ValidateTemplate(ctx context.Context, template *Temp
 		return err
 	}
 
+	return nil
+}
+
+// validateTemplateDeviceTypes 要求模板恰好适用一种可巡检设备类型。
+// 这是「交换机模板只巡检交换机」的前提：允许多选或空选，执行入口就无从判断
+// 该用哪套检查项去巡检哪类设备。内置模板由启动同步直接落库，不经此校验。
+func validateTemplateDeviceTypes(template *Template) error {
+	choices := DeviceTypeLabels(InspectableDeviceTypes)
+	types := TemplateDeviceTypes(template.DeviceTypes)
+	switch {
+	case len(types) == 0:
+		return &ValidationError{
+			Field:   "device_types",
+			Message: fmt.Sprintf("请为模板选择适用的设备类型（%s之一）", choices),
+			Err:     ErrInvalidDeviceTypes,
+		}
+	case len(types) > 1:
+		return &ValidationError{
+			Field:   "device_types",
+			Message: fmt.Sprintf("每个模板只能适用一种设备类型，当前选择了：%s", DeviceTypeLabels(types)),
+			Err:     ErrInvalidDeviceTypes,
+		}
+	case !IsInspectableDeviceType(types[0]):
+		return &ValidationError{
+			Field:   "device_types",
+			Message: fmt.Sprintf("设备类型「%s」暂无巡检能力，可选：%s", DeviceTypeLabel(types[0]), choices),
+			Err:     ErrInvalidDeviceTypes,
+		}
+	}
 	return nil
 }
 

@@ -7,11 +7,8 @@ export { InspectionAnalytics } from './components/InspectionAnalytics'
 export { StrategyModal } from './components/StrategyModal'
 
 // 模板相关组件导出
-export { TemplateEditor } from './components/TemplateEditor'
-export { TemplateEditorWrapper } from './components/TemplateEditorWrapper'
 export { TemplateDetailModal } from './components/TemplateDetailModal'
 export { TemplateImportModal } from './components/TemplateImportModal'
-export { CheckItemEditor } from './components/CheckItemEditor'
 
 // API函数导出
 export {

@@ -153,3 +153,14 @@ func normalizeCheckResultStatus(raw string) string {
 		return "fail"
 	}
 }
+
+// firstPositiveID 返回首个正整数 ID；策略模板列表已由 ValidateStrategyTemplateIDs
+// 保证恰有一个有效 ID，这里只是跳过非正数占位，全无时返回 0。
+func firstPositiveID(ids []int) int {
+	for _, id := range ids {
+		if id > 0 {
+			return id
+		}
+	}
+	return 0
+}

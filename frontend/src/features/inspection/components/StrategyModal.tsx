@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { useCreateStrategy, useUpdateStrategy, useInspectionTemplates } from '../hooks/useInspection'
 import { useDevices } from '@/features/devices/hooks/useDevices'
+import { deviceMatchesTemplate, getDeviceTypeLabel } from '@/utils/deviceTypes'
 import { InspectionStrategy } from '../types'
 
 interface Props {
@@ -195,6 +196,8 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
   const [errors, setErrors] = useState<Partial<Record<keyof StrategyFormData, string>>>({})
   const [deviceSearch, setDeviceSearch] = useState('')
   const [templateSearch, setTemplateSearch] = useState('')
+  // 切换模板后自动移除了哪些设备的说明，避免设备「凭空消失」
+  const [deviceNotice, setDeviceNotice] = useState('')
   const [_showDeviceSelector, _setShowDeviceSelector] = useState(false)
   const [_showTemplateSelector, _setShowTemplateSelector] = useState(false)
 
@@ -264,19 +267,46 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
     handleInputChange('devices', newDevices)
   }
 
-  // 切换模板选择
+  const findTemplate = (templateId?: number) => allTemplates.find(t => Number(t.id) === templateId)
+  const selectedTemplate = findTemplate(formData.templates[0])
+  const templateTypeText = (template: { deviceTypes: string[] }) => template.deviceTypes.map(getDeviceTypeLabel).join('、')
+
+  // 已选设备中与模板适用类型不符的（已删除、列表里查不到的设备交给后端判定）
+  const findMismatchedDevices = (template: { deviceTypes: string[] } | undefined, deviceIds: number[]) => {
+    if (!template) return []
+    return deviceIds
+      .map(id => allDevices.find(d => d.id === id))
+      .filter((device): device is NonNullable<typeof device> =>
+        !!device && !deviceMatchesTemplate(template.deviceTypes, device.device_type))
+  }
+
+  // 切换模板选择：交换机模板只巡检交换机，换模板时移除类型不符的已选设备并说明
   const toggleTemplate = (templateId: number) => {
     const newTemplates = formData.templates.includes(templateId)
       ? []
       : [templateId]
     handleInputChange('templates', newTemplates)
+
+    const next = findTemplate(newTemplates[0])
+    const removed = findMismatchedDevices(next, formData.devices)
+    if (next && removed.length > 0) {
+      const removedIds = new Set(removed.map(device => device.id))
+      handleInputChange('devices', formData.devices.filter(id => !removedIds.has(id)))
+      setDeviceNotice(`已移除 ${removed.length} 台与「${next.name}」适用类型（${templateTypeText(next)}）不符的设备`)
+    } else {
+      setDeviceNotice('')
+    }
   }
 
-  // 过滤设备
-  const filteredDevices = allDevices.filter(device => 
-    device.name.toLowerCase().includes(deviceSearch.toLowerCase()) ||
-    device.ip.toLowerCase().includes(deviceSearch.toLowerCase())
-  )
+  // 过滤设备：只列出所选模板适用类型的设备
+  const filteredDevices = selectedTemplate
+    ? allDevices.filter(device =>
+        deviceMatchesTemplate(selectedTemplate.deviceTypes, device.device_type) && (
+          device.name.toLowerCase().includes(deviceSearch.toLowerCase()) ||
+          device.ip.toLowerCase().includes(deviceSearch.toLowerCase())
+        )
+      )
+    : []
 
   // 过滤模板
   const filteredTemplates = allTemplates.filter(template =>
@@ -322,6 +352,13 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
 
     if (formData.templates.length === 0) {
       newErrors.templates = '请选择一个巡检模板'
+    }
+
+    const mismatched = findMismatchedDevices(selectedTemplate, formData.devices)
+    if (selectedTemplate && mismatched.length > 0) {
+      newErrors.devices = `以下设备与模板「${selectedTemplate.name}」的适用类型（${templateTypeText(selectedTemplate)}）不符，请移除：${
+        mismatched.map(device => `${device.name}（${getDeviceTypeLabel(device.device_type)}）`).join('、')
+      }`
     }
 
     setErrors(newErrors)
@@ -555,81 +592,6 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                   目标配置
                 </h3>
                 
-                {/* 目标设备 */}
-                <div>
-                  <label className="block text-sm font-medium text-muted-foreground mb-1">
-                    目标设备 <span className="text-red-500">*</span>
-                    <span className="text-gray-400 font-normal ml-1">({formData.devices.length} 个)</span>
-                  </label>
-                  <div className={`border rounded-lg overflow-hidden ${
-                    errors.devices ? 'border-red-500' : 'border-border'
-                  }`}>
-                    {/* 已选设备 */}
-                    <div className="p-3 bg-muted/40 dark:bg-gray-700/50 min-h-[60px]">
-                      {formData.devices.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {formData.devices.map((deviceId) => (
-                            <Badge key={deviceId} variant="secondary" className="flex items-center gap-1">
-                              {getDeviceName(deviceId)}
-                              <button
-                                type="button"
-                                onClick={() => toggleDevice(deviceId)}
-                                className="ml-1 hover:text-red-500"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-400">请从下方列表选择设备</p>
-                      )}
-                    </div>
-                    
-                    {/* 设备选择器 */}
-                    <div className="border-t dark:border-gray-600">
-                      <div className="p-2 border-b dark:border-gray-600">
-                        <div className="relative">
-                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                          <input
-                            type="text"
-                            value={deviceSearch}
-                            onChange={(e) => setDeviceSearch(e.target.value)}
-                            placeholder="搜索设备..."
-                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-border rounded bg-background text-foreground"
-                          />
-                        </div>
-                      </div>
-                      <div className="max-h-[120px] overflow-y-auto">
-                        {devicesLoading ? (
-                          <p className="p-3 text-sm text-gray-500">加载中...</p>
-                        ) : filteredDevices.length > 0 ? (
-                          filteredDevices.map((device) => (
-                            <label
-                              key={device.id}
-                              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={formData.devices.includes(device.id)}
-                                onChange={() => toggleDevice(device.id)}
-                                className="rounded border-border text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-sm text-muted-foreground flex-1">
-                                {device.name}
-                              </span>
-                              <span className="text-xs text-gray-400">{device.ip}</span>
-                            </label>
-                          ))
-                        ) : (
-                          <p className="p-3 text-sm text-gray-500">暂无设备</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {errors.devices && <p className="text-xs text-red-500 mt-1">{errors.devices}</p>}
-                </div>
-
                 {/* 巡检模板 */}
                 <div>
                   <label className="block text-sm font-medium text-muted-foreground mb-1">
@@ -694,6 +656,9 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                               <span className="text-sm text-muted-foreground flex-1">
                                 {template.name}
                               </span>
+                              {template.deviceTypes.length > 0 && (
+                                <Badge variant="outline" size="sm">{templateTypeText(template)}</Badge>
+                              )}
                               {template.isBuiltIn && (
                                 <Badge variant="success" size="sm">内置</Badge>
                               )}
@@ -706,6 +671,89 @@ export const StrategyModal: React.FC<Props> = ({ strategy, onClose, onSuccess })
                     </div>
                   </div>
                   {errors.templates && <p className="text-xs text-red-500 mt-1">{errors.templates}</p>}
+                </div>
+
+                {/* 目标设备 */}
+                <div>
+                  <label className="block text-sm font-medium text-muted-foreground mb-1">
+                    目标设备 <span className="text-red-500">*</span>
+                    <span className="text-gray-400 font-normal ml-1">({formData.devices.length} 个)</span>
+                  </label>
+                  <div className={`border rounded-lg overflow-hidden ${
+                    errors.devices ? 'border-red-500' : 'border-border'
+                  }`}>
+                    {/* 已选设备 */}
+                    <div className="p-3 bg-muted/40 dark:bg-gray-700/50 min-h-[60px]">
+                      {formData.devices.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {formData.devices.map((deviceId) => (
+                            <Badge key={deviceId} variant="secondary" className="flex items-center gap-1">
+                              {getDeviceName(deviceId)}
+                              <button
+                                type="button"
+                                onClick={() => toggleDevice(deviceId)}
+                                className="ml-1 hover:text-red-500"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-400">请从下方列表选择设备</p>
+                      )}
+                    </div>
+                    
+                    {/* 设备选择器 */}
+                    <div className="border-t dark:border-gray-600">
+                      <div className="p-2 border-b dark:border-gray-600">
+                        <div className="relative">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <input
+                            type="text"
+                            value={deviceSearch}
+                            onChange={(e) => setDeviceSearch(e.target.value)}
+                            placeholder="搜索设备..."
+                            className="w-full pl-8 pr-3 py-1.5 text-sm border border-border rounded bg-background text-foreground"
+                          />
+                        </div>
+                      </div>
+                      <div className="max-h-[120px] overflow-y-auto">
+                        {!selectedTemplate ? (
+                          <p className="p-3 text-sm text-gray-500">请先选择巡检模板</p>
+                        ) : devicesLoading ? (
+                          <p className="p-3 text-sm text-gray-500">加载中...</p>
+                        ) : filteredDevices.length > 0 ? (
+                          filteredDevices.map((device) => (
+                            <label
+                              key={device.id}
+                              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={formData.devices.includes(device.id)}
+                                onChange={() => toggleDevice(device.id)}
+                                className="rounded border-border text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-sm text-muted-foreground flex-1">
+                                {device.name}
+                              </span>
+                              <span className="text-xs text-gray-400">{getDeviceTypeLabel(device.device_type)}</span>
+                              <span className="text-xs text-gray-400">{device.ip}</span>
+                            </label>
+                          ))
+                        ) : (
+                          <p className="p-3 text-sm text-gray-500">
+                            暂无适用于「{selectedTemplate.name}」的设备（{templateTypeText(selectedTemplate)}）
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {errors.devices && <p className="text-xs text-red-500 mt-1">{errors.devices}</p>}
+                  {deviceNotice && !errors.devices && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">{deviceNotice}</p>
+                  )}
                 </div>
               </div>
             </div>

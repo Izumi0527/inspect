@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 )
 
 func formatPercent(value float64, precision int) string {
@@ -347,10 +349,10 @@ type inspectionDimension struct {
 }
 
 // inspectionDimensions 是全部可采集维度的清单，顺序即报告中的呈现顺序，
-// 与 inspection 包内置检查项的 metric 一一对应（19 项）。
+// 与 inspection 包内置检查项的 metric 一一对应（20 项）。
 //
-// **这是新增 metric 的第五处同步点**：漏加会让该维度被永远算作「未覆盖」，
-// 报告于是在已经查过的情况下平白给出「某某维度未核查」的免责声明。
+// **这是新增 metric 的第五处同步点**：漏加会让该维度既不算覆盖也不算未覆盖，
+// 报告的覆盖声明因此失真（外置测试 TestCoverage_BuiltinTemplateCoversItsDeviceTypeFully 守门）。
 // 另外四处是 inspection_execution.go 的分派分支、validator.go 的
 // validSNMPMetrics、外置测试 builtin_templates_test.go 的两个清单、
 // 以及前端 types/index.ts 的 metric 文档注释。
@@ -359,6 +361,7 @@ var inspectionDimensions = []inspectionDimension{
 	{Metric: "reachable", Label: "SNMP 可达"},
 	{Metric: "cpu", Label: "CPU"},
 	{Metric: "memory", Label: "内存"},
+	{Metric: "disk_usage", Label: "磁盘使用率"},
 	{Metric: "fan_status", Label: "风扇状态"},
 	{Metric: "power_status", Label: "电源状态"},
 	{Metric: "temperature", Label: "温度"},
@@ -376,19 +379,29 @@ var inspectionDimensions = []inspectionDimension{
 	{Metric: "firmware_version", Label: "固件版本"},
 }
 
-// checkItemDimensionKey 把一个检查项归一到维度键。
-// ICMP/PING 类检查项没有 metric（执行端按 type 分派），统一归到 connectivity。
-func checkItemDimensionKey(item map[string]interface{}) string {
-	typ, _ := item["type"].(string)
-	switch strings.ToLower(strings.TrimSpace(typ)) {
-	case "icmp", "ping":
-		return "connectivity"
+// coverageUniverse 返回覆盖范围的全集（维度键集合）：模板声明的各可巡检设备类型
+// 的内置维度之并集。模板按设备类型划分后，「路由器模板不含 PoE」不代表「PoE 未核查」，
+// 而是路由器本就没有这一项。没有声明可巡检类型（未声明类型的存量模板）时返回 nil，
+// 表示以全部维度为全集。
+func coverageUniverse(deviceTypes []string) map[string]bool {
+	var universe map[string]bool
+	for _, deviceType := range deviceTypes {
+		keys := inspection.BuiltinMetricsForDeviceType(deviceType)
+		if len(keys) == 0 {
+			continue
+		}
+		if universe == nil {
+			universe = make(map[string]bool, len(inspectionDimensions))
+		}
+		for _, key := range keys {
+			universe[key] = true
+		}
 	}
-	metric, _ := item["metric"].(string)
-	return strings.ToLower(strings.TrimSpace(metric))
+	return universe
 }
 
-// summarizeTemplateCoverage 从巡检模板的 check_items 推导本次覆盖与未覆盖的维度。
+// summarizeTemplateCoverage 从巡检模板的 check_items 推导本次覆盖与未覆盖的维度，
+// deviceTypes 是模板声明的适用设备类型，决定覆盖范围的全集（见 coverageUniverse）。
 //
 // 覆盖范围取自模板定义而非执行结果，这是刻意的：覆盖范围要回答的是「这个模板
 // 打算查什么」，某一项执行失败或跳过仍属于覆盖范围内（只是没查成，那由异常清单
@@ -396,8 +409,8 @@ func checkItemDimensionKey(item map[string]interface{}) string {
 //
 // 读不到模板信息时返回空，由渲染层跳过覆盖范围声明——绝不能把「读不到模板」
 // 当成「什么都没查」，那会让历史报告（template_id 为 NULL）平白多出一句
-// 「全部 19 个维度未核查」，比不写更误导。
-func summarizeTemplateCoverage(checkItems []byte) (covered []string, uncovered []string) {
+// 「全部维度未核查」，比不写更误导。
+func summarizeTemplateCoverage(checkItems []byte, deviceTypes []string) (covered []string, uncovered []string) {
 	if len(checkItems) == 0 {
 		return nil, nil
 	}
@@ -417,16 +430,22 @@ func summarizeTemplateCoverage(checkItems []byte) (covered []string, uncovered [
 		if enabled, ok := item["enabled"].(bool); ok && !enabled {
 			continue
 		}
-		if key := checkItemDimensionKey(item); key != "" {
+		if key := inspection.CheckItemDimensionKey(item); key != "" {
 			present[key] = true
 		}
 	}
 
+	universe := coverageUniverse(deviceTypes)
 	covered = make([]string, 0, len(inspectionDimensions))
 	uncovered = make([]string, 0, len(inspectionDimensions))
 	for _, dim := range inspectionDimensions {
 		if present[dim.Metric] {
 			covered = append(covered, dim.Label)
+			continue
+		}
+		// 全集之外的维度（该类设备本就没有）既不算覆盖也不算未覆盖；
+		// 模板里额外加入的项已在上一分支计入覆盖，不受全集限制。
+		if universe != nil && !universe[dim.Metric] {
 			continue
 		}
 		uncovered = append(uncovered, dim.Label)

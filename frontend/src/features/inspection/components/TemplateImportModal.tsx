@@ -132,6 +132,7 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
             id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
             name: item.name,
             type: item.type,
+            metric: item.metric,
             config: item.config,
             weight: item.weight,
           }
@@ -278,9 +279,9 @@ export const TemplateImportModal: React.FC<Props> = ({ onClose, onSuccess }) => 
                   Excel 字段说明
                 </h3>
                 <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                  <p>• <strong>Sheet 1 模板信息</strong>：仅 1 行数据，列含 name / description / category / deviceTypes（逗号分隔）</p>
-                  <p>• <strong>Sheet 2 检查项</strong>：≥ 1 行数据，列含 name / type / config / weight</p>
-                  <p>• <strong>下拉验证</strong>：category 与 type 列在 Excel 中已配置下拉选项</p>
+                  <p>• <strong>Sheet 1 模板信息</strong>：仅 1 行数据，列含 name / description / category / 适用设备类型（交换机、路由器、防火墙、服务器之一）</p>
+                  <p>• <strong>Sheet 2 检查项</strong>：≥ 1 行数据，列含 name / type / config / weight / metric（SNMP 检查项必填采集指标）</p>
+                  <p>• <strong>下拉验证</strong>：category、适用设备类型与 type 列在 Excel 中已配置下拉选项</p>
                   <p>• <strong>config 字段</strong>：JSON 字符串（可空填 <code>{`{}`}</code>），如 <code>{`{"oid":"1.3.6.1..."}`}</code></p>
                   <p>• <strong>建议</strong>：先点击右上角"下载模板"获取示例，按格式编辑后上传</p>
                 </div>

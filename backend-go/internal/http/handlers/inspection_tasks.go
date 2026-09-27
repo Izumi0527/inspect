@@ -139,6 +139,15 @@ func (h InspectionHandler) CreateTask(c echo.Context) error {
 	if len(deviceIDs) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "device_ids is required")
 	}
+	// 交换机模板只巡检交换机：创建前拦截类型不符的设备，免得生成注定失败的巡检记录。
+	if templateID != nil {
+		if err := h.Service.ValidateTemplateDeviceTypes(c.Request().Context(), *templateID, deviceIDs); err != nil {
+			if validationErr, ok := err.(*inspection.ValidationError); ok {
+				return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
+			}
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to validate device types")
+		}
+	}
 
 	var scheduledAt *time.Time
 	if value, ok := readOptionalString(payload, "scheduled_at", "scheduledAt"); ok {
@@ -216,6 +225,7 @@ func (h InspectionHandler) StartTask(c echo.Context) error {
 	}
 
 	var checkItems []map[string]interface{}
+	var templateDeviceTypes []string
 	if task.TemplateID != nil {
 		template, err := h.Service.GetTemplate(c.Request().Context(), *task.TemplateID)
 		if err != nil {
@@ -225,11 +235,12 @@ func (h InspectionHandler) StartTask(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection template")
 		}
 		checkItems = decodeJSONMapSlice(template.CheckItems)
+		templateDeviceTypes = inspection.TemplateDeviceTypes(template.DeviceTypes)
 	}
 
 	go func() {
 		ctx := context.Background()
-		h.executeInspection(ctx, task, checkItems, h.inspectionDefaults(ctx), nil)
+		h.executeInspection(ctx, task, checkItems, templateDeviceTypes, h.inspectionDefaults(ctx), nil)
 	}()
 	return inspectionOKWithMessage(c, "巡检任务已启动", map[string]interface{}{"id": taskID})
 }

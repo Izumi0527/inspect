@@ -126,14 +126,41 @@ const mapCheckItem = (value: UnknownRecord): InspectionCheckItem => {
     config.threshold = threshold
   }
 
-  return {
+  const item: InspectionCheckItem = {
     id: toString(value.id ?? value['id']),
     name: toString(value.name ?? value['name']),
     type,
     metric: toString(value.metric ?? value['metric']),
     config,
     weight: toNumber(value.weight ?? value['weight'], 1),
+    // 未声明 enabled 的存量检查项视为启用，与后端执行端口径一致
+    enabled: value.enabled !== false,
   }
+  const description = toString(value.description)
+  if (description) item.description = description
+  const category = toString(value.category)
+  if (category) item.category = category
+  const deviceTypes = toStringArray(value.deviceTypes ?? value['device_types'])
+  if (deviceTypes.length > 0) item.deviceTypes = deviceTypes
+  return item
+}
+
+// 检查项提交给后端的形态。读回来的字段必须原样写回：丢了 enabled 停用项会被悄悄启用，
+// 丢了检查项级 device_types 执行端就无从判断「不适用」。
+const toCheckItemPayload = (item: InspectionCheckItem): UnknownRecord => {
+  const payload: UnknownRecord = {
+    id: item.id,
+    name: item.name,
+    type: item.type,
+    metric: item.metric ?? '',
+    weight: item.weight,
+    config: item.config,
+    enabled: item.enabled ?? true,
+  }
+  if (item.description) payload.description = item.description
+  if (item.category) payload.category = item.category
+  if (item.deviceTypes && item.deviceTypes.length > 0) payload.device_types = item.deviceTypes
+  return payload
 }
 
 const mapCheckResult = (value: UnknownRecord): CheckResult => {
@@ -557,6 +584,8 @@ export async function fetchInspectionTemplates(params?: {
   vendor?: string
   sort?: string
   order?: 'asc' | 'desc'
+  /** 只取内置（true）或只取自建（false）模板，对应后端 is_default 过滤 */
+  isBuiltIn?: boolean
 }): Promise<{ templates: InspectionTemplate[]; total: number; pages: number }> {
   try {
     let endpoint = '/inspection/templates'
@@ -587,6 +616,9 @@ export async function fetchInspectionTemplates(params?: {
       }
       if (params.order) {
         searchParams.append('order', params.order)
+      }
+      if (params.isBuiltIn !== undefined) {
+        searchParams.append('is_default', String(params.isBuiltIn))
       }
     }
 
@@ -651,16 +683,8 @@ export async function createInspectionTemplate(template: Omit<InspectionTemplate
       description: template.description,
       category: template.category,
       device_types: template.deviceTypes,
-      check_items: template.checkItems?.map(item => ({
-        id: item.id,
-        name: item.name,
-        type: item.type,
-        metric: item.metric ?? '',
-        weight: item.weight,
-        config: item.config,
-        enabled: true
-      })),
-      is_default: template.isBuiltIn || false,
+      check_items: template.checkItems?.map(toCheckItemPayload),
+      // 不提交 is_default：内置标记只由后端启动同步维护，接口一律按自建模板处理
       is_active: template.isActive ?? true
     }
 
@@ -687,17 +711,8 @@ export async function updateInspectionTemplate(id: number, updates: Partial<Insp
     if (updates.category !== undefined) payload.category = updates.category
     if (updates.deviceTypes !== undefined) payload.device_types = updates.deviceTypes
     if (updates.checkItems !== undefined) {
-      payload.check_items = updates.checkItems.map(item => ({
-        id: item.id,
-        name: item.name,
-        type: item.type,
-        metric: item.metric ?? '',
-        weight: item.weight,
-        config: item.config,
-        enabled: true
-      }))
+      payload.check_items = updates.checkItems.map(toCheckItemPayload)
     }
-    if (updates.isBuiltIn !== undefined) payload.is_default = updates.isBuiltIn
     if (updates.isActive !== undefined) payload.is_active = updates.isActive
 
     const response = await api.put<InspectionApiResponse<unknown>>(`/inspection/templates/${id}`, payload)

@@ -1,22 +1,27 @@
 package reports_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	_ "unsafe"
 
+	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 )
 
 // 本文件锁定报告的「覆盖范围声明」。
 //
-// 19 项模板在不同设备上实际执行数不同：一台交换机跑全面巡检，BGP 因设备类型
+// 模板在不同设备上实际执行数不同：一台交换机跑旧版全面巡检，BGP 因设备类型
 // 不适用而不执行，通过率仍是 100%。没有这段声明，读者据此得出的结论是
 // 「设备全面健康」，而实际有维度根本没查。这段话把「通过率 100%」
 // 从「设备全面健康」限定回「所查项目均正常」。
+//
+// 模板按设备类型划分后，覆盖范围的全集是「该类设备可查的维度」：路由器模板
+// 不含 PoE 不代表「PoE 未核查」，而是路由器本就没有这一项。
 
 //go:linkname summarizeTemplateCoverage github.com/your-org/inspect-system/backend-go/internal/reports.summarizeTemplateCoverage
-func summarizeTemplateCoverage(checkItems []byte) (covered []string, uncovered []string)
+func summarizeTemplateCoverage(checkItems []byte, deviceTypes []string) (covered []string, uncovered []string)
 
 //go:linkname describeInspectionScope github.com/your-org/inspect-system/backend-go/internal/reports.describeInspectionScope
 func describeInspectionScope(data reports.InspectionReportData) string
@@ -27,9 +32,8 @@ func describeInspectionThresholdPolicy(data reports.InspectionReportData) string
 //go:linkname buildInspectionNarrative github.com/your-org/inspect-system/backend-go/internal/reports.buildInspectionNarrative
 func buildInspectionNarrative(data reports.InspectionReportData) []string
 
-// fullTemplateCheckItems 是「全面巡检」的 19 项检查项，与内置模板一致：
-// 1 项 ICMP 连通性 + 18 项 SNMP。
-const fullTemplateCheckItems = `[
+// allDimensionCheckItems 覆盖全部 20 个可采集维度：1 项 ICMP 连通性 + 19 项 SNMP。
+const allDimensionCheckItems = `[
 	{"id":"connectivity","type":"icmp"},
 	{"id":"reachable","type":"snmp","metric":"reachable"},
 	{"id":"cpu","type":"snmp","metric":"cpu"},
@@ -48,44 +52,110 @@ const fullTemplateCheckItems = `[
 	{"id":"poe","type":"snmp","metric":"poe"},
 	{"id":"optical","type":"snmp","metric":"optical_power"},
 	{"id":"bgp","type":"snmp","metric":"bgp_peers"},
-	{"id":"firmware","type":"snmp","metric":"firmware_version"}
+	{"id":"firmware","type":"snmp","metric":"firmware_version"},
+	{"id":"disk","type":"snmp","metric":"disk_usage"}
 ]`
 
-// connectivityTemplateCheckItems 是「连通性巡检」的 2 项。
+// connectivityTemplateCheckItems 只有连通性两项。
 const connectivityTemplateCheckItems = `[
 	{"id":"connectivity","type":"icmp"},
 	{"id":"reachable","type":"snmp","metric":"reachable"}
 ]`
 
+// builtinCheckItemsJSON 用内置模板的维度键拼出等价的检查项，维度键即 metric
+// （connectivity 对应 ICMP 项）。
+func builtinCheckItemsJSON(t *testing.T, deviceType string) ([]byte, int) {
+	t.Helper()
+	keys := inspection.BuiltinMetricsForDeviceType(deviceType)
+	if len(keys) == 0 {
+		t.Fatalf("%s 没有内置模板", deviceType)
+	}
+	items := make([]map[string]string, 0, len(keys))
+	for _, key := range keys {
+		if key == "connectivity" {
+			items = append(items, map[string]string{"id": key, "type": "icmp"})
+			continue
+		}
+		items = append(items, map[string]string{"id": key, "type": "snmp", "metric": key})
+	}
+	data, err := json.Marshal(items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data, len(keys)
+}
+
 // ---------------------------------------------------------------------------
 // 覆盖范围推导
 // ---------------------------------------------------------------------------
 
-// TestCoverage_FullTemplateCoversEveryDimension 全面巡检应覆盖全部 19 个维度。
+// TestCoverage_BuiltinTemplateCoversItsDeviceTypeFully 每类内置模板都应覆盖该类设备的全部维度，
+// 且每个维度都能映射到中文标签。
 //
-// 这条同时是「第五处同步点」的守门人：新增 metric 若忘了加进维度清单，
-// 该维度会被永远算作未覆盖，报告于是在已经查过的情况下平白给出
-// 「某某维度未核查」的免责声明。
-func TestCoverage_FullTemplateCoversEveryDimension(t *testing.T) {
-	covered, uncovered := summarizeTemplateCoverage([]byte(fullTemplateCheckItems))
+// 这条同时是「第五处同步点」的守门人：新增 metric 若忘了加进报表维度清单，
+// 该维度既不算覆盖也不算未覆盖，覆盖数就会少于模板的检查项数。
+func TestCoverage_BuiltinTemplateCoversItsDeviceTypeFully(t *testing.T) {
+	for _, deviceType := range inspection.InspectableDeviceTypes {
+		t.Run(deviceType, func(t *testing.T) {
+			items, count := builtinCheckItemsJSON(t, deviceType)
 
-	if len(uncovered) != 0 {
-		t.Errorf("全面巡检不应有未覆盖维度，实际 %v", uncovered)
-	}
-	if len(covered) != 19 {
-		t.Errorf("覆盖维度数 = %d，want 19；清单 = %v", len(covered), covered)
+			covered, uncovered := summarizeTemplateCoverage(items, []string{deviceType})
+
+			if len(uncovered) != 0 {
+				t.Errorf("内置模板不应有未覆盖维度，实际 %v", uncovered)
+			}
+			if len(covered) != count {
+				t.Errorf("覆盖维度数 = %d，want %d（每个 metric 都应在报表维度清单里）；清单 = %v", len(covered), count, covered)
+			}
+		})
 	}
 }
 
-// TestCoverage_ConnectivityTemplateLeavesMostUncovered 连通性巡检只覆盖两个维度。
-func TestCoverage_ConnectivityTemplateLeavesMostUncovered(t *testing.T) {
-	covered, uncovered := summarizeTemplateCoverage([]byte(connectivityTemplateCheckItems))
+// TestCoverage_UniverseIsDeviceTypeSpecific 未覆盖维度只从该类设备可查的维度里算：
+// 路由器模板精简后，未覆盖清单里不应出现 PoE、双工、磁盘这些路由器本就没有的项。
+func TestCoverage_UniverseIsDeviceTypeSpecific(t *testing.T) {
+	covered, uncovered := summarizeTemplateCoverage([]byte(connectivityTemplateCheckItems), []string{"router"})
 
 	if len(covered) != 2 {
 		t.Errorf("覆盖维度数 = %d，want 2；清单 = %v", len(covered), covered)
 	}
-	if len(uncovered) != 17 {
-		t.Errorf("未覆盖维度数 = %d，want 17；清单 = %v", len(uncovered), uncovered)
+	joined := strings.Join(uncovered, "、")
+	for _, notApplicable := range []string{"PoE 供电", "接口双工模式", "磁盘使用率"} {
+		if strings.Contains(joined, notApplicable) {
+			t.Errorf("路由器模板的未覆盖清单不应出现 %q：%v", notApplicable, uncovered)
+		}
+	}
+	if !strings.Contains(joined, "BGP 邻居") {
+		t.Errorf("BGP 是路由器可查维度，精简模板未包含时应列为未覆盖：%v", uncovered)
+	}
+}
+
+// TestCoverage_LegacyMultiTypeTemplateUsesUnion 存量多类型模板以各类型维度的并集为全集：
+// 交换机+路由器模板含旧版全面巡检的 19 项时视为全覆盖，不能因磁盘（服务器专属）而报未核查。
+func TestCoverage_LegacyMultiTypeTemplateUsesUnion(t *testing.T) {
+	var items []map[string]interface{}
+	if err := json.Unmarshal([]byte(allDimensionCheckItems), &items); err != nil {
+		t.Fatal(err)
+	}
+	withoutDisk, _ := json.Marshal(items[:len(items)-1])
+
+	_, uncovered := summarizeTemplateCoverage(withoutDisk, []string{"switch", "router"})
+
+	if len(uncovered) != 0 {
+		t.Errorf("交换机+路由器的并集内已全部覆盖，不应有未覆盖维度，实际 %v", uncovered)
+	}
+}
+
+// TestCoverage_UntypedTemplateUsesAllDimensions 未声明设备类型的存量模板以全部 20 个维度为全集。
+func TestCoverage_UntypedTemplateUsesAllDimensions(t *testing.T) {
+	covered, uncovered := summarizeTemplateCoverage([]byte(allDimensionCheckItems), nil)
+	if len(uncovered) != 0 || len(covered) != 20 {
+		t.Errorf("全部维度模板应覆盖 20 项，实际 covered=%d uncovered=%v", len(covered), uncovered)
+	}
+
+	covered, uncovered = summarizeTemplateCoverage([]byte(connectivityTemplateCheckItems), nil)
+	if len(covered) != 2 || len(uncovered) != 18 {
+		t.Errorf("连通性模板应覆盖 2 项、未覆盖 18 项，实际 %d/%d", len(covered), len(uncovered))
 	}
 	// 未覆盖清单必须给中文维度名，不能是 metric 键
 	for _, label := range uncovered {
@@ -103,7 +173,7 @@ func TestCoverage_SkipsDisabledItems(t *testing.T) {
 	covered, _ := summarizeTemplateCoverage([]byte(`[
 		{"id":"connectivity","type":"icmp"},
 		{"id":"cpu","type":"snmp","metric":"cpu","enabled":false}
-	]`))
+	]`), []string{"switch"})
 
 	for _, label := range covered {
 		if label == "CPU" {
@@ -119,7 +189,7 @@ func TestCoverage_SkipsDisabledItems(t *testing.T) {
 //
 // 这是本轮最容易搞反的一处契约。历史记录的 template_id 为 NULL，
 // 若把「读不到模板」当成「什么都没查」，一份两年前的正常报告会平白多出
-// 「全部 19 个维度未核查」的免责声明——比不写更误导。
+// 「全部维度未核查」的免责声明——比不写更误导。
 func TestCoverage_UnreadableTemplateYieldsNothing(t *testing.T) {
 	cases := map[string][]byte{
 		"nil":     nil,
@@ -132,7 +202,7 @@ func TestCoverage_UnreadableTemplateYieldsNothing(t *testing.T) {
 
 	for name, checkItems := range cases {
 		t.Run(name, func(t *testing.T) {
-			covered, uncovered := summarizeTemplateCoverage(checkItems)
+			covered, uncovered := summarizeTemplateCoverage(checkItems, nil)
 			if len(covered) != 0 || len(uncovered) != 0 {
 				t.Errorf("读不到有效模板应返回空，实际 covered=%v uncovered=%v", covered, uncovered)
 			}

@@ -145,6 +145,7 @@ export const useInspectionTemplates = (params?: {
   vendor?: string
   sort?: string
   order?: 'asc' | 'desc'
+  isBuiltIn?: boolean
 }) => {
   return useQuery({
     queryKey: ['inspection', 'templates', params],

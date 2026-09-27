@@ -3,7 +3,7 @@
  * 采用分步向导式设计，提供更好的用户体验
  */
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -30,7 +30,19 @@ import {
   Card,
   CardContent
 } from '@/components/atoms'
-import { useCreateTemplate, useUpdateTemplate } from '../hooks/useInspection'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
+import {
+  INSPECTABLE_DEVICE_TYPE_OPTIONS,
+  getDeviceTypeLabel,
+  isInspectableDeviceType
+} from '@/utils/deviceTypes'
+import { useCreateTemplate, useUpdateTemplate, useInspectionTemplates } from '../hooks/useInspection'
 import { isCheckItemTypeSupported } from '../utils/check-item-support'
 import type { InspectionTemplate, InspectionCheckItem, CheckItemType, TemplateCategory } from '../types'
 
@@ -58,6 +70,8 @@ interface StepProps {
   errors: Record<string, string>
   onChange: <K extends keyof TemplateFormData>(field: K, value: TemplateFormData[K]) => void
   onValidate?: () => boolean
+  /** 编辑的存量模板不满足「恰好一种可巡检类型」时，原先声明的类型（用于提示重选） */
+  legacyDeviceTypes?: string[]
 }
 
 // ============================================================================
@@ -66,7 +80,7 @@ interface StepProps {
 
 const STEPS = [
   { id: 1, title: '基本信息', icon: FileText, description: '设置模板名称和分类' },
-  { id: 2, title: '设备类型', icon: Monitor, description: '选择支持的设备类型' },
+  { id: 2, title: '设备类型', icon: Monitor, description: '选择模板适用的设备类型' },
   { id: 3, title: '检查项', icon: Settings, description: '配置巡检检查项' },
   { id: 4, title: '预览确认', icon: Eye, description: '确认模板配置' }
 ]
@@ -94,14 +108,13 @@ const getCategoryColorClass = (color?: string) => {
   return CATEGORY_COLOR_CLASS[color as CategoryColor] ?? CATEGORY_COLOR_CLASS.gray
 }
 
-const DEVICE_TYPE_OPTIONS = [
-  { value: 'router', label: '路由器', icon: '🌐' },
-  { value: 'switch', label: '交换机', icon: '🔀' },
-  { value: 'firewall', label: '防火墙', icon: '🛡️' },
-  { value: 'server', label: '服务器', icon: '🖥️' },
-  { value: 'storage', label: '存储设备', icon: '💾' },
-  { value: 'wireless', label: '无线设备', icon: '📡' }
-]
+// 四类可巡检设备的图标；取值与中文名来自 utils/deviceTypes
+const DEVICE_TYPE_ICONS: Record<string, string> = {
+  switch: '🔀',
+  router: '🌐',
+  firewall: '🛡️',
+  server: '🖥️'
+}
 
 const CHECK_TYPE_OPTIONS: { value: CheckItemType; label: string; description: string; icon: string; supported: boolean }[] = [
   { value: 'snmp', label: 'SNMP', description: '通过 SNMP 协议获取设备信息', icon: '📊', supported: isCheckItemTypeSupported('snmp') },
@@ -113,29 +126,50 @@ const CHECK_TYPE_OPTIONS: { value: CheckItemType; label: string; description: st
 
 const OID_PATTERN = /^[0-9]+(\.[0-9]+)*$/
 
-// 预设检查项模板
-const PRESET_CHECK_ITEMS: Record<string, InspectionCheckItem[]> = {
-  network: [
-    { id: 'cpu', name: 'CPU 使用率', type: 'snmp', weight: 3, config: { oid: '1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5', threshold: { warning: 70, critical: 90 } } },
-    { id: 'memory', name: '内存使用率', type: 'snmp', weight: 3, config: { oid: '1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7', threshold: { warning: 80, critical: 95 } } },
-    { id: 'uptime', name: '系统运行时间', type: 'snmp', weight: 1, config: { oid: '1.3.6.1.2.1.1.3.0' } },
-    { id: 'interfaces', name: '接口状态', type: 'snmp', weight: 2, config: { oid: '1.3.6.1.2.1.2.2.1.8' } }
-  ],
-  system: [
-    { id: 'ping', name: '设备连通性', type: 'ping', weight: 1, config: {} },
-    { id: 'cpu', name: 'CPU 使用率', type: 'snmp', weight: 3, config: { threshold: { warning: 70, critical: 90 } } },
-    { id: 'memory', name: '内存使用率', type: 'snmp', weight: 3, config: { threshold: { warning: 80, critical: 95 } } },
-    { id: 'uptime', name: '系统运行时间', type: 'snmp', weight: 1, config: {} }
-  ],
-  security: [
-    { id: 'ping', name: '设备连通性', type: 'ping', weight: 2, config: {} },
-    { id: 'snmp', name: 'SNMP 服务检查', type: 'snmp', weight: 2, config: {} }
+interface MetricOption {
+  metric: string
+  label: string
+}
+
+/**
+ * 检查项的维度键：ping/icmp 没有 metric，统一记为 connectivity；其余取 metric。
+ * 与后端 CheckItemDimensionKey 同一口径，用于「从内置模板添加」时去重。
+ */
+const checkItemKey = (item: InspectionCheckItem): string =>
+  item.type === 'ping' ? 'connectivity' : (item.metric ?? '').trim().toLowerCase()
+
+/**
+ * SNMP 采集指标的可选项，取自后端内置模板的检查项（单一来源）：后端新增指标并
+ * 写进内置模板后，这里自动出现，无需前端再维护一份清单。所选设备类型的模板排在前面。
+ */
+const buildMetricOptions = (templates: InspectionTemplate[], deviceType?: string): MetricOption[] => {
+  const ordered = [
+    ...templates.filter(t => deviceType && t.deviceTypes.includes(deviceType)),
+    ...templates.filter(t => !deviceType || !t.deviceTypes.includes(deviceType))
   ]
+  const seen = new Set<string>()
+  const options: MetricOption[] = []
+  for (const template of ordered) {
+    for (const item of template.checkItems) {
+      const metric = item.type === 'snmp' ? (item.metric ?? '').trim() : ''
+      if (!metric || seen.has(metric)) continue
+      seen.add(metric)
+      options.push({ metric, label: item.name })
+    }
+  }
+  return options
 }
 
 // ============================================================================
 // 工具函数
 // ============================================================================
+
+// 每个模板只能适用一种可巡检设备类型：存量模板声明了多种、未声明或声明了不可巡检的
+// 类型时，编辑时清空并要求重选（后端保存时同样会拒绝）。
+const initialDeviceTypes = (deviceTypes: string[]): string[] =>
+  deviceTypes.length === 1 && isInspectableDeviceType(deviceTypes[0])
+    ? [deviceTypes[0].trim().toLowerCase()]
+    : []
 
 const createInitialFormState = (): TemplateFormData => ({
   name: '',
@@ -241,46 +275,47 @@ const StepBasicInfo: React.FC<StepProps> = ({ formData, errors, onChange }) => {
 // Step 2: 设备类型
 // ============================================================================
 
-const StepDeviceTypes: React.FC<StepProps> = ({ formData, errors, onChange }) => {
-  const [customType, setCustomType] = useState('')
-
-  const toggleDeviceType = (type: string) => {
-    const newTypes = formData.deviceTypes.includes(type)
-      ? formData.deviceTypes.filter(t => t !== type)
-      : [...formData.deviceTypes, type]
-    onChange('deviceTypes', newTypes)
-  }
-
-  const addCustomType = () => {
-    const trimmed = customType.trim().toLowerCase()
-    if (trimmed && !formData.deviceTypes.includes(trimmed)) {
-      onChange('deviceTypes', [...formData.deviceTypes, trimmed])
-      setCustomType('')
-    }
-  }
+const StepDeviceTypes: React.FC<StepProps> = ({ formData, errors, onChange, legacyDeviceTypes }) => {
+  const selected = formData.deviceTypes[0]
 
   return (
     <div className="space-y-6">
-      {/* 预设设备类型 */}
+      {legacyDeviceTypes && (
+        <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            该模板原先{legacyDeviceTypes.length > 0
+              ? `声明适用于 ${legacyDeviceTypes.map(getDeviceTypeLabel).join('、')}`
+              : '未声明适用设备类型'}
+            。现在每个模板只能适用一种设备类型，请重新选择。
+          </p>
+        </div>
+      )}
+
       <div>
-        <label className="block text-sm font-medium text-foreground/90 mb-3">
-          常用设备类型
+        <label className="block text-sm font-medium text-foreground/90 mb-1">
+          适用设备类型 <span className="text-red-500">*</span>
         </label>
-        <div className="grid grid-cols-3 gap-3">
-          {DEVICE_TYPE_OPTIONS.map((option) => {
-            const isSelected = formData.deviceTypes.includes(option.value)
+        <p className="text-xs text-muted-foreground mb-3">
+          每个模板只适用一种设备类型，策略与巡检任务只能为该类设备选用此模板。
+        </p>
+        <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="适用设备类型">
+          {INSPECTABLE_DEVICE_TYPE_OPTIONS.map((option) => {
+            const isSelected = selected === option.value
             return (
               <button
                 key={option.value}
                 type="button"
-                onClick={() => toggleDeviceType(option.value)}
+                role="radio"
+                aria-checked={isSelected}
+                onClick={() => onChange('deviceTypes', [option.value])}
                 className={`p-4 rounded-xl border-2 text-center transition-all ${
                   isSelected
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-border hover:border-border'
                 }`}
               >
-                <div className="text-2xl mb-2">{option.icon}</div>
+                <div className="text-2xl mb-2">{DEVICE_TYPE_ICONS[option.value]}</div>
                 <div className={`font-medium ${isSelected ? 'text-blue-600' : 'text-foreground/90'}`}>
                   {option.label}
                 </div>
@@ -288,48 +323,10 @@ const StepDeviceTypes: React.FC<StepProps> = ({ formData, errors, onChange }) =>
             )
           })}
         </div>
+        <p className="text-xs text-muted-foreground mt-3">
+          无线AP 通常由 AC 统一管理，暂不提供巡检模板。
+        </p>
       </div>
-
-      {/* 自定义设备类型 */}
-      <div>
-        <label className="block text-sm font-medium text-foreground/90 mb-2">
-          添加自定义设备类型
-        </label>
-        <div className="flex gap-2">
-          <Input
-            value={customType}
-            onChange={(e) => setCustomType(e.target.value)}
-            placeholder="输入自定义设备类型"
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCustomType())}
-          />
-          <Button type="button" variant="outline" onClick={addCustomType}>
-            <Plus className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* 已选设备类型 */}
-      {formData.deviceTypes.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-foreground/90 mb-2">
-            已选择 ({formData.deviceTypes.length})
-          </label>
-          <div className="flex flex-wrap gap-2 p-4 bg-muted/40 rounded-lg">
-            {formData.deviceTypes.map((type) => (
-              <Badge key={type} variant="secondary" className="flex items-center gap-1 px-3 py-1.5">
-                {type}
-                <button
-                  type="button"
-                  onClick={() => toggleDeviceType(type)}
-                  className="ml-1 hover:text-red-500"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            ))}
-          </div>
-        </div>
-      )}
 
       {errors.deviceTypes && (
         <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
@@ -350,6 +347,7 @@ export default StepBasicInfo
 
 interface CheckItemEditorInlineProps {
   item: InspectionCheckItem
+  metricOptions: MetricOption[]
   onUpdate: (updates: Partial<InspectionCheckItem>) => void
   onDelete: () => void
   isExpanded: boolean
@@ -358,6 +356,7 @@ interface CheckItemEditorInlineProps {
 
 const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
   item,
+  metricOptions,
   onUpdate,
   onDelete,
   isExpanded,
@@ -477,7 +476,8 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                         disabled={isDisabled}
                         onClick={() => {
                           if (isSelected) return
-                          onUpdate({ type: option.value, config: {} })
+                          // metric 只对 SNMP 有意义，换类型时一并清掉，免得残留到非 SNMP 项
+                          onUpdate({ type: option.value, config: {}, metric: '' })
                         }}
                         className={`px-3 py-2 rounded-lg border text-sm transition-all ${
                           isSelected
@@ -509,6 +509,33 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                   <h5 className="font-medium text-foreground flex items-center gap-2">
                     <span>📊</span> SNMP 配置
                   </h5>
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-1">
+                      采集指标 <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                      value={item.metric ?? ''}
+                      onValueChange={(metric) => {
+                        // 未命名时带出内置检查项的名称，省得用户再敲一遍
+                        const option = metricOptions.find(o => o.metric === metric)
+                        onUpdate(item.name.trim() || !option ? { metric } : { metric, name: option.label })
+                      }}
+                    >
+                      <SelectTrigger aria-label="采集指标">
+                        <SelectValue placeholder="选择采集指标" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {metricOptions.map((option) => (
+                          <SelectItem key={option.metric} value={option.metric}>
+                            {option.label}（{option.metric}）
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      执行时按采集指标取数与判定，名称可随意修改；采集 OID 由系统按设备厂商自动选择
+                    </p>
+                  </div>
                   <div>
                     <label className="block text-sm text-muted-foreground mb-1">
                       OID（可选）
@@ -667,6 +694,19 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
 const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
+  const { data: builtInData } = useInspectionTemplates({ isBuiltIn: true, pageSize: 100 })
+  const deviceType = formData.deviceTypes[0]
+  const builtInTemplates = useMemo(() => builtInData?.templates ?? [], [builtInData])
+  const builtInForType = builtInTemplates.find(t => deviceType && t.deviceTypes.includes(deviceType))
+  const metricOptions = useMemo(() => buildMetricOptions(builtInTemplates, deviceType), [builtInTemplates, deviceType])
+
+  // 内置模板里尚未加入本模板的检查项（按维度键去重，避免重复添加 CPU 等）
+  const missingBuiltInItems = useMemo(() => {
+    if (!builtInForType) return []
+    const existing = new Set(formData.checkItems.map(checkItemKey).filter(Boolean))
+    return builtInForType.checkItems.filter(item => !existing.has(checkItemKey(item)))
+  }, [builtInForType, formData.checkItems])
+
   const addCheckItem = () => {
     const newItem: InspectionCheckItem = {
       id: generateCheckItemId(),
@@ -690,15 +730,13 @@ const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => 
     if (expandedId === id) setExpandedId(null)
   }
 
-  const applyPreset = (category: string) => {
-    const presetItems = PRESET_CHECK_ITEMS[category]
-    if (presetItems) {
-      const newItems = presetItems.map(item => ({
-        ...item,
-        id: generateCheckItemId()
-      }))
-      onChange('checkItems', [...formData.checkItems, ...newItems])
-    }
+  const addBuiltInItems = () => {
+    const usedIds = new Set(formData.checkItems.map(item => item.id))
+    const newItems = missingBuiltInItems.map(item => ({
+      ...item,
+      id: usedIds.has(item.id) ? generateCheckItemId() : item.id
+    }))
+    onChange('checkItems', [...formData.checkItems, ...newItems])
   }
 
   return (
@@ -707,37 +745,29 @@ const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => 
       <div className="p-4 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/20 rounded-xl">
         <div className="flex items-center gap-2 mb-3">
           <Zap className="w-5 h-5 text-blue-600" />
-          <span className="font-medium text-foreground">快速添加预设检查项</span>
+          <span className="font-medium text-foreground">快速添加检查项</span>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => applyPreset('network')}
-          >
-            <Monitor className="w-4 h-4 mr-1" />
-            网络设备检查项
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => applyPreset('system')}
-          >
-            <Settings className="w-4 h-4 mr-1" />
-            系统检查项
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => applyPreset('security')}
-          >
-            <Shield className="w-4 h-4 mr-1" />
-            安全检查项
-          </Button>
-        </div>
+        {builtInForType ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addBuiltInItems}
+              disabled={missingBuiltInItems.length === 0}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              从内置「{builtInForType.name}」添加
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {missingBuiltInItems.length > 0
+                ? `将添加 ${missingBuiltInItems.length} 项尚未包含的检查项，可再逐项调整阈值或删除`
+                : '内置模板的检查项已全部包含'}
+            </span>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">请先在上一步选择适用设备类型</p>
+        )}
       </div>
 
       {/* 检查项列表 */}
@@ -747,6 +777,7 @@ const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => 
             <CheckItemEditorInline
               key={item.id}
               item={item}
+              metricOptions={metricOptions}
               onUpdate={(updates) => updateCheckItem(item.id, updates)}
               onDelete={() => deleteCheckItem(item.id)}
               isExpanded={expandedId === item.id}
@@ -825,18 +856,15 @@ const StepPreview: React.FC<StepProps> = ({ formData }) => {
         <CardContent className="p-6">
           <h5 className="font-medium text-foreground mb-3 flex items-center gap-2">
             <Monitor className="w-5 h-5 text-purple-600" />
-            支持设备类型 ({formData.deviceTypes.length})
+            适用设备类型
           </h5>
           <div className="flex flex-wrap gap-2">
-            {formData.deviceTypes.map((type) => {
-              const option = DEVICE_TYPE_OPTIONS.find(o => o.value === type)
-              return (
-                <Badge key={type} variant="secondary" className="px-3 py-1.5">
-                  {option?.icon && <span className="mr-1">{option.icon}</span>}
-                  {option?.label || type}
-                </Badge>
-              )
-            })}
+            {formData.deviceTypes.map((type) => (
+              <Badge key={type} variant="secondary" className="px-3 py-1.5">
+                {DEVICE_TYPE_ICONS[type] && <span className="mr-1">{DEVICE_TYPE_ICONS[type]}</span>}
+                {getDeviceTypeLabel(type)}
+              </Badge>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -894,7 +922,7 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
         name: template.name,
         description: template.description,
         category: template.category,
-        deviceTypes: [...template.deviceTypes],
+        deviceTypes: initialDeviceTypes(template.deviceTypes),
         checkItems: [...template.checkItems],
         isActive: template.isActive ?? true
       }
@@ -902,6 +930,10 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
     return createInitialFormState()
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
+  // 存量模板的设备类型不满足新规则时，保留原值用于提示重选
+  const legacyDeviceTypes = template && initialDeviceTypes(template.deviceTypes).length === 0
+    ? template.deviceTypes
+    : undefined
 
   const createTemplate = useCreateTemplate()
   const updateTemplate = useUpdateTemplate()
@@ -933,8 +965,8 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
         }
         break
       case 2:
-        if (formData.deviceTypes.length === 0) {
-          newErrors.deviceTypes = '请至少选择一种设备类型'
+        if (formData.deviceTypes.length !== 1 || !isInspectableDeviceType(formData.deviceTypes[0])) {
+          newErrors.deviceTypes = '请选择模板适用的设备类型'
         }
         break
       case 3:
@@ -945,6 +977,11 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
           for (const item of formData.checkItems) {
             if (!item.name.trim()) {
               newErrors.checkItems = '所有检查项都必须有名称'
+              break
+            }
+            // SNMP 按 metric 分派取数，缺了后端会拒绝保存（否则执行时无从采集）
+            if (item.type === 'snmp' && !item.metric?.trim()) {
+              newErrors.checkItems = `SNMP 检查项必须选择采集指标：「${item.name}」`
               break
             }
             if (item.type === 'snmp' && typeof item.config.oid === 'string') {
@@ -1011,7 +1048,8 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
     const stepProps: StepProps = {
       formData,
       errors,
-      onChange: handleChange
+      onChange: handleChange,
+      legacyDeviceTypes
     }
 
     switch (currentStep) {

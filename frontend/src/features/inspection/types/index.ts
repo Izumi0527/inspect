@@ -145,6 +145,15 @@ export interface InspectionCheckItem {
   /** 检查项名称 */
   name: string
 
+  /** 检查项说明：同一指标在不同设备类型上的关注点不同，内置模板逐项写明 */
+  description?: string
+
+  /** 检查项分类（connectivity / health / performance），执行与报告按它归组 */
+  category?: string
+
+  /** 是否启用；停用的检查项保留在模板里但不执行。未声明视为启用 */
+  enabled?: boolean
+
   /** 检查项类型 */
   type: CheckItemType
 

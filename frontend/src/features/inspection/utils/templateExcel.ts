@@ -4,21 +4,28 @@
  * 用途：替代 JSON 作为模板导入导出格式，让运维 IT 用户用 Excel/WPS 编辑
  *
  * 文件结构（双 Sheet + 单模板单文件）：
- * - Sheet1 "模板信息"：仅 1 行数据，A=name B=description C=category D=deviceTypes
+ * - Sheet1 "模板信息"：仅 1 行数据，A=name B=description C=category D=deviceType
  *   - C 列下拉：network / system / security / custom
- * - Sheet2 "检查项"：≥1 行数据，A=name B=type C=config D=weight
+ *   - D 列下拉：交换机 / 路由器 / 防火墙 / 服务器（每个模板只适用一种，导出中文，导入中英文皆可）
+ * - Sheet2 "检查项"：≥1 行数据，A=name B=type C=config D=weight E=metric
  *   - B 列下拉：snmp / ssh / http / ping / script
+ *   - E 列为 SNMP 采集指标（执行端按它分派取数），追加在末尾，旧版 4 列文件仍可导入
  * - Sheet3 "使用说明"：纯文本指引（仅在下载模板时附带）
  *
  * 解析规则：
- * - 按列号读取（A/B/C/D），用户改坏表头不致命
+ * - 按列号读取（A/B/C/D/E），用户改坏表头不致命
  * - config 列空字符串视为 {}，否则用 JSON.parse 校验
- * - deviceTypes 列按逗号 / 中文逗号 / 顿号分隔
  * - 校验错误按 sheet + row + column 定位
  */
 
 import ExcelJS from 'exceljs'
 
+import {
+  INSPECTABLE_DEVICE_TYPE_OPTIONS,
+  getDeviceTypeLabel,
+  normalizeDeviceType,
+  type InspectableDeviceType,
+} from '@/utils/deviceTypes'
 import type {
   CheckItemType,
   InspectionTemplate,
@@ -43,8 +50,16 @@ const CHECK_ITEM_TYPES: ReadonlyArray<CheckItemType> = [
   'script',
 ]
 
-const INFO_HEADERS = ['模板名称 name', '描述 description', '分类 category', '支持设备 deviceTypes（逗号分隔）']
-const ITEM_HEADERS = ['检查项名称 name', '类型 type', '配置 config（JSON）', '权重 weight']
+const INFO_HEADERS = ['模板名称 name', '描述 description', '分类 category', '适用设备类型 deviceType（只能一种）']
+const ITEM_HEADERS = ['检查项名称 name', '类型 type', '配置 config（JSON）', '权重 weight', '采集指标 metric（SNMP 必填）']
+
+const DEVICE_TYPE_LABEL_CHOICES = INSPECTABLE_DEVICE_TYPE_OPTIONS.map(option => option.label)
+
+/** 设备类型单元格 → 取值：接受中文名或英文取值（大小写与空白不敏感），不可巡检的返回 undefined */
+const parseDeviceTypeCell = (raw: string): InspectableDeviceType | undefined => {
+  const token = normalizeDeviceType(raw)
+  return INSPECTABLE_DEVICE_TYPE_OPTIONS.find(option => option.value === token || option.label.toLowerCase() === token)?.value
+}
 
 /** 表头黄底加粗样式（统一） */
 const HEADER_STYLE: Partial<ExcelJS.Style> = {
@@ -67,6 +82,7 @@ export interface ParsedTemplate {
     type: CheckItemType
     config: Record<string, unknown>
     weight: number
+    metric: string
   }>
 }
 
@@ -164,13 +180,13 @@ function buildInfoSheet(workbook: ExcelJS.Workbook, template?: InspectionTemplat
         name: template.name,
         description: template.description ?? '',
         category: template.category,
-        deviceTypes: (template.deviceTypes ?? []).join(', '),
+        deviceTypes: (template.deviceTypes ?? []).map(getDeviceTypeLabel).join('、'),
       }
     : {
         name: '示例：核心交换机日常巡检',
         description: '请按本行格式修改后保存上传',
         category: 'network',
-        deviceTypes: 'switch, router',
+        deviceTypes: '交换机',
       }
   sheet.addRow(row)
 
@@ -183,6 +199,16 @@ function buildInfoSheet(workbook: ExcelJS.Workbook, template?: InspectionTemplat
     errorTitle: '分类无效',
     error: `请从以下值中选择：${TEMPLATE_CATEGORIES.join(' / ')}`,
   }
+
+  // D 列下拉：适用设备类型，只能一种
+  sheet.getCell('D2').dataValidation = {
+    type: 'list',
+    allowBlank: false,
+    formulae: [`"${DEVICE_TYPE_LABEL_CHOICES.join(',')}"`],
+    showErrorMessage: true,
+    errorTitle: '设备类型无效',
+    error: `每个模板只能适用一种设备类型，请从以下值中选择：${DEVICE_TYPE_LABEL_CHOICES.join(' / ')}`,
+  }
 }
 
 function buildItemsSheet(workbook: ExcelJS.Workbook, template?: InspectionTemplate) {
@@ -192,6 +218,7 @@ function buildItemsSheet(workbook: ExcelJS.Workbook, template?: InspectionTempla
     { header: ITEM_HEADERS[1], key: 'type', width: 12 },
     { header: ITEM_HEADERS[2], key: 'config', width: 50 },
     { header: ITEM_HEADERS[3], key: 'weight', width: 10 },
+    { header: ITEM_HEADERS[4], key: 'metric', width: 26 },
   ]
   sheet.getRow(1).eachCell(cell => Object.assign(cell, HEADER_STYLE))
 
@@ -201,10 +228,11 @@ function buildItemsSheet(workbook: ExcelJS.Workbook, template?: InspectionTempla
         type: item.type,
         config: JSON.stringify(item.config ?? {}),
         weight: item.weight,
+        metric: item.metric ?? '',
       }))
     : [
-        { name: 'Ping 连通性', type: 'ping', config: '{}', weight: 1 },
-        { name: 'CPU 使用率', type: 'snmp', config: '{"oid":"1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"}', weight: 1 },
+        { name: '设备连通性', type: 'ping', config: '{}', weight: 8, metric: '' },
+        { name: 'CPU 使用率', type: 'snmp', config: '{"threshold":{"warning":70,"critical":85}}', weight: 10, metric: 'cpu' },
       ]
   rows.forEach(r => sheet.addRow(r))
 
@@ -229,11 +257,12 @@ function buildHelpSheet(workbook: ExcelJS.Workbook) {
     ['name', '模板名称，必填，≤ 100 字'],
     ['description', '模板描述，可空'],
     ['category', '分类，从下拉选择：network / system / security / custom'],
-    ['deviceTypes', '支持的设备类型，逗号分隔，如：router, switch, firewall'],
+    ['deviceType', `适用设备类型，只能一种，从下拉选择：${DEVICE_TYPE_LABEL_CHOICES.join(' / ')}（也可填 switch / router / firewall / server）`],
     ['检查项 name', '检查项名称，必填'],
     ['检查项 type', '类型，从下拉选择：snmp / ssh / http / ping / script'],
-    ['检查项 config', 'JSON 字符串，可空填 {}。例：{"oid":"1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"}（Huawei CPU 使用率）'],
+    ['检查项 config', 'JSON 字符串，可空填 {}。阈值示例：{"threshold":{"warning":70,"critical":85}}'],
     ['检查项 weight', '权重数字，默认 1，越大权重越高'],
+    ['检查项 metric', 'SNMP 检查项必填的采集指标，如 cpu / memory / interface / disk_usage；可参照内置模板导出文件的 E 列'],
   ]
   lines.forEach((line, idx) => {
     const row = sheet.addRow(line)
@@ -271,22 +300,23 @@ function parseInfoRow(sheet: ExcelJS.Worksheet, errors: ParseError[]) {
     }
   }
 
-  const deviceTypes = deviceTypesRaw
-    .split(/[,，、\s]+/)
-    .map(s => s.trim())
-    .filter(Boolean)
-  if (deviceTypes.length === 0) {
+  // 每个模板只能适用一种可巡检设备类型（后端保存时同样校验），这里提前按单元格定位报错
+  const tokens = deviceTypesRaw.split(/[,，、]+/).map(s => s.trim()).filter(Boolean)
+  const deviceType = tokens.length === 1 ? parseDeviceTypeCell(tokens[0]) : undefined
+  if (!deviceType) {
     errors.push({
       sheet: SHEET_INFO,
       row: 2,
       column: 'D',
-      message: '支持设备 (D2) 至少需要 1 个，逗号分隔',
+      message: tokens.length > 1
+        ? `适用设备类型 (D2) 只能填写一种，当前为「${deviceTypesRaw}」`
+        : `适用设备类型 (D2) 须为以下之一：${DEVICE_TYPE_LABEL_CHOICES.join(' / ')}${deviceTypesRaw ? `，当前为「${deviceTypesRaw}」` : ''}`,
     })
   }
 
-  if (!name || deviceTypes.length === 0) return null
+  if (!name || !deviceType) return null
 
-  return { name, description, category, deviceTypes }
+  return { name, description, category, deviceTypes: [deviceType] }
 }
 
 function parseItemsRows(sheet: ExcelJS.Worksheet, errors: ParseError[]) {
@@ -298,9 +328,10 @@ function parseItemsRows(sheet: ExcelJS.Worksheet, errors: ParseError[]) {
     const typeRaw = cellText(row.getCell(2)).toLowerCase()
     const configRaw = cellText(row.getCell(3))
     const weightRaw = row.getCell(4).value
+    const metric = cellText(row.getCell(5)).toLowerCase()
 
     // 整行空：跳过
-    if (!name && !typeRaw && !configRaw && weightRaw == null) continue
+    if (!name && !typeRaw && !configRaw && weightRaw == null && !metric) continue
 
     if (!name) {
       errors.push({ sheet: SHEET_ITEMS, row: r, column: 'A', message: '检查项名称不能为空' })
@@ -313,6 +344,11 @@ function parseItemsRows(sheet: ExcelJS.Worksheet, errors: ParseError[]) {
         column: 'B',
         message: `类型 "${typeRaw}" 不在 ${CHECK_ITEM_TYPES.join('/')} 中`,
       })
+      continue
+    }
+    // SNMP 按 metric 分派取数，缺了后端会拒绝整个模板，这里按行定位
+    if (typeRaw === 'snmp' && !metric) {
+      errors.push({ sheet: SHEET_ITEMS, row: r, column: 'E', message: `SNMP 检查项「${name}」缺少采集指标 metric` })
       continue
     }
 
@@ -339,7 +375,7 @@ function parseItemsRows(sheet: ExcelJS.Worksheet, errors: ParseError[]) {
 
     const weight = typeof weightRaw === 'number' ? weightRaw : Number(weightRaw) || 1
 
-    items.push({ name, type: typeRaw as CheckItemType, config, weight })
+    items.push({ name, type: typeRaw as CheckItemType, config, weight, metric })
   }
 
   if (items.length === 0 && !errors.some(e => e.sheet === SHEET_ITEMS)) {

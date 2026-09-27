@@ -348,6 +348,9 @@ func (s *Service) CreateStrategy(ctx context.Context, payload StrategyPayload) (
 	if err := s.ValidateStrategyTemplatesExist(ctx, payload.Templates); err != nil {
 		return Strategy{}, err
 	}
+	if err := s.ValidateTemplateDeviceTypes(ctx, firstPositiveID(payload.Templates), payload.Devices); err != nil {
+		return Strategy{}, err
+	}
 
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
@@ -479,6 +482,22 @@ func (s *Service) UpdateStrategy(ctx context.Context, id int, payload StrategyUp
 		}
 	}
 
+	// 设备或模板任一变更时，按变更后的组合校验设备类型；只改名称、计划等无关字段时不校验，
+	// 以免存量数据阻塞无关编辑。
+	if payload.Devices != nil || payload.Templates != nil {
+		effectiveTemplates := currentTemplates
+		if payload.Templates != nil {
+			effectiveTemplates = *payload.Templates
+		}
+		effectiveDevices := decodeIntSlice(current.Devices)
+		if payload.Devices != nil {
+			effectiveDevices = *payload.Devices
+		}
+		if err := s.ValidateTemplateDeviceTypes(ctx, firstPositiveID(effectiveTemplates), effectiveDevices); err != nil {
+			return Strategy{}, err
+		}
+	}
+
 	// 仅在 cron/type/enabled 发生变化时维护 next_run_time，避免无关字段更新导致 next_run_time 漂移
 	if payload.Type != nil || payload.Cron != nil || payload.Enabled != nil {
 		if strategyType == StrategyManual {
@@ -531,6 +550,78 @@ func (s *Service) ValidateStrategyTemplatesExist(ctx context.Context, templateID
 	}
 
 	return nil
+}
+
+// deviceTypeMismatchNameLimit 设备类型不符时报错里最多点名的设备数，其余汇总计数。
+const deviceTypeMismatchNameLimit = 5
+
+// ValidateTemplateDeviceTypes 校验所选设备的类型与模板适用类型一致，匹配口径见
+// DeviceTypeAllowed。模板未声明设备类型（仅存量数据）时不限制；已删除的设备查不到，
+// 留给执行阶段按原逻辑报错。报错按所选顺序点名不符的设备及其类型。
+func (s *Service) ValidateTemplateDeviceTypes(ctx context.Context, templateID int, deviceIDs []int) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	template, err := s.GetTemplate(ctx, templateID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &ValidationError{
+				Field:   "templates",
+				Message: fmt.Sprintf("巡检模板 %d 不存在", templateID),
+				Err:     err,
+			}
+		}
+		return fmt.Errorf("failed to load inspection template %d: %w", templateID, err)
+	}
+
+	templateTypes := TemplateDeviceTypes(template.DeviceTypes)
+	if len(templateTypes) == 0 || len(deviceIDs) == 0 {
+		return nil
+	}
+
+	type deviceTypeRow struct {
+		ID         int    `gorm:"column:id"`
+		Name       string `gorm:"column:name"`
+		DeviceType string `gorm:"column:device_type"`
+	}
+	rows := make([]deviceTypeRow, 0, len(deviceIDs))
+	if err := s.db.WithContext(ctx).
+		Table("devices").
+		Select("id, name, device_type").
+		Where("id IN ?", deviceIDs).
+		Scan(&rows).Error; err != nil {
+		return fmt.Errorf("failed to load device types: %w", err)
+	}
+
+	byID := make(map[int]deviceTypeRow, len(rows))
+	for _, row := range rows {
+		byID[row.ID] = row
+	}
+	mismatched := make([]string, 0)
+	for _, id := range deviceIDs {
+		row, ok := byID[id]
+		if !ok || DeviceTypeAllowed(templateTypes, row.DeviceType) {
+			continue
+		}
+		mismatched = append(mismatched, fmt.Sprintf("%s（%s）", row.Name, DeviceTypeLabel(row.DeviceType)))
+	}
+	if len(mismatched) == 0 {
+		return nil
+	}
+
+	shown := mismatched
+	suffix := ""
+	if len(shown) > deviceTypeMismatchNameLimit {
+		shown = shown[:deviceTypeMismatchNameLimit]
+		suffix = fmt.Sprintf(" 等 %d 台", len(mismatched))
+	}
+	return &ValidationError{
+		Field: "devices",
+		Message: fmt.Sprintf("以下设备与模板「%s」的适用类型（%s）不符：%s%s。请为这些设备选择对应类型的模板",
+			template.Name, DeviceTypeLabels(templateTypes), strings.Join(shown, "、"), suffix),
+		Err: ErrDeviceTypeMismatch,
+	}
 }
 
 func (s *Service) DeleteStrategy(ctx context.Context, id int) error {
@@ -1065,6 +1156,11 @@ func (s *Service) Create(ctx context.Context, template *Template) error {
 		return err
 	}
 
+	// 内置模板只由启动同步（EnsureBuiltinTemplates）直接落库；经接口创建的一律是
+	// 自建模板。信任请求里的 is_default 会让用户伪造出不可编辑删除、且会在下次
+	// 重启时被同步清理误删的「内置模板」。
+	template.IsDefault = false
+
 	// Set timestamps
 	now := time.Now().UTC()
 	template.CreatedAt = &now
@@ -1104,15 +1200,15 @@ func (s *Service) Update(ctx context.Context, id int, template *Template) error 
 	// Update timestamp
 	now := time.Now().UTC()
 
-	// 使用 map 更新以确保零值布尔字段（IsDefault=false, IsActive=false）也能被正确更新
-	// GORM 的 Updates(struct) 会跳过零值字段
+	// 使用 map 更新以确保零值布尔字段（IsActive=false）也能被正确更新
+	// GORM 的 Updates(struct) 会跳过零值字段。is_default 不在其中：
+	// 内置标记只由启动同步维护，不随请求改写（见 Create）。
 	updates := map[string]interface{}{
 		"name":         template.Name,
 		"description":  template.Description,
 		"category":     template.Category,
 		"device_types": template.DeviceTypes,
 		"check_items":  template.CheckItems,
-		"is_default":   template.IsDefault,
 		"is_active":    template.IsActive,
 		"updated_at":   &now,
 	}
@@ -1233,9 +1329,16 @@ func (s *Service) Import(ctx context.Context, data []byte, overwrite bool) (*Tem
 
 	// Validate template
 	if err := s.Validate(ctx, &template); err != nil {
+		// 带出具体原因：旧版导出的多类型模板在「每个模板只适用一种设备类型」
+		// 的规则下会被拒，只回一句笼统的失败用户无从修正。
+		message := "导入数据验证失败"
+		var ve *ValidationError
+		if errors.As(err, &ve) && strings.TrimSpace(ve.Message) != "" {
+			message += "：" + ve.Message
+		}
 		return nil, &ValidationError{
 			Field:   "template",
-			Message: "导入数据验证失败",
+			Message: message,
 			Err:     ErrImportValidationFailed,
 		}
 	}

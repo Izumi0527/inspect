@@ -231,6 +231,11 @@ func (h InspectionHandler) CopyTemplate(c echo.Context) error {
 		if errors.Is(err, inspection.ErrTemplateNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "模板不存在")
 		}
+		// 旧版多类型模板复制时会被设备类型规则拒绝，属于用户可修正的校验失败
+		var validationErr *inspection.ValidationError
+		if errors.As(err, &validationErr) {
+			return echo.NewHTTPError(http.StatusBadRequest, validationErr.Message)
+		}
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("failed to copy template: %v", err))
 	}
 
@@ -332,34 +337,9 @@ func buildTemplateResponse(template *inspection.Template) map[string]interface{}
 		return nil
 	}
 
-	// 解析设备类型（兼容两种形态）
-	// - 推荐：["router","switch"]
-	// - 历史：{"vendors":[...],"device_types":[...]}
-	deviceTypes := []string{}
-	if len(template.DeviceTypes) > 0 {
-		// 1) 优先按 []string 解析
-		var types []string
-		if err := json.Unmarshal(template.DeviceTypes, &types); err == nil {
-			deviceTypes = types
-		} else {
-			// 2) 回退按对象形态解析
-			var cfg inspection.DeviceTypesConfig
-			if err2 := json.Unmarshal(template.DeviceTypes, &cfg); err2 == nil {
-				deviceTypes = cfg.DeviceTypes
-			} else {
-				// 3) 最后尝试单值字符串
-				var single string
-				if err3 := json.Unmarshal(template.DeviceTypes, &single); err3 == nil {
-					if strings.TrimSpace(single) != "" {
-						deviceTypes = []string{strings.TrimSpace(single)}
-					}
-				}
-			}
-		}
-	}
-	if deviceTypes == nil {
-		deviceTypes = []string{}
-	}
+	// 设备类型兼容数组 / {"device_types":[...]} / 单字符串三种存储形态，
+	// 解码口径与执行端的匹配规则共用 inspection.TemplateDeviceTypes。
+	deviceTypes := inspection.TemplateDeviceTypes(template.DeviceTypes)
 
 	// 解析检查项
 	var checkItems []map[string]interface{}

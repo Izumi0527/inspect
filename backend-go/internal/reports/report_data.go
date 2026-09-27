@@ -9,7 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
+
+	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 )
 
 type InspectionReportData struct {
@@ -894,10 +897,11 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		Uptime        *int       `gorm:"column:uptime"`
 		CPUUsage      *float64   `gorm:"column:cpu_usage"`
 		MemoryUsage   *float64   `gorm:"column:memory_usage"`
-		// TemplateName / TemplateItems 用于推导覆盖范围声明。LEFT JOIN 而非 JOIN：
+		// TemplateName / TemplateItems / TemplateTypes 用于推导覆盖范围声明。LEFT JOIN 而非 JOIN：
 		// 历史记录的 template_id 可能为 NULL，内连接会让这些巡检整条消失。
 		TemplateName  *string `gorm:"column:template_name"`
 		TemplateItems *string `gorm:"column:template_check_items"`
+		TemplateTypes *string `gorm:"column:template_device_types"`
 		// IdentityLost 为 true 表示设备已被物理删除且巡检行无快照，身份字段全为 NULL、无从还原。
 		IdentityLost bool `gorm:"column:identity_lost"`
 	}
@@ -917,7 +921,7 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		        COALESCE(i.device_snapshot->>'firmware_version', d.firmware_version) AS firmware_version,
 		        COALESCE((i.device_snapshot->>'uptime')::bigint, d.uptime) AS uptime,
 		        d.cpu_usage, d.memory_usage, (d.id IS NULL AND i.device_snapshot IS NULL) AS identity_lost,
-		        t.name AS template_name, t.check_items AS template_check_items`).
+		        t.name AS template_name, t.check_items AS template_check_items, t.device_types AS template_device_types`).
 		Joins("LEFT JOIN devices d ON d.id = i.device_id").
 		Joins("LEFT JOIN inspection_templates t ON t.id = i.template_id")
 
@@ -1036,8 +1040,9 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 	templateRefs := make([]templateRef, 0, len(rows))
 	for _, row := range rows {
 		templateRefs = append(templateRefs, templateRef{
-			Name:       defaultStringPtr(row.TemplateName),
-			CheckItems: defaultStringPtr(row.TemplateItems),
+			Name:        defaultStringPtr(row.TemplateName),
+			CheckItems:  defaultStringPtr(row.TemplateItems),
+			DeviceTypes: defaultStringPtr(row.TemplateTypes),
 		})
 	}
 	applyTemplateCoverage(&result, templateRefs)
@@ -1691,6 +1696,8 @@ func defaultFloatPtr(value *float64) float64 {
 type templateRef struct {
 	Name       string
 	CheckItems string
+	// DeviceTypes 是模板 device_types 列的原始 JSON，决定覆盖范围的全集
+	DeviceTypes string
 }
 
 // applyTemplateCoverage 推导本次报告的模板归属与覆盖范围。
@@ -1706,14 +1713,14 @@ func applyTemplateCoverage(data *InspectionReportData, refs []templateRef) {
 		return
 	}
 
-	names := make(map[string]string, 4) // 模板名 -> 该模板的 check_items
+	names := make(map[string]templateRef, 4) // 模板名 -> 首次出现的模板引用
 	for _, ref := range refs {
 		name := strings.TrimSpace(ref.Name)
 		if name == "" {
 			continue
 		}
 		if _, seen := names[name]; !seen {
-			names[name] = ref.CheckItems
+			names[name] = ref
 		}
 	}
 
@@ -1721,9 +1728,10 @@ func applyTemplateCoverage(data *InspectionReportData, refs []templateRef) {
 	if len(names) != 1 {
 		return
 	}
-	for name, checkItems := range names {
+	for name, ref := range names {
 		data.TemplateName = name
-		data.CoveredMetrics, data.UncoveredMetrics = summarizeTemplateCoverage([]byte(checkItems))
+		data.CoveredMetrics, data.UncoveredMetrics = summarizeTemplateCoverage(
+			[]byte(ref.CheckItems), inspection.TemplateDeviceTypes(datatypes.JSON(ref.DeviceTypes)))
 	}
 }
 

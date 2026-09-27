@@ -9,6 +9,7 @@ import {
 } from '@/components/atoms'
 import { isCheckItemTypeSupported } from '../utils/check-item-support'
 import { formatDateTimeYMDHMS } from '@/utils/formatters'
+import { getDeviceTypeLabel } from '@/utils/deviceTypes'
 import type { InspectionTemplate } from '../types'
 
 interface Props {
@@ -178,19 +179,18 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
                 <CardContent className="p-4">
                   <h3 className="text-base font-semibold text-foreground mb-3 flex items-center gap-2">
                     <Monitor className="w-4 h-4 text-purple-600" />
-                    支持设备类型
-                    <span className="text-xs font-normal text-muted-foreground">({template.deviceTypes?.length || 0} 种)</span>
+                    适用设备类型
                   </h3>
                   {template.deviceTypes && template.deviceTypes.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
                       {template.deviceTypes.map((type) => (
                         <Badge key={type} variant="secondary" size="sm" className="px-2.5 py-1">
-                          {type}
+                          {getDeviceTypeLabel(type)}
                         </Badge>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-muted-foreground text-sm">暂未配置支持的设备类型</p>
+                    <p className="text-muted-foreground text-sm">未声明适用设备类型（存量模板），编辑时需选择一种</p>
                   )}
                 </CardContent>
               </Card>
@@ -230,9 +230,18 @@ export const TemplateDetailModal: React.FC<Props> = ({ template, onClose, onEdit
                                 未支持执行
                               </Badge>
                             )}
+                            {checkItem.enabled === false && (
+                              <Badge variant="outline" size="sm">
+                                已停用
+                              </Badge>
+                            )}
                             <span className="text-xs text-muted-foreground">权重: {checkItem.weight || 1}</span>
                           </div>
                         </div>
+
+                        {checkItem.description && (
+                          <p className="text-xs text-muted-foreground mb-2">{checkItem.description}</p>
+                        )}
 
                         {/* 检查项配置详情 - 折叠显示 */}
                         {checkItem.config && Object.keys(checkItem.config).length > 0 && (

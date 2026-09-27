@@ -35,8 +35,9 @@ func (h InspectionHandler) inspectionDefaults(ctx context.Context) settings.Insp
 func (h InspectionHandler) executeInspectionsAsync(inspections []inspection.Inspection, templateID *int) {
 	ctx := context.Background()
 
-	// 获取模板检查项
+	// 获取模板检查项与模板适用的设备类型（执行入口据此兜底拦截类型不符的设备）
 	var checkItems []map[string]interface{}
+	var templateDeviceTypes []string
 	if templateID != nil {
 		template, err := h.Service.GetTemplate(ctx, *templateID)
 		if err != nil {
@@ -51,6 +52,7 @@ func (h InspectionHandler) executeInspectionsAsync(inspections []inspection.Insp
 			return
 		}
 		checkItems = decodeJSONMapSlice(template.CheckItems)
+		templateDeviceTypes = inspection.TemplateDeviceTypes(template.DeviceTypes)
 	}
 
 	defaults := h.inspectionDefaults(ctx)
@@ -66,7 +68,7 @@ func (h InspectionHandler) executeInspectionsAsync(inspections []inspection.Insp
 		go func() {
 			defer wg.Done()
 			defer func() { <-limit }()
-			h.executeInspection(ctx, insp, checkItems, defaults, report)
+			h.executeInspection(ctx, insp, checkItems, templateDeviceTypes, defaults, report)
 		}()
 	}
 	wg.Wait()
@@ -304,14 +306,11 @@ func buildNotApplicableResult(inspectionID int, item map[string]interface{}, dev
 	itemCategory := readString(item, "category")
 
 	declared := checkItemDeviceTypes(item)
-	scope := strings.Join(declared, "、")
+	scope := inspection.DeviceTypeLabels(declared)
 	if scope == "" {
 		scope = "特定设备类型"
 	}
-	shown := strings.TrimSpace(deviceType)
-	if shown == "" {
-		shown = "未知"
-	}
+	shown := inspection.DeviceTypeLabel(deviceType)
 
 	return inspection.Result{
 		InspectionID:      inspectionID,
@@ -327,24 +326,22 @@ func buildNotApplicableResult(inspectionID int, item map[string]interface{}, dev
 	}
 }
 
-// knownDeviceTypes 是设备档案中合法的设备类型，与 inspection/builtin_templates.go
-// 的模板 device_types 对齐。
-//
-// 只有设备类型确实落在此集合内时才按检查项声明过滤。出现集合外的值说明设备档案
-// 数据异常（自动发现尚未归类、手工录入笔误）或系统新增了设备类型而此处漏同步——
-// 两种情况都全部执行而非静默跳过：漏检的代价远大于多跑一次采集，且真正不适用的
-// 项采不到数据自然会 skip。
-var knownDeviceTypes = map[string]bool{
-	"switch":   true,
-	"router":   true,
-	"firewall": true,
-	"server":   true,
+// templateDeviceMismatchMessage 是执行入口的兜底守卫：模板声明了设备类型而设备不在其中时，
+// 返回面向用户的原因。策略保存与任务创建时已校验过，这里拦的是之后才改了设备类型、
+// 或绕过接口校验的存量数据。匹配口径见 inspection.DeviceTypeAllowed。
+func templateDeviceMismatchMessage(templateTypes []string, deviceType string) (string, bool) {
+	if inspection.DeviceTypeAllowed(templateTypes, deviceType) {
+		return "", false
+	}
+	return fmt.Sprintf("设备类型「%s」与模板适用的设备类型（%s）不符，未执行巡检；请为该设备选择对应类型的模板",
+		inspection.DeviceTypeLabel(deviceType), inspection.DeviceTypeLabels(templateTypes)), true
 }
 
 // splitCheckItemsByApplicability 按设备类型把启用的检查项分成可执行与不适用两组。
 //
-// BGP 只对路由器与防火墙有意义，PoE 只对交换机有意义。不做这层过滤的话，一台
-// 交换机跑全面巡检会产出一串采集不到的结果，真正的异常淹没在噪声里。
+// 适用范围的主约束在模板层：模板只绑定一种设备类型，类型不符的设备整体不执行
+// （见 templateDeviceMismatchMessage）。这里处理的是存量模板里检查项级的 device_types
+// 声明——例如从旧「全面巡检」复制出的自建模板，BGP 只声明了路由器与防火墙。
 //
 // 两个刻意的宽松取向：
 //   - 检查项未声明 device_types 时视为适用全部（向后兼容存量模板）
@@ -362,7 +359,7 @@ func splitCheckItemsByApplicability(
 
 	for _, item := range enabled {
 		declared := checkItemDeviceTypes(item)
-		if len(declared) == 0 || normalizedDevice == "" || !knownDeviceTypes[normalizedDevice] {
+		if len(declared) == 0 || normalizedDevice == "" || !inspection.IsInspectableDeviceType(normalizedDevice) {
 			applicable = append(applicable, item)
 			continue
 		}
@@ -417,8 +414,9 @@ func (h InspectionHandler) markInspectionExecutionFailed(ctx context.Context, re
 // executeInspection 执行单个巡检任务。
 // 执行链路（探测/检查项）受任务级 Timeout（缺省为 inspection.default_timeout）约束；
 // 状态与结果落库使用 baseCtx，保证执行超时后仍能写回 timeout 状态。
+// templateDeviceTypes 是模板适用的设备类型，设备类型不符时整体不执行（兜底守卫）。
 // report 为批次化进度广播器（见 newProgressReporter），由批量执行入口注入；可为 nil。
-func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspection.Inspection, checkItems []map[string]interface{}, defaults settings.InspectionDefaults, report inspectionProgressReporter) {
+func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspection.Inspection, checkItems []map[string]interface{}, templateDeviceTypes []string, defaults settings.InspectionDefaults, report inspectionProgressReporter) {
 	if report == nil {
 		report = h.newProgressReporter(insp, nil, 0)
 	}
@@ -458,6 +456,11 @@ func (h InspectionHandler) executeInspection(baseCtx context.Context, insp inspe
 		// 快照失败不阻断巡检：只影响设备日后被删除时报告能否还原设备身份。
 		if serr := h.DeviceService.SnapshotDeviceForInspection(baseCtx, insp.ID); serr != nil && h.Logger != nil {
 			h.Logger.Warn("保存巡检设备快照失败", zap.Int("inspection_id", insp.ID), zap.Error(serr))
+		}
+		// 交换机模板只巡检交换机：类型不符时不探测、不采集，直接以失败收尾并说明原因。
+		if msg, mismatch := templateDeviceMismatchMessage(templateDeviceTypes, device.DeviceType); mismatch {
+			h.markInspectionExecutionFailed(baseCtx, report, insp.ID, msg, 0, 0)
+			return
 		}
 	}
 

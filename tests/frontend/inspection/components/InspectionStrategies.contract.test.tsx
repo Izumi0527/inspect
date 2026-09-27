@@ -162,8 +162,8 @@ describe('InspectionStrategies 单模板契约', () => {
     ;(inspectionHooks.useInspectionTemplates as jest.Mock).mockReturnValue({
       data: {
         templates: [
-          { id: '1', name: '模板A', isBuiltIn: false },
-          { id: '2', name: '模板B', isBuiltIn: false },
+          { id: '1', name: '模板A', isBuiltIn: false, deviceTypes: ['switch'] },
+          { id: '2', name: '模板B', isBuiltIn: false, deviceTypes: ['switch'] },
         ],
       },
       isLoading: false,
@@ -181,8 +181,8 @@ describe('InspectionStrategies 单模板契约', () => {
 
     render(<StrategyModal strategy={null} onClose={jest.fn()} onSuccess={jest.fn()} />)
 
-    const templateARadio = screen.getByRole('radio', { name: '模板A' })
-    const templateBRadio = screen.getByRole('radio', { name: '模板B' })
+    const templateARadio = screen.getByRole('radio', { name: /模板A/ })
+    const templateBRadio = screen.getByRole('radio', { name: /模板B/ })
 
     await user.click(templateARadio)
     expect(templateARadio).toBeChecked()
