@@ -116,21 +116,8 @@ export const deviceVisualMetaMap: Record<DeviceIconName, DeviceVisualMeta> = {
   },
 }
 
-// 设备类型（台账 device_type / SNMP 识别值）→ 中文文案
-const deviceTypeLabels: Record<string, string> = {
-  switch: '交换机',
-  router: '路由器',
-  firewall: '防火墙',
-  ap: '无线 AP',
-  wireless_ap: '无线 AP',
-  server: '服务器',
-}
-
-export const getDeviceTypeLabel = (type: string): string => {
-  const normalized = type.trim().toLowerCase()
-  if (normalized === '') return '未分类'
-  return deviceTypeLabels[normalized] ?? type
-}
+// 设备类型（台账 device_type / SNMP 识别值）→ 中文文案，全前端共用一份映射
+export { getDeviceTypeLabel } from '@/utils/deviceTypes'
 
 // 设备类型 → 视觉元数据；未知类型退回芯片图标
 export const getDeviceVisualMetaByType = (type: string): DeviceVisualMeta => {

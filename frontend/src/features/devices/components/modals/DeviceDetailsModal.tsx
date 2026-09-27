@@ -20,7 +20,7 @@ import {
   fetchDeviceSNMPExtensions,
 } from '../../api/devices.api'
 import { formatDate } from '@/utils/formatters'
-import { getDeviceTypeLabel } from '../DeviceIcon'
+import { getDeviceTypeLabel } from '@/utils/deviceTypes'
 
 const PERFORMANCE_RANGES = [
   { value: '24h', label: '近24小时' },

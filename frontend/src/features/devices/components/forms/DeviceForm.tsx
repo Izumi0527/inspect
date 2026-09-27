@@ -20,24 +20,24 @@ import {
 import { SimpleSelect, SelectItem } from '@/components/ui/select'
 import { CLIConfigForm } from './CLIConfigForm'
 import { SNMPConfigForm } from './SNMPConfigForm'
+import { DEVICE_TYPES, DEVICE_TYPE_OPTIONS } from '@/utils/deviceTypes'
 import {
   Device,
   DeviceType,
   DeviceVendor,
 } from '../../types'
 
-// 设备类型映射
-const DEVICE_TYPE_OPTIONS: Array<{
-  value: DeviceType;
-  label: string;
+// 设备类型的图标与配色；取值与中文名来自 utils/deviceTypes
+const DEVICE_TYPE_ICONS: Record<DeviceType, {
   icon: React.ComponentType<{ className?: string }>;
   color: string
-}> = [
-  { value: 'switch', label: '交换机', icon: Network, color: 'text-blue-600' },
-  { value: 'router', label: '路由器', icon: Router, color: 'text-green-600' },
-  { value: 'firewall', label: '防火墙', icon: Shield, color: 'text-red-600' },
-  { value: 'wireless_ap', label: '无线AP', icon: HardDrive, color: 'text-purple-600' }
-]
+}> = {
+  switch: { icon: Network, color: 'text-blue-600' },
+  router: { icon: Router, color: 'text-green-600' },
+  firewall: { icon: Shield, color: 'text-red-600' },
+  server: { icon: Server, color: 'text-teal-600' },
+  wireless_ap: { icon: HardDrive, color: 'text-purple-600' }
+}
 
 const VENDOR_OPTIONS: Array<{
   value: DeviceVendor;
@@ -53,6 +53,7 @@ const DEFAULT_VENDOR_BY_DEVICE_TYPE: Record<DeviceType, DeviceVendor> = {
   switch: 'huawei',
   router: 'huawei',
   firewall: 'other',
+  server: 'other',
   wireless_ap: 'huawei',
 }
 
@@ -70,7 +71,7 @@ const deviceFormSchema = z.object({
       /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,
       '请输入有效的IP地址'
     ),
-  device_type: z.enum(['switch', 'router', 'firewall', 'wireless_ap'] as const),
+  device_type: z.enum(DEVICE_TYPES),
   vendor: z.enum(['huawei', 'h3c', 'other'] as const),
   location: z
     .string()
@@ -323,11 +324,11 @@ export const DeviceForm: React.FC<Props> = ({
                           placeholder="选择设备类型"
                         >
                           {DEVICE_TYPE_OPTIONS.map(option => {
-                            const IconComponent = option.icon
+                            const { icon: IconComponent, color } = DEVICE_TYPE_ICONS[option.value]
                             return (
                               <SelectItem key={option.value} value={option.value}>
                                 <div className="flex items-center gap-2">
-                                  <IconComponent className={`h-4 w-4 ${option.color}`} />
+                                  <IconComponent className={`h-4 w-4 ${color}`} />
                                   {option.label}
                                 </div>
                               </SelectItem>

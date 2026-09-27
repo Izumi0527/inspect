@@ -21,6 +21,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { DeviceImportData, ImportResult } from '../types'
+import { getDeviceTypeLabel } from '@/utils/deviceTypes'
 import {
   IMPORT_FIELD_DEFINITIONS,
   ImportFieldKey,
@@ -384,7 +385,7 @@ export const BulkDeviceImport: React.FC<BulkDeviceImportProps> = ({ isOpen, onCl
                 <div key={`${device.name || device.ip || 'device'}-${index}`} className="grid grid-cols-7 px-4 py-2 text-xs text-foreground/90">
                   <span className="truncate" title={device.name}>{device.name || '-'}</span>
                   <span>{device.ip || '-'}</span>
-                  <span>{device.device_type}</span>
+                  <span>{getDeviceTypeLabel(device.device_type)}</span>
                   <span>{device.vendor}</span>
                   <span>{snmpSummary}</span>
                   <span className="truncate" title={cliSummary}>{cliSummary}</span>

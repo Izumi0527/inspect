@@ -30,7 +30,7 @@ describe('NetworkOverviewCard', () => {
     expect(legend).toHaveTextContent('交换机')
     expect(legend).toHaveTextContent('严重')
     expect(legend).toHaveTextContent('8 台')
-    expect(legend).toHaveTextContent('无线 AP')
+    expect(legend).toHaveTextContent('无线AP')
     expect(legend).toHaveTextContent('健康')
     expect(legend).toHaveTextContent('16 台')
     expect(screen.queryByText('8 台设备')).not.toBeInTheDocument()

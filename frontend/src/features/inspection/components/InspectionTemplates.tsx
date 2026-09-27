@@ -49,6 +49,7 @@ import {
   fetchInspectionTemplate,
 } from '../api/inspection.api'
 import { buildTemplateXlsx } from '../utils/templateExcel'
+import { getDeviceTypeLabel } from '@/utils/deviceTypes'
 import type { InspectionTemplate } from '../types'
 
 // 筛选和分页类型（本地定义，与新版 API 兼容）
@@ -318,7 +319,7 @@ export const InspectionTemplates: React.FC = () => {
     filters.deviceType
       ? {
           id: 'deviceType',
-          label: `设备类型: ${filters.deviceType}`,
+          label: `设备类型: ${getDeviceTypeLabel(filters.deviceType)}`,
           onRemove: () => handleFilterChange('deviceType', ''),
         }
       : null,
@@ -407,7 +408,7 @@ export const InspectionTemplates: React.FC = () => {
           <div className="flex flex-wrap gap-1">
             {deviceTypes.slice(0, 3).map((type: string) => (
               <Badge key={type} variant="outline" size="sm">
-                {type}
+                {getDeviceTypeLabel(type)}
               </Badge>
             ))}
             {deviceTypes.length > 3 && (

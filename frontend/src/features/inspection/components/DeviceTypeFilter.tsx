@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { INSPECTABLE_DEVICE_TYPE_OPTIONS } from '@/utils/deviceTypes'
 
 interface DeviceTypeFilterProps {
   value: string
@@ -21,9 +22,7 @@ const ALL_DEVICE_TYPE_VALUE = 'all'
 
 const DEVICE_TYPES = [
   { value: ALL_DEVICE_TYPE_VALUE, label: '设备类型' },
-  { value: 'router', label: '路由器' },
-  { value: 'switch', label: '交换机' },
-  { value: 'firewall', label: '防火墙' },
+  ...INSPECTABLE_DEVICE_TYPE_OPTIONS,
 ]
 
 export function DeviceTypeFilter({ value, onChange, className = '' }: DeviceTypeFilterProps) {

@@ -4,6 +4,7 @@ import {
   Wifi, 
   Shield, 
   Monitor,
+  HardDrive,
   CheckCircle,
   Power,
   AlertTriangle,
@@ -22,6 +23,7 @@ export const DeviceIcon: React.FC<DeviceIconProps> = ({ type, className = "h-5 w
     switch: <Server className={className} />,
     router: <Wifi className={className} />,
     firewall: <Shield className={className} />,
+    server: <HardDrive className={className} />,
     wireless_ap: <Wifi className={className} />
   }
   
@@ -56,12 +58,3 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
   )
 }
 
-export const getDeviceTypeLabel = (type: DeviceType): string => {
-  const typeMap: Record<DeviceType, string> = {
-    switch: '交换机',
-    router: '路由器',
-    firewall: '防火墙',
-    wireless_ap: '无线AP'
-  }
-  return typeMap[type] || type
-}

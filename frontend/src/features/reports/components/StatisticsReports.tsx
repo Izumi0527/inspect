@@ -24,6 +24,7 @@ import toast from 'react-hot-toast'
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 import { downloadWithAuth } from '@/utils/download'
 import { formatDateYMD } from '@/utils/formatters'
+import { getDeviceTypeLabel } from '@/utils/deviceTypes'
 import { ReportsToolbar } from './shared/ReportsToolbar'
 
 interface Props {
@@ -187,9 +188,9 @@ export const StatisticsReports: React.FC<Props> = ({
 
     const byTypeStatus = statisticsData?.deviceDistribution?.byTypeStatus ?? {}
 
-    return Object.entries(byType).map(([name, count]) => {
-      const row: DeviceTypeChartRow = { name, count }
-      Object.entries(byTypeStatus[name] ?? {}).forEach(([status, value]) => {
+    return Object.entries(byType).map(([type, count]) => {
+      const row: DeviceTypeChartRow = { name: getDeviceTypeLabel(type), count }
+      Object.entries(byTypeStatus[type] ?? {}).forEach(([status, value]) => {
         row[status] = value
       })
       return row
@@ -278,7 +279,7 @@ export const StatisticsReports: React.FC<Props> = ({
       return {
         rank: index + 1,
         name: device.deviceName || device.device_name || `Device-${device.deviceId}`,
-        type: device.deviceType || device.device_type || '-',
+        type: getDeviceTypeLabel(device.deviceType || device.device_type),
         availability,
         score: device.ranking || 0,
         status: availability >= 98 ? '优秀' : availability >= 95 ? '良好' : '一般'
@@ -504,7 +505,7 @@ export const StatisticsReports: React.FC<Props> = ({
     if (!statisticsData?.deviceDistribution?.byType) return []
     return Object.keys(statisticsData.deviceDistribution.byType).map(type => ({
       value: type,
-      label: type
+      label: getDeviceTypeLabel(type)
     }))
   }, [statisticsData])
 

@@ -12,6 +12,7 @@ import {
 import toast from 'react-hot-toast'
 import { useCompareDeviceReports } from '../hooks/useReports'
 import { formatDateYMD } from '@/utils/formatters'
+import { getDeviceTypeLabel } from '@/utils/deviceTypes'
 
 interface Props {
   onClose: () => void
@@ -185,7 +186,7 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
                         #{String(baseDevice.device_id ?? baseDevice.deviceId)} {String(baseDevice.device_name ?? baseDevice.deviceName ?? '')}
                       </div>
                       <div className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                        类型：{String(baseDevice.device_type ?? baseDevice.deviceType ?? '-')}
+                        类型：{getDeviceTypeLabel(String(baseDevice.device_type ?? baseDevice.deviceType ?? ''))}
                       </div>
                     </div>
                     <div>{severityBadge(String(baseDevice.status))}</div>
@@ -225,7 +226,7 @@ export const InspectionCompareModal: React.FC<Props> = ({ onClose }) => {
                                   {isBase ? '基准 ' : ''}#{id} {String(rec.device_name ?? rec.deviceName ?? '')}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                  {String(rec.device_type ?? rec.deviceType ?? '-')}
+                                  {getDeviceTypeLabel(String(rec.device_type ?? rec.deviceType ?? ''))}
                                 </div>
                               </td>
                               <td className="px-4 py-2 text-sm">{severityBadge(String(rec.status))}</td>

@@ -5,6 +5,7 @@ const defaultVendorMap: Record<string, string> = {
   switch: 'huawei',
   router: 'huawei',
   firewall: 'other',
+  server: 'other',
   wireless_ap: 'huawei',
 }
 

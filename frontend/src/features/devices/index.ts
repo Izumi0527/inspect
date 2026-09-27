@@ -1,6 +1,7 @@
 // 设备模块的统一导出入口
 export { DeviceManagementView } from './components/DeviceManagementView'
-export { DeviceIcon, StatusBadge, getDeviceTypeLabel } from './components/DeviceIcon'
+export { DeviceIcon, StatusBadge } from './components/DeviceIcon'
+export { getDeviceTypeLabel } from '@/utils/deviceTypes'
 export { 
   useDevices, 
   useDeviceFilters, 

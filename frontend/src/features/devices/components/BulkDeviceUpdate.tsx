@@ -19,6 +19,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Device } from '../types'
+import { DEVICE_TYPE_OPTIONS } from '@/utils/deviceTypes'
 
 interface BulkDeviceUpdateProps {
   isOpen: boolean
@@ -60,12 +61,7 @@ export const BulkDeviceUpdate: React.FC<BulkDeviceUpdateProps> = ({
       key: 'device_type',
       label: '设备类型',
       type: 'select',
-      options: [
-        { value: 'switch', label: '交换机' },
-        { value: 'router', label: '路由器' },
-        { value: 'firewall', label: '防火墙' },
-        { value: 'wireless_ap', label: '无线AP' }
-      ],
+      options: [...DEVICE_TYPE_OPTIONS],
       description: '更改设备的类型分类'
     },
     {

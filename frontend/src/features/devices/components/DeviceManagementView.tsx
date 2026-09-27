@@ -35,8 +35,13 @@ import { CompactPageToolbar } from "@/components/shared";
 import { useAuth } from "@/lib/contexts/auth-context";
 import toast from "react-hot-toast";
 
-import { Device, DeviceListQuery, DeviceStatus, DeviceType } from "../types";
-import { DeviceIcon, StatusBadge, getDeviceTypeLabel } from "./DeviceIcon";
+import { Device, DeviceListQuery, DeviceStatus } from "../types";
+import { DeviceIcon, StatusBadge } from "./DeviceIcon";
+import {
+  DEVICE_TYPE_OPTIONS,
+  getDeviceTypeLabel,
+  isDeviceType,
+} from "@/utils/deviceTypes";
 import { DeviceProbeButton } from "./DeviceProbeButton";
 import { DeviceStatsBar } from "./DeviceStatsBar";
 import { BulkDeviceImport } from "./BulkDeviceImport";
@@ -75,20 +80,13 @@ const DEVICE_STATUSES: DeviceStatus[] = [
   "maintenance",
   "unknown",
 ];
-const DEVICE_TYPES: DeviceType[] = [
-  "switch",
-  "router",
-  "firewall",
-  "wireless_ap",
-];
+
 const DEVICE_REFRESH_INTERVAL_MS = 60_000;
 const DEFAULT_API_BASE_URL = getApiOrigin();
 
 const isDeviceStatus = (value: unknown): value is DeviceStatus =>
   typeof value === "string" && (DEVICE_STATUSES as string[]).includes(value);
 
-const isDeviceType = (value: unknown): value is DeviceType =>
-  typeof value === "string" && (DEVICE_TYPES as string[]).includes(value);
 
 const formatPercentage = (value: unknown): string => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -971,10 +969,11 @@ export const DeviceManagementView: React.FC = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">类型</SelectItem>
-                      <SelectItem value="switch">交换机</SelectItem>
-                      <SelectItem value="router">路由器</SelectItem>
-                      <SelectItem value="firewall">防火墙</SelectItem>
-                      <SelectItem value="wireless_ap">无线AP</SelectItem>
+                      {DEVICE_TYPE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

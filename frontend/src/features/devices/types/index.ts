@@ -1,8 +1,9 @@
 // 设备状态类型
 export type DeviceStatus = 'online' | 'offline' | 'warning' | 'maintenance' | 'unknown'
 
-// 设备类型枚举
-export type DeviceType = 'switch' | 'router' | 'firewall' | 'wireless_ap'
+// 设备类型枚举：取值、中文名与巡检模板匹配规则统一定义在 utils/deviceTypes
+import type { DeviceType } from '@/utils/deviceTypes'
+export type { DeviceType }
 
 // 设备厂商枚举（仅支持 Huawei / H3C，other 作为兜底）
 export type DeviceVendor =

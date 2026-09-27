@@ -88,6 +88,12 @@ describe('deviceImportCsv', () => {
       expect(device.cli_protocol).toBe('ssh')
     })
 
+    it('服务器类型支持 server / 服务器 / 主机 三种写法', () => {
+      for (const raw of ['server', '服务器', '主机']) {
+        expect(buildImportDevice({ name: 'a', ip: '10.0.0.9', device_type: raw }).device_type).toBe('server')
+      }
+    })
+
     it('显式 CLI 协议与端口/SNMP 版本被保留', () => {
       const device = buildImportDevice({
         name: 'a',

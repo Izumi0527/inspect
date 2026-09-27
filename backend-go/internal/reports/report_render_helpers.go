@@ -51,7 +51,7 @@ func localizeDeviceType(value string) string {
 		return "防火墙"
 	case "server":
 		return "服务器"
-	case "ap", "access_point", "wireless":
+	case "ap", "access_point", "wireless", "wireless_ap":
 		return "无线AP"
 	case "load_balancer", "loadbalancer", "lb":
 		return "负载均衡"

@@ -171,7 +171,8 @@ describe('StatisticsReports 筛选参数透传', () => {
     render(<StatisticsReports searchText="" />)
 
     await user.click(screen.getByRole('button', { name: '筛选设备类型' }))
-    await user.click(screen.getByRole('button', { name: 'switch' }))
+    // 选项显示中文名，提交给后端的仍是 device_type 原值
+    await user.click(screen.getByRole('button', { name: '交换机' }))
     await user.click(screen.getByRole('button', { name: '筛选设备位置' }))
     await user.click(screen.getByRole('button', { name: 'B区' }))
     await user.click(screen.getByRole('button', { name: '生成统计报表' }))
