@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -41,13 +42,24 @@ type SNMPMetrics struct {
 	// dot1dBaseBridgeAddress，华为的 LLDP 机箱 ID 就是桥 MAC）。回填 devices.detected_sys_name /
 	// detected_chassis_id，让拓扑组装能把别的设备上报的邻居匹配回本机——台账名是中文、
 	// LLDP 管理地址取到别的 VLANIF 时，这是唯一能对上的键。
-	SysName        *string            `json:"sys_name,omitempty"`
-	ChassisID      *string            `json:"chassis_id,omitempty"`
-	BandwidthIn    *float64           `json:"bandwidth_in,omitempty"`  // 入站带宽，单位：bps（比特每秒）
-	BandwidthOut   *float64           `json:"bandwidth_out,omitempty"` // 出站带宽，单位：bps（比特每秒）
-	Interfaces     []InterfaceMetrics `json:"interfaces,omitempty"`
-	CollectedAt    time.Time          `json:"collected_at"`
-	CollectionTime float64            `json:"collection_time_ms"`
+	SysName      *string            `json:"sys_name,omitempty"`
+	ChassisID    *string            `json:"chassis_id,omitempty"`
+	BandwidthIn  *float64           `json:"bandwidth_in,omitempty"`  // 入站带宽，单位：bps（比特每秒）
+	BandwidthOut *float64           `json:"bandwidth_out,omitempty"` // 出站带宽，单位：bps（比特每秒）
+	Interfaces   []InterfaceMetrics `json:"interfaces,omitempty"`
+	// Disks 是主机的固定磁盘分区（HOST-RESOURCES-MIB hrStorageFixedDisk），服务器巡检使用；
+	// 网络设备不实现该表，恒为空。
+	Disks          []DiskMetrics `json:"disks,omitempty"`
+	CollectedAt    time.Time     `json:"collected_at"`
+	CollectionTime float64       `json:"collection_time_ms"`
+}
+
+// DiskMetrics 是一个固定磁盘分区的容量快照，字节数已按分配单元换算。
+type DiskMetrics struct {
+	// Mount 是挂载点（Linux）或盘符（Windows，已去掉卷标与序列号）
+	Mount      string `json:"mount"`
+	TotalBytes int64  `json:"total_bytes"`
+	UsedBytes  int64  `json:"used_bytes"`
 }
 
 // MaxReasonableBandwidthBps 最大合理带宽：10 Gbps = 10,000,000,000 bps
@@ -286,6 +298,12 @@ func (c *SNMPCollector) CollectMetrics(
 		c.logger.Debug("collected memory", zap.Float64("memory", *metrics.MemoryUsage))
 	}
 
+	// 采集主机磁盘分区（HOST-RESOURCES-MIB，仅服务器有数据；网络设备一次 walk 即返回空）
+	c.collectHostStorage(target, metrics, registry)
+	if c.logger != nil && len(metrics.Disks) > 0 {
+		c.logger.Debug("collected disks", zap.Int("count", len(metrics.Disks)))
+	}
+
 	// 采集温度
 	c.collectTemperature(target, metrics, registry, vendor)
 	if c.logger != nil && metrics.Temperature != nil {
@@ -365,24 +383,138 @@ func (c *SNMPCollector) createSNMPTarget(ipAddress string, config snmpConfig) *g
 }
 
 func (c *SNMPCollector) collectUptime(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry) {
-	result, err := target.Get([]string{registry.Common.System.SysUptime.OID})
+	if seconds := readTimeticksSeconds(target, registry.Common.System.SysUptime.OID); seconds != nil {
+		metrics.Uptime = seconds
+	}
+	// 服务器上的 sysUpTime 只是 SNMP 代理（snmpd）的运行时长，重启代理就清零；
+	// hrSystemUptime 才是开机时长，读得到时以它为准。单独发 GET：SNMPv1 下与
+	// sysUpTime 合并请求时，设备不认识的 OID 会让整个请求失败。
+	if seconds := readTimeticksSeconds(target, registry.Common.HostResources.SystemUptime.OID); seconds != nil {
+		metrics.Uptime = seconds
+	}
+}
+
+// readTimeticksSeconds 读取一个 TimeTicks 标量并换算为秒；取不到返回 nil。
+func readTimeticksSeconds(target snmpClient, oid string) *int64 {
+	if strings.TrimSpace(oid) == "" {
+		return nil
+	}
+	result, err := target.Get([]string{oid})
 	if err != nil || result == nil {
-		return
+		return nil
 	}
 
 	for _, variable := range result.Variables {
 		if variable.Type == gosnmp.TimeTicks {
-			ticks := gosnmp.ToBigInt(variable.Value).Int64()
-			seconds := ticks / 100
-			metrics.Uptime = &seconds
-			return
+			seconds := gosnmp.ToBigInt(variable.Value).Int64() / 100
+			return &seconds
 		}
 		if value, ok := numericPDUInt64(variable); ok {
 			seconds := value / 100
-			metrics.Uptime = &seconds
-			return
+			return &seconds
 		}
 	}
+	return nil
+}
+
+// hrStorageFixedDiskType 是 HOST-RESOURCES-TYPES 中固定磁盘的类型 OID。
+// 内存（hrStorageRam）、网络盘（hrStorageNetworkDisk）、光驱、可移动盘都不参与磁盘使用率判定。
+const hrStorageFixedDiskType = "1.3.6.1.2.1.25.2.1.4"
+
+// collectHostStorage 一次 walk hrStorageEntry 取回全部列，挑出固定磁盘分区。
+func (c *SNMPCollector) collectHostStorage(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry) {
+	oid := strings.TrimSpace(registry.Common.HostResources.StorageEntry.OID)
+	if oid == "" {
+		return
+	}
+	pdus, err := target.BulkWalkAll(oid)
+	if err != nil || len(pdus) == 0 {
+		return
+	}
+	metrics.Disks = parseHostStorageDisks(pdus)
+}
+
+// parseHostStorageDisks 从 hrStorageEntry 的 walk 结果里解析固定磁盘分区，按索引升序。
+// 列号：.2 类型、.3 描述、.4 分配单元（字节）、.5 容量、.6 已用（后两者以分配单元计）。
+// 分配单元非法或计数为负（老代理 Integer32 溢出）的行无法换算，直接丢弃；
+// 容量为 0 的行保留，由巡检判定层决定如何呈现。纯函数，便于测试。
+func parseHostStorageDisks(pdus []gosnmp.SnmpPDU) []DiskMetrics {
+	type storageRow struct {
+		fixed          bool
+		descr          string
+		units          int64
+		size, used     int64
+		hasSize, hasUs bool
+	}
+	rows := make(map[int]*storageRow)
+	rowOf := func(index int) *storageRow {
+		if rows[index] == nil {
+			rows[index] = &storageRow{}
+		}
+		return rows[index]
+	}
+
+	// walk 结果都在 hrStorageEntry 子树内，OID 末两段即「列号.索引」（hrStorageIndex 为单个整数）
+	for _, pdu := range pdus {
+		parts := strings.Split(strings.TrimSpace(pdu.Name), ".")
+		if len(parts) < 2 {
+			continue
+		}
+		column := parts[len(parts)-2]
+		index, err := strconv.Atoi(parts[len(parts)-1])
+		if err != nil || index <= 0 {
+			continue
+		}
+		switch column {
+		case "2":
+			typeOID := strings.TrimPrefix(strings.TrimSpace(formatSNMPValue(pdu.Value)), ".")
+			rowOf(index).fixed = typeOID == hrStorageFixedDiskType
+		case "3":
+			rowOf(index).descr = formatSNMPValue(pdu.Value)
+		case "4":
+			if value, ok := numericPDUInt64(pdu); ok {
+				rowOf(index).units = value
+			}
+		case "5":
+			if value, ok := numericPDUInt64(pdu); ok {
+				rowOf(index).size, rowOf(index).hasSize = value, true
+			}
+		case "6":
+			if value, ok := numericPDUInt64(pdu); ok {
+				rowOf(index).used, rowOf(index).hasUs = value, true
+			}
+		}
+	}
+
+	indexes := make([]int, 0, len(rows))
+	for index := range rows {
+		indexes = append(indexes, index)
+	}
+	sort.Ints(indexes)
+
+	disks := make([]DiskMetrics, 0, len(indexes))
+	for _, index := range indexes {
+		row := rows[index]
+		if !row.fixed || !row.hasSize || !row.hasUs || row.units <= 0 || row.size < 0 || row.used < 0 {
+			continue
+		}
+		disks = append(disks, DiskMetrics{
+			Mount:      storageMountName(row.descr),
+			TotalBytes: row.size * row.units,
+			UsedBytes:  row.used * row.units,
+		})
+	}
+	return disks
+}
+
+// storageMountName 清洗存储描述：Windows 形如 `C:\ Label:System  Serial Number 5a3c9f10`，
+// 只留盘符；Linux 的描述本身就是挂载点。
+func storageMountName(descr string) string {
+	name := strings.TrimSpace(descr)
+	if idx := strings.Index(name, " Label:"); idx >= 0 {
+		name = strings.TrimSpace(name[:idx])
+	}
+	return name
 }
 
 func (c *SNMPCollector) resolveMetricCandidates(metricName string, vendor string) []snmpmib.MetricCandidate {
@@ -1541,6 +1673,13 @@ func collectGetUsedFreeBytes(client snmpClient, oids []string) (*float64, *int64
 	return &usage, &total, &used
 }
 
+// collectHostResourcesMemory 从 hrStorage 表计算物理内存使用率。
+//
+// RAM 行优先按精确描述（Physical / Real memory）识别，找不到才退回含 "ram" 的描述：
+// Windows 的盘符行排在内存行之前，卷标里的 "Programs" 就含子串 "ram"。
+// Linux net-snmp 的 Physical memory 已用量包含 buffers 与 page cache，存在
+// Memory buffers / Cached memory 行时从已用量中扣除，否则每台 Linux 服务器都会显示
+// 90% 以上并误报；Windows 没有这两行，按原值计算。
 func collectHostResourcesMemory(client snmpClient, oids []string) (*float64, *int64, *int64) {
 	if len(oids) < 4 {
 		return nil, nil, nil
@@ -1550,19 +1689,31 @@ func collectHostResourcesMemory(client snmpClient, oids []string) (*float64, *in
 		return nil, nil, nil
 	}
 
-	ramIndex := ""
+	ramIndex, looseRAMIndex, buffersIndex, cachedIndex := "", "", "", ""
 	for _, item := range descrResult {
-		descr := strings.ToLower(formatSNMPValue(item.Value))
-		if !strings.Contains(descr, "ram") &&
-			!strings.Contains(descr, "physical memory") &&
-			!strings.Contains(descr, "real memory") {
+		idx := extractIndexFromOID(item.Name)
+		if idx <= 0 {
 			continue
 		}
-		idx := extractIndexFromOID(item.Name)
-		if idx > 0 {
-			ramIndex = fmt.Sprintf("%d", idx)
-			break
+		index := fmt.Sprintf("%d", idx)
+		descr := strings.ToLower(formatSNMPValue(item.Value))
+		switch {
+		case descr == "memory buffers":
+			buffersIndex = index
+		case descr == "cached memory":
+			cachedIndex = index
+		case strings.Contains(descr, "physical memory") || strings.Contains(descr, "real memory"):
+			if ramIndex == "" {
+				ramIndex = index
+			}
+		case strings.Contains(descr, "ram"):
+			if looseRAMIndex == "" {
+				looseRAMIndex = index
+			}
 		}
+	}
+	if ramIndex == "" {
+		ramIndex = looseRAMIndex
 	}
 	if ramIndex == "" {
 		return nil, nil, nil
@@ -1588,12 +1739,45 @@ func collectHostResourcesMemory(client snmpClient, oids []string) (*float64, *in
 	}
 
 	total := values[1] * values[0]
-	used := values[2] * values[0]
+	used := values[2]*values[0] - hostReclaimableMemory(client, oids, buffersIndex, cachedIndex)
+	if used < 0 {
+		used = 0
+	}
 	if total <= 0 {
 		return nil, nil, nil
 	}
 	usage := (float64(used) / float64(total)) * 100
 	return &usage, &total, &used
+}
+
+// hostReclaimableMemory 读取 buffers 与 cached 行已用字节数之和（可回收内存）；
+// 行不存在或读取失败时返回 0，退化为按 RAM 行原值计算。
+func hostReclaimableMemory(client snmpClient, oids []string, indexes ...string) int64 {
+	request := make([]string, 0, 2*len(indexes))
+	for _, index := range indexes {
+		if index == "" {
+			continue
+		}
+		request = append(request, oids[1]+"."+index, oids[3]+"."+index)
+	}
+	if len(request) == 0 {
+		return 0
+	}
+	packet, err := client.Get(request)
+	if err != nil || packet == nil || len(packet.Variables) != len(request) {
+		return 0
+	}
+
+	var reclaimable int64
+	for i := 0; i+1 < len(packet.Variables); i += 2 {
+		units, unitsOK := numericPDUInt64(packet.Variables[i])
+		used, usedOK := numericPDUInt64(packet.Variables[i+1])
+		if !unitsOK || !usedOK || units <= 0 || used < 0 {
+			continue
+		}
+		reclaimable += units * used
+	}
+	return reclaimable
 }
 
 func collectGetTotalAvailKB(client snmpClient, oids []string) (*float64, *int64, *int64) {

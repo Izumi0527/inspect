@@ -31,6 +31,19 @@ type CommonSection struct {
 	Interfaces InterfacesSection `json:"interfaces"`
 	Ethernet   EthernetSection   `json:"ethernet"`
 	LLDP       LLDPSection       `json:"lldp"`
+	// HostResources 是 HOST-RESOURCES-MIB(RFC 2790) 的主机资源，服务器巡检使用；
+	// 网络设备普遍不实现，读不到属预期（对应检查项判 skip）。
+	HostResources HostResourcesSection `json:"host_resources"`
+}
+
+// HostResourcesSection 承载主机资源 OID。各项均可选，为空时采集端跳过。
+type HostResourcesSection struct {
+	// SystemUptime(hrSystemUptime) 是主机开机时长。服务器上的 sysUpTime 只是
+	// SNMP 代理进程的运行时长，重启 snmpd 就会清零。
+	SystemUptime OIDDefinition `json:"system_uptime"`
+	// StorageEntry(hrStorageEntry) 整行一次 walk 取回类型、描述、分配单元、容量、已用五列，
+	// 采集端据此挑出固定磁盘（hrStorageFixedDisk）计算分区使用率。
+	StorageEntry OIDDefinition `json:"storage_entry"`
 }
 
 // LLDPSection 承载 LLDP-MIB(IEEE 802.1AB, 1.0.8802.1.1.2) 的邻居发现 OID。
