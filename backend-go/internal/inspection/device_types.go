@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 // InspectableDeviceTypes 是可巡检的设备类型，每个内置模板恰好对应其中一种。
@@ -106,4 +107,28 @@ func DeviceTypeAllowed(templateTypes []string, deviceType string) bool {
 		}
 	}
 	return false
+}
+
+// deviceTypeRow 是按 ID 查设备类型的一行结果。
+type deviceTypeRow struct {
+	ID         int    `gorm:"column:id"`
+	Name       string `gorm:"column:name"`
+	DeviceType string `gorm:"column:device_type"`
+}
+
+// queryDeviceTypeRows 按 ID 查设备名称与类型，以设备 ID 为键；查不到的设备（已删除）
+// 不在结果中。创建前的类型校验与内置模板迁移改绑共用这一条查询。
+func queryDeviceTypeRows(db *gorm.DB, deviceIDs []int) (map[int]deviceTypeRow, error) {
+	byID := make(map[int]deviceTypeRow, len(deviceIDs))
+	if len(deviceIDs) == 0 {
+		return byID, nil
+	}
+	var rows []deviceTypeRow
+	if err := db.Table("devices").Select("id, name, device_type").Where("id IN ?", deviceIDs).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		byID[row.ID] = row
+	}
+	return byID, nil
 }

@@ -580,23 +580,9 @@ func (s *Service) ValidateTemplateDeviceTypes(ctx context.Context, templateID in
 		return nil
 	}
 
-	type deviceTypeRow struct {
-		ID         int    `gorm:"column:id"`
-		Name       string `gorm:"column:name"`
-		DeviceType string `gorm:"column:device_type"`
-	}
-	rows := make([]deviceTypeRow, 0, len(deviceIDs))
-	if err := s.db.WithContext(ctx).
-		Table("devices").
-		Select("id, name, device_type").
-		Where("id IN ?", deviceIDs).
-		Scan(&rows).Error; err != nil {
+	byID, err := queryDeviceTypeRows(s.db.WithContext(ctx), deviceIDs)
+	if err != nil {
 		return fmt.Errorf("failed to load device types: %w", err)
-	}
-
-	byID := make(map[int]deviceTypeRow, len(rows))
-	for _, row := range rows {
-		byID[row.ID] = row
 	}
 	mismatched := make([]string, 0)
 	for _, id := range deviceIDs {

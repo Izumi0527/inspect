@@ -689,22 +689,15 @@ func migrateStrategiesOffTemplates(tx *gorm.DB, templateIDs []int, templateIDByT
 	return nil
 }
 
-// loadDeviceTypes 查出设备 ID → 设备类型；查不到的设备（已删除）不在结果中。
+// loadDeviceTypes 查出设备 ID → 设备类型，供迁移规划使用；查不到的设备（已删除）不在结果中。
 func loadDeviceTypes(tx *gorm.DB, deviceIDs []int) (map[int]string, error) {
-	typeOf := make(map[int]string, len(deviceIDs))
-	if len(deviceIDs) == 0 {
-		return typeOf, nil
-	}
-	type deviceTypeRow struct {
-		ID         int    `gorm:"column:id"`
-		DeviceType string `gorm:"column:device_type"`
-	}
-	var rows []deviceTypeRow
-	if err := tx.Table("devices").Select("id, device_type").Where("id IN ?", deviceIDs).Scan(&rows).Error; err != nil {
+	rows, err := queryDeviceTypeRows(tx, deviceIDs)
+	if err != nil {
 		return nil, err
 	}
-	for _, row := range rows {
-		typeOf[row.ID] = row.DeviceType
+	typeOf := make(map[int]string, len(rows))
+	for id, row := range rows {
+		typeOf[id] = row.DeviceType
 	}
 	return typeOf, nil
 }

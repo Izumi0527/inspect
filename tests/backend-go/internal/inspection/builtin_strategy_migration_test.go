@@ -6,6 +6,8 @@ import (
 	"testing"
 	_ "unsafe"
 
+	"gorm.io/gorm"
+
 	_ "github.com/your-org/inspect-system/backend-go/internal/inspection"
 )
 
@@ -89,5 +91,34 @@ func TestPlanStrategyMigration_NoInspectableDevices(t *testing.T) {
 	}
 	if !reflect.DeepEqual(plan.Dropped, []int{7}) {
 		t.Fatalf("dropped = %v, want [7]", plan.Dropped)
+	}
+}
+
+// loadDeviceTypes 是内置模板迁移改绑用的设备类型查询。
+//
+//go:linkname loadDeviceTypes github.com/your-org/inspect-system/backend-go/internal/inspection.loadDeviceTypes
+func loadDeviceTypes(tx *gorm.DB, deviceIDs []int) (map[int]string, error)
+
+// 迁移改绑与创建前的类型校验共用同一条设备类型查询；查不到的设备（已删除）不在结果里，
+// 交给规划阶段记为丢弃。没有设备时不查库。
+func TestLoadDeviceTypes_SharesValidationQuery(t *testing.T) {
+	db, mock, cleanup := newGormDBWithSqlmock(t)
+	defer cleanup()
+	expectDeviceRows(mock, deviceRow{1, "接入交换机-01", "switch"}, deviceRow{3, "出口路由器", "router"})
+
+	typeOf, err := loadDeviceTypes(db, []int{1, 2, 3})
+	if err != nil {
+		t.Fatalf("loadDeviceTypes: %v", err)
+	}
+	if want := map[int]string{1: "switch", 3: "router"}; !reflect.DeepEqual(typeOf, want) {
+		t.Fatalf("typeOf = %v, want %v", typeOf, want)
+	}
+
+	empty, err := loadDeviceTypes(db, nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("空设备列表: typeOf = %v, err = %v", empty, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock: %v", err)
 	}
 }
