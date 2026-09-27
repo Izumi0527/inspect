@@ -43,23 +43,14 @@ func formatDurationSeconds(seconds int) string {
 // 用户约定保留英文原文，只做标准大写规范化。
 // ---------------------------------------------------------------------------
 
+// localizeDeviceType 复用 inspection.DeviceTypeLabel 这一份映射。空值保持为空，交给表格的
+// 缺失占位（fallbackPDFValue 的「-」）：报告里类型为空与型号、版本为空一样，表示当时没有
+// 这项数据，不宜写成「未分类」。
 func localizeDeviceType(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "switch":
-		return "交换机"
-	case "router":
-		return "路由器"
-	case "firewall":
-		return "防火墙"
-	case "server":
-		return "服务器"
-	case "ap", "access_point", "wireless", "wireless_ap":
-		return "无线AP"
-	case "load_balancer", "loadbalancer", "lb":
-		return "负载均衡"
-	default:
-		return strings.TrimSpace(value)
+	if strings.TrimSpace(value) == "" {
+		return ""
 	}
+	return inspection.DeviceTypeLabel(value)
 }
 
 func localizeVendor(value string) string {

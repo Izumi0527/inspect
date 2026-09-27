@@ -85,16 +85,21 @@ func TestIsInspectableDeviceType(t *testing.T) {
 // 标签用于执行结果、校验报错等直接面向用户的文案，必须是中文。
 func TestDeviceTypeLabel(t *testing.T) {
 	cases := map[string]string{
-		"switch":      "交换机",
-		"router":      "路由器",
-		"firewall":    "防火墙",
-		"server":      "服务器",
-		" Router ":    "路由器",
-		"ap":          "无线AP",
-		"wireless_ap": "无线AP",
-		"":            "未分类",
-		"   ":         "未分类",
-		"storage":     "storage", // 未识别的取值原样返回，不瞎翻
+		"switch":        "交换机",
+		"router":        "路由器",
+		"firewall":      "防火墙",
+		"server":        "服务器",
+		" Router ":      "路由器",
+		"ap":            "无线AP",
+		"wireless_ap":   "无线AP",
+		"access_point":  "无线AP",
+		"wireless":      "无线AP",
+		"load_balancer": "负载均衡",
+		"loadbalancer":  "负载均衡",
+		"lb":            "负载均衡",
+		"":              "未分类",
+		"   ":           "未分类",
+		"storage":       "storage", // 未识别的取值原样返回，不瞎翻
 	}
 	for input, want := range cases {
 		if got := inspection.DeviceTypeLabel(input); got != want {

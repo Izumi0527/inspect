@@ -26,6 +26,7 @@ func IsInspectableDeviceType(value string) bool {
 }
 
 // DeviceTypeLabel 返回设备类型的中文名，用于执行结果、校验报错等面向用户的文案。
+// 它是后端设备类型中文名的唯一映射，报告渲染（reports.localizeDeviceType）也复用这里。
 // 未识别的取值原样返回，避免把自定义类型瞎翻成别的东西。
 func DeviceTypeLabel(value string) string {
 	switch NormalizeDeviceType(value) {
@@ -39,8 +40,10 @@ func DeviceTypeLabel(value string) string {
 		return "防火墙"
 	case "server":
 		return "服务器"
-	case "ap", "wireless_ap":
+	case "ap", "wireless_ap", "access_point", "wireless":
 		return "无线AP"
+	case "load_balancer", "loadbalancer", "lb":
+		return "负载均衡"
 	default:
 		return strings.TrimSpace(value)
 	}

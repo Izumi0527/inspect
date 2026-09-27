@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	_ "unsafe"
 
+	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"gorm.io/datatypes"
 )
@@ -157,5 +159,28 @@ func TestGenerateReportFile_ShouldRenderStatisticsPDFLikeHTMLPreview(t *testing.
 	}
 	if len(raw) < 6*1024 {
 		t.Fatalf("generated statistics PDF size = %d, want at least 6KB", len(raw))
+	}
+}
+
+//go:linkname localizeDeviceType github.com/your-org/inspect-system/backend-go/internal/reports.localizeDeviceType
+func localizeDeviceType(value string) string
+
+// 报告里的设备类型中文名与巡检模块共用 inspection.DeviceTypeLabel 一份映射，防两份字典分叉。
+func TestLocalizeDeviceType_SharesInspectionLabels(t *testing.T) {
+	for _, value := range []string{"switch", " Router ", "firewall", "server", "ap", "wireless_ap",
+		"access_point", "wireless", "load_balancer", "lb", "设备已删除", "storage"} {
+		if got, want := localizeDeviceType(value), inspection.DeviceTypeLabel(value); got != want {
+			t.Errorf("localizeDeviceType(%q) = %q, want %q", value, got, want)
+		}
+	}
+}
+
+// 报告里类型为空表示当时没有这项数据，和型号、版本的空值一样交给表格占位符「-」，
+// 不能写成「未分类」。
+func TestLocalizeDeviceType_EmptyStaysEmpty(t *testing.T) {
+	for _, value := range []string{"", "   "} {
+		if got := localizeDeviceType(value); got != "" {
+			t.Errorf("localizeDeviceType(%q) = %q, want 空", value, got)
+		}
 	}
 }
