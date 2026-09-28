@@ -22,6 +22,11 @@ const createMockDevice = (id: number) => ({
 
 let mockDevices = [createMockDevice(1)]
 
+jest.mock('@tanstack/react-query', () => ({
+  ...jest.requireActual('@tanstack/react-query'),
+  useQueryClient: () => ({ invalidateQueries: jest.fn() }),
+}))
+
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))

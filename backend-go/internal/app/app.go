@@ -211,6 +211,14 @@ func New() (*App, error) {
 		log.Info("已为历史巡检回填设备快照", zap.Int64("rows", snapshotted))
 	}
 
+	// 摘掉删设备时残留在巡检策略里的设备 ID（幂等）。失败不阻塞启动：只影响编辑弹窗
+	// 显示「设备-N」、执行时给已删设备建出失败巡检，下次删设备时也会顺带清理。
+	if pruned, err := deviceService.PruneDeletedDevicesFromStrategies(context.Background()); err != nil {
+		log.Warn("清理巡检策略中已删除设备的引用失败", zap.Error(err))
+	} else if pruned > 0 {
+		log.Info("已清理巡检策略中已删除设备的引用", zap.Int64("strategies", pruned))
+	}
+
 	reportHandler := handlers.ReportsHandler{
 		Service:   reportService,
 		Auth:      authService,

@@ -356,7 +356,7 @@ func (s *Service) UpdateDevice(ctx context.Context, deviceID int, updates map[st
 
 // DeleteDevice 物理删除设备。删除前在同一事务里把该设备尚无快照的历史巡检补上设备快照：
 // 巡检报告的设备身份原先只靠 LEFT JOIN 当前 devices 表，设备一删历史报告就一片空白；
-// 快照失败则整体回滚、不删设备。
+// 删除后再把它从巡检策略的目标设备里摘掉。任一步失败则整体回滚、不删设备。
 func (s *Service) DeleteDevice(ctx context.Context, deviceID int) error {
 	if s.db == nil {
 		return fmt.Errorf("database not initialized")
@@ -373,8 +373,21 @@ func (s *Service) DeleteDevice(ctx context.Context, deviceID int) error {
 		if result.RowsAffected == 0 {
 			return gorm.ErrRecordNotFound
 		}
+		if err := pruneDeletedDevicesFromStrategies(tx).Error; err != nil {
+			return fmt.Errorf("清理巡检策略中的设备引用失败: %w", err)
+		}
 		return nil
 	})
+}
+
+// PruneDeletedDevicesFromStrategies 清理本机制上线前删设备留在巡检策略里的悬空引用（幂等），
+// 返回被修正的策略数。
+func (s *Service) PruneDeletedDevicesFromStrategies(ctx context.Context) (int64, error) {
+	if s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+	result := pruneDeletedDevicesFromStrategies(s.db.WithContext(ctx))
+	return result.RowsAffected, result.Error
 }
 
 // CountInspections 统计所选设备的巡检记录总数，供删除确认框提示删除影响。
@@ -416,6 +429,17 @@ func snapshotDevicesIntoInspections(db *gorm.DB, scope string, args ...interface
 		`'name', d.name, 'ip_address', d.ip_address, 'device_type', d.device_type, 'vendor', d.vendor, `+
 		`'model', d.model, 'firmware_version', d.firmware_version, 'uptime', d.uptime) `+
 		`FROM devices AS d WHERE d.id = i.device_id AND `+scope, args...)
+}
+
+// pruneDeletedDevicesFromStrategies 把巡检策略 devices（jsonb 数组，外键管不到）里已不在
+// devices 表中的 ID 摘掉，保持原顺序；只改含悬空引用的策略。按文本比对 ID，兼容历史数据里
+// 字符串形式的元素，也避免强转失败拖垮删设备事务。删设备与启动清理共用这一条 SQL。
+func pruneDeletedDevicesFromStrategies(db *gorm.DB) *gorm.DB {
+	return db.Exec(`UPDATE inspection_strategies AS s SET devices = COALESCE((` +
+		`SELECT jsonb_agg(e.value ORDER BY e.ord) FROM jsonb_array_elements(s.devices) WITH ORDINALITY AS e(value, ord) ` +
+		`WHERE EXISTS (SELECT 1 FROM devices AS d WHERE d.id::text = e.value #>> '{}')), '[]'::jsonb) ` +
+		`WHERE jsonb_typeof(s.devices) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(s.devices) AS e ` +
+		`WHERE NOT EXISTS (SELECT 1 FROM devices AS d WHERE d.id::text = e.value #>> '{}'))`)
 }
 
 func (s *Service) BatchCreateDevices(

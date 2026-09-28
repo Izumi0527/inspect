@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { getApiOrigin } from "@/lib/api-client";
 import {
   Server,
@@ -128,6 +129,11 @@ export const DeviceManagementView: React.FC = () => {
   const searchParams = useSearchParams();
   const appliedUrlSearchRef = React.useRef(false);
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  // 后端删设备时会把它从巡检策略的目标设备里摘掉；策略列表缓存 5 分钟，不失效会在编辑
+  // 弹窗里继续显示「设备-N」。巡检特性已依赖设备特性，这里只按键名失效、不反向 import 其 hooks
+  const invalidateStrategies = () =>
+    queryClient.invalidateQueries({ queryKey: ["inspection", "strategies"] });
   const userPermissions = React.useMemo(
     () => ((user?.permissions ?? []) as unknown as string[]),
     [user?.permissions],
@@ -481,6 +487,7 @@ export const DeviceManagementView: React.FC = () => {
 
       // 即使部分失败也要刷新数据：后端可能已删除部分设备
       clearDeviceSelection();
+      invalidateStrategies();
       await loadDevices();
       loadStats();
       setBulkDeleteModalOpen(false);
@@ -617,6 +624,7 @@ export const DeviceManagementView: React.FC = () => {
 
     try {
       await removeDevice(deviceToDelete.id);
+      invalidateStrategies();
       setDeviceToDelete(null);
       loadStats();
       toast.success("设备删除成功");

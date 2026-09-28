@@ -15,6 +15,7 @@ const mockSetError = jest.fn();
 const mockAddDevice = jest.fn();
 const mockRemoveDevice = jest.fn();
 const mockImportDevices = jest.fn();
+const mockInvalidateQueries = jest.fn();
 
 const createMockDevice = (id: number, overrides: Partial<{
   name: string;
@@ -95,12 +96,14 @@ jest.mock("@/components/atoms", () => ({
     children,
     onClick,
     disabled,
+    "aria-label": ariaLabel,
   }: {
     children: React.ReactNode;
     onClick?: () => void;
     disabled?: boolean;
+    "aria-label"?: string;
   }) => (
-    <button type="button" onClick={onClick} disabled={disabled}>
+    <button type="button" onClick={onClick} disabled={disabled} aria-label={ariaLabel}>
       {children}
     </button>
   ),
@@ -155,10 +158,15 @@ jest.mock("@/components/atoms", () => ({
     ) : null,
   Table: ({
     data,
+    columns,
     rowSelection,
     pagination,
   }: {
     data: Array<{ id: number; name: string }>;
+    columns?: Array<{
+      key: string;
+      render?: (value: unknown, record: { id: number; name: string }) => React.ReactNode;
+    }>;
     rowSelection?: {
       selectedRowKeys: Array<string | number>;
       onChange: (
@@ -196,6 +204,8 @@ jest.mock("@/components/atoms", () => ({
       {data.map((item) => (
         <div key={item.id}>{item.name}</div>
       ))}
+      {/* 仅渲染首行操作列，供单台删除等行内操作用例驱动 */}
+      {data[0] && columns?.find((column) => column.key === "actions")?.render?.(undefined, data[0])}
     </div>
   ),
 }));
@@ -319,6 +329,11 @@ jest.mock("@/features/devices/components/modals/DeviceDetailsModal", () => ({
 
 jest.mock("@/features/devices/components/modals/EditDeviceModal", () => ({
   EditDeviceModal: () => null,
+}));
+
+jest.mock("@tanstack/react-query", () => ({
+  ...jest.requireActual("@tanstack/react-query"),
+  useQueryClient: () => ({ invalidateQueries: mockInvalidateQueries }),
 }));
 
 jest.mock("@/features/devices/hooks/useDevices", () => {
@@ -650,6 +665,26 @@ describe("DeviceManagementView", () => {
       expect(batchDeleteDevices).toHaveBeenCalledWith([1]);
     });
     expect(toast.success).toHaveBeenCalledWith("已删除");
+    // 后端已把被删设备从巡检策略里摘掉；策略列表缓存 5 分钟，不失效会继续显示「设备-N」
+    await waitFor(() => {
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ["inspection", "strategies"] });
+    });
+  });
+
+  it("单台删除成功后应使巡检策略缓存失效", async () => {
+    mockRemoveDevice.mockResolvedValue(undefined);
+
+    render(<DeviceManagementView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "删除设备 edge-01" }));
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(mockRemoveDevice).toHaveBeenCalledWith(1);
+    });
+    await waitFor(() => {
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ["inspection", "strategies"] });
+    });
   });
 
   it("批量更新提交后应调用后端接口并刷新", async () => {

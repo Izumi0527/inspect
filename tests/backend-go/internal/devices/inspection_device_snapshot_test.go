@@ -2,6 +2,7 @@ package devices_test
 
 import (
 	"context"
+	"regexp"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -17,6 +18,14 @@ const snapshotUpdatePattern = `UPDATE inspections AS i SET device_snapshot = jso
 	`'name', d\.name, 'ip_address', d\.ip_address, 'device_type', d\.device_type, 'vendor', d\.vendor, ` +
 	`'model', d\.model, 'firmware_version', d\.firmware_version, 'uptime', d\.uptime\) ` +
 	`FROM devices AS d WHERE d\.id = i\.device_id AND `
+
+// 巡检策略的 devices 是 jsonb 数组，外键管不到：设备删了 ID 仍留在策略里，
+// 编辑弹窗显示「设备-17」、执行时照样给已删设备建巡检。删设备与启动清理共用这一条 SQL。
+var strategyRefPrunePattern = regexp.QuoteMeta(`UPDATE inspection_strategies AS s SET devices = COALESCE((`+
+	`SELECT jsonb_agg(e.value ORDER BY e.ord) FROM jsonb_array_elements(s.devices) WITH ORDINALITY AS e(value, ord) `+
+	`WHERE EXISTS (SELECT 1 FROM devices AS d WHERE d.id::text = e.value #>> '{}')), '[]'::jsonb) `+
+	`WHERE jsonb_typeof(s.devices) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(s.devices) AS e `+
+	`WHERE NOT EXISTS (SELECT 1 FROM devices AS d WHERE d.id::text = e.value #>> '{}'))`) + `$`
 
 // 执行时按巡检行覆盖写入：记录的是本次巡检那一刻的设备身份。
 func TestSnapshotDeviceForInspection_OverwritesThatInspection(t *testing.T) {
@@ -57,8 +66,9 @@ func TestBackfillInspectionDeviceSnapshots_OnlyFillsMissing(t *testing.T) {
 	}
 }
 
-// 删除设备必须先把它的历史巡检补上快照、再删设备，且二者同一事务：
-// 快照失败就不删，避免再出现「设备没了、报告也空了」。
+// 删除设备必须先把它的历史巡检补上快照、再删设备、再把它从巡检策略里摘掉，且同一事务：
+// 快照失败就不删，避免再出现「设备没了、报告也空了」；摘除必须在 DELETE 之后，
+// 因为它按「devices 表里已不存在」判定要摘的 ID。
 func TestDeleteDevice_SnapshotsHistoryBeforeDeleteInOneTransaction(t *testing.T) {
 	db, mock, cleanup := newDevicesGormDBWithSQLMock(t)
 	defer cleanup()
@@ -71,6 +81,8 @@ func TestDeleteDevice_SnapshotsHistoryBeforeDeleteInOneTransaction(t *testing.T)
 	mock.ExpectExec(`DELETE FROM "devices" WHERE id = \$1`).
 		WithArgs(7).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(strategyRefPrunePattern).
+		WillReturnResult(sqlmock.NewResult(0, 2))
 	mock.ExpectCommit()
 
 	if err := service.DeleteDevice(context.Background(), 7); err != nil {
@@ -92,6 +104,49 @@ func TestDeleteDevice_SnapshotFailureAbortsDelete(t *testing.T) {
 
 	if err := service.DeleteDevice(context.Background(), 7); err == nil {
 		t.Fatal("快照失败时 DeleteDevice 应返回错误且不执行 DELETE")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// 摘除策略引用失败时整体回滚：设备不删，策略也不会留下指向已删设备的 ID。
+func TestDeleteDevice_StrategyPruneFailureRollsBackDelete(t *testing.T) {
+	db, mock, cleanup := newDevicesGormDBWithSQLMock(t)
+	defer cleanup()
+	service := devices.NewService(db, zap.NewNop())
+
+	mock.ExpectBegin()
+	mock.ExpectExec(snapshotUpdatePattern).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`DELETE FROM "devices" WHERE id = \$1`).
+		WithArgs(7).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(strategyRefPrunePattern).WillReturnError(context.DeadlineExceeded)
+	mock.ExpectRollback()
+
+	if err := service.DeleteDevice(context.Background(), 7); err == nil {
+		t.Fatal("摘除策略引用失败时 DeleteDevice 应返回错误并回滚删除")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// 启动清理修复本机制上线前删设备留下的悬空引用（幂等），返回被修正的策略数。
+func TestPruneDeletedDevicesFromStrategies_RepairsExistingDanglingRefs(t *testing.T) {
+	db, mock, cleanup := newDevicesGormDBWithSQLMock(t)
+	defer cleanup()
+	service := devices.NewService(db, zap.NewNop())
+
+	mock.ExpectExec(strategyRefPrunePattern).
+		WillReturnResult(sqlmock.NewResult(0, 2))
+
+	rows, err := service.PruneDeletedDevicesFromStrategies(context.Background())
+	if err != nil {
+		t.Fatalf("PruneDeletedDevicesFromStrategies: %v", err)
+	}
+	if rows != 2 {
+		t.Fatalf("rows = %d, want 2", rows)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
