@@ -1,5 +1,5 @@
 import React from 'react'
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from './button'
 import { PageSizeSelect } from '@/components/atoms/page-size-select'
 import { PAGE_SIZE_OPTIONS } from '@/constants/pagination'
@@ -11,19 +11,12 @@ export interface PaginationProps {
   totalItems: number
   pageSize: number
   pageSizeOptions?: readonly number[]
-  /** 「每页条数」选择器的前置标签，全站默认统一为「每页」。 */
+  /** 胶囊内的条数标签，默认统一为「每页条数」。 */
   sizeChangerLabel?: string
-  /** 是否渲染左侧「显示 X - Y / 共 Z 条」区间文案。 */
+  /** 是否渲染左侧「第 X - Y 条，共 Z 条」区间文案。 */
   showRangeText?: boolean
-  /** 是否渲染「跳至第 N 页」输入框。 */
-  showJumpToPage?: boolean
   onPageChange: (page: number) => void
-  /**
-   * 每页条数变更回调。
-   *
-   * 契约：本组件只负责上报新的条数，**不再擅自回调 `onPageChange`**。
-   * 「切换条数后回到第 1 页」由调用方在该回调内完成，保证全站行为一致。
-   */
+  /** 只上报条数；调用方负责归位第一页，避免重复触发页码更新。 */
   onPageSizeChange?: (pageSize: number) => void
   showPageSizeSelector?: boolean
   className?: string
@@ -35,207 +28,88 @@ export const Pagination: React.FC<PaginationProps> = ({
   totalItems,
   pageSize,
   pageSizeOptions = PAGE_SIZE_OPTIONS,
-  sizeChangerLabel = '每页',
+  sizeChangerLabel = '每页条数',
   showRangeText = true,
-  showJumpToPage = false,
   onPageChange,
   onPageSizeChange,
   showPageSizeSelector = true,
-  className
+  className,
 }) => {
-  // 计算显示的页码范围
-  const getPageNumbers = () => {
-    const pages: (number | string)[] = []
-    const maxVisiblePages = 7 // 最多显示7个页码按钮
+  const getPageNumbers = (): (number | '...')[] => {
+    if (totalItems === 0) return []
+    if (totalPages <= 8) return Array.from({ length: totalPages }, (_, index) => index + 1)
 
-    if (totalPages <= maxVisiblePages) {
-      // 如果总页数小于等于最大可见页数，显示所有页码
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i)
-      }
-    } else {
-      // 否则，智能显示页码
-      if (currentPage <= 4) {
-        // 当前页在前面
-        for (let i = 1; i <= 5; i++) {
-          pages.push(i)
-        }
-        pages.push('...')
-        pages.push(totalPages)
-      } else if (currentPage >= totalPages - 3) {
-        // 当前页在后面
-        pages.push(1)
-        pages.push('...')
-        for (let i = totalPages - 4; i <= totalPages; i++) {
-          pages.push(i)
-        }
-      } else {
-        // 当前页在中间
-        pages.push(1)
-        pages.push('...')
-        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-          pages.push(i)
-        }
-        pages.push('...')
-        pages.push(totalPages)
-      }
-    }
+    const visible = new Set([1, 2, totalPages - 1, totalPages])
+    const start = currentPage <= 3 ? 1 : currentPage >= totalPages - 2 ? totalPages - 3 : currentPage - 1
+    const end = currentPage <= 3 ? 4 : currentPage >= totalPages - 2 ? totalPages : currentPage + 1
+    for (let page = start; page <= end; page++) visible.add(page)
 
+    const numbers = [...visible].filter(page => page >= 1 && page <= totalPages).sort((a, b) => a - b)
+    const pages: (number | '...')[] = []
+    numbers.forEach((page, index) => {
+      const previous = numbers[index - 1]
+      // 只缺一页时直接补齐，避免用省略号替代单个数字。
+      if (index > 0 && page - previous === 2) pages.push(previous + 1)
+      else if (index > 0 && page - previous > 2) pages.push('...')
+      pages.push(page)
+    })
     return pages
   }
 
-  const pages = getPageNumbers()
   const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1
   const endItem = Math.min(currentPage * pageSize, totalItems)
-
   const handlePageChange = (page: number) => {
-    if (page < 1 || page > totalPages || page === currentPage) return
+    if (totalItems === 0 || page < 1 || page > totalPages || page === currentPage) return
     onPageChange(page)
   }
 
-  const handlePageSizeChange = (newPageSize: number) => {
-    // 只上报新条数；页码归位由调用方决定，避免组件与调用方各改一次页码。
-    onPageSizeChange?.(newPageSize)
-  }
-
-  // 「跳至第 N 页」输入框：受控并跟随当前页同步，避免翻页后残留旧值。
-  const [jumpValue, setJumpValue] = React.useState(String(currentPage))
-  React.useEffect(() => {
-    setJumpValue(String(currentPage))
-  }, [currentPage])
-
-  const commitJump = () => {
-    const parsed = Number.parseInt(jumpValue, 10)
-    const upperBound = Math.max(totalPages, 1)
-    if (Number.isInteger(parsed) && parsed >= 1 && parsed <= upperBound) {
-      handlePageChange(parsed)
-    }
-    setJumpValue(String(currentPage))
-  }
-
   return (
-    <div className={cn('flex flex-wrap items-center justify-between gap-4', className)}>
-      {/* 左侧：总数信息和每页条数选择器 */}
-      <div className="flex flex-wrap items-center gap-4">
-        {showRangeText && (
-          <div className="text-sm text-muted-foreground">
-            显示 <span className="font-medium">{startItem}</span> - <span className="font-medium">{endItem}</span>{' '}
-            / 共 <span className="font-medium">{totalItems}</span> 条
-          </div>
-        )}
-
-        {showPageSizeSelector && onPageSizeChange && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">{sizeChangerLabel}</span>
-            <PageSizeSelect
-              value={pageSize}
-              options={pageSizeOptions}
-              onChange={handlePageSizeChange}
-              ariaLabel="每页条数"
-              triggerClassName="h-8 w-[112px]"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* 右侧：分页按钮 */}
-      <div className="flex flex-wrap items-center gap-1">
-        {/* 跳转到第一页 */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handlePageChange(1)}
-          disabled={currentPage <= 1}
-          className="h-8 w-8 p-0"
-          title="第一页"
-        >
-          <ChevronsLeft className="w-4 h-4" />
-        </Button>
-
-        {/* 上一页 */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handlePageChange(currentPage - 1)}
-          disabled={currentPage <= 1}
-          className="h-8 w-8 p-0"
-          title="上一页"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </Button>
-
-        {/* 页码按钮 */}
-        {pages.map((page, index) => {
-          if (page === '...') {
-            return (
-              <span key={`ellipsis-${index}`} className="px-2 text-muted-foreground">
-                ...
-              </span>
-            )
-          }
-
-          return (
-            <Button
-              key={page}
-              variant={currentPage === page ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => handlePageChange(page as number)}
+    <div className={cn('flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-pagination px-4 py-1.5 text-sm', className)}>
+      {showRangeText && (
+        <div className="whitespace-nowrap text-muted-foreground">
+          {`第 ${startItem} - ${endItem} 条，共 ${totalItems} 条`}
+        </div>
+      )}
+      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+        <nav aria-label="分页导航" className="flex flex-wrap items-center justify-end gap-1">
+          <Button type="button" variant="ghost" size="sm"
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={totalItems === 0 || currentPage <= 1}
+            className="h-8 w-8 rounded-full p-0 text-muted-foreground hover:bg-pagination-control hover:text-foreground"
+            aria-label="上一页" title="上一页">
+            <ChevronLeft />
+          </Button>
+          {getPageNumbers().map((page, index) => page === '...' ? (
+            <span key={`ellipsis-${index}`} data-page-item="ellipsis" aria-hidden="true"
+              className="flex h-8 w-8 items-center justify-center text-foreground">...</span>
+          ) : (
+            <Button key={page} type="button" variant="ghost" size="sm"
+              data-page-item={page}
+              onClick={() => handlePageChange(page)}
               aria-current={currentPage === page ? 'page' : undefined}
               className={cn(
-                'h-8 w-8 p-0',
-                currentPage === page && 'bg-purple-600 text-white hover:bg-purple-700'
-              )}
-            >
+                'h-8 min-w-8 rounded-full px-1 py-0 text-sm font-normal shadow-none',
+                currentPage === page
+                  ? 'bg-pagination-selected text-pagination-selected-foreground hover:bg-pagination-selected hover:text-pagination-selected-foreground'
+                  : 'text-foreground hover:bg-pagination-control hover:text-foreground'
+              )}>
               {page}
             </Button>
-          )
-        })}
-
-        {/* 下一页 */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handlePageChange(currentPage + 1)}
-          disabled={currentPage >= totalPages}
-          className="h-8 w-8 p-0"
-          title="下一页"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </Button>
-
-        {/* 跳转到最后一页 */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handlePageChange(totalPages)}
-          disabled={currentPage >= totalPages}
-          className="h-8 w-8 p-0"
-          title="最后一页"
-        >
-          <ChevronsRight className="w-4 h-4" />
-        </Button>
-
-        {/* 跳转到指定页 */}
-        {showJumpToPage && (
-          <div className="flex items-center gap-1 ml-2">
-            <span className="text-sm text-muted-foreground">跳至</span>
-            <input
-              type="number"
-              min={1}
-              max={Math.max(totalPages, 1)}
-              value={jumpValue}
-              aria-label="跳转页码"
-              onChange={(e) => setJumpValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  commitJump()
-                }
-              }}
-              onBlur={commitJump}
-              className="w-14 px-2 py-1 text-sm text-center border border-border/70 rounded-md bg-card text-foreground/90 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <span className="text-sm text-muted-foreground">页</span>
-          </div>
+          ))}
+          <Button type="button" variant="ghost" size="sm"
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={totalItems === 0 || currentPage >= totalPages}
+            className="h-8 w-8 rounded-full p-0 text-muted-foreground hover:bg-pagination-control hover:text-foreground"
+            aria-label="下一页" title="下一页">
+            <ChevronRight />
+          </Button>
+        </nav>
+        {showPageSizeSelector && onPageSizeChange && (
+          <PageSizeSelect value={pageSize} options={pageSizeOptions}
+            onChange={onPageSizeChange} ariaLabel="每页条数"
+            valueLabel={`${sizeChangerLabel}：${pageSize}`}
+            triggerClassName="h-8 w-auto min-w-[128px] gap-2 rounded-full border-0 bg-pagination-control px-3 py-0 text-sm shadow-none backdrop-blur-none focus:bg-pagination-control"
+          />
         )}
       </div>
     </div>

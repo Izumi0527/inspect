@@ -139,9 +139,7 @@ export function Table<T extends object>({
     large: 'px-6 py-4'
   }
 
-  const paginationPadding = size === 'small' ? 'px-3 py-1.5' : 'px-4 py-3'
-  const paginationTextSize = size === 'small' ? 'text-xs' : 'text-sm'
-  const paginationButtonSize = size === 'small' ? 'px-2.5 py-1 text-xs' : 'px-3 py-1 text-sm'
+  const paginationPadding = size === 'small' ? 'px-3' : 'px-4'
   const headerCellGap = size === 'small' ? 'gap-1.5' : 'gap-2'
   const emptyRowPaddingY =
     size === 'small' ? 'py-6' : size === 'large' ? 'py-10' : 'py-8'
@@ -356,62 +354,17 @@ export function Table<T extends object>({
       )}
 
       {pagination && (
-        pagination.onPageSizeChange ? (
-          <div className={cn(
-            'border-t border-border/50 bg-muted/30',
-            paginationPadding
-          )}>
-            <Pagination
-              currentPage={pagination.current}
-              totalPages={Math.max(1, Math.ceil(pagination.total / Math.max(pagination.pageSize, 1)))}
-              totalItems={pagination.total}
-              pageSize={pagination.pageSize}
-              onPageChange={(page) => pagination.onChange(page, pagination.pageSize)}
-              onPageSizeChange={pagination.onPageSizeChange}
-            />
-          </div>
-        ) : (
-          <div className={cn(
-            'flex flex-col gap-2 border-t border-border/50 bg-muted/30',
-            'sm:flex-row sm:items-center sm:justify-between',
-            paginationPadding
-          )}>
-            <div
-              className={cn(
-                paginationTextSize,
-                'text-muted-foreground',
-                size === 'small' ? 'hidden sm:block' : ''
-              )}
-            >
-              显示第 {(pagination.current - 1) * pagination.pageSize + 1} - {Math.min(pagination.current * pagination.pageSize, pagination.total)} 条，共 {pagination.total} 条
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => pagination.onChange(pagination.current - 1, pagination.pageSize)}
-                disabled={pagination.current <= 1}
-                className={cn(
-                  paginationButtonSize,
-                  'text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
-                )}
-              >
-                上一页
-              </button>
-              <span className={cn(paginationTextSize, 'text-muted-foreground')}>
-                {pagination.current} / {Math.ceil(pagination.total / pagination.pageSize)}
-              </span>
-              <button
-                onClick={() => pagination.onChange(pagination.current + 1, pagination.pageSize)}
-                disabled={pagination.current >= Math.ceil(pagination.total / pagination.pageSize)}
-                className={cn(
-                  paginationButtonSize,
-                  'text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
-                )}
-              >
-                下一页
-              </button>
-            </div>
-          </div>
-        )
+        <div className="border-t border-border/50">
+          <Pagination
+            currentPage={pagination.current}
+            totalPages={Math.ceil(pagination.total / Math.max(pagination.pageSize, 1))}
+            totalItems={pagination.total}
+            pageSize={pagination.pageSize}
+            onPageChange={(page) => pagination.onChange(page, pagination.pageSize)}
+            onPageSizeChange={pagination.onPageSizeChange}
+            className={paginationPadding}
+          />
+        </div>
       )}
     </div>
   )

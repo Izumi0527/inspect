@@ -69,3 +69,16 @@ describe('Table 统一分页空状态', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 })
+
+describe('Table 无档位回调的分页', () => {
+  it('仍使用共享页码和区间，但不显示档位选择器', () => {
+    const onChange = jest.fn()
+    render(<Table data={[]} columns={[{ key: 'name', title: '名称' }]}
+      pagination={{ current: 1, pageSize: 10, total: 156, onChange }} />)
+    expect(screen.getByText('第 1 - 10 条，共 156 条')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: '分页导航' })).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: '每页条数' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '2', exact: true }))
+    expect(onChange).toHaveBeenCalledWith(2, 10)
+  })
+})

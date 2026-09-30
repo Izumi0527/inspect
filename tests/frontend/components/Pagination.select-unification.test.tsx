@@ -57,7 +57,7 @@ jest.mock('@/components/ui/select', () => {
         </button>
       )
     },
-    SelectValue: () => null,
+    SelectValue: ({ children }: { children?: React.ReactNode }) => <>{children}</> ,
     SelectContent: ({ children }: { children: React.ReactNode }) => {
       const { open } = useSelectContext()
       return open ? <div role="listbox">{children}</div> : null
@@ -129,4 +129,10 @@ describe('Pagination 下拉统一化', () => {
     expect(onPageSizeChange).toHaveBeenCalledTimes(1)
     expect(onPageSizeChange).toHaveBeenCalledWith(20)
   })
+})
+
+it('触发器将标签与当前条数放进同一个胶囊', () => {
+  render(<Pagination currentPage={1} totalPages={16} totalItems={156} pageSize={10}
+    onPageChange={jest.fn()} onPageSizeChange={jest.fn()} />)
+  expect(screen.getByRole('combobox', { name: '每页条数' })).toHaveTextContent('每页条数：10')
 })

@@ -57,7 +57,7 @@ jest.mock('@/components/ui/select', () => {
         </button>
       )
     },
-    SelectValue: ({ placeholder }: { placeholder?: string }) => <>{placeholder ?? null}</>,
+    SelectValue: ({ placeholder, children }: { placeholder?: string; children?: React.ReactNode }) => <>{children ?? placeholder ?? null}</>,
     SelectContent: ({ children }: { children: React.ReactNode }) => {
       const { open } = useSelectContext()
       return open ? <div role="listbox">{children}</div> : null
@@ -120,4 +120,13 @@ describe('SharedSelect', () => {
     expect(onChange).toHaveBeenCalledTimes(1)
     expect(onChange).toHaveBeenCalledWith('month')
   })
+})
+
+it('提供 valueLabel 时只替换触发器文字', async () => {
+  const user = userEvent.setup()
+  render(<SharedSelect value="10" valueLabel="每页条数：10" ariaLabel="每页条数"
+    options={[{ value: '10', label: '10条/页' }]} />)
+  expect(screen.getByRole('combobox')).toHaveTextContent('每页条数：10')
+  await user.click(screen.getByRole('combobox'))
+  expect(screen.getByRole('option', { name: '10条/页' })).toBeInTheDocument()
 })

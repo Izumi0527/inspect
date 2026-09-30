@@ -150,12 +150,12 @@ describe('InspectionStrategies 分页能力', () => {
       expect(mockUseInspectionStrategies).toHaveBeenLastCalledWith(
         expect.objectContaining({
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
         })
       )
     })
 
-    expect(screen.getByText('分页 1/3 共 45 条 每页 20 条')).toBeInTheDocument()
+    expect(screen.getByText('分页 1/3 共 45 条 每页 10 条')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '下一页' }))
 
@@ -163,7 +163,7 @@ describe('InspectionStrategies 分页能力', () => {
       expect(mockUseInspectionStrategies).toHaveBeenLastCalledWith(
         expect.objectContaining({
           page: 2,
-          pageSize: 20,
+          pageSize: 10,
         })
       )
     })
@@ -198,7 +198,7 @@ describe('InspectionStrategies 分页能力', () => {
       expect(mockUseInspectionStrategies).toHaveBeenLastCalledWith(
         expect.objectContaining({
           page: 3,
-          pageSize: 20,
+          pageSize: 10,
         })
       )
     })

@@ -119,3 +119,18 @@ describe('分页数值策略分层守卫', () => {
     expect(selector).toMatch(/export const formatPageSizeOption\b/)
   })
 })
+
+describe('截图分页布局守卫', () => {
+  it('业务列表不再开启跳页输入框', () => {
+    const offenders = collectSourceFiles(FEATURES_DIR)
+      .filter(file => /showJumpToPage/.test(read(file)))
+      .map(toRelPosix)
+    expect(offenders).toEqual([])
+  })
+
+  it('表格不存在另一套手写分页', () => {
+    const table = read(path.join(FRONTEND_SRC, 'components/atoms/table.tsx'))
+    expect(table.match(/<Pagination\b/g)).toHaveLength(1)
+    expect(table).not.toMatch(/pagination\.current [+-] 1|显示第/)
+  })
+})

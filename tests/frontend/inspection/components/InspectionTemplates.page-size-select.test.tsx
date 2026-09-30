@@ -273,13 +273,12 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
     render(<InspectionTemplates />)
 
     expect(screen.getByTestId('inspection-templates-page-size-select')).toBeInTheDocument()
+    expect(screen.queryByTestId('jump-to-page')).not.toBeInTheDocument()
     expect(mockPagination).toHaveBeenLastCalledWith(
       expect.objectContaining({
         currentPage: 1,
         totalItems: 100,
-        pageSize: 20,
-        // 跳页能力由共享组件承接，不再由页面自行实现
-        showJumpToPage: true,
+        pageSize: 10,
       })
     )
   })
@@ -295,7 +294,7 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
       expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
         expect.objectContaining({
           page: 2,
-          pageSize: 20,
+          pageSize: 10,
         })
       )
     })
@@ -368,13 +367,13 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
 
       fireEvent.click(screen.getByRole('button', { name: '下一页' }))
       expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
-        expect.objectContaining({ page: 2, pageSize: 20, search: undefined })
+        expect.objectContaining({ page: 2, pageSize: 10, search: undefined })
       )
 
       act(() => { jest.advanceTimersByTime(350) })
 
       expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
-        expect.objectContaining({ page: 2, pageSize: 20, search: undefined })
+        expect.objectContaining({ page: 2, pageSize: 10, search: undefined })
       )
       expect(mockPagination).toHaveBeenLastCalledWith(expect.objectContaining({ currentPage: 2 }))
     })

@@ -727,7 +727,7 @@ export const InspectionTemplates: React.FC = () => {
         </Card>
       )}
 
-      {/* 分页：复用全站统一的分页组件（含每页条数与跳页） */}
+      {/* 分页：复用全站统一的分页组件（含每页条数） */}
       <div className="mt-4 px-2">
         <Pagination
           currentPage={pagination.page}
@@ -744,7 +744,6 @@ export const InspectionTemplates: React.FC = () => {
               page_size: pageSize,
             }))
           }
-          showJumpToPage
         />
       </div>
 

@@ -14,6 +14,7 @@ export interface SharedSelectProps {
   options: readonly SharedSelectOption[]
   ariaLabel?: string
   placeholder?: string
+  valueLabel?: React.ReactNode
   className?: string
   triggerClassName?: string
   disabled?: boolean
@@ -25,6 +26,7 @@ export const SharedSelect: React.FC<SharedSelectProps> = ({
   options,
   ariaLabel,
   placeholder = '请选择',
+  valueLabel,
   className,
   triggerClassName,
   disabled = false,
@@ -36,7 +38,7 @@ export const SharedSelect: React.FC<SharedSelectProps> = ({
           aria-label={ariaLabel}
           className={cn('h-8 w-[112px] px-3 text-sm', triggerClassName)}
         >
-          <SelectValue placeholder={placeholder} />
+          <SelectValue placeholder={placeholder}>{valueLabel}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           {options.map((option) => (

@@ -11,6 +11,7 @@ export interface PageSizeSelectProps {
   options?: readonly number[]
   ariaLabel?: string
   placeholder?: string
+  valueLabel?: React.ReactNode
   className?: string
   triggerClassName?: string
   disabled?: boolean
@@ -23,6 +24,7 @@ export const PageSizeSelect: React.FC<PageSizeSelectProps> = ({
   options = PAGE_SIZE_OPTIONS,
   ariaLabel = '每页条数',
   placeholder = '每页条数',
+  valueLabel,
   className,
   triggerClassName,
   disabled = false,
@@ -45,6 +47,7 @@ export const PageSizeSelect: React.FC<PageSizeSelectProps> = ({
       }))}
       ariaLabel={ariaLabel}
       placeholder={placeholder}
+      valueLabel={valueLabel}
       className={className}
       triggerClassName={triggerClassName}
       disabled={disabled}

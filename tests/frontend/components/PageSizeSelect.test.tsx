@@ -60,3 +60,11 @@ describe('PageSizeSelect', () => {
     expect(onChange).toHaveBeenCalledWith(50)
   })
 })
+
+it('可单独设置触发器文案，不改变菜单选项文案', () => {
+  render(<PageSizeSelect value={10} onChange={jest.fn()} valueLabel="每页条数：10" />)
+  expect(mockSharedSelect).toHaveBeenLastCalledWith(expect.objectContaining({
+    valueLabel: '每页条数：10',
+    options: expect.arrayContaining([{ value: '10', label: '10条/页' }]),
+  }))
+})

@@ -1,8 +1,8 @@
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/constants/pagination'
 
 describe('分页数值策略', () => {
-  it('保持现有默认值与档位集合', () => {
-    expect(DEFAULT_PAGE_SIZE).toBe(20)
+  it('默认每页为 10 条且档位集合不变', () => {
+    expect(DEFAULT_PAGE_SIZE).toBe(10)
     expect(PAGE_SIZE_OPTIONS).toEqual([10, 20, 50, 100])
   })
 
