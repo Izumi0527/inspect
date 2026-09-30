@@ -96,6 +96,8 @@ export const InspectionTemplates: React.FC = () => {
   // 搜索防抖（350ms）
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
+    // 未改变实际搜索条件时，不启动会覆盖用户翻页的定时器。
+    if (searchText === debouncedSearch) return
     if (searchTimerRef.current) {
       clearTimeout(searchTimerRef.current)
     }
@@ -106,7 +108,7 @@ export const InspectionTemplates: React.FC = () => {
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
     }
-  }, [searchText])
+  }, [searchText, debouncedSearch])
 
   // 分页和排序状态
   const [pagination, setPagination] = useState<Pagination>({

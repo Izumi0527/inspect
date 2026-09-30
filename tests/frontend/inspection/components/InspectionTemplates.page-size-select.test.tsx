@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { InspectionTemplates } from '@/features/inspection/components/InspectionTemplates'
 
@@ -364,4 +364,78 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
     expect(screen.getByText('15')).toBeInTheDocument()
     expect(mockUseInspectionTemplateStats).toHaveBeenCalled()
   })
+
+  describe('搜索防抖与翻页竞争', () => {
+    beforeEach(() => {
+      jest.useFakeTimers()
+    })
+
+    afterEach(() => {
+      cleanup()
+      jest.runOnlyPendingTimers()
+      jest.useRealTimers()
+    })
+
+    it.each([false, true])('初始空搜索不能覆盖快速翻页（StrictMode=%s）', (strictMode) => {
+      render(strictMode ? <React.StrictMode><InspectionTemplates /></React.StrictMode> : <InspectionTemplates />)
+
+      fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+      expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 2, pageSize: 20, search: undefined })
+      )
+
+      act(() => { jest.advanceTimersByTime(350) })
+
+      expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 2, pageSize: 20, search: undefined })
+      )
+    })
+
+    it('实际搜索及清空搜索应在防抖结束时更新查询并回第一页', () => {
+      render(<InspectionTemplates />)
+      act(() => { jest.advanceTimersByTime(350) })
+      fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+      const input = screen.getByRole('textbox', { name: '搜索模板' })
+      fireEvent.change(input, { target: { value: '核心' } })
+
+      act(() => { jest.advanceTimersByTime(349) })
+      expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 2, search: undefined })
+      )
+      act(() => { jest.advanceTimersByTime(1) })
+      expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 1, search: '核心' })
+      )
+      expect(mockUseInspectionTemplates).not.toHaveBeenCalledWith(
+        expect.objectContaining({ page: 2, search: '核心' })
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+      fireEvent.change(input, { target: { value: '' } })
+      act(() => { jest.advanceTimersByTime(349) })
+      expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 2, search: '核心' })
+      )
+      act(() => { jest.advanceTimersByTime(1) })
+      expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 1, search: undefined })
+      )
+    })
+
+    it('输入后在防抖期内撤回到原搜索值，不应重置页码', () => {
+      render(<InspectionTemplates />)
+      act(() => { jest.advanceTimersByTime(350) })
+      fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+      const input = screen.getByRole('textbox', { name: '搜索模板' })
+      fireEvent.change(input, { target: { value: '临时搜索' } })
+      act(() => { jest.advanceTimersByTime(100) })
+      fireEvent.change(input, { target: { value: '' } })
+      act(() => { jest.advanceTimersByTime(350) })
+
+      expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 2, search: undefined })
+      )
+    })
+  })
+
 })
