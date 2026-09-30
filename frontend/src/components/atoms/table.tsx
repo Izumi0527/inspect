@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { motion, type HTMLMotionProps } from 'framer-motion'
 import { ChevronUp, ChevronDown } from 'lucide-react'
+import { Pagination } from './pagination'
 import { cn } from '@/utils/cn'
 
 export interface Column<T extends object> {
@@ -16,11 +17,18 @@ export interface TableProps<T extends object> {
   columns: Column<T>[]
   data: T[]
   loading?: boolean
+  /** 空数据时替代表格内容，分页条仍保持可用。 */
+  emptyContent?: React.ReactNode
   pagination?: {
     current: number
     pageSize: number
     total: number
     onChange: (page: number, pageSize: number) => void
+    /**
+     * 传入后，表格页脚改为复用统一的 `Pagination` 组件并显示「每页条数」选择器；
+     * 不传时退化为精简页脚（仅上一页/下一页）。
+     */
+    onPageSizeChange?: (pageSize: number) => void
     showTotal?: boolean
   }
   rowSelection?: {
@@ -39,6 +47,7 @@ export function Table<T extends object>({
   columns,
   data,
   loading = false,
+  emptyContent,
   pagination,
   rowSelection,
   onRow,
@@ -158,6 +167,7 @@ export function Table<T extends object>({
 
   return (
     <div className={cn('rounded-xl overflow-hidden bg-card/80 backdrop-blur-lg border border-border/50', className)}>
+      {!loading && data.length === 0 && emptyContent ? emptyContent : (
       <div className="overflow-auto" style={{ maxHeight: scroll?.y }}>
         <table className="w-full" style={{ minWidth: scroll?.x }}>
           {showHeader && (
@@ -343,47 +353,65 @@ export function Table<T extends object>({
         </table>
       </div>
 
+      )}
+
       {pagination && (
-        <div className={cn(
-          'flex flex-col gap-2 border-t border-border/50 bg-muted/30',
-          'sm:flex-row sm:items-center sm:justify-between',
-          paginationPadding
-        )}>
-          <div
-            className={cn(
-              paginationTextSize,
-              'text-muted-foreground',
-              size === 'small' ? 'hidden sm:block' : ''
-            )}
-          >
-            显示第 {(pagination.current - 1) * pagination.pageSize + 1} - {Math.min(pagination.current * pagination.pageSize, pagination.total)} 条，共 {pagination.total} 条
+        pagination.onPageSizeChange ? (
+          <div className={cn(
+            'border-t border-border/50 bg-muted/30',
+            paginationPadding
+          )}>
+            <Pagination
+              currentPage={pagination.current}
+              totalPages={Math.max(1, Math.ceil(pagination.total / Math.max(pagination.pageSize, 1)))}
+              totalItems={pagination.total}
+              pageSize={pagination.pageSize}
+              onPageChange={(page) => pagination.onChange(page, pagination.pageSize)}
+              onPageSizeChange={pagination.onPageSizeChange}
+            />
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => pagination.onChange(pagination.current - 1, pagination.pageSize)}
-              disabled={pagination.current <= 1}
+        ) : (
+          <div className={cn(
+            'flex flex-col gap-2 border-t border-border/50 bg-muted/30',
+            'sm:flex-row sm:items-center sm:justify-between',
+            paginationPadding
+          )}>
+            <div
               className={cn(
-                paginationButtonSize,
-                'text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                paginationTextSize,
+                'text-muted-foreground',
+                size === 'small' ? 'hidden sm:block' : ''
               )}
             >
-              上一页
-            </button>
-            <span className={cn(paginationTextSize, 'text-muted-foreground')}>
-              {pagination.current} / {Math.ceil(pagination.total / pagination.pageSize)}
-            </span>
-            <button
-              onClick={() => pagination.onChange(pagination.current + 1, pagination.pageSize)}
-              disabled={pagination.current >= Math.ceil(pagination.total / pagination.pageSize)}
-              className={cn(
-                paginationButtonSize,
-                'text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
-              )}
-            >
-              下一页
-            </button>
+              显示第 {(pagination.current - 1) * pagination.pageSize + 1} - {Math.min(pagination.current * pagination.pageSize, pagination.total)} 条，共 {pagination.total} 条
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => pagination.onChange(pagination.current - 1, pagination.pageSize)}
+                disabled={pagination.current <= 1}
+                className={cn(
+                  paginationButtonSize,
+                  'text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                )}
+              >
+                上一页
+              </button>
+              <span className={cn(paginationTextSize, 'text-muted-foreground')}>
+                {pagination.current} / {Math.ceil(pagination.total / pagination.pageSize)}
+              </span>
+              <button
+                onClick={() => pagination.onChange(pagination.current + 1, pagination.pageSize)}
+                disabled={pagination.current >= Math.ceil(pagination.total / pagination.pageSize)}
+                className={cn(
+                  paginationButtonSize,
+                  'text-foreground border border-border rounded-lg bg-card hover:bg-accent/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                )}
+              >
+                下一页
+              </button>
+            </div>
           </div>
-        </div>
+        )
       )}
     </div>
   )

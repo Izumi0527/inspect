@@ -1,7 +1,9 @@
 import React from 'react'
+import { PAGE_SIZE_OPTIONS } from '@/constants/pagination'
 import { SharedSelect } from '@/components/atoms/shared-select'
 
-const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
+/** 全站统一的每页条数选项文案。 */
+export const formatPageSizeOption = (value: number): string => `${value}条/页`
 
 export interface PageSizeSelectProps {
   value: number
@@ -15,18 +17,16 @@ export interface PageSizeSelectProps {
   formatOptionLabel?: (value: number) => React.ReactNode
 }
 
-const defaultFormatOptionLabel = (value: number) => `${value}条/页`
-
 export const PageSizeSelect: React.FC<PageSizeSelectProps> = ({
   value,
   onChange,
-  options = DEFAULT_PAGE_SIZE_OPTIONS,
+  options = PAGE_SIZE_OPTIONS,
   ariaLabel = '每页条数',
   placeholder = '每页条数',
   className,
   triggerClassName,
   disabled = false,
-  formatOptionLabel = defaultFormatOptionLabel,
+  formatOptionLabel = formatPageSizeOption,
 }) => {
   const handleValueChange = (nextValue: string) => {
     const pageSize = Number(nextValue)

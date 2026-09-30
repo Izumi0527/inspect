@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Pagination } from '@/components/atoms/pagination'
 import {
   Users,
   UserPlus,
@@ -79,6 +80,7 @@ export function UserManagement() {
     totalCount,
     page,
     pageSize,
+    queryParams,
     roles,
     isLoading,
     isRolesLoading,
@@ -98,6 +100,9 @@ export function UserManagement() {
     stats,
     error,
   } = useUserManagement()
+
+  // 服务端回包到达前以本地查询参数为准，避免「每页条数」选择器短暂回跳旧值
+  const effectivePageSize = queryParams?.pageSize ?? pageSize
 
   const [keyword, setKeyword] = useState('')
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -547,32 +552,19 @@ export function UserManagement() {
           </div>
         )}
 
-        {/* 分页 */}
-        {totalCount > pageSize && (
-          <div className="px-4 py-3 border-t border-border flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              第 {page} 页 / 共 {Math.ceil(totalCount / pageSize)} 页（{totalCount} 条记录）
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => updateQueryParams({ page: page - 1 })}
-                disabled={page <= 1}
-              >
-                上一页
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => updateQueryParams({ page: page + 1 })}
-                disabled={page * pageSize >= totalCount}
-              >
-                下一页
-              </Button>
-            </div>
-          </div>
-        )}
+        {/* 分页：复用全站统一的分页组件（含每页条数） */}
+        <div className="px-4 py-3 border-t border-border">
+          <Pagination
+            currentPage={queryParams?.page ?? page}
+            totalPages={Math.max(1, Math.ceil(totalCount / effectivePageSize))}
+            totalItems={totalCount}
+            pageSize={effectivePageSize}
+            onPageChange={(nextPage) => updateQueryParams({ page: nextPage })}
+            onPageSizeChange={(nextPageSize) =>
+              updateQueryParams({ page: 1, pageSize: nextPageSize })
+            }
+          />
+        </div>
       </Card>
     </div>
   )

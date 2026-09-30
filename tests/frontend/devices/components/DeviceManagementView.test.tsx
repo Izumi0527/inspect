@@ -564,7 +564,7 @@ describe("DeviceManagementView", () => {
     expect(mockLoadDevices).toHaveBeenLastCalledWith(
       expect.objectContaining({
         page: 1,
-        page_size: 10,
+        page_size: 20,
         status: "online",
       }),
     );

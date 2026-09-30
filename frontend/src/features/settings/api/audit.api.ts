@@ -1,4 +1,5 @@
 import { API_PREFIX, authorizedDownload, getApiOrigin, httpClient } from '@/lib/api-client'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import type {
   AuditAction,
   AuditLogListResponse,
@@ -16,7 +17,7 @@ export const auditApi = {
   getAuditLogs: async (params: AuditLogQueryParams = {}): Promise<AuditLogListResponse> => {
     const {
       page = 1,
-      pageSize = 50,
+      pageSize = DEFAULT_PAGE_SIZE,
       userId,
       action,
       resource,

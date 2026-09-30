@@ -55,16 +55,16 @@ jest.mock('@/components/atoms', () => ({
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   Table: () => <div data-testid="inspection-templates-table" />,
-  PageSizeSelect: ({
-    value,
-    ariaLabel,
+  Pagination: ({
+    currentPage,
+    pageSize,
   }: {
-    value: number
-    ariaLabel?: string
+    currentPage: number
+    pageSize: number
   }) => (
-    <button type="button" aria-label={ariaLabel}>
-      {`页大小:${value}`}
-    </button>
+    <div data-testid="inspection-templates-pagination">
+      {`分页 第 ${currentPage} 页 每页 ${pageSize} 条`}
+    </div>
   ),
   SimpleInput: ({
     value,

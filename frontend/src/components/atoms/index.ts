@@ -39,7 +39,10 @@ export { Pagination } from './pagination'
 export type { PaginationProps } from './pagination'
 export { SharedSelect } from './shared-select'
 export type { SharedSelectProps, SharedSelectOption } from './shared-select'
-export { PageSizeSelect } from './page-size-select'
+export {
+  PageSizeSelect,
+  formatPageSizeOption
+} from './page-size-select'
 export type { PageSizeSelectProps } from './page-size-select'
 export { LoadingSkeleton, CardSkeleton, TableSkeleton, ChartSkeleton } from './LoadingSkeleton'
 export { ErrorAlert, InlineError } from './ErrorAlert'

@@ -58,3 +58,14 @@ describe("Table 行选择", () => {
     expect(onChange).toHaveBeenCalledWith([99, 1], data);
   });
 });
+
+describe('Table 统一分页空状态', () => {
+  it('自定义空状态不应遮蔽分页控件', () => {
+    render(<Table data={[]} columns={[{ key: 'name', title: '名称' }]}
+      emptyContent={<p>暂无业务数据</p>}
+      pagination={{ current: 1, pageSize: 20, total: 0, onChange: jest.fn(), onPageSizeChange: jest.fn() }} />)
+    expect(screen.getByText('暂无业务数据')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '每页条数' })).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+})

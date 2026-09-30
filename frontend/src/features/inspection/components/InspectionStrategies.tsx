@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import { formatDateYMD, formatTimeHM } from '@/utils/formatters'
 import { motion } from 'framer-motion'
 import {
@@ -37,7 +38,7 @@ export const InspectionStrategies: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [strategyToDelete, setStrategyToDelete] = useState<InspectionStrategy | null>(null)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [typeFilter, setTypeFilter] = useState<'all' | 'manual' | 'scheduled'>('all')
   const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
   
@@ -340,39 +341,17 @@ export const InspectionStrategies: React.FC = () => {
 
       {/* 策略列表 */}
       {filteredStrategies.length > 0 ? (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            <Table
-              data={filteredStrategies}
-              columns={columns}
-              className="bg-card rounded-lg shadow-sm"
-            />
-          </motion.div>
-
-          {totalPages > 1 && (
-            <Card>
-              <CardContent className="p-4">
-                <Pagination
-                  currentPage={page}
-                  totalPages={totalPages}
-                  totalItems={totalItems}
-                  pageSize={pageSize}
-                  pageSizeOptions={[10, 20, 50, 100]}
-                  onPageChange={setPage}
-                  onPageSizeChange={(nextPageSize) => {
-                    setPage(1)
-                    setPageSize(nextPageSize)
-                  }}
-                  showPageSizeSelector={true}
-                />
-              </CardContent>
-            </Card>
-          )}
-        </>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Table
+            data={filteredStrategies}
+            columns={columns}
+            className="bg-card rounded-lg shadow-sm"
+          />
+        </motion.div>
       ) : (
         <Card>
           <CardContent className="p-8 text-center">
@@ -385,13 +364,29 @@ export const InspectionStrategies: React.FC = () => {
                 </p>
               </div>
               <Button onClick={handleCreateStrategy} className="mt-2">
-                  <Plus className="w-4 h-4 mr-2" />
-                  创建策略
-                </Button>
+                <Plus className="w-4 h-4 mr-2" />
+                创建策略
+              </Button>
             </div>
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardContent className="p-4">
+          <Pagination
+            currentPage={page}
+            totalPages={Math.max(1, totalPages)}
+            totalItems={totalItems}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(nextPageSize) => {
+              setPage(1)
+              setPageSize(nextPageSize)
+            }}
+          />
+        </CardContent>
+      </Card>
 
       {/* 策略编辑/创建弹窗 */}
       {isModalOpen && (

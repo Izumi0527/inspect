@@ -13,8 +13,10 @@ import { AlertStatsGrid } from './AlertStatsGrid'
 import { AlertAction, AlertQueryParams, DEFAULT_ALERT_FILTERS } from '../types'
 import { AlertFiltersBar } from './AlertFiltersBar'
 import { AlertList } from './AlertList'
+import { Pagination } from '@/components/atoms/pagination'
 import { AlertDetailModal } from './AlertDetailModal'
 import { SkeletonCard, SkeletonList } from '@/components/atoms/skeleton'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import { AlertTimeRangeFilter, AlertTimeRangeFilterValues, ALERT_TIME_RANGE_FILTER_STORAGE_KEY } from './AlertTimeRangeFilter'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -64,7 +66,7 @@ const AlertsViewContent: React.FC = () => {
   const canUpdateAlerts = usePermission(Permission.ALERTS_UPDATE)
   const canDeleteAlerts = usePermission(Permission.ALERTS_DELETE)
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [timeRangeFilter, setTimeRangeFilter] = useState<AlertTimeRangeFilterValues>({})
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
@@ -663,14 +665,18 @@ const AlertsViewContent: React.FC = () => {
                   onAcknowledge={canUpdateAlerts ? handleAcknowledgeAndRefresh : undefined}
                   onResolve={canUpdateAlerts ? handleResolveAndRefresh : undefined}
                   onDelete={canDeleteAlerts ? handleDeleteAndRefresh : undefined}
-                  pagination={{
-                    current: pagination.page,
-                    total: pagination.total,
-                    pageSize: pagination.pageSize,
-                    onPageChange: handlePageChange,
-                    onPageSizeChange: handlePageSizeChange
-                  }}
                   renderAsCard={false}
+                />
+              )}
+              {!error && (
+                <Pagination
+                  className="mt-6 pt-6 border-t border-border"
+                  currentPage={currentPage}
+                  totalPages={Math.max(1, Math.ceil(pagination.total / pageSize))}
+                  totalItems={pagination.total}
+                  pageSize={pageSize}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
                 />
               )}
             </div>

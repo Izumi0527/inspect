@@ -4,6 +4,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { toast } from 'react-hot-toast'
 import { toLocalDayBoundaryIso } from '@/utils/dateRangeQuery'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import * as logsApi from '../api/logsApi'
 import type {
   DeviceLog,
@@ -29,7 +30,7 @@ export function useLogs(params: LogQueryParams = {}) {
   const [error, setError] = useState<string | null>(null)
   const [pagination, setPagination] = useState({
     page: 1,
-    pageSize: 20,
+    pageSize: DEFAULT_PAGE_SIZE,
     total: 0
   })
 
@@ -47,7 +48,7 @@ export function useLogs(params: LogQueryParams = {}) {
       setLogs(items)
       setPagination({
         page: response?.page || params.page || 1,
-        pageSize: response?.page_size || params.page_size || 20,
+        pageSize: response?.page_size || params.page_size || DEFAULT_PAGE_SIZE,
         total: response?.total || 0
       })
       return true

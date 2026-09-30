@@ -1,4 +1,5 @@
 import { httpClient } from '@/lib/api-client'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import type {
   User,
   UserListResponse,
@@ -24,7 +25,7 @@ export const usersApi = {
   getUserList: async (params: UserQueryParams = {}): Promise<UserListResponse> => {
     const {
       page = 1,
-      pageSize = 20,
+      pageSize = DEFAULT_PAGE_SIZE,
       keyword,
       role,
       status,

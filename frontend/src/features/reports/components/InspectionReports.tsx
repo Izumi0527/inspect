@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import { formatDateYMD, formatTimeHMS } from '@/utils/formatters'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
@@ -77,7 +78,7 @@ export const InspectionReports: React.FC<Props> = ({
 
   // 分页：后端分页从 1 开始，默认 20 条/页
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [statusFilter, setStatusFilter] = useState('all')
   const [formatFilter, setFormatFilter] = useState('all')
   const [quickDailyLoading, setQuickDailyLoading] = useState(false)
@@ -583,56 +584,55 @@ export const InspectionReports: React.FC<Props> = ({
       </div>
 
       {/* 报表列表 */}
-      {total > 0 ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          {isClientFiltering && filteredReports.length === 0 && (
-            <div className="text-sm text-muted-foreground mb-2">
-              本页无匹配结果，可尝试翻页或清空搜索/格式筛选。
-            </div>
-          )}
-          <Table
-            data={filteredReports}
-            columns={columns}
-            className="bg-card rounded-lg shadow-sm"
-            rowKey="id"
-            pagination={{
-              current: page,
-              pageSize,
-              total,
-              onChange: (nextPage, nextPageSize) => {
-                setPage(nextPage)
-                setPageSize(nextPageSize)
-              },
-            }}
-          />
-        </motion.div>
-      ) : (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <div className="flex flex-col items-center gap-4">
-              <FileText className="w-12 h-12 text-muted-foreground/80" />
-              <div>
-                <h3 className="text-lg font-medium text-foreground">暂无巡检报告</h3>
-                <p className="text-muted-foreground mt-1">
-                  {searchText ? '没有找到匹配的报告' : '开始生成您的第一个巡检报告'}
-                </p>
-              </div>
-              {!searchText && (
-                canCreate ? (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        {isClientFiltering && filteredReports.length === 0 && (
+          <div className="text-sm text-muted-foreground mb-2">
+            本页无匹配结果，可尝试翻页或清空搜索/格式筛选。
+          </div>
+        )}
+        <Table
+          emptyContent={total === 0 ? (
+            <CardContent className="p-8 text-center">
+              <div className="flex flex-col items-center gap-4">
+                <FileText className="w-12 h-12 text-muted-foreground/80" />
+                <div>
+                  <h3 className="text-lg font-medium text-foreground">暂无巡检报告</h3>
+                  <p className="text-muted-foreground mt-1">
+                    {searchText ? '没有找到匹配的报告' : '开始生成您的第一个巡检报告'}
+                  </p>
+                </div>
+                {!searchText && canCreate && (
                   <Button onClick={handleGenerateReport} className="mt-2">
                     <Plus className="w-4 h-4 mr-2" />
                     生成报告
                   </Button>
-                ) : null
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                )}
+              </div>
+            </CardContent>
+          ) : undefined}
+          data={filteredReports}
+          columns={columns}
+          className="bg-card rounded-lg shadow-sm"
+          rowKey="id"
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            onChange: (nextPage) => {
+              setPage(nextPage)
+            },
+            onPageSizeChange: (nextPageSize) => {
+              // 切换每页条数后回到第 1 页，与全站行为保持一致
+              setPageSize(nextPageSize)
+              setPage(1)
+            },
+          }}
+        />
+      </motion.div>
 
       {/* 生成报告弹窗 */}
       {reportModal && (

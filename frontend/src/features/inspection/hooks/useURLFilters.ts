@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 
 /**
  * URL筛选参数管理Hook
@@ -39,7 +40,7 @@ export const useURLFilters = () => {
   // 从 URL 读取初始值（使用 snake_case 参数名）
   const [filters, setFilters] = useState<URLFiltersState>(() => ({
     page: Number(searchParams.get(URL_PARAM_MAP.page)) || 1,
-    pageSize: Number(searchParams.get(URL_PARAM_MAP.pageSize)) || 10,
+    pageSize: Number(searchParams.get(URL_PARAM_MAP.pageSize)) || DEFAULT_PAGE_SIZE,
     status: searchParams.get(URL_PARAM_MAP.status) || 'all',
     startDate: searchParams.get(URL_PARAM_MAP.startDate) || '',
     endDate: searchParams.get(URL_PARAM_MAP.endDate) || ''
@@ -98,7 +99,7 @@ export const useURLFilters = () => {
   const resetFilters = () => {
     setFilters({
       page: 1,
-      pageSize: 10,
+      pageSize: DEFAULT_PAGE_SIZE,
       status: 'all',
       startDate: '',
       endDate: ''

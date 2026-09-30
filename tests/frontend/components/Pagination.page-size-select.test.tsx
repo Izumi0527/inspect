@@ -28,7 +28,7 @@ jest.mock(
   () => ({
     PageSizeSelect: (props: {
       value: number
-      options?: number[]
+      options?: readonly number[]
       onChange: (value: number) => void
       ariaLabel?: string
     }) => {
@@ -48,8 +48,7 @@ jest.mock(
 )
 
 describe('Pagination 共享页大小下拉接入', () => {
-  it('应通过共享 PageSizeSelect 渲染页大小下拉，并在页数越界时修正当前页', async () => {
-    const user = userEvent.setup()
+  it('应通过共享 PageSizeSelect 渲染页大小下拉', () => {
     const onPageChange = jest.fn()
     const onPageSizeChange = jest.fn()
 
@@ -72,10 +71,43 @@ describe('Pagination 共享页大小下拉接入', () => {
         ariaLabel: '每页条数',
       })
     )
+  })
+
+  it('切换页大小时只上报新条数，不再擅自回调页码（归位由调用方决定）', async () => {
+    const user = userEvent.setup()
+    const onPageChange = jest.fn()
+    const onPageSizeChange = jest.fn()
+
+    render(
+      <Pagination
+        currentPage={5}
+        totalPages={10}
+        totalItems={95}
+        pageSize={20}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+      />
+    )
 
     await user.click(screen.getByTestId('shared-page-size-select'))
 
+    expect(onPageSizeChange).toHaveBeenCalledTimes(1)
     expect(onPageSizeChange).toHaveBeenCalledWith(50)
-    expect(onPageChange).toHaveBeenCalledWith(2)
+    // 统一契约：页码规则由调用方统一实现（一律回到第 1 页），组件不得二次改动页码
+    expect(onPageChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('Pagination 空列表边界', () => {
+  it('总页数为零时保留档位选择器并禁用全部导航按钮', () => {
+    render(
+      <Pagination currentPage={1} totalPages={0} totalItems={0} pageSize={20}
+        onPageChange={jest.fn()} onPageSizeChange={jest.fn()} />
+    )
+    expect(screen.getByTestId('shared-page-size-select')).toBeInTheDocument()
+    for (const title of ['第一页', '上一页', '下一页', '最后一页']) {
+      expect(screen.getByTitle(title)).toBeDisabled()
+    }
+    expect(screen.getByText(/显示/).textContent).toContain('显示 0 - 0 / 共 0 条')
   })
 })

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { auditApi } from '../api/audit.api'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import type {
   AuditLogListResponse,
   AuditStats,
@@ -13,7 +14,7 @@ import type {
 export function useAuditLogs() {
   const [queryParams, setQueryParams] = useState<AuditLogQueryParams>({
     page: 1,
-    pageSize: 50,
+    pageSize: DEFAULT_PAGE_SIZE,
   })
 
   // 获取审计日志列表
@@ -50,7 +51,7 @@ export function useAuditLogs() {
     logs: logsData?.logs || [],
     totalCount: logsData?.totalCount || 0,
     page: logsData?.page || 1,
-    pageSize: logsData?.pageSize || 50,
+    pageSize: logsData?.pageSize || DEFAULT_PAGE_SIZE,
     stats: statsData,
     queryParams,
 

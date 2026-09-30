@@ -5,7 +5,7 @@ import React from 'react'
 import { FileText, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { PageSizeSelect } from '@/components/atoms/page-size-select'
+import { Pagination } from '@/components/atoms/pagination'
 import { LogListItem } from './LogListItem'
 import type { DeviceLog } from '../types'
 
@@ -61,25 +61,6 @@ export const LogList: React.FC<LogListProps> = ({
 
   const totalPages = pagination.pageSize > 0 ? Math.ceil(pagination.total / pagination.pageSize) : 0
 
-  // 空状态
-  if (!loading && logs.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-        <FileText className="h-16 w-16 mb-4 text-gray-300" />
-        <p className="text-lg font-medium mb-2">暂无日志数据</p>
-        <p className="text-sm text-gray-400 mb-4">
-          尝试调整过滤条件或采集设备日志
-        </p>
-        {onRefresh && (
-          <Button variant="outline" onClick={onRefresh}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            刷新
-          </Button>
-        )}
-      </div>
-    )
-  }
-
   return (
     <div className="flex flex-col h-full">
       {/* 列表头部 */}
@@ -97,98 +78,64 @@ export const LogList: React.FC<LogListProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* 每页数量选择 */}
-          <PageSizeSelect
-            value={pagination.pageSize}
-            onChange={pagination.onPageSizeChange}
-            ariaLabel="每页条数"
-          />
-
-          {onRefresh && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onRefresh}
-              disabled={loading}
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-          )}
-        </div>
+        {onRefresh && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onRefresh}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+        )}
       </div>
 
       {/* 日志列表 */}
       <div className="flex-1 overflow-y-auto">
-        {logs.map(log => (
-          <LogListItem
-            key={log.id}
-            log={log}
-            isSelected={enableSelection ? selectedLogs.includes(log.id) : false}
-            enableSelection={enableSelection}
-            onSelect={enableSelection ? onSelectLog : undefined}
-            onDelete={onDelete}
-            onClick={onLogClick}
-          />
-        ))}
+        {!loading && logs.length === 0 && pagination.total === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+            <FileText className="h-16 w-16 mb-4 text-gray-300" />
+            <p className="text-lg font-medium mb-2">暂无日志数据</p>
+            <p className="text-sm text-gray-400 mb-4">
+              尝试调整过滤条件或采集设备日志
+            </p>
+            {onRefresh && (
+              <Button variant="outline" onClick={onRefresh}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                刷新
+              </Button>
+            )}
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+            本页暂无日志，请翻页或调整过滤条件
+          </div>
+        ) : (
+          logs.map(log => (
+            <LogListItem
+              key={log.id}
+              log={log}
+              isSelected={enableSelection ? selectedLogs.includes(log.id) : false}
+              enableSelection={enableSelection}
+              onSelect={enableSelection ? onSelectLog : undefined}
+              onDelete={onDelete}
+              onClick={onLogClick}
+            />
+          ))
+        )}
       </div>
 
-      {/* 分页 */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/50">
-          <span className="text-sm text-muted-foreground">
-            第 {pagination.current} / {totalPages} 页
-          </span>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => pagination.onPageChange(pagination.current - 1)}
-              disabled={pagination.current <= 1}
-            >
-              上一页
-            </Button>
-
-            {/* 页码按钮 */}
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum: number
-                if (totalPages <= 5) {
-                  pageNum = i + 1
-                } else if (pagination.current <= 3) {
-                  pageNum = i + 1
-                } else if (pagination.current >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i
-                } else {
-                  pageNum = pagination.current - 2 + i
-                }
-
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={pagination.current === pageNum ? 'default' : 'outline'}
-                    size="sm"
-                    className="w-8 h-8 p-0"
-                    onClick={() => pagination.onPageChange(pageNum)}
-                  >
-                    {pageNum}
-                  </Button>
-                )
-              })}
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => pagination.onPageChange(pagination.current + 1)}
-              disabled={pagination.current >= totalPages}
-            >
-              下一页
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* 分页：复用全站统一的分页组件（含每页条数，位于页脚） */}
+      <div className="px-4 py-3 border-t border-border bg-muted/50">
+        <Pagination
+          currentPage={pagination.current}
+          totalPages={Math.max(1, totalPages)}
+          totalItems={pagination.total}
+          pageSize={pagination.pageSize}
+          onPageChange={pagination.onPageChange}
+          onPageSizeChange={pagination.onPageSizeChange}
+        />
+      </div>
     </div>
   )
 }

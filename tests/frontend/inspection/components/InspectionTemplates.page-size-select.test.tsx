@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event'
 import { InspectionTemplates } from '@/features/inspection/components/InspectionTemplates'
 
-const mockPageSizeSelect = jest.fn()
+const mockPagination = jest.fn()
 const mockUseInspectionTemplates = jest.fn()
 const mockUseInspectionTemplateStats = jest.fn()
 const mockRefetch = jest.fn()
@@ -22,31 +22,6 @@ jest.mock('framer-motion', () => ({
   },
   AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
-
-jest.mock(
-  '@/components/atoms/page-size-select',
-  () => ({
-    PageSizeSelect: (props: {
-      value: number
-      options?: number[]
-      onChange: (value: number) => void
-      ariaLabel?: string
-    }) => {
-      mockPageSizeSelect(props)
-      return (
-        <button
-          type="button"
-          data-testid="inspection-templates-page-size-select"
-          aria-label={props.ariaLabel}
-          onClick={() => props.onChange(50)}
-        >
-          {`页大小:${props.value}`}
-        </button>
-      )
-    },
-  }),
-  { virtual: true }
-)
 
 jest.mock('@/components/atoms', () => ({
   Card: ({
@@ -84,22 +59,32 @@ jest.mock('@/components/atoms', () => ({
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   Table: () => <div data-testid="inspection-templates-table" />,
-  PageSizeSelect: (props: {
-    value: number
-    options?: number[]
-    onChange: (value: number) => void
-    ariaLabel?: string
+  Pagination: (props: {
+    currentPage: number
+    totalPages: number
+    totalItems: number
+    pageSize: number
+    onPageChange: (page: number) => void
+    onPageSizeChange: (pageSize: number) => void
+    showJumpToPage?: boolean
   }) => {
-    mockPageSizeSelect(props)
+    mockPagination(props)
     return (
-      <button
-        type="button"
-        data-testid="inspection-templates-page-size-select"
-        aria-label={props.ariaLabel}
-        onClick={() => props.onChange(50)}
-      >
-        {`页大小:${props.value}`}
-      </button>
+      <div data-testid="inspection-templates-pagination">
+        <div>{`分页 ${props.currentPage}/${props.totalPages} 共 ${props.totalItems} 条 每页 ${props.pageSize} 条`}</div>
+        <button type="button" onClick={() => props.onPageChange(props.currentPage + 1)}>
+          下一页
+        </button>
+        <button
+          type="button"
+          data-testid="inspection-templates-page-size-select"
+          aria-label="每页条数"
+          onClick={() => props.onPageSizeChange(50)}
+        >
+          {`页大小:${props.pageSize}`}
+        </button>
+        {props.showJumpToPage ? <span data-testid="jump-to-page" /> : null}
+      </div>
     )
   },
   SimpleInput: ({
@@ -261,7 +246,7 @@ const buildTemplate = (
 
 describe('InspectionTemplates 每页条数下拉统一化', () => {
   beforeEach(() => {
-    mockPageSizeSelect.mockReset()
+    mockPagination.mockReset()
     mockUseInspectionTemplates.mockReset()
     mockUseInspectionTemplateStats.mockReset()
     mockUseInspectionTemplates.mockReturnValue({
@@ -284,15 +269,17 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
     })
   })
 
-  it('应通过共享 PageSizeSelect 渲染页大小下拉', () => {
+  it('应通过共享 Pagination 渲染页大小下拉（不再自研分页条）', () => {
     render(<InspectionTemplates />)
 
     expect(screen.getByTestId('inspection-templates-page-size-select')).toBeInTheDocument()
-    expect(mockPageSizeSelect).toHaveBeenLastCalledWith(
+    expect(mockPagination).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        value: 20,
-        options: [10, 20, 50],
-        ariaLabel: '每页条数',
+        currentPage: 1,
+        totalItems: 100,
+        pageSize: 20,
+        // 跳页能力由共享组件承接，不再由页面自行实现
+        showJumpToPage: true,
       })
     )
   })
@@ -302,7 +289,7 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
 
     render(<InspectionTemplates />)
 
-    await user.click(screen.getByRole('button', { name: '2' }))
+    await user.click(screen.getByRole('button', { name: '下一页' }))
 
     await waitFor(() => {
       expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
@@ -389,6 +376,7 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
       expect(mockUseInspectionTemplates).toHaveBeenLastCalledWith(
         expect.objectContaining({ page: 2, pageSize: 20, search: undefined })
       )
+      expect(mockPagination).toHaveBeenLastCalledWith(expect.objectContaining({ currentPage: 2 }))
     })
 
     it('实际搜索及清空搜索应在防抖结束时更新查询并回第一页', () => {

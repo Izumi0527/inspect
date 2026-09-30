@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Alert, AlertFilters, AlertStats, AlertQueryParams, AlertSeverity, AlertStatus, AlertAction, DEFAULT_ALERT_FILTERS } from '../types'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import { 
   fetchAlerts, 
   fetchAlertStats, 
@@ -16,7 +17,7 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
   const [error, setError] = useState<string | null>(null)
   const [pagination, setPagination] = useState({
     page: 1,
-    pageSize: 10,
+    pageSize: DEFAULT_PAGE_SIZE,
     total: 0,
     hasNext: false,
     hasPrev: false
@@ -41,7 +42,7 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
       setAlerts([])  // 错误时清空列表，而非显示假数据
       setPagination({
         page: 1,
-        pageSize: 10,
+        pageSize: DEFAULT_PAGE_SIZE,
         total: 0,
         hasNext: false,
         hasPrev: false

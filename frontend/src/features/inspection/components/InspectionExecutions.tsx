@@ -49,7 +49,7 @@ export const InspectionExecutions: React.FC = () => {
   const queryClient = useQueryClient()
 
   // 使用URL筛选hooks
-  const { filters, updateFilter, resetFilters } = useURLFilters()
+  const { filters, updateFilter, updateFilters, resetFilters } = useURLFilters()
   const { getDateRange } = useDateFilters()
 
   // 本地状态
@@ -593,37 +593,17 @@ export const InspectionExecutions: React.FC = () => {
 
         {/* 执行记录列表 */}
         {filteredExecutions.length > 0 ? (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Table
-                data={filteredExecutions}
-                columns={columns}
-                className="bg-card rounded-lg shadow-sm"
-              />
-            </motion.div>
-
-            {/* 分页组件 */}
-            {totalPages > 1 && (
-              <Card>
-                <CardContent className="p-4">
-                  <Pagination
-                    currentPage={filters.page}
-                    totalPages={totalPages}
-                    totalItems={totalItems}
-                    pageSize={filters.pageSize}
-                    pageSizeOptions={[10, 20, 50, 100]}
-                    onPageChange={(page) => updateFilter('page', page)}
-                    onPageSizeChange={(pageSize) => updateFilter('pageSize', pageSize)}
-                    showPageSizeSelector={true}
-                  />
-                </CardContent>
-              </Card>
-            )}
-          </>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Table
+              data={filteredExecutions}
+              columns={columns}
+              className="bg-card rounded-lg shadow-sm"
+            />
+          </motion.div>
         ) : (
           <ExecutionEmptyState
             hasFilters={hasAnyFilter}
@@ -631,6 +611,22 @@ export const InspectionExecutions: React.FC = () => {
             onRefresh={refetch}
           />
         )}
+        {/* 分页组件：复用全站统一的分页组件（含每页条数） */}
+        <Card>
+          <CardContent className="p-4">
+            <Pagination
+              currentPage={filters.page}
+              totalPages={Math.max(1, totalPages)}
+              totalItems={totalItems}
+              pageSize={filters.pageSize}
+              onPageChange={(page) => updateFilter('page', page)}
+              onPageSizeChange={(pageSize) => {
+                // 切换每页条数后回到第 1 页，与全站行为保持一致
+                updateFilters({ page: 1, pageSize })
+              }}
+            />
+          </CardContent>
+        </Card>
       </div>
 
       {/* 执行详情弹窗 */}

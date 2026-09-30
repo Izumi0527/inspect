@@ -192,6 +192,13 @@ describe('LogList 每页条数下拉', () => {
         ariaLabel: '每页条数',
       })
     )
+
+    // 统一决策：档位选择器位于**页脚**，应排在最后一条日志之后（而非页头）
+    const selector = screen.getByTestId('logs-page-size-select')
+    const lastItem = screen.getByText('log-2')
+    expect(
+      lastItem.compareDocumentPosition(selector) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
   })
 
   it('应通过共享组件触发页大小切换', async () => {
@@ -244,5 +251,18 @@ describe('LogList 每页条数下拉', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '上一页' }))
     expect(onPageChange).toHaveBeenCalledWith(1)
+  })
+})
+
+describe('LogList 空列表分页', () => {
+  it('没有日志时仍显示空状态、刷新与可操作的档位选择器', async () => {
+    const onPageSizeChange = jest.fn()
+    const onRefresh = jest.fn()
+    render(<LogList logs={[]} selectedLogs={[]} onSelectLog={jest.fn()}
+      onSelectAll={jest.fn()} onClearSelection={jest.fn()} onRefresh={onRefresh}
+      pagination={{ current: 1, total: 0, pageSize: 20, onPageChange: jest.fn(), onPageSizeChange }} />)
+    expect(screen.getByText('暂无日志数据')).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('logs-page-size-select'))
+    expect(onPageSizeChange).toHaveBeenCalledWith(50)
   })
 })

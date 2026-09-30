@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { DEFAULT_PAGE_SIZE } from "@/constants/pagination";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { getApiOrigin } from "@/lib/api-client";
@@ -87,7 +88,6 @@ const DEFAULT_API_BASE_URL = getApiOrigin();
 
 const isDeviceStatus = (value: unknown): value is DeviceStatus =>
   typeof value === "string" && (DEVICE_STATUSES as string[]).includes(value);
-
 
 const formatPercentage = (value: unknown): string => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -202,7 +202,7 @@ export const DeviceManagementView: React.FC = () => {
 
   // 分页状态
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   // 搜索防抖：避免每次按键都触发后端请求
   const [debouncedSearch, setDebouncedSearch] = React.useState(
@@ -914,8 +914,6 @@ export const DeviceManagementView: React.FC = () => {
 
   const isInitialLoading = !hasLoadedOnce;
   const isRefreshing = loading && hasLoadedOnce;
-  const showEmptyState = devices.length === 0 && hasLoadedOnce && !error;
-  const showTable = devices.length > 0 || isInitialLoading;
 
   return (
     <AppLayout title="设备管理" alertCount={summary.totalAlerts}>
@@ -1091,48 +1089,50 @@ export const DeviceManagementView: React.FC = () => {
 
             {/* 设备表格 */}
             <div className="flex-1 overflow-y-auto min-h-0">
-              {showEmptyState && (
-                <div className="text-center py-6">
-                  <Server className="h-9 w-9 text-muted-foreground/80 mx-auto mb-2" />
-                  <h3 className="text-base font-semibold text-foreground mb-2">
-                    暂无设备数据
-                  </h3>
-                  <p className="text-sm leading-tight text-muted-foreground">
-                    {debouncedSearch ||
-                    filters.statusFilter !== "all" ||
-                    filters.typeFilter !== "all"
-                      ? "当前筛选条件下没有找到匹配的设备，请尝试调整筛选条件。"
-                      : "系统中还没有添加任何设备,点击上方「添加设备」按钮开始管理您的网络设备。"}
-                  </p>
-                  {isRefreshing && (
-                    <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                      <Activity className="h-3.5 w-3.5 animate-spin" />
-                      <span>正在刷新...</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {showTable && (
-                <Table
-                  columns={columns}
-                  data={devices}
-                  loading={isInitialLoading}
-                  rowKey="id"
-                  size="default"
-                  className="border-0 bg-transparent backdrop-blur-none rounded-none"
-                  rowSelection={{
-                    selectedRowKeys: selectedDevices,
-                    onChange: handleSelectionChange,
-                  }}
-                  pagination={{
-                    current: currentPage,
-                    pageSize: pageSize,
-                    total: total,
-                    onChange: (page) => handlePageChange(page),
-                  }}
-                />
-              )}
+              <Table
+                columns={columns}
+                data={devices}
+                emptyContent={(
+                  <div className="text-center py-6">
+                    <Server className="h-9 w-9 text-muted-foreground/80 mx-auto mb-2" />
+                    <h3 className="text-base font-semibold text-foreground mb-2">
+                      暂无设备数据
+                    </h3>
+                    <p className="text-sm leading-tight text-muted-foreground">
+                      {debouncedSearch ||
+                      filters.statusFilter !== "all" ||
+                      filters.typeFilter !== "all"
+                        ? "当前筛选条件下没有找到匹配的设备，请尝试调整筛选条件。"
+                        : "系统中还没有添加任何设备,点击上方「添加设备」按钮开始管理您的网络设备。"}
+                    </p>
+                    {isRefreshing && (
+                      <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                        <Activity className="h-3.5 w-3.5 animate-spin" />
+                        <span>正在刷新...</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                loading={isInitialLoading}
+                rowKey="id"
+                size="default"
+                className="border-0 bg-transparent backdrop-blur-none rounded-none"
+                rowSelection={{
+                  selectedRowKeys: selectedDevices,
+                  onChange: handleSelectionChange,
+                }}
+                pagination={{
+                  current: currentPage,
+                  pageSize: pageSize,
+                  total: total,
+                  onChange: (page) => handlePageChange(page),
+                  onPageSizeChange: (nextPageSize) => {
+                    // 切换每页条数后回到第 1 页，与全站行为保持一致
+                    setPageSize(nextPageSize);
+                    setCurrentPage(1);
+                  },
+                }}
+              />
             </div>
           </CardContent>
         </Card>

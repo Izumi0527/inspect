@@ -20,6 +20,7 @@ import { LogList } from './LogList'
 import { LogDetailModal } from './LogDetailModal'
 import { LogCollectionModal } from './LogCollectionModal'
 import { SkeletonCard, SkeletonList } from '@/components/atoms/skeleton'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import { CompactPageToolbar } from '@/components/shared'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -43,7 +44,7 @@ export const LogsView: React.FC = () => {
   const router = useRouter()
   const canManageLogs = usePermission(Permission.SYSTEM_LOGS_MANAGE)
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [selectedLog, setSelectedLog] = useState<DeviceLog | null>(null)
   const [collectionOpen, setCollectionOpen] = useState(false)
 
@@ -356,7 +357,7 @@ export const LogsView: React.FC = () => {
                   pagination={{
                     current: pagination.page,
                     total: pagination.total,
-                    pageSize: pagination.pageSize,
+                    pageSize: pageSize,
                     onPageChange: handlePageChange,
                     onPageSizeChange: handlePageSizeChange
                   }}

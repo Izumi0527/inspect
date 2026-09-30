@@ -3,6 +3,7 @@
  * 整合了新的筛选器、模板编辑器、导入导出等功能
  */
 
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { formatDateYMD } from '@/utils/formatters'
 import { motion } from 'framer-motion'
@@ -33,7 +34,7 @@ import {
   Badge,
   Table,
   Column,
-  PageSizeSelect
+  Pagination,
 } from '@/components/atoms'
 import { CompactPageToolbar, CompactStatCard } from '@/components/shared'
 import type { BadgeProps } from '@/components/atoms'
@@ -85,8 +86,6 @@ import { QuickTemplateCreate } from './QuickTemplateCreate'
 type SortField = 'name' | 'category' | 'createdAt' | 'updatedAt'
 type SortOrder = 'asc' | 'desc'
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
-
 export const InspectionTemplates: React.FC = () => {
   // 筛选状态
   const [filters, setFilters] = useState<TemplateFilters>({})
@@ -113,7 +112,7 @@ export const InspectionTemplates: React.FC = () => {
   // 分页和排序状态
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
-    page_size: 20,
+    page_size: DEFAULT_PAGE_SIZE,
     sort: 'updatedAt',
     order: 'desc'
   })
@@ -699,135 +698,6 @@ export const InspectionTemplates: React.FC = () => {
             columns={columns}
             className="bg-card rounded-lg shadow-sm"
           />
-
-          {/* 分页 */}
-          <div className="flex flex-wrap justify-between items-center mt-4 px-2 gap-4">
-            {/* 左侧：每页显示数量选择 */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">每页显示</span>
-              <PageSizeSelect
-                value={pagination.page_size}
-                options={PAGE_SIZE_OPTIONS}
-                onChange={(pageSize) =>
-                  setPagination((prev) => ({
-                    ...prev,
-                    page: 1,
-                    page_size: pageSize,
-                  }))
-                }
-                ariaLabel="每页条数"
-                triggerClassName="h-8 w-[108px] px-3 text-sm"
-                formatOptionLabel={(pageSize) => `${pageSize} 条`}
-              />
-              <span className="text-sm text-muted-foreground">
-                共 {totalTemplates} 条记录
-              </span>
-            </div>
-
-            {/* 右侧：分页控制 */}
-            <div className="flex items-center gap-2">
-              {/* 上一页 */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPagination(p => ({ ...p, page: Math.max(1, p.page - 1) }))}
-                disabled={pagination.page === 1}
-              >
-                上一页
-              </Button>
-
-              {/* 页码显示 */}
-              <div className="flex items-center gap-1">
-                {(() => {
-                  const pages: (number | string)[] = []
-                  const current = pagination.page
-                  const total = totalPages
-
-                  if (total <= 7) {
-                    // 总页数小于等于7，显示所有页码
-                    for (let i = 1; i <= total; i++) {
-                      pages.push(i)
-                    }
-                  } else {
-                    // 总页数大于7，显示省略号
-                    if (current <= 4) {
-                      // 当前页靠近开头
-                      for (let i = 1; i <= 5; i++) pages.push(i)
-                      pages.push('...')
-                      pages.push(total)
-                    } else if (current >= total - 3) {
-                      // 当前页靠近结尾
-                      pages.push(1)
-                      pages.push('...')
-                      for (let i = total - 4; i <= total; i++) pages.push(i)
-                    } else {
-                      // 当前页在中间
-                      pages.push(1)
-                      pages.push('...')
-                      for (let i = current - 1; i <= current + 1; i++) pages.push(i)
-                      pages.push('...')
-                      pages.push(total)
-                    }
-                  }
-
-                  return pages.map((p, idx) => (
-                    p === '...' ? (
-                      <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">...</span>
-                    ) : (
-                      <button
-                        key={p}
-                        onClick={() => setPagination(prev => ({ ...prev, page: p as number }))}
-                        className={`min-w-[32px] h-8 px-2 text-sm rounded-md transition-colors ${
-                          pagination.page === p
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-card text-foreground/90 border border-border/70 hover:bg-muted dark:hover:bg-gray-700'
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    )
-                  ))
-                })()}
-              </div>
-
-              {/* 下一页 */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
-                disabled={pagination.page >= totalPages}
-              >
-                下一页
-              </Button>
-
-              {/* 跳转到指定页 */}
-              <div className="flex items-center gap-1 ml-2">
-                <span className="text-sm text-muted-foreground">跳至</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  defaultValue={pagination.page}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const value = parseInt((e.target as HTMLInputElement).value)
-                      if (value >= 1 && value <= totalPages) {
-                        setPagination(p => ({ ...p, page: value }))
-                      }
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const value = parseInt(e.target.value)
-                    if (value >= 1 && value <= totalPages) {
-                      setPagination(p => ({ ...p, page: value }))
-                    }
-                  }}
-                  className="w-14 px-2 py-1 text-sm text-center border border-border/70 rounded-md bg-card text-foreground/90 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="text-sm text-muted-foreground">页</span>
-              </div>
-            </div>
-          </div>
         </motion.div>
       ) : (
         <Card>
@@ -856,6 +726,27 @@ export const InspectionTemplates: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* 分页：复用全站统一的分页组件（含每页条数与跳页） */}
+      <div className="mt-4 px-2">
+        <Pagination
+          currentPage={pagination.page}
+          totalPages={totalPages}
+          totalItems={totalTemplates}
+          pageSize={pagination.page_size}
+          onPageChange={(page) =>
+            setPagination((prev) => ({ ...prev, page }))
+          }
+          onPageSizeChange={(pageSize) =>
+            setPagination((prev) => ({
+              ...prev,
+              page: 1,
+              page_size: pageSize,
+            }))
+          }
+          showJumpToPage
+        />
+      </div>
 
       {/* 删除确认对话框 */}
       {deleteConfirmTemplate && (

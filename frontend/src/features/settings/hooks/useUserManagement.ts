@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '../api/users.api'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import type {
   UserListResponse,
   UserStats,
@@ -21,7 +22,7 @@ export function useUserManagement() {
   // 查询参数
   const [queryParams, setQueryParams] = useState<UserQueryParams>({
     page: 1,
-    pageSize: 20,
+    pageSize: DEFAULT_PAGE_SIZE,
     sortBy: 'createdAt',
     sortOrder: 'desc',
   })
@@ -188,7 +189,7 @@ export function useUserManagement() {
     users: userListData?.users || [],
     totalCount: userListData?.totalCount || 0,
     page: userListData?.page || 1,
-    pageSize: userListData?.pageSize || 20,
+    pageSize: userListData?.pageSize || DEFAULT_PAGE_SIZE,
     stats: statsData,
     roles: roleListData?.roles || [],
     queryParams,
