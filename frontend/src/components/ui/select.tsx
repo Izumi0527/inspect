@@ -4,6 +4,11 @@ import { Check, ChevronDown, ChevronUp } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { cn } from '@/utils/cn'
 
+/**
+ * 选择器。精密仪器方向：
+ * - 触发器与 Input 同规格（36px / 圆角 6 / 1px 刻线）
+ * - 下拉面板是浮层：圆角 12 + 唯一阴影 shadow-overlay（不透明底，无模糊）
+ */
 const Select = SelectPrimitive.Root
 
 const SelectGroup = SelectPrimitive.Group
@@ -17,11 +22,10 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-12 w-full items-center justify-between rounded-xl border border-border/50 bg-card/80 px-4 py-3 text-base text-foreground ring-offset-background backdrop-blur-lg',
+      'flex h-9 w-full items-center justify-between rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground',
       'placeholder:text-muted-foreground',
-      'focus:border-primary focus:bg-background/90 focus:outline-none focus:ring-2 focus:ring-ring/30',
+      'focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25',
       'disabled:cursor-not-allowed disabled:opacity-50',
-      'hover:border-border',
       '[&>span]:line-clamp-1',
       className
     )}
@@ -71,7 +75,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-xl border border-border/30 bg-popover/95 text-popover-foreground shadow-2xl backdrop-blur-xl',
+        'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-overlay',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -119,10 +123,9 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex w-full cursor-default select-none items-center rounded-lg py-2 pl-8 pr-2 text-sm outline-none',
-      'focus:bg-accent/70 focus:text-accent-foreground',
+      'relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none',
+      'focus:bg-accent focus:text-accent-foreground',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-      'hover:bg-accent/40',
       className
     )}
     {...props}
@@ -143,7 +146,7 @@ const SelectSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Separator
     ref={ref}
-    className={cn('-mx-1 my-1 h-px bg-border/60', className)}
+    className={cn('-mx-1 my-1 h-px bg-border', className)}
     {...props}
   />
 ))
@@ -216,11 +219,10 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
         aria-label={ariaLabel}
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex h-12 w-full items-center justify-between rounded-xl border border-border/50 bg-card/80 px-4 py-3 text-left text-base text-foreground backdrop-blur-lg',
+          'flex h-9 w-full items-center justify-between rounded-md border border-input bg-card px-3 py-1.5 text-left text-sm text-foreground',
           'placeholder:text-muted-foreground',
-          'focus:border-primary focus:bg-background/90 focus:outline-none focus:ring-2 focus:ring-ring/30',
+          'focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25',
           'disabled:cursor-not-allowed disabled:opacity-50',
-          'hover:border-border',
           triggerClassName
         )}
       >
@@ -228,7 +230,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
           {displayText}
         </span>
         <ChevronDown
-          className={cn('h-4 w-4 transition-transform duration-200', isOpen && 'rotate-180')}
+          className={cn('h-4 w-4 transition-transform duration-150', isOpen && 'rotate-180')}
         />
       </motion.button>
 
@@ -238,7 +240,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           className={cn(
-            'absolute z-50 mt-1 w-full rounded-xl border border-border/30 bg-popover/95 shadow-2xl backdrop-blur-xl',
+            'absolute z-50 mt-1 w-full rounded-xl border border-border bg-popover shadow-overlay',
             dropdownClassName
           )}
         >
@@ -250,18 +252,18 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                 onClick={() => handleToggle(option.value)}
                 disabled={option.disabled}
                 className={cn(
-                  'relative flex w-full items-center space-x-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                  'relative flex w-full items-center space-x-2 rounded-sm px-3 py-1.5 text-left text-sm transition-colors duration-100',
                   'disabled:cursor-not-allowed disabled:opacity-50',
-                  'hover:bg-accent/40',
+                  'hover:bg-accent',
                   itemClassName
                 )}
               >
                 <div
                   className={cn(
-                    'flex h-4 w-4 items-center justify-center rounded border-2 transition-colors',
+                    'flex h-4 w-4 items-center justify-center rounded-[4px] border transition-colors',
                     value.includes(option.value)
                       ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-card'
+                      : 'border-input bg-card'
                   )}
                 >
                   {value.includes(option.value) && <Check className="h-3 w-3" />}
@@ -272,12 +274,12 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
           </div>
 
           {value.length > 0 && (
-            <div className="border-t border-border/60 p-2">
+            <div className="border-t border-border p-2">
               <button
                 type="button"
                 onClick={() => onChange([])}
                 className={cn(
-                  'w-full rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground',
+                  'w-full rounded-sm px-3 py-1.5 text-xs text-muted-foreground transition-colors duration-100 hover:bg-accent hover:text-foreground',
                   clearButtonClassName
                 )}
               >
@@ -315,7 +317,7 @@ const SimpleSelect: React.FC<SimpleSelectProps> = ({
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger
           className={cn(
-            error && 'border-red-400 focus:border-red-400 focus:ring-red-400/20',
+            error && 'border-destructive focus:border-destructive focus:ring-destructive/20',
             className
           )}
         >
@@ -323,7 +325,7 @@ const SimpleSelect: React.FC<SimpleSelectProps> = ({
         </SelectTrigger>
         <SelectContent>{children}</SelectContent>
       </Select>
-      {error && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
     </div>
   )
 }

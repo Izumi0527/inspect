@@ -1,6 +1,11 @@
 import * as React from 'react'
 import { cn } from '@/utils/cn'
 
+/**
+ * 输入控件。精密仪器方向：
+ * - 高 36px、圆角 6px、1px 刻线（--rule-strong）、无模糊与阴影
+ * - 聚焦 = 品牌色外环（唯一交互信号）；错误 = danger 令牌
+ */
 const Input = React.forwardRef<
   HTMLInputElement,
   React.InputHTMLAttributes<HTMLInputElement>
@@ -9,12 +14,11 @@ const Input = React.forwardRef<
     <input
       type={type}
       className={cn(
-        'flex h-12 w-full rounded-xl border border-border/50 bg-card/80 backdrop-blur-lg px-4 py-3 text-base text-foreground transition-all duration-200',
+        'flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors duration-150 motion-reduce:transition-none',
         'file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground',
         'placeholder:text-muted-foreground',
-        'focus:border-primary focus:bg-background/90 focus:ring-2 focus:ring-ring/30 focus:outline-none',
+        'focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        'hover:border-border',
         className
       )}
       ref={ref}
@@ -43,9 +47,9 @@ const SimpleInput = React.forwardRef<HTMLInputElement, SimpleInputProps>(
         <Input
           ref={ref}
           className={cn(
-            error && 'border-red-400 focus:border-red-400 focus:ring-red-400/20',
-            leftIcon && 'pl-10',
-            rightIcon && 'pr-10',
+            error && 'border-destructive focus:border-destructive focus:ring-destructive/20',
+            leftIcon && 'pl-9',
+            rightIcon && 'pr-9',
             className
           )}
           {...props}
@@ -56,7 +60,7 @@ const SimpleInput = React.forwardRef<HTMLInputElement, SimpleInputProps>(
           </div>
         )}
         {error && (
-          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p className="mt-1 text-sm text-destructive">{error}</p>
         )}
       </div>
     )
@@ -71,11 +75,10 @@ const TextArea = React.forwardRef<
   return (
     <textarea
       className={cn(
-        'flex min-h-[120px] w-full rounded-xl border border-border/50 bg-card/80 backdrop-blur-lg px-4 py-3 text-base text-foreground transition-all duration-200',
+        'flex min-h-[120px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground transition-colors duration-150 motion-reduce:transition-none',
         'placeholder:text-muted-foreground',
-        'focus:border-primary focus:bg-background/90 focus:ring-2 focus:ring-ring/30 focus:outline-none',
+        'focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        'hover:border-border',
         'resize-none',
         className
       )}

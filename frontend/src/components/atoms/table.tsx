@@ -4,6 +4,13 @@ import { ChevronUp, ChevronDown } from 'lucide-react'
 import { Pagination } from './pagination'
 import { cn } from '@/utils/cn'
 
+/**
+ * 表格。精密仪器方向：
+ * - 表格自身不再画卡片外观（外框/底色由调用方的面板提供，避免「卡中卡」）
+ * - 表头 32px、靠 --surface-2 底色带区分并 sticky；行高 36px、行间 1px 刻线
+ * - 单元格统一 tabular-nums（数字对齐由列 align 决定）；无入场动效
+ */
+
 export interface Column<T extends object> {
   key: string
   title: string
@@ -128,15 +135,21 @@ export function Table<T extends object>({
   }, [data, sortColumn, sortOrder])
 
   const sizeClasses: Record<'small' | 'default' | 'large', string> = {
-    small: 'text-[11px]',
+    small: 'text-[12px]',
     default: 'text-sm',
     large: 'text-base'
   }
 
   const cellPadding: Record<'small' | 'default' | 'large', string> = {
-    small: 'px-3 py-1',
-    default: 'px-4 py-3',
-    large: 'px-6 py-4'
+    small: 'px-2 py-1',
+    default: 'px-3 py-2',
+    large: 'px-4 py-3'
+  }
+
+  const headerPadding: Record<'small' | 'default' | 'large', string> = {
+    small: 'px-2 py-1',
+    default: 'px-3 py-1.5',
+    large: 'px-4 py-2.5'
   }
 
   const paginationPadding = size === 'small' ? 'px-3' : 'px-4'
@@ -164,15 +177,15 @@ export function Table<T extends object>({
     currentPageSelectedKeys.length > 0 && currentPageSelectedKeys.length < data.length
 
   return (
-    <div className={cn('rounded-xl overflow-hidden bg-card/80 backdrop-blur-lg border border-border/50', className)}>
+    <div className={cn('overflow-hidden', className)}>
       {!loading && data.length === 0 && emptyContent ? emptyContent : (
       <div className="overflow-auto" style={{ maxHeight: scroll?.y }}>
         <table className="w-full" style={{ minWidth: scroll?.x }}>
           {showHeader && (
             <thead>
-              <tr className="border-b border-border/50 bg-muted/40">
+              <tr className="bg-muted">
                 {rowSelection && (
-                  <th className={cn('text-left font-medium text-foreground w-12', cellPadding[size])} style={{ width: '48px' }}>
+                  <th className={cn('sticky top-0 z-10 text-left font-medium text-muted-foreground bg-muted w-12', headerPadding[size])} style={{ width: '48px' }}>
                     <input
                       type="checkbox"
                       className="custom-checkbox"
@@ -207,8 +220,8 @@ export function Table<T extends object>({
                   <th
                     key={index}
                     className={cn(
-                      'font-medium text-foreground',
-                      cellPadding[size],
+                      'sticky top-0 z-10 font-medium text-muted-foreground bg-muted',
+                      headerPadding[size],
                       column.align === 'center' && 'text-center',
                       column.align === 'right' && 'text-right',
                       column.align !== 'center' && column.align !== 'right' && 'text-left'
@@ -287,11 +300,8 @@ export function Table<T extends object>({
                 return (
                   <motion.tr
                     key={key}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: index * 0.02 }}
                     className={cn(
-                      'border-b border-border/30 hover:bg-muted/30 transition-colors',
+                      'border-b border-border hover:bg-surface-3 transition-colors duration-100 motion-reduce:transition-none',
                       isSelected && 'bg-primary/10',
                       rowClassName
                     )}
@@ -335,6 +345,7 @@ export function Table<T extends object>({
                           className={cn(
                             cellPadding[size],
                             sizeClasses[size],
+                            'tabular-nums',
                             column.align === 'center' && 'text-center',
                             column.align === 'right' && 'text-right'
                           )}
@@ -354,7 +365,7 @@ export function Table<T extends object>({
       )}
 
       {pagination && (
-        <div className="border-t border-border/50">
+        <div className="border-t border-border">
           <Pagination
             currentPage={pagination.current}
             totalPages={Math.ceil(pagination.total / Math.max(pagination.pageSize, 1))}

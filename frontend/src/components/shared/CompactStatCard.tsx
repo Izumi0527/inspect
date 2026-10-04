@@ -21,35 +21,14 @@ export interface CompactStatCardProps {
    */
   sentiment?: 'positive' | 'negative' | 'neutral'
   icon: LucideIcon
+  /** 图标着色（默认中性 ink-2；仅异常读数才建议传状态色） */
   iconClassName?: string
+  /** 兼容旧调用方：如显式传入则为图标提供一个底衬容器 */
   iconBgClassName?: string
   valueClassName?: string
   className?: string
   onClick?: () => void
   ariaLabel?: string
-}
-
-const deriveIconBgClassName = (iconClassName?: string) => {
-  const value = iconClassName ?? ''
-
-  if (value.includes('text-blue') || value.includes('text-sky')) {
-    return 'bg-sky-100/80 dark:bg-sky-500/12'
-  }
-  if (value.includes('text-green') || value.includes('text-emerald')) {
-    return 'bg-emerald-100/80 dark:bg-emerald-500/12'
-  }
-  if (value.includes('text-red')) return 'bg-red-100/80 dark:bg-red-500/12'
-  if (value.includes('text-yellow') || value.includes('text-amber')) {
-    return 'bg-amber-100/80 dark:bg-amber-500/12'
-  }
-  if (value.includes('text-purple') || value.includes('text-slate')) {
-    return 'bg-slate-200/80 dark:bg-slate-400/12'
-  }
-  if (value.includes('text-orange')) return 'bg-orange-100/80 dark:bg-orange-500/12'
-  if (value.includes('text-cyan')) return 'bg-cyan-100/80 dark:bg-cyan-500/12'
-  if (value.includes('text-gray')) return 'bg-muted/60'
-
-  return 'bg-muted/60'
 }
 
 const deriveAriaLabel = (title: string, value: React.ReactNode) => {
@@ -59,6 +38,13 @@ const deriveAriaLabel = (title: string, value: React.ReactNode) => {
   return title
 }
 
+/**
+ * 统计读数卡（精密仪器）。
+ *
+ * 读数是主角：24px semibold + tabular-nums；标题 12px ink-2；图标退为 16px 中性点缀。
+ * 读数默认中性——只有异常值才通过 valueClassName 获得状态强调；
+ * 卡片本身不再携带彩色图标底（色彩预算：全屏只有 6 个彩色值）。
+ */
 export const CompactStatCard: React.FC<CompactStatCardProps> = ({
   title,
   value,
@@ -67,7 +53,7 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
   trend = 'stable',
   sentiment,
   icon: Icon,
-  iconClassName = 'text-sky-600 dark:text-sky-300',
+  iconClassName,
   iconBgClassName,
   valueClassName,
   className,
@@ -82,8 +68,8 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
   } as const
 
   const sentimentClassName = {
-    positive: 'text-emerald-600 dark:text-emerald-300',
-    negative: 'text-red-600 dark:text-red-300',
+    positive: 'text-success',
+    negative: 'text-destructive',
     neutral: 'text-muted-foreground',
   } as const
 
@@ -97,30 +83,30 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
     stable: { icon: trendArrow.stable, className: sentimentClassName[resolvedSentiment] },
   } as const
 
+  const iconNode = iconBgClassName ? (
+    <span className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-sm', iconBgClassName)}>
+      <Icon className={cn('h-4 w-4', iconClassName ?? 'text-muted-foreground')} />
+    </span>
+  ) : (
+    <Icon className={cn('h-4 w-4 shrink-0', iconClassName ?? 'text-muted-foreground/80')} />
+  )
+
   const card = (
     <Card
       className={cn(
-        onClick && 'cursor-pointer hover:bg-muted/30 transition-colors',
+        onClick && 'cursor-pointer transition-colors duration-100 hover:bg-surface-3',
         className
       )}
     >
-      <CardContent className="p-2.5">
-        <div className="flex items-center">
-          <div
-            className={cn(
-              'p-1 rounded-md',
-              iconBgClassName ?? deriveIconBgClassName(iconClassName)
-            )}
-          >
-            <Icon className={cn('h-5 w-5', iconClassName)} />
-          </div>
-          <div className="ml-2.5 min-w-0">
+      <CardContent className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-medium text-muted-foreground leading-tight truncate">
               {title}
             </p>
             <p
               className={cn(
-                'text-lg font-bold text-foreground leading-none',
+                'mt-1.5 text-2xl font-semibold leading-none tabular-nums text-foreground',
                 valueClassName
               )}
             >
@@ -129,7 +115,7 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
             {change && (
               <p
                 className={cn(
-                  'mt-1 text-xs font-semibold',
+                  'mt-1 text-xs font-medium',
                   trendConfig[trend].className
                 )}
               >
@@ -145,6 +131,7 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
               </p>
             )}
           </div>
+          <span className="mt-0.5">{iconNode}</span>
         </div>
       </CardContent>
     </Card>
@@ -155,7 +142,7 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
   return (
     <button
       type="button"
-      className="block w-full rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      className="block w-full rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       onClick={onClick}
       aria-label={ariaLabel ?? deriveAriaLabel(title, value)}
     >

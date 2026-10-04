@@ -3,27 +3,35 @@ import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/utils/cn'
 
+/**
+ * 徽标。
+ *
+ * 精密仪器方向：
+ * - 基座 `whitespace-nowrap`：徽标绝不折行（P0 修复）
+ * - 语义变体全部走令牌（soft 底 + on-soft 文字，浅深两套成对）；
+ *   不再使用 backdrop-blur 与硬编码调色板。
+ */
 const badgeVariants = cva(
-  'inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+  'inline-flex items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium transition-colors motion-reduce:transition-none focus:outline-none focus:ring-2 focus:ring-ring/40',
   {
     variants: {
       variant: {
-        default: 'border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/90',
-        primary: 'border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/90',
-        secondary: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        destructive: 'border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/90',
-        danger: 'border-transparent bg-red-600 text-white shadow hover:bg-red-700',
-        outline: 'text-foreground border-border bg-card/80 backdrop-blur-lg hover:bg-card',
-        success: 'border-transparent bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 backdrop-blur-lg',
-        warning: 'border-transparent bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 backdrop-blur-lg',
-        error: 'border-transparent bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 backdrop-blur-lg',
-        info: 'border-transparent bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 backdrop-blur-lg',
-        glass: 'border-border/30 bg-card/20 backdrop-blur-lg text-muted-foreground hover:bg-card/30',
+        default: 'border-transparent bg-primary text-primary-foreground',
+        primary: 'border-transparent bg-primary text-primary-foreground',
+        secondary: 'border-transparent bg-secondary text-secondary-foreground',
+        destructive: 'border-transparent bg-destructive text-destructive-foreground',
+        danger: 'border-transparent bg-danger text-danger-foreground',
+        outline: 'border-border bg-card text-muted-foreground',
+        success: 'border-transparent bg-success-soft text-success-soft-foreground',
+        warning: 'border-transparent bg-warning-soft text-warning-soft-foreground',
+        error: 'border-transparent bg-danger-soft text-danger-soft-foreground',
+        info: 'border-transparent bg-info-soft text-info-soft-foreground',
+        neutral: 'border-transparent bg-unknown-soft text-unknown-soft-foreground',
       },
       size: {
-        default: 'h-6 px-3 text-xs',
-        sm: 'h-5 px-2 text-xs',
-        lg: 'h-8 px-4 text-sm',
+        default: 'h-5 px-2',
+        sm: 'h-5 px-1.5 text-[11px]',
+        lg: 'h-6 px-2.5 text-[13px]',
       },
     },
     defaultVariants: {

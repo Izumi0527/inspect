@@ -64,9 +64,9 @@ export const Pagination: React.FC<PaginationProps> = ({
   }
 
   return (
-    <div className={cn('flex min-h-11 flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-pagination px-4 py-1.5 text-sm', className)}>
+    <div className={cn('flex min-h-10 flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-pagination px-4 py-1 text-sm', className)}>
       {showRangeText && (
-        <div className="whitespace-nowrap text-muted-foreground">
+        <div className="whitespace-nowrap text-muted-foreground tabular-nums">
           {`第 ${startItem} - ${endItem} 条，共 ${totalItems} 条`}
         </div>
       )}
@@ -75,7 +75,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           <Button type="button" variant="ghost" size="sm"
             onClick={() => handlePageChange(currentPage - 1)}
             disabled={totalItems === 0 || currentPage <= 1}
-            className="h-8 w-8 rounded-full p-0 text-muted-foreground hover:bg-pagination-control hover:text-foreground"
+            className="h-8 w-8 rounded-md p-0 text-muted-foreground hover:bg-pagination-control hover:text-foreground"
             aria-label="上一页" title="上一页">
             <ChevronLeft />
           </Button>
@@ -88,7 +88,7 @@ export const Pagination: React.FC<PaginationProps> = ({
               onClick={() => handlePageChange(page)}
               aria-current={currentPage === page ? 'page' : undefined}
               className={cn(
-                'h-8 min-w-8 rounded-full px-1 py-0 text-sm font-normal shadow-none',
+                'h-8 min-w-8 rounded-md px-1 py-0 text-sm font-normal shadow-none tabular-nums',
                 currentPage === page
                   ? 'bg-pagination-selected text-pagination-selected-foreground hover:bg-pagination-selected hover:text-pagination-selected-foreground'
                   : 'text-foreground hover:bg-pagination-control hover:text-foreground'
@@ -99,7 +99,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           <Button type="button" variant="ghost" size="sm"
             onClick={() => handlePageChange(currentPage + 1)}
             disabled={totalItems === 0 || currentPage >= totalPages}
-            className="h-8 w-8 rounded-full p-0 text-muted-foreground hover:bg-pagination-control hover:text-foreground"
+            className="h-8 w-8 rounded-md p-0 text-muted-foreground hover:bg-pagination-control hover:text-foreground"
             aria-label="下一页" title="下一页">
             <ChevronRight />
           </Button>
@@ -108,7 +108,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           <PageSizeSelect value={pageSize} options={pageSizeOptions}
             onChange={onPageSizeChange} ariaLabel="每页条数"
             valueLabel={`${sizeChangerLabel}：${pageSize}`}
-            triggerClassName="h-8 w-auto min-w-[128px] gap-2 rounded-full border-0 bg-pagination-control px-3 py-0 text-sm shadow-none backdrop-blur-none focus:bg-pagination-control"
+            triggerClassName="h-8 w-auto min-w-[128px] gap-2 rounded-md border-0 bg-pagination-control px-3 py-0 text-sm shadow-none focus:bg-pagination-control"
           />
         )}
       </div>

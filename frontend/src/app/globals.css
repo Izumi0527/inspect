@@ -1,5 +1,13 @@
 /* ============================================
-   Tailwind CSS v4 配置
+   Tailwind CSS v4 主题 —— 精密仪器（Precision Instrument）
+   ============================================
+   设计令牌权威值与对比度验证：
+     docs/plans/ui-redesign-2026-10-03/evidence/after/palette-verify.py
+   约束：改动任何颜色值后必须复跑该脚本（分页选中态亦已纳入验证）。
+
+   色彩预算：全屏彩色值只有 6 个 —— brand + danger / warning / success / info / unknown。
+   其余表面、刻线、文字一律无彩中性；层级由明度阶与发丝线承载；
+   装饰性阴影为零，唯一阴影（shadow-overlay）留给真正浮起的层。
    ============================================ */
 
 /* 1. 导入 Tailwind CSS v4 */
@@ -12,56 +20,89 @@
 @plugin "@tailwindcss/forms";
 @plugin "@tailwindcss/typography";
 
-/* 3. 主题配置 */
+/* 3. 主题映射：原始值定义在下方 :root/.dark，这里只做语义映射 */
 @theme inline {
-  /* 自定义颜色（引用 CSS 变量） */
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
+  /* 表面与文字 */
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--ink);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+
+  /* 刻线（发丝线承担层级，替代阴影与模糊） */
+  --color-border: var(--rule);
+  --color-input: var(--rule-strong);
+  --color-ring: var(--brand);
+
+  /* 品牌与交互（交互信号只有一个色相） */
+  --color-primary: var(--brand);
+  --color-primary-foreground: var(--on-brand);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--on-brand);
+  --color-secondary: var(--surface-2);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--surface-2);
+  --color-muted-foreground: var(--ink-2);
+  --color-accent: var(--surface-3);
+  --color-accent-foreground: var(--ink);
+
+  /* 五档状态：solid / on-solid / soft / on-soft */
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--on-danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-soft-foreground: var(--on-danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--on-warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--on-warning-soft);
+  --color-success: var(--success);
+  --color-success-foreground: var(--on-success);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--on-success-soft);
+  --color-info: var(--info);
+  --color-info-foreground: var(--on-info);
+  --color-info-soft: var(--info-soft);
+  --color-info-soft-foreground: var(--on-info-soft);
+  --color-unknown: var(--unknown);
+  --color-unknown-foreground: var(--on-unknown);
+  --color-unknown-soft: var(--unknown-soft);
+  --color-unknown-soft-foreground: var(--on-unknown-soft);
+
+  /* 兼容既有语义名：destructive 收敛为 danger 同一值 */
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--on-danger);
+
+  /* 分页 */
   --color-pagination: var(--pagination-background);
   --color-pagination-control: var(--pagination-control);
   --color-pagination-selected: var(--pagination-selected);
   --color-pagination-selected-foreground: var(--pagination-selected-foreground);
 
-  /* 字体族 */
-  --font-family-sans: var(--font-inter, Inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-family-mono: var(--font-mono), Consolas, monospace;
+  /* 字体（v4 标准键名；此前的 --font-family-* 是死键）
+     中文走系统栈；等宽仅用于 IP / OID / 接口名 / 原始日志 */
+  --font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 
-  /* 边框圆角 */
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  /* 圆角三档语义：控件 6 / 面板 8 / 浮层 12（修复旧阶梯断裂） */
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 12px;
+  --radius-3xl: 16px;
 
-  /* 背景图像 */
-  --background-image-gradient-radial: radial-gradient(var(--tw-gradient-stops));
-  --background-image-gradient-conic: conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops));
-  --background-image-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0));
+  /* 浮层阴影（全站唯一一档，只给弹窗/下拉/日期面板/Tooltip） */
+  --shadow-overlay: 0 8px 24px -6px rgb(15 21 25 / 0.18), 0 2px 6px -2px rgb(15 21 25 / 0.10);
 
-  /* 模糊效果 */
-  --backdrop-blur-xs: 2px;
-
-  /* 动画定义 */
-  --animate-accordion-down: accordion-down 0.2s ease-out;
-  --animate-accordion-up: accordion-up 0.2s ease-out;
-  --animate-fade-in: fade-in 0.5s ease-out;
-  --animate-slide-in: slide-in 0.3s ease-out;
-  --animate-scale-in: scale-in 0.2s ease-out;
+  /* 动效三档（进入 220ms / 状态 160ms / 反馈 80ms，退出快于进入） */
+  --animate-accordion-down: accordion-down 0.16s ease-out;
+  --animate-accordion-up: accordion-up 0.16s ease-out;
+  --animate-fade-in: fade-in 0.22s ease-out;
+  --animate-slide-in: slide-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-scale-in: scale-in 0.16s ease-out;
 
   /* 关键帧定义 */
   @keyframes accordion-down {
@@ -103,81 +144,70 @@
 }
 
 /* ============================================
-   自定义 CSS 变量（保留）
+   4. 调色板：浅 / 深两套成对定义（hex 为权威值）
    ============================================ */
 
 @layer base {
   :root {
-    --background: 220 20% 98%;
-    --foreground: 220 10% 10%;
+    /* 表面明度阶 */
+    --bg: #F4F6F7;
+    --surface: #FFFFFF;
+    --surface-2: #EEF1F3;
+    --surface-3: #E5EAED;
 
-    --card: 0 0% 100%;
-    --card-foreground: 220 10% 10%;
+    /* 刻线 */
+    --rule: #C9D3DA;
+    --rule-strong: #B0BDC7;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 10% 10%;
+    /* 文字 */
+    --ink: #0F1519;
+    --ink-2: #4A5964;
+    --ink-3: #5F6C76;
 
-    --primary: 174 73% 38%;
-    --primary-foreground: 0 0% 98%;
+    /* 品牌（交互信号） */
+    --brand: #0E7C86;
+    --on-brand: #FFFFFF;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 220 10% 10%;
+    /* 五档状态 */
+    --danger: #C8372D;   --on-danger: #FFFFFF;   --danger-soft: #FBE9E7;   --on-danger-soft: #8C1D16;
+    --warning: #B26B00;  --on-warning: #FFFFFF;  --warning-soft: #FCF1DF;  --on-warning-soft: #7A4900;
+    --success: #1E7A4B;  --on-success: #FFFFFF;  --success-soft: #E4F4EA;  --on-success-soft: #155C38;
+    --info: #1F5FA8;     --on-info: #FFFFFF;     --info-soft: #E7F0FA;     --on-info-soft: #17457B;
+    --unknown: #7A8A95;  --on-unknown: #FFFFFF;  --unknown-soft: #EDF0F2;  --on-unknown-soft: #5A6771;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 220 10% 45%;
-
-    --accent: 186 96% 45%;
-    --accent-foreground: 0 0% 98%;
-
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 174 73% 38%;
-
-    --radius: 16px;
-
-    --pagination-background: #ffffff;
-    --pagination-control: #f1f1f3;
-    --pagination-selected: #e3effb;
-    --pagination-selected-foreground: #1767a8;
+    /* 分页 */
+    --pagination-background: transparent;
+    --pagination-control: #E5EAED;
+    --pagination-selected: #D7EBED;
+    --pagination-selected-foreground: #0A5A62;
   }
 
-  /* 统一暗色主题 */
   .dark {
-    --background: 220 15% 11%;
-    --foreground: 210 20% 92%;
+    --bg: #12171A;
+    --surface: #191F23;
+    --surface-2: #202830;
+    --surface-3: #28323A;
 
-    --card: 220 15% 14%;
-    --card-foreground: 210 20% 92%;
+    --rule: #333F48;
+    --rule-strong: #47555F;
 
-    --popover: 220 15% 15%;
-    --popover-foreground: 210 20% 92%;
+    --ink: #E4EAEE;
+    --ink-2: #A8B6BF;
+    --ink-3: #8897A2;
 
-    --primary: 196 72% 56%;
-    --primary-foreground: 0 0% 98%;
+    --brand: #3FB3BE;
+    --on-brand: #06222A;
 
-    --secondary: 220 14% 19%;
-    --secondary-foreground: 210 16% 86%;
+    --danger: #F0776B;   --on-danger: #2A100D;   --danger-soft: #3A1E1B;   --on-danger-soft: #FFB3AA;
+    --warning: #E0A33C;  --on-warning: #2A1C05;  --warning-soft: #382A13;  --on-warning-soft: #F3CE8A;
+    --success: #4FBF87;  --on-success: #082114;  --success-soft: #16301F;  --on-success-soft: #9CE3BA;
+    --info: #5DA6E8;     --on-info: #0A1D2E;     --info-soft: #152A3D;     --on-info-soft: #A9D2F3;
+    --unknown: #8B9AA4;  --on-unknown: #14191C;  --unknown-soft: #242C31;  --on-unknown-soft: #B6C2C9;
 
-    --muted: 220 13% 17%;
-    --muted-foreground: 214 12% 68%;
-
-    --accent: 198 44% 24%;
-    --accent-foreground: 0 0% 98%;
-
-    --destructive: 0 72% 56%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 220 12% 23%;
-    --input: 220 12% 20%;
-    --ring: 196 72% 56%;
-
-    --pagination-background: #18181c;
-    --pagination-control: #303034;
-    --pagination-selected: #223448;
-    --pagination-selected-foreground: #70b9f5;
+    --pagination-background: transparent;
+    --pagination-control: #28323A;
+    --pagination-selected: #17333A;
+    --pagination-selected-foreground: #8FD8E0;
   }
 }
 
@@ -197,41 +227,13 @@
 }
 
 /* ============================================
-   自定义组件类（保留）
+   5. 组件类
    ============================================ */
 
 @layer components {
-  .glass {
-    @apply bg-card/80 backdrop-blur-lg border border-border/30;
-  }
-
-  .glass-dark {
-    @apply bg-card/90 backdrop-blur-lg border border-border/40;
-  }
-
-  .gradient-primary {
-    @apply bg-gradient-to-br from-teal-500 via-cyan-500 to-emerald-400;
-  }
-
-  .gradient-secondary {
-    @apply bg-gradient-to-br from-pink-400 via-red-500 to-yellow-500;
-  }
-
-  .gradient-accent {
-    @apply bg-gradient-to-br from-teal-400 via-cyan-400 to-emerald-400;
-  }
-
-  .card-hover {
-    @apply transition-shadow duration-200 hover:shadow-xl;
-  }
-
-  .button-glass {
-    @apply bg-card/80 backdrop-blur-lg border border-border/30 rounded-xl px-6 py-3 font-medium transition-all duration-300 hover:bg-card/90 active:scale-95;
-  }
-
   /* 自定义复选框样式 */
   .custom-checkbox {
-    @apply w-4 h-4 rounded border-2 border-border bg-card text-primary focus:ring-2 focus:ring-primary/50 focus:ring-offset-0 transition-all duration-200 cursor-pointer;
+    @apply h-4 w-4 rounded-[4px] border-2 border-input bg-card text-primary transition-colors duration-100 focus:ring-2 focus:ring-ring/40 focus:ring-offset-0 cursor-pointer;
   }
 
   .custom-checkbox:checked {
