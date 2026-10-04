@@ -1043,8 +1043,8 @@ export const DeviceManagementView: React.FC = () => {
 
             {/* 批量操作栏 */}
             {selectedDevices.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-blue-50/60 p-3 dark:bg-blue-900/15">
-                <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-info/30 bg-info-soft p-3">
+                <span className="text-sm font-medium text-info-soft-foreground">
                   已选择 {selectedDevices.length} 台设备
                 </span>
                 <Button
@@ -1116,7 +1116,7 @@ export const DeviceManagementView: React.FC = () => {
                 loading={isInitialLoading}
                 rowKey="id"
                 size="default"
-                className="border-0 bg-transparent backdrop-blur-none rounded-none"
+                className="border-0"
                 rowSelection={{
                   selectedRowKeys: selectedDevices,
                   onChange: handleSelectionChange,

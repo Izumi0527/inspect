@@ -30,7 +30,7 @@ const frequencyOptions = [
 
 export function BackupConfigSection({ data, onChange, actions }: Props) {
   return (
-    <section aria-label="备份策略配置" className="rounded-xl border border-border bg-card p-5 shadow-sm">
+    <section aria-label="备份策略配置" className="rounded-lg border border-border bg-card p-4">
       <SectionHeader
         title="备份策略配置"
         icon={Settings}

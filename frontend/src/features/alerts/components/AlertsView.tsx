@@ -451,7 +451,7 @@ const AlertsViewContent: React.FC = () => {
           <CardHeader className="pb-0">
             <div className="flex flex-wrap items-center gap-3">
               <CardTitle>告警列表</CardTitle>
-              <span className="text-xs text-gray-400 dark:text-gray-500">
+              <span className="text-xs text-muted-foreground">
                 最后刷新: {formatLastRefreshed()}
               </span>
             </div>
@@ -474,9 +474,9 @@ const AlertsViewContent: React.FC = () => {
                   key: 'toggle-auto-refresh',
                   label: autoRefresh ? '自动刷新开' : '自动刷新关',
                   icon: autoRefresh ? (
-                    <Bell className="h-4 w-4 text-green-500" />
+                    <Bell className="h-4 w-4 text-success" />
                   ) : (
-                    <BellOff className="h-4 w-4 text-gray-400" />
+                    <BellOff className="h-4 w-4 text-muted-foreground" />
                   ),
                   variant: 'outline',
                   onClick: () => setAutoRefresh(!autoRefresh),
@@ -565,7 +565,7 @@ const AlertsViewContent: React.FC = () => {
             {realtimePendingCount > 0 && (
               <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-3 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
-                  <Bell className="h-4 w-4 text-green-500" />
+                  <Bell className="h-4 w-4 text-success" />
                   <span className="font-medium text-foreground">
                     收到 {realtimePendingCount} 条实时更新
                   </span>

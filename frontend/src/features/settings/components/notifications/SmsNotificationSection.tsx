@@ -54,7 +54,7 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
   }
 
   return (
-    <section aria-label="短信通知" className="rounded-xl border border-border bg-card p-5 shadow-sm">
+    <section aria-label="短信通知" className="rounded-lg border border-border bg-card p-4">
       <SectionHeader
         title="短信通知"
         icon={MessageSquare}

@@ -60,7 +60,7 @@ export function EmailNotificationSection({
   }
 
   return (
-    <section aria-label="邮件通知" className="rounded-xl border border-border bg-card p-5 shadow-sm">
+    <section aria-label="邮件通知" className="rounded-lg border border-border bg-card p-4">
       <SectionHeader
         title="邮件通知"
         icon={Mail}

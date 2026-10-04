@@ -17,7 +17,7 @@ export const SettingsWorkbenchCard: React.FC<SettingsWorkbenchCardProps> = ({
   return (
     <div
       className={cn(
-        'bg-card rounded-xl border border-border',
+        'bg-card rounded-lg border border-border',
         fillHeight && 'flex-1 flex flex-col min-h-0',
         className
       )}

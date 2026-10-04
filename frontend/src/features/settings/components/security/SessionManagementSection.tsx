@@ -14,7 +14,7 @@ interface Props {
 
 export function SessionManagementSection({ data, onChange }: Props) {
   return (
-    <section aria-label="会话管理" className="rounded-xl border border-border bg-card p-5 shadow-sm">
+    <section aria-label="会话管理" className="rounded-lg border border-border bg-card p-4">
       <SectionHeader
         title="会话管理"
         icon={Clock}

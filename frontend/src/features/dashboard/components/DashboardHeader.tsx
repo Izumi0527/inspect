@@ -47,135 +47,131 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   }, [clearSearch])
 
   return (
-    <header className="bg-card shadow-sm border-b border-border">
-      <div className="px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">{title}</h1>
-            {subtitle && (
-              <p className="text-sm text-muted-foreground dark:text-muted-foreground mt-1">{subtitle}</p>
-            )}
-          </div>
-          <div className="flex items-center gap-4">
-            {/* 自定义操作区域 */}
-            {actions}
+    <header className="border-b border-border bg-card">
+      <div className="flex h-14 items-center justify-between gap-4 px-6">
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-semibold text-foreground">{title}</h1>
+          {subtitle && (
+            <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {/* 自定义操作区域 */}
+          {actions}
 
-            {/* 搜索框 - 条件渲染 */}
-            {showSearch && (
-              <div className="relative" ref={searchContainerRef}>
-                <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <label htmlFor="dashboard-device-search-input" className="sr-only">
-                  搜索设备
-                </label>
-                <Input
-                  id="dashboard-device-search-input"
-                  name="dashboard-device-search"
-                  type="text"
-                  placeholder="搜索设备..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
+          {/* 搜索框 - 条件渲染 */}
+          {showSearch && (
+            <div className="relative" ref={searchContainerRef}>
+              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
+              <label htmlFor="dashboard-device-search-input" className="sr-only">
+                搜索设备
+              </label>
+              <Input
+                id="dashboard-device-search-input"
+                name="dashboard-device-search"
+                type="text"
+                placeholder="搜索设备..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    setActiveIndex(-1)
+                    clearSearch()
+                    return
+                  }
+
+                  if (!showResults || searching || results.length === 0) return
+
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    setActiveIndex((prev) => Math.min(prev + 1, results.length - 1))
+                    return
+                  }
+
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    setActiveIndex((prev) => Math.max(prev - 1, 0))
+                    return
+                  }
+
+                  if (e.key === 'Enter') {
+                    if (activeIndex >= 0 && activeIndex < results.length) {
                       e.preventDefault()
-                      setActiveIndex(-1)
+                      const device = results[activeIndex]
                       clearSearch()
-                      return
+                      router.push(`/devices?search=${encodeURIComponent(device.name)}`)
                     }
-
-                    if (!showResults || searching || results.length === 0) return
-
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault()
-                      setActiveIndex((prev) => Math.min(prev + 1, results.length - 1))
-                      return
-                    }
-
-                    if (e.key === 'ArrowUp') {
-                      e.preventDefault()
-                      setActiveIndex((prev) => Math.max(prev - 1, 0))
-                      return
-                    }
-
-                    if (e.key === 'Enter') {
-                      if (activeIndex >= 0 && activeIndex < results.length) {
-                        e.preventDefault()
-                        const device = results[activeIndex]
-                        clearSearch()
-                        router.push(`/devices?search=${encodeURIComponent(device.name)}`)
-                      }
-                    }
+                  }
+                }}
+                className="pl-9 pr-14 w-56"
+              />
+              {query && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    clearSearch()
                   }}
-                  className="pl-10 pr-12 py-2 w-56"
-                />
-                {query && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                    onClick={() => {
-                      clearSearch()
-                    }}
-                  >
-                    清除
-                  </Button>
-                )}
+                >
+                  清除
+                </Button>
+              )}
 
-                {/* 搜索结果下拉 */}
-                {showResults && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
-                    {searching ? (
-                      <div className="p-4 text-center text-gray-500 dark:text-muted-foreground">搜索中...</div>
-                    ) : results.length > 0 ? (
-                      <div className="py-2">
-                        {results.map((device, index) => (
-                          <div
-                            key={device.id}
-                            className={`px-4 py-2 cursor-pointer flex items-center justify-between ${
-                              index === activeIndex
-                                ? 'bg-muted/40 dark:bg-accent/10'
-                                : 'hover:bg-muted/40 dark:hover:bg-accent/10'
-                            }`}
-                            onMouseEnter={() => setActiveIndex(index)}
-                            onClick={() => {
-                              clearSearch()
-                              router.push(`/devices?search=${encodeURIComponent(device.name)}`)
-                            }}
-                          >
-                            <div>
-                              <div className="font-medium text-foreground">{device.name}</div>
-                              <div className="text-sm text-muted-foreground dark:text-muted-foreground">{device.ip}</div>
-                            </div>
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              device.status === 'online' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                              device.status === 'warning' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                              'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                            }`}>
-                              {device.status === 'online' ? '在线' :
-                               device.status === 'warning' ? '告警' : '离线'}
-                            </span>
+              {/* 搜索结果下拉 */}
+              {showResults && (
+                <div className="absolute top-full left-0 right-0 mt-1 z-10 max-h-60 overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-overlay">
+                  {searching ? (
+                    <div className="p-4 text-center text-muted-foreground">搜索中...</div>
+                  ) : results.length > 0 ? (
+                    <div className="py-1">
+                      {results.map((device, index) => (
+                        <div
+                          key={device.id}
+                          className={`px-4 py-2 cursor-pointer flex items-center justify-between ${
+                            index === activeIndex ? 'bg-surface-3' : 'hover:bg-surface-3'
+                          }`}
+                          onMouseEnter={() => setActiveIndex(index)}
+                          onClick={() => {
+                            clearSearch()
+                            router.push(`/devices?search=${encodeURIComponent(device.name)}`)
+                          }}
+                        >
+                          <div>
+                            <div className="font-medium text-foreground">{device.name}</div>
+                            <div className="text-sm text-muted-foreground">{device.ip}</div>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-4 text-center text-gray-500 dark:text-muted-foreground">没有找到匹配的设备</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+                          <span className={`px-2 py-0.5 text-xs rounded-md whitespace-nowrap ${
+                            device.status === 'online' ? 'bg-success-soft text-success-soft-foreground' :
+                            device.status === 'warning' ? 'bg-warning-soft text-warning-soft-foreground' :
+                            'bg-danger-soft text-danger-soft-foreground'
+                          }`}>
+                            {device.status === 'online' ? '在线' :
+                             device.status === 'warning' ? '告警' : '离线'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-muted-foreground">没有找到匹配的设备</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-            {/* 主题切换 */}
-            <ThemeToggle />
+          {/* 主题切换 */}
+          <ThemeToggle />
 
-            {/* 通知中心 */}
-            <NotificationCenter
-              alertCount={alertCount}
-              onViewAll={() => router.push('/alerts')}
-            />
+          {/* 通知中心 */}
+          <NotificationCenter
+            alertCount={alertCount}
+            onViewAll={() => router.push('/alerts')}
+          />
 
-            {/* 用户菜单 */}
-            <UserMenu />
-          </div>
+          {/* 用户菜单 */}
+          <UserMenu />
         </div>
       </div>
     </header>

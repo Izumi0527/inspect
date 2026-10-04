@@ -15,7 +15,7 @@ export function InspectionConfigSection({ data, onChange }: Props) {
   return (
     <section
       aria-label="巡检配置"
-      className="rounded-xl border border-border bg-card p-5 shadow-sm"
+      className="rounded-lg border border-border bg-card p-4"
     >
       <SectionHeader
         title="巡检配置"

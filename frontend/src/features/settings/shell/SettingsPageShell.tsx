@@ -99,9 +99,9 @@ const SettingsPageShellLayout: React.FC<{
     <AppLayout title="系统设置">
       <SettingsLeaveGuard activeTab={activeTab} />
       <div
-        className={`p-1 ${
-          shouldFillHeight ? 'h-[calc(100vh-64px)] flex flex-col' : ''
-        }`}
+        className={
+          shouldFillHeight ? 'h-[calc(100vh-64px)] flex flex-col' : undefined
+        }
       >
         <SettingsWorkbenchCard fillHeight={shouldFillHeight}>
           <SettingsTabNav

@@ -71,7 +71,7 @@ export const AlertList: React.FC<AlertListProps> = ({
 
       {/* Pagination - 使用增强的分页组件 */}
       {pagination && alerts.length > 0 && (
-        <div className="mt-6 pt-6 border-t dark:border-gray-700">
+        <div className="mt-6 pt-6 border-t border-border">
           <Pagination
             currentPage={pagination.current}
             totalPages={Math.ceil(pagination.total / pagination.pageSize)}

@@ -25,7 +25,7 @@ export function UserPreferenceSection({ data, onChange }: Props) {
   return (
     <section
       aria-label="个人偏好"
-      className="rounded-xl border border-border bg-card p-5 shadow-sm"
+      className="rounded-lg border border-border bg-card p-4"
     >
       <SectionHeader
         title="个人偏好"

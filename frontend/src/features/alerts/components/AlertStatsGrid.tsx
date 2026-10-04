@@ -25,6 +25,12 @@ interface AlertStatsGridProps {
   onCardClick?: (card: AlertStatsCardKey) => void
 }
 
+/**
+ * 告警统计卡（可点击 = 分面筛选）。
+ *
+ * 精密仪器方向：读数默认中性；只有「严重 / 警告」大于零时获得状态强调。
+ * 不再给七张卡各配一种彩色图标底（那正是「七个一样响」的模板感来源）。
+ */
 export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats, onCardClick }) => {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -32,61 +38,50 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats, onCardCli
         title="总告警"
         value={stats.total}
         icon={Bell}
-        iconClassName="text-muted-foreground"
         onClick={onCardClick ? () => onCardClick('total') : undefined}
       />
 
       <CompactStatCard
         title="严重"
         value={stats.critical}
-        valueClassName="text-red-600 dark:text-red-500"
+        valueClassName={stats.critical > 0 ? 'text-danger' : undefined}
         icon={AlertCircle}
-        iconClassName="text-red-600 dark:text-red-500"
         onClick={onCardClick ? () => onCardClick('critical') : undefined}
       />
 
       <CompactStatCard
         title="警告"
         value={stats.warning}
-        valueClassName="text-yellow-600 dark:text-yellow-500"
+        valueClassName={stats.warning > 0 ? 'text-warning' : undefined}
         icon={AlertTriangle}
-        iconClassName="text-yellow-600 dark:text-yellow-500"
         onClick={onCardClick ? () => onCardClick('warning') : undefined}
       />
 
       <CompactStatCard
         title="信息"
         value={stats.info}
-        valueClassName="text-blue-600 dark:text-blue-500"
         icon={Info}
-        iconClassName="text-blue-600 dark:text-blue-500"
         onClick={onCardClick ? () => onCardClick('info') : undefined}
       />
 
       <CompactStatCard
         title="活跃"
         value={stats.active}
-        valueClassName="text-orange-600 dark:text-orange-500"
         icon={Shield}
-        iconClassName="text-orange-600 dark:text-orange-500"
         onClick={onCardClick ? () => onCardClick('active') : undefined}
       />
 
       <CompactStatCard
         title="已确认"
         value={stats.acknowledged}
-        valueClassName="text-yellow-700 dark:text-yellow-400"
         icon={Eye}
-        iconClassName="text-yellow-700 dark:text-yellow-400"
         onClick={onCardClick ? () => onCardClick('acknowledged') : undefined}
       />
 
       <CompactStatCard
         title="已解决"
         value={stats.resolved}
-        valueClassName="text-green-600 dark:text-green-500"
         icon={CheckCircle}
-        iconClassName="text-green-600 dark:text-green-500"
         onClick={onCardClick ? () => onCardClick('resolved') : undefined}
       />
     </div>

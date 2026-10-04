@@ -41,7 +41,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const { sidebarOpen, toggleSidebar } = useSidebar()
 
   return (
-    <div className="h-screen bg-muted/40 dark:bg-background overflow-hidden">
+    <div className="h-screen bg-background overflow-hidden">
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -50,7 +50,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       />
 
       {/* Main Content */}
-      <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300 h-full flex flex-col`}>
+      <div className={`${sidebarOpen ? 'ml-60' : 'ml-14'} transition-all duration-200 motion-reduce:transition-none h-full flex flex-col`}>
         {/* Header - 显示标题、搜索和通知 */}
         {!hideHeader && (
           <DashboardHeader
@@ -64,7 +64,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         <ErrorBoundary>
           <AnimatedContainer
             animation="pageTransition"
-            className={`flex-1 overflow-auto ${fullWidth ? "p-1" : "p-4"}`}
+            className={`flex-1 overflow-auto ${fullWidth ? "p-1" : "p-4 lg:p-6"}`}
           >
             {routerTabs ? (
               /* Router Tabs Mode - Tab和内容包装在Card中 */
@@ -82,14 +82,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                             key={tab.name}
                             href={tab.href}
                             className={`
-                              flex items-center gap-2 border-b-2 py-4 px-1 text-sm font-medium transition-colors whitespace-nowrap
+                              flex items-center gap-2 border-b-2 py-3 px-1 text-sm font-medium transition-colors whitespace-nowrap
                               ${isActive
-                                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                                : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-border dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300'
+                                ? 'border-primary text-primary'
+                                : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
                               }
                             `}
                           >
-                            <Icon className="w-5 h-5" />
+                            <Icon className="w-4 h-4" />
                             {tab.name}
                           </Link>
                         )

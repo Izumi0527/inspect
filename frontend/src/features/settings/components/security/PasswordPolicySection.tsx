@@ -23,7 +23,7 @@ interface Props {
 
 export function PasswordPolicySection({ data, onChange, actions }: Props) {
   return (
-    <section aria-label="密码策略" className="rounded-xl border border-border bg-card p-5 shadow-sm">
+    <section aria-label="密码策略" className="rounded-lg border border-border bg-card p-4">
       <SectionHeader
         title="密码策略"
         icon={Lock}

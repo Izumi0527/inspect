@@ -22,7 +22,7 @@ export function ReportConfigSection({ data, onChange }: Props) {
   return (
     <section
       aria-label="报表配置"
-      className="rounded-xl border border-border bg-card p-5 shadow-sm"
+      className="rounded-lg border border-border bg-card p-4"
     >
       <SectionHeader
         title="报表配置"

@@ -237,7 +237,7 @@ export const LogsSettings: React.FC = () => {
         <div className="space-y-4">
           <section
             aria-label="日志保留策略"
-            className="rounded-xl border border-border bg-card p-5 shadow-sm"
+            className="rounded-lg border border-border bg-card p-4"
           >
             <SectionHeader
               title="日志保留策略"
@@ -316,7 +316,7 @@ export const LogsSettings: React.FC = () => {
 
           <section
             aria-label="Syslog 接收配置"
-            className="rounded-xl border border-border bg-card p-5 shadow-sm"
+            className="rounded-lg border border-border bg-card p-4"
           >
             <SectionHeader
               title="Syslog 接收配置"
@@ -475,7 +475,7 @@ export const LogsSettings: React.FC = () => {
         <div className="space-y-4">
           <section
             aria-label="运行状态"
-            className="rounded-xl border border-border bg-card p-5 shadow-sm"
+            className="rounded-lg border border-border bg-card p-4"
           >
             <SectionHeader
               title="运行状态"
@@ -523,7 +523,7 @@ export const LogsSettings: React.FC = () => {
 
           <section
             aria-label="实时统计"
-            className="rounded-xl border border-border bg-card p-5 shadow-sm"
+            className="rounded-lg border border-border bg-card p-4"
           >
             <SectionHeader
               title="实时统计"
@@ -581,7 +581,7 @@ export const LogsSettings: React.FC = () => {
 
           <section
             aria-label="最近错误"
-            className="rounded-xl border border-border bg-card p-5 shadow-sm"
+            className="rounded-lg border border-border bg-card p-4"
           >
             <SectionHeader
               title="最近错误"
@@ -597,7 +597,7 @@ export const LogsSettings: React.FC = () => {
 
           <section
             aria-label="手动清理日志"
-            className="rounded-xl border border-red-200/70 bg-red-50/70 p-5 shadow-sm dark:border-red-900/50 dark:bg-red-950/10"
+            className="rounded-lg border border-danger/30 bg-danger-soft p-4"
           >
             <SectionHeader
               title="手动清理日志"

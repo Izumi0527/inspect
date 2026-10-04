@@ -10,6 +10,8 @@ import {
   X
 } from 'lucide-react'
 import { Button } from '@/components/atoms'
+import { StatusRail, type StatusTone } from '@/components/atoms/status'
+import { cn } from '@/utils/cn'
 import { humanizeAlertCategory, translateToPlainLanguage } from '@/lib/plain-language'
 import { Alert } from '../types'
 import { useAlertStyles } from '../hooks/useAlerts'
@@ -33,11 +35,19 @@ const severityIcons = {
   info: Info
 }
 
+const severityTone: Record<Alert['severity'], StatusTone> = {
+  critical: 'danger',
+  warning: 'warning',
+  info: 'info',
+}
+
 /**
- * 告警列表项（紧凑两行）
+ * 告警列表项（事件行）。
  *
- * 列表只放"扫一眼就要知道"的信息：标题、状态、分类、设备、时间与一行摘要。
- * 处置建议、原文全文等细节由详情弹窗承载，点击卡片任意位置打开。
+ * 精密仪器方向：
+ * - 前缘状态轨用「形状」编码级别（实线/虚线/发丝），颜色只是第三通道；行不再整行染色
+ * - 级别图标与状态徽标全部走令牌；徽标禁止折行
+ * - 操作常驻（不再依赖悬停）；点击行打开详情弹窗
  */
 export const AlertListItem: React.FC<AlertListItemProps> = ({
   alert,
@@ -49,8 +59,9 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
   onResolve,
   onDelete
 }) => {
-  const { getSeverityColor, getStatusColor, getStatusText } = useAlertStyles()
+  const { getStatusColor, getStatusText } = useAlertStyles()
   const SeverityIcon = severityIcons[alert.severity]
+  const tone = severityTone[alert.severity]
   const [isModalOpen, setIsModalOpen] = useState(false)
 
   const plain = useMemo(
@@ -94,42 +105,47 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
   return (
     <>
       <div
-        className={`border dark:border-gray-700 rounded-lg px-4 py-2.5 hover:shadow-md transition-shadow cursor-pointer ${getSeverityColor(alert.severity)}`}
+        className={cn(
+          'flex items-stretch overflow-hidden rounded-lg border bg-card transition-colors duration-100 motion-reduce:transition-none hover:bg-surface-3 cursor-pointer',
+          isSelected ? 'border-primary/40' : 'border-border',
+        )}
         onClick={() => setIsModalOpen(true)}
       >
-        <div className="flex items-center justify-between gap-3">
+        <StatusRail tone={tone} />
+        <div className="flex flex-1 items-center justify-between gap-3 px-3 py-2.5 min-w-0">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <input
               type="checkbox"
-              className="rounded flex-shrink-0"
+              className="custom-checkbox flex-shrink-0"
               checked={isSelected}
               onChange={() => onSelect(alert.id)}
               onClick={handleCheckboxClick}
+              aria-label={`选择告警：${alert.title}`}
             />
-            <SeverityIcon className={`w-5 h-5 flex-shrink-0 ${
-              alert.severity === 'critical' ? 'text-red-600' :
-              alert.severity === 'warning' ? 'text-yellow-600' : 'text-blue-600'
-            }`} />
+            <SeverityIcon className={cn(
+              'w-4 h-4 flex-shrink-0',
+              tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : 'text-info'
+            )} />
 
-            <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex-1 min-w-0 space-y-0.5">
               <div className="flex items-center gap-2 min-w-0">
-                <h3 className="font-semibold text-foreground truncate" title={alert.title}>
+                <h3 className="font-medium text-sm text-foreground truncate" title={alert.title}>
                   {alert.title}
                 </h3>
-                <span className={`px-2 py-0.5 text-xs font-medium rounded-full flex-shrink-0 ${getStatusColor(alert.status)}`}>
+                <span className={cn('px-1.5 py-0.5 text-xs font-medium rounded-md whitespace-nowrap flex-shrink-0', getStatusColor(alert.status))}>
                   {getStatusText(alert.status)}
                 </span>
-                <span className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-800 text-muted-foreground rounded-full flex-shrink-0">
+                <span className="px-1.5 py-0.5 text-xs bg-surface-3 text-muted-foreground rounded-md whitespace-nowrap flex-shrink-0">
                   {humanizeAlertCategory(alert.category)}
                 </span>
               </div>
 
-              <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 min-w-0">
+              <div className="flex items-center gap-3 text-xs text-muted-foreground min-w-0">
                 <span className="flex items-center gap-1 flex-shrink-0">
                   <Shield className="w-3 h-3" />
                   {alert.device}
                 </span>
-                <span className="flex items-center gap-1 flex-shrink-0">
+                <span className="flex items-center gap-1 flex-shrink-0 tabular-nums">
                   <Clock className="w-3 h-3" />
                   {formatTimestamp(alert.timestamp)}
                 </span>
@@ -154,7 +170,7 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
                   size="sm"
                   onClick={(e) => handleButtonClick(e, () => onAcknowledge?.(alert.id))}
                 >
-                  <CheckCircle className="w-4 h-4 mr-1" />
+                  <CheckCircle className="w-3.5 h-3.5" />
                   确认
                 </Button>
                 <Button
@@ -170,7 +186,9 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
               <Button
                 variant="ghost"
                 size="sm"
+                className="text-muted-foreground hover:text-destructive"
                 onClick={(e) => handleButtonClick(e, handleDelete)}
+                aria-label="删除该告警"
               >
                 <X className="w-4 h-4" />
               </Button>

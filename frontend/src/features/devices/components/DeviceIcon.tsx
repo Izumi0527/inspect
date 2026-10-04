@@ -40,7 +40,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
     offline: { label: '离线', variant: 'error' as const, icon: Power },
     warning: { label: '告警', variant: 'warning' as const, icon: AlertTriangle },
     maintenance: { label: '维护', variant: 'info' as const, icon: Clock },
-    unknown: { label: '未知', variant: 'secondary' as const, icon: Clock }
+    unknown: { label: '未知', variant: 'neutral' as const, icon: Clock }
   }
   
   const config = statusConfig[status]

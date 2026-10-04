@@ -42,13 +42,13 @@ export function SectionHeader({
       <div className="flex items-start space-x-3 flex-1 min-w-0">
         {IconComponent && (
           <div className="flex-shrink-0">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 dark:bg-primary/12">
-              <IconComponent className="h-5 w-5 text-primary" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-surface-3">
+              <IconComponent className="h-4 w-4 text-muted-foreground" />
             </div>
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+          <h3 className="text-base font-semibold text-foreground">{title}</h3>
           {description && (
             <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           )}

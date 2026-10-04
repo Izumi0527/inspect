@@ -69,11 +69,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div
-      className={`fixed inset-y-0 left-0 z-50 ${isOpen ? 'w-64' : 'w-20'} transform border-r border-border/60 bg-card shadow-lg transition-all duration-300`}
+      className={`fixed inset-y-0 left-0 z-50 ${isOpen ? 'w-60' : 'w-14'} transform border-r border-border bg-card transition-all duration-200 motion-reduce:transition-none`}
     >
-      <div className="flex items-center justify-between border-b border-border/60 p-4">
+      <div className={`flex items-center border-b border-border ${isOpen ? 'justify-between p-4' : 'justify-center p-2'}`}>
         {isOpen && (
-          <h1 className="text-xl font-bold bg-gradient-to-r from-teal-600 to-cyan-500 bg-clip-text text-transparent">
+          <h1 className="truncate text-[15px] font-semibold text-foreground">
             {applicationName}
           </h1>
         )}
@@ -83,31 +83,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={onToggle}
           aria-label={isOpen ? '收起侧边栏' : '展开侧边栏'}
           title={isOpen ? '收起侧边栏' : '展开侧边栏'}
-          className="text-foreground/80 hover:bg-muted/70 hover:text-foreground"
+          className="text-muted-foreground hover:bg-surface-3 hover:text-foreground"
         >
           <Menu className="w-5 h-5" />
         </Button>
       </div>
-      
-      <nav className="mt-8">
+
+      <nav className="mt-3 flex flex-col gap-0.5 px-2">
         {visibleNavItems.map((item) => {
           const isActive = currentPath === item.href
-          
+
           return (
             <Link
               key={item.name}
               href={item.href}
-              className={`flex items-center px-4 py-3 transition-colors ${
+              className={`flex items-center rounded-sm py-2 text-sm transition-colors duration-100 motion-reduce:transition-none ${
+                isOpen ? 'gap-3 px-2' : 'justify-center px-0'
+              } ${
                 isActive
-                  ? 'border-r-2 border-primary bg-primary/12 text-primary'
-                  : 'text-foreground/88 hover:bg-muted/70 hover:text-foreground'
+                  ? 'bg-primary/10 font-medium text-foreground'
+                  : 'text-muted-foreground hover:bg-surface-3 hover:text-foreground'
               }`}
             >
-              <item.icon className="w-6 h-6 flex-shrink-0" />
+              <item.icon className="h-5 w-5 flex-shrink-0" />
               {isOpen && (
                 <>
-                  <span className="ml-3 text-sm font-medium">{item.name}</span>
-                  {isActive && <ChevronRight className="w-4 h-4 ml-auto" />}
+                  <span className="truncate">{item.name}</span>
+                  {isActive && <ChevronRight className="ml-auto h-4 w-4 text-primary" />}
                 </>
               )}
             </Link>
@@ -116,8 +118,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {isOpen && (
-        <div className="absolute bottom-0 left-0 right-0 border-t border-border/60 p-4 text-center">
-          <p className="text-xs text-foreground/50">v{APP_VERSION}</p>
+        <div className="absolute bottom-0 left-0 right-0 border-t border-border p-3 text-center">
+          <p className="text-xs text-muted-foreground tabular-nums">v{APP_VERSION}</p>
         </div>
       )}
     </div>

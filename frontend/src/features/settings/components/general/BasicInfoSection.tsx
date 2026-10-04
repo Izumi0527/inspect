@@ -33,7 +33,7 @@ export function BasicInfoSection({ data, onChange, actions }: Props) {
   return (
     <section
       aria-label="基础信息"
-      className="rounded-xl border border-border bg-card p-5 shadow-sm"
+      className="rounded-lg border border-border bg-card p-4"
     >
       <SectionHeader
         title="基础信息"

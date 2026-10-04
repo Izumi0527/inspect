@@ -203,7 +203,7 @@ export function BackupHistorySection({
   }
 
   return (
-    <section aria-label="备份历史记录" className="rounded-xl border border-border bg-card p-5 shadow-sm">
+    <section aria-label="备份历史记录" className="rounded-lg border border-border bg-card p-4">
       <SectionHeader
         title="备份历史记录"
         icon={Database}

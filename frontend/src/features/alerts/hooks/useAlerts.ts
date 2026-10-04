@@ -204,26 +204,29 @@ export function useAlertSelection() {
 }
 
 // 告警样式工具hook
+//
+// 精密仪器方向：状态色全部走语义令牌（soft 底 + on-soft 文字，浅深两套成对）。
+// 旧实现返回硬编码浅色粉彩且无 dark: 变体，深色主题下对比度曾低至 1.02:1（P0）。
 export function useAlertStyles() {
   const getSeverityColor = useCallback((severity: AlertSeverity) => {
     switch (severity) {
       case 'critical':
-        return 'bg-red-100 text-red-800 border-red-200'
+        return 'bg-danger-soft text-danger-soft-foreground'
       case 'warning':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+        return 'bg-warning-soft text-warning-soft-foreground'
       case 'info':
-        return 'bg-blue-100 text-blue-800 border-blue-200'
+        return 'bg-info-soft text-info-soft-foreground'
     }
   }, [])
 
   const getStatusColor = useCallback((status: AlertStatus) => {
     switch (status) {
       case 'active':
-        return 'bg-red-100 text-red-800'
+        return 'bg-danger-soft text-danger-soft-foreground'
       case 'acknowledged':
-        return 'bg-yellow-100 text-yellow-800'
+        return 'bg-warning-soft text-warning-soft-foreground'
       case 'resolved':
-        return 'bg-green-100 text-green-800'
+        return 'bg-success-soft text-success-soft-foreground'
     }
   }, [])
 

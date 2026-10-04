@@ -47,7 +47,7 @@ export function AuthenticationSection({ data, onChange }: Props) {
   }
 
   return (
-    <section aria-label="访问控制" className="rounded-xl border border-border bg-card p-5 shadow-sm">
+    <section aria-label="访问控制" className="rounded-lg border border-border bg-card p-4">
       <SectionHeader
         title="访问控制"
         icon={GlobeLock}

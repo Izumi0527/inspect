@@ -6,18 +6,8 @@ import {
   CheckCircle,
   Power,
   AlertTriangle,
-  type LucideIcon,
 } from 'lucide-react'
-import { Card, CardContent } from '@/components/atoms'
-
-interface StatItem {
-  label: string
-  value: number
-  icon: LucideIcon
-  bgColor: string
-  iconColor: string
-  valueColor?: string
-}
+import { CompactStatCard } from '@/components/shared/CompactStatCard'
 
 interface DeviceStatsBarProps {
   summary: {
@@ -29,77 +19,42 @@ interface DeviceStatsBarProps {
   }
 }
 
-const STAT_ITEMS: Omit<StatItem, 'value'>[] = [
-  {
-    label: '总设备数',
-    icon: Server,
-    bgColor: 'bg-blue-100 dark:bg-blue-900/30',
-    iconColor: 'text-blue-600 dark:text-blue-400',
-  },
-  {
-    label: '在线设备',
-    icon: CheckCircle,
-    bgColor: 'bg-green-100 dark:bg-green-900/30',
-    iconColor: 'text-green-600 dark:text-green-400',
-    valueColor: 'text-green-600 dark:text-green-400',
-  },
-  {
-    label: '离线设备',
-    icon: Power,
-    bgColor: 'bg-red-100 dark:bg-red-900/30',
-    iconColor: 'text-red-600 dark:text-red-400',
-    valueColor: 'text-red-600 dark:text-red-400',
-  },
-  {
-    label: '告警设备',
-    icon: AlertTriangle,
-    bgColor: 'bg-yellow-100 dark:bg-yellow-900/30',
-    iconColor: 'text-yellow-600 dark:text-yellow-400',
-    valueColor: 'text-yellow-600 dark:text-yellow-400',
-  },
-  {
-    label: '总告警数',
-    icon: AlertTriangle,
-    bgColor: 'bg-purple-100 dark:bg-purple-900/30',
-    iconColor: 'text-purple-600 dark:text-purple-400',
-    valueColor: 'text-purple-600 dark:text-purple-400',
-  },
-]
-
-/** 设备统计卡片栏 — 数据驱动，消除 5 张卡片的重复 JSX */
+/**
+ * 设备统计卡栏 —— 五张读数卡。
+ *
+ * 精密仪器方向：读数默认中性；只有异常值（离线 / 告警 > 0）获得状态强调。
+ * 实现收敛为共享 CompactStatCard，不再维护本地重复实现与硬编码调色板。
+ */
 export const DeviceStatsBar: React.FC<DeviceStatsBarProps> = ({ summary }) => {
-  const values = [
-    summary.total,
-    summary.online,
-    summary.offline,
-    summary.alerting,
-    summary.totalAlerts,
+  const items = [
+    { label: '总设备数', value: summary.total, icon: Server, valueClassName: undefined as string | undefined },
+    { label: '在线设备', value: summary.online, icon: CheckCircle, valueClassName: undefined },
+    {
+      label: '离线设备',
+      value: summary.offline,
+      icon: Power,
+      valueClassName: summary.offline > 0 ? 'text-danger' : undefined,
+    },
+    {
+      label: '告警设备',
+      value: summary.alerting,
+      icon: AlertTriangle,
+      valueClassName: summary.alerting > 0 ? 'text-warning' : undefined,
+    },
+    { label: '总告警数', value: summary.totalAlerts, icon: AlertTriangle, valueClassName: undefined },
   ]
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-      {STAT_ITEMS.map((item, index) => {
-        const Icon = item.icon
-        return (
-          <Card key={item.label}>
-            <CardContent className="p-2.5">
-              <div className="flex items-center">
-                <div className={`p-1 rounded-md ${item.bgColor}`}>
-                  <Icon className={`h-5 w-5 ${item.iconColor}`} />
-                </div>
-                <div className="ml-2.5">
-                  <p className="text-xs font-medium text-muted-foreground leading-tight">
-                    {item.label}
-                  </p>
-                  <p className={`text-lg font-bold leading-none ${item.valueColor || 'text-foreground'}`}>
-                    {values[index]}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )
-      })}
+      {items.map((item) => (
+        <CompactStatCard
+          key={item.label}
+          title={item.label}
+          value={item.value}
+          icon={item.icon}
+          valueClassName={item.valueClassName}
+        />
+      ))}
     </div>
   )
 }
