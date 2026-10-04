@@ -148,7 +148,7 @@ describe('Pagination 截图布局与页码', () => {
     const next = screen.getByRole('button', { name: '下一页' })
     const selector = screen.getByTestId('shared-page-size-select')
     expect(next.compareDocumentPosition(selector) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(screen.getByRole('button', { name: '1', exact: true })).toHaveClass('rounded-full')
+    expect(screen.getByRole('button', { name: '1', exact: true })).toHaveClass('rounded-md')
   })
 
   it('当前页和禁用的上一页不触发，下一页只触发一次', async () => {

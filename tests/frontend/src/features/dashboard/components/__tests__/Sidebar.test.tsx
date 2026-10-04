@@ -26,14 +26,13 @@ describe('Dashboard Sidebar', () => {
 
     expect(inactiveLink.className).not.toContain('text-gray-700')
     expect(inactiveLink.className).not.toContain('hover:bg-blue-50')
-    expect(inactiveLink.className).toContain('text-foreground/88')
-    expect(inactiveLink.className).toContain('hover:bg-muted/70')
+    expect(inactiveLink.className).toContain('text-muted-foreground')
+    expect(inactiveLink.className).toContain('hover:bg-surface-3')
 
     expect(activeLink.className).not.toContain('bg-blue-50')
     expect(activeLink.className).not.toContain('text-blue-600')
     expect(activeLink.className).not.toContain('border-blue-600')
-    expect(activeLink.className).toContain('bg-primary/12')
-    expect(activeLink.className).toContain('text-primary')
-    expect(activeLink.className).toContain('border-primary')
+    expect(activeLink.className).toContain('bg-primary/10')
+    expect(activeLink.className).toContain('font-medium')
   })
 })

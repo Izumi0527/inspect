@@ -26,15 +26,15 @@ describe('CompactStatCard', () => {
     )
 
     const valueEl = screen.getByText('12')
-    expect(valueEl).toHaveClass('text-lg', 'font-bold', 'leading-none')
+    expect(valueEl).toHaveClass('text-2xl', 'font-semibold', 'leading-none', 'tabular-nums')
 
-    // CardContent 使用 p-2.5（Tailwind 含小数点，需要转义）
-    expect(container.querySelector('.p-2\\.5')).toBeInTheDocument()
+    // CardContent 使用 p-3（仪器风密度）
+    expect(container.querySelector('.p-3')).toBeInTheDocument()
 
-    // 图标容器使用 p-1 + rounded-md，并带有传入的背景色
+    // 传入 iconBgClassName 时图标有底衬容器，并带传入的背景色
     const svg = container.querySelector('svg')
     expect(svg).toBeInTheDocument()
-    expect(svg?.parentElement).toHaveClass('p-1', 'rounded-md', 'bg-blue-100')
+    expect(svg?.parentElement).toHaveClass('h-6', 'w-6', 'rounded-sm', 'bg-blue-100')
   })
 
   it('提供 onClick 时可点击并触发回调', async () => {
@@ -69,8 +69,8 @@ describe('CompactStatCard', () => {
     )
 
     const changeEl = screen.getByText('↗ +10%')
-    expect(changeEl).toHaveClass('text-xs', 'font-semibold')
-    expect(changeEl).toHaveClass('text-emerald-600')
+    expect(changeEl).toHaveClass('text-xs', 'font-medium')
+    expect(changeEl).toHaveClass('text-success')
   })
 
   it('提供 changeHint 时追加提示文案', () => {

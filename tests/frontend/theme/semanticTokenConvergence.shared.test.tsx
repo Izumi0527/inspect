@@ -33,14 +33,14 @@ describe('共享组件语义化主题收敛', () => {
     const input = screen.getByPlaceholderText('输入关键字')
     const textarea = screen.getByPlaceholderText('输入描述')
 
-    expect(input.className).toContain('border-border/50')
-    expect(input.className).toContain('bg-card/80')
+    expect(input.className).toContain('border-input')
+    expect(input.className).toContain('bg-card')
     expect(input.className).toContain('text-foreground')
     expect(input.className).not.toContain('border-gray-200/50')
     expect(input.className).not.toContain('bg-white/80')
 
-    expect(textarea.className).toContain('border-border/50')
-    expect(textarea.className).toContain('bg-card/80')
+    expect(textarea.className).toContain('border-input')
+    expect(textarea.className).toContain('bg-card')
     expect(textarea.className).toContain('text-foreground')
     expect(textarea.className).not.toContain('border-gray-200/50')
     expect(textarea.className).not.toContain('bg-white/80')
@@ -69,8 +69,8 @@ describe('共享组件语义化主题收敛', () => {
     )
 
     const selectTrigger = screen.getByRole('combobox')
-    expect(selectTrigger.className).toContain('border-border/50')
-    expect(selectTrigger.className).toContain('bg-card/80')
+    expect(selectTrigger.className).toContain('border-input')
+    expect(selectTrigger.className).toContain('bg-card')
     expect(selectTrigger.className).toContain('text-foreground')
     expect(selectTrigger.className).not.toContain('border-gray-200/50')
 
@@ -154,11 +154,12 @@ describe('共享组件语义化主题收敛', () => {
       <Table columns={columns} data={data} />
     )
 
-    expect(container.innerHTML).toContain('bg-card/80')
-    expect(container.innerHTML).toContain('border-border/50')
-    expect(container.innerHTML).toContain('text-foreground')
-    expect(container.innerHTML).toContain('bg-muted/40')
+    expect(container.innerHTML).toContain('bg-muted')
+    expect(container.innerHTML).toContain('border-border')
+    expect(container.innerHTML).toContain('text-muted-foreground')
+    expect(container.innerHTML).toContain('tabular-nums')
     expect(container.innerHTML).not.toContain('bg-white/80')
     expect(container.innerHTML).not.toContain('text-gray-900')
+    expect(container.innerHTML).not.toContain('backdrop-blur')
   })
 })
