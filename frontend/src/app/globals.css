@@ -1,11 +1,17 @@
 /* ============================================
-   Tailwind CSS v4 主题 —— 精密仪器（Precision Instrument）
+   Tailwind CSS v4 主题 —— 双皮肤（经典 / 精密仪器）
    ============================================
-   设计令牌权威值与对比度验证：
-     docs/plans/ui-redesign-2026-10-03/evidence/after/palette-verify.py
-   约束：改动任何颜色值后必须复跑该脚本（分页选中态亦已纳入验证）。
+   皮肤轴（html[data-skin]）与明暗轴（html.dark）正交：
+     classic    经典主题 —— 玻璃拟态外观（默认；:root / .dark 即经典值）
+     instrument 精密仪器 —— 明度阶 + 发丝线 + 状态轨（[data-skin="instrument"] 作用域）
 
-   色彩预算：全屏彩色值只有 6 个 —— brand + danger / warning / success / info / unknown。
+   精密仪器令牌权威值与对比度验证：
+     docs/plans/ui-redesign-2026-10-03/evidence/after/palette-verify.py
+   约束：改动任何仪器色值后必须复跑该脚本（分页选中态亦已纳入验证）。
+   经典值为 2026-10-04 前旧外观的忠实映射，基线见
+     docs/plans/2026-10-04-precision-instrument/reference/classic/。
+
+   色彩预算（instrument）：全屏彩色值只有 6 个 —— brand + danger / warning / success / info / unknown。
    其余表面、刻线、文字一律无彩中性；层级由明度阶与发丝线承载；
    装饰性阴影为零，唯一阴影（shadow-overlay）留给真正浮起的层。
    ============================================ */
@@ -20,7 +26,7 @@
 @plugin "@tailwindcss/forms";
 @plugin "@tailwindcss/typography";
 
-/* 3. 主题映射：原始值定义在下方 :root/.dark，这里只做语义映射 */
+/* 3. 主题映射：原始值定义在下方第 4 节四块调色板，这里只做语义映射 */
 @theme inline {
   /* 表面与文字 */
   --color-background: var(--bg);
@@ -86,15 +92,17 @@
   --font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 
-  /* 圆角三档语义：控件 6 / 面板 8 / 浮层 12（修复旧阶梯断裂） */
-  --radius-sm: 6px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 12px;
-  --radius-3xl: 16px;
+  /* 圆角三档语义：控件 6 / 面板 8 / 浮层 12（修复旧阶梯断裂）。
+     实际值经 --skin-radius-* 间接，随皮肤切换（经典为旧阶梯 12/14/16）。 */
+  --radius-sm: var(--skin-radius-sm);
+  --radius-md: var(--skin-radius-md);
+  --radius-lg: var(--skin-radius-lg);
+  --radius-xl: var(--skin-radius-xl);
+  --radius-2xl: var(--skin-radius-2xl);
+  --radius-3xl: var(--skin-radius-3xl);
 
-  /* 浮层阴影（全站唯一一档，只给弹窗/下拉/日期面板/Tooltip） */
+  /* 浮层阴影（instrument 唯一一档，只给弹窗/下拉/日期面板/Tooltip；
+     经典皮肤的 shadow-lg / shadow-2xl 由覆盖层恢复） */
   --shadow-overlay: 0 8px 24px -6px rgb(15 21 25 / 0.18), 0 2px 6px -2px rgb(15 21 25 / 0.10);
 
   /* 动效三档（进入 220ms / 状态 160ms / 反馈 80ms，退出快于进入） */
@@ -144,11 +152,89 @@
 }
 
 /* ============================================
-   4. 调色板：浅 / 深两套成对定义（hex 为权威值）
+   4. 调色板：四块成对定义
+      :root / .dark                              → 经典（默认）
+      [data-skin="instrument"] / .dark[data-skin="instrument"] → 精密仪器
+      仪器深色用复合选择器（0,2,0）确保在 dark+instrument 组合下胜出。
    ============================================ */
 
 @layer base {
+  /* 4.1 经典 · 浅色（旧 HSL 三元组 → 新语义变量名） */
   :root {
+    /* 表面明度阶 */
+    --bg: hsl(220 20% 98%);
+    --surface: hsl(0 0% 100%);
+    --surface-2: hsl(210 40% 96%);
+    --surface-3: hsl(186 70% 93%);
+
+    /* 刻线 */
+    --rule: hsl(220 13% 91%);
+    --rule-strong: hsl(220 13% 91%);
+
+    /* 文字 */
+    --ink: hsl(220 10% 10%);
+    --ink-2: hsl(220 10% 45%);
+    --ink-3: hsl(220 10% 55%);
+
+    /* 品牌（旧 primary 青绿） */
+    --brand: hsl(174 73% 38%);
+    --on-brand: hsl(0 0% 98%);
+
+    /* 五档状态：对应旧 Tailwind 色板 600 / 100 / 800 三档 */
+    --danger: #dc2626;   --on-danger: #ffffff;   --danger-soft: #fee2e2;   --on-danger-soft: #991b1b;
+    --warning: #ca8a04;  --on-warning: #ffffff;  --warning-soft: #fef9c3;  --on-warning-soft: #854d0e;
+    --success: #16a34a;  --on-success: #ffffff;  --success-soft: #dcfce7;  --on-success-soft: #166534;
+    --info: #2563eb;     --on-info: #ffffff;     --info-soft: #dbeafe;     --on-info-soft: #1e40af;
+    --unknown: #6b7280;  --on-unknown: #ffffff;  --unknown-soft: #f3f4f6;  --on-unknown-soft: #1f2937;
+
+    /* 分页（旧值） */
+    --pagination-background: #ffffff;
+    --pagination-control: #f1f1f3;
+    --pagination-selected: #e3effb;
+    --pagination-selected-foreground: #1767a8;
+
+    /* 圆角（旧阶梯：--radius 16px 派生） */
+    --skin-radius-sm: 12px;
+    --skin-radius-md: 14px;
+    --skin-radius-lg: 16px;
+    --skin-radius-xl: 12px;
+    --skin-radius-2xl: 16px;
+    --skin-radius-3xl: 24px;
+  }
+
+  /* 4.2 经典 · 深色（旧 HSL 三元组 → 新语义变量名） */
+  .dark {
+    --bg: hsl(220 15% 11%);
+    --surface: hsl(220 15% 14%);
+    --surface-2: hsl(220 13% 17%);
+    --surface-3: hsl(220 13% 21%);
+
+    --rule: hsl(220 12% 23%);
+    --rule-strong: hsl(220 12% 20%);
+
+    --ink: hsl(210 20% 92%);
+    --ink-2: hsl(214 12% 68%);
+    --ink-3: hsl(214 12% 58%);
+
+    --brand: hsl(196 72% 56%);
+    --on-brand: hsl(0 0% 98%);
+
+    /* 状态色与仪器深色同组：同为旧 Tailwind 900/300 组合的暗底浅字变体，色相一致 */
+    --danger: #F0776B;   --on-danger: #2A100D;   --danger-soft: #3A1E1B;   --on-danger-soft: #FFB3AA;
+    --warning: #E0A33C;  --on-warning: #2A1C05;  --warning-soft: #382A13;  --on-warning-soft: #F3CE8A;
+    --success: #4FBF87;  --on-success: #082114;  --success-soft: #16301F;  --on-success-soft: #9CE3BA;
+    --info: #5DA6E8;     --on-info: #0A1D2E;     --info-soft: #152A3D;     --on-info-soft: #A9D2F3;
+    --unknown: #8B9AA4;  --on-unknown: #14191C;  --unknown-soft: #242C31;  --on-unknown-soft: #B6C2C9;
+
+    /* 分页（旧值） */
+    --pagination-background: #18181c;
+    --pagination-control: #303034;
+    --pagination-selected: #223448;
+    --pagination-selected-foreground: #70b9f5;
+  }
+
+  /* 4.3 精密仪器 · 浅色（hex 为权威值，验证脚本见文件头） */
+  [data-skin="instrument"] {
     /* 表面明度阶 */
     --bg: #F4F6F7;
     --surface: #FFFFFF;
@@ -180,9 +266,18 @@
     --pagination-control: #E5EAED;
     --pagination-selected: #D7EBED;
     --pagination-selected-foreground: #0A5A62;
+
+    /* 圆角（仪器阶梯：控件 6 / 面板 8 / 浮层 12） */
+    --skin-radius-sm: 6px;
+    --skin-radius-md: 6px;
+    --skin-radius-lg: 8px;
+    --skin-radius-xl: 12px;
+    --skin-radius-2xl: 12px;
+    --skin-radius-3xl: 16px;
   }
 
-  .dark {
+  /* 4.4 精密仪器 · 深色 */
+  .dark[data-skin="instrument"] {
     --bg: #12171A;
     --surface: #191F23;
     --surface-2: #202830;
@@ -255,4 +350,249 @@
   .custom-checkbox:hover {
     @apply border-primary/80;
   }
+}
+
+/* ============================================
+   6. 皮肤化默认值与经典外观
+   ============================================ */
+
+/* 6.1 皮肤化默认几何（@layer components）
+   组件真身已不再自带这些工具类。层序 components < utilities，
+   因此调用方通过 className 传入的尺寸/内边距覆盖始终优先。 */
+@layer components {
+  /* 面板外观：调用方传入的 bg-/border-/rounded- 工具类始终优先 */
+  :is([data-slot="card"], [data-slot="stat-card"]) {
+    border-radius: var(--skin-radius-lg);
+    border-color: var(--rule);
+    background-color: var(--surface);
+  }
+  [data-skin="classic"] :is([data-slot="card"], [data-slot="stat-card"]) {
+    border-radius: 12px;
+    border-color: color-mix(in srgb, var(--rule) 50%, transparent);
+    background-color: color-mix(in srgb, var(--surface) 80%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  }
+
+  /* 面板内边距（旧：p-6 / p-6 pt-0；仪器：p-4 / p-4 pt-0） */
+  [data-slot="card-header"] { padding: 1rem; }
+  [data-slot="card-content"] { padding: 0 1rem 1rem; }
+  [data-slot="card-footer"] { padding: 0 1rem 1rem; }
+  [data-skin="classic"] [data-slot="card-header"] { padding: 1.5rem; }
+  [data-skin="classic"] [data-slot="card-content"],
+  [data-skin="classic"] [data-slot="card-footer"] { padding: 0 1.5rem 1.5rem; }
+
+  /* 统计卡内边距（旧：p-2.5；仪器：p-3） */
+  [data-slot="stat-card"] [data-slot="card-content"] { padding: 0.75rem; }
+  [data-skin="classic"] [data-slot="stat-card"] [data-slot="card-content"] { padding: 0.625rem; }
+
+  /* 按钮几何（旧：h-9/h-8/h-12 + rounded-lg/md/xl；仪器：32/28/36 + 圆角 6） */
+  [data-slot="button"] { border-radius: 6px; }
+  [data-slot="button"][data-size="default"] { height: 2rem; padding: 0 0.75rem; }
+  [data-slot="button"][data-size="sm"] { height: 1.75rem; padding: 0 0.625rem; }
+  [data-slot="button"][data-size="lg"] { height: 2.25rem; padding: 0 1.25rem; }
+  [data-slot="button"][data-size="icon"] { height: 2rem; width: 2rem; }
+  [data-skin="classic"] [data-slot="button"] { border-radius: 16px; }
+  [data-skin="classic"] [data-slot="button"][data-size="default"] { height: 2.25rem; padding: 0.5rem 1rem; }
+  [data-skin="classic"] [data-slot="button"][data-size="sm"] { height: 2rem; border-radius: 14px; padding: 0 0.75rem; font-size: 0.75rem; }
+  [data-skin="classic"] [data-slot="button"][data-size="lg"] { height: 3rem; border-radius: 12px; padding: 0 2rem; font-size: 1rem; }
+  [data-skin="classic"] [data-slot="button"][data-size="icon"] { height: 2.25rem; width: 2.25rem; }
+
+  /* 输入控件几何（旧：h-12 / px-4 py-3 / 圆角 12；仪器：36 / 12-6 / 圆角 6） */
+  :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], [data-slot="multiselect-trigger"]) { border-radius: 6px; }
+  [data-slot="input"], [data-slot="select-trigger"], [data-slot="multiselect-trigger"] { height: 2.25rem; padding: 0.375rem 0.75rem; }
+  [data-slot="textarea"] { padding: 0.5rem 0.75rem; }
+  [data-skin="classic"] :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], [data-slot="multiselect-trigger"]) { border-radius: 12px; }
+  [data-skin="classic"] :is([data-slot="input"], [data-slot="select-trigger"], [data-slot="multiselect-trigger"]) { height: 3rem; padding: 0.75rem 1rem; }
+  [data-skin="classic"] [data-slot="textarea"] { padding: 0.75rem 1rem; }
+}
+
+/* 6.2 经典皮肤外观覆盖（未分层 → 优先于任何 @layer 内的工具类）
+   仅覆盖调用方不定制的属性：圆角、玻璃、阴影、边框色、字号、宽度。 */
+[data-skin="classic"] {
+  /* --- 表格：表头 / 行线 / 悬停（旧 bg-muted/40、border/50、border/30、hover muted/30） --- */
+  & [data-slot="table-header-row"] {
+    background-color: color-mix(in srgb, var(--surface-2) 40%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--rule) 50%, transparent);
+  }
+  & [data-slot="table-header-row"] > th {
+    background-color: color-mix(in srgb, var(--surface-2) 40%, transparent);
+    color: var(--ink);
+  }
+  & [data-slot="table-row"] {
+    border-bottom-color: color-mix(in srgb, var(--rule) 30%, transparent);
+  }
+  & [data-slot="table-row"]:hover {
+    background-color: color-mix(in srgb, var(--surface-2) 30%, transparent);
+  }
+  & [data-slot="table-footer"] {
+    border-top-color: color-mix(in srgb, var(--rule) 50%, transparent);
+  }
+
+  /* --- 按钮：过渡 / 阴影 / 位移 / 玻璃悬停 --- */
+  & [data-slot="button"] { transition: all 0.2s; }
+  & [data-slot="button"]:is([data-variant="default"], [data-variant="primary"]) {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  }
+  & [data-slot="button"]:is(
+    [data-variant="destructive"], [data-variant="outline"], [data-variant="secondary"],
+    [data-variant="success"], [data-variant="warning"], [data-variant="info"], [data-variant="error"]
+  ) {
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+  & [data-slot="button"]:is(
+    [data-variant="default"], [data-variant="primary"], [data-variant="success"],
+    [data-variant="warning"], [data-variant="info"], [data-variant="error"]
+  ):active {
+    transform: scale(0.95);
+  }
+  & [data-slot="button"]:is([data-variant="outline"], [data-variant="ghost"]):hover {
+    background-color: hsl(186 96% 45%);
+    color: hsl(0 0% 98%);
+  }
+
+  /* --- 徽标：胶囊形 --- */
+  & [data-slot="badge"] { border-radius: 9999px; }
+
+  /* --- 输入 / 选择器：玻璃 --- */
+  & :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], [data-slot="multiselect-trigger"]) {
+    border-color: color-mix(in srgb, var(--rule) 50%, transparent);
+    background-color: color-mix(in srgb, var(--surface) 80%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    font-size: 1rem;
+  }
+  & :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], [data-slot="multiselect-trigger"]):focus {
+    background-color: color-mix(in srgb, var(--bg) 90%, transparent);
+  }
+  & :is([data-slot="input"], [data-slot="textarea"]):hover { border-color: var(--rule); }
+
+  /* 分页内的页大小触发器保持实色胶囊（旧观感） */
+  & [data-slot="pagination"] [data-slot="select-trigger"] {
+    height: 2rem;
+    border-radius: 9999px;
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+    border-color: transparent;
+    background-color: var(--pagination-control);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  & [data-slot="pagination"] [data-slot="select-trigger"]:focus { background-color: var(--pagination-control); }
+
+  /* --- 分页：高度与胶囊按钮 --- */
+  & [data-slot="pagination"] { min-height: 2.75rem; padding-top: 0.375rem; padding-bottom: 0.375rem; }
+  & [data-slot="pagination"] button { border-radius: 9999px; }
+
+  /* --- 侧栏：宽 16rem / 渐变标题 / 旧链接配方 --- */
+  & [data-slot="sidebar"] {
+    width: 16rem;
+    border-right-color: color-mix(in srgb, var(--rule) 60%, transparent);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  }
+  & [data-slot="sidebar"][data-collapsed] { width: 5rem; }
+  & [data-slot="sidebar"] h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    background-image: linear-gradient(to right, #0d9488, #06b6d4);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  & [data-slot="sidebar"] nav { margin-top: 2rem; padding-left: 0; padding-right: 0; gap: 0; }
+  & [data-slot="sidebar-link"] { padding: 0.75rem 1rem; border-radius: 0; }
+  & [data-slot="sidebar-link"] svg { height: 1.5rem; width: 1.5rem; }
+  & [data-slot="sidebar-link"][data-active] {
+    background-color: color-mix(in srgb, var(--brand) 12%, transparent);
+    color: var(--brand);
+    border-right: 2px solid var(--brand);
+  }
+  & [data-slot="sidebar-link"]:not([data-active]) { color: color-mix(in srgb, var(--ink) 88%, transparent); }
+  & [data-slot="sidebar-link"]:not([data-active]):hover {
+    background-color: color-mix(in srgb, var(--surface-2) 70%, transparent);
+    color: var(--ink);
+  }
+
+  /* --- 顶栏：shadow-sm / 旧留白与标题字号 --- */
+  & [data-slot="dashboard-header"] { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); }
+  & [data-slot="dashboard-header"] > div { height: auto; padding: 1rem 1.5rem; }
+  & [data-slot="dashboard-header"] h1 { font-size: 1.5rem; line-height: 2rem; font-weight: 700; }
+
+  /* --- 布局：bg-muted/40、旧栏宽 --- */
+  & [data-slot="app-layout"] { background-color: color-mix(in srgb, var(--surface-2) 40%, transparent); }
+  & [data-slot="app-main"] { margin-left: 16rem; }
+  & [data-slot="app-main"][data-collapsed] { margin-left: 5rem; }
+
+  /* --- 统计卡：旧读数与图标底衬 --- */
+  & [data-slot="stat-value"] { font-size: 1.125rem; font-weight: 700; }
+  & [data-slot="stat-icon-chip"] { height: 1.75rem; width: 1.75rem; border-radius: 14px; }
+  & [data-slot="stat-icon-chip"] svg { height: 1.25rem; width: 1.25rem; }
+
+  /* --- 主题切换触发器：旧圆角与悬停放大 --- */
+  & [data-slot="theme-toggle"] { border-radius: 12px; }
+  & [data-slot="theme-toggle"]:hover {
+    background-color: color-mix(in srgb, var(--surface-3) 12%, transparent);
+    transform: scale(1.05);
+  }
+
+  /* --- 设置页分节头：品牌色图标底衬与标题字号 --- */
+  & [data-slot="section-icon-chip"] {
+    height: 2.5rem;
+    width: 2.5rem;
+    border-radius: 16px;
+    background-color: color-mix(in srgb, var(--brand) 10%, transparent);
+  }
+  & [data-slot="section-icon-chip"] svg { height: 1.25rem; width: 1.25rem; color: var(--brand); }
+  & [data-slot="section-header"] h3 { font-size: 1.125rem; }
+
+  /* --- 告警行：旧的整行按级别染色 + 悬停阴影（不显示状态轨） --- */
+  & [data-slot="alert-list-item"] { border-radius: 12px; }
+  & [data-slot="alert-list-item"]:hover {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+  & [data-slot="alert-list-item"] [data-slot="status-rail"] { display: none; }
+  & [data-slot="alert-list-item"][data-severity="critical"] { background-color: #fee2e2; border-color: #fecaca; }
+  & [data-slot="alert-list-item"][data-severity="critical"] h3 { color: #991b1b; }
+  & [data-slot="alert-list-item"][data-severity="warning"] { background-color: #fef9c3; border-color: #fde68a; }
+  & [data-slot="alert-list-item"][data-severity="warning"] h3 { color: #854d0e; }
+  & [data-slot="alert-list-item"][data-severity="info"] { background-color: #dbeafe; border-color: #bfdbfe; }
+  & [data-slot="alert-list-item"][data-severity="info"] h3 { color: #1e40af; }
+
+  /* --- 浮层（弹窗 / 气泡 / 下拉）：旧玻璃配方 --- */
+  & :is([data-slot="dialog-content"], [data-slot="modal-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"]) {
+    border-color: color-mix(in srgb, var(--rule) 50%, transparent);
+    background-color: color-mix(in srgb, var(--surface) 95%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  }
+  & :is([data-slot="dialog-overlay"], [data-slot="modal-overlay"]) {
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+}
+
+.dark[data-skin="classic"] {
+  & [data-slot="app-layout"] { background-color: var(--bg); }
+  & [data-slot="button"]:is([data-variant="outline"], [data-variant="ghost"]):hover {
+    background-color: hsl(198 44% 24%);
+    color: hsl(0 0% 98%);
+  }
+  /* 告警行深色配色：旧版此处无暗色变体（对比度 1.02:1 缺陷），按暗底浅字修正 */
+  & [data-slot="alert-list-item"][data-severity="critical"] {
+    background-color: color-mix(in srgb, #7f1d1d 30%, transparent);
+    border-color: #991b1b;
+  }
+  & [data-slot="alert-list-item"][data-severity="critical"] h3 { color: #fca5a5; }
+  & [data-slot="alert-list-item"][data-severity="warning"] {
+    background-color: color-mix(in srgb, #78350f 30%, transparent);
+    border-color: #92400e;
+  }
+  & [data-slot="alert-list-item"][data-severity="warning"] h3 { color: #fcd34d; }
+  & [data-slot="alert-list-item"][data-severity="info"] {
+    background-color: color-mix(in srgb, #1e3a8a 30%, transparent);
+    border-color: #1e40af;
+  }
+  & [data-slot="alert-list-item"][data-severity="info"] h3 { color: #93c5fd; }
 }
