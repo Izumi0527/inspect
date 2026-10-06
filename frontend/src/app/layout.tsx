@@ -21,7 +21,16 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang="zh-CN" data-skin="classic" suppressHydrationWarning>
+      <head>
+        {/* 首帧防闪烁：绘制前按本地存储设置皮肤（SSR 默认 classic，仅存储为 instrument 时改写） */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{if(localStorage.getItem('ui-skin')==='instrument'){document.documentElement.setAttribute('data-skin','instrument')}}catch(e){}})()",
+          }}
+        />
+      </head>
       <body className="font-sans antialiased">
         {/* <CriticalResourcePreloader /> */}
         <Providers>

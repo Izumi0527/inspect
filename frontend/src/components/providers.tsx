@@ -7,6 +7,7 @@ import { ThemeProvider } from 'next-themes'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '@/lib/contexts/auth-context'
 import { SidebarProvider } from '@/lib/contexts/sidebar-context'
+import { SkinProvider } from '@/lib/contexts/skin-context'
 import { ApiClientError } from '@/lib/api-client'
 import httpInterceptor from '@/services/httpInterceptor'
 import { createLogger } from '@/lib/logger'
@@ -88,24 +89,27 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange={false}
     >
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <WebSocketBootstrap />
-          <DatetimePreferencesSync />
-          <SidebarProvider>
-            {children}
-            <Toaster
-              position="top-right"
-              toastOptions={{
-                duration: 4000,
-                className:
-                  'rounded-2xl border border-border/40 bg-card/90 text-foreground backdrop-blur-xl',
-              }}
-            />
-            <ReactQueryDevtools initialIsOpen={false} />
-          </SidebarProvider>
-        </AuthProvider>
-      </QueryClientProvider>
+      {/* 皮肤轴（经典 / 精密仪器）与明暗轴正交，首帧由 layout 内联脚本预设 */}
+      <SkinProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <WebSocketBootstrap />
+            <DatetimePreferencesSync />
+            <SidebarProvider>
+              {children}
+              <Toaster
+                position="top-right"
+                toastOptions={{
+                  duration: 4000,
+                  className:
+                    'rounded-2xl border border-border/40 bg-card/90 text-foreground backdrop-blur-xl',
+                }}
+              />
+              <ReactQueryDevtools initialIsOpen={false} />
+            </SidebarProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </SkinProvider>
     </ThemeProvider>
   )
 }
