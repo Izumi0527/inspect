@@ -28,6 +28,16 @@ jest.mock('@/features/dashboard', () => ({
   ),
 }))
 
+// 新外壳 AppLayout 走直连导入渲染 DashboardHeader（不走桶导出），替身需对齐直连路径
+jest.mock('@/features/dashboard/components/DashboardHeader', () => ({
+  DashboardHeader: ({ title, actions }: { title: string; actions?: React.ReactNode }) => (
+    <div>
+      <h1>{title}</h1>
+      <div data-testid="header-actions">{actions}</div>
+    </div>
+  ),
+}))
+
 jest.mock('@/components/shared', () => ({
   StatCard: () => null,
 }))

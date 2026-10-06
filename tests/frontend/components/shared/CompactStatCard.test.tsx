@@ -28,8 +28,8 @@ describe('CompactStatCard', () => {
     const valueEl = screen.getByText('12')
     expect(valueEl).toHaveClass('text-2xl', 'font-semibold', 'leading-none', 'tabular-nums')
 
-    // CardContent 使用 p-3（仪器风密度）
-    expect(container.querySelector('.p-3')).toBeInTheDocument()
+    // 紧凑内边距由 components 层按 data-slot 锚点提供（不再写死在 CardContent 上）
+    expect(container.querySelector('[data-slot="stat-card"]')).toBeInTheDocument()
 
     // 传入 iconBgClassName 时图标有底衬容器，并带传入的背景色
     const svg = container.querySelector('svg')

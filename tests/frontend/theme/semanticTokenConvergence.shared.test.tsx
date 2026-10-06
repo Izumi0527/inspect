@@ -124,8 +124,9 @@ describe('共享组件语义化主题收敛', () => {
     )
 
     const modal = screen.getByText('模态内容').closest('[role="dialog"]') as HTMLElement
-    expect(modal.className).toContain('bg-card/95')
-    expect(modal.className).toContain('border-border/30')
+    expect(modal.className).toContain('bg-popover')
+    expect(modal.className).toContain('border-border')
+    expect(modal.className).toContain('shadow-overlay')
     expect(modal.className).not.toContain('bg-white/95')
   })
 
@@ -141,8 +142,9 @@ describe('共享组件语义化主题收敛', () => {
     )
 
     const dialogContent = screen.getByText('对话框标题').closest('[role="dialog"]') as HTMLElement
-    expect(dialogContent.className).toContain('bg-card/95')
-    expect(dialogContent.className).toContain('border-border/40')
+    expect(dialogContent.className).toContain('bg-popover')
+    expect(dialogContent.className).toContain('border-border')
+    expect(dialogContent.className).toContain('shadow-overlay')
     expect(dialogContent.className).not.toContain('bg-white')
   })
 
