@@ -53,7 +53,7 @@ export function UserMenu({ className }: UserMenuProps) {
           aria-label={`${displayName} 菜单`}
           title={`${displayName} 菜单`}
           className={cn(
-            'relative h-9 w-9 rounded-full p-0 hover:bg-gray-100 dark:hover:bg-gray-800',
+            'relative h-9 w-9 rounded-full p-0 hover:bg-surface-3',
             className
           )}
         >
@@ -80,7 +80,7 @@ export function UserMenu({ className }: UserMenuProps) {
             {displayName}
           </p>
           {user?.email && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+            <p className="text-xs text-muted-foreground truncate">
               {user.email}
             </p>
           )}

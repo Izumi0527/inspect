@@ -73,10 +73,10 @@ export const StatsGrid: React.FC<StatsGridProps> = ({ stats, loading = false }) 
           <Card key={index} className="animate-pulse">
             <CardContent className="p-2.5">
               <div className="flex items-center">
-                <div className="p-1 rounded-md bg-gray-200 dark:bg-gray-700 h-7 w-7" />
+                <div className="p-1 rounded-md bg-surface-3 h-7 w-7" />
                 <div className="ml-2.5 flex-1 min-w-0">
-                  <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-16 mb-2"></div>
-                  <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
+                  <div className="h-3 bg-surface-3 rounded w-16 mb-2"></div>
+                  <div className="h-5 bg-surface-3 rounded w-12"></div>
                 </div>
               </div>
             </CardContent>

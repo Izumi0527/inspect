@@ -223,15 +223,15 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
             <button
               disabled={disableBulkActions}
               onClick={() => markReadMutation.mutate(bulkPayload())}
-              className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="text-sm text-primary hover:text-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               全部已读
             </button>
-            <span className="text-gray-300 dark:text-muted-foreground">|</span>
+            <span className="text-muted-foreground/50">|</span>
             <button
               disabled={disableBulkActions}
               onClick={() => dismissMutation.mutate(bulkPayload())}
-              className="text-sm text-muted-foreground hover:text-gray-700 dark:hover:text-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               清空
             </button>
@@ -250,13 +250,13 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
                 className={cn(
                   'flex-1 px-4 py-3 text-sm font-medium transition-colors relative',
                   isActive
-                    ? 'text-blue-600 dark:text-blue-400'
+                    ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
                 {category.label}
                 {isActive && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400" />
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                 )}
               </button>
             )
@@ -266,9 +266,9 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
         {/* 通知列表 */}
         <div className="max-h-[400px] overflow-y-auto">
           {listQuery.isLoading ? (
-            <div className="p-4 text-center text-gray-500 dark:text-gray-400">加载中...</div>
+            <div className="p-4 text-center text-muted-foreground">加载中...</div>
           ) : listQuery.isError ? (
-            <div className="flex flex-col items-center justify-center py-12 px-6 text-center text-gray-500 dark:text-gray-400">
+            <div className="flex flex-col items-center justify-center py-12 px-6 text-center text-muted-foreground">
               <ShieldCheck className="w-12 h-12 mb-3 text-amber-400 dark:text-amber-500" />
               <p className="text-sm font-medium text-foreground">通知加载失败</p>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -295,8 +295,8 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
             ))
           ) : (
             /* 空状态 */
-            <div className="flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400">
-              <ShieldCheck className="w-12 h-12 mb-3 text-gray-300 dark:text-muted-foreground" />
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <ShieldCheck className="w-12 h-12 mb-3 text-muted-foreground/40" />
               <p className="text-sm">暂无最近{activeCategory === 'alerts' ? '告警' : activeCategory === 'system' ? '系统通知' : '通知'}</p>
             </div>
           )}
@@ -310,7 +310,7 @@ export function NotificationCenter({ alertCount: _alertCount, onViewAll }: Notif
                 setOpen(false)
                 onViewAll()
               }}
-              className="w-full py-3 text-center text-sm text-blue-600 dark:text-blue-400 hover:bg-muted/40 transition-colors"
+              className="w-full py-3 text-center text-sm text-primary hover:bg-surface-3 transition-colors"
             >
               前往告警中心
             </button>

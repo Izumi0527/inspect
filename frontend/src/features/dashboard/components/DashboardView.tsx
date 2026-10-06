@@ -76,20 +76,20 @@ export const DashboardView: React.FC = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-muted/40 dark:bg-background flex items-center justify-center">
-        <div className="max-w-md w-full text-center bg-card rounded-lg shadow-lg p-8">
-          <div className="text-red-600 text-6xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-800 dark:text-foreground mb-2">无法加载数据</h2>
-          <p className="text-muted-foreground dark:text-muted-foreground mb-6">{error}</p>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="max-w-md w-full text-center rounded-lg border border-border bg-card p-8">
+          <div className="text-danger text-6xl mb-4">⚠️</div>
+          <h2 className="text-xl font-semibold text-foreground mb-2">无法加载数据</h2>
+          <p className="text-muted-foreground mb-6">{error}</p>
           <div className="space-y-3">
             <button
               onClick={handleRetry}
               disabled={isInitialLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200"
+              className="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 px-4 py-2 rounded-lg font-medium transition-colors duration-200"
             >
               {isInitialLoading ? '重试中...' : '重试'}
             </button>
-            <p className="text-sm text-gray-500 dark:text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               如果问题持续存在，请联系系统管理员
             </p>
           </div>

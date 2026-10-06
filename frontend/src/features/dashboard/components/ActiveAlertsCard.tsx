@@ -58,12 +58,12 @@ export const ActiveAlertsCard: React.FC<ActiveAlertsCardProps> = ({
           {[...Array(3)].map((_, index) => (
             <div key={index} className="animate-pulse">
               <div className="flex items-center gap-3 p-3 bg-muted/40 dark:bg-accent/5 rounded-lg">
-                <div className="w-2 h-2 bg-gray-300 dark:bg-gray-700 rounded-full"></div>
+                <div className="w-2 h-2 bg-surface-3 rounded-full"></div>
                 <div className="flex-1">
-                  <div className="h-4 bg-gray-300 dark:bg-gray-700 rounded w-32 mb-1"></div>
-                  <div className="h-3 bg-gray-300 dark:bg-gray-700 rounded w-48"></div>
+                  <div className="h-4 bg-surface-3 rounded w-32 mb-1"></div>
+                  <div className="h-3 bg-surface-3 rounded w-48"></div>
                 </div>
-                <div className="h-3 bg-gray-300 dark:bg-gray-700 rounded w-12"></div>
+                <div className="h-3 bg-surface-3 rounded w-12"></div>
               </div>
             </div>
           ))}
@@ -76,8 +76,8 @@ export const ActiveAlertsCard: React.FC<ActiveAlertsCardProps> = ({
     return (
       <CardShell className={className}>
         <div className="px-6 pb-6 text-center py-8">
-          <Shield className="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-muted-foreground">当前无活跃告警</p>
+          <Shield className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+          <p className="text-muted-foreground">当前无活跃告警</p>
         </div>
       </CardShell>
     )
@@ -96,13 +96,13 @@ export const ActiveAlertsCard: React.FC<ActiveAlertsCardProps> = ({
           <div
             key={alert.id}
             data-testid="active-alert-item"
-            className="flex items-start gap-3 rounded-lg bg-muted/40 p-2.5 transition-colors hover:bg-gray-100 dark:bg-accent/5 dark:hover:bg-accent/10"
+            className="flex items-start gap-3 rounded-lg bg-surface-2/60 p-2.5 transition-colors hover:bg-surface-3"
           >
             <div className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', getSeverityColor(alert.severity))} />
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-2">
                 <p className="truncate text-sm font-medium text-foreground">{alert.device}</p>
-                <span className="shrink-0 text-[11px] text-gray-500 dark:text-muted-foreground">
+                <span className="shrink-0 text-[11px] text-muted-foreground">
                   {formatDateTimeYMDHM(alert.time)}
                 </span>
               </div>
@@ -110,7 +110,7 @@ export const ActiveAlertsCard: React.FC<ActiveAlertsCardProps> = ({
                 {alert.message}
               </p>
               {alert.category && (
-                <span className="mt-1 inline-block rounded-full bg-gray-200 px-2 py-0.5 text-[10px] text-muted-foreground dark:bg-gray-700">
+                <span className="mt-1 inline-block rounded-full bg-surface-3 px-2 py-0.5 text-[10px] text-muted-foreground">
                   {alert.category}
                 </span>
               )}

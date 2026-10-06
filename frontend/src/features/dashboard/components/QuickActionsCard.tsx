@@ -4,9 +4,12 @@ import { ArrowRight, Database, Monitor, Play, Settings } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/atoms'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
+import { useSkin } from '@/lib/contexts/skin-context'
 
 export const QuickActionsCard: React.FC = () => {
   const router = useRouter()
+  const { skin } = useSkin()
+  const isClassic = skin === 'classic'
   const canReadDevices = usePermission(Permission.DEVICES_READ)
   const canReadInspections = usePermission(Permission.INSPECTIONS_READ)
   const canReadReports = usePermission(Permission.REPORTS_READ)
@@ -75,7 +78,7 @@ export const QuickActionsCard: React.FC = () => {
       </CardHeader>
       <CardContent>
         {visibleActions.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-8 text-center">
+          <div className="rounded-lg border border-dashed border-border bg-surface-2/60 px-4 py-8 text-center">
             <p className="text-sm font-medium text-foreground">当前账号暂无可用快捷入口</p>
             <p className="mt-2 text-xs text-muted-foreground">
               可进入模块会随角色授权自动更新。
@@ -92,7 +95,7 @@ export const QuickActionsCard: React.FC = () => {
                 variant="outline"
                 aria-label={action.title}
                 onClick={() => handleActionClick(action.targetPath)}
-                className={`h-20 flex flex-col items-center justify-center gap-2 ${action.colorScheme.hover} transition-colors`}
+                className={`h-20 flex flex-col items-center justify-center gap-2 ${isClassic ? action.colorScheme.hover : 'hover:bg-surface-3 hover:text-foreground'} transition-colors`}
               >
                 <IconComponent className="w-6 h-6" />
                 <span className="text-sm font-medium">{action.title}</span>

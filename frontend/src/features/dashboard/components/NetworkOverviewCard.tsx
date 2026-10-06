@@ -45,12 +45,12 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
         <div className="animate-pulse space-y-6">
           <div className="flex gap-3">
             {[...Array(3)].map((_, index) => (
-              <div key={index} className="h-8 w-28 rounded-full bg-gray-200 dark:bg-gray-700" />
+              <div key={index} className="h-8 w-28 rounded-full bg-surface-3" />
             ))}
           </div>
           <div className="flex justify-center gap-12">
             {[...Array(3)].map((_, index) => (
-              <div key={index} className="h-24 w-24 rounded-2xl bg-gray-200 dark:bg-gray-700" />
+              <div key={index} className="h-24 w-24 rounded-lg bg-surface-3" />
             ))}
           </div>
         </div>
@@ -66,13 +66,12 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
         <div className="flex h-full items-center justify-center">
           <div className="py-12 text-center">
             <div className="relative mb-6 inline-block">
-              <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-2xl" />
-              <Network className="relative h-16 w-16 text-gray-300 dark:text-gray-700" />
+              <Network className="relative h-16 w-16 text-muted-foreground/40" />
             </div>
-            <p className="mb-2 text-lg font-medium text-gray-500 dark:text-muted-foreground">
+            <p className="mb-2 text-lg font-medium text-muted-foreground">
               暂无网络概览数据
             </p>
-            <p className="text-sm text-gray-400 dark:text-muted-foreground/70">
+            <p className="text-sm text-muted-foreground/70">
               系统正在收集网络设备信息
             </p>
           </div>
@@ -98,12 +97,12 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
                 <li
                   key={`${item.title}-${item.status}`}
                   className={cn(
-                    'group inline-flex items-center gap-2 rounded-full border border-border py-1 pl-1.5 pr-3 text-xs transition-all duration-300 hover:shadow-md',
+                    'group inline-flex items-center gap-2 rounded-full border border-border py-1 pl-1.5 pr-3 text-xs transition-colors duration-200',
                     visualMeta.surfaceClassName
                   )}
                   aria-label={`${getDeviceTypeLabel(item.title)}，${statusMeta.label}，${item.count} 台设备`}
                 >
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-card shadow-sm">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-card">
                     <IconComponent className={cn('h-4 w-4', visualMeta.iconClassName)} />
                   </span>
                   <span className="font-medium text-foreground">{getDeviceTypeLabel(item.title)}</span>

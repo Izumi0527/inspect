@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Server, AlertTriangle, Cpu, HardDrive, Upload, Download, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/atoms'
 import { CompactStatCard } from '@/components/shared'
+import { useSkin } from '@/lib/contexts/skin-context'
 import { SectionFailureContent } from '../shared'
 import type { MonitoringDataEnvelope, StatCardData } from '../../types'
 
@@ -22,6 +23,7 @@ const STATS_ICON_MAP = {
   peak_inbound: Download,
 } as const
 
+/** 经典皮肤沿用旧配方：六项固定配色；精密仪器读数与图标保持中性。 */
 const STATS_COLOR_MAP = {
   total_devices: 'text-blue-600 dark:text-blue-400',
   active_alerts: 'text-red-600 dark:text-red-400',
@@ -32,11 +34,14 @@ const STATS_COLOR_MAP = {
 } as const
 
 export function StatsSection({ section, statsV2 = [], onRetry }: StatsSectionProps) {
+  const { skin } = useSkin()
+  const isClassic = skin === 'classic'
+
   return (
     <section>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {section?.ok === false ? (
-          <div className="col-span-full rounded-xl border-2 border-dashed border-red-200 bg-red-50/60 p-8 text-center dark:border-red-800 dark:bg-red-900/10">
+          <div className="col-span-full rounded-lg border-2 border-dashed border-danger/40 bg-danger-soft/50 p-8 text-center">
             <SectionFailureContent
               title="关键指标"
               message={section?.message ?? '统计指标加载失败'}
@@ -55,13 +60,13 @@ export function StatsSection({ section, statsV2 = [], onRetry }: StatsSectionPro
                 change={stat.change}
                 trend={stat.trend}
                 icon={IconComponent}
-                iconClassName={iconClassName}
+                iconClassName={isClassic ? iconClassName : undefined}
               />
             )
           })
         ) : (
-          <div className="col-span-full rounded-xl border-2 border-dashed border-border bg-muted/40 p-8 text-center dark:border-border dark:bg-muted/40">
-            <AlertTriangle className="mx-auto mb-4 h-10 w-10 text-yellow-500" />
+          <div className="col-span-full rounded-lg border-2 border-dashed border-border bg-surface-2/60 p-8 text-center">
+            <AlertTriangle className="mx-auto mb-4 h-10 w-10 text-warning" />
             <h3 className="mb-2 text-base font-semibold text-foreground">
               暂无统计数据
             </h3>

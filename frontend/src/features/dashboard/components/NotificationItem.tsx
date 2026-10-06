@@ -25,7 +25,7 @@ export function NotificationItem({ notification, onClick }: NotificationItemProp
 
   // 系统通知使用紫色指示点；已解决的告警不再按严重级别着色，避免与活跃告警混淆
   const indicatorColor =
-    type === 'system' ? 'bg-purple-500' : status === 'resolved' ? 'bg-gray-400 dark:bg-gray-500' : severityColor
+    type === 'system' ? 'bg-info' : status === 'resolved' ? 'bg-unknown' : severityColor
   const statusLabel = type === 'alert' && status ? ALERT_STATUS_LABELS[status] : undefined
 
   return (
@@ -35,7 +35,7 @@ export function NotificationItem({ notification, onClick }: NotificationItemProp
       className={cn(
         'flex w-full items-start gap-3 p-4 text-left cursor-pointer transition-colors border-b border-gray-100 dark:border-gray-800 last:border-b-0',
         'hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none',
-        !read && 'bg-blue-50/50 dark:bg-blue-900/10'
+        !read && 'bg-info-soft/50'
       )}
     >
       {/* 状态指示点 */}
@@ -61,7 +61,7 @@ export function NotificationItem({ notification, onClick }: NotificationItemProp
         </div>
 
         {/* 时间戳 */}
-        <div className="text-xs text-gray-400 dark:text-gray-500">
+        <div className="text-xs text-muted-foreground/70">
           {formatDate(timestamp, 'relative')}
         </div>
       </div>
@@ -69,7 +69,7 @@ export function NotificationItem({ notification, onClick }: NotificationItemProp
       {/* 未读标识（可选） */}
       {!read && (
         <div className="flex-shrink-0">
-          <div className="w-2 h-2 bg-blue-500 rounded-full" />
+          <div className="w-2 h-2 bg-info rounded-full" />
         </div>
       )}
     </button>
