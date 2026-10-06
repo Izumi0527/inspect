@@ -64,7 +64,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   }
 
   return (
-    <div className={cn('flex min-h-10 flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-pagination px-4 py-1 text-sm', className)}>
+    <div data-slot="pagination" className={cn('flex min-h-10 flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-pagination px-4 py-1 text-sm', className)}>
       {showRangeText && (
         <div className="whitespace-nowrap text-muted-foreground tabular-nums">
           {`第 ${startItem} - ${endItem} 条，共 ${totalItems} 条`}

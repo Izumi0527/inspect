@@ -39,6 +39,7 @@ export interface StatusRailProps extends React.HTMLAttributes<HTMLDivElement> {
 export const StatusRail: React.FC<StatusRailProps> = ({ tone, className, ...props }) => (
   <div
     aria-hidden="true"
+    data-slot="status-rail"
     className={cn('shrink-0 self-stretch', railClass[tone], className)}
     {...props}
   />

@@ -12,7 +12,7 @@ import { cn } from '@/utils/cn'
  * - 语义色只来自令牌（danger/warning/success/info 与 destructive 收敛为同一值）
  */
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-sm font-medium transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap text-sm font-medium transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -29,10 +29,12 @@ const buttonVariants = cva(
         error: 'bg-danger text-danger-foreground hover:bg-danger/90',
       },
       size: {
-        default: 'h-8 px-3 py-1.5',
-        sm: 'h-7 rounded-sm px-2.5 text-[13px]',
-        lg: 'h-9 rounded-md px-5',
-        icon: 'h-8 w-8',
+        // 几何（高度/内边距/圆角）由 globals.css 第 6 节按皮肤提供，
+        // 使调用方通过 className 传入的尺寸覆盖始终生效。
+        default: '',
+        sm: 'text-[13px]',
+        lg: '',
+        icon: '',
       },
     },
     defaultVariants: {
@@ -54,6 +56,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const Comp = asChild ? Slot : 'button'
     return (
       <Comp
+        data-slot="button"
+        data-variant={variant ?? 'default'}
+        data-size={size ?? 'default'}
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         disabled={disabled || loading}

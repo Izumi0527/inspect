@@ -47,7 +47,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   }, [clearSearch])
 
   return (
-    <header className="border-b border-border bg-card">
+    <header data-slot="dashboard-header" className="border-b border-border bg-card">
       <div className="flex h-14 items-center justify-between gap-4 px-6">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold text-foreground">{title}</h1>

@@ -177,13 +177,13 @@ export function Table<T extends object>({
     currentPageSelectedKeys.length > 0 && currentPageSelectedKeys.length < data.length
 
   return (
-    <div className={cn('overflow-hidden', className)}>
+    <div data-slot="table-container" className={cn('overflow-hidden', className)}>
       {!loading && data.length === 0 && emptyContent ? emptyContent : (
       <div className="overflow-auto" style={{ maxHeight: scroll?.y }}>
-        <table className="w-full" style={{ minWidth: scroll?.x }}>
+        <table data-slot="table" className="w-full" style={{ minWidth: scroll?.x }}>
           {showHeader && (
             <thead>
-              <tr className="bg-muted">
+              <tr data-slot="table-header-row" className="bg-muted">
                 {rowSelection && (
                   <th className={cn('sticky top-0 z-10 text-left font-medium text-muted-foreground bg-muted w-12', headerPadding[size])} style={{ width: '48px' }}>
                     <input
@@ -300,6 +300,7 @@ export function Table<T extends object>({
                 return (
                   <motion.tr
                     key={key}
+                    data-slot="table-row"
                     className={cn(
                       'border-b border-border hover:bg-surface-3 transition-colors duration-100 motion-reduce:transition-none',
                       isSelected && 'bg-primary/10',
@@ -365,7 +366,7 @@ export function Table<T extends object>({
       )}
 
       {pagination && (
-        <div className="border-t border-border">
+        <div data-slot="table-footer" className="border-t border-border">
           <Pagination
             currentPage={pagination.current}
             totalPages={Math.ceil(pagination.total / Math.max(pagination.pageSize, 1))}

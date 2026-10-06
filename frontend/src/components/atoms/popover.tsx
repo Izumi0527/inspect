@@ -25,12 +25,13 @@ const PopoverContent = React.forwardRef<
   <PopoverPrimitive.Portal>
     <PopoverPrimitive.Content
       ref={ref}
+      data-slot="popover-content"
       align={align}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 rounded-xl border border-border/50",
-        "bg-card/95 backdrop-blur-xl",
-        "p-4 text-foreground shadow-2xl",
+        "z-50 rounded-xl border border-border",
+        "bg-popover",
+        "p-4 text-popover-foreground shadow-overlay",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",

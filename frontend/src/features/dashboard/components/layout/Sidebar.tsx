@@ -69,6 +69,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div
+      data-slot="sidebar"
+      data-collapsed={isOpen ? undefined : 'true'}
       className={`fixed inset-y-0 left-0 z-50 ${isOpen ? 'w-60' : 'w-14'} transform border-r border-border bg-card transition-all duration-200 motion-reduce:transition-none`}
     >
       <div className={`flex items-center border-b border-border ${isOpen ? 'justify-between p-4' : 'justify-center p-2'}`}>
@@ -97,6 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Link
               key={item.name}
               href={item.href}
+              data-slot="sidebar-link"
               className={`flex items-center rounded-sm py-2 text-sm transition-colors duration-100 motion-reduce:transition-none ${
                 isOpen ? 'gap-3 px-2' : 'justify-center px-0'
               } ${

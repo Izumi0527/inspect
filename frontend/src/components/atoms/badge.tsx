@@ -49,7 +49,7 @@ export interface BadgeProps
 
 function Badge({ className, variant, size, asChild = false, ...props }: BadgeProps) {
   const Comp = asChild ? Slot : 'div'
-  return <Comp className={cn(badgeVariants({ variant, size }), className)} {...props} />
+  return <Comp data-slot="badge" className={cn(badgeVariants({ variant, size }), className)} {...props} />
 }
 
 export { Badge, badgeVariants }

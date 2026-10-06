@@ -1,8 +1,26 @@
+'use client'
+
 import React from 'react'
 import type { LucideIcon } from 'lucide-react'
 
 import { Card, CardContent } from '@/components/atoms'
+import { useSkin } from '@/lib/contexts/skin-context'
 import { cn } from '@/utils/cn'
+
+/**
+ * 经典皮肤沿用旧配方：按图标着色推导彩色底衬（仪器皮肤不给底衬）。
+ */
+const deriveIconBgClassName = (iconClassName?: string) => {
+  const value = iconClassName ?? ''
+  if (value.includes('text-blue') || value.includes('text-sky')) return 'bg-sky-100/80 dark:bg-sky-500/12'
+  if (value.includes('text-green') || value.includes('text-emerald')) return 'bg-emerald-100/80 dark:bg-emerald-500/12'
+  if (value.includes('text-red')) return 'bg-red-100/80 dark:bg-red-500/12'
+  if (value.includes('text-yellow') || value.includes('text-amber')) return 'bg-amber-100/80 dark:bg-amber-500/12'
+  if (value.includes('text-purple') || value.includes('text-slate')) return 'bg-slate-200/80 dark:bg-slate-400/12'
+  if (value.includes('text-orange')) return 'bg-orange-100/80 dark:bg-orange-500/12'
+  if (value.includes('text-cyan')) return 'bg-cyan-100/80 dark:bg-cyan-500/12'
+  return 'bg-muted/60'
+}
 
 export interface CompactStatCardProps {
   title: string
@@ -39,6 +57,20 @@ const deriveAriaLabel = (title: string, value: React.ReactNode) => {
 }
 
 /**
+ * 旧调用方会传入 Tailwind 调色板类（text-blue-600 等）作为图标/读数着色。
+ * 精密仪器的彩色预算只有 6 个语义色，故在该皮肤下剥离这些调色板类
+ * （语义令牌如 text-danger / text-warning 保留，它们表示真实状态）。
+ */
+const LEGACY_PALETTE_COLOR =
+  /^(?:dark:)?(?:text|bg|border)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}(?:\/\d+)?$/
+
+const neutralizeLegacyPalette = (className?: string): string | undefined => {
+  if (!className) return undefined
+  const kept = className.split(/\s+/).filter((cls) => cls && !LEGACY_PALETTE_COLOR.test(cls))
+  return kept.length > 0 ? kept.join(' ') : undefined
+}
+
+/**
  * 统计读数卡（精密仪器）。
  *
  * 读数是主角：24px semibold + tabular-nums；标题 12px ink-2；图标退为 16px 中性点缀。
@@ -60,6 +92,14 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
   onClick,
   ariaLabel,
 }) => {
+  const { skin } = useSkin()
+  const isClassic = skin === 'classic'
+  const resolvedIconClassName = isClassic
+    ? iconClassName ?? 'text-sky-600 dark:text-sky-300'
+    : neutralizeLegacyPalette(iconClassName) ?? 'text-muted-foreground/80'
+  const resolvedValueClassName = isClassic ? valueClassName : neutralizeLegacyPalette(valueClassName)
+  const resolvedIconBgClassName =
+    iconBgClassName ?? (isClassic ? deriveIconBgClassName(resolvedIconClassName) : undefined)
   // 箭头只表达数值方向，配色单独由 sentiment 决定
   const trendArrow = {
     up: '↗',
@@ -83,31 +123,33 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
     stable: { icon: trendArrow.stable, className: sentimentClassName[resolvedSentiment] },
   } as const
 
-  const iconNode = iconBgClassName ? (
-    <span className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-sm', iconBgClassName)}>
-      <Icon className={cn('h-4 w-4', iconClassName ?? 'text-muted-foreground')} />
+  const iconNode = resolvedIconBgClassName ? (
+    <span data-slot="stat-icon-chip" className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-sm', resolvedIconBgClassName)}>
+      <Icon className={cn('h-4 w-4', resolvedIconClassName)} />
     </span>
   ) : (
-    <Icon className={cn('h-4 w-4 shrink-0', iconClassName ?? 'text-muted-foreground/80')} />
+    <Icon className={cn('h-4 w-4 shrink-0', resolvedIconClassName)} />
   )
 
   const card = (
     <Card
+      data-slot="stat-card"
       className={cn(
         onClick && 'cursor-pointer transition-colors duration-100 hover:bg-surface-3',
         className
       )}
     >
-      <CardContent className="p-3">
+      <CardContent>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium text-muted-foreground leading-tight truncate">
               {title}
             </p>
             <p
+              data-slot="stat-value"
               className={cn(
                 'mt-1.5 text-2xl font-semibold leading-none tabular-nums text-foreground',
-                valueClassName
+                resolvedValueClassName
               )}
             >
               {value}

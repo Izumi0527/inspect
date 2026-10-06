@@ -41,7 +41,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const { sidebarOpen, toggleSidebar } = useSidebar()
 
   return (
-    <div className="h-screen bg-background overflow-hidden">
+    <div data-slot="app-layout" className="h-screen bg-background overflow-hidden">
       {/* Sidebar */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -50,7 +50,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       />
 
       {/* Main Content */}
-      <div className={`${sidebarOpen ? 'ml-60' : 'ml-14'} transition-all duration-200 motion-reduce:transition-none h-full flex flex-col`}>
+      <div
+        data-slot="app-main"
+        data-collapsed={sidebarOpen ? undefined : 'true'}
+        className={`${sidebarOpen ? 'ml-60' : 'ml-14'} transition-all duration-200 motion-reduce:transition-none h-full flex flex-col`}
+      >
         {/* Header - 显示标题、搜索和通知 */}
         {!hideHeader && (
           <DashboardHeader

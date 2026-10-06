@@ -38,11 +38,11 @@ export function SectionHeader({
   }
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div data-slot="section-header" className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex items-start space-x-3 flex-1 min-w-0">
         {IconComponent && (
           <div className="flex-shrink-0">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-surface-3">
+            <div data-slot="section-icon-chip" className="flex h-8 w-8 items-center justify-center rounded-md bg-surface-3">
               <IconComponent className="h-4 w-4 text-muted-foreground" />
             </div>
           </div>

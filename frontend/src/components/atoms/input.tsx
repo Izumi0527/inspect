@@ -13,8 +13,9 @@ const Input = React.forwardRef<
   return (
     <input
       type={type}
+      data-slot="input"
       className={cn(
-        'flex h-9 w-full rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground transition-colors duration-150 motion-reduce:transition-none',
+        'flex w-full border border-input bg-card text-sm text-foreground transition-colors duration-150 motion-reduce:transition-none',
         'file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground',
         'placeholder:text-muted-foreground',
         'focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25',
@@ -74,8 +75,9 @@ const TextArea = React.forwardRef<
 >(({ className, ...props }, ref) => {
   return (
     <textarea
+      data-slot="textarea"
       className={cn(
-        'flex min-h-[120px] w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground transition-colors duration-150 motion-reduce:transition-none',
+        'flex min-h-[120px] w-full border border-input bg-card text-sm text-foreground transition-colors duration-150 motion-reduce:transition-none',
         'placeholder:text-muted-foreground',
         'focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25',
         'disabled:cursor-not-allowed disabled:opacity-50',

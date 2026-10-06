@@ -105,6 +105,8 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
   return (
     <>
       <div
+        data-slot="alert-list-item"
+        data-severity={alert.severity}
         className={cn(
           'flex items-stretch overflow-hidden rounded-lg border bg-card transition-colors duration-100 motion-reduce:transition-none hover:bg-surface-3 cursor-pointer',
           isSelected ? 'border-primary/40' : 'border-border',

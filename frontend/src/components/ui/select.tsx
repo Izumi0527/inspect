@@ -21,8 +21,9 @@ const SelectTrigger = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Trigger
     ref={ref}
+    data-slot="select-trigger"
     className={cn(
-      'flex h-9 w-full items-center justify-between rounded-md border border-input bg-card px-3 py-1.5 text-sm text-foreground',
+      'flex w-full items-center justify-between border border-input bg-card text-sm text-foreground',
       'placeholder:text-muted-foreground',
       'focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25',
       'disabled:cursor-not-allowed disabled:opacity-50',
@@ -217,9 +218,10 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
         id={triggerId}
         type="button"
         aria-label={ariaLabel}
+        data-slot="multiselect-trigger"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex h-9 w-full items-center justify-between rounded-md border border-input bg-card px-3 py-1.5 text-left text-sm text-foreground',
+          'flex w-full items-center justify-between border border-input bg-card text-left text-sm text-foreground',
           'placeholder:text-muted-foreground',
           'focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25',
           'disabled:cursor-not-allowed disabled:opacity-50',
