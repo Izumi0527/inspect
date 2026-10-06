@@ -6,11 +6,9 @@ import {
   useDashboardAlertRealtimeRefresh,
   useAlertAnalysis
 } from '../hooks/useDashboard'
-import { useSidebar } from '@/lib/contexts/sidebar-context'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
-import { Sidebar } from './layout/Sidebar'
-import { DashboardHeader } from './DashboardHeader'
+import { AppLayout } from '@/components/layout'
 import { StatsGrid } from './StatsGrid'
 import { ActiveAlertsCard } from './ActiveAlertsCard'
 import { QuickActionsCard } from './QuickActionsCard'
@@ -18,7 +16,6 @@ import { NetworkOverviewCard } from './NetworkOverviewCard'
 
 export const DashboardView: React.FC = () => {
   const { data, isInitialLoading, isRefreshing, error, refreshStats, loadData } = useDashboardData()
-  const { sidebarOpen, toggleSidebar } = useSidebar()
   const { config } = useDashboardConfig() // 仅用于自动刷新配置
 
   // 分析告警数据
@@ -99,24 +96,10 @@ export const DashboardView: React.FC = () => {
   }
 
   return (
-    <div className="h-screen bg-muted/40 dark:bg-background overflow-hidden">
-      {/* Sidebar */}
-      <Sidebar
-        isOpen={sidebarOpen}
-        onToggle={toggleSidebar}
-        currentPath="/dashboard"
-      />
-
-      {/* Main Content */}
-      <div className={`${sidebarOpen ? 'ml-64' : 'ml-20'} transition-all duration-300 h-full flex flex-col`}>
-        {/* Header */}
-        <DashboardHeader
-          alertCount={alertAnalysis.high}
-        />
-
+    <AppLayout title="控制台总览" alertCount={alertAnalysis.high}>
         {/* Permission Limited Banner */}
         {isPermissionLimited && (
-          <div className="mx-6 mt-4 mb-0">
+          <div className="mb-4">
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 dark:border-yellow-500 rounded-lg p-4">
               <div className="flex items-start">
                 <div className="flex-shrink-0">
@@ -146,7 +129,7 @@ export const DashboardView: React.FC = () => {
         )}
 
         {hasSectionFailures && (
-          <div className="mx-6 mt-4 mb-0">
+          <div className="mb-4">
             <div className="bg-rose-50 dark:bg-rose-900/20 border-l-4 border-rose-400 dark:border-rose-500 rounded-lg p-4">
               <div className="flex items-start">
                 <div className="flex-shrink-0">
@@ -177,7 +160,6 @@ export const DashboardView: React.FC = () => {
         )}
 
         {/* Main Content：桌面端按视口高度铺满，第二行随窗口高度伸缩；窄屏退化为纵向堆叠可滚动 */}
-        <main className="min-h-0 flex-1 overflow-auto p-4">
           <div className="flex min-h-full flex-col gap-4 lg:h-full">
             {/* Stats Grid */}
             <StatsGrid
@@ -217,15 +199,13 @@ export const DashboardView: React.FC = () => {
 
           {/* Loading overlay for refresh */}
           {isRefreshing && data && (
-            <div className="fixed top-4 right-4 bg-card rounded-lg shadow-lg p-3 z-50">
+            <div className="fixed top-4 right-4 z-50 rounded-lg border border-border bg-card p-3">
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-sm text-muted-foreground dark:text-muted-foreground">刷新数据中...</span>
+                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-sm text-muted-foreground">刷新数据中...</span>
               </div>
             </div>
           )}
-        </main>
-      </div>
-    </div>
+    </AppLayout>
   )
 }

@@ -26,6 +26,7 @@ interface AppLayoutProps {
   fullWidth?: boolean // 是否全宽显示
   routerTabs?: RouterTab[] // 路由驱动的Tab配置
   hideHeader?: boolean // 是否隐藏默认Header
+  actions?: ReactNode // 顶栏右侧自定义操作区
 }
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
@@ -35,7 +36,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   alertCount = 0,
   fullWidth = false,
   routerTabs,
-  hideHeader = false
+  hideHeader = false,
+  actions
 }) => {
   const pathname = usePathname()
   const { sidebarOpen, toggleSidebar } = useSidebar()
@@ -61,6 +63,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             alertCount={alertCount}
             title={title}
             subtitle={subtitle}
+            actions={actions}
           />
         )}
 
