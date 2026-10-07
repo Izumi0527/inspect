@@ -40,7 +40,37 @@ jest.mock('@/features/inspection/components/StrategyModal', () => ({
   StrategyModal: () => null,
 }))
 
-jest.mock('@/components/atoms', () => ({
+jest.mock('@/components/atoms', () => {
+  const PaginationStub = ({
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    onPageChange,
+    onPageSizeChange,
+  }: {
+    currentPage: number
+    totalPages: number
+    totalItems: number
+    pageSize: number
+    onPageChange: (page: number) => void
+    onPageSizeChange?: (pageSize: number) => void
+  }) => (
+    <div>
+      <div>{`分页 ${currentPage}/${totalPages} 共 ${totalItems} 条 每页 ${pageSize} 条`}</div>
+      <button type="button" onClick={() => onPageChange(currentPage - 1)} disabled={currentPage <= 1}>
+        上一页
+      </button>
+      <button type="button" onClick={() => onPageChange(currentPage + 1)} disabled={currentPage >= totalPages}>
+        下一页
+      </button>
+      <button type="button" onClick={() => onPageSizeChange?.(50)}>
+        每页 50 条
+      </button>
+    </div>
+  )
+
+  return {
   Card: ({
     children,
     className,
@@ -82,37 +112,34 @@ jest.mock('@/components/atoms', () => ({
     </button>
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
-  Table: () => <div data-testid="inspection-strategies-table" />,
-  Pagination: ({
-    currentPage,
-    totalPages,
-    totalItems,
-    pageSize,
-    onPageChange,
-    onPageSizeChange,
+  Table: ({
+    pagination,
   }: {
-    currentPage: number
-    totalPages: number
-    totalItems: number
-    pageSize: number
-    onPageChange: (page: number) => void
-    onPageSizeChange?: (pageSize: number) => void
+    pagination?: {
+      current: number
+      total: number
+      pageSize: number
+      onChange: (page: number, pageSize: number) => void
+      onPageSizeChange?: (pageSize: number) => void
+    }
   }) => (
-    <div>
-      <div>{`分页 ${currentPage}/${totalPages} 共 ${totalItems} 条 每页 ${pageSize} 条`}</div>
-      <button type="button" onClick={() => onPageChange(currentPage - 1)} disabled={currentPage <= 1}>
-        上一页
-      </button>
-      <button type="button" onClick={() => onPageChange(currentPage + 1)} disabled={currentPage >= totalPages}>
-        下一页
-      </button>
-      <button type="button" onClick={() => onPageSizeChange?.(50)}>
-        每页 50 条
-      </button>
+    <div data-testid="inspection-strategies-table">
+      {pagination && (
+        <PaginationStub
+          currentPage={pagination.current}
+          totalPages={Math.max(1, Math.ceil(pagination.total / Math.max(pagination.pageSize, 1)))}
+          totalItems={pagination.total}
+          pageSize={pagination.pageSize}
+          onPageChange={(page: number) => pagination.onChange(page, pagination.pageSize)}
+          onPageSizeChange={pagination.onPageSizeChange}
+        />
+      )}
     </div>
   ),
+  Pagination: PaginationStub,
   ConfirmModal: () => null,
-}))
+  }
+})
 
 const buildStrategy = (id: string, name: string) => ({
   id,
@@ -132,7 +159,7 @@ describe('InspectionStrategies 分页能力', () => {
     mockUseInspectionStrategies.mockReturnValue({
       data: {
         items: [buildStrategy('1', '策略一')],
-        total: 45,
+        total: 30,
         pages: 3,
       },
       isLoading: false,
@@ -155,7 +182,7 @@ describe('InspectionStrategies 分页能力', () => {
       )
     })
 
-    expect(screen.getByText('分页 1/3 共 45 条 每页 10 条')).toBeInTheDocument()
+    expect(screen.getByText('分页 1/3 共 30 条 每页 10 条')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '下一页' }))
 
