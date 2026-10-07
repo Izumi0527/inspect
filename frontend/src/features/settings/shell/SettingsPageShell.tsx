@@ -100,7 +100,7 @@ const SettingsPageShellLayout: React.FC<{
       <SettingsLeaveGuard activeTab={activeTab} />
       <div
         className={
-          shouldFillHeight ? 'h-[calc(100vh-64px)] flex flex-col' : undefined
+          shouldFillHeight ? 'h-full flex flex-col' : undefined
         }
       >
         <SettingsWorkbenchCard fillHeight={shouldFillHeight}>
