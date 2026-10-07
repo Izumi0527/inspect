@@ -14,7 +14,6 @@ interface SettingsToolbarProps {
   toolbar?: SettingsToolbarDescriptor
   primaryActions?: SettingsPageAction[]
   secondaryActions?: SettingsPageAction[]
-  bordered?: boolean
   className?: string
 }
 
@@ -22,7 +21,6 @@ export const SettingsToolbar: React.FC<SettingsToolbarProps> = ({
   toolbar,
   primaryActions,
   secondaryActions,
-  bordered = false,
   className,
 }) => {
   const mergedPrimaryActions = useMemo(
@@ -103,7 +101,7 @@ export const SettingsToolbar: React.FC<SettingsToolbarProps> = ({
   return (
     <div
       className={cn(
-        `px-4 py-3 ${bordered ? 'border-b border-border' : ''} flex flex-col gap-3 sm:flex-row sm:items-center ${
+        `px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center ${
           isStartLayout
             ? 'sm:justify-start'
             : isEndLayout

@@ -44,7 +44,6 @@ export const SettingsHeaderRegion: React.FC<SettingsHeaderRegionProps> = ({
           toolbar={toolbar}
           primaryActions={primaryActions}
           secondaryActions={secondaryActions}
-          bordered={false}
           className="lg:pl-0"
         />
       </div>
