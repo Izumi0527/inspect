@@ -3,7 +3,6 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { useUserManagement } from '../../hooks/useUserManagement'
 import { formatDateTimeYMDHMS } from '@/utils/formatters'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -418,26 +417,26 @@ export function UserManagement() {
       />
 
       {/* 用户列表 */}
-      <Card className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0">
         {users.length === 0 ? (
           <div className="flex-1 flex items-center justify-center p-6">
             <EmptyState title="暂无用户" description="当前筛选条件下没有匹配的用户记录。" icon={Users} />
           </div>
         ) : (
-          <div className="overflow-x-auto flex-1">
+          <div className="flex-1 min-h-0 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="px-4 py-3 text-left font-medium text-foreground/90">用户名</th>
-                  <th className="px-4 py-3 text-left font-medium text-foreground/90">邮箱</th>
-                  <th className="px-4 py-3 text-left font-medium text-foreground/90">姓名</th>
-                  <th className="px-4 py-3 text-left font-medium text-foreground/90">角色</th>
-                  <th className="px-4 py-3 text-left font-medium text-foreground/90">状态</th>
-                  <th className="px-4 py-3 text-left font-medium text-foreground/90">最后登录</th>
-                  <th className="px-4 py-3 text-right font-medium text-foreground/90">操作</th>
+                <tr className="border-b border-border bg-muted">
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">用户名</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">邮箱</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">姓名</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">角色</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">状态</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">最后登录</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-right font-medium text-muted-foreground bg-muted">操作</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className="divide-y divide-border">
                 {users.map((user) => (
                   <tr key={user.id} className="hover:bg-muted/60">
                     <td className="px-4 py-3 font-medium">{user.username}</td>
@@ -553,8 +552,9 @@ export function UserManagement() {
         )}
 
         {/* 分页：复用全站统一的分页组件（含每页条数） */}
-        <div className="px-4 py-3 border-t border-border">
+        <div data-slot="table-footer" className="border-t border-border">
           <Pagination
+            className="px-4"
             currentPage={queryParams?.page ?? page}
             totalPages={Math.max(1, Math.ceil(totalCount / effectivePageSize))}
             totalItems={totalCount}
@@ -565,7 +565,7 @@ export function UserManagement() {
             }
           />
         </div>
-      </Card>
+      </div>
     </div>
   )
 }

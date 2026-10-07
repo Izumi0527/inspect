@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuditLogs } from '../../hooks/useAuditLogs'
 import { useDateFilters } from '@/hooks/useDateFilters'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -258,7 +257,7 @@ export function AuditLogs() {
       />
 
       {/* 日志列表 */}
-      <Card className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0">
         {error && !logs.length ? (
           <div className="flex-1 flex items-center justify-center">
             <EmptyState
@@ -280,20 +279,20 @@ export function AuditLogs() {
             />
           </div>
         ) : (
-          <div className="overflow-x-auto flex-1">
+          <div className="flex-1 min-h-0 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">时间</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">用户</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">操作</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">资源</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">详情</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">IP地址</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">状态</th>
+                <tr className="border-b border-border bg-muted">
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">时间</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">用户</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">操作</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">资源</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">详情</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">IP地址</th>
+                  <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">状态</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className="divide-y divide-border">
                 {logs.map((log) => (
                   <tr
                     key={log.id}
@@ -322,8 +321,9 @@ export function AuditLogs() {
         )}
 
         {/* 分页：复用全站统一的分页组件（含每页条数） */}
-        <div className="px-4 py-3 border-t border-border">
+        <div data-slot="table-footer" className="border-t border-border">
           <Pagination
+            className="px-4"
             currentPage={queryParams?.page ?? page}
             totalPages={Math.max(1, Math.ceil(totalCount / effectivePageSize))}
             totalItems={totalCount}
@@ -334,7 +334,7 @@ export function AuditLogs() {
             }
           />
         </div>
-      </Card>
+      </div>
     </div>
   )
 }

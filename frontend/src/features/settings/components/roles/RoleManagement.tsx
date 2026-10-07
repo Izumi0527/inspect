@@ -12,7 +12,6 @@ import {
 import { toast } from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { ApiClientError } from '@/lib/api-client'
@@ -299,20 +298,20 @@ export function RoleManagement() {
       />
 
       {/* 角色列表 */}
-      <Card className="flex-1 flex flex-col min-h-0">
-        <div className="overflow-x-auto flex-1">
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="px-4 py-3 text-left font-medium text-foreground/90">角色</th>
-                <th className="px-4 py-3 text-left font-medium text-foreground/90">描述</th>
-                <th className="px-4 py-3 text-left font-medium text-foreground/90">用户数</th>
-                <th className="px-4 py-3 text-left font-medium text-foreground/90">权限数</th>
-                <th className="px-4 py-3 text-left font-medium text-foreground/90">更新时间</th>
-                <th className="px-4 py-3 text-right font-medium text-foreground/90">操作</th>
+              <tr className="border-b border-border bg-muted">
+                <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">角色</th>
+                <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">描述</th>
+                <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">用户数</th>
+                <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">权限数</th>
+                <th className="sticky top-0 z-10 px-4 py-3 text-left font-medium text-muted-foreground bg-muted">更新时间</th>
+                <th className="sticky top-0 z-10 px-4 py-3 text-right font-medium text-muted-foreground bg-muted">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="divide-y divide-border">
               {filteredRoles.map((role) => (
                 <tr key={role.id} className="hover:bg-muted/60">
                   <td className="px-4 py-3">
@@ -390,7 +389,7 @@ export function RoleManagement() {
         {filteredRoles.length === 0 && (
           <EmptyState title="暂无角色" description="请调整筛选条件，或新建角色。" icon={Shield} />
         )}
-      </Card>
+      </div>
     </div>
   )
 }
