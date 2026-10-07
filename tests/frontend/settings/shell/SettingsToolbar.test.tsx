@@ -74,6 +74,18 @@ describe('SettingsToolbar', () => {
     expect(screen.getByText('filters')).toBeInTheDocument()
   })
 
+  it('默认不应绘制底部分隔线，避免与卡片边框叠成细线', () => {
+    const { container } = render(
+      <SettingsToolbar
+        toolbar={{ search: { value: '', ariaLabel: '搜索', onChange: () => {} } }}
+      />
+    )
+
+    const root = container.firstElementChild as HTMLElement
+    expect(root).toHaveClass('px-4')
+    expect(root).not.toHaveClass('border-b')
+  })
+
   it('无 search/filters/actions 时应渲染为空', () => {
     const { container } = render(<SettingsToolbar />)
     expect(container).toBeEmptyDOMElement()

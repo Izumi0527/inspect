@@ -37,7 +37,7 @@ export const SettingsHeaderRegion: React.FC<SettingsHeaderRegionProps> = ({
     return (
       <div
         data-testid="settings-header-inline"
-        className="border-b border-border flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
+        className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
       >
         <SettingsStatsStrip stats={stats} />
         <SettingsToolbar

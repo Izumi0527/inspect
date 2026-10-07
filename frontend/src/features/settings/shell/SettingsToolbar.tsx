@@ -22,7 +22,7 @@ export const SettingsToolbar: React.FC<SettingsToolbarProps> = ({
   toolbar,
   primaryActions,
   secondaryActions,
-  bordered = true,
+  bordered = false,
   className,
 }) => {
   const mergedPrimaryActions = useMemo(
