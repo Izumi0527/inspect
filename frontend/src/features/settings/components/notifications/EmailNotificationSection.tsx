@@ -99,7 +99,7 @@ export function EmailNotificationSection({
         </ConfigItem>
 
         {/* SMTP 服务器配置 */}
-        <div className="pt-4 border-t space-y-4">
+        <div className="pt-4 space-y-4">
           <ConfigItem
             label="SMTP 服务器地址"
             description="邮件服务器的主机名或IP地址"
@@ -170,7 +170,7 @@ export function EmailNotificationSection({
         </div>
 
         {/* 发件人信息：邮箱 + 名称 并排 */}
-        <div className="pt-4 border-t">
+        <div className="pt-4">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <ConfigItem
               label="发件人邮箱"
@@ -204,7 +204,7 @@ export function EmailNotificationSection({
         </div>
 
         {/* 测试功能 */}
-        <div className="pt-4 border-t">
+        <div className="pt-4">
           <ConfigItem
             label="测试邮件通知"
           >

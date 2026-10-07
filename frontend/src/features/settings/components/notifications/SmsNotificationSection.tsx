@@ -70,7 +70,7 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
         </ConfigItem>
 
         {/* 提供商 */}
-        <div className="pt-4 border-t space-y-4">
+        <div className="pt-4 space-y-4">
           <ConfigItem label="短信服务提供商" description="选择您的短信服务提供商" required>
             <ConfigSelect
               value={data.provider}
@@ -169,7 +169,7 @@ export function SmsNotificationSection({ data, onChange, onTest, isTesting = fal
         </div>
 
         {/* 测试功能 */}
-        <div className="pt-4 border-t">
+        <div className="pt-4">
           <ConfigItem label="测试短信通知">
             <div className="flex flex-col gap-2 sm:flex-row">
               <div className="flex-1 max-w-md">
