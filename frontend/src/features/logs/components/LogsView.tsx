@@ -231,7 +231,7 @@ export const LogsView: React.FC = () => {
 
   return (
     <AppLayout title="日志中心">
-      <div className="flex flex-col gap-4 h-full">
+      <div className="flex flex-col gap-4 h-full min-h-0">
         {/* 日志统计 */}
         {statsLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -245,12 +245,12 @@ export const LogsView: React.FC = () => {
         ) : null}
 
         {/* 主内容卡片 */}
-        <Card className="flex-1 flex flex-col overflow-hidden">
+        <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
           <CardHeader className="pb-0">
             <CardTitle>日志列表</CardTitle>
           </CardHeader>
 
-          <CardContent className="flex-1 flex flex-col overflow-hidden">
+          <CardContent className="flex flex-1 flex-col gap-3 overflow-hidden pt-0 min-h-0">
             <CompactPageToolbar
               testIdPrefix="logs-toolbar"
               filters={(
@@ -337,7 +337,7 @@ export const LogsView: React.FC = () => {
             />
 
             {/* 日志列表 */}
-            <div className="flex-1 overflow-hidden border border-border rounded-lg">
+            <div className="flex-1 overflow-y-auto min-h-0">
               {loading ? (
                 <SkeletonList count={pageSize} itemHeight="h-20" spacing="space-y-0" />
               ) : (

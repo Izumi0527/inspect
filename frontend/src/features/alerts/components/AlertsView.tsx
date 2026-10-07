@@ -424,7 +424,7 @@ const AlertsViewContent: React.FC = () => {
 
   return (
     <AppLayout title="告警中心" alertCount={stats?.active ?? 0}>
-      <div className="flex flex-col gap-4 h-full">
+      <div className="flex flex-col gap-4 h-full min-h-0">
         {/* 统计卡片 */}
         {statsLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -447,7 +447,7 @@ const AlertsViewContent: React.FC = () => {
         ) : null}
 
         {/* 主内容区 */}
-        <Card className="flex-1 flex flex-col overflow-hidden">
+        <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
           <CardHeader className="pb-0">
             <div className="flex flex-wrap items-center gap-3">
               <CardTitle>告警列表</CardTitle>
@@ -457,7 +457,7 @@ const AlertsViewContent: React.FC = () => {
             </div>
           </CardHeader>
 
-          <CardContent className="flex flex-col gap-3 overflow-hidden pt-0">
+          <CardContent className="flex flex-1 flex-col gap-3 overflow-hidden pt-0 min-h-0">
             <CompactPageToolbar
               testIdPrefix="alerts-toolbar"
               filters={(
@@ -604,7 +604,7 @@ const AlertsViewContent: React.FC = () => {
               </div>
             )}
 
-            <div className="overflow-y-auto flex-1">
+            <div className="flex-1 overflow-y-auto min-h-0">
               {loading ? (
                 <SkeletonList count={pageSize} itemHeight="h-16" spacing="space-y-2" />
               ) : error ? (
@@ -624,7 +624,7 @@ const AlertsViewContent: React.FC = () => {
                   )}
                 </div>
               ) : alerts.length === 0 ? (
-                <div className="text-center py-12">
+                <div className="text-center py-6">
                   <AlertTriangle className="h-12 w-12 text-muted-foreground/80 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-foreground mb-2">
                     {hasActiveFilters ? '没有匹配的告警' : isDefaultActiveView ? '暂无活跃告警' : '暂无告警'}
@@ -669,15 +669,17 @@ const AlertsViewContent: React.FC = () => {
                 />
               )}
               {!error && (
-                <Pagination
-                  className="mt-6 pt-6 border-t border-border"
-                  currentPage={currentPage}
-                  totalPages={Math.max(1, Math.ceil(pagination.total / pageSize))}
-                  totalItems={pagination.total}
-                  pageSize={pageSize}
-                  onPageChange={handlePageChange}
-                  onPageSizeChange={handlePageSizeChange}
-                />
+                <div data-slot="table-footer" className="border-t border-border">
+                  <Pagination
+                    className="px-4"
+                    currentPage={currentPage}
+                    totalPages={Math.max(1, Math.ceil(pagination.total / pageSize))}
+                    totalItems={pagination.total}
+                    pageSize={pageSize}
+                    onPageChange={handlePageChange}
+                    onPageSizeChange={handlePageSizeChange}
+                  />
+                </div>
               )}
             </div>
           </CardContent>

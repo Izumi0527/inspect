@@ -140,7 +140,7 @@ export const ReportsView: React.FC = () => {
 
   return (
     <AppLayout title="报表分析">
-      <div className="flex flex-col gap-4 h-full">
+      <div className="flex flex-col gap-4 h-full min-h-0">
         {/* Mock 回退提示：避免验收时误判“已对接后端” */}
         {isMockFallbackEnabled && (
           <Card className="border-yellow-300/60 bg-yellow-50 dark:bg-yellow-900/20">
@@ -159,7 +159,7 @@ export const ReportsView: React.FC = () => {
         )}
 
         {/* 标签导航 */}
-        <Card className="flex-1 flex flex-col overflow-hidden">
+        <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
           <CardHeader className="pb-0">
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-2">
@@ -197,7 +197,7 @@ export const ReportsView: React.FC = () => {
           </div>
         </CardHeader>
 
-        <CardContent className="flex-1 flex flex-col overflow-hidden pt-4">
+        <CardContent className="flex-1 flex flex-col overflow-hidden pt-4 min-h-0">
           {/* 标签内容区域 */}
           <motion.div
             key={activeTab}

@@ -616,7 +616,7 @@ export const InspectionReports: React.FC<Props> = ({
           ) : undefined}
           data={filteredReports}
           columns={columns}
-          className="bg-card rounded-lg shadow-sm"
+          className="border-0"
           rowKey="id"
           pagination={{
             current: page,

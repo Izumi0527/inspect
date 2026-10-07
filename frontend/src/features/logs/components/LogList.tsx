@@ -62,9 +62,9 @@ export const LogList: React.FC<LogListProps> = ({
   const totalPages = pagination.pageSize > 0 ? Math.ceil(pagination.total / pagination.pageSize) : 0
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       {/* 列表头部 */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/50">
+      <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2 bg-muted">
         <div className="flex items-center gap-3">
           {enableSelection && (
             <Checkbox
@@ -126,8 +126,9 @@ export const LogList: React.FC<LogListProps> = ({
       </div>
 
       {/* 分页：复用全站统一的分页组件（含每页条数，位于页脚） */}
-      <div className="px-4 py-3 border-t border-border bg-muted/50">
+      <div data-slot="table-footer" className="border-t border-border">
         <Pagination
+          className="px-4"
           currentPage={pagination.current}
           totalPages={Math.max(1, totalPages)}
           totalItems={pagination.total}

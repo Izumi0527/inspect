@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import { formatDateYMD, formatTimeHM } from '@/utils/formatters'
-import { motion } from 'framer-motion'
 import {
   Plus,
   Play,
@@ -20,7 +19,6 @@ import {
   Badge,
   Table,
   Column,
-  Pagination,
   ConfirmModal
 } from '@/components/atoms'
 import { CompactPageToolbar } from '@/components/shared'
@@ -56,7 +54,6 @@ export const InspectionStrategies: React.FC = () => {
   const triggerExecution = useTriggerExecution()
 
   const strategies: InspectionStrategy[] = strategiesData?.items || []
-  const totalPages = strategiesData?.pages || 1
   const totalItems = strategiesData?.total || 0
 
   // 显示所有策略列表
@@ -340,21 +337,12 @@ export const InspectionStrategies: React.FC = () => {
       />
 
       {/* 策略列表 */}
-      {filteredStrategies.length > 0 ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Table
-            data={filteredStrategies}
-            columns={columns}
-            className="bg-card rounded-lg shadow-sm"
-          />
-        </motion.div>
-      ) : (
-        <Card>
-          <CardContent className="p-8 text-center">
+      <Table
+        data={filteredStrategies}
+        columns={columns}
+        className="border-0"
+        emptyContent={(
+          <div className="text-center py-6">
             <div className="flex flex-col items-center gap-4">
               <AlertCircle className="w-12 h-12 text-gray-400 dark:text-gray-500" />
               <div>
@@ -368,25 +356,19 @@ export const InspectionStrategies: React.FC = () => {
                 创建策略
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardContent className="p-4">
-          <Pagination
-            currentPage={page}
-            totalPages={Math.max(1, totalPages)}
-            totalItems={totalItems}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={(nextPageSize) => {
-              setPage(1)
-              setPageSize(nextPageSize)
-            }}
-          />
-        </CardContent>
-      </Card>
+          </div>
+        )}
+        pagination={{
+          current: page,
+          pageSize,
+          total: totalItems,
+          onChange: (nextPage) => setPage(nextPage),
+          onPageSizeChange: (nextPageSize) => {
+            setPage(1)
+            setPageSize(nextPageSize)
+          },
+        }}
+      />
 
       {/* 策略编辑/创建弹窗 */}
       {isModalOpen && (

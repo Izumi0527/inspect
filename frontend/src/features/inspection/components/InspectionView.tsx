@@ -125,7 +125,7 @@ export const InspectionView: React.FC = () => {
 
   return (
     <AppLayout title="巡检管理">
-      <div className="flex flex-col gap-4 h-full">
+      <div className="flex flex-col gap-4 h-full min-h-0">
         {/* 快速统计卡片 */}
         {!statsLoading && statsError && (
           <Card>
@@ -177,7 +177,7 @@ export const InspectionView: React.FC = () => {
         )}
 
         {/* 标签导航 */}
-      <Card className="flex-1 flex flex-col overflow-hidden">
+      <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
         <CardHeader className="pb-0">
           <div className="flex flex-col sm:flex-row gap-3 justify-between">
             {/* 标签按钮 */}
