@@ -72,7 +72,7 @@ export const SettingsTabNav: React.FC<SettingsTabNavProps> = ({
   )
 
   return (
-    <div className={cn('p-4 border-b border-border', className)}>
+    <div className={cn('p-4', className)}>
       <div
         role="tablist"
         aria-label="系统设置子模块"

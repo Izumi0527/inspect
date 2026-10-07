@@ -71,5 +71,19 @@ describe('SettingsTabNav', () => {
 
     expect(onSelect).toHaveBeenCalledWith('logs')
   })
+
+  it('不应在标签栏底部绘制分隔线，避免与内容卡片边框叠成细线', () => {
+    const tabs: SettingsTabDescriptor[] = [
+      createTab({ key: 'general', label: '通用配置', icon: Settings }),
+    ]
+
+    const { container } = render(
+      <SettingsTabNav tabs={tabs} activeKey="general" onSelect={() => {}} />
+    )
+
+    const root = container.firstElementChild as HTMLElement
+    expect(root).toHaveClass('p-4')
+    expect(root).not.toHaveClass('border-b')
+  })
 })
 
