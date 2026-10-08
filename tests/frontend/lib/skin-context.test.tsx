@@ -1,7 +1,7 @@
 import React from 'react'
 import { act, renderHook } from '@testing-library/react'
 
-import { SkinProvider, useSkin, SKIN_STORAGE_KEY } from '@/lib/contexts/skin-context'
+import { SkinProvider, useSkin, SKIN_STORAGE_KEY, SKINS } from '@/lib/contexts/skin-context'
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <SkinProvider>{children}</SkinProvider>
@@ -68,5 +68,29 @@ describe('SkinProvider', () => {
 
     expect(result.current.skin).toBe('instrument')
     expect(document.documentElement.getAttribute('data-skin')).toBe('instrument')
+  })
+
+  it('按本地存储同步浅色玻璃拟态皮肤', () => {
+    window.localStorage.setItem(SKIN_STORAGE_KEY, 'glass')
+
+    const { result } = renderHook(() => useSkin(), { wrapper })
+
+    expect(result.current.skin).toBe('glass')
+    expect(document.documentElement.getAttribute('data-skin')).toBe('glass')
+  })
+
+  it('切换到 glass 时写入本地存储与 html 属性', () => {
+    const { result } = renderHook(() => useSkin(), { wrapper })
+
+    act(() => {
+      result.current.setSkin('glass')
+    })
+
+    expect(window.localStorage.getItem(SKIN_STORAGE_KEY)).toBe('glass')
+    expect(document.documentElement.getAttribute('data-skin')).toBe('glass')
+  })
+
+  it('SKINS 清单包含三个皮肤且默认值在首位', () => {
+    expect(SKINS).toEqual(['classic', 'instrument', 'glass'])
   })
 })

@@ -23,11 +23,11 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" data-skin="classic" suppressHydrationWarning>
       <head>
-        {/* 首帧防闪烁：绘制前按本地存储设置皮肤（SSR 默认 classic，仅存储为 instrument 时改写） */}
+        {/* 首帧防闪烁：绘制前按本地存储设置皮肤（SSR 默认 classic，存储为 instrument / glass 时改写） */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{if(localStorage.getItem('ui-skin')==='instrument'){document.documentElement.setAttribute('data-skin','instrument')}}catch(e){}})()",
+              "(function(){try{var s=localStorage.getItem('ui-skin');if(s==='instrument'||s==='glass'){document.documentElement.setAttribute('data-skin',s)}}catch(e){}})()",
           }}
         />
       </head>

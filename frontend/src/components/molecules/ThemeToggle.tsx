@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
-import { Sun, Moon, Monitor, Check, Gauge, GlassWater } from 'lucide-react'
+import { Sun, Moon, Monitor, Check, Gauge, GlassWater, Sparkles } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
   DropdownMenu,
@@ -26,6 +26,7 @@ const itemClassName =
 const SKIN_OPTIONS: { value: Skin; label: string; icon: LucideIcon }[] = [
   { value: 'classic', label: '经典主题', icon: GlassWater },
   { value: 'instrument', label: '精密仪器风格主题', icon: Gauge },
+  { value: 'glass', label: '浅色玻璃拟态', icon: Sparkles },
 ]
 
 /**
@@ -33,12 +34,15 @@ const SKIN_OPTIONS: { value: Skin; label: string; icon: LucideIcon }[] = [
  *
  * 两组正交设置：
  * - 明暗轴：浅色 / 暗色 / 跟随系统（next-themes，写 html.dark）
- * - 皮肤轴：经典主题（玻璃拟态）/ 精密仪器风格主题（skin-context，写 html data-skin）
+ * - 皮肤轴：经典主题 / 精密仪器风格主题 / 浅色玻璃拟态（skin-context，写 html data-skin）
+ *
+ * 浅色玻璃拟态恒为浅色（CSS 层已锁定），此处同步禁用暗色与跟随系统两项并提示。
  */
 export function ThemeToggle() {
   const [mounted, setMounted] = useState(false)
   const { theme, setTheme, systemTheme } = useTheme()
   const { skin, setSkin } = useSkin()
+  const lightOnly = skin === 'glass'
 
   // 避免 SSR 水合不匹配
   useEffect(() => {
@@ -88,7 +92,11 @@ export function ThemeToggle() {
           )}
         </DropdownMenuItem>
 
-        <DropdownMenuItem onClick={() => setTheme('dark')} className={itemClassName}>
+        <DropdownMenuItem
+          onClick={() => setTheme('dark')}
+          className={itemClassName}
+          disabled={lightOnly}
+        >
           <Moon className="mr-2 h-4 w-4" />
           <span className="flex-1">暗色主题</span>
           {theme === 'dark' && (
@@ -96,7 +104,11 @@ export function ThemeToggle() {
           )}
         </DropdownMenuItem>
 
-        <DropdownMenuItem onClick={() => setTheme('system')} className={itemClassName}>
+        <DropdownMenuItem
+          onClick={() => setTheme('system')}
+          className={itemClassName}
+          disabled={lightOnly}
+        >
           <Monitor className="mr-2 h-4 w-4" />
           <span className="flex-1">跟随系统</span>
           {theme === 'system' && (
@@ -119,6 +131,10 @@ export function ThemeToggle() {
             )}
           </DropdownMenuItem>
         ))}
+
+        {lightOnly && (
+          <p className="px-3 pb-1.5 pt-1 text-xs text-muted-foreground">浅色玻璃拟态恒为浅色</p>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

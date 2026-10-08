@@ -89,7 +89,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem
       disableTransitionOnChange={false}
     >
-      {/* 皮肤轴（经典 / 精密仪器）与明暗轴正交，首帧由 layout 内联脚本预设 */}
+      {/* 皮肤轴（经典 / 精密仪器 / 浅色玻璃拟态）与明暗轴正交，首帧由 layout 内联脚本预设 */}
       <SkinProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
