@@ -43,13 +43,13 @@ const CLASSIC_COLORS: Record<AlertStatsCardKey, { icon: string; value?: string }
  * 告警统计卡（可点击 = 分面筛选）。
  *
  * 精密仪器方向：读数默认中性；只有「严重 / 警告」大于零时获得状态强调。
- * 经典皮肤沿用旧配方：七张卡各配一种彩色图标底。
+ * 经典 / 玻璃皮肤沿用旧配方：七张卡各配一种彩色图标底。
  */
 export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats, onCardClick }) => {
   const { skin } = useSkin()
-  const isClassic = skin === 'classic'
+  const isInstrument = skin === 'instrument'
 
-  const classicOf = (key: AlertStatsCardKey) => (isClassic ? CLASSIC_COLORS[key] : undefined)
+  const classicOf = (key: AlertStatsCardKey) => (isInstrument ? undefined : CLASSIC_COLORS[key])
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -64,7 +64,7 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats, onCardCli
       <CompactStatCard
         title="严重"
         value={stats.critical}
-        valueClassName={isClassic ? CLASSIC_COLORS.critical.value : stats.critical > 0 ? 'text-danger' : undefined}
+        valueClassName={isInstrument ? (stats.critical > 0 ? 'text-danger' : undefined) : CLASSIC_COLORS.critical.value}
         icon={AlertCircle}
         iconClassName={classicOf('critical')?.icon}
         onClick={onCardClick ? () => onCardClick('critical') : undefined}
@@ -73,7 +73,7 @@ export const AlertStatsGrid: React.FC<AlertStatsGridProps> = ({ stats, onCardCli
       <CompactStatCard
         title="警告"
         value={stats.warning}
-        valueClassName={isClassic ? CLASSIC_COLORS.warning.value : stats.warning > 0 ? 'text-warning' : undefined}
+        valueClassName={isInstrument ? (stats.warning > 0 ? 'text-warning' : undefined) : CLASSIC_COLORS.warning.value}
         icon={AlertTriangle}
         iconClassName={classicOf('warning')?.icon}
         onClick={onCardClick ? () => onCardClick('warning') : undefined}

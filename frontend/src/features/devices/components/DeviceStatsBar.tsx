@@ -24,11 +24,11 @@ interface DeviceStatsBarProps {
  * 设备统计卡栏 —— 五张读数卡。
  *
  * 精密仪器方向：读数默认中性；只有异常值（离线 / 告警 > 0）获得状态强调。
- * 经典皮肤沿用旧配方：五项固定配色（蓝 / 绿 / 红 / 黄 / 紫）。
+ * 经典 / 玻璃皮肤沿用旧配方：五项固定配色（蓝 / 绿 / 红 / 黄 / 紫）。
  */
 export const DeviceStatsBar: React.FC<DeviceStatsBarProps> = ({ summary }) => {
   const { skin } = useSkin()
-  const isClassic = skin === 'classic'
+  const isInstrument = skin === 'instrument'
 
   const items = [
     {
@@ -76,9 +76,9 @@ export const DeviceStatsBar: React.FC<DeviceStatsBarProps> = ({ summary }) => {
           title={item.label}
           value={item.value}
           icon={item.icon}
-          iconClassName={isClassic ? item.classic.icon : undefined}
-          iconBgClassName={isClassic ? item.classic.bg : undefined}
-          valueClassName={isClassic ? item.classic.value : item.valueClassName}
+          iconClassName={isInstrument ? undefined : item.classic.icon}
+          iconBgClassName={isInstrument ? undefined : item.classic.bg}
+          valueClassName={isInstrument ? item.valueClassName : item.classic.value}
         />
       ))}
     </div>

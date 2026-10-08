@@ -9,7 +9,7 @@ import { useSkin } from '@/lib/contexts/skin-context'
 export const QuickActionsCard: React.FC = () => {
   const router = useRouter()
   const { skin } = useSkin()
-  const isClassic = skin === 'classic'
+  const isInstrument = skin === 'instrument'
   const canReadDevices = usePermission(Permission.DEVICES_READ)
   const canReadInspections = usePermission(Permission.INSPECTIONS_READ)
   const canReadReports = usePermission(Permission.REPORTS_READ)
@@ -95,7 +95,7 @@ export const QuickActionsCard: React.FC = () => {
                 variant="outline"
                 aria-label={action.title}
                 onClick={() => handleActionClick(action.targetPath)}
-                className={`h-20 flex flex-col items-center justify-center gap-2 ${isClassic ? action.colorScheme.hover : 'hover:bg-surface-3 hover:text-foreground'} transition-colors`}
+                className={`h-20 flex flex-col items-center justify-center gap-2 ${isInstrument ? 'hover:bg-surface-3 hover:text-foreground' : action.colorScheme.hover} transition-colors`}
               >
                 <IconComponent className="w-6 h-6" />
                 <span className="text-sm font-medium">{action.title}</span>

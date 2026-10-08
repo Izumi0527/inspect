@@ -93,13 +93,13 @@ export const CompactStatCard: React.FC<CompactStatCardProps> = ({
   ariaLabel,
 }) => {
   const { skin } = useSkin()
-  const isClassic = skin === 'classic'
-  const resolvedIconClassName = isClassic
-    ? iconClassName ?? 'text-sky-600 dark:text-sky-300'
-    : neutralizeLegacyPalette(iconClassName) ?? 'text-muted-foreground/80'
-  const resolvedValueClassName = isClassic ? valueClassName : neutralizeLegacyPalette(valueClassName)
+  const isInstrument = skin === 'instrument'
+  const resolvedIconClassName = isInstrument
+    ? neutralizeLegacyPalette(iconClassName) ?? 'text-muted-foreground/80'
+    : iconClassName ?? 'text-sky-600 dark:text-sky-300'
+  const resolvedValueClassName = isInstrument ? neutralizeLegacyPalette(valueClassName) : valueClassName
   const resolvedIconBgClassName =
-    iconBgClassName ?? (isClassic ? deriveIconBgClassName(resolvedIconClassName) : undefined)
+    iconBgClassName ?? (isInstrument ? undefined : deriveIconBgClassName(resolvedIconClassName))
   // 箭头只表达数值方向，配色单独由 sentiment 决定
   const trendArrow = {
     up: '↗',

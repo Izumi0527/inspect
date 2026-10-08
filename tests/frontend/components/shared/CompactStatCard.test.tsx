@@ -5,6 +5,11 @@ import { Server } from 'lucide-react'
 
 import { CompactStatCard } from '@/components/shared'
 
+let mockedSkin: 'classic' | 'instrument' | 'glass' = 'classic'
+jest.mock('@/lib/contexts/skin-context', () => ({
+  useSkin: () => ({ skin: mockedSkin, setSkin: jest.fn() }),
+}))
+
 describe('CompactStatCard', () => {
   it('使用设备管理同款的紧凑规格渲染', () => {
     const { container } = render(
@@ -86,5 +91,23 @@ describe('CompactStatCard', () => {
     )
 
     expect(screen.getByText('vs 上期')).toBeInTheDocument()
+  })
+})
+
+describe('CompactStatCard · 皮肤分支', () => {
+  afterEach(() => {
+    mockedSkin = 'classic'
+  })
+
+  it('glass 皮肤保留调用方传入的调色板类（与 classic 同侧）', () => {
+    mockedSkin = 'glass'
+    render(<CompactStatCard title="在线" value={3} icon={Server} valueClassName="text-emerald-600" />)
+    expect(screen.getByText('3')).toHaveClass('text-emerald-600')
+  })
+
+  it('instrument 皮肤剥离调用方传入的调色板类', () => {
+    mockedSkin = 'instrument'
+    render(<CompactStatCard title="在线" value={3} icon={Server} valueClassName="text-emerald-600" />)
+    expect(screen.getByText('3')).not.toHaveClass('text-emerald-600')
   })
 })

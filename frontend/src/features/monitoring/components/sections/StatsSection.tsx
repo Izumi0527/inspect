@@ -23,7 +23,7 @@ const STATS_ICON_MAP = {
   peak_inbound: Download,
 } as const
 
-/** 经典皮肤沿用旧配方：六项固定配色；精密仪器读数与图标保持中性。 */
+/** 经典 / 玻璃皮肤沿用旧配方：六项固定配色；精密仪器读数与图标保持中性。 */
 const STATS_COLOR_MAP = {
   total_devices: 'text-blue-600 dark:text-blue-400',
   active_alerts: 'text-red-600 dark:text-red-400',
@@ -35,7 +35,7 @@ const STATS_COLOR_MAP = {
 
 export function StatsSection({ section, statsV2 = [], onRetry }: StatsSectionProps) {
   const { skin } = useSkin()
-  const isClassic = skin === 'classic'
+  const isInstrument = skin === 'instrument'
 
   return (
     <section>
@@ -60,7 +60,7 @@ export function StatsSection({ section, statsV2 = [], onRetry }: StatsSectionPro
                 change={stat.change}
                 trend={stat.trend}
                 icon={IconComponent}
-                iconClassName={isClassic ? iconClassName : undefined}
+                iconClassName={isInstrument ? undefined : iconClassName}
               />
             )
           })
