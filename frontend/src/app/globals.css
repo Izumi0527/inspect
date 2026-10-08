@@ -316,7 +316,8 @@
      权威值与对比度证据：docs/plans/2026-10-08-glass-skin/evidence/palette-verify.py
      文字令牌全部在裸底 / 卡面 / 四斑全叠极端卡面上 >= 4.5:1。 */
   :is([data-skin="glass"], .dark[data-skin="glass"]) {
-    color-scheme: light;
+    /* next-themes 会给 <html> 写内联 style="color-scheme: dark"，只有 !important 能压过内联值 */
+    color-scheme: light !important;
 
     /* 表面明度阶（卡为 62% 白；surface-2 更透以显更多底色，视觉更凹） */
     --bg: #EDF5F1;

@@ -15,6 +15,8 @@ const statusSource = fs.readFileSync(
 describe('浅色玻璃拟态皮肤守卫', () => {
   it('调色板用单一选择器列表同时覆盖明暗轴（恒浅色）', () => {
     expect(css).toMatch(/:is\(\[data-skin="glass"\],\s*\.dark\[data-skin="glass"\]\)\s*\{/)
+    // next-themes 写内联 color-scheme，必须 !important 才能锁住浅色的滚动条与原生控件
+    expect(css).toMatch(/color-scheme:\s*light\s*!important/)
   })
 
   it('不存在单独的 glass 暗色调色板', () => {
