@@ -1,9 +1,14 @@
 /* ============================================
-   Tailwind CSS v4 主题 —— 双皮肤（经典 / 精密仪器）
+   Tailwind CSS v4 主题 —— 三皮肤（经典 / 精密仪器 / 浅色玻璃拟态）
    ============================================
    皮肤轴（html[data-skin]）与明暗轴（html.dark）正交：
-     classic    经典主题 —— 玻璃拟态外观（默认；:root / .dark 即经典值）
+     classic    经典主题 —— 旧半透明卡片外观（默认；:root / .dark 即经典值）
      instrument 精密仪器 —— 明度阶 + 发丝线 + 状态轨（[data-skin="instrument"] 作用域）
+     glass      浅色玻璃拟态 —— 光斑 + 玻璃卡，恒浅色（:is([data-skin="glass"], .dark[data-skin="glass"]) 作用域）
+
+   浅色玻璃拟态令牌权威值与对比度验证：
+     docs/plans/2026-10-08-glass-skin/evidence/palette-verify.py
+   约束：改动任何 glass 色值或光斑透明度后必须复跑该脚本。
 
    精密仪器令牌权威值与对比度验证：
      docs/plans/ui-redesign-2026-10-03/evidence/after/palette-verify.py
@@ -152,9 +157,10 @@
 }
 
 /* ============================================
-   4. 调色板：四块成对定义
+   4. 调色板：经典 / 仪器成对定义，玻璃单块恒浅色
       :root / .dark                              → 经典（默认）
       [data-skin="instrument"] / .dark[data-skin="instrument"] → 精密仪器
+      :is([data-skin="glass"], .dark[data-skin="glass"])         → 浅色玻璃拟态（恒浅色）
       仪器深色用复合选择器（0,2,0）确保在 dark+instrument 组合下胜出。
    ============================================ */
 
@@ -303,6 +309,64 @@
     --pagination-control: #28323A;
     --pagination-selected: #17333A;
     --pagination-selected-foreground: #8FD8E0;
+  }
+
+  /* 4.5 浅色玻璃拟态 · 恒浅色
+     同一选择器列表同时匹配 .dark，特指度 (0,2,0) 且源顺序在 .dark 之后，明暗轴对本皮肤无效。
+     权威值与对比度证据：docs/plans/2026-10-08-glass-skin/evidence/palette-verify.py
+     文字令牌全部在裸底 / 卡面 / 四斑全叠极端卡面上 >= 4.5:1。 */
+  :is([data-skin="glass"], .dark[data-skin="glass"]) {
+    color-scheme: light;
+
+    /* 表面明度阶（卡为 62% 白；surface-2 更透以显更多底色，视觉更凹） */
+    --bg: #EDF5F1;
+    --surface: rgba(255, 255, 255, 0.62);
+    --surface-2: rgba(255, 255, 255, 0.45);
+    --surface-3: rgba(15, 120, 90, 0.07);
+
+    /* 刻线：不用白色玻璃边（近白卡面上会消失），白色高光只给卡片外缘 */
+    --rule: #D5E5DD;
+    --rule-strong: #BFD3CA;
+
+    /* 文字 */
+    --ink: #152420;
+    --ink-2: #4A5F57;
+    --ink-3: #5A6C64;
+
+    /* 品牌：文字 / 填充安全色；简报的鲜亮绿青保留为装饰填充对 --glass-accent-* */
+    --brand: #0B7A55;
+    --on-brand: #FFFFFF;
+
+    /* 五档状态 */
+    --danger: #C42020;   --on-danger: #FFFFFF;   --danger-soft: #F7E4E4;   --on-danger-soft: #8C1D16;
+    --warning: #9A4708;  --on-warning: #FFFFFF;  --warning-soft: #F4E7DD;  --on-warning-soft: #7A3D06;
+    --success: #0B7A55;  --on-success: #FFFFFF;  --success-soft: #DDF1EA;  --on-success-soft: #0A5637;
+    --info: #1D4ED8;     --on-info: #FFFFFF;     --info-soft: #E4E8F5;     --on-info-soft: #1B3A85;
+    --unknown: #58685F;  --on-unknown: #FFFFFF;  --unknown-soft: #E8EAE9;  --on-unknown-soft: #39433D;
+
+    /* 分页 */
+    --pagination-background: transparent;
+    --pagination-control: rgba(255, 255, 255, 0.55);
+    --pagination-selected: #DDF1EA;
+    --pagination-selected-foreground: #0A5637;
+
+    /* 圆角（简报：面板 18 / 控件 12） */
+    --skin-radius-sm: 12px;
+    --skin-radius-md: 12px;
+    --skin-radius-lg: 18px;
+    --skin-radius-xl: 18px;
+    --skin-radius-2xl: 18px;
+    --skin-radius-3xl: 24px;
+
+    /* 玻璃材质与装饰色：只用于填充 / 高光 / 阴影，不得用于文字 */
+    --glass-accent-1: #0F9D6B;
+    --glass-accent-2: #12B8A6;
+    --glass-border: rgba(255, 255, 255, 0.85);
+    --glass-blur: 22px;
+    --glass-shadow: 0 8px 32px rgba(20, 80, 60, 0.10);
+    --glass-shadow-hover: 0 12px 40px rgba(20, 80, 60, 0.14);
+    --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.70);
+    --glass-track: rgba(15, 120, 90, 0.14);
   }
 }
 
@@ -595,4 +659,166 @@
     border-color: #1e40af;
   }
   & [data-slot="alert-list-item"][data-severity="info"] h3 { color: #93c5fd; }
+}
+
+/* ============================================
+   6.3 玻璃皮肤几何（@layer components）
+   沿用精密仪器真身的尺寸阶梯，只覆盖圆角与简报钉死的统计卡内边距（15 18 16）。
+   ============================================ */
+@layer components {
+  [data-skin="glass"] [data-slot="button"] { border-radius: 12px; }
+  [data-skin="glass"] [data-slot="button"][data-size="sm"] { border-radius: 10px; }
+  [data-skin="glass"] :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], [data-slot="multiselect-trigger"]) { border-radius: 12px; }
+  [data-skin="glass"] [data-slot="stat-card"] [data-slot="card-content"] { padding: 0.9375rem 1.125rem 1rem; }
+}
+
+/* ============================================
+   6.4 玻璃皮肤外观覆盖（未分层 → 优先于任何 @layer 内的工具类）
+   只覆盖调用方不定制的属性。装饰色一律取 --glass-accent-*，文字一律取语义令牌。
+   ============================================ */
+[data-skin="glass"] {
+  & body { font-variant-numeric: tabular-nums; }
+
+  /* --- 光斑：固定铺满视口；外壳透明并抬到 z-index 1 才能露出 --- */
+  & body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(640px 440px at 8% 4%,    rgba(74, 222, 158, 0.22), transparent 62%),
+      radial-gradient(540px 420px at 92% 8%,   rgba(94, 234, 212, 0.20), transparent 62%),
+      radial-gradient(760px 540px at 60% 100%, rgba(96, 165, 250, 0.16), transparent 62%),
+      radial-gradient(500px 380px at 30% 70%,  rgba(250, 204, 21, 0.08), transparent 62%);
+    animation: glass-aurora 14s ease-in-out infinite alternate;
+  }
+  & [data-slot="app-layout"] {
+    position: relative;
+    z-index: 1;
+    background-color: transparent;
+  }
+
+  /* --- 玻璃材质：面板 / 统计卡 --- */
+  & :is([data-slot="card"], [data-slot="stat-card"]) {
+    border-color: var(--glass-border);
+    background-color: var(--surface);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+    box-shadow: var(--glass-shadow), var(--glass-inset);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.35s ease, background-color 0.35s ease;
+  }
+  & [data-slot="stat-card"]:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--glass-shadow-hover), var(--glass-inset);
+  }
+
+  /* --- 顶栏 / 侧栏：玻璃条 --- */
+  & [data-slot="dashboard-header"] {
+    background-color: var(--surface);
+    border-bottom-color: var(--glass-border);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+    box-shadow: var(--glass-inset);
+  }
+  & [data-slot="sidebar"] {
+    background-color: var(--surface-2);
+    border-right-color: var(--glass-border);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+  }
+  & [data-slot="sidebar-link"][data-active] {
+    background-color: color-mix(in srgb, var(--glass-accent-1) 12%, transparent);
+    color: var(--brand);
+  }
+
+  /* --- 表格：淡绿表头 / 行悬停 / 行入场 / 扫描光带 --- */
+  & [data-slot="table-header-row"],
+  & [data-slot="table-header-row"] > th { background-color: rgba(15, 157, 107, 0.035); }
+  & [data-slot="table-row"]:hover { background-color: rgba(255, 255, 255, 0.60); }
+  & [data-slot="table-row"] { animation: glass-row-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  & [data-slot="table-container"] { position: relative; }
+  & [data-slot="table-container"]::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -130px;
+    height: 130px;
+    z-index: 3;
+    pointer-events: none;
+    background: linear-gradient(180deg,
+      transparent 0%,
+      rgba(15, 157, 107, 0.05) 45%,
+      rgba(15, 157, 107, 0.11) 60%,
+      rgba(15, 157, 107, 0.03) 78%,
+      transparent 100%);
+    animation: glass-scan 8.5s linear infinite;
+  }
+
+  /* --- 状态点呼吸光圈（仅 success / warning / danger；info / unknown 静止） --- */
+  & [data-slot="status-dot"] { position: relative; }
+  & [data-slot="status-dot"]:is([data-tone="success"], [data-tone="warning"], [data-tone="danger"])::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: 1px solid var(--success);
+    animation: glass-ping 2.2s ease-out infinite;
+  }
+  & [data-slot="status-dot"][data-tone="warning"]::after { border-color: var(--warning); }
+  & [data-slot="status-dot"][data-tone="danger"]::after { border-color: var(--danger); }
+
+  /* --- 输入 / 选择器：浅玻璃底、悬停绿描边 --- */
+  & :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], [data-slot="multiselect-trigger"]) {
+    background-color: var(--surface-2);
+    border-color: var(--rule-strong);
+  }
+  & :is([data-slot="input"], [data-slot="textarea"]):hover {
+    border-color: color-mix(in srgb, var(--glass-accent-1) 45%, transparent);
+  }
+
+  /* --- 徽标：胶囊 --- */
+  & [data-slot="badge"] { border-radius: 9999px; }
+
+  /* --- 浮层：玻璃 --- */
+  & :is([data-slot="dialog-content"], [data-slot="modal-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"]) {
+    border-color: var(--glass-border);
+    background-color: rgba(255, 255, 255, 0.88);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.6);
+    box-shadow: 0 16px 48px rgba(20, 80, 60, 0.16), var(--glass-inset);
+  }
+  & :is([data-slot="dialog-overlay"], [data-slot="modal-overlay"]) {
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+}
+
+@keyframes glass-aurora {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-18px, 12px, 0) scale(1.06); }
+}
+@keyframes glass-ping {
+  from { transform: scale(1); opacity: 0.6; }
+  to { transform: scale(3.2); opacity: 0; }
+}
+@keyframes glass-scan {
+  0% { top: -130px; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+@keyframes glass-row-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 减少动态：关闭全部 glass 动画与位移（行入场用了 both 填充，关闭后行保持可见） */
+@media (prefers-reduced-motion: reduce) {
+  [data-skin="glass"] body::before,
+  [data-skin="glass"] [data-slot="table-container"]::after,
+  [data-skin="glass"] [data-slot="status-dot"]::after,
+  [data-skin="glass"] [data-slot="table-row"] { animation: none; }
+  [data-skin="glass"] [data-slot="stat-card"]:hover { transform: none; }
 }

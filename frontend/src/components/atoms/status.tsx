@@ -53,6 +53,8 @@ export interface StatusDotProps extends React.HTMLAttributes<HTMLSpanElement> {
 export const StatusDot: React.FC<StatusDotProps> = ({ tone, className, ...props }) => (
   <span
     aria-hidden="true"
+    data-slot="status-dot"
+    data-tone={tone}
     className={cn('inline-block h-2 w-2 shrink-0 rounded-full', dotClass[tone], className)}
     {...props}
   />
