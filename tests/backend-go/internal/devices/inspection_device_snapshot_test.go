@@ -66,8 +66,8 @@ func TestBackfillInspectionDeviceSnapshots_OnlyFillsMissing(t *testing.T) {
 	}
 }
 
-// 删除设备必须先把它的历史巡检补上快照、再删设备、再把它从巡检策略里摘掉，且同一事务：
-// 快照失败就不删，避免再出现「设备没了、报告也空了」；摘除必须在 DELETE 之后，
+// 删除设备必须先把它的历史巡检补上快照、再删设备、再清掉它的监控数据、再把它从巡检策略里摘掉，
+// 且同一事务：快照失败就不删，避免再出现「设备没了、报告也空了」；摘除必须在 DELETE 之后，
 // 因为它按「devices 表里已不存在」判定要摘的 ID。
 func TestDeleteDevice_SnapshotsHistoryBeforeDeleteInOneTransaction(t *testing.T) {
 	db, mock, cleanup := newDevicesGormDBWithSQLMock(t)
@@ -81,6 +81,7 @@ func TestDeleteDevice_SnapshotsHistoryBeforeDeleteInOneTransaction(t *testing.T)
 	mock.ExpectExec(`DELETE FROM "devices" WHERE id = \$1`).
 		WithArgs(7).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	expectPurgeDeviceMonitoringData(mock, 7, 0)
 	mock.ExpectExec(strategyRefPrunePattern).
 		WillReturnResult(sqlmock.NewResult(0, 2))
 	mock.ExpectCommit()
@@ -121,6 +122,7 @@ func TestDeleteDevice_StrategyPruneFailureRollsBackDelete(t *testing.T) {
 	mock.ExpectExec(`DELETE FROM "devices" WHERE id = \$1`).
 		WithArgs(7).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	expectPurgeDeviceMonitoringData(mock, 7, 0)
 	mock.ExpectExec(strategyRefPrunePattern).WillReturnError(context.DeadlineExceeded)
 	mock.ExpectRollback()
 

@@ -97,6 +97,7 @@ func TestWriteDeviceMetrics_WritesLLDPIdentityColumnsOnlyWhenChanged(t *testing.
 	writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
 	cpu := 1.0
 
+	mock.ExpectQuery(`SELECT id FROM "devices" WHERE id = \$1 LIMIT \$2`).WithArgs(9, 1).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
 	mock.ExpectBegin()
 	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
@@ -131,6 +132,7 @@ func TestWriteDeviceMetrics_ReplacesNeighborsInSavepoint(t *testing.T) {
 	cpu := 12.5
 	collectedAt := monitoring.FlexibleTime{Time: time.Date(2026, 9, 14, 8, 0, 0, 0, time.UTC)}
 
+	mock.ExpectQuery(`SELECT id FROM "devices" WHERE id = \$1 LIMIT \$2`).WithArgs(9, 1).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
 	mock.ExpectBegin()
 	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
@@ -171,6 +173,7 @@ func TestWriteDeviceMetrics_EmptyNeighborsClearsOldRows(t *testing.T) {
 	writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
 	cpu := 1.0
 
+	mock.ExpectQuery(`SELECT id FROM "devices" WHERE id = \$1 LIMIT \$2`).WithArgs(9, 1).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
 	mock.ExpectBegin()
 	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
@@ -190,6 +193,7 @@ func TestWriteDeviceMetrics_EmptyNeighborsClearsOldRows(t *testing.T) {
 		t.Fatalf("sqlmock expectations not met: %v", err)
 	}
 
+	mock.ExpectQuery(`SELECT id FROM "devices" WHERE id = \$1 LIMIT \$2`).WithArgs(9, 1).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
 	mock.ExpectBegin()
 	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))

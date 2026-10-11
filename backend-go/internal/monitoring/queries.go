@@ -24,6 +24,9 @@ type temperatureRow struct {
 
 // isUndefinedRelationError 用于识别“表/视图不存在”的数据库错误（SQLSTATE 42P01）。
 // 该错误在本项目中常见于：未创建 *metrics_hourly 聚合表/视图时，长时间范围查询会失败。
+// 注意：本项目的迁移与部署脚本都不创建 device_metrics_hourly，所有环境实际走 42P01 回退读原始表。
+// 若日后手工建成连续聚合，删设备对 device_metrics 的清理不会刷新已物化的小时桶，
+// 已删设备会从读 hourly 的分支复活，届时需在清理后 refresh_continuous_aggregate 或给这些分支加设备过滤。
 func isUndefinedRelationError(err error) bool {
 	if err == nil {
 		return false
@@ -623,7 +626,11 @@ func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Ti
 		if row.Value == nil {
 			continue
 		}
-		name := deviceNames[row.DeviceID]
+		name, ok := deviceNames[row.DeviceID]
+		if !ok {
+			// 设备已删除（删设备到采集器刷新设备列表之间写入的残留样本），不画幽灵曲线
+			continue
+		}
 		if name == "" {
 			name = fmt.Sprintf("device_%d", row.DeviceID)
 		}
@@ -732,7 +739,11 @@ func (w *MetricsWriter) GetDevicePerformanceHistory(ctx context.Context, start t
 		if row.Value == nil {
 			continue
 		}
-		name := deviceNames[row.DeviceID]
+		name, ok := deviceNames[row.DeviceID]
+		if !ok {
+			// 设备已删除（删设备到采集器刷新设备列表之间写入的残留样本），不画幽灵曲线
+			continue
+		}
 		if name == "" {
 			name = fmt.Sprintf("device_%d", row.DeviceID)
 		}

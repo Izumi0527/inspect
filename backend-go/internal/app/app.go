@@ -219,6 +219,17 @@ func New() (*App, error) {
 		log.Info("已清理巡检策略中已删除设备的引用", zap.Int64("strategies", pruned))
 	}
 
+	// 清掉删设备时残留在监控表里的指标与接口清单（幂等）。失败不阻塞启动：只影响监控中心
+	// 「全部设备」视图是否还会画出已删设备的曲线、统计卡是否混入其样本；之后删设备会当场清理。
+	// 同步执行与上面三条回填一致，保证 HTTP 服务可用前清完；孤儿查询要读完两张 hypertable 的
+	// device_id 索引，大部署上有可感知耗时，故记录耗时便于运维定位启动变慢的原因。
+	purgeStartedAt := time.Now()
+	if purged, err := deviceService.PurgeOrphanMonitoringData(context.Background()); err != nil {
+		log.Warn("清理已删除设备残留的监控数据失败", zap.Error(err), zap.Duration("elapsed", time.Since(purgeStartedAt)))
+	} else if purged > 0 {
+		log.Info("已清理已删除设备残留的监控数据", zap.Int64("devices", purged), zap.Duration("elapsed", time.Since(purgeStartedAt)))
+	}
+
 	reportHandler := handlers.ReportsHandler{
 		Service:   reportService,
 		Auth:      authService,

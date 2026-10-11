@@ -18,6 +18,9 @@ import (
 
 var ErrNoMetrics = errors.New("no metrics to write")
 
+// ErrDeviceNotFound 写入目标设备已不在 devices 表：采集任务中途被删的设备会命中。
+var ErrDeviceNotFound = errors.New("device not found")
+
 type WriteResult struct {
 	DeviceMetrics    int
 	InterfaceMetrics int
@@ -66,7 +69,18 @@ func (w *MetricsWriter) WriteDeviceMetrics(ctx context.Context, req DeviceMetric
 		return WriteResult{}, ErrNoMetrics
 	}
 
-	err := w.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	// 采集任务开始时一次性加载设备列表再逐台写入：任务进行中被删除的设备仍会走到这里。
+	// 删设备已清掉它的监控数据，不校验就会写出新的孤儿行；统计卡、流量聚合不按设备名过滤，
+	// 会被这些样本污染到下次重启清理为止。放在无指标早退之后，没东西可写就不多查一次。
+	exists, err := w.DeviceExists(ctx, req.DeviceID)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	if !exists {
+		return WriteResult{}, ErrDeviceNotFound
+	}
+
+	err = w.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// 核心写入①：设备级时序指标（device_metrics）。
 		if len(deviceMetrics) > 0 {
 			// Use raw SQL to let database sequence generate IDs for TimescaleDB hypertable

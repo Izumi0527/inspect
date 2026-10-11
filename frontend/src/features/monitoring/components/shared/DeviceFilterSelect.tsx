@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { ListFilter } from 'lucide-react'
 import { Button, Popover, PopoverTrigger, PopoverContent } from '@/components/atoms'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -25,9 +25,20 @@ const checkboxClassName = 'rounded-[4px]'
  * - 每行前置始终可见的勾选框；"全部设备"与具体设备互斥：勾选全部即清空筛选
  * - 取消最后一台已选设备时自动回到"全部设备"
  * - 面板宽度不固定，由最长的设备名/IP 撑开（设上限防止极端长名撑爆视口）
+ * - 设备列表就绪后剔除已不存在的已选 ID（设备被删后 localStorage 里的残留）
  */
 export function DeviceFilterSelect({ deviceIds, onChange }: DeviceFilterSelectProps) {
-  const { data: devices = [], isLoading, error } = useMonitoringDevices()
+  const { data, isLoading, error } = useMonitoringDevices()
+  const devices = useMemo(() => data ?? [], [data])
+
+  // 设备被删除后，localStorage 里持久化的 deviceIds 仍留着它的 ID：请求会带上已删设备
+  // （后端按 device_id 过滤，命中残留的指标行），触发器还会显示「已选 1 台」却无对应项。
+  // 列表就绪后把失效 ID 剔除；加载中/失败时 data 为空，此时不动，免得把选择误清成「全部设备」。
+  useEffect(() => {
+    if (isLoading || error || !data || deviceIds.length === 0) return
+    const valid = deviceIds.filter((id) => data.some((item) => item.id === id))
+    if (valid.length !== deviceIds.length) onChange(valid)
+  }, [data, deviceIds, error, isLoading, onChange])
 
   const triggerLabel = useMemo(() => {
     if (deviceIds.length === 0) return '全部设备'

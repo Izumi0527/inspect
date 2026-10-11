@@ -130,10 +130,14 @@ export const DeviceManagementView: React.FC = () => {
   const appliedUrlSearchRef = React.useRef(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  // 后端删设备时会把它从巡检策略的目标设备里摘掉；策略列表缓存 5 分钟，不失效会在编辑
-  // 弹窗里继续显示「设备-N」。巡检特性已依赖设备特性，这里只按键名失效、不反向 import 其 hooks
-  const invalidateStrategies = () =>
+  // 后端删设备时会把它从巡检策略的目标设备里摘掉，也会清掉它的监控数据；策略列表与监控设备
+  // 列表都缓存 5 分钟，不失效会分别表现为：编辑弹窗继续显示「设备-N」、监控中心设备筛选继续
+  // 列出已删设备（勾选后请求带上它的 ID）。巡检特性已依赖设备特性，这里只按键名失效、
+  // 不反向 import 其 hooks
+  const invalidateDeviceDependentCaches = () => {
     queryClient.invalidateQueries({ queryKey: ["inspection", "strategies"] });
+    queryClient.invalidateQueries({ queryKey: ["monitoring-devices"] });
+  };
   const userPermissions = React.useMemo(
     () => ((user?.permissions ?? []) as unknown as string[]),
     [user?.permissions],
@@ -487,7 +491,7 @@ export const DeviceManagementView: React.FC = () => {
 
       // 即使部分失败也要刷新数据：后端可能已删除部分设备
       clearDeviceSelection();
-      invalidateStrategies();
+      invalidateDeviceDependentCaches();
       await loadDevices();
       loadStats();
       setBulkDeleteModalOpen(false);
@@ -624,7 +628,7 @@ export const DeviceManagementView: React.FC = () => {
 
     try {
       await removeDevice(deviceToDelete.id);
-      invalidateStrategies();
+      invalidateDeviceDependentCaches();
       setDeviceToDelete(null);
       loadStats();
       toast.success("设备删除成功");

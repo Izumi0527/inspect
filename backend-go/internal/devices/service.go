@@ -356,7 +356,8 @@ func (s *Service) UpdateDevice(ctx context.Context, deviceID int, updates map[st
 
 // DeleteDevice 物理删除设备。删除前在同一事务里把该设备尚无快照的历史巡检补上设备快照：
 // 巡检报告的设备身份原先只靠 LEFT JOIN 当前 devices 表，设备一删历史报告就一片空白；
-// 删除后再把它从巡检策略的目标设备里摘掉。任一步失败则整体回滚、不删设备。
+// 删除后再清掉它的监控数据（三张指标/接口表无外键，不清会在监控中心复活成幽灵设备），
+// 再把它从巡检策略的目标设备里摘掉。任一步失败则整体回滚、不删设备。
 func (s *Service) DeleteDevice(ctx context.Context, deviceID int) error {
 	if s.db == nil {
 		return fmt.Errorf("database not initialized")
@@ -373,6 +374,9 @@ func (s *Service) DeleteDevice(ctx context.Context, deviceID int) error {
 		if result.RowsAffected == 0 {
 			return gorm.ErrRecordNotFound
 		}
+		if err := purgeDeviceMonitoringData(tx, deviceID); err != nil {
+			return err
+		}
 		if err := pruneDeletedDevicesFromStrategies(tx).Error; err != nil {
 			return fmt.Errorf("清理巡检策略中的设备引用失败: %w", err)
 		}
@@ -388,6 +392,29 @@ func (s *Service) PruneDeletedDevicesFromStrategies(ctx context.Context) (int64,
 	}
 	result := pruneDeletedDevicesFromStrategies(s.db.WithContext(ctx))
 	return result.RowsAffected, result.Error
+}
+
+// PurgeOrphanMonitoringData 清理本机制上线前删设备留在监控表里的指标与接口清单（幂等），
+// 返回清理的设备数。逐台独立事务：单台失败只中断后续，已清理的不回滚。
+func (s *Service) PurgeOrphanMonitoringData(ctx context.Context) (int64, error) {
+	if s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+	orphanIDs := make([]int, 0)
+	if err := s.db.WithContext(ctx).Raw(orphanMonitoringDeviceIDsSQL).Scan(&orphanIDs).Error; err != nil {
+		return 0, fmt.Errorf("查找已删除设备残留的监控数据失败: %w", err)
+	}
+	var purged int64
+	for _, deviceID := range orphanIDs {
+		err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return purgeDeviceMonitoringData(tx, deviceID)
+		})
+		if err != nil {
+			return purged, err
+		}
+		purged++
+	}
+	return purged, nil
 }
 
 // CountInspections 统计所选设备的巡检记录总数，供删除确认框提示删除影响。
@@ -440,6 +467,32 @@ func pruneDeletedDevicesFromStrategies(db *gorm.DB) *gorm.DB {
 		`WHERE EXISTS (SELECT 1 FROM devices AS d WHERE d.id::text = e.value #>> '{}')), '[]'::jsonb) ` +
 		`WHERE jsonb_typeof(s.devices) = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements(s.devices) AS e ` +
 		`WHERE NOT EXISTS (SELECT 1 FROM devices AS d WHERE d.id::text = e.value #>> '{}'))`)
+}
+
+// monitoringTablesByDevice 是按 device_id 挂到设备上的监控表。device_metrics /
+// interface_metrics 是 TimescaleDB hypertable，外键级联挂不上；device_interfaces 也
+// 未建外键。三张表都要在删设备时显式清理，否则监控中心按 device_id 聚合会把已删设备捞回来。
+var monitoringTablesByDevice = []string{"device_metrics", "interface_metrics", "device_interfaces"}
+
+// orphanMonitoringDeviceIDsSQL 找出监控表里引用、却已不在 devices 表中的 device_id。
+// device_id 是三张表索引的首列，UNION 走 index-only scan 后再反连 devices 小表；
+// device_interfaces.device_id 可空，先滤掉 NULL 免得 Scan 到 int 报错。
+// 无时间边界：每次启动都要读完两张 hypertable 的 device_id 索引全部条目，大部署上有可感知耗时。
+const orphanMonitoringDeviceIDsSQL = `SELECT referenced.device_id FROM (` +
+	`SELECT device_id FROM device_metrics UNION SELECT device_id FROM interface_metrics UNION SELECT device_id FROM device_interfaces` +
+	`) AS referenced WHERE referenced.device_id IS NOT NULL ` +
+	`AND NOT EXISTS (SELECT 1 FROM devices AS d WHERE d.id = referenced.device_id) ORDER BY referenced.device_id`
+
+// purgeDeviceMonitoringData 清掉一台设备在三张监控表里的全部行。删设备与启动清理共用。
+// 无时间边界、删的是该设备全部历史：采集很久的设备会让删设备事务持锁较长，与并发采集写入争用；
+// 这是「删设备事务一致」与「大表长事务」之间的取舍，当前取前者。
+func purgeDeviceMonitoringData(db *gorm.DB, deviceID int) error {
+	for _, table := range monitoringTablesByDevice {
+		if err := db.Exec("DELETE FROM "+table+" WHERE device_id = ?", deviceID).Error; err != nil {
+			return fmt.Errorf("清理 %s 中的设备数据失败: %w", table, err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) BatchCreateDevices(
