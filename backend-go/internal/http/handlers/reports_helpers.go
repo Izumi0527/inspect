@@ -19,6 +19,7 @@ import (
 
 	"github.com/your-org/inspect-system/backend-go/internal/common"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 )
 
 func (h ReportsHandler) generateReportByID(c echo.Context, permission string) error {
@@ -336,31 +337,6 @@ func buildReportTemplateResponse(template reports.ReportTemplate) map[string]int
 	}
 }
 
-func buildCustomConfigResponse(template reports.ReportTemplate) map[string]interface{} {
-	config := decodeJSONMap(template.Config)
-	tplType := "custom"
-	if template.IsDefault {
-		tplType = "template"
-	}
-	return map[string]interface{}{
-		"id":          template.ID,
-		"name":        template.Name,
-		"type":        tplType,
-		"description": template.Description,
-		"is_default":  template.IsDefault,
-		"is_active":   template.IsActive,
-		"created_by":  template.CreatedBy,
-		"created_at":  template.CreatedAt,
-		"updated_at":  template.UpdatedAt,
-		"template":    config["template"],
-		"parameters":  config["parameters"],
-		"charts":      config["charts"],
-		"tables":      config["tables"],
-		"filters":     config["filters"],
-		"layout":      config["layout"],
-	}
-}
-
 func resolveReportFormat(report reports.Report) string {
 	formats := decodeJSONStringSlice(report.FileFormats)
 	if len(formats) > 0 {
@@ -432,7 +408,7 @@ func ensureDateRange(params map[string]interface{}, start, end time.Time) map[st
 	return params
 }
 
-func resolveDateRange(parameters map[string]interface{}) (time.Time, time.Time) {
+func resolveDateRange(parameters map[string]interface{}, loc *time.Location) (time.Time, time.Time) {
 	if parameters == nil {
 		now := time.Now().UTC()
 		return now.Add(-24 * time.Hour), now
@@ -440,8 +416,8 @@ func resolveDateRange(parameters map[string]interface{}) (time.Time, time.Time) 
 	if dateRange, ok := parameters["dateRange"].(map[string]interface{}); ok {
 		startStr := fmt.Sprint(dateRange["startDate"])
 		endStr := fmt.Sprint(dateRange["endDate"])
-		start, _ := parseTimeOptional(startStr)
-		end, _ := parseTimeOptional(endStr)
+		start, _ := parseTimeOptional(startStr, loc)
+		end, _ := parseTimeOptional(endStr, loc)
 		if start != nil && end != nil {
 			return *start, *end
 		}
@@ -450,18 +426,18 @@ func resolveDateRange(parameters map[string]interface{}) (time.Time, time.Time) 
 	return now.Add(-24 * time.Hour), now
 }
 
-func resolveDateRangeFromMap(rangeMap map[string]string) (time.Time, time.Time) {
+func resolveDateRangeFromMap(rangeMap map[string]string, loc *time.Location) (time.Time, time.Time) {
 	startStr := strings.TrimSpace(rangeMap["startDate"])
 	endStr := strings.TrimSpace(rangeMap["endDate"])
-	start, _ := parseTimeOptional(startStr)
-	end, _ := parseTimeOptional(endStr)
+	start, _ := parseTimeOptional(startStr, loc)
+	end, _ := parseTimeOptional(endStr, loc)
 	if start == nil || end == nil {
 		return time.Time{}, time.Time{}
 	}
 	return *start, *end
 }
 
-func resolveDateRangeFromPayload(payload map[string]interface{}) (time.Time, time.Time) {
+func resolveDateRangeFromPayload(payload map[string]interface{}, loc *time.Location) (time.Time, time.Time) {
 	if payload == nil {
 		return time.Time{}, time.Time{}
 	}
@@ -477,17 +453,17 @@ func resolveDateRangeFromPayload(payload map[string]interface{}) (time.Time, tim
 	if endStr == "" {
 		endStr = fmt.Sprint(rangeValue["end_date"])
 	}
-	start, _ := parseTimeOptional(startStr)
-	end, _ := parseTimeOptional(endStr)
+	start, _ := parseTimeOptional(startStr, loc)
+	end, _ := parseTimeOptional(endStr, loc)
 	if start == nil || end == nil {
 		return time.Time{}, time.Time{}
 	}
 	return *start, *end
 }
 
-func parseGenerateRange(startStr, endStr string) (time.Time, time.Time) {
-	start, _ := parseTimeOptional(startStr)
-	end, _ := parseTimeOptional(endStr)
+func parseGenerateRange(startStr, endStr string, loc *time.Location) (time.Time, time.Time) {
+	start, _ := parseTimeOptional(startStr, loc)
+	end, _ := parseTimeOptional(endStr, loc)
 	if start != nil && end != nil {
 		return *start, *end
 	}
@@ -495,8 +471,8 @@ func parseGenerateRange(startStr, endStr string) (time.Time, time.Time) {
 	return now.Add(-24 * time.Hour), now
 }
 
-func parseDateRangeFromPayload(payload map[string]interface{}) map[string]interface{} {
-	start, end := resolveDateRangeFromPayload(payload)
+func parseDateRangeFromPayload(payload map[string]interface{}, loc *time.Location) map[string]interface{} {
+	start, end := resolveDateRangeFromPayload(payload, loc)
 	if start.IsZero() || end.IsZero() {
 		now := time.Now().UTC()
 		start = now.AddDate(0, 0, -7)
@@ -556,7 +532,10 @@ func normalizeReportFormat(raw string) string {
 	}
 }
 
-func parseTimeOptional(value string) (*time.Time, error) {
+// parseTimeOptional 解析时间参数：RFC3339 自带时区直接采用；
+// date-only（YYYY-MM-DD）必须按 loc（业务时区）解释成当天零点——
+// 用 UTC 会把「本地某天」错位成 UTC 零点（UTC+8 即本地 08:00），漏掉本地 0-8 点数据。
+func parseTimeOptional(value string, loc *time.Location) (*time.Time, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil, nil
@@ -567,7 +546,11 @@ func parseTimeOptional(value string) (*time.Time, error) {
 	if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
 		return &parsed, nil
 	}
-	if parsed, err := time.Parse("2006-01-02", value); err == nil {
+	if loc == nil {
+		// 回退到默认业务时区而非 UTC：宁可跟随默认值，也不能静默漏掉本地 0-8 点数据。
+		loc = settings.DefaultTimezoneLocation()
+	}
+	if parsed, err := time.ParseInLocation("2006-01-02", value, loc); err == nil {
 		return &parsed, nil
 	}
 	return nil, fmt.Errorf("invalid time format")

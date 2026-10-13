@@ -147,9 +147,23 @@ func TestGetProblemDistribution_ShouldApplyExplicitAnalyticsRange(t *testing.T) 
 	}
 }
 
+// businessLocation 返回测试用的业务时区。
+// handler 未注入 Settings 时，ResolveLocation 回退到默认时区 Asia/Shanghai。
+func businessLocation() *time.Location {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		panic("load Asia/Shanghai: " + err.Error())
+	}
+	return loc
+}
+
+// analyticsRangeBounds 返回按业务时区解释的区间边界：
+// 前端传的 2026-03-01 / 2026-03-31 是本地自然日，
+// 边界应为该时区的 00:00 与 23:59:59.999（而非 UTC 零点，那会漏掉本地 0-8 点）。
 func analyticsRangeBounds() (time.Time, time.Time) {
-	start := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 3, 31, 23, 59, 59, 999999999, time.UTC)
+	loc := businessLocation()
+	start := time.Date(2026, 3, 1, 0, 0, 0, 0, loc)
+	end := time.Date(2026, 3, 31, 23, 59, 59, 999999999, loc)
 	return start, end
 }
 
@@ -166,7 +180,9 @@ func TestGetTrends_ShouldApplyExplicitAnalyticsRangeUsingStartedAt(t *testing.T)
 	}
 
 	start, end := analyticsRangeBounds()
-	mock.ExpectQuery(`SELECT .*date_trunc\('month', started_at\).*FROM "inspections".*started_at >= \$1 AND started_at <= \$2.*GROUP BY "date".*ORDER BY date ASC`).
+	// 聚合按业务时区截断（AT TIME ZONE 'Asia/Shanghai'），与区间边界同一口径。
+	// 返回行里的 date 用 UTC 位置：模拟 pgx 把「无时区 timestamp」解码为 UTC 的行为。
+	mock.ExpectQuery(`SELECT .*date_trunc\('month', started_at AT TIME ZONE 'Asia/Shanghai'\).*FROM "inspections".*started_at >= \$1 AND started_at <= \$2.*GROUP BY "date".*ORDER BY date ASC`).
 		WithArgs(start, end).
 		WillReturnRows(sqlmock.NewRows([]string{"date", "executions", "success", "failed", "avg_score"}).
 			AddRow(time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), 12, 10, 2, 91.2))

@@ -70,15 +70,22 @@ func splitCommaList(value string) []string {
 	return result
 }
 
-func parseDate(value string) (time.Time, error) {
-	return time.Parse("2006-01-02", strings.TrimSpace(value))
+// parseDate 把 YYYY-MM-DD 解析为 loc 时区当天的零点。
+// 必须用 loc 而非 time.UTC：前端传的是本地自然日（API 参数契约），
+// 按 UTC 解析会把「本地某天 00:00」错位成 UTC 零点（UTC+8 下即本地 08:00），
+// 使区间下界整体后移，漏掉本地 0-8 点产生的数据。
+func parseDate(value string, loc *time.Location) (time.Time, error) {
+	if loc == nil {
+		loc = time.UTC
+	}
+	return time.ParseInLocation("2006-01-02", strings.TrimSpace(value), loc)
 }
 
-func parseOptionalDate(value string) (*time.Time, error) {
+func parseOptionalDate(value string, loc *time.Location) (*time.Time, error) {
 	if strings.TrimSpace(value) == "" {
 		return nil, nil
 	}
-	parsed, err := parseDate(value)
+	parsed, err := parseDate(value, loc)
 	if err != nil {
 		return nil, err
 	}

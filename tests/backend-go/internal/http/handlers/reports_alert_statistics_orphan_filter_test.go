@@ -31,7 +31,9 @@ func TestReportsHandler_GetAlertStatistics_ShouldIgnoreAlertsOfDeletedDevices(t 
 	mock.ExpectQuery(`(?is)SELECT COALESCE\(AVG\(EXTRACT\(EPOCH FROM \(COALESCE\(a\.resolved_at, a\.closed_at\) - a\.created_at\)\) / 3600\.0\), 0\) AS avg_resolution_time FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE a\.created_at IS NOT NULL AND COALESCE\(a\.resolved_at, a\.closed_at\) IS NOT NULL AND a\.status IN \(\$1,\$2\)`).
 		WithArgs("resolved", "closed").
 		WillReturnRows(sqlmock.NewRows([]string{"avg_resolution_time"}).AddRow(0))
-	mock.ExpectQuery(`(?is)SELECT date_trunc\('day', a\.created_at\) AS bucket,\s*COUNT\(\*\) AS total,\s*SUM\(CASE WHEN a\.status IN \('resolved', 'closed'\) THEN 1 ELSE 0 END\) AS resolved,\s*SUM\(CASE WHEN a\.severity IN \('critical', 'error', 'fatal'\) THEN 1 ELSE 0 END\) AS severe FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE a\.created_at >= \$1 AND a\.created_at <= \$2 GROUP BY "bucket" ORDER BY bucket`).
+	// 分桶按业务时区截断（handler 未注入 Settings，回退默认 Asia/Shanghai）：
+	// 先 AT TIME ZONE 转本地时间再 date_trunc，再转回 timestamptz 保持瞬时语义。
+	mock.ExpectQuery(`(?is)SELECT date_trunc\('day', a\.created_at AT TIME ZONE 'Asia/Shanghai'\) AT TIME ZONE 'Asia/Shanghai' AS bucket,\s*COUNT\(\*\) AS total,\s*SUM\(CASE WHEN a\.status IN \('resolved', 'closed'\) THEN 1 ELSE 0 END\) AS resolved,\s*SUM\(CASE WHEN a\.severity IN \('critical', 'error', 'fatal'\) THEN 1 ELSE 0 END\) AS severe FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE a\.created_at >= \$1 AND a\.created_at <= \$2 GROUP BY "bucket" ORDER BY bucket`).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "total", "resolved", "severe"}))
 
 	ctx, rec := newEchoContextWithBody(http.MethodGet, "/api/v1/reports/statistics/alerts", token, nil)

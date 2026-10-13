@@ -193,6 +193,7 @@ func loadTrendSeries(
 	end time.Time,
 	granularity string,
 	deviceIDs []int,
+	tz string,
 ) ([]trendMetricSeries, error) {
 	series := make([]trendMetricSeries, 0, len(metrics))
 	for _, raw := range metrics {
@@ -200,7 +201,7 @@ func loadTrendSeries(
 		if spec.Name == "" {
 			continue
 		}
-		points, err := queryTrendSeries(ctx, db, spec, start, end, granularity, deviceIDs)
+		points, err := queryTrendSeries(ctx, db, spec, start, end, granularity, deviceIDs, tz)
 		if err != nil {
 			return nil, err
 		}
@@ -220,18 +221,19 @@ func queryTrendSeries(
 	end time.Time,
 	granularity string,
 	deviceIDs []int,
+	tz string,
 ) ([]trendSeriesPoint, error) {
 	switch spec.Source {
 	case trendSourceAvailability:
-		return queryAvailabilitySeries(ctx, db, start, end, granularity, deviceIDs)
+		return queryAvailabilitySeries(ctx, db, start, end, granularity, deviceIDs, tz)
 	case trendSourceAlerts:
-		return queryAlertSeries(ctx, db, start, end, granularity, deviceIDs)
+		return queryAlertSeries(ctx, db, start, end, granularity, deviceIDs, tz)
 	case trendSourceDeviceMetricsFallback:
-		return queryDeviceMetricSeriesWithFallback(ctx, db, spec.MetricNames, start, end, granularity, deviceIDs)
+		return queryDeviceMetricSeriesWithFallback(ctx, db, spec.MetricNames, start, end, granularity, deviceIDs, tz)
 	case trendSourceNetworkSum:
-		return queryNetworkMetricSeries(ctx, db, spec.MetricNames, start, end, granularity, deviceIDs)
+		return queryNetworkMetricSeries(ctx, db, spec.MetricNames, start, end, granularity, deviceIDs, tz)
 	default:
-		return queryDeviceMetricSeries(ctx, db, spec.MetricNames, start, end, granularity, deviceIDs)
+		return queryDeviceMetricSeries(ctx, db, spec.MetricNames, start, end, granularity, deviceIDs, tz)
 	}
 }
 
@@ -243,12 +245,13 @@ func queryDeviceMetricSeries(
 	end time.Time,
 	granularity string,
 	deviceIDs []int,
+	tz string,
 ) ([]trendSeriesPoint, error) {
 	if len(metricNames) == 0 {
 		return []trendSeriesPoint{}, nil
 	}
 
-	bucketExpr := bucketExpression(granularity, "collected_at")
+	bucketExpr := bucketExpression(granularity, "collected_at", tz)
 	selectExpr := fmt.Sprintf("%s AS bucket, AVG(metric_value) AS value", bucketExpr)
 
 	type row struct {
@@ -292,9 +295,10 @@ func queryDeviceMetricSeriesWithFallback(
 	end time.Time,
 	granularity string,
 	deviceIDs []int,
+	tz string,
 ) ([]trendSeriesPoint, error) {
 	for _, name := range metricNames {
-		points, err := queryDeviceMetricSeries(ctx, db, []string{name}, start, end, granularity, deviceIDs)
+		points, err := queryDeviceMetricSeries(ctx, db, []string{name}, start, end, granularity, deviceIDs, tz)
 		if err != nil {
 			return nil, err
 		}
@@ -313,12 +317,13 @@ func queryNetworkMetricSeries(
 	end time.Time,
 	granularity string,
 	deviceIDs []int,
+	tz string,
 ) ([]trendSeriesPoint, error) {
 	if len(metricNames) == 0 {
 		return []trendSeriesPoint{}, nil
 	}
 
-	bucketExpr := bucketExpression(granularity, "collected_at")
+	bucketExpr := bucketExpression(granularity, "collected_at", tz)
 	selectExpr := fmt.Sprintf("%s AS bucket, SUM(metric_value) AS value", bucketExpr)
 
 	type row struct {
@@ -360,8 +365,9 @@ func queryAlertSeries(
 	end time.Time,
 	granularity string,
 	deviceIDs []int,
+	tz string,
 ) ([]trendSeriesPoint, error) {
-	bucketExpr := bucketExpression(granularity, "a.created_at")
+	bucketExpr := bucketExpression(granularity, "a.created_at", tz)
 	selectExpr := fmt.Sprintf("%s AS bucket, COUNT(*) AS value", bucketExpr)
 
 	type row struct {
@@ -401,6 +407,7 @@ func queryAvailabilitySeries(
 	end time.Time,
 	granularity string,
 	deviceIDs []int,
+	tz string,
 ) ([]trendSeriesPoint, error) {
 	exists, err := tableExists(ctx, db, "device_status_history")
 	if err != nil {
@@ -414,7 +421,7 @@ func queryAvailabilitySeries(
 		return []trendSeriesPoint{{Timestamp: end.UTC(), Value: value}}, nil
 	}
 
-	bucketExpr := bucketExpression(granularity, "collected_at")
+	bucketExpr := bucketExpression(granularity, "collected_at", tz)
 	selectExpr := fmt.Sprintf(`%s AS bucket,
         SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) AS online,
         COUNT(*) AS total`, bucketExpr)
@@ -486,19 +493,20 @@ func queryAvailabilitySnapshot(ctx context.Context, db *gorm.DB, deviceIDs []int
 	return float64(item.Online) / float64(item.Total) * 100, nil
 }
 
-func bucketExpression(granularity string, column string) string {
-	switch normalizeGranularity(granularity) {
-	case "minute":
-		return fmt.Sprintf("date_trunc('minute', %s)", column)
-	case "hour":
-		return fmt.Sprintf("date_trunc('hour', %s)", column)
-	case "week":
-		return fmt.Sprintf("date_trunc('week', %s)", column)
-	case "month":
-		return fmt.Sprintf("date_trunc('month', %s)", column)
+// bucketExpression 生成按业务时区截断的分桶表达式。
+// 先 AT TIME ZONE 把 timestamptz 换算成业务时区的本地时间再 date_trunc，
+// 再 AT TIME ZONE 转回 timestamptz——保持「桶起点 = 本地时刻」的瞬时语义，
+// 使返回值可直接 Format(RFC3339) 传给前端，且不依赖数据库会话时区。
+// tz 来自 system.timezone，已被 timezonePattern 校验（无引号注入风险）。
+func bucketExpression(granularity string, column string, tz string) string {
+	unit := normalizeGranularity(granularity)
+	switch unit {
+	case "minute", "hour", "week", "month":
+		// 合法单位，原样使用
 	default:
-		return fmt.Sprintf("date_trunc('day', %s)", column)
+		unit = "day"
 	}
+	return fmt.Sprintf("date_trunc('%s', %s AT TIME ZONE '%s') AT TIME ZONE '%s'", unit, column, tz, tz)
 }
 
 func formatMetricList(metrics []string) string {

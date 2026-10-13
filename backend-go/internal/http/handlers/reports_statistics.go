@@ -27,7 +27,7 @@ func (h ReportsHandler) GetStatisticsData(c echo.Context) error {
 	payload := map[string]interface{}{}
 	_ = c.Bind(&payload)
 
-	filters := parseStatisticsFilters(payload)
+	filters := parseStatisticsFilters(payload, h.businessLoc(c))
 	ctx := c.Request().Context()
 
 	devicesList, err := loadDeviceSnapshots(ctx, db, filters)
@@ -109,7 +109,7 @@ func (h ReportsHandler) GetStatisticsKPI(c echo.Context) error {
 	payload := map[string]interface{}{}
 	_ = c.Bind(&payload)
 
-	filters := parseStatisticsFilters(payload)
+	filters := parseStatisticsFilters(payload, h.businessLoc(c))
 	start := filters.Start
 	end := filters.End
 
@@ -162,7 +162,7 @@ func (h ReportsHandler) GetStatisticsRankings(c echo.Context) error {
 	payload := map[string]interface{}{}
 	_ = c.Bind(&payload)
 
-	filters := parseStatisticsFilters(payload)
+	filters := parseStatisticsFilters(payload, h.businessLoc(c))
 	rankingType := readString(payload, "ranking_type", "rankingType")
 	if rankingType == "" {
 		rankingType = "performance"
@@ -235,7 +235,7 @@ func (h ReportsHandler) GetDeviceStatistics(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not configured")
 	}
 
-	startTime, endTime, granularity := parseTrendRangeFromQuery(c)
+	startTime, endTime, granularity := parseTrendRangeFromQuery(c, h.businessLoc(c))
 
 	var totalDevices int64
 	_ = db.WithContext(c.Request().Context()).Table("devices").Count(&totalDevices)
@@ -294,7 +294,7 @@ func (h ReportsHandler) GetDeviceStatistics(c echo.Context) error {
 			Total  int64     `gorm:"column:total"`
 		}
 		rows := make([]trendRow, 0)
-		bucketExpr := bucketExpression(granularity, "collected_at")
+		bucketExpr := bucketExpression(granularity, "collected_at", h.businessTZ(c))
 		selectExpr := fmt.Sprintf("%s AS bucket, SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) AS online, COUNT(*) AS total", bucketExpr)
 		_ = db.WithContext(c.Request().Context()).
 			Table("device_status_history").
@@ -344,7 +344,7 @@ func (h ReportsHandler) GetAlertStatistics(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not configured")
 	}
 
-	startTime, endTime, granularity := parseTrendRangeFromQuery(c)
+	startTime, endTime, granularity := parseTrendRangeFromQuery(c, h.businessLoc(c))
 
 	var totalAlerts int64
 	_ = db.WithContext(c.Request().Context()).
@@ -408,7 +408,7 @@ func (h ReportsHandler) GetAlertStatistics(c echo.Context) error {
 		Severe   int64     `gorm:"column:severe"`
 	}
 	rows := make([]trendRow, 0)
-	bucketExpr := bucketExpression(granularity, "a.created_at")
+	bucketExpr := bucketExpression(granularity, "a.created_at", h.businessTZ(c))
 	selectExpr := fmt.Sprintf(`%s AS bucket,
         COUNT(*) AS total,
         SUM(CASE WHEN a.status IN ('resolved', 'closed') THEN 1 ELSE 0 END) AS resolved,
@@ -455,7 +455,7 @@ func (h ReportsHandler) GetInspectionStatistics(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not configured")
 	}
 
-	startTime, endTime, granularity := parseTrendRangeFromQuery(c)
+	startTime, endTime, granularity := parseTrendRangeFromQuery(c, h.businessLoc(c))
 
 	var totalTasks int64
 	var completedTasks int64
@@ -495,7 +495,7 @@ func (h ReportsHandler) GetInspectionStatistics(c echo.Context) error {
 		Failed    int64     `gorm:"column:failed"`
 	}
 	rows := make([]trendRow, 0)
-	timeExpr := bucketExpression(granularity, "COALESCE(started_at, created_at)")
+	timeExpr := bucketExpression(granularity, "COALESCE(started_at, created_at)", h.businessTZ(c))
 	selectExpr := fmt.Sprintf(`%s AS bucket,
         COUNT(*) AS total,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,

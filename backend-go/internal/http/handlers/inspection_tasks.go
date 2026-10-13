@@ -50,13 +50,14 @@ func (h InspectionHandler) ListTasks(c echo.Context) error {
 		}
 	}
 
+	loc := h.Settings.ResolveLocation(c.Request().Context())
 	if start := strings.TrimSpace(c.QueryParam("start_date")); start != "" {
-		if parsed, err := parseDate(start); err == nil {
+		if parsed, err := parseDate(start, loc); err == nil {
 			filter.StartDate = &parsed
 		}
 	}
 	if end := strings.TrimSpace(c.QueryParam("end_date")); end != "" {
-		if parsed, err := parseDate(end); err == nil {
+		if parsed, err := parseDate(end, loc); err == nil {
 			filter.EndDate = &parsed
 		}
 	}
@@ -365,8 +366,9 @@ func (h InspectionHandler) ListExecutions(c echo.Context) error {
 	statusList := splitCommaList(c.QueryParam("status"))
 	strategyID := parseIntWithDefault(c.QueryParam("strategy_id"), 0)
 
-	startDate, _ := parseOptionalDate(c.QueryParam("start_date"))
-	endDate, _ := parseOptionalDate(c.QueryParam("end_date"))
+	loc := h.Settings.ResolveLocation(c.Request().Context())
+	startDate, _ := parseOptionalDate(c.QueryParam("start_date"), loc)
+	endDate, _ := parseOptionalDate(c.QueryParam("end_date"), loc)
 
 	db := h.Service.DB()
 	if db == nil {
@@ -609,8 +611,9 @@ func (h InspectionHandler) ListResults(c echo.Context) error {
 	taskID := parseIntWithDefault(c.QueryParam("task_id"), 0)
 	deviceID := parseIntWithDefault(c.QueryParam("device_id"), 0)
 	statusList := splitCommaList(c.QueryParam("status"))
-	startDate, _ := parseOptionalDate(c.QueryParam("start_date"))
-	endDate, _ := parseOptionalDate(c.QueryParam("end_date"))
+	loc := h.Settings.ResolveLocation(c.Request().Context())
+	startDate, _ := parseOptionalDate(c.QueryParam("start_date"), loc)
+	endDate, _ := parseOptionalDate(c.QueryParam("end_date"), loc)
 
 	db := h.Service.DB()
 	if db == nil {

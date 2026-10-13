@@ -23,8 +23,8 @@ func (h ReportsHandler) ListReports(c echo.Context) error {
 	reportType := firstNonEmpty(c.QueryParam("type"), c.QueryParam("report_type"))
 	status := strings.TrimSpace(c.QueryParam("status"))
 	createdBy := strings.TrimSpace(c.QueryParam("created_by"))
-	startDate, _ := parseTimeOptional(c.QueryParam("start_date"))
-	endDate, _ := parseTimeOptional(c.QueryParam("end_date"))
+	startDate, _ := parseTimeOptional(c.QueryParam("start_date"), h.businessLoc(c))
+	endDate, _ := parseTimeOptional(c.QueryParam("end_date"), h.businessLoc(c))
 
 	page := parseIntWithDefault(c.QueryParam("page"), 1)
 	pageSize := parseIntWithDefault(firstNonEmpty(c.QueryParam("page_size"), c.QueryParam("pageSize")), 20)
@@ -202,7 +202,7 @@ func (h ReportsHandler) CreateReport(c echo.Context) error {
 	reportType := normalizeReportType(req.Type)
 	category := normalizeReportCategory(req.Category)
 	format := normalizeReportFormat(req.Format)
-	startTime, endTime := resolveDateRange(req.Parameters)
+	startTime, endTime := resolveDateRange(req.Parameters, h.businessLoc(c))
 
 	filtersJSON, err := encodeJSON(req.Parameters)
 	if err != nil {
@@ -296,7 +296,7 @@ func (h ReportsHandler) UpdateReport(c echo.Context) error {
 		updates["status"] = strings.TrimSpace(*req.Status)
 	}
 	if req.Parameters != nil {
-		startTime, endTime := resolveDateRange(req.Parameters)
+		startTime, endTime := resolveDateRange(req.Parameters, h.businessLoc(c))
 		updates["start_date"] = startTime
 		updates["end_date"] = endTime
 		filtersJSON, err := encodeJSON(req.Parameters)

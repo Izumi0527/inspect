@@ -35,6 +35,13 @@ type LogsHandler struct {
 
 type SettingsGetter interface {
 	GetSetting(ctx context.Context, key string) (*settings.SettingItem, error)
+	// ResolveLocation 提供业务时区（system.timezone），供日志日期参数按本地口径解析。
+	ResolveLocation(ctx context.Context) *time.Location
+}
+
+// businessLoc 返回业务时区（*time.Location），供日期参数解析使用。
+func (h LogsHandler) businessLoc(c echo.Context) *time.Location {
+	return h.Settings.ResolveLocation(c.Request().Context())
 }
 
 type SyslogRuntime interface {
@@ -96,7 +103,7 @@ func (h LogsHandler) ListLogs(c echo.Context) error {
 		skip = 0
 	}
 
-	filter := buildLogFilter(c, skip, pageSize)
+	filter := buildLogFilter(c, skip, pageSize, h.businessLoc(c))
 	rows, total, err := h.Service.ListLogs(c.Request().Context(), filter)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load logs")
@@ -124,7 +131,7 @@ func (h LogsHandler) GetDeviceLogs(c echo.Context) error {
 		skip = 0
 	}
 
-	filter := buildLogFilter(c, skip, pageSize)
+	filter := buildLogFilter(c, skip, pageSize, h.businessLoc(c))
 	filter.DeviceID = &deviceID
 
 	rows, total, err := h.Service.ListLogs(c.Request().Context(), filter)
@@ -183,7 +190,7 @@ func (h LogsHandler) SearchLogs(c echo.Context) error {
 		skip = 0
 	}
 
-	filter := buildLogFilter(c, skip, pageSize)
+	filter := buildLogFilter(c, skip, pageSize, h.businessLoc(c))
 	rows, total, err := h.Service.SearchLogs(c.Request().Context(), keyword, filter)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to search logs")
@@ -731,10 +738,11 @@ func (h LogsHandler) ExportDeviceLogs(c echo.Context) error {
 
 	format := normalizeExportFormat(c.QueryParam("format"))
 	includeRaw := parseBoolDefault(c.QueryParam("include_raw"), false)
-	startTime, _ := parseTimeOptional(c.QueryParam("start_time"))
-	endTime, _ := parseTimeOptional(c.QueryParam("end_time"))
+	loc := h.businessLoc(c)
+	startTime, _ := parseTimeOptional(c.QueryParam("start_time"), loc)
+	endTime, _ := parseTimeOptional(c.QueryParam("end_time"), loc)
 
-	filter := buildLogFilter(c, 0, exportBatchSize)
+	filter := buildLogFilter(c, 0, exportBatchSize, h.businessLoc(c))
 	filter.DeviceID = &deviceID
 	filter.StartTime = startTime
 	filter.EndTime = endTime
@@ -762,8 +770,9 @@ func (h LogsHandler) ExportLogs(c echo.Context) error {
 	format := normalizeExportFormat(c.QueryParam("format"))
 	includeRaw := parseBoolDefault(c.QueryParam("include_raw"), false)
 	includeStats := parseBoolDefault(c.QueryParam("include_stats"), false)
-	startTime, _ := parseTimeOptional(c.QueryParam("start_time"))
-	endTime, _ := parseTimeOptional(c.QueryParam("end_time"))
+	loc := h.businessLoc(c)
+	startTime, _ := parseTimeOptional(c.QueryParam("start_time"), loc)
+	endTime, _ := parseTimeOptional(c.QueryParam("end_time"), loc)
 	deviceIDs := parseCSVIntList(c.QueryParam("device_ids"))
 	if len(deviceIDs) == 0 {
 		if deviceID := parseOptionalInt(c.QueryParam("device_id")); deviceID != nil {
@@ -778,7 +787,7 @@ func (h LogsHandler) ExportLogs(c echo.Context) error {
 
 	if len(deviceIDs) > 0 {
 		for _, id := range deviceIDs {
-			filter := buildLogFilter(c, 0, exportBatchSize)
+			filter := buildLogFilter(c, 0, exportBatchSize, h.businessLoc(c))
 			filter.DeviceID = &id
 			filter.StartTime = startTime
 			filter.EndTime = endTime
@@ -789,7 +798,7 @@ func (h LogsHandler) ExportLogs(c echo.Context) error {
 			allLogs = append(allLogs, items...)
 		}
 	} else {
-		filter := buildLogFilter(c, 0, exportBatchSize)
+		filter := buildLogFilter(c, 0, exportBatchSize, h.businessLoc(c))
 		filter.StartTime = startTime
 		filter.EndTime = endTime
 		items, err := h.fetchLogsForExport(c.Request().Context(), filter)
@@ -837,7 +846,7 @@ func (h LogsHandler) fetchLogsForExport(ctx context.Context, filter logs.LogFilt
 	return all, nil
 }
 
-func buildLogFilter(c echo.Context, skip int, limit int) logs.LogFilter {
+func buildLogFilter(c echo.Context, skip int, limit int, loc *time.Location) logs.LogFilter {
 	filter := logs.LogFilter{
 		Skip:  skip,
 		Limit: limit,
@@ -860,8 +869,8 @@ func buildLogFilter(c echo.Context, skip int, limit int) logs.LogFilter {
 		filter.Source = &source
 	}
 
-	startTime, _ := parseTimeOptional(c.QueryParam("start_time"))
-	endTime, _ := parseTimeOptional(c.QueryParam("end_time"))
+	startTime, _ := parseTimeOptional(c.QueryParam("start_time"), loc)
+	endTime, _ := parseTimeOptional(c.QueryParam("end_time"), loc)
 	filter.StartTime = startTime
 	filter.EndTime = endTime
 
@@ -875,8 +884,9 @@ func buildLogFilter(c echo.Context, skip int, limit int) logs.LogFilter {
 }
 
 // BuildLogFilter 提供可测试的过滤器构造入口（内部仍复用 buildLogFilter）。
+// 无 handler 上下文，按默认业务时区解析 date-only 参数。
 func BuildLogFilter(c echo.Context, skip int, limit int) logs.LogFilter {
-	return buildLogFilter(c, skip, limit)
+	return buildLogFilter(c, skip, limit, settings.DefaultTimezoneLocation())
 }
 
 func buildLogListResponse(rows []logs.DeviceLogWithDevice, total int64, page int, pageSize int) logs.LogListResponse {

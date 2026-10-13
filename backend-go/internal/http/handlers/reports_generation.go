@@ -37,7 +37,7 @@ func (h ReportsHandler) GenerateReportFromRequest(c echo.Context) error {
 	reportType := normalizeReportType(req.ReportType)
 	category := normalizeReportCategory(req.Category)
 	format := normalizeReportFormat(req.Format)
-	startTime, endTime := parseGenerateRange(req.StartTime, req.EndTime)
+	startTime, endTime := parseGenerateRange(req.StartTime, req.EndTime, h.businessLoc(c))
 
 	parameters := map[string]interface{}{
 		"dateRange": map[string]interface{}{
@@ -73,7 +73,7 @@ func (h ReportsHandler) GenerateReportFromRequest(c echo.Context) error {
 				metrics = []string{"availability", "performance", "errors", "capacity"}
 			}
 			granularity := normalizeGranularity(readString(req.CustomConfig, "granularity"))
-			series, err := loadTrendSeries(c.Request().Context(), db, metrics, startTime, endTime, granularity, req.DeviceIDs)
+			series, err := loadTrendSeries(c.Request().Context(), db, metrics, startTime, endTime, granularity, req.DeviceIDs, h.businessTZ(c))
 			if err != nil {
 				reportData["notes"] = fmt.Sprintf("趋势数据获取失败：%s", err.Error())
 			} else {

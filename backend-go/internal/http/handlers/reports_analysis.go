@@ -87,7 +87,7 @@ func (h ReportsHandler) GetUsageAnalysis(c echo.Context) error {
 	}
 	_ = c.Bind(&req)
 
-	start, end := resolveDateRangeFromMap(req.DateRange)
+	start, end := resolveDateRangeFromMap(req.DateRange, h.businessLoc(c))
 	if start.IsZero() || end.IsZero() {
 		end = time.Now().UTC()
 		start = end.AddDate(0, 0, -7)
@@ -194,14 +194,14 @@ func (h ReportsHandler) GetTrendAnalysis(c echo.Context) error {
 		deviceIDs = parseIntSlice(req["devices"])
 	}
 
-	start, end := resolveDateRangeFromPayload(req)
+	start, end := resolveDateRangeFromPayload(req, h.businessLoc(c))
 	if start.IsZero() || end.IsZero() {
 		now := time.Now().UTC()
 		start = now.AddDate(0, 0, -7)
 		end = now
 	}
 
-	series, err := loadTrendSeries(c.Request().Context(), db, metrics, start, end, granularity, deviceIDs)
+	series, err := loadTrendSeries(c.Request().Context(), db, metrics, start, end, granularity, deviceIDs, h.businessTZ(c))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load trend data")
 	}
@@ -267,7 +267,7 @@ func (h ReportsHandler) GetTrendPredictions(c echo.Context) error {
 	start := end.Add(-timeframeDuration(timeframe))
 	granularity := "day"
 
-	series, err := loadTrendSeries(c.Request().Context(), db, metrics, start, end, granularity, deviceIDs)
+	series, err := loadTrendSeries(c.Request().Context(), db, metrics, start, end, granularity, deviceIDs, h.businessTZ(c))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load prediction data")
 	}
@@ -309,7 +309,7 @@ func (h ReportsHandler) GetTrendAnomalies(c echo.Context) error {
 		deviceIDs = parseIntSlice(req["devices"])
 	}
 
-	start, end := resolveDateRangeFromPayload(req)
+	start, end := resolveDateRangeFromPayload(req, h.businessLoc(c))
 	if start.IsZero() || end.IsZero() {
 		end = time.Now().UTC()
 		start = end.AddDate(0, 0, -7)
@@ -319,7 +319,7 @@ func (h ReportsHandler) GetTrendAnomalies(c echo.Context) error {
 		granularity = "hour"
 	}
 
-	series, err := loadTrendSeries(c.Request().Context(), db, metrics, start, end, granularity, deviceIDs)
+	series, err := loadTrendSeries(c.Request().Context(), db, metrics, start, end, granularity, deviceIDs, h.businessTZ(c))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load anomaly data")
 	}

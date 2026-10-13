@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 )
 
 const (
@@ -26,6 +27,17 @@ type Service struct {
 	// selfMatcher 识别本系统自身活动触发的设备日志（见 self_activity.go）；
 	// 本机 IP 默认自动探测，SetLocalIPs 可补充设备眼中的宿主机地址。
 	selfMatcher *SelfActivityMatcher
+	// settings 提供业务时区（system.timezone）：日志趋势按本地自然小时分桶。
+	// 可选注入；nil 时 ResolveLocation 回退默认时区，不会让统计报错。
+	settings *settings.Service
+}
+
+// SetSettings 注入配置服务（业务时区来源）。
+func (s *Service) SetSettings(svc *settings.Service) {
+	if s == nil {
+		return
+	}
+	s.settings = svc
 }
 
 type LogFilter struct {
@@ -223,9 +235,12 @@ func (s *Service) GetLogStatistics(ctx context.Context, deviceID *int, hours int
 		Hour  time.Time `gorm:"column:hour"`
 		Count int64     `gorm:"column:count"`
 	}
+	// 按业务时区的自然小时分桶：先转本地时间再截断，再转回 timestamptz，
+	// 与其它模块的日/周/月口径一致，不依赖数据库会话时区。
+	tz := s.settings.ResolveLocation(ctx).String()
 	trendRows := make([]trendRow, 0)
 	if err := base.Session(&gorm.Session{}).
-		Select("date_trunc('hour', log_timestamp) AS hour, COUNT(*) AS count").
+		Select(fmt.Sprintf("date_trunc('hour', log_timestamp AT TIME ZONE '%s') AT TIME ZONE '%s' AS hour, COUNT(*) AS count", tz, tz)).
 		Group("hour").
 		Order("hour").
 		Scan(&trendRows).Error; err != nil {

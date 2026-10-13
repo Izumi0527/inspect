@@ -1,15 +1,31 @@
 package handlers
 
 import (
+	"time"
+
 	"github.com/labstack/echo/v4"
 
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 )
 
 type ReportsHandler struct {
 	Service   *reports.Service
 	Auth      PermissionService
 	OutputDir string
+	// Settings 提供业务时区（system.timezone）：趋势/统计的日/周/月分桶与日期范围
+	// 按本地口径切分。允许为 nil（测试/降级场景），ResolveLocation 对 nil receiver 安全。
+	Settings *settings.Service
+}
+
+// businessTZ 返回业务时区名（system.timezone），供 SQL 的 AT TIME ZONE 使用。
+func (h ReportsHandler) businessTZ(c echo.Context) string {
+	return h.Settings.ResolveLocation(c.Request().Context()).String()
+}
+
+// businessLoc 返回业务时区（*time.Location），供日期参数解析使用。
+func (h ReportsHandler) businessLoc(c echo.Context) *time.Location {
+	return h.Settings.ResolveLocation(c.Request().Context())
 }
 
 func (h ReportsHandler) Register(group *echo.Group) {

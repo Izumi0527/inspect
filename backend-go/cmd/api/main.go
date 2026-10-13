@@ -8,6 +8,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	// 嵌入 IANA 时区库：settings.ResolveLocation 用 time.LoadLocation 解析
+	// system.timezone（默认 Asia/Shanghai）来构造查询边界，而 release 镜像是
+	// alpine（默认不含 tzdata）。不嵌入的话 LoadLocation 会静默失败回退 UTC，
+	// 让「按业务时区切分日/周」的修复在容器里失效。
+	_ "time/tzdata"
 
 	"go.uber.org/zap"
 

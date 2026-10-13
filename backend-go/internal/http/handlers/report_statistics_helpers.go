@@ -103,8 +103,8 @@ type alertTotals struct {
 	Severe   int64
 }
 
-func parseStatisticsFilters(payload map[string]interface{}) statisticsFilters {
-	start, end := parseStatisticsRange(payload)
+func parseStatisticsFilters(payload map[string]interface{}, loc *time.Location) statisticsFilters {
+	start, end := parseStatisticsRange(payload, loc)
 	groupBy := readString(payload, "group_by", "groupBy")
 	if strings.TrimSpace(groupBy) == "" {
 		groupBy = "day"
@@ -128,12 +128,12 @@ func parseStatisticsFilters(payload map[string]interface{}) statisticsFilters {
 	}
 }
 
-func parseStatisticsRange(payload map[string]interface{}) (time.Time, time.Time) {
+func parseStatisticsRange(payload map[string]interface{}, loc *time.Location) (time.Time, time.Time) {
 	startStr := readString(payload, "start_date", "startDate")
 	endStr := readString(payload, "end_date", "endDate")
 
-	startValue, _ := parseTimeOptional(startStr)
-	endValue, _ := parseTimeOptional(endStr)
+	startValue, _ := parseTimeOptional(startStr, loc)
+	endValue, _ := parseTimeOptional(endStr, loc)
 
 	now := time.Now().UTC()
 	if endValue == nil {
@@ -152,9 +152,9 @@ func parseStatisticsRange(payload map[string]interface{}) (time.Time, time.Time)
 	return start, end
 }
 
-func parseTrendRangeFromQuery(c echo.Context) (time.Time, time.Time, string) {
-	startValue, _ := parseTimeOptional(c.QueryParam("start_date"))
-	endValue, _ := parseTimeOptional(c.QueryParam("end_date"))
+func parseTrendRangeFromQuery(c echo.Context, loc *time.Location) (time.Time, time.Time, string) {
+	startValue, _ := parseTimeOptional(c.QueryParam("start_date"), loc)
+	endValue, _ := parseTimeOptional(c.QueryParam("end_date"), loc)
 
 	now := time.Now().UTC()
 	if endValue == nil {

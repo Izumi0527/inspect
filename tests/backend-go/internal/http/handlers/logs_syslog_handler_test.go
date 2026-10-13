@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/your-org/inspect-system/backend-go/internal/http/handlers"
 	"github.com/your-org/inspect-system/backend-go/internal/logs"
@@ -24,6 +25,11 @@ func (f fakeSettingsGetter) GetSetting(_ context.Context, key string) (*settings
 		return nil, gorm.ErrRecordNotFound
 	}
 	return &settings.SettingItem{Key: key, Value: v}, nil
+}
+
+// ResolveLocation：测试替身按默认业务时区返回（与 nil Settings 的回退一致）。
+func (f fakeSettingsGetter) ResolveLocation(_ context.Context) *time.Location {
+	return settings.DefaultTimezoneLocation()
 }
 
 type fakeSyslogRuntime struct {

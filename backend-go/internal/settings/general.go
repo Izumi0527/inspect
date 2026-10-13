@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -522,6 +523,54 @@ func (s *Service) getSettingValue(ctx context.Context, key string, fallback stri
 		return text
 	}
 	return fallback
+}
+
+// DefaultTimezone 是 system.timezone 缺失或非法时的回退时区，
+// 与前端展示偏好的默认值保持一致。
+const DefaultTimezone = "Asia/Shanghai"
+
+var (
+	defaultLocationOnce sync.Once
+	defaultLocation     *time.Location
+)
+
+// DefaultTimezoneLocation 返回 DefaultTimezone 对应的 *time.Location（进程内缓存）。
+// 供拿不到配置服务的地方做 nil 回退——回退到默认业务时区而非 UTC，
+// 否则「本地某天 00:00」会被错位成 UTC 零点，静默漏掉本地 0-8 点数据。
+func DefaultTimezoneLocation() *time.Location {
+	defaultLocationOnce.Do(func() {
+		loc, err := time.LoadLocation(DefaultTimezone)
+		if err != nil {
+			loc = time.UTC
+		}
+		defaultLocation = loc
+	})
+	return defaultLocation
+}
+
+// ResolveLocation 把配置中的 system.timezone 解析为 *time.Location，
+// 供「按自然日/周/月切分」的查询构造边界时间（业务时区口径）。
+//
+// 为什么需要它：数据库列是 timestamptz（存 UTC 瞬时），若用 time.UTC 构造
+// 「某天的 00:00」，得到的是 UTC 零点（在 UTC+8 即本地 08:00），
+// 会把本地 0-8 点产生的数据挡在区间之外。配置缺失/非法/加载失败时逐级回退
+// （配置值 → DefaultTimezone → UTC），保证调用方总能拿到可用的 Location。
+func (s *Service) ResolveLocation(ctx context.Context) *time.Location {
+	name := DefaultTimezone
+	if s != nil {
+		if item, err := s.GetSetting(ctx, "system.timezone"); err == nil && item != nil {
+			if text, ok := item.Value.(string); ok && strings.TrimSpace(text) != "" {
+				name = strings.TrimSpace(text)
+			}
+		}
+	}
+	if loc, err := time.LoadLocation(name); err == nil {
+		return loc
+	}
+	if loc, err := time.LoadLocation(DefaultTimezone); err == nil {
+		return loc
+	}
+	return time.UTC
 }
 
 func buildSettingItem(row SystemSetting) SettingItem {

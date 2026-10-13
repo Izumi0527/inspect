@@ -36,7 +36,7 @@ func buildResultStatusFilter(statusList []string) (string, []interface{}) {
 	return strings.Join(conditions, " OR "), args
 }
 
-func resolveRequestedAnalyticsRange(c echo.Context) (time.Time, time.Time, bool) {
+func resolveRequestedAnalyticsRange(c echo.Context, loc *time.Location) (time.Time, time.Time, bool) {
 	if c == nil {
 		return time.Time{}, time.Time{}, false
 	}
@@ -51,14 +51,17 @@ func resolveRequestedAnalyticsRange(c echo.Context) (time.Time, time.Time, bool)
 		period = "week"
 	}
 
-	startDate, _ := parseOptionalDate(startRaw)
-	endDate, _ := parseOptionalDate(endRaw)
-	start, end := resolveTrendRange(period, startDate, endDate)
+	startDate, _ := parseOptionalDate(startRaw, loc)
+	endDate, _ := parseOptionalDate(endRaw, loc)
+	start, end := resolveTrendRange(period, startDate, endDate, loc)
 	return start, end, true
 }
 
-func resolveStatsRange(value string) (time.Time, time.Time) {
-	now := time.Now().UTC()
+// resolveStatsRange 解析 "range" 快捷参数（7d/30d/24h/当天）。
+// 默认分支是「当天」，必须用业务时区 loc 取年月日：用 UTC 会取到 UTC 的今天，
+// 与用户看到的本地「今天」错开。
+func resolveStatsRange(value string, loc *time.Location) (time.Time, time.Time) {
+	now := time.Now().In(loc)
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "7d":
 		return now.Add(-7 * 24 * time.Hour), now
@@ -67,7 +70,7 @@ func resolveStatsRange(value string) (time.Time, time.Time) {
 	case "24h":
 		return now.Add(-24 * time.Hour), now
 	default:
-		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 		return start, start.Add(24 * time.Hour)
 	}
 }
@@ -142,15 +145,15 @@ func roundFloat(value float64, precision int) float64 {
 	return math.Round(value*pow) / pow
 }
 
-func resolveTrendRange(period string, start *time.Time, end *time.Time) (time.Time, time.Time) {
-	now := time.Now().UTC()
+func resolveTrendRange(period string, start *time.Time, end *time.Time, loc *time.Location) (time.Time, time.Time) {
+	now := time.Now().In(loc)
 	// 设置结束时间为今天的23:59:59，确保包含今天的数据
-	endOfToday := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, time.UTC)
+	endOfToday := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, loc)
 	if end == nil {
 		end = &endOfToday
 	} else {
 		// 前端传入的 end_date 解析为 00:00:00，需要调整到当天的 23:59:59
-		// 否则 WHERE ... <= 2026-02-11T00:00:00Z 会漏掉当天的所有数据
+		// 否则 WHERE ... <= 2026-02-11T00:00:00 会漏掉当天的所有数据
 		adjusted := time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 999999999, end.Location())
 		end = &adjusted
 	}
@@ -158,15 +161,15 @@ func resolveTrendRange(period string, start *time.Time, end *time.Time) (time.Ti
 		switch period {
 		case "day":
 			// 按天显示：查询最近7天的数据
-			value := time.Date(now.Year(), now.Month(), now.Day()-6, 0, 0, 0, 0, time.UTC)
+			value := time.Date(now.Year(), now.Month(), now.Day()-6, 0, 0, 0, 0, loc)
 			start = &value
 		case "month":
 			// 按月显示：查询最近12个月的数据
-			value := time.Date(now.Year()-1, now.Month(), 1, 0, 0, 0, 0, time.UTC)
+			value := time.Date(now.Year()-1, now.Month(), 1, 0, 0, 0, 0, loc)
 			start = &value
 		default:
 			// 按周显示：查询最近4周的数据
-			value := time.Date(now.Year(), now.Month(), now.Day()-27, 0, 0, 0, 0, time.UTC)
+			value := time.Date(now.Year(), now.Month(), now.Day()-27, 0, 0, 0, 0, loc)
 			start = &value
 		}
 	}
@@ -183,7 +186,7 @@ type trendDataPoint struct {
 }
 
 // generateEmptyTrendTimeSeries 生成空的时间序列（所有值为0）
-func generateEmptyTrendTimeSeries(start, end time.Time, period string) []map[string]interface{} {
+func generateEmptyTrendTimeSeries(start, end time.Time, period string, loc *time.Location) []map[string]interface{} {
 	result := make([]map[string]interface{}, 0)
 
 	// 根据周期确定时间步长和截断函数
@@ -194,12 +197,12 @@ func generateEmptyTrendTimeSeries(start, end time.Time, period string) []map[str
 	case "day":
 		step = func(t time.Time) time.Time { return t.AddDate(0, 0, 1) }
 		truncate = func(t time.Time) time.Time {
-			return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+			return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
 		}
 	case "month":
 		step = func(t time.Time) time.Time { return t.AddDate(0, 1, 0) }
 		truncate = func(t time.Time) time.Time {
-			return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+			return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, loc)
 		}
 	default: // week
 		step = func(t time.Time) time.Time { return t.AddDate(0, 0, 7) }
@@ -211,7 +214,7 @@ func generateEmptyTrendTimeSeries(start, end time.Time, period string) []map[str
 				weekday = 7 // 周日当作7
 			}
 			// 回退到周一
-			return time.Date(t.Year(), t.Month(), t.Day()-(weekday-1), 0, 0, 0, 0, time.UTC)
+			return time.Date(t.Year(), t.Month(), t.Day()-(weekday-1), 0, 0, 0, 0, loc)
 		}
 	}
 
@@ -235,7 +238,7 @@ func generateEmptyTrendTimeSeries(start, end time.Time, period string) []map[str
 }
 
 // generateTrendTimeSeries 生成完整的时间序列，填充缺失的数据点为0
-func generateTrendTimeSeries(start, end time.Time, period string, dataMap map[string]trendDataPoint) []map[string]interface{} {
+func generateTrendTimeSeries(start, end time.Time, period string, dataMap map[string]trendDataPoint, loc *time.Location) []map[string]interface{} {
 	result := make([]map[string]interface{}, 0)
 
 	// 根据周期确定时间步长
@@ -246,12 +249,12 @@ func generateTrendTimeSeries(start, end time.Time, period string, dataMap map[st
 	case "day":
 		step = func(t time.Time) time.Time { return t.AddDate(0, 0, 1) }
 		truncate = func(t time.Time) time.Time {
-			return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+			return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
 		}
 	case "month":
 		step = func(t time.Time) time.Time { return t.AddDate(0, 1, 0) }
 		truncate = func(t time.Time) time.Time {
-			return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+			return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, loc)
 		}
 	default: // week
 		step = func(t time.Time) time.Time { return t.AddDate(0, 0, 7) }
@@ -261,7 +264,7 @@ func generateTrendTimeSeries(start, end time.Time, period string, dataMap map[st
 			if weekday == 0 {
 				weekday = 7
 			}
-			return time.Date(t.Year(), t.Month(), t.Day()-(weekday-1), 0, 0, 0, 0, time.UTC)
+			return time.Date(t.Year(), t.Month(), t.Day()-(weekday-1), 0, 0, 0, 0, loc)
 		}
 	}
 

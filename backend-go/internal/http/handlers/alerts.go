@@ -17,6 +17,7 @@ import (
 
 	"github.com/your-org/inspect-system/backend-go/internal/alerts"
 	"github.com/your-org/inspect-system/backend-go/internal/auth"
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
@@ -24,6 +25,14 @@ type AlertsHandler struct {
 	Service AlertsService
 	Auth    PermissionService
 	WS      *ws.Manager
+	// Settings 提供业务时区（system.timezone）：今日/昨日告警按本地自然日切分。
+	// 允许为 nil（测试/降级场景），ResolveLocation 对 nil receiver 安全并回退默认时区。
+	Settings *settings.Service
+}
+
+// businessLoc 返回业务时区（*time.Location），供日期参数解析使用。
+func (h AlertsHandler) businessLoc(c echo.Context) *time.Location {
+	return h.Settings.ResolveLocation(c.Request().Context())
 }
 
 type AlertsService interface {
@@ -87,19 +96,21 @@ func (h AlertsHandler) ListAlerts(c echo.Context) error {
 	categoryValues := parseQueryValues(append(params["category"], params["category[]"]...))
 	deviceIDs := parseIntList(append(append(params["device_ids"], params["device_ids[]"]...), params["device_id"]...))
 
+	loc := h.businessLoc(c)
 	startDateRaw := c.QueryParam("start_date")
-	startDate, _ := parseTimeOptional(startDateRaw)
+	startDate, _ := parseTimeOptional(startDateRaw, loc)
 	if startDate == nil {
-		startDate, _ = parseTimeOptional(c.QueryParam("start_time"))
+		startDate, _ = parseTimeOptional(c.QueryParam("start_time"), loc)
 	}
 	endDateRaw := c.QueryParam("end_date")
-	endDate, _ := parseTimeOptional(endDateRaw)
+	endDate, _ := parseTimeOptional(endDateRaw, loc)
 	if endDate == nil {
-		endDate, _ = parseTimeOptional(c.QueryParam("end_time"))
+		endDate, _ = parseTimeOptional(c.QueryParam("end_time"), loc)
 	}
 	// 兼容 date-only：end_date=YYYY-MM-DD 视为“当天结束”，避免把当天数据排除在外。
+	// 用业务时区而非 UTC 调整：date-only 已按 loc 解析成当天零点，加满一天即本地当天末。
 	if endDate != nil && isDateOnly(endDateRaw) {
-		adjusted := endDate.UTC().Add(24*time.Hour - time.Nanosecond)
+		adjusted := endDate.In(loc).Add(24*time.Hour - time.Nanosecond)
 		endDate = &adjusted
 	}
 
@@ -273,7 +284,8 @@ func (h AlertsHandler) GetAlertStatistics(c echo.Context) error {
 	yesterdayCount := 0
 	changePercent := float64(0)
 	if db := h.Service.DB(); db != nil {
-		now := time.Now().UTC()
+		loc := h.Settings.ResolveLocation(c.Request().Context())
+		now := time.Now().In(loc)
 		last24h := now.Add(-24 * time.Hour)
 		var count int64
 		if err := db.WithContext(c.Request().Context()).
@@ -285,8 +297,9 @@ func (h AlertsHandler) GetAlertStatistics(c echo.Context) error {
 		}
 		recent24h = int(count)
 
-		// 趋势：按自然日（UTC）统计今天/昨天新增告警数，并计算变化百分比。
-		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		// 趋势：按业务时区的自然日统计今天/昨天新增告警数，并计算变化百分比。
+		// 不能用 UTC 日界：UTC 零点在 UTC+8 即本地 08:00，会把本地 0-8 点的告警误算进昨天。
+		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 		yesterdayStart := todayStart.Add(-24 * time.Hour)
 
 		var today int64
@@ -551,19 +564,21 @@ func (h AlertsHandler) ExportAlerts(c echo.Context) error {
 	params := c.QueryParams()
 	deviceIDs := parseIntList(append(append(params["device_ids"], params["device_ids[]"]...), params["device_id"]...))
 	categoryValues := parseQueryValues(append(params["category"], params["category[]"]...))
+	loc := h.businessLoc(c)
 	startDateRaw := c.QueryParam("start_date")
-	startDate, _ := parseTimeOptional(startDateRaw)
+	startDate, _ := parseTimeOptional(startDateRaw, loc)
 	if startDate == nil {
-		startDate, _ = parseTimeOptional(c.QueryParam("start_time"))
+		startDate, _ = parseTimeOptional(c.QueryParam("start_time"), loc)
 	}
 	endDateRaw := c.QueryParam("end_date")
-	endDate, _ := parseTimeOptional(endDateRaw)
+	endDate, _ := parseTimeOptional(endDateRaw, loc)
 	if endDate == nil {
-		endDate, _ = parseTimeOptional(c.QueryParam("end_time"))
+		endDate, _ = parseTimeOptional(c.QueryParam("end_time"), loc)
 	}
 	// 兼容 date-only：end_date=YYYY-MM-DD 视为“当天结束”，避免把当天数据排除在外。
+	// 用业务时区而非 UTC 调整：date-only 已按 loc 解析成当天零点，加满一天即本地当天末。
 	if endDate != nil && isDateOnly(endDateRaw) {
-		adjusted := endDate.UTC().Add(24*time.Hour - time.Nanosecond)
+		adjusted := endDate.In(loc).Add(24*time.Hour - time.Nanosecond)
 		endDate = &adjusted
 	}
 

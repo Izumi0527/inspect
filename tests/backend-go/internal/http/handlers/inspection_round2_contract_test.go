@@ -205,8 +205,10 @@ func TestListExecutions_ShouldFilterByStartedAtOrCreatedAtFallback(t *testing.T)
 		Logger:  zap.NewNop(),
 	}
 
-	start := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
-	endExclusive := time.Date(2026, 4, 7, 0, 0, 0, 0, time.UTC)
+	// 日期参数按业务时区解释（未注入 Settings 时回退默认 Asia/Shanghai）
+	loc := businessLocation()
+	start := time.Date(2026, 4, 1, 0, 0, 0, 0, loc)
+	endExclusive := time.Date(2026, 4, 7, 0, 0, 0, 0, loc)
 
 	// 执行历史按批次聚合：先对分组键去重计数，再按分组键分页取本页批次。
 	// 日期筛选为批次级条件（HAVING），保证跨时间边界的批次返回完整设备集合。

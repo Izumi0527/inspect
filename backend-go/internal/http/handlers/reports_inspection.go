@@ -32,7 +32,7 @@ func (h ReportsHandler) GetInspectionReportData(c echo.Context) error {
 	payload := map[string]interface{}{}
 	_ = c.Bind(&payload)
 
-	filters := parseInspectionReportFilters(payload)
+	filters := parseInspectionReportFilters(payload, h.businessLoc(c))
 	ctx := c.Request().Context()
 
 	rows, err := loadInspectionRows(ctx, db, filters)
@@ -218,7 +218,7 @@ func (h ReportsHandler) GetInspectionReportData(c echo.Context) error {
 		})
 	}
 
-	executionTrends, err := buildExecutionTrends(ctx, db, filters)
+	executionTrends, err := buildExecutionTrends(ctx, db, filters, h.businessTZ(c))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load execution trends")
 	}
@@ -267,7 +267,7 @@ func (h ReportsHandler) CompareInspectionReports(c echo.Context) error {
 	payload := map[string]interface{}{}
 	_ = c.Bind(&payload)
 
-	filters := parseInspectionReportFilters(payload)
+	filters := parseInspectionReportFilters(payload, h.businessLoc(c))
 	if len(filters.DeviceIDs) == 0 {
 		deviceIDs := parseIntSlice(payload["deviceIds"])
 		if len(deviceIDs) == 0 {

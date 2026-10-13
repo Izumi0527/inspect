@@ -82,8 +82,8 @@ type inspectionDeviceAggregate struct {
 	AvgDuration   sql.NullFloat64 `gorm:"column:avg_duration"`
 }
 
-func parseInspectionReportFilters(payload map[string]interface{}) inspectionReportFilters {
-	start, end := resolveDateRangeFromPayload(payload)
+func parseInspectionReportFilters(payload map[string]interface{}, loc *time.Location) inspectionReportFilters {
+	start, end := resolveDateRangeFromPayload(payload, loc)
 	if start.IsZero() || end.IsZero() {
 		now := time.Now().UTC()
 		end = now
@@ -311,7 +311,7 @@ func queryInspectionAverageScore(ctx context.Context, db *gorm.DB, filters inspe
 	return 0, nil
 }
 
-func buildExecutionTrends(ctx context.Context, db *gorm.DB, filters inspectionReportFilters) ([]map[string]interface{}, error) {
+func buildExecutionTrends(ctx context.Context, db *gorm.DB, filters inspectionReportFilters, tz string) ([]map[string]interface{}, error) {
 	rows := make([]struct {
 		Bucket       time.Time       `gorm:"column:bucket"`
 		Total        int64           `gorm:"column:total"`
@@ -323,7 +323,7 @@ func buildExecutionTrends(ctx context.Context, db *gorm.DB, filters inspectionRe
 		PassedChecks int64           `gorm:"column:passed_checks"`
 	}, 0)
 
-	timeExpr := bucketExpression(filters.GroupBy, "COALESCE(started_at, created_at)")
+	timeExpr := bucketExpression(filters.GroupBy, "COALESCE(started_at, created_at)", tz)
 	selectExpr := fmt.Sprintf(`%s AS bucket,
         COUNT(*) AS total,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,

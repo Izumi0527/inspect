@@ -250,13 +250,16 @@ func New() (*App, error) {
 	authHandler.Settings = settingsService
 	// 登录/登出/失败尝试写入审计日志。
 	authHandler.Audit = settingsService
+	// 报告趋势/统计的日/周/月分桶按业务时区（system.timezone）截断，与筛选边界同一口径。
+	reportHandler.Settings = settingsService
 
 	alertService := alerts.NewService(dbConn, log)
 	alertEvaluator := alerts.NewEvaluator(dbConn, wsManager, settingsService, log)
 	alertsHandler := handlers.AlertsHandler{
-		Service: alertService,
-		Auth:    authService,
-		WS:      wsManager,
+		Service:  alertService,
+		Auth:     authService,
+		WS:       wsManager,
+		Settings: settingsService,
 	}
 
 	escalationService := escalation.NewService(dbConn, log)
@@ -290,6 +293,7 @@ func New() (*App, error) {
 
 	logsService := logs.NewService(dbConn, log)
 	logsService.SetLocalIPs(cfg.LocalIPAddresses)
+	logsService.SetSettings(settingsService)
 
 	// 创建 Trap 告警桥接器（scheduler 和 trapListener 都需要）
 	trapAlertBridge := alerts.NewTrapAlertBridge(dbConn, wsManager, log)
@@ -358,8 +362,9 @@ func New() (*App, error) {
 	}
 
 	trafficHandler := handlers.TrafficHandler{
-		Service: trafficService,
-		Auth:    authService,
+		Service:  trafficService,
+		Auth:     authService,
+		Settings: settingsService,
 	}
 
 	server := httpserver.NewServer(

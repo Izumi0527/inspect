@@ -100,12 +100,15 @@ func TestListAlerts_QueryParsingAndDateOnlyEndDate(t *testing.T) {
 		}
 	}
 
-	expectedStart := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	// 日期参数按业务时区解析（handler 未注入 Settings 时回退默认 Asia/Shanghai）：
+	// date-only 是本地自然日，不能用 UTC 零点（会错位成本地 08:00）。
+	loc := businessLocation()
+	expectedStart := time.Date(2026, 3, 1, 0, 0, 0, 0, loc)
 	if filter.StartDate == nil || !filter.StartDate.Equal(expectedStart) {
 		t.Fatalf("expected start_date=%s, got %v", expectedStart.Format(time.RFC3339Nano), filter.StartDate)
 	}
 
-	expectedEnd := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC).Add(24*time.Hour - time.Nanosecond)
+	expectedEnd := time.Date(2026, 3, 2, 0, 0, 0, 0, loc).Add(24*time.Hour - time.Nanosecond)
 	if filter.EndDate == nil || !filter.EndDate.Equal(expectedEnd) {
 		t.Fatalf("expected end_date=%s, got %v", expectedEnd.Format(time.RFC3339Nano), filter.EndDate)
 	}

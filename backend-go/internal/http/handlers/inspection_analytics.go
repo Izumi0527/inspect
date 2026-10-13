@@ -47,9 +47,10 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection stats")
 	}
 
-	start, end, hasExplicitRange := resolveRequestedAnalyticsRange(c)
+	loc := h.Settings.ResolveLocation(c.Request().Context())
+	start, end, hasExplicitRange := resolveRequestedAnalyticsRange(c, loc)
 	if !hasExplicitRange {
-		start, end = resolveStatsRange(c.QueryParam("range"))
+		start, end = resolveStatsRange(c.QueryParam("range"), loc)
 	}
 	previousStart := start.Add(start.Sub(end))
 	previousEnd := start
@@ -100,10 +101,11 @@ func (h InspectionHandler) GetTrends(c echo.Context) error {
 	if period == "" {
 		period = "week"
 	}
-	startDate, _ := parseOptionalDate(c.QueryParam("start_date"))
-	endDate, _ := parseOptionalDate(c.QueryParam("end_date"))
+	loc := h.Settings.ResolveLocation(c.Request().Context())
+	startDate, _ := parseOptionalDate(c.QueryParam("start_date"), loc)
+	endDate, _ := parseOptionalDate(c.QueryParam("end_date"), loc)
 
-	start, end := resolveTrendRange(period, startDate, endDate)
+	start, end := resolveTrendRange(period, startDate, endDate, loc)
 
 	db := h.Service.DB()
 	if db == nil {
@@ -118,13 +120,16 @@ func (h InspectionHandler) GetTrends(c echo.Context) error {
 		AvgScore   float64   `gorm:"column:avg_score"`
 	}
 
-	// 执行趋势统一以 started_at 为执行时间口径
-	dateExpr := "date_trunc('week', started_at)"
+	// 执行趋势统一以 started_at 为执行时间口径。
+	// AT TIME ZONE 先把 timestamptz 换算成业务时区的本地时间再截断，
+	// 使分周/分日/分月与查询区间边界处于同一时区口径，且不依赖数据库会话时区。
+	tz := loc.String()
+	dateExpr := fmt.Sprintf("date_trunc('week', started_at AT TIME ZONE '%s')", tz)
 	switch period {
 	case "day":
-		dateExpr = "date_trunc('day', started_at)"
+		dateExpr = fmt.Sprintf("date_trunc('day', started_at AT TIME ZONE '%s')", tz)
 	case "month":
-		dateExpr = "date_trunc('month', started_at)"
+		dateExpr = fmt.Sprintf("date_trunc('month', started_at AT TIME ZONE '%s')", tz)
 	}
 
 	rows := make([]trendRow, 0)
@@ -154,12 +159,12 @@ func (h InspectionHandler) GetTrends(c echo.Context) error {
 				AvgScore:   row.AvgScore,
 			}
 		}
-		payload := generateTrendTimeSeries(start, end, period, dataMap)
+		payload := generateTrendTimeSeries(start, end, period, dataMap, loc)
 		return inspectionOK(c, payload)
 	}
 
 	// 如果没有数据，生成空的时间序列
-	payload := generateEmptyTrendTimeSeries(start, end, period)
+	payload := generateEmptyTrendTimeSeries(start, end, period, loc)
 
 	return inspectionOK(c, payload)
 }
@@ -187,7 +192,8 @@ func (h InspectionHandler) GetDeviceDistribution(c echo.Context) error {
 		Select("devices.device_type AS device_type, COUNT(DISTINCT inspections.device_id) AS count").
 		Joins("JOIN devices ON devices.id = inspections.device_id")
 
-	if start, end, ok := resolveRequestedAnalyticsRange(c); ok {
+	loc := h.Settings.ResolveLocation(c.Request().Context())
+	if start, end, ok := resolveRequestedAnalyticsRange(c, loc); ok {
 		query = query.Where("inspections.started_at >= ? AND inspections.started_at <= ?", start, end)
 	}
 
@@ -238,7 +244,8 @@ func (h InspectionHandler) GetProblemDistribution(c echo.Context) error {
 		Select("inspection_results.check_item_type AS category, COUNT(*) AS count").
 		Joins("JOIN inspections ON inspections.id = inspection_results.inspection_id")
 
-	if start, end, ok := resolveRequestedAnalyticsRange(c); ok {
+	loc := h.Settings.ResolveLocation(c.Request().Context())
+	if start, end, ok := resolveRequestedAnalyticsRange(c, loc); ok {
 		query = query.Where("inspections.started_at >= ? AND inspections.started_at <= ?", start, end)
 	}
 
@@ -300,9 +307,10 @@ func (h InspectionHandler) ExportAnalytics(c echo.Context) error {
 	if period == "" {
 		period = "week"
 	}
-	startDate, _ := parseOptionalDate(c.QueryParam("start_date"))
-	endDate, _ := parseOptionalDate(c.QueryParam("end_date"))
-	start, end := resolveTrendRange(period, startDate, endDate)
+	loc := h.Settings.ResolveLocation(c.Request().Context())
+	startDate, _ := parseOptionalDate(c.QueryParam("start_date"), loc)
+	endDate, _ := parseOptionalDate(c.QueryParam("end_date"), loc)
+	start, end := resolveTrendRange(period, startDate, endDate, loc)
 
 	format := strings.ToLower(strings.TrimSpace(c.QueryParam("format_type")))
 	if format == "" {
@@ -489,8 +497,8 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to resolve execution for report")
 	}
 
-	start, _ := parseTimeOptional(stringValue(startDate))
-	end, _ := parseTimeOptional(stringValue(endDate))
+	start, _ := parseTimeOptional(stringValue(startDate), h.Settings.ResolveLocation(c.Request().Context()))
+	end, _ := parseTimeOptional(stringValue(endDate), h.Settings.ResolveLocation(c.Request().Context()))
 	start, end = resolveInspectionReportWindow(start, end, batchRows, time.Now().UTC())
 
 	paramsJSON, _ := encodeInspectionReportParams(*start, *end, batchRows, taskID, deviceIDs)

@@ -9,12 +9,21 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"github.com/your-org/inspect-system/backend-go/internal/traffic"
 )
 
 type TrafficHandler struct {
 	Service *traffic.Service
 	Auth    PermissionService
+	// Settings 提供业务时区（system.timezone）：日期参数按本地口径解析。
+	// 允许为 nil（测试/降级场景），ResolveLocation 对 nil receiver 安全。
+	Settings *settings.Service
+}
+
+// businessLoc 返回业务时区（*time.Location），供日期参数解析使用。
+func (h TrafficHandler) businessLoc(c echo.Context) *time.Location {
+	return h.Settings.ResolveLocation(c.Request().Context())
 }
 
 func (h TrafficHandler) Register(group *echo.Group) {
@@ -101,11 +110,12 @@ func (h TrafficHandler) GetDeviceTrafficTrend(c echo.Context) error {
 		interfacePtr = &interfaceIndex
 	}
 
-	startValue, err := parseTimeOptional(c.QueryParam("start_time"))
+	loc := h.businessLoc(c)
+	startValue, err := parseTimeOptional(c.QueryParam("start_time"), loc)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid start_time")
 	}
-	endValue, err := parseTimeOptional(c.QueryParam("end_time"))
+	endValue, err := parseTimeOptional(c.QueryParam("end_time"), loc)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid end_time")
 	}
