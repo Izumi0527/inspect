@@ -243,6 +243,42 @@ export class TokenManager {
  * - 不再发送 Authorization Bearer（已弃用 localStorage token）。
  * 返回原始 Response，调用方自行处理 blob/stream。
  */
+// ── 会话彻底失效通知 ────────────────────────────────────────────────────────
+// 401 自愈中 refresh 失败，意味着服务端会话已不存在（登出、被并发会话上限裁剪、
+// 被管理员停用、会话过期等），继续重试不会有结果。这里只广播「会话已失效」，
+// 由上层（auth-context）统一清理登录态并跳登录页；
+// 否则页面会停留在「每次请求都 401」的坏状态，直到用户手动刷新才恢复。
+type SessionExpiredListener = () => void
+
+const sessionExpiredListeners = new Set<SessionExpiredListener>()
+let sessionExpiredNotified = false
+
+/** 订阅「会话已失效」事件，返回取消订阅函数 */
+export const onSessionExpired = (listener: SessionExpiredListener): (() => void) => {
+  sessionExpiredListeners.add(listener)
+  return () => {
+    sessionExpiredListeners.delete(listener)
+  }
+}
+
+/** 续期成功后重新武装：会话恢复后，下一次失效仍要能广播（也是测试的重置入口） */
+export const markSessionAlive = (): void => {
+  sessionExpiredNotified = false
+}
+
+/** 广播会话失效；并发请求同时失败时只广播一次 */
+const notifySessionExpired = (): void => {
+  if (sessionExpiredNotified) return
+  sessionExpiredNotified = true
+  sessionExpiredListeners.forEach((listener) => {
+    try {
+      listener()
+    } catch (error) {
+      console.error('session expired listener failed:', error)
+    }
+  })
+}
+
 export async function authorizedDownload(url: string, init: RequestInit = {}): Promise<Response> {
   const method = (init.method ?? 'GET').toUpperCase()
   const headers = new Headers(init.headers)
@@ -450,6 +486,8 @@ class HttpClient {
         const refreshed = await this.ensureTokenRefreshed()
         if (refreshed) {
           response = await doFetch()
+        } else {
+          notifySessionExpired()
         }
       }
 
@@ -485,6 +523,9 @@ class HttpClient {
         credentials: 'include',
         signal: controller.signal,
       })
+      if (response.ok) {
+        markSessionAlive()
+      }
       return response.ok
     } catch {
       return false

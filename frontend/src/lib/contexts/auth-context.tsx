@@ -8,7 +8,7 @@
 import { createContext, useContext, useEffect, useReducer, useCallback, useMemo, useRef, ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { toast } from 'react-hot-toast'
-import { api, TokenManager, ApiClientError } from '../api-client'
+import { api, TokenManager, ApiClientError, onSessionExpired, markSessionAlive } from '../api-client'
 import { normalizePermissionKey, normalizePermissionList } from '../authz/permission'
 import {
   AuthState,
@@ -129,6 +129,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const response = await api.auth.login(credentials)
 
       // S3：token 已由后端 httpOnly Cookie 设置，前端不再保存。
+      // 新会话开始，重置「会话已失效」广播标记：否则上一轮失效置位后，
+      // 新会话再失效时 notifySessionExpired 会被去重逻辑吞掉，页面卡在 401 死循环。
+      markSessionAlive()
       dispatch({ type: 'LOGIN_SUCCESS', payload: { user: response.user } })
 
       // 首次登录或密码被重置：强制先改密。改密前后端会拒绝业务接口（403 PasswordChangeRequired）。
@@ -193,6 +196,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     }
   }, [router])
+
+  // 会话被服务端判定失效时（401 自愈里 refresh 失败）：清理本地登录态。
+  // 跳转不在这里做，交给 useRequireAuth 统一处理（它会带上当前路径作为 redirect 参数），
+  // 避免与路由守卫各自 push 造成竞态、丢掉返回地址。
+  useEffect(() => {
+    return onSessionExpired(() => {
+      TokenManager.clearTokens()
+      dispatch({ type: 'LOGOUT' })
+      toast.error('登录状态已失效，请重新登录')
+    })
+  }, [])
 
   // Token刷新函数
   const refreshToken = useCallback(async (): Promise<void> => {
@@ -353,6 +367,7 @@ export function useRequireAuth(options: UseRequireAuthOptions = {}) {
   const { skipRedirect = false } = options
   const { isAuthenticated, isLoading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     // 如果 skipRedirect 为 true，跳过自动跳转
@@ -361,9 +376,16 @@ export function useRequireAuth(options: UseRequireAuthOptions = {}) {
     }
 
     if (!isLoading && !isAuthenticated) {
-      router.push('/login')
+      // 带上当前路径：重新登录后回到失效前所在页面。
+      // 已在 /login 或 /change-password 时不再追加，避免自引用成环。
+      const search = typeof window === 'undefined' ? '' : window.location.search
+      const current = (pathname ?? '') + search
+      const shouldCarryRedirect =
+        !current.startsWith('/login') && !current.startsWith('/change-password')
+      router.push(shouldCarryRedirect ? '/login?redirect=' + encodeURIComponent(current) : '/login')
     }
-  }, [isAuthenticated, isLoading, router, skipRedirect])
+
+  }, [isAuthenticated, isLoading, router, skipRedirect, pathname])
 
   return { isAuthenticated, isLoading }
 }
