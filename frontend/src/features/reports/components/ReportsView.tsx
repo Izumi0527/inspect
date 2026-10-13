@@ -5,7 +5,6 @@ import {
   FileText,
   TrendingUp,
   BarChart3,
-  Settings,
   AlertTriangle
 } from 'lucide-react'
 import {
@@ -17,9 +16,8 @@ import { AppLayout } from '@/components/layout'
 import { InspectionReports } from './InspectionReports'
 import { TrendAnalysis } from './TrendAnalysis'
 import { StatisticsReports } from './StatisticsReports'
-import { CustomReports } from './CustomReports'
 
-type TabType = 'inspection' | 'trends' | 'statistics' | 'custom'
+type TabType = 'inspection' | 'trends' | 'statistics'
 
 type IconComponent = React.ComponentType<React.SVGProps<SVGSVGElement>>
 
@@ -42,7 +40,7 @@ export const ReportsView: React.FC = () => {
     const raw = String(searchParams?.get('tab') || '').toLowerCase().trim()
     if (!raw) return null
     if (raw === 'trend') return 'trends'
-    if (raw === 'inspection' || raw === 'trends' || raw === 'statistics' || raw === 'custom') {
+    if (raw === 'inspection' || raw === 'trends' || raw === 'statistics') {
       return raw as TabType
     }
     return null
@@ -50,14 +48,13 @@ export const ReportsView: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabType>(tabFromUrl || 'inspection')
 
-  // 搜索关键词按标签页隔离：四个子页的搜索语义互不相同
-  // （报告标题 / 趋势数据 / 设备类型 / 配置名称），
+  // 搜索关键词按标签页隔离：三个子页的搜索语义互不相同
+  // （报告标题 / 趋势数据 / 设备类型），
   // 共用一个值会把上一个页签的关键词带过来，造成“我的数据怎么没了”的误判。
   const [searchTextByTab, setSearchTextByTab] = useState<Record<TabType, string>>({
     inspection: '',
     trends: '',
     statistics: '',
-    custom: '',
   })
 
   const searchText = searchTextByTab[activeTab]
@@ -95,11 +92,6 @@ export const ReportsView: React.FC = () => {
       key: 'statistics',
       label: '统计报表',
       icon: BarChart3
-    },
-    {
-      key: 'custom',
-      label: '自定义报表',
-      icon: Settings
     }
   ]
 
@@ -122,13 +114,6 @@ export const ReportsView: React.FC = () => {
       case 'statistics':
         return (
           <StatisticsReports
-            searchText={searchText}
-            onSearchTextChange={setSearchText}
-          />
-        )
-      case 'custom':
-        return (
-          <CustomReports
             searchText={searchText}
             onSearchTextChange={setSearchText}
           />

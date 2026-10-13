@@ -24,10 +24,6 @@ jest.mock('@/features/reports/components/StatisticsReports', () => ({
   StatisticsReports: () => <div>统计报表内容</div>,
 }))
 
-jest.mock('@/features/reports/components/CustomReports', () => ({
-  CustomReports: () => <div>自定义报表内容</div>,
-}))
-
 describe('ReportsView 页签样式', () => {
   it('激活页签使用主题变量而不是浅色蓝底类名', () => {
     render(<ReportsView />)

@@ -67,17 +67,6 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/reports/components/ConfigPreviewModal.tsx',
-    bannedPatterns: [
-      /bg-white dark:bg-gray-900/g,
-      /bg-white dark:bg-gray-800/g,
-      /bg-gray-50 dark:bg-gray-800/g,
-      /text-gray-900 dark:text-gray-100/g,
-      /text-gray-600 dark:text-gray-400/g,
-      /text-gray-500 dark:text-gray-400/g,
-    ],
-  },
-  {
     file: 'frontend/src/features/reports/components/InspectionCompareModal.tsx',
     bannedPatterns: [
       /bg-white dark:bg-gray-900/g,
@@ -473,14 +462,6 @@ const rules: FileRule[] = [
     bannedPatterns: [
       /text-gray-900 dark:text-white/g,
       /text-gray-900 dark:text-gray-100/g,
-    ],
-  },
-  {
-    file: 'frontend/src/features/reports/components/CustomReports.tsx',
-    bannedPatterns: [
-      /text-gray-900 dark:text-gray-100/g,
-      /text-gray-600 dark:text-gray-400/g,
-      /bg-gray-50 dark:bg-gray-800/g,
     ],
   },
   {

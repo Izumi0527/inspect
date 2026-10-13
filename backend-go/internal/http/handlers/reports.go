@@ -35,6 +35,7 @@ func (h ReportsHandler) Register(group *echo.Group) {
 	group.POST("/reports", h.CreateReport)
 	group.PUT("/reports/:report_id", h.UpdateReport)
 	group.DELETE("/reports/:report_id", h.DeleteReport)
+	group.DELETE("/reports", h.DeleteReportsByType)
 	group.POST("/reports/:report_id/generate", h.GenerateReport)
 	group.POST("/reports/:report_id/rerender/pdf", h.RerenderReportPDF)
 	group.POST("/reports/:report_id/clone", h.CloneReport)
@@ -63,14 +64,6 @@ func (h ReportsHandler) Register(group *echo.Group) {
 	group.POST("/reports/inspection/generate", h.GenerateInspectionReport)
 	group.POST("/reports/inspection/data", h.GetInspectionReportData)
 	group.POST("/reports/inspection/compare", h.CompareInspectionReports)
-
-	group.GET("/reports/custom/configs", h.ListCustomConfigs)
-	group.GET("/reports/custom/configs/:config_id", h.GetCustomConfig)
-	group.POST("/reports/custom/configs", h.CreateCustomConfig)
-	group.PUT("/reports/custom/configs/:config_id", h.UpdateCustomConfig)
-	group.DELETE("/reports/custom/configs/:config_id", h.DeleteCustomConfig)
-	group.POST("/reports/custom/configs/:config_id/generate", h.GenerateFromCustomConfig)
-	group.POST("/reports/custom/configs/:config_id/preview", h.PreviewCustomConfig)
 
 	group.GET("/reports/templates", h.ListTemplates)
 	group.GET("/reports/templates/:template_id", h.GetTemplate)
@@ -140,15 +133,4 @@ type reportTemplateRequest struct {
 	Sections    []map[string]interface{} `json:"sections"`
 	Styles      map[string]interface{}   `json:"styles"`
 	Config      map[string]interface{}   `json:"config"`
-}
-
-type customConfigRequest struct {
-	Name        string                   `json:"name"`
-	Description *string                  `json:"description"`
-	Template    map[string]interface{}   `json:"template"`
-	Parameters  map[string]interface{}   `json:"parameters"`
-	Charts      []map[string]interface{} `json:"charts"`
-	Tables      []map[string]interface{} `json:"tables"`
-	Filters     []map[string]interface{} `json:"filters"`
-	Layout      map[string]interface{}   `json:"layout"`
 }

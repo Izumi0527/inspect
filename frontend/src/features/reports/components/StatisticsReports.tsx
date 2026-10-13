@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { BarChart3, Users, Target, Activity, RefreshCw, Download, FileText } from 'lucide-react'
 import {
   Card,
@@ -26,6 +26,8 @@ import { downloadWithAuth } from '@/utils/download'
 import { formatDateYMD } from '@/utils/formatters'
 import { getDeviceTypeLabel } from '@/utils/deviceTypes'
 import { ReportsToolbar } from './shared/ReportsToolbar'
+import type { StatisticsData } from '../types'
+import { getQuickDateRange } from '@/utils/quickDateRanges'
 
 interface Props {
   searchText: string
@@ -75,38 +77,26 @@ const resolveStatusColor = (status: string) => DEVICE_STATUS_META[status]?.color
 /** 类型分布柱状图的一行：固定的名称/总数，外加按状态动态展开的分段列 */
 type DeviceTypeChartRow = { name: string; count: number } & Record<string, string | number>
 
+/** 「清除日期」后的空区间：日历显示未选择，查询回落到默认近 30 天 */
+const EMPTY_DATE_RANGE = { startDate: '', endDate: '' }
+
+/** 两份分布的「类型 / 位置」键集合是否一致：筛选选项只关心键，不关心计数 */
+const sameOptionKeys = (
+  prev: StatisticsData['deviceDistribution'] | null,
+  next: StatisticsData['deviceDistribution']
+): boolean => {
+  if (!prev) return false
+  const keysOf = (record: Record<string, number> | undefined) => Object.keys(record ?? {}).sort().join('\u0000')
+  return (
+    keysOf(prev.byType) === keysOf(next.byType) &&
+    keysOf(prev.byLocation) === keysOf(next.byLocation)
+  )
+}
+
 const getDefaultStatisticsDateRange = () => ({
   startDate: formatDateYMD(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
   endDate: formatDateYMD(new Date())
 })
-
-const getQuickStatisticsDateRange = (range: 'today' | 'week' | 'month') => {
-  const endDate = new Date()
-  const startDate = new Date(endDate)
-
-  if (range === 'today') {
-    return {
-      startDate: formatDateYMD(startDate),
-      endDate: formatDateYMD(endDate),
-    }
-  }
-
-  if (range === 'week') {
-    const weekday = startDate.getDay()
-    const diff = weekday === 0 ? 6 : weekday - 1
-    startDate.setDate(startDate.getDate() - diff)
-    return {
-      startDate: formatDateYMD(startDate),
-      endDate: formatDateYMD(endDate),
-    }
-  }
-
-  startDate.setDate(1)
-  return {
-    startDate: formatDateYMD(startDate),
-    endDate: formatDateYMD(endDate),
-  }
-}
 
 export const StatisticsReports: React.FC<Props> = ({
   searchText,
@@ -116,6 +106,13 @@ export const StatisticsReports: React.FC<Props> = ({
   // ==================== State Management ====================
   const defaultDateRange = useMemo(() => getDefaultStatisticsDateRange(), [])
   const [dateRange, setDateRange] = useState(defaultDateRange)
+  // 日期筛选的生效口径：
+  //   - 完整区间（起止都有）→ 按用户所选查询；
+  //   - 空区间（点了「清除日期」）或半截区间（只选了起点）→ 回落到默认近 30 天。
+  // 统计口径必须有一个明确区间，否则 KPI 会显示成一排假零；
+  // 而日历控件照实显示「未选择 / 选到一半」，与全站其它页面「清除即清空」的契约一致。
+  const hasCompleteDateRange = Boolean(dateRange.startDate && dateRange.endDate)
+  const effectiveDateRange = hasCompleteDateRange ? dateRange : defaultDateRange
   const [deviceTypes, setDeviceTypes] = useState<string[]>([])
   const [locations, setLocations] = useState<string[]>([])
 
@@ -126,8 +123,8 @@ export const StatisticsReports: React.FC<Props> = ({
     error: statsError,
     refetch: refetchStats
   } = useStatistics({
-    startDate: dateRange.startDate,
-    endDate: dateRange.endDate,
+    startDate: effectiveDateRange.startDate,
+    endDate: effectiveDateRange.endDate,
     deviceTypes: deviceTypes.length > 0 ? deviceTypes : undefined,
     locations: locations.length > 0 ? locations : undefined,
     groupBy: 'day',
@@ -140,8 +137,8 @@ export const StatisticsReports: React.FC<Props> = ({
     error: kpiError,
     refetch: refetchKpi
   } = useKPIData({
-    startDate: dateRange.startDate,
-    endDate: dateRange.endDate,
+    startDate: effectiveDateRange.startDate,
+    endDate: effectiveDateRange.endDate,
     deviceTypes: deviceTypes.length > 0 ? deviceTypes : undefined,
     locations: locations.length > 0 ? locations : undefined,
     comparisonPeriod: 'previous_period'
@@ -153,8 +150,8 @@ export const StatisticsReports: React.FC<Props> = ({
     error: rankingsError,
     refetch: refetchRankings
   } = useRankings({
-    startDate: dateRange.startDate,
-    endDate: dateRange.endDate,
+    startDate: effectiveDateRange.startDate,
+    endDate: effectiveDateRange.endDate,
     deviceTypes: deviceTypes.length > 0 ? deviceTypes : undefined,
     locations: locations.length > 0 ? locations : undefined,
     rankingType: 'performance',
@@ -356,10 +353,10 @@ export const StatisticsReports: React.FC<Props> = ({
     }
     try {
       const report = await generateReportMutation.mutateAsync({
-        title: `统计报表_${dateRange.startDate}_${dateRange.endDate}`,
+        title: `统计报表_${effectiveDateRange.startDate}_${effectiveDateRange.endDate}`,
         description: '设备统计报表',
-        startDate: dateRange.startDate,
-        endDate: dateRange.endDate,
+        startDate: effectiveDateRange.startDate,
+        endDate: effectiveDateRange.endDate,
         deviceTypes: deviceTypes.length > 0 ? deviceTypes : undefined,
         locations: locations.length > 0 ? locations : undefined,
         format: 'pdf',
@@ -384,8 +381,9 @@ export const StatisticsReports: React.FC<Props> = ({
         console.error('下载统计报表失败:', err)
         toast.error('统计报表生成成功，但下载失败')
       }
-    } catch {
-      toast.error('生成报表失败')
+    } catch (error) {
+      console.error('生成统计报表失败:', error)
+      // toast 由 mutation hook onError 统一处理，这里不再重复弹出
     }
   }
 
@@ -399,7 +397,7 @@ export const StatisticsReports: React.FC<Props> = ({
       return
     }
 
-    const title = `统计报表_${dateRange.startDate}_${dateRange.endDate}`
+    const title = `统计报表_${effectiveDateRange.startDate}_${effectiveDateRange.endDate}`
 
     const kpiRows = kpiCards.map((card) => ({
       metric: card.title,
@@ -491,7 +489,7 @@ export const StatisticsReports: React.FC<Props> = ({
   }
 
   const handleQuickDateRange = (range: 'today' | 'week' | 'month') => {
-    setDateRange(getQuickStatisticsDateRange(range))
+    setDateRange(getQuickDateRange(range))
   }
 
   const handleResetFilters = () => {
@@ -500,26 +498,45 @@ export const StatisticsReports: React.FC<Props> = ({
     setDateRange(defaultDateRange)
   }
 
-  // 可用的设备类型和位置选项
+  // 筛选下拉的选项必须来自「未筛选」的全量分布：
+  // 后端的 by_type / by_location 是按当前筛选过滤后的结果，直接拿来当选项的话，
+  // 选中「交换机」后下拉里就只剩交换机，用户再也追加不了其它类型。
+  // 因此只在没有类型/位置筛选时刷新选项快照，筛选生效期间沿用上一次的全量快照；
+  // 刷新时按键集合比对，避免 data 对象身份变化（如重新拉取）引发无谓更新。
+  const [optionsDistribution, setOptionsDistribution] = useState<
+    StatisticsData['deviceDistribution'] | null
+  >(null)
+  const hasDimensionFilters = deviceTypes.length > 0 || locations.length > 0
+  useEffect(() => {
+    if (hasDimensionFilters) return
+    const next = statisticsData?.deviceDistribution
+    if (!next) return
+    setOptionsDistribution((prev) => (sameOptionKeys(prev, next) ? prev : next))
+  }, [hasDimensionFilters, statisticsData])
+
+  const optionsSource = optionsDistribution ?? statisticsData?.deviceDistribution
+
   const deviceTypeOptions = useMemo(() => {
-    if (!statisticsData?.deviceDistribution?.byType) return []
-    return Object.keys(statisticsData.deviceDistribution.byType).map(type => ({
+    if (!optionsSource?.byType) return []
+    return Object.keys(optionsSource.byType).map(type => ({
       value: type,
       label: getDeviceTypeLabel(type)
     }))
-  }, [statisticsData])
+  }, [optionsSource])
 
   const locationOptions = useMemo(() => {
-    if (!statisticsData?.deviceDistribution?.byLocation) return []
-    return Object.keys(statisticsData.deviceDistribution.byLocation).map(location => ({
+    if (!optionsSource?.byLocation) return []
+    return Object.keys(optionsSource.byLocation).map(location => ({
       value: location,
       label: location
     }))
-  }, [statisticsData])
+  }, [optionsSource])
 
+  // 只有完整且不同于默认的区间才算用户施加了日期筛选；空区间 / 半截区间都回落到默认，不计入
   const hasDateFilter =
-    dateRange.startDate !== defaultDateRange.startDate ||
-    dateRange.endDate !== defaultDateRange.endDate
+    hasCompleteDateRange &&
+    (dateRange.startDate !== defaultDateRange.startDate ||
+      dateRange.endDate !== defaultDateRange.endDate)
   const filterCount =
     (deviceTypes.length > 0 ? 1 : 0) +
     (locations.length > 0 ? 1 : 0) +
@@ -549,57 +566,42 @@ export const StatisticsReports: React.FC<Props> = ({
       )
     : rankingTableData
 
-  // ==================== Loading State ====================
-  if (statsLoading || kpiLoading || rankingsLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex gap-2">
-          <div className="h-10 w-32 bg-muted rounded animate-pulse"></div>
-          <div className="h-10 w-24 bg-muted rounded animate-pulse"></div>
-        </div>
-        <CardSkeleton count={4} />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ChartSkeleton />
-          <ChartSkeleton />
-        </div>
-        <TableSkeleton rows={5} columns={6} />
-      </div>
-    )
-  }
+  // ==================== Loading / Error ====================
+  // 工具栏（搜索、日期、筛选、操作）始终挂载，加载或出错时只替换内容区：
+  // 否则每次切换筛选条件整条工具栏都会被换成骨架屏，日期面板刚选完终点就被卸载。
+  const isLoadingAny = statsLoading || kpiLoading || rankingsLoading
+  const hasAnyError = Boolean(statsError || kpiError || rankingsError)
 
-  // ==================== Error State ====================
-  if (statsError || kpiError || rankingsError) {
-    return (
-      <div className="space-y-4">
-        {statsError && (
-          <ErrorAlert
-            title="统计数据加载失败"
-            message="无法加载统计数据，请检查网络连接或稍后重试"
-            error={statsError}
-            onRetry={refetchStats}
-          />
-        )}
-        {kpiError && (
-          <ErrorAlert
-            title="KPI 数据加载失败"
-            message="无法加载 KPI 指标数据"
-            error={kpiError}
-            variant="warning"
-            onRetry={refetchKpi}
-          />
-        )}
-        {rankingsError && (
-          <ErrorAlert
-            title="排名数据加载失败"
-            message="无法加载设备排名数据"
-            error={rankingsError}
-            variant="warning"
-            onRetry={refetchRankings}
-          />
-        )}
-      </div>
-    )
-  }
+  const errorAlerts = (
+    <div className="space-y-4">
+      {statsError && (
+        <ErrorAlert
+          title="统计数据加载失败"
+          message="无法加载统计数据，请检查网络连接或稍后重试"
+          error={statsError}
+          onRetry={refetchStats}
+        />
+      )}
+      {kpiError && (
+        <ErrorAlert
+          title="KPI 数据加载失败"
+          message="无法加载 KPI 指标数据"
+          error={kpiError}
+          variant="warning"
+          onRetry={refetchKpi}
+        />
+      )}
+      {rankingsError && (
+        <ErrorAlert
+          title="排名数据加载失败"
+          message="无法加载设备排名数据"
+          error={rankingsError}
+          variant="warning"
+          onRetry={refetchRankings}
+        />
+      )}
+    </div>
+  )
 
   // ==================== Main Render ====================
   return (
@@ -618,7 +620,7 @@ export const StatisticsReports: React.FC<Props> = ({
               endDate={dateRange.endDate}
               onStartDateChange={(date) => setDateRange((prev) => ({ ...prev, startDate: date }))}
               onEndDateChange={(date) => setDateRange((prev) => ({ ...prev, endDate: date }))}
-              onClear={() => setDateRange(defaultDateRange)}
+              onClear={() => setDateRange(EMPTY_DATE_RANGE)}
               onQuickSelect={handleQuickDateRange}
               placeholder="日期"
             />
@@ -697,149 +699,165 @@ export const StatisticsReports: React.FC<Props> = ({
         </div>
       )}
 
-      {/* KPI 指标卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        {kpiCards.map((kpi) => {
-          const colors = colorMap[kpi.color as keyof typeof colorMap]
-          const trend = resolveTrendFromChange(kpi.change)
-          return (
-            <CompactStatCard
-              key={kpi.title}
-              title={kpi.title}
-              value={kpi.value}
-              change={kpi.change}
-              changeHint={kpi.changeHint}
-              trend={trend}
-              sentiment={resolveSentiment(trend, kpi.higherIsBetter)}
-              icon={kpi.icon}
-              iconClassName={colors.icon}
-            />
-          )
-        })}
-      </div>
+      {isLoadingAny ? (
+        <div className="space-y-6">
+          <CardSkeleton count={4} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ChartSkeleton />
+            <ChartSkeleton />
+          </div>
+          <TableSkeleton rows={5} columns={6} />
+        </div>
+      ) : hasAnyError ? (
+        errorAlerts
+      ) : (
+        <>
 
-      {/* 统计图表：类型 / 状态 / 性能三个同级分布图并排，避免 2 列布局下末位单卡留白 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>设备类型分布</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {filteredDeviceChartData.length === 0 ? (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                暂无数据
-              </div>
-            ) : (
-              <BarChartComponent
-                data={filteredDeviceChartData}
-                xKey="name"
-                bars={
-                  deviceTypeStatusKeys.length > 0
-                    ? deviceTypeStatusKeys.map((status) => ({
-                        key: status,
-                        name: resolveStatusLabel(status),
-                        color: resolveStatusColor(status),
-                        stackId: 'a',
-                      }))
-                    : [{ key: 'count', name: '设备数量', color: '#3B82F6' }]
-                }
-                height={300}
-              />
-            )}
-          </CardContent>
-        </Card>
+          {/* KPI 指标卡片 */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            {kpiCards.map((kpi) => {
+              const colors = colorMap[kpi.color as keyof typeof colorMap]
+              const trend = resolveTrendFromChange(kpi.change)
+              return (
+                <CompactStatCard
+                  key={kpi.title}
+                  title={kpi.title}
+                  value={kpi.value}
+                  change={kpi.change}
+                  changeHint={kpi.changeHint}
+                  trend={trend}
+                  sentiment={resolveSentiment(trend, kpi.higherIsBetter)}
+                  icon={kpi.icon}
+                  iconClassName={colors.icon}
+                />
+              )
+            })}
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>设备状态分布</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {filteredStatusChartData.length === 0 ? (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                暂无数据
-              </div>
-            ) : (
-              <PieChartComponent
-                data={filteredStatusChartData}
-                height={300}
-                outerRadius={100}
-              />
-            )}
-          </CardContent>
-        </Card>
+          {/* 统计图表：类型 / 状态 / 性能三个同级分布图并排，避免 2 列布局下末位单卡留白 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>设备类型分布</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {filteredDeviceChartData.length === 0 ? (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    暂无数据
+                  </div>
+                ) : (
+                  <BarChartComponent
+                    data={filteredDeviceChartData}
+                    xKey="name"
+                    bars={
+                      deviceTypeStatusKeys.length > 0
+                        ? deviceTypeStatusKeys.map((status) => ({
+                            key: status,
+                            name: resolveStatusLabel(status),
+                            color: resolveStatusColor(status),
+                            stackId: 'a',
+                          }))
+                        : [{ key: 'count', name: '设备数量', color: '#3B82F6' }]
+                    }
+                    height={300}
+                  />
+                )}
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>性能评级分布</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {filteredPerformanceChartData.length === 0 ? (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                暂无数据
-              </div>
-            ) : (
-              <PieChartComponent
-                data={filteredPerformanceChartData}
-                height={300}
-                outerRadius={100}
-              />
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>设备状态分布</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {filteredStatusChartData.length === 0 ? (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    暂无数据
+                  </div>
+                ) : (
+                  <PieChartComponent
+                    data={filteredStatusChartData}
+                    height={300}
+                    outerRadius={100}
+                  />
+                )}
+              </CardContent>
+            </Card>
 
-      {/* 排名表格 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>设备性能排名</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {filteredRankingData.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">暂无排名数据</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-3">排名</th>
-                    <th className="text-left p-3">设备名称</th>
-                    <th className="text-left p-3">类型</th>
-                    <th className="text-left p-3">可用性</th>
-                    <th className="text-left p-3" title="由可用性、响应时间等运行指标综合计算，与「平均巡检评分」口径不同">
-                      性能评分
-                    </th>
-                    <th className="text-left p-3">状态</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRankingData.map((item) => (
-                    <tr key={item.rank} className="border-b hover:bg-muted/40 dark:hover:bg-muted/60">
-                      <td className="p-3 font-medium">#{item.rank}</td>
-                      <td className="p-3">{item.name}</td>
-                      <td className="p-3">{item.type}</td>
-                      <td className="p-3">{item.availability.toFixed(1)}%</td>
-                      <td className="p-3">{item.score.toFixed(1)}</td>
-                      <td className="p-3">
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-medium ${
-                            item.status === '优秀'
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                              : item.status === '良好'
-                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                              : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>性能评级分布</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {filteredPerformanceChartData.length === 0 ? (
+                  <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                    暂无数据
+                  </div>
+                ) : (
+                  <PieChartComponent
+                    data={filteredPerformanceChartData}
+                    height={300}
+                    outerRadius={100}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 排名表格 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>设备性能排名</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filteredRankingData.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">暂无排名数据</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-3">排名</th>
+                        <th className="text-left p-3">设备名称</th>
+                        <th className="text-left p-3">类型</th>
+                        <th className="text-left p-3">可用性</th>
+                        <th className="text-left p-3" title="由可用性、响应时间等运行指标综合计算，与「平均巡检评分」口径不同">
+                          性能评分
+                        </th>
+                        <th className="text-left p-3">状态</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRankingData.map((item) => (
+                        <tr key={item.rank} className="border-b hover:bg-muted/40 dark:hover:bg-muted/60">
+                          <td className="p-3 font-medium">#{item.rank}</td>
+                          <td className="p-3">{item.name}</td>
+                          <td className="p-3">{item.type}</td>
+                          <td className="p-3">{item.availability.toFixed(1)}%</td>
+                          <td className="p-3">{item.score.toFixed(1)}</td>
+                          <td className="p-3">
+                            <span
+                              className={`px-2 py-1 rounded text-xs font-medium ${
+                                item.status === '优秀'
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                  : item.status === '良好'
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                                  : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   )
 }

@@ -123,11 +123,6 @@ test.describe('报表分析（/reports）按钮覆盖', () => {
       deleteDialog2.getByRole('button', { name: '删除' }).click(),
     ])
 
-    // 快捷卡片：自定义配置（跳转到自定义 Tab）
-    await page.getByText('自定义配置').click()
-    await expect(page).toHaveURL(/\/reports\?tab=custom/)
-    await expect(page.getByRole('button', { name: '自定义报表', exact: true })).toBeVisible()
-
     expect(pageErrors, `存在未捕获页面异常：${pageErrors.map((e) => e.message).join('; ')}`).toHaveLength(0)
   })
 
@@ -214,107 +209,6 @@ test.describe('报表分析（/reports）按钮覆盖', () => {
       waitForApiOk(page, 'POST', '/api/v1/reports/export/excel'),
       page.getByRole('button', { name: '导出数据' }).click(),
     ])
-
-    expect(pageErrors, `存在未捕获页面异常：${pageErrors.map((e) => e.message).join('; ')}`).toHaveLength(0)
-  })
-
-  test('自定义报表：创建/预览/生成/编辑/复制/删除/导入弹窗', async ({ page }) => {
-    const pageErrors: Error[] = []
-    page.on('pageerror', (err) => pageErrors.push(err))
-
-    await page.goto('/reports?tab=custom', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('button', { name: '自定义报表', exact: true })).toBeVisible()
-
-    // 先创建一个配置（空态下按钮也存在）
-    const configName = `E2E_自定义配置_${Date.now()}`
-
-    await page.getByRole('button', { name: '创建自定义报表' }).first().click()
-    const createDialog = topDialog(page)
-    await expect(createDialog.getByText('创建自定义报表配置')).toBeVisible()
-    await createDialog.getByPlaceholder('例如：月度运营摘要').fill(configName)
-    await Promise.all([
-      waitForApiOk(page, 'POST', '/api/v1/reports/custom/configs'),
-      createDialog.getByRole('button', { name: '保存' }).click(),
-    ])
-    await expect(page.getByText(configName)).toBeVisible()
-
-    // 配置卡片操作：预览
-    await Promise.all([
-      page.waitForResponse(
-        (resp) =>
-          resp.request().method() === 'POST' &&
-          resp.url().includes('/api/v1/reports/custom/configs/') &&
-          resp.url().includes('/preview') &&
-          resp.status() >= 200 &&
-          resp.status() < 300
-      ),
-      page.locator('button[title="预览报表数据"]').first().click(),
-    ])
-    await expect(page.getByText('配置预览')).toBeVisible()
-
-    // 生成完整报表（在预览弹窗内）
-    const configPreviewDialog = topDialog(page)
-    await Promise.all([
-      page.waitForResponse(
-        (resp) =>
-          resp.request().method() === 'POST' &&
-          resp.url().includes('/api/v1/reports/custom/configs/') &&
-          resp.url().includes('/generate') &&
-          resp.status() >= 200 &&
-          resp.status() < 300
-      ),
-      configPreviewDialog.getByRole('button', { name: '生成完整报表' }).click(),
-    ])
-
-    // 卡片操作：生成报表
-    await Promise.all([
-      page.waitForResponse(
-        (resp) =>
-          resp.request().method() === 'POST' &&
-          resp.url().includes('/api/v1/reports/custom/configs/') &&
-          resp.url().includes('/generate') &&
-          resp.status() >= 200 &&
-          resp.status() < 300
-      ),
-      page.getByRole('button', { name: '生成报表' }).first().click(),
-    ])
-
-    // 卡片操作：编辑
-    await page.locator('button[title="编辑配置"]').first().click()
-    const updateDialog = topDialog(page)
-    await expect(updateDialog.getByText('编辑自定义报表配置')).toBeVisible()
-    await updateDialog.getByPlaceholder('可选：用于说明该配置的用途').fill(`E2E_描述_${Date.now()}`)
-    await Promise.all([
-      page.waitForResponse((resp) => resp.request().method() === 'PUT' && resp.url().includes('/api/v1/reports/custom/configs/') && resp.status() >= 200 && resp.status() < 300),
-      updateDialog.getByRole('button', { name: '保存' }).click(),
-    ])
-
-    // 卡片操作：复制
-    await page.locator('button[title="复制配置"]').first().click()
-    const copyDialog = topDialog(page)
-    await expect(copyDialog.getByText('复制自定义报表配置')).toBeVisible()
-    await Promise.all([
-      waitForApiOk(page, 'POST', '/api/v1/reports/custom/configs'),
-      copyDialog.getByRole('button', { name: '保存' }).click(),
-    ])
-
-    // 导入模板弹窗（仅验证可打开/可取消）
-    await page.getByRole('button', { name: '导入模板' }).first().click()
-    const importDialog = topDialog(page)
-    await expect(importDialog.getByText('导入自定义报表配置')).toBeVisible()
-    await importDialog.getByRole('button', { name: '取消' }).click()
-
-    // 删除配置（删除两次，尽量清理刚创建/复制的配置）
-    const deleteButtons = page.locator('button[title="删除配置"]')
-    const deleteCount = await deleteButtons.count()
-    for (let i = 0; i < Math.min(2, deleteCount); i++) {
-      await deleteButtons.nth(0).click()
-      const deleteConfigDialog = topDialog(page)
-      await Promise.all([
-        page.waitForResponse((resp) => resp.request().method() === 'DELETE' && resp.url().includes('/api/v1/reports/custom/configs/') && resp.status() >= 200 && resp.status() < 300),
-        deleteConfigDialog.getByRole('button', { name: '删除' }).click(),
-      ])
-    }
 
     expect(pageErrors, `存在未捕获页面异常：${pageErrors.map((e) => e.message).join('; ')}`).toHaveLength(0)
   })

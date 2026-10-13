@@ -1,15 +1,12 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { StatisticsReports } from '@/features/reports/components/StatisticsReports'
-import { CustomReports } from '@/features/reports/components/CustomReports'
 import { Permission } from '@/lib/types/auth.types'
 
 const mockUsePermission = jest.fn()
 const mockUseStatistics = jest.fn()
 const mockUseKPIData = jest.fn()
 const mockUseRankings = jest.fn()
-const mockUseCustomReportConfigs = jest.fn()
-const mockUseReportTemplates = jest.fn()
 
 jest.mock('react-hot-toast', () => ({
   __esModule: true,
@@ -29,14 +26,6 @@ jest.mock('@/features/reports/hooks/useReports', () => ({
   useRankings: (...args: unknown[]) => mockUseRankings(...args),
   useGenerateStatisticsReport: () => ({ isPending: false, mutateAsync: jest.fn() }),
   useExportToExcel: () => ({ isPending: false, mutateAsync: jest.fn() }),
-
-  useCustomReportConfigs: (...args: unknown[]) => mockUseCustomReportConfigs(...args),
-  useReportTemplates: (...args: unknown[]) => mockUseReportTemplates(...args),
-  useGenerateFromConfig: () => ({ isPending: false, mutateAsync: jest.fn() }),
-  useDeleteCustomReportConfig: () => ({ isPending: false, mutateAsync: jest.fn() }),
-
-  useCreateCustomReportConfig: () => ({ isPending: false, mutateAsync: jest.fn() }),
-  useUpdateCustomReportConfig: () => ({ isPending: false, mutateAsync: jest.fn() }),
 }))
 
 jest.mock('@/components/atoms', () => ({
@@ -61,35 +50,6 @@ jest.mock('@/components/atoms', () => ({
       {children}
     </button>
   ),
-  ConfirmModal: ({
-    isOpen,
-    title,
-    confirmText = '确认',
-    cancelText = '取消',
-    confirmDisabled,
-    onConfirm,
-    onClose,
-  }: {
-    isOpen: boolean
-    title: string
-    confirmText?: string
-    cancelText?: string
-    confirmDisabled?: boolean
-    onConfirm: () => void
-    onClose: () => void
-  }) =>
-    isOpen ? (
-      <div>
-        <div>{title}</div>
-        <button type="button" disabled={confirmDisabled} onClick={onConfirm}>
-          {confirmText}
-        </button>
-        <button type="button" onClick={onClose}>
-          {cancelText}
-        </button>
-      </div>
-    ) : null,
-
   CardSkeleton: () => <div />,
   ChartSkeleton: () => <div />,
   TableSkeleton: () => <div />,
@@ -102,11 +62,6 @@ jest.mock('@/components/atoms', () => ({
   SmartDateRangePicker: () => <button type="button">日期范围选择器</button>,
   BarChartComponent: () => <div />,
   PieChartComponent: () => <div />,
-
-  SimpleModal: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
-    open ? <div>{children}</div> : null,
-  SimpleInput: (props: React.ComponentProps<'input'>) => <input {...props} />,
-  TextArea: (props: React.ComponentProps<'textarea'>) => <textarea {...props} />,
 }))
 
 jest.mock('@/components/ui/select', () => ({
@@ -123,18 +78,6 @@ jest.mock('@/components/ui/select', () => ({
       {placeholder}
     </button>
   ),
-  Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectTrigger: ({
-    children,
-    ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button type="button" {...props}>
-      {children}
-    </button>
-  ),
-  SelectValue: ({ placeholder }: { placeholder?: string }) => <>{placeholder ?? null}</>,
-  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SelectItem: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
 describe('reports 权限控制（P1）', () => {
@@ -159,26 +102,6 @@ describe('reports 权限控制（P1）', () => {
       error: null,
       refetch: jest.fn(),
     })
-    mockUseCustomReportConfigs.mockReturnValue({
-      data: [
-        {
-          id: 'c1',
-          name: '配置1',
-          description: 'desc',
-          type: 'custom',
-          isDefault: false,
-          lastUsed: null,
-          usageCount: 0,
-        },
-      ],
-      isLoading: false,
-      error: null,
-    })
-    mockUseReportTemplates.mockReturnValue({
-      data: [],
-      isLoading: false,
-      error: null,
-    })
   })
 
   it('无 reports:create 时，统计页不应展示“生成统计报表/导出数据”按钮', () => {
@@ -191,18 +114,5 @@ describe('reports 权限控制（P1）', () => {
     expect(
       screen.getByText('当前账号暂无生成/导出报表权限，请联系管理员开通。')
     ).toBeInTheDocument()
-  })
-
-  it('无 reports:update/delete 时，自定义报表不应展示“编辑/删除”等操作按钮', () => {
-    mockUsePermission.mockReturnValue(false)
-
-    render(<CustomReports searchText="" />)
-
-    expect(screen.queryByRole('button', { name: '创建自定义报表' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '导入模板' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '生成报表' })).not.toBeInTheDocument()
-    expect(screen.queryByTitle('复制配置')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('编辑配置')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('删除配置')).not.toBeInTheDocument()
   })
 })

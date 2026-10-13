@@ -168,6 +168,40 @@ func (s *Service) DeleteReport(ctx context.Context, id int) error {
 	return s.db.WithContext(ctx).Delete(&Report{}, id).Error
 }
 
+// DeleteReportsByType 批量删除指定类型的全部报表，供报表页「全部删除」使用。
+//
+// 只接受显式类型：空类型会把其它页签（趋势/统计）的报表一并清掉，因此直接拒绝；
+// 只负责删行；落盘文件由处理器层按 OutputDir 边界回收（见 removeReportFiles）。
+func (s *Service) DeleteReportsByType(ctx context.Context, reportType string) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("database not initialized")
+	}
+	reportType = strings.TrimSpace(reportType)
+	if reportType == "" {
+		return 0, fmt.Errorf("report type is required")
+	}
+	result := s.db.WithContext(ctx).Where("report_type = ?", reportType).Delete(&Report{})
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return result.RowsAffected, nil
+}
+
+// ListReportFilesByType 返回某一类报表的 id 与落盘文件映射，供批量删除后回收文件。
+func (s *Service) ListReportFilesByType(ctx context.Context, reportType string) ([]Report, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+	var rows []Report
+	if err := s.db.WithContext(ctx).Model(&Report{}).
+		Select("id", "file_paths").
+		Where("report_type = ?", strings.TrimSpace(reportType)).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 // BackfillInspectionReportDeviceIDs 为历史巡检报告回填 device_filters.device_ids（幂等，单条 UPDATE 原子完成）。
 //
 // 执行历史导出的报告曾只落库 inspection_ids（更早为 task_id），报表列表「参数范围」
@@ -232,7 +266,7 @@ func (s *Service) ListTemplates(ctx context.Context, reportType *string) ([]Repo
 // ListTemplateLibrary 返回可复用的报表模板库条目。
 //
 // 自定义报表配置与报表模板共用 report_templates 表，靠 report_type 区分：
-// report_type='custom' 是用户在「自定义报表」页创建的个人配置，由 ListCustomConfigs 负责；
+// report_type='custom' 是已下线的「自定义报表」页遗留的个人配置（接口已移除，历史行仍可能存在）；
 // 其余类型才属于可供复用的模板库。
 // 不做这层区分时，模板库会把用户自己的配置当成「可导入的模板」列出来，
 // 使「导入模板」退化为「复制自己的配置」。

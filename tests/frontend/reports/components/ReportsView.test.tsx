@@ -72,12 +72,6 @@ jest.mock('@/features/reports/components/StatisticsReports', () => ({
   ),
 }))
 
-jest.mock('@/features/reports/components/CustomReports', () => ({
-  CustomReports: ({ searchText }: { searchText: string }) => (
-    <div>自定义报表内容:{searchText}</div>
-  ),
-}))
-
 describe('ReportsView', () => {
   beforeEach(() => {
     mockSearchParams = new URLSearchParams()
@@ -116,11 +110,11 @@ describe('ReportsView', () => {
 
   it('点击标签后同步更新 URL 查询参数，避免刷新后回到旧标签', async () => {
     const user = userEvent.setup()
-    mockSearchParams = new URLSearchParams('tab=custom')
+    mockSearchParams = new URLSearchParams('tab=statistics')
 
     render(<ReportsView />)
 
-    expect(screen.getByText('自定义报表内容:')).toBeInTheDocument()
+    expect(screen.getByText('统计报表内容:')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '巡检报告' }))
 
@@ -128,7 +122,7 @@ describe('ReportsView', () => {
     expect(mockReplace).toHaveBeenCalledWith('/reports?tab=inspection')
   })
 
-  it('应将搜索状态下沉到子页面，便于四个子页复用统一工具栏', async () => {
+  it('应将搜索状态下沉到子页面，便于三个子页复用统一工具栏', async () => {
     const user = userEvent.setup()
     render(<ReportsView />)
 

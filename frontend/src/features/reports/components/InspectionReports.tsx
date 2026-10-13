@@ -3,7 +3,6 @@ import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import { formatDateYMD, formatTimeHMS } from '@/utils/formatters'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { useRouter } from 'next/navigation'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { 
@@ -19,7 +18,6 @@ import {
   AlertCircle,
   Play,
   CheckCircle,
-  Settings,
   RefreshCw
 } from 'lucide-react'
 import {
@@ -43,7 +41,8 @@ import {
 import {
   useReports,
   useDeleteReport,
-  useGenerateInspectionReport
+  useGenerateInspectionReport,
+  useDeleteReportsByType
 } from '../hooks/useReports'
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 import { downloadWithAuth } from '@/utils/download'
@@ -53,7 +52,7 @@ import { ReportPreviewModal } from './ReportPreviewModal'
 import { ReportEditModal } from './ReportEditModal'
 import { InspectionCompareModal } from './InspectionCompareModal'
 import { InspectionProblemAnalysisModal } from './InspectionProblemAnalysisModal'
-import { ReportsToolbar } from './shared/ReportsToolbar'
+import { ReportsToolbar, type ReportsToolbarAction } from './shared/ReportsToolbar'
 
 interface Props {
   searchText: string
@@ -64,7 +63,6 @@ export const InspectionReports: React.FC<Props> = ({
   searchText,
   onSearchTextChange = () => undefined,
 }) => {
-  const router = useRouter()
   const canCreate = usePermission(Permission.REPORTS_CREATE)
   const canUpdate = usePermission(Permission.REPORTS_UPDATE)
   const canDelete = usePermission(Permission.REPORTS_DELETE)
@@ -75,6 +73,7 @@ export const InspectionReports: React.FC<Props> = ({
   const [compareOpen, setCompareOpen] = useState(false)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState(false)
 
   // 分页：后端分页从 1 开始，默认 20 条/页
   const [page, setPage] = useState(1)
@@ -96,6 +95,7 @@ export const InspectionReports: React.FC<Props> = ({
   })
   const deleteReport = useDeleteReport()
   const generateReport = useGenerateInspectionReport()
+  const deleteAllReports = useDeleteReportsByType()
 
   const reports = reportsData?.reports || []
   const total = useMemo(() => {
@@ -181,11 +181,6 @@ export const InspectionReports: React.FC<Props> = ({
       bg: 'bg-red-100 dark:bg-red-900/20',
       text: 'text-red-600 dark:text-red-400',
       icon: 'text-red-600 dark:text-red-400'
-    },
-    purple: {
-      bg: 'bg-purple-100 dark:bg-purple-900/20',
-      text: 'text-purple-600 dark:text-purple-400',
-      icon: 'text-purple-600 dark:text-purple-400'
     }
   }
 
@@ -225,6 +220,34 @@ export const InspectionReports: React.FC<Props> = ({
     } catch (error) {
       console.error('Delete report failed:', error)
     }
+  }
+
+  // 「全部删除」按 report_type 清空整类巡检报告，不受状态/格式筛选影响：
+  // 筛选只是列表视图，用户点的是“全部”；确认文案必须把这个范围说清楚，
+  // 否则在筛了“失败”的视图里点全部删除，会把“已完成”的报告一起删掉而不自知。
+  const handleDeleteAllReports = async () => {
+    try {
+      await deleteAllReports.mutateAsync('inspection')
+      setDeleteAllConfirm(false)
+      setPage(1)
+    } catch (error) {
+      console.error('Delete all reports failed:', error)
+    }
+  }
+
+  const deleteAllDescription =
+    statusFilter === 'all'
+      ? `确定要删除全部 ${total} 份巡检报告吗？此操作无法撤销。`
+      : '确定要删除全部巡检报告吗？包括当前状态筛选之外的报告，此操作无法撤销。'
+
+  const deleteAllAction: ReportsToolbarAction = {
+    key: 'delete-all-reports',
+    label: '全部删除',
+    icon: <Trash2 className="mr-2 h-4 w-4" />,
+    variant: 'destructive',
+    disabled: total === 0 || deleteAllReports.isPending,
+    loading: deleteAllReports.isPending,
+    onClick: () => setDeleteAllConfirm(true),
   }
 
   const getStatusIcon = (status: string) => {
@@ -494,6 +517,7 @@ export const InspectionReports: React.FC<Props> = ({
             disabled: Boolean(isLoading),
             onClick: () => void refetch(),
           },
+          ...(canDelete ? [deleteAllAction] : []),
         ]}
         primaryActions={
           canCreate
@@ -510,7 +534,7 @@ export const InspectionReports: React.FC<Props> = ({
       />
 
       {/* 快速操作卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           {
             title: '快速日报',
@@ -534,14 +558,6 @@ export const InspectionReports: React.FC<Props> = ({
             icon: AlertCircle,
             color: 'red',
             action: () => setAnalysisOpen(true),
-            disabled: false
-          },
-          {
-            title: '自定义配置',
-            description: '配置报告模板',
-            icon: Settings,
-            color: 'purple',
-            action: () => router.push('/reports?tab=custom'),
             disabled: false
           }
         ].map((item) => {
@@ -674,6 +690,20 @@ export const InspectionReports: React.FC<Props> = ({
           onClose={() => setAnalysisOpen(false)}
         />
       )}
+
+      {/* 全部删除确认弹窗：破坏性操作必须二次确认 */}
+      <ConfirmModal
+        isOpen={deleteAllConfirm}
+        onClose={() => setDeleteAllConfirm(false)}
+        onConfirm={handleDeleteAllReports}
+        title="删除全部巡检报告"
+        description={deleteAllDescription}
+        confirmText="确认全部删除"
+        cancelText="取消"
+        variant="destructive"
+        confirmDisabled={deleteAllReports.isPending}
+        cancelDisabled={deleteAllReports.isPending}
+      />
 
       {/* 删除确认弹窗 */}
       <ConfirmModal

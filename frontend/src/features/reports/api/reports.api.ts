@@ -1,16 +1,12 @@
 import { api } from '@/lib/api-client'
 import {
   AggregatedPerformanceStats,
-  ChartConfig,
   ComplianceIssue,
-  CustomReportConfig,
   DevicePerformanceStats,
   DeviceReportResult,
   ExecutionTrendData,
-  FilterConfig,
   InspectionReportData,
   IssueData,
-  LayoutConfig,
   PeriodStats,
   PerformanceMetrics,
   PerformanceMetricsResult,
@@ -24,7 +20,6 @@ import {
   ReportStyles,
   ReportTemplate,
   StatisticsData,
-  TableConfig,
   TemplateSection,
   TrendAlertData,
   TrendAlertsMeta,
@@ -52,10 +47,6 @@ const TREND_ALERT_STATUS = ['active', 'acknowledged', 'resolved'] as const
 const DEVICE_STATUSES = ['online', 'offline', 'warning', 'error'] as const
 const TEMPLATE_TYPES = ['standard', 'custom'] as const
 const TEMPLATE_SECTION_TYPES = ['header', 'summary', 'chart', 'table', 'text', 'recommendations'] as const
-const CHART_TYPES = ['line', 'bar', 'pie', 'area', 'scatter', 'heatmap'] as const
-const TABLE_COLUMN_TYPES = ['text', 'number', 'date', 'status', 'progress'] as const
-const FILTER_TYPES = ['date', 'select', 'multiselect', 'text', 'number'] as const
-const LAYOUT_SECTION_TYPES = ['chart', 'table', 'text', 'metric'] as const
 const REPORT_THEMES = ['light', 'dark', 'professional'] as const
 const COMPLIANCE_STATUS = ['open', 'in_progress', 'resolved'] as const
 
@@ -161,25 +152,6 @@ const toNestedNumberRecord = (value: unknown): Record<string, Record<string, num
     acc[key] = toNumberRecord(val)
     return acc
   }, {})
-}
-
-const toPrimitiveValue = (value: unknown): string | number | boolean | undefined => {
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return value
-  }
-  return undefined
-}
-
-const toPrimitiveArray = (value: unknown): Array<string | number> | undefined => {
-  if (!Array.isArray(value)) {
-    return undefined
-  }
-
-  const normalized = value
-    .map(item => (typeof item === 'string' || typeof item === 'number' ? item : undefined))
-    .filter((item): item is string | number => item !== undefined)
-
-  return normalized.length > 0 ? normalized : undefined
 }
 
 const toEnumValue = <T extends readonly string[]>(value: unknown, allowed: T, fallback: T[number]): T[number] =>
@@ -468,6 +440,24 @@ export async function deleteReport(id: string): Promise<boolean> {
     return response.success === undefined ? true : response.success
   } catch (error) {
     console.error('删除报表失败:', error)
+    throw error
+  }
+}
+
+// 按类型清空报表（巡检报告页「全部删除」）。后端只接受显式类型，并回报实际删除条数。
+export async function deleteReportsByType(type: string): Promise<number> {
+  try {
+    const response = await api.delete<ReportsApiEnvelope<{ deleted?: unknown }>>(
+      `/reports?type=${encodeURIComponent(type)}`
+    )
+
+    if (response.success === false) {
+      throw new Error(response.message || '批量删除报表失败')
+    }
+
+    return toNumberSafe(response.data?.deleted)
+  } catch (error) {
+    console.error('批量删除报表失败:', error)
     throw error
   }
 }
@@ -957,131 +947,6 @@ export async function getRankings(params: {
       return getDefaultRankings()
     }
     throw error instanceof Error ? error : new Error('获取排名数据失败')
-  }
-}
-
-// ==================== 自定义报表 API ====================
-
-// 获取自定义报表配置列表
-export async function fetchCustomReportConfigs(): Promise<CustomReportConfig[]> {
-  try {
-    const response = await api.get<ReportsApiEnvelope<unknown>>('/reports/custom/configs')
-
-    if (response.success && response.data) {
-      const items = Array.isArray(response.data) ? response.data : []
-      return items.map(transformCustomReportConfigData)
-    } else {
-      throw new Error('获取自定义报表配置列表失败')
-    }
-  } catch (error) {
-    console.error('获取自定义报表配置列表失败:', error)
-    if (shouldUseMockFallback()) {
-      return getDefaultCustomReportConfigs()
-    }
-    throw error instanceof Error ? error : new Error('获取自定义报表配置列表失败')
-  }
-}
-
-// 获取自定义报表配置详情
-export async function fetchCustomReportConfig(id: string): Promise<CustomReportConfig | null> {
-  try {
-    const response = await api.get<ReportsApiEnvelope<unknown>>(`/reports/custom/configs/${id}`)
-
-    if (response.success && response.data) {
-      return transformCustomReportConfigData(response.data)
-    } else {
-      throw new Error('获取自定义报表配置详情失败')
-    }
-  } catch (error) {
-    console.error('获取自定义报表配置详情失败:', error)
-    if (shouldUseMockFallback()) {
-      return null
-    }
-    throw error instanceof Error ? error : new Error('获取自定义报表配置详情失败')
-  }
-}
-
-// 创建自定义报表配置
-export async function createCustomReportConfig(configData: Omit<CustomReportConfig, 'id'>): Promise<CustomReportConfig> {
-  try {
-    const response = await api.post<ReportsApiEnvelope<unknown>>('/reports/custom/configs', configData)
-
-    if (response.success && response.data) {
-      return transformCustomReportConfigData(response.data)
-    } else {
-      throw new Error('创建自定义报表配置失败')
-    }
-  } catch (error) {
-    console.error('创建自定义报表配置失败:', error)
-    throw error
-  }
-}
-
-// 更新自定义报表配置
-export async function updateCustomReportConfig(id: string, updates: Partial<CustomReportConfig>): Promise<CustomReportConfig> {
-  try {
-    const response = await api.put<ReportsApiEnvelope<unknown>>(`/reports/custom/configs/${id}`, updates)
-
-    if (response.success && response.data) {
-      return transformCustomReportConfigData(response.data)
-    } else {
-      throw new Error('更新自定义报表配置失败')
-    }
-  } catch (error) {
-    console.error('更新自定义报表配置失败:', error)
-    throw error
-  }
-}
-
-// 删除自定义报表配置
-export async function deleteCustomReportConfig(id: string): Promise<boolean> {
-  try {
-    const response = await api.delete<ReportsApiEnvelope<unknown>>(`/reports/custom/configs/${id}`)
-    return response.success !== false
-  } catch (error) {
-    console.error('删除自定义报表配置失败:', error)
-    throw error
-  }
-}
-
-// 使用配置生成报表
-export async function generateFromConfig(configId: string, parameters?: ReportParameters, format?: string): Promise<Report> {
-  try {
-    const response = await api.post<{success: boolean, data: unknown, message?: string}>(
-      `/reports/custom/configs/${configId}/generate`,
-      {
-        parameters,
-        format: format || 'pdf',
-      }
-    )
-
-    if (response.success && response.data) {
-      return transformReportData(response.data)
-    } else {
-      throw new Error('使用配置生成报表失败')
-    }
-  } catch (error) {
-    console.error('使用配置生成报表失败:', error)
-    throw error
-  }
-}
-
-// 预览自定义报表配置
-export async function previewCustomReportConfig(configId: string, parameters?: ReportParameters): Promise<CustomReportConfig | null> {
-  try {
-    const response = await api.post<ReportsApiEnvelope<unknown>>(`/reports/custom/configs/${configId}/preview`, { parameters })
-
-    if (response.success && response.data) {
-      return transformCustomReportConfigData(response.data)
-    } else {
-      throw new Error('预览自定义报表配置失败')
-    }
-  } catch (error) {
-    console.error('预览自定义报表配置失败:', error)
-    if (shouldUseMockFallback()) {
-      return null
-    }
-    throw error instanceof Error ? error : new Error('预览自定义报表配置失败')
   }
 }
 
@@ -1730,100 +1595,6 @@ const transformTemplateSection = (input: unknown): TemplateSection => {
   }
 }
 
-const transformChartConfig = (input: unknown): ChartConfig => {
-  const data = toRecord(input)
-  return {
-    id: toStringSafe(data.id, generateTempId()),
-    type: toEnumValue(data.type, CHART_TYPES, 'line'),
-    title: toStringSafe(data.title),
-    dataSource: toStringSafe(data.dataSource ?? data['data_source']),
-    xAxis: toStringSafe(data.xAxis ?? data['x_axis']),
-    yAxis: toStringSafe(data.yAxis ?? data['y_axis']),
-    series: toStringArray(data.series),
-    filters: isRecord(data.filters) ? data.filters : undefined,
-    options: isRecord(data.options) ? data.options : undefined,
-  }
-}
-
-const transformTableColumn = (input: unknown): TableConfig['columns'][number] => {
-  const data = toRecord(input)
-  return {
-    key: toStringSafe(data.key),
-    title: toStringSafe(data.title),
-    type: toEnumValue(data.type, TABLE_COLUMN_TYPES, 'text'),
-    width: toOptionalNumber(data.width),
-    sortable: toBooleanSafe(data.sortable, false),
-    filterable: toBooleanSafe(data.filterable, false),
-    format: toOptionalString(data.format),
-  }
-}
-
-const transformTableConfig = (input: unknown): TableConfig => {
-  const data = toRecord(input)
-  return {
-    id: toStringSafe(data.id, generateTempId()),
-    title: toStringSafe(data.title),
-    dataSource: toStringSafe(data.dataSource ?? data['data_source']),
-    columns: mapRecordArray(data.columns, transformTableColumn),
-    filters: isRecord(data.filters) ? data.filters : undefined,
-    pagination: toBooleanSafe(data.pagination, false),
-    exportable: toBooleanSafe(data.exportable, false),
-  }
-}
-
-const transformFilterConfig = (input: unknown): FilterConfig => {
-  const data = toRecord(input)
-  const optionsValue = Array.isArray(data.options)
-    ? data.options
-        .map(option => {
-          const record = toRecord(option)
-          const optionValue = toPrimitiveValue(record.value)
-          if (optionValue === undefined) {
-            return undefined
-          }
-          return {
-            label: toStringSafe(record.label),
-            value: optionValue,
-          }
-        })
-        .filter((item): item is { label: string; value: string | number | boolean } => item !== undefined)
-    : undefined
-
-  const defaultValueRaw = data.defaultValue
-  const defaultValue =
-    defaultValueRaw === null
-      ? null
-      : toPrimitiveValue(defaultValueRaw) ?? toPrimitiveArray(defaultValueRaw)
-
-  return {
-    id: toStringSafe(data.id, generateTempId()),
-    type: toEnumValue(data.type, FILTER_TYPES, 'text'),
-    field: toStringSafe(data.field),
-    label: toStringSafe(data.label),
-    options: optionsValue,
-    defaultValue,
-  }
-}
-
-const transformLayoutSection = (input: unknown): LayoutConfig['sections'][number] => {
-  const data = toRecord(input)
-  return {
-    id: toStringSafe(data.id, generateTempId()),
-    type: toEnumValue(data.type, LAYOUT_SECTION_TYPES, 'text'),
-    span: toNumberSafe(data.span, 1),
-    height: toOptionalNumber(data.height),
-    order: toNumberSafe(data.order),
-  }
-}
-
-const transformLayoutConfig = (input: unknown): LayoutConfig => {
-  const data = toRecord(input)
-  return {
-    columns: toNumberSafe(data.columns, 1),
-    sections: mapRecordArray(data.sections, transformLayoutSection),
-  }
-}
-
 const transformReportStyles = (input: unknown): ReportStyles => {
   const data = toRecord(input)
   const colors = toRecord(data.colors)
@@ -1859,27 +1630,6 @@ const transformReportTemplateData = (input: unknown): ReportTemplate => {
     type: toEnumValue(data.type, TEMPLATE_TYPES, 'custom'),
     sections: mapRecordArray(data.sections, transformTemplateSection),
     styles: transformReportStyles(data.styles),
-  }
-}
-
-const transformCustomReportConfigData = (input: unknown): CustomReportConfig => {
-  const data = toRecord(input)
-  return {
-    id: toStringSafe(data.id, generateTempId()),
-    name: toStringSafe(data.name, '未命名方案'),
-    type: toStringSafe(data.type, 'custom'),
-    description: toStringSafe(data.description),
-    isDefault: toBooleanSafe(data.isDefault ?? data['is_default'], false),
-    isActive: toBooleanSafe(data.isActive ?? data['is_active'], true),
-    createdBy: toOptionalString(data.createdBy ?? data['created_by']),
-    createdAt: toOptionalString(data.createdAt ?? data['created_at']),
-    updatedAt: toOptionalString(data.updatedAt ?? data['updated_at']),
-    template: transformReportTemplateData(data.template),
-    parameters: transformReportParameters(data.parameters),
-    charts: mapRecordArray(data.charts, transformChartConfig),
-    tables: mapRecordArray(data.tables, transformTableConfig),
-    filters: mapRecordArray(data.filters, transformFilterConfig),
-    layout: transformLayoutConfig(data.layout),
   }
 }
 
@@ -2016,10 +1766,6 @@ function getDefaultRankings(): UnknownRecord {
   }
 }
 
-function getDefaultCustomReportConfigs(): CustomReportConfig[] {
-  return []
-}
-
 function getDefaultReportTemplates(): ReportTemplate[] {
   return []
 }
@@ -2050,6 +1796,7 @@ export const reportsApi = {
   createReport,
   updateReport,
   deleteReport,
+  deleteReportsByType,
   generateReport,
   rerenderReportPdf,
   downloadReport,
@@ -2075,16 +1822,6 @@ export const statisticsApi = {
   generateStatisticsReport,
   getKPIData,
   getRankings
-}
-
-export const customReportsApi = {
-  fetchCustomReportConfigs,
-  fetchCustomReportConfig,
-  createCustomReportConfig,
-  updateCustomReportConfig,
-  deleteCustomReportConfig,
-  generateFromConfig,
-  previewCustomReportConfig
 }
 
 export const reportTemplatesApi = {

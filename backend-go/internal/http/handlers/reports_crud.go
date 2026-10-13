@@ -3,6 +3,8 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -333,15 +335,92 @@ func (h ReportsHandler) DeleteReport(c echo.Context) error {
 		return err
 	}
 
-	if err := h.Service.DeleteReport(c.Request().Context(), reportID); err != nil {
+	// 先取一次行拿到 file_paths，删行成功后再回收落盘文件；不存在的报表按 404 处理。
+	report, err := h.Service.GetReport(c.Request().Context(), reportID)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "Report not found")
 		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load report")
+	}
+
+	if err := h.Service.DeleteReport(c.Request().Context(), reportID); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete report")
 	}
+	h.removeReportFiles(c, report)
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
 		"message": "Report deleted successfully",
 	})
+}
+
+// DeleteReportsByType 处理 DELETE /reports?type=<report_type>：一次清空某一类报表。
+//
+// type 为必填且必须是已知类型。normalizeReportType 会把未知值兜底成 "custom"，
+// 若直接沿用，`type=foo` 就会悄悄删掉所有 custom 报表，因此这里对兜底结果显式拒绝。
+func (h ReportsHandler) DeleteReportsByType(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "reports:delete"); err != nil {
+		return err
+	}
+
+	rawType := strings.ToLower(strings.TrimSpace(firstNonEmpty(c.QueryParam("type"), c.QueryParam("report_type"))))
+	if rawType == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "type is required")
+	}
+	reportType := normalizeReportType(rawType)
+	if reportType == "custom" && rawType != "custom" {
+		return echo.NewHTTPError(http.StatusBadRequest, "unknown report type")
+	}
+
+	// 先列出待删行的 file_paths，删行成功后再回收文件：行先删，保证不会留下指向已删文件的记录。
+	rows, err := h.Service.ListReportFilesByType(c.Request().Context(), reportType)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load reports")
+	}
+	deleted, err := h.Service.DeleteReportsByType(c.Request().Context(), reportType)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete reports")
+	}
+	for _, row := range rows {
+		h.removeReportFiles(c, row)
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{
+			"deleted": deleted,
+		},
+	})
+}
+
+// removeReportFiles 回收报表落盘文件（尽力而为）。
+//
+// file_paths 存的是生成器写下的绝对路径；这里只删位于 OutputDir 之内的文件，
+// 与下载接口同一条目录边界守卫，防止脏数据把删除指到目录之外。
+// 单个文件删不掉不影响删除请求本身（行已删，最坏只是留下孤儿文件），只记日志。
+func (h ReportsHandler) removeReportFiles(c echo.Context, report reports.Report) {
+	root := strings.TrimSpace(h.OutputDir)
+	if root == "" {
+		return
+	}
+	root = filepath.Clean(root)
+
+	for _, value := range decodeJSONMap(report.FilePaths) {
+		raw, ok := value.(string)
+		if !ok || strings.TrimSpace(raw) == "" {
+			continue
+		}
+		full := filepath.Clean(raw)
+		rel, err := filepath.Rel(root, full)
+		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
+			c.Logger().Warnf("remove report file failed: report=%d path=%s err=%v", report.ID, full, err)
+		}
+	}
 }

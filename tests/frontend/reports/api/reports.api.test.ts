@@ -2,7 +2,6 @@ import {
   generateInspectionReport,
   generateTrendReport,
   generateStatisticsReport,
-  generateFromConfig,
   rerenderReportPdf,
   getKPIData,
   getRankings,
@@ -193,27 +192,6 @@ describe('reports.api 请求体适配', () => {
       rankingType: 'performance',
       topN: 5,
       includeBottom: false,
-    })
-  })
-
-  it('generateFromConfig 应传递 format 字段到后端', async () => {
-    mockPost.mockResolvedValue({ success: true, data: {} })
-
-    await generateFromConfig(
-      '12',
-      {
-        dateRange: { startDate: '2026-02-01', endDate: '2026-02-02' },
-      } as any,
-      'pdf'
-    )
-
-    const [endpoint, body] = mockPost.mock.calls[0]
-    expect(endpoint).toBe('/reports/custom/configs/12/generate')
-    expect(body).toMatchObject({
-      parameters: {
-        dateRange: { startDate: '2026-02-01', endDate: '2026-02-02' },
-      },
-      format: 'pdf',
     })
   })
 

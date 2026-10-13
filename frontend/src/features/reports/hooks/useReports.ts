@@ -7,7 +7,6 @@ import {
   inspectionReportsApi,
   trendAnalysisApi,
   statisticsApi,
-  customReportsApi,
   reportTemplatesApi,
   exportApi,
   reportStatsApi
@@ -15,7 +14,6 @@ import {
 import {
   Report,
   ReportParameters,
-  CustomReportConfig
 } from '../types'
 
 // 报表管理Hooks
@@ -85,6 +83,21 @@ export const useDeleteReport = () => {
     },
     onError: (error: Error) => {
       toast.error(error.message || '删除报表失败')
+    },
+  })
+}
+
+export const useDeleteReportsByType = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: reportsApi.deleteReportsByType,
+    onSuccess: (deleted) => {
+      queryClient.invalidateQueries({ queryKey: ['reports', 'list'] })
+      toast.success(`已删除 ${deleted} 份报告`)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '批量删除报表失败')
     },
   })
 }
@@ -278,101 +291,6 @@ export const useRankings = (params: {
     queryFn: () => statisticsApi.getRankings(params),
     enabled: !!(params.startDate && params.endDate),
     staleTime: 10 * 60 * 1000,
-  })
-}
-
-// 自定义报表Hooks
-export const useCustomReportConfigs = () => {
-  return useQuery({
-    queryKey: ['reports', 'custom', 'configs'],
-    queryFn: customReportsApi.fetchCustomReportConfigs,
-    staleTime: 10 * 60 * 1000,
-  })
-}
-
-export const useCustomReportConfig = (id: string) => {
-  return useQuery({
-    queryKey: ['reports', 'custom', 'config', id],
-    queryFn: () => customReportsApi.fetchCustomReportConfig(id),
-    enabled: !!id,
-  })
-}
-
-export const useCreateCustomReportConfig = () => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: customReportsApi.createCustomReportConfig,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reports', 'custom', 'configs'] })
-      toast.success('自定义报表配置创建成功')
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || '创建配置失败')
-    },
-  })
-}
-
-export const useUpdateCustomReportConfig = () => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<CustomReportConfig> }) =>
-      customReportsApi.updateCustomReportConfig(id, updates),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['reports', 'custom', 'configs'] })
-      queryClient.invalidateQueries({ queryKey: ['reports', 'custom', 'config', variables.id] })
-      toast.success('自定义报表配置已更新')
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || '更新配置失败')
-    },
-  })
-}
-
-export const useDeleteCustomReportConfig = () => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (id: string) => customReportsApi.deleteCustomReportConfig(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reports', 'custom', 'configs'] })
-      toast.success('自定义报表配置已删除')
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || '删除配置失败')
-    },
-  })
-}
-
-export const useGenerateFromConfig = () => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: ({ configId, parameters, format }: {
-      configId: string
-      parameters?: ReportParameters
-      format?: string
-    }) => customReportsApi.generateFromConfig(configId, parameters, format),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reports', 'list'] })
-      toast.success('自定义报表生成成功')
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || '生成报表失败')
-    },
-  })
-}
-
-export const usePreviewCustomReportConfig = (
-  configId: string | null | undefined,
-  parameters?: ReportParameters
-) => {
-  return useQuery({
-    queryKey: ['reports', 'custom', 'configs', configId, 'preview', parameters],
-    queryFn: () => customReportsApi.previewCustomReportConfig(String(configId), parameters),
-    enabled: !!configId,
-    staleTime: 30 * 1000, // 30秒缓存
   })
 }
 

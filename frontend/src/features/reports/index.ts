@@ -5,7 +5,6 @@ export { InspectionReportModal } from './components/InspectionReportModal'
 export { ReportPreviewModal } from './components/ReportPreviewModal'
 export { TrendAnalysis } from './components/TrendAnalysis'
 export { StatisticsReports } from './components/StatisticsReports'
-export { CustomReports } from './components/CustomReports'
 
 // API服务导出
 export {
@@ -13,7 +12,6 @@ export {
   inspectionReportsApi,
   trendAnalysisApi,
   statisticsApi,
-  customReportsApi,
   reportTemplatesApi,
   exportApi,
   reportStatsApi
@@ -26,6 +24,7 @@ export {
   useCreateReport,
   useUpdateReport,
   useDeleteReport,
+  useDeleteReportsByType,
   useGenerateReport,
   useCloneReport,
   useInspectionReportData,
@@ -39,10 +38,6 @@ export {
   useGenerateStatisticsReport,
   useKPIData,
   useRankings,
-  useCustomReportConfigs,
-  useCustomReportConfig,
-  useCreateCustomReportConfig,
-  useGenerateFromConfig,
   useReportTemplates,
   useReportTemplate,
   useCreateReportTemplate,
@@ -77,15 +72,8 @@ export type {
   AggregatedPerformanceStats,
   ComplianceIssue,
   PeriodStats,
-  CustomReportConfig,
   ReportTemplate,
   TemplateSection,
-  ChartConfig,
-  TableConfig,
-  TableColumnConfig,
-  FilterConfig,
-  LayoutConfig,
-  LayoutSection,
   ReportStyles,
   ReportsApiResponse,
   ReportStats

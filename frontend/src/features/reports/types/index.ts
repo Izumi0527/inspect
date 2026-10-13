@@ -339,28 +339,6 @@ export interface PeriodStats {
   resolvedIssueCount: number
 }
 
-// 自定义报表配置
-export interface CustomReportConfig {
-  id: string
-  name: string
-  description: string
-  // 后端补充字段（非所有接口都会返回）
-  type?: 'template' | 'custom' | string
-  isDefault?: boolean
-  isActive?: boolean
-  createdBy?: string
-  createdAt?: string
-  updatedAt?: string
-  lastUsed?: string
-  usageCount?: number
-  template: ReportTemplate
-  parameters: ReportParameters
-  charts: ChartConfig[]
-  tables: TableConfig[]
-  filters: FilterConfig[]
-  layout: LayoutConfig
-}
-
 // 报表模板
 export interface ReportTemplate {
   id: string
@@ -383,69 +361,6 @@ export interface TemplateSection {
   content: TemplateSectionContent
   order: number
   visible: boolean
-}
-
-// 图表配置
-export interface ChartConfig {
-  id: string
-  type: 'line' | 'bar' | 'pie' | 'area' | 'scatter' | 'heatmap'
-  title: string
-  dataSource: string
-  xAxis: string
-  yAxis: string
-  series: string[]
-  filters?: Record<string, unknown>
-  options?: Record<string, unknown>
-}
-
-// 表格配置
-export interface TableConfig {
-  id: string
-  title: string
-  dataSource: string
-  columns: TableColumnConfig[]
-  filters?: Record<string, unknown>
-  pagination?: boolean
-  exportable?: boolean
-}
-
-// 表格列配置
-export interface TableColumnConfig {
-  key: string
-  title: string
-  type: 'text' | 'number' | 'date' | 'status' | 'progress'
-  width?: number
-  sortable?: boolean
-  filterable?: boolean
-  format?: string
-}
-
-// 过滤器配置
-export interface FilterConfig {
-  id: string
-  type: 'date' | 'select' | 'multiselect' | 'text' | 'number'
-  field: string
-  label: string
-  options?: Array<{
-    label: string
-    value: string | number | boolean
-  }>
-  defaultValue?: string | number | boolean | Array<string | number> | null
-}
-
-// 布局配置
-export interface LayoutConfig {
-  columns: number
-  sections: LayoutSection[]
-}
-
-// 布局节
-export interface LayoutSection {
-  id: string
-  type: 'chart' | 'table' | 'text' | 'metric'
-  span: number
-  height?: number
-  order: number
 }
 
 // 报表样式

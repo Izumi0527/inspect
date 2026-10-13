@@ -97,9 +97,19 @@ func (h ReportsHandler) CreateTemplate(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid config")
 	}
 
-	reportType := "custom"
+	// report_type 必填：模板库查询会排除 custom（已下线自定义报表页的遗留类型），
+	// 若此处继续默认 custom，不带类型创建的模板会静默从模板库里消失。
+	// normalizeReportType 会把未知值兜底成 custom，同样显式拒绝。
+	rawType := ""
 	if req.ReportType != nil {
-		reportType = normalizeReportType(*req.ReportType)
+		rawType = strings.ToLower(strings.TrimSpace(*req.ReportType))
+	}
+	if rawType == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "report_type is required")
+	}
+	reportType := normalizeReportType(rawType)
+	if reportType == "custom" && rawType != "custom" {
+		return echo.NewHTTPError(http.StatusBadRequest, "unknown report_type")
 	}
 
 	template := reports.ReportTemplate{
