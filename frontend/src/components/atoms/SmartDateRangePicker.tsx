@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight, X, Zap } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { getQuickDateRange, type QuickDateRangeKey } from '@/utils/quickDateRanges'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,8 @@ const QUICK_PRESETS = [
   { key: 'month' as const, label: '本月' },
 ]
 
-const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
+// 日历以周一为首列，与「本周」的周一起算口径一致
+const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 const PANEL_WIDTH = 288 // w-72
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -93,10 +95,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = React.memo(({
   const today = todayDateStr()
 
   const cells = useMemo<(number | null)[]>(() => {
-    const firstDayOfWeek = new Date(year, month, 1).getDay()
+    // 周一为首列：把 getDay() 的「周日=0」左移一天再取模，得到 1 号前需要留空的格数
+    // （1 号是周一时为 0，是周日时为 6）。
+    const leadingBlanks = (new Date(year, month, 1).getDay() + 6) % 7
     const daysInMonth = new Date(year, month + 1, 0).getDate()
     const result: (number | null)[] = []
-    for (let i = 0; i < firstDayOfWeek; i++) result.push(null)
+    for (let i = 0; i < leadingBlanks; i++) result.push(null)
     for (let d = 1; d <= daysInMonth; d++) result.push(d)
     return result
   }, [year, month])
@@ -239,6 +243,13 @@ export const SmartDateRangePicker: React.FC<SmartDateRangePickerProps> = ({
     if (open) { setOpen(false) } else { handleOpen() }
   }, [open, handleOpen])
 
+  // 清除：由触发按钮旁的清除键与面板底部的「清除日期」共用
+  const handleClear = useCallback(() => {
+    onClear?.()
+    setSelecting('start')
+    setOpen(false)
+  }, [onClear])
+
   // 面板打开时：scroll/resize 同步更新 fixed 位置
   useEffect(() => {
     if (!open) return
@@ -315,6 +326,19 @@ export const SmartDateRangePicker: React.FC<SmartDateRangePickerProps> = ({
     setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
   }, [])
 
+
+  // 快捷区间选中态：判断口径与父级应用的口径来自同一个共享实现
+  // （@/utils/quickDateRanges），所以高亮结果与页面上的数据区间必然一致。
+  const activePreset = useMemo<QuickDateRangeKey | null>(() => {
+    if (!startDate || !endDate) return null
+    return (
+      QUICK_PRESETS.find(({ key }) => {
+        const preset = getQuickDateRange(key)
+        return preset.startDate === startDate && preset.endDate === endDate
+      })?.key ?? null
+    )
+  }, [startDate, endDate])
+
   // 状态栏文案
   const statusInfo = useMemo(() => {
     if (!startDate && !endDate) return { text: '请点击日历选择开始日期', variant: 'hint' as const }
@@ -361,16 +385,25 @@ export const SmartDateRangePicker: React.FC<SmartDateRangePickerProps> = ({
               <span className="text-xs font-medium text-muted-foreground">快速选择</span>
             </div>
             <div className="flex gap-1.5">
-              {QUICK_PRESETS.map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => handleQuickSelect(key)}
-                  className="flex-1 h-7 rounded-lg text-xs font-medium border border-border/50 bg-muted/20 text-muted-foreground hover:border-primary/50 hover:bg-primary/8 hover:text-primary active:scale-95 transition-all duration-150 cursor-pointer focus:outline-none"
-                >
-                  {label}
-                </button>
-              ))}
+              {QUICK_PRESETS.map(({ key, label }) => {
+                const isActive = activePreset === key
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleQuickSelect(key)}
+                    aria-pressed={isActive}
+                    className={cn(
+                      'flex-1 h-7 rounded-lg text-xs border transition-all duration-150 cursor-pointer focus:outline-none active:scale-95',
+                      isActive
+                        ? 'border-primary/60 bg-primary/12 text-primary font-semibold'
+                        : 'border-border/50 bg-muted/20 text-muted-foreground font-medium hover:border-primary/50 hover:bg-primary/8 hover:text-primary'
+                    )}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
@@ -408,7 +441,7 @@ export const SmartDateRangePicker: React.FC<SmartDateRangePickerProps> = ({
         <div className="px-3 pb-3 pt-1 flex justify-end border-t border-border/20">
           <button
             type="button"
-            onClick={() => { onClear?.(); setSelecting('start'); setOpen(false) }}
+            onClick={handleClear}
             className="flex items-center gap-1.5 h-7 px-3 rounded-md text-xs text-muted-foreground border border-border/40 hover:border-destructive/50 hover:text-destructive hover:bg-destructive/6 transition-all duration-150 cursor-pointer focus:outline-none"
           >
             <X className="w-3 h-3" />
@@ -423,7 +456,11 @@ export const SmartDateRangePicker: React.FC<SmartDateRangePickerProps> = ({
 
   return (
     <div className={cn('relative', className)}>
-      {/* 触发按钮 */}
+      {/*
+        触发按钮内部不放任何可交互元素：<button> 里再嵌 role="button" 属于 nested-interactive，
+        读屏器会把两个控件读成一个，键盘也无法单独聚焦清除键。
+        清除键改为同级的独立按钮，用绝对定位叠在触发按钮右侧（有日期时触发按钮预留 pr-8）。
+      */}
       <button
         ref={triggerRef}
         type="button"
@@ -433,7 +470,8 @@ export const SmartDateRangePicker: React.FC<SmartDateRangePickerProps> = ({
         aria-expanded={open}
         aria-label="日期范围选择器"
         className={cn(
-          'flex items-center gap-2 h-9 px-3 rounded-lg',
+          'flex items-center gap-2 h-9 pl-3 rounded-lg',
+          hasAnyDate ? 'pr-8' : 'pr-3',
           'border border-border bg-card text-sm',
           'transition-all duration-200 cursor-pointer',
           'hover:border-primary/60 hover:bg-card/90',
@@ -461,24 +499,25 @@ export const SmartDateRangePicker: React.FC<SmartDateRangePickerProps> = ({
           <span className="text-sm text-muted-foreground">{placeholder}</span>
         )}
 
-        {hasAnyDate ? (
-          <span
-            role="button"
-            tabIndex={0}
-            aria-label="清除日期范围"
-            onClick={(e) => { e.stopPropagation(); onClear?.(); setOpen(false) }}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onClear?.(); setOpen(false) } }}
-            className="ml-0.5 p-0.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/40"
-          >
-            <X className="w-3.5 h-3.5" />
-          </span>
-        ) : (
+        {!hasAnyDate && (
           <ChevronDown className={cn(
             'w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ml-0.5',
             open && 'rotate-180'
           )} />
         )}
       </button>
+
+      {hasAnyDate && (
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label="清除日期范围"
+          onClick={handleClear}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors duration-150 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
 
       {/* 面板通过 Portal 挂载到 document.body，避免任何 overflow 裁切 */}
       {typeof document !== 'undefined' && createPortal(panel, document.body)}

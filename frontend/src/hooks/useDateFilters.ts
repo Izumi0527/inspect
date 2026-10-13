@@ -1,12 +1,14 @@
-import { formatDateYMD } from '@/utils/formatters'
+import { getQuickDateRange, type QuickDateRangeKey } from '@/utils/quickDateRanges'
 
 /**
  * 日期快捷筛选 Hook
  *
- * 提供常用的日期范围快捷选择功能。
+ * 区间的具体口径统一在 @/utils/quickDateRanges 定义（周一起算、截止到今天），
+ * 这里只做 Hook 形态的包装，保证与 SmartDateRangePicker 快捷按钮、
+ * 统计报表页用的是同一套语义。
  */
 
-export type DateRange = 'today' | 'week' | 'month' | 'custom'
+export type DateRange = QuickDateRangeKey | 'custom'
 
 export interface DateFilterResult {
   startDate: string
@@ -14,59 +16,17 @@ export interface DateFilterResult {
 }
 
 export const useDateFilters = () => {
-  const getToday = (): DateFilterResult => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const dateStr = formatDateYMD(today)
-
-    return {
-      startDate: dateStr,
-      endDate: dateStr,
-    }
-  }
-
-  const getThisWeek = (): DateFilterResult => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const weekStart = new Date(today)
-    weekStart.setDate(today.getDate() - today.getDay())
-
-    return {
-      startDate: formatDateYMD(weekStart),
-      endDate: formatDateYMD(today),
-    }
-  }
-
-  const getThisMonth = (): DateFilterResult => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
-
-    return {
-      startDate: formatDateYMD(monthStart),
-      endDate: formatDateYMD(today),
-    }
-  }
-
   const getDateRange = (range: DateRange): DateFilterResult => {
-    switch (range) {
-      case 'today':
-        return getToday()
-      case 'week':
-        return getThisWeek()
-      case 'month':
-        return getThisMonth()
-      default:
-        return { startDate: '', endDate: '' }
+    if (range === 'custom') {
+      return { startDate: '', endDate: '' }
     }
+    return getQuickDateRange(range)
   }
 
   return {
     getDateRange,
-    getToday,
-    getThisWeek,
-    getThisMonth,
+    getToday: (): DateFilterResult => getQuickDateRange('today'),
+    getThisWeek: (): DateFilterResult => getQuickDateRange('week'),
+    getThisMonth: (): DateFilterResult => getQuickDateRange('month'),
   }
 }
