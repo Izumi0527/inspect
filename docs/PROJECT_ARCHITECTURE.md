@@ -247,7 +247,7 @@ Echo 服务统一配置：
 | `EscalationHandler` | `/escalation` | 告警升级策略 |
 | `DevicesHandler` | `/devices` | 设备 CRUD、扫描、探测、SNMP 扩展指标 |
 | `SchedulerHandler` | `/scheduler` | 调度任务管理 |
-| `ReportsHandler` | `/reports` | 报表中心、统计报表、自定义报表、文件导出 |
+| `ReportsHandler` | `/reports` | 报表中心、统计报表、文件导出 |
 | `InspectionHandler` | `/inspection` | 巡检模板、策略、执行、统计分析、巡检报告 |
 | `SettingsHandler` | `/settings` | 系统设置、用户、角色、审计、通知等 |
 | `DashboardHandler` | `/dashboard` | 首页概览、通知和快捷状态 |
@@ -364,7 +364,7 @@ frontend/src/features/
 | `inspection` | 巡检模板、巡检策略、执行记录、统计分析 |
 | `monitoring` | 监控中心、设备状态、指标图表、监控报告导出 |
 | `alerts` | 告警列表、告警详情、过滤、处理 |
-| `reports` | 报表分析、统计报表、趋势分析、自定义报表 |
+| `reports` | 报表分析、统计报表、趋势分析 |
 | `settings` | 用户、角色、权限、安全、通知、备份、监控配置 |
 | `logs` | 日志列表、日志采集、日志导出、日志配置 |
 | `traffic-analysis` | 网络流量分析视图 |
