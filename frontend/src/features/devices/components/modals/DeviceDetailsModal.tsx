@@ -304,16 +304,10 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
     setHostKeyResetLoading(true)
     try {
       await resetDeviceSSHHostKey(device.id)
-      // 重置后本地置为未记录态：下一次采集会重新走 TOFU 首次信任并记录新指纹。
-      setHostKeyInfo({
-        device_id: device.id,
-        fingerprint: null,
-        algorithm: null,
-        created_at: null,
-        updated_at: null,
-      })
+      // 重置后本地置为空列表：下一次连接会重新走 TOFU 首次信任并记录新指纹。
+      setHostKeyInfo({ device_id: device.id, records: [] })
       setHostKeyResetConfirming(false)
-      toast.success('已重置主机密钥指纹，下次采集将重新信任设备当前密钥')
+      toast.success('已重置主机密钥指纹，下次连接将重新信任设备当前密钥')
     } catch (error) {
       const message = error instanceof Error ? error.message : '重置主机密钥指纹失败'
       toast.error(message)
@@ -395,7 +389,7 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
           <div>
             <p className="text-sm font-semibold text-foreground/90">SSH 主机密钥指纹</p>
             <p className="text-xs text-muted-foreground">
-              日志采集首次 SSH 连接时记录（TOFU 首次信任）。设备指纹变化会拒绝连接，
+              各 SSH 连接首次信任（TOFU）时按算法各记录一条。设备指纹变化会拒绝连接，
               确认设备合法变更（如设备重置/更换）后可重置。
             </p>
           </div>
@@ -406,39 +400,41 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <InfoRow
-              label="指纹"
-              value={
-                hostKeyLoading ? (
-                  '加载中...'
-                ) : hostKeyInfo?.fingerprint ? (
-                  <span className="font-mono break-all">{hostKeyInfo.fingerprint}</span>
-                ) : (
-                  '尚未记录（首次连接时自动记录）'
-                )
-              }
-            />
-            <InfoRow
-              label="算法"
-              value={hostKeyLoading ? '加载中...' : (hostKeyInfo?.algorithm || '-')}
-            />
-            <InfoRow
-              label="记录时间"
-              value={
-                hostKeyLoading
-                  ? '加载中...'
-                  : hostKeyInfo?.created_at
-                    ? formatDate(hostKeyInfo.created_at, 'datetime')
-                    : '-'
-              }
-            />
-          </div>
+          {hostKeyLoading ? (
+            <div className="text-sm text-muted-foreground">加载中...</div>
+          ) : hostKeyInfo && hostKeyInfo.records.length > 0 ? (
+            <div className="space-y-2">
+              {hostKeyInfo.records.map((record) => (
+                <div
+                  key={record.algorithm}
+                  className="rounded-lg border border-border/70 bg-background/80 p-3"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <InfoRow label="算法" value={record.algorithm} />
+                    <InfoRow
+                      label="记录时间"
+                      value={record.created_at ? formatDate(record.created_at, 'datetime') : '-'}
+                    />
+                    <div className="sm:col-span-2">
+                      <InfoRow
+                        label="指纹"
+                        value={<span className="font-mono break-all">{record.fingerprint}</span>}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">
+              尚未记录（首次 SSH 连接时自动记录）
+            </div>
+          )}
 
           {hostKeyResetConfirming ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 space-y-3">
               <p className="text-sm text-amber-800">
-                重置后，下一次采集将信任设备当前出示的密钥。请先确认设备变更为合法操作
+                重置后，下一次连接将信任设备当前出示的密钥。请先确认设备变更为合法操作
                 （如设备重置/更换），否则可能引入中间人风险。
               </p>
               <div className="flex items-center gap-2">

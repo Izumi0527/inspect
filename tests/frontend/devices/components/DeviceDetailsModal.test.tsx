@@ -118,10 +118,7 @@ describe("DeviceDetailsModal", () => {
     // 默认设备尚未记录主机密钥指纹（绝大多数用例不关心该区块）。
     (fetchDeviceSSHHostKey as jest.Mock).mockResolvedValue({
       device_id: 1,
-      fingerprint: null,
-      algorithm: null,
-      created_at: null,
-      updated_at: null,
+      records: [],
     });
   });
 
@@ -411,17 +408,27 @@ describe("DeviceDetailsModal", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("应展示已记录的 SSH 主机密钥指纹（TOFU）", async () => {
+  it("应展示已记录的 SSH 主机密钥指纹（TOFU，支持多算法）", async () => {
     (fetchDevicePerformance as jest.Mock).mockResolvedValue({
       current: {},
       history: [],
     });
     (fetchDeviceSSHHostKey as jest.Mock).mockResolvedValue({
       device_id: 21,
-      fingerprint: "SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg",
-      algorithm: "ssh-rsa",
-      created_at: "2026-09-29T00:49:19+08:00",
-      updated_at: "2026-09-29T00:49:19+08:00",
+      records: [
+        {
+          fingerprint: "SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg",
+          algorithm: "ssh-rsa",
+          created_at: "2026-09-29T00:49:19+08:00",
+          updated_at: "2026-09-29T00:49:19+08:00",
+        },
+        {
+          fingerprint: "SHA256:abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+          algorithm: "ecdsa-sha2-nistp256",
+          created_at: "2026-10-15T01:09:20+08:00",
+          updated_at: "2026-10-15T01:09:20+08:00",
+        },
+      ],
     });
 
     render(
@@ -448,6 +455,10 @@ describe("DeviceDetailsModal", () => {
       screen.getByText("SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg"),
     ).toBeInTheDocument();
     expect(screen.getByText("ssh-rsa")).toBeInTheDocument();
+    expect(
+      screen.getByText("SHA256:abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ecdsa-sha2-nistp256")).toBeInTheDocument();
   });
 
   it("重置指纹需二次确认，确认后刷新为尚未记录", async () => {
@@ -457,10 +468,14 @@ describe("DeviceDetailsModal", () => {
     });
     (fetchDeviceSSHHostKey as jest.Mock).mockResolvedValue({
       device_id: 21,
-      fingerprint: "SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg",
-      algorithm: "ssh-rsa",
-      created_at: "2026-09-29T00:49:19+08:00",
-      updated_at: "2026-09-29T00:49:19+08:00",
+      records: [
+        {
+          fingerprint: "SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg",
+          algorithm: "ssh-rsa",
+          created_at: "2026-09-29T00:49:19+08:00",
+          updated_at: "2026-09-29T00:49:19+08:00",
+        },
+      ],
     });
     (resetDeviceSSHHostKey as jest.Mock).mockResolvedValue({
       device_id: 21,
@@ -492,7 +507,7 @@ describe("DeviceDetailsModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "重置指纹" }));
     expect(
-      screen.getByText(/下一次采集将信任设备当前出示的密钥/),
+      screen.getByText(/下一次连接将信任设备当前出示的密钥/),
     ).toBeInTheDocument();
     expect(resetDeviceSSHHostKey).not.toHaveBeenCalled();
 

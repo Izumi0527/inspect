@@ -1121,40 +1121,56 @@ export async function fetchDevicePerformance(
   throw new Error("获取设备性能数据失败：响应格式不正确");
 }
 
-// SSH 主机密钥指纹（TOFU 首次信任）：日志采集首次 SSH 连接时记录，
-// 指纹变化会拒绝连接；确认设备密钥合法变更（设备重置/更换）后可重置，
-// 重置后下一次采集重新记录设备出示的密钥。
-export interface DeviceSSHHostKeyInfo {
-  device_id: number;
-  fingerprint: string | null;
-  algorithm: string | null;
+// SSH 主机密钥指纹（TOFU 首次信任）：各 SSH 连接点首次连接某算法的主机密钥时
+// 记录，按算法各一条（同一设备可有多把不同算法的密钥）。指纹变化会拒绝连接；
+// 确认设备密钥合法变更（设备重置/更换）后可重置，重置后下一次连接重新记录。
+export interface DeviceSSHHostKeyRecord {
+  fingerprint: string;
+  algorithm: string;
   created_at: string | null;
   updated_at: string | null;
 }
+
+export interface DeviceSSHHostKeyInfo {
+  device_id: number;
+  records: DeviceSSHHostKeyRecord[];
+}
+
+const normalizeDeviceSSHHostKeyRecord = (
+  candidate: unknown,
+): DeviceSSHHostKeyRecord | null => {
+  if (!isObject(candidate)) {
+    return null;
+  }
+  if (typeof candidate.fingerprint !== "string" || typeof candidate.algorithm !== "string") {
+    return null;
+  }
+  return {
+    fingerprint: candidate.fingerprint,
+    algorithm: candidate.algorithm,
+    created_at:
+      typeof candidate.created_at === "string" ? candidate.created_at : null,
+    updated_at:
+      typeof candidate.updated_at === "string" ? candidate.updated_at : null,
+  };
+};
 
 const normalizeDeviceSSHHostKey = (
   deviceId: number,
   payload: unknown,
 ): DeviceSSHHostKeyInfo => {
   if (!isObject(payload)) {
-    return {
-      device_id: deviceId,
-      fingerprint: null,
-      algorithm: null,
-      created_at: null,
-      updated_at: null,
-    };
+    return { device_id: deviceId, records: [] };
   }
+  const records = Array.isArray(payload.records)
+    ? payload.records
+        .map(normalizeDeviceSSHHostKeyRecord)
+        .filter((record): record is DeviceSSHHostKeyRecord => record !== null)
+    : [];
   return {
     device_id:
       typeof payload.device_id === "number" ? payload.device_id : deviceId,
-    fingerprint:
-      typeof payload.fingerprint === "string" ? payload.fingerprint : null,
-    algorithm: typeof payload.algorithm === "string" ? payload.algorithm : null,
-    created_at:
-      typeof payload.created_at === "string" ? payload.created_at : null,
-    updated_at:
-      typeof payload.updated_at === "string" ? payload.updated_at : null,
+    records,
   };
 };
 
