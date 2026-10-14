@@ -50,8 +50,10 @@ func (h InspectionHandler) executeSSHCheck(ctx context.Context, result *inspecti
 
 	// 密钥认证设备从 tags 提取私钥（AfterFind 已解密）；密码与私钥由
 	// sshutil.BuildAuthMethods 统一组合，私钥优先、密码兜底。
+	// 带 DeviceID 的连接同走 TOFU 主机密钥校验（与日志采集/连接测试/配置备份同一实现）。
 	privateKey, keyPassphrase := device.SSHKeyCredentials()
 	target := cliconn.Target{
+		DeviceID:      device.ID,
 		Protocol:      "ssh",
 		Host:          device.IPAddress,
 		Port:          port,
@@ -61,7 +63,7 @@ func (h InspectionHandler) executeSSHCheck(ctx context.Context, result *inspecti
 		KeyPassphrase: keyPassphrase,
 	}
 
-	output, err := cliconn.RunCommand(ctx, target, command, 10*time.Second)
+	output, err := cliconn.RunCommand(ctx, target, command, h.HostKeys, 10*time.Second)
 	if err != nil {
 		result.Status = "fail"
 		msg := fmt.Sprintf("SSH 命令执行失败: %v", err)

@@ -82,9 +82,17 @@ func (h DevicesHandler) TestCLIConnection(c echo.Context) error {
 		}
 	}
 
+	// 编辑已存在设备时带 device_id：连接走 TOFU 主机密钥校验（与日志采集同一实现），
+	// 若弹窗里改 IP 指向了别的设备，指纹不匹配会拒绝并提示重置——防止凭据被伪装设备收割。
+	deviceID := 0
+	if req.DeviceID != nil {
+		deviceID = *req.DeviceID
+	}
+
 	result := cliconn.TestConnection(
 		c.Request().Context(),
 		cliconn.Target{
+			DeviceID:       deviceID,
 			Protocol:       protocol,
 			Host:           host,
 			Port:           port,
@@ -94,6 +102,7 @@ func (h DevicesHandler) TestCLIConnection(c echo.Context) error {
 			PrivateKey:     privateKey,
 			KeyPassphrase:  keyPassphrase,
 		},
+		h.HostKeys,
 		8*time.Second,
 	)
 

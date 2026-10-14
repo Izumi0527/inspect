@@ -278,6 +278,7 @@ func New() (*App, error) {
 		DeviceService:   deviceService,
 		ProbeService:    probeService,
 		SNMPCollector:   snmpCollector,
+		HostKeys:        sshutil.NewSSHHostKeyStore(dbConn, log),
 		WS:              wsManager,
 		Logger:          log,
 		ReportOutputDir: cfg.ReportsOutputDir,

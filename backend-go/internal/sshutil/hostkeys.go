@@ -190,7 +190,12 @@ func hostKeyMismatchError(deviceID int, record *DeviceSSHHostKey, current ssh.Pu
 // HostKeyCallbackFor 构造统一的 TOFU 主机密钥校验回调，供日志采集、连接测试、
 // 配置备份、巡检等全部 SSH 连接点使用。deviceID<=0（无设备上下文，如新增设备
 // 的连接测试）或 store 为 nil（未配置指纹存储）时退化为放行。
+// logger 为 nil 时回退用 store 自带的 logger，无 logger 的调用方（如配置备份）
+// 无需额外传递即可保留校验失败的诊断日志。
 func HostKeyCallbackFor(store *SSHHostKeyStore, deviceID int, logger *zap.Logger) ssh.HostKeyCallback {
+	if store != nil && logger == nil {
+		logger = store.logger
+	}
 	if store == nil || deviceID <= 0 {
 		if logger != nil && store == nil && deviceID > 0 {
 			logger.Warn("SSH主机密钥校验未启用（未配置指纹存储），连接不受中间人保护",

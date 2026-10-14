@@ -16,6 +16,9 @@ import (
 
 // Target CLI 连接测试目标参数（取自编辑弹窗当前填写值，不依赖已保存设备）。
 type Target struct {
+	// DeviceID 台账设备 ID；>0 时对该连接做 TOFU 主机密钥校验（编辑已存在设备），
+	// 0 表示无设备上下文（新增设备的连接测试），跳过校验。
+	DeviceID       int
 	Protocol       string // "ssh" | "telnet"
 	Host           string
 	Port           int
@@ -34,7 +37,9 @@ type Result struct {
 }
 
 // TestConnection 按协议验证 SSH/Telnet 登录连通性（仅建立连接并完成认证，不执行业务命令）。
-func TestConnection(ctx context.Context, target Target, timeout time.Duration) Result {
+// hostKeys 非 nil 且 target.DeviceID>0 时，SSH 连接走 TOFU 主机密钥校验——
+// 与日志采集/配置备份/巡检同一实现，防止凭据被伪装设备收割。
+func TestConnection(ctx context.Context, target Target, hostKeys *sshutil.SSHHostKeyStore, timeout time.Duration) Result {
 	if timeout <= 0 {
 		timeout = 8 * time.Second
 	}
@@ -43,7 +48,7 @@ func TestConnection(ctx context.Context, target Target, timeout time.Duration) R
 	var err error
 	switch strings.ToLower(strings.TrimSpace(target.Protocol)) {
 	case "ssh":
-		err = testSSH(ctx, target, timeout)
+		err = testSSH(ctx, target, hostKeys, timeout)
 	case "telnet":
 		err = testTelnet(ctx, target, timeout)
 	default:
@@ -58,9 +63,10 @@ func TestConnection(ctx context.Context, target Target, timeout time.Duration) R
 }
 
 // dialSSHClient 建立到目标的 SSH 客户端连接（含老旧网络设备算法兼容，
-// 认证方式由已配置凭据决定：私钥优先、密码兜底，见 sshutil.BuildAuthMethods）。
+// 认证方式由已配置凭据决定：私钥优先、密码兜底，见 sshutil.BuildAuthMethods；
+// 主机密钥校验见 sshutil.HostKeyCallbackFor）。
 // 调用方负责 Close 返回的 client（其 Close 会一并关闭底层 TCP 连接）。
-func dialSSHClient(ctx context.Context, target Target, timeout time.Duration) (*ssh.Client, error) {
+func dialSSHClient(ctx context.Context, target Target, hostKeys *sshutil.SSHHostKeyStore, timeout time.Duration) (*ssh.Client, error) {
 	auth, err := sshutil.BuildAuthMethods(target.Password, target.PrivateKey, target.KeyPassphrase)
 	if err != nil {
 		return nil, err
@@ -70,7 +76,7 @@ func dialSSHClient(ctx context.Context, target Target, timeout time.Duration) (*
 		Config:          sshutil.LegacyAlgorithms(),
 		User:            target.Username,
 		Auth:            auth,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // 网络设备无 CA 主机证书，不做主机校验
+		HostKeyCallback: sshutil.HostKeyCallbackFor(hostKeys, target.DeviceID, nil),
 		Timeout:         timeout,
 	}
 	address := fmt.Sprintf("%s:%d", target.Host, target.Port)
@@ -89,8 +95,8 @@ func dialSSHClient(ctx context.Context, target Target, timeout time.Duration) (*
 	return ssh.NewClient(clientConn, chans, reqs), nil
 }
 
-func testSSH(ctx context.Context, target Target, timeout time.Duration) error {
-	client, err := dialSSHClient(ctx, target, timeout)
+func testSSH(ctx context.Context, target Target, hostKeys *sshutil.SSHHostKeyStore, timeout time.Duration) error {
+	client, err := dialSSHClient(ctx, target, hostKeys, timeout)
 	if err != nil {
 		return err
 	}
@@ -105,8 +111,9 @@ func testSSH(ctx context.Context, target Target, timeout time.Duration) error {
 }
 
 // RunCommand 建立 SSH 连接并执行单条命令，返回合并输出（stdout+stderr）。
-// 仅供巡检按检查项配置采集只读命令输出使用；复用 LegacyAlgorithms 兼容老旧网络设备。
-func RunCommand(ctx context.Context, target Target, command string, timeout time.Duration) (string, error) {
+// 仅供巡检按检查项配置采集只读命令输出使用；复用 LegacyAlgorithms 兼容老旧网络设备，
+// hostKeys 与 target.DeviceID 提供时同走 TOFU 主机密钥校验。
+func RunCommand(ctx context.Context, target Target, command string, hostKeys *sshutil.SSHHostKeyStore, timeout time.Duration) (string, error) {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
@@ -114,7 +121,7 @@ func RunCommand(ctx context.Context, target Target, command string, timeout time
 		return "", fmt.Errorf("仅支持通过 SSH 执行命令，当前协议: %q", target.Protocol)
 	}
 
-	client, err := dialSSHClient(ctx, target, timeout)
+	client, err := dialSSHClient(ctx, target, hostKeys, timeout)
 	if err != nil {
 		return "", err
 	}

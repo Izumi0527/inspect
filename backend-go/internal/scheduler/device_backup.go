@@ -172,7 +172,9 @@ func (s *Service) backupSingleDevice(
 	if strings.EqualFold(target.CliProtocol, "telnet") {
 		output, err = executeTelnetCommand(ctx, target, command, timeout)
 	} else {
-		output, err = executeSSHCommand(ctx, target, command, timeout)
+		// 配置备份会用凭据登录设备，与日志采集同走 TOFU 主机密钥校验，
+		// 防止凭据被伪装设备收割（此前为空回调不做校验）。
+		output, err = executeSSHCommand(ctx, target, command, sshutil.NewSSHHostKeyStore(s.db, s.logger), timeout)
 	}
 	if err != nil {
 		item.Status = "failed"
@@ -212,7 +214,7 @@ func resolveBackupCommand(vendor string, deviceType string) string {
 	return "display current-configuration"
 }
 
-func executeSSHCommand(ctx context.Context, target deviceBackupTarget, command string, timeout time.Duration) (string, error) {
+func executeSSHCommand(ctx context.Context, target deviceBackupTarget, command string, hostKeys *sshutil.SSHHostKeyStore, timeout time.Duration) (string, error) {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
@@ -230,14 +232,10 @@ func executeSSHCommand(ctx context.Context, target deviceBackupTarget, command s
 		Config: sshutil.LegacyAlgorithms(),
 		User:   target.SshUsername,
 		Auth:   auth,
-		// TOFU(Trust On First Use): 记录主机密钥指纹但不阻断连接。
-		// 网络设备通常没有 CA 签发的主机证书，完整的 HostKey 验证不切实际，
-		// 但此处仍记录指纹以便事后审计和异常检测。
-		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-			// TODO: 后续可集成 known_hosts 持久化存储，实现真正的 TOFU 校验
-			return nil
-		},
-		Timeout: timeout,
+		// TOFU 主机密钥校验：首次连接记录指纹，之后同算法指纹不一致则拒绝
+		// （与日志采集/连接测试/巡检共用同一实现）。
+		HostKeyCallback: sshutil.HostKeyCallbackFor(hostKeys, target.ID, nil),
+		Timeout:         timeout,
 	}
 
 	address := fmt.Sprintf("%s:%d", target.IPAddress, target.SshPort)

@@ -10,17 +10,20 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
+	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
 type InspectionHandler struct {
-	Service         *inspection.Service
-	Reports         *reports.Service
-	Auth            PermissionService
-	Settings        *settings.Service // 用于获取用户信息
-	DeviceService   *devices.Service
-	ProbeService    *devices.ProbeService
-	SNMPCollector   SNMPMetricsCollector
+	Service       *inspection.Service
+	Reports       *reports.Service
+	Auth          PermissionService
+	Settings      *settings.Service // 用于获取用户信息
+	DeviceService *devices.Service
+	ProbeService  *devices.ProbeService
+	SNMPCollector SNMPMetricsCollector
+	// HostKeys 是 SSH 主机密钥指纹存储（TOFU），供 SSH 类型检查项做主机校验。
+	HostKeys        *sshutil.SSHHostKeyStore
 	WS              *ws.Manager
 	Logger          *zap.Logger
 	ReportOutputDir string
