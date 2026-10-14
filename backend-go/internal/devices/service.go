@@ -469,21 +469,23 @@ func pruneDeletedDevicesFromStrategies(db *gorm.DB) *gorm.DB {
 		`WHERE NOT EXISTS (SELECT 1 FROM devices AS d WHERE d.id::text = e.value #>> '{}'))`)
 }
 
-// monitoringTablesByDevice 是按 device_id 挂到设备上的监控表。device_metrics /
-// interface_metrics 是 TimescaleDB hypertable，外键级联挂不上；device_interfaces 也
-// 未建外键。三张表都要在删设备时显式清理，否则监控中心按 device_id 聚合会把已删设备捞回来。
-var monitoringTablesByDevice = []string{"device_metrics", "interface_metrics", "device_interfaces"}
+// monitoringTablesByDevice 是删设备时需要按 device_id 显式清理的关联表。
+// device_metrics / interface_metrics 是 TimescaleDB hypertable，外键级联挂不上；
+// device_interfaces 与 device_ssh_host_keys（SSH 主机密钥指纹）也未建外键。
+// 不清理会让监控中心按 device_id 聚合把已删设备捞回来，指纹则留下孤儿记录
+// 阻塞同 IP 重新导入设备后的首次信任语义。四张表都要在删设备时显式清理。
+var monitoringTablesByDevice = []string{"device_metrics", "interface_metrics", "device_interfaces", "device_ssh_host_keys"}
 
-// orphanMonitoringDeviceIDsSQL 找出监控表里引用、却已不在 devices 表中的 device_id。
-// device_id 是三张表索引的首列，UNION 走 index-only scan 后再反连 devices 小表；
+// orphanMonitoringDeviceIDsSQL 找出关联表里引用、却已不在 devices 表中的 device_id。
+// device_id 是各表索引的首列，UNION 走 index-only scan 后再反连 devices 小表；
 // device_interfaces.device_id 可空，先滤掉 NULL 免得 Scan 到 int 报错。
 // 无时间边界：每次启动都要读完两张 hypertable 的 device_id 索引全部条目，大部署上有可感知耗时。
 const orphanMonitoringDeviceIDsSQL = `SELECT referenced.device_id FROM (` +
-	`SELECT device_id FROM device_metrics UNION SELECT device_id FROM interface_metrics UNION SELECT device_id FROM device_interfaces` +
+	`SELECT device_id FROM device_metrics UNION SELECT device_id FROM interface_metrics UNION SELECT device_id FROM device_interfaces UNION SELECT device_id FROM device_ssh_host_keys` +
 	`) AS referenced WHERE referenced.device_id IS NOT NULL ` +
 	`AND NOT EXISTS (SELECT 1 FROM devices AS d WHERE d.id = referenced.device_id) ORDER BY referenced.device_id`
 
-// purgeDeviceMonitoringData 清掉一台设备在三张监控表里的全部行。删设备与启动清理共用。
+// purgeDeviceMonitoringData 清掉一台设备在监控表与指纹表里的全部行。删设备与启动清理共用。
 // 无时间边界、删的是该设备全部历史：采集很久的设备会让删设备事务持锁较长，与并发采集写入争用；
 // 这是「删设备事务一致」与「大表长事务」之间的取舍，当前取前者。
 func purgeDeviceMonitoringData(db *gorm.DB, deviceID int) error {

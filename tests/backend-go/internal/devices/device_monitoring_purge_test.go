@@ -10,7 +10,9 @@ import (
 )
 
 // device_metrics / interface_metrics / device_interfaces 都按 device_id 挂到设备上，
-// 三张表没有外键（前两张是 TimescaleDB hypertable，外键级联挂不上）。
+// 三张表没有外键（前两张是 TimescaleDB hypertable，外键级联挂不上）；
+// device_ssh_host_keys（SSH 主机密钥指纹）同样按 device_id 挂设备且无外键，
+// 设备删除后残留会变成孤儿指纹记录。四张表都要在删设备时显式清理。
 // 此前删设备只删 devices 行，指标与接口清单原地留存：监控中心按 device_id 聚合时
 // 把已删设备捞回来，"全部设备"视图出现幽灵曲线、统计卡被已删设备的样本污染。
 
@@ -18,15 +20,17 @@ const (
 	purgeDeviceMetricsPattern    = `DELETE FROM device_metrics WHERE device_id = \$1`
 	purgeInterfaceMetricsPattern = `DELETE FROM interface_metrics WHERE device_id = \$1`
 	purgeDeviceInterfacesPattern = `DELETE FROM device_interfaces WHERE device_id = \$1`
+	purgeSSHHostKeyPattern       = `DELETE FROM device_ssh_host_keys WHERE device_id = \$1`
 )
 
-// 启动清理先找出三张表里引用、却已不在 devices 表中的 device_id。
-const orphanMonitoringDeviceIDsPattern = `(?is)SELECT referenced\.device_id FROM \(SELECT device_id FROM device_metrics UNION SELECT device_id FROM interface_metrics UNION SELECT device_id FROM device_interfaces\) AS referenced WHERE referenced\.device_id IS NOT NULL AND NOT EXISTS \(SELECT 1 FROM devices AS d WHERE d\.id = referenced\.device_id\) ORDER BY referenced\.device_id`
+// 启动清理先找出四张表里引用、却已不在 devices 表中的 device_id。
+const orphanMonitoringDeviceIDsPattern = `(?is)SELECT referenced\.device_id FROM \(SELECT device_id FROM device_metrics UNION SELECT device_id FROM interface_metrics UNION SELECT device_id FROM device_interfaces UNION SELECT device_id FROM device_ssh_host_keys\) AS referenced WHERE referenced\.device_id IS NOT NULL AND NOT EXISTS \(SELECT 1 FROM devices AS d WHERE d\.id = referenced\.device_id\) ORDER BY referenced\.device_id`
 
 func expectPurgeDeviceMonitoringData(mock sqlmock.Sqlmock, deviceID int, rows int64) {
 	mock.ExpectExec(purgeDeviceMetricsPattern).WithArgs(deviceID).WillReturnResult(sqlmock.NewResult(0, rows))
 	mock.ExpectExec(purgeInterfaceMetricsPattern).WithArgs(deviceID).WillReturnResult(sqlmock.NewResult(0, rows))
 	mock.ExpectExec(purgeDeviceInterfacesPattern).WithArgs(deviceID).WillReturnResult(sqlmock.NewResult(0, rows))
+	mock.ExpectExec(purgeSSHHostKeyPattern).WithArgs(deviceID).WillReturnResult(sqlmock.NewResult(0, 1))
 }
 
 // 删设备必须在同一事务内清掉它的监控数据：DELETE devices 之后、摘策略引用之前。
