@@ -42,7 +42,7 @@ type logEntry struct {
 type SSHCollector struct {
 	Timeout time.Duration
 	// hostKeys 用于主机密钥 TOFU 校验，nil 时退化为不校验（仅测试场景）。
-	hostKeys *hostKeyStore
+	hostKeys *SSHHostKeyStore
 	logger   *zap.Logger
 }
 
@@ -50,7 +50,7 @@ type SSHCollector struct {
 func NewSSHCollector(db *gorm.DB, logger *zap.Logger) *SSHCollector {
 	collector := &SSHCollector{Timeout: 30 * time.Second}
 	if db != nil {
-		collector.hostKeys = &hostKeyStore{db: db, logger: logger}
+		collector.hostKeys = NewSSHHostKeyStore(db, logger)
 	}
 	if logger != nil {
 		collector.logger = logger
@@ -155,15 +155,59 @@ func (c *SSHCollector) hostKeyCallback(device deviceInfo) ssh.HostKeyCallback {
 	}
 }
 
-// hostKeyStore 基于 device_ssh_host_keys 表的主机密钥指纹存储。
-type hostKeyStore struct {
+// SSHHostKeyStore 基于 device_ssh_host_keys 表的主机密钥指纹存储。
+// 采集链路用 verifyOrRecord 做 TOFU 校验；管理面（设备详情页）用 Get/Delete
+// 查询与重置指纹，重置后下一次连接重新走首次信任。
+type SSHHostKeyStore struct {
 	db     *gorm.DB
 	logger *zap.Logger
 }
 
+// NewSSHHostKeyStore 构造主机密钥指纹存储。
+func NewSSHHostKeyStore(db *gorm.DB, logger *zap.Logger) *SSHHostKeyStore {
+	return &SSHHostKeyStore{db: db, logger: logger}
+}
+
+// Get 查询设备的主机密钥指纹记录；尚未记录时返回 (nil, nil)。
+func (s *SSHHostKeyStore) Get(ctx context.Context, deviceID int) (*DeviceSSHHostKey, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("主机密钥指纹存储未初始化")
+	}
+	var record DeviceSSHHostKey
+	err := s.db.WithContext(ctx).Where("device_id = ?", deviceID).Take(&record).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("查询主机密钥指纹失败: %w", err)
+	}
+	return &record, nil
+}
+
+// Delete 删除设备的主机密钥指纹记录（幂等）；返回是否实际删除了一行。
+// 仅在确认设备密钥合法变更（如设备重置/更换）后使用：删除后下一次 SSH
+// 连接将重新记录设备出示的密钥。
+func (s *SSHHostKeyStore) Delete(ctx context.Context, deviceID int) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, errors.New("主机密钥指纹存储未初始化")
+	}
+	result := s.db.WithContext(ctx).Where("device_id = ?", deviceID).Delete(&DeviceSSHHostKey{})
+	if result.Error != nil {
+		return false, fmt.Errorf("删除主机密钥指纹失败: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// hostKeyMismatchError 构造指纹不一致的拒绝错误：带上记录与当前值的算法，
+// 并给出可达的操作指引（设备详情页重置指纹），便于区分密钥轮换与算法协商变化。
+func hostKeyMismatchError(deviceID int, record *DeviceSSHHostKey, current ssh.PublicKey) error {
+	return fmt.Errorf("设备 %d 的 SSH 主机密钥指纹发生变化（记录: %s（%s），当前: %s（%s）），已拒绝连接；若确认为合法变更，请在设备详情页重置主机密钥指纹后重试",
+		deviceID, record.Fingerprint, record.Algorithm, ssh.FingerprintSHA256(current), current.Type())
+}
+
 // verifyOrRecord 校验设备主机密钥指纹：首次连接记录（TOFU），不一致则拒绝。
 // 若确认为合法变更（如设备重装系统），删除对应设备的指纹记录后下次连接会重新记录。
-func (s *hostKeyStore) verifyOrRecord(ctx context.Context, deviceID int, key ssh.PublicKey) error {
+func (s *SSHHostKeyStore) verifyOrRecord(ctx context.Context, deviceID int, key ssh.PublicKey) error {
 	if s == nil || s.db == nil {
 		return nil
 	}
@@ -185,7 +229,7 @@ func (s *hostKeyStore) verifyOrRecord(ctx context.Context, deviceID int, key ssh
 				if existing.Fingerprint == fingerprint {
 					return nil
 				}
-				return fmt.Errorf("设备 %d 的 SSH 主机密钥指纹与已有记录不一致", deviceID)
+				return hostKeyMismatchError(deviceID, &existing, key)
 			}
 			return fmt.Errorf("记录主机密钥指纹失败: %w", createErr)
 		}
@@ -199,8 +243,7 @@ func (s *hostKeyStore) verifyOrRecord(ctx context.Context, deviceID int, key ssh
 	case err != nil:
 		return fmt.Errorf("查询主机密钥指纹失败: %w", err)
 	case record.Fingerprint != fingerprint:
-		return fmt.Errorf("设备 %d 的 SSH 主机密钥指纹发生变化（记录: %s，当前: %s），已拒绝连接；若确认为合法变更请删除该设备的指纹记录后重试",
-			deviceID, record.Fingerprint, fingerprint)
+		return hostKeyMismatchError(deviceID, &record, key)
 	default:
 		return nil
 	}
