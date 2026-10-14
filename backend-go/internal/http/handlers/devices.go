@@ -5,6 +5,7 @@ import (
 
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	"github.com/your-org/inspect-system/backend-go/internal/inspection"
+	"github.com/your-org/inspect-system/backend-go/internal/logs"
 	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
 )
 
@@ -16,7 +17,9 @@ type DevicesHandler struct {
 	SNMPCollector *devices.SNMPCollector
 	Inspection    *inspection.Service
 	Metrics       *monitoring.MetricsWriter
-	Auth          PermissionService
+	// HostKeys 是 SSH 主机密钥指纹存储（TOFU 首次信任），供设备详情页查询与重置。
+	HostKeys *logs.SSHHostKeyStore
+	Auth     PermissionService
 }
 
 // Register 注册所有设备相关路由
@@ -56,4 +59,8 @@ func (h DevicesHandler) Register(group *echo.Group) {
 
 	// CLI 连接测试（device_cli_test.go）
 	group.POST("/devices/cli-test", h.TestCLIConnection)
+
+	// SSH 主机密钥指纹（device_crud.go）：TOFU 记录的查询与重置
+	group.GET("/devices/:device_id/ssh-host-key", h.GetDeviceSSHHostKey)
+	group.DELETE("/devices/:device_id/ssh-host-key", h.ResetDeviceSSHHostKey)
 }

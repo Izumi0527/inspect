@@ -251,6 +251,81 @@ func (h DevicesHandler) GetDeviceInspectionCount(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]int64{"count": count})
 }
 
+// GetDeviceSSHHostKey 返回设备已记录的 SSH 主机密钥指纹（TOFU 首次信任时由日志采集写入）。
+// 尚未记录时 fingerprint/algorithm/created_at/updated_at 均为 null（设备存在与有无记录是两回事）。
+func (h DevicesHandler) GetDeviceSSHHostKey(c echo.Context) error {
+	if h.Service == nil || h.HostKeys == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "device service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "devices:read"); err != nil {
+		return err
+	}
+
+	deviceID, err := strconv.Atoi(c.Param("device_id"))
+	if err != nil || deviceID <= 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid device_id")
+	}
+	if _, err := h.Service.GetDeviceRecord(c.Request().Context(), deviceID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "device not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query device")
+	}
+
+	record, err := h.HostKeys.Get(c.Request().Context(), deviceID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query ssh host key")
+	}
+	if record == nil {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"device_id":   deviceID,
+			"fingerprint": nil,
+			"algorithm":   nil,
+			"created_at":  nil,
+			"updated_at":  nil,
+		})
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"device_id":   deviceID,
+		"fingerprint": record.Fingerprint,
+		"algorithm":   record.Algorithm,
+		"created_at":  record.CreatedAt,
+		"updated_at":  record.UpdatedAt,
+	})
+}
+
+// ResetDeviceSSHHostKey 删除设备已记录的 SSH 主机密钥指纹（幂等），
+// 仅在确认设备密钥合法变更（如设备重置/更换）后使用：
+// 删除后下一次 SSH 连接将重新记录设备出示的密钥（重新走首次信任）。
+func (h DevicesHandler) ResetDeviceSSHHostKey(c echo.Context) error {
+	if h.Service == nil || h.HostKeys == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "device service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "devices:update"); err != nil {
+		return err
+	}
+
+	deviceID, err := strconv.Atoi(c.Param("device_id"))
+	if err != nil || deviceID <= 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid device_id")
+	}
+	if _, err := h.Service.GetDeviceRecord(c.Request().Context(), deviceID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "device not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query device")
+	}
+
+	deleted, err := h.HostKeys.Delete(c.Request().Context(), deviceID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to reset ssh host key")
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"device_id": deviceID,
+		"deleted":   deleted,
+	})
+}
+
 func buildDeviceUpdates(payload map[string]interface{}) map[string]interface{} {
 	updates := map[string]interface{}{}
 

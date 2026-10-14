@@ -190,6 +190,7 @@ func New() (*App, error) {
 		SNMPCollector: snmpCollector,
 		Inspection:    inspectionService,
 		Metrics:       metricsWriter,
+		HostKeys:      logs.NewSSHHostKeyStore(dbConn, log),
 		Auth:          authService,
 	}
 
