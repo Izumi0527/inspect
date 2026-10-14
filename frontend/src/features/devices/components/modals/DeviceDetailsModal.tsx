@@ -18,9 +18,13 @@ import {
   healthCheckDevice,
   fetchDevicePerformance,
   fetchDeviceSNMPExtensions,
+  fetchDeviceSSHHostKey,
+  resetDeviceSSHHostKey,
+  DeviceSSHHostKeyInfo,
 } from '../../api/devices.api'
 import { formatDate } from '@/utils/formatters'
 import { getDeviceTypeLabel } from '@/utils/deviceTypes'
+import toast from 'react-hot-toast'
 
 const PERFORMANCE_RANGES = [
   { value: '24h', label: '近24小时' },
@@ -157,6 +161,11 @@ interface DeviceDetailsModalProps {
    * 只读用户建议传 false，避免产生写库行为或触发后端权限拦截。
    */
   updateStatus?: boolean
+  /**
+   * 是否允许重置 SSH 主机密钥指纹（写操作，默认 true）。
+   * 只读用户建议传 false，按钮会禁用而非触发后端 403。
+   */
+  canResetHostKey?: boolean
 }
 
 const InfoRow = ({ label, value }: { label: string; value?: React.ReactNode }) => (
@@ -172,6 +181,7 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
   loading,
   onClose,
   updateStatus = true,
+  canResetHostKey = true,
 }) => {
   const [healthLoading, setHealthLoading] = React.useState(false)
   const [healthResult, setHealthResult] = React.useState<Record<string, unknown> | null>(null)
@@ -183,6 +193,11 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
   const [snmpExtensionsLoading, setSnmpExtensionsLoading] = React.useState(false)
   const [snmpExtensionsError, setSnmpExtensionsError] = React.useState<string | null>(null)
   const [snmpExtensionsData, setSnmpExtensionsData] = React.useState<DeviceSNMPExtensions | null>(null)
+  const [hostKeyLoading, setHostKeyLoading] = React.useState(false)
+  const [hostKeyError, setHostKeyError] = React.useState<string | null>(null)
+  const [hostKeyInfo, setHostKeyInfo] = React.useState<DeviceSSHHostKeyInfo | null>(null)
+  const [hostKeyResetConfirming, setHostKeyResetConfirming] = React.useState(false)
+  const [hostKeyResetLoading, setHostKeyResetLoading] = React.useState(false)
 
   React.useEffect(() => {
     if (!isOpen || !device) {
@@ -192,6 +207,9 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
       setPerformanceError(null)
       setSnmpExtensionsData(null)
       setSnmpExtensionsError(null)
+      setHostKeyInfo(null)
+      setHostKeyError(null)
+      setHostKeyResetConfirming(false)
       setTimeRange('24h')
       return
     }
@@ -201,6 +219,9 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
     setPerformanceError(null)
     setSnmpExtensionsLoading(true)
     setSnmpExtensionsError(null)
+    setHostKeyLoading(true)
+    setHostKeyError(null)
+    setHostKeyResetConfirming(false)
 
     fetchDevicePerformance(device.id, timeRange)
       .then((result) => {
@@ -238,6 +259,24 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
         }
       })
 
+    fetchDeviceSSHHostKey(device.id)
+      .then((result) => {
+        if (!cancelled) {
+          setHostKeyInfo(result)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : '加载主机密钥指纹失败'
+          setHostKeyError(message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setHostKeyLoading(false)
+        }
+      })
+
     return () => {
       cancelled = true
     }
@@ -256,6 +295,30 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
       setHealthError(message)
     } finally {
       setHealthLoading(false)
+    }
+  }
+
+  const handleResetHostKey = async () => {
+    if (!device) return
+
+    setHostKeyResetLoading(true)
+    try {
+      await resetDeviceSSHHostKey(device.id)
+      // 重置后本地置为未记录态：下一次采集会重新走 TOFU 首次信任并记录新指纹。
+      setHostKeyInfo({
+        device_id: device.id,
+        fingerprint: null,
+        algorithm: null,
+        created_at: null,
+        updated_at: null,
+      })
+      setHostKeyResetConfirming(false)
+      toast.success('已重置主机密钥指纹，下次采集将重新信任设备当前密钥')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '重置主机密钥指纹失败'
+      toast.error(message)
+    } finally {
+      setHostKeyResetLoading(false)
     }
   }
 
@@ -326,6 +389,85 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
             <InfoRow label="CLI 端口" value={cliInfo.port} />
             <InfoRow label={cliInfo.extraLabel} value={cliInfo.extraValue} />
           </div>
+        </div>
+
+        <div className="border rounded-xl p-4 bg-muted/40 space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-foreground/90">SSH 主机密钥指纹</p>
+            <p className="text-xs text-muted-foreground">
+              日志采集首次 SSH 连接时记录（TOFU 首次信任）。设备指纹变化会拒绝连接，
+              确认设备合法变更（如设备重置/更换）后可重置。
+            </p>
+          </div>
+
+          {hostKeyError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {hostKeyError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <InfoRow
+              label="指纹"
+              value={
+                hostKeyLoading ? (
+                  '加载中...'
+                ) : hostKeyInfo?.fingerprint ? (
+                  <span className="font-mono break-all">{hostKeyInfo.fingerprint}</span>
+                ) : (
+                  '尚未记录（首次连接时自动记录）'
+                )
+              }
+            />
+            <InfoRow
+              label="算法"
+              value={hostKeyLoading ? '加载中...' : (hostKeyInfo?.algorithm || '-')}
+            />
+            <InfoRow
+              label="记录时间"
+              value={
+                hostKeyLoading
+                  ? '加载中...'
+                  : hostKeyInfo?.created_at
+                    ? formatDate(hostKeyInfo.created_at, 'datetime')
+                    : '-'
+              }
+            />
+          </div>
+
+          {hostKeyResetConfirming ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 space-y-3">
+              <p className="text-sm text-amber-800">
+                重置后，下一次采集将信任设备当前出示的密钥。请先确认设备变更为合法操作
+                （如设备重置/更换），否则可能引入中间人风险。
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="destructive"
+                  onClick={handleResetHostKey}
+                  disabled={hostKeyResetLoading}
+                >
+                  {hostKeyResetLoading ? '重置中...' : '确认重置'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setHostKeyResetConfirming(false)}
+                  disabled={hostKeyResetLoading}
+                >
+                  取消
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => setHostKeyResetConfirming(true)}
+              disabled={!canResetHostKey || hostKeyLoading}
+              title={canResetHostKey ? undefined : '需要设备更新权限'}
+            >
+              重置指纹
+            </Button>
+          )}
         </div>
 
         <div className="border rounded-xl p-4 bg-muted/40 space-y-4">

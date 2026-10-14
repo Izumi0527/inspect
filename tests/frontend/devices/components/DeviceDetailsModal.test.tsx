@@ -11,12 +11,26 @@ import {
   healthCheckDevice,
   fetchDevicePerformance,
   fetchDeviceSNMPExtensions,
+  fetchDeviceSSHHostKey,
+  resetDeviceSSHHostKey,
 } from "@/features/devices/api/devices.api";
+
+const mockToastSuccess = jest.fn();
 
 jest.mock("@/features/devices/api/devices.api", () => ({
   healthCheckDevice: jest.fn(),
   fetchDevicePerformance: jest.fn(),
   fetchDeviceSNMPExtensions: jest.fn(),
+  fetchDeviceSSHHostKey: jest.fn(),
+  resetDeviceSSHHostKey: jest.fn(),
+}));
+
+jest.mock("react-hot-toast", () => ({
+  __esModule: true,
+  default: {
+    success: (...args: unknown[]) => mockToastSuccess(...args),
+    error: jest.fn(),
+  },
 }));
 
 jest.mock("@/components/atoms", () => ({
@@ -100,6 +114,14 @@ describe("DeviceDetailsModal", () => {
       timestamp: null,
       bgp_peers: [],
       optical_transceivers: [],
+    });
+    // 默认设备尚未记录主机密钥指纹（绝大多数用例不关心该区块）。
+    (fetchDeviceSSHHostKey as jest.Mock).mockResolvedValue({
+      device_id: 1,
+      fingerprint: null,
+      algorithm: null,
+      created_at: null,
+      updated_at: null,
     });
   });
 
@@ -387,5 +409,130 @@ describe("DeviceDetailsModal", () => {
     expect(
       within(currentCpuRow as HTMLElement).queryByText("0.0%"),
     ).not.toBeInTheDocument();
+  });
+
+  it("应展示已记录的 SSH 主机密钥指纹（TOFU）", async () => {
+    (fetchDevicePerformance as jest.Mock).mockResolvedValue({
+      current: {},
+      history: [],
+    });
+    (fetchDeviceSSHHostKey as jest.Mock).mockResolvedValue({
+      device_id: 21,
+      fingerprint: "SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg",
+      algorithm: "ssh-rsa",
+      created_at: "2026-09-29T00:49:19+08:00",
+      updated_at: "2026-09-29T00:49:19+08:00",
+    });
+
+    render(
+      <DeviceDetailsModal
+        isOpen={true}
+        loading={false}
+        onClose={jest.fn()}
+        device={{
+          id: 21,
+          name: "测试",
+          ip: "192.168.20.1",
+          device_type: "switch",
+          status: "online",
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(fetchDeviceSSHHostKey).toHaveBeenCalledWith(21);
+    });
+
+    expect(screen.getByText("SSH 主机密钥指纹")).toBeInTheDocument();
+    expect(
+      screen.getByText("SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ssh-rsa")).toBeInTheDocument();
+  });
+
+  it("重置指纹需二次确认，确认后刷新为尚未记录", async () => {
+    (fetchDevicePerformance as jest.Mock).mockResolvedValue({
+      current: {},
+      history: [],
+    });
+    (fetchDeviceSSHHostKey as jest.Mock).mockResolvedValue({
+      device_id: 21,
+      fingerprint: "SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg",
+      algorithm: "ssh-rsa",
+      created_at: "2026-09-29T00:49:19+08:00",
+      updated_at: "2026-09-29T00:49:19+08:00",
+    });
+    (resetDeviceSSHHostKey as jest.Mock).mockResolvedValue({
+      device_id: 21,
+      deleted: true,
+    });
+
+    render(
+      <DeviceDetailsModal
+        isOpen={true}
+        loading={false}
+        onClose={jest.fn()}
+        device={{
+          id: 21,
+          name: "测试",
+          ip: "192.168.20.1",
+          device_type: "switch",
+          status: "online",
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "重置指纹" }));
+    expect(
+      screen.getByText(/下一次采集将信任设备当前出示的密钥/),
+    ).toBeInTheDocument();
+    expect(resetDeviceSSHHostKey).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "确认重置" }));
+
+    await waitFor(() => {
+      expect(resetDeviceSSHHostKey).toHaveBeenCalledWith(21);
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/尚未记录/)).toBeInTheDocument();
+    });
+    expect(mockToastSuccess).toHaveBeenCalled();
+  });
+
+  it("无更新权限时重置指纹按钮禁用", async () => {
+    (fetchDevicePerformance as jest.Mock).mockResolvedValue({
+      current: {},
+      history: [],
+    });
+
+    render(
+      <DeviceDetailsModal
+        isOpen={true}
+        loading={false}
+        onClose={jest.fn()}
+        canResetHostKey={false}
+        device={{
+          id: 21,
+          name: "测试",
+          ip: "192.168.20.1",
+          device_type: "switch",
+          status: "online",
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(fetchDeviceSSHHostKey).toHaveBeenCalledWith(21);
+    });
+
+    expect(screen.getByRole("button", { name: "重置指纹" })).toBeDisabled();
   });
 });

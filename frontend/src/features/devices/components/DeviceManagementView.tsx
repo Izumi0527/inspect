@@ -1185,6 +1185,7 @@ export const DeviceManagementView: React.FC = () => {
           device={viewingDevice}
           loading={viewModalLoading}
           updateStatus={canPersistProbeStatus}
+          canResetHostKey={canUpdateDevice}
         />
 
         <EditDeviceModal
