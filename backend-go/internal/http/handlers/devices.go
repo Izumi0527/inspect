@@ -5,8 +5,8 @@ import (
 
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	"github.com/your-org/inspect-system/backend-go/internal/inspection"
-	"github.com/your-org/inspect-system/backend-go/internal/logs"
 	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
+	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
 )
 
 // DevicesHandler 设备管理 HTTP 处理器
@@ -18,7 +18,7 @@ type DevicesHandler struct {
 	Inspection    *inspection.Service
 	Metrics       *monitoring.MetricsWriter
 	// HostKeys 是 SSH 主机密钥指纹存储（TOFU 首次信任），供设备详情页查询与重置。
-	HostKeys *logs.SSHHostKeyStore
+	HostKeys *sshutil.SSHHostKeyStore
 	Auth     PermissionService
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"github.com/your-org/inspect-system/backend-go/internal/scheduler"
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
+	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
 )
 
 func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
@@ -37,6 +38,12 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 	}
 	if err := execSQL(db, `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`); err != nil {
 		return fmt.Errorf("enable uuid-ossp extension failed: %w", err)
+	}
+
+	// device_ssh_host_keys 由单指纹迁移到多算法多指纹，需在 AutoMigrate 之前
+	// 清洗数据并删除旧唯一索引（AutoMigrate 只建不删索引）。
+	if err := migrateDeviceSSHHostKeys(db, logger); err != nil {
+		return err
 	}
 
 	// 迁移非 TimescaleDB hypertable 的表
@@ -70,7 +77,7 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 
 		&logs.DeviceLog{},
 		&logs.LogParsingRule{},
-		&logs.DeviceSSHHostKey{},
+		&sshutil.DeviceSSHHostKey{},
 
 		&reports.ReportTemplate{},
 		&reports.ReportSchedule{},
@@ -117,6 +124,32 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 		logger.Info("database migration completed")
 	}
 
+	return nil
+}
+
+// migrateDeviceSSHHostKeys 把 device_ssh_host_keys 从"每设备单指纹"迁移到
+// "每设备每算法多指纹"：SSH 服务器可同时提供多种主机密钥，单指纹设计会在
+// 协商算法变化时误报"指纹变化"。
+//   - 清洗 algorithm 空值：复合唯一索引与查询都要求非空（历史行理论上都有值，
+//     此处防御性兜底）。
+//   - 删除旧的 device_id 单列唯一索引：GORM AutoMigrate 只创建缺失索引、
+//     不会删除不再需要的旧索引，必须显式清理。
+//
+// 复合唯一索引 (device_id, algorithm) 与 algorithm NOT NULL 由随后的
+// AutoMigrate 按模型定义创建。本函数幂等，重复启动无副作用。
+func migrateDeviceSSHHostKeys(db *gorm.DB, logger *zap.Logger) error {
+	statements := []string{
+		`UPDATE device_ssh_host_keys SET algorithm = 'unknown' WHERE algorithm IS NULL OR algorithm = ''`,
+		`DROP INDEX IF EXISTS idx_device_ssh_host_keys_device_id`,
+	}
+	for _, stmt := range statements {
+		if err := execSQL(db, stmt); err != nil {
+			return fmt.Errorf("migrate device_ssh_host_keys failed: %w", err)
+		}
+	}
+	if logger != nil {
+		logger.Info("migrated device_ssh_host_keys to multi-algorithm fingerprints")
+	}
 	return nil
 }
 

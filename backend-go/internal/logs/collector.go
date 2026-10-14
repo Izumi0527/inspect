@@ -2,7 +2,6 @@ package logs
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -42,7 +41,7 @@ type logEntry struct {
 type SSHCollector struct {
 	Timeout time.Duration
 	// hostKeys 用于主机密钥 TOFU 校验，nil 时退化为不校验（仅测试场景）。
-	hostKeys *SSHHostKeyStore
+	hostKeys *sshutil.SSHHostKeyStore
 	logger   *zap.Logger
 }
 
@@ -50,7 +49,7 @@ type SSHCollector struct {
 func NewSSHCollector(db *gorm.DB, logger *zap.Logger) *SSHCollector {
 	collector := &SSHCollector{Timeout: 30 * time.Second}
 	if db != nil {
-		collector.hostKeys = NewSSHHostKeyStore(db, logger)
+		collector.hostKeys = sshutil.NewSSHHostKeyStore(db, logger)
 	}
 	if logger != nil {
 		collector.logger = logger
@@ -104,10 +103,11 @@ func (c *SSHCollector) connect(ctx context.Context, device deviceInfo) (*ssh.Cli
 	}
 	config := &ssh.ClientConfig{
 		// 兼容华为/H3C 等老旧网络设备的密钥交换/加密/MAC 算法（Go 默认禁用部分旧算法）
-		Config:          sshutil.LegacyAlgorithms(),
-		User:            device.SshUsername,
-		Auth:            auth,
-		HostKeyCallback: c.hostKeyCallback(device),
+		Config: sshutil.LegacyAlgorithms(),
+		User:   device.SshUsername,
+		Auth:   auth,
+		// TOFU 主机密钥校验（与连接测试/配置备份/巡检共用同一实现）
+		HostKeyCallback: sshutil.HostKeyCallbackFor(c.hostKeys, device.ID, c.logger),
 		Timeout:         c.Timeout,
 	}
 
@@ -125,128 +125,6 @@ func (c *SSHCollector) connect(ctx context.Context, device deviceInfo) (*ssh.Cli
 	}
 
 	return ssh.NewClient(clientConn, chans, reqs), nil
-}
-
-// hostKeyCallback 返回 TOFU（首次信任）主机密钥校验回调：
-// 首次连接记录指纹，之后指纹不一致则拒绝连接，防止中间人伪装设备收割凭据。
-func (c *SSHCollector) hostKeyCallback(device deviceInfo) ssh.HostKeyCallback {
-	if c.hostKeys == nil {
-		if c.logger != nil {
-			c.logger.Warn("SSH主机密钥校验未启用（未配置指纹存储），连接不受中间人保护",
-				zap.Int("device_id", device.ID))
-		}
-		return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-			return nil
-		}
-	}
-	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := c.hostKeys.verifyOrRecord(ctx, device.ID, key); err != nil {
-			if c.logger != nil {
-				c.logger.Error("SSH主机密钥校验失败",
-					zap.Int("device_id", device.ID),
-					zap.String("host", hostname),
-					zap.Error(err))
-			}
-			return err
-		}
-		return nil
-	}
-}
-
-// SSHHostKeyStore 基于 device_ssh_host_keys 表的主机密钥指纹存储。
-// 采集链路用 verifyOrRecord 做 TOFU 校验；管理面（设备详情页）用 Get/Delete
-// 查询与重置指纹，重置后下一次连接重新走首次信任。
-type SSHHostKeyStore struct {
-	db     *gorm.DB
-	logger *zap.Logger
-}
-
-// NewSSHHostKeyStore 构造主机密钥指纹存储。
-func NewSSHHostKeyStore(db *gorm.DB, logger *zap.Logger) *SSHHostKeyStore {
-	return &SSHHostKeyStore{db: db, logger: logger}
-}
-
-// Get 查询设备的主机密钥指纹记录；尚未记录时返回 (nil, nil)。
-func (s *SSHHostKeyStore) Get(ctx context.Context, deviceID int) (*DeviceSSHHostKey, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("主机密钥指纹存储未初始化")
-	}
-	var record DeviceSSHHostKey
-	err := s.db.WithContext(ctx).Where("device_id = ?", deviceID).Take(&record).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("查询主机密钥指纹失败: %w", err)
-	}
-	return &record, nil
-}
-
-// Delete 删除设备的主机密钥指纹记录（幂等）；返回是否实际删除了一行。
-// 仅在确认设备密钥合法变更（如设备重置/更换）后使用：删除后下一次 SSH
-// 连接将重新记录设备出示的密钥。
-func (s *SSHHostKeyStore) Delete(ctx context.Context, deviceID int) (bool, error) {
-	if s == nil || s.db == nil {
-		return false, errors.New("主机密钥指纹存储未初始化")
-	}
-	result := s.db.WithContext(ctx).Where("device_id = ?", deviceID).Delete(&DeviceSSHHostKey{})
-	if result.Error != nil {
-		return false, fmt.Errorf("删除主机密钥指纹失败: %w", result.Error)
-	}
-	return result.RowsAffected > 0, nil
-}
-
-// hostKeyMismatchError 构造指纹不一致的拒绝错误：带上记录与当前值的算法，
-// 并给出可达的操作指引（设备详情页重置指纹），便于区分密钥轮换与算法协商变化。
-func hostKeyMismatchError(deviceID int, record *DeviceSSHHostKey, current ssh.PublicKey) error {
-	return fmt.Errorf("设备 %d 的 SSH 主机密钥指纹发生变化（记录: %s（%s），当前: %s（%s）），已拒绝连接；若确认为合法变更，请在设备详情页重置主机密钥指纹后重试",
-		deviceID, record.Fingerprint, record.Algorithm, ssh.FingerprintSHA256(current), current.Type())
-}
-
-// verifyOrRecord 校验设备主机密钥指纹：首次连接记录（TOFU），不一致则拒绝。
-// 若确认为合法变更（如设备重装系统），删除对应设备的指纹记录后下次连接会重新记录。
-func (s *SSHHostKeyStore) verifyOrRecord(ctx context.Context, deviceID int, key ssh.PublicKey) error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-
-	fingerprint := ssh.FingerprintSHA256(key)
-	var record DeviceSSHHostKey
-	err := s.db.WithContext(ctx).Where("device_id = ?", deviceID).Take(&record).Error
-	switch {
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		// 首次连接：记录指纹。并发首连可能撞唯一索引，失败时重查比对兜底。
-		createErr := s.db.WithContext(ctx).Create(&DeviceSSHHostKey{
-			DeviceID:    deviceID,
-			Fingerprint: fingerprint,
-			Algorithm:   key.Type(),
-		}).Error
-		if createErr != nil {
-			var existing DeviceSSHHostKey
-			if reErr := s.db.WithContext(ctx).Where("device_id = ?", deviceID).Take(&existing).Error; reErr == nil {
-				if existing.Fingerprint == fingerprint {
-					return nil
-				}
-				return hostKeyMismatchError(deviceID, &existing, key)
-			}
-			return fmt.Errorf("记录主机密钥指纹失败: %w", createErr)
-		}
-		if s.logger != nil {
-			s.logger.Info("SSH主机密钥指纹已记录（首次信任）",
-				zap.Int("device_id", deviceID),
-				zap.String("fingerprint", fingerprint),
-				zap.String("algorithm", key.Type()))
-		}
-		return nil
-	case err != nil:
-		return fmt.Errorf("查询主机密钥指纹失败: %w", err)
-	case record.Fingerprint != fingerprint:
-		return hostKeyMismatchError(deviceID, &record, key)
-	default:
-		return nil
-	}
 }
 
 // runCommands 在同一个 shell 会话内顺序执行多条命令，返回与 commands 一一对应的输出段。

@@ -251,8 +251,9 @@ func (h DevicesHandler) GetDeviceInspectionCount(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]int64{"count": count})
 }
 
-// GetDeviceSSHHostKey 返回设备已记录的 SSH 主机密钥指纹（TOFU 首次信任时由日志采集写入）。
-// 尚未记录时 fingerprint/algorithm/created_at/updated_at 均为 null（设备存在与有无记录是两回事）。
+// GetDeviceSSHHostKey 返回设备已记录的全部 SSH 主机密钥指纹（TOFU 首次信任时由
+// 各 SSH 连接点写入，按算法各一条）。尚未记录时 records 为空数组——
+// 设备存在与有无记录是两回事。
 func (h DevicesHandler) GetDeviceSSHHostKey(c echo.Context) error {
 	if h.Service == nil || h.HostKeys == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "device service not configured")
@@ -272,25 +273,22 @@ func (h DevicesHandler) GetDeviceSSHHostKey(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query device")
 	}
 
-	record, err := h.HostKeys.Get(c.Request().Context(), deviceID)
+	records, err := h.HostKeys.Get(c.Request().Context(), deviceID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query ssh host key")
 	}
-	if record == nil {
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"device_id":   deviceID,
-			"fingerprint": nil,
-			"algorithm":   nil,
-			"created_at":  nil,
-			"updated_at":  nil,
+	items := make([]map[string]interface{}, 0, len(records))
+	for _, record := range records {
+		items = append(items, map[string]interface{}{
+			"fingerprint": record.Fingerprint,
+			"algorithm":   record.Algorithm,
+			"created_at":  record.CreatedAt,
+			"updated_at":  record.UpdatedAt,
 		})
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"device_id":   deviceID,
-		"fingerprint": record.Fingerprint,
-		"algorithm":   record.Algorithm,
-		"created_at":  record.CreatedAt,
-		"updated_at":  record.UpdatedAt,
+		"device_id": deviceID,
+		"records":   items,
 	})
 }
 

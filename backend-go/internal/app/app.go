@@ -35,6 +35,7 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/secrets"
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
+	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
 	"github.com/your-org/inspect-system/backend-go/internal/traffic"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
@@ -190,7 +191,7 @@ func New() (*App, error) {
 		SNMPCollector: snmpCollector,
 		Inspection:    inspectionService,
 		Metrics:       metricsWriter,
-		HostKeys:      logs.NewSSHHostKeyStore(dbConn, log),
+		HostKeys:      sshutil.NewSSHHostKeyStore(dbConn, log),
 		Auth:          authService,
 	}
 

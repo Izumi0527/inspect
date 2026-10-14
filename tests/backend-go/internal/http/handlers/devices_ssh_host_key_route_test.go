@@ -10,12 +10,12 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	"github.com/your-org/inspect-system/backend-go/internal/http/handlers"
-	"github.com/your-org/inspect-system/backend-go/internal/logs"
+	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
 	"go.uber.org/zap"
 )
 
 // 设备详情页的「SSH 主机密钥指纹」区块：
-// GET 查询当前记录（尚未记录时字段为 null，前端据此提示首次连接时自动记录）；
+// GET 查询当前记录列表（按算法各一条，尚未记录时为空数组）；
 // DELETE 重置（幂等），仅在确认设备密钥合法变更后使用，删除后下一次 SSH 连接重新走 TOFU。
 // 审计由 /devices 前缀规则自动覆盖（DELETE 落 delete/device）。
 
@@ -26,7 +26,7 @@ func newDevicesHandlerWithHostKeys(t *testing.T, permissions []string) (*echo.Ec
 	e := echo.New()
 	handlers.DevicesHandler{
 		Service:  devices.NewService(gormDB, zap.NewNop()),
-		HostKeys: logs.NewSSHHostKeyStore(gormDB, zap.NewNop()),
+		HostKeys: sshutil.NewSSHHostKeyStore(gormDB, zap.NewNop()),
 		Auth:     authService,
 	}.Register(e.Group("/api/v1"))
 	return e, mock, token, cleanup
@@ -38,13 +38,13 @@ func expectDeviceExists(mock sqlmock.Sqlmock, deviceID int) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow(deviceID, "测试"))
 }
 
-func TestGetDeviceSSHHostKey_ReturnsRecord(t *testing.T) {
+func TestGetDeviceSSHHostKey_ReturnsRecords(t *testing.T) {
 	e, mock, token, cleanup := newDevicesHandlerWithHostKeys(t, []string{"devices:read"})
 	defer cleanup()
 
 	expectDeviceExists(mock, 21)
 	mock.ExpectQuery(`FROM "device_ssh_host_keys" WHERE device_id = \$1`).
-		WithArgs(21, 1).
+		WithArgs(21).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "device_id", "fingerprint", "algorithm"}).
 			AddRow(4, 21, "SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg", "ssh-rsa"))
 
@@ -57,33 +57,35 @@ func TestGetDeviceSSHHostKey_ReturnsRecord(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 	var body struct {
-		DeviceID    int     `json:"device_id"`
-		Fingerprint *string `json:"fingerprint"`
-		Algorithm   *string `json:"algorithm"`
+		DeviceID int `json:"device_id"`
+		Records  []struct {
+			Fingerprint string `json:"fingerprint"`
+			Algorithm   string `json:"algorithm"`
+		} `json:"records"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if body.DeviceID != 21 || body.Fingerprint == nil || *body.Fingerprint != "SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg" {
+	if body.DeviceID != 21 || len(body.Records) != 1 {
 		t.Fatalf("body = %s", rec.Body.String())
 	}
-	if body.Algorithm == nil || *body.Algorithm != "ssh-rsa" {
-		t.Fatalf("algorithm = %v, want ssh-rsa", body.Algorithm)
+	if body.Records[0].Fingerprint != "SHA256:g8e2/vJVyjdqBhOfml+UbRnCIz6MXWnehBIpdQv4hSg" || body.Records[0].Algorithm != "ssh-rsa" {
+		t.Fatalf("records[0] = %+v", body.Records[0])
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// 尚未记录（设备刚添加、还没走过 SSH 采集）时返回 200 + null 字段，
+// 尚未记录（设备刚添加、还没走过任何 SSH 连接）时返回 200 + 空数组，
 // 而不是 404：设备存在与"有无指纹记录"是两回事。
-func TestGetDeviceSSHHostKey_NoRecordReturnsNullFields(t *testing.T) {
+func TestGetDeviceSSHHostKey_NoRecordReturnsEmptyArray(t *testing.T) {
 	e, mock, token, cleanup := newDevicesHandlerWithHostKeys(t, []string{"devices:read"})
 	defer cleanup()
 
 	expectDeviceExists(mock, 21)
 	mock.ExpectQuery(`FROM "device_ssh_host_keys" WHERE device_id = \$1`).
-		WithArgs(21, 1).
+		WithArgs(21).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "device_id", "fingerprint", "algorithm"}))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/devices/21/ssh-host-key", nil)
@@ -95,14 +97,14 @@ func TestGetDeviceSSHHostKey_NoRecordReturnsNullFields(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 	var body struct {
-		DeviceID    int     `json:"device_id"`
-		Fingerprint *string `json:"fingerprint"`
+		DeviceID int              `json:"device_id"`
+		Records  []map[string]any `json:"records"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if body.DeviceID != 21 || body.Fingerprint != nil {
-		t.Fatalf("body = %s, want fingerprint null", rec.Body.String())
+	if body.DeviceID != 21 || len(body.Records) != 0 {
+		t.Fatalf("body = %s, want empty records", rec.Body.String())
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
