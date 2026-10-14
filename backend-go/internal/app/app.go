@@ -303,6 +303,11 @@ func New() (*App, error) {
 	// Syslog 告警桥接器（用于日志级别联动告警 + 风暴保护）
 	syslogAlertBridge := alerts.NewSyslogAlertBridge(dbConn, redisClient, wsManager, log)
 
+	// SSH 主机密钥指纹变化告警桥：注入为进程级通知器后，全部 SSH 连接点
+	// （日志采集/连接测试/配置备份/巡检）的 TOFU 校验失败都会产生告警，
+	// 重置指纹记录时自动解除。
+	sshutil.SetHostKeyAlertNotifier(alerts.NewSSHHostKeyAlertBridge(dbConn, wsManager, log))
+
 	schedulerService := scheduler.NewService(
 		dbConn,
 		log,
