@@ -141,10 +141,7 @@ describe('ExecutionFilters 下拉统一化', () => {
         onStartDateChange={jest.fn()}
         onEndDateChange={jest.fn()}
         onClearDateRange={jest.fn()}
-        onClearAllFilters={jest.fn()}
         onQuickDateFilter={jest.fn()}
-        hasDateFilter={false}
-        hasAnyFilter={false}
         onRefresh={jest.fn()}
         isFetching={false}
         hasRunningExecutions={false}
@@ -169,10 +166,7 @@ describe('ExecutionFilters 下拉统一化', () => {
         onStartDateChange={jest.fn()}
         onEndDateChange={jest.fn()}
         onClearDateRange={jest.fn()}
-        onClearAllFilters={jest.fn()}
         onQuickDateFilter={jest.fn()}
-        hasDateFilter={false}
-        hasAnyFilter={false}
         onRefresh={jest.fn()}
         isFetching={false}
         hasRunningExecutions={false}
@@ -185,5 +179,8 @@ describe('ExecutionFilters 下拉统一化', () => {
     expect(statusSelect).toHaveClass('h-9')
     expect(statusSelect).toHaveClass('text-sm')
     expect(refreshButton).toHaveClass('h-9')
+    // 筛选栏不再渲染「已应用 N 个筛选」徽章与「清除筛选」按钮
+    expect(screen.queryByText(/已应用 \d+ 个筛选/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^清除筛选$/ })).not.toBeInTheDocument()
   })
 })

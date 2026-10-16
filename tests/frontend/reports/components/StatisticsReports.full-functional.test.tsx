@@ -287,11 +287,9 @@ describe('StatisticsReports 全量功能', () => {
     const trigger = screen.getByRole('button', { name: '日期范围选择器' })
     expect(trigger).toHaveTextContent(short(defaultStart))
     expect(trigger).toHaveTextContent(short(today))
-    // 默认区间不算用户施加的筛选
-    expect(screen.queryByText(/已应用 \d+ 个筛选/)).not.toBeInTheDocument()
   })
 
-  it('快速选择「今天」后三个查询同步切换，出现筛选徽章，重置筛选可回到默认', async () => {
+  it('快速选择「今天」后三个查询同步切换', async () => {
     const user = userEvent.setup()
     render(<StatisticsReports searchText="" />)
 
@@ -303,14 +301,21 @@ describe('StatisticsReports 全量功能', () => {
       expect(lastArg(mockUseKPIData)).toMatchObject({ startDate: today, endDate: today })
       expect(lastArg(mockUseRankings)).toMatchObject({ startDate: today, endDate: today })
     })
-    expect(screen.getByText('已应用 1 个筛选')).toBeInTheDocument()
+  })
 
-    await user.click(screen.getByRole('button', { name: '重置筛选' }))
+  it('筛选生效后工具栏不再渲染「已应用 N 个筛选」徽章与「重置筛选」按钮', async () => {
+    const user = userEvent.setup()
+    render(<StatisticsReports searchText="" />)
+
+    await openDatePicker(user)
+    await user.click(screen.getByRole('button', { name: '今天' }))
 
     await waitFor(() => {
-      expect(lastArg(mockUseStatistics)).toMatchObject({ startDate: defaultStart, endDate: today })
+      expect(lastArg(mockUseStatistics)).toMatchObject({ startDate: today, endDate: today })
     })
+    // 这两个元素随筛选出现/消失，会把右对齐的工具栏挤变形；已移除，此处防止回潮
     expect(screen.queryByText(/已应用 \d+ 个筛选/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '重置筛选' })).not.toBeInTheDocument()
   })
 
   it('日历手动点选：先选起点再选终点，区间透传给查询', async () => {
@@ -330,7 +335,6 @@ describe('StatisticsReports 全量功能', () => {
         endDate: `${year}-${mm}-02`,
       })
     })
-    expect(screen.getByText('已应用 1 个筛选')).toBeInTheDocument()
   })
 
   it('只选了起点时查询不应带着残缺区间发出，而应回落到默认近 30 天', async () => {
@@ -346,8 +350,6 @@ describe('StatisticsReports 全量功能', () => {
       expect(lastArg(mockUseKPIData)).toMatchObject({ startDate: defaultStart, endDate: today })
       expect(lastArg(mockUseRankings)).toMatchObject({ startDate: defaultStart, endDate: today })
     })
-    // 半截区间也不算已生效的筛选
-    expect(screen.queryByText(/已应用 \d+ 个筛选/)).not.toBeInTheDocument()
   })
 
   it('触发按钮上的「清除日期范围」应真正清空日历，查询回落到默认近 30 天', async () => {
@@ -363,7 +365,6 @@ describe('StatisticsReports 全量功能', () => {
     expect(trigger).toHaveTextContent('日期')
     expect(trigger).not.toHaveTextContent('→')
     expect(screen.queryByRole('button', { name: '清除日期范围' })).not.toBeInTheDocument()
-    expect(screen.queryByText(/已应用 \d+ 个筛选/)).not.toBeInTheDocument()
 
     await waitFor(() => {
       expect(lastArg(mockUseStatistics)).toMatchObject({ startDate: defaultStart, endDate: today })

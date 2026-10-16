@@ -305,15 +305,17 @@ describe('InspectionTemplates 筛选栏重塑', () => {
     expect(screen.queryByRole('button', { name: '筛选' })).not.toBeInTheDocument()
   })
 
-  it('有激活筛选时应在筛选栏中展示清除筛选与刷新按钮', async () => {
+  it('有激活筛选时只展示可逐个移除的 chip，不再有计数徽章与清除按钮', async () => {
     const user = userEvent.setup()
 
     render(<InspectionTemplates />)
 
     await user.type(screen.getByRole('textbox', { name: '搜索模板' }), '核心')
 
-    expect(screen.getByRole('button', { name: '清除筛选' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '移除 搜索: 核心 筛选' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '刷新' })).toBeInTheDocument()
+    expect(screen.queryByText(/已应用 \d+ 个/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^清除筛选$/ })).not.toBeInTheDocument()
   })
 
   it('应将筛选、动作和统计卡片统一到共享页面规格', () => {

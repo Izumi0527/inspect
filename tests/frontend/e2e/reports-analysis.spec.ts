@@ -169,34 +169,34 @@ test.describe('报表分析（/reports）按钮覆盖', () => {
     expect(pageErrors, `存在未捕获页面异常：${pageErrors.map((e) => e.message).join('; ')}`).toHaveLength(0)
   })
 
-  test('统计报表：筛选展开/快捷日期/重置/刷新/生成/导出', async ({ page }) => {
+  test('统计报表：快捷日期/清除日期范围/刷新/生成/导出', async ({ page }) => {
     const pageErrors: Error[] = []
     page.on('pageerror', (err) => pageErrors.push(err))
 
     await page.goto('/reports?tab=statistics', { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('button', { name: '统计报表', exact: true })).toBeVisible()
-    await expect(page.getByText('数据筛选')).toBeVisible()
+    // 筛选条件通过工具栏内的控件施加，选中后不再额外插入徽章/按钮（否则工具栏会被撑变形）
+    await expect(page.getByRole('button', { name: '日期范围选择器' })).toBeVisible()
 
-    // 展开筛选面板
-    await page.getByRole('button', { name: '展开' }).click()
-
-    // 快捷日期（触发统计接口请求；至少断言 data 2xx）
+    // 快捷日期：打开日期面板后选「本周」（触发统计接口请求；至少断言 data 2xx）
+    await page.getByRole('button', { name: '日期范围选择器' }).click()
     await Promise.all([
       waitForApiOk(page, 'POST', '/api/v1/reports/statistics/data'),
-      page.getByRole('button', { name: '最近7天' }).click(),
+      page.getByRole('button', { name: '本周', exact: true }).click(),
     ])
 
-    // 重置筛选：可能命中 react-query staleTime 缓存，因此不强制等待网络请求
-    await page.getByRole('button', { name: '重置筛选' }).click()
+    // 施加筛选后也不应出现计数徽章与「重置筛选」按钮
+    await expect(page.getByText(/已应用 \d+ 个筛选/)).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '重置筛选' })).toHaveCount(0)
+
+    // 清除日期范围：可能命中 react-query staleTime 缓存，因此不强制等待网络请求
+    await page.getByRole('button', { name: '清除日期范围' }).click()
 
     // 刷新数据
     await Promise.all([
       waitForApiOk(page, 'POST', '/api/v1/reports/statistics/data'),
       page.getByRole('button', { name: '刷新数据' }).click(),
     ])
-
-    // 收起
-    await page.getByRole('button', { name: '收起' }).click()
 
     // 生成统计报表
     await Promise.all([

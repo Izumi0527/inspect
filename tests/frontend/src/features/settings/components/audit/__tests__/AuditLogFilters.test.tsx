@@ -88,15 +88,14 @@ describe('AuditLogFilters', () => {
     )
 
     expect(screen.getByTestId('smart-date-range-value')).toHaveTextContent('2026-04-12|2026-04-16')
-    expect(screen.getByText('已应用 1 个筛选')).toBeInTheDocument()
+    // 筛选生效时不再渲染计数徽章与「清除筛选」按钮：它们随筛选出现/消失会把工具栏挤变形
+    expect(screen.queryByText(/已应用 \d+ 个筛选/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^清除筛选$/ })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '快捷本周' }))
     expect(onQuickDateFilter).toHaveBeenCalledWith('week')
 
     await user.click(screen.getByRole('button', { name: '清除日期范围' }))
     expect(onClearDateRange).toHaveBeenCalledTimes(1)
-
-    await user.click(screen.getByRole('button', { name: /清除筛选/i }))
-    expect(onClearAllFilters).toHaveBeenCalledTimes(1)
   })
 })
