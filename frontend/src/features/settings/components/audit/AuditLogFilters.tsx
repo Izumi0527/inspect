@@ -1,6 +1,5 @@
 import React from 'react'
-import { X } from 'lucide-react'
-import { Badge, Button, SmartDateRangePicker } from '@/components/atoms'
+import { Button, SmartDateRangePicker } from '@/components/atoms'
 import {
   Select,
   SelectContent,
@@ -16,14 +15,11 @@ interface Props {
   statusFilter: 'success' | 'failed' | ''
   startDate: string
   endDate: string
-  hasDateFilter: boolean
-  hasAnyFilter: boolean
   onActionChange: (action: AuditAction | '') => void
   onStatusChange: (status: 'success' | 'failed' | '') => void
   onStartDateChange: (date: string) => void
   onEndDateChange: (date: string) => void
   onClearDateRange: () => void
-  onClearAllFilters: () => void
   onQuickDateFilter: (range: 'today' | 'week' | 'month') => void
 }
 
@@ -33,21 +29,13 @@ export const AuditLogFilters: React.FC<Props> = React.memo((props) => {
     statusFilter,
     startDate,
     endDate,
-    hasDateFilter,
-    hasAnyFilter,
     onActionChange,
     onStatusChange,
     onStartDateChange,
     onEndDateChange,
     onClearDateRange,
-    onClearAllFilters,
     onQuickDateFilter,
   } = props
-
-  const filterCount =
-    (actionFilter ? 1 : 0) +
-    (statusFilter ? 1 : 0) +
-    (hasDateFilter ? 1 : 0)
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -96,17 +84,6 @@ export const AuditLogFilters: React.FC<Props> = React.memo((props) => {
         placeholder="日期"
       />
 
-      {hasAnyFilter && (
-        <>
-          <Badge variant="secondary" className="px-2 py-1 text-xs">
-            已应用 {filterCount} 个筛选
-          </Badge>
-          <Button variant="outline" size="sm" onClick={onClearAllFilters} className="h-9">
-            <X className="w-4 h-4 mr-1" />
-            清除筛选
-          </Button>
-        </>
-      )}
     </div>
   )
 })

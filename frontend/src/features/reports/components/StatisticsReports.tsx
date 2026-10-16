@@ -5,8 +5,6 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-  Button,
-  Badge,
   CardSkeleton,
   ChartSkeleton,
   TableSkeleton,
@@ -492,12 +490,6 @@ export const StatisticsReports: React.FC<Props> = ({
     setDateRange(getQuickDateRange(range))
   }
 
-  const handleResetFilters = () => {
-    setDeviceTypes([])
-    setLocations([])
-    setDateRange(defaultDateRange)
-  }
-
   // 筛选下拉的选项必须来自「未筛选」的全量分布：
   // 后端的 by_type / by_location 是按当前筛选过滤后的结果，直接拿来当选项的话，
   // 选中「交换机」后下拉里就只剩交换机，用户再也追加不了其它类型。
@@ -531,17 +523,6 @@ export const StatisticsReports: React.FC<Props> = ({
       label: location
     }))
   }, [optionsSource])
-
-  // 只有完整且不同于默认的区间才算用户施加了日期筛选；空区间 / 半截区间都回落到默认，不计入
-  const hasDateFilter =
-    hasCompleteDateRange &&
-    (dateRange.startDate !== defaultDateRange.startDate ||
-      dateRange.endDate !== defaultDateRange.endDate)
-  const filterCount =
-    (deviceTypes.length > 0 ? 1 : 0) +
-    (locations.length > 0 ? 1 : 0) +
-    (hasDateFilter ? 1 : 0)
-  const hasActiveFilters = filterCount > 0
 
   // ==================== Search Filter ====================
   const normalizedKeyword = searchText.trim().toLowerCase()
@@ -649,17 +630,6 @@ export const StatisticsReports: React.FC<Props> = ({
                 triggerClassName="h-9 min-w-[140px] rounded-md border-input bg-background px-3 py-2 text-sm shadow-sm backdrop-blur-none"
                 dropdownClassName="rounded-md border-border bg-popover shadow-lg backdrop-blur-none"
               />
-            )}
-
-            {hasActiveFilters && (
-              <>
-                <Badge variant="secondary" className="px-2 py-1 text-xs">
-                  已应用 {filterCount} 个筛选
-                </Badge>
-                <Button variant="outline" onClick={handleResetFilters}>
-                  重置筛选
-                </Button>
-              </>
             )}
           </div>
         )}

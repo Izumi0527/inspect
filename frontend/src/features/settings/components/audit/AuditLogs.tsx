@@ -83,25 +83,6 @@ export function AuditLogs() {
     }
   }, [filterAction, filterStatus, filterStartDate, filterEndDate])
 
-  // 清除所有筛选
-  const handleClearFilters = useCallback(() => {
-    setFilterAction('')
-    setFilterStatus('')
-    setFilterStartDate('')
-    setFilterEndDate('')
-    updateQueryParams({
-      action: undefined,
-      status: undefined,
-      startDate: undefined,
-      endDate: undefined,
-      page: 1,
-    })
-  }, [updateQueryParams])
-
-  // 是否有活跃筛选
-  const hasActiveFilters = Boolean(filterAction || filterStatus || filterStartDate || filterEndDate)
-  const hasDateFilter = Boolean(filterStartDate || filterEndDate)
-
   const handleQuickDateFilter = useCallback((range: 'today' | 'week' | 'month') => {
     const dateRange = getDateRange(range)
     setFilterStartDate(dateRange.startDate)
@@ -137,14 +118,11 @@ export function AuditLogs() {
       statusFilter={filterStatus}
       startDate={filterStartDate}
       endDate={filterEndDate}
-      hasDateFilter={hasDateFilter}
-      hasAnyFilter={hasActiveFilters}
       onActionChange={setFilterAction}
       onStatusChange={setFilterStatus}
       onStartDateChange={setFilterStartDate}
       onEndDateChange={setFilterEndDate}
       onClearDateRange={handleClearDateRange}
-      onClearAllFilters={handleClearFilters}
       onQuickDateFilter={handleQuickDateFilter}
     />
   ), [
@@ -152,10 +130,7 @@ export function AuditLogs() {
     filterStatus,
     filterStartDate,
     filterEndDate,
-    hasDateFilter,
-    hasActiveFilters,
     handleClearDateRange,
-    handleClearFilters,
     handleQuickDateFilter,
   ])
 

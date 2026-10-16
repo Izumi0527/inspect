@@ -600,9 +600,6 @@ export const InspectionTemplates: React.FC = () => {
 
       {activeFilters.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/50 bg-muted/35 p-3">
-          <Badge variant="secondary" size="sm" className="px-2 py-1 text-xs">
-            已应用 {activeFilters.length} 个
-          </Badge>
           {activeFilters.map((filter) => (
             <Badge key={filter.id} variant="outline" size="sm" asChild>
               <button
@@ -615,9 +612,6 @@ export const InspectionTemplates: React.FC = () => {
               </button>
             </Badge>
           ))}
-          <Button type="button" variant="ghost" size="sm" onClick={handleClearFilters} className="sm:ml-auto">
-            清除筛选
-          </Button>
         </div>
       )}
 

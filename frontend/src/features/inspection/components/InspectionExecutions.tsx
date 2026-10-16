@@ -536,10 +536,7 @@ export const InspectionExecutions: React.FC = () => {
               onStartDateChange={(date) => updateFilter('startDate', date)}
               onEndDateChange={(date) => updateFilter('endDate', date)}
               onClearDateRange={handleClearDateRange}
-              onClearAllFilters={resetFilters}
               onQuickDateFilter={handleQuickDateFilter}
-              hasDateFilter={hasDateFilter}
-              hasAnyFilter={hasAnyFilter}
               onRefresh={refetch}
               isFetching={isFetching}
               hasRunningExecutions={hasRunningExecutions}

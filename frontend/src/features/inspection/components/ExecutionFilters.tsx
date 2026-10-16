@@ -1,8 +1,7 @@
 import React from 'react'
-import { RefreshCw, X } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import {
   Button,
-  Badge,
   SmartDateRangePicker
 } from '@/components/atoms'
 import {
@@ -19,8 +18,6 @@ import {
  * 包含的筛选功能：
  * - 状态筛选（全部/执行中/已完成/失败/已取消）
  * - 智能日期范围筛选（快速预设 + 自定义输入）
- * - 清除所有筛选按钮
- * - 筛选状态指示器
  * - 刷新按钮（与筛选器同行）
  */
 
@@ -33,11 +30,7 @@ interface Props {
   onStartDateChange: (date: string) => void
   onEndDateChange: (date: string) => void
   onClearDateRange: () => void
-  onClearAllFilters: () => void
   onQuickDateFilter: (range: 'today' | 'week' | 'month') => void
-
-  hasDateFilter: boolean
-  hasAnyFilter: boolean
 
   // 刷新
   onRefresh: () => void
@@ -55,18 +48,12 @@ export const ExecutionFilters: React.FC<Props> = React.memo((props) => {
     onStartDateChange,
     onEndDateChange,
     onClearDateRange,
-    onClearAllFilters,
     onQuickDateFilter,
-    hasDateFilter,
-    hasAnyFilter,
     onRefresh,
     isFetching,
     hasRunningExecutions,
     showRefresh = true,
   } = props
-
-  const filterCount =
-    (statusFilter !== 'all' ? 1 : 0) + (hasDateFilter ? 1 : 0)
 
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -94,25 +81,6 @@ export const ExecutionFilters: React.FC<Props> = React.memo((props) => {
         onQuickSelect={onQuickDateFilter}
         placeholder="日期"
       />
-
-      {/* 筛选状态徽章 + 清除 */}
-      {hasAnyFilter && (
-        <>
-          <Badge variant="secondary" className="px-2 py-1 text-xs">
-            已应用 {filterCount} 个筛选
-          </Badge>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onClearAllFilters}
-            className="h-9"
-            title="清除所有筛选条件"
-          >
-            <X className="w-4 h-4 mr-1" />
-            清除筛选
-          </Button>
-        </>
-      )}
 
       {/* 刷新按钮（ml-auto 推到最右侧）*/}
       {showRefresh && (
