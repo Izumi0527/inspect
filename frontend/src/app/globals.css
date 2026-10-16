@@ -520,13 +520,13 @@
   /* --- 徽标：胶囊形 --- */
   & [data-slot="badge"] { border-radius: 9999px; }
 
-  /* --- 输入 / 选择器：玻璃 --- */
+  /* --- 输入 / 选择器：玻璃 ---
+       字号不覆盖：四个控件均自带 text-sm，与按钮及另两皮肤保持一致。 */
   & :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], [data-slot="multiselect-trigger"]) {
     border-color: color-mix(in srgb, var(--rule) 50%, transparent);
     background-color: color-mix(in srgb, var(--surface) 80%, transparent);
     -webkit-backdrop-filter: blur(16px);
     backdrop-filter: blur(16px);
-    font-size: 1rem;
   }
   & :is([data-slot="input"], [data-slot="textarea"], [data-slot="select-trigger"], [data-slot="multiselect-trigger"]):focus {
     background-color: color-mix(in srgb, var(--bg) 90%, transparent);
