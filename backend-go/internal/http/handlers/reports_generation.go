@@ -95,6 +95,10 @@ func (h ReportsHandler) GenerateReportFromRequest(c echo.Context) error {
 					reportData["predictions"] = buildTrendPredictions(series, predictionSteps(timeframe, granularity), timeframe)
 				}
 				reportData["alerts"] = buildTrendAlerts(series, "medium", 50)
+				// 告警检测执行情况（数据点是否足够）：渲染侧据此区分
+				//「未执行检测」与「已检测无异常」，与前端分析接口的
+				// alerts_meta 字段同名同义。
+				reportData["alerts_meta"] = buildTrendAlertsMeta(series)
 			}
 		}
 

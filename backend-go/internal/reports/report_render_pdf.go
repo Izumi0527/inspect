@@ -571,6 +571,24 @@ func genericReportFieldLabel(key string) string {
 		return "最小值"
 	case "max":
 		return "最大值"
+	case "report_name", "title":
+		return "报表名称"
+	case "range", "statistics_range":
+		return "统计范围"
+	case "generated_at":
+		return "生成时间"
+	case "generated_by":
+		return "生成人"
+	case "summary":
+		return "摘要"
+	case "devices", "device_count", "total_devices":
+		return "设备"
+	case "predictions", "prediction":
+		return "预测"
+	case "alerts":
+		return "告警"
+	case "notes", "note", "remark", "remarks":
+		return "备注"
 	case "metrics":
 		return "指标"
 	case "include_predictions":
@@ -2073,3 +2091,196 @@ func thresholdUnitLabel(unit string) string {
 // 「0.3」、邻居 IP「10.0.0.3」这类以数字起头的标识列出现，首字被裁掉半个。
 //
 // 只对有强调条的行的首列生效：其余情况返回 0，保持既有报告的排版不变。
+
+// ---------------------------------------------------------------------------
+// 趋势分析报告（专属 PDF 渲染）
+// ---------------------------------------------------------------------------
+
+// writeTrendPDF 渲染趋势分析报告。趋势数据在生成侧被刻意裁剪为「摘要版」
+// （不含逐点时序），因此不再走 generic 的键值块 —— 那会把 metrics /
+// predictions / alerts 直接 dump 成缩进 JSON。这里按前端趋势分析页的语义
+// 区块重建：报表概览 / 指标趋势明细 / 预测分析 / 趋势告警 / 说明。
+func writeTrendPDF(path string, data TrendReportData) error {
+	pdf, err := newReportPDF()
+	if err != nil {
+		return err
+	}
+
+	generatedAt := strings.TrimSpace(data.GeneratedAt)
+	if generatedAt == "" {
+		generatedAt = time.Now().Format("2006-01-02 15:04:05")
+	}
+	// chip 按信息重要度排序：HeroBanner 在宽度不足时从尾部丢弃。
+	chips := []string{fmt.Sprintf("时间范围 %s", fallbackPDFValue(data.Range))}
+	if data.MetricCount > 0 {
+		chips = append(chips, fmt.Sprintf("指标 %d 个", data.MetricCount))
+	}
+	if data.DeviceCount > 0 {
+		chips = append(chips, fmt.Sprintf("设备 %d 台", data.DeviceCount))
+	}
+	pdfkit.WriteHeroBanner(pdf, pdfkit.HeroBanner{
+		Title:    "趋势分析报告",
+		Subtitle: "指标趋势、预测与异常告警",
+		Brand:    "巡检系统",
+		Tagline:  "报告中心",
+		Chips:    chips,
+	})
+	pdf.Ln(6)
+
+	writePDFSectionTitle(pdf, "报表概览")
+	overviewStyle := defaultPDFTableStyle(pdfHeaderStyleLight)
+	overviewStyle.BodyAlign = "L"
+	pdfkit.GridTable(pdf, []string{"项目", "内容"}, buildTrendPDFOverviewRows(data, generatedAt), []float64{45.7, 91.4}, overviewStyle)
+
+	writeTrendPDFMetrics(pdf, data)
+	writeTrendPDFPredictions(pdf, data)
+	writeTrendPDFAlerts(pdf, data)
+	writeTrendPDFNotes(pdf, data)
+
+	return pdf.OutputFileAndClose(path)
+}
+
+func buildTrendPDFOverviewRows(data TrendReportData, generatedAt string) [][]string {
+	return [][]string{
+		{"报表名称", fallbackPDFValue(data.ReportName)},
+		{"统计范围", fallbackPDFValue(data.Range)},
+		{"生成人", fallbackPDFValue(data.GeneratedBy)},
+		{"生成时间", fallbackPDFValue(generatedAt)},
+	}
+}
+
+// writeTrendPDFMetrics 指标趋势明细：当前值 / 上期值 / 变化 / 变化率 / 趋势方向。
+func writeTrendPDFMetrics(pdf *gofpdf.Fpdf, data TrendReportData) {
+	pdf.Ln(9)
+	writePDFSectionTitle(pdf, "指标趋势明细")
+	if len(data.Metrics) == 0 {
+		pdfkit.EmptyStateWithHint(pdf, "当前筛选条件下暂无指标数据", "请调整时间范围或指标后重新生成报告")
+		return
+	}
+	rows := make([][]string, 0, len(data.Metrics))
+	for _, metric := range data.Metrics {
+		rows = append(rows, []string{
+			fallbackPDFValue(metric.DisplayName),
+			trendValueText(metric.Current, metric.Unit),
+			trendValueText(metric.Previous, metric.Unit),
+			trendDeltaText(metric.Change, metric.Unit),
+			trendDeltaText(metric.ChangePercentage, "%"),
+			trendDirectionText(metric.Direction),
+		})
+	}
+	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+	style.BodyAlign = "C"
+	pdfkit.GridTable(pdf, []string{"指标", "当前值", "上期值", "变化", "变化率", "趋势"}, rows,
+		[]float64{38.2, 22, 22, 22, 20, 18}, style)
+}
+
+// writeTrendPDFPredictions 预测分析：当前值与预测值必须同时呈现，
+// 否则「会变成多少」失去参照。
+func writeTrendPDFPredictions(pdf *gofpdf.Fpdf, data TrendReportData) {
+	pdf.Ln(9)
+	writePDFSectionTitle(pdf, "预测分析")
+	if len(data.Predictions) == 0 {
+		pdfkit.EmptyStateWithHint(pdf, "暂无预测数据", "预测需要至少 2 个数据点，请拉长时间范围或等待下一轮采集")
+		return
+	}
+	rows := make([][]string, 0, len(data.Predictions))
+	for _, item := range data.Predictions {
+		rows = append(rows, []string{
+			fallbackPDFValue(item.DisplayName),
+			formatFloat(item.CurrentValue, 2),
+			formatFloat(item.PredictedValue, 2),
+			trendTimeframeText(item.Timeframe),
+			trendConfidenceText(item.Confidence),
+			fallbackPDFValue(item.Recommendation),
+		})
+	}
+	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+	style.BodyAlign = "C"
+	style.WrapColumns = []int{5}
+	pdfkit.GridTable(pdf, []string{"指标", "当前值", "预测值", "预测周期", "置信水平", "建议"}, rows,
+		[]float64{32, 20, 20, 22, 20, 28.2}, style)
+}
+
+// writeTrendPDFAlerts 趋势告警；空告警按 alerts_meta 区分三种语义。
+func writeTrendPDFAlerts(pdf *gofpdf.Fpdf, data TrendReportData) {
+	pdf.Ln(9)
+	writePDFSectionTitle(pdf, "趋势告警")
+	if len(data.Alerts) == 0 {
+		// 空告警有三种语义：已检测无异常 / 数据点不足未检测 / 报告未携带
+		// 检测元信息（历史报告）。三者混淆会让读者误判系统健康度，
+		// 所以这里逐一分派 —— 绝不再出现裸的「[]」。
+		switch {
+		case data.AlertsMeta.MinPointsRequired > 0 && data.AlertsMeta.Evaluated:
+			pdfkit.EmptyStateWithHint(pdf, "未检测到趋势异常",
+				fmt.Sprintf("已基于 %d 个数据点完成异常检测，当前波动均在正常范围内", data.AlertsMeta.ActualPoints))
+		case data.AlertsMeta.MinPointsRequired > 0:
+			pdfkit.EmptyStateWithHint(pdf, "数据点不足，未执行异常检测",
+				fmt.Sprintf("异常检测需要至少 %d 个数据点，当前最多 %d 个", data.AlertsMeta.MinPointsRequired, data.AlertsMeta.ActualPoints))
+		default:
+			pdfkit.EmptyStateWithHint(pdf, "暂无趋势告警", "本报告未包含异常检测结果")
+		}
+		return
+	}
+
+	rows := make([][]string, 0, len(data.Alerts))
+	accents := make([][3]int, 0, len(data.Alerts))
+	for _, alert := range data.Alerts {
+		rows = append(rows, []string{
+			trendSeverityText(alert.Severity),
+			fallbackPDFValue(alert.Title),
+			fallbackPDFValue(localizeTrendTimestamps(alert.Description)),
+			trendDetectedAtText(alert.DetectedAt),
+		})
+		accents = append(accents, trendSeverityAccent(alert.Severity))
+	}
+	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+	style.BodyAlign = "L"
+	style.WrapColumns = []int{1, 2}
+	style.RowAccents = accents
+	pdfkit.GridTable(pdf, []string{"级别", "标题", "说明", "检测时间"}, rows,
+		[]float64{16, 36, 58, 32.2}, style)
+}
+
+// trendSeverityAccent 告警行左侧色条：与前端三级着色（红/黄/蓝）语义一致，
+// 让读者扫一眼就知道哪条最要紧。
+func trendSeverityAccent(severity string) [3]int {
+	switch strings.ToLower(strings.TrimSpace(severity)) {
+	case "critical":
+		return pdfkit.ColorRed500
+	case "warning", "warn":
+		return pdfkit.ColorAmber500
+	default:
+		return pdfkit.ColorSky500
+	}
+}
+
+// writeTrendPDFNotes 说明段落：保留生成侧的备注原文，并说明摘要版定位、
+// 引导读者去趋势分析页看完整曲线。
+func writeTrendPDFNotes(pdf *gofpdf.Fpdf, data TrendReportData) {
+	pdf.Ln(9)
+	writePDFSectionTitle(pdf, "说明")
+	paragraphs := make([]string, 0, 2)
+	if notes := strings.TrimSpace(data.Notes); notes != "" {
+		paragraphs = append(paragraphs, notes)
+	}
+	paragraphs = append(paragraphs, "本报告为摘要版，不含逐点时序数据；完整趋势曲线请在「报表中心 · 趋势分析」页面查看。")
+	writeTrendPDFParagraphs(pdf, paragraphs)
+}
+
+// writeTrendPDFParagraphs 按可用宽断行写段落。不用 MultiCell：它的内置
+// 断行逐字节遍历（为 cp1252 设计），会在 UTF-8 多字节序列中间断开并吞字，
+// 与结论段落一致改走 SplitLines。
+func writeTrendPDFParagraphs(pdf *gofpdf.Fpdf, paragraphs []string) {
+	pdf.SetFont(pdfFontName, "", pdfSmallSize)
+	pdf.SetTextColor(pdfColorGrey[0], pdfColorGrey[1], pdfColorGrey[2])
+	usableW := pdfkit.UsableWidth(pdf)
+	for _, para := range paragraphs {
+		for _, line := range pdfkit.SplitLines(pdf, strings.TrimSpace(para), usableW) {
+			ensurePDFSpace(pdf, 8)
+			pdf.CellFormat(usableW, 5.6, line, "", 1, "L", false, 0, "")
+		}
+		pdf.Ln(2)
+	}
+	pdf.SetTextColor(pdfkit.ColorBlack[0], pdfkit.ColorBlack[1], pdfkit.ColorBlack[2])
+	pdf.SetFont(pdfFontName, "", pdfBodySize)
+}

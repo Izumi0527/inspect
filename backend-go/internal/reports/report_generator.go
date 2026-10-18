@@ -49,6 +49,9 @@ func GenerateReportFile(ctx context.Context, db *gorm.DB, outputDir string, repo
 			return "", err
 		}
 		return writeDeviceSummaryReport(fullPath, normalized, data)
+	case "trend", "trend_report", "trend_analysis":
+		data := buildTrendReportData(report, params)
+		return writeTrendReport(fullPath, normalized, data)
 	case "alert", "performance":
 		data := buildGenericReportData(report, params)
 		return writeGenericReport(fullPath, normalized, data)

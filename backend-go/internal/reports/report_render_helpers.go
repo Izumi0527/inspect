@@ -202,8 +202,14 @@ func formatSummaryItem(value interface{}) string {
 	}
 }
 
-// formatValueForReport 用于把复杂结构（map/slice/array）格式化为可读的 JSON 字符串。
-// 主要服务于通用报表（GenericReportData）的 Extra 字段展示，避免输出难读的 Go 默认格式。
+// formatValueForReport 用于把复杂结构（map/slice/array）格式化为可读文本，
+// 服务于通用报表（GenericReportData）的 Extra 字段展示。
+//
+// 历史实现把 map/slice 一律 MarshalIndent 成 JSON 直出，趋势报告因此在
+// 「补充信息」里出现整页缩进 JSON（英文键名、跨页错位）。现在的策略：
+//   - []string 视为「逐行文本」按行拼接（趋势报告的指标/预测/告警行）；
+//   - 空集合返回空串，交由 fallbackPDFValue 统一显示占位符，不再出现裸 []；
+//   - 其余嵌套结构仍序列化，但超过 reportValueMaxRunes 时截断并标注。
 func formatValueForReport(value interface{}) string {
 	if value == nil {
 		return ""
@@ -213,15 +219,32 @@ func formatValueForReport(value interface{}) string {
 		return v
 	case []byte:
 		return string(v)
+	case []string:
+		return strings.Join(v, "\n")
 	}
 	rv := reflect.ValueOf(value)
 	switch rv.Kind() {
 	case reflect.Map, reflect.Slice, reflect.Array:
+		if rv.Len() == 0 {
+			return ""
+		}
 		if raw, err := json.MarshalIndent(value, "", "  "); err == nil {
-			return string(raw)
+			return truncateReportValue(string(raw))
 		}
 	}
 	return fmt.Sprintf("%v", value)
+}
+
+// reportValueMaxRunes 限制单个 Extra 值在报告中的最大字符数。嵌套结构的
+// 文本化结果对读者价值有限，超长时截断并明确标注，避免整页被机器格式占满。
+const reportValueMaxRunes = 1200
+
+func truncateReportValue(text string) string {
+	runes := []rune(text)
+	if len(runes) <= reportValueMaxRunes {
+		return text
+	}
+	return string(runes[:reportValueMaxRunes]) + "…（内容过长，已截断）"
 }
 
 // localizeIntMapKeys 用 fn 翻译计数 map 的键（如设备类型分布的

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -795,6 +796,386 @@ func parseStatisticsReportPayload(payload map[string]interface{}, fallbackTitle 
 	}
 	data.TopDevices = topDevices
 	return data
+}
+
+// TrendMetricReport 是趋势报告中单个指标的汇总行：窗内首末值对比
+// （current=窗内末值、previous=窗内首值）与变化量/变化率。
+type TrendMetricReport struct {
+	DisplayName      string
+	MetricName       string
+	Unit             string
+	Current          float64
+	Previous         float64
+	Change           float64
+	ChangePercentage float64
+	Direction        string
+}
+
+// TrendPredictionReport 是单个指标的预测结果（当前值 → 预测值），
+// Timeframe 为预测周期（week/month 等），Confidence 取值 0-1。
+type TrendPredictionReport struct {
+	MetricName     string
+	DisplayName    string
+	CurrentValue   float64
+	PredictedValue float64
+	Confidence     float64
+	Timeframe      string
+	Recommendation string
+}
+
+// TrendAlertReport 是趋势异常检测产出的一条告警。
+type TrendAlertReport struct {
+	Severity    string
+	Title       string
+	Description string
+	DetectedAt  string
+}
+
+// TrendAlertsMetaReport 描述异常检测的执行情况。Evaluated=false 且
+// MinPointsRequired>0 表示数据点不足、检测未执行；MinPointsRequired=0
+// 表示报告未携带检测元信息（历史报告），渲染侧按中性说明处理。
+type TrendAlertsMetaReport struct {
+	Evaluated         bool
+	MinPointsRequired int
+	ActualPoints      int
+}
+
+// TrendReportData 是趋势分析报告的数据载体。趋势报告刻意定位为
+// 「摘要版」：只承载指标汇总、预测与异常告警，不含时序数据点
+// （生成侧会先删掉 data_points，避免报告体积失控）。
+type TrendReportData struct {
+	ReportName  string
+	Range       string
+	GeneratedAt string
+	GeneratedBy string
+	Notes       string
+	MetricCount int
+	DeviceCount int
+	Metrics     []TrendMetricReport
+	Predictions []TrendPredictionReport
+	Alerts      []TrendAlertReport
+	AlertsMeta  TrendAlertsMetaReport
+}
+
+// parseTrendReportPayload 把生成侧写入的 report_data 解析为强类型结构。
+// 与其它 parse*Payload 一致走容错路线：字段缺失/类型异常降级为零值或
+// 跳过该元素，绝不 panic —— 历史报告与新报告共用一份渲染代码。
+func parseTrendReportPayload(payload map[string]interface{}) TrendReportData {
+	reportName := toString(payload["report_name"])
+	if reportName == "" {
+		reportName = firstNonEmptyString(
+			toString(payload["title"]),
+			toString(payload["report_title"]),
+			"趋势分析报告",
+		)
+	}
+	data := TrendReportData{
+		ReportName:  reportName,
+		Range:       toString(payload["range"]),
+		GeneratedAt: toString(payload["generated_at"]),
+		GeneratedBy: toString(payload["generated_by"]),
+		Notes:       toString(payload["notes"]),
+	}
+
+	summary := toMap(payload["summary"])
+	data.MetricCount = toInt(summary["metrics"])
+	data.DeviceCount = toInt(summary["devices"])
+
+	metrics := make([]TrendMetricReport, 0)
+	displayByMetric := map[string]string{}
+	for _, item := range toSlice(payload["metrics"]) {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		metricName := firstNonEmptyString(toString(itemMap["metric_name"]), toString(itemMap["name"]))
+		displayName := firstNonEmptyString(toString(itemMap["display_name"]), metricName)
+		if metricName == "" && displayName == "" {
+			continue
+		}
+		metrics = append(metrics, TrendMetricReport{
+			DisplayName:      displayName,
+			MetricName:       metricName,
+			Unit:             toString(itemMap["unit"]),
+			Current:          toFloat(itemMap["current"]),
+			Previous:         toFloat(itemMap["previous"]),
+			Change:           toFloat(itemMap["change"]),
+			ChangePercentage: toFloat(itemMap["change_percentage"]),
+			Direction:        toString(itemMap["trend_direction"]),
+		})
+		if metricName != "" && displayName != "" {
+			displayByMetric[metricName] = displayName
+		}
+	}
+	data.Metrics = metrics
+	if data.MetricCount == 0 && len(metrics) > 0 {
+		data.MetricCount = len(metrics)
+	}
+
+	predictions := make([]TrendPredictionReport, 0)
+	for _, item := range toSlice(payload["predictions"]) {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		metricName := toString(itemMap["metric"])
+		if metricName == "" {
+			continue
+		}
+		predictions = append(predictions, TrendPredictionReport{
+			MetricName:     metricName,
+			DisplayName:    firstNonEmptyString(toString(itemMap["display_name"]), displayByMetric[metricName], metricName),
+			CurrentValue:   toFloat(itemMap["current_value"]),
+			PredictedValue: toFloat(itemMap["predicted_value"]),
+			Confidence:     toFloat(itemMap["confidence"]),
+			Timeframe:      toString(itemMap["timeframe"]),
+			Recommendation: toString(itemMap["recommendation"]),
+		})
+	}
+	data.Predictions = predictions
+
+	alerts := make([]TrendAlertReport, 0)
+	for _, item := range toSlice(payload["alerts"]) {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		title := toString(itemMap["title"])
+		if title == "" {
+			continue
+		}
+		alerts = append(alerts, TrendAlertReport{
+			Severity:    toString(itemMap["severity"]),
+			Title:       title,
+			Description: toString(itemMap["description"]),
+			DetectedAt:  toString(itemMap["detected_at"]),
+		})
+	}
+	data.Alerts = alerts
+
+	meta := toMap(payload["alerts_meta"])
+	data.AlertsMeta = TrendAlertsMetaReport{
+		Evaluated:         toBool(meta["evaluated"]),
+		MinPointsRequired: toInt(meta["min_points_required"]),
+		ActualPoints:      toInt(meta["actual_points"]),
+	}
+	return data
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// toGenericReportData 把趋势数据降级为通用报表结构，供没有趋势专属渲染器
+// 的格式（excel / html / word）复用。降级后的各区块是逐行人类可读文本，
+// 而不是 JSON dump —— 与 PDF 侧「消除难读内容」是同一诉求。
+func (data TrendReportData) toGenericReportData() GenericReportData {
+	summary := map[string]interface{}{}
+	if data.MetricCount > 0 {
+		summary["metrics"] = data.MetricCount
+	}
+	if data.DeviceCount > 0 {
+		summary["devices"] = data.DeviceCount
+	}
+	extra := map[string]interface{}{}
+	if len(data.Metrics) > 0 {
+		extra["metrics"] = trendMetricReportLines(data.Metrics)
+	}
+	if len(data.Predictions) > 0 {
+		extra["predictions"] = trendPredictionReportLines(data.Predictions)
+	}
+	if len(data.Alerts) > 0 {
+		extra["alerts"] = trendAlertReportLines(data.Alerts)
+	}
+	return GenericReportData{
+		ReportType:         "trend",
+		ReportTitle:        data.ReportName,
+		ReportName:         data.ReportName,
+		Range:              data.Range,
+		GeneratedBy:        data.GeneratedBy,
+		GeneratedTimestamp: data.GeneratedAt,
+		Summary:            summary,
+		Notes:              data.Notes,
+		Extra:              extra,
+	}
+}
+
+// buildTrendReportData 组装趋势报告数据：优先读生成侧写入的 report_data，
+// 缺失时退化为「只有报告名的空态」（渲染侧走空态分支，不产 JSON dump）。
+func buildTrendReportData(report Report, params map[string]interface{}) TrendReportData {
+	payload := findPayload(params, "trend_data", "report_data")
+	if len(payload) == 0 {
+		data := TrendReportData{ReportName: strings.TrimSpace(report.Title)}
+		data.GeneratedAt = reportGeneratedTimestamp(report)
+		return data
+	}
+	data := parseTrendReportPayload(payload)
+	if strings.TrimSpace(data.ReportName) == "" {
+		data.ReportName = strings.TrimSpace(report.Title)
+	}
+	if strings.TrimSpace(data.GeneratedBy) == "" && report.GeneratedBy != nil {
+		data.GeneratedBy = strings.TrimSpace(*report.GeneratedBy)
+	}
+	if strings.TrimSpace(data.GeneratedAt) == "" {
+		data.GeneratedAt = reportGeneratedTimestamp(report)
+	}
+	return data
+}
+
+// ---------------------------------------------------------------------------
+// 趋势数据的展示文案（PDF 与降级格式共用同一口径）
+// ---------------------------------------------------------------------------
+
+// trendValueText 数值带单位（"72.08%"）；单位缺失时只显示数值。
+func trendValueText(value float64, unit string) string {
+	return formatFloat(value, 2) + unit
+}
+
+// trendDeltaText 变化量带符号（"+0.04%" / "-0.12%"）。注意 change_percentage
+// 由生成侧按 change/previous*100 计算，本身就是百分数，不可再乘 100。
+func trendDeltaText(value float64, unit string) string {
+	sign := ""
+	if value > 0 {
+		sign = "+"
+	}
+	return sign + formatFloat(value, 2) + unit
+}
+
+// trendDirectionText 箭头 + 方向文案，与前端趋势页的语义一致。
+func trendDirectionText(direction string) string {
+	switch strings.ToLower(strings.TrimSpace(direction)) {
+	case "up":
+		return "↑ 上升"
+	case "down":
+		return "↓ 下降"
+	case "stable":
+		return "→ 持平"
+	default:
+		return pdfEmptyValuePlaceholder
+	}
+}
+
+// trendTimeframeText 与前端 PREDICTION_PERIOD_LABELS 对齐，避免 week 等
+// 英文枚举直接暴露给用户。
+func trendTimeframeText(timeframe string) string {
+	switch strings.ToLower(strings.TrimSpace(timeframe)) {
+	case "day":
+		return "未来 1 天"
+	case "week":
+		return "未来 1 周"
+	case "month":
+		return "未来 1 个月"
+	case "quarter":
+		return "未来 1 季度"
+	case "year":
+		return "未来 1 年"
+	default:
+		return pdfEmptyValuePlaceholder
+	}
+}
+
+// trendSeverityText 告警级别本地化；未知级别保留原文，便于发现新增枚举。
+func trendSeverityText(severity string) string {
+	switch strings.ToLower(strings.TrimSpace(severity)) {
+	case "critical":
+		return "严重"
+	case "warning", "warn":
+		return "警告"
+	case "info", "information":
+		return "提示"
+	case "":
+		return pdfEmptyValuePlaceholder
+	default:
+		return severity
+	}
+}
+
+// trendConfidenceText 置信度（0-1）转百分比文本。
+func trendConfidenceText(confidence float64) string {
+	return formatPercent(confidence*100, 1)
+}
+
+// trendDetectedAtText 把 RFC3339（生成侧写入的格式）转为本地可读时间；
+// 解析失败时原样返回，避免静默丢信息。
+func trendDetectedAtText(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return pdfEmptyValuePlaceholder
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", time.RFC3339Nano} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed.Local().Format("2006-01-02 15:04")
+		}
+	}
+	return value
+}
+
+// trendTimestampPattern 匹配文本中内嵌的 RFC3339 时间戳。
+var trendTimestampPattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})`)
+
+// localizeTrendTimestamps 把文本里的 RFC3339 时间戳转成本地可读格式。
+// 生成侧的告警描述按模板拼入了原始时间戳（"检测到内存使用在
+// 2026-10-15T03:00:00Z 出现异常值"），PDF 面向读者应当本地化；
+// 这里在渲染侧替换而不改生成侧，前端展示语义保持不变。
+func localizeTrendTimestamps(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return text
+	}
+	return trendTimestampPattern.ReplaceAllStringFunc(text, trendDetectedAtText)
+}
+
+func trendMetricReportLines(metrics []TrendMetricReport) []string {
+	lines := make([]string, 0, len(metrics))
+	for _, metric := range metrics {
+		lines = append(lines, fmt.Sprintf("%s：当前 %s，上期 %s，变化 %s，变化率 %s，趋势 %s",
+			fallbackPDFValue(metric.DisplayName),
+			trendValueText(metric.Current, metric.Unit),
+			trendValueText(metric.Previous, metric.Unit),
+			trendDeltaText(metric.Change, metric.Unit),
+			trendDeltaText(metric.ChangePercentage, "%"),
+			trendDirectionText(metric.Direction),
+		))
+	}
+	return lines
+}
+
+func trendPredictionReportLines(predictions []TrendPredictionReport) []string {
+	lines := make([]string, 0, len(predictions))
+	for _, item := range predictions {
+		line := fmt.Sprintf("%s：%s → %s（%s，置信水平 %s）",
+			fallbackPDFValue(item.DisplayName),
+			formatFloat(item.CurrentValue, 2),
+			formatFloat(item.PredictedValue, 2),
+			trendTimeframeText(item.Timeframe),
+			trendConfidenceText(item.Confidence),
+		)
+		if recommendation := strings.TrimSpace(item.Recommendation); recommendation != "" {
+			line += "；建议：" + recommendation
+		}
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+func trendAlertReportLines(alerts []TrendAlertReport) []string {
+	lines := make([]string, 0, len(alerts))
+	for _, alert := range alerts {
+		line := fmt.Sprintf("[%s] %s（%s）",
+			trendSeverityText(alert.Severity),
+			fallbackPDFValue(alert.Title),
+			trendDetectedAtText(alert.DetectedAt),
+		)
+		if description := strings.TrimSpace(alert.Description); description != "" {
+			line += "：" + localizeTrendTimestamps(description)
+		}
+		lines = append(lines, line)
+	}
+	return lines
 }
 
 func parseDeviceSummaryPayload(payload map[string]interface{}) DeviceSummaryData {
@@ -1668,6 +2049,22 @@ func toIntMap(value interface{}) map[string]int {
 		result[key] = toInt(item)
 	}
 	return result
+}
+
+func toBool(value interface{}) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true")
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	}
+	return false
 }
 
 func defaultStringPtr(value *string) string {

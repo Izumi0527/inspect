@@ -69,6 +69,23 @@ func writeGenericReport(path string, format string, data GenericReportData) (str
 	}
 }
 
+// writeTrendReport 分发趋势报告：PDF 走专属渲染（五语义区块），
+// excel / html / word 降级为通用报表结构（行式文本，无 JSON dump）。
+func writeTrendReport(path string, format string, data TrendReportData) (string, error) {
+	switch format {
+	case "excel":
+		return path, writeGenericExcel(path, data.toGenericReportData())
+	case "html":
+		return path, writeGenericHTML(path, data.toGenericReportData())
+	case "word":
+		return path, writeGenericWord(path, data.toGenericReportData())
+	case "pdf":
+		fallthrough
+	default:
+		return path, writeTrendPDF(path, data)
+	}
+}
+
 type inspectionHTMLView struct {
 	InspectionName    string
 	InspectionID      string
