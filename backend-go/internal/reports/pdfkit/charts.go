@@ -278,7 +278,7 @@ func RenderLineChart(spec LineSpec) ([]byte, error) {
 	}
 
 	chartSeries := make([]chart.Series, 0, len(spec.Series))
-	palette := []Color{ColorPrimary, ColorSuccess, ColorAmber500, ColorRose500, ColorIndigo300}
+	palette := DeviceSeriesPalette
 	for i, s := range spec.Series {
 		c := s.Color
 		if IsZero(c) {

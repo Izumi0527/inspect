@@ -54,6 +54,17 @@ var (
 
 	ColorWhite = Color{255, 255, 255}
 	ColorBlack = Color{0, 0, 0}
+
+	// Extended accents mirrored from the frontend monitoring charts. Values are
+	// the exact hex literals used by DEVICE_SERIES_COLORS / TRAFFIC_SERIES in
+	// frontend/src/features/monitoring/utils/monitoring.ts — do not "correct"
+	// them to nominal Tailwind v4 values; the two ends must stay identical.
+	ColorCyan600  = Color{8, 145, 178}  // #0891B2
+	ColorSky500   = Color{14, 165, 233} // #0EA5E9
+	ColorGreen500 = Color{34, 197, 94}  // #22C55E
+	ColorRed500   = Color{239, 68, 68}  // #EF4444
+	ColorGreen600 = Color{22, 163, 74}  // #16A34A
+	ColorSky600   = Color{2, 132, 199}  // #0284C7
 )
 
 // Semantic role aliases. Components should reference these rather than the
@@ -81,7 +92,17 @@ var (
 	ColorHeroGradientTop    = ColorIndigo700
 	ColorHeroGradientBottom = ColorIndigo500
 	ColorStatCardAccent     = ColorIndigo500
+
+	// 流量图的固定语义色（与页面 TRAFFIC_SERIES 对齐）：上行/出站 = green-600、
+	// 下行/入站 = sky-600。监控报告与页面共用同一对颜色，读者无需重新学习图例。
+	ColorTrafficUp   = ColorGreen600
+	ColorTrafficDown = ColorSky600
 )
+
+// DeviceSeriesPalette 是多设备性能/温度图的色序（颜色=设备、线型=指标），与
+// 前端 DEVICE_SERIES_COLORS 逐色一致：前端测试钉住首色 #0891B2，本变量由
+// pdfkit_palette_test.go 钉住，两侧共同构成跨端契约——改色必须同时改两端。
+var DeviceSeriesPalette = []Color{ColorCyan600, ColorSky500, ColorGreen500, ColorAmber500, ColorRed500}
 
 // Spacing tokens expressed in millimeters (PDF native unit). Roughly aligned
 // with Tailwind's 4/8/12/16/24 spacing scale (1 unit ≈ 0.5mm in print).
@@ -98,13 +119,19 @@ const (
 // chrome (cover / TOC / chapter dividers) and the component layer (hero /
 // cards / tables) so vertical rhythm stays consistent across reports.
 const (
-	FontHero    = 22.0
-	FontTitle   = 18.0
-	FontH1      = 16.0
-	FontH2      = 13.0
-	FontBody    = 11.0
-	FontSmall   = 9.0
-	FontCaption = 8.0
+	FontCover     = 32.0 // 封面大标题（chrome.go）
+	FontHero      = 22.0 // Hero 标题
+	FontTitle     = 18.0 // 页面大标题
+	FontSection   = 14.0 // 章节标题（SectionTitle / 报告章节标题）
+	FontH2        = 13.0 // 次级标题（chrome.go）
+	FontSubtitle  = 12.0 // 副标题（chrome.go）
+	FontBody      = 11.0 // 正文
+	FontTableBody = 10.0 // 表格正文 / 右对齐小注
+	FontTableHead = 9.5  // 软表格表头与正文
+	FontSmall     = 9.0  // 小字（巡检表头、chrome 小注）
+	FontCaption   = 8.5  // 卡片标签 / chips
+	FontMicro     = 8.0  // 页脚 / 空态附注
+	FontNano      = 7.5  // StatCard hint
 )
 
 // PassRateColor returns the semantic status color for a pass-rate value

@@ -7,9 +7,9 @@ import (
 	"github.com/phpdave11/gofpdf"
 )
 
-// HeroBanner is the slim 35-40mm header that introduces a section/page
-// (different from CoverPage which is a full A4 cover). Use it at the top
-// of inspection / statistics / monitoring PDFs to set the visual tone.
+// HeroBanner is the slim 35-40mm header that introduces a report or section.
+// Use it at the top of inspection / statistics / monitoring PDFs to set the
+// visual tone.
 type HeroBanner struct {
 	Title    string
 	Subtitle string
@@ -89,21 +89,25 @@ func WriteHeroBanner(pdf *gofpdf.Fpdf, hero HeroBanner) {
 	fitFontSize(pdf, tagline, textFontFamily(tagline), "", 8, 6, badgeW-4)
 	pdf.CellFormat(badgeW, 4, tagline, "", 0, "C", false, 0, "")
 
-	// 标题（字号 22pt，CJK Bold）
+	// 标题（CJK Bold）：长标题（用户自定义报表名）先按可用宽度自适应缩小
+	// （FontHero→FontSection），仍放不下再截断——绝不允许画到 hero 之外。
+	titleText := normalize(hero.Title, "报表")
+	titleW := usableW - badgeW - 22
 	pdf.SetTextColor(ColorWhite[0], ColorWhite[1], ColorWhite[2])
-	pdf.SetFont(FontFamilyCJK, "B", 22)
+	fitFontSize(pdf, titleText, FontFamilyCJK, "B", FontHero, FontSection, titleW)
 	pdf.SetXY(x+12, y+5.5)
-	pdf.CellFormat(usableW-badgeW-22, 10, normalize(hero.Title, "报表"), "", 1, "L", false, 0, "")
+	pdf.CellFormat(titleW, 10, TruncateToWidth(pdf, titleText, titleW), "", 1, "L", false, 0, "")
 
 	// 副标题（左侧 1.6mm 浅色短条 + 11pt 文字）
 	if subtitle := strings.TrimSpace(hero.Subtitle); subtitle != "" {
 		subY := y + 16.5
+		subW := usableW - badgeW - 25
 		pdf.SetFillColor(ColorIndigo300[0], ColorIndigo300[1], ColorIndigo300[2])
 		pdf.Rect(x+12, subY+0.6, 1.6, 4.2, "F")
-		pdf.SetFont(FontFamilyCJK, "", 11)
+		fitFontSize(pdf, subtitle, FontFamilyCJK, "", FontBody, FontMicro, subW)
 		pdf.SetTextColor(ColorWhite[0], ColorWhite[1], ColorWhite[2])
 		pdf.SetXY(x+15, subY)
-		pdf.CellFormat(usableW-badgeW-25, 6, subtitle, "", 1, "L", false, 0, "")
+		pdf.CellFormat(subW, 6, TruncateToWidth(pdf, subtitle, subW), "", 1, "L", false, 0, "")
 	}
 
 	// Chips（仅在有 chips 时渲染，置于 hero 底部）。宽度用 GetStringWidth
@@ -112,7 +116,7 @@ func WriteHeroBanner(pdf *gofpdf.Fpdf, hero HeroBanner) {
 	if len(hero.Chips) > 0 {
 		chipY := y + height - 11
 		chipX := x + 12
-		pdf.SetFont(FontFamilyCJK, "", 8.5)
+		pdf.SetFont(FontFamilyCJK, "", FontCaption)
 		for _, item := range hero.Chips {
 			text := strings.TrimSpace(item)
 			if text == "" {
@@ -136,6 +140,15 @@ func WriteHeroBanner(pdf *gofpdf.Fpdf, hero HeroBanner) {
 	pdf.SetY(y + height + 2)
 }
 
+// UsableWidth returns the page width left over after both side margins (mm).
+// Every full-width draw should size itself against this so nothing can spill
+// past the margins.
+func UsableWidth(pdf *gofpdf.Fpdf) float64 {
+	pageW, _ := pdf.GetPageSize()
+	left, _, right, _ := pdf.GetMargins()
+	return pageW - left - right
+}
+
 // SectionTitle writes a large section heading with an accent bar and a
 // thin underline. Replaces the old writePDFSectionTitle visual.
 func SectionTitle(pdf *gofpdf.Fpdf, title string) {
@@ -143,14 +156,16 @@ func SectionTitle(pdf *gofpdf.Fpdf, title string) {
 	left, _, right, _ := pdf.GetMargins()
 	usable := pageW - left - right
 
+	title = strings.TrimSpace(title)
+
 	y := pdf.GetY()
 	pdf.SetFillColor(ColorPrimary[0], ColorPrimary[1], ColorPrimary[2])
 	pdf.Rect(left, y+1, 2.4, 7, "F")
 
 	pdf.SetXY(left+5, y)
-	pdf.SetFont(FontFamilyCJK, "B", 14)
+	pdf.SetFont(FontFamilyCJK, "B", FontSection)
 	pdf.SetTextColor(ColorText[0], ColorText[1], ColorText[2])
-	pdf.CellFormat(usable-5, 9, strings.TrimSpace(title), "", 1, "L", false, 0, "")
+	pdf.CellFormat(usable-5, 9, TruncateToWidth(pdf, title, usable-5), "", 1, "L", false, 0, "")
 
 	pdf.SetDrawColor(ColorBorder[0], ColorBorder[1], ColorBorder[2])
 	pdf.SetLineWidth(0.2)
@@ -212,7 +227,7 @@ func WriteStatCardRow(pdf *gofpdf.Fpdf, cards []StatCard, columns int) {
 
 		// Label
 		pdf.SetXY(x+5, y+5)
-		pdf.SetFont(FontFamilyCJK, "", 8.5)
+		pdf.SetFont(FontFamilyCJK, "", FontCaption)
 		pdf.SetTextColor(ColorTextMuted[0], ColorTextMuted[1], ColorTextMuted[2])
 		pdf.CellFormat(cardW-10, 4.5, strings.TrimSpace(card.Label), "", 1, "L", false, 0, "")
 
@@ -228,7 +243,7 @@ func WriteStatCardRow(pdf *gofpdf.Fpdf, cards []StatCard, columns int) {
 		// Hint
 		if hint := strings.TrimSpace(card.Hint); hint != "" {
 			pdf.SetX(x + 5)
-			pdf.SetFont(FontFamilyCJK, "", 7.5)
+			pdf.SetFont(FontFamilyCJK, "", FontNano)
 			pdf.SetTextColor(ColorTextMuted[0], ColorTextMuted[1], ColorTextMuted[2])
 			pdf.CellFormat(cardW-10, 3.5, hint, "", 0, "L", false, 0, "")
 		}
@@ -257,10 +272,10 @@ func ProgressBar(pdf *gofpdf.Fpdf, label string, percent float64, fill Color) {
 	usable := pageW - left - right
 
 	// Caption row
-	pdf.SetFont(FontFamilyCJK, "B", 10)
+	pdf.SetFont(FontFamilyCJK, "B", FontTableBody)
 	pdf.SetTextColor(ColorText[0], ColorText[1], ColorText[2])
 	pdf.CellFormat(usable*0.7, 5.5, strings.TrimSpace(label), "", 0, "L", false, 0, "")
-	pdf.SetFont(FontFamilyLatin, "B", 10)
+	pdf.SetFont(FontFamilyLatin, "B", FontTableBody)
 	pdf.SetTextColor(fill[0], fill[1], fill[2])
 	pdf.CellFormat(usable*0.3, 5.5, fmt.Sprintf("%.1f%%", percent), "", 1, "R", false, 0, "")
 
@@ -281,6 +296,10 @@ func ProgressBar(pdf *gofpdf.Fpdf, label string, percent float64, fill Color) {
 // SoftTable is the modernized replacement for the boxy bordered table:
 // it draws only top/bottom horizontal rules and a header underline (no
 // per-cell vertical borders), and uses ColorSurfaceMuted for zebra.
+//
+// Cells are truncated to their column width via FitCellText, and a widths sum
+// exceeding the usable page width is proportionally scaled down, so a caller
+// can never draw past the page margins.
 type SoftTable struct {
 	Headers      []string
 	Rows         [][]string
@@ -325,6 +344,16 @@ func WriteSoftTable(pdf *gofpdf.Fpdf, t SoftTable) float64 {
 	for _, w := range t.Widths {
 		totalW += w
 	}
+	widths := t.Widths
+	if totalW > usable && totalW > 0 {
+		// 防御：列宽总和超过可用宽度时按比例缩放，宁可列略窄也不越出页缘。
+		scale := usable / totalW
+		widths = make([]float64, len(t.Widths))
+		for i, w := range t.Widths {
+			widths[i] = w * scale
+		}
+		totalW = usable
+	}
 	startX := left + (usable-totalW)/2
 
 	prevLine := pdf.GetLineWidth()
@@ -340,13 +369,13 @@ func WriteSoftTable(pdf *gofpdf.Fpdf, t SoftTable) float64 {
 	pdf.SetFillColor(t.HeaderFill[0], t.HeaderFill[1], t.HeaderFill[2])
 	pdf.Rect(startX, y, totalW, t.HeaderHeight, "F")
 	pdf.SetTextColor(t.HeaderColor[0], t.HeaderColor[1], t.HeaderColor[2])
-	pdf.SetFont(FontFamilyCJK, "B", 9.5)
+	pdf.SetFont(FontFamilyCJK, "B", FontTableHead)
 	pdf.SetXY(startX, y)
 	for i, h := range t.Headers {
-		if i >= len(t.Widths) {
+		if i >= len(widths) {
 			break
 		}
-		pdf.CellFormat(t.Widths[i], t.HeaderHeight, h, "", 0, t.HeaderAlign, false, 0, "")
+		pdf.CellFormat(widths[i], t.HeaderHeight, FitCellText(pdf, h, widths[i]), "", 0, t.HeaderAlign, false, 0, "")
 	}
 	pdf.Ln(-1)
 
@@ -359,7 +388,7 @@ func WriteSoftTable(pdf *gofpdf.Fpdf, t SoftTable) float64 {
 	pdf.SetDrawColor(ColorBorder[0], ColorBorder[1], ColorBorder[2])
 
 	// Body rows (zebra background, no vertical borders, thin row separators)
-	pdf.SetFont(FontFamilyCJK, "", 9.5)
+	pdf.SetFont(FontFamilyCJK, "", FontTableHead)
 	pdf.SetTextColor(ColorText[0], ColorText[1], ColorText[2])
 	for rowIdx, row := range t.Rows {
 		rowY := pdf.GetY()
@@ -369,14 +398,14 @@ func WriteSoftTable(pdf *gofpdf.Fpdf, t SoftTable) float64 {
 		}
 		pdf.SetXY(startX, rowY)
 		for i := range t.Headers {
-			if i >= len(t.Widths) {
+			if i >= len(widths) {
 				break
 			}
 			val := ""
 			if i < len(row) {
 				val = row[i]
 			}
-			pdf.CellFormat(t.Widths[i], t.BodyHeight, val, "", 0, t.Align, false, 0, "")
+			pdf.CellFormat(widths[i], t.BodyHeight, FitCellText(pdf, val, widths[i]), "", 0, t.Align, false, 0, "")
 		}
 		pdf.Ln(-1)
 	}
@@ -435,7 +464,7 @@ func EmptyStateWithHint(pdf *gofpdf.Fpdf, message, hint string) {
 	hintText := strings.TrimSpace(hint)
 	textX := left + 11
 	pdf.SetXY(textX, y+h/2-2.5)
-	pdf.SetFont(FontFamilyCJK, "B", 9.5)
+	pdf.SetFont(FontFamilyCJK, "B", FontTableHead)
 	pdf.SetTextColor(ColorText[0], ColorText[1], ColorText[2])
 	if hintText == "" {
 		// 单行：message 居左，宽度铺满
@@ -444,7 +473,7 @@ func EmptyStateWithHint(pdf *gofpdf.Fpdf, message, hint string) {
 		// 主提示窄一点，让 hint 紧随其后
 		msgW := pdf.GetStringWidth(msg) + 1
 		pdf.CellFormat(msgW, 5, msg, "", 0, "L", false, 0, "")
-		pdf.SetFont(FontFamilyCJK, "", 8)
+		pdf.SetFont(FontFamilyCJK, "", FontMicro)
 		pdf.SetTextColor(ColorTextMuted[0], ColorTextMuted[1], ColorTextMuted[2])
 		pdf.CellFormat(usable-12-msgW, 5, " · "+hintText, "", 0, "L", false, 0, "")
 	}
@@ -475,7 +504,7 @@ func PageFooter(pdf *gofpdf.Fpdf, brand string, pageNo int) {
 	pdf.Line(left, pageH-12, left+usable, pageH-12)
 
 	pdf.SetY(-10)
-	pdf.SetFont(FontFamilyCJK, "", 8)
+	pdf.SetFont(FontFamilyCJK, "", FontMicro)
 	pdf.SetTextColor(ColorTextMuted[0], ColorTextMuted[1], ColorTextMuted[2])
 	pdf.CellFormat(0, 5, fmt.Sprintf("%s · 第 %d 页", brand, pageNo), "", 0, "C", false, 0, "")
 	pdf.SetTextColor(ColorBlack[0], ColorBlack[1], ColorBlack[2])
@@ -512,6 +541,9 @@ func textFontFamily(text string) string {
 }
 
 // fitFontSize steps the font size down (0.5pt at a time, floored at minSize)
+//
+// 起点与下限是各调用点的自适应区间端点（badge 15→9、tagline 8→6、StatCard 值 16→9），
+// 不是排版层级字号，故不纳入 tokens 字号阶梯；绘制层级字号一律走 FontX 令牌。
 // until text fits maxWidth with the given family/style. The font stays set
 // at the returned size so callers can draw immediately afterwards.
 func fitFontSize(pdf *gofpdf.Fpdf, text, family, style string, size, minSize, maxWidth float64) float64 {
@@ -526,4 +558,24 @@ func fitFontSize(pdf *gofpdf.Fpdf, text, family, style string, size, minSize, ma
 	}
 	pdf.SetFont(family, style, minSize)
 	return minSize
+}
+
+// drawVerticalGradient paints a top-to-bottom color gradient inside the
+// rectangle (x,y,w,h) by stacking `bands` thin horizontal slices, each
+// colored by linear interpolation between top and bottom.
+func drawVerticalGradient(pdf *gofpdf.Fpdf, x, y, w, h float64, top, bottom Color, bands int) {
+	if bands < 2 {
+		bands = 2
+	}
+	bandH := h / float64(bands)
+	for i := 0; i < bands; i++ {
+		t := float64(i) / float64(bands-1)
+		r := int(float64(top[0])*(1-t) + float64(bottom[0])*t)
+		g := int(float64(top[1])*(1-t) + float64(bottom[1])*t)
+		b := int(float64(top[2])*(1-t) + float64(bottom[2])*t)
+		pdf.SetFillColor(r, g, b)
+		// Overlap each band by 0.05mm to avoid hairline gaps at zoom levels
+		// where PDF viewers anti-alias seams differently.
+		pdf.Rect(x, y+float64(i)*bandH-0.05, w, bandH+0.1, "F")
+	}
 }

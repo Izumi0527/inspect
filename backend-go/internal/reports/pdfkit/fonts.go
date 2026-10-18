@@ -119,6 +119,7 @@ func RegisterFontsWithPaths(pdf *gofpdf.Fpdf, paths FontPaths) error {
 			return err
 		}
 		pdf.AddUTF8FontFromBytes(face.family, face.style, raw)
+		// 字号 10pt 仅为触发一次真实 SetFont 路径以验证注册结果，与排版层级无关。
 		pdf.SetFont(face.family, face.style, 10)
 		if err := pdf.Error(); err != nil {
 			return fmt.Errorf("注册PDF字体 %s/%s 失败（%s）: %w", face.family, face.style, describeFontSource(face.path), err)

@@ -222,42 +222,6 @@ func TestSoftTable_RendersInsideGofpdf(t *testing.T) {
 	}
 }
 
-// TestWriteCoverPage_RendersStandalone validates the cover page primitive
-// in isolation (without the full report pipeline).
-func TestWriteCoverPage_RendersStandalone(t *testing.T) {
-	pdf := gofpdf.New("P", "mm", "A4", "")
-	pdf.SetMargins(15, 15, 15)
-	if err := pdfkit.RegisterFonts(pdf); err != nil {
-		if strings.Contains(err.Error(), "未找到可用的PDF中文字体") {
-			t.Skipf("缺中文字体，跳过: %v", err)
-		}
-		t.Fatalf("RegisterFonts() error = %v", err)
-	}
-
-	pdfkit.WriteCoverPage(pdf, pdfkit.CoverPage{
-		Title:       "网络设备巡检报告",
-		Subtitle:    "2026 年 5 月 — 季度回顾",
-		GeneratedAt: "2026-05-09 10:30:00",
-		Range:       "2026-05-01 ~ 2026-05-09",
-		GeneratedBy: "admin",
-		Highlights:  []string{"设备 42 台", "通过率 96.4%", "活跃告警 3"},
-	})
-
-	buf := bytes.NewBuffer(nil)
-	if err := pdf.Output(buf); err != nil {
-		t.Fatalf("pdf.Output() error = %v", err)
-	}
-	raw := buf.Bytes()
-	if !bytes.HasPrefix(raw, []byte("%PDF-")) {
-		t.Fatalf("not a PDF (first 8 = %x)", first8(raw))
-	}
-	// Cover page packs gradient bands + circles + multiple text lines
-	// + brand badge — easily clears 6KB even with no compression.
-	if len(raw) < 4*1024 {
-		t.Fatalf("cover-only PDF too small (%d bytes); expected ≥ 4KB", len(raw))
-	}
-}
-
 // isPNG checks the standard PNG signature: 0x89 'P' 'N' 'G' 0x0D 0x0A 0x1A 0x0A
 func isPNG(b []byte) bool {
 	return len(b) >= 8 &&

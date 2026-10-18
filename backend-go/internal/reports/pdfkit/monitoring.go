@@ -78,7 +78,8 @@ type MonitoringAlertInput struct {
 func RenderMonitoringPDF(path string, input MonitoringPDFInput) error {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetMargins(18, 18, 18)
-	pdf.SetAutoPageBreak(true, 16)
+	// 15mm 与报告侧 pdfBottomMM 统一（原先 16mm 会让两类 PDF 的底线差 1mm）。
+	pdf.SetAutoPageBreak(true, 15)
 	if err := RegisterFonts(pdf); err != nil {
 		return err
 	}
@@ -155,8 +156,8 @@ func renderMonitoringStats(pdf *gofpdf.Fpdf, stats *MonitoringStatsInput) {
 		{Label: "活跃告警", Value: fmt.Sprintf("%d", stats.ActiveAlerts), Color: ColorDanger},
 		{Label: "平均CPU", Value: fmt.Sprintf("%.1f%%", stats.AvgCPU), Color: ColorAmber500},
 		{Label: "平均内存", Value: fmt.Sprintf("%.1f%%", stats.AvgMemory), Color: ColorIndigo400},
-		{Label: "上行流量峰值", Value: formatBandwidthBps(stats.PeakOutbound), Color: ColorSuccess},
-		{Label: "下行流量峰值", Value: formatBandwidthBps(stats.PeakInbound), Color: ColorEmerald500},
+		{Label: "上行流量峰值", Value: formatBandwidthBps(stats.PeakOutbound), Color: ColorTrafficUp},
+		{Label: "下行流量峰值", Value: formatBandwidthBps(stats.PeakInbound), Color: ColorTrafficDown},
 	}, 6)
 }
 
@@ -179,8 +180,6 @@ func formatBandwidthBps(bps float64) string {
 // 与页面一致：最多绘制 5 台设备（颜色 = 设备、线型 = 指标），更多设备只在标题提示
 const maxPDFPerformanceDevices = 5
 
-var devicePerformancePalette = []Color{ColorPrimary, ColorSuccess, ColorAmber500, ColorRose500, ColorIndigo300}
-
 func renderMonitoringCharts(pdf *gofpdf.Fpdf, perfLabels []string, devices []DevicePerformanceSeries, traffic []NetworkTrafficPoint) {
 	SectionTitle(pdf, "性能趋势")
 	if len(devices) == 0 || len(perfLabels) == 0 {
@@ -196,7 +195,7 @@ func renderMonitoringCharts(pdf *gofpdf.Fpdf, perfLabels []string, devices []Dev
 		}
 		series := make([]LineSeries, 0, len(shown)*2)
 		for i, dev := range shown {
-			color := devicePerformancePalette[i%len(devicePerformancePalette)]
+			color := DeviceSeriesPalette[i%len(DeviceSeriesPalette)]
 			series = append(series,
 				LineSeries{Name: dev.Name + " CPU", Color: color, Values: dev.CPU},
 				LineSeries{Name: dev.Name + " 内存", Color: color, Values: dev.Memory, DashArray: []float64{6, 4}},
@@ -236,8 +235,8 @@ func renderMonitoringCharts(pdf *gofpdf.Fpdf, perfLabels []string, devices []Dev
 		Title:   "流量 (Mbps)",
 		XLabels: labels,
 		Series: []LineSeries{
-			{Name: "Inbound", Color: ColorPrimary, Values: inValues},
-			{Name: "Outbound", Color: ColorEmerald500, Values: outValues},
+			{Name: "下行", Color: ColorTrafficDown, Values: inValues},
+			{Name: "上行", Color: ColorTrafficUp, Values: outValues},
 		},
 	}
 	if png, err := RenderLineChart(spec); err == nil {

@@ -8,6 +8,7 @@ import (
 	_ "unsafe"
 
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
+	_ "github.com/your-org/inspect-system/backend-go/internal/reports/pdfkit"
 )
 
 // 本文件锁定 PDF 报告端对四类结构化明细的解析与渲染。
@@ -32,7 +33,7 @@ func parseComponentStatusDetails(raw *string) *reports.ComponentStatusReport
 //go:linkname writeInspectionPDF github.com/your-org/inspect-system/backend-go/internal/reports.writeInspectionPDF
 func writeInspectionPDF(path string, data reports.InspectionReportData) error
 
-//go:linkname bodyCellTextIndent github.com/your-org/inspect-system/backend-go/internal/reports.bodyCellTextIndent
+//go:linkname bodyCellTextIndent github.com/your-org/inspect-system/backend-go/internal/reports/pdfkit.gridBodyCellTextIndent
 func bodyCellTextIndent(accents [][3]int, rowIndex, colIndex int) float64
 
 func rawJSON(s string) *string { return &s }
