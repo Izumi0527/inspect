@@ -21,7 +21,6 @@ export {
   fetchRecentAlerts,
   fetchNetworkOverview,
   performDeviceScan,
-  generateReport,
   searchDevices
 } from './api/dashboard.api'
 

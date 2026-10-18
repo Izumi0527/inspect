@@ -1,7 +1,6 @@
 import {
   fetchDashboardData,
   fetchDashboardNotificationsWithMeta,
-  generateReport,
   saveTopologyLayout,
 } from '@/features/dashboard/api/dashboard.api'
 
@@ -17,33 +16,13 @@ jest.mock('@/lib/api-client', () => ({
   },
 }))
 
-describe('dashboard.api generateReport', () => {
+describe('dashboard.api', () => {
   beforeEach(() => {
-    jest.useFakeTimers()
-    jest.setSystemTime(new Date('2026-02-27T00:00:00.000Z'))
-    mockPost.mockResolvedValue({ success: true, data: { id: 1 } })
     mockGet.mockReset()
   })
 
   afterEach(() => {
-    jest.useRealTimers()
     jest.clearAllMocks()
-  })
-
-  it('应调用 /reports/generate 并使用后端 reportGenerateRequest 结构', async () => {
-    await generateReport('inspection-summary')
-
-    expect(mockPost).toHaveBeenCalledTimes(1)
-    expect(mockPost).toHaveBeenCalledWith(
-      '/reports/generate',
-      expect.objectContaining({
-        report_type: 'inspection_summary',
-        format: 'pdf',
-        category: 'weekly',
-        start_time: '2026-02-20T00:00:00.000Z',
-        end_time: '2026-02-27T00:00:00.000Z',
-      })
-    )
   })
 
   it('应解析总览接口返回的分区权限元信息', async () => {

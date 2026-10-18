@@ -601,52 +601,6 @@ export async function performDeviceScan(subnet: string = '192.168.1.0/24'): Prom
   })
 }
 
-export async function generateReport(
-  reportType: 'inspection-summary' | 'device-health' | 'trend-analysis' = 'inspection-summary'
-): Promise<Record<string, unknown>> {
-  // 统一走后端通用端点：POST /api/v1/reports/generate
-  // 注意：该端点请求体为 snake_case（见后端 handlers.reportGenerateRequest）
-  const now = new Date()
-  const endTime = now.toISOString()
-  const startTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
-
-  const reportTypeMap = {
-    'inspection-summary': {
-      name: '巡检汇总报表',
-      report_type: 'inspection_summary',
-      custom_config: {},
-    },
-    'device-health': {
-      name: '设备健康报表',
-      report_type: 'performance',
-      custom_config: {},
-    },
-    'trend-analysis': {
-      name: '趋势分析报表',
-      report_type: 'trend',
-      custom_config: {
-        include_predictions: true,
-        granularity: 'day',
-      },
-    },
-  } as const
-
-  const config = reportTypeMap[reportType]
-
-  return api.post('/reports/generate', {
-    name: config.name,
-    report_type: config.report_type,
-    start_time: startTime,
-    end_time: endTime,
-    device_ids: [],
-    include_charts: true,
-    include_details: true,
-    custom_config: config.custom_config,
-    format: 'pdf',
-    category: 'weekly',
-  })
-}
-
 export async function searchDevices(query: string): Promise<Record<string, unknown>[]> {
   try {
     const payload = await api.get<unknown>(`/devices/search?q=${encodeURIComponent(query)}&limit=10`)

@@ -7,7 +7,6 @@ const mockSearchDevices = jest.fn()
 jest.mock('@/features/dashboard/api/dashboard.api', () => ({
   fetchDashboardData: jest.fn(),
   performDeviceScan: jest.fn(),
-  generateReport: jest.fn(),
   searchDevices: (...args: unknown[]) => mockSearchDevices(...args),
 }))
 
