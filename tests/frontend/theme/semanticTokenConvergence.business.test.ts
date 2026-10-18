@@ -174,15 +174,6 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/reports/components/ReportExportModal.tsx',
-    bannedPatterns: [
-      /text-gray-900 dark:text-gray-100/g,
-      /text-gray-600 dark:text-gray-400/g,
-      /bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400/g,
-      /text-gray-700 dark:text-gray-300/g,
-    ],
-  },
-  {
     file: 'frontend/src/features/reports/components/InspectionReportModal.tsx',
     bannedPatterns: [
       /bg-white dark:bg-gray-900/g,

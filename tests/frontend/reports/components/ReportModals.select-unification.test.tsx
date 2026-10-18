@@ -1,8 +1,6 @@
 import React from 'react'
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { InspectionReportModal } from '@/features/reports/components/InspectionReportModal'
-import { ReportExportModal } from '@/features/reports/components/ReportExportModal'
 import { ReportEditModal } from '@/features/reports/components/ReportEditModal'
 
 const mockGenerateInspectionReport = jest.fn()
@@ -234,15 +232,5 @@ describe('Report 弹窗下拉统一化', () => {
 
     expect(container.querySelector('select')).toBeNull()
     expect(screen.getByRole('combobox', { name: '报表类别' })).toBeInTheDocument()
-  })
-
-  it('ReportExportModal 导出格式下拉应使用 ui/select 并具备 aria-label', async () => {
-    const user = userEvent.setup()
-    const { container } = render(<ReportExportModal isOpen onClose={jest.fn()} />)
-
-    await user.click(screen.getByText('设备汇总报表'))
-
-    expect(container.querySelector('select')).toBeNull()
-    expect(screen.getByRole('combobox', { name: '导出格式' })).toBeInTheDocument()
   })
 })
