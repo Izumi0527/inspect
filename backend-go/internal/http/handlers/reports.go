@@ -73,7 +73,6 @@ func (h ReportsHandler) Register(group *echo.Group) {
 	group.POST("/reports/templates/:template_id/clone", h.CloneTemplate)
 
 	group.POST("/reports/export/excel", h.ExportExcel)
-	group.POST("/reports/export/pdf", h.ExportPDF)
 	group.POST("/reports/export/word", h.ExportWord)
 
 	group.GET("/reports/scheduled", h.ListScheduledReports)

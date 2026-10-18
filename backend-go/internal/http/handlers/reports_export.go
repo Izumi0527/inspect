@@ -112,10 +112,6 @@ func (h ReportsHandler) ExportExcel(c echo.Context) error {
 	})
 }
 
-func (h ReportsHandler) ExportPDF(c echo.Context) error {
-	return h.exportTextBased(c, "pdf")
-}
-
 func (h ReportsHandler) ExportWord(c echo.Context) error {
 	return h.exportTextBased(c, "word")
 }
@@ -146,9 +142,7 @@ func (h ReportsHandler) exportTextBased(c echo.Context, format string) error {
 	}
 
 	ext := "txt"
-	if format == "pdf" {
-		ext = "pdf"
-	} else if format == "word" {
+	if format == "word" {
 		ext = "doc"
 	}
 

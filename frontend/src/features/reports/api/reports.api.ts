@@ -1084,36 +1084,6 @@ export async function exportToExcel(data: {
   }
 }
 
-// 导出PDF
-export async function exportToPDF(data: {
-  title: string
-  content: string
-  options?: {
-    format: 'A4' | 'A3'
-    orientation: 'portrait' | 'landscape'
-    includeHeader: boolean
-    includeFooter: boolean
-  }
-}): Promise<string> {
-  try {
-    const response = await api.post<{success: boolean, data: unknown, message?: string}>('/reports/export/pdf', data)
-
-    if (response.success) {
-      const record = toRecord(response.data)
-      const downloadUrl = toOptionalString(record.downloadUrl ?? record['download_url'])
-
-      if (downloadUrl) {
-        return downloadUrl
-      }
-    }
-
-    throw new Error('PDF导出失败')
-  } catch (error) {
-    console.error('PDF导出失败:', error)
-    throw error
-  }
-}
-
 // 导出Word
 export async function exportToWord(data: {
   title: string
@@ -1835,7 +1805,6 @@ export const reportTemplatesApi = {
 
 export const exportApi = {
   exportToExcel,
-  exportToPDF,
   exportToWord
 }
 

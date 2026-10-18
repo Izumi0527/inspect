@@ -346,24 +346,6 @@ export const useExportToExcel = () => {
   })
 }
 
-export const useExportToPDF = () => {
-  return useMutation({
-    mutationFn: exportApi.exportToPDF,
-    onSuccess: async (downloadUrl) => {
-      try {
-        await downloadWithAuth(downloadUrl, `report_${Date.now()}.pdf`)
-        toast.success('PDF导出成功')
-      } catch (error) {
-        console.error('PDF导出下载失败:', error)
-        toast.error('PDF下载失败')
-      }
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'PDF导出失败')
-    },
-  })
-}
-
 export const useExportToWord = () => {
   return useMutation({
     mutationFn: exportApi.exportToWord,
