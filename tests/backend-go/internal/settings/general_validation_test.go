@@ -1,9 +1,23 @@
-package settings
+package settings_test
+
+// 通用配置校验的回归：数字区间 / 枚举 / 字符串形状三类约束在写库前拦住
+// 非法值。这两个校验函数未导出，经 go:linkname 直测（与同目录
+// monitoring_uptime_test.go 同口径）。
 
 import (
 	"strings"
 	"testing"
+	_ "unsafe"
+
+	// blank import：确保被测包被链接进测试二进制，go:linkname 才能解析到符号。
+	_ "github.com/your-org/inspect-system/backend-go/internal/settings"
 )
+
+//go:linkname validateGeneralSetting github.com/your-org/inspect-system/backend-go/internal/settings.validateGeneralSetting
+func validateGeneralSetting(key string, value interface{}) (enforcedType string, err error)
+
+//go:linkname validateNewSettingKey github.com/your-org/inspect-system/backend-go/internal/settings.validateNewSettingKey
+func validateNewSettingKey(key string) error
 
 func TestValidateGeneralSettingNumeric(t *testing.T) {
 	cases := []struct {
