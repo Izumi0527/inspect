@@ -57,6 +57,13 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 	})
 	pdf.Ln(6)
 
+	// 多设备报告（≥2 台）在 Hero 之后插入「报告导航」目录页：先按目录项数
+	// 预留页，正文渲染时记录各章节/设备起始页，文末回填页码与可点击跳转。
+	// 单台/空报告 toc == nil，版式与旧版完全一致。
+	toc := newInspectionTOC(data)
+	toc.reserve(pdf)
+
+	toc.markSection("基本信息", pdf.PageNo())
 	writePDFSectionTitle(pdf, "基本信息")
 	// 4 张「基本信息」卡片改用 pdfkit.WriteStatCardRow（白底+顶色条）
 	// 与「统计摘要」风格统一；颜色按业务语义彩虹化：标识/时间/数量/性能时长
@@ -71,6 +78,7 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 	}, 4)
 	pdf.Ln(4)
 
+	toc.markSection("统计摘要", pdf.PageNo())
 	writePDFSectionTitle(pdf, "统计摘要")
 	// 卡片按实际出现的状态动态生成：只有真的存在「错误 / 跳过 / 未知」
 	// 检查项时才多出对应卡片。固定 4 张卡（总/通过/警告/失败）是旧版
@@ -87,7 +95,7 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 	// 异常清单紧跟统计摘要：数字之后立刻给出「哪台设备的哪一项出了问题」，
 	// 读者不必翻到后面逐设备明细里自行检索状态列。
 	pdf.Ln(2)
-	writeInspectionIssueSection(pdf, collectInspectionIssues(data))
+	writeInspectionIssueSection(pdf, collectInspectionIssues(data), toc.markSection)
 	pdf.Ln(4)
 
 	// 旧版此处无条件 addPDFPage，设备很少甚至为空时首页下半页整片留白。
@@ -95,6 +103,7 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 	// 概览表依赖 writePDFTable 的跨页表头重绘自然续页。
 	ensurePDFSpace(pdf, 48)
 	pdf.Ln(1)
+	toc.markSection("设备巡检详情", pdf.PageNo())
 	writePDFSectionTitle(pdf, "设备巡检详情")
 	if len(data.Devices) == 0 {
 		pdfkit.EmptyStateWithHint(pdf, "当前筛选条件下暂无设备巡检明细", "请调整筛选条件后重试")
@@ -127,10 +136,13 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 	pdfkit.GridTable(pdf, []string{"设备名称", "IP地址", "类型", "状态", "通过率", "问题"}, overviewRows, []float64{35, 28, 25, 24, 24, 18}, overviewStyle)
 	pdf.Ln(9)
 
-	for _, device := range data.Devices {
+	for deviceIdx, device := range data.Devices {
 		// 小节标题 + 属性表头 + 前两行合计约 35mm；不够就先换页，避免
 		// 「设备: xxx」标题孤悬页底而表格全部落到下一页。
 		ensurePDFSpace(pdf, 42)
+		// 每台设备一个二级书签，多设备报告可经阅读器书签面板直接跳转。
+		pdfkit.Bookmark(pdf, deviceBookmarkLabel(device), 1)
+		toc.markDevice(deviceIdx, pdf.PageNo())
 		writePDFSubSectionTitle(pdf, fmt.Sprintf("设备: %s", device.DeviceName))
 		deviceRows := [][]string{
 			{"IP地址", device.IPAddress},
@@ -181,7 +193,10 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 		pdf.Ln(10)
 	}
 
-	writeInspectionConclusion(pdf, data)
+	writeInspectionConclusion(pdf, data, toc.markSection)
+
+	// 目录回填：所有目标页码此时已确定，切回预留页写页码与可点击链接。
+	toc.write(pdf)
 
 	return pdf.OutputFileAndClose(path)
 }
@@ -675,6 +690,8 @@ func writePDFSubtitle(pdf *gofpdf.Fpdf, subtitle string) {
 }
 
 func writePDFSectionTitle(pdf *gofpdf.Fpdf, title string) {
+	// 每个章节进入阅读器书签面板（顶层）。
+	pdfkit.Bookmark(pdf, title, 0)
 	pdf.SetFont(pdfFontName, "B", pdfHeadingSize)
 	x := pdf.GetX()
 	y := pdf.GetY()
@@ -1243,8 +1260,11 @@ func writePDFCallout(pdf *gofpdf.Fpdf, title, hint string, accent, tint [3]int) 
 
 // writeInspectionIssueSection 输出「异常与告警」章节。无异常时给出绿色
 // 结论横幅，而不是留白或空表。
-func writeInspectionIssueSection(pdf *gofpdf.Fpdf, issues []inspectionIssue) {
+func writeInspectionIssueSection(pdf *gofpdf.Fpdf, issues []inspectionIssue, record func(string, int)) {
 	ensurePDFSpace(pdf, 46)
+	if record != nil {
+		record("异常与告警", pdf.PageNo())
+	}
 	writePDFSectionTitle(pdf, "异常与告警")
 
 	if len(issues) == 0 {
@@ -1660,11 +1680,175 @@ func inspectionRemediation(checkName, checkType string) string {
 	}
 }
 
+// deviceBookmarkLabel 生成设备书签文本：「设备名 (IP)」，IP 缺失时只有设备名。
+func deviceBookmarkLabel(device InspectionDeviceData) string {
+	name := fallbackPDFValue(device.DeviceName)
+	if ip := strings.TrimSpace(device.IPAddress); ip != "" {
+		return fmt.Sprintf("%s (%s)", name, ip)
+	}
+	return name
+}
+
+// ---------------------------------------------------------------------------
+// 多设备导航：目录页（阅读器书签由 pdfkit.Bookmark 单独生成）
+// ---------------------------------------------------------------------------
+
+// tocSectionLabels 是巡检报告目录的章节顺序，必须与正文渲染顺序一致。
+var tocSectionLabels = []string{"基本信息", "统计摘要", "异常与告警", "设备巡检详情", "巡检情况说明", "修复方案"}
+
+// tocRowsPerPage 是目录页每页行数上限；首页为「报告导航」标题让出的空间
+// 已包含在该上限内，故预留页数与行数一一对应。
+const tocRowsPerPage = 36
+
+// inspectionTOC 收集目录项的目标页码，供文档末尾回填目录页。所有方法对
+// nil 接收者安全——未启用目录（单台/空报告）时调用方无需分支。
+type inspectionTOC struct {
+	startPage    int
+	pages        int
+	sectionPages map[string]int
+	deviceLabels []string
+	deviceIPs    []string
+	devicePages  []int
+}
+
+// newInspectionTOC 为多设备（≥2 台）巡检报告构建目录；单台/空报告返回 nil。
+func newInspectionTOC(data InspectionReportData) *inspectionTOC {
+	if len(data.Devices) < 2 {
+		return nil
+	}
+	toc := &inspectionTOC{
+		sectionPages: make(map[string]int, len(tocSectionLabels)),
+		devicePages:  make([]int, len(data.Devices)),
+		deviceLabels: make([]string, 0, len(data.Devices)),
+		deviceIPs:    make([]string, 0, len(data.Devices)),
+	}
+	for i := range toc.devicePages {
+		toc.devicePages[i] = -1
+	}
+	for i := range data.Devices {
+		// 名称与 IP 分开存储：目录行先按可用宽度截断名称、再紧跟 IP，
+		// 超长设备名因此不会把 IP 一起剪掉（书签仍用「名称 (IP)」全名）。
+		toc.deviceLabels = append(toc.deviceLabels, fallbackPDFValue(data.Devices[i].DeviceName))
+		toc.deviceIPs = append(toc.deviceIPs, strings.TrimSpace(data.Devices[i].IPAddress))
+	}
+	rows := len(tocSectionLabels) + len(toc.deviceLabels)
+	toc.pages = (rows + tocRowsPerPage - 1) / tocRowsPerPage
+	return toc
+}
+
+// reserve 在 Hero 之后预留目录页，并把正文起始推到预留区之后。
+func (t *inspectionTOC) reserve(pdf *gofpdf.Fpdf) {
+	if t == nil {
+		return
+	}
+	t.startPage = pdf.PageNo() + 1
+	for i := 0; i < t.pages+1; i++ {
+		addPDFPage(pdf)
+	}
+}
+
+// markSection 记录章节起始页。
+func (t *inspectionTOC) markSection(label string, page int) {
+	if t == nil || label == "" || page <= 0 {
+		return
+	}
+	t.sectionPages[label] = page
+}
+
+// markDevice 记录第 index 台设备的起始页。
+func (t *inspectionTOC) markDevice(index, page int) {
+	if t == nil || index < 0 || index >= len(t.devicePages) || page <= 0 {
+		return
+	}
+	t.devicePages[index] = page
+}
+
+// write 回填目录页：章节/设备分行、页码右对齐、整行可点击跳转到目标页。
+// 必须在正文全部渲染完成后调用（此时目标页码已全部记录）。
+func (t *inspectionTOC) write(pdf *gofpdf.Fpdf) {
+	if t == nil || t.startPage <= 0 {
+		return
+	}
+	pageW, pageH := pdf.GetPageSize()
+	left, _, right, _ := pdf.GetMargins()
+	usable := pageW - left - right
+
+	type tocRow struct {
+		label string
+		ip    string
+		page  int
+		level int
+	}
+	rows := make([]tocRow, 0, len(tocSectionLabels)+len(t.deviceLabels))
+	for _, label := range tocSectionLabels {
+		rows = append(rows, tocRow{label: label, page: t.sectionPages[label], level: 0})
+	}
+	for i, label := range t.deviceLabels {
+		rows = append(rows, tocRow{label: label, ip: t.deviceIPs[i], page: t.devicePages[i], level: 1})
+	}
+
+	const (
+		topMM   = 18.0
+		rowH    = 6.8
+		pageGap = 15.0
+	)
+	// gofpdf 的 putpages 以「当前页」为上界输出页面，指针一旦留在目录页，
+	// 其后的正文页会被整体丢弃——回填结束必须把指针恢复到最后页。
+	resumePage := pdf.PageNo()
+	page := t.startPage
+	maxPage := t.startPage + t.pages - 1
+	pdf.SetPage(page)
+	pdf.SetXY(left, topMM)
+	pdf.SetFont(pdfFontName, "B", pdfHeadingSize)
+	pdf.SetTextColor(pdfColorText[0], pdfColorText[1], pdfColorText[2])
+	pdf.CellFormat(usable, 12, "报告导航", "", 1, "L", false, 0, "")
+	pdf.SetFont(pdfFontName, "", pdfSmallSize)
+	y := pdf.GetY() + 1.5
+	for _, row := range rows {
+		if y+rowH > pageH-pageGap {
+			if page >= maxPage {
+				break // 预留页用尽（预留页数按行数计算，正常不可达）
+			}
+			page++
+			pdf.SetPage(page)
+			y = topMM + 2
+		}
+		indent := 0.0
+		if row.level > 0 {
+			indent = 6.0
+		}
+		nameW := usable - indent - 18
+		label := pdfkit.TruncateToWidth(pdf, row.label, nameW)
+		if row.ip != "" {
+			ipText := " (" + row.ip + ")"
+			label = pdfkit.TruncateToWidth(pdf, row.label, nameW-pdf.GetStringWidth(ipText)) + ipText
+		}
+		pdf.SetXY(left+indent, y)
+		pdf.SetTextColor(pdfColorText[0], pdfColorText[1], pdfColorText[2])
+		pdf.CellFormat(usable-indent-16, rowH, label, "", 0, "L", false, 0, "")
+		if row.page > 0 {
+			pdf.SetTextColor(pdfColorMuted[0], pdfColorMuted[1], pdfColorMuted[2])
+			pdf.SetXY(left, y)
+			pdf.CellFormat(usable, rowH, fmt.Sprintf("%d", row.page), "", 0, "R", false, 0, "")
+			link := pdf.AddLink()
+			pdf.Link(left, y, usable, rowH, link)
+			pdf.SetLink(link, 0, row.page)
+		}
+		y += rowH
+	}
+	pdf.SetTextColor(pdfkit.ColorBlack[0], pdfkit.ColorBlack[1], pdfkit.ColorBlack[2])
+	pdf.SetFont(pdfFontName, "", pdfBodySize)
+	pdf.SetPage(resumePage)
+}
+
 // writeInspectionConclusion 在报告结尾输出「巡检情况说明」与「修复方案」。
 // 前者是给管理者看的结论段落，后者是给运维执行的动作清单——同一份数据的
 // 两种读法。缺了这一段，报告只能停留在「看到了问题」而不是「知道怎么办」。
-func writeInspectionConclusion(pdf *gofpdf.Fpdf, data InspectionReportData) {
+func writeInspectionConclusion(pdf *gofpdf.Fpdf, data InspectionReportData, record func(string, int)) {
 	ensurePDFSpace(pdf, 60)
+	if record != nil {
+		record("巡检情况说明", pdf.PageNo())
+	}
 	writePDFSectionTitle(pdf, "巡检情况说明")
 
 	grade, accent, tint := inspectionHealthGrade(data.SummaryStats)
@@ -1704,6 +1888,9 @@ func writeInspectionConclusion(pdf *gofpdf.Fpdf, data InspectionReportData) {
 	pdf.Ln(4)
 
 	ensurePDFSpace(pdf, 50)
+	if record != nil {
+		record("修复方案", pdf.PageNo())
+	}
 	writePDFSectionTitle(pdf, "修复方案")
 	issues := collectInspectionIssues(data)
 	if len(issues) == 0 {

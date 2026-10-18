@@ -140,6 +140,19 @@ func WriteHeroBanner(pdf *gofpdf.Fpdf, hero HeroBanner) {
 	pdf.SetY(y + height + 2)
 }
 
+// Bookmark adds a PDF outline entry pointing at the current position. Level 0
+// is a top-level entry, level 1 nests one level deeper — readers show these in
+// their bookmark pane. gofpdf encodes the title to UTF-16 internally, so CJK
+// titles need no special handling. Empty titles are skipped so callers can
+// pass optional text without guarding each call site.
+func Bookmark(pdf *gofpdf.Fpdf, title string, level int) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return
+	}
+	pdf.Bookmark(title, level, -1)
+}
+
 // UsableWidth returns the page width left over after both side margins (mm).
 // Every full-width draw should size itself against this so nothing can spill
 // past the margins.
@@ -157,6 +170,7 @@ func SectionTitle(pdf *gofpdf.Fpdf, title string) {
 	usable := pageW - left - right
 
 	title = strings.TrimSpace(title)
+	Bookmark(pdf, title, 0)
 
 	y := pdf.GetY()
 	pdf.SetFillColor(ColorPrimary[0], ColorPrimary[1], ColorPrimary[2])
