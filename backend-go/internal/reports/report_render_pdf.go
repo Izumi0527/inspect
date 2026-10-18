@@ -2118,8 +2118,9 @@ func writeTrendPDF(path string, data TrendReportData) error {
 	if data.DeviceCount > 0 {
 		chips = append(chips, fmt.Sprintf("设备 %d 台", data.DeviceCount))
 	}
+	// 报表名作为文档主标题（统计/设备汇总报表同惯例）；名称缺失才回退类型名。
 	pdfkit.WriteHeroBanner(pdf, pdfkit.HeroBanner{
-		Title:    "趋势分析报告",
+		Title:    normalizeReportTitle(data.ReportName, "趋势分析报告"),
 		Subtitle: "指标趋势、预测与异常告警",
 		Brand:    "巡检系统",
 		Tagline:  "报告中心",
@@ -2140,9 +2141,10 @@ func writeTrendPDF(path string, data TrendReportData) error {
 	return pdf.OutputFileAndClose(path)
 }
 
+// buildTrendPDFOverviewRows 返回「报表概览」表行。报表名已是文档主标题，
+// 这里不再重复；生成人/生成时间由数据层解析成可读文本（用户名 / 业务时区）。
 func buildTrendPDFOverviewRows(data TrendReportData, generatedAt string) [][]string {
 	return [][]string{
-		{"报表名称", fallbackPDFValue(data.ReportName)},
 		{"统计范围", fallbackPDFValue(data.Range)},
 		{"生成人", fallbackPDFValue(data.GeneratedBy)},
 		{"生成时间", fallbackPDFValue(generatedAt)},

@@ -501,6 +501,8 @@ func writeGenericHTML(path string, data GenericReportData) error {
 	rows = append(rows, htmlRow("report_name", data.ReportName))
 	rows = append(rows, htmlRow("range", data.Range))
 	rows = append(rows, htmlRow("generated_by", data.GeneratedBy))
+	// Excel/Word 一直带生成时间，HTML 此前漏了这一行：元信息三件套应齐。
+	rows = append(rows, htmlRow("generated_at", data.GeneratedTimestamp))
 	rows = append(rows, htmlRow("summary", formatSummaryValue(data.Summary)))
 	if data.Notes != "" {
 		rows = append(rows, htmlRow("notes", data.Notes))

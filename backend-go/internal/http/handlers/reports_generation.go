@@ -56,7 +56,7 @@ func (h ReportsHandler) GenerateReportFromRequest(c echo.Context) error {
 		reportData := map[string]interface{}{
 			"report_name":  req.Name,
 			"range":        fmt.Sprintf("%s ~ %s", startTime.Format("2006-01-02"), endTime.Format("2006-01-02")),
-			"generated_at": time.Now().UTC().Format(time.RFC3339),
+			"generated_at": time.Now().In(h.businessLoc(c)).Format("2006-01-02 15:04:05"),
 			"summary": map[string]interface{}{
 				"metrics": len(readStringSlice(req.CustomConfig, "metrics")),
 				"devices": len(req.DeviceIDs),

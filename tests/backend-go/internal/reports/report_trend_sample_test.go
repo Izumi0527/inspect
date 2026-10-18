@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"gorm.io/datatypes"
 )
@@ -23,9 +24,8 @@ const trendSamplePayload = `{
   "report_data": {
     "report_name": "趋势分析报告 - 2026-10-18",
     "range": "2026-10-11 ~ 2026-10-18",
-    "generated_at": "2026-10-18 19:00:00",
-    "generated_by": "admin",
-    "notes": "该趋势报表为摘要版（不包含全部数据点），用于快速回溯趋势变化与预测结果。",
+    "generated_at": "2026-10-18T19:00:00Z",
+        "notes": "该趋势报表为摘要版（不包含全部数据点），用于快速回溯趋势变化与预测结果。",
     "summary": {"metrics": 3, "devices": 12},
     "metrics": [
       {"name": "capacity", "metric_name": "capacity", "display_name": "容量使用", "unit": "%", "current": 72.08, "previous": 72.05, "change": 0.04, "change_percentage": 0.05, "trend_direction": "up"},
@@ -45,7 +45,17 @@ const trendSamplePayload = `{
 }`
 
 func TestTrendReportSample(t *testing.T) {
-	generatedBy := "admin"
+	const tzQuery = `SELECT COALESCE(value, '') FROM system_settings WHERE key = 'system.timezone' LIMIT 1`
+	const creatorQuery = `SELECT COALESCE(NULLIF(TRIM(full_name), ''), username) AS name FROM users WHERE id = $1 LIMIT 1`
+
+	// 生产形态：报表记录持有生成人 UUID，report_data 里没有可读名；
+	// 渲染时经数据库解析成用户名、生成时间按业务时区呈现。
+	db, mock, cleanup := newReportsDBWithSqlmock(t)
+	defer cleanup()
+	mock.ExpectQuery(tzQuery).WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow("Asia/Shanghai"))
+	mock.ExpectQuery(creatorQuery).WillReturnRows(sqlmock.NewRows([]string{"name"}).AddRow("张运维"))
+
+	generatedBy := "dff7f0df-baca-464e-900b-87ed6e4c9a01"
 	generatedAt := time.Date(2026, 10, 18, 19, 0, 0, 0, time.UTC)
 	report := reports.Report{
 		ID:            9200,
@@ -60,7 +70,7 @@ func TestTrendReportSample(t *testing.T) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	path, err := reports.GenerateReportFile(context.Background(), nil, outDir, report, "pdf")
+	path, err := reports.GenerateReportFile(context.Background(), db, outDir, report, "pdf")
 	if err != nil {
 		if strings.Contains(err.Error(), "未找到可用的PDF中文字体") {
 			t.Skipf("当前环境缺少 PDF 中文字体，跳过样本生成: %v", err)

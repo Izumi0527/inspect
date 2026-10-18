@@ -594,10 +594,12 @@ type GenericReportData struct {
 }
 
 func buildInspectionReportData(ctx context.Context, db *gorm.DB, report Report, params map[string]interface{}) (InspectionReportData, error) {
+	loc := reportDisplayLocation(ctx, db)
 	payload := findPayload(params, "inspection_data", "report_data")
 	if len(payload) > 0 {
 		data := parseInspectionReportPayload(payload)
 		reconcileInspectionSummary(&data)
+		data.GeneratedTimestamp = reportTimestampDisplay(data.GeneratedTimestamp, report, loc)
 		return data, nil
 	}
 	data, err := buildInspectionReportDataFromDB(ctx, db, report, params)
@@ -605,50 +607,62 @@ func buildInspectionReportData(ctx context.Context, db *gorm.DB, report Report, 
 		return data, err
 	}
 	reconcileInspectionSummary(&data)
+	data.GeneratedTimestamp = reportTimestampDisplay(data.GeneratedTimestamp, report, loc)
 	return data, nil
 }
 
 func buildStatisticsReportData(ctx context.Context, db *gorm.DB, report Report, params map[string]interface{}) (StatisticsReportData, error) {
+	loc := reportDisplayLocation(ctx, db)
 	payload := findPayload(params, "statistics_data", "report_data")
 	if len(payload) > 0 {
-		return parseStatisticsReportPayload(payload, report.Title), nil
+		data := parseStatisticsReportPayload(payload, report.Title)
+		data.GeneratedTimestamp = reportTimestampDisplay(data.GeneratedTimestamp, report, loc)
+		return data, nil
 	}
-	return buildStatisticsReportDataFromDB(ctx, db, report, params)
+	data, err := buildStatisticsReportDataFromDB(ctx, db, report, params)
+	if err != nil {
+		return data, err
+	}
+	data.GeneratedTimestamp = reportTimestampDisplay(data.GeneratedTimestamp, report, loc)
+	return data, nil
 }
 
 func buildDeviceSummaryData(ctx context.Context, db *gorm.DB, report Report, params map[string]interface{}) (DeviceSummaryData, error) {
+	loc := reportDisplayLocation(ctx, db)
 	payload := findPayload(params, "device_summary", "summary_data", "report_data")
 	if len(payload) > 0 {
 		data := parseDeviceSummaryPayload(payload)
-		if strings.TrimSpace(data.GeneratedTimestamp) == "" {
-			data.GeneratedTimestamp = reportGeneratedTimestamp(report)
-		}
+		data.GeneratedTimestamp = reportTimestampDisplay(data.GeneratedTimestamp, report, loc)
 		return data, nil
 	}
 	data, err := buildDeviceSummaryFromDB(ctx, db, params)
 	if err != nil {
 		return data, err
 	}
-	if strings.TrimSpace(data.GeneratedTimestamp) == "" {
-		data.GeneratedTimestamp = reportGeneratedTimestamp(report)
-	}
+	data.GeneratedTimestamp = reportTimestampDisplay(data.GeneratedTimestamp, report, loc)
 	return data, nil
 }
 
-func buildGenericReportData(report Report, params map[string]interface{}) GenericReportData {
+func buildGenericReportData(ctx context.Context, db *gorm.DB, report Report, params map[string]interface{}) GenericReportData {
+	loc := reportDisplayLocation(ctx, db)
+	creator := resolveReportCreatorName(ctx, db, report)
+
 	payload := findPayload(params, "generic_data", "report_data")
 	if len(payload) == 0 {
 		data := defaultGenericReportData(report)
-		if strings.TrimSpace(data.GeneratedTimestamp) == "" {
-			data.GeneratedTimestamp = reportGeneratedTimestamp(report)
+		if strings.TrimSpace(creator) != "" {
+			data.GeneratedBy = creator
 		}
+		data.GeneratedTimestamp = reportTimestampDisplay(data.GeneratedTimestamp, report, loc)
 		return data
 	}
 	data := parseGenericReportPayload(payload, report)
 	data.ReportTitle = resolveGenericReportTitle(report.ReportType, report.Title, data.ReportName)
-	if strings.TrimSpace(data.GeneratedTimestamp) == "" {
-		data.GeneratedTimestamp = reportGeneratedTimestamp(report)
+	// 生成人以数据库记录为准（payload 里可能是 UUID），解析不到才保留原值。
+	if strings.TrimSpace(creator) != "" {
+		data.GeneratedBy = creator
 	}
+	data.GeneratedTimestamp = reportTimestampDisplay(data.GeneratedTimestamp, report, loc)
 	return data
 }
 
@@ -1005,26 +1019,125 @@ func (data TrendReportData) toGenericReportData() GenericReportData {
 	}
 }
 
+// reportDisplayLocation 返回报告展示用的业务时区（system_settings 的
+// system.timezone，默认 Asia/Shanghai）。与 handlers 侧的 businessLoc 同源，
+// 只是渲染路径拿不到 Settings 服务，直接读同一配置；查询失败或时区名非法
+// 时退回服务器本地时区，展示层不因此报错。
+func reportDisplayLocation(ctx context.Context, db *gorm.DB) *time.Location {
+	const defaultTimezone = "Asia/Shanghai"
+	if db != nil {
+		var name string
+		if err := db.WithContext(ctx).
+			Raw(`SELECT COALESCE(value, '') FROM system_settings WHERE key = 'system.timezone' LIMIT 1`).
+			Scan(&name).Error; err == nil && strings.TrimSpace(name) != "" {
+			if loc, err := time.LoadLocation(strings.TrimSpace(name)); err == nil {
+				return loc
+			}
+		}
+	}
+	if loc, err := time.LoadLocation(defaultTimezone); err == nil {
+		return loc
+	}
+	return time.Local
+}
+
+// normalizeReportTimestamp 把报告时间戳规范成展示文本：带时区信息的
+// RFC3339（如 2026-10-18T13:23:03Z，生成侧历史写入的格式）转业务时区
+// 可读格式；已是可读格式或无法解析的输入原样返回，不二次解释。
+func normalizeReportTimestamp(raw string, loc *time.Location) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			if loc == nil {
+				loc = time.Local
+			}
+			return parsed.In(loc).Format("2006-01-02 15:04:05")
+		}
+	}
+	return value
+}
+
+// resolveReportCreatorName 把 report.generated_by（用户 UUID）解析成可读
+// 名称：全名优先，否则用户名（与报表列表的 attachReportCreatorNames 同口径）。
+// 没有数据库或查不到时保留原值 —— 宁可显示原始标识，也不静默丢信息。
+func resolveReportCreatorName(ctx context.Context, db *gorm.DB, report Report) string {
+	if report.GeneratedBy == nil {
+		return ""
+	}
+	raw := strings.TrimSpace(*report.GeneratedBy)
+	if raw == "" {
+		return ""
+	}
+	if db == nil {
+		return raw
+	}
+	var name string
+	if err := db.WithContext(ctx).
+		Raw(`SELECT COALESCE(NULLIF(TRIM(full_name), ''), username) AS name FROM users WHERE id = ? LIMIT 1`, raw).
+		Scan(&name).Error; err != nil {
+		return raw
+	}
+	if strings.TrimSpace(name) == "" {
+		return raw
+	}
+	return strings.TrimSpace(name)
+}
+
 // buildTrendReportData 组装趋势报告数据：优先读生成侧写入的 report_data，
 // 缺失时退化为「只有报告名的空态」（渲染侧走空态分支，不产 JSON dump）。
-func buildTrendReportData(report Report, params map[string]interface{}) TrendReportData {
+func buildTrendReportData(ctx context.Context, db *gorm.DB, report Report, params map[string]interface{}) TrendReportData {
+	loc := reportDisplayLocation(ctx, db)
+	creator := resolveReportCreatorName(ctx, db, report)
+
 	payload := findPayload(params, "trend_data", "report_data")
 	if len(payload) == 0 {
-		data := TrendReportData{ReportName: strings.TrimSpace(report.Title)}
-		data.GeneratedAt = reportGeneratedTimestamp(report)
-		return data
+		return TrendReportData{
+			ReportName:  strings.TrimSpace(report.Title),
+			GeneratedBy: creator,
+			GeneratedAt: reportGeneratedAtInLocation(report, loc),
+		}
 	}
+
 	data := parseTrendReportPayload(payload)
 	if strings.TrimSpace(data.ReportName) == "" {
 		data.ReportName = strings.TrimSpace(report.Title)
 	}
-	if strings.TrimSpace(data.GeneratedBy) == "" && report.GeneratedBy != nil {
-		data.GeneratedBy = strings.TrimSpace(*report.GeneratedBy)
+	// 生成人以数据库记录为准：payload 里可能是 UUID（历史写法），
+	// 直接渲染会把 UUID 印进 PDF；解析不到才回退 payload 值。
+	if strings.TrimSpace(creator) != "" {
+		data.GeneratedBy = creator
 	}
-	if strings.TrimSpace(data.GeneratedAt) == "" {
-		data.GeneratedAt = reportGeneratedTimestamp(report)
-	}
+	// 生成时间：payload 可能是 UTC RFC3339（历史写法），统一换算成业务时区
+	// 可读格式；payload 缺失时用报表记录的生成时间补位。
+	data.GeneratedAt = reportTimestampDisplay(data.GeneratedAt, report, loc)
 	return data
+}
+
+// reportGeneratedAtInLocation 以业务时区输出报表记录的生成时间。
+// report.GeneratedAt 存的是 UTC，直接按原值渲染会让人读成本地时间（差一个时区）。
+func reportGeneratedAtInLocation(report Report, loc *time.Location) string {
+	if report.GeneratedAt != nil && !report.GeneratedAt.IsZero() {
+		stamp := report.GeneratedAt.UTC()
+		if loc != nil {
+			stamp = stamp.In(loc)
+		}
+		return stamp.Format("2006-01-02 15:04:05")
+	}
+	return reportGeneratedTimestamp(report)
+}
+
+// reportTimestampDisplay 把报告生成时间统一成业务时区可读文本：RFC3339
+// （生成侧历史写入的 UTC 写法）按业务时区换算；缺失或不可解析时回退到
+// 报表记录里的生成时间。所有报表类型的「生成时间」都走这里，避免同类
+// 报表一半显示可读时间、一半显示 UTC 原始串。
+func reportTimestampDisplay(raw string, report Report, loc *time.Location) string {
+	if normalized := normalizeReportTimestamp(raw, loc); normalized != "" {
+		return normalized
+	}
+	return reportGeneratedAtInLocation(report, loc)
 }
 
 // ---------------------------------------------------------------------------
