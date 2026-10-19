@@ -14,6 +14,14 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
 )
 
+// trendDisplayPrecision 是趋势指标展示值的统一小数位：current/previous/change
+// 与变化率都按它取整，确保报告里「当前 − 上期 = 变化」的算术自洽。
+const trendDisplayPrecision = 2
+
+// defaultTrendSensitivity 是异常检测的默认灵敏度，供分析接口与报表生成共用，
+// 避免同一个魔数散落多处后失配。
+const defaultTrendSensitivity = "medium"
+
 const (
 	trendSourceAvailability          = "availability"
 	trendSourceAlerts                = "alerts"
@@ -201,10 +209,11 @@ func loadTrendSeries(
 		if spec.Name == "" {
 			continue
 		}
-		points, err := queryTrendSeries(ctx, db, spec, start, end, granularity, deviceIDs, tz)
+		points, source, err := queryTrendSeries(ctx, db, spec, start, end, granularity, deviceIDs, tz)
 		if err != nil {
 			return nil, err
 		}
+		spec.DisplayName = trendMetricDisplayNameFor(spec, source)
 		series = append(series, trendMetricSeries{
 			Spec:   spec,
 			Points: points,
@@ -213,6 +222,8 @@ func loadTrendSeries(
 	return series, nil
 }
 
+// queryTrendSeries 取序列，并回传「实际命中的来源指标名」——只有 fallback
+// 分支可能非空（代理指标要据此标注来源）。其余分支返回空串。
 func queryTrendSeries(
 	ctx context.Context,
 	db *gorm.DB,
@@ -222,18 +233,22 @@ func queryTrendSeries(
 	granularity string,
 	deviceIDs []int,
 	tz string,
-) ([]trendSeriesPoint, error) {
+) ([]trendSeriesPoint, string, error) {
 	switch spec.Source {
 	case trendSourceAvailability:
-		return queryAvailabilitySeries(ctx, db, start, end, granularity, deviceIDs, tz)
+		points, err := queryAvailabilitySeries(ctx, db, start, end, granularity, deviceIDs, tz)
+		return points, "", err
 	case trendSourceAlerts:
-		return queryAlertSeries(ctx, db, start, end, granularity, deviceIDs, tz)
+		points, err := queryAlertSeries(ctx, db, start, end, granularity, deviceIDs, tz)
+		return points, "", err
 	case trendSourceDeviceMetricsFallback:
 		return queryDeviceMetricSeriesWithFallback(ctx, db, spec.MetricNames, start, end, granularity, deviceIDs, tz)
 	case trendSourceNetworkSum:
-		return queryNetworkMetricSeries(ctx, db, spec.MetricNames, start, end, granularity, deviceIDs, tz)
+		points, err := queryNetworkMetricSeries(ctx, db, spec.MetricNames, start, end, granularity, deviceIDs, tz)
+		return points, "", err
 	default:
-		return queryDeviceMetricSeries(ctx, db, spec.MetricNames, start, end, granularity, deviceIDs, tz)
+		points, err := queryDeviceMetricSeries(ctx, db, spec.MetricNames, start, end, granularity, deviceIDs, tz)
+		return points, "", err
 	}
 }
 
@@ -296,17 +311,19 @@ func queryDeviceMetricSeriesWithFallback(
 	granularity string,
 	deviceIDs []int,
 	tz string,
-) ([]trendSeriesPoint, error) {
+) ([]trendSeriesPoint, string, error) {
 	for _, name := range metricNames {
 		points, err := queryDeviceMetricSeries(ctx, db, []string{name}, start, end, granularity, deviceIDs, tz)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if len(points) > 0 {
-			return points, nil
+			// 一并返回命中的真实指标：代理指标（如 capacity 依 disk→memory→cpu
+			// 兜底）需要据此标注来源，否则会把内存/CPU 数据标成「容量使用」。
+			return points, name, nil
 		}
 	}
-	return []trendSeriesPoint{}, nil
+	return []trendSeriesPoint{}, "", nil
 }
 
 func queryNetworkMetricSeries(
@@ -540,6 +557,8 @@ func buildTrendMetricPayload(series trendMetricSeries) map[string]interface{} {
 		values = append(values, value)
 	}
 
+	// summarizeTrend 已按展示精度取整，这里直接采用，保证
+	//「当前 − 上期 = 变化」在报告里能对上。
 	current, previous, change, changePct, direction := summarizeTrend(values)
 
 	return map[string]interface{}{
@@ -547,35 +566,87 @@ func buildTrendMetricPayload(series trendMetricSeries) map[string]interface{} {
 		"metric_name":       series.Spec.Name,
 		"display_name":      series.Spec.DisplayName,
 		"unit":              series.Spec.Unit,
-		"current":           roundFloat(current, 2),
-		"previous":          roundFloat(previous, 2),
-		"change":            roundFloat(change, 2),
-		"change_percentage": roundFloat(changePct, 2),
+		"current":           current,
+		"previous":          previous,
+		"change":            change,
+		"change_percentage": roundPercentForDisplay(changePct),
 		"trend_direction":   direction,
 		"data_points":       points,
 	}
 }
 
-func summarizeTrend(values []float64) (float64, float64, float64, float64, string) {
+// summarizeTrend 汇总窗内首末值（current=末值、previous=首值）。
+//
+// 关键：先把 current/previous 按展示精度取整，再由取整后的值推导 change 与
+// 方向 —— 否则会出现两类自相矛盾：
+//  1. 报告显示 72.08 − 72.05 = 0.03，变化列却标 0.04（由未取整值相减）；
+//  2. change 实际为 +0.001 时方向标「↑ 上升」，显示出来的变化却是「+0.00」。
+//
+// 取整后再推导，读者用报告里的数字自己算也能对得上。
+func summarizeTrend(values []float64) (current, previous, change, changePct float64, direction string) {
 	if len(values) == 0 {
 		return 0, 0, 0, 0, "stable"
 	}
-	current := values[len(values)-1]
-	previous := values[0]
-	change := current - previous
-	changePct := 0.0
+	current = roundFloat(values[len(values)-1], trendDisplayPrecision)
+	previous = roundFloat(values[0], trendDisplayPrecision)
+	change = roundFloat(current-previous, trendDisplayPrecision)
 	if previous != 0 {
 		changePct = change / previous * 100
 	}
 
-	direction := "stable"
-	if change > 0 {
+	switch {
+	case change > 0:
 		direction = "up"
-	} else if change < 0 {
+	case change < 0:
 		direction = "down"
+	default:
+		direction = "stable"
 	}
-
 	return current, previous, change, changePct, direction
+}
+
+// roundPercentForDisplay 保留变化率的有效精度：常规值 2 位小数足够，但微小
+// 变化（<0.01%）若也压到 2 位会显示成「0.00」，与「无变化」混淆，故多留 2 位。
+func roundPercentForDisplay(value float64) float64 {
+	if value != 0 && math.Abs(value) < 0.01 {
+		return roundFloat(value, 4)
+	}
+	return roundFloat(value, trendDisplayPrecision)
+}
+
+// trendMetricDisplayNameFor 在 fallback 解析出真实来源指标时，把「容量使用」这类
+// 代理指标改写成「容量使用（内存）」——否则底层取的是内存/CPU 数据却标成容量，
+// 会误导读者。命中名义（列表首个）指标或未解析出来源时保持原名。
+func trendMetricDisplayNameFor(spec trendMetricSpec, sourceMetric string) string {
+	nominal := ""
+	if len(spec.MetricNames) > 0 {
+		nominal = spec.MetricNames[0]
+	}
+	return trendMetricFallbackDisplayName(spec.DisplayName, nominal, sourceMetric)
+}
+
+// trendMetricFallbackDisplayName 是展示名决策的纯字符串版本（便于单测）：
+// 来源与名义指标一致、或未解析出来源时保持原名，否则补「（来源）」。
+func trendMetricFallbackDisplayName(displayName, nominalMetric, sourceMetric string) string {
+	if sourceMetric == "" || sourceMetric == nominalMetric {
+		return displayName
+	}
+	return fmt.Sprintf("%s（%s）", displayName, trendMetricSourceLabel(sourceMetric))
+}
+
+// trendMetricSourceLabel 返回来源指标的短标签：括号内的补充说明必须塞进
+// 「指标」列宽（约 38mm），故用「磁盘/内存/CPU」这类简称而非完整指标名。
+func trendMetricSourceLabel(metricName string) string {
+	switch metricName {
+	case "disk_usage":
+		return "磁盘"
+	case "memory_usage":
+		return "内存"
+	case "cpu_usage":
+		return "CPU"
+	default:
+		return trendMetricSpecFor(metricName).DisplayName
+	}
 }
 
 func clampValue(value float64, min float64, max float64) float64 {
@@ -694,18 +765,23 @@ const minAnomalyDetectionPoints = 6
 // 「没有告警」有两种截然不同的含义：检测跑了但没发现异常，或样本不足压根没跑。
 // 前端只拿到空数组无法区分二者，会把「未检测」误呈现为「一切正常」，
 // 因此这里把判据随响应一起返回。
-func buildTrendAlertsMeta(series []trendMetricSeries) map[string]interface{} {
+func buildTrendAlertsMeta(series []trendMetricSeries, sensitivity string) map[string]interface{} {
 	maxPoints := 0
 	for _, item := range series {
 		if len(item.Points) > maxPoints {
 			maxPoints = len(item.Points)
 		}
 	}
+	normalized := normalizeTrendSensitivity(sensitivity)
 
 	return map[string]interface{}{
 		"evaluated":           maxPoints >= minAnomalyDetectionPoints,
 		"min_points_required": minAnomalyDetectionPoints,
 		"actual_points":       maxPoints,
+		// 判定口径随结果一并返回：读者看到「无异常」时需知道是按多大灵敏度、
+		// 多少 z-score 阈值判的，否则无从判断宽严。
+		"sensitivity":       normalized,
+		"z_score_threshold": anomalyThreshold(normalized),
 	}
 }
 
@@ -764,6 +840,18 @@ func detectAnomalies(series trendMetricSeries, sensitivity string) []trendAnomal
 		})
 	}
 	return anomalies
+}
+
+// normalizeTrendSensitivity 归一灵敏度取值，非法值退回默认（medium）。
+func normalizeTrendSensitivity(sensitivity string) string {
+	switch strings.ToLower(strings.TrimSpace(sensitivity)) {
+	case "high":
+		return "high"
+	case "low":
+		return "low"
+	default:
+		return defaultTrendSensitivity
+	}
 }
 
 func anomalyThreshold(sensitivity string) float64 {
@@ -863,12 +951,14 @@ func stepsByGranularity(granularity string, days int) int {
 	}
 }
 
+// timeframeForRange 按时间范围跨度选择预测周期。用「日历日」而非
+// end.Sub(start).Hours()/24 判档：后者是浮点且带时刻误差，恰好 7 天的区间
+// 可能算出 7.0000001 而被误判成「月」，预测步长随之突变（跨 DST 时更明显）。
 func timeframeForRange(start time.Time, end time.Time) string {
 	if end.Before(start) {
 		return "week"
 	}
-	days := end.Sub(start).Hours() / 24
-	switch {
+	switch days := calendarDaysBetween(start, end); {
 	case days <= 7:
 		return "week"
 	case days <= 30:
@@ -876,6 +966,16 @@ func timeframeForRange(start time.Time, end time.Time) string {
 	default:
 		return "quarter"
 	}
+}
+
+// calendarDaysBetween 返回两个时刻各自所在日历日之间的天数差（忽略时刻），
+// 对 DST/毫秒偏差免疫。两个时刻应来自同一解析路径（同一时区）。
+func calendarDaysBetween(start time.Time, end time.Time) int {
+	sy, sm, sd := start.Date()
+	ey, em, ed := end.Date()
+	startDay := time.Date(sy, sm, sd, 0, 0, 0, 0, time.UTC)
+	endDay := time.Date(ey, em, ed, 0, 0, 0, 0, time.UTC)
+	return int(endDay.Sub(startDay).Hours() / 24)
 }
 
 func parseIntSlice(value interface{}) []int {

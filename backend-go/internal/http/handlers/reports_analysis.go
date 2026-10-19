@@ -213,7 +213,7 @@ func (h ReportsHandler) GetTrendAnalysis(c echo.Context) error {
 
 	timeframe := timeframeForRange(start, end)
 	predictions := buildTrendPredictions(series, predictionSteps(timeframe, granularity), timeframe)
-	alerts := buildTrendAlerts(series, "medium", 50)
+	alerts := buildTrendAlerts(series, defaultTrendSensitivity, 50)
 
 	dateRange := map[string]interface{}{
 		"startDate": start.Format(time.RFC3339),
@@ -226,7 +226,7 @@ func (h ReportsHandler) GetTrendAnalysis(c echo.Context) error {
 			"metrics":     payload,
 			"predictions": predictions,
 			"alerts":      alerts,
-			"alerts_meta": buildTrendAlertsMeta(series),
+			"alerts_meta": buildTrendAlertsMeta(series, defaultTrendSensitivity),
 		},
 	})
 }
@@ -302,7 +302,7 @@ func (h ReportsHandler) GetTrendAnomalies(c echo.Context) error {
 	}
 	sensitivity := readString(req, "sensitivity")
 	if sensitivity == "" {
-		sensitivity = "medium"
+		sensitivity = defaultTrendSensitivity
 	}
 	deviceIDs := parseIntSlice(req["device_ids"])
 	if len(deviceIDs) == 0 {

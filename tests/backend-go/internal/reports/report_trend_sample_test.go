@@ -28,7 +28,7 @@ const trendSamplePayload = `{
         "notes": "该趋势报表为摘要版（不包含全部数据点），用于快速回溯趋势变化与预测结果。",
     "summary": {"metrics": 3, "devices": 12},
     "metrics": [
-      {"name": "capacity", "metric_name": "capacity", "display_name": "容量使用", "unit": "%", "current": 72.08, "previous": 72.05, "change": 0.04, "change_percentage": 0.05, "trend_direction": "up"},
+      {"name": "capacity", "metric_name": "capacity", "display_name": "容量使用", "unit": "%", "current": 72.08, "previous": 72.05, "change": 0.03, "change_percentage": 0.04, "trend_direction": "up"},
       {"name": "cpu_usage", "metric_name": "cpu_usage", "display_name": "CPU使用率", "unit": "%", "current": 41.5, "previous": 46.8, "change": -5.3, "change_percentage": -11.32, "trend_direction": "down"},
       {"name": "errors", "metric_name": "errors", "display_name": "错误数", "unit": "", "current": 0, "previous": 3, "change": -3, "change_percentage": -100, "trend_direction": "down"}
     ],
@@ -40,7 +40,7 @@ const trendSamplePayload = `{
       {"id": "memory_usage-20261015030000", "type": "anomaly", "severity": "critical", "title": "内存使用率波动异常", "description": "检测到内存使用在 2026-10-15T03:00:00Z 出现异常值", "affected_metrics": ["memory_usage"], "detected_at": "2026-10-15T03:00:00Z", "status": "active"},
       {"id": "cpu_usage-20261012090000", "type": "anomaly", "severity": "warning", "title": "CPU使用率波动异常", "description": "检测到CPU使用率在 2026-10-12T09:00:00Z 出现异常值", "affected_metrics": ["cpu_usage"], "detected_at": "2026-10-12T09:00:00Z", "status": "active"}
     ],
-    "alerts_meta": {"evaluated": true, "min_points_required": 6, "actual_points": 24}
+    "alerts_meta": {"evaluated": true, "min_points_required": 6, "actual_points": 24, "sensitivity": "medium", "z_score_threshold": 2.5}
   }
 }`
 

@@ -115,20 +115,19 @@ const (
 	Space2XL = 24.0
 )
 
-// Font size tokens expressed in points. These are referenced by both the
-// chrome (cover / TOC / chapter dividers) and the component layer (hero /
-// cards / tables) so vertical rhythm stays consistent across reports.
+// Font size tokens expressed in points. Referenced across pdfkit components
+// and report renderers so vertical rhythm stays consistent across reports.
 const (
-	FontCover     = 32.0 // 封面大标题（chrome.go）
+	FontCover     = 32.0 // 封面大标题
 	FontHero      = 22.0 // Hero 标题
 	FontTitle     = 18.0 // 页面大标题
 	FontSection   = 14.0 // 章节标题（SectionTitle / 报告章节标题）
-	FontH2        = 13.0 // 次级标题（chrome.go）
-	FontSubtitle  = 12.0 // 副标题（chrome.go）
+	FontH2        = 13.0 // 次级标题
+	FontSubtitle  = 12.0 // 副标题
 	FontBody      = 11.0 // 正文
 	FontTableBody = 10.0 // 表格正文 / 右对齐小注
 	FontTableHead = 9.5  // 软表格表头与正文
-	FontSmall     = 9.0  // 小字（巡检表头、chrome 小注）
+	FontSmall     = 9.0  // 小字（巡检表头、小注）
 	FontCaption   = 8.5  // 卡片标签 / chips
 	FontMicro     = 8.0  // 页脚 / 空态附注
 	FontNano      = 7.5  // StatCard hint

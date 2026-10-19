@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -653,7 +654,7 @@ func buildGenericReportData(ctx context.Context, db *gorm.DB, report Report, par
 		if strings.TrimSpace(creator) != "" {
 			data.GeneratedBy = creator
 		}
-		data.GeneratedTimestamp = reportTimestampDisplay(data.GeneratedTimestamp, report, loc)
+		data.GeneratedTimestamp = reportGeneratedAtInLocation(report, loc)
 		return data
 	}
 	data := parseGenericReportPayload(payload, report)
@@ -852,6 +853,10 @@ type TrendAlertsMetaReport struct {
 	Evaluated         bool
 	MinPointsRequired int
 	ActualPoints      int
+	// Sensitivity 与 Threshold 是检测判据口径（z-score 阈值随灵敏度而定），
+	// 供说明区呈现，使「无异常」可被判断宽严。历史报告可能为空/0。
+	Sensitivity string
+	Threshold   float64
 }
 
 // TrendReportData 是趋势分析报告的数据载体。趋势报告刻意定位为
@@ -972,6 +977,8 @@ func parseTrendReportPayload(payload map[string]interface{}) TrendReportData {
 		Evaluated:         toBool(meta["evaluated"]),
 		MinPointsRequired: toInt(meta["min_points_required"]),
 		ActualPoints:      toInt(meta["actual_points"]),
+		Sensitivity:       toString(meta["sensitivity"]),
+		Threshold:         toFloat(meta["z_score_threshold"]),
 	}
 	return data
 }
@@ -1096,6 +1103,7 @@ func buildTrendReportData(ctx context.Context, db *gorm.DB, report Report, param
 	if len(payload) == 0 {
 		return TrendReportData{
 			ReportName:  strings.TrimSpace(report.Title),
+			Range:       formatRange(report.StartDate, report.EndDate),
 			GeneratedBy: creator,
 			GeneratedAt: reportGeneratedAtInLocation(report, loc),
 		}
@@ -1105,6 +1113,9 @@ func buildTrendReportData(ctx context.Context, db *gorm.DB, report Report, param
 	if strings.TrimSpace(data.ReportName) == "" {
 		data.ReportName = strings.TrimSpace(report.Title)
 	}
+	if strings.TrimSpace(data.Range) == "" {
+		data.Range = formatRange(report.StartDate, report.EndDate)
+	}
 	// 生成人以数据库记录为准：payload 里可能是 UUID（历史写法），
 	// 直接渲染会把 UUID 印进 PDF；解析不到才回退 payload 值。
 	if strings.TrimSpace(creator) != "" {
@@ -1113,20 +1124,39 @@ func buildTrendReportData(ctx context.Context, db *gorm.DB, report Report, param
 	// 生成时间：payload 可能是 UTC RFC3339（历史写法），统一换算成业务时区
 	// 可读格式；payload 缺失时用报表记录的生成时间补位。
 	data.GeneratedAt = reportTimestampDisplay(data.GeneratedAt, report, loc)
+	for i := range data.Alerts {
+		data.Alerts[i].DetectedAt = trendDetectedAtTextInLocation(data.Alerts[i].DetectedAt, loc)
+		data.Alerts[i].Description = localizeTrendTimestampsInLocation(data.Alerts[i].Description, loc)
+	}
 	return data
 }
 
 // reportGeneratedAtInLocation 以业务时区输出报表记录的生成时间。
-// report.GeneratedAt 存的是 UTC，直接按原值渲染会让人读成本地时间（差一个时区）。
+// report.GeneratedAt / UpdatedAt / CreatedAt 存的是 UTC，直接按原值渲染会让人读成本地时间（差一个时区）。
 func reportGeneratedAtInLocation(report Report, loc *time.Location) string {
-	if report.GeneratedAt != nil && !report.GeneratedAt.IsZero() {
-		stamp := report.GeneratedAt.UTC()
+	formatInLoc := func(t time.Time) string {
+		stamp := t.UTC()
 		if loc != nil {
 			stamp = stamp.In(loc)
 		}
 		return stamp.Format("2006-01-02 15:04:05")
 	}
-	return reportGeneratedTimestamp(report)
+	if report.GeneratedAt != nil && !report.GeneratedAt.IsZero() {
+		return formatInLoc(*report.GeneratedAt)
+	}
+	if !report.EndDate.IsZero() {
+		return report.EndDate.Format("2006-01-02 15:04:05")
+	}
+	if !report.StartDate.IsZero() {
+		return report.StartDate.Format("2006-01-02 15:04:05")
+	}
+	if report.UpdatedAt != nil && !report.UpdatedAt.IsZero() {
+		return formatInLoc(*report.UpdatedAt)
+	}
+	if report.CreatedAt != nil && !report.CreatedAt.IsZero() {
+		return formatInLoc(*report.CreatedAt)
+	}
+	return ""
 }
 
 // reportTimestampDisplay 把报告生成时间统一成业务时区可读文本：RFC3339
@@ -1151,6 +1181,44 @@ func trendValueText(value float64, unit string) string {
 
 // trendDeltaText 变化量带符号（"+0.04%" / "-0.12%"）。注意 change_percentage
 // 由生成侧按 change/previous*100 计算，本身就是百分数，不可再乘 100。
+// trendChangePercentText 渲染变化率：常规 2 位小数；小于 0.01 的非零值多留
+// 2 位，避免「有变化却显示 0.00%」。正数补加号，与 trendDeltaText 同风格。
+func trendChangePercentText(value float64) string {
+	precision := 2
+	if value != 0 && math.Abs(value) < 0.01 {
+		precision = 4
+	}
+	sign := ""
+	if value > 0 {
+		sign = "+"
+	}
+	return sign + formatFloat(value, precision) + "%"
+}
+
+// trendSensitivityText 灵敏度本地化；空值（历史报告未携带）显示「默认」。
+func trendSensitivityText(sensitivity string) string {
+	switch strings.ToLower(strings.TrimSpace(sensitivity)) {
+	case "high":
+		return "高"
+	case "medium":
+		return "中"
+	case "low":
+		return "低"
+	default:
+		return "默认"
+	}
+}
+
+// trendDetectionCriteriaText 说明异常检测口径（灵敏度 / z-score 阈值 / 点数门槛），
+// 让读者在「无告警」时能判断判据宽严，而不是把「未检测」误读成「一切正常」。
+func trendDetectionCriteriaText(meta TrendAlertsMetaReport) string {
+	criteria := fmt.Sprintf("异常检测口径：灵敏度 %s", trendSensitivityText(meta.Sensitivity))
+	if meta.Threshold > 0 {
+		criteria += fmt.Sprintf("（z-score 阈值 %.1f）", meta.Threshold)
+	}
+	return criteria + fmt.Sprintf("，需至少 %d 个数据点。", meta.MinPointsRequired)
+}
+
 func trendDeltaText(value float64, unit string) string {
 	sign := ""
 	if value > 0 {
@@ -1216,13 +1284,20 @@ func trendConfidenceText(confidence float64) string {
 // trendDetectedAtText 把 RFC3339（生成侧写入的格式）转为本地可读时间；
 // 解析失败时原样返回，避免静默丢信息。
 func trendDetectedAtText(raw string) string {
+	return trendDetectedAtTextInLocation(raw, time.Local)
+}
+
+func trendDetectedAtTextInLocation(raw string, loc *time.Location) string {
 	value := strings.TrimSpace(raw)
 	if value == "" {
 		return pdfEmptyValuePlaceholder
 	}
+	if loc == nil {
+		loc = time.Local
+	}
 	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", time.RFC3339Nano} {
 		if parsed, err := time.Parse(layout, value); err == nil {
-			return parsed.Local().Format("2006-01-02 15:04")
+			return parsed.In(loc).Format("2006-01-02 15:04")
 		}
 	}
 	return value
@@ -1236,10 +1311,16 @@ var trendTimestampPattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d
 // 2026-10-15T03:00:00Z 出现异常值"），PDF 面向读者应当本地化；
 // 这里在渲染侧替换而不改生成侧，前端展示语义保持不变。
 func localizeTrendTimestamps(text string) string {
+	return localizeTrendTimestampsInLocation(text, time.Local)
+}
+
+func localizeTrendTimestampsInLocation(text string, loc *time.Location) string {
 	if strings.TrimSpace(text) == "" {
 		return text
 	}
-	return trendTimestampPattern.ReplaceAllStringFunc(text, trendDetectedAtText)
+	return trendTimestampPattern.ReplaceAllStringFunc(text, func(match string) string {
+		return trendDetectedAtTextInLocation(match, loc)
+	})
 }
 
 func trendMetricReportLines(metrics []TrendMetricReport) []string {
@@ -1250,7 +1331,7 @@ func trendMetricReportLines(metrics []TrendMetricReport) []string {
 			trendValueText(metric.Current, metric.Unit),
 			trendValueText(metric.Previous, metric.Unit),
 			trendDeltaText(metric.Change, metric.Unit),
-			trendDeltaText(metric.ChangePercentage, "%"),
+			trendChangePercentText(metric.ChangePercentage),
 			trendDirectionText(metric.Direction),
 		))
 	}

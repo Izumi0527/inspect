@@ -624,8 +624,6 @@ func fallbackPDFValue(value string) string {
 	return trimmed
 }
 
-// rowTint 取第 index 行的语义色（底色或色条），越界或零值时返回 false。
-
 var (
 	pdfColorPaper       = pdfkit.ColorSurfaceMuted // slate-50
 	pdfColorPanel       = pdfkit.ColorSurfacePanel // slate-100
@@ -1714,14 +1712,18 @@ func deviceBookmarkLabel(device InspectionDeviceData) string {
 // tocSectionLabels 是巡检报告目录的章节顺序，必须与正文渲染顺序一致。
 var tocSectionLabels = []string{"基本信息", "统计摘要", "异常与告警", "设备巡检详情", "巡检情况说明", "修复方案"}
 
-// tocRowsPerPage 是目录页每页行数上限；首页为「报告导航」标题让出的空间
-// 已包含在该上限内，故预留页数与行数一一对应。
-const tocRowsPerPage = 36
+const (
+	// tocFirstPageRows 是首页 Hero Banner 下方「报告导航」可容纳的最大目录行数。
+	tocFirstPageRows = 30
+	// tocContPageRows 是续页（无 Hero Banner）每页可容纳的最大目录行数。
+	tocContPageRows = 38
+)
 
 // inspectionTOC 收集目录项的目标页码，供文档末尾回填目录页。所有方法对
 // nil 接收者安全——未启用目录（单台/空报告）时调用方无需分支。
 type inspectionTOC struct {
 	startPage    int
+	startY       float64
 	pages        int
 	sectionPages map[string]int
 	deviceLabels []string
@@ -1750,17 +1752,22 @@ func newInspectionTOC(data InspectionReportData) *inspectionTOC {
 		toc.deviceIPs = append(toc.deviceIPs, strings.TrimSpace(data.Devices[i].IPAddress))
 	}
 	rows := len(tocSectionLabels) + len(toc.deviceLabels)
-	toc.pages = (rows + tocRowsPerPage - 1) / tocRowsPerPage
+	if rows <= tocFirstPageRows {
+		toc.pages = 1
+	} else {
+		toc.pages = 1 + (rows-tocFirstPageRows+tocContPageRows-1)/tocContPageRows
+	}
 	return toc
 }
 
-// reserve 在 Hero 之后预留目录页，并把正文起始推到预留区之后。
+// reserve 在 Hero 之后预留目录空间（首页直接复用 Hero 下方区域），并把正文起始推到预留区之后。
 func (t *inspectionTOC) reserve(pdf *gofpdf.Fpdf) {
 	if t == nil {
 		return
 	}
-	t.startPage = pdf.PageNo() + 1
-	for i := 0; i < t.pages+1; i++ {
+	t.startPage = pdf.PageNo()
+	t.startY = pdf.GetY()
+	for i := 0; i < t.pages; i++ {
 		addPDFPage(pdf)
 	}
 }
@@ -1816,10 +1823,14 @@ func (t *inspectionTOC) write(pdf *gofpdf.Fpdf) {
 	page := t.startPage
 	maxPage := t.startPage + t.pages - 1
 	pdf.SetPage(page)
-	pdf.SetXY(left, topMM)
+	startY := t.startY
+	if startY <= 0 {
+		startY = topMM
+	}
+	pdf.SetXY(left, startY)
 	pdf.SetFont(pdfFontName, "B", pdfHeadingSize)
 	pdf.SetTextColor(pdfColorText[0], pdfColorText[1], pdfColorText[2])
-	pdf.CellFormat(usable, 12, "报告导航", "", 1, "L", false, 0, "")
+	pdf.CellFormat(usable, 10, "报告导航", "", 1, "L", false, 0, "")
 	pdf.SetFont(pdfFontName, "", pdfSmallSize)
 	y := pdf.GetY() + 1.5
 	for _, row := range rows {
@@ -2083,15 +2094,6 @@ func thresholdUnitLabel(unit string) string {
 	return unit
 }
 
-// bodyCellTextIndent 返回单元格文本相对格左边的额外缩进。
-//
-// 强调条是一条实心矩形，为了压住单元格左边框而在整行绘制完之后才画。
-// 首列文本只有 gofpdf 默认约 1mm 的内边距，比条宽窄，于是被压在条下。
-// 中文首字因字形左边距较大恰好躲开，所以这个缺陷长期没暴露——直到部件编号
-// 「0.3」、邻居 IP「10.0.0.3」这类以数字起头的标识列出现，首字被裁掉半个。
-//
-// 只对有强调条的行的首列生效：其余情况返回 0，保持既有报告的排版不变。
-
 // ---------------------------------------------------------------------------
 // 趋势分析报告（专属 PDF 渲染）
 // ---------------------------------------------------------------------------
@@ -2166,7 +2168,7 @@ func writeTrendPDFMetrics(pdf *gofpdf.Fpdf, data TrendReportData) {
 			trendValueText(metric.Current, metric.Unit),
 			trendValueText(metric.Previous, metric.Unit),
 			trendDeltaText(metric.Change, metric.Unit),
-			trendDeltaText(metric.ChangePercentage, "%"),
+			trendChangePercentText(metric.ChangePercentage),
 			trendDirectionText(metric.Direction),
 		})
 	}
@@ -2261,9 +2263,14 @@ func trendSeverityAccent(severity string) [3]int {
 func writeTrendPDFNotes(pdf *gofpdf.Fpdf, data TrendReportData) {
 	pdf.Ln(9)
 	writePDFSectionTitle(pdf, "说明")
-	paragraphs := make([]string, 0, 2)
+	paragraphs := make([]string, 0, 3)
 	if notes := strings.TrimSpace(data.Notes); notes != "" {
 		paragraphs = append(paragraphs, notes)
+	}
+	// 检测口径随报告呈现：读者看到「无趋势异常」时，需要知道判据是多大
+	// 灵敏度、多少数据点门槛，否则无从判断该结论的宽严。
+	if data.AlertsMeta.MinPointsRequired > 0 {
+		paragraphs = append(paragraphs, trendDetectionCriteriaText(data.AlertsMeta))
 	}
 	paragraphs = append(paragraphs, "本报告为摘要版，不含逐点时序数据；完整趋势曲线请在「报表中心 · 趋势分析」页面查看。")
 	writeTrendPDFParagraphs(pdf, paragraphs)

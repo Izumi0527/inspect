@@ -234,3 +234,86 @@ func TestGenericReport_LocalizesCreatorAndTimestamp(t *testing.T) {
 		t.Errorf("SQL 期望未满足: %v", err)
 	}
 }
+
+// 无 payload 的通用报表（如定时/默认 alert 或 performance 报表）走 defaultGenericReportData 分支，
+// report.GeneratedAt（UTC）也必须按业务时区换算，不能直接输出未转换的 UTC 时间串。
+func TestGenericReport_EmptyPayloadLocalizesGeneratedAt(t *testing.T) {
+	const tzQuery = `SELECT COALESCE(value, '') FROM system_settings WHERE key = 'system.timezone' LIMIT 1`
+	const creatorQuery = `SELECT COALESCE(NULLIF(TRIM(full_name), ''), username) AS name FROM users WHERE id = $1 LIMIT 1`
+
+	db, mock, cleanup := newReportsDBWithSqlmock(t)
+	defer cleanup()
+
+	mock.ExpectQuery(tzQuery).WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow("Asia/Shanghai"))
+	mock.ExpectQuery(creatorQuery).WillReturnRows(sqlmock.NewRows([]string{"name"}).AddRow("张运维"))
+
+	creatorID := "dff7f0df-baca-464e-900b-87ed6e4c9a01"
+	generatedAt := time.Date(2026, 10, 18, 11, 23, 3, 0, time.UTC)
+	report := reports.Report{
+		ID:          9501,
+		Title:       "告警汇总报表",
+		ReportType:  "alert",
+		GeneratedBy: &creatorID,
+		GeneratedAt: &generatedAt,
+	}
+	path, err := reports.GenerateReportFile(context.Background(), db, t.TempDir(), report, "html")
+	if err != nil {
+		t.Fatalf("GenerateReportFile: %v", err)
+	}
+	body := readReportText(t, path, "html")
+	if !strings.Contains(body, "2026-10-18 19:23:03") {
+		t.Errorf("无 payload 通用报表生成时间应由 UTC 11:23:03 换算为业务时区 19:23:03，实际内容: %s", body)
+	}
+	if strings.Contains(body, "2026-10-18 11:23:03") {
+		t.Errorf("不应直接输出未转换的 UTC 时间 11:23:03")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("SQL 期望未满足: %v", err)
+	}
+}
+
+// 趋势报告的告警检测时间与描述内嵌时间戳应跟随 system.timezone（而非固定宿主机 Local），
+// 且缺失 range 时应回退使用 report.StartDate ~ EndDate。
+func TestTrendReport_AlertTimestampsAndFallbackRangeUseBusinessTimezone(t *testing.T) {
+	const tzQuery = `SELECT COALESCE(value, '') FROM system_settings WHERE key = 'system.timezone' LIMIT 1`
+
+	db, mock, cleanup := newReportsDBWithSqlmock(t)
+	defer cleanup()
+
+	// 故意使用 UTC+9 (Asia/Tokyo) 以区分宿主机 Asia/Shanghai (+8) 与 UTC (0)
+	mock.ExpectQuery(tzQuery).WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow("Asia/Tokyo"))
+
+	report := reports.Report{
+		ID:         9502,
+		Title:      "趋势时区校验报表",
+		ReportType: "trend",
+		StartDate:  time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC),
+		EndDate:    time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC),
+		DeviceFilters: datatypes.JSON([]byte(`{
+			"report_data": {
+				"alerts": [
+					{
+						"severity": "critical",
+						"title": "容量异常",
+						"description": "检测到容量在 2026-10-15T03:00:00Z 突增",
+						"detected_at": "2026-10-15T03:00:00Z"
+					}
+				]
+			}
+		}`)),
+	}
+	path, err := reports.GenerateReportFile(context.Background(), db, t.TempDir(), report, "html")
+	if err != nil {
+		t.Fatalf("GenerateReportFile: %v", err)
+	}
+	body := readReportText(t, path, "html")
+	if !strings.Contains(body, "2026-10-15 12:00") {
+		t.Errorf("告警时间戳应按业务时区 Asia/Tokyo (+9) 呈现为 2026-10-15 12:00，实际内容: %s", body)
+	}
+	if !strings.Contains(body, "2026-10-11 ~ 2026-10-18") {
+		t.Errorf("payload 缺失 range 时应回退 report.StartDate ~ EndDate")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("SQL 期望未满足: %v", err)
+	}
+}

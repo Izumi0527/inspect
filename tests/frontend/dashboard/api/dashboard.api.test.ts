@@ -4,14 +4,12 @@ import {
   saveTopologyLayout,
 } from '@/features/dashboard/api/dashboard.api'
 
-const mockPost = jest.fn()
 const mockGet = jest.fn()
 const mockPut = jest.fn()
 
 jest.mock('@/lib/api-client', () => ({
   api: {
     get: (...args: unknown[]) => mockGet(...args),
-    post: (...args: unknown[]) => mockPost(...args),
     put: (...args: unknown[]) => mockPut(...args),
   },
 }))
