@@ -42,8 +42,11 @@ import {
   useReports,
   useDeleteReport,
   useGenerateInspectionReport,
-  useDeleteReportsByType
+  useBatchDeleteReports,
 } from '../hooks/useReports'
+import { useBatchSelection } from '@/hooks/useBatchSelection'
+import { FloatingBatchActionBar } from '@/components/shared/FloatingBatchActionBar'
+import { BatchDeleteConfirmModal } from '@/components/shared/BatchDeleteConfirmModal'
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 import { downloadWithAuth } from '@/utils/download'
 import { Report } from '../types'
@@ -73,7 +76,7 @@ export const InspectionReports: React.FC<Props> = ({
   const [compareOpen, setCompareOpen] = useState(false)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [deleteAllConfirm, setDeleteAllConfirm] = useState(false)
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
 
   // 分页：后端分页从 1 开始，默认 20 条/页
   const [page, setPage] = useState(1)
@@ -95,13 +98,40 @@ export const InspectionReports: React.FC<Props> = ({
   })
   const deleteReport = useDeleteReport()
   const generateReport = useGenerateInspectionReport()
-  const deleteAllReports = useDeleteReportsByType()
+  const batchDeleteReports = useBatchDeleteReports()
 
   const reports = reportsData?.reports || []
   const total = useMemo(() => {
     const serverTotal = typeof reportsData?.total === 'number' ? reportsData.total : 0
     return Math.max(serverTotal, reports.length)
   }, [reportsData?.total, reports.length])
+
+  // 过滤报表列表
+  const normalizedKeyword = searchText.trim().toLowerCase()
+  const isClientFiltering = normalizedKeyword.length > 0 || formatFilter !== 'all'
+  const filteredReports = reports.filter((report: Report) => {
+    const title = String(report?.title || '').toLowerCase()
+    const description = String(report?.description || '').toLowerCase()
+    const keywordMatched =
+      normalizedKeyword.length === 0 ||
+      title.includes(normalizedKeyword) ||
+      description.includes(normalizedKeyword)
+
+    const reportFormat = String(report?.format || '').toLowerCase()
+    const formatMatched = formatFilter === 'all' || reportFormat === formatFilter
+
+    return keywordMatched && formatMatched
+  })
+
+  const effectiveTotal = isClientFiltering ? filteredReports.length : total
+
+  const batchSelection = useBatchSelection<Report>({
+    items: filteredReports,
+    totalCount: effectiveTotal,
+    getId: (r) => r.id,
+    filterDeps: [searchText, statusFilter, formatFilter],
+    pageDeps: [page, pageSize],
+  })
 
   // 删除/筛选后可能出现“当前页超出最后页”的情况：自动回退到最后一页，避免列表空白且无法翻页。
   useEffect(() => {
@@ -184,23 +214,6 @@ export const InspectionReports: React.FC<Props> = ({
     }
   }
 
-  // 过滤报表列表
-  const normalizedKeyword = searchText.trim().toLowerCase()
-  const isClientFiltering = normalizedKeyword.length > 0 || formatFilter !== 'all'
-  const filteredReports = reports.filter((report: Report) => {
-    const title = String(report?.title || '').toLowerCase()
-    const description = String(report?.description || '').toLowerCase()
-    const keywordMatched =
-      normalizedKeyword.length === 0 ||
-      title.includes(normalizedKeyword) ||
-      description.includes(normalizedKeyword)
-
-    const reportFormat = String(report?.format || '').toLowerCase()
-    const formatMatched = formatFilter === 'all' || reportFormat === formatFilter
-
-    return keywordMatched && formatMatched
-  })
-
   const handleGenerateReport = () => {
     if (!canCreate) {
       toast.error('暂无权限生成报表')
@@ -222,32 +235,37 @@ export const InspectionReports: React.FC<Props> = ({
     }
   }
 
-  // 「全部删除」按 report_type 清空整类巡检报告，不受状态/格式筛选影响：
-  // 筛选只是列表视图，用户点的是“全部”；确认文案必须把这个范围说清楚，
-  // 否则在筛了“失败”的视图里点全部删除，会把“已完成”的报告一起删掉而不自知。
-  const handleDeleteAllReports = async () => {
+  const handleConfirmBatchDelete = async () => {
     try {
-      await deleteAllReports.mutateAsync('inspection')
-      setDeleteAllConfirm(false)
-      setPage(1)
+      if (batchSelection.selectionMode === 'all_filtered') {
+        await batchDeleteReports?.mutateAsync?.({
+          selectAllFiltered: true,
+          excludeIds: batchSelection.excludedIds,
+          type: 'inspection',
+          status: statusFilter !== 'all' ? statusFilter : undefined,
+          format: formatFilter !== 'all' ? formatFilter : undefined,
+          search: searchText.trim() || undefined,
+        })
+      } else {
+        await batchDeleteReports?.mutateAsync?.({
+          selectAllFiltered: false,
+          ids: batchSelection.selectedIds,
+        })
+      }
+      setShowBatchDeleteConfirm(false)
+      batchSelection.clearSelection()
+
+      // 如果当前页全部删空且 page > 1 则 setPage(page - 1)
+      if (
+        page > 1 &&
+        (batchSelection.selectionMode === 'all_filtered' ||
+          batchSelection.selectedIds.length >= filteredReports.length)
+      ) {
+        setPage(page - 1)
+      }
     } catch (error) {
-      console.error('Delete all reports failed:', error)
+      console.error('Batch delete reports failed:', error)
     }
-  }
-
-  const deleteAllDescription =
-    statusFilter === 'all'
-      ? `确定要删除全部 ${total} 份巡检报告吗？此操作无法撤销。`
-      : '确定要删除全部巡检报告吗？包括当前状态筛选之外的报告，此操作无法撤销。'
-
-  const deleteAllAction: ReportsToolbarAction = {
-    key: 'delete-all-reports',
-    label: '全部删除',
-    icon: <Trash2 className="mr-2 h-4 w-4" />,
-    variant: 'destructive',
-    disabled: total === 0 || deleteAllReports.isPending,
-    loading: deleteAllReports.isPending,
-    onClick: () => setDeleteAllConfirm(true),
   }
 
   const getStatusIcon = (status: string) => {
@@ -517,7 +535,6 @@ export const InspectionReports: React.FC<Props> = ({
             disabled: Boolean(isLoading),
             onClick: () => void refetch(),
           },
-          ...(canDelete ? [deleteAllAction] : []),
         ]}
         primaryActions={
           canCreate
@@ -634,6 +651,7 @@ export const InspectionReports: React.FC<Props> = ({
           columns={columns}
           className="border-0"
           rowKey="id"
+          rowSelection={canDelete ? batchSelection.rowSelection : undefined}
           pagination={{
             current: page,
             pageSize,
@@ -691,19 +709,33 @@ export const InspectionReports: React.FC<Props> = ({
         />
       )}
 
-      {/* 全部删除确认弹窗：破坏性操作必须二次确认 */}
-      <ConfirmModal
-        isOpen={deleteAllConfirm}
-        onClose={() => setDeleteAllConfirm(false)}
-        onConfirm={handleDeleteAllReports}
-        title="删除全部巡检报告"
-        description={deleteAllDescription}
-        confirmText="确认全部删除"
-        cancelText="取消"
-        variant="destructive"
-        confirmDisabled={deleteAllReports.isPending}
-        cancelDisabled={deleteAllReports.isPending}
-      />
+      {/* 底部悬浮批量操作栏与二次确认弹窗 */}
+      {canDelete && (
+        <>
+          <FloatingBatchActionBar
+            selectedCount={batchSelection.selectedCount}
+            selectionMode={batchSelection.selectionMode}
+            totalCount={effectiveTotal}
+            isAllCurrentPageSelected={batchSelection.isAllCurrentPageSelected}
+            onSelectCurrentPage={batchSelection.selectCurrentPage}
+            onSelectAllFiltered={batchSelection.selectAllFiltered}
+            onInvertCurrentPage={batchSelection.invertCurrentPage}
+            onClearSelection={batchSelection.clearSelection}
+            onDelete={() => setShowBatchDeleteConfirm(true)}
+            isDeleting={batchDeleteReports?.isPending ?? false}
+          />
+
+          <BatchDeleteConfirmModal
+            isOpen={showBatchDeleteConfirm}
+            onClose={() => setShowBatchDeleteConfirm(false)}
+            onConfirm={handleConfirmBatchDelete}
+            isDeleting={batchDeleteReports?.isPending ?? false}
+            count={batchSelection.selectedCount}
+            isAllFiltered={batchSelection.selectionMode === 'all_filtered'}
+            entityLabel="份巡检报告"
+          />
+        </>
+      )}
 
       {/* 删除确认弹窗 */}
       <ConfirmModal

@@ -9,6 +9,7 @@ export { StatisticsReports } from './components/StatisticsReports'
 // API服务导出
 export {
   reportsApi,
+  batchDeleteReports,
   inspectionReportsApi,
   trendAnalysisApi,
   statisticsApi,
@@ -24,7 +25,7 @@ export {
   useCreateReport,
   useUpdateReport,
   useDeleteReport,
-  useDeleteReportsByType,
+  useBatchDeleteReports,
   useGenerateReport,
   useCloneReport,
   useInspectionReportData,
@@ -51,6 +52,7 @@ export {
 } from './hooks/useReports'
 
 // 类型定义导出
+export type { BatchDeleteReportsPayload } from './api/reports.api'
 export type {
   Report,
   ReportParameters,

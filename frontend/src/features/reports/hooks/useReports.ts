@@ -87,14 +87,15 @@ export const useDeleteReport = () => {
   })
 }
 
-export const useDeleteReportsByType = () => {
+export const useBatchDeleteReports = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: reportsApi.deleteReportsByType,
-    onSuccess: (deleted) => {
+    mutationFn: reportsApi.batchDeleteReports,
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['reports', 'list'] })
-      toast.success(`已删除 ${deleted} 份报告`)
+      queryClient.invalidateQueries({ queryKey: ['reports', 'stats'] })
+      toast.success(`成功删除 ${data.deletedCount} 份报告`)
     },
     onError: (error: Error) => {
       toast.error(error.message || '批量删除报表失败')

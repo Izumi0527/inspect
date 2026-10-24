@@ -5,6 +5,7 @@ import {
   rerenderReportPdf,
   getKPIData,
   getRankings,
+  batchDeleteReports,
 } from '@/features/reports/api/reports.api'
 
 const mockGet = jest.fn()
@@ -214,5 +215,53 @@ describe('reports.api 请求体适配', () => {
       previewUrl: '/api/v1/reports/files/report-63-new.pdf',
       report: undefined,
     })
+  })
+
+  it('batchDeleteReports 应按显式 IDs 模式发送请求并返回 deletedCount', async () => {
+    mockPost.mockResolvedValue({
+      success: true,
+      data: {
+        deletedCount: 3,
+      },
+    })
+
+    const result = await batchDeleteReports({
+      selectAllFiltered: false,
+      ids: ['1', '2', '3'],
+    })
+
+    expect(mockPost).toHaveBeenCalledWith('/reports/batch-delete', {
+      selectAllFiltered: false,
+      ids: ['1', '2', '3'],
+    })
+    expect(result).toEqual({ deletedCount: 3 })
+  })
+
+  it('batchDeleteReports 应按 selectAllFiltered 模式发送筛选参数并返回 deletedCount', async () => {
+    mockPost.mockResolvedValue({
+      success: true,
+      data: {
+        deleted_count: 5,
+      },
+    })
+
+    const result = await batchDeleteReports({
+      selectAllFiltered: true,
+      excludeIds: ['9'],
+      type: 'inspection',
+      status: 'completed',
+      format: 'pdf',
+      search: '日报',
+    })
+
+    expect(mockPost).toHaveBeenCalledWith('/reports/batch-delete', {
+      selectAllFiltered: true,
+      excludeIds: ['9'],
+      type: 'inspection',
+      status: 'completed',
+      format: 'pdf',
+      search: '日报',
+    })
+    expect(result).toEqual({ deletedCount: 5 })
   })
 })

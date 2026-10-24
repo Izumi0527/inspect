@@ -32,7 +32,7 @@ jest.mock('@/features/reports/hooks/useReports', () => ({
   useDeleteReport: () => ({
     mutateAsync: jest.fn(),
   }),
-  useDeleteReportsByType: () => ({ isPending: false, mutateAsync: jest.fn() }),
+  useBatchDeleteReports: () => ({ isPending: false, mutateAsync: jest.fn() }),
   useGenerateInspectionReport: () => ({
     isPending: false,
     mutateAsync: jest.fn(),

@@ -444,18 +444,33 @@ export async function deleteReport(id: string): Promise<boolean> {
   }
 }
 
-// 按类型清空报表（巡检报告页「全部删除」）。后端只接受显式类型，并回报实际删除条数。
-export async function deleteReportsByType(type: string): Promise<number> {
+export interface BatchDeleteReportsPayload {
+  selectAllFiltered: boolean
+  ids?: string[]
+  excludeIds?: string[]
+  type?: string
+  status?: string
+  format?: string
+  search?: string
+}
+
+export async function batchDeleteReports(
+  payload: BatchDeleteReportsPayload
+): Promise<{ deletedCount: number }> {
   try {
-    const response = await api.delete<ReportsApiEnvelope<{ deleted?: unknown }>>(
-      `/reports?type=${encodeURIComponent(type)}`
-    )
+    const response = await api.post<
+      ReportsApiEnvelope<{ deleted?: unknown; deletedCount?: unknown; deleted_count?: unknown }>
+    >('/reports/batch-delete', payload)
 
     if (response.success === false) {
       throw new Error(response.message || '批量删除报表失败')
     }
 
-    return toNumberSafe(response.data?.deleted)
+    const deletedCount = toNumberSafe(
+      response.data?.deletedCount ?? response.data?.deleted_count ?? response.data?.deleted
+    )
+
+    return { deletedCount }
   } catch (error) {
     console.error('批量删除报表失败:', error)
     throw error
@@ -1766,7 +1781,7 @@ export const reportsApi = {
   createReport,
   updateReport,
   deleteReport,
-  deleteReportsByType,
+  batchDeleteReports,
   generateReport,
   rerenderReportPdf,
   downloadReport,
