@@ -246,6 +246,125 @@ func (h InspectionHandler) ToggleStrategy(c echo.Context) error {
 	return inspectionOKWithMessage(c, "策略状态已更新", buildStrategyResponse(item))
 }
 
+type batchDeleteStrategiesRequest struct {
+	IDs                    []interface{} `json:"ids"`
+	StrategyIDs            []interface{} `json:"strategy_ids"`
+	StrategyIDsCamel       []interface{} `json:"strategyIds"`
+	SelectAllFiltered      bool          `json:"selectAllFiltered"`
+	SelectAllFilteredSnake bool          `json:"select_all_filtered"`
+	ExcludeIDs             []interface{} `json:"excludeIds"`
+	ExcludeIDsSnake        []interface{} `json:"exclude_ids"`
+	Type                   string        `json:"type"`
+	Enabled                *bool         `json:"enabled"`
+}
+
+func parsePositiveIntIDs(lists ...[]interface{}) []int {
+	seen := make(map[int]bool)
+	var result []int
+	for _, list := range lists {
+		for _, item := range list {
+			var id int
+			switch v := item.(type) {
+			case float64:
+				id = int(v)
+			case int:
+				id = v
+			case int64:
+				id = int(v)
+			case string:
+				v = strings.TrimSpace(v)
+				if strings.Contains(v, ",") {
+					for _, part := range strings.Split(v, ",") {
+						pid := parseIntWithDefault(strings.TrimSpace(part), 0)
+						if pid > 0 && !seen[pid] {
+							seen[pid] = true
+							result = append(result, pid)
+						}
+					}
+					continue
+				}
+				id = parseIntWithDefault(v, 0)
+			}
+			if id > 0 && !seen[id] {
+				seen[id] = true
+				result = append(result, id)
+			}
+		}
+	}
+	return result
+}
+
+// BatchDeleteStrategies 处理 POST /api/v1/inspection/strategies/batch-delete 请求
+func (h InspectionHandler) BatchDeleteStrategies(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:delete"); err != nil {
+		return err
+	}
+	db := h.Service.DB()
+	if db == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not initialized")
+	}
+
+	var req batchDeleteStrategiesRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+
+	selectAllFiltered := req.SelectAllFiltered || req.SelectAllFilteredSnake
+
+	if !selectAllFiltered {
+		targetIDs := parsePositiveIntIDs(req.IDs, req.StrategyIDs, req.StrategyIDsCamel)
+		if len(targetIDs) == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "未指定要删除的巡检策略")
+		}
+
+		result := db.WithContext(c.Request().Context()).Where("id IN ?", targetIDs).Delete(&inspection.Strategy{})
+		if result.Error != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete strategies")
+		}
+
+		return inspectionOKWithMessage(c, "巡检策略已批量删除", map[string]interface{}{
+			"deletedCount":  result.RowsAffected,
+			"deleted_count": result.RowsAffected,
+		})
+	}
+
+	excludeIntIDs := parsePositiveIntIDs(req.ExcludeIDs, req.ExcludeIDsSnake)
+	query := db.WithContext(c.Request().Context()).Model(&inspection.Strategy{})
+	if strings.TrimSpace(req.Type) != "" {
+		query = query.Where("type = ?", strings.ToLower(strings.TrimSpace(req.Type)))
+	}
+	if req.Enabled != nil {
+		query = query.Where("enabled = ?", *req.Enabled)
+	}
+	if len(excludeIntIDs) > 0 {
+		query = query.Where("id NOT IN ?", excludeIntIDs)
+	}
+
+	var matchIDs []int
+	if err := query.Pluck("id", &matchIDs).Error; err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query strategies")
+	}
+	if len(matchIDs) == 0 {
+		return inspectionOKWithMessage(c, "巡检策略已批量删除", map[string]interface{}{
+			"deletedCount":  0,
+			"deleted_count": 0,
+		})
+	}
+
+	result := db.WithContext(c.Request().Context()).Where("id IN ?", matchIDs).Delete(&inspection.Strategy{})
+	if result.Error != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete strategies")
+	}
+
+	return inspectionOKWithMessage(c, "巡检策略已批量删除", map[string]interface{}{
+		"deletedCount":  result.RowsAffected,
+		"deleted_count": result.RowsAffected,
+	})
+}
+
 // =====================================================================
 // 巡检策略触发（手动/定时）与定时调度器
 // =====================================================================

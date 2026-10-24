@@ -18,6 +18,12 @@ export {
   createInspectionTemplate,
   updateInspectionTemplate,
   deleteInspectionTemplate,
+  batchDeleteInspectionTemplates,
+  batchDeleteInspectionStrategies,
+} from './api/inspection.api'
+export type {
+  BatchDeleteTemplatesPayload,
+  BatchDeleteStrategiesPayload,
 } from './api/inspection.api'
 
 // Hooks导出
@@ -27,6 +33,7 @@ export {
   useCreateStrategy,
   useUpdateStrategy,
   useDeleteStrategy,
+  useBatchDeleteStrategies,
   useToggleStrategy,
   useInspectionTemplates,
   useInspectionTemplate,
@@ -34,12 +41,14 @@ export {
   useCloneTemplate,
   useUpdateTemplate,
   useDeleteTemplate,
+  useBatchDeleteTemplates,
   useInspectionExecutions,
   useInspectionExecution,
   useExecutionDetail,
   useTriggerExecution,
   useStopExecution,
   useDeleteExecution,
+  useBatchDeleteExecutions,
   useInspectionStats,
   useInspectionTrends,
   useInspectionReports,
@@ -48,7 +57,6 @@ export {
   useExecutionProgress
 } from './hooks/useInspection'
 
-  useBatchDeleteExecutions,
 // 类型定义导出
 export type {
   InspectionStrategy,

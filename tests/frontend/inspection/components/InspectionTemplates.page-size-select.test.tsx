@@ -198,6 +198,10 @@ jest.mock('@/features/inspection/hooks/useInspection', () => ({
     isPending: false,
     mutateAsync: mockCloneTemplateMutateAsync,
   }),
+  useBatchDeleteTemplates: () => ({
+    isPending: false,
+    mutateAsync: jest.fn(),
+  }),
   useDeleteTemplate: () => ({
     isPending: false,
     mutateAsync: mockDeleteTemplateMutateAsync,

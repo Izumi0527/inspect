@@ -208,6 +208,133 @@ func (h InspectionHandler) DeleteTemplate(c echo.Context) error {
 	return inspectionOKWithMessage(c, "模板已删除", map[string]interface{}{"id": templateID})
 }
 
+type batchDeleteTemplatesRequest struct {
+	IDs                    []interface{} `json:"ids"`
+	TemplateIDs            []interface{} `json:"template_ids"`
+	TemplateIDsCamel       []interface{} `json:"templateIds"`
+	SelectAllFiltered      bool          `json:"selectAllFiltered"`
+	SelectAllFilteredSnake bool          `json:"select_all_filtered"`
+	ExcludeIDs             []interface{} `json:"excludeIds"`
+	ExcludeIDsSnake        []interface{} `json:"exclude_ids"`
+	Vendor                 string        `json:"vendor"`
+	DeviceType             string        `json:"deviceType"`
+	DeviceTypeSnake        string        `json:"device_type"`
+	Category               string        `json:"category"`
+	Search                 string        `json:"search"`
+}
+
+// BatchDeleteTemplates 处理 POST /api/v1/inspection/templates/batch-delete 请求
+func (h InspectionHandler) BatchDeleteTemplates(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:delete"); err != nil {
+		return err
+	}
+	db := h.Service.DB()
+	if db == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not initialized")
+	}
+
+	var req batchDeleteTemplatesRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+
+	selectAllFiltered := req.SelectAllFiltered || req.SelectAllFilteredSnake
+
+	if !selectAllFiltered {
+		targetIDs := parsePositiveIntIDs(req.IDs, req.TemplateIDs, req.TemplateIDsCamel)
+		if len(targetIDs) == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "未指定要删除的巡检模板")
+		}
+
+		var templates []inspection.Template
+		if err := db.WithContext(c.Request().Context()).Where("id IN ?", targetIDs).Find(&templates).Error; err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to query templates")
+		}
+		if len(templates) == 0 {
+			return echo.NewHTTPError(http.StatusNotFound, "模板不存在")
+		}
+
+		for _, tpl := range templates {
+			if tpl.IsDefault {
+				return echo.NewHTTPError(http.StatusForbidden, "不能删除内置模板")
+			}
+		}
+
+		result := db.WithContext(c.Request().Context()).Where("id IN ? AND is_default = ?", targetIDs, false).Delete(&inspection.Template{})
+		if result.Error != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete templates")
+		}
+
+		return inspectionOKWithMessage(c, "模板已批量删除", map[string]interface{}{
+			"deletedCount":  result.RowsAffected,
+			"deleted_count": result.RowsAffected,
+		})
+	}
+
+	deviceType := strings.TrimSpace(req.DeviceType)
+	if deviceType == "" {
+		deviceType = strings.TrimSpace(req.DeviceTypeSnake)
+	}
+	vendor := strings.TrimSpace(req.Vendor)
+	category := strings.TrimSpace(req.Category)
+	search := strings.TrimSpace(req.Search)
+	excludeIntIDs := parsePositiveIntIDs(req.ExcludeIDs, req.ExcludeIDsSnake)
+
+	query := db.WithContext(c.Request().Context()).Model(&inspection.Template{}).Where("is_default = ?", false)
+	if vendor != "" {
+		vendorPattern := "%" + vendor + "%"
+		vendorJSON := fmt.Sprintf(`["%s"]`, vendor)
+		query = query.Where(
+			"(name ILIKE ? OR description ILIKE ? OR COALESCE(device_types->'vendors','[]'::jsonb) @> ?)",
+			vendorPattern,
+			vendorPattern,
+			vendorJSON,
+		)
+	}
+	if deviceType != "" {
+		filterJSON := fmt.Sprintf(`["%s"]`, deviceType)
+		query = query.Where(
+			`((jsonb_typeof(device_types) = 'array' AND device_types @> ?) OR (jsonb_typeof(device_types) = 'object' AND COALESCE(device_types->'device_types','[]'::jsonb) @> ?))`,
+			filterJSON,
+			filterJSON,
+		)
+	}
+	if category != "" {
+		query = query.Where("category = ?", category)
+	}
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		query = query.Where("name ILIKE ? OR description ILIKE ?", searchPattern, searchPattern)
+	}
+	if len(excludeIntIDs) > 0 {
+		query = query.Where("id NOT IN ?", excludeIntIDs)
+	}
+
+	var matchIDs []int
+	if err := query.Pluck("id", &matchIDs).Error; err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query templates")
+	}
+	if len(matchIDs) == 0 {
+		return inspectionOKWithMessage(c, "模板已批量删除", map[string]interface{}{
+			"deletedCount":  0,
+			"deleted_count": 0,
+		})
+	}
+
+	result := db.WithContext(c.Request().Context()).Where("id IN ? AND is_default = ?", matchIDs, false).Delete(&inspection.Template{})
+	if result.Error != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete templates")
+	}
+
+	return inspectionOKWithMessage(c, "模板已批量删除", map[string]interface{}{
+		"deletedCount":  result.RowsAffected,
+		"deleted_count": result.RowsAffected,
+	})
+}
+
 // CopyTemplate 处理 POST /api/v1/templates/:id/copy 请求
 func (h InspectionHandler) CopyTemplate(c echo.Context) error {
 	if h.Service == nil {

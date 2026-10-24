@@ -14,6 +14,7 @@ jest.mock('@/features/inspection/hooks/useInspection', () => ({
   useInspectionStrategies: jest.fn(),
   useToggleStrategy: jest.fn(),
   useDeleteStrategy: jest.fn(),
+  useBatchDeleteStrategies: jest.fn(),
   useTriggerExecution: jest.fn(),
 }))
 

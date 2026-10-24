@@ -36,6 +36,7 @@ func (h ReportsHandler) Register(group *echo.Group) {
 	group.PUT("/reports/:report_id", h.UpdateReport)
 	group.DELETE("/reports/:report_id", h.DeleteReport)
 	group.DELETE("/reports", h.DeleteReportsByType)
+	group.POST("/reports/batch-delete", h.BatchDeleteReports)
 	group.POST("/reports/:report_id/generate", h.GenerateReport)
 	group.POST("/reports/:report_id/rerender/pdf", h.RerenderReportPDF)
 	group.POST("/reports/:report_id/clone", h.CloneReport)

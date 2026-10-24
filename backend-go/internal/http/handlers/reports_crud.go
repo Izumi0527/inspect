@@ -397,6 +397,175 @@ func (h ReportsHandler) DeleteReportsByType(c echo.Context) error {
 	})
 }
 
+type batchDeleteReportsRequest struct {
+	IDs                    []interface{} `json:"ids"`
+	ReportIDs              []interface{} `json:"report_ids"`
+	ReportIDsCamel         []interface{} `json:"reportIds"`
+	SelectAllFiltered      bool          `json:"selectAllFiltered"`
+	SelectAllFilteredSnake bool          `json:"select_all_filtered"`
+	ExcludeIDs             []interface{} `json:"excludeIds"`
+	ExcludeIDsSnake        []interface{} `json:"exclude_ids"`
+	Type                   string        `json:"type"`
+	ReportType             string        `json:"report_type"`
+	Status                 string        `json:"status"`
+	Format                 string        `json:"format"`
+	Search                 string        `json:"search"`
+}
+
+// BatchDeleteReports 处理 POST /api/v1/reports/batch-delete 请求
+// 支持显式 IDs 批量删除与全选筛选结果（SelectAllFiltered）两种模式。
+func (h ReportsHandler) BatchDeleteReports(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "report service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "reports:delete"); err != nil {
+		return err
+	}
+
+	db := h.Service.DB()
+	if db == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not configured")
+	}
+
+	var req batchDeleteReportsRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+
+	ctx := c.Request().Context()
+	selectAllFiltered := req.SelectAllFiltered || req.SelectAllFilteredSnake
+
+	if !selectAllFiltered {
+		rawIDs := make([]interface{}, 0, len(req.IDs)+len(req.ReportIDs)+len(req.ReportIDsCamel))
+		rawIDs = append(rawIDs, req.IDs...)
+		rawIDs = append(rawIDs, req.ReportIDs...)
+		rawIDs = append(rawIDs, req.ReportIDsCamel...)
+
+		parsedIDs := parseIntListFromPayload(rawIDs)
+		seen := make(map[int]bool, len(parsedIDs))
+		targetIDs := make([]int, 0, len(parsedIDs))
+		for _, id := range parsedIDs {
+			if !seen[id] {
+				seen[id] = true
+				targetIDs = append(targetIDs, id)
+			}
+		}
+		if len(targetIDs) == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "未指定要删除的报告")
+		}
+
+		var rows []reports.Report
+		if err := db.WithContext(ctx).Where("id IN ?", targetIDs).Find(&rows).Error; err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load reports")
+		}
+
+		result := db.WithContext(ctx).Where("id IN ?", targetIDs).Delete(&reports.Report{})
+		if result.Error != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete reports")
+		}
+
+		for _, row := range rows {
+			h.removeReportFiles(c, row)
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"success": true,
+			"data": map[string]interface{}{
+				"deleted":       result.RowsAffected,
+				"deletedCount":  result.RowsAffected,
+				"deleted_count": result.RowsAffected,
+			},
+		})
+	}
+
+	// 全选筛选结果模式
+	rawExclude := make([]interface{}, 0, len(req.ExcludeIDs)+len(req.ExcludeIDsSnake))
+	rawExclude = append(rawExclude, req.ExcludeIDs...)
+	rawExclude = append(rawExclude, req.ExcludeIDsSnake...)
+	excludeIntIDs := parseIntListFromPayload(rawExclude)
+
+	query := db.WithContext(ctx).Model(&reports.Report{})
+
+	reportType := strings.TrimSpace(firstNonEmpty(req.Type, req.ReportType))
+	if reportType != "" && !strings.EqualFold(reportType, "all") {
+		query = query.Where("report_type = ?", normalizeReportType(reportType))
+	}
+
+	status := strings.TrimSpace(req.Status)
+	if strings.EqualFold(status, "scheduled") {
+		query = query.Where("status = ? AND schedule_id IS NOT NULL", "pending")
+	} else if status != "" && !strings.EqualFold(status, "all") {
+		query = query.Where("status = ?", status)
+	}
+
+	if len(excludeIntIDs) > 0 {
+		query = query.Where("id NOT IN ?", excludeIntIDs)
+	}
+
+	var allRows []reports.Report
+	if err := query.Find(&allRows).Error; err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load reports")
+	}
+
+	search := strings.ToLower(strings.TrimSpace(req.Search))
+	formatFilter := strings.ToLower(strings.TrimSpace(req.Format))
+	if formatFilter == "all" {
+		formatFilter = ""
+	}
+
+	matchedRows := make([]reports.Report, 0, len(allRows))
+	matchedIDs := make([]int, 0, len(allRows))
+	for _, row := range allRows {
+		if search != "" {
+			title := strings.ToLower(row.Title)
+			desc := ""
+			if row.Description != nil {
+				desc = strings.ToLower(*row.Description)
+			}
+			if !strings.Contains(title, search) && !strings.Contains(desc, search) {
+				continue
+			}
+		}
+		if formatFilter != "" {
+			rowFormat := strings.ToLower(resolveReportFormat(row))
+			if rowFormat != formatFilter {
+				continue
+			}
+		}
+		matchedRows = append(matchedRows, row)
+		matchedIDs = append(matchedIDs, row.ID)
+	}
+
+	if len(matchedIDs) == 0 {
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"success": true,
+			"data": map[string]interface{}{
+				"deleted":       int64(0),
+				"deletedCount":  int64(0),
+				"deleted_count": int64(0),
+			},
+		})
+	}
+
+	result := db.WithContext(ctx).Where("id IN ?", matchedIDs).Delete(&reports.Report{})
+	if result.Error != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete reports")
+	}
+
+	for _, row := range matchedRows {
+		h.removeReportFiles(c, row)
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"data": map[string]interface{}{
+			"deleted":       result.RowsAffected,
+			"deletedCount":  result.RowsAffected,
+			"deleted_count": result.RowsAffected,
+		},
+	})
+}
+
 // removeReportFiles 回收报表落盘文件（尽力而为）。
 //
 // file_paths 存的是生成器写下的绝对路径；这里只删位于 OutputDir 之内的文件，

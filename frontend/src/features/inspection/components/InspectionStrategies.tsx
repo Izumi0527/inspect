@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import { formatDateYMD, formatTimeHM } from '@/utils/formatters'
 import {
@@ -22,10 +22,14 @@ import {
   ConfirmModal
 } from '@/components/atoms'
 import { CompactPageToolbar } from '@/components/shared'
+import { FloatingBatchActionBar } from '@/components/shared/FloatingBatchActionBar'
+import { BatchDeleteConfirmModal } from '@/components/shared/BatchDeleteConfirmModal'
+import { useBatchSelection } from '@/hooks'
 import { 
   useInspectionStrategies, 
   useToggleStrategy, 
   useDeleteStrategy,
+  useBatchDeleteStrategies,
   useTriggerExecution 
 } from '../hooks/useInspection'
 import { InspectionStrategy } from '../types'
@@ -35,6 +39,7 @@ export const InspectionStrategies: React.FC = () => {
   const [selectedStrategy, setSelectedStrategy] = useState<InspectionStrategy | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [strategyToDelete, setStrategyToDelete] = useState<InspectionStrategy | null>(null)
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [typeFilter, setTypeFilter] = useState<'all' | 'manual' | 'scheduled'>('all')
@@ -51,13 +56,23 @@ export const InspectionStrategies: React.FC = () => {
   })
   const toggleStrategy = useToggleStrategy()
   const deleteStrategy = useDeleteStrategy()
+  const batchDeleteStrategies = typeof useBatchDeleteStrategies === 'function' ? useBatchDeleteStrategies() : undefined
   const triggerExecution = useTriggerExecution()
+  const isBatchDeleting = Boolean(batchDeleteStrategies?.isPending)
 
   const strategies: InspectionStrategy[] = strategiesData?.items || []
   const totalItems = strategiesData?.total || 0
 
   // 显示所有策略列表
   const filteredStrategies = strategies
+
+  const batchSelection = useBatchSelection<InspectionStrategy>({
+    items: filteredStrategies,
+    totalCount: totalItems,
+    getId: (s) => s.id,
+    filterDeps: [typeFilter, enabledFilter],
+    pageDeps: [page, pageSize],
+  })
 
   const handleCreateStrategy = () => {
     setSelectedStrategy(null)
@@ -103,6 +118,37 @@ export const InspectionStrategies: React.FC = () => {
       console.error('Delete strategy failed:', error)
     }
   }
+
+  const handleConfirmBatchDelete = useCallback(async () => {
+    try {
+      if (batchSelection.selectionMode === 'all_filtered') {
+        await batchDeleteStrategies?.mutateAsync({
+          selectAllFiltered: true,
+          excludeIds: batchSelection.excludedIds,
+          type: typeFilter === 'all' ? undefined : typeFilter,
+          enabled: enabledFilter === 'all' ? undefined : enabledFilter === 'enabled',
+        })
+      } else {
+        await batchDeleteStrategies?.mutateAsync({
+          selectAllFiltered: false,
+          ids: batchSelection.selectedIds,
+        })
+      }
+      setShowBatchDeleteConfirm(false)
+      batchSelection.clearSelection()
+
+      if (
+        page > 1 &&
+        (batchSelection.selectionMode === 'all_filtered' ||
+          batchSelection.selectedIds.length >= filteredStrategies.length)
+      ) {
+        setPage(page - 1)
+      }
+      refetch()
+    } catch (error) {
+      console.error('Batch delete strategies failed:', error)
+    }
+  }, [batchSelection, batchDeleteStrategies, typeFilter, enabledFilter, page, filteredStrategies.length, refetch])
 
   const handleTriggerExecution = async (strategyId: string) => {
     try {
@@ -340,6 +386,8 @@ export const InspectionStrategies: React.FC = () => {
       <Table
         data={filteredStrategies}
         columns={columns}
+        rowKey="id"
+        rowSelection={batchSelection.rowSelection}
         className="border-0"
         emptyContent={(
           <div className="text-center py-6">
@@ -401,6 +449,31 @@ export const InspectionStrategies: React.FC = () => {
         variant="destructive"
         confirmDisabled={deleteStrategy.isPending}
         cancelDisabled={deleteStrategy.isPending}
+      />
+
+      {/* 底部悬浮批量操作栏 */}
+      <FloatingBatchActionBar
+        selectedCount={batchSelection.selectedCount}
+        selectionMode={batchSelection.selectionMode}
+        totalCount={totalItems}
+        isAllCurrentPageSelected={batchSelection.isAllCurrentPageSelected}
+        onSelectCurrentPage={batchSelection.selectCurrentPage}
+        onSelectAllFiltered={batchSelection.selectAllFiltered}
+        onInvertCurrentPage={batchSelection.invertCurrentPage}
+        onClearSelection={batchSelection.clearSelection}
+        onDelete={() => setShowBatchDeleteConfirm(true)}
+        isDeleting={isBatchDeleting}
+      />
+
+      {/* 批量删除确认弹窗 */}
+      <BatchDeleteConfirmModal
+        isOpen={showBatchDeleteConfirm}
+        onClose={() => setShowBatchDeleteConfirm(false)}
+        onConfirm={handleConfirmBatchDelete}
+        isDeleting={isBatchDeleting}
+        count={batchSelection.selectedCount}
+        isAllFiltered={batchSelection.selectionMode === 'all_filtered'}
+        entityLabel="条巡检策略"
       />
 
     </div>

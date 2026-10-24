@@ -62,6 +62,7 @@ func (h InspectionHandler) Register(group *echo.Group) {
 	group.POST("/inspection/templates/:id/copy", h.CopyTemplate)
 	group.GET("/inspection/templates/:id/export", h.ExportTemplate)
 	group.POST("/inspection/templates/import", h.ImportTemplate)
+	group.POST("/inspection/templates/batch-delete", h.BatchDeleteTemplates)
 
 	group.GET("/inspection/strategies", h.ListStrategies)
 	group.POST("/inspection/strategies", h.CreateStrategy)
@@ -70,14 +71,15 @@ func (h InspectionHandler) Register(group *echo.Group) {
 	group.DELETE("/inspection/strategies/:id", h.DeleteStrategy)
 	group.POST("/inspection/strategies/:id/toggle", h.ToggleStrategy)
 	group.POST("/inspection/strategies/:id/trigger", h.TriggerStrategy)
+	group.POST("/inspection/strategies/batch-delete", h.BatchDeleteStrategies)
 
 	group.GET("/inspection/executions", h.ListExecutions)
 	group.GET("/inspection/executions/:id", h.GetExecution)
 	group.POST("/inspection/executions/:id/stop", h.StopExecution)
 	group.DELETE("/inspection/executions/:id", h.DeleteExecution)
+	group.POST("/inspection/executions/batch-delete", h.BatchDeleteExecutions)
 
 	group.GET("/inspection/results", h.ListResults)
-	group.POST("/inspection/executions/batch-delete", h.BatchDeleteExecutions)
 	group.GET("/inspection/results/:id", h.GetResult)
 	group.GET("/inspection/devices/:id/history", h.ListDeviceHistory)
 

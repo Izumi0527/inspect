@@ -20,13 +20,17 @@ import {
   createInspectionStrategy,
   updateInspectionStrategy,
   deleteInspectionStrategy,
+  batchDeleteInspectionStrategies,
+  BatchDeleteStrategiesPayload,
   toggleInspectionStrategy,
   triggerStrategyExecution,
   generateInspectionReport,
-} from '../api/inspection.api'
-import {
   batchDeleteInspectionExecutions,
   BatchDeleteExecutionsPayload,
+  batchDeleteInspectionTemplates,
+  BatchDeleteTemplatesPayload,
+} from '../api/inspection.api'
+import {
   InspectionStrategy,
   InspectionTemplate,
   InspectionStats,
@@ -113,6 +117,23 @@ export const useDeleteStrategy = () => {
     },
     onError: (error: Error) => {
       toast.error(error.message || '删除策略失败')
+    },
+  })
+}
+
+export const useBatchDeleteStrategies = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: BatchDeleteStrategiesPayload) =>
+      batchDeleteInspectionStrategies(payload),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'strategies'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
+      toast.success(`成功删除 ${data.deletedCount} 条巡检策略`)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '批量删除巡检策略失败')
     },
   })
 }
@@ -293,6 +314,23 @@ export const useDeleteTemplate = () => {
   })
 }
 
+export const useBatchDeleteTemplates = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: BatchDeleteTemplatesPayload) =>
+      batchDeleteInspectionTemplates(payload),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'templates'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
+      toast.success(`成功删除 ${data.deletedCount} 个巡检模板`)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '批量删除巡检模板失败')
+    },
+  })
+}
+
 // 巡检执行Hooks - 连接到真实API
 export const useInspectionExecutions = (params?: {
   page?: number
@@ -418,6 +456,26 @@ export const useDeleteExecution = () => {
   })
 }
 
+export const useBatchDeleteExecutions = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: BatchDeleteExecutionsPayload) =>
+      batchDeleteInspectionExecutions(payload),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'executions'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'trends'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'device-distribution'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'problem-distribution'] })
+      toast.success(`成功删除 ${data.deletedCount} 条执行记录`)
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '批量删除执行记录失败')
+    },
+  })
+}
+
 // 巡检统计Hooks
 export const useInspectionStats = (params?: string | InspectionAnalyticsRange) => {
   return useQuery<InspectionStats>({
@@ -456,26 +514,6 @@ export const useProblemDistribution = (params?: InspectionAnalyticsRange) => {
     queryFn: () => fetchProblemDistribution(params),
     staleTime: 5 * 60 * 1000, // 5分钟缓存
   })
-export const useBatchDeleteExecutions = () => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (payload: BatchDeleteExecutionsPayload) =>
-      batchDeleteInspectionExecutions(payload),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['inspection', 'executions'] })
-      queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
-      queryClient.invalidateQueries({ queryKey: ['inspection', 'trends'] })
-      queryClient.invalidateQueries({ queryKey: ['inspection', 'device-distribution'] })
-      queryClient.invalidateQueries({ queryKey: ['inspection', 'problem-distribution'] })
-      toast.success(`成功删除 ${data.deletedCount} 条执行记录`)
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || '批量删除执行记录失败')
-    },
-  })
-}
-
 }
 
 // 巡检报告Hooks - 部分实现

@@ -30,6 +30,10 @@ jest.mock('@/features/inspection/hooks/useInspection', () => ({
     isPending: false,
     mutateAsync: mockDeleteStrategyMutateAsync,
   }),
+  useBatchDeleteStrategies: () => ({
+    isPending: false,
+    mutateAsync: jest.fn(),
+  }),
   useTriggerExecution: () => ({
     isPending: false,
     mutateAsync: mockTriggerExecutionMutateAsync,

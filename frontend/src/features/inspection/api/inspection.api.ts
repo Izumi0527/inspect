@@ -1,4 +1,4 @@
-﻿import { api, authorizedDownload } from '@/lib/api-client'
+import { api, authorizedDownload } from '@/lib/api-client'
 import { getApiOrigin } from '@/lib/api-client'
 import {
   InspectionTemplate,
@@ -738,6 +738,38 @@ export async function deleteInspectionTemplate(id: number): Promise<boolean> {
   }
 }
 
+export interface BatchDeleteTemplatesPayload {
+  selectAllFiltered?: boolean
+  ids?: (string | number)[]
+  excludeIds?: (string | number)[]
+  vendor?: string
+  deviceType?: string
+  category?: string
+  search?: string
+}
+
+/**
+ * 批量删除巡检模板（内置模板不可删除，仅自定义模板可删）
+ */
+export async function batchDeleteInspectionTemplates(
+  payload: BatchDeleteTemplatesPayload
+): Promise<{ deletedCount: number }> {
+  try {
+    const response = await api.post<InspectionApiResponse<{ deletedCount: number; deleted_count?: number }>>(
+      '/inspection/templates/batch-delete',
+      payload
+    )
+    if (response.code !== 200) {
+      throw new Error(response.message || '批量删除巡检模板失败')
+    }
+    const count = response.data?.deletedCount ?? response.data?.deleted_count ?? 0
+    return { deletedCount: count }
+  } catch (error) {
+    console.error('批量删除巡检模板失败:', error)
+    throw error
+  }
+}
+
 // ==================== 巡检任务管理 ====================
 
 export async function fetchInspectionTasks(params?: {
@@ -1029,6 +1061,37 @@ export async function fetchExecutionDetail(executionId: string): Promise<Inspect
   }
 }
 
+export interface BatchDeleteExecutionsPayload {
+  ids?: string[]
+  selectAllFiltered?: boolean
+  excludeIds?: string[]
+  status?: string | string[]
+  strategyId?: string | number
+  startDate?: string
+  endDate?: string
+}
+
+/**
+ * 批量删除巡检执行记录（支持显式 IDs 与全选筛选结果两种模式）
+ */
+export async function batchDeleteInspectionExecutions(
+  payload: BatchDeleteExecutionsPayload
+): Promise<{ deletedCount: number }> {
+  try {
+    const response = await api.post<InspectionApiResponse<{ deletedCount: number }>>(
+      '/inspection/executions/batch-delete',
+      payload
+    )
+    if (response.code !== 200) {
+      throw new Error(response.message || '批量删除执行记录失败')
+    }
+    return response.data ?? { deletedCount: 0 }
+  } catch (error) {
+    console.error('[API] 批量删除执行记录失败:', error)
+    throw error
+  }
+}
+
 export async function fetchInspectionResults(params?: {
   page?: number
   pageSize?: number
@@ -1061,37 +1124,6 @@ export async function fetchInspectionResults(params?: {
     if (!response.data) {
       throw new Error(response.message || '获取巡检结果失败')
     }
-export interface BatchDeleteExecutionsPayload {
-  ids?: string[]
-  selectAllFiltered?: boolean
-  excludeIds?: string[]
-  status?: string | string[]
-  strategyId?: string | number
-  startDate?: string
-  endDate?: string
-}
-
-/**
- * 批量删除巡检执行记录（支持显式 IDs 与全选筛选结果两种模式）
- */
-export async function batchDeleteInspectionExecutions(
-  payload: BatchDeleteExecutionsPayload
-): Promise<{ deletedCount: number }> {
-  try {
-    const response = await api.post<InspectionApiResponse<{ deletedCount: number }>>(
-      '/inspection/executions/batch-delete',
-      payload
-    )
-    if (response.code !== 200) {
-      throw new Error(response.message || '批量删除执行记录失败')
-    }
-    return response.data ?? { deletedCount: 0 }
-  } catch (error) {
-    console.error('[API] 批量删除执行记录失败:', error)
-    throw error
-  }
-}
-
 
     const data = toRecord(response.data)
 
@@ -1349,6 +1381,36 @@ export async function deleteInspectionStrategy(id: string): Promise<void> {
     await api.delete(`/inspection/strategies/${id}`)
   } catch (error) {
     console.error('删除策略失败:', error)
+    throw error
+  }
+}
+
+export interface BatchDeleteStrategiesPayload {
+  selectAllFiltered?: boolean
+  ids?: (string | number)[]
+  excludeIds?: (string | number)[]
+  type?: string
+  enabled?: boolean
+}
+
+/**
+ * 批量删除巡检策略
+ */
+export async function batchDeleteInspectionStrategies(
+  payload: BatchDeleteStrategiesPayload
+): Promise<{ deletedCount: number }> {
+  try {
+    const response = await api.post<InspectionApiResponse<{ deletedCount: number; deleted_count?: number }>>(
+      '/inspection/strategies/batch-delete',
+      payload
+    )
+    if (response.code !== 200) {
+      throw new Error(response.message || '批量删除巡检策略失败')
+    }
+    const count = response.data?.deletedCount ?? response.data?.deleted_count ?? 0
+    return { deletedCount: count }
+  } catch (error) {
+    console.error('批量删除巡检策略失败:', error)
     throw error
   }
 }

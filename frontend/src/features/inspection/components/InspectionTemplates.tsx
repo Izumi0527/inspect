@@ -37,6 +37,9 @@ import {
   Pagination,
 } from '@/components/atoms'
 import { CompactPageToolbar, CompactStatCard } from '@/components/shared'
+import { FloatingBatchActionBar } from '@/components/shared/FloatingBatchActionBar'
+import { BatchDeleteConfirmModal } from '@/components/shared/BatchDeleteConfirmModal'
+import { useBatchSelection } from '@/hooks'
 import type { BadgeProps } from '@/components/atoms'
 
 // 导入新版 hooks 和类型（来自 inspection feature）
@@ -45,6 +48,7 @@ import {
   useInspectionTemplateStats,
   useCloneTemplate,
   useDeleteTemplate,
+  useBatchDeleteTemplates,
 } from '../hooks/useInspection'
 import {
   fetchInspectionTemplate,
@@ -125,6 +129,7 @@ export const InspectionTemplates: React.FC = () => {
   const [editingTemplate, setEditingTemplate] = useState<InspectionTemplate | null>(null)
   const [viewingTemplate, setViewingTemplate] = useState<InspectionTemplate | null>(null)
   const [deleteConfirmTemplate, setDeleteConfirmTemplate] = useState<InspectionTemplate | null>(null)
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
 
   // 排序字段映射：前端驼峰 → 后端蛇形（数据库列名）
@@ -150,6 +155,8 @@ export const InspectionTemplates: React.FC = () => {
   const cloneTemplate = useCloneTemplate()
 
   const deleteTemplateMutation = useDeleteTemplate()
+  const batchDeleteTemplates = typeof useBatchDeleteTemplates === 'function' ? useBatchDeleteTemplates() : undefined
+  const isBatchDeleting = Boolean(batchDeleteTemplates?.isPending)
 
   // 导出模板：失败也保证释放 blob URL，避免内存泄漏
   const handleExportTemplate = async (template: InspectionTemplate) => {
@@ -196,6 +203,49 @@ export const InspectionTemplates: React.FC = () => {
     : templates.filter(template => template.isActive).length
 
   const totalPages = Math.ceil(totalTemplates / pagination.page_size)
+  const batchSelection = useBatchSelection<InspectionTemplate>({
+    items: templates,
+    totalCount: customTemplatesCount + templates.filter(t => t.isBuiltIn).length,
+    getId: (t) => t.id,
+    isSelectable: (t) => !t.isBuiltIn,
+    getDisabledReason: (t) => (t.isBuiltIn ? '内置模板不可删除' : undefined),
+    filterDeps: [filters.vendor, filters.deviceType, filters.category, debouncedSearch],
+    pageDeps: [pagination.page, pagination.page_size],
+  })
+
+  const handleConfirmBatchDelete = useCallback(async () => {
+    try {
+      if (batchSelection.selectionMode === 'all_filtered') {
+        await batchDeleteTemplates?.mutateAsync({
+          selectAllFiltered: true,
+          excludeIds: batchSelection.excludedIds,
+          vendor: filters.vendor || undefined,
+          deviceType: filters.deviceType || undefined,
+          category: filters.category || undefined,
+          search: debouncedSearch || undefined,
+        })
+      } else {
+        await batchDeleteTemplates?.mutateAsync({
+          selectAllFiltered: false,
+          ids: batchSelection.selectedIds,
+        })
+      }
+      setShowBatchDeleteConfirm(false)
+      batchSelection.clearSelection()
+
+      const currentPageCustomCount = templates.filter(t => !t.isBuiltIn).length
+      if (
+        pagination.page > 1 &&
+        (batchSelection.selectionMode === 'all_filtered' ||
+          batchSelection.selectedIds.length >= currentPageCustomCount)
+      ) {
+        setPagination(prev => ({ ...prev, page: prev.page - 1 }))
+      }
+      refetch()
+    } catch (error) {
+      console.error('Batch delete templates failed:', error)
+    }
+  }, [batchSelection, batchDeleteTemplates, filters.vendor, filters.deviceType, filters.category, debouncedSearch, pagination.page, templates, refetch])
 
   // 处理筛选变更
   const handleFilterChange = useCallback((key: keyof TemplateFilters, value: string) => {
@@ -690,6 +740,8 @@ export const InspectionTemplates: React.FC = () => {
           <Table
             data={templates}
             columns={columns}
+            rowKey="id"
+            rowSelection={batchSelection.rowSelection}
             className="bg-card rounded-lg shadow-sm"
           />
         </motion.div>
@@ -764,13 +816,7 @@ export const InspectionTemplates: React.FC = () => {
               <p className="text-foreground/90">
                 确定要删除巡检模板 <span className="font-semibold">"{deleteConfirmTemplate.name}"</span> 吗？
               </p>
-              {deleteConfirmTemplate.isBuiltIn && (
-                <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                  <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                    ⚠️ 这是一个内置模板，删除后可能影响系统功能
-                  </p>
-                </div>
-              )}
+
             </div>
 
             <div className="flex items-center justify-end gap-3">
@@ -839,6 +885,31 @@ export const InspectionTemplates: React.FC = () => {
           onSuccess={handleEditorSuccess}
         />
       )}
+
+      {/* 底部悬浮批量操作栏 */}
+      <FloatingBatchActionBar
+        selectedCount={batchSelection.selectedCount}
+        selectionMode={batchSelection.selectionMode}
+        totalCount={customTemplatesCount}
+        isAllCurrentPageSelected={batchSelection.isAllCurrentPageSelected}
+        onSelectCurrentPage={batchSelection.selectCurrentPage}
+        onSelectAllFiltered={batchSelection.selectAllFiltered}
+        onInvertCurrentPage={batchSelection.invertCurrentPage}
+        onClearSelection={batchSelection.clearSelection}
+        onDelete={() => setShowBatchDeleteConfirm(true)}
+        isDeleting={isBatchDeleting}
+      />
+
+      {/* 批量删除确认弹窗 */}
+      <BatchDeleteConfirmModal
+        isOpen={showBatchDeleteConfirm}
+        onClose={() => setShowBatchDeleteConfirm(false)}
+        onConfirm={handleConfirmBatchDelete}
+        isDeleting={isBatchDeleting}
+        count={batchSelection.selectedCount}
+        isAllFiltered={batchSelection.selectionMode === 'all_filtered'}
+        entityLabel="个自定义模板"
+      />
     </div>
   )
 }
