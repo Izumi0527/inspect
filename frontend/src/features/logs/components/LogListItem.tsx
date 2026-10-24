@@ -166,7 +166,7 @@ export const LogListItem: React.FC<LogListItemProps> = ({
           <Button
             variant="ghost"
             size="icon"
-            className="text-gray-400 hover:text-red-600"
+            className="text-red-500 hover:text-red-600"
             aria-label={`删除日志 ${log.id}`}
             title={`删除日志 ${log.id}`}
             onClick={(e) => {
@@ -174,7 +174,7 @@ export const LogListItem: React.FC<LogListItemProps> = ({
               onDelete(log.id)
             }}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-4 w-4 text-red-500" />
           </Button>
         )}
         <ChevronRight className="h-4 w-4 text-gray-400" />
