@@ -2,6 +2,7 @@ import {
   fetchDevice,
   fetchDevices,
   fetchDeviceSNMPExtensions,
+  fetchAllFilteredDevices,
 } from '@/features/devices/api/devices.api'
 
 const mockGet = jest.fn()
@@ -137,6 +138,63 @@ describe('devices.api fetchDevices', () => {
     expect(result.device_id).toBe(7)
     expect(result.bgp_peers).toHaveLength(1)
     expect(result.optical_transceivers).toEqual([])
+  })
+
+  describe('fetchAllFilteredDevices', () => {
+    it('450 台设备跨页获取应发起 3 次分页请求', async () => {
+      const createDeviceDtos = (start: number, count: number) =>
+        Array.from({ length: count }, (_, i) => ({
+          id: start + i,
+          name: `dev-${start + i}`,
+          ip_address: `10.0.0.${start + i}`,
+          device_type: 'router',
+          status: 'online',
+        }))
+
+      mockGet.mockResolvedValueOnce({
+        devices: createDeviceDtos(1, 200),
+        total: 450,
+        page: 1,
+        page_size: 200,
+      })
+      mockGet.mockResolvedValueOnce({
+        devices: createDeviceDtos(201, 200),
+        total: 450,
+        page: 2,
+        page_size: 200,
+      })
+      mockGet.mockResolvedValueOnce({
+        devices: createDeviceDtos(401, 50),
+        total: 450,
+        page: 3,
+        page_size: 200,
+      })
+
+      const result = await fetchAllFilteredDevices({ search: 'dev' })
+
+      expect(mockGet).toHaveBeenCalledTimes(3)
+      expect(mockGet).toHaveBeenNthCalledWith(1, '/devices?search=dev&page=1&page_size=200')
+      expect(mockGet).toHaveBeenNthCalledWith(2, '/devices?search=dev&page=2&page_size=200')
+      expect(mockGet).toHaveBeenNthCalledWith(3, '/devices?search=dev&page=3&page_size=200')
+      expect(result.total).toBe(450)
+      expect(result.devices).toHaveLength(450)
+      expect(result.devices[0].id).toBe(1)
+      expect(result.devices[449].id).toBe(450)
+    })
+
+    it('total 超过 1000 时应抛出异常阻止操作', async () => {
+      mockGet.mockResolvedValueOnce({
+        devices: [],
+        total: 1001,
+        page: 1,
+        page_size: 200,
+      })
+
+      await expect(fetchAllFilteredDevices({})).rejects.toThrow(
+        '筛选结果超过 1000 台，请缩小筛选范围后再操作'
+      )
+      expect(mockGet).toHaveBeenCalledTimes(1)
+    })
   })
 })
 

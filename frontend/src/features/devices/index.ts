@@ -4,11 +4,11 @@ export { DeviceIcon, StatusBadge } from './components/DeviceIcon'
 export { getDeviceTypeLabel } from '@/utils/deviceTypes'
 export { 
   useDevices, 
-  useDeviceFilters, 
-  useDeviceSelection 
+  useDeviceFilters
 } from './hooks/useDevices'
 export { 
   fetchDevices, 
+  fetchAllFilteredDevices,
   fetchDevice, 
   createDevice, 
   updateDevice, 

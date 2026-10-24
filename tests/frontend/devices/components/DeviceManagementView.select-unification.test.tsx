@@ -235,13 +235,6 @@ jest.mock('@/features/devices/hooks/useDevices', () => {
           })),
       }
     },
-    useDeviceSelection: () => ({
-      selectedDevices: [],
-      toggleDevice: jest.fn(),
-      selectAll: jest.fn(),
-      clearSelection: jest.fn(),
-      setSelectedDevices: jest.fn(),
-    }),
   }
 })
 
@@ -258,6 +251,7 @@ jest.mock('@/features/devices/api/devices.api', () => ({
   batchDeleteDevices: jest.fn(),
   batchProbeDevices: jest.fn(),
   bulkUpdateDevices: jest.fn(),
+  fetchAllFilteredDevices: jest.fn(),
 }))
 
 describe('DeviceManagementView 下拉规范', () => {

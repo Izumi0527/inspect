@@ -649,6 +649,34 @@ export async function fetchDevices(
   }
 }
 
+export async function fetchAllFilteredDevices(
+  filters: DeviceListQuery = {},
+  max = 1000,
+): Promise<{ devices: Device[]; total: number }> {
+  const firstRes = await fetchDevices({ ...filters, page: 1, page_size: 200 });
+  if (firstRes.total > max) {
+    throw new Error("筛选结果超过 1000 台，请缩小筛选范围后再操作");
+  }
+
+  const allDevices: Device[] = [...firstRes.devices];
+  const total = firstRes.total;
+
+  if (allDevices.length >= total || total === 0) {
+    return { devices: allDevices, total };
+  }
+
+  const totalPages = Math.ceil(total / 200);
+  for (let page = 2; page <= totalPages; page++) {
+    const res = await fetchDevices({ ...filters, page, page_size: 200 });
+    allDevices.push(...res.devices);
+    if (res.devices.length === 0) {
+      break;
+    }
+  }
+
+  return { devices: allDevices, total };
+}
+
 export async function fetchDevice(id: number): Promise<Device | null> {
   try {
     const payload = await api.get<unknown>(`/devices/${id}`);

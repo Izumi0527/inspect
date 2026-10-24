@@ -8,7 +8,6 @@ import {
   Plus,
   Eye,
   Edit,
-  Trash2,
   AlertTriangle,
   Upload,
   Download,
@@ -35,6 +34,9 @@ import {
 import { AppLayout } from "@/components/layout";
 import { CompactPageToolbar } from "@/components/shared";
 import { DeleteIconButton } from '@/components/shared/DeleteIconButton';
+import { FloatingBatchActionBar } from "@/components/shared/FloatingBatchActionBar";
+import { BatchDeleteConfirmModal } from "@/components/shared/BatchDeleteConfirmModal";
+import { useBatchSelection } from "@/hooks/useBatchSelection";
 import { useAuth } from "@/lib/contexts/auth-context";
 import toast from "react-hot-toast";
 
@@ -55,7 +57,6 @@ import { EditDeviceModal } from "./modals/EditDeviceModal";
 import {
   useDevices,
   useDeviceFilters,
-  useDeviceSelection,
 } from "../hooks/useDevices";
 import { useDeleteImpactNotice } from "../hooks/useDeleteImpactNotice";
 import {
@@ -65,6 +66,7 @@ import {
   batchDeleteDevices,
   batchProbeDevices,
   bulkUpdateDevices,
+  fetchAllFilteredDevices,
 } from "../api/devices.api";
 import type { DevicePayload } from "../utils/deviceFormMapper";
 import {
@@ -163,13 +165,35 @@ export const DeviceManagementView: React.FC = () => {
     loadDevices,
   } = useDevices(true, DEVICE_REFRESH_INTERVAL_MS);
   const { filters, updateFilter } = useDeviceFilters();
-  const {
-    selectedDevices,
-    toggleDevice: _toggleDevice,
-    selectAll: _selectAll,
-    clearSelection,
-    setSelectedDevices,
-  } = useDeviceSelection();
+
+  // 分页状态
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  // 搜索防抖：避免每次按键都触发后端请求
+  const [debouncedSearch, setDebouncedSearch] = React.useState(
+    filters.searchQuery,
+  );
+  const searchTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const filterSignature = [
+    debouncedSearch,
+    filters.statusFilter,
+    filters.typeFilter,
+  ].join("|");
+  const previousFilterSignatureRef = React.useRef(filterSignature);
+
+  // 批量选择
+  const batchSelection = useBatchSelection<Device, number>({
+    items: devices,
+    totalCount: total,
+    getId: "id",
+    filterDeps: [debouncedSearch, filters.statusFilter, filters.typeFilter],
+  });
+
+  const [bulkTargets, setBulkTargets] = useState<Device[]>([]);
+  const [selectedDeviceSnapshots, setSelectedDeviceSnapshots] = React.useState<
+    Record<number, Device>
+  >({});
 
   // 统计数据（从独立API获取，不受分页影响）
   const [summary, setSummary] = React.useState({
@@ -198,68 +222,50 @@ export const DeviceManagementView: React.FC = () => {
     deviceToDelete ? [deviceToDelete.id] : [],
     deleteModalOpen
   );
-  const bulkDeleteNotice = useDeleteImpactNotice(selectedDevices, bulkDeleteModalOpen);
+  const bulkTargetIds = React.useMemo(
+    () => bulkTargets.map((d) => d.id),
+    [bulkTargets],
+  );
+  const bulkDeleteNotice = useDeleteImpactNotice(bulkTargetIds, bulkDeleteModalOpen);
   const [bulkProbing, setBulkProbing] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = React.useState(false);
-  const [selectedDeviceSnapshots, setSelectedDeviceSnapshots] = React.useState<
-    Record<number, Device>
-  >({});
 
-  // 分页状态
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const resolveSelectedDevices = React.useCallback(async (): Promise<Device[] | null> => {
+    if (batchSelection.selectionMode === "explicit") {
+      const records = batchSelection.selectedIds
+        .map((id) => selectedDeviceSnapshots[id] ?? devices.find((d) => d.id === id))
+        .filter((device): device is Device => device !== undefined);
+      return records;
+    }
 
-  // 搜索防抖：避免每次按键都触发后端请求
-  const [debouncedSearch, setDebouncedSearch] = React.useState(
-    filters.searchQuery,
-  );
-  const searchTimerRef = React.useRef<NodeJS.Timeout | null>(null);
-  const filterSignature = [
+    try {
+      const serverFilters: DeviceListQuery = {};
+      if (debouncedSearch) serverFilters.search = debouncedSearch;
+      if (filters.statusFilter && filters.statusFilter !== "all") {
+        serverFilters.status = filters.statusFilter;
+      }
+      if (filters.typeFilter && filters.typeFilter !== "all") {
+        serverFilters.device_type = filters.typeFilter;
+      }
+
+      const result = await fetchAllFilteredDevices(serverFilters);
+      const excludedSet = new Set(batchSelection.excludedIds);
+      return result.devices.filter((device) => !excludedSet.has(device.id));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "获取筛选设备失败";
+      toast.error(message);
+      return null;
+    }
+  }, [
+    batchSelection.selectionMode,
+    batchSelection.selectedIds,
+    batchSelection.excludedIds,
+    selectedDeviceSnapshots,
+    devices,
     debouncedSearch,
     filters.statusFilter,
     filters.typeFilter,
-  ].join("|");
-  const previousFilterSignatureRef = React.useRef(filterSignature);
-  const clearDeviceSelection = React.useCallback(() => {
-    clearSelection();
-    setSelectedDeviceSnapshots({});
-  }, [clearSelection]);
-  const handleSelectionChange = React.useCallback(
-    (keys: Array<string | number>) => {
-      const deviceIds = keys.filter(
-        (key): key is number => typeof key === "number",
-      );
-      const selectedIdSet = new Set(deviceIds);
-
-      setSelectedDevices(deviceIds);
-      setSelectedDeviceSnapshots((previous) => {
-        const next: Record<number, Device> = {};
-
-        for (const deviceId of deviceIds) {
-          const snapshot = previous[deviceId];
-          if (snapshot) {
-            next[deviceId] = snapshot;
-          }
-        }
-
-        for (const device of devices) {
-          if (selectedIdSet.has(device.id)) {
-            next[device.id] = device;
-          }
-        }
-
-        return next;
-      });
-    },
-    [devices, setSelectedDevices],
-  );
-  const selectedDeviceRecords = React.useMemo(
-    () =>
-      selectedDevices
-        .map((deviceId) => selectedDeviceSnapshots[deviceId])
-        .filter((device): device is Device => device !== undefined),
-    [selectedDeviceSnapshots, selectedDevices],
-  );
+  ]);
 
   // 从 URL 查询参数初始化搜索词（Dashboard 顶栏搜索跳转会带上 ?search=xxx）
   React.useEffect(() => {
@@ -288,7 +294,7 @@ export const DeviceManagementView: React.FC = () => {
 
     if (filtersChanged) {
       previousFilterSignatureRef.current = filterSignature;
-      clearDeviceSelection();
+      setSelectedDeviceSnapshots({});
 
       if (currentPage !== 1) {
         setCurrentPage(1);
@@ -323,29 +329,49 @@ export const DeviceManagementView: React.FC = () => {
     currentPage,
     pageSize,
     loadDevices,
-    clearDeviceSelection,
   ]);
 
   React.useEffect(() => {
-    if (selectedDevices.length === 0) {
-      return;
-    }
-
-    const selectedIdSet = new Set(selectedDevices);
-    setSelectedDeviceSnapshots((previous) => {
-      let changed = false;
-      const next = { ...previous };
-
-      for (const device of devices) {
-        if (selectedIdSet.has(device.id) && next[device.id] !== device) {
-          next[device.id] = device;
-          changed = true;
-        }
+    if (batchSelection.selectionMode === "explicit") {
+      if (batchSelection.selectedIds.length === 0) {
+        setSelectedDeviceSnapshots((prev) =>
+          Object.keys(prev).length === 0 ? prev : {},
+        );
+        return;
       }
 
-      return changed ? next : previous;
-    });
-  }, [devices, selectedDevices]);
+      const selectedIdSet = new Set(batchSelection.selectedIds);
+      setSelectedDeviceSnapshots((previous) => {
+        let changed = false;
+        const next: Record<number, Device> = {};
+
+        for (const id of batchSelection.selectedIds) {
+          if (previous[id]) {
+            next[id] = previous[id];
+          }
+        }
+
+        for (const device of devices) {
+          if (selectedIdSet.has(device.id)) {
+            if (next[device.id] !== device) {
+              next[device.id] = device;
+              changed = true;
+            }
+          }
+        }
+
+        if (!changed) {
+          const prevKeys = Object.keys(previous);
+          const nextKeys = Object.keys(next);
+          if (prevKeys.length !== nextKeys.length) {
+            changed = true;
+          }
+        }
+
+        return changed ? next : previous;
+      });
+    }
+  }, [batchSelection.selectionMode, batchSelection.selectedIds, devices]);
 
   // 获取统计数据（独立于分页）
   const loadStats = React.useCallback(async () => {
@@ -383,19 +409,25 @@ export const DeviceManagementView: React.FC = () => {
   };
 
   // 批量删除处理
-  const handleBulkDelete = () => {
-    if (selectedDevices.length === 0) {
+  const handleBulkDelete = async () => {
+    if (batchSelection.selectedCount === 0) {
       toast.error("请先选择要删除的设备");
       return;
     }
+    const targets = await resolveSelectedDevices();
+    if (!targets || targets.length === 0) return;
+    setBulkTargets(targets);
     setBulkDeleteModalOpen(true);
   };
 
-  const handleBulkUpdate = () => {
-    if (selectedDevices.length === 0) {
+  const handleBulkUpdate = async () => {
+    if (batchSelection.selectedCount === 0) {
       toast.error("请先选择要更新的设备");
       return;
     }
+    const targets = await resolveSelectedDevices();
+    if (!targets || targets.length === 0) return;
+    setBulkTargets(targets);
     setBulkUpdateModalOpen(true);
   };
 
@@ -449,7 +481,8 @@ export const DeviceManagementView: React.FC = () => {
         loadStats();
       }
       if (label === "批量探测") {
-        clearDeviceSelection();
+        batchSelection.clearSelection();
+        setSelectedDeviceSnapshots({});
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "批量探测失败";
@@ -459,22 +492,26 @@ export const DeviceManagementView: React.FC = () => {
     }
   };
 
-  const handleBulkProbe = () => {
-    if (selectedDevices.length === 0) {
+  const handleBulkProbe = async () => {
+    if (batchSelection.selectedCount === 0) {
       toast.error("请先选择要探测的设备");
       return;
     }
-    handleProbe(selectedDevices, "批量探测");
+    const targets = await resolveSelectedDevices();
+    if (!targets || targets.length === 0) return;
+    setBulkTargets(targets);
+    await handleProbe(targets.map((d) => d.id), "批量探测");
   };
 
   const handleProbeAll = () => handleProbe(devices.map((d) => d.id), "探测");
 
   const confirmBulkDelete = async () => {
-    if (selectedDevices.length === 0) return;
+    const ids = bulkTargets.map((d) => d.id);
+    if (ids.length === 0) return;
 
     setBulkDeleting(true);
     try {
-      const result = await batchDeleteDevices(selectedDevices);
+      const result = await batchDeleteDevices(ids);
       if (result.success) {
         toast.success(result.message);
       } else {
@@ -490,8 +527,19 @@ export const DeviceManagementView: React.FC = () => {
         toast.error(`${result.message}${suffix}`);
       }
 
+      const targetIdSet = new Set(ids);
+      const isAllFiltered = batchSelection.selectionMode === "all_filtered";
+      const currentPageDeletedCount = devices.filter((d) => targetIdSet.has(d.id)).length;
+      if (
+        currentPage > 1 &&
+        (isAllFiltered || currentPageDeletedCount >= devices.length)
+      ) {
+        setCurrentPage((prev) => Math.max(1, prev - 1));
+      }
+
       // 即使部分失败也要刷新数据：后端可能已删除部分设备
-      clearDeviceSelection();
+      batchSelection.clearSelection();
+      setSelectedDeviceSnapshots({});
       invalidateDeviceDependentCaches();
       await loadDevices();
       loadStats();
@@ -506,7 +554,8 @@ export const DeviceManagementView: React.FC = () => {
   };
 
   const confirmBulkUpdate = async (updates: Partial<Device>) => {
-    if (selectedDevices.length === 0) return;
+    const ids = bulkTargets.map((d) => d.id);
+    if (ids.length === 0) return;
 
     if (Object.keys(updates).length === 0) {
       toast.error("请至少填写一个要更新的字段值");
@@ -516,7 +565,7 @@ export const DeviceManagementView: React.FC = () => {
     setBulkUpdating(true);
     try {
       const result = await bulkUpdateDevices({
-        device_ids: selectedDevices,
+        device_ids: ids,
         updates,
       });
 
@@ -555,7 +604,8 @@ export const DeviceManagementView: React.FC = () => {
 
       // 仅当至少有一台设备更新成功时，自动关闭弹窗并清空选择；否则保留现场便于用户修正后重试
       if (succeeded > 0) {
-        clearDeviceSelection();
+        batchSelection.clearSelection();
+        setSelectedDeviceSnapshots({});
         setBulkUpdateModalOpen(false);
         await loadDevices();
         loadStats();
@@ -1042,52 +1092,6 @@ export const DeviceManagementView: React.FC = () => {
               </div>
             )}
 
-            {/* 批量操作栏 */}
-            {selectedDevices.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 rounded-md border border-info/30 bg-info-soft p-3">
-                <span className="text-sm font-medium text-info-soft-foreground">
-                  已选择 {selectedDevices.length} 台设备
-                </span>
-                <Button
-                  variant="outline"
-                  onClick={handleBulkUpdate}
-                  disabled={bulkUpdating || !canUpdateDevice}
-                  title={canUpdateDevice ? undefined : "需要设备更新权限"}
-                >
-                  批量更新
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleBulkProbe}
-                  disabled={bulkProbing}
-                >
-                  {bulkProbing ? (
-                    <Activity className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Activity className="h-4 w-4" />
-                  )}
-                  批量探测
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleBulkDelete}
-                  disabled={!canDeleteDevice}
-                  title={canDeleteDevice ? undefined : "需要设备删除权限"}
-                  className="gap-1"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  批量删除
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={clearDeviceSelection}
-                  className="sm:ml-auto"
-                >
-                  取消选择
-                </Button>
-              </div>
-            )}
-
             {/* 设备表格 */}
             <div className="flex-1 overflow-y-auto min-h-0">
               <Table
@@ -1118,10 +1122,7 @@ export const DeviceManagementView: React.FC = () => {
                 rowKey="id"
                 size="default"
                 className="border-0"
-                rowSelection={{
-                  selectedRowKeys: selectedDevices,
-                  onChange: handleSelectionChange,
-                }}
+                rowSelection={batchSelection.rowSelection}
                 pagination={{
                   current: currentPage,
                   pageSize: pageSize,
@@ -1137,6 +1138,38 @@ export const DeviceManagementView: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* 底部悬浮批量操作栏 */}
+        <FloatingBatchActionBar
+          selectedCount={batchSelection.selectedCount}
+          selectionMode={batchSelection.selectionMode}
+          totalCount={total}
+          isAllCurrentPageSelected={batchSelection.isAllCurrentPageSelected}
+          onSelectCurrentPage={batchSelection.selectCurrentPage}
+          onSelectAllFiltered={batchSelection.selectAllFiltered}
+          onInvertCurrentPage={batchSelection.invertCurrentPage}
+          onClearSelection={() => {
+            batchSelection.clearSelection();
+            setSelectedDeviceSnapshots({});
+          }}
+          onDelete={canDeleteDevice ? handleBulkDelete : undefined}
+          showDelete={canDeleteDevice}
+          isDeleting={bulkDeleting}
+          extraActions={[
+            {
+              key: "bulk-update",
+              label: "批量更新",
+              disabled: bulkUpdating || !canUpdateDevice,
+              onClick: handleBulkUpdate,
+            },
+            {
+              key: "bulk-probe",
+              label: "批量探测",
+              disabled: bulkProbing,
+              onClick: handleBulkProbe,
+            },
+          ]}
+        />
 
         {/* 删除确认对话框 */}
         <ConfirmModal
@@ -1154,21 +1187,22 @@ export const DeviceManagementView: React.FC = () => {
         />
 
         {/* 批量删除确认对话框 */}
-        <ConfirmModal
+        <BatchDeleteConfirmModal
           isOpen={bulkDeleteModalOpen}
           onClose={() => setBulkDeleteModalOpen(false)}
           onConfirm={confirmBulkDelete}
+          isDeleting={bulkDeleting}
+          count={bulkTargets.length}
+          isAllFiltered={batchSelection.selectionMode === "all_filtered"}
           title="批量删除设备"
-          description={`确定要删除选中的 ${selectedDevices.length} 台设备吗？此操作不可撤销。${bulkDeleteNotice}`}
-          confirmText={bulkDeleting ? "删除中..." : "确认删除"}
-          cancelText="取消"
-          variant="destructive"
+          description={`确定要删除选中的 ${bulkTargets.length} 台设备吗？此操作不可撤销。${bulkDeleteNotice}`}
+          entityLabel="台设备"
         />
 
         <BulkDeviceUpdate
           isOpen={bulkUpdateModalOpen}
           onClose={() => setBulkUpdateModalOpen(false)}
-          selectedDevices={selectedDeviceRecords}
+          selectedDevices={bulkTargets}
           onBulkUpdate={confirmBulkUpdate}
           isProcessing={bulkUpdating}
         />

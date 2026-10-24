@@ -50,6 +50,15 @@ jest.mock("next/navigation", () => ({
   useSearchParams: () => mockSearchParams,
 }));
 
+jest.mock("framer-motion", () => ({
+  motion: {
+    div: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+      <div {...props}>{children}</div>
+    ),
+  },
+  AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
+}));
+
 jest.mock("@/lib/contexts/auth-context", () => ({
   useAuth: () => ({
     user: {
@@ -186,12 +195,23 @@ jest.mock("@/components/atoms", () => ({
         type="button"
         onClick={() => {
           const nextKeys = Array.from(
-            new Set([...(rowSelection?.selectedRowKeys ?? []), data[0].id]),
+            new Set([...(rowSelection?.selectedRowKeys ?? []), data[0]?.id].filter(Boolean)),
           );
           rowSelection?.onChange(nextKeys, [data[0]]);
         }}
       >
         选择第一行
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          const nextKeys = (rowSelection?.selectedRowKeys ?? []).filter(
+            (k) => k !== data[0]?.id,
+          );
+          rowSelection?.onChange(nextKeys, []);
+        }}
+      >
+        取消选择第一行
       </button>
       <button
         type="button"
@@ -367,20 +387,6 @@ jest.mock("@/features/devices/hooks/useDevices", () => {
           })),
       };
     },
-    useDeviceSelection: () => {
-      const [selectedDevices, setSelectedDevices] = React.useState<number[]>([]);
-      const clearSelection = React.useCallback(() => {
-        setSelectedDevices([]);
-      }, []);
-
-      return {
-        selectedDevices,
-        toggleDevice: jest.fn(),
-        selectAll: jest.fn(),
-        clearSelection,
-        setSelectedDevices,
-      };
-    },
   };
 });
 
@@ -392,6 +398,7 @@ jest.mock("@/features/devices/api/devices.api", () => ({
   fetchDeviceInspectionCount: jest.fn(),
   batchProbeDevices: jest.fn(),
   bulkUpdateDevices: jest.fn(),
+  fetchAllFilteredDevices: jest.fn(),
 }));
 
 describe("DeviceManagementView", () => {
@@ -529,14 +536,16 @@ describe("DeviceManagementView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "选择第一行" }));
 
-    expect(screen.getByText("已选择 1 台设备")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "批量操作栏" })).toBeInTheDocument();
+    expect(screen.getByText("已选择 1 项")).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("combobox", { name: "设备状态筛选" }), {
       target: { value: "online" },
     });
 
     await waitFor(() => {
-      expect(screen.queryByText("已选择 1 台设备")).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "批量操作栏" })).not.toBeInTheDocument();
+      expect(screen.queryByText("已选择 1 项")).not.toBeInTheDocument();
     });
   });
 
@@ -575,7 +584,8 @@ describe("DeviceManagementView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "选择第一行" }));
 
-    expect(screen.getByText("已选择 1 台设备")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "批量操作栏" })).toBeInTheDocument();
+    expect(screen.getByText("已选择 1 项")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "下一页" }));
 
@@ -583,14 +593,18 @@ describe("DeviceManagementView", () => {
     rerender(<DeviceManagementView />);
 
     await waitFor(() => {
-      expect(screen.getByText("已选择 1 台设备")).toBeInTheDocument();
+      expect(screen.getByText("已选择 1 项")).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "选择第一行" }));
 
-    expect(screen.getByText("已选择 2 台设备")).toBeInTheDocument();
+    expect(screen.getByText("已选择 2 项")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "批量更新" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("批量更新设备弹窗")).toBeInTheDocument();
+    });
 
     const bulkUpdateModal = screen.getByText("批量更新设备弹窗").parentElement;
 
@@ -630,7 +644,8 @@ describe("DeviceManagementView", () => {
     render(<DeviceManagementView />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择第一行" }));
-    fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
+    const bar = screen.getByRole("region", { name: "批量操作栏" });
+    fireEvent.click(within(bar).getByRole("button", { name: "删除" }));
 
     expect(
       await screen.findByText(/该设备有 12 条巡检记录，删除后这些记录和巡检报告仍会保留/)
@@ -656,9 +671,14 @@ describe("DeviceManagementView", () => {
     render(<DeviceManagementView />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择第一行" }));
-    expect(screen.getByText("已选择 1 台设备")).toBeInTheDocument();
+    const bar = screen.getByRole("region", { name: "批量操作栏" });
+    expect(bar).toBeInTheDocument();
+    expect(screen.getByText("已选择 1 项")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "删除" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "确认删除" })).toBeInTheDocument();
+    });
     fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
 
     await waitFor(() => {
@@ -706,6 +726,9 @@ describe("DeviceManagementView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "选择第一行" }));
     fireEvent.click(screen.getByRole("button", { name: "批量更新" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "提交批量更新" })).toBeInTheDocument();
+    });
     fireEvent.click(screen.getByRole("button", { name: "提交批量更新" }));
 
     await waitFor(() => {
@@ -763,5 +786,84 @@ describe("DeviceManagementView", () => {
     expect(
       screen.getByRole("combobox", { name: "设备类型筛选" }),
     ).toBeInTheDocument();
+  });
+
+  it("全选筛选结果后批量删除应通过 fetchAllFilteredDevices 解析设备 ID 并排除取消勾选的行", async () => {
+    const { fetchAllFilteredDevices, batchDeleteDevices } = await import(
+      "@/features/devices/api/devices.api"
+    );
+    mockDevices = [createMockDevice(1), createMockDevice(2)];
+    (fetchAllFilteredDevices as jest.Mock).mockResolvedValue({
+      devices: [createMockDevice(1), createMockDevice(2)],
+      total: 2,
+    });
+    (batchDeleteDevices as jest.Mock).mockResolvedValue({
+      success: true,
+      message: "已删除",
+      deleted_count: 1,
+      failed_count: 0,
+    });
+
+    render(<DeviceManagementView />);
+
+    // 先选中第一行唤起浮动操作栏
+    fireEvent.click(screen.getByRole("button", { name: "选择第一行" }));
+    const bar = screen.getByRole("region", { name: "批量操作栏" });
+    expect(bar).toBeInTheDocument();
+
+    // 点击全选筛选结果
+    fireEvent.click(screen.getByRole("button", { name: "全选筛选结果" }));
+    expect(screen.getByText(/已全选筛选结果/)).toBeInTheDocument();
+
+    // 取消选择第一行（device 1 进入 excludedIds）
+    fireEvent.click(screen.getByRole("button", { name: "取消选择第一行" }));
+
+    // 点击批量删除
+    fireEvent.click(within(bar).getByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(fetchAllFilteredDevices).toHaveBeenCalled();
+    });
+
+    // 确认删除弹窗已打开并确认
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "确认删除" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+
+    await waitFor(() => {
+      // 2 台设备排除 id=1 之后只剩 [2]
+      expect(batchDeleteDevices).toHaveBeenCalledWith([2]);
+    });
+  });
+
+  it("fetchAllFilteredDevices 失败时应展示错误 toast 且不打开删除弹窗", async () => {
+    const toast = (await import("react-hot-toast")).default as unknown as {
+      success: jest.Mock;
+      error: jest.Mock;
+    };
+    const { fetchAllFilteredDevices, batchDeleteDevices } = await import(
+      "@/features/devices/api/devices.api"
+    );
+    (fetchAllFilteredDevices as jest.Mock).mockRejectedValue(
+      new Error("筛选结果超过 1000 台，请缩小筛选范围后再操作"),
+    );
+
+    render(<DeviceManagementView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "选择第一行" }));
+    const bar = screen.getByRole("region", { name: "批量操作栏" });
+    expect(bar).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "全选筛选结果" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "删除" }));
+
+    await waitFor(() => {
+      expect(fetchAllFilteredDevices).toHaveBeenCalled();
+      expect(toast.error).toHaveBeenCalledWith("筛选结果超过 1000 台，请缩小筛选范围后再操作");
+    });
+
+    expect(screen.queryByRole("button", { name: "确认删除" })).not.toBeInTheDocument();
+    expect(batchDeleteDevices).not.toHaveBeenCalled();
   });
 });
