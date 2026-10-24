@@ -11,7 +11,6 @@ export {
   useAlerts,
   useAlertStats,
   useAlertFilters,
-  useAlertSelection,
   useAlertStyles
 } from './hooks/useAlerts'
 

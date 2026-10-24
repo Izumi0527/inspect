@@ -141,13 +141,11 @@ const buildFilters = (overrides: Partial<AlertFilters> = {}): AlertFilters => ({
 })
 
 describe('AlertFiltersBar 下拉统一化', () => {
-  it('应在非 Card 模式下使用统一 Select 实现，而不是原生 select', () => {
+  it('应使用统一 Select 实现，而不是原生 select', () => {
     const { container } = render(
       <AlertFiltersBar
         filters={buildFilters()}
         onFilterChange={jest.fn()}
-        selectedCount={0}
-        renderAsCard={false}
       />
     )
 
@@ -164,7 +162,6 @@ describe('AlertFiltersBar 下拉统一化', () => {
       <AlertFiltersBar
         filters={buildFilters()}
         onFilterChange={onFilterChange}
-        selectedCount={0}
       />
     )
 
@@ -178,28 +175,11 @@ describe('AlertFiltersBar 下拉统一化', () => {
     expect(onFilterChange).toHaveBeenCalledWith('statusFilter', 'acknowledged')
   })
 
-  it('selectedCount 大于 0 时应保留批量操作区域', () => {
-    render(
-      <AlertFiltersBar
-        filters={buildFilters()}
-        onFilterChange={jest.fn()}
-        selectedCount={2}
-        onBulkAction={jest.fn()}
-      />
-    )
-
-    expect(screen.getByText('已选择 2 项')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '批量确认' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '批量解决' })).toBeInTheDocument()
-  })
-
   it('搜索输入框应提供 name 与可访问标签，便于浏览器识别', () => {
     render(
       <AlertFiltersBar
         filters={buildFilters()}
         onFilterChange={jest.fn()}
-        selectedCount={0}
-        renderAsCard={false}
       />
     )
 
@@ -209,13 +189,11 @@ describe('AlertFiltersBar 下拉统一化', () => {
     expect(searchInput).toHaveAttribute('name', 'alert-search')
   })
 
-  it('非 Card 模式下应收敛到紧凑工具栏规格', () => {
+  it('筛选栏应收敛到紧凑工具栏规格', () => {
     render(
       <AlertFiltersBar
         filters={buildFilters()}
         onFilterChange={jest.fn()}
-        selectedCount={0}
-        renderAsCard={false}
       />
     )
 
@@ -239,8 +217,6 @@ describe('AlertFiltersBar 下拉统一化', () => {
       <AlertFiltersBar
         filters={buildFilters()}
         onFilterChange={jest.fn()}
-        selectedCount={0}
-        renderAsCard={false}
       />
     )
 

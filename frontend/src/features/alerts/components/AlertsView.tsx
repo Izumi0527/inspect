@@ -7,10 +7,10 @@ import {
   useAlerts,
   useAlertStats,
   useAlertFilters,
-  useAlertSelection
 } from '../hooks/useAlerts'
+import { useBatchSelection } from '@/hooks/useBatchSelection'
 import { AlertStatsGrid } from './AlertStatsGrid'
-import { AlertAction, AlertQueryParams, DEFAULT_ALERT_FILTERS } from '../types'
+import { Alert, AlertQueryParams, DEFAULT_ALERT_FILTERS } from '../types'
 import { AlertFiltersBar } from './AlertFiltersBar'
 import { AlertList } from './AlertList'
 import { Pagination } from '@/components/atoms/pagination'
@@ -26,13 +26,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Download, CheckCheck, XCircle, RefreshCw, Bell, BellOff, ArrowUpDown, AlertTriangle } from 'lucide-react'
+import { Download, RefreshCw, Bell, BellOff, ArrowUpDown, AlertTriangle } from 'lucide-react'
 import { exportAlerts } from '../api/alerts.api'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
 import { ErrorAlert } from '@/components/atoms/ErrorAlert'
-import { CompactPageToolbar } from '@/components/shared'
+import { CompactPageToolbar, FloatingBatchActionBar, BatchDeleteConfirmModal } from '@/components/shared'
 
 const AUTO_REFRESH_INTERVAL = 30000 // 30秒
 const WS_SELF_EVENT_TTL_MS = 5000 // 本端操作后短时间内忽略同ID回推事件，避免重复刷新
@@ -77,6 +77,8 @@ const AlertsViewContent: React.FC = () => {
   const [realtimePendingCount, setRealtimePendingCount] = useState(0)
   const [realtimePendingAt, setRealtimePendingAt] = useState<Date | null>(null)
   const [pendingRefreshAfterQueryChange, setPendingRefreshAfterQueryChange] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wsSelfEventRef = useRef<Map<string, number>>(new Map())
 
@@ -150,17 +152,25 @@ const AlertsViewContent: React.FC = () => {
     handleAcknowledgeAlert,
     handleResolveAlert,
     handleDeleteAlert,
+    performBulkAction,
     loadAlerts
   } = useAlerts(queryParams)
 
   const { stats, loading: statsLoading, error: statsError, loadStats } = useAlertStats()
-  const {
-    selectedAlerts,
-    toggleAlert,
-    selectAll,
-    clearSelection,
-    handleBulkAction
-  } = useAlertSelection()
+
+  const batchSelection = useBatchSelection<Alert>({
+    items: alerts,
+    totalCount: pagination.total,
+    getId: (item) => String(item.id),
+    filterDeps: [
+      filters.searchQuery,
+      filters.severityFilter,
+      filters.statusFilter,
+      timeRangeFilter.dateRange?.start,
+      timeRangeFilter.dateRange?.end,
+    ],
+    pageDeps: [currentPage, pageSize],
+  })
 
   const selectedAlert = useMemo(
     () => alerts.find(alert => alert.id === selectedAlertId) ?? null,
@@ -333,27 +343,77 @@ const AlertsViewContent: React.FC = () => {
   }, [markSelfEvent, handleDeleteAlert, refreshAll])
 
   // 批量操作
-  const handleBulkActionClick = async (action: AlertAction) => {
+  const handleBatchAcknowledge = useCallback(async () => {
+    if (!canUpdateAlerts || batchSelection.selectedCount === 0) return
     try {
-      if ((action === 'acknowledge' || action === 'resolve' || action === 'assign' || action === 'comment') && !canUpdateAlerts) {
-        console.warn('缺少告警操作权限，已阻止批量操作:', action)
-        return
+      if (batchSelection.selectionMode === 'all_filtered') {
+        await performBulkAction('acknowledge', {
+          selectAllFiltered: true,
+          excludeIds: batchSelection.excludedIds,
+          filters: queryParams,
+        })
+      } else {
+        await performBulkAction('acknowledge', {
+          alertIds: batchSelection.selectedIds,
+        })
       }
-      if (action === 'delete' && !canDeleteAlerts) {
-        console.warn('缺少告警删除权限，已阻止批量删除')
-        return
-      }
-      if (action === 'delete') {
-        const ok = confirm(`确定要删除选中的 ${selectedAlerts.length} 条告警吗？此操作不可恢复。`)
-        if (!ok) return
-      }
-      selectedAlerts.forEach(markSelfEvent)
-      await handleBulkAction(action)
+      batchSelection.clearSelection()
       await refreshAll()
-    } catch (error) {
-      console.error('批量操作失败:', error)
+    } catch (err) {
+      console.error('批量确认告警失败:', err)
     }
-  }
+  }, [canUpdateAlerts, batchSelection, performBulkAction, queryParams, refreshAll])
+
+  const handleBatchResolve = useCallback(async () => {
+    if (!canUpdateAlerts || batchSelection.selectedCount === 0) return
+    try {
+      if (batchSelection.selectionMode === 'all_filtered') {
+        await performBulkAction('resolve', {
+          selectAllFiltered: true,
+          excludeIds: batchSelection.excludedIds,
+          filters: queryParams,
+        })
+      } else {
+        await performBulkAction('resolve', {
+          alertIds: batchSelection.selectedIds,
+        })
+      }
+      batchSelection.clearSelection()
+      await refreshAll()
+    } catch (err) {
+      console.error('批量解决告警失败:', err)
+    }
+  }, [canUpdateAlerts, batchSelection, performBulkAction, queryParams, refreshAll])
+
+  const handleConfirmBatchDelete = useCallback(async () => {
+    if (!canDeleteAlerts || batchSelection.selectedCount === 0) return
+    setIsDeleting(true)
+    try {
+      if (batchSelection.selectionMode === 'all_filtered') {
+        await performBulkAction('delete', {
+          selectAllFiltered: true,
+          excludeIds: batchSelection.excludedIds,
+          filters: queryParams,
+        })
+      } else {
+        await performBulkAction('delete', {
+          alertIds: batchSelection.selectedIds,
+        })
+      }
+      setDeleteModalOpen(false)
+      batchSelection.clearSelection()
+
+      // 若删空当前页且 pagination.page > 1 则回退上一页，并刷新统计数据
+      if (currentPage > 1 && alerts.length <= batchSelection.selectedCount) {
+        setCurrentPage((prev) => Math.max(1, prev - 1))
+      }
+      await refreshAll()
+    } catch (err) {
+      console.error('批量删除告警失败:', err)
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [canDeleteAlerts, batchSelection, performBulkAction, queryParams, currentPage, alerts.length, refreshAll])
 
   const handlePageChange = (page: number) => setCurrentPage(page)
   const handlePageSizeChange = (newPageSize: number) => {
@@ -464,9 +524,6 @@ const AlertsViewContent: React.FC = () => {
                 <AlertFiltersBar
                   filters={filters}
                   onFilterChange={updateFilter}
-                  selectedCount={selectedAlerts.length}
-                  onBulkAction={handleBulkActionClick}
-                  renderAsCard={false}
                 />
               )}
               secondaryActions={[
@@ -525,39 +582,6 @@ const AlertsViewContent: React.FC = () => {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-
-                  {selectedAlerts.length > 0 && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" type="button">
-                          批量操作 ({selectedAlerts.length})
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {canUpdateAlerts && (
-                          <>
-                            <DropdownMenuItem onClick={() => handleBulkActionClick('acknowledge')}>
-                              <CheckCheck className="h-4 w-4 mr-2" />
-                              批量确认
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleBulkActionClick('resolve')}>
-                              <CheckCheck className="h-4 w-4 mr-2" />
-                              批量解决
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                        {canDeleteAlerts && (
-                          <DropdownMenuItem
-                            onClick={() => handleBulkActionClick('delete')}
-                            className="text-red-600"
-                          >
-                            <XCircle className="h-4 w-4 mr-2" />
-                            批量删除
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
                 </>
               )}
             />
@@ -656,16 +680,17 @@ const AlertsViewContent: React.FC = () => {
               ) : (
                 <AlertList
                   alerts={alerts}
-                  selectedAlerts={selectedAlerts}
-                  onSelectAlert={toggleAlert}
-                  onSelectAll={selectAll}
-                  onClearSelection={clearSelection}
+                  selectedAlerts={batchSelection.selectedIds}
+                  onSelectAlert={(id) => {
+                    if (canUpdateAlerts || canDeleteAlerts) {
+                      batchSelection.toggleSelect(id)
+                    }
+                  }}
                   canUpdate={canUpdateAlerts}
                   canDelete={canDeleteAlerts}
                   onAcknowledge={canUpdateAlerts ? handleAcknowledgeAndRefresh : undefined}
                   onResolve={canUpdateAlerts ? handleResolveAndRefresh : undefined}
                   onDelete={canDeleteAlerts ? handleDeleteAndRefresh : undefined}
-                  renderAsCard={false}
                 />
               )}
               {!error && (
@@ -697,6 +722,48 @@ const AlertsViewContent: React.FC = () => {
           onDelete={canDeleteAlerts ? handleDeleteAndRefresh : undefined}
         />
       )}
+
+      {/* 底部悬浮批量操作栏 */}
+      <FloatingBatchActionBar
+        selectedCount={batchSelection.selectedCount}
+        selectionMode={batchSelection.selectionMode}
+        totalCount={pagination.total}
+        isAllCurrentPageSelected={batchSelection.isAllCurrentPageSelected}
+        onSelectCurrentPage={batchSelection.selectCurrentPage}
+        onSelectAllFiltered={batchSelection.selectAllFiltered}
+        onInvertCurrentPage={batchSelection.invertCurrentPage}
+        onClearSelection={batchSelection.clearSelection}
+        extraActions={
+          canUpdateAlerts
+            ? [
+                {
+                  key: 'batch-ack',
+                  label: '批量确认',
+                  onClick: handleBatchAcknowledge,
+                },
+                {
+                  key: 'batch-resolve',
+                  label: '批量解决',
+                  onClick: handleBatchResolve,
+                },
+              ]
+            : undefined
+        }
+        showDelete={canDeleteAlerts}
+        onDelete={() => setDeleteModalOpen(true)}
+        isDeleting={isDeleting}
+      />
+
+      {/* 批量删除二次确认弹窗 */}
+      <BatchDeleteConfirmModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleConfirmBatchDelete}
+        isDeleting={isDeleting}
+        count={batchSelection.selectedCount}
+        isAllFiltered={batchSelection.selectionMode === 'all_filtered'}
+        entityLabel="条告警记录"
+      />
     </AppLayout>
   )
 }

@@ -2,7 +2,17 @@ import React from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { AlertsView } from '@/features/alerts/components/AlertsView'
 
+jest.mock('framer-motion', () => ({
+  motion: {
+    div: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+      <div {...props}>{children}</div>
+    ),
+  },
+  AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
+}))
+
 const mockHandleAcknowledgeAlert = jest.fn<Promise<void>, [string, (string | undefined)?]>()
+const mockPerformBulkAction = jest.fn<Promise<boolean>, [string, unknown?]>().mockResolvedValue(true)
 const mockLoadAlerts = jest.fn<Promise<void>, []>()
 const mockLoadStats = jest.fn<Promise<void>, []>()
 const mockWsHandlers = new Map<string, (payload?: unknown) => void>()
@@ -30,6 +40,16 @@ let mockAlertsList = [
     device: '设备A',
     timestamp: new Date(),
   },
+  {
+    id: '2',
+    title: '测试告警2',
+    message: '测试消息2',
+    severity: 'critical',
+    status: 'active',
+    category: 'other',
+    device: '设备B',
+    timestamp: new Date(),
+  },
 ]
 let mockAlertsLoading = false
 let mockAlertsError: string | null = null
@@ -46,22 +66,23 @@ jest.mock('@/features/alerts/hooks/useAlerts', () => ({
     pagination: {
       page: 1,
       pageSize: 10,
-      total: 1,
+      total: mockAlertsList.length,
       hasNext: false,
       hasPrev: false,
     },
     handleAcknowledgeAlert: mockHandleAcknowledgeAlert,
     handleResolveAlert: jest.fn(),
     handleDeleteAlert: jest.fn(),
+    performBulkAction: mockPerformBulkAction,
     loadAlerts: mockLoadAlerts,
   }),
   useAlertStats: () => ({
     stats: {
-      total: 1,
-      critical: 0,
+      total: 2,
+      critical: 1,
       warning: 1,
       info: 0,
-      active: 1,
+      active: 2,
       acknowledged: 0,
       resolved: 0,
       byCategory: {},
@@ -75,13 +96,6 @@ jest.mock('@/features/alerts/hooks/useAlerts', () => ({
     filters: mockAlertFilters,
     updateFilter: mockUpdateFilter,
     resetFilters: mockResetFilters,
-  }),
-  useAlertSelection: () => ({
-    selectedAlerts: [],
-    toggleAlert: jest.fn(),
-    selectAll: jest.fn(),
-    clearSelection: jest.fn(),
-    handleBulkAction: jest.fn(),
   }),
 }))
 
@@ -104,10 +118,35 @@ jest.mock('@/features/alerts/components/AlertFiltersBar', () => ({
 }))
 
 jest.mock('@/features/alerts/components/AlertList', () => ({
-  AlertList: ({ onAcknowledge }: { onAcknowledge: (id: string) => Promise<void> }) => (
-    <button type="button" onClick={() => void onAcknowledge('1')}>
-      触发单条确认
-    </button>
+  AlertList: ({
+    alerts,
+    selectedAlerts,
+    onSelectAlert,
+    onAcknowledge,
+  }: {
+    alerts: Array<{ id: string; title: string }>
+    selectedAlerts?: string[]
+    onSelectAlert?: (id: string) => void
+    onAcknowledge?: (id: string) => Promise<void>
+  }) => (
+    <div data-testid="mock-alert-list">
+      {onAcknowledge && (
+        <button type="button" onClick={() => void onAcknowledge('1')}>
+          触发单条确认
+        </button>
+      )}
+      {alerts?.map((item) => (
+        <label key={item.id}>
+          <input
+            type="checkbox"
+            data-testid={`select-alert-${item.id}`}
+            checked={selectedAlerts?.includes(item.id)}
+            onChange={() => onSelectAlert?.(item.id)}
+          />
+          {item.title}
+        </label>
+      ))}
+    </div>
   ),
 }))
 
@@ -142,7 +181,7 @@ jest.mock('@/components/ui/button', () => ({
     onClick?: () => void
     disabled?: boolean
   }) => (
-    <button type="button" disabled={disabled} onClick={onClick}>
+    <button type="button" onClick={onClick} disabled={disabled}>
       {children}
     </button>
   ),
@@ -150,45 +189,44 @@ jest.mock('@/components/ui/button', () => ({
 
 jest.mock('@/components/ui/dropdown-menu', () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DropdownMenuItem: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) => (
+  DropdownMenuItem: ({
+    children,
+    onClick,
+  }: {
+    children: React.ReactNode
+    onClick?: () => void
+  }) => (
     <button type="button" onClick={onClick}>
       {children}
     </button>
   ),
-  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+jest.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 jest.mock('@/lib/websocket', () => ({
-  WebSocketEvents: {
-    CONNECT: 'connect',
-    NEW_ALERT: 'new_alert',
-    ALERT_UPDATE: 'alert_update',
-    ALERT_RESOLVED: 'alert_resolved',
-  },
   useWebSocket: () => mockWs,
   useWebSocketEvent: (event: string, handler: (payload?: unknown) => void) => {
     mockWsHandlers.set(event, handler)
   },
-}))
-
-jest.mock('@/features/alerts/api/alerts.api', () => ({
-  exportAlerts: jest.fn(),
+  WebSocketEvents: {
+    NEW_ALERT: 'new_alert',
+    ALERT_UPDATE: 'alert_update',
+    ALERT_RESOLVED: 'alert_resolved',
+  },
 }))
 
 describe('AlertsView', () => {
   beforeEach(() => {
-    mockWsHandlers.clear()
-    mockWs.isConnected.mockReturnValue(true)
-    mockWs.subscribeToAlerts.mockImplementation(() => mockReleaseAlertsLease)
+    jest.clearAllMocks()
     mockCanReadAlerts = true
-    mockAlertFilters = {
-      searchQuery: '',
-      severityFilter: 'all',
-      statusFilter: 'all',
-    }
-    mockResetFilters.mockClear()
-    mockUpdateFilter.mockClear()
+    mockAlertsLoading = false
+    mockAlertsError = null
+    mockPerformBulkAction.mockClear()
     mockAlertsList = [
       {
         id: '1',
@@ -200,12 +238,25 @@ describe('AlertsView', () => {
         device: '设备A',
         timestamp: new Date(),
       },
+      {
+        id: '2',
+        title: '测试告警2',
+        message: '测试消息2',
+        severity: 'critical',
+        status: 'active',
+        category: 'other',
+        device: '设备B',
+        timestamp: new Date(),
+      },
     ]
-    mockAlertsLoading = false
-    mockAlertsError = null
-    mockHandleAcknowledgeAlert.mockResolvedValue(undefined)
-    mockLoadAlerts.mockResolvedValue(undefined)
-    mockLoadStats.mockResolvedValue(undefined)
+    mockAlertFilters = {
+      searchQuery: '',
+      severityFilter: 'all',
+      statusFilter: 'all',
+    }
+    mockWsHandlers.clear()
+    mockWs.isConnected.mockReturnValue(true)
+    mockWs.subscribeToAlerts.mockReturnValue(mockReleaseAlertsLease)
   })
 
   it('挂载时应申请 alerts 房间租约，卸载时只释放自己的租约', () => {
@@ -215,6 +266,7 @@ describe('AlertsView', () => {
     expect(mockReleaseAlertsLease).not.toHaveBeenCalled()
 
     unmount()
+
     expect(mockReleaseAlertsLease).toHaveBeenCalledTimes(1)
   })
 
@@ -224,7 +276,6 @@ describe('AlertsView', () => {
     render(<AlertsView />)
 
     expect(mockWs.subscribeToAlerts).toHaveBeenCalledTimes(1)
-    expect(mockWsHandlers.has('connect')).toBe(false)
   })
 
   it('无 alerts:read 权限时应显示无权限提示且不订阅房间', () => {
@@ -292,7 +343,7 @@ describe('AlertsView', () => {
 
   it('开启筛选时WS推送不应自动刷新列表，但应提示并可手动刷新/清空筛选', async () => {
     mockAlertFilters = {
-      searchQuery: '',
+      searchQuery: 'core-switch',
       severityFilter: 'critical',
       statusFilter: 'all',
     }
@@ -388,5 +439,95 @@ describe('AlertsView', () => {
     expect(screen.getByText('暂无活跃告警')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '查看全部告警' }))
     expect(mockUpdateFilter).toHaveBeenCalledWith('statusFilter', 'all')
+  })
+
+  it('选中告警后在底部展示 FloatingBatchActionBar，并能触发全选当前页与取消选择', () => {
+    render(<AlertsView />)
+
+    expect(screen.queryByRole('region', { name: '批量操作栏' })).not.toBeInTheDocument()
+
+    // 勾选第一项
+    fireEvent.click(screen.getByTestId('select-alert-1'))
+    expect(screen.getByRole('region', { name: '批量操作栏' })).toBeInTheDocument()
+    expect(screen.getByText('已选择 1 项')).toBeInTheDocument()
+
+    // 点击全选当前页
+    fireEvent.click(screen.getByRole('button', { name: '全选当前页' }))
+    expect(screen.getByText('已选择 2 项')).toBeInTheDocument()
+
+    // 点击反选当前页 (两项全选时反选变为 0 项)
+    fireEvent.click(screen.getByRole('button', { name: '反选当前页' }))
+    expect(screen.queryByRole('region', { name: '批量操作栏' })).not.toBeInTheDocument()
+
+    // 重新勾选并取消选择
+    fireEvent.click(screen.getByTestId('select-alert-1'))
+    expect(screen.getByRole('region', { name: '批量操作栏' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '取消选择' }))
+    expect(screen.queryByRole('region', { name: '批量操作栏' })).not.toBeInTheDocument()
+  })
+
+  it('全选筛选结果与批量确认', async () => {
+    render(<AlertsView />)
+
+    fireEvent.click(screen.getByTestId('select-alert-1'))
+    fireEvent.click(screen.getByRole('button', { name: '全选筛选结果' }))
+    expect(screen.getByText(/已全选筛选结果 \(2 项\)/)).toBeInTheDocument()
+
+    // 批量确认
+    fireEvent.click(screen.getByRole('button', { name: '批量确认' }))
+    await waitFor(() => {
+      expect(mockPerformBulkAction).toHaveBeenCalledWith(
+        'acknowledge',
+        expect.objectContaining({ selectAllFiltered: true })
+      )
+    })
+  })
+
+  it('显式选择单项并批量解决', async () => {
+    render(<AlertsView />)
+
+    fireEvent.click(screen.getByTestId('select-alert-2'))
+    expect(screen.getByRole('region', { name: '批量操作栏' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '批量解决' }))
+    await waitFor(() => {
+      expect(mockPerformBulkAction).toHaveBeenCalledWith(
+        'resolve',
+        expect.objectContaining({ alertIds: ['2'] })
+      )
+    })
+  })
+
+  it('点击删除打开二次确认弹窗并在确认后执行批量删除', async () => {
+    render(<AlertsView />)
+
+    fireEvent.click(screen.getByTestId('select-alert-1'))
+
+    // 悬浮栏中的删除按钮
+    const deleteBtn = screen.getByRole('button', { name: '删除' })
+    expect(deleteBtn).toBeInTheDocument()
+    fireEvent.click(deleteBtn)
+
+    // 二次确认弹窗
+    expect(screen.getByRole('heading', { name: '批量删除确认', level: 3 })).toBeInTheDocument()
+    expect(screen.getByText(/您确定要批量删除选中的 1 条告警记录吗？/)).toBeInTheDocument()
+
+    // 点击取消关闭弹窗
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('heading', { name: '批量删除确认', level: 3 })).not.toBeInTheDocument()
+
+    // 再次打开并确认删除
+    fireEvent.click(screen.getByRole('button', { name: '删除' }))
+    const confirmBtn = screen.getByRole('button', { name: '确认删除' })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(mockPerformBulkAction).toHaveBeenCalledWith(
+        'delete',
+        expect.objectContaining({ alertIds: ['1'] })
+      )
+      expect(mockLoadAlerts).toHaveBeenCalled()
+      expect(mockLoadStats).toHaveBeenCalled()
+    })
   })
 })

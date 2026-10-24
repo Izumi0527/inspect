@@ -319,7 +319,31 @@ export async function bulkAlertAction(action: BulkAlertAction): Promise<boolean>
   try {
     const payload: Record<string, JsonValue> = {
       action: action.action,
-      alert_ids: action.alertIds,
+    }
+    if (action.alertIds && action.alertIds.length > 0) {
+      payload.alert_ids = action.alertIds
+    }
+    if (action.selectAllFiltered !== undefined) {
+      payload.select_all_filtered = action.selectAllFiltered
+      payload.selectAllFiltered = action.selectAllFiltered
+    }
+    if (action.excludeIds && action.excludeIds.length > 0) {
+      payload.exclude_ids = action.excludeIds
+    }
+    if (action.status) {
+      payload.status = action.status
+    }
+    if (action.severity) {
+      payload.severity = action.severity
+    }
+    if (action.search) {
+      payload.search = action.search
+    }
+    if (action.startDate) {
+      payload.start_date = action.startDate
+    }
+    if (action.endDate) {
+      payload.end_date = action.endDate
     }
     if (action.params) {
       payload.params = toJsonValue(action.params)

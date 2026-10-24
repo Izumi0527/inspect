@@ -1,13 +1,22 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Alert, AlertFilters, AlertStats, AlertQueryParams, AlertSeverity, AlertStatus, AlertAction, DEFAULT_ALERT_FILTERS } from '../types'
+import {
+  Alert,
+  AlertFilters,
+  AlertStats,
+  AlertQueryParams,
+  AlertSeverity,
+  AlertStatus,
+  AlertAction,
+  DEFAULT_ALERT_FILTERS,
+} from '../types'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
-import { 
-  fetchAlerts, 
-  fetchAlertStats, 
-  acknowledgeAlert, 
-  resolveAlert, 
+import {
+  fetchAlerts,
+  fetchAlertStats,
+  acknowledgeAlert,
+  resolveAlert,
   bulkAlertAction,
-  deleteAlert 
+  deleteAlert,
 } from '../api/alerts.api'
 
 // 告警数据管理hook
@@ -20,7 +29,7 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
     pageSize: DEFAULT_PAGE_SIZE,
     total: 0,
     hasNext: false,
-    hasPrev: false
+    hasPrev: false,
   })
 
   const loadAlerts = useCallback(async () => {
@@ -34,18 +43,18 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
         pageSize: response.pageSize,
         total: response.total,
         hasNext: response.hasNext,
-        hasPrev: response.hasPrev
+        hasPrev: response.hasPrev,
       })
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '加载告警数据失败'
       setError(errorMessage)
-      setAlerts([])  // 错误时清空列表，而非显示假数据
+      setAlerts([]) // 错误时清空列表，而非显示假数据
       setPagination({
         page: 1,
         pageSize: DEFAULT_PAGE_SIZE,
         total: 0,
         hasNext: false,
-        hasPrev: false
+        hasPrev: false,
       })
       console.error('Failed to load alerts:', err)
     } finally {
@@ -80,6 +89,82 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
     }
   }, [])
 
+  // 批量操作告警
+  const performBulkAction = useCallback(async (
+    action: AlertAction,
+    target?: string[] | {
+      alertIds?: string[]
+      selectAllFiltered?: boolean
+      excludeIds?: string[]
+      filters?: AlertQueryParams
+      assignee?: string
+      comment?: string
+    },
+    legacyAssignee?: string
+  ) => {
+    try {
+      setLoading(true)
+      let alertIds: string[] | undefined
+      let selectAllFiltered: boolean | undefined
+      let excludeIds: string[] | undefined
+      let status: string | undefined
+      let severity: string | undefined
+      let search: string | undefined
+      let startDate: string | undefined
+      let endDate: string | undefined
+      let assignee: string | undefined
+      let comment: string | undefined
+
+      if (Array.isArray(target)) {
+        alertIds = target
+        assignee = legacyAssignee
+      } else if (target) {
+        alertIds = target.alertIds
+        selectAllFiltered = target.selectAllFiltered
+        excludeIds = target.excludeIds
+        assignee = target.assignee
+        comment = target.comment
+        if (target.filters) {
+          if (target.filters.status) {
+            status = Array.isArray(target.filters.status)
+              ? target.filters.status.join(',')
+              : String(target.filters.status)
+          }
+          if (target.filters.severity) {
+            severity = Array.isArray(target.filters.severity)
+              ? target.filters.severity.join(',')
+              : String(target.filters.severity)
+          }
+          search = target.filters.search
+          startDate = target.filters.startDate
+          endDate = target.filters.endDate
+        }
+      }
+
+      const res = await bulkAlertAction({
+        action,
+        alertIds,
+        selectAllFiltered,
+        excludeIds,
+        status,
+        severity,
+        search,
+        startDate,
+        endDate,
+        assignee,
+        comment,
+      })
+      await loadAlerts()
+      return res
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '批量操作失败'
+      setError(errorMessage)
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }, [loadAlerts])
+
   // 初始加载
   useEffect(() => {
     loadAlerts()
@@ -93,7 +178,8 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
     loadAlerts,
     handleAcknowledgeAlert,
     handleResolveAlert,
-    handleDeleteAlert
+    handleDeleteAlert,
+    performBulkAction,
   }
 }
 
@@ -124,7 +210,7 @@ export function useAlertStats() {
     stats,
     loading,
     error,
-    loadStats
+    loadStats,
   }
 }
 
@@ -143,63 +229,7 @@ export function useAlertFilters() {
   return {
     filters,
     updateFilter,
-    resetFilters
-  }
-}
-
-// 告警选择hook
-export function useAlertSelection() {
-  const [selectedAlerts, setSelectedAlerts] = useState<string[]>([])
-
-  const selectAlert = useCallback((alertId: string) => {
-    setSelectedAlerts(prev => [...prev, alertId])
-  }, [])
-
-  const deselectAlert = useCallback((alertId: string) => {
-    setSelectedAlerts(prev => prev.filter(id => id !== alertId))
-  }, [])
-
-  const toggleAlert = useCallback((alertId: string) => {
-    setSelectedAlerts(prev =>
-      prev.includes(alertId)
-        ? prev.filter(id => id !== alertId)
-        : [...prev, alertId]
-    )
-  }, [])
-
-  const selectAll = useCallback((alertIds: string[]) => {
-    setSelectedAlerts(alertIds)
-  }, [])
-
-  const clearSelection = useCallback(() => {
-    setSelectedAlerts([])
-  }, [])
-
-  const handleBulkAction = useCallback(async (action: AlertAction, assignee?: string) => {
-    if (selectedAlerts.length === 0) return
-
-    try {
-      await bulkAlertAction({
-        alertIds: selectedAlerts,
-        action,
-        assignee
-      })
-      setSelectedAlerts([])
-    } catch (error) {
-      console.error('批量操作失败:', error)
-      throw error
-    }
-  }, [selectedAlerts])
-
-  return {
-    selectedAlerts,
-    selectAlert,
-    deselectAlert,
-    toggleAlert,
-    selectAll,
-    clearSelection,
-    handleBulkAction,
-    setSelectedAlerts
+    resetFilters,
   }
 }
 
@@ -244,6 +274,6 @@ export function useAlertStyles() {
   return {
     getSeverityColor,
     getStatusColor,
-    getStatusText
+    getStatusText,
   }
 }

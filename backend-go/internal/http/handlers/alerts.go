@@ -709,17 +709,37 @@ func BuildAlertsCSV(rows []alerts.AlertWithDevice) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+type BulkAlertActionRequest struct {
+	AlertIDs               []interface{} `json:"alert_ids"`
+	AlertIDsCamel          []interface{} `json:"alertIds"`
+	Action                 string        `json:"action"`
+	SelectAllFiltered      bool          `json:"select_all_filtered"`
+	SelectAllFilteredCamel bool          `json:"selectAllFiltered"`
+	ExcludeIDs             []interface{} `json:"exclude_ids"`
+	ExcludeIDsCamel        []interface{} `json:"excludeIds"`
+	Status                 interface{}   `json:"status"`
+	Severity               interface{}   `json:"severity"`
+	Search                 string        `json:"search"`
+	StartDate              string        `json:"start_date"`
+	StartDateCamel         string        `json:"startDate"`
+	EndDate                string        `json:"end_date"`
+	EndDateCamel           string        `json:"endDate"`
+	Assignee               *string       `json:"assignee"`
+	Comment                *string       `json:"comment"`
+	Note                   *string       `json:"note"`
+}
+
 func (h AlertsHandler) BulkAlertAction(c echo.Context) error {
 	if h.Service == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "alert service not configured")
 	}
 
-	payload := map[string]interface{}{}
-	if err := c.Bind(&payload); err != nil {
+	var req BulkAlertActionRequest
+	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
 	}
 
-	action := strings.ToLower(strings.TrimSpace(readStringValue(payload["action"])))
+	action := strings.ToLower(strings.TrimSpace(req.Action))
 	if action == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "action is required")
 	}
@@ -733,16 +753,93 @@ func (h AlertsHandler) BulkAlertAction(c echo.Context) error {
 		return err
 	}
 
-	alertIDs := parseIntListFromPayload(payload["alert_ids"])
-	if len(alertIDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "alert_ids is required")
+	var alertIDs []int
+	selectAllFiltered := req.SelectAllFiltered || req.SelectAllFilteredCamel
+
+	if selectAllFiltered {
+		excludeRaw := req.ExcludeIDs
+		if len(excludeRaw) == 0 {
+			excludeRaw = req.ExcludeIDsCamel
+		}
+		excludeIDs := parseIntListFromPayload(excludeRaw)
+		excludeSet := make(map[int]bool, len(excludeIDs))
+		for _, id := range excludeIDs {
+			excludeSet[id] = true
+		}
+
+		var statusValues []string
+		if req.Status != nil {
+			statusValues = parseStringSliceFromInterface(req.Status)
+		}
+		var severityValues []string
+		if req.Severity != nil {
+			severityValues = parseStringSliceFromInterface(req.Severity)
+		}
+		search := strings.TrimSpace(req.Search)
+
+		startDateStr := req.StartDate
+		if startDateStr == "" {
+			startDateStr = req.StartDateCamel
+		}
+		endDateStr := req.EndDate
+		if endDateStr == "" {
+			endDateStr = req.EndDateCamel
+		}
+
+		loc := h.businessLoc(c)
+		startDate, _ := parseTimeOptional(startDateStr, loc)
+		endDate, _ := parseTimeOptional(endDateStr, loc)
+		if endDate != nil && isDateOnly(endDateStr) {
+			adjusted := endDate.In(loc).Add(24*time.Hour - time.Nanosecond)
+			endDate = &adjusted
+		}
+
+		filter := alerts.ListAlertsFilter{
+			Page:       1,
+			PageSize:   10000,
+			Statuses:   statusValues,
+			Severities: severityValues,
+			Search:     search,
+			StartDate:  startDate,
+			EndDate:    endDate,
+		}
+
+		rows, _, err := h.Service.ListAlerts(c.Request().Context(), filter)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load alerts")
+		}
+
+		for _, row := range rows {
+			if !excludeSet[row.ID] {
+				alertIDs = append(alertIDs, row.ID)
+			}
+		}
+
+		if len(alertIDs) == 0 {
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"success":      true,
+				"processed":    0,
+				"updatedCount": 0,
+				"deletedCount": 0,
+				"failed":       0,
+				"errors":       []interface{}{},
+			})
+		}
+	} else {
+		rawAlertIDs := req.AlertIDs
+		if len(rawAlertIDs) == 0 {
+			rawAlertIDs = req.AlertIDsCamel
+		}
+		alertIDs = parseIntListFromPayload(rawAlertIDs)
+		if len(alertIDs) == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "alert_ids is required")
+		}
 	}
 
-	assignee := readStringPayload(payload, "assignee")
-	comment := readStringPayload(payload, "comment")
-	note := readStringPayload(payload, "note")
+	assignee := req.Assignee
+	note := req.Note
 	if note == nil {
-		note = comment
+		note = req.Comment
 	}
 
 	operator := buildOperator(user)
@@ -784,10 +881,12 @@ func (h AlertsHandler) BulkAlertAction(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"success":   len(failed) == 0,
-		"processed": processed,
-		"failed":    len(failed),
-		"errors":    failed,
+		"success":      len(failed) == 0,
+		"processed":    processed,
+		"updatedCount": processed,
+		"deletedCount": processed,
+		"failed":       len(failed),
+		"errors":       failed,
 	})
 }
 func (h AlertsHandler) ListRules(c echo.Context) error {
@@ -1262,10 +1361,49 @@ func parseIntListFromPayload(value interface{}) []int {
 				result = append(result, item)
 			}
 		}
+	case []int64:
+		for _, item := range v {
+			if item > 0 {
+				result = append(result, int(item))
+			}
+		}
 	case []string:
 		result = append(result, parseIntList(v)...)
 	}
 	return result
+}
+
+func parseStringSliceFromInterface(val interface{}) []string {
+	if val == nil {
+		return nil
+	}
+	switch v := val.(type) {
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			return nil
+		}
+		parts := strings.Split(trimmed, ",")
+		res := make([]string, 0, len(parts))
+		for _, p := range parts {
+			if s := strings.TrimSpace(p); s != "" {
+				res = append(res, s)
+			}
+		}
+		return res
+	case []string:
+		return v
+	case []interface{}:
+		res := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				res = append(res, strings.TrimSpace(s))
+			}
+		}
+		return res
+	default:
+		return nil
+	}
 }
 
 func readStringPayload(payload map[string]interface{}, key string) *string {

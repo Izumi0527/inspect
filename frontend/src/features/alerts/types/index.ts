@@ -57,8 +57,15 @@ export interface AlertStats {
 export type AlertAction = 'acknowledge' | 'resolve' | 'assign' | 'delete' | 'comment'
 
 export interface BulkAlertAction {
-  alertIds: string[]
+  alertIds?: string[]
   action: AlertAction
+  selectAllFiltered?: boolean
+  excludeIds?: string[]
+  status?: string
+  severity?: string
+  search?: string
+  startDate?: string
+  endDate?: string
   assignee?: string
   comment?: string
   params?: Record<string, unknown>
