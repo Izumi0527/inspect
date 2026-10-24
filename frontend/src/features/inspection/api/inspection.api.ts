@@ -1061,6 +1061,37 @@ export async function fetchInspectionResults(params?: {
     if (!response.data) {
       throw new Error(response.message || '获取巡检结果失败')
     }
+export interface BatchDeleteExecutionsPayload {
+  ids?: string[]
+  selectAllFiltered?: boolean
+  excludeIds?: string[]
+  status?: string | string[]
+  strategyId?: string | number
+  startDate?: string
+  endDate?: string
+}
+
+/**
+ * 批量删除巡检执行记录（支持显式 IDs 与全选筛选结果两种模式）
+ */
+export async function batchDeleteInspectionExecutions(
+  payload: BatchDeleteExecutionsPayload
+): Promise<{ deletedCount: number }> {
+  try {
+    const response = await api.post<InspectionApiResponse<{ deletedCount: number }>>(
+      '/inspection/executions/batch-delete',
+      payload
+    )
+    if (response.code !== 200) {
+      throw new Error(response.message || '批量删除执行记录失败')
+    }
+    return response.data ?? { deletedCount: 0 }
+  } catch (error) {
+    console.error('[API] 批量删除执行记录失败:', error)
+    throw error
+  }
+}
+
 
     const data = toRecord(response.data)
 

@@ -77,6 +77,7 @@ func (h InspectionHandler) Register(group *echo.Group) {
 	group.DELETE("/inspection/executions/:id", h.DeleteExecution)
 
 	group.GET("/inspection/results", h.ListResults)
+	group.POST("/inspection/executions/batch-delete", h.BatchDeleteExecutions)
 	group.GET("/inspection/results/:id", h.GetResult)
 	group.GET("/inspection/devices/:id/history", h.ListDeviceHistory)
 

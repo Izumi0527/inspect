@@ -48,6 +48,7 @@ export {
   useExecutionProgress
 } from './hooks/useInspection'
 
+  useBatchDeleteExecutions,
 // 类型定义导出
 export type {
   InspectionStrategy,

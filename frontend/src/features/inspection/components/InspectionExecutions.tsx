@@ -24,13 +24,19 @@ import {
   Column,
   Pagination
 } from '@/components/atoms'
-import { CompactPageToolbar } from '@/components/shared'
+import {
+  CompactPageToolbar,
+  FloatingBatchActionBar,
+  BatchDeleteConfirmModal
+} from '@/components/shared'
 import { SimpleModal } from '@/components/atoms/modal'
+import { useBatchSelection } from '@/hooks'
 import {
   useInspectionExecutions,
   useStopExecution,
   useGenerateReport,
-  useDeleteExecution
+  useDeleteExecution,
+  useBatchDeleteExecutions
 } from '../hooks/useInspection'
 import { useURLFilters } from '../hooks/useURLFilters'
 import { useDateFilters } from '../hooks/useDateFilters'
@@ -68,6 +74,8 @@ export const InspectionExecutions: React.FC = () => {
   const stopExecution = useStopExecution()
   const generateReport = useGenerateReport()
   const deleteExecution = useDeleteExecution()
+  const batchDeleteExecutions = useBatchDeleteExecutions()
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
 
   const executions: InspectionExecution[] = useMemo(
     () => executionsData?.items ?? [],
@@ -88,6 +96,16 @@ export const InspectionExecutions: React.FC = () => {
     () => executions,
     [executions]
   )
+
+  const batchSelection = useBatchSelection<InspectionExecution>({
+    items: filteredExecutions,
+    totalCount: totalItems,
+    getId: (e) => e.id,
+    isSelectable: (e) => e.status !== 'running',
+    getDisabledReason: (e) => (e.status === 'running' ? '执行中的任务不可删除' : undefined),
+    filterDeps: [filters.status, filters.startDate, filters.endDate],
+    pageDeps: [filters.page, filters.pageSize],
+  })
 
   // 清除选中的执行记录（如果不存在）
   useEffect(() => {
@@ -307,6 +325,40 @@ export const InspectionExecutions: React.FC = () => {
     setShowDeleteConfirm(false)
     setExecutionToDelete(null)
   }, [])
+
+  // 确认批量删除执行记录
+  const handleConfirmBatchDelete = useCallback(async () => {
+    try {
+      if (batchSelection.selectionMode === 'all_filtered') {
+        await batchDeleteExecutions.mutateAsync({
+          selectAllFiltered: true,
+          excludeIds: batchSelection.excludedIds,
+          status: filters.status !== 'all' ? filters.status : undefined,
+          startDate: filters.startDate || undefined,
+          endDate: filters.endDate || undefined,
+        })
+      } else {
+        await batchDeleteExecutions.mutateAsync({
+          selectAllFiltered: false,
+          ids: batchSelection.selectedIds,
+        })
+      }
+      setShowBatchDeleteConfirm(false)
+      batchSelection.clearSelection()
+
+      // 如果当前页全部删除了，自动回退上一页
+      if (
+        filters.page > 1 &&
+        (batchSelection.selectionMode === 'all_filtered' ||
+          batchSelection.selectedIds.length >= filteredExecutions.length)
+      ) {
+        updateFilter('page', filters.page - 1)
+      }
+      refetch()
+    } catch (error) {
+      console.error('Batch delete executions failed:', error)
+    }
+  }, [batchSelection, batchDeleteExecutions, filters, updateFilter, filteredExecutions.length, refetch])
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -564,27 +616,6 @@ export const InspectionExecutions: React.FC = () => {
           ]}
         />
 
-        {selectedExecution && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-foreground">已选择执行</span>
-              {getStatusBadge(selectedExecution.status)}
-            </div>
-            <div className="text-muted-foreground">
-              {selectedExecution.strategyName}
-            </div>
-            <div className="text-xs text-gray-400 dark:text-gray-500">
-              {formatDateTimeYMDHMS(selectedExecution.startTime)}
-            </div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              完成进度：{selectedExecution.progress}% ({selectedExecution.completedDevices}/{selectedExecution.totalDevices})
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedExecution(null)}>
-              清除
-            </Button>
-          </div>
-        )}
-
         {/* 执行统计 */}
         <ExecutionStatsCards executions={executions} />
 
@@ -598,6 +629,8 @@ export const InspectionExecutions: React.FC = () => {
             <Table
               data={filteredExecutions}
               columns={columns}
+              rowKey="id"
+              rowSelection={batchSelection.rowSelection}
               className="bg-card rounded-lg shadow-sm"
             />
           </motion.div>
@@ -712,6 +745,30 @@ export const InspectionExecutions: React.FC = () => {
           </div>
         </div>
       </SimpleModal>
+
+      {/* 底部悬浮批量操作栏 */}
+      <FloatingBatchActionBar
+        selectedCount={batchSelection.selectedCount}
+        selectionMode={batchSelection.selectionMode}
+        totalCount={totalItems}
+        isAllCurrentPageSelected={batchSelection.isAllCurrentPageSelected}
+        onSelectCurrentPage={batchSelection.selectCurrentPage}
+        onSelectAllFiltered={batchSelection.selectAllFiltered}
+        onInvertCurrentPage={batchSelection.invertCurrentPage}
+        onClearSelection={batchSelection.clearSelection}
+        onDelete={() => setShowBatchDeleteConfirm(true)}
+        isDeleting={batchDeleteExecutions.isPending}
+      />
+
+      {/* 批量删除确认弹窗 */}
+      <BatchDeleteConfirmModal
+        isOpen={showBatchDeleteConfirm}
+        onClose={() => setShowBatchDeleteConfirm(false)}
+        onConfirm={handleConfirmBatchDelete}
+        isDeleting={batchDeleteExecutions.isPending}
+        count={batchSelection.selectedCount}
+        isAllFiltered={batchSelection.selectionMode === 'all_filtered'}
+      />
     </>
   )
 }

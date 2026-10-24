@@ -244,7 +244,6 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
             </div>
             <div>
               <h2 className="text-xl font-semibold text-foreground">{execution.strategyName}</h2>
-              <p className="text-sm text-muted-foreground">执行ID: {execution.id}</p>
             </div>
           </div>
           <Badge className={currentStatus.color}>{currentStatus.label}</Badge>

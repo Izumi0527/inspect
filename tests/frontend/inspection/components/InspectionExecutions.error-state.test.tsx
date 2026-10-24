@@ -8,6 +8,7 @@ jest.mock('framer-motion', () => ({
   motion: {
     div: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   },
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
 jest.mock('@tanstack/react-query', () => ({
@@ -22,6 +23,7 @@ jest.mock('@/features/inspection/hooks/useInspection', () => ({
   useStopExecution: jest.fn(),
   useGenerateReport: jest.fn(),
   useDeleteExecution: jest.fn(),
+  useBatchDeleteExecutions: jest.fn(),
 }))
 
 jest.mock('@/features/inspection/hooks/useURLFilters', () => ({
@@ -119,6 +121,7 @@ describe('InspectionExecutions 错误态', () => {
     ;(inspectionHooks.useStopExecution as jest.Mock).mockReturnValue({ isPending: false })
     ;(inspectionHooks.useGenerateReport as jest.Mock).mockReturnValue({ isPending: false })
     ;(inspectionHooks.useDeleteExecution as jest.Mock).mockReturnValue({ isPending: false })
+    ;(inspectionHooks.useBatchDeleteExecutions as jest.Mock).mockReturnValue({ isPending: false })
 
     render(<InspectionExecutions />)
 
@@ -164,6 +167,7 @@ describe('InspectionExecutions 错误态', () => {
     ;(inspectionHooks.useStopExecution as jest.Mock).mockReturnValue({ isPending: false })
     ;(inspectionHooks.useGenerateReport as jest.Mock).mockReturnValue({ isPending: false })
     ;(inspectionHooks.useDeleteExecution as jest.Mock).mockReturnValue({ isPending: false })
+    ;(inspectionHooks.useBatchDeleteExecutions as jest.Mock).mockReturnValue({ isPending: false })
 
     render(<InspectionExecutions />)
 

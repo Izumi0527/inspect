@@ -384,28 +384,7 @@ func (h InspectionHandler) ListExecutions(c echo.Context) error {
 		query = query.Where("schedule_id = ?", strategyID)
 	}
 
-	var having *executionGroupHaving
-	if len(statusList) > 0 || startDate != nil || endDate != nil {
-		exprParts := make([]string, 0, 3)
-		havingArgs := make([]interface{}, 0, len(statusList)+2)
-		if len(statusList) > 0 {
-			// 批内任一设备处于所选状态即视为命中，返回完整批次
-			exprParts = append(exprParts, "bool_or(status IN (?))")
-			havingArgs = append(havingArgs, statusList)
-		}
-		if startDate != nil {
-			exprParts = append(exprParts, "MIN(COALESCE(started_at, created_at)) >= ?")
-			havingArgs = append(havingArgs, *startDate)
-		}
-		if endDate != nil {
-			exprParts = append(exprParts, "MIN(COALESCE(started_at, created_at)) < ?")
-			havingArgs = append(havingArgs, endDate.Add(24*time.Hour))
-		}
-		having = &executionGroupHaving{
-			expr: strings.Join(exprParts, " AND "),
-			args: havingArgs,
-		}
-	}
+	having := h.buildExecutionFilterHaving(statusList, startDate, endDate)
 
 	groups, total, err := h.queryExecutionGroups(c.Request().Context(), query,
 		"start_time DESC, min_id DESC", page, pageSize, having)
@@ -591,6 +570,257 @@ func (h InspectionHandler) DeleteExecution(c echo.Context) error {
 
 	return inspectionOKWithMessage(c, "执行记录已删除", map[string]interface{}{
 		"id": idParam,
+	})
+}
+
+// buildExecutionFilterHaving 构造用于批次执行历史聚合的 HAVING 条件
+func (h InspectionHandler) buildExecutionFilterHaving(statusList []string, startDate *time.Time, endDate *time.Time) *executionGroupHaving {
+	if len(statusList) == 0 && startDate == nil && endDate == nil {
+		return nil
+	}
+	exprParts := make([]string, 0, 3)
+	havingArgs := make([]interface{}, 0, len(statusList)+2)
+	if len(statusList) > 0 {
+		// 批内任一设备处于所选状态即视为命中，返回完整批次
+		exprParts = append(exprParts, "bool_or(status IN (?))")
+		havingArgs = append(havingArgs, statusList)
+	}
+	if startDate != nil {
+		exprParts = append(exprParts, "MIN(COALESCE(started_at, created_at)) >= ?")
+		havingArgs = append(havingArgs, *startDate)
+	}
+	if endDate != nil {
+		exprParts = append(exprParts, "MIN(COALESCE(started_at, created_at)) < ?")
+		havingArgs = append(havingArgs, endDate.Add(24*time.Hour))
+	}
+	return &executionGroupHaving{
+		expr: strings.Join(exprParts, " AND "),
+		args: havingArgs,
+	}
+}
+
+type batchDeleteExecutionsRequest struct {
+	IDs               []string    `json:"ids"`
+	SelectAllFiltered bool        `json:"selectAllFiltered"`
+	ExcludeIDs        []string    `json:"excludeIds"`
+	ExcludeIDsSnake   []string    `json:"exclude_ids"`
+	Status            interface{} `json:"status"`
+	StrategyID        interface{} `json:"strategyId"`
+	StrategyIDSnake   interface{} `json:"strategy_id"`
+	StartDate         string      `json:"startDate"`
+	StartDateSnake    string      `json:"start_date"`
+	EndDate           string      `json:"endDate"`
+	EndDateSnake      string      `json:"end_date"`
+}
+
+// BatchDeleteExecutions 处理 POST /api/v1/inspection/executions/batch-delete 请求
+// 支持显式 IDs 批量删除与全选筛选结果（SelectAllFiltered）两种模式。
+func (h InspectionHandler) BatchDeleteExecutions(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "inspection service not configured")
+	}
+	if _, err := requirePermission(c, h.Auth, "inspections:delete"); err != nil {
+		return err
+	}
+
+	db := h.Service.DB()
+	if db == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not initialized")
+	}
+
+	var req batchDeleteExecutionsRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+
+	// 模式 1：默认显式 IDs 列表删除
+	if !req.SelectAllFiltered {
+		seen := make(map[string]bool)
+		uniqueIDs := make([]string, 0, len(req.IDs))
+		for _, id := range req.IDs {
+			id = strings.TrimSpace(id)
+			if id != "" && !seen[id] {
+				seen[id] = true
+				uniqueIDs = append(uniqueIDs, id)
+			}
+		}
+		if len(uniqueIDs) == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "未指定要删除的执行记录")
+		}
+		if len(uniqueIDs) > 200 {
+			return echo.NewHTTPError(http.StatusBadRequest, "单次最多批量删除 200 条记录")
+		}
+
+		batchRowsList := make([][]inspection.Inspection, 0, len(uniqueIDs))
+		for _, id := range uniqueIDs {
+			rows, err := h.resolveExecutionBatchRows(c.Request().Context(), db, id)
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
+				}
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to load execution")
+			}
+			if len(rows) == 0 {
+				return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
+			}
+			for _, item := range rows {
+				if item.Status == inspection.StatusRunning {
+					return echo.NewHTTPError(http.StatusBadRequest, "无法删除正在执行的任务，请先停止任务")
+				}
+			}
+			batchRowsList = append(batchRowsList, rows)
+		}
+
+		seenRowID := make(map[int]bool)
+		allRowIDs := make([]int, 0)
+		for _, rows := range batchRowsList {
+			for _, item := range rows {
+				if !seenRowID[item.ID] {
+					seenRowID[item.ID] = true
+					allRowIDs = append(allRowIDs, item.ID)
+				}
+			}
+		}
+		if len(allRowIDs) == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "没有可删除的执行记录")
+		}
+
+		if err := h.Service.DeleteInspectionsByIDs(c.Request().Context(), allRowIDs); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return echo.NewHTTPError(http.StatusNotFound, "执行记录不存在")
+			}
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete execution")
+		}
+
+		return inspectionOKWithMessage(c, "执行记录已批量删除", map[string]interface{}{
+			"deletedCount": len(uniqueIDs),
+		})
+	}
+
+	// 模式 2：全选筛选结果批量删除
+	excludeIDs := req.ExcludeIDs
+	if len(excludeIDs) == 0 && len(req.ExcludeIDsSnake) > 0 {
+		excludeIDs = req.ExcludeIDsSnake
+	}
+	excludeSet := make(map[string]bool, len(excludeIDs))
+	for _, id := range excludeIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			excludeSet[id] = true
+		}
+	}
+
+	var strategyID int
+	rawStrategyID := req.StrategyID
+	if rawStrategyID == nil {
+		rawStrategyID = req.StrategyIDSnake
+	}
+	if rawStrategyID != nil {
+		switch v := rawStrategyID.(type) {
+		case float64:
+			strategyID = int(v)
+		case int:
+			strategyID = v
+		case string:
+			strategyID = parseIntWithDefault(v, 0)
+		}
+	}
+
+	var statusList []string
+	if req.Status != nil {
+		switch v := req.Status.(type) {
+		case string:
+			statusList = splitCommaList(v)
+		case []string:
+			statusList = v
+		case []interface{}:
+			for _, item := range v {
+				if s, ok := item.(string); ok {
+					s = strings.TrimSpace(s)
+					if s != "" {
+						statusList = append(statusList, s)
+					}
+				}
+			}
+		}
+	}
+
+	startDateStr := req.StartDate
+	if startDateStr == "" {
+		startDateStr = req.StartDateSnake
+	}
+	endDateStr := req.EndDate
+	if endDateStr == "" {
+		endDateStr = req.EndDateSnake
+	}
+	loc := h.Settings.ResolveLocation(c.Request().Context())
+	startDate, _ := parseOptionalDate(startDateStr, loc)
+	endDate, _ := parseOptionalDate(endDateStr, loc)
+
+	query := db.WithContext(c.Request().Context()).Model(&inspection.Inspection{})
+	if strategyID > 0 {
+		query = query.Where("schedule_id = ?", strategyID)
+	}
+	having := h.buildExecutionFilterHaving(statusList, startDate, endDate)
+	groups, _, err := h.queryExecutionGroups(c.Request().Context(), query, "start_time DESC, min_id DESC", 1, 10000, having)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load executions")
+	}
+
+	var deletedBatchesCount int
+	allRowIDs := make([]int, 0)
+	seenRowID := make(map[int]bool)
+
+	for _, group := range groups {
+		if len(group.rows) == 0 {
+			continue
+		}
+		displayID := executionBatchDisplayID(group.rows)
+		if excludeSet[displayID] {
+			continue
+		}
+		hasExcludedRow := false
+		for _, row := range group.rows {
+			if excludeSet[strconv.Itoa(row.ID)] {
+				hasExcludedRow = true
+				break
+			}
+		}
+		if hasExcludedRow {
+			continue
+		}
+
+		// 自动跳过包含 running 状态的批次
+		hasRunning := false
+		for _, row := range group.rows {
+			if row.Status == inspection.StatusRunning {
+				hasRunning = true
+				break
+			}
+		}
+		if hasRunning {
+			continue
+		}
+
+		deletedBatchesCount++
+		for _, row := range group.rows {
+			if !seenRowID[row.ID] {
+				seenRowID[row.ID] = true
+				allRowIDs = append(allRowIDs, row.ID)
+			}
+		}
+	}
+
+	if len(allRowIDs) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "没有可删除的执行记录")
+	}
+
+	if err := h.Service.DeleteInspectionsByIDs(c.Request().Context(), allRowIDs); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete executions")
+	}
+
+	return inspectionOKWithMessage(c, "执行记录已批量删除", map[string]interface{}{
+		"deletedCount": deletedBatchesCount,
 	})
 }
 
