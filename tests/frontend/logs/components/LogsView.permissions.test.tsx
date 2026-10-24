@@ -33,12 +33,6 @@ jest.mock('@/features/logs/hooks/useLogs', () => ({
     resetFilters: jest.fn(),
     queryParams: {},
   }),
-  useLogSelection: () => ({
-    selectedLogs: [1, 2],
-    toggleLog: jest.fn(),
-    selectAll: jest.fn(),
-    clearSelection: jest.fn(),
-  }),
   useLogCollection: () => ({
     collecting: false,
     progress: {},
@@ -56,13 +50,15 @@ jest.mock('@/features/logs/components/LogStatsGrid', () => ({
 }))
 
 jest.mock('@/features/logs/components/LogFiltersBar', () => ({
-  LogFiltersBar: ({ selectedCount }: { selectedCount: number }) => (
-    <div>{`selected:${selectedCount}`}</div>
-  ),
+  LogFiltersBar: () => <div>filters</div>,
 }))
 
+const mockLogList = jest.fn()
 jest.mock('@/features/logs/components/LogList', () => ({
-  LogList: () => <div>list</div>,
+  LogList: (props: unknown) => {
+    mockLogList(props)
+    return <div>list</div>
+  },
 }))
 
 jest.mock('@/features/logs/components/LogDetailModal', () => ({
@@ -128,12 +124,19 @@ jest.mock('react-hot-toast', () => ({
 }))
 
 describe('LogsView 权限分支', () => {
-  it('无 system:logs:manage 权限时应隐藏采集/批量入口，且 selectedCount=0', () => {
+  it('无 system:logs:manage 权限时应隐藏采集/批量入口与底部批量操作栏，且禁用列表勾选', () => {
     render(<LogsView />)
 
     expect(screen.queryByRole('button', { name: /采集日志/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /批量操作/i })).toBeNull()
-    expect(screen.getByText('selected:0')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '批量操作栏' })).toBeNull()
+    expect(mockLogList).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        enableSelection: false,
+        selectedLogs: [],
+        onSelectLog: undefined,
+      })
+    )
   })
 
   it('应将筛选栏和页面动作收敛到同一条紧凑工具栏', () => {

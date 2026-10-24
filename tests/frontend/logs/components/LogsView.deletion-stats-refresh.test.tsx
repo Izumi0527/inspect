@@ -1,5 +1,5 @@
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { LogsView } from '@/features/logs/components/LogsView'
 
 const deleteLogMock = jest.fn()
@@ -55,12 +55,6 @@ jest.mock('@/features/logs/hooks/useLogs', () => ({
     resetFilters: jest.fn(),
     queryParams: {},
   }),
-  useLogSelection: () => ({
-    selectedLogs: [2, 1],
-    toggleLog: jest.fn(),
-    selectAll: jest.fn(),
-    clearSelection: clearSelectionMock,
-  }),
   useLogCollection: () => ({
     collecting: false,
     progress: {},
@@ -84,12 +78,20 @@ jest.mock('@/features/logs/components/LogFiltersBar', () => ({
 jest.mock('@/features/logs/components/LogList', () => ({
   LogList: ({
     onDelete,
+    onSelectLog,
   }: {
     onDelete?: (logId: number) => Promise<void> | void
+    onSelectLog?: (logId: number) => void
   }) => (
     <div>
       <button type="button" onClick={() => onDelete?.(2)}>
         删除日志 2
+      </button>
+      <button type="button" onClick={() => onSelectLog?.(2)}>
+        勾选日志 2
+      </button>
+      <button type="button" onClick={() => onSelectLog?.(1)}>
+        勾选日志 1
       </button>
     </div>
   ),
@@ -189,16 +191,76 @@ describe('LogsView 删除后的统计刷新', () => {
     expect(refreshStatsMock).toHaveBeenCalledTimes(1)
   })
 
-  it('批量删除成功后应刷新统计数据并清空选择', async () => {
+  it('勾选日志项后弹出正下方悬浮栏，点击红色删除并在弹窗中确认后触发 batchDeleteLogs 并刷新统计', async () => {
     render(<LogsView />)
 
-    fireEvent.click(screen.getByRole('button', { name: /批量删除/i }))
+    // 初始状态下无选中，不应渲染底部悬浮操作栏
+    expect(screen.queryByRole('region', { name: '批量操作栏' })).toBeNull()
+
+    // 勾选日志 2 与日志 1
+    fireEvent.click(screen.getByRole('button', { name: '勾选日志 2' }))
+    fireEvent.click(screen.getByRole('button', { name: '勾选日志 1' }))
+
+    // 正下方弹出 FloatingBatchActionBar
+    const floatingBar = screen.getByRole('region', { name: '批量操作栏' })
+    expect(floatingBar).toBeInTheDocument()
+    expect(screen.getByText('已选择 2 项')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '全选当前页' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '全选筛选结果' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '反选当前页' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '取消选择' })).toBeInTheDocument()
+
+    // 点击悬浮栏中的删除按钮
+    fireEvent.click(within(floatingBar).getByRole('button', { name: '删除' }))
+
+    // 弹出 BatchDeleteConfirmModal
+    expect(screen.getByRole('heading', { level: 3, name: '批量删除确认' })).toBeInTheDocument()
+    expect(screen.getByText(/确定要批量删除选中的 2 条日志记录吗/)).toBeInTheDocument()
+
+    // 点击弹窗中的「确认删除」
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }))
 
     await waitFor(() => {
       expect(batchDeleteLogsMock).toHaveBeenCalledWith([2, 1])
     })
 
-    expect(clearSelectionMock).toHaveBeenCalledTimes(1)
+    expect(refreshStatsMock).toHaveBeenCalledTimes(1)
+
+    // 删除成功后选择已清空，悬浮栏收起
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: '批量操作栏' })).toBeNull()
+    })
+  })
+
+  it('全选筛选结果模式下删除应传递 selectAllFiltered 与筛选参数并刷新统计', async () => {
+    render(<LogsView />)
+
+    fireEvent.click(screen.getByRole('button', { name: '勾选日志 2' }))
+    const floatingBar = screen.getByRole('region', { name: '批量操作栏' })
+    expect(floatingBar).toBeInTheDocument()
+
+    // 点击全选筛选结果
+    fireEvent.click(screen.getByRole('button', { name: '全选筛选结果' }))
+    expect(screen.getByText(/已全选筛选结果/)).toBeInTheDocument()
+
+    // 点击删除
+    fireEvent.click(within(floatingBar).getByRole('button', { name: '删除' }))
+
+    // 弹出确认弹窗
+    expect(screen.getByText(/确定要删除当前筛选结果中的全部/)).toBeInTheDocument()
+
+    // 点击确认删除
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }))
+
+    await waitFor(() => {
+      expect(batchDeleteLogsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          selectAllFiltered: true,
+          excludeIds: [],
+        })
+      )
+    })
+
     expect(refreshStatsMock).toHaveBeenCalledTimes(1)
   })
 })

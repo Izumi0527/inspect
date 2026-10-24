@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Trash2
 } from 'lucide-react'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PLAIN_TONE_STYLES } from '@/components/shared'
@@ -74,10 +73,13 @@ export const LogListItem: React.FC<LogListItemProps> = ({
     >
       {/* 选择框 */}
       {enableSelection && onSelect && (
-        <div className="pt-1" onClick={(e) => e.stopPropagation()}>
-          <Checkbox
+        <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
             checked={isSelected}
-            onCheckedChange={() => onSelect(log.id)}
+            onChange={() => onSelect(log.id)}
+            className="custom-checkbox"
+            aria-label={`选择日志 ${log.id}`}
           />
         </div>
       )}

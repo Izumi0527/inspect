@@ -4,7 +4,6 @@
 import React from 'react'
 import { FileText, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Pagination } from '@/components/atoms/pagination'
 import { LogListItem } from './LogListItem'
 import type { DeviceLog } from '../types'
@@ -20,9 +19,7 @@ interface PaginationProps {
 interface LogListProps {
   logs: DeviceLog[]
   selectedLogs: number[]
-  onSelectLog: (logId: number) => void
-  onSelectAll: (logIds: number[]) => void
-  onClearSelection: () => void
+  onSelectLog?: (logId: number) => void
   onDelete?: (logId: number) => void
   onLogClick?: (log: DeviceLog) => void
   onRefresh?: () => void
@@ -35,8 +32,6 @@ export const LogList: React.FC<LogListProps> = ({
   logs,
   selectedLogs,
   onSelectLog,
-  onSelectAll,
-  onClearSelection,
   onDelete,
   onLogClick,
   onRefresh,
@@ -44,21 +39,6 @@ export const LogList: React.FC<LogListProps> = ({
   loading = false,
   enableSelection = true
 }) => {
-  const selectedCountOnPage = enableSelection
-    ? logs.reduce((count, log) => count + (selectedLogs.includes(log.id) ? 1 : 0), 0)
-    : 0
-  const allSelected = enableSelection && logs.length > 0 && selectedCountOnPage === logs.length
-  const someSelected = enableSelection && selectedCountOnPage > 0 && !allSelected
-
-  const handleSelectAll = () => {
-    if (!enableSelection) return
-    if (allSelected) {
-      onClearSelection()
-    } else {
-      onSelectAll(logs.map(log => log.id))
-    }
-  }
-
   const totalPages = pagination.pageSize > 0 ? Math.ceil(pagination.total / pagination.pageSize) : 0
 
   return (
@@ -66,13 +46,6 @@ export const LogList: React.FC<LogListProps> = ({
       {/* 列表头部 */}
       <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2 bg-muted">
         <div className="flex items-center gap-3">
-          {enableSelection && (
-            <Checkbox
-              checked={allSelected}
-              indeterminate={someSelected}
-              onCheckedChange={handleSelectAll}
-            />
-          )}
           <span className="text-sm text-muted-foreground">
             共 {pagination.total.toLocaleString()} 条日志
           </span>

@@ -15,7 +15,6 @@ export {
   useLogs,
   useLogStats,
   useLogFilters,
-  useLogSelection,
   useLogCollection,
   useRecentLogs
 } from './hooks/useLogs'

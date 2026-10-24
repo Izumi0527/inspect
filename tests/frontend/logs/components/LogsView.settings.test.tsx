@@ -48,12 +48,6 @@ jest.mock('@/features/logs/hooks/useLogs', () => ({
     resetFilters: jest.fn(),
     queryParams: {},
   }),
-  useLogSelection: () => ({
-    selectedLogs: [],
-    toggleLog: jest.fn(),
-    selectAll: jest.fn(),
-    clearSelection: jest.fn(),
-  }),
   useLogCollection: () => ({
     collecting: false,
     progress: {},

@@ -202,12 +202,56 @@ export async function deleteLog(logId: number): Promise<void> {
 }
 
 /**
+ * 批量删除日志请求参数
+ */
+export interface BatchDeleteLogsRequest extends Partial<LogQueryParams> {
+  logIds?: number[]
+  selectAllFiltered?: boolean
+  excludeIds?: number[]
+  deviceId?: number
+  startTime?: string
+  endTime?: string
+  includeSelf?: boolean
+}
+
+/**
  * 批量删除日志
  */
-export async function batchDeleteLogs(logIds: number[]): Promise<{ deleted_count: number }> {
-  const payload = await api.post<unknown>(`${BASE_URL}/batch-delete`, {
-    log_ids: logIds
-  })
+export async function batchDeleteLogs(
+  params: number[] | BatchDeleteLogsRequest
+): Promise<{ deleted_count: number }> {
+  let body: Record<string, unknown>
+  if (Array.isArray(params)) {
+    body = { logIds: params, log_ids: params }
+  } else if (params.selectAllFiltered) {
+    const deviceId = params.deviceId ?? params.device_id
+    const startTime = params.startTime ?? params.start_time
+    const endTime = params.endTime ?? params.end_time
+    const includeSelf = params.includeSelf ?? params.include_self
+    body = {
+      selectAllFiltered: true,
+      excludeIds: params.excludeIds,
+      exclude_ids: params.excludeIds,
+      level: params.level,
+      facility: params.facility,
+      source: params.source,
+      deviceId,
+      device_id: deviceId,
+      search: params.search,
+      startTime,
+      start_time: startTime,
+      endTime,
+      end_time: endTime,
+      includeSelf,
+      include_self: includeSelf,
+    }
+  } else {
+    body = {
+      logIds: params.logIds,
+      log_ids: params.logIds,
+    }
+  }
+  const payload = await api.post<unknown>(`${BASE_URL}/batch-delete`, body)
   return unwrapPayload<{ deleted_count: number }>(payload)
 }
 

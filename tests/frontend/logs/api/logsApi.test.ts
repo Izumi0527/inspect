@@ -139,5 +139,55 @@ describe('logsApi 响应解包兼容', () => {
     const result = await batchDeleteLogs([1, 2, 3])
 
     expect(result.deleted_count).toBe(3)
+    expect(mockPost).toHaveBeenCalledWith(
+      '/logs/batch-delete',
+      expect.objectContaining({ logIds: [1, 2, 3] })
+    )
+  })
+
+  it('batchDeleteLogs 支持 BatchDeleteLogsRequest 对象参数', async () => {
+    mockPost.mockResolvedValue({ deleted_count: 5 })
+
+    const result = await batchDeleteLogs({
+      selectAllFiltered: true,
+      excludeIds: [9],
+      level: 'error',
+      facility: 'auth',
+      source: 'syslog',
+      device_id: 10,
+      search: 'link down',
+      start_time: '2026-10-01',
+      end_time: '2026-10-02',
+      include_self: false,
+    })
+
+    expect(result.deleted_count).toBe(5)
+    expect(mockPost).toHaveBeenCalledWith(
+      '/logs/batch-delete',
+      expect.objectContaining({
+        selectAllFiltered: true,
+        excludeIds: [9],
+        level: 'error',
+        facility: 'auth',
+        source: 'syslog',
+        deviceId: 10,
+        search: 'link down',
+        startTime: '2026-10-01',
+        endTime: '2026-10-02',
+        includeSelf: false,
+      })
+    )
+  })
+
+  it('batchDeleteLogs 支持显式 logIds 对象参数', async () => {
+    mockPost.mockResolvedValue({ deleted_count: 2 })
+
+    const result = await batchDeleteLogs({ logIds: [101, 102] })
+
+    expect(result.deleted_count).toBe(2)
+    expect(mockPost).toHaveBeenCalledWith(
+      '/logs/batch-delete',
+      expect.objectContaining({ logIds: [101, 102] })
+    )
   })
 })

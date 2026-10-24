@@ -15,6 +15,7 @@ import type {
 
 interface RequestOptions {
   showToast?: boolean
+  refreshStats?: () => Promise<unknown> | unknown
 }
 
 /** 从 unknown 错误对象提取展示消息（catch 参数不使用 any） */
@@ -85,14 +86,29 @@ export function useLogs(params: LogQueryParams = {}) {
     }
   }, [loadLogs])
 
-  const batchDeleteLogs = useCallback(async (logIds: number[], options: RequestOptions = {}) => {
-    const { showToast = true } = options
+  const batchDeleteLogs = useCallback(async (
+    params: number[] | logsApi.BatchDeleteLogsRequest,
+    options: RequestOptions = {}
+  ) => {
+    const { showToast = true, refreshStats } = options
+    if (Array.isArray(params)) {
+      if (params.length === 0) return false
+    } else {
+      if (!params.selectAllFiltered && (!params.logIds || params.logIds.length === 0)) {
+        return false
+      }
+    }
+
     try {
-      const result = await logsApi.batchDeleteLogs(logIds)
+      const result = await logsApi.batchDeleteLogs(params)
       if (showToast) {
         toast.success(`成功删除 ${result.deleted_count} 条日志`)
       }
-      await loadLogs({ showToast: false })
+      if (refreshStats) {
+        await Promise.all([loadLogs({ showToast: false }), refreshStats()])
+      } else {
+        await loadLogs({ showToast: false })
+      }
       return true
     } catch (err) {
       if (showToast) {
@@ -345,41 +361,6 @@ export function useLogCollection() {
     progress,
     collectLogs,
     batchCollect
-  }
-}
-
-/**
- * 日志选择 Hook
- */
-export function useLogSelection() {
-  const [selectedLogs, setSelectedLogs] = useState<number[]>([])
-
-  const toggleLog = useCallback((logId: number) => {
-    setSelectedLogs(prev =>
-      prev.includes(logId)
-        ? prev.filter(id => id !== logId)
-        : [...prev, logId]
-    )
-  }, [])
-
-  const selectAll = useCallback((logIds: number[]) => {
-    setSelectedLogs(logIds)
-  }, [])
-
-  const clearSelection = useCallback(() => {
-    setSelectedLogs([])
-  }, [])
-
-  const isSelected = useCallback((logId: number) => {
-    return selectedLogs.includes(logId)
-  }, [selectedLogs])
-
-  return {
-    selectedLogs,
-    toggleLog,
-    selectAll,
-    clearSelection,
-    isSelected
   }
 }
 

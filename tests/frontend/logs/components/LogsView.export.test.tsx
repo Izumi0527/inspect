@@ -45,12 +45,6 @@ jest.mock('@/features/logs/hooks/useLogs', () => ({
       end_time: '2026-02-25',
     },
   }),
-  useLogSelection: () => ({
-    selectedLogs: [],
-    toggleLog: jest.fn(),
-    selectAll: jest.fn(),
-    clearSelection: jest.fn(),
-  }),
   useLogCollection: () => ({
     collecting: false,
     progress: {},

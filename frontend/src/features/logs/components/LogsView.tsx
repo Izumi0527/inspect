@@ -1,7 +1,7 @@
 /**
  * 日志中心主视图
  */
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppLayout } from '@/components/layout'
 import { usePermission } from '@/lib/contexts/auth-context'
@@ -10,7 +10,6 @@ import {
   useLogs,
   useLogStats,
   useLogFilters,
-  useLogSelection,
   useLogCollection
 } from '../hooks/useLogs'
 import { exportLogs as exportLogsApi } from '../api/logsApi'
@@ -21,7 +20,12 @@ import { LogDetailModal } from './LogDetailModal'
 import { LogCollectionModal } from './LogCollectionModal'
 import { SkeletonCard, SkeletonList } from '@/components/atoms/skeleton'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
-import { CompactPageToolbar } from '@/components/shared'
+import {
+  CompactPageToolbar,
+  FloatingBatchActionBar,
+  BatchDeleteConfirmModal
+} from '@/components/shared'
+import { useBatchSelection } from '@/hooks'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,7 +36,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   Download,
-  Trash2,
   RefreshCw,
   Play,
   Settings
@@ -43,10 +46,13 @@ import type { DeviceLog } from '../types'
 export const LogsView: React.FC = () => {
   const router = useRouter()
   const canManageLogs = usePermission(Permission.SYSTEM_LOGS_MANAGE)
+  const canDeleteLogs = canManageLogs
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [selectedLog, setSelectedLog] = useState<DeviceLog | null>(null)
   const [collectionOpen, setCollectionOpen] = useState(false)
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // 获取过滤器状态
   const { filters, updateFilter, queryParams } = useLogFilters()
@@ -70,13 +76,24 @@ export const LogsView: React.FC = () => {
   } = useLogs(fullQueryParams)
 
   const { stats, loading: statsLoading, refresh: refreshStats } = useLogStats()
-  const {
-    selectedLogs,
-    toggleLog,
-    selectAll,
-    clearSelection
-  } = useLogSelection()
   const { collecting, progress, collectLogs, batchCollect } = useLogCollection()
+
+  const batchSelection = useBatchSelection<DeviceLog, number>({
+    items: logs,
+    totalCount: pagination.total,
+    getId: (log) => log.id,
+    filterDeps: [
+      queryParams.level,
+      queryParams.facility,
+      queryParams.source,
+      queryParams.device_id,
+      queryParams.search,
+      queryParams.start_time,
+      queryParams.end_time,
+      queryParams.include_self,
+    ],
+    pageDeps: [currentPage, pageSize],
+  })
 
   // 分页越界自愈（例如批量删除导致总页数减少）
   const totalPages = useMemo(() => {
@@ -88,20 +105,22 @@ export const LogsView: React.FC = () => {
   useEffect(() => {
     if (totalPages > 0 && currentPage > totalPages) {
       setCurrentPage(totalPages)
-      clearSelection()
+      batchSelection.clearSelection()
     }
-  }, [clearSelection, currentPage, totalPages])
+  }, [batchSelection, currentPage, totalPages])
 
   // 处理分页
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    clearSelection()
+    batchSelection.clearSelection()
   }
+
+  const changePage = handlePageChange
 
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize)
     setCurrentPage(1)
-    clearSelection()
+    batchSelection.clearSelection()
   }
 
   // 处理过滤器变更时重置页码
@@ -111,28 +130,59 @@ export const LogsView: React.FC = () => {
   ) => {
     updateFilter(key, value)
     setCurrentPage(1)
-    clearSelection()
+    batchSelection.clearSelection()
   }
 
-  // 处理批量删除
-  const handleBatchDelete = async () => {
-    if (!canManageLogs) {
+  // 确认批量删除
+  const handleConfirmBatchDelete = useCallback(async () => {
+    if (!canDeleteLogs) {
       toast.error('无权限执行批量删除')
       return
     }
-    if (selectedLogs.length === 0) {
-      toast.error('请先选择要删除的日志')
-      return
-    }
 
-    if (confirm(`确定要删除选中的 ${selectedLogs.length} 条日志吗？`)) {
-      const ok = await batchDeleteLogs(selectedLogs)
-      if (ok) {
-        clearSelection()
-        await refreshStats()
+    try {
+      setIsDeleting(true)
+      let ok = false
+      if (batchSelection.selectionMode === 'all_filtered') {
+        ok = await batchDeleteLogs({
+          selectAllFiltered: true,
+          excludeIds: Array.from(batchSelection.excludedIds).map(Number),
+          level: queryParams.level,
+          facility: queryParams.facility,
+          source: queryParams.source,
+          deviceId: queryParams.device_id,
+          device_id: queryParams.device_id,
+          search: queryParams.search,
+          startTime: queryParams.start_time,
+          start_time: queryParams.start_time,
+          endTime: queryParams.end_time,
+          end_time: queryParams.end_time,
+          includeSelf: queryParams.include_self,
+          include_self: queryParams.include_self,
+        })
+      } else {
+        ok = await batchDeleteLogs(Array.from(batchSelection.selectedIds).map(Number))
       }
+
+      if (ok) {
+        setShowBatchDeleteConfirm(false)
+        batchSelection.clearSelection()
+        await refreshStats()
+
+        if (
+          pagination.page > 1 &&
+          (batchSelection.selectionMode === 'all_filtered' ||
+            batchSelection.selectedIds.length >= logs.length)
+        ) {
+          changePage(pagination.page - 1)
+        }
+      }
+    } catch (err) {
+      console.error('Batch delete logs failed:', err)
+    } finally {
+      setIsDeleting(false)
     }
-  }
+  }, [canDeleteLogs, batchSelection, batchDeleteLogs, queryParams, refreshStats, pagination.page, logs.length, changePage])
 
   // 处理单条删除
   const handleDeleteLog = async (logId: number) => {
@@ -257,8 +307,6 @@ export const LogsView: React.FC = () => {
                 <LogFiltersBar
                   filters={filters}
                   onFilterChange={handleFilterChange}
-                  selectedCount={canManageLogs ? selectedLogs.length : 0}
-                  renderAsToolbar
                 />
               )}
               secondaryActions={[
@@ -305,25 +353,6 @@ export const LogsView: React.FC = () => {
                     </DropdownMenuContent>
                   </DropdownMenu>
 
-                  {canManageLogs && selectedLogs.length > 0 && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" type="button">
-                          批量操作 ({selectedLogs.length})
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={handleBatchDelete}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          批量删除
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-
                   <Button
                     variant="ghost"
                     type="button"
@@ -343,17 +372,15 @@ export const LogsView: React.FC = () => {
               ) : (
                 <LogList
                   logs={logs}
-                  selectedLogs={selectedLogs}
-                  onSelectLog={toggleLog}
-                  onSelectAll={selectAll}
-                  onClearSelection={clearSelection}
+                  selectedLogs={canDeleteLogs ? (batchSelection.rowSelection?.selectedRowKeys ?? batchSelection.selectedIds).map(Number) : []}
+                  onSelectLog={canDeleteLogs ? (id: number) => (batchSelection.toggleSelect ?? (batchSelection as any).toggleItem)(id) : undefined}
                   onDelete={canManageLogs ? handleDeleteLog : undefined}
                   onLogClick={handleLogClick}
                   onRefresh={() => {
                     void loadLogs()
                   }}
                   loading={loading}
-                  enableSelection={canManageLogs}
+                  enableSelection={canDeleteLogs}
                   pagination={{
                     current: pagination.page,
                     total: pagination.total,
@@ -386,6 +413,39 @@ export const LogsView: React.FC = () => {
           await Promise.all([loadLogs({ showToast: false }), refreshStats()])
         }}
       />
+
+      {/* 底部悬浮批量操作栏与批量删除确认弹窗 */}
+      {canDeleteLogs && (
+        <>
+          <FloatingBatchActionBar
+            selectedCount={batchSelection.selectedCount}
+            selectionMode={batchSelection.selectionMode}
+            totalCount={pagination.total}
+            isAllCurrentPageSelected={batchSelection.isAllCurrentPageSelected}
+            onSelectCurrentPage={batchSelection.selectCurrentPage}
+            onSelectAllFiltered={batchSelection.selectAllFiltered}
+            onInvertCurrentPage={batchSelection.invertCurrentPage}
+            onClearSelection={batchSelection.clearSelection}
+            onDelete={() => setShowBatchDeleteConfirm(true)}
+            isDeleting={isDeleting}
+          />
+
+          <BatchDeleteConfirmModal
+            isOpen={showBatchDeleteConfirm}
+            onClose={() => setShowBatchDeleteConfirm(false)}
+            onConfirm={handleConfirmBatchDelete}
+            isDeleting={isDeleting}
+            count={batchSelection.selectedCount}
+            isAllFiltered={batchSelection.selectionMode === 'all_filtered'}
+            description={
+              batchSelection.selectionMode === 'all_filtered'
+                ? `您确定要删除当前筛选结果中的全部 ${batchSelection.selectedCount} 条日志记录吗？`
+                : `您确定要批量删除选中的 ${batchSelection.selectedCount} 条日志记录吗？`
+            }
+            {...({ entityLabel: '条日志记录' } as Record<string, unknown>)}
+          />
+        </>
+      )}
     </AppLayout>
   )
 }

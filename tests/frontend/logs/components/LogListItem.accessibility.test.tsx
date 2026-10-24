@@ -37,4 +37,23 @@ describe('LogListItem 可访问性', () => {
     fireEvent.click(deleteButton)
     expect(onDelete).toHaveBeenCalledWith(9001)
   })
+
+  it('复选框应使用原生 custom-checkbox 并提供明确 aria-label', () => {
+    const onSelect = jest.fn()
+
+    render(
+      <LogListItem
+        log={sampleLog}
+        onSelect={onSelect}
+        isSelected={false}
+      />,
+    )
+
+    const checkbox = screen.getByRole('checkbox', { name: '选择日志 9001' })
+    expect(checkbox).toBeInTheDocument()
+    expect(checkbox).toHaveClass('custom-checkbox')
+
+    fireEvent.click(checkbox)
+    expect(onSelect).toHaveBeenCalledWith(9001)
+  })
 })

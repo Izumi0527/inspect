@@ -41,6 +41,9 @@ type SettingsGetter interface {
 
 // businessLoc 返回业务时区（*time.Location），供日期参数解析使用。
 func (h LogsHandler) businessLoc(c echo.Context) *time.Location {
+	if h.Settings == nil {
+		return time.UTC
+	}
 	return h.Settings.ResolveLocation(c.Request().Context())
 }
 
@@ -375,6 +378,27 @@ func (h LogsHandler) DeleteLog(c echo.Context) error {
 	})
 }
 
+type batchDeleteLogsRequest struct {
+	LogIDs                 []interface{} `json:"log_ids"`
+	LogIDsCamel            []interface{} `json:"logIds"`
+	SelectAllFiltered      bool          `json:"select_all_filtered"`
+	SelectAllFilteredCamel bool          `json:"selectAllFiltered"`
+	ExcludeIDs             []interface{} `json:"exclude_ids"`
+	ExcludeIDsCamel        []interface{} `json:"excludeIds"`
+	Level                  string        `json:"level"`
+	Facility               string        `json:"facility"`
+	Source                 string        `json:"source"`
+	DeviceID               interface{}   `json:"device_id"`
+	DeviceIDCamel          interface{}   `json:"deviceId"`
+	Search                 string        `json:"search"`
+	StartTime              string        `json:"start_time"`
+	StartTimeCamel         string        `json:"startTime"`
+	EndTime                string        `json:"end_time"`
+	EndTimeCamel           string        `json:"endTime"`
+	IncludeSelf            *bool         `json:"include_self"`
+	IncludeSelfCamel       *bool         `json:"includeSelf"`
+}
+
 func (h LogsHandler) BatchDeleteLogs(c echo.Context) error {
 	if _, err := requirePermission(c, h.Auth, logsManagePermission); err != nil {
 		return err
@@ -383,15 +407,138 @@ func (h LogsHandler) BatchDeleteLogs(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "log service not configured")
 	}
 
-	var req logs.DeleteLogsRequest
+	var req batchDeleteLogsRequest
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
 	}
-	if len(req.LogIDs) == 0 {
+
+	selectAllFiltered := req.SelectAllFiltered || req.SelectAllFilteredCamel
+
+	if selectAllFiltered {
+		excludeRaw := req.ExcludeIDs
+		if len(excludeRaw) == 0 {
+			excludeRaw = req.ExcludeIDsCamel
+		}
+		excludeIDs := parseIntListFromPayload(excludeRaw)
+		excludeSet := make(map[int]bool, len(excludeIDs))
+		for _, id := range excludeIDs {
+			excludeSet[id] = true
+		}
+
+		var deviceID *int
+		rawDeviceID := req.DeviceID
+		if rawDeviceID == nil {
+			rawDeviceID = req.DeviceIDCamel
+		}
+		if rawDeviceID != nil {
+			if id, ok := toInt(rawDeviceID); ok && id > 0 {
+				deviceID = &id
+			}
+		}
+
+		var level *string
+		if s := strings.TrimSpace(req.Level); s != "" {
+			level = &s
+		}
+		var facility *string
+		if s := strings.TrimSpace(req.Facility); s != "" {
+			facility = &s
+		}
+		var source *string
+		if s := strings.TrimSpace(req.Source); s != "" {
+			source = &s
+		}
+		var search *string
+		if s := strings.TrimSpace(req.Search); s != "" {
+			search = &s
+		}
+
+		startTimeStr := req.StartTime
+		if startTimeStr == "" {
+			startTimeStr = req.StartTimeCamel
+		}
+		endTimeStr := req.EndTime
+		if endTimeStr == "" {
+			endTimeStr = req.EndTimeCamel
+		}
+
+		loc := h.businessLoc(c)
+		startTime, _ := parseTimeOptional(startTimeStr, loc)
+		endTime, _ := parseTimeOptional(endTimeStr, loc)
+		if endTime != nil && isDateOnly(endTimeStr) {
+			adjusted := endTime.In(loc).Add(24*time.Hour - time.Nanosecond)
+			endTime = &adjusted
+		}
+
+		includeSelf := false
+		if req.IncludeSelf != nil {
+			includeSelf = *req.IncludeSelf
+		} else if req.IncludeSelfCamel != nil {
+			includeSelf = *req.IncludeSelfCamel
+		}
+
+		filter := logs.LogFilter{
+			DeviceID:    deviceID,
+			Level:       level,
+			Facility:    facility,
+			Source:      source,
+			Search:      search,
+			StartTime:   startTime,
+			EndTime:     endTime,
+			IncludeSelf: includeSelf,
+		}
+
+		allLogIDs := make([]int, 0)
+		ctx := c.Request().Context()
+		for skip := 0; skip < exportMaxRows; skip += exportBatchSize {
+			batch := filter
+			batch.Skip = skip
+			batch.Limit = exportBatchSize
+			rows, total, err := h.Service.ListLogs(ctx, batch)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to query logs for deletion")
+			}
+			for _, row := range rows {
+				allLogIDs = append(allLogIDs, row.ID)
+			}
+			if len(rows) < exportBatchSize || int64(skip+len(rows)) >= total {
+				break
+			}
+		}
+
+		ids := make([]int, 0, len(allLogIDs))
+		for _, id := range allLogIDs {
+			if !excludeSet[id] {
+				ids = append(ids, id)
+			}
+		}
+
+		if len(ids) == 0 {
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"deleted_count": 0,
+			})
+		}
+
+		deleted, err := h.Service.BatchDelete(c.Request().Context(), ids)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete logs")
+		}
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"deleted_count": deleted,
+		})
+	}
+
+	rawIDs := req.LogIDs
+	if len(rawIDs) == 0 {
+		rawIDs = req.LogIDsCamel
+	}
+	ids := parseIntListFromPayload(rawIDs)
+	if len(ids) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "log_ids is required")
 	}
 
-	deleted, err := h.Service.BatchDelete(c.Request().Context(), req.LogIDs)
+	deleted, err := h.Service.BatchDelete(c.Request().Context(), ids)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete logs")
 	}

@@ -173,8 +173,6 @@ describe('LogList 每页条数下拉', () => {
         logs={[buildLog(1), buildLog(2)]}
         selectedLogs={[]}
         onSelectLog={jest.fn()}
-        onSelectAll={jest.fn()}
-        onClearSelection={jest.fn()}
         pagination={{
           current: 1,
           total: 50,
@@ -211,8 +209,6 @@ describe('LogList 每页条数下拉', () => {
         logs={[buildLog(1), buildLog(2)]}
         selectedLogs={[]}
         onSelectLog={jest.fn()}
-        onSelectAll={jest.fn()}
-        onClearSelection={jest.fn()}
         pagination={{
           current: 1,
           total: 50,
@@ -237,8 +233,6 @@ describe('LogList 每页条数下拉', () => {
         logs={[buildLog(1), buildLog(2)]}
         selectedLogs={[]}
         onSelectLog={jest.fn()}
-        onSelectAll={jest.fn()}
-        onClearSelection={jest.fn()}
         pagination={{
           current: 2,
           total: 100,
@@ -259,7 +253,7 @@ describe('LogList 空列表分页', () => {
     const onPageSizeChange = jest.fn()
     const onRefresh = jest.fn()
     render(<LogList logs={[]} selectedLogs={[]} onSelectLog={jest.fn()}
-      onSelectAll={jest.fn()} onClearSelection={jest.fn()} onRefresh={onRefresh}
+      onRefresh={onRefresh}
       pagination={{ current: 1, total: 0, pageSize: 20, onPageChange: jest.fn(), onPageSizeChange }} />)
     expect(screen.getByText('暂无日志数据')).toBeInTheDocument()
     await userEvent.click(screen.getByTestId('logs-page-size-select'))
