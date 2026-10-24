@@ -6,10 +6,10 @@ import {
   Shield,
   Clock,
   User,
-  CheckCircle,
-  X
+  CheckCircle
 } from 'lucide-react'
 import { Button } from '@/components/atoms'
+import { DeleteIconButton } from '@/components/shared/DeleteIconButton'
 import { StatusRail, type StatusTone } from '@/components/atoms/status'
 import { cn } from '@/utils/cn'
 import { humanizeAlertCategory, translateToPlainLanguage } from '@/lib/plain-language'
@@ -185,15 +185,12 @@ export const AlertListItem: React.FC<AlertListItemProps> = ({
               </>
             )}
             {canDelete && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={(e) => handleButtonClick(e, handleDelete)}
+              <DeleteIconButton
+                stopPropagation
+                onClick={handleDelete}
+                title="删除"
                 aria-label="删除该告警"
-              >
-                <X className="w-4 h-4" />
-              </Button>
+              />
             )}
           </div>
         </div>

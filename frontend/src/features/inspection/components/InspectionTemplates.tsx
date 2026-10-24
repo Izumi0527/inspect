@@ -12,7 +12,6 @@ import {
   Plus,
   Edit,
   Copy,
-  Trash2,
   Eye,
   FileText,
   Shield,
@@ -37,6 +36,7 @@ import {
   Pagination,
 } from '@/components/atoms'
 import { CompactPageToolbar, CompactStatCard } from '@/components/shared'
+import { DeleteIconButton } from '@/components/shared/DeleteIconButton'
 import { FloatingBatchActionBar } from '@/components/shared/FloatingBatchActionBar'
 import { BatchDeleteConfirmModal } from '@/components/shared/BatchDeleteConfirmModal'
 import { useBatchSelection } from '@/hooks'
@@ -535,14 +535,10 @@ export const InspectionTemplates: React.FC = () => {
               >
                 <Edit className="w-4 h-4" />
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
+              <DeleteIconButton
                 onClick={() => handleDeleteTemplate(template)}
                 title="删除"
-              >
-                <Trash2 className="w-4 h-4 text-red-500" />
-              </Button>
+              />
             </>
           )}
         </div>

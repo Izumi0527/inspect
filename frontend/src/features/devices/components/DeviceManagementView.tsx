@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { AppLayout } from "@/components/layout";
 import { CompactPageToolbar } from "@/components/shared";
+import { DeleteIconButton } from '@/components/shared/DeleteIconButton';
 import { useAuth } from "@/lib/contexts/auth-context";
 import toast from "react-hot-toast";
 
@@ -827,17 +828,13 @@ export const DeviceManagementView: React.FC = () => {
           >
             <Edit className="h-4 w-4" />
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
+          <DeleteIconButton
             onClick={() => handleDeleteDevice(record)}
             disabled={!canDeleteDevice}
             aria-label={`删除设备 ${record.name}`}
             title={canDeleteDevice ? "删除" : "需要设备删除权限"}
             className="px-2"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          />
         </div>
       ),
     },

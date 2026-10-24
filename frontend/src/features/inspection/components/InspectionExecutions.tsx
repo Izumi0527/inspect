@@ -29,6 +29,7 @@ import {
   FloatingBatchActionBar,
   BatchDeleteConfirmModal
 } from '@/components/shared'
+import { DeleteIconButton } from '@/components/shared/DeleteIconButton'
 import { SimpleModal } from '@/components/atoms/modal'
 import { useBatchSelection } from '@/hooks'
 import {
@@ -533,16 +534,11 @@ export const InspectionExecutions: React.FC = () => {
               </Button>
             )}
             {canDelete && (
-              <Button
-                size="sm"
-                variant="ghost"
+              <DeleteIconButton
                 onClick={() => handleDeleteClick(execution)}
                 disabled={deleteExecution.isPending}
                 title="删除记录"
-                className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
+              />
             )}
           </div>
         )

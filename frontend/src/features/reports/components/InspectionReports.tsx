@@ -12,7 +12,6 @@ import {
   Download,
   Eye, 
   Edit, 
-  Trash2, 
   Clock, 
   Users,
   AlertCircle,
@@ -47,6 +46,7 @@ import {
 import { useBatchSelection } from '@/hooks/useBatchSelection'
 import { FloatingBatchActionBar } from '@/components/shared/FloatingBatchActionBar'
 import { BatchDeleteConfirmModal } from '@/components/shared/BatchDeleteConfirmModal'
+import { DeleteIconButton } from '@/components/shared/DeleteIconButton'
 import { downloadReport as fetchDownloadUrl } from '../api/reports.api'
 import { downloadWithAuth } from '@/utils/download'
 import { Report } from '../types'
@@ -431,14 +431,10 @@ export const InspectionReports: React.FC<Props> = ({
             </Button>
           )}
           {canDelete && (
-            <Button
-              size="sm"
-              variant="ghost"
+            <DeleteIconButton
               onClick={() => setDeleteConfirm(report.id)}
               title="删除"
-            >
-              <Trash2 className="w-4 h-4 text-red-500" />
-            </Button>
+            />
           )}
         </div>
       )

@@ -6,7 +6,6 @@ import {
   Play,
   Pause,
   Edit,
-  Trash2,
   Clock,
   Users,
   CheckCircle,
@@ -22,6 +21,7 @@ import {
   ConfirmModal
 } from '@/components/atoms'
 import { CompactPageToolbar } from '@/components/shared'
+import { DeleteIconButton } from '@/components/shared/DeleteIconButton'
 import { FloatingBatchActionBar } from '@/components/shared/FloatingBatchActionBar'
 import { BatchDeleteConfirmModal } from '@/components/shared/BatchDeleteConfirmModal'
 import { useBatchSelection } from '@/hooks'
@@ -266,14 +266,10 @@ export const InspectionStrategies: React.FC = () => {
           >
             <Edit className="w-4 h-4" />
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
+          <DeleteIconButton
             onClick={() => handleDeleteStrategy(strategy)}
             title="删除"
-          >
-            <Trash2 className="w-4 h-4 text-red-500" />
-          </Button>
+          />
         </div>
       )
     }
