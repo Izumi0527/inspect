@@ -14,3 +14,7 @@ export type {
   CompactPageToolbarSearch,
   CompactPageToolbarProps,
 } from './CompactPageToolbar'
+export { FloatingBatchActionBar } from './FloatingBatchActionBar'
+export type { FloatingBatchActionBarProps } from './FloatingBatchActionBar'
+export { BatchDeleteConfirmModal } from './BatchDeleteConfirmModal'
+export type { BatchDeleteConfirmModalProps } from './BatchDeleteConfirmModal'

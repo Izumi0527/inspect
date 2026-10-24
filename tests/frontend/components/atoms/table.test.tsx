@@ -57,6 +57,43 @@ describe("Table 行选择", () => {
 
     expect(onChange).toHaveBeenCalledWith([99, 1], data);
   });
+
+  it("支持 getCheckboxProps 禁用特定行并从全选计算中排除", () => {
+    const list = [
+      { id: 1, name: "dev-1", disabled: false },
+      { id: 2, name: "dev-2", disabled: true },
+    ];
+    const onChange = jest.fn();
+
+    render(
+      <Table
+        columns={columns}
+        data={list}
+        rowKey="id"
+        rowSelection={{
+          selectedRowKeys: [1],
+          onChange,
+          getCheckboxProps: (record) => ({
+            disabled: record.disabled,
+            title: record.disabled ? "任务执行中不可选" : undefined,
+          }),
+        }}
+      />
+    );
+
+    const [headerCheckbox, row1Checkbox, row2Checkbox] = screen.getAllByRole("checkbox");
+
+    // 因为第二行被禁用，只有第一行可选且已被选，表头应该呈现全选态
+    expect(headerCheckbox).toBeChecked();
+    expect(row1Checkbox).toBeChecked();
+    expect(row1Checkbox).not.toBeDisabled();
+    expect(row2Checkbox).toBeDisabled();
+    expect(row2Checkbox).toHaveAttribute("title", "任务执行中不可选");
+
+    // 点击被禁用的复选框不应触发 onChange
+    fireEvent.click(row2Checkbox);
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });
 
 describe('Table 统一分页空状态', () => {

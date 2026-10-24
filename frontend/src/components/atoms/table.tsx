@@ -41,6 +41,7 @@ export interface TableProps<T extends object> {
   rowSelection?: {
     selectedRowKeys: (string | number)[]
     onChange: (selectedRowKeys: (string | number)[], selectedRows: T[]) => void
+    getCheckboxProps?: (record: T) => { disabled?: boolean; title?: string }
   }
   onRow?: (record: T, index: number) => HTMLMotionProps<'tr'>
   className?: string
@@ -165,16 +166,29 @@ export function Table<T extends object>({
     () => new Set(currentPageKeys),
     [currentPageKeys]
   )
+  const selectableCurrentPageRecords = React.useMemo(() => {
+    if (!rowSelection?.getCheckboxProps) return data
+    return data.filter(record => !rowSelection.getCheckboxProps?.(record).disabled)
+  }, [data, rowSelection])
+
+  const selectableCurrentPageKeys = React.useMemo(
+    () => selectableCurrentPageRecords.map((record) => getRowKey(record, data.indexOf(record))),
+    [selectableCurrentPageRecords, data, getRowKey]
+  )
+  const selectableCurrentPageKeySet = React.useMemo(
+    () => new Set(selectableCurrentPageKeys),
+    [selectableCurrentPageKeys]
+  )
   const currentPageSelectedKeys = React.useMemo(
     () => rowSelection
-      ? rowSelection.selectedRowKeys.filter(key => currentPageKeySet.has(key))
+      ? rowSelection.selectedRowKeys.filter(key => selectableCurrentPageKeySet.has(key))
       : [],
-    [currentPageKeySet, rowSelection]
+    [selectableCurrentPageKeySet, rowSelection]
   )
   const allCurrentPageSelected =
-    currentPageSelectedKeys.length === data.length && data.length > 0
+    currentPageSelectedKeys.length === selectableCurrentPageKeys.length && selectableCurrentPageKeys.length > 0
   const partiallyCurrentPageSelected =
-    currentPageSelectedKeys.length > 0 && currentPageSelectedKeys.length < data.length
+    currentPageSelectedKeys.length > 0 && currentPageSelectedKeys.length < selectableCurrentPageKeys.length
 
   return (
     <div data-slot="table-container" className={cn('overflow-hidden', className)}>
@@ -190,6 +204,7 @@ export function Table<T extends object>({
                       type="checkbox"
                       className="custom-checkbox"
                       checked={allCurrentPageSelected}
+                      disabled={selectableCurrentPageKeys.length === 0}
                       ref={(input) => {
                         if (input) {
                           input.indeterminate = partiallyCurrentPageSelected
@@ -201,13 +216,13 @@ export function Table<T extends object>({
                             key => !currentPageKeySet.has(key)
                           )
                           rowSelection.onChange(
-                            Array.from(new Set([...nonVisibleKeys, ...currentPageKeys])),
-                            data
+                            Array.from(new Set([...nonVisibleKeys, ...selectableCurrentPageKeys])),
+                            selectableCurrentPageRecords
                           )
                         } else {
                           rowSelection.onChange(
                             rowSelection.selectedRowKeys.filter(
-                              key => !currentPageKeySet.has(key)
+                              key => !selectableCurrentPageKeySet.has(key)
                             ),
                             []
                           )
@@ -308,31 +323,38 @@ export function Table<T extends object>({
                     )}
                     {...restRowProps}
                   >
-                    {rowSelection && (
-                      <td className={cn(cellPadding[size], 'w-12')} style={{ width: '48px' }}>
-                        <input
-                          type="checkbox"
-                          className="custom-checkbox"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              rowSelection.onChange(
-                                [...rowSelection.selectedRowKeys, key],
-                                [...data.filter((_, i) => rowSelection.selectedRowKeys.includes(getRowKey(data[i], i))), record]
-                              )
-                            } else {
-                              rowSelection.onChange(
-                                rowSelection.selectedRowKeys.filter(k => k !== key),
-                                data.filter((_, i) => {
-                                  const rowKeyValue = getRowKey(data[i], i)
-                                  return rowSelection.selectedRowKeys.includes(rowKeyValue) && rowKeyValue !== key
-                                })
-                              )
-                            }
-                          }}
-                        />
-                      </td>
-                    )}
+                    {rowSelection && (() => {
+                      const checkboxProps = rowSelection.getCheckboxProps?.(record)
+                      const isDisabled = checkboxProps?.disabled
+                      return (
+                        <td className={cn(cellPadding[size], 'w-12')} style={{ width: '48px' }}>
+                          <input
+                            type="checkbox"
+                            className="custom-checkbox"
+                            checked={isSelected}
+                            disabled={isDisabled}
+                            title={checkboxProps?.title}
+                            onChange={(e) => {
+                              if (isDisabled) return
+                              if (e.target.checked) {
+                                rowSelection.onChange(
+                                  [...rowSelection.selectedRowKeys, key],
+                                  [...data.filter((_, i) => rowSelection.selectedRowKeys.includes(getRowKey(data[i], i))), record]
+                                )
+                              } else {
+                                rowSelection.onChange(
+                                  rowSelection.selectedRowKeys.filter(k => k !== key),
+                                  data.filter((_, i) => {
+                                    const rowKeyValue = getRowKey(data[i], i)
+                                    return rowSelection.selectedRowKeys.includes(rowKeyValue) && rowKeyValue !== key
+                                  })
+                                )
+                              }
+                            }}
+                          />
+                        </td>
+                      )
+                    })()}
                     {columns.map((column, colIndex) => {
                       const recordData = record as Record<string, unknown>
                       const rawValue = recordData[column.key]
