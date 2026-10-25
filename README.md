@@ -42,7 +42,7 @@ sudo bash install.sh --domain inspect.example.com
 锁定 ref 支持分支、tag 或 commit 短 hash（尚未打 tag 时用 commit 即可）：
 
 ```bash
-# 锁定到某个 tag 或 commit（示例为 v1.1.17 版本提交）
+# 锁定到某个 tag 或 commit（示例为 v1.1.18 版本提交）
 curl -fsSL https://raw.githubusercontent.com/Izumi0527/inspect/ac41823/scripts/install.sh \
   | sudo INSPECT_REF=ac41823 bash -s -- --domain inspect.example.com --yes
 ```
@@ -105,7 +105,7 @@ Firefox 使用独立证书库，需在 `设置 → 隐私与安全 → 证书 �
 
 ```bash
 sudo ./scripts/upgrade-ubuntu.sh                     # 升级到 main 最新
-sudo ./scripts/upgrade-ubuntu.sh --version v1.1.17   # 锁定到指定 tag / 分支 / commit
+sudo ./scripts/upgrade-ubuntu.sh --version v1.1.18   # 锁定到指定 tag / 分支 / commit
 sudo ./scripts/upgrade-ubuntu.sh --dry-run           # 仅打印将执行的操作，不产生任何变更
 sudo ./scripts/upgrade-ubuntu.sh --force             # 目标与当前一致时仍强制重建
 sudo ./scripts/upgrade-ubuntu.sh --yes               # CI/无终端场景必须显式 --yes
@@ -250,7 +250,7 @@ REDIS_URL=redis://:dev_redis_2024@127.0.0.1:16380/0
 
 Made with ❤️ by Izumi0527
 
-**项目版本**: v1.1.17 | **API版本**: v1.1.17 | **最后更新**: 2026-10-25
+**项目版本**: v1.1.18 | **API版本**: v1.1.18 | **最后更新**: 2026-10-26
 
 版本号权威源为仓库根 `VERSION` 文件
 
