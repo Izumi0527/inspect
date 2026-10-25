@@ -363,7 +363,7 @@ type inspectionDimension struct {
 }
 
 // inspectionDimensions 是全部可采集维度的清单，顺序即报告中的呈现顺序，
-// 与 inspection 包内置检查项的 metric 一一对应（20 项）。
+// 与 inspection 包内置检查项的 metric 一一对应（23 项）。
 //
 // **这是新增 metric 的第五处同步点**：漏加会让该维度既不算覆盖也不算未覆盖，
 // 报告的覆盖声明因此失真（外置测试 TestCoverage_BuiltinTemplateCoversItsDeviceTypeFully 守门）。
@@ -386,11 +386,14 @@ var inspectionDimensions = []inspectionDimension{
 	{Metric: "interface_discards", Label: "接口丢弃率"},
 	{Metric: "interface_admin_status", Label: "接口管理状态"},
 	{Metric: "interface_duplex", Label: "接口双工模式"},
+	{Metric: "interface_broadcast", Label: "接口非单播包率"},
 	{Metric: "bandwidth", Label: "带宽吞吐量"},
 	{Metric: "poe", Label: "PoE 供电"},
 	{Metric: "optical_power", Label: "光模块光功率"},
 	{Metric: "bgp_peers", Label: "BGP 邻居"},
 	{Metric: "firmware_version", Label: "固件版本"},
+	{Metric: "lldp_neighbors", Label: "LLDP 邻居"},
+	{Metric: "stp_status", Label: "生成树状态"},
 }
 
 // coverageUniverse 返回覆盖范围的全集（维度键集合）：模板声明的各可巡检设备类型

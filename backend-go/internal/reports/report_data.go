@@ -225,6 +225,10 @@ type InspectionCheckResult struct {
 	ComponentStatus *ComponentStatusReport
 	// DiskUsage 承载服务器逐分区磁盘使用率
 	DiskUsage *DiskUsageReport
+	// LLDPNeighbors 承载交换机 LLDP 邻居明细表
+	LLDPNeighbors *LLDPNeighborsReport
+	// PoE 承载交换机 PoE 端口供电与 PSE 余量明细表
+	PoE *PoEReport
 	// Threshold 本次实际生效的判定阈值，与上面六种明细正交——
 	// 带阈值的检查项无论有没有逐项明细，details 里都会带 threshold 字段。
 	// inspection_results 表没有阈值列，报告要说明「按什么口径判的」只能靠它。
@@ -319,7 +323,7 @@ type InterfaceRatioReport struct {
 }
 
 func parseInterfaceRatioDetails(raw *string) *InterfaceRatioReport {
-	payload, ok := decodeDetailsPayload[InterfaceRatioReport](raw, "interface_errors", "interface_discards")
+	payload, ok := decodeDetailsPayload[InterfaceRatioReport](raw, "interface_errors", "interface_discards", "interface_broadcast")
 	if !ok {
 		return nil
 	}
@@ -459,6 +463,59 @@ func parseDiskUsageDetails(raw *string) *DiskUsageReport {
 	return payload
 }
 
+// LLDPNeighborEntryReport 报告中的单个 LLDP 邻居行。
+type LLDPNeighborEntryReport struct {
+	LocalPort       string `json:"local_port"`
+	RemoteSysName   string `json:"remote_sys_name"`
+	RemotePort      string `json:"remote_port"`
+	RemoteMgmtIP    string `json:"remote_mgmt_ip"`
+	RemoteChassisID string `json:"remote_chassis_id"`
+}
+
+// LLDPNeighborsReport 对应 details 中 kind=lldp_neighbors 的载荷。
+type LLDPNeighborsReport struct {
+	Kind      string                    `json:"kind"`
+	Status    string                    `json:"status"`
+	Total     int                       `json:"total"`
+	Neighbors []LLDPNeighborEntryReport `json:"neighbors"`
+}
+
+func parseLLDPNeighborsDetails(raw *string) *LLDPNeighborsReport {
+	payload, ok := decodeDetailsPayload[LLDPNeighborsReport](raw, "lldp_neighbors")
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
+// PoEPortEntryReport 报告中的单个 PoE 端口供电行。
+type PoEPortEntryReport struct {
+	Index          string   `json:"index"`
+	ConsumingPower *float64 `json:"consuming_power"`
+	PeakPower      *float64 `json:"peak_power"`
+	Unit           string   `json:"unit"`
+}
+
+// PoEReport 对应 details 中 kind=poe 的载荷。
+type PoEReport struct {
+	Kind                string               `json:"kind"`
+	TotalPorts          int                  `json:"total_ports"`
+	TotalConsumingPower float64              `json:"total_consuming_power"`
+	RemainingPower      *float64             `json:"remaining_power"`
+	RemainingUnit       string               `json:"remaining_unit"`
+	WarningThreshold    float64              `json:"warning_threshold"`
+	CriticalThreshold   float64              `json:"critical_threshold"`
+	Ports               []PoEPortEntryReport `json:"ports"`
+}
+
+func parsePoEDetails(raw *string) *PoEReport {
+	payload, ok := decodeDetailsPayload[PoEReport](raw, "poe")
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
 // detailsKindProbe 只取顶层 kind，用于在完整反序列化前判断载荷类型。
 type detailsKindProbe struct {
 	Kind string `json:"kind"`
@@ -513,6 +570,12 @@ func parseCheckResultDetails(raw *string, result *InspectionCheckResult) {
 		return
 	}
 	if result.DiskUsage = parseDiskUsageDetails(raw); result.DiskUsage != nil {
+		return
+	}
+	if result.LLDPNeighbors = parseLLDPNeighborsDetails(raw); result.LLDPNeighbors != nil {
+		return
+	}
+	if result.PoE = parsePoEDetails(raw); result.PoE != nil {
 		return
 	}
 	result.ComponentStatus = parseComponentStatusDetails(raw)

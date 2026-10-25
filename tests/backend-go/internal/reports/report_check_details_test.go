@@ -30,6 +30,12 @@ func parseBGPPeersDetails(raw *string) *reports.BGPPeersReport
 //go:linkname parseComponentStatusDetails github.com/your-org/inspect-system/backend-go/internal/reports.parseComponentStatusDetails
 func parseComponentStatusDetails(raw *string) *reports.ComponentStatusReport
 
+//go:linkname parseLLDPNeighborsDetails github.com/your-org/inspect-system/backend-go/internal/reports.parseLLDPNeighborsDetails
+func parseLLDPNeighborsDetails(raw *string) *reports.LLDPNeighborsReport
+
+//go:linkname parsePoEDetails github.com/your-org/inspect-system/backend-go/internal/reports.parsePoEDetails
+func parsePoEDetails(raw *string) *reports.PoEReport
+
 //go:linkname writeInspectionPDF github.com/your-org/inspect-system/backend-go/internal/reports.writeInspectionPDF
 func writeInspectionPDF(path string, data reports.InspectionReportData) error
 
@@ -96,6 +102,21 @@ func TestParseInterfaceRatio_AcceptsDiscardsKind(t *testing.T) {
 	payload := strings.Replace(interfaceRatioPayload, "interface_errors", "interface_discards", -1)
 	if report := parseInterfaceRatioDetails(rawJSON(payload)); report == nil {
 		t.Fatal("interface_discards 应复用同一解析器，实际返回 nil")
+	}
+}
+
+// TestParseInterfaceRatio_AcceptsBroadcastKind 广播/非单播率共用同一载荷结构。
+func TestParseInterfaceRatio_AcceptsBroadcastKind(t *testing.T) {
+	payload := strings.Replace(interfaceRatioPayload, "interface_errors", "interface_broadcast", -1)
+	report := parseInterfaceRatioDetails(rawJSON(payload))
+	if report == nil {
+		t.Fatal("interface_broadcast 应复用同一解析器，实际返回 nil")
+	}
+	if report.Kind != "interface_broadcast" {
+		t.Fatalf("Kind = %q, want interface_broadcast", report.Kind)
+	}
+	if len(report.Interfaces) != 2 {
+		t.Fatalf("Interfaces count = %d, want 2", len(report.Interfaces))
 	}
 }
 
@@ -287,6 +308,96 @@ func TestParseComponentStatus_ReadsComponentsAndCriteria(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// LLDP 邻居与 PoE 结构化明细
+// ---------------------------------------------------------------------------
+
+const lldpNeighborsPayload = `{
+	"kind": "lldp_neighbors",
+	"status": "normal",
+	"total": 2,
+	"neighbors": [
+		{
+			"local_port": "GigabitEthernet0/0/1",
+			"remote_sys_name": "Switch-Core-01",
+			"remote_port": "GigabitEthernet1/0/24",
+			"remote_mgmt_ip": "192.168.1.1",
+			"remote_chassis_id": "00-11-22-33-44-55"
+		},
+		{
+			"local_port": "GigabitEthernet0/0/2",
+			"remote_sys_name": "AP-Floor-2",
+			"remote_port": "eth0",
+			"remote_mgmt_ip": "192.168.1.50",
+			"remote_chassis_id": "00-aa-bb-cc-dd-ee"
+		}
+	]
+}`
+
+func TestParseLLDPNeighborsDetails_ReadsTopologyEntries(t *testing.T) {
+	report := parseLLDPNeighborsDetails(rawJSON(lldpNeighborsPayload))
+	if report == nil {
+		t.Fatal("合法的 lldp_neighbors 载荷应解析成功，实际返回 nil")
+	}
+	if report.Kind != "lldp_neighbors" || report.Status != "normal" || report.Total != 2 {
+		t.Fatalf("LLDPReport metadata mismatch: %+v", report)
+	}
+	if len(report.Neighbors) != 2 {
+		t.Fatalf("Neighbors count = %d, want 2", len(report.Neighbors))
+	}
+	first := report.Neighbors[0]
+	if first.LocalPort != "GigabitEthernet0/0/1" || first.RemoteSysName != "Switch-Core-01" {
+		t.Errorf("first neighbor mismatch: %+v", first)
+	}
+}
+
+func TestParseLLDPNeighborsDetails_RejectsInvalidKind(t *testing.T) {
+	payload := `{"kind": "other", "total": 0}`
+	if report := parseLLDPNeighborsDetails(rawJSON(payload)); report != nil {
+		t.Errorf("非 lldp_neighbors kind 应返回 nil，实际返回 %+v", report)
+	}
+}
+
+const poePayload = `{
+	"kind": "poe",
+	"total_ports": 2,
+	"total_consuming_power": 45.5,
+	"remaining_power": 324.5,
+	"remaining_unit": "W",
+	"warning_threshold": 300.0,
+	"critical_threshold": 350.0,
+	"ports": [
+		{"index": "1", "consuming_power": 15.4, "peak_power": 18.0, "unit": "W"},
+		{"index": "2", "consuming_power": 30.1, "peak_power": 30.1, "unit": "W"}
+	]
+}`
+
+func TestParsePoEDetails_ReadsPowerAndThreshold(t *testing.T) {
+	report := parsePoEDetails(rawJSON(poePayload))
+	if report == nil {
+		t.Fatal("合法的 poe 载荷应解析成功，实际返回 nil")
+	}
+	if report.Kind != "poe" || report.TotalPorts != 2 || report.TotalConsumingPower != 45.5 {
+		t.Fatalf("PoE metadata mismatch: %+v", report)
+	}
+	if report.RemainingPower == nil || *report.RemainingPower != 324.5 {
+		t.Fatalf("PoE remaining power mismatch: %v", report.RemainingPower)
+	}
+	if len(report.Ports) != 2 {
+		t.Fatalf("Ports count = %d, want 2", len(report.Ports))
+	}
+	if report.Ports[0].Index != "1" || report.Ports[0].ConsumingPower == nil || *report.Ports[0].ConsumingPower != 15.4 {
+		t.Errorf("first port mismatch: %+v", report.Ports[0])
+	}
+}
+
+func TestParsePoEDetails_RejectsInvalidKind(t *testing.T) {
+	payload := `{"kind": "other", "total_ports": 0}`
+	if report := parsePoEDetails(rawJSON(payload)); report != nil {
+		t.Errorf("非 poe kind 应返回 nil，实际返回 %+v", report)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // 脏数据容错
 // ---------------------------------------------------------------------------
 
@@ -322,6 +433,12 @@ func TestParseCheckDetails_TolerantToBadInput(t *testing.T) {
 			if got := parseComponentStatusDetails(tc.raw); got != nil {
 				t.Errorf("parseComponentStatusDetails 应返回 nil，实际 %v", got)
 			}
+			if got := parseLLDPNeighborsDetails(tc.raw); got != nil {
+				t.Errorf("parseLLDPNeighborsDetails 应返回 nil，实际 %v", got)
+			}
+			if got := parsePoEDetails(tc.raw); got != nil {
+				t.Errorf("parsePoEDetails 应返回 nil，实际 %v", got)
+			}
 		})
 	}
 }
@@ -330,7 +447,7 @@ func TestParseCheckDetails_TolerantToBadInput(t *testing.T) {
 // 渲染
 // ---------------------------------------------------------------------------
 
-// inspectionDataWithDetailTables 构造一台设备跑完四类明细型检查项的报告数据。
+// inspectionDataWithDetailTables 构造一台设备跑完多类明细型检查项的报告数据。
 func inspectionDataWithDetailTables() reports.InspectionReportData {
 	return reports.InspectionReportData{
 		InspectionName: "核心区例行巡检",
@@ -357,13 +474,21 @@ func inspectionDataWithDetailTables() reports.InspectionReportData {
 						CheckItemName: "风扇状态", CheckItemType: "snmp", Status: "fail",
 						ComponentStatus: parseComponentStatusDetails(rawJSON(componentStatusPayload)),
 					},
+					{
+						CheckItemName: "LLDP 邻居", CheckItemType: "snmp", Status: "pass",
+						LLDPNeighbors: parseLLDPNeighborsDetails(rawJSON(lldpNeighborsPayload)),
+					},
+					{
+						CheckItemName: "PoE 供电状态", CheckItemType: "snmp", Status: "pass",
+						PoE: parsePoEDetails(rawJSON(poePayload)),
+					},
 				},
 			},
 		},
 	}
 }
 
-// TestInspectionPDF_RendersDetailTables 四类明细必须实际渲染进 PDF。
+// TestInspectionPDF_RendersDetailTables 明细必须实际渲染进 PDF。
 //
 // CJK 走子集嵌入，pdftotext 抽不出字符，无法断言文案。这里用「带明细的 PDF
 // 显著大于不带明细的同构 PDF」来证明表格确实画出去了——若渲染函数被漏调，
@@ -377,6 +502,8 @@ func TestInspectionPDF_RendersDetailTables(t *testing.T) {
 		bare.Devices[0].CheckResults[i].OpticalPower = nil
 		bare.Devices[0].CheckResults[i].BGPPeers = nil
 		bare.Devices[0].CheckResults[i].ComponentStatus = nil
+		bare.Devices[0].CheckResults[i].LLDPNeighbors = nil
+		bare.Devices[0].CheckResults[i].PoE = nil
 	}
 
 	fullSize := renderInspectionPDFSize(t, withDetails, "with-details.pdf")

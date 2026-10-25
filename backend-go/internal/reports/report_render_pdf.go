@@ -23,6 +23,8 @@ const (
 	pdfMarginMM    = 18.0
 	pdfBottomMM    = 15.0
 	pdfTopOffsetMM = 1.6
+	// pdfMaxDeviceCheckRows 单设备巡检结果表格的最大行数，超出截断
+	pdfMaxDeviceCheckRows = 30
 )
 
 func writeInspectionPDF(path string, data InspectionReportData) error {
@@ -163,8 +165,8 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 			pdf.Ln(5)
 			resultRows := make([][]string, 0, len(device.CheckResults))
 			for idx, result := range device.CheckResults {
-				if idx >= 12 {
-					resultRows = append(resultRows, []string{"已截断", fmt.Sprintf("仅展示前%d条检查结果", 12), "", "", ""})
+				if idx >= pdfMaxDeviceCheckRows {
+					resultRows = append(resultRows, []string{"已截断", fmt.Sprintf("仅展示前%d条检查结果", pdfMaxDeviceCheckRows), "", "", ""})
 					break
 				}
 				resultRows = append(resultRows, []string{
@@ -792,7 +794,7 @@ func writeInterfaceUtilizationPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckR
 }
 
 // writeCheckDetailTables 按明细类型分派渲染。
-// 五种载荷互斥，一条检查结果至多命中一种；都不命中时什么也不画。
+// 各类载荷互斥，一条检查结果至多命中一种；都不命中时什么也不画。
 func writeCheckDetailTables(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
 	writeInterfaceUtilizationPDFTable(pdf, result)
 	writeInterfaceRatioPDFTable(pdf, result)
@@ -800,6 +802,89 @@ func writeCheckDetailTables(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
 	writeBGPPeersPDFTable(pdf, result)
 	writeComponentStatusPDFTable(pdf, result)
 	writeDiskUsagePDFTable(pdf, result)
+	writeLLDPNeighborsPDFTable(pdf, result)
+	writePoEPDFTable(pdf, result)
+}
+
+// writeLLDPNeighborsPDFTable 为「LLDP 邻居状态」输出逐邻居拓扑明细表。
+func writeLLDPNeighborsPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.LLDPNeighbors
+	if detail == nil || len(detail.Neighbors) == 0 {
+		return
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+	writePDFSubSectionTitle(pdf, fmt.Sprintf("%s - LLDP 邻居拓扑明细（共发现 %d 个邻居）",
+		result.CheckItemName, detail.Total))
+
+	rows := make([][]string, 0, len(detail.Neighbors))
+	for _, nb := range detail.Neighbors {
+		rows = append(rows, []string{
+			fallbackPDFValue(nb.LocalPort),
+			fallbackPDFValue(nb.RemoteSysName),
+			fallbackPDFValue(nb.RemotePort),
+			fallbackPDFValue(nb.RemoteMgmtIP),
+			fallbackPDFValue(nb.RemoteChassisID),
+		})
+	}
+	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+	style.BodyAlign = "L"
+	style.WrapColumns = []int{0, 1, 2, 4}
+	pdfkit.GridTable(pdf,
+		[]string{"本端端口", "对端设备名", "对端端口", "对端管理IP", "对端机箱MAC/ID"},
+		rows, []float64{30, 36, 26, 26, 24.2}, style)
+}
+
+// writePoEPDFTable 为「PoE 供电余量」输出逐端口供电与 PSE 余量明细表。
+func writePoEPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
+	detail := result.PoE
+	if detail == nil || len(detail.Ports) == 0 {
+		return
+	}
+
+	pdf.Ln(4)
+	ensurePDFSpace(pdf, 40)
+
+	title := fmt.Sprintf("%s - PoE 端口供电明细（共 %d 个供电端口，合计消耗 %.1fW",
+		result.CheckItemName, detail.TotalPorts, detail.TotalConsumingPower)
+	if detail.RemainingPower != nil {
+		title += fmt.Sprintf("，剩余保障功率 %.1f%s）", *detail.RemainingPower, detail.RemainingUnit)
+	} else {
+		title += "）"
+	}
+	writePDFSubSectionTitle(pdf, title)
+
+	rows := make([][]string, 0, len(detail.Ports))
+	for _, port := range detail.Ports {
+		consuming := pdfEmptyValuePlaceholder
+		if port.ConsumingPower != nil {
+			unit := port.Unit
+			if unit == "" {
+				unit = "W"
+			}
+			consuming = fmt.Sprintf("%.1f%s", *port.ConsumingPower, unit)
+		}
+		peak := pdfEmptyValuePlaceholder
+		if port.PeakPower != nil {
+			unit := port.Unit
+			if unit == "" {
+				unit = "W"
+			}
+			peak = fmt.Sprintf("%.1f%s", *port.PeakPower, unit)
+		}
+		rows = append(rows, []string{
+			port.Index,
+			consuming,
+			peak,
+		})
+	}
+	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
+	style.BodyAlign = "L"
+	style.WrapColumns = []int{0}
+	pdfkit.GridTable(pdf,
+		[]string{"端口", "当前消耗功率", "峰值功率"},
+		rows, []float64{50, 46, 46.2}, style)
 }
 
 // writeDiskUsagePDFTable 输出服务器逐分区磁盘使用率明细，最坏的分区在前（执行端已排序）。
@@ -927,8 +1012,16 @@ func writeInterfaceRatioPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult)
 		style := defaultPDFTableStyle(pdfHeaderStyleBlue)
 		style.BodyAlign = "L"
 		style.WrapColumns = []int{0}
+		ratioHeader := "比率"
+		countHeader := "计数"
+		packetsHeader := "包数"
+		if detail.Kind == "interface_broadcast" {
+			ratioHeader = "非单播率"
+			countHeader = "非单播包数"
+			packetsHeader = "单播包数"
+		}
 		pdfkit.GridTable(pdf,
-			[]string{"接口", "峰值方向", "比率", "计数", "包数"},
+			[]string{"接口", "峰值方向", ratioHeader, countHeader, packetsHeader},
 			rows, []float64{46, 20, 22, 27, 27.2}, style)
 	}
 
@@ -1675,6 +1768,18 @@ func inspectionRemediation(checkName, checkType string) string {
 		return "确认设备电源与上联链路状态，检查中间链路 ACL / 防火墙策略与路由是否变更；持续不可达需现场确认设备是否宕机。"
 	case contains("利用率", "带宽", "utilization", "bandwidth"):
 		return "查看「逐接口明细」定位高负载接口；评估链路扩容、启用链路聚合或调整流量调度策略，并核实是否存在异常大流量。"
+	case contains("光模块", "光功率", "optical", "transceiver"):
+		return "查看「逐光模块明细」定位收发光异常端口；检查光纤跳线是否弯折/脏污、清洁法兰盘与光纤端面，若偏置电流升高发光衰减则应更换光模块。"
+	case contains("poe", "供电余量", "pse"):
+		return "查看「PoE 供电明细」核查高功耗端口与 PSE 剩余保障功率；调整终端供电优先级或下线冗余受电设备，必要时扩充交换机 PoE 电源模块。"
+	case contains("lldp", "邻居"):
+		return "检查设备全局与端口 LLDP 协议是否开启，核对对端交换机/路由器连线与配置；若邻居缺失需排查物理链路或对端 LLDP 发送配置。"
+	case contains("stp", "生成树", "dot1d"):
+		return "生成树近期发生拓扑重算；排查二层网络是否存在频繁 up/down 的抖动链路、环路或非根桥抢占，检查边缘端口是否配置 edge-port/portfast 与 BPDU 保护。"
+	case contains("非单播", "广播", "nucast", "broadcast", "multicast", "风暴"):
+		return "查看「逐接口明细」定位非单播包占比较高的端口；排查二层环路、ARP/DHCP 泛洪或组播源异常，建议在接入端口配置风暴抑制（Storm Control）与端口安全。"
+	case contains("双工", "duplex", "半双工"):
+		return "高速以太网接口误协商为半双工是引起严重错包与性能骤降的典型根因；检查网线线序与质量，排查接口速率/双工自动协商（Auto-Negotiation）配置。"
 	case contains("接口", "端口", "interface", "port"):
 		return "核对 down 端口与错包计数，检查光模块、跳线与对端配置，排除物理层故障。"
 	case contains("丢包", "误码", "crc"):

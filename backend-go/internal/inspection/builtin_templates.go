@@ -228,6 +228,35 @@ func ckFirmwareVersion() map[string]interface{} {
 	}
 }
 
+// ckLLDPNeighbors LLDP 邻居状态与拓扑连线。通过已采集的 LLDP 邻居表核查上下联拓扑连接。
+func ckLLDPNeighbors() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "lldp_neighbors", "name": "LLDP 邻居状态", "description": "检查 LLDP 协议运行状态与邻居发现情况，核查上下联链路拓扑",
+		"type": "snmp", "category": "connectivity", "metric": "lldp_neighbors", "weight": 7,
+		"config": map[string]interface{}{}, "enabled": true,
+	}
+}
+
+// ckSTPStatus 生成树 STP 拓扑稳定性（BRIDGE-MIB dot1dStp）。检测近期是否发生生成树重算与拓扑震荡。
+func ckSTPStatus() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "stp_status", "name": "生成树拓扑状态", "description": "监控生成树运行状态与近期拓扑变更，识别二层环路或链路震荡引起的重算",
+		"type": "snmp", "category": "health", "metric": "stp_status", "weight": 9,
+		"config":  map[string]interface{}{"unit": "s", "threshold": map[string]interface{}{"warning": 3600, "critical": 300}},
+		"enabled": true,
+	}
+}
+
+// ckInterfaceBroadcast 接口非单播/广播包占比。基于 IF-MIB ifInNUcastPkts/ifOutNUcastPkts，识别二层广播风暴隐患。
+func ckInterfaceBroadcast() map[string]interface{} {
+	return map[string]interface{}{
+		"id": "interface_broadcast", "name": "接口非单播包率", "description": "逐接口统计非单播（广播/组播）报文占比，识别广播风暴与二层异常流量",
+		"type": "snmp", "category": "performance", "metric": "interface_broadcast", "weight": 8,
+		"config":  map[string]interface{}{"unit": "%", "threshold": map[string]interface{}{"warning": 15.0, "critical": 30.0}},
+		"enabled": true,
+	}
+}
+
 // ---------------------------------------------------------------------------
 // 主机专项检查项（HOST-RESOURCES-MIB，Linux net-snmp 与 Windows SNMP 服务均支持）
 // ---------------------------------------------------------------------------
@@ -283,7 +312,9 @@ func builtinTemplateSeeds() []builtinTemplateSeed {
 				describe(ckInterfaceUtilization(), "逐端口计算入/出方向带宽利用率，识别上联与汇聚链路拥塞"),
 				ckInterfaceErrors(), ckInterfaceDiscards(),
 				describe(ckInterfaceDuplex(), "检测高速端口是否误协商为半双工（接入终端的常见故障）"),
-				ckOpticalPower(), ckPoEStatus(), ckFirmwareVersion(),
+				ckOpticalPower(), ckPoEStatus(),
+				ckLLDPNeighbors(), ckSTPStatus(), ckInterfaceBroadcast(),
+				ckFirmwareVersion(),
 			},
 		},
 		{

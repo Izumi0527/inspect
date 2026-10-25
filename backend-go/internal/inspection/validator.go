@@ -362,8 +362,10 @@ var validSNMPMetrics = []string{
 	"interface", "interface_utilization", "bandwidth",
 	// 接口健康类（标准 IF-MIB / EtherLike-MIB，全厂商通用）
 	"interface_errors", "interface_discards", "interface_admin_status", "interface_duplex",
-	// 硬件部件与专项（厂商 catalog，采不到时检查项判 skip）
+	"interface_broadcast",
+	// 硬件部件与专项（厂商 catalog 或标准协议，采不到时检查项判 skip）
 	"fan_status", "power_status", "poe", "optical_power", "bgp_peers", "firmware_version",
+	"lldp_neighbors", "stp_status",
 	// 主机专项（HOST-RESOURCES-MIB，服务器模板使用）
 	"disk_usage",
 }

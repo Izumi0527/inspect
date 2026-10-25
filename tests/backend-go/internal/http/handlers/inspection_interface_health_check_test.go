@@ -374,3 +374,126 @@ func TestInterfaceDuplex_DownPortIgnored(t *testing.T) {
 		t.Errorf("已 down 的端口不应参与双工判定，实际 %q（消息：%v）", result.Status, result.Message)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// 接口非单播/广播包率
+// ---------------------------------------------------------------------------
+
+// TestInterfaceBroadcast_HighRatioFails 非单播包比例超过严重阈值应判失败。
+func TestInterfaceBroadcast_HighRatioFails(t *testing.T) {
+	bad := healthyPort("GigabitEthernet0/0/1")
+	// 40000 非单播 / (40000 + 60000) = 40%，超过故障阈值 30%
+	bad.InNUcastPkts = u64(40000)
+	bad.InUcastPkts = u64(60000)
+
+	result := runMetricCheck(t, "interface_broadcast", &devices.SNMPMetrics{
+		Interfaces: []devices.InterfaceMetrics{bad},
+	}, thresholdConfig(15.0, 30.0, "%"))
+
+	if result.Status != "fail" {
+		t.Errorf("非单播率 40%% 应判 fail，实际 %q（消息：%v）", result.Status, result.Message)
+	}
+	if result.ActualValue == nil || !strings.Contains(*result.ActualValue, "40.00%") {
+		t.Errorf("实际值应包含 40.00%%，实际 %v", result.ActualValue)
+	}
+}
+
+// TestInterfaceBroadcast_LowTrafficPortSkipped 样本包数不足 1000 的端口归入 skipped，防低流量误报。
+func TestInterfaceBroadcast_LowTrafficPortSkipped(t *testing.T) {
+	lowTraffic := healthyPort("GigabitEthernet0/0/1")
+	// 80 非单播 + 20 单播 = 100 包 < 1000
+	lowTraffic.InNUcastPkts = u64(80)
+	lowTraffic.InUcastPkts = u64(20)
+	lowTraffic.OutNUcastPkts = u64(0)
+	lowTraffic.OutUcastPkts = u64(0)
+
+	result := runMetricCheck(t, "interface_broadcast", &devices.SNMPMetrics{
+		Interfaces: []devices.InterfaceMetrics{lowTraffic},
+	}, nil)
+
+	if result.Status != "skip" {
+		t.Errorf("低流量端口应判 skip，实际 %q（消息：%v）", result.Status, result.Message)
+	}
+
+	payload := decodeDetails(t, result)
+	skipped := detailRows(t, payload, "skipped")
+	if len(skipped) != 1 {
+		t.Fatalf("应有 1 个跳过接口，实际 %d", len(skipped))
+	}
+	if rowString(t, skipped[0], "reason") != "样本包数不足 1000，不计风暴比率" {
+		t.Errorf("跳过原因应为样本包数不足，实际 %v", skipped[0]["reason"])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 生成树拓扑状态 (STP)
+// ---------------------------------------------------------------------------
+
+// TestSTPStatus_RecentTopologyChangeFails 距上次拓扑变更时间过短（重算频繁）判故障。
+func TestSTPStatus_RecentTopologyChangeFails(t *testing.T) {
+	timeSince := int64(120) // 120 秒 <= critical 300 秒
+	topChanges := int64(42)
+	result := runMetricCheck(t, "stp_status", &devices.SNMPMetrics{
+		STP: devices.STPMetrics{
+			TimeSinceTopologyChange: &timeSince,
+			TopChanges:              &topChanges,
+		},
+	}, thresholdConfig(3600, 300, "s"))
+
+	if result.Status != "fail" {
+		t.Errorf("STP 变更距今 120 秒应判 fail，实际 %q（消息：%v）", result.Status, result.Message)
+	}
+	if result.ActualValue == nil || !strings.Contains(*result.ActualValue, "120 秒") {
+		t.Errorf("实际值应包含 120 秒，实际 %v", result.ActualValue)
+	}
+}
+
+// TestSTPStatus_StablePasses 生成树稳定（长久无重算）判通过。
+func TestSTPStatus_StablePasses(t *testing.T) {
+	timeSince := int64(86400) // 86400 秒 > 3600 秒
+	topChanges := int64(3)
+	result := runMetricCheck(t, "stp_status", &devices.SNMPMetrics{
+		STP: devices.STPMetrics{
+			TimeSinceTopologyChange: &timeSince,
+			TopChanges:              &topChanges,
+		},
+	}, thresholdConfig(3600, 300, "s"))
+
+	if result.Status != "pass" {
+		t.Errorf("STP 稳定应判 pass，实际 %q", result.Status)
+	}
+}
+
+// TestSTPStatus_ZeroTopChangesPasses 自上电以来未发生过拓扑变更（TopChanges=0，即便 TimeSinceTopologyChange=0）应判通过。
+func TestSTPStatus_ZeroTopChangesPasses(t *testing.T) {
+	timeSince := int64(0)
+	topChanges := int64(0)
+	proto := int64(3) // ieee8021d
+	result := runMetricCheck(t, "stp_status", &devices.SNMPMetrics{
+		STP: devices.STPMetrics{
+			ProtocolSpec:            &proto,
+			TimeSinceTopologyChange: &timeSince,
+			TopChanges:              &topChanges,
+		},
+	}, thresholdConfig(3600, 300, "s"))
+
+	if result.Status != "pass" {
+		t.Errorf("TopChanges=0 应判 pass，实际 %q（消息：%v）", result.Status, result.Message)
+	}
+}
+
+// TestSTPStatus_ProtocolNoneSkips 协议未启用（ProtocolSpec=1 且无变更记录）应判跳过。
+func TestSTPStatus_ProtocolNoneSkips(t *testing.T) {
+	proto := int64(1) // none
+	topChanges := int64(0)
+	result := runMetricCheck(t, "stp_status", &devices.SNMPMetrics{
+		STP: devices.STPMetrics{
+			ProtocolSpec: &proto,
+			TopChanges:   &topChanges,
+		},
+	}, thresholdConfig(3600, 300, "s"))
+
+	if result.Status != "skip" {
+		t.Errorf("ProtocolSpec=1(none) 应判 skip，实际 %q（消息：%v）", result.Status, result.Message)
+	}
+}

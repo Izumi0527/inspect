@@ -20,6 +20,8 @@ import {
   BGPPeersDetails,
   ComponentStatusDetails,
   DiskUsageDetails,
+  LLDPNeighborsDetails,
+  PoEDetails,
   InspectionStrategy,
   InspectionAnalyticsRange
 } from '../types'
@@ -234,11 +236,17 @@ const toVerdict = (raw: unknown): CheckDetailVerdict =>
   toEnumValue(raw, ['pass', 'warning', 'fail', 'skip'] as const, 'skip')
 
 /**
- * 解析接口错包率 / 丢弃率明细。两者载荷同构，只有 kind 与表头文案不同。
+ * 解析接口错包率 / 丢弃率 / 非单播包率明细。三者载荷同构，只有 kind 与表头文案不同。
  */
 const mapInterfaceRatioDetails = (record: UnknownRecord): InterfaceRatioDetails | undefined => {
   const kind = record.kind
-  if (kind !== 'interface_errors' && kind !== 'interface_discards') return undefined
+  if (
+    kind !== 'interface_errors' &&
+    kind !== 'interface_discards' &&
+    kind !== 'interface_broadcast'
+  ) {
+    return undefined
+  }
 
   return {
     kind,
@@ -364,10 +372,59 @@ const mapDiskUsageDetails = (record: UnknownRecord): DiskUsageDetails | undefine
   }
 }
 
+const mapLLDPNeighborsDetails = (record: UnknownRecord): LLDPNeighborsDetails | undefined => {
+  if (record.kind !== 'lldp_neighbors') return undefined
+
+  return {
+    kind: 'lldp_neighbors',
+    status: toString(record.status),
+    total: toNumber(record.total),
+    min_neighbors: toOptionalNumber(record.min_neighbors),
+    neighbors: toRecordArray(record.neighbors).map(entry => ({
+      local_port: toString(entry.local_port),
+      remote_sys_name: toString(entry.remote_sys_name) || undefined,
+      remote_port: toString(entry.remote_port) || undefined,
+      remote_port_desc: toString(entry.remote_port_desc) || undefined,
+      remote_mgmt_ip: toString(entry.remote_mgmt_ip) || undefined,
+      remote_chassis_id: toString(entry.remote_chassis_id) || undefined,
+    })),
+  }
+}
+
+const mapPoEDetails = (record: UnknownRecord): PoEDetails | undefined => {
+  if (record.kind !== 'poe') return undefined
+
+  const thresholdRecord = isObject(record.threshold) ? (record.threshold as UnknownRecord) : undefined
+
+  return {
+    kind: 'poe',
+    powered_ports: toOptionalNumber(record.powered_ports),
+    total_ports: toOptionalNumber(record.total_ports),
+    total_consuming_power: toOptionalNumber(record.total_consuming_power),
+    remaining_power: toOptionalNumber(record.remaining_power),
+    remaining_unit: toString(record.remaining_unit) || undefined,
+    warning_threshold: toOptionalNumber(record.warning_threshold),
+    critical_threshold: toOptionalNumber(record.critical_threshold),
+    threshold: thresholdRecord
+      ? {
+          warning: toOptionalNumber(thresholdRecord.warning),
+          critical: toOptionalNumber(thresholdRecord.critical),
+          unit: toString(thresholdRecord.unit) || undefined,
+        }
+      : undefined,
+    ports: toRecordArray(record.ports).map(entry => ({
+      index: toString(entry.index),
+      consuming_power: toOptionalNumber(entry.consuming_power),
+      peak_power: toOptionalNumber(entry.peak_power),
+      unit: toString(entry.unit) || undefined,
+    })),
+  }
+}
+
 /**
  * 按 kind 分派解析检查项结构化明细。
  *
- * 六种载荷互斥，至多命中一种；都不命中时返回 undefined，
+ * 各载荷互斥，至多命中一种；都不命中时返回 undefined，
  * 让 UI 退回纯文本展示而不是崩在渲染层——details 列历史上存过手工写入的自由文本。
  */
 const mapCheckResultDetails = (raw: unknown): CheckResultDetails | undefined => {
@@ -380,7 +437,9 @@ const mapCheckResultDetails = (raw: unknown): CheckResultDetails | undefined => 
     mapOpticalPowerDetails(record) ??
     mapBGPPeersDetails(record) ??
     mapComponentStatusDetails(record) ??
-    mapDiskUsageDetails(record)
+    mapDiskUsageDetails(record) ??
+    mapLLDPNeighborsDetails(record) ??
+    mapPoEDetails(record)
   )
 }
 

@@ -162,10 +162,10 @@ export interface InspectionCheckItem {
    *
    * 基础：reachable / system_info / cpu / memory / temperature / uptime /
    *       interface / interface_utilization / bandwidth
-   * 接口健康：interface_errors / interface_discards / interface_admin_status /
-   *           interface_duplex（标准 IF-MIB 与 EtherLike-MIB，全厂商通用）
+   * 接口健康：interface_errors / interface_discards / interface_broadcast /
+   *           interface_admin_status / interface_duplex（标准 IF-MIB 与 EtherLike-MIB，全厂商通用）
    * 部件与专项：fan_status / power_status / poe / optical_power / bgp_peers /
-   *             firmware_version（依赖厂商 catalog，采不到时判 skip）
+   *             lldp_neighbors / stp_status / firmware_version（依赖厂商 catalog 或标准 MIB，采不到时判 skip）
    * 主机专项：disk_usage（HOST-RESOURCES-MIB，服务器模板使用）
    */
   metric?: string
@@ -319,7 +319,7 @@ export interface InterfaceRatioEntry {
  * 长期拉高，只看「1.2%」无法区分持续劣化与三年前抖过一次。
  */
 export interface InterfaceRatioDetails {
-  kind: 'interface_errors' | 'interface_discards'
+  kind: 'interface_errors' | 'interface_discards' | 'interface_broadcast'
   total: number
   evaluated: number
   over_warning: number
@@ -440,10 +440,78 @@ export interface DiskUsageDetails {
   skipped: InterfaceUtilizationSkipped[]
 }
 
+/** 单条 LLDP 邻居明细 */
+export interface LLDPNeighborEntry {
+  /** 本地端口编号/名称 */
+  local_port: string
+  /** 远端设备名称（sysName） */
+  remote_sys_name?: string
+  /** 远端端口标识（Port ID） */
+  remote_port?: string
+  /** 远端端口描述（Port Desc） */
+  remote_port_desc?: string
+  /** 远端管理 IP 地址 */
+  remote_mgmt_ip?: string
+  /** 远端机箱 ID（Chassis ID） */
+  remote_chassis_id?: string
+}
+
+/** LLDP 邻居与拓扑状态明细 */
+export interface LLDPNeighborsDetails {
+  kind: 'lldp_neighbors'
+  /** LLDP 采集状态（ok / disabled / mib_unreachable 等） */
+  status: string
+  /** 邻居总数 */
+  total: number
+  /** 邻居清单 */
+  neighbors: LLDPNeighborEntry[]
+  /** 最小邻居数阈值配置（可选） */
+  min_neighbors?: number
+}
+
+/** 单个 PoE 供电端口明细 */
+export interface PoEPortEntry {
+  /** 端口索引/编号 */
+  index: string
+  /** 当前消耗功率（单位通常为 W） */
+  consuming_power?: number
+  /** 峰值功率（单位通常为 W） */
+  peak_power?: number
+  /** 功率单位（如 W） */
+  unit?: string
+}
+
+/** PoE 供电状态与端口明细 */
+export interface PoEDetails {
+  kind: 'poe'
+  /** 受电/在供电端口数 */
+  powered_ports?: number
+  /** 端口总数 */
+  total_ports?: number
+  /** 合计消耗功率 */
+  total_consuming_power?: number
+  /** 剩余保障功率 */
+  remaining_power?: number
+  /** 功率单位（如 W） */
+  remaining_unit?: string
+  /** 警告阈值 */
+  warning_threshold?: number
+  /** 严重阈值 */
+  critical_threshold?: number
+  /** 阈值片段（透传载荷） */
+  threshold?: {
+    warning?: number
+    critical?: number
+    unit?: string
+  }
+  /** 各端口供电明细，按功率降序排列 */
+  ports: PoEPortEntry[]
+}
+
 /**
  * 检查项结构化明细。
  *
- * 后端用顶层 kind 区分载荷类型，六种互斥。这里做成可辨识联合，
+ * 后端用顶层 kind 区分载荷类型，互斥。这里做成可辨识联合，
  * 消费方写 `details.kind === 'optical_power'` 即可自动收窄类型。
  */
 export type CheckResultDetails =
@@ -453,6 +521,8 @@ export type CheckResultDetails =
   | BGPPeersDetails
   | ComponentStatusDetails
   | DiskUsageDetails
+  | LLDPNeighborsDetails
+  | PoEDetails
 
 /**
  * 设备巡检结果接口

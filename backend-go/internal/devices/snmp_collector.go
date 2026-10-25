@@ -46,7 +46,9 @@ type SNMPMetrics struct {
 	ChassisID    *string            `json:"chassis_id,omitempty"`
 	BandwidthIn  *float64           `json:"bandwidth_in,omitempty"`  // 入站带宽，单位：bps（比特每秒）
 	BandwidthOut *float64           `json:"bandwidth_out,omitempty"` // 出站带宽，单位：bps（比特每秒）
-	Interfaces   []InterfaceMetrics `json:"interfaces,omitempty"`
+	// STP 保存生成树（BRIDGE-MIB dot1dStp）指标，用于巡检拓扑稳定性
+	STP        STPMetrics         `json:"stp,omitempty"`
+	Interfaces []InterfaceMetrics `json:"interfaces,omitempty"`
 	// Disks 是主机的固定磁盘分区（HOST-RESOURCES-MIB hrStorageFixedDisk），服务器巡检使用；
 	// 网络设备不实现该表，恒为空。
 	Disks          []DiskMetrics `json:"disks,omitempty"`
@@ -91,13 +93,22 @@ type InterfaceMetrics struct {
 	OutErrors    *uint64 `json:"out_errors,omitempty"`
 	InDiscards   *uint64 `json:"in_discards,omitempty"`
 	OutDiscards  *uint64 `json:"out_discards,omitempty"`
-	InUcastPkts  *uint64 `json:"in_ucast_pkts,omitempty"`
-	OutUcastPkts *uint64 `json:"out_ucast_pkts,omitempty"`
+	InUcastPkts   *uint64 `json:"in_ucast_pkts,omitempty"`
+	OutUcastPkts  *uint64 `json:"out_ucast_pkts,omitempty"`
+	InNUcastPkts  *uint64 `json:"in_nucast_pkts,omitempty"`
+	OutNUcastPkts *uint64 `json:"out_nucast_pkts,omitempty"`
 
 	// DuplexStatus 取自 EtherLike-MIB 的 dot3StatsDuplexStatus：
 	// 1=unknown、2=halfDuplex、3=fullDuplex。千兆口协商成半双工是经典故障，
 	// 会同时引发大量错包与性能腰斩——它解释的正是 InErrors 升高的原因。
 	DuplexStatus *int `json:"duplex_status,omitempty"`
+}
+
+// STPMetrics 保存 RFC 1493 (BRIDGE-MIB) 生成树指标
+type STPMetrics struct {
+	ProtocolSpec            *int64 `json:"protocol_spec,omitempty"`
+	TimeSinceTopologyChange *int64 `json:"time_since_topology_change,omitempty"` // 单位：秒
+	TopChanges              *int64 `json:"top_changes,omitempty"`
 }
 
 // BGPNeighborMetrics 保存通过厂商扩展 MIB 采集到的 BGP 邻居摘要。
@@ -357,6 +368,15 @@ func (c *SNMPCollector) CollectMetrics(
 			zap.Int("count", len(metrics.Neighbors)))
 	}
 
+	// 采集生成树 STP 拓扑指标（BRIDGE-MIB dot1dStp）
+	c.collectSTP(target, metrics, registry)
+	if c.logger != nil && (metrics.STP.ProtocolSpec != nil || metrics.STP.TimeSinceTopologyChange != nil || metrics.STP.TopChanges != nil) {
+		c.logger.Debug("collected stp",
+			zap.Int64p("protocol_spec", metrics.STP.ProtocolSpec),
+			zap.Int64p("time_since_topology_change", metrics.STP.TimeSinceTopologyChange),
+			zap.Int64p("top_changes", metrics.STP.TopChanges))
+	}
+
 	// 采集接口指标
 	c.collectInterfaces(target, ipAddress, metrics, registry)
 	if c.logger != nil {
@@ -415,6 +435,42 @@ func readTimeticksSeconds(target snmpClient, oid string) *int64 {
 		}
 	}
 	return nil
+}
+
+// collectSTP 采集 RFC 1493 (BRIDGE-MIB) 生成树标量指标
+func (c *SNMPCollector) collectSTP(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+) {
+	if registry == nil {
+		return
+	}
+	if oid := strings.TrimSpace(registry.Common.BridgeSTP.StpProtocolSpec.OID); oid != "" {
+		metrics.STP.ProtocolSpec = readNumericScalar(target, oid)
+	}
+	if oid := strings.TrimSpace(registry.Common.BridgeSTP.StpTimeSinceTopologyChange.OID); oid != "" {
+		metrics.STP.TimeSinceTopologyChange = readTimeticksSeconds(target, oid)
+	}
+	if oid := strings.TrimSpace(registry.Common.BridgeSTP.StpTopChanges.OID); oid != "" {
+		metrics.STP.TopChanges = readNumericScalar(target, oid)
+	}
+}
+
+// readNumericScalar 读取单个数值型标量 OID（Integer 或 Counter32）；取不到返回 nil。
+func readNumericScalar(target snmpClient, oid string) *int64 {
+	if strings.TrimSpace(oid) == "" {
+		return nil
+	}
+	packet, err := target.Get([]string{oid})
+	if err != nil || packet == nil || len(packet.Variables) == 0 {
+		return nil
+	}
+	val, ok := numericPDUInt64(packet.Variables[0])
+	if !ok {
+		return nil
+	}
+	return &val
 }
 
 // hrStorageFixedDiskType 是 HOST-RESOURCES-TYPES 中固定磁盘的类型 OID。
@@ -730,6 +786,14 @@ func (c *SNMPCollector) collectInterfaces(
 	walkInterfaceValues(target, ifaceOIDs.IfOutUcastPkts.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {
 		v := value
 		iface.OutUcastPkts = &v
+	})
+	walkInterfaceValues(target, ifaceOIDs.IfInNUcastPkts.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {
+		v := value
+		iface.InNUcastPkts = &v
+	})
+	walkInterfaceValues(target, ifaceOIDs.IfOutNUcastPkts.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {
+		v := value
+		iface.OutNUcastPkts = &v
 	})
 	// 双工取自 EtherLike-MIB（非 IF-MIB），仅以太网口有意义，其余接口取不到属预期
 	walkInterfaceValues(target, registry.Common.Ethernet.Dot3DuplexStatus.OID, interfaces, func(iface *InterfaceMetrics, value uint64) {

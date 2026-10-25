@@ -17,6 +17,9 @@ import (
 //go:linkname collectInterfaces github.com/your-org/inspect-system/backend-go/internal/devices.(*SNMPCollector).collectInterfaces
 func collectInterfaces(c *devices.SNMPCollector, target collectorSNMPClient, ipAddress string, metrics *devices.SNMPMetrics, registry *snmpmib.Registry)
 
+//go:linkname collectSTP github.com/your-org/inspect-system/backend-go/internal/devices.(*SNMPCollector).collectSTP
+func collectSTP(c *devices.SNMPCollector, target collectorSNMPClient, metrics *devices.SNMPMetrics, registry *snmpmib.Registry)
+
 // walkPDU 构造一条 bulkwalk 返回的 PDU。
 func walkPDU(baseOID string, index int, value interface{}, pduType gosnmp.Asn1BER) gosnmp.SnmpPDU {
 	return gosnmp.SnmpPDU{
@@ -56,6 +59,8 @@ func interfaceHealthRegistry() *snmpmib.Registry {
 	reg.Common.Interfaces.IfOutDiscards = def("1.3.6.1.2.1.2.2.1.19")
 	reg.Common.Interfaces.IfInUcastPkts = def("1.3.6.1.2.1.2.2.1.11")
 	reg.Common.Interfaces.IfOutUcastPkts = def("1.3.6.1.2.1.2.2.1.17")
+	reg.Common.Interfaces.IfInNUcastPkts = def("1.3.6.1.2.1.2.2.1.12")
+	reg.Common.Interfaces.IfOutNUcastPkts = def("1.3.6.1.2.1.2.2.1.18")
 	reg.Common.Ethernet.Dot3DuplexStatus = def("1.3.6.1.2.1.10.7.2.1.19")
 	return reg
 }
@@ -89,6 +94,8 @@ func interfaceHealthClient() *fakeCollectorSNMPClient {
 			"1.3.6.1.2.1.2.2.1.19": {walkPDU("1.3.6.1.2.1.2.2.1.19", 1, 7, gosnmp.Counter32)},
 			"1.3.6.1.2.1.2.2.1.11": {walkPDU("1.3.6.1.2.1.2.2.1.11", 1, 998800, gosnmp.Counter32)},
 			"1.3.6.1.2.1.2.2.1.17": {walkPDU("1.3.6.1.2.1.2.2.1.17", 1, 999966, gosnmp.Counter32)},
+			"1.3.6.1.2.1.2.2.1.12": {walkPDU("1.3.6.1.2.1.2.2.1.12", 1, 15000, gosnmp.Counter32)},
+			"1.3.6.1.2.1.2.2.1.18": {walkPDU("1.3.6.1.2.1.2.2.1.18", 1, 8000, gosnmp.Counter32)},
 			// 口 1 协商成半双工（2）——千兆口上属异常，会引发大量错包
 			"1.3.6.1.2.1.10.7.2.1.19": {walkPDU("1.3.6.1.2.1.10.7.2.1.19", 1, 2, gosnmp.Integer)},
 		},
@@ -131,6 +138,8 @@ func TestCollectInterfaces_CollectsErrorAndDiscardCounters(t *testing.T) {
 		{"出方向丢弃", iface.OutDiscards, 7},
 		{"入方向单播包", iface.InUcastPkts, 998800},
 		{"出方向单播包", iface.OutUcastPkts, 999966},
+		{"入方向非单播包", iface.InNUcastPkts, 15000},
+		{"出方向非单播包", iface.OutNUcastPkts, 8000},
 	}
 	for _, tc := range cases {
 		if tc.got == nil {
@@ -140,6 +149,52 @@ func TestCollectInterfaces_CollectsErrorAndDiscardCounters(t *testing.T) {
 		if *tc.got != tc.want {
 			t.Errorf("%s = %d，want %d", tc.name, *tc.got, tc.want)
 		}
+	}
+}
+
+// TestCollectSTP_CollectsMetrics 守护生成树（STP）指标的采集。
+func TestCollectSTP_CollectsMetrics(t *testing.T) {
+	collector := devices.NewSNMPCollector(zap.NewNop())
+	metrics := &devices.SNMPMetrics{}
+
+	def := func(oid, method, valType string) snmpmib.OIDDefinition {
+		return snmpmib.OIDDefinition{OID: oid, Method: method, ValueType: valType}
+	}
+	reg := &snmpmib.Registry{}
+	reg.Common.BridgeSTP.StpProtocolSpec = def("1.3.6.1.2.1.17.2.1.0", "get", "integer")
+	reg.Common.BridgeSTP.StpTimeSinceTopologyChange = def("1.3.6.1.2.1.17.2.3.0", "get", "timeticks")
+	reg.Common.BridgeSTP.StpTopChanges = def("1.3.6.1.2.1.17.2.4.0", "get", "counter32")
+
+	client := &fakeCollectorSNMPClient{
+		getPackets: map[string]*gosnmp.SnmpPacket{
+			"1.3.6.1.2.1.17.2.1.0": {
+				Variables: []gosnmp.SnmpPDU{
+					{Name: "1.3.6.1.2.1.17.2.1.0", Type: gosnmp.Integer, Value: 3},
+				},
+			},
+			"1.3.6.1.2.1.17.2.3.0": {
+				Variables: []gosnmp.SnmpPDU{
+					{Name: "1.3.6.1.2.1.17.2.3.0", Type: gosnmp.TimeTicks, Value: uint32(720000)}, // 7200 秒
+				},
+			},
+			"1.3.6.1.2.1.17.2.4.0": {
+				Variables: []gosnmp.SnmpPDU{
+					{Name: "1.3.6.1.2.1.17.2.4.0", Type: gosnmp.Counter32, Value: uint32(5)},
+				},
+			},
+		},
+	}
+
+	collectSTP(collector, client, metrics, reg)
+
+	if metrics.STP.ProtocolSpec == nil || *metrics.STP.ProtocolSpec != 3 {
+		t.Errorf("ProtocolSpec = %v, want 3", metrics.STP.ProtocolSpec)
+	}
+	if metrics.STP.TimeSinceTopologyChange == nil || *metrics.STP.TimeSinceTopologyChange != 7200 {
+		t.Errorf("TimeSinceTopologyChange = %v, want 7200", metrics.STP.TimeSinceTopologyChange)
+	}
+	if metrics.STP.TopChanges == nil || *metrics.STP.TopChanges != 5 {
+		t.Errorf("TopChanges = %v, want 5", metrics.STP.TopChanges)
 	}
 }
 

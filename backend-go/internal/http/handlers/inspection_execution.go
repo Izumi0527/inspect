@@ -869,6 +869,12 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 		h.checkFirmwareVersionMetric(result, snmpMetrics)
 	case "disk_usage":
 		h.checkDiskUsageMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+	case "lldp_neighbors":
+		h.checkLLDPNeighborsMetric(result, snmpMetrics, config)
+	case "stp_status":
+		h.checkSTPStatusMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
+	case "interface_broadcast":
+		h.checkInterfaceBroadcastMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
 	case "bandwidth":
 		h.checkBandwidthMetric(result, snmpMetrics)
 	case "reachable", "system_info":
@@ -907,6 +913,7 @@ func (h InspectionHandler) checkCPUMetric(result *inspection.Result, metrics *de
 		criticalThreshold = 90
 	}
 	result.ExpectedValue = stringPtr(fmt.Sprintf("< %.0f%%（警告 ≥%.0f%%，故障 ≥%.0f%%）", warningThreshold, warningThreshold, criticalThreshold))
+	result.Details = buildThresholdDetails("cpu", warningThreshold, criticalThreshold, "%")
 
 	if metrics == nil || metrics.CPUUsage == nil {
 		result.Status = "skip"
@@ -933,6 +940,28 @@ func (h InspectionHandler) checkCPUMetric(result *inspection.Result, metrics *de
 	}
 }
 
+// formatInspectionBytes 把字节数格式化为带合适单位（KB、MB、GB、TB）的紧凑字符串。
+func formatInspectionBytes(bytes int64) string {
+	const (
+		kb = 1024
+		mb = 1024 * kb
+		gb = 1024 * mb
+		tb = 1024 * gb
+	)
+	switch {
+	case bytes >= tb:
+		return fmt.Sprintf("%.1f TB", float64(bytes)/float64(tb))
+	case bytes >= gb:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(gb))
+	case bytes >= mb:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(mb))
+	case bytes >= kb:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
 // checkMemoryMetric 检查内存使用率
 func (h InspectionHandler) checkMemoryMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64) {
 	if warningThreshold == 0 {
@@ -942,6 +971,7 @@ func (h InspectionHandler) checkMemoryMetric(result *inspection.Result, metrics 
 		criticalThreshold = 95
 	}
 	result.ExpectedValue = stringPtr(fmt.Sprintf("< %.0f%%（警告 ≥%.0f%%，故障 ≥%.0f%%）", warningThreshold, warningThreshold, criticalThreshold))
+	result.Details = buildThresholdDetails("memory", warningThreshold, criticalThreshold, "%")
 
 	if metrics == nil || metrics.MemoryUsage == nil {
 		result.Status = "skip"
@@ -951,6 +981,9 @@ func (h InspectionHandler) checkMemoryMetric(result *inspection.Result, metrics 
 
 	memUsage := *metrics.MemoryUsage
 	actualValue := fmt.Sprintf("%.1f%%", memUsage)
+	if metrics.MemoryUsed != nil && metrics.MemoryTotal != nil && *metrics.MemoryTotal > 0 {
+		actualValue = fmt.Sprintf("%.1f%% (%s / %s)", memUsage, formatInspectionBytes(*metrics.MemoryUsed), formatInspectionBytes(*metrics.MemoryTotal))
+	}
 	result.ActualValue = &actualValue
 
 	if memUsage >= criticalThreshold {
@@ -1066,6 +1099,7 @@ func (h InspectionHandler) checkTemperatureMetric(result *inspection.Result, met
 		criticalThreshold = 75
 	}
 	result.ExpectedValue = stringPtr(fmt.Sprintf("< %.0f°C（警告 ≥%.0f°C，故障 ≥%.0f°C）", warningThreshold, warningThreshold, criticalThreshold))
+	result.Details = buildThresholdDetails("temperature", warningThreshold, criticalThreshold, "C")
 
 	if metrics == nil || metrics.Temperature == nil {
 		result.Status = "skip"
@@ -1250,6 +1284,9 @@ func buildInterfaceUtilizationDetails(summary interfaceUtilizationSummary, warni
 	}
 	if summary.Skipped == nil {
 		payload["skipped"] = []interfaceUtilizationSkipped{}
+	}
+	for key, value := range thresholdDetailsPayload("interface_utilization", warning, critical, "%") {
+		payload[key] = value
 	}
 
 	encoded, err := json.Marshal(payload)
@@ -1544,6 +1581,48 @@ func (h InspectionHandler) checkComponentStatusMetric(
 // PoE 供电
 // ---------------------------------------------------------------------------
 
+// buildPoEDetails 生成 PoE 供电明细载荷，按端口消耗功率降序排列。
+func buildPoEDetails(ports []devices.PoEPortMetrics, remainingPower *float64, remainingUnit string, warning, critical float64) datatypes.JSON {
+	sortedPorts := make([]devices.PoEPortMetrics, len(ports))
+	copy(sortedPorts, ports)
+	sort.SliceStable(sortedPorts, func(i, j int) bool {
+		var pi, pj float64
+		if sortedPorts[i].ConsumingPower != nil {
+			pi = *sortedPorts[i].ConsumingPower
+		}
+		if sortedPorts[j].ConsumingPower != nil {
+			pj = *sortedPorts[j].ConsumingPower
+		}
+		return pi > pj
+	})
+	totalConsuming := 0.0
+	for _, p := range sortedPorts {
+		if p.ConsumingPower != nil {
+			totalConsuming += *p.ConsumingPower
+		}
+	}
+	unit := remainingUnit
+	if unit == "" {
+		unit = "W"
+	}
+	payload := map[string]interface{}{
+		"kind":                  "poe",
+		"total_ports":           len(sortedPorts),
+		"total_consuming_power": totalConsuming,
+		"remaining_power":       remainingPower,
+		"remaining_unit":        unit,
+		"warning_threshold":     warning,
+		"critical_threshold":    critical,
+		"ports":                 sortedPorts,
+	}
+	if remainingPower != nil {
+		for k, v := range thresholdDetailsPayload("poe", warning, critical, unit) {
+			payload[k] = v
+		}
+	}
+	return encodeDetailsPayload(payload)
+}
+
 // checkPoEMetric 检查 PoE 供电余量。
 //
 // 分厂商降级：H3C 上报 PSE 剩余保障功率，可直接判定「还能不能再接设备」；
@@ -1557,12 +1636,15 @@ func (h InspectionHandler) checkPoEMetric(result *inspection.Result, metrics *de
 		critical = 10
 	}
 	result.ExpectedValue = stringPtr(fmt.Sprintf("PSE 剩余保障功率 > %gW（警告 <=%gW，故障 <=%gW）", warning, warning, critical))
+	result.Details = buildThresholdDetails("poe", warning, critical, "W")
 
 	if metrics == nil || (len(metrics.PoE.Ports) == 0 && metrics.PoE.RemainingPower == nil) {
 		result.Status = "skip"
 		result.Message = stringPtr("设备未上报 PoE 供电数据（非 PoE 设备或不支持对应 MIB）")
 		return
 	}
+
+	result.Details = buildPoEDetails(metrics.PoE.Ports, metrics.PoE.RemainingPower, metrics.PoE.RemainingUnit, warning, critical)
 
 	totalConsuming := 0.0
 	for _, port := range metrics.PoE.Ports {
@@ -1574,7 +1656,7 @@ func (h InspectionHandler) checkPoEMetric(result *inspection.Result, metrics *de
 	if metrics.PoE.RemainingPower == nil {
 		// 只有端口功率：纯展示
 		result.ExpectedValue = stringPtr("仅采集展示（该设备未上报 PSE 剩余保障功率，无法计算供电余量）")
-		actual := fmt.Sprintf("%d 个端口在供电，合计消耗 %.1f", len(metrics.PoE.Ports), totalConsuming)
+		actual := fmt.Sprintf("%d 个端口在供电，合计消耗 %.1fW", len(metrics.PoE.Ports), totalConsuming)
 		result.ActualValue = &actual
 		result.Status = "pass"
 		result.Message = stringPtr(fmt.Sprintf(
@@ -1963,6 +2045,160 @@ func (h InspectionHandler) checkFirmwareVersionMetric(result *inspection.Result,
 	result.Message = stringPtr(fmt.Sprintf("型号 %s，固件版本 %s；请对照厂商推荐版本与安全公告自行评估", model, version))
 }
 
+// checkLLDPNeighborsMetric 检查 LLDP 协议运行状态与拓扑连线。
+func (h InspectionHandler) checkLLDPNeighborsMetric(result *inspection.Result, metrics *devices.SNMPMetrics, config map[string]interface{}) {
+	result.ExpectedValue = stringPtr("LLDP 协议正常启用且拓扑连接正常")
+
+	if metrics == nil || (!metrics.LLDPAvailable && metrics.LLDPStatus == "") {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取 LLDP 邻居数据")
+		return
+	}
+
+	minNeighbors := 0
+	if config != nil {
+		if v, ok := config["min_neighbors"]; ok {
+			switch n := v.(type) {
+			case int:
+				minNeighbors = n
+			case int64:
+				minNeighbors = int(n)
+			case float64:
+				minNeighbors = int(n)
+			}
+		}
+	}
+
+	entries := make([]map[string]interface{}, 0, len(metrics.Neighbors))
+	for _, m := range metrics.Neighbors {
+		localPort := m.LocalPortDesc
+		if localPort == "" {
+			localPort = m.LocalPortID
+		}
+		if localPort == "" && m.LocalPortNum > 0 {
+			localPort = fmt.Sprintf("port%d", m.LocalPortNum)
+		}
+		remotePort := m.RemotePortDesc
+		if remotePort == "" {
+			remotePort = m.RemotePortID
+		}
+		entries = append(entries, map[string]interface{}{
+			"local_port":        localPort,
+			"remote_sys_name":   m.RemoteSysName,
+			"remote_port":       remotePort,
+			"remote_mgmt_ip":    m.RemoteMgmtIP,
+			"remote_chassis_id": m.RemoteChassisID,
+		})
+	}
+
+	payload := map[string]interface{}{
+		"kind":      "lldp_neighbors",
+		"status":    string(metrics.LLDPStatus),
+		"total":     len(entries),
+		"neighbors": entries,
+	}
+	result.Details = encodeDetailsPayload(payload)
+
+	switch metrics.LLDPStatus {
+	case devices.LLDPStatusDisabled:
+		result.Status = "warning"
+		actual := fmt.Sprintf("LLDP 未启用（0 个邻居）")
+		result.ActualValue = &actual
+		result.Message = stringPtr("设备全局未启用 LLDP 服务，无法发现链路拓扑")
+	case devices.LLDPStatusMIBUnreachable:
+		result.Status = "skip"
+		actual := "LLDP-MIB 不可读"
+		result.ActualValue = &actual
+		result.Message = stringPtr("设备 SNMP 视图未放行 LLDP-MIB(1.0.8802) 或设备不支持")
+	default:
+		count := len(entries)
+		actual := fmt.Sprintf("已发现 %d 个邻居", count)
+		result.ActualValue = &actual
+		if minNeighbors > 0 && count < minNeighbors {
+			result.Status = "warning"
+			result.Message = stringPtr(fmt.Sprintf("已发现 %d 个 LLDP 邻居，低于配置的最小邻居数 %d", count, minNeighbors))
+		} else {
+			result.Status = "pass"
+			if count > 0 {
+				result.Message = stringPtr(fmt.Sprintf("LLDP 运行正常，已发现 %d 个邻居", count))
+			} else {
+				result.Message = stringPtr("LLDP 运行正常，当前未发现邻居设备（接入终端端口未启用 LLDP 属正常）")
+			}
+		}
+	}
+}
+
+// checkSTPStatusMetric 检查生成树（STP）运行状态与拓扑稳定性。
+func (h InspectionHandler) checkSTPStatusMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warningThreshold, criticalThreshold float64) {
+	if warningThreshold == 0 {
+		warningThreshold = 3600
+	}
+	if criticalThreshold == 0 {
+		criticalThreshold = 300
+	}
+	result.ExpectedValue = stringPtr(fmt.Sprintf("距上次拓扑变更 > %.0f 秒（警告 <=%.0f秒，故障 <=%.0f秒）",
+		warningThreshold, warningThreshold, criticalThreshold))
+	result.Details = buildThresholdDetails("stp_status", warningThreshold, criticalThreshold, "s")
+
+	if metrics == nil || (metrics.STP.ProtocolSpec == nil && metrics.STP.TimeSinceTopologyChange == nil && metrics.STP.TopChanges == nil) {
+		result.Status = "skip"
+		result.Message = stringPtr("设备未上报生成树(STP)数据（可能未启用生成树或不支持 BRIDGE-MIB）")
+		return
+	}
+
+	if metrics.STP.ProtocolSpec != nil && *metrics.STP.ProtocolSpec == 1 && (metrics.STP.TopChanges == nil || *metrics.STP.TopChanges == 0) {
+		result.Status = "skip"
+		actual := "协议未启用"
+		result.ActualValue = &actual
+		result.Message = stringPtr("设备生成树协议未启用（dot1dStpProtocolSpecification=none）")
+		return
+	}
+
+	if metrics.STP.TopChanges != nil && *metrics.STP.TopChanges == 0 {
+		actual := "累计变更 0 次"
+		result.ActualValue = &actual
+		result.Status = "pass"
+		result.Message = stringPtr("生成树运行稳定，自上电以来未发生过拓扑变更（累计变更 0 次）")
+		return
+	}
+
+	if metrics.STP.TimeSinceTopologyChange == nil {
+		if metrics.STP.TopChanges != nil {
+			actual := fmt.Sprintf("累计变更 %d 次", *metrics.STP.TopChanges)
+			result.ActualValue = &actual
+			result.Status = "pass"
+			result.Message = stringPtr(fmt.Sprintf("生成树运行中，累计变更 %d 次（未上报距上次变更时间）", *metrics.STP.TopChanges))
+		} else {
+			result.Status = "skip"
+			result.Message = stringPtr("未上报生成树拓扑变更时间")
+		}
+		return
+	}
+
+	sec := *metrics.STP.TimeSinceTopologyChange
+	topChangesStr := ""
+	if metrics.STP.TopChanges != nil {
+		topChangesStr = fmt.Sprintf("；累计变更 %d 次", *metrics.STP.TopChanges)
+	}
+	actual := fmt.Sprintf("距上次变更 %d 秒%s", sec, topChangesStr)
+	result.ActualValue = &actual
+
+	switch {
+	case float64(sec) <= criticalThreshold:
+		result.Status = "fail"
+		result.Message = stringPtr(fmt.Sprintf("生成树近期发生拓扑震荡：距上次变更仅 %d 秒（故障阈值 <=%.0f 秒）%s，可能存在二层链路频繁抖动或环路",
+			sec, criticalThreshold, topChangesStr))
+	case float64(sec) <= warningThreshold:
+		result.Status = "warning"
+		result.Message = stringPtr(fmt.Sprintf("生成树发生过拓扑变更：距上次变更 %d 秒（警告阈值 <=%.0f 秒）%s，建议排查二层网络稳定性",
+			sec, warningThreshold, topChangesStr))
+	default:
+		result.Status = "pass"
+		result.Message = stringPtr(fmt.Sprintf("生成树拓扑稳定：距上次变更 %d 秒（> %.0f 秒）%s",
+			sec, warningThreshold, topChangesStr))
+	}
+}
+
 // ---------------------------------------------------------------------------
 // 接口健康类检查（错包 / 丢弃 / 管理状态 / 双工）
 // ---------------------------------------------------------------------------
@@ -2171,6 +2407,138 @@ func (h InspectionHandler) checkInterfaceDiscardsMetric(result *inspection.Resul
 		})
 }
 
+const minBroadcastEvalPackets = 1000
+
+// summarizeInterfaceBroadcast 逐接口计算非单播包（广播+组播）占比，带低流量保护。
+func summarizeInterfaceBroadcast(
+	interfaces []devices.InterfaceMetrics,
+	warning, critical float64,
+) interfaceRatioSummary {
+	summary := interfaceRatioSummary{Total: len(interfaces)}
+	entries := make([]interfaceRatioEntry, 0, len(interfaces))
+
+	for _, iface := range interfaces {
+		name := strings.TrimSpace(iface.Description)
+		if name == "" {
+			name = strings.TrimSpace(iface.Name)
+		}
+
+		inCount, outCount := iface.InNUcastPkts, iface.OutNUcastPkts
+		inPkts, outPkts := iface.InUcastPkts, iface.OutUcastPkts
+
+		if inCount == nil && outCount == nil {
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "设备未上报该计数器"})
+			continue
+		}
+
+		best := interfaceRatioEntry{Name: name, Percent: -1}
+		hasEnoughPackets := false
+
+		evaluate := func(direction string, count, pkts *uint64) {
+			if count == nil || pkts == nil {
+				return
+			}
+			total := *count + *pkts
+			if total < minBroadcastEvalPackets {
+				return
+			}
+			hasEnoughPackets = true
+			percent := float64(*count) / float64(total) * 100
+			if percent > best.Percent {
+				best = interfaceRatioEntry{
+					Name: name, Direction: direction, Percent: percent,
+					Count: *count, Packets: *pkts,
+				}
+			}
+		}
+		evaluate("入", inCount, inPkts)
+		evaluate("出", outCount, outPkts)
+
+		if !hasEnoughPackets {
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "样本包数不足 1000，不计风暴比率"})
+			continue
+		}
+
+		if best.Percent < 0 {
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "无包计数样本，无法计算比率"})
+			continue
+		}
+
+		summary.Evaluated++
+		entries = append(entries, best)
+		if best.Percent >= critical {
+			summary.OverCritical++
+			summary.OverWarning++
+		} else if best.Percent >= warning {
+			summary.OverWarning++
+		}
+		if summary.Evaluated == 1 || best.Percent > summary.Peak.Percent {
+			summary.Peak = best
+		}
+	}
+
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Percent > entries[j].Percent })
+	summary.Entries = entries
+	return summary
+}
+
+// checkInterfaceBroadcastMetric 检查接口非单播（广播/组播）包占比。
+// 设定 minBroadcastEvalPackets=1000 门槛保护：包数不足 1000 的端口计入 skipped，避免低流量口假阳性。
+func (h InspectionHandler) checkInterfaceBroadcastMetric(result *inspection.Result, metrics *devices.SNMPMetrics, warning, critical float64) {
+	const (
+		defaultWarning  = 15.0
+		defaultCritical = 30.0
+	)
+	if warning == 0 {
+		warning = defaultWarning
+	}
+	if critical == 0 {
+		critical = defaultCritical
+	}
+	result.ExpectedValue = stringPtr(fmt.Sprintf("各接口非单播包率 < %g%%（警告 >=%g%%，故障 >=%g%%）",
+		warning, warning, critical))
+	result.Details = buildThresholdDetails("interface_broadcast", warning, critical, "%")
+
+	if metrics == nil || len(metrics.Interfaces) == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取接口数据")
+		return
+	}
+
+	summary := summarizeInterfaceBroadcast(metrics.Interfaces, warning, critical)
+	result.Details = buildInterfaceRatioDetails("interface_broadcast", summary, warning, critical)
+
+	if summary.Evaluated == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr(fmt.Sprintf(
+			"采集到 %d 个接口，但均未上报非单播计数器或包数样本不足 %d，无法计算比率", summary.Total, minBroadcastEvalPackets))
+		return
+	}
+
+	peakWhere := summary.Peak.Name
+	if summary.Peak.Percent > 0 {
+		peakWhere += " " + summary.Peak.Direction + "方向"
+	}
+	actual := fmt.Sprintf("峰值 %.2f%%（%s）；%d/%d 接口超阈值",
+		summary.Peak.Percent, peakWhere, summary.OverWarning, summary.Evaluated)
+	result.ActualValue = &actual
+
+	switch {
+	case summary.OverCritical > 0:
+		result.Status = "fail"
+		result.Message = stringPtr(fmt.Sprintf("%d 个接口非单播包率达到故障阈值 %g%%，峰值 %s（%.2f%%），可能存在广播风暴或环路",
+			summary.OverCritical, critical, summary.Peak.Name, summary.Peak.Percent))
+	case summary.OverWarning > 0:
+		result.Status = "warning"
+		result.Message = stringPtr(fmt.Sprintf("%d 个接口非单播包率超过警告阈值 %g%%，峰值 %s（%.2f%%），建议排查二层流量",
+			summary.OverWarning, warning, summary.Peak.Name, summary.Peak.Percent))
+	default:
+		result.Status = "pass"
+		result.Message = stringPtr(fmt.Sprintf("已评估 %d/%d 个接口，非单播包率均在阈值内（峰值 %.2f%%）",
+			summary.Evaluated, summary.Total, summary.Peak.Percent))
+	}
+}
+
 // checkInterfaceAdminStatusMetric 接口管理状态与运行状态的一致性。
 //
 // admin up 但 oper down 才是真故障；admin down 是运维主动关闭，不该告警。
@@ -2327,6 +2695,7 @@ func (h InspectionHandler) checkInterfaceUtilizationMetric(result *inspection.Re
 	}
 	result.ExpectedValue = stringPtr(fmt.Sprintf("各接口利用率 < %.0f%%（警告 ≥%.0f%%，故障 ≥%.0f%%）",
 		warningThreshold, warningThreshold, criticalThreshold))
+	result.Details = buildThresholdDetails("interface_utilization", warningThreshold, criticalThreshold, "%")
 
 	if metrics == nil || len(metrics.Interfaces) == 0 {
 		result.Status = "skip"

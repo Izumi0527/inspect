@@ -452,3 +452,129 @@ func TestComponentStatusDetails_CountsByVerdict(t *testing.T) {
 		}
 	}
 }
+
+// TestThresholdDetails_CarriedOnResourceChecks 守护 CPU、内存、温度与利用率检查项透传 threshold details。
+func TestThresholdDetails_CarriedOnResourceChecks(t *testing.T) {
+	// 1. CPU
+	cpuUsage := 45.0
+	cpuResult := runMetricCheck(t, "cpu", &devices.SNMPMetrics{CPUUsage: &cpuUsage}, thresholdConfig(70, 85, "%"))
+	cpuPayload := decodeDetails(t, cpuResult)
+	if cpuPayload["kind"] != "threshold" || cpuPayload["metric"] != "cpu" {
+		t.Fatalf("CPU threshold payload 格式不符: %v", cpuPayload)
+	}
+	cpuThresh, ok := cpuPayload["threshold"].(map[string]interface{})
+	if !ok || cpuThresh["warning"] != 70.0 || cpuThresh["critical"] != 85.0 || cpuThresh["unit"] != "%" {
+		t.Errorf("CPU threshold 不符: %v", cpuThresh)
+	}
+
+	// 2. Memory
+	memUsage := 60.0
+	memResult := runMetricCheck(t, "memory", &devices.SNMPMetrics{MemoryUsage: &memUsage}, thresholdConfig(75, 90, "%"))
+	memPayload := decodeDetails(t, memResult)
+	if memPayload["kind"] != "threshold" || memPayload["metric"] != "memory" {
+		t.Fatalf("Memory threshold payload 格式不符: %v", memPayload)
+	}
+
+	// 3. Temperature
+	temp := 50.0
+	tempResult := runMetricCheck(t, "temperature", &devices.SNMPMetrics{Temperature: &temp}, thresholdConfig(60, 75, "C"))
+	tempPayload := decodeDetails(t, tempResult)
+	if tempPayload["kind"] != "threshold" || tempPayload["metric"] != "temperature" {
+		t.Fatalf("Temperature threshold payload 格式不符: %v", tempPayload)
+	}
+}
+
+// TestMemoryMetric_FormatsActualValueWithBytes 当上报内存容量时，实际值展示使用率与物理字节。
+func TestMemoryMetric_FormatsActualValueWithBytes(t *testing.T) {
+	memUsage := 45.2
+	memUsed := int64(462 * 1024 * 1024)
+	memTotal := int64(1024 * 1024 * 1024)
+	result := runMetricCheck(t, "memory", &devices.SNMPMetrics{
+		MemoryUsage: &memUsage,
+		MemoryUsed:  &memUsed,
+		MemoryTotal: &memTotal,
+	}, nil)
+
+	if result.ActualValue == nil {
+		t.Fatal("ActualValue 为空")
+	}
+	want := "45.2% (462.0 MB / 1.0 GB)"
+	if *result.ActualValue != want {
+		t.Errorf("ActualValue = %q, want %q", *result.ActualValue, want)
+	}
+}
+
+// TestPoEDetails_StructuredPayload 守护 PoE 供电结构化明细。
+func TestPoEDetails_StructuredPayload(t *testing.T) {
+	p1 := 15.4
+	p2 := 30.0
+	rem := 120.5
+	result := runMetricCheck(t, "poe", &devices.SNMPMetrics{
+		PoE: devices.PoEMetrics{
+			Ports: []devices.PoEPortMetrics{
+				{Index: "GigabitEthernet0/0/1", ConsumingPower: &p1, Unit: "W"},
+				{Index: "GigabitEthernet0/0/2", ConsumingPower: &p2, Unit: "W"},
+			},
+			RemainingPower: &rem,
+			RemainingUnit:  "W",
+		},
+	}, thresholdConfig(30, 10, "W"))
+
+	payload := decodeDetails(t, result)
+	if payload["kind"] != "poe" {
+		t.Fatalf("kind = %v, want poe", payload["kind"])
+	}
+	if payload["total_consuming_power"] != 45.4 {
+		t.Errorf("total_consuming_power = %v, want 45.4", payload["total_consuming_power"])
+	}
+	if payload["remaining_power"] != 120.5 {
+		t.Errorf("remaining_power = %v, want 120.5", payload["remaining_power"])
+	}
+
+	ports := detailRows(t, payload, "ports")
+	if len(ports) != 2 {
+		t.Fatalf("端口数 = %d, want 2", len(ports))
+	}
+	// 降序排序：30.0W 在前，15.4W 在后
+	if rowString(t, ports[0], "index") != "GigabitEthernet0/0/2" {
+		t.Errorf("首个端口应为最高功耗的 GE0/0/2，实际 %v", ports[0])
+	}
+}
+
+// TestLLDPNeighborsDetails_StructuredPayload 守护 LLDP 邻居结构化明细。
+func TestLLDPNeighborsDetails_StructuredPayload(t *testing.T) {
+	result := runMetricCheck(t, "lldp_neighbors", &devices.SNMPMetrics{
+		LLDPAvailable: true,
+		LLDPStatus:    devices.LLDPStatusOK,
+		Neighbors: []devices.NeighborMetrics{
+			{
+				LocalPortNum:    1,
+				LocalPortDesc:   "GigabitEthernet0/0/1",
+				RemoteSysName:   "Core-SW-01",
+				RemotePortDesc:  "XGigabitEthernet0/0/1",
+				RemoteMgmtIP:    "192.168.1.254",
+				RemoteChassisID: "4c1f-cc81-1234",
+			},
+		},
+	}, nil)
+
+	if result.Status != "pass" {
+		t.Errorf("LLDP 状态 = %q, want pass", result.Status)
+	}
+	payload := decodeDetails(t, result)
+	if payload["kind"] != "lldp_neighbors" {
+		t.Fatalf("kind = %v, want lldp_neighbors", payload["kind"])
+	}
+	neighbors := detailRows(t, payload, "neighbors")
+	if len(neighbors) != 1 {
+		t.Fatalf("邻居数 = %d, want 1", len(neighbors))
+	}
+	nb := neighbors[0]
+	if rowString(t, nb, "local_port") != "GigabitEthernet0/0/1" ||
+		rowString(t, nb, "remote_sys_name") != "Core-SW-01" ||
+		rowString(t, nb, "remote_port") != "XGigabitEthernet0/0/1" ||
+		rowString(t, nb, "remote_mgmt_ip") != "192.168.1.254" ||
+		rowString(t, nb, "remote_chassis_id") != "4c1f-cc81-1234" {
+		t.Errorf("邻居明细字段不符: %v", nb)
+	}
+}

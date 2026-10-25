@@ -18,7 +18,9 @@ import type {
   DiskUsageDetails,
   InterfaceRatioDetails,
   InterfaceUtilizationSkipped,
+  LLDPNeighborsDetails,
   OpticalPowerDetails,
+  PoEDetails,
 } from '../types'
 import { cn } from '@/utils/cn'
 
@@ -158,7 +160,13 @@ const CriteriaNote = ({ children }: { children: ReactNode }) => (
 )
 
 const InterfaceRatioTable = ({ details }: { details: InterfaceRatioDetails }) => {
-  const label = details.kind === 'interface_errors' ? '错包' : '丢弃'
+  const label =
+    details.kind === 'interface_broadcast'
+      ? '非单播'
+      : details.kind === 'interface_errors'
+        ? '错包'
+        : '丢弃'
+  const packetHeader = details.kind === 'interface_broadcast' ? '单播包数' : '总包数'
   if (details.interfaces.length === 0 && details.skipped.length === 0) return null
 
   return (
@@ -168,7 +176,7 @@ const InterfaceRatioTable = ({ details }: { details: InterfaceRatioDetails }) =>
       }）`}
     >
       {details.interfaces.length > 0 ? (
-        <DetailTable headers={['接口', '峰值方向', `${label}率`, `${label}数`, '包数']}>
+        <DetailTable headers={['接口', '峰值方向', `${label}率`, `${label}数`, packetHeader]}>
           {details.interfaces.map((entry) => (
             <tr key={`${entry.name}-${entry.direction}`} className="border-b border-border/60 last:border-0">
               <td className="py-1.5 pr-3 font-medium text-foreground/90 break-all">{entry.name}</td>
@@ -199,7 +207,7 @@ const InterfaceRatioTable = ({ details }: { details: InterfaceRatioDetails }) =>
       )}
 
       <CriteriaNote>
-        判定口径：累计比率 = {label}数 / ({label}数 + 包数)，警告线{' '}
+        判定口径：累计比率 = {label}数 / ({label}数 + {packetHeader})，警告线{' '}
         {formatPercent(details.warning_threshold)}，故障线 {formatPercent(details.critical_threshold)}
       </CriteriaNote>
 
@@ -356,6 +364,140 @@ const DiskUsageTable = ({ details }: { details: DiskUsageDetails }) => {
   )
 }
 
+const getLLDPStatusLabel = (status: string | undefined): string => {
+  switch (status) {
+    case 'ok':
+      return '正常'
+    case 'disabled':
+      return '设备未启用'
+    case 'mib_unreachable':
+      return 'SNMP 视图未放行'
+    default:
+      return status || '未知'
+  }
+}
+
+const LLDPNeighborsTable = ({ details }: { details: LLDPNeighborsDetails }) => {
+  const neighbors = details.neighbors ?? []
+  const statusLabel = getLLDPStatusLabel(details.status)
+  const total = details.total ?? neighbors.length
+
+  return (
+    <Disclosure summary={`LLDP 邻居明细（共 ${total} 个邻居，状态：${statusLabel}）`}>
+      {neighbors.length > 0 ? (
+        <DetailTable headers={['本地端口', '远端设备名称', '远端端口描述', '远端管理 IP']}>
+          {neighbors.map((entry, index) => (
+            <tr
+              key={`${entry.local_port}-${entry.remote_chassis_id || entry.remote_sys_name || index}`}
+              className="border-b border-border/60 last:border-0"
+            >
+              <td className="py-1.5 pr-3 font-medium text-foreground/90 whitespace-nowrap">
+                {entry.local_port || EMPTY}
+              </td>
+              <td className="py-1.5 pr-3 text-foreground/90 font-medium break-all">
+                {entry.remote_sys_name || EMPTY}
+              </td>
+              <td className="py-1.5 pr-3 text-muted-foreground break-all">
+                {entry.remote_port_desc || entry.remote_port || EMPTY}
+              </td>
+              <td className="py-1.5 text-muted-foreground whitespace-nowrap font-mono tabular-nums">
+                {entry.remote_mgmt_ip || EMPTY}
+              </td>
+            </tr>
+          ))}
+        </DetailTable>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          本次未发现 LLDP 邻居设备（采集状态：{statusLabel}）。
+        </p>
+      )}
+
+      <CriteriaNote>
+        判定依据：全局未开启 LLDP 判警告；已开启时上报拓扑邻居清单。若状态为 SNMP 视图未放行，需在设备端放行 1.0.8802 视图。
+      </CriteriaNote>
+    </Disclosure>
+  )
+}
+
+const PoETable = ({ details }: { details: PoEDetails }) => {
+  const ports = details.ports ?? []
+  if (ports.length === 0 && details.remaining_power === undefined) return null
+
+  const unit = details.remaining_unit ?? details.threshold?.unit ?? 'W'
+  const totalConsuming =
+    details.total_consuming_power ??
+    ports.reduce((acc, p) => acc + (p.consuming_power ?? 0), 0)
+  const poweredPortsCount =
+    details.powered_ports ??
+    ports.filter((p) => (p.consuming_power ?? 0) > 0).length
+
+  const warningThresh = details.warning_threshold ?? details.threshold?.warning
+  const criticalThresh = details.critical_threshold ?? details.threshold?.critical
+
+  const sortedPorts = [...ports].sort(
+    (a, b) => (b.consuming_power ?? 0) - (a.consuming_power ?? 0)
+  )
+
+  const summary =
+    details.remaining_power !== undefined
+      ? `PoE 供电明细（${poweredPortsCount} 个端口受电，消耗 ${totalConsuming.toFixed(1)}${unit}，剩余保障 ${details.remaining_power.toFixed(1)}${unit}）`
+      : `PoE 供电明细（${poweredPortsCount} 个端口受电，消耗 ${totalConsuming.toFixed(1)}${unit}）`
+
+  return (
+    <Disclosure summary={summary}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 text-xs">
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground text-[11px]">受电端口数</div>
+          <div className="font-semibold text-foreground mt-0.5">{poweredPortsCount} 个</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground text-[11px]">总消耗功率</div>
+          <div className="font-semibold text-foreground mt-0.5">{totalConsuming.toFixed(1)} {unit}</div>
+        </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground text-[11px]">剩余保障功率</div>
+          <div className="font-semibold text-foreground mt-0.5">
+            {details.remaining_power !== undefined ? `${details.remaining_power.toFixed(1)} ${unit}` : EMPTY}
+          </div>
+        </div>
+        <div className="rounded bg-muted/50 p-2">
+          <div className="text-muted-foreground text-[11px]">判定阈值 (告警 / 故障)</div>
+          <div className="font-semibold text-foreground mt-0.5">
+            {warningThresh !== undefined && criticalThresh !== undefined
+              ? `<= ${warningThresh}${unit} / <= ${criticalThresh}${unit}`
+              : '仅展示'}
+          </div>
+        </div>
+      </div>
+
+      {sortedPorts.length > 0 ? (
+        <DetailTable headers={['端口', '消耗功率', '峰值功率']}>
+          {sortedPorts.map((port) => (
+            <tr key={port.index} className="border-b border-border/60 last:border-0">
+              <td className="py-1.5 pr-3 font-medium text-foreground/90 whitespace-nowrap">
+                {port.index}
+              </td>
+              <td className="py-1.5 pr-3 text-foreground/90 whitespace-nowrap tabular-nums font-medium">
+                {formatOptional(port.consuming_power, port.unit || unit, 1)}
+              </td>
+              <td className="py-1.5 text-muted-foreground whitespace-nowrap tabular-nums">
+                {formatOptional(port.peak_power, port.unit || unit, 1)}
+              </td>
+            </tr>
+          ))}
+        </DetailTable>
+      ) : (
+        <p className="text-xs text-muted-foreground">本次未采集到 PoE 端口供电数据。</p>
+      )}
+
+      <CriteriaNote>
+        判定口径：PSE 剩余保障功率越低越危险，告警线 &lt;= {warningThresh ?? 30}{unit}，故障线 &lt;= {criticalThresh ?? 10}{unit}。
+        {details.remaining_power === undefined && '（当前设备未上报 PSE 剩余保障功率，仅展示端口消耗数据）'}
+      </CriteriaNote>
+    </Disclosure>
+  )
+}
+
 interface CheckDetailTablesProps {
   details: CheckResultDetails
 }
@@ -368,6 +510,7 @@ export function CheckDetailTables({ details }: CheckDetailTablesProps) {
   switch (details.kind) {
     case 'interface_errors':
     case 'interface_discards':
+    case 'interface_broadcast':
       return <InterfaceRatioTable details={details} />
     case 'optical_power':
       return <OpticalPowerTable details={details} />
@@ -377,6 +520,10 @@ export function CheckDetailTables({ details }: CheckDetailTablesProps) {
       return <ComponentStatusTable details={details} />
     case 'disk_usage':
       return <DiskUsageTable details={details} />
+    case 'lldp_neighbors':
+      return <LLDPNeighborsTable details={details} />
+    case 'poe':
+      return <PoETable details={details} />
     default:
       return null
   }

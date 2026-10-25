@@ -60,9 +60,11 @@ func TestBuiltinCheckItems_ExecutableAndMetricValid(t *testing.T) {
 		// 接口健康类（标准 IF-MIB / EtherLike-MIB）
 		"interface_errors": true, "interface_discards": true,
 		"interface_admin_status": true, "interface_duplex": true,
+		"interface_broadcast": true,
 		// 硬件部件与设备专项
 		"fan_status": true, "power_status": true, "poe": true,
 		"optical_power": true, "bgp_peers": true, "firmware_version": true,
+		"lldp_neighbors": true, "stp_status": true,
 		// 主机专项（HOST-RESOURCES-MIB）
 		"disk_usage": true,
 	}
@@ -86,7 +88,9 @@ func TestBuiltinCheckItems_ExecutableAndMetricValid(t *testing.T) {
 		"reachable", "cpu", "memory", "temperature", "uptime", "interface",
 		"interface_utilization", "bandwidth",
 		"interface_errors", "interface_discards", "interface_admin_status", "interface_duplex",
+		"interface_broadcast",
 		"fan_status", "power_status", "poe", "optical_power", "bgp_peers", "firmware_version",
+		"lldp_neighbors", "stp_status",
 		"disk_usage",
 	}
 	got := map[string]bool{}
@@ -175,18 +179,18 @@ func TestBuiltinMetricsForDeviceType_PerTypeDesign(t *testing.T) {
 	}{
 		{
 			deviceType: "switch",
-			required:   append(append([]string{}, networkHardware...), "interface_duplex", "poe"),
+			required:   append(append([]string{}, networkHardware...), "interface_duplex", "poe", "lldp_neighbors", "stp_status", "interface_broadcast"),
 			forbidden:  []string{"bgp_peers", "bandwidth", "disk_usage"},
 		},
 		{
 			deviceType: "router",
 			required:   append(append([]string{}, networkHardware...), "bgp_peers", "bandwidth"),
-			forbidden:  []string{"poe", "interface_duplex", "disk_usage"},
+			forbidden:  []string{"poe", "interface_duplex", "disk_usage", "lldp_neighbors", "stp_status", "interface_broadcast"},
 		},
 		{
 			deviceType: "firewall",
 			required:   append(append([]string{}, networkHardware...), "bgp_peers", "bandwidth"),
-			forbidden:  []string{"poe", "interface_duplex", "disk_usage"},
+			forbidden:  []string{"poe", "interface_duplex", "disk_usage", "lldp_neighbors", "stp_status", "interface_broadcast"},
 		},
 		{
 			deviceType: "server",
@@ -194,6 +198,7 @@ func TestBuiltinMetricsForDeviceType_PerTypeDesign(t *testing.T) {
 			forbidden: []string{
 				"temperature", "fan_status", "power_status", "optical_power", "firmware_version",
 				"poe", "interface_duplex", "bgp_peers", "bandwidth",
+				"lldp_neighbors", "stp_status", "interface_broadcast",
 			},
 		},
 	}
@@ -256,4 +261,29 @@ func TestBuiltinTemplates_ServerThresholds(t *testing.T) {
 	if len(want) != 0 {
 		t.Errorf("服务器模板缺少这些带阈值的检查项: %v", want)
 	}
+}
+
+// TestBuiltinTemplates_SwitchHas20Items 校验「交换机巡检」模板包含全部 20 项检查项
+func TestBuiltinTemplates_SwitchHas20Items(t *testing.T) {
+	for _, s := range decodeBuiltinSeeds(t) {
+		if s.Name != "交换机巡检" {
+			continue
+		}
+		if len(s.CheckItems) != 20 {
+			t.Fatalf("交换机巡检应包含 20 个检查项，实际 %d", len(s.CheckItems))
+		}
+		metrics := map[string]bool{}
+		for _, item := range s.CheckItems {
+			if m, ok := item["metric"].(string); ok {
+				metrics[m] = true
+			}
+		}
+		for _, want := range []string{"lldp_neighbors", "stp_status", "interface_broadcast"} {
+			if !metrics[want] {
+				t.Errorf("交换机巡检模板缺少新项 metric=%q", want)
+			}
+		}
+		return
+	}
+	t.Fatal("未找到交换机巡检模板")
 }

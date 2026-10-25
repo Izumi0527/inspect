@@ -34,6 +34,16 @@ type CommonSection struct {
 	// HostResources 是 HOST-RESOURCES-MIB(RFC 2790) 的主机资源，服务器巡检使用；
 	// 网络设备普遍不实现，读不到属预期（对应检查项判 skip）。
 	HostResources HostResourcesSection `json:"host_resources"`
+	// BridgeSTP 是 RFC 1493 (BRIDGE-MIB) 的生成树 OID，交换机巡检使用；
+	// 标量 OID，单次 GET 即可读取。
+	BridgeSTP BridgeSTPSection `json:"bridge_stp"`
+}
+
+// BridgeSTPSection 承载 RFC 1493 (BRIDGE-MIB) 的 dot1dStp 标量 OID。
+type BridgeSTPSection struct {
+	StpProtocolSpec            OIDDefinition `json:"stp_protocol_spec"`
+	StpTimeSinceTopologyChange OIDDefinition `json:"stp_time_since_topology_change"`
+	StpTopChanges              OIDDefinition `json:"stp_top_changes"`
 }
 
 // HostResourcesSection 承载主机资源 OID。各项均可选，为空时采集端跳过。
@@ -117,8 +127,10 @@ type InterfacesSection struct {
 	IfOutErrors    OIDDefinition `json:"if_out_errors"`
 	IfInDiscards   OIDDefinition `json:"if_in_discards"`
 	IfOutDiscards  OIDDefinition `json:"if_out_discards"`
-	IfInUcastPkts  OIDDefinition `json:"if_in_ucast_pkts"`
-	IfOutUcastPkts OIDDefinition `json:"if_out_ucast_pkts"`
+	IfInUcastPkts   OIDDefinition `json:"if_in_ucast_pkts"`
+	IfOutUcastPkts  OIDDefinition `json:"if_out_ucast_pkts"`
+	IfInNUcastPkts  OIDDefinition `json:"if_in_nucast_pkts"`
+	IfOutNUcastPkts OIDDefinition `json:"if_out_nucast_pkts"`
 }
 
 type OIDDefinition struct {
