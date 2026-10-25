@@ -530,10 +530,27 @@ export const useInspectionReports = (params?: {
   })
 }
 
+const EXPORT_REPORT_TOAST_ID = 'inspection-export-report'
+
+const getReportFormatLabel = (format: 'pdf' | 'excel' | 'html' | 'word'): string => {
+  switch (format) {
+    case 'excel':
+      return 'Excel'
+    case 'word':
+      return 'Word'
+    default:
+      return 'PDF'
+  }
+}
+
 export const useGenerateReport = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
+    onMutate: ({ format }) => {
+      const formatLabel = getReportFormatLabel(format)
+      toast.loading(`正在导出 ${formatLabel} 报告...`, { id: EXPORT_REPORT_TOAST_ID })
+    },
     mutationFn: async ({
       executionId,
       type,
@@ -597,7 +614,7 @@ export const useGenerateReport = () => {
           document.body.appendChild(link)
           link.click()
           document.body.removeChild(link)
-          window.URL.revokeObjectURL(blobUrl)
+          window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000)
         }
         
         return result
@@ -606,12 +623,13 @@ export const useGenerateReport = () => {
         throw error
       }
     },
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'reports'] })
+      const formatLabel = getReportFormatLabel(variables.format)
       if (result.download_url) {
-        toast.success('报告已生成，正在下载...')
+        toast.success(`${formatLabel} 报告导出完成`, { id: EXPORT_REPORT_TOAST_ID })
       } else {
-        toast.success('报告生成请求已提交')
+        toast.success(`${formatLabel} 报告导出完成`, { id: EXPORT_REPORT_TOAST_ID })
       }
     },
     onError: (error: Error) => {
@@ -633,7 +651,7 @@ export const useGenerateReport = () => {
           : rawMessage
       )
       console.error('[useGenerateReport] 报告生成失败，原始错误:', rawMessage)
-      toast.error(friendly)
+      toast.error(friendly, { id: EXPORT_REPORT_TOAST_ID })
     },
   })
 }

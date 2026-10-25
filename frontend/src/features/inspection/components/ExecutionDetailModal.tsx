@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -66,6 +66,8 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
   const [activeTab, setActiveTab] = useState<'overview' | 'devices' | 'checks'>('overview')
   const [expandedDevice, setExpandedDevice] = useState<string | null>(null)
   const [showExportMenu, setShowExportMenu] = useState(false)
+  const [exportCompleted, setExportCompleted] = useState(false)
+  const exportResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   
   // 获取完整的执行详情（包含设备结果和检查项）
   const {
@@ -88,6 +90,12 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
     if (open) {
       setActiveTab('overview')
       setExpandedDevice(null)
+      setExportCompleted(false)
+    }
+    return () => {
+      if (exportResetTimerRef.current) {
+        clearTimeout(exportResetTimerRef.current)
+      }
     }
   }, [open])
 
@@ -96,6 +104,10 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
     if (!execution) return
     
     setShowExportMenu(false)
+    setExportCompleted(false)
+    if (exportResetTimerRef.current) {
+      clearTimeout(exportResetTimerRef.current)
+    }
     
     try {
       await generateReport.mutateAsync({
@@ -103,6 +115,10 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
         type: 'detailed',
         format,
       })
+      setExportCompleted(true)
+      exportResetTimerRef.current = setTimeout(() => {
+        setExportCompleted(false)
+      }, 3000)
     } catch (error) {
       console.error('导出报告失败:', error)
     }
@@ -637,10 +653,12 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
             >
               {generateReport.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
+              ) : exportCompleted ? (
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
               ) : (
                 <Download className="w-4 h-4" />
               )}
-              {generateReport.isPending ? '生成中...' : '导出报告'}
+              {generateReport.isPending ? '正在导出...' : exportCompleted ? '导出完成' : '导出报告'}
               {canExport && !generateReport.isPending && (
                 <ChevronDown className={cn('w-4 h-4 transition-transform', showExportMenu && 'rotate-180')} />
               )}
