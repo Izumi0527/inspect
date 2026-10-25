@@ -503,8 +503,13 @@ func (h InspectionHandler) GenerateInspectionReport(c echo.Context) error {
 
 	paramsJSON, _ := encodeInspectionReportParams(*start, *end, batchRows, taskID, deviceIDs)
 
+	reportTitle := strings.TrimSpace(executionDisplayName(batchRows))
+	if reportTitle == "" {
+		reportTitle = "巡检报告"
+	}
+
 	report := reports.Report{
-		Title:         "巡检报告",
+		Title:         reportTitle,
 		ReportType:    "inspection",
 		StartDate:     *start,
 		EndDate:       *end,

@@ -120,17 +120,21 @@ func writeInspectionSummarySheet(file *excelize.File, sheet string, data Inspect
 		inspectionTime = time.Now().Format("2006-01-02 15:04:05")
 	}
 
-	if err := setCell(file, sheet, "A1", fmt.Sprintf("网络设备巡检报告 - %s", inspectionName)); err != nil {
+	sheetTitle := "网络设备巡检报告"
+	if inspectionName != "" && inspectionName != "巡检报告" {
+		sheetTitle = fmt.Sprintf("网络设备巡检报告 - %s", inspectionName)
+	}
+	if err := setCell(file, sheet, "A1", sheetTitle); err != nil {
 		return err
 	}
 	if err := file.MergeCell(sheet, "A1", "F1"); err == nil {
 		_ = file.SetCellStyle(sheet, "A1", "F1", styles.Title)
 	}
-	if err := setCell(file, sheet, "A3", "巡检ID:"); err != nil {
+	if err := setCell(file, sheet, "A3", "巡检任务名称:"); err != nil {
 		return err
 	}
 	_ = file.SetCellStyle(sheet, "A3", "A7", styles.Section)
-	if err := setCell(file, sheet, "B3", data.InspectionID); err != nil {
+	if err := setCell(file, sheet, "B3", inspectionName); err != nil {
 		return err
 	}
 	if err := setCell(file, sheet, "A4", "巡检时间:"); err != nil {
@@ -148,7 +152,7 @@ func writeInspectionSummarySheet(file *excelize.File, sheet string, data Inspect
 	if err := setCell(file, sheet, "A6", "巡检状态:"); err != nil {
 		return err
 	}
-	if err := setCell(file, sheet, "B6", data.Status); err != nil {
+	if err := setCell(file, sheet, "B6", localizeStatusWord(data.Status)); err != nil {
 		return err
 	}
 	if err := setCell(file, sheet, "A7", "执行时长:"); err != nil {
@@ -218,8 +222,8 @@ func writeInspectionSummarySheet(file *excelize.File, sheet string, data Inspect
 		values := []interface{}{
 			device.DeviceName,
 			device.IPAddress,
-			device.DeviceType,
-			device.InspectionStatus,
+			localizeDeviceType(device.DeviceType),
+			localizeStatusWord(device.InspectionStatus),
 			formatPercent(device.PassRate, 1),
 			device.IssueCount,
 		}
@@ -276,13 +280,13 @@ func writeInspectionDeviceDetailSheet(file *excelize.File, sheet string, data In
 		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+2), "设备类型:"); err != nil {
 			return err
 		}
-		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+2), device.DeviceType); err != nil {
+		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+2), localizeDeviceType(device.DeviceType)); err != nil {
 			return err
 		}
 		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+3), "厂商:"); err != nil {
 			return err
 		}
-		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+3), device.Vendor); err != nil {
+		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+3), localizeVendor(device.Vendor)); err != nil {
 			return err
 		}
 		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+4), "型号:"); err != nil {
@@ -338,8 +342,8 @@ func writeInspectionResultSheet(file *excelize.File, sheet string, data Inspecti
 			values := []interface{}{
 				device.DeviceName,
 				result.CheckItemName,
-				result.CheckItemType,
-				result.Status,
+				localizeProtocolTerm(result.CheckItemType),
+				localizeStatusWord(result.Status),
 				result.ExpectedValue,
 				result.ActualValue,
 				result.ExecutionTime,
@@ -350,13 +354,12 @@ func writeInspectionResultSheet(file *excelize.File, sheet string, data Inspecti
 					return err
 				}
 				if idx == 3 {
-					status := strings.ToLower(strings.TrimSpace(result.Status))
-					switch status {
-					case "pass", "success", "completed":
+					switch normalizeCheckStatus(result.Status) {
+					case checkStatusPass:
 						_ = file.SetCellStyle(sheet, cell, cell, styles.Success)
-					case "warning":
+					case checkStatusWarning:
 						_ = file.SetCellStyle(sheet, cell, cell, styles.Warning)
-					case "fail", "error":
+					case checkStatusFailed, checkStatusError:
 						_ = file.SetCellStyle(sheet, cell, cell, styles.Error)
 					}
 				}
@@ -558,7 +561,7 @@ func writeStatisticsDistributionSheet(file *excelize.File, sheet string, data St
 	row := 5
 	for _, key := range keys {
 		count := byType[key]
-		values := []interface{}{key, count, formatPercentByTotal(count, total)}
+		values := []interface{}{localizeDeviceType(key), count, formatPercentByTotal(count, total)}
 		for idx, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(1+idx, row)
 			if err := setCell(file, sheet, cell, value); err != nil {
@@ -665,7 +668,7 @@ func writeStatisticsTopSheet(file *excelize.File, sheet string, data StatisticsR
 
 	row := 4
 	for idx, item := range data.TopDevices {
-		values := []interface{}{idx + 1, item.DeviceName, item.DeviceType, formatFloat(item.Score, 2)}
+		values := []interface{}{idx + 1, item.DeviceName, localizeDeviceType(item.DeviceType), formatFloat(item.Score, 2)}
 		for col, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(1+col, row)
 			if err := setCell(file, sheet, cell, value); err != nil {
@@ -707,7 +710,7 @@ func writeStatisticsChartSheet(file *excelize.File, sheet string, data Statistic
 	keys := orderedKeysByPreference(byType, []string{"switch", "router", "firewall", "server"})
 	row := 5
 	for _, key := range keys {
-		values := []interface{}{key, byType[key]}
+		values := []interface{}{localizeDeviceType(key), byType[key]}
 		for idx, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(1+idx, row)
 			if err := setCell(file, sheet, cell, value); err != nil {
@@ -817,7 +820,7 @@ func writeDeviceSummaryExcel(path string, data DeviceSummaryData) error {
 
 	row = 12
 	for _, device := range data.Devices {
-		values := []interface{}{device.Name, device.IP, device.DeviceType, device.Status, device.Location}
+		values := []interface{}{device.Name, device.IP, localizeDeviceType(device.DeviceType), localizeStatusWord(device.Status), device.Location}
 		for idx, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(1+idx, row)
 			if err := setCell(file, sheet, cell, value); err != nil {

@@ -271,8 +271,8 @@ var inspectionHTMLTpl = template.Must(template.New("inspection").Parse(`<!DOCTYP
         <h2>📋 基本信息</h2>
         <div class="info-grid">
             <div class="info-item">
-                <div class="info-label">巡检ID</div>
-                <div class="info-value">{{.InspectionID}}</div>
+                <div class="info-label">巡检任务名称</div>
+                <div class="info-value">{{.InspectionName}}</div>
             </div>
             <div class="info-item">
                 <div class="info-label">巡检时间</div>
@@ -489,7 +489,7 @@ func writeDeviceSummaryHTML(path string, data DeviceSummaryData) error {
 	rows := make([]string, 0, len(data.Devices))
 	for _, device := range data.Devices {
 		rows = append(rows, fmt.Sprintf("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>",
-			escapeHTML(device.Name), escapeHTML(device.IP), escapeHTML(device.DeviceType), escapeHTML(device.Status), escapeHTML(device.Location)))
+			escapeHTML(device.Name), escapeHTML(device.IP), escapeHTML(localizeDeviceType(device.DeviceType)), escapeHTML(localizeStatusWord(device.Status)), escapeHTML(device.Location)))
 	}
 	content := fmt.Sprintf(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>设备汇总报表</title></head><body><h1>设备汇总报表</h1><p>设备总数: %d</p><p>在线设备: %d</p><p>离线设备: %d</p><p>告警设备: %d</p><table border="1" cellpadding="4" cellspacing="0"><tr><th>设备名称</th><th>IP地址</th><th>设备类型</th><th>状态</th><th>位置</th></tr>%s</table></body></html>`,
 		data.Total, data.Online, data.Offline, data.Warning, strings.Join(rows, ""))
@@ -523,8 +523,8 @@ func buildInspectionHTMLView(data InspectionReportData) inspectionHTMLView {
 		devices = append(devices, inspectionHTMLDevice{
 			DeviceName:  device.DeviceName,
 			IPAddress:   device.IPAddress,
-			DeviceType:  device.DeviceType,
-			Status:      device.InspectionStatus,
+			DeviceType:  localizeDeviceType(device.DeviceType),
+			Status:      localizeStatusWord(device.InspectionStatus),
 			StatusClass: statusClass(device.InspectionStatus),
 			PassRate:    device.PassRate,
 			IssueCount:  device.IssueCount,
@@ -564,7 +564,7 @@ func buildStatisticsHTMLView(data StatisticsReportData) statisticsHTMLView {
 			percent = float64(count) / float64(total) * 100
 		}
 		rows = append(rows, statisticsHTMLRow{
-			DeviceType: deviceType,
+			DeviceType: localizeDeviceType(deviceType),
 			Count:      count,
 			Percent:    fmt.Sprintf("%.1f%%", percent),
 		})

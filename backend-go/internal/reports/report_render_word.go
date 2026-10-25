@@ -31,10 +31,10 @@ func writeInspectionWord(path string, data InspectionReportData) error {
 	elements = append(elements, docxParagraph("基本信息", ""))
 
 	infoRows := [][]string{
-		{"巡检ID", data.InspectionID},
+		{"巡检任务名称", normalizeReportTitle(data.InspectionName, "巡检报告")},
 		{"巡检时间", inspectionTime},
 		{"设备总数", fmt.Sprintf("%d", len(data.Devices))},
-		{"巡检状态", data.Status},
+		{"巡检状态", localizeStatusWord(data.Status)},
 		{"执行时长", formatDurationSeconds(data.ExecutionDuration)},
 	}
 	elements = append(elements, docxTable(infoRows, false))
@@ -56,8 +56,8 @@ func writeInspectionWord(path string, data InspectionReportData) error {
 		deviceRows = append(deviceRows, []string{
 			device.DeviceName,
 			device.IPAddress,
-			device.DeviceType,
-			device.InspectionStatus,
+			localizeDeviceType(device.DeviceType),
+			localizeStatusWord(device.InspectionStatus),
 			formatPercent(device.PassRate, 1),
 			fmt.Sprintf("%d", device.IssueCount),
 		})
@@ -92,7 +92,7 @@ func writeStatisticsWord(path string, data StatisticsReportData) error {
 	keys := orderedKeysByPreference(byType, []string{"switch", "router", "firewall", "server"})
 	distRows := [][]string{{"设备类型", "数量"}}
 	for _, key := range keys {
-		distRows = append(distRows, []string{key, fmt.Sprintf("%d", byType[key])})
+		distRows = append(distRows, []string{localizeDeviceType(key), fmt.Sprintf("%d", byType[key])})
 	}
 	elements = append(elements, docxTable(distRows, true))
 
@@ -132,8 +132,8 @@ func writeDeviceSummaryWord(path string, data DeviceSummaryData) error {
 		deviceRows = append(deviceRows, []string{
 			device.Name,
 			device.IP,
-			device.DeviceType,
-			device.Status,
+			localizeDeviceType(device.DeviceType),
+			localizeStatusWord(device.Status),
 			device.Location,
 		})
 	}

@@ -71,9 +71,8 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 	// 与「统计摘要」风格统一；颜色按业务语义彩虹化：标识/时间/数量/性能时长
 	// → indigo/emerald/amber/rose，避免旧版「执行时长」突兀灰色。
 	pdfkit.WriteStatCardRow(pdf, []pdfkit.StatCard{
-		// 首卡展示巡检名称（可读标识）；内部编号降级为 Hint 小字保留，
-		// 既满足「一眼看清是哪次巡检」，又不丢失工单追溯所需的 ID。
-		{Label: "巡检名称", Value: fallbackPDFValue(data.InspectionName), Hint: "编号 " + fallbackPDFValue(data.InspectionID), Color: pdfkit.ColorPrimary},
+		// 首卡展示巡检任务名称（可读标识），不再显示巡检ID内部编号。
+		{Label: "巡检任务名称", Value: fallbackPDFValue(data.InspectionName), Color: pdfkit.ColorPrimary},
 		{Label: "巡检时间", Value: fallbackPDFValue(inspectionTime), Color: pdfkit.ColorEmerald500},
 		{Label: "设备总数", Value: fmt.Sprintf("%d", len(data.Devices)), Color: pdfkit.ColorAmber500},
 		{Label: "执行时长", Value: formatDurationSeconds(data.ExecutionDuration), Color: pdfkit.ColorRose500},

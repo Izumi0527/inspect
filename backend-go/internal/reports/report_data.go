@@ -1733,11 +1733,7 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 	result.Devices = devices
 
 	latestInspection := rows[0]
-	inspectionName := report.Title
-	if inspectionName == "" {
-		inspectionName = defaultStringPtr(latestInspection.Name)
-	}
-	result.InspectionName = inspectionName
+	result.InspectionName = resolveInspectionTaskName(report.Title, latestInspection.Name)
 	result.InspectionID = fmt.Sprintf("INSP-%d", latestInspection.ID)
 	inspectionTime := coalesceTime(latestInspection.CompletedAt, latestInspection.CreatedAt)
 	if !inspectionTime.IsZero() {
@@ -1950,7 +1946,7 @@ func buildDeviceSummaryFromDB(ctx context.Context, db *gorm.DB, params map[strin
 
 func defaultInspectionReportData(report Report) InspectionReportData {
 	now := time.Now().UTC()
-	title := report.Title
+	title := strings.TrimSpace(report.Title)
 	if title == "" {
 		title = "巡检报告"
 	}
@@ -1966,6 +1962,24 @@ func defaultInspectionReportData(report Report) InspectionReportData {
 		SummaryStats:       InspectionSummaryStats{},
 		Devices:            []InspectionDeviceData{},
 	}
+}
+
+// resolveInspectionTaskName 解析巡检报告展示的「巡检任务名称」：
+// 当底层巡检记录带有实际任务/策略名称，且 Report.Title 为空或仅为默认占位词（"巡检报告"/"报表"）时，
+// 优先采用巡检记录上的真实任务名称，避免报告中出现「巡检任务名称: 巡检报告」。
+func resolveInspectionTaskName(reportTitle string, inspectionRowName *string) string {
+	rowName := defaultStringPtr(inspectionRowName)
+	title := strings.TrimSpace(reportTitle)
+	if rowName != "" && (title == "" || title == "巡检报告" || title == "报表") {
+		return rowName
+	}
+	if title != "" {
+		return title
+	}
+	if rowName != "" {
+		return rowName
+	}
+	return "巡检报告"
 }
 
 func defaultGenericReportData(report Report) GenericReportData {
