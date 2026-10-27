@@ -18,6 +18,9 @@ import (
 // 解析函数是这条链路上唯一可纯函数测试的环节，因此契约全部锁在这里；
 // 渲染层因 CJK 子集嵌入抽不出文本，只能断言结构完整性。
 
+//go:linkname parseInterfaceUtilizationDetails github.com/your-org/inspect-system/backend-go/internal/reports.parseInterfaceUtilizationDetails
+func parseInterfaceUtilizationDetails(raw *string) *reports.InterfaceUtilizationReport
+
 //go:linkname parseInterfaceRatioDetails github.com/your-org/inspect-system/backend-go/internal/reports.parseInterfaceRatioDetails
 func parseInterfaceRatioDetails(raw *string) *reports.InterfaceRatioReport
 
@@ -56,7 +59,7 @@ const interfaceRatioPayload = `{
 		{"name": "GigabitEthernet0/0/1", "direction": "入", "percent": 1.2, "count": 1200, "packets": 98800},
 		{"name": "GigabitEthernet0/0/2", "direction": "出", "percent": 0.0, "count": 0, "packets": 100000}
 	],
-	"skipped": [{"name": "NULL0", "reason": "设备未上报该计数器"}],
+	"skipped": [{"name": "Vlanif1", "reason": "设备未上报该计数器"}],
 	"metric": "interface_errors",
 	"threshold": {"warning": 0.01, "critical": 0.1, "unit": "%"}
 }`
@@ -574,4 +577,84 @@ func TestBodyCellTextIndent_NoAccentNoIndent(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestParseInterfaceDetails_FiltersIgnoredLogicalPorts 验证利用率与错包明细解析时自动剔除
+// NULL0、Console9/0/0、InLoopBack0 并扣减 Total，同时保留 Vlanif1 与 Eth-Trunk1。
+func TestParseInterfaceDetails_FiltersIgnoredLogicalPorts(t *testing.T) {
+	t.Run("interface_utilization", func(t *testing.T) {
+		raw := `{
+			"kind": "interface_utilization",
+			"total": 5, "evaluated": 3,
+			"warning_threshold": 70, "critical_threshold": 90,
+			"interfaces": [
+				{"name": "Vlanif1", "direction": "入", "percent": 50.0, "speed_mbps": 1000},
+				{"name": "Eth-Trunk1", "direction": "出", "percent": 60.0, "speed_mbps": 1000},
+				{"name": "Console9/0/0", "direction": "入", "percent": 10.0, "speed_mbps": 100}
+			],
+			"skipped": [
+				{"name": "NULL0", "reason": "无接口容量"},
+				{"name": "InLoopBack0", "reason": "无接口容量"}
+			]
+		}`
+		report := parseInterfaceUtilizationDetails(rawJSON(raw))
+		if report == nil {
+			t.Fatal("parseInterfaceUtilizationDetails 返回 nil")
+		}
+		if report.Total != 2 {
+			t.Errorf("Total = %d, want 2 (原本5减去3个非业务口)", report.Total)
+		}
+		if report.Evaluated != 2 {
+			t.Errorf("Evaluated = %d, want 2 (原本3减去1个在 interfaces 中的 Console9/0/0)", report.Evaluated)
+		}
+		if len(report.Interfaces) != 2 {
+			t.Fatalf("len(Interfaces) = %d, want 2", len(report.Interfaces))
+		}
+		for _, iface := range report.Interfaces {
+			if iface.Name != "Vlanif1" && iface.Name != "Eth-Trunk1" {
+				t.Errorf("不期望的接口: %q", iface.Name)
+			}
+		}
+		if len(report.Skipped) != 0 {
+			t.Errorf("len(Skipped) = %d, want 0", len(report.Skipped))
+		}
+	})
+
+	t.Run("interface_ratio", func(t *testing.T) {
+		raw := `{
+			"kind": "interface_errors",
+			"total": 5, "evaluated": 3,
+			"warning_threshold": 0.01, "critical_threshold": 0.1,
+			"interfaces": [
+				{"name": "Vlanif1", "direction": "入", "percent": 0.0, "count": 0, "packets": 1000},
+				{"name": "Eth-Trunk1", "direction": "出", "percent": 0.0, "count": 0, "packets": 1000},
+				{"name": "Console9/0/0", "direction": "入", "percent": 0.0, "count": 0, "packets": 1000}
+			],
+			"skipped": [
+				{"name": "NULL0", "reason": "未上报"},
+				{"name": "InLoopBack0", "reason": "未上报"}
+			]
+		}`
+		report := parseInterfaceRatioDetails(rawJSON(raw))
+		if report == nil {
+			t.Fatal("parseInterfaceRatioDetails 返回 nil")
+		}
+		if report.Total != 2 {
+			t.Errorf("Total = %d, want 2", report.Total)
+		}
+		if report.Evaluated != 2 {
+			t.Errorf("Evaluated = %d, want 2", report.Evaluated)
+		}
+		if len(report.Interfaces) != 2 {
+			t.Fatalf("len(Interfaces) = %d, want 2", len(report.Interfaces))
+		}
+		for _, iface := range report.Interfaces {
+			if iface.Name != "Vlanif1" && iface.Name != "Eth-Trunk1" {
+				t.Errorf("不期望的接口: %q", iface.Name)
+			}
+		}
+		if len(report.Skipped) != 0 {
+			t.Errorf("len(Skipped) = %d, want 0", len(report.Skipped))
+		}
+	})
 }

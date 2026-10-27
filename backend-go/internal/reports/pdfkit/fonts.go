@@ -39,31 +39,32 @@ type FontPaths struct {
 //   - REPORT_PDF_FONT_LATIN_PATH      (optional)
 //   - REPORT_PDF_FONT_LATIN_BOLD_PATH (optional)
 //
-// 中文字体按环境变量、系统候选的顺序查找；均不存在时保留空路径，
-// 注册时直接从内存使用内嵌字体。Windows、Ubuntu 24.04 和精简容器
-// 共用此回退方式，不需要创建或复用临时字体文件。
+// 未显式设置环境变量覆盖时默认返回空路径，统一使用内嵌的 macOS PingFang SC
+// （Medium 500 常规 + Bold 700 粗体），在 Windows、Ubuntu、macOS 和 Docker
+// 容器下保证排版一致且无需扫描宿主机字体。
 func ResolveFontPaths() (FontPaths, error) {
 	cjkOverrides := []string{
 		envOverride("REPORT_PDF_FONT_CJK_PATH"),
 		envOverride("REPORT_PDF_FONT_PATH"),
 	}
-	cjk, _ := pickFirstExisting(append(cjkOverrides, cjkCandidates()...)...)
+	cjk, _ := pickFirstExisting(cjkOverrides...)
 
-	// Bold falls back to the regular face — rendering stays correct, the
-	// headings just lose weight contrast on hosts without a bold CJK .ttf.
 	cjkBoldOverrides := []string{envOverride("REPORT_PDF_FONT_CJK_BOLD_PATH")}
-	cjkBold, boldErr := pickFirstExisting(append(cjkBoldOverrides, cjkBoldCandidates()...)...)
+	cjkBold, boldErr := pickFirstExisting(cjkBoldOverrides...)
 	if boldErr != nil {
 		cjkBold = cjk
 	}
 
 	latinOverrides := []string{envOverride("REPORT_PDF_FONT_LATIN_PATH")}
-	latin, _ := pickFirstExisting(append(latinOverrides, latinCandidates()...)...)
+	latin, _ := pickFirstExisting(latinOverrides...)
+	if latin == "" {
+		latin = cjk
+	}
 
 	latinBoldOverrides := []string{envOverride("REPORT_PDF_FONT_LATIN_BOLD_PATH")}
-	latinBold, latinBoldErr := pickFirstExisting(append(latinBoldOverrides, latinBoldCandidates()...)...)
-	if latinBoldErr != nil {
-		latinBold = latin // may be empty; RegisterFonts handles the fallback chain
+	latinBold, _ := pickFirstExisting(latinBoldOverrides...)
+	if latinBold == "" {
+		latinBold = cjkBold
 	}
 
 	return FontPaths{CJK: cjk, CJKBold: cjkBold, Latin: latin, LatinBold: latinBold}, nil
@@ -87,16 +88,20 @@ func RegisterFonts(pdf *gofpdf.Fpdf) error {
 func RegisterFontsWithPaths(pdf *gofpdf.Fpdf, paths FontPaths) error {
 	cjk := strings.TrimSpace(paths.CJK)
 	cjkBold := strings.TrimSpace(paths.CJKBold)
-	if cjkBold == "" {
+	if cjkBold == "" && cjk != "" {
 		cjkBold = cjk
 	}
 	latin := strings.TrimSpace(paths.Latin)
-	if latin == "" {
+	if latin == "" && cjk != "" {
 		latin = cjk
 	}
 	latinBold := strings.TrimSpace(paths.LatinBold)
 	if latinBold == "" {
-		latinBold = latin
+		if latin != "" {
+			latinBold = latin
+		} else if cjkBold != "" {
+			latinBold = cjkBold
+		}
 	}
 
 	for _, face := range []struct{ family, style, path string }{
@@ -108,7 +113,7 @@ func RegisterFontsWithPaths(pdf *gofpdf.Fpdf, paths FontPaths) error {
 		// gofpdf.AddUTF8Font 内部用 path.Join(fontpath, file) 拼路径，Linux 绝对路径
 		// 的前导 "/" 会被吃掉变成相对路径（Windows 的 C:\ 不含正斜杠故侥幸正常）。
 		// 因此字体文件一律自己读成字节再注册，不把路径交给 gofpdf。
-		raw, err := fontBytes(face.path)
+		raw, err := fontBytes(face.path, face.style)
 		if err != nil {
 			return err
 		}
@@ -147,14 +152,17 @@ func validateTrueTypeHeader(raw []byte, path string) error {
 
 func describeFontSource(path string) string {
 	if path == "" {
-		return "内嵌 Noto Sans SC"
+		return "内嵌 PingFang SC"
 	}
 	return path
 }
 
-// fontBytes 返回字体文件内容；空路径表示使用内嵌 Noto Sans SC。
-func fontBytes(path string) ([]byte, error) {
+// fontBytes 返回字体文件内容；空路径表示使用内嵌 PingFang SC（按 style 区分常规与粗体）。
+func fontBytes(path string, style ...string) ([]byte, error) {
 	if path == "" {
+		if len(style) > 0 && style[0] == "B" {
+			return assets.EmbeddedCJKBold(), nil
+		}
 		return assets.EmbeddedNotoSansSC(), nil
 	}
 	raw, err := os.ReadFile(path)
@@ -205,14 +213,12 @@ func pickFirstExisting(candidates ...string) (string, error) {
 // Chinese characters, so falling back to it would blank out every report.
 func cjkCandidates() []string {
 	return []string{
-		// Windows — DengXian (等线) is the modern Office-default face
-		// shipped since Windows 8.1 / Server 2016; it pairs with a true
-		// bold (Dengb.ttf) and reads much lighter than SimHei for body
-		// text. SimHei / FangSong / KaiTi remain as fallbacks for older
-		// hosts. msyh.ttc (YaHei) is intentionally excluded because
-		// gofpdf cannot parse TTC files.
-		`C:\Windows\Fonts\Deng.ttf`,
+		// Windows — 首选 SimHei (黑体)，笔画粗细扎实饱满，避免 DengXian (等线)
+		// 在小字号和打印时笔画偏细发虚；次选 DengXian (等线)。
+		// FangSong / KaiTi 作为老旧系统的后备选项。
+		// msyh.ttc (YaHei) 因 gofpdf 不支持 TTC 集合格式而排除。
 		`C:\Windows\Fonts\simhei.ttf`,
+		`C:\Windows\Fonts\Deng.ttf`,
 		`C:\Windows\Fonts\simfang.ttf`,
 		`C:\Windows\Fonts\simkai.ttf`,
 

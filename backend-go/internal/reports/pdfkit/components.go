@@ -241,18 +241,16 @@ func WriteStatCardRow(pdf *gofpdf.Fpdf, cards []StatCard, columns int) {
 
 		// Label
 		pdf.SetXY(x+5, y+5)
-		pdf.SetFont(FontFamilyCJK, "", FontCaption)
+		pdf.SetFont(FontFamilyCJK, "B", FontSmall)
 		pdf.SetTextColor(ColorTextMuted[0], ColorTextMuted[1], ColorTextMuted[2])
 		pdf.CellFormat(cardW-10, 4.5, strings.TrimSpace(card.Label), "", 1, "L", false, 0, "")
 
-		// Big value — 按内容选字体（含 CJK 时不能用 Latin 面，Inter/Arial
-		// 没有汉字字形，"3 秒" 会渲染成方框），并按卡宽自适应缩字号，
-		// 避免长值（如完整时间戳）溢出卡片被右侧邻卡覆盖。
+		// Big value — 按内容自适应缩字号，消除跨字体族粗细割裂并防止溢出
 		value := fallback(card.Value, "-")
 		pdf.SetX(x + 5)
-		fitFontSize(pdf, value, textFontFamily(value), "B", 16, 9, cardW-10)
+		fitFontSize(pdf, value, FontFamilyCJK, "B", 16, FontNano, cardW-10)
 		pdf.SetTextColor(ColorText[0], ColorText[1], ColorText[2])
-		pdf.CellFormat(cardW-10, 8, value, "", 1, "L", false, 0, "")
+		pdf.CellFormat(cardW-10, 8, TruncateToWidth(pdf, value, cardW-8), "", 1, "L", false, 0, "")
 
 		// Hint
 		if hint := strings.TrimSpace(card.Hint); hint != "" {

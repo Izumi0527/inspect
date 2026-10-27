@@ -497,3 +497,73 @@ func TestSTPStatus_ProtocolNoneSkips(t *testing.T) {
 		t.Errorf("ProtocolSpec=1(none) 应判 skip，实际 %q（消息：%v）", result.Status, result.Message)
 	}
 }
+
+// TestInterfaceHealthChecks_FiltersIgnoredLogicalPorts 验证 interface_errors、interface_discards、
+// interface_broadcast 以及 interfaces 检查项均会忽略 NULL0、Console9/0/0、InLoopBack0 等
+// 非业务逻辑端口，同时保留 Vlanif1、Eth-Trunk1 等业务逻辑接口。
+func TestInterfaceHealthChecks_FiltersIgnoredLogicalPorts(t *testing.T) {
+	makePort := func(name string, up bool) devices.InterfaceMetrics {
+		return devices.InterfaceMetrics{
+			Name: name, Description: name,
+			Speed: i64(1000), IsUp: boolPtr(up), AdminUp: boolPtr(true),
+			InErrors: u64(0), OutErrors: u64(0),
+			InDiscards: u64(0), OutDiscards: u64(0),
+			InUcastPkts: u64(100000), OutUcastPkts: u64(100000),
+			InNUcastPkts: u64(100), OutNUcastPkts: u64(100),
+			DuplexStatus: intPtr(3),
+		}
+	}
+
+	testInterfaces := []devices.InterfaceMetrics{
+		makePort("NULL0", true),
+		makePort("Console9/0/0", true),
+		makePort("InLoopBack0", true),
+		makePort("Vlanif1", true),
+		makePort("Eth-Trunk1", true),
+	}
+
+	// 1. 测试 interfaces (接口状态检查)
+	t.Run("interfaces", func(t *testing.T) {
+		result := runMetricCheck(t, "interfaces", &devices.SNMPMetrics{Interfaces: testInterfaces}, nil)
+		if result.Status != "pass" {
+			t.Fatalf("interfaces 状态 = %q, want pass", result.Status)
+		}
+		if result.ActualValue == nil || *result.ActualValue != "2/2" {
+			t.Errorf("interfaces 实际值 = %v, want 2/2 (排除了3个非业务逻辑口)", result.ActualValue)
+		}
+	})
+
+	// 2. 测试 interface_errors, interface_discards, interface_broadcast
+	for _, metric := range []string{"interface_errors", "interface_discards", "interface_broadcast"} {
+		t.Run(metric, func(t *testing.T) {
+			result := runMetricCheck(t, metric, &devices.SNMPMetrics{Interfaces: testInterfaces}, nil)
+			if result.Status != "pass" {
+				t.Fatalf("%s 状态 = %q, want pass", metric, result.Status)
+			}
+			if len(result.Details) == 0 {
+				t.Fatalf("%s 缺少 details", metric)
+			}
+			var parsed struct {
+				Total      int `json:"total"`
+				Evaluated  int `json:"evaluated"`
+				Interfaces []struct {
+					Name string `json:"name"`
+				} `json:"interfaces"`
+				Skipped []struct {
+					Name string `json:"name"`
+				} `json:"skipped"`
+			}
+			if err := json.Unmarshal(result.Details, &parsed); err != nil {
+				t.Fatalf("解析 %s details 失败: %v", metric, err)
+			}
+			if parsed.Total != 2 {
+				t.Errorf("%s Total = %d, want 2", metric, parsed.Total)
+			}
+			for _, item := range append(parsed.Interfaces, parsed.Skipped...) {
+				if item.Name == "NULL0" || item.Name == "Console9/0/0" || item.Name == "InLoopBack0" {
+					t.Errorf("%s details 中不应包含非业务逻辑口 %q", metric, item.Name)
+				}
+			}
+		})
+	}
+}

@@ -2,6 +2,7 @@ package reports_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
@@ -143,5 +144,94 @@ func TestEmbeddedFont_ContainsReportChineseGlyphs(t *testing.T) {
 		if font.Index(char) == 0 {
 			t.Errorf("内嵌字体缺少字符 %q", char)
 		}
+	}
+}
+
+// TestEmbeddedFont_IsStaticMediumWeight 验证内嵌常规与粗体中文字体（macOS PingFang SC Medium + Bold）：
+// 1. 不包含 fvar / gvar 可变字体表（避免不支持可变字体的 PDF/图表引擎退化为 Thin 100 极细体）；
+// 2. OS/2 表的 usWeightClass >= 400（排除 100 Thin 极细字重），且常规与粗体为两个不同字面；
+// 3. 常见报告中英文字符与数字字形完整。
+func TestEmbeddedFont_IsStaticMediumWeight(t *testing.T) {
+	if bytes.Equal(assets.EmbeddedNotoSansSC(), assets.EmbeddedCJKBold()) {
+		t.Fatal("常规体与粗体内嵌字体字节完全相同，应提供独立的 PingFang SC Medium 与 Bold 字面")
+	}
+
+	cases := []struct {
+		name      string
+		data      []byte
+		minWeight uint16
+	}{
+		{
+			name:      "PingFang SC Medium (Regular)",
+			data:      assets.EmbeddedNotoSansSC(),
+			minWeight: 400,
+		},
+		{
+			name:      "PingFang SC Bold",
+			data:      assets.EmbeddedCJKBold(),
+			minWeight: 400,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			data := tc.data
+			if len(data) < 12 {
+				t.Fatalf("%s 字体数据长度不足: %d", tc.name, len(data))
+			}
+
+			numTables := binary.BigEndian.Uint16(data[4:6])
+			if len(data) < 12+int(numTables)*16 {
+				t.Fatalf("%s 字体数据截断: 需要至少 %d 字节, 实际 %d 字节", tc.name, 12+int(numTables)*16, len(data))
+			}
+
+			tables := make(map[string]struct {
+				offset uint32
+				length uint32
+			})
+
+			for i := 0; i < int(numTables); i++ {
+				entryOffset := 12 + i*16
+				tag := string(data[entryOffset : entryOffset+4])
+				offset := binary.BigEndian.Uint32(data[entryOffset+8 : entryOffset+12])
+				length := binary.BigEndian.Uint32(data[entryOffset+12 : entryOffset+16])
+				tables[tag] = struct {
+					offset uint32
+					length uint32
+				}{offset: offset, length: length}
+			}
+
+			// 断言不含 fvar / gvar 可变字体表
+			if _, hasFvar := tables["fvar"]; hasFvar {
+				t.Errorf("%s 仍包含 fvar 可变字体表，应为静态字体", tc.name)
+			}
+			if _, hasGvar := tables["gvar"]; hasGvar {
+				t.Errorf("%s 仍包含 gvar 可变字体表，应为静态字体", tc.name)
+			}
+
+			// 断言 OS/2 表的 usWeightClass >= minWeight
+			os2, hasOS2 := tables["OS/2"]
+			if !hasOS2 {
+				t.Fatalf("%s 缺少 OS/2 表", tc.name)
+			}
+			if int(os2.offset)+6 > len(data) {
+				t.Fatalf("%s OS/2 表偏移量越界", tc.name)
+			}
+			usWeightClass := binary.BigEndian.Uint16(data[os2.offset+4 : os2.offset+6])
+			if usWeightClass < tc.minWeight {
+				t.Errorf("%s usWeightClass = %d, want >= %d", tc.name, usWeightClass, tc.minWeight)
+			}
+
+			// 验证中英文字符字形完整
+			font, err := truetype.Parse(data)
+			if err != nil {
+				t.Fatalf("%s truetype 解析失败: %v", tc.name, err)
+			}
+			for _, char := range "网络设备巡检报告告警流量统计0123456789CPU%" {
+				if font.Index(char) == 0 {
+					t.Errorf("%s 缺少字符 %q", tc.name, char)
+				}
+			}
+		})
 	}
 }

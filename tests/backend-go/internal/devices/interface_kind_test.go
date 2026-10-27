@@ -33,3 +33,28 @@ func TestIsLogicalInterface(t *testing.T) {
 		}
 	}
 }
+
+// 巡检统计与报告中应忽略的非业务逻辑端口（NULL0、Console、LoopBack 等），而业务逻辑口（Vlanif、Eth-Trunk）与物理口保留。
+func TestIsIgnoredInspectionInterface(t *testing.T) {
+	ignored := []string{
+		"NULL0", "Null0",
+		"Console9/0/0", "Aux0/0/1",
+		"InLoopBack0", "LoopBack0", "Loopback1", "lo",
+	}
+	for _, name := range ignored {
+		if !devices.IsIgnoredInspectionInterface(name) {
+			t.Errorf("IsIgnoredInspectionInterface(%q) = false, want true", name)
+		}
+	}
+
+	retained := []string{
+		"Vlanif1", "vlanif100", "Vlan-interface10", "Vlan20",
+		"Eth-Trunk1", "Bridge-Aggregation2", "Route-Aggregation3", "Port-channel4",
+		"GigabitEthernet0/0/1", "MEth0/0/1",
+	}
+	for _, name := range retained {
+		if devices.IsIgnoredInspectionInterface(name) {
+			t.Errorf("IsIgnoredInspectionInterface(%q) = true, want false", name)
+		}
+	}
+}

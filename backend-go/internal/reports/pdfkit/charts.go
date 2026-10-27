@@ -117,7 +117,12 @@ func RenderDonutChart(spec DonutSpec) ([]byte, error) {
 	}
 
 	donut := chart.DonutChart{
-		Title:  spec.Title,
+		Title: spec.Title,
+		TitleStyle: chart.Style{
+			FontColor: toDrawing(ColorText),
+			FontSize:  13,
+			Font:      chartFont(),
+		},
 		Width:  w,
 		Height: h,
 		Font:   chartFont(),
@@ -190,7 +195,12 @@ func RenderBarChart(spec BarSpec) ([]byte, error) {
 	}
 
 	bar := chart.BarChart{
-		Title:  spec.Title,
+		Title: spec.Title,
+		TitleStyle: chart.Style{
+			FontColor: toDrawing(ColorText),
+			FontSize:  13,
+			Font:      chartFont(),
+		},
 		Width:  w,
 		Height: h,
 		Font:   chartFont(),

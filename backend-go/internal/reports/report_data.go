@@ -14,6 +14,7 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
+	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	"github.com/your-org/inspect-system/backend-go/internal/inspection"
 )
 
@@ -285,6 +286,38 @@ func parseInterfaceUtilizationDetails(raw *string) *InterfaceUtilizationReport {
 	if payload.Kind != "interface_utilization" {
 		return nil
 	}
+
+	filteredInterfaces := make([]InterfaceUtilizationEntryReport, 0, len(payload.Interfaces))
+	removedInterfaces := 0
+	for _, item := range payload.Interfaces {
+		if devices.IsIgnoredInspectionInterface(item.Name) {
+			removedInterfaces++
+			continue
+		}
+		filteredInterfaces = append(filteredInterfaces, item)
+	}
+	payload.Interfaces = filteredInterfaces
+
+	filteredSkipped := make([]InterfaceUtilizationSkippedReport, 0, len(payload.Skipped))
+	removedSkipped := 0
+	for _, item := range payload.Skipped {
+		if devices.IsIgnoredInspectionInterface(item.Name) {
+			removedSkipped++
+			continue
+		}
+		filteredSkipped = append(filteredSkipped, item)
+	}
+	payload.Skipped = filteredSkipped
+
+	payload.Total -= (removedInterfaces + removedSkipped)
+	if payload.Total < 0 {
+		payload.Total = 0
+	}
+	payload.Evaluated -= removedInterfaces
+	if payload.Evaluated < 0 {
+		payload.Evaluated = 0
+	}
+
 	return &payload
 }
 
@@ -327,6 +360,38 @@ func parseInterfaceRatioDetails(raw *string) *InterfaceRatioReport {
 	if !ok {
 		return nil
 	}
+
+	filteredInterfaces := make([]InterfaceRatioEntryReport, 0, len(payload.Interfaces))
+	removedInterfaces := 0
+	for _, item := range payload.Interfaces {
+		if devices.IsIgnoredInspectionInterface(item.Name) {
+			removedInterfaces++
+			continue
+		}
+		filteredInterfaces = append(filteredInterfaces, item)
+	}
+	payload.Interfaces = filteredInterfaces
+
+	filteredSkipped := make([]InterfaceUtilizationSkippedReport, 0, len(payload.Skipped))
+	removedSkipped := 0
+	for _, item := range payload.Skipped {
+		if devices.IsIgnoredInspectionInterface(item.Name) {
+			removedSkipped++
+			continue
+		}
+		filteredSkipped = append(filteredSkipped, item)
+	}
+	payload.Skipped = filteredSkipped
+
+	payload.Total -= (removedInterfaces + removedSkipped)
+	if payload.Total < 0 {
+		payload.Total = 0
+	}
+	payload.Evaluated -= removedInterfaces
+	if payload.Evaluated < 0 {
+		payload.Evaluated = 0
+	}
+
 	return payload
 }
 

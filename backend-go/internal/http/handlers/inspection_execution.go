@@ -843,7 +843,7 @@ func (h InspectionHandler) executeSNMPCheck(result *inspection.Result, probeResu
 		h.checkTemperatureMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
 	case "uptime":
 		h.checkUptimeMetric(result, snmpMetrics)
-	case "interface":
+	case "interface", "interfaces":
 		h.checkInterfaceMetric(result, snmpMetrics)
 	case "interface_utilization":
 		h.checkInterfaceUtilizationMetric(result, snmpMetrics, warningThreshold, criticalThreshold)
@@ -1054,11 +1054,18 @@ func (h InspectionHandler) checkInterfaceMetric(result *inspection.Result, metri
 		return
 	}
 
-	totalInterfaces := len(metrics.Interfaces)
+	interfaces := filterInspectionInterfaces(metrics.Interfaces)
+	if len(interfaces) == 0 {
+		result.Status = "skip"
+		result.Message = stringPtr("无法获取接口状态数据")
+		return
+	}
+
+	totalInterfaces := len(interfaces)
 	upInterfaces := 0
 	upKnown := false
 	activeByTraffic := 0
-	for _, iface := range metrics.Interfaces {
+	for _, iface := range interfaces {
 		if iface.IsUp != nil {
 			upKnown = true
 			if *iface.IsUp {
@@ -1170,15 +1177,30 @@ func interfaceDisplayName(iface devices.InterfaceMetrics) string {
 	return strings.TrimSpace(iface.Name)
 }
 
+// filterInspectionInterfaces 剔除巡检统计与报告中应忽略的非业务逻辑端口（NULL0、Console、InLoopBack 等）。
+func filterInspectionInterfaces(interfaces []devices.InterfaceMetrics) []devices.InterfaceMetrics {
+	if len(interfaces) == 0 {
+		return interfaces
+	}
+	filtered := make([]devices.InterfaceMetrics, 0, len(interfaces))
+	for _, iface := range interfaces {
+		if !devices.IsIgnoredInspectionInterface(interfaceDisplayName(iface)) {
+			filtered = append(filtered, iface)
+		}
+	}
+	return filtered
+}
+
 // summarizeInterfaceUtilization 逐接口计算带宽利用率并汇总。
 // 纯函数（不依赖 handler/DB/网络），便于表驱动测试。
 //
 // 接口被排除在评估之外的三种情形：
 //  1. IsUp 明确为 false —— DOWN 口的利用率无意义，其状态由"接口状态"检查项负责；
 //     IsUp 为 nil（旧采集数据未带 ifOperStatus）时不过滤，避免整机漏评估。
-//  2. Speed 缺失或非正 —— 没有容量就没有分母（Loopback/NULL 口通常落在这里）。
+//  2. Speed 缺失或非正 —— 没有容量就没有分母。
 //  3. InRate 与 OutRate 均缺失 —— 速率由两次 octets 采样差分得出，首轮采集尚无基线。
 func summarizeInterfaceUtilization(interfaces []devices.InterfaceMetrics, warning, critical float64) interfaceUtilizationSummary {
+	interfaces = filterInspectionInterfaces(interfaces)
 	summary := interfaceUtilizationSummary{Total: len(interfaces)}
 	entries := make([]interfaceUtilizationEntry, 0, len(interfaces))
 
@@ -2236,6 +2258,7 @@ func summarizeInterfaceCounterRatio(
 	warning, critical float64,
 	pick func(devices.InterfaceMetrics) (inCount, outCount, inPkts, outPkts *uint64),
 ) interfaceRatioSummary {
+	interfaces = filterInspectionInterfaces(interfaces)
 	summary := interfaceRatioSummary{Total: len(interfaces)}
 	entries := make([]interfaceRatioEntry, 0, len(interfaces))
 
@@ -2414,6 +2437,7 @@ func summarizeInterfaceBroadcast(
 	interfaces []devices.InterfaceMetrics,
 	warning, critical float64,
 ) interfaceRatioSummary {
+	interfaces = filterInspectionInterfaces(interfaces)
 	summary := interfaceRatioSummary{Total: len(interfaces)}
 	entries := make([]interfaceRatioEntry, 0, len(interfaces))
 
@@ -2636,6 +2660,9 @@ func (h InspectionHandler) checkInterfaceDuplexMetric(result *inspection.Result,
 	evaluated := 0
 	half := make([]string, 0)
 	for _, iface := range metrics.Interfaces {
+		if devices.IsIgnoredInspectionInterface(interfaceDisplayName(iface)) {
+			continue
+		}
 		if iface.DuplexStatus == nil {
 			continue
 		}

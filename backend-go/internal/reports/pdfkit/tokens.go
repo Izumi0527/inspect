@@ -78,7 +78,7 @@ var (
 	ColorWarning       = ColorAmber500
 	ColorDanger        = ColorRose500
 	ColorText          = ColorSlate900
-	ColorTextMuted     = ColorSlate500
+	ColorTextMuted     = ColorSlate700
 	ColorBorder        = ColorSlate200
 	ColorBorderStrong  = ColorSlate300
 	ColorSurface       = ColorWhite

@@ -96,17 +96,30 @@ func TestInterfaceUtilizationDetailsCoverAllInterfaces(t *testing.T) {
 			},
 		},
 		{
-			name: "无容量的接口（Loopback/NULL）附容量缺失原因",
+			name: "无容量的接口附容量缺失原因",
 			interfaces: []devices.InterfaceMetrics{
-				{Description: "InLoopBack0", InRate: rateMbps(1)},
-				{Description: "NULL0", Speed: ifaceSpeed(0), InRate: rateMbps(1)},
+				{Description: "Vlanif10", InRate: rateMbps(1)},
+				{Description: "Eth-Trunk1", Speed: ifaceSpeed(0), InRate: rateMbps(1)},
 			},
 			wantTotal:     2,
 			wantEvaluated: 0,
 			wantSkipReasons: map[string]string{
-				"InLoopBack0": "无接口容量（未上报速率）",
-				"NULL0":       "无接口容量（未上报速率）",
+				"Vlanif10":   "无接口容量（未上报速率）",
+				"Eth-Trunk1": "无接口容量（未上报速率）",
 			},
+		},
+		{
+			name: "非业务逻辑口（NULL0/Console/InLoopBack）直接剔除，Vlanif与Eth-Trunk保留",
+			interfaces: []devices.InterfaceMetrics{
+				{Description: "NULL0", Speed: ifaceSpeed(0), InRate: rateMbps(1)},
+				{Description: "Console9/0/0", Speed: ifaceSpeed(0), InRate: rateMbps(1)},
+				{Description: "InLoopBack0", Speed: ifaceSpeed(0), InRate: rateMbps(1)},
+				{Description: "Vlanif1", Speed: ifaceSpeed(1000), InRate: rateMbps(100)},
+				{Description: "Eth-Trunk1", Speed: ifaceSpeed(1000), InRate: rateMbps(200)},
+			},
+			wantTotal:     2,
+			wantEvaluated: 2,
+			wantOrder:     []string{"Eth-Trunk1", "Vlanif1"},
 		},
 		{
 			name: "DOWN 接口被排除，IsUp 未知的接口仍参与评估",
