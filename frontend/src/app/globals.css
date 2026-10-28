@@ -473,6 +473,10 @@
   [data-skin="classic"] [data-slot="textarea"] { padding: 0.75rem 1rem; }
 }
 
+/* 底部批量悬浮栏：置于未分层级，覆盖 @layer utilities 中的 inset-x-0，确保各皮肤下均相对主工作区居中 */
+[data-slot="app-main"] [data-slot="floating-batch-bar"] { left: 15rem; }
+[data-slot="app-main"][data-collapsed] [data-slot="floating-batch-bar"] { left: 3.5rem; }
+
 /* 6.2 经典皮肤外观覆盖（未分层 → 优先于任何 @layer 内的工具类）
    仅覆盖调用方不定制的属性：圆角、玻璃、阴影、边框色、字号、宽度。 */
 [data-skin="classic"] {
@@ -588,6 +592,8 @@
   & [data-slot="app-layout"] { background-color: color-mix(in srgb, var(--surface-2) 40%, transparent); }
   & [data-slot="app-main"] { margin-left: 16rem; }
   & [data-slot="app-main"][data-collapsed] { margin-left: 5rem; }
+  & [data-slot="app-main"] [data-slot="floating-batch-bar"] { left: 16rem; }
+  & [data-slot="app-main"][data-collapsed] [data-slot="floating-batch-bar"] { left: 5rem; }
 
   /* --- 统计卡：旧读数与图标底衬 --- */
   & [data-slot="stat-value"] { font-size: 1.125rem; font-weight: 700; }

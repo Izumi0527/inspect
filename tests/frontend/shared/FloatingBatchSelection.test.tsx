@@ -243,8 +243,49 @@ describe('FloatingBatchActionBar 组件', () => {
     const deleteBtn = screen.getByRole('button', { name: '删除' })
     expect(deleteBtn).toBeInTheDocument()
     expect(deleteBtn.className).toContain('text-red-600')
+    expect(deleteBtn.className).toContain('h-7')
     fireEvent.click(deleteBtn)
     expect(onDelete).toHaveBeenCalledTimes(1)
+  })
+
+  it('使用外层 Flex 居中轨道定位且内层不含 -translate-x-1/2，采用紧凑尺寸', () => {
+    const { container } = render(
+      <FloatingBatchActionBar
+        selectedCount={3}
+        onSelectCurrentPage={jest.fn()}
+        onSelectAllFiltered={jest.fn()}
+        onInvertCurrentPage={jest.fn()}
+        onClearSelection={jest.fn()}
+        onDelete={jest.fn()}
+      />
+    )
+
+    // 外层定位轨道 flex 水平居中
+    const outerTrack = container.querySelector('[data-slot="floating-batch-bar"]')
+    expect(outerTrack).toBeInTheDocument()
+    expect(outerTrack?.className).toContain('flex')
+    expect(outerTrack?.className).toContain('justify-center')
+    expect(outerTrack?.className).toContain('fixed')
+    expect(outerTrack?.className).toContain('bottom-4')
+    expect(outerTrack?.className).toContain('inset-x-0')
+
+    // 内层面板 region 不含 -translate-x-1/2 避免与 Framer Motion 叠加
+    const region = screen.getByRole('region', { name: '批量操作栏' })
+    expect(region).toBeInTheDocument()
+    expect(region.className).not.toContain('-translate-x-1/2')
+    expect(region.className).not.toContain('left-1/2')
+
+    // 验证紧凑化尺寸类名（适配 14 寸 1080P/2K 屏幕）
+    expect(region.className).toContain('px-3')
+    expect(region.className).toContain('py-1.5')
+    expect(region.className).toContain('rounded-xl')
+    expect(region.className).toContain('text-xs')
+
+    // 验证操作按钮与删除按钮均使用紧凑高度 h-7
+    const selectCurrentBtn = screen.getByRole('button', { name: '全选当前页' })
+    expect(selectCurrentBtn.className).toContain('h-7')
+    const deleteBtn = screen.getByRole('button', { name: '删除' })
+    expect(deleteBtn.className).toContain('h-7')
   })
 
   it('全选筛选结果模式下文案展示', () => {

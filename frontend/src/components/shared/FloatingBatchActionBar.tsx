@@ -58,114 +58,121 @@ export const FloatingBatchActionBar: React.FC<FloatingBatchActionBarProps> = ({
     <Container>
       {selectedCount > 0 && (
         <motion.div
-          initial={{ opacity: 0, y: 24, x: '-50%' }}
-          animate={{ opacity: 1, y: 0, x: '-50%' }}
-          exit={{ opacity: 0, y: 24, x: '-50%' }}
+          key="floating-batch-bar"
+          data-slot="floating-batch-bar"
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 14 }}
           transition={{ duration: 0.18, ease: 'easeOut' }}
-          role="region"
-          aria-label="批量操作栏"
-          className={cn(
-            'fixed bottom-6 left-1/2 -translate-x-1/2 z-40',
-            'flex items-center gap-2 sm:gap-3',
-            'px-4 py-2.5 rounded-2xl',
-            'bg-background/95 dark:bg-card/95 backdrop-blur-md',
-            'border border-border/80 shadow-2xl dark:shadow-black/60',
-            'text-sm text-foreground',
-            className
-          )}
+          className="fixed bottom-4 inset-x-0 z-40 pointer-events-none flex justify-center px-4 transition-[left] duration-200 motion-reduce:transition-none"
         >
-          {/* 已选计数摘要 */}
-          <div className="flex items-center gap-1.5 font-medium whitespace-nowrap pl-1">
-            <CheckSquare className="w-4 h-4 text-primary shrink-0" />
-            <span>
-              {selectionMode === 'all_filtered'
-                ? `已全选筛选结果 (${selectedCount} 项)`
-                : `已选择 ${selectedCount} 项`}
-            </span>
-          </div>
-
-          <div className="h-4 w-px bg-border my-auto shrink-0" />
-
-          {/* 选项操作按钮组 */}
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-              onClick={onSelectCurrentPage}
-            >
-              全选当前页
-            </Button>
-            {onSelectAllFiltered && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-                onClick={onSelectAllFiltered}
-              >
-                全选筛选结果
-              </Button>
+          <div
+            role="region"
+            aria-label="批量操作栏"
+            className={cn(
+              'pointer-events-auto',
+              'flex items-center gap-1.5 sm:gap-2',
+              'max-w-full overflow-x-auto',
+              'px-3 py-1.5 rounded-xl',
+              'bg-background/95 dark:bg-card/95 backdrop-blur-md',
+              'border border-border/80 shadow-xl dark:shadow-black/60',
+              'text-xs text-foreground',
+              className
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-              onClick={onInvertCurrentPage}
-            >
-              反选当前页
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
-              onClick={onClearSelection}
-            >
-              取消选择
-            </Button>
-          </div>
+          >
+            {/* 已选计数摘要 */}
+            <div className="flex items-center gap-1.5 font-medium whitespace-nowrap pl-1 text-xs">
+              <CheckSquare className="w-3.5 h-3.5 text-primary shrink-0" />
+              <span>
+                {selectionMode === 'all_filtered'
+                  ? `已全选筛选结果 (${selectedCount} 项)`
+                  : `已选择 ${selectedCount} 项`}
+              </span>
+            </div>
 
-          {/* 附加动作按钮 */}
-          {extraActions && extraActions.length > 0 && (
-            <>
-              <div className="h-4 w-px bg-border my-auto shrink-0" />
-              <div className="flex items-center gap-1">
-                {extraActions.map((action) => (
-                  <button
-                    key={action.key}
-                    type="button"
-                    disabled={action.disabled}
-                    onClick={action.onClick}
-                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    {action.icon}
-                    <span>{action.label}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+            <div className="h-3.5 w-px bg-border my-auto shrink-0" />
 
-          {/* 红色删除字样按钮 */}
-          {showDelete && onDelete && (
-            <>
-              <div className="h-4 w-px bg-border my-auto shrink-0" />
+            {/* 选项操作按钮组 */}
+            <div className="flex items-center gap-0.5">
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={isDeleting}
-                onClick={onDelete}
-                className={cn(
-                  'h-8 px-3 font-semibold text-xs',
-                  'text-red-600 dark:text-red-400',
-                  'hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-700 dark:hover:text-red-300',
-                  'transition-colors duration-150'
-                )}
+                className="h-7 px-2 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+                onClick={onSelectCurrentPage}
               >
-                <Trash2 className="w-3.5 h-3.5 mr-1" />
-                删除
+                全选当前页
               </Button>
-            </>
-          )}
+              {onSelectAllFiltered && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+                  onClick={onSelectAllFiltered}
+                >
+                  全选筛选结果
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+                onClick={onInvertCurrentPage}
+              >
+                反选当前页
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 rounded-lg text-xs text-muted-foreground hover:text-foreground"
+                onClick={onClearSelection}
+              >
+                取消选择
+              </Button>
+            </div>
+
+            {/* 附加动作按钮 */}
+            {extraActions && extraActions.length > 0 && (
+              <>
+                <div className="h-3.5 w-px bg-border my-auto shrink-0" />
+                <div className="flex items-center gap-0.5">
+                  {extraActions.map((action) => (
+                    <button
+                      key={action.key}
+                      type="button"
+                      disabled={action.disabled}
+                      onClick={action.onClick}
+                      className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-800 whitespace-nowrap"
+                    >
+                      {action.icon}
+                      <span>{action.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* 红色删除字样按钮 */}
+            {showDelete && onDelete && (
+              <>
+                <div className="h-3.5 w-px bg-border my-auto shrink-0" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={isDeleting}
+                  onClick={onDelete}
+                  className={cn(
+                    'h-7 px-2.5 rounded-lg font-semibold text-xs',
+                    'text-red-600 dark:text-red-400',
+                    'hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-700 dark:hover:text-red-300',
+                    'transition-colors duration-150'
+                  )}
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-0.5" />
+                  删除
+                </Button>
+              </>
+            )}
+          </div>
         </motion.div>
       )}
     </Container>
