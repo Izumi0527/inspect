@@ -446,12 +446,23 @@ func TestCollectOpticalTransceiversFromCatalog_ShouldUseH3COpticalEntries(t *tes
 }
 
 func TestCollectOpticalTransceiversFromCatalog_ShouldMapHuaweiOpticalCurrentToBiasCurrent(t *testing.T) {
-	currentOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.18"
+	currentOID := "1.3.6.1.4.1.2011.5.25.31.1.1.3.1.7"
+	rxPowerOID := "1.3.6.1.4.1.2011.5.25.31.1.1.3.1.8"
+	voltageOID := "1.3.6.1.4.1.2011.5.25.31.1.1.3.1.6"
 
 	client := &fakeCollectorSNMPClient{
 		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
 			currentOID: {
 				{Name: currentOID + ".7", Type: gosnmp.Integer, Value: 42},
+				{Name: currentOID + ".8", Type: gosnmp.Integer, Value: -1}, // 电口或不支持 DDM 的 -1 哨兵值
+			},
+			rxPowerOID: {
+				{Name: rxPowerOID + ".7", Type: gosnmp.Integer, Value: 500},
+				{Name: rxPowerOID + ".8", Type: gosnmp.Integer, Value: -1},
+			},
+			voltageOID: {
+				{Name: voltageOID + ".7", Type: gosnmp.Integer, Value: 3300},
+				{Name: voltageOID + ".8", Type: gosnmp.Integer, Value: -1},
 			},
 		},
 	}
@@ -459,18 +470,55 @@ func TestCollectOpticalTransceiversFromCatalog_ShouldMapHuaweiOpticalCurrentToBi
 	items := collectOpticalTransceiversFromCatalog(client, []snmpmib.CatalogOID{
 		{
 			ID:          "hw_entity_optical_current",
-			Name:        "hwEntityOpticalCurrent",
+			Name:        "hwEntityOpticalBiasCurrent",
 			OID:         currentOID,
 			Method:      "bulkwalk",
 			ValueType:   "integer",
+			Unit:        "uA",
 			Description: "光模块偏置电流",
+		},
+		{
+			ID:          "hw_entity_optical_rx_power",
+			Name:        "hwEntityOpticalRxPower",
+			OID:         rxPowerOID,
+			Method:      "bulkwalk",
+			ValueType:   "integer",
+			Unit:        "uW",
+			Description: "光模块接收光功率",
+		},
+		{
+			ID:          "hw_entity_optical_voltage",
+			Name:        "hwEntityOpticalVoltage",
+			OID:         voltageOID,
+			Method:      "bulkwalk",
+			ValueType:   "integer",
+			Unit:        "mV",
+			Description: "光模块供电电压",
 		},
 	})
 
 	if len(items) != 1 {
-		t.Fatalf("len(items)=%d, want 1", len(items))
+		t.Fatalf("len(items)=%d, want 1（全为 -1 哨兵值的电口索引 8 必须被过滤）", len(items))
+	}
+	if items[0].Index != "7" {
+		t.Fatalf("optical index=%q, want \"7\"", items[0].Index)
 	}
 	if items[0].BiasCurrent == nil || *items[0].BiasCurrent != 42 {
 		t.Fatalf("optical bias_current=%v, want 42", items[0].BiasCurrent)
+	}
+	if items[0].BiasCurrentUnit != "uA" {
+		t.Fatalf("optical bias_current_unit=%q, want \"uA\"", items[0].BiasCurrentUnit)
+	}
+	if items[0].RxPower == nil || *items[0].RxPower != 500 {
+		t.Fatalf("optical rx_power=%v, want 500", items[0].RxPower)
+	}
+	if items[0].RxPowerUnit != "uW" {
+		t.Fatalf("optical rx_power_unit=%q, want \"uW\"", items[0].RxPowerUnit)
+	}
+	if items[0].Voltage == nil || *items[0].Voltage != 3300 {
+		t.Fatalf("optical voltage=%v, want 3300", items[0].Voltage)
+	}
+	if items[0].VoltageUnit != "mV" {
+		t.Fatalf("optical voltage_unit=%q, want \"mV\"", items[0].VoltageUnit)
 	}
 }

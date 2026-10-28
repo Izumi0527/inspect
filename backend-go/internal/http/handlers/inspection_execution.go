@@ -1746,6 +1746,28 @@ type opticalPowerSummary struct {
 	Offenders    []string // 供消息摘要，已按最坏优先排序
 }
 
+// normalizeOpticalPowerDBm 将 uW 单位的光功率按华为/行业标准公式转换为 dBm。
+// 公式：uW = (10^(dBm/10)) * 1000 => dBm = 10 * log10(uW / 1000)。
+func normalizeOpticalPowerDBm(power float64, unit string) (float64, string, bool) {
+	trimmed := strings.TrimSpace(unit)
+	if strings.EqualFold(trimmed, "0.1uW") {
+		power = power / 10.0
+		trimmed = "uW"
+	}
+	if strings.EqualFold(trimmed, "uW") {
+		if power <= 0 {
+			return 0, "dBm", false
+		}
+		dbm := 10 * math.Log10(power/1000.0)
+		dbm = math.Round(dbm*100) / 100
+		return dbm, "dBm", true
+	}
+	if trimmed == "" {
+		trimmed = "dBm"
+	}
+	return power, trimmed, true
+}
+
 // summarizeOpticalModules 逐模块判定收光功率。
 //
 // 与其他阈值检查方向相反：光功率越低越危险，判定用「低于阈值告警」。
@@ -1763,7 +1785,14 @@ func summarizeOpticalModules(modules []devices.OpticalTransceiverMetrics, warnin
 			continue
 		}
 
-		rx := *module.RxPower
+		rx, unit, ok := normalizeOpticalPowerDBm(*module.RxPower, module.RxPowerUnit)
+		if !ok {
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{
+				Name: module.Index, Reason: "设备未上报有效收光功率（无光信号或不支持 DDM）",
+			})
+			continue
+		}
+
 		summary.Evaluated++
 		if summary.Evaluated == 1 || rx < summary.Worst {
 			summary.Worst = rx
@@ -1781,16 +1810,19 @@ func summarizeOpticalModules(modules []devices.OpticalTransceiverMetrics, warnin
 			summary.OverWarning++
 		}
 
-		unit := module.RxPowerUnit
-		if unit == "" {
-			// 采集端已把各厂商量纲归一到 dBm，缺省时按判定单位补齐，
-			// 否则报告里会出现没有单位的裸数字。
-			unit = "dBm"
+		var txPtr *float64
+		txUnit := ""
+		if module.TxPower != nil {
+			if txVal, normalizedTxUnit, txOK := normalizeOpticalPowerDBm(*module.TxPower, module.TxPowerUnit); txOK {
+				txPtr = &txVal
+				txUnit = normalizedTxUnit
+			}
 		}
+
 		entries = append(entries, opticalModuleEntry{
 			Index: module.Index, Verdict: verdict,
 			RxPower: rx, RxPowerUnit: unit,
-			TxPower: module.TxPower, TxPowerUnit: module.TxPowerUnit,
+			TxPower: txPtr, TxPowerUnit: txUnit,
 			Voltage: module.Voltage, VoltageUnit: module.VoltageUnit,
 			BiasCurrent: module.BiasCurrent, BiasCurrentUnit: module.BiasCurrentUnit,
 		})

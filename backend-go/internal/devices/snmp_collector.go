@@ -1411,8 +1411,14 @@ func collectOpticalTransceiversFromCatalog(
 	}
 
 	indexes := make([]string, 0, len(items))
-	for index := range items {
+	for index, item := range items {
+		if item.TxPower == nil && item.RxPower == nil && item.BiasCurrent == nil && item.Voltage == nil {
+			continue
+		}
 		indexes = append(indexes, index)
+	}
+	if len(indexes) == 0 {
+		return nil
 	}
 	sort.Strings(indexes)
 
@@ -1522,21 +1528,28 @@ func collectPoEFromCatalog(
 		if oid == "" {
 			continue
 		}
+		normalizedID := normalizeCollectorToken(entry.ID)
+		isRemaining := strings.Contains(normalizedID, "remaining")
+		isPeakPower := strings.Contains(normalizedID, "peak_power")
+		isConsumingPower := !isRemaining && !isPeakPower && strings.Contains(normalizedID, "power")
+		if !isRemaining && !isPeakPower && !isConsumingPower {
+			continue
+		}
+
 		result, err := client.BulkWalkAll(oid)
 		if err != nil || len(result) == 0 {
 			continue
 		}
 
-		normalizedID := normalizeCollectorToken(entry.ID)
 		for _, variable := range result {
 			value, ok := numericPDUValue(variable)
-			if !ok {
+			if !ok || value < 0 {
 				continue
 			}
 			normalizedValue, normalizedUnit := normalizeCatalogNumericValue(value, entry.Unit)
 
 			// 剩余保障功率是设备级指标，不归属任何端口
-			if strings.Contains(normalizedID, "remaining") {
+			if isRemaining {
 				v := normalizedValue
 				metrics.RemainingPower = &v
 				metrics.RemainingUnit = normalizedUnit
@@ -1554,10 +1567,9 @@ func collectPoEFromCatalog(
 				order = append(order, index)
 			}
 			v := normalizedValue
-			switch {
-			case strings.Contains(normalizedID, "peak_power"):
+			if isPeakPower {
 				port.PeakPower = &v
-			case strings.Contains(normalizedID, "power"):
+			} else if isConsumingPower {
 				port.ConsumingPower = &v
 			}
 			if normalizedUnit != "" {
@@ -1607,6 +1619,15 @@ func applyBGPCatalogValue(
 	}
 }
 
+func isNonNegativeOpticalUnit(unit string) bool {
+	switch strings.TrimSpace(unit) {
+	case "uW", "0.1uW", "mV", "0.1mV", "uA", "0.1uA":
+		return true
+	default:
+		return false
+	}
+}
+
 func applyOpticalCatalogValue(
 	item *OpticalTransceiverMetrics,
 	entry snmpmib.CatalogOID,
@@ -1614,6 +1635,9 @@ func applyOpticalCatalogValue(
 ) {
 	value, ok := numericPDUValue(variable)
 	if !ok {
+		return
+	}
+	if value < 0 && isNonNegativeOpticalUnit(entry.Unit) {
 		return
 	}
 
@@ -2040,6 +2064,8 @@ func normalizeCollectorToken(value string) string {
 func normalizeCatalogNumericValue(value float64, unit string) (float64, string) {
 	normalizedUnit := strings.TrimSpace(unit)
 	switch normalizedUnit {
+	case "mW":
+		return value / 1000, "W"
 	case "0.1uA":
 		return value / 10, "uA"
 	case "0.1mV":

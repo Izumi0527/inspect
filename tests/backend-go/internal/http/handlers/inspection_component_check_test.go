@@ -194,6 +194,73 @@ func TestOpticalPower_NoModulesSkips(t *testing.T) {
 	}
 }
 
+// TestOpticalPower_ConvertsMicrowattsToDBm 华为与 H3C 采到的 uW 须按公式归一为 dBm 并正确判定。
+//
+// 500 uW -> -3.01 dBm（高于 -25dBm 警告线，pass）
+// 0.5 uW -> -33.01 dBm（低于 -30dBm 故障线，fail）
+func TestOpticalPower_ConvertsMicrowattsToDBm(t *testing.T) {
+	result := runMetricCheck(t, "optical_power", &devices.SNMPMetrics{
+		OpticalTransceivers: []devices.OpticalTransceiverMetrics{
+			{Index: "1", RxPower: f64(500), RxPowerUnit: "uW", TxPower: f64(1000), TxPowerUnit: "uW"},
+			{Index: "2", RxPower: f64(0.5), RxPowerUnit: "uW", TxPower: f64(1000), TxPowerUnit: "uW"},
+			{Index: "3", RxPower: f64(0), RxPowerUnit: "uW"}, // 无光信号或无效值，应跳过
+		},
+	}, nil)
+
+	if result.Status != "fail" {
+		t.Fatalf("含 -33.01dBm 模块应判 fail，实际 %q（消息：%v）", result.Status, result.Message)
+	}
+
+	payload := decodeDetails(t, result)
+	rows := detailRows(t, payload, "modules")
+	if len(rows) != 2 {
+		t.Fatalf("有效评估模块应为 2 个，实际 %d", len(rows))
+	}
+
+	// 模块 2 (-33.01dBm) 最差，排第一
+	if got := rowString(t, rows[0], "index"); got != "2" {
+		t.Errorf("第 0 行应为最差模块 2，实际 %s", got)
+	}
+	if got := rowNumber(t, rows[0], "rx_power"); got != -33.01 {
+		t.Errorf("模块 2 收光应为 -33.01dBm，实际 %v", got)
+	}
+	if got := rowString(t, rows[0], "rx_power_unit"); got != "dBm" {
+		t.Errorf("模块 2 收光单位应为 dBm，实际 %s", got)
+	}
+	if got := rowString(t, rows[0], "verdict"); got != "fail" {
+		t.Errorf("模块 2 判定应为 fail，实际 %s", got)
+	}
+
+	// 模块 1 (-3.01dBm) 正常，排第二
+	if got := rowString(t, rows[1], "index"); got != "1" {
+		t.Errorf("第 1 行应为模块 1，实际 %s", got)
+	}
+	if got := rowNumber(t, rows[1], "rx_power"); got != -3.01 {
+		t.Errorf("模块 1 收光应为 -3.01dBm，实际 %v", got)
+	}
+	if got := rowString(t, rows[1], "rx_power_unit"); got != "dBm" {
+		t.Errorf("模块 1 收光单位应为 dBm，实际 %s", got)
+	}
+	if got := rowString(t, rows[1], "verdict"); got != "pass" {
+		t.Errorf("模块 1 判定应为 pass，实际 %s", got)
+	}
+	if got := rowNumber(t, rows[1], "tx_power"); got != 0.0 {
+		t.Errorf("模块 1 发光 1000uW 应归一为 0.0dBm，实际 %v", got)
+	}
+	if got := rowString(t, rows[1], "tx_power_unit"); got != "dBm" {
+		t.Errorf("模块 1 发光单位应为 dBm，实际 %s", got)
+	}
+
+	// 模块 3 (0 uW) 应出现在 skipped 列表中
+	skippedRows := detailRows(t, payload, "skipped")
+	if len(skippedRows) != 1 {
+		t.Fatalf("跳过模块数应为 1，实际 %d", len(skippedRows))
+	}
+	if got := rowString(t, skippedRows[0], "name"); got != "3" {
+		t.Errorf("跳过模块名称应为 3，实际 %s", got)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // BGP 邻居
 // ---------------------------------------------------------------------------

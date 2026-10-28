@@ -35,14 +35,14 @@ func TestCollectComponents_SeparatesFanAndPower(t *testing.T) {
 				walkPDU("1.3.6.1.4.1.2011.5.25.31.1.1.10.1.7", 1, 1, gosnmp.Integer),
 				walkPDU("1.3.6.1.4.1.2011.5.25.31.1.1.10.1.7", 2, 2, gosnmp.Integer),
 			},
-			"1.3.6.1.4.1.2011.5.25.31.1.1.11.1.3": {
-				walkPDU("1.3.6.1.4.1.2011.5.25.31.1.1.11.1.3", 1, 1, gosnmp.Integer),
+			"1.3.6.1.4.1.2011.5.25.31.1.1.18.1.6": {
+				walkPDU("1.3.6.1.4.1.2011.5.25.31.1.1.18.1.6", 1, 1, gosnmp.Integer),
 			},
 		},
 	}
 	entries := []snmpmib.CatalogOID{
 		catalogEntry("hw_entity_fan_state", "1.3.6.1.4.1.2011.5.25.31.1.1.10.1.7", "integer", ""),
-		catalogEntry("hw_entity_power_state", "1.3.6.1.4.1.2011.5.25.31.1.1.11.1.3", "integer", ""),
+		catalogEntry("hw_entity_power_state", "1.3.6.1.4.1.2011.5.25.31.1.1.18.1.6", "integer", ""),
 	}
 
 	got := collectComponentsFromCatalog(client, entries)
@@ -114,9 +114,9 @@ func TestCollectComponents_EmptyEntriesReturnsNil(t *testing.T) {
 func TestCollectPoE_PortPowerAndRemaining(t *testing.T) {
 	client := &fakeCollectorSNMPClient{
 		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
-			"1.3.6.1.4.1.2011.6.3.18.1.4.1.6": {
-				walkPDU("1.3.6.1.4.1.2011.6.3.18.1.4.1.6", 1, 15400, gosnmp.Integer),
-				walkPDU("1.3.6.1.4.1.2011.6.3.18.1.4.1.6", 2, 6900, gosnmp.Integer),
+			"1.3.6.1.4.1.2011.5.25.195.3.1.10": {
+				walkPDU("1.3.6.1.4.1.2011.5.25.195.3.1.10", 1, 15400, gosnmp.Integer),
+				walkPDU("1.3.6.1.4.1.2011.5.25.195.3.1.10", 2, 6900, gosnmp.Integer),
 			},
 			"1.3.6.1.4.1.25506.2.14.2.1.4": {
 				walkPDU("1.3.6.1.4.1.25506.2.14.2.1.4", 0, 220, gosnmp.Gauge32),
@@ -124,7 +124,7 @@ func TestCollectPoE_PortPowerAndRemaining(t *testing.T) {
 		},
 	}
 	entries := []snmpmib.CatalogOID{
-		catalogEntry("hw_poe_port_consuming_power", "1.3.6.1.4.1.2011.6.3.18.1.4.1.6", "integer", ""),
+		catalogEntry("hw_poe_port_consuming_power", "1.3.6.1.4.1.2011.5.25.195.3.1.10", "integer", "mW"),
 		catalogEntry("hh3c_main_guaranteed_power_remaining", "1.3.6.1.4.1.25506.2.14.2.1.4", "gauge32", "W"),
 	}
 
@@ -132,6 +132,12 @@ func TestCollectPoE_PortPowerAndRemaining(t *testing.T) {
 
 	if len(got.Ports) != 2 {
 		t.Errorf("PoE 端口数 = %d，want 2，实际 = %+v", len(got.Ports), got.Ports)
+	}
+	if got.Ports[0].ConsumingPower == nil || *got.Ports[0].ConsumingPower != 15.4 {
+		t.Errorf("端口1消耗功率 = %v，want 15.4 (15400 mW 归一化为 15.4 W)", got.Ports[0].ConsumingPower)
+	}
+	if got.Ports[0].Unit != "W" {
+		t.Errorf("端口1功率单位 = %q，want \"W\"", got.Ports[0].Unit)
 	}
 	if got.RemainingPower == nil {
 		t.Fatal("未采集到 PSE 剩余保障功率")
