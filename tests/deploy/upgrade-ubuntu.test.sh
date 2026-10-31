@@ -251,6 +251,278 @@ else
     fi
 fi
 
+printf '\n\033[36m网络拉取弹性与超时防护（跨境链路与镜像回退）\033[0m\n'
+
+# ---------- 用例 14：FETCH_TIMEOUT 默认放宽至 600 且支持环境变量覆盖 ----------
+grep -qE '^FETCH_TIMEOUT="\$\{FETCH_TIMEOUT:-600\}"' "$TARGET" \
+    && ok "FETCH_TIMEOUT 声明为 \${FETCH_TIMEOUT:-600} 格式" \
+    || ng "FETCH_TIMEOUT 未使用 \${FETCH_TIMEOUT:-600} 默认值语法"
+
+grep -qE '^FETCH_RETRIES="\$\{FETCH_RETRIES:-3\}"' "$TARGET" \
+    && ok "FETCH_RETRIES 声明为 \${FETCH_RETRIES:-3} 格式" \
+    || ng "FETCH_RETRIES 未使用 \${FETCH_RETRIES:-3} 默认值语法"
+
+grep -qE '^GH_PROXY="\$\{GH_PROXY:-https://ghfast\.top/\}"' "$TARGET" \
+    && ok "GH_PROXY 默认值声明为 https://ghfast.top/" \
+    || ng "GH_PROXY 默认值未正确声明"
+
+probe="$(mktemp)"
+{
+    grep -E '^(FETCH_TIMEOUT|FETCH_RETRIES|GH_PROXY)=' "$TARGET"
+    printf 'echo "TO=$FETCH_TIMEOUT RETRIES=$FETCH_RETRIES PROXY=$GH_PROXY"\n'
+} >"$probe"
+def_out="$(bash "$probe" 2>&1)"
+cust_out="$(FETCH_TIMEOUT=120 FETCH_RETRIES=5 GH_PROXY="https://custom.proxy/" bash "$probe" 2>&1)"
+rm -f "$probe"
+
+if grep -q 'TO=600 RETRIES=3 PROXY=https://ghfast.top/' <<<"$def_out" \
+    && grep -q 'TO=120 RETRIES=5 PROXY=https://custom.proxy/' <<<"$cust_out"; then
+    ok "FETCH_TIMEOUT / FETCH_RETRIES / GH_PROXY 支持环境变量覆盖且默认值正确"
+else
+    ng "环境变量覆盖行为异常" "default=$def_out custom=$cust_out"
+fi
+
+# ---------- 用例 15：--gh-proxy 参数解析 ----------
+if [[ -z "${PA_SRC:-}" ]]; then
+    ng "未能提取 parse_args() 定义"
+else
+    # 15a: 自定义镜像
+    probe="$(mktemp)"
+    {
+        printf 'TARGET_REF=main\nGH_PROXY="https://ghfast.top/"\n'
+        printf 'die() { echo "DIE:$*"; exit 99; }\n'
+        printf '%s\n' "$PA_SRC"
+        printf 'parse_args --gh-proxy "https://mirror.example.com/"; echo "PROXY=$GH_PROXY"\n'
+    } >"$probe"
+    out="$(bash "$probe" 2>&1)"
+    rm -f "$probe"
+    grep -q 'PROXY=https://mirror.example.com/' <<<"$out" \
+        && ok "--gh-proxy 支持指定自定义镜像地址" \
+        || ng "--gh-proxy 自定义镜像解析失败" "$out"
+
+    # 15b: 传 '' 空串置空直连
+    probe="$(mktemp)"
+    {
+        printf 'TARGET_REF=main\nGH_PROXY="https://ghfast.top/"\n'
+        printf 'die() { echo "DIE:$*"; exit 99; }\n'
+        printf '%s\n' "$PA_SRC"
+        printf 'parse_args --gh-proxy ""; echo "PROXY=[$GH_PROXY]"\n'
+    } >"$probe"
+    out="$(bash "$probe" 2>&1)"
+    rm -f "$probe"
+    grep -q 'PROXY=\[\]' <<<"$out" \
+        && ok "--gh-proxy 支持传入空串 '' 置空直连" \
+        || ng "--gh-proxy 空串置空失败" "$out"
+
+    # 15c: 缺少参数报错
+    probe="$(mktemp)"
+    {
+        printf 'TARGET_REF=main\nGH_PROXY="https://ghfast.top/"\n'
+        printf 'die() { echo "DIE:$*"; exit 99; }\n'
+        printf '%s\n' "$PA_SRC"
+        printf 'parse_args --gh-proxy\n'
+    } >"$probe"
+    out="$(bash "$probe" 2>&1)"; rc=$?
+    rm -f "$probe"
+    [[ $rc -eq 99 ]] && grep -q '需要一个参数' <<<"$out" \
+        && ok "--gh-proxy 缺少参数时明确报错" \
+        || ng "--gh-proxy 缺少参数未被拒绝" "rc=$rc out=$out"
+fi
+
+# ---------- 用例 16：fetch_ref 传递低速检测与 shallow 参数 ----------
+FR_SRC="$(extract_fn fetch_ref)"
+if [[ -z "$FR_SRC" ]]; then
+    ng "未能提取 fetch_ref() 定义"
+else
+    grep -q 'http\.lowSpeedLimit=1024' <<<"$FR_SRC" \
+        && ok "fetch_ref 配置 -c http.lowSpeedLimit=1024" \
+        || ng "fetch_ref 缺少 lowSpeedLimit=1024"
+
+    grep -q 'http\.lowSpeedTime=30' <<<"$FR_SRC" \
+        && ok "fetch_ref 配置 -c http.lowSpeedTime=30" \
+        || ng "fetch_ref 缺少 lowSpeedTime=30"
+
+    grep -q -- '--depth=1' <<<"$FR_SRC" \
+        && ok "fetch_ref 使用 --depth=1（快速浅拉取）" \
+        || ng "fetch_ref 缺少 --depth=1"
+fi
+
+# ---------- 用例 17：fetch_ref 首轮失败后回退镜像源并成功拉取 ----------
+if [[ -z "$FR_SRC" ]]; then
+    ng "跳过 fetch_ref 回退测试（未能提取 fetch_ref）"
+else
+    probe="$(mktemp)"
+    {
+        cat <<'EOF'
+APP_USER="inspect"
+APP_SRC="/opt/inspect/app"
+FETCH_RETRIES=3
+FETCH_TIMEOUT=600
+GH_PROXY="https://ghfast.top/"
+
+step_banner() { :; }
+info() { echo "INFO:$*"; }
+warn() { echo "WARN:$*"; }
+dim() { echo "DIM:$*"; }
+die() { echo "DIE:$*"; exit 99; }
+sleep() { echo "SLEEP:$*"; }
+
+with_timeout() {
+    shift
+    "$@"
+}
+
+CALL_COUNT=0
+sudo() {
+    shift 2
+    "$@"
+}
+
+git() {
+    local cmd=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -C) shift 2 ;;
+            remote)
+                if [[ "$2" == "get-url" && "$3" == "origin" ]]; then
+                    echo "https://github.com/your-org/inspect-system.git"
+                    return 0
+                fi
+                shift ;;
+            fetch)
+                cmd="fetch"
+                shift ;;
+            *)
+                if [[ "$cmd" == "fetch" ]]; then
+                    CALL_COUNT=$((CALL_COUNT + 1))
+                    echo "GIT_FETCH_ATTEMPT_${CALL_COUNT}:$*"
+                    if [[ $CALL_COUNT -eq 1 ]]; then
+                        return 1
+                    fi
+                    return 0
+                fi
+                shift ;;
+        esac
+    done
+}
+EOF
+        printf '%s\n' "$FR_SRC"
+        printf 'fetch_ref main\n'
+    } >"$probe"
+    out="$(bash "$probe" 2>&1)"; rc=$?
+    rm -f "$probe"
+
+    if [[ $rc -eq 0 ]] \
+        && grep -q 'GIT_FETCH_ATTEMPT_1:--depth=1 origin main' <<<"$out" \
+        && grep -q 'GIT_FETCH_ATTEMPT_2:--depth=1 https://ghfast.top/https://github.com/your-org/inspect-system.git main' <<<"$out" \
+        && grep -q '使用镜像: https://ghfast.top/https://github.com/your-org/inspect-system.git' <<<"$out"; then
+        ok "fetch_ref 首轮直连 origin 失败后第 2 轮自动回退镜像源并成功拉取"
+    else
+        ng "fetch_ref 镜像回退测试未达预期" "rc=$rc out=$out"
+    fi
+
+    # 17b: 全部重试失败时报错提示 --gh-proxy
+    probe="$(mktemp)"
+    {
+        cat <<'EOF'
+APP_USER="inspect"
+APP_SRC="/opt/inspect/app"
+FETCH_RETRIES=2
+FETCH_TIMEOUT=600
+GH_PROXY="https://ghfast.top/"
+step_banner() { :; }
+info() { :; }
+warn() { :; }
+die() { echo "DIE:$*"; exit 99; }
+sleep() { :; }
+with_timeout() { shift; "$@"; }
+sudo() { shift 2; "$@"; }
+git() {
+    if [[ "$*" == *"remote get-url origin"* ]]; then
+        echo "https://github.com/your-org/inspect-system.git"
+        return 0
+    fi
+    return 1
+}
+EOF
+        printf '%s\n' "$FR_SRC"
+        printf 'fetch_ref test-branch\n'
+    } >"$probe"
+    out="$(bash "$probe" 2>&1)"; rc=$?
+    rm -f "$probe"
+    if [[ $rc -eq 99 ]] && grep -q '连续 2 次失败，请检查网络或使用 --gh-proxy 指定可用镜像后重试' <<<"$out"; then
+        ok "fetch_ref 全部重试失败时 die 提示 --gh-proxy"
+    else
+        ng "fetch_ref 全部重试失败时未正确提示 --gh-proxy" "rc=$rc out=$out"
+    fi
+fi
+
+# ---------- 用例 18：with_timeout 超时告警与退出码透传 ----------
+WT_SRC="$(extract_fn with_timeout)"
+if [[ -z "$WT_SRC" ]]; then
+    ng "未能提取 with_timeout() 定义"
+else
+    # 18a: 超时（124）场景
+    probe="$(mktemp)"
+    {
+        cat <<'EOF'
+warn() { echo "WARN:$*"; }
+timeout() {
+    return 124
+}
+EOF
+        printf '%s\n' "$WT_SRC"
+        printf 'with_timeout 10 sleep 20\n'
+    } >"$probe"
+    out="$(bash "$probe" 2>&1)"; rc=$?
+    rm -f "$probe"
+    if [[ $rc -eq 124 ]] && grep -q '命令超过 10s 未完成，已超时终止: sleep 20' <<<"$out"; then
+        ok "with_timeout 在 124 超时时输出超时告警并返回退出码 124"
+    else
+        ng "with_timeout 124 超时处理异常" "rc=$rc out=$out"
+    fi
+
+    # 18b: 强杀超时（137）场景
+    probe="$(mktemp)"
+    {
+        cat <<'EOF'
+warn() { echo "WARN:$*"; }
+timeout() {
+    return 137
+}
+EOF
+        printf '%s\n' "$WT_SRC"
+        printf 'with_timeout 30 mock_build\n'
+    } >"$probe"
+    out="$(bash "$probe" 2>&1)"; rc=$?
+    rm -f "$probe"
+    if [[ $rc -eq 137 ]] && grep -q '命令超过 30s 未完成，已超时终止: mock_build' <<<"$out"; then
+        ok "with_timeout 在 137 超时时输出超时告警并返回退出码 137"
+    else
+        ng "with_timeout 137 超时处理异常" "rc=$rc out=$out"
+    fi
+
+    # 18c: 正常退出（0）透传且无超时告警
+    probe="$(mktemp)"
+    {
+        cat <<'EOF'
+warn() { echo "WARN:$*"; }
+timeout() {
+    return 0
+}
+EOF
+        printf '%s\n' "$WT_SRC"
+        printf 'with_timeout 60 echo ok\n'
+    } >"$probe"
+    out="$(bash "$probe" 2>&1)"; rc=$?
+    rm -f "$probe"
+    if [[ $rc -eq 0 ]] && ! grep -q 'WARN:' <<<"$out"; then
+        ok "with_timeout 正常退出码 0 透传且无超时告警"
+    else
+        ng "with_timeout 正常退出码处理异常" "rc=$rc out=$out"
+    fi
+fi
+
 printf '\n'
 if [[ "$FAIL" -gt 0 ]]; then
     printf '\033[31m失败 %d 项\033[0m，通过 %d 项\n' "$FAIL" "$PASS"

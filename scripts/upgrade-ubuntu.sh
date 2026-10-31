@@ -42,10 +42,13 @@ GOPROXY_URL="${GOPROXY_URL:-https://goproxy.cn,direct}"
 NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 BUILD_MEM_MB="${BUILD_MEM_MB:-4096}"
 
-# git fetch 的网络重试次数与单次超时（秒）。跨境链路对 github.com 偶发超时，
-# 短间隔多次重试优于挂死。
-FETCH_RETRIES=3
-FETCH_TIMEOUT=60
+# git fetch 的网络重试次数、单次超时（秒）与 GitHub 镜像前缀。
+# 跨境链路下载含大体积资源（如内嵌字体）的 packfile 可能需数分钟，故默认单次硬超时放宽至 600s
+# （与 deploy-ubuntu.sh 对齐），配合 git http.lowSpeedLimit / http.lowSpeedTime 快速甄别真正断流卡死，
+# 并支持 GH_PROXY 镜像回退（置空即直连 github.com）。
+FETCH_RETRIES="${FETCH_RETRIES:-3}"
+FETCH_TIMEOUT="${FETCH_TIMEOUT:-600}"
+GH_PROXY="${GH_PROXY:-https://ghfast.top/}"
 
 TARGET_REF="main"
 FORCE=false
@@ -84,7 +87,13 @@ step_banner() {
 # （deploy-ubuntu.sh 的 with_timeout 同款教训，详见其注释）。
 with_timeout() {
     local secs="$1"; shift
-    timeout --foreground --signal=TERM --kill-after=30 "$secs" "$@"
+    local rc=0
+    timeout --foreground --signal=TERM --kill-after=30 "$secs" "$@" || rc=$?
+    if [[ $rc -eq 124 || $rc -eq 137 ]]; then
+        printf '\n' >&2
+        warn "命令超过 ${secs}s 未完成，已超时终止: $*"
+    fi
+    return "$rc"
 }
 
 run() {
@@ -166,18 +175,38 @@ probe_current() {
 
 fetch_ref() {
     local ref="$1" attempt rc=1
+    local origin_url proxy_url="" remote_target
+    origin_url="$(sudo -u "$APP_USER" git -C "$APP_SRC" remote get-url origin 2>/dev/null || true)"
+    if [[ -n "$GH_PROXY" && "$origin_url" =~ ^https://github\.com/ ]]; then
+        proxy_url="${GH_PROXY%/}/${origin_url}"
+    fi
+
     for attempt in $(seq 1 "$FETCH_RETRIES"); do
-        info "→ 拉取 ${ref}（第 ${attempt}/${FETCH_RETRIES} 次）"
+        remote_target="origin"
+        if [[ $attempt -gt 1 && -n "$proxy_url" ]]; then
+            remote_target="$proxy_url"
+            info "→ 拉取 ${ref}（第 ${attempt}/${FETCH_RETRIES} 次，使用镜像: ${remote_target}）"
+        else
+            info "→ 拉取 ${ref}（第 ${attempt}/${FETCH_RETRIES} 次）"
+        fi
+
         # fetch 只更新远程跟踪引用，对工作区无破坏——不纳入 dry-run 跳过范围，
         # 否则 dry-run 的版本对比与目标解析（rev-parse FETCH_HEAD）没有数据来源
         if with_timeout "$FETCH_TIMEOUT" \
-            sudo -u "$APP_USER" git -C "$APP_SRC" fetch origin "$ref"; then
+            sudo -u "$APP_USER" git -C "$APP_SRC" \
+            -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=30 \
+            fetch --depth=1 "$remote_target" "$ref"; then
             rc=0
             break
         fi
-        [[ $attempt -lt $FETCH_RETRIES ]] && sleep 2
+
+        printf '\n' >&2
+        if [[ $attempt -lt $FETCH_RETRIES ]]; then
+            warn "拉取 ${ref} 失败（第 ${attempt}/${FETCH_RETRIES} 次），2 秒后重试……"
+            sleep 2
+        fi
     done
-    [[ $rc -eq 0 ]] || die "git fetch origin ${ref} 连续 ${FETCH_RETRIES} 次失败，请检查网络后重试"
+    [[ $rc -eq 0 ]] || die "git fetch origin ${ref} 连续 ${FETCH_RETRIES} 次失败，请检查网络或使用 --gh-proxy 指定可用镜像后重试"
 }
 
 resolve_target() {
@@ -412,6 +441,7 @@ usage() {
 
 选项:
   --version <ref>   升级目标：分支 / tag / commit（默认 main 最新）
+  --gh-proxy <url>  GitHub 镜像前缀（默认 https://ghfast.top/，传 '' 则仅直连）
   --force           目标与当前一致时仍强制重建
   --skip-backup     跳过升级前数据库备份（不建议在生产环境使用）
   --dry-run         仅打印将要执行的操作，不做任何改动
@@ -419,7 +449,7 @@ usage() {
   --help, -h        显示本帮助
 
 环境变量（与 deploy-ubuntu.sh 同名同义）:
-  GOPROXY_URL / NPM_REGISTRY / BUILD_MEM_MB
+  GOPROXY_URL / NPM_REGISTRY / BUILD_MEM_MB / GH_PROXY / FETCH_TIMEOUT / FETCH_RETRIES
 
 说明:
   - 仅适用于已按 deploy-ubuntu.sh 完成部署的机器；不安装/升级 Go、Node 等依赖，
@@ -434,6 +464,7 @@ parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --version)     TARGET_REF="${2:-}"; [[ -n "$TARGET_REF" ]] || die "--version 需要一个分支/tag/commit 参数"; shift 2 ;;
+            --gh-proxy)    [[ $# -ge 2 ]] || die "--gh-proxy 需要一个参数（传 '' 表示直连）"; GH_PROXY="$2"; shift 2 ;;
             --force)       FORCE=true; shift ;;
             --skip-backup) SKIP_BACKUP=true; shift ;;
             --dry-run)     DRY_RUN=true; shift ;;
