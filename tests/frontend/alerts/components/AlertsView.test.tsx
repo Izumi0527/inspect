@@ -109,6 +109,24 @@ jest.mock('@/features/alerts/components/AlertStatsGrid', () => ({
       <button type="button" onClick={() => onCardClick?.('critical')}>
         点击严重统计卡
       </button>
+      <button type="button" onClick={() => onCardClick?.('warning')}>
+        点击警告统计卡
+      </button>
+      <button type="button" onClick={() => onCardClick?.('info')}>
+        点击信息统计卡
+      </button>
+      <button type="button" onClick={() => onCardClick?.('active')}>
+        点击活跃统计卡
+      </button>
+      <button type="button" onClick={() => onCardClick?.('acknowledged')}>
+        点击已确认统计卡
+      </button>
+      <button type="button" onClick={() => onCardClick?.('resolved')}>
+        点击已解决统计卡
+      </button>
+      <button type="button" onClick={() => onCardClick?.('total')}>
+        点击全部统计卡
+      </button>
     </div>
   ),
 }))
@@ -379,6 +397,71 @@ describe('AlertsView', () => {
 
     await waitFor(() => {
       expect(mockUpdateFilter).toHaveBeenCalledWith('severityFilter', 'critical')
+    })
+  })
+
+  it('点击级别统计卡（critical/warning/info）应同时设置对应级别并将状态重置为 active', async () => {
+    render(<AlertsView />)
+
+    fireEvent.click(screen.getByRole('button', { name: '点击信息统计卡' }))
+
+    await waitFor(() => {
+      expect(mockUpdateFilter).toHaveBeenCalledWith('severityFilter', 'info')
+      expect(mockUpdateFilter).toHaveBeenCalledWith('statusFilter', 'active')
+    })
+
+    mockUpdateFilter.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: '点击警告统计卡' }))
+
+    await waitFor(() => {
+      expect(mockUpdateFilter).toHaveBeenCalledWith('severityFilter', 'warning')
+      expect(mockUpdateFilter).toHaveBeenCalledWith('statusFilter', 'active')
+    })
+
+    mockUpdateFilter.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: '点击严重统计卡' }))
+
+    await waitFor(() => {
+      expect(mockUpdateFilter).toHaveBeenCalledWith('severityFilter', 'critical')
+      expect(mockUpdateFilter).toHaveBeenCalledWith('statusFilter', 'active')
+    })
+  })
+
+  it('先点击级别统计卡后再点击状态统计卡时，应重置级别为 all 并切换对应状态', async () => {
+    render(<AlertsView />)
+
+    fireEvent.click(screen.getByRole('button', { name: '点击信息统计卡' }))
+    mockUpdateFilter.mockClear()
+
+    fireEvent.click(screen.getByRole('button', { name: '点击活跃统计卡' }))
+    await waitFor(() => {
+      expect(mockUpdateFilter).toHaveBeenCalledWith('severityFilter', 'all')
+      expect(mockUpdateFilter).toHaveBeenCalledWith('statusFilter', 'active')
+    })
+
+    mockUpdateFilter.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: '点击已确认统计卡' }))
+    await waitFor(() => {
+      expect(mockUpdateFilter).toHaveBeenCalledWith('severityFilter', 'all')
+      expect(mockUpdateFilter).toHaveBeenCalledWith('statusFilter', 'acknowledged')
+    })
+
+    mockUpdateFilter.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: '点击已解决统计卡' }))
+    await waitFor(() => {
+      expect(mockUpdateFilter).toHaveBeenCalledWith('severityFilter', 'all')
+      expect(mockUpdateFilter).toHaveBeenCalledWith('statusFilter', 'resolved')
+    })
+  })
+
+  it('点击全部统计卡应将级别与状态均重置为 all', async () => {
+    render(<AlertsView />)
+
+    fireEvent.click(screen.getByRole('button', { name: '点击全部统计卡' }))
+
+    await waitFor(() => {
+      expect(mockUpdateFilter).toHaveBeenCalledWith('severityFilter', 'all')
+      expect(mockUpdateFilter).toHaveBeenCalledWith('statusFilter', 'all')
     })
   })
 

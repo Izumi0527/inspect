@@ -597,7 +597,16 @@ func mapStatusFilters(values []string) []string {
 	for _, raw := range values {
 		normalized := strings.ToLower(strings.TrimSpace(raw))
 		switch normalized {
-		case "active", "open":
+		case "active":
+			for _, value := range []string{alertStatusOpen, alertStatusAcknowledged} {
+				if _, ok := seen[value]; ok {
+					continue
+				}
+				seen[value] = struct{}{}
+				result = append(result, value)
+			}
+			continue
+		case "open":
 			normalized = alertStatusOpen
 		case "suppressed":
 			normalized = alertStatusClosed

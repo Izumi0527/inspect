@@ -71,6 +71,102 @@ func TestListAlerts_ShouldExcludeDeletedDeviceAlerts(t *testing.T) {
 	}
 }
 
+func TestListAlerts_ActiveStatusFilterIncludesOpenAndAcknowledged(t *testing.T) {
+	db, mock, cleanup := newAlertsGormDBWithSQLMock(t)
+	defer cleanup()
+
+	service := alerts.NewService(db, zap.NewNop())
+
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE a\.status IN \(\$1,\$2\)`).
+		WithArgs("open", "acknowledged").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(41))
+
+	mock.ExpectQuery(`(?is)SELECT a\.\*, d\.name AS device_name, d\.ip_address AS device_ip, r\.name AS rule_name FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE a\.status IN \(\$1,\$2\)`).
+		WithArgs("open", "acknowledged", 10).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "device_id", "title", "message", "category", "severity", "status", "device_name", "device_ip", "rule_name",
+		}))
+
+	_, total, err := service.ListAlerts(context.Background(), alerts.ListAlertsFilter{
+		Page:     1,
+		PageSize: 10,
+		Statuses: []string{"active"},
+	})
+	if err != nil {
+		t.Fatalf("ListAlerts() error = %v", err)
+	}
+	if total != 41 {
+		t.Fatalf("ListAlerts() total = %d, want 41", total)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
+func TestListAlerts_ActiveStatusFilterDeduplicatesAcknowledged(t *testing.T) {
+	db, mock, cleanup := newAlertsGormDBWithSQLMock(t)
+	defer cleanup()
+
+	service := alerts.NewService(db, zap.NewNop())
+
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE a\.status IN \(\$1,\$2\)`).
+		WithArgs("open", "acknowledged").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(12))
+
+	mock.ExpectQuery(`(?is)SELECT a\.\*, d\.name AS device_name, d\.ip_address AS device_ip, r\.name AS rule_name FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE a\.status IN \(\$1,\$2\)`).
+		WithArgs("open", "acknowledged", 10).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "device_id", "title", "message", "category", "severity", "status", "device_name", "device_ip", "rule_name",
+		}))
+
+	_, total, err := service.ListAlerts(context.Background(), alerts.ListAlertsFilter{
+		Page:     1,
+		PageSize: 10,
+		Statuses: []string{"active", "acknowledged"},
+	})
+	if err != nil {
+		t.Fatalf("ListAlerts() error = %v", err)
+	}
+	if total != 12 {
+		t.Fatalf("ListAlerts() total = %d, want 12", total)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
+func TestListAlerts_OpenStatusFilterPreservesSingleOpenStatus(t *testing.T) {
+	db, mock, cleanup := newAlertsGormDBWithSQLMock(t)
+	defer cleanup()
+
+	service := alerts.NewService(db, zap.NewNop())
+
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE a\.status IN \(\$1\)`).
+		WithArgs("open").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(5))
+
+	mock.ExpectQuery(`(?is)SELECT a\.\*, d\.name AS device_name, d\.ip_address AS device_ip, r\.name AS rule_name FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE a\.status IN \(\$1\)`).
+		WithArgs("open", 10).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "device_id", "title", "message", "category", "severity", "status", "device_name", "device_ip", "rule_name",
+		}))
+
+	_, total, err := service.ListAlerts(context.Background(), alerts.ListAlertsFilter{
+		Page:     1,
+		PageSize: 10,
+		Statuses: []string{"open"},
+	})
+	if err != nil {
+		t.Fatalf("ListAlerts() error = %v", err)
+	}
+	if total != 5 {
+		t.Fatalf("ListAlerts() total = %d, want 5", total)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
 func newAlertsGormDBWithSQLMock(t *testing.T) (*gorm.DB, sqlmock.Sqlmock, func()) {
 	t.Helper()
 

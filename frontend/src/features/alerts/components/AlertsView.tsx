@@ -463,12 +463,12 @@ const AlertsViewContent: React.FC = () => {
       case 'critical':
       case 'warning':
       case 'info':
-        applyStatFilter({ severity: card })
+        applyStatFilter({ severity: card, status: 'active' })
         return
       case 'active':
       case 'acknowledged':
       case 'resolved':
-        applyStatFilter({ status: card })
+        applyStatFilter({ severity: 'all', status: card })
         return
       default:
         return
