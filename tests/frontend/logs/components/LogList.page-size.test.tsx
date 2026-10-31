@@ -197,6 +197,29 @@ describe('LogList 每页条数下拉', () => {
     expect(
       lastItem.compareDocumentPosition(selector) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
+
+    // 验证不再渲染顶部冗余的“共 X 条日志”列表头
+    expect(screen.queryByText(/共 .* 条日志/)).not.toBeInTheDocument()
+  })
+
+  it('不应在列表顶部渲染冗余的“共 X 条日志”列表头', () => {
+    render(
+      <LogList
+        logs={[buildLog(1)]}
+        selectedLogs={[]}
+        onSelectLog={jest.fn()}
+        onRefresh={jest.fn()}
+        pagination={{
+          current: 1,
+          total: 50,
+          pageSize: 20,
+          onPageChange: jest.fn(),
+          onPageSizeChange: jest.fn(),
+        }}
+      />
+    )
+
+    expect(screen.queryByText(/共 .* 条日志/)).not.toBeInTheDocument()
   })
 
   it('应通过共享组件触发页大小切换', async () => {

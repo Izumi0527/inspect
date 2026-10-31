@@ -43,26 +43,6 @@ export const LogList: React.FC<LogListProps> = ({
 
   return (
     <div className="flex flex-col">
-      {/* 列表头部 */}
-      <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2 bg-muted">
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
-            共 {pagination.total.toLocaleString()} 条日志
-          </span>
-        </div>
-
-        {onRefresh && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onRefresh}
-            disabled={loading}
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
-        )}
-      </div>
-
       {/* 日志列表 */}
       <div className="flex-1 overflow-y-auto">
         {!loading && logs.length === 0 && pagination.total === 0 ? (
