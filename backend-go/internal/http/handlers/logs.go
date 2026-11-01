@@ -391,6 +391,8 @@ type batchDeleteLogsRequest struct {
 	DeviceID               interface{}   `json:"device_id"`
 	DeviceIDCamel          interface{}   `json:"deviceId"`
 	Search                 string        `json:"search"`
+	ExcludeSearch          string        `json:"exclude_search"`
+	ExcludeSearchCamel     string        `json:"excludeSearch"`
 	StartTime              string        `json:"start_time"`
 	StartTimeCamel         string        `json:"startTime"`
 	EndTime                string        `json:"end_time"`
@@ -452,6 +454,14 @@ func (h LogsHandler) BatchDeleteLogs(c echo.Context) error {
 		if s := strings.TrimSpace(req.Search); s != "" {
 			search = &s
 		}
+		var excludeSearch *string
+		rawExclude := strings.TrimSpace(req.ExcludeSearch)
+		if rawExclude == "" {
+			rawExclude = strings.TrimSpace(req.ExcludeSearchCamel)
+		}
+		if rawExclude != "" {
+			excludeSearch = &rawExclude
+		}
 
 		startTimeStr := req.StartTime
 		if startTimeStr == "" {
@@ -478,14 +488,15 @@ func (h LogsHandler) BatchDeleteLogs(c echo.Context) error {
 		}
 
 		filter := logs.LogFilter{
-			DeviceID:    deviceID,
-			Level:       level,
-			Facility:    facility,
-			Source:      source,
-			Search:      search,
-			StartTime:   startTime,
-			EndTime:     endTime,
-			IncludeSelf: includeSelf,
+			DeviceID:      deviceID,
+			Level:         level,
+			Facility:      facility,
+			Source:        source,
+			Search:        search,
+			ExcludeSearch: excludeSearch,
+			StartTime:     startTime,
+			EndTime:       endTime,
+			IncludeSelf:   includeSelf,
 		}
 
 		allLogIDs := make([]int, 0)
@@ -1024,6 +1035,13 @@ func buildLogFilter(c echo.Context, skip int, limit int, loc *time.Location) log
 	search := strings.TrimSpace(c.QueryParam("search"))
 	if search != "" {
 		filter.Search = &search
+	}
+	excludeSearch := strings.TrimSpace(c.QueryParam("exclude_search"))
+	if excludeSearch == "" {
+		excludeSearch = strings.TrimSpace(c.QueryParam("exclude_keyword"))
+	}
+	if excludeSearch != "" {
+		filter.ExcludeSearch = &excludeSearch
 	}
 	filter.IncludeSelf = parseBoolDefault(c.QueryParam("include_self"), false)
 

@@ -115,17 +115,18 @@ func (h AlertsHandler) ListAlerts(c echo.Context) error {
 	}
 
 	filter := alerts.ListAlertsFilter{
-		Page:       page,
-		PageSize:   pageSize,
-		Statuses:   statusValues,
-		Severities: severityValues,
-		DeviceIDs:  deviceIDs,
-		Categories: categoryValues,
-		StartDate:  startDate,
-		EndDate:    endDate,
-		Search:     strings.TrimSpace(c.QueryParam("search")),
-		SortBy:     strings.TrimSpace(c.QueryParam("sort_by")),
-		SortOrder:  strings.TrimSpace(c.QueryParam("sort_order")),
+		Page:          page,
+		PageSize:      pageSize,
+		Statuses:      statusValues,
+		Severities:    severityValues,
+		DeviceIDs:     deviceIDs,
+		Categories:    categoryValues,
+		StartDate:     startDate,
+		EndDate:       endDate,
+		Search:        strings.TrimSpace(c.QueryParam("search")),
+		ExcludeSearch: parseAlertExcludeSearch(c),
+		SortBy:        strings.TrimSpace(c.QueryParam("sort_by")),
+		SortOrder:     strings.TrimSpace(c.QueryParam("sort_order")),
 	}
 
 	rows, total, err := h.Service.ListAlerts(c.Request().Context(), filter)
@@ -592,15 +593,16 @@ func (h AlertsHandler) ExportAlerts(c echo.Context) error {
 	}
 
 	filter := alerts.ListAlertsFilter{
-		Statuses:   parseQueryValues(append(params["status"], params["status[]"]...)),
-		Severities: parseQueryValues(append(params["severity"], params["severity[]"]...)),
-		Categories: categoryValues,
-		DeviceIDs:  deviceIDs,
-		StartDate:  startDate,
-		EndDate:    endDate,
-		Search:     strings.TrimSpace(c.QueryParam("search")),
-		SortBy:     sortBy,
-		SortOrder:  sortOrder,
+		Statuses:      parseQueryValues(append(params["status"], params["status[]"]...)),
+		Severities:    parseQueryValues(append(params["severity"], params["severity[]"]...)),
+		Categories:    categoryValues,
+		DeviceIDs:     deviceIDs,
+		StartDate:     startDate,
+		EndDate:       endDate,
+		Search:        strings.TrimSpace(c.QueryParam("search")),
+		ExcludeSearch: parseAlertExcludeSearch(c),
+		SortBy:        sortBy,
+		SortOrder:     sortOrder,
 	}
 
 	rows, err := CollectAllAlertsForExport(
@@ -720,6 +722,8 @@ type BulkAlertActionRequest struct {
 	Status                 interface{}   `json:"status"`
 	Severity               interface{}   `json:"severity"`
 	Search                 string        `json:"search"`
+	ExcludeSearch          string        `json:"exclude_search"`
+	ExcludeSearchCamel     string        `json:"excludeSearch"`
 	StartDate              string        `json:"start_date"`
 	StartDateCamel         string        `json:"startDate"`
 	EndDate                string        `json:"end_date"`
@@ -776,6 +780,10 @@ func (h AlertsHandler) BulkAlertAction(c echo.Context) error {
 			severityValues = parseStringSliceFromInterface(req.Severity)
 		}
 		search := strings.TrimSpace(req.Search)
+		excludeSearch := strings.TrimSpace(req.ExcludeSearch)
+		if excludeSearch == "" {
+			excludeSearch = strings.TrimSpace(req.ExcludeSearchCamel)
+		}
 
 		startDateStr := req.StartDate
 		if startDateStr == "" {
@@ -795,13 +803,14 @@ func (h AlertsHandler) BulkAlertAction(c echo.Context) error {
 		}
 
 		filter := alerts.ListAlertsFilter{
-			Page:       1,
-			PageSize:   10000,
-			Statuses:   statusValues,
-			Severities: severityValues,
-			Search:     search,
-			StartDate:  startDate,
-			EndDate:    endDate,
+			Page:          1,
+			PageSize:      10000,
+			Statuses:      statusValues,
+			Severities:    severityValues,
+			Search:        search,
+			ExcludeSearch: excludeSearch,
+			StartDate:     startDate,
+			EndDate:       endDate,
 		}
 
 		rows, _, err := h.Service.ListAlerts(c.Request().Context(), filter)
@@ -1859,4 +1868,12 @@ func operatorToCondition(operator string) string {
 	default:
 		return ""
 	}
+}
+
+func parseAlertExcludeSearch(c echo.Context) string {
+	val := strings.TrimSpace(c.QueryParam("exclude_search"))
+	if val == "" {
+		val = strings.TrimSpace(c.QueryParam("exclude_keyword"))
+	}
+	return val
 }

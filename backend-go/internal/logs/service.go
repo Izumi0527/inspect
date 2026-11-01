@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	defaultLogLimit = 100
-	maxLogLimit     = 1000
+	defaultLogLimit        = 100
+	maxLogLimit            = 1000
+	maxLogExcludeKeywords  = 20
 )
 
 type Service struct {
@@ -41,17 +42,18 @@ func (s *Service) SetSettings(svc *settings.Service) {
 }
 
 type LogFilter struct {
-	DeviceID  *int
-	Level     *string
-	Facility  *string
-	Source    *string
-	StartTime *time.Time
-	EndTime   *time.Time
-	Search    *string
-	Skip      int
-	Limit     int
+	DeviceID      *int
+	Level         *string
+	Facility      *string
+	Source        *string
+	StartTime     *time.Time
+	EndTime       *time.Time
+	Search        *string
+	ExcludeSearch *string
+	Skip          int
+	Limit         int
 	// IncludeSelf 为 true 时包含本系统自身活动触发的日志（self_generated），默认排除。
-	IncludeSelf bool
+	IncludeSelf   bool
 }
 
 func NewService(db *gorm.DB, logger *zap.Logger) *Service {
@@ -483,6 +485,15 @@ func (s *Service) buildLogQuery(ctx context.Context, filter LogFilter) *gorm.DB 
 		pattern := "%" + escapeLikePattern(strings.TrimSpace(*filter.Search)) + "%"
 		query = query.Where("(l.message ILIKE ? OR l.raw_message ILIKE ?)", pattern, pattern)
 	}
+	if filter.ExcludeSearch != nil && strings.TrimSpace(*filter.ExcludeSearch) != "" {
+		for _, kw := range splitLogExcludeKeywords(*filter.ExcludeSearch) {
+			pattern := "%" + escapeLikePattern(kw) + "%"
+			query = query.Where(
+				"(COALESCE(l.message, '') NOT ILIKE ? AND COALESCE(l.raw_message, '') NOT ILIKE ?)",
+				pattern, pattern,
+			)
+		}
+	}
 	if !filter.IncludeSelf {
 		query = query.Where("l.self_generated = ?", false)
 	}
@@ -498,6 +509,40 @@ func escapeLikePattern(raw string) string {
 		`%`, `\%`,
 		`_`, `\_`,
 	).Replace(raw)
+}
+
+// splitLogExcludeKeywords 按逗号或分号切分屏蔽词，做去空、小写去重并截断至上限。
+func splitLogExcludeKeywords(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	splitter := func(r rune) bool {
+		return r == ',' || r == '，' || r == ';' || r == '；'
+	}
+	parts := strings.FieldsFunc(raw, splitter)
+	seen := make(map[string]struct{}, len(parts))
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		if _, exists := seen[lower]; exists {
+			continue
+		}
+		seen[lower] = struct{}{}
+		result = append(result, trimmed)
+		if len(result) >= maxLogExcludeKeywords {
+			break
+		}
+	}
+	return result
+}
+
+// SplitLogExcludeKeywords 导出版本供测试直接验证。
+func SplitLogExcludeKeywords(raw string) []string {
+	return splitLogExcludeKeywords(raw)
 }
 
 func normalizeFilter(filter LogFilter) LogFilter {

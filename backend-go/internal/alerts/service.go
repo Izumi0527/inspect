@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	alertDefaultPageSize = 20
-	alertMaxPageSize     = 200
+	alertDefaultPageSize    = 20
+	alertMaxPageSize        = 200
+	maxAlertExcludeKeywords = 20
 )
 
 const (
@@ -47,17 +48,18 @@ type AlertWithDevice struct {
 }
 
 type ListAlertsFilter struct {
-	Page       int
-	PageSize   int
-	Statuses   []string
-	Severities []string
-	DeviceIDs  []int
-	Categories []string
-	StartDate  *time.Time
-	EndDate    *time.Time
-	Search     string
-	SortBy     string
-	SortOrder  string
+	Page          int
+	PageSize      int
+	Statuses      []string
+	Severities    []string
+	DeviceIDs     []int
+	Categories    []string
+	StartDate     *time.Time
+	EndDate       *time.Time
+	Search        string
+	ExcludeSearch string
+	SortBy        string
+	SortOrder     string
 }
 
 type ListRulesFilter struct {
@@ -134,6 +136,15 @@ func (s *Service) ListAlerts(ctx context.Context, filter ListAlertsFilter) ([]Al
 			"(a.title ILIKE ? OR a.message ILIKE ? OR d.name ILIKE ? OR CAST(d.ip_address AS TEXT) ILIKE ?)",
 			pattern, pattern, pattern, pattern,
 		)
+	}
+	if strings.TrimSpace(filter.ExcludeSearch) != "" {
+		for _, kw := range splitAlertExcludeKeywords(filter.ExcludeSearch) {
+			pattern := "%" + escapeAlertLikePattern(kw) + "%"
+			query = query.Where(
+				"(COALESCE(a.title, '') NOT ILIKE ? AND COALESCE(a.message, '') NOT ILIKE ? AND COALESCE(d.name, '') NOT ILIKE ? AND COALESCE(CAST(d.ip_address AS TEXT), '') NOT ILIKE ?)",
+				pattern, pattern, pattern, pattern,
+			)
+		}
 	}
 
 	statuses := mapStatusFilters(filter.Statuses)
@@ -851,4 +862,52 @@ func encodeJSON(value interface{}) (datatypes.JSON, error) {
 		return nil, err
 	}
 	return datatypes.JSON(raw), nil
+}
+
+// escapeAlertLikePattern 转义 SQL LIKE/ILIKE 通配符与反斜杠。
+func escapeAlertLikePattern(raw string) string {
+	return strings.NewReplacer(
+		`\`, `\\`,
+		`%`, `\%`,
+		`_`, `\_`,
+	).Replace(raw)
+}
+
+// EscapeAlertLikePattern 导出版本供测试直接验证。
+func EscapeAlertLikePattern(raw string) string {
+	return escapeAlertLikePattern(raw)
+}
+
+// splitAlertExcludeKeywords 按逗号或分号切分屏蔽词，做去空、小写去重并截断至上限。
+func splitAlertExcludeKeywords(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	splitter := func(r rune) bool {
+		return r == ',' || r == '，' || r == ';' || r == '；'
+	}
+	parts := strings.FieldsFunc(raw, splitter)
+	seen := make(map[string]struct{}, len(parts))
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		if _, exists := seen[lower]; exists {
+			continue
+		}
+		seen[lower] = struct{}{}
+		result = append(result, trimmed)
+		if len(result) >= maxAlertExcludeKeywords {
+			break
+		}
+	}
+	return result
+}
+
+// SplitAlertExcludeKeywords 导出版本供测试直接验证。
+func SplitAlertExcludeKeywords(raw string) []string {
+	return splitAlertExcludeKeywords(raw)
 }

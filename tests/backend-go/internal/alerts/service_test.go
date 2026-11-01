@@ -2,6 +2,7 @@ package alerts_test
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -161,6 +162,128 @@ func TestListAlerts_OpenStatusFilterPreservesSingleOpenStatus(t *testing.T) {
 	}
 	if total != 5 {
 		t.Fatalf("ListAlerts() total = %d, want 5", total)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
+func TestSplitAlertExcludeKeywords(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{
+			name: "支持中英文逗号与分号混合切分、去空与去重",
+			in:   " NTP , lldp，GigabitEthernet; ntp ； LLDP ; ; ",
+			want: []string{"NTP", "lldp", "GigabitEthernet"},
+		},
+		{
+			name: "空字符串返回 nil",
+			in:   "   ",
+			want: nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := alerts.SplitAlertExcludeKeywords(tc.in)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("SplitAlertExcludeKeywords(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSplitAlertExcludeKeywords_MaxLimit(t *testing.T) {
+	var input []string
+	for i := 0; i < 30; i++ {
+		input = append(input, fmt.Sprintf("kw_%d", i))
+	}
+	inStr := ""
+	for i, item := range input {
+		if i > 0 {
+			inStr += ","
+		}
+		inStr += item
+	}
+
+	got := alerts.SplitAlertExcludeKeywords(inStr)
+	if len(got) != 20 {
+		t.Fatalf("SplitAlertExcludeKeywords length = %d, want max 20", len(got))
+	}
+	if got[0] != "kw_0" || got[19] != "kw_19" {
+		t.Fatalf("SplitAlertExcludeKeywords elements mismatch: first=%s, last=%s", got[0], got[19])
+	}
+}
+
+func TestEscapeAlertLikePattern(t *testing.T) {
+	in := `100%_of_\alert`
+	want := `100\%\_of\_\\alert`
+	if got := alerts.EscapeAlertLikePattern(in); got != want {
+		t.Fatalf("EscapeAlertLikePattern(%q) = %q, want %q", in, got, want)
+	}
+}
+
+func TestListAlerts_ExcludeSearch_SingleKeyword(t *testing.T) {
+	db, mock, cleanup := newAlertsGormDBWithSQLMock(t)
+	defer cleanup()
+
+	service := alerts.NewService(db, zap.NewNop())
+
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE \({1,2}COALESCE\(a\.title, ''\) NOT ILIKE \$1 AND COALESCE\(a\.message, ''\) NOT ILIKE \$2 AND COALESCE\(d\.name, ''\) NOT ILIKE \$3 AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$4\){1,2}`).
+		WithArgs("%test%", "%test%", "%test%", "%test%").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	mock.ExpectQuery(`(?is)SELECT a\.\*, d\.name AS device_name, d\.ip_address AS device_ip, r\.name AS rule_name FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE \({1,2}COALESCE\(a\.title, ''\) NOT ILIKE \$1 AND COALESCE\(a\.message, ''\) NOT ILIKE \$2 AND COALESCE\(d\.name, ''\) NOT ILIKE \$3 AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$4\){1,2}`).
+		WithArgs("%test%", "%test%", "%test%", "%test%", 10).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "device_id", "title", "message", "category", "severity", "status", "device_name", "device_ip", "rule_name",
+		}))
+
+	_, total, err := service.ListAlerts(context.Background(), alerts.ListAlertsFilter{
+		Page:          1,
+		PageSize:      10,
+		ExcludeSearch: "test",
+	})
+	if err != nil {
+		t.Fatalf("ListAlerts() error = %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("ListAlerts() total = %d, want 1", total)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
+func TestListAlerts_ExcludeSearch_MultipleKeywordsAndWildcardEscape(t *testing.T) {
+	db, mock, cleanup := newAlertsGormDBWithSQLMock(t)
+	defer cleanup()
+
+	service := alerts.NewService(db, zap.NewNop())
+
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE \({1,2}COALESCE\(a\.title, ''\) NOT ILIKE \$1 AND COALESCE\(a\.message, ''\) NOT ILIKE \$2 AND COALESCE\(d\.name, ''\) NOT ILIKE \$3 AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$4\){1,2} AND \({1,2}COALESCE\(a\.title, ''\) NOT ILIKE \$5 AND COALESCE\(a\.message, ''\) NOT ILIKE \$6 AND COALESCE\(d\.name, ''\) NOT ILIKE \$7 AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$8\){1,2}`).
+		WithArgs(`%100\%%`, `%100\%%`, `%100\%%`, `%100\%%`, `%\_down%`, `%\_down%`, `%\_down%`, `%\_down%`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
+
+	mock.ExpectQuery(`(?is)SELECT a\.\*, d\.name AS device_name, d\.ip_address AS device_ip, r\.name AS rule_name FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE \({1,2}COALESCE\(a\.title, ''\) NOT ILIKE \$1 AND COALESCE\(a\.message, ''\) NOT ILIKE \$2 AND COALESCE\(d\.name, ''\) NOT ILIKE \$3 AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$4\){1,2} AND \({1,2}COALESCE\(a\.title, ''\) NOT ILIKE \$5 AND COALESCE\(a\.message, ''\) NOT ILIKE \$6 AND COALESCE\(d\.name, ''\) NOT ILIKE \$7 AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$8\){1,2}`).
+		WithArgs(`%100\%%`, `%100\%%`, `%100\%%`, `%100\%%`, `%\_down%`, `%\_down%`, `%\_down%`, `%\_down%`, 10).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "device_id", "title", "message", "category", "severity", "status", "device_name", "device_ip", "rule_name",
+		}))
+
+	_, total, err := service.ListAlerts(context.Background(), alerts.ListAlertsFilter{
+		Page:          1,
+		PageSize:      10,
+		ExcludeSearch: "100%, _down, 100%",
+	})
+	if err != nil {
+		t.Fatalf("ListAlerts() error = %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("ListAlerts() total = %d, want 2", total)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sqlmock expectations not met: %v", err)

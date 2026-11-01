@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,4 +123,117 @@ func TestListAlerts_QueryParsingAndDateOnlyEndDate(t *testing.T) {
 	if filter.SortOrder != "asc" {
 		t.Fatalf("expected sort_order=asc, got %q", filter.SortOrder)
 	}
+}
+
+func TestListAlerts_ExcludeSearch_QueryParam(t *testing.T) {
+	e := echo.New()
+	authService, token := newAuthServiceWithPermissions(t, []string{"alerts:read"})
+
+	t.Run("exclude_search 绑定", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts?exclude_search=NTP,LLDP", nil)
+		req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		service := &captureListAlertsService{}
+		handler := handlers.AlertsHandler{Service: service, Auth: authService}
+		if err := handler.ListAlerts(c); err != nil {
+			t.Fatalf("ListAlerts failed: %v", err)
+		}
+		if service.lastFilter == nil || service.lastFilter.ExcludeSearch != "NTP,LLDP" {
+			t.Fatalf("expected ExcludeSearch to be 'NTP,LLDP', got %v", service.lastFilter)
+		}
+	})
+
+	t.Run("exclude_keyword 兼容回退", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts?exclude_keyword=BGP", nil)
+		req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		service := &captureListAlertsService{}
+		handler := handlers.AlertsHandler{Service: service, Auth: authService}
+		if err := handler.ListAlerts(c); err != nil {
+			t.Fatalf("ListAlerts failed: %v", err)
+		}
+		if service.lastFilter == nil || service.lastFilter.ExcludeSearch != "BGP" {
+			t.Fatalf("expected ExcludeSearch to be 'BGP', got %v", service.lastFilter)
+		}
+	})
+
+	t.Run("exclude_search 优先于 exclude_keyword", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts?exclude_search=Primary&exclude_keyword=Secondary", nil)
+		req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		service := &captureListAlertsService{}
+		handler := handlers.AlertsHandler{Service: service, Auth: authService}
+		if err := handler.ListAlerts(c); err != nil {
+			t.Fatalf("ListAlerts failed: %v", err)
+		}
+		if service.lastFilter == nil || service.lastFilter.ExcludeSearch != "Primary" {
+			t.Fatalf("expected ExcludeSearch to be 'Primary', got %v", service.lastFilter)
+		}
+	})
+}
+
+func TestExportAlerts_ExcludeSearch_QueryParam(t *testing.T) {
+	e := echo.New()
+	authService, token := newAuthServiceWithPermissions(t, []string{"alerts:read"})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts/export?exclude_search=NoiseAlert", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	service := &captureListAlertsService{}
+	handler := handlers.AlertsHandler{Service: service, Auth: authService}
+	if err := handler.ExportAlerts(c); err != nil {
+		t.Fatalf("ExportAlerts failed: %v", err)
+	}
+	if service.lastFilter == nil || service.lastFilter.ExcludeSearch != "NoiseAlert" {
+		t.Fatalf("expected ExcludeSearch in ExportAlerts to be 'NoiseAlert', got %v", service.lastFilter)
+	}
+}
+
+func TestBulkAlertAction_SelectAllFiltered_ExcludeSearch(t *testing.T) {
+	e := echo.New()
+	authService, token := newAuthServiceWithPermissions(t, []string{"alerts:update"})
+
+	t.Run("snake_case exclude_search", func(t *testing.T) {
+		body := `{"action":"acknowledge","select_all_filtered":true,"exclude_search":"NTP,LLDP"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts/bulk", strings.NewReader(body))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		service := &captureListAlertsService{}
+		handler := handlers.AlertsHandler{Service: service, Auth: authService}
+		if err := handler.BulkAlertAction(c); err != nil {
+			t.Fatalf("BulkAlertAction failed: %v", err)
+		}
+		if service.lastFilter == nil || service.lastFilter.ExcludeSearch != "NTP,LLDP" {
+			t.Fatalf("expected ExcludeSearch in BulkAlertAction to be 'NTP,LLDP', got %v", service.lastFilter)
+		}
+	})
+
+	t.Run("camelCase excludeSearch", func(t *testing.T) {
+		body := `{"action":"acknowledge","selectAllFiltered":true,"excludeSearch":"BGP_FLAP"}`
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts/bulk", strings.NewReader(body))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		service := &captureListAlertsService{}
+		handler := handlers.AlertsHandler{Service: service, Auth: authService}
+		if err := handler.BulkAlertAction(c); err != nil {
+			t.Fatalf("BulkAlertAction failed: %v", err)
+		}
+		if service.lastFilter == nil || service.lastFilter.ExcludeSearch != "BGP_FLAP" {
+			t.Fatalf("expected ExcludeSearch in BulkAlertAction to be 'BGP_FLAP', got %v", service.lastFilter)
+		}
+	})
 }
