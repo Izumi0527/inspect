@@ -1,5 +1,5 @@
 import React from 'react'
-import { Search } from 'lucide-react'
+import { Search, EyeOff, X } from 'lucide-react'
 import { Input } from '@/components/atoms'
 import {
   Select,
@@ -35,6 +35,32 @@ export const AlertFiltersBar: React.FC<AlertFiltersBarProps> = ({
           onChange={(e) => onFilterChange('searchQuery', e.target.value)}
           className="h-9 pl-10 text-sm"
         />
+      </div>
+
+      <div className="relative w-full sm:w-64">
+        <EyeOff className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/80" />
+        <label htmlFor="alert-exclude-input" className="sr-only">
+          屏蔽告警关键字
+        </label>
+        <Input
+          id="alert-exclude-input"
+          name="alert-exclude"
+          type="text"
+          placeholder="屏蔽关键字（逗号分隔）..."
+          value={filters.excludeQuery ?? ''}
+          onChange={(e) => onFilterChange('excludeQuery', e.target.value)}
+          className="h-9 pl-10 pr-8 text-sm"
+        />
+        {(filters.excludeQuery ?? '').length > 0 && (
+          <button
+            type="button"
+            aria-label="清空屏蔽关键字"
+            onClick={() => onFilterChange('excludeQuery', '')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       <Select

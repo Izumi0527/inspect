@@ -35,4 +35,32 @@ describe('useLogFilters 日期范围', () => {
     expect(result.current.queryParams.start_time).toBe(new Date(2026, 8, 5, 0, 0, 0, 0).toISOString())
     expect(result.current.queryParams.end_time).toBeUndefined()
   })
+
+  it('设置 excludeQuery 防抖后生成 queryParams.exclude_search', () => {
+    jest.useFakeTimers()
+    const { result } = renderHook(() => useLogFilters())
+
+    expect(result.current.queryParams.exclude_search).toBeUndefined()
+
+    act(() => {
+      result.current.updateFilter('excludeQuery', 'NTP,LLDP')
+    })
+
+    // 防抖 350ms 前不应立即更新
+    expect(result.current.queryParams.exclude_search).toBeUndefined()
+
+    act(() => {
+      jest.advanceTimersByTime(350)
+    })
+
+    expect(result.current.queryParams.exclude_search).toBe('NTP,LLDP')
+
+    // 清空时立即置空
+    act(() => {
+      result.current.updateFilter('excludeQuery', '')
+    })
+
+    expect(result.current.queryParams.exclude_search).toBeUndefined()
+    jest.useRealTimers()
+  })
 })

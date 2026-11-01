@@ -110,6 +110,7 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
       let status: string | undefined
       let severity: string | undefined
       let search: string | undefined
+      let excludeSearch: string | undefined
       let startDate: string | undefined
       let endDate: string | undefined
       let assignee: string | undefined
@@ -136,6 +137,7 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
               : String(target.filters.severity)
           }
           search = target.filters.search
+          excludeSearch = target.filters.excludeSearch
           startDate = target.filters.startDate
           endDate = target.filters.endDate
         }
@@ -149,6 +151,7 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
         status,
         severity,
         search,
+        excludeSearch,
         startDate,
         endDate,
         assignee,

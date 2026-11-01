@@ -228,4 +228,51 @@ describe('AlertFiltersBar 下拉统一化', () => {
     expect(screen.getByRole('option', { name: '状态' })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: '所有状态' })).not.toBeInTheDocument()
   })
+
+  it('屏蔽关键字输入框应提供可访问标签，并能在输入时触发 onFilterChange', async () => {
+    const user = userEvent.setup()
+    const onFilterChange = jest.fn()
+
+    render(
+      <AlertFiltersBar
+        filters={buildFilters()}
+        onFilterChange={onFilterChange}
+      />
+    )
+
+    const excludeInput = screen.getByRole('textbox', { name: '屏蔽告警关键字' })
+    expect(excludeInput).toHaveAttribute('id', 'alert-exclude-input')
+    expect(excludeInput).toHaveAttribute('name', 'alert-exclude')
+    expect(excludeInput).toHaveAttribute('placeholder', '屏蔽关键字（逗号分隔）...')
+
+    await user.type(excludeInput, 'CPU')
+    expect(onFilterChange).toHaveBeenCalledWith('excludeQuery', expect.any(String))
+  })
+
+  it('屏蔽关键字非空时应展示清空按钮，点击后清空', async () => {
+    const user = userEvent.setup()
+    const onFilterChange = jest.fn()
+
+    const { rerender } = render(
+      <AlertFiltersBar
+        filters={buildFilters({ excludeQuery: '' })}
+        onFilterChange={onFilterChange}
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: '清空屏蔽关键字' })).not.toBeInTheDocument()
+
+    rerender(
+      <AlertFiltersBar
+        filters={buildFilters({ excludeQuery: 'NTP,LLDP' })}
+        onFilterChange={onFilterChange}
+      />
+    )
+
+    const clearButton = screen.getByRole('button', { name: '清空屏蔽关键字' })
+    expect(clearButton).toBeInTheDocument()
+
+    await user.click(clearButton)
+    expect(onFilterChange).toHaveBeenCalledWith('excludeQuery', '')
+  })
 })

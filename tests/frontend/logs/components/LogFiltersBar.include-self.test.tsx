@@ -56,4 +56,67 @@ describe('LogFiltersBar 本系统活动开关', () => {
 
     expect(screen.getByRole('checkbox', { name: '显示本系统活动' })).toBeChecked()
   })
+
+  it('屏蔽关键字输入框输入时应触发 onFilterChange', () => {
+    const onFilterChange = jest.fn()
+    render(
+      <LogFiltersBar
+        filters={{
+          searchQuery: '',
+          levelFilter: 'all',
+          facilityFilter: 'all',
+          sourceFilter: 'all',
+          includeSelf: false,
+        }}
+        onFilterChange={onFilterChange}
+      />
+    )
+
+    const excludeInput = screen.getByRole('textbox', { name: '屏蔽日志关键字' })
+    expect(excludeInput).toHaveAttribute('id', 'log-exclude-input')
+    expect(excludeInput).toHaveAttribute('name', 'log-exclude')
+    expect(excludeInput).toHaveAttribute('placeholder', '屏蔽关键字（逗号分隔）...')
+
+    fireEvent.change(excludeInput, { target: { value: 'NTP,LLDP' } })
+    expect(onFilterChange).toHaveBeenCalledWith('excludeQuery', 'NTP,LLDP')
+  })
+
+  it('屏蔽关键字非空时显示清空按钮，点击触发清空', () => {
+    const onFilterChange = jest.fn()
+    const { rerender } = render(
+      <LogFiltersBar
+        filters={{
+          searchQuery: '',
+          excludeQuery: '',
+          levelFilter: 'all',
+          facilityFilter: 'all',
+          sourceFilter: 'all',
+          includeSelf: false,
+        }}
+        onFilterChange={onFilterChange}
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: '清空屏蔽关键字' })).not.toBeInTheDocument()
+
+    rerender(
+      <LogFiltersBar
+        filters={{
+          searchQuery: '',
+          excludeQuery: 'NTP',
+          levelFilter: 'all',
+          facilityFilter: 'all',
+          sourceFilter: 'all',
+          includeSelf: false,
+        }}
+        onFilterChange={onFilterChange}
+      />
+    )
+
+    const clearBtn = screen.getByRole('button', { name: '清空屏蔽关键字' })
+    expect(clearBtn).toBeInTheDocument()
+
+    fireEvent.click(clearBtn)
+    expect(onFilterChange).toHaveBeenCalledWith('excludeQuery', '')
+  })
 })

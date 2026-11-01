@@ -86,6 +86,7 @@ const AlertsViewContent: React.FC = () => {
 
   const hasActiveFilters = useMemo(() => {
     const hasBasicSearch = String(filters.searchQuery ?? '').trim() !== ''
+    const hasExcludeSearch = Boolean(String(filters.excludeQuery ?? '').trim())
     const hasBasicSeverity = String(filters.severityFilter ?? '').trim() !== '' && filters.severityFilter !== 'all'
     // 默认视图（活跃）不算用户筛选：否则首屏就会显示「已开启筛选」并关闭实时自动刷新
     const statusValue = String(filters.statusFilter ?? '').trim()
@@ -97,8 +98,8 @@ const AlertsViewContent: React.FC = () => {
       String(timeRangeFilter.dateRange?.end ?? '').trim()
     )
 
-    return hasBasicSearch || hasBasicSeverity || hasBasicStatus || hasTimeRange
-  }, [timeRangeFilter, filters.searchQuery, filters.severityFilter, filters.statusFilter])
+    return hasBasicSearch || hasExcludeSearch || hasBasicSeverity || hasBasicStatus || hasTimeRange
+  }, [timeRangeFilter, filters.searchQuery, filters.excludeQuery, filters.severityFilter, filters.statusFilter])
 
   const isDefaultActiveView = filters.statusFilter === DEFAULT_ALERT_FILTERS.statusFilter
 
@@ -112,6 +113,10 @@ const AlertsViewContent: React.FC = () => {
 
     if (filters.searchQuery) {
       params.search = filters.searchQuery
+    }
+
+    if (filters.excludeQuery && filters.excludeQuery.trim()) {
+      params.excludeSearch = filters.excludeQuery.trim()
     }
 
     if (filters.severityFilter && filters.severityFilter !== 'all') {
@@ -164,6 +169,7 @@ const AlertsViewContent: React.FC = () => {
     getId: (item) => String(item.id),
     filterDeps: [
       filters.searchQuery,
+      filters.excludeQuery,
       filters.severityFilter,
       filters.statusFilter,
       timeRangeFilter.dateRange?.start,

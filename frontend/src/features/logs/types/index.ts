@@ -64,6 +64,7 @@ export interface LogQueryParams {
   facility?: LogFacility
   source?: LogSource
   search?: string
+  exclude_search?: string
   start_time?: string
   end_time?: string
   page?: number
@@ -111,6 +112,7 @@ export interface LogCollectionResponse {
 // 日志过滤器状态
 export interface LogFilters {
   searchQuery: string
+  excludeQuery?: string
   levelFilter: LogLevel | 'all'
   facilityFilter: LogFacility | 'all'
   sourceFilter: LogSource | 'all'

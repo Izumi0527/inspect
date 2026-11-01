@@ -31,6 +31,7 @@ export interface AlertFilters {
   categoryFilter?: string
   deviceFilter?: string
   assigneeFilter?: string
+  excludeQuery?: string
 }
 
 // 告警中心默认视图：只看活跃告警。打开页面先看还没处理的，而不是被历史的已解决记录淹没；
@@ -64,6 +65,7 @@ export interface BulkAlertAction {
   status?: string
   severity?: string
   search?: string
+  excludeSearch?: string
   startDate?: string
   endDate?: string
   assignee?: string
@@ -77,6 +79,7 @@ export interface AlertQueryParams {
   severity?: AlertSeverity[]
   status?: AlertStatus[]
   search?: string
+  excludeSearch?: string
   sortBy?: 'timestamp' | 'severity' | 'status'
   sortOrder?: 'asc' | 'desc'
   deviceIds?: string[]

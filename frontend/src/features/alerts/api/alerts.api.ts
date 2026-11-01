@@ -211,6 +211,7 @@ const buildQueryParams = (params?: AlertQueryParams) => {
   if (params.startDate) query.start_date = params.startDate
   if (params.endDate) query.end_date = params.endDate
   if (params.search) query.search = params.search
+  if (params.excludeSearch) query.exclude_search = params.excludeSearch
   if (params.category && params.category.length) query.category = params.category
   if (params.sortBy) query.sort_by = params.sortBy
   if (params.sortOrder) query.sort_order = params.sortOrder
@@ -338,6 +339,10 @@ export async function bulkAlertAction(action: BulkAlertAction): Promise<boolean>
     }
     if (action.search) {
       payload.search = action.search
+    }
+    if (action.excludeSearch) {
+      payload.exclude_search = action.excludeSearch
+      payload.excludeSearch = action.excludeSearch
     }
     if (action.startDate) {
       payload.start_date = action.startDate

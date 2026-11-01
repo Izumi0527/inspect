@@ -61,6 +61,7 @@ export async function getDeviceLogs(
       facility: params.facility,
       source: params.source,
       search: params.search,
+      exclude_search: params.exclude_search || undefined,
       start_time: params.start_time,
       end_time: params.end_time,
       include_self: params.include_self || undefined
@@ -82,6 +83,7 @@ export async function getAllLogs(params: LogQueryParams = {}): Promise<LogListRe
       facility: params.facility,
       source: params.source,
       search: params.search,
+      exclude_search: params.exclude_search || undefined,
       start_time: params.start_time,
       end_time: params.end_time,
       include_self: params.include_self || undefined
@@ -106,6 +108,7 @@ export async function searchLogs(
       level: params.level,
       facility: params.facility,
       source: params.source,
+      exclude_search: params.exclude_search || undefined,
     }
   })
   return unwrapPayload<LogListResponse>(payload)
@@ -212,6 +215,7 @@ export interface BatchDeleteLogsRequest extends Partial<LogQueryParams> {
   startTime?: string
   endTime?: string
   includeSelf?: boolean
+  excludeSearch?: string
 }
 
 /**
@@ -228,6 +232,7 @@ export async function batchDeleteLogs(
     const startTime = params.startTime ?? params.start_time
     const endTime = params.endTime ?? params.end_time
     const includeSelf = params.includeSelf ?? params.include_self
+    const excludeSearch = params.excludeSearch ?? params.exclude_search
     body = {
       selectAllFiltered: true,
       excludeIds: params.excludeIds,
@@ -238,6 +243,8 @@ export async function batchDeleteLogs(
       deviceId,
       device_id: deviceId,
       search: params.search,
+      excludeSearch,
+      exclude_search: excludeSearch,
       startTime,
       start_time: startTime,
       endTime,
@@ -268,6 +275,7 @@ export async function exportLogs(params: LogExportParams): Promise<Blob> {
   if (params.facility) searchParams.append('facility', String(params.facility))
   if (params.source) searchParams.append('source', String(params.source))
   if (params.search) searchParams.append('search', String(params.search))
+  if (params.exclude_search) searchParams.append('exclude_search', String(params.exclude_search))
   if (params.start_time) searchParams.append('start_time', String(params.start_time))
   if (params.end_time) searchParams.append('end_time', String(params.end_time))
 

@@ -182,6 +182,9 @@ export function useLogFilters() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
 
+  const [debouncedExcludeQuery, setDebouncedExcludeQuery] = useState('')
+  const excludeTimerRef = useRef<NodeJS.Timeout | null>(null)
+
   const updateFilter = useCallback(<K extends keyof LogFilters>(
     key: K,
     value: LogFilters[K]
@@ -207,12 +210,33 @@ export function useLogFilters() {
     }
   }, [filters.searchQuery])
 
+  useEffect(() => {
+    if (excludeTimerRef.current) clearTimeout(excludeTimerRef.current)
+
+    const value = (filters.excludeQuery || '').trim()
+    if (!value) {
+      setDebouncedExcludeQuery('')
+      return
+    }
+
+    excludeTimerRef.current = setTimeout(() => {
+      setDebouncedExcludeQuery(value)
+    }, 350)
+
+    return () => {
+      if (excludeTimerRef.current) clearTimeout(excludeTimerRef.current)
+    }
+  }, [filters.excludeQuery])
+
   // 转换为API查询参数
   const queryParams = useMemo((): LogQueryParams => {
     const params: LogQueryParams = {}
     
     if (debouncedSearchQuery) {
       params.search = debouncedSearchQuery
+    }
+    if (debouncedExcludeQuery) {
+      params.exclude_search = debouncedExcludeQuery
     }
     if (filters.levelFilter !== 'all') {
       params.level = filters.levelFilter
@@ -241,6 +265,7 @@ export function useLogFilters() {
     return params
   }, [
     debouncedSearchQuery,
+    debouncedExcludeQuery,
     filters.levelFilter,
     filters.facilityFilter,
     filters.sourceFilter,
