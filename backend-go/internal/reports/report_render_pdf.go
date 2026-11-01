@@ -1218,20 +1218,68 @@ func writePDFKeyValueBlocks(pdf *gofpdf.Fpdf, rows [][]string) {
 }
 
 func writePDFRightAligned(pdf *gofpdf.Fpdf, text string) {
-	pdf.SetFont(pdfFontName, "", pdfSmallSize)
-	// 右对齐文本超宽时向左溢出（实测最长越出左页边距 97pt），同样按可用宽截断。
-	pdf.CellFormat(0, 6, pdfkit.TruncateToWidth(pdf, text, pdfkit.UsableWidth(pdf)-2), "", 1, "R", false, 0, "")
-	pdf.SetFont(pdfFontName, "", pdfBodySize)
+	writePDFRightAlignedColored(pdf, text, pdfkit.ColorBlack)
 }
 
 func writePDFRightAlignedColored(pdf *gofpdf.Fpdf, text string, color [3]int) {
 	pdf.SetFont(pdfFontName, "", pdfSmallSize)
 	pdf.SetTextColor(color[0], color[1], color[2])
-	// 口径恒等式等长说明文本可能超过整行可用宽，右对齐会整体左移出页（p1 实测
-	// 越出 97pt）；截断保证最长也只到左页边距为止。
-	pdf.CellFormat(0, 6, pdfkit.TruncateToWidth(pdf, text, pdfkit.UsableWidth(pdf)-2), "", 1, "R", false, 0, "")
+	// 口径恒等式与判定说明可能超过单行可用宽度：直接单行右对齐会向左越出左页边距，
+	// 而截断又会吞掉句尾关键口径（如「（按 106 项计）」）。这里改为按可用宽度折行，
+	// 优先在分号「；」处语义断行，确保全文完整显示且不越出页边距。
+	usableW := pdfkit.UsableWidth(pdf) - 2
+	for _, line := range splitPDFRightAlignedLines(pdf, text, usableW) {
+		pdf.CellFormat(0, 6, line, "", 1, "R", false, 0, "")
+	}
 	pdf.SetTextColor(pdfkit.ColorBlack[0], pdfkit.ColorBlack[1], pdfkit.ColorBlack[2])
 	pdf.SetFont(pdfFontName, "", pdfBodySize)
+}
+
+// splitPDFRightAlignedLines 将右对齐说明文本按 maxWidth 拆分为多行：
+// 单行可容纳时保持单行；超宽且含中文分号「；」时优先按分号子句断行，避免句尾只剩
+// 一两个孤字；单个子句仍超宽时由 pdfkit.SplitLines 兜底按字符边界折行。
+func splitPDFRightAlignedLines(pdf *gofpdf.Fpdf, text string, maxWidth float64) []string {
+	if text == "" || maxWidth <= 0 {
+		return []string{text}
+	}
+	paragraphs := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	lines := make([]string, 0, len(paragraphs))
+	for _, para := range paragraphs {
+		if pdf.GetStringWidth(para) <= maxWidth {
+			lines = append(lines, para)
+			continue
+		}
+		clauses := strings.SplitAfter(para, "；")
+		current := ""
+		for _, rawClause := range clauses {
+			clause := strings.TrimSpace(rawClause)
+			if clause == "" {
+				continue
+			}
+			if current != "" && pdf.GetStringWidth(current+clause) <= maxWidth {
+				current += clause
+				continue
+			}
+			if current != "" {
+				lines = append(lines, current)
+				current = ""
+			}
+			if pdf.GetStringWidth(clause) <= maxWidth {
+				current = clause
+				continue
+			}
+			wrapped := pdfkit.SplitLines(pdf, clause, maxWidth)
+			lines = append(lines, wrapped[:len(wrapped)-1]...)
+			current = wrapped[len(wrapped)-1]
+		}
+		if current != "" {
+			lines = append(lines, current)
+		}
+	}
+	if len(lines) == 0 {
+		return []string{""}
+	}
+	return lines
 }
 
 func defaultPDFTableStyle(header pdfkit.GridHeaderStyle) pdfkit.GridTableStyle {

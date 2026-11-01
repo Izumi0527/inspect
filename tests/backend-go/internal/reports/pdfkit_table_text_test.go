@@ -3,11 +3,19 @@ package reports_test
 import (
 	"strings"
 	"testing"
+	_ "unsafe"
 
 	"github.com/phpdave11/gofpdf"
 
+	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"github.com/your-org/inspect-system/backend-go/internal/reports/pdfkit"
 )
+
+//go:linkname describeInspectionTally github.com/your-org/inspect-system/backend-go/internal/reports.describeInspectionTally
+func describeInspectionTally(stats reports.InspectionSummaryStats) string
+
+//go:linkname splitPDFRightAlignedLines github.com/your-org/inspect-system/backend-go/internal/reports.splitPDFRightAlignedLines
+func splitPDFRightAlignedLines(pdf *gofpdf.Fpdf, text string, maxWidth float64) []string
 
 // newMeasurePDF builds a page with the CJK font registered so text width
 // measurement behaves exactly as it does during real rendering. Hosts without
@@ -75,4 +83,93 @@ func TestSplitLines_RespectsWidthAndKeepsAllRunes(t *testing.T) {
 	if joined := strings.Join(lines, ""); joined != text {
 		t.Errorf("SplitLines lost runes:\n got %q\nwant %q", joined, text)
 	}
+}
+
+func TestSplitPDFRightAlignedLines_PreservesFullInspectionTallyWithoutTruncation(t *testing.T) {
+	pdf := newMeasurePDF(t)
+	pdf.SetMargins(18, 18, 18)
+	maxWidth := pdfkit.UsableWidth(pdf) - 2
+
+	t.Run("UserReportStats", func(t *testing.T) {
+		stats := reports.InspectionSummaryStats{
+			TotalChecks:   120,
+			PassedChecks:  88,
+			WarningChecks: 3,
+			FailedChecks:  15,
+			SkippedChecks: 14,
+		}
+		tally := describeInspectionTally(stats)
+		if !strings.Contains(tally, "（按 106 项计）") {
+			t.Fatalf("expected tally to contain '（按 106 项计）', got: %s", tally)
+		}
+
+		lines := splitPDFRightAlignedLines(pdf, tally, maxWidth)
+		if len(lines) != 2 {
+			t.Fatalf("expected len(lines) == 2, got %d: %#v", len(lines), lines)
+		}
+		if !strings.HasSuffix(lines[0], "；") {
+			t.Errorf("expected line[0] to end with '；', got: %q", lines[0])
+		}
+		wantLine1 := "通过率分母已剔除跳过 14 项（按 106 项计）"
+		if lines[1] != wantLine1 {
+			t.Errorf("line[1] = %q, want %q", lines[1], wantLine1)
+		}
+		for i, line := range lines {
+			if strings.Contains(line, "…") {
+				t.Errorf("line %d contains ellipsis: %q", i, line)
+			}
+			if w := pdf.GetStringWidth(line); w > maxWidth+0.001 {
+				t.Errorf("line %d width %.2fmm exceeds maxWidth %.2fmm: %q", i, w, maxWidth, line)
+			}
+		}
+		if joined := strings.Join(lines, ""); joined != tally {
+			t.Errorf("joined text mismatch:\n got %q\nwant %q", joined, tally)
+		}
+	})
+
+	t.Run("AllStatesSuperimposed", func(t *testing.T) {
+		statsAll := reports.InspectionSummaryStats{
+			TotalChecks:         150,
+			PassedChecks:        100,
+			WarningChecks:       5,
+			FailedChecks:        10,
+			ErrorChecks:         5,
+			SkippedChecks:       15,
+			NotApplicableChecks: 10,
+			UnknownChecks:       5,
+		}
+		tallyAll := describeInspectionTally(statsAll)
+		linesAll := splitPDFRightAlignedLines(pdf, tallyAll, maxWidth)
+		if len(linesAll) < 2 {
+			t.Fatalf("expected >= 2 lines for all states tally, got %d", len(linesAll))
+		}
+		for i, line := range linesAll {
+			if strings.Contains(line, "…") {
+				t.Errorf("all-states line %d contains ellipsis: %q", i, line)
+			}
+			if w := pdf.GetStringWidth(line); w > maxWidth+0.001 {
+				t.Errorf("all-states line %d width %.2fmm exceeds maxWidth %.2fmm: %q", i, w, maxWidth, line)
+			}
+		}
+		if joined := strings.Join(linesAll, ""); joined != tallyAll {
+			t.Errorf("joined all-states text mismatch:\n got %q\nwant %q", joined, tallyAll)
+		}
+	})
+
+	t.Run("ShortTextSingleLine", func(t *testing.T) {
+		shortText := "口径：总检查项 10 = 通过 10"
+		linesShort := splitPDFRightAlignedLines(pdf, shortText, maxWidth)
+		if len(linesShort) != 1 {
+			t.Fatalf("expected 1 line for short text, got %d", len(linesShort))
+		}
+		if linesShort[0] != shortText {
+			t.Errorf("got %q, want %q", linesShort[0], shortText)
+		}
+		if w := pdf.GetStringWidth(linesShort[0]); w > maxWidth+0.001 {
+			t.Errorf("short line width %.2fmm exceeds maxWidth %.2fmm: %q", w, maxWidth, linesShort[0])
+		}
+		if joined := strings.Join(linesShort, ""); joined != shortText {
+			t.Errorf("joined short text mismatch:\n got %q\nwant %q", joined, shortText)
+		}
+	})
 }
