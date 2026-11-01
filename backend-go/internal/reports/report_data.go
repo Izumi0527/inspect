@@ -190,6 +190,7 @@ type InspectionDeviceData struct {
 	Vendor             string
 	Model              string
 	SoftwareVersion    string
+	PatchVersion       string
 	Uptime             string
 	LastInspectionTime string
 	InspectionStatus   string
@@ -230,7 +231,9 @@ type InspectionCheckResult struct {
 	LLDPNeighbors *LLDPNeighborsReport
 	// PoE 承载交换机 PoE 端口供电与 PSE 余量明细表
 	PoE *PoEReport
-	// Threshold 本次实际生效的判定阈值，与上面六种明细正交——
+	// FirmwareVersion 承载型号、固件版本与补丁版本明细
+	FirmwareVersion *FirmwareVersionReport
+	// Threshold 本次实际生效的判定阈值，与上面明细正交——
 	// 带阈值的检查项无论有没有逐项明细，details 里都会带 threshold 字段。
 	// inspection_results 表没有阈值列，报告要说明「按什么口径判的」只能靠它。
 	Threshold *CheckThresholdReport
@@ -613,14 +616,66 @@ func decodeDetailsPayload[T any](raw *string, wantKinds ...string) (*T, bool) {
 	return &payload, true
 }
 
+// parseTypedDetails 校验 kind 后反序列化 details 载荷，失败或不匹配时返回 nil。
+func parseTypedDetails[T any](raw *string, wantKinds ...string) *T {
+	payload, ok := decodeDetailsPayload[T](raw, wantKinds...)
+	if !ok {
+		return nil
+	}
+	return payload
+}
+
+// FirmwareVersionReport 对应 details 中 kind=firmware_version 的载荷。
+type FirmwareVersionReport struct {
+	Kind            string `json:"kind"`
+	Model           string `json:"model"`
+	FirmwareVersion string `json:"firmware_version"`
+	PatchVersion    string `json:"patch_version"`
+}
+
+func parseFirmwareVersionDetails(raw *string) *FirmwareVersionReport {
+	return parseTypedDetails[FirmwareVersionReport](raw, "firmware_version")
+}
+
+// resolveDevicePatchVersion 解析设备的补丁版本。
+// 优先级：
+// 1. 若 device.PatchVersion 非空则直接返回；
+// 2. 遍历 CheckResults，若 item.FirmwareVersion 带有非空 PatchVersion 则返回；
+// 3. 若 device.SoftwareVersion 为 deletedDeviceField 则返回 deletedDeviceField；
+// 4. 若 device.SoftwareVersion 非空，调用 devices.ExtractPatchVersion，非空返回该补丁，为空返回“无”；
+// 5. 否则返回空串。
+func resolveDevicePatchVersion(device InspectionDeviceData) string {
+	if trimmed := strings.TrimSpace(device.PatchVersion); trimmed != "" {
+		return trimmed
+	}
+	for _, item := range device.CheckResults {
+		if item.FirmwareVersion != nil && strings.TrimSpace(item.FirmwareVersion.PatchVersion) != "" {
+			return strings.TrimSpace(item.FirmwareVersion.PatchVersion)
+		}
+	}
+	if strings.TrimSpace(device.SoftwareVersion) == deletedDeviceField {
+		return deletedDeviceField
+	}
+	if strings.TrimSpace(device.SoftwareVersion) != "" {
+		if patch := devices.ExtractPatchVersion("", device.SoftwareVersion); patch != "" {
+			return patch
+		}
+		return "无"
+	}
+	return ""
+}
+
 // parseCheckResultDetails 按 kind 把 details 载荷分派到对应的明细字段。
-// 六种载荷互斥，至多命中一种；都不命中时全部为 nil，报告只渲染摘要行。
+// 各类载荷互斥，至多命中一种；都不命中时全部为 nil，报告只渲染摘要行。
 func parseCheckResultDetails(raw *string, result *InspectionCheckResult) {
 	// 阈值与明细正交：带阈值的检查项无论有没有逐项明细，载荷里都会带
 	// threshold 字段（thresholdDetailsPayload 合并进各类载荷）。因此先单独取，
 	// 不能塞进下面的 kind 分派——那样只有命中某一种明细的检查项才拿得到阈值。
 	result.Threshold = parseCheckThreshold(raw)
 
+	if result.FirmwareVersion = parseFirmwareVersionDetails(raw); result.FirmwareVersion != nil {
+		return
+	}
 	result.InterfaceUtilization = parseInterfaceUtilizationDetails(raw)
 	if result.InterfaceUtilization != nil {
 		return
@@ -830,6 +885,7 @@ func parseInspectionReportPayload(payload map[string]interface{}) InspectionRepo
 			Vendor:             toString(deviceMap["vendor"]),
 			Model:              toString(deviceMap["model"]),
 			SoftwareVersion:    toString(deviceMap["software_version"]),
+			PatchVersion:       toString(deviceMap["patch_version"]),
 			Uptime:             toString(deviceMap["uptime"]),
 			LastInspectionTime: toString(deviceMap["last_inspection"]),
 			InspectionStatus:   toString(deviceMap["inspection_status"]),
@@ -853,6 +909,7 @@ func parseInspectionReportPayload(payload map[string]interface{}) InspectionRepo
 				ExecutionTime: toInt(resultMap["execution_time"]),
 			})
 		}
+		device.PatchVersion = resolveDevicePatchVersion(device)
 
 		if device.IssueCount == 0 && len(device.CheckResults) > 0 {
 			issueCount := 0
@@ -1794,6 +1851,7 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 			CheckResults: checks,
 		})
 		markDeletedInspectionDevice(&devices[len(devices)-1], deviceID, row.IdentityLost)
+		devices[len(devices)-1].PatchVersion = resolveDevicePatchVersion(devices[len(devices)-1])
 	}
 	result.Devices = devices
 
@@ -2253,7 +2311,7 @@ func markDeletedInspectionDevice(device *InspectionDeviceData, deviceID int, ide
 	}
 	for _, field := range []*string{
 		&device.IPAddress, &device.DeviceType, &device.Vendor,
-		&device.Model, &device.SoftwareVersion, &device.Uptime,
+		&device.Model, &device.SoftwareVersion, &device.PatchVersion, &device.Uptime,
 	} {
 		if strings.TrimSpace(*field) == "" {
 			*field = deletedDeviceField

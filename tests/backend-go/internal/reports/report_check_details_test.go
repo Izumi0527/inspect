@@ -39,6 +39,12 @@ func parseLLDPNeighborsDetails(raw *string) *reports.LLDPNeighborsReport
 //go:linkname parsePoEDetails github.com/your-org/inspect-system/backend-go/internal/reports.parsePoEDetails
 func parsePoEDetails(raw *string) *reports.PoEReport
 
+//go:linkname parseFirmwareVersionDetails github.com/your-org/inspect-system/backend-go/internal/reports.parseFirmwareVersionDetails
+func parseFirmwareVersionDetails(raw *string) *reports.FirmwareVersionReport
+
+//go:linkname resolveDevicePatchVersion github.com/your-org/inspect-system/backend-go/internal/reports.resolveDevicePatchVersion
+func resolveDevicePatchVersion(device reports.InspectionDeviceData) string
+
 //go:linkname writeInspectionPDF github.com/your-org/inspect-system/backend-go/internal/reports.writeInspectionPDF
 func writeInspectionPDF(path string, data reports.InspectionReportData) error
 
@@ -655,6 +661,101 @@ func TestParseInterfaceDetails_FiltersIgnoredLogicalPorts(t *testing.T) {
 		}
 		if len(report.Skipped) != 0 {
 			t.Errorf("len(Skipped) = %d, want 0", len(report.Skipped))
+		}
+	})
+}
+
+func TestParseFirmwareVersionDetailsAndResolveDevicePatchVersion(t *testing.T) {
+	t.Run("解析有效固件版本明细 JSON", func(t *testing.T) {
+		raw := `{"kind":"firmware_version","model":"S5700-28C-HI","firmware_version":"V200R019C00SPC500","patch_version":"SPC500"}`
+		report := parseFirmwareVersionDetails(rawJSON(raw))
+		if report == nil {
+			t.Fatal("parseFirmwareVersionDetails 返回 nil")
+		}
+		if report.Kind != "firmware_version" {
+			t.Errorf("Kind = %q, want firmware_version", report.Kind)
+		}
+		if report.Model != "S5700-28C-HI" {
+			t.Errorf("Model = %q, want S5700-28C-HI", report.Model)
+		}
+		if report.FirmwareVersion != "V200R019C00SPC500" {
+			t.Errorf("FirmwareVersion = %q, want V200R019C00SPC500", report.FirmwareVersion)
+		}
+		if report.PatchVersion != "SPC500" {
+			t.Errorf("PatchVersion = %q, want SPC500", report.PatchVersion)
+		}
+	})
+
+	t.Run("非法或空 JSON 返回 nil", func(t *testing.T) {
+		if got := parseFirmwareVersionDetails(nil); got != nil {
+			t.Errorf("nil raw 期望返回 nil，实际 %v", got)
+		}
+		empty := ""
+		if got := parseFirmwareVersionDetails(&empty); got != nil {
+			t.Errorf("empty raw 期望返回 nil，实际 %v", got)
+		}
+		mismatch := `{"kind":"cpu"}`
+		if got := parseFirmwareVersionDetails(rawJSON(mismatch)); got != nil {
+			t.Errorf("mismatched kind 期望返回 nil，实际 %v", got)
+		}
+	})
+
+	t.Run("resolveDevicePatchVersion 优先级决议", func(t *testing.T) {
+		// 1. 显式 PatchVersion 优先
+		dev1 := reports.InspectionDeviceData{
+			SoftwareVersion: "V200R019C00SPC500",
+			PatchVersion:    "V200R019SPH020",
+		}
+		if got := resolveDevicePatchVersion(dev1); got != "V200R019SPH020" {
+			t.Errorf("dev1: got %q, want V200R019SPH020", got)
+		}
+
+		// 2. 从 CheckResults 的 FirmwareVersion 中获取
+		dev2 := reports.InspectionDeviceData{
+			SoftwareVersion: "V200R019C00",
+			CheckResults: []reports.InspectionCheckResult{
+				{
+					FirmwareVersion: &reports.FirmwareVersionReport{
+						Kind:         "firmware_version",
+						PatchVersion: "SPC500",
+					},
+				},
+			},
+		}
+		if got := resolveDevicePatchVersion(dev2); got != "SPC500" {
+			t.Errorf("dev2: got %q, want SPC500", got)
+		}
+
+		// 3. 已删除设备
+		dev3 := reports.InspectionDeviceData{
+			SoftwareVersion: "设备已删除",
+		}
+		if got := resolveDevicePatchVersion(dev3); got != "设备已删除" {
+			t.Errorf("dev3: got %q, want 设备已删除", got)
+		}
+
+		// 4. 从 SoftwareVersion 中自动提取补丁版本
+		dev4 := reports.InspectionDeviceData{
+			SoftwareVersion: "Release 2612P08",
+		}
+		if got := resolveDevicePatchVersion(dev4); got != "P08" {
+			t.Errorf("dev4: got %q, want P08", got)
+		}
+
+		// 5. 无补丁固件版本返回“无”
+		dev5 := reports.InspectionDeviceData{
+			SoftwareVersion: "V200R001C00",
+		}
+		if got := resolveDevicePatchVersion(dev5); got != "无" {
+			t.Errorf("dev5: got %q, want 无", got)
+		}
+
+		// 6. 空软件版本返回空串
+		dev6 := reports.InspectionDeviceData{
+			SoftwareVersion: "",
+		}
+		if got := resolveDevicePatchVersion(dev6); got != "" {
+			t.Errorf("dev6: got %q, want empty", got)
 		}
 	})
 }

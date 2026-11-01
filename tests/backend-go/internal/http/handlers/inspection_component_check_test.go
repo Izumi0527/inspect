@@ -341,6 +341,30 @@ func TestFirmwareVersion_AlwaysPassesWhenCollected(t *testing.T) {
 	if result.ActualValue == nil {
 		t.Fatal("应把型号与版本写入实际值")
 	}
+	wantActual := "S5700-28C-HI / V200R019C00SPC500 / 补丁: SPC500"
+	if *result.ActualValue != wantActual {
+		t.Errorf("ActualValue = %q, 期望 %q", *result.ActualValue, wantActual)
+	}
+
+	// 存在显式 PatchVersion 时优先展示显式补丁版本
+	explicitPatch := "V200R019SPH020"
+	resultExplicit := runMetricCheck(t, "firmware_version", &devices.SNMPMetrics{
+		Model: &model, FirmwareVersion: &version, PatchVersion: &explicitPatch,
+	}, nil)
+	wantExplicitActual := "S5700-28C-HI / V200R019C00SPC500 / 补丁: V200R019SPH020"
+	if resultExplicit.ActualValue == nil || *resultExplicit.ActualValue != wantExplicitActual {
+		t.Errorf("显式补丁 ActualValue = %v, 期望 %q", resultExplicit.ActualValue, wantExplicitActual)
+	}
+
+	// 无补丁版本时展示 补丁: 无
+	versionNoPatch := "V200R001C00"
+	resultNoPatch := runMetricCheck(t, "firmware_version", &devices.SNMPMetrics{
+		Model: &model, FirmwareVersion: &versionNoPatch,
+	}, nil)
+	wantNoPatchActual := "S5700-28C-HI / V200R001C00 / 补丁: 无"
+	if resultNoPatch.ActualValue == nil || *resultNoPatch.ActualValue != wantNoPatchActual {
+		t.Errorf("无补丁 ActualValue = %v, 期望 %q", resultNoPatch.ActualValue, wantNoPatchActual)
+	}
 }
 
 // TestFirmwareVersion_NotCollectedSkips 采不到版本时判 skip 而非 fail。

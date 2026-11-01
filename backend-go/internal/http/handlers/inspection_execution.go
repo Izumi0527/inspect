@@ -1384,6 +1384,10 @@ func encodeDetailsPayload(payload map[string]interface{}) datatypes.JSON {
 	return datatypes.JSON(encoded)
 }
 
+func marshalDetails(payload map[string]interface{}) datatypes.JSON {
+	return encodeDetailsPayload(payload)
+}
+
 // ---------------------------------------------------------------------------
 // 部件状态（风扇 / 电源）
 // ---------------------------------------------------------------------------
@@ -2070,7 +2074,7 @@ func (h InspectionHandler) checkBGPPeersMetric(result *inspection.Result, metric
 // 固件版本
 // ---------------------------------------------------------------------------
 
-// checkFirmwareVersionMetric 采集设备型号与固件版本。
+// checkFirmwareVersionMetric 采集设备型号、固件版本与补丁版本。
 //
 // 恒判 pass，只做展示不做判定：版本是否合规取决于厂商推荐版本列表与安全公告，
 // 这些信息不在系统内，硬编码判定规则会很快过期。作用是让巡检报告自带版本清单，
@@ -2078,9 +2082,9 @@ func (h InspectionHandler) checkBGPPeersMetric(result *inspection.Result, metric
 func (h InspectionHandler) checkFirmwareVersionMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
 	result.ExpectedValue = stringPtr("仅采集展示，不做合规判定")
 
-	if metrics == nil || (metrics.Model == nil && metrics.FirmwareVersion == nil) {
+	if metrics == nil || (metrics.Model == nil && metrics.FirmwareVersion == nil && metrics.PatchVersion == nil) {
 		result.Status = "skip"
-		result.Message = stringPtr("未采集到设备型号与固件版本")
+		result.Message = stringPtr("未采集到设备型号、固件版本与补丁版本")
 		return
 	}
 
@@ -2093,10 +2097,20 @@ func (h InspectionHandler) checkFirmwareVersionMetric(result *inspection.Result,
 		version = strings.TrimSpace(*metrics.FirmwareVersion)
 	}
 
-	actual := fmt.Sprintf("%s / %s", model, version)
+	patch := ""
+	if metrics.PatchVersion != nil && strings.TrimSpace(*metrics.PatchVersion) != "" {
+		patch = strings.TrimSpace(*metrics.PatchVersion)
+	} else if extracted := devices.ExtractPatchVersion("", version); extracted != "" {
+		patch = extracted
+	} else {
+		patch = "无"
+	}
+
+	actual := fmt.Sprintf("%s / %s / 补丁: %s", model, version, patch)
 	result.ActualValue = &actual
 	result.Status = "pass"
-	result.Message = stringPtr(fmt.Sprintf("型号 %s，固件版本 %s；请对照厂商推荐版本与安全公告自行评估", model, version))
+	result.Message = stringPtr(fmt.Sprintf("型号 %s，固件版本 %s，补丁版本 %s；请对照厂商推荐版本与安全公告自行评估", model, version, patch))
+	result.Details = marshalDetails(map[string]interface{}{"kind": "firmware_version", "model": model, "firmware_version": version, "patch_version": patch})
 }
 
 // checkLLDPNeighborsMetric 检查 LLDP 协议运行状态与拓扑连线。

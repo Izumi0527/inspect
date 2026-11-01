@@ -4,7 +4,7 @@ import (
 	"testing"
 	_ "unsafe"
 
-	_ "github.com/your-org/inspect-system/backend-go/internal/devices"
+	"github.com/your-org/inspect-system/backend-go/internal/devices"
 )
 
 //go:linkname parseDeviceIdentityFromSysDescr github.com/your-org/inspect-system/backend-go/internal/devices.parseDeviceIdentityFromSysDescr
@@ -107,6 +107,85 @@ func TestSanitizeIdentityValue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := sanitizeIdentityValue(tt.input); got != tt.want {
 				t.Errorf("sanitizeIdentityValue(%q) = %q, 期望 %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractPatchVersion(t *testing.T) {
+	tests := []struct {
+		name            string
+		sysDescr        string
+		firmwareVersion string
+		wantPatch       string
+	}{
+		{
+			name:            "显式声明补丁版本优先",
+			sysDescr:        "Huawei Versatile Routing Platform Software\r\nPatch Version: V200R019SPH020",
+			firmwareVersion: "V200R019C00SPC500",
+			wantPatch:       "V200R019SPH020",
+		},
+		{
+			name:            "显式声明中文补丁",
+			sysDescr:        "补丁版本：HP001",
+			firmwareVersion: "",
+			wantPatch:       "HP001",
+		},
+		{
+			name:            "华为 VRP 固件版本内嵌补丁号 SPC500",
+			sysDescr:        "",
+			firmwareVersion: "V200R019C00SPC500",
+			wantPatch:       "SPC500",
+		},
+		{
+			name:            "H3C Release 内嵌补丁号 P08",
+			sysDescr:        "H3C Comware Software, Version 7.1.070, Release 2612P08",
+			firmwareVersion: "Release 2612P08",
+			wantPatch:       "P08",
+		},
+		{
+			name:            "锐捷 RGOS 内嵌补丁号 P2",
+			sysDescr:        "Ruijie Networks RGOS 11.4(1)B42P2",
+			firmwareVersion: "11.4(1)B42P2",
+			wantPatch:       "P2",
+		},
+		{
+			name:            "独立热补丁 token",
+			sysDescr:        "Huawei VRP Software SPH020",
+			firmwareVersion: "",
+			wantPatch:       "SPH020",
+		},
+		{
+			name:            "无补丁固件版本返回空串",
+			sysDescr:        "Huawei Versatile Routing Platform Software V200R001C00",
+			firmwareVersion: "V200R001C00",
+			wantPatch:       "",
+		},
+		{
+			name:            "显式为 none 返回空串",
+			sysDescr:        "Patch version: None",
+			firmwareVersion: "V200R001C00",
+			wantPatch:       "",
+		},
+		{
+			name:            "显式为“无”返回空串",
+			sysDescr:        "补丁: 无",
+			firmwareVersion: "",
+			wantPatch:       "",
+		},
+		{
+			name:            "空输入返回空串",
+			sysDescr:        "",
+			firmwareVersion: "",
+			wantPatch:       "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := devices.ExtractPatchVersion(tt.sysDescr, tt.firmwareVersion)
+			if got != tt.wantPatch {
+				t.Errorf("ExtractPatchVersion(%q, %q) = %q, 期望 %q", tt.sysDescr, tt.firmwareVersion, got, tt.wantPatch)
 			}
 		})
 	}

@@ -273,7 +273,7 @@ func writeInspectionDeviceDetailSheet(file *excelize.File, sheet string, data In
 		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+1), "IP地址:"); err != nil {
 			return err
 		}
-		_ = file.SetCellStyle(sheet, fmt.Sprintf("A%d", row+1), fmt.Sprintf("A%d", row+7), styles.Section)
+		_ = file.SetCellStyle(sheet, fmt.Sprintf("A%d", row+1), fmt.Sprintf("A%d", row+8), styles.Section)
 		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+1), device.IPAddress); err != nil {
 			return err
 		}
@@ -301,16 +301,22 @@ func writeInspectionDeviceDetailSheet(file *excelize.File, sheet string, data In
 		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+5), device.SoftwareVersion); err != nil {
 			return err
 		}
-		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+6), "运行时间:"); err != nil {
+		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+6), "补丁版本:"); err != nil {
 			return err
 		}
-		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+6), device.Uptime); err != nil {
+		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+6), resolveDevicePatchVersion(device)); err != nil {
 			return err
 		}
-		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+7), "最后巡检时间:"); err != nil {
+		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+7), "运行时间:"); err != nil {
 			return err
 		}
-		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+7), device.LastInspectionTime); err != nil {
+		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+7), device.Uptime); err != nil {
+			return err
+		}
+		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+8), "最后巡检时间:"); err != nil {
+			return err
+		}
+		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+8), device.LastInspectionTime); err != nil {
 			return err
 		}
 	}

@@ -151,6 +151,7 @@ func writeInspectionPDF(path string, data InspectionReportData) error {
 			{"厂商", localizeVendor(device.Vendor)},
 			{"型号", device.Model},
 			{"软件版本", device.SoftwareVersion},
+			{"补丁版本", resolveDevicePatchVersion(device)},
 			{"运行时长", device.Uptime},
 			{"最近巡检", device.LastInspectionTime},
 			{"巡检状态", localizeStatusWord(device.InspectionStatus)},

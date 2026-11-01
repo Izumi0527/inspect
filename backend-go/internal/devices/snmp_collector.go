@@ -29,6 +29,7 @@ type SNMPMetrics struct {
 	Uptime              *int64                      `json:"uptime,omitempty"`
 	Model               *string                     `json:"model,omitempty"`            // 设备型号，如 S5700-28P-LI-AC
 	FirmwareVersion     *string                     `json:"firmware_version,omitempty"` // 软件/固件版本，如 V200R019C00SPC500
+	PatchVersion        *string                     `json:"patch_version,omitempty"`    // 补丁版本，如 SPC500、V200R019SPH020
 	// DetectedType 是按 sysDescr / LLDP 能力位 / sysServices 推断的设备类型（switch/router/firewall/ap），
 	// 只回填 devices.detected_device_type，不覆盖用户填写的 device_type；推断不出为 nil。
 	DetectedType *string `json:"detected_type,omitempty"`
@@ -983,6 +984,12 @@ var (
 	// entPhysicalSoftwareRev 常见形如 "Version 3.30 V200R001C00"，
 	// 开头的 "Version" 是描述词而非版本内容，去掉后档案更干净。
 	identityVersionPrefixRe = regexp.MustCompile(`(?i)^\s*(software\s+version|version|ver)\s*[:：]?\s*`)
+
+	// 补丁提取规则：显式声明、热补丁标识、VRP/Release/RGOS 内嵌补丁
+	patchExplicitRe        = regexp.MustCompile(`(?i)(?:patch\s+version|patch|补丁版本|补丁)\s*[:：=]\s*([A-Za-z0-9][A-Za-z0-9._-]*)`)
+	patchHotfixTokenRe     = regexp.MustCompile(`(?i)\b(V\d+R\d+[A-Za-z0-9]*SPH\d+[A-Za-z0-9]*|SPH\d+[A-Za-z0-9]*|HP\d{3,}[A-Za-z0-9]*)\b`)
+	patchEmbeddedVRPRe     = regexp.MustCompile(`(?i)\bV\d+R\d+[A-Za-z0-9]*?(SP[A-Z]?\d+[A-Za-z0-9]*)\b`)
+	patchEmbeddedReleaseRe = regexp.MustCompile(`(?i)(?:\b(?:release|ess)\s+[A-Za-z0-9]*?\d+(P\d+[A-Za-z0-9]*)\b|\b\d+\.\d+\([^)]+\)[A-Za-z0-9]+?(P\d+[A-Za-z0-9]*)\b)`)
 )
 
 // sanitizeIdentityValue 清理设备自报字符串的冗余前缀与空白。
@@ -1079,14 +1086,85 @@ func firstNonEmptyWalkValue(client snmpClient, oid string) string {
 	return ""
 }
 
+// isNonePatchValue 判定是否为显式声明的“无补丁”占位文案。
+func isNonePatchValue(v string) bool {
+	lower := strings.ToLower(strings.TrimSpace(v))
+	return lower == "" || lower == "none" || lower == "null" || lower == "n/a" || lower == "nil" || lower == "无"
+}
+
+// extractEmbeddedPatch 从固件版本或 sysDescr 文本中提取内嵌的补丁标识（SPCxxx/Pxx）。
+func extractEmbeddedPatch(text string) string {
+	if m := patchEmbeddedVRPRe.FindStringSubmatch(text); len(m) == 2 {
+		if val := strings.Trim(m[1], " \t\r\n,;:.()[]"); val != "" {
+			return val
+		}
+	}
+	if m := patchEmbeddedReleaseRe.FindStringSubmatch(text); len(m) >= 2 {
+		val := m[1]
+		if val == "" && len(m) > 2 {
+			val = m[2]
+		}
+		if trimmed := strings.Trim(val, " \t\r\n,;:.()[]"); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+// ExtractPatchVersion 从 sysDescr 与固件版本字符串中提取补丁版本号。
+// 纯函数，供 devices 采集、handlers 巡检判定及 reports 报告渲染共用。
+func ExtractPatchVersion(sysDescr string, firmwareVersion string) string {
+	texts := []string{firmwareVersion, sysDescr}
+
+	// 1. 显式声明：Patch Version: xxx / 补丁版本: xxx
+	for _, text := range texts {
+		if text == "" {
+			continue
+		}
+		if m := patchExplicitRe.FindStringSubmatch(text); len(m) == 2 {
+			val := strings.Trim(m[1], " \t\r\n,;:.()[]")
+			if !isNonePatchValue(val) {
+				return val
+			}
+		}
+	}
+
+	// 2. 独立热补丁标识：如 V200R019SPH020、SPH020、HPxxx
+	for _, text := range texts {
+		if text == "" {
+			continue
+		}
+		if m := patchHotfixTokenRe.FindStringSubmatch(text); len(m) == 2 {
+			val := strings.Trim(m[1], " \t\r\n,;:.()[]")
+			if val != "" {
+				return val
+			}
+		}
+	}
+
+	// 3. 固件版本内嵌补丁号：如华为 SPC500、H3C Release 2612P08 -> P08、锐捷 P2
+	for _, text := range texts {
+		if text == "" {
+			continue
+		}
+		if val := extractEmbeddedPatch(text); val != "" {
+			return val
+		}
+	}
+
+	return ""
+}
+
 // collectDeviceIdentity 采集设备型号与软件版本。
 // 优先 ENTITY-MIB（标准、结构化），缺失时回退解析 sysDescr。
 func (c *SNMPCollector) collectDeviceIdentity(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry) {
 	model := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalModelName.OID)
 	version := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalSoftwareRev.OID)
 
+	var descr string
 	if model == "" || version == "" {
-		if descr := c.readSysDescr(target, registry); descr != "" {
+		if d := c.readSysDescr(target, registry); d != "" {
+			descr = d
 			fallbackModel, fallbackVersion := parseDeviceIdentityFromSysDescr(descr)
 			if model == "" {
 				model = fallbackModel
@@ -1109,6 +1187,17 @@ func (c *SNMPCollector) collectDeviceIdentity(target snmpClient, metrics *SNMPMe
 	if version != "" {
 		version = sanitizeIdentityValue(version)
 		metrics.FirmwareVersion = &version
+	}
+
+	patch := ExtractPatchVersion(descr, version)
+	if patch == "" && descr == "" {
+		if d := c.readSysDescr(target, registry); d != "" {
+			descr = d
+			patch = ExtractPatchVersion(descr, version)
+		}
+	}
+	if patch != "" {
+		metrics.PatchVersion = &patch
 	}
 }
 

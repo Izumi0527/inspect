@@ -222,7 +222,7 @@ func ckBGPPeers() map[string]interface{} {
 // 作用是让报告自带版本清单，便于事后比对。
 func ckFirmwareVersion() map[string]interface{} {
 	return map[string]interface{}{
-		"id": "firmware_version", "name": "型号与固件版本", "description": "采集设备型号与固件版本，供版本基线比对",
+		"id": "firmware_version", "name": "型号与固件版本", "description": "采集设备型号、固件版本与补丁版本，供版本基线与安全公告比对",
 		"type": "snmp", "category": "health", "metric": "firmware_version", "weight": 3,
 		"config": map[string]interface{}{}, "enabled": true,
 	}
