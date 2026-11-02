@@ -804,7 +804,7 @@ func (s *Service) getAlertSummary(ctx context.Context) (AlertSummary, error) {
 	}
 
 	if s.alerts != nil {
-		stats, err := s.alerts.GetAlertStatistics(ctx)
+		stats, err := s.alerts.GetAlertStatistics(ctx, alerts.AlertStatisticsFilter{})
 		if err == nil {
 			return AlertSummary{
 				Critical:       stats.Critical,

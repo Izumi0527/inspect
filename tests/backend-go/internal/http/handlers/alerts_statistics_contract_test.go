@@ -20,7 +20,7 @@ type fixedAlertStatsService struct {
 	recent []alerts.AlertWithDevice
 }
 
-func (s fixedAlertStatsService) GetAlertStatistics(_ context.Context) (alerts.AlertStatistics, error) {
+func (s fixedAlertStatsService) GetAlertStatistics(_ context.Context, _ alerts.AlertStatisticsFilter) (alerts.AlertStatistics, error) {
 	return s.stats, nil
 }
 

@@ -62,6 +62,11 @@ type ListAlertsFilter struct {
 	SortOrder     string
 }
 
+// AlertStatisticsFilter 统计口径过滤：与列表共用屏蔽关键字，使统计卡 / 顶栏角标与列表一致。
+type AlertStatisticsFilter struct {
+	ExcludeSearch string
+}
+
 type ListRulesFilter struct {
 	Severity *string
 	Category *string
@@ -231,7 +236,7 @@ func (s *Service) GetRecentAlerts(ctx context.Context, limit int) ([]AlertWithDe
 	return rows, err
 }
 
-func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, error) {
+func (s *Service) GetAlertStatistics(ctx context.Context, filter AlertStatisticsFilter) (AlertStatistics, error) {
 	if s == nil || s.db == nil {
 		return AlertStatistics{}, fmt.Errorf("database not initialized")
 	}
@@ -241,19 +246,24 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 		ByDevice:   map[string]int{},
 	}
 
+	// 六条统计查询共用同一基础查询（含屏蔽关键字），保证每个数字口径一致。
+	base := func() *gorm.DB {
+		return applyAlertExcludeKeywords(
+			s.db.WithContext(ctx).
+				Table("alerts AS a").
+				Joins("JOIN devices d ON d.id = a.device_id"),
+			filter.ExcludeSearch,
+		)
+	}
+
 	var total int64
-	if err := s.db.WithContext(ctx).
-		Table("alerts AS a").
-		Joins("JOIN devices d ON d.id = a.device_id").
-		Count(&total).Error; err != nil {
+	if err := base().Count(&total).Error; err != nil {
 		return stats, err
 	}
 	stats.Total = int(total)
 
 	var active int64
-	if err := s.db.WithContext(ctx).
-		Table("alerts AS a").
-		Joins("JOIN devices d ON d.id = a.device_id").
+	if err := base().
 		Where("a.status IN ?", []string{alertStatusOpen, alertStatusAcknowledged}).
 		Count(&active).Error; err != nil {
 		return stats, err
@@ -261,9 +271,7 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 	stats.Active = int(active)
 
 	var acknowledged int64
-	if err := s.db.WithContext(ctx).
-		Table("alerts AS a").
-		Joins("JOIN devices d ON d.id = a.device_id").
+	if err := base().
 		Where("a.status = ?", alertStatusAcknowledged).
 		Count(&acknowledged).Error; err != nil {
 		return stats, err
@@ -271,9 +279,7 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 	stats.Acknowledged = int(acknowledged)
 
 	var resolved int64
-	if err := s.db.WithContext(ctx).
-		Table("alerts AS a").
-		Joins("JOIN devices d ON d.id = a.device_id").
+	if err := base().
 		Where("a.status IN ?", []string{alertStatusResolved, alertStatusClosed}).
 		Count(&resolved).Error; err != nil {
 		return stats, err
@@ -285,9 +291,7 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 		Count    int    `gorm:"column:count"`
 	}
 	severityRows := make([]severityRow, 0)
-	if err := s.db.WithContext(ctx).
-		Table("alerts AS a").
-		Joins("JOIN devices d ON d.id = a.device_id").
+	if err := base().
 		Select("severity, COUNT(*) as count").
 		Where("a.status IN ?", []string{alertStatusOpen, alertStatusAcknowledged}).
 		Group("severity").
@@ -310,9 +314,7 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 		Count    int    `gorm:"column:count"`
 	}
 	categoryRows := make([]categoryRow, 0)
-	if err := s.db.WithContext(ctx).
-		Table("alerts AS a").
-		Joins("JOIN devices d ON d.id = a.device_id").
+	if err := base().
 		Select("category, COUNT(*) as count").
 		Where("a.status IN ?", []string{alertStatusOpen, alertStatusAcknowledged}).
 		Group("category").
@@ -332,10 +334,8 @@ func (s *Service) GetAlertStatistics(ctx context.Context) (AlertStatistics, erro
 		Count      int     `gorm:"column:count"`
 	}
 	deviceRows := make([]deviceRow, 0)
-	if err := s.db.WithContext(ctx).
-		Table("alerts AS a").
+	if err := base().
 		Select("a.device_id, d.name AS device_name, COUNT(*) as count").
-		Joins("JOIN devices d ON d.id = a.device_id").
 		Where("a.status IN ?", []string{alertStatusOpen, alertStatusAcknowledged}).
 		Group("a.device_id, d.name").
 		Order("count desc").

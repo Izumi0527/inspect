@@ -256,3 +256,38 @@ func newAlertsGormDBWithSQLMock(t *testing.T) (*gorm.DB, sqlmock.Sqlmock, func()
 	}
 	return gormDB, mock, cleanup
 }
+
+// 统计卡与顶栏角标必须与列表同口径：传入屏蔽关键字时，六条统计查询每条都要带上 NOT ILIKE 子句，
+// 且关键字中的 LIKE 元字符要被转义（50% 不能变成通配匹配）。
+func TestGetAlertStatistics_ExcludeSearch_AppliesToEveryQuery(t *testing.T) {
+	db, mock, cleanup := newAlertsGormDBWithSQLMock(t)
+	defer cleanup()
+
+	service := alerts.NewService(db, zap.NewNop())
+
+	excludeClause := `\(\(COALESCE\(a\.title, ''\) NOT ILIKE \$\d+ AND COALESCE\(a\.message, ''\) NOT ILIKE \$\d+ AND COALESCE\(d\.name, ''\) NOT ILIKE \$\d+ AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$\d+\)\)`
+	twoKeywords := excludeClause + ` AND ` + excludeClause
+
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE ` + twoKeywords).
+		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%", `%50\%%`, `%50\%%`, `%50\%%`, `%50\%%`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE ` + twoKeywords + ` AND a\.status IN`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE ` + twoKeywords + ` AND a\.status = `).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE ` + twoKeywords + ` AND a\.status IN`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`(?is)SELECT severity, COUNT\(\*\) as count FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE ` + twoKeywords + ` AND a\.status IN .* GROUP BY "severity"`).
+		WillReturnRows(sqlmock.NewRows([]string{"severity", "count"}))
+	mock.ExpectQuery(`(?is)SELECT category, COUNT\(\*\) as count FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE ` + twoKeywords + ` AND a\.status IN .* GROUP BY "category"`).
+		WillReturnRows(sqlmock.NewRows([]string{"category", "count"}))
+	mock.ExpectQuery(`(?is)SELECT a\.device_id, d\.name AS device_name, COUNT\(\*\) as count FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE ` + twoKeywords + ` AND a\.status IN .* GROUP BY a\.device_id, d\.name ORDER BY count desc LIMIT`).
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "device_name", "count"}))
+
+	if _, err := service.GetAlertStatistics(context.Background(), alerts.AlertStatisticsFilter{ExcludeSearch: "NTP,50%"}); err != nil {
+		t.Fatalf("GetAlertStatistics() error = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}

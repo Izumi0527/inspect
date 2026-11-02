@@ -25,7 +25,7 @@ func (alertsServiceStub) GetRecentAlerts(_ context.Context, _ int) ([]alerts.Ale
 	return []alerts.AlertWithDevice{}, nil
 }
 
-func (alertsServiceStub) GetAlertStatistics(_ context.Context) (alerts.AlertStatistics, error) {
+func (alertsServiceStub) GetAlertStatistics(_ context.Context, _ alerts.AlertStatisticsFilter) (alerts.AlertStatistics, error) {
 	return alerts.AlertStatistics{}, nil
 }
 

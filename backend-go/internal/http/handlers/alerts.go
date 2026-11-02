@@ -41,7 +41,7 @@ type AlertsService interface {
 	ListAlerts(ctx context.Context, filter alerts.ListAlertsFilter) ([]alerts.AlertWithDevice, int64, error)
 	GetAlert(ctx context.Context, alertID int) (alerts.AlertWithDevice, error)
 	GetRecentAlerts(ctx context.Context, limit int) ([]alerts.AlertWithDevice, error)
-	GetAlertStatistics(ctx context.Context) (alerts.AlertStatistics, error)
+	GetAlertStatistics(ctx context.Context, filter alerts.AlertStatisticsFilter) (alerts.AlertStatistics, error)
 	ListAlertOperations(ctx context.Context, alertID int, limit int) ([]alerts.AlertOperationHistory, error)
 
 	AcknowledgeAlert(ctx context.Context, alertID int, operator alerts.Operator, note *string, assignee *string) error
@@ -272,7 +272,7 @@ func (h AlertsHandler) GetAlertStatistics(c echo.Context) error {
 		return err
 	}
 
-	stats, err := h.Service.GetAlertStatistics(c.Request().Context())
+	stats, err := h.Service.GetAlertStatistics(c.Request().Context(), alerts.AlertStatisticsFilter{ExcludeSearch: parseAlertExcludeSearch(c)})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load alert statistics")
 	}

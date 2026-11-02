@@ -237,3 +237,33 @@ func TestBulkAlertAction_SelectAllFiltered_ExcludeSearch(t *testing.T) {
 		}
 	})
 }
+
+type captureStatsService struct {
+	alertsServiceStub
+	lastFilter *alerts.AlertStatisticsFilter
+}
+
+func (s *captureStatsService) GetAlertStatistics(_ context.Context, filter alerts.AlertStatisticsFilter) (alerts.AlertStatistics, error) {
+	copied := filter
+	s.lastFilter = &copied
+	return alerts.AlertStatistics{}, nil
+}
+
+func TestGetAlertStatistics_ExcludeSearchBinding(t *testing.T) {
+	e := echo.New()
+	authService, token := newAuthServiceWithPermissions(t, []string{"alerts:read"})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts/statistics?exclude_search=NTP,LLDP", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	service := &captureStatsService{}
+	handler := handlers.AlertsHandler{Service: service, Auth: authService}
+	if err := handler.GetAlertStatistics(c); err != nil {
+		t.Fatalf("GetAlertStatistics failed: %v", err)
+	}
+	if service.lastFilter == nil || service.lastFilter.ExcludeSearch != "NTP,LLDP" {
+		t.Fatalf("expected ExcludeSearch to be 'NTP,LLDP', got %v", service.lastFilter)
+	}
+}
