@@ -267,7 +267,7 @@ export function useLogFilters() {
   ])
 
   const mergedFilters = useMemo(
-    () => ({ ...filters, excludeQuery: exclude.excludeQuery }),
+    (): LogFilters => ({ ...filters, excludeQuery: exclude.excludeQuery }),
     [filters, exclude.excludeQuery],
   )
 

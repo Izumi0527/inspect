@@ -268,7 +268,7 @@ func TestGetAlertStatistics_ExcludeSearch_AppliesToEveryQuery(t *testing.T) {
 	excludeClause := `\(\(COALESCE\(a\.title, ''\) NOT ILIKE \$\d+ AND COALESCE\(a\.message, ''\) NOT ILIKE \$\d+ AND COALESCE\(d\.name, ''\) NOT ILIKE \$\d+ AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$\d+\)\)`
 	twoKeywords := excludeClause + ` AND ` + excludeClause
 
-	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE ` + twoKeywords).
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE `+twoKeywords).
 		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%", `%50\%%`, `%50\%%`, `%50\%%`, `%50\%%`).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE ` + twoKeywords + ` AND a\.status IN`).
