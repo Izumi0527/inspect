@@ -2,7 +2,6 @@ package alerts_test
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -165,64 +164,6 @@ func TestListAlerts_OpenStatusFilterPreservesSingleOpenStatus(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sqlmock expectations not met: %v", err)
-	}
-}
-
-func TestSplitAlertExcludeKeywords(t *testing.T) {
-	cases := []struct {
-		name string
-		in   string
-		want []string
-	}{
-		{
-			name: "支持中英文逗号与分号混合切分、去空与去重",
-			in:   " NTP , lldp，GigabitEthernet; ntp ； LLDP ; ; ",
-			want: []string{"NTP", "lldp", "GigabitEthernet"},
-		},
-		{
-			name: "空字符串返回 nil",
-			in:   "   ",
-			want: nil,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := alerts.SplitAlertExcludeKeywords(tc.in)
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("SplitAlertExcludeKeywords(%q) = %v, want %v", tc.in, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestSplitAlertExcludeKeywords_MaxLimit(t *testing.T) {
-	var input []string
-	for i := 0; i < 30; i++ {
-		input = append(input, fmt.Sprintf("kw_%d", i))
-	}
-	inStr := ""
-	for i, item := range input {
-		if i > 0 {
-			inStr += ","
-		}
-		inStr += item
-	}
-
-	got := alerts.SplitAlertExcludeKeywords(inStr)
-	if len(got) != 20 {
-		t.Fatalf("SplitAlertExcludeKeywords length = %d, want max 20", len(got))
-	}
-	if got[0] != "kw_0" || got[19] != "kw_19" {
-		t.Fatalf("SplitAlertExcludeKeywords elements mismatch: first=%s, last=%s", got[0], got[19])
-	}
-}
-
-func TestEscapeAlertLikePattern(t *testing.T) {
-	in := `100%_of_\alert`
-	want := `100\%\_of\_\\alert`
-	if got := alerts.EscapeAlertLikePattern(in); got != want {
-		t.Fatalf("EscapeAlertLikePattern(%q) = %q, want %q", in, got, want)
 	}
 }
 

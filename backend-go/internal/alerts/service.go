@@ -8,15 +8,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/your-org/inspect-system/backend-go/internal/common"
 	"go.uber.org/zap"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 const (
-	alertDefaultPageSize    = 20
-	alertMaxPageSize        = 200
-	maxAlertExcludeKeywords = 20
+	alertDefaultPageSize = 20
+	alertMaxPageSize     = 200
 )
 
 const (
@@ -137,15 +137,7 @@ func (s *Service) ListAlerts(ctx context.Context, filter ListAlertsFilter) ([]Al
 			pattern, pattern, pattern, pattern,
 		)
 	}
-	if strings.TrimSpace(filter.ExcludeSearch) != "" {
-		for _, kw := range splitAlertExcludeKeywords(filter.ExcludeSearch) {
-			pattern := "%" + escapeAlertLikePattern(kw) + "%"
-			query = query.Where(
-				"(COALESCE(a.title, '') NOT ILIKE ? AND COALESCE(a.message, '') NOT ILIKE ? AND COALESCE(d.name, '') NOT ILIKE ? AND COALESCE(CAST(d.ip_address AS TEXT), '') NOT ILIKE ?)",
-				pattern, pattern, pattern, pattern,
-			)
-		}
-	}
+	query = applyAlertExcludeKeywords(query, filter.ExcludeSearch)
 
 	statuses := mapStatusFilters(filter.Statuses)
 	if len(statuses) > 0 {
@@ -864,50 +856,15 @@ func encodeJSON(value interface{}) (datatypes.JSON, error) {
 	return datatypes.JSON(raw), nil
 }
 
-// escapeAlertLikePattern 转义 SQL LIKE/ILIKE 通配符与反斜杠。
-func escapeAlertLikePattern(raw string) string {
-	return strings.NewReplacer(
-		`\`, `\\`,
-		`%`, `\%`,
-		`_`, `\_`,
-	).Replace(raw)
-}
-
-// EscapeAlertLikePattern 导出版本供测试直接验证。
-func EscapeAlertLikePattern(raw string) string {
-	return escapeAlertLikePattern(raw)
-}
-
-// splitAlertExcludeKeywords 按逗号或分号切分屏蔽词，做去空、小写去重并截断至上限。
-func splitAlertExcludeKeywords(raw string) []string {
-	if strings.TrimSpace(raw) == "" {
-		return nil
+// applyAlertExcludeKeywords 把屏蔽关键字转成逐词的 NOT ILIKE 条件（标题/消息/设备名/IP 四字段任一命中即排除）。
+// 列表与统计共用，保证两处口径一致；用 COALESCE 规避 NULL 列在三值逻辑下被误排除。
+func applyAlertExcludeKeywords(query *gorm.DB, raw string) *gorm.DB {
+	for _, kw := range common.SplitExcludeKeywords(raw) {
+		pattern := "%" + common.EscapeLikePattern(kw) + "%"
+		query = query.Where(
+			"(COALESCE(a.title, '') NOT ILIKE ? AND COALESCE(a.message, '') NOT ILIKE ? AND COALESCE(d.name, '') NOT ILIKE ? AND COALESCE(CAST(d.ip_address AS TEXT), '') NOT ILIKE ?)",
+			pattern, pattern, pattern, pattern,
+		)
 	}
-	splitter := func(r rune) bool {
-		return r == ',' || r == '，' || r == ';' || r == '；'
-	}
-	parts := strings.FieldsFunc(raw, splitter)
-	seen := make(map[string]struct{}, len(parts))
-	result := make([]string, 0, len(parts))
-	for _, p := range parts {
-		trimmed := strings.TrimSpace(p)
-		if trimmed == "" {
-			continue
-		}
-		lower := strings.ToLower(trimmed)
-		if _, exists := seen[lower]; exists {
-			continue
-		}
-		seen[lower] = struct{}{}
-		result = append(result, trimmed)
-		if len(result) >= maxAlertExcludeKeywords {
-			break
-		}
-	}
-	return result
-}
-
-// SplitAlertExcludeKeywords 导出版本供测试直接验证。
-func SplitAlertExcludeKeywords(raw string) []string {
-	return splitAlertExcludeKeywords(raw)
+	return query
 }
