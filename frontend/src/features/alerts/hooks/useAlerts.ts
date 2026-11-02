@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useExcludeKeywords } from '@/hooks/useExcludeKeywords'
 import {
   Alert,
   AlertFilters,
@@ -186,8 +187,8 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
   }
 }
 
-// 告警统计hook
-export function useAlertStats() {
+// 告警统计hook。excludeSearch 与列表同口径，避免列表被屏蔽后统计卡仍显示噪声数量。
+export function useAlertStats(excludeSearch?: string) {
   const [stats, setStats] = useState<AlertStats | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -196,14 +197,14 @@ export function useAlertStats() {
     try {
       setLoading(true)
       setError(null)
-      const alertStats = await fetchAlertStats()
+      const alertStats = await fetchAlertStats({ excludeSearch })
       setStats(alertStats)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载统计数据失败')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [excludeSearch])
 
   useEffect(() => {
     loadStats()
@@ -218,21 +219,38 @@ export function useAlertStats() {
 }
 
 // 告警筛选hook
+//
+// 屏蔽关键字是「视图偏好」而非「筛选」：持久化到 localStorage、输入防抖，并且 resetFilters 不清它
+// （用户清空筛选是为了换查看条件，不是要重新被噪声淹没）。
+export const ALERT_EXCLUDE_KEYWORDS_STORAGE_KEY = 'alert_exclude_keywords'
+
 export function useAlertFilters() {
   const [filters, setFilters] = useState<AlertFilters>({ ...DEFAULT_ALERT_FILTERS })
+  const exclude = useExcludeKeywords(ALERT_EXCLUDE_KEYWORDS_STORAGE_KEY)
 
   const updateFilter = useCallback((key: keyof AlertFilters, value: string) => {
+    if (key === 'excludeQuery') {
+      exclude.setExcludeQuery(value)
+      return
+    }
     setFilters(prev => ({ ...prev, [key]: value }))
-  }, [])
+  }, [exclude])
 
   const resetFilters = useCallback(() => {
     setFilters({ ...DEFAULT_ALERT_FILTERS })
   }, [])
 
+  const mergedFilters = useMemo(
+    () => ({ ...filters, excludeQuery: exclude.excludeQuery }),
+    [filters, exclude.excludeQuery],
+  )
+
   return {
-    filters,
+    filters: mergedFilters,
     updateFilter,
     resetFilters,
+    debouncedExcludeQuery: exclude.debouncedExcludeQuery,
+    excludeKeywords: exclude.excludeKeywords,
   }
 }
 

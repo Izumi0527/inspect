@@ -367,9 +367,13 @@ export async function bulkAlertAction(action: BulkAlertAction): Promise<boolean>
   }
 }
 
-export async function fetchAlertStats(): Promise<AlertStats> {
+export async function fetchAlertStats(params?: { excludeSearch?: string }): Promise<AlertStats> {
   // 注意: 后端实际路由是 /alerts/statistics 而不是 /alerts/stats
-  const response = await api.get<AlertStatsDto>('/alerts/statistics')
+  const excludeSearch = params?.excludeSearch?.trim()
+  const response = await api.get<AlertStatsDto>(
+    '/alerts/statistics',
+    excludeSearch ? { params: { exclude_search: excludeSearch } } : undefined,
+  )
   const data = response ?? {}
 
   return {

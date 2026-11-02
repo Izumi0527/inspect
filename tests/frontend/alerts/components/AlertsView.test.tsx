@@ -26,9 +26,11 @@ let mockAlertFilters = {
   searchQuery: '',
   severityFilter: 'all',
   statusFilter: 'all',
+  excludeQuery: '',
 }
 const mockUpdateFilter = jest.fn()
 const mockResetFilters = jest.fn()
+const mockUseAlertStats = jest.fn<void, [string | undefined]>()
 let mockAlertsList = [
   {
     id: '1',
@@ -76,26 +78,33 @@ jest.mock('@/features/alerts/hooks/useAlerts', () => ({
     performBulkAction: mockPerformBulkAction,
     loadAlerts: mockLoadAlerts,
   }),
-  useAlertStats: () => ({
-    stats: {
-      total: 2,
-      critical: 1,
-      warning: 1,
-      info: 0,
-      active: 2,
-      acknowledged: 0,
-      resolved: 0,
-      byCategory: {},
-      byDevice: {},
-    },
-    loading: false,
-    error: null,
-    loadStats: mockLoadStats,
-  }),
+  useAlertStats: (excludeSearch?: string) => {
+    mockUseAlertStats(excludeSearch)
+    return {
+      stats: {
+        total: 2,
+        critical: 1,
+        warning: 1,
+        info: 0,
+        active: 2,
+        acknowledged: 0,
+        resolved: 0,
+        byCategory: {},
+        byDevice: {},
+      },
+      loading: false,
+      error: null,
+      loadStats: mockLoadStats,
+    }
+  },
   useAlertFilters: () => ({
     filters: mockAlertFilters,
     updateFilter: mockUpdateFilter,
     resetFilters: mockResetFilters,
+    debouncedExcludeQuery: mockAlertFilters.excludeQuery,
+    excludeKeywords: mockAlertFilters.excludeQuery
+      ? mockAlertFilters.excludeQuery.split(',').map((s) => s.trim()).filter(Boolean)
+      : [],
   }),
 }))
 
@@ -271,6 +280,7 @@ describe('AlertsView', () => {
       searchQuery: '',
       severityFilter: 'all',
       statusFilter: 'all',
+      excludeQuery: '',
     }
     mockWsHandlers.clear()
     mockWs.isConnected.mockReturnValue(true)
@@ -611,6 +621,78 @@ describe('AlertsView', () => {
       )
       expect(mockLoadAlerts).toHaveBeenCalled()
       expect(mockLoadStats).toHaveBeenCalled()
+    })
+  })
+
+  // 屏蔽关键字是"视图偏好"而非"筛选"：不冻结实时刷新、不触发筛选空态，
+  // 命中屏蔽词的新告警在事件层就被丢掉（不刷新、不计数、不闪骨架屏）。
+  describe('屏蔽关键字', () => {
+    beforeEach(() => {
+      mockAlertFilters = {
+        searchQuery: '',
+        severityFilter: 'all',
+        statusFilter: 'active',
+        excludeQuery: 'NTP',
+      }
+    })
+
+    it('仅有屏蔽词时 WS 推送仍自动刷新列表，且不显示“已开启筛选”提示', async () => {
+      render(<AlertsView />)
+
+      const updateHandler = mockWsHandlers.get('alert_update')
+      expect(updateHandler).toBeDefined()
+      await act(async () => {
+        updateHandler?.({ id: '2', status: 'active' })
+      })
+
+      await waitFor(() => {
+        expect(mockLoadAlerts).toHaveBeenCalledTimes(1)
+      })
+      expect(screen.queryByText(/已开启筛选/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/收到 1 条实时更新/)).not.toBeInTheDocument()
+    })
+
+    it('命中屏蔽词的 new_alert 事件应被完全忽略', async () => {
+      render(<AlertsView />)
+
+      const newAlertHandler = mockWsHandlers.get('new_alert')
+      expect(newAlertHandler).toBeDefined()
+      await act(async () => {
+        newAlertHandler?.({ id: '9', title: '[WARNING] sw1 - ntp 同步失败', message: '', device: 'sw1' })
+      })
+
+      expect(mockLoadAlerts).toHaveBeenCalledTimes(0)
+      expect(mockLoadStats).toHaveBeenCalledTimes(0)
+      expect(screen.queryByText(/收到 1 条实时更新/)).not.toBeInTheDocument()
+    })
+
+    it('未命中屏蔽词的 new_alert 事件仍应刷新列表', async () => {
+      render(<AlertsView />)
+
+      const newAlertHandler = mockWsHandlers.get('new_alert')
+      await act(async () => {
+        newAlertHandler?.({ id: '10', title: 'CPU 使用率过高', message: '', device: 'sw2' })
+      })
+
+      await waitFor(() => {
+        expect(mockLoadAlerts).toHaveBeenCalledTimes(1)
+      })
+    })
+
+    it('屏蔽词应透传给统计 hook', () => {
+      render(<AlertsView />)
+
+      expect(mockUseAlertStats).toHaveBeenCalledWith('NTP')
+    })
+
+    it('屏蔽词 + 无数据时应显示“暂无活跃告警”而非“没有匹配的告警”', () => {
+      mockAlertsList = []
+
+      render(<AlertsView />)
+
+      expect(screen.getByText('暂无活跃告警')).toBeInTheDocument()
+      expect(screen.queryByText('没有匹配的告警')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '清空筛选' })).not.toBeInTheDocument()
     })
   })
 })

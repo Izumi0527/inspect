@@ -33,6 +33,7 @@ import { Permission } from '@/lib/types/auth.types'
 import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
 import { ErrorAlert } from '@/components/atoms/ErrorAlert'
 import { CompactPageToolbar, FloatingBatchActionBar, BatchDeleteConfirmModal } from '@/components/shared'
+import { matchesExcludeKeywords } from '@/utils/excludeKeywords'
 
 const AUTO_REFRESH_INTERVAL = 30000 // 30秒
 const WS_SELF_EVENT_TTL_MS = 5000 // 本端操作后短时间内忽略同ID回推事件，避免重复刷新
@@ -82,11 +83,12 @@ const AlertsViewContent: React.FC = () => {
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wsSelfEventRef = useRef<Map<string, number>>(new Map())
 
-  const { filters, updateFilter, resetFilters } = useAlertFilters()
+  const { filters, updateFilter, resetFilters, debouncedExcludeQuery, excludeKeywords } = useAlertFilters()
 
+  // 屏蔽关键字是「视图偏好」而非「用户筛选」：不计入 hasActiveFilters，否则输入屏蔽词后实时刷新会被冻结、
+  // 每条噪声告警都会变成「收到 N 条实时更新」提示——噪声只是换了个地方出现。
   const hasActiveFilters = useMemo(() => {
     const hasBasicSearch = String(filters.searchQuery ?? '').trim() !== ''
-    const hasExcludeSearch = Boolean(String(filters.excludeQuery ?? '').trim())
     const hasBasicSeverity = String(filters.severityFilter ?? '').trim() !== '' && filters.severityFilter !== 'all'
     // 默认视图（活跃）不算用户筛选：否则首屏就会显示「已开启筛选」并关闭实时自动刷新
     const statusValue = String(filters.statusFilter ?? '').trim()
@@ -98,8 +100,8 @@ const AlertsViewContent: React.FC = () => {
       String(timeRangeFilter.dateRange?.end ?? '').trim()
     )
 
-    return hasBasicSearch || hasExcludeSearch || hasBasicSeverity || hasBasicStatus || hasTimeRange
-  }, [timeRangeFilter, filters.searchQuery, filters.excludeQuery, filters.severityFilter, filters.statusFilter])
+    return hasBasicSearch || hasBasicSeverity || hasBasicStatus || hasTimeRange
+  }, [timeRangeFilter, filters.searchQuery, filters.severityFilter, filters.statusFilter])
 
   const isDefaultActiveView = filters.statusFilter === DEFAULT_ALERT_FILTERS.statusFilter
 
@@ -115,8 +117,8 @@ const AlertsViewContent: React.FC = () => {
       params.search = filters.searchQuery
     }
 
-    if (filters.excludeQuery && filters.excludeQuery.trim()) {
-      params.excludeSearch = filters.excludeQuery.trim()
+    if (debouncedExcludeQuery) {
+      params.excludeSearch = debouncedExcludeQuery
     }
 
     if (filters.severityFilter && filters.severityFilter !== 'all') {
@@ -147,7 +149,17 @@ const AlertsViewContent: React.FC = () => {
     }
 
     return params
-  }, [currentPage, pageSize, filters, timeRangeFilter, sortBy, sortOrder])
+  }, [
+    currentPage,
+    pageSize,
+    filters.searchQuery,
+    filters.severityFilter,
+    filters.statusFilter,
+    debouncedExcludeQuery,
+    timeRangeFilter,
+    sortBy,
+    sortOrder,
+  ])
 
   const {
     alerts,
@@ -161,7 +173,7 @@ const AlertsViewContent: React.FC = () => {
     loadAlerts
   } = useAlerts(queryParams)
 
-  const { stats, loading: statsLoading, error: statsError, loadStats } = useAlertStats()
+  const { stats, loading: statsLoading, error: statsError, loadStats } = useAlertStats(debouncedExcludeQuery)
 
   const batchSelection = useBatchSelection<Alert>({
     items: alerts,
@@ -169,7 +181,7 @@ const AlertsViewContent: React.FC = () => {
     getId: (item) => String(item.id),
     filterDeps: [
       filters.searchQuery,
-      filters.excludeQuery,
+      debouncedExcludeQuery,
       filters.severityFilter,
       filters.statusFilter,
       timeRangeFilter.dateRange?.start,
@@ -256,6 +268,13 @@ const AlertsViewContent: React.FC = () => {
 
   // WebSocket 实时告警更新
   const handleRealtimeAlertEvent = useCallback((payload: unknown) => {
+    // 命中屏蔽词的新告警在事件层直接丢弃：不刷新、不计数、不闪骨架屏，这才是"屏蔽"。
+    // alert_update / alert_resolved 事件只带 id + status，不会命中，照常处理。
+    if (excludeKeywords.length > 0 && payload && typeof payload === 'object') {
+      const data = payload as Record<string, unknown>
+      if (matchesExcludeKeywords([data.title, data.message, data.device], excludeKeywords)) return
+    }
+
     if (shouldSkipSelfEventRefresh(payload)) return
 
     // “筛选/分页/关闭自动刷新”场景下不自动刷新列表，避免破坏用户当前视图；改为提示条+手动应用。
@@ -268,7 +287,7 @@ const AlertsViewContent: React.FC = () => {
     setRealtimePendingCount((prev) => prev + 1)
     setRealtimePendingAt(new Date())
     void loadStats()
-  }, [autoRefresh, currentPage, hasActiveFilters, loadStats, refreshAll, shouldSkipSelfEventRefresh])
+  }, [autoRefresh, currentPage, excludeKeywords, hasActiveFilters, loadStats, refreshAll, shouldSkipSelfEventRefresh])
 
   useWebSocketEvent(WebSocketEvents.NEW_ALERT, handleRealtimeAlertEvent)
   useWebSocketEvent(WebSocketEvents.ALERT_UPDATE, handleRealtimeAlertEvent)
