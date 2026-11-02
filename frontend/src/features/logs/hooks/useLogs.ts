@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { toast } from 'react-hot-toast'
 import { toLocalDayBoundaryIso } from '@/utils/dateRangeQuery'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
+import { useExcludeKeywords } from '@/hooks/useExcludeKeywords'
 import * as logsApi from '../api/logsApi'
 import type {
   DeviceLog,
@@ -168,7 +169,11 @@ export function useLogStats(hours: number = 24) {
 
 /**
  * 日志过滤器 Hook
+ *
+ * 屏蔽关键字是「视图偏好」：持久化到 localStorage、输入防抖（由 useExcludeKeywords 统一提供）。
  */
+export const LOG_EXCLUDE_KEYWORDS_STORAGE_KEY = 'log_exclude_keywords'
+
 export function useLogFilters() {
   const [filters, setFilters] = useState<LogFilters>({
     searchQuery: '',
@@ -177,20 +182,22 @@ export function useLogFilters() {
     sourceFilter: 'all',
     includeSelf: false,
   })
+  const exclude = useExcludeKeywords(LOG_EXCLUDE_KEYWORDS_STORAGE_KEY)
 
   // 搜索防抖：避免每次按键都触发后端请求
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  const [debouncedExcludeQuery, setDebouncedExcludeQuery] = useState('')
-  const excludeTimerRef = useRef<NodeJS.Timeout | null>(null)
-
   const updateFilter = useCallback(<K extends keyof LogFilters>(
     key: K,
     value: LogFilters[K]
   ) => {
+    if (key === 'excludeQuery') {
+      exclude.setExcludeQuery((value as string | undefined) ?? '')
+      return
+    }
     setFilters(prev => ({ ...prev, [key]: value }))
-  }, [])
+  }, [exclude])
 
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
@@ -210,28 +217,12 @@ export function useLogFilters() {
     }
   }, [filters.searchQuery])
 
-  useEffect(() => {
-    if (excludeTimerRef.current) clearTimeout(excludeTimerRef.current)
-
-    const value = (filters.excludeQuery || '').trim()
-    if (!value) {
-      setDebouncedExcludeQuery('')
-      return
-    }
-
-    excludeTimerRef.current = setTimeout(() => {
-      setDebouncedExcludeQuery(value)
-    }, 350)
-
-    return () => {
-      if (excludeTimerRef.current) clearTimeout(excludeTimerRef.current)
-    }
-  }, [filters.excludeQuery])
+  const debouncedExcludeQuery = exclude.debouncedExcludeQuery
 
   // 转换为API查询参数
   const queryParams = useMemo((): LogQueryParams => {
     const params: LogQueryParams = {}
-    
+
     if (debouncedSearchQuery) {
       params.search = debouncedSearchQuery
     }
@@ -275,8 +266,13 @@ export function useLogFilters() {
     filters.endDate,
   ])
 
+  const mergedFilters = useMemo(
+    () => ({ ...filters, excludeQuery: exclude.excludeQuery }),
+    [filters, exclude.excludeQuery],
+  )
+
   return {
-    filters,
+    filters: mergedFilters,
     updateFilter,
     queryParams
   }

@@ -1,10 +1,14 @@
 import { act, renderHook } from '@testing-library/react'
-import { useLogFilters } from '@/features/logs/hooks/useLogs'
+import { useLogFilters, LOG_EXCLUDE_KEYWORDS_STORAGE_KEY } from '@/features/logs/hooks/useLogs'
 
 // 日期筛选产出 YYYY-MM-DD，后端按时间戳比较；查询参数必须转成本地当天的边界时间，
 // 否则结束日会被当成 UTC 零点截掉大半天。
 
 describe('useLogFilters 日期范围', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
   it('默认不带 start_time / end_time', () => {
     const { result } = renderHook(() => useLogFilters())
 
@@ -62,5 +66,31 @@ describe('useLogFilters 日期范围', () => {
 
     expect(result.current.queryParams.exclude_search).toBeUndefined()
     jest.useRealTimers()
+  })
+})
+
+// 屏蔽关键字是"视图偏好"：刷新页面后仍在，且首帧请求就带上，不等防抖。
+describe('useLogFilters 屏蔽关键字持久化', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('屏蔽词应从 localStorage 回放且首帧即进入 queryParams', () => {
+    localStorage.setItem(LOG_EXCLUDE_KEYWORDS_STORAGE_KEY, 'NTP')
+
+    const { result } = renderHook(() => useLogFilters())
+
+    expect(result.current.filters.excludeQuery).toBe('NTP')
+    expect(result.current.queryParams.exclude_search).toBe('NTP')
+  })
+
+  it('更新屏蔽词应写回 localStorage', () => {
+    const { result } = renderHook(() => useLogFilters())
+
+    act(() => {
+      result.current.updateFilter('excludeQuery', 'LLDP')
+    })
+
+    expect(localStorage.getItem(LOG_EXCLUDE_KEYWORDS_STORAGE_KEY)).toBe('LLDP')
   })
 })
