@@ -1,35 +1,57 @@
 import {
+  MONITORING_DATA_STALE_THRESHOLD_MS,
   TIME_RANGE_OPTIONS,
-  resolveMonitoringDataStaleThresholdMs,
   resolveTickStepMinutes,
   selectTimeTickLabels,
 } from '@/features/monitoring/utils/monitoring'
 
 describe('TIME_RANGE_OPTIONS', () => {
-  it('应为五档：1h/12h/24h/3d/7d', () => {
-    expect(TIME_RANGE_OPTIONS.map((item) => item.value)).toEqual(['1h', '12h', '24h', '3d', '7d'])
+  it('应为八档：1h/3h/6h/12h/24h/3d/7d/14d', () => {
+    expect(TIME_RANGE_OPTIONS.map((item) => item.value)).toEqual([
+      '1h',
+      '3h',
+      '6h',
+      '12h',
+      '24h',
+      '3d',
+      '7d',
+      '14d',
+    ])
   })
 
   it('标签应为中文近N描述', () => {
     expect(TIME_RANGE_OPTIONS.map((item) => item.label)).toEqual([
       '近1小时',
+      '近3小时',
+      '近6小时',
       '近12小时',
-      '近24小时',
+      '近1天',
       '近3天',
       '近7天',
+      '近14天',
     ])
   })
 })
 
-describe('resolveTickStepMinutes（刻度=范围/12）', () => {
+describe('resolveTickStepMinutes（刻度落在自然边界）', () => {
   it.each([
     ['1h', 5],
+    ['3h', 15],
+    ['6h', 30],
     ['12h', 60],
     ['24h', 120],
     ['3d', 360],
-    ['7d', 840],
+    ['7d', 720],
+    ['14d', 1440],
   ])('%s → %d 分钟', (range, expected) => {
     expect(resolveTickStepMinutes(range)).toBe(expected)
+  })
+
+  // 步长整除 24 小时时 selectTimeTickLabels 才会按 epoch 对齐，刻度落在整点/整 12 点等自然边界
+  it('每个档位的刻度步长都能整除 24 小时', () => {
+    for (const option of TIME_RANGE_OPTIONS) {
+      expect((24 * 60) % resolveTickStepMinutes(option.value)).toBe(0)
+    }
   })
 
   it('未知范围按 范围/12 向上取 5 的倍数兜底', () => {
@@ -79,14 +101,8 @@ describe('selectTimeTickLabels', () => {
   })
 })
 
-describe('resolveMonitoringDataStaleThresholdMs（新五档）', () => {
-  it.each([
-    ['1h', 10 * 60 * 1000],
-    ['12h', 10 * 60 * 1000],
-    ['24h', 10 * 60 * 1000],
-    ['3d', 2 * 60 * 60 * 1000],
-    ['7d', 2 * 60 * 60 * 1000],
-  ])('%s → %d ms', (range, expected) => {
-    expect(resolveMonitoringDataStaleThresholdMs(range)).toBe(expected)
+describe('MONITORING_DATA_STALE_THRESHOLD_MS（所有档位统一）', () => {
+  it('统一 10 分钟：5 分钟桶 + 约 3 分钟采集，容忍两轮采集缺失', () => {
+    expect(MONITORING_DATA_STALE_THRESHOLD_MS).toBe(10 * 60 * 1000)
   })
 })

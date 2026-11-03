@@ -3,14 +3,24 @@ import type { MonitoringSectionKey } from '../types'
 
 export const TIME_RANGE_OPTIONS = [
   { value: '1h', label: '近1小时' },
+  { value: '3h', label: '近3小时' },
+  { value: '6h', label: '近6小时' },
   { value: '12h', label: '近12小时' },
-  { value: '24h', label: '近24小时' },
+  { value: '24h', label: '近1天' },
   { value: '3d', label: '近3天' },
   { value: '7d', label: '近7天' },
+  { value: '14d', label: '近14天' },
 ] as const
 
 /** 监控中心默认时间范围 */
 export const DEFAULT_TIME_RANGE = '1h'
+
+/**
+ * 监控中心页统一采样间隔（分钟）：后端对 1h~14d 所有档位都按 5 分钟分桶，
+ * 各档位点位密度一致。改这里必须同步 backend-go/internal/monitoring/queries.go 的
+ * DashboardSampleInterval，此处仅用于界面提示。
+ */
+export const MONITORING_SAMPLE_INTERVAL_MINUTES = 5
 
 export const MONITORING_SECTION_LABELS: Record<MonitoringSectionKey, string> = {
   stats: '关键指标',
@@ -23,48 +33,40 @@ export function resolveTimeRangeLabel(timeRange: string): string {
   return TIME_RANGE_OPTIONS.find((item) => item.value === timeRange)?.label ?? timeRange
 }
 
-export function resolveMonitoringDataStaleThresholdMs(timeRange: string): number {
-  switch (timeRange) {
-    case '1h':
-    case '12h':
-    case '24h':
-      // 5 分钟采集 + 5 分钟桶：容忍两轮采集缺失与网络抖动
-      return 10 * 60 * 1000
-    case '3d':
-    case '7d':
-      // 小时级聚合桶，为避免桶边界误报取 2 小时
-      return 2 * 60 * 60 * 1000
-    default:
-      return 10 * 60 * 1000
-  }
-}
+/**
+ * 数据陈旧阈值（毫秒）：所有档位统一 10 分钟。
+ * 采样间隔统一为 5 分钟后，长档位不再有"小时级聚合桶"，原 3d/7d 的 2 小时阈值失去依据；
+ * 采集侧约 3 分钟一轮，10 分钟可容忍两轮采集缺失与网络抖动。
+ */
+export const MONITORING_DATA_STALE_THRESHOLD_MS = 10 * 60 * 1000
 
 /**
- * X 轴刻度步长（分钟）：范围/12，保证每档约 12 个刻度
- * （1h→5min、12h→1h、24h→2h、3d→6h、7d→14h）
+ * X 轴刻度步长（分钟）：每档约 12 个刻度，且步长都整除 24 小时，
+ * 使刻度按 epoch 对齐落在整点/整 12 点等自然边界（7d→12 小时、14d→1 天）。
  */
+const TICK_STEP_MINUTES_BY_RANGE: Readonly<Record<string, number>> = {
+  '1h': 5,
+  '3h': 15,
+  '6h': 30,
+  '12h': 60,
+  '24h': 120,
+  '3d': 360,
+  '7d': 720,
+  '14d': 1440,
+}
+
 export function resolveTickStepMinutes(timeRange: string): number {
-  switch (timeRange) {
-    case '1h':
-      return 5
-    case '12h':
-      return 60
-    case '24h':
-      return 120
-    case '3d':
-      return 360
-    case '7d':
-      return 840
-    default: {
-      const match = /^([0-9]+)([hdw])$/i.exec(timeRange.trim())
-      if (!match) return 120
-      const value = Number.parseInt(match[1], 10)
-      if (!Number.isFinite(value) || value <= 0) return 120
-      const unitMinutes = match[2].toLowerCase() === 'h' ? 60 : match[2].toLowerCase() === 'd' ? 1440 : 10080
-      const totalMinutes = value * unitMinutes
-      return Math.max(5, Math.ceil(totalMinutes / 12 / 5) * 5)
-    }
-  }
+  const preset = TICK_STEP_MINUTES_BY_RANGE[timeRange.trim().toLowerCase()]
+  if (preset !== undefined) return preset
+
+  // 未知/自定义档位兜底：范围/12 向上取 5 的倍数
+  const match = /^([0-9]+)([hdw])$/i.exec(timeRange.trim())
+  if (!match) return 120
+  const value = Number.parseInt(match[1], 10)
+  if (!Number.isFinite(value) || value <= 0) return 120
+  const unitMinutes = match[2].toLowerCase() === 'h' ? 60 : match[2].toLowerCase() === 'd' ? 1440 : 10080
+  const totalMinutes = value * unitMinutes
+  return Math.max(5, Math.ceil(totalMinutes / 12 / 5) * 5)
 }
 
 /**

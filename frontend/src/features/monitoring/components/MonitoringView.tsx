@@ -9,6 +9,7 @@ import {
   MonitoringLoadingSkeleton,
   MonitoringErrorPanel,
   MonitoringHeaderActions,
+  MonitoringTimeRangeBar,
 } from './shared'
 
 // 模块级稳定引用，避免每次渲染重建 inView 配置对象
@@ -55,6 +56,12 @@ export function MonitoringView() {
   return (
     <AppLayout title="监控中心" actions={<MonitoringHeaderActions page={page} />}>
       <div className="flex flex-col gap-4">
+
+        {/* 时间范围筛选栏：快捷时间键 + 下拉，控制整页（性能/温度/流量三卡同一档位） */}
+        <MonitoringTimeRangeBar
+          timeRange={page.timeRange}
+          onTimeRangeChange={page.setTimeRange}
+        />
 
         {/* 部分失败横幅 */}
         {page.hasEffectivePartialFailure && (

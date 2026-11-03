@@ -11,9 +11,9 @@ import { INTERFACE_TRAFFIC_QUERY_KEY } from './useDeviceInterfaceTraffic'
 import {
   TIME_RANGE_OPTIONS,
   DEFAULT_TIME_RANGE,
+  MONITORING_DATA_STALE_THRESHOLD_MS,
   MONITORING_SECTION_LABELS,
   resolveTimeRangeLabel,
-  resolveMonitoringDataStaleThresholdMs,
   formatDurationFromMs,
 } from '../utils/monitoring'
 import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../types'
@@ -326,11 +326,6 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     return fallback !== '' ? fallback : null
   }, [envelope?.lastUpdate, lastUpdateAt])
 
-  const dataStaleThresholdMs = useMemo(
-    () => resolveMonitoringDataStaleThresholdMs(timeRange),
-    [timeRange]
-  )
-
   const dataAgeMs = useMemo(() => {
     if (!lastUpdateAt) return null
     return Math.max(0, nowMs - lastUpdateAt.getTime())
@@ -341,7 +336,8 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     return formatDurationFromMs(dataAgeMs)
   }, [dataAgeMs])
 
-  const isDataStale = dataAgeMs !== null && dataAgeMs > dataStaleThresholdMs
+  // 所有档位共用同一阈值：后端对每个档位都按 5 分钟分桶，粒度不再随时长变化
+  const isDataStale = dataAgeMs !== null && dataAgeMs > MONITORING_DATA_STALE_THRESHOLD_MS
 
   // 区分"API 正常响应但数据源无新数据"与"API 不可达"
   const apiOkButDataStale = useMemo(() => {

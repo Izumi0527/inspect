@@ -1,9 +1,7 @@
 'use client'
 
 import { Badge, Button } from '@/components/atoms'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { RefreshCw, Wifi, WifiOff, AlertTriangle, CheckCircle2, Clock } from 'lucide-react'
-import { TIME_RANGE_OPTIONS } from '../../utils/monitoring'
 import { type UseMonitoringPageResult } from '../../hooks/useMonitoringPage'
 import { ReportExportButton } from '../ReportExportButton'
 import { DeviceFilterSelect } from './DeviceFilterSelect'
@@ -21,7 +19,10 @@ const WS_STATUS = {
 
 /**
  * 监控页 DashboardHeader 右侧操作区
- * （WS 状态 Badge、数据新鲜度 Badge、时间范围选择器、导出按钮、刷新按钮）
+ * （WS 状态 Badge、数据新鲜度 Badge、设备筛选、导出按钮、刷新按钮）
+ *
+ * 时间范围控件不在这里：8 个快捷时间键放不进 56px 单行头部，
+ * 已迁到页内筛选栏 MonitoringTimeRangeBar，全页保持单一时间范围入口。
  */
 export function MonitoringHeaderActions({ page }: MonitoringHeaderActionsProps) {
   const wsStatus = WS_STATUS[page.wsHealth]
@@ -71,18 +72,6 @@ export function MonitoringHeaderActions({ page }: MonitoringHeaderActionsProps) 
 
       {/* 设备筛选 */}
       <DeviceFilterSelect deviceIds={page.deviceIds} onChange={page.setDeviceIds} />
-
-      {/* 时间范围选择器 */}
-      <Select value={page.timeRange} onValueChange={page.setTimeRange}>
-        <SelectTrigger className="h-9 w-28 px-3 py-2 text-sm" aria-label="监控时间范围">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {TIME_RANGE_OPTIONS.map((item) => (
-            <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
 
       {/* 导出按钮 */}
       {page.canExportReport && (
