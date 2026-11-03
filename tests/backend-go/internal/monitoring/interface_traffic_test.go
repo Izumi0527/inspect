@@ -42,7 +42,7 @@ func TestGetDeviceInterfaceTraffic_DefaultsToFirstPhysicalUpInterface(t *testing
 			AddRow(bucket1, 2_500_000.0, 500_000.0).
 			AddRow(bucket2, nil, 1_000_000.0))
 
-	result, err := writer.GetDeviceInterfaceTraffic(context.Background(), 6, start, end, "")
+	result, err := writer.GetDeviceInterfaceTraffic(context.Background(), 6, start, end, "", monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetDeviceInterfaceTraffic() error = %v", err)
 	}
@@ -95,7 +95,7 @@ func TestGetDeviceInterfaceTraffic_SingleInterface_FiltersByName(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "inbound", "outbound"}).
 			AddRow(start, 8_000_000.0, 4_000_000.0))
 
-	result, err := writer.GetDeviceInterfaceTraffic(context.Background(), 6, start, end, " if7 ")
+	result, err := writer.GetDeviceInterfaceTraffic(context.Background(), 6, start, end, " if7 ", monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetDeviceInterfaceTraffic() error = %v", err)
 	}
@@ -127,7 +127,7 @@ func TestGetDeviceInterfaceTraffic_NoUpInterfaces_SkipsSeriesQuery(t *testing.T)
 		WithArgs(6).
 		WillReturnRows(sqlmock.NewRows([]string{"name", "alias", "speed"}))
 
-	result, err := writer.GetDeviceInterfaceTraffic(context.Background(), 6, start, end, "")
+	result, err := writer.GetDeviceInterfaceTraffic(context.Background(), 6, start, end, "", monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetDeviceInterfaceTraffic() error = %v", err)
 	}
@@ -158,7 +158,7 @@ func TestGetDeviceInterfaceTraffic_OnlyLogicalUpInterfaces_ReturnsEmpty(t *testi
 			AddRow("if1", "InLoopBack0", nil).
 			AddRow("if5", "Vlanif1", int64(1000)))
 
-	result, err := writer.GetDeviceInterfaceTraffic(context.Background(), 6, start, end, "")
+	result, err := writer.GetDeviceInterfaceTraffic(context.Background(), 6, start, end, "", monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetDeviceInterfaceTraffic() error = %v", err)
 	}

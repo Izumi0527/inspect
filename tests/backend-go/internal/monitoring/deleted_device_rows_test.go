@@ -35,7 +35,7 @@ func TestGetDevicePerformanceHistory_DropsRowsOfDeletedDevices(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "name_count"}).
 			AddRow(21, "测试", "192.168.20.1", 1))
 
-	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil)
+	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil, monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetDevicePerformanceHistory() error = %v", err)
 	}
@@ -74,7 +74,7 @@ func TestGetDevicePerformanceHistory_AllRowsDeleted_ReturnsEmpty(t *testing.T) {
 		WithArgs(6).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "name_count"}))
 
-	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil)
+	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil, monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetDevicePerformanceHistory() error = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestGetTemperatureHistory_DropsRowsOfDeletedDevices(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "name_count"}).
 			AddRow(21, "测试", "192.168.20.1", 1))
 
-	points, err := writer.GetTemperatureHistory(context.Background(), start, end, nil)
+	points, err := writer.GetTemperatureHistory(context.Background(), start, end, nil, monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetTemperatureHistory() error = %v", err)
 	}

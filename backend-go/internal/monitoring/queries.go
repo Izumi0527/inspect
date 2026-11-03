@@ -542,19 +542,22 @@ func (w *MetricsWriter) GetBulkMetricsHistory(
 	return points, nil
 }
 
-func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]TemperatureHistoryPoint, error) {
+// GetTemperatureHistory 查询按设备区分的温度时序；deviceIDs 非空时仅返回所选设备。
+// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 5 分钟。
+func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]TemperatureHistoryPoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
-	// 尝试从缓存获取
+	bucket := resolveBucket(start, end, interval)
+
+	// 尝试从缓存获取（桶宽进键，避免同一 (start,end,devices) 上不同粒度互相串数据）
 	if w.cache != nil {
-		if cached, found := w.cache.GetTemperature(ctx, start, end, deviceIDs); found {
+		if cached, found := w.cache.GetTemperature(ctx, start, end, deviceIDs, bucket); found {
 			return cached, nil
 		}
 	}
 
-	bucket := bucketSizeForRange(start, end)
 	useHourly := bucket >= time.Hour
 
 	deviceFilter := ""
@@ -645,7 +648,7 @@ func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Ti
 
 	// 写入缓存
 	if w.cache != nil {
-		w.cache.SetTemperature(ctx, start, end, deviceIDs, result)
+		w.cache.SetTemperature(ctx, start, end, deviceIDs, bucket, result)
 	}
 
 	return result, nil
@@ -663,18 +666,21 @@ type devicePerformanceRow struct {
 
 // GetDevicePerformanceHistory 查询按设备区分的 CPU/内存趋势；deviceIDs 非空时仅返回所选设备。
 // 故意不回退主机级 system_metrics：按设备视图无处挂载。
-func (w *MetricsWriter) GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]DevicePerformancePoint, error) {
+// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 5 分钟。
+func (w *MetricsWriter) GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]DevicePerformancePoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
+	bucket := resolveBucket(start, end, interval)
+
+	// 桶宽进键，避免同一 (start,end,devices) 上不同粒度互相串数据
 	if w.cache != nil {
-		if cached, found := w.cache.GetDevicePerformance(ctx, start, end, deviceIDs); found {
+		if cached, found := w.cache.GetDevicePerformance(ctx, start, end, deviceIDs, bucket); found {
 			return cached, nil
 		}
 	}
 
-	bucket := bucketSizeForRange(start, end)
 	useHourly := bucket >= time.Hour
 
 	deviceFilter := ""
@@ -764,7 +770,7 @@ func (w *MetricsWriter) GetDevicePerformanceHistory(ctx context.Context, start t
 	result := flattenDevicePerformanceSeries(points)
 
 	if w.cache != nil {
-		w.cache.SetDevicePerformance(ctx, start, end, deviceIDs, result)
+		w.cache.SetDevicePerformance(ctx, start, end, deviceIDs, bucket, result)
 	}
 
 	return result, nil
@@ -791,19 +797,21 @@ func aggregateTrafficQuery(interval string, deviceFilter string) string {
 }
 
 // GetNetworkTrafficHistory 查询网络流量时序；deviceIDs 非空时仅聚合所选设备。
-func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]NetworkTrafficPoint, error) {
+// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 5 分钟。
+func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]NetworkTrafficPoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
-	// 尝试从缓存获取
+	bucket := resolveBucket(start, end, interval)
+
+	// 尝试从缓存获取（桶宽进键，避免同一 (start,end,devices) 上不同粒度互相串数据）
 	if w.cache != nil {
-		if cached, found := w.cache.GetNetworkTraffic(ctx, start, end, deviceIDs); found {
+		if cached, found := w.cache.GetNetworkTraffic(ctx, start, end, deviceIDs, bucket); found {
 			return cached, nil
 		}
 	}
 
-	bucket := bucketSizeForRange(start, end)
 	useHourly := bucket >= time.Hour
 
 	inboundNames := networkInboundMetricNames
@@ -886,7 +894,7 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 
 	// 写入缓存
 	if w.cache != nil {
-		w.cache.SetNetworkTraffic(ctx, start, end, deviceIDs, points)
+		w.cache.SetNetworkTraffic(ctx, start, end, deviceIDs, bucket, points)
 	}
 
 	return points, nil
@@ -918,6 +926,23 @@ func normalizeStatusBucket(status string) string {
 	default:
 		return "warning"
 	}
+}
+
+// DashboardSampleInterval 是监控中心页统一的采样间隔（5 分钟）。
+// 页面所有时间档位（1h/3h/6h/12h/24h/3d/7d/14d）都按它分桶，使各档位点位密度一致、
+// 曲线可直接横向比对；长时段的其他消费者（报告导出、流量分析）仍用 AutoBucket 分档，
+// 避免数据量与 PDF/CSV 渲染成本随范围线性膨胀。
+const DashboardSampleInterval = 5 * time.Minute
+
+// AutoBucket 表示「按时间范围自动分档」，桶宽交给 bucketSizeForRange（0 值语义）。
+const AutoBucket time.Duration = 0
+
+// resolveBucket 解析调用方指定的采样间隔：<= 0（AutoBucket）时回退为按范围分档。
+func resolveBucket(start, end time.Time, interval time.Duration) time.Duration {
+	if interval > 0 {
+		return interval
+	}
+	return bucketSizeForRange(start, end)
 }
 
 func bucketSizeForRange(start time.Time, end time.Time) time.Duration {

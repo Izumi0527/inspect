@@ -40,7 +40,8 @@ type interfaceTrafficRow struct {
 //
 // 桶内先按接口 AVG 再输出：采集周期与桶宽不对齐时同一桶内会落入多个样本，
 // 直接 SUM 会把这些桶成倍放大；速率类指标在桶内取均值才是正确口径。
-func (w *MetricsWriter) GetDeviceInterfaceTraffic(ctx context.Context, deviceID int, start time.Time, end time.Time, interfaceName string) (DeviceInterfaceTraffic, error) {
+// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 5 分钟。
+func (w *MetricsWriter) GetDeviceInterfaceTraffic(ctx context.Context, deviceID int, start time.Time, end time.Time, interfaceName string, interval time.Duration) (DeviceInterfaceTraffic, error) {
 	if w.db == nil {
 		return DeviceInterfaceTraffic{}, fmt.Errorf("database not initialized")
 	}
@@ -86,7 +87,7 @@ func (w *MetricsWriter) GetDeviceInterfaceTraffic(ctx context.Context, deviceID 
 
 	query := fmt.Sprintf(
 		`SELECT bucket, SUM(inbound) AS inbound, SUM(outbound) AS outbound FROM (SELECT time_bucket('%s', collected_at) AS bucket, interface_name, AVG(CASE WHEN metric_name IN (%s) THEN metric_value END) AS inbound, AVG(CASE WHEN metric_name IN (%s) THEN metric_value END) AS outbound FROM interface_metrics WHERE device_id = ? AND collected_at >= ? AND collected_at <= ? AND metric_name IN (%s) AND interface_name = ? GROUP BY bucket, interface_name) AS per_interface GROUP BY bucket ORDER BY bucket ASC`,
-		bucketIntervalString(bucketSizeForRange(start, end)),
+		bucketIntervalString(resolveBucket(start, end, interval)),
 		formatMetricList(networkInboundMetricNames),
 		formatMetricList(networkOutboundMetricNames),
 		formatMetricList(networkAllMetricNames()),

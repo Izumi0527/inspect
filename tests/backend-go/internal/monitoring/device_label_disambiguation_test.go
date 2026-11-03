@@ -36,7 +36,7 @@ func TestGetDevicePerformanceHistory_DuplicateDeviceNames_GetIPSuffix(t *testing
 			AddRow(2, "核心交换机", "10.0.0.2", 2).
 			AddRow(3, "接入交换机", "10.0.0.3", 1))
 
-	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil)
+	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil, monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetDevicePerformanceHistory() error = %v", err)
 	}
@@ -81,7 +81,7 @@ func TestGetTemperatureHistory_DuplicateDeviceNames_GetIPSuffix(t *testing.T) {
 			AddRow(1, "核心交换机", "10.0.0.1", 2).
 			AddRow(2, "核心交换机", "10.0.0.2", 2))
 
-	points, err := writer.GetTemperatureHistory(context.Background(), start, end, nil)
+	points, err := writer.GetTemperatureHistory(context.Background(), start, end, nil, monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetTemperatureHistory() error = %v", err)
 	}

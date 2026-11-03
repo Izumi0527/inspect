@@ -39,7 +39,7 @@ func TestGetDevicePerformanceHistory_MinuteBucket_GroupsByDeviceAndMetric(t *tes
 			AddRow(1, "SW-01", "10.0.0.1", 1).
 			AddRow(2, "SW-02", "10.0.0.2", 1))
 
-	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, []int{1, 2})
+	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, []int{1, 2}, monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetDevicePerformanceHistory() error = %v", err)
 	}
@@ -98,7 +98,7 @@ func TestGetDevicePerformanceHistory_HourlyBucket_FallsBackWhenHourlyTableMissin
 		WithArgs(7).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "name_count"}).AddRow(7, "CORE-A", "10.0.0.7", 1))
 
-	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil)
+	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil, monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetDevicePerformanceHistory() error = %v", err)
 	}
@@ -126,7 +126,7 @@ func TestGetDevicePerformanceHistory_NoRows_ReturnsEmptySliceWithoutNameLookup(t
 	mock.ExpectQuery(`(?is)SELECT time_bucket\('5 minutes', collected_at\) AS bucket, device_id, metric_name, AVG\(metric_value\) AS value FROM device_metrics WHERE .* GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "device_id", "metric_name", "value"}))
 
-	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil)
+	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil, monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetDevicePerformanceHistory() error = %v", err)
 	}

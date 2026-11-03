@@ -120,11 +120,13 @@ func (w *MetricsWriter) ExportMonitoringReport(
 	}
 
 	if hasReportSection(sections, "charts") {
-		perf, err := w.GetDevicePerformanceHistory(ctx, start, end, nil)
+		// 报告导出按范围分档（AutoBucket）：若跟随监控页用 5 分钟，7d/14d 的
+		// CSV/Excel 行数与 PDF 折线点数会放大约 12~24 倍，报告体积与渲染时间失控。
+		perf, err := w.GetDevicePerformanceHistory(ctx, start, end, nil, AutoBucket)
 		if err != nil {
 			return MonitoringReportExportResult{}, err
 		}
-		traffic, err := w.GetNetworkTrafficHistory(ctx, start, end, nil)
+		traffic, err := w.GetNetworkTrafficHistory(ctx, start, end, nil, AutoBucket)
 		if err != nil {
 			return MonitoringReportExportResult{}, err
 		}

@@ -54,7 +54,9 @@ func NewMetricsCache(redis *redis.Client, config CacheConfig, logger *zap.Logger
 	}
 }
 
-// 缓存键生成函数（设备维度必须纳入键，否则不同筛选之间会串数据）
+// 缓存键生成函数（设备维度必须纳入键，否则不同筛选之间会串数据；
+// 桶宽同样必须纳入键，否则同一 (start,end,devices) 上「监控页固定 5 分钟」与
+// 「报告导出按范围分档」两种粒度会互相命中对方的缓存）
 func deviceIDsCacheKey(deviceIDs []int) string {
 	if len(deviceIDs) == 0 {
 		return "all"
@@ -68,25 +70,25 @@ func deviceIDsCacheKey(deviceIDs []int) string {
 	return strings.Join(parts, ",")
 }
 
-func (c *MetricsCache) temperatureKey(start, end time.Time, deviceIDs []int) string {
-	return fmt.Sprintf("monitoring:temperature:%d:%d:dev=%s", start.Unix(), end.Unix(), deviceIDsCacheKey(deviceIDs))
+func (c *MetricsCache) temperatureKey(start, end time.Time, deviceIDs []int, bucket time.Duration) string {
+	return fmt.Sprintf("monitoring:temperature:%d:%d:bucket=%s:dev=%s", start.Unix(), end.Unix(), bucket.String(), deviceIDsCacheKey(deviceIDs))
 }
 
-func (c *MetricsCache) devicePerformanceKey(start, end time.Time, deviceIDs []int) string {
-	return fmt.Sprintf("monitoring:device_performance:%d:%d:dev=%s", start.Unix(), end.Unix(), deviceIDsCacheKey(deviceIDs))
+func (c *MetricsCache) devicePerformanceKey(start, end time.Time, deviceIDs []int, bucket time.Duration) string {
+	return fmt.Sprintf("monitoring:device_performance:%d:%d:bucket=%s:dev=%s", start.Unix(), end.Unix(), bucket.String(), deviceIDsCacheKey(deviceIDs))
 }
 
-func (c *MetricsCache) networkTrafficKey(start, end time.Time, deviceIDs []int) string {
-	return fmt.Sprintf("monitoring:network_traffic:%d:%d:dev=%s", start.Unix(), end.Unix(), deviceIDsCacheKey(deviceIDs))
+func (c *MetricsCache) networkTrafficKey(start, end time.Time, deviceIDs []int, bucket time.Duration) string {
+	return fmt.Sprintf("monitoring:network_traffic:%d:%d:bucket=%s:dev=%s", start.Unix(), end.Unix(), bucket.String(), deviceIDsCacheKey(deviceIDs))
 }
 
 // GetTemperature 获取缓存的温度数据
-func (c *MetricsCache) GetTemperature(ctx context.Context, start, end time.Time, deviceIDs []int) ([]TemperatureHistoryPoint, bool) {
+func (c *MetricsCache) GetTemperature(ctx context.Context, start, end time.Time, deviceIDs []int, bucket time.Duration) ([]TemperatureHistoryPoint, bool) {
 	if !c.config.Enabled || c.redis == nil {
 		return nil, false
 	}
 
-	key := c.temperatureKey(start, end, deviceIDs)
+	key := c.temperatureKey(start, end, deviceIDs, bucket)
 	data, err := c.redis.Get(ctx, key).Bytes()
 	if err != nil {
 		if err != redis.Nil {
@@ -106,12 +108,12 @@ func (c *MetricsCache) GetTemperature(ctx context.Context, start, end time.Time,
 }
 
 // SetTemperature 设置温度数据缓存
-func (c *MetricsCache) SetTemperature(ctx context.Context, start, end time.Time, deviceIDs []int, data []TemperatureHistoryPoint) {
+func (c *MetricsCache) SetTemperature(ctx context.Context, start, end time.Time, deviceIDs []int, bucket time.Duration, data []TemperatureHistoryPoint) {
 	if !c.config.Enabled || c.redis == nil {
 		return
 	}
 
-	key := c.temperatureKey(start, end, deviceIDs)
+	key := c.temperatureKey(start, end, deviceIDs, bucket)
 	encoded, err := json.Marshal(data)
 	if err != nil {
 		c.logger.Warn("failed to marshal temperature for cache", zap.Error(err))
@@ -127,12 +129,12 @@ func (c *MetricsCache) SetTemperature(ctx context.Context, start, end time.Time,
 }
 
 // GetDevicePerformance 获取缓存的按设备性能趋势数据
-func (c *MetricsCache) GetDevicePerformance(ctx context.Context, start, end time.Time, deviceIDs []int) ([]DevicePerformancePoint, bool) {
+func (c *MetricsCache) GetDevicePerformance(ctx context.Context, start, end time.Time, deviceIDs []int, bucket time.Duration) ([]DevicePerformancePoint, bool) {
 	if !c.config.Enabled || c.redis == nil {
 		return nil, false
 	}
 
-	key := c.devicePerformanceKey(start, end, deviceIDs)
+	key := c.devicePerformanceKey(start, end, deviceIDs, bucket)
 	data, err := c.redis.Get(ctx, key).Bytes()
 	if err != nil {
 		if err != redis.Nil {
@@ -152,12 +154,12 @@ func (c *MetricsCache) GetDevicePerformance(ctx context.Context, start, end time
 }
 
 // SetDevicePerformance 设置按设备性能趋势数据缓存
-func (c *MetricsCache) SetDevicePerformance(ctx context.Context, start, end time.Time, deviceIDs []int, data []DevicePerformancePoint) {
+func (c *MetricsCache) SetDevicePerformance(ctx context.Context, start, end time.Time, deviceIDs []int, bucket time.Duration, data []DevicePerformancePoint) {
 	if !c.config.Enabled || c.redis == nil {
 		return
 	}
 
-	key := c.devicePerformanceKey(start, end, deviceIDs)
+	key := c.devicePerformanceKey(start, end, deviceIDs, bucket)
 	encoded, err := json.Marshal(data)
 	if err != nil {
 		c.logger.Warn("failed to marshal device performance for cache", zap.Error(err))
@@ -173,12 +175,12 @@ func (c *MetricsCache) SetDevicePerformance(ctx context.Context, start, end time
 }
 
 // GetNetworkTraffic 获取缓存的网络流量数据
-func (c *MetricsCache) GetNetworkTraffic(ctx context.Context, start, end time.Time, deviceIDs []int) ([]NetworkTrafficPoint, bool) {
+func (c *MetricsCache) GetNetworkTraffic(ctx context.Context, start, end time.Time, deviceIDs []int, bucket time.Duration) ([]NetworkTrafficPoint, bool) {
 	if !c.config.Enabled || c.redis == nil {
 		return nil, false
 	}
 
-	key := c.networkTrafficKey(start, end, deviceIDs)
+	key := c.networkTrafficKey(start, end, deviceIDs, bucket)
 	data, err := c.redis.Get(ctx, key).Bytes()
 	if err != nil {
 		if err != redis.Nil {
@@ -198,12 +200,12 @@ func (c *MetricsCache) GetNetworkTraffic(ctx context.Context, start, end time.Ti
 }
 
 // SetNetworkTraffic 设置网络流量数据缓存
-func (c *MetricsCache) SetNetworkTraffic(ctx context.Context, start, end time.Time, deviceIDs []int, data []NetworkTrafficPoint) {
+func (c *MetricsCache) SetNetworkTraffic(ctx context.Context, start, end time.Time, deviceIDs []int, bucket time.Duration, data []NetworkTrafficPoint) {
 	if !c.config.Enabled || c.redis == nil {
 		return
 	}
 
-	key := c.networkTrafficKey(start, end, deviceIDs)
+	key := c.networkTrafficKey(start, end, deviceIDs, bucket)
 	encoded, err := json.Marshal(data)
 	if err != nil {
 		c.logger.Warn("failed to marshal network traffic for cache", zap.Error(err))

@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+
+	"github.com/your-org/inspect-system/backend-go/internal/monitoring"
 )
 
 // GetDeviceInterfaceTraffic 返回单台设备某个物理 UP 接口的上行/下行流量时序（监控中心流量卡接口视图）。
@@ -42,6 +44,8 @@ func (h MonitoringHandler) GetDeviceInterfaceTraffic(c echo.Context) error {
 		startTime,
 		endTime,
 		strings.TrimSpace(c.QueryParam("interface")),
+		// 该端点只服务监控中心流量卡的接口视图，跟随页面统一 5 分钟采样
+		monitoring.DashboardSampleInterval,
 	)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query interface traffic")

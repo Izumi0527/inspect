@@ -28,7 +28,7 @@ func (testMonitoringDashboardWriter) GetMonitoringStats(_ context.Context, _ []i
 	}, nil
 }
 
-func (testMonitoringDashboardWriter) GetDevicePerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.DevicePerformancePoint, error) {
+func (testMonitoringDashboardWriter) GetDevicePerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []int, _ time.Duration) ([]monitoring.DevicePerformancePoint, error) {
 	return []monitoring.DevicePerformancePoint{
 		{
 			Timestamp: "2026-03-15T00:00:00Z",
@@ -40,7 +40,7 @@ func (testMonitoringDashboardWriter) GetDevicePerformanceHistory(_ context.Conte
 	}, nil
 }
 
-func (testMonitoringDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.TemperatureHistoryPoint, error) {
+func (testMonitoringDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Time, _ time.Time, _ []int, _ time.Duration) ([]monitoring.TemperatureHistoryPoint, error) {
 	return []monitoring.TemperatureHistoryPoint{
 		{
 			Timestamp: "2026-03-15T01:00:00Z",
@@ -49,7 +49,7 @@ func (testMonitoringDashboardWriter) GetTemperatureHistory(_ context.Context, _ 
 	}, nil
 }
 
-func (testMonitoringDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.NetworkTrafficPoint, error) {
+func (testMonitoringDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time, _ []int, _ time.Duration) ([]monitoring.NetworkTrafficPoint, error) {
 	return []monitoring.NetworkTrafficPoint{
 		{
 			Timestamp: "2026-03-15T02:00:00Z",

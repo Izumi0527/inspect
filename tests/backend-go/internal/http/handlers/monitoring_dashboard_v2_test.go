@@ -33,15 +33,15 @@ func (s stubDashboardWriter) GetMonitoringStats(_ context.Context, _ []int) (mon
 	return s.stats, s.statsErr
 }
 
-func (s stubDashboardWriter) GetDevicePerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.DevicePerformancePoint, error) {
+func (s stubDashboardWriter) GetDevicePerformanceHistory(_ context.Context, _ time.Time, _ time.Time, _ []int, _ time.Duration) ([]monitoring.DevicePerformancePoint, error) {
 	return s.devicePerf, s.devicePerfErr
 }
 
-func (s stubDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.TemperatureHistoryPoint, error) {
+func (s stubDashboardWriter) GetTemperatureHistory(_ context.Context, _ time.Time, _ time.Time, _ []int, _ time.Duration) ([]monitoring.TemperatureHistoryPoint, error) {
 	return s.temperature, s.temperatureErr
 }
 
-func (s stubDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time, _ []int) ([]monitoring.NetworkTrafficPoint, error) {
+func (s stubDashboardWriter) GetNetworkTrafficHistory(_ context.Context, _ time.Time, _ time.Time, _ []int, _ time.Duration) ([]monitoring.NetworkTrafficPoint, error) {
 	return s.networkTraffic, s.networkTrafficErr
 }
 
@@ -280,6 +280,10 @@ type recordingDashboardWriter struct {
 	perfDeviceIDs    []int
 	tempDeviceIDs    []int
 	trafficDeviceIDs []int
+	// 采样间隔：监控页所有档位必须统一传 DashboardSampleInterval
+	perfInterval    time.Duration
+	tempInterval    time.Duration
+	trafficInterval time.Duration
 }
 
 func (r *recordingDashboardWriter) GetMonitoringStats(ctx context.Context, deviceIDs []int) (monitoring.MonitoringStats, error) {
@@ -289,25 +293,28 @@ func (r *recordingDashboardWriter) GetMonitoringStats(ctx context.Context, devic
 	return r.stubDashboardWriter.GetMonitoringStats(ctx, deviceIDs)
 }
 
-func (r *recordingDashboardWriter) GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.DevicePerformancePoint, error) {
+func (r *recordingDashboardWriter) GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]monitoring.DevicePerformancePoint, error) {
 	r.mu.Lock()
 	r.perfDeviceIDs = append([]int(nil), deviceIDs...)
+	r.perfInterval = interval
 	r.mu.Unlock()
-	return r.stubDashboardWriter.GetDevicePerformanceHistory(ctx, start, end, deviceIDs)
+	return r.stubDashboardWriter.GetDevicePerformanceHistory(ctx, start, end, deviceIDs, interval)
 }
 
-func (r *recordingDashboardWriter) GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.TemperatureHistoryPoint, error) {
+func (r *recordingDashboardWriter) GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]monitoring.TemperatureHistoryPoint, error) {
 	r.mu.Lock()
 	r.tempDeviceIDs = append([]int(nil), deviceIDs...)
+	r.tempInterval = interval
 	r.mu.Unlock()
-	return r.stubDashboardWriter.GetTemperatureHistory(ctx, start, end, deviceIDs)
+	return r.stubDashboardWriter.GetTemperatureHistory(ctx, start, end, deviceIDs, interval)
 }
 
-func (r *recordingDashboardWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.NetworkTrafficPoint, error) {
+func (r *recordingDashboardWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]monitoring.NetworkTrafficPoint, error) {
 	r.mu.Lock()
 	r.trafficDeviceIDs = append([]int(nil), deviceIDs...)
+	r.trafficInterval = interval
 	r.mu.Unlock()
-	return r.stubDashboardWriter.GetNetworkTrafficHistory(ctx, start, end, deviceIDs)
+	return r.stubDashboardWriter.GetNetworkTrafficHistory(ctx, start, end, deviceIDs, interval)
 }
 
 func TestMonitoringHandler_GetMonitoringDashboardV2_DeviceIDsPassthrough(t *testing.T) {
@@ -356,6 +363,17 @@ func TestMonitoringHandler_GetMonitoringDashboardV2_DeviceIDsPassthrough(t *test
 	for section, ids := range got {
 		if !reflect.DeepEqual(ids, want) {
 			t.Fatalf("分区 %s 收到 deviceIDs=%v，期望 %v", section, ids, want)
+		}
+	}
+
+	// 监控中心页各档位统一 5 分钟采样：v2 聚合接口必须把 DashboardSampleInterval 透传到三个时序分区
+	for section, interval := range map[string]time.Duration{
+		"systemPerf":     writer.perfInterval,
+		"temperature":    writer.tempInterval,
+		"networkTraffic": writer.trafficInterval,
+	} {
+		if interval != monitoring.DashboardSampleInterval {
+			t.Fatalf("分区 %s 收到采样间隔=%v，期望 %v", section, interval, monitoring.DashboardSampleInterval)
 		}
 	}
 }

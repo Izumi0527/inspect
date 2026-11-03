@@ -31,9 +31,9 @@ type MonitoringHandler struct {
 
 type monitoringDashboardWriter interface {
 	GetMonitoringStats(ctx context.Context, deviceIDs []int) (monitoring.MonitoringStats, error)
-	GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.DevicePerformancePoint, error)
-	GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.TemperatureHistoryPoint, error)
-	GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int) ([]monitoring.NetworkTrafficPoint, error)
+	GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]monitoring.DevicePerformancePoint, error)
+	GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]monitoring.TemperatureHistoryPoint, error)
+	GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]monitoring.NetworkTrafficPoint, error)
 }
 
 func (h MonitoringHandler) dashboardWriter() monitoringDashboardWriter {
@@ -456,7 +456,7 @@ func (h MonitoringHandler) GetDeviceTemperatureHistory(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	result, err := h.Writer.GetTemperatureHistory(c.Request().Context(), startTime, endTime, sanitizeDeviceIDs(req.DeviceIDs))
+	result, err := h.Writer.GetTemperatureHistory(c.Request().Context(), startTime, endTime, sanitizeDeviceIDs(req.DeviceIDs), monitoring.AutoBucket)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query temperature history")
 	}
@@ -482,7 +482,7 @@ func (h MonitoringHandler) GetNetworkTrafficHistory(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	result, err := h.Writer.GetNetworkTrafficHistory(c.Request().Context(), startTime, endTime, sanitizeDeviceIDs(req.DeviceIDs))
+	result, err := h.Writer.GetNetworkTrafficHistory(c.Request().Context(), startTime, endTime, sanitizeDeviceIDs(req.DeviceIDs), monitoring.AutoBucket)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query network traffic history")
 	}
@@ -644,6 +644,9 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	deviceIDs := sanitizeDeviceIDs(req.DeviceIDs)
 
 	startTime, endTime := resolveTimeRangeFromString(timeRange, 24*time.Hour)
+	// 监控中心页所有档位统一 5 分钟采样：与前端档位（1h~14d）解耦，使各档位点位密度一致；
+	// 报告导出/流量分析等长时段路径不经此处，仍按范围分档。
+	sampleInterval := monitoring.DashboardSampleInterval
 	generatedAt := time.Now().UTC()
 	generatedAtRFC3339 := generatedAt.Format(time.RFC3339Nano)
 
@@ -675,7 +678,7 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		points, err := writer.GetDevicePerformanceHistory(c.Request().Context(), startTime, endTime, deviceIDs)
+		points, err := writer.GetDevicePerformanceHistory(c.Request().Context(), startTime, endTime, deviceIDs, sampleInterval)
 		if err != nil {
 			systemPerfResult = result[[]monitoring.DevicePerformancePoint]{value: []monitoring.DevicePerformancePoint{}, err: err}
 			return
@@ -686,14 +689,14 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		value, err := writer.GetTemperatureHistory(c.Request().Context(), startTime, endTime, deviceIDs)
+		value, err := writer.GetTemperatureHistory(c.Request().Context(), startTime, endTime, deviceIDs, sampleInterval)
 		tempResult = result[[]monitoring.TemperatureHistoryPoint]{value: value, err: err}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		value, err := writer.GetNetworkTrafficHistory(c.Request().Context(), startTime, endTime, deviceIDs)
+		value, err := writer.GetNetworkTrafficHistory(c.Request().Context(), startTime, endTime, deviceIDs, sampleInterval)
 		networkTrafficResult = result[[]monitoring.NetworkTrafficPoint]{value: value, err: err}
 	}()
 

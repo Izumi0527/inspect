@@ -40,7 +40,7 @@ func TestGetNetworkTrafficHistory_ShouldAverageWithinDeviceBucketThenSumAcrossDe
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "inbound", "outbound"}).
 			AddRow(bucket, 3_000_000.0, 1_000_000.0))
 
-	points, err := writer.GetNetworkTrafficHistory(context.Background(), start, end, []int{1, 2})
+	points, err := writer.GetNetworkTrafficHistory(context.Background(), start, end, []int{1, 2}, monitoring.AutoBucket)
 	if err != nil {
 		t.Fatalf("GetNetworkTrafficHistory() error = %v", err)
 	}
@@ -69,7 +69,7 @@ func TestGetNetworkTrafficHistory_HourlyFallbackShouldUseSameShape(t *testing.T)
 		WithArgs(start, end).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "inbound", "outbound"}))
 
-	if _, err := writer.GetNetworkTrafficHistory(context.Background(), start, end, nil); err != nil {
+	if _, err := writer.GetNetworkTrafficHistory(context.Background(), start, end, nil, monitoring.AutoBucket); err != nil {
 		t.Fatalf("GetNetworkTrafficHistory() error = %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
