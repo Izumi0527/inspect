@@ -148,6 +148,7 @@ export function TemperatureChart({
         height={height}
         formatter={formatter}
         xTickValues={xTickValues}
+        gridTone="prominent"
       />
       {showLegend && <Legend />}
 

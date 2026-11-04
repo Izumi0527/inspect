@@ -134,6 +134,7 @@ export function SystemPerformanceChart({
         height={height}
         formatter={formatter}
         xTickValues={xTickValues}
+        gridTone="prominent"
       />
       {showLegend && <DeviceLegend />}
     </div>
