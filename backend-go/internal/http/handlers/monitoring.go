@@ -644,8 +644,8 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	deviceIDs := sanitizeDeviceIDs(req.DeviceIDs)
 
 	startTime, endTime := resolveTimeRangeFromString(timeRange, 24*time.Hour)
-	// 监控中心页所有档位统一 5 分钟采样：与前端档位（1h~14d）解耦，使各档位点位密度一致；
-	// 报告导出/流量分析等长时段路径不经此处，仍按范围分档。
+	// 监控中心页所有档位统一 3 分钟采样：与前端档位（1h~14d）解耦、与采集节奏对齐，
+	// 使各档位点位密度一致且每桶正好一次采集；报告导出/流量分析等长时段路径不经此处，仍按范围分档。
 	sampleInterval := monitoring.DashboardSampleInterval
 	generatedAt := time.Now().UTC()
 	generatedAtRFC3339 := generatedAt.Format(time.RFC3339Nano)

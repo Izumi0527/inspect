@@ -40,7 +40,7 @@ type interfaceTrafficRow struct {
 //
 // 桶内先按接口 AVG 再输出：采集周期与桶宽不对齐时同一桶内会落入多个样本，
 // 直接 SUM 会把这些桶成倍放大；速率类指标在桶内取均值才是正确口径。
-// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 5 分钟。
+// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 3 分钟。
 func (w *MetricsWriter) GetDeviceInterfaceTraffic(ctx context.Context, deviceID int, start time.Time, end time.Time, interfaceName string, interval time.Duration) (DeviceInterfaceTraffic, error) {
 	if w.db == nil {
 		return DeviceInterfaceTraffic{}, fmt.Errorf("database not initialized")

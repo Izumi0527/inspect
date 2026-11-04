@@ -48,9 +48,9 @@ describe('MonitoringTimeRangeBar（快捷时间键 + 时间范围下拉）', () 
     expect(onTimeRangeChange).toHaveBeenCalledWith('6h')
   })
 
-  it('提示采样间隔为 5 分钟', () => {
+  it('提示采样间隔为 3 分钟', () => {
     render(<MonitoringTimeRangeBar timeRange="3d" onTimeRangeChange={jest.fn()} />)
 
-    expect(screen.getByText('采样间隔 5 分钟')).toBeInTheDocument()
+    expect(screen.getByText('采样间隔 3 分钟')).toBeInTheDocument()
   })
 })

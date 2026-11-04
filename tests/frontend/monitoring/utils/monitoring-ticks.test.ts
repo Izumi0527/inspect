@@ -1,5 +1,6 @@
 import {
   MONITORING_DATA_STALE_THRESHOLD_MS,
+  MONITORING_SAMPLE_INTERVAL_MINUTES,
   TIME_RANGE_OPTIONS,
   resolveTickStepMinutes,
   selectTimeTickLabels,
@@ -33,9 +34,9 @@ describe('TIME_RANGE_OPTIONS', () => {
   })
 })
 
-describe('resolveTickStepMinutes（刻度落在自然边界）', () => {
+describe('resolveTickStepMinutes（刻度既落在自然边界，又对得上采样点）', () => {
   it.each([
-    ['1h', 5],
+    ['1h', 6],
     ['3h', 15],
     ['6h', 30],
     ['12h', 60],
@@ -47,16 +48,18 @@ describe('resolveTickStepMinutes（刻度落在自然边界）', () => {
     expect(resolveTickStepMinutes(range)).toBe(expected)
   })
 
-  // 步长整除 24 小时时 selectTimeTickLabels 才会按 epoch 对齐，刻度落在整点/整 12 点等自然边界
-  it('每个档位的刻度步长都能整除 24 小时', () => {
+  // 两条约束缺一不可：整除 24 小时 → 按 epoch 对齐落在整点；是采样间隔的整倍数 → 刻度点上真的有数据
+  it('每个档位的步长都能整除 24 小时且是采样间隔的整倍数', () => {
     for (const option of TIME_RANGE_OPTIONS) {
-      expect((24 * 60) % resolveTickStepMinutes(option.value)).toBe(0)
+      const step = resolveTickStepMinutes(option.value)
+      expect((24 * 60) % step).toBe(0)
+      expect(step % MONITORING_SAMPLE_INTERVAL_MINUTES).toBe(0)
     }
   })
 
-  it('未知范围按 范围/12 向上取 5 的倍数兜底', () => {
-    // 2h = 120min / 12 = 10min
-    expect(resolveTickStepMinutes('2h')).toBe(10)
+  it('未知范围按 范围/12 向上取采样间隔的整倍数兜底', () => {
+    // 2h = 120min / 12 = 10min，再向上对齐到 3 分钟的整倍数 → 12min
+    expect(resolveTickStepMinutes('2h')).toBe(12)
   })
 
   it('非法输入回退 120 分钟', () => {
@@ -68,19 +71,20 @@ describe('selectTimeTickLabels', () => {
   const fmt = (date: Date) =>
     `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`
 
-  it('5 分钟采集点 + 5 分钟步长：全部入选（1h 档）', () => {
-    const points = Array.from({ length: 12 }, (_, i) => ({
-      timestamp: new Date(Date.UTC(2026, 6, 25, 13, i * 5)).toISOString(),
+  it('3 分钟采集点 + 6 分钟步长：隔点入选（1h 档）', () => {
+    const points = Array.from({ length: 20 }, (_, i) => ({
+      timestamp: new Date(Date.UTC(2026, 6, 25, 13, i * 3)).toISOString(),
     }))
-    const labels = selectTimeTickLabels(points, 5, fmt)
-    expect(labels).toHaveLength(12)
+    const labels = selectTimeTickLabels(points, 6, fmt)
+    expect(labels).toHaveLength(10)
     expect(labels[0]).toBe('13:00')
-    expect(labels[11]).toBe('13:55')
+    expect(labels[1]).toBe('13:06')
+    expect(labels[9]).toBe('13:54')
   })
 
-  it('5 分钟采集点 + 60 分钟步长：仅整点入选（12h 档）', () => {
-    const points = Array.from({ length: 25 }, (_, i) => ({
-      timestamp: new Date(Date.UTC(2026, 6, 25, 12, 0) + i * 5 * 60_000).toISOString(),
+  it('3 分钟采集点 + 60 分钟步长：仅整点入选（12h 档）', () => {
+    const points = Array.from({ length: 41 }, (_, i) => ({
+      timestamp: new Date(Date.UTC(2026, 6, 25, 12, 0) + i * 3 * 60_000).toISOString(),
     }))
     const labels = selectTimeTickLabels(points, 60, fmt)
     expect(labels).toEqual(['12:00', '13:00', '14:00'])
@@ -101,8 +105,12 @@ describe('selectTimeTickLabels', () => {
   })
 })
 
-describe('MONITORING_DATA_STALE_THRESHOLD_MS（所有档位统一）', () => {
-  it('统一 10 分钟：5 分钟桶 + 约 3 分钟采集，容忍两轮采集缺失', () => {
+describe('采样间隔与陈旧阈值', () => {
+  it('采样间隔常量为 3 分钟，与采集任务 cron 一致', () => {
+    expect(MONITORING_SAMPLE_INTERVAL_MINUTES).toBe(3)
+  })
+
+  it('陈旧阈值所有档位统一 10 分钟：3 分钟桶 + 3 分钟采集，容忍约三轮采集缺失', () => {
     expect(MONITORING_DATA_STALE_THRESHOLD_MS).toBe(10 * 60 * 1000)
   })
 })

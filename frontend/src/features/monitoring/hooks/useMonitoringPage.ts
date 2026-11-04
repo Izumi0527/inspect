@@ -336,7 +336,7 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     return formatDurationFromMs(dataAgeMs)
   }, [dataAgeMs])
 
-  // 所有档位共用同一阈值：后端对每个档位都按 5 分钟分桶，粒度不再随时长变化
+  // 所有档位共用同一阈值：后端对每个档位都按 3 分钟分桶，粒度不再随时长变化
   const isDataStale = dataAgeMs !== null && dataAgeMs > MONITORING_DATA_STALE_THRESHOLD_MS
 
   // 区分"API 正常响应但数据源无新数据"与"API 不可达"

@@ -16,11 +16,12 @@ export const TIME_RANGE_OPTIONS = [
 export const DEFAULT_TIME_RANGE = '1h'
 
 /**
- * 监控中心页统一采样间隔（分钟）：后端对 1h~14d 所有档位都按 5 分钟分桶，
- * 各档位点位密度一致。改这里必须同步 backend-go/internal/monitoring/queries.go 的
- * DashboardSampleInterval，此处仅用于界面提示。
+ * 监控中心页统一采样间隔（分钟）：后端对 1h~14d 所有档位都按 3 分钟分桶，
+ * 与采集任务节奏（scheduler.MetricsCollectionInterval，cron 每 3 分钟）相等，每个桶正好一次采集。
+ * 改这里必须同步 backend-go/internal/monitoring/queries.go 的 DashboardSampleInterval 与
+ * scheduler 的 MetricsCollectionInterval（跨包一致性有守卫测试），此处仅用于界面提示。
  */
-export const MONITORING_SAMPLE_INTERVAL_MINUTES = 5
+export const MONITORING_SAMPLE_INTERVAL_MINUTES = 3
 
 export const MONITORING_SECTION_LABELS: Record<MonitoringSectionKey, string> = {
   stats: '关键指标',
@@ -35,17 +36,19 @@ export function resolveTimeRangeLabel(timeRange: string): string {
 
 /**
  * 数据陈旧阈值（毫秒）：所有档位统一 10 分钟。
- * 采样间隔统一为 5 分钟后，长档位不再有"小时级聚合桶"，原 3d/7d 的 2 小时阈值失去依据；
- * 采集侧约 3 分钟一轮，10 分钟可容忍两轮采集缺失与网络抖动。
+ * 采样间隔统一为 3 分钟后，长档位不再有"小时级聚合桶"，原 3d/7d 的 2 小时阈值失去依据；
+ * 采集侧每 3 分钟一轮，10 分钟可容忍约三轮采集缺失与网络抖动。
  */
 export const MONITORING_DATA_STALE_THRESHOLD_MS = 10 * 60 * 1000
 
 /**
- * X 轴刻度步长（分钟）：每档约 12 个刻度，且步长都整除 24 小时，
- * 使刻度按 epoch 对齐落在整点/整 12 点等自然边界（7d→12 小时、14d→1 天）。
+ * X 轴刻度步长（分钟）：每档约 12 个刻度，且步长必须同时满足两个条件：
+ * ① 整除 24 小时 → 按 epoch 对齐，刻度落在整点、整 12 点等自然边界；
+ * ② 是采样间隔（3 分钟）的整倍数 → 刻度点上真的有数据（5、10 这类步长会落空，
+ *    只剩公倍数位置有标签，曲线看起来"少了一大截"）。
  */
 const TICK_STEP_MINUTES_BY_RANGE: Readonly<Record<string, number>> = {
-  '1h': 5,
+  '1h': 6,
   '3h': 15,
   '6h': 30,
   '12h': 60,
@@ -59,14 +62,16 @@ export function resolveTickStepMinutes(timeRange: string): number {
   const preset = TICK_STEP_MINUTES_BY_RANGE[timeRange.trim().toLowerCase()]
   if (preset !== undefined) return preset
 
-  // 未知/自定义档位兜底：范围/12 向上取 5 的倍数
+  // 未知/自定义档位兜底：范围/12 向上取采样间隔的整倍数，保持与固定档位同一条约束
+  const sample = MONITORING_SAMPLE_INTERVAL_MINUTES
   const match = /^([0-9]+)([hdw])$/i.exec(timeRange.trim())
-  if (!match) return 120
+  // 无法解析时按「约 2 小时一格」兜底，同样对齐到采样间隔
+  if (!match) return Math.ceil(120 / sample) * sample
   const value = Number.parseInt(match[1], 10)
-  if (!Number.isFinite(value) || value <= 0) return 120
+  if (!Number.isFinite(value) || value <= 0) return Math.ceil(120 / sample) * sample
   const unitMinutes = match[2].toLowerCase() === 'h' ? 60 : match[2].toLowerCase() === 'd' ? 1440 : 10080
   const totalMinutes = value * unitMinutes
-  return Math.max(5, Math.ceil(totalMinutes / 12 / 5) * 5)
+  return Math.max(sample, Math.ceil(totalMinutes / 12 / sample) * sample)
 }
 
 /**
