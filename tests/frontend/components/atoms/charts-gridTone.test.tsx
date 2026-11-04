@@ -1,12 +1,21 @@
 import React from 'react'
-import { act, render, waitFor } from '@testing-library/react'
-import { LineChartComponent } from '@/components/atoms/charts'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  BarChartComponent,
+  LineChartComponent,
+  PieChartComponent,
+} from '@/components/atoms/charts'
 
-// jsdom 不实现 SVG 文本测量，@visx/axis 会 console.warn；补一个固定宽度让坐标轴标签静默渲染
+// jsdom 不实现 SVG 文本测量，@visx/axis 会 console.warn；补一个固定宽度让坐标轴标签静默渲染。
+// getScreenCTM 同样未实现：返回 null 让 visx 的 localPoint 走包围盒兜底分支，悬停才能触发提示框。
 beforeAll(() => {
   Object.defineProperty(SVGElement.prototype, 'getComputedTextLength', {
     configurable: true,
     value: () => 40,
+  })
+  Object.defineProperty(SVGElement.prototype, 'getScreenCTM', {
+    configurable: true,
+    value: () => null,
   })
 })
 
@@ -116,5 +125,51 @@ describe('LineChartComponent 网格线强度（gridTone）', () => {
     } finally {
       document.documentElement.classList.remove('dark')
     }
+  })
+})
+
+// F14：柱状图与饼图同样只在渲染时读一次主题，切换后颜色残留到刷新为止
+describe('柱状图与饼图随主题实时更新', () => {
+  afterEach(() => {
+    document.documentElement.classList.remove('dark')
+  })
+
+  it('柱状图：运行中切换主题，横向网格线颜色随之更新', async () => {
+    const { container } = render(
+      <BarChartComponent data={data} xKey="time" bars={[{ key: 'value', name: '值' }]} />
+    )
+    expect(gridLines(container)[0].getAttribute('stroke')).toBe('#e5e7eb')
+
+    await act(async () => {
+      document.documentElement.classList.add('dark')
+    })
+
+    await waitFor(() => {
+      for (const node of gridLines(container)) {
+        expect(node.getAttribute('stroke')).toBe('#374151')
+      }
+    })
+  })
+
+  // 顺序很关键：先悬停再切主题。若先切主题再悬停，悬停引起的重渲染会顺带读到新主题，测不出缺陷。
+  it('饼图：提示框显示期间切换主题，底色随之更新', async () => {
+    const { container } = render(
+      <PieChartComponent data={[{ name: '在线', value: 3 }, { name: '离线', value: 1 }]} />
+    )
+
+    const slice = container.querySelector('svg g g') as SVGGElement
+    fireEvent.mouseMove(slice, { clientX: 10, clientY: 10 })
+    const tooltipOf = () =>
+      screen.getByText('在线:').closest('.visx-tooltip') as HTMLElement
+    await screen.findByText('在线:')
+    expect(tooltipOf().style.background).toBe('rgba(255, 255, 255, 0.95)')
+
+    await act(async () => {
+      document.documentElement.classList.add('dark')
+    })
+
+    await waitFor(() => {
+      expect(tooltipOf().style.background).toBe('rgba(17, 24, 39, 0.95)')
+    })
   })
 })
