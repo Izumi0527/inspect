@@ -1443,6 +1443,84 @@ func (s *Service) nextRun(expression string, from time.Time) (time.Time, error) 
 	return schedule.Next(from), nil
 }
 
+// 采集任务的身份与节奏常量。
+//
+// 历史背景：Python→Go 迁移时把采集节奏写进了任务 ID（metrics_collection_5min），而任务的 cron
+// 与名称自始至终都是 3 分钟，三者从第一天起就不一致；ID 又是主键、被 task_executions.task_id
+// 软引用，改一次节奏就要迁移主键。现在 ID 只表达身份、不含节奏，节奏统一由
+// MetricsCollectionInterval 派生（cron 与显示名都从它生成）；页面采样间隔
+// （monitoring.DashboardSampleInterval）必须与它相等，由跨包守卫测试把关。
+const (
+	// MetricsCollectionTaskID 采集任务的稳定 ID（不含节奏，改节奏无需迁移主键）
+	MetricsCollectionTaskID = "metrics_collection"
+	// metricsCollectionTaskLegacyID 迁移前的历史 ID，仅在 migrateMetricsCollectionTaskID 中使用
+	metricsCollectionTaskLegacyID = "metrics_collection_5min"
+	// MetricsCollectionInterval 指标采集节奏：任务 cron、任务显示名、监控页采样间隔都对齐它
+	MetricsCollectionInterval = 3 * time.Minute
+)
+
+// migrateMetricsCollectionTaskID 把历史遗留的采集任务 ID 改成不含节奏的稳定 ID。
+//
+// 幂等：旧 ID 不存在（已迁移或全新库）时直接返回，不做任何写入；
+// 旧新 ID 同时存在时不做改名（会撞主键）并告警，保留现场由人工确认，避免静默改动采集节奏。
+// 改名必须同时同步 task_executions.task_id（软引用，无外键），否则历史执行记录成为孤儿，
+// 所以两步放在一个事务里。
+//
+// 返回是否真的发生了迁移。
+func migrateMetricsCollectionTaskID(ctx context.Context, db *gorm.DB, logger *zap.Logger) (bool, error) {
+	if db == nil {
+		return false, fmt.Errorf("database not initialized")
+	}
+
+	var legacyCount int64
+	if err := db.WithContext(ctx).Model(&ScheduledTask{}).
+		Where("id = ?", metricsCollectionTaskLegacyID).
+		Count(&legacyCount).Error; err != nil {
+		return false, err
+	}
+	if legacyCount == 0 {
+		return false, nil
+	}
+
+	var currentCount int64
+	if err := db.WithContext(ctx).Model(&ScheduledTask{}).
+		Where("id = ?", MetricsCollectionTaskID).
+		Count(&currentCount).Error; err != nil {
+		return false, err
+	}
+	if currentCount > 0 {
+		if logger != nil {
+			logger.Warn("采集任务新旧 ID 同时存在，跳过改名，请人工确认后删除多余任务",
+				zap.String("legacy_id", metricsCollectionTaskLegacyID),
+				zap.String("current_id", MetricsCollectionTaskID))
+		}
+		return false, nil
+	}
+
+	now := time.Now().UTC()
+	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(
+			"UPDATE scheduled_tasks SET id = ?, updated_at = ? WHERE id = ?",
+			MetricsCollectionTaskID, now, metricsCollectionTaskLegacyID,
+		).Error; err != nil {
+			return err
+		}
+		return tx.Exec(
+			"UPDATE task_executions SET task_id = ? WHERE task_id = ?",
+			MetricsCollectionTaskID, metricsCollectionTaskLegacyID,
+		).Error
+	}); err != nil {
+		return false, err
+	}
+
+	if logger != nil {
+		logger.Info("采集任务 ID 已迁移",
+			zap.String("from", metricsCollectionTaskLegacyID),
+			zap.String("to", MetricsCollectionTaskID))
+	}
+	return true, nil
+}
+
 type defaultTaskSeed struct {
 	ID             string
 	Name           string
@@ -1455,6 +1533,12 @@ type defaultTaskSeed struct {
 func (s *Service) ensureDefaultTasks(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("database not initialized")
+	}
+
+	// 历史 ID 迁移必须早于下面的 seed 匹配：seed 用 id 或 name 命中存量任务，
+	// 若旧 ID 还留着，新 ID 与名称两个键都不命中，会再建一条采集任务（双份采集）。
+	if _, err := migrateMetricsCollectionTaskID(ctx, s.db, s.logger); err != nil && s.logger != nil {
+		s.logger.Warn("采集任务 ID 迁移失败，本轮沿用旧 ID（下次启动重试）", zap.Error(err))
 	}
 
 	seeds := []defaultTaskSeed{
@@ -1471,10 +1555,10 @@ func (s *Service) ensureDefaultTasks(ctx context.Context) error {
 			},
 		},
 		{
-			ID:             "metrics_collection_5min",
-			Name:           "设备指标采集(3分钟)",
+			ID:             MetricsCollectionTaskID,
+			Name:           fmt.Sprintf("设备指标采集(%d分钟)", int(MetricsCollectionInterval.Minutes())),
 			TaskType:       TaskTypeDeviceInspection,
-			CronExpression: "*/3 * * * *",
+			CronExpression: fmt.Sprintf("*/%d * * * *", int(MetricsCollectionInterval.Minutes())),
 			Enabled:        true,
 			Config: map[string]interface{}{
 				"check_connectivity": true,
@@ -1545,8 +1629,8 @@ func (s *Service) ensureDefaultTasks(ctx context.Context) error {
 	now := time.Now().UTC()
 	for _, seed := range seeds {
 		if _, ok := existingIDs[seed.ID]; ok {
-			// 特殊处理：更新 metrics_collection_5min 任务的 cron 表达式
-			if seed.ID == "metrics_collection_5min" {
+			// 特殊处理：采集任务的 cron 与名称由 MetricsCollectionInterval 派生，存量库每次启动都要同步
+			if seed.ID == MetricsCollectionTaskID {
 				if err := s.updateMetricsCollectionTask(ctx, seed, now); err != nil {
 					if s.logger != nil {
 						s.logger.Warn("update metrics collection task failed", zap.Error(err))
