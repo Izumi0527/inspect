@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Group } from '@visx/group'
 import { AreaClosed, LinePath } from '@visx/shape'
 import { AxisBottom, AxisLeft } from '@visx/axis'
-import { GridRows } from '@visx/grid'
+import { GridColumns, GridRows } from '@visx/grid'
 import { scaleLinear, scaleTime } from '@visx/scale'
 import { curveMonotoneX } from '@visx/curve'
 import { localPoint } from '@visx/event'
 import { useTooltip, TooltipWithBounds, defaultStyles } from '@visx/tooltip'
 import { LinearGradient } from '@visx/gradient'
+import { resolveChartGridStyle, useDocumentDarkClass } from '@/lib/chart-theme'
 import {
   formatBandwidthValue,
   resolveTickStepMinutes,
@@ -91,9 +92,10 @@ export function InterfaceTrafficChart({
     return () => window.removeEventListener('resize', updateWidth)
   }, [])
 
-  const isDark =
-    typeof window !== 'undefined' && document.documentElement.classList.contains('dark')
-  const gridColor = isDark ? '#374151' : '#e5e7eb'
+  // 订阅式主题探测：切换主题后网格、坐标轴、提示框颜色同步更新，不必刷新页面。
+  // 网格与系统性能趋势、设备温度监控两张图共用 prominent 样式，同一页面观感一致。
+  const isDark = useDocumentDarkClass()
+  const gridStyle = resolveChartGridStyle('prominent', isDark)
   const axisColor = isDark ? '#9CA3AF' : '#6b7280'
   const surfaceColor = isDark ? '#111827' : '#ffffff'
   const tooltipBg = isDark ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)'
@@ -212,7 +214,21 @@ export function InterfaceTrafficChart({
           </defs>
 
           <Group left={margin.left} top={margin.top}>
-            <GridRows scale={yScale} width={innerWidth} stroke={gridColor} numTicks={5} />
+            <GridRows
+              scale={yScale}
+              width={innerWidth}
+              stroke={gridStyle.stroke}
+              strokeDasharray={gridStyle.dasharray}
+              numTicks={5}
+            />
+            {/* 纵向网格与 X 轴刻度同位，刻度已按采样间隔对齐 */}
+            <GridColumns
+              scale={xScale}
+              height={innerHeight}
+              stroke={gridStyle.stroke}
+              strokeDasharray={gridStyle.dasharray}
+              tickValues={xTickValues}
+            />
 
             {TRAFFIC_SERIES.map((series) => (
               <AreaClosed
@@ -277,16 +293,16 @@ export function InterfaceTrafficChart({
             <AxisBottom
               top={innerHeight}
               scale={xScale}
-              stroke={gridColor}
-              tickStroke={gridColor}
+              stroke={axisColor}
+              tickStroke={axisColor}
               tickValues={xTickValues}
               tickLabelProps={() => ({ fill: axisColor, fontSize: 11, textAnchor: 'middle' })}
               tickFormat={(value) => formatTimeLabel(value as Date)}
             />
             <AxisLeft
               scale={yScale}
-              stroke={gridColor}
-              tickStroke={gridColor}
+              stroke={axisColor}
+              tickStroke={axisColor}
               numTicks={5}
               tickLabelProps={() => ({ fill: axisColor, fontSize: 11, textAnchor: 'end', dx: -4 })}
               tickFormat={(value) => formatBandwidthValue(Number(value))}
