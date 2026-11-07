@@ -74,3 +74,16 @@ func TestRenderLineChart_TenLongNamedSeries_RendersPNG(t *testing.T) {
 		t.Fatalf("RenderLineChart() did not produce PNG bytes")
 	}
 }
+
+//go:linkname chartTitleWithInterval github.com/your-org/inspect-system/backend-go/internal/reports/pdfkit.chartTitleWithInterval
+func chartTitleWithInterval(title string, sampleInterval string) string
+
+// 监控报告的采样粒度并入趋势图标题（页眉 chip 已满，超宽会被 break 丢弃并连带挤掉后续 chip）。
+func TestChartTitleWithInterval_AppendsSampleInterval(t *testing.T) {
+	if got := chartTitleWithInterval("流量 (Mbps)", "15 分钟"); got != "流量 (Mbps) · 采样粒度 15 分钟" {
+		t.Fatalf("got %q", got)
+	}
+	if got := chartTitleWithInterval("流量 (Mbps)", " "); got != "流量 (Mbps)" {
+		t.Fatalf("粒度为空时标题应保持原样，got %q", got)
+	}
+}

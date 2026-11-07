@@ -48,11 +48,13 @@ type MonitoringReportExportResult struct {
 }
 
 type MonitoringReportData struct {
-	GeneratedAt       time.Time
-	TimeRange         string
-	StartTime         time.Time
-	EndTime           time.Time
-	Sections          []string
+	GeneratedAt time.Time
+	TimeRange   string
+	StartTime   time.Time
+	EndTime     time.Time
+	Sections    []string
+	// SampleInterval 性能与流量序列实际使用的桶宽（按点数预算分档），报告中标注给读者
+	SampleInterval    time.Duration
 	Stats             *MonitoringStats
 	DevicePerformance []DevicePerformancePoint
 	NetworkTraffic    []NetworkTrafficPoint
@@ -120,13 +122,15 @@ func (w *MetricsWriter) ExportMonitoringReport(
 	}
 
 	if hasReportSection(sections, "charts") {
-		// 报告导出按范围分档（AutoBucket）：若跟随监控页用 5 分钟，7d/14d 的
-		// CSV/Excel 行数与 PDF 折线点数会放大约 12~24 倍，报告体积与渲染时间失控。
-		perf, err := w.GetDevicePerformanceHistory(ctx, start, end, nil, AutoBucket)
+		// 报告按点数预算分档（单序列 ≤360 点、对齐 3 分钟采集），不跟随监控页的固定 3 分钟：
+		// 否则 14d 每条序列 6720 点，PDF 折线糊成一片、CSV/Excel 截断更严重。
+		// 桶宽只在这里算一次，同时传给查询与报告标注，保证标注与实际一致。
+		data.SampleInterval = resolveBucket(start, end, AutoBucket)
+		perf, err := w.GetDevicePerformanceHistory(ctx, start, end, nil, data.SampleInterval)
 		if err != nil {
 			return MonitoringReportExportResult{}, err
 		}
-		traffic, err := w.GetNetworkTrafficHistory(ctx, start, end, nil, AutoBucket)
+		traffic, err := w.GetNetworkTrafficHistory(ctx, start, end, nil, data.SampleInterval)
 		if err != nil {
 			return MonitoringReportExportResult{}, err
 		}
@@ -194,6 +198,9 @@ func renderMonitoringReportCSV(data MonitoringReportData) ([]byte, error) {
 	writeRow("监控报告")
 	writeRow("生成时间", data.GeneratedAt.Format(time.RFC3339))
 	writeRow("时间范围", data.StartTime.Format(time.RFC3339), data.EndTime.Format(time.RFC3339))
+	if label := sampleIntervalLabel(data); label != "" {
+		writeRow("采样粒度", label)
+	}
 	writeRow()
 
 	if hasReportSection(data.Sections, "stats") {
@@ -327,6 +334,11 @@ func renderMonitoringReportExcel(data MonitoringReportData) ([]byte, error) {
 	}
 	if err := writeRow("时间范围", data.StartTime.Format(time.RFC3339), data.EndTime.Format(time.RFC3339)); err != nil {
 		return nil, err
+	}
+	if label := sampleIntervalLabel(data); label != "" {
+		if err := writeRow("采样粒度", label); err != nil {
+			return nil, err
+		}
 	}
 	if err := writeRow(); err != nil {
 		return nil, err
@@ -514,6 +526,7 @@ func buildMonitoringPDFInput(data MonitoringReportData) pdfkit.MonitoringPDFInpu
 		EndTime:     data.EndTime,
 		Sections:    data.Sections,
 	}
+	input.SampleInterval = sampleIntervalLabel(data)
 	if data.Stats != nil {
 		input.Stats = &pdfkit.MonitoringStatsInput{
 			TotalDevices: data.Stats.TotalDevices,
@@ -755,4 +768,16 @@ func projectDevicePerformance(points []DevicePerformancePoint) ([]string, []pdfk
 		}
 	}
 	return labels, series
+}
+
+// sampleIntervalLabel 报告中标注的采样粒度；只在包含趋势分区（charts）时有意义。
+func sampleIntervalLabel(data MonitoringReportData) string {
+	if data.SampleInterval <= 0 || !hasReportSection(data.Sections, "charts") {
+		return ""
+	}
+	minutes := int(data.SampleInterval / time.Minute)
+	if minutes >= 60 && minutes%60 == 0 {
+		return fmt.Sprintf("%d 小时", minutes/60)
+	}
+	return fmt.Sprintf("%d 分钟", minutes)
 }

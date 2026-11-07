@@ -22,19 +22,6 @@ type temperatureRow struct {
 	Value    *float64  `gorm:"column:value"`
 }
 
-// isUndefinedRelationError 用于识别“表/视图不存在”的数据库错误（SQLSTATE 42P01）。
-// 该错误在本项目中常见于：未创建 *metrics_hourly 聚合表/视图时，长时间范围查询会失败。
-// 注意：本项目的迁移与部署脚本都不创建 device_metrics_hourly，所有环境实际走 42P01 回退读原始表。
-// 若日后手工建成连续聚合，删设备对 device_metrics 的清理不会刷新已物化的小时桶，
-// 已删设备会从读 hourly 的分支复活，届时需在清理后 refresh_continuous_aggregate 或给这些分支加设备过滤。
-func isUndefinedRelationError(err error) bool {
-	if err == nil {
-		return false
-	}
-	// gorm/driver 对底层 pg 错误的包装层级不固定，这里使用 SQLSTATE 码做最小可靠判断。
-	return strings.Contains(err.Error(), "SQLSTATE 42P01")
-}
-
 func (w *MetricsWriter) GetDevicesStatus(ctx context.Context) ([]DeviceStatusSummary, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -430,35 +417,18 @@ func (w *MetricsWriter) GetBulkMetricsHistory(
 
 		rows := make([]row, 0)
 		query := w.db.WithContext(ctx).
-			Table("device_metrics_hourly").
-			Select("bucket, device_id, metric_name, avg_value AS metric_value").
-			Where("bucket >= ? AND bucket <= ?", start, end).
+			Table("device_metrics").
+			Select("time_bucket('1 hour', collected_at) AS bucket, device_id, metric_name, AVG(metric_value) AS metric_value").
+			Where("collected_at >= ? AND collected_at <= ?", start, end).
 			Where("device_id IN ?", deviceIDs)
-
 		if len(metricNames) > 0 {
 			query = query.Where("metric_name IN ?", metricNames)
 		}
-
-		if err := query.Order("bucket ASC").Scan(&rows).Error; err != nil {
-			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
-			if !isUndefinedRelationError(err) {
-				return nil, err
-			}
-
-			fallback := w.db.WithContext(ctx).
-				Table("device_metrics").
-				Select("time_bucket('1 hour', collected_at) AS bucket, device_id, metric_name, AVG(metric_value) AS metric_value").
-				Where("collected_at >= ? AND collected_at <= ?", start, end).
-				Where("device_id IN ?", deviceIDs)
-			if len(metricNames) > 0 {
-				fallback = fallback.Where("metric_name IN ?", metricNames)
-			}
-			if err := fallback.
-				Group("bucket, device_id, metric_name").
-				Order("bucket ASC").
-				Scan(&rows).Error; err != nil {
-				return nil, err
-			}
+		if err := query.
+			Group("bucket, device_id, metric_name").
+			Order("bucket ASC").
+			Scan(&rows).Error; err != nil {
+			return nil, err
 		}
 
 		for _, row := range rows {
@@ -550,57 +520,23 @@ func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Ti
 		}
 	}
 
-	useHourly := bucket >= time.Hour
-
 	deviceFilter := ""
 	if len(deviceIDs) > 0 {
 		deviceFilter = " AND device_id IN (?)"
 	}
 
 	rows := make([]temperatureRow, 0)
-	if useHourly {
-		hourlyQuery := w.db.WithContext(ctx).
-			Table("device_metrics_hourly").
-			Select("bucket, device_id, avg_value AS value").
-			Where("metric_name = ?", "temperature").
-			Where("bucket >= ? AND bucket <= ?", start, end)
-		if len(deviceIDs) > 0 {
-			hourlyQuery = hourlyQuery.Where("device_id IN ?", deviceIDs)
-		}
-		if err := hourlyQuery.
-			Order("bucket ASC").
-			Scan(&rows).Error; err != nil {
-			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
-			if !isUndefinedRelationError(err) {
-				return nil, err
-			}
-			query := fmt.Sprintf(
-				"SELECT time_bucket('%s', collected_at) AS bucket, device_id, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket, device_id ORDER BY bucket ASC",
-				"1 hour",
-				deviceFilter,
-			)
-			args := []interface{}{"temperature", start, end}
-			if len(deviceIDs) > 0 {
-				args = append(args, deviceIDs)
-			}
-			if err := w.db.WithContext(ctx).Raw(query, args...).Scan(&rows).Error; err != nil {
-				return nil, err
-			}
-		}
-	} else {
-		interval := bucketIntervalString(bucket)
-		query := fmt.Sprintf(
-			"SELECT time_bucket('%s', collected_at) AS bucket, device_id, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket, device_id ORDER BY bucket ASC",
-			interval,
-			deviceFilter,
-		)
-		args := []interface{}{"temperature", start, end}
-		if len(deviceIDs) > 0 {
-			args = append(args, deviceIDs)
-		}
-		if err := w.db.WithContext(ctx).Raw(query, args...).Scan(&rows).Error; err != nil {
-			return nil, err
-		}
+	query := fmt.Sprintf(
+		"SELECT time_bucket('%s', collected_at) AS bucket, device_id, AVG(metric_value) AS value FROM device_metrics WHERE metric_name = ? AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket, device_id ORDER BY bucket ASC",
+		bucketIntervalString(bucket),
+		deviceFilter,
+	)
+	args := []interface{}{"temperature", start, end}
+	if len(deviceIDs) > 0 {
+		args = append(args, deviceIDs)
+	}
+	if err := w.db.WithContext(ctx).Raw(query, args...).Scan(&rows).Error; err != nil {
+		return nil, err
 	}
 
 	if len(rows) == 0 {
@@ -673,50 +609,23 @@ func (w *MetricsWriter) GetDevicePerformanceHistory(ctx context.Context, start t
 		}
 	}
 
-	useHourly := bucket >= time.Hour
-
 	deviceFilter := ""
 	if len(deviceIDs) > 0 {
 		deviceFilter = " AND device_id IN (?)"
 	}
-	buildArgs := func() []interface{} {
-		args := []interface{}{devicePerformanceMetrics, start, end}
-		if len(deviceIDs) > 0 {
-			args = append(args, deviceIDs)
-		}
-		return args
-	}
-	rawBucketQuery := func(interval string) string {
-		return fmt.Sprintf(
-			"SELECT time_bucket('%s', collected_at) AS bucket, device_id, metric_name, AVG(metric_value) AS value FROM device_metrics WHERE metric_name IN (?) AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC",
-			interval,
-			deviceFilter,
-		)
+	query := fmt.Sprintf(
+		"SELECT time_bucket('%s', collected_at) AS bucket, device_id, metric_name, AVG(metric_value) AS value FROM device_metrics WHERE metric_name IN (?) AND collected_at >= ? AND collected_at <= ?%s GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC",
+		bucketIntervalString(bucket),
+		deviceFilter,
+	)
+	args := []interface{}{devicePerformanceMetrics, start, end}
+	if len(deviceIDs) > 0 {
+		args = append(args, deviceIDs)
 	}
 
 	rows := make([]devicePerformanceRow, 0)
-	if useHourly {
-		hourlyQuery := w.db.WithContext(ctx).
-			Table("device_metrics_hourly").
-			Select("bucket, device_id, metric_name, avg_value AS value").
-			Where("metric_name IN ?", devicePerformanceMetrics).
-			Where("bucket >= ? AND bucket <= ?", start, end)
-		if len(deviceIDs) > 0 {
-			hourlyQuery = hourlyQuery.Where("device_id IN ?", deviceIDs)
-		}
-		if err := hourlyQuery.Order("bucket ASC").Scan(&rows).Error; err != nil {
-			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
-			if !isUndefinedRelationError(err) {
-				return nil, err
-			}
-			if err := w.db.WithContext(ctx).Raw(rawBucketQuery("1 hour"), buildArgs()...).Scan(&rows).Error; err != nil {
-				return nil, err
-			}
-		}
-	} else {
-		if err := w.db.WithContext(ctx).Raw(rawBucketQuery(bucketIntervalString(bucket)), buildArgs()...).Scan(&rows).Error; err != nil {
-			return nil, err
-		}
+	if err := w.db.WithContext(ctx).Raw(query, args...).Scan(&rows).Error; err != nil {
+		return nil, err
 	}
 
 	if len(rows) == 0 {
@@ -804,12 +713,6 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 		}
 	}
 
-	useHourly := bucket >= time.Hour
-
-	inboundNames := networkInboundMetricNames
-	outboundNames := networkOutboundMetricNames
-	allNames := networkAllMetricNames()
-
 	deviceFilter := ""
 	if len(deviceIDs) > 0 {
 		deviceFilter = " AND device_id IN (?)"
@@ -822,49 +725,13 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 	}
 
 	rows := make([]row, 0)
-	if useHourly {
-		query := fmt.Sprintf(
-			`SELECT bucket,
-                SUM(CASE WHEN metric_name IN (%s) THEN avg_value ELSE 0 END) AS inbound,
-                SUM(CASE WHEN metric_name IN (%s) THEN avg_value ELSE 0 END) AS outbound
-             FROM device_metrics_hourly
-             WHERE bucket >= ? AND bucket <= ? AND metric_name IN (%s)%s
-             GROUP BY bucket
-             ORDER BY bucket ASC`,
-			formatMetricList(inboundNames),
-			formatMetricList(outboundNames),
-			formatMetricList(allNames),
-			deviceFilter,
-		)
-		hourlyArgs := []interface{}{start, end}
-		if len(deviceIDs) > 0 {
-			hourlyArgs = append(hourlyArgs, deviceIDs)
-		}
-		if err := w.db.WithContext(ctx).Raw(query, hourlyArgs...).Scan(&rows).Error; err != nil {
-			// 兼容：缺少 device_metrics_hourly 时回退到动态聚合（按小时 bucket）
-			if !isUndefinedRelationError(err) {
-				return nil, err
-			}
-
-			interval := "1 hour"
-			fallback := aggregateTrafficQuery(interval, deviceFilter)
-			fallbackArgs := []interface{}{start, end}
-			if len(deviceIDs) > 0 {
-				fallbackArgs = append(fallbackArgs, deviceIDs)
-			}
-			if err := w.db.WithContext(ctx).Raw(fallback, fallbackArgs...).Scan(&rows).Error; err != nil {
-				return nil, err
-			}
-		}
-	} else {
-		query := aggregateTrafficQuery(bucketIntervalString(bucket), deviceFilter)
-		rawArgs := []interface{}{start, end}
-		if len(deviceIDs) > 0 {
-			rawArgs = append(rawArgs, deviceIDs)
-		}
-		if err := w.db.WithContext(ctx).Raw(query, rawArgs...).Scan(&rows).Error; err != nil {
-			return nil, err
-		}
+	query := aggregateTrafficQuery(bucketIntervalString(bucket), deviceFilter)
+	args := []interface{}{start, end}
+	if len(deviceIDs) > 0 {
+		args = append(args, deviceIDs)
+	}
+	if err := w.db.WithContext(ctx).Raw(query, args...).Scan(&rows).Error; err != nil {
+		return nil, err
 	}
 
 	points := make([]NetworkTrafficPoint, 0, len(rows))
@@ -924,12 +791,30 @@ func normalizeStatusBucket(status string) string {
 // 页面所有时间档位（1h/3h/6h/12h/24h/3d/7d/14d）都按它分桶，使各档位点位密度一致、
 // 曲线可直接横向比对；它与采集任务的节奏（scheduler.MetricsCollectionInterval，cron */3）
 // 相等，每个桶恰好覆盖一次采集，桶内不会出现 1~2 个样本的忽多忽少。
-// 长时段的其他消费者（报告导出、流量分析）仍用 AutoBucket 分档，
+// 长时段的其他消费者（报告导出、流量分析）用 AutoBucket 按点数预算分档，
 // 避免数据量与 PDF/CSV 渲染成本随范围线性膨胀。
 const DashboardSampleInterval = 3 * time.Minute
 
 // AutoBucket 表示「按时间范围自动分档」，桶宽交给 bucketSizeForRange（0 值语义）。
 const AutoBucket time.Duration = 0
+
+// autoBucketMaxPoints 是 AutoBucket 单条序列的点数预算：14 天 PDF 原本就画 336 点且渲染正常，
+// 以此为上限保证任何档位的报告都不比现状更密。
+const autoBucketMaxPoints = 360
+
+// autoBucketLadder 是 AutoBucket 可选的桶宽阶梯，全部是 DashboardSampleInterval 的整数倍，
+// 使每个桶恰好包含整数个采集样本（5 分钟这类非整倍数桶会让桶内样本数在 1~2 之间交替）。
+var autoBucketLadder = []time.Duration{
+	3 * time.Minute,
+	6 * time.Minute,
+	15 * time.Minute,
+	30 * time.Minute,
+	time.Hour,
+	3 * time.Hour,
+	6 * time.Hour,
+	12 * time.Hour,
+	24 * time.Hour,
+}
 
 // resolveBucket 解析调用方指定的采样间隔：<= 0（AutoBucket）时回退为按范围分档。
 func resolveBucket(start, end time.Time, interval time.Duration) time.Duration {
@@ -939,24 +824,16 @@ func resolveBucket(start, end time.Time, interval time.Duration) time.Duration {
 	return bucketSizeForRange(start, end)
 }
 
+// bucketSizeForRange 从阶梯中取「点数不超过预算」的最小桶宽；返回值原样进入 time_bucket，
+// 不再有另一层封顶，声明与实际由构造保证一致。超出最大桶宽仍放不下时返回最大桶宽。
 func bucketSizeForRange(start time.Time, end time.Time) time.Duration {
-	if end.Before(start) {
-		return 15 * time.Minute
+	span := end.Sub(start)
+	for _, bucket := range autoBucketLadder {
+		if span <= bucket*autoBucketMaxPoints {
+			return bucket
+		}
 	}
-
-	duration := end.Sub(start)
-	switch {
-	case duration <= 24*time.Hour:
-		return 5 * time.Minute // 24小时内使用5分钟间隔
-	case duration <= 48*time.Hour:
-		return 15 * time.Minute
-	case duration <= 7*24*time.Hour:
-		return time.Hour
-	case duration <= 30*24*time.Hour:
-		return 6 * time.Hour
-	default:
-		return 24 * time.Hour
-	}
+	return autoBucketLadder[len(autoBucketLadder)-1]
 }
 
 func bucketIntervalString(bucket time.Duration) string {

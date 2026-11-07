@@ -21,6 +21,8 @@ type MonitoringPDFInput struct {
 	StartTime   time.Time
 	EndTime     time.Time
 	Sections    []string // which sections to render: stats / charts / alerts
+	// SampleInterval 趋势图的采样粒度（如 "15 分钟"），并入两张趋势图标题；为空时不显示
+	SampleInterval string
 
 	Stats *MonitoringStatsInput
 	// PerformanceLabels 性能趋势 X 轴时间戳（RFC3339），与每台设备的 CPU/Memory 等长
@@ -130,7 +132,7 @@ func RenderMonitoringPDF(path string, input MonitoringPDFInput) error {
 	}
 
 	if hasSection(sections, "charts") {
-		renderMonitoringCharts(pdf, input.PerformanceLabels, input.DevicePerformance, input.NetworkTraffic)
+		renderMonitoringCharts(pdf, input.PerformanceLabels, input.DevicePerformance, input.NetworkTraffic, input.SampleInterval)
 		pdf.Ln(SpaceMD)
 	}
 
@@ -180,7 +182,16 @@ func formatBandwidthBps(bps float64) string {
 // 与页面一致：最多绘制 5 台设备（颜色 = 设备、线型 = 指标），更多设备只在标题提示
 const maxPDFPerformanceDevices = 5
 
-func renderMonitoringCharts(pdf *gofpdf.Fpdf, perfLabels []string, devices []DevicePerformanceSeries, traffic []NetworkTrafficPoint) {
+// chartTitleWithInterval 把采样粒度并入趋势图标题。粒度不放页眉 chip：页眉宽度已被
+// 生成时间/时间范围/活跃告警占满，chip 循环超宽即 break，会连带挤掉后面的 chip。
+func chartTitleWithInterval(title string, sampleInterval string) string {
+	if interval := strings.TrimSpace(sampleInterval); interval != "" {
+		return fmt.Sprintf("%s · 采样粒度 %s", title, interval)
+	}
+	return title
+}
+
+func renderMonitoringCharts(pdf *gofpdf.Fpdf, perfLabels []string, devices []DevicePerformanceSeries, traffic []NetworkTrafficPoint, sampleInterval string) {
 	SectionTitle(pdf, "性能趋势")
 	if len(devices) == 0 || len(perfLabels) == 0 {
 		EmptyStateWithHint(pdf, "暂无系统性能数据", "请扩大时间范围或检查设备采集状态")
@@ -205,7 +216,7 @@ func renderMonitoringCharts(pdf *gofpdf.Fpdf, perfLabels []string, devices []Dev
 		if len(devices) > len(shown) {
 			title = fmt.Sprintf("%s · 显示 %d/%d 台设备", title, len(shown), len(devices))
 		}
-		spec := LineSpec{Title: title, XLabels: labels, Series: series, NoFill: true}
+		spec := LineSpec{Title: chartTitleWithInterval(title, sampleInterval), XLabels: labels, Series: series, NoFill: true}
 		if png, err := RenderLineChart(spec); err == nil {
 			pageW, _ := pdf.GetPageSize()
 			left, _, right, _ := pdf.GetMargins()
@@ -232,7 +243,7 @@ func renderMonitoringCharts(pdf *gofpdf.Fpdf, perfLabels []string, devices []Dev
 		outValues[i] = p.Outbound
 	}
 	spec := LineSpec{
-		Title:   "流量 (Mbps)",
+		Title:   chartTitleWithInterval("流量 (Mbps)", sampleInterval),
 		XLabels: labels,
 		Series: []LineSeries{
 			{Name: "下行", Color: ColorTrafficDown, Values: inValues},

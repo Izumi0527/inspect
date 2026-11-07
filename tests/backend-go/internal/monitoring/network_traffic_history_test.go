@@ -2,7 +2,6 @@ package monitoring_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -15,10 +14,6 @@ import (
 
 func sprintfPattern(pattern string, args ...interface{}) string {
 	return fmt.Sprintf(pattern, args...)
-}
-
-func undefinedRelationErr(table string) error {
-	return errors.New(`ERROR: relation "` + table + `" does not exist (SQLSTATE 42P01)`)
 }
 
 // 聚合流量口径（方案 A）：只读 device_metrics（设备级 bandwidth_* 已是采集器按接口累加的结果，
@@ -35,7 +30,7 @@ func TestGetNetworkTrafficHistory_ShouldAverageWithinDeviceBucketThenSumAcrossDe
 	end := start.Add(24 * time.Hour)
 	bucket := start.Add(5 * time.Minute)
 
-	mock.ExpectQuery(sprintfPattern(aggregateTrafficQueryPattern, "5 minutes", ` AND device_id IN \(\$3,\$4\)`)).
+	mock.ExpectQuery(sprintfPattern(aggregateTrafficQueryPattern, "6 minutes", ` AND device_id IN \(\$3,\$4\)`)).
 		WithArgs(start, end, 1, 2).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "inbound", "outbound"}).
 			AddRow(bucket, 3_000_000.0, 1_000_000.0))
@@ -55,7 +50,8 @@ func TestGetNetworkTrafficHistory_ShouldAverageWithinDeviceBucketThenSumAcrossDe
 	}
 }
 
-func TestGetNetworkTrafficHistory_HourlyFallbackShouldUseSameShape(t *testing.T) {
+// 长时段与短时段走同一形状的原始表聚合 SQL，只是桶宽不同（7 天档为 30 分钟）。
+func TestGetNetworkTrafficHistory_LongRangeUsesSameShape(t *testing.T) {
 	db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
 	defer cleanup()
 	writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
@@ -63,9 +59,7 @@ func TestGetNetworkTrafficHistory_HourlyFallbackShouldUseSameShape(t *testing.T)
 	start := time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)
 	end := start.Add(7 * 24 * time.Hour)
 
-	mock.ExpectQuery(`(?is)FROM device_metrics_hourly`).
-		WillReturnError(undefinedRelationErr("device_metrics_hourly"))
-	mock.ExpectQuery(sprintfPattern(aggregateTrafficQueryPattern, "1 hour", "")).
+	mock.ExpectQuery(sprintfPattern(aggregateTrafficQueryPattern, "30 minutes", "")).
 		WithArgs(start, end).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "inbound", "outbound"}))
 

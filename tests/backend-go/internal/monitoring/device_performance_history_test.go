@@ -2,7 +2,6 @@ package monitoring_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -24,7 +23,7 @@ func TestGetDevicePerformanceHistory_MinuteBucket_GroupsByDeviceAndMetric(t *tes
 	bucket1 := start
 	bucket2 := start.Add(5 * time.Minute)
 
-	mock.ExpectQuery(`(?is)SELECT time_bucket\('5 minutes', collected_at\) AS bucket, device_id, metric_name, AVG\(metric_value\) AS value FROM device_metrics WHERE metric_name IN \(\$1,\$2\) AND collected_at >= \$3 AND collected_at <= \$4 AND device_id IN \(\$5,\$6\) GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
+	mock.ExpectQuery(`(?is)SELECT time_bucket\('3 minutes', collected_at\) AS bucket, device_id, metric_name, AVG\(metric_value\) AS value FROM device_metrics WHERE metric_name IN \(\$1,\$2\) AND collected_at >= \$3 AND collected_at <= \$4 AND device_id IN \(\$5,\$6\) GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
 		WithArgs("cpu_usage", "memory_usage", start, end, 1, 2).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "device_id", "metric_name", "value"}).
 			AddRow(bucket1, 1, "cpu_usage", 10.0).
@@ -74,8 +73,8 @@ func TestGetDevicePerformanceHistory_MinuteBucket_GroupsByDeviceAndMetric(t *tes
 	}
 }
 
-// 小时桶：优先读 device_metrics_hourly，缺表（SQLSTATE 42P01）时回退到 time_bucket('1 hour') 动态聚合。
-func TestGetDevicePerformanceHistory_HourlyBucket_FallsBackWhenHourlyTableMissing(t *testing.T) {
+// 7 天档：点数预算内对齐采集节奏的最小桶为 30 分钟，直接对原始表 device_metrics 做 time_bucket 动态聚合。
+func TestGetDevicePerformanceHistory_LongRange_AggregatesFromRawTable(t *testing.T) {
 	db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
 	defer cleanup()
 	writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
@@ -84,11 +83,7 @@ func TestGetDevicePerformanceHistory_HourlyBucket_FallsBackWhenHourlyTableMissin
 	end := start.Add(7 * 24 * time.Hour)
 	bucket := start
 
-	mock.ExpectQuery(`(?is)SELECT bucket, device_id, metric_name, avg_value AS value FROM "device_metrics_hourly" WHERE metric_name IN \(\$1,\$2\) AND \(bucket >= \$3 AND bucket <= \$4\) ORDER BY bucket ASC`).
-		WithArgs("cpu_usage", "memory_usage", start, end).
-		WillReturnError(errors.New(`ERROR: relation "device_metrics_hourly" does not exist (SQLSTATE 42P01)`))
-
-	mock.ExpectQuery(`(?is)SELECT time_bucket\('1 hour', collected_at\) AS bucket, device_id, metric_name, AVG\(metric_value\) AS value FROM device_metrics WHERE metric_name IN \(\$1,\$2\) AND collected_at >= \$3 AND collected_at <= \$4 GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
+	mock.ExpectQuery(`(?is)SELECT time_bucket\('30 minutes', collected_at\) AS bucket, device_id, metric_name, AVG\(metric_value\) AS value FROM device_metrics WHERE metric_name IN \(\$1,\$2\) AND collected_at >= \$3 AND collected_at <= \$4 GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
 		WithArgs("cpu_usage", "memory_usage", start, end).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "device_id", "metric_name", "value"}).
 			AddRow(bucket, 7, "cpu_usage", 33.0).
@@ -123,7 +118,7 @@ func TestGetDevicePerformanceHistory_NoRows_ReturnsEmptySliceWithoutNameLookup(t
 	start := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 	end := start.Add(time.Hour)
 
-	mock.ExpectQuery(`(?is)SELECT time_bucket\('5 minutes', collected_at\) AS bucket, device_id, metric_name, AVG\(metric_value\) AS value FROM device_metrics WHERE .* GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
+	mock.ExpectQuery(`(?is)SELECT time_bucket\('3 minutes', collected_at\) AS bucket, device_id, metric_name, AVG\(metric_value\) AS value FROM device_metrics WHERE .* GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "device_id", "metric_name", "value"}))
 
 	points, err := writer.GetDevicePerformanceHistory(context.Background(), start, end, nil, monitoring.AutoBucket)
