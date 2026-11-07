@@ -689,7 +689,8 @@ func (s *Service) GetSystemStatus(ctx context.Context) (SystemStatus, error) {
 		}
 	}
 
-	dbConnected := s.db.WithContext(ctx).Raw("SELECT 1").Error == nil
+	var dbMarker int
+	dbConnected := s.db.WithContext(ctx).Raw("SELECT 1").Scan(&dbMarker).Error == nil
 
 	uptime := int64(time.Since(s.startedAt).Seconds())
 	if uptime < 0 {

@@ -196,7 +196,8 @@ func (s *Service) collectServiceHealth(ctx context.Context) []ServiceHealth {
 	})
 
 	dbStatus := "healthy"
-	if err := s.db.WithContext(ctx).Raw("SELECT 1").Error; err != nil {
+	var dbMarker int
+	if err := s.db.WithContext(ctx).Raw("SELECT 1").Scan(&dbMarker).Error; err != nil {
 		message := err.Error()
 		services = append(services, ServiceHealth{
 			Name:         "PostgreSQL",

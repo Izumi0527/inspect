@@ -39,7 +39,8 @@ func (s *Service) GetSystemHealth(ctx context.Context) (SystemHealthResponse, er
 		LastCheck: now,
 	})
 
-	if err := s.db.WithContext(ctx).Raw("SELECT 1").Error; err != nil {
+	var dbMarker int
+	if err := s.db.WithContext(ctx).Raw("SELECT 1").Scan(&dbMarker).Error; err != nil {
 		message := err.Error()
 		services = append(services, SystemServiceHealth{
 			Name:      "PostgreSQL",

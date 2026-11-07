@@ -174,7 +174,8 @@ func (w *MetricsWriter) checkMetricsStorageConnection(ctx context.Context) (bool
 		return false, fmt.Errorf("database not initialized")
 	}
 
-	if err := w.db.WithContext(ctx).Raw("SELECT 1").Error; err != nil {
+	var marker int
+	if err := w.db.WithContext(ctx).Raw("SELECT 1").Scan(&marker).Error; err != nil {
 		return false, err
 	}
 	return true, nil
