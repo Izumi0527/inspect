@@ -225,15 +225,11 @@ func renderMonitoringReportCSV(data MonitoringReportData) ([]byte, error) {
 			writeRow("暂无系统性能数据")
 		} else {
 			writeRow("timestamp", "device_name", "cpu_usage", "memory_usage")
-			shown := perfRows
-			if len(shown) > maxReportRows {
-				shown = shown[:maxReportRows]
-			}
-			for _, row := range shown {
+			for _, row := range latestRows(perfRows) {
 				writeRow(row...)
 			}
 			if len(perfRows) > maxReportRows {
-				writeRow("已截断", fmt.Sprintf("仅保留前%d条", maxReportRows))
+				writeRow("已截断", truncatedNotice())
 			}
 		}
 		writeRow()
@@ -243,11 +239,7 @@ func renderMonitoringReportCSV(data MonitoringReportData) ([]byte, error) {
 			writeRow("暂无网络流量数据")
 		} else {
 			writeRow("timestamp", "inbound", "outbound")
-			traffic := data.NetworkTraffic
-			if len(traffic) > maxReportRows {
-				traffic = traffic[:maxReportRows]
-			}
-			for _, point := range traffic {
+			for _, point := range latestRows(data.NetworkTraffic) {
 				writeRow(
 					point.Timestamp,
 					formatFloat(point.Inbound, 2),
@@ -255,7 +247,7 @@ func renderMonitoringReportCSV(data MonitoringReportData) ([]byte, error) {
 				)
 			}
 			if len(data.NetworkTraffic) > maxReportRows {
-				writeRow("已截断", fmt.Sprintf("仅保留前%d条", maxReportRows))
+				writeRow("已截断", truncatedNotice())
 			}
 		}
 		writeRow()
@@ -390,10 +382,7 @@ func renderMonitoringReportExcel(data MonitoringReportData) ([]byte, error) {
 			if err := writeRow("timestamp", "device_name", "cpu_usage", "memory_usage"); err != nil {
 				return nil, err
 			}
-			shown := perfRows
-			if len(shown) > maxReportRows {
-				shown = shown[:maxReportRows]
-			}
+			shown := latestRows(perfRows)
 			for _, row := range shown {
 				cells := make([]interface{}, len(row))
 				for i, cell := range row {
@@ -404,7 +393,7 @@ func renderMonitoringReportExcel(data MonitoringReportData) ([]byte, error) {
 				}
 			}
 			if len(perfRows) > maxReportRows {
-				if err := writeRow("已截断", fmt.Sprintf("仅保留前%d条", maxReportRows)); err != nil {
+				if err := writeRow("已截断", truncatedNotice()); err != nil {
 					return nil, err
 				}
 			}
@@ -424,10 +413,7 @@ func renderMonitoringReportExcel(data MonitoringReportData) ([]byte, error) {
 			if err := writeRow("timestamp", "inbound", "outbound"); err != nil {
 				return nil, err
 			}
-			traffic := data.NetworkTraffic
-			if len(traffic) > maxReportRows {
-				traffic = traffic[:maxReportRows]
-			}
+			traffic := latestRows(data.NetworkTraffic)
 			for _, point := range traffic {
 				if err := writeRow(
 					point.Timestamp,
@@ -438,7 +424,7 @@ func renderMonitoringReportExcel(data MonitoringReportData) ([]byte, error) {
 				}
 			}
 			if len(data.NetworkTraffic) > maxReportRows {
-				if err := writeRow("已截断", fmt.Sprintf("仅保留前%d条", maxReportRows)); err != nil {
+				if err := writeRow("已截断", truncatedNotice()); err != nil {
 					return nil, err
 				}
 			}
@@ -768,6 +754,18 @@ func projectDevicePerformance(points []DevicePerformancePoint) ([]string, []pdfk
 		}
 	}
 	return labels, series
+}
+
+// latestRows 超过行数上限时保留末尾（最新）的 maxReportRows 行：序列按时间升序，截取开头会丢掉最近的数据。
+func latestRows[T any](rows []T) []T {
+	if len(rows) <= maxReportRows {
+		return rows
+	}
+	return rows[len(rows)-maxReportRows:]
+}
+
+func truncatedNotice() string {
+	return fmt.Sprintf("仅保留最新%d条", maxReportRows)
 }
 
 // sampleIntervalLabel 报告中标注的采样粒度；只在包含趋势分区（charts）时有意义。

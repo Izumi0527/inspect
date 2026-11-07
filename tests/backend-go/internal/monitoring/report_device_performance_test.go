@@ -91,6 +91,39 @@ func TestExportMonitoringReportCSV_StatesSampleInterval(t *testing.T) {
 	}
 }
 
+// 超过行数上限时保留最新的行：数据按时间升序，截取开头会把最近的数据丢掉。
+func TestExportMonitoringReportCSV_TruncationKeepsNewestRows(t *testing.T) {
+	db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
+	defer cleanup()
+	writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
+
+	mock.ExpectQuery(`(?is)GROUP BY bucket, device_id, metric_name`).
+		WillReturnRows(sqlmock.NewRows([]string{"bucket", "device_id", "metric_name", "value"}))
+	base := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	rows := sqlmock.NewRows([]string{"bucket", "inbound", "outbound"})
+	const total = 501
+	for i := 0; i < total; i++ {
+		rows.AddRow(base.Add(time.Duration(i)*6*time.Minute), float64(i), 0.0)
+	}
+	mock.ExpectQuery(`(?is)AS per_device GROUP BY bucket`).WillReturnRows(rows)
+
+	content := exportReportCSV(t, writer, "24h")
+	oldest := base.Format(time.RFC3339Nano)
+	newest := base.Add(time.Duration(total-1) * 6 * time.Minute).Format(time.RFC3339Nano)
+	if strings.Contains(content, oldest+",") {
+		t.Fatalf("CSV 仍包含最旧一行 %s，应保留最新 500 行", oldest)
+	}
+	if !strings.Contains(content, newest+",") {
+		t.Fatalf("CSV 缺少最新一行 %s", newest)
+	}
+	if !strings.Contains(content, "仅保留最新500条") {
+		t.Fatalf("截断提示应说明保留的是最新数据，内容尾部：\n%s", content[len(content)-200:])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
 //go:linkname buildMonitoringPDFInput github.com/your-org/inspect-system/backend-go/internal/monitoring.buildMonitoringPDFInput
 func buildMonitoringPDFInput(data monitoring.MonitoringReportData) pdfkit.MonitoringPDFInput
 
