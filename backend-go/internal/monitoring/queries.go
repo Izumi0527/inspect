@@ -156,19 +156,18 @@ func (w *MetricsWriter) ListMonitoringDevices(ctx context.Context) ([]Monitoring
 	}
 
 	type deviceRow struct {
-		ID              int        `gorm:"column:id"`
-		Name            string     `gorm:"column:name"`
-		IPAddress       string     `gorm:"column:ip_address"`
-		Status          string     `gorm:"column:status"`
-		IsMonitored     bool       `gorm:"column:is_monitored"`
-		MonitorInterval int        `gorm:"column:monitor_interval"`
-		LastSeen        *time.Time `gorm:"column:last_seen"`
+		ID          int        `gorm:"column:id"`
+		Name        string     `gorm:"column:name"`
+		IPAddress   string     `gorm:"column:ip_address"`
+		Status      string     `gorm:"column:status"`
+		IsMonitored bool       `gorm:"column:is_monitored"`
+		LastSeen    *time.Time `gorm:"column:last_seen"`
 	}
 
 	rows := make([]deviceRow, 0)
 	if err := w.db.WithContext(ctx).
 		Table("devices").
-		Select("id, name, ip_address, status, is_monitored, monitor_interval, last_seen").
+		Select("id, name, ip_address, status, is_monitored, last_seen").
 		Where("is_active = ?", true).
 		Order("id ASC").
 		Scan(&rows).Error; err != nil {
@@ -178,32 +177,25 @@ func (w *MetricsWriter) ListMonitoringDevices(ctx context.Context) ([]Monitoring
 	result := make([]MonitoringDevice, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, MonitoringDevice{
-			ID:              row.ID,
-			Name:            row.Name,
-			IPAddress:       row.IPAddress,
-			Status:          row.Status,
-			IsMonitored:     row.IsMonitored,
-			MonitorInterval: row.MonitorInterval,
-			LastSeen:        row.LastSeen,
+			ID:          row.ID,
+			Name:        row.Name,
+			IPAddress:   row.IPAddress,
+			Status:      row.Status,
+			IsMonitored: row.IsMonitored,
+			LastSeen:    row.LastSeen,
 		})
 	}
 
 	return result, nil
 }
 
-func (w *MetricsWriter) SetDeviceMonitoring(ctx context.Context, deviceID int, enabled bool, interval int) error {
+// SetDeviceMonitoring 切换设备的告警开关（is_monitored）：false 时告警评估器跳过该设备，采集不受影响。
+func (w *MetricsWriter) SetDeviceMonitoring(ctx context.Context, deviceID int, enabled bool) error {
 	if w.db == nil {
 		return fmt.Errorf("database not initialized")
 	}
 
-	updates := map[string]interface{}{
-		"is_monitored": enabled,
-	}
-	if interval > 0 {
-		updates["monitor_interval"] = interval
-	}
-
-	result := w.db.WithContext(ctx).Table("devices").Where("id = ?", deviceID).Updates(updates)
+	result := w.db.WithContext(ctx).Table("devices").Where("id = ?", deviceID).Update("is_monitored", enabled)
 	if result.Error != nil {
 		return result.Error
 	}

@@ -77,8 +77,6 @@ func (h MonitoringHandler) Register(group *echo.Group) {
 
 	// 监控中心 v2 聚合接口：将多接口拉取收敛为单次请求，返回分区状态与降级信息
 	group.POST("/monitoring/dashboard/v2", h.GetMonitoringDashboardV2)
-	group.POST("/monitoring/start", h.StartMonitoringService)
-	group.POST("/monitoring/stop", h.StopMonitoringService)
 	group.POST("/monitoring/devices/:device_id/start", h.StartDeviceMonitoring)
 	group.POST("/monitoring/devices/:device_id/stop", h.StopDeviceMonitoring)
 	group.POST("/monitoring/devices/:device_id/metrics", h.WriteDeviceMetrics)
@@ -345,40 +343,6 @@ func (h MonitoringHandler) GetMonitoringOverview(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query monitoring overview")
 	}
 	return c.JSON(http.StatusOK, result)
-}
-
-func (h MonitoringHandler) StartMonitoringService(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth, monitoringControlPermission); err != nil {
-		return err
-	}
-	if h.Writer == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
-	}
-
-	if err := h.Writer.SetMonitoringServiceRunning(c.Request().Context(), true); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to start monitoring service")
-	}
-
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "监控服务已启动",
-	})
-}
-
-func (h MonitoringHandler) StopMonitoringService(c echo.Context) error {
-	if _, err := requirePermission(c, h.Auth, monitoringControlPermission); err != nil {
-		return err
-	}
-	if h.Writer == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics writer not configured")
-	}
-
-	if err := h.Writer.SetMonitoringServiceRunning(c.Request().Context(), false); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to stop monitoring service")
-	}
-
-	return c.JSON(http.StatusOK, map[string]interface{}{
-		"message": "监控服务已停止",
-	})
 }
 
 func (h MonitoringHandler) GetSystemStatus(c echo.Context) error {
@@ -1125,6 +1089,9 @@ func (h MonitoringHandler) CheckMonitoringReportDownloadToken(c echo.Context) er
 	})
 }
 
+// StartDeviceMonitoring / StopDeviceMonitoring 是设备级「告警开关」：只写 is_monitored，
+// 告警评估器（阈值告警与离线告警）据此跳过该设备；采集任务只看 is_active，静默期间照常探测与采集。
+// 路由沿用历史的 start/stop 命名以保持 API 兼容。
 func (h MonitoringHandler) StartDeviceMonitoring(c echo.Context) error {
 	return h.updateDeviceMonitoring(c, true)
 }
@@ -1154,18 +1121,22 @@ func (h MonitoringHandler) updateDeviceMonitoring(c echo.Context, enabled bool) 
 		return echo.NewHTTPError(http.StatusBadRequest, "device_id mismatch")
 	}
 
-	if err := h.Writer.SetDeviceMonitoring(c.Request().Context(), deviceID, enabled, req.Interval); err != nil {
+	if err := h.Writer.SetDeviceMonitoring(c.Request().Context(), deviceID, enabled); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "设备不存在")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update device monitoring")
 	}
 
+	message := "已开启该设备的告警"
+	if !enabled {
+		message = "已静默该设备的告警（采集不受影响）"
+	}
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success":   true,
 		"device_id": deviceID,
 		"enabled":   enabled,
-		"interval":  req.Interval,
+		"message":   message,
 	})
 }
 

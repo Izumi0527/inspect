@@ -26,43 +26,43 @@ type Device struct {
 	DetectedSysName   *string `gorm:"column:detected_sys_name"`
 	DetectedChassisID *string `gorm:"column:detected_chassis_id"`
 	// LLDPStatus 是最近一轮有结论的 LLDP 可用性判定（ok/mib_unreachable/disabled），总览据此提示精确原因。
-	LLDPStatus      *string        `gorm:"column:lldp_status"`
-	Vendor          string         `gorm:"column:vendor"`
-	Model           *string        `gorm:"column:model"`
-	SerialNumber    *string        `gorm:"column:serial_number"`
-	FirmwareVersion *string        `gorm:"column:firmware_version"`
-	Location        *string        `gorm:"column:location"`
-	GroupID         *int           `gorm:"column:group_id"`
-	Status          string         `gorm:"column:status"`
-	IsActive        bool           `gorm:"column:is_active"`
-	IsMonitored     bool           `gorm:"column:is_monitored"`
-	MonitorInterval int            `gorm:"column:monitor_interval"`
-	SnmpVersion     *string        `gorm:"column:snmp_version"`
-	SnmpCommunity   *string        `gorm:"column:snmp_community"`
-	SnmpPort        *int           `gorm:"column:snmp_port"`
-	CliProtocol     *string        `gorm:"column:cli_protocol"`
-	SshUsername     *string        `gorm:"column:ssh_username"`
-	SshPassword     *string        `gorm:"column:ssh_password"`
-	SshPort         *int           `gorm:"column:ssh_port"`
-	TelnetUsername  *string        `gorm:"column:telnet_username"`
-	TelnetPassword  *string        `gorm:"column:telnet_password"`
-	TelnetPort      *int           `gorm:"column:telnet_port"`
-	EnablePassword  *string        `gorm:"column:enable_password"`
-	IcmpStatus      *string        `gorm:"column:icmp_status"`
-	SnmpStatus      *string        `gorm:"column:snmp_status"`
-	LastProbeTime   *time.Time     `gorm:"column:last_probe_time"`
-	CPUUsage        *float64       `gorm:"column:cpu_usage"`
-	MemoryUsage     *float64       `gorm:"column:memory_usage"`
-	Temperature     *float64       `gorm:"column:temperature"`
-	Uptime          *int64         `gorm:"column:uptime"`
-	ResponseTime    *float64       `gorm:"column:response_time"`
-	LastSeen        *time.Time     `gorm:"column:last_seen"`
-	AlertCount      *int           `gorm:"column:alert_count"`
-	Description     *string        `gorm:"column:description"`
-	Tags            datatypes.JSON `gorm:"column:tags;type:jsonb"`
-	CreatedBy       *string        `gorm:"column:created_by"`
-	CreatedAt       *time.Time     `gorm:"column:created_at"`
-	UpdatedAt       *time.Time     `gorm:"column:updated_at"`
+	LLDPStatus      *string `gorm:"column:lldp_status"`
+	Vendor          string  `gorm:"column:vendor"`
+	Model           *string `gorm:"column:model"`
+	SerialNumber    *string `gorm:"column:serial_number"`
+	FirmwareVersion *string `gorm:"column:firmware_version"`
+	Location        *string `gorm:"column:location"`
+	GroupID         *int    `gorm:"column:group_id"`
+	Status          string  `gorm:"column:status"`
+	IsActive        bool    `gorm:"column:is_active"`
+	// IsMonitored 实为设备级告警开关：false 时告警评估器跳过该设备，采集任务只看 IsActive 不受影响。
+	IsMonitored    bool           `gorm:"column:is_monitored"`
+	SnmpVersion    *string        `gorm:"column:snmp_version"`
+	SnmpCommunity  *string        `gorm:"column:snmp_community"`
+	SnmpPort       *int           `gorm:"column:snmp_port"`
+	CliProtocol    *string        `gorm:"column:cli_protocol"`
+	SshUsername    *string        `gorm:"column:ssh_username"`
+	SshPassword    *string        `gorm:"column:ssh_password"`
+	SshPort        *int           `gorm:"column:ssh_port"`
+	TelnetUsername *string        `gorm:"column:telnet_username"`
+	TelnetPassword *string        `gorm:"column:telnet_password"`
+	TelnetPort     *int           `gorm:"column:telnet_port"`
+	EnablePassword *string        `gorm:"column:enable_password"`
+	IcmpStatus     *string        `gorm:"column:icmp_status"`
+	SnmpStatus     *string        `gorm:"column:snmp_status"`
+	LastProbeTime  *time.Time     `gorm:"column:last_probe_time"`
+	CPUUsage       *float64       `gorm:"column:cpu_usage"`
+	MemoryUsage    *float64       `gorm:"column:memory_usage"`
+	Temperature    *float64       `gorm:"column:temperature"`
+	Uptime         *int64         `gorm:"column:uptime"`
+	ResponseTime   *float64       `gorm:"column:response_time"`
+	LastSeen       *time.Time     `gorm:"column:last_seen"`
+	AlertCount     *int           `gorm:"column:alert_count"`
+	Description    *string        `gorm:"column:description"`
+	Tags           datatypes.JSON `gorm:"column:tags;type:jsonb"`
+	CreatedBy      *string        `gorm:"column:created_by"`
+	CreatedAt      *time.Time     `gorm:"column:created_at"`
+	UpdatedAt      *time.Time     `gorm:"column:updated_at"`
 }
 
 func (Device) TableName() string {

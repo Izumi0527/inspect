@@ -317,13 +317,13 @@ type MonitoringOverview struct {
 }
 
 type MonitoringDevice struct {
-	ID              int        `json:"id"`
-	Name            string     `json:"name"`
-	IPAddress       string     `json:"ip_address"`
-	Status          string     `json:"status"`
-	IsMonitored     bool       `json:"is_monitored"`
-	MonitorInterval int        `json:"monitor_interval"`
-	LastSeen        *time.Time `json:"last_seen,omitempty"`
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	IPAddress string `json:"ip_address"`
+	Status    string `json:"status"`
+	// IsMonitored 实为设备级告警开关：false 时不告警，但照常采集
+	IsMonitored bool       `json:"is_monitored"`
+	LastSeen    *time.Time `json:"last_seen,omitempty"`
 }
 
 type SystemStatusSnapshot struct {
@@ -351,6 +351,5 @@ type TimeRangeRequest struct {
 
 type MonitoringToggleRequest struct {
 	DeviceID int  `json:"device_id"`
-	Interval int  `json:"interval"`
 	Enabled  bool `json:"enabled"`
 }

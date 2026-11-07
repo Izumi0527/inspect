@@ -169,7 +169,7 @@ func builtInPermissions() []permissionSeed {
 		{Name: "alerts:delete", DisplayName: "删除告警", Description: "删除告警记录", Module: "alerts", Action: "delete", Resource: "alert"},
 
 		{Name: "monitoring:read", DisplayName: "查看监控", Description: "查看实时监控数据与仪表板", Module: "monitoring", Action: "read", Resource: "monitoring"},
-		{Name: "monitoring:control", DisplayName: "控制监控", Description: "启动/停止监控服务及写入监控指标", Module: "monitoring", Action: "control", Resource: "monitoring"},
+		{Name: "monitoring:control", DisplayName: "控制监控", Description: "设置设备告警开关及写入监控指标", Module: "monitoring", Action: "control", Resource: "monitoring"},
 		{Name: "monitoring:export", DisplayName: "导出监控报告", Description: "导出监控中心报告（PDF/CSV/Excel）", Module: "monitoring", Action: "export", Resource: "monitoring"},
 
 		{Name: "reports:read", DisplayName: "查看报表", Description: "查看各类统计报表", Module: "reports", Action: "read", Resource: "report"},

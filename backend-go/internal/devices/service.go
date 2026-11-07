@@ -12,14 +12,13 @@ import (
 )
 
 const (
-	defaultSnmpCommunity   = "public"
-	defaultSnmpVersion     = "2c"
-	defaultSnmpPort        = 161
-	defaultSshPort         = 22
-	defaultTelnetPort      = 23
-	defaultCliProtocol     = "none"
-	defaultStatus          = "unknown"
-	defaultMonitorInterval = 300
+	defaultSnmpCommunity = "public"
+	defaultSnmpVersion   = "2c"
+	defaultSnmpPort      = 161
+	defaultSshPort       = 22
+	defaultTelnetPort    = 23
+	defaultCliProtocol   = "none"
+	defaultStatus        = "unknown"
 )
 
 type Service struct {
@@ -182,30 +181,29 @@ func (s *Service) CreateDevice(ctx context.Context, req DeviceCreateRequest, cre
 	}
 
 	device := Device{
-		Name:            name,
-		IPAddress:       ip,
-		DeviceType:      deviceType,
-		Vendor:          vendor,
-		Model:           req.Model,
-		Location:        req.Location,
-		GroupID:         req.GroupID,
-		SnmpCommunity:   snmpCommunity,
-		SnmpVersion:     &snmpVersion,
-		SnmpPort:        snmpPort,
-		CliProtocol:     &cliProtocol,
-		SshUsername:     req.SshUsername,
-		SshPassword:     req.SshPassword,
-		SshPort:         sshPort,
-		TelnetUsername:  req.TelnetUsername,
-		TelnetPassword:  req.TelnetPassword,
-		TelnetPort:      telnetPort,
-		EnablePassword:  req.EnablePassword,
-		Status:          defaultStatus,
-		IsActive:        true,
-		IsMonitored:     true,
-		MonitorInterval: defaultMonitorInterval,
-		Description:     req.Description,
-		Tags:            tags,
+		Name:           name,
+		IPAddress:      ip,
+		DeviceType:     deviceType,
+		Vendor:         vendor,
+		Model:          req.Model,
+		Location:       req.Location,
+		GroupID:        req.GroupID,
+		SnmpCommunity:  snmpCommunity,
+		SnmpVersion:    &snmpVersion,
+		SnmpPort:       snmpPort,
+		CliProtocol:    &cliProtocol,
+		SshUsername:    req.SshUsername,
+		SshPassword:    req.SshPassword,
+		SshPort:        sshPort,
+		TelnetUsername: req.TelnetUsername,
+		TelnetPassword: req.TelnetPassword,
+		TelnetPort:     telnetPort,
+		EnablePassword: req.EnablePassword,
+		Status:         defaultStatus,
+		IsActive:       true,
+		IsMonitored:    true,
+		Description:    req.Description,
+		Tags:           tags,
 	}
 	if strings.TrimSpace(createdBy) != "" {
 		device.CreatedBy = &createdBy

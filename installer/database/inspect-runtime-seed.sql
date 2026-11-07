@@ -40,7 +40,7 @@ WITH permission_seed(name, display_name, description, module, action, resource) 
         ('alerts:delete', '删除告警', '删除告警记录', 'alerts', 'delete', 'alert'),
 
         ('monitoring:read', '查看监控', '查看实时监控数据与仪表板', 'monitoring', 'read', 'monitoring'),
-        ('monitoring:control', '控制监控', '启动/停止监控服务及写入监控指标', 'monitoring', 'control', 'monitoring'),
+        ('monitoring:control', '控制监控', '设置设备告警开关及写入监控指标', 'monitoring', 'control', 'monitoring'),
         ('monitoring:export', '导出监控报告', '导出监控中心报告（PDF/CSV/Excel）', 'monitoring', 'export', 'monitoring'),
 
         ('reports:read', '查看报表', '查看各类统计报表', 'reports', 'read', 'report'),

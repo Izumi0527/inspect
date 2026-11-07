@@ -2,23 +2,16 @@ package monitoring
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
-	"math"
-	"strconv"
-	"strings"
 	"time"
 
 	"gorm.io/gorm"
 )
 
-const (
-	monitoringServiceEnabledKey  = "monitoring_service_enabled"
-	monitoringServiceIntervalKey = "monitoring_service_interval"
-	defaultMonitoringInterval    = 60
-	defaultMonitoringEnabled     = true
-)
+// MetricsCollectionTaskID 是采集任务在 scheduled_tasks 中的 ID，必须与 scheduler.MetricsCollectionTaskID 一致
+// （scheduler 依赖本包，不能反向引用，由 tests/backend-go/internal/scheduler 下的跨包用例钉住）。
+const MetricsCollectionTaskID = "metrics_collection"
 
 type MonitoringServiceStatsResponse struct {
 	IsRunning             bool    `json:"is_running"`
@@ -31,14 +24,11 @@ type MonitoringServiceStatsResponse struct {
 	Error                 *string `json:"error,omitempty"`
 }
 
+// GetMonitoringServiceStats 汇报监控服务状态。Go 版没有独立的监控后台循环，监控就是采集任务本身：
+// is_running = 采集任务是否启用，monitor_interval = 真实采集节奏（与页面采样间隔相等，由跨包用例保证）。
 func (w *MetricsWriter) GetMonitoringServiceStats(ctx context.Context) (MonitoringServiceStatsResponse, error) {
 	stats := MonitoringServiceStatsResponse{
-		IsRunning:             defaultMonitoringEnabled,
-		MonitorInterval:       defaultMonitoringInterval,
-		TotalDevices:          0,
-		ActiveDevices:         0,
-		MonitoringTasks:       0,
-		MetricsStoreConnected: false,
+		MonitorInterval: int(DashboardSampleInterval / time.Second),
 	}
 	if w == nil || w.db == nil {
 		return stats, fmt.Errorf("database not initialized")
@@ -47,17 +37,11 @@ func (w *MetricsWriter) GetMonitoringServiceStats(ctx context.Context) (Monitori
 	lastCheck := time.Now().UTC().Format(time.RFC3339Nano)
 	stats.LastCheck = &lastCheck
 
-	isRunning, err := w.loadMonitoringServiceEnabled(ctx)
+	isRunning, err := w.loadCollectionTaskEnabled(ctx)
 	if err != nil {
 		return stats, err
 	}
 	stats.IsRunning = isRunning
-
-	interval, err := w.loadMonitoringServiceInterval(ctx)
-	if err != nil {
-		return stats, err
-	}
-	stats.MonitorInterval = interval
 
 	total, active, tasks, err := w.queryMonitoringServiceCounts(ctx)
 	if err != nil {
@@ -77,69 +61,23 @@ func (w *MetricsWriter) GetMonitoringServiceStats(ctx context.Context) (Monitori
 	return stats, nil
 }
 
-func (w *MetricsWriter) SetMonitoringServiceRunning(ctx context.Context, enabled bool) error {
-	if w == nil || w.db == nil {
-		return fmt.Errorf("database not initialized")
+// loadCollectionTaskEnabled 读取采集任务的启用状态；任务不存在（尚未 seed）时如实报告未运行。
+func (w *MetricsWriter) loadCollectionTaskEnabled(ctx context.Context) (bool, error) {
+	var row struct {
+		Enabled bool `gorm:"column:enabled"`
 	}
-
-	value := "false"
-	if enabled {
-		value = "true"
+	err := w.db.WithContext(ctx).
+		Table("scheduled_tasks").
+		Select("enabled").
+		Where("id = ?", MetricsCollectionTaskID).
+		Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
 	}
-
-	return w.upsertSystemSetting(
-		ctx,
-		monitoringServiceEnabledKey,
-		value,
-		"boolean",
-		"监控服务开关",
-	)
-}
-
-func (w *MetricsWriter) loadMonitoringServiceEnabled(ctx context.Context) (bool, error) {
-	value, err := w.getSystemSettingValue(ctx, monitoringServiceEnabledKey)
 	if err != nil {
-		return defaultMonitoringEnabled, err
+		return false, err
 	}
-	if value == nil {
-		return defaultMonitoringEnabled, nil
-	}
-	return parseBoolSetting(*value, defaultMonitoringEnabled), nil
-}
-
-func (w *MetricsWriter) loadMonitoringServiceInterval(ctx context.Context) (int, error) {
-	value, err := w.getSystemSettingValue(ctx, monitoringServiceIntervalKey)
-	if err != nil {
-		return defaultMonitoringInterval, err
-	}
-	if value != nil {
-		return parseIntSetting(*value, defaultMonitoringInterval), nil
-	}
-
-	avgInterval, err := w.avgDeviceMonitorInterval(ctx)
-	if err != nil {
-		return defaultMonitoringInterval, err
-	}
-	if avgInterval > 0 {
-		return int(math.Round(avgInterval)), nil
-	}
-
-	return defaultMonitoringInterval, nil
-}
-
-func (w *MetricsWriter) avgDeviceMonitorInterval(ctx context.Context) (float64, error) {
-	var avg sql.NullFloat64
-	if err := w.db.WithContext(ctx).
-		Table("devices").
-		Select("AVG(monitor_interval) AS avg_value").
-		Where("is_active = ?", true).
-		Scan(&avg).Error; err != nil {
-		return 0, err
-	}
-	if avg.Valid {
-		return avg.Float64, nil
-	}
-	return 0, nil
+	return row.Enabled, nil
 }
 
 func (w *MetricsWriter) queryMonitoringServiceCounts(ctx context.Context) (int, int, int, error) {
@@ -179,71 +117,4 @@ func (w *MetricsWriter) checkMetricsStorageConnection(ctx context.Context) (bool
 		return false, err
 	}
 	return true, nil
-}
-
-func (w *MetricsWriter) getSystemSettingValue(ctx context.Context, key string) (*string, error) {
-	if w.db == nil {
-		return nil, fmt.Errorf("database not initialized")
-	}
-
-	type row struct {
-		Value *string `gorm:"column:value"`
-	}
-
-	var item row
-	err := w.db.WithContext(ctx).
-		Table("system_settings").
-		Select("value").
-		Where("key = ?", key).
-		Take(&item).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return item.Value, nil
-}
-
-func (w *MetricsWriter) upsertSystemSetting(
-	ctx context.Context,
-	key string,
-	value string,
-	dataType string,
-	description string,
-) error {
-	query := `
-        INSERT INTO system_settings (key, value, category, data_type, description, updated_at)
-        VALUES (?, ?, 'system', ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT (key) DO UPDATE
-        SET value = EXCLUDED.value,
-            data_type = EXCLUDED.data_type,
-            description = EXCLUDED.description,
-            updated_at = CURRENT_TIMESTAMP`
-
-	return w.db.WithContext(ctx).Exec(query, key, value, dataType, description).Error
-}
-
-func parseBoolSetting(raw string, fallback bool) bool {
-	value := strings.TrimSpace(strings.ToLower(raw))
-	switch value {
-	case "true", "1", "yes", "y", "on":
-		return true
-	case "false", "0", "no", "n", "off":
-		return false
-	default:
-		return fallback
-	}
-}
-
-func parseIntSetting(raw string, fallback int) int {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
 }
