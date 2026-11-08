@@ -2,6 +2,7 @@ package devices_test
 
 import (
 	"testing"
+	"time"
 	_ "unsafe"
 
 	"github.com/gosnmp/gosnmp"
@@ -19,6 +20,31 @@ func collectInterfaces(c *devices.SNMPCollector, target collectorSNMPClient, ipA
 
 //go:linkname collectSTP github.com/your-org/inspect-system/backend-go/internal/devices.(*SNMPCollector).collectSTP
 func collectSTP(c *devices.SNMPCollector, target collectorSNMPClient, metrics *devices.SNMPMetrics, registry *snmpmib.Registry)
+
+//go:linkname rateSampleUsable github.com/your-org/inspect-system/backend-go/internal/devices.rateSampleUsable
+func rateSampleUsable(elapsed time.Duration) bool
+
+// 速率窗口必须容得下「一个采集周期 + 抖动」以及慢轮后的补跑间隔，超过 10 分钟才重建基线。
+func TestRateSampleUsable_AcceptsCadenceJitterAndRejectsStaleBaseline(t *testing.T) {
+	cases := []struct {
+		name    string
+		elapsed time.Duration
+		want    bool
+	}{
+		{"零间隔", 0, false},
+		{"时钟回拨", -time.Second, false},
+		{"3 分钟节奏", 3 * time.Minute, true},
+		{"5 分钟节奏 + 50ms 抖动", 5*time.Minute + 50*time.Millisecond, true},
+		{"慢轮后补跑", 9*time.Minute + 59*time.Second, true},
+		{"恰好 10 分钟", 10 * time.Minute, false},
+		{"中断 15 分钟", 15 * time.Minute, false},
+	}
+	for _, tc := range cases {
+		if got := rateSampleUsable(tc.elapsed); got != tc.want {
+			t.Errorf("%s：rateSampleUsable(%v) = %v，want %v", tc.name, tc.elapsed, got, tc.want)
+		}
+	}
+}
 
 // walkPDU 构造一条 bulkwalk 返回的 PDU。
 func walkPDU(baseOID string, index int, value interface{}, pduType gosnmp.Asn1BER) gosnmp.SnmpPDU {

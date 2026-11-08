@@ -70,6 +70,13 @@ type DiskMetrics struct {
 // 供查询端过滤历史脏数据及 dashboard 等消费方引用。
 const MaxReasonableBandwidthBps = 10_000_000_000
 
+// RateSampleMaxGap 是相邻两次接口计数器采样的最大间隔：超过即不计算速率，以本次读数重新建立基线；
+// 速率缓存里超过它未更新的条目也会被淘汰（再旧的读数已算不出速率）。
+// 必须大于「1 个采集节奏 + 抖动」，否则正常相邻样本会被当成中断而丢掉速率；取 ≥ 2 × 节奏
+// （scheduler.MetricsCollectionInterval）是为了让慢轮后补跑的样本（间隔约 7–9 分钟）仍能算出平均速率。
+// devices 包不能 import scheduler（反向依赖），由 tests/backend-go/internal/scheduler 下的跨包守卫测试把关。
+const RateSampleMaxGap = 10 * time.Minute
+
 // InterfaceMetrics 保存每个接口的指标
 type InterfaceMetrics struct {
 	Name        string   `json:"name"`
@@ -228,7 +235,7 @@ func (c *SNMPCollector) getRegistry() (*snmpmib.Registry, error) {
 	return registry, nil
 }
 
-// evictStaleOctets 定期清理超过 10 分钟未更新的速率缓存条目，防止 map 无限膨胀
+// evictStaleOctets 定期清理超过 RateSampleMaxGap 未更新的速率缓存条目（再旧的读数已算不出速率），防止 map 无限膨胀
 func (c *SNMPCollector) evictStaleOctets() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
@@ -236,7 +243,7 @@ func (c *SNMPCollector) evictStaleOctets() {
 		c.mu.Lock()
 		for ip, ifMap := range c.lastOctets {
 			for idx, cache := range ifMap {
-				if time.Since(cache.timestamp) > 10*time.Minute {
+				if time.Since(cache.timestamp) > RateSampleMaxGap {
 					delete(ifMap, idx)
 				}
 			}
@@ -246,6 +253,12 @@ func (c *SNMPCollector) evictStaleOctets() {
 		}
 		c.mu.Unlock()
 	}
+}
+
+// rateSampleUsable 判断距上一次计数器采样的间隔能否用来计算速率：间隔必须为正（排除时钟回拨），
+// 且小于 RateSampleMaxGap。
+func rateSampleUsable(elapsed time.Duration) bool {
+	return elapsed > 0 && elapsed < RateSampleMaxGap
 }
 
 // CollectMetrics 从设备采集所有可用的指标
@@ -842,8 +855,9 @@ func (c *SNMPCollector) collectInterfaces(
 		}
 
 		if last, ok := lastCache[idx]; ok {
-			elapsed := now.Sub(last.timestamp).Seconds()
-			if elapsed > 0 && elapsed < 300 {
+			gap := now.Sub(last.timestamp)
+			elapsed := gap.Seconds()
+			if rateSampleUsable(gap) {
 				if *iface.InOctets < last.inOctets || *iface.OutOctets < last.outOctets {
 					lastCache[idx] = octetsCache{
 						inOctets:  *iface.InOctets,
