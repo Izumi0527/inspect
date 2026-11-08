@@ -277,7 +277,7 @@ func renderMonitoringReportCSV(data MonitoringReportData) ([]byte, error) {
 				)
 			}
 			if len(data.Alerts) > maxReportRows {
-				writeRow("已截断", fmt.Sprintf("仅保留前%d条", maxReportRows))
+				writeRow("已截断", truncatedNotice())
 			}
 		}
 	}
@@ -466,7 +466,7 @@ func renderMonitoringReportExcel(data MonitoringReportData) ([]byte, error) {
 				}
 			}
 			if len(data.Alerts) > maxReportRows {
-				if err := writeRow("已截断", fmt.Sprintf("仅保留前%d条", maxReportRows)); err != nil {
+				if err := writeRow("已截断", truncatedNotice()); err != nil {
 					return nil, err
 				}
 			}
@@ -658,7 +658,9 @@ func queryReportAlerts(ctx context.Context, db *gorm.DB, start time.Time, end ti
         ORDER BY a.created_at DESC
         LIMIT ?`
 
-	if err := db.WithContext(ctx).Raw(query, start, end, maxReportRows).Scan(&rows).Error; err != nil {
+	// 多取一行用于判断是否超出 maxReportRows：只取上限条数时，渲染侧「超过上限才提示截断」永远不成立，
+	// 超出部分被静默丢弃。按 created_at 倒序，渲染时保留的前 maxReportRows 条即最新数据。
+	if err := db.WithContext(ctx).Raw(query, start, end, maxReportRows+1).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 

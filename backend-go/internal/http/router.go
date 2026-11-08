@@ -1,6 +1,8 @@
 package http
 
 import (
+	"strings"
+
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
@@ -27,7 +29,6 @@ func NewServer(
 	settingsHandler *handlers.SettingsHandler,
 	dashboardHandler *handlers.DashboardHandler,
 	logsHandler *handlers.LogsHandler,
-	trafficHandler *handlers.TrafficHandler,
 ) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
@@ -58,6 +59,7 @@ func NewServer(
 		AllowHeaders:     []string{"Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "X-Request-ID", authcookie.CSRFHeader},
 		AllowCredentials: true,
 	}))
+	e.Use(responseCompression())
 
 	handlers.HealthHandler{Version: cfg.AppVersion}.Register(e)
 
@@ -117,9 +119,6 @@ func NewServer(
 	if logsHandler != nil {
 		logsHandler.Register(api)
 	}
-	if trafficHandler != nil {
-		trafficHandler.Register(api)
-	}
 
 	return e
 }
@@ -166,4 +165,19 @@ func csrfExemptPaths() map[string]struct{} {
 		"/api/v1/auth/refresh":                {},
 		"/api/v1/monitoring/reports/download": {},
 	}
+}
+
+// responseCompression 在客户端声明 Accept-Encoding: gzip 且响应不小于 1KB 时压缩响应体。
+// Ubuntu 部署的 nginx 只压缩 text/html，Windows 安装包与开发环境由浏览器直连后端，
+// 监控时序这类大 JSON 此前在所有部署形态下都不压缩。
+// 跳过两类请求：WebSocket 升级（连接交给 ws 处理器劫持）；带 Range 的请求（c.File 回 206 部分内容，
+// 压缩后 Content-Range 指向的字节区间就对不上了）。
+func responseCompression() echo.MiddlewareFunc {
+	return echomw.GzipWithConfig(echomw.GzipConfig{
+		MinLength: 1024,
+		Skipper: func(c echo.Context) bool {
+			header := c.Request().Header
+			return strings.EqualFold(header.Get(echo.HeaderUpgrade), "websocket") || header.Get("Range") != ""
+		},
+	})
 }

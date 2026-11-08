@@ -162,6 +162,9 @@ func UsableWidth(pdf *gofpdf.Fpdf) float64 {
 	return pageW - left - right
 }
 
+// sectionTitleHeight 是 SectionTitle 占用的总高度（mm）；需要「标题 + 内容」整体换页的调用方据此预留空间。
+const sectionTitleHeight = 13.0
+
 // SectionTitle writes a large section heading with an accent bar and a
 // thin underline. Replaces the old writePDFSectionTitle visual.
 func SectionTitle(pdf *gofpdf.Fpdf, title string) {
@@ -187,7 +190,7 @@ func SectionTitle(pdf *gofpdf.Fpdf, title string) {
 
 	pdf.SetTextColor(ColorBlack[0], ColorBlack[1], ColorBlack[2])
 	pdf.SetDrawColor(ColorBlack[0], ColorBlack[1], ColorBlack[2])
-	pdf.SetY(y + 13)
+	pdf.SetY(y + sectionTitleHeight)
 }
 
 // StatCard is a single big-number metric (e.g. "12 设备").

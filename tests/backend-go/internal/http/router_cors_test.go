@@ -29,7 +29,6 @@ func TestNewServer_CORSPreflightShouldExplicitlyAllowAuthorizationHeader(t *test
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 
 	request := httptest.NewRequest(http.MethodOptions, "/api/v1/reports/trends/analysis", nil)

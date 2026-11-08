@@ -33,7 +33,7 @@ func TestNewServer_LoginOptionsIsPublic(t *testing.T) {
 
 	authHandler := &handlers.AuthHandler{Service: auth.NewService(gormDB, config.Config{}, zap.NewNop())}
 	server := apphttp.NewServer(config.Config{AppVersion: "test"}, nil, nil, authHandler,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	rec := httptest.NewRecorder()
 	server.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/login-options", nil))

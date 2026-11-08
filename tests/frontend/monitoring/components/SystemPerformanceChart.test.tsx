@@ -45,10 +45,10 @@ describe('SystemPerformanceChart（按设备区分）', () => {
     render(<SystemPerformanceChart data={twoDevices} timeRange="1h" />)
 
     expect(chartLineTexts()).toEqual([
-      'SW-01 CPU|#0891B2|solid',
-      'SW-01 内存|#0891B2|6 4',
-      'SW-02 CPU|#0EA5E9|solid',
-      'SW-02 内存|#0EA5E9|6 4',
+      'SW-01 CPU|#3987E5|solid',
+      'SW-01 内存|#3987E5|6 4',
+      'SW-02 CPU|#D95926|solid',
+      'SW-02 内存|#D95926|6 4',
     ])
   })
 
@@ -57,7 +57,7 @@ describe('SystemPerformanceChart（按设备区分）', () => {
       <SystemPerformanceChart data={twoDevices} timeRange="1h" hiddenMetrics={new Set(['memory'])} />
     )
 
-    expect(chartLineTexts()).toEqual(['SW-01 CPU|#0891B2|solid', 'SW-02 CPU|#0EA5E9|solid'])
+    expect(chartLineTexts()).toEqual(['SW-01 CPU|#3987E5|solid', 'SW-02 CPU|#D95926|solid'])
   })
 
   it('底部设备图例列出设备名，且不再出现「网络」', () => {

@@ -39,6 +39,8 @@ func (s *Service) cleanupMetricsTables(ctx context.Context, before time.Time) (m
 		{Table: "device_metrics", Column: "collected_at", Key: "device_metrics_deleted"},
 		{Table: "system_metrics", Column: "collected_at", Key: "system_metrics_deleted"},
 		{Table: "device_status_history", Column: "collected_at", Key: "device_status_deleted"},
+		// 接口时序原先由流量分析模块的 CleanupData 清理，模块删除后并入这里，结果键沿用原命名。
+		{Table: "interface_metrics", Column: "collected_at", Key: "interface_metrics_deleted"},
 	}
 
 	results := map[string]int64{}

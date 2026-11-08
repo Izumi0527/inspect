@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	_ "unsafe"
 
@@ -329,20 +330,33 @@ func TestCheckInterfaceUtilizationMetricStatus(t *testing.T) {
 	}
 }
 
-// 带宽吞吐量项已不再做利用率判定，但仍须区分"没有基线"与"跑了 0 流量"。
+// 带宽吞吐量项已不再做利用率判定，但仍须区分"没有基线"与"跑了 0 流量"，
+// 也要区分"缺基线"与"取不到接口数据"：前者再等一轮采集即可，后者才需要排查 SNMP。
 func TestCheckBandwidthMetricSkipsWithoutRateBaseline(t *testing.T) {
 	h := handlers.InspectionHandler{}
-	zero := 0.0
 
-	t.Run("采集端已写入总速率但接口无速率样本时判跳过", func(t *testing.T) {
+	// 采集端只在至少一个接口算出速率时才写总带宽：首轮、基线过期、计数器回绕时 BandwidthIn/Out 为空。
+	t.Run("采到接口但尚无速率样本时判跳过并说明缺基线", func(t *testing.T) {
 		result := inspection.Result{}
 		checkBandwidthMetric(h, &result, &devices.SNMPMetrics{
-			BandwidthIn:  &zero,
-			BandwidthOut: &zero,
-			Interfaces:   []devices.InterfaceMetrics{{Description: "GE0/0/1", Speed: ifaceSpeed(1000)}},
+			Interfaces: []devices.InterfaceMetrics{{Description: "GE0/0/1", Speed: ifaceSpeed(1000)}},
 		})
 		if result.Status != "skip" {
 			t.Errorf("Status = %q, 期望 skip", result.Status)
+		}
+		if msg := messageText(result); !strings.Contains(msg, "基线") {
+			t.Errorf("Message = %q，应说明尚无速率基线，而不是取不到数据", msg)
+		}
+	})
+
+	t.Run("没有接口数据时判跳过且不归因于缺基线", func(t *testing.T) {
+		result := inspection.Result{}
+		checkBandwidthMetric(h, &result, &devices.SNMPMetrics{})
+		if result.Status != "skip" {
+			t.Errorf("Status = %q, 期望 skip", result.Status)
+		}
+		if msg := messageText(result); msg == "" || strings.Contains(msg, "基线") {
+			t.Errorf("Message = %q，取不到接口数据时应如实说明，不应归因于缺基线", msg)
 		}
 	})
 
@@ -361,4 +375,12 @@ func TestCheckBandwidthMetricSkipsWithoutRateBaseline(t *testing.T) {
 			t.Error("ActualValue 必须包含入/出速率")
 		}
 	})
+}
+
+// messageText 取检查结果的提示文案，未设置时为空串。
+func messageText(result inspection.Result) string {
+	if result.Message == nil {
+		return ""
+	}
+	return *result.Message
 }

@@ -294,3 +294,49 @@ func TestCollectInterfaces_TolerantToMissingOIDs(t *testing.T) {
 		t.Errorf("其余 OID 的采集不应被牵连，出方向错包 = %v", iface.OutErrors)
 	}
 }
+
+// octetsClient 构造单个在线千兆口的应答，入/出方向 64 位八位组计数器分别为 in / out。
+func octetsClient(in, out uint64) *fakeCollectorSNMPClient {
+	return &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			"1.3.6.1.2.1.2.2.1.2":     {walkPDU("1.3.6.1.2.1.2.2.1.2", 1, []byte("GigabitEthernet0/0/1"), gosnmp.OctetString)},
+			"1.3.6.1.2.1.31.1.1.1.15": {walkPDU("1.3.6.1.2.1.31.1.1.1.15", 1, 1000, gosnmp.Gauge32)},
+			"1.3.6.1.2.1.2.2.1.8":     {walkPDU("1.3.6.1.2.1.2.2.1.8", 1, 1, gosnmp.Integer)},
+			"1.3.6.1.2.1.31.1.1.1.6":  {walkPDU("1.3.6.1.2.1.31.1.1.1.6", 1, in, gosnmp.Counter64)},
+			"1.3.6.1.2.1.31.1.1.1.10": {walkPDU("1.3.6.1.2.1.31.1.1.1.10", 1, out, gosnmp.Counter64)},
+		},
+	}
+}
+
+// 没有任何接口算出速率（重启后首轮、长时间未采集后重建基线、计数器回绕）时，总带宽必须留空：
+// 写成 0 会把「本轮没有数据」伪装成「流量为 0」，聚合流量图在这些时间点掉到 0。
+func TestCollectInterfaces_FirstSampleLeavesTotalBandwidthUnset(t *testing.T) {
+	collector := devices.NewSNMPCollector(zap.NewNop())
+	metrics := &devices.SNMPMetrics{}
+	collectInterfaces(collector, octetsClient(1_000_000, 500_000), "192.168.9.9", metrics, interfaceHealthRegistry())
+
+	if metrics.BandwidthIn != nil || metrics.BandwidthOut != nil {
+		t.Fatalf("首轮只建立基线、算不出速率，总带宽应为空，实际 in=%v out=%v", deref(metrics.BandwidthIn), deref(metrics.BandwidthOut))
+	}
+}
+
+// 第二轮有了基线，总带宽要按接口速率汇总上报（防止改成「永远不写」）。
+func TestCollectInterfaces_SecondSampleReportsTotalBandwidth(t *testing.T) {
+	collector := devices.NewSNMPCollector(zap.NewNop())
+	registry := interfaceHealthRegistry()
+	collectInterfaces(collector, octetsClient(1_000_000, 500_000), "192.168.9.9", &devices.SNMPMetrics{}, registry)
+	time.Sleep(50 * time.Millisecond)
+
+	metrics := &devices.SNMPMetrics{}
+	collectInterfaces(collector, octetsClient(1_001_000, 500_500), "192.168.9.9", metrics, registry)
+	if metrics.BandwidthIn == nil || *metrics.BandwidthIn <= 0 || metrics.BandwidthOut == nil || *metrics.BandwidthOut <= 0 {
+		t.Fatalf("第二轮应汇总出正的总带宽，实际 in=%v out=%v", deref(metrics.BandwidthIn), deref(metrics.BandwidthOut))
+	}
+}
+
+func deref(value *float64) interface{} {
+	if value == nil {
+		return nil
+	}
+	return *value
+}

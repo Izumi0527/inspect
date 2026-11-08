@@ -771,26 +771,6 @@ export const api = {
       httpClient.get<UsersListResponse>(appendQuery('/settings/users', params)),
     getUserPermissions: (id: string) => httpClient.get(`/settings/users/${id}/permissions`),
   },
-
-  // 流量分析
-  traffic: {
-    summary: (params?: QueryParams) =>
-      httpClient.get(appendQuery('/traffic/summary', params)),
-    deviceTraffic: (deviceId: number) =>
-      httpClient.get(`/traffic/devices/${deviceId}`),
-    trend: (deviceId: number, params?: QueryParams) =>
-      httpClient.get(appendQuery(`/traffic/devices/${deviceId}/trend`, params)),
-    topTalkers: (limit?: number, sortBy?: string) =>
-      httpClient.get('/traffic/top-talkers', { 
-        params: { limit: limit || 10, sort_by: sortBy || 'total_bytes' } 
-      }),
-    bandwidthUtilization: (params?: QueryParams) =>
-      httpClient.get(appendQuery('/traffic/bandwidth-utilization', params)),
-    topBandwidth: (limit?: number) =>
-      httpClient.get('/traffic/bandwidth-utilization/top', { 
-        params: { limit: limit || 10 } 
-      }),
-  },
 }
 
 // 导出默认客户端

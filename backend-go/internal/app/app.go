@@ -36,7 +36,6 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
 	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
-	"github.com/your-org/inspect-system/backend-go/internal/traffic"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
@@ -292,8 +291,6 @@ func New() (*App, error) {
 		Auth:    authService,
 	}
 
-	trafficService := traffic.NewService(dbConn, metricsWriter, log)
-
 	logsService := logs.NewService(dbConn, log)
 	logsService.SetLocalIPs(cfg.LocalIPAddresses)
 	logsService.SetSettings(settingsService)
@@ -319,7 +316,6 @@ func New() (*App, error) {
 		metricsWriter,
 		redisClient,
 		settingsService,
-		trafficService,
 		reportService,
 		cfg.ReportsOutputDir,
 		alertEvaluator,
@@ -369,12 +365,6 @@ func New() (*App, error) {
 		return nil, err
 	}
 
-	trafficHandler := handlers.TrafficHandler{
-		Service:  trafficService,
-		Auth:     authService,
-		Settings: settingsService,
-	}
-
 	server := httpserver.NewServer(
 		cfg,
 		log,
@@ -390,7 +380,6 @@ func New() (*App, error) {
 		&settingsHandler,
 		&dashboardHandler,
 		&logsHandler,
-		&trafficHandler,
 	)
 
 	return &App{

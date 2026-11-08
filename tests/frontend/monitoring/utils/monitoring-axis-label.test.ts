@@ -28,6 +28,6 @@ describe('DEVICE_SERIES_COLORS（设备曲线调色板）', () => {
   it('固定 5 色且互不相同，温度图与性能图共用', () => {
     expect(DEVICE_SERIES_COLORS).toHaveLength(5)
     expect(new Set(DEVICE_SERIES_COLORS).size).toBe(5)
-    expect(DEVICE_SERIES_COLORS[0]).toBe('#0891B2')
+    expect(DEVICE_SERIES_COLORS[0]).toBe('#3987E5')
   })
 })

@@ -55,16 +55,22 @@ var (
 	ColorWhite = Color{255, 255, 255}
 	ColorBlack = Color{0, 0, 0}
 
-	// Extended accents mirrored from the frontend monitoring charts. Values are
-	// the exact hex literals used by DEVICE_SERIES_COLORS / TRAFFIC_SERIES in
+	// Extended accents mirrored from the frontend. ColorGreen600 / ColorSky600 are
+	// the exact hex literals of TRAFFIC_SERIES in
 	// frontend/src/features/monitoring/utils/monitoring.ts — do not "correct"
 	// them to nominal Tailwind v4 values; the two ends must stay identical.
-	ColorCyan600  = Color{8, 145, 178}  // #0891B2
+	// ColorSky500 / ColorRed500 are used by the report renderer.
 	ColorSky500   = Color{14, 165, 233} // #0EA5E9
-	ColorGreen500 = Color{34, 197, 94}  // #22C55E
 	ColorRed500   = Color{239, 68, 68}  // #EF4444
 	ColorGreen600 = Color{22, 163, 74}  // #16A34A
 	ColorSky600   = Color{2, 132, 199}  // #0284C7
+
+	// 设备序列色，与前端 DEVICE_SERIES_COLORS 逐色一致（校验结果见前端注释）。
+	ColorSeriesBlue    = Color{57, 135, 229} // #3987E5
+	ColorSeriesOrange  = Color{217, 89, 38}  // #D95926
+	ColorSeriesTeal    = Color{25, 158, 112} // #199E70
+	ColorSeriesGold    = Color{201, 133, 0}  // #C98500
+	ColorSeriesMagenta = Color{213, 81, 129} // #D55181
 )
 
 // Semantic role aliases. Components should reference these rather than the
@@ -100,9 +106,9 @@ var (
 )
 
 // DeviceSeriesPalette 是多设备性能/温度图的色序（颜色=设备、线型=指标），与
-// 前端 DEVICE_SERIES_COLORS 逐色一致：前端测试钉住首色 #0891B2，本变量由
+// 前端 DEVICE_SERIES_COLORS 逐色一致：前端测试钉住首色 #3987E5，本变量由
 // pdfkit_palette_test.go 钉住，两侧共同构成跨端契约——改色必须同时改两端。
-var DeviceSeriesPalette = []Color{ColorCyan600, ColorSky500, ColorGreen500, ColorAmber500, ColorRed500}
+var DeviceSeriesPalette = []Color{ColorSeriesBlue, ColorSeriesOrange, ColorSeriesTeal, ColorSeriesGold, ColorSeriesMagenta}
 
 // Spacing tokens expressed in millimeters (PDF native unit). Roughly aligned
 // with Tailwind's 4/8/12/16/24 spacing scale (1 unit ≈ 0.5mm in print).

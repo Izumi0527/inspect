@@ -111,13 +111,18 @@ export function selectTimeTickLabels(
   return labels
 }
 
-/** 设备曲线调色板（颜色 = 设备），温度图与性能图共用，最多 5 台 */
+/**
+ * 设备曲线调色板（颜色 = 设备），温度图与性能图共用，最多 5 台。
+ * 经 dataviz 调色板校验：在浅色卡片 #ffffff 与暗色卡片 #191f23 上，相邻色色盲 ΔE ≥ 8.4、
+ * 正常视觉 ΔE ≥ 19.3、对比度均 ≥ 3:1，一套色值两种主题通用；不含红色（红色是告警「严重」的状态色）。
+ * 与 PDF 侧 pdfkit.DeviceSeriesPalette 逐色一致，改色必须两端同步。
+ */
 export const DEVICE_SERIES_COLORS: readonly string[] = [
-  '#0891B2', // cyan-600
-  '#0EA5E9', // 天蓝色
-  '#22C55E', // 绿色
-  '#F59E0B', // 橙色
-  '#EF4444', // 红色
+  '#3987E5', // 蓝
+  '#D95926', // 橙
+  '#199E70', // 青绿
+  '#C98500', // 金
+  '#D55181', // 品红
 ]
 
 /**

@@ -442,27 +442,7 @@ func probeSNMP(
 	tags interface{},
 ) (bool, *float64, *string, *string) {
 	config := resolveSNMPConfig(snmpCommunity, snmpVersion, snmpPort, tags)
-
-	if config.version == "1" || config.version == "2c" {
-		if strings.TrimSpace(config.community) == "" {
-			msg := "SNMP community not configured"
-			return false, nil, nil, &msg
-		}
-	} else if config.version == "3" {
-		if strings.TrimSpace(config.username) == "" {
-			msg := "SNMP v3 username not configured"
-			return false, nil, nil, &msg
-		}
-		if config.securityLevel != gosnmp.NoAuthNoPriv && strings.TrimSpace(config.authKey) == "" {
-			msg := "SNMP v3 auth password not configured"
-			return false, nil, nil, &msg
-		}
-		if config.securityLevel == gosnmp.AuthPriv && strings.TrimSpace(config.privKey) == "" {
-			msg := "SNMP v3 priv password not configured"
-			return false, nil, nil, &msg
-		}
-	} else {
-		msg := "unsupported SNMP version"
+	if msg := snmpCredentialError(config); msg != "" {
 		return false, nil, nil, &msg
 	}
 
@@ -533,6 +513,35 @@ func probeSNMP(
 	}
 
 	return true, &elapsed, &info, nil
+}
+
+// SNMPCredentialError 返回设备 SNMP 凭据缺失的原因，齐全时返回空串。v1/v2c 要求 community，
+// v3 要求用户名及安全级别所需的认证/加密口令；凭据可来自顶层列或 tags.snmp_config。
+// 探测与定时采集共用这一判定：凭据不全时请求只会逐个等满超时。
+func SNMPCredentialError(snmpCommunity *string, snmpVersion *string, snmpPort *int, tags interface{}) string {
+	return snmpCredentialError(resolveSNMPConfig(snmpCommunity, snmpVersion, snmpPort, tags))
+}
+
+func snmpCredentialError(config snmpConfig) string {
+	switch config.version {
+	case "1", "2c":
+		if strings.TrimSpace(config.community) == "" {
+			return "SNMP community not configured"
+		}
+	case "3":
+		if strings.TrimSpace(config.username) == "" {
+			return "SNMP v3 username not configured"
+		}
+		if config.securityLevel != gosnmp.NoAuthNoPriv && strings.TrimSpace(config.authKey) == "" {
+			return "SNMP v3 auth password not configured"
+		}
+		if config.securityLevel == gosnmp.AuthPriv && strings.TrimSpace(config.privKey) == "" {
+			return "SNMP v3 priv password not configured"
+		}
+	default:
+		return "unsupported SNMP version"
+	}
+	return ""
 }
 
 func probeSystemDescrOID() (string, error) {
@@ -706,6 +715,16 @@ func resolveSNMPConfig(
 				config.privKey = strings.TrimSpace(privKey)
 			}
 		}
+	}
+
+	// 安全级别用不到的协议必须清掉：gosnmp 只要协议不是 NoAuth/NoPriv 就要求对应口令，
+	// 默认的 MD5/DES 会让 noAuthNoPriv（前端默认级别）与 authNoPriv 的设备在连接阶段就被拒绝。
+	switch config.securityLevel {
+	case gosnmp.NoAuthNoPriv:
+		config.authProtocol = gosnmp.NoAuth
+		config.privProtocol = gosnmp.NoPriv
+	case gosnmp.AuthNoPriv:
+		config.privProtocol = gosnmp.NoPriv
 	}
 
 	return config

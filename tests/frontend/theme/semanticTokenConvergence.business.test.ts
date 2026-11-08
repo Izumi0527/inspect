@@ -287,15 +287,6 @@ const rules: FileRule[] = [
     ],
   },
   {
-    file: 'frontend/src/features/traffic-analysis/components/TrafficSummaryCards.tsx',
-    bannedPatterns: [
-      /text-gray-900/g,
-      /text-gray-600/g,
-      /text-gray-700/g,
-      /bg-gray-50/g,
-    ],
-  },
-  {
     file: 'frontend/src/features/inspection/components/InspectionStrategies.tsx',
     bannedPatterns: [
       /bg-white dark:bg-gray-900/g,
@@ -404,22 +395,6 @@ const rules: FileRule[] = [
     bannedPatterns: [
       /text-gray-900 dark:text-gray-100/g,
       /border-gray-200 dark:border-gray-700/g,
-    ],
-  },
-  {
-    file: 'frontend/src/features/traffic-analysis/components/TrafficAnomaliesPanel.tsx',
-    bannedPatterns: [
-      /text-gray-900/g,
-      /text-gray-600/g,
-      /text-gray-700/g,
-      /bg-gray-100 text-gray-800/g,
-    ],
-  },
-  {
-    file: 'frontend/src/features/traffic-analysis/components/TrafficTrendsChart.tsx',
-    bannedPatterns: [
-      /text-gray-600/g,
-      /bg-gray-50/g,
     ],
   },
   {

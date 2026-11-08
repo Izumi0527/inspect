@@ -164,7 +164,7 @@ func TestEnsureDefaultTasks_SkipsNewCollectionTaskWhileLegacyRowRemains(t *testi
 	mock.ExpectExec(`(?is)UPDATE "scheduled_tasks" SET .+ WHERE id = \$\d+ OR name = \$\d+`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	svc := scheduler.NewService(db, zap.NewNop(), nil, nil, nil, nil, nil, nil, nil, nil, nil, "", nil, nil, nil)
+	svc := scheduler.NewService(db, zap.NewNop(), nil, nil, nil, nil, nil, nil, nil, nil, "", nil, nil, nil)
 	if err := ensureDefaultTasks(svc, context.Background()); err != nil {
 		t.Fatalf("ensureDefaultTasks() error = %v", err)
 	}

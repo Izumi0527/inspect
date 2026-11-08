@@ -2989,13 +2989,14 @@ func (h InspectionHandler) checkDiskUsageMetric(result *inspection.Result, metri
 func (h InspectionHandler) checkBandwidthMetric(result *inspection.Result, metrics *devices.SNMPMetrics) {
 	result.ExpectedValue = stringPtr("完成入/出方向流量速率采集")
 
-	if metrics == nil || (metrics.BandwidthIn == nil && metrics.BandwidthOut == nil) {
+	if metrics == nil || len(metrics.Interfaces) == 0 {
 		result.Status = "skip"
 		result.Message = stringPtr("无法获取带宽数据")
 		return
 	}
 
-	// 采集端恒会写入 BandwidthIn/Out（首轮为 0），因此必须回看接口是否真有速率样本
+	// 采集端只在至少一个接口算出速率时才写总带宽：采到了接口却没有速率样本，说明还没有基线
+	// （首轮、基线过期或计数器回绕），不是取数失败，提示要与上面分开
 	hasRateSample := false
 	for _, iface := range metrics.Interfaces {
 		if iface.InRate != nil || iface.OutRate != nil {

@@ -128,7 +128,7 @@ func TestExportMonitoringReportCSV_TruncationKeepsNewestRows(t *testing.T) {
 //go:linkname buildMonitoringPDFInput github.com/your-org/inspect-system/backend-go/internal/monitoring.buildMonitoringPDFInput
 func buildMonitoringPDFInput(data monitoring.MonitoringReportData) pdfkit.MonitoringPDFInput
 
-// PDF 的采样粒度与 CSV 同源（报告数据里的桶宽），交给 pdfkit 渲染为页眉标签。
+// PDF 的采样粒度与 CSV 同源（报告数据里的桶宽），交给 pdfkit 并入两张趋势图的标题。
 func TestBuildMonitoringPDFInput_CarriesSampleInterval(t *testing.T) {
 	input := buildMonitoringPDFInput(monitoring.MonitoringReportData{
 		Sections:       []string{"charts"},

@@ -29,7 +29,6 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/reports"
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
-	"github.com/your-org/inspect-system/backend-go/internal/traffic"
 )
 
 const (
@@ -61,7 +60,6 @@ type Service struct {
 	snmpCollector   *devices.SNMPCollector
 	metricsWriter   *monitoring.MetricsWriter
 	settingsService *settings.Service
-	trafficService  *traffic.Service
 	reportService   *reports.Service
 	alertEvaluator  *alerts.Evaluator
 	trapAlertBridge *alerts.TrapAlertBridge
@@ -161,7 +159,6 @@ func NewService(
 	metricsWriter *monitoring.MetricsWriter,
 	redis *redis.Client,
 	settingsService *settings.Service,
-	trafficService *traffic.Service,
 	reportService *reports.Service,
 	reportOutputDir string,
 	alertEvaluator *alerts.Evaluator,
@@ -178,7 +175,6 @@ func NewService(
 		snmpCollector:   snmpCollector,
 		metricsWriter:   metricsWriter,
 		settingsService: settingsService,
-		trafficService:  trafficService,
 		reportService:   reportService,
 		alertEvaluator:  alertEvaluator,
 		trapAlertBridge: trapAlertBridge,
@@ -232,23 +228,41 @@ func (s *Service) Start() error {
 }
 
 // recoverStaleRunningTasks 将上次进程中断遗留的 running 任务重置为 pending，
-// 避免 processDueTasks（status<>running）永久跳过它们导致调度僵死停摆。
+// 避免 processDueTasks（status<>running）永久跳过它们导致调度僵死停摆；
+// 同时把这些任务中断时正在进行的执行记录收尾为 failed：它们等不到 finishTask
+// （进程崩溃，或停机时 ctx 已取消导致写库失败），否则执行历史里会永远挂着「执行中」。
 func (s *Service) recoverStaleRunningTasks(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("database not initialized")
 	}
+	now := time.Now().UTC()
 	result := s.db.WithContext(ctx).
 		Model(&ScheduledTask{}).
 		Where("status = ?", string(TaskStatusRunning)).
 		Updates(map[string]interface{}{
 			"status":     string(TaskStatusPending),
-			"updated_at": time.Now().UTC(),
+			"updated_at": now,
 		})
 	if result.Error != nil {
 		return result.Error
 	}
 	if result.RowsAffected > 0 && s.logger != nil {
 		s.logger.Info("已恢复僵死 running 任务", zap.Int64("count", result.RowsAffected))
+	}
+
+	executions := s.db.WithContext(ctx).
+		Model(&TaskExecution{}).
+		Where("status = ?", string(TaskStatusRunning)).
+		Updates(map[string]interface{}{
+			"status":        string(TaskStatusFailed),
+			"finished_at":   now,
+			"error_message": "服务重启前未执行完毕，执行已中断",
+		})
+	if executions.Error != nil {
+		return executions.Error
+	}
+	if executions.RowsAffected > 0 && s.logger != nil {
+		s.logger.Info("已收尾中断的 running 执行记录", zap.Int64("count", executions.RowsAffected))
 	}
 	return nil
 }
@@ -670,9 +684,12 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 	metricsCollected := 0
 
 	// Step 1: Connectivity check
+	// probeResults 供后续步骤复用：探测与指标采集、日志轮询面对同一批设备并使用同一份 SNMP 配置与超时，
+	// 本轮已确认无应答的设备不必再逐个请求等超时。未做探测时为 nil，后续步骤维持原有行为。
+	var probeResults map[int]devices.ProbeResult
 	if checkConnectivity {
-		results := s.probeService.BatchProbeDevices(ctx, targets, s.currentMaxConcurrent(ctx))
-		for _, result := range results {
+		probeResults = s.probeService.BatchProbeDevices(ctx, targets, s.currentMaxConcurrent(ctx))
+		for _, result := range probeResults {
 			inspectedCount++
 			if result.IcmpReachable {
 				onlineCount++
@@ -694,8 +711,17 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 	}
 
 	// Step 2: Collect detailed SNMP metrics (temperature, bandwidth, etc.)
+	// 本轮探测 SNMP 无应答的设备跳过：采集器对它的十几个采集阶段会逐个等满超时（实测 43 次×15s≈645s），
+	// 拖住整轮采集、第 3 步告警评估（离线告警因此晚 10 分钟以上）和下一轮。
+	metricsSkipped := 0
 	if collectMetrics && s.snmpCollector != nil && s.metricsWriter != nil {
-		metricsCollected = s.collectDeviceMetrics(ctx, devicesList, task.ID, total)
+		collectList, skipped := snmpCollectionTargets(devicesList, probeResults)
+		metricsSkipped = len(skipped)
+		if metricsSkipped > 0 && s.logger != nil {
+			s.logger.Info("skip SNMP metrics collection for devices whose SNMP probe failed in this round",
+				zap.Ints("device_ids", skipped))
+		}
+		metricsCollected = s.collectDeviceMetrics(ctx, collectList, task.ID, len(collectList))
 	}
 
 	// Step 3: Evaluate alert rules against collected metrics
@@ -721,6 +747,15 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 	trapAlertsCreated := 0
 	if s.logsService != nil && s.trapAlertBridge != nil && s.claimLogPoll(ctx, time.Now()) {
 		for _, device := range devicesList {
+			// 本轮 ICMP 与 SNMP 都无应答的设备不主动轮询：否则先等两次 SNMP walk 超时、再回退 SSH 等握手失败
+			// （实测约 4 分钟）。告警转换照常执行：设备掉线前推送的 trap 只在 10 分钟窗口内可转，跳过就补不回来。
+			if unreachableInRound(probeResults, device.ID) {
+				if s.logger != nil {
+					s.logger.Debug("skip alarm log polling for device unreachable in this round", zap.Int("device_id", device.ID))
+				}
+				trapAlertsCreated += s.convertLogsToAlerts(ctx, device.ID, device.IPAddress)
+				continue
+			}
 			trapsPushed, evidenceErr := s.logsService.HasPushedTrapsSince(ctx, device.ID, time.Now().Add(-trapPushEvidenceWindow))
 			if evidenceErr != nil && s.logger != nil {
 				s.logger.Debug("trap push evidence lookup failed", zap.Int("device_id", device.ID), zap.Error(evidenceErr))
@@ -763,6 +798,7 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 		"offline_count":       offlineCount,
 		"success_rate":        successRate,
 		"metrics_collected":   metricsCollected,
+		"metrics_skipped":     metricsSkipped,
 		"alerts_created":      alertsCreated + trapAlertsCreated,
 		"alerts_resolved":     alertsResolved,
 		"trap_alerts_created": trapAlertsCreated,
@@ -801,8 +837,9 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 			defer wg.Done()
 			defer func() { <-limit }()
 
-			// Skip devices without SNMP configuration
-			if device.SnmpCommunity == nil || strings.TrimSpace(*device.SnmpCommunity) == "" {
+			// 凭据不全的设备跳过（请求只会逐个等满超时）。按版本判定：v3 的凭据在 tags 里、没有 community，
+			// 此前按「community 为空」跳过，v3 设备因此从未被定时采集。
+			if devices.SNMPCredentialError(device.SnmpCommunity, device.SnmpVersion, device.SnmpPort, device.Tags) != "" {
 				return
 			}
 
@@ -1300,15 +1337,6 @@ func (s *Service) executeDataCleanup(ctx context.Context, task ScheduledTask) (m
 	}
 
 	if cleanupMetrics {
-		if s.trafficService != nil {
-			olderThanHours := retentionDays * 24
-			deleted, err := s.trafficService.CleanupData(ctx, olderThanHours)
-			if err != nil {
-				return nil, err
-			}
-			results["interface_metrics_deleted"] = deleted
-		}
-
 		tableResults, err := s.cleanupMetricsTables(ctx, metricsCutoff)
 		if err != nil {
 			return nil, err
@@ -2312,6 +2340,39 @@ func conditionalLastSeen(result devices.ProbeResult) *time.Time {
 		return &t
 	}
 	return nil
+}
+
+// snmpCollectionTargets 依据本轮探测结果筛出仍需做 SNMP 指标采集的设备，并返回因 SNMP 探测失败而跳过的设备 ID。
+// 探测与采集使用同一份 SNMP 配置与超时（见 devices.probeSNMP 注释），探测无应答时采集只会逐个阶段等超时。
+// probes 为 nil（本轮未做探测）或缺少某台设备的结果时，该设备照常采集；未配置 SNMP 的设备不算探测失败，
+// 原样交给采集循环，由凭据检查跳过（不发请求）。
+func snmpCollectionTargets(list []devices.Device, probes map[int]devices.ProbeResult) ([]devices.Device, []int) {
+	if probes == nil {
+		return list, nil
+	}
+	targets := make([]devices.Device, 0, len(list))
+	skipped := make([]int, 0)
+	for _, device := range list {
+		if result, ok := probes[device.ID]; ok && snmpProbeFailed(result) {
+			skipped = append(skipped, device.ID)
+			continue
+		}
+		targets = append(targets, device)
+	}
+	return targets, skipped
+}
+
+// snmpProbeFailed 报告本轮 SNMP 探测确实发出了请求却没有拿到应答；凭据不全（未配置 SNMP）不算失败。
+func snmpProbeFailed(result devices.ProbeResult) bool {
+	_, _, snmpStatus := buildProbeStatuses(result)
+	return snmpStatus == "failed"
+}
+
+// unreachableInRound 报告设备在本轮探测中 ICMP 与 SNMP 都无应答，且 SNMP 确实发出了请求。
+// 未配置 SNMP 的设备探测必然「失败」，它可能只靠 SSH 取日志，不能据此判为不可达。
+func unreachableInRound(probes map[int]devices.ProbeResult, deviceID int) bool {
+	result, ok := probes[deviceID]
+	return ok && !result.IcmpReachable && snmpProbeFailed(result)
 }
 
 func defaultDiskPath() string {

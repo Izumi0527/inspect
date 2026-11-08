@@ -8,16 +8,17 @@ import (
 
 // The monitoring PDF charts must mirror the frontend's device color memory:
 // DEVICE_SERIES_COLORS in frontend/src/features/monitoring/utils/monitoring.ts
-// (cyan-600, sky-500, green-500, amber-500, red-500). This test pins the PDF
+// (blue, orange, teal, gold, magenta — validated with the dataviz palette checker
+// on both the light #ffffff and dark #191f23 card surfaces). This test pins the PDF
 // end of that cross-end contract so a future palette edit cannot silently
 // drift the two ends apart.
 func TestDeviceSeriesPalette_MirrorsFrontendColors(t *testing.T) {
 	want := []pdfkit.Color{
-		{8, 145, 178},  // cyan-600  #0891B2
-		{14, 165, 233}, // sky-500   #0EA5E9
-		{34, 197, 94},  // green-500 #22C55E
-		{245, 158, 11}, // amber-500 #F59E0B
-		{239, 68, 68},  // red-500   #EF4444
+		{57, 135, 229}, // blue    #3987E5
+		{217, 89, 38},  // orange  #D95926
+		{25, 158, 112}, // teal    #199E70
+		{201, 133, 0},  // gold    #C98500
+		{213, 81, 129}, // magenta #D55181
 	}
 	got := pdfkit.DeviceSeriesPalette
 	if len(got) != len(want) {

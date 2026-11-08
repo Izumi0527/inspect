@@ -849,6 +849,7 @@ func (c *SNMPCollector) collectInterfaces(
 
 	var totalInRate float64
 	var totalOutRate float64
+	ratedInterfaces := 0
 	for idx, iface := range interfaces {
 		if iface.InOctets == nil || iface.OutOctets == nil {
 			continue
@@ -914,6 +915,7 @@ func (c *SNMPCollector) collectInterfaces(
 				iface.OutRate = &outRateBps
 				totalInRate += inRateBps
 				totalOutRate += outRateBps
+				ratedInterfaces++
 			}
 		} else {
 			lastCache[idx] = octetsCache{
@@ -932,8 +934,12 @@ func (c *SNMPCollector) collectInterfaces(
 	}
 	c.mu.Unlock()
 
-	metrics.BandwidthIn = &totalInRate
-	metrics.BandwidthOut = &totalOutRate
+	// 没有任何接口算出速率（重启后首轮、长时间未采集后重建基线、计数器回绕）时不写总带宽：
+	// 写 0 会把「本轮没有数据」伪装成「流量为 0」，聚合流量图在这些时间点掉到 0。
+	if ratedInterfaces > 0 {
+		metrics.BandwidthIn = &totalInRate
+		metrics.BandwidthOut = &totalOutRate
+	}
 
 	for _, iface := range interfaces {
 		metrics.Interfaces = append(metrics.Interfaces, *iface)

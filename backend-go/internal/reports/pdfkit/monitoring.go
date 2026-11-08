@@ -191,9 +191,67 @@ func chartTitleWithInterval(title string, sampleInterval string) string {
 	return title
 }
 
+// trafficLineSpec 构造流量趋势图。输入恒为 Mbps；按两条序列的峰值选择显示单位并换算数值，
+// 固定按 Mbps 画时，Kbps 级流量的纵轴刻度（两位小数）全是 0.00。
+func trafficLineSpec(traffic []NetworkTrafficPoint, sampleInterval string) LineSpec {
+	peak := 0.0
+	for _, p := range traffic {
+		if p.Inbound > peak {
+			peak = p.Inbound
+		}
+		if p.Outbound > peak {
+			peak = p.Outbound
+		}
+	}
+	unit, factor := trafficDisplayUnit(peak)
+
+	labels := make([]string, len(traffic))
+	inValues := make([]float64, len(traffic))
+	outValues := make([]float64, len(traffic))
+	for i, p := range traffic {
+		labels[i] = shortenTimestamp(p.Timestamp)
+		inValues[i] = p.Inbound * factor
+		outValues[i] = p.Outbound * factor
+	}
+	return LineSpec{
+		Title:   chartTitleWithInterval(fmt.Sprintf("流量 (%s)", unit), sampleInterval),
+		XLabels: labels,
+		Series: []LineSeries{
+			{Name: "下行", Color: ColorTrafficDown, Values: inValues},
+			{Name: "上行", Color: ColorTrafficUp, Values: outValues},
+		},
+	}
+}
+
+// trafficDisplayUnit 返回峰值（Mbps）对应的显示单位与换算系数，分档与 formatBandwidthBps 一致；
+// 全为 0 时沿用 Mbps。
+func trafficDisplayUnit(peakMbps float64) (string, float64) {
+	switch {
+	case peakMbps <= 0:
+		return "Mbps", 1
+	case peakMbps < 0.001:
+		return "bps", 1_000_000
+	case peakMbps < 1:
+		return "Kbps", 1_000
+	case peakMbps < 1_000:
+		return "Mbps", 1
+	default:
+		return "Gbps", 0.001
+	}
+}
+
 func renderMonitoringCharts(pdf *gofpdf.Fpdf, perfLabels []string, devices []DevicePerformanceSeries, traffic []NetworkTrafficPoint, sampleInterval string) {
+	left, _, _, _ := pdf.GetMargins()
+	usable := UsableWidth(pdf)
+	perfChartH := usable * 0.45
+	trafficChartH := usable * 0.4
+
+	hasPerf := len(devices) > 0 && len(perfLabels) > 0
+	if hasPerf {
+		ensureSpace(pdf, sectionTitleHeight+perfChartH)
+	}
 	SectionTitle(pdf, "性能趋势")
-	if len(devices) == 0 || len(perfLabels) == 0 {
+	if !hasPerf {
 		EmptyStateWithHint(pdf, "暂无系统性能数据", "请扩大时间范围或检查设备采集状态")
 	} else {
 		shown := devices
@@ -218,46 +276,36 @@ func renderMonitoringCharts(pdf *gofpdf.Fpdf, perfLabels []string, devices []Dev
 		}
 		spec := LineSpec{Title: chartTitleWithInterval(title, sampleInterval), XLabels: labels, Series: series, NoFill: true}
 		if png, err := RenderLineChart(spec); err == nil {
-			pageW, _ := pdf.GetPageSize()
-			left, _, right, _ := pdf.GetMargins()
-			usable := pageW - left - right
-			h := usable * 0.45
 			y := pdf.GetY()
-			_ = EmbedChart(pdf, png, left, y, usable, h)
-			pdf.SetY(y + h + 4)
+			_ = EmbedChart(pdf, png, left, y, usable, perfChartH)
+			pdf.SetY(y + perfChartH + 4)
 		}
 	}
 
 	pdf.Ln(SpaceSM)
+	if len(traffic) > 0 {
+		ensureSpace(pdf, sectionTitleHeight+trafficChartH)
+	}
 	SectionTitle(pdf, "网络流量")
 	if len(traffic) == 0 {
 		EmptyStateWithHint(pdf, "暂无网络流量数据", "采样间隔可能过短或链路当前空闲")
 		return
 	}
-	labels := make([]string, len(traffic))
-	inValues := make([]float64, len(traffic))
-	outValues := make([]float64, len(traffic))
-	for i, p := range traffic {
-		labels[i] = shortenTimestamp(p.Timestamp)
-		inValues[i] = p.Inbound
-		outValues[i] = p.Outbound
-	}
-	spec := LineSpec{
-		Title:   chartTitleWithInterval("流量 (Mbps)", sampleInterval),
-		XLabels: labels,
-		Series: []LineSeries{
-			{Name: "下行", Color: ColorTrafficDown, Values: inValues},
-			{Name: "上行", Color: ColorTrafficUp, Values: outValues},
-		},
-	}
+	spec := trafficLineSpec(traffic, sampleInterval)
 	if png, err := RenderLineChart(spec); err == nil {
-		pageW, _ := pdf.GetPageSize()
-		left, _, right, _ := pdf.GetMargins()
-		usable := pageW - left - right
-		h := usable * 0.4
 		y := pdf.GetY()
-		_ = EmbedChart(pdf, png, left, y, usable, h)
-		pdf.SetY(y + h + 4)
+		_ = EmbedChart(pdf, png, left, y, usable, trafficChartH)
+		pdf.SetY(y + trafficChartH + 4)
+	}
+}
+
+// ensureSpace 在剩余高度不足 needMM 时先换页。图表以绝对坐标嵌入，不会触发 gofpdf 的自动分页，
+// 放不下时图片会越过底边距压住页脚；调用方在节标题之前按「标题 + 图表」检查，标题随图表一起换页。
+func ensureSpace(pdf *gofpdf.Fpdf, needMM float64) {
+	_, pageH := pdf.GetPageSize()
+	_, bottom := pdf.GetAutoPageBreak()
+	if pdf.GetY()+needMM > pageH-bottom {
+		pdf.AddPage()
 	}
 }
 

@@ -15,7 +15,7 @@
 
 ## 1. 系统定位
 
-企业级网络设备巡检系统用于统一管理网络设备、采集监控指标、执行巡检策略、生成巡检与监控报告，并提供告警、日志、流量分析和系统设置能力。
+企业级网络设备巡检系统用于统一管理网络设备、采集监控指标、执行巡检策略、生成巡检与监控报告，并提供告警、日志和系统设置能力。
 
 系统核心目标：
 
@@ -52,7 +52,7 @@ flowchart TB
 | 前端基础层 | `frontend/src/lib`、`frontend/src/services` | API 客户端、认证上下文、WebSocket、HTTP 拦截器、日志工具 |
 | HTTP 接入层 | `backend-go/internal/http` | Echo 路由、中间件、错误处理、请求追踪、CORS、处理器注册 |
 | 应用编排层 | `backend-go/internal/app` | 加载配置、初始化依赖、组装服务、启动后台任务和 HTTP 服务 |
-| 业务服务层 | `backend-go/internal/*` | 设备、监控、巡检、报表、告警、设置、日志、流量分析等领域逻辑 |
+| 业务服务层 | `backend-go/internal/*` | 设备、监控、巡检、报表、告警、设置、日志等领域逻辑 |
 | 数据访问层 | `backend-go/internal/db`、GORM 模型 | PostgreSQL 连接、迁移、事务、查询和 TimescaleDB 支撑 |
 | 缓存与实时层 | `backend-go/internal/redis`、`backend-go/internal/ws` | Redis 客户端、监控缓存、下载票据、WebSocket 连接与广播 |
 | 外部协议层 | `devices`、`logs`、`snmpmib` | SNMP、Trap、Syslog、设备探测、厂商 OID 注册表、华为告警知识库（`huawei-alarms.json`，由 `scripts/mib/extract-huawei-alarms.py` 从产品文档生成） |
@@ -134,7 +134,6 @@ C:\Coder\Inspect
 │  ├─ internal/settings/       系统设置、通知、备份、监控配置
 │  ├─ internal/dashboard/      首页聚合和通知状态
 │  ├─ internal/logs/           系统日志、Syslog、SNMP Trap、设备告警缓冲采集（SNMP 优先、SSH 兜底）
-│  ├─ internal/traffic/        流量分析
 │  ├─ internal/ws/             WebSocket 连接、权限、广播
 │  ├─ internal/snmpmib/        SNMP MIB / 厂商 OID 注册表
 │  ├─ internal/db/             数据库连接与迁移
@@ -252,7 +251,6 @@ Echo 服务统一配置：
 | `SettingsHandler` | `/settings` | 系统设置、用户、角色、审计、通知等 |
 | `DashboardHandler` | `/dashboard` | 首页概览、通知和快捷状态 |
 | `LogsHandler` | `/logs` | 日志查询、采集、导出、Syslog/Trap 配置 |
-| `TrafficHandler` | `/traffic` | 流量分析 |
 
 ### 5.4 后端领域模块边界
 
@@ -267,7 +265,6 @@ Echo 服务统一配置：
 | 系统设置 | `settings` | 负责配置读取、保存、通知、备份、监控设置等 |
 | 首页看板 | `dashboard` | 负责首页聚合数据、通知状态、孤儿数据过滤 |
 | 日志中心 | `logs` | 负责应用日志、Syslog、SNMP Trap、日志导出 |
-| 流量分析 | `traffic` | 负责网络流量数据分析和接口输出 |
 | 实时通信 | `ws` | 负责 WebSocket 鉴权、连接、订阅、广播和权限控制 |
 | SNMP MIB | `snmpmib` | 负责嵌入式厂商 OID 注册表和解析 |
 
@@ -351,8 +348,7 @@ frontend/src/features/
 ├─ logs
 ├─ monitoring
 ├─ reports
-├─ settings
-└─ traffic-analysis
+└─ settings
 ```
 
 模块职责：
@@ -367,7 +363,6 @@ frontend/src/features/
 | `reports` | 报表分析、统计报表、趋势分析 |
 | `settings` | 用户、角色、权限、安全、通知、备份、监控配置 |
 | `logs` | 日志列表、日志采集、日志导出、日志配置 |
-| `traffic-analysis` | 网络流量分析视图 |
 
 ### 6.3 HTTP 客户端
 
