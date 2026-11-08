@@ -22,8 +22,8 @@ export const EmptyLinksHint: React.FC<{ nodes: TopologyNode[] }> = ({ nodes }) =
       <p className="flex items-center gap-2">
         <Link2Off className="h-4 w-4 shrink-0" />
         {diagnosed
-          ? '尚未发现 LLDP 链路，采集已定位到以下原因；采集每 3 分钟自动刷新。'
-          : '尚未发现 LLDP 链路：请确认设备已全局启用 LLDP，且 SNMP 视图放行 1.0.8802.1.1.2；采集每 3 分钟自动刷新。'}
+          ? '尚未发现 LLDP 链路，采集已定位到以下原因；采集每 5 分钟自动刷新。'
+          : '尚未发现 LLDP 链路：请确认设备已全局启用 LLDP，且 SNMP 视图放行 1.0.8802.1.1.2；采集每 5 分钟自动刷新。'}
       </p>
       {unreachable.length > 0 && (
         <div className="pl-6">

@@ -23,7 +23,7 @@ func TestGetDevicePerformanceHistory_DropsRowsOfDeletedDevices(t *testing.T) {
 	start := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 	end := start.Add(time.Hour)
 
-	mock.ExpectQuery(`(?is)SELECT time_bucket\('3 minutes', collected_at\).*GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
+	mock.ExpectQuery(`(?is)SELECT time_bucket\('5 minutes', collected_at\).*GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "device_id", "metric_name", "value"}).
 			AddRow(start, 6, "cpu_usage", 10.0).
 			AddRow(start, 6, "memory_usage", 40.0).
@@ -66,7 +66,7 @@ func TestGetDevicePerformanceHistory_AllRowsDeleted_ReturnsEmpty(t *testing.T) {
 	start := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 	end := start.Add(time.Hour)
 
-	mock.ExpectQuery(`(?is)SELECT time_bucket\('3 minutes', collected_at\).*GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
+	mock.ExpectQuery(`(?is)SELECT time_bucket\('5 minutes', collected_at\).*GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "device_id", "metric_name", "value"}).
 			AddRow(start, 6, "cpu_usage", 10.0))
 
@@ -94,7 +94,7 @@ func TestGetTemperatureHistory_DropsRowsOfDeletedDevices(t *testing.T) {
 	start := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 	end := start.Add(time.Hour)
 
-	mock.ExpectQuery(`(?is)SELECT time_bucket\('3 minutes', collected_at\) AS bucket, device_id, AVG\(metric_value\) AS value FROM device_metrics WHERE metric_name = \$1 AND collected_at >= \$2 AND collected_at <= \$3 GROUP BY bucket, device_id ORDER BY bucket ASC`).
+	mock.ExpectQuery(`(?is)SELECT time_bucket\('5 minutes', collected_at\) AS bucket, device_id, AVG\(metric_value\) AS value FROM device_metrics WHERE metric_name = \$1 AND collected_at >= \$2 AND collected_at <= \$3 GROUP BY bucket, device_id ORDER BY bucket ASC`).
 		WithArgs("temperature", start, end).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "device_id", "value"}).
 			AddRow(start, 6, 41.0).

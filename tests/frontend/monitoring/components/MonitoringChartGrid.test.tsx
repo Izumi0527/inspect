@@ -15,9 +15,9 @@ beforeAll(() => {
   })
 })
 
-/** 采样间隔 3 分钟：数据点落在 3 分钟网格上 */
+/** 采样间隔 5 分钟：数据点落在 5 分钟网格上 */
 const timestamps = Array.from({ length: 11 }, (_, i) =>
-  new Date(Date.UTC(2026, 10, 4, 2, 0) + i * 3 * 60_000).toISOString()
+  new Date(Date.UTC(2026, 10, 4, 2, 0) + i * 5 * 60_000).toISOString()
 )
 
 const systemPerformance: SystemPerformanceDataPoint[] = timestamps.map((timestamp, i) => ({

@@ -22,7 +22,7 @@ func TestMonitoringServiceStats_TaskIDMatchesScheduler(t *testing.T) {
 	}
 }
 
-// is_running 取采集任务的启用状态、monitor_interval 取真实采集节奏（180 秒），
+// is_running 取采集任务的启用状态、monitor_interval 取真实采集节奏（300 秒），
 // 不再读取从未被调度器消费的系统设置 monitoring_service_enabled / monitoring_service_interval。
 func TestMonitoringServiceStats_ReportsCollectionTaskState(t *testing.T) {
 	db, mock, cleanup := newSchedulerGormDBWithSQLMock(t)

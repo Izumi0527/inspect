@@ -15,7 +15,7 @@ interface MonitoringTimeRangeBarProps {
  *
  * - 快捷时间键：8 档一键切换（1h/3h/6h/12h/24h/3d/7d/14d），当前档位用 aria-pressed 标记
  * - 下拉：与快捷时间键同源同值（供键盘操作与窄屏使用），保证全页只有这一个时间范围入口
- * - 采样间隔提示：后端对每个档位都固定 3 分钟分桶（与采集节奏一致），明示避免把"曲线变密"误读为数据异常
+ * - 采样间隔提示：后端对每个档位都固定 5 分钟分桶（与采集节奏一致），明示避免把"曲线变密"误读为数据异常
  */
 export function MonitoringTimeRangeBar({ timeRange, onTimeRangeChange }: MonitoringTimeRangeBarProps) {
   return (

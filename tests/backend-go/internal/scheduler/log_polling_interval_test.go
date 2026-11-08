@@ -8,7 +8,7 @@ import (
 	_ "github.com/your-org/inspect-system/backend-go/internal/scheduler"
 )
 
-// 设备日志轮询门控（任务 D2）：巡检任务每 3 分钟一轮，但告警日志轮询要 SSH 登录设备、
+// 设备日志轮询门控（任务 D2）：巡检任务每 5 分钟一轮，但告警日志轮询要 SSH 登录设备、
 // 在设备上留下登录日志并被下一轮采回，因此单独按 logs.polling.interval_minutes 限频，
 // 距上次轮询不足间隔就跳过；设置值可能以 int / float64 / 字符串等形态从配置表读出。
 

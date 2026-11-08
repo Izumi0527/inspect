@@ -505,7 +505,7 @@ func (w *MetricsWriter) GetBulkMetricsHistory(
 }
 
 // GetTemperatureHistory 查询按设备区分的温度时序；deviceIDs 非空时仅返回所选设备。
-// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 3 分钟。
+// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 5 分钟。
 func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]TemperatureHistoryPoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -594,7 +594,7 @@ type devicePerformanceRow struct {
 
 // GetDevicePerformanceHistory 查询按设备区分的 CPU/内存趋势；deviceIDs 非空时仅返回所选设备。
 // 故意不回退主机级 system_metrics：按设备视图无处挂载。
-// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 3 分钟。
+// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 5 分钟。
 func (w *MetricsWriter) GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]DevicePerformancePoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -698,7 +698,7 @@ func aggregateTrafficQuery(interval string, deviceFilter string) string {
 }
 
 // GetNetworkTrafficHistory 查询网络流量时序；deviceIDs 非空时仅聚合所选设备。
-// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 3 分钟。
+// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 5 分钟。
 func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]NetworkTrafficPoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -787,13 +787,13 @@ func normalizeStatusBucket(status string) string {
 	}
 }
 
-// DashboardSampleInterval 是监控中心页统一的采样间隔（3 分钟）。
+// DashboardSampleInterval 是监控中心页统一的采样间隔（5 分钟）。
 // 页面所有时间档位（1h/3h/6h/12h/24h/3d/7d/14d）都按它分桶，使各档位点位密度一致、
-// 曲线可直接横向比对；它与采集任务的节奏（scheduler.MetricsCollectionInterval，cron */3）
+// 曲线可直接横向比对；它与采集任务的节奏（scheduler.MetricsCollectionInterval，cron */5）
 // 相等，每个桶恰好覆盖一次采集，桶内不会出现 1~2 个样本的忽多忽少。
 // 长时段的其他消费者（报告导出、流量分析）用 AutoBucket 按点数预算分档，
 // 避免数据量与 PDF/CSV 渲染成本随范围线性膨胀。
-const DashboardSampleInterval = 3 * time.Minute
+const DashboardSampleInterval = 5 * time.Minute
 
 // AutoBucket 表示「按时间范围自动分档」，桶宽交给 bucketSizeForRange（0 值语义）。
 const AutoBucket time.Duration = 0
@@ -803,10 +803,10 @@ const AutoBucket time.Duration = 0
 const autoBucketMaxPoints = 360
 
 // autoBucketLadder 是 AutoBucket 可选的桶宽阶梯，全部是 DashboardSampleInterval 的整数倍，
-// 使每个桶恰好包含整数个采集样本（5 分钟这类非整倍数桶会让桶内样本数在 1~2 之间交替）。
+// 使每个桶恰好包含整数个采集样本（7、8 分钟这类非整倍数桶会让桶内样本数在 1~2 之间交替）。
 var autoBucketLadder = []time.Duration{
-	3 * time.Minute,
-	6 * time.Minute,
+	5 * time.Minute,
+	10 * time.Minute,
 	15 * time.Minute,
 	30 * time.Minute,
 	time.Hour,
@@ -858,8 +858,8 @@ func shouldUseHourlyAggregate(start time.Time, end time.Time) bool {
 	return end.Sub(start) >= 48*time.Hour
 }
 
-// latestSampleWindow 统计卡"最近一轮采集"的新鲜窗口：15 分钟 ≈ 5 个采集周期（3 分钟一轮），
-// 允许连续缺采约 4 轮仍能取到"最近一次采集值"。
+// latestSampleWindow 统计卡"最近一轮采集"的新鲜窗口：15 分钟 ≈ 3 个采集周期（5 分钟一轮），
+// 允许连续缺采约 2 轮仍能取到"最近一次采集值"。
 const latestSampleWindow = 15 * time.Minute
 
 // LatestMetricAverageWithFallback 导出"最近一轮采集均值"口径查询，供总览等模块复用：

@@ -470,7 +470,7 @@ type InterfaceSpeedUpdate struct {
 // writeDeviceIdentityIfChanged 把采集到的型号/软件版本/LLDP 身份与状态回填设备档案。
 //
 // 只写差异：WHERE 子句带 "值为空或与新值不同" 的条件，取值稳定时不产生任何 UPDATE，
-// 因此不会让每 3 分钟一轮的采集持续刷新 devices.updated_at。
+// 因此不会让每 5 分钟一轮的采集持续刷新 devices.updated_at。
 // 失败仅记日志——设备档案是锦上添花，不能连累已落库的核心指标快照。
 func writeDeviceIdentityIfChanged(tx *gorm.DB, deviceID int, identity *DeviceIdentity, logger *zap.Logger) {
 	if identity == nil || deviceID <= 0 {

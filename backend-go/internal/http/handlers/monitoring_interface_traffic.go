@@ -44,7 +44,7 @@ func (h MonitoringHandler) GetDeviceInterfaceTraffic(c echo.Context) error {
 		startTime,
 		endTime,
 		strings.TrimSpace(c.QueryParam("interface")),
-		// 该端点只服务监控中心流量卡的接口视图，跟随页面统一 3 分钟采样
+		// 该端点只服务监控中心流量卡的接口视图，跟随页面统一 5 分钟采样
 		monitoring.DashboardSampleInterval,
 	)
 	if err != nil {

@@ -30,7 +30,7 @@ func TestGetNetworkTrafficHistory_ShouldAverageWithinDeviceBucketThenSumAcrossDe
 	end := start.Add(24 * time.Hour)
 	bucket := start.Add(5 * time.Minute)
 
-	mock.ExpectQuery(sprintfPattern(aggregateTrafficQueryPattern, "6 minutes", ` AND device_id IN \(\$3,\$4\)`)).
+	mock.ExpectQuery(sprintfPattern(aggregateTrafficQueryPattern, "5 minutes", ` AND device_id IN \(\$3,\$4\)`)).
 		WithArgs(start, end, 1, 2).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "inbound", "outbound"}).
 			AddRow(bucket, 3_000_000.0, 1_000_000.0))

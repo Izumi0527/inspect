@@ -1446,7 +1446,7 @@ func (s *Service) nextRun(expression string, from time.Time) (time.Time, error) 
 // 采集任务的身份与节奏常量。
 //
 // 历史背景：Python→Go 迁移时把采集节奏写进了任务 ID（metrics_collection_5min），而任务的 cron
-// 与名称自始至终都是 3 分钟，三者从第一天起就不一致；ID 又是主键、被 task_executions.task_id
+// 与名称迁移时都是 3 分钟，三者从第一天起就不一致；ID 又是主键、被 task_executions.task_id
 // 软引用，改一次节奏就要迁移主键。现在 ID 只表达身份、不含节奏，节奏统一由
 // MetricsCollectionInterval 派生（cron 与显示名都从它生成）；页面采样间隔
 // （monitoring.DashboardSampleInterval）必须与它相等，由跨包守卫测试把关。
@@ -1456,7 +1456,7 @@ const (
 	// metricsCollectionTaskLegacyID 迁移前的历史 ID，仅在 migrateMetricsCollectionTaskID 中使用
 	metricsCollectionTaskLegacyID = "metrics_collection_5min"
 	// MetricsCollectionInterval 指标采集节奏：任务 cron、任务显示名、监控页采样间隔都对齐它
-	MetricsCollectionInterval = 3 * time.Minute
+	MetricsCollectionInterval = 5 * time.Minute
 )
 
 // migrateMetricsCollectionTaskID 把历史遗留的采集任务 ID 改成不含节奏的稳定 ID。
@@ -1652,6 +1652,20 @@ func (s *Service) ensureDefaultTasks(ctx context.Context) error {
 			}
 			continue
 		}
+		if seed.ID == MetricsCollectionTaskID {
+			// 旧 ID 行还在说明上面的迁移没有完成（失败已记 Warn）：旧任务本轮照旧运行，下次启动重试迁移。
+			// 旧行名称带着当时的节奏，节奏改过后按新名称匹配不到它；此时新建会变成双份采集，
+			// 而且下次启动迁移会因新旧 ID 并存拒绝改名，双任务就永久保留下来。
+			var legacyCount int64
+			if err := s.db.WithContext(ctx).Model(&ScheduledTask{}).
+				Where("id = ?", metricsCollectionTaskLegacyID).
+				Count(&legacyCount).Error; err != nil {
+				return err
+			}
+			if legacyCount > 0 {
+				continue
+			}
+		}
 
 		config := seed.Config
 		if config == nil {
@@ -1709,7 +1723,7 @@ func (s *Service) updateMetricsCollectionTask(ctx context.Context, seed defaultT
 	// 更新指标采集任务的 cron 表达式和名称
 	nextRun, err := s.nextRun(seed.CronExpression, now)
 	if err != nil {
-		nextRun = now.Add(3 * time.Minute)
+		nextRun = now.Add(MetricsCollectionInterval)
 	}
 
 	// 同步 config（如 check_connectivity 开关）；原实现只更 cron/name，

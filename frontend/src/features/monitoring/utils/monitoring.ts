@@ -16,12 +16,13 @@ export const TIME_RANGE_OPTIONS = [
 export const DEFAULT_TIME_RANGE = '1h'
 
 /**
- * 监控中心页统一采样间隔（分钟）：后端对 1h~14d 所有档位都按 3 分钟分桶，
- * 与采集任务节奏（scheduler.MetricsCollectionInterval，cron 每 3 分钟）相等，每个桶正好一次采集。
+ * 监控中心页统一采样间隔（分钟）：后端对 1h~14d 所有档位都按 5 分钟分桶，
+ * 与采集任务节奏（scheduler.MetricsCollectionInterval，cron 每 5 分钟）相等，每个桶正好一次采集。
  * 改这里必须同步 backend-go/internal/monitoring/queries.go 的 DashboardSampleInterval 与
- * scheduler 的 MetricsCollectionInterval（跨包一致性有守卫测试），此处仅用于界面提示。
+ * scheduler 的 MetricsCollectionInterval（跨包一致性有守卫测试），此处仅用于界面提示；
+ * 总览拓扑的 EmptyLinksHint 文案也写了采集节奏，需一并修改。
  */
-export const MONITORING_SAMPLE_INTERVAL_MINUTES = 3
+export const MONITORING_SAMPLE_INTERVAL_MINUTES = 5
 
 export const MONITORING_SECTION_LABELS: Record<MonitoringSectionKey, string> = {
   stats: '关键指标',
@@ -35,20 +36,21 @@ export function resolveTimeRangeLabel(timeRange: string): string {
 }
 
 /**
- * 数据陈旧阈值（毫秒）：所有档位统一 10 分钟。
- * 采样间隔统一为 3 分钟后，长档位不再有"小时级聚合桶"，原 3d/7d 的 2 小时阈值失去依据；
- * 采集侧每 3 分钟一轮，10 分钟可容忍约三轮采集缺失与网络抖动。
+ * 数据陈旧阈值（毫秒）：所有档位统一 15 分钟。
+ * 页面各档位统一按采样间隔分桶后，长档位不再有"小时级聚合桶"，原 3d/7d 的 2 小时阈值失去依据；
+ * 采集侧每 5 分钟一轮，15 分钟可完整容忍一轮采集缺失与网络抖动；数据年龄从最新桶的起点算，
+ * 连续缺两轮时会在第三轮数据到达前短暂提示。
  */
-export const MONITORING_DATA_STALE_THRESHOLD_MS = 10 * 60 * 1000
+export const MONITORING_DATA_STALE_THRESHOLD_MS = 15 * 60 * 1000
 
 /**
  * X 轴刻度步长（分钟）：每档约 12 个刻度，且步长必须同时满足两个条件：
  * ① 整除 24 小时 → 按 epoch 对齐，刻度落在整点、整 12 点等自然边界；
- * ② 是采样间隔（3 分钟）的整倍数 → 刻度点上真的有数据（5、10 这类步长会落空，
+ * ② 是采样间隔（5 分钟）的整倍数 → 刻度点上真的有数据（3、6 这类步长会落空，
  *    只剩公倍数位置有标签，曲线看起来"少了一大截"）。
  */
 const TICK_STEP_MINUTES_BY_RANGE: Readonly<Record<string, number>> = {
-  '1h': 6,
+  '1h': 5,
   '3h': 15,
   '6h': 30,
   '12h': 60,

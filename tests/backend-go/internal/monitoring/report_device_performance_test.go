@@ -24,8 +24,8 @@ func TestExportMonitoringReportCSV_ChartsSection_ListsPerformancePerDevice(t *te
 
 	bucket := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
 
-	// 24h → 6 分钟桶（点数预算 360 内对齐 3 分钟采集的最小桶）：按设备性能查询 + 设备名查询
-	mock.ExpectQuery(`(?is)SELECT time_bucket\('6 minutes', collected_at\) AS bucket, device_id, metric_name, AVG\(metric_value\) AS value FROM device_metrics WHERE metric_name IN \(\$1,\$2\) AND collected_at >= \$3 AND collected_at <= \$4 GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
+	// 24h → 5 分钟桶（点数预算 360 内对齐 5 分钟采集的最小桶）：按设备性能查询 + 设备名查询
+	mock.ExpectQuery(`(?is)SELECT time_bucket\('5 minutes', collected_at\) AS bucket, device_id, metric_name, AVG\(metric_value\) AS value FROM device_metrics WHERE metric_name IN \(\$1,\$2\) AND collected_at >= \$3 AND collected_at <= \$4 GROUP BY bucket, device_id, metric_name ORDER BY bucket ASC`).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "device_id", "metric_name", "value"}).
 			AddRow(bucket, 1, "cpu_usage", 10.0).
 			AddRow(bucket, 1, "memory_usage", 40.0).
@@ -37,7 +37,7 @@ func TestExportMonitoringReportCSV_ChartsSection_ListsPerformancePerDevice(t *te
 			AddRow(1, "SW-01", "10.0.0.1", 1).
 			AddRow(2, "SW-02", "10.0.0.2", 1))
 	// 网络流量查询：只读 device_metrics，桶内按设备 AVG 再跨设备 SUM（返回空）
-	mock.ExpectQuery(`(?is)SELECT bucket, SUM\(inbound\) AS inbound, SUM\(outbound\) AS outbound FROM \(SELECT time_bucket\('6 minutes', collected_at\) AS bucket, device_id, AVG\(.*FROM device_metrics WHERE .*GROUP BY bucket, device_id\) AS per_device GROUP BY bucket ORDER BY bucket ASC`).
+	mock.ExpectQuery(`(?is)SELECT bucket, SUM\(inbound\) AS inbound, SUM\(outbound\) AS outbound FROM \(SELECT time_bucket\('5 minutes', collected_at\) AS bucket, device_id, AVG\(.*FROM device_metrics WHERE .*GROUP BY bucket, device_id\) AS per_device GROUP BY bucket ORDER BY bucket ASC`).
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "inbound", "outbound"}))
 
 	result, err := writer.ExportMonitoringReport(context.Background(), monitoring.MonitoringReportExportRequest{
@@ -58,6 +58,7 @@ func TestExportMonitoringReportCSV_ChartsSection_ListsPerformancePerDevice(t *te
 		"timestamp,device_name,cpu_usage,memory_usage",
 		"2026-09-06T12:00:00Z,SW-01,10.00,40.00",
 		"2026-09-06T12:00:00Z,SW-02,20.00,50.00",
+		"采样粒度,5 分钟",
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("CSV 缺少 %q，内容：\n%s", want, content)
@@ -71,7 +72,7 @@ func TestExportMonitoringReportCSV_ChartsSection_ListsPerformancePerDevice(t *te
 	}
 }
 
-// 报告必须写明实际采样粒度（与页面的 3 分钟可能不同），粒度取自查询真正使用的桶宽。
+// 报告必须写明实际采样粒度（与页面的 5 分钟可能不同），粒度取自查询真正使用的桶宽。
 func TestExportMonitoringReportCSV_StatesSampleInterval(t *testing.T) {
 	db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
 	defer cleanup()
@@ -103,13 +104,13 @@ func TestExportMonitoringReportCSV_TruncationKeepsNewestRows(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"bucket", "inbound", "outbound"})
 	const total = 501
 	for i := 0; i < total; i++ {
-		rows.AddRow(base.Add(time.Duration(i)*6*time.Minute), float64(i), 0.0)
+		rows.AddRow(base.Add(time.Duration(i)*5*time.Minute), float64(i), 0.0)
 	}
 	mock.ExpectQuery(`(?is)AS per_device GROUP BY bucket`).WillReturnRows(rows)
 
 	content := exportReportCSV(t, writer, "24h")
 	oldest := base.Format(time.RFC3339Nano)
-	newest := base.Add(time.Duration(total-1) * 6 * time.Minute).Format(time.RFC3339Nano)
+	newest := base.Add(time.Duration(total-1) * 5 * time.Minute).Format(time.RFC3339Nano)
 	if strings.Contains(content, oldest+",") {
 		t.Fatalf("CSV 仍包含最旧一行 %s，应保留最新 500 行", oldest)
 	}

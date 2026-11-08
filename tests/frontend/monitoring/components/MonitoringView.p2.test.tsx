@@ -143,7 +143,7 @@ describe('MonitoringView - WS 健康度与数据新鲜度提示（P2护栏）', 
     const nowMs = new Date('2026-03-15T14:00:00.000Z').getTime()
     jest.spyOn(Date, 'now').mockReturnValue(nowMs)
 
-    const lastUpdate = new Date(nowMs - (10 * 60 * 1000 + 1000)).toISOString()
+    const lastUpdate = new Date(nowMs - (15 * 60 * 1000 + 1000)).toISOString()
     const envelope = buildEnvelope(lastUpdate)
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -163,7 +163,7 @@ describe('MonitoringView - WS 健康度与数据新鲜度提示（P2护栏）', 
     const { unmount } = renderView()
 
     expect(screen.getByText('连接不稳')).toBeInTheDocument()
-    expect(screen.getByText(/已10\s*分钟未更新/)).toBeInTheDocument()
+    expect(screen.getByText(/已15\s*分钟未更新/)).toBeInTheDocument()
 
     unmount()
   })

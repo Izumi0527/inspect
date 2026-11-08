@@ -122,8 +122,8 @@ func (w *MetricsWriter) ExportMonitoringReport(
 	}
 
 	if hasReportSection(sections, "charts") {
-		// 报告按点数预算分档（单序列 ≤360 点、对齐 3 分钟采集），不跟随监控页的固定 3 分钟：
-		// 否则 14d 每条序列 6720 点，PDF 折线糊成一片、CSV/Excel 截断更严重。
+		// 报告按点数预算分档（单序列 ≤360 点、对齐 5 分钟采集），不跟随监控页的固定 5 分钟：
+		// 否则 14d 每条序列 4032 点，PDF 折线糊成一片、CSV/Excel 截断更严重。
 		// 桶宽只在这里算一次，同时传给查询与报告标注，保证标注与实际一致。
 		data.SampleInterval = resolveBucket(start, end, AutoBucket)
 		perf, err := w.GetDevicePerformanceHistory(ctx, start, end, nil, data.SampleInterval)
