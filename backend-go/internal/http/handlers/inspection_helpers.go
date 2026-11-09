@@ -164,44 +164,6 @@ func readOptionalIntSlice(payload map[string]interface{}, keys ...string) ([]int
 	return nil, false
 }
 
-func readOptionalStringSlice(payload map[string]interface{}, keys ...string) ([]string, bool) {
-	for _, key := range keys {
-		if _, ok := payload[key]; ok {
-			return readStringSlice(payload, key), true
-		}
-	}
-	return nil, false
-}
-
-func readMapSlice(payload map[string]interface{}, keys ...string) []map[string]interface{} {
-	for _, key := range keys {
-		if value, ok := payload[key]; ok {
-			switch v := value.(type) {
-			case []map[string]interface{}:
-				return v
-			case []interface{}:
-				result := make([]map[string]interface{}, 0, len(v))
-				for _, item := range v {
-					if row, ok := item.(map[string]interface{}); ok {
-						result = append(result, row)
-					}
-				}
-				return result
-			}
-		}
-	}
-	return []map[string]interface{}{}
-}
-
-func readOptionalMapSlice(payload map[string]interface{}, keys ...string) ([]map[string]interface{}, bool) {
-	for _, key := range keys {
-		if _, ok := payload[key]; ok {
-			return readMapSlice(payload, key), true
-		}
-	}
-	return nil, false
-}
-
 func stringValue(value *string) string {
 	if value == nil {
 		return ""
@@ -320,89 +282,6 @@ func buildCheckResultResponse(result inspection.Result) map[string]interface{} {
 	}
 
 	return payload
-}
-
-func buildExecutionResponse(item inspection.Inspection, strategyName string) map[string]interface{} {
-	progress := computeProgress(item)
-	totalChecks := resolveTotalChecks(item, nil)
-	passed := resolvePassedChecks(item, nil)
-	failed := resolveFailedChecks(item, nil)
-	warning := resolveWarningChecks(item, nil)
-	effectiveTotal := passed + failed + warning // 不把 skip 计入分母
-	score := computeScore(effectiveTotal, passed)
-
-	triggerType := inspection.TriggerManual
-	if strings.EqualFold(item.Trigger, inspection.TriggerScheduled) {
-		triggerType = inspection.TriggerScheduled
-	}
-
-	strategyID := ""
-	if item.ScheduleID != nil {
-		strategyID = fmt.Sprintf("%d", *item.ScheduleID)
-	}
-	if strings.TrimSpace(strategyName) == "" && item.Name != nil {
-		strategyName = *item.Name
-	}
-
-	return map[string]interface{}{
-		"id":               fmt.Sprintf("%d", item.ID),
-		"strategyId":       strategyID,
-		"strategy_id":      strategyID,
-		"strategyName":     strategyName,
-		"triggerType":      triggerType,
-		"triggerUser":      item.CreatedBy,
-		"status":           item.Status,
-		"progress":         progress,
-		"totalDevices":     1,
-		"completedDevices": resolveCompletedDevices(item.Status),
-		"startTime":        coalesceTime(item.StartedAt, item.CreatedAt),
-		"endTime":          item.CompletedAt,
-		"duration":         item.Duration,
-		"summary": map[string]interface{}{
-			"totalChecks":   totalChecks,
-			"passedChecks":  passed,
-			"failedChecks":  failed,
-			"warningChecks": warning,
-			"score":         score,
-			"deviceResults": []interface{}{},
-		},
-	}
-}
-
-func buildExecutionSummary(item inspection.Inspection, device deviceInfo, results []inspection.Result) map[string]interface{} {
-	totalChecks := resolveTotalChecks(item, results)
-	passed := resolvePassedChecks(item, results)
-	failed := resolveFailedChecks(item, results)
-	warning := resolveWarningChecks(item, results)
-	effectiveTotal := passed + failed + warning // 不把 skip 计入分母
-	score := computeScore(effectiveTotal, passed)
-	status := deriveDeviceStatus(item, passed, failed, warning)
-
-	checkResults := buildCheckResults(results)
-	deviceResults := []interface{}{}
-	if device.ID > 0 {
-		deviceResults = append(deviceResults, map[string]interface{}{
-			"deviceId":      fmt.Sprintf("%d", device.ID),
-			"deviceName":    defaultString(device.Name, "未知设备"),
-			"deviceType":    device.DeviceType,
-			"deviceIp":      device.IPAddress,
-			"status":        status,
-			"score":         float64(score),
-			"checkResults":  checkResults,
-			"passedChecks":  passed,
-			"totalChecks":   totalChecks,
-			"executionTime": defaultIntPtr(item.Duration),
-		})
-	}
-
-	return map[string]interface{}{
-		"totalChecks":   totalChecks,
-		"passedChecks":  passed,
-		"failedChecks":  failed,
-		"warningChecks": warning,
-		"score":         score,
-		"deviceResults": deviceResults,
-	}
 }
 
 func buildInspectionResultResponse(item inspection.Inspection, device deviceInfo, results []inspection.Result) map[string]interface{} {

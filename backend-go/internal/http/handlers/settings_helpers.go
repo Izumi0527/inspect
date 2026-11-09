@@ -96,62 +96,6 @@ func readStringSlice(payload map[string]interface{}, keys ...string) []string {
 	return []string{}
 }
 
-func readStringMap(payload map[string]interface{}, keys ...string) map[string]string {
-	for _, key := range keys {
-		if value, ok := payload[key]; ok {
-			switch v := value.(type) {
-			case map[string]string:
-				result := make(map[string]string, len(v))
-				for k, item := range v {
-					trimmed := strings.TrimSpace(item)
-					if trimmed == "" {
-						continue
-					}
-					result[k] = trimmed
-				}
-				return result
-			case map[string]interface{}:
-				result := make(map[string]string, len(v))
-				for k, item := range v {
-					if item == nil {
-						continue
-					}
-					switch text := item.(type) {
-					case string:
-						trimmed := strings.TrimSpace(text)
-						if trimmed == "" {
-							continue
-						}
-						result[k] = trimmed
-					default:
-						result[k] = fmt.Sprint(item)
-					}
-				}
-				return result
-			}
-		}
-	}
-	return map[string]string{}
-}
-
-func readInterfaceMap(payload map[string]interface{}, keys ...string) map[string]interface{} {
-	for _, key := range keys {
-		if value, ok := payload[key]; ok {
-			switch v := value.(type) {
-			case map[string]interface{}:
-				return v
-			case map[string]string:
-				result := make(map[string]interface{}, len(v))
-				for k, item := range v {
-					result[k] = item
-				}
-				return result
-			}
-		}
-	}
-	return map[string]interface{}{}
-}
-
 func parseTimeValue(value string) (time.Time, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {

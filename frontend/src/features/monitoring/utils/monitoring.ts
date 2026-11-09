@@ -19,7 +19,8 @@ export const DEFAULT_TIME_RANGE = '1h'
  * 监控中心页统一采样间隔（分钟）：后端对 1h~14d 所有档位都按 5 分钟分桶，
  * 与采集任务节奏（scheduler.MetricsCollectionInterval，cron 每 5 分钟）相等，每个桶正好一次采集。
  * 改这里必须同步 backend-go/internal/monitoring/queries.go 的 DashboardSampleInterval 与
- * scheduler 的 MetricsCollectionInterval（跨包一致性有守卫测试），此处仅用于界面提示；
+ * scheduler 的 MetricsCollectionInterval（跨包一致性有守卫测试）。此处用于界面提示，
+ * 以及流量图的缺口判定（相邻两点超过 2 个采样间隔即断线，见 InterfaceTrafficChart）；
  * 总览拓扑的 EmptyLinksHint 文案也写了采集节奏，需一并修改。
  */
 export const MONITORING_SAMPLE_INTERVAL_MINUTES = 5

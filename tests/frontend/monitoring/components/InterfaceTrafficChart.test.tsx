@@ -104,3 +104,40 @@ describe('InterfaceTrafficChart 网格（与性能/温度图统一）', () => {
     }
   })
 })
+
+// 设备离线、采集停摆期间没有数据点：相邻两点相隔超过两个采样周期（5 分钟 × 2，与后端速率窗口
+// RateSampleMaxGap 同一口径）即视为中断，曲线与面积都必须在缺口处断开，不能把缺口补成「一直有流量」。
+describe('InterfaceTrafficChart 数据缺口', () => {
+  const at = (timestamp: string): NetworkTrafficDataPoint => ({ timestamp, inbound: 1, outbound: 2 })
+  const lines = (container: HTMLElement, key: string) => container.querySelectorAll(`path[data-series="${key}"]`)
+  const areas = (container: HTMLElement, key: string) => container.querySelectorAll(`path[data-area="${key}"]`)
+  const dots = (container: HTMLElement, key: string) => container.querySelectorAll(`circle[data-series="${key}"]`)
+
+  it('离线近 20 小时的缺口两侧各成一段，曲线与面积都不跨缺口', () => {
+    const data = ['2026-11-08T02:25:00Z', '2026-11-08T02:30:00Z', '2026-11-08T02:35:00Z', '2026-11-08T22:20:00Z', '2026-11-08T22:25:00Z'].map(at)
+    const { container } = render(<InterfaceTrafficChart data={data} timeRange="24h" height={240} />)
+
+    for (const key of ['outbound', 'inbound']) {
+      expect(lines(container, key)).toHaveLength(2)
+      expect(areas(container, key)).toHaveLength(2)
+    }
+  })
+
+  it('只缺一个采样点（如后端重启漏掉一轮）时仍连成一段', () => {
+    const data = ['2026-11-09T00:00:00Z', '2026-11-09T00:05:00Z', '2026-11-09T00:15:00Z', '2026-11-09T00:20:00Z'].map(at)
+    const { container } = render(<InterfaceTrafficChart data={data} timeRange="1h" height={240} />)
+
+    expect(lines(container, 'outbound')).toHaveLength(1)
+    expect(lines(container, 'inbound')).toHaveLength(1)
+  })
+
+  it('两侧都是缺口的孤立采样点画成圆点，不能因断线而消失', () => {
+    const data = ['2026-11-09T00:00:00Z', '2026-11-09T00:05:00Z', '2026-11-09T01:00:00Z', '2026-11-09T02:00:00Z', '2026-11-09T02:05:00Z'].map(at)
+    const { container } = render(<InterfaceTrafficChart data={data} timeRange="3h" height={240} />)
+
+    for (const key of ['outbound', 'inbound']) {
+      expect(lines(container, key)).toHaveLength(2)
+      expect(dots(container, key)).toHaveLength(1)
+    }
+  })
+})

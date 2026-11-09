@@ -11,6 +11,7 @@ import { LinearGradient } from '@visx/gradient'
 import { resolveChartGridStyle, useDocumentDarkClass } from '@/lib/chart-theme'
 import {
   formatBandwidthValue,
+  MONITORING_SAMPLE_INTERVAL_MINUTES,
   resolveTickStepMinutes,
   resolveTimeAxisLabelFormatter,
 } from '../../utils/monitoring'
@@ -32,6 +33,28 @@ interface ChartPoint {
   date: Date
   outbound: number
   inbound: number
+}
+
+/**
+ * 相邻两点相隔超过两个采样周期即视为数据中断（设备离线、采集停摆），曲线与面积在此断开，
+ * 不把缺口补成「一直有流量」。与后端速率窗口 RateSampleMaxGap（2 × 采集节奏）同一口径：
+ * 只缺一个点（如后端重启漏掉一轮）仍连成一段。
+ */
+const TRAFFIC_GAP_THRESHOLD_MS = 2 * MONITORING_SAMPLE_INTERVAL_MINUTES * 60_000
+
+/** 把按时间升序的点列在数据缺口处切成若干连续段 */
+function splitAtGaps(points: ChartPoint[]): ChartPoint[][] {
+  const segments: ChartPoint[][] = []
+  for (const point of points) {
+    const current = segments[segments.length - 1]
+    const previous = current?.[current.length - 1]
+    if (previous && point.date.getTime() - previous.date.getTime() <= TRAFFIC_GAP_THRESHOLD_MS) {
+      current.push(point)
+    } else {
+      segments.push([point])
+    }
+  }
+  return segments
 }
 
 /** 在按时间升序的点列中找离 target 最近的下标（十字线吸附） */
@@ -117,6 +140,8 @@ export function InterfaceTrafficChart({
       .filter((point) => !Number.isNaN(point.date.getTime()))
       .sort((a, b) => a.date.getTime() - b.date.getTime())
   }, [data])
+
+  const segments = useMemo(() => splitAtGaps(points), [points])
 
   const xScale = useMemo(() => {
     const times = points.map((point) => point.date.getTime())
@@ -230,30 +255,50 @@ export function InterfaceTrafficChart({
               tickValues={xTickValues}
             />
 
-            {TRAFFIC_SERIES.map((series) => (
-              <AreaClosed
-                key={`area-${series.key}`}
-                data={points}
-                x={(d) => xScale(d.date)}
-                y={(d) => yScale(d[series.key])}
-                yScale={yScale}
-                fill={`url(#traffic-area-${series.key})`}
-                curve={curveMonotoneX}
-              />
-            ))}
+            {TRAFFIC_SERIES.flatMap((series) =>
+              segments
+                .map((segment, index) => ({ segment, index }))
+                .filter(({ segment }) => segment.length > 1)
+                .map(({ segment, index }) => (
+                  <AreaClosed
+                    key={`area-${series.key}-${index}`}
+                    data-area={series.key}
+                    data={segment}
+                    x={(d) => xScale(d.date)}
+                    y={(d) => yScale(d[series.key])}
+                    yScale={yScale}
+                    fill={`url(#traffic-area-${series.key})`}
+                    curve={curveMonotoneX}
+                  />
+                ))
+            )}
 
-            {TRAFFIC_SERIES.map((series) => (
-              <LinePath
-                key={`line-${series.key}`}
-                data-series={series.key}
-                data={points}
-                x={(d) => xScale(d.date)}
-                y={(d) => yScale(d[series.key])}
-                stroke={series.color}
-                strokeWidth={2}
-                curve={curveMonotoneX}
-              />
-            ))}
+            {TRAFFIC_SERIES.flatMap((series) =>
+              segments.map((segment, index) =>
+                segment.length > 1 ? (
+                  <LinePath
+                    key={`line-${series.key}-${index}`}
+                    data-series={series.key}
+                    data={segment}
+                    x={(d) => xScale(d.date)}
+                    y={(d) => yScale(d[series.key])}
+                    stroke={series.color}
+                    strokeWidth={2}
+                    curve={curveMonotoneX}
+                  />
+                ) : (
+                  // 两侧都是缺口的孤立采样点：单点路径不可见，画成圆点
+                  <circle
+                    key={`dot-${series.key}-${index}`}
+                    data-series={series.key}
+                    cx={xScale(segment[0].date)}
+                    cy={yScale(segment[0][series.key])}
+                    r={2.5}
+                    fill={series.color}
+                  />
+                )
+              )
+            )}
 
             {tooltipData && hoverX !== null && (
               <g pointerEvents="none">

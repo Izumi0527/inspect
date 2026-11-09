@@ -369,16 +369,6 @@ func readBearerToken(c echo.Context) (string, error) {
 	return token, nil
 }
 
-func authUserActive(user *auth.UserRecord) bool {
-	if user == nil {
-		return false
-	}
-	if user.IsActive == nil {
-		return true
-	}
-	return *user.IsActive
-}
-
 // issueAuthCookies 下发 access/refresh（httpOnly）与 csrf（非 httpOnly）Cookie。
 // maxAge 单位为秒：access 用其有效期，refresh/csrf 用 refresh 有效期。
 func (h AuthHandler) issueAuthCookies(c echo.Context, accessToken, refreshToken string, accessMaxAge, refreshMaxAge int) error {

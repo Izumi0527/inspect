@@ -471,19 +471,6 @@ func parseGenerateRange(startStr, endStr string, loc *time.Location) (time.Time,
 	return now.Add(-24 * time.Hour), now
 }
 
-func parseDateRangeFromPayload(payload map[string]interface{}, loc *time.Location) map[string]interface{} {
-	start, end := resolveDateRangeFromPayload(payload, loc)
-	if start.IsZero() || end.IsZero() {
-		now := time.Now().UTC()
-		start = now.AddDate(0, 0, -7)
-		end = now
-	}
-	return map[string]interface{}{
-		"startDate": start.Format(time.RFC3339),
-		"endDate":   end.Format(time.RFC3339),
-	}
-}
-
 func parseIDParam(c echo.Context, name string) (int, error) {
 	raw := strings.TrimSpace(c.Param(name))
 	if raw == "" {

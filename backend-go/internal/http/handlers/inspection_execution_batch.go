@@ -211,7 +211,7 @@ func executionBatchDisplayID(rows []inspection.Inspection) string {
 }
 
 // buildBatchExecutionResponse 将一个批次的记录聚合为执行历史列表的单行响应。
-// 响应字段结构与单设备版本 buildExecutionResponse 完全一致，仅语义为"整批"。
+// 单行批次（仅一台设备）即等价于单设备执行记录，执行历史列表的每一行都由此构建。
 func buildBatchExecutionResponse(rows []inspection.Inspection, strategyNames map[int]string, userNames map[string]string) map[string]interface{} {
 	if len(rows) == 0 {
 		// 理论上不会发生（调用方保证非空），兜底空结构
