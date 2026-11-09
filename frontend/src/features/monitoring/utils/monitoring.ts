@@ -20,7 +20,7 @@ export const DEFAULT_TIME_RANGE = '1h'
  * 与采集任务节奏（scheduler.MetricsCollectionInterval，cron 每 5 分钟）相等，每个桶正好一次采集。
  * 改这里必须同步 backend-go/internal/monitoring/queries.go 的 DashboardSampleInterval 与
  * scheduler 的 MetricsCollectionInterval（跨包一致性有守卫测试）。此处用于界面提示，
- * 以及流量图的缺口判定（相邻两点超过 2 个采样间隔即断线，见 InterfaceTrafficChart）；
+ * 以及时间轴图表的缺口判定（相邻两点超过 2 个采样间隔即断线，见 utils/timeSeries.ts）；
  * 总览拓扑的 EmptyLinksHint 文案也写了采集节奏，需一并修改。
  */
 export const MONITORING_SAMPLE_INTERVAL_MINUTES = 5
@@ -47,8 +47,8 @@ export const MONITORING_DATA_STALE_THRESHOLD_MS = 15 * 60 * 1000
 /**
  * X 轴刻度步长（分钟）：每档约 12 个刻度，且步长必须同时满足两个条件：
  * ① 整除 24 小时 → 按 epoch 对齐，刻度落在整点、整 12 点等自然边界；
- * ② 是采样间隔（5 分钟）的整倍数 → 刻度点上真的有数据（3、6 这类步长会落空，
- *    只剩公倍数位置有标签，曲线看起来"少了一大截"）。
+ * ② 是采样间隔（5 分钟）的整倍数 → 刻度落在采样时刻上，悬停吸附到的数据点与刻度对齐。
+ * 三张监控图都是时间轴，刻度由 utils/timeSeries.ts 的 buildTimeAxisTicks 按步长生成。
  */
 const TICK_STEP_MINUTES_BY_RANGE: Readonly<Record<string, number>> = {
   '1h': 5,
@@ -75,41 +75,6 @@ export function resolveTickStepMinutes(timeRange: string): number {
   const unitMinutes = match[2].toLowerCase() === 'h' ? 60 : match[2].toLowerCase() === 'd' ? 1440 : 10080
   const totalMinutes = value * unitMinutes
   return Math.max(sample, Math.ceil(totalMinutes / 12 / sample) * sample)
-}
-
-/**
- * 从时序数据点中挑出落在刻度步长上的点，返回格式化后的 X 轴刻度标签。
- * 步长整除 24h 时按 epoch 对齐（刻度落在整点/整 5 分钟等自然边界）；
- * 否则（如 7d 档的 14h 步长）以首个数据点为锚均匀取刻度。
- */
-export function selectTimeTickLabels(
-  points: ReadonlyArray<{ timestamp: Date | string }>,
-  stepMinutes: number,
-  format: (date: Date) => string
-): string[] {
-  if (points.length === 0 || stepMinutes <= 0) return []
-
-  const stepMs = stepMinutes * 60_000
-  const dayMs = 24 * 60 * 60_000
-  const alignedToEpoch = dayMs % stepMs === 0
-
-  const times: number[] = []
-  for (const point of points) {
-    const date = point.timestamp instanceof Date ? point.timestamp : new Date(point.timestamp)
-    const time = date.getTime()
-    if (!Number.isNaN(time)) {
-      times.push(time)
-    }
-  }
-  if (times.length === 0) return []
-
-  const anchor = alignedToEpoch ? 0 : times[0]
-  const labels: string[] = []
-  for (const time of times) {
-    if ((time - anchor) % stepMs !== 0) continue
-    labels.push(format(new Date(time)))
-  }
-  return labels
 }
 
 /**

@@ -11,10 +11,9 @@ import { LinearGradient } from '@visx/gradient'
 import { resolveChartGridStyle, useDocumentDarkClass } from '@/lib/chart-theme'
 import {
   formatBandwidthValue,
-  MONITORING_SAMPLE_INTERVAL_MINUTES,
-  resolveTickStepMinutes,
   resolveTimeAxisLabelFormatter,
 } from '../../utils/monitoring'
+import { buildTimeAxisTicks, nearestPointIndex, resolveTimeWindow, splitAtGaps } from '../../utils/timeSeries'
 import type { NetworkTrafficDataPoint } from '../../types'
 
 type TrafficSeriesKey = 'outbound' | 'inbound'
@@ -33,47 +32,6 @@ interface ChartPoint {
   date: Date
   outbound: number
   inbound: number
-}
-
-/**
- * 相邻两点相隔超过两个采样周期即视为数据中断（设备离线、采集停摆），曲线与面积在此断开，
- * 不把缺口补成「一直有流量」。与后端速率窗口 RateSampleMaxGap（2 × 采集节奏）同一口径：
- * 只缺一个点（如后端重启漏掉一轮）仍连成一段。
- */
-const TRAFFIC_GAP_THRESHOLD_MS = 2 * MONITORING_SAMPLE_INTERVAL_MINUTES * 60_000
-
-/** 把按时间升序的点列在数据缺口处切成若干连续段 */
-function splitAtGaps(points: ChartPoint[]): ChartPoint[][] {
-  const segments: ChartPoint[][] = []
-  for (const point of points) {
-    const current = segments[segments.length - 1]
-    const previous = current?.[current.length - 1]
-    if (previous && point.date.getTime() - previous.date.getTime() <= TRAFFIC_GAP_THRESHOLD_MS) {
-      current.push(point)
-    } else {
-      segments.push([point])
-    }
-  }
-  return segments
-}
-
-/** 在按时间升序的点列中找离 target 最近的下标（十字线吸附） */
-function nearestPointIndex(points: ChartPoint[], target: Date): number {
-  const time = target.getTime()
-  let low = 0
-  let high = points.length - 1
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2)
-    if (points[mid].date.getTime() < time) {
-      low = mid + 1
-    } else {
-      high = mid
-    }
-  }
-  if (low > 0 && time - points[low - 1].date.getTime() < points[low].date.getTime() - time) {
-    return low - 1
-  }
-  return low
 }
 
 interface InterfaceTrafficChartProps {
@@ -130,8 +88,10 @@ export function InterfaceTrafficChart({
 
   const formatTimeLabel = useMemo(() => resolveTimeAxisLabelFormatter(timeRange), [timeRange])
 
-  const points = useMemo<ChartPoint[]>(() => {
-    return data
+  // 横轴范围 = 所选时间窗口（与系统性能趋势、设备温度图一致），早于窗口起点的点不绘制；
+  // 窗口终点取渲染时的当前时间，随数据刷新（data 变化）重新计算，窗口跟着向前滚动
+  const { points, domain } = useMemo(() => {
+    const dated = data
       .map((point) => ({
         date: new Date(point.timestamp),
         outbound: Math.max(0, point.outbound) * 1_000_000,
@@ -139,17 +99,20 @@ export function InterfaceTrafficChart({
       }))
       .filter((point) => !Number.isNaN(point.date.getTime()))
       .sort((a, b) => a.date.getTime() - b.date.getTime())
-  }, [data])
+    const timeWindow = resolveTimeWindow(timeRange, Date.now(), dated.map((point) => point.date))
+    return {
+      points: dated.filter((point) => point.date.getTime() >= timeWindow[0].getTime()),
+      domain: timeWindow,
+    }
+  }, [data, timeRange])
 
+  // 数据缺口处断开曲线与面积（规则见 utils/timeSeries 的 TIME_SERIES_GAP_THRESHOLD_MS）
   const segments = useMemo(() => splitAtGaps(points), [points])
 
-  const xScale = useMemo(() => {
-    const times = points.map((point) => point.date.getTime())
-    return scaleTime({
-      domain: [new Date(Math.min(...times)), new Date(Math.max(...times))],
-      range: [0, innerWidth],
-    })
-  }, [points, innerWidth])
+  const xScale = useMemo(
+    () => scaleTime({ domain: [domain[0], domain[1]], range: [0, innerWidth] }),
+    [domain, innerWidth]
+  )
 
   const yScale = useMemo(() => {
     const maxValue = Math.max(...points.map((point) => Math.max(point.inbound, point.outbound)), 0)
@@ -161,37 +124,7 @@ export function InterfaceTrafficChart({
   }, [points, innerHeight])
 
   // X 轴刻度：按时间范围取步长（1h→5min，以此类推），对齐到自然边界；过密时按倍数稀疏
-  const xTickValues = useMemo(() => {
-    if (points.length < 2) return undefined
-    const [minTime, maxTime] = xScale.domain()
-    const stepMinutes = resolveTickStepMinutes(String(timeRange ?? '').trim() || '24h')
-
-    const start = new Date(minTime)
-    start.setSeconds(0, 0)
-    if (stepMinutes >= 24 * 60) {
-      start.setHours(0, 0, 0, 0)
-    } else if (stepMinutes >= 60) {
-      start.setMinutes(0)
-    } else {
-      start.setMinutes(Math.floor(start.getMinutes() / stepMinutes) * stepMinutes)
-    }
-
-    const ticks: Date[] = []
-    const current = new Date(start)
-    while (current.getTime() <= maxTime.getTime()) {
-      if (current.getTime() >= minTime.getTime()) {
-        ticks.push(new Date(current))
-      }
-      current.setMinutes(current.getMinutes() + stepMinutes)
-    }
-
-    const maxTicks = Math.max(Math.floor(innerWidth / 80), 4)
-    if (ticks.length > maxTicks) {
-      const step = Math.ceil(ticks.length / maxTicks)
-      return ticks.filter((_, index) => index % step === 0)
-    }
-    return ticks
-  }, [points.length, xScale, timeRange, innerWidth])
+  const xTickValues = useMemo(() => buildTimeAxisTicks(domain, timeRange, innerWidth), [domain, timeRange, innerWidth])
 
   const { showTooltip, hideTooltip, tooltipData, tooltipLeft = 0, tooltipTop = 0 } =
     useTooltip<ChartPoint>()

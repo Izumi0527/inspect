@@ -1,11 +1,7 @@
 import { useMemo } from 'react'
-import { LineChartComponent } from '@/components/atoms/charts'
-import {
-  DEVICE_SERIES_COLORS,
-  resolveTickStepMinutes,
-  resolveTimeAxisLabelFormatter,
-  selectTimeTickLabels,
-} from '../../utils/monitoring'
+import { DEVICE_SERIES_COLORS } from '../../utils/monitoring'
+import { resolveTimeWindow } from '../../utils/timeSeries'
+import { TimeSeriesLineChart, type TimeSeriesLine } from './TimeSeriesLineChart'
 import type { TemperatureDataPoint } from '../../types'
 
 interface TemperatureChartProps {
@@ -14,17 +10,21 @@ interface TemperatureChartProps {
   showLegend?: boolean
   className?: string
   temperatureThreshold?: number // 温度阈值,超过此值高亮显示
-  /** 时间范围（用于 x 轴标签格式优化） */
+  /** 时间范围：决定横轴窗口、刻度步长与标签格式 */
   timeRange?: string
 }
+
+/** 最多绘制的设备数（避免曲线过于拥挤，更多设备请用页面顶部设备筛选） */
+const MAX_DEVICES = 5
+
+const formatCelsius = (value: number): string => `${value.toFixed(1)}°C`
 
 /**
  * 设备温度监控图
  *
- * 显示多个设备的温度变化趋势
- * - 自动为每个设备分配不同颜色
- * - 超过阈值的温度点会高亮显示
- * - 支持最多显示5个设备(避免图表过于拥挤)
+ * 每台设备一条温度曲线（颜色区分设备），图例对超阈值设备加 [!] 标记。
+ * 横轴为真实时间、范围 = 所选时间窗口；某台设备在某时刻没有数据就不画（不补 0℃），
+ * 相邻两点超过两个采样周期即断线，与系统性能趋势、接口流量图同一口径。
  */
 export function TemperatureChart({
   data,
@@ -34,104 +34,36 @@ export function TemperatureChart({
   temperatureThreshold = 75, // 默认75°C为阈值
   timeRange,
 }: TemperatureChartProps) {
-  const formatTimeLabel = useMemo(() => resolveTimeAxisLabelFormatter(timeRange), [timeRange])
+  // 窗口终点取渲染时的当前时间；随数据刷新（data 变化）重新计算，窗口跟着向前滚动
+  const { domain, lines } = useMemo(() => {
+    const dated = data
+      .map((point) => ({ date: new Date(point.timestamp), devices: point.devices }))
+      .filter((point) => !Number.isNaN(point.date.getTime()))
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
 
-  // 数据转换:将时间戳和设备温度展平
-  const { chartData, deviceNames } = useMemo(() => {
-    if (data.length === 0) {
-      return { chartData: [], deviceNames: [] }
-    }
+    const timeWindow = resolveTimeWindow(timeRange, Date.now(), dated.map((point) => point.date))
+    const inWindow = dated.filter((point) => point.date.getTime() >= timeWindow[0].getTime())
 
-    // 获取所有设备名称
-    const allDeviceNames = Array.from(
-      new Set(data.flatMap((point) => Object.keys(point.devices)))
-    )
+    const names = Array.from(new Set(inWindow.flatMap((point) => Object.keys(point.devices)))).slice(0, MAX_DEVICES)
 
-    // 限制最多显示5个设备
-    const limitedDeviceNames = allDeviceNames.slice(0, 5)
-
-    // 转换数据格式
-    const transformed = data.map((point) => {
-      const date = new Date(point.timestamp)
-      const timeLabel = formatTimeLabel(date)
-
-      const dataPoint: Record<string, string | number> = {
-        time: timeLabel,
-      }
-
-      // 为每个设备添加温度数据
-      limitedDeviceNames.forEach((deviceName) => {
-        dataPoint[deviceName] = point.devices[deviceName] || 0
-      })
-
-      return dataPoint
-    })
-
-    return {
-      chartData: transformed,
-      deviceNames: limitedDeviceNames,
-    }
-  }, [data, formatTimeLabel])
-
-  // X 轴刻度：按时间范围取步长（1h→5min，以此类推）
-  const xTickValues = useMemo(() => {
-    if (!timeRange) return undefined
-    return selectTimeTickLabels(data, resolveTickStepMinutes(timeRange), formatTimeLabel)
-  }, [data, formatTimeLabel, timeRange])
-
-  // 配置设备温度曲线
-  const lines = useMemo(() => {
-    return deviceNames.map((deviceName, index) => ({
+    const built: TimeSeriesLine[] = names.map((deviceName, index) => ({
       key: deviceName,
       name: deviceName,
       color: DEVICE_SERIES_COLORS[index % DEVICE_SERIES_COLORS.length],
-      strokeWidth: 2.5,
+      points: inWindow.flatMap((point) => {
+        const value = point.devices[deviceName]
+        return typeof value === 'number' && Number.isFinite(value) ? [{ date: point.date, value }] : []
+      }),
     }))
-  }, [deviceNames])
 
-  // 自定义 tooltip 格式化
-  const formatter = (value: number | string, _name: string): string => {
-    const numValue = Number(value)
-    const tempStr = `${numValue.toFixed(1)}°C`
+    return { domain: timeWindow, lines: built }
+  }, [data, timeRange])
 
-    // 如果超过阈值,添加警告标识
-    if (numValue >= temperatureThreshold) {
-      return `${tempStr} [!]`
-    }
+  // 提示框里超过阈值的温度加警告标识（纵轴刻度不加）
+  const formatTooltipValue = (value: number): string =>
+    value >= temperatureThreshold ? `${formatCelsius(value)} [!]` : formatCelsius(value)
 
-    return tempStr
-  }
-
-  // 图例组件
-  const Legend = () => (
-    <div className="mt-4 flex flex-wrap items-center justify-center gap-4">
-      {lines.map((line) => {
-        // 检查该设备是否有温度超过阈值
-        const hasHighTemp = chartData.some(
-          (d) => Number(d[line.key]) >= temperatureThreshold
-        )
-
-        return (
-          <div key={line.key} className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: line.color }} />
-            <span className="text-sm text-muted-foreground">
-              {line.name}
-              {hasHighTemp && <span className="ml-1 text-xs font-semibold text-orange-500">[!]</span>}
-            </span>
-          </div>
-        )
-      })}
-      {deviceNames.length === 5 && (
-        <div className="mt-1 w-full text-center">
-          <span className="text-xs text-muted-foreground">
-            (最多显示5个设备)
-          </span>
-        </div>
-      )}
-    </div>
-  )
-
-  if (chartData.length === 0) {
+  if (lines.length === 0) {
     return (
       <div className="flex items-center justify-center" style={{ height }}>
         <p className="text-muted-foreground">暂无温度数据</p>
@@ -141,16 +73,38 @@ export function TemperatureChart({
 
   return (
     <div className={className}>
-      <LineChartComponent
-        data={chartData}
-        xKey="time"
+      <TimeSeriesLineChart
         lines={lines}
+        domain={domain}
+        timeRange={timeRange}
         height={height}
-        formatter={formatter}
-        xTickValues={xTickValues}
-        gridTone="prominent"
+        formatValue={formatCelsius}
+        formatTooltipValue={formatTooltipValue}
+        ariaLabel="设备温度监控图"
       />
-      {showLegend && <Legend />}
+      {showLegend && (
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-4">
+          {lines.map((line) => {
+            // 该设备在窗口内是否有温度超过阈值
+            const hasHighTemp = line.points.some((point) => point.value >= temperatureThreshold)
+
+            return (
+              <div key={line.key} className="flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: line.color }} />
+                <span className="text-sm text-muted-foreground">
+                  {line.name}
+                  {hasHighTemp && <span className="ml-1 text-xs font-semibold text-orange-500">[!]</span>}
+                </span>
+              </div>
+            )
+          })}
+          {lines.length === MAX_DEVICES && (
+            <div className="mt-1 w-full text-center">
+              <span className="text-xs text-muted-foreground">(最多显示{MAX_DEVICES}个设备)</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 温度阈值提示 */}
       <div className="mt-2 flex items-center justify-center gap-2 text-xs text-muted-foreground">

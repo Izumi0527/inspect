@@ -20,6 +20,18 @@ beforeAll(() => {
   })
 })
 
+/** 横轴范围 = 所选时间窗口，窗口终点取自当前时间：把当前时间钉住 */
+const freezeNow = (iso: string) => jest.spyOn(Date, 'now').mockReturnValue(new Date(iso).getTime())
+
+// 默认钉在样本 points 之后，使其落在 1h 窗口内；需要别的「当前时间」的用例自行覆盖
+beforeEach(() => {
+  freezeNow('2026-09-10T02:15:00Z')
+})
+
+afterEach(() => {
+  jest.restoreAllMocks()
+})
+
 describe('InterfaceTrafficChart（上行/下行两序列）', () => {
   it('只绘制上行与下行两条序列，不再出现总流量', () => {
     const { container } = render(<InterfaceTrafficChart data={points} timeRange="1h" height={240} />)
@@ -114,6 +126,7 @@ describe('InterfaceTrafficChart 数据缺口', () => {
   const dots = (container: HTMLElement, key: string) => container.querySelectorAll(`circle[data-series="${key}"]`)
 
   it('离线近 20 小时的缺口两侧各成一段，曲线与面积都不跨缺口', () => {
+    freezeNow('2026-11-09T00:00:00Z')
     const data = ['2026-11-08T02:25:00Z', '2026-11-08T02:30:00Z', '2026-11-08T02:35:00Z', '2026-11-08T22:20:00Z', '2026-11-08T22:25:00Z'].map(at)
     const { container } = render(<InterfaceTrafficChart data={data} timeRange="24h" height={240} />)
 
@@ -124,6 +137,7 @@ describe('InterfaceTrafficChart 数据缺口', () => {
   })
 
   it('只缺一个采样点（如后端重启漏掉一轮）时仍连成一段', () => {
+    freezeNow('2026-11-09T00:30:00Z')
     const data = ['2026-11-09T00:00:00Z', '2026-11-09T00:05:00Z', '2026-11-09T00:15:00Z', '2026-11-09T00:20:00Z'].map(at)
     const { container } = render(<InterfaceTrafficChart data={data} timeRange="1h" height={240} />)
 
@@ -132,6 +146,7 @@ describe('InterfaceTrafficChart 数据缺口', () => {
   })
 
   it('两侧都是缺口的孤立采样点画成圆点，不能因断线而消失', () => {
+    freezeNow('2026-11-09T02:30:00Z')
     const data = ['2026-11-09T00:00:00Z', '2026-11-09T00:05:00Z', '2026-11-09T01:00:00Z', '2026-11-09T02:00:00Z', '2026-11-09T02:05:00Z'].map(at)
     const { container } = render(<InterfaceTrafficChart data={data} timeRange="3h" height={240} />)
 
@@ -139,5 +154,39 @@ describe('InterfaceTrafficChart 数据缺口', () => {
       expect(lines(container, key)).toHaveLength(2)
       expect(dots(container, key)).toHaveLength(1)
     }
+  })
+})
+
+// 横轴范围 = 所选时间窗口（而非数据首尾），与系统性能趋势图一致：缺口在窗口开头或末尾时也看得见
+describe('InterfaceTrafficChart 横轴范围', () => {
+  const at = (timestamp: string): NetworkTrafficDataPoint => ({ timestamp, inbound: 1, outbound: 2 })
+  const lines = (container: HTMLElement) => Array.from(container.querySelectorAll('path[data-series="outbound"]'))
+  /** 路径起点 x（d 形如 "M12.3,45.6C..."） */
+  const startX = (path: Element) => Number(/^M\s*(-?[\d.]+)/.exec(path.getAttribute('d') ?? '')?.[1])
+  /** 路径终点 x（d 的最后一对坐标） */
+  const endX = (path: Element) => {
+    const numbers = (path.getAttribute('d') ?? '').match(/-?[\d.]+/g) ?? []
+    return Number(numbers[numbers.length - 2])
+  }
+
+  it('24h 档只有最后 1 小时有数据时，曲线挤在右侧而不是拉满整个宽度', () => {
+    freezeNow('2026-11-09T00:00:00Z')
+    const data = Array.from({ length: 12 }, (_, i) =>
+      at(new Date(Date.UTC(2026, 10, 8, 23, 0) + i * 5 * 60_000).toISOString())
+    )
+    const { container } = render(<InterfaceTrafficChart data={data} timeRange="24h" height={240} />)
+
+    const [path] = lines(container)
+    // 23:00 位于 24h 窗口的 23/24 处；若按数据首尾定范围，起点会落在 0
+    expect(startX(path) / endX(path)).toBeGreaterThan(0.9)
+  })
+
+  it('早于窗口起点的点不绘制', () => {
+    freezeNow('2026-11-09T00:00:00Z')
+    const data = ['2026-11-07T18:00:00Z', '2026-11-08T23:50:00Z', '2026-11-08T23:55:00Z'].map(at)
+    const { container } = render(<InterfaceTrafficChart data={data} timeRange="24h" height={240} />)
+
+    expect(lines(container)).toHaveLength(1)
+    expect(container.querySelectorAll('circle[data-series="outbound"]')).toHaveLength(0)
   })
 })

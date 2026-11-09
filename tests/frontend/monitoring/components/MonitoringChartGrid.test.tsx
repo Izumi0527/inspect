@@ -53,6 +53,15 @@ function expectProminentDashedGrid(container: HTMLElement) {
 }
 
 describe('监控中心图表网格（更醒目的横竖虚线）', () => {
+  // 横轴范围 = 所选时间窗口（终点取当前时间）：把当前时间钉在样本末尾，样本才落在 1h 窗口内
+  beforeEach(() => {
+    jest.spyOn(Date, 'now').mockReturnValue(new Date(timestamps[timestamps.length - 1]).getTime())
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
   it('系统性能趋势图：横竖网格线均为醒目虚线', () => {
     const { container } = render(
       <SystemPerformanceChart data={systemPerformance} timeRange="1h" />

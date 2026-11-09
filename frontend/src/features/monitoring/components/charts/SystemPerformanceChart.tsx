@@ -1,12 +1,8 @@
 import { useMemo } from 'react'
-import { LineChartComponent } from '@/components/atoms/charts'
-import {
-  DEVICE_SERIES_COLORS,
-  resolveTickStepMinutes,
-  resolveTimeAxisLabelFormatter,
-  selectTimeTickLabels,
-} from '../../utils/monitoring'
+import { DEVICE_SERIES_COLORS } from '../../utils/monitoring'
+import { resolveTimeWindow } from '../../utils/timeSeries'
 import { PERFORMANCE_METRICS, type PerformanceMetricKey } from './PerformanceMetricLegend'
+import { TimeSeriesLineChart, type TimeSeriesLine } from './TimeSeriesLineChart'
 import type { SystemPerformanceDataPoint } from '../../types'
 
 interface SystemPerformanceChartProps {
@@ -14,7 +10,7 @@ interface SystemPerformanceChartProps {
   height?: number
   showLegend?: boolean
   className?: string
-  /** 时间范围（用于 x 轴标签格式优化） */
+  /** 时间范围：决定横轴窗口、刻度步长与标签格式 */
   timeRange?: string
   /** 被用户隐藏的指标（由卡片标题右侧的指标图例控制） */
   hiddenMetrics?: ReadonlySet<PerformanceMetricKey>
@@ -25,12 +21,16 @@ const MAX_DEVICES = 5
 
 const EMPTY_HIDDEN: ReadonlySet<PerformanceMetricKey> = new Set()
 
+const colorOf = (deviceIndex: number) => DEVICE_SERIES_COLORS[deviceIndex % DEVICE_SERIES_COLORS.length]
+
+const formatPercent = (value: number): string => `${value.toFixed(1)}%`
+
 /**
  * 系统性能趋势图（按设备区分）
  *
- * 每台设备绘制 CPU（实线）与内存（虚线）两条曲线：
- * - 颜色区分设备，线型区分指标
- * - 图表下方为设备图例；指标显隐由外部 hiddenMetrics 控制
+ * 每台设备绘制 CPU（实线）与内存（虚线）两条曲线：颜色区分设备，线型区分指标。
+ * 横轴为真实时间、范围 = 所选时间窗口；某台设备在某时刻没有数据就不画（不补 0），
+ * 相邻两点超过两个采样周期即断线，与接口流量图同一口径。
  */
 export function SystemPerformanceChart({
   data,
@@ -40,76 +40,41 @@ export function SystemPerformanceChart({
   timeRange,
   hiddenMetrics = EMPTY_HIDDEN,
 }: SystemPerformanceChartProps) {
-  const formatTimeLabel = useMemo(() => resolveTimeAxisLabelFormatter(timeRange), [timeRange])
+  // 窗口终点取渲染时的当前时间；随数据刷新（data 变化）重新计算，窗口跟着向前滚动
+  const { domain, deviceNames, allLines } = useMemo(() => {
+    const dated = data
+      .map((point) => ({ date: new Date(point.timestamp), devices: point.devices }))
+      .filter((point) => !Number.isNaN(point.date.getTime()))
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
 
-  // 数据转换：每台设备的 cpu/memory 展平为 `${设备名}:cpu` / `${设备名}:memory` 列
-  const { chartData, deviceNames } = useMemo(() => {
-    if (data.length === 0) {
-      return { chartData: [], deviceNames: [] }
-    }
+    const timeWindow = resolveTimeWindow(timeRange, Date.now(), dated.map((point) => point.date))
+    const inWindow = dated.filter((point) => point.date.getTime() >= timeWindow[0].getTime())
 
-    const allDeviceNames = Array.from(
-      new Set(data.flatMap((point) => Object.keys(point.devices)))
-    )
-    const limitedDeviceNames = allDeviceNames.slice(0, MAX_DEVICES)
+    const names = Array.from(new Set(inWindow.flatMap((point) => Object.keys(point.devices)))).slice(0, MAX_DEVICES)
 
-    const transformed = data.map((point) => {
-      const dataPoint: Record<string, string | number> = {
-        time: formatTimeLabel(new Date(point.timestamp)),
-      }
-      limitedDeviceNames.forEach((deviceName) => {
-        const value = point.devices[deviceName]
-        PERFORMANCE_METRICS.forEach((metric) => {
-          dataPoint[`${deviceName}:${metric.key}`] = value?.[metric.key] ?? 0
-        })
-      })
-      return dataPoint
-    })
-
-    return { chartData: transformed, deviceNames: limitedDeviceNames }
-  }, [data, formatTimeLabel])
-
-  // X 轴刻度：按时间范围取步长（1h→5min，以此类推），保证每档约 12 个刻度
-  const xTickValues = useMemo(() => {
-    if (!timeRange) return undefined
-    return selectTimeTickLabels(data, resolveTickStepMinutes(timeRange), formatTimeLabel)
-  }, [data, formatTimeLabel, timeRange])
-
-  const colorOf = (deviceIndex: number) => DEVICE_SERIES_COLORS[deviceIndex % DEVICE_SERIES_COLORS.length]
-
-  // 曲线 = 设备 × 可见指标
-  const lines = useMemo(() => {
-    return deviceNames.flatMap((deviceName, index) =>
-      PERFORMANCE_METRICS.filter((metric) => !hiddenMetrics.has(metric.key)).map((metric) => ({
+    const built: Array<TimeSeriesLine & { metric: PerformanceMetricKey }> = names.flatMap((deviceName, index) =>
+      PERFORMANCE_METRICS.map((metric) => ({
         key: `${deviceName}:${metric.key}`,
         name: `${deviceName} ${metric.label}`,
         color: colorOf(index),
-        strokeWidth: 2.5,
         strokeDasharray: metric.strokeDasharray,
+        metric: metric.key,
+        points: inWindow.flatMap((point) => {
+          const value = point.devices[deviceName]?.[metric.key]
+          return typeof value === 'number' && Number.isFinite(value) ? [{ date: point.date, value }] : []
+        }),
       }))
     )
-  }, [deviceNames, hiddenMetrics])
 
-  const formatter = (value: number | string): string => `${Number(value).toFixed(1)}%`
+    return { domain: timeWindow, deviceNames: names, allLines: built }
+  }, [data, timeRange])
 
-  // 设备图例
-  const DeviceLegend = () => (
-    <ul aria-label="设备图例" className="mt-4 flex flex-wrap items-center justify-center gap-4">
-      {deviceNames.map((deviceName, index) => (
-        <li key={deviceName} className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full" style={{ backgroundColor: colorOf(index) }} />
-          <span className="text-sm text-muted-foreground">{deviceName}</span>
-        </li>
-      ))}
-      {deviceNames.length === MAX_DEVICES && (
-        <li className="mt-1 w-full text-center">
-          <span className="text-xs text-muted-foreground">(最多显示{MAX_DEVICES}个设备)</span>
-        </li>
-      )}
-    </ul>
+  const lines = useMemo(
+    () => allLines.filter((line) => !hiddenMetrics.has(line.metric)),
+    [allLines, hiddenMetrics]
   )
 
-  if (chartData.length === 0 || deviceNames.length === 0) {
+  if (deviceNames.length === 0) {
     return (
       <div className="flex items-center justify-center" style={{ height }}>
         <p className="text-muted-foreground">暂无性能数据</p>
@@ -127,16 +92,29 @@ export function SystemPerformanceChart({
 
   return (
     <div className={className}>
-      <LineChartComponent
-        data={chartData}
-        xKey="time"
+      <TimeSeriesLineChart
         lines={lines}
+        domain={domain}
+        timeRange={timeRange}
         height={height}
-        formatter={formatter}
-        xTickValues={xTickValues}
-        gridTone="prominent"
+        formatValue={formatPercent}
+        ariaLabel="系统性能趋势图"
       />
-      {showLegend && <DeviceLegend />}
+      {showLegend && (
+        <ul aria-label="设备图例" className="mt-4 flex flex-wrap items-center justify-center gap-4">
+          {deviceNames.map((deviceName, index) => (
+            <li key={deviceName} className="flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: colorOf(index) }} />
+              <span className="text-sm text-muted-foreground">{deviceName}</span>
+            </li>
+          ))}
+          {deviceNames.length === MAX_DEVICES && (
+            <li className="mt-1 w-full text-center">
+              <span className="text-xs text-muted-foreground">(最多显示{MAX_DEVICES}个设备)</span>
+            </li>
+          )}
+        </ul>
+      )}
     </div>
   )
 }

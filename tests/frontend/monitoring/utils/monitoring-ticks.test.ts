@@ -3,7 +3,6 @@ import {
   MONITORING_SAMPLE_INTERVAL_MINUTES,
   TIME_RANGE_OPTIONS,
   resolveTickStepMinutes,
-  selectTimeTickLabels,
 } from '@/features/monitoring/utils/monitoring'
 
 describe('TIME_RANGE_OPTIONS', () => {
@@ -64,44 +63,6 @@ describe('resolveTickStepMinutes（刻度既落在自然边界，又对得上采
 
   it('非法输入回退 120 分钟', () => {
     expect(resolveTickStepMinutes('abc')).toBe(120)
-  })
-})
-
-describe('selectTimeTickLabels', () => {
-  const fmt = (date: Date) =>
-    `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`
-
-  it('5 分钟采集点 + 5 分钟步长：逐点入选（1h 档）', () => {
-    const points = Array.from({ length: 12 }, (_, i) => ({
-      timestamp: new Date(Date.UTC(2026, 6, 25, 13, i * 5)).toISOString(),
-    }))
-    const labels = selectTimeTickLabels(points, 5, fmt)
-    expect(labels).toHaveLength(12)
-    expect(labels[0]).toBe('13:00')
-    expect(labels[1]).toBe('13:05')
-    expect(labels[11]).toBe('13:55')
-  })
-
-  it('5 分钟采集点 + 60 分钟步长：仅整点入选（12h 档）', () => {
-    const points = Array.from({ length: 25 }, (_, i) => ({
-      timestamp: new Date(Date.UTC(2026, 6, 25, 12, 0) + i * 5 * 60_000).toISOString(),
-    }))
-    const labels = selectTimeTickLabels(points, 60, fmt)
-    expect(labels).toEqual(['12:00', '13:00', '14:00'])
-  })
-
-  it('步长不整除 24 小时（14h）时按首点锚定', () => {
-    const base = Date.UTC(2026, 6, 20, 3, 0)
-    const points = Array.from({ length: 29 }, (_, i) => ({
-      timestamp: new Date(base + i * 60 * 60_000).toISOString(),
-    }))
-    const labels = selectTimeTickLabels(points, 14 * 60, fmt)
-    // 首点 03:00 锚定，其后每 14 小时：03:00、17:00、07:00(次日+28h)
-    expect(labels).toEqual(['03:00', '17:00', '07:00'])
-  })
-
-  it('空数据返回空数组', () => {
-    expect(selectTimeTickLabels([], 5, fmt)).toEqual([])
   })
 })
 
