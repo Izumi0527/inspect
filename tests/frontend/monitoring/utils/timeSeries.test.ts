@@ -1,4 +1,5 @@
 import {
+  findHoverPoint,
   resolveTimeRangeMs,
   resolveTimeWindow,
   splitAtGaps,
@@ -58,5 +59,28 @@ describe('splitAtGaps（相邻两点超过 2 个采样周期即断开）', () =>
   it('超过 2 个采样周期断成两段', () => {
     const segments = splitAtGaps([at('2026-11-09T00:00:00Z'), at('2026-11-09T00:15:00Z')])
     expect(segments).toHaveLength(2)
+  })
+})
+
+// 悬停吸附与断线同一阈值：最近的采样点也离光标超过 2 个采样周期，说明光标落在缺口里，不提示
+describe('findHoverPoint（光标在缺口里返回 null）', () => {
+  const points = [at('2026-11-09T00:00:00Z'), at('2026-11-09T00:05:00Z'), at('2026-11-09T01:00:00Z')]
+  const hover = (iso: string) => findHoverPoint(points, new Date(iso))?.date.toISOString() ?? null
+
+  it('吸附到离光标最近的采样点', () => {
+    expect(hover('2026-11-09T00:04:00Z')).toBe('2026-11-09T00:05:00.000Z')
+    expect(hover('2026-11-09T00:56:00Z')).toBe('2026-11-09T01:00:00.000Z')
+  })
+
+  it('最近的采样点也超过 2 个采样周期时返回 null', () => {
+    expect(hover('2026-11-09T00:30:00Z')).toBeNull()
+  })
+
+  it('正好 2 个采样周期仍吸附，与断线阈值同为闭区间', () => {
+    expect(hover('2026-11-09T00:15:00Z')).toBe('2026-11-09T00:05:00.000Z')
+  })
+
+  it('空点列返回 null', () => {
+    expect(findHoverPoint([], new Date('2026-11-09T00:00:00Z'))).toBeNull()
   })
 })

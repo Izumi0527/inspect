@@ -59,8 +59,8 @@ export function splitAtGaps<T extends { date: Date }>(points: ReadonlyArray<T>):
   return segments
 }
 
-/** 在按时间升序的点列中找离 target 最近的下标（十字线吸附）；点列须非空 */
-export function nearestPointIndex<T extends { date: Date }>(points: ReadonlyArray<T>, target: Date): number {
+/** 在按时间升序的点列中找离 target 最近的下标；点列须非空 */
+function nearestPointIndex<T extends { date: Date }>(points: ReadonlyArray<T>, target: Date): number {
   const time = target.getTime()
   let low = 0
   let high = points.length - 1
@@ -76,6 +76,17 @@ export function nearestPointIndex<T extends { date: Date }>(points: ReadonlyArra
     return low - 1
   }
   return low
+}
+
+/**
+ * 悬停吸附：返回按时间升序的点列中离 target 最近的点。
+ * 若最近的点也离光标超过缺口阈值，说明光标落在数据缺口里，返回 null（不提示），
+ * 避免十字线跳到几小时外的点、把缺口说成有数据。阈值与断线同为闭区间。
+ */
+export function findHoverPoint<T extends { date: Date }>(points: ReadonlyArray<T>, target: Date): T | null {
+  if (points.length === 0) return null
+  const point = points[nearestPointIndex(points, target)]
+  return Math.abs(point.date.getTime() - target.getTime()) > TIME_SERIES_GAP_THRESHOLD_MS ? null : point
 }
 
 /**

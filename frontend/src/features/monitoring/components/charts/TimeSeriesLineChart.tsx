@@ -9,12 +9,7 @@ import { localPoint } from '@visx/event'
 import { useTooltip, TooltipWithBounds, defaultStyles } from '@visx/tooltip'
 import { resolveChartGridStyle, useDocumentDarkClass } from '@/lib/chart-theme'
 import { resolveTimeAxisLabelFormatter } from '../../utils/monitoring'
-import {
-  buildTimeAxisTicks,
-  nearestPointIndex,
-  splitAtGaps,
-  TIME_SERIES_GAP_THRESHOLD_MS,
-} from '../../utils/timeSeries'
+import { buildTimeAxisTicks, findHoverPoint, splitAtGaps } from '../../utils/timeSeries'
 
 export interface TimeSeriesPoint {
   date: Date
@@ -141,10 +136,9 @@ export function TimeSeriesLineChart({
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<SVGRectElement>) => {
       const point = localPoint(event)
-      if (!point || anchors.length === 0) return
-      const target = xScale.invert(point.x - MARGIN.left)
-      const anchor = anchors[nearestPointIndex(anchors, target)]
-      if (Math.abs(anchor.date.getTime() - target.getTime()) > TIME_SERIES_GAP_THRESHOLD_MS) {
+      if (!point) return
+      const anchor = findHoverPoint(anchors, xScale.invert(point.x - MARGIN.left))
+      if (!anchor) {
         hideTooltip()
         return
       }

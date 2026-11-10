@@ -1,5 +1,5 @@
 import React from 'react'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   InterfaceTrafficChart,
   TrafficSeriesLegend,
@@ -188,5 +188,47 @@ describe('InterfaceTrafficChart 横轴范围', () => {
 
     expect(lines(container)).toHaveLength(1)
     expect(container.querySelectorAll('circle[data-series="outbound"]')).toHaveLength(0)
+  })
+})
+
+// 与系统性能趋势、设备温度图同一判断：光标落在缺口里（最近的采样点也超过 2 个采样周期）不提示，
+// 避免十字线跳到几小时外的点、把缺口说成有数据
+describe('InterfaceTrafficChart 悬停提示', () => {
+  // jsdom 无布局：容器宽 0 → 绘图区宽度取下限 100px，24h 窗口下 1px = 14.4 分钟；
+  // localPoint 无 getScreenCTM 时按包围盒（全 0）计算，clientX 即 SVG 坐标，需加上图表左边距
+  const MARGIN_LEFT = 72
+  const hover = (container: HTMLElement, innerX: number) => {
+    const overlay = container.querySelector('rect[fill="transparent"]')
+    if (!overlay) throw new Error('未找到悬停层')
+    fireEvent.mouseMove(overlay, { clientX: MARGIN_LEFT + innerX, clientY: 20 })
+  }
+  const tooltip = (container: HTMLElement) => container.querySelector('.visx-tooltip')
+  const crosshair = (container: HTMLElement) => container.querySelector('g[pointer-events="none"]')
+
+  const at = (timestamp: string): NetworkTrafficDataPoint => ({ timestamp, inbound: 1, outbound: 2 })
+  // 2026-11-08 02:35 至 22:20 离线近 20 小时
+  const data = ['2026-11-08T02:25:00Z', '2026-11-08T02:30:00Z', '2026-11-08T02:35:00Z', '2026-11-08T22:20:00Z', '2026-11-08T22:25:00Z'].map(at)
+
+  beforeEach(() => {
+    freezeNow('2026-11-09T00:00:00Z')
+  })
+
+  it('光标靠近采样点时吸附并提示', () => {
+    const { container } = render(<InterfaceTrafficChart data={data} timeRange="24h" height={240} />)
+
+    hover(container, 93) // 22:19，最近点 22:20
+    expect(tooltip(container)).not.toBeNull()
+    expect(crosshair(container)).not.toBeNull()
+  })
+
+  it('光标落在离线缺口里不提示，从采样点移入缺口后提示消失', () => {
+    const { container } = render(<InterfaceTrafficChart data={data} timeRange="24h" height={240} />)
+
+    hover(container, 93)
+    expect(tooltip(container)).not.toBeNull()
+
+    hover(container, 50) // 12:00，离最近的采样点 02:35 也有 9 小时以上
+    expect(tooltip(container)).toBeNull()
+    expect(crosshair(container)).toBeNull()
   })
 })

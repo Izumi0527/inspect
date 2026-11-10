@@ -13,7 +13,7 @@ import {
   formatBandwidthValue,
   resolveTimeAxisLabelFormatter,
 } from '../../utils/monitoring'
-import { buildTimeAxisTicks, nearestPointIndex, resolveTimeWindow, splitAtGaps } from '../../utils/timeSeries'
+import { buildTimeAxisTicks, findHoverPoint, resolveTimeWindow, splitAtGaps } from '../../utils/timeSeries'
 import type { NetworkTrafficDataPoint } from '../../types'
 
 type TrafficSeriesKey = 'outbound' | 'inbound'
@@ -132,16 +132,20 @@ export function InterfaceTrafficChart({
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<SVGRectElement>) => {
       const point = localPoint(event)
-      if (!point || points.length === 0) return
-      const x = point.x - margin.left
-      const datum = points[nearestPointIndex(points, xScale.invert(x))]
+      if (!point) return
+      const datum = findHoverPoint(points, xScale.invert(point.x - margin.left))
+      // 光标落在数据缺口里：不提示（与系统性能趋势、设备温度图同一判断）
+      if (!datum) {
+        hideTooltip()
+        return
+      }
       showTooltip({
         tooltipData: datum,
         tooltipLeft: xScale(datum.date) + margin.left,
         tooltipTop: point.y,
       })
     },
-    [points, xScale, margin.left, showTooltip]
+    [points, xScale, margin.left, showTooltip, hideTooltip]
   )
 
   if (points.length === 0) {
