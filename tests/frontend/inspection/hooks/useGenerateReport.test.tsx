@@ -18,11 +18,13 @@ jest.mock('@/lib/api-client', () => ({
 
 jest.mock('react-hot-toast', () => ({
   __esModule: true,
-  default: { success: jest.fn(), error: jest.fn() },
+  default: { success: jest.fn(), error: jest.fn(), loading: jest.fn() },
 }))
 
 const request = { executionId: 'batch-report-test', type: 'detailed' as const, format: 'pdf' as const }
 const fallback = '巡检报告生成失败，请稍后重试或联系管理员'
+// 导出全程复用同一个 toast id：loading 提示被成功或失败提示原位替换，不会叠出多条
+const toastOptions = { id: 'inspection-export-report' }
 
 const renderReportHook = () => {
   const client = new QueryClient({
@@ -64,7 +66,7 @@ describe('巡检报告生成与错误提示', () => {
       await act(async () => {
         await expect(result.current.mutateAsync(request)).rejects.toThrow(message)
       })
-      expect(toast.error).toHaveBeenCalledWith(expected)
+      expect(toast.error).toHaveBeenCalledWith(expected, toastOptions)
       expect(toast.success).not.toHaveBeenCalled()
       expect(authorizedDownload).not.toHaveBeenCalled()
     } finally {
@@ -87,6 +89,7 @@ describe('巡检报告生成与错误提示', () => {
     const originalRevoke = URL.revokeObjectURL
     URL.createObjectURL = jest.fn(() => 'blob:report-test')
     URL.revokeObjectURL = jest.fn()
+    const setTimeoutSpy = jest.spyOn(window, 'setTimeout')
     let downloadedFilename = ''
     jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
       downloadedFilename = this.download
@@ -103,10 +106,17 @@ describe('巡检报告生成与错误提示', () => {
       })
       expect(authorizedDownload).toHaveBeenCalledWith('http://localhost:18080/api/v1/reports/files/report-test.pdf')
       expect(URL.createObjectURL).toHaveBeenCalledWith(blob)
+      // 临时链接延迟 60 秒回收，给浏览器留出读取 blob 的时间；这里手动触发该回调而不真等
+      const revokeCallIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 60_000)
+      expect(revokeCallIndex).toBeGreaterThanOrEqual(0)
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+      window.clearTimeout(setTimeoutSpy.mock.results[revokeCallIndex].value)
+      ;(setTimeoutSpy.mock.calls[revokeCallIndex][0] as () => void)()
       expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:report-test')
       expect(downloadedFilename).toBe('report-test.pdf')
       expect(document.querySelector('a[download="report-test.pdf"]')).toBeNull()
-      expect(toast.success).toHaveBeenCalledWith('报告已生成，正在下载...')
+      expect(toast.loading).toHaveBeenCalledWith('正在导出 PDF 报告...', toastOptions)
+      expect(toast.success).toHaveBeenCalledWith('PDF 报告导出完成', toastOptions)
       expect(toast.error).not.toHaveBeenCalled()
     } finally {
       URL.createObjectURL = originalCreate
