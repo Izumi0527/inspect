@@ -125,3 +125,99 @@ func TestValidateGeneralSettingEnumAndString(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateGeneralSettingExcludeKeywords(t *testing.T) {
+	keys := []string{"system.alert_exclude_keywords", "logs.exclude_keywords"}
+
+	for _, key := range keys {
+		t.Run(key+"_合法字符串", func(t *testing.T) {
+			enforcedType, err := validateGeneralSetting(key, "CPU, MEM; 磁盘，网络")
+			if err != nil {
+				t.Fatalf("期望通过，实际报错: %v", err)
+			}
+			if enforcedType != "string" {
+				t.Fatalf("enforcedType=%q, want 'string'", enforcedType)
+			}
+		})
+
+		t.Run(key+"_空字符串及全空白分隔符", func(t *testing.T) {
+			for _, val := range []interface{}{"", "   ", ",,,;；，"} {
+				enforcedType, err := validateGeneralSetting(key, val)
+				if err != nil {
+					t.Fatalf("val=%q 期望通过，实际报错: %v", val, err)
+				}
+				if enforcedType != "string" {
+					t.Fatalf("enforcedType=%q, want 'string'", enforcedType)
+				}
+			}
+		})
+
+		t.Run(key+"_非字符串拒绝", func(t *testing.T) {
+			for _, val := range []interface{}{123, true, nil, []string{"test"}} {
+				_, err := validateGeneralSetting(key, val)
+				if err == nil {
+					t.Fatalf("val=%v 期望报错，实际通过", val)
+				}
+				if !strings.Contains(err.Error(), "必须是字符串") {
+					t.Fatalf("错误信息未包含'必须是字符串': %v", err)
+				}
+			}
+		})
+
+		t.Run(key+"_超过20个独立关键字拒绝", func(t *testing.T) {
+			var kws []string
+			for i := 1; i <= 21; i++ {
+				kws = append(kws, strings.Repeat("a", i))
+			}
+			val := strings.Join(kws, ",")
+			_, err := validateGeneralSetting(key, val)
+			if err == nil {
+				t.Fatalf("21个独立关键字期望报错，实际通过")
+			}
+			if !strings.Contains(err.Error(), "最多允许配置 20 个") {
+				t.Fatalf("错误信息未包含'最多允许配置 20 个': %v", err)
+			}
+		})
+
+		t.Run(key+"_含重复时不超过20个独立关键字通过", func(t *testing.T) {
+			var kws []string
+			for i := 1; i <= 20; i++ {
+				kws = append(kws, strings.Repeat("b", i))
+			}
+			// 追加大小写重复项
+			kws = append(kws, "B", "bb", "BBB")
+			val := strings.Join(kws, ",")
+			enforcedType, err := validateGeneralSetting(key, val)
+			if err != nil {
+				t.Fatalf("去重后20个关键字期望通过，实际报错: %v", err)
+			}
+			if enforcedType != "string" {
+				t.Fatalf("enforcedType=%q, want 'string'", enforcedType)
+			}
+		})
+
+		t.Run(key+"_单个关键字超100字符拒绝", func(t *testing.T) {
+			over100 := strings.Repeat("字", 101)
+			val := "正常," + over100
+			_, err := validateGeneralSetting(key, val)
+			if err == nil {
+				t.Fatalf("101字符关键字期望报错，实际通过")
+			}
+			if !strings.Contains(err.Error(), "单个屏蔽关键字长度不能超过 100 个字符") {
+				t.Fatalf("错误信息未包含'单个屏蔽关键字长度不能超过 100 个字符': %v", err)
+			}
+		})
+
+		t.Run(key+"_单个关键字正好100字符通过", func(t *testing.T) {
+			exact100 := strings.Repeat("测", 100)
+			val := "kw1," + exact100
+			enforcedType, err := validateGeneralSetting(key, val)
+			if err != nil {
+				t.Fatalf("100字符关键字期望通过，实际报错: %v", err)
+			}
+			if enforcedType != "string" {
+				t.Fatalf("enforcedType=%q, want 'string'", enforcedType)
+			}
+		})
+	}
+}

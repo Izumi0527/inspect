@@ -5,6 +5,7 @@ import { Permission } from '@/lib/types/auth.types'
 export type SettingsTabKey =
   | 'general'
   | 'logs'
+  | 'filter'
   | 'users'
   | 'roles'
   | 'security'

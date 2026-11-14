@@ -2,12 +2,26 @@ import { act, renderHook } from '@testing-library/react'
 import { useAlertFilters, ALERT_EXCLUDE_KEYWORDS_STORAGE_KEY } from '@/features/alerts/hooks/useAlerts'
 import { DEFAULT_ALERT_FILTERS } from '@/features/alerts/types'
 
-// 告警中心默认视图为「活跃」：打开页面先看还没处理的告警，而不是被历史的已解决记录淹没。
-// 屏蔽关键字是"视图偏好"而非"筛选"：重置筛选不清它，刷新页面也不丢。
+let mockDisplayPreferences:
+  | {
+      timezone?: string
+      time_format?: '12h' | '24h'
+      application_name?: string
+      alert_exclude_keywords?: string
+      log_exclude_keywords?: string
+    }
+  | undefined = undefined
+
+jest.mock('@/hooks/useDatetimePreferencesSync', () => ({
+  useDisplayPreferences: () => ({
+    data: mockDisplayPreferences,
+  }),
+}))
 
 describe('useAlertFilters 默认视图', () => {
   beforeEach(() => {
     localStorage.clear()
+    mockDisplayPreferences = undefined
   })
 
   it('默认状态筛选应为活跃，级别、搜索与屏蔽词为空', () => {
@@ -48,34 +62,29 @@ describe('useAlertFilters 默认视图', () => {
   })
 })
 
-describe('useAlertFilters 屏蔽关键字', () => {
+describe('useAlertFilters 屏蔽关键字与持久化偏好', () => {
   beforeEach(() => {
     localStorage.clear()
+    mockDisplayPreferences = undefined
   })
 
-  it('重置筛选应保留屏蔽词', () => {
-    const { result } = renderHook(() => useAlertFilters())
-
-    act(() => {
-      result.current.updateFilter('excludeQuery', 'NTP')
-      result.current.updateFilter('statusFilter', 'resolved')
-    })
-
-    act(() => {
-      result.current.resetFilters()
-    })
-
-    expect(result.current.filters.excludeQuery).toBe('NTP')
-    expect(result.current.filters.statusFilter).toBe('active')
-  })
-
-  it('屏蔽词应从 localStorage 回放并立即进入防抖值', () => {
-    localStorage.setItem(ALERT_EXCLUDE_KEYWORDS_STORAGE_KEY, 'LLDP')
+  it('应从 useDisplayPreferences 获取 alert_exclude_keywords 并派生防抖值与切分数组', () => {
+    mockDisplayPreferences = {
+      alert_exclude_keywords: 'NTP, LLDP, BGP',
+    }
 
     const { result } = renderHook(() => useAlertFilters())
 
-    expect(result.current.filters.excludeQuery).toBe('LLDP')
-    expect(result.current.debouncedExcludeQuery).toBe('LLDP')
-    expect(result.current.excludeKeywords).toEqual(['LLDP'])
+    expect(result.current.filters.excludeQuery).toBe('NTP, LLDP, BGP')
+    expect(result.current.debouncedExcludeQuery).toBe('NTP, LLDP, BGP')
+    expect(result.current.excludeKeywords).toEqual(['NTP', 'LLDP', 'BGP'])
+  })
+
+  it('挂载时应主动清理遗留的 localStorage 本地存储 key', () => {
+    localStorage.setItem(ALERT_EXCLUDE_KEYWORDS_STORAGE_KEY, 'legacy_word')
+
+    renderHook(() => useAlertFilters())
+
+    expect(localStorage.getItem(ALERT_EXCLUDE_KEYWORDS_STORAGE_KEY)).toBeNull()
   })
 })

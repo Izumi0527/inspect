@@ -96,3 +96,52 @@ describe('useAlertStats 屏蔽关键字透传', () => {
     expect(firstArg?.excludeSearch).toBeUndefined()
   })
 })
+
+describe('useAlerts 人话翻译层屏蔽关键字过滤', () => {
+  it('当配置中文屏蔽词“电源”时，应过滤掉英文原文被翻译为含“电源”的告警并修正 total', async () => {
+    ;(fetchAlerts as jest.Mock).mockResolvedValue({
+      alerts: [
+        {
+          id: '101',
+          title: '[CRITICAL] test - SNMP Trap 硬件告警 (1.3.6.1.4.1.2011.5.25.129.2.1.19)',
+          description: 'Dying gasp is detected. (EntityPhysicalIndex=603979809)',
+          device: 'test',
+          severity: 'critical',
+          status: 'active',
+          timestamp: new Date().toISOString(),
+          category: 'hardware',
+          tags: [],
+          metadata: {},
+        },
+        {
+          id: '102',
+          title: '[WARNING] test - CPU使用率',
+          description: '设备 test 的 CPU使用率 当前值为 99%',
+          device: 'test',
+          severity: 'warning',
+          status: 'active',
+          timestamp: new Date().toISOString(),
+          category: 'performance',
+          tags: [],
+          metadata: {},
+        },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 10,
+      currentPage: 1,
+      hasNext: false,
+      hasPrev: false,
+    })
+
+    const { result } = renderHook(() =>
+      useAlerts({ page: 1, pageSize: 10, excludeSearch: '电源' }),
+    )
+
+    await waitFor(() => {
+      expect(result.current.alerts).toHaveLength(1)
+    })
+    expect(result.current.alerts[0].id).toBe('102')
+    expect(result.current.pagination.total).toBe(1)
+  })
+})

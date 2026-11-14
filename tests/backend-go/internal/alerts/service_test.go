@@ -7,6 +7,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/your-org/inspect-system/backend-go/internal/alerts"
+	"github.com/your-org/inspect-system/backend-go/internal/config"
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -287,6 +289,126 @@ func TestGetAlertStatistics_ExcludeSearch_AppliesToEveryQuery(t *testing.T) {
 	if _, err := service.GetAlertStatistics(context.Background(), alerts.AlertStatisticsFilter{ExcludeSearch: "NTP,50%"}); err != nil {
 		t.Fatalf("GetAlertStatistics() error = %v", err)
 	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
+func TestListAlerts_AutomaticallyAppliesPersistedExcludeKeywords(t *testing.T) {
+	db, mock, cleanup := newAlertsGormDBWithSQLMock(t)
+	defer cleanup()
+
+	settingsService := settings.NewService(db, nil, config.Config{}, zap.NewNop())
+	service := alerts.NewService(db, zap.NewNop())
+	service.SetSettings(settingsService)
+
+	mock.ExpectQuery(`SELECT \* FROM "system_settings" WHERE key = \$1`).
+		WithArgs("system.alert_exclude_keywords", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "key", "value", "category", "data_type"}).
+			AddRow(1, "system.alert_exclude_keywords", "BGP,CPU", "system", "string"))
+
+	excludeClause := `\(\(COALESCE\(a\.title, ''\) NOT ILIKE \$\d+ AND COALESCE\(a\.message, ''\) NOT ILIKE \$\d+ AND COALESCE\(d\.name, ''\) NOT ILIKE \$\d+ AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$\d+\)\)`
+	twoKeywords := excludeClause + ` AND ` + excludeClause
+
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE `+twoKeywords).
+		WithArgs("%BGP%", "%BGP%", "%BGP%", "%BGP%", "%CPU%", "%CPU%", "%CPU%", "%CPU%").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	mock.ExpectQuery(`(?is)SELECT a\.\*, d\.name AS device_name, d\.ip_address AS device_ip, r\.name AS rule_name FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE `+twoKeywords).
+		WithArgs("%BGP%", "%BGP%", "%BGP%", "%BGP%", "%CPU%", "%CPU%", "%CPU%", "%CPU%", 10).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "device_id", "title", "message", "category", "severity", "status", "device_name", "device_ip", "rule_name",
+		}).AddRow(1, 10, "Fan Alert", "Normal", "hardware", "warning", "open", "dev-1", "192.168.1.1", "rule-1"))
+
+	rows, total, err := service.ListAlerts(context.Background(), alerts.ListAlertsFilter{
+		Page:          1,
+		PageSize:      10,
+		ExcludeSearch: "", // 空输入，应当自动应用全局持久化的屏蔽关键字
+	})
+	if err != nil {
+		t.Fatalf("ListAlerts() error = %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("ListAlerts() total = %d, want 1", total)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("ListAlerts() rows = %d, want 1", len(rows))
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
+func TestGetRecentAlerts_AutomaticallyAppliesPersistedExcludeKeywords(t *testing.T) {
+	db, mock, cleanup := newAlertsGormDBWithSQLMock(t)
+	defer cleanup()
+
+	settingsService := settings.NewService(db, nil, config.Config{}, zap.NewNop())
+	service := alerts.NewService(db, zap.NewNop())
+	service.SetSettings(settingsService)
+
+	mock.ExpectQuery(`SELECT \* FROM "system_settings" WHERE key = \$1`).
+		WithArgs("system.alert_exclude_keywords", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "key", "value", "category", "data_type"}).
+			AddRow(1, "system.alert_exclude_keywords", "BGP", "system", "string"))
+
+	excludeClause := `\(COALESCE\(a\.title, ''\) NOT ILIKE \$\d+ AND COALESCE\(a\.message, ''\) NOT ILIKE \$\d+ AND COALESCE\(d\.name, ''\) NOT ILIKE \$\d+ AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$\d+\)`
+
+	mock.ExpectQuery(`(?is)SELECT a\.\*, d\.name AS device_name, d\.ip_address AS device_ip, r\.name AS rule_name FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE `+excludeClause+` ORDER BY .* LIMIT \$\d+`).
+		WithArgs("%BGP%", "%BGP%", "%BGP%", "%BGP%", 5).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "device_id", "title", "message", "category", "severity", "status", "device_name", "device_ip", "rule_name",
+		}))
+
+	rows, err := service.GetRecentAlerts(context.Background(), 5)
+	if err != nil {
+		t.Fatalf("GetRecentAlerts() error = %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("GetRecentAlerts() rows = %d, want 0", len(rows))
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
+func TestListAlerts_CombinesPersistedAndRequestExcludeKeywords(t *testing.T) {
+	db, mock, cleanup := newAlertsGormDBWithSQLMock(t)
+	defer cleanup()
+
+	settingsService := settings.NewService(db, nil, config.Config{}, zap.NewNop())
+	service := alerts.NewService(db, zap.NewNop())
+	service.SetSettings(settingsService)
+
+	mock.ExpectQuery(`SELECT \* FROM "system_settings" WHERE key = \$1`).
+		WithArgs("system.alert_exclude_keywords", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "key", "value", "category", "data_type"}).
+			AddRow(1, "system.alert_exclude_keywords", "GLOBAL", "system", "string"))
+
+	excludeClause := `\(\(COALESCE\(a\.title, ''\) NOT ILIKE \$\d+ AND COALESCE\(a\.message, ''\) NOT ILIKE \$\d+ AND COALESCE\(d\.name, ''\) NOT ILIKE \$\d+ AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$\d+\)\)`
+	twoKeywords := excludeClause + ` AND ` + excludeClause
+
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE `+twoKeywords).
+		WithArgs("%GLOBAL%", "%GLOBAL%", "%GLOBAL%", "%GLOBAL%", "%REQ%", "%REQ%", "%REQ%", "%REQ%").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	mock.ExpectQuery(`(?is)SELECT a\.\*, d\.name AS device_name, d\.ip_address AS device_ip, r\.name AS rule_name FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id WHERE `+twoKeywords).
+		WithArgs("%GLOBAL%", "%GLOBAL%", "%GLOBAL%", "%GLOBAL%", "%REQ%", "%REQ%", "%REQ%", "%REQ%", 10).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "device_id", "title", "message", "category", "severity", "status", "device_name", "device_ip", "rule_name",
+		}))
+
+	_, _, err := service.ListAlerts(context.Background(), alerts.ListAlertsFilter{
+		Page:          1,
+		PageSize:      10,
+		ExcludeSearch: "REQ",
+	})
+	if err != nil {
+		t.Fatalf("ListAlerts() error = %v", err)
+	}
+
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sqlmock expectations not met: %v", err)
 	}

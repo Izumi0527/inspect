@@ -2,6 +2,7 @@ import {
   Activity,
   Bell,
   Database,
+  EyeOff,
   FileText,
   KeyRound,
   ScrollText,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react'
 import { GeneralSettings } from '@/features/settings/components/general/GeneralSettings'
 import { LogsSettings } from '@/features/settings/components/logs/LogsSettings'
+import { FilterRulesSettings } from '@/features/settings/components/filter/FilterRulesSettings'
 import { UserManagement } from '@/features/settings/components/users/UserManagement'
 import { RoleManagement } from '@/features/settings/components/roles/RoleManagement'
 import { SecuritySettings } from '@/features/settings/components/security/SecuritySettings'
@@ -47,6 +49,19 @@ export const settingsTabRegistry: SettingsTabDescriptor[] = [
     supportsStats: false,
     supportsLeaveGuard: true,
     component: LogsSettings,
+  },
+  {
+    key: 'filter',
+    label: '屏蔽规则',
+    icon: EyeOff,
+    description: '告警中心与日志中心的全局屏蔽关键字配置',
+    requiredPermissions: [Permission.SYSTEM_CONFIG],
+    kind: 'form',
+    scrollMode: 'page',
+    toolbarMode: 'local',
+    supportsStats: false,
+    supportsLeaveGuard: true,
+    component: FilterRulesSettings,
   },
   {
     key: 'users',

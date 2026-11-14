@@ -51,6 +51,8 @@ func TestGetDisplayPreferences_LoginOnlyWithoutSystemConfigPermission(t *testing
 	expectSettingQuery(mock, "system.timezone", "America/New_York")
 	expectSettingQuery(mock, "user_preference.time_format", "12h")
 	expectSettingQuery(mock, "system.application_name", "自定义巡检平台")
+	expectSettingQuery(mock, "system.alert_exclude_keywords", "BGP,OSPF")
+	expectSettingQuery(mock, "logs.exclude_keywords", "debug,info")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/display-preferences", nil)
 	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
@@ -74,6 +76,12 @@ func TestGetDisplayPreferences_LoginOnlyWithoutSystemConfigPermission(t *testing
 	if body["application_name"] != "自定义巡检平台" {
 		t.Fatalf("application_name=%q, want 自定义巡检平台", body["application_name"])
 	}
+	if body["alert_exclude_keywords"] != "BGP,OSPF" {
+		t.Fatalf("alert_exclude_keywords=%q, want BGP,OSPF", body["alert_exclude_keywords"])
+	}
+	if body["log_exclude_keywords"] != "debug,info" {
+		t.Fatalf("log_exclude_keywords=%q, want debug,info", body["log_exclude_keywords"])
+	}
 }
 
 func TestGetDisplayPreferences_DefaultsWhenSettingsMissing(t *testing.T) {
@@ -83,6 +91,8 @@ func TestGetDisplayPreferences_DefaultsWhenSettingsMissing(t *testing.T) {
 	expectSettingQuery(mock, "system.timezone", "")
 	expectSettingQuery(mock, "user_preference.time_format", "")
 	expectSettingQuery(mock, "system.application_name", "")
+	expectSettingQuery(mock, "system.alert_exclude_keywords", "")
+	expectSettingQuery(mock, "logs.exclude_keywords", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/display-preferences", nil)
 	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
@@ -103,6 +113,12 @@ func TestGetDisplayPreferences_DefaultsWhenSettingsMissing(t *testing.T) {
 	}
 	if body["application_name"] != "网络设备巡检系统" {
 		t.Fatalf("缺省 application_name=%q, want 网络设备巡检系统", body["application_name"])
+	}
+	if body["alert_exclude_keywords"] != "" {
+		t.Fatalf("缺省 alert_exclude_keywords=%q, want \"\"", body["alert_exclude_keywords"])
+	}
+	if body["log_exclude_keywords"] != "" {
+		t.Fatalf("缺省 log_exclude_keywords=%q, want \"\"", body["log_exclude_keywords"])
 	}
 }
 

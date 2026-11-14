@@ -17,6 +17,7 @@ import (
 
 	"github.com/your-org/inspect-system/backend-go/internal/alerts"
 	"github.com/your-org/inspect-system/backend-go/internal/auth"
+	"github.com/your-org/inspect-system/backend-go/internal/common"
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
@@ -272,12 +273,14 @@ func (h AlertsHandler) GetAlertStatistics(c echo.Context) error {
 		return err
 	}
 
-	stats, err := h.Service.GetAlertStatistics(c.Request().Context(), alerts.AlertStatisticsFilter{ExcludeSearch: parseAlertExcludeSearch(c)})
+	ctx := c.Request().Context()
+	rawExclude := parseAlertExcludeSearch(c)
+	stats, err := h.Service.GetAlertStatistics(ctx, alerts.AlertStatisticsFilter{ExcludeSearch: rawExclude})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load alert statistics")
 	}
 
-	recentRows, _ := h.Service.GetRecentAlerts(c.Request().Context(), 5)
+	recentRows, _ := h.Service.GetRecentAlerts(ctx, 5)
 	recent := buildRecentAlerts(recentRows, 5)
 
 	recent24h := 0
@@ -285,13 +288,26 @@ func (h AlertsHandler) GetAlertStatistics(c echo.Context) error {
 	yesterdayCount := 0
 	changePercent := float64(0)
 	if db := h.Service.DB(); db != nil {
-		loc := h.Settings.ResolveLocation(c.Request().Context())
+		loc := h.Settings.ResolveLocation(ctx)
+		effectiveExclude := rawExclude
+		if persisted := h.Settings.GetAlertExcludeKeywords(ctx); persisted != "" {
+			if effectiveExclude == "" {
+				effectiveExclude = persisted
+			} else {
+				effectiveExclude = persisted + "," + effectiveExclude
+			}
+		}
+		baseAlertsQuery := func() *gorm.DB {
+			q := db.WithContext(ctx).
+				Table("alerts").
+				Joins("JOIN devices ON devices.id = alerts.device_id")
+			return applyAlertTableExcludeKeywords(q, effectiveExclude)
+		}
+
 		now := time.Now().In(loc)
 		last24h := now.Add(-24 * time.Hour)
 		var count int64
-		if err := db.WithContext(c.Request().Context()).
-			Table("alerts").
-			Joins("JOIN devices ON devices.id = alerts.device_id").
+		if err := baseAlertsQuery().
 			Where("COALESCE(alerts.first_occurred, alerts.created_at) >= ?", last24h).
 			Count(&count).Error; err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load recent alerts stats")
@@ -304,17 +320,13 @@ func (h AlertsHandler) GetAlertStatistics(c echo.Context) error {
 		yesterdayStart := todayStart.Add(-24 * time.Hour)
 
 		var today int64
-		if err := db.WithContext(c.Request().Context()).
-			Table("alerts").
-			Joins("JOIN devices ON devices.id = alerts.device_id").
+		if err := baseAlertsQuery().
 			Where("COALESCE(alerts.first_occurred, alerts.created_at) >= ? AND COALESCE(alerts.first_occurred, alerts.created_at) < ?", todayStart, todayStart.Add(24*time.Hour)).
 			Count(&today).Error; err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load today alerts stats")
 		}
 		var yesterday int64
-		if err := db.WithContext(c.Request().Context()).
-			Table("alerts").
-			Joins("JOIN devices ON devices.id = alerts.device_id").
+		if err := baseAlertsQuery().
 			Where("COALESCE(alerts.first_occurred, alerts.created_at) >= ? AND COALESCE(alerts.first_occurred, alerts.created_at) < ?", yesterdayStart, todayStart).
 			Count(&yesterday).Error; err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to load yesterday alerts stats")
@@ -1876,4 +1888,15 @@ func parseAlertExcludeSearch(c echo.Context) string {
 		val = strings.TrimSpace(c.QueryParam("exclude_keyword"))
 	}
 	return val
+}
+
+func applyAlertTableExcludeKeywords(query *gorm.DB, raw string) *gorm.DB {
+	for _, kw := range common.ExpandExcludeKeywords(raw) {
+		pattern := "%" + common.EscapeLikePattern(kw) + "%"
+		query = query.Where(
+			"(COALESCE(alerts.title, '') NOT ILIKE ? AND COALESCE(alerts.message, '') NOT ILIKE ? AND COALESCE(devices.name, '') NOT ILIKE ? AND COALESCE(CAST(devices.ip_address AS TEXT), '') NOT ILIKE ?)",
+			pattern, pattern, pattern, pattern,
+		)
+	}
+	return query
 }

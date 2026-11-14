@@ -5,7 +5,11 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { toast } from 'react-hot-toast'
 import { toLocalDayBoundaryIso } from '@/utils/dateRangeQuery'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
-import { useExcludeKeywords } from '@/hooks/useExcludeKeywords'
+import { useDisplayPreferences } from '@/hooks/useDatetimePreferencesSync'
+import {
+  matchesLogExcludeKeywords,
+  splitExcludeKeywords,
+} from '@/utils/excludeKeywords'
 import * as logsApi from '../api/logsApi'
 import type {
   DeviceLog,
@@ -35,16 +39,24 @@ export function useLogs(params: LogQueryParams = {}) {
     pageSize: DEFAULT_PAGE_SIZE,
     total: 0
   })
+  const requestIdRef = useRef(0)
+
+  const excludeKeywords = useMemo(
+    () => splitExcludeKeywords(params.exclude_search ?? ''),
+    [params.exclude_search],
+  )
 
   const loadLogs = useCallback(async (options: RequestOptions = {}) => {
     const { showToast = true } = options
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setError(null)
     try {
       const response = params.device_id
         ? await logsApi.getDeviceLogs(params.device_id, params)
         : await logsApi.getAllLogs(params)
-      
+
+      if (requestId !== requestIdRef.current) return false
       // 安全地访问响应数据
       const items = response?.items || []
       setLogs(items)
@@ -55,6 +67,7 @@ export function useLogs(params: LogQueryParams = {}) {
       })
       return true
     } catch (err) {
+      if (requestId !== requestIdRef.current) return false
       const message = errorMessage(err, '加载日志失败')
       setError(message)
       if (showToast) {
@@ -62,9 +75,25 @@ export function useLogs(params: LogQueryParams = {}) {
       }
       return false
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [params])
+
+  const filteredLogs = useMemo(() => {
+    if (excludeKeywords.length === 0) return logs
+    return logs.filter((log) => !matchesLogExcludeKeywords(log, excludeKeywords))
+  }, [logs, excludeKeywords])
+
+  const effectivePagination = useMemo(() => {
+    const removedCount = logs.length - filteredLogs.length
+    if (removedCount <= 0) return pagination
+    return {
+      ...pagination,
+      total: Math.max(0, pagination.total - removedCount),
+    }
+  }, [logs.length, filteredLogs.length, pagination])
 
   useEffect(() => {
     void loadLogs()
@@ -120,10 +149,10 @@ export function useLogs(params: LogQueryParams = {}) {
   }, [loadLogs])
 
   return {
-    logs,
+    logs: filteredLogs,
     loading,
     error,
-    pagination,
+    pagination: effectivePagination,
     loadLogs,
     deleteLog,
     batchDeleteLogs
@@ -170,7 +199,7 @@ export function useLogStats(hours: number = 24) {
 /**
  * 日志过滤器 Hook
  *
- * 屏蔽关键字是「视图偏好」：持久化到 localStorage、输入防抖（由 useExcludeKeywords 统一提供）。
+ * 屏蔽关键字统一由系统设置「屏蔽规则」持久化并由 useDisplayPreferences 读取。
  */
 export const LOG_EXCLUDE_KEYWORDS_STORAGE_KEY = 'log_exclude_keywords'
 
@@ -182,7 +211,15 @@ export function useLogFilters() {
     sourceFilter: 'all',
     includeSelf: false,
   })
-  const exclude = useExcludeKeywords(LOG_EXCLUDE_KEYWORDS_STORAGE_KEY)
+  const { data: displayPrefs } = useDisplayPreferences()
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(LOG_EXCLUDE_KEYWORDS_STORAGE_KEY)
+      }
+    } catch {}
+  }, [])
 
   // 搜索防抖：避免每次按键都触发后端请求
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
@@ -192,12 +229,8 @@ export function useLogFilters() {
     key: K,
     value: LogFilters[K]
   ) => {
-    if (key === 'excludeQuery') {
-      exclude.setExcludeQuery((value as string | undefined) ?? '')
-      return
-    }
     setFilters(prev => ({ ...prev, [key]: value }))
-  }, [exclude])
+  }, [])
 
   useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
@@ -217,7 +250,7 @@ export function useLogFilters() {
     }
   }, [filters.searchQuery])
 
-  const debouncedExcludeQuery = exclude.debouncedExcludeQuery
+  const debouncedExcludeQuery = (displayPrefs?.log_exclude_keywords ?? '').trim()
 
   // 转换为API查询参数
   const queryParams = useMemo((): LogQueryParams => {
@@ -267,8 +300,8 @@ export function useLogFilters() {
   ])
 
   const mergedFilters = useMemo(
-    (): LogFilters => ({ ...filters, excludeQuery: exclude.excludeQuery }),
-    [filters, exclude.excludeQuery],
+    (): LogFilters => ({ ...filters, excludeQuery: debouncedExcludeQuery }),
+    [filters, debouncedExcludeQuery],
   )
 
   return {

@@ -391,10 +391,11 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     // `SRM/4/TEMPRECOVERALARM: temperature below resume threshold`
     // 恢复类必须排在所有硬件故障与温度门限规则之前 —— 「below resume threshold」
     // 含 below/threshold 字样，会被温度门限规则抢先读成低温告警。
+    // 注意：normal 必须要求词边界或紧接器件名前缀，避免 `fan card is abnormal` 中的 abnormal 误命中恢复规则。
     id: 'huawei-hardware-recover',
-    pattern: /(?:temperature|fan|power|voltage|humidity|电源|风扇|温度|电压|湿度)[\s\S]{0,40}?(?:resume|recover|restore|normal|解除|恢复)/i,
+    pattern: /(temperature|fan|power|voltage|humidity|电源|风扇|温度|电压|湿度)[\s\S]{0,40}?(?:\b(?:resume\w*|recover\w*|restore\w*|normal)\b|(?:power|fan|temp(?:erature)?|voltage|humidity)normal|解除|恢复)/i,
     title: '硬件状态恢复',
-    summary: '{device} 的电源/风扇/温度相关告警已解除，硬件状态恢复正常。',
+    summary: '{device} 的{1:hwkind}相关告警已解除，硬件状态恢复正常。',
     tone: 'success',
   },
   {

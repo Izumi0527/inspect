@@ -41,6 +41,24 @@ func (s *Service) SetSettings(svc *settings.Service) {
 	s.settings = svc
 }
 
+func (s *Service) effectiveExcludeSearch(ctx context.Context, raw *string) string {
+	rawVal := ""
+	if raw != nil {
+		rawVal = strings.TrimSpace(*raw)
+	}
+	persisted := ""
+	if s != nil && s.settings != nil {
+		persisted = s.settings.GetLogExcludeKeywords(ctx)
+	}
+	if persisted == "" {
+		return rawVal
+	}
+	if rawVal == "" {
+		return persisted
+	}
+	return persisted + "," + rawVal
+}
+
 type LogFilter struct {
 	DeviceID      *int
 	Level         *string
@@ -169,10 +187,19 @@ func (s *Service) GetLogStatistics(ctx context.Context, deviceID *int, hours int
 	}
 
 	start := time.Now().Add(-time.Duration(hours) * time.Hour)
-	// 统计表达"设备真实活动"，本系统自身活动恒排除
+	// 统计表达"设备真实活动"，本系统自身活动恒排除，且与列表同口径应用全局日志屏蔽关键字
 	base := s.db.WithContext(ctx).Table("device_logs").Where("log_timestamp >= ?", start).Where("self_generated = ?", false)
 	if deviceID != nil {
 		base = base.Where("device_id = ?", *deviceID)
+	}
+	if effectiveExclude := s.effectiveExcludeSearch(ctx, nil); effectiveExclude != "" {
+		for _, kw := range common.ExpandExcludeKeywords(effectiveExclude) {
+			pattern := "%" + common.EscapeLikePattern(kw) + "%"
+			base = base.Where(
+				"(COALESCE(message, '') NOT ILIKE ? AND COALESCE(raw_message, '') NOT ILIKE ?)",
+				pattern, pattern,
+			)
+		}
 	}
 
 	stats := LogStatistics{
@@ -485,8 +512,8 @@ func (s *Service) buildLogQuery(ctx context.Context, filter LogFilter) *gorm.DB 
 		pattern := "%" + common.EscapeLikePattern(strings.TrimSpace(*filter.Search)) + "%"
 		query = query.Where("(l.message ILIKE ? OR l.raw_message ILIKE ?)", pattern, pattern)
 	}
-	if filter.ExcludeSearch != nil {
-		for _, kw := range common.SplitExcludeKeywords(*filter.ExcludeSearch) {
+	if effectiveExclude := s.effectiveExcludeSearch(ctx, filter.ExcludeSearch); effectiveExclude != "" {
+		for _, kw := range common.ExpandExcludeKeywords(effectiveExclude) {
 			pattern := "%" + common.EscapeLikePattern(kw) + "%"
 			query = query.Where(
 				"(COALESCE(l.message, '') NOT ILIKE ? AND COALESCE(l.raw_message, '') NOT ILIKE ?)",

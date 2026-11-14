@@ -81,3 +81,62 @@ func TestGetAlertStatistics_ShouldIgnoreAlertsOfDeletedDevices(t *testing.T) {
 		t.Fatalf("sqlmock expectations not met: %v", err)
 	}
 }
+
+func TestGetAlertStatistics_AppliesExcludeKeywordsToTrendsAndRecent24h(t *testing.T) {
+	gormDB, mock, cleanup := newGormDBWithSqlmock(t)
+	defer cleanup()
+
+	authService, token := newAuthServiceWithPermissions(t, []string{"alerts:read"})
+	service := alerts.NewService(gormDB, zap.NewNop())
+	handler := handlers.AlertsHandler{
+		Service: service,
+		Auth:    authService,
+	}
+
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE \(+COALESCE\(a\.title, ''\) NOT ILIKE \$1`).
+		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE \(+COALESCE\(a\.title, ''\) NOT ILIKE \$1.*AND a\.status IN \(\$5,\$6\)`).
+		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%", "open", "acknowledged").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE \(+COALESCE\(a\.title, ''\) NOT ILIKE \$1.*AND a\.status = \$5`).
+		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%", "acknowledged").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE \(+COALESCE\(a\.title, ''\) NOT ILIKE \$1.*AND a\.status IN \(\$5,\$6\)`).
+		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%", "resolved", "closed").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`(?is)SELECT severity, COUNT\(\*\) as count FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE \(+COALESCE\(a\.title, ''\) NOT ILIKE \$1.*AND a\.status IN \(\$5,\$6\) GROUP BY "severity"`).
+		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%", "open", "acknowledged").
+		WillReturnRows(sqlmock.NewRows([]string{"severity", "count"}))
+	mock.ExpectQuery(`(?is)SELECT category, COUNT\(\*\) as count FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE \(+COALESCE\(a\.title, ''\) NOT ILIKE \$1.*AND a\.status IN \(\$5,\$6\) GROUP BY "category"`).
+		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%", "open", "acknowledged").
+		WillReturnRows(sqlmock.NewRows([]string{"category", "count"}))
+	mock.ExpectQuery(`(?is)SELECT a\.device_id, d\.name AS device_name, COUNT\(\*\) as count FROM alerts AS a JOIN devices d ON d\.id = a\.device_id WHERE \(+COALESCE\(a\.title, ''\) NOT ILIKE \$1.*AND a\.status IN \(\$5,\$6\) GROUP BY a\.device_id, d\.name ORDER BY count desc LIMIT \$7`).
+		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%", "open", "acknowledged", 10).
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "device_name", "count"}))
+	mock.ExpectQuery(`(?is)SELECT a\.\*, d\.name AS device_name, d\.ip_address AS device_ip, r\.name AS rule_name FROM alerts AS a JOIN devices d ON d\.id = a\.device_id LEFT JOIN alert_rules r ON r\.id = a\.rule_id ORDER BY a\.last_occurred desc, a\.created_at desc LIMIT \$1`).
+		WithArgs(5).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "device_id", "title", "message", "category", "severity", "status", "device_name", "device_ip", "rule_name",
+		}))
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM "alerts" JOIN devices ON devices\.id = alerts\.device_id WHERE \(+COALESCE\(alerts\.title, ''\) NOT ILIKE \$1.*AND COALESCE\(alerts\.first_occurred, alerts\.created_at\) >= \$5`).
+		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM "alerts" JOIN devices ON devices\.id = alerts\.device_id WHERE \(+COALESCE\(alerts\.title, ''\) NOT ILIKE \$1.*AND \(+COALESCE\(alerts\.first_occurred, alerts\.created_at\) >= \$5 AND COALESCE\(alerts\.first_occurred, alerts\.created_at\) < \$6\)+`).
+		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) FROM "alerts" JOIN devices ON devices\.id = alerts\.device_id WHERE \(+COALESCE\(alerts\.title, ''\) NOT ILIKE \$1.*AND \(+COALESCE\(alerts\.first_occurred, alerts\.created_at\) >= \$5 AND COALESCE\(alerts\.first_occurred, alerts\.created_at\) < \$6\)+`).
+		WithArgs("%NTP%", "%NTP%", "%NTP%", "%NTP%", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	ctx, rec := newEchoContextWithBody(http.MethodGet, "/api/v1/alerts/statistics?exclude_search=NTP", token, nil)
+	if err := handler.GetAlertStatistics(ctx); err != nil {
+		t.Fatalf("GetAlertStatistics() error = %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", rec.Code, rec.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}

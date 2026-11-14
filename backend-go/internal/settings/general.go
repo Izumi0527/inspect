@@ -511,6 +511,22 @@ func (s *Service) GetDefaultReportFormat(ctx context.Context) string {
 	}
 }
 
+// GetAlertExcludeKeywords 返回全局持久化的告警屏蔽关键字（system.alert_exclude_keywords），未配置或出错时回退空串。
+func (s *Service) GetAlertExcludeKeywords(ctx context.Context) string {
+	if s == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.getSettingValue(ctx, AlertExcludeKeywordsKey, ""))
+}
+
+// GetLogExcludeKeywords 返回全局持久化的日志屏蔽关键字（logs.exclude_keywords），未配置或出错时回退空串。
+func (s *Service) GetLogExcludeKeywords(ctx context.Context) string {
+	if s == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.getSettingValue(ctx, LogExcludeKeywordsKey, ""))
+}
+
 func (s *Service) getSettingValue(ctx context.Context, key string, fallback string) string {
 	item, err := s.GetSetting(ctx, key)
 	if err != nil || item == nil {

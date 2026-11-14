@@ -89,3 +89,18 @@ func TestSplitExcludeKeywords_MaxLimit(t *testing.T) {
 		t.Fatalf("SplitExcludeKeywords elements mismatch: first=%s, last=%s", got[0], got[19])
 	}
 }
+
+func TestExpandExcludeKeywords_ExpandsChinesePlainLanguageTerms(t *testing.T) {
+	got := common.ExpandExcludeKeywords("电源, 风扇")
+	want := []string{"电源", "power", "dying gasp", "dyinggasp", "psu", "风扇", "fan"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ExpandExcludeKeywords(\"电源, 风扇\") = %v, want %v", got, want)
+	}
+
+	// 普通英文关键字保持原样不额外膨胀
+	gotASCII := common.ExpandExcludeKeywords("BGP, CPU")
+	wantASCII := []string{"BGP", "CPU"}
+	if !reflect.DeepEqual(gotASCII, wantASCII) {
+		t.Fatalf("ExpandExcludeKeywords(\"BGP, CPU\") = %v, want %v", gotASCII, wantASCII)
+	}
+}

@@ -1,6 +1,8 @@
 import {
   MAX_EXCLUDE_KEYWORDS,
+  matchesAlertExcludeKeywords,
   matchesExcludeKeywords,
+  matchesLogExcludeKeywords,
   splitExcludeKeywords,
 } from '@/utils/excludeKeywords'
 
@@ -50,5 +52,30 @@ describe('matchesExcludeKeywords', () => {
 
   it('所有关键字都不是子串时不命中', () => {
     expect(matchesExcludeKeywords(['CPU high'], ['ntp', 'lldp'])).toBe(false)
+  })
+})
+
+describe('matchesAlertExcludeKeywords & matchesLogExcludeKeywords（人话翻译层联动）', () => {
+  it('当设备原始告警为英文 Power/Dying gasp 时，配置中文屏蔽词“电源”应命中翻译结果并屏蔽', () => {
+    const powerAlert = {
+      title: '[CRITICAL] test - SNMP Trap 硬件告警 (1.3.6.1.4.1.2011.5.25.129.2.1.19)',
+      description: 'Dying gasp is detected. (EntityPhysicalIndex=603979809)',
+      device: 'test',
+      severity: 'critical',
+      category: 'hardware',
+    }
+    expect(matchesAlertExcludeKeywords(powerAlert, ['电源'])).toBe(true)
+    expect(matchesAlertExcludeKeywords(powerAlert, ['风扇'])).toBe(false)
+  })
+
+  it('当设备原始日志为英文 Power supply 恢复时，配置中文屏蔽词“电源”应命中日志翻译结果并屏蔽', () => {
+    const powerLog = {
+      message: 'Power 1 has resumed. (EntityPhysicalIndex=603979809, BaseTrapSeverity=1)',
+      device_name: 'test',
+      level: 'info',
+      facility: 'system',
+    }
+    expect(matchesLogExcludeKeywords(powerLog, ['电源'])).toBe(true)
+    expect(matchesLogExcludeKeywords(powerLog, ['温度'])).toBe(false)
   })
 })

@@ -202,6 +202,18 @@ describe('华为 VRP 日志人话解读覆盖', () => {
       expect(result.tone).toBe('critical')
     })
 
+    it('携带 ReasonDescription=fan card is abnormal 的完整风扇故障报文不得被误判为硬件恢复或电源恢复', () => {
+      const fullFanLoss =
+        'SRM/3/ENTITYINVALID: OID 1.3.6.1.4.1.2011.5.25.129.2.1.9 Fan loss.(EntityPhysicalIndex=603979777, BaseTrapSeverity=3, BaseTrapProbableCause=67591, BaseTrapEventType=5, EntPhysicalContainedIn=5, EntPhysicalName=MPU Board 0, RelativeResource=fan card, ReasonDescription=fan card is abnormal)'
+      const result = translate(fullFanLoss, 'warning', 'hardware')
+
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('fan-fault')
+      expect(result.summary).toContain('风扇')
+      expect(result.summary).not.toContain('电源')
+      expect(result.tone).toBe('critical')
+    })
+
     it('温度低于门限不得被解读为温度过高', () => {
       const result = translate(SAMPLES.tempFalling, 'error', 'system')
       const text = `${result.title}${result.summary}`

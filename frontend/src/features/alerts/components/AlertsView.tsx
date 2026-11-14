@@ -33,7 +33,7 @@ import { Permission } from '@/lib/types/auth.types'
 import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
 import { ErrorAlert } from '@/components/atoms/ErrorAlert'
 import { CompactPageToolbar, FloatingBatchActionBar, BatchDeleteConfirmModal } from '@/components/shared'
-import { matchesExcludeKeywords } from '@/utils/excludeKeywords'
+import { matchesAlertExcludeKeywords } from '@/utils/excludeKeywords'
 
 const AUTO_REFRESH_INTERVAL = 30000 // 30秒
 const WS_SELF_EVENT_TTL_MS = 5000 // 本端操作后短时间内忽略同ID回推事件，避免重复刷新
@@ -272,7 +272,7 @@ const AlertsViewContent: React.FC = () => {
     // alert_update / alert_resolved 事件只带 id + status，不会命中，照常处理。
     if (excludeKeywords.length > 0 && payload && typeof payload === 'object') {
       const data = payload as Record<string, unknown>
-      if (matchesExcludeKeywords([data.title, data.message, data.device], excludeKeywords)) return
+      if (matchesAlertExcludeKeywords(data, excludeKeywords)) return
     }
 
     if (shouldSkipSelfEventRefresh(payload)) return

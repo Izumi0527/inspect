@@ -65,9 +65,11 @@ func (h SettingsHandler) GetDisplayPreferences(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{
-		"timezone":         timezone,
-		"time_format":      timeFormat,
-		"application_name": applicationName,
+		"timezone":               timezone,
+		"time_format":            timeFormat,
+		"application_name":       applicationName,
+		"alert_exclude_keywords": h.Service.GetAlertExcludeKeywords(ctx),
+		"log_exclude_keywords":   h.Service.GetLogExcludeKeywords(ctx),
 	})
 }
 

@@ -101,6 +101,8 @@ export interface DisplayPreferencesResponse {
   timezone: string
   time_format: '12h' | '24h'
   application_name: string
+  alert_exclude_keywords?: string
+  log_exclude_keywords?: string
 }
 
 /**

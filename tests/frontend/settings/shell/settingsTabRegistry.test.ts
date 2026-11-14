@@ -1,10 +1,11 @@
 import { settingsTabRegistry } from '@/features/settings/registry/settings-tabs'
 
 describe('settingsTabRegistry', () => {
-  it('应完整声明 9 个系统设置子分页', () => {
+  it('应完整声明 10 个系统设置子分页', () => {
     expect(settingsTabRegistry.map((tab) => tab.key)).toEqual([
       'general',
       'logs',
+      'filter',
       'users',
       'roles',
       'security',

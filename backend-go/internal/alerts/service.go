@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/your-org/inspect-system/backend-go/internal/common"
+	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"go.uber.org/zap"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -31,8 +32,9 @@ var (
 )
 
 type Service struct {
-	db     *gorm.DB
-	logger *zap.Logger
+	db       *gorm.DB
+	logger   *zap.Logger
+	settings *settings.Service
 }
 
 type Operator struct {
@@ -99,6 +101,29 @@ func (s *Service) DB() *gorm.DB {
 	return s.db
 }
 
+// SetSettings 注入配置服务（全局屏蔽关键字来源）。
+func (s *Service) SetSettings(svc *settings.Service) {
+	if s == nil {
+		return
+	}
+	s.settings = svc
+}
+
+func (s *Service) effectiveExcludeSearch(ctx context.Context, raw string) string {
+	rawTrimmed := strings.TrimSpace(raw)
+	if s == nil || s.settings == nil {
+		return rawTrimmed
+	}
+	persisted := s.settings.GetAlertExcludeKeywords(ctx)
+	if persisted == "" {
+		return rawTrimmed
+	}
+	if rawTrimmed == "" {
+		return persisted
+	}
+	return persisted + "," + rawTrimmed
+}
+
 func (s *Service) ListAlerts(ctx context.Context, filter ListAlertsFilter) ([]AlertWithDevice, int64, error) {
 	if s == nil || s.db == nil {
 		return nil, 0, fmt.Errorf("database not initialized")
@@ -142,7 +167,7 @@ func (s *Service) ListAlerts(ctx context.Context, filter ListAlertsFilter) ([]Al
 			pattern, pattern, pattern, pattern,
 		)
 	}
-	query = applyAlertExcludeKeywords(query, filter.ExcludeSearch)
+	query = applyAlertExcludeKeywords(query, s.effectiveExcludeSearch(ctx, filter.ExcludeSearch))
 
 	statuses := mapStatusFilters(filter.Statuses)
 	if len(statuses) > 0 {
@@ -225,12 +250,13 @@ func (s *Service) GetRecentAlerts(ctx context.Context, limit int) ([]AlertWithDe
 	}
 
 	rows := make([]AlertWithDevice, 0)
-	err := s.db.WithContext(ctx).
+	query := s.db.WithContext(ctx).
 		Table("alerts AS a").
 		Select("a.*, d.name AS device_name, d.ip_address AS device_ip, r.name AS rule_name").
 		Joins("JOIN devices d ON d.id = a.device_id").
-		Joins("LEFT JOIN alert_rules r ON r.id = a.rule_id").
-		Order("a.last_occurred desc, a.created_at desc").
+		Joins("LEFT JOIN alert_rules r ON r.id = a.rule_id")
+	query = applyAlertExcludeKeywords(query, s.effectiveExcludeSearch(ctx, ""))
+	err := query.Order("a.last_occurred desc, a.created_at desc").
 		Limit(limit).
 		Scan(&rows).Error
 	return rows, err
@@ -246,13 +272,15 @@ func (s *Service) GetAlertStatistics(ctx context.Context, filter AlertStatistics
 		ByDevice:   map[string]int{},
 	}
 
+	effectiveExclude := s.effectiveExcludeSearch(ctx, filter.ExcludeSearch)
+
 	// 六条统计查询共用同一基础查询（含屏蔽关键字），保证每个数字口径一致。
 	base := func() *gorm.DB {
 		return applyAlertExcludeKeywords(
 			s.db.WithContext(ctx).
 				Table("alerts AS a").
 				Joins("JOIN devices d ON d.id = a.device_id"),
-			filter.ExcludeSearch,
+			effectiveExclude,
 		)
 	}
 
@@ -859,7 +887,7 @@ func encodeJSON(value interface{}) (datatypes.JSON, error) {
 // applyAlertExcludeKeywords 把屏蔽关键字转成逐词的 NOT ILIKE 条件（标题/消息/设备名/IP 四字段任一命中即排除）。
 // 列表与统计共用，保证两处口径一致；用 COALESCE 规避 NULL 列在三值逻辑下被误排除。
 func applyAlertExcludeKeywords(query *gorm.DB, raw string) *gorm.DB {
-	for _, kw := range common.SplitExcludeKeywords(raw) {
+	for _, kw := range common.ExpandExcludeKeywords(raw) {
 		pattern := "%" + common.EscapeLikePattern(kw) + "%"
 		query = query.Where(
 			"(COALESCE(a.title, '') NOT ILIKE ? AND COALESCE(a.message, '') NOT ILIKE ? AND COALESCE(d.name, '') NOT ILIKE ? AND COALESCE(CAST(d.ip_address AS TEXT), '') NOT ILIKE ?)",

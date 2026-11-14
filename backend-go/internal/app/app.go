@@ -255,6 +255,7 @@ func New() (*App, error) {
 	reportHandler.Settings = settingsService
 
 	alertService := alerts.NewService(dbConn, log)
+	alertService.SetSettings(settingsService)
 	alertEvaluator := alerts.NewEvaluator(dbConn, wsManager, settingsService, log)
 	alertsHandler := handlers.AlertsHandler{
 		Service:  alertService,

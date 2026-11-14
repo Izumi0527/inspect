@@ -1,5 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useExcludeKeywords } from '@/hooks/useExcludeKeywords'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useDisplayPreferences } from '@/hooks/useDatetimePreferencesSync'
+import {
+  matchesAlertExcludeKeywords,
+  splitExcludeKeywords,
+} from '@/utils/excludeKeywords'
 import {
   Alert,
   AlertFilters,
@@ -32,12 +36,20 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
     hasNext: false,
     hasPrev: false,
   })
+  const requestIdRef = useRef(0)
+
+  const excludeKeywords = useMemo(
+    () => splitExcludeKeywords(queryParams.excludeSearch ?? ''),
+    [queryParams.excludeSearch],
+  )
 
   const loadAlerts = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     try {
       setLoading(true)
       setError(null)
       const response = await fetchAlerts(queryParams)
+      if (requestId !== requestIdRef.current) return
       setAlerts(response.alerts)
       setPagination({
         page: response.page,
@@ -47,6 +59,7 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
         hasPrev: response.hasPrev,
       })
     } catch (err) {
+      if (requestId !== requestIdRef.current) return
       const errorMessage = err instanceof Error ? err.message : '加载告警数据失败'
       setError(errorMessage)
       setAlerts([]) // 错误时清空列表，而非显示假数据
@@ -59,9 +72,25 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
       })
       console.error('Failed to load alerts:', err)
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [queryParams])
+
+  const filteredAlerts = useMemo(() => {
+    if (excludeKeywords.length === 0) return alerts
+    return alerts.filter((alert) => !matchesAlertExcludeKeywords(alert, excludeKeywords))
+  }, [alerts, excludeKeywords])
+
+  const effectivePagination = useMemo(() => {
+    const removedCount = alerts.length - filteredAlerts.length
+    if (removedCount <= 0) return pagination
+    return {
+      ...pagination,
+      total: Math.max(0, pagination.total - removedCount),
+    }
+  }, [alerts.length, filteredAlerts.length, pagination])
 
   // 确认告警
   const handleAcknowledgeAlert = useCallback(async (id: string, assignee?: string) => {
@@ -175,10 +204,10 @@ export function useAlerts(queryParams: AlertQueryParams = {}) {
   }, [loadAlerts])
 
   return {
-    alerts,
+    alerts: filteredAlerts,
     loading,
     error,
-    pagination,
+    pagination: effectivePagination,
     loadAlerts,
     handleAcknowledgeAlert,
     handleResolveAlert,
@@ -192,17 +221,23 @@ export function useAlertStats(excludeSearch?: string) {
   const [stats, setStats] = useState<AlertStats | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const requestIdRef = useRef(0)
 
   const loadStats = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     try {
       setLoading(true)
       setError(null)
       const alertStats = await fetchAlertStats({ excludeSearch })
+      if (requestId !== requestIdRef.current) return
       setStats(alertStats)
     } catch (err) {
+      if (requestId !== requestIdRef.current) return
       setError(err instanceof Error ? err.message : '加载统计数据失败')
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [excludeSearch])
 
@@ -220,37 +255,46 @@ export function useAlertStats(excludeSearch?: string) {
 
 // 告警筛选hook
 //
-// 屏蔽关键字是「视图偏好」而非「筛选」：持久化到 localStorage、输入防抖，并且 resetFilters 不清它
-// （用户清空筛选是为了换查看条件，不是要重新被噪声淹没）。
+// 屏蔽关键字统一由系统设置「屏蔽规则」持久化并由 useDisplayPreferences 读取。
 export const ALERT_EXCLUDE_KEYWORDS_STORAGE_KEY = 'alert_exclude_keywords'
 
 export function useAlertFilters() {
   const [filters, setFilters] = useState<AlertFilters>({ ...DEFAULT_ALERT_FILTERS })
-  const exclude = useExcludeKeywords(ALERT_EXCLUDE_KEYWORDS_STORAGE_KEY)
+  const { data: displayPrefs } = useDisplayPreferences()
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(ALERT_EXCLUDE_KEYWORDS_STORAGE_KEY)
+      }
+    } catch {}
+  }, [])
+
+  const debouncedExcludeQuery = (displayPrefs?.alert_exclude_keywords ?? '').trim()
+  const excludeKeywords = useMemo(
+    () => splitExcludeKeywords(debouncedExcludeQuery),
+    [debouncedExcludeQuery],
+  )
 
   const updateFilter = useCallback((key: keyof AlertFilters, value: string) => {
-    if (key === 'excludeQuery') {
-      exclude.setExcludeQuery(value)
-      return
-    }
     setFilters(prev => ({ ...prev, [key]: value }))
-  }, [exclude])
+  }, [])
 
   const resetFilters = useCallback(() => {
     setFilters({ ...DEFAULT_ALERT_FILTERS })
   }, [])
 
   const mergedFilters = useMemo(
-    () => ({ ...filters, excludeQuery: exclude.excludeQuery }),
-    [filters, exclude.excludeQuery],
+    () => ({ ...filters, excludeQuery: debouncedExcludeQuery }),
+    [filters, debouncedExcludeQuery],
   )
 
   return {
     filters: mergedFilters,
     updateFilter,
     resetFilters,
-    debouncedExcludeQuery: exclude.debouncedExcludeQuery,
-    excludeKeywords: exclude.excludeKeywords,
+    debouncedExcludeQuery,
+    excludeKeywords,
   }
 }
 

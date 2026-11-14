@@ -71,7 +71,7 @@ function resolveTrapIdentity(message: string, title?: string): TrapIdentity | un
  */
 function toneFromTrap(trap: TrapIdentity): PlainTone {
   const text = `${trap.name} ${trap.label} ${trap.detail ?? ''}`
-  if (/resume|normal|recover|恢复|正常/i.test(text)) return 'success'
+  if (/resume|(?<!ab)normal|recover|恢复|正常/i.test(text)) return 'success'
   if (/power|fan|temperature|loop|dyinggasp|电源|风扇|温度|环路|断电|失效|不可用/i.test(text)) {
     return 'critical'
   }
@@ -160,6 +160,28 @@ function resolveVRPLogHeader(message: string): VRPLogHeader | undefined {
   }
 }
 
+function humanizeHardwareKind(value: string): string {
+  switch (value.trim().toLowerCase()) {
+    case 'power':
+    case '电源':
+      return '电源'
+    case 'fan':
+    case '风扇':
+      return '风扇'
+    case 'temperature':
+    case '温度':
+      return '温度'
+    case 'voltage':
+    case '电压':
+      return '电压'
+    case 'humidity':
+    case '湿度':
+      return '湿度'
+    default:
+      return '硬件'
+  }
+}
+
 /** 按占位符声明的转换器加工捕获组 */
 function applyTransform(value: string, transform?: string): string {
   switch (transform) {
@@ -167,6 +189,8 @@ function applyTransform(value: string, transform?: string): string {
       return humanizeInterfaceName(value)
     case 'state':
       return humanizeState(value)
+    case 'hwkind':
+      return humanizeHardwareKind(value)
     default:
       return value
   }

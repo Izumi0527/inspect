@@ -6,6 +6,8 @@ import (
 	"math"
 	"regexp"
 	"strings"
+
+	"github.com/your-org/inspect-system/backend-go/internal/common"
 )
 
 // 通用配置写入约束：UpsertSetting（含 bulk 路径）在写库前强制校验。
@@ -50,6 +52,13 @@ var generalEnumConstraints = map[string][]string{
 var timezonePattern = regexp.MustCompile(`^[A-Za-z]+(/[A-Za-z0-9_+\-]+)+$|^UTC$`)
 
 const applicationNameMaxLength = 100
+
+const (
+	AlertExcludeKeywordsKey     = "system.alert_exclude_keywords"
+	LogExcludeKeywordsKey       = "logs.exclude_keywords"
+	excludeKeywordMaxLength     = 100
+	excludeKeywordsRawMaxLength = 2500
+)
 
 // validSettingCategories 是允许新建配置项的类别前缀集合。
 // 已存在的 key 不受限（更新路径），仅拦截 bulk/单 key 写入创造未知前缀的垃圾行。
@@ -126,6 +135,8 @@ func validateGeneralSetting(key string, value interface{}) (enforcedType string,
 			return "", fmt.Errorf("应用程序名称（%s）不能超过 %d 个字符", key, applicationNameMaxLength)
 		}
 		return "string", nil
+	case AlertExcludeKeywordsKey, LogExcludeKeywordsKey:
+		return validateExcludeKeywordsSetting(key, value)
 	case ipAllowlistKey:
 		if _, err := parseIPAllowlistEntries(value); err != nil {
 			return "", err
@@ -134,6 +145,42 @@ func validateGeneralSetting(key string, value interface{}) (enforcedType string,
 	}
 
 	return "", nil
+}
+
+func validateExcludeKeywordsSetting(key string, value interface{}) (string, error) {
+	text, isString := value.(string)
+	if !isString {
+		return "", fmt.Errorf("屏蔽关键字（%s）必须是字符串", key)
+	}
+	if len([]rune(text)) > excludeKeywordsRawMaxLength {
+		return "", fmt.Errorf("屏蔽关键字（%s）原始输入长度不能超过 %d 个字符", key, excludeKeywordsRawMaxLength)
+	}
+	splitter := func(r rune) bool {
+		return r == ',' || r == '，' || r == ';' || r == '；'
+	}
+	parts := strings.FieldsFunc(text, splitter)
+	var uniqueKeywords []string
+	seen := make(map[string]struct{}, len(parts))
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		if _, exists := seen[lower]; !exists {
+			seen[lower] = struct{}{}
+			uniqueKeywords = append(uniqueKeywords, trimmed)
+		}
+	}
+	if len(uniqueKeywords) > common.MaxExcludeKeywords {
+		return "", fmt.Errorf("屏蔽关键字（%s）最多允许配置 %d 个", key, common.MaxExcludeKeywords)
+	}
+	for _, kw := range uniqueKeywords {
+		if len([]rune(kw)) > excludeKeywordMaxLength {
+			return "", fmt.Errorf("单个屏蔽关键字长度不能超过 %d 个字符", excludeKeywordMaxLength)
+		}
+	}
+	return "string", nil
 }
 
 // legacySecuritySettingKeys 是旧版安全策略页写入、但后端从未消费的配置键
