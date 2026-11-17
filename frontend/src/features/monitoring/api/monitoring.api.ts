@@ -1,5 +1,5 @@
 import { api, ApiClientError } from '@/lib/api-client'
-import { formatBandwidthValue } from '../utils/monitoring'
+import { formatBandwidthValue, parseCustomDateRange } from '../utils/monitoring'
 import {
   SystemPerformanceDataPoint,
   TemperatureDataPoint,
@@ -40,6 +40,13 @@ function toStrOpt(value: unknown): string | undefined {
 
 function resolveTimeRange(timeRange: string) {
   const now = new Date()
+  const custom = parseCustomDateRange(timeRange, now.getTime())
+  if (custom) {
+    return {
+      start: new Date(custom.startMs).toISOString(),
+      end: new Date(custom.endMs).toISOString(),
+    }
+  }
   const match = /^([0-9]+)([hdw])$/i.exec(timeRange.trim())
   const start = new Date(now)
 

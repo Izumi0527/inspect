@@ -1,4 +1,4 @@
-import { MONITORING_SAMPLE_INTERVAL_MINUTES, resolveTickStepMinutes } from './monitoring'
+import { MONITORING_SAMPLE_INTERVAL_MINUTES, parseCustomDateRange, resolveTickStepMinutes } from './monitoring'
 
 /**
  * 时间轴图表共用的缺口与刻度规则（流量图、系统性能趋势图）。
@@ -34,6 +34,10 @@ export function resolveTimeWindow(
   nowMs: number,
   dates: ReadonlyArray<Date>
 ): [Date, Date] {
+  const custom = parseCustomDateRange(timeRange, nowMs)
+  if (custom) {
+    return [new Date(custom.startMs), new Date(custom.endMs)]
+  }
   const times = dates.map((date) => date.getTime())
   const rangeMs = resolveTimeRangeMs(timeRange)
   if (rangeMs === null) {

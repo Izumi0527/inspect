@@ -42,7 +42,10 @@ export function TemperatureChart({
       .sort((a, b) => a.date.getTime() - b.date.getTime())
 
     const timeWindow = resolveTimeWindow(timeRange, Date.now(), dated.map((point) => point.date))
-    const inWindow = dated.filter((point) => point.date.getTime() >= timeWindow[0].getTime())
+    const inWindow = dated.filter(
+      (point) =>
+        point.date.getTime() >= timeWindow[0].getTime() && point.date.getTime() <= timeWindow[1].getTime()
+    )
 
     const names = Array.from(new Set(inWindow.flatMap((point) => Object.keys(point.devices)))).slice(0, MAX_DEVICES)
 

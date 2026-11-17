@@ -9,12 +9,12 @@ import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocke
 import { useMonitoringV2 } from './useMonitoringV2'
 import { INTERFACE_TRAFFIC_QUERY_KEY } from './useDeviceInterfaceTraffic'
 import {
-  TIME_RANGE_OPTIONS,
   DEFAULT_TIME_RANGE,
   MONITORING_DATA_STALE_THRESHOLD_MS,
   MONITORING_SECTION_LABELS,
-  resolveTimeRangeLabel,
   formatDurationFromMs,
+  formatMonitoringTimeRangeTriggerLabel,
+  isValidMonitoringTimeRange,
 } from '../utils/monitoring'
 import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../types'
 
@@ -64,7 +64,7 @@ export function useMonitoringPage(): UseMonitoringPageResult {
   const [timeRange, setTimeRange] = useState<string>(() => {
     if (typeof window === 'undefined') return DEFAULT_TIME_RANGE
     const stored = window.localStorage.getItem('monitoring:timeRange')
-    if (stored && TIME_RANGE_OPTIONS.some((item) => item.value === stored)) {
+    if (stored && isValidMonitoringTimeRange(stored)) {
       return stored
     }
     return DEFAULT_TIME_RANGE
@@ -301,7 +301,7 @@ export function useMonitoringPage(): UseMonitoringPageResult {
   useWebSocketEvent(WebSocketEvents.NETWORK_STATS_UPDATE, handleRealtimeRefresh)
 
   // ── 计算值 ─────────────────────────────────────────────────────────────────
-  const timeRangeLabel = useMemo(() => resolveTimeRangeLabel(timeRange), [timeRange])
+  const timeRangeLabel = useMemo(() => formatMonitoringTimeRangeTriggerLabel(timeRange), [timeRange])
 
   const lastUpdateAt = useMemo(() => {
     const raw = envelope?.lastUpdate

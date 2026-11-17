@@ -2,5 +2,5 @@ export { SectionFailureContent, SectionFailureCard, SectionPermissionLimitedCard
 export { MonitoringLoadingSkeleton } from './MonitoringLoadingSkeleton'
 export { MonitoringErrorPanel } from './MonitoringErrorPanel'
 export { MonitoringHeaderActions } from './MonitoringHeaderActions'
-export { MonitoringTimeRangeBar } from './MonitoringTimeRangeBar'
+export { MonitoringTimeRangeControl } from './MonitoringTimeRangeControl'
 export { DeviceFilterSelect } from './DeviceFilterSelect'

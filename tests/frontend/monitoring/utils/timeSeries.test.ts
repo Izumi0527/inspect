@@ -48,6 +48,14 @@ describe('resolveTimeWindow', () => {
     expect(start.toISOString()).toBe('2026-11-08T10:00:00.000Z')
     expect(end.toISOString()).toBe('2026-11-08T12:00:00.000Z')
   })
+
+  it('自定义日期范围返回对应的本地起止时间窗口', () => {
+    const futureNow = new Date(2026, 10, 15, 12, 0, 0, 0).getTime()
+    const [start, end] = resolveTimeWindow('2026-11-09..2026-11-12', futureNow, [])
+
+    expect(start.getTime()).toBe(new Date(2026, 10, 9, 0, 0, 0, 0).getTime())
+    expect(end.getTime()).toBe(new Date(2026, 10, 12, 23, 59, 59, 999).getTime())
+  })
 })
 
 describe('splitAtGaps（相邻两点超过 2 个采样周期即断开）', () => {

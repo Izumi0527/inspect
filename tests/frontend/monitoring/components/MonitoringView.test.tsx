@@ -68,8 +68,13 @@ jest.mock('@/components/atoms', () => ({
   CardTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   CardDescription: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   CardContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Button: ({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) => (
-    <button type="button" onClick={onClick} disabled={disabled}>{children}</button>
+  Button: ({
+    children,
+    onClick,
+    disabled,
+    ...rest
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type="button" onClick={onClick} disabled={disabled} {...rest}>{children}</button>
   ),
   Badge: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Popover: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -253,5 +258,37 @@ describe('MonitoringView', () => {
     expect(screen.getByText('perf down')).toBeInTheDocument()
     expect(screen.getByText('temp down')).toBeInTheDocument()
     expect(screen.getByText('traffic down')).toBeInTheDocument()
+  })
+
+  it('时间范围控件收进头部操作区，内容区不再渲染独立筛选栏且无采样间隔字样', () => {
+    ;(useMonitoringV2 as jest.Mock).mockReturnValue({
+      data: {
+        data: {
+          statsV2: [{ id: 'total_devices', title: '总设备', value: '1' }],
+          systemPerformance: [],
+          temperatureHistory: [],
+          networkTrafficHistory: [],
+        },
+        hasPartialFailure: false,
+        failedSections: [],
+        sections: {
+          stats: { ok: true },
+          systemPerformance: { ok: true },
+          temperature: { ok: true },
+          networkTraffic: { ok: true },
+        },
+        lastUpdate: '2026-02-24T12:00:00.000Z',
+      },
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+      isRefetching: false,
+    })
+
+    const { container } = renderView()
+
+    expect(screen.getAllByRole('button', { name: '监控时间范围' })).toHaveLength(1)
+    expect(container.querySelector('[data-slot="monitoring-time-range-bar"]')).toBeNull()
+    expect(screen.queryByText(/采样间隔/)).not.toBeInTheDocument()
   })
 })

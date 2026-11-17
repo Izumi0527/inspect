@@ -103,7 +103,6 @@ jest.mock('@/features/monitoring/components/shared', () => ({
   MonitoringLoadingSkeleton: () => <div>MonitoringLoadingSkeleton</div>,
   MonitoringErrorPanel: () => <div>MonitoringErrorPanel</div>,
   MonitoringHeaderActions: () => <div>MonitoringHeaderActions</div>,
-  MonitoringTimeRangeBar: () => <div>MonitoringTimeRangeBar</div>,
 }))
 
 const wsHandlers: Record<string, ((payload: unknown) => void) | undefined> = {}

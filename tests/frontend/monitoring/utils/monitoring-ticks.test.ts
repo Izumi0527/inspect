@@ -2,7 +2,13 @@ import {
   MONITORING_DATA_STALE_THRESHOLD_MS,
   MONITORING_SAMPLE_INTERVAL_MINUTES,
   TIME_RANGE_OPTIONS,
+  formatCustomDateRangeSummary,
+  formatCustomDateRangeValue,
+  formatMonitoringTimeRangeTriggerLabel,
+  isValidMonitoringTimeRange,
+  parseCustomDateRange,
   resolveTickStepMinutes,
+  shouldShowDateOnTimeAxis,
 } from '@/features/monitoring/utils/monitoring'
 
 describe('TIME_RANGE_OPTIONS', () => {
@@ -73,5 +79,60 @@ describe('采样间隔与陈旧阈值', () => {
 
   it('陈旧阈值所有档位统一 15 分钟：5 分钟桶 + 5 分钟采集，容忍一轮采集缺失', () => {
     expect(MONITORING_DATA_STALE_THRESHOLD_MS).toBe(15 * 60 * 1000)
+  })
+})
+
+describe('自定义日期范围工具函数', () => {
+  const nowMs = new Date(2026, 10, 15, 12, 0, 0, 0).getTime()
+
+  it('parseCustomDateRange 正确解析合法多日与单日范围，拒绝超限/反序/未来/非法日期', () => {
+    const multi = parseCustomDateRange('2026-11-09..2026-11-12', nowMs)
+    expect(multi).not.toBeNull()
+    expect(multi?.days).toBe(4)
+    expect(multi?.startMs).toBe(new Date(2026, 10, 9, 0, 0, 0, 0).getTime())
+    expect(multi?.endMs).toBe(new Date(2026, 10, 12, 23, 59, 59, 999).getTime())
+
+    const single = parseCustomDateRange('2026-11-09..2026-11-09', nowMs)
+    expect(single?.days).toBe(1)
+
+    const todayTruncated = parseCustomDateRange('2026-11-14..2026-11-15', nowMs)
+    expect(todayTruncated?.days).toBe(2)
+    expect(todayTruncated?.endMs).toBe(nowMs)
+
+    expect(parseCustomDateRange('2026-11-02..2026-11-15', nowMs)?.days).toBe(14)
+    expect(parseCustomDateRange('2026-11-01..2026-11-15', nowMs)).toBeNull()
+    expect(parseCustomDateRange('2026-11-12..2026-11-09', nowMs)).toBeNull()
+    expect(parseCustomDateRange('2026-11-16..2026-11-17', nowMs)).toBeNull()
+    expect(parseCustomDateRange('2026-02-30..2026-03-01', nowMs)).toBeNull()
+  })
+
+  it('formatCustomDateRangeValue 自动归正起止顺序', () => {
+    expect(formatCustomDateRangeValue('2026-11-12', '2026-11-09')).toBe('2026-11-09..2026-11-12')
+  })
+
+  it('isValidMonitoringTimeRange 校验预设与自定义范围', () => {
+    expect(isValidMonitoringTimeRange('6h', nowMs)).toBe(true)
+    expect(isValidMonitoringTimeRange('2026-11-09..2026-11-12', nowMs)).toBe(true)
+    expect(isValidMonitoringTimeRange('2026-11-01..2026-11-15', nowMs)).toBe(false)
+    expect(isValidMonitoringTimeRange('invalid', nowMs)).toBe(false)
+  })
+
+  it('formatMonitoringTimeRangeTriggerLabel 格式化触发器文案', () => {
+    expect(formatMonitoringTimeRangeTriggerLabel('6h')).toBe('近6小时')
+    expect(formatMonitoringTimeRangeTriggerLabel('2026-11-09..2026-11-12')).toBe('11/09 → 11/12')
+  })
+
+  it('formatCustomDateRangeSummary 生成中文汇总文案', () => {
+    expect(formatCustomDateRangeSummary('2026-11-09', '2026-11-12')).toBe('11月09日 — 11月12日，共 4 天')
+  })
+
+  it('resolveTickStepMinutes 与 shouldShowDateOnTimeAxis 支持自定义范围', () => {
+    expect(resolveTickStepMinutes('2026-11-09..2026-11-09')).toBe(120)
+    expect(resolveTickStepMinutes('2026-11-09..2026-11-11')).toBe(360)
+    expect(resolveTickStepMinutes('2026-11-09..2026-11-12')).toBe(720)
+    expect(resolveTickStepMinutes('2026-11-01..2026-11-14')).toBe(1440)
+
+    expect(shouldShowDateOnTimeAxis('2026-11-09..2026-11-09')).toBe(false)
+    expect(shouldShowDateOnTimeAxis('2026-11-09..2026-11-12')).toBe(true)
   })
 })

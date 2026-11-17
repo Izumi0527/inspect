@@ -802,6 +802,13 @@ func buildSectionStatus(err error, fallback string) monitoringSectionStatus {
 
 func resolveTimeRangeFromString(timeRange string, fallback time.Duration) (time.Time, time.Time) {
 	end := time.Now().UTC()
+	if start, customEnd, matched, err := monitoring.ParseCustomDateRange(timeRange, end); matched {
+		if err == nil {
+			return start, customEnd
+		}
+		return end.Add(-fallback), end
+	}
+
 	trimmed := strings.ToLower(strings.TrimSpace(timeRange))
 	if trimmed == "" {
 		return end.Add(-fallback), end

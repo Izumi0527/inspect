@@ -101,7 +101,10 @@ export function InterfaceTrafficChart({
       .sort((a, b) => a.date.getTime() - b.date.getTime())
     const timeWindow = resolveTimeWindow(timeRange, Date.now(), dated.map((point) => point.date))
     return {
-      points: dated.filter((point) => point.date.getTime() >= timeWindow[0].getTime()),
+      points: dated.filter(
+        (point) =>
+          point.date.getTime() >= timeWindow[0].getTime() && point.date.getTime() <= timeWindow[1].getTime()
+      ),
       domain: timeWindow,
     }
   }, [data, timeRange])

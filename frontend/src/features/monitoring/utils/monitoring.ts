@@ -15,6 +15,104 @@ export const TIME_RANGE_OPTIONS = [
 /** 监控中心默认时间范围 */
 export const DEFAULT_TIME_RANGE = '1h'
 
+/** 自定义日期范围最大跨度（包含首尾的自然日天数） */
+export const MAX_CUSTOM_RANGE_DAYS = 14
+
+export interface CustomDateRangeInfo {
+  startDate: string
+  endDate: string
+  startMs: number
+  endMs: number
+  days: number
+}
+
+const CUSTOM_DATE_RANGE_PATTERN = /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/
+const CALENDAR_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
+
+interface CalendarDateParts {
+  year: number
+  month: number
+  day: number
+}
+
+function parseCalendarDateParts(dateStr: string): CalendarDateParts | null {
+  const match = CALENDAR_DATE_PATTERN.exec(dateStr)
+  if (!match) return null
+  const year = Number.parseInt(match[1], 10)
+  const month = Number.parseInt(match[2], 10)
+  const day = Number.parseInt(match[3], 10)
+  const date = new Date(year, month - 1, day, 0, 0, 0, 0)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null
+  }
+  return { year, month, day }
+}
+
+function diffCalendarDays(start: CalendarDateParts, end: CalendarDateParts): number {
+  const startUtc = Date.UTC(start.year, start.month - 1, start.day)
+  const endUtc = Date.UTC(end.year, end.month - 1, end.day)
+  return Math.round((endUtc - startUtc) / 86_400_000)
+}
+
+export function parseCustomDateRange(timeRange?: string, nowMs?: number): CustomDateRangeInfo | null {
+  const match = CUSTOM_DATE_RANGE_PATTERN.exec(String(timeRange ?? '').trim())
+  if (!match) return null
+
+  const [, startDate, endDate] = match
+  const startParts = parseCalendarDateParts(startDate)
+  const endParts = parseCalendarDateParts(endDate)
+  if (!startParts || !endParts) return null
+
+  const days = diffCalendarDays(startParts, endParts) + 1
+  if (days < 1 || days > MAX_CUSTOM_RANGE_DAYS) return null
+
+  if (nowMs !== undefined && Number.isFinite(nowMs)) {
+    const nowDate = new Date(nowMs)
+    const todayParts: CalendarDateParts = {
+      year: nowDate.getFullYear(),
+      month: nowDate.getMonth() + 1,
+      day: nowDate.getDate(),
+    }
+    if (diffCalendarDays(endParts, todayParts) < 0) return null
+  }
+
+  const startMs = new Date(startParts.year, startParts.month - 1, startParts.day, 0, 0, 0, 0).getTime()
+  const endOfDayMs = new Date(endParts.year, endParts.month - 1, endParts.day, 23, 59, 59, 999).getTime()
+  const endMs =
+    nowMs !== undefined && Number.isFinite(nowMs) && endOfDayMs > nowMs && startMs <= nowMs
+      ? Math.max(startMs + 60_000, nowMs)
+      : endOfDayMs
+
+  return { startDate, endDate, startMs, endMs, days }
+}
+
+export function formatCustomDateRangeValue(startDate: string, endDate: string): string {
+  return startDate <= endDate ? `${startDate}..${endDate}` : `${endDate}..${startDate}`
+}
+
+export function isValidMonitoringTimeRange(value: string, nowMs = Date.now()): boolean {
+  if (TIME_RANGE_OPTIONS.some((item) => item.value === value)) return true
+  return parseCustomDateRange(value, nowMs) !== null
+}
+
+export function formatMonitoringTimeRangeTriggerLabel(timeRange: string): string {
+  const preset = TIME_RANGE_OPTIONS.find((item) => item.value === timeRange)
+  if (preset) return preset.label
+  const custom = parseCustomDateRange(timeRange)
+  if (custom) {
+    return `${custom.startDate.slice(5).replace('-', '/')} → ${custom.endDate.slice(5).replace('-', '/')}`
+  }
+  return timeRange
+}
+
+export function formatCustomDateRangeSummary(startDate: string, endDate: string): string {
+  const [start, end] = startDate <= endDate ? [startDate, endDate] : [endDate, startDate]
+  const startParts = parseCalendarDateParts(start)
+  const endParts = parseCalendarDateParts(end)
+  const days = startParts && endParts ? diffCalendarDays(startParts, endParts) + 1 : 1
+  return `${start.slice(5, 7)}月${start.slice(8, 10)}日 — ${end.slice(5, 7)}月${end.slice(8, 10)}日，共 ${days} 天`
+}
+
 /**
  * 监控中心页统一采样间隔（分钟）：后端对 1h~14d 所有档位都按 5 分钟分桶，
  * 与采集任务节奏（scheduler.MetricsCollectionInterval，cron 每 5 分钟）相等，每个桶正好一次采集。
@@ -65,6 +163,14 @@ export function resolveTickStepMinutes(timeRange: string): number {
   const preset = TICK_STEP_MINUTES_BY_RANGE[timeRange.trim().toLowerCase()]
   if (preset !== undefined) return preset
 
+  const custom = parseCustomDateRange(timeRange)
+  if (custom) {
+    if (custom.days === 1) return 120
+    if (custom.days <= 3) return 360
+    if (custom.days <= 7) return 720
+    return 1440
+  }
+
   // 未知/自定义档位兜底：范围/12 向上取采样间隔的整倍数，保持与固定档位同一条约束
   const sample = MONITORING_SAMPLE_INTERVAL_MINUTES
   const match = /^([0-9]+)([hdw])$/i.exec(timeRange.trim())
@@ -103,7 +209,10 @@ export function resolveTimeAxisLabelFormatter(timeRange: string | undefined): (d
   }
 }
 
-function shouldShowDateOnTimeAxis(timeRange: string | undefined): boolean {
+export function shouldShowDateOnTimeAxis(timeRange: string | undefined): boolean {
+  const custom = parseCustomDateRange(timeRange)
+  if (custom) return custom.days > 1
+
   const match = /^(\d+)([hdw])$/.exec(String(timeRange ?? '').trim().toLowerCase())
   if (!match) return false
   const value = Number.parseInt(match[1], 10)

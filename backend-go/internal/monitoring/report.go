@@ -28,9 +28,13 @@ var (
 const (
 	defaultReportTimeRange = "24h"
 	maxReportRows          = 500
+	maxCustomDateRangeDays = 14
 )
 
-var reportTimeRangePattern = regexp.MustCompile(`^(\d+)([mhdw])$`)
+var (
+	reportTimeRangePattern = regexp.MustCompile(`^(\d+)([mhdw])$`)
+	customDateRangePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$`)
+)
 
 type MonitoringReportExportRequest struct {
 	Format    string   `json:"format"`
@@ -590,7 +594,57 @@ func reportFormatExtension(format string) (string, bool) {
 	}
 }
 
+// ParseCustomDateRange 解析 YYYY-MM-DD..YYYY-MM-DD 格式的自定义日期范围（本地自然日，最长 14 天）。
+// 若不匹配自定义日期格式返回 matched=false, err=nil；
+// 若格式匹配但日期非法或超限则返回 matched=true, err=ErrInvalidReportTimeRange。
+func ParseCustomDateRange(raw string, now time.Time) (time.Time, time.Time, bool, error) {
+	trimmed := strings.TrimSpace(raw)
+	matches := customDateRangePattern.FindStringSubmatch(trimmed)
+	if len(matches) != 3 {
+		return time.Time{}, time.Time{}, false, nil
+	}
+
+	startDay, err := time.ParseInLocation("2006-01-02", matches[1], time.Local)
+	if err != nil {
+		return time.Time{}, time.Time{}, true, ErrInvalidReportTimeRange
+	}
+	endDay, err := time.ParseInLocation("2006-01-02", matches[2], time.Local)
+	if err != nil {
+		return time.Time{}, time.Time{}, true, ErrInvalidReportTimeRange
+	}
+	if endDay.Before(startDay) {
+		return time.Time{}, time.Time{}, true, ErrInvalidReportTimeRange
+	}
+
+	// 用 UTC 日期差计算包含首尾的自然日天数，规避夏令时切换导致的 23/25 小时误差
+	startUTC := time.Date(startDay.Year(), startDay.Month(), startDay.Day(), 0, 0, 0, 0, time.UTC)
+	endUTC := time.Date(endDay.Year(), endDay.Month(), endDay.Day(), 0, 0, 0, 0, time.UTC)
+	days := int(endUTC.Sub(startUTC)/(24*time.Hour)) + 1
+	if days < 1 || days > maxCustomDateRangeDays {
+		return time.Time{}, time.Time{}, true, ErrInvalidReportTimeRange
+	}
+
+	localNow := now.In(time.Local)
+	todayEnd := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 23, 59, 59, 999999999, time.Local)
+	if endDay.After(todayEnd) {
+		return time.Time{}, time.Time{}, true, ErrInvalidReportTimeRange
+	}
+
+	endOfDay := time.Date(endDay.Year(), endDay.Month(), endDay.Day(), 23, 59, 59, 999999999, time.Local)
+	start := startDay.UTC()
+	end := endOfDay.UTC()
+	nowUTC := now.UTC()
+	if end.After(nowUTC) && nowUTC.After(start) {
+		end = nowUTC
+	}
+	return start, end, true, nil
+}
+
 func parseReportTimeRange(raw string, now time.Time) (time.Time, time.Time, error) {
+	if start, end, matched, err := ParseCustomDateRange(raw, now); matched {
+		return start, end, err
+	}
+
 	value := strings.ToLower(strings.TrimSpace(raw))
 	if value == "" {
 		value = defaultReportTimeRange
