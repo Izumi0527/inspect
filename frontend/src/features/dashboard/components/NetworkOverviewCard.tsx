@@ -17,6 +17,7 @@ interface NetworkOverviewCardProps {
   loading?: boolean
   // 有 devices:update 的用户可拖动节点并保存共享布局
   canEditLayout?: boolean
+  focusDeviceId?: number | null
 }
 
 const CardShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -38,6 +39,7 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
   topology,
   loading = false,
   canEditLayout = false,
+  focusDeviceId = null,
 }) => {
   if (loading) {
     return (
@@ -116,7 +118,11 @@ export const NetworkOverviewCard: React.FC<NetworkOverviewCardProps> = ({
           </ul>
         )}
 
-        <NetworkTopologyGraph topology={topology} canEditLayout={canEditLayout} />
+        <NetworkTopologyGraph
+          topology={topology}
+          canEditLayout={canEditLayout}
+          focusDeviceId={focusDeviceId}
+        />
       </div>
     </CardShell>
   )

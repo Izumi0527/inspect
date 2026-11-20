@@ -24,13 +24,16 @@ type DevicesHandler struct {
 
 // Register 注册所有设备相关路由
 func (h DevicesHandler) Register(group *echo.Group) {
-	// CRUD（device_crud.go）
+	// CRUD（device_crud.go / device_groups.go）
 	group.GET("/devices", h.GetDevices)
 	group.POST("/devices", h.CreateDevice)
+	group.GET("/devices/groups", h.GetDeviceGroups)
+	group.POST("/devices/groups", h.CreateDeviceGroup)
+	group.PUT("/devices/groups/:group_id", h.UpdateDeviceGroup)
+	group.DELETE("/devices/groups/:group_id", h.DeleteDeviceGroup)
 	group.GET("/devices/:device_id", h.GetDevice)
 	group.PUT("/devices/:device_id", h.UpdateDevice)
 	group.DELETE("/devices/:device_id", h.DeleteDevice)
-	group.GET("/devices/groups", h.GetDeviceGroups)
 	group.GET("/devices/search", h.SearchDevices)
 	group.GET("/devices/statistics", h.GetDeviceStatistics)
 	group.GET("/devices/inspection-count", h.GetDeviceInspectionCount)

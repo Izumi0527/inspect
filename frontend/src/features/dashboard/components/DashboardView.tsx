@@ -1,4 +1,5 @@
 import React from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   useDashboardData,
   useDashboardConfig,
@@ -15,6 +16,13 @@ import { QuickActionsCard } from './QuickActionsCard'
 import { NetworkOverviewCard } from './NetworkOverviewCard'
 
 export const DashboardView: React.FC = () => {
+  const searchParams = useSearchParams()
+  const focusDeviceId = React.useMemo(() => {
+    const raw = searchParams.get('focusDevice')?.trim() ?? ''
+    if (!/^\d+$/.test(raw)) return null
+    const parsed = Number(raw)
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
+  }, [searchParams])
   const { data, isInitialLoading, isRefreshing, error, refreshStats, loadData } = useDashboardData()
   const { config } = useDashboardConfig() // 仅用于自动刷新配置
 
@@ -178,6 +186,7 @@ export const DashboardView: React.FC = () => {
                   topology={data?.networkTopology ?? { nodes: [], links: [] }}
                   loading={isInitialLoading}
                   canEditLayout={canEditTopologyLayout}
+                  focusDeviceId={focusDeviceId}
                 />
               </div>
 

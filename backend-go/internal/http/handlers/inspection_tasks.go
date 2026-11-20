@@ -365,6 +365,7 @@ func (h InspectionHandler) ListExecutions(c echo.Context) error {
 
 	statusList := splitCommaList(c.QueryParam("status"))
 	strategyID := parseIntWithDefault(c.QueryParam("strategy_id"), 0)
+	deviceID := parseIntWithDefault(c.QueryParam("device_id"), 0)
 
 	loc := h.Settings.ResolveLocation(c.Request().Context())
 	startDate, _ := parseOptionalDate(c.QueryParam("start_date"), loc)
@@ -376,7 +377,7 @@ func (h InspectionHandler) ListExecutions(c echo.Context) error {
 	}
 
 	// 执行历史按"执行批次"聚合：一次策略执行（多台设备）展示为一条记录。
-	// 状态与日期筛选是"批内各设备取值可能不同"的条件，必须放在批次级 HAVING
+	// 状态、设备与日期筛选是"批内各设备取值可能不同"的条件，必须放在批次级 HAVING
 	// 而非行级 WHERE——否则会把同一批次截断成部分设备，列表与详情的设备数对不上。
 	// 策略筛选（schedule_id）批内取值一致，保留行级 WHERE。
 	query := db.WithContext(c.Request().Context()).Model(&inspection.Inspection{})
@@ -384,7 +385,7 @@ func (h InspectionHandler) ListExecutions(c echo.Context) error {
 		query = query.Where("schedule_id = ?", strategyID)
 	}
 
-	having := h.buildExecutionFilterHaving(statusList, startDate, endDate)
+	having := h.buildExecutionFilterHaving(statusList, deviceID, startDate, endDate)
 
 	groups, total, err := h.queryExecutionGroups(c.Request().Context(), query,
 		"start_time DESC, min_id DESC", page, pageSize, having)
@@ -574,16 +575,21 @@ func (h InspectionHandler) DeleteExecution(c echo.Context) error {
 }
 
 // buildExecutionFilterHaving 构造用于批次执行历史聚合的 HAVING 条件
-func (h InspectionHandler) buildExecutionFilterHaving(statusList []string, startDate *time.Time, endDate *time.Time) *executionGroupHaving {
-	if len(statusList) == 0 && startDate == nil && endDate == nil {
+func (h InspectionHandler) buildExecutionFilterHaving(statusList []string, deviceID int, startDate *time.Time, endDate *time.Time) *executionGroupHaving {
+	if len(statusList) == 0 && deviceID <= 0 && startDate == nil && endDate == nil {
 		return nil
 	}
-	exprParts := make([]string, 0, 3)
-	havingArgs := make([]interface{}, 0, len(statusList)+2)
+	exprParts := make([]string, 0, 4)
+	havingArgs := make([]interface{}, 0, len(statusList)+3)
 	if len(statusList) > 0 {
 		// 批内任一设备处于所选状态即视为命中，返回完整批次
 		exprParts = append(exprParts, "bool_or(status IN (?))")
 		havingArgs = append(havingArgs, statusList)
+	}
+	if deviceID > 0 {
+		// 批内包含目标设备即视为命中，保持完整批次展示与批量删除口径一致
+		exprParts = append(exprParts, "bool_or(device_id = ?)")
+		havingArgs = append(havingArgs, deviceID)
 	}
 	if startDate != nil {
 		exprParts = append(exprParts, "MIN(COALESCE(started_at, created_at)) >= ?")
@@ -607,6 +613,8 @@ type batchDeleteExecutionsRequest struct {
 	Status            interface{} `json:"status"`
 	StrategyID        interface{} `json:"strategyId"`
 	StrategyIDSnake   interface{} `json:"strategy_id"`
+	DeviceID          interface{} `json:"deviceId"`
+	DeviceIDSnake     interface{} `json:"device_id"`
 	StartDate         string      `json:"startDate"`
 	StartDateSnake    string      `json:"start_date"`
 	EndDate           string      `json:"endDate"`
@@ -757,11 +765,27 @@ func (h InspectionHandler) BatchDeleteExecutions(c echo.Context) error {
 	startDate, _ := parseOptionalDate(startDateStr, loc)
 	endDate, _ := parseOptionalDate(endDateStr, loc)
 
+	var deviceID int
+	rawDeviceID := req.DeviceID
+	if rawDeviceID == nil {
+		rawDeviceID = req.DeviceIDSnake
+	}
+	if rawDeviceID != nil {
+		switch v := rawDeviceID.(type) {
+		case float64:
+			deviceID = int(v)
+		case int:
+			deviceID = v
+		case string:
+			deviceID = parseIntWithDefault(v, 0)
+		}
+	}
+
 	query := db.WithContext(c.Request().Context()).Model(&inspection.Inspection{})
 	if strategyID > 0 {
 		query = query.Where("schedule_id = ?", strategyID)
 	}
-	having := h.buildExecutionFilterHaving(statusList, startDate, endDate)
+	having := h.buildExecutionFilterHaving(statusList, deviceID, startDate, endDate)
 	groups, _, err := h.queryExecutionGroups(c.Request().Context(), query, "start_time DESC, min_id DESC", 1, 10000, having)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load executions")

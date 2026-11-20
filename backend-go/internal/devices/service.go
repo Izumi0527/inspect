@@ -398,8 +398,13 @@ func (s *Service) PurgeOrphanMonitoringData(ctx context.Context) (int64, error) 
 	if s.db == nil {
 		return 0, fmt.Errorf("database not initialized")
 	}
+	present, err := existingTables(s.db.WithContext(ctx), allOptionalPurgeTableNames())
+	if err != nil {
+		return 0, fmt.Errorf("探测监控关联表失败: %w", err)
+	}
 	orphanIDs := make([]int, 0)
-	if err := s.db.WithContext(ctx).Raw(orphanMonitoringDeviceIDsSQL).Scan(&orphanIDs).Error; err != nil {
+	query := buildOrphanMonitoringDeviceIDsSQL(present)
+	if err := s.db.WithContext(ctx).Raw(query).Scan(&orphanIDs).Error; err != nil {
 		return 0, fmt.Errorf("查找已删除设备残留的监控数据失败: %w", err)
 	}
 	var purged int64
@@ -467,29 +472,113 @@ func pruneDeletedDevicesFromStrategies(db *gorm.DB) *gorm.DB {
 		`WHERE NOT EXISTS (SELECT 1 FROM devices AS d WHERE d.id::text = e.value #>> '{}'))`)
 }
 
-// monitoringTablesByDevice 是删设备时需要按 device_id 显式清理的关联表。
+// monitoringTablesByDevice 是删设备时需要按 device_id 显式清理的核心关联表。
 // device_metrics / interface_metrics 是 TimescaleDB hypertable，外键级联挂不上；
 // device_interfaces 与 device_ssh_host_keys（SSH 主机密钥指纹）也未建外键。
 // 不清理会让监控中心按 device_id 聚合把已删设备捞回来，指纹则留下孤儿记录
-// 阻塞同 IP 重新导入设备后的首次信任语义。四张表都要在删设备时显式清理。
+// 阻塞同 IP 重新导入设备后的首次信任语义。
+// 注意：无 device_id 列的多态目标表（如 monitor_maintenance_targets）严禁放入本切片。
 var monitoringTablesByDevice = []string{"device_metrics", "interface_metrics", "device_interfaces", "device_ssh_host_keys"}
 
-// orphanMonitoringDeviceIDsSQL 找出关联表里引用、却已不在 devices 表中的 device_id。
+// optionalMonitoringTablesByDevice 列出后续阶段按 device_id 关联的可选监控扩展表；
+// 清理前先探测表是否存在，避免 Phase 0 尚未建表时删设备报错。
+var optionalMonitoringTablesByDevice = []string{
+	"device_latest_metrics",
+	"device_collection_states",
+	"user_pinned_devices",
+	"device_template_bindings",
+	"trigger_eval_states",
+}
+
+type polymorphicDeviceTargetTable struct {
+	table         string
+	targetTypeCol string
+	targetTypeVal string
+	targetIDCol   string
+}
+
+// polymorphicMonitoringTablesByDevice 列出使用 (target_type, target_id) 多态关联设备的可选表；
+// 严禁放入 monitoringTablesByDevice，清理与孤儿扫描均需按表存在探测 + target_type 条件保护执行。
+var polymorphicMonitoringTablesByDevice = []polymorphicDeviceTargetTable{
+	{
+		table:         "monitor_maintenance_targets",
+		targetTypeCol: "target_type",
+		targetTypeVal: "device",
+		targetIDCol:   "target_id",
+	},
+}
+
+func allOptionalPurgeTableNames() []string {
+	names := make([]string, 0, len(optionalMonitoringTablesByDevice)+len(polymorphicMonitoringTablesByDevice))
+	names = append(names, optionalMonitoringTablesByDevice...)
+	for _, spec := range polymorphicMonitoringTablesByDevice {
+		names = append(names, spec.table)
+	}
+	return names
+}
+
+// orphanMonitoringDeviceIDsSQL 找出核心关联表里引用、却已不在 devices 表中的 device_id。
 // device_id 是各表索引的首列，UNION 走 index-only scan 后再反连 devices 小表；
 // device_interfaces.device_id 可空，先滤掉 NULL 免得 Scan 到 int 报错。
-// 无时间边界：每次启动都要读完两张 hypertable 的 device_id 索引全部条目，大部署上有可感知耗时。
 const orphanMonitoringDeviceIDsSQL = `SELECT referenced.device_id FROM (` +
 	`SELECT device_id FROM device_metrics UNION SELECT device_id FROM interface_metrics UNION SELECT device_id FROM device_interfaces UNION SELECT device_id FROM device_ssh_host_keys` +
 	`) AS referenced WHERE referenced.device_id IS NOT NULL ` +
 	`AND NOT EXISTS (SELECT 1 FROM devices AS d WHERE d.id = referenced.device_id) ORDER BY referenced.device_id`
 
-// purgeDeviceMonitoringData 清掉一台设备在监控表与指纹表里的全部行。删设备与启动清理共用。
-// 无时间边界、删的是该设备全部历史：采集很久的设备会让删设备事务持锁较长，与并发采集写入争用；
-// 这是「删设备事务一致」与「大表长事务」之间的取舍，当前取前者。
+func buildOrphanMonitoringDeviceIDsSQL(present map[string]bool) string {
+	unions := make([]string, 0, len(monitoringTablesByDevice)+len(optionalMonitoringTablesByDevice)+len(polymorphicMonitoringTablesByDevice))
+	for _, table := range monitoringTablesByDevice {
+		unions = append(unions, "SELECT device_id FROM "+table)
+	}
+	for _, table := range optionalMonitoringTablesByDevice {
+		if present[table] {
+			unions = append(unions, "SELECT device_id FROM "+table)
+		}
+	}
+	for _, spec := range polymorphicMonitoringTablesByDevice {
+		if present[spec.table] {
+			unions = append(unions, fmt.Sprintf(
+				"SELECT %s AS device_id FROM %s WHERE %s = '%s'",
+				spec.targetIDCol, spec.table, spec.targetTypeCol, spec.targetTypeVal,
+			))
+		}
+	}
+	return `SELECT referenced.device_id FROM (` +
+		strings.Join(unions, " UNION ") +
+		`) AS referenced WHERE referenced.device_id IS NOT NULL ` +
+		`AND NOT EXISTS (SELECT 1 FROM devices AS d WHERE d.id = referenced.device_id) ORDER BY referenced.device_id`
+}
+
+// purgeDeviceMonitoringData 清掉一台设备在监控表、指纹表与多态目标表里的全部行。
+// 删设备与启动清理共用；扩展表与多态表先探测存在性再清理，兼容分阶段迁移。
 func purgeDeviceMonitoringData(db *gorm.DB, deviceID int) error {
 	for _, table := range monitoringTablesByDevice {
 		if err := db.Exec("DELETE FROM "+table+" WHERE device_id = ?", deviceID).Error; err != nil {
 			return fmt.Errorf("清理 %s 中的设备数据失败: %w", table, err)
+		}
+	}
+
+	present, err := existingTables(db, allOptionalPurgeTableNames())
+	if err != nil {
+		return fmt.Errorf("探测设备关联扩展表失败: %w", err)
+	}
+
+	for _, table := range optionalMonitoringTablesByDevice {
+		if !present[table] {
+			continue
+		}
+		if err := db.Exec("DELETE FROM "+table+" WHERE device_id = ?", deviceID).Error; err != nil {
+			return fmt.Errorf("清理 %s 中的设备数据失败: %w", table, err)
+		}
+	}
+
+	for _, spec := range polymorphicMonitoringTablesByDevice {
+		if !present[spec.table] {
+			continue
+		}
+		stmt := fmt.Sprintf("DELETE FROM %s WHERE %s = ? AND %s = ?", spec.table, spec.targetTypeCol, spec.targetIDCol)
+		if err := db.Exec(stmt, spec.targetTypeVal, deviceID).Error; err != nil {
+			return fmt.Errorf("清理 %s 中的设备关联失败: %w", spec.table, err)
 		}
 	}
 	return nil
@@ -532,50 +621,6 @@ func (s *Service) BatchCreateDevices(
 	}
 
 	return imported, skipped, nil
-}
-
-func (s *Service) GetDeviceGroups(ctx context.Context) ([]DeviceGroupResponse, error) {
-	if s.db == nil {
-		return nil, fmt.Errorf("database not initialized")
-	}
-
-	type row struct {
-		ID          int        `gorm:"column:id"`
-		Name        string     `gorm:"column:name"`
-		Description *string    `gorm:"column:description"`
-		CreatedAt   *time.Time `gorm:"column:created_at"`
-		DeviceCount int        `gorm:"column:device_count"`
-	}
-
-	rows := make([]row, 0)
-	query := `
-        SELECT g.id, g.name, g.description, g.created_at,
-               COUNT(d.id) AS device_count
-        FROM device_groups g
-        LEFT JOIN devices d ON d.group_id = g.id
-        GROUP BY g.id
-        ORDER BY g.name`
-
-	if err := s.db.WithContext(ctx).Raw(query).Scan(&rows).Error; err != nil {
-		return nil, err
-	}
-
-	result := make([]DeviceGroupResponse, 0, len(rows))
-	for _, item := range rows {
-		createdAt := time.Now()
-		if item.CreatedAt != nil {
-			createdAt = *item.CreatedAt
-		}
-		result = append(result, DeviceGroupResponse{
-			ID:          item.ID,
-			Name:        item.Name,
-			Description: item.Description,
-			DeviceCount: item.DeviceCount,
-			CreatedAt:   createdAt,
-		})
-	}
-
-	return result, nil
 }
 
 func (s *Service) GetDeviceStatistics(ctx context.Context) (DeviceStatistics, error) {

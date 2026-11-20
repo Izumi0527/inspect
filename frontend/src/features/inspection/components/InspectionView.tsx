@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { 
   Calendar, 
@@ -34,12 +35,23 @@ interface TabConfig {
   icon: LucideIcon
 }
 
+const hasPositiveDeviceIdParam = (raw: string | null): boolean => {
+  const trimmed = raw?.trim() ?? ''
+  if (!/^\d+$/.test(trimmed)) return false
+  const parsed = Number(trimmed)
+  return Number.isSafeInteger(parsed) && parsed > 0
+}
+
 export const InspectionView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('strategies')
+  const searchParams = useSearchParams()
+  const initialHasDeviceFilter = hasPositiveDeviceIdParam(searchParams.get('device_id'))
+  const [activeTab, setActiveTab] = useState<TabType>(
+    initialHasDeviceFilter ? 'executions' : 'strategies'
+  )
   const [mountedTabs, setMountedTabs] = useState<Record<TabType, boolean>>({
-    strategies: true,
+    strategies: !initialHasDeviceFilter,
     templates: false,
-    executions: false,
+    executions: initialHasDeviceFilter,
     analytics: false,
   })
   
@@ -76,6 +88,15 @@ export const InspectionView: React.FC = () => {
       toast.error('巡检任务执行失败')
     }
   })
+
+  useEffect(() => {
+    if (initialHasDeviceFilter) {
+      setActiveTab('executions')
+      setMountedTabs((current) => (
+        current.executions ? current : { ...current, executions: true }
+      ))
+    }
+  }, [initialHasDeviceFilter])
 
   useEffect(() => {
     setMountedTabs((current) => (

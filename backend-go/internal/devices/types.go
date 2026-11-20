@@ -1,6 +1,51 @@
 package devices
 
-import "time"
+import (
+	"bytes"
+	"encoding/json"
+	"time"
+)
+
+// NullableInt 区分 JSON 请求中字段"未传入"与"显式置 null / 传入整数"，
+// 用于 PUT 更新分组 parent_id 时区分"保持不变"与"移至顶层分组"。
+type NullableInt struct {
+	Set   bool
+	Value *int
+}
+
+func (n *NullableInt) UnmarshalJSON(data []byte) error {
+	n.Set = true
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		n.Value = nil
+		return nil
+	}
+	var value int
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	n.Value = &value
+	return nil
+}
+
+// NullableString 区分 JSON 请求中字段"未传入"与"显式置 null / 传入字符串"。
+type NullableString struct {
+	Set   bool
+	Value *string
+}
+
+func (n *NullableString) UnmarshalJSON(data []byte) error {
+	n.Set = true
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		n.Value = nil
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	n.Value = &value
+	return nil
+}
 
 type DeviceCreateRequest struct {
 	Name           string      `json:"name"`
@@ -65,11 +110,32 @@ type DeviceResponse struct {
 }
 
 type DeviceGroupResponse struct {
-	ID          int       `json:"id"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description,omitempty"`
-	DeviceCount int       `json:"device_count"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID                        int        `json:"id"`
+	Name                      string     `json:"name"`
+	Description               *string    `json:"description,omitempty"`
+	ParentID                  *int       `json:"parent_id"`
+	IsActive                  bool       `json:"is_active"`
+	DeviceCount               int        `json:"device_count"`
+	OnlineCount               int        `json:"online_count"`
+	AlertCount                int        `json:"alert_count"`
+	AlertsLimitedByPermission bool       `json:"alerts_limited_by_permission"`
+	CreatedAt                 time.Time  `json:"created_at"`
+	UpdatedAt                 *time.Time `json:"updated_at,omitempty"`
+}
+
+type DeviceGroupCreateRequest struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	ParentID    *int    `json:"parent_id,omitempty"`
+	IsActive    *bool   `json:"is_active,omitempty"`
+	DeviceIDs   []int   `json:"device_ids,omitempty"`
+}
+
+type DeviceGroupUpdateRequest struct {
+	Name        *string        `json:"name,omitempty"`
+	Description NullableString `json:"description"`
+	ParentID    NullableInt    `json:"parent_id"`
+	IsActive    *bool          `json:"is_active,omitempty"`
 }
 
 type NetworkScanRequest struct {

@@ -38,6 +38,13 @@ import { matchesAlertExcludeKeywords } from '@/utils/excludeKeywords'
 const AUTO_REFRESH_INTERVAL = 30000 // 30秒
 const WS_SELF_EVENT_TTL_MS = 5000 // 本端操作后短时间内忽略同ID回推事件，避免重复刷新
 
+const parsePositiveDeviceIdParam = (raw: string | null): string | null => {
+  const trimmed = raw?.trim() ?? ''
+  if (!/^\d+$/.test(trimmed)) return null
+  const parsed = Number(trimmed)
+  return Number.isSafeInteger(parsed) && parsed > 0 ? String(parsed) : null
+}
+
 function AlertsAccessDenied() {
   return (
     <AppLayout title="告警中心 - 无权限" alertCount={0}>
@@ -66,6 +73,11 @@ const AlertsViewContent: React.FC = () => {
   const ws = useWebSocket()
   const canUpdateAlerts = usePermission(Permission.ALERTS_UPDATE)
   const canDeleteAlerts = usePermission(Permission.ALERTS_DELETE)
+  const urlDeviceId = useMemo(
+    () => parsePositiveDeviceIdParam(searchParams.get('device_id')),
+    [searchParams],
+  )
+  const [deviceIdFilter, setDeviceIdFilter] = useState<string | null>(urlDeviceId)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [timeRangeFilter, setTimeRangeFilter] = useState<AlertTimeRangeFilterValues>({})
@@ -100,8 +112,8 @@ const AlertsViewContent: React.FC = () => {
       String(timeRangeFilter.dateRange?.end ?? '').trim()
     )
 
-    return hasBasicSearch || hasBasicSeverity || hasBasicStatus || hasTimeRange
-  }, [timeRangeFilter, filters.searchQuery, filters.severityFilter, filters.statusFilter])
+    return hasBasicSearch || hasBasicSeverity || hasBasicStatus || hasTimeRange || Boolean(deviceIdFilter)
+  }, [timeRangeFilter, filters.searchQuery, filters.severityFilter, filters.statusFilter, deviceIdFilter])
 
   const isDefaultActiveView = filters.statusFilter === DEFAULT_ALERT_FILTERS.statusFilter
 
@@ -148,6 +160,10 @@ const AlertsViewContent: React.FC = () => {
       if (endIso) params.endDate = endIso
     }
 
+    if (deviceIdFilter) {
+      params.deviceIds = [deviceIdFilter]
+    }
+
     return params
   }, [
     currentPage,
@@ -157,6 +173,7 @@ const AlertsViewContent: React.FC = () => {
     filters.statusFilter,
     debouncedExcludeQuery,
     timeRangeFilter,
+    deviceIdFilter,
     sortBy,
     sortOrder,
   ])
@@ -186,6 +203,7 @@ const AlertsViewContent: React.FC = () => {
       filters.statusFilter,
       timeRangeFilter.dateRange?.start,
       timeRangeFilter.dateRange?.end,
+      deviceIdFilter,
     ],
     pageDeps: [currentPage, pageSize],
   })
@@ -195,11 +213,16 @@ const AlertsViewContent: React.FC = () => {
     [alerts, selectedAlertId]
   )
 
-  // URL 参数中的告警 ID
+  // URL 参数中的告警 ID 与设备 ID
   useEffect(() => {
     const alertId = searchParams.get('id')
     if (alertId) setSelectedAlertId(alertId)
   }, [searchParams])
+
+  useEffect(() => {
+    setDeviceIdFilter(urlDeviceId)
+    setCurrentPage(1)
+  }, [urlDeviceId])
 
   // 自动刷新
   const refreshAll = useCallback(async () => {
@@ -320,6 +343,7 @@ const AlertsViewContent: React.FC = () => {
     clearRealtimePending()
     resetFilters()
     resetTimeRangeFilter()
+    setDeviceIdFilter(null)
     setCurrentPage(1)
     requestRefreshAfterQueryChange()
   }, [clearRealtimePending, requestRefreshAfterQueryChange, resetTimeRangeFilter, resetFilters])
@@ -539,6 +563,21 @@ const AlertsViewContent: React.FC = () => {
               <span className="text-xs text-muted-foreground">
                 最后刷新: {formatLastRefreshed()}
               </span>
+              {deviceIdFilter && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs text-foreground">
+                  <span className="tabular-nums">设备 #{deviceIdFilter}</span>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setDeviceIdFilter(null)
+                      setCurrentPage(1)
+                    }}
+                  >
+                    清除
+                  </button>
+                </span>
+              )}
             </div>
           </CardHeader>
 

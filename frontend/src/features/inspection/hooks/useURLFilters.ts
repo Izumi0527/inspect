@@ -17,6 +17,7 @@ export interface URLFiltersState {
   status: string
   startDate: string
   endDate: string
+  deviceId: string
 }
 
 /**
@@ -30,7 +31,15 @@ const URL_PARAM_MAP: Record<keyof URLFiltersState, string> = {
   pageSize: 'page_size',
   status: 'status',
   startDate: 'start_date',
-  endDate: 'end_date'
+  endDate: 'end_date',
+  deviceId: 'device_id',
+}
+
+const parsePositiveDeviceId = (raw: string | null): string => {
+  const trimmed = raw?.trim() ?? ''
+  if (!/^\d+$/.test(trimmed)) return ''
+  const parsed = Number(trimmed)
+  return Number.isSafeInteger(parsed) && parsed > 0 ? String(parsed) : ''
 }
 
 export const useURLFilters = () => {
@@ -43,7 +52,8 @@ export const useURLFilters = () => {
     pageSize: Number(searchParams.get(URL_PARAM_MAP.pageSize)) || DEFAULT_PAGE_SIZE,
     status: searchParams.get(URL_PARAM_MAP.status) || 'all',
     startDate: searchParams.get(URL_PARAM_MAP.startDate) || '',
-    endDate: searchParams.get(URL_PARAM_MAP.endDate) || ''
+    endDate: searchParams.get(URL_PARAM_MAP.endDate) || '',
+    deviceId: parsePositiveDeviceId(searchParams.get(URL_PARAM_MAP.deviceId)),
   }))
 
   /**
@@ -102,9 +112,19 @@ export const useURLFilters = () => {
       pageSize: DEFAULT_PAGE_SIZE,
       status: 'all',
       startDate: '',
-      endDate: ''
+      endDate: '',
+      deviceId: '',
     })
   }
+
+  // 当 URL 查询参数外部变化时同步 device_id（如跨页深链切换设备）
+  const urlDeviceId = parsePositiveDeviceId(searchParams.get(URL_PARAM_MAP.deviceId))
+  useEffect(() => {
+    setFilters((prev) => {
+      if (prev.deviceId === urlDeviceId) return prev
+      return { ...prev, deviceId: urlDeviceId, page: 1 }
+    })
+  }, [urlDeviceId])
 
   // 当筛选条件变化时，同步到 URL
   useEffect(() => {

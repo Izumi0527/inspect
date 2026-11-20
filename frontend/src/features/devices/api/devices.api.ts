@@ -11,7 +11,13 @@ import {
   DeviceProbeResult,
   DeviceBatchProbeResponse,
   DeviceSNMPExtensions,
+  DeviceGroupItem,
+  CreateDeviceGroupPayload,
+  UpdateDeviceGroupPayload,
+  DeleteDeviceGroupOnNonEmpty,
 } from "../types";
+
+export const DEVICE_GROUPS_QUERY_KEY = ["device-groups"] as const;
 import { ApiResponse } from "@/lib/types/api-response.types";
 import type {
   CreateDevicePayload,
@@ -1357,4 +1363,104 @@ export async function batchProbeDevices(
     }
     throw error;
   }
+}
+
+const normalizeDeviceGroup = (candidate: unknown): DeviceGroupItem | null => {
+  if (!isObject(candidate)) return null;
+  if (typeof candidate.id !== "number" || typeof candidate.name !== "string") {
+    return null;
+  }
+  return {
+    id: candidate.id,
+    name: candidate.name,
+    description:
+      typeof candidate.description === "string"
+        ? candidate.description
+        : candidate.description === null
+          ? null
+          : undefined,
+    parent_id:
+      typeof candidate.parent_id === "number" && Number.isFinite(candidate.parent_id)
+        ? candidate.parent_id
+        : null,
+    is_active:
+      typeof candidate.is_active === "boolean" ? candidate.is_active : undefined,
+    device_count:
+      typeof candidate.device_count === "number" && Number.isFinite(candidate.device_count)
+        ? candidate.device_count
+        : 0,
+    online_count:
+      typeof candidate.online_count === "number" && Number.isFinite(candidate.online_count)
+        ? candidate.online_count
+        : 0,
+    alert_count:
+      typeof candidate.alert_count === "number" && Number.isFinite(candidate.alert_count)
+        ? candidate.alert_count
+        : 0,
+    alerts_limited_by_permission:
+      candidate.alerts_limited_by_permission === true ||
+      candidate.limitedByPermission === true,
+    created_at:
+      typeof candidate.created_at === "string" ? candidate.created_at : undefined,
+    updated_at:
+      typeof candidate.updated_at === "string" ? candidate.updated_at : undefined,
+  };
+};
+
+const extractDeviceGroup = (payload: unknown): DeviceGroupItem | null => {
+  const unwrapped = unwrapMaybeApiResponseData(payload);
+  const direct = normalizeDeviceGroup(unwrapped);
+  if (direct) return direct;
+  if (isObject(unwrapped) && "group" in unwrapped) {
+    return normalizeDeviceGroup(unwrapped.group);
+  }
+  return null;
+};
+
+export async function getDeviceGroups(): Promise<DeviceGroupItem[]> {
+  const payload = await api.get<unknown>("/devices/groups");
+  const unwrapped = unwrapMaybeApiResponseData(payload);
+  const rawList = Array.isArray(unwrapped)
+    ? unwrapped
+    : isObject(unwrapped) && Array.isArray(unwrapped.groups)
+      ? unwrapped.groups
+      : isObject(unwrapped) && Array.isArray(unwrapped.items)
+        ? unwrapped.items
+        : [];
+  return rawList
+    .map(normalizeDeviceGroup)
+    .filter((item): item is DeviceGroupItem => item !== null);
+}
+
+export async function createDeviceGroup(
+  data: CreateDeviceGroupPayload,
+): Promise<DeviceGroupItem> {
+  const payload = await api.post<unknown>("/devices/groups", data);
+  const group = extractDeviceGroup(payload);
+  if (!group) {
+    throw new Error("创建设备分组失败：响应格式不正确");
+  }
+  return group;
+}
+
+export async function updateDeviceGroup(
+  id: number,
+  data: UpdateDeviceGroupPayload,
+): Promise<DeviceGroupItem> {
+  const payload = await api.put<unknown>(`/devices/groups/${id}`, data);
+  const group = extractDeviceGroup(payload);
+  if (!group) {
+    throw new Error("更新设备分组失败：响应格式不正确");
+  }
+  return group;
+}
+
+export async function deleteDeviceGroup(
+  id: number,
+  onNonEmpty: DeleteDeviceGroupOnNonEmpty = "reject",
+): Promise<boolean> {
+  await api.delete<unknown>(
+    appendQuery(`/devices/groups/${id}`, { on_non_empty: onNonEmpty }),
+  );
+  return true;
 }

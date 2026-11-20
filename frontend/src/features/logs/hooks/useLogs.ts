@@ -2,6 +2,7 @@
  * 日志中心 Hooks
  */
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 import { toLocalDayBoundaryIso } from '@/utils/dateRangeQuery'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
@@ -15,7 +16,8 @@ import type {
   DeviceLog,
   LogStatistics,
   LogQueryParams,
-  LogFilters
+  LogFilters,
+  LogLevel,
 } from '../types'
 
 interface RequestOptions {
@@ -203,15 +205,54 @@ export function useLogStats(hours: number = 24) {
  */
 export const LOG_EXCLUDE_KEYWORDS_STORAGE_KEY = 'log_exclude_keywords'
 
+const ALLOWED_URL_LOG_LEVELS: ReadonlySet<LogLevel> = new Set([
+  'debug',
+  'info',
+  'warning',
+  'error',
+  'critical',
+])
+
+const parseUrlLogDeviceId = (raw: string | null): number | undefined => {
+  const trimmed = raw?.trim() ?? ''
+  if (!/^\d+$/.test(trimmed)) return undefined
+  const parsed = Number(trimmed)
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
+const parseUrlLogLevel = (raw: string | null): LogLevel | 'all' => {
+  const normalized = raw?.trim().toLowerCase() ?? ''
+  return ALLOWED_URL_LOG_LEVELS.has(normalized as LogLevel)
+    ? (normalized as LogLevel)
+    : 'all'
+}
+
 export function useLogFilters() {
-  const [filters, setFilters] = useState<LogFilters>({
+  const searchParams = useSearchParams()
+  const urlDeviceId = parseUrlLogDeviceId(searchParams.get('device_id'))
+  const urlLevel = parseUrlLogLevel(searchParams.get('level'))
+  const urlSignature = `${urlDeviceId ?? ''}|${urlLevel}`
+  const prevUrlSignatureRef = useRef(urlSignature)
+
+  const [filters, setFilters] = useState<LogFilters>(() => ({
     searchQuery: '',
-    levelFilter: 'all',
+    levelFilter: urlLevel,
     facilityFilter: 'all',
     sourceFilter: 'all',
     includeSelf: false,
-  })
+    ...(urlDeviceId !== undefined ? { deviceId: urlDeviceId } : {}),
+  }))
   const { data: displayPrefs } = useDisplayPreferences()
+
+  useEffect(() => {
+    if (prevUrlSignatureRef.current === urlSignature) return
+    prevUrlSignatureRef.current = urlSignature
+    setFilters((prev) => ({
+      ...prev,
+      levelFilter: urlLevel,
+      deviceId: urlDeviceId,
+    }))
+  }, [urlSignature, urlDeviceId, urlLevel])
 
   useEffect(() => {
     try {

@@ -241,6 +241,7 @@ export const LogsView: React.FC = () => {
         level: queryParams.level,
         facility: queryParams.facility,
         source: queryParams.source,
+        device_id: queryParams.device_id,
         start_time: queryParams.start_time,
         end_time: queryParams.end_time,
         search: queryParams.search,
@@ -301,7 +302,21 @@ export const LogsView: React.FC = () => {
         {/* 主内容卡片 */}
         <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
           <CardHeader className="pb-0">
-            <CardTitle>日志列表</CardTitle>
+            <div className="flex flex-wrap items-center gap-3">
+              <CardTitle>日志列表</CardTitle>
+              {filters.deviceId !== undefined && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-xs text-foreground">
+                  <span className="tabular-nums">设备 #{filters.deviceId}</span>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => handleFilterChange('deviceId', undefined)}
+                  >
+                    清除
+                  </button>
+                </span>
+              )}
+            </div>
           </CardHeader>
 
           <CardContent className="flex flex-1 flex-col gap-3 overflow-hidden pt-0 min-h-0">

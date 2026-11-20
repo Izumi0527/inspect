@@ -337,6 +337,7 @@ export const useInspectionExecutions = (params?: {
   pageSize?: number
   status?: string
   strategyId?: string | number
+  deviceId?: string | number
   startDate?: string
   endDate?: string
 }) => {
@@ -347,6 +348,7 @@ export const useInspectionExecutions = (params?: {
       pageSize: params?.pageSize,
       status: params?.status ? [params.status] : undefined,
       strategyId: params?.strategyId,
+      deviceId: params?.deviceId,
       startDate: params?.startDate,
       endDate: params?.endDate,
     }),

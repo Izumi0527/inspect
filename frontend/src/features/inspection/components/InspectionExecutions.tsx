@@ -65,10 +65,12 @@ export const InspectionExecutions: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [executionToDelete, setExecutionToDelete] = useState<InspectionExecution | null>(null)
 
+  const parsedDeviceId = filters.deviceId ? Number(filters.deviceId) : undefined
   const { data: executionsData, isLoading, refetch, isFetching, error } = useInspectionExecutions({
     page: filters.page,
     pageSize: filters.pageSize,
     status: filters.status !== 'all' ? filters.status : undefined,
+    deviceId: parsedDeviceId && Number.isInteger(parsedDeviceId) && parsedDeviceId > 0 ? parsedDeviceId : undefined,
     startDate: filters.startDate || undefined,
     endDate: filters.endDate || undefined
   })
@@ -104,7 +106,7 @@ export const InspectionExecutions: React.FC = () => {
     getId: (e) => e.id,
     isSelectable: (e) => e.status !== 'running',
     getDisabledReason: (e) => (e.status === 'running' ? '执行中的任务不可删除' : undefined),
-    filterDeps: [filters.status, filters.startDate, filters.endDate],
+    filterDeps: [filters.status, filters.startDate, filters.endDate, filters.deviceId],
     pageDeps: [filters.page, filters.pageSize],
   })
 
@@ -250,8 +252,8 @@ export const InspectionExecutions: React.FC = () => {
     [filters.startDate, filters.endDate]
   )
   const hasAnyFilter = useMemo(
-    () => filters.status !== 'all' || hasDateFilter,
-    [filters.status, hasDateFilter]
+    () => filters.status !== 'all' || hasDateFilter || Boolean(filters.deviceId),
+    [filters.status, hasDateFilter, filters.deviceId]
   )
 
   // 查看详情 - 使用 useCallback 优化
@@ -335,6 +337,7 @@ export const InspectionExecutions: React.FC = () => {
           selectAllFiltered: true,
           excludeIds: batchSelection.excludedIds,
           status: filters.status !== 'all' ? filters.status : undefined,
+          deviceId: filters.deviceId || undefined,
           startDate: filters.startDate || undefined,
           endDate: filters.endDate || undefined,
         })
@@ -613,6 +616,18 @@ export const InspectionExecutions: React.FC = () => {
         />
 
         {/* 执行统计 */}
+        {filters.deviceId && (
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-xs text-foreground">
+            <span className="tabular-nums">当前按设备 #{filters.deviceId} 筛选巡检记录</span>
+            <button
+              type="button"
+              className="text-primary hover:underline"
+              onClick={() => updateFilter('deviceId', '')}
+            >
+              清除
+            </button>
+          </div>
+        )}
         <ExecutionStatsCards executions={executions} />
 
         {/* 执行记录列表 */}

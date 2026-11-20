@@ -977,6 +977,7 @@ export async function fetchInspectionExecutions(params?: {
   pageSize?: number
   status?: string[]
   strategyId?: string | number
+  deviceId?: string | number
   startDate?: string
   endDate?: string
 }): Promise<{ items: InspectionExecution[]; total: number; pages: number }> {
@@ -1024,6 +1025,15 @@ export async function fetchInspectionExecutions(params?: {
           searchParams.append('strategy_id', strategyIdStr)
         } else {
           console.warn(`[API] 无效的 strategyId 参数: ${params.strategyId}, 已忽略`)
+        }
+      }
+
+      if (params.deviceId !== undefined && params.deviceId !== null && params.deviceId !== '') {
+        const deviceIdNum = Number(params.deviceId)
+        if (Number.isInteger(deviceIdNum) && deviceIdNum > 0) {
+          searchParams.append('device_id', String(deviceIdNum))
+        } else {
+          console.warn(`[API] 无效的 deviceId 参数: ${params.deviceId}, 已忽略`)
         }
       }
 
@@ -1126,6 +1136,7 @@ export interface BatchDeleteExecutionsPayload {
   excludeIds?: string[]
   status?: string | string[]
   strategyId?: string | number
+  deviceId?: string | number
   startDate?: string
   endDate?: string
 }

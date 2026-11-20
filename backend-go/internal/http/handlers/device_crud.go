@@ -211,7 +211,11 @@ func (h DevicesHandler) GetDeviceGroups(c echo.Context) error {
 		return err
 	}
 
-	groups, err := h.Service.GetDeviceGroups(c.Request().Context())
+	// 独立权限门控：缺少 alerts:read 时隐藏真实告警计数并标注受限状态。
+	permissions, _ := c.Get(authContextPermissionsKey).([]string)
+	canReadAlerts := hasPermission("alerts:read", permissions)
+
+	groups, err := h.Service.ListGroupTreeWithStats(c.Request().Context(), canReadAlerts)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query groups")
 	}

@@ -15,17 +15,37 @@ interface NetworkTopologyGraphProps {
   topology: NetworkTopology
   // 有 devices:update 的用户可拖动节点并保存共享布局；其他人只能平移缩放
   canEditLayout?: boolean
+  focusDeviceId?: number | null
 }
 
-export const NetworkTopologyGraph: React.FC<NetworkTopologyGraphProps> = ({ topology, canEditLayout = false }) => {
+export const NetworkTopologyGraph: React.FC<NetworkTopologyGraphProps> = ({
+  topology,
+  canEditLayout = false,
+  focusDeviceId = null,
+}) => {
   const layoutState = useTopologyLayoutState(topology)
   const roles = useMemo(() => inferNodeRoles(topology), [topology])
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const appliedFocusIdRef = React.useRef<number | null>(null)
 
   const nodeById = useMemo(
     () => new Map(topology.nodes.map((node) => [node.id, node])),
     [topology.nodes]
   )
+
+  React.useEffect(() => {
+    if (focusDeviceId == null) {
+      appliedFocusIdRef.current = null
+      return
+    }
+    if (appliedFocusIdRef.current === focusDeviceId) {
+      return
+    }
+    if (nodeById.has(focusDeviceId)) {
+      appliedFocusIdRef.current = focusDeviceId
+      setSelectedId(focusDeviceId)
+    }
+  }, [focusDeviceId, nodeById])
 
   const selectedNode = selectedId !== null ? nodeById.get(selectedId) ?? null : null
   const selectedLinks = selectedNode

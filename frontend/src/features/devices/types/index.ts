@@ -318,3 +318,33 @@ export interface DeviceBatchProbeResponse {
   status_updated?: boolean
   status_updated_count?: number
 }
+
+// 设备分组树节点
+export interface DeviceGroupItem {
+  id: number
+  name: string
+  description?: string | null
+  parent_id: number | null
+  is_active?: boolean
+  device_count: number
+  online_count: number
+  alert_count: number
+  alerts_limited_by_permission: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface CreateDeviceGroupPayload {
+  name: string
+  description?: string
+  parent_id?: number | null
+  device_ids?: number[]
+}
+
+export interface UpdateDeviceGroupPayload {
+  name?: string
+  description?: string | null
+  parent_id?: number | null
+}
+
+export type DeleteDeviceGroupOnNonEmpty = 'reject' | 'unassign'

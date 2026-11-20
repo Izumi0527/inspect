@@ -12,6 +12,7 @@ import {
   Upload,
   Download,
   Activity,
+  FolderTree,
 } from "lucide-react";
 import {
   Card,
@@ -54,6 +55,7 @@ import { BulkDeviceUpdate } from "./BulkDeviceUpdate";
 import { AddDeviceModal } from "./modals/AddDeviceModal";
 import { DeviceDetailsModal } from "./modals/DeviceDetailsModal";
 import { EditDeviceModal } from "./modals/EditDeviceModal";
+import { DeviceGroupModal } from "./DeviceGroupModal";
 import {
   useDevices,
   useDeviceFilters,
@@ -131,6 +133,7 @@ const toAlertCount = (value: unknown): number => {
 export const DeviceManagementView: React.FC = () => {
   const searchParams = useSearchParams();
   const appliedUrlSearchRef = React.useRef(false);
+  const appliedUrlDeviceIdRef = React.useRef<number | null>(null);
   const { user } = useAuth();
   const queryClient = useQueryClient();
   // 后端删设备时会把它从巡检策略的目标设备里摘掉，也会清掉它的监控数据；策略列表与监控设备
@@ -207,6 +210,7 @@ export const DeviceManagementView: React.FC = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [deviceToDelete, setDeviceToDelete] = useState<Device | null>(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -276,6 +280,48 @@ export const DeviceManagementView: React.FC = () => {
     }
     appliedUrlSearchRef.current = true;
   }, [searchParams, updateFilter]);
+
+  // 从 URL 查询参数自动打开指定设备详情（监控中心单机抽屉跳转会带上 ?deviceId=xxx）
+  React.useEffect(() => {
+    const rawDeviceId = searchParams.get("deviceId")?.trim() ?? "";
+    if (!/^\d+$/.test(rawDeviceId)) return;
+    const parsedId = Number(rawDeviceId);
+    if (!Number.isSafeInteger(parsedId) || parsedId <= 0) return;
+    if (appliedUrlDeviceIdRef.current === parsedId) return;
+
+    appliedUrlDeviceIdRef.current = parsedId;
+    let cancelled = false;
+    setViewModalOpen(true);
+    setViewModalLoading(true);
+
+    void fetchDevice(parsedId)
+      .then((latest) => {
+        if (cancelled) return;
+        if (latest) {
+          setViewingDevice(latest);
+        } else {
+          setViewModalOpen(false);
+          setViewingDevice(null);
+          toast.error(`未找到设备 #${parsedId}`);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setViewModalOpen(false);
+          setViewingDevice(null);
+          toast.error(`加载设备 #${parsedId} 详情失败`);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setViewModalLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
 
   React.useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -1056,6 +1102,13 @@ export const DeviceManagementView: React.FC = () => {
                   onClick: handleDownloadTemplate,
                 },
                 {
+                  key: "manage-groups",
+                  label: "分组管理",
+                  icon: <FolderTree className="h-4 w-4" />,
+                  variant: "outline",
+                  onClick: () => setGroupModalOpen(true),
+                },
+                {
                   key: "bulk-import",
                   label: "批量导入",
                   icon: <Upload className="h-4 w-4" />,
@@ -1253,6 +1306,20 @@ export const DeviceManagementView: React.FC = () => {
             return result;
           }}
         />
+
+        {groupModalOpen && (
+          <DeviceGroupModal
+            isOpen={groupModalOpen}
+            onClose={() => setGroupModalOpen(false)}
+            canCreate={canCreateDevice}
+            canUpdate={canUpdateDevice}
+            canDelete={canDeleteDevice}
+            onMutated={() => {
+              void loadDevices();
+              void loadStats();
+            }}
+          />
+        )}
       </div>
     </AppLayout>
   );
