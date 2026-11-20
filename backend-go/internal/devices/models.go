@@ -27,6 +27,7 @@ type Device struct {
 	DetectedChassisID *string `gorm:"column:detected_chassis_id"`
 	// LLDPStatus 是最近一轮有结论的 LLDP 可用性判定（ok/mib_unreachable/disabled），总览据此提示精确原因。
 	LLDPStatus      *string `gorm:"column:lldp_status"`
+	TopologyRole    string  `gorm:"column:topology_role;size:24;not null;default:'access'"`
 	Vendor          string  `gorm:"column:vendor"`
 	Model           *string `gorm:"column:model"`
 	SerialNumber    *string `gorm:"column:serial_number"`
@@ -313,17 +314,32 @@ func (DeviceGroup) TableName() string {
 // DeviceInterface 设备接口当前状态表。此前缺失 model 与建表，
 // 导致 WriteDeviceMetrics 写接口速率时报 42P01 并回滚整笔指标写入（含 cpu/mem 快照）。
 type DeviceInterface struct {
-	ID          int        `gorm:"column:id;primaryKey"`
-	DeviceID    int        `gorm:"column:device_id;uniqueIndex:uq_device_iface"`
-	Name        string     `gorm:"column:name;uniqueIndex:uq_device_iface"`
-	Alias       *string    `gorm:"column:alias"`
-	Speed       *int64     `gorm:"column:speed"`
-	InOctets    *int64     `gorm:"column:in_octets"`
-	OutOctets   *int64     `gorm:"column:out_octets"`
-	IsUp        *bool      `gorm:"column:is_up"`
-	LastUpdated *time.Time `gorm:"column:last_updated"`
-	CreatedAt   *time.Time `gorm:"column:created_at"`
-	UpdatedAt   *time.Time `gorm:"column:updated_at"`
+	ID                 int        `gorm:"column:id;primaryKey"`
+	DeviceID           int        `gorm:"column:device_id;uniqueIndex:uq_device_iface"`
+	Name               string     `gorm:"column:name;uniqueIndex:uq_device_iface"`
+	Alias              *string    `gorm:"column:alias"`
+	Speed              *int64     `gorm:"column:speed"`
+	InOctets           *int64     `gorm:"column:in_octets"`
+	OutOctets          *int64     `gorm:"column:out_octets"`
+	IsUp               *bool      `gorm:"column:is_up"`
+	AdminUp            bool       `gorm:"column:admin_up;not null;default:true"`
+	DuplexStatus       string     `gorm:"column:duplex_status;size:24;not null;default:'unknown'"`
+	InErrors           int64      `gorm:"column:in_errors;not null;default:0"`
+	OutErrors          int64      `gorm:"column:out_errors;not null;default:0"`
+	InDiscards         int64      `gorm:"column:in_discards;not null;default:0"`
+	OutDiscards        int64      `gorm:"column:out_discards;not null;default:0"`
+	InErrorRate        float64    `gorm:"column:in_error_rate;not null;default:0"`
+	OutErrorRate       float64    `gorm:"column:out_error_rate;not null;default:0"`
+	UtilizationIn      float64    `gorm:"column:utilization_in;not null;default:0"`
+	UtilizationOut     float64    `gorm:"column:utilization_out;not null;default:0"`
+	SpeedUnknown       bool       `gorm:"column:speed_unknown;not null;default:false"`
+	FlapCount1h        int        `gorm:"column:flap_count_1h;not null;default:0"`
+	LastStatusChangeAt *time.Time `gorm:"column:last_status_change_at"`
+	LLDMonitored       bool       `gorm:"column:lld_monitored;not null;default:true"`
+	LLDLostSince       *time.Time `gorm:"column:lld_lost_since"`
+	LastUpdated        *time.Time `gorm:"column:last_updated"`
+	CreatedAt          *time.Time `gorm:"column:created_at"`
+	UpdatedAt          *time.Time `gorm:"column:updated_at"`
 }
 
 func (DeviceInterface) TableName() string {

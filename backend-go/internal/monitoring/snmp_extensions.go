@@ -15,7 +15,14 @@ type SNMPExtensionsResponse struct {
 	Timestamp           *time.Time                          `json:"timestamp,omitempty"`
 	BGPPeers            []devices.BGPNeighborMetrics        `json:"bgp_peers"`
 	OpticalTransceivers []devices.OpticalTransceiverMetrics `json:"optical_transceivers"`
+	Components          []devices.ComponentStatusMetrics    `json:"components"`
+	PoE                 *devices.PoEMetrics                 `json:"poe,omitempty"`
+	STP                 *devices.STPMetrics                 `json:"stp,omitempty"`
+	Disks               []devices.DiskMetrics               `json:"disks"`
 }
+
+// SNMPExtensionsSnapshot 为 SNMPExtensionsResponse 的语义别名，供扩展监控消费方统一引用。
+type SNMPExtensionsSnapshot = SNMPExtensionsResponse
 
 type snmpExtensionsTagEnvelope struct {
 	SNMPExtensions snmpExtensionsPayload `json:"snmp_extensions"`
@@ -24,6 +31,10 @@ type snmpExtensionsTagEnvelope struct {
 type snmpExtensionsPayload struct {
 	BGPPeers            []devices.BGPNeighborMetrics        `json:"bgp_peers"`
 	OpticalTransceivers []devices.OpticalTransceiverMetrics `json:"optical_transceivers"`
+	Components          []devices.ComponentStatusMetrics    `json:"components"`
+	PoE                 *devices.PoEMetrics                 `json:"poe,omitempty"`
+	STP                 *devices.STPMetrics                 `json:"stp,omitempty"`
+	Disks               []devices.DiskMetrics               `json:"disks"`
 }
 
 type latestSNMPExtensionsRow struct {
@@ -36,6 +47,8 @@ func newSNMPExtensionsResponse(deviceID int) SNMPExtensionsResponse {
 		DeviceID:            deviceID,
 		BGPPeers:            []devices.BGPNeighborMetrics{},
 		OpticalTransceivers: []devices.OpticalTransceiverMetrics{},
+		Components:          []devices.ComponentStatusMetrics{},
+		Disks:               []devices.DiskMetrics{},
 	}
 }
 
@@ -79,6 +92,18 @@ func (w *MetricsWriter) GetLatestSNMPExtensions(ctx context.Context, deviceID in
 	}
 	if envelope.SNMPExtensions.OpticalTransceivers != nil {
 		resp.OpticalTransceivers = envelope.SNMPExtensions.OpticalTransceivers
+	}
+	if envelope.SNMPExtensions.Components != nil {
+		resp.Components = envelope.SNMPExtensions.Components
+	}
+	if envelope.SNMPExtensions.PoE != nil {
+		resp.PoE = envelope.SNMPExtensions.PoE
+	}
+	if envelope.SNMPExtensions.STP != nil {
+		resp.STP = envelope.SNMPExtensions.STP
+	}
+	if envelope.SNMPExtensions.Disks != nil {
+		resp.Disks = envelope.SNMPExtensions.Disks
 	}
 
 	return resp, nil

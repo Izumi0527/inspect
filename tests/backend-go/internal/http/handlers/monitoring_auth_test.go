@@ -191,6 +191,7 @@ type fakePermissionService struct {
 
 func (s fakePermissionService) GetActiveUserFromToken(_ context.Context, _ string) (*auth.UserRecord, error) {
 	return &auth.UserRecord{
+		ID:       "00000000-0000-0000-0000-000000000001",
 		Username: "tester",
 		Role:     "viewer",
 	}, nil

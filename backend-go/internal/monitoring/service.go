@@ -28,19 +28,37 @@ type WriteResult struct {
 }
 
 type MetricsWriter struct {
-	db        *gorm.DB
-	wsManager *ws.Manager
-	logger    *zap.Logger
-	cache     *MetricsCache
+	db           *gorm.DB
+	wsManager    *ws.Manager
+	logger       *zap.Logger
+	cache        *MetricsCache
+	engineHealth *EngineHealthTracker
 }
 
 func NewMetricsWriter(db *gorm.DB, wsManager *ws.Manager, logger *zap.Logger) *MetricsWriter {
 	return &MetricsWriter{
-		db:        db,
-		wsManager: wsManager,
-		logger:    logger,
-		cache:     nil, // 缓存需要单独设置
+		db:           db,
+		wsManager:    wsManager,
+		logger:       logger,
+		cache:        nil, // 缓存需要单独设置
+		engineHealth: NewEngineHealthTracker(),
 	}
+}
+
+// EngineHealthTracker 返回指标写入器关联的采集引擎健康追踪器。
+func (w *MetricsWriter) EngineHealthTracker() *EngineHealthTracker {
+	if w == nil {
+		return nil
+	}
+	return w.engineHealth
+}
+
+// EngineHealthSnapshot 返回当前采集引擎健康状态的只读快照。
+func (w *MetricsWriter) EngineHealthSnapshot() EngineHealthSnapshot {
+	if w == nil || w.engineHealth == nil {
+		return NewEngineHealthTracker().Snapshot()
+	}
+	return w.engineHealth.Snapshot()
 }
 
 // SetCache 设置缓存服务
@@ -80,11 +98,20 @@ func (w *MetricsWriter) WriteDeviceMetrics(ctx context.Context, req DeviceMetric
 		return WriteResult{}, ErrDeviceNotFound
 	}
 
+	if w.engineHealth != nil {
+		w.engineHealth.IncPendingWriteQueue(1)
+		defer w.engineHealth.IncPendingWriteQueue(-1)
+	}
+
+	writtenInterfaceMetrics := len(interfaceMetrics)
 	err = w.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// 核心写入①：设备级时序指标（device_metrics）。
+		// 核心写入①：设备级时序指标（device_metrics）与最新快照（device_latest_metrics）。
 		if len(deviceMetrics) > 0 {
 			// Use raw SQL to let database sequence generate IDs for TimescaleDB hypertable
 			if err := insertDeviceMetricsRaw(tx, deviceMetrics); err != nil {
+				return err
+			}
+			if err := upsertLatestMetricsWithDB(tx, DeviceMetricsToLatestMetrics(deviceMetrics)); err != nil {
 				return err
 			}
 		}
@@ -98,10 +125,10 @@ func (w *MetricsWriter) WriteDeviceMetrics(ctx context.Context, req DeviceMetric
 		// 核心写入③：设备档案静态属性（型号/软件版本）。
 		// 与快照分开：仅当采集值与库中不同才写，避免每轮采集都刷新 updated_at。
 		writeDeviceIdentityIfChanged(tx, req.DeviceID, req.Identity, w.logger)
-		// 次要写入：接口时序指标 + device_interfaces 状态表 UPSERT + 接口速率更新。
+		// 次要写入：接口时序指标 + device_interfaces 状态表 UPSERT + 接口速率更新 + 纳管接口最新快照。
 		// 用嵌套事务(SAVEPOINT)隔离为“尽力而为”：任一步失败仅回滚本段并记日志，
 		// 不连累上面已写入的核心快照——根治“接口写入报错导致整笔回滚、cpu/mem 丢失”的历史故障。
-		w.writeInterfaceDataBestEffort(tx, req.DeviceID, interfaceMetrics, req.Interfaces, interfaceSpeedUpdates, collectedAt)
+		writtenInterfaceMetrics = w.writeInterfaceDataBestEffort(tx, req.DeviceID, interfaceMetrics, req.Interfaces, interfaceSpeedUpdates, tags, collectedAt)
 		// 次要写入：LLDP 邻居全量替换（拓扑连线数据源），同样尽力而为。
 		w.writeNeighborsBestEffort(tx, req.DeviceID, req.Neighbors, collectedAt)
 		return nil
@@ -117,7 +144,7 @@ func (w *MetricsWriter) WriteDeviceMetrics(ctx context.Context, req DeviceMetric
 
 	return WriteResult{
 		DeviceMetrics:    len(deviceMetrics),
-		InterfaceMetrics: len(interfaceMetrics),
+		InterfaceMetrics: writtenInterfaceMetrics,
 	}, nil
 }
 
@@ -660,7 +687,7 @@ func interfaceSpeedPriority(normalized string) (int, float64) {
 func isInterfaceMetaKey(key string) bool {
 	normalized := normalizeInterfaceKey(key)
 	switch normalized {
-	case "name", "timestamp", "collected_at":
+	case "name", "timestamp", "collected_at", "speed_unknown", "lld_monitored":
 		return true
 	default:
 		return false
@@ -694,7 +721,39 @@ func applyInterfaceSpeedUpdates(tx *gorm.DB, updates []InterfaceSpeedUpdate) err
 	return nil
 }
 
-// writeInterfaceDataBestEffort 以“尽力而为”方式写入接口相关数据（时序指标 + 状态表 + 速率）。
+type deviceInterfaceState struct {
+	Name               string     `gorm:"column:name"`
+	Speed              *int64     `gorm:"column:speed"`
+	IsUp               *bool      `gorm:"column:is_up"`
+	AdminUp            bool       `gorm:"column:admin_up"`
+	DuplexStatus       string     `gorm:"column:duplex_status"`
+	InErrors           int64      `gorm:"column:in_errors"`
+	OutErrors          int64      `gorm:"column:out_errors"`
+	FlapCount1h        int        `gorm:"column:flap_count_1h"`
+	LastStatusChangeAt *time.Time `gorm:"column:last_status_change_at"`
+	LastUpdated        *time.Time `gorm:"column:last_updated"`
+	LLDMonitored       bool       `gorm:"column:lld_monitored"`
+}
+
+func loadDeviceInterfaceStates(tx *gorm.DB, deviceID int) (map[string]deviceInterfaceState, error) {
+	rows := make([]deviceInterfaceState, 0)
+	if err := tx.Table("device_interfaces").
+		Select("name, speed, is_up, admin_up, duplex_status, in_errors, out_errors, flap_count_1h, last_status_change_at, last_updated, lld_monitored").
+		Where("device_id = ?", deviceID).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	states := make(map[string]deviceInterfaceState, len(rows))
+	for _, row := range rows {
+		name := strings.TrimSpace(row.Name)
+		if name != "" {
+			states[name] = row
+		}
+	}
+	return states, nil
+}
+
+// writeInterfaceDataBestEffort 以“尽力而为”方式写入接口相关数据（时序指标 + 状态表 + 速率 + 纳管接口最新快照）。
 // 整段包在嵌套事务(SAVEPOINT)中：任一步失败只回滚本段并记日志，不影响外层已写入的核心快照。
 func (w *MetricsWriter) writeInterfaceDataBestEffort(
 	tx *gorm.DB,
@@ -702,52 +761,132 @@ func (w *MetricsWriter) writeInterfaceDataBestEffort(
 	interfaceMetrics []InterfaceMetric,
 	interfacePayload []map[string]interface{},
 	speedUpdates []InterfaceSpeedUpdate,
+	tags datatypes.JSONMap,
 	collectedAt time.Time,
-) {
+) int {
 	if len(interfaceMetrics) == 0 && len(interfacePayload) == 0 && len(speedUpdates) == 0 {
-		return
+		return 0
 	}
 
+	writtenCount := len(interfaceMetrics)
 	err := tx.Transaction(func(itx *gorm.DB) error {
-		if len(interfaceMetrics) > 0 {
-			// Use raw SQL to let database sequence generate IDs for TimescaleDB hypertable
-			if err := insertInterfaceMetricsRaw(itx, interfaceMetrics); err != nil {
-				return err
-			}
+		existingStates, err := loadDeviceInterfaceStates(itx, deviceID)
+		if err != nil {
+			return err
 		}
+
+		monitoredMap := make(map[string]bool, len(existingStates)+len(interfacePayload))
+		for name, st := range existingStates {
+			monitoredMap[name] = st.LLDMonitored
+		}
+
+		allInterfaceMetrics := make([]InterfaceMetric, len(interfaceMetrics))
+		copy(allInterfaceMetrics, interfaceMetrics)
+
 		if len(interfacePayload) > 0 {
-			if err := upsertDeviceInterfaces(itx, deviceID, interfacePayload, collectedAt); err != nil {
+			flapMetrics, err := upsertDeviceInterfacesWithStates(itx, deviceID, interfacePayload, existingStates, monitoredMap, tags, collectedAt)
+			if err != nil {
+				return err
+			}
+			allInterfaceMetrics = appendUniqueInterfaceMetrics(allInterfaceMetrics, flapMetrics)
+		}
+
+		if len(allInterfaceMetrics) > 0 {
+			// Use raw SQL to let database sequence generate IDs for TimescaleDB hypertable
+			if err := insertInterfaceMetricsRaw(itx, allInterfaceMetrics); err != nil {
+				return err
+			}
+			for _, m := range allInterfaceMetrics {
+				if _, exists := monitoredMap[m.InterfaceName]; !exists {
+					monitoredMap[m.InterfaceName] = true
+				}
+			}
+			latestPoints := InterfaceMetricsToLatestMetrics(allInterfaceMetrics, monitoredMap)
+			if err := upsertLatestMetricsWithDB(itx, latestPoints); err != nil {
 				return err
 			}
 		}
+
 		if len(speedUpdates) > 0 {
 			if err := applyInterfaceSpeedUpdates(itx, speedUpdates); err != nil {
 				return err
 			}
 		}
+		writtenCount = len(allInterfaceMetrics)
 		return nil
 	})
 	if err != nil && w.logger != nil {
 		w.logger.Warn("interface data best-effort write failed; core device snapshot preserved",
 			zap.Int("device_id", deviceID), zap.Error(err))
+		return 0
 	}
+	return writtenCount
 }
 
-// upsertDeviceInterfaces 将采集到的接口当前状态 UPSERT 到 device_interfaces。
-// 此前该表无任何 INSERT，导致 traffic 接口列表、reports 接口统计、接口速率更新长期空转。
-// speed 列交由 applyInterfaceSpeedUpdates 维护（带多来源优先级解析），此处不覆盖。
-func upsertDeviceInterfaces(tx *gorm.DB, deviceID int, interfaces []map[string]interface{}, collectedAt time.Time) error {
+func appendUniqueInterfaceMetrics(base []InterfaceMetric, extras []InterfaceMetric) []InterfaceMetric {
+	if len(extras) == 0 {
+		return base
+	}
+	type metricKey struct {
+		iface string
+		name  string
+	}
+	seen := make(map[metricKey]struct{}, len(base))
+	for _, m := range base {
+		seen[metricKey{iface: m.InterfaceName, name: m.MetricName}] = struct{}{}
+	}
+	for _, m := range extras {
+		key := metricKey{iface: m.InterfaceName, name: m.MetricName}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		base = append(base, m)
+	}
+	return base
+}
+
+// upsertDeviceInterfacesWithStates 将采集到的接口状态、错包/丢弃、利用率及闪断统计 UPSERT 到 device_interfaces。
+func upsertDeviceInterfacesWithStates(
+	tx *gorm.DB,
+	deviceID int,
+	interfaces []map[string]interface{},
+	existingStates map[string]deviceInterfaceState,
+	monitoredMap map[string]bool,
+	tags datatypes.JSONMap,
+	collectedAt time.Time,
+) ([]InterfaceMetric, error) {
 	const upsertSQL = `
-INSERT INTO device_interfaces (device_id, name, alias, in_octets, out_octets, is_up, last_updated, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO device_interfaces (
+    device_id, name, alias, in_octets, out_octets, is_up,
+    admin_up, duplex_status, in_errors, out_errors, in_discards, out_discards,
+    in_error_rate, out_error_rate, utilization_in, utilization_out, speed_unknown,
+    flap_count_1h, last_status_change_at, lld_monitored, last_updated, created_at, updated_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (device_id, name) DO UPDATE SET
     alias = COALESCE(EXCLUDED.alias, device_interfaces.alias),
     in_octets = EXCLUDED.in_octets,
     out_octets = EXCLUDED.out_octets,
     is_up = EXCLUDED.is_up,
+    admin_up = EXCLUDED.admin_up,
+    duplex_status = EXCLUDED.duplex_status,
+    in_errors = EXCLUDED.in_errors,
+    out_errors = EXCLUDED.out_errors,
+    in_discards = EXCLUDED.in_discards,
+    out_discards = EXCLUDED.out_discards,
+    in_error_rate = EXCLUDED.in_error_rate,
+    out_error_rate = EXCLUDED.out_error_rate,
+    utilization_in = EXCLUDED.utilization_in,
+    utilization_out = EXCLUDED.utilization_out,
+    speed_unknown = EXCLUDED.speed_unknown,
+    flap_count_1h = EXCLUDED.flap_count_1h,
+    last_status_change_at = EXCLUDED.last_status_change_at,
+    lld_monitored = EXCLUDED.lld_monitored,
     last_updated = EXCLUDED.last_updated,
     updated_at = EXCLUDED.updated_at`
 
+	flapMetrics := make([]InterfaceMetric, 0, len(interfaces))
 	for _, item := range interfaces {
 		if item == nil {
 			continue
@@ -758,29 +897,176 @@ ON CONFLICT (device_id, name) DO UPDATE SET
 			continue
 		}
 
-		var alias interface{}
-		if descr, ok := item["description"].(string); ok {
-			if trimmed := strings.TrimSpace(descr); trimmed != "" {
-				alias = trimmed
-			}
+		prev, hasPrev := existingStates[name]
+		var prevPtr *deviceInterfaceState
+		if hasPrev {
+			prevCopy := prev
+			prevPtr = &prevCopy
 		}
+
+		resolved := resolveInterfaceUpsertValues(item, prevPtr, collectedAt)
+		monitoredMap[name] = resolved.lldMonitored
 
 		if err := tx.Exec(
 			upsertSQL,
 			deviceID,
 			name,
-			alias,
+			resolved.alias,
 			mapInterfaceInt64(item, "ifHCInOctets"),
 			mapInterfaceInt64(item, "ifHCOutOctets"),
-			mapInterfaceBool(item, "is_up"),
+			resolved.currUpVal,
+			resolved.adminUp,
+			resolved.duplexStatus,
+			resolved.inErrors,
+			resolved.outErrors,
+			resolved.inDiscards,
+			resolved.outDiscards,
+			resolved.inErrorRate,
+			resolved.outErrorRate,
+			resolved.utilIn,
+			resolved.utilOut,
+			resolved.speedUnknown,
+			resolved.flapCount1h,
+			resolved.lastStatusChangeAt,
+			resolved.lldMonitored,
 			collectedAt,
 			collectedAt,
 			collectedAt,
 		).Error; err != nil {
-			return err
+			return nil, err
+		}
+
+		flapFloat := float64(resolved.flapCount1h)
+		flapMetrics = append(flapMetrics, InterfaceMetric{
+			DeviceID:      deviceID,
+			InterfaceName: name,
+			MetricName:    "if_flap_count_1h",
+			MetricValue:   &flapFloat,
+			Tags:          tags,
+			CollectedAt:   collectedAt,
+		})
+	}
+	return flapMetrics, nil
+}
+
+type resolvedInterfaceUpsert struct {
+	alias              interface{}
+	currUpVal          interface{}
+	adminUp            bool
+	duplexStatus       string
+	inErrors           int64
+	outErrors          int64
+	inDiscards         int64
+	outDiscards        int64
+	inErrorRate        float64
+	outErrorRate       float64
+	utilIn             float64
+	utilOut            float64
+	speedUnknown       bool
+	flapCount1h        int
+	lastStatusChangeAt *time.Time
+	lldMonitored       bool
+}
+
+func resolveInterfaceUpsertValues(item map[string]interface{}, prev *deviceInterfaceState, collectedAt time.Time) resolvedInterfaceUpsert {
+	res := resolvedInterfaceUpsert{
+		adminUp:      true,
+		duplexStatus: "unknown",
+		lldMonitored: true,
+	}
+	if descr, ok := item["description"].(string); ok {
+		if trimmed := strings.TrimSpace(descr); trimmed != "" {
+			res.alias = trimmed
 		}
 	}
-	return nil
+
+	var currUpPtr *bool
+	if up, ok := item["is_up"].(bool); ok {
+		res.currUpVal = up
+		currUpPtr = &up
+	}
+
+	if adminUp, ok := item["admin_up"].(bool); ok {
+		res.adminUp = adminUp
+	} else if prev != nil {
+		res.adminUp = prev.AdminUp
+	}
+
+	if duplex, ok := item["duplex_status"].(string); ok && strings.TrimSpace(duplex) != "" {
+		res.duplexStatus = normalizeDuplexStatus(duplex)
+	} else if prev != nil && strings.TrimSpace(prev.DuplexStatus) != "" {
+		res.duplexStatus = prev.DuplexStatus
+	}
+
+	if lldMon, ok := item["lld_monitored"].(bool); ok {
+		res.lldMonitored = lldMon
+	} else if prev != nil {
+		res.lldMonitored = prev.LLDMonitored
+	}
+
+	res.inErrors = mapInterfaceInt64OrZero(item, "if_in_errors", "in_errors")
+	res.outErrors = mapInterfaceInt64OrZero(item, "if_out_errors", "out_errors")
+	res.inDiscards = mapInterfaceInt64OrZero(item, "if_in_discards", "in_discards")
+	res.outDiscards = mapInterfaceInt64OrZero(item, "if_out_discards", "out_discards")
+
+	if prev != nil && prev.LastUpdated != nil {
+		res.inErrorRate = CalculateCounterRate(prev.InErrors, res.inErrors, *prev.LastUpdated, collectedAt)
+		res.outErrorRate = CalculateCounterRate(prev.OutErrors, res.outErrors, *prev.LastUpdated, collectedAt)
+	}
+
+	res.utilIn, res.utilOut, res.speedUnknown = resolveInterfaceUtilizationForUpsert(item, prev)
+
+	var prevUpPtr *bool
+	var prevFlaps int
+	var prevChange *time.Time
+	if prev != nil {
+		prevUpPtr = prev.IsUp
+		prevFlaps = prev.FlapCount1h
+		prevChange = prev.LastStatusChangeAt
+	}
+	res.flapCount1h, res.lastStatusChangeAt = NextInterfaceFlapState(prevUpPtr, prevFlaps, prevChange, currUpPtr, collectedAt)
+	return res
+}
+
+func resolveInterfaceUtilizationForUpsert(item map[string]interface{}, prev *deviceInterfaceState) (float64, float64, bool) {
+	var speedPtr *int64
+	if speed, _, ok := resolveInterfaceSpeed(item); ok {
+		speedPtr = &speed
+	} else if prev != nil && prev.Speed != nil {
+		speedPtr = prev.Speed
+	}
+	if _, hasExplicitSpeed := item["ifHighSpeed"]; hasExplicitSpeed {
+		if raw, ok := coerceFloat(item["ifHighSpeed"]); ok && int64(raw) <= 0 {
+			zero := int64(0)
+			speedPtr = &zero
+		}
+	}
+	var inRatePtr, outRatePtr *float64
+	if v, ok := coerceFloat(item["bandwidth_in"]); ok {
+		inRatePtr = &v
+	}
+	if v, ok := coerceFloat(item["bandwidth_out"]); ok {
+		outRatePtr = &v
+	}
+	utilIn, unknownIn := CalculateInterfaceUtilization(inRatePtr, speedPtr)
+	utilOut, unknownOut := CalculateInterfaceUtilization(outRatePtr, speedPtr)
+	speedUnknown := unknownIn || unknownOut
+	if explicitUnknown, ok := item["speed_unknown"].(bool); ok && explicitUnknown {
+		speedUnknown = true
+		utilIn, utilOut = 0, 0
+	}
+	return utilIn, utilOut, speedUnknown
+}
+
+func mapInterfaceInt64OrZero(item map[string]interface{}, keys ...string) int64 {
+	for _, key := range keys {
+		if value, ok := item[key]; ok {
+			if f, ok := coerceFloat(value); ok && f >= 0 {
+				return int64(f)
+			}
+		}
+	}
+	return 0
 }
 
 // mapInterfaceInt64 从接口 payload 中按 key 提取整数（兼容内存路径的 uint64/int64 与 JSON 路径的 float64）；

@@ -105,10 +105,18 @@ func TestDeleteDevice_PurgesOptionalAndPolymorphicTargetsWhenTablesExist(t *test
 	mock.ExpectQuery(optionalTableProbePattern).
 		WillReturnRows(sqlmock.NewRows([]string{"table_name"}).
 			AddRow("device_latest_metrics").
+			AddRow("device_collection_states").
+			AddRow("user_pinned_devices").
 			AddRow("monitor_maintenance_targets"))
 	mock.ExpectExec(`DELETE FROM device_latest_metrics WHERE device_id = \$1`).
 		WithArgs(9).
 		WillReturnResult(sqlmock.NewResult(0, 5))
+	mock.ExpectExec(`DELETE FROM device_collection_states WHERE device_id = \$1`).
+		WithArgs(9).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`DELETE FROM user_pinned_devices WHERE device_id = \$1`).
+		WithArgs(9).
+		WillReturnResult(sqlmock.NewResult(0, 2))
 	mock.ExpectExec(`DELETE FROM monitor_maintenance_targets WHERE target_type = \$1 AND target_id = \$2`).
 		WithArgs("device", 9).
 		WillReturnResult(sqlmock.NewResult(0, 1))

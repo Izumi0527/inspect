@@ -86,6 +86,10 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 		&dashboard.UserNotificationState{},
 		&dashboard.TopologyLayoutRecord{},
 
+		&monitoring.DeviceLatestMetric{},
+		&monitoring.DeviceCollectionState{},
+		&monitoring.UserPinnedDevice{},
+
 		&scheduler.ScheduledTask{},
 		&scheduler.TaskExecution{},
 	); err != nil {
@@ -117,6 +121,13 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 	}
 
 	if err := ensureMetricIndexes(db); err != nil {
+		return err
+	}
+
+	if err := EnsureTimescaleCompressionAndRetention(db, cfg); err != nil {
+		if logger != nil {
+			logger.Warn("ensure timescale compression and retention failed", zap.Error(err))
+		}
 		return err
 	}
 
@@ -354,4 +365,52 @@ func ensureMetricIndexes(db *gorm.DB) error {
 
 func execSQL(db *gorm.DB, sql string) error {
 	return db.Exec(sql).Error
+}
+
+// EnsureTimescaleCompressionAndRetention 为 TimescaleDB hypertable 幂等开启 7 天列压缩与 90 天保留策略。
+// 非 TimescaleDB（普通 PostgreSQL 或 SQLite）优雅跳过，绝不抛错污染事务。
+func EnsureTimescaleCompressionAndRetention(db *gorm.DB, cfg config.Config) error {
+	if db == nil || !cfg.TimescaleEnabled {
+		return nil
+	}
+	if db.Dialector != nil && db.Dialector.Name() != "postgres" {
+		return nil
+	}
+
+	targets := []struct {
+		table     string
+		segmentBy string
+	}{
+		{table: "device_metrics", segmentBy: "device_id,metric_name"},
+		{table: "interface_metrics", segmentBy: "device_id,metric_name"},
+	}
+
+	for _, target := range targets {
+		if !isHypertable(db, target.table) {
+			continue
+		}
+		alterSQL := fmt.Sprintf(
+			`ALTER TABLE %s SET (timescaledb.compress, timescaledb.compress_segmentby = %s, timescaledb.compress_orderby = 'collected_at DESC');`,
+			target.table, quoteSQLLiteral(target.segmentBy),
+		)
+		if err := execSQL(db, alterSQL); err != nil {
+			return fmt.Errorf("enable compression for %s failed: %w", target.table, err)
+		}
+		compressSQL := fmt.Sprintf(
+			`SELECT add_compression_policy(%s, INTERVAL '7 days', if_not_exists => TRUE);`,
+			quoteSQLLiteral(target.table),
+		)
+		if err := execSQL(db, compressSQL); err != nil {
+			return fmt.Errorf("add compression policy for %s failed: %w", target.table, err)
+		}
+		retentionSQL := fmt.Sprintf(
+			`SELECT add_retention_policy(%s, INTERVAL '90 days', if_not_exists => TRUE);`,
+			quoteSQLLiteral(target.table),
+		)
+		if err := execSQL(db, retentionSQL); err != nil {
+			return fmt.Errorf("add retention policy for %s failed: %w", target.table, err)
+		}
+	}
+
+	return nil
 }

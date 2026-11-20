@@ -77,6 +77,16 @@ func (h MonitoringHandler) Register(group *echo.Group) {
 
 	// 监控中心 v2 聚合接口：将多接口拉取收敛为单次请求，返回分区状态与降级信息
 	group.POST("/monitoring/dashboard/v2", h.GetMonitoringDashboardV2)
+	group.GET("/monitoring/engine-health", h.GetEngineHealth)
+	group.GET("/monitoring/hosts", h.ListMonitoringHosts)
+	group.GET("/monitoring/hosts/:device_id/detail", h.GetMonitoringHostDetail)
+	group.GET("/monitoring/pins", h.ListMonitoringPins)
+	group.POST("/monitoring/pins/:device_id", h.PinMonitoringDevice)
+	group.DELETE("/monitoring/pins/:device_id", h.UnpinMonitoringDevice)
+	group.POST("/monitoring/pins/batch", h.BatchPinMonitoringDevices)
+	group.GET("/monitoring/topn", h.GetMonitoringTopN)
+	group.GET("/monitoring/latest-data", h.GetMonitoringLatestData)
+	group.POST("/monitoring/graphs/adhoc", h.GetMonitoringAdhocGraphs)
 	group.POST("/monitoring/devices/:device_id/start", h.StartDeviceMonitoring)
 	group.POST("/monitoring/devices/:device_id/stop", h.StopDeviceMonitoring)
 	group.POST("/monitoring/devices/:device_id/metrics", h.WriteDeviceMetrics)
@@ -552,6 +562,10 @@ type monitoringDashboardV2Request struct {
 	TimeRange string `json:"time_range"`
 	// 设备筛选：为空表示全部设备
 	DeviceIDs []int `json:"device_ids"`
+	// 分组筛选：可选，递归包含子分组下设备
+	GroupID *int `json:"group_id,omitempty"`
+	// 对比昨日同期：为 true 时返回 24h 前对齐基线序列
+	CompareYesterday bool `json:"compare_yesterday,omitempty"`
 }
 
 type monitoringSectionStatus struct {
@@ -573,11 +587,19 @@ type monitoringDashboardV2Envelope struct {
 type monitoringDashboardV2Data struct {
 	// systemPerformance 是前端分区 id（类型/分区键/回退逻辑均绑定），指「系统性能趋势」分区
 	// 而非聚合方式；数据已按设备区分，勿为对齐元素类型而改动此键名
-	SystemPerformance     []monitoring.DevicePerformancePoint  `json:"systemPerformance"`
-	TemperatureHistory    []monitoring.TemperatureHistoryPoint `json:"temperatureHistory"`
-	NetworkTrafficHistory []monitoring.NetworkTrafficPoint     `json:"networkTrafficHistory"`
-	StatsV2               []monitoringV2StatCardData           `json:"statsV2"`
-	LastUpdate            string                               `json:"lastUpdate"`
+	SystemPerformance          []monitoring.DevicePerformancePoint       `json:"systemPerformance"`
+	TemperatureHistory         []monitoring.TemperatureHistoryPoint      `json:"temperatureHistory"`
+	NetworkTrafficHistory      []monitoring.NetworkTrafficPoint          `json:"networkTrafficHistory"`
+	StatsV2                    []monitoringV2StatCardData                `json:"statsV2"`
+	LastUpdate                 string                                    `json:"lastUpdate"`
+	Thresholds                 *monitoring.ThresholdSummary              `json:"thresholds,omitempty"`
+	HealthDistribution         *monitoring.HealthDistributionBuckets     `json:"healthDistribution,omitempty"`
+	GroupSummaries             []monitoring.GroupSummaryItem             `json:"groupSummaries,omitempty"`
+	AggregateTrends            []monitoring.AggregateTrendPoint          `json:"aggregateTrends,omitempty"`
+	YesterdayBaseline          []monitoring.DevicePerformancePoint       `json:"yesterdayBaseline,omitempty"`
+	Annotations                []monitoring.DashboardAnnotation          `json:"annotations,omitempty"`
+	NotificationChannelSummary []monitoring.NotificationChannelReadiness `json:"notificationChannelSummary,omitempty"`
+	ActiveProblems             []monitoring.ActiveProblemItem            `json:"activeProblems,omitempty"`
 }
 
 type monitoringV2StatCardData struct {
@@ -606,6 +628,11 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	}
 
 	deviceIDs := sanitizeDeviceIDs(req.DeviceIDs)
+	if req.GroupID != nil && *req.GroupID > 0 && h.Writer != nil {
+		if resolvedIDs, resolveErr := h.Writer.ResolveGroupDeviceIDs(c.Request().Context(), *req.GroupID, deviceIDs); resolveErr == nil {
+			deviceIDs = resolvedIDs
+		}
+	}
 
 	startTime, endTime := resolveTimeRangeFromString(timeRange, 24*time.Hour)
 	// 监控中心页所有档位统一 5 分钟采样：与前端档位（1h~14d）解耦、与采集节奏对齐，
@@ -730,6 +757,32 @@ func (h MonitoringHandler) GetMonitoringDashboardV2(c echo.Context) error {
 	// 规则：优先取各时序分区（性能/温度/流量）中最新的数据点时间；若均无数据，则回退为生成时间。
 	resolvedLastUpdate := resolveMonitoringDashboardLastUpdate(generatedAt, data.SystemPerformance, data.TemperatureHistory, data.NetworkTrafficHistory)
 	data.LastUpdate = resolvedLastUpdate
+
+	// 增量扩展字段（100% 向后兼容；Writer 为 nil 时优雅降级为纯内存聚合）
+	enrichmentWriter := h.Writer
+	if enrichmentWriter == nil {
+		enrichmentWriter = monitoring.NewMetricsWriter(nil, nil, nil)
+	}
+	enrichment := enrichmentWriter.BuildDashboardV2Enrichment(
+		c.Request().Context(),
+		startTime,
+		endTime,
+		deviceIDs,
+		sampleInterval,
+		data.SystemPerformance,
+		req.CompareYesterday,
+		canReadAlerts,
+	)
+	data.Thresholds = &enrichment.Thresholds
+	data.HealthDistribution = &enrichment.HealthDistribution
+	data.GroupSummaries = enrichment.GroupSummaries
+	data.AggregateTrends = enrichment.AggregateTrends
+	if req.CompareYesterday {
+		data.YesterdayBaseline = enrichment.YesterdayBaseline
+	}
+	data.Annotations = enrichment.Annotations
+	data.NotificationChannelSummary = enrichment.NotificationChannelSummary
+	data.ActiveProblems = enrichment.ActiveProblems
 
 	return c.JSON(http.StatusOK, monitoringDashboardV2Envelope{
 		Data:              data,

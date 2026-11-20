@@ -101,6 +101,7 @@ func TestWriteDeviceMetrics_WritesLLDPIdentityColumnsOnlyWhenChanged(t *testing.
 	mock.ExpectBegin()
 	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO device_latest_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`UPDATE "devices" SET "cpu_usage"`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`UPDATE "devices" SET "detected_sys_name"=\$1 WHERE id = \$2 AND \(detected_sys_name IS NULL OR detected_sys_name <> \$3\)`).
 		WithArgs("16F-HJ-SW", 9, "16F-HJ-SW").WillReturnResult(sqlmock.NewResult(0, 1))
@@ -136,6 +137,7 @@ func TestWriteDeviceMetrics_ReplacesNeighborsInSavepoint(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO device_latest_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`UPDATE "devices" SET "cpu_usage"=\$1 WHERE id = \$2`).WithArgs(cpu, 9).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`UPDATE "devices" SET "detected_device_type"=\$1 WHERE id = \$2 AND \(detected_device_type IS NULL OR detected_device_type <> \$3\)`).
 		WithArgs("router", 9, "router").WillReturnResult(sqlmock.NewResult(0, 1))
@@ -177,6 +179,7 @@ func TestWriteDeviceMetrics_EmptyNeighborsClearsOldRows(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO device_latest_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`UPDATE "devices" SET "cpu_usage"`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`SAVEPOINT`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`DELETE FROM device_neighbors WHERE device_id = \$1`).WithArgs(9).WillReturnResult(sqlmock.NewResult(0, 0))
@@ -197,6 +200,7 @@ func TestWriteDeviceMetrics_EmptyNeighborsClearsOldRows(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO device_latest_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`UPDATE "devices" SET "cpu_usage"`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 

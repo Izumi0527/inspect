@@ -157,6 +157,19 @@ func (s *ProbeService) ProbeDevice(
 	return result, nil
 }
 
+// ProbeICMP 执行轻量级 ICMP 探活（不发 SNMP 请求），供采集退避恢复检查复用。
+func (s *ProbeService) ProbeICMP(ctx context.Context, ipAddress string) (bool, *float64, *string) {
+	if strings.TrimSpace(ipAddress) == "" {
+		msg := "ip_address is required"
+		return false, nil, &msg
+	}
+	prober := probeICMP
+	if s != nil && s.icmp != nil {
+		prober = s.icmp
+	}
+	return prober(ctx, ipAddress)
+}
+
 // probeAbandonedMessage 是探测腿因调用方取消而未等到结果时填入的错误文本。
 const probeAbandonedMessage = "probe abandoned: request cancelled before completion"
 

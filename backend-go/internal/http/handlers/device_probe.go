@@ -3,9 +3,11 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -430,18 +432,81 @@ func conditionalLastSeen(result devices.ProbeResult) *time.Time {
 	return nil
 }
 
+const DefaultDeviceCollectCooldown = 10 * time.Second
+
+// DeviceCollectCooldown 提供进程内并发安全的单设备「立即采集」防刷冷却锁。
+type DeviceCollectCooldown struct {
+	mu       sync.Mutex
+	duration time.Duration
+	lastAt   map[int]time.Time
+}
+
+// NewDeviceCollectCooldown 创建单设备冷却锁。
+func NewDeviceCollectCooldown(duration time.Duration) *DeviceCollectCooldown {
+	if duration <= 0 {
+		duration = DefaultDeviceCollectCooldown
+	}
+	return &DeviceCollectCooldown{
+		duration: duration,
+		lastAt:   make(map[int]time.Time),
+	}
+}
+
+var defaultDeviceCollectCooldown = NewDeviceCollectCooldown(DefaultDeviceCollectCooldown)
+
+func (h DevicesHandler) collectCooldown() *DeviceCollectCooldown {
+	if h.CollectCooldown != nil {
+		return h.CollectCooldown
+	}
+	return defaultDeviceCollectCooldown
+}
+
+// TryAcquire 尝试为指定设备获取立即采集资格；若处于冷却期则返回 false 与剩余冷却秒数（向上取整，至少 1 秒）。
+func (c *DeviceCollectCooldown) TryAcquire(deviceID int, now time.Time) (bool, int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if prev, ok := c.lastAt[deviceID]; ok {
+		elapsed := now.Sub(prev)
+		if elapsed < c.duration {
+			remaining := int(math.Ceil((c.duration - elapsed).Seconds()))
+			if remaining < 1 {
+				remaining = 1
+			}
+			return false, remaining
+		}
+	}
+	if len(c.lastAt) >= 512 {
+		for id, ts := range c.lastAt {
+			if now.Sub(ts) >= c.duration {
+				delete(c.lastAt, id)
+			}
+		}
+	}
+	c.lastAt[deviceID] = now
+	return true, 0
+}
+
 func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
 	if h.Service == nil || h.SNMPCollector == nil || h.Metrics == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics collection service not configured")
 	}
-	// 采集接口会写入监控指标数据，必须具备更新权限
-	if _, err := requirePermission(c, h.Auth, "devices:update"); err != nil {
+	// 采集接口会写入监控指标数据，允许 devices:update 或 monitoring:control
+	if _, err := requireAnyPermission(c, h.Auth, "devices:update", "monitoring:control"); err != nil {
 		return err
 	}
 
 	deviceID, err := strconv.Atoi(c.Param("device_id"))
 	if err != nil || deviceID <= 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid device_id")
+	}
+
+	if ok, retryAfter := h.collectCooldown().TryAcquire(deviceID, time.Now()); !ok {
+		return c.JSON(http.StatusTooManyRequests, map[string]interface{}{
+			"error":               "cooldown_active",
+			"message":             fmt.Sprintf("采集冷却中，请 %d 秒后再试", retryAfter),
+			"device_id":           deviceID,
+			"retry_after_seconds": retryAfter,
+		})
 	}
 
 	device, err := h.Service.GetDeviceRecord(c.Request().Context(), deviceID)
@@ -490,8 +555,8 @@ func (h DevicesHandler) BatchCollectMetrics(c echo.Context) error {
 	if h.Service == nil || h.SNMPCollector == nil || h.Metrics == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "metrics collection service not configured")
 	}
-	// 采集接口会写入监控指标数据，必须具备更新权限
-	if _, err := requirePermission(c, h.Auth, "devices:update"); err != nil {
+	// 采集接口会写入监控指标数据，允许 devices:update 或 monitoring:control
+	if _, err := requireAnyPermission(c, h.Auth, "devices:update", "monitoring:control"); err != nil {
 		return err
 	}
 
@@ -538,10 +603,16 @@ func (h DevicesHandler) BatchCollectMetrics(c echo.Context) error {
 	}
 
 	results := make([]collectResult, 0, len(deviceRows))
+	skippedCooldownDeviceIDs := make([]int, 0)
 	successCount := 0
+	cooldown := h.collectCooldown()
 
 	// Process devices (could be parallelized with goroutines)
 	for _, device := range deviceRows {
+		if ok, _ := cooldown.TryAcquire(device.ID, time.Now()); !ok {
+			skippedCooldownDeviceIDs = append(skippedCooldownDeviceIDs, device.ID)
+			continue
+		}
 		result := collectResult{
 			DeviceID:   device.ID,
 			DeviceName: device.Name,
@@ -580,10 +651,11 @@ func (h DevicesHandler) BatchCollectMetrics(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"success":   successCount > 0,
-		"total":     len(req.DeviceIDs),
-		"collected": successCount,
-		"failed":    len(results) - successCount,
-		"results":   results,
+		"success":                  successCount > 0,
+		"total":                    len(req.DeviceIDs),
+		"collected":                successCount,
+		"failed":                   len(results) - successCount,
+		"skippedCooldownDeviceIDs": skippedCooldownDeviceIDs,
+		"results":                  results,
 	})
 }

@@ -18,8 +18,9 @@ type DevicesHandler struct {
 	Inspection    *inspection.Service
 	Metrics       *monitoring.MetricsWriter
 	// HostKeys 是 SSH 主机密钥指纹存储（TOFU 首次信任），供设备详情页查询与重置。
-	HostKeys *sshutil.SSHHostKeyStore
-	Auth     PermissionService
+	HostKeys        *sshutil.SSHHostKeyStore
+	Auth            PermissionService
+	CollectCooldown *DeviceCollectCooldown
 }
 
 // Register 注册所有设备相关路由

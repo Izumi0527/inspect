@@ -81,6 +81,8 @@ type Service struct {
 	// 重启后归零即立刻轮询一次，可接受。
 	logPollMu     sync.Mutex
 	lastLogPollAt time.Time
+
+	engineHealth *monitoring.EngineHealthTracker
 }
 
 // logPollingIntervalFrom 解析配置表中的轮询间隔（分钟），形态可能是 int / int64 / float64 / 字符串；
@@ -185,6 +187,7 @@ func NewService(
 		maxConcurrent:   defaultMaxConcurrent,
 		parser:          parser,
 		limit:           make(chan struct{}, defaultMaxConcurrent),
+		engineHealth:    monitoring.NewEngineHealthTracker(),
 	}
 }
 
@@ -655,7 +658,12 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 	}
 
 	total := len(devicesList)
+	roundStart := time.Now().UTC()
+	tracker := s.resolveEngineHealthTracker()
+	tracker.RecordRoundStart(roundStart, total)
+
 	if total == 0 {
+		tracker.RecordRoundFinish(time.Now().UTC(), 0, 0, 0, 0, nil)
 		return map[string]interface{}{
 			"total_devices":     0,
 			"inspected_count":   0,
@@ -666,8 +674,15 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 		}, nil
 	}
 
-	targets := make([]devices.ProbeTarget, 0, total)
-	for _, item := range devicesList {
+	stateStore := newCollectionStateStore(s.loadCollectionStates(ctx, collectDeviceIDs(devicesList)))
+	eligibleDevices, backoffSkipped, backoffProbeResults := s.partitionDevicesByBackoff(ctx, devicesList, stateStore, roundStart)
+	backoffSkippedSet := make(map[int]bool, len(backoffSkipped))
+	for _, d := range backoffSkipped {
+		backoffSkippedSet[d.ID] = true
+	}
+
+	targets := make([]devices.ProbeTarget, 0, len(eligibleDevices))
+	for _, item := range eligibleDevices {
 		targets = append(targets, devices.ProbeTarget{
 			ID:            item.ID,
 			IPAddress:     item.IPAddress,
@@ -682,13 +697,22 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 	offlineCount := 0
 	inspectedCount := 0
 	metricsCollected := 0
+	failedDevices := len(backoffSkipped)
 
 	// Step 1: Connectivity check
 	// probeResults 供后续步骤复用：探测与指标采集、日志轮询面对同一批设备并使用同一份 SNMP 配置与超时，
 	// 本轮已确认无应答的设备不必再逐个请求等超时。未做探测时为 nil，后续步骤维持原有行为。
 	var probeResults map[int]devices.ProbeResult
 	if checkConnectivity {
-		probeResults = s.probeService.BatchProbeDevices(ctx, targets, s.currentMaxConcurrent(ctx))
+		probeResults = make(map[int]devices.ProbeResult, total)
+		if len(targets) > 0 {
+			for id, res := range s.probeService.BatchProbeDevices(ctx, targets, s.currentMaxConcurrent(ctx)) {
+				probeResults[id] = res
+			}
+		}
+		for id, res := range backoffProbeResults {
+			probeResults[id] = res
+		}
 		for _, result := range probeResults {
 			inspectedCount++
 			if result.IcmpReachable {
@@ -707,22 +731,47 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 				conditionalLastSeen(result),
 				&result.ProbedAt,
 			)
+			s.writeProbeMetricsBestEffort(ctx, result)
+			if !backoffSkippedSet[result.DeviceID] && snmpProbeFailed(result) {
+				s.recordCollectionFailure(ctx, stateStore, result.DeviceID, probeErrorFromResult(result), "snmp_probe", 0, time.Now().UTC())
+				failedDevices++
+			}
 		}
 	}
 
 	// Step 2: Collect detailed SNMP metrics (temperature, bandwidth, etc.)
-	// 本轮探测 SNMP 无应答的设备跳过：采集器对它的十几个采集阶段会逐个等满超时（实测 43 次×15s≈645s），
-	// 拖住整轮采集、第 3 步告警评估（离线告警因此晚 10 分钟以上）和下一轮。
-	metricsSkipped := 0
+	// 本轮探测 SNMP 无应答或仍在退避熔断期的设备跳过：采集器对它的十几个采集阶段会逐个等满超时，
+	// 拖住整轮采集、第 3 步告警评估和下一轮。
+	metricsSkipped := len(backoffSkipped)
 	if collectMetrics && s.snmpCollector != nil && s.metricsWriter != nil {
-		collectList, skipped := snmpCollectionTargets(devicesList, probeResults)
-		metricsSkipped = len(skipped)
+		collectList, skipped := snmpCollectionTargets(eligibleDevices, probeResults)
+		metricsSkipped += len(skipped)
 		if metricsSkipped > 0 && s.logger != nil {
-			s.logger.Info("skip SNMP metrics collection for devices whose SNMP probe failed in this round",
-				zap.Ints("device_ids", skipped))
+			s.logger.Info("skip SNMP metrics collection for devices in backoff or failed SNMP probe",
+				zap.Ints("probe_failed_ids", skipped),
+				zap.Int("backoff_skipped_count", len(backoffSkipped)))
 		}
-		metricsCollected = s.collectDeviceMetrics(ctx, collectList, task.ID, len(collectList))
+		var collectFailed int
+		metricsCollected, collectFailed = s.collectDeviceMetricsWithStates(ctx, collectList, task.ID, len(collectList), stateStore)
+		failedDevices += collectFailed
+	} else if checkConnectivity && !collectMetrics {
+		for _, result := range probeResults {
+			if !backoffSkippedSet[result.DeviceID] && result.IcmpReachable && result.SnmpReachable {
+				s.recordCollectionSuccess(ctx, stateStore, result.DeviceID, 0, time.Now().UTC())
+			}
+		}
 	}
+
+	roundFinishedAt := time.Now().UTC()
+	backoffSummaries := buildBackoffSummaries(devicesList, stateStore.snapshotMap(), roundFinishedAt)
+	tracker.RecordRoundFinish(
+		roundFinishedAt,
+		roundFinishedAt.Sub(roundStart).Milliseconds(),
+		total,
+		metricsCollected,
+		failedDevices,
+		backoffSummaries,
+	)
 
 	// Step 3: Evaluate alert rules against collected metrics
 	alertsCreated := 0
@@ -817,11 +866,23 @@ func (s *Service) currentMaxConcurrent(ctx context.Context) int {
 
 // collectDeviceMetrics collects detailed SNMP metrics from all devices
 func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []devices.Device, taskID string, total int) int {
+	collected, _ := s.collectDeviceMetricsWithStates(ctx, devicesList, taskID, total, nil)
+	return collected
+}
+
+func (s *Service) collectDeviceMetricsWithStates(
+	ctx context.Context,
+	devicesList []devices.Device,
+	taskID string,
+	total int,
+	stateStore *collectionStateStore,
+) (int, int) {
 	if s.snmpCollector == nil || s.metricsWriter == nil {
-		return 0
+		return 0, 0
 	}
 
 	collected := 0
+	failed := 0
 	limit := make(chan struct{}, s.currentMaxConcurrent(ctx))
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -843,6 +904,7 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 				return
 			}
 
+			collectStart := time.Now()
 			// Collect metrics via SNMP
 			metrics, err := s.snmpCollector.CollectMetrics(
 				ctx,
@@ -853,6 +915,7 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 				device.SnmpPort,
 				device.Tags,
 			)
+			durationMS := int(time.Since(collectStart).Milliseconds())
 			if err != nil {
 				if s.logger != nil {
 					s.logger.Debug("SNMP metrics collection failed",
@@ -860,6 +923,12 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 						zap.String("ip", device.IPAddress),
 						zap.Error(err))
 				}
+				if stateStore != nil {
+					s.recordCollectionFailure(ctx, stateStore, device.ID, err, "snmp_collect", durationMS, time.Now().UTC())
+				}
+				mu.Lock()
+				failed++
+				mu.Unlock()
 				return
 			}
 
@@ -887,8 +956,18 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 							zap.Int("device_id", device.ID),
 							zap.Error(err))
 					}
+					if stateStore != nil {
+						s.recordCollectionFailure(ctx, stateStore, device.ID, err, "metrics_write", durationMS, time.Now().UTC())
+					}
+					mu.Lock()
+					failed++
+					mu.Unlock()
 				}
 				return
+			}
+
+			if stateStore != nil {
+				s.recordCollectionSuccess(ctx, stateStore, device.ID, durationMS, time.Now().UTC())
 			}
 
 			mu.Lock()
@@ -915,7 +994,7 @@ func (s *Service) collectDeviceMetrics(ctx context.Context, devicesList []device
 	}
 
 	wg.Wait()
-	return collected
+	return collected, failed
 }
 
 // convertLogsToAlerts queries recent warning/critical logs for a device and creates alerts
