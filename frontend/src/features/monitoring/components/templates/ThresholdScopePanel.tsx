@@ -6,6 +6,13 @@ import { FolderPlus, RotateCcw, SlidersHorizontal } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge, Button } from '@/components/atoms'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { DEVICE_GROUPS_QUERY_KEY, getDeviceGroups } from '@/features/devices/api/devices.api'
 import { DeviceGroupModal } from '@/features/devices/components/DeviceGroupModal'
 import { usePermission } from '@/lib/contexts/auth-context'
@@ -190,17 +197,20 @@ export function ThresholdScopePanel({ template, canControl }: ThresholdScopePane
           </div>
           {canControl && (
             <div className="flex items-center gap-2">
-              <select
-                aria-label="选择要绑定的设备"
-                value={addDeviceId}
-                onChange={(e) => setAddDeviceId(e.target.value)}
-                className="h-8 min-w-44 rounded-md border border-input bg-card px-2 text-xs text-foreground"
-              >
-                <option value="">添加单台设备...</option>
-                {devices.filter((d) => !boundDeviceIds.includes(d.id)).map((d) => (
-                  <option key={d.id} value={d.id}>{d.name} ({d.ipAddress})</option>
-                ))}
-              </select>
+              <Select value={addDeviceId} onValueChange={setAddDeviceId}>
+                <SelectTrigger aria-label="选择要绑定的设备" className="h-9 w-auto min-w-44 gap-2 text-sm">
+                  <SelectValue placeholder="添加单台设备..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {devices
+                    .filter((d) => !boundDeviceIds.includes(d.id))
+                    .map((d) => (
+                      <SelectItem key={d.id} value={String(d.id)}>
+                        {`${d.name} (${d.ipAddress})`}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
               <Button type="button" size="sm" variant="outline" disabled={!addDeviceId} onClick={() => void handleBindDevice()}>
                 绑定设备
               </Button>

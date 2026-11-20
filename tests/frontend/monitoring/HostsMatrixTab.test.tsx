@@ -17,6 +17,10 @@ import {
 import { usePermission } from '@/lib/contexts/auth-context'
 import type { HostsMatrixResponse } from '@/features/monitoring/types/zabbix-monitoring.types'
 
+jest.mock('@/components/ui/select', () =>
+  require('./components/helpers/selectMock').createSelectMock()
+)
+
 jest.mock('@/features/monitoring/api/monitoring-hosts.api', () => ({
   getMonitoringHosts: jest.fn(),
   pinMonitoringDevice: jest.fn(),
@@ -314,7 +318,8 @@ describe('设备监控矩阵 HostsMatrixTab (Task 10)', () => {
 
     // 批量移入分组
     await user.click(screen.getByRole('button', { name: '批量移入分组' }))
-    await user.selectOptions(screen.getByLabelText('目标分组'), '1')
+    await user.click(screen.getByRole('combobox', { name: '目标分组' }))
+    await user.click(screen.getByRole('option', { name: '总部数据中心 (15)' }))
     await user.click(screen.getByRole('button', { name: '确认移入' }))
     await waitFor(() => {
       expect(bulkDeviceAction).toHaveBeenCalledWith('batch_add_group', {

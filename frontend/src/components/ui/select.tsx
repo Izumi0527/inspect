@@ -11,6 +11,11 @@ import { cn } from '@/utils/cn'
  */
 const Select = SelectPrimitive.Root
 
+/** 设备管理标准工具栏下拉框样式（紧凑自适应宽度） */
+export const SELECT_TRIGGER_TOOLBAR_CLASS = 'h-9 w-auto gap-2 text-sm'
+/** 设备管理标准表单下拉框样式（占满容器宽度） */
+export const SELECT_TRIGGER_FORM_CLASS = 'h-9 w-full gap-2 text-sm'
+
 const SelectGroup = SelectPrimitive.Group
 
 const SelectValue = SelectPrimitive.Value
@@ -23,7 +28,7 @@ const SelectTrigger = React.forwardRef<
     ref={ref}
     data-slot="select-trigger"
     className={cn(
-      'flex w-full items-center justify-between border border-input bg-card text-sm text-foreground',
+      'flex h-9 w-full items-center justify-between gap-2 border border-input bg-card text-sm text-foreground',
       'placeholder:text-muted-foreground',
       'focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/25',
       'disabled:cursor-not-allowed disabled:opacity-50',
@@ -304,6 +309,9 @@ export interface SimpleSelectProps {
   children: React.ReactNode
   className?: string
   error?: string
+  id?: string
+  ariaLabel?: string
+  disabled?: boolean
 }
 
 const SimpleSelect: React.FC<SimpleSelectProps> = ({
@@ -313,11 +321,16 @@ const SimpleSelect: React.FC<SimpleSelectProps> = ({
   children,
   className,
   error,
+  id,
+  ariaLabel,
+  disabled,
 }) => {
   return (
     <div className="relative">
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger
+          id={id}
+          aria-label={ariaLabel}
           className={cn(
             error && 'border-destructive focus:border-destructive focus:ring-destructive/20',
             className

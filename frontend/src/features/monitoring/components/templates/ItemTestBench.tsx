@@ -3,6 +3,13 @@
 import { useState } from 'react'
 import { FlaskConical, Play } from 'lucide-react'
 import { Button } from '@/components/atoms'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useMonitoringDevices } from '../../hooks/useMonitoringDevices'
 import { useTestMonitoringItemMutation } from '../../hooks/useMonitoringConfig'
 import type { CustomCollectResult, MonitorItemInput } from '../../types/zabbix-monitoring.types'
@@ -54,19 +61,18 @@ export function ItemTestBench({ buildItemInput }: ItemTestBenchProps) {
           <span>在线测试台</span>
         </div>
         <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-          <select
-            aria-label="选择测试设备"
-            value={deviceId}
-            onChange={(e) => setDeviceId(e.target.value)}
-            className="h-8 min-w-44 rounded-md border border-input bg-card px-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-          >
-            <option value="">选择测试设备...</option>
-            {devices.map((dev) => (
-              <option key={dev.id} value={dev.id}>
-                {dev.name} ({dev.ipAddress})
-              </option>
-            ))}
-          </select>
+          <Select value={deviceId} onValueChange={setDeviceId}>
+            <SelectTrigger aria-label="选择测试设备" className="h-9 w-auto min-w-44 gap-2 text-sm">
+              <SelectValue placeholder="选择测试设备..." />
+            </SelectTrigger>
+            <SelectContent>
+              {devices.map((dev) => (
+                <SelectItem key={dev.id} value={String(dev.id)}>
+                  {`${dev.name} (${dev.ipAddress})`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             type="button"
             size="sm"

@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { cn } from '@/utils/cn'
 
 interface Option {
   value: string | number
@@ -49,7 +50,7 @@ export function ConfigSelect({
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
         aria-invalid={ariaInvalid}
-        className={className || 'max-w-md'}
+        className={cn('h-9 w-full max-w-md gap-2 text-sm', className)}
       >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>

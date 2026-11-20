@@ -75,7 +75,7 @@ export const DeviceGroupFormPanel: React.FC<DeviceGroupFormPanelProps> = ({
         <SelectTrigger
           id="device-group-parent"
           aria-label="上级分组"
-          className="h-9 px-3 rounded-md text-sm"
+          className="h-9 w-full gap-2 text-sm"
         >
           <SelectValue placeholder="无（作为一级根分组）" />
         </SelectTrigger>

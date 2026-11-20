@@ -2,6 +2,13 @@
 
 import { AlertTriangle, Info, Search } from 'lucide-react'
 import { Pagination } from '@/components/atoms/pagination'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { formatDateTimeMDHMS } from '@/utils/formatters'
 import {
   MAX_COMPARISON_SERIES,
@@ -109,46 +116,52 @@ export function LatestDataTab({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-card p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            aria-label="按设备筛选指标"
-            value={state.deviceFilterId ?? ''}
-            onChange={(e) =>
+          <Select
+            value={state.deviceFilterId !== null ? String(state.deviceFilterId) : 'all'}
+            onValueChange={(val) =>
               state.setDeviceFilterId(
-                e.target.value ? Number.parseInt(e.target.value, 10) : null
+                val === 'all' ? null : Number.parseInt(val, 10)
               )
             }
-            className="h-8 rounded-lg border border-input bg-card px-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            <option value="">全部设备</option>
-            {state.devices.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name} ({d.ipAddress})
-              </option>
-            ))}
-          </select>
+            <SelectTrigger aria-label="按设备筛选指标" className="h-9 w-auto gap-2 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部设备</SelectItem>
+              {state.devices.map((d) => (
+                <SelectItem key={d.id} value={String(d.id)}>
+                  {`${d.name} (${d.ipAddress})`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-          <select
-            aria-label="按指标分类筛选"
-            value={state.applicationTag}
-            onChange={(e) => state.setApplicationTag(e.target.value)}
-            className="h-8 rounded-lg border border-input bg-card px-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          <Select
+            value={state.applicationTag || 'all'}
+            onValueChange={(val) => state.setApplicationTag(val === 'all' ? '' : val)}
           >
-            {APPLICATION_TAG_OPTIONS.map((opt) => (
-              <option key={opt.label} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger aria-label="按指标分类筛选" className="h-9 w-auto gap-2 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {APPLICATION_TAG_OPTIONS.map((opt) => (
+                <SelectItem key={opt.label} value={opt.value || 'all'}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
               value={state.search}
               onChange={(e) => state.setSearch(e.target.value)}
               placeholder="搜索指标名、端口或主机..."
               aria-label="搜索实时指标"
-              className="h-8 w-52 rounded-lg border border-input bg-surface-2/50 pl-8 pr-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="h-9 w-52 rounded-lg border border-input bg-surface-2/50 pl-8 pr-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
         </div>

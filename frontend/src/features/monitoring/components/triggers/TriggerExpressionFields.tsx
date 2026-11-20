@@ -2,6 +2,13 @@
 
 import type { UseFormReturn } from 'react-hook-form'
 import { Input } from '@/components/atoms'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import type { MonitoringDeviceOption } from '../../types'
 import {
@@ -35,15 +42,24 @@ export function TriggerExpressionFields({ form, devices }: TriggerExpressionFiel
           <label htmlFor="trig-severity" className="mb-1 block text-xs font-medium text-foreground">
             告警级别
           </label>
-          <select
-            id="trig-severity"
-            {...form.register('severity')}
-            className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground"
+          <Select
+            value={String(watched.severity ?? 'warning')}
+            onValueChange={(val) =>
+              form.setValue('severity', val as TriggerFormValues['severity'], {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
           >
-            <option value="critical">严重告警</option>
-            <option value="warning">警告告警</option>
-            <option value="info">提示告警</option>
-          </select>
+            <SelectTrigger id="trig-severity" aria-label="告警级别" className="h-9 w-full gap-2 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="critical">严重告警</SelectItem>
+              <SelectItem value="warning">警告告警</SelectItem>
+              <SelectItem value="info">提示告警</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -52,29 +68,47 @@ export function TriggerExpressionFields({ form, devices }: TriggerExpressionFiel
           <label htmlFor="trig-mode" className="mb-1 block text-xs font-medium text-foreground">
             检测模式
           </label>
-          <select
-            id="trig-mode"
-            {...form.register('expression_mode')}
-            className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground"
+          <Select
+            value={String(watched.expression_mode ?? 'threshold')}
+            onValueChange={(val) =>
+              form.setValue('expression_mode', val as TriggerFormValues['expression_mode'], {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
           >
-            {EXPRESSION_MODE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+            <SelectTrigger id="trig-mode" aria-label="检测模式" className="h-9 w-full gap-2 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {EXPRESSION_MODE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <label htmlFor="trig-metric" className="mb-1 block text-xs font-medium text-foreground">
             监测指标
           </label>
-          <select
-            id="trig-metric"
-            {...form.register('metric_name')}
-            className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground"
+          <Select
+            value={String(watched.metric_name ?? 'temperature')}
+            onValueChange={(val) =>
+              form.setValue('metric_name', val, {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
           >
-            {Object.entries(METRIC_META).map(([key, meta]) => (
-              <option key={key} value={key}>{meta.label}</option>
-            ))}
-          </select>
+            <SelectTrigger id="trig-metric" aria-label="监测指标" className="h-9 w-full gap-2 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(METRIC_META).map(([key, meta]) => (
+                <SelectItem key={key} value={key}>{meta.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -86,15 +120,24 @@ export function TriggerExpressionFields({ form, devices }: TriggerExpressionFiel
             <label htmlFor="trig-op" className="mb-1 block text-xs font-medium text-foreground">
               触发条件
             </label>
-            <select
-              id="trig-op"
-              {...form.register('operator')}
-              className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground"
+            <Select
+              value={String(watched.operator ?? '>')}
+              onValueChange={(val) =>
+                form.setValue('operator', val as TriggerFormValues['operator'], {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
             >
-              {Object.entries(OPERATOR_LABELS).map(([op, label]) => (
-                <option key={op} value={op}>{label}</option>
-              ))}
-            </select>
+              <SelectTrigger id="trig-op" aria-label="触发条件" className="h-9 w-full gap-2 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(OPERATOR_LABELS).map(([op, label]) => (
+                  <SelectItem key={op} value={op}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <label htmlFor="trig-threshold" className="mb-1 block text-xs font-medium text-foreground">
@@ -117,15 +160,24 @@ export function TriggerExpressionFields({ form, devices }: TriggerExpressionFiel
             <label htmlFor="trig-rec-op" className="mb-1 block text-xs font-medium text-foreground">
               防抖动恢复条件
             </label>
-            <select
-              id="trig-rec-op"
-              {...form.register('recovery_operator')}
-              className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground"
+            <Select
+              value={String(watched.recovery_operator ?? '<')}
+              onValueChange={(val) =>
+                form.setValue('recovery_operator', val as TriggerFormValues['recovery_operator'], {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
             >
-              {Object.entries(OPERATOR_LABELS).map(([op, label]) => (
-                <option key={op} value={op}>{label}</option>
-              ))}
-            </select>
+              <SelectTrigger id="trig-rec-op" aria-label="防抖动恢复条件" className="h-9 w-full gap-2 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(OPERATOR_LABELS).map(([op, label]) => (
+                  <SelectItem key={op} value={op}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <label htmlFor="trig-rec-val" className="mb-1 block text-xs font-medium text-foreground">
@@ -150,15 +202,24 @@ export function TriggerExpressionFields({ form, devices }: TriggerExpressionFiel
           <label htmlFor="trig-dep-mode" className="mb-1 block text-xs font-medium text-foreground">
             上级断网防风暴
           </label>
-          <select
-            id="trig-dep-mode"
-            {...form.register('dependency_mode')}
-            className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground"
+          <Select
+            value={String(watched.dependency_mode ?? 'none')}
+            onValueChange={(val) =>
+              form.setValue('dependency_mode', val as TriggerFormValues['dependency_mode'], {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
           >
-            {DEPENDENCY_MODE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+            <SelectTrigger id="trig-dep-mode" aria-label="上级断网防风暴" className="h-9 w-full gap-2 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DEPENDENCY_MODE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {watched.dependency_mode === 'manual_device' && (
@@ -166,16 +227,24 @@ export function TriggerExpressionFields({ form, devices }: TriggerExpressionFiel
             <label htmlFor="trig-dep-dev" className="mb-1 block text-xs font-medium text-foreground">
               指定上级父设备
             </label>
-            <select
-              id="trig-dep-dev"
-              {...form.register('depends_on_device_id')}
-              className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground"
+            <Select
+              value={watched.depends_on_device_id ? String(watched.depends_on_device_id) : ''}
+              onValueChange={(val) =>
+                form.setValue('depends_on_device_id', Number(val), {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
             >
-              <option value="">请选择父设备...</option>
-              {devices.map((d) => (
-                <option key={d.id} value={d.id}>{d.name} ({d.ipAddress})</option>
-              ))}
-            </select>
+              <SelectTrigger id="trig-dep-dev" aria-label="指定上级父设备" className="h-9 w-full gap-2 text-sm">
+                <SelectValue placeholder="请选择父设备..." />
+              </SelectTrigger>
+              <SelectContent>
+                {devices.map((d) => (
+                  <SelectItem key={d.id} value={String(d.id)}>{`${d.name} (${d.ipAddress})`}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
 

@@ -2,6 +2,13 @@
 
 import { useState } from 'react'
 import { AlertCircle, Search, Star } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useMonitoringHosts } from '../../hooks/useMonitoringHosts'
@@ -138,29 +145,32 @@ export function HostsMatrixTab({
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
                 value={state.search}
                 onChange={(e) => state.setSearch(e.target.value)}
                 placeholder="搜索设备名、IP 或型号..."
                 aria-label="搜索设备"
-                className="h-8 w-52 rounded-lg border border-input bg-surface-2/50 pl-8 pr-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 w-52 rounded-lg border border-input bg-surface-2/50 pl-8 pr-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
 
-            <select
-              aria-label="排序方式"
-              value={state.sortBy}
-              onChange={(e) => state.setSortBy(e.target.value)}
-              className="h-8 rounded-lg border border-input bg-card px-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            <Select
+              value={state.sortBy || 'default'}
+              onValueChange={(val) => state.setSortBy(val === 'default' ? '' : val)}
             >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.label} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger aria-label="排序方式" className="h-9 w-auto gap-2 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.label} value={opt.value || 'default'}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

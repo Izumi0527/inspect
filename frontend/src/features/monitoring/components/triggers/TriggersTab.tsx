@@ -5,6 +5,13 @@ import Link from 'next/link'
 import { BellRing, Edit3, ExternalLink, Lock, Plus, ShieldAlert, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge, Button, Card, CardContent } from '@/components/atoms'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
@@ -153,17 +160,20 @@ export function TriggersTab({ notificationChannelSummary }: TriggersTabProps = {
             <div className="flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-warning" />
               <h2 className="text-sm font-semibold text-foreground">告警规则列表</h2>
-              <select
-                aria-label="按告警级别筛选"
-                value={severityFilter}
-                onChange={(e) => setSeverityFilter(e.target.value)}
-                className="h-8 rounded-md border border-input bg-card px-2 text-xs text-foreground"
+              <Select
+                value={severityFilter || 'all'}
+                onValueChange={(val) => setSeverityFilter(val === 'all' ? '' : val)}
               >
-                <option value="">全部级别</option>
-                <option value="critical">严重告警</option>
-                <option value="warning">警告告警</option>
-                <option value="info">提示告警</option>
-              </select>
+                <SelectTrigger aria-label="按告警级别筛选" className="h-9 w-auto gap-2 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部级别</SelectItem>
+                  <SelectItem value="critical">严重告警</SelectItem>
+                  <SelectItem value="warning">警告告警</SelectItem>
+                  <SelectItem value="info">提示告警</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {canCreate && (
               <Button

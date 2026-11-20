@@ -2,6 +2,13 @@
 
 import type { UseFormReturn } from 'react-hook-form'
 import { Input } from '@/components/atoms'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { PROTOCOL_OPTIONS, type ItemFormValues } from './templateConfigHelpers'
 
@@ -46,19 +53,33 @@ export function ItemProtocolFields({ form, editingExisting, readOnly }: ItemProt
           <label htmlFor="item-protocol" className="mb-1 block text-xs font-medium text-foreground">
             采集方式
           </label>
-          <select
-            id="item-protocol"
+          <Select
             disabled={readOnly}
-            {...form.register('protocol')}
-            className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground"
+            value={String(form.watch('protocol') ?? '')}
+            onValueChange={(val) =>
+              form.setValue('protocol', val as ItemFormValues['protocol'], {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
           >
-            {protocol === 'builtin' && <option value="builtin">系统内置采集</option>}
-            {PROTOCOL_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              id="item-protocol"
+              aria-label="采集方式"
+              disabled={readOnly}
+              className="h-9 w-full gap-2 text-sm"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {protocol === 'builtin' && <SelectItem value="builtin">系统内置采集</SelectItem>}
+              {PROTOCOL_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <label htmlFor="item-interval" className="mb-1 block text-xs font-medium text-foreground">
@@ -114,15 +135,29 @@ export function ItemProtocolFields({ form, editingExisting, readOnly }: ItemProt
             <label htmlFor="http-scheme" className="mb-1 block text-xs font-medium text-foreground">
               协议
             </label>
-            <select
-              id="http-scheme"
+            <Select
               disabled={readOnly}
-              {...form.register('http_scheme')}
-              className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground"
+              value={String(form.watch('http_scheme') ?? 'https')}
+              onValueChange={(val) =>
+                form.setValue('http_scheme', val as ItemFormValues['http_scheme'], {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
             >
-              <option value="https">https</option>
-              <option value="http">http</option>
-            </select>
+              <SelectTrigger
+                id="http-scheme"
+                aria-label="协议"
+                disabled={readOnly}
+                className="h-9 w-full gap-2 text-sm"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="https">https</SelectItem>
+                <SelectItem value="http">http</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <label htmlFor="http-port" className="mb-1 block text-xs font-medium text-foreground">
@@ -146,16 +181,30 @@ export function ItemProtocolFields({ form, editingExisting, readOnly }: ItemProt
           <label htmlFor="item-value-type" className="mb-1 block text-xs font-medium text-foreground">
             数据类型
           </label>
-          <select
-            id="item-value-type"
+          <Select
             disabled={readOnly}
-            {...form.register('value_type')}
-            className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground"
+            value={String(form.watch('value_type') ?? 'float')}
+            onValueChange={(val) =>
+              form.setValue('value_type', val as ItemFormValues['value_type'], {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
           >
-            <option value="float">数值（小数）</option>
-            <option value="uint">整数</option>
-            <option value="string">文本状态</option>
-          </select>
+            <SelectTrigger
+              id="item-value-type"
+              aria-label="数据类型"
+              disabled={readOnly}
+              className="h-9 w-full gap-2 text-sm"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="float">数值（小数）</SelectItem>
+              <SelectItem value="uint">整数</SelectItem>
+              <SelectItem value="string">文本状态</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
           <span className="text-xs font-medium text-foreground">启用该采集指标</span>

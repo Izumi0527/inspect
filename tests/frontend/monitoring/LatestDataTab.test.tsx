@@ -11,6 +11,10 @@ import {
 import { useMonitoringDevices } from '@/features/monitoring/hooks/useMonitoringDevices'
 import type { LatestDataItem } from '@/features/monitoring/types/zabbix-monitoring.types'
 
+jest.mock('@/components/ui/select', () =>
+  require('./components/helpers/selectMock').createSelectMock()
+)
+
 jest.mock('@/features/monitoring/api/monitoring-hosts.api', () => ({
   getLatestData: jest.fn(),
   getAdhocGraphs: jest.fn(),
@@ -60,6 +64,9 @@ describe('实时指标明细与多指标同图对比 LatestDataTab (Task 12)', (
   beforeEach(() => {
     jest.clearAllMocks()
     ;(useMonitoringDevices as jest.Mock).mockReturnValue({
+      data: [
+        { id: 31, name: 'SW-01', ipAddress: '10.30.0.1', status: 'online', isMonitored: true },
+      ],
       devices: [
         { id: 31, name: 'SW-01', ipAddress: '10.30.0.1', status: 'online', isMonitored: true },
       ],
@@ -134,6 +141,36 @@ describe('实时指标明细与多指标同图对比 LatestDataTab (Task 12)', (
 
     await user.click(screen.getByRole('button', { name: 'SW-01' }))
     expect(onSelectHost).toHaveBeenCalledWith(31)
+
+    // 下拉筛选：按设备与按指标分类
+    await user.click(screen.getByRole('combobox', { name: '按设备筛选指标' }))
+    await user.click(screen.getByRole('option', { name: 'SW-01 (10.30.0.1)' }))
+    await waitFor(() => {
+      expect(getLatestData).toHaveBeenLastCalledWith(
+        expect.objectContaining({ device_ids: [31], page: 1 })
+      )
+    })
+
+    await user.click(screen.getByRole('combobox', { name: '按指标分类筛选' }))
+    await user.click(screen.getByRole('option', { name: '系统性能' }))
+    await waitFor(() => {
+      expect(getLatestData).toHaveBeenLastCalledWith(
+        expect.objectContaining({ application_tag: 'system', page: 1 })
+      )
+    })
+
+    // 重置回全部设备与全部分类
+    await user.click(screen.getByRole('combobox', { name: '按设备筛选指标' }))
+    await user.click(screen.getByRole('option', { name: '全部设备' }))
+    await waitFor(() => {
+      expect(getLatestData).toHaveBeenLastCalledWith(
+        expect.objectContaining({ device_ids: undefined, application_tag: 'system', page: 1 })
+      )
+    })
+    await user.click(screen.getByRole('combobox', { name: '按指标分类筛选' }))
+    await user.click(screen.getByRole('option', { name: '全部分类' }))
+    expect(screen.getByRole('combobox', { name: '按设备筛选指标' })).toHaveTextContent('全部设备')
+    expect(screen.getByRole('combobox', { name: '按指标分类筛选' })).toHaveTextContent('全部分类')
   })
 
   it('勾选 <= 6 条渲染多指标同图对比与归一化切换，超过 6 条给出友好上限提示', async () => {

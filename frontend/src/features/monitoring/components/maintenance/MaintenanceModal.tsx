@@ -13,6 +13,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { DEVICE_GROUPS_QUERY_KEY, getDeviceGroups } from '@/features/devices/api/devices.api'
 import { useMonitoringDevices } from '../../hooks/useMonitoringDevices'
 import type { MaintenanceInput, MaintenanceView } from '../../types/zabbix-monitoring.types'
@@ -152,9 +159,19 @@ export function MaintenanceModal({
             </div>
             <div>
               <label htmlFor="maint-tz" className="mb-1 block text-xs font-medium text-foreground">执行时区</label>
-              <select id="maint-tz" {...form.register('timezone')} className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground">
-                {TIMEZONE_OPTIONS.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
-              </select>
+              <Select
+                value={String(form.watch('timezone') ?? 'Asia/Shanghai')}
+                onValueChange={(val) => form.setValue('timezone', val, { shouldDirty: true, shouldValidate: true })}
+              >
+                <SelectTrigger id="maint-tz" aria-label="执行时区" className="h-9 w-full gap-2 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIMEZONE_OPTIONS.map((tz) => (
+                    <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -184,11 +201,24 @@ export function MaintenanceModal({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label htmlFor="maint-schedule" className="mb-1 block text-xs font-medium text-foreground">执行周期</label>
-              <select id="maint-schedule" {...form.register('schedule_type')} className="h-9 w-full rounded-md border border-input bg-card px-2.5 text-sm text-foreground">
-                <option value="once">一次性维护</option>
-                <option value="weekly">每周重复</option>
-                <option value="monthly">每月重复</option>
-              </select>
+              <Select
+                value={String(form.watch('schedule_type') ?? 'once')}
+                onValueChange={(val) =>
+                  form.setValue('schedule_type', val as MaintenanceFormValues['schedule_type'], {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+              >
+                <SelectTrigger id="maint-schedule" aria-label="执行周期" className="h-9 w-full gap-2 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="once">一次性维护</SelectItem>
+                  <SelectItem value="weekly">每周重复</SelectItem>
+                  <SelectItem value="monthly">每月重复</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {scheduleType === 'once' ? (
               <>

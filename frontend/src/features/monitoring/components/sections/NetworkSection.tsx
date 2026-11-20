@@ -133,7 +133,7 @@ export function NetworkSection({
             <span className="truncate text-sm text-muted-foreground">{scopeLabel}</span>
             {singleDeviceId !== null ? (
               <Select value={activeInterface} onValueChange={setSelectedInterface}>
-                <SelectTrigger className="h-8 w-auto min-w-40 max-w-64 px-3 py-1 text-sm" aria-label="接口选择">
+                <SelectTrigger className="h-9 w-auto min-w-40 max-w-64 gap-2 text-sm" aria-label="接口选择">
                   <SelectValue placeholder="选择接口" />
                 </SelectTrigger>
                 <SelectContent>

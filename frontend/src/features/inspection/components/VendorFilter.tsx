@@ -36,7 +36,7 @@ export function VendorFilter({ value, onChange, className = '' }: VendorFilterPr
       >
         <SelectTrigger
           id="vendor-filter"
-          className={`w-auto gap-2 h-9 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
+          className="h-9 w-auto gap-2 text-sm"
           aria-label="厂商筛选"
         >
           <SelectValue placeholder="厂商" />

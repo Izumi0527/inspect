@@ -5,6 +5,13 @@ import { Radar, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge, Button } from '@/components/atoms'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import {
   usePreviewLLDRuleMutation,
@@ -131,18 +138,21 @@ export function AutoDiscoveryPanel({ template, canControl }: AutoDiscoveryPanelP
         </div>
         <div className="flex items-center gap-3">
           {rules.length > 1 && (
-            <select
-              aria-label="选择自动识别规则"
-              value={activeRule.id}
-              onChange={(e) => setSelectedRuleId(Number(e.target.value))}
-              className="h-8 rounded-md border border-input bg-card px-2 text-xs text-foreground"
+            <Select
+              value={String(activeRule.id)}
+              onValueChange={(val) => setSelectedRuleId(Number(val))}
             >
-              {rules.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger aria-label="选择自动识别规则" className="h-9 w-auto gap-2 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {rules.map((r) => (
+                  <SelectItem key={r.id} value={String(r.id)}>
+                    {r.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
           <div className="flex items-center gap-2 text-xs text-foreground">
             <span>启用自动识别</span>
@@ -194,17 +204,27 @@ export function AutoDiscoveryPanel({ template, canControl }: AutoDiscoveryPanelP
             </label>
             <p className="text-[11px] text-muted-foreground">端口下线或光模块拔出后保留历史曲线的天数，到期自动清理</p>
           </div>
-          <select
-            id="keep-lost-days"
+          <Select
             disabled={readOnly}
-            value={keepLostDays}
-            onChange={(e) => setKeepLostDays(Number(e.target.value))}
-            className="h-9 rounded-md border border-input bg-card px-2.5 text-xs text-foreground tabular-nums"
+            value={String(keepLostDays)}
+            onValueChange={(val) => setKeepLostDays(Number(val))}
           >
-            {KEEP_LOST_DAY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+            <SelectTrigger
+              id="keep-lost-days"
+              aria-label="拔线历史保留天数"
+              disabled={readOnly}
+              className="h-9 w-auto gap-2 text-sm tabular-nums"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {KEEP_LOST_DAY_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={String(opt.value)}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

@@ -2,6 +2,13 @@
 
 import { Plus, Trash2 } from 'lucide-react'
 import { Button, Input } from '@/components/atoms'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import type { PreprocessStep } from '../../types/zabbix-monitoring.types'
 import { PREPROCESS_TYPE_OPTIONS } from './templateConfigHelpers'
 
@@ -77,24 +84,31 @@ export function ItemPreprocessEditor({
           {steps.map((step, idx) => (
             <div key={idx} className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card p-2">
               <span className="text-xs font-medium text-muted-foreground tabular-nums">#{idx + 1}</span>
-              <select
-                aria-label={`换算步骤 ${idx + 1} 类型`}
+              <Select
                 disabled={disabled}
                 value={step.type}
-                onChange={(e) =>
+                onValueChange={(val) =>
                   handleUpdateStep(idx, {
-                    type: e.target.value,
-                    params: defaultParamsForType(e.target.value),
+                    type: val,
+                    params: defaultParamsForType(val),
                   })
                 }
-                className="h-8 flex-1 min-w-52 rounded-md border border-input bg-card px-2 text-xs text-foreground"
               >
-                {PREPROCESS_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger
+                  aria-label={`换算步骤 ${idx + 1} 类型`}
+                  disabled={disabled}
+                  className="h-9 w-auto flex-1 min-w-52 gap-2 text-sm"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PREPROCESS_TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
               {step.type === 'multiplier' && (
                 <Input
@@ -110,19 +124,26 @@ export function ItemPreprocessEditor({
               )}
 
               {step.type === 'change_per_sec' && (
-                <select
-                  aria-label={`换算步骤 ${idx + 1} 计数器位数`}
+                <Select
                   disabled={disabled}
                   value={step.params?.bits ?? 'auto'}
-                  onChange={(e) =>
-                    handleUpdateStep(idx, { ...step, params: { bits: e.target.value } })
+                  onValueChange={(val) =>
+                    handleUpdateStep(idx, { ...step, params: { bits: val } })
                   }
-                  className="h-8 rounded-md border border-input bg-card px-2 text-xs text-foreground"
                 >
-                  <option value="auto">自动识别翻转位宽</option>
-                  <option value="32">32 位计数器</option>
-                  <option value="64">64 位计数器</option>
-                </select>
+                  <SelectTrigger
+                    aria-label={`换算步骤 ${idx + 1} 计数器位数`}
+                    disabled={disabled}
+                    className="h-9 w-auto gap-2 text-sm"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">自动识别翻转位宽</SelectItem>
+                    <SelectItem value="32">32 位计数器</SelectItem>
+                    <SelectItem value="64">64 位计数器</SelectItem>
+                  </SelectContent>
+                </Select>
               )}
 
               {step.type === 'regex' && (

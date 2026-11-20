@@ -38,7 +38,7 @@ export function CategoryFilter({ value, onChange, className = '' }: CategoryFilt
       >
         <SelectTrigger
           id="category-filter"
-          className={`w-auto gap-2 h-9 rounded-lg px-3 text-sm ${value ? 'border-primary/50 bg-primary/5 text-foreground shadow-sm' : ''}`}
+          className="h-9 w-auto gap-2 text-sm"
           aria-label="分类筛选"
         >
           <SelectValue placeholder="分类" />

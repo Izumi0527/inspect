@@ -11,6 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import type { DeviceGroupItem } from '@/features/devices/types'
 import type { MaintenanceMode } from '../../types/zabbix-monitoring.types'
 
@@ -154,19 +161,22 @@ export function HostBatchBar({
             <label htmlFor="batch-target-group" className="block text-xs font-medium text-foreground">
               目标分组
             </label>
-            <select
-              id="batch-target-group"
-              value={targetGroupId}
-              onChange={(e) => setTargetGroupId(e.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">请选择目标分组</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name} ({g.device_count})
-                </option>
-              ))}
-            </select>
+            <Select value={targetGroupId} onValueChange={setTargetGroupId}>
+              <SelectTrigger
+                id="batch-target-group"
+                aria-label="目标分组"
+                className="h-9 w-full gap-2 text-sm"
+              >
+                <SelectValue placeholder="请选择目标分组" />
+              </SelectTrigger>
+              <SelectContent>
+                {groups.map((g) => (
+                  <SelectItem key={g.id} value={String(g.id)}>
+                    {`${g.name} (${g.device_count})`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setGroupDialogOpen(false)}>

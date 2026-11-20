@@ -15,6 +15,10 @@ import type {
   TriggerRule,
 } from '@/features/monitoring/types/zabbix-monitoring.types'
 
+jest.mock('@/components/ui/select', () =>
+  require('./components/helpers/selectMock').createSelectMock()
+)
+
 jest.mock('react-hot-toast', () => ({
   __esModule: true,
   default: {
@@ -297,7 +301,8 @@ describe('Phase 4 Wave 4C 去黑话配置工作台 (Task 13)', () => {
     await user.click(screen.getByRole('button', { name: /新建采集指标/ }))
     await user.type(screen.getByLabelText('指标名称'), 'Web 健康检查')
     await user.type(screen.getByLabelText('指标编码（英文）'), 'http.health')
-    await user.selectOptions(screen.getByLabelText('采集方式'), 'http')
+    await user.click(screen.getByRole('combobox', { name: '采集方式' }))
+    await user.click(screen.getByRole('option', { name: 'HTTP 网页检查' }))
     expect(screen.getByLabelText('协议')).toBeInTheDocument()
     expect(screen.getByLabelText('端口')).toBeInTheDocument()
     const pathInput = screen.getByLabelText(/检查路径/)
@@ -305,7 +310,8 @@ describe('Phase 4 Wave 4C 去黑话配置工作台 (Task 13)', () => {
     await user.type(pathInput, '/api/health')
 
     await user.click(screen.getByRole('button', { name: /添加换算步骤/ }))
-    await user.selectOptions(screen.getByLabelText('选择测试设备'), '101')
+    await user.click(screen.getByRole('combobox', { name: '选择测试设备' }))
+    await user.click(screen.getByRole('option', { name: 'Core-SW-01 (10.0.0.1)' }))
     await user.click(screen.getByRole('button', { name: /执行测试/ }))
 
     expect(await screen.findByText('755')).toBeInTheDocument()
@@ -394,7 +400,8 @@ describe('Phase 4 Wave 4C 去黑话配置工作台 (Task 13)', () => {
 
     await user.click(screen.getByRole('button', { name: /新建告警规则/ }))
     await user.type(screen.getByLabelText('规则名称'), '接口断流规则')
-    await user.selectOptions(screen.getByLabelText('检测模式'), 'nodata')
+    await user.click(screen.getByRole('combobox', { name: '检测模式' }))
+    await user.click(screen.getByRole('option', { name: '采集断流检测' }))
     expect(screen.getByLabelText('规则自然语言预览')).toHaveTextContent(/未上报新数据时/)
 
     await user.click(screen.getByRole('button', { name: '创建规则' }))
@@ -445,7 +452,7 @@ describe('Phase 4 Wave 4C 去黑话配置工作台 (Task 13)', () => {
 
     await user.click(screen.getByRole('button', { name: /新建维护窗口/ }))
     await user.type(screen.getByLabelText('维护窗口名称'), '接入交换机固件升级')
-    expect(screen.getByLabelText('执行时区')).toHaveValue('Asia/Shanghai')
+    expect(screen.getByRole('combobox', { name: '执行时区' })).toHaveTextContent('Asia/Shanghai')
 
     await user.click(screen.getByText('核心骨干网'))
     await user.click(screen.getByRole('button', { name: '创建维护窗口' }))

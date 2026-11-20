@@ -36,7 +36,7 @@ export const SharedSelect: React.FC<SharedSelectProps> = ({
       <Select value={value} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger
           aria-label={ariaLabel}
-          className={cn('h-8 w-[112px] px-3 text-sm', triggerClassName)}
+          className={cn('h-9 w-auto gap-2 text-sm', triggerClassName)}
         >
           <SelectValue placeholder={placeholder}>{valueLabel}</SelectValue>
         </SelectTrigger>
