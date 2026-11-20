@@ -108,6 +108,12 @@ func New() (*App, error) {
 	if err := inspection.EnsureBuiltinTemplates(context.Background(), dbConn, log); err != nil && log != nil {
 		log.Warn("同步内置巡检模板失败（将继续启动）", zap.Error(err))
 	}
+	if err := monitoring.EnsureBuiltinMonitorTemplates(context.Background(), dbConn, log); err != nil && log != nil {
+		log.Warn("同步内置监控方案失败（将继续启动）", zap.Error(err))
+	}
+	if err := monitoring.AutoBindLegacyDevices(context.Background(), dbConn, log); err != nil && log != nil {
+		log.Warn("存量设备自动匹配监控方案失败（将继续启动）", zap.Error(err))
+	}
 
 	redisClient, err := redisstore.NewClient(cfg)
 	if err != nil {

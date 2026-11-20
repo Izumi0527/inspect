@@ -164,6 +164,20 @@ func dedupeLatestMetrics(points []DeviceLatestMetric) []DeviceLatestMetric {
 	return result
 }
 
+const MaxLatestMetricRawTextRunes = 512
+
+func truncateRawTextPtr(raw *string, maxRunes int) *string {
+	if raw == nil || maxRunes <= 0 {
+		return raw
+	}
+	runes := []rune(*raw)
+	if len(runes) <= maxRunes {
+		return raw
+	}
+	truncated := string(runes[:maxRunes])
+	return &truncated
+}
+
 func normalizeLatestMetricPoint(p DeviceLatestMetric, metricName, ifaceName string, now time.Time) DeviceLatestMetric {
 	p.MetricName = metricName
 	p.InterfaceName = ifaceName
@@ -175,6 +189,7 @@ func normalizeLatestMetricPoint(p DeviceLatestMetric, metricName, ifaceName stri
 	if p.ApplicationTag == "" {
 		p.ApplicationTag = inferApplicationTag(metricName, ifaceName)
 	}
+	p.RawText = truncateRawTextPtr(p.RawText, MaxLatestMetricRawTextRunes)
 	if p.CollectedAt.IsZero() {
 		p.CollectedAt = now
 	} else {

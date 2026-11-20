@@ -89,6 +89,11 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 		&monitoring.DeviceLatestMetric{},
 		&monitoring.DeviceCollectionState{},
 		&monitoring.UserPinnedDevice{},
+		&monitoring.MonitorTemplate{},
+		&monitoring.MonitorItem{},
+		&monitoring.MonitorLLDRule{},
+		&monitoring.TemplateGroupBinding{},
+		&monitoring.DeviceTemplateBinding{},
 
 		&scheduler.ScheduledTask{},
 		&scheduler.TaskExecution{},

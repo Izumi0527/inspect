@@ -754,6 +754,7 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 		var collectFailed int
 		metricsCollected, collectFailed = s.collectDeviceMetricsWithStates(ctx, collectList, task.ID, len(collectList), stateStore)
 		failedDevices += collectFailed
+		s.collectCustomTemplateItems(ctx, collectList, time.Now().UTC())
 	} else if checkConnectivity && !collectMetrics {
 		for _, result := range probeResults {
 			if !backoffSkippedSet[result.DeviceID] && result.IcmpReachable && result.SnmpReachable {
@@ -995,6 +996,126 @@ func (s *Service) collectDeviceMetricsWithStates(
 
 	wg.Wait()
 	return collected, failed
+}
+
+const customTemplateItemWorkerLimit = 8
+
+// collectCustomTemplateItems 按设备生效的监控方案调度自定义采集项（SNMP OID / ICMP / TCP / HTTP），
+// 采用有界信号量 worker pool 限流，并同步执行接口 LLD 过滤落库标记。
+func (s *Service) collectCustomTemplateItems(ctx context.Context, devicesList []devices.Device, now time.Time) {
+	if s == nil || s.db == nil || s.metricsWriter == nil || len(devicesList) == 0 {
+		return
+	}
+
+	collector := monitoring.NewCustomCollector(s.probeService)
+	limit := make(chan struct{}, customTemplateItemWorkerLimit)
+	var wg sync.WaitGroup
+
+	for _, device := range devicesList {
+		device := device
+		wg.Add(1)
+		limit <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-limit }()
+
+			cfg, err := s.metricsWriter.ResolveEffectiveTemplateConfig(ctx, device.ID)
+			if err != nil || cfg == nil {
+				return
+			}
+
+			if len(cfg.LLDRules) > 0 {
+				if lldErr := monitoring.ApplyLLDInterfaceFilter(ctx, s.db, device.ID, cfg.LLDRules, now); lldErr != nil && s.logger != nil {
+					s.logger.Debug("apply LLD interface filter failed", zap.Int("device_id", device.ID), zap.Error(lldErr))
+				}
+			}
+
+			if len(cfg.Items) == 0 {
+				return
+			}
+
+			var latestRows []monitoring.DeviceLatestMetric
+			_ = s.db.WithContext(ctx).
+				Where("device_id = ? AND interface_name = ''", device.ID).
+				Find(&latestRows).Error
+			latestByMetric := make(map[string]monitoring.DeviceLatestMetric, len(latestRows))
+			for _, row := range latestRows {
+				latestByMetric[row.MetricName] = row
+			}
+
+			points := make([]monitoring.DeviceLatestMetric, 0)
+			for _, item := range cfg.Items {
+				var lastAt *time.Time
+				var prev *monitoring.PrevSample
+				if existing, ok := latestByMetric[item.ItemKey]; ok {
+					t := existing.CollectedAt
+					lastAt = &t
+					if existing.MetricValue != nil {
+						prev = &monitoring.PrevSample{
+							Value:       *existing.MetricValue,
+							CollectedAt: existing.CollectedAt,
+							CurrentAt:   now,
+						}
+					}
+				}
+				if !monitoring.CustomItemDue(item, lastAt, now) {
+					continue
+				}
+
+				res, colErr := collector.CollectItem(ctx, device, item, prev)
+				if colErr != nil {
+					continue
+				}
+				unit := item.Unit
+				var unitPtr *string
+				if unit != "" {
+					unitPtr = &unit
+				}
+				rawText := truncateRunes(res.DisplayText, 512)
+				var rawPtr *string
+				if rawText != "" {
+					rawPtr = &rawText
+				}
+				appTag := item.ApplicationTag
+				if appTag == "" {
+					appTag = "custom"
+				}
+				points = append(points, monitoring.DeviceLatestMetric{
+					DeviceID:       device.ID,
+					MetricName:     item.ItemKey,
+					InterfaceName:  "",
+					ItemKey:        item.ItemKey,
+					ApplicationTag: appTag,
+					MetricValue:    res.NumericVal,
+					RawText:        rawPtr,
+					MetricUnit:     unitPtr,
+					CollectedAt:    now,
+					UpdatedAt:      now,
+				})
+			}
+
+			if len(points) > 0 {
+				if upErr := s.metricsWriter.UpsertLatestMetrics(ctx, points); upErr != nil && s.logger != nil {
+					s.logger.Debug("upsert custom item latest metrics failed", zap.Int("device_id", device.ID), zap.Error(upErr))
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+}
+
+// truncateRunes 按 UTF-8 rune 边界将文本安全截断到 maxRunes 以内，
+// 防止 64KB HTTP 响应体直接落库触发 PostgreSQL varchar(512) 长度溢出回滚。
+func truncateRunes(s string, maxRunes int) string {
+	if maxRunes <= 0 || len(s) <= maxRunes {
+		return s
+	}
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes])
 }
 
 // convertLogsToAlerts queries recent warning/critical logs for a device and creates alerts
