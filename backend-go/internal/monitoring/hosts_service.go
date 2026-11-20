@@ -93,6 +93,8 @@ type HostMatrixItem struct {
 	Status                string                  `json:"status"`
 	IsMonitored           bool                    `json:"is_monitored"`
 	IsPinned              bool                    `json:"is_pinned"`
+	InMaintenance         bool                    `json:"in_maintenance"`
+	Maintenance           *ActiveMaintenance      `json:"maintenance,omitempty"`
 	CPUUsage              *float64                `json:"cpu_usage,omitempty"`
 	MemoryUsage           *float64                `json:"memory_usage,omitempty"`
 	Temperature           *float64                `json:"temperature,omitempty"`
@@ -477,6 +479,7 @@ func (w *MetricsWriter) QueryHostsMatrix(ctx context.Context, filter HostsMatrix
 
 	now := time.Now().UTC()
 	pinnedMap := w.queryPinnedSet(ctx, filter.UserID, pageDeviceIDs)
+	maintMap, _ := w.GetActiveMaintenanceMapForDevices(ctx, now)
 	ifaceStatsMap := w.queryInterfaceCounts(ctx, pageDeviceIDs)
 	hwFaultMap := w.queryHardwareFaultCounts(ctx, pageDeviceIDs)
 	sparklineMap := w.queryPageSparklines(ctx, pageDeviceIDs)
@@ -507,18 +510,29 @@ func (w *MetricsWriter) QueryHostsMatrix(ctx context.Context, filter HostsMatrix
 		}
 
 		item := HostMatrixItem{
-			ID:           r.ID,
-			Name:         r.Name,
-			IPAddress:    r.IPAddress,
-			Hostname:     r.Hostname,
-			DeviceType:   r.DeviceType,
-			Vendor:       r.Vendor,
-			Model:        r.Model,
-			GroupID:      r.GroupID,
-			GroupName:    r.GroupName,
-			Status:       r.Status,
-			IsMonitored:  r.IsMonitored,
-			IsPinned:     pinnedMap[r.ID],
+			ID:          r.ID,
+			Name:        r.Name,
+			IPAddress:   r.IPAddress,
+			Hostname:    r.Hostname,
+			DeviceType:  r.DeviceType,
+			Vendor:      r.Vendor,
+			Model:       r.Model,
+			GroupID:     r.GroupID,
+			GroupName:   r.GroupName,
+			Status:      r.Status,
+			IsMonitored: r.IsMonitored,
+			IsPinned:    pinnedMap[r.ID],
+			InMaintenance: func() bool {
+				_, ok := maintMap[r.ID]
+				return ok
+			}(),
+			Maintenance: func() *ActiveMaintenance {
+				if am, ok := maintMap[r.ID]; ok {
+					copyAM := am
+					return &copyAM
+				}
+				return nil
+			}(),
 			CPUUsage:     r.CPUUsage,
 			MemoryUsage:  r.MemoryUsage,
 			Temperature:  r.Temperature,
@@ -702,6 +716,7 @@ func (w *MetricsWriter) GetHostDetail(
 
 	now := time.Now().UTC()
 	pinnedMap := w.queryPinnedSet(ctx, userID, []int{deviceID})
+	activeMaint, _ := w.GetActiveWindowForDevice(ctx, deviceID, dev.GroupID, now)
 	ifaceStatsMap := w.queryInterfaceCounts(ctx, []int{deviceID})
 	hwFaultMap := w.queryHardwareFaultCounts(ctx, []int{deviceID})
 	icmpStr := derefStr(dev.ICMPStatus, "unknown")
@@ -709,24 +724,26 @@ func (w *MetricsWriter) GetHostDetail(
 	cliStr := derefStr(dev.CLIProtocol, "")
 
 	resp.Device = HostMatrixItem{
-		ID:           dev.ID,
-		Name:         dev.Name,
-		IPAddress:    dev.IPAddress,
-		Hostname:     dev.Hostname,
-		DeviceType:   dev.DeviceType,
-		Vendor:       dev.Vendor,
-		Model:        dev.Model,
-		GroupID:      dev.GroupID,
-		GroupName:    dev.GroupName,
-		Status:       dev.Status,
-		IsMonitored:  dev.IsMonitored,
-		IsPinned:     pinnedMap[deviceID],
-		CPUUsage:     dev.CPUUsage,
-		MemoryUsage:  dev.MemoryUsage,
-		Temperature:  dev.Temperature,
-		Uptime:       dev.Uptime,
-		ResponseTime: dev.ResponseTime,
-		LastSeen:     dev.LastSeen,
+		ID:            dev.ID,
+		Name:          dev.Name,
+		IPAddress:     dev.IPAddress,
+		Hostname:      dev.Hostname,
+		DeviceType:    dev.DeviceType,
+		Vendor:        dev.Vendor,
+		Model:         dev.Model,
+		GroupID:       dev.GroupID,
+		GroupName:     dev.GroupName,
+		Status:        dev.Status,
+		IsMonitored:   dev.IsMonitored,
+		IsPinned:      pinnedMap[deviceID],
+		InMaintenance: activeMaint != nil,
+		Maintenance:   activeMaint,
+		CPUUsage:      dev.CPUUsage,
+		MemoryUsage:   dev.MemoryUsage,
+		Temperature:   dev.Temperature,
+		Uptime:        dev.Uptime,
+		ResponseTime:  dev.ResponseTime,
+		LastSeen:      dev.LastSeen,
 		Protocols: HostProtocolSummary{
 			ICMPStatus:    icmpStr,
 			SNMPStatus:    snmpStr,
@@ -1210,7 +1227,7 @@ func (w *MetricsWriter) queryDeviceActiveAlerts(ctx context.Context, deviceID in
 	var rows []HostActiveAlertSummary
 	if err := w.db.WithContext(ctx).
 		Table("alerts").
-		Select("id, title, severity, status, metric_name, current_value, threshold_value, first_occurred, last_occurred").
+		Select("id, title, severity, status, metric_name, current_value, threshold_value, first_occurred, last_occurred, snoozed_until").
 		Where("device_id = ? AND status IN ('active', 'acknowledged')", deviceID).
 		Order("last_occurred DESC, id DESC").
 		Scan(&rows).Error; err != nil || rows == nil {

@@ -22,6 +22,7 @@ import (
 type MonitoringHandler struct {
 	Writer               *monitoring.MetricsWriter
 	DashboardWriter      monitoringDashboardWriter
+	Alerts               AlertsService
 	ReportOutputDir      string
 	Auth                 PermissionService
 	DownloadTokens       *ReportDownloadTokenStore
@@ -104,6 +105,17 @@ func (h MonitoringHandler) Register(group *echo.Group) {
 	group.DELETE("/monitoring/templates/:id/lld-rules/:rule_id", h.DeleteMonitoringTemplateLLDRule)
 	group.POST("/monitoring/templates/:id/lld-rules/preview", h.PreviewMonitoringTemplateLLDRule)
 	group.POST("/monitoring/items/test", h.TestMonitoringItem)
+	group.GET("/monitoring/maintenances", h.ListMonitoringMaintenances)
+	group.GET("/monitoring/maintenances/active", h.GetActiveMonitoringMaintenances)
+	group.GET("/monitoring/maintenances/:id", h.GetMonitoringMaintenance)
+	group.POST("/monitoring/maintenances", h.CreateMonitoringMaintenance)
+	group.PUT("/monitoring/maintenances/:id", h.UpdateMonitoringMaintenance)
+	group.DELETE("/monitoring/maintenances/:id", h.DeleteMonitoringMaintenance)
+	group.GET("/monitoring/triggers", h.ListMonitoringTriggers)
+	group.POST("/monitoring/triggers", h.CreateMonitoringTrigger)
+	group.PUT("/monitoring/triggers/:id", h.UpdateMonitoringTrigger)
+	group.DELETE("/monitoring/triggers/:id", h.DeleteMonitoringTrigger)
+	group.PATCH("/monitoring/triggers/:id/toggle", h.ToggleMonitoringTrigger)
 	group.POST("/monitoring/devices/:device_id/start", h.StartDeviceMonitoring)
 	group.POST("/monitoring/devices/:device_id/stop", h.StopDeviceMonitoring)
 	group.POST("/monitoring/devices/:device_id/metrics", h.WriteDeviceMetrics)

@@ -18,6 +18,7 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/alerts"
 	"github.com/your-org/inspect-system/backend-go/internal/auth"
 	"github.com/your-org/inspect-system/backend-go/internal/common"
+	"github.com/your-org/inspect-system/backend-go/internal/http/middleware"
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
@@ -51,6 +52,8 @@ type AlertsService interface {
 	DeleteAlert(ctx context.Context, alertID int) error
 	AddAlertComment(ctx context.Context, alertID int, operator alerts.Operator, comment *string) error
 	AssignAlert(ctx context.Context, alertID int, operator alerts.Operator, assignee *string) error
+	SnoozeAlert(ctx context.Context, alertID int, operator alerts.Operator, durationHours int, reason string) (alerts.Alert, error)
+	UnsnoozeAlert(ctx context.Context, alertID int, operator alerts.Operator) (alerts.Alert, error)
 
 	ListRules(ctx context.Context, filter alerts.ListRulesFilter) ([]alerts.AlertRule, error)
 	GetRule(ctx context.Context, ruleID int) (alerts.AlertRule, error)
@@ -70,6 +73,8 @@ func (h AlertsHandler) Register(group *echo.Group) {
 	group.POST("/alerts/:alert_id/resolve", h.ResolveAlert)
 	group.POST("/alerts/:alert_id/reactivate", h.ReactivateAlert)
 	group.POST("/alerts/:alert_id/comment", h.AddComment)
+	group.POST("/alerts/:alert_id/snooze", h.SnoozeAlert)
+	group.DELETE("/alerts/:alert_id/snooze", h.UnsnoozeAlert)
 	group.DELETE("/alerts/:alert_id", h.DeleteAlert)
 	group.POST("/alerts/bulk", h.BulkAlertAction)
 	group.GET("/alerts/export", h.ExportAlerts)
@@ -563,6 +568,89 @@ func (h AlertsHandler) AddComment(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
+	})
+}
+
+// SnoozeAlert 对单条告警执行临时静默（白名单 2/8/24 小时），权限 alerts:update。
+func (h AlertsHandler) SnoozeAlert(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "alert service not configured")
+	}
+	user, err := requirePermission(c, h.Auth, "alerts:update")
+	if err != nil {
+		return err
+	}
+	alertID, err := parseIDParam(c, "alert_id")
+	if err != nil {
+		return err
+	}
+
+	var req struct {
+		DurationHours int    `json:"duration_hours"`
+		Reason        string `json:"reason"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+
+	operator := buildOperator(user)
+	updated, err := h.Service.SnoozeAlert(c.Request().Context(), alertID, operator, req.DurationHours, req.Reason)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "alert not found")
+		}
+		if errors.Is(err, alerts.ErrInvalidSnoozeDuration) || errors.Is(err, alerts.ErrInvalidSnoozeReason) {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to snooze alert")
+	}
+
+	middleware.SetAuditDetails(c, map[string]interface{}{
+		"alert_id":       alertID,
+		"duration_hours": req.DurationHours,
+		"snoozed_until":  updated.SnoozedUntil,
+		"reason":         strings.TrimSpace(req.Reason),
+	})
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success":       true,
+		"alert_id":      strconv.Itoa(alertID),
+		"snoozed_until": updated.SnoozedUntil,
+		"snoozed_by":    updated.SnoozedBy,
+		"snooze_reason": updated.SnoozeReason,
+	})
+}
+
+// UnsnoozeAlert 取消单条告警的临时静默，权限 alerts:update。
+func (h AlertsHandler) UnsnoozeAlert(c echo.Context) error {
+	if h.Service == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "alert service not configured")
+	}
+	user, err := requirePermission(c, h.Auth, "alerts:update")
+	if err != nil {
+		return err
+	}
+	alertID, err := parseIDParam(c, "alert_id")
+	if err != nil {
+		return err
+	}
+
+	operator := buildOperator(user)
+	if _, err := h.Service.UnsnoozeAlert(c.Request().Context(), alertID, operator); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "alert not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to unsnooze alert")
+	}
+
+	middleware.SetAuditDetails(c, map[string]interface{}{
+		"alert_id":  alertID,
+		"unsnoozed": true,
+	})
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"success":  true,
+		"alert_id": strconv.Itoa(alertID),
 	})
 }
 
@@ -1086,31 +1174,37 @@ func buildAlertResponse(row alerts.AlertWithDevice) map[string]interface{} {
 	metadata := buildAlertMetadata(row)
 
 	response := map[string]interface{}{
-		"id":              strconv.Itoa(row.ID),
-		"rule_id":         ruleID,
-		"rule_name":       ruleName,
-		"title":           row.Title,
-		"message":         row.Message,
-		"description":     row.Message,
-		"details":         metadata,
-		"device":          deviceName,
-		"device_id":       row.DeviceID,
-		"device_name":     deviceNameValue,
-		"device_ip":       deviceIPValue,
-		"severity":        alerts.NormalizeSeverity(row.Severity),
-		"status":          alerts.NormalizeStatus(row.Status),
-		"timestamp":       timestamp.Format(time.RFC3339),
-		"triggered_at":    triggeredAt,
-		"category":        normalizeCategory(row.Category),
-		"resolution":      row.ResolutionNote,
-		"acknowledged_at": row.AcknowledgedAt,
-		"resolved_at":     row.ResolvedAt,
-		"acknowledged_by": row.AcknowledgedBy,
-		"resolved_by":     row.ResolvedBy,
-		"created_at":      row.CreatedAt,
-		"updated_at":      row.UpdatedAt,
-		"notes":           []string{},
-		"tags":            []string{},
+		"id":                strconv.Itoa(row.ID),
+		"rule_id":           ruleID,
+		"rule_name":         ruleName,
+		"title":             row.Title,
+		"message":           row.Message,
+		"description":       row.Message,
+		"details":           metadata,
+		"device":            deviceName,
+		"device_id":         row.DeviceID,
+		"device_name":       deviceNameValue,
+		"device_ip":         deviceIPValue,
+		"severity":          alerts.NormalizeSeverity(row.Severity),
+		"status":            alerts.NormalizeStatus(row.Status),
+		"timestamp":         timestamp.Format(time.RFC3339),
+		"triggered_at":      triggeredAt,
+		"category":          normalizeCategory(row.Category),
+		"resolution":        row.ResolutionNote,
+		"acknowledged_at":   row.AcknowledgedAt,
+		"resolved_at":       row.ResolvedAt,
+		"acknowledged_by":   row.AcknowledgedBy,
+		"resolved_by":       row.ResolvedBy,
+		"created_at":        row.CreatedAt,
+		"updated_at":        row.UpdatedAt,
+		"suppressed_by":     row.SuppressedBy,
+		"suppressed_ref_id": row.SuppressedRefID,
+		"entity_key":        row.EntityKey,
+		"snoozed_until":     row.SnoozedUntil,
+		"snoozed_by":        row.SnoozedBy,
+		"snooze_reason":     row.SnoozeReason,
+		"notes":             []string{},
+		"tags":              []string{},
 	}
 
 	if assignee := resolveAlertAssignee(row); assignee != "" {

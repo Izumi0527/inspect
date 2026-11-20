@@ -69,6 +69,7 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 		&alerts.Alert{},
 		&alerts.AlertRule{},
 		&alerts.AlertOperationHistory{},
+		&alerts.TriggerEvalState{},
 
 		&inspection.Template{},
 		&inspection.Strategy{},
@@ -94,6 +95,8 @@ func Migrate(db *gorm.DB, cfg config.Config, logger *zap.Logger) error {
 		&monitoring.MonitorLLDRule{},
 		&monitoring.TemplateGroupBinding{},
 		&monitoring.DeviceTemplateBinding{},
+		&monitoring.MonitorMaintenance{},
+		&monitoring.MonitorMaintenanceTarget{},
 
 		&scheduler.ScheduledTask{},
 		&scheduler.TaskExecution{},

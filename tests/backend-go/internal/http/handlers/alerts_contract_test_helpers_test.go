@@ -57,6 +57,14 @@ func (alertsServiceStub) AssignAlert(_ context.Context, _ int, _ alerts.Operator
 	return nil
 }
 
+func (alertsServiceStub) SnoozeAlert(_ context.Context, _ int, _ alerts.Operator, _ int, _ string) (alerts.Alert, error) {
+	return alerts.Alert{}, nil
+}
+
+func (alertsServiceStub) UnsnoozeAlert(_ context.Context, _ int, _ alerts.Operator) (alerts.Alert, error) {
+	return alerts.Alert{}, nil
+}
+
 func (alertsServiceStub) ListRules(_ context.Context, _ alerts.ListRulesFilter) ([]alerts.AlertRule, error) {
 	return []alerts.AlertRule{}, nil
 }

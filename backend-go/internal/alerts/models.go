@@ -33,6 +33,12 @@ type Alert struct {
 	ReactivatedBy      *string    `gorm:"column:reactivated_by"`
 	ReactivationReason *string    `gorm:"column:reactivation_reason"`
 	ClosedBy           *string    `gorm:"column:closed_by"`
+	SuppressedBy       string     `gorm:"column:suppressed_by;size:32;default:''"`
+	SuppressedRefID    *int64     `gorm:"column:suppressed_ref_id"`
+	EntityKey          string     `gorm:"column:entity_key;size:128;default:''"`
+	SnoozedUntil       *time.Time `gorm:"column:snoozed_until"`
+	SnoozedBy          string     `gorm:"column:snoozed_by;type:varchar(36);default:''"`
+	SnoozeReason       string     `gorm:"column:snooze_reason;size:256;default:''"`
 	CreatedAt          *time.Time `gorm:"column:created_at"`
 	UpdatedAt          *time.Time `gorm:"column:updated_at"`
 }
@@ -40,6 +46,21 @@ type Alert struct {
 func (Alert) TableName() string {
 	return "alerts"
 }
+
+const (
+	ExpressionModeThreshold  = "threshold"
+	ExpressionModeHysteresis = "hysteresis"
+	ExpressionModeNoData     = "nodata"
+	ExpressionModeUptimeDrop = "uptime_drop"
+	ExpressionModeIfFlap     = "if_flap"
+
+	DependencyModeNone         = "none"
+	DependencyModeLLDPUpstream = "lldp_upstream"
+	DependencyModeManualDevice = "manual_device"
+
+	SuppressedByMaintenance = "maintenance"
+	SuppressedByDependency  = "dependency"
+)
 
 type AlertRule struct {
 	ID                  int            `gorm:"primaryKey;autoIncrement"`
@@ -62,6 +83,15 @@ type AlertRule struct {
 	EmailRecipients     datatypes.JSON `gorm:"column:email_recipients"`
 	CooldownMinutes     *int           `gorm:"column:cooldown_minutes"`
 	IsActive            *bool          `gorm:"column:is_active"`
+	TemplateID          *int64         `gorm:"column:template_id"`
+	ExpressionMode      string         `gorm:"column:expression_mode;size:32;default:'threshold'"`
+	RecoveryOperator    string         `gorm:"column:recovery_operator;size:16;default:''"`
+	RecoveryThreshold   *float64       `gorm:"column:recovery_threshold"`
+	NoDataSeconds       int            `gorm:"column:nodata_seconds;default:0"`
+	DependencyMode      string         `gorm:"column:dependency_mode;size:24;default:'none'"`
+	DependsOnDeviceID   *int           `gorm:"column:depends_on_device_id"`
+	EntityFilterRegex   string         `gorm:"column:entity_filter_regex;size:256;default:''"`
+	TagsJSON            datatypes.JSON `gorm:"column:tags_json;type:jsonb;default:'{}'"`
 	CreatedBy           *string        `gorm:"column:created_by;size:36"`
 	CreatedAt           *time.Time     `gorm:"column:created_at"`
 	UpdatedAt           *time.Time     `gorm:"column:updated_at"`
@@ -69,6 +99,22 @@ type AlertRule struct {
 
 func (AlertRule) TableName() string {
 	return "alert_rules"
+}
+
+// TriggerEvalState 持久化触发器持续时间窗口与滞后恢复状态，确保服务重启后状态不丢失。
+type TriggerEvalState struct {
+	RuleID          int        `gorm:"column:rule_id;primaryKey;autoIncrement:false"`
+	DeviceID        int        `gorm:"column:device_id;primaryKey;autoIncrement:false"`
+	EntityKey       string     `gorm:"column:entity_key;size:128;primaryKey;default:''"`
+	BreachSince     *time.Time `gorm:"column:breach_since"`
+	ConsecutiveHits int        `gorm:"column:consecutive_hits;default:0"`
+	IsFiring        bool       `gorm:"column:is_firing;default:false"`
+	LastValue       float64    `gorm:"column:last_value;default:0"`
+	LastEvalAt      time.Time  `gorm:"column:last_eval_at"`
+}
+
+func (TriggerEvalState) TableName() string {
+	return "trigger_eval_states"
 }
 
 type AlertOperationHistory struct {

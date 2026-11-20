@@ -28,7 +28,9 @@ const (
 )
 
 var (
-	ErrInvalidAlertStatus = errors.New("invalid alert status")
+	ErrInvalidAlertStatus    = errors.New("invalid alert status")
+	ErrInvalidSnoozeDuration = errors.New("duration_hours must be one of 2, 8, 24")
+	ErrInvalidSnoozeReason   = errors.New("snooze reason must be <= 256 characters")
 )
 
 type Service struct {
@@ -513,6 +515,92 @@ func (s *Service) AssignAlert(ctx context.Context, alertID int, operator Operato
 		}
 		return s.recordOperation(tx, alertID, "update", operator, nil, nil, nil, meta)
 	})
+}
+
+// SnoozeAlert 对单条告警执行临时静默（白名单 2h/8h/24h），同步写入 alert_operation_history，不影响同设备其他告警。
+func (s *Service) SnoozeAlert(ctx context.Context, alertID int, operator Operator, durationHours int, reason string) (Alert, error) {
+	if s == nil || s.db == nil {
+		return Alert{}, fmt.Errorf("database not initialized")
+	}
+	if durationHours != 2 && durationHours != 8 && durationHours != 24 {
+		return Alert{}, ErrInvalidSnoozeDuration
+	}
+	trimmedReason := strings.TrimSpace(reason)
+	if len([]rune(trimmedReason)) > 256 {
+		return Alert{}, ErrInvalidSnoozeReason
+	}
+
+	var updated Alert
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing Alert
+		if err := tx.Table("alerts").Where("id = ?", alertID).Take(&existing).Error; err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		until := now.Add(time.Duration(durationHours) * time.Hour)
+		op := normalizeOperator(operator)
+
+		if err := tx.Table("alerts").Where("id = ?", alertID).Updates(map[string]interface{}{
+			"snoozed_until": until,
+			"snoozed_by":    op.ID,
+			"snooze_reason": trimmedReason,
+			"updated_at":    now,
+		}).Error; err != nil {
+			return err
+		}
+
+		var notePtr *string
+		if trimmedReason != "" {
+			notePtr = &trimmedReason
+		}
+		if err := s.recordOperation(tx, alertID, "snooze", op, notePtr, &existing.Status, &existing.Status, map[string]interface{}{
+			"duration_hours": durationHours,
+			"snoozed_until":  until.Format(time.RFC3339),
+			"reason":         trimmedReason,
+		}); err != nil {
+			return err
+		}
+
+		return tx.Table("alerts").Where("id = ?", alertID).Take(&updated).Error
+	})
+	return updated, err
+}
+
+// UnsnoozeAlert 立即取消单条告警的临时静默，并记录取消静默操作历史。
+func (s *Service) UnsnoozeAlert(ctx context.Context, alertID int, operator Operator) (Alert, error) {
+	if s == nil || s.db == nil {
+		return Alert{}, fmt.Errorf("database not initialized")
+	}
+
+	var updated Alert
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing Alert
+		if err := tx.Table("alerts").Where("id = ?", alertID).Take(&existing).Error; err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		op := normalizeOperator(operator)
+
+		if err := tx.Table("alerts").Where("id = ?", alertID).Updates(map[string]interface{}{
+			"snoozed_until": nil,
+			"snoozed_by":    "",
+			"snooze_reason": "",
+			"updated_at":    now,
+		}).Error; err != nil {
+			return err
+		}
+
+		if err := s.recordOperation(tx, alertID, "unsnooze", op, nil, &existing.Status, &existing.Status, map[string]interface{}{
+			"unsnoozed_at": now.Format(time.RFC3339),
+		}); err != nil {
+			return err
+		}
+
+		return tx.Table("alerts").Where("id = ?", alertID).Take(&updated).Error
+	})
+	return updated, err
 }
 
 func (s *Service) ListRules(ctx context.Context, filter ListRulesFilter) ([]AlertRule, error) {

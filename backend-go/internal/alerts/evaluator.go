@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/your-org/inspect-system/backend-go/internal/settings"
@@ -25,14 +27,28 @@ func (silentLogger) Error(context.Context, string, ...interface{})    {}
 func (silentLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
 }
 
+// MaintenanceWindowInfo 表示设备命中的维护窗口摘要（避免 alerts 与 monitoring 循环依赖）。
+type MaintenanceWindowInfo struct {
+	MaintenanceID int64
+	Name          string
+	Mode          string
+}
+
+// MaintenanceChecker 查询当前生效维护窗口的抽象接口。
+type MaintenanceChecker interface {
+	GetActiveMaintenanceMapForDevices(ctx context.Context, now time.Time) (map[int]MaintenanceWindowInfo, error)
+}
+
 // Evaluator 告警规则评估引擎
 // 负责将 device_metrics 中的指标与 alert_rules 中的规则进行比对，
 // 当指标超过阈值时自动创建或更新告警记录。
 type Evaluator struct {
-	db        *gorm.DB
-	wsManager *ws.Manager
-	logger    *zap.Logger
-	settings  *settings.Service
+	db           *gorm.DB
+	wsManager    *ws.Manager
+	logger       *zap.Logger
+	settings     *settings.Service
+	maintChecker MaintenanceChecker
+	nowFn        func() time.Time
 }
 
 // NewEvaluator 创建告警评估引擎
@@ -42,16 +58,106 @@ func NewEvaluator(db *gorm.DB, wsManager *ws.Manager, settingsService *settings.
 		wsManager: wsManager,
 		logger:    logger,
 		settings:  settingsService,
+		nowFn:     func() time.Time { return time.Now().UTC() },
 	}
+}
+
+// SetMaintenanceChecker 注入维护窗口查询接口。
+func (e *Evaluator) SetMaintenanceChecker(checker MaintenanceChecker) {
+	if e != nil {
+		e.maintChecker = checker
+	}
+}
+
+// SetNowFunc 注入时钟函数（便于单测确定性验证持续窗口与滞后恢复）。
+func (e *Evaluator) SetNowFunc(fn func() time.Time) {
+	if e != nil && fn != nil {
+		e.nowFn = fn
+	}
+}
+
+func (e *Evaluator) currentTime() time.Time {
+	if e != nil && e.nowFn != nil {
+		return e.nowFn().UTC()
+	}
+	return time.Now().UTC()
+}
+
+// EnsureBuiltinAlertRules 幂等初始化 2 条内置隐形高危规则（设备异常重启 uptime_drop、端口频繁闪断 if_flap），
+// 不破坏存量 alert_rules。
+func EnsureBuiltinAlertRules(ctx context.Context, db *gorm.DB, logger *zap.Logger) error {
+	if db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	autoResolve := true
+	isActive := true
+	notify := true
+	cooldown := 15
+
+	builtins := []AlertRule{
+		{
+			Name:                "设备异常重启",
+			Category:            "system",
+			MetricName:          "uptime",
+			Operator:            "<",
+			ThresholdValue:      60,
+			Duration:            0,
+			Severity:            "critical",
+			AutoResolve:         &autoResolve,
+			NotificationEnabled: &notify,
+			CooldownMinutes:     &cooldown,
+			IsActive:            &isActive,
+			ExpressionMode:      ExpressionModeUptimeDrop,
+			DependencyMode:      DependencyModeNone,
+		},
+		{
+			Name:                "端口频繁闪断",
+			Category:            "interface",
+			MetricName:          "flap_count_1h",
+			Operator:            ">=",
+			ThresholdValue:      4,
+			Duration:            0,
+			Severity:            "warning",
+			AutoResolve:         &autoResolve,
+			NotificationEnabled: &notify,
+			CooldownMinutes:     &cooldown,
+			IsActive:            &isActive,
+			ExpressionMode:      ExpressionModeIfFlap,
+			DependencyMode:      DependencyModeNone,
+		},
+	}
+
+	for _, rule := range builtins {
+		var count int64
+		if err := db.WithContext(ctx).
+			Table("alert_rules").
+			Where("expression_mode = ?", rule.ExpressionMode).
+			Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			continue
+		}
+		if err := db.WithContext(ctx).Table("alert_rules").Create(&rule).Error; err != nil {
+			return err
+		}
+		if logger != nil {
+			logger.Info("seeded builtin alert rule", zap.String("expression_mode", rule.ExpressionMode), zap.String("name", rule.Name))
+		}
+	}
+	return nil
 }
 
 // deviceLatestMetrics 设备最新指标快照
 type deviceLatestMetrics struct {
-	DeviceID   int
-	DeviceName string
-	DeviceType string
-	IPAddress  string
-	Metrics    map[string]float64
+	DeviceID     int
+	DeviceName   string
+	DeviceType   string
+	IPAddress    string
+	TopologyRole string
+	Status       string
+	Metrics      map[string]float64
 }
 
 // EvaluateAll 评估所有活跃规则，对所有被监控设备的最新指标进行检查
@@ -66,8 +172,8 @@ func (e *Evaluator) EvaluateAll(ctx context.Context) (created int, resolved int,
 		return 0, 0, fmt.Errorf("load alert rules: %w", err)
 	}
 
-	// 2. 加载所有被监控设备的最新指标
-	deviceMetrics, err := e.loadLatestDeviceMetrics(ctx)
+	// 2. 加载所有被监控设备基础信息与最新指标
+	allDevices, deviceMetrics, err := e.loadDevicesAndLatestMetrics(ctx)
 	if err != nil {
 		return 0, 0, fmt.Errorf("load device metrics: %w", err)
 	}
@@ -77,7 +183,7 @@ func (e *Evaluator) EvaluateAll(ctx context.Context) (created int, resolved int,
 	created += offlineCreated
 	resolved += offlineResolved
 
-	if len(rules) == 0 || len(deviceMetrics) == 0 {
+	if len(rules) == 0 || len(allDevices) == 0 {
 		if e.logger != nil {
 			e.logger.Info("alert evaluation completed",
 				zap.Int("rules", len(rules)),
@@ -88,87 +194,66 @@ func (e *Evaluator) EvaluateAll(ctx context.Context) (created int, resolved int,
 		return created, resolved, nil
 	}
 
-	// 3. 打印调试信息：设备指标快照
-	if e.logger != nil {
-		for _, dm := range deviceMetrics {
-			metricNames := make([]string, 0, len(dm.Metrics))
-			for k := range dm.Metrics {
-				metricNames = append(metricNames, k)
-			}
-			e.logger.Debug("device metrics snapshot",
-				zap.Int("device_id", dm.DeviceID),
-				zap.String("device_name", dm.DeviceName),
-				zap.Strings("available_metrics", metricNames),
-				zap.Int("metric_count", len(dm.Metrics)))
+	now := e.currentTime()
+	offlineDeviceIDs := make(map[int]bool, len(allDevices))
+	for _, d := range allDevices {
+		if strings.EqualFold(strings.TrimSpace(d.Status), "offline") {
+			offlineDeviceIDs[d.DeviceID] = true
+		}
+	}
+
+	maintMap := make(map[int]MaintenanceWindowInfo)
+	if e.maintChecker != nil {
+		if m, mErr := e.maintChecker.GetActiveMaintenanceMapForDevices(ctx, now); mErr == nil && m != nil {
+			maintMap = m
 		}
 	}
 
 	// 4. 逐规则逐设备评估
 	for _, rule := range rules {
-		ruleMetric := normalizeMetricName(rule.MetricName)
-
-		for _, dm := range deviceMetrics {
-			if !e.ruleAppliesToDevice(rule, dm) {
+		mode := strings.ToLower(strings.TrimSpace(rule.ExpressionMode))
+		switch mode {
+		case ExpressionModeNoData:
+			if rule.NoDataSeconds <= 0 {
 				continue
 			}
+			c, r := e.evaluateNoDataRule(ctx, rule, allDevices, maintMap, offlineDeviceIDs, now)
+			created += c
+			resolved += r
 
-			value, exists := findMetricValue(dm.Metrics, ruleMetric)
-			if !exists {
-				if e.logger != nil {
-					e.logger.Debug("metric not found for rule",
-						zap.Int("rule_id", rule.ID),
-						zap.String("rule_metric", rule.MetricName),
-						zap.String("normalized", ruleMetric),
-						zap.Int("device_id", dm.DeviceID))
+		case ExpressionModeUptimeDrop:
+			c, r := e.evaluateUptimeDropRule(ctx, rule, allDevices, maintMap, offlineDeviceIDs, now)
+			created += c
+			resolved += r
+
+		case ExpressionModeIfFlap:
+			c, r := e.evaluateIfFlapRule(ctx, rule, allDevices, maintMap, offlineDeviceIDs, now)
+			created += c
+			resolved += r
+
+		default:
+			ruleMetric := normalizeMetricName(rule.MetricName)
+			for _, dm := range deviceMetrics {
+				if !e.ruleAppliesToDevice(rule, dm) {
+					continue
 				}
-				continue
-			}
-
-			violated := evaluateCondition(value, rule.Operator, rule.ThresholdValue)
-
-			if e.logger != nil {
-				e.logger.Info("rule evaluation result",
-					zap.Int("rule_id", rule.ID),
-					zap.String("rule_name", rule.Name),
-					zap.String("metric", ruleMetric),
-					zap.Float64("value", value),
-					zap.String("operator", rule.Operator),
-					zap.Float64("threshold", rule.ThresholdValue),
-					zap.Bool("violated", violated),
-					zap.Int("device_id", dm.DeviceID),
-					zap.String("device", dm.DeviceName))
-			}
-
-			if violated {
-				isNew, createErr := e.createOrUpdateAlert(ctx, rule, dm, value)
-				if createErr != nil {
+				value, exists := findMetricValue(dm.Metrics, ruleMetric)
+				if !exists {
+					continue
+				}
+				violated := evaluateCondition(value, rule.Operator, rule.ThresholdValue)
+				isNew, didResolve, evalErr := e.processRuleDeviceEvaluation(ctx, rule, dm, "", value, violated, maintMap, offlineDeviceIDs, now)
+				if evalErr != nil {
 					if e.logger != nil {
-						e.logger.Warn("create alert failed",
-							zap.Int("rule_id", rule.ID),
-							zap.Int("device_id", dm.DeviceID),
-							zap.Error(createErr))
+						e.logger.Warn("evaluate rule failed", zap.Int("rule_id", rule.ID), zap.Int("device_id", dm.DeviceID), zap.Error(evalErr))
 					}
 					continue
 				}
 				if isNew {
 					created++
 				}
-			} else {
-				// 指标恢复正常，检查是否需要自动解决
-				if rule.AutoResolve != nil && *rule.AutoResolve {
-					didResolve, resolveErr := e.autoResolveAlert(ctx, rule, dm)
-					if resolveErr != nil {
-						if e.logger != nil {
-							e.logger.Warn("auto resolve alert failed",
-								zap.Int("rule_id", rule.ID),
-								zap.Int("device_id", dm.DeviceID),
-								zap.Error(resolveErr))
-						}
-						continue
-					}
-					if didResolve {
-						resolved++
-					}
+				if didResolve {
+					resolved++
 				}
 			}
 		}
@@ -211,34 +296,33 @@ func (e *Evaluator) loadActiveRules(ctx context.Context) ([]AlertRule, error) {
 	return rules, nil
 }
 
-// loadLatestDeviceMetrics 加载所有被监控设备的最新指标
-func (e *Evaluator) loadLatestDeviceMetrics(ctx context.Context) ([]deviceLatestMetrics, error) {
-	// 查询所有活跃且被监控的设备
+// loadDevicesAndLatestMetrics 加载所有被监控设备基础信息及最新指标。
+func (e *Evaluator) loadDevicesAndLatestMetrics(ctx context.Context) ([]deviceLatestMetrics, []deviceLatestMetrics, error) {
 	type deviceRow struct {
-		ID         int    `gorm:"column:id"`
-		Name       string `gorm:"column:name"`
-		DeviceType string `gorm:"column:device_type"`
-		IPAddress  string `gorm:"column:ip_address"`
+		ID           int    `gorm:"column:id"`
+		Name         string `gorm:"column:name"`
+		DeviceType   string `gorm:"column:device_type"`
+		IPAddress    string `gorm:"column:ip_address"`
+		TopologyRole string `gorm:"column:topology_role"`
+		Status       string `gorm:"column:status"`
 	}
 
 	var devices []deviceRow
 	if err := e.db.WithContext(ctx).
 		Table("devices").
-		Select("id, name, device_type, ip_address").
+		Select("id, name, device_type, ip_address, COALESCE(topology_role, 'access') AS topology_role, status").
 		Where("is_active = ? AND is_monitored = ?", true, true).
 		Find(&devices).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if len(devices) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	deviceIDs := make([]int, 0, len(devices))
-	deviceMap := make(map[int]deviceRow, len(devices))
 	for _, d := range devices {
 		deviceIDs = append(deviceIDs, d.ID)
-		deviceMap[d.ID] = d
 	}
 
 	// 查询每个设备每个指标的最新值（最近30分钟内，放宽时间窗口）
@@ -259,10 +343,6 @@ func (e *Evaluator) loadLatestDeviceMetrics(ctx context.Context) ([]deviceLatest
 		ORDER BY device_id, metric_name, collected_at DESC`
 
 	if err := e.db.WithContext(ctx).Raw(query, deviceIDs).Scan(&metrics).Error; err != nil {
-		// 如果 DISTINCT ON 不支持，回退到子查询方式
-		if e.logger != nil {
-			e.logger.Warn("DISTINCT ON query failed, trying fallback", zap.Error(err))
-		}
 		fallbackQuery := `
 			SELECT dm.device_id, dm.metric_name, dm.metric_value
 			FROM device_metrics dm
@@ -277,23 +357,39 @@ func (e *Evaluator) loadLatestDeviceMetrics(ctx context.Context) ([]deviceLatest
 				AND dm.metric_name = latest.metric_name
 				AND dm.collected_at = latest.max_collected`
 		if err2 := e.db.WithContext(ctx).Raw(fallbackQuery, deviceIDs).Scan(&metrics).Error; err2 != nil {
-			return nil, fmt.Errorf("load metrics failed: %w", err2)
+			// 允许在仅使用 device_latest_metrics / devices 快照时继续评估
+			metrics = nil
 		}
 	}
 
-	if e.logger != nil {
-		e.logger.Debug("loaded device metrics from database",
-			zap.Int("device_count", len(deviceIDs)),
-			zap.Int("metric_rows", len(metrics)))
-	}
-
-	// 按设备聚合指标
 	metricsMap := make(map[int]map[string]float64)
 	for _, m := range metrics {
 		if metricsMap[m.DeviceID] == nil {
 			metricsMap[m.DeviceID] = make(map[string]float64)
 		}
 		metricsMap[m.DeviceID][m.MetricName] = m.MetricValue
+	}
+
+	// 补充从 device_latest_metrics 读取最新值（如 device_metrics 未写入或测试库直接写入快照表）
+	type latestSnapshotRow struct {
+		DeviceID    int     `gorm:"column:device_id"`
+		MetricName  string  `gorm:"column:metric_name"`
+		MetricValue float64 `gorm:"column:metric_value"`
+	}
+	var latestRows []latestSnapshotRow
+	if err := e.db.WithContext(ctx).
+		Table("device_latest_metrics").
+		Select("device_id, metric_name, metric_value").
+		Where("device_id IN ? AND interface_name = ''", deviceIDs).
+		Scan(&latestRows).Error; err == nil {
+		for _, r := range latestRows {
+			if metricsMap[r.DeviceID] == nil {
+				metricsMap[r.DeviceID] = make(map[string]float64)
+			}
+			if _, exists := metricsMap[r.DeviceID][r.MetricName]; !exists {
+				metricsMap[r.DeviceID][r.MetricName] = r.MetricValue
+			}
+		}
 	}
 
 	// 同时从 devices 表获取快照指标（作为补充）
@@ -327,26 +423,28 @@ func (e *Evaluator) loadLatestDeviceMetrics(ctx context.Context) ([]deviceLatest
 		}
 	}
 
-	// 构建结果
-	result := make([]deviceLatestMetrics, 0, len(devices))
+	allDevices := make([]deviceLatestMetrics, 0, len(devices))
+	withMetrics := make([]deviceLatestMetrics, 0, len(devices))
 	for _, d := range devices {
 		dm := deviceLatestMetrics{
-			DeviceID:   d.ID,
-			DeviceName: d.Name,
-			DeviceType: d.DeviceType,
-			IPAddress:  d.IPAddress,
-			Metrics:    metricsMap[d.ID],
+			DeviceID:     d.ID,
+			DeviceName:   d.Name,
+			DeviceType:   d.DeviceType,
+			IPAddress:    d.IPAddress,
+			TopologyRole: d.TopologyRole,
+			Status:       d.Status,
+			Metrics:      metricsMap[d.ID],
 		}
 		if dm.Metrics == nil {
 			dm.Metrics = make(map[string]float64)
 		}
-		// 只有有指标数据的设备才参与评估
+		allDevices = append(allDevices, dm)
 		if len(dm.Metrics) > 0 {
-			result = append(result, dm)
+			withMetrics = append(withMetrics, dm)
 		}
 	}
 
-	return result, nil
+	return allDevices, withMetrics, nil
 }
 
 // ruleAppliesToDevice 检查规则是否适用于指定设备
@@ -417,32 +515,305 @@ func evaluateCondition(value float64, operator string, threshold float64) bool {
 	}
 }
 
+// processRuleDeviceEvaluation 处理持续时间窗口持久化、滞后恢复、维护静默与依赖抑制。
+func (e *Evaluator) processRuleDeviceEvaluation(
+	ctx context.Context,
+	rule AlertRule,
+	dm deviceLatestMetrics,
+	entityKey string,
+	value float64,
+	violated bool,
+	maintMap map[int]MaintenanceWindowInfo,
+	offlineDeviceIDs map[int]bool,
+	now time.Time,
+) (isNew bool, didResolve bool, err error) {
+	var state TriggerEvalState
+	stateErr := e.db.WithContext(ctx).Session(&gorm.Session{Logger: silentLogger{}}).
+		Table("trigger_eval_states").
+		Where("rule_id = ? AND device_id = ? AND entity_key = ?", rule.ID, dm.DeviceID, entityKey).
+		Take(&state).Error
+	if stateErr != nil {
+		if stateErr != gorm.ErrRecordNotFound {
+			return false, false, stateErr
+		}
+		state = TriggerEvalState{
+			RuleID:    rule.ID,
+			DeviceID:  dm.DeviceID,
+			EntityKey: entityKey,
+		}
+	}
+
+	if violated {
+		if state.BreachSince == nil {
+			bs := now
+			state.BreachSince = &bs
+			state.ConsecutiveHits = 1
+		} else {
+			state.ConsecutiveHits++
+		}
+		state.LastValue = value
+		state.LastEvalAt = now
+
+		shouldFire := rule.Duration <= 0 || now.Sub(*state.BreachSince) >= time.Duration(rule.Duration)*time.Second
+		if !shouldFire {
+			state.IsFiring = false
+			if upsertErr := e.upsertTriggerEvalState(ctx, state); upsertErr != nil {
+				return false, false, upsertErr
+			}
+			return false, false, nil
+		}
+
+		state.IsFiring = true
+		if upsertErr := e.upsertTriggerEvalState(ctx, state); upsertErr != nil {
+			return false, false, upsertErr
+		}
+
+		suppressedBy := ""
+		var suppressedRefID *int64
+		if maint, inMaint := maintMap[dm.DeviceID]; inMaint {
+			suppressedBy = SuppressedByMaintenance
+			id := maint.MaintenanceID
+			suppressedRefID = &id
+		} else if sup, refID := IsSuppressedByUpstream(ctx, e.db, rule, dm.DeviceID, dm.TopologyRole, offlineDeviceIDs); sup {
+			suppressedBy = SuppressedByDependency
+			id := int64(refID)
+			suppressedRefID = &id
+		}
+
+		created, createErr := e.createOrUpdateAlertWithSuppression(ctx, rule, dm, entityKey, value, suppressedBy, suppressedRefID, now)
+		return created, false, createErr
+	}
+
+	// 未触发：检查滞后恢复（Hysteresis）缓冲带
+	if strings.EqualFold(strings.TrimSpace(rule.ExpressionMode), ExpressionModeHysteresis) &&
+		state.IsFiring &&
+		rule.RecoveryThreshold != nil &&
+		strings.TrimSpace(rule.RecoveryOperator) != "" {
+		if !evaluateCondition(value, rule.RecoveryOperator, *rule.RecoveryThreshold) {
+			state.LastValue = value
+			state.LastEvalAt = now
+			_ = e.upsertTriggerEvalState(ctx, state)
+			return false, false, nil
+		}
+	}
+
+	state.BreachSince = nil
+	state.ConsecutiveHits = 0
+	state.IsFiring = false
+	state.LastValue = value
+	state.LastEvalAt = now
+	if upsertErr := e.upsertTriggerEvalState(ctx, state); upsertErr != nil {
+		return false, false, upsertErr
+	}
+
+	if rule.AutoResolve != nil && *rule.AutoResolve {
+		resolved, resolveErr := e.autoResolveAlertByEntity(ctx, rule, dm, entityKey, now)
+		return false, resolved, resolveErr
+	}
+	return false, false, nil
+}
+
+func (e *Evaluator) upsertTriggerEvalState(ctx context.Context, state TriggerEvalState) error {
+	return e.db.WithContext(ctx).
+		Table("trigger_eval_states").
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "rule_id"}, {Name: "device_id"}, {Name: "entity_key"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"breach_since", "consecutive_hits", "is_firing", "last_value", "last_eval_at",
+			}),
+		}).
+		Create(&state).Error
+}
+
+func (e *Evaluator) evaluateNoDataRule(
+	ctx context.Context,
+	rule AlertRule,
+	allDevices []deviceLatestMetrics,
+	maintMap map[int]MaintenanceWindowInfo,
+	offlineDeviceIDs map[int]bool,
+	now time.Time,
+) (created int, resolved int) {
+	ruleMetric := normalizeMetricName(rule.MetricName)
+	for _, dm := range allDevices {
+		if !e.ruleAppliesToDevice(rule, dm) {
+			continue
+		}
+		var latest struct {
+			CollectedAt time.Time `gorm:"column:collected_at"`
+		}
+		q := e.db.WithContext(ctx).Session(&gorm.Session{Logger: silentLogger{}}).
+			Table("device_latest_metrics").
+			Select("MAX(collected_at) AS collected_at").
+			Where("device_id = ?", dm.DeviceID)
+		if ruleMetric != "" {
+			q = q.Where("LOWER(metric_name) = ?", ruleMetric)
+		}
+		err := q.Take(&latest).Error
+		staleSec := float64(rule.NoDataSeconds)
+		violated := true
+		if err == nil && !latest.CollectedAt.IsZero() {
+			gap := now.Sub(latest.CollectedAt.UTC()).Seconds()
+			staleSec = gap
+			violated = gap > float64(rule.NoDataSeconds)
+		}
+		isNew, didResolve, evalErr := e.processRuleDeviceEvaluation(ctx, rule, dm, "", staleSec, violated, maintMap, offlineDeviceIDs, now)
+		if evalErr == nil {
+			if isNew {
+				created++
+			}
+			if didResolve {
+				resolved++
+			}
+		}
+	}
+	return created, resolved
+}
+
+func (e *Evaluator) evaluateUptimeDropRule(
+	ctx context.Context,
+	rule AlertRule,
+	allDevices []deviceLatestMetrics,
+	maintMap map[int]MaintenanceWindowInfo,
+	offlineDeviceIDs map[int]bool,
+	now time.Time,
+) (created int, resolved int) {
+	drop := rule.ThresholdValue
+	if drop <= 0 {
+		drop = 60
+	}
+	for _, dm := range allDevices {
+		if !e.ruleAppliesToDevice(rule, dm) {
+			continue
+		}
+		var row struct {
+			MetricValue float64  `gorm:"column:metric_value"`
+			PrevValue   *float64 `gorm:"column:prev_value"`
+		}
+		err := e.db.WithContext(ctx).Session(&gorm.Session{Logger: silentLogger{}}).
+			Table("device_latest_metrics").
+			Select("metric_value, prev_value").
+			Where("device_id = ? AND LOWER(metric_name) = 'uptime' AND interface_name = ''", dm.DeviceID).
+			Take(&row).Error
+		if err != nil {
+			continue
+		}
+		violated := row.PrevValue != nil && *row.PrevValue > 0 && row.MetricValue < *row.PrevValue-drop
+		isNew, didResolve, evalErr := e.processRuleDeviceEvaluation(ctx, rule, dm, "", row.MetricValue, violated, maintMap, offlineDeviceIDs, now)
+		if evalErr == nil {
+			if isNew {
+				created++
+			}
+			if didResolve {
+				resolved++
+			}
+		}
+	}
+	return created, resolved
+}
+
+func (e *Evaluator) evaluateIfFlapRule(
+	ctx context.Context,
+	rule AlertRule,
+	allDevices []deviceLatestMetrics,
+	maintMap map[int]MaintenanceWindowInfo,
+	offlineDeviceIDs map[int]bool,
+	now time.Time,
+) (created int, resolved int) {
+	var filterRE *regexp.Regexp
+	if strings.TrimSpace(rule.EntityFilterRegex) != "" {
+		compiled, err := regexp.Compile(strings.TrimSpace(rule.EntityFilterRegex))
+		if err != nil {
+			return 0, 0
+		}
+		filterRE = compiled
+	}
+	op := strings.TrimSpace(rule.Operator)
+	if op == "" {
+		op = ">="
+	}
+	thresh := rule.ThresholdValue
+	if thresh <= 0 {
+		thresh = 4
+	}
+
+	for _, dm := range allDevices {
+		if !e.ruleAppliesToDevice(rule, dm) {
+			continue
+		}
+		var ifaces []struct {
+			Name        string `gorm:"column:name"`
+			FlapCount1h int    `gorm:"column:flap_count_1h"`
+		}
+		if err := e.db.WithContext(ctx).
+			Table("device_interfaces").
+			Select("name, COALESCE(flap_count_1h, 0) AS flap_count_1h").
+			Where("device_id = ? AND COALESCE(lld_monitored, true) = true", dm.DeviceID).
+			Scan(&ifaces).Error; err != nil {
+			continue
+		}
+		for _, iface := range ifaces {
+			if filterRE != nil && !filterRE.MatchString(iface.Name) {
+				continue
+			}
+			violated := evaluateCondition(float64(iface.FlapCount1h), op, thresh)
+			entityKey := iface.Name
+			if runes := []rune(entityKey); len(runes) > 128 {
+				entityKey = string(runes[:128])
+			}
+			isNew, didResolve, evalErr := e.processRuleDeviceEvaluation(ctx, rule, dm, entityKey, float64(iface.FlapCount1h), violated, maintMap, offlineDeviceIDs, now)
+			if evalErr == nil {
+				if isNew {
+					created++
+				}
+				if didResolve {
+					resolved++
+				}
+			}
+		}
+	}
+	return created, resolved
+}
+
 // createOrUpdateAlert 创建新告警或更新已有告警的发生次数
 // 返回 (isNew, error)
 func (e *Evaluator) createOrUpdateAlert(ctx context.Context, rule AlertRule, dm deviceLatestMetrics, currentValue float64) (bool, error) {
+	return e.createOrUpdateAlertWithSuppression(ctx, rule, dm, "", currentValue, "", nil, e.currentTime())
+}
+
+func (e *Evaluator) createOrUpdateAlertWithSuppression(
+	ctx context.Context,
+	rule AlertRule,
+	dm deviceLatestMetrics,
+	entityKey string,
+	currentValue float64,
+	suppressedBy string,
+	suppressedRefID *int64,
+	now time.Time,
+) (bool, error) {
 	// 检查冷却时间：同一规则+设备是否在冷却期内
 	cooldownMinutes := 30
 	if rule.CooldownMinutes != nil && *rule.CooldownMinutes > 0 {
 		cooldownMinutes = *rule.CooldownMinutes
 	}
 
-	// 查找该规则+设备的现有活跃告警
+	// 查找该规则+设备+实体的现有活跃告警
 	var existing Alert
 	err := e.db.WithContext(ctx).Session(&gorm.Session{Logger: silentLogger{}}).
 		Table("alerts").
-		Where("rule_id = ? AND device_id = ? AND status IN ?",
-			rule.ID, dm.DeviceID, []string{alertStatusOpen, alertStatusAcknowledged}).
+		Where("rule_id = ? AND device_id = ? AND COALESCE(entity_key, '') = ? AND status IN ?",
+			rule.ID, dm.DeviceID, entityKey, []string{alertStatusOpen, alertStatusAcknowledged}).
 		Order("last_occurred DESC").
 		Take(&existing).Error
 
 	if err == nil {
 		// 已有活跃告警，更新发生次数和最后发生时间
-		now := time.Now().UTC()
 		updates := map[string]interface{}{
-			"last_occurred":    now,
-			"current_value":    currentValue,
-			"occurrence_count": gorm.Expr("COALESCE(occurrence_count, 0) + 1"),
-			"updated_at":       now,
+			"last_occurred":     now,
+			"current_value":     currentValue,
+			"occurrence_count":  gorm.Expr("COALESCE(occurrence_count, 0) + 1"),
+			"suppressed_by":     suppressedBy,
+			"suppressed_ref_id": suppressedRefID,
+			"updated_at":        now,
 		}
 		return false, e.db.WithContext(ctx).
 			Table("alerts").
@@ -456,11 +827,11 @@ func (e *Evaluator) createOrUpdateAlert(ctx context.Context, rule AlertRule, dm 
 
 	// 检查冷却期：最近是否刚解决过同一告警
 	var recentResolved Alert
-	cooldownCutoff := time.Now().UTC().Add(-time.Duration(cooldownMinutes) * time.Minute)
+	cooldownCutoff := now.Add(-time.Duration(cooldownMinutes) * time.Minute)
 	recentErr := e.db.WithContext(ctx).Session(&gorm.Session{Logger: silentLogger{}}).
 		Table("alerts").
-		Where("rule_id = ? AND device_id = ? AND status IN ? AND resolved_at >= ?",
-			rule.ID, dm.DeviceID, []string{alertStatusResolved, alertStatusClosed}, cooldownCutoff).
+		Where("rule_id = ? AND device_id = ? AND COALESCE(entity_key, '') = ? AND status IN ? AND resolved_at >= ?",
+			rule.ID, dm.DeviceID, entityKey, []string{alertStatusResolved, alertStatusClosed}, cooldownCutoff).
 		Take(&recentResolved).Error
 	if recentErr == nil {
 		// 在冷却期内，不创建新告警
@@ -468,10 +839,12 @@ func (e *Evaluator) createOrUpdateAlert(ctx context.Context, rule AlertRule, dm 
 	}
 
 	// 创建新告警
-	now := time.Now().UTC()
 	ruleID := rule.ID
 	occurrenceCount := 1
 	title := buildAlertTitle(rule, dm)
+	if entityKey != "" {
+		title = fmt.Sprintf("%s (%s)", title, entityKey)
+	}
 	message := buildAlertMessage(rule, dm, currentValue)
 
 	alert := Alert{
@@ -488,6 +861,9 @@ func (e *Evaluator) createOrUpdateAlert(ctx context.Context, rule AlertRule, dm 
 		FirstOccurred:   &now,
 		LastOccurred:    &now,
 		OccurrenceCount: &occurrenceCount,
+		SuppressedBy:    suppressedBy,
+		SuppressedRefID: suppressedRefID,
+		EntityKey:       entityKey,
 		CreatedAt:       &now,
 		UpdatedAt:       &now,
 	}
@@ -496,11 +872,12 @@ func (e *Evaluator) createOrUpdateAlert(ctx context.Context, rule AlertRule, dm 
 		return false, err
 	}
 
-	// 通过 WebSocket 推送实时告警通知
-	e.broadcastAlert(alert, dm)
-
-	// 触发外部通知（邮件/Webhook）。仅对新建告警触发一次，避免重复发生时刷屏。
-	e.dispatchExternalNotifications(rule, alert, dm)
+	// 命中维护期静默、依赖抑制或单条 Snooze 时，跳过实时推送与外部通知
+	isSnoozed := alert.SnoozedUntil != nil && alert.SnoozedUntil.After(now)
+	if suppressedBy == "" && !isSnoozed {
+		e.broadcastAlert(alert, dm)
+		e.dispatchExternalNotifications(rule, alert, dm)
+	}
 
 	return true, nil
 }
@@ -617,11 +994,15 @@ func buildExternalAlertContent(alert Alert, dm deviceLatestMetrics, rule AlertRu
 
 // autoResolveAlert 当指标恢复正常时自动解决告警
 func (e *Evaluator) autoResolveAlert(ctx context.Context, rule AlertRule, dm deviceLatestMetrics) (bool, error) {
+	return e.autoResolveAlertByEntity(ctx, rule, dm, "", e.currentTime())
+}
+
+func (e *Evaluator) autoResolveAlertByEntity(ctx context.Context, rule AlertRule, dm deviceLatestMetrics, entityKey string, now time.Time) (bool, error) {
 	var existing Alert
 	err := e.db.WithContext(ctx).Session(&gorm.Session{Logger: silentLogger{}}).
 		Table("alerts").
-		Where("rule_id = ? AND device_id = ? AND status = ?",
-			rule.ID, dm.DeviceID, alertStatusOpen).
+		Where("rule_id = ? AND device_id = ? AND COALESCE(entity_key, '') = ? AND status = ?",
+			rule.ID, dm.DeviceID, entityKey, alertStatusOpen).
 		Take(&existing).Error
 
 	if err != nil {
@@ -631,7 +1012,6 @@ func (e *Evaluator) autoResolveAlert(ctx context.Context, rule AlertRule, dm dev
 		return false, err
 	}
 
-	now := time.Now().UTC()
 	resolvedBy := "system"
 	resolutionNote := "指标恢复正常，系统自动解决"
 	updates := map[string]interface{}{

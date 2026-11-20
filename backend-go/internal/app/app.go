@@ -39,6 +39,29 @@ import (
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
+type maintenanceCheckerAdapter struct {
+	writer *monitoring.MetricsWriter
+}
+
+func (a maintenanceCheckerAdapter) GetActiveMaintenanceMapForDevices(ctx context.Context, now time.Time) (map[int]alerts.MaintenanceWindowInfo, error) {
+	if a.writer == nil {
+		return nil, nil
+	}
+	raw, err := a.writer.GetActiveMaintenanceMapForDevices(ctx, now)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int]alerts.MaintenanceWindowInfo, len(raw))
+	for devID, am := range raw {
+		out[devID] = alerts.MaintenanceWindowInfo{
+			MaintenanceID: am.MaintenanceID,
+			Name:          am.Name,
+			Mode:          am.Mode,
+		}
+	}
+	return out, nil
+}
+
 // wsAuthAdapter 将 auth.Service 适配为 ws.AccessTokenAuthorizer，避免 ws 包直接依赖 internal/auth 造成循环引用。
 type wsAuthAdapter struct {
 	Service *auth.Service
@@ -113,6 +136,9 @@ func New() (*App, error) {
 	}
 	if err := monitoring.AutoBindLegacyDevices(context.Background(), dbConn, log); err != nil && log != nil {
 		log.Warn("存量设备自动匹配监控方案失败（将继续启动）", zap.Error(err))
+	}
+	if err := alerts.EnsureBuiltinAlertRules(context.Background(), dbConn, log); err != nil && log != nil {
+		log.Warn("同步内置高危告警规则失败（将继续启动）", zap.Error(err))
 	}
 
 	redisClient, err := redisstore.NewClient(cfg)
@@ -262,7 +288,9 @@ func New() (*App, error) {
 
 	alertService := alerts.NewService(dbConn, log)
 	alertService.SetSettings(settingsService)
+	monitoringHandler.Alerts = alertService
 	alertEvaluator := alerts.NewEvaluator(dbConn, wsManager, settingsService, log)
+	alertEvaluator.SetMaintenanceChecker(maintenanceCheckerAdapter{writer: metricsWriter})
 	alertsHandler := handlers.AlertsHandler{
 		Service:  alertService,
 		Auth:     authService,

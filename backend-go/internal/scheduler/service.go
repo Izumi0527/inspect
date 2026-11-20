@@ -745,10 +745,12 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 	metricsSkipped := len(backoffSkipped)
 	if collectMetrics && s.snmpCollector != nil && s.metricsWriter != nil {
 		collectList, skipped := snmpCollectionTargets(eligibleDevices, probeResults)
-		metricsSkipped += len(skipped)
-		if metricsSkipped > 0 && s.logger != nil {
-			s.logger.Info("skip SNMP metrics collection for devices in backoff or failed SNMP probe",
+		collectList, maintSkipped := s.filterPauseCollectionDevices(ctx, collectList, time.Now().UTC())
+		metricsSkipped += len(skipped) + len(maintSkipped)
+		if (metricsSkipped > 0 || len(maintSkipped) > 0) && s.logger != nil {
+			s.logger.Info("skip SNMP metrics collection for devices in backoff, failed SNMP probe, or pause_collection maintenance",
 				zap.Ints("probe_failed_ids", skipped),
+				zap.Ints("maintenance_paused_ids", maintSkipped),
 				zap.Int("backoff_skipped_count", len(backoffSkipped)))
 		}
 		var collectFailed int
@@ -853,6 +855,27 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 		"alerts_resolved":     alertsResolved,
 		"trap_alerts_created": trapAlertsCreated,
 	}, nil
+}
+
+// filterPauseCollectionDevices 过滤处于 pause_collection 模式计划维护期的设备，绝不修改 devices.is_monitored 永久标志。
+func (s *Service) filterPauseCollectionDevices(ctx context.Context, list []devices.Device, now time.Time) ([]devices.Device, []int) {
+	if s == nil || s.metricsWriter == nil || len(list) == 0 {
+		return list, nil
+	}
+	maintMap, err := s.metricsWriter.GetActiveMaintenanceMapForDevices(ctx, now)
+	if err != nil || len(maintMap) == 0 {
+		return list, nil
+	}
+	kept := make([]devices.Device, 0, len(list))
+	pausedIDs := make([]int, 0)
+	for _, d := range list {
+		if am, ok := maintMap[d.ID]; ok && am.Mode == monitoring.MaintenanceModePauseCollection {
+			pausedIDs = append(pausedIDs, d.ID)
+			continue
+		}
+		kept = append(kept, d)
+	}
+	return kept, pausedIDs
 }
 
 // currentMaxConcurrent 返回批量设备操作（探测/采集/备份）的并发上限。

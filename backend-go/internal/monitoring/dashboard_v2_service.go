@@ -225,12 +225,13 @@ func (w *MetricsWriter) loadEffectiveThresholds(ctx context.Context) ThresholdSu
 func (w *MetricsWriter) queryHealthDistribution(ctx context.Context, deviceIDs []int) HealthDistributionBuckets {
 	var buckets HealthDistributionBuckets
 	type row struct {
+		ID          int      `gorm:"column:id"`
 		Status      string   `gorm:"column:status"`
 		CPUUsage    *float64 `gorm:"column:cpu_usage"`
 		MemoryUsage *float64 `gorm:"column:memory_usage"`
 	}
 	var rows []row
-	q := w.db.WithContext(ctx).Table("devices").Select("status, cpu_usage, memory_usage").Where("is_active = ?", true)
+	q := w.db.WithContext(ctx).Table("devices").Select("id, status, cpu_usage, memory_usage").Where("is_active = ?", true)
 	if len(deviceIDs) > 0 {
 		q = q.Where("id IN ?", deviceIDs)
 	}
@@ -238,13 +239,17 @@ func (w *MetricsWriter) queryHealthDistribution(ctx context.Context, deviceIDs [
 		return buckets
 	}
 
+	maintMap, _ := w.GetActiveMaintenanceMapForDevices(ctx, time.Now().UTC())
+
 	for _, r := range rows {
 		st := strings.ToLower(strings.TrimSpace(r.Status))
+		if _, inMaint := maintMap[r.ID]; inMaint || st == "maintenance" {
+			buckets.Maintenance++
+			continue
+		}
 		switch st {
 		case "offline":
 			buckets.Offline++
-		case "maintenance":
-			buckets.Maintenance++
 		default:
 			maxLoad := 0.0
 			if r.CPUUsage != nil && *r.CPUUsage > maxLoad {
