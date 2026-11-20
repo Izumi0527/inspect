@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { MonitoringTabKey } from '../types/zabbix-monitoring.types'
 
@@ -77,6 +77,7 @@ export function useMonitoringNavigation(
     parseKioskParam(searchParams.get('kiosk'))
   )
   const [kioskCountdownSec, setKioskCountdownSec] = useState(KIOSK_REFRESH_SECONDS)
+  const kioskCountdownRef = useRef(KIOSK_REFRESH_SECONDS)
 
   const setActiveTab = useCallback((tab: MonitoringTabKey) => {
     setActiveTabState(tab)
@@ -89,6 +90,7 @@ export function useMonitoringNavigation(
 
   const setIsKioskMode = useCallback((enabled: boolean) => {
     setIsKioskModeState(enabled)
+    kioskCountdownRef.current = KIOSK_REFRESH_SECONDS
     setKioskCountdownSec(KIOSK_REFRESH_SECONDS)
     if (enabled) {
       setActiveTabState('overview')
@@ -96,6 +98,7 @@ export function useMonitoringNavigation(
   }, [])
 
   const resetKioskCountdown = useCallback(() => {
+    kioskCountdownRef.current = KIOSK_REFRESH_SECONDS
     setKioskCountdownSec(KIOSK_REFRESH_SECONDS)
   }, [])
 
@@ -126,13 +129,15 @@ export function useMonitoringNavigation(
     }
     window.addEventListener('keydown', handleKeyDown)
     const timer = window.setInterval(() => {
-      setKioskCountdownSec((prev) => {
-        if (prev <= 1) {
-          onAutoRefresh()
-          return KIOSK_REFRESH_SECONDS
-        }
-        return prev - 1
-      })
+      if (kioskCountdownRef.current <= 1) {
+        kioskCountdownRef.current = KIOSK_REFRESH_SECONDS
+        setKioskCountdownSec(KIOSK_REFRESH_SECONDS)
+        onAutoRefresh()
+        return
+      }
+      const next = kioskCountdownRef.current - 1
+      kioskCountdownRef.current = next
+      setKioskCountdownSec(next)
     }, 1000)
 
     return () => {

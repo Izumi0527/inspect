@@ -2,6 +2,7 @@ import React from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import toast, { Toaster } from 'react-hot-toast'
 import { LatestDataTab } from '@/features/monitoring/components/latest'
 import {
   getAdhocGraphs,
@@ -172,5 +173,111 @@ describe('实时指标明细与多指标同图对比 LatestDataTab (Task 12)', (
       '最多支持同时对比 6 条指标序列'
     )
     expect(screen.getByText('多指标同图对比（6/6）')).toBeInTheDocument()
+  })
+
+  it('StrictMode + Toaster 下勾选超过 6 条指标零 console.error 报错，取消/移除后可继续勾选', async () => {
+    const user = userEvent.setup()
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    ;(getLatestData as jest.Mock).mockResolvedValue({
+      items: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(makeMetricItem),
+      total: 9,
+      page: 1,
+      page_size: 50,
+      total_pages: 1,
+    })
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+
+    try {
+      render(
+        <React.StrictMode>
+          <QueryClientProvider client={queryClient}>
+            <LatestDataTab
+              activeGroupId={null}
+              selectedDeviceIds={[]}
+              onSelectHost={jest.fn()}
+            />
+            <Toaster />
+          </QueryClientProvider>
+        </React.StrictMode>
+      )
+
+      expect(await screen.findByText('CPU 使用率-9')).toBeInTheDocument()
+
+      for (let i = 1; i <= 6; i++) {
+        await user.click(
+          screen.getByRole('checkbox', { name: `选择对比 SW-0${i} CPU 使用率-${i}` })
+        )
+      }
+
+      expect(await screen.findByLabelText('多指标同图对比曲线图')).toBeInTheDocument()
+      expect(screen.getByText('多指标同图对比（6/6）')).toBeInTheDocument()
+      expect(screen.getByText('已勾选对比 6/6')).toBeInTheDocument()
+
+      // 点击第 7 个指标触发上限提示与 toast.error
+      await user.click(
+        screen.getByRole('checkbox', { name: '选择对比 SW-07 CPU 使用率-7' })
+      )
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '最多支持同时对比 6 条指标序列，请先取消已选指标'
+      )
+      expect(screen.getByText('多指标同图对比（6/6）')).toBeInTheDocument()
+      expect(screen.getByText('已勾选对比 6/6')).toBeInTheDocument()
+      expect(
+        screen.getByRole('checkbox', { name: '选择对比 SW-07 CPU 使用率-7' })
+      ).not.toBeChecked()
+
+      // 点击移除按钮移除第 2 条指标后，上限提示消失，可正常勾选第 8 条作为新的第 6 条
+      await user.click(
+        screen.getByRole('button', { name: '移除对比 SW-02 · CPU 使用率-2' })
+      )
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getByText('多指标同图对比（5/6）')).toBeInTheDocument()
+      expect(screen.getByText('已勾选对比 5/6')).toBeInTheDocument()
+
+      await user.click(
+        screen.getByRole('checkbox', { name: '选择对比 SW-08 CPU 使用率-8' })
+      )
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getByText('多指标同图对比（6/6）')).toBeInTheDocument()
+      expect(screen.getByText('已勾选对比 6/6')).toBeInTheDocument()
+      expect(
+        screen.getByRole('checkbox', { name: '选择对比 SW-08 CPU 使用率-8' })
+      ).toBeChecked()
+
+      // 再次触发上限后通过取消勾选第 1 条解除上限，并可勾选第 9 条
+      await user.click(
+        screen.getByRole('checkbox', { name: '选择对比 SW-07 CPU 使用率-7' })
+      )
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '最多支持同时对比 6 条指标序列，请先取消已选指标'
+      )
+
+      await user.click(
+        screen.getByRole('checkbox', { name: '选择对比 SW-01 CPU 使用率-1' })
+      )
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getByText('多指标同图对比（5/6）')).toBeInTheDocument()
+
+      await user.click(
+        screen.getByRole('checkbox', { name: '选择对比 SW-09 CPU 使用率-9' })
+      )
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getByText('多指标同图对比（6/6）')).toBeInTheDocument()
+      expect(
+        screen.getByRole('checkbox', { name: '选择对比 SW-09 CPU 使用率-9' })
+      ).toBeChecked()
+
+      expect(consoleErrorSpy).not.toHaveBeenCalled()
+    } finally {
+      toast.remove()
+      consoleErrorSpy.mockRestore()
+    }
   })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { getAdhocGraphs, getLatestData } from '../api/monitoring-hosts.api'
@@ -44,6 +44,7 @@ export function useLatestData({
   const [pageSize, setPageSize] = useState(50)
   const [timeRange, setTimeRange] = useState('1h')
   const [selectedSeries, setSelectedSeries] = useState<SelectedMetricSeries[]>([])
+  const selectedSeriesRef = useRef<SelectedMetricSeries[]>([])
   const [limitNotice, setLimitNotice] = useState('')
 
   useEffect(() => {
@@ -112,40 +113,47 @@ export function useLatestData({
       item.metric_name,
       item.interface_name
     )
-    setSelectedSeries((prev) => {
-      if (prev.some((s) => s.id === id)) {
-        setLimitNotice('')
-        return prev.filter((s) => s.id !== id)
-      }
-      if (prev.length >= MAX_COMPARISON_SERIES) {
-        const msg = `最多支持同时对比 ${MAX_COMPARISON_SERIES} 条指标序列，请先取消已选指标`
-        setLimitNotice(msg)
-        toast.error(msg)
-        return prev
-      }
+    const current = selectedSeriesRef.current
+    if (current.some((s) => s.id === id)) {
+      const next = current.filter((s) => s.id !== id)
+      selectedSeriesRef.current = next
+      setSelectedSeries(next)
       setLimitNotice('')
-      const ifacePart = item.interface_name ? ` (${item.interface_name})` : ''
-      return [
-        ...prev,
-        {
-          id,
-          device_id: item.device_id,
-          metric_name: item.metric_name,
-          interface_name: item.interface_name || undefined,
-          label: `${item.device_name} · ${item.metric_label}${ifacePart}`,
-        },
-      ]
-    })
+      return
+    }
+    if (current.length >= MAX_COMPARISON_SERIES) {
+      const msg = `最多支持同时对比 ${MAX_COMPARISON_SERIES} 条指标序列，请先取消已选指标`
+      setLimitNotice(msg)
+      toast.error(msg)
+      return
+    }
+    const ifacePart = item.interface_name ? ` (${item.interface_name})` : ''
+    const next: SelectedMetricSeries[] = [
+      ...current,
+      {
+        id,
+        device_id: item.device_id,
+        metric_name: item.metric_name,
+        interface_name: item.interface_name || undefined,
+        label: `${item.device_name} · ${item.metric_label}${ifacePart}`,
+      },
+    ]
+    selectedSeriesRef.current = next
+    setSelectedSeries(next)
+    setLimitNotice('')
   }, [])
 
   const removeSeries = useCallback((id: string) => {
+    const next = selectedSeriesRef.current.filter((s) => s.id !== id)
+    selectedSeriesRef.current = next
+    setSelectedSeries(next)
     setLimitNotice('')
-    setSelectedSeries((prev) => prev.filter((s) => s.id !== id))
   }, [])
 
   const clearSeries = useCallback(() => {
-    setLimitNotice('')
+    selectedSeriesRef.current = []
     setSelectedSeries([])
+    setLimitNotice('')
   }, [])
 
   const hasNarrowingFilter =
