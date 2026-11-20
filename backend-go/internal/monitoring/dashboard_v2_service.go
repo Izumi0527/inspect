@@ -84,6 +84,9 @@ type ActiveProblemItem struct {
 	CurrentValue   *float64   `json:"current_value,omitempty"`
 	ThresholdValue *float64   `json:"threshold_value,omitempty"`
 	LastOccurred   *time.Time `json:"last_occurred,omitempty"`
+	SuppressedBy   string     `json:"suppressed_by,omitempty"`
+	SnoozedUntil   *time.Time `json:"snoozed_until,omitempty"`
+	SnoozeReason   string     `json:"snooze_reason,omitempty"`
 }
 
 // DashboardV2Enrichment 承载 dashboard/v2 的增量扩展字段。
@@ -396,7 +399,7 @@ func (w *MetricsWriter) queryActiveProblems(ctx context.Context, deviceIDs []int
 	var rows []ActiveProblemItem
 	q := w.db.WithContext(ctx).
 		Table("alerts AS a").
-		Select("a.id AS alert_id, a.device_id, d.name AS device_name, a.title, a.severity, a.status, a.metric_name, a.current_value, a.threshold_value, a.last_occurred").
+		Select("a.id AS alert_id, a.device_id, d.name AS device_name, a.title, a.severity, a.status, a.metric_name, a.current_value, a.threshold_value, a.last_occurred, COALESCE(a.suppressed_by, '') AS suppressed_by, a.snoozed_until, COALESCE(a.snooze_reason, '') AS snooze_reason").
 		Joins("JOIN devices AS d ON d.id = a.device_id").
 		Where("a.status IN ('active', 'acknowledged')")
 	if len(deviceIDs) > 0 {

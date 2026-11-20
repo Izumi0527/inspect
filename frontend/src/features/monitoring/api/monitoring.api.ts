@@ -1,5 +1,6 @@
 import { api, ApiClientError } from '@/lib/api-client'
 import { formatBandwidthValue, parseCustomDateRange } from '../utils/monitoring'
+import { extractDashboardV2Enrichment } from './monitoring-v2-normalizer'
 import {
   SystemPerformanceDataPoint,
   TemperatureDataPoint,
@@ -353,15 +354,22 @@ export async function fetchDeviceInterfaceTraffic(
   }
 }
 
+export interface FetchMonitoringV2Options {
+  groupId?: number | null
+  compareYesterday?: boolean
+}
+
 /**
  * 获取完整的监控数据 (一次性获取所有数据)
  * @param timeRange - 时间范围
  * @param deviceIds - 设备筛选（空数组/缺省 = 全部设备）
+ * @param options - 可选分组筛选与同比昨日基线开关
  * @returns 监控数据
  */
 export async function fetchMonitoringDataV2(
   timeRange: string = '1h',
-  deviceIds: number[] = []
+  deviceIds: number[] = [],
+  options?: FetchMonitoringV2Options
 ): Promise<MonitoringDataEnvelope> {
   const MONITORING_SECTION_KEYS: MonitoringSectionKey[] = [
     'stats',
@@ -571,6 +579,7 @@ export async function fetchMonitoringDataV2(
       networkTrafficHistory: normalizeNetworkTrafficHistory(raw.networkTrafficHistory),
       statsV2: normalizeStatsV2(raw.statsV2),
       lastUpdate: toNonEmptyString(raw.lastUpdate) || nowIso,
+      ...extractDashboardV2Enrichment(raw, normalizeSystemPerformance),
     }
   }
 
@@ -620,10 +629,19 @@ export async function fetchMonitoringDataV2(
 
   // 优先使用后端聚合接口（减少扇出请求）；当后端尚未升级时自动回退到旧逻辑。
   try {
-    const raw = await api.post<unknown>('/monitoring/dashboard/v2', {
+    const body: Record<string, unknown> = {
       time_range: timeRange,
-      ...(deviceIds.length > 0 ? { device_ids: deviceIds } : {}),
-    })
+    }
+    if (deviceIds.length > 0) {
+      body.device_ids = deviceIds
+    }
+    if (options?.groupId && options.groupId > 0) {
+      body.group_id = options.groupId
+    }
+    if (options?.compareYesterday) {
+      body.compare_yesterday = true
+    }
+    const raw = await api.post<unknown>('/monitoring/dashboard/v2', body)
     return normalizeEnvelope(raw)
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 404) {

@@ -66,13 +66,18 @@ export function SystemPerformanceChartWrapper({
   )
 }
 
+import type { DashboardAnnotation } from '../../types/zabbix-monitoring.types'
+
 /**
  * 温度监控图表包装器
  */
 interface TemperatureChartWrapperProps {
   data: TemperatureDataPoint[]
   height?: number
-  temperatureThreshold?: number
+  warnThreshold?: number
+  critThreshold?: number
+  annotations?: DashboardAnnotation[]
+  canReadAlerts?: boolean
   /** 时间范围（用于图表 x 轴刻度/标签格式优化） */
   timeRange?: string
 }
@@ -80,7 +85,10 @@ interface TemperatureChartWrapperProps {
 export function TemperatureChartWrapper({
   data,
   height = 300,
-  temperatureThreshold = 75,
+  warnThreshold,
+  critThreshold,
+  annotations,
+  canReadAlerts,
   timeRange,
 }: TemperatureChartWrapperProps) {
   return (
@@ -88,7 +96,10 @@ export function TemperatureChartWrapper({
       <LazyTemperatureChart
         data={data}
         height={height}
-        temperatureThreshold={temperatureThreshold}
+        warnThreshold={warnThreshold}
+        critThreshold={critThreshold}
+        annotations={annotations}
+        canReadAlerts={canReadAlerts}
         timeRange={timeRange}
       />
     </Suspense>

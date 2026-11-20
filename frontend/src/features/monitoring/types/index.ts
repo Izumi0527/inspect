@@ -1,3 +1,15 @@
+import type {
+  ActiveProblemItem,
+  AggregateTrendPoint,
+  DashboardAnnotation,
+  GroupSummaryItem,
+  HealthDistributionBuckets,
+  NotificationChannelReadiness,
+  ThresholdSummary,
+} from './zabbix-monitoring.types'
+
+export * from './zabbix-monitoring.types'
+
 // 单台设备在一个时间桶内的 CPU/内存均值（0-100）
 export interface DevicePerformanceValue {
   cpu: number
@@ -73,6 +85,15 @@ export interface MonitoringDataV2 {
   statsV2?: StatCardData[]
   // 最后更新时间
   lastUpdate?: Date | string
+  // v2 增强扩展字段（向后兼容）
+  thresholds?: ThresholdSummary
+  healthDistribution?: HealthDistributionBuckets
+  groupSummaries?: GroupSummaryItem[]
+  aggregateTrends?: AggregateTrendPoint[]
+  yesterdayBaseline?: SystemPerformanceDataPoint[]
+  annotations?: DashboardAnnotation[]
+  notificationChannelSummary?: NotificationChannelReadiness[]
+  activeProblems?: ActiveProblemItem[]
 }
 
 // 监控分区键

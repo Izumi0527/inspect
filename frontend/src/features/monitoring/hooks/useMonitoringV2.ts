@@ -43,6 +43,17 @@ interface UseMonitoringV2Options {
   deviceIds?: number[]
 
   /**
+   * 设备分组筛选（含子分组）
+   */
+  groupId?: number | null
+
+  /**
+   * 是否对比昨日同期基线
+   * @default false
+   */
+  compareYesterday?: boolean
+
+  /**
    * 轮询间隔（毫秒）
    * @default 120000 (2分钟)
    */
@@ -63,18 +74,29 @@ export function useMonitoringV2(
   const {
     timeRange = '1h',
     deviceIds = [],
+    groupId = null,
+    compareYesterday = false,
     refetchInterval = 120000, // 默认 2 分钟 (120秒) - 比后端采集快，确保及时获取新数据
     enablePolling = true,
   } = options
 
   const deviceCacheKey = deviceIds.length > 0 ? deviceIds.join(',') : 'all'
+  const groupCacheKey = groupId && groupId > 0 ? `group:${groupId}` : 'group:all'
+  const compareCacheKey = compareYesterday ? 'yoy:1' : 'yoy:0'
 
   return useQuery<MonitoringDataEnvelope, Error>({
     // 按用户隔离缓存，避免同一浏览器内切换账号时短暂展示上一账号的监控数据。
-    queryKey: ['monitoring-v2', userCacheKey, timeRange, deviceCacheKey],
+    queryKey: ['monitoring-v2', userCacheKey, timeRange, deviceCacheKey, groupCacheKey, compareCacheKey],
 
     queryFn: async () => {
-      return await fetchMonitoringDataV2(timeRange, deviceIds)
+      const fetchOpts =
+        (groupId && groupId > 0) || compareYesterday
+          ? {
+              ...(groupId && groupId > 0 ? { groupId } : {}),
+              ...(compareYesterday ? { compareYesterday } : {}),
+            }
+          : undefined
+      return await fetchMonitoringDataV2(timeRange, deviceIds, fetchOpts)
     },
 
     // 轮询配置

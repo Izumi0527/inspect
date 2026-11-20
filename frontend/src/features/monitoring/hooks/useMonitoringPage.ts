@@ -9,6 +9,10 @@ import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocke
 import { useMonitoringV2 } from './useMonitoringV2'
 import { INTERFACE_TRAFFIC_QUERY_KEY } from './useDeviceInterfaceTraffic'
 import {
+  useMonitoringNavigation,
+  type MonitoringNavigationState,
+} from './useMonitoringNavigation'
+import {
   DEFAULT_TIME_RANGE,
   MONITORING_DATA_STALE_THRESHOLD_MS,
   MONITORING_SECTION_LABELS,
@@ -17,10 +21,8 @@ import {
   isValidMonitoringTimeRange,
 } from '../utils/monitoring'
 import type { MonitoringDataEnvelope, MonitoringDataV2 } from '../types'
+import type { MonitoringTabKey } from '../types/zabbix-monitoring.types'
 
-// 推送触发"受控刷新"的节流参数：
-// - debounce：等待推送"安静"一小段时间再刷新，尽量一次性拿到同一轮采集的完整数据
-// - max wait：防止持续推送导致永不刷新（兜底定时触发一次）
 const REFRESH_DEBOUNCE_MS = 10_000
 const REFRESH_MAX_WAIT_MS = 60_000
 
@@ -37,6 +39,13 @@ export interface UseMonitoringPageResult {
   // 权限
   canExportReport: boolean
   canReadAlerts: boolean
+  canUpdateAlerts?: boolean
+  canControlMonitoring?: boolean
+  canCreateDeviceGroup?: boolean
+  canUpdateDeviceGroup?: boolean
+  canDeleteDeviceGroup?: boolean
+  canReadInspections?: boolean
+  canReadLogs?: boolean
   // 数据
   envelope: MonitoringDataEnvelope | undefined
   data: MonitoringDataV2 | undefined
@@ -48,17 +57,67 @@ export interface UseMonitoringPageResult {
   lastUpdateLabel: string | null
   isDataStale: boolean
   dataAgeLabel: string | null
-  /** API 正常响应但无新数据点（采集可能失败/设备不可达） */
   apiOkButDataStale: boolean
   hasEffectivePartialFailure: boolean
   effectiveFailedSectionLabels: string[]
+  // Task 8 导航与投屏状态（向后兼容旧测试构建）
+  activeTab?: MonitoringTabKey
+  setActiveTab?: (tab: MonitoringTabKey) => void
+  activeGroupId?: number | null
+  setActiveGroupId?: (groupId: number | null) => void
+  selectedHostId?: number | null
+  setSelectedHostId?: (hostId: number | null) => void
+  initialHostStatusFilter?: string | null
+  setInitialHostStatusFilter?: (status: string | null) => void
+  navigateToHostsWithStatus?: (status: string | null) => void
+  compareYesterday?: boolean
+  setCompareYesterday?: (enabled: boolean) => void
+  isKioskMode?: boolean
+  setIsKioskMode?: (enabled: boolean) => void
+  kioskCountdownSec?: number
+  resetKioskCountdown?: () => void
 }
 
-export function useMonitoringPage(): UseMonitoringPageResult {
+export type UseMonitoringPageFullResult = Omit<
+  UseMonitoringPageResult,
+  | keyof MonitoringNavigationState
+  | 'canUpdateAlerts'
+  | 'canControlMonitoring'
+  | 'canCreateDeviceGroup'
+  | 'canUpdateDeviceGroup'
+  | 'canDeleteDeviceGroup'
+  | 'canReadInspections'
+  | 'canReadLogs'
+> &
+  MonitoringNavigationState & {
+    canUpdateAlerts: boolean
+    canControlMonitoring: boolean
+    canCreateDeviceGroup: boolean
+    canUpdateDeviceGroup: boolean
+    canDeleteDeviceGroup: boolean
+    canReadInspections: boolean
+    canReadLogs: boolean
+  }
+
+export function useMonitoringPage(): UseMonitoringPageFullResult {
   const canExportReport = usePermission(Permission.MONITORING_EXPORT)
+  const canControlMonitoring = usePermission(Permission.MONITORING_CONTROL)
   const canReadAlerts = usePermission(Permission.ALERTS_READ)
+  const canUpdateAlerts = usePermission(Permission.ALERTS_UPDATE)
+  const canCreateDeviceGroup = usePermission(Permission.DEVICES_CREATE)
+  const canUpdateDeviceGroup = usePermission(Permission.DEVICES_UPDATE)
+  const canDeleteDeviceGroup = usePermission(Permission.DEVICES_DELETE)
+  const canReadInspections = usePermission(Permission.INSPECTIONS_READ)
+  const canReadLogs = usePermission(Permission.SYSTEM_LOGS)
   const ws = useWebSocket()
   const queryClient = useQueryClient()
+
+  const refetchRef = useRef<null | (() => unknown)>(null)
+  const nav = useMonitoringNavigation(
+    useCallback(() => {
+      void refetchRef.current?.()
+    }, [])
+  )
 
   // ── 时间范围（持久化到 localStorage）──────────────────────────────────────
   const [timeRange, setTimeRange] = useState<string>(() => {
@@ -97,7 +156,6 @@ export function useMonitoringPage(): UseMonitoringPageResult {
   }, [deviceIds])
 
   // ── 页面可见性 ─────────────────────────────────────────────────────────────
-  // 页面不可见时暂停轮询：降低无意义的后台刷新；返回页面时 React Query 会因 focus 自动 refetch。
   const [pageVisible, setPageVisible] = useState(() => {
     if (typeof document === 'undefined') return true
     return document.visibilityState !== 'hidden'
@@ -105,11 +163,9 @@ export function useMonitoringPage(): UseMonitoringPageResult {
 
   useEffect(() => {
     if (typeof document === 'undefined') return
-
     const handleVisibilityChange = () => {
       setPageVisible(document.visibilityState !== 'hidden')
     }
-
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -122,29 +178,19 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     ws.getHealthStatus()
   )
 
-  // WS 健康度（stale）检测：用于识别"显示已连接但实际上已半开/无响应"的场景。
-  // 通过 wsManager 的心跳 ack（后端会回 heartbeat:ok）判断最近活跃时间。
   useEffect(() => {
     if (!pageVisible) return
-
     const timer = setInterval(() => {
-      const now = Date.now()
-      setNowMs(now)
+      setNowMs(Date.now())
       const next = ws.getHealthStatus()
       setWsHealth((prev) => (prev === next ? prev : next))
     }, 10_000)
-
-    return () => {
-      clearInterval(timer)
-    }
+    return () => clearInterval(timer)
   }, [pageVisible, ws])
 
-  // ── 引用 ──────────────────────────────────────────────────────────────────
-  const refetchRef = useRef<null | (() => unknown)>(null)
   const lastWsConnectRefetchAtRef = useRef<number>(0)
   const lastStaleAutoRefetchAtRef = useRef<number>(0)
 
-  // ── React Query ────────────────────────────────────────────────────────────
   const {
     data: envelope,
     isLoading,
@@ -154,35 +200,29 @@ export function useMonitoringPage(): UseMonitoringPageResult {
   } = useMonitoringV2({
     timeRange,
     deviceIds,
-    // 轮询兜底策略：
-    // - 页面不可见：关闭轮询（避免后台无意义刷新）
-    // - WS 在线：低频轮询（防止"无推送/订阅异常"导致页面长期不更新）
-    // - WS 离线：恢复较高频轮询兜底
+    groupId: nav.activeGroupId,
+    compareYesterday: nav.compareYesterday,
     enablePolling: pageVisible,
-    refetchInterval: wsHealth === 'connected' ? 300000 : wsHealth === 'stale' ? 60000 : 120000,
+    refetchInterval:
+      wsHealth === 'connected' ? 300000 : wsHealth === 'stale' ? 60000 : 120000,
   })
 
-  // 页面级刷新 = v2 聚合数据 + 流量卡的接口流量查询（后者是独立查询，不在 v2 包络内）
   const refetch = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: [INTERFACE_TRAFFIC_QUERY_KEY] })
+    nav.resetKioskCountdown()
     return refetchV2()
-  }, [queryClient, refetchV2])
+  }, [queryClient, refetchV2, nav])
   refetchRef.current = refetch
 
-  // ── WS 订阅回调 ────────────────────────────────────────────────────────────
   const subscribeDeviceMonitoring = useCallback(() => {
     ws.subscribeToDeviceMonitoring(deviceIds.length > 0 ? deviceIds : undefined)
   }, [deviceIds, ws])
 
-  // ── WS connect/disconnect 处理 ─────────────────────────────────────────────
   const handleWsConnect = useCallback(() => {
     setNowMs(Date.now())
     setWsHealth('connected')
-    // 页面不可见时不订阅房间，避免后台接收推送与触发刷新；返回页面时会在可见性 effect 中重新订阅。
     if (!pageVisible) return
     subscribeDeviceMonitoring()
-
-    // WS 连接建立后主动触发一次首轮刷新，避免"连接成功但短期无推送"导致页面长期不更新。
     const now = Date.now()
     if (now - lastWsConnectRefetchAtRef.current >= 15_000) {
       lastWsConnectRefetchAtRef.current = now
@@ -195,40 +235,27 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     setWsHealth('disconnected')
   }, [])
 
-  // WebSocket 连接/断开状态监听（用于轮询兜底开关 + 重连后重新订阅）
   useWebSocketEvent(WebSocketEvents.CONNECT, handleWsConnect)
   useWebSocketEvent(WebSocketEvents.DISCONNECT, handleWsDisconnect)
 
-  // ── stale 状态自动刷新（限流）─────────────────────────────────────────────
-  // 当 WS 连接处于 stale（无心跳 ack）时，主动触发一次刷新，尽快恢复数据更新体验。
   useEffect(() => {
-    if (!pageVisible) return
-    if (wsHealth !== 'stale') return
-
+    if (!pageVisible || wsHealth !== 'stale') return
     const now = Date.now()
     if (now - lastStaleAutoRefetchAtRef.current < 30_000) return
     lastStaleAutoRefetchAtRef.current = now
     void refetch()
   }, [pageVisible, refetch, wsHealth])
 
-  // ── 页面可见性驱动订阅 ─────────────────────────────────────────────────────
-  // 页面级订阅：进入监控中心才订阅 device_metrics，离开页面即退订，降低无关推送开销。
   useEffect(() => {
     if (!pageVisible) {
       ws.unsubscribeFromDeviceMonitoring()
       return
     }
-
     subscribeDeviceMonitoring()
-
-    return () => {
-      ws.unsubscribeFromDeviceMonitoring()
-    }
+    return () => ws.unsubscribeFromDeviceMonitoring()
   }, [pageVisible, subscribeDeviceMonitoring, ws])
 
   // ── 受控刷新（debounce + max wait）────────────────────────────────────────
-  // 推送触发"受控刷新"：合并同一轮采集产生的爆发推送，避免 refetch 风暴。
-  // 经验值：将刷新频率控制在"约 1 次/分钟"量级，既接近实时又避免对后端造成额外压力。
   const firstRealtimeEventAtRef = useRef<number | null>(null)
   const scheduledRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -237,13 +264,11 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     if (firstRealtimeEventAtRef.current === null) {
       firstRealtimeEventAtRef.current = now
     }
-
     const run = () => {
       firstRealtimeEventAtRef.current = null
       scheduledRefetchTimerRef.current = null
       void refetch()
     }
-
     if (now - firstRealtimeEventAtRef.current >= REFRESH_MAX_WAIT_MS) {
       if (scheduledRefetchTimerRef.current) {
         clearTimeout(scheduledRefetchTimerRef.current)
@@ -252,44 +277,39 @@ export function useMonitoringPage(): UseMonitoringPageResult {
       run()
       return
     }
-
     if (scheduledRefetchTimerRef.current) {
       clearTimeout(scheduledRefetchTimerRef.current)
       scheduledRefetchTimerRef.current = null
     }
-
     scheduledRefetchTimerRef.current = setTimeout(run, REFRESH_DEBOUNCE_MS)
   }, [refetch])
 
-  // cleanup：组件卸载时清理 pending 定时器
   useEffect(() => {
     return () => {
-      if (!scheduledRefetchTimerRef.current) return
-      clearTimeout(scheduledRefetchTimerRef.current)
-      scheduledRefetchTimerRef.current = null
+      if (scheduledRefetchTimerRef.current) {
+        clearTimeout(scheduledRefetchTimerRef.current)
+        scheduledRefetchTimerRef.current = null
+      }
     }
   }, [])
 
-  // 页面不可见时清理"受控刷新"定时器，避免后台触发 refetch。
   useEffect(() => {
     if (pageVisible) return
-
     firstRealtimeEventAtRef.current = null
-    if (!scheduledRefetchTimerRef.current) return
-    clearTimeout(scheduledRefetchTimerRef.current)
-    scheduledRefetchTimerRef.current = null
+    if (scheduledRefetchTimerRef.current) {
+      clearTimeout(scheduledRefetchTimerRef.current)
+      scheduledRefetchTimerRef.current = null
+    }
   }, [pageVisible])
 
-  // 切换时间范围/设备筛选时清理 pending 定时器，避免旧 queryKey 的 refetch 泄漏。
   useEffect(() => {
     firstRealtimeEventAtRef.current = null
-    if (!scheduledRefetchTimerRef.current) return
-    clearTimeout(scheduledRefetchTimerRef.current)
-    scheduledRefetchTimerRef.current = null
+    if (scheduledRefetchTimerRef.current) {
+      clearTimeout(scheduledRefetchTimerRef.current)
+      scheduledRefetchTimerRef.current = null
+    }
   }, [timeRange, deviceIds])
 
-  // ── WS 事件处理 ────────────────────────────────────────────────────────────
-  // 注意：后端 device_metrics 推送会映射为多个事件，这里只监听一个，避免重复刷新。
   const handleRealtimeRefresh = useCallback(
     (_payload: unknown) => {
       if (!pageVisible) return
@@ -300,28 +320,22 @@ export function useMonitoringPage(): UseMonitoringPageResult {
 
   useWebSocketEvent(WebSocketEvents.NETWORK_STATS_UPDATE, handleRealtimeRefresh)
 
-  // ── 计算值 ─────────────────────────────────────────────────────────────────
-  const timeRangeLabel = useMemo(() => formatMonitoringTimeRangeTriggerLabel(timeRange), [timeRange])
+  const timeRangeLabel = useMemo(
+    () => formatMonitoringTimeRangeTriggerLabel(timeRange),
+    [timeRange]
+  )
 
   const lastUpdateAt = useMemo(() => {
     const raw = envelope?.lastUpdate
     if (!raw) return null
-
     const date = raw instanceof Date ? raw : new Date(String(raw))
-    if (Number.isNaN(date.getTime())) {
-      return null
-    }
-    return date
+    return Number.isNaN(date.getTime()) ? null : date
   }, [envelope?.lastUpdate])
 
   const lastUpdateLabel = useMemo(() => {
     const raw = envelope?.lastUpdate
     if (!raw) return null
-
-    if (lastUpdateAt) {
-      return formatDateTimeYMDHMS(lastUpdateAt)
-    }
-
+    if (lastUpdateAt) return formatDateTimeYMDHMS(lastUpdateAt)
     const fallback = String(raw).trim()
     return fallback !== '' ? fallback : null
   }, [envelope?.lastUpdate, lastUpdateAt])
@@ -331,44 +345,39 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     return Math.max(0, nowMs - lastUpdateAt.getTime())
   }, [lastUpdateAt, nowMs])
 
-  const dataAgeLabel = useMemo(() => {
-    if (dataAgeMs === null) return null
-    return formatDurationFromMs(dataAgeMs)
-  }, [dataAgeMs])
+  const dataAgeLabel = useMemo(
+    () => (dataAgeMs === null ? null : formatDurationFromMs(dataAgeMs)),
+    [dataAgeMs]
+  )
 
-  // 所有档位共用同一阈值：后端对每个档位都按 5 分钟分桶，粒度不再随时长变化
-  const isDataStale = dataAgeMs !== null && dataAgeMs > MONITORING_DATA_STALE_THRESHOLD_MS
+  const isDataStale =
+    dataAgeMs !== null && dataAgeMs > MONITORING_DATA_STALE_THRESHOLD_MS
 
-  // 区分"API 正常响应但数据源无新数据"与"API 不可达"
   const apiOkButDataStale = useMemo(() => {
     if (!isDataStale || !envelope?.generatedAt) return false
-    const generatedDate = envelope.generatedAt instanceof Date
-      ? envelope.generatedAt
-      : new Date(String(envelope.generatedAt))
+    const generatedDate =
+      envelope.generatedAt instanceof Date
+        ? envelope.generatedAt
+        : new Date(String(envelope.generatedAt))
     if (Number.isNaN(generatedDate.getTime())) return false
-    // generatedAt 在 5 分钟内说明 API 仍在正常响应
     return nowMs - generatedDate.getTime() < 5 * 60 * 1000
   }, [isDataStale, envelope?.generatedAt, nowMs])
 
-  const { effectiveFailedSectionLabels, hasEffectivePartialFailure } =
-    useMemo(() => {
-      const allFailed = envelope?.failedSections ?? []
-      // 恰好勾选 1 台设备时流量卡走独立的接口流量查询，v2 的 networkTraffic 分区不再被渲染，
-      // 其失败不应计入页面降级提示（接口流量自身的失败在卡片内展示）
-      const singleDeviceView = deviceIds.length === 1
-      const sections = allFailed.filter((section) => {
-        if (section === 'networkTraffic' && singleDeviceView) return false
-        return true
-      })
-      return {
-        effectiveFailedSections: sections,
-        effectiveFailedSectionLabels: sections.map((key) => MONITORING_SECTION_LABELS[key] ?? key),
-        hasEffectivePartialFailure: sections.length > 0,
-      }
-    }, [deviceIds.length, envelope?.failedSections])
+  const { effectiveFailedSectionLabels, hasEffectivePartialFailure } = useMemo(() => {
+    const allFailed = envelope?.failedSections ?? []
+    const singleDeviceView = deviceIds.length === 1
+    const sections = allFailed.filter(
+      (section) => !(section === 'networkTraffic' && singleDeviceView)
+    )
+    return {
+      effectiveFailedSectionLabels: sections.map(
+        (key) => MONITORING_SECTION_LABELS[key] ?? key
+      ),
+      hasEffectivePartialFailure: sections.length > 0,
+    }
+  }, [deviceIds.length, envelope?.failedSections])
 
   return {
-    // 状态
     timeRange,
     setTimeRange,
     timeRangeLabel,
@@ -376,22 +385,27 @@ export function useMonitoringPage(): UseMonitoringPageResult {
     setDeviceIds,
     wsHealth,
     pageVisible,
-    // 权限
     canExportReport,
     canReadAlerts,
-    // 数据
+    canUpdateAlerts,
+    canControlMonitoring,
+    canCreateDeviceGroup,
+    canUpdateDeviceGroup,
+    canDeleteDeviceGroup,
+    canReadInspections,
+    canReadLogs,
     envelope,
     data: envelope?.data,
     isLoading,
     error: error ?? null,
     refetch,
     isRefetching,
-    // 计算值
     lastUpdateLabel,
     isDataStale,
     dataAgeLabel,
     apiOkButDataStale,
     hasEffectivePartialFailure,
     effectiveFailedSectionLabels,
+    ...nav,
   }
 }
