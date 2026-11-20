@@ -2,6 +2,7 @@ package snmpmib
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -122,11 +123,11 @@ type InterfacesSection struct {
 
 	// 以下为接口健康类 OID。它们都是可选的：registry 里为空时采集端跳过，
 	// 对应检查项判 skip 而非 fail——老设备或精简 agent 不上报属预期。
-	IfAdminStatus  OIDDefinition `json:"if_admin_status"`
-	IfInErrors     OIDDefinition `json:"if_in_errors"`
-	IfOutErrors    OIDDefinition `json:"if_out_errors"`
-	IfInDiscards   OIDDefinition `json:"if_in_discards"`
-	IfOutDiscards  OIDDefinition `json:"if_out_discards"`
+	IfAdminStatus   OIDDefinition `json:"if_admin_status"`
+	IfInErrors      OIDDefinition `json:"if_in_errors"`
+	IfOutErrors     OIDDefinition `json:"if_out_errors"`
+	IfInDiscards    OIDDefinition `json:"if_in_discards"`
+	IfOutDiscards   OIDDefinition `json:"if_out_discards"`
 	IfInUcastPkts   OIDDefinition `json:"if_in_ucast_pkts"`
 	IfOutUcastPkts  OIDDefinition `json:"if_out_ucast_pkts"`
 	IfInNUcastPkts  OIDDefinition `json:"if_in_nucast_pkts"`
@@ -283,6 +284,108 @@ func (r Registry) ResolveVendor(vendor string) string {
 	}
 
 	return normalized
+}
+
+// ResolveVendorByContext 结合台账 vendor、SNMP sysObjectID 与 sysDescr 综合推断规范厂商键。
+// 先查显式 vendor / aliases；仅当台账未命中已知厂商时，先按 enterprise_prefixes 前缀边界匹配；
+// 若既无显式第三方厂商、也无未知第三方企业号，再按 sysDescr 强特征兜底。
+func (r Registry) ResolveVendorByContext(vendor, sysObjectID, sysDescr string) string {
+	resolved := r.ResolveVendor(vendor)
+	if resolved != "" {
+		if _, ok := r.Vendors[resolved]; ok {
+			return resolved
+		}
+	}
+
+	if matched := r.matchVendorByEnterprisePrefix(sysObjectID); matched != "" {
+		return matched
+	}
+
+	// 若台账已显式指明未注册的第三方厂商（如 cisco/ruijie/linux），
+	// 或 sysObjectID 属于明确的非注册企业号（如 .9/.8072），尊重原归属不以 sysDescr 强行覆盖。
+	if !isGenericVendorPlaceholder(resolved) || hasThirdPartyEnterpriseOID(sysObjectID) {
+		return resolved
+	}
+
+	if matched := matchVendorBySysDescr(sysDescr); matched != "" {
+		return matched
+	}
+
+	return resolved
+}
+
+func isGenericVendorPlaceholder(resolved string) bool {
+	switch resolved {
+	case "", "other", "unknown", "auto", "default":
+		return true
+	default:
+		return false
+	}
+}
+
+func hasThirdPartyEnterpriseOID(sysObjectID string) bool {
+	normalized := NormalizeOID(sysObjectID)
+	return strings.HasPrefix(normalized, "1.3.6.1.4.1.")
+}
+
+func (r Registry) matchVendorByEnterprisePrefix(sysObjectID string) string {
+	normalizedOID := NormalizeOID(sysObjectID)
+	if normalizedOID == "" || len(r.Vendors) == 0 {
+		return ""
+	}
+
+	vendorKeys := make([]string, 0, len(r.Vendors))
+	for key := range r.Vendors {
+		vendorKeys = append(vendorKeys, key)
+	}
+	sort.Strings(vendorKeys)
+
+	bestVendor := ""
+	bestPrefixLen := -1
+	for _, key := range vendorKeys {
+		prefixLen := longestMatchingPrefixLen(normalizedOID, r.Vendors[key].EnterprisePrefixes)
+		if prefixLen > bestPrefixLen {
+			bestPrefixLen = prefixLen
+			bestVendor = key
+		}
+	}
+	return bestVendor
+}
+
+func longestMatchingPrefixLen(normalizedOID string, prefixes []string) int {
+	bestLen := -1
+	for _, rawPrefix := range prefixes {
+		prefix := NormalizeOID(rawPrefix)
+		if prefix == "" {
+			continue
+		}
+		// 检查精确相等或 "." 边界，防止 1.3.6.1.4.1.2011 误匹配 1.3.6.1.4.1.20110
+		if (normalizedOID == prefix || strings.HasPrefix(normalizedOID, prefix+".")) && len(prefix) > bestLen {
+			bestLen = len(prefix)
+		}
+	}
+	return bestLen
+}
+
+func matchVendorBySysDescr(sysDescr string) string {
+	lower := strings.ToLower(strings.TrimSpace(sysDescr))
+	if lower == "" {
+		return ""
+	}
+	if strings.Contains(lower, "huawei versatile routing platform") ||
+		strings.Contains(lower, "vrp (r) software") ||
+		strings.Contains(lower, "cloudengine") ||
+		strings.Contains(lower, "quidway") ||
+		strings.HasPrefix(lower, "huawei ") {
+		return "huawei"
+	}
+	if strings.Contains(lower, "h3c comware") ||
+		strings.Contains(lower, "comware platform") ||
+		strings.Contains(lower, "new h3c") ||
+		strings.HasPrefix(lower, "h3c ") {
+		return "h3c"
+	}
+	return ""
 }
 
 func (r Registry) CatalogEntries(vendor string, category string) []CatalogOID {

@@ -6,7 +6,13 @@
       "display_name": "Huawei",
       "aliases": [
         "huawei",
-        "huawei_vrp"
+        "huawei_vrp",
+        "huawei_v600",
+        "huawei_vrp8",
+        "cloudengine",
+        "quidway",
+        "huawei_technologies",
+        "华为"
       ],
       "enterprise_prefixes": [
         "1.3.6.1.4.1.2011"
@@ -282,6 +288,18 @@
   "metrics": {
     "cpu_usage": [
       {
+        "id": "huawei_entity_cpu",
+        "vendors": [
+          "huawei"
+        ],
+        "method": "bulkwalk",
+        "oids": [
+          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
+        ],
+        "strategy": "walk_percent_auto",
+        "aggregate": "avg_non_zero"
+      },
+      {
         "id": "huawei_cpu_dev",
         "vendors": [
           "huawei"
@@ -294,15 +312,27 @@
         "aggregate": "avg_non_zero"
       },
       {
-        "id": "huawei_entity_cpu",
+        "id": "huawei_cpu_dev_1min",
         "vendors": [
           "huawei"
         ],
         "method": "bulkwalk",
         "oids": [
-          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
+          "1.3.6.1.4.1.2011.6.3.4.1.3"
         ],
-        "strategy": "walk_percent_auto",
+        "strategy": "walk_percent",
+        "aggregate": "avg_non_zero"
+      },
+      {
+        "id": "huawei_cpu_dev_5min",
+        "vendors": [
+          "huawei"
+        ],
+        "method": "bulkwalk",
+        "oids": [
+          "1.3.6.1.4.1.2011.6.3.4.1.4"
+        ],
+        "strategy": "walk_percent",
         "aggregate": "avg_non_zero"
       },
       {
@@ -345,6 +375,32 @@
     ],
     "memory_usage": [
       {
+        "id": "huawei_entity_memory_mega",
+        "vendors": [
+          "huawei"
+        ],
+        "method": "bulkwalk",
+        "oids": [
+          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7",
+          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19"
+        ],
+        "strategy": "walk_percent_with_optional_size_mb",
+        "aggregate": "avg_non_zero_total_sum"
+      },
+      {
+        "id": "huawei_entity_memory_bytes",
+        "vendors": [
+          "huawei"
+        ],
+        "method": "bulkwalk",
+        "oids": [
+          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7",
+          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.9"
+        ],
+        "strategy": "walk_percent_with_optional_size_bytes",
+        "aggregate": "avg_non_zero_total_sum"
+      },
+      {
         "id": "huawei_mem_dev",
         "vendors": [
           "huawei"
@@ -357,17 +413,16 @@
         "strategy": "walk_mem_size_free_bytes"
       },
       {
-        "id": "huawei_entity_memory",
+        "id": "huawei_entity_memory_usage_only",
         "vendors": [
           "huawei"
         ],
         "method": "bulkwalk",
         "oids": [
-          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7",
-          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.10"
+          "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
         ],
-        "strategy": "walk_percent_with_size_kb",
-        "aggregate": "avg_non_zero_total_sum"
+        "strategy": "walk_percent_auto",
+        "aggregate": "avg_non_zero"
       },
       {
         "id": "h3c_entity_memory",
@@ -468,6 +523,15 @@
           "method": "bulkwalk",
           "value_type": "integer",
           "description": "实体当前电压"
+        },
+        {
+          "id": "hw_entity_temperature_threshold",
+          "name": "hwEntityTemperatureThreshold",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.12",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "unit": "C",
+          "description": "实体温度告警阈值"
         }
       ],
       "interface_monitor": [
@@ -540,6 +604,15 @@
       ],
       "optical": [
         {
+          "id": "hw_entity_optical_temperature",
+          "name": "hwEntityOpticalTemperature",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.3.1.5",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "unit": "C",
+          "description": "光模块工作温度"
+        },
+        {
           "id": "hw_entity_optical_voltage",
           "name": "hwEntityOpticalVoltage",
           "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.3.1.6",
@@ -574,6 +647,24 @@
           "value_type": "integer",
           "unit": "uW",
           "description": "光模块发送光功率"
+        }
+      ],
+      "stack": [
+        {
+          "id": "hw_stack_run",
+          "name": "hwStackRun",
+          "oid": "1.3.6.1.4.1.2011.5.25.183.1.1.0",
+          "method": "get",
+          "value_type": "integer",
+          "description": "堆叠运行使能状态"
+        },
+        {
+          "id": "hw_stack_port_status",
+          "name": "hwStackPortStatus",
+          "oid": "1.3.6.1.4.1.2011.5.25.183.1.21.1.5",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "物理堆叠端口运行状态"
         }
       ]
     },

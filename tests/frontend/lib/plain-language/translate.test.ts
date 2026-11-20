@@ -201,9 +201,25 @@ describe('translateToPlainLanguage 兜底与占位', () => {
 
 describe('humanizeInterfaceName', () => {
   it.each([
+    ['400GE1/0/1', '400GE1/0/1（400G 以太口）'],
+    ['200GE1/0/1', '200GE1/0/1（200G 以太口）'],
+    ['100GE1/0/1', '100GE1/0/1（100G 以太口）'],
+    ['50GE1/0/1', '50GE1/0/1（50G 以太口）'],
+    ['40GE1/0/1', '40GE1/0/1（40G 以太口）'],
+    ['25GE1/0/1', '25GE1/0/1（25G 以太口）'],
+    ['MultiGE0/0/1', 'MultiGE0/0/1（多速率以太口）'],
+    ['5GE0/0/1', '5GE0/0/1（5G 以太口）'],
+    ['2.5GE0/0/1', '2.5GE0/0/1（2.5G 以太口）'],
     ['GigabitEthernet0/0/1', 'GigabitEthernet0/0/1（千兆以太口）'],
     ['TenGigabitEthernet1/0/2', 'TenGigabitEthernet1/0/2（万兆以太口）'],
+    ['M-GigabitEthernet0/0/0', 'M-GigabitEthernet0/0/0（带外管理口）'],
+    ['MEth0/0/1', 'MEth0/0/1（带外管理口）'],
     ['Eth-Trunk1', 'Eth-Trunk1（链路聚合口）'],
+    ['Stack-Port0/1', 'Stack-Port0/1（堆叠物理口）'],
+    ['Css-Port1/1', 'Css-Port1/1（集群物理口）'],
+    ['Bridge-if1', 'Bridge-if1（桥接虚接口）'],
+    ['Vbdif100', 'Vbdif100（VBDIF 三层虚接口）'],
+    ['Nve1', 'Nve1（NVE 隧道接口）'],
     ['Vlanif10', 'Vlanif10（VLAN 虚接口）'],
     ['Loopback0', 'Loopback0（环回口）'],
   ])('%s 应注解为 %s', (raw, expected) => {

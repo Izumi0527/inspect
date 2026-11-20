@@ -141,3 +141,161 @@ func TestRegistryValidate_ShouldRejectCatalogVendorOutsideVendorList(t *testing.
 		t.Fatal("Validate() error = nil, want non-nil when catalog references unknown vendor")
 	}
 }
+
+func TestRegistry_ResolveVendorByContext_HuaweiAliasesAndSysObjectID(t *testing.T) {
+	registry, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry error: %v", err)
+	}
+
+	cases := []struct {
+		name        string
+		vendor      string
+		sysObjectID string
+		sysDescr    string
+		want        string
+	}{
+		{
+			name:   "chinese_alias",
+			vendor: "华为",
+			want:   "huawei",
+		},
+		{
+			name:   "huawei_technologies_alias",
+			vendor: "Huawei Technologies",
+			want:   "huawei",
+		},
+		{
+			name:   "huawei_v600_alias",
+			vendor: "huawei_v600",
+			want:   "huawei",
+		},
+		{
+			name:        "other_vendor_with_huawei_sysobjectid",
+			vendor:      "other",
+			sysObjectID: ".1.3.6.1.4.1.2011.2.23.982",
+			want:        "huawei",
+		},
+		{
+			name:        "empty_vendor_with_cloudengine_sysdescr",
+			vendor:      "",
+			sysObjectID: "",
+			sysDescr:    "Huawei Versatile Routing Platform Software (CloudEngine S5736-S24S4XC V600R022C00)",
+			want:        "huawei",
+		},
+		{
+			name:        "enterprise_prefix_boundary_should_not_match_20110",
+			vendor:      "other",
+			sysObjectID: ".1.3.6.1.4.1.20110.1.1",
+			want:        "other",
+		},
+		{
+			name:        "h3c_sysobjectid_fallback",
+			vendor:      "",
+			sysObjectID: ".1.3.6.1.4.1.25506.1.1",
+			want:        "h3c",
+		},
+		{
+			name:     "h3c_sysdescr_fallback",
+			vendor:   "unknown",
+			sysDescr: "H3C Comware Platform Software",
+			want:     "h3c",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := registry.ResolveVendorByContext(tc.vendor, tc.sysObjectID, tc.sysDescr)
+			if got != tc.want {
+				t.Fatalf("ResolveVendorByContext(%q, %q, %q) = %q, want %q", tc.vendor, tc.sysObjectID, tc.sysDescr, got, tc.want)
+			}
+		})
+	}
+
+	cpuCandidates := registry.MetricCandidates("cpu_usage", "huawei")
+	if len(cpuCandidates) < 4 {
+		t.Fatalf("len(cpuCandidates) = %d, want >= 4", len(cpuCandidates))
+	}
+	if cpuCandidates[0].ID != "huawei_entity_cpu" {
+		t.Fatalf("first cpu candidate = %q, want huawei_entity_cpu", cpuCandidates[0].ID)
+	}
+	if len(cpuCandidates[0].OIDs) != 1 || cpuCandidates[0].OIDs[0] != "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5" {
+		t.Fatalf("first cpu candidate oids = %v, want [1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5]", cpuCandidates[0].OIDs)
+	}
+
+	memCandidates := registry.MetricCandidates("memory_usage", "huawei")
+	if len(memCandidates) < 4 {
+		t.Fatalf("len(memCandidates) = %d, want >= 4", len(memCandidates))
+	}
+	if memCandidates[0].ID != "huawei_entity_memory_mega" {
+		t.Fatalf("first memory candidate = %q, want huawei_entity_memory_mega", memCandidates[0].ID)
+	}
+	if len(memCandidates[0].OIDs) != 2 ||
+		memCandidates[0].OIDs[0] != "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7" ||
+		memCandidates[0].OIDs[1] != "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19" {
+		t.Fatalf("first memory candidate oids = %v", memCandidates[0].OIDs)
+	}
+	if memCandidates[1].ID != "huawei_entity_memory_bytes" {
+		t.Fatalf("second memory candidate = %q, want huawei_entity_memory_bytes", memCandidates[1].ID)
+	}
+	if len(memCandidates[1].OIDs) != 2 ||
+		memCandidates[1].OIDs[0] != "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7" ||
+		memCandidates[1].OIDs[1] != "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.9" {
+		t.Fatalf("second memory candidate oids = %v", memCandidates[1].OIDs)
+	}
+	for _, candidate := range memCandidates {
+		if candidate.ID == "huawei_mem_dev" || candidate.ID == "huawei_entity_memory_mega" || candidate.ID == "huawei_entity_memory_bytes" || candidate.ID == "huawei_entity_memory_usage_only" {
+			for _, oid := range candidate.OIDs {
+				if oid == "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.10" {
+					t.Fatalf("memory candidate %q still references wrong hwEntityUpTime OID .10", candidate.ID)
+				}
+			}
+		}
+	}
+}
+
+func TestRegistry_ResolveVendorByContext_ThirdPartyAndSysDescrBoundaries(t *testing.T) {
+	registry, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry error: %v", err)
+	}
+
+	cases := []struct {
+		name        string
+		vendor      string
+		sysObjectID string
+		sysDescr    string
+		want        string
+	}{
+		{
+			name:        "explicit_third_party_vendor_not_overridden_by_sysdescr",
+			vendor:      "cisco",
+			sysObjectID: "",
+			sysDescr:    "Linux huawei-cloud-host",
+			want:        "cisco",
+		},
+		{
+			name:        "third_party_enterprise_oid_not_overridden_by_sysdescr",
+			vendor:      "other",
+			sysObjectID: ".1.3.6.1.4.1.8072.3.2.10",
+			sysDescr:    "Linux huawei-server",
+			want:        "other",
+		},
+		{
+			name:        "generic_linux_hostname_with_huawei_not_misclassified",
+			vendor:      "",
+			sysObjectID: "",
+			sysDescr:    "Linux huawei-node",
+			want:        "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := registry.ResolveVendorByContext(tc.vendor, tc.sysObjectID, tc.sysDescr)
+			if got != tc.want {
+				t.Fatalf("ResolveVendorByContext(%q, %q, %q) = %q, want %q", tc.vendor, tc.sysObjectID, tc.sysDescr, got, tc.want)
+			}
+		})
+	}
+}

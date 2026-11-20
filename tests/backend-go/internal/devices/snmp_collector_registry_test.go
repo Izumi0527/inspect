@@ -1,6 +1,9 @@
 package devices_test
 
 import (
+	"context"
+	"errors"
+	"math"
 	"testing"
 	_ "unsafe"
 
@@ -34,6 +37,9 @@ func collectBGPPeersFromCatalog(client collectorSNMPClient, entries []snmpmib.Ca
 
 //go:linkname collectOpticalTransceiversFromCatalog github.com/your-org/inspect-system/backend-go/internal/devices.collectOpticalTransceiversFromCatalog
 func collectOpticalTransceiversFromCatalog(client collectorSNMPClient, entries []snmpmib.CatalogOID) []devices.OpticalTransceiverMetrics
+
+//go:linkname shouldFallbackToWalkAll github.com/your-org/inspect-system/backend-go/internal/devices.shouldFallbackToWalkAll
+func shouldFallbackToWalkAll(err error) bool
 
 type fakeCollectorSNMPClient struct {
 	getPackets      map[string]*gosnmp.SnmpPacket
@@ -520,5 +526,461 @@ func TestCollectOpticalTransceiversFromCatalog_ShouldMapHuaweiOpticalCurrentToBi
 	}
 	if items[0].VoltageUnit != "mV" {
 		t.Fatalf("optical voltage_unit=%q, want \"mV\"", items[0].VoltageUnit)
+	}
+}
+
+func TestCollectCPUFromCandidates_AllZeroFirstCandidateFallsBackToSecond(t *testing.T) {
+	firstOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
+	secondOID := "1.3.6.1.4.1.2011.6.3.4.1.2"
+
+	client := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			firstOID: {
+				{Name: firstOID + ".1", Type: gosnmp.Integer, Value: 0},
+				{Name: firstOID + ".2", Type: gosnmp.Integer, Value: 0},
+				{Name: firstOID + ".3", Type: gosnmp.Integer, Value: 0},
+			},
+			secondOID: {
+				{Name: secondOID + ".1", Type: gosnmp.Integer, Value: 0},
+				{Name: secondOID + ".2", Type: gosnmp.Integer, Value: 255},
+				{Name: secondOID + ".3", Type: gosnmp.Integer, Value: -1},
+				{Name: secondOID + ".4", Type: gosnmp.Integer, Value: 18},
+			},
+		},
+	}
+
+	candidates := []snmpmib.MetricCandidate{
+		{
+			ID:        "huawei_entity_cpu",
+			Method:    "bulkwalk",
+			OIDs:      []string{firstOID},
+			Strategy:  "walk_percent_auto",
+			Aggregate: "avg_non_zero",
+		},
+		{
+			ID:        "huawei_cpu_dev",
+			Method:    "bulkwalk",
+			OIDs:      []string{secondOID},
+			Strategy:  "walk_percent",
+			Aggregate: "avg_non_zero",
+		},
+	}
+
+	value := collectCPUFromCandidates(client, candidates, nil)
+	if value == nil {
+		t.Fatal("cpu usage = nil, want 18.0")
+	}
+	if *value != 18.0 {
+		t.Fatalf("cpu usage = %v, want 18.0", *value)
+	}
+
+	// 所有候选仅返回有效 0（真实 0% 空载设备）时必须返回 0.0 而非 nil
+	idleClient := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			firstOID: {
+				{Name: firstOID + ".1", Type: gosnmp.Integer, Value: 0},
+			},
+			secondOID: {
+				{Name: secondOID + ".1", Type: gosnmp.Integer, Value: 0},
+			},
+		},
+	}
+	idleValue := collectCPUFromCandidates(idleClient, candidates, nil)
+	if idleValue == nil {
+		t.Fatal("idle cpu usage = nil, want 0.0")
+	}
+	if *idleValue != 0.0 {
+		t.Fatalf("idle cpu usage = %v, want 0.0", *idleValue)
+	}
+}
+
+func TestCollectMemoryFromCandidates_S5736_EntityMemoryMegaAndIndexAligned(t *testing.T) {
+	usageOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
+	megaOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19"
+
+	client := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			usageOID: {
+				{Name: usageOID + ".1", Type: gosnmp.Integer, Value: 0},
+				{Name: usageOID + ".67108873", Type: gosnmp.Integer, Value: 42},
+				{Name: usageOID + ".67108874", Type: gosnmp.Integer, Value: 255},
+			},
+			megaOID: {
+				{Name: megaOID + ".1", Type: gosnmp.Integer, Value: 0},
+				{Name: megaOID + ".67108873", Type: gosnmp.Integer, Value: 2048},
+			},
+		},
+	}
+
+	usage, total, used := collectMemoryFromCandidates(client, []snmpmib.MetricCandidate{
+		{
+			ID:        "huawei_entity_memory_mega",
+			Method:    "bulkwalk",
+			OIDs:      []string{usageOID, megaOID},
+			Strategy:  "walk_percent_with_optional_size_mb",
+			Aggregate: "avg_non_zero_total_sum",
+		},
+	}, nil)
+
+	wantTotal := int64(2048) * 1024 * 1024
+	wantUsed := int64(float64(wantTotal) * 0.42)
+	if usage == nil || total == nil || used == nil {
+		t.Fatalf("memory result = (%v, %v, %v), want all non-nil", usage, total, used)
+	}
+	if *usage != 42.0 {
+		t.Fatalf("usage = %v, want 42.0", *usage)
+	}
+	if *total != wantTotal {
+		t.Fatalf("total = %d, want %d", *total, wantTotal)
+	}
+	if *used != wantUsed {
+		t.Fatalf("used = %d, want %d", *used, wantUsed)
+	}
+}
+
+func TestCollectMemoryFromCandidates_S5736_UsageOnlyWhenSizeMissingOrOverflow(t *testing.T) {
+	usageOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
+	megaOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19"
+	bytesOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.9"
+
+	client := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			usageOID: {
+				{Name: usageOID + ".67108873", Type: gosnmp.Integer, Value: 37},
+			},
+			bytesOID: {
+				{Name: bytesOID + ".67108873", Type: gosnmp.Integer, Value: -1},
+			},
+		},
+	}
+
+	usage, total, used := collectMemoryFromCandidates(client, []snmpmib.MetricCandidate{
+		{
+			ID:        "huawei_entity_memory_mega",
+			Method:    "bulkwalk",
+			OIDs:      []string{usageOID, megaOID},
+			Strategy:  "walk_percent_with_optional_size_mb",
+			Aggregate: "avg_non_zero_total_sum",
+		},
+		{
+			ID:        "huawei_entity_memory_bytes",
+			Method:    "bulkwalk",
+			OIDs:      []string{usageOID, bytesOID},
+			Strategy:  "walk_percent_with_optional_size_bytes",
+			Aggregate: "avg_non_zero_total_sum",
+		},
+		{
+			ID:        "huawei_mem_dev",
+			Method:    "bulkwalk",
+			OIDs:      []string{"1.3.6.1.4.1.2011.6.3.5.1.1.2", "1.3.6.1.4.1.2011.6.3.5.1.1.3"},
+			Strategy:  "walk_mem_size_free_bytes",
+			Aggregate: "",
+		},
+		{
+			ID:        "huawei_entity_memory_usage_only",
+			Method:    "bulkwalk",
+			OIDs:      []string{usageOID},
+			Strategy:  "walk_percent_auto",
+			Aggregate: "avg_non_zero",
+		},
+	}, nil)
+
+	if usage == nil {
+		t.Fatal("usage = nil, want 37.0")
+	}
+	if *usage != 37.0 {
+		t.Fatalf("usage = %v, want 37.0", *usage)
+	}
+	if total != nil || used != nil {
+		t.Fatalf("total/used = (%v, %v), want (nil, nil)", total, used)
+	}
+}
+
+func TestCollectMemoryFromCandidates_S5736_FallbackFromMegaToBytesForSize(t *testing.T) {
+	usageOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
+	megaOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19"
+	bytesOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.9"
+
+	client := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			usageOID: {
+				{Name: usageOID + ".9", Type: gosnmp.Integer, Value: 50},
+			},
+			bytesOID: {
+				{Name: bytesOID + ".9", Type: gosnmp.Integer, Value: 1073741824},
+			},
+		},
+	}
+
+	usage, total, used := collectMemoryFromCandidates(client, []snmpmib.MetricCandidate{
+		{
+			ID:        "huawei_entity_memory_mega",
+			Method:    "bulkwalk",
+			OIDs:      []string{usageOID, megaOID},
+			Strategy:  "walk_percent_with_optional_size_mb",
+			Aggregate: "avg_non_zero_total_sum",
+		},
+		{
+			ID:        "huawei_entity_memory_bytes",
+			Method:    "bulkwalk",
+			OIDs:      []string{usageOID, bytesOID},
+			Strategy:  "walk_percent_with_optional_size_bytes",
+			Aggregate: "avg_non_zero_total_sum",
+		},
+	}, nil)
+
+	if usage == nil || total == nil || used == nil {
+		t.Fatalf("memory result = (%v, %v, %v), want all non-nil", usage, total, used)
+	}
+	if *usage != 50.0 {
+		t.Fatalf("usage = %v, want 50.0", *usage)
+	}
+	if *total != 1073741824 {
+		t.Fatalf("total = %d, want 1073741824", *total)
+	}
+	if *used != 536870912 {
+		t.Fatalf("used = %d, want 536870912", *used)
+	}
+}
+
+func TestCollectCPUFromCandidates_WalkPercentAutoFiltersHuaweiSentinel255(t *testing.T) {
+	oid := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.5"
+	client := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			oid: {
+				{Name: oid + ".1", Type: gosnmp.Integer, Value: 0},
+				{Name: oid + ".2", Type: gosnmp.Integer, Value: 255},
+				{Name: oid + ".3", Type: gosnmp.Integer, Value: -1},
+				{Name: oid + ".4", Type: gosnmp.Integer, Value: 18},
+			},
+		},
+	}
+
+	value := collectCPUFromCandidates(client, []snmpmib.MetricCandidate{
+		{
+			ID:        "huawei_entity_cpu",
+			Method:    "bulkwalk",
+			OIDs:      []string{oid},
+			Strategy:  "walk_percent_auto",
+			Aggregate: "avg_non_zero",
+		},
+	}, nil)
+
+	if value == nil || *value != 18.0 {
+		t.Fatalf("cpu usage = %v, want 18.0 (255 sentinel must be filtered)", value)
+	}
+}
+
+func TestCollectMemoryFromCandidates_S5736_OverflowSizeAndUnalignedFallback(t *testing.T) {
+	usageOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
+	megaOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19"
+
+	// 1. 超过 math.MaxInt64/(1024*1024) 的非法溢出容量必须被跳过，仅保留使用率
+	overflowClient := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			usageOID: {
+				{Name: usageOID + ".67108873", Type: gosnmp.Integer, Value: 35},
+			},
+			megaOID: {
+				{Name: megaOID + ".67108873", Type: gosnmp.Counter64, Value: uint64(math.MaxInt64/(1024*1024) + 1)},
+			},
+		},
+	}
+	usage, total, used := collectMemoryFromCandidates(overflowClient, []snmpmib.MetricCandidate{
+		{
+			ID:        "huawei_entity_memory_mega",
+			Method:    "bulkwalk",
+			OIDs:      []string{usageOID, megaOID},
+			Strategy:  "walk_percent_with_optional_size_mb",
+			Aggregate: "avg_non_zero_total_sum",
+		},
+	}, nil)
+	if usage == nil || *usage != 35.0 || total != nil || used != nil {
+		t.Fatalf("overflow result = (%v, %v, %v), want (35.0, nil, nil)", usage, total, used)
+	}
+
+	// 2. 容量表索引无法对齐但存在正容量时，安全回退正容量之和
+	unalignedClient := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			usageOID: {
+				{Name: usageOID + ".67108873", Type: gosnmp.Integer, Value: 25},
+			},
+			megaOID: {
+				{Name: megaOID + ".1", Type: gosnmp.Integer, Value: 1024},
+			},
+		},
+	}
+	usage2, total2, used2 := collectMemoryFromCandidates(unalignedClient, []snmpmib.MetricCandidate{
+		{
+			ID:        "huawei_entity_memory_mega",
+			Method:    "bulkwalk",
+			OIDs:      []string{usageOID, megaOID},
+			Strategy:  "walk_percent_with_optional_size_mb",
+			Aggregate: "avg_non_zero_total_sum",
+		},
+	}, nil)
+	wantTotal := int64(1024) * 1024 * 1024
+	if usage2 == nil || *usage2 != 25.0 || total2 == nil || *total2 != wantTotal || used2 == nil {
+		t.Fatalf("unaligned result = (%v, %v, %v), want (25.0, %d, non-nil)", usage2, total2, used2, wantTotal)
+	}
+}
+
+func TestNewSNMPClient_SetsMaxRepetitions(t *testing.T) {
+	community := "public"
+	version := "2c"
+	client, err := devices.NewSNMPClient("192.168.1.1", &community, &version, nil, nil)
+	if err != nil {
+		t.Fatalf("NewSNMPClient error: %v", err)
+	}
+	if client.MaxRepetitions != 10 {
+		t.Fatalf("MaxRepetitions = %d, want 10", client.MaxRepetitions)
+	}
+}
+
+func TestCollectMemoryFromCandidates_AllZeroFirstCandidateFallsBackToHuaweiMemDev(t *testing.T) {
+	usageOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
+	megaOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19"
+	memSizeOID := "1.3.6.1.4.1.2011.6.3.5.1.1.2"
+	memFreeOID := "1.3.6.1.4.1.2011.6.3.5.1.1.3"
+
+	const totalBytes = int64(1024 * 1024 * 1024) // 1 GiB
+	const freeBytes = int64(400 * 1024 * 1024)   // 400 MiB
+	const wantUsed = totalBytes - freeBytes
+	wantUsage := float64(wantUsed) / float64(totalBytes) * 100.0
+
+	candidates := []snmpmib.MetricCandidate{
+		{
+			ID:        "huawei_entity_memory_mega",
+			Method:    "bulkwalk",
+			OIDs:      []string{usageOID, megaOID},
+			Strategy:  "walk_percent_with_optional_size_mb",
+			Aggregate: "avg_non_zero_total_sum",
+		},
+		{
+			ID:       "huawei_mem_dev",
+			Method:   "bulkwalk",
+			OIDs:     []string{memSizeOID, memFreeOID},
+			Strategy: "walk_mem_size_free_bytes",
+		},
+	}
+
+	for _, withMegaSize := range []bool{false, true} {
+		name := "without_size_19"
+		packets := map[string][]gosnmp.SnmpPDU{
+			usageOID: {
+				{Name: usageOID + ".1", Type: gosnmp.Integer, Value: 0},
+				{Name: usageOID + ".2", Type: gosnmp.Integer, Value: 0},
+			},
+			memSizeOID: {
+				{Name: memSizeOID + ".1", Type: gosnmp.Gauge32, Value: uint64(totalBytes)},
+			},
+			memFreeOID: {
+				{Name: memFreeOID + ".1", Type: gosnmp.Gauge32, Value: uint64(freeBytes)},
+			},
+		}
+		if withMegaSize {
+			name = "with_size_19"
+			packets[megaOID] = []gosnmp.SnmpPDU{
+				{Name: megaOID + ".1", Type: gosnmp.Integer, Value: 1024},
+			}
+		}
+
+		t.Run(name, func(t *testing.T) {
+			client := &fakeCollectorSNMPClient{bulkWalkPackets: packets}
+			usage, total, used := collectMemoryFromCandidates(client, candidates, nil)
+			if usage == nil || total == nil || used == nil {
+				t.Fatalf("memory result = (%v, %v, %v), want all non-nil", usage, total, used)
+			}
+			if math.Abs(*usage-wantUsage) > 1e-6 {
+				t.Fatalf("usage = %v, want %v", *usage, wantUsage)
+			}
+			if *total != totalBytes {
+				t.Fatalf("total = %d, want %d", *total, totalBytes)
+			}
+			if *used != wantUsed {
+				t.Fatalf("used = %d, want %d", *used, wantUsed)
+			}
+		})
+	}
+}
+
+func TestCollectMemoryFromCandidates_MaxInt64TotalAt100PercentDoesNotOverflow(t *testing.T) {
+	usageOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
+	bytesOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.9"
+
+	client := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			usageOID: {
+				{Name: usageOID + ".1", Type: gosnmp.Integer, Value: 100},
+			},
+			bytesOID: {
+				{Name: bytesOID + ".1", Type: gosnmp.Counter64, Value: uint64(math.MaxInt64)},
+			},
+		},
+	}
+
+	usage, total, used := collectMemoryFromCandidates(client, []snmpmib.MetricCandidate{
+		{
+			ID:        "huawei_entity_memory_bytes",
+			Method:    "bulkwalk",
+			OIDs:      []string{usageOID, bytesOID},
+			Strategy:  "walk_percent_with_optional_size_bytes",
+			Aggregate: "avg_non_zero_total_sum",
+		},
+	}, nil)
+
+	if usage == nil || total == nil || used == nil {
+		t.Fatalf("memory result = (%v, %v, %v), want all non-nil", usage, total, used)
+	}
+	if *usage != 100.0 {
+		t.Fatalf("usage = %v, want 100.0", *usage)
+	}
+	if *total != math.MaxInt64 {
+		t.Fatalf("total = %d, want %d", *total, int64(math.MaxInt64))
+	}
+	if *used != math.MaxInt64 {
+		t.Fatalf("used = %d, want %d (must not overflow)", *used, int64(math.MaxInt64))
+	}
+}
+
+func TestShouldFallbackToWalkAll_DistinguishesTimeoutAuthAndProtocolErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "context_deadline_exceeded",
+			err:  context.DeadlineExceeded,
+			want: false,
+		},
+		{
+			name: "io_timeout",
+			err:  errors.New("read udp 192.168.1.1:161: i/o timeout"),
+			want: false,
+		},
+		{
+			name: "usm_authentication_failed",
+			err:  errors.New("usm authentication failed"),
+			want: false,
+		},
+		{
+			name: "snmp_tooBig",
+			err:  errors.New("tooBig"),
+			want: true,
+		},
+		{
+			name: "snmp_genErr",
+			err:  errors.New("genErr"),
+			want: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shouldFallbackToWalkAll(tc.err); got != tc.want {
+				t.Fatalf("shouldFallbackToWalkAll(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
 	}
 }

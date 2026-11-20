@@ -56,6 +56,32 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     tone: 'critical',
   },
   {
+    // 华为 V600 M-LAG 双主分裂：必须排在普通 M-LAG 与链路规则之前。
+    id: 'huawei-mlag-split-brain',
+    pattern: /m-?lag[\s\S]{0,60}?(?:split.?brain|dual.?active|双主|分裂)|dad[\s\S]{0,40}?(?:conflict|dual|detect|冲突)/i,
+    title: 'M-LAG 双主分裂告警',
+    summary: '{device} 检测到 M-LAG 双主分裂（Dual-Active），两端同时作为主设备转发可能导致全网流量环路或丢包。',
+    suggestion: '通过 display dfs-group 1 m-lag 与 display mad verbose 排查 peer-link 与 DAD 心跳链路状态，尽快恢复协商通道。',
+    tone: 'critical',
+  },
+  {
+    // M-LAG Peer-Link 恢复必须排在断开之前；up 强制词边界防止误命中 Group / backup
+    id: 'huawei-mlag-peer-link-up',
+    pattern: /peer-?link[\s\S]{0,40}?(?:\bup\b|recover|resume|restore|恢复)/i,
+    title: 'M-LAG Peer-Link 恢复',
+    summary: '{device} 的 M-LAG Peer-Link 链路已恢复正常，跨设备链路聚合主备同步重新建立。',
+    tone: 'success',
+  },
+  {
+    // 必须排在 huawei-ethtrunk-down 之前：Peer-Link 报文通常同时包含 Eth-Trunk 与 down。
+    id: 'huawei-mlag-peer-link-down',
+    pattern: /(?:m-?lag|dfs)[\s\S]{0,60}?peer-?link[\s\S]{0,40}?(?:down|fail|fault|disconnect|断开)|peer-?link[\s\S]{0,40}?\bdown\b/i,
+    title: 'M-LAG Peer-Link 断开',
+    summary: '{device} 的 M-LAG Peer-Link 链路断开，备设备侧单归属端口可能进入 Error-Down 保护或引发流量中断。',
+    suggestion: '通过 display dfs-group 1 node 与 display eth-trunk 查看 Peer-Link 物理链路及成员口状态，检查跨机互联光模块与光纤。',
+    tone: 'critical',
+  },
+  {
     // 华为 VRP：`TRUNK/4/ETHTRUNK_DOWN: The Eth-Trunk 1 went down`
     // 必须排在通用接口规则之前：聚合口 Down 的影响面是全部成员链路。
     id: 'huawei-ethtrunk-down',
@@ -156,6 +182,15 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     tone: 'warning',
   },
   {
+    // 华为 VRP：`POE/4/POE_OVERLOAD` / V600 PoE++ 供电超载告警：排在通用 PoE 故障之前
+    id: 'huawei-poe-overload',
+    pattern: /(?:\bpoe(?:\+\+)?|\bpse\b)[\s\S]{0,50}?(?:overload|over.?budget|budget[\s\S]{0,20}?exceed|power[\s\S]{0,20}?denied|insufficient|超载|过载|功率不足)/i,
+    title: 'PoE 供电超载',
+    summary: '{device} 的 PoE/PoE++ 供电负载超过端口或整机电源预算，低优先级受电终端可能被强制断电。',
+    suggestion: '通过 display poe power-state 与 display poe-power 查看整机功率预算与各端口功耗，合理调整供电优先级或电源模块配置。',
+    tone: 'critical',
+  },
+  {
     // 华为 VRP：`POE/4/POEPOWERABSENT: … PoE power is absent`
     id: 'huawei-poe-fault',
     pattern: /\bpoe[\s\S]{0,40}?(?:fail|abnormal|power.?off|dying|overload|disconnect|异常)/i,
@@ -165,8 +200,25 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     tone: 'warning',
   },
   {
+    // 光模块插拔必须排在通用 transceiver-fault 之前；排除 not present / not online 否定表述
+    id: 'huawei-transceiver-inserted',
+    pattern: /(?:transceiver|sfp|qsfp\d*|optical[\s\S]{0,15}?module|光模块)[\s\S]{0,40}?(?:plug(?:ged)?\s*in|insert(?:ed)?|(?<!not\s+)(?:\bonline\b|\bpresent\b)|插入|上电)/i,
+    title: '光模块已插入',
+    summary: '{device} 检测到光模块插入并识别，端口物理通道已就绪。',
+    suggestion: '通过 display transceiver 核对光模块型号、波长及收发光功率是否与对端匹配。',
+    tone: 'info',
+  },
+  {
+    id: 'huawei-transceiver-removed',
+    pattern: /(?:transceiver|sfp|qsfp\d*|optical[\s\S]{0,15}?module|光模块)[\s\S]{0,40}?(?:pull(?:ed)?\s*out|remov(?:ed|e)|plug(?:ged)?\s*out|offline|拔出|离线)/i,
+    title: '光模块被拔出',
+    summary: '{device} 检测到光模块被拔出或离线，对应端口的物理连接已中断。',
+    suggestion: '确认是否为计划内更换操作；若非计划变更，现场核查光模块插接是否牢靠及接口指示灯状态。',
+    tone: 'warning',
+  },
+  {
     id: 'transceiver-fault',
-    pattern: /(?:transceiver|sfp|optical|光模块)[\s\S]{0,40}?(?:fail|error|absent|abnormal|invalid|不在位|异常)/i,
+    pattern: /(?:transceiver|sfp|optical|光模块)[\s\S]{0,40}?(?:fail|error|absent|not\s+(?:present|online)|abnormal|invalid|不在位|异常)/i,
     title: '光模块异常',
     summary: '{device} 的光模块状态异常，可能为未在位、型号不兼容或器件失效。',
     suggestion: '确认模块在位且与设备型号匹配；通过 display transceiver 核对收发功率是否处于告警门限内。',
@@ -282,6 +334,15 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     tone: 'info',
   },
   {
+    // 华为 V600 MACsec 加密协商异常：排在通用认证失败之前；必须命中故障词避免误报正常 SAK 安装
+    id: 'huawei-macsec-fault',
+    pattern: /(?:macsec|mka)[\s\S]{0,50}?(?:\bfail\w*|\berror\b|\btimeout\b|\bmismatch\b|\bexpire\w*|\binvalid\b|\bdown\b|异常|失败)/i,
+    title: 'MACsec 协商异常',
+    summary: '{device} 的 MACsec/MKA 链路加密会话协商失败或密钥失效，链路层加密保护可能中断。',
+    suggestion: '通过 display macsec 与 display mka 检查两端 CKN/CAK 预共享密钥、加密套件及端口状态是否一致。',
+    tone: 'warning',
+  },
+  {
     id: 'port-security-violation',
     pattern: /port.?security[\s\S]{0,40}?violat/i,
     title: '端口安全违规',
@@ -307,6 +368,23 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     title: 'OSPF 邻居建立',
     summary: '{device} 与邻居路由器的 OSPF 邻接关系已达成 Full 状态，路由收敛完成。',
     tone: 'success',
+  },
+  {
+    // VXLAN / EVPN 叠加网络规则：必须排在 bgp-neighbor-down 之前，避免 EVPN BGP 邻居被通用 BGP 规则吞掉
+    id: 'huawei-evpn-peer-down',
+    pattern: /evpn[\s\S]{0,50}?(?:peer|neighbor|bgp|route)[\s\S]{0,40}?(?:down|idle|fail|withdraw|断开)/i,
+    title: 'EVPN 邻居中断',
+    summary: '{device} 的 BGP EVPN 对等体或控制面会话中断，叠加网络 MAC/主机路由学习与隧道同步将受影响。',
+    suggestion: '通过 display bgp evpn peer 与 display evpn vpn-instance 检查底层 Underlay 路由可达性与 BGP EVPN 邻居配置。',
+    tone: 'critical',
+  },
+  {
+    id: 'huawei-vxlan-tunnel-down',
+    pattern: /(?:vxlan|nve)[\s\S]{0,50}?(?:tunnel|vtep|vni)[\s\S]{0,40}?(?:down|fail|unreachable|delete|断开)|vtep[\s\S]{0,30}?\bdown\b/i,
+    title: 'VXLAN 隧道断开',
+    summary: '{device} 的 VXLAN 隧道或 NVE 源目的 VTEP 状态变为 Down，跨节点大二层或三层 Overlay 业务流量将中断。',
+    suggestion: '通过 display vxlan tunnel 与 display interface Nve1 检查 Underlay 路由连通性、VTEP 源地址及 BFD 检测状态。',
+    tone: 'warning',
   },
   {
     id: 'bgp-neighbor-down',
@@ -547,6 +625,16 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
   // 系统运行
   // ==========================================
   {
+    // 华为 V600 SRM/FWM 硬件表项资源（TCAM/LEM/LPM）告警：排在通用 huawei-entry-exceed 之前；
+    // tcam/lem/lpm 强制词边界防止误命中 problem / element
+    id: 'huawei-srm-resource-alarm',
+    pattern: /(?:\b(?:tcam|lem|lpm)\b|acl[\s\S]{0,15}?resource|hardware[\s\S]{0,20}?(?:resource|table|entry)|表项资源|硬件资源)[\s\S]{0,50}?(?:exceed|full|overload|insufficient|threshold|limit|exhaust|usage|告警|超限|不足)/i,
+    title: '硬件表项资源告警',
+    summary: '{device} 的转发芯片硬件表项（TCAM/LPM/MAC/ACL 资源）占用接近或超过门限，新策略或转发表下发可能失败。',
+    suggestion: '通过 display forward resource 或 display hardware resource 查看各模块资源占用比例，优化 ACL/路由聚合规格。',
+    tone: 'warning',
+  },
+  {
     // 华为 VRP：`LICENSE/4/LICENSE_ALARM: … will expire` 等
     id: 'huawei-license-alarm',
     pattern: /license[\s\S]{0,40}?(?:expire|invalid|insufficient|exceed|near|alarm)/i,
@@ -583,6 +671,24 @@ export const PLAIN_LANGUAGE_RULES: ReadonlyArray<PlainLanguageRule> = [
     summary: '{device} 正在执行软件升级或补丁加载操作，期间可能出现短暂的管理中断。',
     suggestion: '确认操作在维护窗口内执行；升级期间避免断电，完成后通过 display version 核对运行版本。',
     tone: 'info',
+  },
+  {
+    // Telemetry / gRPC / NETCONF 网管通道异常
+    id: 'huawei-telemetry-netconf-fault',
+    pattern: /(?:telemetry|grpc|netconf)[\s\S]{0,50}?(?:fail|error|disconnect|down|unreach|timeout|close|reject|abort|异常|断开|失败)/i,
+    title: 'Telemetry/NETCONF 异常',
+    summary: '{device} 与采集器或控制器的 Telemetry/NETCONF 管理连接异常中断，实时遥测采样或配置下发可能受阻。',
+    suggestion: '通过 display telemetry sensor / display netconf session 检查采集器可达性、TLS 证书及 gRPC/SSH 端口状态。',
+    tone: 'warning',
+  },
+  {
+    // 华为框式 CSS 集群主备切换 / 心跳异常：排在通用 huawei-stack-change 之前
+    id: 'huawei-css-cluster',
+    pattern: /(?:\bcss\b|cluster[\s\S]{0,20}?switch)[\s\S]{0,50}?(?:heartbeat|link|switchover|master|standby|split|fail|down|loss|timeout|心跳|主备|分裂)/i,
+    title: 'CSS 集群状态异常',
+    summary: '{device} 的框式交换机 CSS 集群出现心跳异常、集群链路变化或主备倒换，请核查双框协同状态。',
+    suggestion: '通过 display css status 与 display css link 检查集群成员角色、CSS 卡连线及跨框聚合检测状态。',
+    tone: 'warning',
   },
   {
     // 华为 VRP：`STACKM/4/STACK_MEMBER_CHANGE`、`CSS/4/CSSMASTEREXCHANGED`、

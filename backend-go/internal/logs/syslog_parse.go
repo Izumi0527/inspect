@@ -1,9 +1,17 @@
 package logs
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+)
+
+var (
+	// vrpSyslogHeaderPattern 匹配内嵌在 Syslog 报文中的华为 VRP/V600 结构化头：
+	// %%01MLAG/3/PEER_LINK_DOWN(l):CID=0x807a040b;...
+	vrpSyslogHeaderPattern = regexp.MustCompile(`%%\d{2}([A-Za-z0-9_-]+)/([0-7])/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?(?:\[\d+\])?`)
+	vrpSyslogCIDPrefix     = regexp.MustCompile(`^CID=[^;\s]+;\s*`)
 )
 
 // SyslogParsedMessage 表示从 Syslog 原始报文中提取出的关键字段（用于日志落库与告警联动）。
@@ -52,6 +60,32 @@ func ParseSyslogMessage(raw string, receivedAt time.Time) SyslogParsedMessage {
 	if !ok {
 		level = detectLogLevel(rest)
 		facility = detectLogFacility(rest)
+	}
+
+	// 若正文内嵌华为 VRP/V600 结构化头（%%01MODULE/SEV/MNEMONIC(l):CID=...），
+	// 精准提取 VRP 严重级别与模块设施：
+	// - VRP 严重级别优先于通用或转发覆盖的 PRI 级别；
+	// - 明确的 VRP 模块设施优先于无 PRI 或通用 local0-local7/system/other 设施；
+	// - 剥离消息体前导 CID=0x...; 并补齐干净的模块进程名。
+	if vrpMatch := vrpSyslogHeaderPattern.FindStringSubmatch(rest); len(vrpMatch) == 4 {
+		module := vrpMatch[1]
+		vrpSev := vrpMatch[2]
+		level = mapVRPSeverity(vrpSev)
+
+		cleanMsg := vrpSyslogCIDPrefix.ReplaceAllString(strings.TrimSpace(message), "")
+		message = cleanMsg
+
+		if mapped, exists := vrpModuleFacilities[strings.ToLower(strings.TrimSpace(module))]; exists {
+			if !ok || facility == "system" || facility == "other" {
+				facility = mapped
+			}
+		} else if !ok || facility == "system" || facility == "other" {
+			facility = detectLogFacility(cleanMsg)
+		}
+
+		if process == "" || strings.HasPrefix(process, "%%") {
+			process = module
+		}
 	}
 
 	// 如果解析出 process 为空，尝试从内容推断（保守：不强行猜）。
@@ -144,8 +178,19 @@ func parseSyslogBody(rest string, receivedAt time.Time) (time.Time, string, stri
 		tsCandidate := strings.Join(fields[0:3], " ")
 		if ts, ok := parseSyslogTimestampRFC3164(tsCandidate, receivedAt); ok {
 			host := fields[3]
-			afterHost := strings.TrimSpace(strings.TrimPrefix(trimmed, tsCandidate))
-			afterHost = strings.TrimSpace(strings.TrimPrefix(afterHost, host))
+			afterHost := stripLeadingFields(trimmed, 4)
+
+			process, msg := parseRFC3164TagAndMessage(afterHost)
+			return ts, host, process, msg
+		}
+	}
+
+	// 华为 VRP/V600 带 4 位年份的 Syslog 格式：MMM dd yyyy hh:mm:ss HOST TAG: MSG
+	if len(fields) >= 6 {
+		tsCandidate := strings.Join(fields[0:4], " ")
+		if ts, ok := parseSyslogTimestampWithYear(tsCandidate); ok {
+			host := fields[4]
+			afterHost := stripLeadingFields(trimmed, 5)
 
 			process, msg := parseRFC3164TagAndMessage(afterHost)
 			return ts, host, process, msg
@@ -154,6 +199,32 @@ func parseSyslogBody(rest string, receivedAt time.Time) (time.Time, string, stri
 
 	// 兜底：不解析，使用接收时间。
 	return receivedAt.UTC(), "", "", trimmed
+}
+
+// stripLeadingFields 按空白分隔跳过前 n 个词元并返回剩余正文，兼容 RFC3164 单数日双空格（如 "Nov  2 2026"）。
+func stripLeadingFields(text string, n int) string {
+	rest := strings.TrimSpace(text)
+	for i := 0; i < n && rest != ""; i++ {
+		idx := strings.IndexAny(rest, " \t")
+		if idx < 0 {
+			return ""
+		}
+		rest = strings.TrimSpace(rest[idx:])
+	}
+	return rest
+}
+
+func parseSyslogTimestampWithYear(value string) (time.Time, bool) {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{"Jan 2 2006 15:04:05", "Jan _2 2006 15:04:05"} {
+		if ts, err := time.Parse(layout, text); err == nil {
+			return ts.UTC(), true
+		}
+	}
+	return time.Time{}, false
 }
 
 func parseSyslogTimestamp(value string, receivedAt time.Time) (time.Time, bool) {

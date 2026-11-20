@@ -145,3 +145,43 @@ func TestBuildTrapLog_UnknownTrapShouldKeepLegacyFallback(t *testing.T) {
 		t.Fatalf("未知变量应原样保留: %q", result.Message)
 	}
 }
+
+func TestBuildTrapLog_ShouldResolveV600AndModularChassisTraps(t *testing.T) {
+	// hwPowerFail + hwEntityTrapFaultID(78=powerSupplyFailure) + hwBaseTrapSeverity=major(4)
+	powerPacket := decodeTrap(t, "1.3.6.1.4.1.2011.5.25.219.2.5.3",
+		gosnmp.SnmpPDU{Name: oidEntPhysName, Type: gosnmp.OctetString, Value: []byte("PWR 1")},
+		gosnmp.SnmpPDU{Name: "1.3.6.1.4.1.2011.5.25.219.1.3.0", Type: gosnmp.Integer, Value: 78},
+		gosnmp.SnmpPDU{Name: oidBaseTrapSev, Type: gosnmp.Integer, Value: 4},
+	)
+	powerRes := logs.BuildTrapLogForTest(powerPacket, "192.168.20.1")
+	if powerRes.Level != "critical" || powerRes.Facility != "hardware" {
+		t.Fatalf("hwPowerFail level/facility=%q/%q, want critical/hardware", powerRes.Level, powerRes.Facility)
+	}
+	if !strings.Contains(powerRes.Message, "hwEntityTrapFaultID.0=powerSupplyFailure(78)") {
+		t.Fatalf("摘要应翻译故障枚举: %q", powerRes.Message)
+	}
+
+	// M-LAG DFS Peer Down
+	mlagRes := logs.BuildTrapLogForTest(decodeTrap(t, "1.3.6.1.4.1.2011.5.25.178.8.2.7"), "192.168.20.2")
+	if mlagRes.Level != "critical" || mlagRes.Facility != "switching" {
+		t.Fatalf("hwMlagDfsPeerDown level/facility=%q/%q, want critical/switching", mlagRes.Level, mlagRes.Facility)
+	}
+
+	// CSS Link Down + hwStackPortStatus=down(2)
+	cssPacket := decodeTrap(t, "1.3.6.1.4.1.2011.5.25.183.3.3.2.1",
+		gosnmp.SnmpPDU{Name: "1.3.6.1.4.1.2011.5.25.183.1.21.1.5.1", Type: gosnmp.Integer, Value: 2},
+	)
+	cssRes := logs.BuildTrapLogForTest(cssPacket, "192.168.20.3")
+	if cssRes.Level != "warning" || cssRes.Facility != "switching" {
+		t.Fatalf("hwCssLinkDown level/facility=%q/%q, want warning/switching", cssRes.Level, cssRes.Facility)
+	}
+	if !strings.Contains(cssRes.Message, "hwStackPortStatus.1=down(2)") {
+		t.Fatalf("摘要应翻译 hwStackPortStatus 枚举: %q", cssRes.Message)
+	}
+
+	// MACsec Fail
+	macsecRes := logs.BuildTrapLogForTest(decodeTrap(t, "1.3.6.1.4.1.2011.5.25.347.2.6"), "192.168.20.4")
+	if macsecRes.Level != "critical" || macsecRes.Facility != "security" {
+		t.Fatalf("hwMACsecFailNotify level/facility=%q/%q, want critical/security", macsecRes.Level, macsecRes.Facility)
+	}
+}

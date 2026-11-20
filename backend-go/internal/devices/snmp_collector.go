@@ -3,6 +3,7 @@ package devices
 import (
 	"context"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -43,10 +44,10 @@ type SNMPMetrics struct {
 	// dot1dBaseBridgeAddress，华为的 LLDP 机箱 ID 就是桥 MAC）。回填 devices.detected_sys_name /
 	// detected_chassis_id，让拓扑组装能把别的设备上报的邻居匹配回本机——台账名是中文、
 	// LLDP 管理地址取到别的 VLANIF 时，这是唯一能对上的键。
-	SysName      *string            `json:"sys_name,omitempty"`
-	ChassisID    *string            `json:"chassis_id,omitempty"`
-	BandwidthIn  *float64           `json:"bandwidth_in,omitempty"`  // 入站带宽，单位：bps（比特每秒）
-	BandwidthOut *float64           `json:"bandwidth_out,omitempty"` // 出站带宽，单位：bps（比特每秒）
+	SysName      *string  `json:"sys_name,omitempty"`
+	ChassisID    *string  `json:"chassis_id,omitempty"`
+	BandwidthIn  *float64 `json:"bandwidth_in,omitempty"`  // 入站带宽，单位：bps（比特每秒）
+	BandwidthOut *float64 `json:"bandwidth_out,omitempty"` // 出站带宽，单位：bps（比特每秒）
 	// STP 保存生成树（BRIDGE-MIB dot1dStp）指标，用于巡检拓扑稳定性
 	STP        STPMetrics         `json:"stp,omitempty"`
 	Interfaces []InterfaceMetrics `json:"interfaces,omitempty"`
@@ -97,10 +98,10 @@ type InterfaceMetrics struct {
 	// 老化、接头氧化、电磁干扰；丢弃（Discards）指向缓冲区溢出、QoS 队列丢弃
 	// 或 ACL 拒绝，即拥塞与配置问题。合成一个指标会让配置问题被当成线路问题查。
 	// 均为设备上电以来的累计计数器，比率的分母是 UcastPkts。
-	InErrors     *uint64 `json:"in_errors,omitempty"`
-	OutErrors    *uint64 `json:"out_errors,omitempty"`
-	InDiscards   *uint64 `json:"in_discards,omitempty"`
-	OutDiscards  *uint64 `json:"out_discards,omitempty"`
+	InErrors      *uint64 `json:"in_errors,omitempty"`
+	OutErrors     *uint64 `json:"out_errors,omitempty"`
+	InDiscards    *uint64 `json:"in_discards,omitempty"`
+	OutDiscards   *uint64 `json:"out_discards,omitempty"`
 	InUcastPkts   *uint64 `json:"in_ucast_pkts,omitempty"`
 	OutUcastPkts  *uint64 `json:"out_ucast_pkts,omitempty"`
 	InNUcastPkts  *uint64 `json:"in_nucast_pkts,omitempty"`
@@ -301,66 +302,82 @@ func (c *SNMPCollector) CollectMetrics(
 	}
 	defer target.Conn.Close()
 
+	client := newResilientSNMPClientWithContext(ctx, target)
+	sysObjectID := snmpmib.NormalizeOID(readStringScalar(client, registry.Common.System.SysObjectID.OID))
+	sysDescr := readStringScalar(client, registry.Common.Probe.SysDescr.OID)
+	effectiveVendor := registry.ResolveVendorByContext(vendor, sysObjectID, sysDescr)
+
 	metrics := &SNMPMetrics{
 		CollectedAt: time.Now().UTC(),
 	}
 
 	// 采集系统运行时间
-	c.collectUptime(target, metrics, registry)
+	c.collectUptime(client, metrics, registry)
 	if c.logger != nil && metrics.Uptime != nil {
 		c.logger.Debug("collected uptime", zap.Int64("uptime", *metrics.Uptime))
 	}
 
 	// 采集 CPU 使用率
-	c.collectCPU(target, metrics, registry, vendor)
+	c.collectCPU(client, metrics, registry, effectiveVendor)
 	if c.logger != nil && metrics.CPUUsage != nil {
 		c.logger.Debug("collected CPU", zap.Float64("cpu", *metrics.CPUUsage))
 	}
 
 	// 采集内存使用率
-	c.collectMemory(target, metrics, registry, vendor)
+	c.collectMemory(client, metrics, registry, effectiveVendor)
 	if c.logger != nil && metrics.MemoryUsage != nil {
 		c.logger.Debug("collected memory", zap.Float64("memory", *metrics.MemoryUsage))
 	}
 
+	if c.logger != nil && (metrics.CPUUsage == nil || metrics.MemoryUsage == nil) {
+		c.logger.Warn("SNMP CPU or memory metrics unavailable",
+			zap.String("ip", ipAddress),
+			zap.String("input_vendor", vendor),
+			zap.String("effective_vendor", effectiveVendor),
+			zap.String("sys_object_id", sysObjectID),
+			zap.String("sys_descr_head", sysDescrHead(sysDescr)),
+			zap.Bool("missing_cpu", metrics.CPUUsage == nil),
+			zap.Bool("missing_memory", metrics.MemoryUsage == nil))
+	}
+
 	// 采集主机磁盘分区（HOST-RESOURCES-MIB，仅服务器有数据；网络设备一次 walk 即返回空）
-	c.collectHostStorage(target, metrics, registry)
+	c.collectHostStorage(client, metrics, registry)
 	if c.logger != nil && len(metrics.Disks) > 0 {
 		c.logger.Debug("collected disks", zap.Int("count", len(metrics.Disks)))
 	}
 
 	// 采集温度
-	c.collectTemperature(target, metrics, registry, vendor)
+	c.collectTemperature(client, metrics, registry, effectiveVendor)
 	if c.logger != nil && metrics.Temperature != nil {
 		c.logger.Debug("collected temperature", zap.Float64("temp", *metrics.Temperature))
 	}
 
 	// 采集 BGP 邻居摘要
-	c.collectBGP(target, metrics, registry, vendor)
+	c.collectBGP(client, metrics, registry, effectiveVendor)
 	if c.logger != nil && len(metrics.BGPPeers) > 0 {
 		c.logger.Debug("collected bgp peers", zap.Int("count", len(metrics.BGPPeers)))
 	}
 
 	// 采集光模块诊断摘要
-	c.collectOptical(target, metrics, registry, vendor)
+	c.collectOptical(client, metrics, registry, effectiveVendor)
 	if c.logger != nil && len(metrics.OpticalTransceivers) > 0 {
 		c.logger.Debug("collected optical transceivers", zap.Int("count", len(metrics.OpticalTransceivers)))
 	}
 
 	// 采集风扇、电源、单板状态：硬件基础健康，比 CPU/内存更早暴露物理隐患
-	c.collectComponents(target, metrics, registry, vendor)
+	c.collectComponents(client, metrics, registry, effectiveVendor)
 	if c.logger != nil && len(metrics.Components) > 0 {
 		c.logger.Debug("collected components", zap.Int("count", len(metrics.Components)))
 	}
 
 	// 采集 PoE 供电概况（仅 PoE 交换机有数据）
-	c.collectPoE(target, metrics, registry, vendor)
+	c.collectPoE(client, metrics, registry, effectiveVendor)
 	if c.logger != nil && (len(metrics.PoE.Ports) > 0 || metrics.PoE.RemainingPower != nil) {
 		c.logger.Debug("collected poe", zap.Int("ports", len(metrics.PoE.Ports)))
 	}
 
 	// 采集设备型号与软件版本（低频变化的静态属性，用于回填设备档案）
-	c.collectDeviceIdentity(target, metrics, registry)
+	c.collectDeviceIdentityWithContext(client, metrics, registry, sysDescr, true, sysObjectID, true)
 	if c.logger != nil && (metrics.Model != nil || metrics.FirmwareVersion != nil) {
 		c.logger.Debug("collected device identity",
 			zap.Stringp("model", metrics.Model),
@@ -368,13 +385,13 @@ func (c *SNMPCollector) CollectMetrics(
 	}
 
 	// 推断设备类型（交换机/路由器/防火墙/AP），放在 identity 之后以复用已解析的型号
-	c.collectDeviceClassification(target, metrics, registry)
+	c.collectDeviceClassificationWithSysDescr(client, metrics, registry, sysDescr, true)
 	if c.logger != nil && metrics.DetectedType != nil {
 		c.logger.Debug("collected device classification", zap.Stringp("detected_type", metrics.DetectedType))
 	}
 
 	// 采集 LLDP 邻居（拓扑连线数据源）与设备自身 LLDP 身份
-	c.collectNeighbors(target, metrics, registry, vendor)
+	c.collectNeighbors(client, metrics, registry, effectiveVendor)
 	if c.logger != nil {
 		c.logger.Debug("collected lldp",
 			zap.String("status", string(metrics.LLDPStatus)),
@@ -383,7 +400,7 @@ func (c *SNMPCollector) CollectMetrics(
 	}
 
 	// 采集生成树 STP 拓扑指标（BRIDGE-MIB dot1dStp）
-	c.collectSTP(target, metrics, registry)
+	c.collectSTP(client, metrics, registry)
 	if c.logger != nil && (metrics.STP.ProtocolSpec != nil || metrics.STP.TimeSinceTopologyChange != nil || metrics.STP.TopChanges != nil) {
 		c.logger.Debug("collected stp",
 			zap.Int64p("protocol_spec", metrics.STP.ProtocolSpec),
@@ -392,7 +409,7 @@ func (c *SNMPCollector) CollectMetrics(
 	}
 
 	// 采集接口指标
-	c.collectInterfaces(target, ipAddress, metrics, registry)
+	c.collectInterfaces(client, ipAddress, metrics, registry)
 	if c.logger != nil {
 		c.logger.Debug("collected interfaces", zap.Int("count", len(metrics.Interfaces)))
 	}
@@ -994,9 +1011,11 @@ func collectLegacyIfSpeed(target snmpClient, interfaces map[int]*InterfaceMetric
 // 华为 VRP 典型串："...Software VRP (R) software, Version 5.170 (S5700-28P-LI-AC V200R019C00SPC500) Copyright..."
 // 括号内「型号 版本」成对出现，是可信度最高的兜底来源。
 var (
-	sysDescrModelVersionRe = regexp.MustCompile(`\(([A-Za-z][A-Za-z0-9][A-Za-z0-9\-_/.]{1,40})\s+(V\d+R\d+[A-Za-z0-9]*)\)`)
+	sysDescrModelVersionRe = regexp.MustCompile(`\((?:(?i:CloudEngine|Quidway)\s+)?([A-Za-z][A-Za-z0-9][A-Za-z0-9\-_/.]{1,40})\s+(V\d+R\d+[A-Za-z0-9]*)\)`)
 	sysDescrVRPVersionRe   = regexp.MustCompile(`\b(V\d+R\d+[A-Za-z0-9]*)\b`)
 	sysDescrVersionRe      = regexp.MustCompile(`(?i)\bversion\s+([A-Za-z0-9][A-Za-z0-9._-]{0,30})`)
+	huaweiV600PlatformRe   = regexp.MustCompile(`(?i)\bV600(?:R\d+[A-Za-z0-9]*)?\b`)
+	huaweiV200PlatformRe   = regexp.MustCompile(`(?i)\bV200(?:R\d+[A-Za-z0-9]*)?\b`)
 	// 型号样式：字母开头、无空格、且至少含一段 -/_ 分隔的后缀（板型标识），
 	// 例如 S5700-28C-HI、AR2220-S。要求分隔后缀是为了把 "Linux"、"Huawei"
 	// 这类首行普通单词挡在外面。
@@ -1059,12 +1078,29 @@ func parseDeviceIdentityFromSysDescr(sysDescr string) (model string, version str
 	return model, ""
 }
 
+// DetectHuaweiPlatform 根据软件版本或 sysDescr 识别华为软件平台（"V600" / "V200" / ""）。
+func DetectHuaweiPlatform(version, sysDescr string) string {
+	for _, candidate := range []string{version, sysDescr} {
+		trimmed := strings.TrimSpace(candidate)
+		if trimmed == "" {
+			continue
+		}
+		if huaweiV600PlatformRe.MatchString(trimmed) {
+			return "V600"
+		}
+		if huaweiV200PlatformRe.MatchString(trimmed) {
+			return "V200"
+		}
+	}
+	return ""
+}
+
 // extractModelFromSysDescrHead 在 sysDescr 开头形如型号时返回它，否则返回空。
 //
-// 取"首个空白分隔的 token"而非严格意义的首行：sysDescr 经 formatSNMPValue
-// 会把 \r\n 压成空格（probe.go 为单行展示做的清洗），换行边界已不可依赖，
-// 但完整型号仍稳定处在最前。Cisco/Linux 那类开头是普通单词（"Cisco"、"Linux"）
-// 的设备会因缺少 -/_ 板型后缀而落空，回退其它策略。
+// 取"首个空白分隔的 token"（遇到 CloudEngine / Quidway 品牌前缀时取第二个 token）
+// 而非严格意义的首行：sysDescr 经 formatSNMPValue 会把 \r\n 压成空格（probe.go 为单行展示
+// 做的清洗），换行边界已不可依赖，但完整型号仍稳定处在最前。Cisco/Linux 那类开头是普通单词
+// （"Cisco"、"Linux"）的设备会因缺少 -/_ 板型后缀而落空，回退其它策略。
 func extractModelFromSysDescrHead(sysDescr string) string {
 	head := sysDescr
 	if idx := strings.IndexAny(head, "\r\n"); idx >= 0 {
@@ -1075,6 +1111,9 @@ func extractModelFromSysDescrHead(sysDescr string) string {
 		return ""
 	}
 	candidate := fields[0]
+	if isHuaweiModelBrandPrefix(candidate) && len(fields) >= 2 {
+		candidate = fields[1]
+	}
 	if len(candidate) < 2 || len(candidate) > 40 {
 		return ""
 	}
@@ -1082,6 +1121,10 @@ func extractModelFromSysDescrHead(sysDescr string) string {
 		return ""
 	}
 	return candidate
+}
+
+func isHuaweiModelBrandPrefix(token string) bool {
+	return strings.EqualFold(token, "CloudEngine") || strings.EqualFold(token, "Quidway")
 }
 
 // firstNonEmptyWalkValue 返回 walk 结果中第一个非空字符串值。
@@ -1178,13 +1221,37 @@ func ExtractPatchVersion(sysDescr string, firmwareVersion string) string {
 // collectDeviceIdentity 采集设备型号与软件版本。
 // 优先 ENTITY-MIB（标准、结构化），缺失时回退解析 sysDescr。
 func (c *SNMPCollector) collectDeviceIdentity(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry) {
+	c.collectDeviceIdentityWithSysDescr(target, metrics, registry, "", false)
+}
+
+func (c *SNMPCollector) collectDeviceIdentityWithSysDescr(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	cachedSysDescr string,
+	sysDescrCached bool,
+) {
+	c.collectDeviceIdentityWithContext(target, metrics, registry, cachedSysDescr, sysDescrCached, "", false)
+}
+
+func (c *SNMPCollector) collectDeviceIdentityWithContext(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	cachedSysDescr string,
+	sysDescrCached bool,
+	cachedSysObjectID string,
+	sysObjectIDCached bool,
+) {
 	model := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalModelName.OID)
 	version := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalSoftwareRev.OID)
 
-	var descr string
+	descr := cachedSysDescr
 	if model == "" || version == "" {
-		if d := c.readSysDescr(target, registry); d != "" {
-			descr = d
+		if !sysDescrCached && descr == "" {
+			descr = c.readSysDescr(target, registry)
+		}
+		if descr != "" {
 			fallbackModel, fallbackVersion := parseDeviceIdentityFromSysDescr(descr)
 			if model == "" {
 				model = fallbackModel
@@ -1200,6 +1267,21 @@ func (c *SNMPCollector) collectDeviceIdentity(target snmpClient, metrics *SNMPMe
 		model = firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalDescr.OID)
 	}
 
+	// 若 ENTITY-MIB 与 sysDescr 均未给出型号，按 sysObjectID 查华为型号知识库兜底
+	if model == "" {
+		sysObjID := snmpmib.NormalizeOID(cachedSysObjectID)
+		if !sysObjectIDCached && sysObjID == "" {
+			sysObjID = snmpmib.NormalizeOID(readStringScalar(target, registry.Common.System.SysObjectID.OID))
+		}
+		if sysObjID != "" {
+			if catalog, err := snmpmib.DefaultHuaweiModelCatalog(); err == nil && catalog != nil {
+				if profile, ok := catalog.LookupBySysObjectID(sysObjID); ok {
+					model = profile.Series
+				}
+			}
+		}
+	}
+
 	if model != "" {
 		model = sanitizeIdentityValue(model)
 		metrics.Model = &model
@@ -1210,7 +1292,7 @@ func (c *SNMPCollector) collectDeviceIdentity(target snmpClient, metrics *SNMPMe
 	}
 
 	patch := ExtractPatchVersion(descr, version)
-	if patch == "" && descr == "" {
+	if patch == "" && descr == "" && !sysDescrCached {
 		if d := c.readSysDescr(target, registry); d != "" {
 			descr = d
 			patch = ExtractPatchVersion(descr, version)
@@ -1234,10 +1316,38 @@ func (c *SNMPCollector) readSysDescr(target snmpClient, registry *snmpmib.Regist
 	return strings.TrimSpace(formatSNMPValue(packet.Variables[0].Value))
 }
 
+func sysDescrHead(sysDescr string) string {
+	trimmed := strings.TrimSpace(sysDescr)
+	if trimmed == "" {
+		return ""
+	}
+	if idx := strings.IndexAny(trimmed, "\r\n"); idx >= 0 {
+		trimmed = strings.TrimSpace(trimmed[:idx])
+	}
+	const maxHeadLen = 120
+	if len(trimmed) > maxHeadLen {
+		return trimmed[:maxHeadLen]
+	}
+	return trimmed
+}
+
 // collectDeviceClassification 采集设备分类信号并推断类型。
 // 各信号独立获取、缺失即置零值：老设备没有 LLDP、精简 agent 不上报 sysServices 都属预期。
 func (c *SNMPCollector) collectDeviceClassification(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry) {
-	sysDescr := c.readSysDescr(target, registry)
+	c.collectDeviceClassificationWithSysDescr(target, metrics, registry, "", false)
+}
+
+func (c *SNMPCollector) collectDeviceClassificationWithSysDescr(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	cachedSysDescr string,
+	sysDescrCached bool,
+) {
+	sysDescr := cachedSysDescr
+	if !sysDescrCached && sysDescr == "" {
+		sysDescr = c.readSysDescr(target, registry)
+	}
 
 	sysServices := 0
 	if oid := strings.TrimSpace(registry.Common.System.SysServices.OID); oid != "" {
@@ -1328,6 +1438,9 @@ func collectCPUFromCandidates(
 	candidates []snmpmib.MetricCandidate,
 	logger *zap.Logger,
 ) *float64 {
+	var zeroFallback *float64
+	var zeroCandidateID string
+
 	for _, candidate := range candidates {
 		var value *float64
 		switch candidate.Strategy {
@@ -1341,16 +1454,74 @@ func collectCPUFromCandidates(
 			value = collectPercentFromParts(client, candidate.OIDs)
 		}
 
-		if value != nil {
-			if logger != nil {
-				logger.Debug("collected CPU from registry candidate",
-					zap.String("candidate", candidate.ID),
-					zap.Float64("cpu_usage", *value))
-			}
-			return value
+		if value == nil {
+			continue
 		}
+		if *value == 0 && usesNonZeroAverage(candidate.Aggregate) {
+			if zeroFallback == nil {
+				zeroFallback = value
+				zeroCandidateID = candidate.ID
+			}
+			continue
+		}
+		if logger != nil {
+			logger.Debug("collected CPU from registry candidate",
+				zap.String("candidate", candidate.ID),
+				zap.Float64("cpu_usage", *value))
+		}
+		return value
+	}
+
+	if zeroFallback != nil {
+		if logger != nil {
+			logger.Debug("collected zero CPU fallback from registry candidate",
+				zap.String("candidate", zeroCandidateID),
+				zap.Float64("cpu_usage", *zeroFallback))
+		}
+		return zeroFallback
 	}
 	return nil
+}
+
+type memoryCandidateResult struct {
+	candidateID string
+	usage       *float64
+	total       *int64
+	used        *int64
+}
+
+func evaluateMemoryCandidate(
+	client snmpClient,
+	candidate snmpmib.MetricCandidate,
+) (*float64, *int64, *int64) {
+	switch candidate.Strategy {
+	case "walk_percent_with_optional_size_mb":
+		return collectWalkPercentWithOptionalSize(client, candidate, 1024*1024)
+	case "walk_percent_with_optional_size_bytes":
+		return collectWalkPercentWithOptionalSize(client, candidate, 1)
+	case "walk_percent_auto":
+		return collectWalkPercentValue(client, candidate, true), nil, nil
+	case "walk_percent_with_size_kb":
+		return collectWalkPercentWithSize(client, candidate, 1024)
+	case "walk_percent_with_size_bytes":
+		return collectWalkPercentWithSize(client, candidate, 1)
+	case "walk_percent_with_size_mb":
+		return collectWalkPercentWithSize(client, candidate, 1024*1024)
+	case "get_percent":
+		return collectSinglePercent(client, candidate.OIDs), nil, nil
+	case "get_percent_with_size_kb":
+		return collectGetPercentWithSize(client, candidate.OIDs, 1024)
+	case "get_used_free_bytes":
+		return collectGetUsedFreeBytes(client, candidate.OIDs)
+	case "host_resources_ram_storage":
+		return collectHostResourcesMemory(client, candidate.OIDs)
+	case "get_total_avail_kb":
+		return collectGetTotalAvailKB(client, candidate.OIDs)
+	case "walk_mem_size_free_bytes":
+		return collectWalkMemSizeFree(client, candidate.OIDs)
+	default:
+		return nil, nil, nil
+	}
 }
 
 func collectMemoryFromCandidates(
@@ -1358,50 +1529,62 @@ func collectMemoryFromCandidates(
 	candidates []snmpmib.MetricCandidate,
 	logger *zap.Logger,
 ) (*float64, *int64, *int64) {
+	var usageOnlyFallback *memoryCandidateResult
+	var zeroFallback *memoryCandidateResult
+
 	for _, candidate := range candidates {
-		var usage *float64
-		var total *int64
-		var used *int64
-
-		switch candidate.Strategy {
-		case "walk_percent_with_size_kb":
-			usage, total, used = collectWalkPercentWithSize(client, candidate, 1024)
-		case "walk_percent_with_size_bytes":
-			usage, total, used = collectWalkPercentWithSize(client, candidate, 1)
-		case "walk_percent_with_size_mb":
-			usage, total, used = collectWalkPercentWithSize(client, candidate, 1024*1024)
-		case "get_percent":
-			usage = collectSinglePercent(client, candidate.OIDs)
-		case "get_percent_with_size_kb":
-			usage, total, used = collectGetPercentWithSize(client, candidate.OIDs, 1024)
-		case "get_used_free_bytes":
-			usage, total, used = collectGetUsedFreeBytes(client, candidate.OIDs)
-		case "host_resources_ram_storage":
-			usage, total, used = collectHostResourcesMemory(client, candidate.OIDs)
-		case "get_total_avail_kb":
-			usage, total, used = collectGetTotalAvailKB(client, candidate.OIDs)
-		case "walk_mem_size_free_bytes":
-			usage, total, used = collectWalkMemSizeFree(client, candidate.OIDs)
+		usage, total, used := evaluateMemoryCandidate(client, candidate)
+		if usage == nil && total == nil && used == nil {
+			continue
 		}
 
-		if usage != nil || total != nil || used != nil {
-			if logger != nil {
-				fields := []zap.Field{zap.String("candidate", candidate.ID)}
-				if usage != nil {
-					fields = append(fields, zap.Float64("memory_usage", *usage))
-				}
-				if total != nil {
-					fields = append(fields, zap.Int64("memory_total", *total))
-				}
-				if used != nil {
-					fields = append(fields, zap.Int64("memory_used", *used))
-				}
-				logger.Debug("collected memory from registry candidate", fields...)
+		// 全 0 占位行先暂存，避免阻断后续真实上报内存的候选（如旧款设备仅在 hwMemoryDevTable 上报）。
+		if usage != nil && *usage == 0 && usesNonZeroAverage(candidate.Aggregate) {
+			if zeroFallback == nil {
+				zeroFallback = &memoryCandidateResult{candidateID: candidate.ID, usage: usage, total: total, used: used}
 			}
-			return usage, total, used
+			continue
 		}
+
+		if usage != nil && total == nil && used == nil {
+			if usageOnlyFallback == nil {
+				usageOnlyFallback = &memoryCandidateResult{candidateID: candidate.ID, usage: usage}
+			}
+			continue
+		}
+
+		logMemoryCandidate(logger, "collected memory from registry candidate", candidate.ID, usage, total, used)
+		return usage, total, used
+	}
+
+	if usageOnlyFallback != nil {
+		logMemoryCandidate(logger, "collected memory usage-only fallback from registry candidate",
+			usageOnlyFallback.candidateID, usageOnlyFallback.usage, nil, nil)
+		return usageOnlyFallback.usage, nil, nil
+	}
+	if zeroFallback != nil {
+		logMemoryCandidate(logger, "collected zero memory fallback from registry candidate",
+			zeroFallback.candidateID, zeroFallback.usage, zeroFallback.total, zeroFallback.used)
+		return zeroFallback.usage, zeroFallback.total, zeroFallback.used
 	}
 	return nil, nil, nil
+}
+
+func logMemoryCandidate(logger *zap.Logger, msg, candidateID string, usage *float64, total, used *int64) {
+	if logger == nil {
+		return
+	}
+	fields := []zap.Field{zap.String("candidate", candidateID)}
+	if usage != nil {
+		fields = append(fields, zap.Float64("memory_usage", *usage))
+	}
+	if total != nil {
+		fields = append(fields, zap.Int64("memory_total", *total))
+	}
+	if used != nil {
+		fields = append(fields, zap.Int64("memory_used", *used))
+	}
+	logger.Debug(msg, fields...)
 }
 
 func collectTemperatureFromCandidates(
@@ -1840,6 +2023,126 @@ func collectWalkPercentWithSize(
 	return usage, &totalSize, &usedBytes
 }
 
+// collectWalkPercentWithOptionalSize 采集内存使用率及可选容量列。
+// 容量列缺失、溢出或为空时仅返回使用率（total/used 为 nil），不丢弃已采到的使用率；
+// 容量汇总时优先按实体索引后缀对齐非零有效 usage 行，避免混算无关端口/占位实体。
+func collectWalkPercentWithOptionalSize(
+	client snmpClient,
+	candidate snmpmib.MetricCandidate,
+	sizeMultiplier int64,
+) (*float64, *int64, *int64) {
+	if len(candidate.OIDs) == 0 {
+		return nil, nil, nil
+	}
+	usageOID := strings.TrimSpace(candidate.OIDs[0])
+	if usageOID == "" {
+		return nil, nil, nil
+	}
+	usageResult, err := client.BulkWalkAll(usageOID)
+	if err != nil || len(usageResult) == 0 {
+		return nil, nil, nil
+	}
+
+	usage, nonZeroIndexes := aggregateDirectPercentWithIndexes(usageResult, usageOID, candidate.Aggregate)
+	if usage == nil {
+		return nil, nil, nil
+	}
+
+	totalSize := resolveOptionalMemorySize(client, candidate.OIDs, nonZeroIndexes, sizeMultiplier)
+	if totalSize <= 0 {
+		return usage, nil, nil
+	}
+
+	usedBytes := calculateUsedBytes(totalSize, *usage)
+	return usage, &totalSize, &usedBytes
+}
+
+func resolveOptionalMemorySize(
+	client snmpClient,
+	oids []string,
+	nonZeroIndexes map[string]struct{},
+	sizeMultiplier int64,
+) int64 {
+	if len(oids) < 2 || sizeMultiplier <= 0 {
+		return 0
+	}
+	sizeOID := strings.TrimSpace(oids[1])
+	if sizeOID == "" {
+		return 0
+	}
+	sizeResult, sizeErr := client.BulkWalkAll(sizeOID)
+	if sizeErr != nil || len(sizeResult) == 0 {
+		return 0
+	}
+	if len(nonZeroIndexes) > 0 {
+		if aligned := sumPositiveSizesFiltered(sizeResult, sizeOID, nonZeroIndexes, sizeMultiplier); aligned > 0 {
+			return aligned
+		}
+	}
+	return sumPositiveSizesFiltered(sizeResult, "", nil, sizeMultiplier)
+}
+
+func calculateUsedBytes(totalSize int64, usage float64) int64 {
+	if totalSize <= 0 || usage <= 0 {
+		return 0
+	}
+	if usage >= 100 {
+		return totalSize
+	}
+	raw := float64(totalSize) * (usage / 100.0)
+	if raw >= float64(math.MaxInt64) {
+		return totalSize
+	}
+	used := int64(raw)
+	if used < 0 {
+		return 0
+	}
+	if used > totalSize {
+		return totalSize
+	}
+	return used
+}
+
+func aggregateDirectPercentWithIndexes(
+	items []gosnmp.SnmpPDU,
+	baseOID string,
+	aggregate string,
+) (*float64, map[string]struct{}) {
+	total := 0.0
+	count := 0
+	nonZeroCount := 0
+	nonZeroIndexes := make(map[string]struct{})
+
+	for _, item := range items {
+		value, ok := numericPDUValue(item)
+		if !ok || value < 0 || value > 100 {
+			continue
+		}
+		total += value
+		count++
+		if value > 0 {
+			nonZeroCount++
+			if suffix := extractOIDIndexSuffix(item.Name, baseOID); suffix != "" {
+				nonZeroIndexes[suffix] = struct{}{}
+			}
+		}
+	}
+
+	if count == 0 {
+		return nil, nil
+	}
+	if usesNonZeroAverage(aggregate) {
+		if nonZeroCount == 0 {
+			zero := 0.0
+			return &zero, nonZeroIndexes
+		}
+		avg := total / float64(nonZeroCount)
+		return &avg, nonZeroIndexes
+	}
+	avg := total / float64(count)
+	return &avg, nonZeroIndexes
+}
+
 func collectGetPercentWithSize(
 	client snmpClient,
 	oids []string,
@@ -2043,13 +2346,15 @@ func collectMaxTemperature(client snmpClient, oids []string, divisor float64) *f
 	return &maxTemp
 }
 
+const snmpPercentInvalidSentinel = 255
+
 func aggregatePercentPDUs(items []gosnmp.SnmpPDU, autoNormalize bool, aggregate string) *float64 {
 	total := 0.0
 	count := 0
 	nonZeroCount := 0
 	for _, item := range items {
 		value, ok := numericPDUValue(item)
-		if !ok {
+		if !ok || value < 0 || value == snmpPercentInvalidSentinel {
 			continue
 		}
 		if autoNormalize {
@@ -2101,13 +2406,36 @@ func extractPacketNumbers(client snmpClient, oids []string) []float64 {
 }
 
 func sumPositiveSizes(items []gosnmp.SnmpPDU, multiplier int64) int64 {
+	return sumPositiveSizesFiltered(items, "", nil, multiplier)
+}
+
+func sumPositiveSizesFiltered(
+	items []gosnmp.SnmpPDU,
+	baseOID string,
+	allowedIndexes map[string]struct{},
+	multiplier int64,
+) int64 {
+	if multiplier <= 0 {
+		return 0
+	}
+	maxRaw := math.MaxInt64 / multiplier
 	total := int64(0)
 	for _, item := range items {
+		if len(allowedIndexes) > 0 {
+			suffix := extractOIDIndexSuffix(item.Name, baseOID)
+			if _, ok := allowedIndexes[suffix]; !ok {
+				continue
+			}
+		}
 		value, ok := numericPDUInt64(item)
-		if !ok || value <= 0 {
+		if !ok || value <= 0 || value > maxRaw {
 			continue
 		}
-		total += value * multiplier
+		scaled := value * multiplier
+		if total > math.MaxInt64-scaled {
+			return 0
+		}
+		total += scaled
 	}
 	return total
 }
@@ -2137,11 +2465,16 @@ func numericPDUValue(variable gosnmp.SnmpPDU) (float64, bool) {
 }
 
 func numericPDUInt64(variable gosnmp.SnmpPDU) (int64, bool) {
-	value, ok := numericPDUValue(variable)
-	if !ok {
+	switch variable.Type {
+	case gosnmp.Integer, gosnmp.Gauge32, gosnmp.Counter32, gosnmp.Counter64, gosnmp.TimeTicks, gosnmp.Uinteger32:
+		bi := gosnmp.ToBigInt(variable.Value)
+		if bi == nil || !bi.IsInt64() {
+			return 0, false
+		}
+		return bi.Int64(), true
+	default:
 		return 0, false
 	}
-	return int64(value), true
 }
 
 func bgpStateLabel(state int) string {

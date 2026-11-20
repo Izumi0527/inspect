@@ -1,0 +1,729 @@
+{
+  "schema_version": 1,
+  "description": "Huawei V600 and modular chassis (S7700/S8700/S12700E/S16700) authoritative SNMP alarm/node supplement",
+  "source": "Huawei V600 & Modular Chassis MIB Reference (HUAWEI-ENTITY-TRAP-MIB / HUAWEI-STACK-MIB CSS / HUAWEI-M-LAG-MIB / HUAWEI-EVPN-MIB / HUAWEI-MACSEC-MIB / HUAWEI-SECURITY-MIB)",
+  "traps": {
+    "1.3.6.1.4.1.2011.5.25.165.2.2.7.3": {
+      "name": "hwCpcarAutoPortDefendAlarm",
+      "mib": "HUAWEI-SECURITY-MIB",
+      "level": "warning",
+      "facility": "security",
+      "meaning": "端口自动防攻击功能检测到上送CPU的协议报文速率超过阈值并触发抑制",
+      "vars": [
+        "hwCpcarAutoPortDefendIfName",
+        "hwCpcarAutoPortDefendProtocol"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.178.8.2.1": {
+      "name": "hwMLagConsistencyCheckType1",
+      "mib": "HUAWEI-M-LAG-MIB",
+      "level": "warning",
+      "facility": "switching",
+      "meaning": "M-LAG两台设备之间Type 1关键配置一致性检查失败",
+      "vars": [
+        "hwMlagDfsGroupId",
+        "hwMlagConsistencyCheckReason"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.178.8.2.2": {
+      "name": "hwMLagConsistencyCheckType1Resume",
+      "mib": "HUAWEI-M-LAG-MIB",
+      "level": "info",
+      "facility": "switching",
+      "cleared": true,
+      "meaning": "M-LAG Type 1关键配置一致性检查告警恢复",
+      "vars": [
+        "hwMlagDfsGroupId"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.178.8.2.3": {
+      "name": "hwMLagConsistencyCheckType2",
+      "mib": "HUAWEI-M-LAG-MIB",
+      "level": "warning",
+      "facility": "switching",
+      "meaning": "M-LAG两台设备之间Type 2业务配置一致性检查失败",
+      "vars": [
+        "hwMlagDfsGroupId",
+        "hwMlagConsistencyCheckReason"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.178.8.2.7": {
+      "name": "hwMlagDfsPeerDown",
+      "mib": "HUAWEI-M-LAG-MIB",
+      "level": "critical",
+      "facility": "switching",
+      "meaning": "M-LAG DFS Group对端设备状态变为Down，双归可靠性降级",
+      "vars": [
+        "hwMlagDfsGroupId"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.178.8.2.8": {
+      "name": "hwMlagDfsPeerDownResume",
+      "mib": "HUAWEI-M-LAG-MIB",
+      "level": "info",
+      "facility": "switching",
+      "cleared": true,
+      "meaning": "M-LAG DFS Group对端设备状态恢复为Up",
+      "vars": [
+        "hwMlagDfsGroupId"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.178.8.2.9": {
+      "name": "hwMlagPortDown",
+      "mib": "HUAWEI-M-LAG-MIB",
+      "level": "critical",
+      "facility": "interface",
+      "meaning": "M-LAG本端与对端成员接口同时处于Down状态，业务转发中断",
+      "vars": [
+        "hwMlagId",
+        "ifName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.178.8.2.21": {
+      "name": "hwPeerlinkBlock",
+      "mib": "HUAWEI-M-LAG-MIB",
+      "level": "critical",
+      "facility": "switching",
+      "meaning": "M-LAG Peer-Link接口的STP状态进入Discarding阻塞状态，可能导致双主或丢包",
+      "vars": [
+        "ifName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.178.8.2.31": {
+      "name": "hwMlagDiffVersionOrBoardType",
+      "mib": "HUAWEI-M-LAG-MIB",
+      "level": "warning",
+      "facility": "switching",
+      "meaning": "M-LAG两端设备的软件版本或单板型号不一致",
+      "vars": [
+        "hwMlagDfsGroupId"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.178.8.2.32": {
+      "name": "hwMlagDiffVersionOrBoardTypeResume",
+      "mib": "HUAWEI-M-LAG-MIB",
+      "level": "info",
+      "facility": "switching",
+      "cleared": true,
+      "meaning": "M-LAG两端设备的软件版本或单板型号不一致告警恢复",
+      "vars": [
+        "hwMlagDfsGroupId"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.178.8.2.35": {
+      "name": "hwMlagSrcIpChgHeartLost",
+      "mib": "HUAWEI-M-LAG-MIB",
+      "level": "critical",
+      "facility": "switching",
+      "meaning": "M-LAG DFS源IP地址变更导致双机心跳连接丢失",
+      "vars": [
+        "hwMlagDfsGroupId"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.183.3.3.2.1": {
+      "name": "hwCssLinkDown",
+      "mib": "HUAWEI-STACK-MIB",
+      "level": "warning",
+      "facility": "switching",
+      "meaning": "CSS框式集群物理或逻辑集群链路状态变为Down",
+      "vars": [
+        "hwCssPortPortId",
+        "hwStackPortStatus"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.183.3.3.2.2": {
+      "name": "hwCssLinkUp",
+      "mib": "HUAWEI-STACK-MIB",
+      "level": "info",
+      "facility": "switching",
+      "cleared": true,
+      "meaning": "CSS框式集群链路状态恢复为Up",
+      "vars": [
+        "hwCssPortPortId",
+        "hwStackPortStatus"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.183.3.3.2.3": {
+      "name": "hwCssSwitchOver",
+      "mib": "HUAWEI-STACK-MIB",
+      "level": "warning",
+      "facility": "switching",
+      "meaning": "CSS框式集群发生主备框倒换",
+      "vars": [
+        "hwMemberCurrentStackId"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.183.3.3.2.4": {
+      "name": "hwCssConnectError",
+      "mib": "HUAWEI-STACK-MIB",
+      "level": "critical",
+      "facility": "switching",
+      "meaning": "CSS框式集群物理连线错误或拓扑连接异常",
+      "vars": [
+        "hwCssPortPortId"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.183.3.3.2.11": {
+      "name": "hwCssPortUpDownAlarm",
+      "mib": "HUAWEI-STACK-MIB",
+      "level": "warning",
+      "facility": "switching",
+      "meaning": "CSS框式集群端口频繁Up/Down震荡告警",
+      "vars": [
+        "hwCssPortPortId",
+        "hwStackPortStatus"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.1.1": {
+      "name": "hwChassisRemove",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "warning",
+      "facility": "hardware",
+      "meaning": "框式机框实体被拔出或离线",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.1.2": {
+      "name": "hwChassisInsert",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "框式机框实体插入就绪",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.1.3": {
+      "name": "hwChassisFail",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "critical",
+      "facility": "hardware",
+      "meaning": "框式设备机框发生硬件功能故障",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID",
+        "hwEntityTrapReasonDescr"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.1.4": {
+      "name": "hwChassisFailResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "框式设备机框硬件故障恢复",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.1.5": {
+      "name": "hwChassisInvalid",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "critical",
+      "facility": "hardware",
+      "meaning": "框式设备机框完全不可用",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.1.6": {
+      "name": "hwChassisInvalidResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "框式设备机框不可用状态恢复",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.2.7": {
+      "name": "hwBoardLeaveMaster",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "warning",
+      "facility": "hardware",
+      "meaning": "主控板退出主用状态（发生主备切换或单板复位）",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.2.8": {
+      "name": "hwBoardBecomeMaster",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "meaning": "主控板升为主用状态",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.2.13": {
+      "name": "hwBoardPowerOff",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "critical",
+      "facility": "hardware",
+      "meaning": "单板被强制下电或供电异常掉电",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapReasonDescr"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.5.3": {
+      "name": "hwPowerFail",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "critical",
+      "facility": "hardware",
+      "meaning": "电源模块供电故障（输入欠压/过压或输出异常）",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID",
+        "hwEntityTrapReasonDescr"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.5.4": {
+      "name": "hwPowerFailResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "电源模块供电故障恢复",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.5.7": {
+      "name": "hwPowerUnusable",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "critical",
+      "facility": "hardware",
+      "meaning": "电源模块处于不可用状态",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.5.8": {
+      "name": "hwPowerUnusableResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "电源模块从不可用状态恢复正常",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.6.3": {
+      "name": "hwFanFail",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "critical",
+      "facility": "hardware",
+      "meaning": "风扇模块出现硬件故障或转速异常",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID",
+        "hwEntityTrapReasonDescr"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.6.4": {
+      "name": "hwFanFailResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "风扇模块故障恢复正常",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.6.7": {
+      "name": "hwFanUnusable",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "critical",
+      "facility": "hardware",
+      "meaning": "风扇模块整体不可用",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.6.8": {
+      "name": "hwFanUnusableResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "风扇模块从不可用状态恢复正常",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.7.3": {
+      "name": "hwLcdInvalid",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "warning",
+      "facility": "hardware",
+      "meaning": "框式设备前面板LCD模块失效",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.7.4": {
+      "name": "hwLcdInvalidResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "框式设备前面板LCD模块失效恢复",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.8.1": {
+      "name": "hwCmuRemove",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "warning",
+      "facility": "hardware",
+      "meaning": "框式设备集中监控板（CMU）被拔出",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.8.2": {
+      "name": "hwCmuInsert",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "框式设备集中监控板（CMU）已插入",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.8.3": {
+      "name": "hwCmuInvalid",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "critical",
+      "facility": "hardware",
+      "meaning": "框式设备集中监控板（CMU）失效",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.8.4": {
+      "name": "hwCmuInvalidResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "框式设备集中监控板（CMU）失效恢复",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.10.1": {
+      "name": "hwTempAlarm",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "critical",
+      "facility": "hardware",
+      "meaning": "设备实体温度超过严重告警阈值",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID",
+        "hwEntityTrapReasonDescr"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.10.2": {
+      "name": "hwTempResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "设备实体温度恢复到正常范围",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.10.5": {
+      "name": "hwVoltAlarm",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "warning",
+      "facility": "hardware",
+      "meaning": "设备实体供电电压超出正常范围",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.10.6": {
+      "name": "hwVoltResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "设备实体供电电压恢复正常",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.10.15": {
+      "name": "hwBrdTempFatalAlarm",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "critical",
+      "facility": "hardware",
+      "meaning": "单板温度超过致命高温阈值，存在自动下电保护风险",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapReasonDescr"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.10.16": {
+      "name": "hwBrdTempFatalResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "hardware",
+      "cleared": true,
+      "meaning": "单板致命高温告警恢复",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.11.1": {
+      "name": "hwSystemConfigError",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "warning",
+      "facility": "configuration",
+      "meaning": "设备系统配置校验异常",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "hwEntityTrapReasonDescr"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.11.2": {
+      "name": "hwSystemConfigResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "configuration",
+      "cleared": true,
+      "meaning": "设备系统配置校验异常恢复",
+      "vars": [
+        "hwEntityPhysicalIndex"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.12.1": {
+      "name": "hwPortDown",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "warning",
+      "facility": "interface",
+      "meaning": "实体物理端口链路状态变为Down",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.12.2": {
+      "name": "hwPortUp",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "interface",
+      "cleared": true,
+      "meaning": "实体物理端口链路状态恢复为Up",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.14.3": {
+      "name": "hwCpuFail",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "critical",
+      "facility": "system",
+      "meaning": "实体CPU发生硬件故障",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityTrapFaultID"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.14.4": {
+      "name": "hwCpuFailResume",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "info",
+      "facility": "system",
+      "cleared": true,
+      "meaning": "实体CPU硬件故障恢复",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.14.5": {
+      "name": "hwFwdCPUUtilizationRising",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "warning",
+      "facility": "system",
+      "meaning": "转发平面CPU使用率超过告警阈值",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityThresholdCurrent",
+        "hwEntityThresholdWarning"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.219.2.15.3": {
+      "name": "hwCapMemUtilizationRising",
+      "mib": "HUAWEI-ENTITY-TRAP-MIB",
+      "level": "warning",
+      "facility": "system",
+      "meaning": "转发容量内存使用率超过告警阈值",
+      "vars": [
+        "hwEntityPhysicalIndex",
+        "entPhysicalName",
+        "hwEntityThresholdCurrent",
+        "hwEntityThresholdWarning"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.347.2.6": {
+      "name": "hwMACsecFailNotify",
+      "mib": "HUAWEI-MACSEC-MIB",
+      "level": "critical",
+      "facility": "security",
+      "meaning": "接口MACsec加密协议协商或运行失败",
+      "vars": [
+        "ifName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.347.2.7": {
+      "name": "hwMacsecRebootRequired",
+      "mib": "HUAWEI-MACSEC-MIB",
+      "level": "warning",
+      "facility": "security",
+      "meaning": "MACsec配置变更需要重启设备或单板后生效",
+      "vars": [
+        "ifName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.347.2.9": {
+      "name": "hwMacsecDynCakReAuthPacketLoss",
+      "mib": "HUAWEI-MACSEC-MIB",
+      "level": "warning",
+      "facility": "security",
+      "meaning": "MACsec动态CAK重认证过程中检测到报文丢弃",
+      "vars": [
+        "ifName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.356.1.1.2.1": {
+      "name": "hwEvpnMacDupVpnAlarm",
+      "mib": "HUAWEI-EVPN-MIB",
+      "level": "warning",
+      "facility": "routing",
+      "meaning": "EVPN实例内检测到MAC地址重复并触发抑制",
+      "vars": [
+        "hwEvpnInstanceName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.356.1.1.2.2": {
+      "name": "hwEvpnMacDupVpnAlarmClear",
+      "mib": "HUAWEI-EVPN-MIB",
+      "level": "info",
+      "facility": "routing",
+      "cleared": true,
+      "meaning": "EVPN实例内MAC地址重复抑制告警清除",
+      "vars": [
+        "hwEvpnInstanceName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.356.1.1.2.5": {
+      "name": "hwEvpnEvplInstDown",
+      "mib": "HUAWEI-EVPN-MIB",
+      "level": "critical",
+      "facility": "routing",
+      "meaning": "EVPN EVPL实例状态变为Down",
+      "vars": [
+        "hwEvpnEvplId"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.356.1.1.2.7": {
+      "name": "hwEvpnDiscardRoute",
+      "mib": "HUAWEI-EVPN-MIB",
+      "level": "warning",
+      "facility": "routing",
+      "meaning": "EVPN路由数量超过上限导致新路由被丢弃",
+      "vars": [
+        "hwEvpnInstanceName"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.356.1.1.2.13": {
+      "name": "hwEvpnEvplAlarmUp",
+      "mib": "HUAWEI-EVPN-MIB",
+      "level": "info",
+      "facility": "routing",
+      "cleared": true,
+      "meaning": "EVPN EVPL实例状态恢复为Up",
+      "vars": [
+        "hwEvpnEvplId"
+      ]
+    },
+    "1.3.6.1.4.1.2011.5.25.356.1.1.2.14": {
+      "name": "hwEvpnMacFlappingVpnAlarm",
+      "mib": "HUAWEI-EVPN-MIB",
+      "level": "warning",
+      "facility": "switching",
+      "meaning": "EVPN实例内检测到MAC地址漂移",
+      "vars": [
+        "hwEvpnInstanceName"
+      ]
+    }
+  },
+  "nodes": {
+    "1.3.6.1.4.1.2011.5.25.183.1.21.1.5": {
+      "name": "hwStackPortStatus",
+      "mib": "HUAWEI-STACK-MIB",
+      "enum": {
+        "1": "up",
+        "2": "down"
+      }
+    },
+    "1.3.6.1.4.1.2011.5.25.183.3.4.1.4": {
+      "name": "hwCssPortPortId",
+      "mib": "HUAWEI-STACK-MIB"
+    }
+  }
+}

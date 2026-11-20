@@ -282,6 +282,74 @@ func parseNotificationLogPDUs(logPDUs, varPDUs []gosnmp.SnmpPDU, deviceID int, c
 	return entries
 }
 
+// normalizeAlarmPDUValue 安全提取活动告警 PDU 值：对 nil / 异常类型 / 空字节返回空串，
+// 避免 fmt.Sprintf("<nil>") 或空字节返回 "0x" 污染消息与 OID 查找。
+func normalizeAlarmPDUValue(pdu gosnmp.SnmpPDU) string {
+	switch pdu.Type {
+	case gosnmp.Null, gosnmp.NoSuchObject, gosnmp.NoSuchInstance, gosnmp.EndOfMibView:
+		return ""
+	}
+	if pdu.Value == nil {
+		return ""
+	}
+	if raw, ok := pdu.Value.([]byte); ok && len(raw) == 0 {
+		return ""
+	}
+	return normalizeTrapValue(pdu.Value)
+}
+
+func isDottedOIDText(value string) bool {
+	trimmed := strings.TrimPrefix(strings.TrimSpace(value), ".")
+	if trimmed == "" || !strings.ContainsRune(trimmed, '.') {
+		return false
+	}
+	parts := strings.Split(trimmed, ".")
+	if len(parts) < 2 {
+		return false
+	}
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		for i := 0; i < len(part); i++ {
+			if part[i] < '0' || part[i] > '9' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func extractActiveAlarmID(pdu gosnmp.SnmpPDU) string {
+	val := normalizeAlarmPDUValue(pdu)
+	if val == "" {
+		return ""
+	}
+	if pdu.Type == gosnmp.ObjectIdentifier || isDottedOIDText(val) {
+		return snmpmib.NormalizeOID(val)
+	}
+	return strings.TrimSpace(val)
+}
+
+func lookupActiveAlarmTrap(catalog *snmpmib.AlarmCatalog, id string) (snmpmib.TrapDefinition, bool) {
+	if catalog == nil || id == "" {
+		return snmpmib.TrapDefinition{}, false
+	}
+	if def, ok := catalog.LookupTrap(id); ok {
+		return def, true
+	}
+	if isDottedOIDText(id) {
+		return snmpmib.TrapDefinition{}, false
+	}
+	// V600 部分形态可能在 hwActiveAlarmId 返回英文 Trap 名而非 OID，做确定性次级匹配
+	for _, def := range catalog.Traps {
+		if strings.EqualFold(def.Name, id) {
+			return def, true
+		}
+	}
+	return snmpmib.TrapDefinition{}, false
+}
+
 // parseAlarmActivePDUs 把 hwAlarmActiveTable 的 walk 结果组装为日志条目。
 // 表无时间列，log_timestamp 取采集时间，去重退化为按内容（同一活动告警反复轮询只入库一次）。
 func parseAlarmActivePDUs(pdus []gosnmp.SnmpPDU, deviceID int, collectedAt time.Time, maxEntries int) []logEntry {
@@ -305,13 +373,21 @@ func parseAlarmActivePDUs(pdus []gosnmp.SnmpPDU, deviceID int, collectedAt time.
 		}
 		switch column {
 		case hwAlarmColID:
-			r.id = snmpmib.NormalizeOID(normalizeTrapValue(pdu.Value))
+			if alarmID := extractActiveAlarmID(pdu); alarmID != "" {
+				r.id = alarmID
+			}
 		case hwAlarmColPara:
-			r.para = normalizeTrapValue(pdu.Value)
+			if para := normalizeAlarmPDUValue(pdu); para != "" {
+				r.para = para
+			}
 		}
 	}
 	sort.SliceStable(order, func(i, j int) bool {
-		return lastIndexSegment(order[i]) < lastIndexSegment(order[j])
+		li, lj := lastIndexSegment(order[i]), lastIndexSegment(order[j])
+		if li != lj {
+			return li < lj
+		}
+		return order[i] < order[j]
 	})
 
 	catalog := alarmCatalog()
@@ -326,7 +402,7 @@ func parseAlarmActivePDUs(pdus []gosnmp.SnmpPDU, deviceID int, collectedAt time.
 		}
 		level, facility := "warning", "system"
 		label := r.id
-		if def, ok := catalog.LookupTrap(r.id); ok {
+		if def, ok := lookupActiveAlarmTrap(catalog, r.id); ok {
 			level, facility = def.Level, def.Facility
 			label = fmt.Sprintf("%s (%s)", r.id, def.Name)
 		}

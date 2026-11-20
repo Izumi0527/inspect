@@ -4,8 +4,10 @@
 
 用法（在项目根目录执行）：
     python scripts/mib/extract-huawei-alarms.py [docx 路径]
+    python scripts/mib/extract-huawei-alarms.py --docx-dir docs/vendor --supplement backend-go/internal/snmpmib/huawei-alarms-v600-supplement.json
 
 默认 docx：docs/vendor/S300, S500, S2700, S5700, S6700 产品文档_20260803 094100.docx
+默认 supplement：backend-go/internal/snmpmib/huawei-alarms-v600-supplement.json（存在时自动无损合并）
 输出：
     backend-go/internal/snmpmib/huawei-alarms.json
     frontend/src/lib/plain-language/trap-oids.ts
@@ -15,6 +17,7 @@
 """
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
@@ -25,8 +28,16 @@ from pathlib import Path
 W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DOCX = ROOT / 'docs' / 'vendor' / 'S300, S500, S2700, S5700, S6700 产品文档_20260803 094100.docx'
+DEFAULT_SUPPLEMENT = ROOT / 'backend-go' / 'internal' / 'snmpmib' / 'huawei-alarms-v600-supplement.json'
 OUT_JSON = ROOT / 'backend-go' / 'internal' / 'snmpmib' / 'huawei-alarms.json'
 OUT_TS = ROOT / 'frontend' / 'src' / 'lib' / 'plain-language' / 'trap-oids.ts'
+MAX_DOCX_XML_BYTES = 256 * 1024 * 1024
+
+VALID_LEVELS = {'critical', 'warning', 'info'}
+VALID_FACILITIES = {
+    'system', 'interface', 'security', 'routing', 'switching',
+    'snmp', 'ssh', 'hardware', 'configuration',
+}
 
 MIB_HEADING = re.compile(r'^1\.\d+ ([A-Za-z0-9-]+MIB)$')
 # 表头有「节点名称/节点」「最大访问权限/访问权限/实现规格」乃至英文等变体，只按第 1、3 列判定表类型
@@ -46,7 +57,7 @@ ALWAYS_INCLUDE_MIBS = {
 # 恢复/清除类先判（hwCardInvalidResume 是恢复而非故障）→ info 且 cleared=true；
 # `(?<![Ii]n)Valid` 只认 Valid 不认 Invalid。NearlyExpired 是预警不是失效，不进 critical。
 CLEARED_RE = re.compile(
-    r'Resume|Recover|Restore|Clear|Normal|Online|Insert|Connect(?!ion)|Established|Success'
+    r'Resume|Recover|Restore|Clear|Normal|Online|Insert|Connect(?!ion|Error|Fail)|Established|Success'
     r'|Completed|Enabled|(?<![Ii]n)Valid|Full$|Up$|On$|Close$|Login$|Logout$',
 )
 CRITICAL_RE = re.compile(
@@ -61,7 +72,7 @@ CRITICAL_RE = re.compile(
 FACILITY_NAME_RULES = [
     ('hardware', re.compile(r'Temp|Fan|Power|Psu|Board|Card|Optical|Chassis|Volt|Humid|Battery|Rps|Lcd|Cmu|Entity(?!Ext)|Sensor|Fog|Gate|Unstable')),
     ('security', re.compile(r'Login|Logout|Auth|Password|Attack|Acl|Portal|Radius|Tacacs|Spoof|Wids|Snooping|Snp|Arp|Dhcp|Nac|Dot1x|8021x|Ipsg|Pki|Ssl|Ipsec|Secure|Quiet')),
-    ('system', re.compile(r'Cpu|CPU|Mem(?!ber)|Memory|Flash|Storage|Patch|Upgrade|License|Gtl|Clock|Ntp|Ptp|Config|Reboot|Restart|Process')),
+    ('system', re.compile(r'Cpu|CPU|Mem(?!ber)|Memory|Flash|Storage|Patch|Upgrade|License|Gtl|Clock|Ntp|Ptp|Config|Reboot|Restart|Process|Telemetry')),
     ('interface', re.compile(r'Port|Link|Lacp|Trunk|Duplex|Ifnet|If[A-Z]|Interface|Optical|Lldp|Dldp|Efm|Cfm|Poe')),
 ]
 FACILITY_MIB_RULES = [
@@ -69,25 +80,27 @@ FACILITY_MIB_RULES = [
                    'LLDP-EXT-DOT1-MIB', 'LLDP-EXT-DOT3-MIB', 'HUAWEI-DLDP-MIB', 'HUAWEI-ETHOAM-MIB', 'HUAWEI-E-TRUNK-MIB',
                    'HUAWEI-POE-MIB', 'HUAWEI-ERRORDOWN-MIB', 'HUAWEI-LDT-MIB', 'HUAWEI-RUMNG-MIB')),
     ('switching', ('BRIDGE-MIB', 'P-BRIDGE-MIB', 'Q-BRIDGE-MIB', 'HUAWEI-MSTP-MIB', 'HUAWEI-L2VLAN-MIB', 'HUAWEI-L2MAM-MIB',
-                   'HUAWEI-L2IF-MIB', 'HUAWEI-STACK-MIB', 'HUAWEI-ERPS-MIB', 'HUAWEI-RRPP-MIB', 'HUAWEI-VBST-MIB',
-                   'HUAWEI-MFLP-MIB', 'HUAWEI-SEP-MIB', 'HUAWEI-QINQ-MIB', 'HUAWEI-GARP-APP-MIB', 'HUAWEI-SWITCH-L2MAM-EXT-MIB',
-                   'HUAWEI-XQoS-MIB', 'HUAWEI-HGMP-MIB', 'HUAWEI-UNIMNG-MIB', 'HUAWEI-MFF-MIB', 'HUAWEI-ISOLATE-MIB')),
+                   'HUAWEI-L2IF-MIB', 'HUAWEI-STACK-MIB', 'HUAWEI-CSS-MIB', 'HUAWEI-M-LAG-MIB', 'HUAWEI-MLAG-MIB',
+                   'HUAWEI-ERPS-MIB', 'HUAWEI-RRPP-MIB', 'HUAWEI-VBST-MIB', 'HUAWEI-MFLP-MIB', 'HUAWEI-SEP-MIB',
+                   'HUAWEI-QINQ-MIB', 'HUAWEI-GARP-APP-MIB', 'HUAWEI-SWITCH-L2MAM-EXT-MIB', 'HUAWEI-XQoS-MIB',
+                   'HUAWEI-HGMP-MIB', 'HUAWEI-UNIMNG-MIB', 'HUAWEI-MFF-MIB', 'HUAWEI-ISOLATE-MIB')),
     ('routing', ('BGP4-MIB', 'HUAWEI-BGP-VPN-MIB', 'OSPF-MIB', 'OSPF-TRAP-MIB', 'HUAWEI-OSPFV2-MIB', 'HUAWEI-OSPFV3-MIB',
                  'ISIS-MIB', 'RIPv2-MIB', 'HUAWEI-RIPV2-EXT-MIB', 'HUAWEI-RM-EXT-MIB', 'HUAWEI-BFD-MIB',
                  'HUAWEI-BFD-CONFIG-TRAP-MIB', 'VRRP-MIB', 'VRRPV3-MIB', 'HUAWEI-VRRP-EXT-MIB', 'HUAWEI-MPLS-EXTEND-MIB',
                  'HUAWEI-MPLSLDP-MIB', 'HUAWEI-MPLSLSR-EXT-MIB', 'HUAWEI-MPLSOAM-MIB', 'HUAWEI-LSP-PING-TRACE-TRAP-MIB',
                  'HUAWEI-L2VPN-MIB', 'HUAWEI-VPLS-EXT-MIB', 'HUAWEI-VPLS-TNL-MIB', 'HUAWEI-PWE3-MIB', 'HUAWEI-PWE3-TNL-MIB',
                  'HUAWEI-KOMPELLA-MIB', 'HUAWEI-CCC-MIB', 'HUAWEI-TUNNEL-TE-MIB', 'HUAWEI-RSVPTE-MIB', 'HUAWEI-VXLAN-MIB',
-                 'HUAWEI-IPV6-MIB', 'IPV6-MIB', 'IP-MIB', 'IP-FORWARD-MIB', 'HUAWEI-GTSM-MIB', 'HUAWEI-MSDP-MIB', 'MSDP-MIB',
-                 'HUAWEI-VPN-DIAGNOSTICS-MIB', 'HUAWEI-MULTICAST-MIB', 'HUAWEI-IPMCAST-MIB', 'IPMCAST-MIB', 'HUAWEI-MGMD-STD-MIB',
-                 'MGMD-STD-MIB', 'HUAWEI-PIM-STD-MIB', 'HUAWEI-PIM-BSR-MIB', 'PIM-STD-MIB', 'PIM-BSR-MIB',
-                 'MPLS-FTN-STD-MIB', 'MPLS-L3VPN-STD-MIB', 'MPLS-LDP-GENERIC-STD-MIB', 'MPLS-LDP-STD-MIB', 'MPLS-LSR-STD-MIB',
-                 'MPLS-TE-STD-MIB', 'HUAWEI-L2VC-STATISTIC-MIB')),
+                 'HUAWEI-EVPN-MIB', 'HUAWEI-IPV6-MIB', 'IPV6-MIB', 'IP-MIB', 'IP-FORWARD-MIB', 'HUAWEI-GTSM-MIB',
+                 'HUAWEI-MSDP-MIB', 'MSDP-MIB', 'HUAWEI-VPN-DIAGNOSTICS-MIB', 'HUAWEI-MULTICAST-MIB',
+                 'HUAWEI-IPMCAST-MIB', 'IPMCAST-MIB', 'HUAWEI-MGMD-STD-MIB', 'MGMD-STD-MIB', 'HUAWEI-PIM-STD-MIB',
+                 'HUAWEI-PIM-BSR-MIB', 'PIM-STD-MIB', 'PIM-BSR-MIB', 'MPLS-FTN-STD-MIB', 'MPLS-L3VPN-STD-MIB',
+                 'MPLS-LDP-GENERIC-STD-MIB', 'MPLS-LDP-STD-MIB', 'MPLS-LSR-STD-MIB', 'MPLS-TE-STD-MIB',
+                 'HUAWEI-L2VC-STATISTIC-MIB')),
     ('security', ('HUAWEI-AAA-MIB', 'HUAWEI-ACL-MIB', 'HUAWEI-SECURITY-MIB', 'HUAWEI-SECURITY-PKI-MIB', 'HUAWEI-SECURITY-IPSEC-MIB',
                   'HUAWEI-DHCP-SNOOPING-MIB', 'HUAWEI-DHCPS-MIB', 'HUAWEI-DHCPR-MIB', 'HUAWEI-MAC-AUTHEN-MIB', 'HUAWEI-PORTAL-MIB',
                   'HUAWEI-HWTACACS-MIB', 'HUAWEI-BRAS-RADIUS-MIB', 'HUAWEI-BRAS-SRVCFG-EAP-MIB', 'HUAWEI-BRAS-SRVCFG-STATICUSER-MIB',
                   'HUAWEI-USA-MIB', 'HUAWEI-USC-MIB', 'SAVI-MIB', 'HUAWEI-WLAN-WIDS-SERVICE-MIB', 'HUAWEI-ETHARP-MIB',
-                  'HUAWEI-TCP-MIB', 'HUAWEI-DAD-MIB', 'HUAWEI-DIE-MIB')),
+                  'HUAWEI-TCP-MIB', 'HUAWEI-DAD-MIB', 'HUAWEI-DIE-MIB', 'HUAWEI-MACSEC-MIB')),
     ('snmp', ('SNMPv2-MIB', 'SNMP-FRAMEWORK-MIB', 'SNMP-MPD-MIB', 'SNMP-NOTIFICATION-MIB', 'SNMP-TARGET-MIB',
               'SNMP-USER-BASED-SM-MIB', 'SNMP-VIEW-BASED-ACM-MIB', 'HUAWEI-SNMP-EXT-MIB', 'HUAWEI-ALARM-MIB',
               'HUAWEI-ALARM-RELIABILITY-MIB', 'NOTIFICATION-LOG-MIB', 'RMON-MIB', 'RMON2-MIB')),
@@ -95,6 +108,7 @@ FACILITY_MIB_RULES = [
     ('hardware', ('HUAWEI-ENTITY-TRAP-MIB', 'HUAWEI-ENTITY-EXTENT-MIB', 'ENTITY-MIB', 'HUAWEI-BASE-TRAP-MIB',
                   'HUAWEI-ENERGYMNGT-MIB', 'HUAWEI-DC-TRAP-MIB', 'HUAWEI-DEVICE-MIB')),
     ('configuration', ('HUAWEI-CONFIG-MAN-MIB', 'HUAWEI-EASY-OPERATION-MIB', 'HUAWEI-DATASYNC-MIB', 'HUAWEI-AUTODIAGNOSE-MIB')),
+    ('system', ('HUAWEI-TELEMETRY-MIB', 'HUAWEI-SYS-MAN-MIB', 'HUAWEI-SYS-RES-TRAP-MIB', 'HUAWEI-FWD-RES-TRAP-MIB')),
 ]
 # SNMPv2 通用 Trap 逐条钉死，与注册表 trap.overrides 一致
 GENERIC_TRAP_FACILITY = {
@@ -134,30 +148,33 @@ def para_text(p) -> str:
 
 def iter_blocks(docx: Path):
     """流式产出 ('p', text) 与 ('tbl', rows) 两种块；表格内段落不单独产出。"""
-    z = zipfile.ZipFile(docx)
-    with z.open('word/document.xml') as f:
-        depth = 0
-        for event, el in ET.iterparse(f, events=('start', 'end')):
-            if event == 'start':
+    with zipfile.ZipFile(docx) as z:
+        info = z.getinfo('word/document.xml')
+        if info.file_size > MAX_DOCX_XML_BYTES:
+            raise ValueError(f'{docx.name} word/document.xml 体积过大 ({info.file_size} bytes)')
+        with z.open(info) as f:
+            depth = 0
+            for event, el in ET.iterparse(f, events=('start', 'end')):
+                if event == 'start':
+                    if el.tag == W + 'tbl':
+                        depth += 1
+                    continue
                 if el.tag == W + 'tbl':
-                    depth += 1
-                continue
-            if el.tag == W + 'tbl':
-                depth -= 1
-                if depth == 0:
-                    rows = []
-                    for tr in el.iter(W + 'tr'):
-                        cells = []
-                        for tc in tr.findall(W + 'tc'):
-                            cells.append(' '.join(para_text(p).strip() for p in tc.iter(W + 'p')).strip())
-                        rows.append(cells)
-                    yield 'tbl', rows
+                    depth -= 1
+                    if depth == 0:
+                        rows = []
+                        for tr in el.iter(W + 'tr'):
+                            cells = []
+                            for tc in tr.findall(W + 'tc'):
+                                cells.append(' '.join(para_text(p).strip() for p in tc.iter(W + 'p')).strip())
+                            rows.append(cells)
+                        yield 'tbl', rows
+                        el.clear()
+                elif el.tag == W + 'p' and depth == 0:
+                    text = para_text(el).strip()
+                    if text:
+                        yield 'p', text
                     el.clear()
-            elif el.tag == W + 'p' and depth == 0:
-                text = para_text(el).strip()
-                if text:
-                    yield 'p', text
-                el.clear()
 
 
 def parse_enum(dtype: str) -> dict[str, str]:
@@ -229,18 +246,19 @@ def clean_label(oid: str, meaning: str, name: str) -> tuple[str, str | None]:
 
 
 def ts_string(value: str) -> str:
-    return "'" + value.replace('\\', '\\\\').replace("'", "\\'") + "'"
+    return (
+        json.dumps(value, ensure_ascii=False)
+        .replace('\u2028', '\\u2028')
+        .replace('\u2029', '\\u2029')
+    )
 
 
-def main() -> int:
-    docx = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_DOCX
-    if not docx.exists():
-        print(f'docx 不存在: {docx}', file=sys.stderr)
-        return 1
-
-    traps: dict[str, dict] = {}
-    nodes: dict[str, dict] = {}
-    name_to_oid: dict[str, str] = {}
+def extract_from_docx(
+    docx: Path,
+    traps: dict[str, dict],
+    nodes: dict[str, dict],
+    name_to_oid: dict[str, str],
+) -> None:
     cur_mib = None
     for kind, payload in iter_blocks(docx):
         if kind == 'p':
@@ -285,6 +303,155 @@ def main() -> int:
                 }
                 name_to_oid.setdefault(name, oid)
 
+
+def merge_supplement(
+    supplement_path: Path,
+    out_traps: dict[str, dict],
+    out_nodes: dict[str, dict],
+    severity_varbinds: dict[str, dict],
+    reason_varbinds: dict[str, str],
+) -> tuple[int, int]:
+    """无损合入增量补充 JSON：保留 docx 基线全部条目，仅增补缺失 Trap/Node/Varbind。"""
+    data = json.loads(supplement_path.read_text(encoding='utf-8'))
+    if not isinstance(data, dict):
+        raise ValueError(f'supplement 格式非法: {supplement_path}')
+
+    added_traps = 0
+    for raw_oid, raw_item in data.get('traps', {}).items():
+        oid = raw_oid.strip().lstrip('.')
+        if not OID_RE.match(oid) or oid in out_traps:
+            continue
+        name = str(raw_item.get('name', '')).strip()
+        if not name:
+            continue
+        mib = str(raw_item.get('mib', '')).strip()
+        derived_level, derived_cleared = classify_level(name)
+        level = str(raw_item.get('level') or derived_level).strip()
+        if level not in VALID_LEVELS:
+            raise ValueError(f'supplement trap {oid} level 非法: {level}')
+        facility = str(raw_item.get('facility') or classify_facility(oid, name, mib)).strip()
+        if facility not in VALID_FACILITIES:
+            raise ValueError(f'supplement trap {oid} facility 非法: {facility}')
+        if 'cleared' in raw_item:
+            cleared = bool(raw_item['cleared'])
+        elif 'level' in raw_item:
+            cleared = level == 'info' and derived_cleared
+        else:
+            cleared = derived_cleared
+        meaning = str(raw_item.get('meaning', '')).strip() or name
+        raw_vars = raw_item.get('vars') or []
+        vars_list = [str(v).strip() for v in raw_vars if str(v).strip()]
+        item: dict = {
+            'name': name,
+            'mib': mib,
+            'level': level,
+            'facility': facility,
+            'meaning': meaning,
+            'vars': vars_list,
+        }
+        if cleared:
+            item['cleared'] = True
+        out_traps[oid] = item
+        added_traps += 1
+
+    added_nodes = 0
+    for raw_oid, raw_node in data.get('nodes', {}).items():
+        oid = raw_oid.strip().lstrip('.')
+        if not OID_RE.match(oid):
+            continue
+        raw_enum = raw_node.get('enum')
+        enum_map = {str(k).strip(): str(v).strip() for k, v in raw_enum.items()} if isinstance(raw_enum, dict) else {}
+        if oid in out_nodes:
+            # 基线节点已存在但缺 enum 时无损补齐 enum，其余字段不动
+            if enum_map and not out_nodes[oid].get('enum'):
+                out_nodes[oid]['enum'] = enum_map
+            continue
+        name = str(raw_node.get('name', '')).strip()
+        if not name:
+            continue
+        item = {
+            'name': name,
+            'mib': str(raw_node.get('mib', '')).strip(),
+        }
+        if enum_map:
+            item['enum'] = enum_map
+        out_nodes[oid] = item
+        added_nodes += 1
+
+    for raw_oid, vb in data.get('severity_varbinds', {}).items():
+        oid = raw_oid.strip().lstrip('.')
+        if OID_RE.match(oid) and oid not in severity_varbinds and isinstance(vb, dict):
+            severity_varbinds[oid] = vb
+
+    for raw_oid, name in data.get('reason_varbinds', {}).items():
+        oid = raw_oid.strip().lstrip('.')
+        if OID_RE.match(oid) and oid not in reason_varbinds and isinstance(name, str) and name.strip():
+            reason_varbinds[oid] = name.strip()
+
+    return added_traps, added_nodes
+
+
+def resolve_docx_inputs(args: argparse.Namespace) -> list[Path]:
+    files: list[Path] = []
+    if args.docx_dir is not None:
+        if not args.docx_dir.is_dir():
+            raise FileNotFoundError(f'docx 目录不存在: {args.docx_dir}')
+        for p in sorted(args.docx_dir.glob('*.docx'), key=lambda item: item.name):
+            if p.name.startswith('~$') or not p.is_file():
+                continue
+            files.append(p)
+    if args.docx is not None:
+        files.append(args.docx)
+    if args.legacy_docx is not None:
+        files.append(args.legacy_docx)
+    if not files:
+        files.append(DEFAULT_DOCX)
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for p in files:
+        resolved = p.resolve()
+        if not p.is_file():
+            raise FileNotFoundError(f'docx 文件不存在: {p}')
+        if p.suffix.lower() != '.docx':
+            raise ValueError(f'非 .docx 文件: {p}')
+        if resolved not in seen:
+            seen.add(resolved)
+            unique.append(p)
+    return unique
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='抽取并合并华为 MIB 告警知识库与前端 Trap 词典')
+    parser.add_argument('legacy_docx', nargs='?', type=Path, help='兼容旧用法的单个 docx 路径')
+    parser.add_argument('--docx', type=Path, help='指定单个华为产品文档 .docx 路径')
+    parser.add_argument('--docx-dir', type=Path, help='扫描目录下全部 .docx 文件并按文件名排序合并')
+    parser.add_argument(
+        '--supplement',
+        type=Path,
+        default=DEFAULT_SUPPLEMENT if DEFAULT_SUPPLEMENT.exists() else None,
+        help='增量补充 JSON 路径（默认自动合并 huawei-alarms-v600-supplement.json）',
+    )
+    parser.add_argument('--no-supplement', action='store_true', help='禁用增量补充 JSON，仅从 docx 抽取')
+    parser.add_argument('--out-json', type=Path, default=OUT_JSON, help='输出后端 JSON 路径')
+    parser.add_argument('--out-ts', type=Path, default=OUT_TS, help='输出前端 TS 词典路径')
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    try:
+        docx_files = resolve_docx_inputs(args)
+    except (FileNotFoundError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    traps: dict[str, dict] = {}
+    nodes: dict[str, dict] = {}
+    name_to_oid: dict[str, str] = {}
+    for docx in docx_files:
+        extract_from_docx(docx, traps, nodes, name_to_oid)
+
     # 绑定变量名 → 引用节点集合
     referenced: set[str] = set()
     for entry in traps.values():
@@ -317,7 +484,8 @@ def main() -> int:
     for oid, node in nodes.items():
         name = node['name']
         enum = node['enum']
-        is_notify_var = oid in referenced or node['access'] == 'accessible-for-notify'             or oid.startswith('1.3.6.1.4.1.2011.5.25.180.1.')
+        is_notify_var = oid in referenced or node['access'] == 'accessible-for-notify' \
+            or oid.startswith('1.3.6.1.4.1.2011.5.25.180.1.')
         if name.endswith('Severity') and enum and set(enum.values()) <= SEVERITY_WORDS and is_notify_var:
             severity_varbinds[oid] = {'name': name, 'values': enum}
         if REASON_NAME_RE.search(name) and ('OCTET' in node['dtype'].upper() or 'DisplayString' in node['dtype']) \
@@ -325,8 +493,7 @@ def main() -> int:
             reason_varbinds[oid] = name
 
     out_traps: dict[str, dict] = {}
-    for oid in sorted(traps, key=oid_key):
-        entry = traps[oid]
+    for oid, entry in traps.items():
         level, cleared = classify_level(entry['name'])
         facility = classify_facility(oid, entry['name'], entry['mib'])
         item = {
@@ -341,22 +508,39 @@ def main() -> int:
             item['cleared'] = True
         out_traps[oid] = item
 
+    source_parts = [p.name for p in docx_files]
+    added_traps, added_nodes = 0, 0
+    if not args.no_supplement and args.supplement is not None:
+        if not args.supplement.is_file():
+            print(f'supplement 文件不存在: {args.supplement}', file=sys.stderr)
+            return 1
+        added_traps, added_nodes = merge_supplement(
+            args.supplement, out_traps, out_nodes, severity_varbinds, reason_varbinds
+        )
+        source_parts.append(args.supplement.name)
+
+    sorted_traps = {k: out_traps[k] for k in sorted(out_traps, key=oid_key)}
+    sorted_nodes = {k: out_nodes[k] for k in sorted(out_nodes, key=oid_key)}
+    source_desc = ' + '.join(source_parts)
+
     catalog = {
         'schema_version': 1,
-        'source': docx.name,
+        'source': source_desc,
         'generator': 'scripts/mib/extract-huawei-alarms.py',
         'severity_varbinds': {k: severity_varbinds[k] for k in sorted(severity_varbinds, key=oid_key)},
         'reason_varbinds': {k: reason_varbinds[k] for k in sorted(reason_varbinds, key=oid_key)},
-        'traps': out_traps,
-        'nodes': {k: out_nodes[k] for k in sorted(out_nodes, key=oid_key)},
+        'traps': sorted_traps,
+        'nodes': sorted_nodes,
     }
-    OUT_JSON.write_text(json.dumps(catalog, ensure_ascii=False, indent=1) + '\n', encoding='utf-8', newline='\n')
+    args.out_json.write_text(json.dumps(catalog, ensure_ascii=False, indent=1) + '\n', encoding='utf-8', newline='\n')
 
+    doc_title = '、'.join(f'《{p.stem}》' for p in docx_files)
+    supplement_note = f' + {args.supplement.name}（增量 +{added_traps} 条）' if not args.no_supplement and args.supplement else ''
     lines = [
         '/**',
         ' * 告警 Trap OID 词典（生成物，勿手改）',
         ' *',
-        f' * 数据来源：华为《{docx.stem}》「告警节点详细描述」章节，全量 {len(out_traps)} 条。',
+        f' * 数据来源：华为{doc_title}{supplement_note}，全量 {len(sorted_traps)} 条。',
         ' * 生成脚本：scripts/mib/extract-huawei-alarms.py（同一脚本同时生成后端',
         ' * backend-go/internal/snmpmib/huawei-alarms.json，两侧条目一一对应）。',
         ' *',
@@ -381,7 +565,7 @@ def main() -> int:
         '/** 键为完整 OID。按 OID 数值序排列，便于查找与 diff */',
         'export const TRAP_OID_DICTIONARY: Readonly<Record<string, TrapOIDEntry>> = {',
     ]
-    for oid, item in out_traps.items():
+    for oid, item in sorted_traps.items():
         label, detail = clean_label(oid, item['meaning'], item['name'])
         fields = f"name: {ts_string(item['name'])}, label: {ts_string(label)}"
         if detail:
@@ -389,12 +573,12 @@ def main() -> int:
         lines.append(f"  {ts_string(oid)}: {{ {fields} }},")
     lines.append('}')
     lines.append('')
-    OUT_TS.write_text('\n'.join(lines), encoding='utf-8', newline='\n')
+    args.out_ts.write_text('\n'.join(lines), encoding='utf-8', newline='\n')
 
-    print(f'traps={len(out_traps)} nodes={len(out_nodes)} severity_varbinds={len(severity_varbinds)} '
-          f'reason_varbinds={len(reason_varbinds)}')
-    print(f'json -> {OUT_JSON.relative_to(ROOT)} ({OUT_JSON.stat().st_size // 1024} KB)')
-    print(f'ts   -> {OUT_TS.relative_to(ROOT)} ({OUT_TS.stat().st_size // 1024} KB)')
+    print(f'traps={len(sorted_traps)} (supplement +{added_traps}) nodes={len(sorted_nodes)} (supplement +{added_nodes}) '
+          f'severity_varbinds={len(severity_varbinds)} reason_varbinds={len(reason_varbinds)}')
+    print(f'json -> {args.out_json}')
+    print(f'ts   -> {args.out_ts}')
     return 0
 
 

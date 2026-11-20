@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
 
+	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
 	"github.com/your-org/inspect-system/backend-go/internal/sshutil"
 )
 
@@ -299,8 +300,33 @@ func (c *SSHCollector) outputWithoutPty(client *ssh.Client, command string) (str
 	return string(output), err
 }
 
+// normalizeLogVendor 将设备台账中的厂商别名归一化为日志解析/命令路由使用的规范厂商键。
+// 优先复用 snmpmib.DefaultRegistry 的别名映射，确保与 SNMP 采集识别保持单一事实源一致。
+func normalizeLogVendor(vendor string) string {
+	trimmed := strings.TrimSpace(vendor)
+	if trimmed == "" {
+		return "huawei"
+	}
+	if reg, err := snmpmib.DefaultRegistry(); err == nil && reg != nil {
+		if resolved := reg.ResolveVendor(trimmed); resolved != "" {
+			if resolved == "huawei" || resolved == "h3c" {
+				return resolved
+			}
+		}
+	}
+	lower := strings.ToLower(trimmed)
+	switch lower {
+	case "huawei", "huawei_vrp", "huawei-vrp", "huawei_v600", "huawei-v600", "huawei_vrp8", "huawei-vrp8", "cloudengine", "quidway", "huawei_technologies", "华为":
+		return "huawei"
+	case "h3c", "h3c_comware", "h3c-comware":
+		return "h3c"
+	default:
+		return lower
+	}
+}
+
 func resolveVendorCommand(vendor string, logType string) string {
-	vendor = strings.ToLower(strings.TrimSpace(vendor))
+	vendor = normalizeLogVendor(vendor)
 	logType = normalizeLogType(logType)
 
 	commands := map[string]map[string]string{
@@ -333,7 +359,7 @@ func resolveVendorCommand(vendor string, logType string) string {
 // 多条命令共用一个 shell 后，分页提示会吞掉后续输入，结束标记永远读不到，
 // 第二条命令就永远发不出去；关分页也让缓冲内容不再依赖误触按键翻页才被采全。
 func resolveVendorPrelude(vendor string) string {
-	switch strings.ToLower(strings.TrimSpace(vendor)) {
+	switch normalizeLogVendor(vendor) {
 	case "h3c":
 		return "screen-length disable"
 	default:
@@ -365,21 +391,14 @@ func parseLogOutput(output string, deviceID int, vendor string, collectedAt time
 	lines := strings.Split(output, "\n")
 	entries := make([]logEntry, 0, maxEntries)
 
-	// 检测是否为 trapbuffer 或 alarm active 输出（通过内容特征判断）
-	isTrapBuffer := false
-	isAlarmActive := false
-	vendorLower := strings.ToLower(strings.TrimSpace(vendor))
-	if vendorLower == "huawei" || vendorLower == "h3c" {
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if strings.Contains(trimmed, "Trapping buffer") || strings.Contains(trimmed, "trapbuffer") || strings.HasPrefix(trimmed, "#") {
-				isTrapBuffer = true
-				break
-			}
-			if strings.Contains(trimmed, "Sequence") && strings.Contains(trimmed, "AlarmID") {
-				isAlarmActive = true
-				break
-			}
+	vendorNorm := normalizeLogVendor(vendor)
+	if vendorNorm == "huawei" || vendorNorm == "h3c" {
+		isTrapBuffer, isAlarmActive := detectHuaweiSpecialOutput(lines)
+		if isTrapBuffer {
+			return parseTrapBufferOutput(lines, deviceID, vendorNorm, collectedAt, maxEntries)
+		}
+		if isAlarmActive {
+			return parseAlarmActiveOutput(lines, deviceID, vendorNorm, collectedAt, maxEntries)
 		}
 	}
 
@@ -392,16 +411,7 @@ func parseLogOutput(output string, deviceID int, vendor string, collectedAt time
 			continue
 		}
 
-		var entry *logEntry
-		if isTrapBuffer {
-			entry = parseTrapBufferLine(line, deviceID, collectedAt)
-		} else if isAlarmActive {
-			entry = parseAlarmActiveLine(line, deviceID, collectedAt)
-		}
-		if entry == nil {
-			entry = parseLogLine(line, deviceID, vendor, collectedAt)
-		}
-		if entry != nil {
+		if entry := parseLogLine(line, deviceID, vendorNorm, collectedAt); entry != nil {
 			entries = append(entries, *entry)
 		}
 	}
@@ -409,86 +419,138 @@ func parseLogOutput(output string, deviceID int, vendor string, collectedAt time
 	return entries
 }
 
+func detectHuaweiSpecialOutput(lines []string) (isTrapBuffer bool, isAlarmActive bool) {
+	hasTimestamp := false
+	hasTrapName := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		if strings.Contains(lower, "trapping buffer") || strings.Contains(lower, "trapbuffer") || strings.HasPrefix(trimmed, "#") {
+			return true, false
+		}
+		if strings.HasPrefix(lower, "timestamp") && (strings.Contains(trimmed, ":") || strings.Contains(trimmed, "=")) {
+			hasTimestamp = true
+		}
+		if (strings.HasPrefix(lower, "trapname") || strings.HasPrefix(lower, "trap name") || strings.HasPrefix(lower, "trapoid")) &&
+			(strings.Contains(trimmed, ":") || strings.Contains(trimmed, "=")) {
+			hasTrapName = true
+		}
+		if hasTimestamp && hasTrapName {
+			return true, false
+		}
+		if strings.Contains(trimmed, "Sequence") && strings.Contains(trimmed, "AlarmID") {
+			return false, true
+		}
+		if strings.HasPrefix(trimmed, "Index") && strings.Contains(trimmed, "Severity") &&
+			(strings.Contains(trimmed, "Id") || strings.Contains(trimmed, "Source") || strings.Contains(trimmed, "Name")) {
+			return false, true
+		}
+		if strings.Contains(trimmed, "Total active alarms") {
+			return false, true
+		}
+	}
+	return false, false
+}
+
 var (
 	huaweiPattern        = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+\[([^\]]+)\]:\s*(.+)$`)
 	facilityLevelPattern = regexp.MustCompile(`[/-](\d+)[/-]`)
 )
 
-// huaweiLogbufferPattern 匹配华为 VRP display logbuffer 的标准行结构：
+// huaweiLogbufferPattern 匹配华为 VRP V200/V600 display logbuffer 的标准行结构（RE2 线性正则）：
 //
-//	2025-03-10 08:12:33+08:00 HUAWEI-S5720 %%01IFNET/4/IF_STATE(l)[231]:Interface 6 turned into DOWN state.(...)
-//	Mar 10 2025 08:12:33 HUAWEI %%01SSH/5/SSH_FAIL(l):Failed to login. (UserName=admin, IpAddress=10.1.1.1)
-//
-// 头部含模块名、级别数字（0-7）与助记符，是日志最重要的结构化信息；
-// 此前仅支持 H3C 风格的 `[模块/级别/助记符]:` 头，VRP 行整体落入兜底分支，
-// message 连同时间戳、主机名、%% 头一起入库，级别与设施只能靠关键词猜测。
+//	V200: 2025-03-10 08:12:33+08:00 HUAWEI-S5720 %%01IFNET/4/IF_STATE(l)[231]:Interface 6 turned into DOWN state.(...)
+//	V600: 2026-11-20 10:15:20.123 +08:00 Switch-S5755 %%01IFM/4/IF_STATE(l):CID=0x807a040b;Interface 25GE1/0/1 has turned into DOWN state.
+//	V600 表格化: 2026-06-06 11:20:10  842   Informational  %%01IFM/4/LINK_STATE(l):The physical status...
+//	英文月名: Mar 10 2025 08:12:33 HUAWEI %%01SSH/5/SSH_FAIL(l):Failed to login. (...)
 var huaweiLogbufferPattern = regexp.MustCompile(
-	`^((?:\w{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}[^\s]*)\s+(\S+)\s+%%\d{2}([A-Za-z0-9_]+)/(\d)/([A-Za-z0-9_-]+)(?:\([a-z]\))?(?:\[\d+\])?:\s*(.+)$`)
+	`^((?:[A-Za-z]{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{2}:?\d{2}|DST|UTC)?)\s+(\d+\s+[A-Za-z]+|\S+)\s+%%\d{2}([A-Za-z0-9_-]+)/(\d)/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?(?:\[\d+\])?:\s*(?:CID=[^;\s]+;\s*)?(.+)$`)
 
-// huaweiLegacyLogbufferPattern 匹配华为 VRP 日志行去掉版本头后的变体：
-// 设备执行 undo info-center logbuf version 后，logbuffer 行不再带 %%01 版本前缀，
-// 形如 `2025-03-10 08:12:33+08:00 HUAWEI SSH/5/SSH_FAIL(l)[7]:Failed to login.`
-// 其余结构与标准行一致，须在标准模式匹配失败后兜底尝试。
+// huaweiLegacyLogbufferPattern 匹配华为 VRP 日志行去掉 %%01 版本头后的变体（undo info-center logbuf version）。
 var huaweiLegacyLogbufferPattern = regexp.MustCompile(
-	`^((?:\w{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}[^\s]*)\s+(\S+)\s+([A-Za-z0-9_]+)/(\d)/([A-Za-z0-9_-]+)(?:\([a-z]\))?(?:\[\d+\])?:\s*(.+)$`)
+	`^((?:[A-Za-z]{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{2}:?\d{2}|DST|UTC)?)\s+(\d+\s+[A-Za-z]+|\S+)\s+([A-Za-z0-9_-]+)/(\d)/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?(?:\[\d+\])?:\s*(?:CID=[^;\s]+;\s*)?(.+)$`)
 
-// vrpModuleFacilities 华为 VRP 常见日志模块 → 本系统 facility 值域映射。
+// vrpModuleFacilities 华为 VRP V200/V600 全量日志模块（130+）→ 本系统 facility 值域映射。
 // 映射结果必须落在 normalizeFacility 认可的值域内
 // （system/interface/security/routing/switching/snmp/ssh/other），
-// 否则入库时会被归一化掉。模块清单参照华为 S 系列产品文档中的模块命名。
+// 与 docs/vendor/huawei/campus-switch-log-reference.md 保持单一事实源对齐。
 var vrpModuleFacilities = map[string]string{
-	// 接口与链路
-	"ifnet": "interface", "if_pdt": "interface", "errdown": "interface",
-	"mstp": "interface", "l2if": "interface", "l2ifpdt": "interface",
-	"trunk": "interface", "ethtrunk": "interface", "lldp": "interface",
-	"poe": "interface", "poepdt": "interface", "ethport": "interface",
-	// 二层交换
-	"vlan": "switching", "l2": "switching", "stack": "switching",
-	"stackm": "switching", "css": "switching", "igsp": "switching",
-	"maclimit": "switching",
-	// 路由
-	"rm": "routing", "ipv6rm": "routing", "ospf": "routing", "bgp": "routing",
-	"rip": "routing", "isis": "routing", "nd": "routing", "pim": "routing",
-	"igmp": "routing", "mld": "routing", "mrib": "routing", "msvc": "routing",
-	// 安全与接入
-	"aaa": "security", "am": "security", "line": "security",
-	"arpspi": "security", "dhcp": "security", "dhcpsnp": "security",
-	"ipsg": "security", "portsec": "security", "pki": "security",
-	"ssl": "security", "sec": "security", "8021x": "security",
-	// 远程登录与文件传输
-	"ssh": "ssh", "sftp": "ssh", "scp": "ssh", "telnet": "ssh",
-	"ftp": "ssh", "tftp": "ssh", "netconf": "ssh",
-	// 网管
-	"snmp": "snmp",
-	// 系统运行（含 SRM 硬件资源管理——设施值域无 hardware，归 system）
-	"system": "system", "shell": "system", "configuration": "system",
-	"vfs": "system", "ops": "system", "license": "system",
-	"update": "system", "patch": "system", "restart": "system",
-	"ic": "system", "srm": "system", "dev": "system", "env": "system",
-	// 以下按 docs/vendor 华为 S 系列产品文档 MIB 清单补充的模块族
-	// （HUAWEI-XXX-MIB 与 VRP 日志模块同名对应）
-	// 接口与链路
-	"dldp": "interface", "ethoam": "interface", "etrunk": "interface",
-	// 路由（BFD 为路由协议快速故障检测，随会话 Down 撤销路由，归 routing）
-	"bfd": "routing",
-	// 二层交换环网与 MAC 漂移
-	"erps": "switching", "rrpp": "switching", "vbst": "switching",
-	"mflp": "switching", "smartlink": "switching",
-	// 安全与接入认证
-	"nac": "security", "authen": "security", "radius": "security",
-	"hwtacacs": "security", "portal": "security", "macauth": "security",
-	"usa": "security", "savi": "security",
-	// 系统运行
-	"ntp": "system", "cpu": "system", "memory": "system",
-	"fib": "system", "flash": "system", "gtl": "system",
-	"infocenter": "system", "syslog": "system", "sysman": "system",
-	"energymngt": "system", "netstream": "system", "ptp": "system",
-	"dns": "system", "nqa": "system", "dad": "system",
-	"datasync": "system", "autodiagnose": "system",
-	"easyoperation": "system", "trng": "system", "configman": "system",
-	"wlan": "system", "capwap": "system",
-	// Web 网管属远程管理面，与 ssh/telnet 同归远程登录
-	"http": "ssh",
+	// 接口、物理层与链路（interface）
+	"ifnet": "interface", "ifm": "interface", "if_pdt": "interface", "ifpdt": "interface",
+	"errdown": "interface", "mstp": "interface", "l2if": "interface", "l2ifpdt": "interface",
+	"l3if": "interface", "trunk": "interface", "ethtrunk": "interface", "eth-trunk": "interface",
+	"etrunk": "interface", "e-trunk": "interface", "lacp": "interface", "lldp": "interface",
+	"poe": "interface", "poepdt": "interface", "ethport": "interface", "eth": "interface",
+	"dldp": "interface", "ethoam": "interface", "efm": "interface", "cfm": "interface",
+	"y1731": "interface", "optical": "interface", "transceiver": "interface", "sfp": "interface",
+	"phy": "interface", "port": "interface", "subif": "interface", "vbdif": "interface",
+	"nve": "interface", "udld": "interface", "l2vpn": "interface",
+
+	// 二层交换、堆叠与叠加网络（switching）
+	"vlan": "switching", "l2": "switching", "stack": "switching", "stackm": "switching",
+	"istack": "switching", "css": "switching", "mlag": "switching", "m-lag": "switching",
+	"m_lag": "switching", "vxlan": "switching", "evpn": "switching", "igsp": "switching",
+	"maclimit": "switching", "erps": "switching", "rrpp": "switching", "vbst": "switching",
+	"mflp": "switching", "smartlink": "switching", "stp": "switching", "rstp": "switching",
+	"sep": "switching", "gvrp": "switching", "mvrp": "switching", "muxvlan": "switching",
+	"qinq": "switching", "mac": "switching", "arp": "switching", "storm": "switching",
+	"stormcon": "switching", "fdb": "switching", "bd": "switching", "bridge": "switching",
+	"svf": "switching", "trill": "switching", "l2mc": "switching",
+
+	// 三层路由、组播与检测（routing）
+	"rm": "routing", "ipv6rm": "routing", "ospf": "routing", "ospfv3": "routing",
+	"bgp": "routing", "bgp4plus": "routing", "rip": "routing", "ripng": "routing",
+	"isis": "routing", "nd": "routing", "pim": "routing", "igmp": "routing",
+	"mld": "routing", "mrib": "routing", "msvc": "routing", "bfd": "routing",
+	"vrrp": "routing", "vrrp6": "routing", "msdp": "routing", "mvpn": "routing",
+	"mpls": "routing", "ldp": "routing", "rsvp": "routing", "srv6": "routing",
+	"pbr": "routing", "nat": "routing", "tunnel": "routing", "gre": "routing",
+	"urpf": "routing", "route-policy": "routing", "rpolicy": "routing", "fib6": "routing",
+
+	// 安全、接入认证与控制平面防护（security）
+	"aaa": "security", "am": "security", "line": "security", "arpspi": "security",
+	"dhcp": "security", "dhcpsnp": "security", "ipsg": "security", "portsec": "security",
+	"pki": "security", "ssl": "security", "sec": "security", "secl": "security",
+	"8021x": "security", "dot1x": "security", "nac": "security", "authen": "security",
+	"radius": "security", "hwtacacs": "security", "portal": "security", "macauth": "security",
+	"usa": "security", "savi": "security", "macsec": "security", "cpu_defend": "security",
+	"cpudefend": "security", "cpu-defend": "security", "acl": "security", "rbac": "security",
+	"cmd": "security", "sacg": "security", "eap": "security", "ipsec": "security",
+	"ike": "security", "arpsec": "security", "dai": "security", "ndsec": "security",
+	"dhcpv6": "security", "localuser": "security",
+
+	// 远程登录、可编程网管通道与文件传输（ssh）
+	"ssh": "ssh", "sshs": "ssh", "sshc": "ssh", "stelnet": "ssh",
+	"sftp": "ssh", "scp": "ssh", "telnet": "ssh", "ftp": "ssh",
+	"tftp": "ssh", "netconf": "ssh", "restconf": "ssh", "yang": "ssh",
+	"http": "ssh", "https": "ssh", "vty": "ssh",
+
+	// 网管监控与遥测（snmp）
+	"snmp": "snmp", "snmpd": "snmp", "trap": "snmp", "rmon": "snmp",
+	"telemetry": "snmp", "grpc": "snmp",
+
+	// 系统运行、硬件、环境与运维支撑（system）
+	"system": "system", "shell": "system", "configuration": "system", "config": "system",
+	"cfg": "system", "cli": "system", "vfs": "system", "ops": "system",
+	"license": "system", "lic": "system", "update": "system", "patch": "system",
+	"issu": "system", "restart": "system", "ic": "system", "srm": "system",
+	"dev": "system", "devm": "system", "devmgr": "system", "dev-mgr": "system",
+	"env": "system", "environment": "system", "ntp": "system", "cpu": "system",
+	"memory": "system", "mem": "system", "fib": "system", "fwm": "system",
+	"kpi": "system", "flash": "system", "gtl": "system", "infocenter": "system",
+	"syslog": "system", "sysman": "system", "energymngt": "system", "netstream": "system",
+	"ptp": "system", "dns": "system", "nqa": "system", "dad": "system",
+	"datasync": "system", "autodiagnose": "system", "easyoperation": "system", "trng": "system",
+	"configman": "system", "wlan": "system", "capwap": "system", "clock": "system",
+	"ha": "system", "diagnose": "system", "diag": "system", "monitor": "system",
+	"health": "system", "power": "system", "fan": "system", "temp": "system",
+	"temperature": "system", "board": "system", "slot": "system", "entity": "system",
+	"sem": "system", "mirror": "system", "sflow": "system", "erspan": "system",
+	"twamp": "system", "ztp": "system", "pnp": "system", "rollback": "system",
+	"upgrade": "system", "boot": "system", "reset": "system",
 }
 
 // vrpModuleToFacility 按 VRP 模块名精确映射设施；未收录的模块退回
@@ -501,7 +563,7 @@ func vrpModuleToFacility(module string, message string) string {
 }
 
 func parseLogLine(line string, deviceID int, vendor string, collectedAt time.Time) *logEntry {
-	vendor = strings.ToLower(strings.TrimSpace(vendor))
+	vendor = normalizeLogVendor(vendor)
 
 	switch vendor {
 	case "huawei", "h3c":
@@ -567,13 +629,21 @@ func parseLogLine(line string, deviceID int, vendor string, collectedAt time.Tim
 	}
 }
 
-// huaweiTrapPattern matches Huawei trapbuffer output lines:
+// huaweiTrapPattern matches Huawei V200/V600 single-line trapbuffer output:
 // #Sep 17 2012 17:09:47+00:00 HUAWEI LLDP/4/NBRCHGTRAP:OID: 1.0.8802.1.1.2.0.0.1 Neighbor info changed.
-var huaweiTrapPattern = regexp.MustCompile(`(?i)^#?\s*(\w+\s+\d+\s+\d{4}\s+\d{2}:\d{2}:\d{2}[^\s]*|\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[^\s]*)\s+\S+\s+(?:%%\d+)?(\w+)/(\d+)/(\w+)(?:\([a-z]\))?[:\s]+(.+)`)
+var huaweiTrapPattern = regexp.MustCompile(`(?i)^#?\s*((?:[A-Za-z]{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{2}:?\d{2}|DST|UTC)?)\s+\S+\s+(?:%%\d+)?([A-Za-z0-9_-]+)/(\d+)/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?[:\s]+(?:CID=[^;\s]+;\s*)?(.+)`)
 
-// huaweiAlarmActivePattern matches Huawei "display alarm active" output lines:
+// huaweiAlarmActivePattern matches Huawei V200 "display alarm active" output lines:
 // 1  0x08d40001  hwBoardFail  Critical  ...  Board failed.
 var huaweiAlarmActivePattern = regexp.MustCompile(`(?i)^\s*(\d+)\s+0x[0-9a-fA-F]+\s+(\S+)\s+(Critical|Major|Minor|Warning)\s+(.+)`)
+
+// huaweiV600AlarmActivePattern matches Huawei V600 "display alarm active" table lines:
+// Index Severity Id Source Time Name
+// 1     Major    0x85020001 Slot:1 2026-06-06 10:14:22 Power supply failed
+var huaweiV600AlarmActivePattern = regexp.MustCompile(`(?i)^\s*(\d+)\s+(Critical|Major|Minor|Warning)\s+(0x[0-9a-fA-F]+)\s+(\S+(?:\s+\S+){0,3}?)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{2}:?\d{2})?)\s+(.+)$`)
+
+var trapBlockHeaderPattern = regexp.MustCompile(`(?i)^#\s*trap\b.*$`)
+var vrpEmbeddedHeaderPattern = regexp.MustCompile(`(?:%%\d{2})?([A-Za-z0-9_-]+)/([0-7])/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?`)
 
 // parseTrapBufferLine parses a single line from Huawei "display trapbuffer" output
 func parseTrapBufferLine(line string, deviceID int, collectedAt time.Time) *logEntry {
@@ -590,7 +660,7 @@ func parseTrapBufferLine(line string, deviceID int, collectedAt time.Time) *logE
 
 	logTimestamp := parseTrapTimestamp(timestamp, collectedAt)
 	level := mapVRPSeverity(severityNum)
-	facility := detectLogFacility(module + " " + trapName + " " + description)
+	facility := vrpModuleToFacility(module, module+" "+trapName+" "+description)
 
 	message := fmt.Sprintf("%s/%s/%s: %s", module, severityNum, trapName, description)
 
@@ -606,31 +676,56 @@ func parseTrapBufferLine(line string, deviceID int, collectedAt time.Time) *logE
 	}
 }
 
-// parseAlarmActiveLine parses a single line from Huawei "display alarm active" output
-func parseAlarmActiveLine(line string, deviceID int, collectedAt time.Time) *logEntry {
-	match := huaweiAlarmActivePattern.FindStringSubmatch(line)
-	if len(match) < 5 {
+type trapKVBlock struct {
+	fields   map[string]string
+	rawLines []string
+}
+
+func (b *trapKVBlock) isEmpty() bool {
+	return b == nil || len(b.fields) == 0
+}
+
+func (b *trapKVBlock) toLogEntry(deviceID int, collectedAt time.Time) *logEntry {
+	if b.isEmpty() {
+		return nil
+	}
+	trapName := strings.TrimSpace(b.fields["trapname"])
+	desc := strings.TrimSpace(b.fields["description"])
+	if trapName == "" && desc == "" {
 		return nil
 	}
 
-	alarmName := match[2]
-	severity := strings.ToLower(strings.TrimSpace(match[3]))
-	description := strings.TrimSpace(match[4])
+	ts := parseTrapTimestamp(b.fields["timestamp"], collectedAt)
+	module := strings.TrimSpace(b.fields["module"])
+	level := ""
 
-	level := "warning"
-	switch severity {
-	case "critical":
-		level = "critical"
-	case "major":
-		level = "error"
-	case "minor":
-		level = "warning"
-	case "warning":
-		level = "warning"
+	if hdr := vrpEmbeddedHeaderPattern.FindStringSubmatch(trapName); len(hdr) == 4 {
+		if module == "" {
+			module = hdr[1]
+		}
+		level = mapVRPSeverity(hdr[2])
+	}
+	if sev := strings.TrimSpace(b.fields["severity"]); sev != "" {
+		level = mapAlarmOrTrapSeverityText(sev)
+	}
+	if level == "" {
+		level = detectLogLevel(trapName + " " + desc)
 	}
 
-	facility := detectLogFacility(alarmName + " " + description)
-	message := fmt.Sprintf("[%s] %s: %s", strings.ToUpper(severity), alarmName, description)
+	facility := vrpModuleToFacility(module, module+" "+trapName+" "+desc)
+
+	oid := strings.TrimSpace(b.fields["trapoid"])
+	var message string
+	switch {
+	case trapName != "" && desc != "" && oid != "" && !strings.Contains(desc, oid):
+		message = fmt.Sprintf("%s (OID %s): %s", trapName, oid, desc)
+	case trapName != "" && desc != "":
+		message = fmt.Sprintf("%s: %s", trapName, desc)
+	case trapName != "":
+		message = trapName
+	default:
+		message = desc
+	}
 
 	return &logEntry{
 		DeviceID:     deviceID,
@@ -638,10 +733,186 @@ func parseAlarmActiveLine(line string, deviceID int, collectedAt time.Time) *log
 		Facility:     facility,
 		Source:       "ssh",
 		Message:      message,
-		RawMessage:   line,
-		LogTimestamp: collectedAt,
+		RawMessage:   strings.Join(b.rawLines, "\n"),
+		LogTimestamp: ts,
 		CollectedAt:  collectedAt,
 	}
+}
+
+func normalizeTrapKVKey(rawKey string) string {
+	key := strings.ToLower(strings.TrimSpace(rawKey))
+	key = strings.ReplaceAll(key, " ", "")
+	key = strings.ReplaceAll(key, "_", "")
+	switch key {
+	case "timestamp", "time":
+		return "timestamp"
+	case "sequence", "seq":
+		return "sequence"
+	case "trapname":
+		return "trapname"
+	case "trapoid", "oid":
+		return "trapoid"
+	case "severity", "level":
+		return "severity"
+	case "module", "source":
+		return "module"
+	case "description", "desc", "message", "content":
+		return "description"
+	default:
+		return ""
+	}
+}
+
+func parseTrapKVLine(line string) (string, string, bool) {
+	sepIdx := strings.IndexAny(line, ":=")
+	if sepIdx <= 0 {
+		return "", "", false
+	}
+	canonicalKey := normalizeTrapKVKey(line[:sepIdx])
+	if canonicalKey == "" {
+		return "", "", false
+	}
+	return canonicalKey, strings.TrimSpace(line[sepIdx+1:]), true
+}
+
+// parseTrapBufferOutput 解析 V200 单行与 V600 多行键值块格式的 display trapbuffer 输出。
+func parseTrapBufferOutput(lines []string, deviceID int, vendor string, collectedAt time.Time, maxEntries int) []logEntry {
+	entries := make([]logEntry, 0, maxEntries)
+	block := &trapKVBlock{fields: map[string]string{}}
+
+	flushBlock := func() {
+		if len(entries) >= maxEntries {
+			block = &trapKVBlock{fields: map[string]string{}}
+			return
+		}
+		if entry := block.toLogEntry(deviceID, collectedAt); entry != nil {
+			entries = append(entries, *entry)
+		}
+		block = &trapKVBlock{fields: map[string]string{}}
+	}
+
+	for _, raw := range lines {
+		if len(entries) >= maxEntries {
+			break
+		}
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" || isLineSeparator(trimmed, '-') || isLineSeparator(trimmed, '=') || trapBlockHeaderPattern.MatchString(trimmed) {
+			flushBlock()
+			continue
+		}
+		if isHeaderLine(trimmed) || isDeviceEchoNoise(trimmed) {
+			continue
+		}
+		if single := parseTrapBufferLine(trimmed, deviceID, collectedAt); single != nil {
+			flushBlock()
+			if len(entries) < maxEntries {
+				entries = append(entries, *single)
+			}
+			continue
+		}
+		if key, val, ok := parseTrapKVLine(trimmed); ok {
+			if _, exists := block.fields[key]; exists {
+				flushBlock()
+			}
+			block.fields[key] = val
+			block.rawLines = append(block.rawLines, trimmed)
+			continue
+		}
+		flushBlock()
+		if len(entries) < maxEntries {
+			if entry := parseLogLine(trimmed, deviceID, vendor, collectedAt); entry != nil {
+				entries = append(entries, *entry)
+			}
+		}
+	}
+	flushBlock()
+	return entries
+}
+
+// parseAlarmActiveOutput 解析 V200 与 V600 表格化 display alarm active 输出。
+func parseAlarmActiveOutput(lines []string, deviceID int, vendor string, collectedAt time.Time, maxEntries int) []logEntry {
+	entries := make([]logEntry, 0, maxEntries)
+	for _, raw := range lines {
+		if len(entries) >= maxEntries {
+			break
+		}
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" || isHeaderLine(trimmed) || isDeviceEchoNoise(trimmed) {
+			continue
+		}
+		entry := parseAlarmActiveLine(trimmed, deviceID, collectedAt)
+		if entry == nil {
+			entry = parseLogLine(trimmed, deviceID, vendor, collectedAt)
+		}
+		if entry != nil {
+			entries = append(entries, *entry)
+		}
+	}
+	return entries
+}
+
+func mapAlarmOrTrapSeverityText(severity string) string {
+	switch strings.ToLower(strings.TrimSpace(severity)) {
+	case "critical", "emergency", "alert":
+		return "critical"
+	case "major", "error", "err":
+		return "error"
+	case "minor", "warning", "warn":
+		return "warning"
+	case "debug":
+		return "debug"
+	default:
+		return "info"
+	}
+}
+
+// parseAlarmActiveLine parses a single line from Huawei V200/V600 "display alarm active" output
+func parseAlarmActiveLine(line string, deviceID int, collectedAt time.Time) *logEntry {
+	if match := huaweiAlarmActivePattern.FindStringSubmatch(line); len(match) >= 5 {
+		alarmName := match[2]
+		severity := strings.ToLower(strings.TrimSpace(match[3]))
+		description := strings.TrimSpace(match[4])
+
+		level := mapAlarmOrTrapSeverityText(severity)
+		facility := detectLogFacility(alarmName + " " + description)
+		message := fmt.Sprintf("[%s] %s: %s", strings.ToUpper(severity), alarmName, description)
+
+		return &logEntry{
+			DeviceID:     deviceID,
+			Level:        level,
+			Facility:     facility,
+			Source:       "ssh",
+			Message:      message,
+			RawMessage:   line,
+			LogTimestamp: collectedAt,
+			CollectedAt:  collectedAt,
+		}
+	}
+
+	if match := huaweiV600AlarmActivePattern.FindStringSubmatch(line); len(match) >= 7 {
+		severity := strings.ToLower(strings.TrimSpace(match[2]))
+		alarmID := strings.TrimSpace(match[3])
+		source := strings.TrimSpace(match[4])
+		tsRaw := strings.TrimSpace(match[5])
+		name := strings.TrimSpace(match[6])
+
+		level := mapAlarmOrTrapSeverityText(severity)
+		facility := detectLogFacility(source + " " + name)
+		message := fmt.Sprintf("[%s] %s (%s): %s", strings.ToUpper(severity), alarmID, source, name)
+
+		return &logEntry{
+			DeviceID:     deviceID,
+			Level:        level,
+			Facility:     facility,
+			Source:       "ssh",
+			Message:      message,
+			RawMessage:   line,
+			LogTimestamp: parseTrapTimestamp(tsRaw, collectedAt),
+			CollectedAt:  collectedAt,
+		}
+	}
+
+	return nil
 }
 
 // mapVRPSeverity maps Huawei VRP severity number (0-7) to our level
@@ -661,30 +932,58 @@ func mapVRPSeverity(num string) string {
 	}
 }
 
-// parseTrapTimestamp parses timestamps from Huawei trapbuffer
-// Formats: "Sep 17 2012 17:09:47+00:00" or "2024-01-15 10:30:22+08:00"
+// parseTrapTimestamp parses timestamps from Huawei V200/V600 logbuffer and trapbuffer.
+// Formats:
+//   - "Sep 17 2012 17:09:47+00:00"
+//   - "2024-01-15 10:30:22+08:00"
+//   - "2026-11-20 10:15:20.123 +08:00"
+//   - "2026-11-20 10:15:20.123456 +08:00"
 func parseTrapTimestamp(raw string, fallback time.Time) time.Time {
 	value := strings.TrimSpace(raw)
 	if value == "" {
 		return fallback
 	}
 
-	// Remove timezone offset suffix for simpler parsing
-	// "Sep 17 2012 17:09:47+00:00" -> "Sep 17 2012 17:09:47"
+	tzLayouts := []string{
+		"2006-01-02 15:04:05.999999999 -07:00",
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05 -07:00",
+		"2006-01-02 15:04:05-07:00",
+		"2006-01-02 15:04:05.999999999 -0700",
+		"2006-01-02 15:04:05.999999999-0700",
+		"2006-01-02 15:04:05 -0700",
+		"2006-01-02 15:04:05-0700",
+		"Jan 2 2006 15:04:05.999999999 -07:00",
+		"Jan 2 2006 15:04:05.999999999-07:00",
+		"Jan 2 2006 15:04:05 -07:00",
+		"Jan 2 2006 15:04:05-07:00",
+		"Jan _2 2006 15:04:05 -07:00",
+		"Jan _2 2006 15:04:05-07:00",
+	}
+	for _, layout := range tzLayouts {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed.UTC()
+		}
+	}
+
+	// Remove non-standard trailing DST/UTC or offset suffix if any
+	value = strings.TrimSpace(strings.TrimSuffix(strings.TrimSuffix(value, "DST"), "UTC"))
 	if idx := strings.LastIndex(value, "+"); idx > 10 {
-		value = value[:idx]
+		value = strings.TrimSpace(value[:idx])
 	} else if idx := strings.LastIndex(value, "-"); idx > 10 {
-		// Be careful not to strip date hyphens
 		suffix := value[idx:]
 		if len(suffix) <= 6 && strings.Contains(suffix, ":") {
-			value = value[:idx]
+			value = strings.TrimSpace(value[:idx])
 		}
 	}
 
 	layouts := []string{
-		"Jan 2 2006 15:04:05",
-		"Jan 02 2006 15:04:05",
+		"2006-01-02 15:04:05.999999999",
 		"2006-01-02 15:04:05",
+		"Jan 2 2006 15:04:05.999999999",
+		"Jan _2 2006 15:04:05.999999999",
+		"Jan 2 2006 15:04:05",
+		"Jan _2 2006 15:04:05",
 	}
 
 	for _, layout := range layouts {
@@ -820,6 +1119,10 @@ func isHeaderLine(line string) bool {
 		if strings.HasPrefix(trimmed, prefix) {
 			return true
 		}
+	}
+
+	if strings.HasPrefix(trimmed, "Index") && strings.Contains(trimmed, "Severity") {
+		return true
 	}
 
 	if isLineSeparator(trimmed, '-') || isLineSeparator(trimmed, '=') {

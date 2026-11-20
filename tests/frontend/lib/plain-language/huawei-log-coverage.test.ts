@@ -417,4 +417,185 @@ describe('华为 VRP 日志人话解读覆盖', () => {
       expect(result.summary).toContain('HW_BASETRAP')
     })
   })
+
+  describe('华为 V600 / 园区交换机高频场景规则', () => {
+    it('M-LAG Peer-Link 断开应优先命中 M-LAG 规则而非普通 Eth-Trunk', () => {
+      const result = translate(
+        'M-LAG peer-link Eth-Trunk10 is down.',
+        'error',
+        'switching',
+      )
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-mlag-peer-link-down')
+      expect(result.tone).toBe('critical')
+    })
+
+    it('M-LAG 双主分裂应识别为严重告警', () => {
+      const result = translate(
+        'M-LAG dual-active split-brain detected by DAD.',
+        'critical',
+        'switching',
+      )
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-mlag-split-brain')
+      expect(result.tone).toBe('critical')
+    })
+
+    it('CSS 集群心跳或主备切换应命中 CSS 规则', () => {
+      const result = translate(
+        'CSS cluster switchover master-standby heartbeat timeout.',
+        'warning',
+        'switching',
+      )
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-css-cluster')
+    })
+
+    it('VXLAN 隧道断开与 EVPN 邻居中断应命中对应规则', () => {
+      const vxlan = translate(
+        'VXLAN tunnel on Nve1 VTEP 10.1.1.2 went down.',
+        'warning',
+        'switching',
+      )
+      expect(vxlan.matched).toBe(true)
+      expect(vxlan.ruleId).toBe('huawei-vxlan-tunnel-down')
+
+      const evpn = translate(
+        'EVPN BGP peer 10.1.1.2 is down.',
+        'critical',
+        'routing',
+      )
+      expect(evpn.matched).toBe(true)
+      expect(evpn.ruleId).toBe('huawei-evpn-peer-down')
+      expect(evpn.tone).toBe('critical')
+    })
+
+    it('MACsec 协商异常应命中 MACsec 规则', () => {
+      const result = translate(
+        'MACsec MKA session negotiation failed on 25GE1/0/1.',
+        'warning',
+        'security',
+      )
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-macsec-fault')
+    })
+
+    it('PoE++ 供电超载应命中 PoE 超载规则', () => {
+      const result = translate(
+        'PoE++ total power budget exceeded, port power denied due to overload.',
+        'warning',
+        'interface',
+      )
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-poe-overload')
+      expect(result.tone).toBe('critical')
+    })
+
+    it('光模块插入与拔出应准确区分，且光功率异常仍命中光功率规则', () => {
+      const inserted = translate(
+        'Optical transceiver 25GE1/0/1 plugged in.',
+        'info',
+        'interface',
+      )
+      expect(inserted.matched).toBe(true)
+      expect(inserted.ruleId).toBe('huawei-transceiver-inserted')
+      expect(inserted.tone).toBe('info')
+
+      const removed = translate(
+        'Optical transceiver 25GE1/0/1 pulled out.',
+        'warning',
+        'interface',
+      )
+      expect(removed.matched).toBe(true)
+      expect(removed.ruleId).toBe('huawei-transceiver-removed')
+      expect(removed.tone).toBe('warning')
+
+      const rxLow = translate(
+        'Optical Rx power too low on 25GE1/0/1.',
+        'warning',
+        'interface',
+      )
+      expect(rxLow.matched).toBe(true)
+      expect(rxLow.ruleId).toBe('huawei-optical-power')
+    })
+
+    it('SRM 硬件表项资源告警应命中资源告警规则', () => {
+      const result = translate(
+        'FWM hardware table TCAM resource usage exceeds threshold.',
+        'warning',
+        'system',
+      )
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-srm-resource-alarm')
+    })
+
+    it('Telemetry 与 NETCONF 连接异常应命中对应规则', () => {
+      const telemetry = translate(
+        'Telemetry gRPC connection to collector 10.0.0.10 failed.',
+        'warning',
+        'snmp',
+      )
+      expect(telemetry.matched).toBe(true)
+      expect(telemetry.ruleId).toBe('huawei-telemetry-netconf-fault')
+
+      const netconf = translate(
+        'NETCONF session disconnected unexpectedly.',
+        'warning',
+        'ssh',
+      )
+      expect(netconf.matched).toBe(true)
+      expect(netconf.ruleId).toBe('huawei-telemetry-netconf-fault')
+    })
+  })
+
+  describe('安全审查回归：规则劫持与误判防护', () => {
+    it('M-LAG Peer-Link 断开不得被 up 规则劫持', () => {
+      const result = translate(
+        'M-LAG DFS Group 1 peer-link Eth-Trunk10 is down.',
+        'error',
+        'switching',
+      )
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('huawei-mlag-peer-link-down')
+      expect(result.ruleId).not.toBe('huawei-mlag-peer-link-up')
+      expect(result.tone).toBe('critical')
+    })
+
+    it('光模块不在位应命中 transceiver-fault 而非插入规则', () => {
+      const result = translate(
+        'Optical transceiver 25GE1/0/1 is not present.',
+        'warning',
+        'interface',
+      )
+      expect(result.matched).toBe(true)
+      expect(result.ruleId).toBe('transceiver-fault')
+      expect(result.ruleId).not.toBe('huawei-transceiver-inserted')
+      expect(result.tone).toBe('warning')
+    })
+
+    it('MACsec SAK 安装成功不得误命中故障规则', () => {
+      const result = translate(
+        'MACsec MKA session SAK installed successfully.',
+        'info',
+        'security',
+      )
+      expect(result.ruleId).not.toBe('huawei-macsec-fault')
+    })
+
+    it('Flash 空间满与 ARP 表项超限不得被 SRM 资源告警劫持', () => {
+      const flash = translate(
+        'Flash storage problem: disk usage is full.',
+        'warning',
+        'system',
+      )
+      expect(flash.ruleId).not.toBe('huawei-srm-resource-alarm')
+
+      const arp = translate(
+        'ARP table element exceeds limit.',
+        'warning',
+        'switching',
+      )
+      expect(arp.ruleId).not.toBe('huawei-srm-resource-alarm')
+    })
+  })
 })

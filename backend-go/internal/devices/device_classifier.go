@@ -39,7 +39,7 @@ var firewallTokenPrefixes = []string{
 // 不能在整段 sysDescr 里搜 "Routing"：华为交换机 sysDescr 含 "Versatile Routing Platform"。
 var (
 	routerHeadPattern = regexp.MustCompile(`^(ar|ne|msr|sr|isr|asr)\d|^netengine`)
-	switchHeadPattern = regexp.MustCompile(`^(s|ce|c9|c2|c3|ex|n9k)\d|^ws-c|^catalyst`)
+	switchHeadPattern = regexp.MustCompile(`^cloudengine\s+(s|ce)\d|^(s|ce|c9|c2|c3|ex|n9k)\d|^ws-c|^catalyst`)
 	apHeadPattern     = regexp.MustCompile(`^(ap|wa)\d|^airengine`)
 )
 
@@ -67,15 +67,18 @@ func classifyDeviceType(sysDescr string, model string, sysServices int, lldpCaps
 		}
 	}
 
-	head := modelHeadToken(sysDescr, model)
-	switch {
-	case head == "":
-	case apHeadPattern.MatchString(head):
-		return detectedTypeAP
-	case routerHeadPattern.MatchString(head):
-		return detectedTypeRouter
-	case switchHeadPattern.MatchString(head):
-		return detectedTypeSwitch
+	if detected := classifyHeadToken(modelHeadToken(sysDescr, model)); detected != "" {
+		return detected
+	}
+
+	// 若未传 model 且 sysDescr 首词是厂商名（如 "Huawei Versatile...(CloudEngine S5755-...)"），
+	// 尝试从 sysDescr 括号内提取型号后再做产品线匹配。
+	if strings.TrimSpace(model) == "" {
+		if fallbackModel, _ := parseDeviceIdentityFromSysDescr(sysDescr); fallbackModel != "" {
+			if detected := classifyHeadToken(modelHeadToken("", fallbackModel)); detected != "" {
+				return detected
+			}
+		}
 	}
 
 	switch {
@@ -98,13 +101,43 @@ func matchesFirewallToken(text string) bool {
 	return false
 }
 
-// modelHeadToken 返回型号的首个空白分隔词（小写）；型号为空时退回 sysDescr 首词。
+func classifyHeadToken(head string) string {
+	switch {
+	case head == "":
+		return ""
+	case apHeadPattern.MatchString(head):
+		return detectedTypeAP
+	case routerHeadPattern.MatchString(head):
+		return detectedTypeRouter
+	case switchHeadPattern.MatchString(head):
+		return detectedTypeSwitch
+	default:
+		return ""
+	}
+}
+
+// modelHeadToken 返回型号的首个空白分隔词（小写；若以 CloudEngine/Quidway 开头则保留/剥离品牌前缀）；
+// 型号为空时退回 sysDescr 首词。
 func modelHeadToken(sysDescr string, model string) string {
 	if fields := strings.Fields(model); len(fields) > 0 {
-		return strings.ToLower(fields[0])
+		return normalizeClassifierHeadFields(fields)
 	}
 	if fields := strings.Fields(sysDescr); len(fields) > 0 {
-		return strings.ToLower(fields[0])
+		return normalizeClassifierHeadFields(fields)
 	}
 	return ""
+}
+
+func normalizeClassifierHeadFields(fields []string) string {
+	first := strings.ToLower(fields[0])
+	if len(fields) > 1 {
+		second := strings.ToLower(fields[1])
+		if first == "cloudengine" {
+			return first + " " + second
+		}
+		if first == "quidway" {
+			return second
+		}
+	}
+	return first
 }

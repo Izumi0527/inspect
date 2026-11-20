@@ -188,3 +188,46 @@ func TestParseAlarmActive_EmptyWalkShouldReturnNoEntries(t *testing.T) {
 		t.Fatalf("空 walk 应返回空切片，得 %d 条", len(got))
 	}
 }
+
+func TestParseAlarmActive_V600OctetStringOIDMultiIndexAndNullSafety(t *testing.T) {
+	const alarmEntry = "1.3.6.1.4.1.2011.5.25.180.1.8.1"
+	// 多段表索引：targetName("target1.v2cl") + alarmIndex(108)
+	const idxMulti = ".11.116.97.114.103.101.116.49.46.118.50.99.108.108"
+	const idxNumeric = ".0.109"
+	const idxNil = ".0.110"
+	const idxException = ".0.111"
+
+	pdus := []gosnmp.SnmpPDU{
+		// 1) V600 以 OctetString 形式返回带前导点和空格的 OID，且 Para 为空 []byte{}
+		{Name: alarmEntry + ".2" + idxMulti, Type: gosnmp.OctetString, Value: []byte(" .1.3.6.1.4.1.2011.5.25.219.2.5.3 ")},
+		{Name: alarmEntry + ".3" + idxMulti, Type: gosnmp.OctetString, Value: []byte{}},
+		// 2) V600 Counter64 数值型 hwActiveAlarmId + 正常文本 Para
+		{Name: alarmEntry + ".2" + idxNumeric, Type: gosnmp.Counter64, Value: uint64(139591681)},
+		{Name: alarmEntry + ".3" + idxNumeric, Type: gosnmp.OctetString, Value: []byte("Slot=1, Power failed")},
+		// 3) 空值 / nil Value 不应生成 "<nil>" 或 "0x"
+		{Name: alarmEntry + ".2" + idxNil, Type: gosnmp.Null, Value: nil},
+		{Name: alarmEntry + ".3" + idxNil, Type: gosnmp.OctetString, Value: []byte("orphan para")},
+		// 4) NoSuchInstance / EndOfMibView 异常 PDU 不应入库
+		{Name: alarmEntry + ".2" + idxException, Type: gosnmp.NoSuchInstance, Value: nil},
+	}
+
+	entries := logs.ParseAlarmActivePDUsForTest(pdus, 8, snmpCollectedAt, 10)
+	if len(entries) != 2 {
+		t.Fatalf("entries=%d, want 2（nil 与 NoSuchInstance 行应被安全跳过）", len(entries))
+	}
+
+	power, numeric := entries[0], entries[1]
+	if !strings.Contains(power.Message, "1.3.6.1.4.1.2011.5.25.219.2.5.3 (hwPowerFail)") {
+		t.Fatalf("OctetString OID 应归一并命中 hwPowerFail: %q", power.Message)
+	}
+	if power.Level != "critical" {
+		t.Fatalf("hwPowerFail level=%q, want critical", power.Level)
+	}
+	if strings.Contains(power.Message, "|") || strings.Contains(power.Message, "0x") || strings.Contains(power.Message, "<nil>") {
+		t.Fatalf("空 Para 不应附带分隔符或 0x/<nil>: %q", power.Message)
+	}
+
+	if !strings.Contains(numeric.Message, "Active alarm 139591681 | Slot=1, Power failed") {
+		t.Fatalf("Counter64 告警 ID 应正确格式化: %q", numeric.Message)
+	}
+}

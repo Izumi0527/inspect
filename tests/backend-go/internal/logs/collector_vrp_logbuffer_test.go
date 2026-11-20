@@ -1,11 +1,38 @@
 package logs_test
 
 import (
+	"strings"
 	"testing"
 	"time"
+	_ "unsafe"
 
 	"github.com/your-org/inspect-system/backend-go/internal/logs"
 )
+
+//go:linkname resolveVendorCommandForTest github.com/your-org/inspect-system/backend-go/internal/logs.resolveVendorCommand
+func resolveVendorCommandForTest(vendor string, logType string) string
+
+//go:linkname parseTrapBufferLineForTest github.com/your-org/inspect-system/backend-go/internal/logs.parseTrapBufferLine
+func parseTrapBufferLineForTest(line string, deviceID int, collectedAt time.Time) *logEntryLink
+
+//go:linkname parseAlarmActiveLineForTest github.com/your-org/inspect-system/backend-go/internal/logs.parseAlarmActiveLine
+func parseAlarmActiveLineForTest(line string, deviceID int, collectedAt time.Time) *logEntryLink
+
+//go:linkname parseLogOutputForVRPTest github.com/your-org/inspect-system/backend-go/internal/logs.parseLogOutput
+func parseLogOutputForVRPTest(output string, deviceID int, vendor string, collectedAt time.Time, maxEntries int) []logEntryLink
+
+type logEntryLink struct {
+	DeviceID      int
+	Level         string
+	Facility      string
+	Source        string
+	Message       string
+	RawMessage    string
+	SourceIP      *string
+	SourceProcess *string
+	LogTimestamp  time.Time
+	CollectedAt   time.Time
+}
 
 // 华为 VRP display logbuffer 行的结构化解析测试。
 //
@@ -224,5 +251,206 @@ func TestParseLogLine_VRPModuleFacilityExpansion(t *testing.T) {
 		if entry.Facility != tc.wantFacility {
 			t.Errorf("%s\n设施 = %q, want %q", tc.line, entry.Facility, tc.wantFacility)
 		}
+	}
+}
+
+func TestParseLogLine_V600Formats(t *testing.T) {
+	t.Run("V600带空格时区与毫秒_CID与IFM", func(t *testing.T) {
+		line := "2026-11-20 10:15:20.123 +08:00 Switch-S5755 %%01IFM/4/IF_STATE(l):CID=0x807a040b;Interface 25GE1/0/1 has turned into DOWN state."
+		entry := parseLine(t, line)
+
+		if entry.Level != "warning" {
+			t.Fatalf("级别 = %q, want warning", entry.Level)
+		}
+		if entry.Facility != "interface" {
+			t.Fatalf("设施 = %q, want interface", entry.Facility)
+		}
+		wantMsg := "Interface 25GE1/0/1 has turned into DOWN state."
+		if entry.Message != wantMsg {
+			t.Fatalf("消息体 = %q, want %q", entry.Message, wantMsg)
+		}
+		wantTS := time.Date(2026, 11, 20, 2, 15, 20, 123000000, time.UTC)
+		if !entry.LogTimestamp.Equal(wantTS) {
+			t.Fatalf("时间戳 = %v, want %v", entry.LogTimestamp, wantTS)
+		}
+	})
+
+	t.Run("V600微秒与大写类型标识S_SECL", func(t *testing.T) {
+		line := "2026-11-20 10:20:00.123456 +08:00 S5736-S %%01SECL/5/LOGIN(S):CID=0x801;User admin logged in."
+		entry := parseLine(t, line)
+
+		if entry.Level != "info" {
+			t.Fatalf("级别 = %q, want info", entry.Level)
+		}
+		if entry.Facility != "security" {
+			t.Fatalf("设施 = %q, want security", entry.Facility)
+		}
+		if entry.Message != "User admin logged in." {
+			t.Fatalf("消息体 = %q", entry.Message)
+		}
+	})
+
+	t.Run("V600含连字符模块_ETH-TRUNK", func(t *testing.T) {
+		line := "2026-11-20 10:21:00 +08:00 S8700 %%01ETH-TRUNK/4/MEMBER_DOWN(l):CID=0x802;Member interface 100GE1/0/1 is down."
+		entry := parseLine(t, line)
+
+		if entry.Level != "warning" {
+			t.Fatalf("级别 = %q, want warning", entry.Level)
+		}
+		if entry.Facility != "interface" {
+			t.Fatalf("设施 = %q, want interface", entry.Facility)
+		}
+		if entry.Message != "Member interface 100GE1/0/1 is down." {
+			t.Fatalf("消息体 = %q", entry.Message)
+		}
+	})
+
+	t.Run("V600表格化display_logbuffer行", func(t *testing.T) {
+		line := "2026-06-06 11:20:10  842   Informational  %%01IFM/4/LINK_STATE(l):The physical status of interface GigabitEthernet1/0/1 changed to DOWN."
+		entry := parseLine(t, line)
+
+		if entry.Level != "warning" {
+			t.Fatalf("级别 = %q, want warning", entry.Level)
+		}
+		if entry.Facility != "interface" {
+			t.Fatalf("设施 = %q, want interface", entry.Facility)
+		}
+		wantMsg := "The physical status of interface GigabitEthernet1/0/1 changed to DOWN."
+		if entry.Message != wantMsg {
+			t.Fatalf("消息体 = %q, want %q", entry.Message, wantMsg)
+		}
+	})
+
+	t.Run("V600无版本头带连字符模块与CID", func(t *testing.T) {
+		line := "2026-11-20 10:21:00.500 +08:00 S8700 M-LAG/3/PEER_LINK_DOWN(L)[12]:CID=0x803;M-LAG peer-link Eth-Trunk10 is down."
+		entry := parseLine(t, line)
+
+		if entry.Level != "error" {
+			t.Fatalf("级别 = %q, want error", entry.Level)
+		}
+		if entry.Facility != "switching" {
+			t.Fatalf("设施 = %q, want switching", entry.Facility)
+		}
+		if entry.Message != "M-LAG peer-link Eth-Trunk10 is down." {
+			t.Fatalf("消息体 = %q", entry.Message)
+		}
+	})
+
+	t.Run("V600扩展模块_130plus抽查", func(t *testing.T) {
+		cases := []struct {
+			line         string
+			wantFacility string
+		}{
+			{"2026-11-20 10:00:00 +08:00 S5755 %%01DEVM/2/POWER_FAIL(l):CID=0x1;Power supply 1 failed.", "system"},
+			{"2026-11-20 10:00:00 +08:00 S5755 %%01OPTICAL/4/RX_POWER_LOW(l):CID=0x2;Optical Rx power low.", "interface"},
+			{"2026-11-20 10:00:00 +08:00 S6750 %%01VXLAN/4/TUNNEL_DOWN(l):CID=0x3;VXLAN tunnel down.", "switching"},
+			{"2026-11-20 10:00:00 +08:00 S6750 %%01EVPN/3/PEER_DOWN(l):CID=0x4;EVPN peer down.", "switching"},
+			{"2026-11-20 10:00:00 +08:00 S5755 %%01MACSEC/4/MKA_FAIL(l):CID=0x5;MACsec MKA negotiation failed.", "security"},
+			{"2026-11-20 10:00:00 +08:00 S5755 %%01TELEMETRY/4/CONN_FAIL(l):CID=0x6;Telemetry gRPC disconnected.", "snmp"},
+			{"2026-11-20 10:00:00 +08:00 S16700 %%01BGP4PLUS/4/PEER_DOWN(l):CID=0x7;BGP4+ peer down.", "routing"},
+			{"2026-11-20 10:00:00 +08:00 S5736-S %%01ISTACK/4/LINK_DOWN(l):CID=0x8;iStack link down.", "switching"},
+			{"2026-11-20 10:00:00 +08:00 S5736-S %%01L3IF/4/IF_DOWN(l):CID=0x9;L3 interface down.", "interface"},
+			{"2026-11-20 10:00:00 +08:00 S8700 %%01DEV-MGR/4/BOARD_RESET(l):CID=0xa;Board reset.", "system"},
+		}
+		for _, tc := range cases {
+			entry := parseLine(t, tc.line)
+			if entry.Facility != tc.wantFacility {
+				t.Errorf("%s\n设施 = %q, want %q", tc.line, entry.Facility, tc.wantFacility)
+			}
+		}
+	})
+}
+
+func TestParseAlarmActiveAndTrapBuffer_V600Formats(t *testing.T) {
+	t.Run("V600_display_alarm_active_表格行", func(t *testing.T) {
+		output := strings.Join([]string{
+			"Index   Severity     Id           Source          Time                   Name",
+			"-------------------------------------------------------------------------------",
+			"1       Major        0x85020001   Slot:1          2026-06-06 10:14:22    Power supply failed",
+			"2       Critical     0x85020002   GE1/0/1         2026-06-06 10:15:00    Interface link down",
+		}, "\n")
+
+		entries := parseLogOutputForVRPTest(output, 1, "huawei_v600", collectedAt, 100)
+		if len(entries) != 2 {
+			t.Fatalf("len(entries) = %d, want 2", len(entries))
+		}
+		if entries[0].Level != "error" || entries[0].Facility != "system" {
+			t.Fatalf("entry[0] = level=%q facility=%q, want error/system", entries[0].Level, entries[0].Facility)
+		}
+		if !strings.Contains(entries[0].Message, "Power supply failed") {
+			t.Fatalf("entry[0].Message = %q", entries[0].Message)
+		}
+		if entries[1].Level != "critical" || entries[1].Facility != "interface" {
+			t.Fatalf("entry[1] = level=%q facility=%q, want critical/interface", entries[1].Level, entries[1].Facility)
+		}
+	})
+
+	t.Run("V600_display_trapbuffer_多行键值块", func(t *testing.T) {
+		output := strings.Join([]string{
+			"Trapping buffer configuration and contents : enabled",
+			"Allowed max buffer size : 1024",
+			"Current messages : 2",
+			"",
+			"Timestamp   : 2026-11-20 10:15:20.123 +08:00",
+			"Sequence    : 1024",
+			"TrapName    : %%01MLAG/3/PEER_LINK_DOWN(t)",
+			"Description : M-LAG peer-link Eth-Trunk10 is down.",
+			"",
+			"Timestamp   : 2026-11-20 10:16:00 +08:00",
+			"Sequence    : 1025",
+			"TrapName    : %%01DEVM/2/POWER_FAIL(t)",
+			"Description : Power supply 1 failed.",
+		}, "\n")
+
+		entries := parseLogOutputForVRPTest(output, 1, "cloudengine", collectedAt, 100)
+		if len(entries) != 2 {
+			t.Fatalf("len(entries) = %d, want 2", len(entries))
+		}
+		if entries[0].Level != "error" || entries[0].Facility != "switching" {
+			t.Fatalf("entry[0] = level=%q facility=%q, want error/switching", entries[0].Level, entries[0].Facility)
+		}
+		if !strings.Contains(entries[0].Message, "M-LAG peer-link Eth-Trunk10 is down.") {
+			t.Fatalf("entry[0].Message = %q", entries[0].Message)
+		}
+		wantTS := time.Date(2026, 11, 20, 2, 15, 20, 123000000, time.UTC)
+		if !entries[0].LogTimestamp.Equal(wantTS) {
+			t.Fatalf("entry[0].LogTimestamp = %v, want %v", entries[0].LogTimestamp, wantTS)
+		}
+		if entries[1].Level != "critical" || entries[1].Facility != "system" {
+			t.Fatalf("entry[1] = level=%q facility=%q, want critical/system", entries[1].Level, entries[1].Facility)
+		}
+	})
+
+	t.Run("V200单行alarm与trap保持兼容", func(t *testing.T) {
+		trapLine := "#Sep 17 2012 17:09:47+00:00 HUAWEI LLDP/4/NBRCHGTRAP:OID: 1.0.8802.1.1.2.0.0.1 Neighbor info changed."
+		trap := parseTrapBufferLineForTest(trapLine, 1, collectedAt)
+		if trap == nil || trap.Level != "warning" {
+			t.Fatalf("V200 trap 解析失败: %+v", trap)
+		}
+
+		alarmLine := "1  0x08d40001  hwBoardFail  Critical  Start  Board failed."
+		alarm := parseAlarmActiveLineForTest(alarmLine, 1, collectedAt)
+		if alarm == nil || alarm.Level != "critical" {
+			t.Fatalf("V200 alarm 解析失败: %+v", alarm)
+		}
+	})
+}
+
+func TestResolveVendorCommand_HuaweiAliases(t *testing.T) {
+	aliases := []string{"huawei", "huawei_vrp", "huawei_v600", "huawei_vrp8", "cloudengine", "quidway", "华为"}
+	for _, vendor := range aliases {
+		if got := resolveVendorCommandForTest(vendor, "interface"); got != "display logbuffer | include IF" {
+			t.Errorf("resolveVendorCommand(%q, interface) = %q, want huawei command", vendor, got)
+		}
+		if got := resolveVendorCommandForTest(vendor, "alarm"); got != "display alarm active" {
+			t.Errorf("resolveVendorCommand(%q, alarm) = %q", vendor, got)
+		}
+	}
+	if got := resolveVendorCommandForTest("huawei_v600", "system"); got != "display logbuffer" {
+		t.Fatalf("got %q", got)
+	}
+	// Ensure h3c_comware still maps to h3c
+	if got := resolveVendorCommandForTest("h3c_comware", "interface"); got != "display logbuffer | include Link" {
+		t.Fatalf("resolveVendorCommand(h3c_comware, interface) = %q, want h3c command", got)
 	}
 }

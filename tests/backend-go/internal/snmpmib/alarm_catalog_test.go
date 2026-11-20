@@ -24,12 +24,76 @@ func TestDefaultAlarmCatalog_ShouldLoadFullTrapSet(t *testing.T) {
 	if catalog.SchemaVersion != 1 {
 		t.Fatalf("SchemaVersion=%d, want 1", catalog.SchemaVersion)
 	}
-	// 文档「告警节点详细描述」全量 1157 条；留余量防止文档小改就断
-	if len(catalog.Traps) < 1100 {
-		t.Fatalf("traps=%d, want >= 1100（应为全量而非主题子集）", len(catalog.Traps))
+	// 文档「告警节点详细描述」全量 1157 条 + V600/框式核心增量补充，基线零丢失且应严格扩充
+	if len(catalog.Traps) <= 1157 {
+		t.Fatalf("traps=%d, want > 1157（应保留 1157 基线并合入 V600/框式核心增量）", len(catalog.Traps))
 	}
-	if len(catalog.Nodes) < 800 {
-		t.Fatalf("nodes=%d, want >= 800", len(catalog.Nodes))
+	if len(catalog.Nodes) < 931 {
+		t.Fatalf("nodes=%d, want >= 931", len(catalog.Nodes))
+	}
+}
+
+func TestLookupTrap_ShouldIncludeV600AndModularChassisAlarms(t *testing.T) {
+	catalog := loadCatalog(t)
+
+	cases := []struct {
+		oid      string
+		name     string
+		mib      string
+		level    string
+		facility string
+		cleared  bool
+	}{
+		{"1.3.6.1.4.1.2011.5.25.219.2.5.3", "hwPowerFail", "HUAWEI-ENTITY-TRAP-MIB", "critical", "hardware", false},
+		{"1.3.6.1.4.1.2011.5.25.219.2.5.4", "hwPowerFailResume", "HUAWEI-ENTITY-TRAP-MIB", "info", "hardware", true},
+		{"1.3.6.1.4.1.2011.5.25.219.2.6.3", "hwFanFail", "HUAWEI-ENTITY-TRAP-MIB", "critical", "hardware", false},
+		{"1.3.6.1.4.1.2011.5.25.219.2.6.4", "hwFanFailResume", "HUAWEI-ENTITY-TRAP-MIB", "info", "hardware", true},
+		{"1.3.6.1.4.1.2011.5.25.219.2.1.3", "hwChassisFail", "HUAWEI-ENTITY-TRAP-MIB", "critical", "hardware", false},
+		{"1.3.6.1.4.1.2011.5.25.183.3.3.2.1", "hwCssLinkDown", "HUAWEI-STACK-MIB", "warning", "switching", false},
+		{"1.3.6.1.4.1.2011.5.25.183.3.3.2.4", "hwCssConnectError", "HUAWEI-STACK-MIB", "critical", "switching", false},
+		{"1.3.6.1.4.1.2011.5.25.178.8.2.7", "hwMlagDfsPeerDown", "HUAWEI-M-LAG-MIB", "critical", "switching", false},
+		{"1.3.6.1.4.1.2011.5.25.178.8.2.8", "hwMlagDfsPeerDownResume", "HUAWEI-M-LAG-MIB", "info", "switching", true},
+		{"1.3.6.1.4.1.2011.5.25.356.1.1.2.5", "hwEvpnEvplInstDown", "HUAWEI-EVPN-MIB", "critical", "routing", false},
+		{"1.3.6.1.4.1.2011.5.25.347.2.6", "hwMACsecFailNotify", "HUAWEI-MACSEC-MIB", "critical", "security", false},
+		{"1.3.6.1.4.1.2011.5.25.165.2.2.7.3", "hwCpcarAutoPortDefendAlarm", "HUAWEI-SECURITY-MIB", "warning", "security", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			def, ok := catalog.LookupTrap("." + tc.oid)
+			if !ok {
+				t.Fatalf("%s (%s) 未收录", tc.name, tc.oid)
+			}
+			if def.Name != tc.name || def.MIB != tc.mib || def.Level != tc.level || def.Facility != tc.facility || def.Cleared != tc.cleared {
+				t.Fatalf("got %+v, want name=%s mib=%s level=%s facility=%s cleared=%v", def, tc.name, tc.mib, tc.level, tc.facility, tc.cleared)
+			}
+			if def.Meaning == "" {
+				t.Fatalf("%s meaning 不应为空", tc.name)
+			}
+		})
+	}
+
+	// 验证原 1157 基线关键条目零丢失
+	for _, baselineOID := range []string{
+		"1.3.6.1.4.1.2011.5.25.219.2.6.1",  // hwFanRemove
+		"1.3.6.1.4.1.2011.5.25.219.2.14.1", // hwCPUUtilizationRising
+		"1.3.6.1.4.1.2011.5.25.219.2.15.1", // hwMemUtilizationRising
+		"1.3.6.1.4.1.2011.5.25.668.2.1",    // hwVxlanTunnelFull
+		"1.3.6.1.4.1.2011.5.25.257.2.1",    // hwErrordown
+		"1.3.6.1.4.1.2011.5.25.180.2.2",    // hwAlarmStorm
+	} {
+		if _, ok := catalog.LookupTrap(baselineOID); !ok {
+			t.Fatalf("基线 Trap %s 丢失", baselineOID)
+		}
+	}
+
+	// 验证补充的枚举节点 hwStackPortStatus
+	node, instance, ok := catalog.LookupNode("1.3.6.1.4.1.2011.5.25.183.1.21.1.5.1")
+	if !ok || node.Name != "hwStackPortStatus" || instance != "1" {
+		t.Fatalf("hwStackPortStatus 解析失败: %+v / %q / %v", node, instance, ok)
+	}
+	if node.Enum["1"] != "up" || node.Enum["2"] != "down" {
+		t.Fatalf("hwStackPortStatus 枚举错误: %v", node.Enum)
 	}
 }
 

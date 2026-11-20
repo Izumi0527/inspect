@@ -84,6 +84,111 @@ func TestClassifyDeviceType(t *testing.T) {
 			want:        "",
 		},
 		{
+			name:     "CloudEngine S5755 V600 sysDescr 自动识别为 switch",
+			sysDescr: "Huawei Versatile Routing Platform Software\r\nVRP (R) software, Version 8.230 (CloudEngine S5755-H48T4XC V600R023C00SPC500)",
+			want:     "switch",
+		},
+		{
+			name:     "CloudEngine S5736-S 首行 sysDescr 识别为 switch",
+			sysDescr: "CloudEngine S5736-S24S4XC\r\nHuawei Versatile Routing Platform Software\r\nVRP (R) software, Version 5.170 (S5736-S V200R021C00SPC100)",
+			want:     "switch",
+		},
+		{
+			name:     "CloudEngine S16700-8 框式核心识别为 switch",
+			sysDescr: "CloudEngine S16700-8\r\nVRP (R) software, Version 8.240 (S16700-8 V600R024C00SPC500)",
+			want:     "switch",
+		},
+		{
+			name:  "CloudEngine S5755 model 带品牌前缀识别为 switch",
+			model: "CloudEngine S5755-H48T4XC",
+			want:  "switch",
+		},
+		{
+			name:  "S5736-S24UM4XC 识别为 switch",
+			model: "S5736-S24UM4XC",
+			want:  "switch",
+		},
+		{
+			name:  "S300-24T4S 识别为 switch",
+			model: "S300-24T4S",
+			want:  "switch",
+		},
+		{
+			name:  "S310-24T4X 识别为 switch",
+			model: "S310-24T4X",
+			want:  "switch",
+		},
+		{
+			name:  "S500-48T4X 识别为 switch",
+			model: "S500-48T4X",
+			want:  "switch",
+		},
+		{
+			name:  "S530-48T4XE 识别为 switch",
+			model: "S530-48T4XE",
+			want:  "switch",
+		},
+		{
+			name:  "S620-24T16X8Y 识别为 switch",
+			model: "S620-24T16X8Y",
+			want:  "switch",
+		},
+		{
+			name:  "S1730S-S24T4S-A 识别为 switch",
+			model: "S1730S-S24T4S-A",
+			want:  "switch",
+		},
+		{
+			name:  "S2730S-S24FT4S-A 识别为 switch",
+			model: "S2730S-S24FT4S-A",
+			want:  "switch",
+		},
+		{
+			name:  "S5731-H24T4XC 识别为 switch",
+			model: "S5731-H24T4XC",
+			want:  "switch",
+		},
+		{
+			name:  "S5732-H24UM2CC 识别为 switch",
+			model: "S5732-H24UM2CC",
+			want:  "switch",
+		},
+		{
+			name:  "S5735-S24T4XE-V2 识别为 switch",
+			model: "S5735-S24T4XE-V2",
+			want:  "switch",
+		},
+		{
+			name:  "S6730-H24X6C-V2 识别为 switch",
+			model: "S6730-H24X6C-V2",
+			want:  "switch",
+		},
+		{
+			name:  "S6735-S48X6C 识别为 switch",
+			model: "S6735-S48X6C",
+			want:  "switch",
+		},
+		{
+			name:  "S6750-H24X8C 识别为 switch",
+			model: "S6750-H24X8C",
+			want:  "switch",
+		},
+		{
+			name:  "S7706 识别为 switch",
+			model: "S7706",
+			want:  "switch",
+		},
+		{
+			name:  "S8700-6 识别为 switch",
+			model: "S8700-6",
+			want:  "switch",
+		},
+		{
+			name:  "S12700E-8 识别为 switch",
+			model: "S12700E-8",
+			want:  "switch",
+		},
+		{
 			name: "全部信号为空返回空串",
 			want: "",
 		},
