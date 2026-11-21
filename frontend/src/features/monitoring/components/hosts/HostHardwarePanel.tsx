@@ -1,21 +1,22 @@
 'use client'
 
 import { Activity, Cpu, HardDrive, Network, Zap } from 'lucide-react'
-import type {
-  SNMPComponentStatusMetrics,
-  SNMPExtensionsResponse,
-  SNMPOpticalTransceiverMetrics,
-} from '../../types/zabbix-monitoring.types'
-import { formatUptimeChinese } from './hostDisplayHelpers'
+import type { SNMPExtensionsResponse } from '../../types/zabbix-monitoring.types'
+import {
+  convertOpticalPowerToDBm,
+  formatOpticalBiasCurrent,
+  formatOpticalPower,
+  formatOpticalVoltage,
+  formatUptimeChinese,
+  isOpticalTransceiverActive,
+  isOpticalTransceiverWeak,
+  resolveComponentDisplayName,
+  resolveComponentStatusMeta,
+  resolveOpticalPortLabel,
+} from './hostDisplayHelpers'
 
 export interface HostHardwarePanelProps {
   extensions: SNMPExtensionsResponse
-}
-
-function isOpticalWeak(item: SNMPOpticalTransceiverMetrics): boolean {
-  const weakRx = item.rx_power !== undefined && item.rx_power < -20
-  const weakTx = item.tx_power !== undefined && item.tx_power < -10
-  return weakRx || weakTx
 }
 
 function componentKindLabel(kind: string): string {
@@ -30,28 +31,6 @@ function componentKindLabel(kind: string): string {
       return '单板'
     default:
       return kind || '硬件模块'
-  }
-}
-
-function componentStateMeta(comp: SNMPComponentStatusMetrics): {
-  label: string
-  className: string
-} {
-  if (comp.state === 1 || comp.state === 0) {
-    return {
-      label: '正常',
-      className: 'bg-success-soft text-success-soft-foreground',
-    }
-  }
-  if (comp.state === 2) {
-    return {
-      label: '告警',
-      className: 'bg-warning-soft text-warning-soft-foreground',
-    }
-  }
-  return {
-    label: comp.state !== undefined ? `异常 (${comp.state})` : '未知',
-    className: 'bg-danger-soft text-danger-soft-foreground',
   }
 }
 
@@ -73,8 +52,9 @@ function bgpStateMeta(state?: number, label?: string): {
 
 export function HostHardwarePanel({ extensions }: HostHardwarePanelProps) {
   const { optical_transceivers, components, bgp_peers, poe, stp, disks } = extensions
+  const activeOpticals = optical_transceivers.filter(isOpticalTransceiverActive)
   const hasAnyData =
-    optical_transceivers.length > 0 ||
+    activeOpticals.length > 0 ||
     components.length > 0 ||
     bgp_peers.length > 0 ||
     (poe?.ports?.length ?? 0) > 0 ||
@@ -98,19 +78,27 @@ export function HostHardwarePanel({ extensions }: HostHardwarePanelProps) {
   const poeTotal = poeConsuming + poeRemaining
   const poePct = poeTotal > 0 ? Math.min(100, (poeConsuming / poeTotal) * 100) : 0
 
+  const kindCounters = new Map<string, number>()
+  const componentItems = components.map((comp) => {
+    const kindKey = comp.kind.toLowerCase()
+    const kindPosition = (kindCounters.get(kindKey) ?? 0) + 1
+    kindCounters.set(kindKey, kindPosition)
+    return { comp, kindPosition }
+  })
+
   return (
     <div className="space-y-4">
-      {optical_transceivers.length > 0 && (
+      {activeOpticals.length > 0 && (
         <section className="rounded-xl border border-border bg-card p-3.5">
           <h4 className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
             <Activity className="h-3.5 w-3.5 text-primary" />
-            光模块光功率监测（{optical_transceivers.length}）
+            光模块光功率监测（{activeOpticals.length}）
           </h4>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="h-7 border-b border-border bg-surface-2 text-muted-foreground">
-                  <th className="px-2 font-medium">端口/索引</th>
+                  <th className="px-2 font-medium">光口名称</th>
                   <th className="px-2 text-right font-medium">Tx 发送光功率</th>
                   <th className="px-2 text-right font-medium">Rx 接收光功率</th>
                   <th className="px-2 text-right font-medium">偏置电流 / 电压</th>
@@ -118,35 +106,40 @@ export function HostHardwarePanel({ extensions }: HostHardwarePanelProps) {
                 </tr>
               </thead>
               <tbody>
-                {optical_transceivers.map((opt) => {
-                  const weak = isOpticalWeak(opt)
+                {activeOpticals.map((opt, idx) => {
+                  const weak = isOpticalTransceiverWeak(opt)
+                  const rxDbm = convertOpticalPowerToDBm(opt.rx_power, opt.rx_power_unit)
+                  const txDbm = convertOpticalPowerToDBm(opt.tx_power, opt.tx_power_unit)
+                  const noSignal = rxDbm === null && txDbm === null
+                  const portLabel = resolveOpticalPortLabel(opt, idx + 1)
+
                   return (
                     <tr
-                      key={opt.index}
+                      key={`${opt.index}-${idx}`}
                       className={`h-8 border-b border-border/50 tabular-nums ${
                         weak ? 'bg-warning-soft/40' : ''
                       }`}
                     >
-                      <td className="px-2 font-mono font-medium text-foreground">{opt.index}</td>
+                      <td className="px-2 font-mono font-medium text-foreground">{portLabel}</td>
                       <td className="px-2 text-right">
-                        {opt.tx_power !== undefined
-                          ? `${opt.tx_power.toFixed(2)} ${opt.tx_power_unit ?? 'dBm'}`
-                          : '—'}
+                        {formatOpticalPower(opt.tx_power, opt.tx_power_unit)}
                       </td>
                       <td className={`px-2 text-right font-medium ${weak ? 'text-danger' : 'text-foreground'}`}>
-                        {opt.rx_power !== undefined
-                          ? `${opt.rx_power.toFixed(2)} ${opt.rx_power_unit ?? 'dBm'}`
-                          : '—'}
+                        {formatOpticalPower(opt.rx_power, opt.rx_power_unit)}
                       </td>
                       <td className="px-2 text-right text-muted-foreground">
-                        {opt.bias_current !== undefined ? `${opt.bias_current.toFixed(1)}${opt.bias_current_unit ?? 'mA'}` : '—'}
+                        {formatOpticalBiasCurrent(opt.bias_current, opt.bias_current_unit)}
                         {' / '}
-                        {opt.voltage !== undefined ? `${opt.voltage.toFixed(2)}${opt.voltage_unit ?? 'V'}` : '—'}
+                        {formatOpticalVoltage(opt.voltage, opt.voltage_unit)}
                       </td>
                       <td className="px-2 text-right">
                         {weak ? (
                           <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[11px] font-medium text-danger-soft-foreground">
                             弱光告警
+                          </span>
+                        ) : noSignal ? (
+                          <span className="rounded bg-unknown-soft px-1.5 py-0.5 text-[11px] font-medium text-unknown-soft-foreground">
+                            无光信号
                           </span>
                         ) : (
                           <span className="rounded bg-success-soft px-1.5 py-0.5 text-[11px] font-medium text-success-soft-foreground">
@@ -163,24 +156,27 @@ export function HostHardwarePanel({ extensions }: HostHardwarePanelProps) {
         </section>
       )}
 
-      {components.length > 0 && (
+      {componentItems.length > 0 && (
         <section className="rounded-xl border border-border bg-card p-3.5">
           <h4 className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
             <Cpu className="h-3.5 w-3.5 text-primary" />
             风扇 / 电源 / 单板健康状态
           </h4>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {components.map((comp) => {
-              const meta = componentStateMeta(comp)
+            {componentItems.map(({ comp, kindPosition }) => {
+              const meta = resolveComponentStatusMeta(comp)
+              const displayName = resolveComponentDisplayName(
+                comp,
+                componentKindLabel(comp.kind),
+                kindPosition
+              )
               return (
                 <div
-                  key={`${comp.kind}-${comp.index}`}
+                  key={`${comp.kind}-${comp.index}-${kindPosition}`}
                   className="flex items-center justify-between rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-xs"
                 >
                   <div className="min-w-0">
-                    <p className="font-medium text-foreground">
-                      {componentKindLabel(comp.kind)} #{comp.index}
-                    </p>
+                    <p className="font-medium text-foreground">{displayName}</p>
                   </div>
                   <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${meta.className}`}>
                     {meta.label}

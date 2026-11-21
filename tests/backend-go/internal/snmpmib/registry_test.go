@@ -21,6 +21,29 @@ func TestDefaultRegistry_ShouldLoadEmbeddedJSON(t *testing.T) {
 	}
 }
 
+func TestDefaultRegistry_ShouldContainEntitySerialAndClassOIDs(t *testing.T) {
+	registry, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry error: %v", err)
+	}
+
+	if got := registry.Common.System.EntPhysicalClass; got.OID != "1.3.6.1.2.1.47.1.1.1.1.5" || got.Method != "bulkwalk" || got.ValueType != "integer" {
+		t.Fatalf("ent_physical_class = %+v, want oid=1.3.6.1.2.1.47.1.1.1.1.5 method=bulkwalk value_type=integer", got)
+	}
+	if got := registry.Common.System.EntPhysicalSerialNum; got.OID != "1.3.6.1.2.1.47.1.1.1.1.11" || got.Method != "bulkwalk" || got.ValueType != "string" {
+		t.Fatalf("ent_physical_serial_num = %+v, want oid=1.3.6.1.2.1.47.1.1.1.1.11 method=bulkwalk value_type=string", got)
+	}
+	if got := registry.Common.System.EntPhysicalName; got.OID != "1.3.6.1.2.1.47.1.1.1.1.7" || got.Method != "bulkwalk" || got.ValueType != "string" {
+		t.Fatalf("ent_physical_name = %+v, want oid=1.3.6.1.2.1.47.1.1.1.1.7 method=bulkwalk value_type=string", got)
+	}
+	if got := registry.Common.Interfaces.IfName; got.OID != "1.3.6.1.2.1.31.1.1.1.1" || got.Method != "bulkwalk" || got.ValueType != "string" {
+		t.Fatalf("if_name = %+v, want oid=1.3.6.1.2.1.31.1.1.1.1 method=bulkwalk value_type=string", got)
+	}
+	if got := registry.Common.Interfaces.IfAlias; got.OID != "1.3.6.1.2.1.31.1.1.1.18" || got.Method != "bulkwalk" || got.ValueType != "string" {
+		t.Fatalf("if_alias = %+v, want oid=1.3.6.1.2.1.31.1.1.1.18 method=bulkwalk value_type=string", got)
+	}
+}
+
 func TestRegistryValidate_ShouldRequireCoreSections(t *testing.T) {
 	registry := snmpmib.Registry{}
 	err := registry.Validate()

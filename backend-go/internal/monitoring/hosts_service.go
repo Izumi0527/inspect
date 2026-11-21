@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 	"time"
 
@@ -131,7 +132,9 @@ type HostsMatrixResponse struct {
 type HostInterfaceDetail struct {
 	ID                 int        `json:"id"`
 	Name               string     `json:"name"`
+	DisplayName        string     `gorm:"-" json:"display_name,omitempty"`
 	Alias              *string    `json:"alias,omitempty"`
+	Description        *string    `gorm:"column:description" json:"description,omitempty"`
 	Speed              *int64     `json:"speed,omitempty"`
 	InOctets           *int64     `json:"in_octets,omitempty"`
 	OutOctets          *int64     `json:"out_octets,omitempty"`
@@ -407,8 +410,8 @@ func (w *MetricsWriter) QueryHostsMatrix(ctx context.Context, filter HostsMatrix
 	if search := strings.TrimSpace(filter.Search); search != "" {
 		pattern := "%" + search + "%"
 		query = query.Where(
-			"(d.name ILIKE ? OR d.ip_address ILIKE ? OR COALESCE(d.hostname, '') ILIKE ? OR COALESCE(d.model, '') ILIKE ? OR d.vendor ILIKE ?)",
-			pattern, pattern, pattern, pattern, pattern,
+			"(d.name ILIKE ? OR d.ip_address ILIKE ? OR COALESCE(d.hostname, '') ILIKE ? OR COALESCE(d.detected_sys_name, '') ILIKE ? OR COALESCE(d.model, '') ILIKE ? OR d.vendor ILIKE ?)",
+			pattern, pattern, pattern, pattern, pattern, pattern,
 		)
 	}
 
@@ -431,6 +434,7 @@ func (w *MetricsWriter) QueryHostsMatrix(ctx context.Context, filter HostsMatrix
 		Name                string     `gorm:"column:name"`
 		IPAddress           string     `gorm:"column:ip_address"`
 		Hostname            *string    `gorm:"column:hostname"`
+		DetectedSysName     *string    `gorm:"column:detected_sys_name"`
 		DeviceType          string     `gorm:"column:device_type"`
 		Vendor              string     `gorm:"column:vendor"`
 		Model               *string    `gorm:"column:model"`
@@ -457,7 +461,7 @@ func (w *MetricsWriter) QueryHostsMatrix(ctx context.Context, filter HostsMatrix
 	rows := make([]hostRow, 0, pageSize)
 	offset := (page - 1) * pageSize
 	if err := query.Select(`
-		d.id, d.name, d.ip_address, d.hostname, d.device_type, d.vendor, d.model,
+		d.id, d.name, d.ip_address, d.hostname, d.detected_sys_name, d.device_type, d.vendor, d.model,
 		d.group_id, COALESCE(dg.name, '') AS group_name, d.status, d.is_monitored,
 		d.cpu_usage, d.memory_usage, d.temperature, d.uptime, d.response_time, d.last_seen,
 		d.icmp_status, d.snmp_status, d.cli_protocol,
@@ -513,7 +517,7 @@ func (w *MetricsWriter) QueryHostsMatrix(ctx context.Context, filter HostsMatrix
 			ID:          r.ID,
 			Name:        r.Name,
 			IPAddress:   r.IPAddress,
-			Hostname:    r.Hostname,
+			Hostname:    resolveEffectiveHostname(r.Hostname, r.DetectedSysName),
 			DeviceType:  r.DeviceType,
 			Vendor:      r.Vendor,
 			Model:       r.Model,
@@ -663,6 +667,7 @@ func (w *MetricsWriter) GetHostDetail(
 		Name                string     `gorm:"column:name"`
 		IPAddress           string     `gorm:"column:ip_address"`
 		Hostname            *string    `gorm:"column:hostname"`
+		DetectedSysName     *string    `gorm:"column:detected_sys_name"`
 		DeviceType          string     `gorm:"column:device_type"`
 		Vendor              string     `gorm:"column:vendor"`
 		Model               *string    `gorm:"column:model"`
@@ -694,7 +699,7 @@ func (w *MetricsWriter) GetHostDetail(
 	err := w.db.WithContext(ctx).
 		Table("devices AS d").
 		Select(`
-			d.id, d.name, d.ip_address, d.hostname, d.device_type, d.vendor, d.model,
+			d.id, d.name, d.ip_address, d.hostname, d.detected_sys_name, d.device_type, d.vendor, d.model,
 			d.serial_number, d.firmware_version, d.location, COALESCE(d.topology_role, 'access') AS topology_role,
 			d.group_id, COALESCE(dg.name, '') AS group_name, d.status, d.is_monitored,
 			d.cpu_usage, d.memory_usage, d.temperature, d.uptime, d.response_time, d.last_seen,
@@ -727,7 +732,7 @@ func (w *MetricsWriter) GetHostDetail(
 		ID:            dev.ID,
 		Name:          dev.Name,
 		IPAddress:     dev.IPAddress,
-		Hostname:      dev.Hostname,
+		Hostname:      resolveEffectiveHostname(dev.Hostname, dev.DetectedSysName),
 		DeviceType:    dev.DeviceType,
 		Vendor:        dev.Vendor,
 		Model:         dev.Model,
@@ -767,7 +772,7 @@ func (w *MetricsWriter) GetHostDetail(
 		Sparkline:          []HostSparklinePoint{},
 	}
 	resp.FirmwareVersion = dev.FirmwareVersion
-	resp.SerialNumber = dev.SerialNumber
+	resp.SerialNumber = normalizeOptionalString(dev.SerialNumber)
 	resp.Location = dev.Location
 	resp.TopologyRole = dev.TopologyRole
 
@@ -778,6 +783,11 @@ func (w *MetricsWriter) GetHostDetail(
 		Where("device_id = ?", deviceID).
 		Order("COALESCE(is_up, false) DESC, name ASC").
 		Scan(&ifaces).Error; err == nil && ifaces != nil {
+		for i := range ifaces {
+			ifaces[i].Alias = normalizeOptionalString(ifaces[i].Alias)
+			ifaces[i].Description = normalizeOptionalString(ifaces[i].Description)
+			ifaces[i].DisplayName = resolveInterfaceDisplayName(ifaces[i].Name, ifaces[i].Alias)
+		}
 		resp.Interfaces = ifaces
 	}
 
@@ -965,6 +975,41 @@ func conditionalPerm(allowed bool, key string) string {
 		return ""
 	}
 	return key
+}
+
+var syntheticInterfaceNameRe = regexp.MustCompile(`(?i)^if\d+$`)
+
+func isSyntheticInterfaceName(name string) bool {
+	return syntheticInterfaceNameRe.MatchString(strings.TrimSpace(name))
+}
+
+func resolveInterfaceDisplayName(name string, alias *string) string {
+	if normalized := normalizeOptionalString(alias); normalized != nil {
+		return *normalized
+	}
+	trimmed := strings.TrimSpace(name)
+	if trimmed != "" && !isSyntheticInterfaceName(trimmed) {
+		return trimmed
+	}
+	return ""
+}
+
+func normalizeOptionalString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func resolveEffectiveHostname(hostname, detectedSysName *string) *string {
+	if normalized := normalizeOptionalString(hostname); normalized != nil {
+		return normalized
+	}
+	return normalizeOptionalString(detectedSysName)
 }
 
 func derefStr(ptr *string, fallback string) string {

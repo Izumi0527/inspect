@@ -13,6 +13,7 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
+	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	"github.com/your-org/inspect-system/backend-go/internal/ws"
 )
 
@@ -494,26 +495,46 @@ type InterfaceSpeedUpdate struct {
 	UpdatedAt     time.Time
 }
 
-// writeDeviceIdentityIfChanged 把采集到的型号/软件版本/LLDP 身份与状态回填设备档案。
+const maxIdentityFieldLen = 255
+
+// sanitizeIdentityField 清洗设备静态身份字段：拦截控制字符（含 NUL/换行/ANSI 转义）与超长输入，
+// 避免经外部推送接口写入脏值或触发 PostgreSQL 22021（非法 NUL 字节）报错。
+func sanitizeIdentityField(value string, maxLen int) string {
+	cleaned := strings.TrimSpace(strings.Trim(value, "\x00"))
+	if cleaned == "" || (maxLen > 0 && len(cleaned) > maxLen) {
+		return ""
+	}
+	for _, r := range cleaned {
+		if r < 0x20 || r == 0x7f {
+			return ""
+		}
+	}
+	return cleaned
+}
+
+// writeDeviceIdentityIfChanged 把采集到的型号/软件版本/序列号/LLDP 身份与状态回填设备档案。
 //
 // 只写差异：WHERE 子句带 "值为空或与新值不同" 的条件，取值稳定时不产生任何 UPDATE，
 // 因此不会让每 5 分钟一轮的采集持续刷新 devices.updated_at。
-// 失败仅记日志——设备档案是锦上添花，不能连累已落库的核心指标快照。
+// 单列 UPDATE 各自包在 SAVEPOINT 里，失败仅回滚该列并记日志——设备档案是锦上添花，
+// 绝不污染外层事务或连累已落库的核心指标快照。
 func writeDeviceIdentityIfChanged(tx *gorm.DB, deviceID int, identity *DeviceIdentity, logger *zap.Logger) {
 	if identity == nil || deviceID <= 0 {
 		return
 	}
 
 	apply := func(column, value string) {
-		if strings.TrimSpace(value) == "" {
+		if value == "" {
 			return
 		}
 		// 条件写成单个带括号的表达式：拆成两个 Where 会生成
 		// "id = ? AND col IS NULL OR col <> ?"，AND 优先级高于 OR，
 		// 会退化成"更新所有取值不同的设备"——多设备环境下是跨设备误写。
-		err := tx.Table("devices").
-			Where(fmt.Sprintf("id = ? AND (%s IS NULL OR %s <> ?)", column, column), deviceID, value).
-			Update(column, value).Error
+		err := tx.Transaction(func(itx *gorm.DB) error {
+			return itx.Table("devices").
+				Where(fmt.Sprintf("id = ? AND (%s IS NULL OR %s <> ?)", column, column), deviceID, value).
+				Update(column, value).Error
+		})
 		if err != nil && logger != nil {
 			logger.Warn("write_device_identity_failed",
 				zap.Int("device_id", deviceID),
@@ -522,12 +543,13 @@ func writeDeviceIdentityIfChanged(tx *gorm.DB, deviceID int, identity *DeviceIde
 		}
 	}
 
-	apply("model", identity.Model)
-	apply("firmware_version", identity.FirmwareVersion)
-	apply("detected_device_type", identity.DetectedDeviceType)
-	apply("detected_sys_name", identity.SysName)
-	apply("detected_chassis_id", identity.ChassisID)
-	apply("lldp_status", identity.LLDPStatus)
+	apply("model", sanitizeIdentityField(identity.Model, maxIdentityFieldLen))
+	apply("firmware_version", sanitizeIdentityField(identity.FirmwareVersion, maxIdentityFieldLen))
+	apply("serial_number", devices.SanitizeSerialNumber(identity.SerialNumber))
+	apply("detected_device_type", sanitizeIdentityField(identity.DetectedDeviceType, maxIdentityFieldLen))
+	apply("detected_sys_name", sanitizeIdentityField(identity.SysName, maxIdentityFieldLen))
+	apply("detected_chassis_id", sanitizeIdentityField(identity.ChassisID, maxIdentityFieldLen))
+	apply("lldp_status", sanitizeIdentityField(identity.LLDPStatus, maxIdentityFieldLen))
 }
 
 // writeNeighborsBestEffort 以「先删后插」全量替换设备的 LLDP 邻居行。
@@ -687,7 +709,8 @@ func interfaceSpeedPriority(normalized string) (int, float64) {
 func isInterfaceMetaKey(key string) bool {
 	normalized := normalizeInterfaceKey(key)
 	switch normalized {
-	case "name", "timestamp", "collected_at", "speed_unknown", "lld_monitored":
+	case "name", "timestamp", "collected_at", "speed_unknown", "lld_monitored",
+		"description", "port_description", "alias", "if_alias":
 		return true
 	default:
 		return false
@@ -858,14 +881,15 @@ func upsertDeviceInterfacesWithStates(
 ) ([]InterfaceMetric, error) {
 	const upsertSQL = `
 INSERT INTO device_interfaces (
-    device_id, name, alias, in_octets, out_octets, is_up,
+    device_id, name, alias, description, in_octets, out_octets, is_up,
     admin_up, duplex_status, in_errors, out_errors, in_discards, out_discards,
     in_error_rate, out_error_rate, utilization_in, utilization_out, speed_unknown,
     flap_count_1h, last_status_change_at, lld_monitored, last_updated, created_at, updated_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (device_id, name) DO UPDATE SET
     alias = COALESCE(EXCLUDED.alias, device_interfaces.alias),
+    description = CASE WHEN ? THEN EXCLUDED.description ELSE device_interfaces.description END,
     in_octets = EXCLUDED.in_octets,
     out_octets = EXCLUDED.out_octets,
     is_up = EXCLUDED.is_up,
@@ -912,6 +936,7 @@ ON CONFLICT (device_id, name) DO UPDATE SET
 			deviceID,
 			name,
 			resolved.alias,
+			resolved.portDescription,
 			mapInterfaceInt64(item, "ifHCInOctets"),
 			mapInterfaceInt64(item, "ifHCOutOctets"),
 			resolved.currUpVal,
@@ -932,6 +957,7 @@ ON CONFLICT (device_id, name) DO UPDATE SET
 			collectedAt,
 			collectedAt,
 			collectedAt,
+			resolved.hasPortDescription,
 		).Error; err != nil {
 			return nil, err
 		}
@@ -951,6 +977,8 @@ ON CONFLICT (device_id, name) DO UPDATE SET
 
 type resolvedInterfaceUpsert struct {
 	alias              interface{}
+	portDescription    interface{}
+	hasPortDescription bool
 	currUpVal          interface{}
 	adminUp            bool
 	duplexStatus       string
@@ -977,6 +1005,14 @@ func resolveInterfaceUpsertValues(item map[string]interface{}, prev *deviceInter
 	if descr, ok := item["description"].(string); ok {
 		if trimmed := strings.TrimSpace(descr); trimmed != "" {
 			res.alias = trimmed
+		}
+	}
+	if rawPortDesc, exists := item["port_description"]; exists {
+		if portDesc, ok := rawPortDesc.(string); ok {
+			res.hasPortDescription = true
+			if cleaned := devices.SanitizeInterfaceDescription(portDesc); cleaned != "" {
+				res.portDescription = cleaned
+			}
 		}
 	}
 

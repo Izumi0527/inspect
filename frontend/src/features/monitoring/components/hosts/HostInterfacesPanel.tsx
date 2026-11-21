@@ -2,7 +2,11 @@
 
 import { useMemo, useState } from 'react'
 import type { HostInterfaceDetail } from '../../types/zabbix-monitoring.types'
-import { formatInterfaceSpeed } from './hostDisplayHelpers'
+import {
+  formatInterfaceSpeed,
+  resolveHostInterfaceDescription,
+  resolveHostInterfaceDisplayName,
+} from './hostDisplayHelpers'
 import { HostInterfaceDualChart } from './HostInterfaceDualChart'
 
 export interface HostInterfacesPanelProps {
@@ -14,7 +18,7 @@ const VIRTUAL_NAME_PATTERN = /^(loopback|null|vlanif|console|lo\d*$)/i
 
 function isVirtualOrUnmanaged(iface: HostInterfaceDetail): boolean {
   if (!iface.lld_monitored) return true
-  const label = (iface.alias || iface.name).trim()
+  const label = resolveHostInterfaceDisplayName(iface)
   return VIRTUAL_NAME_PATTERN.test(label)
 }
 
@@ -72,6 +76,8 @@ function InterfaceRow({
 }) {
   const errorsTotal = iface.in_errors + iface.out_errors
   const discardsTotal = iface.in_discards + iface.out_discards
+  const portName = resolveHostInterfaceDisplayName(iface)
+  const portDescription = resolveHostInterfaceDescription(iface)
 
   return (
     <tr
@@ -82,15 +88,15 @@ function InterfaceRow({
     >
       <td className="px-2.5 py-1.5">
         <div className="flex items-center gap-1.5">
-          <span className="font-mono font-medium text-foreground">{iface.name}</span>
+          <span className="font-mono font-medium text-foreground">{portName || '—'}</span>
           {iface.flap_count_1h > 0 && (
             <span className="rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning-soft-foreground tabular-nums">
               闪断 {iface.flap_count_1h} 次
             </span>
           )}
         </div>
-        {iface.alias && (
-          <div className="text-[11px] text-muted-foreground">{iface.alias}</div>
+        {portDescription !== '' && (
+          <div className="text-[11px] text-muted-foreground">{portDescription}</div>
         )}
       </td>
       <td className="px-2 py-1.5">

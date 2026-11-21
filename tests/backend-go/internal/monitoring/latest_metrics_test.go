@@ -69,7 +69,7 @@ func TestLatestMetrics_SchemaModelsAndConstraints(t *testing.T) {
 		t.Fatalf("parse DeviceInterface schema: %v", err)
 	}
 	requiredIfaceCols := []string{
-		"admin_up", "duplex_status", "in_errors", "out_errors", "in_discards", "out_discards",
+		"description", "admin_up", "duplex_status", "in_errors", "out_errors", "in_discards", "out_discards",
 		"in_error_rate", "out_error_rate", "utilization_in", "utilization_out", "speed_unknown",
 		"flap_count_1h", "last_status_change_at", "lld_monitored", "lld_lost_since",
 	}

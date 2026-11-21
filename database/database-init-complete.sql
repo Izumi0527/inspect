@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS device_interfaces (
     device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
     name VARCHAR(128) NOT NULL,
     alias VARCHAR(255),
+    description TEXT,
     speed BIGINT,
     in_octets BIGINT,
     out_octets BIGINT,

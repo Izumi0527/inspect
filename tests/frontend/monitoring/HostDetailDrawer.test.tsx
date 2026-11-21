@@ -15,6 +15,7 @@ import {
 } from '@/features/monitoring/api/monitoring-config.api'
 import { fetchDeviceInterfaceTraffic } from '@/features/monitoring/api/monitoring.api'
 import { usePermission } from '@/lib/contexts/auth-context'
+import { formatDateTimeMDHMS } from '@/utils/formatters'
 import type { HostDetailResponse } from '@/features/monitoring/types/zabbix-monitoring.types'
 
 jest.mock('@/features/monitoring/api/monitoring-hosts.api', () => {
@@ -385,5 +386,563 @@ describe('单机 6 视角观测抽屉 HostDetailDrawer (Task 11)', () => {
 
     await user.click(screen.getByRole('tab', { name: '关联日志与 Trap' }))
     expect(screen.getByText('暂无关联日志查看权限')).toBeInTheDocument()
+  })
+
+  it('真机 ifX 合成键场景：隐藏 ifX、仅展示真实端口名与描述、无描述不重复端口名且点击仍用 ifX 查流量', async () => {
+    const user = userEvent.setup()
+    const ifxDetail: HostDetailResponse = {
+      ...mockDetail,
+      interfaces: [
+        {
+          id: 201,
+          name: 'if8',
+          alias: 'GigabitEthernet0/0/3',
+          display_name: 'GigabitEthernet0/0/3',
+          description: 'To-Core-SW',
+          speed: 1000,
+          is_up: true,
+          admin_up: true,
+          duplex_status: 'full',
+          in_errors: 0,
+          out_errors: 0,
+          in_discards: 0,
+          out_discards: 0,
+          in_error_rate: 0,
+          out_error_rate: 0,
+          utilization_in: 12.5,
+          utilization_out: 8.3,
+          speed_unknown: false,
+          flap_count_1h: 0,
+          lld_monitored: true,
+        },
+        {
+          id: 202,
+          name: 'if9',
+          alias: 'GigabitEthernet0/0/4',
+          display_name: 'GigabitEthernet0/0/4',
+          speed: 1000,
+          is_up: true,
+          admin_up: true,
+          duplex_status: 'full',
+          in_errors: 0,
+          out_errors: 0,
+          in_discards: 0,
+          out_discards: 0,
+          in_error_rate: 0,
+          out_error_rate: 0,
+          utilization_in: 5.0,
+          utilization_out: 4.0,
+          speed_unknown: false,
+          flap_count_1h: 0,
+          lld_monitored: true,
+        },
+        {
+          id: 203,
+          name: 'if10',
+          speed: 0,
+          is_up: false,
+          admin_up: true,
+          duplex_status: 'unknown',
+          in_errors: 0,
+          out_errors: 0,
+          in_discards: 0,
+          out_discards: 0,
+          in_error_rate: 0,
+          out_error_rate: 0,
+          utilization_in: 0,
+          utilization_out: 0,
+          speed_unknown: true,
+          flap_count_1h: 0,
+          lld_monitored: true,
+        },
+      ],
+    }
+
+    ;(getMonitoringHostDetail as jest.Mock).mockResolvedValue(ifxDetail)
+    ;(fetchDeviceInterfaceTraffic as jest.Mock).mockResolvedValue({
+      deviceId: 21,
+      interface: 'if8',
+      interfaces: [{ name: 'if8', label: 'GigabitEthernet0/0/3' }],
+      points: [
+        { timestamp: '2026-11-20T12:00:00Z', inbound: 120, outbound: 80 },
+      ],
+    })
+
+    const { container } = renderWithQuery(
+      <HostDetailDrawer deviceId={21} onClose={jest.fn()} />
+    )
+    expect(await screen.findByText('Core-Router-21')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '端口监控' }))
+
+    // 端口 1：展示真实端口名与描述
+    expect(screen.getByText('GigabitEthernet0/0/3')).toBeInTheDocument()
+    expect(screen.getByText('To-Core-SW')).toBeInTheDocument()
+
+    // 端口 2：无描述，端口名不重复渲染为副行描述
+    expect(screen.getAllByText('GigabitEthernet0/0/4')).toHaveLength(1)
+
+    // 端口 3：仅合成键 if10 且无 display_name/alias，主行展示 '—'
+    const rows = screen.getAllByRole('row')
+    expect(rows).toHaveLength(4) // 1 表头 + 3 端口行
+    expect(rows[3].querySelector('td')).toHaveTextContent('—')
+
+    // 页面绝不出现 if8 / if9 / if10
+    expect(container.textContent).not.toMatch(/\bif(?:8|9|10)\b/i)
+
+    // 点击端口 1 行，仍以 interfaceName: 'if8' 请求流量趋势，且趋势图标题显示真实端口名而非 if8
+    await user.click(screen.getByText('GigabitEthernet0/0/3'))
+    await waitFor(() => {
+      expect(fetchDeviceInterfaceTraffic).toHaveBeenCalledWith(21, '1h', 'if8')
+    })
+
+    const chartHeading = await screen.findByRole('heading', {
+      name: /端口双轨观测：GigabitEthernet0\/0\/3/,
+    })
+    expect(chartHeading).toHaveTextContent('端口双轨观测：GigabitEthernet0/0/3 · To-Core-SW')
+    expect(container.textContent).not.toMatch(/\bif(?:8|9|10)\b/i)
+  })
+
+  it('硬件与链路：光模块 uW/uA/mV 换算、过滤全 0 占位行与华为组件名/状态兼容', async () => {
+    const user = userEvent.setup()
+    const hwDetail: HostDetailResponse = {
+      ...mockDetail,
+      snmp_extensions: {
+        device_id: 21,
+        optical_transceivers: [
+          {
+            index: '939982848',
+            name: 'GigabitEthernet0/0/25',
+            rx_power: 5,
+            rx_power_unit: 'uW',
+            tx_power: 500,
+            tx_power_unit: 'uW',
+            bias_current: 12000,
+            bias_current_unit: 'uA',
+            voltage: 3300,
+            voltage_unit: 'mV',
+          },
+          {
+            index: '939982849',
+            rx_power: 0,
+            rx_power_unit: 'uW',
+            tx_power: 0,
+            tx_power_unit: 'uW',
+            bias_current: 0,
+            bias_current_unit: 'uA',
+            voltage: 0,
+            voltage_unit: 'mV',
+          },
+          {
+            index: '939982850',
+            rx_power: -5,
+            rx_power_unit: 'dBm',
+            tx_power: -2,
+            tx_power_unit: 'dBm',
+          },
+        ],
+        components: [
+          {
+            index: '201326593',
+            kind: 'board',
+            name: 'MPU Board 0',
+            state: 3,
+            status_label: '正常',
+            status_level: 'normal',
+          },
+          {
+            index: '0.3',
+            kind: 'fan',
+            state: 2,
+          },
+          {
+            index: '335544321',
+            kind: 'board',
+            state: 3,
+          },
+        ],
+        bgp_peers: [],
+        disks: [],
+      },
+    }
+
+    ;(getMonitoringHostDetail as jest.Mock).mockResolvedValue(hwDetail)
+
+    const { container } = renderWithQuery(
+      <HostDetailDrawer deviceId={21} onClose={jest.fn()} />
+    )
+    expect(await screen.findByText('Core-Router-21')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '硬件与链路' }))
+
+    // 光模块：在位真实端口名、uW -> dBm 换算与弱光告警、历史无名有效光口降级为 光口 #2
+    expect(screen.getByText('光口名称')).toBeInTheDocument()
+    expect(screen.getByText('GigabitEthernet0/0/25')).toBeInTheDocument()
+    expect(screen.getByText('-23.01 dBm')).toBeInTheDocument()
+    expect(screen.getByText('12.0 mA / 3.30 V')).toBeInTheDocument()
+    expect(screen.getByText('弱光告警')).toBeInTheDocument()
+    expect(screen.getByText('光口 #2')).toBeInTheDocument()
+    expect(container.textContent).not.toContain('939982849')
+
+    // 风扇 / 电源 / 单板健康状态：真实名称、槽位格式化、entPhysicalIndex 降级与 board state=3 兼容
+    const mpuCard = screen.getByText('MPU Board 0').closest('div')?.parentElement
+    const fanCard = screen.getByText('槽位 0 · 风扇 3').closest('div')?.parentElement
+    const board2Card = screen.getByText('单板 2').closest('div')?.parentElement
+    expect(mpuCard).toHaveTextContent('正常')
+    expect(fanCard).toHaveTextContent('异常')
+    expect(board2Card).toHaveTextContent('正常')
+    expect(container.textContent).not.toContain('335544321')
+    expect(container.textContent).not.toContain('异常 (3)')
+  })
+
+  it('实时指标 5 列优化：仅中文指标名、屏蔽非流量端口、自然排序、真实端口名与整机胶囊、delta_display 语义化、含秒时间、视角切换与分页', async () => {
+    const user = userEvent.setup()
+    const collectedAt = '2026-11-20T12:15:30Z'
+    const page1Items = [
+      // 故意乱序输入：先放 10 / 2 / 24 号端口与非流量端口，再放整机与 1 / 3 号端口
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'ifHCInOctets',
+        metric_label: '入站累计字节数',
+        interface_name: 'if10',
+        interface_display_name: 'GigabitEthernet0/0/10',
+        item_key: 'ifHCInOctets',
+        application_tag: 'interface',
+        metric_value: 2048,
+        prev_value: 1024,
+        delta: 1024,
+        delta_display: '+1.00 KB',
+        display_value: '2.00 KB',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'ifHCInOctets',
+        metric_label: '入站累计字节数',
+        interface_name: 'if11',
+        interface_display_name: 'Console9/0/0',
+        item_key: 'ifHCInOctets',
+        application_tag: 'interface',
+        metric_value: 0,
+        prev_value: 0,
+        delta: 0,
+        delta_display: '无变化',
+        display_value: '0 B',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'ifHCInOctets',
+        metric_label: '入站累计字节数',
+        interface_name: 'InLoopBack0',
+        item_key: 'ifHCInOctets',
+        application_tag: 'interface',
+        metric_value: 0,
+        prev_value: 0,
+        delta: 0,
+        delta_display: '无变化',
+        display_value: '0 B',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'ifHCInOctets',
+        metric_label: '入站累计字节数',
+        interface_name: 'MEth0/0/1',
+        item_key: 'ifHCInOctets',
+        application_tag: 'interface',
+        metric_value: 100,
+        prev_value: 100,
+        delta: 0,
+        delta_display: '无变化',
+        display_value: '100 B',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'ifHCInOctets',
+        metric_label: '入站累计字节数',
+        interface_name: 'NULL0',
+        item_key: 'ifHCInOctets',
+        application_tag: 'interface',
+        metric_value: 0,
+        prev_value: 0,
+        delta: 0,
+        delta_display: '无变化',
+        display_value: '0 B',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'ifHCInOctets',
+        metric_label: '入站累计字节数',
+        interface_name: 'if2',
+        interface_display_name: 'GigabitEthernet0/0/2',
+        item_key: 'ifHCInOctets',
+        application_tag: 'interface',
+        metric_value: 4096,
+        prev_value: 4096,
+        delta: 0,
+        delta_display: '无变化',
+        display_value: '4.00 KB',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'ifHCInOctets',
+        metric_label: '入站累计字节数',
+        interface_name: 'if24',
+        interface_display_name: 'GigabitEthernet0/0/24',
+        item_key: 'ifHCInOctets',
+        application_tag: 'interface',
+        metric_value: 8192,
+        prev_value: 8192,
+        delta: 0,
+        delta_display: '无变化',
+        display_value: '8.00 KB',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'ifHCInOctets',
+        metric_label: '入站累计字节数',
+        interface_name: 'if1',
+        interface_display_name: 'GigabitEthernet0/0/1',
+        item_key: 'ifHCInOctets',
+        application_tag: 'interface',
+        metric_value: 1024,
+        prev_value: 1024,
+        delta: 0,
+        delta_display: '无变化',
+        display_value: '1.00 KB',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'bandwidth_in',
+        metric_label: '下行速率',
+        interface_name: '',
+        interface_display_name: '',
+        item_key: 'bandwidth.in',
+        application_tag: 'interface',
+        metric_value: 1450,
+        prev_value: 340,
+        delta: 1110,
+        delta_display: '+1.11 Kbps',
+        display_value: '1.45 Kbps',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'icmp.rtt',
+        metric_label: 'ICMP 探测延迟',
+        interface_name: '',
+        item_key: 'icmp.rtt',
+        application_tag: 'availability',
+        metric_value: 2.3,
+        prev_value: 2.0,
+        delta: 0.3,
+        delta_display: '+0.3 ms',
+        display_value: '2.3 ms',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'ifHCInOctets',
+        metric_label: '入站累计字节数',
+        interface_name: 'if8',
+        interface_display_name: 'GigabitEthernet0/0/3',
+        item_key: 'ifHCInOctets',
+        application_tag: 'interface',
+        metric_value: 12400000,
+        prev_value: 12400000,
+        delta: 0,
+        delta_display: '无变化',
+        display_value: '12.4 MB',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'ifHCOutOctets',
+        metric_label: '出站累计字节数',
+        interface_name: 'if9',
+        item_key: 'ifHCOutOctets',
+        application_tag: 'interface',
+        metric_value: 8000,
+        prev_value: 7000,
+        delta: 1000,
+        delta_display: '+1.00 KB',
+        display_value: '8.00 KB',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'cpu_usage',
+        metric_label: 'CPU 使用率',
+        interface_name: '',
+        item_key: 'cpu.usage',
+        application_tag: 'system',
+        metric_value: 72.5,
+        prev_value: 69.0,
+        delta: 3.5,
+        metric_unit: '%',
+        display_value: '72.50 %',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+    ]
+
+    const page2Items = [
+      {
+        device_id: 21,
+        device_name: 'Core-Router-21',
+        ip_address: '10.20.0.21',
+        metric_name: 'memory_usage',
+        metric_label: '内存使用率',
+        interface_name: '',
+        item_key: 'memory.usage',
+        application_tag: 'system',
+        metric_value: 61.0,
+        prev_value: 60.0,
+        delta: 1.0,
+        delta_display: '+1.00 %',
+        display_value: '61.00 %',
+        is_abnormal: false,
+        collected_at: collectedAt,
+      },
+    ]
+
+    ;(getLatestData as jest.Mock)
+      .mockResolvedValueOnce({
+        items: page1Items,
+        total: 80,
+        page: 1,
+        page_size: 50,
+        total_pages: 2,
+      })
+      .mockResolvedValueOnce({
+        items: page2Items,
+        total: 80,
+        page: 2,
+        page_size: 50,
+        total_pages: 2,
+      })
+
+    const { container } = renderWithQuery(
+      <HostDetailDrawer deviceId={21} onClose={jest.fn()} />
+    )
+    expect(await screen.findByText('Core-Router-21')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '实时指标' }))
+    expect(await screen.findByText('下行速率')).toBeInTheDocument()
+
+    // 1. 指标名称列仅显示中文名称，DOM 绝不出现 item_key
+    expect(screen.getByText('ICMP 探测延迟')).toBeInTheDocument()
+    expect(screen.getByText('下行速率')).toBeInTheDocument()
+    expect(screen.getAllByText('入站累计字节数').length).toBeGreaterThanOrEqual(1)
+    expect(container.textContent).not.toContain('icmp.rtt')
+    expect(container.textContent).not.toContain('bandwidth.in')
+    expect(container.textContent).not.toContain('ifHCInOctets')
+    expect(container.textContent).not.toContain('ifHCOutOctets')
+    expect(container.textContent).not.toContain('cpu.usage')
+
+    // 2. 非流量端口全部屏蔽
+    expect(container.textContent).not.toContain('Console9/0/0')
+    expect(container.textContent).not.toContain('InLoopBack0')
+    expect(container.textContent).not.toContain('MEth0/0/1')
+    expect(container.textContent).not.toContain('NULL0')
+
+    // 3. 整机置顶 + 端口自然排序（1 -> 2 -> 3 -> 10 -> 24）
+    const bodyRows = Array.from(container.querySelectorAll('tbody tr'))
+    const portOrder = bodyRows.map((tr) => tr.querySelectorAll('td')[1]?.textContent?.trim())
+    expect(portOrder).toEqual([
+      '整机',
+      '整机',
+      '整机',
+      'GigabitEthernet0/0/1',
+      'GigabitEthernet0/0/2',
+      'GigabitEthernet0/0/3',
+      'GigabitEthernet0/0/10',
+      'GigabitEthernet0/0/24',
+      '—',
+    ])
+
+    // 4. 整机与端口关键列值断言 + DOM 绝不出现 ifX
+    expect(screen.getByText('共 80 项实时指标')).toBeInTheDocument()
+    expect(screen.getByText('1.45 Kbps')).toBeInTheDocument()
+    expect(screen.getByText('+1.11 Kbps')).toBeInTheDocument()
+    const expectedTime = formatDateTimeMDHMS(collectedAt)
+    expect(expectedTime).toMatch(/^\d{2}-\d{2}\s+\d{2}:\d{2}:30$/)
+    expect(screen.getAllByText(expectedTime).length).toBeGreaterThanOrEqual(1)
+
+    expect(screen.getByText('12.4 MB')).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(container.textContent).not.toMatch(/\bif(?:1|2|8|9|10|11|24)\b/i)
+
+    // 5. delta_display 缺失时回退 formatMetricDelta（'+3.50 %'）
+    expect(screen.getByText('+3.50 %')).toBeInTheDocument()
+
+    // 6. 视角切换：「整机」/「端口」/「全部」
+    await user.click(screen.getByRole('button', { name: '端口' }))
+    expect(screen.queryByText('下行速率')).not.toBeInTheDocument()
+    expect(screen.getByText('GigabitEthernet0/0/3')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '整机' }))
+    expect(screen.getByText('下行速率')).toBeInTheDocument()
+    expect(screen.queryByText('GigabitEthernet0/0/3')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '全部' }))
+    expect(screen.getByText('GigabitEthernet0/0/3')).toBeInTheDocument()
+
+    // 7. 分页控件：点击「下一页」请求 page: 2
+    expect(screen.getByText('第 1 / 2 页')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '下一页' }))
+    await waitFor(() => {
+      expect(getLatestData).toHaveBeenLastCalledWith({
+        device_ids: [21],
+        page: 2,
+        page_size: 50,
+      })
+    })
+    expect(await screen.findByText('内存使用率')).toBeInTheDocument()
+    expect(screen.getByText('第 2 / 2 页')).toBeInTheDocument()
   })
 })

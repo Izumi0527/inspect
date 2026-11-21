@@ -1,6 +1,7 @@
 package devices_test
 
 import (
+	"math"
 	"testing"
 	_ "unsafe"
 
@@ -19,6 +20,17 @@ func collectComponentsFromCatalog(client collectorSNMPClient, entries []snmpmib.
 //
 //go:linkname collectPoEFromCatalog github.com/your-org/inspect-system/backend-go/internal/devices.collectPoEFromCatalog
 func collectPoEFromCatalog(client collectorSNMPClient, entries []snmpmib.CatalogOID) devices.PoEMetrics
+
+type entityCatalogOpaque struct{}
+
+//go:linkname newEntityCatalog github.com/your-org/inspect-system/backend-go/internal/devices.newEntityCatalog
+func newEntityCatalog(target collectorSNMPClient, registry *snmpmib.Registry) *entityCatalogOpaque
+
+//go:linkname enrichOpticalTransceivers github.com/your-org/inspect-system/backend-go/internal/devices.enrichOpticalTransceivers
+func enrichOpticalTransceivers(items []devices.OpticalTransceiverMetrics, vendor string, catalog *entityCatalogOpaque, ifaceNameByIndex map[int]string) []devices.OpticalTransceiverMetrics
+
+//go:linkname enrichComponents github.com/your-org/inspect-system/backend-go/internal/devices.enrichComponents
+func enrichComponents(items []devices.ComponentStatusMetrics, vendor string, catalog *entityCatalogOpaque) []devices.ComponentStatusMetrics
 
 func catalogEntry(id, oid, valueType, unit string) snmpmib.CatalogOID {
 	return snmpmib.CatalogOID{ID: id, Name: id, OID: oid, Method: "bulkwalk", ValueType: valueType, Unit: unit}
@@ -153,4 +165,238 @@ func TestCollectPoE_NoEntriesReturnsZeroValue(t *testing.T) {
 	if len(got.Ports) != 0 || got.RemainingPower != nil {
 		t.Errorf("无 catalog 条目时应返回零值，实际 %+v", got)
 	}
+}
+
+func TestEnrichOpticalTransceivers_FiltersPlaceholdersAndResolvesNames(t *testing.T) {
+	reg, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry() error = %v", err)
+	}
+	nameOID := reg.Common.System.EntPhysicalName.OID
+	descrOID := reg.Common.System.EntPhysicalDescr.OID
+
+	client := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			nameOID: {
+				walkPDU(nameOID, 939982849, []byte("GigabitEthernet0/0/25"), gosnmp.OctetString),
+				walkPDU(nameOID, 939982850, []byte("GigabitEthernet0/0/26"), gosnmp.OctetString),
+			},
+			descrOID: {
+				walkPDU(descrOID, 939982851, []byte("XGigabitEthernet0/0/1"), gosnmp.OctetString),
+			},
+		},
+	}
+	catalog := newEntityCatalog(client, reg)
+
+	f := func(v float64) *float64 { return &v }
+	items := []devices.OpticalTransceiverMetrics{
+		// 全 0 占位行 -> 必须过滤掉
+		{Index: "939982850", Voltage: f(0), VoltageUnit: "mV", BiasCurrent: f(0), BiasCurrentUnit: "uA", TxPower: f(0), TxPowerUnit: "uW", RxPower: f(0), RxPowerUnit: "uW"},
+		// 在位但无收光（电压 > 0，rx=0 uW）-> 保留且按 entPhysicalName 赋名
+		{Index: "939982849", Voltage: f(3300), VoltageUnit: "mV", RxPower: f(0), RxPowerUnit: "uW"},
+		// dBm 读数为 0 -> 有效强光，保留且回退 entPhysicalDescr
+		{Index: "939982851", RxPower: f(0), RxPowerUnit: "dBm"},
+		// H3C ifIndex 兼容回退 ifaceNameByIndex
+		{Index: "12", TxPower: f(-2.1), TxPowerUnit: "dBm"},
+	}
+
+	got := enrichOpticalTransceivers(items, "huawei", catalog, map[int]string{12: "Ten-GigabitEthernet1/0/12"})
+	if len(got) != 3 {
+		t.Fatalf("len(got) = %d, want 3 (all-zero placeholder must be filtered): %+v", len(got), got)
+	}
+
+	byIdx := make(map[string]devices.OpticalTransceiverMetrics, len(got))
+	for _, item := range got {
+		byIdx[item.Index] = item
+	}
+	if _, exists := byIdx["939982850"]; exists {
+		t.Fatalf("all-zero placeholder 939982850 should be filtered out")
+	}
+	if byIdx["939982849"].Name != "GigabitEthernet0/0/25" {
+		t.Fatalf("939982849 Name = %q, want GigabitEthernet0/0/25", byIdx["939982849"].Name)
+	}
+	if byIdx["939982851"].Name != "XGigabitEthernet0/0/1" {
+		t.Fatalf("939982851 Name = %q, want XGigabitEthernet0/0/1", byIdx["939982851"].Name)
+	}
+	if byIdx["12"].Name != "Ten-GigabitEthernet1/0/12" {
+		t.Fatalf("12 Name = %q, want Ten-GigabitEthernet1/0/12", byIdx["12"].Name)
+	}
+
+	t.Run("H3C 优先 ifaceNameByIndex 防 ENTITY-MIB 撞号，非 H3C 拒绝非端口实体类且拦截 NaN/Inf", func(t *testing.T) {
+		classOID := reg.Common.System.EntPhysicalClass.OID
+		collisionClient := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				classOID: {
+					walkPDU(classOID, 12, 7, gosnmp.Integer), // fan
+					walkPDU(classOID, 20, 3, gosnmp.Integer), // chassis
+					walkPDU(classOID, 21, 10, gosnmp.Integer),
+				},
+				nameOID: {
+					walkPDU(nameOID, 12, []byte("FAN1"), gosnmp.OctetString),
+					walkPDU(nameOID, 20, []byte("Chassis-0"), gosnmp.OctetString),
+					walkPDU(nameOID, 21, []byte("GigabitEthernet0/0/21"), gosnmp.OctetString),
+				},
+			},
+		}
+
+		// H3C: idx=12 在 ENTITY-MIB 是 fan("FAN1")，但必须优先取 ifaceNameByIndex[12]
+		h3cGot := enrichOpticalTransceivers(
+			[]devices.OpticalTransceiverMetrics{{Index: "12", TxPower: f(-2.1), TxPowerUnit: "dBm"}},
+			"h3c",
+			newEntityCatalog(collisionClient, reg),
+			map[int]string{12: "Ten-GigabitEthernet1/0/12"},
+		)
+		if len(h3cGot) != 1 || h3cGot[0].Name != "Ten-GigabitEthernet1/0/12" {
+			t.Fatalf("h3cGot = %+v, want Ten-GigabitEthernet1/0/12", h3cGot)
+		}
+
+		// 华为/非 H3C: idx=12(fan)/idx=20(chassis) 拒绝非端口实体名；idx=21(port) 正常赋名；NaN/+Inf 被过滤
+		nanVal := math.NaN()
+		infVal := math.Inf(1)
+		hwGot := enrichOpticalTransceivers(
+			[]devices.OpticalTransceiverMetrics{
+				{Index: "12", RxPower: f(-3.0), RxPowerUnit: "dBm"},
+				{Index: "20", RxPower: f(-4.0), RxPowerUnit: "dBm"},
+				{Index: "21", RxPower: f(-5.0), RxPowerUnit: "dBm"},
+				{Index: "22", RxPower: &nanVal, RxPowerUnit: "dBm"},
+				{Index: "23", TxPower: &infVal, TxPowerUnit: "dBm"},
+			},
+			"huawei",
+			newEntityCatalog(collisionClient, reg),
+			nil,
+		)
+		if len(hwGot) != 3 {
+			t.Fatalf("len(hwGot) = %d, want 3 (NaN/+Inf must be filtered): %+v", len(hwGot), hwGot)
+		}
+		hwByIdx := make(map[string]devices.OpticalTransceiverMetrics, len(hwGot))
+		for _, item := range hwGot {
+			hwByIdx[item.Index] = item
+		}
+		if hwByIdx["12"].Name != "" {
+			t.Fatalf("idx 12 (fan) Name = %q, want empty", hwByIdx["12"].Name)
+		}
+		if hwByIdx["20"].Name != "" {
+			t.Fatalf("idx 20 (chassis) Name = %q, want empty", hwByIdx["20"].Name)
+		}
+		if hwByIdx["21"].Name != "GigabitEthernet0/0/21" {
+			t.Fatalf("idx 21 (port) Name = %q, want GigabitEthernet0/0/21", hwByIdx["21"].Name)
+		}
+	})
+}
+
+func TestEnrichComponents_FiltersBoardNoiseAndMapsVendorSemantics(t *testing.T) {
+	reg, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry() error = %v", err)
+	}
+	classOID := reg.Common.System.EntPhysicalClass.OID
+	nameOID := reg.Common.System.EntPhysicalName.OID
+
+	i64 := func(v int64) *int64 { return &v }
+
+	t.Run("华为 board 按 entPhysicalClass 过滤噪声并映射华为各部件语义", func(t *testing.T) {
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				classOID: {
+					walkPDU(classOID, 201326593, 9, gosnmp.Integer), // module -> keep
+					walkPDU(classOID, 201326594, 3, gosnmp.Integer), // chassis -> keep
+					walkPDU(classOID, 201326595, 4, gosnmp.Integer), // backplane -> keep
+					walkPDU(classOID, 201326596, 11, gosnmp.Integer),
+					walkPDU(classOID, 1001, 10, gosnmp.Integer), // port -> drop
+					walkPDU(classOID, 1002, 5, gosnmp.Integer),  // container -> drop
+					walkPDU(classOID, 1003, 7, gosnmp.Integer),  // fan -> drop
+					walkPDU(classOID, 1004, 6, gosnmp.Integer),  // powerSupply -> drop
+					walkPDU(classOID, 1005, 8, gosnmp.Integer),  // sensor -> drop
+					walkPDU(classOID, 1006, 12, gosnmp.Integer), // cpu -> drop
+					walkPDU(classOID, 1007, 1, gosnmp.Integer),  // other -> drop
+					walkPDU(classOID, 1008, 2, gosnmp.Integer),  // unknown -> drop
+				},
+				nameOID: {
+					walkPDU(nameOID, 201326593, []byte("MPU Board 0"), gosnmp.OctetString),
+				},
+			},
+		}
+		catalog := newEntityCatalog(client, reg)
+
+		items := []devices.ComponentStatusMetrics{
+			{Index: "201326593", Kind: "board", State: i64(3)},
+			{Index: "201326594", Kind: "board", State: i64(4)},
+			{Index: "201326595", Kind: "board", State: i64(1)},
+			{Index: "201326596", Kind: "board", State: i64(11)},
+			{Index: "1001", Kind: "board", State: i64(3)},
+			{Index: "1002", Kind: "board", State: i64(3)},
+			{Index: "1003", Kind: "board", State: i64(3)},
+			{Index: "1004", Kind: "board", State: i64(3)},
+			{Index: "1005", Kind: "board", State: i64(3)},
+			{Index: "1006", Kind: "board", State: i64(3)},
+			{Index: "1007", Kind: "board", State: i64(3)},
+			{Index: "1008", Kind: "board", State: i64(3)},
+			{Index: "0.3", Kind: "fan", State: i64(2)},
+			{Index: "0.1", Kind: "fan", State: i64(1)},
+			{Index: "1", Kind: "power", State: i64(1)},
+			{Index: "2", Kind: "power", State: i64(2)},
+			{Index: "3", Kind: "power", State: i64(3)},
+			{Index: "4", Kind: "power", State: i64(4)},
+		}
+
+		got := enrichComponents(items, "huawei", catalog)
+		if len(got) != 10 {
+			t.Fatalf("len(got) = %d, want 10 (8 non-hardware boards must be filtered): %+v", len(got), got)
+		}
+
+		byKindIdx := make(map[string]devices.ComponentStatusMetrics, len(got))
+		for _, c := range got {
+			byKindIdx[c.Kind+":"+c.Index] = c
+		}
+
+		if c := byKindIdx["board:201326593"]; c.Name != "MPU Board 0" || c.StatusLabel != "正常" || c.StatusLevel != "normal" || *c.State != 3 {
+			t.Fatalf("board 201326593 = %+v", c)
+		}
+		if c := byKindIdx["board:201326594"]; c.Name != "" || c.StatusLabel != "异常/离线" || c.StatusLevel != "critical" {
+			t.Fatalf("board 201326594 = %+v, want empty Name for unnamed long index", c)
+		}
+		if c := byKindIdx["board:201326595"]; c.StatusLabel != "未安装/不支持" || c.StatusLevel != "unknown" {
+			t.Fatalf("board 201326595 = %+v", c)
+		}
+		if c := byKindIdx["fan:0.3"]; c.Name != "槽位 0 · 风扇 3" || c.StatusLabel != "异常" || c.StatusLevel != "critical" {
+			t.Fatalf("fan 0.3 = %+v", c)
+		}
+		if c := byKindIdx["power:1"]; c.Name != "电源 1" || c.StatusLabel != "正常供电" || c.StatusLevel != "normal" {
+			t.Fatalf("power 1 = %+v", c)
+		}
+		if c := byKindIdx["power:2"]; c.StatusLabel != "未供电/异常" || c.StatusLevel != "critical" {
+			t.Fatalf("power 2 = %+v", c)
+		}
+		if c := byKindIdx["power:3"]; c.StatusLabel != "休眠/备用" || c.StatusLevel != "warning" {
+			t.Fatalf("power 3 = %+v", c)
+		}
+		if c := byKindIdx["power:4"]; c.StatusLabel != "未知" || c.StatusLevel != "unknown" {
+			t.Fatalf("power 4 = %+v", c)
+		}
+	})
+
+	t.Run("H3C 风扇与电源状态映射", func(t *testing.T) {
+		items := []devices.ComponentStatusMetrics{
+			{Index: "1", Kind: "fan", State: i64(1)},
+			{Index: "2", Kind: "fan", State: i64(2)},
+			{Index: "3", Kind: "power", State: i64(3)},
+			{Index: "4", Kind: "power", State: i64(4)},
+		}
+		got := enrichComponents(items, "h3c", nil)
+		if len(got) != 4 {
+			t.Fatalf("len(got) = %d, want 4", len(got))
+		}
+		if got[0].StatusLabel != "正常" || got[0].StatusLevel != "normal" {
+			t.Fatalf("h3c state=1 got %+v", got[0])
+		}
+		if got[1].StatusLabel != "故障" || got[1].StatusLevel != "critical" {
+			t.Fatalf("h3c state=2 got %+v", got[1])
+		}
+		if got[2].StatusLabel != "未安装" || got[2].StatusLevel != "unknown" {
+			t.Fatalf("h3c state=3 got %+v", got[2])
+		}
+		if got[3].StatusLabel != "不支持" || got[3].StatusLevel != "unknown" {
+			t.Fatalf("h3c state=4 got %+v", got[3])
+		}
+	})
 }

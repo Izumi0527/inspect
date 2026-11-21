@@ -106,6 +106,9 @@ type SystemSection struct {
 	EntPhysicalDescr       OIDDefinition `json:"ent_physical_descr"`
 	EntPhysicalModelName   OIDDefinition `json:"ent_physical_model_name"`
 	EntPhysicalSoftwareRev OIDDefinition `json:"ent_physical_software_rev"`
+	EntPhysicalClass       OIDDefinition `json:"ent_physical_class"`
+	EntPhysicalName        OIDDefinition `json:"ent_physical_name"`
+	EntPhysicalSerialNum   OIDDefinition `json:"ent_physical_serial_num"`
 	// BRIDGE-MIB 桥 MAC。华为/H3C 的 LLDP 机箱 ID（macAddress 子类型）就是桥 MAC，且它在缺省
 	// 视图内可读，用作 lldpLocChassisId 不可读时的设备身份兜底，让别的设备上报的邻居能匹配回本机。
 	Dot1dBaseBridgeAddress OIDDefinition `json:"dot1d_base_bridge_address"`
@@ -113,6 +116,8 @@ type SystemSection struct {
 
 type InterfacesSection struct {
 	IfDescr       OIDDefinition `json:"if_descr"`
+	IfName        OIDDefinition `json:"if_name"`
+	IfAlias       OIDDefinition `json:"if_alias"`
 	IfSpeed       OIDDefinition `json:"if_speed"`
 	IfInOctets    OIDDefinition `json:"if_in_octets"`
 	IfOutOctets   OIDDefinition `json:"if_out_octets"`

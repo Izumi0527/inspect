@@ -19,8 +19,10 @@ import type { LatestDataItem } from '../../types/zabbix-monitoring.types'
 import { AdhocComparisonChart } from './AdhocComparisonChart'
 import {
   APPLICATION_TAG_OPTIONS,
-  formatMetricDelta,
   getApplicationTagLabel,
+  getLatestDataDeltaToneClass,
+  resolveLatestDataDeltaDisplay,
+  resolveLatestDataPortLabel,
 } from './latestDataHelpers'
 
 export interface LatestDataTabProps {
@@ -40,6 +42,10 @@ function LatestMetricRow({
   onToggle: () => void
   onSelectHost: (deviceId: number) => void
 }) {
+  const portLabel = resolveLatestDataPortLabel(item)
+  const deltaDisplay = resolveLatestDataDeltaDisplay(item)
+  const deltaToneClass = getLatestDataDeltaToneClass(item)
+
   return (
     <tr className="h-9 border-b border-border/60 bg-card transition-colors hover:bg-accent/50">
       <td className="px-2.5 py-1.5">
@@ -66,9 +72,9 @@ function LatestMetricRow({
       <td className="px-2.5 py-1.5">
         <div className="flex items-center gap-1.5">
           <span className="font-medium text-foreground">{item.metric_label}</span>
-          {item.interface_name && (
+          {portLabel !== '整机' && portLabel !== '—' && (
             <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-              {item.interface_name}
+              {portLabel}
             </span>
           )}
         </div>
@@ -90,8 +96,8 @@ function LatestMetricRow({
           {item.display_value}
         </span>
       </td>
-      <td className="px-2.5 py-1.5 text-right text-muted-foreground tabular-nums">
-        {formatMetricDelta(item.delta, item.metric_unit)}
+      <td className={`px-2.5 py-1.5 text-right tabular-nums ${deltaToneClass}`}>
+        {deltaDisplay}
       </td>
       <td className="px-2.5 py-1.5 text-right text-muted-foreground tabular-nums">
         {formatDateTimeMDHMS(item.collected_at)}

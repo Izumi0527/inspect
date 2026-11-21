@@ -1,7 +1,10 @@
 import type {
   HostCollectionStateView,
   HostDetailResponse,
+  HostInterfaceDetail,
   HostMatrixItem,
+  SNMPComponentStatusMetrics,
+  SNMPOpticalTransceiverMetrics,
 } from '../../types/zabbix-monitoring.types'
 
 export interface StatusBadgeMeta {
@@ -70,6 +73,217 @@ export function formatUptimeChinese(seconds?: number): string {
   return `${minutes} 分钟`
 }
 
+export function isSyntheticInterfaceKey(name?: string): boolean {
+  return /^if\d+$/i.test((name ?? '').trim())
+}
+
+export function resolveHostInterfaceDisplayName(
+  iface: Pick<HostInterfaceDetail, 'name' | 'alias' | 'display_name'>
+): string {
+  const displayName = iface.display_name?.trim()
+  if (displayName) return displayName
+  if (isSyntheticInterfaceKey(iface.name)) {
+    return iface.alias?.trim() || ''
+  }
+  return iface.name.trim()
+}
+
+export function resolveHostInterfaceDescription(
+  iface: Pick<HostInterfaceDetail, 'name' | 'alias' | 'display_name' | 'description'>
+): string {
+  if (iface.description !== undefined) {
+    return iface.description.trim()
+  }
+  const alias = iface.alias?.trim()
+  if (!isSyntheticInterfaceKey(iface.name) && alias && alias !== resolveHostInterfaceDisplayName(iface)) {
+    return alias
+  }
+  return ''
+}
+
+const NON_NEGATIVE_OPTICAL_UNITS = new Set([
+  'uw',
+  '0.1uw',
+  'mw',
+  'mv',
+  '0.1mv',
+  'ua',
+  '0.1ua',
+])
+
+function isOpticalMetricPresent(value?: number, unit?: string): boolean {
+  if (value === undefined || value === null || !Number.isFinite(value)) {
+    return false
+  }
+  const normalizedUnit = (unit ?? '').trim().toLowerCase()
+  if (NON_NEGATIVE_OPTICAL_UNITS.has(normalizedUnit)) {
+    return value > 0
+  }
+  return true
+}
+
+export function convertOpticalPowerToDBm(value?: number, unit?: string): number | null {
+  if (value === undefined || value === null || !Number.isFinite(value)) {
+    return null
+  }
+  const normalizedUnit = (unit ?? '').trim().toLowerCase()
+  if (normalizedUnit === '0.1uw') {
+    const uw = value / 10
+    return uw <= 0 ? null : 10 * Math.log10(uw / 1000)
+  }
+  if (normalizedUnit === 'uw') {
+    return value <= 0 ? null : 10 * Math.log10(value / 1000)
+  }
+  if (normalizedUnit === 'mw') {
+    return value <= 0 ? null : 10 * Math.log10(value)
+  }
+  if (normalizedUnit === '' || normalizedUnit === 'dbm') {
+    return value
+  }
+  return value
+}
+
+export function isOpticalTransceiverActive(item: SNMPOpticalTransceiverMetrics): boolean {
+  return (
+    isOpticalMetricPresent(item.tx_power, item.tx_power_unit) ||
+    isOpticalMetricPresent(item.rx_power, item.rx_power_unit) ||
+    isOpticalMetricPresent(item.bias_current, item.bias_current_unit) ||
+    isOpticalMetricPresent(item.voltage, item.voltage_unit)
+  )
+}
+
+export function isOpticalTransceiverWeak(item: SNMPOpticalTransceiverMetrics): boolean {
+  const rxDbm = convertOpticalPowerToDBm(item.rx_power, item.rx_power_unit)
+  const txDbm = convertOpticalPowerToDBm(item.tx_power, item.tx_power_unit)
+  return (rxDbm !== null && rxDbm < -20) || (txDbm !== null && txDbm < -10)
+}
+
+export function formatOpticalPower(value?: number, unit?: string): string {
+  if (value === undefined || value === null || !Number.isFinite(value)) {
+    return '—'
+  }
+  const dbm = convertOpticalPowerToDBm(value, unit)
+  if (dbm === null) {
+    return '无光信号'
+  }
+  return `${dbm.toFixed(2)} dBm`
+}
+
+export function formatOpticalBiasCurrent(value?: number, unit?: string): string {
+  if (value === undefined || value === null || !Number.isFinite(value) || value <= 0) {
+    return '—'
+  }
+  const rawUnit = (unit ?? '').trim()
+  const normalizedUnit = rawUnit.toLowerCase()
+  if (normalizedUnit === 'ua') {
+    return `${(value / 1000).toFixed(1)} mA`
+  }
+  if (normalizedUnit === '0.1ua') {
+    return `${(value / 10000).toFixed(1)} mA`
+  }
+  return `${value.toFixed(1)} ${rawUnit || 'mA'}`
+}
+
+export function formatOpticalVoltage(value?: number, unit?: string): string {
+  if (value === undefined || value === null || !Number.isFinite(value) || value <= 0) {
+    return '—'
+  }
+  const rawUnit = (unit ?? '').trim()
+  const normalizedUnit = rawUnit.toLowerCase()
+  if (normalizedUnit === 'mv') {
+    return `${(value / 1000).toFixed(2)} V`
+  }
+  if (normalizedUnit === '0.1mv') {
+    return `${(value / 10000).toFixed(2)} V`
+  }
+  return `${value.toFixed(2)} ${rawUnit || 'V'}`
+}
+
+export function resolveOpticalPortLabel(
+  item: SNMPOpticalTransceiverMetrics,
+  position: number
+): string {
+  const name = item.name?.trim()
+  if (name) return name
+  const index = item.index?.trim() ?? ''
+  if (index && !/^\d{6,}$/.test(index)) {
+    return index
+  }
+  return `光口 #${position}`
+}
+
+export function resolveComponentDisplayName(
+  comp: SNMPComponentStatusMetrics,
+  kindLabel: string,
+  kindPosition: number
+): string {
+  const name = comp.name?.trim()
+  if (name) return name
+  const index = comp.index?.trim() ?? ''
+  const slotMatch = /^(\d+)\.(\d+)$/.exec(index)
+  if (slotMatch) {
+    return `槽位 ${slotMatch[1]} · ${kindLabel} ${slotMatch[2]}`
+  }
+  if (/^\d{1,4}$/.test(index)) {
+    return `${kindLabel} ${index}`
+  }
+  if (index && !/^\d+$/.test(index)) {
+    return `${kindLabel} ${index}`
+  }
+  return `${kindLabel} ${kindPosition}`
+}
+
+export function resolveComponentStatusMeta(comp: SNMPComponentStatusMetrics): StatusBadgeMeta {
+  const level = comp.status_level?.trim().toLowerCase()
+  if (level) {
+    switch (level) {
+      case 'normal':
+        return {
+          label: comp.status_label?.trim() || '正常',
+          className: 'bg-success-soft text-success-soft-foreground',
+        }
+      case 'warning':
+        return {
+          label: comp.status_label?.trim() || '告警',
+          className: 'bg-warning-soft text-warning-soft-foreground',
+        }
+      case 'critical':
+        return {
+          label: comp.status_label?.trim() || '异常',
+          className: 'bg-danger-soft text-danger-soft-foreground',
+        }
+      default:
+        return {
+          label: comp.status_label?.trim() || '未知',
+          className: 'bg-unknown-soft text-unknown-soft-foreground',
+        }
+    }
+  }
+
+  if (comp.kind?.toLowerCase() === 'board' && comp.state === 3) {
+    return {
+      label: '正常',
+      className: 'bg-success-soft text-success-soft-foreground',
+    }
+  }
+  if (comp.state === 1 || comp.state === 0) {
+    return {
+      label: '正常',
+      className: 'bg-success-soft text-success-soft-foreground',
+    }
+  }
+  if (comp.state === 2) {
+    return {
+      label: '异常',
+      className: 'bg-danger-soft text-danger-soft-foreground',
+    }
+  }
+  return {
+    label: comp.state !== undefined ? `状态 ${comp.state}` : '未知',
+    className: 'bg-unknown-soft text-unknown-soft-foreground',
+  }
+}
+
 export function formatInterfaceSpeed(speedMbps?: number, speedUnknown?: boolean): string {
   if (speedUnknown || speedMbps === undefined || speedMbps === null || speedMbps <= 0) {
     return '— (速率未知)'
@@ -118,12 +332,20 @@ export function buildSanitizedDiagnosticSummary(detail: HostDetailResponse): str
     )
   }
 
-  const weakOpticals = detail.snmp_extensions.optical_transceivers.filter(
-    (item) => (item.rx_power !== undefined && item.rx_power < -20) || (item.tx_power !== undefined && item.tx_power < -10)
+  const activeOpticals = detail.snmp_extensions.optical_transceivers.filter(
+    isOpticalTransceiverActive
   )
+  const weakOpticals = activeOpticals
+    .map((item, idx) => ({ item, label: resolveOpticalPortLabel(item, idx + 1) }))
+    .filter(({ item }) => isOpticalTransceiverWeak(item))
   if (weakOpticals.length > 0) {
     lines.push(
-      `- 弱光/光模块异常：${weakOpticals.map((o) => `${o.index}(Tx=${o.tx_power ?? '—'}, Rx=${o.rx_power ?? '—'})`).join('；')}`
+      `- 弱光/光模块异常：${weakOpticals
+        .map(
+          ({ item, label }) =>
+            `${label}(Tx=${formatOpticalPower(item.tx_power, item.tx_power_unit)}, Rx=${formatOpticalPower(item.rx_power, item.rx_power_unit)})`
+        )
+        .join('；')}`
     )
   }
 

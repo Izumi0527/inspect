@@ -133,6 +133,8 @@ export interface HostsMatrixQueryParams {
 export interface HostInterfaceDetail {
   id: number
   name: string
+  display_name?: string
+  description?: string
   alias?: string
   speed?: number
   in_octets?: number
@@ -208,6 +210,7 @@ export interface SNMPBGPPeerMetrics {
 
 export interface SNMPOpticalTransceiverMetrics {
   index: string
+  name?: string
   voltage?: number
   voltage_unit?: string
   bias_current?: number
@@ -220,8 +223,11 @@ export interface SNMPOpticalTransceiverMetrics {
 
 export interface SNMPComponentStatusMetrics {
   index: string
+  name?: string
   kind: string
   state?: number
+  status_label?: string
+  status_level?: string
 }
 
 export interface SNMPPoEPortMetrics {

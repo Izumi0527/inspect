@@ -1,5 +1,9 @@
-import type { AdhocSeriesData } from '../../types/zabbix-monitoring.types'
+import type {
+  AdhocSeriesData,
+  LatestDataItem,
+} from '../../types/zabbix-monitoring.types'
 import { DEVICE_SERIES_COLORS } from '../../utils/monitoring'
+import { isSyntheticInterfaceKey } from '../hosts/hostDisplayHelpers'
 
 export const COMPARISON_PALETTE: readonly string[] = [
   ...DEVICE_SERIES_COLORS,
@@ -30,6 +34,95 @@ export function formatMetricDelta(delta: number | null, unit?: string): string {
   const sign = delta > 0 ? '+' : ''
   const val = Number.isInteger(delta) ? String(delta) : delta.toFixed(2)
   return unit ? `${sign}${val} ${unit}` : `${sign}${val}`
+}
+
+export function resolveLatestDataPortLabel(
+  item: Pick<LatestDataItem, 'interface_name' | 'interface_display_name'>
+): string {
+  const displayName = item.interface_display_name?.trim()
+  if (displayName) return displayName
+  const ifaceName = item.interface_name?.trim()
+  if (!ifaceName) return '整机'
+  if (!isSyntheticInterfaceKey(ifaceName)) return ifaceName
+  return '—'
+}
+
+export function resolveLatestDataDeltaDisplay(
+  item: Pick<LatestDataItem, 'delta' | 'delta_display' | 'metric_unit'>
+): string {
+  const deltaDisplay = item.delta_display?.trim()
+  if (deltaDisplay) return deltaDisplay
+  return formatMetricDelta(item.delta, item.metric_unit)
+}
+
+export function getLatestDataDeltaToneClass(
+  item: Pick<LatestDataItem, 'delta' | 'is_abnormal' | 'metric_name'>
+): string {
+  if (item.delta === null || !Number.isFinite(item.delta) || item.delta === 0) {
+    return 'text-muted-foreground'
+  }
+  if (item.is_abnormal && item.delta > 0) {
+    return 'font-medium text-danger'
+  }
+  return 'text-foreground'
+}
+
+const NON_TRAFFIC_PORT_PATTERN =
+  /^(console|aux|inloopback|loopback|lo|null|meth|m-gigabitethernet|mgmt|management)($|[0-9/\-\s])/i
+
+export function isNonTrafficPortName(portName?: string): boolean {
+  const trimmed = (portName ?? '').trim()
+  if (!trimmed) return false
+  return NON_TRAFFIC_PORT_PATTERN.test(trimmed)
+}
+
+function compareNaturalStrings(left: string, right: string): number {
+  const leftParts = left.split(/(\d+)/)
+  const rightParts = right.split(/(\d+)/)
+  const len = Math.max(leftParts.length, rightParts.length)
+
+  for (let i = 0; i < len; i += 1) {
+    const a = leftParts[i] ?? ''
+    const b = rightParts[i] ?? ''
+    if (a === b) continue
+
+    const aIsNum = /^\d+$/.test(a)
+    const bIsNum = /^\d+$/.test(b)
+    if (aIsNum && bIsNum) {
+      const diff = Number(a) - Number(b)
+      if (diff !== 0) return diff
+      if (a.length !== b.length) return a.length - b.length
+      continue
+    }
+
+    const aLower = a.toLowerCase()
+    const bLower = b.toLowerCase()
+    if (aLower !== bLower) {
+      return aLower < bLower ? -1 : 1
+    }
+  }
+  return 0
+}
+
+export function compareLatestDataItemsNaturally(
+  a: Pick<LatestDataItem, 'interface_name' | 'interface_display_name' | 'metric_name'>,
+  b: Pick<LatestDataItem, 'interface_name' | 'interface_display_name' | 'metric_name'>
+): number {
+  const aIsHost = a.interface_name.trim() === ''
+  const bIsHost = b.interface_name.trim() === ''
+  if (aIsHost !== bIsHost) {
+    return aIsHost ? -1 : 1
+  }
+
+  if (!aIsHost) {
+    const portCmp = compareNaturalStrings(
+      resolveLatestDataPortLabel(a),
+      resolveLatestDataPortLabel(b)
+    )
+    if (portCmp !== 0) return portCmp
+  }
+
+  return a.metric_name.localeCompare(b.metric_name)
 }
 
 export interface NormalizedSeriesStats {

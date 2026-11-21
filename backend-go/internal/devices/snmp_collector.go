@@ -1,6 +1,7 @@
 package devices
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -10,10 +11,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gosnmp/gosnmp"
 	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
 	"go.uber.org/zap"
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 // SNMPMetrics 保存采集的 SNMP 指标
@@ -30,6 +33,7 @@ type SNMPMetrics struct {
 	Uptime              *int64                      `json:"uptime,omitempty"`
 	Model               *string                     `json:"model,omitempty"`            // 设备型号，如 S5700-28P-LI-AC
 	FirmwareVersion     *string                     `json:"firmware_version,omitempty"` // 软件/固件版本，如 V200R019C00SPC500
+	SerialNumber        *string                     `json:"serial_number,omitempty"`    // 设备序列号，如 210235A1B2C3
 	PatchVersion        *string                     `json:"patch_version,omitempty"`    // 补丁版本，如 SPC500、V200R019SPH020
 	// DetectedType 是按 sysDescr / LLDP 能力位 / sysServices 推断的设备类型（switch/router/firewall/ap），
 	// 只回填 devices.detected_device_type，不覆盖用户填写的 device_type；推断不出为 nil。
@@ -80,14 +84,15 @@ const RateSampleMaxGap = 10 * time.Minute
 
 // InterfaceMetrics 保存每个接口的指标
 type InterfaceMetrics struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	Speed       *int64   `json:"speed,omitempty"` // 接口速率，单位：Mbps
-	InOctets    *uint64  `json:"in_octets,omitempty"`
-	OutOctets   *uint64  `json:"out_octets,omitempty"`
-	InRate      *float64 `json:"in_rate,omitempty"`  // 入站速率，单位：bps（比特每秒）
-	OutRate     *float64 `json:"out_rate,omitempty"` // 出站速率，单位：bps（比特每秒）
-	IsUp        *bool    `json:"is_up,omitempty"`    // 接口运行状态：IfOperStatus=1 为 up
+	Name            string   `json:"name"`
+	Description     string   `json:"description,omitempty"`
+	PortDescription *string  `json:"port_description,omitempty"`
+	Speed           *int64   `json:"speed,omitempty"` // 接口速率，单位：Mbps
+	InOctets        *uint64  `json:"in_octets,omitempty"`
+	OutOctets       *uint64  `json:"out_octets,omitempty"`
+	InRate          *float64 `json:"in_rate,omitempty"`  // 入站速率，单位：bps（比特每秒）
+	OutRate         *float64 `json:"out_rate,omitempty"` // 出站速率，单位：bps（比特每秒）
+	IsUp            *bool    `json:"is_up,omitempty"`    // 接口运行状态：IfOperStatus=1 为 up
 
 	// AdminUp 是管理状态（ifAdminStatus=1 为 up）。与 IsUp 配合才能区分
 	// 「人为 shutdown」（admin down）与「链路故障」（admin up 但 oper down）——
@@ -132,6 +137,7 @@ type BGPNeighborMetrics struct {
 // OpticalTransceiverMetrics 保存光模块诊断摘要。
 type OpticalTransceiverMetrics struct {
 	Index           string   `json:"index"`
+	Name            string   `json:"name,omitempty"`
 	Voltage         *float64 `json:"voltage,omitempty"`
 	VoltageUnit     string   `json:"voltage_unit,omitempty"`
 	BiasCurrent     *float64 `json:"bias_current,omitempty"`
@@ -144,16 +150,16 @@ type OpticalTransceiverMetrics struct {
 
 // ComponentStatusMetrics 保存风扇、电源、单板等部件的状态。
 //
-// State 是**厂商原始状态码**，采集端刻意不做正常/异常判定：状态码语义因厂商
-// 甚至型号而异（华为 hwEntityFanState 与 H3C hh3cFanState 的取值含义并不一致），
-// 在采集端硬编码判定等于把一个未经实测确认的假设埋进最底层。判定放在检查项层，
-// 那里可以按模板 config 覆盖映射表，且未知状态码判 skip 而非 fail——
-// 宁可不判，也不能把正常设备报成故障，或反过来把故障报成正常。
+// State 是**厂商原始状态码**，采集端刻意在基础采集函数里保留原值；
+// enrichComponents 基于已确认的厂商/实体类型上下文补齐 Name、StatusLabel 与 StatusLevel。
 type ComponentStatusMetrics struct {
 	Index string `json:"index"`
+	Name  string `json:"name,omitempty"`
 	// Kind 取 fan / power / board，由 catalog 条目 ID 推断
-	Kind  string `json:"kind"`
-	State *int64 `json:"state,omitempty"`
+	Kind        string `json:"kind"`
+	State       *int64 `json:"state,omitempty"`
+	StatusLabel string `json:"status_label,omitempty"`
+	StatusLevel string `json:"status_level,omitempty"`
 }
 
 // PoEPortMetrics 保存单个 PoE 端口的供电数据。
@@ -358,6 +364,8 @@ func (c *SNMPCollector) CollectMetrics(
 		c.logger.Debug("collected bgp peers", zap.Int("count", len(metrics.BGPPeers)))
 	}
 
+	entityCatalog := newEntityCatalog(client, registry)
+
 	// 采集光模块诊断摘要
 	c.collectOptical(client, metrics, registry, effectiveVendor)
 	if c.logger != nil && len(metrics.OpticalTransceivers) > 0 {
@@ -365,7 +373,7 @@ func (c *SNMPCollector) CollectMetrics(
 	}
 
 	// 采集风扇、电源、单板状态：硬件基础健康，比 CPU/内存更早暴露物理隐患
-	c.collectComponents(client, metrics, registry, effectiveVendor)
+	c.collectComponentsWithCatalog(client, metrics, registry, effectiveVendor, entityCatalog)
 	if c.logger != nil && len(metrics.Components) > 0 {
 		c.logger.Debug("collected components", zap.Int("count", len(metrics.Components)))
 	}
@@ -376,12 +384,13 @@ func (c *SNMPCollector) CollectMetrics(
 		c.logger.Debug("collected poe", zap.Int("ports", len(metrics.PoE.Ports)))
 	}
 
-	// 采集设备型号与软件版本（低频变化的静态属性，用于回填设备档案）
-	c.collectDeviceIdentityWithContext(client, metrics, registry, sysDescr, true, sysObjectID, true)
-	if c.logger != nil && (metrics.Model != nil || metrics.FirmwareVersion != nil) {
+	// 采集设备型号、软件版本与序列号（低频变化的静态属性，用于回填设备档案）
+	c.collectDeviceIdentityWithCatalog(client, metrics, registry, sysDescr, true, sysObjectID, true, entityCatalog)
+	if c.logger != nil && (metrics.Model != nil || metrics.FirmwareVersion != nil || metrics.SerialNumber != nil) {
 		c.logger.Debug("collected device identity",
 			zap.Stringp("model", metrics.Model),
-			zap.Stringp("firmware_version", metrics.FirmwareVersion))
+			zap.Stringp("firmware_version", metrics.FirmwareVersion),
+			zap.Stringp("serial_number", metrics.SerialNumber))
 	}
 
 	// 推断设备类型（交换机/路由器/防火墙/AP），放在 identity 之后以复用已解析的型号
@@ -410,6 +419,10 @@ func (c *SNMPCollector) CollectMetrics(
 
 	// 采集接口指标
 	c.collectInterfaces(client, ipAddress, metrics, registry)
+	if len(metrics.OpticalTransceivers) > 0 {
+		ifaceNames := buildInterfaceNameIndex(metrics.Interfaces)
+		metrics.OpticalTransceivers = enrichOpticalTransceivers(metrics.OpticalTransceivers, effectiveVendor, entityCatalog, ifaceNames)
+	}
 	if c.logger != nil {
 		c.logger.Debug("collected interfaces", zap.Int("count", len(metrics.Interfaces)))
 	}
@@ -670,6 +683,139 @@ func (c *SNMPCollector) collectOptical(
 	)
 }
 
+const (
+	maxInterfaceDescriptionBytes = 255
+)
+
+// decodeSNMPTextValue 将 SNMP OctetString 解码为 UTF-8 文本；非 UTF-8 字节按 GBK 尝试解码（兼容中文设备描述）。
+func decodeSNMPTextValue(value interface{}) string {
+	switch raw := value.(type) {
+	case []byte:
+		trimmed := bytes.Trim(raw, "\x00")
+		if len(trimmed) == 0 {
+			return ""
+		}
+		if utf8.Valid(trimmed) {
+			return string(trimmed)
+		}
+		decoded, err := simplifiedchinese.GBK.NewDecoder().Bytes(trimmed)
+		if err != nil || !utf8.Valid(decoded) {
+			return ""
+		}
+		return string(decoded)
+	case string:
+		return raw
+	default:
+		return ""
+	}
+}
+
+// SanitizeInterfaceDescription 清洗接口描述（ifAlias）：规范化制表/换行，拦截控制字符并按 UTF-8 rune 边界截断至 255 字节。
+func SanitizeInterfaceDescription(value string) string {
+	trimmed := strings.Trim(value, "\x00")
+	if trimmed == "" || !utf8.ValidString(trimmed) {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(trimmed))
+	prevSpace := false
+	for _, r := range trimmed {
+		if r == '\r' || r == '\n' || r == '\t' {
+			if !prevSpace {
+				b.WriteByte(' ')
+				prevSpace = true
+			}
+			continue
+		}
+		if r < 0x20 || r == 0x7f {
+			return ""
+		}
+		b.WriteRune(r)
+		prevSpace = r == ' '
+	}
+	cleaned := strings.TrimSpace(b.String())
+	if cleaned == "" {
+		return ""
+	}
+	return truncateUTF8Bytes(cleaned, maxInterfaceDescriptionBytes)
+}
+
+func truncateUTF8Bytes(s string, maxBytes int) string {
+	if maxBytes <= 0 || len(s) <= maxBytes {
+		return s
+	}
+	end := 0
+	for idx, r := range s {
+		runeLen := utf8.RuneLen(r)
+		if idx+runeLen > maxBytes {
+			break
+		}
+		end = idx + runeLen
+	}
+	return strings.TrimSpace(s[:end])
+}
+
+func fillMissingInterfaceNames(target snmpClient, interfaces map[int]*InterfaceMetrics, rawOID string) {
+	ifNameOID := strings.TrimSpace(rawOID)
+	if ifNameOID == "" || len(interfaces) == 0 {
+		return
+	}
+	needsFallback := false
+	for _, iface := range interfaces {
+		if strings.TrimSpace(iface.Description) == "" {
+			needsFallback = true
+			break
+		}
+	}
+	if !needsFallback {
+		return
+	}
+	rows, err := target.BulkWalkAll(ifNameOID)
+	if err != nil || len(rows) == 0 {
+		return
+	}
+	for _, v := range rows {
+		if v.Type != gosnmp.OctetString {
+			continue
+		}
+		idx, err := strconv.Atoi(extractOIDIndexSuffix(v.Name, ifNameOID))
+		if err != nil || idx <= 0 {
+			continue
+		}
+		if iface, exists := interfaces[idx]; exists && strings.TrimSpace(iface.Description) == "" {
+			if name := strings.TrimSpace(formatSNMPValue(v.Value)); name != "" {
+				iface.Description = name
+			}
+		}
+	}
+}
+
+func collectInterfacePortDescriptions(target snmpClient, interfaces map[int]*InterfaceMetrics, rawOID string) {
+	ifAliasOID := strings.TrimSpace(rawOID)
+	if ifAliasOID == "" || len(interfaces) == 0 {
+		return
+	}
+	rows, err := target.BulkWalkAll(ifAliasOID)
+	if err != nil {
+		return
+	}
+	aliasByIndex := make(map[int]string, len(rows))
+	for _, v := range rows {
+		if v.Type != gosnmp.OctetString {
+			continue
+		}
+		idx, err := strconv.Atoi(extractOIDIndexSuffix(v.Name, ifAliasOID))
+		if err != nil || idx <= 0 {
+			continue
+		}
+		aliasByIndex[idx] = SanitizeInterfaceDescription(decodeSNMPTextValue(v.Value))
+	}
+	for idx, iface := range interfaces {
+		desc := aliasByIndex[idx]
+		iface.PortDescription = &desc
+	}
+}
+
 // walkInterfaceValues 按接口索引 walk 一个 OID，并用 assign 把值写入对应接口。
 //
 // OID 为空（registry 未定义该项）或 walk 失败时静默返回：接口健康类 OID 都是
@@ -709,7 +855,18 @@ func (c *SNMPCollector) collectComponents(
 	registry *snmpmib.Registry,
 	vendor string,
 ) {
-	metrics.Components = collectComponentsFromCatalog(target, registry.CatalogEntries(vendor, "environment"))
+	c.collectComponentsWithCatalog(target, metrics, registry, vendor, newEntityCatalog(target, registry))
+}
+
+func (c *SNMPCollector) collectComponentsWithCatalog(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+	catalog *entityCatalog,
+) {
+	raw := collectComponentsFromCatalog(target, registry.CatalogEntries(vendor, "environment"))
+	metrics.Components = enrichComponents(raw, vendor, catalog)
 }
 
 // collectPoE 采集 PoE 供电概况（catalog 分类 poe）。非 PoE 设备返回零值。
@@ -752,6 +909,9 @@ func (c *SNMPCollector) collectInterfaces(
 	if len(interfaces) == 0 {
 		return
 	}
+
+	fillMissingInterfaceNames(target, interfaces, registry.Common.Interfaces.IfName.OID)
+	collectInterfacePortDescriptions(target, interfaces, registry.Common.Interfaces.IfAlias.OID)
 
 	speedResult, _ := target.BulkWalkAll(registry.Common.Interfaces.IfHighSpeed.OID)
 	for _, v := range speedResult {
@@ -1243,6 +1403,28 @@ func (c *SNMPCollector) collectDeviceIdentityWithContext(
 	cachedSysObjectID string,
 	sysObjectIDCached bool,
 ) {
+	c.collectDeviceIdentityWithCatalog(
+		target,
+		metrics,
+		registry,
+		cachedSysDescr,
+		sysDescrCached,
+		cachedSysObjectID,
+		sysObjectIDCached,
+		newEntityCatalog(target, registry),
+	)
+}
+
+func (c *SNMPCollector) collectDeviceIdentityWithCatalog(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	cachedSysDescr string,
+	sysDescrCached bool,
+	cachedSysObjectID string,
+	sysObjectIDCached bool,
+	catalog *entityCatalog,
+) {
 	model := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalModelName.OID)
 	version := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalSoftwareRev.OID)
 
@@ -1301,6 +1483,628 @@ func (c *SNMPCollector) collectDeviceIdentityWithContext(
 	if patch != "" {
 		metrics.PatchVersion = &patch
 	}
+	if serial := collectDeviceSerialNumberWithCatalog(target, registry, catalog); serial != "" {
+		metrics.SerialNumber = &serial
+	}
+}
+
+const (
+	minSerialNumberLen = 3
+	maxSerialNumberLen = 128
+
+	entPhysicalClassOther       int64 = 1
+	entPhysicalClassUnknown     int64 = 2
+	entPhysicalClassChassis     int64 = 3
+	entPhysicalClassBackplane   int64 = 4
+	entPhysicalClassContainer   int64 = 5
+	entPhysicalClassPowerSupply int64 = 6
+	entPhysicalClassFan         int64 = 7
+	entPhysicalClassSensor      int64 = 8
+	entPhysicalClassModule      int64 = 9
+	entPhysicalClassPort        int64 = 10
+	entPhysicalClassStack       int64 = 11
+	entPhysicalClassCPU         int64 = 12
+)
+
+var serialPlaceholderSentinels = map[string]struct{}{
+	"none":                   {},
+	"null":                   {},
+	"n/a":                    {},
+	"na":                     {},
+	"nil":                    {},
+	"unknown":                {},
+	"default":                {},
+	"not applicable":         {},
+	"to be filled by o.e.m.": {},
+	"empty":                  {},
+	"uninitialized":          {},
+	"无":                      {},
+}
+
+type entitySerialCandidate struct {
+	index  int
+	serial string
+}
+
+// SanitizeSerialNumber 清洗设备序列号并拦截占位文本、控制字符、非 ASCII 与全分隔符伪值。
+// 仅裁剪首尾 NUL 填充与空白，保留中间 NUL 交由控制字符检查拒绝，防止二进制脏数据绕过。
+func SanitizeSerialNumber(value string) string {
+	cleaned := strings.TrimSpace(strings.Trim(value, "\x00"))
+	if cleaned == "" {
+		return ""
+	}
+	if _, isPlaceholder := serialPlaceholderSentinels[strings.ToLower(cleaned)]; isPlaceholder {
+		return ""
+	}
+	if len(cleaned) < minSerialNumberLen || len(cleaned) > maxSerialNumberLen {
+		return ""
+	}
+	hasMeaningfulChar := false
+	for _, r := range cleaned {
+		if r < 0x20 || r >= 0x7f {
+			return ""
+		}
+		if r != '0' && r != '-' && r != '_' && r != '.' && r != ' ' {
+			hasMeaningfulChar = true
+		}
+	}
+	if !hasMeaningfulChar {
+		return ""
+	}
+	return cleaned
+}
+
+func sanitizeSerialNumber(value string) string {
+	return SanitizeSerialNumber(value)
+}
+
+// rawSNMPSerialString 保留 OctetString 原始字节语义，避免 formatSNMPValue 静默剥离控制/非 ASCII 字节。
+func rawSNMPSerialString(value interface{}) (string, bool) {
+	switch raw := value.(type) {
+	case []byte:
+		return string(raw), true
+	case string:
+		return raw, true
+	default:
+		return "", false
+	}
+}
+
+// entityClassSerialPriority 定义 RFC 4133 / RFC 6933 物理实体类型的序列号优先级。
+func entityClassSerialPriority(class int64) (int, bool) {
+	switch class {
+	case entPhysicalClassChassis:
+		return 1, true
+	case entPhysicalClassStack:
+		return 2, true
+	case entPhysicalClassModule:
+		return 3, true
+	case entPhysicalClassBackplane:
+		return 4, true
+	case entPhysicalClassOther, entPhysicalClassUnknown:
+		return 5, true
+	default:
+		return 0, false
+	}
+}
+
+// selectBestEntitySerialNumber 按实体类型优先级和最小索引确定性择优整机序列号。
+func selectBestEntitySerialNumber(candidates []entitySerialCandidate, classByIndex map[int]int64) string {
+	if len(candidates) == 0 {
+		return ""
+	}
+	if len(classByIndex) == 0 {
+		best := candidates[0]
+		for _, c := range candidates[1:] {
+			if c.index < best.index {
+				best = c
+			}
+		}
+		return best.serial
+	}
+
+	hasBest := false
+	bestPrio := 0
+	var best entitySerialCandidate
+	for _, c := range candidates {
+		class, ok := classByIndex[c.index]
+		if !ok {
+			continue
+		}
+		prio, allowed := entityClassSerialPriority(class)
+		if !allowed {
+			continue
+		}
+		if !hasBest || prio < bestPrio || (prio == bestPrio && c.index < best.index) {
+			best = c
+			bestPrio = prio
+			hasBest = true
+		}
+	}
+	if !hasBest {
+		return ""
+	}
+	return best.serial
+}
+
+// collectDeviceSerialNumber 从 ENTITY-MIB 采集并筛选整机序列号；无有效序列号时不额外 walk entPhysicalClass。
+func collectDeviceSerialNumber(target snmpClient, registry *snmpmib.Registry) string {
+	return collectDeviceSerialNumberWithCatalog(target, registry, newEntityCatalog(target, registry))
+}
+
+func collectDeviceSerialNumberWithCatalog(target snmpClient, registry *snmpmib.Registry, catalog *entityCatalog) string {
+	if registry == nil {
+		return ""
+	}
+	serialOID := strings.TrimSpace(registry.Common.System.EntPhysicalSerialNum.OID)
+	if serialOID == "" {
+		return ""
+	}
+	rows, err := target.BulkWalkAll(serialOID)
+	if err != nil || len(rows) == 0 {
+		return ""
+	}
+
+	candidates := make([]entitySerialCandidate, 0, len(rows))
+	for _, v := range rows {
+		if v.Type != gosnmp.OctetString {
+			continue
+		}
+		idx, err := strconv.Atoi(extractOIDIndexSuffix(v.Name, serialOID))
+		if err != nil || idx <= 0 {
+			continue
+		}
+		rawSerial, ok := rawSNMPSerialString(v.Value)
+		if !ok {
+			continue
+		}
+		if serial := SanitizeSerialNumber(rawSerial); serial != "" {
+			candidates = append(candidates, entitySerialCandidate{index: idx, serial: serial})
+		}
+	}
+	if len(candidates) == 0 {
+		return ""
+	}
+
+	var classByIndex map[int]int64
+	if catalog != nil {
+		classByIndex = catalog.classes()
+	} else {
+		classByIndex = collectEntityClassMap(target, registry.Common.System.EntPhysicalClass.OID)
+	}
+	return selectBestEntitySerialNumber(candidates, classByIndex)
+}
+
+type entityCatalog struct {
+	target       snmpClient
+	registry     *snmpmib.Registry
+	classLoaded  bool
+	classByIndex map[int]int64
+	nameLoaded   bool
+	nameByIndex  map[int]string
+	descrLoaded  bool
+	descrByIndex map[int]string
+}
+
+func newEntityCatalog(target snmpClient, registry *snmpmib.Registry) *entityCatalog {
+	return &entityCatalog{target: target, registry: registry}
+}
+
+func (c *entityCatalog) classes() map[int]int64 {
+	if c == nil {
+		return nil
+	}
+	if !c.classLoaded {
+		c.classLoaded = true
+		if c.target != nil && c.registry != nil {
+			c.classByIndex = collectEntityClassMap(c.target, c.registry.Common.System.EntPhysicalClass.OID)
+		}
+	}
+	return c.classByIndex
+}
+
+func (c *entityCatalog) names() map[int]string {
+	if c == nil {
+		return nil
+	}
+	if !c.nameLoaded {
+		c.nameLoaded = true
+		if c.target != nil && c.registry != nil {
+			c.nameByIndex = collectEntityTextMap(c.target, c.registry.Common.System.EntPhysicalName.OID)
+		}
+	}
+	return c.nameByIndex
+}
+
+func (c *entityCatalog) descrs() map[int]string {
+	if c == nil {
+		return nil
+	}
+	if !c.descrLoaded {
+		c.descrLoaded = true
+		if c.target != nil && c.registry != nil {
+			c.descrByIndex = collectEntityTextMap(c.target, c.registry.Common.System.EntPhysicalDescr.OID)
+		}
+	}
+	return c.descrByIndex
+}
+
+func (c *entityCatalog) lookupName(idx int) string {
+	if c == nil || idx <= 0 {
+		return ""
+	}
+	if name := c.names()[idx]; name != "" {
+		return name
+	}
+	return c.descrs()[idx]
+}
+
+func collectEntityTextMap(target snmpClient, rawOID string) map[int]string {
+	oid := strings.TrimSpace(rawOID)
+	if oid == "" {
+		return nil
+	}
+	rows, err := target.BulkWalkAll(oid)
+	if err != nil || len(rows) == 0 {
+		return nil
+	}
+	out := make(map[int]string, len(rows))
+	for _, v := range rows {
+		if v.Type != gosnmp.OctetString {
+			continue
+		}
+		idx, err := strconv.Atoi(extractOIDIndexSuffix(v.Name, oid))
+		if err != nil || idx <= 0 {
+			continue
+		}
+		if cleaned := SanitizeInterfaceDescription(decodeSNMPTextValue(v.Value)); cleaned != "" {
+			out[idx] = cleaned
+		}
+	}
+	return out
+}
+
+func buildInterfaceNameIndex(interfaces []InterfaceMetrics) map[int]string {
+	if len(interfaces) == 0 {
+		return nil
+	}
+	out := make(map[int]string, len(interfaces))
+	for _, iface := range interfaces {
+		trimmed := strings.TrimSpace(iface.Name)
+		if !strings.HasPrefix(strings.ToLower(trimmed), "if") {
+			continue
+		}
+		idx, err := strconv.Atoi(trimmed[2:])
+		if err != nil || idx <= 0 {
+			continue
+		}
+		if desc := strings.TrimSpace(iface.Description); desc != "" {
+			out[idx] = desc
+		}
+	}
+	return out
+}
+
+func isValidOpticalReading(val *float64, unit string) bool {
+	if val == nil || math.IsNaN(*val) || math.IsInf(*val, 0) {
+		return false
+	}
+	normalized := strings.ToLower(strings.TrimSpace(unit))
+	if normalized == "" || normalized == "dbm" {
+		return true
+	}
+	return *val > 0
+}
+
+func hasActiveOpticalReading(item OpticalTransceiverMetrics) bool {
+	return isValidOpticalReading(item.Voltage, item.VoltageUnit) ||
+		isValidOpticalReading(item.BiasCurrent, item.BiasCurrentUnit) ||
+		isValidOpticalReading(item.TxPower, item.TxPowerUnit) ||
+		isValidOpticalReading(item.RxPower, item.RxPowerUnit)
+}
+
+func lookupOpticalEntityName(catalog *entityCatalog, idx int) string {
+	if catalog == nil || idx <= 0 {
+		return ""
+	}
+	if classByIndex := catalog.classes(); len(classByIndex) > 0 {
+		if class, ok := classByIndex[idx]; ok && class != entPhysicalClassPort && class != entPhysicalClassModule {
+			return ""
+		}
+	}
+	return catalog.lookupName(idx)
+}
+
+func resolveOpticalPortName(
+	vendor string,
+	idx int,
+	catalog *entityCatalog,
+	ifaceNameByIndex map[int]string,
+) string {
+	if idx <= 0 {
+		return ""
+	}
+	if normalizeCollectorToken(vendor) == "h3c" {
+		// H3C hh3cTransceiverInfoTable 按 ifIndex 索引，优先匹配接口表避免撞上同编号的机框/风扇实体。
+		if ifaceName := strings.TrimSpace(ifaceNameByIndex[idx]); ifaceName != "" {
+			return ifaceName
+		}
+		return lookupOpticalEntityName(catalog, idx)
+	}
+	if name := lookupOpticalEntityName(catalog, idx); name != "" {
+		return name
+	}
+	return strings.TrimSpace(ifaceNameByIndex[idx])
+}
+
+// enrichOpticalTransceivers 过滤全零未插光口占位行，并按厂商索引空间（entPhysicalIndex / ifIndex）补齐端口展示名称。
+func enrichOpticalTransceivers(
+	items []OpticalTransceiverMetrics,
+	vendor string,
+	catalog *entityCatalog,
+	ifaceNameByIndex map[int]string,
+) []OpticalTransceiverMetrics {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]OpticalTransceiverMetrics, 0, len(items))
+	for _, item := range items {
+		if !hasActiveOpticalReading(item) {
+			continue
+		}
+		if strings.TrimSpace(item.Name) == "" {
+			if idx, err := strconv.Atoi(strings.TrimSpace(item.Index)); err == nil && idx > 0 {
+				item.Name = resolveOpticalPortName(vendor, idx, catalog, ifaceNameByIndex)
+			}
+		}
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		aEmpty := strings.TrimSpace(out[i].Name) == ""
+		bEmpty := strings.TrimSpace(out[j].Name) == ""
+		if aEmpty != bEmpty {
+			return !aEmpty
+		}
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].Index < out[j].Index
+	})
+	return out
+}
+
+// enrichComponents 过滤板卡噪声实体，补齐人类可读名称，并映射厂商语义状态与等级。
+func enrichComponents(
+	items []ComponentStatusMetrics,
+	vendor string,
+	catalog *entityCatalog,
+) []ComponentStatusMetrics {
+	if len(items) == 0 {
+		return nil
+	}
+	var classByIndex map[int]int64
+	if catalog != nil && hasNumericBoardIndex(items) {
+		classByIndex = catalog.classes()
+	}
+
+	out := make([]ComponentStatusMetrics, 0, len(items))
+	for _, comp := range items {
+		if !shouldKeepBoardComponent(comp, classByIndex) {
+			continue
+		}
+		comp.Name = resolveComponentName(comp, catalog)
+		if comp.State != nil {
+			comp.StatusLabel, comp.StatusLevel = resolveComponentStatus(vendor, comp.Kind, *comp.State)
+		}
+		out = append(out, comp)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		oi, oj := componentKindOrder(out[i].Kind), componentKindOrder(out[j].Kind)
+		if oi != oj {
+			return oi < oj
+		}
+		aiEmpty := strings.TrimSpace(out[i].Name) == ""
+		ajEmpty := strings.TrimSpace(out[j].Name) == ""
+		if aiEmpty != ajEmpty {
+			return !aiEmpty
+		}
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].Index < out[j].Index
+	})
+	return out
+}
+
+func hasNumericBoardIndex(items []ComponentStatusMetrics) bool {
+	for _, comp := range items {
+		if comp.Kind != "board" {
+			continue
+		}
+		if idx, err := strconv.Atoi(strings.TrimSpace(comp.Index)); err == nil && idx > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldKeepBoardComponent(comp ComponentStatusMetrics, classByIndex map[int]int64) bool {
+	if comp.Kind != "board" || len(classByIndex) == 0 {
+		return true
+	}
+	idx, err := strconv.Atoi(strings.TrimSpace(comp.Index))
+	if err != nil || idx <= 0 {
+		return true
+	}
+	class, ok := classByIndex[idx]
+	if !ok {
+		return true
+	}
+	return class == entPhysicalClassChassis ||
+		class == entPhysicalClassBackplane ||
+		class == entPhysicalClassModule ||
+		class == entPhysicalClassStack
+}
+
+func resolveComponentName(comp ComponentStatusMetrics, catalog *entityCatalog) string {
+	if existing := strings.TrimSpace(comp.Name); existing != "" {
+		return existing
+	}
+	idxStr := strings.TrimSpace(comp.Index)
+	if idx, err := strconv.Atoi(idxStr); err == nil && idx > 0 {
+		if name := catalog.lookupName(idx); name != "" {
+			return name
+		}
+		if len(idxStr) <= 4 {
+			return fmt.Sprintf("%s %s", kindLabelZH(comp.Kind), idxStr)
+		}
+		return ""
+	}
+	parts := strings.Split(idxStr, ".")
+	if len(parts) == 2 {
+		slot, err1 := strconv.Atoi(parts[0])
+		subID, err2 := strconv.Atoi(parts[1])
+		if err1 == nil && err2 == nil && slot >= 0 && subID >= 0 {
+			return fmt.Sprintf("槽位 %s · %s %s", parts[0], kindLabelZH(comp.Kind), parts[1])
+		}
+	}
+	return ""
+}
+
+func kindLabelZH(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "fan":
+		return "风扇"
+	case "power":
+		return "电源"
+	case "board":
+		return "单板"
+	default:
+		return "部件"
+	}
+}
+
+func componentKindOrder(kind string) int {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "fan":
+		return 1
+	case "power":
+		return 2
+	case "board":
+		return 3
+	default:
+		return 4
+	}
+}
+
+func resolveComponentStatus(vendor, kind string, state int64) (string, string) {
+	v := normalizeCollectorToken(vendor)
+	k := strings.ToLower(strings.TrimSpace(kind))
+	switch v {
+	case "huawei":
+		return resolveHuaweiComponentStatus(k, state)
+	case "h3c":
+		return resolveH3CComponentStatus(k, state)
+	default:
+		return resolveDefaultComponentStatus(state)
+	}
+}
+
+func resolveHuaweiComponentStatus(kind string, state int64) (string, string) {
+	switch kind {
+	case "board":
+		switch state {
+		case 3, 11, 13, 15, 16, 18:
+			return "正常", "normal"
+		case 2, 4, 12, 17:
+			return "异常/离线", "critical"
+		case 1, 19:
+			return "未安装/不支持", "unknown"
+		default:
+			return fmt.Sprintf("状态 %d", state), "unknown"
+		}
+	case "fan":
+		switch state {
+		case 1:
+			return "正常", "normal"
+		case 2:
+			return "异常", "critical"
+		default:
+			return fmt.Sprintf("状态 %d", state), "unknown"
+		}
+	case "power":
+		switch state {
+		case 1:
+			return "正常供电", "normal"
+		case 2:
+			return "未供电/异常", "critical"
+		case 3:
+			return "休眠/备用", "warning"
+		case 4:
+			return "未知", "unknown"
+		default:
+			return fmt.Sprintf("状态 %d", state), "unknown"
+		}
+	default:
+		return resolveDefaultComponentStatus(state)
+	}
+}
+
+func resolveH3CComponentStatus(kind string, state int64) (string, string) {
+	if kind == "fan" || kind == "power" {
+		switch state {
+		case 1:
+			return "正常", "normal"
+		case 2:
+			return "故障", "critical"
+		case 3:
+			return "未安装", "unknown"
+		case 4:
+			return "不支持", "unknown"
+		default:
+			return fmt.Sprintf("状态 %d", state), "unknown"
+		}
+	}
+	return resolveDefaultComponentStatus(state)
+}
+
+func resolveDefaultComponentStatus(state int64) (string, string) {
+	switch state {
+	case 1:
+		return "正常", "normal"
+	case 2:
+		return "异常", "critical"
+	default:
+		return fmt.Sprintf("状态 %d", state), "unknown"
+	}
+}
+
+func collectEntityClassMap(target snmpClient, rawOID string) map[int]int64 {
+	classOID := strings.TrimSpace(rawOID)
+	if classOID == "" {
+		return nil
+	}
+	rows, err := target.BulkWalkAll(classOID)
+	if err != nil || len(rows) == 0 {
+		return nil
+	}
+	classByIndex := make(map[int]int64, len(rows))
+	for _, v := range rows {
+		idx, err := strconv.Atoi(extractOIDIndexSuffix(v.Name, classOID))
+		if err != nil || idx <= 0 {
+			continue
+		}
+		if classVal, ok := numericPDUInt64(v); ok {
+			classByIndex[idx] = classVal
+		}
+	}
+	return classByIndex
 }
 
 // readSysDescr 读取 sysDescr（1.3.6.1.2.1.1.1.0），失败返回空串。

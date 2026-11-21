@@ -15,6 +15,10 @@ import {
   resolveTimeAxisLabelFormatter,
 } from '../../utils/monitoring'
 import { buildTimeAxisTicks, resolveTimeWindow } from '../../utils/timeSeries'
+import {
+  resolveHostInterfaceDescription,
+  resolveHostInterfaceDisplayName,
+} from './hostDisplayHelpers'
 
 export interface HostInterfaceDualChartProps {
   deviceId: number
@@ -130,6 +134,13 @@ export function HostInterfaceDualChart({
   iface,
   timeRange = '1h',
 }: HostInterfaceDualChartProps) {
+  const portName = resolveHostInterfaceDisplayName(iface)
+  const portDescription = resolveHostInterfaceDescription(iface)
+  const chartTitle =
+    portDescription !== ''
+      ? `端口双轨观测：${portName || '—'} · ${portDescription}`
+      : `端口双轨观测：${portName || '—'}`
+
   const trafficQuery = useDeviceInterfaceTraffic({
     deviceId,
     timeRange,
@@ -152,9 +163,7 @@ export function HostInterfaceDualChart({
     <div className="rounded-xl border border-border bg-card p-3.5 text-xs">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h4 className="font-semibold text-foreground">
-            端口双轨观测：{iface.alias || iface.name}
-          </h4>
+          <h4 className="font-semibold text-foreground">{chartTitle}</h4>
           <p className="text-[11px] text-muted-foreground tabular-nums">
             错包：入 {iface.in_errors} / 出 {iface.out_errors} · 丢包：入{' '}
             {iface.in_discards} / 出 {iface.out_discards}

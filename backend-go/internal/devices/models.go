@@ -318,6 +318,7 @@ type DeviceInterface struct {
 	DeviceID           int        `gorm:"column:device_id;uniqueIndex:uq_device_iface"`
 	Name               string     `gorm:"column:name;uniqueIndex:uq_device_iface"`
 	Alias              *string    `gorm:"column:alias"`
+	Description        *string    `gorm:"column:description"`
 	Speed              *int64     `gorm:"column:speed"`
 	InOctets           *int64     `gorm:"column:in_octets"`
 	OutOctets          *int64     `gorm:"column:out_octets"`

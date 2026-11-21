@@ -53,6 +53,9 @@ func BuildSNMPDeviceMetricsRequest(deviceID int, metrics *devices.SNMPMetrics) D
 	if metrics.FirmwareVersion != nil {
 		identity.FirmwareVersion = *metrics.FirmwareVersion
 	}
+	if metrics.SerialNumber != nil {
+		identity.SerialNumber = *metrics.SerialNumber
+	}
 	if metrics.DetectedType != nil {
 		identity.DetectedDeviceType = *metrics.DetectedType
 	}
@@ -119,10 +122,17 @@ func appendSNMPExtensionMetrics(metricsMap map[string]MetricValue, metrics *devi
 	}
 }
 
-// CountHardwareFaults 统计处于已知异常状态码（state == 2）的硬件组件数量。
+// CountHardwareFaults 统计处于异常状态的硬件组件数量；优先依据语义等级 status_level 判定，
+// 缺失时回退兼容历史原始状态码（state == 2）。
 func CountHardwareFaults(components []devices.ComponentStatusMetrics) int {
 	faults := 0
 	for _, comp := range components {
+		if comp.StatusLevel != "" {
+			if comp.StatusLevel == "critical" {
+				faults++
+			}
+			continue
+		}
 		if comp.State != nil && *comp.State == abnormalComponentStateCode {
 			faults++
 		}
@@ -293,6 +303,9 @@ func buildSNMPInterfaces(items []devices.InterfaceMetrics) []map[string]interfac
 		}
 		if iface.Description != "" {
 			ifaceMap["description"] = iface.Description
+		}
+		if iface.PortDescription != nil {
+			ifaceMap["port_description"] = *iface.PortDescription
 		}
 		if iface.Speed != nil {
 			ifaceMap["ifHighSpeed"] = *iface.Speed

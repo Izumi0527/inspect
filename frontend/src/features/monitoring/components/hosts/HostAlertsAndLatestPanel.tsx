@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { BellOff, CheckCircle2, ExternalLink, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { formatDateTimeMDHM } from '@/utils/formatters'
+import { formatDateTimeMDHMS, formatDateTimeYMDHMS } from '@/utils/formatters'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { getLatestData } from '../../api/monitoring-hosts.api'
@@ -21,18 +21,51 @@ import type {
   SnoozeDurationHours,
 } from '../../types/zabbix-monitoring.types'
 import {
+  compareLatestDataItemsNaturally,
+  getLatestDataDeltaToneClass,
+  isNonTrafficPortName,
+  resolveLatestDataDeltaDisplay,
+  resolveLatestDataPortLabel,
+} from '../latest/latestDataHelpers'
+import {
   AcknowledgeProblemModal,
   SnoozeProblemModal,
 } from '../overview/ProblemActionModals'
 
+type LatestMetricScope = 'all' | 'host' | 'port'
+
 export function HostLatestMetricsPanel({ deviceId }: { deviceId: number }) {
+  const [prevDeviceId, setPrevDeviceId] = useState(deviceId)
+  const [page, setPage] = useState(1)
+  const [scope, setScope] = useState<LatestMetricScope>('all')
+
+  if (prevDeviceId !== deviceId) {
+    setPrevDeviceId(deviceId)
+    setPage(1)
+    setScope('all')
+  }
+
   const query = useQuery({
-    queryKey: ['monitoring-host-latest', deviceId],
-    queryFn: () => getLatestData({ device_ids: [deviceId], page: 1, page_size: 50 }),
+    queryKey: ['monitoring-host-latest', deviceId, page],
+    queryFn: () => getLatestData({ device_ids: [deviceId], page, page_size: 50 }),
     staleTime: 30_000,
     retry: 1,
   })
   const items = query.data?.items ?? []
+  const total = query.data?.total ?? items.length
+  const totalPages = Math.max(1, query.data?.total_pages ?? 1)
+  const visibleItems = items
+    .filter((item) => {
+      if (item.interface_name.trim() === '') return true
+      const portName = resolveLatestDataPortLabel(item)
+      return !isNonTrafficPortName(portName) && !isNonTrafficPortName(item.interface_name)
+    })
+    .sort(compareLatestDataItemsNaturally)
+  const filteredItems = visibleItems.filter((item) => {
+    if (scope === 'host') return item.interface_name.trim() === ''
+    if (scope === 'port') return item.interface_name.trim() !== ''
+    return true
+  })
 
   if (query.isLoading) {
     return <div className="py-8 text-center text-xs text-muted-foreground">正在加载主机实时指标...</div>
@@ -41,48 +74,131 @@ export function HostLatestMetricsPanel({ deviceId }: { deviceId: number }) {
     return <div className="py-8 text-center text-xs text-muted-foreground">暂无最新指标快照</div>
   }
 
+  const scopeOptions: ReadonlyArray<{ value: LatestMetricScope; label: string }> = [
+    { value: 'all', label: '全部' },
+    { value: 'host', label: '整机' },
+    { value: 'port', label: '端口' },
+  ]
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <table className="w-full border-collapse text-left text-xs">
-        <thead>
-          <tr className="h-8 border-b border-border bg-surface-2 text-muted-foreground">
-            <th className="px-2.5 font-medium">指标名称</th>
-            <th className="px-2 font-medium">端口</th>
-            <th className="px-2 text-right font-medium">最新值</th>
-            <th className="px-2 text-right font-medium">较上次变化</th>
-            <th className="px-2 text-right font-medium">采集时间</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => (
-            <tr
-              key={`${item.metric_name}-${item.interface_name}-${item.item_key}`}
-              className="h-9 border-b border-border/50 tabular-nums"
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground tabular-nums">
+          共 {total} 项实时指标
+        </span>
+        <div className="inline-flex items-center rounded-lg border border-border bg-surface-2 p-0.5">
+          {scopeOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setScope(opt.value)}
+              aria-pressed={scope === opt.value}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                scope === opt.value
+                  ? 'bg-card text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
-              <td className="px-2.5 py-1.5">
-                <div className="font-medium text-foreground">{item.metric_label}</div>
-                <div className="font-mono text-[10px] text-muted-foreground">{item.item_key}</div>
-              </td>
-              <td className="px-2 py-1.5 font-mono text-muted-foreground">
-                {item.interface_name || '整机'}
-              </td>
-              <td className={`px-2 py-1.5 text-right font-semibold ${item.is_abnormal ? 'text-danger' : 'text-foreground'}`}>
-                {item.display_value}
-              </td>
-              <td className="px-2 py-1.5 text-right text-muted-foreground">
-                {item.delta === null
-                  ? '—'
-                  : item.delta > 0
-                    ? `+${item.delta}`
-                    : String(item.delta)}
-              </td>
-              <td className="px-2 py-1.5 text-right text-muted-foreground">
-                {formatDateTimeMDHM(item.collected_at)}
-              </td>
-            </tr>
+              {opt.label}
+            </button>
           ))}
-        </tbody>
-      </table>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-border bg-card">
+        <table className="w-full border-collapse text-left text-xs">
+          <thead>
+            <tr className="h-8 border-b border-border bg-surface-2 text-muted-foreground">
+              <th className="px-2.5 font-medium">指标名称</th>
+              <th className="px-2 font-medium">端口</th>
+              <th className="px-2 text-right font-medium">最新值</th>
+              <th className="px-2 text-right font-medium">较上次变化</th>
+              <th className="px-2 text-right font-medium">采集时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredItems.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  当前页暂无符合条件的指标
+                </td>
+              </tr>
+            ) : (
+              filteredItems.map((item) => {
+                const portLabel = resolveLatestDataPortLabel(item)
+                const deltaDisplay = resolveLatestDataDeltaDisplay(item)
+                const deltaToneClass = getLatestDataDeltaToneClass(item)
+
+                return (
+                  <tr
+                    key={`${item.metric_name}-${item.interface_name}-${item.item_key}`}
+                    className="h-9 border-b border-border/50 tabular-nums"
+                  >
+                    <td className="px-2.5 py-1.5">
+                      <div className="font-medium text-foreground">{item.metric_label}</div>
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {portLabel === '整机' ? (
+                        <span className="inline-flex rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                          整机
+                        </span>
+                      ) : (
+                        <span
+                          className={`font-mono ${
+                            portLabel === '—' ? 'text-muted-foreground' : 'text-foreground'
+                          }`}
+                        >
+                          {portLabel}
+                        </span>
+                      )}
+                    </td>
+                    <td
+                      className={`px-2 py-1.5 text-right font-semibold whitespace-nowrap ${
+                        item.is_abnormal ? 'text-danger' : 'text-foreground'
+                      }`}
+                    >
+                      {item.display_value}
+                    </td>
+                    <td className={`px-2 py-1.5 text-right whitespace-nowrap ${deltaToneClass}`}>
+                      {deltaDisplay}
+                    </td>
+                    <td
+                      className="px-2 py-1.5 text-right text-muted-foreground whitespace-nowrap"
+                      title={formatDateTimeYMDHMS(item.collected_at)}
+                    >
+                      {formatDateTimeMDHMS(item.collected_at)}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="rounded-md border border-border bg-card px-2.5 py-1 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            上一页
+          </button>
+          <span className="tabular-nums">
+            第 {page} / {totalPages} 页
+          </span>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="rounded-md border border-border bg-card px-2.5 py-1 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            下一页
+          </button>
+        </div>
+      )}
     </div>
   )
 }

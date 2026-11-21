@@ -2,6 +2,8 @@ package monitoring_test
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,6 +88,16 @@ func TestBuildSNMPDeviceMetricsRequest_NeighborsAndDetectedType(t *testing.T) {
 			t.Fatalf("Identity = %+v", req.Identity)
 		}
 	})
+
+	t.Run("SerialNumber 透传至 Identity.SerialNumber", func(t *testing.T) {
+		req := monitoring.BuildSNMPDeviceMetricsRequest(3, &devices.SNMPMetrics{
+			SerialNumber: strPtr("210235A1B2C3"),
+			CollectedAt:  time.Now(),
+		})
+		if req.Identity == nil || req.Identity.SerialNumber != "210235A1B2C3" {
+			t.Fatalf("Identity = %+v, want SerialNumber=210235A1B2C3", req.Identity)
+		}
+	})
 }
 
 // TestWriteDeviceMetrics_WritesLLDPIdentityColumnsOnlyWhenChanged LLDP 状态与识别身份沿用
@@ -103,10 +115,13 @@ func TestWriteDeviceMetrics_WritesLLDPIdentityColumnsOnlyWhenChanged(t *testing.
 	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO device_latest_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`UPDATE "devices" SET "cpu_usage"`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`SAVEPOINT`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`UPDATE "devices" SET "detected_sys_name"=\$1 WHERE id = \$2 AND \(detected_sys_name IS NULL OR detected_sys_name <> \$3\)`).
 		WithArgs("16F-HJ-SW", 9, "16F-HJ-SW").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`SAVEPOINT`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`UPDATE "devices" SET "detected_chassis_id"=\$1 WHERE id = \$2 AND \(detected_chassis_id IS NULL OR detected_chassis_id <> \$3\)`).
 		WithArgs("4c:1f:cc:1a:07:48", 9, "4c:1f:cc:1a:07:48").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`SAVEPOINT`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`UPDATE "devices" SET "lldp_status"=\$1 WHERE id = \$2 AND \(lldp_status IS NULL OR lldp_status <> \$3\)`).
 		WithArgs("mib_unreachable", 9, "mib_unreachable").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
@@ -139,6 +154,7 @@ func TestWriteDeviceMetrics_ReplacesNeighborsInSavepoint(t *testing.T) {
 	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO device_latest_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`UPDATE "devices" SET "cpu_usage"=\$1 WHERE id = \$2`).WithArgs(cpu, 9).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`SAVEPOINT`).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`UPDATE "devices" SET "detected_device_type"=\$1 WHERE id = \$2 AND \(detected_device_type IS NULL OR detected_device_type <> \$3\)`).
 		WithArgs("router", 9, "router").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`SAVEPOINT`).WillReturnResult(sqlmock.NewResult(0, 0))
@@ -207,6 +223,119 @@ func TestWriteDeviceMetrics_EmptyNeighborsClearsOldRows(t *testing.T) {
 	if _, err := writer.WriteDeviceMetrics(context.Background(), monitoring.DeviceMetricsRequest{
 		DeviceID: 9,
 		Metrics:  map[string]monitoring.MetricValue{"cpu_usage": {Value: &cpu}},
+	}); err != nil {
+		t.Fatalf("WriteDeviceMetrics() error = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
+// TestWriteDeviceMetrics_WritesSerialNumberOnlyWhenChanged 验证序列号通过差量条件回填至 devices.serial_number。
+func TestWriteDeviceMetrics_WritesSerialNumberOnlyWhenChanged(t *testing.T) {
+	db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
+	defer cleanup()
+
+	writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
+	cpu := 5.0
+
+	mock.ExpectQuery(`SELECT id FROM "devices" WHERE id = \$1 LIMIT \$2`).WithArgs(9, 1).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
+	mock.ExpectBegin()
+	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO device_latest_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`UPDATE "devices" SET "cpu_usage"`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`SAVEPOINT`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`UPDATE "devices" SET "serial_number"=\$1 WHERE id = \$2 AND \(serial_number IS NULL OR serial_number <> \$3\)`).
+		WithArgs("210235A1B2C3", 9, "210235A1B2C3").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	if _, err := writer.WriteDeviceMetrics(context.Background(), monitoring.DeviceMetricsRequest{
+		DeviceID: 9,
+		Metrics:  map[string]monitoring.MetricValue{"cpu_usage": {Value: &cpu}},
+		Identity: &monitoring.DeviceIdentity{SerialNumber: " 210235A1B2C3 "},
+	}); err != nil {
+		t.Fatalf("WriteDeviceMetrics() error = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
+// TestWriteDeviceMetrics_RejectsDirtyIdentityFieldsWithoutUpdates 外部推送脏 Identity 字段会被清洗拦截，
+// 不触发任何身份 SAVEPOINT 或 UPDATE。
+func TestWriteDeviceMetrics_RejectsDirtyIdentityFieldsWithoutUpdates(t *testing.T) {
+	dirtySerials := []string{
+		"N/A",
+		"SN\x00123",
+		"SN\x1b[31m123",
+		strings.Repeat("A", 129),
+	}
+	for _, dirtySerial := range dirtySerials {
+		db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
+		writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
+		cpu := 10.0
+
+		mock.ExpectQuery(`SELECT id FROM "devices" WHERE id = \$1 LIMIT \$2`).WithArgs(9, 1).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
+		mock.ExpectBegin()
+		mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec(`INSERT INTO device_latest_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectExec(`UPDATE "devices" SET "cpu_usage"`).WillReturnResult(sqlmock.NewResult(0, 1))
+		mock.ExpectCommit()
+
+		if _, err := writer.WriteDeviceMetrics(context.Background(), monitoring.DeviceMetricsRequest{
+			DeviceID: 9,
+			Metrics:  map[string]monitoring.MetricValue{"cpu_usage": {Value: &cpu}},
+			Identity: &monitoring.DeviceIdentity{
+				Model:           "S5700\nBAD",
+				FirmwareVersion: strings.Repeat("V", 256),
+				SerialNumber:    dirtySerial,
+				SysName:         "SW\x07CORE",
+				ChassisID:       strings.Repeat("C", 256),
+			},
+		}); err != nil {
+			cleanup()
+			t.Fatalf("WriteDeviceMetrics(%q) error = %v", dirtySerial, err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			cleanup()
+			t.Fatalf("sqlmock expectations not met for %q: %v", dirtySerial, err)
+		}
+		cleanup()
+	}
+}
+
+// TestWriteDeviceMetrics_IdentityColumnFailureRollsBackSavepointOnly 单列身份 UPDATE 失败只回滚自身 SAVEPOINT，
+// 后续身份列与核心指标事务仍正常 COMMIT。
+func TestWriteDeviceMetrics_IdentityColumnFailureRollsBackSavepointOnly(t *testing.T) {
+	db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
+	defer cleanup()
+
+	writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
+	cpu := 15.0
+
+	mock.ExpectQuery(`SELECT id FROM "devices" WHERE id = \$1 LIMIT \$2`).WithArgs(9, 1).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
+	mock.ExpectBegin()
+	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS device_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`INSERT INTO device_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO device_latest_metrics`).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`UPDATE "devices" SET "cpu_usage"`).WillReturnResult(sqlmock.NewResult(0, 1))
+
+	mock.ExpectExec(`SAVEPOINT`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`UPDATE "devices" SET "model"=\$1 WHERE id = \$2 AND \(model IS NULL OR model <> \$3\)`).
+		WithArgs("S5700", 9, "S5700").WillReturnError(errors.New("simulated column error"))
+	mock.ExpectExec(`ROLLBACK TO SAVEPOINT`).WillReturnResult(sqlmock.NewResult(0, 0))
+
+	mock.ExpectExec(`SAVEPOINT`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`UPDATE "devices" SET "serial_number"=\$1 WHERE id = \$2 AND \(serial_number IS NULL OR serial_number <> \$3\)`).
+		WithArgs("210235A1B2C3", 9, "210235A1B2C3").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	if _, err := writer.WriteDeviceMetrics(context.Background(), monitoring.DeviceMetricsRequest{
+		DeviceID: 9,
+		Metrics:  map[string]monitoring.MetricValue{"cpu_usage": {Value: &cpu}},
+		Identity: &monitoring.DeviceIdentity{Model: "S5700", SerialNumber: "210235A1B2C3"},
 	}); err != nil {
 		t.Fatalf("WriteDeviceMetrics() error = %v", err)
 	}

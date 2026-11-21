@@ -59,11 +59,13 @@ export interface LatestDataItem {
   metric_name: string
   metric_label: string
   interface_name: string
+  interface_display_name?: string
   item_key: string
   application_tag: string
   metric_value: number | null
   prev_value: number | null
   delta: number | null
+  delta_display?: string
   display_value: string
   raw_text?: string
   metric_unit?: string

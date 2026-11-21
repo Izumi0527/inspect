@@ -278,11 +278,11 @@ func TestSNMPPayload_ErrorRateRespectsMaxGapAndFlapCountAccumulates(t *testing.T
 	// 验证 flap_count_1h == 2 与 in_error_rate == (12-2)/300 写入 device_interfaces
 	mock.ExpectExec(`(?is)INSERT INTO device_interfaces`).
 		WithArgs(
-			11, "if1", "GE0/0/1", nil, nil, false, true, "full_duplex",
+			11, "if1", "GE0/0/1", nil, nil, nil, false, true, "full_duplex",
 			int64(12), int64(0), int64(0), int64(0),
 			float64(10)/300.0, float64(0),
 			float64(0), float64(0), false,
-			2, t1, true, t1, t1, t1,
+			2, t1, true, t1, t1, t1, false,
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS interface_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
@@ -515,4 +515,120 @@ func TestEngineHealthTracker_ThreadSafeSnapshot(t *testing.T) {
 
 func floatPtr(v float64) *float64 {
 	return &v
+}
+
+func TestSNMPPayload_PortDescriptionPropagationAndNumericGuard(t *testing.T) {
+	numericDesc := "1001"
+	emptyDesc := ""
+	t1 := time.Date(2026, 11, 22, 0, 0, 0, 0, time.UTC)
+
+	req := monitoring.BuildSNMPDeviceMetricsRequest(15, &devices.SNMPMetrics{
+		Interfaces: []devices.InterfaceMetrics{
+			{Name: "if1", Description: "GigabitEthernet0/0/1", PortDescription: &numericDesc},
+			{Name: "if2", Description: "GigabitEthernet0/0/2", PortDescription: &emptyDesc},
+			{Name: "if3", Description: "GigabitEthernet0/0/3", PortDescription: nil},
+		},
+		CollectedAt: t1,
+	})
+
+	if len(req.Interfaces) != 3 {
+		t.Fatalf("len(Interfaces) = %d, want 3", len(req.Interfaces))
+	}
+	if req.Interfaces[0]["port_description"] != "1001" {
+		t.Fatalf("if1 port_description = %#v, want 1001", req.Interfaces[0]["port_description"])
+	}
+	if got, exists := req.Interfaces[1]["port_description"]; !exists || got != "" {
+		t.Fatalf("if2 port_description = (%#v, %v), want (\"\", true)", got, exists)
+	}
+	if _, exists := req.Interfaces[2]["port_description"]; exists {
+		t.Fatalf("if3 should not carry port_description when nil: %#v", req.Interfaces[2])
+	}
+
+	db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
+	defer cleanup()
+	writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
+
+	mock.ExpectQuery(`SELECT id FROM "devices" WHERE id = \$1 LIMIT \$2`).
+		WithArgs(15, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(15))
+	mock.ExpectBegin()
+	mock.ExpectExec(`SAVEPOINT`).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(`(?is)SELECT name, speed, is_up, admin_up, duplex_status, in_errors, out_errors, flap_count_1h, last_status_change_at, last_updated, lld_monitored FROM "device_interfaces" WHERE device_id = \$1`).
+		WithArgs(15).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"name", "speed", "is_up", "admin_up", "duplex_status", "in_errors", "out_errors",
+			"flap_count_1h", "last_status_change_at", "last_updated", "lld_monitored",
+		}))
+
+	// if1: hasPortDescription=true, description="1001" (不进 interface_metrics!)
+	mock.ExpectExec(`(?is)INSERT INTO device_interfaces`).
+		WithArgs(
+			15, "if1", "GigabitEthernet0/0/1", "1001", nil, nil, nil, true, "unknown",
+			int64(0), int64(0), int64(0), int64(0),
+			float64(0), float64(0), float64(0), float64(0), true,
+			0, nil, true, t1, t1, t1, true,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	// if2: hasPortDescription=true, description=nil (清空为 NULL)
+	mock.ExpectExec(`(?is)INSERT INTO device_interfaces`).
+		WithArgs(
+			15, "if2", "GigabitEthernet0/0/2", nil, nil, nil, nil, true, "unknown",
+			int64(0), int64(0), int64(0), int64(0),
+			float64(0), float64(0), float64(0), float64(0), true,
+			0, nil, true, t1, t1, t1, true,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	// if3: hasPortDescription=false, description=nil (保留旧值)
+	mock.ExpectExec(`(?is)INSERT INTO device_interfaces`).
+		WithArgs(
+			15, "if3", "GigabitEthernet0/0/3", nil, nil, nil, nil, true, "unknown",
+			int64(0), int64(0), int64(0), int64(0),
+			float64(0), float64(0), float64(0), float64(0), true,
+			0, nil, true, t1, t1, t1, false,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	mock.ExpectExec(`CREATE SEQUENCE IF NOT EXISTS interface_metrics_id_seq`).WillReturnResult(sqlmock.NewResult(0, 0))
+	// 每个接口仅 3 条指标（utilization_in / utilization_out / if_flap_count_1h），共 9 条（绝不能出现 port_description=1001）
+	mock.ExpectExec(`INSERT INTO interface_metrics`).WillReturnResult(sqlmock.NewResult(0, 9))
+	latestArgs := make([]driver.Value, 9*11)
+	for i := range latestArgs {
+		latestArgs[i] = sqlmock.AnyArg()
+	}
+	mock.ExpectExec(`(?is)INSERT INTO device_latest_metrics`).
+		WithArgs(latestArgs...).
+		WillReturnResult(sqlmock.NewResult(0, 9))
+	mock.ExpectCommit()
+
+	res, err := writer.WriteDeviceMetrics(context.Background(), req)
+	if err != nil {
+		t.Fatalf("WriteDeviceMetrics() error = %v", err)
+	}
+	if res.InterfaceMetrics != 9 {
+		t.Fatalf("InterfaceMetrics = %d, want 9 (pure numeric port_description must not become a metric)", res.InterfaceMetrics)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}
+
+func TestCountHardwareFaults_RespectsStatusLevelAndKeepsLegacyFallback(t *testing.T) {
+	i64 := func(v int64) *int64 { return &v }
+	items := []devices.ComponentStatusMetrics{
+		// 华为正常单板 state=3，StatusLevel=normal -> 不计故障
+		{Index: "201326593", Kind: "board", State: i64(3), StatusLevel: "normal"},
+		// 华为异常单板 state=4，StatusLevel=critical -> 计 1 故障
+		{Index: "201326594", Kind: "board", State: i64(4), StatusLevel: "critical"},
+		// 华为异常风扇 state=2，StatusLevel=critical -> 计 1 故障
+		{Index: "0.3", Kind: "fan", State: i64(2), StatusLevel: "critical"},
+		// 休眠电源 state=3，StatusLevel=warning -> 不计故障
+		{Index: "3", Kind: "power", State: i64(3), StatusLevel: "warning"},
+		// 历史数据无 StatusLevel，state=2 -> 兼容计 1 故障
+		{Index: "1", Kind: "fan", State: i64(2)},
+		// 历史数据无 StatusLevel，state=3 -> 不计故障
+		{Index: "2", Kind: "board", State: i64(3)},
+	}
+	if got := monitoring.CountHardwareFaults(items); got != 3 {
+		t.Fatalf("CountHardwareFaults() = %d, want 3", got)
+	}
 }

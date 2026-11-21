@@ -269,6 +269,8 @@ func defaultInterfaceMetricUnit(metricName string) string {
 	switch metricName {
 	case "bandwidth_in", "bandwidth_out":
 		return "bps"
+	case "ifHCInOctets", "ifHCOutOctets", "if_hc_in_octets", "if_hc_out_octets", "network_bytes_in", "network_bytes_out":
+		return "bytes"
 	case "utilization_in", "utilization_out":
 		return "%"
 	case "if_in_errors", "if_out_errors", "if_in_discards", "if_out_discards", "if_flap_count_1h":

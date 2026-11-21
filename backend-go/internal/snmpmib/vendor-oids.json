@@ -83,6 +83,21 @@
         "method": "bulkwalk",
         "value_type": "string"
       },
+      "ent_physical_class": {
+        "oid": "1.3.6.1.2.1.47.1.1.1.1.5",
+        "method": "bulkwalk",
+        "value_type": "integer"
+      },
+      "ent_physical_name": {
+        "oid": "1.3.6.1.2.1.47.1.1.1.1.7",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
+      "ent_physical_serial_num": {
+        "oid": "1.3.6.1.2.1.47.1.1.1.1.11",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
       "dot1d_base_bridge_address": {
         "oid": "1.3.6.1.2.1.17.1.1.0",
         "method": "get",
@@ -92,6 +107,16 @@
     "interfaces": {
       "if_descr": {
         "oid": "1.3.6.1.2.1.2.2.1.2",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
+      "if_name": {
+        "oid": "1.3.6.1.2.1.31.1.1.1.1",
+        "method": "bulkwalk",
+        "value_type": "string"
+      },
+      "if_alias": {
+        "oid": "1.3.6.1.2.1.31.1.1.1.18",
         "method": "bulkwalk",
         "value_type": "string"
       },

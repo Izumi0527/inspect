@@ -1,9 +1,11 @@
 package devices_test
 
 import (
+	"strings"
 	"testing"
 	_ "unsafe"
 
+	"github.com/gosnmp/gosnmp"
 	"github.com/your-org/inspect-system/backend-go/internal/devices"
 	"github.com/your-org/inspect-system/backend-go/internal/snmpmib"
 )
@@ -13,6 +15,9 @@ func parseDeviceIdentityFromSysDescr(sysDescr string) (string, string)
 
 //go:linkname sanitizeIdentityValue github.com/your-org/inspect-system/backend-go/internal/devices.sanitizeIdentityValue
 func sanitizeIdentityValue(value string) string
+
+//go:linkname sanitizeSerialNumber github.com/your-org/inspect-system/backend-go/internal/devices.sanitizeSerialNumber
+func sanitizeSerialNumber(value string) string
 
 //go:linkname collectDeviceIdentityWithContext github.com/your-org/inspect-system/backend-go/internal/devices.(*SNMPCollector).collectDeviceIdentityWithContext
 func collectDeviceIdentityWithContext(
@@ -331,6 +336,287 @@ func TestCollectDeviceIdentityWithContext_SysObjectIDFallback(t *testing.T) {
 		)
 		if metrics.Model != nil {
 			t.Fatalf("Model = %q, want nil for generic root OID", *metrics.Model)
+		}
+	})
+}
+
+func TestSanitizeSerialNumber(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"正常序列号", "210235A1B2C3D4000001", "210235A1B2C3D4000001"},
+		{"首尾 NUL 填充应清洗通过", "210235A1B2C3\x00\x00", "210235A1B2C3"},
+		{"首尾 NUL 与空白联合填充应清洗通过", "\x00 210235A1B2C3 \t\x00\x00", "210235A1B2C3"},
+		{"中间 NUL 应被控制字符检查拒绝", "SN\x00123", ""},
+		{"允许合法分隔符与空格", "SN-2026_01.A", "SN-2026_01.A"},
+		{"占位符 none 忽略大小写", "None", ""},
+		{"占位符 null", "NULL", ""},
+		{"占位符 n/a", "N/A", ""},
+		{"占位符 na", "na", ""},
+		{"占位符 nil", "nil", ""},
+		{"占位符 unknown", "Unknown", ""},
+		{"占位符 default", "Default", ""},
+		{"占位符 not applicable", "Not Applicable", ""},
+		{"占位符 oem", "To be filled by O.E.M.", ""},
+		{"占位符 empty", "EMPTY", ""},
+		{"占位符 uninitialized", "uninitialized", ""},
+		{"占位符 中文无", "无", ""},
+		{"全 0 伪值", "00000000", ""},
+		{"全横线伪值", "---", ""},
+		{"全分隔符 IP 伪值", "0.0.0.0", ""},
+		{"全下划线空格伪值", " _ _ ", ""},
+		{"过短拒绝 (<3)", "AB", ""},
+		{"最小合法长度 (3)", "ABC", "ABC"},
+		{"最大合法长度 (128)", strings.Repeat("A", 128), strings.Repeat("A", 128)},
+		{"超长拒绝 (>128)", strings.Repeat("A", 129), ""},
+		{"控制字符拒绝", "SN\x07123", ""},
+		{"换行符拒绝", "SN\n123", ""},
+		{"非 ASCII 字符拒绝", "序列号123", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sanitizeSerialNumber(tt.input); got != tt.want {
+				t.Errorf("sanitizeSerialNumber(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCollectDeviceIdentityWithContext_SerialNumber(t *testing.T) {
+	registry, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry() error = %v", err)
+	}
+	collector := devices.NewSNMPCollectorWithRegistry(nil, registry)
+	serialOID := registry.Common.System.EntPhysicalSerialNum.OID
+	classOID := registry.Common.System.EntPhysicalClass.OID
+
+	strPDU := func(base string, idx string, val string) gosnmp.SnmpPDU {
+		return gosnmp.SnmpPDU{Name: "." + base + "." + idx, Type: gosnmp.OctetString, Value: []byte(val)}
+	}
+	intPDU := func(base string, idx string, val int) gosnmp.SnmpPDU {
+		return gosnmp.SnmpPDU{Name: "." + base + "." + idx, Type: gosnmp.Integer, Value: val}
+	}
+
+	t.Run("chassis(3) 优先于 port/fan/powerSupply/module，即便索引更大", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				serialOID: {
+					strPDU(serialOID, "2", "SFP-PORT-01"),
+					strPDU(serialOID, "3", "FAN-SN-01"),
+					strPDU(serialOID, "4", "PSU-SN-01"),
+					strPDU(serialOID, "5", "MOD-SN-01"),
+					strPDU(serialOID, "9", "CHASSIS-SN-99"),
+				},
+				classOID: {
+					intPDU(classOID, "2", 10),
+					intPDU(classOID, "3", 7),
+					intPDU(classOID, "4", 6),
+					intPDU(classOID, "5", 9),
+					intPDU(classOID, "9", 3),
+				},
+			},
+		}
+		collectDeviceIdentityWithContext(collector, client, metrics, registry, "sys", true, "", true)
+		if metrics.SerialNumber == nil || *metrics.SerialNumber != "CHASSIS-SN-99" {
+			t.Fatalf("SerialNumber = %v, want CHASSIS-SN-99", metrics.SerialNumber)
+		}
+	})
+
+	t.Run("chassis 为空时按 stack(11) -> module(9) -> backplane(4) 优先级回退", func(t *testing.T) {
+		cases := []struct {
+			name    string
+			serials []gosnmp.SnmpPDU
+			classes []gosnmp.SnmpPDU
+			want    string
+		}{
+			{
+				name: "stack(11) 优先于 module(9)",
+				serials: []gosnmp.SnmpPDU{
+					strPDU(serialOID, "1", "MOD-SN-1"),
+					strPDU(serialOID, "2", "STACK-SN-2"),
+				},
+				classes: []gosnmp.SnmpPDU{
+					intPDU(classOID, "1", 9),
+					intPDU(classOID, "2", 11),
+				},
+				want: "STACK-SN-2",
+			},
+			{
+				name: "module(9) 优先于 backplane(4)",
+				serials: []gosnmp.SnmpPDU{
+					strPDU(serialOID, "1", "BP-SN-1"),
+					strPDU(serialOID, "3", "MOD-SN-3"),
+				},
+				classes: []gosnmp.SnmpPDU{
+					intPDU(classOID, "1", 4),
+					intPDU(classOID, "3", 9),
+				},
+				want: "MOD-SN-3",
+			},
+			{
+				name: "backplane(4) 优先于 other(1)",
+				serials: []gosnmp.SnmpPDU{
+					strPDU(serialOID, "1", "OTHER-SN-1"),
+					strPDU(serialOID, "2", "BP-SN-2"),
+				},
+				classes: []gosnmp.SnmpPDU{
+					intPDU(classOID, "1", 1),
+					intPDU(classOID, "2", 4),
+				},
+				want: "BP-SN-2",
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				metrics := &devices.SNMPMetrics{}
+				client := &fakeCollectorSNMPClient{
+					bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+						serialOID: tc.serials,
+						classOID:  tc.classes,
+					},
+				}
+				collectDeviceIdentityWithContext(collector, client, metrics, registry, "sys", true, "", true)
+				if metrics.SerialNumber == nil || *metrics.SerialNumber != tc.want {
+					t.Fatalf("SerialNumber = %v, want %s", metrics.SerialNumber, tc.want)
+				}
+			})
+		}
+	})
+
+	t.Run("仅外设(port/fan/psu/cpu)有序列号时不误取", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				serialOID: {
+					strPDU(serialOID, "1", "PORT-SN-1"),
+					strPDU(serialOID, "2", "FAN-SN-2"),
+					strPDU(serialOID, "3", "PSU-SN-3"),
+					strPDU(serialOID, "4", "CPU-SN-4"),
+				},
+				classOID: {
+					intPDU(classOID, "1", 10),
+					intPDU(classOID, "2", 7),
+					intPDU(classOID, "3", 6),
+					intPDU(classOID, "4", 12),
+				},
+			},
+		}
+		collectDeviceIdentityWithContext(collector, client, metrics, registry, "sys", true, "", true)
+		if metrics.SerialNumber != nil {
+			t.Fatalf("SerialNumber = %q, want nil when only peripheral serials exist", *metrics.SerialNumber)
+		}
+	})
+
+	t.Run("entPhysicalClass 不可读时按最小索引兜底", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				serialOID: {
+					strPDU(serialOID, "10", "SN-INDEX-10"),
+					strPDU(serialOID, "2", "SN-INDEX-02"),
+					strPDU(serialOID, "5", "SN-INDEX-05"),
+				},
+			},
+		}
+		collectDeviceIdentityWithContext(collector, client, metrics, registry, "sys", true, "", true)
+		if metrics.SerialNumber == nil || *metrics.SerialNumber != "SN-INDEX-02" {
+			t.Fatalf("SerialNumber = %v, want SN-INDEX-02", metrics.SerialNumber)
+		}
+	})
+
+	t.Run("多 chassis 堆叠按最小索引确定性选择", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				serialOID: {
+					strPDU(serialOID, "12", "CHASSIS-SLOT-2"),
+					strPDU(serialOID, "4", "CHASSIS-SLOT-1"),
+				},
+				classOID: {
+					intPDU(classOID, "12", 3),
+					intPDU(classOID, "4", 3),
+				},
+			},
+		}
+		collectDeviceIdentityWithContext(collector, client, metrics, registry, "sys", true, "", true)
+		if metrics.SerialNumber == nil || *metrics.SerialNumber != "CHASSIS-SLOT-1" {
+			t.Fatalf("SerialNumber = %v, want CHASSIS-SLOT-1", metrics.SerialNumber)
+		}
+	})
+
+	t.Run("entPhysicalSerialNum 为空或不合法时不触发 entPhysicalClass walk", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				serialOID: {
+					strPDU(serialOID, "1", "N/A"),
+					strPDU(serialOID, "2", "000000"),
+				},
+			},
+		}
+		collectDeviceIdentityWithContext(collector, client, metrics, registry, "sys", true, "", true)
+		if metrics.SerialNumber != nil {
+			t.Fatalf("SerialNumber = %q, want nil", *metrics.SerialNumber)
+		}
+		for _, calledOID := range client.bulkWalkCalls {
+			if calledOID == classOID {
+				t.Fatalf("unexpected BulkWalkAll(%s) when no valid serial candidates exist", classOID)
+			}
+		}
+	})
+
+	t.Run("真实 OctetString []byte 路径直接拦截控制字符与非 ASCII，保留首尾 NUL 合法串", func(t *testing.T) {
+		dirtyCases := []struct {
+			name string
+			raw  []byte
+		}{
+			{"BEL 控制字符", []byte("SN\x07123")},
+			{"换行控制字符", []byte("SN\n123")},
+			{"中间 NUL 字节", []byte("SN\x00123")},
+			{"非 ASCII 中文", []byte("序列号123")},
+			{"首尾二进制脏字节", []byte{0x01, 'A', 'B', 'C', 0xff}},
+		}
+		for _, tc := range dirtyCases {
+			t.Run(tc.name, func(t *testing.T) {
+				metrics := &devices.SNMPMetrics{}
+				client := &fakeCollectorSNMPClient{
+					bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+						serialOID: {
+							{Name: "." + serialOID + ".1", Type: gosnmp.OctetString, Value: tc.raw},
+						},
+					},
+				}
+				collectDeviceIdentityWithContext(collector, client, metrics, registry, "sys", true, "", true)
+				if metrics.SerialNumber != nil {
+					t.Fatalf("SerialNumber = %q, want nil for dirty []byte %v", *metrics.SerialNumber, tc.raw)
+				}
+				for _, calledOID := range client.bulkWalkCalls {
+					if calledOID == classOID {
+						t.Fatalf("unexpected BulkWalkAll(%s) when dirty []byte candidate rejected", classOID)
+					}
+				}
+			})
+		}
+
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				serialOID: {
+					{Name: "." + serialOID + ".1", Type: gosnmp.OctetString, Value: []byte("210235A1B2C3\x00\x00")},
+				},
+				classOID: {
+					intPDU(classOID, "1", 3),
+				},
+			},
+		}
+		collectDeviceIdentityWithContext(collector, client, metrics, registry, "sys", true, "", true)
+		if metrics.SerialNumber == nil || *metrics.SerialNumber != "210235A1B2C3" {
+			t.Fatalf("SerialNumber = %v, want 210235A1B2C3", metrics.SerialNumber)
 		}
 	})
 }
