@@ -303,6 +303,35 @@ export function buildHostMetricLine(device: HostMatrixItem): string {
   return `CPU ${cpu} | 内存 ${mem} | 温度 ${temp} | Ping RTT ${rtt}`
 }
 
+function appendSNMPDiagnosticsSummary(lines: string[], detail: HostDetailResponse): void {
+  const diag = detail.snmp_extensions.diagnostics
+  if (!diag) return
+
+  const vendorLabel = diag.effective_vendor || detail.device.vendor || '未知'
+  const parts = [`厂商=${vendorLabel}`]
+  if (diag.sys_object_id) {
+    parts.push(`sysObjectID=${diag.sys_object_id}`)
+  }
+  if (diag.enterprise_mapped && diag.canonical_prefix && diag.active_prefix) {
+    parts.push(`企业前缀重映射=${diag.canonical_prefix}->${diag.active_prefix}`)
+  }
+  parts.push(`耗时=${diag.total_elapsed_ms}ms`)
+  lines.push(`- SNMP 识别：${parts.join(' | ')}`)
+
+  const abnormal = (diag.candidates ?? []).filter(
+    (c) => c.status !== 'hit' || Boolean(c.error_class) || c.elapsed_ms >= 500
+  )
+  if (abnormal.length > 0) {
+    lines.push(`- SNMP 异常/慢候选（${abnormal.length} 项）：`)
+    abnormal.slice(0, 6).forEach((c) => {
+      const errSuffix = c.error_class ? `, err=${c.error_class}` : ''
+      lines.push(
+        `  - [${c.category}] ${c.candidate_id} (${c.oid}): ${c.status}, rows=${c.rows}, ${c.elapsed_ms}ms${errSuffix}`
+      )
+    })
+  }
+}
+
 /**
  * 构建脱敏排障诊断摘要（严禁包含任何密码、SNMP 团体字、私钥或 Token）。
  */
@@ -317,6 +346,8 @@ export function buildSanitizedDiagnosticSummary(detail: HostDetailResponse): str
     `- 协议状态：ICMP=${device.protocols.icmp_healthy ? '可达' : device.protocols.icmp_status} | SNMP=${device.protocols.snmp_healthy ? '正常' : device.protocols.snmp_status} | CLI=${device.protocols.cli_configured ? device.protocols.cli_protocol.toUpperCase() : '未配置'}`,
     `- 核心指标：${buildHostMetricLine(device)}`,
   ]
+
+  appendSNMPDiagnosticsSummary(lines, detail)
 
   const errText = resolveCollectionErrorText(device.collection_state)
   if (errText || device.collection_state.in_backoff) {

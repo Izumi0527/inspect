@@ -39,7 +39,7 @@ var firewallTokenPrefixes = []string{
 // 不能在整段 sysDescr 里搜 "Routing"：华为交换机 sysDescr 含 "Versatile Routing Platform"。
 var (
 	routerHeadPattern = regexp.MustCompile(`^(ar|ne|msr|sr|isr|asr)\d|^netengine`)
-	switchHeadPattern = regexp.MustCompile(`^cloudengine\s+(s|ce)\d|^(s|ce|c9|c2|c3|ex|n9k)\d|^ws-c|^catalyst`)
+	switchHeadPattern = regexp.MustCompile(`^((cloudengine|futurematrix)\s+)?(s|ce)\d|^(c9|c2|c3|ex|n9k)\d|^ws-c|^catalyst`)
 	apHeadPattern     = regexp.MustCompile(`^(ap|wa)\d|^airengine`)
 )
 
@@ -135,7 +135,7 @@ func normalizeClassifierHeadFields(fields []string) string {
 		if first == "cloudengine" {
 			return first + " " + second
 		}
-		if first == "quidway" {
+		if first == "quidway" || first == "futurematrix" {
 			return second
 		}
 	}

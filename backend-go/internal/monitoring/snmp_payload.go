@@ -181,6 +181,9 @@ func buildSNMPExtensionTags(metrics *devices.SNMPMetrics) map[string]interface{}
 	if len(metrics.Disks) > 0 {
 		extensions["disks"] = metrics.Disks
 	}
+	if compacted := devices.CompactSNMPDiagnostics(metrics.Diagnostics); compacted != nil {
+		extensions["diagnostics"] = compacted
+	}
 	if len(extensions) == 0 {
 		return nil
 	}

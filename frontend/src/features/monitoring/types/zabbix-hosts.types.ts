@@ -255,6 +255,28 @@ export interface SNMPDiskMetrics {
   used_bytes: number
 }
 
+export interface SNMPCandidateDiagnostic {
+  category: string
+  candidate_id: string
+  method: string
+  oid: string
+  status: string
+  rows: number
+  elapsed_ms: number
+  error_class?: string
+}
+
+export interface SNMPCollectionDiagnostics {
+  input_vendor?: string
+  effective_vendor?: string
+  sys_object_id?: string
+  canonical_prefix?: string
+  active_prefix?: string
+  enterprise_mapped?: boolean
+  total_elapsed_ms: number
+  candidates?: SNMPCandidateDiagnostic[]
+}
+
 export interface SNMPExtensionsResponse {
   device_id: number
   timestamp?: string
@@ -264,6 +286,7 @@ export interface SNMPExtensionsResponse {
   poe?: SNMPPoEMetrics
   stp?: SNMPSTPMetrics
   disks: SNMPDiskMetrics[]
+  diagnostics?: SNMPCollectionDiagnostics
 }
 
 export interface HostDetailResponse {

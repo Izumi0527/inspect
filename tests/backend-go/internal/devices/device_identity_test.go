@@ -742,4 +742,93 @@ func TestCollectDeviceIdentityWithContext_HuaweiELabel3ModelFallback(t *testing.
 			t.Fatalf("Model = %v, want S5736-S24T4XC", metrics.Model)
 		}
 	})
+
+	t.Run("FutureMatrix 占位词被拦截且兼容产品名标量 .6.3.11.4 按场景跳过或回退", func(t *testing.T) {
+		compatOID56813 := "1.3.6.1.4.1.56813.6.3.11.4"
+		modelOID := registry.Common.System.EntPhysicalModelName.OID
+		classOID := registry.Common.System.EntPhysicalClass.OID
+
+		// 1. sysDescr 已解析出精确型号时，跳过 hwEntityBoardName 与 FMCompatibleProductName(.6.3.11.4)
+		metricsExact := &devices.SNMPMetrics{}
+		clientExact := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				modelOID:       {strPDU(modelOID, "67108867", "FutureMatrix")},
+				compatOID56813: {strPDU(compatOID56813, "0", "S5736-Generic")},
+			},
+		}
+		collectDeviceIdentityWithDeviceContext(
+			collector,
+			clientExact,
+			metricsExact,
+			registry,
+			"futurematrix",
+			"FutureMatrix S5736-S24T4XC\r\nVRP (R) software, Version 5.170 (FutureMatrix S5736-S24T4XC V200R025C00)",
+			true,
+			".1.3.6.1.4.1.56813.2.23.811",
+			true,
+			newEntityCatalog(clientExact, registry),
+		)
+		if metricsExact.Model == nil || *metricsExact.Model != "S5736-S24T4XC" {
+			t.Fatalf("Model = %v, want S5736-S24T4XC", metricsExact.Model)
+		}
+		for _, called := range clientExact.bulkWalkCalls {
+			if called == compatOID56813 {
+				t.Fatalf("unexpected BulkWalkAll(%s) when sysDescr already resolved exact model", compatOID56813)
+			}
+		}
+
+		// 2. allowBoardName=true 时允许 .6.3.11.4.0 标量通过 BulkWalkAll（不受 idx==0 与 classByIndex 拦截）
+		metricsWalkScalar := &devices.SNMPMetrics{}
+		clientWalkScalar := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				classOID:       {intPDU(classOID, "67108867", 3)},
+				compatOID56813: {strPDU(compatOID56813, "0", "S5736-S24T4XC")},
+			},
+		}
+		collectDeviceIdentityWithDeviceContext(
+			collector,
+			clientWalkScalar,
+			metricsWalkScalar,
+			registry,
+			"futurematrix",
+			"FutureMatrix Versatile Routing Platform Software V200R025C00",
+			true,
+			".1.3.6.1.4.1.56813.2.23.811",
+			true,
+			newEntityCatalog(clientWalkScalar, registry),
+		)
+		if metricsWalkScalar.Model == nil || *metricsWalkScalar.Model != "S5736-S24T4XC" {
+			t.Fatalf("Walk scalar Model = %v, want S5736-S24T4XC", metricsWalkScalar.Model)
+		}
+
+		// 3. BulkWalkAll(.6.3.11.4) 返回空时，兜底 Get(.6.3.11.4.0)
+		metricsGetScalar := &devices.SNMPMetrics{}
+		clientGetScalar := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				classOID: {intPDU(classOID, "67108867", 3)},
+			},
+			getPackets: map[string]*gosnmp.SnmpPacket{
+				compatOID56813 + ".0": {
+					Variables: []gosnmp.SnmpPDU{
+						strPDU(compatOID56813, "0", "S5736-S48T4XC"),
+					},
+				},
+			},
+		}
+		collectDeviceIdentityWithDeviceContext(
+			collector,
+			clientGetScalar,
+			metricsGetScalar,
+			registry,
+			"futurematrix",
+			"FutureMatrix Versatile Routing Platform Software V200R025C00",
+			true,
+			".1.3.6.1.4.1.56813.2.23.811",
+			true,
+			newEntityCatalog(clientGetScalar, registry),
+		)
+		if metricsGetScalar.Model == nil || *metricsGetScalar.Model != "S5736-S48T4XC" {
+			t.Fatalf("Get scalar Model = %v, want S5736-S48T4XC", metricsGetScalar.Model)
+		}
+	})
 }

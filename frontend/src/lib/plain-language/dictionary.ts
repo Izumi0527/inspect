@@ -345,6 +345,11 @@ const VRP_MODULE_LABELS: Readonly<Record<string, string>> = {
   SEA: '安全增强审计',
   VRRP: 'VRRP 冗余路由',
   STORM: '风暴抑制',
+  // FutureMatrix (V200R025C00) 新增高频日志模块
+  CLOUDMNG: '云管理',
+  IFMCOMM: '接口公共管理',
+  SYSMNG: '系统管理',
+  WEBM: 'Web 网管',
 }
 
 /**

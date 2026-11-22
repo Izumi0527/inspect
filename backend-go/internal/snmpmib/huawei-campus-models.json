@@ -9,7 +9,7 @@
       "form_factor": "fixed",
       "platforms": ["V200"],
       "release_year": 2022,
-      "model_prefixes": ["S300"],
+      "model_prefixes": ["S300-2", "S300"],
       "sys_object_ids": [],
       "primary_cpu_mib": "HUAWEI-ENTITY-EXTENT-MIB::hwEntityCpuUsage",
       "primary_memory_mib": "HUAWEI-ENTITY-EXTENT-MIB::hwEntityMemSizeMega",
@@ -53,6 +53,19 @@
       "primary_cpu_mib": "HUAWEI-ENTITY-EXTENT-MIB::hwEntityCpuUsage",
       "primary_memory_mib": "HUAWEI-ENTITY-EXTENT-MIB::hwEntityMemSizeMega",
       "notes": "新一代分销/商业高性能万兆上行接入交换机，V600 平台。"
+    },
+    {
+      "series": "S600",
+      "display_name": "FutureMatrix / Huawei S600 Series",
+      "layer": "access",
+      "form_factor": "fixed",
+      "platforms": ["V200", "V600"],
+      "release_year": 2024,
+      "model_prefixes": ["S600"],
+      "sys_object_ids": [],
+      "primary_cpu_mib": "HUAWEI-ENTITY-EXTENT-MIB::hwEntityCpuUsage",
+      "primary_memory_mib": "HUAWEI-ENTITY-EXTENT-MIB::hwEntityMemSizeMega",
+      "notes": "FutureMatrix S600 系列万兆/多速率接入交换机，兼容 V200/V600 平台。"
     },
     {
       "series": "S620",
@@ -165,7 +178,21 @@
       "form_factor": "fixed",
       "platforms": ["V200"],
       "release_year": 2021,
-      "model_prefixes": ["S5735-L", "S5735-S", "S5735S", "S5735L", "S5735R", "S5735"],
+      "model_prefixes": [
+        "S5735-S-X",
+        "S5735S-S-X",
+        "S5735-L2",
+        "S5735S-L1",
+        "S5735S-L2",
+        "S5735S-S",
+        "S5735S-H",
+        "S5735-L",
+        "S5735-S",
+        "S5735S",
+        "S5735L",
+        "S5735R",
+        "S5735"
+      ],
       "sys_object_ids": [
         "1.3.6.1.4.1.2011.2.23.816",
         "1.3.6.1.4.1.2011.2.23.982"
@@ -193,7 +220,10 @@
         "S5736S",
         "S5736"
       ],
-      "sys_object_ids": [],
+      "sys_object_ids": [
+        "1.3.6.1.4.1.2011.2.23.811",
+        "1.3.6.1.4.1.56813.2.23.811"
+      ],
       "primary_cpu_mib": "HUAWEI-ENTITY-EXTENT-MIB::hwEntityCpuUsage",
       "primary_memory_mib": "HUAWEI-ENTITY-EXTENT-MIB::hwEntityMemSizeMega",
       "notes": "全光/电口/MultiGE/PoE++ 90W 多场景增强接入交换机（V200 & V600 双平台），支持 TrunkMax 250 / LAG 1~16 与电子标签 3.0；必须使用 hwEntityCpuUsage (.5) 与 hwEntityMemSizeMega (.19)。"
@@ -517,7 +547,7 @@
       "form_factor": "fixed",
       "platforms": ["V200"],
       "release_year": 2017,
-      "model_prefixes": ["S6720S"],
+      "model_prefixes": ["S6720S-S", "S6720S-EI", "S6720S"],
       "sys_object_ids": [],
       "primary_cpu_mib": "HUAWEI-ENTITY-EXTENT-MIB::hwEntityCpuUsage",
       "primary_memory_mib": "HUAWEI-ENTITY-EXTENT-MIB::hwEntityMemSizeMega",

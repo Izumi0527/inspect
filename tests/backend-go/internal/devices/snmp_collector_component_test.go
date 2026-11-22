@@ -399,4 +399,88 @@ func TestEnrichComponents_FiltersBoardNoiseAndMapsVendorSemantics(t *testing.T) 
 			t.Fatalf("h3c state=4 got %+v", got[3])
 		}
 	})
+
+	t.Run("S5736 内置电源与风扇在专表为空时从 board 智能归位，专表非空时不重复", func(t *testing.T) {
+		nameOID := reg.Common.System.EntPhysicalName.OID
+		classOID := reg.Common.System.EntPhysicalClass.OID
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				classOID: {
+					walkPDU(classOID, 67108867, 3, gosnmp.Integer), // chassis
+					walkPDU(classOID, 67108873, 9, gosnmp.Integer), // module
+					walkPDU(classOID, 67190797, 9, gosnmp.Integer), // POWER Card 0/PWR1
+					walkPDU(classOID, 67207181, 9, gosnmp.Integer), // POWER Card 0/PWR2
+					walkPDU(classOID, 67223565, 9, gosnmp.Integer), // FAN Card 0/FAN1
+					walkPDU(classOID, 67239949, 9, gosnmp.Integer), // FAN Card 0/FAN2
+				},
+				nameOID: {
+					walkPDU(nameOID, 67108867, []byte("FutureMatrix S5736 Routing Switch"), gosnmp.OctetString),
+					walkPDU(nameOID, 67108873, []byte("MPU Board 0"), gosnmp.OctetString),
+					walkPDU(nameOID, 67190797, []byte("POWER Card 0/PWR1"), gosnmp.OctetString),
+					walkPDU(nameOID, 67207181, []byte("POWER Card 0/PWR2"), gosnmp.OctetString),
+					walkPDU(nameOID, 67223565, []byte("FAN Card 0/FAN1"), gosnmp.OctetString),
+					walkPDU(nameOID, 67239949, []byte("FAN Card 0/FAN2"), gosnmp.OctetString),
+				},
+			},
+		}
+		catalog := newEntityCatalog(client, reg)
+
+		s5736Boards := []devices.ComponentStatusMetrics{
+			{Index: "67108867", Kind: "board", State: i64(3)},
+			{Index: "67108873", Kind: "board", State: i64(3)},
+			{Index: "67190797", Kind: "board", State: i64(3)},
+			{Index: "67207181", Kind: "board", State: i64(2)},
+			{Index: "67223565", Kind: "board", State: i64(3)},
+			{Index: "67239949", Kind: "board", State: i64(1)},
+		}
+
+		// 1. 专表为空：自动产出 2 fan + 2 power + 2 board
+		gotEmptyDedicated := enrichComponents(s5736Boards, "huawei", catalog)
+		if len(gotEmptyDedicated) != 6 {
+			t.Fatalf("len(gotEmptyDedicated) = %d, want 6: %+v", len(gotEmptyDedicated), gotEmptyDedicated)
+		}
+		byKindIdx := make(map[string]devices.ComponentStatusMetrics, len(gotEmptyDedicated))
+		counts := map[string]int{}
+		for _, c := range gotEmptyDedicated {
+			counts[c.Kind]++
+			byKindIdx[c.Kind+":"+c.Index] = c
+		}
+		if counts["fan"] != 2 || counts["power"] != 2 || counts["board"] != 2 {
+			t.Fatalf("counts = %+v, want fan=2 power=2 board=2", counts)
+		}
+		if c := byKindIdx["power:67190797"]; c.Name != "POWER Card 0/PWR1" || c.StatusLabel != "正常供电" || c.StatusLevel != "normal" {
+			t.Fatalf("power 67190797 = %+v", c)
+		}
+		if c := byKindIdx["power:67207181"]; c.Name != "POWER Card 0/PWR2" || c.StatusLabel != "未供电/异常" || c.StatusLevel != "critical" {
+			t.Fatalf("power 67207181 = %+v", c)
+		}
+		if c := byKindIdx["fan:67223565"]; c.Name != "FAN Card 0/FAN1" || c.StatusLabel != "正常" || c.StatusLevel != "normal" {
+			t.Fatalf("fan 67223565 = %+v", c)
+		}
+		if c := byKindIdx["fan:67239949"]; c.Name != "FAN Card 0/FAN2" || c.StatusLabel != "未安装/不支持" || c.StatusLevel != "unknown" {
+			t.Fatalf("fan 67239949 = %+v", c)
+		}
+		if _, ok := byKindIdx["board:67108867"]; !ok {
+			t.Fatalf("missing board:67108867")
+		}
+		if _, ok := byKindIdx["board:67108873"]; !ok {
+			t.Fatalf("missing board:67108873")
+		}
+
+		// 2. 专表非空：跳过 board 中的 POWER Card / FAN Card，防止重复
+		withDedicated := append([]devices.ComponentStatusMetrics(nil), s5736Boards...)
+		withDedicated = append(withDedicated,
+			devices.ComponentStatusMetrics{Index: "1", Kind: "power", State: i64(1)},
+			devices.ComponentStatusMetrics{Index: "0.1", Kind: "fan", State: i64(1)},
+		)
+		gotWithDedicated := enrichComponents(withDedicated, "huawei", catalog)
+		if len(gotWithDedicated) != 4 {
+			t.Fatalf("len(gotWithDedicated) = %d, want 4: %+v", len(gotWithDedicated), gotWithDedicated)
+		}
+		for _, c := range gotWithDedicated {
+			if c.Kind == "board" && (c.Name == "POWER Card 0/PWR1" || c.Name == "FAN Card 0/FAN1") {
+				t.Fatalf("unexpected duplicated board subcomponent: %+v", c)
+			}
+		}
+	})
 }

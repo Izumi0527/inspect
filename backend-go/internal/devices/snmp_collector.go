@@ -57,9 +57,10 @@ type SNMPMetrics struct {
 	Interfaces []InterfaceMetrics `json:"interfaces,omitempty"`
 	// Disks 是主机的固定磁盘分区（HOST-RESOURCES-MIB hrStorageFixedDisk），服务器巡检使用；
 	// 网络设备不实现该表，恒为空。
-	Disks          []DiskMetrics `json:"disks,omitempty"`
-	CollectedAt    time.Time     `json:"collected_at"`
-	CollectionTime float64       `json:"collection_time_ms"`
+	Disks          []DiskMetrics              `json:"disks,omitempty"`
+	Diagnostics    *SNMPCollectionDiagnostics `json:"diagnostics,omitempty"`
+	CollectedAt    time.Time                  `json:"collected_at"`
+	CollectionTime float64                    `json:"collection_time_ms"`
 }
 
 // DiskMetrics 是一个固定磁盘分区的容量快照，字节数已按分配单元换算。
@@ -313,6 +314,8 @@ func (c *SNMPCollector) CollectMetrics(
 	sysObjectID := snmpmib.NormalizeOID(readStringScalar(client, registry.Common.System.SysObjectID.OID))
 	sysDescr := readStringScalar(client, registry.Common.Probe.SysDescr.OID)
 	effectiveVendor := registry.ResolveVendorByContext(vendor, sysObjectID, sysDescr)
+	canonicalPrefix, activePrefix := registry.ResolveEnterprisePrefix(vendor, sysObjectID, sysDescr)
+	diag := newSNMPCollectionDiagnostics(vendor, effectiveVendor, sysObjectID, canonicalPrefix, activePrefix)
 
 	metrics := &SNMPMetrics{
 		CollectedAt: time.Now().UTC(),
@@ -325,26 +328,15 @@ func (c *SNMPCollector) CollectMetrics(
 	}
 
 	// 采集 CPU 使用率
-	c.collectCPU(client, metrics, registry, effectiveVendor)
+	c.collectCPUWithDeviceContext(client, metrics, registry, vendor, sysObjectID, sysDescr, diag)
 	if c.logger != nil && metrics.CPUUsage != nil {
 		c.logger.Debug("collected CPU", zap.Float64("cpu", *metrics.CPUUsage))
 	}
 
 	// 采集内存使用率
-	c.collectMemory(client, metrics, registry, effectiveVendor)
+	c.collectMemoryWithDeviceContext(client, metrics, registry, vendor, sysObjectID, sysDescr, diag)
 	if c.logger != nil && metrics.MemoryUsage != nil {
 		c.logger.Debug("collected memory", zap.Float64("memory", *metrics.MemoryUsage))
-	}
-
-	if c.logger != nil && (metrics.CPUUsage == nil || metrics.MemoryUsage == nil) {
-		c.logger.Warn("SNMP CPU or memory metrics unavailable",
-			zap.String("ip", ipAddress),
-			zap.String("input_vendor", vendor),
-			zap.String("effective_vendor", effectiveVendor),
-			zap.String("sys_object_id", sysObjectID),
-			zap.String("sys_descr_head", sysDescrHead(sysDescr)),
-			zap.Bool("missing_cpu", metrics.CPUUsage == nil),
-			zap.Bool("missing_memory", metrics.MemoryUsage == nil))
 	}
 
 	// 采集主机磁盘分区（HOST-RESOURCES-MIB，仅服务器有数据；网络设备一次 walk 即返回空）
@@ -354,13 +346,13 @@ func (c *SNMPCollector) CollectMetrics(
 	}
 
 	// 采集温度
-	c.collectTemperature(client, metrics, registry, effectiveVendor)
+	c.collectTemperatureWithDeviceContext(client, metrics, registry, vendor, sysObjectID, sysDescr, diag)
 	if c.logger != nil && metrics.Temperature != nil {
 		c.logger.Debug("collected temperature", zap.Float64("temp", *metrics.Temperature))
 	}
 
 	// 采集 BGP 邻居摘要
-	c.collectBGP(client, metrics, registry, effectiveVendor)
+	c.collectBGPWithDeviceContext(client, metrics, registry, vendor, sysObjectID, sysDescr, diag)
 	if c.logger != nil && len(metrics.BGPPeers) > 0 {
 		c.logger.Debug("collected bgp peers", zap.Int("count", len(metrics.BGPPeers)))
 	}
@@ -368,25 +360,25 @@ func (c *SNMPCollector) CollectMetrics(
 	entityCatalog := newEntityCatalog(client, registry)
 
 	// 采集光模块诊断摘要
-	c.collectOptical(client, metrics, registry, effectiveVendor)
+	c.collectOpticalWithDeviceContext(client, metrics, registry, vendor, sysObjectID, sysDescr, diag)
 	if c.logger != nil && len(metrics.OpticalTransceivers) > 0 {
 		c.logger.Debug("collected optical transceivers", zap.Int("count", len(metrics.OpticalTransceivers)))
 	}
 
 	// 采集风扇、电源、单板状态：硬件基础健康，比 CPU/内存更早暴露物理隐患
-	c.collectComponentsWithCatalog(client, metrics, registry, effectiveVendor, entityCatalog)
+	c.collectComponentsWithDeviceContext(client, metrics, registry, vendor, sysObjectID, sysDescr, entityCatalog, diag)
 	if c.logger != nil && len(metrics.Components) > 0 {
 		c.logger.Debug("collected components", zap.Int("count", len(metrics.Components)))
 	}
 
 	// 采集 PoE 供电概况（仅 PoE 交换机有数据）
-	c.collectPoE(client, metrics, registry, effectiveVendor)
+	c.collectPoEWithDeviceContext(client, metrics, registry, vendor, sysObjectID, sysDescr, diag)
 	if c.logger != nil && (len(metrics.PoE.Ports) > 0 || metrics.PoE.RemainingPower != nil) {
 		c.logger.Debug("collected poe", zap.Int("ports", len(metrics.PoE.Ports)))
 	}
 
 	// 采集设备型号、软件版本与序列号（低频变化的静态属性，用于回填设备档案）
-	c.collectDeviceIdentityWithCatalog(client, metrics, registry, sysDescr, true, sysObjectID, true, entityCatalog)
+	c.collectDeviceIdentityWithDeviceContext(client, metrics, registry, vendor, sysDescr, true, sysObjectID, true, entityCatalog)
 	if c.logger != nil && (metrics.Model != nil || metrics.FirmwareVersion != nil || metrics.SerialNumber != nil) {
 		c.logger.Debug("collected device identity",
 			zap.Stringp("model", metrics.Model),
@@ -401,7 +393,7 @@ func (c *SNMPCollector) CollectMetrics(
 	}
 
 	// 采集 LLDP 邻居（拓扑连线数据源）与设备自身 LLDP 身份
-	c.collectNeighbors(client, metrics, registry, effectiveVendor)
+	c.collectNeighborsWithDeviceContext(client, metrics, registry, vendor, sysObjectID, sysDescr, diag)
 	if c.logger != nil {
 		c.logger.Debug("collected lldp",
 			zap.String("status", string(metrics.LLDPStatus)),
@@ -428,7 +420,22 @@ func (c *SNMPCollector) CollectMetrics(
 		c.logger.Debug("collected interfaces", zap.Int("count", len(metrics.Interfaces)))
 	}
 
-	metrics.CollectionTime = float64(time.Since(start).Milliseconds())
+	elapsed := time.Since(start)
+	metrics.CollectionTime = float64(elapsed.Milliseconds())
+	diag.TotalElapsedMs = elapsed.Milliseconds()
+	metrics.Diagnostics = CompactSNMPDiagnostics(diag)
+
+	if c.logger != nil && (metrics.CPUUsage == nil || metrics.MemoryUsage == nil) {
+		c.logger.Warn("SNMP CPU or memory metrics unavailable",
+			zap.String("ip", ipAddress),
+			zap.String("input_vendor", vendor),
+			zap.String("effective_vendor", effectiveVendor),
+			zap.String("sys_object_id", sysObjectID),
+			zap.String("sys_descr_head", sysDescrHead(sysDescr)),
+			zap.Bool("missing_cpu", metrics.CPUUsage == nil),
+			zap.Bool("missing_memory", metrics.MemoryUsage == nil),
+			zap.String("candidate_diagnostics", FormatCandidateDiagnosticsLog(metrics.Diagnostics)))
+	}
 
 	if c.logger != nil {
 		c.logger.Info("SNMP metrics collection completed",
@@ -626,14 +633,40 @@ func (c *SNMPCollector) resolveMetricCandidates(metricName string, vendor string
 	return registry.MetricCandidates(metricName, vendor)
 }
 
+func (c *SNMPCollector) resolveMetricCandidatesForDevice(
+	metricName string,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+) []snmpmib.MetricCandidate {
+	registry, err := c.getRegistry()
+	if err != nil || registry == nil {
+		return nil
+	}
+	return registry.MetricCandidatesForDevice(metricName, vendor, sysObjectID, sysDescr)
+}
+
 func (c *SNMPCollector) collectCPU(
 	target snmpClient,
 	metrics *SNMPMetrics,
 	registry *snmpmib.Registry,
 	vendor string,
 ) {
+	c.collectCPUWithDeviceContext(target, metrics, registry, vendor, "", "", nil)
+}
+
+func (c *SNMPCollector) collectCPUWithDeviceContext(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+	diag *SNMPCollectionDiagnostics,
+) {
 	_ = registry
-	metrics.CPUUsage = collectCPUFromCandidates(target, c.resolveMetricCandidates("cpu_usage", vendor), c.logger)
+	candidates := c.resolveMetricCandidatesForDevice("cpu_usage", vendor, sysObjectID, sysDescr)
+	metrics.CPUUsage = collectCPUFromCandidatesWithDiagnostics(target, candidates, c.logger, diag)
 }
 
 func (c *SNMPCollector) collectMemory(
@@ -642,11 +675,25 @@ func (c *SNMPCollector) collectMemory(
 	registry *snmpmib.Registry,
 	vendor string,
 ) {
+	c.collectMemoryWithDeviceContext(target, metrics, registry, vendor, "", "", nil)
+}
+
+func (c *SNMPCollector) collectMemoryWithDeviceContext(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+	diag *SNMPCollectionDiagnostics,
+) {
 	_ = registry
-	metrics.MemoryUsage, metrics.MemoryTotal, metrics.MemoryUsed = collectMemoryFromCandidates(
+	candidates := c.resolveMetricCandidatesForDevice("memory_usage", vendor, sysObjectID, sysDescr)
+	metrics.MemoryUsage, metrics.MemoryTotal, metrics.MemoryUsed = collectMemoryFromCandidatesWithDiagnostics(
 		target,
-		c.resolveMetricCandidates("memory_usage", vendor),
+		candidates,
 		c.logger,
+		diag,
 	)
 }
 
@@ -656,11 +703,21 @@ func (c *SNMPCollector) collectTemperature(
 	registry *snmpmib.Registry,
 	vendor string,
 ) {
+	c.collectTemperatureWithDeviceContext(target, metrics, registry, vendor, "", "", nil)
+}
+
+func (c *SNMPCollector) collectTemperatureWithDeviceContext(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+	diag *SNMPCollectionDiagnostics,
+) {
 	_ = registry
-	metrics.Temperature = collectTemperatureFromCandidates(
-		target,
-		c.resolveMetricCandidates("temperature", vendor),
-	)
+	candidates := c.resolveMetricCandidatesForDevice("temperature", vendor, sysObjectID, sysDescr)
+	metrics.Temperature = collectTemperatureFromCandidatesWithDiagnostics(target, candidates, diag)
 }
 
 func (c *SNMPCollector) collectBGP(
@@ -669,7 +726,23 @@ func (c *SNMPCollector) collectBGP(
 	registry *snmpmib.Registry,
 	vendor string,
 ) {
-	metrics.BGPPeers = collectBGPPeersFromCatalog(target, registry.CatalogEntries(vendor, "bgp"))
+	c.collectBGPWithDeviceContext(target, metrics, registry, vendor, "", "", nil)
+}
+
+func (c *SNMPCollector) collectBGPWithDeviceContext(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+	diag *SNMPCollectionDiagnostics,
+) {
+	metrics.BGPPeers = collectBGPPeersFromCatalogWithDiagnostics(
+		target,
+		registry.CatalogEntriesForDevice(vendor, "bgp", sysObjectID, sysDescr),
+		diag,
+	)
 }
 
 func (c *SNMPCollector) collectOptical(
@@ -678,9 +751,22 @@ func (c *SNMPCollector) collectOptical(
 	registry *snmpmib.Registry,
 	vendor string,
 ) {
-	metrics.OpticalTransceivers = collectOpticalTransceiversFromCatalog(
+	c.collectOpticalWithDeviceContext(target, metrics, registry, vendor, "", "", nil)
+}
+
+func (c *SNMPCollector) collectOpticalWithDeviceContext(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+	diag *SNMPCollectionDiagnostics,
+) {
+	metrics.OpticalTransceivers = collectOpticalTransceiversFromCatalogWithDiagnostics(
 		target,
-		registry.CatalogEntries(vendor, "optical"),
+		registry.CatalogEntriesForDevice(vendor, "optical", sysObjectID, sysDescr),
+		diag,
 	)
 }
 
@@ -866,8 +952,29 @@ func (c *SNMPCollector) collectComponentsWithCatalog(
 	vendor string,
 	catalog *entityCatalog,
 ) {
-	raw := collectComponentsFromCatalog(target, registry.CatalogEntries(vendor, "environment"))
-	metrics.Components = enrichComponents(raw, vendor, catalog)
+	c.collectComponentsWithDeviceContext(target, metrics, registry, vendor, "", "", catalog, nil)
+}
+
+func (c *SNMPCollector) collectComponentsWithDeviceContext(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+	catalog *entityCatalog,
+	diag *SNMPCollectionDiagnostics,
+) {
+	effectiveVendor := vendor
+	if registry != nil {
+		effectiveVendor = registry.ResolveVendorByContext(vendor, sysObjectID, sysDescr)
+	}
+	raw := collectComponentsFromCatalogWithDiagnostics(
+		target,
+		registry.CatalogEntriesForDevice(vendor, "environment", sysObjectID, sysDescr),
+		diag,
+	)
+	metrics.Components = enrichComponents(raw, effectiveVendor, catalog)
 }
 
 // collectPoE 采集 PoE 供电概况（catalog 分类 poe）。非 PoE 设备返回零值。
@@ -877,7 +984,23 @@ func (c *SNMPCollector) collectPoE(
 	registry *snmpmib.Registry,
 	vendor string,
 ) {
-	metrics.PoE = collectPoEFromCatalog(target, registry.CatalogEntries(vendor, "poe"))
+	c.collectPoEWithDeviceContext(target, metrics, registry, vendor, "", "", nil)
+}
+
+func (c *SNMPCollector) collectPoEWithDeviceContext(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+	diag *SNMPCollectionDiagnostics,
+) {
+	metrics.PoE = collectPoEFromCatalogWithDiagnostics(
+		target,
+		registry.CatalogEntriesForDevice(vendor, "poe", sysObjectID, sysDescr),
+		diag,
+	)
 }
 
 func (c *SNMPCollector) collectInterfaces(
@@ -1172,7 +1295,7 @@ func collectLegacyIfSpeed(target snmpClient, interfaces map[int]*InterfaceMetric
 // 华为 VRP 典型串："...Software VRP (R) software, Version 5.170 (S5700-28P-LI-AC V200R019C00SPC500) Copyright..."
 // 括号内「型号 版本」成对出现，是可信度最高的兜底来源。
 var (
-	sysDescrModelVersionRe = regexp.MustCompile(`\((?:(?i:CloudEngine|Quidway)\s+)?([A-Za-z][A-Za-z0-9][A-Za-z0-9\-_/.]{1,40})\s+(V\d+R\d+[A-Za-z0-9]*)\)`)
+	sysDescrModelVersionRe = regexp.MustCompile(`\((?:(?i:CloudEngine|Quidway|FutureMatrix)\s+)?([A-Za-z][A-Za-z0-9][A-Za-z0-9\-_/.]{1,40})\s+(V\d+R\d+[A-Za-z0-9]*)\)`)
 	sysDescrVRPVersionRe   = regexp.MustCompile(`\b(V\d+R\d+[A-Za-z0-9]*)\b`)
 	sysDescrVersionRe      = regexp.MustCompile(`(?i)\bversion\s+([A-Za-z0-9][A-Za-z0-9._-]{0,30})`)
 	huaweiV600PlatformRe   = regexp.MustCompile(`(?i)\bV600(?:R\d+[A-Za-z0-9]*)?\b`)
@@ -1285,7 +1408,9 @@ func extractModelFromSysDescrHead(sysDescr string) string {
 }
 
 func isHuaweiModelBrandPrefix(token string) bool {
-	return strings.EqualFold(token, "CloudEngine") || strings.EqualFold(token, "Quidway")
+	return strings.EqualFold(token, "CloudEngine") ||
+		strings.EqualFold(token, "Quidway") ||
+		strings.EqualFold(token, "FutureMatrix")
 }
 
 // firstNonEmptyWalkValue 返回 walk 结果中第一个非空字符串值。
@@ -1426,6 +1551,30 @@ func (c *SNMPCollector) collectDeviceIdentityWithCatalog(
 	sysObjectIDCached bool,
 	catalog *entityCatalog,
 ) {
+	c.collectDeviceIdentityWithDeviceContext(
+		target,
+		metrics,
+		registry,
+		"",
+		cachedSysDescr,
+		sysDescrCached,
+		cachedSysObjectID,
+		sysObjectIDCached,
+		catalog,
+	)
+}
+
+func (c *SNMPCollector) collectDeviceIdentityWithDeviceContext(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+	cachedSysDescr string,
+	sysDescrCached bool,
+	cachedSysObjectID string,
+	sysObjectIDCached bool,
+	catalog *entityCatalog,
+) {
 	model := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalModelName.OID)
 	version := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalSoftwareRev.OID)
 
@@ -1450,9 +1599,9 @@ func (c *SNMPCollector) collectDeviceIdentityWithCatalog(
 		if !sysObjectIDCached && sysObjID == "" {
 			sysObjID = snmpmib.NormalizeOID(readStringScalar(target, registry.Common.System.SysObjectID.OID))
 		}
-		if registry.ResolveVendorByContext("", sysObjID, descr) == "huawei" {
+		if registry.ResolveVendorByContext(vendor, sysObjID, descr) == "huawei" {
 			// 仅当 sysDescr 也未能解析出整机型号时，才允许回退到 hwEntityBoardName
-			model = collectHuaweiEntityModelFallback(target, registry, catalog, sysDescrModel == "")
+			model = collectHuaweiEntityModelFallbackForDevice(target, registry, catalog, sysDescrModel == "", vendor, sysObjID, descr)
 		}
 	}
 
@@ -1503,13 +1652,13 @@ func (c *SNMPCollector) collectDeviceIdentityWithCatalog(
 	if patch != "" {
 		metrics.PatchVersion = &patch
 	}
-	if serial := collectDeviceSerialNumberWithCatalog(target, registry, catalog); serial != "" {
+	if serial := collectDeviceSerialNumberForDevice(target, registry, catalog, vendor, sysObjID, descr); serial != "" {
 		metrics.SerialNumber = &serial
 	}
 }
 
 var genericModelPlaceholders = map[string]struct{}{
-	"switch": {}, "chassis": {}, "unknown": {}, "none": {}, "n/a": {}, "na": {}, "default": {}, "null": {}, "huawei": {},
+	"switch": {}, "chassis": {}, "unknown": {}, "none": {}, "n/a": {}, "na": {}, "default": {}, "null": {}, "huawei": {}, "futurematrix": {},
 }
 
 func isGenericModelPlaceholder(value string) bool {
@@ -1521,7 +1670,10 @@ func isGenericModelPlaceholder(value string) bool {
 	return ok
 }
 
-const huaweiEntityBoardNameOID = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.43"
+const (
+	huaweiEntityBoardNameOID = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.43"
+	huaweiDeviceESNOID       = "1.3.6.1.4.1.2011.5.25.188.1.1"
+)
 
 var nonChassisComponentPrefixes = []string{
 	"PWR", "PSU", "PAC", "PDC", "POWER",
@@ -1572,7 +1724,7 @@ func isCleanModelOctetString(raw string) (string, bool) {
 	return cleaned, true
 }
 
-func selectHuaweiModelCandidate(rows []gosnmp.SnmpPDU, baseOID string, classByIndex map[int]int64) string {
+func selectHuaweiModelCandidate(rows []gosnmp.SnmpPDU, baseOID string, classByIndex map[int]int64, allowScalar bool) string {
 	hasBest := false
 	bestPrio := 0
 	bestIdx := 0
@@ -1590,11 +1742,11 @@ func selectHuaweiModelCandidate(rows []gosnmp.SnmpPDU, baseOID string, classByIn
 			continue
 		}
 		idx, err := strconv.Atoi(extractOIDIndexSuffix(pdu.Name, baseOID))
-		if err != nil || idx <= 0 {
+		if err != nil || idx < 0 || (!allowScalar && idx == 0) {
 			continue
 		}
 		prio := 4
-		if len(classByIndex) > 0 {
+		if len(classByIndex) > 0 && idx > 0 {
 			class, exists := classByIndex[idx]
 			if !exists {
 				continue
@@ -1617,34 +1769,64 @@ func selectHuaweiModelCandidate(rows []gosnmp.SnmpPDU, baseOID string, classByIn
 
 // collectHuaweiEntityModelFallback 在华为电子标签 3.0 设备上读取 hwEntityBoardType -> hwEntityModel -> hwEntityBoardName。
 func collectHuaweiEntityModelFallback(target snmpClient, registry *snmpmib.Registry, catalog *entityCatalog, allowBoardName bool) string {
-	oids := []string{
-		"1.3.6.1.4.1.2011.5.25.31.1.1.2.1.11", // hwEntityBoardType
-		"1.3.6.1.4.1.2011.5.25.31.1.1.2.1.13", // hwEntityModel
-		huaweiEntityBoardNameOID,              // hwEntityBoardName
+	return collectHuaweiEntityModelFallbackForDevice(target, registry, catalog, allowBoardName, "huawei", "", "")
+}
+
+func collectHuaweiEntityModelFallbackForDevice(
+	target snmpClient,
+	registry *snmpmib.Registry,
+	catalog *entityCatalog,
+	allowBoardName bool,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+) string {
+	entries := []snmpmib.CatalogOID{
+		{ID: "huawei_entity_board_type", OID: "1.3.6.1.4.1.2011.5.25.31.1.1.2.1.11"},
+		{ID: "huawei_entity_model", OID: "1.3.6.1.4.1.2011.5.25.31.1.1.2.1.13"},
+		{ID: "huawei_entity_board_name", OID: huaweiEntityBoardNameOID},
 	}
+	rewrittenBoardNameOID := huaweiEntityBoardNameOID
 	if registry != nil {
-		if entries := registry.CatalogEntries("huawei", "identity"); len(entries) > 0 {
-			oids = oids[:0]
-			for _, entry := range entries {
-				if trimmed := strings.TrimSpace(entry.OID); trimmed != "" {
-					oids = append(oids, trimmed)
-				}
-			}
+		rewrittenBoardNameOID = registry.RewriteVendorOID(vendor, sysObjectID, huaweiEntityBoardNameOID, sysDescr)
+		lookupVendor := vendor
+		if strings.TrimSpace(lookupVendor) == "" {
+			lookupVendor = "huawei"
+		}
+		if catalogEntries := registry.CatalogEntriesForDevice(lookupVendor, "identity", sysObjectID, sysDescr); len(catalogEntries) > 0 {
+			entries = catalogEntries
 		}
 	}
 	var classByIndex map[int]int64
 	if catalog != nil {
 		classByIndex = catalog.classes()
 	}
-	for _, oid := range oids {
-		if !allowBoardName && snmpmib.NormalizeOID(oid) == huaweiEntityBoardNameOID {
+	for _, entry := range entries {
+		if entry.ID == "huawei_device_esn" {
 			continue
 		}
+		oid := snmpmib.NormalizeOID(entry.OID)
+		if oid == "" {
+			continue
+		}
+		if !allowBoardName && (entry.ID == "huawei_entity_board_name" ||
+			entry.ID == "huawei_compatible_product_name" ||
+			oid == huaweiEntityBoardNameOID ||
+			oid == rewrittenBoardNameOID) {
+			continue
+		}
+		isCompatScalar := entry.ID == "huawei_compatible_product_name"
 		rows, err := target.BulkWalkAll(oid)
+		if isCompatScalar && (err != nil || len(rows) == 0) {
+			if pkt, getErr := target.Get([]string{oid + ".0"}); getErr == nil && pkt != nil && len(pkt.Variables) > 0 {
+				rows = pkt.Variables
+				err = nil
+			}
+		}
 		if err != nil || len(rows) == 0 {
 			continue
 		}
-		if candidate := selectHuaweiModelCandidate(rows, oid, classByIndex); candidate != "" {
+		if candidate := selectHuaweiModelCandidate(rows, oid, classByIndex, isCompatScalar); candidate != "" {
 			return candidate
 		}
 	}
@@ -1836,6 +2018,50 @@ func collectDeviceSerialNumberWithCatalog(target snmpClient, registry *snmpmib.R
 		classByIndex = collectEntityClassMap(target, registry.Common.System.EntPhysicalClass.OID)
 	}
 	return selectBestEntitySerialNumber(candidates, classByIndex)
+}
+
+func collectDeviceSerialNumberForDevice(
+	target snmpClient,
+	registry *snmpmib.Registry,
+	catalog *entityCatalog,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+) string {
+	if serial := collectDeviceSerialNumberWithCatalog(target, registry, catalog); serial != "" {
+		return serial
+	}
+	if registry == nil || registry.ResolveVendorByContext(vendor, sysObjectID, sysDescr) != "huawei" {
+		return ""
+	}
+	esnOID := registry.RewriteVendorOID(vendor, sysObjectID, huaweiDeviceESNOID, sysDescr)
+	if esnOID == "" {
+		return ""
+	}
+	if serial := readHuaweiDeviceESN(target, esnOID); serial != "" {
+		return serial
+	}
+	return readHuaweiDeviceESN(target, esnOID+".0")
+}
+
+func readHuaweiDeviceESN(target snmpClient, oid string) string {
+	packet, err := target.Get([]string{oid})
+	if err != nil || packet == nil {
+		return ""
+	}
+	for _, variable := range packet.Variables {
+		if variable.Type != gosnmp.OctetString {
+			continue
+		}
+		rawSerial, ok := rawSNMPSerialString(variable.Value)
+		if !ok {
+			continue
+		}
+		if serial := SanitizeSerialNumber(rawSerial); serial != "" {
+			return serial
+		}
+	}
+	return ""
 }
 
 type entityCatalog struct {
@@ -2048,6 +2274,15 @@ func enrichComponents(
 	if len(items) == 0 {
 		return nil
 	}
+	hasDedicatedPower, hasDedicatedFan := false, false
+	for _, comp := range items {
+		switch strings.ToLower(strings.TrimSpace(comp.Kind)) {
+		case "power":
+			hasDedicatedPower = true
+		case "fan":
+			hasDedicatedFan = true
+		}
+	}
 	var classByIndex map[int]int64
 	if catalog != nil && hasNumericBoardIndex(items) {
 		classByIndex = catalog.classes()
@@ -2059,8 +2294,29 @@ func enrichComponents(
 			continue
 		}
 		comp.Name = resolveComponentName(comp, catalog)
+		reclassifiedFromBoard := false
+		if comp.Kind == "board" {
+			switch inferBoardSubcomponentKind(comp.Name) {
+			case "power":
+				if hasDedicatedPower {
+					continue
+				}
+				comp.Kind = "power"
+				reclassifiedFromBoard = true
+			case "fan":
+				if hasDedicatedFan {
+					continue
+				}
+				comp.Kind = "fan"
+				reclassifiedFromBoard = true
+			}
+		}
 		if comp.State != nil {
-			comp.StatusLabel, comp.StatusLevel = resolveComponentStatus(vendor, comp.Kind, *comp.State)
+			if reclassifiedFromBoard && normalizeCollectorToken(vendor) == "huawei" {
+				comp.StatusLabel, comp.StatusLevel = resolveHuaweiBoardSubcomponentStatus(comp.Kind, *comp.State)
+			} else {
+				comp.StatusLabel, comp.StatusLevel = resolveComponentStatus(vendor, comp.Kind, *comp.State)
+			}
 		}
 		out = append(out, comp)
 	}
@@ -2176,6 +2432,51 @@ func resolveComponentStatus(vendor, kind string, state int64) (string, string) {
 		return resolveH3CComponentStatus(k, state)
 	default:
 		return resolveDefaultComponentStatus(state)
+	}
+}
+
+var (
+	boardPowerNamePrefixes = []string{"POWER", "PWR", "PSU", "PAC", "PDC"}
+	boardFanNamePrefixes   = []string{"FAN"}
+)
+
+func inferBoardSubcomponentKind(name string) string {
+	upper := strings.ToUpper(strings.TrimSpace(name))
+	if upper == "" {
+		return ""
+	}
+	for _, prefix := range boardPowerNamePrefixes {
+		if strings.HasPrefix(upper, prefix) {
+			return "power"
+		}
+	}
+	for _, prefix := range boardFanNamePrefixes {
+		if strings.HasPrefix(upper, prefix) {
+			return "fan"
+		}
+	}
+	return ""
+}
+
+func resolveHuaweiBoardSubcomponentStatus(kind string, state int64) (string, string) {
+	if kind != "power" && kind != "fan" {
+		return resolveHuaweiComponentStatus(kind, state)
+	}
+	switch state {
+	case 3, 11, 13, 15, 16, 18:
+		if kind == "power" {
+			return "正常供电", "normal"
+		}
+		return "正常", "normal"
+	case 2, 4, 12, 17:
+		if kind == "power" {
+			return "未供电/异常", "critical"
+		}
+		return "异常", "critical"
+	case 1, 19:
+		return "未安装/不支持", "unknown"
+	default:
+		return fmt.Sprintf("状态 %d", state), "unknown"
 	}
 }
 
@@ -2346,16 +2647,46 @@ func (c *SNMPCollector) collectDeviceClassificationWithSysDescr(
 // collectNeighbors 采集 LLDP 邻居与设备自身的 LLDP 身份。
 // 只有 LLDP-MIB 判定可读（ok）时才下发邻居快照；mib_unreachable/disabled/未知 都保留旧邻居。
 func (c *SNMPCollector) collectNeighbors(target snmpClient, metrics *SNMPMetrics, registry *snmpmib.Registry, vendor string) {
+	c.collectNeighborsWithDeviceContext(target, metrics, registry, vendor, "", "", nil)
+}
+
+func (c *SNMPCollector) collectNeighborsWithDeviceContext(
+	target snmpClient,
+	metrics *SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+	diag *SNMPCollectionDiagnostics,
+) {
 	vendorEnableOID := ""
-	if item, ok := registry.Vendors[registry.ResolveVendor(vendor)]; ok {
-		vendorEnableOID = item.LLDPEnable.OID
+	if registry != nil {
+		vendorEnableOID = registry.VendorLLDPEnableOIDForDevice(vendor, sysObjectID, sysDescr)
 	}
 
+	lldpStart := time.Now()
 	result := collectLLDP(target, registry.Common.LLDP, vendorEnableOID)
 	metrics.LLDPStatus = result.Status
 	if result.Status == LLDPStatusOK {
 		metrics.Neighbors = result.Neighbors
 		metrics.LLDPAvailable = true
+	}
+	if diag != nil {
+		status := "empty"
+		if result.Status == LLDPStatusOK {
+			status = "hit"
+		} else if result.Status == LLDPStatusDisabled {
+			status = "skipped"
+		}
+		diag.addCandidate(SNMPCandidateDiagnostic{
+			Category:    "lldp",
+			CandidateID: "lldp_neighbors",
+			Method:      "bulkwalk",
+			OID:         registry.Common.LLDP.RemSysName.OID,
+			Status:      status,
+			Rows:        len(result.Neighbors),
+			ElapsedMs:   time.Since(lldpStart).Milliseconds(),
+		})
 	}
 
 	if name := readStringScalar(target, registry.Common.System.SysName.OID); name != "" {
@@ -2400,26 +2731,147 @@ func readBridgeMAC(client snmpClient, oid string) string {
 	return formatMACBytes(raw)
 }
 
+type walkCacheEntry struct {
+	pdus []gosnmp.SnmpPDU
+	err  error
+}
+
+// walkCacheClient 仅在单轮调用作用域内缓存 BulkWalkAll 结果，避免候选回退时重复遍历同一实体表。
+type walkCacheClient struct {
+	inner snmpClient
+	cache map[string]walkCacheEntry
+}
+
+func newWalkCacheClient(inner snmpClient) *walkCacheClient {
+	return &walkCacheClient{
+		inner: inner,
+		cache: make(map[string]walkCacheEntry),
+	}
+}
+
+func (w *walkCacheClient) Get(oids []string) (*gosnmp.SnmpPacket, error) {
+	return w.inner.Get(oids)
+}
+
+func (w *walkCacheClient) BulkWalkAll(oid string) ([]gosnmp.SnmpPDU, error) {
+	key := snmpmib.NormalizeOID(oid)
+	if entry, ok := w.cache[key]; ok {
+		return entry.pdus, entry.err
+	}
+	pdus, err := w.inner.BulkWalkAll(oid)
+	w.cache[key] = walkCacheEntry{pdus: pdus, err: err}
+	return pdus, err
+}
+
+type diagnosticSNMPClient struct {
+	inner   snmpClient
+	rows    int
+	lastErr error
+}
+
+func newDiagnosticSNMPClient(inner snmpClient) *diagnosticSNMPClient {
+	return &diagnosticSNMPClient{inner: inner}
+}
+
+func (d *diagnosticSNMPClient) Get(oids []string) (*gosnmp.SnmpPacket, error) {
+	pkt, err := d.inner.Get(oids)
+	if err != nil {
+		d.lastErr = err
+		return nil, err
+	}
+	if pkt != nil {
+		for _, v := range pkt.Variables {
+			if !isNoSuchPDU(v) {
+				d.rows++
+			}
+		}
+	}
+	return pkt, nil
+}
+
+func (d *diagnosticSNMPClient) BulkWalkAll(oid string) ([]gosnmp.SnmpPDU, error) {
+	pdus, err := d.inner.BulkWalkAll(oid)
+	if err != nil {
+		d.lastErr = err
+		return nil, err
+	}
+	d.rows += len(pdus)
+	return pdus, nil
+}
+
+func recordCandidateDiagnostic(
+	diag *SNMPCollectionDiagnostics,
+	category, id, method, oid string,
+	hit bool,
+	probe *diagnosticSNMPClient,
+	elapsed time.Duration,
+) {
+	if diag == nil {
+		return
+	}
+	status := "empty"
+	errClass := ""
+	if hit {
+		status = "hit"
+	} else if probe != nil && probe.lastErr != nil {
+		status = "error"
+		errClass = ClassifySNMPError(probe.lastErr)
+	}
+	rows := 0
+	if probe != nil {
+		rows = probe.rows
+	}
+	diag.addCandidate(SNMPCandidateDiagnostic{
+		Category:    category,
+		CandidateID: id,
+		Method:      method,
+		OID:         oid,
+		Status:      status,
+		Rows:        rows,
+		ElapsedMs:   elapsed.Milliseconds(),
+		ErrorClass:  errClass,
+	})
+}
+
+func firstCandidateOID(oids []string) string {
+	if len(oids) > 0 {
+		return oids[0]
+	}
+	return ""
+}
+
 func collectCPUFromCandidates(
 	client snmpClient,
 	candidates []snmpmib.MetricCandidate,
 	logger *zap.Logger,
 ) *float64 {
+	return collectCPUFromCandidatesWithDiagnostics(client, candidates, logger, nil)
+}
+
+func collectCPUFromCandidatesWithDiagnostics(
+	client snmpClient,
+	candidates []snmpmib.MetricCandidate,
+	logger *zap.Logger,
+	diag *SNMPCollectionDiagnostics,
+) *float64 {
 	var zeroFallback *float64
 	var zeroCandidateID string
 
 	for _, candidate := range candidates {
+		candStart := time.Now()
+		probe := newDiagnosticSNMPClient(client)
 		var value *float64
 		switch candidate.Strategy {
 		case "walk_percent_auto":
-			value = collectWalkPercentValue(client, candidate, true)
+			value = collectWalkPercentValue(probe, candidate, true)
 		case "walk_percent":
-			value = collectWalkPercentValue(client, candidate, false)
+			value = collectWalkPercentValue(probe, candidate, false)
 		case "get_percent":
-			value = collectSinglePercent(client, candidate.OIDs)
+			value = collectSinglePercent(probe, candidate.OIDs)
 		case "get_percent_from_parts":
-			value = collectPercentFromParts(client, candidate.OIDs)
+			value = collectPercentFromParts(probe, candidate.OIDs)
 		}
+		recordCandidateDiagnostic(diag, "cpu", candidate.ID, candidate.Method, firstCandidateOID(candidate.OIDs), value != nil, probe, time.Since(candStart))
 
 		if value == nil {
 			continue
@@ -2496,12 +2948,26 @@ func collectMemoryFromCandidates(
 	candidates []snmpmib.MetricCandidate,
 	logger *zap.Logger,
 ) (*float64, *int64, *int64) {
+	return collectMemoryFromCandidatesWithDiagnostics(client, candidates, logger, nil)
+}
+
+func collectMemoryFromCandidatesWithDiagnostics(
+	client snmpClient,
+	candidates []snmpmib.MetricCandidate,
+	logger *zap.Logger,
+	diag *SNMPCollectionDiagnostics,
+) (*float64, *int64, *int64) {
+	cachedClient := newWalkCacheClient(client)
 	var usageOnlyFallback *memoryCandidateResult
 	var zeroFallback *memoryCandidateResult
 
 	for _, candidate := range candidates {
-		usage, total, used := evaluateMemoryCandidate(client, candidate)
-		if usage == nil && total == nil && used == nil {
+		candStart := time.Now()
+		probe := newDiagnosticSNMPClient(cachedClient)
+		usage, total, used := evaluateMemoryCandidate(probe, candidate)
+		hit := usage != nil || total != nil || used != nil
+		recordCandidateDiagnostic(diag, "memory", candidate.ID, candidate.Method, firstCandidateOID(candidate.OIDs), hit, probe, time.Since(candStart))
+		if !hit {
 			continue
 		}
 
@@ -2558,16 +3024,27 @@ func collectTemperatureFromCandidates(
 	client snmpClient,
 	candidates []snmpmib.MetricCandidate,
 ) *float64 {
+	return collectTemperatureFromCandidatesWithDiagnostics(client, candidates, nil)
+}
+
+func collectTemperatureFromCandidatesWithDiagnostics(
+	client snmpClient,
+	candidates []snmpmib.MetricCandidate,
+	diag *SNMPCollectionDiagnostics,
+) *float64 {
 	for _, candidate := range candidates {
+		candStart := time.Now()
+		probe := newDiagnosticSNMPClient(client)
+		var value *float64
 		switch candidate.Strategy {
 		case "walk_max_tenths_celsius":
-			if value := collectMaxTemperature(client, candidate.OIDs, 10); value != nil {
-				return value
-			}
+			value = collectMaxTemperature(probe, candidate.OIDs, 10)
 		case "walk_max_celsius":
-			if value := collectMaxTemperature(client, candidate.OIDs, 1); value != nil {
-				return value
-			}
+			value = collectMaxTemperature(probe, candidate.OIDs, 1)
+		}
+		recordCandidateDiagnostic(diag, "temperature", candidate.ID, candidate.Method, firstCandidateOID(candidate.OIDs), value != nil, probe, time.Since(candStart))
+		if value != nil {
+			return value
 		}
 	}
 	return nil
@@ -2576,6 +3053,14 @@ func collectTemperatureFromCandidates(
 func collectBGPPeersFromCatalog(
 	client snmpClient,
 	entries []snmpmib.CatalogOID,
+) []BGPNeighborMetrics {
+	return collectBGPPeersFromCatalogWithDiagnostics(client, entries, nil)
+}
+
+func collectBGPPeersFromCatalogWithDiagnostics(
+	client snmpClient,
+	entries []snmpmib.CatalogOID,
+	diag *SNMPCollectionDiagnostics,
 ) []BGPNeighborMetrics {
 	if len(entries) == 0 {
 		return nil
@@ -2589,7 +3074,10 @@ func collectBGPPeersFromCatalog(
 			continue
 		}
 
-		result, err := client.BulkWalkAll(oid)
+		candStart := time.Now()
+		probe := newDiagnosticSNMPClient(client)
+		result, err := probe.BulkWalkAll(oid)
+		recordCandidateDiagnostic(diag, "bgp", entry.ID, entry.Method, oid, err == nil && len(result) > 0, probe, time.Since(candStart))
 		if err != nil || len(result) == 0 {
 			continue
 		}
@@ -2632,6 +3120,14 @@ func collectOpticalTransceiversFromCatalog(
 	client snmpClient,
 	entries []snmpmib.CatalogOID,
 ) []OpticalTransceiverMetrics {
+	return collectOpticalTransceiversFromCatalogWithDiagnostics(client, entries, nil)
+}
+
+func collectOpticalTransceiversFromCatalogWithDiagnostics(
+	client snmpClient,
+	entries []snmpmib.CatalogOID,
+	diag *SNMPCollectionDiagnostics,
+) []OpticalTransceiverMetrics {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -2644,7 +3140,10 @@ func collectOpticalTransceiversFromCatalog(
 			continue
 		}
 
-		result, err := client.BulkWalkAll(oid)
+		candStart := time.Now()
+		probe := newDiagnosticSNMPClient(client)
+		result, err := probe.BulkWalkAll(oid)
+		recordCandidateDiagnostic(diag, "optical", entry.ID, entry.Method, oid, err == nil && len(result) > 0, probe, time.Since(candStart))
 		if err != nil || len(result) == 0 {
 			continue
 		}
@@ -2715,6 +3214,14 @@ func collectComponentsFromCatalog(
 	client snmpClient,
 	entries []snmpmib.CatalogOID,
 ) []ComponentStatusMetrics {
+	return collectComponentsFromCatalogWithDiagnostics(client, entries, nil)
+}
+
+func collectComponentsFromCatalogWithDiagnostics(
+	client snmpClient,
+	entries []snmpmib.CatalogOID,
+	diag *SNMPCollectionDiagnostics,
+) []ComponentStatusMetrics {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -2730,7 +3237,10 @@ func collectComponentsFromCatalog(
 			continue
 		}
 
-		result, err := client.BulkWalkAll(oid)
+		candStart := time.Now()
+		probe := newDiagnosticSNMPClient(client)
+		result, err := probe.BulkWalkAll(oid)
+		recordCandidateDiagnostic(diag, "components", entry.ID, entry.Method, oid, err == nil && len(result) > 0, probe, time.Since(candStart))
 		if err != nil || len(result) == 0 {
 			continue
 		}
@@ -2774,6 +3284,14 @@ func collectPoEFromCatalog(
 	client snmpClient,
 	entries []snmpmib.CatalogOID,
 ) PoEMetrics {
+	return collectPoEFromCatalogWithDiagnostics(client, entries, nil)
+}
+
+func collectPoEFromCatalogWithDiagnostics(
+	client snmpClient,
+	entries []snmpmib.CatalogOID,
+	diag *SNMPCollectionDiagnostics,
+) PoEMetrics {
 	metrics := PoEMetrics{}
 	if len(entries) == 0 {
 		return metrics
@@ -2795,7 +3313,10 @@ func collectPoEFromCatalog(
 			continue
 		}
 
-		result, err := client.BulkWalkAll(oid)
+		candStart := time.Now()
+		probe := newDiagnosticSNMPClient(client)
+		result, err := probe.BulkWalkAll(oid)
+		recordCandidateDiagnostic(diag, "poe", entry.ID, entry.Method, oid, err == nil && len(result) > 0, probe, time.Since(candStart))
 		if err != nil || len(result) == 0 {
 			continue
 		}

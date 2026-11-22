@@ -437,7 +437,11 @@ class HttpClient {
     // 单次网络请求（含超时、CSRF 回填、body 序列化）。401 自愈重试时会被再次调用。
     const doFetch = async (): Promise<Response> => {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), timeout)
+      let timedOut = false
+      const timeoutId = setTimeout(() => {
+        timedOut = true
+        controller.abort()
+      }, timeout)
 
       try {
         const resolvedHeaders = this.buildHeaders(headers)
@@ -472,6 +476,15 @@ class HttpClient {
         }
 
         return await fetch(url, requestConfig)
+      } catch (error) {
+        if (timedOut) {
+          throw new ApiClientError({
+            message: `请求超时（超过 ${Math.ceil(timeout / 1000)} 秒），请稍后刷新查看`,
+            type: 'REQUEST_TIMEOUT',
+            status: 408,
+          })
+        }
+        throw error
       } finally {
         clearTimeout(timeoutId)
       }

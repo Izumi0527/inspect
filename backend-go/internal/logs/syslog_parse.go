@@ -10,7 +10,7 @@ import (
 var (
 	// vrpSyslogHeaderPattern 匹配内嵌在 Syslog 报文中的华为 VRP/V600 结构化头：
 	// %%01MLAG/3/PEER_LINK_DOWN(l):CID=0x807a040b;...
-	vrpSyslogHeaderPattern = regexp.MustCompile(`%%\d{2}([A-Za-z0-9_-]+)/([0-7])/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?(?:\[\d+\])?`)
+	vrpSyslogHeaderPattern = regexp.MustCompile(`%%\s*\d{2}\s*([A-Za-z0-9_-]+)/([0-7])/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?(?:\[\d+\])?`)
 	vrpSyslogCIDPrefix     = regexp.MustCompile(`^CID=[^;\s]+;\s*`)
 )
 

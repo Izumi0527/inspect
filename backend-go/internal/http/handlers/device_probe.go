@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -386,8 +387,11 @@ func (h DevicesHandler) collectAndPersistMetrics(c echo.Context, device devices.
 		return
 	}
 
+	collectCtx, cancel := newManualCollectContext(c.Request().Context(), manualDeviceCollectTimeout)
+	defer cancel()
+
 	metrics, err := h.SNMPCollector.CollectMetrics(
-		c.Request().Context(),
+		collectCtx,
 		device.IPAddress,
 		device.Vendor,
 		device.SnmpCommunity,
@@ -401,7 +405,7 @@ func (h DevicesHandler) collectAndPersistMetrics(c echo.Context, device devices.
 	}
 
 	writeReq := monitoring.BuildSNMPDeviceMetricsRequest(device.ID, metrics)
-	if _, err := h.Metrics.WriteDeviceMetrics(c.Request().Context(), writeReq); err != nil && !errors.Is(err, monitoring.ErrNoMetrics) {
+	if _, err := h.Metrics.WriteDeviceMetrics(collectCtx, writeReq); err != nil && !errors.Is(err, monitoring.ErrNoMetrics) {
 		c.Logger().Warnf("探测时回写设备指标失败 device_id=%d: %v", device.ID, err)
 	}
 }
@@ -432,13 +436,27 @@ func conditionalLastSeen(result devices.ProbeResult) *time.Time {
 	return nil
 }
 
-const DefaultDeviceCollectCooldown = 10 * time.Second
+const (
+	DefaultDeviceCollectCooldown = 10 * time.Second
+	manualDeviceCollectTimeout   = 55 * time.Second
+)
 
-// DeviceCollectCooldown 提供进程内并发安全的单设备「立即采集」防刷冷却锁。
+func newManualCollectContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	if timeout <= 0 {
+		timeout = manualDeviceCollectTimeout
+	}
+	return context.WithTimeout(context.WithoutCancel(parent), timeout)
+}
+
+// DeviceCollectCooldown 提供进程内并发安全的单设备「立即采集」防刷冷却与在途防重入锁。
 type DeviceCollectCooldown struct {
 	mu       sync.Mutex
 	duration time.Duration
 	lastAt   map[int]time.Time
+	inFlight map[int]bool
 }
 
 // NewDeviceCollectCooldown 创建单设备冷却锁。
@@ -449,6 +467,7 @@ func NewDeviceCollectCooldown(duration time.Duration) *DeviceCollectCooldown {
 	return &DeviceCollectCooldown{
 		duration: duration,
 		lastAt:   make(map[int]time.Time),
+		inFlight: make(map[int]bool),
 	}
 }
 
@@ -461,29 +480,91 @@ func (h DevicesHandler) collectCooldown() *DeviceCollectCooldown {
 	return defaultDeviceCollectCooldown
 }
 
-// TryAcquire 尝试为指定设备获取立即采集资格；若处于冷却期则返回 false 与剩余冷却秒数（向上取整，至少 1 秒）。
+func (c *DeviceCollectCooldown) remainingCooldownLocked(deviceID int, now time.Time) (int, bool) {
+	prev, ok := c.lastAt[deviceID]
+	if !ok {
+		return 0, false
+	}
+	elapsed := now.Sub(prev)
+	if elapsed >= c.duration {
+		return 0, false
+	}
+	remaining := int(math.Ceil((c.duration - elapsed).Seconds()))
+	if remaining < 1 {
+		remaining = 1
+	}
+	return remaining, true
+}
+
+func (c *DeviceCollectCooldown) evictExpiredLocked(now time.Time) {
+	if len(c.lastAt) < 512 {
+		return
+	}
+	for id, ts := range c.lastAt {
+		if c.inFlight[id] {
+			continue
+		}
+		if now.Sub(ts) >= c.duration {
+			delete(c.lastAt, id)
+		}
+	}
+}
+
+// TryAcquire 尝试为指定设备获取立即采集资格；若处于冷却期或正在采集中则返回 false 与剩余冷却秒数（向上取整，至少 1 秒）。
 func (c *DeviceCollectCooldown) TryAcquire(deviceID int, now time.Time) (bool, int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if prev, ok := c.lastAt[deviceID]; ok {
-		elapsed := now.Sub(prev)
-		if elapsed < c.duration {
-			remaining := int(math.Ceil((c.duration - elapsed).Seconds()))
-			if remaining < 1 {
-				remaining = 1
-			}
-			return false, remaining
-		}
+	if c.lastAt == nil {
+		c.lastAt = make(map[int]time.Time)
 	}
-	if len(c.lastAt) >= 512 {
-		for id, ts := range c.lastAt {
-			if now.Sub(ts) >= c.duration {
-				delete(c.lastAt, id)
-			}
+	if c.inFlight != nil && c.inFlight[deviceID] {
+		remaining, _ := c.remainingCooldownLocked(deviceID, now)
+		if remaining < 1 {
+			remaining = 1
 		}
+		return false, remaining
 	}
+	if remaining, active := c.remainingCooldownLocked(deviceID, now); active {
+		return false, remaining
+	}
+	c.evictExpiredLocked(now)
 	c.lastAt[deviceID] = now
 	return true, 0
+}
+
+// TryStart 原子校验冷却期与在途执行状态；成功时返回幂等释放函数 finish。
+func (c *DeviceCollectCooldown) TryStart(deviceID int, now time.Time) (bool, int, func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.lastAt == nil {
+		c.lastAt = make(map[int]time.Time)
+	}
+	if c.inFlight == nil {
+		c.inFlight = make(map[int]bool)
+	}
+	if c.inFlight[deviceID] {
+		remaining, _ := c.remainingCooldownLocked(deviceID, now)
+		if remaining < 1 {
+			remaining = 1
+		}
+		return false, remaining, nil
+	}
+	if remaining, active := c.remainingCooldownLocked(deviceID, now); active {
+		return false, remaining, nil
+	}
+	c.evictExpiredLocked(now)
+	c.lastAt[deviceID] = now
+	c.inFlight[deviceID] = true
+
+	var once sync.Once
+	finish := func() {
+		once.Do(func() {
+			c.mu.Lock()
+			delete(c.inFlight, deviceID)
+			c.mu.Unlock()
+		})
+	}
+	return true, 0, finish
 }
 
 func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
@@ -500,7 +581,8 @@ func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid device_id")
 	}
 
-	if ok, retryAfter := h.collectCooldown().TryAcquire(deviceID, time.Now()); !ok {
+	ok, retryAfter, finish := h.collectCooldown().TryStart(deviceID, time.Now())
+	if !ok {
 		return c.JSON(http.StatusTooManyRequests, map[string]interface{}{
 			"error":               "cooldown_active",
 			"message":             fmt.Sprintf("采集冷却中，请 %d 秒后再试", retryAfter),
@@ -508,6 +590,7 @@ func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
 			"retry_after_seconds": retryAfter,
 		})
 	}
+	defer finish()
 
 	device, err := h.Service.GetDeviceRecord(c.Request().Context(), deviceID)
 	if err != nil {
@@ -517,9 +600,13 @@ func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query device")
 	}
 
+	// 脱离 HTTP 请求取消信号但保留 55s 硬超时，防止网关或前端短超时中断后台采落库。
+	collectCtx, cancel := newManualCollectContext(c.Request().Context(), manualDeviceCollectTimeout)
+	defer cancel()
+
 	// Collect metrics via SNMP
 	metrics, err := h.SNMPCollector.CollectMetrics(
-		c.Request().Context(),
+		collectCtx,
 		device.IPAddress,
 		device.Vendor,
 		device.SnmpCommunity,
@@ -534,7 +621,7 @@ func (h DevicesHandler) CollectDeviceMetrics(c echo.Context) error {
 
 	writeReq := monitoring.BuildSNMPDeviceMetricsRequest(deviceID, metrics)
 
-	result, err := h.Metrics.WriteDeviceMetrics(c.Request().Context(), writeReq)
+	result, err := h.Metrics.WriteDeviceMetrics(collectCtx, writeReq)
 	if err != nil && !errors.Is(err, monitoring.ErrNoMetrics) {
 		c.Logger().Errorf("failed to write metrics for device %d: %v", deviceID, err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to write metrics")
@@ -609,45 +696,49 @@ func (h DevicesHandler) BatchCollectMetrics(c echo.Context) error {
 
 	// Process devices (could be parallelized with goroutines)
 	for _, device := range deviceRows {
-		if ok, _ := cooldown.TryAcquire(device.ID, time.Now()); !ok {
+		ok, _, finish := cooldown.TryStart(device.ID, time.Now())
+		if !ok {
 			skippedCooldownDeviceIDs = append(skippedCooldownDeviceIDs, device.ID)
 			continue
 		}
-		result := collectResult{
-			DeviceID:   device.ID,
-			DeviceName: device.Name,
-		}
+		func() {
+			defer finish()
+			result := collectResult{
+				DeviceID:   device.ID,
+				DeviceName: device.Name,
+			}
 
-		metrics, err := h.SNMPCollector.CollectMetrics(
-			c.Request().Context(),
-			device.IPAddress,
-			device.Vendor,
-			device.SnmpCommunity,
-			device.SnmpVersion,
-			device.SnmpPort,
-			device.Tags,
-		)
-		if err != nil {
-			result.Success = false
-			result.Error = err.Error()
+			metrics, err := h.SNMPCollector.CollectMetrics(
+				c.Request().Context(),
+				device.IPAddress,
+				device.Vendor,
+				device.SnmpCommunity,
+				device.SnmpVersion,
+				device.SnmpPort,
+				device.Tags,
+			)
+			if err != nil {
+				result.Success = false
+				result.Error = err.Error()
+				results = append(results, result)
+				return
+			}
+
+			writeReq := monitoring.BuildSNMPDeviceMetricsRequest(device.ID, metrics)
+
+			writeResult, writeErr := h.Metrics.WriteDeviceMetrics(c.Request().Context(), writeReq)
+			if writeErr != nil && !errors.Is(writeErr, monitoring.ErrNoMetrics) {
+				result.Success = false
+				result.Error = writeErr.Error()
+			} else {
+				result.Success = true
+				result.MetricsWritten = writeResult.DeviceMetrics
+				result.Metrics = metrics
+				successCount++
+			}
+
 			results = append(results, result)
-			continue
-		}
-
-		writeReq := monitoring.BuildSNMPDeviceMetricsRequest(device.ID, metrics)
-
-		writeResult, writeErr := h.Metrics.WriteDeviceMetrics(c.Request().Context(), writeReq)
-		if writeErr != nil && !errors.Is(writeErr, monitoring.ErrNoMetrics) {
-			result.Success = false
-			result.Error = writeErr.Error()
-		} else {
-			result.Success = true
-			result.MetricsWritten = writeResult.DeviceMetrics
-			result.Metrics = metrics
-			successCount++
-		}
-
-		results = append(results, result)
+		}()
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{

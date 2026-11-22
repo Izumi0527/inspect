@@ -381,6 +381,7 @@ func matchVendorBySysDescr(sysDescr string) string {
 		strings.Contains(lower, "vrp (r) software") ||
 		strings.Contains(lower, "cloudengine") ||
 		strings.Contains(lower, "quidway") ||
+		strings.Contains(lower, "futurematrix") ||
 		strings.HasPrefix(lower, "huawei ") {
 		return "huawei"
 	}
@@ -458,6 +459,164 @@ func (r Registry) MetricCandidates(metricName string, vendor string) []MetricCan
 	}
 
 	return append(exact, fallback...)
+}
+
+const (
+	huaweiCanonicalEnterprisePrefix = "1.3.6.1.4.1.2011"
+	futureMatrixEnterprisePrefix    = "1.3.6.1.4.1.56813"
+)
+
+// RewriteOIDPrefix 严格按精确相等或 "." 边界把 oid 前缀由 fromPrefix 替换为 toPrefix，
+// 防止误改 1.3.6.1.4.1.20110 或标准 MIB（1.3.6.1.2.1.* / 1.0.8802.*）。
+func RewriteOIDPrefix(oid, fromPrefix, toPrefix string) string {
+	normOID := NormalizeOID(oid)
+	if normOID == "" {
+		return ""
+	}
+	from := NormalizeOID(fromPrefix)
+	to := NormalizeOID(toPrefix)
+	if from == "" || to == "" || from == to {
+		return normOID
+	}
+	if normOID == from {
+		return to
+	}
+	if strings.HasPrefix(normOID, from+".") {
+		return to + normOID[len(from):]
+	}
+	return normOID
+}
+
+// CanonicalizeHuaweiEnterpriseOID 将 FutureMatrix (PEN 56813) OID 按 "." 边界归一到华为基线 (PEN 2011)。
+func CanonicalizeHuaweiEnterpriseOID(oid string) string {
+	return RewriteOIDPrefix(oid, futureMatrixEnterprisePrefix, huaweiCanonicalEnterprisePrefix)
+}
+
+func firstOptionalArg(args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	return ""
+}
+
+func containsFutureMatrixBrand(values ...string) bool {
+	for _, raw := range values {
+		lower := strings.ToLower(strings.TrimSpace(raw))
+		if lower == "" {
+			continue
+		}
+		if strings.Contains(lower, "futurematrix") ||
+			strings.Contains(lower, "future_matrix") ||
+			strings.Contains(lower, "future-matrix") ||
+			strings.Contains(lower, "huarong") {
+			return true
+		}
+	}
+	return false
+}
+
+func findMatchingPrefix(normalizedOID string, prefixes []string) string {
+	if normalizedOID == "" {
+		return ""
+	}
+	best := ""
+	for _, raw := range prefixes {
+		prefix := NormalizeOID(raw)
+		if prefix == "" {
+			continue
+		}
+		if (normalizedOID == prefix || strings.HasPrefix(normalizedOID, prefix+".")) && len(prefix) > len(best) {
+			best = prefix
+		}
+	}
+	return best
+}
+
+// ResolveEnterprisePrefix 解析设备当前应使用的企业 OID 前缀：
+// 当 sysObjectID 命中非首项 enterprise_prefixes（如 56813），或 sysObjectID 未命中 2011 且
+// vendor/sysDescr 明确含 FutureMatrix/Huarong 时，返回 ("1.3.6.1.4.1.2011", "1.3.6.1.4.1.56813")。
+func (r Registry) ResolveEnterprisePrefix(vendor, sysObjectID string, sysDescr ...string) (canonicalPrefix, activePrefix string) {
+	descr := firstOptionalArg(sysDescr)
+	resolvedVendor := r.ResolveVendorByContext(vendor, sysObjectID, descr)
+	item, ok := r.Vendors[resolvedVendor]
+	if !ok || len(item.EnterprisePrefixes) == 0 {
+		return "", ""
+	}
+	canonicalPrefix = NormalizeOID(item.EnterprisePrefixes[0])
+	if canonicalPrefix == "" {
+		return "", ""
+	}
+	activePrefix = canonicalPrefix
+
+	normSysObj := NormalizeOID(sysObjectID)
+	if matched := findMatchingPrefix(normSysObj, item.EnterprisePrefixes); matched != "" {
+		return canonicalPrefix, matched
+	}
+	if resolvedVendor == "huawei" && len(item.EnterprisePrefixes) > 1 && containsFutureMatrixBrand(vendor, descr) {
+		if secondary := NormalizeOID(item.EnterprisePrefixes[1]); secondary != "" {
+			activePrefix = secondary
+		}
+	}
+	return canonicalPrefix, activePrefix
+}
+
+// RewriteVendorOID 根据设备上下文动态重写厂商私有 OID（例如 2011.* -> 56813.*）。
+func (r Registry) RewriteVendorOID(vendor, sysObjectID, oid string, sysDescr ...string) string {
+	canonical, active := r.ResolveEnterprisePrefix(vendor, sysObjectID, sysDescr...)
+	if canonical == "" || active == "" || canonical == active {
+		return NormalizeOID(oid)
+	}
+	return RewriteOIDPrefix(oid, canonical, active)
+}
+
+// MetricCandidatesForDevice 返回按设备上下文深拷贝并完成企业 OID 重写的指标候选列表。
+func (r Registry) MetricCandidatesForDevice(metricName, vendor, sysObjectID string, sysDescr ...string) []MetricCandidate {
+	descr := firstOptionalArg(sysDescr)
+	resolvedVendor := r.ResolveVendorByContext(vendor, sysObjectID, descr)
+	base := r.MetricCandidates(metricName, resolvedVendor)
+	if len(base) == 0 {
+		return nil
+	}
+	out := make([]MetricCandidate, len(base))
+	for i, cand := range base {
+		cloned := cand
+		cloned.Vendors = append([]string(nil), cand.Vendors...)
+		cloned.OIDs = make([]string, len(cand.OIDs))
+		for j, oid := range cand.OIDs {
+			cloned.OIDs[j] = r.RewriteVendorOID(vendor, sysObjectID, oid, descr)
+		}
+		out[i] = cloned
+	}
+	return out
+}
+
+// CatalogEntriesForDevice 返回按设备上下文完成企业 OID 重写的扩展特征目录条目。
+func (r Registry) CatalogEntriesForDevice(vendor, category, sysObjectID string, sysDescr ...string) []CatalogOID {
+	descr := firstOptionalArg(sysDescr)
+	resolvedVendor := r.ResolveVendorByContext(vendor, sysObjectID, descr)
+	entries := r.CatalogEntries(resolvedVendor, category)
+	if len(entries) == 0 {
+		return nil
+	}
+	for i := range entries {
+		entries[i].OID = r.RewriteVendorOID(vendor, sysObjectID, entries[i].OID, descr)
+	}
+	return entries
+}
+
+// VendorLLDPEnableOIDForDevice 返回按设备上下文重写后的厂商 LLDP 全局开关 OID。
+func (r Registry) VendorLLDPEnableOIDForDevice(vendor, sysObjectID string, sysDescr ...string) string {
+	descr := firstOptionalArg(sysDescr)
+	resolvedVendor := r.ResolveVendorByContext(vendor, sysObjectID, descr)
+	item, ok := r.Vendors[resolvedVendor]
+	if !ok {
+		return ""
+	}
+	rawOID := strings.TrimSpace(item.LLDPEnable.OID)
+	if rawOID == "" {
+		return ""
+	}
+	return r.RewriteVendorOID(vendor, sysObjectID, rawOID, descr)
 }
 
 func validateOIDDefinition(path string, item OIDDefinition) error {

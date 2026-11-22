@@ -119,6 +119,16 @@ GENERIC_TRAP_FACILITY = {
 
 SEVERITY_WORDS = {'cleared', 'indeterminate', 'critical', 'major', 'minor', 'warning'}
 REASON_NAME_RE = re.compile(r'Reason(Descr|Info)?$')
+ALARM_MIB_VARBIND_PREFIXES = (
+    '1.3.6.1.4.1.2011.5.25.180.1.',
+    '1.3.6.1.4.1.56813.5.25.180.1.',
+)
+# FutureMatrix《告警处理》1.32.1/1.32.2 将 FMEasyOperationClientAdded/Lost 误印为 .2.25.311，
+# 与《MIB参考》中的 .5.25.311 并列双录，保证两类手册及设备侧 OID 均可命中。
+FM_EASYOP_ERRATA_MIRROR_REV = {
+    '1.3.6.1.4.1.56813.5.25.311.6.2.1': '1.3.6.1.4.1.56813.2.25.311.6.2.1',
+    '1.3.6.1.4.1.56813.5.25.311.6.2.2': '1.3.6.1.4.1.56813.2.25.311.6.2.2',
+}
 LABEL_MAX = 24
 LABEL_PREFIXES = ('该节点用来表示', '该节点标识', '该节点表示', '该告警表示', '该trap表示', '该Trap表示')
 # 「当 X 时触发告警」「X，产生告警」之类的框架套话：剥掉后剩下的 X 才是告警名
@@ -396,7 +406,10 @@ def resolve_docx_inputs(args: argparse.Namespace) -> list[Path]:
     if args.docx_dir is not None:
         if not args.docx_dir.is_dir():
             raise FileNotFoundError(f'docx 目录不存在: {args.docx_dir}')
-        for p in sorted(args.docx_dir.glob('*.docx'), key=lambda item: item.name):
+        for p in sorted(
+            args.docx_dir.glob('*.docx'),
+            key=lambda item: (1 if 'futurematrix' in item.name.lower() else 0, item.name),
+        ):
             if p.name.startswith('~$') or not p.is_file():
                 continue
             files.append(p)
@@ -405,7 +418,18 @@ def resolve_docx_inputs(args: argparse.Namespace) -> list[Path]:
     if args.legacy_docx is not None:
         files.append(args.legacy_docx)
     if not files:
-        files.append(DEFAULT_DOCX)
+        if DEFAULT_DOCX.is_file():
+            files.append(DEFAULT_DOCX)
+        elif DEFAULT_DOCX.parent.is_dir():
+            for p in sorted(
+                DEFAULT_DOCX.parent.glob('*.docx'),
+                key=lambda item: (1 if 'futurematrix' in item.name.lower() else 0, item.name),
+            ):
+                if p.name.startswith('~$') or not p.is_file():
+                    continue
+                files.append(p)
+        else:
+            files.append(DEFAULT_DOCX)
 
     unique: list[Path] = []
     seen: set[Path] = set()
@@ -485,11 +509,11 @@ def main(argv: list[str] | None = None) -> int:
         name = node['name']
         enum = node['enum']
         is_notify_var = oid in referenced or node['access'] == 'accessible-for-notify' \
-            or oid.startswith('1.3.6.1.4.1.2011.5.25.180.1.')
+            or oid.startswith(ALARM_MIB_VARBIND_PREFIXES)
         if name.endswith('Severity') and enum and set(enum.values()) <= SEVERITY_WORDS and is_notify_var:
             severity_varbinds[oid] = {'name': name, 'values': enum}
         if REASON_NAME_RE.search(name) and ('OCTET' in node['dtype'].upper() or 'DisplayString' in node['dtype']) \
-                and (node['access'] == 'accessible-for-notify' or oid.startswith('1.3.6.1.4.1.2011.5.25.180.1.')):
+                and (node['access'] == 'accessible-for-notify' or oid.startswith(ALARM_MIB_VARBIND_PREFIXES)):
             reason_varbinds[oid] = name
 
     out_traps: dict[str, dict] = {}
@@ -507,8 +531,16 @@ def main(argv: list[str] | None = None) -> int:
         if cleared:
             item['cleared'] = True
         out_traps[oid] = item
+        errata_oid = FM_EASYOP_ERRATA_MIRROR_REV.get(oid)
+        if errata_oid and errata_oid not in out_traps:
+            out_traps[errata_oid] = dict(item)
 
-    source_parts = [p.name for p in docx_files]
+    has_hw = any('futurematrix' not in p.name.lower() for p in docx_files)
+    has_fm = any('futurematrix' in p.name.lower() for p in docx_files)
+    if has_hw and has_fm:
+        source_parts = ['Huawei V200R024C00', 'FutureMatrix V200R025C00']
+    else:
+        source_parts = [p.name for p in docx_files]
     added_traps, added_nodes = 0, 0
     if not args.no_supplement and args.supplement is not None:
         if not args.supplement.is_file():

@@ -12,10 +12,14 @@
         "cloudengine",
         "quidway",
         "huawei_technologies",
-        "华为"
+        "华为",
+        "futurematrix",
+        "future_matrix",
+        "huarong"
       ],
       "enterprise_prefixes": [
-        "1.3.6.1.4.1.2011"
+        "1.3.6.1.4.1.2011",
+        "1.3.6.1.4.1.56813"
       ],
       "lldp_enable": {
         "oid": "1.3.6.1.4.1.2011.5.25.134.1.1.1.0",
@@ -565,6 +569,14 @@
           "method": "bulkwalk",
           "value_type": "integer",
           "description": "实体故障指示灯状态"
+        },
+        {
+          "id": "huawei_entity_fault_light_v2",
+          "name": "FMEntityFaultLight",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.42",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "实体故障指示灯状态（V200R025/FutureMatrix .42 节点）"
         }
       ],
       "identity": [
@@ -591,6 +603,22 @@
           "method": "bulkwalk",
           "value_type": "string",
           "description": "华为实体单板名称"
+        },
+        {
+          "id": "huawei_compatible_product_name",
+          "name": "FMCompatibleProductName",
+          "oid": "1.3.6.1.4.1.2011.6.3.11.4",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "兼容设备产品名称"
+        },
+        {
+          "id": "huawei_device_esn",
+          "name": "FMDeviceEsn",
+          "oid": "1.3.6.1.4.1.2011.5.25.188.1.1",
+          "method": "get",
+          "value_type": "string",
+          "description": "设备或主堆叠成员 ESN"
         }
       ],
       "interface_monitor": [

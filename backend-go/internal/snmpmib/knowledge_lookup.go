@@ -18,17 +18,28 @@ type KnowledgeLookupResult struct {
 }
 
 var (
-	vrpHeaderExtractRe = regexp.MustCompile(`(?:%%[0-9]{2})?([A-Za-z0-9_-]+)/([0-7])/([A-Za-z0-9_()\[\].-]+?)(?:\([lsLS]\))?(?:\[[0-9]+\])?(?:[:\s]|$)`)
+	vrpHeaderExtractRe = regexp.MustCompile(`(?:\s*%%\s*[0-9]{2}\s*)?([A-Za-z0-9_-]+)/([0-7])/([A-Za-z0-9_()\[\].-]+?)(?:\([lsLS]\))?(?:\[[0-9]+\])?(?:[:\s]|$)`)
 	oidExtractRe       = regexp.MustCompile(`(?:\.?)(?:1\.3\.6\.1|1\.0\.8802)(?:\.[0-9]+)+`)
 	eventIDExtractRe   = regexp.MustCompile(`(?i)\b(?:EventID|SubID|SubId)\s*[=:]\s*([0-9]+)`)
 )
 
 // LookupMIB 按 OID 查找 MIB 节点定义：先精确匹配，再最多剥离 8 段实例后缀做前缀匹配。
+// 优先直接查原 OID（命中 56813 FM* 原生定义），未命中时回退 2011 规范前缀。
 func (c *HuaweiKnowledgeCatalog) LookupMIB(oid string) (MIBNodeEntry, string, bool) {
 	if c == nil {
 		return MIBNodeEntry{}, "", false
 	}
 	normalized := NormalizeOID(oid)
+	if node, suffix, ok := c.lookupMIBDirect(normalized); ok {
+		return node, suffix, true
+	}
+	if canonical := CanonicalizeHuaweiEnterpriseOID(normalized); canonical != "" && canonical != normalized {
+		return c.lookupMIBDirect(canonical)
+	}
+	return MIBNodeEntry{}, "", false
+}
+
+func (c *HuaweiKnowledgeCatalog) lookupMIBDirect(normalized string) (MIBNodeEntry, string, bool) {
 	if normalized == "" {
 		return MIBNodeEntry{}, "", false
 	}
@@ -47,6 +58,7 @@ func (c *HuaweiKnowledgeCatalog) LookupMIB(oid string) (MIBNodeEntry, string, bo
 
 // LookupAlarm 按 OID 查找官方告警排障知识；若传入 eventID（如 SubID / AlarmID），
 // 且该 OID 存在 Variants，则优先匹配对应变体并回填主结构体展示字段。
+// 优先直接查原 OID（命中 56813 FM* 原生定义），未命中时回退 2011 规范前缀。
 func (c *HuaweiKnowledgeCatalog) LookupAlarm(oid string, eventID ...string) (AlarmKnowledgeEntry, bool) {
 	if c == nil {
 		return AlarmKnowledgeEntry{}, false
@@ -56,6 +68,11 @@ func (c *HuaweiKnowledgeCatalog) LookupAlarm(oid string, eventID ...string) (Ala
 		return AlarmKnowledgeEntry{}, false
 	}
 	entry, ok := c.alarmByOID[normalized]
+	if !ok {
+		if canonical := CanonicalizeHuaweiEnterpriseOID(normalized); canonical != "" && canonical != normalized {
+			entry, ok = c.alarmByOID[canonical]
+		}
+	}
 	if !ok {
 		return AlarmKnowledgeEntry{}, false
 	}

@@ -50,6 +50,16 @@ TRAP_VAR_HEADERS = ('绑定变量', 'Binding Variable')
 NODE_TYPE_HEADER = '数据类型'
 REASON_NAME_RE = re.compile(r'Reason(Descr|Info)?$')
 SEVERITY_WORDS = {'cleared', 'indeterminate', 'critical', 'major', 'minor', 'warning'}
+ALARM_MIB_VARBIND_PREFIXES = (
+    '1.3.6.1.4.1.2011.5.25.180.1.',
+    '1.3.6.1.4.1.56813.5.25.180.1.',
+)
+# FutureMatrix《告警处理》1.32.1/1.32.2 将 FMEasyOperationClientAdded/Lost 误印为 .2.25.311，
+# 保留原勘误 OID 同时镜像到《MIB参考》中的真实 Trap OID (.5.25.311)。
+FM_EASYOP_ERRATA_MIRROR = {
+    '1.3.6.1.4.1.56813.2.25.311.6.2.1': '1.3.6.1.4.1.56813.5.25.311.6.2.1',
+    '1.3.6.1.4.1.56813.2.25.311.6.2.2': '1.3.6.1.4.1.56813.5.25.311.6.2.2',
+}
 
 VALID_LEVELS = {'critical', 'warning', 'info'}
 VALID_FACILITIES = {
@@ -136,19 +146,20 @@ OFFICIAL_MODULE_FACILITY_MAP = {
     # interface
     'bptnladp': 'interface', 'cfm': 'interface', 'dldp': 'interface', 'efm': 'interface',
     'eoam1ag': 'interface', 'eoam_adp': 'interface', 'eoam_y1731': 'interface', 'errdown': 'interface',
-    'errordown': 'interface', 'etrunk': 'interface', 'ifadp': 'interface', 'ifnet': 'interface',
-    'ifpdt': 'interface', 'l2bptnl': 'interface', 'l2if': 'interface', 'l2ifppi': 'interface',
-    'l2v': 'interface', 'l3ad': 'interface', 'l3vpn': 'interface', 'lacp': 'interface',
-    'lldp': 'interface', 'mid_l2bptnl': 'interface', 'nvo3': 'interface', 'poe': 'interface',
-    'ru': 'interface', 'rumng': 'interface', 'ruup': 'interface', 'tnlm': 'interface',
-    'tplmng': 'interface', 'trunk': 'interface', 'tunn_ps': 'interface', 'tunnel': 'interface',
-    'uni-topomng': 'interface', 'vtrunk': 'interface', 'y1731adp': 'interface',
+    'errordown': 'interface', 'etrunk': 'interface', 'ifadp': 'interface', 'ifmcomm': 'interface',
+    'ifnet': 'interface', 'ifpdt': 'interface', 'l2bptnl': 'interface', 'l2if': 'interface',
+    'l2ifppi': 'interface', 'l2v': 'interface', 'l3ad': 'interface', 'l3vpn': 'interface',
+    'lacp': 'interface', 'lldp': 'interface', 'mid_l2bptnl': 'interface', 'nvo3': 'interface',
+    'poe': 'interface', 'ru': 'interface', 'rumng': 'interface', 'ruup': 'interface',
+    'tnlm': 'interface', 'tplmng': 'interface', 'trunk': 'interface', 'tunn_ps': 'interface',
+    'tunnel': 'interface', 'uni-topomng': 'interface', 'vtrunk': 'interface', 'y1731adp': 'interface',
     # switching
     'adpvxlan': 'switching', 'arp': 'switching', 'arplink': 'switching', 'erps': 'switching',
-    'hgmp': 'switching', 'lbdt': 'switching', 'loopdetect': 'switching', 'mad': 'switching',
-    'mdns': 'switching', 'mstp': 'switching', 'mstp_adp': 'switching', 'rrpp': 'switching',
-    'sep': 'switching', 'smlk': 'switching', 'svxlan': 'switching', 'sw_snpg': 'switching',
-    'vbst': 'switching', 'vcmp': 'switching', 'vcmp_adp': 'switching',
+    'hgmp': 'switching', 'lbdt': 'switching', 'loopdetect': 'switching', 'mac': 'switching',
+    'mad': 'switching', 'mdns': 'switching', 'mstp': 'switching', 'mstp_adp': 'switching',
+    'rrpp': 'switching', 'sep': 'switching', 'smlk': 'switching', 'svxlan': 'switching',
+    'sw_snpg': 'switching', 'vbst': 'switching', 'vcmp': 'switching', 'vcmp_adp': 'switching',
+    'vlan': 'switching',
     # routing
     '6over4': 'routing', 'ada_bfd': 'routing', 'adpipv4': 'routing', 'bfd': 'routing',
     'bgp': 'routing', 'cspf': 'routing', 'fibspt': 'routing', 'gre': 'routing',
@@ -168,14 +179,16 @@ OFFICIAL_MODULE_FACILITY_MAP = {
     'ike': 'security', 'ipsec': 'security', 'ipsec-vpn': 'security', 'keychain': 'security',
     'line': 'security', 'nac': 'security', 'nd_raguard': 'security', 'pki': 'security',
     'portal': 'security', 'rds': 'security', 'rsa': 'security', 'sa': 'security',
-    'sacl': 'security', 'sece': 'security', 'station': 'security', 'tac': 'security',
-    'usa': 'security',
+    'sacl': 'security', 'sece': 'security', 'security': 'security', 'station': 'security',
+    'tac': 'security', 'usa': 'security',
     # ssh
     'ftps': 'ssh', 'http': 'ssh', 'http2c': 'ssh', 'ssh': 'ssh',
     'tftp': 'ssh', 'vty': 'ssh', 'web': 'ssh', 'web_writefile_log': 'ssh',
-    'webmng': 'ssh', 'webs': 'ssh',
+    'webm': 'ssh', 'webmng': 'ssh', 'webs': 'ssh',
     # snmp
     'bulkstat': 'snmp', 'rmon': 'snmp', 'snmp': 'snmp', 'tad': 'snmp',
+    # system (FutureMatrix 新增模块显式归口)
+    'cloudmng': 'system', 'devm': 'system', 'sysmng': 'system',
 }
 
 
@@ -837,7 +850,7 @@ def build_alarms_kb(parsed_alarms: list[dict], legacy_traps: dict[str, dict]) ->
 
     kb = {
         'schema_version': 1,
-        'source': 'Huawei S300/S500/S2700/S5700/S6700 V200R024C00 Alarm Reference + huawei-alarms-v600-supplement.json',
+        'source': 'Huawei V200R024C00 + FutureMatrix V200R025C00 Alarm Reference + huawei-alarms-v600-supplement.json',
         'module_count': len(modules),
         'alarm_count': len(alarms_out),
         'alarms': alarms_out,
@@ -923,7 +936,11 @@ def resolve_inputs(docx_dir: Path) -> dict[str, list[Path]]:
     if not docx_dir.is_dir():
         raise FileNotFoundError(f'docx 目录不存在: {docx_dir}')
     grouped: dict[str, list[Path]] = {'mib': [], 'alarms': [], 'logs': []}
-    for p in sorted(docx_dir.glob('*.docx'), key=lambda item: item.name):
+    # 确保 HUAWEI V200R024C00 基线先解析，再无损并列合入 FutureMatrix V200R025C00
+    for p in sorted(
+        docx_dir.glob('*.docx'),
+        key=lambda item: (1 if 'futurematrix' in item.name.lower() else 0, item.name),
+    ):
         if p.name.startswith('~$') or not p.is_file():
             continue
         dtype = detect_docx_type(p)
@@ -963,17 +980,37 @@ def main(argv: list[str] | None = None) -> int:
         parse_mib_docx(p, mib_catalog, mib_traps, raw_nodes, name_to_oid)
 
     parsed_alarms: list[dict] = []
+    seen_alarm_keys: set[tuple[str, str]] = set()
     alarm_modules: set[str] = set()
     for p in grouped['alarms']:
         items, mods = parse_alarm_docx(p)
-        parsed_alarms.extend(items)
+        for item in items:
+            key = (item['oid'], item['sub_id'])
+            if key not in seen_alarm_keys:
+                seen_alarm_keys.add(key)
+                parsed_alarms.append(item)
+            mirror_oid = FM_EASYOP_ERRATA_MIRROR.get(item['oid'])
+            if mirror_oid:
+                mirror_key = (mirror_oid, item['sub_id'])
+                if mirror_key not in seen_alarm_keys:
+                    seen_alarm_keys.add(mirror_key)
+                    mirrored = dict(item)
+                    mirrored['oid'] = mirror_oid
+                    if mirrored.get('alarm_id') == item['oid']:
+                        mirrored['alarm_id'] = mirror_oid
+                    parsed_alarms.append(mirrored)
         alarm_modules.update(mods)
 
     parsed_logs: list[dict] = []
+    seen_log_keys: set[tuple[str, str, int]] = set()
     log_modules: set[str] = set()
     for p in grouped['logs']:
         items, mods = parse_log_docx(p)
-        parsed_logs.extend(items)
+        for item in items:
+            key = (item['module'], item['mnemonic'], item['severity'])
+            if key not in seen_log_keys:
+                seen_log_keys.add(key)
+                parsed_logs.append(item)
         log_modules.update(mods)
 
     # 兼容基线初始化
@@ -1032,11 +1069,15 @@ def main(argv: list[str] | None = None) -> int:
             out_nodes[oid] = item
         name = node['name']
         enum = node['enum']
-        is_notify = oid in referenced or node['access'] == 'accessible-for-notify' or oid.startswith('1.3.6.1.4.1.2011.5.25.180.1.')
+        is_notify = (
+            oid in referenced
+            or node['access'] == 'accessible-for-notify'
+            or oid.startswith(ALARM_MIB_VARBIND_PREFIXES)
+        )
         if name.endswith('Severity') and enum and set(enum.values()) <= SEVERITY_WORDS and is_notify:
             severity_varbinds.setdefault(oid, {'name': name, 'values': enum})
         if REASON_NAME_RE.search(name) and ('OCTET' in node['dtype'].upper() or 'DisplayString' in node['dtype']) \
-                and (node['access'] == 'accessible-for-notify' or oid.startswith('1.3.6.1.4.1.2011.5.25.180.1.')):
+                and (node['access'] == 'accessible-for-notify' or oid.startswith(ALARM_MIB_VARBIND_PREFIXES)):
             reason_varbinds.setdefault(oid, name)
 
     added_traps, added_nodes = 0, 0
@@ -1052,7 +1093,7 @@ def main(argv: list[str] | None = None) -> int:
     mib_modules = {n['mib'] for n in mib_list if n['mib']}
     mib_kb = {
         'schema_version': 1,
-        'source': 'Huawei S300/S500/S2700/S5700/S6700 V200R024C00 MIB Reference',
+        'source': 'Huawei V200R024C00 + FutureMatrix V200R025C00 MIB Reference',
         'module_count': len(mib_modules),
         'node_count': len(mib_list),
         'nodes': mib_list,
@@ -1063,14 +1104,14 @@ def main(argv: list[str] | None = None) -> int:
     sorted_logs = sorted(parsed_logs, key=lambda x: (x['module'], x['mnemonic'], x['severity']))
     logs_kb = {
         'schema_version': 1,
-        'source': 'Huawei S300/S500/S2700/S5700/S6700 V200R024C00 Log Reference',
+        'source': 'Huawei V200R024C00 + FutureMatrix V200R025C00 Log Reference',
         'module_count': len(log_modules),
         'log_count': len(sorted_logs),
         'logs': sorted_logs,
     }
 
     all_vrp_modules = log_modules | alarm_modules
-    source_desc = '华为 S300/S500/S2700/S5700/S6700 V200R024C00 产品文档 + huawei-alarms-v600-supplement.json'
+    source_desc = 'Huawei V200R024C00 + FutureMatrix V200R025C00 + huawei-alarms-v600-supplement.json'
 
     if not args.dry_run:
         legacy_catalog = {

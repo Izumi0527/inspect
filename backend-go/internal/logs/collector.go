@@ -467,7 +467,7 @@ var (
 //	V600 表格化: 2026-06-06 11:20:10  842   Informational  %%01IFM/4/LINK_STATE(l):The physical status...
 //	英文月名: Mar 10 2025 08:12:33 HUAWEI %%01SSH/5/SSH_FAIL(l):Failed to login. (...)
 var huaweiLogbufferPattern = regexp.MustCompile(
-	`^((?:[A-Za-z]{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{2}:?\d{2}|DST|UTC)?)\s+(\d+\s+[A-Za-z]+|\S+)\s+%%\d{2}([A-Za-z0-9_-]+)/(\d)/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?(?:\[\d+\])?:\s*(?:CID=[^;\s]+;\s*)?(.+)$`)
+	`^((?:[A-Za-z]{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{2}:?\d{2}|DST|UTC)?)\s+(\d+\s+[A-Za-z]+|\S+)\s+%%\s*\d{2}\s*([A-Za-z0-9_-]+)/(\d)/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?(?:\[\d+\])?:\s*(?:CID=[^;\s]+;\s*)?(.+)$`)
 
 // huaweiLegacyLogbufferPattern 匹配华为 VRP 日志行去掉 %%01 版本头后的变体（undo info-center logbuf version）。
 var huaweiLegacyLogbufferPattern = regexp.MustCompile(
@@ -487,7 +487,7 @@ var vrpModuleFacilities = map[string]string{
 	"dldp": "interface", "ethoam": "interface", "efm": "interface", "cfm": "interface",
 	"y1731": "interface", "optical": "interface", "transceiver": "interface", "sfp": "interface",
 	"phy": "interface", "port": "interface", "subif": "interface", "vbdif": "interface",
-	"nve": "interface", "udld": "interface", "l2vpn": "interface",
+	"nve": "interface", "udld": "interface", "l2vpn": "interface", "ifmcomm": "interface",
 
 	// 二层交换、堆叠与叠加网络（switching）
 	"vlan": "switching", "l2": "switching", "stack": "switching", "stackm": "switching",
@@ -520,13 +520,13 @@ var vrpModuleFacilities = map[string]string{
 	"cpudefend": "security", "cpu-defend": "security", "acl": "security", "rbac": "security",
 	"cmd": "security", "sacg": "security", "eap": "security", "ipsec": "security",
 	"ike": "security", "arpsec": "security", "dai": "security", "ndsec": "security",
-	"dhcpv6": "security", "localuser": "security",
+	"dhcpv6": "security", "localuser": "security", "security": "security",
 
 	// 远程登录、可编程网管通道与文件传输（ssh）
 	"ssh": "ssh", "sshs": "ssh", "sshc": "ssh", "stelnet": "ssh",
 	"sftp": "ssh", "scp": "ssh", "telnet": "ssh", "ftp": "ssh",
 	"tftp": "ssh", "netconf": "ssh", "restconf": "ssh", "yang": "ssh",
-	"http": "ssh", "https": "ssh", "vty": "ssh",
+	"http": "ssh", "https": "ssh", "vty": "ssh", "webm": "ssh",
 
 	// 网管监控与遥测（snmp）
 	"snmp": "snmp", "snmpd": "snmp", "trap": "snmp", "rmon": "snmp",
@@ -551,6 +551,7 @@ var vrpModuleFacilities = map[string]string{
 	"sem": "system", "mirror": "system", "sflow": "system", "erspan": "system",
 	"twamp": "system", "ztp": "system", "pnp": "system", "rollback": "system",
 	"upgrade": "system", "boot": "system", "reset": "system",
+	"cloudmng": "system", "sysmng": "system",
 }
 
 // vrpModuleToFacility 按 VRP 模块名精确映射设施；未收录的模块退回
@@ -635,7 +636,7 @@ func parseLogLine(line string, deviceID int, vendor string, collectedAt time.Tim
 
 // huaweiTrapPattern matches Huawei V200/V600 single-line trapbuffer output:
 // #Sep 17 2012 17:09:47+00:00 HUAWEI LLDP/4/NBRCHGTRAP:OID: 1.0.8802.1.1.2.0.0.1 Neighbor info changed.
-var huaweiTrapPattern = regexp.MustCompile(`(?i)^#?\s*((?:[A-Za-z]{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{2}:?\d{2}|DST|UTC)?)\s+\S+\s+(?:%%\d+)?([A-Za-z0-9_-]+)/(\d+)/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?[:\s]+(?:CID=[^;\s]+;\s*)?(.+)`)
+var huaweiTrapPattern = regexp.MustCompile(`(?i)^#?\s*((?:[A-Za-z]{3}\s+\d{1,2}\s+\d{4}|\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{2}:?\d{2}|DST|UTC)?)\s+\S+\s+(?:%%\s*\d+\s*)?([A-Za-z0-9_-]+)/(\d+)/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?[:\s]+(?:CID=[^;\s]+;\s*)?(.+)`)
 
 // huaweiAlarmActivePattern matches Huawei V200 "display alarm active" output lines:
 // 1  0x08d40001  hwBoardFail  Critical  ...  Board failed.
@@ -647,7 +648,7 @@ var huaweiAlarmActivePattern = regexp.MustCompile(`(?i)^\s*(\d+)\s+0x[0-9a-fA-F]
 var huaweiV600AlarmActivePattern = regexp.MustCompile(`(?i)^\s*(\d+)\s+(Critical|Major|Minor|Warning)\s+(0x[0-9a-fA-F]+)\s+(\S+(?:\s+\S+){0,3}?)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[+-]\d{2}:?\d{2})?)\s+(.+)$`)
 
 var trapBlockHeaderPattern = regexp.MustCompile(`(?i)^#\s*trap\b.*$`)
-var vrpEmbeddedHeaderPattern = regexp.MustCompile(`(?:%%\d{2})?([A-Za-z0-9_-]+)/([0-7])/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?`)
+var vrpEmbeddedHeaderPattern = regexp.MustCompile(`(?:%%\s*\d{2}\s*)?([A-Za-z0-9_-]+)/([0-7])/([A-Za-z0-9_-]+)(?:\([A-Za-z]\))?`)
 
 // parseTrapBufferLine parses a single line from Huawei "display trapbuffer" output
 func parseTrapBufferLine(line string, deviceID int, collectedAt time.Time) *logEntry {

@@ -164,11 +164,15 @@ export async function getAdhocGraphs(req: AdhocGraphRequest): Promise<AdhocGraph
   return unwrapData<AdhocGraphResponse>(payload)
 }
 
+export const DEVICE_COLLECT_NOW_TIMEOUT_MS = 60_000
+
 export async function triggerDeviceCollectNow(
   deviceId: number
 ): Promise<CollectDeviceMetricsResult> {
   try {
-    const payload = await api.post<unknown>(`/devices/${deviceId}/collect-metrics`)
+    const payload = await api.post<unknown>(`/devices/${deviceId}/collect-metrics`, undefined, {
+      timeout: DEVICE_COLLECT_NOW_TIMEOUT_MS,
+    })
     return unwrapData<CollectDeviceMetricsResult>(payload)
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 429) {

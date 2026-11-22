@@ -19,6 +19,7 @@ type SNMPExtensionsResponse struct {
 	PoE                 *devices.PoEMetrics                 `json:"poe,omitempty"`
 	STP                 *devices.STPMetrics                 `json:"stp,omitempty"`
 	Disks               []devices.DiskMetrics               `json:"disks"`
+	Diagnostics         *devices.SNMPCollectionDiagnostics  `json:"diagnostics,omitempty"`
 }
 
 // SNMPExtensionsSnapshot 为 SNMPExtensionsResponse 的语义别名，供扩展监控消费方统一引用。
@@ -35,6 +36,7 @@ type snmpExtensionsPayload struct {
 	PoE                 *devices.PoEMetrics                 `json:"poe,omitempty"`
 	STP                 *devices.STPMetrics                 `json:"stp,omitempty"`
 	Disks               []devices.DiskMetrics               `json:"disks"`
+	Diagnostics         *devices.SNMPCollectionDiagnostics  `json:"diagnostics,omitempty"`
 }
 
 type latestSNMPExtensionsRow struct {
@@ -104,6 +106,9 @@ func (w *MetricsWriter) GetLatestSNMPExtensions(ctx context.Context, deviceID in
 	}
 	if envelope.SNMPExtensions.Disks != nil {
 		resp.Disks = envelope.SNMPExtensions.Disks
+	}
+	if envelope.SNMPExtensions.Diagnostics != nil {
+		resp.Diagnostics = envelope.SNMPExtensions.Diagnostics
 	}
 
 	return resp, nil

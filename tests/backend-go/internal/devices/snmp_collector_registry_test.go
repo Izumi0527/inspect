@@ -41,6 +41,19 @@ func collectOpticalTransceiversFromCatalog(client collectorSNMPClient, entries [
 //go:linkname shouldFallbackToWalkAll github.com/your-org/inspect-system/backend-go/internal/devices.shouldFallbackToWalkAll
 func shouldFallbackToWalkAll(err error) bool
 
+//go:linkname collectComponentsWithDeviceContext github.com/your-org/inspect-system/backend-go/internal/devices.(*SNMPCollector).collectComponentsWithDeviceContext
+func collectComponentsWithDeviceContext(
+	collector *devices.SNMPCollector,
+	target collectorSNMPClient,
+	metrics *devices.SNMPMetrics,
+	registry *snmpmib.Registry,
+	vendor string,
+	sysObjectID string,
+	sysDescr string,
+	catalog *entityCatalogOpaque,
+	diag *devices.SNMPCollectionDiagnostics,
+)
+
 type fakeCollectorSNMPClient struct {
 	getPackets      map[string]*gosnmp.SnmpPacket
 	bulkWalkPackets map[string][]gosnmp.SnmpPDU
@@ -1066,4 +1079,110 @@ func TestCollectOpticalTransceiversFromCatalog_ExtractsAndSanitizesVendorSN(t *t
 	if items[1].VendorSN != "" {
 		t.Fatalf("items[1].VendorSN = %q, want empty when dirty control chars present", items[1].VendorSN)
 	}
+}
+
+func TestCollectComponentsWithDeviceContext_S5736RealFixture(t *testing.T) {
+	registry, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry() error = %v", err)
+	}
+	collector := devices.NewSNMPCollectorWithRegistry(zap.NewNop(), registry)
+
+	operOID := "1.3.6.1.4.1.56813.5.25.31.1.1.1.1.2"
+	fanOID := "1.3.6.1.4.1.56813.5.25.31.1.1.10.1.7"
+	powerOID := "1.3.6.1.4.1.56813.5.25.31.1.1.18.1.6"
+	nameOID := registry.Common.System.EntPhysicalName.OID
+	classOID := registry.Common.System.EntPhysicalClass.OID
+	sysObjID := ".1.3.6.1.4.1.56813.2.23.811"
+	sysDescr := "FutureMatrix S5736-S24T4XC\r\nVersatile Routing Platform Software\r\nVRP (R) software, Version 5.170 (FutureMatrix S5736-S24T4XC V200R025C00)"
+
+	basePackets := func() map[string][]gosnmp.SnmpPDU {
+		return map[string][]gosnmp.SnmpPDU{
+			operOID: {
+				walkPDU(operOID, 67108867, 3, gosnmp.Integer),
+				walkPDU(operOID, 67108873, 3, gosnmp.Integer),
+				walkPDU(operOID, 67190797, 3, gosnmp.Integer),
+				walkPDU(operOID, 67207181, 3, gosnmp.Integer),
+				walkPDU(operOID, 67223565, 3, gosnmp.Integer),
+				walkPDU(operOID, 67239949, 3, gosnmp.Integer),
+			},
+			classOID: {
+				walkPDU(classOID, 67108867, 3, gosnmp.Integer),
+				walkPDU(classOID, 67108873, 9, gosnmp.Integer),
+				walkPDU(classOID, 67190797, 9, gosnmp.Integer),
+				walkPDU(classOID, 67207181, 9, gosnmp.Integer),
+				walkPDU(classOID, 67223565, 9, gosnmp.Integer),
+				walkPDU(classOID, 67239949, 9, gosnmp.Integer),
+			},
+			nameOID: {
+				walkPDU(nameOID, 67108867, []byte("FutureMatrix S5736 Routing Switch"), gosnmp.OctetString),
+				walkPDU(nameOID, 67108873, []byte("MPU Board 0"), gosnmp.OctetString),
+				walkPDU(nameOID, 67190797, []byte("POWER Card 0/PWR1"), gosnmp.OctetString),
+				walkPDU(nameOID, 67207181, []byte("POWER Card 0/PWR2"), gosnmp.OctetString),
+				walkPDU(nameOID, 67223565, []byte("FAN Card 0/FAN1"), gosnmp.OctetString),
+				walkPDU(nameOID, 67239949, []byte("FAN Card 0/FAN2"), gosnmp.OctetString),
+			},
+		}
+	}
+
+	t.Run("专表为空时自动归位 2 fan + 2 power + 2 board", func(t *testing.T) {
+		client := &fakeCollectorSNMPClient{bulkWalkPackets: basePackets()}
+		metrics := &devices.SNMPMetrics{}
+		collectComponentsWithDeviceContext(
+			collector,
+			client,
+			metrics,
+			registry,
+			"futurematrix",
+			sysObjID,
+			sysDescr,
+			newEntityCatalog(client, registry),
+			nil,
+		)
+		counts := map[string]int{}
+		for _, c := range metrics.Components {
+			counts[c.Kind]++
+			if c.Kind == "board" && (c.Name != "FutureMatrix S5736 Routing Switch" && c.Name != "MPU Board 0") {
+				t.Fatalf("unexpected board component: %+v", c)
+			}
+		}
+		if counts["fan"] != 2 || counts["power"] != 2 || counts["board"] != 2 {
+			t.Fatalf("counts = %+v, want fan=2 power=2 board=2; components=%+v", counts, metrics.Components)
+		}
+	})
+
+	t.Run("专表非空时不重复残留 POWER Card 或 FAN Card 到 board", func(t *testing.T) {
+		packets := basePackets()
+		packets[fanOID] = []gosnmp.SnmpPDU{
+			walkPDU(fanOID, 1, 1, gosnmp.Integer),
+			walkPDU(fanOID, 2, 1, gosnmp.Integer),
+		}
+		packets[powerOID] = []gosnmp.SnmpPDU{
+			walkPDU(powerOID, 1, 1, gosnmp.Integer),
+			walkPDU(powerOID, 2, 1, gosnmp.Integer),
+		}
+		client := &fakeCollectorSNMPClient{bulkWalkPackets: packets}
+		metrics := &devices.SNMPMetrics{}
+		collectComponentsWithDeviceContext(
+			collector,
+			client,
+			metrics,
+			registry,
+			"futurematrix",
+			sysObjID,
+			sysDescr,
+			newEntityCatalog(client, registry),
+			nil,
+		)
+		counts := map[string]int{}
+		for _, c := range metrics.Components {
+			counts[c.Kind]++
+			if c.Kind == "board" && (c.Name != "FutureMatrix S5736 Routing Switch" && c.Name != "MPU Board 0") {
+				t.Fatalf("unexpected board subcomponent leaked: %+v", c)
+			}
+		}
+		if counts["fan"] != 2 || counts["power"] != 2 || counts["board"] != 2 {
+			t.Fatalf("counts = %+v, want fan=2 power=2 board=2; components=%+v", counts, metrics.Components)
+		}
+	})
 }

@@ -90,22 +90,43 @@ func NormalizeOID(oid string) string {
 	return strings.TrimPrefix(strings.TrimSpace(oid), ".")
 }
 
-// LookupTrap 按告警 OID 精确查找定义。
+// LookupTrap 按告警 OID 精确查找定义（优先原生 OID，未命中时尝试 56813->2011 归一回退）。
 func (c *AlarmCatalog) LookupTrap(oid string) (TrapDefinition, bool) {
 	if c == nil {
 		return TrapDefinition{}, false
 	}
-	def, ok := c.Traps[NormalizeOID(oid)]
-	return def, ok
+	normalized := NormalizeOID(oid)
+	if def, ok := c.Traps[normalized]; ok {
+		return def, true
+	}
+	if canonical := CanonicalizeHuaweiEnterpriseOID(normalized); canonical != "" && canonical != normalized {
+		def, ok := c.Traps[canonical]
+		return def, ok
+	}
+	return TrapDefinition{}, false
 }
 
 // LookupNode 查找绑定变量节点：先精确匹配，再逐段剥离尾部实例索引做前缀匹配。
+// 优先原生 OID（直接命中 56813 FM* 定义），未命中时回退 2011 规范前缀。
 // 返回节点定义与被剥离的实例后缀（如 "12"、"0"；精确命中为空串）。
 func (c *AlarmCatalog) LookupNode(oid string) (NodeDefinition, string, bool) {
 	if c == nil {
 		return NodeDefinition{}, "", false
 	}
 	normalized := NormalizeOID(oid)
+	if node, suffix, ok := c.lookupNodeDirect(normalized); ok {
+		return node, suffix, true
+	}
+	if canonical := CanonicalizeHuaweiEnterpriseOID(normalized); canonical != "" && canonical != normalized {
+		return c.lookupNodeDirect(canonical)
+	}
+	return NodeDefinition{}, "", false
+}
+
+func (c *AlarmCatalog) lookupNodeDirect(normalized string) (NodeDefinition, string, bool) {
+	if normalized == "" {
+		return NodeDefinition{}, "", false
+	}
 	if node, ok := c.Nodes[normalized]; ok {
 		return node, "", true
 	}
@@ -117,7 +138,7 @@ func (c *AlarmCatalog) LookupNode(oid string) (NodeDefinition, string, bool) {
 		}
 	}
 	if kb, err := DefaultHuaweiKnowledgeCatalog(); err == nil && kb != nil {
-		if entry, suffix, ok := kb.LookupMIB(normalized); ok {
+		if entry, suffix, ok := kb.lookupMIBDirect(normalized); ok {
 			return NodeDefinition{Name: entry.Name, MIB: entry.MIB}, suffix, true
 		}
 	}
@@ -132,23 +153,9 @@ func (c *AlarmCatalog) SeverityFromVarbinds(vars map[string]string) (string, boo
 		return "", false
 	}
 	for oid, raw := range vars {
-		normalized := NormalizeOID(oid)
-		varbind, ok := c.SeverityVarbinds[normalized]
+		varbind, ok := c.resolveSeverityVarbind(oid)
 		if !ok {
-			// 标量实例 .0 或表列实例后缀
-			node, _, found := c.LookupNode(normalized)
-			if !found {
-				continue
-			}
-			for defOID, candidate := range c.SeverityVarbinds {
-				if candidate.Name == node.Name {
-					varbind, ok = c.SeverityVarbinds[defOID], true
-					break
-				}
-			}
-			if !ok {
-				continue
-			}
+			continue
 		}
 		word, ok := varbind.Values[strings.TrimSpace(raw)]
 		if !ok {
@@ -166,6 +173,29 @@ func (c *AlarmCatalog) SeverityFromVarbinds(vars map[string]string) (string, boo
 		}
 	}
 	return "", false
+}
+
+func (c *AlarmCatalog) resolveSeverityVarbind(oid string) (SeverityVarbind, bool) {
+	normalized := NormalizeOID(oid)
+	if varbind, ok := c.SeverityVarbinds[normalized]; ok {
+		return varbind, true
+	}
+	if canonical := CanonicalizeHuaweiEnterpriseOID(normalized); canonical != "" && canonical != normalized {
+		if varbind, ok := c.SeverityVarbinds[canonical]; ok {
+			return varbind, true
+		}
+	}
+	// 标量实例 .0 或表列实例后缀
+	node, _, found := c.LookupNode(normalized)
+	if !found {
+		return SeverityVarbind{}, false
+	}
+	for defOID, candidate := range c.SeverityVarbinds {
+		if candidate.Name == node.Name {
+			return c.SeverityVarbinds[defOID], true
+		}
+	}
+	return SeverityVarbind{}, false
 }
 
 // Validate 校验知识库结构：schema 版本、级别与设施值域、OID 非空。

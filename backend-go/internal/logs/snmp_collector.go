@@ -31,6 +31,8 @@ const (
 	oidNlmLogEntry         = "1.3.6.1.2.1.92.1.3.1.1"
 	oidNlmLogVariableEntry = "1.3.6.1.2.1.92.1.3.2.1"
 	oidHwAlarmActiveEntry  = "1.3.6.1.4.1.2011.5.25.180.1.8.1"
+	oidFmAlarmActiveEntry  = "1.3.6.1.4.1.56813.5.25.180.1.8.1"
+	oidSysObjectIDScalar   = "1.3.6.1.2.1.1.2.0"
 
 	nlmColDateAndTime    = "3"
 	nlmColNotificationID = "9"
@@ -39,6 +41,15 @@ const (
 	hwAlarmColID         = "2"
 	hwAlarmColPara       = "3"
 )
+
+// ResolveHuaweiAlarmActiveEntryOID 根据设备 sysObjectID 返回活动告警表 Entry OID（兼容 PEN 2011 与 PEN 56813）。
+func ResolveHuaweiAlarmActiveEntryOID(sysObjectID string) string {
+	norm := snmpmib.NormalizeOID(sysObjectID)
+	if norm == "1.3.6.1.4.1.56813" || strings.HasPrefix(norm, "1.3.6.1.4.1.56813.") {
+		return oidFmAlarmActiveEntry
+	}
+	return oidHwAlarmActiveEntry
+}
 
 // ErrSNMPLogTypeUnsupported 表示该日志类型没有 SNMP 等价物（logbuffer 文本只能 SSH 或 Syslog）。
 var ErrSNMPLogTypeUnsupported = errors.New("log type has no snmp equivalent")
@@ -89,11 +100,13 @@ func (c *SNMPLogCollector) Collect(ctx context.Context, device deviceInfo, logTy
 	collectedAt := time.Now().UTC()
 	switch logType {
 	case "alarm":
-		pdus, err := devices.SNMPWalkAll(client, oidHwAlarmActiveEntry)
+		sysObjectID := readSNMPSysObjectID(client)
+		entryOID := ResolveHuaweiAlarmActiveEntryOID(sysObjectID)
+		pdus, err := devices.SNMPWalkAll(client, entryOID)
 		if err != nil {
 			return nil, fmt.Errorf("walk hwAlarmActiveTable failed: %w", err)
 		}
-		return parseAlarmActivePDUs(pdus, device.ID, collectedAt, maxEntries), nil
+		return parseAlarmActivePDUsWithEntry(pdus, entryOID, device.ID, collectedAt, maxEntries), nil
 	default:
 		logPDUs, err := devices.SNMPWalkAll(client, oidNlmLogEntry)
 		if err != nil {
@@ -350,9 +363,36 @@ func lookupActiveAlarmTrap(catalog *snmpmib.AlarmCatalog, id string) (snmpmib.Tr
 	return snmpmib.TrapDefinition{}, false
 }
 
-// parseAlarmActivePDUs 把 hwAlarmActiveTable 的 walk 结果组装为日志条目。
+func readSNMPSysObjectID(client *gosnmp.GoSNMP) string {
+	if client == nil {
+		return ""
+	}
+	pkt, err := client.Get([]string{oidSysObjectIDScalar})
+	if err != nil || pkt == nil || len(pkt.Variables) == 0 {
+		return ""
+	}
+	return snmpmib.NormalizeOID(normalizeAlarmPDUValue(pkt.Variables[0]))
+}
+
+// parseAlarmActivePDUs 把 hwAlarmActiveTable 的 walk 结果组装为日志条目（兼容 2011 与 56813）。
 // 表无时间列，log_timestamp 取采集时间，去重退化为按内容（同一活动告警反复轮询只入库一次）。
 func parseAlarmActivePDUs(pdus []gosnmp.SnmpPDU, deviceID int, collectedAt time.Time, maxEntries int) []logEntry {
+	return parseAlarmActivePDUsWithEntry(pdus, "", deviceID, collectedAt, maxEntries)
+}
+
+func splitAlarmActiveColumn(preferredEntryOID string, pduName string) (string, string, bool) {
+	if preferredEntryOID != "" {
+		if col, idx, ok := splitTableColumn(preferredEntryOID, pduName); ok {
+			return col, idx, true
+		}
+	}
+	if col, idx, ok := splitTableColumn(oidHwAlarmActiveEntry, pduName); ok {
+		return col, idx, true
+	}
+	return splitTableColumn(oidFmAlarmActiveEntry, pduName)
+}
+
+func parseAlarmActivePDUsWithEntry(pdus []gosnmp.SnmpPDU, entryOID string, deviceID int, collectedAt time.Time, maxEntries int) []logEntry {
 	type alarmRow struct {
 		index string
 		id    string
@@ -361,7 +401,7 @@ func parseAlarmActivePDUs(pdus []gosnmp.SnmpPDU, deviceID int, collectedAt time.
 	rows := make(map[string]*alarmRow)
 	order := make([]string, 0)
 	for _, pdu := range pdus {
-		column, index, ok := splitTableColumn(oidHwAlarmActiveEntry, pdu.Name)
+		column, index, ok := splitAlarmActiveColumn(entryOID, pdu.Name)
 		if !ok {
 			continue
 		}

@@ -51,11 +51,14 @@ var (
 		"V200": {}, "V600": {},
 	}
 	genericHuaweiRootOIDs = map[string]struct{}{
-		"1.3.6.1.4.1.2011":      {},
-		"1.3.6.1.4.1.2011.2":    {},
-		"1.3.6.1.4.1.2011.2.23": {},
+		"1.3.6.1.4.1.2011":       {},
+		"1.3.6.1.4.1.2011.2":     {},
+		"1.3.6.1.4.1.2011.2.23":  {},
+		"1.3.6.1.4.1.56813":      {},
+		"1.3.6.1.4.1.56813.2":    {},
+		"1.3.6.1.4.1.56813.2.23": {},
 	}
-	huaweiBrandPrefixes = []string{"CLOUDENGINE ", "QUIDWAY ", "HUAWEI "}
+	huaweiBrandPrefixes = []string{"CLOUDENGINE ", "QUIDWAY ", "HUAWEI ", "FUTUREMATRIX "}
 )
 
 // DefaultHuaweiModelCatalog 返回嵌入的华为园区交换机型号知识库（首次加载并校验，之后复用）。
@@ -159,12 +162,23 @@ func (c *HuaweiModelCatalog) LookupModel(modelName string) (SwitchModelProfile, 
 }
 
 // LookupBySysObjectID 根据 SNMP sysObjectID 查找华为园区交换机系列画像。
-// 优先精确匹配已登记的叶子 OID，其次在非通用根分支上做 "." 边界最长前缀匹配。
+// 优先按原 OID 匹配（含 56813 原生登记），未命中时归一到 2011 再查一次。
 func (c *HuaweiModelCatalog) LookupBySysObjectID(oid string) (SwitchModelProfile, bool) {
 	if c == nil {
 		return SwitchModelProfile{}, false
 	}
 	normalized := NormalizeOID(oid)
+	if profile, ok := c.lookupByNormalizedSysObjectID(normalized); ok {
+		return profile, true
+	}
+	canonical := CanonicalizeHuaweiEnterpriseOID(normalized)
+	if canonical != "" && canonical != normalized {
+		return c.lookupByNormalizedSysObjectID(canonical)
+	}
+	return SwitchModelProfile{}, false
+}
+
+func (c *HuaweiModelCatalog) lookupByNormalizedSysObjectID(normalized string) (SwitchModelProfile, bool) {
 	if normalized == "" {
 		return SwitchModelProfile{}, false
 	}

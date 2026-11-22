@@ -189,6 +189,26 @@ func TestClassifyDeviceType(t *testing.T) {
 			want:  "switch",
 		},
 		{
+			name:  "S12700E-8 识别为 switch",
+			model: "S12700E-8",
+			want:  "switch",
+		},
+		{
+			name:  "FutureMatrix S5736 Routing Switch model 无 LLDP/sysServices 识别为 switch",
+			model: "FutureMatrix S5736 Routing Switch",
+			want:  "switch",
+		},
+		{
+			name:     "FutureMatrix S5736-S24T4XC sysDescr 首行无 LLDP/sysServices 识别为 switch",
+			sysDescr: "FutureMatrix S5736-S24T4XC\r\nVersatile Routing Platform Software\r\nVRP (R) software, Version 5.170",
+			want:     "switch",
+		},
+		{
+			name:     "FutureMatrix VRP sysDescr 括号含型号无 LLDP/sysServices 识别为 switch",
+			sysDescr: "FutureMatrix Versatile Routing Platform Software\r\nVRP (R) software, Version 5.170 (FutureMatrix S5736-S24T4XC V200R025C00SPC100)",
+			want:     "switch",
+		},
+		{
 			name: "全部信号为空返回空串",
 			want: "",
 		},
