@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import { AlertDetailModal } from '@/features/alerts/components/AlertDetailModal'
 import { fetchAlert, fetchAlertOperations } from '@/features/alerts/api/alerts.api'
+import { api } from '@/lib/api-client'
+import { clearHuaweiKnowledgeCache } from '@/lib/plain-language'
 
 jest.mock('@/features/alerts/api/alerts.api', () => ({
   fetchAlert: jest.fn(),
@@ -200,5 +202,74 @@ describe('AlertDetailModal 深链详情加载', () => {
     expect(screen.queryByText(/device_ip/)).not.toBeInTheDocument()
     expect(screen.queryByText(/occurrence_count/)).not.toBeInTheDocument()
     expect(screen.queryByText(/rule_id/)).not.toBeInTheDocument()
+  })
+
+  it('告警含华为 Trap OID 时弹窗打开按需请求知识库并展示官方参考，普通纯文本不发请求', async () => {
+    clearHuaweiKnowledgeCache()
+    const getSpy = jest.spyOn(api, 'get').mockResolvedValue({
+      success: true,
+      data: {
+        matched: true,
+        kind: 'alarm',
+        alarm: {
+          oid: '1.3.6.1.4.1.2011.5.25.219.2.2.3',
+          module: 'HUAWEI-ENTITY-TRAP-MIB',
+          alarm_name: 'hwBoardFail',
+          meaning: '单板发生局部功能失效。',
+          causes: ['单板硬件故障或插接不良'],
+          procedures: ['执行 display device 检查单板状态'],
+        },
+      },
+    })
+
+    try {
+      const { rerender } = render(
+        <AlertDetailModal
+          open={true}
+          onClose={jest.fn()}
+          alert={{
+            id: '701',
+            title: '普通文本告警',
+            description: '仅含普通中文描述，不含任何 OID 或 VRP 头',
+            device: '核心交换机',
+            severity: 'warning',
+            status: 'active',
+            timestamp: new Date().toISOString(),
+            category: 'other',
+            tags: [],
+            metadata: {},
+          }}
+        />,
+      )
+
+      expect(await screen.findByText('普通文本告警')).toBeInTheDocument()
+      expect(getSpy).not.toHaveBeenCalled()
+
+      rerender(
+        <AlertDetailModal
+          open={true}
+          onClose={jest.fn()}
+          alert={{
+            id: '702',
+            title: '单板故障告警',
+            description: 'SNMP Trap 1.3.6.1.4.1.2011.5.25.219.2.2.3 | Board failed',
+            device: '核心交换机',
+            severity: 'critical',
+            status: 'active',
+            timestamp: new Date().toISOString(),
+            category: 'hardware',
+            tags: [],
+            metadata: {},
+          }}
+        />,
+      )
+
+      expect(await screen.findByText('华为官方文档参考')).toBeInTheDocument()
+      expect(screen.getByText('单板发生局部功能失效。')).toBeInTheDocument()
+      expect(screen.getByText('执行 display device 检查单板状态')).toBeInTheDocument()
+      expect(getSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      getSpy.mockRestore()
+    }
   })
 })

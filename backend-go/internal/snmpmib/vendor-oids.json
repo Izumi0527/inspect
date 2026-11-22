@@ -557,6 +557,40 @@
           "value_type": "integer",
           "unit": "C",
           "description": "实体温度告警阈值"
+        },
+        {
+          "id": "huawei_entity_fault_light",
+          "name": "hwEntityFaultLight",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.21",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "实体故障指示灯状态"
+        }
+      ],
+      "identity": [
+        {
+          "id": "huawei_entity_board_type",
+          "name": "hwEntityBoardType",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.2.1.11",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "华为实体单板/整机类型（电子标签 3.0 型号识别）"
+        },
+        {
+          "id": "huawei_entity_model",
+          "name": "hwEntityModel",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.2.1.13",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "华为实体设备型号（电子标签 3.0 型号回退）"
+        },
+        {
+          "id": "huawei_entity_board_name",
+          "name": "hwEntityBoardName",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.43",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "华为实体单板名称"
         }
       ],
       "interface_monitor": [
@@ -672,6 +706,14 @@
           "value_type": "integer",
           "unit": "uW",
           "description": "光模块发送光功率"
+        },
+        {
+          "id": "huawei_optical_vendor_sn",
+          "name": "hwEntityOpticalVendorSn",
+          "oid": "1.3.6.1.4.1.2011.5.25.31.1.1.3.1.4",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "光模块厂商序列号"
         }
       ],
       "stack": [

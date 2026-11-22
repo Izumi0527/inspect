@@ -391,6 +391,9 @@ func New() (*App, error) {
 		Syslog:   syslogReceiver,
 		Logger:   log,
 	}
+	knowledgeHandler := handlers.KnowledgeHandler{
+		Auth: authService,
+	}
 	trapListener := logs.NewSNMPTrapListener(logsService, log, cfg.SnmpTrapAddress(), cfg.SnmpTrapEnabled)
 	trapListener.SetAlertCreator(trapAlertBridge)
 
@@ -415,6 +418,7 @@ func New() (*App, error) {
 		&settingsHandler,
 		&dashboardHandler,
 		&logsHandler,
+		&knowledgeHandler,
 	)
 
 	return &App{

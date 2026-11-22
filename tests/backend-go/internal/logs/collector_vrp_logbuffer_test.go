@@ -113,6 +113,28 @@ func TestParseLogLine_VRPLogbufferHeader(t *testing.T) {
 		}
 	})
 
+	t.Run("官方V200R024C00全量日志模块映射到合法设施", func(t *testing.T) {
+		cases := []struct {
+			line         string
+			wantFacility string
+		}{
+			{"2026-11-22 10:00:00 HUAWEI %%01VOSCPU/4/CPU_USAGE_HIGH(l):CPU high.", "system"},
+			{"2026-11-22 10:00:00 HUAWEI %%01VOSMEM/4/MEM_USAGE_HIGH(l):Memory high.", "system"},
+			{"2026-11-22 10:00:00 HUAWEI %%01ENTITYTRAP/3/FANFAIL(l):Fan fail.", "system"},
+			{"2026-11-22 10:00:00 HUAWEI %%01BASETRAP/4/TEMP(l):Temperature high.", "system"},
+			{"2026-11-22 10:00:00 HUAWEI %%01ERRDOWN/4/ERRORDOWN_OCCUR(l):Link fault.", "interface"},
+			{"2026-11-22 10:00:00 HUAWEI %%01CFGMGR/5/CFG_CHANGE(l):Config changed.", "system"},
+			{"2026-11-22 10:00:00 HUAWEI %%01RUMNG/4/RU_INTF_ERR(l):RU intf error.", "interface"},
+			{"2026-11-22 10:00:00 HUAWEI %%01RUUP/5/RU_UPGRADE(l):RU upgrade.", "interface"},
+		}
+		for _, tc := range cases {
+			entry := parseLine(t, tc.line)
+			if entry.Facility != tc.wantFacility {
+				t.Fatalf("line=%q facility=%q, want %q", tc.line, entry.Facility, tc.wantFacility)
+			}
+		}
+	})
+
 	t.Run("无日志类型标记与序号时仍可解析", func(t *testing.T) {
 		line := "2025-03-10 08:12:33 HUAWEI %%01CONFIGURATION/4/CONFIGURATION_CHANGE:Configuration changed."
 		entry := parseLine(t, line)

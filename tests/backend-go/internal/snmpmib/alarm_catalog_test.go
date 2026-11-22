@@ -167,6 +167,12 @@ func TestLookupNode_ShouldStripInstanceSuffixAndExposeEnum(t *testing.T) {
 	if _, _, ok := catalog.LookupNode("1.2.3.4.5.6.7.8.9.10"); ok {
 		t.Fatal("未知 OID 不应命中")
 	}
+
+	// 全量 185 MIB 节点回退：hwEntityOpticalVendorSn 不在原 932 nodes 中，应经 DefaultHuaweiKnowledgeCatalog 命中
+	vendorSNNode, suffix, ok := catalog.LookupNode("1.3.6.1.4.1.2011.5.25.31.1.1.3.1.4.12")
+	if !ok || vendorSNNode.Name != "hwEntityOpticalVendorSn" || suffix != "12" {
+		t.Fatalf("LookupNode fallback = (%+v, %q, %v), want hwEntityOpticalVendorSn suffix 12", vendorSNNode, suffix, ok)
+	}
 }
 
 func TestSeverityFromVarbinds_ShouldMapVendorEnumsToLevel(t *testing.T) {

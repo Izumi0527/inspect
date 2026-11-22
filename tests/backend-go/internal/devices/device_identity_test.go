@@ -620,3 +620,126 @@ func TestCollectDeviceIdentityWithContext_SerialNumber(t *testing.T) {
 		}
 	})
 }
+
+func TestCollectDeviceIdentityWithContext_HuaweiELabel3ModelFallback(t *testing.T) {
+	registry, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry() error = %v", err)
+	}
+	collector := devices.NewSNMPCollectorWithRegistry(nil, registry)
+	modelOID := registry.Common.System.EntPhysicalModelName.OID
+	boardTypeOID := "1.3.6.1.4.1.2011.5.25.31.1.1.2.1.11"
+	hwModelOID := "1.3.6.1.4.1.2011.5.25.31.1.1.2.1.13"
+	boardNameOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.43"
+
+	strPDU := func(base, idx, val string) gosnmp.SnmpPDU {
+		return gosnmp.SnmpPDU{Name: "." + base + "." + idx, Type: gosnmp.OctetString, Value: []byte(val)}
+	}
+
+	t.Run("entPhysicalModelName 为通用占位词时回退 hwEntityBoardType", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				modelOID:     {strPDU(modelOID, "1", "Switch")},
+				boardTypeOID: {strPDU(boardTypeOID, "1", "Chassis"), strPDU(boardTypeOID, "2", "S5736-S48U4XC")},
+				hwModelOID:   {strPDU(hwModelOID, "2", "S5736-Fallback")},
+			},
+		}
+		collectDeviceIdentityWithContext(collector, client, metrics, registry, "Huawei Versatile Routing Platform Software", true, ".1.3.6.1.4.1.2011.2.23.982", true)
+		if metrics.Model == nil || *metrics.Model != "S5736-S48U4XC" {
+			t.Fatalf("Model = %v, want S5736-S48U4XC", metrics.Model)
+		}
+	})
+
+	t.Run("hwEntityBoardType 为空时回退 hwEntityModel 与 hwEntityBoardName", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				hwModelOID: {strPDU(hwModelOID, "1", "S5736-S24T4XC")},
+			},
+		}
+		collectDeviceIdentityWithContext(collector, client, metrics, registry, "", true, ".1.3.6.1.4.1.2011.2.23.816", true)
+		if metrics.Model == nil || *metrics.Model != "S5736-S24T4XC" {
+			t.Fatalf("Model = %v, want S5736-S24T4XC", metrics.Model)
+		}
+
+		metricsBoardName := &devices.SNMPMetrics{}
+		clientBoardName := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				boardNameOID: {strPDU(boardNameOID, "1", "S5736-S24UM4XC")},
+			},
+		}
+		collectDeviceIdentityWithContext(collector, clientBoardName, metricsBoardName, registry, "", true, ".1.3.6.1.4.1.2011.2.23.816", true)
+		if metricsBoardName.Model == nil || *metricsBoardName.Model != "S5736-S24UM4XC" {
+			t.Fatalf("Model = %v, want S5736-S24UM4XC", metricsBoardName.Model)
+		}
+	})
+
+	classOID := registry.Common.System.EntPhysicalClass.OID
+	intPDU := func(base, idx string, val int) gosnmp.SnmpPDU {
+		return gosnmp.SnmpPDU{Name: "." + base + "." + idx, Type: gosnmp.Integer, Value: val}
+	}
+
+	t.Run("按 entPhysicalClass 过滤风扇电源光模块且优先 chassis", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				boardTypeOID: {
+					strPDU(boardTypeOID, "1", "FAN-40EA-B"),
+					strPDU(boardTypeOID, "2", "PAC150S12-R"),
+					strPDU(boardTypeOID, "3", "SFP-GE-LX"),
+					strPDU(boardTypeOID, "9", "S5736-S24UM4XC"),
+				},
+				classOID: {
+					intPDU(classOID, "1", 7),
+					intPDU(classOID, "2", 6),
+					intPDU(classOID, "3", 10),
+					intPDU(classOID, "9", 3),
+				},
+			},
+		}
+		collectDeviceIdentityWithContext(collector, client, metrics, registry, "", true, ".1.3.6.1.4.1.2011.2.23.982", true)
+		if metrics.Model == nil || *metrics.Model != "S5736-S24UM4XC" {
+			t.Fatalf("Model = %v, want S5736-S24UM4XC", metrics.Model)
+		}
+	})
+
+	t.Run("缺少 entPhysicalClass 时拦截非整机前缀并选出 S5736-S48U4XC", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				boardTypeOID: {
+					strPDU(boardTypeOID, "1", "FAN-40EA-B"),
+					strPDU(boardTypeOID, "2", "PAC150S12-R"),
+					strPDU(boardTypeOID, "3", "S5736-S48U4XC"),
+				},
+			},
+		}
+		collectDeviceIdentityWithContext(collector, client, metrics, registry, "", true, ".1.3.6.1.4.1.2011.2.23.982", true)
+		if metrics.Model == nil || *metrics.Model != "S5736-S48U4XC" {
+			t.Fatalf("Model = %v, want S5736-S48U4XC", metrics.Model)
+		}
+	})
+
+	t.Run("sysDescr 已解析型号时 hwEntityBoardName 不得抢占", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				boardNameOID: {strPDU(boardNameOID, "1", "MPU-Board")},
+			},
+		}
+		collectDeviceIdentityWithContext(
+			collector,
+			client,
+			metrics,
+			registry,
+			"CloudEngine S5736-S24T4XC\r\nHuawei Versatile Routing Platform Software\r\nVRP (R) software, Version 8.220 (S5736-S24T4XC V600R022C00)",
+			true,
+			".1.3.6.1.4.1.2011.2.23.982",
+			true,
+		)
+		if metrics.Model == nil || *metrics.Model != "S5736-S24T4XC" {
+			t.Fatalf("Model = %v, want S5736-S24T4XC", metrics.Model)
+		}
+	})
+}

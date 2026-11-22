@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { getAdhocGraphs, getLatestData } from '../api/monitoring-hosts.api'
+import { resolveLatestDataPortLabel } from '../components/latest/latestDataHelpers'
 import { useMonitoringDevices } from './useMonitoringDevices'
 import type {
   AdhocGraphResponse,
@@ -127,7 +128,9 @@ export function useLatestData({
       toast.error(msg)
       return
     }
-    const ifacePart = item.interface_name ? ` (${item.interface_name})` : ''
+    const portLabel = resolveLatestDataPortLabel(item)
+    const ifacePart =
+      portLabel !== '整机' && portLabel !== '—' ? ` (${portLabel})` : ''
     const next: SelectedMetricSeries[] = [
       ...current,
       {

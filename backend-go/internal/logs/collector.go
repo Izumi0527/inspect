@@ -556,7 +556,11 @@ var vrpModuleFacilities = map[string]string{
 // vrpModuleToFacility 按 VRP 模块名精确映射设施；未收录的模块退回
 // detectLogFacility 对消息正文做启发式判断。
 func vrpModuleToFacility(module string, message string) string {
-	if facility, ok := vrpModuleFacilities[strings.ToLower(strings.TrimSpace(module))]; ok {
+	key := strings.ToLower(strings.TrimSpace(module))
+	if facility, ok := vrpModuleFacilities[key]; ok {
+		return facility
+	}
+	if facility, ok := vrpOfficialModuleFacilities[key]; ok {
 		return facility
 	}
 	return detectLogFacility(message)

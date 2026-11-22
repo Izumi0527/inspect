@@ -984,3 +984,86 @@ func TestShouldFallbackToWalkAll_DistinguishesTimeoutAuthAndProtocolErrors(t *te
 		})
 	}
 }
+
+func TestCollectTemperatureFromCandidates_FiltersHuaweiSentinels(t *testing.T) {
+	tempOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.11"
+	client := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			tempOID: {
+				{Name: tempOID + ".1", Type: gosnmp.Integer, Value: 0},
+				{Name: tempOID + ".2", Type: gosnmp.Integer, Value: 255},
+				{Name: tempOID + ".3", Type: gosnmp.Integer, Value: 65535},
+				{Name: tempOID + ".4", Type: gosnmp.Integer, Value: 46},
+			},
+		},
+	}
+
+	got := collectTemperatureFromCandidates(client, []snmpmib.MetricCandidate{
+		{ID: "huawei_entity_temperature", Method: "bulkwalk", OIDs: []string{tempOID}, Strategy: "walk_max_celsius"},
+	})
+	if got == nil || *got != 46 {
+		t.Fatalf("temperature = %v, want 46 (sentinels 0/255/65535 must be filtered)", got)
+	}
+}
+
+func TestCollectMemoryFromCandidates_S5736_NoMegaOnlyBytesWithZeroPlaceholder(t *testing.T) {
+	usageOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.7"
+	megaOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.19"
+	bytesOID := "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.9"
+
+	client := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			usageOID: {
+				{Name: usageOID + ".1", Type: gosnmp.Integer, Value: 0},
+				{Name: usageOID + ".2", Type: gosnmp.Integer, Value: 50},
+			},
+			bytesOID: {
+				{Name: bytesOID + ".1", Type: gosnmp.Counter64, Value: uint64(0)},
+				{Name: bytesOID + ".2", Type: gosnmp.Counter64, Value: uint64(4 << 30)},
+			},
+		},
+	}
+
+	usage, total, used := collectMemoryFromCandidates(client, []snmpmib.MetricCandidate{
+		{ID: "huawei_entity_memory_mega", Method: "bulkwalk", OIDs: []string{usageOID, megaOID}, Strategy: "walk_percent_with_optional_size_mb", Aggregate: "avg_non_zero_total_sum"},
+		{ID: "huawei_entity_memory_bytes", Method: "bulkwalk", OIDs: []string{usageOID, bytesOID}, Strategy: "walk_percent_with_optional_size_bytes", Aggregate: "avg_non_zero_total_sum"},
+	}, nil)
+	if usage == nil || total == nil || used == nil {
+		t.Fatalf("memory = (%v, %v, %v), want all non-nil", usage, total, used)
+	}
+	if *usage != 50.0 || *total != int64(4<<30) || *used != int64(2<<30) {
+		t.Fatalf("memory = (usage=%v, total=%d, used=%d), want (50, %d, %d)", *usage, *total, *used, int64(4<<30), int64(2<<30))
+	}
+}
+
+func TestCollectOpticalTransceiversFromCatalog_ExtractsAndSanitizesVendorSN(t *testing.T) {
+	rxPowerOID := "1.3.6.1.4.1.2011.5.25.31.1.1.3.1.8"
+	vendorSNOID := "1.3.6.1.4.1.2011.5.25.31.1.1.3.1.4"
+
+	client := &fakeCollectorSNMPClient{
+		bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+			rxPowerOID: {
+				{Name: rxPowerOID + ".10", Type: gosnmp.Integer, Value: 450},
+				{Name: rxPowerOID + ".11", Type: gosnmp.Integer, Value: 460},
+			},
+			vendorSNOID: {
+				{Name: vendorSNOID + ".10", Type: gosnmp.OctetString, Value: []byte("2102312ABC\x00")},
+				{Name: vendorSNOID + ".11", Type: gosnmp.OctetString, Value: []byte("BAD\x07SN")},
+			},
+		},
+	}
+
+	items := collectOpticalTransceiversFromCatalog(client, []snmpmib.CatalogOID{
+		{ID: "hw_entity_optical_rx_power", Name: "hwEntityOpticalRxPower", OID: rxPowerOID, Method: "bulkwalk", ValueType: "integer", Unit: "uW", Description: "rx"},
+		{ID: "huawei_optical_vendor_sn", Name: "hwEntityOpticalVendorSn", OID: vendorSNOID, Method: "bulkwalk", ValueType: "string", Description: "sn"},
+	})
+	if len(items) != 2 {
+		t.Fatalf("len(items) = %d, want 2: %+v", len(items), items)
+	}
+	if items[0].VendorSN != "2102312ABC" {
+		t.Fatalf("items[0].VendorSN = %q, want 2102312ABC", items[0].VendorSN)
+	}
+	if items[1].VendorSN != "" {
+		t.Fatalf("items[1].VendorSN = %q, want empty when dirty control chars present", items[1].VendorSN)
+	}
+}

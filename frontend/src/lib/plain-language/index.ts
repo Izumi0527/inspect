@@ -26,6 +26,19 @@ export {
 export { PLAIN_LANGUAGE_RULES } from './rules'
 export { TRAP_OID_DICTIONARY } from './trap-oids'
 export type { TrapOIDEntry } from './trap-oids'
+export {
+  clearHuaweiKnowledgeCache,
+  hasHuaweiKnowledgeSignal,
+  lookupHuaweiKnowledge,
+} from './huawei-knowledge.api'
+export type {
+  HuaweiAlarmKnowledge,
+  HuaweiKnowledgeLookupParams,
+  HuaweiKnowledgeLookupResponse,
+  HuaweiKnowledgeParam,
+  HuaweiLogKnowledge,
+  HuaweiMIBKnowledge,
+} from './huawei-knowledge.api'
 export type {
   PlainLanguageInput,
   PlainLanguageResult,

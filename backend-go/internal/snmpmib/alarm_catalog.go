@@ -116,6 +116,11 @@ func (c *AlarmCatalog) LookupNode(oid string) (NodeDefinition, string, bool) {
 			return node, strings.Join(parts[len(parts)-depth:], "."), true
 		}
 	}
+	if kb, err := DefaultHuaweiKnowledgeCatalog(); err == nil && kb != nil {
+		if entry, suffix, ok := kb.LookupMIB(normalized); ok {
+			return NodeDefinition{Name: entry.Name, MIB: entry.MIB}, suffix, true
+		}
+	}
 	return NodeDefinition{}, "", false
 }
 

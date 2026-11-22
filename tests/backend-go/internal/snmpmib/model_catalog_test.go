@@ -18,8 +18,8 @@ func TestDefaultHuaweiModelCatalog_LoadAndValidate(t *testing.T) {
 	if err := catalog.Validate(); err != nil {
 		t.Fatalf("catalog.Validate() error = %v", err)
 	}
-	if len(catalog.Models) < 20 {
-		t.Fatalf("len(catalog.Models) = %d, want >= 20", len(catalog.Models))
+	if len(catalog.Models) < 40 {
+		t.Fatalf("len(catalog.Models) = %d, want >= 40", len(catalog.Models))
 	}
 }
 
@@ -40,6 +40,21 @@ func TestHuaweiModelCatalog_LookupModel(t *testing.T) {
 	}{
 		{"S5736-S MultiGE", "S5736-S24UM4XC", true, "S5736-S", "access", "fixed", "V600"},
 		{"S5736-S 全光", "S5736-S48S4XC", true, "S5736-S", "access", "fixed", "V200"},
+		{"S5736-S 电口", "S5736-S24T4XC", true, "S5736-S", "access", "fixed", "V200"},
+		{"S5736-S U口", "S5736-S48U4XC", true, "S5736-S", "access", "fixed", "V600"},
+		{"S1720 入门接入", "S1720-28GFR-4TP", true, "S1720", "access", "fixed", "V200"},
+		{"S2750 百兆PoE", "S2750-20TP-PWR-EI-AC", true, "S2750", "access", "fixed", "V200"},
+		{"S5700 经典接入", "S5700-28P-LI-AC", true, "S5700", "access", "fixed", "V200"},
+		{"S5700S 最长前缀优先不被 S5700 抢占", "S5700S-28P-LI-AC", true, "S5700S", "access", "fixed", "V200"},
+		{"S5720 敏捷千兆", "S5720-52X-EI-AC", true, "S5720", "access", "fixed", "V200"},
+		{"S5720S 最长前缀优先", "S5720S-28P-SI-AC", true, "S5720S", "access", "fixed", "V200"},
+		{"S5720I 工业宽温", "S5720I-6X-PWH-SI-AC", true, "S5720I", "access", "fixed", "V200"},
+		{"S5730 增强接入", "S5730-48C-HI-24S-AC", true, "S5730", "access", "fixed", "V200"},
+		{"S5730S 精简增强", "S5730S-48T4X-A", true, "S5730S", "access", "fixed", "V200"},
+		{"S5751 园区接入", "S5751-L24T4X", true, "S5751", "access", "fixed", "V600"},
+		{"S6700 万兆汇聚", "S6700-48-EI", true, "S6700", "aggregation", "fixed", "V200"},
+		{"S6720 万兆核心", "S6720-30C-EI-24S-AC", true, "S6720", "aggregation", "fixed", "V200"},
+		{"S6720S 最长前缀优先", "S6720S-26Q-EI-24S-AC", true, "S6720S", "aggregation", "fixed", "V200"},
 		{"S5755 带 CloudEngine 前缀", "CloudEngine S5755-H48T4XC", true, "S5755", "access", "fixed", "V600"},
 		{"S5735-V2 后缀匹配", "S5735-S24T4XE-V2", true, "S5735-V2", "access", "fixed", "V600"},
 		{"S5735 V1 不误匹配 V2", "S5735-S24T4X", true, "S5735", "access", "fixed", "V200"},

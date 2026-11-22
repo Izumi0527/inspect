@@ -101,6 +101,7 @@ export interface AdhocSeriesData {
   metric_name: string
   metric_label: string
   interface_name?: string
+  interface_display_name?: string
   unit?: string
   values: Array<number | null>
 }

@@ -1,7 +1,7 @@
 {
  "schema_version": 1,
- "source": "S300, S500, S2700, S5700, S6700 产品文档_20260803 094100.docx + huawei-alarms-v600-supplement.json",
- "generator": "scripts/mib/extract-huawei-alarms.py",
+ "source": "华为 S300/S500/S2700/S5700/S6700 V200R024C00 产品文档 + huawei-alarms-v600-supplement.json",
+ "generator": "scripts/mib/extract-huawei-knowledge.py",
  "severity_varbinds": {
   "1.3.6.1.4.1.2011.5.25.129.1.1": {
    "name": "hwBaseTrapSeverity",
@@ -1088,6 +1088,36 @@
     "prialarmFallingThreshold"
    ]
   },
+  "1.3.6.1.4.1.2011.2.25.311.6.2.1": {
+   "name": "hwEasyOperationClientAdded",
+   "mib": "EZOP",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "Client设备加入。",
+   "vars": [
+    "OID",
+    "ClientId",
+    "HostName",
+    "ClientIp",
+    "ClientMac",
+    "ClientEsn"
+   ]
+  },
+  "1.3.6.1.4.1.2011.2.25.311.6.2.2": {
+   "name": "hwEasyOperationClientLost",
+   "mib": "EZOP",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "Client设备离开。",
+   "vars": [
+    "OID",
+    "ClientId",
+    "HostName",
+    "ClientIp",
+    "ClientMac",
+    "ClientEsn"
+   ]
+  },
   "1.3.6.1.4.1.2011.5.1.2.2.1.1.4.1": {
    "name": "hwAclResThresholdExceedClearTrap",
    "mib": "HUAWEI-ACL-MIB",
@@ -1534,6 +1564,33 @@
    ],
    "cleared": true
   },
+  "1.3.6.1.4.1.2011.5.2.2.2.0.145": {
+   "name": "hwWirelessUserNumExceedThresholdAlarm",
+   "mib": "AAA",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "(Slot=[OCTET], UserNum=[INTEGER], Threshold=[INTEGER])\n单板无线用户数量达到告警上限阈值。",
+   "vars": [
+    "[OID]",
+    "Slot",
+    "UserNum",
+    "Threshold"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.2.2.2.0.146": {
+   "name": "hwWirelessUserNumExceedThresholdResume",
+   "mib": "AAA",
+   "level": "info",
+   "facility": "system",
+   "meaning": "(Slot=[OCTET], UserNum=[INTEGER], Threshold=[INTEGER])\n单板无线用户数量达到告警下限阈值。",
+   "vars": [
+    "[OID]",
+    "Slot",
+    "UserNum",
+    "Threshold"
+   ],
+   "cleared": true
+  },
   "1.3.6.1.4.1.2011.5.4.2.2.1.1": {
    "name": "hwPortalServerUp",
    "mib": "HUAWEI-PORTAL-MIB",
@@ -1639,6 +1696,41 @@
     "hwMplsPsSwitchResult"
    ]
   },
+  "1.3.6.1.4.1.2011.5.12.7.1.4.7": {
+   "name": "hwMplsApsOutage",
+   "mib": "TUNNEL",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "隧道保护组变为故障状态。",
+   "vars": [
+    "OID",
+    "IfIndex",
+    "SessionTunnelId",
+    "LocalLspId",
+    "IngressLsrId",
+    "EgressLsrId",
+    "WorkTunnel",
+    "SignalingProtocol"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.12.7.1.4.8": {
+   "name": "hwMplsApsOutageRecovery",
+   "mib": "TUNNEL",
+   "level": "info",
+   "facility": "system",
+   "meaning": "隧道保护组故障恢复。",
+   "vars": [
+    "OID",
+    "IfIndex",
+    "SessionTunnelId",
+    "LocalLspId",
+    "IngressLsrId",
+    "EgressLsrId",
+    "WorkTunnel",
+    "SignalingProtocol"
+   ],
+   "cleared": true
+  },
   "1.3.6.1.4.1.2011.5.25.19.2.1": {
    "name": "hwSysClockChangedNotification",
    "mib": "HUAWEI-SYS-MAN-MIB",
@@ -1733,6 +1825,17 @@
    "meaning": "hwSysSlaveSwitchChassisNum框主备倒换失败。",
    "vars": [
     "hwSysSlaveSwitchChassisNum"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.19.2.10": {
+   "name": "hwSysIssuNotification",
+   "mib": "SYSMIB",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "ISSU升级完成。",
+   "vars": [
+    "issuState",
+    "issuConditionCheck"
    ]
   },
   "1.3.6.1.4.1.2011.5.25.31.2.0.8": {
@@ -1881,6 +1984,18 @@
     "hwEntityExtTrapMonitorInterval"
    ]
   },
+  "1.3.6.1.4.1.2011.5.25.31.2.2.12": {
+   "name": "hwEntityRuntPacketCheckNotify",
+   "mib": "ENTITYEXTTRAP",
+   "level": "warning",
+   "facility": "hardware",
+   "meaning": "设备接口收到Runt报文（长度超小且CRC正确的报文）进行故障恢复，恢复次数超过5000次。",
+   "vars": [
+    "SlotID",
+    "UnitID",
+    "PortID"
+   ]
+  },
   "1.3.6.1.4.1.2011.5.25.31.2.2.13": {
    "name": "hwBoardDropRuntPacketNotify",
    "mib": "HUAWEI-ENTITY-EXTENT-MIB",
@@ -1908,6 +2023,39 @@
     "hwEntityExtTrapThreshold",
     "hwEntityExtTrapInterval"
    ]
+  },
+  "1.3.6.1.4.1.2011.5.25.31.2.2.17": {
+   "name": "hwEntityHigCrcErrorAlarm",
+   "mib": "ENTITYEXTTRAP",
+   "level": "warning",
+   "facility": "hardware",
+   "meaning": "入方向报文由于物理层检测时发现错包被丢弃。",
+   "vars": [
+    "SlotID",
+    "UnitID",
+    "PortID",
+    "PeerSlotID",
+    "ErrorPacketStatistics",
+    "ErrorPacketThreshold",
+    "MonitorInterval"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.31.2.2.18": {
+   "name": "hwEntityHigCrcErrorAlarmResume",
+   "mib": "ENTITYEXTTRAP",
+   "level": "info",
+   "facility": "hardware",
+   "meaning": "物理层检测时发现错包被修复。",
+   "vars": [
+    "SlotID",
+    "UnitID",
+    "PortID",
+    "PeerSlotID",
+    "ErrorPacketStatistics",
+    "ErrorPacketThreshold",
+    "MonitorInterval"
+   ],
+   "cleared": true
   },
   "1.3.6.1.4.1.2011.5.25.31.7.2.1": {
    "name": "hwEntityHeartbeatTrap",
@@ -2244,6 +2392,23 @@
    ],
    "cleared": true
   },
+  "1.3.6.1.4.1.2011.5.25.41.3.7": {
+   "name": "hwIfNameChange",
+   "mib": "IFNET",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "单框设备扩容到多框设备，接口信息发生变化。",
+   "vars": []
+  },
+  "1.3.6.1.4.1.2011.5.25.41.3.8": {
+   "name": "hwIfNameChangeResume",
+   "mib": "IFNET",
+   "level": "info",
+   "facility": "interface",
+   "meaning": "多框设备回退单框设备，接口信息发生变化。",
+   "vars": [],
+   "cleared": true
+  },
   "1.3.6.1.4.1.2011.5.25.41.3.9": {
    "name": "hwExtLinkDown",
    "mib": "HUAWEI-IF-EXT-MIB",
@@ -2310,6 +2475,26 @@
     "ifName"
    ],
    "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.41.3.26": {
+   "name": "hwEntityExtCfmOverSlot",
+   "mib": "IFNET",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "接口板配置已经恢复。",
+   "vars": [
+    "BoardName"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.41.3.27": {
+   "name": "hwEntityExtCfmOverCard",
+   "mib": "IFNET",
+   "level": "warning",
+   "facility": "hardware",
+   "meaning": "接口卡配置已经恢复。",
+   "vars": [
+    "CardName"
+   ]
   },
   "1.3.6.1.4.1.2011.5.25.41.3.28": {
    "name": "hwExtAllMemberDownNotify",
@@ -2476,6 +2661,17 @@
     "hwIfMonitorOutputRateThreshold"
    ],
    "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.41.4.9": {
+   "name": "hwIfMonitorHalfduplexRising",
+   "mib": "IFNET",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "端口在半双工模式发生告警。",
+   "vars": [
+    "OID",
+    "hwIfMonitorIndex"
+   ]
   },
   "1.3.6.1.4.1.2011.5.25.41.6.1": {
    "name": "hwIfIpAddressChange",
@@ -2870,6 +3066,29 @@
     "ifName"
    ]
   },
+  "1.3.6.1.4.1.2011.5.25.42.4.2.26": {
+   "name": "hwMstpPortCountExceedThreshold",
+   "mib": "MSTP",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "当前设备使能生成树协议且端口状态为Up的端口数量超过上限阈值之后，触发该告警。",
+   "vars": [
+    "OID",
+    "UpperThreshold"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.42.4.2.27": {
+   "name": "hwMstpPortCountExceedThresholdResume",
+   "mib": "MSTP",
+   "level": "info",
+   "facility": "interface",
+   "meaning": "当前设备使能生成树协议且端口状态为Up的端口数量低于下限阈值之后，触发该告警。",
+   "vars": [
+    "OID",
+    "LowerThreshold"
+   ],
+   "cleared": true
+  },
   "1.3.6.1.4.1.2011.5.25.42.4.2.28": {
    "name": "hwMstpProRootLost",
    "mib": "HUAWEI-MSTP-MIB",
@@ -2888,6 +3107,39 @@
    "meaning": "当前桥是根桥。",
    "vars": [
     "hwMstpProInstanceRootType"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.44.99.1": {
+   "name": "hwCfgRefreshFailAlarm",
+   "mib": "SW_SNPG",
+   "level": "critical",
+   "facility": "system",
+   "meaning": "二层组播转发表表项下发芯片失败。",
+   "vars": [
+    "OID",
+    "Index",
+    "Vlan"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.44.99.2": {
+   "name": "hwMCastTableLoadAbnormalNotify",
+   "mib": "SW_SNPG",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "二层组播转发表表项配置达到整机限制数量。",
+   "vars": [
+    "OID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.44.99.3": {
+   "name": "hwMCastTableLoadAbnormalResume",
+   "mib": "SW_SNPG",
+   "level": "info",
+   "facility": "system",
+   "meaning": "二层组播转发表表项配置恢复到整机限制数量以下。",
+   "vars": [
+    "OID"
    ],
    "cleared": true
   },
@@ -3220,6 +3472,17 @@
     "nqaJitterStatsMaxDelaySD",
     "nqaJitterStatsMaxDelayDS",
     "nqaJitterStatsRTDOverThresholds"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.111.6.27": {
+   "name": "nqaReflectorStateChangeNotification",
+   "mib": "NQA",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "通用流测试例中反射端状态改变。",
+   "vars": [
+    "nqaReflectorID",
+    "state"
    ]
   },
   "1.3.6.1.4.1.2011.5.25.111.6.28": {
@@ -3661,6 +3924,54 @@
     "hwVplsPwWorkingState",
     "sysUpTime"
    ]
+  },
+  "1.3.6.1.4.1.2011.5.25.119.1.2.9": {
+   "name": "hwVplsVcNumberThresholdExceed",
+   "mib": "L2V",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "VPLS VC达到阈值上限发出的告警。",
+   "vars": [
+    "OID",
+    "LimitClass",
+    "CurrentVcNumber",
+    "UpperThreshold",
+    "MaxiVcNumber"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.119.1.2.10": {
+   "name": "hwVplsVcNumberThresholdClear",
+   "mib": "L2V",
+   "level": "info",
+   "facility": "system",
+   "meaning": "VPLS VC数量低于阈值下限发出的清除告警。",
+   "vars": [
+    "OID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.119.1.2.11": {
+   "name": "hwVplsVcNumberMaxExceed",
+   "mib": "L2V",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "VPLS VC数量达到支持的最大值发出的告警。",
+   "vars": [
+    "OID",
+    "LimitClass",
+    "MaxiVcNumber"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.119.1.2.12": {
+   "name": "hwVplsVcNumberMaxClear",
+   "mib": "L2V",
+   "level": "info",
+   "facility": "system",
+   "meaning": "VPLS VC数量低于最大值的95%发出的清除告警。",
+   "vars": [
+    "OID"
+   ],
+   "cleared": true
   },
   "1.3.6.1.4.1.2011.5.25.119.2.2.1": {
    "name": "hwKompellaVcDown",
@@ -5212,6 +5523,35 @@
    "vars": [],
    "cleared": true
   },
+  "1.3.6.1.4.1.2011.5.25.136.1.6.32": {
+   "name": "hwDot1agCfmUnexpectedMEGLevel",
+   "mib": "EOAM1AG",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "端口上收到的CCM报文为MEG级别泄露的报文。",
+   "vars": [
+    "MdIndex",
+    "MaIndex",
+    "MdName",
+    "MaName",
+    "MepId"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.136.1.6.33": {
+   "name": "hwDot1agCfmUnexpectedMEGLevelCleared",
+   "mib": "EOAM1AG",
+   "level": "info",
+   "facility": "interface",
+   "meaning": "端口上收到的CCM报文为MEG级别泄露的报文的告警恢复。",
+   "vars": [
+    "MdIndex",
+    "MaIndex",
+    "MdName",
+    "MaName",
+    "MepId"
+   ],
+   "cleared": true
+  },
   "1.3.6.1.4.1.2011.5.25.136.1.6.34": {
    "name": "hwDot1agCfmMismerge",
    "mib": "HUAWEI-ETHOAM-MIB",
@@ -5297,6 +5637,37 @@
    "vars": [],
    "cleared": true
   },
+  "1.3.6.1.4.1.2011.5.25.136.1.6.44": {
+   "name": "hwDot1agCfmExceptionalMACStatus",
+   "mib": "EOAM1AG",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "本地配置的RMEP在检测时间内收到对应的正确的CCM报文，但是报文中携带了TLV信息显示对端的端口状态异常。",
+   "vars": [
+    "MdIndex",
+    "MaIndex",
+    "MdName",
+    "MaName",
+    "MepId",
+    "RmepId"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.136.1.6.45": {
+   "name": "hwDot1agCfmExceptionalMACStatusCleared",
+   "mib": "EOAM1AG",
+   "level": "info",
+   "facility": "interface",
+   "meaning": "本地配置的RMEP在检测时间内收到对应的正确的CCM报文，但是报文中携带了TLV信息显示对端的端口状态异常的告警恢复。",
+   "vars": [
+    "MdIndex",
+    "MaIndex",
+    "MdName",
+    "MaName",
+    "MepId",
+    "RmepId"
+   ],
+   "cleared": true
+  },
   "1.3.6.1.4.1.2011.5.25.136.1.6.46": {
    "name": "hwDot1agCfmRDI",
    "mib": "HUAWEI-ETHOAM-MIB",
@@ -5359,6 +5730,68 @@
     "hwY1731TestIdStatTrapLogLowerLimitThreshold"
    ],
    "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.140.2.1": {
+   "name": "hwBulkStatCollectIncomplete",
+   "mib": "BULKSTAT",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "在某个文件的一个采集周期内，未采集完用户指定的所有统计对象，上一个采集周期采集完整（如果本采集周期为第一个采集周期，则直接报送该trap）。",
+   "vars": [
+    "FileIndex",
+    "FileName"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.140.2.2": {
+   "name": "hwBulkStatCollectResume",
+   "mib": "BULKSTAT",
+   "level": "info",
+   "facility": "system",
+   "meaning": "在某个文件的一个采集周期内，采集完用户指定的所有统计对象，上个采集周期是采集不完整的。",
+   "vars": [
+    "FileIndex",
+    "FileName"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.140.2.3": {
+   "name": "hwBulkStatURLConnectionFail",
+   "mib": "BULKSTAT",
+   "level": "critical",
+   "facility": "system",
+   "meaning": "FTP上传采集文件失败（已进行主/备URL两次尝试）。此Trap不会连续发，再次连续上传失败，不发送此Trap。",
+   "vars": [
+    "FileIndex",
+    "FileName",
+    "PrimaryUrl",
+    "SecondaryUrl"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.140.2.4": {
+   "name": "hwBulkStatURLConnectionResume",
+   "mib": "BULKSTAT",
+   "level": "info",
+   "facility": "system",
+   "meaning": "FTP上次上传采集文件失败（已进行主/备URL两次尝试），FTP本次上传采集文件成功（通过主URL上传成功，或者通过备URL上传成功）。",
+   "vars": [
+    "FileIndex",
+    "FileName",
+    "PrimaryUrl",
+    "SecondaryUrl"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.140.2.5": {
+   "name": "hwBulkStatTransferFileDiscard",
+   "mib": "BULKSTAT",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "统计文件的保存时间结束时，文件仍然没有上传成功，设备将中止上传链接，删除内存中的压缩文件，并发送此Trap。由于文件删除之后不可能恢复，所以此Trap没有成对的恢复Trap。",
+   "vars": [
+    "FileIndex",
+    "FileName",
+    "LastTransferFailTime"
+   ]
   },
   "1.3.6.1.4.1.2011.5.25.142.2.1": {
    "name": "hwGtlDefaultValue",
@@ -5448,6 +5881,29 @@
    "meaning": "该节点用来表示设备ESN和GTL License文件的ESN不一致的告警被清除。",
    "vars": [
     "hwGtlChassisID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.142.2.22": {
+   "name": "hwGtlItemInactive",
+   "mib": "GTL",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "需要License控制的业务模块未包含在License中，但业务配置成功时，系统产生此告警。",
+   "vars": [
+    "OID",
+    "item-name"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.142.2.23": {
+   "name": "hwGtlItemInactiveCleared",
+   "mib": "GTL",
+   "level": "info",
+   "facility": "system",
+   "meaning": "包含当前业务模块的GTL License没有被激活的告警清除。",
+   "vars": [
+    "OID",
+    "item-name"
    ],
    "cleared": true
   },
@@ -5565,6 +6021,43 @@
     "hwIpv6PrefixLimitValue"
    ],
    "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.145.19.3.1": {
+   "name": "hwL3vpnIpv6PrefixExceed",
+   "mib": "RM",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "VPN实例中IPv6前缀数超过了最大值。",
+   "vars": [
+    "VpnInstanceName",
+    "PrefixCount",
+    "MaxValue"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.145.19.3.2": {
+   "name": "hwL3vpnIpv6PrefixExceedClear",
+   "mib": "RM",
+   "level": "info",
+   "facility": "system",
+   "meaning": "VPN实例中IPv6前缀数量降到最大值以下。",
+   "vars": [
+    "VpnInstanceName",
+    "PrefixCount",
+    "MaxValue"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.145.19.3.3": {
+   "name": "hwL3vpnIpv6PrefixThresholdExceed",
+   "mib": "RM",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "VPN实例中IPv6前缀数超过了阈值。",
+   "vars": [
+    "VpnInstanceName",
+    "PrefixCount",
+    "Threshold"
+   ]
   },
   "1.3.6.1.4.1.2011.5.25.147.0.1": {
    "name": "hwOspfv3VirtIfStateChange",
@@ -6020,6 +6513,139 @@
    ],
    "cleared": true
   },
+  "1.3.6.1.4.1.2011.5.25.149.3.3.12": {
+   "name": "hwMgmdTotalLimitThresholdExceed",
+   "mib": "MGMD",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "IGMP/MLD所有实例下的总体表项数量达到了阈值上限。",
+   "vars": [
+    "hwMgmdNotificationAddressType",
+    "hwMgmdTotalLimitCurrentCount",
+    "hwMgmdTotalLimitThreshold",
+    "hwMgmdTotalEntries"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.149.3.3.13": {
+   "name": "hwMgmdTotalLimitThresholdExceedClear",
+   "mib": "MGMD",
+   "level": "info",
+   "facility": "system",
+   "meaning": "IGMP/MLD所有实例下的表项降低到阈值下限以下。",
+   "vars": [
+    "hwMgmdNotificationAddressType",
+    "hwMgmdTotalLimitCurrentCount",
+    "hwMgmdTotalLimitThreshold",
+    "hwMgmdTotalEntries"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.149.3.3.14": {
+   "name": "hwMgmdHostStarGThresholdExceed",
+   "mib": "MGMD",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "所有实例下的IGMP/MLD主机侧(*, G)表项数量达到了阈值上限。",
+   "vars": [
+    "hwMgmdNotificationAddressType",
+    "hwMgmdHostStarGCurrentCount",
+    "hwMgmdHostStarGThreshold",
+    "hwMgmdHostStarGTotalCount"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.149.3.3.15": {
+   "name": "hwMgmdHostStarGThresholdExceedClear",
+   "mib": "MGMD",
+   "level": "info",
+   "facility": "system",
+   "meaning": "所有实例下的IGMP/MLD主机侧(*, G)表项降低到阈值下限以下。",
+   "vars": [
+    "hwMgmdNotificationAddressType",
+    "hwMgmdHostStarGCurrentCount",
+    "hwMgmdHostStarGThreshold",
+    "hwMgmdHostStarGTotalCount"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.149.3.3.16": {
+   "name": "hwMgmdHostStarGExceed",
+   "mib": "MGMD",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "所有实例下的IGMP/MLD主机侧(*, G)表项数量超限。",
+   "vars": [
+    "hwMgmdNotificationAddressType",
+    "hwMgmdHostNotificationSrcAddr",
+    "hwMgmdHostNotificationGrpAddr",
+    "hwMgmdHostStarGTotalCount",
+    "hwMgmdInstanceName"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.149.3.3.17": {
+   "name": "hwMgmdHostStarGExceedClear",
+   "mib": "MGMD",
+   "level": "info",
+   "facility": "system",
+   "meaning": "所有实例下的IGMP/MLD主机侧(*, G)表项数量降低到限制值以下，可以创建新的IGMP/MLD主机侧(*, G)表项。",
+   "vars": [
+    "hwMgmdNotificationAddressType",
+    "hwMgmdHostStarGTotalCount"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.149.3.3.18": {
+   "name": "hwMgmdHostSGThresholdExceed",
+   "mib": "MGMD",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "所有实例下的IGMP/MLD主机侧(S, G)表项数量达到了阈值上限。",
+   "vars": [
+    "hwMgmdNotificationAddressType",
+    "hwMgmdHostSGCurrentCount",
+    "hwMgmdHostSGThreshold",
+    "hwMgmdHostSGTotalCount"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.149.3.3.19": {
+   "name": "hwMgmdHostSGThresholdExceedClear",
+   "mib": "MGMD",
+   "level": "info",
+   "facility": "system",
+   "meaning": "所有实例下的IGMP/MLD主机侧(S, G)表项降低到阈值下限以下。",
+   "vars": [
+    "hwMgmdNotificationAddressType",
+    "hwMgmdHostSGCurrentCount",
+    "hwMgmdHostSGThreshold",
+    "hwMgmdHostSGTotalCount"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.149.3.3.20": {
+   "name": "hwMgmdHostSGExceed",
+   "mib": "MGMD",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "所有实例下的IGMP/MLD主机侧(S, G)表项数量超限。",
+   "vars": [
+    "hwMgmdNotificationAddressType",
+    "hwMgmdHostNotificationSrcAddr",
+    "hwMgmdHostNotificationGrpAddr",
+    "hwMgmdHostSGTotalCount",
+    "hwMgmdInstanceName"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.149.3.3.21": {
+   "name": "hwMgmdHostSGExceedClear",
+   "mib": "MGMD",
+   "level": "info",
+   "facility": "system",
+   "meaning": "所有实例下的IGMP/MLD主机侧(S, G)表项数量降低到限制值以下，可以创建新的IGMP/MLD主机侧(S, G)表项。",
+   "vars": [
+    "hwMgmdNotificationAddressType",
+    "hwMgmdHostSGTotalCount"
+   ],
+   "cleared": true
+  },
   "1.3.6.1.4.1.2011.5.25.149.4.0.1": {
    "name": "hwPimNeighborLoss",
    "mib": "HUAWEI-PIM-STD-MIB",
@@ -6132,6 +6758,110 @@
    ],
    "cleared": true
   },
+  "1.3.6.1.4.1.2011.5.25.149.4.0.13": {
+   "name": "hwPimStarGThresholdExceed",
+   "mib": "PIM",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "PIM全局(*, G)表项达到了阈值上限。",
+   "vars": [
+    "hwPimNotificationAddressType",
+    "hwPimStarGCurrentCount",
+    "hwPimStarGThreshold",
+    "hwPimStarGTotalCount"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.149.4.0.14": {
+   "name": "hwPimStarGThresholdExceedClear",
+   "mib": "PIM",
+   "level": "info",
+   "facility": "system",
+   "meaning": "PIM全局(*, G)表项数降低到阈值下限以下。",
+   "vars": [
+    "hwPimNotificationAddressType",
+    "hwPimStarGCurrentCount",
+    "hwPimStarGThreshold",
+    "hwPimStarGTotalCount"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.149.4.0.15": {
+   "name": "hwPimStarGExceed",
+   "mib": "PIM",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "PIM全局(*, G)表项数量超过了限制值。",
+   "vars": [
+    "hwPimNotificationAddressType",
+    "hwPimNotificationSrcAddr",
+    "hwPimNotificationGrpAddr",
+    "hwPimStarGTotalCount",
+    "hwPimInstanceName"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.149.4.0.16": {
+   "name": "hwPimStarGExceedClear",
+   "mib": "PIM",
+   "level": "info",
+   "facility": "system",
+   "meaning": "PIM全局(*, G)表项数量降低到限制值以下，可以创建新的PIM (*, G)表项。",
+   "vars": [
+    "hwPimNotificationAddressType"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.149.4.0.17": {
+   "name": "hwPimSGThresholdExceed",
+   "mib": "PIM",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "PIM全局(S, G)表项达到了阈值上限。",
+   "vars": [
+    "hwPimNotificationAddressType",
+    "hwPimSGCurrentCount",
+    "hwPimSGThreshold",
+    "hwPimSGTotalCount"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.149.4.0.18": {
+   "name": "hwPimSGThresholdExceedClear",
+   "mib": "PIM",
+   "level": "info",
+   "facility": "system",
+   "meaning": "PIM全局(S, G)表项降低到阈值下限以下。",
+   "vars": [
+    "hwPimNotificationAddressType",
+    "hwPimSGCurrentCount",
+    "hwPimSGThreshold",
+    "hwPimSGTotalCount"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.149.4.0.19": {
+   "name": "hwPimSGExceed",
+   "mib": "PIM",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "PIM全局(S, G)表项数量超限。",
+   "vars": [
+    "hwPimNotificationAddressType",
+    "hwPimNotificationSrcAddr",
+    "hwPimNotificationGrpAddr",
+    "hwPimSGTotalCount",
+    "hwPimInstanceName"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.149.4.0.20": {
+   "name": "hwPimSGExceedClear",
+   "mib": "PIM",
+   "level": "info",
+   "facility": "system",
+   "meaning": "PIM全局(S, G)表项数量降低到限制值以下，可以创建新的PIM (S, G)表项。",
+   "vars": [
+    "hwPimNotificationAddressType"
+   ],
+   "cleared": true
+  },
   "1.3.6.1.4.1.2011.5.25.155.31.3": {
    "name": "hwOspfv2IntraAreaRouteridConflict",
    "mib": "HUAWEI-OSPFV2-MIB",
@@ -6180,6 +6910,34 @@
     "hwOspfv2InterfaceName",
     "hwOspfv2PeerFlappingSuppressStatus",
     "hwOspfv2PeerFlappingSuppressReason"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.157.2.157.18": {
+   "name": "hwPortCrcRateExceed",
+   "mib": "IFPDT",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "CRC错包速率大于等于1000个/秒。",
+   "vars": [
+    "OID",
+    "InterfaceIndex",
+    "InterfaceName",
+    "CrcRate",
+    "TrapThreshold"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.157.2.157.19": {
+   "name": "hwPortErrorRateExceed",
+   "mib": "IFPDT",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "接口的CRC、Giants和Runts报文的总错包速率大于等于1000个/秒。",
+   "vars": [
+    "OID",
+    "InterfaceIndex",
+    "InterfaceName",
+    "ErrorRate",
+    "TrapThreshold"
    ]
   },
   "1.3.6.1.4.1.2011.5.25.157.2.157.20": {
@@ -6285,6 +7043,39 @@
    ],
    "cleared": true
   },
+  "1.3.6.1.4.1.2011.5.25.157.2.248": {
+   "name": "hwPortProtectGroupUnavailable",
+   "mib": "IFPDT",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "端口保护组功能失效。",
+   "vars": [
+    "OID",
+    "PortProtectGroupId"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.157.2.249": {
+   "name": "hwPortProtectGroupAvailable",
+   "mib": "IFPDT",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "端口保护组功能失效后重新生效，恢复正常。",
+   "vars": [
+    "OID",
+    "PortProtectGroupId"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.157.2.250": {
+   "name": "hwPortProtectGroupDelete",
+   "mib": "IFPDT",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "端口保护组被删除。",
+   "vars": [
+    "OID",
+    "PortProtectGroupId"
+   ]
+  },
   "1.3.6.1.4.1.2011.5.25.157.2.257": {
    "name": "hwCableSnrAbnormal",
    "mib": "HUAWEI-PORT-MIB",
@@ -6376,6 +7167,18 @@
    "vars": [
     "hwPhysicalPortIfIndex",
     "hwPhysicalPortName"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.157.2.328": {
+   "name": "hwPortSfpWorkOnlyNonNego",
+   "mib": "IFPDT",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "XGE接口插入的GE光模块只能工作在非自协商1000Mbit/s模式，请将互联的接口速率配置为强制1000Mbit/s。",
+   "vars": [
+    "OID",
+    "InterfaceIndex",
+    "InterfaceName"
    ]
   },
   "1.3.6.1.4.1.2011.5.25.157.2.331": {
@@ -6553,6 +7356,21 @@
     "hwStrackPacketPVlan",
     "hwStrackEndTime",
     "hwStrackTotalPacket"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.165.2.2.1.6": {
+   "name": "hwStrackUserAbnormal",
+   "mib": "SECE",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "接口板上收到报文的速率超出了正常速率，会发出告警。",
+   "vars": [
+    "OID",
+    "board",
+    "user ip",
+    "packet type",
+    "normal rate",
+    "actual rate"
    ]
   },
   "1.3.6.1.4.1.2011.5.25.165.2.2.2.1": {
@@ -7015,6 +7833,27 @@
    "facility": "security",
    "meaning": "该节点用来表示存在SSH攻击。",
    "vars": []
+  },
+  "1.3.6.1.4.1.2011.5.25.166.2.1": {
+   "name": "hwFtpNumThreshold",
+   "mib": "FTPS",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "FTP用户数超过上限阈值。",
+   "vars": [
+    "Upper threshold"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.166.2.2": {
+   "name": "hwFtpNumThresholdResume",
+   "mib": "FTPS",
+   "level": "info",
+   "facility": "system",
+   "meaning": "FTP用户数低于恢复阈值产生的恢复告警。",
+   "vars": [
+    "Lower threshold"
+   ],
+   "cleared": true
   },
   "1.3.6.1.4.1.2011.5.25.171.2.1": {
    "name": "hwMacAuthenMaxUserAlarm",
@@ -8220,6 +9059,18 @@
     "hwCfgChgTableMaxItem"
    ]
   },
+  "1.3.6.1.4.1.2011.5.25.191.3.3": {
+   "name": "hwCfgChangeDetailNotify",
+   "mib": "DS",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "设备的配置发生变更。",
+   "vars": [
+    "SeqId",
+    "ChangeDetail",
+    "UserName"
+   ]
+  },
   "1.3.6.1.4.1.2011.5.25.192.3.1": {
    "name": "hwHttpUserLogin",
    "mib": "HUAWEI-HTTP-MIB",
@@ -8429,6 +9280,58 @@
    "meaning": "PoE端口故障恢复。",
    "vars": [
     "hwPoePortName"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.207.2.1": {
+   "name": "hwVtyNumExceed",
+   "mib": "LINE",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "通过Telnet方式登录设备的用户数量超过设定的最大值。",
+   "vars": [
+    "OID",
+    "MaxUserNum"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.207.2.2": {
+   "name": "hwUserLogin",
+   "mib": "LINE",
+   "level": "info",
+   "facility": "security",
+   "meaning": "用户登录。",
+   "vars": [
+    "UserIndex",
+    "UserName",
+    "UserIP",
+    "UserChannel"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.207.2.3": {
+   "name": "hwUserLoginFail",
+   "mib": "LINE",
+   "level": "critical",
+   "facility": "security",
+   "meaning": "用户登录失败通知信息。",
+   "vars": [
+    "UserIndex",
+    "UserName",
+    "UserIP",
+    "UserChannel"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.207.2.4": {
+   "name": "hwUserLogout",
+   "mib": "LINE",
+   "level": "info",
+   "facility": "security",
+   "meaning": "用户退出设备。",
+   "vars": [
+    "UserIndex",
+    "UserName",
+    "UserIP",
+    "UserChannel"
    ],
    "cleared": true
   },
@@ -8752,6 +9655,21 @@
     "hwEntityTrapReasonDescr"
    ]
   },
+  "1.3.6.1.4.1.2011.5.25.219.2.3.6": {
+   "name": "hwCardInvalidResume",
+   "mib": "ENTITYTRAP",
+   "level": "info",
+   "facility": "hardware",
+   "meaning": "子卡故障恢复。",
+   "vars": [
+    "Index",
+    "EntityPhysicalIndex",
+    "PhysicalName",
+    "EntityTrapEntType",
+    "EntityTrapFaultID"
+   ],
+   "cleared": true
+  },
   "1.3.6.1.4.1.2011.5.25.219.2.3.15": {
    "name": "hwCardPortInvalid",
    "mib": "HUAWEI-ENTITY-TRAP-MIB",
@@ -8766,6 +9684,33 @@
     "hwEntityTrapReasonDescr",
     "hwEntityOperStatus"
    ]
+  },
+  "1.3.6.1.4.1.2011.5.25.219.2.4.1": {
+   "name": "hwOpticalRemove",
+   "mib": "ENTITYTRAP",
+   "level": "warning",
+   "facility": "hardware",
+   "meaning": "光模块被拔出",
+   "vars": [
+    "Index",
+    "EntityPhysicalIndex",
+    "PhysicalName",
+    "EntityTrapFaultID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.219.2.4.2": {
+   "name": "hwOpticalInsert",
+   "mib": "ENTITYTRAP",
+   "level": "info",
+   "facility": "hardware",
+   "meaning": "光模块被插入",
+   "vars": [
+    "Index",
+    "EntityPhysicalIndex",
+    "PhysicalName",
+    "EntityTrapFaultID"
+   ],
+   "cleared": true
   },
   "1.3.6.1.4.1.2011.5.25.219.2.4.3": {
    "name": "hwOpticalFail",
@@ -9903,6 +10848,21 @@
    ],
    "cleared": true
   },
+  "1.3.6.1.4.1.2011.5.25.227.2.1.12": {
+   "name": "hwBoardServiceFailed",
+   "mib": "L3MB",
+   "level": "critical",
+   "facility": "hardware",
+   "meaning": "由于单板二层用户表项资源不足造成单板在执行全局下发的命令行失败的告警。",
+   "vars": [
+    "OID",
+    "Command",
+    "ViewName",
+    "ReasonID",
+    "ReasonDescr",
+    "Slot"
+   ]
+  },
   "1.3.6.1.4.1.2011.5.25.227.2.1.22": {
    "name": "hwBoardIPv6ACLResLack",
    "mib": "HUAWEI-FWD-RES-TRAP-MIB",
@@ -9912,6 +10872,28 @@
    "vars": [
     "hwViewName",
     "hwFwdResLackSlotStr"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.227.2.1.23": {
+   "name": "hwBoardMplsPhpResLack",
+   "mib": "MPLS",
+   "level": "warning",
+   "facility": "hardware",
+   "meaning": "资源不足导致PHP标签增加失败。",
+   "vars": [
+    "OID",
+    "Slot"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.227.2.1.24": {
+   "name": "hwBoardMplsNonSupport",
+   "mib": "MPLS",
+   "level": "warning",
+   "facility": "hardware",
+   "meaning": "由于硬件限制不支持MPLS功能，该设备将被重启。",
+   "vars": [
+    "OID",
+    "Slot"
    ]
   },
   "1.3.6.1.4.1.2011.5.25.227.2.1.25": {
@@ -10085,6 +11067,43 @@
     "hwEMDIThreshold"
    ],
    "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.227.2.1.62": {
+   "name": "hwBoardMcResLack",
+   "mib": "MCAST",
+   "level": "warning",
+   "facility": "hardware",
+   "meaning": "组播表项资源使用率超过阈值。",
+   "vars": [
+    "OID",
+    "GAUGE",
+    "Slot",
+    "ResourceType"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.227.2.1.63": {
+   "name": "hwBoardMcResLackResume",
+   "mib": "MCAST",
+   "level": "info",
+   "facility": "hardware",
+   "meaning": "组播表项资源使用率恢复到阈值以下。",
+   "vars": [
+    "OID",
+    "GAUGE",
+    "Slot",
+    "ResourceType"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.5.25.227.2.1.73": {
+   "name": "hwPingfFail",
+   "mib": "L3MB",
+   "level": "critical",
+   "facility": "system",
+   "meaning": "设备上存在值为0000-0000-0001的MAC地址，可能会导致设备发送ICMP回应报文失败，需要删除该MAC或者去使能ping快回功能。",
+   "vars": [
+    "OID"
+   ]
   },
   "1.3.6.1.4.1.2011.5.25.227.2.1.80": {
    "name": "hwEMDIResLack",
@@ -10328,6 +11347,20 @@
     "hwLspTunnelID",
     "hwLspSenderAddress",
     "hwLspEndPointAddress",
+    "hwLspTTL",
+    "hwLspHandle"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.302.3.3": {
+   "name": "hwLspPingIPv4VpnProbe",
+   "mib": "LSPV",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "IPv4 VPN LSP ping测试的告警，用于通知网管本设备收到IPv4 VPN LSP ping报文。",
+   "vars": [
+    "hwLspIPv4VpnName",
+    "hwLspIPv4VpnSrcAddr",
+    "hwLspIPv4VpnDstAddr",
     "hwLspTTL",
     "hwLspHandle"
    ]
@@ -11162,6 +12195,18 @@
     "hwUniMbrTrapIllegalConfigReason"
    ]
   },
+  "1.3.6.1.4.1.2011.5.25.327.31.3.2.5": {
+   "name": "hwUniMbrAsServiceAbnormal",
+   "mib": "MBR",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "AS上业务功能异常。",
+   "vars": [
+    "ASDeviceName",
+    "ASIndex",
+    "Description"
+   ]
+  },
   "1.3.6.1.4.1.2011.5.25.327.31.4.2.1": {
    "name": "hwVermngUpgradeFail",
    "mib": "HUAWEI-UNIMNG-MIB",
@@ -11223,6 +12268,24 @@
     "hwUniAsBaseThresholdEntValue",
     "hwUniAsBaseThresholdEntCurrent",
     "hwUniAsBaseEntityTrapEntFaultID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.5.25.327.31.6.2.2.1": {
+   "name": "hwASBrdTempAlarm",
+   "mib": "MBR",
+   "level": "critical",
+   "facility": "hardware",
+   "meaning": "AS温度高于高温阈值或低于低温阈值。",
+   "vars": [
+    "ASName",
+    "ASIndex",
+    "Index",
+    "EntityPhysicalIndex",
+    "PhysicalName",
+    "EntityThresholdType",
+    "EntityThresholdValue",
+    "EntityThresholdCurrent",
+    "EntityTrapFaultID"
    ]
   },
   "1.3.6.1.4.1.2011.5.25.327.31.6.2.2.2": {
@@ -11610,6 +12673,24 @@
     "hwIplpmPortUserQueLossRatio",
     "hwIplpmPortOutputLossRatio"
    ]
+  },
+  "1.3.6.1.4.1.2011.5.25.328.2.4": {
+   "name": "hwIplpmLinkForwardLossRatioRecovery",
+   "mib": "IPCA",
+   "level": "info",
+   "facility": "interface",
+   "meaning": "直连链路连续5个周期，丢包阈值低于或等于1%。",
+   "vars": [
+    "[OID]",
+    "IfIndex",
+    "IfIndex",
+    "PeriodHigh",
+    "PeriodLow",
+    "ForwardLossPkts",
+    "ForwardLossRatio",
+    "PeriodNo"
+   ],
+   "cleared": true
   },
   "1.3.6.1.4.1.2011.5.25.334.2.1.1": {
    "name": "hwSrvServiceExceedThreshould",
@@ -13019,6 +14100,98 @@
    ],
    "cleared": true
   },
+  "1.3.6.1.4.1.2011.6.139.12.3.1.3": {
+   "name": "hwWlanShareLicAgeTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "共享license老化告警。",
+   "vars": [
+    "ACMAC",
+    "Number of shared licenses"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.12.3.1.4": {
+   "name": "hwWlanShareLicAgeRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "system",
+   "meaning": "共享license停止老化。",
+   "vars": [
+    "ACMAC",
+    "Number of shared licenses"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.12.3.1.5": {
+   "name": "hwWlanPoolLicAgeTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "License资源池老化告警。",
+   "vars": [
+    "Total number of licenses",
+    "Number of local shared licenses"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.12.3.1.6": {
+   "name": "hwWlanPoolLicAgeRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "system",
+   "meaning": "License资源池停止老化。",
+   "vars": [
+    "Total number of licenses",
+    "Number of local shared licenses"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.12.3.1.7": {
+   "name": "hwWlanStaNumReachWarningTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "设备上无线用户数达到整机规格数的80%，产生告警。",
+   "vars": [
+    "MaxStaNum",
+    "CurStaNum"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.12.3.1.8": {
+   "name": "hwWlanStaNumReachWarningRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "system",
+   "meaning": "设备上无线用户数恢复到整机规格80%以下，告警恢复。",
+   "vars": [
+    "MaxStaNum",
+    "CurStaNum"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.12.3.1.9": {
+   "name": "hwWlanStaNumReachMaxTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "设备上无线用户数达到整机规格，产生告警。",
+   "vars": [
+    "MaxStaNum",
+    "CurStaNum"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.12.3.1.10": {
+   "name": "hwWlanStaNumReachMaxRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "system",
+   "meaning": "设备上无线用户数恢复到整机规格以下，告警恢复。",
+   "vars": [
+    "MaxStaNum",
+    "CurStaNum"
+   ],
+   "cleared": true
+  },
   "1.3.6.1.4.1.2011.6.139.12.3.1.11": {
    "name": "hwWlanWapiCertificateNearlyExpiredTrap",
    "mib": "HUAWEI-WLAN-GLOBAL-MIB",
@@ -13757,6 +14930,415 @@
     "hwWlanApId"
    ]
   },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.49": {
+   "name": "hwMPJoinedOnEthernetTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "MP通过以太口上线告警。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.50": {
+   "name": "hwMPJoinedOnEthernetRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "system",
+   "meaning": "MP通过以太口上线恢复为通过空口上线告警。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "APID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.51": {
+   "name": "hwMPPJoinedOnAirTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "MPP转换为MP通过空口上线告警。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.52": {
+   "name": "hwMPPJoinedOnAirRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "system",
+   "meaning": "MPP转换为MP通过空口上线，恢复成MPP通过有线口上线的告警。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "APID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.53": {
+   "name": "hwApOpticalTxPowerTooHighTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "hardware",
+   "meaning": "AP光模块的发送功率高于最大值。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "Ap Optical TxPower",
+    "ApEntityPhysicalName",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.54": {
+   "name": "hwApOpticalTxPowerTooHighRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "hardware",
+   "meaning": "AP光模块的发送功率低于最大值。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "Ap Optical TxPower",
+    "ApEntityPhysicalName",
+    "APID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.55": {
+   "name": "hwApOpticalTxPowerTooLowTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "hardware",
+   "meaning": "AP光模块的发送功率低于最小值。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "Ap Optical TxPower",
+    "ApEntityPhysicalName",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.56": {
+   "name": "hwApOpticalTxPowerTooLowRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "hardware",
+   "meaning": "AP光模块的发送功率高于最小值。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "Ap Optical TxPower",
+    "ApEntityPhysicalName",
+    "APID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.58": {
+   "name": "hwApFanInvalidTrap",
+   "mib": "WLAN",
+   "level": "critical",
+   "facility": "hardware",
+   "meaning": "风扇故障。\n仅AirEngine 9700D-M支持该节点。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApFanIndex",
+    "ApEntityPhysicalName",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.59": {
+   "name": "hwApFanInvalidRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "hardware",
+   "meaning": "风扇故障恢复。\n仅AirEngine 9700D-M支持该节点。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApFanIndex",
+    "ApEntityPhysicalName",
+    "APID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.60": {
+   "name": "hwApStorageDevRemoveTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "拔出存储卡。\n仅AirEngine 9700D-M支持该节点。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApStorageIndex",
+    "ApStorageName",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.61": {
+   "name": "hwApStorageDevInsertTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "system",
+   "meaning": "插入存储卡。\n仅AirEngine 9700D-M支持该节点。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApStorageIndex",
+    "ApStorageName",
+    "APID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.62": {
+   "name": "hwApPoePowerOffTrap",
+   "mib": "WLAN",
+   "level": "critical",
+   "facility": "hardware",
+   "meaning": "AP上支持PoE输出的接口上的PD断电。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "APID",
+    "Reason"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.63": {
+   "name": "hwApPoePowerOnTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "hardware",
+   "meaning": "AP上支持PoE输出的接口满足了供电的条件：\n功率足够。\n该PD被系统识别。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.64": {
+   "name": "hwApPoePdConnectedTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "interface",
+   "meaning": "AP上支持PoE输出的接口有PD设备接入。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "APID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.65": {
+   "name": "hwApPoePdDisconnectedTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "AP上支持PoE输出的接口有PD设备断开连接。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.66": {
+   "name": "hwApPoePdClassOvercurrentTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "支持PoE的AP检测到PD在分级的过程中出现过流且不向PD供电。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.67": {
+   "name": "hwApPoePdPriorityDifferentTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "interface",
+   "meaning": "AP上支持PoE输出的接口设置的优先级与PD的优先级不一致会发生该告警。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "ApPoePdPriority",
+    "ApPoePortPriority",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.68": {
+   "name": "hwApPoePowerOverUtilizationThresholdTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "hardware",
+   "meaning": "对于支持PoE输出的AP，当PoE电源消耗总功率大于等于告警上限的时候产生此告警。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "ApPoeCurConsumPower",
+    "ApPoeConsumPowerThreshold",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.69": {
+   "name": "hwApPoePowerOverUtilizationThresholdRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "hardware",
+   "meaning": "对于支持PoE输出的AP，当POE电源消耗总功率小于告警上限的时候产生此恢复告警。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "ApPoeCurConsumPower",
+    "ApPoeConsumPowerThreshold",
+    "APID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.70": {
+   "name": "hwApSTPAutoShutdownTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "STP检测到本地环回后，联动Shutdown端口并触发告警。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.71": {
+   "name": "hwApSTPAutoShutdownRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "system",
+   "meaning": "STP检测到本地环回消失后，联动取消Shutdown端口并触发恢复告警。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "APID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.72": {
+   "name": "hwApOpticalInvalidTrap",
+   "mib": "WLAN",
+   "level": "critical",
+   "facility": "hardware",
+   "meaning": "AP光模块功能异常告警。\n仅AirEngine 9700D-M支持该节点。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "hwWlanApOpticalFaultID",
+    "APID",
+    "hwWlanApOpticalFaultReason"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.73": {
+   "name": "hwApOpticalInvalidRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "hardware",
+   "meaning": "AP光模块功能恢复正常。\n仅AirEngine 9700D-M支持该节点。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "ApIfIndex",
+    "ApEntityPhysicalName",
+    "hwWlanApOpticalFaultID",
+    "APID"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.74": {
+   "name": "hwApVapStaFullTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "VAP无法增加新的移动用户告警。",
+   "vars": [
+    "APMAC",
+    "APName",
+    "RADIOID",
+    "WLANID",
+    "FailCause",
+    "PermitNum",
+    "APID"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.75": {
+   "name": "hwVapStaFullRecoverTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "system",
+   "meaning": "VAP无法增加新的移动用户告警清除。",
+   "vars": [
+    "APMAC",
+    "APName",
+    "RADIOID",
+    "WLANID",
+    "FailCause",
+    "CurrentNum",
+    "APID"
+   ],
+   "cleared": true
+  },
   "1.3.6.1.4.1.2011.6.139.13.1.1.76": {
    "name": "hwWlanBLELowPowerTrap",
    "mib": "HUAWEI-WLAN-AP-MIB",
@@ -13881,6 +15463,21 @@
     "hwWlanApId"
    ],
    "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.86": {
+   "name": "hwWlanApSubFirmwareMismatchTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "AP设备上子固件版本不匹配告警。",
+   "vars": [
+    "APMAC",
+    "APName",
+    "APSubFirmwareName",
+    "APSubFirmware",
+    "RealVersion",
+    "APID"
+   ]
   },
   "1.3.6.1.4.1.2011.6.139.13.1.1.88": {
    "name": "hwApConfigInconsistWithActualTrap",
@@ -14026,6 +15623,21 @@
     "hwWlanApId"
    ],
    "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.99": {
+   "name": "hwApTypeMismatchTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "配置的AP类型和实际不匹配。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "APConfigType",
+    "APActualType",
+    "APID"
+   ]
   },
   "1.3.6.1.4.1.2011.6.139.13.1.1.100": {
    "name": "hwAPSoftGreDownTrap",
@@ -14375,6 +15987,32 @@
     "hwApLicenseType"
    ],
    "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.139": {
+   "name": "hwApRTUDemoLicenseExpireTrap",
+   "mib": "WLAN",
+   "level": "critical",
+   "facility": "system",
+   "meaning": "AP的RTU demo license即将到期。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APName",
+    "APID",
+    "RemainTime"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.13.1.1.140": {
+   "name": "hwApTypeInfoInconsistentTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "AP上报的AP-type字段与本地不一致。",
+   "vars": [
+    "OID",
+    "APMAC",
+    "APType"
+   ]
   },
   "1.3.6.1.4.1.2011.6.139.13.1.1.143": {
    "name": "hwApEMDISessionOverloadTrap",
@@ -15161,6 +16799,17 @@
    ],
    "cleared": true
   },
+  "1.3.6.1.4.1.2011.6.139.17.2.1.1": {
+   "name": "hwVapNumExceedSpecTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "VAP实例数量超过了系统最大规格。",
+   "vars": [
+    "OID",
+    "Vap"
+   ]
+  },
   "1.3.6.1.4.1.2011.6.139.17.2.1.2": {
    "name": "hwVapIGMPSnoopingBandwidthExceedTrap",
    "mib": "HUAWEI-WLAN-VAP-MIB",
@@ -15209,6 +16858,29 @@
    "meaning": "VAP创建失败告警恢复。",
    "vars": [
     "hwVapCreateFailReason"
+   ],
+   "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.17.2.1.8": {
+   "name": "hwVapNumReachWarningTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "VAP数量达到最大规格的80%。",
+   "vars": [
+    "MaxNum",
+    "CurNum"
+   ]
+  },
+  "1.3.6.1.4.1.2011.6.139.17.2.1.9": {
+   "name": "hwVapNumReachWarningRestoreTrap",
+   "mib": "WLAN",
+   "level": "info",
+   "facility": "system",
+   "meaning": "VAP数量低于最大规格的75%。",
+   "vars": [
+    "MaxNum",
+    "CurNum"
    ],
    "cleared": true
   },
@@ -15403,6 +17075,21 @@
     "hwWlanApId"
    ],
    "cleared": true
+  },
+  "1.3.6.1.4.1.2011.6.139.18.1.1.1.16": {
+   "name": "hwCPEAlarmTrap",
+   "mib": "WLAN",
+   "level": "warning",
+   "facility": "system",
+   "meaning": "AP上报CPE设备的告警信息。",
+   "vars": [
+    "OID",
+    "CPEMac",
+    "APMac",
+    "APName",
+    "APID",
+    "AlarmContent"
+   ]
   },
   "1.3.6.1.4.1.2011.6.139.19.3.1.3": {
    "name": "hwWlanAeroscoutLocationViaAcTrap",

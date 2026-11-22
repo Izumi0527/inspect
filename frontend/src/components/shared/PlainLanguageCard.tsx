@@ -5,8 +5,16 @@
  * 供日志中心与告警中心的详情弹窗共用，避免两处重复实现。
  */
 import React from 'react'
-import { AlertCircle, AlertTriangle, CheckCircle2, Info, Lightbulb } from 'lucide-react'
-import type { PlainLanguageResult, PlainTone } from '@/lib/plain-language'
+import { AlertCircle, AlertTriangle, BookOpen, CheckCircle2, Info, Lightbulb } from 'lucide-react'
+import type {
+  HuaweiAlarmKnowledge,
+  HuaweiKnowledgeLookupResponse,
+  HuaweiKnowledgeParam,
+  HuaweiLogKnowledge,
+  HuaweiMIBKnowledge,
+  PlainLanguageResult,
+  PlainTone,
+} from '@/lib/plain-language'
 import { RawInfoDisclosure } from './RawInfoDisclosure'
 
 /**
@@ -47,10 +55,141 @@ export const PLAIN_TONE_STYLES: Record<
 
 export interface PlainLanguageCardProps {
   result: PlainLanguageResult
+  knowledge?: HuaweiKnowledgeLookupResponse | null
   className?: string
 }
 
-export const PlainLanguageCard: React.FC<PlainLanguageCardProps> = ({ result, className = '' }) => {
+function KnowledgeStringList({
+  title,
+  items,
+  ordered = false,
+}: {
+  title: string
+  items?: string[]
+  ordered?: boolean
+}) {
+  if (!items || items.length === 0) return null
+  const ListTag = ordered ? 'ol' : 'ul'
+  const listStyle = ordered ? 'list-decimal' : 'list-disc'
+
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-muted-foreground">{title}</p>
+      <ListTag className={`${listStyle} pl-4 space-y-1 text-xs text-foreground/85 leading-relaxed`}>
+        {items.map((entry, idx) => (
+          <li key={idx}>{entry}</li>
+        ))}
+      </ListTag>
+    </div>
+  )
+}
+
+function KnowledgeParamsList({ parameters }: { parameters?: HuaweiKnowledgeParam[] }) {
+  if (!parameters || parameters.length === 0) return null
+
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-muted-foreground">参数说明</p>
+      <ul className="space-y-1 text-xs text-foreground/85">
+        {parameters.map((param, idx) => (
+          <li key={`${param.name}-${idx}`} className="flex flex-wrap gap-1.5">
+            <span className="font-mono font-medium text-foreground">{param.name}:</span>
+            <span>{param.meaning}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function AlarmKnowledgeDetails({ alarm }: { alarm: HuaweiAlarmKnowledge }) {
+  const metaParts = [alarm.alarm_name, alarm.module, alarm.oid, alarm.severity].filter(Boolean)
+  return (
+    <div className="space-y-2">
+      <p className="font-mono text-[11px] text-muted-foreground break-all">
+        {metaParts.join(' · ')}
+      </p>
+      {alarm.meaning && (
+        <p className="text-xs text-foreground/90 leading-relaxed">{alarm.meaning}</p>
+      )}
+      {alarm.impact && (
+        <p className="text-xs text-foreground/85 leading-relaxed">
+          <span className="font-medium text-muted-foreground">对系统影响：</span>
+          {alarm.impact}
+        </p>
+      )}
+      <KnowledgeParamsList parameters={alarm.parameters} />
+      <KnowledgeStringList title="可能原因" items={alarm.causes} />
+      <KnowledgeStringList title="处理建议" items={alarm.procedures} ordered />
+    </div>
+  )
+}
+
+function LogKnowledgeDetails({ log }: { log: HuaweiLogKnowledge }) {
+  const header = `${log.module}/${log.severity}/${log.mnemonic}`
+  return (
+    <div className="space-y-2">
+      <p className="font-mono text-[11px] text-muted-foreground break-all">{header}</p>
+      {log.meaning && (
+        <p className="text-xs text-foreground/90 leading-relaxed">{log.meaning}</p>
+      )}
+      <KnowledgeParamsList parameters={log.parameters} />
+      <KnowledgeStringList title="可能原因" items={log.causes} />
+      <KnowledgeStringList title="处理建议" items={log.procedures} ordered />
+    </div>
+  )
+}
+
+function MIBKnowledgeDetails({ mib }: { mib: HuaweiMIBKnowledge }) {
+  const metaParts = [mib.mib, mib.name, mib.oid, mib.data_type].filter(Boolean)
+  return (
+    <div className="space-y-2">
+      <p className="font-mono text-[11px] text-muted-foreground break-all">
+        {metaParts.join(' · ')}
+      </p>
+      {mib.meaning && (
+        <p className="text-xs text-foreground/90 leading-relaxed">{mib.meaning}</p>
+      )}
+      {mib.impl_spec && (
+        <p className="text-xs text-foreground/85 leading-relaxed">
+          <span className="font-medium text-muted-foreground">实现规格：</span>
+          {mib.impl_spec}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function HuaweiKnowledgeSection({ knowledge }: { knowledge: HuaweiKnowledgeLookupResponse }) {
+  if (!knowledge.matched) return null
+
+  let content: React.ReactNode = null
+  if (knowledge.kind === 'alarm' && knowledge.alarm) {
+    content = <AlarmKnowledgeDetails alarm={knowledge.alarm} />
+  } else if (knowledge.kind === 'log' && knowledge.log) {
+    content = <LogKnowledgeDetails log={knowledge.log} />
+  } else if (knowledge.kind === 'mib' && knowledge.mib) {
+    content = <MIBKnowledgeDetails mib={knowledge.mib} />
+  }
+
+  if (!content) return null
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border/60 space-y-2">
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+        <BookOpen className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+        <span>华为官方文档参考</span>
+      </div>
+      {content}
+    </div>
+  )
+}
+
+export const PlainLanguageCard: React.FC<PlainLanguageCardProps> = ({
+  result,
+  knowledge,
+  className = '',
+}) => {
   const tone = PLAIN_TONE_STYLES[result.tone] ?? PLAIN_TONE_STYLES.info
   const { Icon } = tone
 
@@ -94,6 +233,8 @@ export const PlainLanguageCard: React.FC<PlainLanguageCardProps> = ({ result, cl
           </RawInfoDisclosure>
         </div>
       )}
+
+      {knowledge && <HuaweiKnowledgeSection knowledge={knowledge} />}
     </div>
   )
 }

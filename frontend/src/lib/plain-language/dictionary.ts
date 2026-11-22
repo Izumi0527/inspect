@@ -324,6 +324,27 @@ const VRP_MODULE_LABELS: Readonly<Record<string, string>> = {
   WLAN: '无线接入',
   CAPWAP: '无线接入控制',
   HTTP: 'Web 网管',
+  // V200R024C00 官方日志与告警高频新增模块
+  VOSCPU: 'VOS CPU 监控',
+  VOSMEM: 'VOS 内存监控',
+  ENTITYTRAP: '实体告警',
+  BASETRAP: '基础告警',
+  CFGMGR: '配置管理',
+  RUMNG: '资源使用管理',
+  RUUP: '资源使用上报',
+  ACLE: 'ACL 策略引擎',
+  ASMNG: '应用服务管理',
+  FWDRES: '转发资源管理',
+  OPTMON: '光模块监控',
+  SYSRES: '系统资源管理',
+  LACP: '链路聚合控制协议',
+  ARP: 'ARP 协议',
+  MCAST: '组播管理',
+  MDNS: 'mDNS 服务发现',
+  SMLK: 'Smart Link 主备',
+  SEA: '安全增强审计',
+  VRRP: 'VRRP 冗余路由',
+  STORM: '风暴抑制',
 }
 
 /**

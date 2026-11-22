@@ -149,7 +149,7 @@ func (c *HuaweiModelCatalog) LookupModel(modelName string) (SwitchModelProfile, 
 	for _, profile := range c.Models {
 		for _, rawPrefix := range profile.ModelPrefixes {
 			score := matchModelPrefixScore(normalized, rawPrefix)
-			if score > bestScore {
+			if score > bestScore || (score >= 0 && score == bestScore && profile.Series < best.Series) {
 				bestScore = score
 				best = profile
 			}

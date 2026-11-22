@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { formatDateTimeMDHMS } from '@/utils/formatters'
+import { formatDateTimeMDHMS, formatDateTimeYMDHMS } from '@/utils/formatters'
 import {
   MAX_COMPARISON_SERIES,
   buildMetricSelectionId,
@@ -19,8 +19,10 @@ import type { LatestDataItem } from '../../types/zabbix-monitoring.types'
 import { AdhocComparisonChart } from './AdhocComparisonChart'
 import {
   APPLICATION_TAG_OPTIONS,
+  compareLatestDataItemsNaturally,
   getApplicationTagLabel,
   getLatestDataDeltaToneClass,
+  isNonTrafficPortName,
   resolveLatestDataDeltaDisplay,
   resolveLatestDataPortLabel,
 } from './latestDataHelpers'
@@ -70,24 +72,30 @@ function LatestMetricRow({
         </div>
       </td>
       <td className="px-2.5 py-1.5">
-        <div className="flex items-center gap-1.5">
-          <span className="font-medium text-foreground">{item.metric_label}</span>
-          {portLabel !== '整机' && portLabel !== '—' && (
-            <span className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-              {portLabel}
-            </span>
-          )}
-        </div>
-        <div className="font-mono text-[10px] text-muted-foreground/80">
-          {item.item_key}
-        </div>
+        <div className="font-medium text-foreground">{item.metric_label}</div>
       </td>
-      <td className="px-2.5 py-1.5">
+      <td className="px-2.5 py-1.5 whitespace-nowrap">
+        {portLabel === '整机' ? (
+          <span className="inline-flex rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            整机
+          </span>
+        ) : (
+          <span
+            title={portLabel}
+            className={`font-mono ${
+              portLabel === '—' ? 'text-muted-foreground' : 'text-foreground'
+            }`}
+          >
+            {portLabel}
+          </span>
+        )}
+      </td>
+      <td className="px-2.5 py-1.5 whitespace-nowrap">
         <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-muted-foreground">
           {getApplicationTagLabel(item.application_tag)}
         </span>
       </td>
-      <td className="px-2.5 py-1.5 text-right tabular-nums">
+      <td className="px-2.5 py-1.5 text-right whitespace-nowrap tabular-nums">
         <span
           className={`font-semibold ${
             item.is_abnormal ? 'text-danger' : 'text-foreground'
@@ -96,10 +104,13 @@ function LatestMetricRow({
           {item.display_value}
         </span>
       </td>
-      <td className={`px-2.5 py-1.5 text-right tabular-nums ${deltaToneClass}`}>
+      <td className={`px-2.5 py-1.5 text-right whitespace-nowrap tabular-nums ${deltaToneClass}`}>
         {deltaDisplay}
       </td>
-      <td className="px-2.5 py-1.5 text-right text-muted-foreground tabular-nums">
+      <td
+        className="px-2.5 py-1.5 text-right text-muted-foreground whitespace-nowrap tabular-nums"
+        title={formatDateTimeYMDHMS(item.collected_at)}
+      >
         {formatDateTimeMDHMS(item.collected_at)}
       </td>
     </tr>
@@ -113,7 +124,14 @@ export function LatestDataTab({
 }: LatestDataTabProps) {
   const state = useLatestData({ activeGroupId, selectedDeviceIds })
   const pageData = state.latestQuery.data
-  const items = pageData?.items ?? []
+  const rawItems = pageData?.items ?? []
+  const items = rawItems
+    .filter((item) => {
+      if (item.interface_name.trim() === '') return true
+      const portLabel = resolveLatestDataPortLabel(item)
+      return !isNonTrafficPortName(portLabel) && !isNonTrafficPortName(item.interface_name)
+    })
+    .sort(compareLatestDataItemsNaturally)
   const selectedIdSet = new Set(state.selectedSeries.map((s) => s.id))
   const showLargeNetworkHint =
     !state.hasNarrowingFilter && !state.onlyAbnormalOrChanged
@@ -227,6 +245,7 @@ export function LatestDataTab({
                 <th className="w-9 px-2.5 font-medium">对比</th>
                 <th className="px-2.5 font-medium">设备 / IP</th>
                 <th className="px-2.5 font-medium">指标名称</th>
+                <th className="px-2.5 font-medium">端口</th>
                 <th className="px-2.5 font-medium">分类</th>
                 <th className="px-2.5 text-right font-medium">最新值</th>
                 <th className="px-2.5 text-right font-medium">较上次变化</th>
@@ -236,19 +255,19 @@ export function LatestDataTab({
             <tbody>
               {state.latestQuery.isLoading && items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     正在加载实时指标明细...
                   </td>
                 </tr>
               ) : state.latestQuery.isError ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-danger">
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-danger">
                     {state.latestQuery.error?.message || '实时指标明细加载失败'}
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     暂无匹配的实时指标记录
                   </td>
                 </tr>

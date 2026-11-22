@@ -237,3 +237,60 @@ func TestInterfaceMetricsToLatestMetrics_InfersBytesUnitForOctets(t *testing.T) 
 		}
 	}
 }
+
+func TestQueryAdhocGraphs_ResolvesInterfaceDisplayName(t *testing.T) {
+	db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
+	defer cleanup()
+
+	writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
+	start := time.Date(2026, 11, 22, 0, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	bucketTS := start.Add(5 * time.Minute)
+
+	mock.ExpectQuery(`SELECT id, name FROM "devices" WHERE id IN`).
+		WithArgs(28).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow(28, "core-sw-01"))
+
+	mock.ExpectQuery(`SELECT device_id, name, alias FROM "device_interfaces" WHERE device_id IN \(\$1\) AND name IN \(\$2,\$3\)`).
+		WithArgs(28, "if1", "if2").
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "name", "alias"}).
+			AddRow(28, "if1", "GigabitEthernet0/0/1"))
+
+	mock.ExpectQuery(`FROM interface_metrics`).
+		WithArgs(28, "if1", "utilization_in", start, end).
+		WillReturnRows(sqlmock.NewRows([]string{"bucket", "val", "unit"}).AddRow(bucketTS, 42.5, "%"))
+
+	mock.ExpectQuery(`FROM interface_metrics`).
+		WithArgs(28, "if2", "utilization_out", start, end).
+		WillReturnRows(sqlmock.NewRows([]string{"bucket", "val", "unit"}).AddRow(bucketTS, 18.0, "%"))
+
+	mock.ExpectQuery(`FROM device_metrics`).
+		WithArgs(28, "cpu_usage", start, end).
+		WillReturnRows(sqlmock.NewRows([]string{"bucket", "val", "unit"}).AddRow(bucketTS, 31.2, "%"))
+
+	resp, err := writer.QueryAdhocGraphs(context.Background(), []monitoring.AdhocSeriesSpec{
+		{DeviceID: 28, MetricName: "utilization_in", InterfaceName: "if1"},
+		{DeviceID: 28, MetricName: "utilization_out", InterfaceName: "if2"},
+		{DeviceID: 28, MetricName: "cpu_usage"},
+	}, start, end)
+	if err != nil {
+		t.Fatalf("QueryAdhocGraphs() error = %v", err)
+	}
+	if len(resp.Series) != 3 {
+		t.Fatalf("len(Series) = %d, want 3", len(resp.Series))
+	}
+
+	if resp.Series[0].InterfaceName != "if1" || resp.Series[0].InterfaceDisplayName != "GigabitEthernet0/0/1" {
+		t.Fatalf("series[0] = (%q, %q), want (if1, GigabitEthernet0/0/1)", resp.Series[0].InterfaceName, resp.Series[0].InterfaceDisplayName)
+	}
+	if resp.Series[1].InterfaceName != "if2" || resp.Series[1].InterfaceDisplayName != "" {
+		t.Fatalf("series[1] = (%q, %q), want (if2, empty for unmapped synthetic ifX)", resp.Series[1].InterfaceName, resp.Series[1].InterfaceDisplayName)
+	}
+	if resp.Series[2].InterfaceName != "" || resp.Series[2].InterfaceDisplayName != "" {
+		t.Fatalf("series[2] = (%q, %q), want empty for whole-device metric", resp.Series[2].InterfaceName, resp.Series[2].InterfaceDisplayName)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
+}

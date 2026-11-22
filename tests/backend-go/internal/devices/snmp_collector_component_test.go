@@ -192,8 +192,8 @@ func TestEnrichOpticalTransceivers_FiltersPlaceholdersAndResolvesNames(t *testin
 	items := []devices.OpticalTransceiverMetrics{
 		// 全 0 占位行 -> 必须过滤掉
 		{Index: "939982850", Voltage: f(0), VoltageUnit: "mV", BiasCurrent: f(0), BiasCurrentUnit: "uA", TxPower: f(0), TxPowerUnit: "uW", RxPower: f(0), RxPowerUnit: "uW"},
-		// 在位但无收光（电压 > 0，rx=0 uW）-> 保留且按 entPhysicalName 赋名
-		{Index: "939982849", Voltage: f(3300), VoltageUnit: "mV", RxPower: f(0), RxPowerUnit: "uW"},
+		// 在位但无收光（电压 > 0，rx=0 uW）-> 保留且按 entPhysicalName 赋名，并保留 VendorSN
+		{Index: "939982849", VendorSN: "SFP2102312XYZ", Voltage: f(3300), VoltageUnit: "mV", RxPower: f(0), RxPowerUnit: "uW"},
 		// dBm 读数为 0 -> 有效强光，保留且回退 entPhysicalDescr
 		{Index: "939982851", RxPower: f(0), RxPowerUnit: "dBm"},
 		// H3C ifIndex 兼容回退 ifaceNameByIndex
@@ -212,8 +212,8 @@ func TestEnrichOpticalTransceivers_FiltersPlaceholdersAndResolvesNames(t *testin
 	if _, exists := byIdx["939982850"]; exists {
 		t.Fatalf("all-zero placeholder 939982850 should be filtered out")
 	}
-	if byIdx["939982849"].Name != "GigabitEthernet0/0/25" {
-		t.Fatalf("939982849 Name = %q, want GigabitEthernet0/0/25", byIdx["939982849"].Name)
+	if byIdx["939982849"].Name != "GigabitEthernet0/0/25" || byIdx["939982849"].VendorSN != "SFP2102312XYZ" {
+		t.Fatalf("939982849 Name/VendorSN = %q/%q, want GigabitEthernet0/0/25 / SFP2102312XYZ", byIdx["939982849"].Name, byIdx["939982849"].VendorSN)
 	}
 	if byIdx["939982851"].Name != "XGigabitEthernet0/0/1" {
 		t.Fatalf("939982851 Name = %q, want XGigabitEthernet0/0/1", byIdx["939982851"].Name)

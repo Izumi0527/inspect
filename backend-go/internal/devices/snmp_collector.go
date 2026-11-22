@@ -138,6 +138,7 @@ type BGPNeighborMetrics struct {
 type OpticalTransceiverMetrics struct {
 	Index           string   `json:"index"`
 	Name            string   `json:"name,omitempty"`
+	VendorSN        string   `json:"vendor_sn,omitempty"`
 	Voltage         *float64 `json:"voltage,omitempty"`
 	VoltageUnit     string   `json:"voltage_unit,omitempty"`
 	BiasCurrent     *float64 `json:"bias_current,omitempty"`
@@ -1428,36 +1429,55 @@ func (c *SNMPCollector) collectDeviceIdentityWithCatalog(
 	model := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalModelName.OID)
 	version := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalSoftwareRev.OID)
 
+	if isGenericModelPlaceholder(model) {
+		model = ""
+	}
+
 	descr := cachedSysDescr
+	sysObjID := snmpmib.NormalizeOID(cachedSysObjectID)
+	sysDescrModel := ""
+	sysDescrVersion := ""
 	if model == "" || version == "" {
 		if !sysDescrCached && descr == "" {
 			descr = c.readSysDescr(target, registry)
 		}
 		if descr != "" {
-			fallbackModel, fallbackVersion := parseDeviceIdentityFromSysDescr(descr)
-			if model == "" {
-				model = fallbackModel
-			}
-			if version == "" {
-				version = fallbackVersion
-			}
+			sysDescrModel, sysDescrVersion = parseDeviceIdentityFromSysDescr(descr)
 		}
+	}
+
+	if model == "" && registry != nil {
+		if !sysObjectIDCached && sysObjID == "" {
+			sysObjID = snmpmib.NormalizeOID(readStringScalar(target, registry.Common.System.SysObjectID.OID))
+		}
+		if registry.ResolveVendorByContext("", sysObjID, descr) == "huawei" {
+			// 仅当 sysDescr 也未能解析出整机型号时，才允许回退到 hwEntityBoardName
+			model = collectHuaweiEntityModelFallback(target, registry, catalog, sysDescrModel == "")
+		}
+	}
+
+	if model == "" && sysDescrModel != "" {
+		model = sysDescrModel
+	}
+	if version == "" && sysDescrVersion != "" {
+		version = sysDescrVersion
 	}
 
 	// 仍为空时回退 entPhysicalDescr（部分设备只填这一列）
 	if model == "" {
-		model = firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalDescr.OID)
+		if candidate := firstNonEmptyWalkValue(target, registry.Common.System.EntPhysicalDescr.OID); !isGenericModelPlaceholder(candidate) {
+			model = candidate
+		}
 	}
 
 	// 若 ENTITY-MIB 与 sysDescr 均未给出型号，按 sysObjectID 查华为型号知识库兜底
 	if model == "" {
-		sysObjID := snmpmib.NormalizeOID(cachedSysObjectID)
 		if !sysObjectIDCached && sysObjID == "" {
 			sysObjID = snmpmib.NormalizeOID(readStringScalar(target, registry.Common.System.SysObjectID.OID))
 		}
 		if sysObjID != "" {
-			if catalog, err := snmpmib.DefaultHuaweiModelCatalog(); err == nil && catalog != nil {
-				if profile, ok := catalog.LookupBySysObjectID(sysObjID); ok {
+			if modelCatalog, err := snmpmib.DefaultHuaweiModelCatalog(); err == nil && modelCatalog != nil {
+				if profile, ok := modelCatalog.LookupBySysObjectID(sysObjID); ok {
 					model = profile.Series
 				}
 			}
@@ -1486,6 +1506,149 @@ func (c *SNMPCollector) collectDeviceIdentityWithCatalog(
 	if serial := collectDeviceSerialNumberWithCatalog(target, registry, catalog); serial != "" {
 		metrics.SerialNumber = &serial
 	}
+}
+
+var genericModelPlaceholders = map[string]struct{}{
+	"switch": {}, "chassis": {}, "unknown": {}, "none": {}, "n/a": {}, "na": {}, "default": {}, "null": {}, "huawei": {},
+}
+
+func isGenericModelPlaceholder(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return true
+	}
+	_, ok := genericModelPlaceholders[strings.ToLower(trimmed)]
+	return ok
+}
+
+const huaweiEntityBoardNameOID = "1.3.6.1.4.1.2011.5.25.31.1.1.1.1.43"
+
+var nonChassisComponentPrefixes = []string{
+	"PWR", "PSU", "PAC", "PDC", "POWER",
+	"FAN", "SFP", "QSFP", "XFP", "CFP", "OSFP", "OPTICAL",
+	"BATTERY", "SUBCARD", "TRANSC", "CABLE",
+}
+
+func isNonChassisComponentModel(value string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(value))
+	if upper == "" {
+		return true
+	}
+	for _, prefix := range nonChassisComponentPrefixes {
+		if strings.HasPrefix(upper, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func entityClassModelPriority(class int64) (int, bool) {
+	switch class {
+	case entPhysicalClassChassis:
+		return 1, true
+	case entPhysicalClassStack:
+		return 2, true
+	case entPhysicalClassModule:
+		return 3, true
+	default:
+		return 0, false
+	}
+}
+
+func isCleanModelOctetString(raw string) (string, bool) {
+	cleaned := strings.TrimSpace(strings.Trim(raw, "\x00"))
+	if cleaned == "" || len(cleaned) > maxSerialNumberLen {
+		return "", false
+	}
+	for _, r := range cleaned {
+		if r < 0x20 || r >= 0x7f {
+			return "", false
+		}
+	}
+	cleaned = sanitizeIdentityValue(cleaned)
+	if isGenericModelPlaceholder(cleaned) || isNonChassisComponentModel(cleaned) {
+		return "", false
+	}
+	return cleaned, true
+}
+
+func selectHuaweiModelCandidate(rows []gosnmp.SnmpPDU, baseOID string, classByIndex map[int]int64) string {
+	hasBest := false
+	bestPrio := 0
+	bestIdx := 0
+	bestVal := ""
+	for _, pdu := range rows {
+		if pdu.Type != gosnmp.OctetString {
+			continue
+		}
+		rawVal, ok := rawSNMPSerialString(pdu.Value)
+		if !ok {
+			continue
+		}
+		candidate, ok := isCleanModelOctetString(rawVal)
+		if !ok {
+			continue
+		}
+		idx, err := strconv.Atoi(extractOIDIndexSuffix(pdu.Name, baseOID))
+		if err != nil || idx <= 0 {
+			continue
+		}
+		prio := 4
+		if len(classByIndex) > 0 {
+			class, exists := classByIndex[idx]
+			if !exists {
+				continue
+			}
+			var allowed bool
+			prio, allowed = entityClassModelPriority(class)
+			if !allowed {
+				continue
+			}
+		}
+		if !hasBest || prio < bestPrio || (prio == bestPrio && idx < bestIdx) {
+			hasBest = true
+			bestPrio = prio
+			bestIdx = idx
+			bestVal = candidate
+		}
+	}
+	return bestVal
+}
+
+// collectHuaweiEntityModelFallback 在华为电子标签 3.0 设备上读取 hwEntityBoardType -> hwEntityModel -> hwEntityBoardName。
+func collectHuaweiEntityModelFallback(target snmpClient, registry *snmpmib.Registry, catalog *entityCatalog, allowBoardName bool) string {
+	oids := []string{
+		"1.3.6.1.4.1.2011.5.25.31.1.1.2.1.11", // hwEntityBoardType
+		"1.3.6.1.4.1.2011.5.25.31.1.1.2.1.13", // hwEntityModel
+		huaweiEntityBoardNameOID,              // hwEntityBoardName
+	}
+	if registry != nil {
+		if entries := registry.CatalogEntries("huawei", "identity"); len(entries) > 0 {
+			oids = oids[:0]
+			for _, entry := range entries {
+				if trimmed := strings.TrimSpace(entry.OID); trimmed != "" {
+					oids = append(oids, trimmed)
+				}
+			}
+		}
+	}
+	var classByIndex map[int]int64
+	if catalog != nil {
+		classByIndex = catalog.classes()
+	}
+	for _, oid := range oids {
+		if !allowBoardName && snmpmib.NormalizeOID(oid) == huaweiEntityBoardNameOID {
+			continue
+		}
+		rows, err := target.BulkWalkAll(oid)
+		if err != nil || len(rows) == 0 {
+			continue
+		}
+		if candidate := selectHuaweiModelCandidate(rows, oid, classByIndex); candidate != "" {
+			return candidate
+		}
+	}
+	return ""
 }
 
 const (
@@ -2729,6 +2892,18 @@ func applyOpticalCatalogValue(
 	entry snmpmib.CatalogOID,
 	variable gosnmp.SnmpPDU,
 ) {
+	normalizedID := normalizeCollectorToken(entry.ID)
+	if strings.Contains(normalizedID, "vendor_sn") {
+		rawSN, ok := rawSNMPSerialString(variable.Value)
+		if !ok {
+			rawSN = formatSNMPValue(variable.Value)
+		}
+		if cleaned := SanitizeSerialNumber(rawSN); cleaned != "" {
+			item.VendorSN = cleaned
+		}
+		return
+	}
+
 	value, ok := numericPDUValue(variable)
 	if !ok {
 		return
@@ -2737,7 +2912,6 @@ func applyOpticalCatalogValue(
 		return
 	}
 
-	normalizedID := normalizeCollectorToken(entry.ID)
 	normalizedValue, normalizedUnit := normalizeCatalogNumericValue(value, entry.Unit)
 
 	switch {

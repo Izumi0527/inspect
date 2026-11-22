@@ -105,13 +105,21 @@ function compareNaturalStrings(left: string, right: string): number {
 }
 
 export function compareLatestDataItemsNaturally(
-  a: Pick<LatestDataItem, 'interface_name' | 'interface_display_name' | 'metric_name'>,
-  b: Pick<LatestDataItem, 'interface_name' | 'interface_display_name' | 'metric_name'>
+  a: Pick<LatestDataItem, 'interface_name' | 'interface_display_name' | 'metric_name'> & {
+    device_id?: number
+  },
+  b: Pick<LatestDataItem, 'interface_name' | 'interface_display_name' | 'metric_name'> & {
+    device_id?: number
+  }
 ): number {
   const aIsHost = a.interface_name.trim() === ''
   const bIsHost = b.interface_name.trim() === ''
   if (aIsHost !== bIsHost) {
     return aIsHost ? -1 : 1
+  }
+
+  if (a.device_id !== undefined && b.device_id !== undefined && a.device_id !== b.device_id) {
+    return a.device_id - b.device_id
   }
 
   if (!aIsHost) {
@@ -156,6 +164,10 @@ export function normalizeValue(
 }
 
 export function formatSeriesDisplayName(series: AdhocSeriesData): string {
-  const iface = series.interface_name ? ` (${series.interface_name})` : ''
+  const portLabel = resolveLatestDataPortLabel({
+    interface_name: series.interface_name ?? '',
+    interface_display_name: series.interface_display_name,
+  })
+  const iface = portLabel !== '整机' && portLabel !== '—' ? ` (${portLabel})` : ''
   return `${series.device_name} · ${series.metric_label}${iface}`
 }

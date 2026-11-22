@@ -3,7 +3,7 @@
  *
  * 顶部给出人话解读，设备原文收进折叠区，仅在需要时展开。
  */
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import {
   Server,
@@ -22,7 +22,12 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PlainLanguageCard, RawInfoDisclosure } from '@/components/shared'
-import { translateToPlainLanguage } from '@/lib/plain-language'
+import {
+  hasHuaweiKnowledgeSignal,
+  lookupHuaweiKnowledge,
+  translateToPlainLanguage,
+} from '@/lib/plain-language'
+import type { HuaweiKnowledgeLookupResponse } from '@/lib/plain-language'
 import { toast } from 'react-hot-toast'
 import type { DeviceLog } from '../types'
 import { LOG_LEVEL_CONFIG, LOG_FACILITY_CONFIG, LOG_SOURCE_CONFIG } from '../types'
@@ -38,6 +43,31 @@ export const LogDetailModal: React.FC<LogDetailModalProps> = ({
   log,
   onClose
 }) => {
+  const [knowledge, setKnowledge] = useState<HuaweiKnowledgeLookupResponse | null>(null)
+  const combinedKnowledgeText = useMemo(
+    () => (log ? [log.message, log.raw_message].filter(Boolean).join('\n') : ''),
+    [log]
+  )
+
+  useEffect(() => {
+    if (!open || !log || !hasHuaweiKnowledgeSignal(combinedKnowledgeText)) {
+      setKnowledge(null)
+      return
+    }
+    const controller = new AbortController()
+    setKnowledge(null)
+    void lookupHuaweiKnowledge({ message: combinedKnowledgeText }, controller.signal).then(
+      (result) => {
+        if (!controller.signal.aborted) {
+          setKnowledge(result)
+        }
+      }
+    )
+    return () => {
+      controller.abort()
+    }
+  }, [open, log, combinedKnowledgeText])
+
   // 必须在 early return 之前调用，否则违反 React hooks 的调用顺序约束
   const plain = useMemo(
     () => (log
@@ -85,7 +115,7 @@ export const LogDetailModal: React.FC<LogDetailModalProps> = ({
 
         <div className="space-y-6 mt-4">
           {/* 人话解读：置于最前，用户最关心「发生了什么」 */}
-          <PlainLanguageCard result={plain} />
+          <PlainLanguageCard result={plain} knowledge={knowledge} />
 
           {/* 基本信息 */}
           <div className="grid grid-cols-2 gap-4">

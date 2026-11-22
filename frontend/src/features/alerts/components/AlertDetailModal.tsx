@@ -16,7 +16,13 @@ import {
 } from 'lucide-react'
 import { SimpleModal, Badge, Button } from '@/components/atoms'
 import { PlainLanguageCard, RawInfoDisclosure } from '@/components/shared'
-import { humanizeAlertCategory, translateToPlainLanguage } from '@/lib/plain-language'
+import {
+  hasHuaweiKnowledgeSignal,
+  humanizeAlertCategory,
+  lookupHuaweiKnowledge,
+  translateToPlainLanguage,
+} from '@/lib/plain-language'
+import type { HuaweiKnowledgeLookupResponse } from '@/lib/plain-language'
 import { cn } from '@/utils/cn'
 import { Alert, AlertSeverity, AlertStatus } from '../types'
 import { useAlertStyles } from '../hooks/useAlerts'
@@ -75,6 +81,7 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
   const [operationsLoading, setOperationsLoading] = useState(false)
   const [operationsError, setOperationsError] = useState<string | null>(null)
   const [operationsReloadNonce, setOperationsReloadNonce] = useState(0)
+  const [knowledge, setKnowledge] = useState<HuaweiKnowledgeLookupResponse | null>(null)
   const { getSeverityColor, getStatusColor } = useAlertStyles()
 
   const normalizedAlertId = typeof alertId === 'string' ? alertId.trim() : ''
@@ -186,6 +193,30 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
       : null),
     [alert],
   )
+
+  const combinedKnowledgeText = useMemo(
+    () => (alert ? [alert.title, alert.description].filter(Boolean).join('\n') : ''),
+    [alert]
+  )
+
+  useEffect(() => {
+    if (!open || !alert || !hasHuaweiKnowledgeSignal(combinedKnowledgeText)) {
+      setKnowledge(null)
+      return
+    }
+    const controller = new AbortController()
+    setKnowledge(null)
+    void lookupHuaweiKnowledge({ message: combinedKnowledgeText }, controller.signal).then(
+      (result) => {
+        if (!controller.signal.aborted) {
+          setKnowledge(result)
+        }
+      }
+    )
+    return () => {
+      controller.abort()
+    }
+  }, [open, alert, combinedKnowledgeText])
 
   const ariaLabel = alert?.title
     ? `告警详情 - ${alert.title}`
@@ -523,7 +554,7 @@ export const AlertDetailModal: React.FC<AlertDetailModalProps> = ({
           {activeTab === 'details' && (
             <div className="space-y-4">
               {/* 人话解读：置于最前，用户最关心「发生了什么、该怎么办」 */}
-              <PlainLanguageCard result={plain} />
+              <PlainLanguageCard result={plain} knowledge={knowledge} />
 
               {/* 原始告警信息：默认折叠，翻译未命中时自动展开 */}
               <div className="p-4 bg-muted/40 rounded-lg border border-border">

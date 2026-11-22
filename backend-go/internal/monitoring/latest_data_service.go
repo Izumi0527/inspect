@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -102,14 +103,15 @@ type AdhocGraphRequest struct {
 
 // AdhocSeriesData 表示单条对齐时序序列。
 type AdhocSeriesData struct {
-	Key           string     `json:"key"`
-	DeviceID      int        `json:"device_id"`
-	DeviceName    string     `json:"device_name"`
-	MetricName    string     `json:"metric_name"`
-	MetricLabel   string     `json:"metric_label"`
-	InterfaceName string     `json:"interface_name,omitempty"`
-	Unit          string     `json:"unit,omitempty"`
-	Values        []*float64 `json:"values"`
+	Key                  string     `json:"key"`
+	DeviceID             int        `json:"device_id"`
+	DeviceName           string     `json:"device_name"`
+	MetricName           string     `json:"metric_name"`
+	MetricLabel          string     `json:"metric_label"`
+	InterfaceName        string     `json:"interface_name,omitempty"`
+	InterfaceDisplayName string     `json:"interface_display_name,omitempty"`
+	Unit                 string     `json:"unit,omitempty"`
+	Values               []*float64 `json:"values"`
 }
 
 // AdhocGraphResponse 表示多指标同图对比响应。
@@ -316,6 +318,11 @@ func (w *MetricsWriter) QueryAdhocGraphs(
 		deviceNames[d.ID] = d.Name
 	}
 
+	interfaceAliases, err := w.loadInterfaceAliases(ctx, series)
+	if err != nil {
+		return resp, err
+	}
+
 	bucketDuration := resolveAdhocBucketDuration(endTime.Sub(startTime))
 	bucketExpr := buildBucketSQL(bucketDuration)
 
@@ -408,19 +415,80 @@ func (w *MetricsWriter) QueryAdhocGraphs(
 		if unit == "" {
 			unit = defaultInterfaceMetricUnit(metricName)
 		}
+		interfaceDisplayName := ""
+		if ifaceName != "" {
+			interfaceDisplayName = resolveInterfaceDisplayName(
+				ifaceName,
+				interfaceAliases[adhocInterfaceKey{deviceID: spec.DeviceID, name: ifaceName}],
+			)
+		}
 		resp.Series = append(resp.Series, AdhocSeriesData{
-			Key:           key,
-			DeviceID:      spec.DeviceID,
-			DeviceName:    devName,
-			MetricName:    metricName,
-			MetricLabel:   friendlyMetricLabel(metricName),
-			InterfaceName: ifaceName,
-			Unit:          unit,
-			Values:        values,
+			Key:                  key,
+			DeviceID:             spec.DeviceID,
+			DeviceName:           devName,
+			MetricName:           metricName,
+			MetricLabel:          friendlyMetricLabel(metricName),
+			InterfaceName:        ifaceName,
+			InterfaceDisplayName: interfaceDisplayName,
+			Unit:                 unit,
+			Values:               values,
 		})
 	}
 
 	return resp, nil
+}
+
+type adhocInterfaceKey struct {
+	deviceID int
+	name     string
+}
+
+func (w *MetricsWriter) loadInterfaceAliases(
+	ctx context.Context,
+	series []AdhocSeriesSpec,
+) (map[adhocInterfaceKey]*string, error) {
+	devSet := make(map[int]struct{}, len(series))
+	nameSet := make(map[string]struct{}, len(series))
+	devIDs := make([]int, 0, len(series))
+	names := make([]string, 0, len(series))
+	for _, s := range series {
+		iface := strings.TrimSpace(s.InterfaceName)
+		if iface == "" {
+			continue
+		}
+		if _, ok := devSet[s.DeviceID]; !ok {
+			devSet[s.DeviceID] = struct{}{}
+			devIDs = append(devIDs, s.DeviceID)
+		}
+		if _, ok := nameSet[iface]; !ok {
+			nameSet[iface] = struct{}{}
+			names = append(names, iface)
+		}
+	}
+	aliases := make(map[adhocInterfaceKey]*string)
+	if len(devIDs) == 0 || len(names) == 0 {
+		return aliases, nil
+	}
+	slices.Sort(devIDs)
+	slices.Sort(names)
+
+	type ifaceRow struct {
+		DeviceID int     `gorm:"column:device_id"`
+		Name     string  `gorm:"column:name"`
+		Alias    *string `gorm:"column:alias"`
+	}
+	var rows []ifaceRow
+	if err := w.db.WithContext(ctx).
+		Table("device_interfaces").
+		Select("device_id, name, alias").
+		Where("device_id IN ? AND name IN ?", devIDs, names).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		aliases[adhocInterfaceKey{deviceID: r.DeviceID, name: r.Name}] = r.Alias
+	}
+	return aliases, nil
 }
 
 func resolveAdhocBucketDuration(span time.Duration) time.Duration {

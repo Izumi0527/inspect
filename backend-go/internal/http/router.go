@@ -29,6 +29,7 @@ func NewServer(
 	settingsHandler *handlers.SettingsHandler,
 	dashboardHandler *handlers.DashboardHandler,
 	logsHandler *handlers.LogsHandler,
+	knowledgeHandler ...*handlers.KnowledgeHandler,
 ) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
@@ -118,6 +119,11 @@ func NewServer(
 	}
 	if logsHandler != nil {
 		logsHandler.Register(api)
+	}
+	for _, kh := range knowledgeHandler {
+		if kh != nil {
+			kh.Register(api)
+		}
 	}
 
 	return e
