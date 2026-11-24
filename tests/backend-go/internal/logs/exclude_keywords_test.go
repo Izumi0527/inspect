@@ -106,20 +106,20 @@ func TestGetLogStatisticsWithExclude_MatchesListLogsFiltering(t *testing.T) {
 
 	fromJoinWhere := `FROM device_logs AS l LEFT JOIN devices d ON d\.id = l\.device_id WHERE l\.log_timestamp >= \$\d+ AND l\.self_generated = \$\d+ AND l\.device_id = \$\d+ AND ` + sixColExcludeClause
 
-	mock.ExpectQuery(`(?is)SELECT count\(\*\) ` + fromJoinWhere).
+	mock.ExpectQuery(`(?is)SELECT count\(\*\) `+fromJoinWhere).
 		WithArgs(sqlmock.AnyArg(), false, 7, "%NTP%", "%NTP%", "%NTP%", "%NTP%", "%NTP%", "%NTP%").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
 
-	mock.ExpectQuery(`(?is)SELECT l\.level AS key, COUNT\(\*\) AS count ` + fromJoinWhere + ` GROUP BY "?l"?\."?level"?`).
+	mock.ExpectQuery(`(?is)SELECT l\.level AS key, COUNT\(\*\) AS count `+fromJoinWhere+` GROUP BY "?l"?\."?level"?`).
 		WithArgs(sqlmock.AnyArg(), false, 7, "%NTP%", "%NTP%", "%NTP%", "%NTP%", "%NTP%", "%NTP%").
 		WillReturnRows(sqlmock.NewRows([]string{"key", "count"}).AddRow("warning", 3))
 
-	mock.ExpectQuery(`(?is)SELECT l\.facility AS key, COUNT\(\*\) AS count ` + fromJoinWhere + ` GROUP BY "?l"?\."?facility"?`).
+	mock.ExpectQuery(`(?is)SELECT l\.facility AS key, COUNT\(\*\) AS count `+fromJoinWhere+` GROUP BY "?l"?\."?facility"?`).
 		WithArgs(sqlmock.AnyArg(), false, 7, "%NTP%", "%NTP%", "%NTP%", "%NTP%", "%NTP%", "%NTP%").
 		WillReturnRows(sqlmock.NewRows([]string{"key", "count"}).AddRow("system", 3))
 
 	now := time.Now().UTC().Truncate(time.Hour)
-	mock.ExpectQuery(`(?is)SELECT date_trunc\('hour', l\.log_timestamp AT TIME ZONE '[^']+'\) AT TIME ZONE '[^']+' AS hour, COUNT\(\*\) AS count ` + fromJoinWhere + ` GROUP BY "?hour"? ORDER BY "?hour"?`).
+	mock.ExpectQuery(`(?is)SELECT date_trunc\('hour', l\.log_timestamp AT TIME ZONE '[^']+'\) AT TIME ZONE '[^']+' AS hour, COUNT\(\*\) AS count `+fromJoinWhere+` GROUP BY "?hour"? ORDER BY "?hour"?`).
 		WithArgs(sqlmock.AnyArg(), false, 7, "%NTP%", "%NTP%", "%NTP%", "%NTP%", "%NTP%", "%NTP%").
 		WillReturnRows(sqlmock.NewRows([]string{"hour", "count"}).AddRow(now, 3))
 
