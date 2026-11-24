@@ -72,7 +72,7 @@ export function HostsMatrixTable({
               <th className="px-2.5 text-right font-medium">内存</th>
               <th className="px-2.5 text-right font-medium">温度</th>
               <th className="px-2.5 text-right font-medium">Ping 延迟</th>
-              <th className="px-2.5 text-right font-medium">端口 / 硬件</th>
+              <th className="px-2.5 text-right font-medium whitespace-nowrap">端口 / 硬件</th>
               <th className="px-2.5 text-right font-medium">最近巡检分</th>
               <th className="px-2.5 text-right font-medium">异常日志</th>
             </tr>

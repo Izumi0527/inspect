@@ -103,6 +103,7 @@ const mockMatrixResponse: HostsMatrixResponse = {
       interfaces_up: 22,
       interfaces_total: 24,
       hardware_fault_count: 1,
+      hardware_status: 'fault',
       latest_inspection_score: 92,
       error_log_count_24h: 3,
       trap_log_count_24h: 1,
@@ -143,6 +144,7 @@ const mockMatrixResponse: HostsMatrixResponse = {
       interfaces_up: 10,
       interfaces_total: 24,
       hardware_fault_count: 0,
+      hardware_status: 'healthy',
       latest_inspection_score: 98,
       error_log_count_24h: 0,
       trap_log_count_24h: 0,
@@ -231,6 +233,10 @@ describe('设备监控矩阵 HostsMatrixTab (Task 10)', () => {
     expect(screen.getByText('Trap 1')).toBeInTheDocument()
     expect(screen.getByTitle('夜间割接')).toHaveTextContent('维护中')
     expect(screen.getByText('已自动退避')).toBeInTheDocument()
+    expect(screen.getByTitle('活跃物理端口 22 / 物理端口总数 24')).toHaveTextContent('22/24 口')
+    expect(screen.getByText('故障 1')).toBeInTheDocument()
+    expect(screen.getByTitle('活跃物理端口 10 / 物理端口总数 24')).toHaveTextContent('10/24 口')
+    expect(screen.getByText('硬件正常')).toBeInTheDocument()
 
     // 展开子分组并点击
     await user.click(screen.getByRole('button', { name: '展开 总部数据中心' }))
@@ -344,5 +350,37 @@ describe('设备监控矩阵 HostsMatrixTab (Task 10)', () => {
         expect.objectContaining({ device_ids: [11], mode: 'collect_silence' })
       )
     })
+  })
+
+  it('无物理端口采集且硬件未采集时渲染 — 与 未采集', async () => {
+    ;(getMonitoringHosts as jest.Mock).mockResolvedValue({
+      ...mockMatrixResponse,
+      items: [
+        {
+          ...mockMatrixResponse.items[1],
+          id: 13,
+          name: 'Unknown-HW-SW',
+          interfaces_up: 0,
+          interfaces_total: 0,
+          hardware_fault_count: 0,
+          hardware_status: 'unknown',
+        },
+      ],
+      total: 1,
+      total_pages: 1,
+    })
+
+    renderWithQuery(
+      <HostsMatrixTab
+        activeGroupId={null}
+        initialStatusFilter={null}
+        onSelectGroup={jest.fn()}
+        onSelectHost={jest.fn()}
+      />
+    )
+
+    expect(await screen.findByText('Unknown-HW-SW')).toBeInTheDocument()
+    expect(screen.getByTitle('暂无物理端口采集数据')).toHaveTextContent('—')
+    expect(screen.getByText('未采集')).toBeInTheDocument()
   })
 })

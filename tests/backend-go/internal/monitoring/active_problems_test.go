@@ -147,7 +147,7 @@ func TestHostsAlerts_IncludeOpenStatusInDetailAndMatrix(t *testing.T) {
 
 		rows := sqlmock.NewRows(hostDetailMockColumns()).AddRow(
 			deviceID, "test-sw", "192.168.20.1", "test-sw", "SW-CORE-01",
-			"switch", "huawei", "S5700", "SN-1", "V200R001",
+			"switch", nil, "huawei", "S5700", "SN-1", "V200R001",
 			nil, "access", nil, "", "online",
 			true, nil, nil, nil, nil,
 			nil, nil, "online", "success", "",
@@ -211,9 +211,9 @@ func TestHostsAlerts_IncludeOpenStatusInDetailAndMatrix(t *testing.T) {
 		mock.ExpectQuery(`SELECT \* FROM "monitor_maintenances" WHERE enabled = \$1`).
 			WithArgs(true).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}))
-		mock.ExpectQuery(`SELECT device_id, SUM\(CASE WHEN COALESCE\(is_up, false\) THEN 1 ELSE 0 END\) AS up_cnt, COUNT\(\*\) AS total_cnt FROM "device_interfaces"`).
+		mock.ExpectQuery(`SELECT device_id, name, alias, is_up FROM "device_interfaces"`).
 			WithArgs(7, true).
-			WillReturnRows(sqlmock.NewRows([]string{"device_id", "up_cnt", "total_cnt"}))
+			WillReturnRows(sqlmock.NewRows([]string{"device_id", "name", "alias", "is_up"}))
 		mock.ExpectQuery(`SELECT device_id, metric_value FROM "device_latest_metrics"`).
 			WithArgs(7).
 			WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_value"}))

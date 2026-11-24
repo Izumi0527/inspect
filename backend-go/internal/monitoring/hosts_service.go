@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"github.com/your-org/inspect-system/backend-go/internal/devices"
 )
 
 const (
@@ -85,6 +87,24 @@ type HostsMatrixFilter struct {
 	CanReadLogs        bool
 }
 
+const (
+	HardwareStatusHealthy = "healthy"
+	HardwareStatusFault   = "fault"
+	HardwareStatusUnknown = "unknown"
+)
+
+type hostHardwareSummary struct {
+	FaultCount int
+	Status     string
+}
+
+func resolveHostHardwareSummary(summaryMap map[int]hostHardwareSummary, deviceID int) hostHardwareSummary {
+	if summary, ok := summaryMap[deviceID]; ok {
+		return summary
+	}
+	return hostHardwareSummary{Status: HardwareStatusUnknown}
+}
+
 // HostMatrixItem 表示设备监控矩阵中的单行设备摘要。
 type HostMatrixItem struct {
 	ID                    int                     `json:"id"`
@@ -112,6 +132,7 @@ type HostMatrixItem struct {
 	InterfacesUp          int                     `json:"interfaces_up"`
 	InterfacesTotal       int                     `json:"interfaces_total"`
 	HardwareFaultCount    int                     `json:"hardware_fault_count"`
+	HardwareStatus        string                  `json:"hardware_status,omitempty"`
 	ActiveAlertCount      *int                    `json:"active_alert_count,omitempty"`
 	CriticalAlertCount    *int                    `json:"critical_alert_count,omitempty"`
 	WarningAlertCount     *int                    `json:"warning_alert_count,omitempty"`
@@ -215,6 +236,7 @@ type HostDetailResponse struct {
 	SerialNumber        *string                  `json:"serial_number,omitempty"`
 	Location            *string                  `json:"location,omitempty"`
 	TopologyRole        string                   `json:"topology_role"`
+	TopologyRoleSource  string                   `json:"topology_role_source,omitempty"`
 	Interfaces          []HostInterfaceDetail    `json:"interfaces"`
 	SNMPExtensions      SNMPExtensionsResponse   `json:"snmp_extensions"`
 	LatestInspection    *HostInspectionSummary   `json:"latest_inspection,omitempty"`
@@ -506,7 +528,7 @@ func (w *MetricsWriter) QueryHostsMatrix(ctx context.Context, filter HostsMatrix
 	pinnedMap := w.queryPinnedSet(ctx, filter.UserID, pageDeviceIDs)
 	maintMap, _ := w.GetActiveMaintenanceMapForDevices(ctx, now)
 	ifaceStatsMap := w.queryInterfaceCounts(ctx, pageDeviceIDs)
-	hwFaultMap := w.queryHardwareFaultCounts(ctx, pageDeviceIDs)
+	hwSummaryMap := w.queryHardwareSummaries(ctx, pageDeviceIDs)
 	sparklineMap := w.queryPageSparklines(ctx, pageDeviceIDs)
 
 	var alertCountsMap map[int][3]int
@@ -529,6 +551,7 @@ func (w *MetricsWriter) QueryHostsMatrix(ctx context.Context, filter HostsMatrix
 		cliStr := derefStr(r.CLIProtocol, "")
 		inBackoff := r.BackoffUntil != nil && r.BackoffUntil.After(now)
 		ifaceStat := ifaceStatsMap[r.ID]
+		hwSummary := resolveHostHardwareSummary(hwSummaryMap, r.ID)
 		sp := sparklineMap[r.ID]
 		if sp == nil {
 			sp = []HostSparklinePoint{}
@@ -583,7 +606,8 @@ func (w *MetricsWriter) QueryHostsMatrix(ctx context.Context, filter HostsMatrix
 			},
 			InterfacesUp:       ifaceStat[0],
 			InterfacesTotal:    ifaceStat[1],
-			HardwareFaultCount: hwFaultMap[r.ID],
+			HardwareFaultCount: hwSummary.FaultCount,
+			HardwareStatus:     hwSummary.Status,
 			Sparkline:          sp,
 		}
 
@@ -690,6 +714,7 @@ func (w *MetricsWriter) GetHostDetail(
 		Hostname            *string    `gorm:"column:hostname"`
 		DetectedSysName     *string    `gorm:"column:detected_sys_name"`
 		DeviceType          string     `gorm:"column:device_type"`
+		DetectedDeviceType  *string    `gorm:"column:detected_device_type"`
 		Vendor              string     `gorm:"column:vendor"`
 		Model               *string    `gorm:"column:model"`
 		SerialNumber        *string    `gorm:"column:serial_number"`
@@ -720,7 +745,7 @@ func (w *MetricsWriter) GetHostDetail(
 	err := w.db.WithContext(ctx).
 		Table("devices AS d").
 		Select(`
-			d.id, d.name, d.ip_address, d.hostname, d.detected_sys_name, d.device_type, d.vendor, d.model,
+			d.id, d.name, d.ip_address, d.hostname, d.detected_sys_name, d.device_type, d.detected_device_type, d.vendor, d.model,
 			d.serial_number, d.firmware_version, d.location, COALESCE(d.topology_role, 'access') AS topology_role,
 			d.group_id, COALESCE(dg.name, '') AS group_name, d.status, d.is_monitored,
 			d.cpu_usage, d.memory_usage, d.temperature, d.uptime, d.response_time, d.last_seen,
@@ -744,7 +769,8 @@ func (w *MetricsWriter) GetHostDetail(
 	pinnedMap := w.queryPinnedSet(ctx, userID, []int{deviceID})
 	activeMaint, _ := w.GetActiveWindowForDevice(ctx, deviceID, dev.GroupID, now)
 	ifaceStatsMap := w.queryInterfaceCounts(ctx, []int{deviceID})
-	hwFaultMap := w.queryHardwareFaultCounts(ctx, []int{deviceID})
+	hwSummaryMap := w.queryHardwareSummaries(ctx, []int{deviceID})
+	hwSummary := resolveHostHardwareSummary(hwSummaryMap, deviceID)
 	icmpStr := derefStr(dev.ICMPStatus, "unknown")
 	snmpStr := derefStr(dev.SNMPStatus, "unknown")
 	cliStr := derefStr(dev.CLIProtocol, "")
@@ -789,13 +815,16 @@ func (w *MetricsWriter) GetHostDetail(
 		},
 		InterfacesUp:       ifaceStatsMap[deviceID][0],
 		InterfacesTotal:    ifaceStatsMap[deviceID][1],
-		HardwareFaultCount: hwFaultMap[deviceID],
+		HardwareFaultCount: hwSummary.FaultCount,
+		HardwareStatus:     hwSummary.Status,
 		Sparkline:          []HostSparklinePoint{},
 	}
 	resp.FirmwareVersion = dev.FirmwareVersion
 	resp.SerialNumber = normalizeOptionalString(dev.SerialNumber)
 	resp.Location = dev.Location
-	resp.TopologyRole = dev.TopologyRole
+	roleRes := w.resolveDeviceTopologyRole(ctx, dev.ID, dev.DeviceType, dev.DetectedDeviceType, dev.Name, dev.TopologyRole)
+	resp.TopologyRole = roleRes.Role
+	resp.TopologyRoleSource = roleRes.Source
 
 	// 全量接口矩阵
 	var ifaces []HostInterfaceDetail
@@ -854,6 +883,100 @@ func (w *MetricsWriter) GetHostDetail(
 	}
 
 	return resp, nil
+}
+
+func (w *MetricsWriter) resolveDeviceTopologyRole(
+	ctx context.Context,
+	deviceID int,
+	deviceType string,
+	detectedType *string,
+	name string,
+	fallbackRole string,
+) devices.TopologyRoleResult {
+	fallback := func() devices.TopologyRoleResult {
+		return devices.InferSingleDeviceTopologyRole(deviceType, derefStr(detectedType, ""), name, fallbackRole)
+	}
+	if w == nil || w.db == nil {
+		return fallback()
+	}
+
+	topoDevs, err := w.queryTopologyRoleDevices(ctx)
+	if err != nil {
+		return fallback()
+	}
+	topoNeighbors, err := w.queryTopologyRoleNeighbors(ctx)
+	if err != nil {
+		return fallback()
+	}
+
+	roles := devices.InferTopologyRoles(topoDevs, topoNeighbors)
+	if res, ok := roles[deviceID]; ok {
+		return res
+	}
+	return fallback()
+}
+
+func (w *MetricsWriter) queryTopologyRoleDevices(ctx context.Context) ([]devices.TopologyRoleDevice, error) {
+	type row struct {
+		ID                 int     `gorm:"column:id"`
+		Name               string  `gorm:"column:name"`
+		Hostname           *string `gorm:"column:hostname"`
+		IPAddress          string  `gorm:"column:ip_address"`
+		MacAddress         *string `gorm:"column:mac_address"`
+		DetectedSysName    *string `gorm:"column:detected_sys_name"`
+		DetectedChassisID  *string `gorm:"column:detected_chassis_id"`
+		DeviceType         string  `gorm:"column:device_type"`
+		DetectedDeviceType *string `gorm:"column:detected_device_type"`
+	}
+	rows := make([]row, 0)
+	if err := w.db.WithContext(ctx).
+		Table("devices").
+		Select("id, name, hostname, ip_address, mac_address, detected_sys_name, detected_chassis_id, device_type, detected_device_type").
+		Order("id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]devices.TopologyRoleDevice, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, devices.TopologyRoleDevice{
+			ID:                 r.ID,
+			Name:               r.Name,
+			Hostname:           derefStr(r.Hostname, ""),
+			IP:                 r.IPAddress,
+			MAC:                derefStr(r.MacAddress, ""),
+			DetectedSysName:    derefStr(r.DetectedSysName, ""),
+			DetectedChassisID:  derefStr(r.DetectedChassisID, ""),
+			DeviceType:         r.DeviceType,
+			DetectedDeviceType: derefStr(r.DetectedDeviceType, ""),
+		})
+	}
+	return out, nil
+}
+
+func (w *MetricsWriter) queryTopologyRoleNeighbors(ctx context.Context) ([]devices.TopologyRoleNeighbor, error) {
+	type row struct {
+		DeviceID        int     `gorm:"column:device_id"`
+		RemoteChassisID string  `gorm:"column:remote_chassis_id"`
+		RemoteSysName   *string `gorm:"column:remote_sys_name"`
+		RemoteMgmtIP    *string `gorm:"column:remote_mgmt_ip"`
+	}
+	rows := make([]row, 0)
+	if err := w.db.WithContext(ctx).
+		Table("device_neighbors").
+		Select("device_id, remote_chassis_id, remote_sys_name, remote_mgmt_ip").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]devices.TopologyRoleNeighbor, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, devices.TopologyRoleNeighbor{
+			DeviceID:        r.DeviceID,
+			RemoteChassisID: r.RemoteChassisID,
+			RemoteSysName:   derefStr(r.RemoteSysName, ""),
+			RemoteMgmtIP:    derefStr(r.RemoteMgmtIP, ""),
+		})
+	}
+	return out, nil
 }
 
 type topNQueryRow struct {
@@ -1167,6 +1290,19 @@ func isSyntheticInterfaceName(name string) bool {
 	return syntheticInterfaceNameRe.MatchString(strings.TrimSpace(name))
 }
 
+func resolveInterfaceCanonicalName(name string, alias *string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed != "" && !isSyntheticInterfaceName(trimmed) {
+		return trimmed
+	}
+	if alias != nil {
+		if trimmedAlias := strings.TrimSpace(*alias); trimmedAlias != "" {
+			return trimmedAlias
+		}
+	}
+	return ""
+}
+
 func resolveInterfaceDisplayName(name string, alias *string) string {
 	if normalized := normalizeOptionalString(alias); normalized != nil {
 		return *normalized
@@ -1226,26 +1362,35 @@ func (w *MetricsWriter) queryInterfaceCounts(ctx context.Context, deviceIDs []in
 		return res
 	}
 	type row struct {
-		DeviceID int `gorm:"column:device_id"`
-		UpCnt    int `gorm:"column:up_cnt"`
-		TotalCnt int `gorm:"column:total_cnt"`
+		DeviceID int     `gorm:"column:device_id"`
+		Name     string  `gorm:"column:name"`
+		Alias    *string `gorm:"column:alias"`
+		IsUp     *bool   `gorm:"column:is_up"`
 	}
 	var rows []row
 	if err := w.db.WithContext(ctx).
 		Table("device_interfaces").
-		Select("device_id, SUM(CASE WHEN COALESCE(is_up, false) THEN 1 ELSE 0 END) AS up_cnt, COUNT(*) AS total_cnt").
+		Select("device_id, name, alias, is_up").
 		Where("device_id IN ? AND lld_monitored = ?", deviceIDs, true).
-		Group("device_id").
-		Scan(&rows).Error; err == nil {
-		for _, r := range rows {
-			res[r.DeviceID] = [2]int{r.UpCnt, r.TotalCnt}
+		Scan(&rows).Error; err != nil {
+		return res
+	}
+	for _, r := range rows {
+		if devices.IsNonPhysicalInterface(resolveInterfaceCanonicalName(r.Name, r.Alias)) {
+			continue
 		}
+		stat := res[r.DeviceID]
+		stat[1]++
+		if r.IsUp != nil && *r.IsUp {
+			stat[0]++
+		}
+		res[r.DeviceID] = stat
 	}
 	return res
 }
 
-func (w *MetricsWriter) queryHardwareFaultCounts(ctx context.Context, deviceIDs []int) map[int]int {
-	res := make(map[int]int)
+func (w *MetricsWriter) queryHardwareSummaries(ctx context.Context, deviceIDs []int) map[int]hostHardwareSummary {
+	res := make(map[int]hostHardwareSummary)
 	if len(deviceIDs) == 0 {
 		return res
 	}
@@ -1258,11 +1403,23 @@ func (w *MetricsWriter) queryHardwareFaultCounts(ctx context.Context, deviceIDs 
 		Table("device_latest_metrics").
 		Select("device_id, metric_value").
 		Where("device_id IN ? AND metric_name = 'hardware_fault_count'", deviceIDs).
-		Scan(&rows).Error; err == nil {
-		for _, r := range rows {
-			if r.Val != nil && *r.Val > 0 {
-				res[r.DeviceID] = int(*r.Val)
+		Scan(&rows).Error; err != nil {
+		return res
+	}
+	for _, r := range rows {
+		if r.Val == nil {
+			continue
+		}
+		if *r.Val > 0 {
+			res[r.DeviceID] = hostHardwareSummary{
+				FaultCount: int(*r.Val),
+				Status:     HardwareStatusFault,
 			}
+			continue
+		}
+		res[r.DeviceID] = hostHardwareSummary{
+			FaultCount: 0,
+			Status:     HardwareStatusHealthy,
 		}
 	}
 	return res

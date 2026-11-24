@@ -227,7 +227,7 @@ type LLDPresetFlags struct {
 	HighlightUplink bool `json:"highlight_uplink"`
 }
 
-const builtinVirtualInterfaceRegex = `(?i)^(Null|LoopBack|InLoopBack|Vlan|Vlanif|Tunnel|Stack-Port|M-GigabitEthernet)`
+const builtinVirtualInterfaceRegex = `(?i)^(Null|LoopBack|InLoopBack|lo($|[0-9/\-\s])|Vlan|Vlanif|Tunnel|Stack-Port|Css-Port|MEth|M-GigabitEthernet|M-Ethernet|M-Eth|Mgmt|Management|Eth-Trunk|Bridge-Aggregation|Route-Aggregation|Port-channel|Console|Aux|Vbdif|Vsi|Nve)`
 
 // LLDMatcher 封装编译后的 RE2 自动识别匹配器。
 type LLDMatcher struct {

@@ -115,8 +115,13 @@ func TestLLDMatcher_PresetIgnoreVirtualAndRegex(t *testing.T) {
 	}{
 		{"Null0", false},
 		{"LoopBack0", false},
+		{"InLoopBack0", false},
+		{"lo0", false},
 		{"Vlanif100", false},
 		{"Tunnel0/0/1", false},
+		{"MEth0/0/1", false},
+		{"Eth-Trunk1", false},
+		{"Console9/0/0", false},
 		{"GigabitEthernet0/0/1", true},
 		{"XGigabitEthernet0/0/2", true},
 		{"GigabitEthernet0/0/24", false},

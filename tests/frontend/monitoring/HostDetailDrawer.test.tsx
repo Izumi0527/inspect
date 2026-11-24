@@ -104,6 +104,7 @@ const mockDetail: HostDetailResponse = {
   serial_number: 'SN20261120001',
   location: 'A机房-R01',
   topology_role: 'core',
+  topology_role_source: 'inferred',
   interfaces: [
     {
       id: 101,
@@ -310,8 +311,11 @@ describe('单机 6 视角观测抽屉 HostDetailDrawer (Task 11)', () => {
       <HostDetailDrawer deviceId={21} onClose={jest.fn()} onSelectHost={onSelectHost} />
     )
 
-    // 1. 运行概览：巡检与邻居下钻
+    // 1. 运行概览：巡检、拓扑角色中文同步与邻居下钻
     expect(await screen.findByText('健康分 91.5')).toBeInTheDocument()
+    expect(screen.getByText('核心')).toBeInTheDocument()
+    expect(screen.getByText('（按拓扑推断）')).toBeInTheDocument()
+    expect(screen.queryByText('core')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /查看完整巡检报告/ })).toHaveAttribute(
       'href',
       '/inspection?device_id=21'

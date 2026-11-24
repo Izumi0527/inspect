@@ -58,3 +58,35 @@ func TestIsIgnoredInspectionInterface(t *testing.T) {
 		}
 	}
 }
+
+func TestIsNonPhysicalInterface(t *testing.T) {
+	nonPhysical := []string{
+		"InLoopBack0", "LoopBack0", "lo", "lo0",
+		"NULL0", "Null0",
+		"Vlanif1", "Vlan-interface10", "Vlan20",
+		"MEth0/0/1", "M-GigabitEthernet0/0/0", "M-Ethernet0/0/1", "M-Eth0", "Mgmt0", "Management0/0",
+		"Eth-Trunk1", "Bridge-Aggregation2", "Route-Aggregation3", "Port-channel4",
+		"Stack-Port0/1", "Css-Port1/1",
+		"Console9/0/0", "Aux0/0/1",
+		"Tunnel0/0/1", "Virtual-Template0", "Dialer1", "Vbdif10", "Vsi1",
+		"BVI10", "IRB100", "Nve1", "Bridge-if1", "Cellular0/0/0", "Async1", "Serial0/0/0",
+		"GigabitEthernet0/0/1.100", "Eth-Trunk1.20", "2.5GE0/0/1.10",
+	}
+	for _, name := range nonPhysical {
+		if !devices.IsNonPhysicalInterface(name) {
+			t.Errorf("IsNonPhysicalInterface(%q) = false, want true", name)
+		}
+	}
+
+	physicalOrUnknown := []string{
+		"GigabitEthernet0/0/1", "GE0/0/2", "XGigabitEthernet0/0/1", "Ten-GigabitEthernet1/0/1",
+		"2.5GE0/0/1", "10GE1/0/1", "25GE1/0/1", "40GE1/0/1", "100GE1/0/1",
+		"Ethernet0/0/1", "FastEthernet0/1",
+		"if10", "  ", "",
+	}
+	for _, name := range physicalOrUnknown {
+		if devices.IsNonPhysicalInterface(name) {
+			t.Errorf("IsNonPhysicalInterface(%q) = true, want false", name)
+		}
+	}
+}

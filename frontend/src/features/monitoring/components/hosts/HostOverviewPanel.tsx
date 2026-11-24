@@ -8,7 +8,7 @@ import type {
   HostInspectionSummary,
   HostNeighborSummary,
 } from '../../types/zabbix-monitoring.types'
-import { formatUptimeChinese } from './hostDisplayHelpers'
+import { formatUptimeChinese, resolveTopologyRoleMeta } from './hostDisplayHelpers'
 
 export interface HostOverviewPanelProps {
   detail: HostDetailResponse
@@ -62,6 +62,7 @@ function MetricSummaryGrid({ detail }: { detail: HostDetailResponse }) {
 
 function FingerprintCard({ detail }: { detail: HostDetailResponse }) {
   const { device } = detail
+  const roleMeta = resolveTopologyRoleMeta(detail.topology_role, detail.topology_role_source)
   return (
     <section className="rounded-xl border border-border bg-card p-3.5 text-xs">
       <h4 className="mb-2.5 font-semibold text-foreground">设备指纹与生效方案</h4>
@@ -86,9 +87,16 @@ function FingerprintCard({ detail }: { detail: HostDetailResponse }) {
           <span className="text-muted-foreground">机房/位置：</span>
           <span className="text-foreground">{detail.location || '—'}</span>
         </div>
-        <div>
+        <div className="flex flex-wrap items-center gap-1">
           <span className="text-muted-foreground">拓扑角色：</span>
-          <span className="text-foreground">{detail.topology_role || 'access'}</span>
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${roleMeta.className}`}
+          >
+            {roleMeta.label}
+          </span>
+          {roleMeta.sourceLabel && (
+            <span className="text-muted-foreground">（{roleMeta.sourceLabel}）</span>
+          )}
         </div>
       </div>
     </section>

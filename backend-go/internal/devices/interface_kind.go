@@ -24,6 +24,13 @@ var ignoredInspectionInterfacePrefixes = []string{
 	"console", "aux",
 }
 
+// nonPhysicalExtraPrefixes 补充识别管理口、堆叠口与虚拟控制口前缀（小写）。
+var nonPhysicalExtraPrefixes = []string{
+	"meth", "m-gigabitethernet", "m-ethernet", "m-eth", "mgmt", "management",
+	"stack-port", "css-port",
+	"bvi", "irb", "nve", "bridge-if", "cellular", "async", "serial",
+}
+
 func hasInterfacePrefix(descr string, prefixes []string) bool {
 	name := strings.ToLower(strings.TrimSpace(descr))
 	if name == "" {
@@ -51,4 +58,39 @@ func IsLogicalInterface(descr string) bool {
 // IsIgnoredInspectionInterface 判断接口是否属于不纳入巡检报告统计的非业务逻辑端口。
 func IsIgnoredInspectionInterface(descr string) bool {
 	return hasInterfacePrefix(descr, ignoredInspectionInterfacePrefixes)
+}
+
+func isASCIIAlnum(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+// isSubInterfaceName 识别三层子接口（如 GigabitEthernet0/0/1.100、Eth-Trunk1.20、2.5GE0/0/1.10），
+// 避免误判速率前缀带小数点的物理口（如 2.5GE0/0/1）。
+func isSubInterfaceName(name string) bool {
+	trimmed := strings.TrimSpace(name)
+	idx := strings.LastIndexByte(trimmed, '.')
+	if idx <= 0 || idx >= len(trimmed)-1 {
+		return false
+	}
+	if !isASCIIAlnum(trimmed[idx-1]) {
+		return false
+	}
+	for i := idx + 1; i < len(trimmed); i++ {
+		if trimmed[i] < '0' || trimmed[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// IsNonPhysicalInterface 判断接口是否属于虚拟/逻辑/管理/堆叠/三层子接口等非物理端口。
+// 空串或采集合成名（如 if10）返回 false，避免误删未解析别名的物理口。
+func IsNonPhysicalInterface(descr string) bool {
+	if IsLogicalInterface(descr) {
+		return true
+	}
+	if hasInterfacePrefix(descr, nonPhysicalExtraPrefixes) {
+		return true
+	}
+	return isSubInterfaceName(descr)
 }

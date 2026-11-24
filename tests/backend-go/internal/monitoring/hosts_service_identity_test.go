@@ -13,7 +13,7 @@ import (
 func hostDetailMockColumns() []string {
 	return []string{
 		"id", "name", "ip_address", "hostname", "detected_sys_name",
-		"device_type", "vendor", "model", "serial_number", "firmware_version",
+		"device_type", "detected_device_type", "vendor", "model", "serial_number", "firmware_version",
 		"location", "topology_role", "group_id", "group_name", "status",
 		"is_monitored", "cpu_usage", "memory_usage", "temperature", "uptime",
 		"response_time", "last_seen", "icmp_status", "snmp_status", "cli_protocol",
@@ -21,16 +21,29 @@ func hostDetailMockColumns() []string {
 	}
 }
 
+func expectTopologyRoleQueries(mock sqlmock.Sqlmock) {
+	mock.ExpectQuery(`SELECT id, name, hostname, ip_address, mac_address, detected_sys_name, detected_chassis_id, device_type, detected_device_type FROM "devices" ORDER BY id`).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "name", "hostname", "ip_address", "mac_address",
+			"detected_sys_name", "detected_chassis_id", "device_type", "detected_device_type",
+		}))
+	mock.ExpectQuery(`SELECT device_id, remote_chassis_id, remote_sys_name, remote_mgmt_ip FROM "device_neighbors"`).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"device_id", "remote_chassis_id", "remote_sys_name", "remote_mgmt_ip",
+		}))
+}
+
 func expectGetHostDetailSupportingQueries(mock sqlmock.Sqlmock, deviceID int) {
 	mock.ExpectQuery(`SELECT \* FROM "monitor_maintenances" WHERE enabled = \$1`).
 		WithArgs(true).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
-	mock.ExpectQuery(`SELECT device_id, SUM\(CASE WHEN COALESCE\(is_up, false\) THEN 1 ELSE 0 END\) AS up_cnt, COUNT\(\*\) AS total_cnt FROM "device_interfaces"`).
+	mock.ExpectQuery(`SELECT device_id, name, alias, is_up FROM "device_interfaces"`).
 		WithArgs(deviceID, true).
-		WillReturnRows(sqlmock.NewRows([]string{"device_id", "up_cnt", "total_cnt"}))
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "name", "alias", "is_up"}))
 	mock.ExpectQuery(`SELECT device_id, metric_value FROM "device_latest_metrics"`).
 		WithArgs(deviceID).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_value"}))
+	expectTopologyRoleQueries(mock)
 	mock.ExpectQuery(`SELECT \* FROM "device_interfaces" WHERE device_id = \$1`).
 		WithArgs(deviceID).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
@@ -97,7 +110,7 @@ func TestGetHostDetail_HostnameFallbackAndSerialNormalization(t *testing.T) {
 
 			rows := sqlmock.NewRows(hostDetailMockColumns()).AddRow(
 				deviceID, "test-sw", "192.168.20.1", tc.hostname, tc.detectedSysName,
-				"switch", "huawei", "S5700-28C-HI", tc.serialNumber, "3.30 V200R001C00",
+				"switch", nil, "huawei", "S5700-28C-HI", tc.serialNumber, "3.30 V200R001C00",
 				nil, "access", nil, "", "online",
 				true, nil, nil, nil, nil,
 				nil, nil, "online", "success", "",
@@ -156,9 +169,9 @@ func TestQueryHostsMatrix_HostnameFallbackAndDetectedSysNameSearch(t *testing.T)
 	mock.ExpectQuery(`SELECT \* FROM "monitor_maintenances" WHERE enabled = \$1`).
 		WithArgs(true).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
-	mock.ExpectQuery(`SELECT device_id, SUM\(CASE WHEN COALESCE\(is_up, false\) THEN 1 ELSE 0 END\) AS up_cnt, COUNT\(\*\) AS total_cnt FROM "device_interfaces"`).
+	mock.ExpectQuery(`SELECT device_id, name, alias, is_up FROM "device_interfaces"`).
 		WithArgs(7, true).
-		WillReturnRows(sqlmock.NewRows([]string{"device_id", "up_cnt", "total_cnt"}))
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "name", "alias", "is_up"}))
 	mock.ExpectQuery(`SELECT device_id, metric_value FROM "device_latest_metrics"`).
 		WithArgs(7).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_value"}))
@@ -178,6 +191,9 @@ func TestQueryHostsMatrix_HostnameFallbackAndDetectedSysNameSearch(t *testing.T)
 		t.Fatalf("len(Items) = %d, want 1", len(res.Items))
 	}
 	assertOptionalStrEqual(t, "Items[0].Hostname", res.Items[0].Hostname, strPtr("SW-CORE-07"))
+	if res.Items[0].HardwareStatus != monitoring.HardwareStatusUnknown {
+		t.Fatalf("Items[0].HardwareStatus = %q, want %q", res.Items[0].HardwareStatus, monitoring.HardwareStatusUnknown)
+	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sqlmock expectations not met: %v", err)
@@ -193,7 +209,7 @@ func TestGetHostDetail_InterfaceDisplayNameAndDescription(t *testing.T) {
 
 	devRows := sqlmock.NewRows(hostDetailMockColumns()).AddRow(
 		deviceID, "test-sw", "192.168.20.1", nil, "SW-CORE-01",
-		"switch", "huawei", "S5700-28C-HI", "210235A1B2C3", "3.30 V200R001C00",
+		"switch", nil, "huawei", "S5700-28C-HI", "210235A1B2C3", "3.30 V200R001C00",
 		nil, "access", nil, "", "online",
 		true, nil, nil, nil, nil,
 		nil, nil, "online", "success", "",
@@ -206,12 +222,13 @@ func TestGetHostDetail_InterfaceDisplayNameAndDescription(t *testing.T) {
 	mock.ExpectQuery(`SELECT \* FROM "monitor_maintenances" WHERE enabled = \$1`).
 		WithArgs(true).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
-	mock.ExpectQuery(`SELECT device_id, SUM\(CASE WHEN COALESCE\(is_up, false\) THEN 1 ELSE 0 END\) AS up_cnt, COUNT\(\*\) AS total_cnt FROM "device_interfaces"`).
+	mock.ExpectQuery(`SELECT device_id, name, alias, is_up FROM "device_interfaces"`).
 		WithArgs(deviceID, true).
-		WillReturnRows(sqlmock.NewRows([]string{"device_id", "up_cnt", "total_cnt"}))
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "name", "alias", "is_up"}))
 	mock.ExpectQuery(`SELECT device_id, metric_value FROM "device_latest_metrics"`).
 		WithArgs(deviceID).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_value"}))
+	expectTopologyRoleQueries(mock)
 
 	ifaceRows := sqlmock.NewRows([]string{"id", "name", "alias", "description"}).
 		AddRow(201, "if8", "GigabitEthernet0/0/3", nil).
@@ -271,4 +288,127 @@ func assertOptionalStrEqual(t *testing.T, field string, got, want *string) {
 	if *got != *want {
 		t.Fatalf("%s = %q, want %q", field, *got, *want)
 	}
+}
+
+func TestGetHostDetail_TopologyRoleSyncedWithFullTopology(t *testing.T) {
+	t.Run("按全网拓扑同步推断核心角色并覆盖库内陈旧access值", func(t *testing.T) {
+		db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
+		defer cleanup()
+
+		writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
+		deviceID := 42
+
+		devRows := sqlmock.NewRows(hostDetailMockColumns()).AddRow(
+			deviceID, "SW-42", "10.10.0.42", nil, nil,
+			"switch", nil, "huawei", "S5735", "SN-42", "V200R021",
+			nil, "access", nil, "", "online",
+			true, nil, nil, nil, nil,
+			nil, nil, "online", "success", "",
+			"", 0, nil, nil, 0,
+		)
+		mock.ExpectQuery(`SELECT\s+d\.id, d\.name, d\.ip_address, d\.hostname, d\.detected_sys_name`).
+			WithArgs(deviceID, 1).
+			WillReturnRows(devRows)
+		mock.ExpectQuery(`SELECT \* FROM "monitor_maintenances" WHERE enabled = \$1`).
+			WithArgs(true).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}))
+		mock.ExpectQuery(`SELECT device_id, name, alias, is_up FROM "device_interfaces"`).
+			WithArgs(deviceID, true).
+			WillReturnRows(sqlmock.NewRows([]string{"device_id", "name", "alias", "is_up"}))
+		mock.ExpectQuery(`SELECT device_id, metric_value FROM "device_latest_metrics"`).
+			WithArgs(deviceID).
+			WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_value"}))
+
+		topoCols := []string{
+			"id", "name", "hostname", "ip_address", "mac_address",
+			"detected_sys_name", "detected_chassis_id", "device_type", "detected_device_type",
+		}
+		mock.ExpectQuery(`SELECT id, name, hostname, ip_address, mac_address, detected_sys_name, detected_chassis_id, device_type, detected_device_type FROM "devices" ORDER BY id`).
+			WillReturnRows(sqlmock.NewRows(topoCols).
+				AddRow(42, "SW-42", nil, "10.10.0.42", nil, nil, nil, "switch", nil).
+				AddRow(43, "Leaf-43", nil, "10.10.0.43", nil, nil, nil, "switch", nil).
+				AddRow(44, "Leaf-44", nil, "10.10.0.44", nil, "SYS-44", nil, "switch", nil).
+				AddRow(45, "Leaf-45", nil, "10.10.0.45", nil, nil, "0011.2233.4445", "switch", nil))
+		mock.ExpectQuery(`SELECT device_id, remote_chassis_id, remote_sys_name, remote_mgmt_ip FROM "device_neighbors"`).
+			WillReturnRows(sqlmock.NewRows([]string{"device_id", "remote_chassis_id", "remote_sys_name", "remote_mgmt_ip"}).
+				AddRow(42, "", nil, "10.10.0.43").
+				AddRow(42, "", "sys-44", nil).
+				AddRow(42, "00-11-22-33-44-45", nil, nil))
+
+		mock.ExpectQuery(`SELECT \* FROM "device_interfaces" WHERE device_id = \$1`).
+			WithArgs(deviceID).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}))
+		mock.ExpectQuery(`FROM device_metrics`).
+			WithArgs(deviceID).
+			WillReturnRows(sqlmock.NewRows([]string{"collected_at", "tags"}))
+		mock.ExpectQuery(`FROM "device_neighbors" WHERE device_id = \$1`).
+			WithArgs(deviceID).
+			WillReturnRows(sqlmock.NewRows([]string{"local_port_id"}))
+		mock.ExpectQuery(`FROM "alert_rules"`).
+			WillReturnRows(sqlmock.NewRows([]string{"metric_name", "severity", "threshold_value"}))
+
+		detail, err := writer.GetHostDetail(context.Background(), deviceID, "", false, false, false)
+		if err != nil {
+			t.Fatalf("GetHostDetail() error = %v", err)
+		}
+		if detail.TopologyRole != "core" || detail.TopologyRoleSource != "inferred" {
+			t.Fatalf("got (%q, %q), want (\"core\", \"inferred\")", detail.TopologyRole, detail.TopologyRoleSource)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatalf("sqlmock expectations not met: %v", err)
+		}
+	})
+
+	t.Run("拓扑查询失败时安全回退单机判定不阻塞详情返回", func(t *testing.T) {
+		db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
+		defer cleanup()
+
+		writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
+		deviceID := 42
+
+		devRows := sqlmock.NewRows(hostDetailMockColumns()).AddRow(
+			deviceID, "SW-42", "10.10.0.42", nil, nil,
+			"switch", "router", "huawei", "NE40E", "SN-42", "V800",
+			nil, "access", nil, "", "online",
+			true, nil, nil, nil, nil,
+			nil, nil, "online", "success", "",
+			"", 0, nil, nil, 0,
+		)
+		mock.ExpectQuery(`SELECT\s+d\.id, d\.name, d\.ip_address, d\.hostname, d\.detected_sys_name`).
+			WithArgs(deviceID, 1).
+			WillReturnRows(devRows)
+		mock.ExpectQuery(`SELECT \* FROM "monitor_maintenances" WHERE enabled = \$1`).
+			WithArgs(true).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}))
+		mock.ExpectQuery(`SELECT device_id, name, alias, is_up FROM "device_interfaces"`).
+			WithArgs(deviceID, true).
+			WillReturnRows(sqlmock.NewRows([]string{"device_id", "name", "alias", "is_up"}))
+		mock.ExpectQuery(`SELECT device_id, metric_value FROM "device_latest_metrics"`).
+			WithArgs(deviceID).
+			WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_value"}))
+		mock.ExpectQuery(`SELECT id, name, hostname, ip_address, mac_address, detected_sys_name, detected_chassis_id, device_type, detected_device_type FROM "devices" ORDER BY id`).
+			WillReturnError(context.DeadlineExceeded)
+		mock.ExpectQuery(`SELECT \* FROM "device_interfaces" WHERE device_id = \$1`).
+			WithArgs(deviceID).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}))
+		mock.ExpectQuery(`FROM device_metrics`).
+			WithArgs(deviceID).
+			WillReturnRows(sqlmock.NewRows([]string{"collected_at", "tags"}))
+		mock.ExpectQuery(`FROM "device_neighbors" WHERE device_id = \$1`).
+			WithArgs(deviceID).
+			WillReturnRows(sqlmock.NewRows([]string{"local_port_id"}))
+		mock.ExpectQuery(`FROM "alert_rules"`).
+			WillReturnRows(sqlmock.NewRows([]string{"metric_name", "severity", "threshold_value"}))
+
+		detail, err := writer.GetHostDetail(context.Background(), deviceID, "", false, false, false)
+		if err != nil {
+			t.Fatalf("GetHostDetail() error = %v", err)
+		}
+		if detail.TopologyRole != "router" || detail.TopologyRoleSource != "type" {
+			t.Fatalf("got (%q, %q), want (\"router\", \"type\")", detail.TopologyRole, detail.TopologyRoleSource)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatalf("sqlmock expectations not met: %v", err)
+		}
+	})
 }

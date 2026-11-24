@@ -71,6 +71,8 @@ export interface HostSparklinePoint {
   memory?: number
 }
 
+export type HostHardwareStatus = 'healthy' | 'fault' | 'unknown'
+
 export interface HostMatrixItem {
   id: number
   name: string
@@ -97,6 +99,7 @@ export interface HostMatrixItem {
   interfaces_up: number
   interfaces_total: number
   hardware_fault_count: number
+  hardware_status?: HostHardwareStatus
   active_alert_count?: number
   critical_alert_count?: number
   warning_alert_count?: number
@@ -295,6 +298,7 @@ export interface HostDetailResponse {
   serial_number?: string
   location?: string
   topology_role: string
+  topology_role_source?: 'type' | 'name' | 'inferred' | string
   interfaces: HostInterfaceDetail[]
   snmp_extensions: SNMPExtensionsResponse
   latest_inspection?: HostInspectionSummary

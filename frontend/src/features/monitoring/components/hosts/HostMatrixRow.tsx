@@ -72,6 +72,51 @@ function AbnormalLogCell({
   )
 }
 
+function PortHardwareCell({ host }: { host: HostMatrixItem }) {
+  const isFault = host.hardware_fault_count > 0 || host.hardware_status === 'fault'
+  const isHealthy = !isFault && host.hardware_status === 'healthy'
+
+  return (
+    <div className="inline-flex items-center justify-end gap-1.5 whitespace-nowrap">
+      {host.interfaces_total > 0 ? (
+        <span
+          title={`活跃物理端口 ${host.interfaces_up} / 物理端口总数 ${host.interfaces_total}`}
+        >
+          <span className="font-medium text-foreground">{host.interfaces_up}</span>
+          <span className="text-muted-foreground">/{host.interfaces_total} 口</span>
+        </span>
+      ) : (
+        <span className="text-muted-foreground" title="暂无物理端口采集数据">
+          —
+        </span>
+      )}
+      {isFault ? (
+        <span
+          title={`硬件故障 ${host.hardware_fault_count} 项`}
+          className="inline-flex items-center gap-0.5 rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-medium text-danger-soft-foreground"
+        >
+          <AlertTriangle className="h-3 w-3" />
+          故障 {host.hardware_fault_count}
+        </span>
+      ) : isHealthy ? (
+        <span
+          title="硬件组件（电源/风扇/单板）状态正常"
+          className="rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-medium text-success-soft-foreground"
+        >
+          硬件正常
+        </span>
+      ) : (
+        <span
+          title="暂未采集到风扇/电源/单板硬件状态"
+          className="text-[11px] text-muted-foreground"
+        >
+          未采集
+        </span>
+      )}
+    </div>
+  )
+}
+
 export interface HostMatrixRowProps {
   host: HostMatrixItem
   selected: boolean
@@ -160,20 +205,7 @@ export function HostMatrixRow({
         {host.response_time !== undefined ? `${host.response_time.toFixed(1)}ms` : '—'}
       </td>
       <td className="px-2.5 py-1.5 text-right tabular-nums">
-        <div className="inline-flex items-center justify-end gap-1.5">
-          <span className="text-foreground">
-            {host.interfaces_up}/{host.interfaces_total}
-          </span>
-          {host.hardware_fault_count > 0 && (
-            <span
-              title={`硬件故障 ${host.hardware_fault_count} 项`}
-              className="inline-flex items-center gap-0.5 rounded bg-danger-soft px-1 py-0.5 text-[10px] font-medium text-danger-soft-foreground"
-            >
-              <AlertTriangle className="h-3 w-3" />
-              {host.hardware_fault_count}
-            </span>
-          )}
-        </div>
+        <PortHardwareCell host={host} />
       </td>
       <td className="px-2.5 py-1.5 text-right">
         <InspectionScoreCell host={host} allowed={inspectionsAllowed} />

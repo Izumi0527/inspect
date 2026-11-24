@@ -12,6 +12,70 @@ export interface StatusBadgeMeta {
   className: string
 }
 
+export interface TopologyRoleMeta {
+  label: string
+  sourceLabel: string
+  className: string
+}
+
+const TOPOLOGY_ROLE_MAP: Readonly<Record<string, StatusBadgeMeta>> = {
+  core: {
+    label: '核心',
+    className: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300',
+  },
+  aggregation: {
+    label: '汇聚',
+    className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+  },
+  distribution: {
+    label: '汇聚',
+    className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+  },
+  access: {
+    label: '接入',
+    className: 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300',
+  },
+  router: {
+    label: '路由',
+    className: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+  },
+  firewall: {
+    label: '防火墙',
+    className: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+  },
+  edge: {
+    label: '终端',
+    className: 'bg-surface-2 text-muted-foreground',
+  },
+  endpoint: {
+    label: '终端',
+    className: 'bg-surface-2 text-muted-foreground',
+  },
+}
+
+const TOPOLOGY_ROLE_SOURCE_MAP: Readonly<Record<string, string>> = {
+  type: '按设备类型',
+  name: '按名称识别',
+  inferred: '按拓扑推断',
+}
+
+export function resolveTopologyRoleMeta(role?: string, source?: string): TopologyRoleMeta {
+  const rawRole = role?.trim() ?? ''
+  const key = rawRole.toLowerCase()
+  const badge = !key
+    ? TOPOLOGY_ROLE_MAP.access
+    : TOPOLOGY_ROLE_MAP[key] ?? {
+        label: rawRole,
+        className: 'bg-surface-2 text-muted-foreground',
+      }
+  const sourceKey = source?.trim().toLowerCase() ?? ''
+  return {
+    label: badge.label,
+    sourceLabel: TOPOLOGY_ROLE_SOURCE_MAP[sourceKey] ?? '',
+    className: badge.className,
+  }
+}
+
 const HOST_STATUS_MAP: Readonly<Record<string, StatusBadgeMeta>> = {
   online: {
     label: '正常',
@@ -75,6 +139,21 @@ export function formatUptimeChinese(seconds?: number): string {
 
 export function isSyntheticInterfaceKey(name?: string): boolean {
   return /^if\d+$/i.test((name ?? '').trim())
+}
+
+const NON_PHYSICAL_INTERFACE_PREFIX_RE =
+  /^(?:vlanif|vlan-interface|vlan|inloopback|loopback|lo|null|console|aux|eth-trunk|bridge-aggregation|route-aggregation|port-channel|tunnel|virtual-template|dialer|vbdif|vsi|meth|m-gigabitethernet|m-ethernet|m-eth|management|mgmt|stack-port|css-port|bvi|irb|nve|bridge-if|cellular|async|serial)(?:$|[-\/\s\d])/i
+
+const SUB_INTERFACE_NAME_RE = /^[^.\s].*\.\d+$/
+
+/**
+ * 判断端口名称是否属于虚拟/逻辑/管理/堆叠/三层子接口等非物理端口（与后端 devices.IsNonPhysicalInterface 对齐）。
+ */
+export function isNonPhysicalInterfaceName(name?: string): boolean {
+  const trimmed = (name ?? '').trim()
+  if (!trimmed) return false
+  if (NON_PHYSICAL_INTERFACE_PREFIX_RE.test(trimmed)) return true
+  return SUB_INTERFACE_NAME_RE.test(trimmed)
 }
 
 export function resolveHostInterfaceDisplayName(

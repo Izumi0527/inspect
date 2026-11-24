@@ -100,10 +100,13 @@ func TestMonitoringHosts_ListHosts_SortWhitelistAndPageOnlySparklineAndRBAC(t *t
 
 	mock.ExpectQuery(`(?is)SELECT .* FROM "user_pinned_devices".*`).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id"}))
-	mock.ExpectQuery(`(?is)SELECT .* FROM "device_interfaces".*`).
-		WillReturnRows(sqlmock.NewRows([]string{"device_id", "up_cnt", "total_cnt"}).AddRow(11, 4, 4))
+	mock.ExpectQuery(`(?is)SELECT device_id, name, alias, is_up FROM "device_interfaces".*`).
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "name", "alias", "is_up"}).
+			AddRow(11, "if1", "GigabitEthernet0/0/1", true).
+			AddRow(11, "if2", "GigabitEthernet0/0/2", true).
+			AddRow(11, "if3", "InLoopBack0", true))
 	mock.ExpectQuery(`(?is)SELECT .* FROM "device_latest_metrics".*`).
-		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_value"}))
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_value"}).AddRow(11, 0.0))
 	// 仅对当前页设备 ID=11 查 12 点 Sparkline
 	mock.ExpectQuery(`(?is)SELECT device_id, collected_at, metric_value FROM .* WHERE device_id IN \(\$1\) AND metric_name = 'cpu_usage'.*`).
 		WithArgs(11, 12).
@@ -131,6 +134,9 @@ func TestMonitoringHosts_ListHosts_SortWhitelistAndPageOnlySparklineAndRBAC(t *t
 	}
 	if len(resp.Items) != 1 || resp.Items[0].ActiveAlertCount != nil || resp.Items[0].LatestInspectionScore != nil || resp.Items[0].ErrorLogCount24h != nil {
 		t.Fatalf("expected gated fields to be nil, got %+v", resp.Items)
+	}
+	if resp.Items[0].InterfacesUp != 2 || resp.Items[0].InterfacesTotal != 2 || resp.Items[0].HardwareStatus != monitoring.HardwareStatusHealthy || resp.Items[0].HardwareFaultCount != 0 {
+		t.Fatalf("unexpected port/hardware summary: %+v", resp.Items[0])
 	}
 	if len(resp.Items[0].Sparkline) != 1 {
 		t.Fatalf("expected 1 sparkline point for page device, got %d", len(resp.Items[0].Sparkline))

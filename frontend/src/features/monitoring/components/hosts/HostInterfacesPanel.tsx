@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import type { HostInterfaceDetail } from '../../types/zabbix-monitoring.types'
 import {
   formatInterfaceSpeed,
+  isNonPhysicalInterfaceName,
   resolveHostInterfaceDescription,
   resolveHostInterfaceDisplayName,
 } from './hostDisplayHelpers'
@@ -14,12 +15,9 @@ export interface HostInterfacesPanelProps {
   interfaces: HostInterfaceDetail[]
 }
 
-const VIRTUAL_NAME_PATTERN = /^(loopback|null|vlanif|console|lo\d*$)/i
-
 function isVirtualOrUnmanaged(iface: HostInterfaceDetail): boolean {
   if (!iface.lld_monitored) return true
-  const label = resolveHostInterfaceDisplayName(iface)
-  return VIRTUAL_NAME_PATTERN.test(label)
+  return isNonPhysicalInterfaceName(resolveHostInterfaceDisplayName(iface))
 }
 
 function PortStatusBadge({ iface }: { iface: HostInterfaceDetail }) {
