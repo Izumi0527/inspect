@@ -254,7 +254,8 @@ describe('MonitoringView', () => {
     renderView()
 
     expect(screen.getByText('监控数据不完整')).toBeInTheDocument()
-    expect(screen.getByText('stats down')).toBeInTheDocument()
+    expect(screen.getByText(/失败分区：关键指标、系统性能趋势、设备温度监控、网络流量/)).toBeInTheDocument()
+    expect(screen.queryByText('stats down')).not.toBeInTheDocument()
     expect(screen.getByText('perf down')).toBeInTheDocument()
     expect(screen.getByText('temp down')).toBeInTheDocument()
     expect(screen.getByText('traffic down')).toBeInTheDocument()

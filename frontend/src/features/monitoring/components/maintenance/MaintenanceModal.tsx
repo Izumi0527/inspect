@@ -20,11 +20,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { DEVICE_GROUPS_QUERY_KEY, getDeviceGroups } from '@/features/devices/api/devices.api'
 import { useMonitoringDevices } from '../../hooks/useMonitoringDevices'
 import type { MaintenanceInput, MaintenanceView } from '../../types/zabbix-monitoring.types'
 import { MaintenanceTargetsSection } from './MaintenanceTargetsSection'
 import {
+  datetimeLocalToIsoInTimezone,
   MAINTENANCE_MODE_META,
   maintenanceFormSchema,
   TIMEZONE_OPTIONS,
@@ -43,6 +45,7 @@ interface MaintenanceModalProps {
 
 function getDefaults(win: MaintenanceView | null): MaintenanceFormValues {
   if (!win) {
+    const tz = 'Asia/Shanghai'
     const now = new Date()
     const twoHoursLater = new Date(now.getTime() + 2 * 3600 * 1000)
     return {
@@ -50,23 +53,24 @@ function getDefaults(win: MaintenanceView | null): MaintenanceFormValues {
       description: '',
       mode: 'collect_silence',
       schedule_type: 'once',
-      timezone: 'Asia/Shanghai',
-      start_time: toDatetimeLocalValue(now.toISOString()),
-      end_time: toDatetimeLocalValue(twoHoursLater.toISOString()),
+      timezone: tz,
+      start_time: toDatetimeLocalValue(now.toISOString(), tz),
+      end_time: toDatetimeLocalValue(twoHoursLater.toISOString(), tz),
       start_hm: '23:00',
       end_hm: '02:00',
       enabled: true,
     }
   }
+  const tz = win.timezone || 'Asia/Shanghai'
   return {
     name: win.name,
     description: win.description ?? '',
     mode: win.mode === 'pause_collection' ? 'pause_collection' : 'collect_silence',
     schedule_type:
       win.schedule_type === 'weekly' || win.schedule_type === 'monthly' ? win.schedule_type : 'once',
-    timezone: win.timezone || 'Asia/Shanghai',
-    start_time: toDatetimeLocalValue(win.start_time),
-    end_time: toDatetimeLocalValue(win.end_time),
+    timezone: tz,
+    start_time: toDatetimeLocalValue(win.start_time, tz),
+    end_time: toDatetimeLocalValue(win.end_time, tz),
     start_hm: win.recurrence?.start_hm ?? '23:00',
     end_hm: win.recurrence?.end_hm ?? '02:00',
     enabled: win.enabled,
@@ -92,6 +96,7 @@ export function MaintenanceModal({
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([])
   const [selectedDeviceIds, setSelectedDeviceIds] = useState<number[]>([])
   const [targetError, setTargetError] = useState<string | null>(null)
+  const [recurrenceError, setRecurrenceError] = useState<string | null>(null)
 
   const form = useForm<MaintenanceFormValues>({
     resolver: zodResolver(maintenanceFormSchema),
@@ -99,6 +104,7 @@ export function MaintenanceModal({
   })
   const scheduleType = form.watch('schedule_type')
   const mode = form.watch('mode')
+  const enabled = form.watch('enabled')
 
   useEffect(() => {
     if (!open) return
@@ -108,6 +114,7 @@ export function MaintenanceModal({
     setSelectedGroupIds((editingWindow?.targets ?? []).filter((t) => t.target_type === 'device_group').map((t) => t.target_id))
     setSelectedDeviceIds((editingWindow?.targets ?? []).filter((t) => t.target_type === 'device').map((t) => t.target_id))
     setTargetError(null)
+    setRecurrenceError(null)
   }, [open, editingWindow, form])
 
   const handleFormSubmit = (values: MaintenanceFormValues) => {
@@ -116,10 +123,6 @@ export function MaintenanceModal({
       return
     }
     setTargetError(null)
-    const daysOfMonth = daysOfMonthText
-      .split(/[,，\s]+/)
-      .map((s) => Number.parseInt(s, 10))
-      .filter((n) => Number.isInteger(n) && n >= 1 && n <= 31)
 
     const payload: MaintenanceInput = {
       name: values.name.trim(),
@@ -131,14 +134,55 @@ export function MaintenanceModal({
       group_ids: selectedGroupIds,
       device_ids: selectedDeviceIds,
     }
+
     if (values.schedule_type === 'once') {
-      payload.start_time = new Date(values.start_time).toISOString()
-      payload.end_time = new Date(values.end_time).toISOString()
+      setRecurrenceError(null)
+      payload.start_time = datetimeLocalToIsoInTimezone(values.start_time, values.timezone)
+      payload.end_time = datetimeLocalToIsoInTimezone(values.end_time, values.timezone)
     } else if (values.schedule_type === 'weekly') {
-      payload.recurrence = { weekdays: weekdays.length > 0 ? weekdays : [0], start_hm: values.start_hm, end_hm: values.end_hm }
+      if (weekdays.length === 0) {
+        setRecurrenceError('请至少选择一个每周执行日')
+        return
+      }
+      setRecurrenceError(null)
+      payload.recurrence = {
+        weekdays,
+        start_hm: values.start_hm,
+        end_hm: values.end_hm,
+      }
     } else {
-      payload.recurrence = { days_of_month: daysOfMonth.length > 0 ? daysOfMonth : [1], start_hm: values.start_hm, end_hm: values.end_hm }
+      const tokens = daysOfMonthText
+        .split(/[,，\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const parsedDays: number[] = []
+      let hasInvalidDay = false
+      for (const token of tokens) {
+        if (!/^\d+$/.test(token)) {
+          hasInvalidDay = true
+          break
+        }
+        const dayNum = Number(token)
+        if (!Number.isInteger(dayNum) || dayNum < 1 || dayNum > 31) {
+          hasInvalidDay = true
+          break
+        }
+        if (!parsedDays.includes(dayNum)) {
+          parsedDays.push(dayNum)
+        }
+      }
+      if (parsedDays.length === 0 || hasInvalidDay) {
+        setRecurrenceError('请填写有效的每月执行日期（1~31 的整数，英文逗号分隔）')
+        return
+      }
+      setRecurrenceError(null)
+      payload.recurrence = {
+        days_of_month: parsedDays,
+        start_hm: values.start_hm,
+        end_hm: values.end_hm,
+      }
     }
+
     onSubmit(payload)
   }
 
@@ -175,6 +219,29 @@ export function MaintenanceModal({
             </div>
           </div>
 
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end">
+            <div className="sm:col-span-2">
+              <label htmlFor="maint-description" className="mb-1 block text-xs font-medium text-foreground">维护说明</label>
+              <Input
+                id="maint-description"
+                maxLength={256}
+                {...form.register('description')}
+                placeholder="选填：记录割接范围、变更单号或注意事项（不超过 256 字）"
+              />
+              {form.formState.errors.description && (
+                <p className="mt-1 text-xs text-danger">{form.formState.errors.description.message}</p>
+              )}
+            </div>
+            <label className="flex h-9 items-center justify-between rounded-md border border-border px-3 text-xs font-medium text-foreground">
+              <span>立即启用</span>
+              <Switch
+                aria-label="立即启用维护窗口"
+                checked={enabled}
+                onCheckedChange={(c) => form.setValue('enabled', c, { shouldDirty: true })}
+              />
+            </label>
+          </div>
+
           <div className="space-y-2">
             <span className="block text-xs font-medium text-foreground">维护模式</span>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -203,12 +270,13 @@ export function MaintenanceModal({
               <label htmlFor="maint-schedule" className="mb-1 block text-xs font-medium text-foreground">执行周期</label>
               <Select
                 value={String(form.watch('schedule_type') ?? 'once')}
-                onValueChange={(val) =>
+                onValueChange={(val) => {
+                  setRecurrenceError(null)
                   form.setValue('schedule_type', val as MaintenanceFormValues['schedule_type'], {
                     shouldDirty: true,
                     shouldValidate: true,
                   })
-                }
+                }}
               >
                 <SelectTrigger id="maint-schedule" aria-label="执行周期" className="h-9 w-full gap-2 text-sm">
                   <SelectValue />
@@ -248,28 +316,44 @@ export function MaintenanceModal({
           </div>
 
           {scheduleType === 'weekly' && (
-            <div className="flex flex-wrap gap-2">
-              {WEEKDAY_OPTIONS.map((opt) => {
-                const checked = weekdays.includes(opt.value)
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    aria-pressed={checked}
-                    onClick={() => setWeekdays((prev) => checked ? prev.filter((d) => d !== opt.value) : [...prev, opt.value])}
-                    className={`rounded-md border px-2.5 py-1 text-xs font-medium ${checked ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground'}`}
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })}
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap gap-2">
+                {WEEKDAY_OPTIONS.map((opt) => {
+                  const checked = weekdays.includes(opt.value)
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      aria-pressed={checked}
+                      onClick={() => {
+                        setRecurrenceError(null)
+                        setWeekdays((prev) => checked ? prev.filter((d) => d !== opt.value) : [...prev, opt.value])
+                      }}
+                      className={`rounded-md border px-2.5 py-1 text-xs font-medium ${checked ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground'}`}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+              {recurrenceError && <p className="text-xs text-danger">{recurrenceError}</p>}
             </div>
           )}
 
           {scheduleType === 'monthly' && (
             <div>
               <label htmlFor="maint-dom" className="mb-1 block text-xs font-medium text-foreground">每月执行日期（1~31，英文逗号分隔）</label>
-              <Input id="maint-dom" value={daysOfMonthText} onChange={(e) => setDaysOfMonthText(e.target.value)} placeholder="1,15" className="tabular-nums" />
+              <Input
+                id="maint-dom"
+                value={daysOfMonthText}
+                onChange={(e) => {
+                  setRecurrenceError(null)
+                  setDaysOfMonthText(e.target.value)
+                }}
+                placeholder="1,15"
+                className="tabular-nums"
+              />
+              {recurrenceError && <p className="mt-1 text-xs text-danger">{recurrenceError}</p>}
             </div>
           )}
 

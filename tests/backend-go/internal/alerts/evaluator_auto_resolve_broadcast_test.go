@@ -98,9 +98,9 @@ func TestEvaluateAll_ConnectivityAutoResolveBroadcastsResolved(t *testing.T) {
 		WithArgs(true).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 	// 2. 无被监控设备的指标快照（设备列表为空时不再查 device_metrics）
-	mock.ExpectQuery(`(?is)SELECT id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices" WHERE is_active = \$1 AND is_monitored = \$2`).
+	mock.ExpectQuery(`(?is)SELECT id, group_id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices" WHERE is_active = \$1 AND is_monitored = \$2`).
 		WithArgs(true, true).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "device_type", "ip_address", "topology_role", "status"}))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "group_id", "name", "device_type", "ip_address", "topology_role", "status"}))
 	// 3. 连通性评估：一台在线设备
 	mock.ExpectQuery(`(?is)SELECT id, name, ip_address, status FROM "devices" WHERE is_active = \$1 AND is_monitored = \$2`).
 		WithArgs(true, true).

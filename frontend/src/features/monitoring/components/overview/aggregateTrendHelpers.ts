@@ -1,6 +1,9 @@
 import { splitAtGaps } from '../../utils/timeSeries'
 import type { SystemPerformanceDataPoint } from '../../types'
-import type { AggregateTrendPoint, DashboardAnnotation } from '../../types/zabbix-monitoring.types'
+import type {
+  AggregateTrendPoint,
+  DashboardAnnotation,
+} from '../../types/zabbix-monitoring.types'
 
 export interface NormalizedAggregatePoint {
   date: Date
@@ -12,6 +15,8 @@ export interface NormalizedAggregatePoint {
   maxMemory: number
   peakDeviceId?: number
   peakDeviceName?: string
+  peakMemoryDeviceId?: number
+  peakMemoryDeviceName?: string
 }
 
 export interface BaselineMeanPoint {
@@ -36,6 +41,8 @@ export function normalizeAggregatePoints(
       maxMemory: pt.max_memory,
       peakDeviceId: pt.peak_device_id,
       peakDeviceName: pt.peak_device_name,
+      peakMemoryDeviceId: pt.peak_memory_device_id,
+      peakMemoryDeviceName: pt.peak_memory_device_name,
     }))
     .filter(
       (pt) =>
@@ -119,4 +126,28 @@ export function annotationLabel(type: DashboardAnnotation['type']): string {
 
 export function splitAggregateSegments(points: NormalizedAggregatePoint[]) {
   return splitAtGaps(points)
+}
+
+export function resolvePeakDeviceTarget(
+  point: NormalizedAggregatePoint | undefined,
+  showCpu: boolean,
+  showMemory: boolean
+): { deviceId?: number; deviceName?: string } {
+  if (!point) return {}
+  if (!showCpu && showMemory) {
+    return {
+      deviceId: point.peakMemoryDeviceId,
+      deviceName: point.peakMemoryDeviceName,
+    }
+  }
+  if (point.peakDeviceId !== undefined) {
+    return {
+      deviceId: point.peakDeviceId,
+      deviceName: point.peakDeviceName,
+    }
+  }
+  return {
+    deviceId: point.peakMemoryDeviceId,
+    deviceName: point.peakMemoryDeviceName ?? point.peakDeviceName,
+  }
 }

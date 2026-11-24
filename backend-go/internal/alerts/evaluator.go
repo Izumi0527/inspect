@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -152,6 +153,7 @@ func EnsureBuiltinAlertRules(ctx context.Context, db *gorm.DB, logger *zap.Logge
 // deviceLatestMetrics 设备最新指标快照
 type deviceLatestMetrics struct {
 	DeviceID     int
+	GroupID      *int
 	DeviceName   string
 	DeviceType   string
 	IPAddress    string
@@ -209,6 +211,11 @@ func (e *Evaluator) EvaluateAll(ctx context.Context) (created int, resolved int,
 		}
 	}
 
+	var groupParentMap map[int]*int
+	if hasDeviceGroupFilter(rules) {
+		groupParentMap = e.loadGroupParentMap(ctx)
+	}
+
 	// 4. 逐规则逐设备评估
 	for _, rule := range rules {
 		mode := strings.ToLower(strings.TrimSpace(rule.ExpressionMode))
@@ -217,24 +224,24 @@ func (e *Evaluator) EvaluateAll(ctx context.Context) (created int, resolved int,
 			if rule.NoDataSeconds <= 0 {
 				continue
 			}
-			c, r := e.evaluateNoDataRule(ctx, rule, allDevices, maintMap, offlineDeviceIDs, now)
+			c, r := e.evaluateNoDataRule(ctx, rule, allDevices, groupParentMap, maintMap, offlineDeviceIDs, now)
 			created += c
 			resolved += r
 
 		case ExpressionModeUptimeDrop:
-			c, r := e.evaluateUptimeDropRule(ctx, rule, allDevices, maintMap, offlineDeviceIDs, now)
+			c, r := e.evaluateUptimeDropRule(ctx, rule, allDevices, groupParentMap, maintMap, offlineDeviceIDs, now)
 			created += c
 			resolved += r
 
 		case ExpressionModeIfFlap:
-			c, r := e.evaluateIfFlapRule(ctx, rule, allDevices, maintMap, offlineDeviceIDs, now)
+			c, r := e.evaluateIfFlapRule(ctx, rule, allDevices, groupParentMap, maintMap, offlineDeviceIDs, now)
 			created += c
 			resolved += r
 
 		default:
 			ruleMetric := normalizeMetricName(rule.MetricName)
 			for _, dm := range deviceMetrics {
-				if !e.ruleAppliesToDevice(rule, dm) {
+				if !e.ruleAppliesToDevice(rule, dm, groupParentMap) {
 					continue
 				}
 				value, exists := findMetricValue(dm.Metrics, ruleMetric)
@@ -300,6 +307,7 @@ func (e *Evaluator) loadActiveRules(ctx context.Context) ([]AlertRule, error) {
 func (e *Evaluator) loadDevicesAndLatestMetrics(ctx context.Context) ([]deviceLatestMetrics, []deviceLatestMetrics, error) {
 	type deviceRow struct {
 		ID           int    `gorm:"column:id"`
+		GroupID      *int   `gorm:"column:group_id"`
 		Name         string `gorm:"column:name"`
 		DeviceType   string `gorm:"column:device_type"`
 		IPAddress    string `gorm:"column:ip_address"`
@@ -310,7 +318,7 @@ func (e *Evaluator) loadDevicesAndLatestMetrics(ctx context.Context) ([]deviceLa
 	var devices []deviceRow
 	if err := e.db.WithContext(ctx).
 		Table("devices").
-		Select("id, name, device_type, ip_address, COALESCE(topology_role, 'access') AS topology_role, status").
+		Select("id, group_id, name, device_type, ip_address, COALESCE(topology_role, 'access') AS topology_role, status").
 		Where("is_active = ? AND is_monitored = ?", true, true).
 		Find(&devices).Error; err != nil {
 		return nil, nil, err
@@ -392,18 +400,70 @@ func (e *Evaluator) loadDevicesAndLatestMetrics(ctx context.Context) ([]deviceLa
 		}
 	}
 
+	// 聚合活跃设备接口级指标最大值（不覆盖已有整机指标）
+	var ifaceMaxRows []latestSnapshotRow
+	if err := e.db.WithContext(ctx).
+		Table("device_latest_metrics").
+		Select("device_id, metric_name, MAX(metric_value) AS metric_value").
+		Where("device_id IN ? AND interface_name <> '' AND metric_name IN ?",
+			deviceIDs, []string{"utilization_in", "utilization_out", "if_in_errors", "if_flap_count_1h"}).
+		Group("device_id, metric_name").
+		Scan(&ifaceMaxRows).Error; err == nil {
+		utilInMap := make(map[int]float64)
+		utilOutMap := make(map[int]float64)
+		hasUtilIn := make(map[int]bool)
+		hasUtilOut := make(map[int]bool)
+		for _, r := range ifaceMaxRows {
+			if metricsMap[r.DeviceID] == nil {
+				metricsMap[r.DeviceID] = make(map[string]float64)
+			}
+			if _, exists := metricsMap[r.DeviceID][r.MetricName]; !exists {
+				metricsMap[r.DeviceID][r.MetricName] = r.MetricValue
+			}
+			switch r.MetricName {
+			case "utilization_in":
+				utilInMap[r.DeviceID] = r.MetricValue
+				hasUtilIn[r.DeviceID] = true
+			case "utilization_out":
+				utilOutMap[r.DeviceID] = r.MetricValue
+				hasUtilOut[r.DeviceID] = true
+			}
+		}
+		for _, devID := range deviceIDs {
+			if !hasUtilIn[devID] && !hasUtilOut[devID] {
+				continue
+			}
+			maxUtil := 0.0
+			hasVal := false
+			if hasUtilIn[devID] {
+				maxUtil = utilInMap[devID]
+				hasVal = true
+			}
+			if hasUtilOut[devID] && (!hasVal || utilOutMap[devID] > maxUtil) {
+				maxUtil = utilOutMap[devID]
+			}
+			if metricsMap[devID] == nil {
+				metricsMap[devID] = make(map[string]float64)
+			}
+			if _, exists := metricsMap[devID]["if_utilization"]; !exists {
+				metricsMap[devID]["if_utilization"] = maxUtil
+			}
+		}
+	}
+
 	// 同时从 devices 表获取快照指标（作为补充）
 	type snapshotRow struct {
-		ID          int      `gorm:"column:id"`
-		CPUUsage    *float64 `gorm:"column:cpu_usage"`
-		MemoryUsage *float64 `gorm:"column:memory_usage"`
-		Temperature *float64 `gorm:"column:temperature"`
+		ID           int      `gorm:"column:id"`
+		CPUUsage     *float64 `gorm:"column:cpu_usage"`
+		MemoryUsage  *float64 `gorm:"column:memory_usage"`
+		Temperature  *float64 `gorm:"column:temperature"`
+		ResponseTime *float64 `gorm:"column:response_time"`
 	}
 
 	var snapshots []snapshotRow
 	if err := e.db.WithContext(ctx).
 		Table("devices").
-		Select("id, cpu_usage, memory_usage, temperature").
+		Select("id, cpu_usage, memory_usage, temperature, response_time").
 		Where("id IN ?", deviceIDs).
 		Find(&snapshots).Error; err == nil {
 		for _, s := range snapshots {
@@ -420,6 +480,9 @@ func (e *Evaluator) loadDevicesAndLatestMetrics(ctx context.Context) ([]deviceLa
 			if _, exists := m["temperature"]; !exists && s.Temperature != nil {
 				m["temperature"] = *s.Temperature
 			}
+			if _, exists := m["response_time"]; !exists && s.ResponseTime != nil {
+				m["response_time"] = *s.ResponseTime
+			}
 		}
 	}
 
@@ -428,6 +491,7 @@ func (e *Evaluator) loadDevicesAndLatestMetrics(ctx context.Context) ([]deviceLa
 	for _, d := range devices {
 		dm := deviceLatestMetrics{
 			DeviceID:     d.ID,
+			GroupID:      d.GroupID,
 			DeviceName:   d.Name,
 			DeviceType:   d.DeviceType,
 			IPAddress:    d.IPAddress,
@@ -447,8 +511,50 @@ func (e *Evaluator) loadDevicesAndLatestMetrics(ctx context.Context) ([]deviceLa
 	return allDevices, withMetrics, nil
 }
 
+func hasDeviceGroupFilter(rules []AlertRule) bool {
+	for _, r := range rules {
+		raw := strings.TrimSpace(string(r.DeviceGroups))
+		if raw != "" && raw != "null" && raw != "[]" {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *Evaluator) loadGroupParentMap(ctx context.Context) map[int]*int {
+	type groupRow struct {
+		ID       int  `gorm:"column:id"`
+		ParentID *int `gorm:"column:parent_id"`
+	}
+	var groups []groupRow
+	_ = e.db.WithContext(ctx).Table("device_groups").Select("id, parent_id").Scan(&groups).Error
+	parentMap := make(map[int]*int, len(groups))
+	for _, g := range groups {
+		parentMap[g.ID] = g.ParentID
+	}
+	return parentMap
+}
+
+func walkGroupAncestors(groupID *int, parentMap map[int]*int) []int {
+	if groupID == nil || *groupID <= 0 {
+		return nil
+	}
+	visited := make(map[int]bool)
+	res := make([]int, 0, 4)
+	curr := groupID
+	for curr != nil && *curr > 0 {
+		if visited[*curr] {
+			break
+		}
+		visited[*curr] = true
+		res = append(res, *curr)
+		curr = parentMap[*curr]
+	}
+	return res
+}
+
 // ruleAppliesToDevice 检查规则是否适用于指定设备
-func (e *Evaluator) ruleAppliesToDevice(rule AlertRule, dm deviceLatestMetrics) bool {
+func (e *Evaluator) ruleAppliesToDevice(rule AlertRule, dm deviceLatestMetrics, groupParentMap map[int]*int) bool {
 	// 检查设备类型过滤
 	if len(rule.DeviceTypes) > 0 && string(rule.DeviceTypes) != "null" && string(rule.DeviceTypes) != "[]" {
 		var types []string
@@ -456,6 +562,39 @@ func (e *Evaluator) ruleAppliesToDevice(rule AlertRule, dm deviceLatestMetrics) 
 			matched := false
 			for _, t := range types {
 				if strings.EqualFold(strings.TrimSpace(t), strings.TrimSpace(dm.DeviceType)) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return false
+			}
+		}
+	}
+
+	// 检查设备分组过滤（含祖先分组继承）
+	if len(rule.DeviceGroups) > 0 && string(rule.DeviceGroups) != "null" && string(rule.DeviceGroups) != "[]" {
+		var rawGroupIDs []interface{}
+		if err := json.Unmarshal(rule.DeviceGroups, &rawGroupIDs); err == nil && len(rawGroupIDs) > 0 {
+			if dm.GroupID == nil || *dm.GroupID <= 0 {
+				return false
+			}
+			targetGroupSet := make(map[int]bool, len(rawGroupIDs))
+			for _, item := range rawGroupIDs {
+				switch v := item.(type) {
+				case float64:
+					if int(v) > 0 {
+						targetGroupSet[int(v)] = true
+					}
+				case string:
+					if parsed, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && parsed > 0 {
+						targetGroupSet[parsed] = true
+					}
+				}
+			}
+			matched := false
+			for _, ancID := range walkGroupAncestors(dm.GroupID, groupParentMap) {
+				if targetGroupSet[ancID] {
 					matched = true
 					break
 				}
@@ -629,13 +768,14 @@ func (e *Evaluator) evaluateNoDataRule(
 	ctx context.Context,
 	rule AlertRule,
 	allDevices []deviceLatestMetrics,
+	groupParentMap map[int]*int,
 	maintMap map[int]MaintenanceWindowInfo,
 	offlineDeviceIDs map[int]bool,
 	now time.Time,
 ) (created int, resolved int) {
-	ruleMetric := normalizeMetricName(rule.MetricName)
+	aliases := resolveMetricAliases(rule.MetricName)
 	for _, dm := range allDevices {
-		if !e.ruleAppliesToDevice(rule, dm) {
+		if !e.ruleAppliesToDevice(rule, dm, groupParentMap) {
 			continue
 		}
 		var latest struct {
@@ -645,8 +785,8 @@ func (e *Evaluator) evaluateNoDataRule(
 			Table("device_latest_metrics").
 			Select("MAX(collected_at) AS collected_at").
 			Where("device_id = ?", dm.DeviceID)
-		if ruleMetric != "" {
-			q = q.Where("LOWER(metric_name) = ?", ruleMetric)
+		if len(aliases) > 0 {
+			q = q.Where("LOWER(metric_name) IN ?", aliases)
 		}
 		err := q.Take(&latest).Error
 		staleSec := float64(rule.NoDataSeconds)
@@ -673,6 +813,7 @@ func (e *Evaluator) evaluateUptimeDropRule(
 	ctx context.Context,
 	rule AlertRule,
 	allDevices []deviceLatestMetrics,
+	groupParentMap map[int]*int,
 	maintMap map[int]MaintenanceWindowInfo,
 	offlineDeviceIDs map[int]bool,
 	now time.Time,
@@ -682,7 +823,7 @@ func (e *Evaluator) evaluateUptimeDropRule(
 		drop = 60
 	}
 	for _, dm := range allDevices {
-		if !e.ruleAppliesToDevice(rule, dm) {
+		if !e.ruleAppliesToDevice(rule, dm, groupParentMap) {
 			continue
 		}
 		var row struct {
@@ -715,6 +856,7 @@ func (e *Evaluator) evaluateIfFlapRule(
 	ctx context.Context,
 	rule AlertRule,
 	allDevices []deviceLatestMetrics,
+	groupParentMap map[int]*int,
 	maintMap map[int]MaintenanceWindowInfo,
 	offlineDeviceIDs map[int]bool,
 	now time.Time,
@@ -737,7 +879,7 @@ func (e *Evaluator) evaluateIfFlapRule(
 	}
 
 	for _, dm := range allDevices {
-		if !e.ruleAppliesToDevice(rule, dm) {
+		if !e.ruleAppliesToDevice(rule, dm, groupParentMap) {
 			continue
 		}
 		var ifaces []struct {
@@ -1320,17 +1462,39 @@ func (e *Evaluator) resolveConnectivityAlert(ctx context.Context, deviceID int) 
 }
 
 // metricNameAliases 指标名称别名映射
-// 规则中可能使用的名称 → 实际存储在 device_metrics 中的名称
+// 规则中可能使用的名称 → 实际存储在 device_metrics / device_latest_metrics 中的名称
 var metricNameAliases = map[string][]string{
-	"cpu_usage":     {"cpu_usage", "cpu", "cpu_utilization", "cpu_load"},
-	"memory_usage":  {"memory_usage", "memory", "mem_usage", "mem_utilization"},
-	"disk_usage":    {"disk_usage", "disk", "disk_utilization", "storage_usage"},
-	"temperature":   {"temperature", "temp", "cpu_temperature", "device_temperature"},
-	"bandwidth_in":  {"bandwidth_in", "network_bytes_in", "throughput_in", "inbound_bandwidth"},
-	"bandwidth_out": {"bandwidth_out", "network_bytes_out", "throughput_out", "outbound_bandwidth"},
-	"packet_loss":   {"packet_loss", "loss_rate"},
-	"response_time": {"response_time", "latency", "rtt"},
-	"uptime":        {"uptime", "system_uptime"},
+	"cpu_usage":        {"cpu_usage", "cpu", "cpu_utilization", "cpu_load"},
+	"memory_usage":     {"memory_usage", "memory", "mem_usage", "mem_utilization"},
+	"disk_usage":       {"disk_usage", "disk", "disk_utilization", "storage_usage"},
+	"temperature":      {"temperature", "temp", "cpu_temperature", "device_temperature"},
+	"bandwidth_in":     {"bandwidth_in", "network_bytes_in", "throughput_in", "inbound_bandwidth"},
+	"bandwidth_out":    {"bandwidth_out", "network_bytes_out", "throughput_out", "outbound_bandwidth"},
+	"packet_loss":      {"packet_loss", "ping_loss_pct", "loss_rate"},
+	"response_time":    {"response_time", "icmp_rtt", "icmp.rtt", "ping_rtt_ms", "latency", "rtt"},
+	"uptime":           {"uptime", "system_uptime", "sys_uptime"},
+	"if_utilization":   {"if_utilization", "utilization_in", "utilization_out"},
+	"if_in_errors":     {"if_in_errors", "in_errors", "if_in_error_rate"},
+	"if_flap_count_1h": {"if_flap_count_1h", "flap_count_1h"},
+}
+
+// resolveMetricAliases 返回规则指标名所属的规范化同义词集合（均为小写）。
+func resolveMetricAliases(ruleMetric string) []string {
+	norm := normalizeMetricName(ruleMetric)
+	if norm == "" {
+		return nil
+	}
+	if aliases, ok := metricNameAliases[norm]; ok {
+		return append([]string(nil), aliases...)
+	}
+	for _, aliases := range metricNameAliases {
+		for _, alias := range aliases {
+			if strings.EqualFold(alias, norm) {
+				return append([]string(nil), aliases...)
+			}
+		}
+	}
+	return []string{norm}
 }
 
 // findMetricValue 在设备指标中查找匹配的指标值
@@ -1348,30 +1512,14 @@ func findMetricValue(metrics map[string]float64, ruleMetric string) (float64, bo
 		}
 	}
 
-	// 3. 别名匹配：规则指标名 → 查找所有可能的别名
-	if aliases, ok := metricNameAliases[ruleMetric]; ok {
-		for _, alias := range aliases {
-			if v, found := metrics[alias]; found {
-				return v, true
-			}
+	// 3. 别名匹配：规则指标名 → 查找所有同组别名（正向/反向统一）
+	for _, alias := range resolveMetricAliases(ruleMetric) {
+		if v, found := metrics[alias]; found {
+			return v, true
 		}
-	}
-
-	// 4. 反向别名匹配：遍历所有别名组，看规则指标名是否是某个别名
-	for canonical, aliases := range metricNameAliases {
-		for _, alias := range aliases {
-			if alias == ruleMetric {
-				// 规则使用了别名，尝试用规范名查找
-				if v, found := metrics[canonical]; found {
-					return v, true
-				}
-				// 也尝试该组的其他别名
-				for _, otherAlias := range aliases {
-					if v, found := metrics[otherAlias]; found {
-						return v, true
-					}
-				}
-				break
+		for k, v := range metrics {
+			if strings.EqualFold(k, alias) {
+				return v, true
 			}
 		}
 	}

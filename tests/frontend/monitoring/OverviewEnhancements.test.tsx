@@ -172,6 +172,7 @@ describe('总览大屏大规模降维升级 (Task 9)', () => {
     expect(container.querySelector('[data-series="aggregate:cpu-mean"]')).toBeInTheDocument()
     expect(container.querySelector('[data-series="aggregate:cpu-p95"]')).toBeInTheDocument()
     expect(container.querySelector('[data-series="aggregate:cpu-envelope"]')).toBeInTheDocument()
+    expect(container.querySelector('[data-series="aggregate:memory-envelope"]')).toBeInTheDocument()
     expect(container.querySelector('[data-series="aggregate:yesterday-cpu"]')).toBeInTheDocument()
     expect(container.querySelector('[data-annotation-type="reboot"]')).toBeInTheDocument()
     expect(container.querySelector('[data-annotation-type="alert"]')).toBeInTheDocument()
@@ -181,6 +182,86 @@ describe('总览大屏大规模降维升级 (Task 9)', () => {
 
     await user.click(screen.getByRole('button', { name: '精选设备对比' }))
     expect(await screen.findByLabelText('系统性能趋势图')).toBeInTheDocument()
+  })
+
+  it('全网聚合态势支持单点兜底、内存峰值设备下钻及注解圆点交互，且不渲染阈值参考线', async () => {
+    const user = userEvent.setup()
+    const onSelectHost = jest.fn()
+    const agg: AggregateTrendPoint[] = [
+      {
+        timestamp: '2026-11-20T12:05:00Z',
+        mean_cpu: 42,
+        p95_cpu: 58,
+        max_cpu: 66,
+        mean_memory: 55,
+        p95_memory: 70,
+        max_memory: 82,
+        peak_device_id: 6,
+        peak_device_name: 'SW-06',
+        peak_memory_device_id: 9,
+        peak_memory_device_name: 'MEM-09',
+      },
+    ]
+    const thresholds: ThresholdSummary = {
+      cpu: { warn: 80, crit: 90 },
+      memory: { warn: 80, crit: 90 },
+      temperature: { warn: 70, crit: 85 },
+    }
+    const annotations: DashboardAnnotation[] = [
+      {
+        timestamp: '2026-11-20T12:05:00Z',
+        type: 'maintenance',
+        title: '核心交换机割接',
+        device_id: 12,
+        device_name: 'CORE-12',
+      },
+    ]
+
+    const { container } = render(
+      <SyncedCrosshairProvider>
+        <PerformanceSection
+          sectionRef={createRef<HTMLDivElement>()}
+          chartsInView
+          sectionSystemPerformance={{ ok: true }}
+          sectionTemperature={{ ok: true }}
+          systemPerformance={[]}
+          temperatureHistory={[]}
+          timeRange="1h"
+          onRetry={jest.fn()}
+          aggregateTrends={agg}
+          thresholds={thresholds}
+          annotations={annotations}
+          onSelectHost={onSelectHost}
+        />
+      </SyncedCrosshairProvider>
+    )
+
+    expect(await screen.findByLabelText('全网聚合态势图')).toBeInTheDocument()
+    expect(container.querySelector('circle[data-series="aggregate:cpu-mean"]')).toBeInTheDocument()
+    expect(container.querySelector('circle[data-series="aggregate:memory-mean"]')).toBeInTheDocument()
+    expect(container.querySelector('[data-reference-line]')).toBeNull()
+    expect(screen.queryByText(/警告|严重/)).not.toBeInTheDocument()
+
+    // 隐藏 CPU，仅看内存时点击交互层使用 peakMemoryDeviceId
+    await user.click(screen.getByRole('button', { name: 'CPU' }))
+    const overlay = container.querySelector('svg rect[fill="transparent"]')!
+    fireEvent.mouseMove(overlay, { clientX: 659, clientY: 50 })
+    expect(screen.getByText('内存峰值设备：MEM-09')).toBeInTheDocument()
+    expect(screen.getByText('点击查看峰值设备详情')).toBeInTheDocument()
+    fireEvent.click(overlay)
+    expect(onSelectHost).toHaveBeenCalledWith(9)
+
+    // 注解圆点悬停与点击
+    const annDot = container.querySelector('circle[data-annotation-type="maintenance"]')!
+    fireEvent.mouseEnter(annDot)
+    expect(screen.getByText('核心交换机割接')).toBeInTheDocument()
+    fireEvent.click(annDot)
+    expect(onSelectHost).toHaveBeenCalledWith(12)
+
+    // 全部指标隐藏时展示「已隐藏全部指标」
+    await user.click(screen.getByRole('button', { name: '内存' }))
+    expect(screen.getByText('已隐藏全部指标')).toBeInTheDocument()
+    expect(container.querySelector('svg[aria-label="全网聚合态势图"]')).toBeNull()
   })
 
   it('TemperatureChart 消费动态 Warn/Crit 双虚线与标注，移除硬编码 75，且多图十字游标联动', () => {
@@ -264,11 +345,12 @@ describe('总览大屏大规模降维升级 (Task 9)', () => {
 
   it('ActiveProblemsCard 支持接手确认、单条临时静默 (2h/8h/24h) 与取消静默', async () => {
     const user = userEvent.setup()
+    const futureSnoozeUntil = new Date(Date.now() + 8 * 3600 * 1000).toISOString()
     ;(acknowledgeAlert as jest.Mock).mockResolvedValue({ success: true })
     ;(snoozeAlert as jest.Mock).mockResolvedValue({
       success: true,
       alert_id: '501',
-      snoozed_until: '2026-11-20T20:00:00Z',
+      snoozed_until: futureSnoozeUntil,
       snoozed_by: 'admin',
       snooze_reason: '等待备件',
     })

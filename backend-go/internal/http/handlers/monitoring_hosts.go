@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -245,14 +246,45 @@ func (h MonitoringHandler) GetMonitoringTopN(c echo.Context) error {
 		groupID = &gid
 	}
 
-	resp, err := h.Writer.QueryTopN(c.Request().Context(), c.QueryParam("metric"), limit, groupID)
+	deviceIDs, err := parseStrictDeviceIDsQueryParam(c.QueryParam("device_ids"), monitoring.MaxTopNDeviceIDs)
 	if err != nil {
-		if strings.Contains(err.Error(), "unsupported topn metric") {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	resp, err := h.Writer.QueryTopN(c.Request().Context(), c.QueryParam("metric"), limit, groupID, deviceIDs...)
+	if err != nil {
+		if strings.Contains(err.Error(), "unsupported topn metric") || strings.Contains(err.Error(), "device_ids") {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to query topn")
 	}
 	return c.JSON(http.StatusOK, resp)
+}
+
+func parseStrictDeviceIDsQueryParam(raw string, maxCount int) ([]int, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	parts := strings.Split(trimmed, ",")
+	seen := make(map[int]struct{}, len(parts))
+	out := make([]int, 0, len(parts))
+	for _, part := range parts {
+		token := strings.TrimSpace(part)
+		id, err := strconv.Atoi(token)
+		if token == "" || err != nil || id <= 0 {
+			return nil, fmt.Errorf("invalid device_ids")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+		if maxCount > 0 && len(out) > maxCount {
+			return nil, fmt.Errorf("device_ids count exceeds max %d", maxCount)
+		}
+	}
+	return out, nil
 }
 
 // GetMonitoringLatestData 基于 device_latest_metrics 分页检索实时指标明细。

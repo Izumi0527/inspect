@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type Ref } from 'react'
+import { useEffect, useMemo, useState, type Ref } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/atoms'
 import { Switch } from '@/components/ui/switch'
 import { SectionFailureContent } from '../shared'
@@ -35,24 +35,31 @@ interface PerformanceSectionProps {
   compareYesterday?: boolean
   onToggleCompareYesterday?: (enabled: boolean) => void
   onSelectHost?: (deviceId: number) => void
+  filterResetKey?: string
 }
 
 function buildFallbackAggregateTrends(
   points: SystemPerformanceDataPoint[]
 ): AggregateTrendPoint[] {
   return points.flatMap((pt) => {
-    const entries = Object.entries(pt.devices)
+    const entries = Object.entries(pt.devices).sort(([a], [b]) => a.localeCompare(b))
     if (entries.length === 0) return []
     const cpus = entries.map(([, val]) => val.cpu).sort((a, b) => a - b)
     const mems = entries.map(([, val]) => val.memory).sort((a, b) => a - b)
     const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length
     const p95 = (arr: number[]) => arr[Math.max(0, Math.ceil(0.95 * arr.length) - 1)]
     let peakName = ''
-    let peakCpu = -1
+    let peakCpu = -Infinity
+    let peakMemoryName = ''
+    let peakMemory = -Infinity
     for (const [name, val] of entries) {
       if (val.cpu > peakCpu) {
         peakCpu = val.cpu
         peakName = name
+      }
+      if (val.memory > peakMemory) {
+        peakMemory = val.memory
+        peakMemoryName = name
       }
     }
     return [{
@@ -63,7 +70,8 @@ function buildFallbackAggregateTrends(
       mean_memory: Number(mean(mems).toFixed(2)),
       p95_memory: Number(p95(mems).toFixed(2)),
       max_memory: mems[mems.length - 1],
-      peak_device_name: peakName,
+      peak_device_name: peakName || undefined,
+      peak_memory_device_name: peakMemoryName || undefined,
     }]
   })
 }
@@ -85,9 +93,14 @@ export function PerformanceSection({
   compareYesterday = false,
   onToggleCompareYesterday,
   onSelectHost,
+  filterResetKey,
 }: PerformanceSectionProps) {
   const [hiddenMetrics, setHiddenMetrics] = useState<ReadonlySet<PerformanceMetricKey>>(new Set())
   const [modeOverride, setModeOverride] = useState<'auto' | 'aggregate' | 'compare'>('auto')
+
+  useEffect(() => {
+    setModeOverride('auto')
+  }, [filterResetKey])
 
   const toggleMetric = (metric: PerformanceMetricKey) => {
     setHiddenMetrics((prev) => {
@@ -106,13 +119,19 @@ export function PerformanceSection({
     return names.size
   }, [systemPerformance])
 
-  const effectiveMode: 'aggregate' | 'compare' =
-    modeOverride === 'auto' ? (deviceCount > 5 ? 'aggregate' : 'compare') : modeOverride
-
   const resolvedAggregateTrends = useMemo(() => {
     if (aggregateTrends && aggregateTrends.length > 0) return aggregateTrends
     return buildFallbackAggregateTrends(systemPerformance ?? [])
   }, [aggregateTrends, systemPerformance])
+
+  const effectiveMode: 'aggregate' | 'compare' =
+    modeOverride === 'auto'
+      ? deviceCount === 0 && resolvedAggregateTrends.length > 0
+        ? 'aggregate'
+        : deviceCount > 5
+          ? 'aggregate'
+          : 'compare'
+      : modeOverride
 
   const hasPerfData =
     (systemPerformance && systemPerformance.length > 0) ||
@@ -129,7 +148,11 @@ export function PerformanceSection({
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">系统性能趋势</CardTitle>
               {showPerformanceChart && (
-                <PerformanceMetricLegend hiddenMetrics={hiddenMetrics} onToggle={toggleMetric} />
+                <PerformanceMetricLegend
+                  hiddenMetrics={hiddenMetrics}
+                  onToggle={toggleMetric}
+                  variant={effectiveMode === 'aggregate' ? 'color' : 'line-style'}
+                />
               )}
             </div>
             {showPerformanceChart && (
@@ -190,7 +213,6 @@ export function PerformanceSection({
                     data={resolvedAggregateTrends}
                     yesterdayBaseline={yesterdayBaseline}
                     annotations={annotations}
-                    thresholds={thresholds}
                     hiddenMetrics={hiddenMetrics}
                     compareYesterday={compareYesterday}
                     canReadAlerts={canReadAlerts}
@@ -204,6 +226,11 @@ export function PerformanceSection({
                     height={280}
                     timeRange={timeRange}
                     hiddenMetrics={hiddenMetrics}
+                    annotations={annotations}
+                    canReadAlerts={canReadAlerts}
+                    yesterdayBaseline={yesterdayBaseline}
+                    compareYesterday={compareYesterday}
+                    onSelectDevice={onSelectHost ? (id) => onSelectHost(id) : undefined}
                   />
                 )
               ) : (

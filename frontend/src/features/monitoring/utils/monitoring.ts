@@ -1,5 +1,5 @@
 import { formatDateTimeMDHM, formatTimeHM } from '@/utils/formatters'
-import type { MonitoringSectionKey } from '../types'
+import type { MonitoringDataV2, MonitoringSectionKey } from '../types'
 
 export const TIME_RANGE_OPTIONS = [
   { value: '1h', label: '近1小时' },
@@ -258,4 +258,19 @@ export function formatBandwidthValue(bps: number): string {
   } else {
     return `${value.toFixed(2)} ${units[unitIndex]}`
   }
+}
+
+/**
+ * 从监控数据中解析活跃告警总数：优先取 statsV2 中的 active_alerts 非负整数，缺失时回退 activeProblems 长度。
+ */
+export function resolveActiveAlertCount(data: MonitoringDataV2 | undefined): number | undefined {
+  if (!data) return undefined
+  const stat = data.statsV2?.find((item) => item.id === 'active_alerts')
+  if (stat !== undefined && stat.value !== undefined && stat.value !== null) {
+    const parsed = Number.parseInt(String(stat.value), 10)
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed
+    }
+  }
+  return data.activeProblems?.length
 }

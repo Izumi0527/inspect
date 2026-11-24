@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,6 +19,10 @@ const (
 	SparklinePointLimit  = 12
 	DefaultTopNLimit     = 5
 	MaxTopNLimit         = 20
+	MaxTopNDeviceIDs     = 200
+
+	topNActiveDeviceClause         = `d.is_active = ? AND COALESCE(d.is_monitored, true) = true AND LOWER(COALESCE(d.status, '')) <> 'offline'`
+	topNInterfaceTrafficOnlyClause = `NOT (LOWER(BTRIM(COALESCE(NULLIF(BTRIM(di.alias), ''), di.name))) ~ '` + nonTrafficInterfaceNamePattern + `')`
 )
 
 // ModulePermissionStatus 描述跨模块聚合区块的权限状态。
@@ -225,13 +230,15 @@ type HostDetailResponse struct {
 
 // TopNItem 表示 TopN 排行单项。
 type TopNItem struct {
-	DeviceID      int     `json:"device_id"`
-	DeviceName    string  `json:"device_name"`
-	IPAddress     string  `json:"ip_address"`
-	Status        string  `json:"status"`
-	InterfaceName string  `json:"interface_name,omitempty"`
-	Value         float64 `json:"value"`
-	Unit          string  `json:"unit"`
+	DeviceID             int     `json:"device_id"`
+	DeviceName           string  `json:"device_name"`
+	IPAddress            string  `json:"ip_address"`
+	Status               string  `json:"status"`
+	InterfaceName        string  `json:"interface_name,omitempty"`
+	InterfaceDisplayName string  `json:"interface_display_name,omitempty"`
+	Value                float64 `json:"value"`
+	Unit                 string  `json:"unit"`
+	DisplayValue         string  `json:"display_value,omitempty"`
 }
 
 // TopNResponse 表示全网 TopN 排行响应。
@@ -359,7 +366,21 @@ func (w *MetricsWriter) QueryHostsMatrix(ctx context.Context, filter HostsMatrix
 		Where("d.is_active = ?", true)
 
 	if status := strings.ToLower(strings.TrimSpace(filter.Status)); status != "" {
-		query = query.Where("LOWER(d.status) = ?", status)
+		if status == "maintenance" {
+			maintMap, _ := w.GetActiveMaintenanceMapForDevices(ctx, time.Now().UTC())
+			if len(maintMap) > 0 {
+				maintIDs := make([]int, 0, len(maintMap))
+				for id := range maintMap {
+					maintIDs = append(maintIDs, id)
+				}
+				sort.Ints(maintIDs)
+				query = query.Where("(LOWER(d.status) = 'maintenance' OR d.id IN ?)", maintIDs)
+			} else {
+				query = query.Where("LOWER(d.status) = 'maintenance'")
+			}
+		} else {
+			query = query.Where("LOWER(d.status) = ?", status)
+		}
 	}
 	if filter.GroupID != nil && *filter.GroupID > 0 {
 		groupIDs, err := w.resolveDescendantGroupIDs(ctx, *filter.GroupID)
@@ -385,7 +406,7 @@ func (w *MetricsWriter) QueryHostsMatrix(ctx context.Context, filter HostsMatrix
 				COALESCE(d.cpu_usage, 0) >= 80 OR
 				COALESCE(d.memory_usage, 0) >= 80 OR
 				COALESCE(d.temperature, 0) >= 75 OR
-				EXISTS (SELECT 1 FROM alerts AS a WHERE a.device_id = d.id AND a.status IN ('active', 'acknowledged'))
+				EXISTS (SELECT 1 FROM alerts AS a WHERE a.device_id = d.id AND ` + activeAlertAliasStatusClause + `)
 			)`)
 		} else {
 			query = query.Where(`(
@@ -623,8 +644,8 @@ func resolveHostsOrderClause(sortBy, sortOrder string, canReadAlerts bool) strin
 	if canReadAlerts {
 		return `CASE
 			WHEN LOWER(d.status) = 'offline' THEN 1
-			WHEN LOWER(d.status) = 'critical' OR COALESCE(d.cpu_usage, 0) >= 90 OR COALESCE(d.memory_usage, 0) >= 90 OR EXISTS (SELECT 1 FROM alerts AS a WHERE a.device_id = d.id AND a.status IN ('active', 'acknowledged') AND LOWER(a.severity) = 'critical') THEN 2
-			WHEN LOWER(d.status) = 'warning' OR COALESCE(cs.consecutive_failures, 0) > 0 OR COALESCE(d.cpu_usage, 0) >= 80 OR COALESCE(d.memory_usage, 0) >= 80 OR EXISTS (SELECT 1 FROM alerts AS a WHERE a.device_id = d.id AND a.status IN ('active', 'acknowledged')) THEN 3
+			WHEN LOWER(d.status) = 'critical' OR COALESCE(d.cpu_usage, 0) >= 90 OR COALESCE(d.memory_usage, 0) >= 90 OR EXISTS (SELECT 1 FROM alerts AS a WHERE a.device_id = d.id AND ` + activeAlertAliasStatusClause + ` AND LOWER(a.severity) = 'critical') THEN 2
+			WHEN LOWER(d.status) = 'warning' OR COALESCE(cs.consecutive_failures, 0) > 0 OR COALESCE(d.cpu_usage, 0) >= 80 OR COALESCE(d.memory_usage, 0) >= 80 OR EXISTS (SELECT 1 FROM alerts AS a WHERE a.device_id = d.id AND ` + activeAlertAliasStatusClause + `) THEN 3
 			WHEN LOWER(d.status) = 'maintenance' THEN 4
 			ELSE 5
 		END ASC, COALESCE(d.cpu_usage, 0) DESC, d.id ASC`
@@ -835,44 +856,88 @@ func (w *MetricsWriter) GetHostDetail(
 	return resp, nil
 }
 
+type topNQueryRow struct {
+	DeviceID       int     `gorm:"column:device_id"`
+	DeviceName     string  `gorm:"column:device_name"`
+	IPAddress      string  `gorm:"column:ip_address"`
+	Status         string  `gorm:"column:status"`
+	InterfaceName  string  `gorm:"column:interface_name"`
+	InterfaceAlias *string `gorm:"column:interface_alias"`
+	Val            float64 `gorm:"column:val"`
+}
+
+type topNDeviceMetricSpec struct {
+	column      string
+	whereClause string
+	orderClause string
+}
+
+var topNUnitMap = map[string]string{
+	"cpu":         "%",
+	"memory":      "%",
+	"temperature": "°C",
+	"if_util":     "%",
+	"if_errors":   "count",
+	"ping_rtt":    "ms",
+}
+
+var topNDeviceMetricSpecs = map[string]topNDeviceMetricSpec{
+	"cpu": {
+		column:      "d.cpu_usage",
+		whereClause: "d.cpu_usage IS NOT NULL AND d.cpu_usage >= 0 AND d.cpu_usage <= 100",
+		orderClause: "d.cpu_usage DESC NULLS LAST, d.id ASC",
+	},
+	"memory": {
+		column:      "d.memory_usage",
+		whereClause: "d.memory_usage IS NOT NULL AND d.memory_usage >= 0 AND d.memory_usage <= 100",
+		orderClause: "d.memory_usage DESC NULLS LAST, d.id ASC",
+	},
+	"temperature": {
+		column:      "d.temperature",
+		whereClause: "d.temperature IS NOT NULL AND d.temperature > -50 AND d.temperature <= 200",
+		orderClause: "d.temperature DESC NULLS LAST, d.id ASC",
+	},
+	"ping_rtt": {
+		column:      "d.response_time",
+		whereClause: "LOWER(COALESCE(d.icmp_status, '')) <> 'offline' AND d.response_time IS NOT NULL AND d.response_time >= 0 AND d.response_time <= 60000",
+		orderClause: "d.response_time DESC NULLS LAST, d.id ASC",
+	},
+}
+
+type topNInterfaceMetricSpec struct {
+	selectExpr  string
+	whereClause string
+}
+
+var topNInterfaceMetricSpecs = map[string]topNInterfaceMetricSpec{
+	"if_util": {
+		selectExpr:  "GREATEST(COALESCE(di.utilization_in, 0), COALESCE(di.utilization_out, 0)) AS val",
+		whereClause: "COALESCE(di.speed_unknown, false) = false AND " + topNInterfaceTrafficOnlyClause + " AND GREATEST(COALESCE(di.utilization_in, 0), COALESCE(di.utilization_out, 0)) > 0 AND GREATEST(COALESCE(di.utilization_in, 0), COALESCE(di.utilization_out, 0)) <= 100",
+	},
+	"if_errors": {
+		selectExpr:  "(COALESCE(di.in_errors, 0) + COALESCE(di.out_errors, 0))::float8 AS val",
+		whereClause: topNInterfaceTrafficOnlyClause + " AND (COALESCE(di.in_errors, 0) + COALESCE(di.out_errors, 0)) > 0",
+	},
+}
+
 // QueryTopN 返回全网 TopN 排行（cpu|memory|temperature|if_util|if_errors|ping_rtt）。
-func (w *MetricsWriter) QueryTopN(ctx context.Context, metric string, limit int, groupID *int) (TopNResponse, error) {
-	m := strings.ToLower(strings.TrimSpace(metric))
-	if m == "" {
-		m = "cpu"
+func (w *MetricsWriter) QueryTopN(ctx context.Context, metric string, limit int, groupID *int, deviceIDs ...int) (TopNResponse, error) {
+	m, unit, normalizedLimit, err := normalizeTopNMetricAndLimit(metric, limit)
+	if err != nil {
+		return TopNResponse{}, err
 	}
-	if limit <= 0 {
-		limit = DefaultTopNLimit
-	}
-	if limit > MaxTopNLimit {
-		limit = MaxTopNLimit
+	cleanDeviceIDs, err := sanitizeTopNDeviceIDs(deviceIDs)
+	if err != nil {
+		return TopNResponse{}, err
 	}
 
-	unitMap := map[string]string{
-		"cpu":         "%",
-		"memory":      "%",
-		"temperature": "°C",
-		"if_util":     "%",
-		"if_errors":   "count",
-		"ping_rtt":    "ms",
-	}
-	unit, ok := unitMap[m]
-	if !ok {
-		return TopNResponse{}, fmt.Errorf("unsupported topn metric: %s", metric)
-	}
-
-	resp := TopNResponse{
-		Metric: m,
-		Unit:   unit,
-		Items:  []TopNItem{},
-	}
+	resp := TopNResponse{Metric: m, Unit: unit, Items: []TopNItem{}}
 	if w == nil || w.db == nil {
 		return resp, fmt.Errorf("database not initialized")
 	}
 
 	var groupIDs []int
 	if groupID != nil && *groupID > 0 {
-		var err error
 		groupIDs, err = w.resolveDescendantGroupIDs(ctx, *groupID)
 		if err != nil {
 			return resp, err
@@ -882,72 +947,191 @@ func (w *MetricsWriter) QueryTopN(ctx context.Context, metric string, limit int,
 		}
 	}
 
-	type topRow struct {
-		DeviceID      int     `gorm:"column:device_id"`
-		DeviceName    string  `gorm:"column:device_name"`
-		IPAddress     string  `gorm:"column:ip_address"`
-		Status        string  `gorm:"column:status"`
-		InterfaceName string  `gorm:"column:interface_name"`
-		Val           float64 `gorm:"column:val"`
+	rows, err := w.fetchTopNRows(ctx, m, normalizedLimit, groupIDs, cleanDeviceIDs)
+	if err != nil {
+		return resp, err
 	}
-	var rows []topRow
+	resp.Items = buildTopNItems(m, unit, rows)
+	return resp, nil
+}
 
-	switch m {
-	case "cpu", "memory", "temperature", "ping_rtt":
-		col := map[string]string{
-			"cpu":         "d.cpu_usage",
-			"memory":      "d.memory_usage",
-			"temperature": "d.temperature",
-			"ping_rtt":    "d.response_time",
-		}[m]
+func normalizeTopNMetricAndLimit(metric string, limit int) (string, string, int, error) {
+	m := strings.ToLower(strings.TrimSpace(metric))
+	if m == "" {
+		m = "cpu"
+	}
+	unit, ok := topNUnitMap[m]
+	if !ok {
+		return "", "", 0, fmt.Errorf("unsupported topn metric: %s", metric)
+	}
+	if limit <= 0 {
+		limit = DefaultTopNLimit
+	}
+	if limit > MaxTopNLimit {
+		limit = MaxTopNLimit
+	}
+	return m, unit, limit, nil
+}
+
+func sanitizeTopNDeviceIDs(raw []int) ([]int, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	seen := make(map[int]struct{}, len(raw))
+	out := make([]int, 0, len(raw))
+	for _, id := range raw {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+		if len(out) > MaxTopNDeviceIDs {
+			return nil, fmt.Errorf("device_ids count exceeds max %d", MaxTopNDeviceIDs)
+		}
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
+func applyTopNDeviceScope(q *gorm.DB, groupIDs, deviceIDs []int) *gorm.DB {
+	if len(groupIDs) > 0 {
+		q = q.Where("d.group_id IN ?", groupIDs)
+	}
+	if len(deviceIDs) > 0 {
+		q = q.Where("d.id IN ?", deviceIDs)
+	}
+	return q
+}
+
+func (w *MetricsWriter) fetchTopNRows(ctx context.Context, metric string, limit int, groupIDs, deviceIDs []int) ([]topNQueryRow, error) {
+	if spec, ok := topNDeviceMetricSpecs[metric]; ok {
 		q := w.db.WithContext(ctx).
 			Table("devices AS d").
-			Select(fmt.Sprintf("d.id AS device_id, d.name AS device_name, d.ip_address, d.status, '' AS interface_name, %s AS val", col)).
-			Where("d.is_active = ? AND "+col+" IS NOT NULL", true)
-		if len(groupIDs) > 0 {
-			q = q.Where("d.group_id IN ?", groupIDs)
+			Select(fmt.Sprintf("d.id AS device_id, d.name AS device_name, d.ip_address, d.status, '' AS interface_name, %s AS val", spec.column)).
+			Where(topNActiveDeviceClause, true).
+			Where(spec.whereClause)
+		q = applyTopNDeviceScope(q, groupIDs, deviceIDs)
+		var rows []topNQueryRow
+		if err := q.Order(spec.orderClause).Limit(limit).Scan(&rows).Error; err != nil {
+			return nil, err
 		}
-		if err := q.Order(col + " DESC, d.id ASC").Limit(limit).Scan(&rows).Error; err != nil {
-			return resp, err
-		}
-	case "if_util":
-		q := w.db.WithContext(ctx).
-			Table("device_interfaces AS di").
-			Select("d.id AS device_id, d.name AS device_name, d.ip_address, d.status, di.name AS interface_name, GREATEST(di.utilization_in, di.utilization_out) AS val").
-			Joins("JOIN devices AS d ON d.id = di.device_id").
-			Where("d.is_active = ? AND di.lld_monitored = ?", true, true)
-		if len(groupIDs) > 0 {
-			q = q.Where("d.group_id IN ?", groupIDs)
-		}
-		if err := q.Order("val DESC, d.id ASC").Limit(limit).Scan(&rows).Error; err != nil {
-			return resp, err
-		}
-	case "if_errors":
-		q := w.db.WithContext(ctx).
-			Table("device_interfaces AS di").
-			Select("d.id AS device_id, d.name AS device_name, d.ip_address, d.status, di.name AS interface_name, (di.in_errors + di.out_errors)::float8 AS val").
-			Joins("JOIN devices AS d ON d.id = di.device_id").
-			Where("d.is_active = ? AND di.lld_monitored = ?", true, true)
-		if len(groupIDs) > 0 {
-			q = q.Where("d.group_id IN ?", groupIDs)
-		}
-		if err := q.Order("val DESC, d.id ASC").Limit(limit).Scan(&rows).Error; err != nil {
-			return resp, err
-		}
+		return rows, nil
 	}
 
+	if spec, ok := topNInterfaceMetricSpecs[metric]; ok {
+		q := w.db.WithContext(ctx).
+			Table("device_interfaces AS di").
+			Select("d.id AS device_id, d.name AS device_name, d.ip_address, d.status, di.name AS interface_name, di.alias AS interface_alias, "+spec.selectExpr).
+			Joins("JOIN devices AS d ON d.id = di.device_id").
+			Where(topNActiveDeviceClause, true).
+			Where("di.lld_monitored = ? AND COALESCE(di.is_up, false) = true", true).
+			Where(spec.whereClause)
+		q = applyTopNDeviceScope(q, groupIDs, deviceIDs)
+		var rows []topNQueryRow
+		if err := q.Order("val DESC NULLS LAST, d.id ASC, di.id ASC").Limit(limit).Scan(&rows).Error; err != nil {
+			return nil, err
+		}
+		return rows, nil
+	}
+
+	return nil, fmt.Errorf("unsupported topn metric: %s", metric)
+}
+
+func buildTopNItems(metric, unit string, rows []topNQueryRow) []TopNItem {
+	items := make([]TopNItem, 0, len(rows))
+	isInterfaceMetric := metric == "if_util" || metric == "if_errors"
 	for _, r := range rows {
-		resp.Items = append(resp.Items, TopNItem{
+		normalized, ok := normalizeTopNValue(metric, r.Val)
+		if !ok {
+			continue
+		}
+		item := TopNItem{
 			DeviceID:      r.DeviceID,
 			DeviceName:    r.DeviceName,
 			IPAddress:     r.IPAddress,
 			Status:        r.Status,
 			InterfaceName: r.InterfaceName,
-			Value:         math.Round(r.Val*100) / 100,
+			Value:         normalized,
 			Unit:          unit,
-		})
+			DisplayValue:  formatTopNDisplayValue(metric, normalized),
+		}
+		if isInterfaceMetric {
+			item.InterfaceDisplayName = resolveInterfaceDisplayName(r.InterfaceName, r.InterfaceAlias)
+		}
+		items = append(items, item)
 	}
-	return resp, nil
+	return items
+}
+
+func normalizeTopNValue(metric string, val float64) (float64, bool) {
+	if math.IsNaN(val) || math.IsInf(val, 0) {
+		return 0, false
+	}
+	switch metric {
+	case "cpu", "memory":
+		clamped := clampFloat(val, 0, 100)
+		return normalizeSignedZero(math.Round(clamped*100) / 100), true
+	case "if_util":
+		clamped := clampFloat(val, 0, 100)
+		if clamped > 0 && clamped < 0.01 {
+			rounded := math.Round(clamped*10000) / 10000
+			if rounded == 0 {
+				return 0.0001, true
+			}
+			return rounded, true
+		}
+		return normalizeSignedZero(math.Round(clamped*100) / 100), true
+	case "if_errors":
+		return normalizeSignedZero(math.Round(val)), true
+	default:
+		return normalizeSignedZero(math.Round(val*100) / 100), true
+	}
+}
+
+func formatTopNDisplayValue(metric string, val float64) string {
+	switch metric {
+	case "cpu", "memory":
+		return formatCompactFloat(clampFloat(val, 0, 100), 2) + "%"
+	case "if_util":
+		clamped := clampFloat(val, 0, 100)
+		if clamped > 0 && clamped < 0.01 {
+			return "< 0.01%"
+		}
+		return formatCompactFloat(clamped, 2) + "%"
+	case "temperature":
+		return formatCompactFloat(val, 1) + "°C"
+	case "ping_rtt":
+		if val > 0 && val < 0.1 {
+			return "< 0.1 ms"
+		}
+		return formatCompactFloat(val, 1) + " ms"
+	case "if_errors":
+		return fmt.Sprintf("%d 个", int64(math.Round(val)))
+	default:
+		return formatCompactFloat(val, 2)
+	}
+}
+
+func clampFloat(v, minVal, maxVal float64) float64 {
+	if v < minVal {
+		return minVal
+	}
+	if v > maxVal {
+		return maxVal
+	}
+	return v
+}
+
+func normalizeSignedZero(v float64) float64 {
+	if v == 0 {
+		return 0
+	}
+	return v
 }
 
 func buildCrossModulePermissions(canAlerts, canInspections, canLogs bool) CrossModulePermissions {
@@ -1137,7 +1321,7 @@ func (w *MetricsWriter) queryActiveAlertCounts(ctx context.Context, deviceIDs []
 			COUNT(*) AS total_cnt,
 			SUM(CASE WHEN LOWER(severity) = 'critical' THEN 1 ELSE 0 END) AS crit_cnt,
 			SUM(CASE WHEN LOWER(severity) IN ('warning', 'high', 'medium') THEN 1 ELSE 0 END) AS warn_cnt`).
-		Where("device_id IN ? AND status IN ('active', 'acknowledged')", deviceIDs).
+		Where("device_id IN ? AND "+activeAlertStatusClause, deviceIDs).
 		Group("device_id").
 		Scan(&rows).Error; err == nil {
 		for _, r := range rows {
@@ -1273,7 +1457,7 @@ func (w *MetricsWriter) queryDeviceActiveAlerts(ctx context.Context, deviceID in
 	if err := w.db.WithContext(ctx).
 		Table("alerts").
 		Select("id, title, severity, status, metric_name, current_value, threshold_value, first_occurred, last_occurred, snoozed_until").
-		Where("device_id = ? AND status IN ('active', 'acknowledged')", deviceID).
+		Where("device_id = ? AND "+activeAlertStatusClause, deviceID).
 		Order("last_occurred DESC, id DESC").
 		Scan(&rows).Error; err != nil || rows == nil {
 		return []HostActiveAlertSummary{}

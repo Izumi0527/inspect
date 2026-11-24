@@ -6,6 +6,7 @@ import { formatDateTimeYMDHMS } from '@/utils/formatters'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
+import { MONITORING_TOPN_QUERY_KEY } from '../api/monitoring-hosts.api'
 import { useMonitoringV2 } from './useMonitoringV2'
 import { INTERFACE_TRAFFIC_QUERY_KEY } from './useDeviceInterfaceTraffic'
 import {
@@ -209,6 +210,7 @@ export function useMonitoringPage(): UseMonitoringPageFullResult {
 
   const refetch = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: [INTERFACE_TRAFFIC_QUERY_KEY] })
+    void queryClient.invalidateQueries({ queryKey: [MONITORING_TOPN_QUERY_KEY] })
     nav.resetKioskCountdown()
     return refetchV2()
   }, [queryClient, refetchV2, nav])

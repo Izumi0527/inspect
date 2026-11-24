@@ -171,25 +171,6 @@ jest.mock('@/features/devices/api/devices.api', () => ({
   getDeviceGroups: jest.fn(),
 }))
 
-jest.mock('@/features/devices/components/DeviceGroupModal', () => ({
-  DeviceGroupModal: ({
-    isOpen,
-    onClose,
-    onMutated,
-  }: {
-    isOpen: boolean
-    onClose: () => void
-    onMutated?: () => void
-  }) =>
-    isOpen ? (
-      <div role="dialog" aria-label="设备分组管理弹窗">
-        <button type="button" onClick={() => { onMutated?.(); onClose() }}>
-          模拟建组完成
-        </button>
-      </div>
-    ) : null,
-}))
-
 jest.mock('@/features/monitoring/components/charts', () => ({
   SystemPerformanceChartWrapper: () => <div>SystemPerformanceChartWrapper</div>,
   TemperatureChartWrapper: () => <div>TemperatureChartWrapper</div>,
@@ -336,17 +317,20 @@ describe('MonitoringView 6-Tab 外壳、引擎健康浮层与值班投屏模式'
     expect(screen.getByRole('dialog', { name: '设备监控详情抽屉' })).toHaveTextContent('99')
   })
 
-  it('顶栏可唤起 DeviceGroupModal 新建分组并刷新分组列表', async () => {
+  it('顶栏「设备分组筛选」不再提供新建分组入口，点击分组项仍可正确筛选', async () => {
     const user = userEvent.setup()
     renderView()
 
-    await user.click(screen.getByRole('button', { name: '新建分组' }))
-    expect(screen.getByRole('dialog', { name: '设备分组管理弹窗' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /\+ 新建分组/ })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '模拟建组完成' }))
-    await waitFor(() => {
-      expect(getDeviceGroups).toHaveBeenCalledTimes(2)
-    })
+    const trigger = screen.getByRole('button', { name: '设备分组筛选' })
+    await user.click(trigger)
+
+    const groupOption = await screen.findByRole('button', { name: /核心机房/ })
+    expect(screen.queryByRole('button', { name: /\+ 新建分组/ })).not.toBeInTheDocument()
+
+    await user.click(groupOption)
+    expect(trigger).toHaveTextContent('核心机房')
   })
 
   it('点击顶栏「实时采样」弹出采集引擎健康浮层并可点击退避设备打开抽屉', async () => {
@@ -368,8 +352,37 @@ describe('MonitoringView 6-Tab 外壳、引擎健康浮层与值班投屏模式'
     expect(screen.getByRole('dialog', { name: '设备监控详情抽屉' })).toHaveTextContent('99')
   })
 
-  it('点击「值班投屏」进入全屏投屏模式（隐藏配置 Tab 含倒计时）且 Esc 可退出', async () => {
+  it('点击「值班投屏」进入全屏投屏模式（渲染三层大屏网格与实时时钟，移除旧 6 卡片）且 Esc 可退出', async () => {
     const user = userEvent.setup()
+    const envelope = buildEnvelope()
+    envelope.data.statsV2 = [
+      { id: 'total_devices', title: '总设备', value: '12' },
+      { id: 'active_alerts', title: '活跃告警', value: '2' },
+      { id: 'avg_cpu', title: 'CPU使用率', value: '35.2%' },
+      { id: 'avg_memory', title: '内存使用率', value: '51.4%' },
+      { id: 'peak_outbound', title: '上行流量', value: '120 Mbps' },
+      { id: 'peak_inbound', title: '下行流量', value: '240 Mbps' },
+    ]
+    envelope.data.groupSummaries = [
+      {
+        group_id: 10,
+        group_name: '核心机房',
+        total_devices: 12,
+        online_devices: 11,
+        offline_devices: 1,
+        warning_devices: 1,
+        max_cpu: 76.5,
+        max_memory: 64.2,
+      },
+    ]
+    ;(useMonitoringV2 as jest.Mock).mockReturnValue({
+      data: envelope,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+      isRefetching: false,
+    })
+
     renderView()
 
     await user.click(screen.getByRole('button', { name: '值班投屏' }))
@@ -377,11 +390,90 @@ describe('MonitoringView 6-Tab 外壳、引擎健康浮层与值班投屏模式'
     expect(screen.getByText(/30s 后自动刷新/)).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: '监控方案' })).not.toBeInTheDocument()
 
+    expect(screen.getByText('全网健康与负载分布')).toBeInTheDocument()
+    expect(screen.getByText('活跃告警 2')).toBeInTheDocument()
+    expect(screen.getByText('核心机房')).toBeInTheDocument()
+    expect(screen.getByText('系统性能趋势')).toBeInTheDocument()
+    expect(screen.getByText('设备温度监控')).toBeInTheDocument()
+    expect(screen.getByText('流量监控')).toBeInTheDocument()
+    expect(screen.getByText('全网负载 Top 5 排行')).toBeInTheDocument()
+    expect(screen.getByText('活跃告警与问题')).toBeInTheDocument()
+    expect(screen.getByText('近1小时')).toBeInTheDocument()
+    expect(screen.getByTestId('kiosk-live-clock')).toHaveTextContent(
+      /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/
+    )
+
+    for (const legacyTitle of ['总设备', 'CPU使用率', '内存使用率', '上行流量', '下行流量']) {
+      expect(screen.queryByText(legacyTitle)).not.toBeInTheDocument()
+    }
+
     fireEvent.keyDown(window, { key: 'Escape' })
     await waitFor(() => {
       expect(screen.queryByTestId('monitoring-kiosk-view')).not.toBeInTheDocument()
     })
     expect(screen.getByRole('tab', { name: '监控方案' })).toBeInTheDocument()
+  })
+
+  it('正常总览大屏不再渲染 6 个均值卡片，并在 HealthDistributionBar 按 alerts:read 权限门控展示活跃告警徽标', () => {
+    const envelope = buildEnvelope()
+    envelope.data.statsV2 = [
+      { id: 'total_devices', title: '总设备', value: '12' },
+      { id: 'active_alerts', title: '活跃告警', value: '3' },
+      { id: 'avg_cpu', title: 'CPU使用率', value: '35.2%' },
+      { id: 'avg_memory', title: '内存使用率', value: '51.4%' },
+      { id: 'peak_outbound', title: '上行流量', value: '120 Mbps' },
+      { id: 'peak_inbound', title: '下行流量', value: '240 Mbps' },
+    ]
+    ;(useMonitoringV2 as jest.Mock).mockReturnValue({
+      data: envelope,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+      isRefetching: false,
+    })
+
+    const { unmount } = renderView()
+    for (const legacyTitle of ['总设备', 'CPU使用率', '内存使用率', '上行流量', '下行流量']) {
+      expect(screen.queryByText(legacyTitle)).not.toBeInTheDocument()
+    }
+    expect(screen.getByText('活跃告警 3')).toBeInTheDocument()
+    unmount()
+
+    // 缺失 statsV2.active_alerts 时回退 activeProblems.length
+    const fallbackEnvelope = buildEnvelope()
+    fallbackEnvelope.data.statsV2 = []
+    fallbackEnvelope.data.activeProblems = [
+      {
+        alert_id: 1,
+        device_id: 11,
+        device_name: 'Core-SW-01',
+        title: 'CPU 过高',
+        severity: 'warning',
+        status: 'active',
+      },
+    ]
+    ;(useMonitoringV2 as jest.Mock).mockReturnValue({
+      data: fallbackEnvelope,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+      isRefetching: false,
+    })
+    const { unmount: unmountFallback } = renderView()
+    expect(screen.getByText('活跃告警 1')).toBeInTheDocument()
+    unmountFallback()
+
+    // 缺少 alerts:read 权限时不展示活跃告警徽标
+    mockedPermissions = { 'alerts:read': false }
+    ;(useMonitoringV2 as jest.Mock).mockReturnValue({
+      data: envelope,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+      isRefetching: false,
+    })
+    renderView()
+    expect(screen.queryByText(/活跃告警 \d+/)).not.toBeInTheDocument()
   })
 
   it('缺少 alerts:read 权限时活跃问题区展示优雅降级提示而非报错崩溃', () => {

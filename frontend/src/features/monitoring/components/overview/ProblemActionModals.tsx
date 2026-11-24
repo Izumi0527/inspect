@@ -101,6 +101,7 @@ interface SnoozeProblemModalProps {
 }
 
 const SNOOZE_DURATIONS: readonly SnoozeDurationHours[] = [2, 8, 24]
+const MAX_SNOOZE_REASON_RUNES = 256
 
 export function SnoozeProblemModal({
   problem,
@@ -118,10 +119,16 @@ export function SnoozeProblemModal({
     setErrorMsg('')
   }, [problem?.alert_id])
 
+  const reasonRuneCount = Array.from(reason).length
+
   const handleSubmit = () => {
     const trimmed = reason.trim()
     if (!trimmed) {
       setErrorMsg('请填写临时静默原因')
+      return
+    }
+    if (Array.from(trimmed).length > MAX_SNOOZE_REASON_RUNES) {
+      setErrorMsg(`静默原因不能超过 ${MAX_SNOOZE_REASON_RUNES} 个字符`)
       return
     }
     setErrorMsg('')
@@ -169,11 +176,17 @@ export function SnoozeProblemModal({
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-foreground">
-              静默原因（必填）
-            </label>
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <label className="font-medium text-foreground">
+                静默原因（必填）
+              </label>
+              <span className="text-muted-foreground tabular-nums">
+                {reasonRuneCount}/{MAX_SNOOZE_REASON_RUNES}
+              </span>
+            </div>
             <input
               type="text"
+              maxLength={MAX_SNOOZE_REASON_RUNES}
               value={reason}
               onChange={(e) => {
                 setReason(e.target.value)

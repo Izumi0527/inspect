@@ -7,7 +7,8 @@ import { useInView } from '@/hooks'
 import { useMonitoringPage } from '../hooks/useMonitoringPage'
 import type { MonitoringTabKey } from '../types/zabbix-monitoring.types'
 import { KioskMonitoringView } from './KioskMonitoringView'
-import { StatsSection, PerformanceSection, NetworkSection } from './sections'
+import { PerformanceSection, NetworkSection } from './sections'
+import { resolveActiveAlertCount } from '../utils/monitoring'
 import {
   SyncedCrosshairProvider,
   HealthDistributionBar,
@@ -79,6 +80,8 @@ export function MonitoringView() {
           page={page}
           chartsRef={chartsRef}
           chartsInView={chartsInView}
+          networkRef={networkRef}
+          networkInView={networkInView}
         />
         <HostDetailDrawer
           deviceId={page.selectedHostId}
@@ -88,6 +91,8 @@ export function MonitoringView() {
       </>
     )
   }
+
+  const activeAlertCount = resolveActiveAlertCount(page.data)
 
   return (
     <AppLayout title="监控中心" actions={<MonitoringHeaderActions page={page} />}>
@@ -135,14 +140,10 @@ export function MonitoringView() {
                 </div>
               )}
 
-              <StatsSection
-                section={page.envelope?.sections.stats}
-                statsV2={page.data.statsV2}
-                onRetry={page.refetch}
-              />
-
               <HealthDistributionBar
                 distribution={page.data.healthDistribution}
+                activeAlertCount={activeAlertCount}
+                canReadAlerts={page.canReadAlerts}
                 onSelectBucket={(status) => page.navigateToHostsWithStatus(status)}
               />
 
@@ -169,6 +170,7 @@ export function MonitoringView() {
                 compareYesterday={page.compareYesterday}
                 onToggleCompareYesterday={page.setCompareYesterday}
                 onSelectHost={(id) => page.setSelectedHostId(id)}
+                filterResetKey={`${page.activeGroupId ?? 'all'}:${page.deviceIds.join(',')}`}
               />
 
               <NetworkSection
@@ -185,6 +187,8 @@ export function MonitoringView() {
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <TopNRankingCard
                   groupId={page.activeGroupId}
+                  deviceIds={page.deviceIds}
+                  thresholds={page.data.thresholds}
                   onSelectHost={(id) => page.setSelectedHostId(id)}
                 />
                 <ActiveProblemsCard

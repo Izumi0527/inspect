@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, BellOff, CheckCircle2, ExternalLink, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -16,6 +16,12 @@ import type {
   SnoozeDurationHours,
 } from '../../types/zabbix-monitoring.types'
 import { AcknowledgeProblemModal, SnoozeProblemModal } from './ProblemActionModals'
+import {
+  formatProblemMetricLabel,
+  formatProblemMetricValue,
+  getProblemSeverityMeta,
+  isAlertActivelySnoozed,
+} from './activeProblemHelpers'
 
 interface ActiveProblemsCardProps {
   problems?: ActiveProblemItem[]
@@ -25,28 +31,25 @@ interface ActiveProblemsCardProps {
   onActionSuccess?: () => void
 }
 
-function severityStyle(severity: string): { label: string; className: string } {
-  switch (severity.toLowerCase()) {
-    case 'critical':
-      return {
-        label: '严重',
-        className: 'bg-danger-soft text-danger-soft-foreground',
-      }
-    case 'warning':
-      return {
-        label: '警告',
-        className: 'bg-warning-soft text-warning-soft-foreground',
-      }
-    default:
-      return {
-        label: '提示',
-        className: 'bg-info-soft text-info-soft-foreground',
-      }
+const EMPTY_PROBLEMS: ActiveProblemItem[] = []
+
+function buildSnoozeTooltip(snoozedUntil?: string, snoozeReason?: string): string {
+  const parts: string[] = []
+  const reason = snoozeReason?.trim()
+  if (reason) {
+    parts.push(`原因：${reason}`)
   }
+  if (snoozedUntil) {
+    const ts = Date.parse(snoozedUntil)
+    if (Number.isFinite(ts)) {
+      parts.push(`截止 ${formatDateTimeMDHM(new Date(ts))}`)
+    }
+  }
+  return parts.length > 0 ? parts.join(' · ') : '已临时静默'
 }
 
 export function ActiveProblemsCard({
-  problems = [],
+  problems = EMPTY_PROBLEMS,
   canReadAlerts,
   canUpdateAlerts,
   onSelectHost,
@@ -55,8 +58,16 @@ export function ActiveProblemsCard({
   const [ackTarget, setAckTarget] = useState<ActiveProblemItem | null>(null)
   const [snoozeTarget, setSnoozeTarget] = useState<ActiveProblemItem | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [unsnoozingId, setUnsnoozingId] = useState<number | null>(null)
   const [ackedIds, setAckedIds] = useState<Record<number, boolean>>({})
   const [snoozedMap, setSnoozedMap] = useState<Record<number, string>>({})
+  const [unsnoozedIds, setUnsnoozedIds] = useState<Record<number, boolean>>({})
+
+  useEffect(() => {
+    setAckedIds((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+    setSnoozedMap((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+    setUnsnoozedIds((prev) => (Object.keys(prev).length === 0 ? prev : {}))
+  }, [problems])
 
   const handleAckConfirm = async (payload: { note?: string; assignee?: string }) => {
     if (!ackTarget) return
@@ -89,6 +100,12 @@ export function ActiveProblemsCard({
         ...prev,
         [snoozeTarget.alert_id]: res.snoozed_until,
       }))
+      setUnsnoozedIds((prev) => {
+        if (!prev[snoozeTarget.alert_id]) return prev
+        const next = { ...prev }
+        delete next[snoozeTarget.alert_id]
+        return next
+      })
       toast.success(`已临时静默该告警 ${durationHours} 小时`)
       setSnoozeTarget(null)
       onActionSuccess?.()
@@ -100,6 +117,7 @@ export function ActiveProblemsCard({
   }
 
   const handleUnsnooze = async (alertId: number) => {
+    setUnsnoozingId(alertId)
     try {
       await unsnoozeAlert(alertId)
       setSnoozedMap((prev) => {
@@ -107,10 +125,13 @@ export function ActiveProblemsCard({
         delete next[alertId]
         return next
       })
+      setUnsnoozedIds((prev) => ({ ...prev, [alertId]: true }))
       toast.success('已取消临时静默')
       onActionSuccess?.()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '取消静默失败')
+    } finally {
+      setUnsnoozingId((prev) => (prev === alertId ? null : prev))
     }
   }
 
@@ -122,6 +143,18 @@ export function ActiveProblemsCard({
             <CardTitle className="flex items-center gap-2 text-base">
               <AlertTriangle className="h-4 w-4 text-warning" />
               <span>活跃告警与问题</span>
+              {canReadAlerts && problems.length > 0 && (
+                <span
+                  title={
+                    problems.length >= 20
+                      ? '展示前 20 条，点击前往告警中心查看全部'
+                      : undefined
+                  }
+                  className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums"
+                >
+                  {problems.length} 条
+                </span>
+              )}
             </CardTitle>
             {canReadAlerts && (
               <Link
@@ -153,9 +186,18 @@ export function ActiveProblemsCard({
           ) : (
             <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
               {problems.map((item) => {
-                const sev = severityStyle(item.severity)
+                const sev = getProblemSeverityMeta(item.severity)
                 const isAcked = item.status === 'acknowledged' || ackedIds[item.alert_id]
-                const snoozedUntil = snoozedMap[item.alert_id] ?? item.snoozed_until
+                const effectiveSnoozedUntil = unsnoozedIds[item.alert_id]
+                  ? undefined
+                  : (snoozedMap[item.alert_id] ?? item.snoozed_until)
+                const isSnoozed = isAlertActivelySnoozed(effectiveSnoozedUntil)
+                const suppressedBy = item.suppressed_by?.trim()
+                const metricLabel = formatProblemMetricLabel(item.metric_name)
+                const lastOccurredTs = item.last_occurred
+                  ? Date.parse(item.last_occurred)
+                  : Number.NaN
+                const hasValidLastOccurred = Number.isFinite(lastOccurredTs)
 
                 return (
                   <div
@@ -180,24 +222,43 @@ export function ActiveProblemsCard({
                               已接手
                             </span>
                           )}
-                          {snoozedUntil && (
-                            <span className="inline-flex items-center gap-1 rounded bg-unknown-soft px-1.5 py-0.5 text-[11px] font-medium text-unknown-soft-foreground">
+                          {isSnoozed && (
+                            <span
+                              title={buildSnoozeTooltip(
+                                effectiveSnoozedUntil,
+                                item.snooze_reason
+                              )}
+                              className="inline-flex items-center gap-1 rounded bg-unknown-soft px-1.5 py-0.5 text-[11px] font-medium text-unknown-soft-foreground"
+                            >
                               <BellOff className="h-3 w-3" />
                               已静默
+                            </span>
+                          )}
+                          {suppressedBy && (
+                            <span
+                              title={`由维护策略「${suppressedBy}」抑制`}
+                              className="inline-flex items-center gap-1 rounded bg-surface-2 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
+                            >
+                              维护静默
                             </span>
                           )}
                         </div>
                         <p className="text-xs text-foreground">{item.title}</p>
                         <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground tabular-nums">
+                          {metricLabel && <span>指标 {metricLabel}</span>}
                           {item.current_value !== undefined && (
-                            <span>当前值 {item.current_value}</span>
+                            <span>
+                              当前值 {formatProblemMetricValue(item.current_value, item.metric_name)}
+                            </span>
                           )}
                           {item.threshold_value !== undefined && (
-                            <span>阈值 {item.threshold_value}</span>
-                          )}
-                          {item.last_occurred && (
                             <span>
-                              最近 {formatDateTimeMDHM(new Date(item.last_occurred))}
+                              阈值 {formatProblemMetricValue(item.threshold_value, item.metric_name)}
+                            </span>
+                          )}
+                          {hasValidLastOccurred && (
+                            <span>
+                              最近 {formatDateTimeMDHM(new Date(lastOccurredTs))}
                             </span>
                           )}
                         </div>
@@ -214,11 +275,12 @@ export function ActiveProblemsCard({
                           </button>
                         )}
                         {canUpdateAlerts &&
-                          (snoozedUntil ? (
+                          (isSnoozed ? (
                             <button
                               type="button"
+                              disabled={unsnoozingId === item.alert_id}
                               onClick={() => void handleUnsnooze(item.alert_id)}
-                              className="rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground hover:bg-accent"
+                              className="rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               取消静默
                             </button>

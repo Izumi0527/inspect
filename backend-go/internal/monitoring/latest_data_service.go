@@ -16,7 +16,8 @@ const (
 	MaxLatestDataPageSize = 100
 	MaxAdhocSeriesCount   = 6
 
-	nonTrafficInterfaceExcludeClause = `(lm.interface_name = '' OR NOT (LOWER(BTRIM(COALESCE(NULLIF(BTRIM(di.alias), ''), lm.interface_name))) ~ '^(console|aux|inloopback|loopback|lo|null|meth|m-gigabitethernet|mgmt|management)($|[0-9/\-\s])'))`
+	nonTrafficInterfaceNamePattern   = `^(console|aux|inloopback|loopback|lo|null|meth|m-gigabitethernet|mgmt|management)($|[0-9/\-\s])`
+	nonTrafficInterfaceExcludeClause = `(lm.interface_name = '' OR NOT (LOWER(BTRIM(COALESCE(NULLIF(BTRIM(di.alias), ''), lm.interface_name))) ~ '` + nonTrafficInterfaceNamePattern + `'))`
 
 	latestDataNaturalOrderClause = `CASE WHEN lm.interface_name = '' THEN 0 ELSE 1 END ASC,
 lm.device_id ASC,

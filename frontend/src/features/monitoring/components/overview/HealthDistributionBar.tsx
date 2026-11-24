@@ -7,6 +7,8 @@ import type { HealthDistributionBuckets } from '../../types/zabbix-monitoring.ty
 interface HealthDistributionBarProps {
   distribution?: HealthDistributionBuckets
   onSelectBucket?: (status: string) => void
+  activeAlertCount?: number
+  canReadAlerts?: boolean
 }
 
 interface BucketMeta {
@@ -58,6 +60,8 @@ const BUCKET_METAS: readonly BucketMeta[] = [
 export function HealthDistributionBar({
   distribution,
   onSelectBucket,
+  activeAlertCount,
+  canReadAlerts = false,
 }: HealthDistributionBarProps) {
   if (!distribution) return null
 
@@ -78,9 +82,22 @@ export function HealthDistributionBar({
             <Activity className="h-4 w-4 text-primary" />
             <span>全网健康与负载分布</span>
           </CardTitle>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            共 {total} 台纳管设备 · 点击色段下钻设备监控
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {canReadAlerts && typeof activeAlertCount === 'number' && (
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium tabular-nums ${
+                  activeAlertCount > 0
+                    ? 'bg-danger-soft text-danger-soft-foreground'
+                    : 'bg-success-soft text-success-soft-foreground'
+                }`}
+              >
+                活跃告警 {activeAlertCount}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground tabular-nums">
+              共 {total} 台纳管设备 · 点击色段下钻设备监控
+            </span>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">

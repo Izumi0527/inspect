@@ -4,8 +4,14 @@ import (
 	"context"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+)
+
+const (
+	activeAlertStatusClause      = "status IN ('open', 'active', 'acknowledged')"
+	activeAlertAliasStatusClause = "a.status IN ('open', 'active', 'acknowledged')"
 )
 
 // ThresholdPair 表示预警与严重双级阈值。
@@ -44,15 +50,17 @@ type GroupSummaryItem struct {
 
 // AggregateTrendPoint 表示全网聚合态势包络带单时刻数据点（Mean / P95 / Max + 峰值设备）。
 type AggregateTrendPoint struct {
-	Timestamp      string  `json:"timestamp"`
-	MeanCPU        float64 `json:"mean_cpu"`
-	P95CPU         float64 `json:"p95_cpu"`
-	MaxCPU         float64 `json:"max_cpu"`
-	MeanMemory     float64 `json:"mean_memory"`
-	P95Memory      float64 `json:"p95_memory"`
-	MaxMemory      float64 `json:"max_memory"`
-	PeakDeviceID   int     `json:"peak_device_id,omitempty"`
-	PeakDeviceName string  `json:"peak_device_name,omitempty"`
+	Timestamp            string  `json:"timestamp"`
+	MeanCPU              float64 `json:"mean_cpu"`
+	P95CPU               float64 `json:"p95_cpu"`
+	MaxCPU               float64 `json:"max_cpu"`
+	MeanMemory           float64 `json:"mean_memory"`
+	P95Memory            float64 `json:"p95_memory"`
+	MaxMemory            float64 `json:"max_memory"`
+	PeakDeviceID         int     `json:"peak_device_id,omitempty"`
+	PeakDeviceName       string  `json:"peak_device_name,omitempty"`
+	PeakMemoryDeviceID   int     `json:"peak_memory_device_id,omitempty"`
+	PeakMemoryDeviceName string  `json:"peak_memory_device_name,omitempty"`
 }
 
 // DashboardAnnotation 表示监控趋势图上的事件标注点（alert 类严格受 alerts:read 门控）。
@@ -114,6 +122,9 @@ func (w *MetricsWriter) ResolveGroupDeviceIDs(ctx context.Context, groupID int, 
 	if w == nil || w.db == nil || groupID <= 0 {
 		return baseDeviceIDs, nil
 	}
+	if baseDeviceIDs != nil && len(baseDeviceIDs) == 0 {
+		return []int{}, nil
+	}
 	groupIDs, err := w.resolveDescendantGroupIDs(ctx, groupID)
 	if err != nil {
 		return nil, err
@@ -129,6 +140,9 @@ func (w *MetricsWriter) ResolveGroupDeviceIDs(ctx context.Context, groupID int, 
 	}
 	if err := q.Pluck("id", &matched).Error; err != nil {
 		return nil, err
+	}
+	if matched == nil {
+		matched = []int{}
 	}
 	return matched, nil
 }
@@ -154,7 +168,8 @@ func (w *MetricsWriter) BuildDashboardV2Enrichment(
 		ActiveProblems:             []ActiveProblemItem{},
 	}
 
-	out.AggregateTrends = computeAggregateTrends(perfPoints)
+	nameToID := w.lookupDeviceIDsByNames(ctx, perfPoints, deviceIDs)
+	out.AggregateTrends = computeAggregateTrends(perfPoints, nameToID)
 	if w == nil || w.db == nil {
 		return out
 	}
@@ -194,7 +209,8 @@ func (w *MetricsWriter) loadEffectiveThresholds(ctx context.Context) ThresholdSu
 	if err := w.db.WithContext(ctx).
 		Table("alert_rules").
 		Select("metric_name, severity, threshold_value").
-		Where("COALESCE(is_active, true) = true AND metric_name IN ('cpu_usage', 'memory_usage', 'temperature')").
+		Where("COALESCE(is_active, true) = true AND COALESCE(expression_mode, 'threshold') IN ('threshold', 'hysteresis') AND metric_name IN ('cpu_usage', 'memory_usage', 'temperature')").
+		Order("id ASC").
 		Scan(&rows).Error; err != nil {
 		return res
 	}
@@ -227,6 +243,9 @@ func (w *MetricsWriter) loadEffectiveThresholds(ctx context.Context) ThresholdSu
 
 func (w *MetricsWriter) queryHealthDistribution(ctx context.Context, deviceIDs []int) HealthDistributionBuckets {
 	var buckets HealthDistributionBuckets
+	if w == nil || w.db == nil || (deviceIDs != nil && len(deviceIDs) == 0) {
+		return buckets
+	}
 	type row struct {
 		ID          int      `gorm:"column:id"`
 		Status      string   `gorm:"column:status"`
@@ -275,6 +294,9 @@ func (w *MetricsWriter) queryHealthDistribution(ctx context.Context, deviceIDs [
 }
 
 func (w *MetricsWriter) queryGroupSummaries(ctx context.Context, deviceIDs []int) []GroupSummaryItem {
+	if w == nil || w.db == nil || (deviceIDs != nil && len(deviceIDs) == 0) {
+		return []GroupSummaryItem{}
+	}
 	type row struct {
 		GroupID        int     `gorm:"column:group_id"`
 		GroupName      string  `gorm:"column:group_name"`
@@ -358,9 +380,21 @@ func (w *MetricsWriter) queryMaskedNotificationChannels(ctx context.Context) []N
 }
 
 func (w *MetricsWriter) queryDashboardAnnotations(ctx context.Context, startTime, endTime time.Time, deviceIDs []int, canReadAlerts bool) []DashboardAnnotation {
-	if !canReadAlerts {
-		return []DashboardAnnotation{}
+	out := make([]DashboardAnnotation, 0)
+	if w == nil || w.db == nil {
+		return out
 	}
+	if deviceIDs != nil && len(deviceIDs) == 0 {
+		return out
+	}
+	if canReadAlerts {
+		out = append(out, w.queryAlertAnnotations(ctx, startTime, endTime, deviceIDs)...)
+	}
+	out = append(out, w.queryMaintenanceAnnotations(ctx, startTime, endTime, deviceIDs)...)
+	return out
+}
+
+func (w *MetricsWriter) queryAlertAnnotations(ctx context.Context, startTime, endTime time.Time, deviceIDs []int) []DashboardAnnotation {
 	type alertRow struct {
 		Title      string    `gorm:"column:title"`
 		Severity   string    `gorm:"column:severity"`
@@ -378,9 +412,8 @@ func (w *MetricsWriter) queryDashboardAnnotations(ctx context.Context, startTime
 		q = q.Where("a.device_id IN ?", deviceIDs)
 	}
 	if err := q.Order("occurred_at DESC").Limit(20).Scan(&rows).Error; err != nil {
-		return []DashboardAnnotation{}
+		return nil
 	}
-
 	out := make([]DashboardAnnotation, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, DashboardAnnotation{
@@ -395,17 +428,114 @@ func (w *MetricsWriter) queryDashboardAnnotations(ctx context.Context, startTime
 	return out
 }
 
+func (w *MetricsWriter) queryMaintenanceAnnotations(ctx context.Context, startTime, endTime time.Time, deviceIDs []int) []DashboardAnnotation {
+	var maints []MonitorMaintenance
+	err := w.db.WithContext(ctx).
+		Table("monitor_maintenances").
+		Where("enabled = ? AND schedule_type = ? AND end_time >= ? AND start_time <= ?", true, MaintenanceScheduleOnce, startTime, endTime).
+		Order("start_time DESC, id DESC").
+		Limit(20).
+		Find(&maints).Error
+	if err != nil || len(maints) == 0 {
+		return nil
+	}
+
+	matchedMaintIDs := w.resolveMatchedMaintenanceIDs(ctx, maints, deviceIDs)
+	out := make([]DashboardAnnotation, 0, len(matchedMaintIDs))
+	for _, m := range maints {
+		if !matchedMaintIDs[m.ID] {
+			continue
+		}
+		out = append(out, DashboardAnnotation{
+			Timestamp: m.StartTime.UTC().Format(time.RFC3339),
+			Type:      "maintenance",
+			Title:     "计划维护：" + m.Name,
+		})
+	}
+	return out
+}
+
+func (w *MetricsWriter) resolveMatchedMaintenanceIDs(ctx context.Context, maints []MonitorMaintenance, deviceIDs []int) map[int64]bool {
+	matched := make(map[int64]bool, len(maints))
+	if len(deviceIDs) == 0 {
+		for _, m := range maints {
+			matched[m.ID] = true
+		}
+		return matched
+	}
+
+	maintIDs := make([]int64, 0, len(maints))
+	for _, m := range maints {
+		maintIDs = append(maintIDs, m.ID)
+	}
+	var targets []MonitorMaintenanceTarget
+	if err := w.db.WithContext(ctx).
+		Table("monitor_maintenance_targets").
+		Where("maintenance_id IN ?", maintIDs).
+		Find(&targets).Error; err != nil || len(targets) == 0 {
+		return matched
+	}
+
+	targetDeviceSet := make(map[int]bool, len(deviceIDs))
+	for _, did := range deviceIDs {
+		targetDeviceSet[did] = true
+	}
+	targetGroupSet := w.resolveTargetGroupSet(ctx, targets, deviceIDs)
+	for _, t := range targets {
+		if t.TargetType == MaintenanceTargetDevice && targetDeviceSet[int(t.TargetID)] {
+			matched[t.MaintenanceID] = true
+		} else if t.TargetType == MaintenanceTargetDeviceGroup && targetGroupSet[int(t.TargetID)] {
+			matched[t.MaintenanceID] = true
+		}
+	}
+	return matched
+}
+
+func (w *MetricsWriter) resolveTargetGroupSet(ctx context.Context, targets []MonitorMaintenanceTarget, deviceIDs []int) map[int]bool {
+	needGroups := false
+	for _, t := range targets {
+		if t.TargetType == MaintenanceTargetDeviceGroup {
+			needGroups = true
+			break
+		}
+	}
+	targetGroupSet := make(map[int]bool)
+	if !needGroups {
+		return targetGroupSet
+	}
+
+	type devGroupRow struct {
+		ID      int  `gorm:"column:id"`
+		GroupID *int `gorm:"column:group_id"`
+	}
+	var devs []devGroupRow
+	if err := w.db.WithContext(ctx).Table("devices").Select("id, group_id").Where("id IN ?", deviceIDs).Scan(&devs).Error; err != nil {
+		return targetGroupSet
+	}
+	parentMap := w.loadGroupParentMap(ctx)
+	for _, d := range devs {
+		for _, gid := range walkAncestorsFromMap(d.GroupID, parentMap) {
+			targetGroupSet[gid] = true
+		}
+	}
+	return targetGroupSet
+}
+
 func (w *MetricsWriter) queryActiveProblems(ctx context.Context, deviceIDs []int, limit int) []ActiveProblemItem {
+	if deviceIDs != nil && len(deviceIDs) == 0 {
+		return []ActiveProblemItem{}
+	}
 	var rows []ActiveProblemItem
 	q := w.db.WithContext(ctx).
 		Table("alerts AS a").
 		Select("a.id AS alert_id, a.device_id, d.name AS device_name, a.title, a.severity, a.status, a.metric_name, a.current_value, a.threshold_value, a.last_occurred, COALESCE(a.suppressed_by, '') AS suppressed_by, a.snoozed_until, COALESCE(a.snooze_reason, '') AS snooze_reason").
 		Joins("JOIN devices AS d ON d.id = a.device_id").
-		Where("a.status IN ('active', 'acknowledged')")
+		Where("d.is_active = ?", true).
+		Where(activeAlertAliasStatusClause)
 	if len(deviceIDs) > 0 {
 		q = q.Where("a.device_id IN ?", deviceIDs)
 	}
-	if err := q.Order("CASE WHEN LOWER(a.severity)='critical' THEN 1 WHEN LOWER(a.severity)='warning' THEN 2 ELSE 3 END ASC, a.last_occurred DESC").
+	if err := q.Order("CASE WHEN LOWER(a.severity) IN ('critical', 'fatal') THEN 1 WHEN LOWER(a.severity) = 'high' THEN 2 WHEN LOWER(a.severity) IN ('warning', 'medium') THEN 3 ELSE 4 END ASC, a.last_occurred DESC, a.id DESC").
 		Limit(limit).
 		Scan(&rows).Error; err != nil || rows == nil {
 		return []ActiveProblemItem{}
@@ -413,7 +543,109 @@ func (w *MetricsWriter) queryActiveProblems(ctx context.Context, deviceIDs []int
 	return rows
 }
 
-func computeAggregateTrends(perfPoints []DevicePerformancePoint) []AggregateTrendPoint {
+func (w *MetricsWriter) lookupDeviceIDsByNames(ctx context.Context, perfPoints []DevicePerformancePoint, deviceIDs []int) map[string]int {
+	if deviceIDs != nil && len(deviceIDs) == 0 {
+		return map[string]int{}
+	}
+	names := collectDeviceNames(perfPoints)
+	nameToID := make(map[string]int, len(names))
+	if len(names) == 0 {
+		return nameToID
+	}
+
+	if w != nil && w.db != nil {
+		w.queryActiveDeviceIDsByName(ctx, names, deviceIDs, nameToID)
+	}
+
+	allowedIDs := toDeviceIDSet(deviceIDs)
+	for _, name := range names {
+		if _, exists := nameToID[name]; exists {
+			continue
+		}
+		if id, ok := parseFallbackDeviceID(name); ok && isAllowedDeviceID(id, allowedIDs) {
+			nameToID[name] = id
+		}
+	}
+	return nameToID
+}
+
+func (w *MetricsWriter) queryActiveDeviceIDsByName(ctx context.Context, names []string, deviceIDs []int, dest map[string]int) {
+	type deviceIDRow struct {
+		ID   int    `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+	}
+	q := w.db.WithContext(ctx).
+		Table("devices").
+		Select("id, name").
+		Where("is_active = ? AND name IN ?", true, names)
+	if len(deviceIDs) > 0 {
+		q = q.Where("id IN ?", deviceIDs)
+	}
+	var rows []deviceIDRow
+	if err := q.Order("id ASC").Scan(&rows).Error; err != nil {
+		return
+	}
+	for _, r := range rows {
+		if _, exists := dest[r.Name]; !exists {
+			dest[r.Name] = r.ID
+		}
+	}
+}
+
+func toDeviceIDSet(deviceIDs []int) map[int]struct{} {
+	if len(deviceIDs) == 0 {
+		return nil
+	}
+	set := make(map[int]struct{}, len(deviceIDs))
+	for _, id := range deviceIDs {
+		set[id] = struct{}{}
+	}
+	return set
+}
+
+func isAllowedDeviceID(id int, allowed map[int]struct{}) bool {
+	if allowed == nil {
+		return true
+	}
+	_, ok := allowed[id]
+	return ok
+}
+
+func collectDeviceNames(perfPoints []DevicePerformancePoint) []string {
+	if len(perfPoints) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	for _, pt := range perfPoints {
+		for name := range pt.Devices {
+			if name != "" {
+				seen[name] = struct{}{}
+			}
+		}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func parseFallbackDeviceID(name string) (int, bool) {
+	if !strings.HasPrefix(name, "device_") {
+		return 0, false
+	}
+	id, err := strconv.Atoi(strings.TrimPrefix(name, "device_"))
+	if err != nil || id <= 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+func computeAggregateTrends(perfPoints []DevicePerformancePoint, nameToID map[string]int) []AggregateTrendPoint {
 	if len(perfPoints) == 0 {
 		return []AggregateTrendPoint{}
 	}
@@ -422,32 +654,52 @@ func computeAggregateTrends(perfPoints []DevicePerformancePoint) []AggregateTren
 		if len(pt.Devices) == 0 {
 			continue
 		}
-		cpus := make([]float64, 0, len(pt.Devices))
-		mems := make([]float64, 0, len(pt.Devices))
-		peakName := ""
-		peakCPU := -1.0
-		for name, val := range pt.Devices {
-			cpus = append(cpus, val.CPU)
-			mems = append(mems, val.Memory)
-			if val.CPU > peakCPU {
-				peakCPU = val.CPU
-				peakName = name
-			}
-		}
-		sort.Float64s(cpus)
-		sort.Float64s(mems)
-		out = append(out, AggregateTrendPoint{
-			Timestamp:      pt.Timestamp,
-			MeanCPU:        round2(meanFloat64(cpus)),
-			P95CPU:         round2(percentile95(cpus)),
-			MaxCPU:         round2(cpus[len(cpus)-1]),
-			MeanMemory:     round2(meanFloat64(mems)),
-			P95Memory:      round2(percentile95(mems)),
-			MaxMemory:      round2(mems[len(mems)-1]),
-			PeakDeviceName: peakName,
-		})
+		out = append(out, aggregateTrendPoint(pt, nameToID))
 	}
 	return out
+}
+
+func aggregateTrendPoint(pt DevicePerformancePoint, nameToID map[string]int) AggregateTrendPoint {
+	names := make([]string, 0, len(pt.Devices))
+	for name := range pt.Devices {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	cpus := make([]float64, 0, len(names))
+	mems := make([]float64, 0, len(names))
+	peakCPUName, peakMemName := "", ""
+	peakCPU, peakMem := -1.0, -1.0
+
+	for _, name := range names {
+		val := pt.Devices[name]
+		cpus = append(cpus, val.CPU)
+		mems = append(mems, val.Memory)
+		if peakCPUName == "" || val.CPU > peakCPU {
+			peakCPU = val.CPU
+			peakCPUName = name
+		}
+		if peakMemName == "" || val.Memory > peakMem {
+			peakMem = val.Memory
+			peakMemName = name
+		}
+	}
+	sort.Float64s(cpus)
+	sort.Float64s(mems)
+
+	return AggregateTrendPoint{
+		Timestamp:            pt.Timestamp,
+		MeanCPU:              round2(meanFloat64(cpus)),
+		P95CPU:               round2(percentile95(cpus)),
+		MaxCPU:               round2(cpus[len(cpus)-1]),
+		MeanMemory:           round2(meanFloat64(mems)),
+		P95Memory:            round2(percentile95(mems)),
+		MaxMemory:            round2(mems[len(mems)-1]),
+		PeakDeviceID:         nameToID[peakCPUName],
+		PeakDeviceName:       peakCPUName,
+		PeakMemoryDeviceID:   nameToID[peakMemName],
+		PeakMemoryDeviceName: peakMemName,
+	}
 }
 
 func shiftPerformancePointsBy24h(points []DevicePerformancePoint) []DevicePerformancePoint {

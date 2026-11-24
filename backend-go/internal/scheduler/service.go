@@ -676,6 +676,11 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 
 	stateStore := newCollectionStateStore(s.loadCollectionStates(ctx, collectDeviceIDs(devicesList)))
 	eligibleDevices, backoffSkipped, backoffProbeResults := s.partitionDevicesByBackoff(ctx, devicesList, stateStore, roundStart)
+	eligibleDevices, pauseMaintSkipped := s.filterPauseCollectionDevices(ctx, eligibleDevices, roundStart)
+	if len(pauseMaintSkipped) > 0 && s.logger != nil {
+		s.logger.Info("skip connectivity probe and collection for devices in pause_collection maintenance",
+			zap.Ints("maintenance_paused_ids", pauseMaintSkipped))
+	}
 	backoffSkippedSet := make(map[int]bool, len(backoffSkipped))
 	for _, d := range backoffSkipped {
 		backoffSkippedSet[d.ID] = true
@@ -742,15 +747,16 @@ func (s *Service) executeDeviceInspection(ctx context.Context, task ScheduledTas
 	// Step 2: Collect detailed SNMP metrics (temperature, bandwidth, etc.)
 	// 本轮探测 SNMP 无应答或仍在退避熔断期的设备跳过：采集器对它的十几个采集阶段会逐个等满超时，
 	// 拖住整轮采集、第 3 步告警评估和下一轮。
-	metricsSkipped := len(backoffSkipped)
+	metricsSkipped := len(backoffSkipped) + len(pauseMaintSkipped)
 	if collectMetrics && s.snmpCollector != nil && s.metricsWriter != nil {
 		collectList, skipped := snmpCollectionTargets(eligibleDevices, probeResults)
 		collectList, maintSkipped := s.filterPauseCollectionDevices(ctx, collectList, time.Now().UTC())
+		allMaintSkipped := append(append([]int(nil), pauseMaintSkipped...), maintSkipped...)
 		metricsSkipped += len(skipped) + len(maintSkipped)
-		if (metricsSkipped > 0 || len(maintSkipped) > 0) && s.logger != nil {
+		if (metricsSkipped > 0 || len(allMaintSkipped) > 0) && s.logger != nil {
 			s.logger.Info("skip SNMP metrics collection for devices in backoff, failed SNMP probe, or pause_collection maintenance",
 				zap.Ints("probe_failed_ids", skipped),
-				zap.Ints("maintenance_paused_ids", maintSkipped),
+				zap.Ints("maintenance_paused_ids", allMaintSkipped),
 				zap.Int("backoff_skipped_count", len(backoffSkipped)))
 		}
 		var collectFailed int

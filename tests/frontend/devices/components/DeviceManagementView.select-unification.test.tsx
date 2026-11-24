@@ -29,6 +29,15 @@ jest.mock('@tanstack/react-query', () => ({
 
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    prefetch: jest.fn(),
+    back: jest.fn(),
+    forward: jest.fn(),
+    refresh: jest.fn(),
+  }),
+  usePathname: () => '/devices',
 }))
 
 jest.mock('@/lib/contexts/auth-context', () => ({

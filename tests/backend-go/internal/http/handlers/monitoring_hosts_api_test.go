@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -188,6 +189,26 @@ func TestMonitoringHosts_TopNAndAdhocValidation(t *testing.T) {
 	c := e.NewContext(req, rec)
 	assertHTTPErrorCode(t, h.GetMonitoringTopN(c), http.StatusBadRequest)
 
+	// TopN 非法 device_ids 返回 400
+	for _, query := range []string{"device_ids=abc", "device_ids=1,0", "device_ids=1,-2", "device_ids=1,,2"} {
+		badReq := httptest.NewRequest(http.MethodGet, "/api/v1/monitoring/topn?metric=cpu&"+query, nil)
+		badReq.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+		badRec := httptest.NewRecorder()
+		badCtx := e.NewContext(badReq, badRec)
+		assertHTTPErrorCode(t, h.GetMonitoringTopN(badCtx), http.StatusBadRequest)
+	}
+
+	// TopN device_ids 超过上限返回 400
+	overLimitParts := make([]string, monitoring.MaxTopNDeviceIDs+1)
+	for i := range overLimitParts {
+		overLimitParts[i] = fmt.Sprintf("%d", i+1)
+	}
+	overReq := httptest.NewRequest(http.MethodGet, "/api/v1/monitoring/topn?metric=cpu&device_ids="+strings.Join(overLimitParts, ","), nil)
+	overReq.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	overRec := httptest.NewRecorder()
+	overCtx := e.NewContext(overReq, overRec)
+	assertHTTPErrorCode(t, h.GetMonitoringTopN(overCtx), http.StatusBadRequest)
+
 	// Adhoc 超过 6 条序列返回 400
 	body := `{"series":[
 		{"device_id":1,"metric_name":"cpu_usage"},
@@ -204,6 +225,47 @@ func TestMonitoringHosts_TopNAndAdhocValidation(t *testing.T) {
 	rec2 := httptest.NewRecorder()
 	c2 := e.NewContext(req2, rec2)
 	assertHTTPErrorCode(t, h.GetMonitoringAdhocGraphs(c2), http.StatusBadRequest)
+}
+
+func TestMonitoringHosts_TopNWithDeviceIDsSuccess(t *testing.T) {
+	db, mock, cleanup := newMonitoringHandlerGormDBWithSQLMock(t)
+	defer cleanup()
+
+	authService, token := newAuthServiceWithPermissions(t, []string{"monitoring:read"})
+	writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
+	h := handlers.MonitoringHandler{Writer: writer, Auth: authService}
+
+	mock.ExpectQuery(`(?is)SELECT d\.id AS device_id, d\.name AS device_name, d\.ip_address, d\.status, di\.name AS interface_name, di\.alias AS interface_alias, GREATEST\(COALESCE\(di\.utilization_in, 0\), COALESCE\(di\.utilization_out, 0\)\) AS val FROM device_interfaces AS di JOIN devices AS d ON d\.id = di\.device_id WHERE .* AND d\.id IN \(\$3,\$4\) ORDER BY val DESC NULLS LAST, d\.id ASC, di\.id ASC LIMIT \$5`).
+		WithArgs(true, true, 10, 20, 5).
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "device_name", "ip_address", "status", "interface_name", "interface_alias", "val"}).
+			AddRow(10, "sw-10", "10.0.0.10", "online", "if6", "GigabitEthernet0/0/1", 0.000196))
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/monitoring/topn?metric=if_util&limit=5&device_ids=10,20,10", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+token)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.GetMonitoringTopN(c); err != nil {
+		e.HTTPErrorHandler(err, c)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp monitoring.TopNResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal err=%v", err)
+	}
+	if resp.Metric != "if_util" || len(resp.Items) != 1 ||
+		resp.Items[0].InterfaceDisplayName != "GigabitEthernet0/0/1" ||
+		resp.Items[0].Value != 0.0002 ||
+		resp.Items[0].DisplayValue != "< 0.01%" {
+		t.Fatalf("unexpected topn response: %+v", resp)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sqlmock expectations not met: %v", err)
+	}
 }
 
 func TestMonitoringHosts_DashboardV2_MasksNotificationsAndGatesAlertAnnotations(t *testing.T) {

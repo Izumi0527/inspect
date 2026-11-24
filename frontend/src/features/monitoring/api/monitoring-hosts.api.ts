@@ -125,15 +125,19 @@ export async function batchPinMonitoringDevices(
   return unwrapData<BatchPinActionResponse>(payload)
 }
 
+export const MONITORING_TOPN_QUERY_KEY = 'monitoring-topn'
+
 export async function getMonitoringTopN(
   metric: TopNMetric,
   limit = 5,
-  groupId?: number | null
+  groupId?: number | null,
+  deviceIds?: number[]
 ): Promise<TopNResponse> {
   const params: Record<string, string | number | undefined> = {
     metric,
     limit,
     group_id: groupId && groupId > 0 ? groupId : undefined,
+    device_ids: deviceIds && deviceIds.length > 0 ? deviceIds.join(',') : undefined,
   }
   const payload = await api.get<unknown>('/monitoring/topn', { params })
   return unwrapData<TopNResponse>(payload)

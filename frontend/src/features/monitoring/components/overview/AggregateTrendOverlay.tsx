@@ -11,6 +11,7 @@ interface AggregateTrendTooltipProps {
   tooltipBorder: string
   showCpu: boolean
   showMemory: boolean
+  canDrillDown?: boolean
   formatTimeLabel: (date: Date) => string
 }
 
@@ -22,8 +23,15 @@ export function AggregateTrendTooltip({
   tooltipBorder,
   showCpu,
   showMemory,
+  canDrillDown = false,
   formatTimeLabel,
 }: AggregateTrendTooltipProps) {
+  const showCpuPeak = showCpu && Boolean(tooltipData.peakDeviceName)
+  const showMemoryPeak =
+    showMemory &&
+    Boolean(tooltipData.peakMemoryDeviceName) &&
+    (tooltipData.peakMemoryDeviceName !== tooltipData.peakDeviceName || !showCpu)
+
   return (
     <TooltipWithBounds
       key={tooltipData.date.getTime()}
@@ -55,27 +63,58 @@ export function AggregateTrendTooltip({
           </div>
         </div>
       )}
-      {tooltipData.peakDeviceName && (
-        <div className="mt-1.5 border-t border-border pt-1 text-xs text-primary">
-          峰值设备：{tooltipData.peakDeviceName}
+      {(showCpuPeak || showMemoryPeak) && (
+        <div className="mt-1.5 space-y-0.5 border-t border-border pt-1 text-xs text-primary">
+          {showCpuPeak && <div>CPU 峰值设备：{tooltipData.peakDeviceName}</div>}
+          {showMemoryPeak && <div>内存峰值设备：{tooltipData.peakMemoryDeviceName}</div>}
+          {canDrillDown && (
+            <div className="text-[11px] text-muted-foreground">点击查看峰值设备详情</div>
+          )}
         </div>
       )}
     </TooltipWithBounds>
   )
 }
 
-export function AggregateTrendLegend({ compareYesterday }: { compareYesterday: boolean }) {
+interface AggregateTrendLegendProps {
+  compareYesterday: boolean
+  showCpu?: boolean
+  showMemory?: boolean
+}
+
+export function AggregateTrendLegend({
+  compareYesterday,
+  showCpu = true,
+  showMemory = true,
+}: AggregateTrendLegendProps) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
-      <span className="inline-flex items-center gap-1.5">
-        <span className="h-0.5 w-4 bg-brand" /> 均值 (Mean)
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="h-0.5 w-4 border-t-2 border-dashed border-brand" /> P95 分位
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="h-2.5 w-4 rounded-sm bg-brand/20" /> Max 包络带
-      </span>
+    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+      {showCpu && (
+        <>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-0.5 w-4 bg-brand" /> CPU 均值
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-0.5 w-4 border-t-2 border-dashed border-brand" /> CPU P95 分位
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-4 rounded-sm bg-brand/20" /> CPU Max 包络带
+          </span>
+        </>
+      )}
+      {showMemory && (
+        <>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-0.5 w-4 bg-info" /> 内存 均值
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-0.5 w-4 border-t-2 border-dashed border-info" /> 内存 P95 分位
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2.5 w-4 rounded-sm bg-info/15" /> 内存 Max 包络带
+          </span>
+        </>
+      )}
       {compareYesterday && (
         <span className="inline-flex items-center gap-1.5">
           <span className="h-0.5 w-4 border-t-2 border-dashed border-ink-2" /> 昨日同期基线

@@ -67,8 +67,16 @@ func (h MonitoringHandler) CreateMonitoringTrigger(c echo.Context) error {
 	if err := applyTriggerFieldsOnCreate(&rule, payload); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+	if rule.ExpressionMode == alerts.ExpressionModeHysteresis {
+		if err := validateHysteresisConfig(rule.Operator, rule.ThresholdValue, rule.RecoveryOperator, rule.RecoveryThreshold); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+	}
 
-	if rule.DependencyMode == alerts.DependencyModeManualDevice && rule.DependsOnDeviceID != nil {
+	if rule.DependencyMode == alerts.DependencyModeManualDevice {
+		if rule.DependsOnDeviceID == nil || *rule.DependsOnDeviceID <= 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "manual_device dependency_mode requires depends_on_device_id > 0")
+		}
 		targetDevs := normalizeIntSlice(payload["specific_devices"])
 		if err := alerts.ValidateDependencyDAG(c.Request().Context(), h.Alerts.DB(), 0, targetDevs, *rule.DependsOnDeviceID); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -123,15 +131,55 @@ func (h MonitoringHandler) UpdateMonitoringTrigger(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
+	exprMode := strings.ToLower(strings.TrimSpace(existing.ExpressionMode))
+	if exprMode == "" {
+		exprMode = alerts.ExpressionModeThreshold
+	}
+	if v, ok := updates["expression_mode"].(string); ok {
+		exprMode = v
+	}
+	if exprMode == alerts.ExpressionModeHysteresis {
+		effOp := existing.Operator
+		if v, ok := updates["operator"].(string); ok {
+			effOp = v
+		}
+		effThresh := existing.ThresholdValue
+		if v, ok := updates["threshold_value"].(float64); ok {
+			effThresh = v
+		}
+		effRecOp := existing.RecoveryOperator
+		if v, ok := updates["recovery_operator"].(string); ok {
+			effRecOp = v
+		}
+		effRecThresh := existing.RecoveryThreshold
+		if raw, has := updates["recovery_threshold"]; has {
+			if raw == nil {
+				effRecThresh = nil
+			} else if v, ok := raw.(*float64); ok {
+				effRecThresh = v
+			}
+		}
+		if err := validateHysteresisConfig(effOp, effThresh, effRecOp, effRecThresh); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+	}
+
 	depMode := existing.DependencyMode
 	if v, ok := updates["dependency_mode"].(string); ok {
 		depMode = v
 	}
 	depDevID := existing.DependsOnDeviceID
-	if v, ok := updates["depends_on_device_id"].(*int); ok {
-		depDevID = v
+	if raw, has := updates["depends_on_device_id"]; has {
+		if raw == nil {
+			depDevID = nil
+		} else if v, ok := raw.(*int); ok {
+			depDevID = v
+		}
 	}
-	if depMode == alerts.DependencyModeManualDevice && depDevID != nil && *depDevID > 0 {
+	if depMode == alerts.DependencyModeManualDevice {
+		if depDevID == nil || *depDevID <= 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, "manual_device dependency_mode requires depends_on_device_id > 0")
+		}
 		var targetDevs []int
 		if _, has := payload["specific_devices"]; has {
 			targetDevs = normalizeIntSlice(payload["specific_devices"])
@@ -270,6 +318,33 @@ func validateEntityFilterRegex(raw string) (string, error) {
 		}
 	}
 	return trimmed, nil
+}
+
+func validateHysteresisConfig(operator string, threshold float64, recOp string, recThreshold *float64) error {
+	if recThreshold == nil {
+		return errors.New("hysteresis mode requires recovery_threshold")
+	}
+	op := strings.TrimSpace(operator)
+	rOp := strings.TrimSpace(recOp)
+	switch op {
+	case ">", ">=":
+		if rOp != "<" && rOp != "<=" {
+			return errors.New("hysteresis mode with > or >= requires recovery_operator < or <=")
+		}
+		if !(*recThreshold < threshold) {
+			return errors.New("hysteresis mode requires recovery_threshold < threshold_value")
+		}
+	case "<", "<=":
+		if rOp != ">" && rOp != ">=" {
+			return errors.New("hysteresis mode with < or <= requires recovery_operator > or >=")
+		}
+		if !(*recThreshold > threshold) {
+			return errors.New("hysteresis mode requires recovery_threshold > threshold_value")
+		}
+	default:
+		return errors.New("hysteresis mode requires operator >, >=, <, or <=")
+	}
+	return nil
 }
 
 func applyTriggerFieldsOnCreate(rule *alerts.AlertRule, payload map[string]interface{}) error {

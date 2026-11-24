@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -226,5 +227,45 @@ func TestMaintenanceAPI_ValidationAndRBAC(t *testing.T) {
 	httpErr2, ok := err2.(*echo.HTTPError)
 	if !ok || httpErr2.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %v", err2)
+	}
+
+	// 3. 描述超过 256 字符返回 400
+	longDesc := strings.Repeat("维", 257)
+	longDescBody, _ := json.Marshal(map[string]interface{}{
+		"name":          "long-desc",
+		"description":   longDesc,
+		"mode":          "collect_silence",
+		"schedule_type": "once",
+		"timezone":      "Asia/Shanghai",
+		"start_time":    time.Now().UTC().Format(time.RFC3339),
+		"end_time":      time.Now().UTC().Add(time.Hour).Format(time.RFC3339),
+		"device_ids":    []int64{1},
+	})
+	req3 := httptest.NewRequest(http.MethodPost, "/api/v1/monitoring/maintenances", bytes.NewReader(longDescBody))
+	req3.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req3.Header.Set(echo.HeaderAuthorization, "Bearer test")
+	err3 := hAllowed.CreateMonitoringMaintenance(e.NewContext(req3, httptest.NewRecorder()))
+	httpErr3, ok := err3.(*echo.HTTPError)
+	if !ok || httpErr3.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for description > 256 runes, got %v", err3)
+	}
+
+	// 4. 空目标列表返回 400
+	emptyTargetsBody, _ := json.Marshal(map[string]interface{}{
+		"name":          "no-targets",
+		"description":   "ok",
+		"mode":          "collect_silence",
+		"schedule_type": "once",
+		"timezone":      "Asia/Shanghai",
+		"start_time":    time.Now().UTC().Format(time.RFC3339),
+		"end_time":      time.Now().UTC().Add(time.Hour).Format(time.RFC3339),
+	})
+	req4 := httptest.NewRequest(http.MethodPost, "/api/v1/monitoring/maintenances", bytes.NewReader(emptyTargetsBody))
+	req4.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req4.Header.Set(echo.HeaderAuthorization, "Bearer test")
+	err4 := hAllowed.CreateMonitoringMaintenance(e.NewContext(req4, httptest.NewRecorder()))
+	httpErr4, ok := err4.(*echo.HTTPError)
+	if !ok || httpErr4.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty targets, got %v", err4)
 	}
 }

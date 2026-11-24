@@ -73,6 +73,10 @@ function normalizeAggregateTrends(raw: unknown): AggregateTrendPoint[] | undefin
     max_memory: toNum(item.max_memory, 0),
     peak_device_id: typeof item.peak_device_id === 'number' ? item.peak_device_id : undefined,
     peak_device_name: typeof item.peak_device_name === 'string' ? item.peak_device_name : undefined,
+    peak_memory_device_id:
+      typeof item.peak_memory_device_id === 'number' ? item.peak_memory_device_id : undefined,
+    peak_memory_device_name:
+      typeof item.peak_memory_device_name === 'string' ? item.peak_memory_device_name : undefined,
   }))
 }
 
@@ -112,13 +116,21 @@ function normalizeActiveProblems(raw: unknown): ActiveProblemItem[] | undefined 
     device_name: toStr(item.device_name),
     title: toStr(item.title),
     severity: toStr(item.severity, 'warning'),
-    status: toStr(item.status, 'active'),
+    status: toStr(item.status, 'open'),
     metric_name: typeof item.metric_name === 'string' ? item.metric_name : undefined,
     current_value: typeof item.current_value === 'number' ? item.current_value : undefined,
     threshold_value:
       typeof item.threshold_value === 'number' ? item.threshold_value : undefined,
     last_occurred: typeof item.last_occurred === 'string' ? item.last_occurred : undefined,
     snoozed_until: typeof item.snoozed_until === 'string' ? item.snoozed_until : undefined,
+    suppressed_by:
+      typeof item.suppressed_by === 'string' && item.suppressed_by.trim()
+        ? item.suppressed_by.trim()
+        : undefined,
+    snooze_reason:
+      typeof item.snooze_reason === 'string' && item.snooze_reason.trim()
+        ? item.snooze_reason.trim()
+        : undefined,
   }))
 }
 

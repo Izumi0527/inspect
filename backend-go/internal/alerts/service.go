@@ -536,6 +536,9 @@ func (s *Service) SnoozeAlert(ctx context.Context, alertID int, operator Operato
 		if err := tx.Table("alerts").Where("id = ?", alertID).Take(&existing).Error; err != nil {
 			return err
 		}
+		if existing.Status != alertStatusOpen && existing.Status != alertStatusAcknowledged {
+			return ErrInvalidAlertStatus
+		}
 
 		now := time.Now().UTC()
 		until := now.Add(time.Duration(durationHours) * time.Hour)
@@ -578,6 +581,9 @@ func (s *Service) UnsnoozeAlert(ctx context.Context, alertID int, operator Opera
 		var existing Alert
 		if err := tx.Table("alerts").Where("id = ?", alertID).Take(&existing).Error; err != nil {
 			return err
+		}
+		if existing.Status != alertStatusOpen && existing.Status != alertStatusAcknowledged {
+			return ErrInvalidAlertStatus
 		}
 
 		now := time.Now().UTC()
@@ -664,18 +670,22 @@ func (s *Service) DeleteRule(ctx context.Context, ruleID int) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("database not initialized")
 	}
-	result := s.db.WithContext(ctx).Table("alert_rules").Where("id = ?", ruleID).
-		Updates(map[string]interface{}{
-			"is_active":  false,
-			"updated_at": time.Now().UTC(),
-		})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table("trigger_eval_states").Where("rule_id = ?", ruleID).Delete(&TriggerEvalState{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Table("alerts").Where("rule_id = ?", ruleID).Update("rule_id", nil).Error; err != nil {
+			return err
+		}
+		result := tx.Table("alert_rules").Where("id = ?", ruleID).Delete(&AlertRule{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
 }
 
 func NormalizeSeverity(raw string) string {

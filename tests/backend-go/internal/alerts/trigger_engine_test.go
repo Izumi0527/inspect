@@ -72,17 +72,19 @@ func TestTriggerEngine_DurationWindowAndRestartRecovery(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "category", "metric_name", "operator", "threshold_value", "duration", "severity", "is_active", "expression_mode"}).
 			AddRow(1, "CPU持续过高", "performance", "cpu_usage", ">", 80.0, 900, "warning", true, "threshold"))
 
-	mock.ExpectQuery(`(?is)SELECT id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "device_type", "ip_address", "topology_role", "status"}).
-			AddRow(10, "sw-1", "switch", "10.0.0.10", "access", "online"))
+	mock.ExpectQuery(`(?is)SELECT id, group_id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "group_id", "name", "device_type", "ip_address", "topology_role", "status"}).
+			AddRow(10, nil, "sw-1", "switch", "10.0.0.10", "access", "online"))
 
 	mock.ExpectQuery(`(?is)FROM device_metrics`).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}).
 			AddRow(10, "cpu_usage", 88.0))
 	mock.ExpectQuery(`(?is)SELECT device_id, metric_name, metric_value FROM "device_latest_metrics"`).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}))
-	mock.ExpectQuery(`(?is)SELECT id, cpu_usage, memory_usage, temperature FROM "devices"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "cpu_usage", "memory_usage", "temperature"}))
+	mock.ExpectQuery(`(?is)SELECT device_id, metric_name, MAX\(metric_value\) AS metric_value FROM "device_latest_metrics"`).
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}))
+	mock.ExpectQuery(`(?is)SELECT id, cpu_usage, memory_usage, temperature, response_time FROM "devices"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "cpu_usage", "memory_usage", "temperature", "response_time"}))
 
 	// evaluateDeviceConnectivity
 	mock.ExpectQuery(`(?is)SELECT id, name, ip_address, status FROM "devices"`).
@@ -112,16 +114,18 @@ func TestTriggerEngine_DurationWindowAndRestartRecovery(t *testing.T) {
 		WithArgs(true).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "category", "metric_name", "operator", "threshold_value", "duration", "severity", "is_active", "expression_mode"}).
 			AddRow(1, "CPU持续过高", "performance", "cpu_usage", ">", 80.0, 900, "warning", true, "threshold"))
-	mock.ExpectQuery(`(?is)SELECT id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "device_type", "ip_address", "topology_role", "status"}).
-			AddRow(10, "sw-1", "switch", "10.0.0.10", "access", "online"))
+	mock.ExpectQuery(`(?is)SELECT id, group_id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "group_id", "name", "device_type", "ip_address", "topology_role", "status"}).
+			AddRow(10, nil, "sw-1", "switch", "10.0.0.10", "access", "online"))
 	mock.ExpectQuery(`(?is)FROM device_metrics`).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}).
 			AddRow(10, "cpu_usage", 89.0))
 	mock.ExpectQuery(`(?is)SELECT device_id, metric_name, metric_value FROM "device_latest_metrics"`).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}))
-	mock.ExpectQuery(`(?is)SELECT id, cpu_usage, memory_usage, temperature FROM "devices"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "cpu_usage", "memory_usage", "temperature"}))
+	mock.ExpectQuery(`(?is)SELECT device_id, metric_name, MAX\(metric_value\) AS metric_value FROM "device_latest_metrics"`).
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}))
+	mock.ExpectQuery(`(?is)SELECT id, cpu_usage, memory_usage, temperature, response_time FROM "devices"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "cpu_usage", "memory_usage", "temperature", "response_time"}))
 
 	mock.ExpectQuery(`(?is)SELECT id, name, ip_address, status FROM "devices"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "status"}).AddRow(10, "sw-1", "10.0.0.10", "online"))
@@ -168,16 +172,18 @@ func TestTriggerEngine_HysteresisDeadbandAndRecovery(t *testing.T) {
 	mock.ExpectQuery(`(?is)SELECT \* FROM "alert_rules"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "category", "metric_name", "operator", "threshold_value", "duration", "severity", "auto_resolve", "is_active", "expression_mode", "recovery_operator", "recovery_threshold"}).
 			AddRow(2, "温度滞后规则", "hardware", "temperature", ">", 85.0, 0, "critical", autoResolve, true, "hysteresis", "<", recThresh))
-	mock.ExpectQuery(`(?is)SELECT id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "device_type", "ip_address", "topology_role", "status"}).
-			AddRow(10, "sw-1", "switch", "10.0.0.10", "access", "online"))
+	mock.ExpectQuery(`(?is)SELECT id, group_id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "group_id", "name", "device_type", "ip_address", "topology_role", "status"}).
+			AddRow(10, nil, "sw-1", "switch", "10.0.0.10", "access", "online"))
 	mock.ExpectQuery(`(?is)FROM device_metrics`).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}).
 			AddRow(10, "temperature", 80.0))
 	mock.ExpectQuery(`(?is)SELECT device_id, metric_name, metric_value FROM "device_latest_metrics"`).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}))
-	mock.ExpectQuery(`(?is)SELECT id, cpu_usage, memory_usage, temperature FROM "devices"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "cpu_usage", "memory_usage", "temperature"}))
+	mock.ExpectQuery(`(?is)SELECT device_id, metric_name, MAX\(metric_value\) AS metric_value FROM "device_latest_metrics"`).
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}))
+	mock.ExpectQuery(`(?is)SELECT id, cpu_usage, memory_usage, temperature, response_time FROM "devices"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "cpu_usage", "memory_usage", "temperature", "response_time"}))
 	mock.ExpectQuery(`(?is)SELECT id, name, ip_address, status FROM "devices"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "status"}).AddRow(10, "sw-1", "10.0.0.10", "online"))
 	mock.ExpectQuery(`(?is)SELECT \* FROM "alerts" WHERE device_id = \$1 AND category = \$2 AND status = \$3`).
@@ -200,16 +206,18 @@ func TestTriggerEngine_HysteresisDeadbandAndRecovery(t *testing.T) {
 	mock.ExpectQuery(`(?is)SELECT \* FROM "alert_rules"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "category", "metric_name", "operator", "threshold_value", "duration", "severity", "auto_resolve", "is_active", "expression_mode", "recovery_operator", "recovery_threshold"}).
 			AddRow(2, "温度滞后规则", "hardware", "temperature", ">", 85.0, 0, "critical", autoResolve, true, "hysteresis", "<", recThresh))
-	mock.ExpectQuery(`(?is)SELECT id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "device_type", "ip_address", "topology_role", "status"}).
-			AddRow(10, "sw-1", "switch", "10.0.0.10", "access", "online"))
+	mock.ExpectQuery(`(?is)SELECT id, group_id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "group_id", "name", "device_type", "ip_address", "topology_role", "status"}).
+			AddRow(10, nil, "sw-1", "switch", "10.0.0.10", "access", "online"))
 	mock.ExpectQuery(`(?is)FROM device_metrics`).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}).
 			AddRow(10, "temperature", 72.0))
 	mock.ExpectQuery(`(?is)SELECT device_id, metric_name, metric_value FROM "device_latest_metrics"`).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}))
-	mock.ExpectQuery(`(?is)SELECT id, cpu_usage, memory_usage, temperature FROM "devices"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "cpu_usage", "memory_usage", "temperature"}))
+	mock.ExpectQuery(`(?is)SELECT device_id, metric_name, MAX\(metric_value\) AS metric_value FROM "device_latest_metrics"`).
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}))
+	mock.ExpectQuery(`(?is)SELECT id, cpu_usage, memory_usage, temperature, response_time FROM "devices"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "cpu_usage", "memory_usage", "temperature", "response_time"}))
 	mock.ExpectQuery(`(?is)SELECT id, name, ip_address, status FROM "devices"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "status"}).AddRow(10, "sw-1", "10.0.0.10", "online"))
 	mock.ExpectQuery(`(?is)SELECT \* FROM "alerts" WHERE device_id = \$1 AND category = \$2 AND status = \$3`).
@@ -253,15 +261,17 @@ func TestTriggerEngine_NoDataUptimeDropIfFlapAndMaintenanceSilence(t *testing.T)
 			AddRow(11, "设备异常重启", "system", "uptime", "<", 60.0, 0, "critical", true, "uptime_drop", 0).
 			AddRow(12, "端口频繁闪断", "interface", "flap_count_1h", ">=", 4.0, 0, "warning", true, "if_flap", 0))
 
-	mock.ExpectQuery(`(?is)SELECT id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "device_type", "ip_address", "topology_role", "status"}).
-			AddRow(10, "core-1", "switch", "10.0.0.1", "core", "online"))
+	mock.ExpectQuery(`(?is)SELECT id, group_id, name, device_type, ip_address, COALESCE\(topology_role, 'access'\) AS topology_role, status FROM "devices"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "group_id", "name", "device_type", "ip_address", "topology_role", "status"}).
+			AddRow(10, nil, "core-1", "switch", "10.0.0.1", "core", "online"))
 	mock.ExpectQuery(`(?is)FROM device_metrics`).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}))
 	mock.ExpectQuery(`(?is)SELECT device_id, metric_name, metric_value FROM "device_latest_metrics"`).
 		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}))
-	mock.ExpectQuery(`(?is)SELECT id, cpu_usage, memory_usage, temperature FROM "devices"`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "cpu_usage", "memory_usage", "temperature"}))
+	mock.ExpectQuery(`(?is)SELECT device_id, metric_name, MAX\(metric_value\) AS metric_value FROM "device_latest_metrics"`).
+		WillReturnRows(sqlmock.NewRows([]string{"device_id", "metric_name", "metric_value"}))
+	mock.ExpectQuery(`(?is)SELECT id, cpu_usage, memory_usage, temperature, response_time FROM "devices"`).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "cpu_usage", "memory_usage", "temperature", "response_time"}))
 	mock.ExpectQuery(`(?is)SELECT id, name, ip_address, status FROM "devices"`).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "ip_address", "status"}).AddRow(10, "core-1", "10.0.0.1", "online"))
 	mock.ExpectQuery(`(?is)SELECT \* FROM "alerts" WHERE device_id = \$1 AND category = \$2 AND status = \$3`).
@@ -443,6 +453,43 @@ func TestTriggersAPI_DAGCycleReturns400AndSnoozeWhitelistAndIsolation(t *testing
 	if recOK.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", recOK.Code, recOK.Body.String())
 	}
+
+	// 5. Snooze / Unsnooze 对 resolved / closed 状态告警返回 HTTP 400
+	for _, status := range []string{"resolved", "closed"} {
+		mock.ExpectBegin()
+		mock.ExpectQuery(`(?is)SELECT \* FROM "alerts" WHERE id = \$1`).
+			WithArgs(202, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "device_id", "status"}).AddRow(202, 10, status))
+		mock.ExpectRollback()
+
+		reqSnoozeInvalid := httptest.NewRequest(http.MethodPost, "/api/v1/alerts/202/snooze", bytes.NewReader(snoozeBody))
+		reqSnoozeInvalid.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		reqSnoozeInvalid.Header.Set(echo.HeaderAuthorization, "Bearer test")
+		cSnoozeInvalid := e.NewContext(reqSnoozeInvalid, httptest.NewRecorder())
+		cSnoozeInvalid.SetParamNames("alert_id")
+		cSnoozeInvalid.SetParamValues("202")
+		errSnoozeInvalid := ahAllowed.SnoozeAlert(cSnoozeInvalid)
+		if he, ok := errSnoozeInvalid.(*echo.HTTPError); !ok || he.Code != http.StatusBadRequest {
+			t.Fatalf("SnoozeAlert on status=%s expected 400, got %v", status, errSnoozeInvalid)
+		}
+
+		mock.ExpectBegin()
+		mock.ExpectQuery(`(?is)SELECT \* FROM "alerts" WHERE id = \$1`).
+			WithArgs(202, 1).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "device_id", "status"}).AddRow(202, 10, status))
+		mock.ExpectRollback()
+
+		reqUnsnoozeInvalid := httptest.NewRequest(http.MethodDelete, "/api/v1/alerts/202/snooze", nil)
+		reqUnsnoozeInvalid.Header.Set(echo.HeaderAuthorization, "Bearer test")
+		cUnsnoozeInvalid := e.NewContext(reqUnsnoozeInvalid, httptest.NewRecorder())
+		cUnsnoozeInvalid.SetParamNames("alert_id")
+		cUnsnoozeInvalid.SetParamValues("202")
+		errUnsnoozeInvalid := ahAllowed.UnsnoozeAlert(cUnsnoozeInvalid)
+		if he, ok := errUnsnoozeInvalid.(*echo.HTTPError); !ok || he.Code != http.StatusBadRequest {
+			t.Fatalf("UnsnoozeAlert on status=%s expected 400, got %v", status, errUnsnoozeInvalid)
+		}
+	}
+
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sqlmock expectations not met: %v", err)
 	}

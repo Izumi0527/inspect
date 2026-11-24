@@ -5,6 +5,15 @@ import { useQuery } from '@tanstack/react-query'
 import { CalendarClock, Edit3, Plus, Trash2, Wrench } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Badge, Button, Card, CardContent } from '@/components/atoms'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Switch } from '@/components/ui/switch'
 import { DEVICE_GROUPS_QUERY_KEY, getDeviceGroups } from '@/features/devices/api/devices.api'
 import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
@@ -34,6 +43,7 @@ const STATUS_BADGE: Record<
   active: { label: '进行中', variant: 'info' },
   pending: { label: '待生效', variant: 'warning' },
   ended: { label: '已结束', variant: 'neutral' },
+  disabled: { label: '已停用', variant: 'neutral' },
 }
 
 export function MaintenanceTab() {
@@ -53,6 +63,9 @@ export function MaintenanceTab() {
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [modalOpen, setModalOpen] = useState(false)
   const [editingWindow, setEditingWindow] = useState<MaintenanceView | null>(null)
+  const [togglingId, setTogglingId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [confirmDeleteWindow, setConfirmDeleteWindow] = useState<MaintenanceView | null>(null)
 
   const classified = useMemo(
     () =>
@@ -69,6 +82,7 @@ export function MaintenanceTab() {
       active: classified.filter((c) => c.status === 'active').length,
       pending: classified.filter((c) => c.status === 'pending').length,
       ended: classified.filter((c) => c.status === 'ended').length,
+      disabled: classified.filter((c) => c.status === 'disabled').length,
     }),
     [classified]
   )
@@ -94,12 +108,51 @@ export function MaintenanceTab() {
     }
   }
 
-  const handleDelete = async (win: MaintenanceView) => {
+  const handleToggle = async (win: MaintenanceView) => {
+    if (togglingId === win.id) return
+    setTogglingId(win.id)
+    try {
+      const groupIds = (win.targets ?? [])
+        .filter((t) => t.target_type === 'device_group')
+        .map((t) => t.target_id)
+      const deviceIds = (win.targets ?? [])
+        .filter((t) => t.target_type === 'device')
+        .map((t) => t.target_id)
+      const input: MaintenanceInput = {
+        name: win.name,
+        description: win.description ?? '',
+        mode: win.mode,
+        schedule_type: win.schedule_type,
+        timezone: win.timezone || 'Asia/Shanghai',
+        enabled: !win.enabled,
+        group_ids: groupIds,
+        device_ids: deviceIds,
+        ...(win.schedule_type === 'once'
+          ? { start_time: win.start_time, end_time: win.end_time }
+          : { recurrence: win.recurrence }),
+      }
+      await updateMaint.mutateAsync({ id: win.id, input })
+      toast.success(`已${win.enabled ? '停用' : '启用'}维护窗口「${win.name}」`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '切换维护窗口状态失败')
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDeleteWindow) return
+    const win = confirmDeleteWindow
+    if (deletingId === win.id) return
+    setDeletingId(win.id)
     try {
       await deleteMaint.mutateAsync(win.id)
       toast.success(`已删除维护窗口「${win.name}」`)
+      setConfirmDeleteWindow(null)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '删除维护窗口失败')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -123,7 +176,7 @@ export function MaintenanceTab() {
               <Wrench className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold text-foreground">计划维护（割接免打扰）</h2>
               <div className="flex items-center gap-1 rounded-lg border border-border bg-surface-2/70 p-1">
-                {(['all', 'active', 'pending', 'ended'] as const).map((key) => {
+                {(['all', 'active', 'pending', 'ended', 'disabled'] as const).map((key) => {
                   const label =
                     key === 'all'
                       ? '全部'
@@ -131,7 +184,9 @@ export function MaintenanceTab() {
                         ? '进行中'
                         : key === 'pending'
                           ? '待生效'
-                          : '已结束'
+                          : key === 'ended'
+                            ? '已结束'
+                            : '已停用'
                   return (
                     <button
                       key={key}
@@ -200,6 +255,10 @@ export function MaintenanceTab() {
                         </Badge>
                       </div>
 
+                      {win.description?.trim() && (
+                        <p className="text-xs text-muted-foreground">{win.description}</p>
+                      )}
+
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground tabular-nums">
                         <CalendarClock className="h-3.5 w-3.5 shrink-0" />
                         <span>{formatMaintenanceWindowSchedule(win)}</span>
@@ -217,7 +276,13 @@ export function MaintenanceTab() {
                     </div>
 
                     {canControl && (
-                      <div className="flex shrink-0 items-center gap-1.5">
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Switch
+                          aria-label={`启停维护窗口 ${win.name}`}
+                          disabled={togglingId === win.id}
+                          checked={win.enabled}
+                          onCheckedChange={() => void handleToggle(win)}
+                        />
                         <Button
                           type="button"
                           size="sm"
@@ -235,7 +300,8 @@ export function MaintenanceTab() {
                           size="icon"
                           variant="ghost"
                           aria-label={`删除维护窗口 ${win.name}`}
-                          onClick={() => void handleDelete(win)}
+                          disabled={deletingId === win.id}
+                          onClick={() => setConfirmDeleteWindow(win)}
                           className="h-8 w-8 text-muted-foreground hover:text-danger"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -249,6 +315,43 @@ export function MaintenanceTab() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={confirmDeleteWindow !== null}
+        onOpenChange={(open) => {
+          if (!open && deletingId === null) setConfirmDeleteWindow(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除计划维护窗口</DialogTitle>
+            <DialogDescription>
+              {confirmDeleteWindow
+                ? `确定删除计划维护窗口「${confirmDeleteWindow.name}」？删除后关联设备将立即恢复正常告警与采集。`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deletingId !== null}
+              onClick={() => setConfirmDeleteWindow(null)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              loading={deletingId !== null}
+              disabled={deletingId !== null}
+              onClick={() => void handleConfirmDelete()}
+            >
+              确认删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <MaintenanceModal
         open={modalOpen}

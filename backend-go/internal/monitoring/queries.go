@@ -242,6 +242,9 @@ func (w *MetricsWriter) GetMonitoringStats(ctx context.Context, deviceIDs []int)
 	if w.db == nil {
 		return MonitoringStats{}, fmt.Errorf("database not initialized")
 	}
+	if deviceIDs != nil && len(deviceIDs) == 0 {
+		return MonitoringStats{}, nil
+	}
 
 	var total int64
 	totalQuery := w.db.WithContext(ctx).
@@ -510,6 +513,9 @@ func (w *MetricsWriter) GetTemperatureHistory(ctx context.Context, start time.Ti
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
+	if deviceIDs != nil && len(deviceIDs) == 0 {
+		return []TemperatureHistoryPoint{}, nil
+	}
 
 	bucket := resolveBucket(start, end, interval)
 
@@ -598,6 +604,9 @@ type devicePerformanceRow struct {
 func (w *MetricsWriter) GetDevicePerformanceHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]DevicePerformancePoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
+	}
+	if deviceIDs != nil && len(deviceIDs) == 0 {
+		return []DevicePerformancePoint{}, nil
 	}
 
 	bucket := resolveBucket(start, end, interval)
@@ -702,6 +711,9 @@ func aggregateTrafficQuery(interval string, deviceFilter string) string {
 func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]NetworkTrafficPoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
+	}
+	if deviceIDs != nil && len(deviceIDs) == 0 {
+		return []NetworkTrafficPoint{}, nil
 	}
 
 	bucket := resolveBucket(start, end, interval)
@@ -871,6 +883,9 @@ func LatestMetricAverageWithFallback(ctx context.Context, db *gorm.DB, metric st
 // latestSampleAverageWithFallback 取"每台设备最近一次采集值的平均"；
 // 新鲜窗口内无任何样本时回退到 devices 表快照平均。
 func latestSampleAverageWithFallback(ctx context.Context, db *gorm.DB, metric string, deviceIDs []int) (float64, error) {
+	if deviceIDs != nil && len(deviceIDs) == 0 {
+		return 0, nil
+	}
 	value, samples, err := latestMetricAverage(ctx, db, metric, deviceIDs, latestSampleWindow)
 	if err != nil {
 		return 0, err
@@ -955,6 +970,9 @@ type PeakNetworkSnapshot struct {
 func PeakNetworkMetrics24h(ctx context.Context, db *gorm.DB, deviceIDs []int) (PeakNetworkSnapshot, error) {
 	if db == nil {
 		return PeakNetworkSnapshot{}, fmt.Errorf("database not initialized")
+	}
+	if deviceIDs != nil && len(deviceIDs) == 0 {
+		return PeakNetworkSnapshot{}, nil
 	}
 
 	inbound := []string{"bandwidth_in", "network_bytes_in", "throughput_in"}

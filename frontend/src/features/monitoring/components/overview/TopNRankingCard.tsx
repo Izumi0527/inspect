@@ -1,14 +1,25 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/atoms'
-import { getMonitoringTopN } from '../../api/monitoring-hosts.api'
-import type { TopNMetric } from '../../types/zabbix-monitoring.types'
+import {
+  MONITORING_TOPN_QUERY_KEY,
+  getMonitoringTopN,
+} from '../../api/monitoring-hosts.api'
+import type { ThresholdSummary, TopNMetric } from '../../types/zabbix-monitoring.types'
+import {
+  formatTopNValue,
+  getTopNEmptyMessage,
+  resolveTopNBarPresentation,
+  resolveTopNInterfaceLabel,
+} from './topNRankingHelpers'
 
 interface TopNRankingCardProps {
   groupId: number | null
+  deviceIds?: number[]
+  thresholds?: ThresholdSummary
   onSelectHost?: (deviceId: number) => void
 }
 
@@ -21,12 +32,29 @@ const METRIC_OPTIONS: ReadonlyArray<{ key: TopNMetric; label: string }> = [
   { key: 'ping_rtt', label: '延迟' },
 ]
 
-export function TopNRankingCard({ groupId, onSelectHost }: TopNRankingCardProps) {
+export function TopNRankingCard({
+  groupId,
+  deviceIds,
+  thresholds,
+  onSelectHost,
+}: TopNRankingCardProps) {
   const [metric, setMetric] = useState<TopNMetric>('cpu')
 
+  const normalizedDeviceIds = useMemo(
+    () =>
+      Array.from(
+        new Set((deviceIds ?? []).filter((id) => Number.isInteger(id) && id > 0))
+      ).sort((a, b) => a - b),
+    [deviceIds]
+  )
+  const deviceIdsKey = normalizedDeviceIds.length > 0 ? normalizedDeviceIds.join(',') : 'all'
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['monitoring-topn', metric, groupId ?? 'all'],
-    queryFn: () => getMonitoringTopN(metric, 5, groupId),
+    queryKey: [MONITORING_TOPN_QUERY_KEY, metric, groupId ?? 'all', deviceIdsKey],
+    queryFn: () =>
+      normalizedDeviceIds.length > 0
+        ? getMonitoringTopN(metric, 5, groupId, normalizedDeviceIds)
+        : getMonitoringTopN(metric, 5, groupId),
     staleTime: 30_000,
     retry: 1,
   })
@@ -36,6 +64,7 @@ export function TopNRankingCard({ groupId, onSelectHost }: TopNRankingCardProps)
     1,
     ...items.map((item) => (Number.isFinite(item.value) ? item.value : 0))
   )
+  const isInterfaceMetric = metric === 'if_util' || metric === 'if_errors'
 
   return (
     <Card>
@@ -77,19 +106,30 @@ export function TopNRankingCard({ groupId, onSelectHost }: TopNRankingCardProps)
         ) : isError ? (
           <p className="py-6 text-center text-sm text-danger">Top 5 排行加载失败</p>
         ) : items.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">暂无排行数据</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            {getTopNEmptyMessage(metric)}
+          </p>
         ) : (
           <div className="space-y-2">
             {items.map((item, idx) => {
-              const ratio =
-                metric === 'cpu' || metric === 'memory' || metric === 'if_util'
-                  ? Math.min(100, Math.max(0, item.value))
-                  : Math.min(100, Math.max(4, (item.value / maxValue) * 100))
+              const interfaceLabel = isInterfaceMetric ? resolveTopNInterfaceLabel(item) : ''
+              const secondaryLabel = isInterfaceMetric
+                ? interfaceLabel
+                : item.ip_address?.trim() ?? ''
+              const formattedValue = formatTopNValue(metric, item)
+              const bar = resolveTopNBarPresentation(metric, item.value, maxValue, thresholds)
+              const titleParts = [
+                item.device_name,
+                item.ip_address?.trim() ? `(${item.ip_address.trim()})` : '',
+                interfaceLabel,
+                formattedValue,
+              ].filter(Boolean)
 
               return (
                 <button
                   key={`${item.device_id}-${item.interface_name ?? ''}-${idx}`}
                   type="button"
+                  title={titleParts.join(' · ')}
                   onClick={() => onSelectHost?.(item.device_id)}
                   className="w-full rounded-lg border border-border bg-surface-2/40 px-3 py-2 text-left transition-colors hover:bg-accent"
                 >
@@ -101,22 +141,22 @@ export function TopNRankingCard({ groupId, onSelectHost }: TopNRankingCardProps)
                       <span className="truncate font-medium text-foreground">
                         {item.device_name}
                       </span>
-                      {item.interface_name && (
+                      {secondaryLabel && (
                         <span className="truncate font-mono text-xs text-muted-foreground">
-                          {item.interface_name}
+                          {secondaryLabel}
                         </span>
                       )}
                     </div>
                     <span className="shrink-0 font-semibold text-foreground tabular-nums">
-                      {item.value.toFixed(item.unit === 'count' ? 0 : 1)} {item.unit}
+                      {formattedValue}
                     </span>
                   </div>
                   <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
                     <div
-                      className={`h-full rounded-full ${
-                        ratio >= 85 ? 'bg-danger' : ratio >= 65 ? 'bg-warning' : 'bg-primary'
-                      }`}
-                      style={{ width: `${ratio}%` }}
+                      data-testid={`topn-bar-${idx}`}
+                      data-severity={bar.severity}
+                      className={`h-full rounded-full transition-all ${bar.barClassName}`}
+                      style={{ width: `${bar.widthPct}%` }}
                     />
                   </div>
                 </button>

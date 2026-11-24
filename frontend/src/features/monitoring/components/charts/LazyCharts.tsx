@@ -6,6 +6,7 @@ import type {
   TemperatureDataPoint,
   NetworkTrafficDataPoint,
 } from '../../types'
+import type { DashboardAnnotation } from '../../types/zabbix-monitoring.types'
 
 /**
  * 懒加载图表组件
@@ -46,6 +47,11 @@ interface SystemPerformanceChartWrapperProps {
   timeRange?: string
   /** 被用户隐藏的指标（由卡片标题右侧的指标图例控制） */
   hiddenMetrics?: ReadonlySet<PerformanceMetricKey>
+  annotations?: DashboardAnnotation[]
+  canReadAlerts?: boolean
+  yesterdayBaseline?: SystemPerformanceDataPoint[]
+  compareYesterday?: boolean
+  onSelectDevice?: (deviceId: number, deviceName?: string) => void
 }
 
 export function SystemPerformanceChartWrapper({
@@ -53,6 +59,11 @@ export function SystemPerformanceChartWrapper({
   height = 300,
   timeRange,
   hiddenMetrics,
+  annotations,
+  canReadAlerts,
+  yesterdayBaseline,
+  compareYesterday,
+  onSelectDevice,
 }: SystemPerformanceChartWrapperProps) {
   return (
     <Suspense fallback={<ChartSkeleton height={height} />}>
@@ -61,12 +72,15 @@ export function SystemPerformanceChartWrapper({
         height={height}
         timeRange={timeRange}
         hiddenMetrics={hiddenMetrics}
+        annotations={annotations}
+        canReadAlerts={canReadAlerts}
+        yesterdayBaseline={yesterdayBaseline}
+        compareYesterday={compareYesterday}
+        onSelectDevice={onSelectDevice}
       />
     </Suspense>
   )
 }
-
-import type { DashboardAnnotation } from '../../types/zabbix-monitoring.types'
 
 /**
  * 温度监控图表包装器

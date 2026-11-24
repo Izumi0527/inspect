@@ -26,6 +26,7 @@ import {
   DeviceType,
   DeviceVendor,
 } from '../../types'
+import type { DeviceDeepLinkSection } from '../../utils/deviceDeepLink'
 
 // 设备类型的图标与配色；取值与中文名来自 utils/deviceTypes
 const DEVICE_TYPE_ICONS: Record<DeviceType, {
@@ -163,17 +164,33 @@ interface Props {
   onSubmit: (data: DeviceFormData) => Promise<void>
   onCancel: () => void
   loading?: boolean
+  focusSection?: DeviceDeepLinkSection
+  secondarySubmitLabel?: string
+  onSecondarySubmit?: (data: DeviceFormData) => Promise<void>
 }
 
 export const DeviceForm: React.FC<Props> = ({
   initialData,
   onSubmit,
   onCancel,
-  loading = false
+  loading = false,
+  focusSection,
+  secondarySubmitLabel,
+  onSecondarySubmit,
 }) => {
   const [submitting, setSubmitting] = useState(false)
+  const credentialsSectionRef = React.useRef<HTMLDivElement | null>(null)
 
   const isEditMode = !!initialData?.id
+
+  React.useEffect(() => {
+    if (focusSection === 'credentials') {
+      credentialsSectionRef.current?.scrollIntoView?.({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }
+  }, [focusSection])
 
   // 表单配置
   const {
@@ -245,11 +262,14 @@ export const DeviceForm: React.FC<Props> = ({
     mode: 'onChange'
   })
 
-  // 处理表单提交
-  const handleFormSubmit = async (data: DeviceFormData) => {
+  // 处理表单提交（主提交与次级提交复用防重与错误兜底）
+  const runSubmit = async (
+    handler: (data: DeviceFormData) => Promise<void>,
+    data: DeviceFormData,
+  ) => {
     try {
       setSubmitting(true)
-      await onSubmit(data)
+      await handler(data)
     } catch (error) {
       console.error('提交设备表单失败:', error)
     } finally {
@@ -258,7 +278,7 @@ export const DeviceForm: React.FC<Props> = ({
   }
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="flex flex-col h-full max-h-[calc(100vh-12rem)]">
+    <form onSubmit={handleSubmit((data) => runSubmit(onSubmit, data))} className="flex flex-col h-full max-h-[calc(100vh-12rem)]">
       {/* 可滚动内容区域 */}
       <div className="flex-1 overflow-y-auto pr-2 space-y-6">
         {/* 顶部：设备基本信息 */}
@@ -417,7 +437,16 @@ export const DeviceForm: React.FC<Props> = ({
         </Card>
 
         {/* 下方：配置区域 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div
+          id="device-credentials-section"
+          data-testid="device-credentials-section"
+          ref={credentialsSectionRef}
+          className={`grid grid-cols-1 lg:grid-cols-2 gap-6${
+            focusSection === 'credentials'
+              ? ' rounded-xl p-2 ring-2 ring-primary/40 ring-offset-2 ring-offset-card'
+              : ''
+          }`}
+        >
           {/* 左侧：CLI配置 */}
           <div className="space-y-6">
             <CLIConfigForm
@@ -449,6 +478,17 @@ export const DeviceForm: React.FC<Props> = ({
         >
           取消
         </Button>
+        {isEditMode && secondarySubmitLabel && onSecondarySubmit && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!isValid || submitting || loading}
+            loading={submitting || loading}
+            onClick={handleSubmit((data) => runSubmit(onSecondarySubmit, data))}
+          >
+            {secondarySubmitLabel}
+          </Button>
+        )}
         <Button
           type="submit"
           disabled={!isValid || submitting || loading}

@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import {
   SimpleModal,
   Badge,
@@ -166,6 +167,7 @@ interface DeviceDetailsModalProps {
    * 只读用户建议传 false，按钮会禁用而非触发后端 403。
    */
   canResetHostKey?: boolean
+  returnToMonitoringHref?: string
 }
 
 const InfoRow = ({ label, value }: { label: string; value?: React.ReactNode }) => (
@@ -182,6 +184,7 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
   onClose,
   updateStatus = true,
   canResetHostKey = true,
+  returnToMonitoringHref,
 }) => {
   const [healthLoading, setHealthLoading] = React.useState(false)
   const [healthResult, setHealthResult] = React.useState<Record<string, unknown> | null>(null)
@@ -347,14 +350,24 @@ export const DeviceDetailsModal: React.FC<DeviceDetailsModalProps> = ({
 
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="h-12 w-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-xl font-semibold">
-            {device.name?.slice(0, 2)?.toUpperCase() || 'NA'}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-xl font-semibold">
+              {device.name?.slice(0, 2)?.toUpperCase() || 'NA'}
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-foreground">{device.name}</p>
+              <p className="text-sm text-muted-foreground">{device.description || '未填写描述'}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-lg font-semibold text-foreground">{device.name}</p>
-            <p className="text-sm text-muted-foreground">{device.description || '未填写描述'}</p>
-          </div>
+          {returnToMonitoringHref && (
+            <Link
+              href={returnToMonitoringHref}
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground hover:bg-accent"
+            >
+              返回监控抽屉
+            </Link>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

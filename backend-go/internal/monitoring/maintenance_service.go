@@ -573,6 +573,10 @@ func validateAndBuildMaintenance(input MaintenanceInput, createdBy string) (Moni
 	if name == "" || len([]rune(name)) > 128 {
 		return MonitorMaintenance{}, nil, fmt.Errorf("%w: name is required and must be <= 128 chars", ErrMaintenanceValidation)
 	}
+	description := strings.TrimSpace(input.Description)
+	if len([]rune(description)) > 256 {
+		return MonitorMaintenance{}, nil, fmt.Errorf("%w: description must be <= 256 chars", ErrMaintenanceValidation)
+	}
 
 	mode := strings.ToLower(strings.TrimSpace(input.Mode))
 	if mode == "" {
@@ -731,10 +735,13 @@ func validateAndBuildMaintenance(input MaintenanceInput, createdBy string) (Moni
 			return MonitorMaintenance{}, nil, err
 		}
 	}
+	if len(targets) == 0 {
+		return MonitorMaintenance{}, nil, fmt.Errorf("%w: at least one target device or device_group is required", ErrMaintenanceValidation)
+	}
 
 	return MonitorMaintenance{
 		Name:           name,
-		Description:    strings.TrimSpace(input.Description),
+		Description:    description,
 		Mode:           mode,
 		ScheduleType:   scheduleType,
 		StartTime:      startTime,

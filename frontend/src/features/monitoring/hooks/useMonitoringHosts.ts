@@ -163,6 +163,11 @@ export function useMonitoringHosts({
       toast.success('已为所选设备创建计划维护窗口')
       invalidateHosts()
       void queryClient.invalidateQueries({ queryKey: ['monitoring-maintenances'] })
+      void queryClient.invalidateQueries({ queryKey: ['monitoring-maintenances-active'] })
+      void queryClient.invalidateQueries({ queryKey: ['monitoring-v2'] })
+      void queryClient.invalidateQueries({ queryKey: ['monitoring-dashboard-v2'] })
+      void queryClient.invalidateQueries({ queryKey: ['monitoring-host-detail'] })
+      void queryClient.invalidateQueries({ queryKey: ['monitoring-latest-data'] })
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : '创建计划维护失败')

@@ -15,7 +15,7 @@ interface MonitoringHeaderActionsProps {
 
 /**
  * 监控页 DashboardHeader 右侧操作区
- * （时间范围控制、分组筛选+新建分组、设备筛选、采集引擎健康胶囊、值班投屏、导出按钮、刷新按钮）
+ * （时间范围控制、分组筛选、设备筛选、采集引擎健康胶囊、值班投屏、导出按钮、刷新按钮）
  */
 export function MonitoringHeaderActions({ page }: MonitoringHeaderActionsProps) {
   return (
@@ -26,13 +26,10 @@ export function MonitoringHeaderActions({ page }: MonitoringHeaderActionsProps) 
         onTimeRangeChange={page.setTimeRange}
       />
 
-      {/* 全局设备分组筛选 + 新建分组 */}
+      {/* 全局设备分组筛选 */}
       <GroupFilterSelect
         activeGroupId={page.activeGroupId ?? null}
         onChange={(gid) => page.setActiveGroupId?.(gid)}
-        canCreate={page.canCreateDeviceGroup}
-        canUpdate={page.canUpdateDeviceGroup}
-        canDelete={page.canDeleteDeviceGroup}
       />
 
       {/* 设备筛选 */}

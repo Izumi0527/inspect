@@ -31,8 +31,10 @@ export interface TopNItem {
   ip_address: string
   status: string
   interface_name?: string
+  interface_display_name?: string
   value: number
   unit: string
+  display_value?: string
 }
 
 export interface TopNResponse {

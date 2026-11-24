@@ -48,6 +48,15 @@ let mockSearchParams = new URLSearchParams();
 
 jest.mock("next/navigation", () => ({
   useSearchParams: () => mockSearchParams,
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    prefetch: jest.fn(),
+    back: jest.fn(),
+    forward: jest.fn(),
+    refresh: jest.fn(),
+  }),
+  usePathname: () => "/devices",
 }));
 
 jest.mock("framer-motion", () => ({

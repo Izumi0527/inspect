@@ -17,16 +17,19 @@ import type { SystemPerformanceDataPoint } from '../../types'
 import type {
   AggregateTrendPoint,
   DashboardAnnotation,
-  ThresholdSummary,
 } from '../../types/zabbix-monitoring.types'
 import { useSyncedCrosshair } from './SyncedCrosshairContext'
+import {
+  AnnotationMarkers,
+  AnnotationTooltip,
+  type HoveredAnnotationState,
+} from '../charts/TimeSeriesOverlays'
 import { AggregateTrendLegend, AggregateTrendTooltip } from './AggregateTrendOverlay'
 import {
-  annotationColor,
-  annotationLabel,
   computeYesterdayBaselineMeans,
   filterVisibleAnnotations,
   normalizeAggregatePoints,
+  resolvePeakDeviceTarget,
   splitAggregateSegments,
   type NormalizedAggregatePoint,
 } from './aggregateTrendHelpers'
@@ -35,7 +38,6 @@ interface AggregateTrendChartProps {
   data: AggregateTrendPoint[]
   yesterdayBaseline?: SystemPerformanceDataPoint[]
   annotations?: DashboardAnnotation[]
-  thresholds?: ThresholdSummary
   hiddenMetrics?: ReadonlySet<PerformanceMetricKey>
   compareYesterday?: boolean
   canReadAlerts?: boolean
@@ -51,7 +53,6 @@ export function AggregateTrendChart({
   data,
   yesterdayBaseline = [],
   annotations,
-  thresholds,
   hiddenMetrics = EMPTY_HIDDEN,
   compareYesterday = false,
   canReadAlerts = true,
@@ -113,11 +114,10 @@ export function AggregateTrendChart({
   const yScale = useMemo(() => {
     const maxVal = Math.max(
       100,
-      thresholds?.cpu.crit ?? 0,
       ...points.map((pt) => Math.max(pt.maxCpu, pt.maxMemory))
     )
     return scaleLinear({ domain: [0, maxVal], range: [innerHeight, 0], nice: true })
-  }, [points, thresholds, innerHeight])
+  }, [points, innerHeight])
 
   const xTickValues = useMemo(
     () => buildTimeAxisTicks(domain, timeRange, innerWidth),
@@ -126,11 +126,13 @@ export function AggregateTrendChart({
   const segments = useMemo(() => splitAggregateSegments(points), [points])
   const baselineSegments = useMemo(() => splitAtGaps(baselinePoints), [baselinePoints])
 
+  const [hoveredAnnotation, setHoveredAnnotation] = useState<HoveredAnnotationState | null>(null)
   const { showTooltip, hideTooltip, tooltipData, tooltipLeft = 0, tooltipTop = 0 } =
     useTooltip<NormalizedAggregatePoint>()
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<SVGRectElement>) => {
+      setHoveredAnnotation(null)
       const point = localPoint(event)
       if (!point) return
       const anchor = findHoverPoint(points, xScale.invert(point.x - MARGIN.left))
@@ -150,6 +152,7 @@ export function AggregateTrendChart({
   )
 
   const handleMouseLeave = useCallback(() => {
+    setHoveredAnnotation(null)
     hideTooltip()
     setHoveredTimestampMs(null)
   }, [hideTooltip, setHoveredTimestampMs])
@@ -162,6 +165,16 @@ export function AggregateTrendChart({
     )
   }
 
+  if (!showCpu && !showMemory) {
+    return (
+      <div className="flex items-center justify-center" style={{ height }}>
+        <p className="text-sm text-muted-foreground">已隐藏全部指标</p>
+      </div>
+    )
+  }
+
+  const peakTarget = resolvePeakDeviceTarget(tooltipData, showCpu, showMemory)
+  const canDrillPeak = Boolean(peakTarget.deviceId && onSelectDevice)
   const activeCrosshairX = tooltipData
     ? xScale(tooltipData.date)
     : hoveredTimestampMs !== null &&
@@ -193,34 +206,39 @@ export function AggregateTrendChart({
                 <LinePath data-series="aggregate:cpu-p95" data={seg} x={(d) => xScale(d.date)} y={(d) => yScale(d.p95Cpu)} stroke="var(--brand)" strokeWidth={1.75} strokeDasharray="6 4" curve={curveMonotoneX} />
                 <LinePath data-series="aggregate:cpu-mean" data={seg} x={(d) => xScale(d.date)} y={(d) => yScale(d.meanCpu)} stroke="var(--brand)" strokeWidth={2.5} curve={curveMonotoneX} />
               </Group>
-            ) : null)}
+            ) : (
+              <circle key={`agg-cpu-dot-${idx}`} data-series="aggregate:cpu-mean" cx={xScale(seg[0].date)} cy={yScale(seg[0].meanCpu)} r={3.5} fill="var(--brand)" />
+            ))}
 
             {showMemory && segments.map((seg, idx) => seg.length > 1 ? (
               <Group key={`agg-mem-${idx}`}>
+                <Area
+                  data-series="aggregate:memory-envelope"
+                  data={seg}
+                  x={(d) => xScale(d.date)}
+                  y0={(d) => yScale(d.meanMemory)}
+                  y1={(d) => yScale(d.maxMemory)}
+                  fill="var(--info)"
+                  fillOpacity={0.12}
+                  curve={curveMonotoneX}
+                />
                 <LinePath data-series="aggregate:memory-p95" data={seg} x={(d) => xScale(d.date)} y={(d) => yScale(d.p95Memory)} stroke="var(--info)" strokeWidth={1.5} strokeDasharray="6 4" curve={curveMonotoneX} />
                 <LinePath data-series="aggregate:memory-mean" data={seg} x={(d) => xScale(d.date)} y={(d) => yScale(d.meanMemory)} stroke="var(--info)" strokeWidth={2} curve={curveMonotoneX} />
               </Group>
-            ) : null)}
+            ) : (
+              <circle key={`agg-mem-dot-${idx}`} data-series="aggregate:memory-mean" cx={xScale(seg[0].date)} cy={yScale(seg[0].meanMemory)} r={3.5} fill="var(--info)" />
+            ))}
 
             {compareYesterday && baselineSegments.map((seg, idx) => seg.length > 1 ? (
               <Group key={`agg-yoy-${idx}`}>
                 {showCpu && <LinePath data-series="aggregate:yesterday-cpu" data={seg} x={(d) => xScale(d.date)} y={(d) => yScale(d.meanCpu)} stroke="var(--ink-2)" strokeWidth={1.5} strokeDasharray="3 3" curve={curveMonotoneX} />}
                 {showMemory && <LinePath data-series="aggregate:yesterday-memory" data={seg} x={(d) => xScale(d.date)} y={(d) => yScale(d.meanMemory)} stroke="var(--unknown)" strokeWidth={1.5} strokeDasharray="3 3" curve={curveMonotoneX} />}
               </Group>
-            ) : null)}
-
-            {visibleAnnotations.map((ann, idx) => (
-              <circle
-                key={`ann-${ann.type}-${ann.timestamp}-${idx}`}
-                data-annotation-type={ann.type}
-                aria-label={`${annotationLabel(ann.type)}事件: ${ann.title}`}
-                cx={xScale(ann.date)}
-                cy={innerHeight - 6}
-                r={4.5}
-                fill={annotationColor(ann.type)}
-                stroke="var(--surface)"
-                strokeWidth={1.5}
-              />
+            ) : (
+              <Group key={`agg-yoy-dot-${idx}`}>
+                {showCpu && <circle data-series="aggregate:yesterday-cpu" cx={xScale(seg[0].date)} cy={yScale(seg[0].meanCpu)} r={3.5} fill="var(--ink-2)" />}
+                {showMemory && <circle data-series="aggregate:yesterday-memory" cx={xScale(seg[0].date)} cy={yScale(seg[0].meanMemory)} r={3.5} fill="var(--unknown)" />}
+              </Group>
             ))}
 
             {activeCrosshairX !== null && (
@@ -233,13 +251,27 @@ export function AggregateTrendChart({
               width={innerWidth}
               height={innerHeight}
               fill="transparent"
+              className={canDrillPeak ? 'cursor-pointer' : undefined}
+              style={{ cursor: canDrillPeak ? 'pointer' : undefined }}
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
               onClick={() => {
-                if (tooltipData?.peakDeviceId && onSelectDevice) {
-                  onSelectDevice(tooltipData.peakDeviceId, tooltipData.peakDeviceName)
+                if (peakTarget.deviceId && onSelectDevice) {
+                  onSelectDevice(peakTarget.deviceId, peakTarget.deviceName)
                 }
               }}
+            />
+
+            <AnnotationMarkers
+              annotations={visibleAnnotations}
+              xScale={xScale}
+              cy={innerHeight - 6}
+              radius={4.5}
+              strokeColor="var(--surface)"
+              marginLeft={MARGIN.left}
+              marginTop={MARGIN.top}
+              onHover={setHoveredAnnotation}
+              onSelectDevice={onSelectDevice}
             />
 
             <AxisBottom top={innerHeight} scale={xScale} stroke={axisColor} tickStroke={axisColor} tickValues={xTickValues} tickLabelProps={() => ({ fill: axisColor, fontSize: 11, textAnchor: 'middle' })} tickFormat={(value) => formatTimeLabel(value as Date)} />
@@ -247,7 +279,15 @@ export function AggregateTrendChart({
           </Group>
         </svg>
 
-        {tooltipData && (
+        {hoveredAnnotation ? (
+          <AnnotationTooltip
+            state={hoveredAnnotation}
+            tooltipBg={tooltipBg}
+            tooltipBorder={tooltipBorder}
+            formatTimeLabel={formatTimeLabel}
+            canDrillDown={Boolean(onSelectDevice)}
+          />
+        ) : tooltipData ? (
           <AggregateTrendTooltip
             tooltipData={tooltipData}
             tooltipLeft={tooltipLeft}
@@ -256,12 +296,13 @@ export function AggregateTrendChart({
             tooltipBorder={tooltipBorder}
             showCpu={showCpu}
             showMemory={showMemory}
+            canDrillDown={canDrillPeak}
             formatTimeLabel={formatTimeLabel}
           />
-        )}
+        ) : null}
       </div>
 
-      <AggregateTrendLegend compareYesterday={compareYesterday} />
+      <AggregateTrendLegend compareYesterday={compareYesterday} showCpu={showCpu} showMemory={showMemory} />
     </div>
   )
 }

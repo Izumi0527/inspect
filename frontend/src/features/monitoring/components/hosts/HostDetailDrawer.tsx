@@ -3,8 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
 import {
   CollectCooldownError,
+  MONITORING_TOPN_QUERY_KEY,
   getMonitoringHostDetail,
   triggerDeviceCollectNow,
 } from '../../api/monitoring-hosts.api'
@@ -95,6 +98,8 @@ export function HostDetailDrawer({
   onSelectHost,
 }: HostDetailDrawerProps) {
   const queryClient = useQueryClient()
+  const canReadDevices = usePermission(Permission.DEVICES_READ)
+  const canUpdateDevices = usePermission(Permission.DEVICES_UPDATE)
   const [internalHostId, setInternalHostId] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState<DrawerTabKey>('overview')
   const [cooldownSec, setCooldownSec] = useState(0)
@@ -138,6 +143,7 @@ export function HostDetailDrawer({
       toast.success(`采集完成：更新 ${res.metrics_written} 项指标（${res.collection_time_ms}ms）`)
       void queryClient.invalidateQueries({ queryKey: ['monitoring-host-detail', effectiveDeviceId] })
       void queryClient.invalidateQueries({ queryKey: [MONITORING_HOSTS_QUERY_KEY] })
+      void queryClient.invalidateQueries({ queryKey: [MONITORING_TOPN_QUERY_KEY] })
     },
     onError: (err) => {
       if (err instanceof CollectCooldownError) {
@@ -188,6 +194,8 @@ export function HostDetailDrawer({
           detail={detailQuery.data}
           collecting={collectMutation.isPending}
           cooldownSec={cooldownSec}
+          canReadDevices={canReadDevices}
+          canUpdateDevices={canUpdateDevices}
           onCollectNow={() => collectMutation.mutate(effectiveDeviceId)}
           onCopySummary={() => void handleCopySummary()}
           onClose={onClose}

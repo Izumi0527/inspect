@@ -1,7 +1,8 @@
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { SystemPerformanceChart } from '@/features/monitoring/components/charts/SystemPerformanceChart'
 import type { SystemPerformanceDataPoint } from '@/features/monitoring/types'
+import type { DashboardAnnotation } from '@/features/monitoring/types/zabbix-monitoring.types'
 
 // jsdom 不实现 SVG 文本测量，@visx/text 会 console.warn；补一个固定宽度让坐标轴标签静默渲染
 beforeAll(() => {
@@ -103,7 +104,7 @@ describe('SystemPerformanceChart（按设备区分）', () => {
     expect(container.querySelector('svg')).toBeNull()
   })
 
-  it('超过 5 台设备时只绘制前 5 台并提示上限', () => {
+  it('超过 5 台设备时按峰值负载降序精选 Top 5 并提示精选数量', () => {
     const devices: SystemPerformanceDataPoint['devices'] = {}
     for (let i = 1; i <= 6; i += 1) {
       devices[`DEV-${i}`] = { cpu: i, memory: i * 10 }
@@ -114,8 +115,81 @@ describe('SystemPerformanceChart（按设备区分）', () => {
 
     const drawn = drawnSeries(container)
     expect(drawn).toHaveLength(10)
-    expect(drawn.some((key) => key?.startsWith('DEV-6:'))).toBe(false)
-    expect(screen.getByText('(最多显示5个设备)')).toBeInTheDocument()
+    expect(drawn.some((key) => key?.startsWith('DEV-6:'))).toBe(true)
+    expect(drawn.some((key) => key?.startsWith('DEV-1:'))).toBe(false)
+    expect(screen.getByText('已按峰值负载精选前 5 / 共 6 台设备')).toBeInTheDocument()
+  })
+
+  it('高负载 z-hot (CPU 95%) 排在低负载 a-idle~e-idle 之前入选 Top 5', () => {
+    const devices: SystemPerformanceDataPoint['devices'] = {
+      'a-idle': { cpu: 5, memory: 10 },
+      'b-idle': { cpu: 15, memory: 20 },
+      'c-idle': { cpu: 16, memory: 22 },
+      'd-idle': { cpu: 18, memory: 25 },
+      'e-idle': { cpu: 20, memory: 30 },
+      'z-hot': { cpu: 95, memory: 40 },
+    }
+    const { container } = render(
+      <SystemPerformanceChart data={[{ timestamp: '2026-09-06T12:00:00Z', devices }]} timeRange="1h" />
+    )
+
+    const drawn = drawnSeries(container)
+    expect(drawn.some((key) => key?.startsWith('z-hot:'))).toBe(true)
+    expect(drawn.some((key) => key?.startsWith('a-idle:'))).toBe(false)
+  })
+
+  it('开启 compareYesterday 时渲染昨日同期基线并支持空今日数据兜底', () => {
+    const yesterday: SystemPerformanceDataPoint[] = [
+      { timestamp: '2026-09-06T12:00:00Z', devices: { 'SW-01': { cpu: 30, memory: 55 } } },
+      { timestamp: '2026-09-06T12:05:00Z', devices: { 'SW-01': { cpu: 35, memory: 60 } } },
+    ]
+    const { container } = render(
+      <SystemPerformanceChart
+        data={[]}
+        timeRange="1h"
+        compareYesterday
+        yesterdayBaseline={yesterday}
+      />
+    )
+
+    expect(container.querySelector('[data-series="yesterday:cpu"]')).toBeInTheDocument()
+    expect(container.querySelector('[data-series="yesterday:memory"]')).toBeInTheDocument()
+    expect(screen.getByText('昨日同期基线')).toBeInTheDocument()
+  })
+
+  it('支持可交互事件注解圆点（悬停提示 + 点击下钻）且不渲染阈值参考线', () => {
+    const annotations: DashboardAnnotation[] = [
+      {
+        timestamp: '2026-09-06T12:05:00Z',
+        type: 'alert',
+        title: 'CPU 过载',
+        device_id: 42,
+        device_name: 'SW-02',
+      },
+    ]
+    const onSelectDevice = jest.fn()
+
+    const { container } = render(
+      <SystemPerformanceChart
+        data={twoDevices}
+        timeRange="1h"
+        annotations={annotations}
+        canReadAlerts
+        onSelectDevice={onSelectDevice}
+      />
+    )
+
+    expect(container.querySelector('[data-reference-line]')).toBeNull()
+    expect(screen.queryByText(/警告|严重/)).not.toBeInTheDocument()
+
+    const annCircle = container.querySelector('circle[data-annotation-type="alert"]')
+    expect(annCircle).toBeInTheDocument()
+    fireEvent.mouseEnter(annCircle!)
+    expect(screen.getByText('CPU 过载')).toBeInTheDocument()
+    expect(screen.getByText('设备：SW-02')).toBeInTheDocument()
+
+    fireEvent.click(annCircle!)
+    expect(onSelectDevice).toHaveBeenCalledWith(42, 'SW-02')
   })
 
   it('无数据时显示暂无性能数据', () => {

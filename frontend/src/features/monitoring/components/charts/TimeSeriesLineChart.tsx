@@ -12,15 +12,15 @@ import { resolveTimeAxisLabelFormatter } from '../../utils/monitoring'
 import { buildTimeAxisTicks, findHoverPoint, splitAtGaps } from '../../utils/timeSeries'
 import type { DashboardAnnotation } from '../../types/zabbix-monitoring.types'
 import { useSyncedCrosshair } from '../overview/SyncedCrosshairContext'
+import { filterVisibleAnnotations } from '../overview/aggregateTrendHelpers'
 import {
-  annotationColor,
-  annotationLabel,
-  filterVisibleAnnotations,
-} from '../overview/aggregateTrendHelpers'
-import {
+  AnnotationMarkers,
+  AnnotationTooltip,
+  ReferenceLineLayer,
   TimeSeriesTooltip,
   type ChartReferenceLine,
   type HoverState,
+  type HoveredAnnotationState,
   type TimeSeriesLine,
   type TimeSeriesPoint,
 } from './TimeSeriesOverlays'
@@ -38,6 +38,7 @@ interface TimeSeriesLineChartProps {
   referenceLines?: ChartReferenceLine[]
   annotations?: DashboardAnnotation[]
   canReadAlerts?: boolean
+  onSelectDevice?: (deviceId: number, deviceName?: string) => void
 }
 
 const MARGIN = { top: 16, right: 24, bottom: 36, left: 72 }
@@ -53,6 +54,7 @@ export function TimeSeriesLineChart({
   referenceLines = [],
   annotations,
   canReadAlerts = true,
+  onSelectDevice,
 }: TimeSeriesLineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(800)
@@ -135,11 +137,13 @@ export function TimeSeriesLineChart({
     return { anchors: sorted, valueIndex: index }
   }, [lines])
 
+  const [hoveredAnnotation, setHoveredAnnotation] = useState<HoveredAnnotationState | null>(null)
   const { showTooltip, hideTooltip, tooltipData, tooltipLeft = 0, tooltipTop = 0 } =
     useTooltip<HoverState>()
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<SVGRectElement>) => {
+      setHoveredAnnotation(null)
       const point = localPoint(event)
       if (!point) return
       const anchor = findHoverPoint(anchors, xScale.invert(point.x - MARGIN.left))
@@ -164,6 +168,7 @@ export function TimeSeriesLineChart({
   )
 
   const handleMouseLeave = useCallback(() => {
+    setHoveredAnnotation(null)
     hideTooltip()
     setHoveredTimestampMs(null)
   }, [hideTooltip, setHoveredTimestampMs])
@@ -183,17 +188,7 @@ export function TimeSeriesLineChart({
           <GridRows scale={yScale} width={innerWidth} stroke={gridStyle.stroke} strokeDasharray={gridStyle.dasharray} numTicks={5} />
           <GridColumns scale={xScale} height={innerHeight} stroke={gridStyle.stroke} strokeDasharray={gridStyle.dasharray} tickValues={xTickValues} />
 
-          {referenceLines.map((refLine) => {
-            const y = yScale(refLine.value)
-            return (
-              <g key={refLine.key} data-reference-line={refLine.key} pointerEvents="none">
-                <line x1={0} x2={innerWidth} y1={y} y2={y} stroke={refLine.color} strokeWidth={1.5} strokeDasharray={refLine.strokeDasharray ?? '5 4'} />
-                <text x={innerWidth - 4} y={y - 4} textAnchor="end" fontSize={10} fill={refLine.color}>
-                  {refLine.label}
-                </text>
-              </g>
-            )
-          })}
+          <ReferenceLineLayer referenceLines={referenceLines} innerWidth={innerWidth} yScale={yScale} />
 
           {segmentsByLine.flatMap(({ line, segments }) =>
             segments.map((segment, index) =>
@@ -204,10 +199,6 @@ export function TimeSeriesLineChart({
               )
             )
           )}
-
-          {visibleAnnotations.map((ann, idx) => (
-            <circle key={`ann-${ann.type}-${ann.timestamp}-${idx}`} data-annotation-type={ann.type} aria-label={`${annotationLabel(ann.type)}事件: ${ann.title}`} cx={xScale(ann.date)} cy={innerHeight - 6} r={4} fill={annotationColor(ann.type)} stroke={surfaceColor} strokeWidth={1.5} />
-          ))}
 
           {hoverX !== null && (
             <g pointerEvents="none">
@@ -220,12 +211,32 @@ export function TimeSeriesLineChart({
 
           <rect x={0} y={0} width={innerWidth} height={innerHeight} fill="transparent" onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} />
 
+          <AnnotationMarkers
+            annotations={visibleAnnotations}
+            xScale={xScale}
+            cy={innerHeight - 6}
+            radius={4}
+            strokeColor={surfaceColor}
+            marginLeft={MARGIN.left}
+            marginTop={MARGIN.top}
+            onHover={setHoveredAnnotation}
+            onSelectDevice={onSelectDevice}
+          />
+
           <AxisBottom top={innerHeight} scale={xScale} stroke={axisColor} tickStroke={axisColor} tickValues={xTickValues} tickLabelProps={() => ({ fill: axisColor, fontSize: 11, textAnchor: 'middle' })} tickFormat={(value) => formatTimeLabel(value as Date)} />
           <AxisLeft scale={yScale} stroke={axisColor} tickStroke={axisColor} numTicks={5} tickLabelProps={() => ({ fill: axisColor, fontSize: 11, textAnchor: 'end', dx: -4 })} tickFormat={(value) => formatValue(Number(value))} />
         </Group>
       </svg>
 
-      {tooltipData && (
+      {hoveredAnnotation ? (
+        <AnnotationTooltip
+          state={hoveredAnnotation}
+          tooltipBg={tooltipBg}
+          tooltipBorder={tooltipBorder}
+          formatTimeLabel={formatTimeLabel}
+          canDrillDown={Boolean(onSelectDevice)}
+        />
+      ) : tooltipData ? (
         <TimeSeriesTooltip
           tooltipData={tooltipData}
           tooltipLeft={tooltipLeft}
@@ -235,7 +246,7 @@ export function TimeSeriesLineChart({
           formatTimeLabel={formatTimeLabel}
           formatTooltipValue={formatTooltipValue}
         />
-      )}
+      ) : null}
     </div>
   )
 }

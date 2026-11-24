@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { Copy, ExternalLink, RefreshCw, Wrench, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { buildDeviceCredentialsEditHref } from '@/features/devices/utils/deviceDeepLink'
 import type { HostDetailResponse } from '../../types/zabbix-monitoring.types'
 import {
   getHostStatusMeta,
@@ -15,6 +16,8 @@ export interface HostDrawerHeaderProps {
   detail?: HostDetailResponse
   collecting: boolean
   cooldownSec: number
+  canReadDevices?: boolean
+  canUpdateDevices?: boolean
   onCollectNow: () => void
   onCopySummary: () => void
   onClose: () => void
@@ -25,6 +28,8 @@ export function HostDrawerHeader({
   detail,
   collecting,
   cooldownSec,
+  canReadDevices = true,
+  canUpdateDevices = true,
   onCollectNow,
   onCopySummary,
   onClose,
@@ -103,13 +108,23 @@ export function HostDrawerHeader({
               复制诊断摘要
             </Button>
 
-            <Link
-              href={`/devices?deviceId=${deviceId}`}
-              className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground hover:bg-accent"
-            >
-              去设备管理编辑凭据
-              <ExternalLink className="h-3 w-3" />
-            </Link>
+            {canUpdateDevices ? (
+              <Link
+                href={buildDeviceCredentialsEditHref(deviceId, { canUpdate: true })}
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground hover:bg-accent"
+              >
+                去设备管理编辑凭据
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            ) : canReadDevices ? (
+              <Link
+                href={buildDeviceCredentialsEditHref(deviceId, { canUpdate: false })}
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground hover:bg-accent"
+              >
+                查看设备配置
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            ) : null}
           </div>
         </div>
       )}

@@ -50,6 +50,8 @@ export interface AggregateTrendPoint {
   max_memory: number
   peak_device_id?: number
   peak_device_name?: string
+  peak_memory_device_id?: number
+  peak_memory_device_name?: string
 }
 
 export type DashboardAnnotationType = 'alert' | 'reboot' | 'maintenance'
@@ -81,6 +83,8 @@ export interface ActiveProblemItem {
   threshold_value?: number
   last_occurred?: string
   snoozed_until?: string
+  suppressed_by?: string
+  snooze_reason?: string
 }
 
 export interface CollectDeviceMetricsResult {

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { DEFAULT_PAGE_SIZE } from "@/constants/pagination";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { getApiOrigin } from "@/lib/api-client";
 import {
@@ -76,6 +76,12 @@ import {
   IMPORT_TEMPLATE_HEADERS,
 } from "../utils/deviceImportCsv";
 import { summarizeBatchProbe } from "../utils/probeSummary";
+import {
+  buildMonitoringHostDrawerHref,
+  parseDeviceDeepLink,
+  stripDeviceDeepLinkParams,
+  type DeviceDeepLinkSection,
+} from "../utils/deviceDeepLink";
 
 // 批量探测结果 toast 中最多逐台列出的失败条数，其余在列表状态列可见
 const PROBE_TOAST_MAX_FAILURES = 5;
@@ -132,8 +138,10 @@ const toAlertCount = (value: unknown): number => {
 
 export const DeviceManagementView: React.FC = () => {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const appliedUrlSearchRef = React.useRef(false);
-  const appliedUrlDeviceIdRef = React.useRef<number | null>(null);
+  const appliedDeepLinkKeyRef = React.useRef<string | null>(null);
   const { user } = useAuth();
   const queryClient = useQueryClient();
   // 后端删设备时会把它从巡检策略的目标设备里摘掉，也会清掉它的监控数据；策略列表与监控设备
@@ -218,6 +226,24 @@ export const DeviceManagementView: React.FC = () => {
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
   const [viewModalLoading, setViewModalLoading] = useState(false);
   const [editModalLoading, setEditModalLoading] = useState(false);
+  const [editFocusSection, setEditFocusSection] = useState<
+    DeviceDeepLinkSection | undefined
+  >(undefined);
+  const [returnToMonitoringDeviceId, setReturnToMonitoringDeviceId] = useState<
+    number | null
+  >(null);
+  const clearDeepLinkUrl = React.useCallback(() => {
+    const target = stripDeviceDeepLinkParams(
+      new URLSearchParams(searchParams.toString()),
+      pathname ?? "/",
+    );
+    if (target) {
+      router.replace(target, { scroll: false });
+    }
+  }, [pathname, router, searchParams]);
+  const clearDeepLinkUrlRef = React.useRef(clearDeepLinkUrl);
+  clearDeepLinkUrlRef.current = clearDeepLinkUrl;
+  const searchParamsString = searchParams.toString();
   const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
   const [bulkUpdateModalOpen, setBulkUpdateModalOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -281,47 +307,75 @@ export const DeviceManagementView: React.FC = () => {
     appliedUrlSearchRef.current = true;
   }, [searchParams, updateFilter]);
 
-  // 从 URL 查询参数自动打开指定设备详情（监控中心单机抽屉跳转会带上 ?deviceId=xxx）
+  // 从 URL 查询参数自动打开设备编辑/详情弹窗（支持监控抽屉深链与权限降级）
   React.useEffect(() => {
-    const rawDeviceId = searchParams.get("deviceId")?.trim() ?? "";
-    if (!/^\d+$/.test(rawDeviceId)) return;
-    const parsedId = Number(rawDeviceId);
-    if (!Number.isSafeInteger(parsedId) || parsedId <= 0) return;
-    if (appliedUrlDeviceIdRef.current === parsedId) return;
+    const intent = parseDeviceDeepLink(new URLSearchParams(searchParamsString));
+    if (!intent) {
+      appliedDeepLinkKeyRef.current = null;
+      return;
+    }
+    if (appliedDeepLinkKeyRef.current === intent.key) return;
 
-    appliedUrlDeviceIdRef.current = parsedId;
+    appliedDeepLinkKeyRef.current = intent.key;
     let cancelled = false;
-    setViewModalOpen(true);
-    setViewModalLoading(true);
+    let completed = false;
+    const isEditMode = intent.action === "edit" && canUpdateDevice;
+    const sourceDeviceId = intent.source === "monitoring" ? intent.deviceId : null;
 
-    void fetchDevice(parsedId)
+    if (intent.action === "edit" && !canUpdateDevice) {
+      toast.error("当前账号缺少设备编辑权限（devices:update），已切换为只读详情");
+    }
+
+    const setModalOpen = isEditMode ? setEditModalOpen : setViewModalOpen;
+    const setModalLoading = isEditMode ? setEditModalLoading : setViewModalLoading;
+    const setModalDevice = isEditMode ? setEditingDevice : setViewingDevice;
+    const errorLabel = isEditMode ? "编辑信息" : "详情";
+
+    setModalOpen(true);
+    setModalLoading(true);
+    setModalDevice(null);
+    setEditFocusSection(isEditMode ? intent.section : undefined);
+    setReturnToMonitoringDeviceId(sourceDeviceId);
+
+    void fetchDevice(intent.deviceId)
       .then((latest) => {
         if (cancelled) return;
+        completed = true;
         if (latest) {
-          setViewingDevice(latest);
-        } else {
-          setViewModalOpen(false);
-          setViewingDevice(null);
-          toast.error(`未找到设备 #${parsedId}`);
+          setModalDevice(latest);
+          return;
         }
+        setModalOpen(false);
+        setModalDevice(null);
+        setEditFocusSection(undefined);
+        setReturnToMonitoringDeviceId(null);
+        toast.error(`未找到设备 #${intent.deviceId}`);
+        clearDeepLinkUrlRef.current();
       })
       .catch(() => {
-        if (!cancelled) {
-          setViewModalOpen(false);
-          setViewingDevice(null);
-          toast.error(`加载设备 #${parsedId} 详情失败`);
-        }
+        if (cancelled) return;
+        completed = true;
+        setModalOpen(false);
+        setModalDevice(null);
+        setEditFocusSection(undefined);
+        setReturnToMonitoringDeviceId(null);
+        toast.error(`加载设备 #${intent.deviceId} ${errorLabel}失败`);
+        clearDeepLinkUrlRef.current();
       })
       .finally(() => {
         if (!cancelled) {
-          setViewModalLoading(false);
+          completed = true;
+          setModalLoading(false);
         }
       });
 
     return () => {
       cancelled = true;
+      if (!completed && appliedDeepLinkKeyRef.current === intent.key) {
+        appliedDeepLinkKeyRef.current = null;
+      }
     };
-  }, [searchParams]);
+  }, [searchParamsString, canUpdateDevice]);
 
   React.useEffect(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -667,6 +721,8 @@ export const DeviceManagementView: React.FC = () => {
 
   // 设备操作处理函数
   const handleViewDevice = async (device: Device) => {
+    setEditFocusSection(undefined);
+    setReturnToMonitoringDeviceId(null);
     setViewModalOpen(true);
     setViewModalLoading(true);
     try {
@@ -681,6 +737,8 @@ export const DeviceManagementView: React.FC = () => {
   };
 
   const handleEditDevice = async (device: Device) => {
+    setEditFocusSection(undefined);
+    setReturnToMonitoringDeviceId(null);
     setEditModalOpen(true);
     setEditModalLoading(true);
     try {
@@ -701,6 +759,11 @@ export const DeviceManagementView: React.FC = () => {
     try {
       setEditModalLoading(true);
       await updateDeviceApi(deviceId, payload);
+      invalidateDeviceDependentCaches();
+      queryClient.invalidateQueries({ queryKey: ["monitoring-host-detail", deviceId] });
+      queryClient.invalidateQueries({ queryKey: ["monitoring-hosts"] });
+      queryClient.invalidateQueries({ queryKey: ["monitoring-topn"] });
+      queryClient.invalidateQueries({ queryKey: ["monitoring-v2"] });
       await loadDevices();
       loadStats();
       toast.success("设备更新成功");
@@ -1265,11 +1328,19 @@ export const DeviceManagementView: React.FC = () => {
           onClose={() => {
             setViewModalOpen(false);
             setViewingDevice(null);
+            setEditFocusSection(undefined);
+            setReturnToMonitoringDeviceId(null);
+            clearDeepLinkUrl();
           }}
           device={viewingDevice}
           loading={viewModalLoading}
           updateStatus={canPersistProbeStatus}
           canResetHostKey={canUpdateDevice}
+          returnToMonitoringHref={
+            returnToMonitoringDeviceId
+              ? buildMonitoringHostDrawerHref(returnToMonitoringDeviceId)
+              : undefined
+          }
         />
 
         <EditDeviceModal
@@ -1277,9 +1348,23 @@ export const DeviceManagementView: React.FC = () => {
           onClose={() => {
             setEditModalOpen(false);
             setEditingDevice(null);
+            setEditFocusSection(undefined);
+            setReturnToMonitoringDeviceId(null);
+            clearDeepLinkUrl();
           }}
           device={editingDevice}
           loading={editModalLoading}
+          focusSection={editFocusSection}
+          returnToMonitoringHref={
+            returnToMonitoringDeviceId
+              ? buildMonitoringHostDrawerHref(returnToMonitoringDeviceId)
+              : undefined
+          }
+          onReturnToMonitoring={
+            returnToMonitoringDeviceId
+              ? () => router.push(buildMonitoringHostDrawerHref(returnToMonitoringDeviceId))
+              : undefined
+          }
           onSubmit={handleUpdateDevice}
         />
 

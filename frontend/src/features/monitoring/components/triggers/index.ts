@@ -1,3 +1,7 @@
 export { TriggersTab } from './TriggersTab'
 export { TriggerEditorDrawer } from './TriggerEditorDrawer'
-export { formatTriggerNaturalSummary } from './triggerHelpers'
+export {
+  formatTriggerNaturalSummary,
+  normalizeTriggerMetricName,
+  resolveMetricMeta,
+} from './triggerHelpers'

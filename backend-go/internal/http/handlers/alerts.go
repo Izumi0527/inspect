@@ -599,7 +599,7 @@ func (h AlertsHandler) SnoozeAlert(c echo.Context) error {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "alert not found")
 		}
-		if errors.Is(err, alerts.ErrInvalidSnoozeDuration) || errors.Is(err, alerts.ErrInvalidSnoozeReason) {
+		if errors.Is(err, alerts.ErrInvalidSnoozeDuration) || errors.Is(err, alerts.ErrInvalidSnoozeReason) || errors.Is(err, alerts.ErrInvalidAlertStatus) {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to snooze alert")
@@ -639,6 +639,9 @@ func (h AlertsHandler) UnsnoozeAlert(c echo.Context) error {
 	if _, err := h.Service.UnsnoozeAlert(c.Request().Context(), alertID, operator); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "alert not found")
+		}
+		if errors.Is(err, alerts.ErrInvalidAlertStatus) {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to unsnooze alert")
 	}
@@ -1637,9 +1640,16 @@ func buildAlertRuleCreate(payload map[string]interface{}, user *auth.UserRecord)
 		thresholdValue = readFloatValue(payload["threshold"])
 	}
 
-	duration := int(readFloatValue(payload["duration"]))
-	if duration <= 0 {
-		duration = 300
+	duration := 300
+	if rawDur, has := payload["duration"]; has && rawDur != nil {
+		parsedDur, ok := toInt(rawDur)
+		if !ok {
+			return alerts.AlertRule{}, errors.New("invalid duration")
+		}
+		if parsedDur < 0 {
+			return alerts.AlertRule{}, errors.New("duration must be >= 0")
+		}
+		duration = parsedDur
 	}
 
 	isActive := true
@@ -1760,8 +1770,15 @@ func buildAlertRuleUpdates(payload map[string]interface{}) (map[string]interface
 		updates["threshold_value"] = readFloatValue(value)
 	}
 
-	if value, ok := toInt(payload["duration"]); ok && value > 0 {
-		updates["duration"] = value
+	if rawDur, has := payload["duration"]; has && rawDur != nil {
+		parsedDur, ok := toInt(rawDur)
+		if !ok {
+			return nil, errors.New("invalid duration")
+		}
+		if parsedDur < 0 {
+			return nil, errors.New("duration must be >= 0")
+		}
+		updates["duration"] = parsedDur
 	}
 
 	if value, ok := payload["is_active"].(bool); ok {

@@ -13,16 +13,19 @@ import {
 } from '@/features/inspection/api/inspection.api'
 import { useLogFilters } from '@/features/logs/hooks/useLogs'
 import { fetchDevice, fetchDeviceStats } from '@/features/devices/api/devices.api'
+import toast from 'react-hot-toast'
 import { api } from '@/lib/api-client'
 import * as inspectionHooks from '@/features/inspection/hooks/useInspection'
 
 let mockSearchParams = new URLSearchParams()
 const mockRouterReplace = jest.fn()
+const mockRouterPush = jest.fn()
+let mockUserPermissions = ['devices:read', 'devices:create', 'devices:update', 'devices:delete']
 
 jest.mock('next/navigation', () => ({
   useSearchParams: () => mockSearchParams,
   useRouter: () => ({
-    push: jest.fn(),
+    push: mockRouterPush,
     replace: mockRouterReplace,
     prefetch: jest.fn(),
     back: jest.fn(),
@@ -47,7 +50,7 @@ jest.mock('react-hot-toast', () => ({
 jest.mock('@/lib/contexts/auth-context', () => ({
   useAuth: () => ({
     user: {
-      permissions: ['devices:read', 'devices:create', 'devices:update', 'devices:delete'],
+      permissions: mockUserPermissions,
     },
   }),
   usePermission: () => true,
@@ -110,15 +113,24 @@ jest.mock('@/features/devices/components/modals/DeviceDetailsModal', () => ({
   DeviceDetailsModal: ({
     isOpen,
     device,
+    loading,
+    returnToMonitoringHref,
     onClose,
   }: {
     isOpen: boolean
     device: { id: number; name: string } | null
+    loading?: boolean
+    returnToMonitoringHref?: string
     onClose: () => void
   }) =>
     isOpen ? (
-      <div data-testid="device-details-modal">
-        <span>{device ? `${device.id}:${device.name}` : 'loading'}</span>
+      <div
+        data-testid="device-details-modal"
+        data-loading={String(Boolean(loading))}
+        data-return-href={returnToMonitoringHref ?? ''}
+      >
+        <span>{loading || !device ? 'loading' : `${device.id}:${device.name}`}</span>
+        {returnToMonitoringHref && <a href={returnToMonitoringHref}>返回监控抽屉</a>}
         <button type="button" onClick={onClose}>
           关闭详情
         </button>
@@ -130,7 +142,35 @@ jest.mock('@/features/devices/components/modals/AddDeviceModal', () => ({
   AddDeviceModal: () => null,
 }))
 jest.mock('@/features/devices/components/modals/EditDeviceModal', () => ({
-  EditDeviceModal: () => null,
+  EditDeviceModal: ({
+    isOpen,
+    device,
+    loading,
+    focusSection,
+    returnToMonitoringHref,
+    onClose,
+  }: {
+    isOpen: boolean
+    device: { id: number; name: string } | null
+    loading?: boolean
+    focusSection?: string
+    returnToMonitoringHref?: string
+    onClose: () => void
+  }) =>
+    isOpen ? (
+      <div
+        data-testid="edit-device-modal"
+        data-loading={String(Boolean(loading))}
+        data-focus-section={focusSection ?? ''}
+        data-return-href={returnToMonitoringHref ?? ''}
+      >
+        <span>{loading || !device ? 'loading' : `${device.id}:${device.name}`}</span>
+        {returnToMonitoringHref && <a href={returnToMonitoringHref}>返回监控抽屉</a>}
+        <button type="button" onClick={onClose}>
+          关闭编辑
+        </button>
+      </div>
+    ) : null,
 }))
 jest.mock('@/features/devices/components/BulkDeviceImport', () => ({
   BulkDeviceImport: () => null,
@@ -340,6 +380,7 @@ describe('跨页深链 URL 参数解析（5 处）', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockSearchParams = new URLSearchParams()
+    mockUserPermissions = ['devices:read', 'devices:create', 'devices:update', 'devices:delete']
     mockInspectionExecutionsItems = []
     mockBatchDeleteMutateAsync.mockResolvedValue({ deletedCount: 1 })
     ;(fetchDeviceStats as jest.Mock).mockResolvedValue({
@@ -366,6 +407,7 @@ describe('跨页深链 URL 参数解析（5 处）', () => {
     fireEvent.click(screen.getByRole('button', { name: '关闭详情' }))
     expect(screen.queryByTestId('device-details-modal')).not.toBeInTheDocument()
     expect(fetchDevice).toHaveBeenCalledTimes(1)
+    expect(mockRouterReplace).toHaveBeenCalledWith('/', { scroll: false })
 
     jest.clearAllMocks()
     mockSearchParams = new URLSearchParams('deviceId=abc')
@@ -374,6 +416,109 @@ describe('跨页深链 URL 参数解析（5 处）', () => {
       expect(fetchDeviceStats).toHaveBeenCalled()
     })
     expect(fetchDevice).not.toHaveBeenCalled()
+  })
+
+  it('1b. /devices?deviceId=42&action=edit&section=credentials&from=monitoring 直接打开编辑弹窗并透传凭据定位与返回监控链接', async () => {
+    mockSearchParams = new URLSearchParams(
+      'deviceId=42&action=edit&section=credentials&from=monitoring',
+    )
+    ;(fetchDevice as jest.Mock).mockResolvedValue({ id: 42, name: 'core-sw-42' })
+
+    render(<DeviceManagementView />)
+
+    const modal = await screen.findByTestId('edit-device-modal')
+    expect(modal).toHaveTextContent('42:core-sw-42')
+    expect(modal).toHaveAttribute('data-focus-section', 'credentials')
+    expect(modal).toHaveAttribute('data-return-href', '/monitoring?tab=hosts&hostId=42')
+    expect(screen.getByRole('link', { name: '返回监控抽屉' })).toHaveAttribute(
+      'href',
+      '/monitoring?tab=hosts&hostId=42',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭编辑' }))
+    expect(screen.queryByTestId('edit-device-modal')).not.toBeInTheDocument()
+    expect(mockRouterReplace).toHaveBeenCalledWith('/', { scroll: false })
+  })
+
+  it('1c. 无 devices:update 权限时，深链 edit 降级为只读详情弹窗并弹出权限提示', async () => {
+    mockUserPermissions = ['devices:read']
+    mockSearchParams = new URLSearchParams(
+      'deviceId=42&action=edit&section=credentials&from=monitoring',
+    )
+    ;(fetchDevice as jest.Mock).mockResolvedValue({ id: 42, name: 'core-sw-42' })
+
+    render(<DeviceManagementView />)
+
+    const detailsModal = await screen.findByTestId('device-details-modal')
+    expect(detailsModal).toHaveTextContent('42:core-sw-42')
+    expect(detailsModal).toHaveAttribute(
+      'data-return-href',
+      '/monitoring?tab=hosts&hostId=42',
+    )
+    expect(screen.queryByTestId('edit-device-modal')).not.toBeInTheDocument()
+    expect(toast.error).toHaveBeenCalledWith(
+      '当前账号缺少设备编辑权限（devices:update），已切换为只读详情',
+    )
+  })
+
+  it('1d. 深链编辑目标设备不存在时关闭编辑弹窗、提示错误并清理 URL 参数', async () => {
+    mockSearchParams = new URLSearchParams(
+      'deviceId=404&action=edit&section=credentials&from=monitoring',
+    )
+    ;(fetchDevice as jest.Mock).mockResolvedValue(null)
+
+    render(<DeviceManagementView />)
+
+    await waitFor(() => {
+      expect(fetchDevice).toHaveBeenCalledWith(404)
+    })
+    await waitFor(() => {
+      expect(screen.queryByTestId('edit-device-modal')).not.toBeInTheDocument()
+    })
+    expect(toast.error).toHaveBeenCalledWith('未找到设备 #404')
+    expect(mockRouterReplace).toHaveBeenCalledWith('/', { scroll: false })
+  })
+
+  it('1e. React.StrictMode 下深链编辑弹窗二次挂载后正常完成加载，不卡在 loading 态', async () => {
+    mockSearchParams = new URLSearchParams(
+      'deviceId=42&action=edit&section=credentials&from=monitoring',
+    )
+    ;(fetchDevice as jest.Mock).mockResolvedValue({ id: 42, name: 'core-sw-42' })
+
+    render(
+      <React.StrictMode>
+        <DeviceManagementView />
+      </React.StrictMode>,
+    )
+
+    const modal = await screen.findByTestId('edit-device-modal')
+    await waitFor(() => {
+      expect(modal).toHaveAttribute('data-loading', 'false')
+      expect(modal).toHaveTextContent('42:core-sw-42')
+    })
+    expect(modal).not.toHaveTextContent('loading')
+    expect(modal).toHaveAttribute('data-focus-section', 'credentials')
+    expect(modal).toHaveAttribute('data-return-href', '/monitoring?tab=hosts&hostId=42')
+    expect(fetchDevice).toHaveBeenCalledWith(42)
+  })
+
+  it('1f. React.StrictMode 下深链详情弹窗二次挂载后正常完成加载，不卡在 loading 态', async () => {
+    mockSearchParams = new URLSearchParams('deviceId=42')
+    ;(fetchDevice as jest.Mock).mockResolvedValue({ id: 42, name: 'core-sw-42' })
+
+    render(
+      <React.StrictMode>
+        <DeviceManagementView />
+      </React.StrictMode>,
+    )
+
+    const modal = await screen.findByTestId('device-details-modal')
+    await waitFor(() => {
+      expect(modal).toHaveAttribute('data-loading', 'false')
+      expect(modal).toHaveTextContent('42:core-sw-42')
+    })
+    expect(modal).not.toHaveTextContent('loading')
+    expect(fetchDevice).toHaveBeenCalledWith(42)
   })
 
   it('2. /dashboard?focusDevice=2 高亮并选中拓扑节点；不存在节点安全忽略', async () => {

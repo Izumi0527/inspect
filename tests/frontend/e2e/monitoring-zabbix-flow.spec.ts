@@ -386,13 +386,12 @@ test.describe('监控中心 Zabbix 级工作台浏览器回归 (/monitoring)', (
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('monitoring-kiosk-view')).toHaveCount(0)
 
-    // 新建分组弹窗
-    await page.getByRole('button', { name: '新建分组' }).click()
+    // 设备监控 -> 左侧栏 GroupTreeSidebar 新建分组弹窗 & 点击主机打开 6 视角抽屉
+    await page.getByRole('tab', { name: '设备监控' }).click()
+    await page.getByLabel('设备分组树导航').getByRole('button', { name: /\+ 新建分组/ }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.keyboard.press('Escape')
 
-    // 设备监控 -> 点击主机打开 6 视角抽屉
-    await page.getByRole('tab', { name: '设备监控' }).click()
     await expect(page.getByText('Core-SW-01')).toBeVisible()
     await page.getByText('Core-SW-01').click()
     await expect(page.getByRole('dialog', { name: '设备监控详情抽屉' })).toBeVisible()

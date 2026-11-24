@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { MaintenanceView } from '../../types/zabbix-monitoring.types'
 
-export type MaintenanceLifecycleStatus = 'active' | 'pending' | 'ended'
+export type MaintenanceLifecycleStatus = 'active' | 'pending' | 'ended' | 'disabled'
 
 export const MAINTENANCE_MODE_META: Record<
   string,
@@ -43,10 +43,122 @@ export const TIMEZONE_OPTIONS: ReadonlyArray<string> = [
   'America/New_York',
 ]
 
+interface ZonedDateParts {
+  year: string
+  month: string
+  day: string
+  hour: string
+  minute: string
+  second: string
+}
+
+function getZonedDateParts(date: Date, timeZone: string): ZonedDateParts {
+  const safeTimeZone = timeZone?.trim() || 'Asia/Shanghai'
+  let formatter: Intl.DateTimeFormat
+  try {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: safeTimeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+      hour12: false,
+    })
+  } catch {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+      hour12: false,
+    })
+  }
+
+  const map: Record<string, string> = {}
+  for (const part of formatter.formatToParts(date)) {
+    if (part.type !== 'literal') {
+      map[part.type] = part.value
+    }
+  }
+  const rawHour = map.hour ?? '00'
+  // 部分 ICU 运行时在午夜 0 点会输出 "24"，统一规范为 "00"
+  const hour = rawHour === '24' ? '00' : rawHour.padStart(2, '0')
+  return {
+    year: (map.year ?? '1970').padStart(4, '0'),
+    month: (map.month ?? '01').padStart(2, '0'),
+    day: (map.day ?? '01').padStart(2, '0'),
+    hour,
+    minute: (map.minute ?? '00').padStart(2, '0'),
+    second: (map.second ?? '00').padStart(2, '0'),
+  }
+}
+
+/**
+ * 将 ISO 时间字符串按指定 IANA 时区格式化为 `YYYY-MM-DD HH:mm`。
+ */
+export function formatIsoInTimezone(iso: string, timeZone: string): string {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) {
+    return iso.slice(0, 16).replace('T', ' ')
+  }
+  const parts = getZonedDateParts(date, timeZone)
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`
+}
+
+/**
+ * 将 `datetime-local` 墙钟值按所选 IANA 时区精确换算为 UTC ISO 字符串。
+ */
+export function datetimeLocalToIsoInTimezone(localValue: string, timeZone: string): string {
+  const trimmed = (localValue ?? '').trim()
+  if (!trimmed) return ''
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(trimmed)
+  if (!match) {
+    const parsed = new Date(trimmed)
+    return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString()
+  }
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const hour = Number(match[4])
+  const minute = Number(match[5])
+  const second = match[6] ? Number(match[6]) : 0
+
+  const targetUtcMs = Date.UTC(year, month - 1, day, hour, minute, second)
+  const tz = timeZone?.trim() || 'Asia/Shanghai'
+
+  let guessMs = targetUtcMs
+  for (let i = 0; i < 3; i += 1) {
+    const parts = getZonedDateParts(new Date(guessMs), tz)
+    const shownAsUtcMs = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour),
+      Number(parts.minute),
+      Number(parts.second)
+    )
+    const diff = targetUtcMs - shownAsUtcMs
+    if (diff === 0) break
+    guessMs += diff
+  }
+
+  return new Date(guessMs).toISOString()
+}
+
 export function getMaintenanceLifecycleStatus(
   window: MaintenanceView,
   nowMs = Date.now()
 ): MaintenanceLifecycleStatus {
+  if (!window.enabled) return 'disabled'
   if (window.is_active) return 'active'
   if (window.schedule_type === 'once') {
     const endMs = new Date(window.end_time).getTime()
@@ -60,8 +172,8 @@ export function getMaintenanceLifecycleStatus(
 export function formatMaintenanceWindowSchedule(window: MaintenanceView): string {
   const tz = window.timezone || 'Asia/Shanghai'
   if (window.schedule_type === 'once') {
-    const start = window.start_time.slice(0, 16).replace('T', ' ')
-    const end = window.end_time.slice(0, 16).replace('T', ' ')
+    const start = formatIsoInTimezone(window.start_time, tz)
+    const end = formatIsoInTimezone(window.end_time, tz)
     return `${start} ~ ${end} (${tz})`
   }
   if (window.schedule_type === 'weekly') {
@@ -74,10 +186,14 @@ export function formatMaintenanceWindowSchedule(window: MaintenanceView): string
   return `每月 ${doms || '1日'} ${window.recurrence?.start_hm ?? '00:00'} ~ ${window.recurrence?.end_hm ?? '02:00'} (${tz})`
 }
 
-export function toDatetimeLocalValue(iso?: string): string {
+export function toDatetimeLocalValue(iso?: string, timeZone?: string): string {
   if (!iso) return ''
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
+  if (timeZone) {
+    const parts = getZonedDateParts(date, timeZone)
+    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
+  }
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
@@ -85,7 +201,7 @@ export function toDatetimeLocalValue(iso?: string): string {
 export const maintenanceFormSchema = z
   .object({
     name: z.string().trim().min(1, '请填写维护窗口名称').max(128, '名称不超过 128 字符'),
-    description: z.string().trim().max(256).default(''),
+    description: z.string().trim().max(256, '维护说明不超过 256 字符').default(''),
     mode: z.enum(['collect_silence', 'pause_collection']),
     schedule_type: z.enum(['once', 'weekly', 'monthly']),
     timezone: z.string().trim().min(1).default('Asia/Shanghai'),
@@ -97,8 +213,11 @@ export const maintenanceFormSchema = z
   })
   .superRefine((val, ctx) => {
     if (val.schedule_type === 'once') {
-      const s = new Date(val.start_time).getTime()
-      const e = new Date(val.end_time).getTime()
+      const tz = val.timezone || 'Asia/Shanghai'
+      const startIso = datetimeLocalToIsoInTimezone(val.start_time, tz)
+      const endIso = datetimeLocalToIsoInTimezone(val.end_time, tz)
+      const s = startIso ? new Date(startIso).getTime() : Number.NaN
+      const e = endIso ? new Date(endIso).getTime() : Number.NaN
       if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

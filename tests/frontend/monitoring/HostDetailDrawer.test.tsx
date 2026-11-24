@@ -15,6 +15,7 @@ import {
 } from '@/features/monitoring/api/monitoring-config.api'
 import { fetchDeviceInterfaceTraffic } from '@/features/monitoring/api/monitoring.api'
 import { usePermission } from '@/lib/contexts/auth-context'
+import { Permission } from '@/lib/types/auth.types'
 import { formatDateTimeMDHMS } from '@/utils/formatters'
 import type { HostDetailResponse } from '@/features/monitoring/types/zabbix-monitoring.types'
 
@@ -281,7 +282,7 @@ describe('单机 6 视角观测抽屉 HostDetailDrawer (Task 11)', () => {
     expect(await screen.findByText('Core-Router-21')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /去设备管理编辑凭据/ })).toHaveAttribute(
       'href',
-      '/devices?deviceId=21'
+      '/devices?deviceId=21&action=edit&section=credentials&from=monitoring'
     )
 
     // 立即采集触发 429 冷却提示
@@ -386,6 +387,38 @@ describe('单机 6 视角观测抽屉 HostDetailDrawer (Task 11)', () => {
 
     await user.click(screen.getByRole('tab', { name: '关联日志与 Trap' }))
     expect(screen.getByText('暂无关联日志查看权限')).toBeInTheDocument()
+  })
+
+  it('仅拥有 devices:read 权限时降级渲染「查看设备配置」链接；无设备权限时隐藏链接', async () => {
+    ;(usePermission as jest.Mock).mockImplementation(
+      (perm: Permission) => perm === Permission.DEVICES_READ
+    )
+
+    const { unmount } = renderWithQuery(
+      <HostDetailDrawer deviceId={21} onClose={jest.fn()} />
+    )
+    expect(await screen.findByText('Core-Router-21')).toBeInTheDocument()
+
+    expect(
+      screen.queryByRole('link', { name: /去设备管理编辑凭据/ })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /查看设备配置/ })).toHaveAttribute(
+      'href',
+      '/devices?deviceId=21&from=monitoring'
+    )
+
+    unmount()
+
+    ;(usePermission as jest.Mock).mockReturnValue(false)
+    renderWithQuery(<HostDetailDrawer deviceId={21} onClose={jest.fn()} />)
+    expect(await screen.findByText('Core-Router-21')).toBeInTheDocument()
+
+    expect(
+      screen.queryByRole('link', { name: /去设备管理编辑凭据/ })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: /查看设备配置/ })
+    ).not.toBeInTheDocument()
   })
 
   it('真机 ifX 合成键场景：隐藏 ifX、仅展示真实端口名与描述、无描述不重复端口名且点击仍用 ifX 查流量', async () => {
