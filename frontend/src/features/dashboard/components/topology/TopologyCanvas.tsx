@@ -5,8 +5,13 @@ import { Button } from '@/components/atoms'
 import { cn } from '@/utils/cn'
 import type { NetworkTopology, TopologyLink, TopologyPoint, TopologyViewport } from '../../types'
 import { GAP_Y, NODE_H, NODE_W, type TopologyLayout } from '../../utils/topologyLayout'
+import {
+  computeLinkGeometry,
+  shouldCurveLink,
+  type LinkGeometryResult,
+} from '../../utils/topologyLinkGeometry'
 import type { NodeRole } from '../../utils/topologyRoles'
-import { TopologyLinkView } from './TopologyLinkView'
+import { TopologyLinkPath, TopologyLinkPorts } from './TopologyLinkView'
 import { TopologyNodeView } from './TopologyNodeView'
 
 interface TopologyCanvasProps {
@@ -234,7 +239,36 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
     onSelect(id)
   }
 
-  const centerOf = (point: TopologyPoint): TopologyPoint => ({ x: point.x + NODE_W / 2, y: point.y + NODE_H / 2 })
+  const linkGeometries = useMemo<Array<{ link: TopologyLink; geometry: LinkGeometryResult }>>(
+    () =>
+      topology.links.flatMap((link) => {
+        const from = positions.get(link.source)
+        const to = positions.get(link.target)
+        if (!from || !to) return []
+        const fromCenter = { x: from.x + NODE_W / 2, y: from.y + NODE_H / 2 }
+        const toCenter = { x: to.x + NODE_W / 2, y: to.y + NODE_H / 2 }
+        const sourceTier = tierById.get(link.source)
+        const targetTier = tierById.get(link.target)
+        const sameLogicalTier = sourceTier !== undefined && sourceTier === targetTier
+        const slots = linkSlots.get(link.id) ?? { source: 0, target: 0 }
+        return [
+          {
+            link,
+            geometry: computeLinkGeometry({
+              from: fromCenter,
+              to: toCenter,
+              curved: shouldCurveLink(sameLogicalTier, fromCenter, toCenter),
+              sourcePort: link.sourcePort,
+              targetPort: link.targetPort,
+              sourceSlot: slots.source,
+              targetSlot: slots.target,
+            }),
+          },
+        ]
+      }),
+    [topology.links, positions, tierById, linkSlots]
+  )
+
   const isLinkUp = (link: TopologyLink) =>
     nodeById.get(link.source)?.status === 'online' && nodeById.get(link.target)?.status === 'online'
   const isHighlighted = (link: TopologyLink) =>
@@ -296,42 +330,47 @@ export const TopologyCanvas: React.FC<TopologyCanvasProps> = ({
             </g>
           ))}
 
-          {topology.links.map((link) => {
-            const from = positions.get(link.source)
-            const to = positions.get(link.target)
-            if (!from || !to) return null
-            const slots = linkSlots.get(link.id) ?? { source: 0, target: 0 }
-            return (
-              <TopologyLinkView
+          <g data-testid="topology-links-layer">
+            {linkGeometries.map(({ link, geometry }) => (
+              <TopologyLinkPath
                 key={link.id}
                 link={link}
-                from={centerOf(from)}
-                to={centerOf(to)}
-                sameTier={tierById.get(link.source) === tierById.get(link.target)}
+                geometry={geometry}
                 up={isLinkUp(link)}
                 highlighted={isHighlighted(link)}
-                sourceSlot={slots.source}
-                targetSlot={slots.target}
               />
-            )
-          })}
+            ))}
+          </g>
 
-          {topology.nodes.map((node) => {
-            const position = positions.get(node.id)
-            if (!position) return null
-            return (
-              <TopologyNodeView
-                key={node.id}
-                node={node}
-                role={roles.get(node.id)}
-                position={position}
-                selected={node.id === selectedId}
-                draggable={canEdit}
-                onSelect={handleSelect}
-                onDragStart={startNodeDrag}
+          <g data-testid="topology-nodes-layer">
+            {topology.nodes.map((node) => {
+              const position = positions.get(node.id)
+              if (!position) return null
+              return (
+                <TopologyNodeView
+                  key={node.id}
+                  node={node}
+                  role={roles.get(node.id)}
+                  position={position}
+                  selected={node.id === selectedId}
+                  draggable={canEdit}
+                  onSelect={handleSelect}
+                  onDragStart={startNodeDrag}
+                />
+              )
+            })}
+          </g>
+
+          <g data-testid="topology-ports-layer">
+            {linkGeometries.map(({ link, geometry }) => (
+              <TopologyLinkPorts
+                key={link.id}
+                link={link}
+                geometry={geometry}
+                highlighted={isHighlighted(link)}
               />
-            )
-          })}
+            ))}
+          </g>
         </g>
       </svg>
 

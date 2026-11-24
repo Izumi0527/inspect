@@ -6,8 +6,8 @@ import { NODE_H, NODE_W } from '../../utils/topologyLayout'
 import { ROLE_LABELS, type NodeRole } from '../../utils/topologyRoles'
 import {
   getDeviceTypeLabel,
-  getDeviceVisualMetaByType,
   getTopologyNodeStatusMeta,
+  getTopologyNodeVisualMeta,
   iconMap,
 } from './deviceVisualMeta'
 
@@ -39,10 +39,11 @@ export const TopologyNodeView: React.FC<TopologyNodeViewProps> = ({
   onSelect,
   onDragStart,
 }) => {
-  const meta = getDeviceVisualMetaByType(displayTypeOf(node))
+  const displayType = displayTypeOf(node)
+  const visualMeta = getTopologyNodeVisualMeta(displayType, role?.role)
   const statusMeta = getTopologyNodeStatusMeta(node.status)
-  const Icon = iconMap[meta.icon]
-  const typeLabel = getDeviceTypeLabel(displayTypeOf(node))
+  const Icon = iconMap[visualMeta.icon]
+  const typeLabel = getDeviceTypeLabel(displayType)
   const roleLabel = role ? ROLE_LABELS[role.role] : ''
 
   return (
@@ -51,6 +52,8 @@ export const TopologyNodeView: React.FC<TopologyNodeViewProps> = ({
       tabIndex={0}
       aria-label={`设备节点 ${node.name}`}
       aria-pressed={selected}
+      data-role={role?.role ?? 'unknown'}
+      data-icon={visualMeta.icon}
       transform={`translate(${position.x}, ${position.y})`}
       className={cn('group outline-none', draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer')}
       onPointerDown={(event) => onDragStart(node.id, event)}
@@ -69,15 +72,24 @@ export const TopologyNodeView: React.FC<TopologyNodeViewProps> = ({
         strokeWidth={selected ? 3 : 1.5}
         className={cn(
           'fill-card transition-all duration-300 group-hover:drop-shadow-lg',
-          selected ? 'stroke-blue-500' : meta.strokeClassName
+          selected ? 'stroke-blue-500' : visualMeta.strokeClassName
         )}
+      />
+      <rect
+        x={24}
+        y={10}
+        width={48}
+        height={38}
+        rx={10}
+        className={visualMeta.iconBackdropClassName}
       />
       <Icon
         x={(NODE_W - ICON_SIZE) / 2}
-        y={14}
+        y={13}
         width={ICON_SIZE}
         height={ICON_SIZE}
-        className={cn('transition-transform duration-300 group-hover:scale-110', meta.iconClassName)}
+        strokeWidth={visualMeta.strokeWidth}
+        className={cn('transition-transform duration-300 group-hover:scale-110', visualMeta.iconClassName)}
         aria-hidden
       />
       <circle cx={NODE_W - 12} cy={12} r={4} className={statusMeta.dotClassName} />
@@ -95,7 +107,7 @@ export const TopologyNodeView: React.FC<TopologyNodeViewProps> = ({
         textAnchor="middle"
         className="fill-muted-foreground text-[10px]"
       >
-        {typeLabel}
+        {visualMeta.subtitle}
       </text>
       <title>{`${node.name} (${node.ip}) · ${typeLabel}${roleLabel ? ` · ${roleLabel}` : ''} · ${statusMeta.label}`}</title>
     </g>

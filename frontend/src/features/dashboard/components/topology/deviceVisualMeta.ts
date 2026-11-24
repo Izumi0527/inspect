@@ -1,3 +1,4 @@
+import type React from 'react'
 import type { IconType } from 'react-icons'
 import {
   HiOutlineServer,
@@ -14,7 +15,14 @@ import {
   TbCloudNetwork,
 } from 'react-icons/tb'
 
+import { getDeviceTypeLabel } from '@/utils/deviceTypes'
 import type { NetworkOverviewItem, TopologyLLDPStatus, TopologyNodeStatus } from '../../types'
+import type { NetworkRole } from '../../utils/topologyRoles'
+import {
+  AccessSwitchIcon,
+  AggregationSwitchIcon,
+  CoreSwitchIcon,
+} from './TopologyDeviceIcons'
 
 // 网络概览卡片与拓扑图共用的图标、配色与文案元数据。
 // 拓扑节点与类型图例必须长得一样，否则用户无法把"图例里的交换机"和"图上的交换机"对上。
@@ -30,7 +38,10 @@ export const iconMap = {
   Network: TbNetwork,
   Desktop: TbDeviceDesktop,
   Cloud: TbCloudNetwork,
-} satisfies Record<string, IconType>
+  CoreSwitch: CoreSwitchIcon,
+  AggregationSwitch: AggregationSwitchIcon,
+  AccessSwitch: AccessSwitchIcon,
+} satisfies Record<string, IconType | React.ComponentType<React.SVGProps<SVGSVGElement>>>
 
 export type DeviceIconName = keyof typeof iconMap
 
@@ -114,10 +125,59 @@ export const deviceVisualMetaMap: Record<DeviceIconName, DeviceVisualMeta> = {
     titleHoverClassName: 'group-hover:text-slate-700 dark:group-hover:text-slate-200',
     strokeClassName: 'stroke-slate-500/60',
   },
+  CoreSwitch: {
+    icon: 'CoreSwitch',
+    surfaceClassName: 'bg-indigo-50 dark:bg-indigo-950/30',
+    iconClassName: 'text-indigo-600 dark:text-indigo-400',
+    titleHoverClassName: 'group-hover:text-indigo-600 dark:group-hover:text-indigo-400',
+    strokeClassName: 'stroke-indigo-500/80',
+  },
+  AggregationSwitch: {
+    icon: 'AggregationSwitch',
+    surfaceClassName: 'bg-blue-50 dark:bg-blue-950/30',
+    iconClassName: 'text-blue-600 dark:text-blue-400',
+    titleHoverClassName: 'group-hover:text-blue-600 dark:group-hover:text-blue-400',
+    strokeClassName: 'stroke-blue-500/75',
+  },
+  AccessSwitch: {
+    icon: 'AccessSwitch',
+    surfaceClassName: 'bg-teal-50 dark:bg-teal-950/30',
+    iconClassName: 'text-teal-600 dark:text-teal-400',
+    titleHoverClassName: 'group-hover:text-teal-600 dark:group-hover:text-teal-400',
+    strokeClassName: 'stroke-teal-500/70',
+  },
 }
 
 // 设备类型（台账 device_type / SNMP 识别值）→ 中文文案，全前端共用一份映射
-export { getDeviceTypeLabel } from '@/utils/deviceTypes'
+export { getDeviceTypeLabel }
+
+export interface TopologyNodeVisualMeta extends DeviceVisualMeta {
+  iconBackdropClassName: string
+  subtitle: string
+  strokeWidth: number
+}
+
+const SWITCH_ROLE_VISUAL: Partial<Record<NetworkRole, TopologyNodeVisualMeta>> = {
+  core: { ...deviceVisualMetaMap.CoreSwitch, iconBackdropClassName: 'fill-indigo-500/10 dark:fill-indigo-400/15', subtitle: '核心交换机', strokeWidth: 2 },
+  aggregation: { ...deviceVisualMetaMap.AggregationSwitch, iconBackdropClassName: 'fill-blue-500/10 dark:fill-blue-400/15', subtitle: '汇聚交换机', strokeWidth: 1.75 },
+  access: { ...deviceVisualMetaMap.AccessSwitch, iconBackdropClassName: 'fill-teal-500/10 dark:fill-teal-400/15', subtitle: '接入交换机', strokeWidth: 1.5 },
+}
+
+const ICON_BACKDROP: Partial<Record<DeviceIconName, string>> = {
+  Router: 'fill-sky-500/10 dark:fill-sky-400/15',
+  Shield: 'fill-red-500/10 dark:fill-red-400/15',
+  Wifi: 'fill-cyan-500/10 dark:fill-cyan-400/15',
+  Server: 'fill-green-500/10 dark:fill-green-400/15',
+}
+
+export const getTopologyNodeVisualMeta = (deviceType: string, role?: NetworkRole): TopologyNodeVisualMeta => {
+  if (deviceType.trim().toLowerCase() === 'switch') {
+    if (role && SWITCH_ROLE_VISUAL[role]) return SWITCH_ROLE_VISUAL[role]!
+    return { ...deviceVisualMetaMap.Network, icon: 'AccessSwitch', iconBackdropClassName: 'fill-sky-500/10 dark:fill-sky-400/15', subtitle: '交换机', strokeWidth: 1.5 }
+  }
+  const base = getDeviceVisualMetaByType(deviceType)
+  return { ...base, iconBackdropClassName: ICON_BACKDROP[base.icon] ?? 'fill-muted/60 dark:fill-muted/40', subtitle: getDeviceTypeLabel(deviceType), strokeWidth: 1.5 }
+}
 
 // 设备类型 → 视觉元数据；未知类型退回芯片图标
 export const getDeviceVisualMetaByType = (type: string): DeviceVisualMeta => {
@@ -176,40 +236,15 @@ export const getDeviceVisualMeta = (item: NetworkOverviewItem): DeviceVisualMeta
 export const getNetworkStatusMeta = (status: NetworkOverviewItem['status']) => {
   switch (status) {
     case 'healthy':
-      return {
-        label: '健康',
-        className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
-        gradientClassName: 'from-emerald-500 to-teal-600',
-        description: '运行稳定，暂无异常波动',
-      }
+      return { label: '健康', className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300', gradientClassName: 'from-emerald-500 to-teal-600', description: '运行稳定，暂无异常波动' }
     case 'warning':
-      return {
-        label: '告警',
-        className: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
-        gradientClassName: 'from-amber-500 to-orange-600',
-        description: '存在风险信号，建议尽快排查',
-      }
+      return { label: '告警', className: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300', gradientClassName: 'from-amber-500 to-orange-600', description: '存在风险信号，建议尽快排查' }
     case 'critical':
-      return {
-        label: '严重',
-        className: 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
-        gradientClassName: 'from-rose-500 to-pink-600',
-        description: '需要立即处理当前链路异常',
-      }
+      return { label: '严重', className: 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300', gradientClassName: 'from-rose-500 to-pink-600', description: '需要立即处理当前链路异常' }
     case 'normal':
-      return {
-        label: '正常',
-        className: 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
-        gradientClassName: 'from-sky-500 to-blue-600',
-        description: '当前运行平稳，保持持续观察',
-      }
+      return { label: '正常', className: 'bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300', gradientClassName: 'from-sky-500 to-blue-600', description: '当前运行平稳，保持持续观察' }
     default:
-      return {
-        label: '未知',
-        className: 'bg-gray-100 text-gray-700 dark:bg-gray-900/60 dark:text-gray-300',
-        gradientClassName: 'from-gray-500 to-slate-600',
-        description: '等待设备继续上报最新状态',
-      }
+      return { label: '未知', className: 'bg-gray-100 text-gray-700 dark:bg-gray-900/60 dark:text-gray-300', gradientClassName: 'from-gray-500 to-slate-600', description: '等待设备继续上报最新状态' }
   }
 }
 

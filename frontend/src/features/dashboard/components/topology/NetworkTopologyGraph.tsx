@@ -3,13 +3,17 @@ import { LayoutGrid, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import { Button } from '@/components/atoms'
+import { cn } from '@/utils/cn'
 import { formatDateTimeYMDHM } from '@/utils/formatters'
 import type { NetworkTopology } from '../../types'
 import { useTopologyLayoutState } from '../../hooks/useTopologyLayoutState'
-import { inferNodeRoles } from '../../utils/topologyRoles'
+import { inferNodeRoles, ROLE_LABELS, type NetworkRole } from '../../utils/topologyRoles'
+import { getTopologyNodeVisualMeta, iconMap } from './deviceVisualMeta'
 import { EmptyLinksHint } from './EmptyLinksHint'
 import { TopologyCanvas } from './TopologyCanvas'
 import { TopologyNodeDetail } from './TopologyNodeDetail'
+
+const SWITCH_LEGEND_ROLES: readonly NetworkRole[] = ['core', 'aggregation', 'access']
 
 interface NetworkTopologyGraphProps {
   topology: NetworkTopology
@@ -51,6 +55,22 @@ export const NetworkTopologyGraph: React.FC<NetworkTopologyGraphProps> = ({
   const selectedLinks = selectedNode
     ? topology.links.filter((link) => link.source === selectedNode.id || link.target === selectedNode.id)
     : []
+
+  const switchLegendItems = useMemo(() => {
+    const present = new Set<NetworkRole>()
+    for (const node of topology.nodes) {
+      const type = (node.detectedType ?? node.deviceType).trim().toLowerCase()
+      const role = roles.get(node.id)?.role
+      if (type === 'switch' && role && SWITCH_LEGEND_ROLES.includes(role)) {
+        present.add(role)
+      }
+    }
+    return SWITCH_LEGEND_ROLES.filter((role) => present.has(role)).map((role) => ({
+      role,
+      label: ROLE_LABELS[role],
+      meta: getTopologyNodeVisualMeta('switch', role),
+    }))
+  }, [topology.nodes, roles])
 
   if (topology.nodes.length === 0) {
     return null
@@ -109,6 +129,28 @@ export const NetworkTopologyGraph: React.FC<NetworkTopologyGraphProps> = ({
           )}
         </div>
       </div>
+
+      {switchLegendItems.length > 0 && (
+        <div
+          data-testid="topology-role-legend"
+          className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground"
+        >
+          <span className="text-muted-foreground/80">交换机层级：</span>
+          {switchLegendItems.map(({ role, label, meta }) => {
+            const Icon = iconMap[meta.icon]
+            return (
+              <span key={role} className="inline-flex items-center gap-1.5">
+                <Icon
+                  className={cn('h-3.5 w-3.5', meta.iconClassName)}
+                  strokeWidth={meta.strokeWidth}
+                  aria-hidden
+                />
+                <span className="text-foreground/90">{label}</span>
+              </span>
+            )
+          })}
+        </div>
+      )}
 
       <TopologyCanvas
         topology={topology}

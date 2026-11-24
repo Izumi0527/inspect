@@ -426,4 +426,87 @@ describe('NetworkTopologyGraph', () => {
     fireEvent.click(screen.getByRole('button', { name: /设备节点 acc/ }))
     expect(screen.getByTestId('topology-node-detail')).toHaveTextContent('LLDP：尚未采集')
   })
+
+  it('已保存布局中同层垂直级联链路走直线，接口标签不进入节点矩形且不重叠', () => {
+    const verticalCascade: NetworkTopology = {
+      nodes: [
+        node({ id: 1, name: '16F汇聚交换机' }),
+        node({ id: 2, name: '16F接入交换机1' }),
+        node({ id: 3, name: '16F接入交换机2' }),
+      ],
+      links: [
+        { id: '1-2', source: 1, target: 2, sourcePort: 'GE0/0/1', targetPort: 'GE0/0/49', bidirectional: true },
+        { id: '2-3', source: 2, target: 3, sourcePort: 'GE0/0/48', targetPort: 'GE0/0/48', bidirectional: true },
+      ],
+      layout: {
+        positions: [
+          { deviceId: 1, x: 100, y: 24 },
+          { deviceId: 2, x: 100, y: 180 },
+          { deviceId: 3, x: 100, y: 312 },
+        ],
+      },
+    }
+
+    const { container } = render(<NetworkTopologyGraph topology={verticalCascade} />)
+    const cascadeLink = container.querySelector('[data-testid="topology-link"][data-link-id="2-3"]')
+    expect(cascadeLink?.getAttribute('data-curved')).toBe('false')
+
+    const portsLayer = container.querySelector('[data-testid="topology-ports-layer"]')!
+    const labels = Array.from(portsLayer.querySelectorAll('[data-testid="topology-link-port"]')).filter(
+      (el) => el.textContent === 'GE0/0/48'
+    )
+    expect(labels).toHaveLength(2)
+    const ys = labels.map((el) => parseTranslate(el.getAttribute('transform')).y).sort((a, b) => a - b)
+    // 节点 2 范围 [180, 276]，节点 3 范围 [312, 408]，两个标签 y 应在间隙外侧且互不重叠
+    expect(ys[0]).toBeGreaterThan(276)
+    expect(ys[1]).toBeLessThan(312)
+    expect(ys[1] - ys[0]).toBeGreaterThanOrEqual(20)
+  })
+
+  it('SVG 图层严格按 边线 -> 节点 -> 接口标签 的顺序渲染，确保标签不被节点遮挡', () => {
+    const { container } = render(<NetworkTopologyGraph topology={labTopology} />)
+    const linksLayer = container.querySelector('[data-testid="topology-links-layer"]')!
+    const nodesLayer = container.querySelector('[data-testid="topology-nodes-layer"]')!
+    const portsLayer = container.querySelector('[data-testid="topology-ports-layer"]')!
+
+    expect(linksLayer.compareDocumentPosition(nodesLayer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(nodesLayer.compareDocumentPosition(portsLayer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('核心 / 汇聚 / 接入交换机使用区分图标与副标题，并展示交换机层级图例', () => {
+    const threeTierSwitches: NetworkTopology = {
+      nodes: [
+        node({ id: 1, name: '核心交换机-01' }),
+        node({ id: 2, name: '汇聚交换机-01' }),
+        node({ id: 3, name: '接入交换机-01' }),
+      ],
+      links: [
+        { id: '1-2', source: 1, target: 2, sourcePort: 'XGE0/0/1', targetPort: 'XGE0/0/1', bidirectional: true },
+        { id: '2-3', source: 2, target: 3, sourcePort: 'GE0/0/1', targetPort: 'GE0/0/49', bidirectional: true },
+      ],
+    }
+
+    render(<NetworkTopologyGraph topology={threeTierSwitches} />)
+
+    const coreNode = screen.getByRole('button', { name: '设备节点 核心交换机-01' })
+    const aggNode = screen.getByRole('button', { name: '设备节点 汇聚交换机-01' })
+    const accNode = screen.getByRole('button', { name: '设备节点 接入交换机-01' })
+
+    expect(coreNode).toHaveAttribute('data-role', 'core')
+    expect(coreNode).toHaveAttribute('data-icon', 'CoreSwitch')
+    expect(coreNode).toHaveTextContent('核心交换机')
+
+    expect(aggNode).toHaveAttribute('data-role', 'aggregation')
+    expect(aggNode).toHaveAttribute('data-icon', 'AggregationSwitch')
+    expect(aggNode).toHaveTextContent('汇聚交换机')
+
+    expect(accNode).toHaveAttribute('data-role', 'access')
+    expect(accNode).toHaveAttribute('data-icon', 'AccessSwitch')
+    expect(accNode).toHaveTextContent('接入交换机')
+
+    const legend = screen.getByTestId('topology-role-legend')
+    expect(legend).toHaveTextContent('核心')
+    expect(legend).toHaveTextContent('汇聚')
+    expect(legend).toHaveTextContent('接入')
+  })
 })
