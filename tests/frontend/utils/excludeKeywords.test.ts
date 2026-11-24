@@ -78,4 +78,23 @@ describe('matchesAlertExcludeKeywords & matchesLogExcludeKeywords（人话翻译
     expect(matchesLogExcludeKeywords(powerLog, ['电源'])).toBe(true)
     expect(matchesLogExcludeKeywords(powerLog, ['温度'])).toBe(false)
   })
+
+  it('不再匹配人话翻译 suggestion 字段，避免恢复类或接口类事件被 suggestion 中的排查词误杀', () => {
+    const recoverLog = {
+      message: 'ERRDOWN/4/ERRDOWN_DOWNRECOVER: The interface GE0/0/1 leaves the error-down state',
+      device_name: 'sw1',
+      level: 'info',
+      facility: 'interface',
+    }
+    expect(matchesLogExcludeKeywords(recoverLog, ['错包'])).toBe(false)
+
+    const recoverAlert = {
+      title: '端口恢复',
+      description: 'ERRDOWN/4/ERRDOWN_DOWNRECOVER: The interface GE0/0/1 leaves the error-down state',
+      device: 'sw1',
+      severity: 'info',
+      category: 'connectivity',
+    }
+    expect(matchesAlertExcludeKeywords(recoverAlert, ['错包'])).toBe(false)
+  })
 })

@@ -96,12 +96,12 @@ func TestBatchDeleteLogs_SelectAllFiltered_WithExcludeSearch(t *testing.T) {
 	startTime := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	now := time.Now().UTC()
 
-	mock.ExpectQuery(`SELECT count\(\*\) FROM device_logs AS l LEFT JOIN devices d ON d.id = l.device_id WHERE l.level = \$1 AND l.log_timestamp >= \$2 AND \({1,2}COALESCE\(l\.message, ''\) NOT ILIKE \$3 AND COALESCE\(l\.raw_message, ''\) NOT ILIKE \$4\){1,2} AND l.self_generated = \$5`).
-		WithArgs("error", startTime, "%noise%", "%noise%", false).
+	mock.ExpectQuery(`SELECT count\(\*\) FROM device_logs AS l LEFT JOIN devices d ON d.id = l.device_id WHERE l.level = \$1 AND l.log_timestamp >= \$2 AND \({1,2}COALESCE\(l\.message, ''\) NOT ILIKE \$3 AND COALESCE\(l\.raw_message, ''\) NOT ILIKE \$4 AND COALESCE\(d\.name, ''\) NOT ILIKE \$5 AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$6 AND COALESCE\(l\.source_process, ''\) NOT ILIKE \$7 AND COALESCE\(l\.facility, ''\) NOT ILIKE \$8\){1,2} AND l.self_generated = \$9`).
+		WithArgs("error", startTime, "%noise%", "%noise%", "%noise%", "%noise%", "%noise%", "%noise%", false).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
-	mock.ExpectQuery(`SELECT l\.\*, d\.name AS device_name, d\.ip_address AS device_ip FROM device_logs AS l LEFT JOIN devices d ON d\.id = l\.device_id WHERE l\.level = \$1 AND l\.log_timestamp >= \$2 AND \({1,2}COALESCE\(l\.message, ''\) NOT ILIKE \$3 AND COALESCE\(l\.raw_message, ''\) NOT ILIKE \$4\){1,2} AND l\.self_generated = \$5 ORDER BY l\.log_timestamp desc LIMIT \$6`).
-		WithArgs("error", startTime, "%noise%", "%noise%", false, 1000).
+	mock.ExpectQuery(`SELECT l\.\*, d\.name AS device_name, d\.ip_address AS device_ip FROM device_logs AS l LEFT JOIN devices d ON d\.id = l\.device_id WHERE l\.level = \$1 AND l\.log_timestamp >= \$2 AND \({1,2}COALESCE\(l\.message, ''\) NOT ILIKE \$3 AND COALESCE\(l\.raw_message, ''\) NOT ILIKE \$4 AND COALESCE\(d\.name, ''\) NOT ILIKE \$5 AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$6 AND COALESCE\(l\.source_process, ''\) NOT ILIKE \$7 AND COALESCE\(l\.facility, ''\) NOT ILIKE \$8\){1,2} AND l\.self_generated = \$9 ORDER BY l\.log_timestamp desc LIMIT \$10`).
+		WithArgs("error", startTime, "%noise%", "%noise%", "%noise%", "%noise%", "%noise%", "%noise%", false, 1000).
 		WillReturnRows(sqlmock.NewRows(logColumns()).
 			AddRow(201, 1, "error", "daemon", "syslog", "msg1", nil, nil, nil, now, now, now, false, "dev1", "10.0.0.1"))
 
@@ -152,12 +152,12 @@ func TestBatchDeleteLogs_SelectAllFiltered_WithCamelCaseExcludeSearch(t *testing
 
 	startTime := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 
-	mock.ExpectQuery(`SELECT count\(\*\) FROM device_logs AS l LEFT JOIN devices d ON d.id = l.device_id WHERE l.level = \$1 AND l.log_timestamp >= \$2 AND \({1,2}COALESCE\(l\.message, ''\) NOT ILIKE \$3 AND COALESCE\(l\.raw_message, ''\) NOT ILIKE \$4\){1,2} AND l.self_generated = \$5`).
-		WithArgs("warning", startTime, `%keep\_away%`, `%keep\_away%`, false).
+	mock.ExpectQuery(`SELECT count\(\*\) FROM device_logs AS l LEFT JOIN devices d ON d.id = l.device_id WHERE l.level = \$1 AND l.log_timestamp >= \$2 AND \({1,2}COALESCE\(l\.message, ''\) NOT ILIKE \$3 AND COALESCE\(l\.raw_message, ''\) NOT ILIKE \$4 AND COALESCE\(d\.name, ''\) NOT ILIKE \$5 AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$6 AND COALESCE\(l\.source_process, ''\) NOT ILIKE \$7 AND COALESCE\(l\.facility, ''\) NOT ILIKE \$8\){1,2} AND l.self_generated = \$9`).
+		WithArgs("warning", startTime, `%keep\_away%`, `%keep\_away%`, `%keep\_away%`, `%keep\_away%`, `%keep\_away%`, `%keep\_away%`, false).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-	mock.ExpectQuery(`SELECT l\.\*, d\.name AS device_name, d\.ip_address AS device_ip FROM device_logs AS l LEFT JOIN devices d ON d\.id = l\.device_id WHERE l\.level = \$1 AND l\.log_timestamp >= \$2 AND \({1,2}COALESCE\(l\.message, ''\) NOT ILIKE \$3 AND COALESCE\(l\.raw_message, ''\) NOT ILIKE \$4\){1,2} AND l\.self_generated = \$5 ORDER BY l\.log_timestamp desc LIMIT \$6`).
-		WithArgs("warning", startTime, `%keep\_away%`, `%keep\_away%`, false, 1000).
+	mock.ExpectQuery(`SELECT l\.\*, d\.name AS device_name, d\.ip_address AS device_ip FROM device_logs AS l LEFT JOIN devices d ON d\.id = l\.device_id WHERE l\.level = \$1 AND l\.log_timestamp >= \$2 AND \({1,2}COALESCE\(l\.message, ''\) NOT ILIKE \$3 AND COALESCE\(l\.raw_message, ''\) NOT ILIKE \$4 AND COALESCE\(d\.name, ''\) NOT ILIKE \$5 AND COALESCE\(CAST\(d\.ip_address AS TEXT\), ''\) NOT ILIKE \$6 AND COALESCE\(l\.source_process, ''\) NOT ILIKE \$7 AND COALESCE\(l\.facility, ''\) NOT ILIKE \$8\){1,2} AND l\.self_generated = \$9 ORDER BY l\.log_timestamp desc LIMIT \$10`).
+		WithArgs("warning", startTime, `%keep\_away%`, `%keep\_away%`, `%keep\_away%`, `%keep\_away%`, `%keep\_away%`, `%keep\_away%`, false, 1000).
 		WillReturnRows(sqlmock.NewRows(logColumns()))
 
 	payload := map[string]interface{}{

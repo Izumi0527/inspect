@@ -212,8 +212,9 @@ func (h LogsHandler) GetLogStatistics(c echo.Context) error {
 
 	deviceID := parseOptionalInt(c.QueryParam("device_id"))
 	hours := parseIntDefault(c.QueryParam("hours"), 24)
+	excludeSearch := parseOptionalExcludeSearch(c)
 
-	stats, err := h.Service.GetLogStatistics(c.Request().Context(), deviceID, hours)
+	stats, err := h.Service.GetLogStatisticsWithExclude(c.Request().Context(), deviceID, hours, excludeSearch)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load log statistics")
 	}
@@ -972,7 +973,7 @@ func (h LogsHandler) ExportLogs(c echo.Context) error {
 
 	var stats *logs.LogStatistics
 	if includeStats && (format == "xlsx") {
-		value, err := h.Service.GetLogStatistics(c.Request().Context(), nil, 24)
+		value, err := h.Service.GetLogStatisticsWithExclude(c.Request().Context(), nil, 24, parseOptionalExcludeSearch(c))
 		if err == nil {
 			stats = &value
 		}
@@ -1036,16 +1037,21 @@ func buildLogFilter(c echo.Context, skip int, limit int, loc *time.Location) log
 	if search != "" {
 		filter.Search = &search
 	}
+	filter.ExcludeSearch = parseOptionalExcludeSearch(c)
+	filter.IncludeSelf = parseBoolDefault(c.QueryParam("include_self"), false)
+
+	return filter
+}
+
+func parseOptionalExcludeSearch(c echo.Context) *string {
 	excludeSearch := strings.TrimSpace(c.QueryParam("exclude_search"))
 	if excludeSearch == "" {
 		excludeSearch = strings.TrimSpace(c.QueryParam("exclude_keyword"))
 	}
-	if excludeSearch != "" {
-		filter.ExcludeSearch = &excludeSearch
+	if excludeSearch == "" {
+		return nil
 	}
-	filter.IncludeSelf = parseBoolDefault(c.QueryParam("include_self"), false)
-
-	return filter
+	return &excludeSearch
 }
 
 // BuildLogFilter 提供可测试的过滤器构造入口（内部仍复用 buildLogFilter）。

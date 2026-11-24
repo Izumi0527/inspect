@@ -7,10 +7,6 @@ import { toast } from 'react-hot-toast'
 import { toLocalDayBoundaryIso } from '@/utils/dateRangeQuery'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import { useDisplayPreferences } from '@/hooks/useDatetimePreferencesSync'
-import {
-  matchesLogExcludeKeywords,
-  splitExcludeKeywords,
-} from '@/utils/excludeKeywords'
 import * as logsApi from '../api/logsApi'
 import type {
   DeviceLog,
@@ -42,11 +38,6 @@ export function useLogs(params: LogQueryParams = {}) {
     total: 0
   })
   const requestIdRef = useRef(0)
-
-  const excludeKeywords = useMemo(
-    () => splitExcludeKeywords(params.exclude_search ?? ''),
-    [params.exclude_search],
-  )
 
   const loadLogs = useCallback(async (options: RequestOptions = {}) => {
     const { showToast = true } = options
@@ -82,20 +73,6 @@ export function useLogs(params: LogQueryParams = {}) {
       }
     }
   }, [params])
-
-  const filteredLogs = useMemo(() => {
-    if (excludeKeywords.length === 0) return logs
-    return logs.filter((log) => !matchesLogExcludeKeywords(log, excludeKeywords))
-  }, [logs, excludeKeywords])
-
-  const effectivePagination = useMemo(() => {
-    const removedCount = logs.length - filteredLogs.length
-    if (removedCount <= 0) return pagination
-    return {
-      ...pagination,
-      total: Math.max(0, pagination.total - removedCount),
-    }
-  }, [logs.length, filteredLogs.length, pagination])
 
   useEffect(() => {
     void loadLogs()
@@ -151,10 +128,10 @@ export function useLogs(params: LogQueryParams = {}) {
   }, [loadLogs])
 
   return {
-    logs: filteredLogs,
+    logs,
     loading,
     error,
-    pagination: effectivePagination,
+    pagination,
     loadLogs,
     deleteLog,
     batchDeleteLogs
@@ -164,27 +141,33 @@ export function useLogs(params: LogQueryParams = {}) {
 /**
  * 日志统计 Hook
  */
-export function useLogStats(hours: number = 24) {
+export function useLogStats(hours: number = 24, excludeSearch?: string) {
   const [stats, setStats] = useState<LogStatistics | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const requestIdRef = useRef(0)
 
   const loadStats = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setError(null)
     try {
-      const data = await logsApi.getLogStatistics(hours)
+      const data = await logsApi.getLogStatistics(hours, excludeSearch)
+      if (requestId !== requestIdRef.current) return false
       setStats(data)
       return true
     } catch (err) {
+      if (requestId !== requestIdRef.current) return false
       const message = errorMessage(err, '加载日志统计失败')
       setError(message)
       // 不显示toast，避免频繁提示
       return false
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
-  }, [hours])
+  }, [hours, excludeSearch])
 
   useEffect(() => {
     void loadStats()

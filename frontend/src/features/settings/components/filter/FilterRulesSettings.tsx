@@ -278,7 +278,7 @@ export function FilterRulesSettings() {
       <KeywordRuleSection
         title="日志屏蔽规则"
         icon={FileText}
-        description="配置日志全局屏蔽关键字。命中的日志（按日志消息内容或原始报文，大小写不敏感匹配）将自动从日志中心列表、检索、导出文件及筛选批量清理中排除。"
+        description="配置日志全局屏蔽关键字。命中的日志（按消息内容、原始报文、设备名称、设备 IP、源进程或中文解读，大小写不敏感匹配）将自动从日志中心列表、统计卡片、检索、导出文件及筛选批量清理中排除。"
         inputAriaLabel="添加日志屏蔽关键字"
         buttonAriaLabel="添加日志关键字"
         removeAriaPrefix="移除日志屏蔽词"

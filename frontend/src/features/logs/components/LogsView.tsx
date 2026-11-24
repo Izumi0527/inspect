@@ -75,7 +75,7 @@ export const LogsView: React.FC = () => {
     batchDeleteLogs
   } = useLogs(fullQueryParams)
 
-  const { stats, loading: statsLoading, refresh: refreshStats } = useLogStats()
+  const { stats, loading: statsLoading, refresh: refreshStats } = useLogStats(24, queryParams.exclude_search)
   const { collecting, progress, collectLogs, batchCollect } = useLogCollection()
 
   const batchSelection = useBatchSelection<DeviceLog, number>({

@@ -4,8 +4,11 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 )
 
 //go:embed huawei-alarms.json
@@ -220,4 +223,81 @@ func (c AlarmCatalog) Validate() error {
 		}
 	}
 	return nil
+}
+
+// MatchTrapOIDsByKeyword 按关键字匹配 Trap 名称或清洗后的官方中文释义，返回归一到 2011 企业前缀的排序去重 OID 列表。
+func (c *AlarmCatalog) MatchTrapOIDsByKeyword(keyword string) []string {
+	if c == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(keyword)
+	if trimmed == "" {
+		return nil
+	}
+	nonASCII := hasNonASCIIBytes(trimmed)
+	if nonASCII && utf8.RuneCountInString(trimmed) < 2 {
+		return nil
+	}
+	if !nonASCII && len(trimmed) < 4 {
+		return nil
+	}
+
+	lowerKW := strings.ToLower(trimmed)
+	oidSet := make(map[string]struct{})
+	for oid, def := range c.Traps {
+		if !matchTrapDefByKeyword(def, lowerKW, nonASCII) {
+			continue
+		}
+		if norm := canonicalTrapOID(oid); norm != "" {
+			oidSet[norm] = struct{}{}
+		}
+	}
+	if len(oidSet) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(oidSet))
+	for oid := range oidSet {
+		result = append(result, oid)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func matchTrapDefByKeyword(def TrapDefinition, lowerKW string, nonASCII bool) bool {
+	if strings.Contains(strings.ToLower(def.Name), lowerKW) {
+		return true
+	}
+	if !nonASCII {
+		return false
+	}
+	meaning := cleanTrapMeaning(def.Meaning)
+	return meaning != "" && strings.Contains(strings.ToLower(meaning), lowerKW)
+}
+
+func cleanTrapMeaning(raw string) string {
+	cleaned := strings.TrimSpace(raw)
+	for _, prefix := range []string{"该节点用来表示", "该告警用来表示", "该trap用来表示", "该Trap用来表示"} {
+		cleaned = strings.TrimPrefix(cleaned, prefix)
+	}
+	return strings.TrimSpace(cleaned)
+}
+
+func canonicalTrapOID(oid string) string {
+	normalized := NormalizeOID(oid)
+	if normalized == "" {
+		return ""
+	}
+	if canonical := CanonicalizeHuaweiEnterpriseOID(normalized); canonical != "" && canonical != normalized {
+		return canonical
+	}
+	return normalized
+}
+
+func hasNonASCIIBytes(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > unicode.MaxASCII {
+			return true
+		}
+	}
+	return false
 }

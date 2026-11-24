@@ -227,3 +227,50 @@ func TestAlarmCatalogValidate_ShouldRejectBadLevelOrFacility(t *testing.T) {
 		t.Fatalf("合法条目不应报错: %v", err)
 	}
 }
+
+func TestMatchTrapOIDsByKeyword(t *testing.T) {
+	catalog := loadCatalog(t)
+
+	fanOIDs := catalog.MatchTrapOIDsByKeyword("风扇")
+	if len(fanOIDs) == 0 {
+		t.Fatal("中文关键字“风扇”应命中至少一条 Trap OID")
+	}
+	foundFanFail := false
+	for _, oid := range fanOIDs {
+		if oid == "1.3.6.1.4.1.2011.5.25.219.2.6.3" {
+			foundFanFail = true
+		}
+		if len(oid) > 19 && oid[:19] == "1.3.6.1.4.1.56813." {
+			t.Fatalf("返回的 OID %q 应已归一为 2011 前缀", oid)
+		}
+	}
+	if !foundFanFail {
+		t.Fatalf("未包含 hwFanFail (1.3.6.1.4.1.2011.5.25.219.2.6.3), got %v", fanOIDs)
+	}
+
+	if got := catalog.MatchTrapOIDsByKeyword("电"); len(got) != 0 {
+		t.Fatalf("单字中文不应命中, got %v", got)
+	}
+	if got := catalog.MatchTrapOIDsByKeyword("fan"); len(got) != 0 {
+		t.Fatalf("长度 < 4 的纯 ASCII 不应命中, got %v", got)
+	}
+
+	asciiOIDs := catalog.MatchTrapOIDsByKeyword("hwFanFail")
+	if len(asciiOIDs) == 0 {
+		t.Fatal("长度 >= 4 的纯 ASCII hwFanFail 应命中 Name")
+	}
+	foundExact := false
+	for _, oid := range asciiOIDs {
+		if oid == "1.3.6.1.4.1.2011.5.25.219.2.6.3" {
+			foundExact = true
+		}
+	}
+	if !foundExact {
+		t.Fatalf("hwFanFail 未命中 1.3.6.1.4.1.2011.5.25.219.2.6.3, got %v", asciiOIDs)
+	}
+
+	var nilCatalog *snmpmib.AlarmCatalog
+	if got := nilCatalog.MatchTrapOIDsByKeyword("风扇"); len(got) != 0 {
+		t.Fatalf("nil catalog 应返回空, got %v", got)
+	}
+}

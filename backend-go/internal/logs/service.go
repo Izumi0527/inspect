@@ -179,6 +179,10 @@ func (s *Service) SearchLogs(ctx context.Context, keyword string, filter LogFilt
 }
 
 func (s *Service) GetLogStatistics(ctx context.Context, deviceID *int, hours int) (LogStatistics, error) {
+	return s.GetLogStatisticsWithExclude(ctx, deviceID, hours, nil)
+}
+
+func (s *Service) GetLogStatisticsWithExclude(ctx context.Context, deviceID *int, hours int, excludeSearch *string) (LogStatistics, error) {
 	if s == nil || s.db == nil {
 		return LogStatistics{}, fmt.Errorf("database not initialized")
 	}
@@ -187,20 +191,16 @@ func (s *Service) GetLogStatistics(ctx context.Context, deviceID *int, hours int
 	}
 
 	start := time.Now().Add(-time.Duration(hours) * time.Hour)
-	// 统计表达"设备真实活动"，本系统自身活动恒排除，且与列表同口径应用全局日志屏蔽关键字
-	base := s.db.WithContext(ctx).Table("device_logs").Where("log_timestamp >= ?", start).Where("self_generated = ?", false)
+	// 统计表达"设备真实活动"，本系统自身活动恒排除，且与列表同口径应用屏蔽关键字
+	base := s.db.WithContext(ctx).
+		Table("device_logs AS l").
+		Joins("LEFT JOIN devices d ON d.id = l.device_id").
+		Where("l.log_timestamp >= ?", start).
+		Where("l.self_generated = ?", false)
 	if deviceID != nil {
-		base = base.Where("device_id = ?", *deviceID)
+		base = base.Where("l.device_id = ?", *deviceID)
 	}
-	if effectiveExclude := s.effectiveExcludeSearch(ctx, nil); effectiveExclude != "" {
-		for _, kw := range common.ExpandExcludeKeywords(effectiveExclude) {
-			pattern := "%" + common.EscapeLikePattern(kw) + "%"
-			base = base.Where(
-				"(COALESCE(message, '') NOT ILIKE ? AND COALESCE(raw_message, '') NOT ILIKE ?)",
-				pattern, pattern,
-			)
-		}
-	}
+	base = s.applyLogExcludeKeywords(ctx, base, excludeSearch)
 
 	stats := LogStatistics{
 		ByLevel:        map[string]int64{},
@@ -221,8 +221,8 @@ func (s *Service) GetLogStatistics(ctx context.Context, deviceID *int, hours int
 
 	levelRows := make([]aggRow, 0)
 	if err := base.Session(&gorm.Session{}).
-		Select("level AS key, COUNT(*) AS count").
-		Group("level").
+		Select("l.level AS key, COUNT(*) AS count").
+		Group("l.level").
 		Scan(&levelRows).Error; err != nil {
 		return stats, err
 	}
@@ -232,8 +232,8 @@ func (s *Service) GetLogStatistics(ctx context.Context, deviceID *int, hours int
 
 	facilityRows := make([]aggRow, 0)
 	if err := base.Session(&gorm.Session{}).
-		Select("facility AS key, COUNT(*) AS count").
-		Group("facility").
+		Select("l.facility AS key, COUNT(*) AS count").
+		Group("l.facility").
 		Scan(&facilityRows).Error; err != nil {
 		return stats, err
 	}
@@ -248,8 +248,8 @@ func (s *Service) GetLogStatistics(ctx context.Context, deviceID *int, hours int
 		}
 		deviceRows := make([]deviceRow, 0)
 		if err := base.Session(&gorm.Session{}).
-			Select("device_id, COUNT(*) AS count").
-			Group("device_id").
+			Select("l.device_id, COUNT(*) AS count").
+			Group("l.device_id").
 			Order("count desc").
 			Limit(10).
 			Scan(&deviceRows).Error; err != nil {
@@ -269,7 +269,7 @@ func (s *Service) GetLogStatistics(ctx context.Context, deviceID *int, hours int
 	tz := s.settings.ResolveLocation(ctx).String()
 	trendRows := make([]trendRow, 0)
 	if err := base.Session(&gorm.Session{}).
-		Select(fmt.Sprintf("date_trunc('hour', log_timestamp AT TIME ZONE '%s') AT TIME ZONE '%s' AS hour, COUNT(*) AS count", tz, tz)).
+		Select(fmt.Sprintf("date_trunc('hour', l.log_timestamp AT TIME ZONE '%s') AT TIME ZONE '%s' AS hour, COUNT(*) AS count", tz, tz)).
 		Group("hour").
 		Order("hour").
 		Scan(&trendRows).Error; err != nil {
@@ -512,15 +512,7 @@ func (s *Service) buildLogQuery(ctx context.Context, filter LogFilter) *gorm.DB 
 		pattern := "%" + common.EscapeLikePattern(strings.TrimSpace(*filter.Search)) + "%"
 		query = query.Where("(l.message ILIKE ? OR l.raw_message ILIKE ?)", pattern, pattern)
 	}
-	if effectiveExclude := s.effectiveExcludeSearch(ctx, filter.ExcludeSearch); effectiveExclude != "" {
-		for _, kw := range common.ExpandExcludeKeywords(effectiveExclude) {
-			pattern := "%" + common.EscapeLikePattern(kw) + "%"
-			query = query.Where(
-				"(COALESCE(l.message, '') NOT ILIKE ? AND COALESCE(l.raw_message, '') NOT ILIKE ?)",
-				pattern, pattern,
-			)
-		}
-	}
+	query = s.applyLogExcludeKeywords(ctx, query, filter.ExcludeSearch)
 	if !filter.IncludeSelf {
 		query = query.Where("l.self_generated = ?", false)
 	}

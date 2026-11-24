@@ -39,9 +39,16 @@ const unwrapPayload = <T>(payload: unknown): T => {
 /**
  * 获取日志统计信息
  */
-export async function getLogStatistics(hours: number = 24): Promise<LogStatistics> {
+export async function getLogStatistics(
+  hours: number = 24,
+  excludeSearch?: string
+): Promise<LogStatistics> {
+  const trimmedExclude = excludeSearch?.trim()
   const payload = await api.get<unknown>(`${BASE_URL}/statistics`, {
-    params: { hours }
+    params: {
+      hours,
+      ...(trimmedExclude ? { exclude_search: trimmedExclude } : {}),
+    }
   })
   return unwrapPayload<LogStatistics>(payload)
 }
