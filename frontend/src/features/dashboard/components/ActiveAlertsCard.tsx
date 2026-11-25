@@ -54,7 +54,7 @@ export const ActiveAlertsCard: React.FC<ActiveAlertsCardProps> = ({
   if (loading) {
     return (
       <CardShell className={className}>
-        <div className="space-y-3 px-6 pb-6">
+        <div className="space-y-3 px-4 pb-6">
           {[...Array(3)].map((_, index) => (
             <div key={index} className="animate-pulse">
               <div className="flex items-center gap-3 p-3 bg-muted/40 dark:bg-accent/5 rounded-lg">
@@ -75,7 +75,7 @@ export const ActiveAlertsCard: React.FC<ActiveAlertsCardProps> = ({
   if (alerts.length === 0) {
     return (
       <CardShell className={className}>
-        <div className="px-6 pb-6 text-center py-8">
+        <div className="px-4 pb-6 text-center py-8">
           <Shield className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
           <p className="text-muted-foreground">当前无活跃告警</p>
         </div>
@@ -90,13 +90,13 @@ export const ActiveAlertsCard: React.FC<ActiveAlertsCardProps> = ({
     <CardShell className={className} count={totalCount}>
       <div
         data-testid="active-alerts-list"
-        className="min-h-0 flex-1 space-y-2 overflow-y-auto px-6 pb-2 max-h-[60vh] lg:max-h-none"
+        className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 pb-2 max-h-[60vh] lg:max-h-none"
       >
         {preview.map((alert) => (
           <div
             key={alert.id}
             data-testid="active-alert-item"
-            className="flex items-start gap-3 rounded-lg bg-surface-2/60 p-2.5 transition-colors hover:bg-surface-3"
+            className="flex items-start gap-2.5 rounded-lg bg-surface-2/60 p-2.5 transition-colors hover:bg-surface-3"
           >
             <div className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', getSeverityColor(alert.severity))} />
             <div className="min-w-0 flex-1">
@@ -106,7 +106,7 @@ export const ActiveAlertsCard: React.FC<ActiveAlertsCardProps> = ({
                   {formatDateTimeYMDHM(alert.time)}
                 </span>
               </div>
-              <p className="line-clamp-2 text-xs text-muted-foreground" title={alert.message}>
+              <p className="line-clamp-2 break-words text-xs text-muted-foreground" title={alert.message}>
                 {alert.message}
               </p>
               {alert.category && (
@@ -118,7 +118,7 @@ export const ActiveAlertsCard: React.FC<ActiveAlertsCardProps> = ({
           </div>
         ))}
       </div>
-      <div className="border-t border-border/60 px-6 py-3">
+      <div className="border-t border-border/60 px-4 py-3">
         <Button asChild variant="outline" className="w-full">
           <Link href="/alerts">
             查看所有告警{totalCount > preview.length ? `（共 ${totalCount} 条）` : ''}

@@ -150,13 +150,6 @@ type SystemStatus struct {
 	LastCheck             time.Time `json:"last_check"`
 }
 
-// BandwidthStats 表示带宽统计信息及其单位
-type BandwidthStats struct {
-	InboundRate  float64 `json:"inbound_rate"`  // 入站速率，单位：bps（比特每秒）
-	OutboundRate float64 `json:"outbound_rate"` // 出站速率，单位：bps（比特每秒）
-	Unit         string  `json:"unit"`          // 单位标识："bps"
-}
-
 // Notification 用于仪表板通知中心的数据结构（告警 + 系统消息聚合）
 type Notification struct {
 	ID        string    `json:"id"`

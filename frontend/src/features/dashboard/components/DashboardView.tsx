@@ -175,11 +175,14 @@ export const DashboardView: React.FC = () => {
               loading={isInitialLoading}
             />
 
-            <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-3">
+            <div
+              data-testid="dashboard-main-grid"
+              className="grid grid-cols-1 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_296px] xl:grid-cols-[minmax(0,1fr)_328px] 2xl:grid-cols-[minmax(0,1fr)_352px]"
+            >
               {/* 左列：网络概览（无限画布） */}
               <div
                 data-testid="dashboard-primary-column"
-                className="flex min-h-[560px] flex-col lg:col-span-2 lg:min-h-0"
+                className="flex min-h-[560px] min-w-0 flex-col lg:min-h-0"
               >
                 <NetworkOverviewCard
                   overview={data?.networkOverview || []}
@@ -193,7 +196,7 @@ export const DashboardView: React.FC = () => {
               {/* 右列：快捷入口在上，实时告警紧贴其下并占满剩余高度 */}
               <div
                 data-testid="dashboard-secondary-column"
-                className="flex flex-col gap-4 lg:min-h-0"
+                className="flex min-w-0 flex-col gap-4 lg:min-h-0"
               >
                 <QuickActionsCard />
                 <ActiveAlertsCard

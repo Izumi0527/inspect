@@ -24,7 +24,6 @@ func (h DashboardHandler) Register(group *echo.Group) {
 	group.GET("/dashboard/network-overview", h.GetNetworkOverview)
 	group.GET("/dashboard/network-topology", h.GetNetworkTopology)
 	group.PUT("/dashboard/network-topology/layout", h.PutNetworkTopologyLayout)
-	group.GET("/dashboard/bandwidth-stats", h.GetBandwidthStats)
 	group.GET("/dashboard/notifications", h.GetNotifications)
 	group.POST("/dashboard/notifications/read", h.MarkNotificationsRead)
 	group.POST("/dashboard/notifications/dismiss", h.DismissNotifications)
@@ -230,21 +229,6 @@ func (h DashboardHandler) PutNetworkTopologyLayout(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to save topology layout")
 	}
 	return c.JSON(http.StatusOK, layout)
-}
-
-func (h DashboardHandler) GetBandwidthStats(c echo.Context) error {
-	if h.Service == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "dashboard service not configured")
-	}
-	if _, err := requirePermission(c, h.Auth, "monitoring:read"); err != nil {
-		return err
-	}
-
-	resp, err := h.Service.GetBandwidthStats(c.Request().Context())
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load bandwidth statistics")
-	}
-	return c.JSON(http.StatusOK, resp)
 }
 
 func (h DashboardHandler) GetNotifications(c echo.Context) error {

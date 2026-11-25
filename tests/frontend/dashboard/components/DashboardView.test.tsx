@@ -155,8 +155,13 @@ describe('DashboardView', () => {
       screen.getByTestId('quick-actions-card').compareDocumentPosition(screen.getByTestId('active-alerts-card'))
       & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
-    // 布局改动：网络概览左列占两栏
-    expect(primary.className).toContain('lg:col-span-2')
+    // 布局改动：固定右列宽度 + 左右列允许收缩避免溢出
+    const mainGrid = screen.getByTestId('dashboard-main-grid')
+    expect(mainGrid.className).toContain('lg:grid-cols-[minmax(0,1fr)_296px]')
+    expect(mainGrid.className).toContain('xl:grid-cols-[minmax(0,1fr)_328px]')
+    expect(mainGrid.className).toContain('2xl:grid-cols-[minmax(0,1fr)_352px]')
+    expect(primary.className).toContain('min-w-0')
+    expect(secondary.className).toContain('min-w-0')
 
     expect(mockNetworkOverviewCard).toHaveBeenCalledWith(expect.objectContaining({ canEditLayout: true }))
     expect(mockActiveAlertsCard).toHaveBeenCalledWith(expect.objectContaining({ total: 25 }))

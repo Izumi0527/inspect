@@ -2,7 +2,6 @@ package dashboard
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"sort"
 	"strings"
@@ -275,30 +274,6 @@ func (s *Service) getNetworkTopologyWithLayout(ctx context.Context) (NetworkTopo
 	}
 	topology.Layout = layout
 	return topology, nil
-}
-
-func (s *Service) GetBandwidthStats(ctx context.Context) (BandwidthStats, error) {
-	if s == nil || s.db == nil {
-		return BandwidthStats{}, fmt.Errorf("database not initialized")
-	}
-
-	// 查询平均入站带宽（单位：bps）
-	inboundRate, _, err := s.avgMetricList(ctx, []string{"bandwidth_in", "network_bytes_in", "throughput_in"})
-	if err != nil {
-		return BandwidthStats{}, err
-	}
-
-	// 查询平均出站带宽（单位：bps）
-	outboundRate, _, err := s.avgMetricList(ctx, []string{"bandwidth_out", "network_bytes_out", "throughput_out"})
-	if err != nil {
-		return BandwidthStats{}, err
-	}
-
-	return BandwidthStats{
-		InboundRate:  inboundRate,
-		OutboundRate: outboundRate,
-		Unit:         "bps",
-	}, nil
 }
 
 func (s *Service) GetNotifications(ctx context.Context, limit int) (NotificationsResponse, error) {
@@ -1039,32 +1014,6 @@ func resolveAlertTime(alert alerts.AlertWithDevice) string {
 		return alert.CreatedAt.UTC().Format(time.RFC3339)
 	}
 	return time.Now().UTC().Format(time.RFC3339)
-}
-
-func (s *Service) avgMetricList(ctx context.Context, metrics []string) (float64, int64, error) {
-	if s == nil || s.db == nil {
-		return 0, 0, fmt.Errorf("database not initialized")
-	}
-
-	type avgRow struct {
-		AvgValue    sql.NullFloat64 `gorm:"column:avg_value"`
-		SampleCount int64           `gorm:"column:sample_count"`
-	}
-	var avg avgRow
-	// 过滤掉超过 10 Gbps 的异常数据（阈值与 monitoring 包共用同一常量）
-	if err := s.db.WithContext(ctx).
-		Table("device_metrics").
-		Select("AVG(metric_value) AS avg_value, COUNT(*) AS sample_count").
-		Where("metric_name IN ?", metrics).
-		Where("collected_at >= NOW() - INTERVAL '1 hour'").
-		Where("metric_value < ?", monitoring.MaxReasonableBandwidthBps).
-		Scan(&avg).Error; err != nil {
-		return 0, 0, err
-	}
-	if avg.AvgValue.Valid {
-		return avg.AvgValue.Float64, avg.SampleCount, nil
-	}
-	return 0, avg.SampleCount, nil
 }
 
 func formatPercent(value float64, precision int) string {

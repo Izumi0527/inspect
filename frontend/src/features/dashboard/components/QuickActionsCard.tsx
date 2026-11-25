@@ -85,7 +85,7 @@ export const QuickActionsCard: React.FC = () => {
             </p>
           </div>
         ) : (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-2.5">
           {visibleActions.map((action) => {
             const IconComponent = action.icon
 
@@ -95,7 +95,7 @@ export const QuickActionsCard: React.FC = () => {
                 variant="outline"
                 aria-label={action.title}
                 onClick={() => handleActionClick(action.targetPath)}
-                className={`h-20 flex flex-col items-center justify-center gap-2 ${isInstrument ? 'hover:bg-surface-3 hover:text-foreground' : action.colorScheme.hover} transition-colors`}
+                className={`h-20 min-w-0 px-2 flex flex-col items-center justify-center gap-1.5 ${isInstrument ? 'hover:bg-surface-3 hover:text-foreground' : action.colorScheme.hover} transition-colors`}
               >
                 <IconComponent className="w-6 h-6" />
                 <span className="text-sm font-medium">{action.title}</span>
