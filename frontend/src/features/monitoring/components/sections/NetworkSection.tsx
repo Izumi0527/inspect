@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type Ref } from 'react'
+import { Info } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/atoms'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { SectionFailureContent } from '../shared'
@@ -16,6 +17,8 @@ interface NetworkSectionProps {
   networkInView: boolean
   /** 页面级设备筛选（空 = 全部设备）；恰好 1 台时切换为该设备的接口视图 */
   deviceIds: number[]
+  /** 当前页面聚焦的分组名称（deviceIds 为空且按分组筛选时用于展示范围标签） */
+  activeGroupName?: string | null
   timeRange: string
   pageVisible: boolean
   sectionNetworkTraffic: MonitoringDataEnvelope['sections']['networkTraffic'] | undefined
@@ -27,15 +30,16 @@ interface NetworkSectionProps {
 /**
  * 流量监控卡
  *
- * - 单设备视图：物理 UP 接口选择器（逻辑口不列出），数据来自 /monitoring/devices/:id/interface-traffic；
- *   selectedInterface 为空表示跟随后端默认（列表首个物理口）
- * - 聚合视图：全部设备或多选时沿用 v2 的跨设备聚合曲线
+ * - 单设备视图：当前 UP 的物理口与链路聚合口（如 Eth-Trunk）选择器，数据来自 /monitoring/devices/:id/interface-traffic；
+ *   selectedInterface 为空表示跟随后端默认（列表首个接口）
+ * - 聚合视图：全部设备或多选时沿用 v2 的跨设备整机聚合曲线（剔除聚合口避免重复累加）
  * 两种视图都只画上行/下行两条序列。
  */
 export function NetworkSection({
   sectionRef,
   networkInView,
   deviceIds,
+  activeGroupName,
   timeRange,
   pageVisible,
   sectionNetworkTraffic,
@@ -76,8 +80,12 @@ export function NetworkSection({
       if (!device) return `设备 #${singleDeviceId}`
       return device.ipAddress ? `${device.name} · ${device.ipAddress}` : device.name
     }
-    return deviceIds.length === 0 ? '全部设备' : `已选 ${deviceIds.length} 台`
-  }, [deviceIds.length, devices, singleDeviceId])
+    if (deviceIds.length > 1) {
+      return `已选 ${deviceIds.length} 台`
+    }
+    const groupName = activeGroupName?.trim()
+    return groupName ? `分组 · ${groupName}` : '全部设备'
+  }, [activeGroupName, deviceIds.length, devices, singleDeviceId])
 
   const renderInterfaceView = () => {
     if (interfaceTraffic.error) {
@@ -96,7 +104,7 @@ export function NetworkSection({
     if (upInterfaces.length === 0) {
       return (
         <div className="flex h-48 items-center justify-center">
-          <p className="text-sm text-muted-foreground">该设备当前没有 UP 状态的物理接口</p>
+          <p className="text-sm text-muted-foreground">该设备当前没有 UP 状态的物理或聚合接口</p>
         </div>
       )
     }
@@ -136,16 +144,26 @@ export function NetworkSection({
                 <SelectTrigger className="h-9 w-auto min-w-40 max-w-64 gap-2 text-sm" aria-label="接口选择">
                   <SelectValue placeholder="选择接口" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-w-[min(32rem,calc(100vw-2rem))]">
                   {upInterfaces.map((item) => (
-                    <SelectItem key={item.name} value={item.name}>
+                    <SelectItem key={item.name} value={item.name} description={item.description}>
                       {item.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : (
-              <span className="text-xs text-muted-foreground">勾选单台设备可查看各接口流量</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  data-slot="traffic-aggregate-scope-hint"
+                  className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-surface-2 px-2 py-0.5 text-xs text-muted-foreground"
+                  title="数据来源：当前范围内活跃设备的物理接口总吞吐（采集时已剔除 Eth-Trunk 等聚合口、Vlanif / LoopBack / 子接口，避免与成员物理口重复累加；同一设备 5 分钟桶内取均值，跨设备求和。多台互联设备会同时统计两端端口流量）"
+                >
+                  <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>活跃设备物理口聚合总吞吐</span>
+                </span>
+                <span className="text-xs text-muted-foreground">勾选单台设备可查看各接口流量</span>
+              </div>
             )}
             <div className="ml-auto">
               <TrafficSeriesLegend />

@@ -89,7 +89,7 @@ describe('useMonitoringPage', () => {
     expect(listenedEvents).toEqual(expect.not.arrayContaining(['new_alert', 'alert_update', 'alert_resolved']))
   })
 
-  it('页面 refetch 同时刷新 v2 聚合数据与接口流量查询', () => {
+  it('页面 refetch 同时刷新 v2 聚合数据、接口流量、实时指标与主机详情查询', () => {
     const queryClient = new QueryClient()
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries')
     const { result } = renderPage(queryClient)
@@ -100,6 +100,10 @@ describe('useMonitoringPage', () => {
 
     expect(v2Refetch).toHaveBeenCalledTimes(1)
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: [INTERFACE_TRAFFIC_QUERY_KEY] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['monitoring-latest-data'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['monitoring-hosts'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['monitoring-host-detail'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['monitoring-topn'] })
   })
 
   it('单设备接口视图下，v2 流量分区失败不计入页面降级提示', () => {

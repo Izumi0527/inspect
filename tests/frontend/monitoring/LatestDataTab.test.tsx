@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import toast, { Toaster } from 'react-hot-toast'
 import { LatestDataTab } from '@/features/monitoring/components/latest'
 import {
+  buildLatestDataQueryKey,
   compareLatestDataItemsNaturally,
   formatSeriesDisplayName,
 } from '@/features/monitoring/components/latest/latestDataHelpers'
@@ -578,5 +579,73 @@ describe('实时指标明细与多指标同图对比 LatestDataTab (Task 12)', (
       '1:GigabitEthernet0/0/10',
       '2:GigabitEthernet0/0/1',
     ])
+  })
+
+  it('整机出入方向速率展示同源口径提示，且 buildLatestDataQueryKey 归一化设备顺序产出一致缓存键', async () => {
+    ;(getLatestData as jest.Mock).mockResolvedValue({
+      items: [
+        {
+          device_id: 31,
+          device_name: 'SW-01',
+          ip_address: '10.30.0.1',
+          metric_name: 'bandwidth_in',
+          metric_label: '下行速率',
+          interface_name: '',
+          item_key: 'bandwidth_in',
+          application_tag: 'network',
+          metric_value: 2000,
+          prev_value: 1500,
+          delta: 500,
+          delta_display: '+500 bps',
+          display_value: '2 Kbps',
+          is_abnormal: false,
+          collected_at: '2026-11-20T12:15:00Z',
+        },
+        {
+          device_id: 31,
+          device_name: 'SW-01',
+          ip_address: '10.30.0.1',
+          metric_name: 'bandwidth_out',
+          metric_label: '上行速率',
+          interface_name: '',
+          item_key: 'bandwidth_out',
+          application_tag: 'network',
+          metric_value: 1000,
+          prev_value: 1000,
+          delta: 0,
+          delta_display: '无变化',
+          display_value: '1 Kbps',
+          is_abnormal: false,
+          collected_at: '2026-11-20T12:15:00Z',
+        },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 50,
+      total_pages: 1,
+    })
+
+    renderWithQuery(
+      <LatestDataTab
+        activeGroupId={null}
+        selectedDeviceIds={[]}
+        onSelectHost={jest.fn()}
+      />
+    )
+
+    expect(await screen.findByText('下行速率')).toHaveAttribute(
+      'title',
+      '整机所有物理接口入方向总流量（与总览流量监控同源，已剔除逻辑口与聚合口）'
+    )
+    expect(screen.getByText('上行速率')).toHaveAttribute(
+      'title',
+      '整机所有物理接口出方向总流量（与总览流量监控同源，已剔除逻辑口与聚合口）'
+    )
+
+    expect(
+      buildLatestDataQueryKey({ deviceIds: [7, 6], page: 1, pageSize: 50 })
+    ).toEqual(
+      buildLatestDataQueryKey({ deviceIds: [6, 7], groupId: 0, page: 1, pageSize: 50 })
+    )
   })
 })

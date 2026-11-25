@@ -90,3 +90,49 @@ func TestIsNonPhysicalInterface(t *testing.T) {
 		}
 	}
 }
+
+func TestIsAggregateExcludedInterface(t *testing.T) {
+	excluded := []string{
+		"Vlanif1", "Eth-Trunk1", "Port-channel1", "Bridge-Aggregation1",
+		"InLoopBack0", "NULL0", "Console9/0/0", "Tunnel0/0/1",
+		"BVI10", "IRB.10", "Nve1",
+		"GigabitEthernet0/0/1.100", "2.5GE0/0/1.20",
+	}
+	for _, name := range excluded {
+		if !devices.IsAggregateExcludedInterface(name) {
+			t.Errorf("IsAggregateExcludedInterface(%q) = false, want true", name)
+		}
+	}
+
+	retained := []string{
+		"GigabitEthernet0/0/1", "XGigabitEthernet0/0/2", "2.5GE0/0/1", "10GE1/0/1",
+		"MEth0/0/1", "if6", "",
+	}
+	for _, name := range retained {
+		if devices.IsAggregateExcludedInterface(name) {
+			t.Errorf("IsAggregateExcludedInterface(%q) = true, want false", name)
+		}
+	}
+}
+
+func TestIsLinkAggregationInterface(t *testing.T) {
+	aggregated := []string{
+		"Eth-Trunk1", "eth-trunk10", "Bridge-Aggregation1",
+		"Route-Aggregation2", "Port-channel4",
+	}
+	for _, name := range aggregated {
+		if !devices.IsLinkAggregationInterface(name) {
+			t.Errorf("IsLinkAggregationInterface(%q) = false, want true", name)
+		}
+	}
+
+	nonAggregated := []string{
+		"Eth-Trunk1.20", "Port-channel1.100",
+		"GigabitEthernet0/0/1", "Vlanif1", "InLoopBack0", "NULL0", "",
+	}
+	for _, name := range nonAggregated {
+		if devices.IsLinkAggregationInterface(name) {
+			t.Errorf("IsLinkAggregationInterface(%q) = true, want false", name)
+		}
+	}
+}

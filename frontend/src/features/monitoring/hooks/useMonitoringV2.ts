@@ -1,4 +1,4 @@
-import { useQuery, UseQueryResult } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, UseQueryResult } from '@tanstack/react-query'
 import { fetchMonitoringDataV2 } from '../api/monitoring.api'
 import type { MonitoringDataEnvelope } from '../types'
 import { useAuth } from '@/lib/contexts/auth-context'
@@ -80,13 +80,15 @@ export function useMonitoringV2(
     enablePolling = true,
   } = options
 
-  const deviceCacheKey = deviceIds.length > 0 ? deviceIds.join(',') : 'all'
+  const deviceCacheKey =
+    deviceIds.length > 0 ? [...deviceIds].sort((a, b) => a - b).join(',') : 'all'
   const groupCacheKey = groupId && groupId > 0 ? `group:${groupId}` : 'group:all'
   const compareCacheKey = compareYesterday ? 'yoy:1' : 'yoy:0'
 
   return useQuery<MonitoringDataEnvelope, Error>({
     // 按用户隔离缓存，避免同一浏览器内切换账号时短暂展示上一账号的监控数据。
     queryKey: ['monitoring-v2', userCacheKey, timeRange, deviceCacheKey, groupCacheKey, compareCacheKey],
+    placeholderData: keepPreviousData,
 
     queryFn: async () => {
       const fetchOpts =

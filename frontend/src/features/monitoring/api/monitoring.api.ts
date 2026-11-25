@@ -330,9 +330,11 @@ export async function fetchDeviceInterfaceTraffic(
       const name = toStr(raw.name)
       if (name === '') continue
       const speed = Number(raw.speed_mbps)
+      const description = typeof raw.description === 'string' ? raw.description.trim() : ''
       interfaces.push({
         name,
         label: toStr(raw.label, name),
+        ...(description !== '' ? { description } : {}),
         speedMbps: Number.isFinite(speed) && speed > 0 ? speed : undefined,
       })
     }

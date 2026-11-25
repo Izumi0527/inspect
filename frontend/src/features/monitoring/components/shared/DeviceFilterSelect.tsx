@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ListFilter } from 'lucide-react'
 import { Button, Popover, PopoverTrigger, PopoverContent } from '@/components/atoms'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -19,46 +19,96 @@ const rowClassName =
 // 看起来像单选按钮；这里明确用方角，让它读作"可多选的勾选框"
 const checkboxClassName = 'rounded-[4px]'
 
+function normalizeDeviceIds(ids: number[]): number[] {
+  const seen = new Set<number>()
+  const out: number[] = []
+  for (const id of ids) {
+    if (!seen.has(id)) {
+      seen.add(id)
+      out.push(id)
+    }
+  }
+  return out
+}
+
+function haveSameDeviceIds(left: number[], right: number[]): boolean {
+  const leftNorm = normalizeDeviceIds(left)
+  const rightNorm = normalizeDeviceIds(right)
+  if (leftNorm.length !== rightNorm.length) return false
+  const rightSet = new Set(rightNorm)
+  return leftNorm.every((id) => rightSet.has(id))
+}
+
 /**
- * 监控中心设备筛选（勾选框列表）
+ * 监控中心设备筛选（多选草稿 + 关闭即提交）
  *
- * - 每行前置始终可见的勾选框；"全部设备"与具体设备互斥：勾选全部即清空筛选
- * - 取消最后一台已选设备时自动回到"全部设备"
- * - 面板宽度不固定，由最长的设备名/IP 撑开（设上限防止极端长名撑爆视口）
- * - 设备列表就绪后剔除已不存在的已选 ID（设备被删后 localStorage 里的残留）
+ * - 面板展开期间可连续勾选多台设备（或勾选「全部设备」清空筛选），仅更新本地草稿而不中途刷新页面；
+ * - 点击空白处（或 Esc / 再次点击触发器）关闭面板时，若选择集合变化再一次性提交并刷新；
+ * - 「全部设备」与具体设备互斥：勾选全部即清空草稿，取消最后一台设备时自动回到「全部设备」；
+ * - 面板宽度不固定，由最长的设备名/IP 撑开（设上限防止极端长名撑爆视口）；
+ * - 设备列表就绪后剔除已不存在的已选 ID（设备被删后 localStorage 里的残留）。
  */
 export function DeviceFilterSelect({ deviceIds, onChange }: DeviceFilterSelectProps) {
   const { data, isLoading, error } = useMonitoringDevices()
   const devices = useMemo(() => data ?? [], [data])
 
+  const [open, setOpen] = useState(false)
+  const [draftIds, setDraftIds] = useState<number[]>(() => normalizeDeviceIds(deviceIds))
+
   // 设备被删除后，localStorage 里持久化的 deviceIds 仍留着它的 ID：请求会带上已删设备
   // （后端按 device_id 过滤，命中残留的指标行），触发器还会显示「已选 1 台」却无对应项。
   // 列表就绪后把失效 ID 剔除；加载中/失败时 data 为空，此时不动，免得把选择误清成「全部设备」。
   useEffect(() => {
-    if (isLoading || error || !data || deviceIds.length === 0) return
-    const valid = deviceIds.filter((id) => data.some((item) => item.id === id))
-    if (valid.length !== deviceIds.length) onChange(valid)
-  }, [data, deviceIds, error, isLoading, onChange])
+    if (isLoading || error || !data) return
+    if (deviceIds.length > 0) {
+      const valid = deviceIds.filter((id) => data.some((item) => item.id === id))
+      if (valid.length !== deviceIds.length) onChange(valid)
+    }
+    if (open && draftIds.length > 0) {
+      const validDraft = draftIds.filter((id) => data.some((item) => item.id === id))
+      if (validDraft.length !== draftIds.length) setDraftIds(validDraft)
+    }
+  }, [data, deviceIds, draftIds, error, isLoading, onChange, open])
+
+  const visibleIds = open ? draftIds : deviceIds
 
   const triggerLabel = useMemo(() => {
-    if (deviceIds.length === 0) return '全部设备'
-    if (deviceIds.length === 1) {
-      const device = devices.find((item) => item.id === deviceIds[0])
+    if (visibleIds.length === 0) return '全部设备'
+    if (visibleIds.length === 1) {
+      const device = devices.find((item) => item.id === visibleIds[0])
       return device ? device.name : `已选 1 台`
     }
-    return `已选 ${deviceIds.length} 台`
-  }, [deviceIds, devices])
+    return `已选 ${visibleIds.length} 台`
+  }, [devices, visibleIds])
 
-  const toggleDevice = (id: number, checked: boolean) => {
-    if (checked) {
-      onChange([...deviceIds, id])
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      setDraftIds(normalizeDeviceIds(deviceIds))
+      setOpen(true)
       return
     }
-    onChange(deviceIds.filter((item) => item !== id))
+    setOpen(false)
+    const normalized = normalizeDeviceIds(draftIds)
+    const nextIds =
+      !isLoading && !error && data
+        ? normalized.filter((id) => data.some((item) => item.id === id))
+        : normalized
+    if (!haveSameDeviceIds(nextIds, deviceIds)) {
+      onChange(nextIds)
+    }
+  }
+
+  const toggleDevice = (id: number, checked: boolean) => {
+    setDraftIds((prev) => {
+      if (checked) {
+        return normalizeDeviceIds([...prev, id])
+      }
+      return prev.filter((item) => item !== id)
+    })
   }
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -76,7 +126,11 @@ export function DeviceFilterSelect({ deviceIds, onChange }: DeviceFilterSelectPr
         className="w-auto min-w-40 max-w-[min(22rem,calc(100vw-2rem))] p-1"
       >
         <label className={rowClassName}>
-          <Checkbox className={checkboxClassName} checked={deviceIds.length === 0} onCheckedChange={() => onChange([])} />
+          <Checkbox
+            className={checkboxClassName}
+            checked={visibleIds.length === 0}
+            onCheckedChange={() => setDraftIds([])}
+          />
           <span>全部设备</span>
         </label>
         <div role="separator" className="my-1 h-px bg-muted" />
@@ -92,7 +146,7 @@ export function DeviceFilterSelect({ deviceIds, onChange }: DeviceFilterSelectPr
               <label key={device.id} className={rowClassName}>
                 <Checkbox
                   className={checkboxClassName}
-                  checked={deviceIds.includes(device.id)}
+                  checked={visibleIds.includes(device.id)}
                   onCheckedChange={(checked) => toggleDevice(device.id, checked)}
                 />
                 <span className="flex min-w-0 flex-col leading-tight">
@@ -102,6 +156,11 @@ export function DeviceFilterSelect({ deviceIds, onChange }: DeviceFilterSelectPr
               </label>
             ))
           )}
+        </div>
+        <div className="mt-1 border-t border-border/60 px-2 pb-1 pt-1.5 text-[11px] text-muted-foreground">
+          {visibleIds.length === 0
+            ? '可勾选多台设备，点击空白处完成选择'
+            : `已选 ${visibleIds.length} 台，点击空白处完成选择`}
         </div>
       </PopoverContent>
     </Popover>

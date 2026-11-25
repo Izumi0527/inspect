@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { BellOff, CheckCircle2, ExternalLink, Lock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { formatDateTimeMDHMS, formatDateTimeYMDHMS } from '@/utils/formatters'
@@ -21,10 +21,11 @@ import type {
   SnoozeDurationHours,
 } from '../../types/zabbix-monitoring.types'
 import {
-  compareLatestDataItemsNaturally,
+  buildLatestDataQueryKey,
+  filterAndSortLatestDataItems,
   getLatestDataDeltaToneClass,
-  isNonTrafficPortName,
   resolveLatestDataDeltaDisplay,
+  resolveLatestDataMetricTooltip,
   resolveLatestDataPortLabel,
 } from '../latest/latestDataHelpers'
 import {
@@ -46,21 +47,25 @@ export function HostLatestMetricsPanel({ deviceId }: { deviceId: number }) {
   }
 
   const query = useQuery({
-    queryKey: ['monitoring-host-latest', deviceId, page],
+    queryKey: buildLatestDataQueryKey({
+      deviceIds: [deviceId],
+      groupId: null,
+      applicationTag: '',
+      search: '',
+      onlyAbnormalOrChanged: false,
+      page,
+      pageSize: 50,
+    }),
     queryFn: () => getLatestData({ device_ids: [deviceId], page, page_size: 50 }),
-    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    staleTime: 20_000,
+    refetchOnWindowFocus: true,
     retry: 1,
   })
   const items = query.data?.items ?? []
   const total = query.data?.total ?? items.length
   const totalPages = Math.max(1, query.data?.total_pages ?? 1)
-  const visibleItems = items
-    .filter((item) => {
-      if (item.interface_name.trim() === '') return true
-      const portName = resolveLatestDataPortLabel(item)
-      return !isNonTrafficPortName(portName) && !isNonTrafficPortName(item.interface_name)
-    })
-    .sort(compareLatestDataItemsNaturally)
+  const visibleItems = filterAndSortLatestDataItems(items)
   const filteredItems = visibleItems.filter((item) => {
     if (scope === 'host') return item.interface_name.trim() === ''
     if (scope === 'port') return item.interface_name.trim() !== ''
@@ -128,6 +133,7 @@ export function HostLatestMetricsPanel({ deviceId }: { deviceId: number }) {
                 const portLabel = resolveLatestDataPortLabel(item)
                 const deltaDisplay = resolveLatestDataDeltaDisplay(item)
                 const deltaToneClass = getLatestDataDeltaToneClass(item)
+                const metricTooltip = resolveLatestDataMetricTooltip(item)
 
                 return (
                   <tr
@@ -135,7 +141,9 @@ export function HostLatestMetricsPanel({ deviceId }: { deviceId: number }) {
                     className="h-9 border-b border-border/50 tabular-nums"
                   >
                     <td className="px-2.5 py-1.5">
-                      <div className="font-medium text-foreground">{item.metric_label}</div>
+                      <div className="font-medium text-foreground" title={metricTooltip}>
+                        {item.metric_label}
+                      </div>
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
                       {portLabel === '整机' ? (

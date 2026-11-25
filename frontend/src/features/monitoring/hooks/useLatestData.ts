@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { getAdhocGraphs, getLatestData } from '../api/monitoring-hosts.api'
-import { resolveLatestDataPortLabel } from '../components/latest/latestDataHelpers'
+import {
+  LATEST_DATA_QUERY_KEY,
+  buildLatestDataQueryKey,
+  resolveLatestDataPortLabel,
+} from '../components/latest/latestDataHelpers'
 import { useMonitoringDevices } from './useMonitoringDevices'
 import type {
   AdhocGraphResponse,
@@ -12,6 +16,8 @@ import type {
   LatestDataItem,
   LatestDataPageResponse,
 } from '../types/zabbix-monitoring.types'
+
+export { LATEST_DATA_QUERY_KEY, buildLatestDataQueryKey }
 
 export const MAX_COMPARISON_SERIES = 6
 
@@ -48,9 +54,15 @@ export function useLatestData({
   const selectedSeriesRef = useRef<SelectedMetricSeries[]>([])
   const [limitNotice, setLimitNotice] = useState('')
 
+  const selectedDevicesSignature = useMemo(
+    () => [...selectedDeviceIds].sort((a, b) => a - b).join(','),
+    [selectedDeviceIds]
+  )
+
   useEffect(() => {
     setPage(1)
-  }, [activeGroupId, selectedDeviceIds])
+    setDeviceFilterId(null)
+  }, [activeGroupId, selectedDevicesSignature])
 
   const devicesQuery = useMonitoringDevices()
   const effectiveDeviceIds = useMemo(() => {
@@ -59,18 +71,15 @@ export function useLatestData({
   }, [deviceFilterId, selectedDeviceIds])
 
   const latestQuery = useQuery<LatestDataPageResponse, Error>({
-    queryKey: [
-      'monitoring-latest-data',
-      {
-        deviceIds: effectiveDeviceIds,
-        groupId: activeGroupId,
-        applicationTag,
-        search: search.trim(),
-        onlyAbnormalOrChanged,
-        page,
-        pageSize,
-      },
-    ],
+    queryKey: buildLatestDataQueryKey({
+      deviceIds: effectiveDeviceIds,
+      groupId: activeGroupId,
+      applicationTag,
+      search,
+      onlyAbnormalOrChanged,
+      page,
+      pageSize,
+    }),
     queryFn: () =>
       getLatestData({
         device_ids: effectiveDeviceIds.length > 0 ? effectiveDeviceIds : undefined,
@@ -84,6 +93,7 @@ export function useLatestData({
       }),
     placeholderData: keepPreviousData,
     staleTime: 20_000,
+    refetchOnWindowFocus: true,
     retry: 1,
   })
 

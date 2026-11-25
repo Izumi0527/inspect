@@ -19,11 +19,11 @@ import type { LatestDataItem } from '../../types/zabbix-monitoring.types'
 import { AdhocComparisonChart } from './AdhocComparisonChart'
 import {
   APPLICATION_TAG_OPTIONS,
-  compareLatestDataItemsNaturally,
+  filterAndSortLatestDataItems,
   getApplicationTagLabel,
   getLatestDataDeltaToneClass,
-  isNonTrafficPortName,
   resolveLatestDataDeltaDisplay,
+  resolveLatestDataMetricTooltip,
   resolveLatestDataPortLabel,
 } from './latestDataHelpers'
 
@@ -47,6 +47,7 @@ function LatestMetricRow({
   const portLabel = resolveLatestDataPortLabel(item)
   const deltaDisplay = resolveLatestDataDeltaDisplay(item)
   const deltaToneClass = getLatestDataDeltaToneClass(item)
+  const metricTooltip = resolveLatestDataMetricTooltip(item)
 
   return (
     <tr className="h-9 border-b border-border/60 bg-card transition-colors hover:bg-accent/50">
@@ -72,7 +73,9 @@ function LatestMetricRow({
         </div>
       </td>
       <td className="px-2.5 py-1.5">
-        <div className="font-medium text-foreground">{item.metric_label}</div>
+        <div className="font-medium text-foreground" title={metricTooltip}>
+          {item.metric_label}
+        </div>
       </td>
       <td className="px-2.5 py-1.5 whitespace-nowrap">
         {portLabel === '整机' ? (
@@ -125,13 +128,7 @@ export function LatestDataTab({
   const state = useLatestData({ activeGroupId, selectedDeviceIds })
   const pageData = state.latestQuery.data
   const rawItems = pageData?.items ?? []
-  const items = rawItems
-    .filter((item) => {
-      if (item.interface_name.trim() === '') return true
-      const portLabel = resolveLatestDataPortLabel(item)
-      return !isNonTrafficPortName(portLabel) && !isNonTrafficPortName(item.interface_name)
-    })
-    .sort(compareLatestDataItemsNaturally)
+  const items = filterAndSortLatestDataItems(rawItems)
   const selectedIdSet = new Set(state.selectedSeries.map((s) => s.id))
   const showLargeNetworkHint =
     !state.hasNarrowingFilter && !state.onlyAbnormalOrChanged

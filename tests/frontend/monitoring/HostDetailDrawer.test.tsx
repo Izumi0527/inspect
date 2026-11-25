@@ -4,6 +4,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HostDetailDrawer } from '@/features/monitoring/components/hosts'
 import {
+  LATEST_DATA_QUERY_KEY,
+  buildLatestDataQueryKey,
+} from '@/features/monitoring/components/latest/latestDataHelpers'
+import {
   CollectCooldownError,
   getLatestData,
   getMonitoringHostDetail,
@@ -981,5 +985,112 @@ describe('单机 6 视角观测抽屉 HostDetailDrawer (Task 11)', () => {
     })
     expect(await screen.findByText('内存使用率')).toBeInTheDocument()
     expect(screen.getByText('第 2 / 2 页')).toBeInTheDocument()
+  })
+
+  it('抽屉实时指标与实时指标明细共享缓存键，立即采集成功后同步失效并刷新实时指标', async () => {
+    const user = userEvent.setup()
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries')
+
+    ;(triggerDeviceCollectNow as jest.Mock).mockResolvedValueOnce({
+      success: true,
+      device_id: 21,
+      metrics_written: 12,
+      interfaces_written: 4,
+      collection_time_ms: 180,
+    })
+
+    ;(getLatestData as jest.Mock)
+      .mockResolvedValueOnce({
+        items: [
+          {
+            device_id: 21,
+            device_name: 'Core-Router-21',
+            ip_address: '10.20.0.21',
+            metric_name: 'bandwidth_in',
+            metric_label: '下行速率',
+            interface_name: '',
+            item_key: 'bandwidth_in',
+            application_tag: 'network',
+            metric_value: 1000,
+            prev_value: 900,
+            delta: 100,
+            delta_display: '+100 bps',
+            display_value: '1 Kbps',
+            is_abnormal: false,
+            collected_at: '2026-11-20T12:10:00Z',
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 50,
+        total_pages: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            device_id: 21,
+            device_name: 'Core-Router-21',
+            ip_address: '10.20.0.21',
+            metric_name: 'bandwidth_in',
+            metric_label: '下行速率',
+            interface_name: '',
+            item_key: 'bandwidth_in',
+            application_tag: 'network',
+            metric_value: 2048,
+            prev_value: 1000,
+            delta: 1048,
+            delta_display: '+1.05 Kbps',
+            display_value: '2.05 Kbps',
+            is_abnormal: false,
+            collected_at: '2026-11-20T12:15:00Z',
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 50,
+        total_pages: 1,
+      })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <HostDetailDrawer deviceId={21} onClose={jest.fn()} />
+      </QueryClientProvider>
+    )
+
+    expect(await screen.findByText('Core-Router-21')).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: '实时指标' }))
+    expect(await screen.findByText('1 Kbps')).toBeInTheDocument()
+    expect(screen.getByText('下行速率')).toHaveAttribute(
+      'title',
+      '整机所有物理接口入方向总流量（与总览流量监控同源，已剔除逻辑口与聚合口）'
+    )
+
+    // 抽屉内实时指标写入的缓存键与实时指标明细页完全一致
+    const sharedKey = buildLatestDataQueryKey({
+      deviceIds: [21],
+      groupId: null,
+      applicationTag: '',
+      search: '',
+      onlyAbnormalOrChanged: false,
+      page: 1,
+      pageSize: 50,
+    })
+    expect(queryClient.getQueryData(sharedKey)).toBeDefined()
+
+    // 触发「立即采集一次」后失效实时指标与相关监控缓存，并自动拉取最新快照
+    await user.click(screen.getByRole('button', { name: '立即采集一次' }))
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: [LATEST_DATA_QUERY_KEY] })
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['monitoring-host-detail', 21] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['monitoring-hosts'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['monitoring-topn'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['monitoring-interface-traffic'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['monitoring-v2'] })
+    expect(await screen.findByText('2.05 Kbps')).toBeInTheDocument()
   })
 })

@@ -461,3 +461,73 @@ func TestCollectInterfaces_PortDescriptionAndIfNameFallback(t *testing.T) {
 		}
 	})
 }
+
+// 设备总带宽 BandwidthIn/BandwidthOut 只累加物理口，排除 Vlanif/Eth-Trunk/LoopBack/子接口，
+// 同时各接口自身的 InRate/OutRate 仍照常计算供单口明细记录。
+func TestCollectInterfaces_TotalBandwidthExcludesLogicalAndSubInterfaces(t *testing.T) {
+	makeClient := func(mul uint64) *fakeCollectorSNMPClient {
+		return &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				"1.3.6.1.2.1.2.2.1.2": {
+					walkPDU("1.3.6.1.2.1.2.2.1.2", 1, []byte("GigabitEthernet0/0/1"), gosnmp.OctetString),
+					walkPDU("1.3.6.1.2.1.2.2.1.2", 2, []byte("Vlanif1"), gosnmp.OctetString),
+					walkPDU("1.3.6.1.2.1.2.2.1.2", 3, []byte("Eth-Trunk1"), gosnmp.OctetString),
+					walkPDU("1.3.6.1.2.1.2.2.1.2", 4, []byte("InLoopBack0"), gosnmp.OctetString),
+					walkPDU("1.3.6.1.2.1.2.2.1.2", 5, []byte("GigabitEthernet0/0/1.100"), gosnmp.OctetString),
+				},
+				"1.3.6.1.2.1.31.1.1.1.15": {
+					walkPDU("1.3.6.1.2.1.31.1.1.1.15", 1, 1000, gosnmp.Gauge32),
+					walkPDU("1.3.6.1.2.1.31.1.1.1.15", 2, 1000, gosnmp.Gauge32),
+					walkPDU("1.3.6.1.2.1.31.1.1.1.15", 3, 1000, gosnmp.Gauge32),
+					walkPDU("1.3.6.1.2.1.31.1.1.1.15", 5, 1000, gosnmp.Gauge32),
+				},
+				"1.3.6.1.2.1.2.2.1.8": {
+					walkPDU("1.3.6.1.2.1.2.2.1.8", 1, 1, gosnmp.Integer),
+					walkPDU("1.3.6.1.2.1.2.2.1.8", 2, 1, gosnmp.Integer),
+					walkPDU("1.3.6.1.2.1.2.2.1.8", 3, 1, gosnmp.Integer),
+					walkPDU("1.3.6.1.2.1.2.2.1.8", 4, 1, gosnmp.Integer),
+					walkPDU("1.3.6.1.2.1.2.2.1.8", 5, 1, gosnmp.Integer),
+				},
+				"1.3.6.1.2.1.31.1.1.1.6": {
+					walkPDU("1.3.6.1.2.1.31.1.1.1.6", 1, 100_000*mul, gosnmp.Counter64),
+					walkPDU("1.3.6.1.2.1.31.1.1.1.6", 2, 100_000*mul, gosnmp.Counter64),
+					walkPDU("1.3.6.1.2.1.31.1.1.1.6", 3, 100_000*mul, gosnmp.Counter64),
+					walkPDU("1.3.6.1.2.1.31.1.1.1.6", 4, 20_000*mul, gosnmp.Counter64),
+					walkPDU("1.3.6.1.2.1.31.1.1.1.6", 5, 100_000*mul, gosnmp.Counter64),
+				},
+				"1.3.6.1.2.1.31.1.1.1.10": {
+					walkPDU("1.3.6.1.2.1.31.1.1.1.10", 1, 50_000*mul, gosnmp.Counter64),
+					walkPDU("1.3.6.1.2.1.31.1.1.1.10", 2, 50_000*mul, gosnmp.Counter64),
+					walkPDU("1.3.6.1.2.1.31.1.1.1.10", 3, 50_000*mul, gosnmp.Counter64),
+					walkPDU("1.3.6.1.2.1.31.1.1.1.10", 4, 10_000*mul, gosnmp.Counter64),
+					walkPDU("1.3.6.1.2.1.31.1.1.1.10", 5, 50_000*mul, gosnmp.Counter64),
+				},
+			},
+		}
+	}
+
+	collector := devices.NewSNMPCollector(zap.NewNop())
+	registry := interfaceHealthRegistry()
+	collectInterfaces(collector, makeClient(1), "192.168.9.10", &devices.SNMPMetrics{}, registry)
+	time.Sleep(50 * time.Millisecond)
+
+	metrics := &devices.SNMPMetrics{}
+	collectInterfaces(collector, makeClient(2), "192.168.9.10", metrics, registry)
+
+	byName := make(map[string]devices.InterfaceMetrics, len(metrics.Interfaces))
+	for _, iface := range metrics.Interfaces {
+		byName[iface.Name] = iface
+	}
+	for _, key := range []string{"if1", "if2", "if3", "if4", "if5"} {
+		if byName[key].InRate == nil || *byName[key].InRate <= 0 || byName[key].OutRate == nil || *byName[key].OutRate <= 0 {
+			t.Fatalf("%s rate should still be computed: in=%v out=%v", key, deref(byName[key].InRate), deref(byName[key].OutRate))
+		}
+	}
+	if metrics.BandwidthIn == nil || metrics.BandwidthOut == nil {
+		t.Fatalf("expected non-nil BandwidthIn/BandwidthOut, got in=%v out=%v", metrics.BandwidthIn, metrics.BandwidthOut)
+	}
+	if *metrics.BandwidthIn != *byName["if1"].InRate || *metrics.BandwidthOut != *byName["if1"].OutRate {
+		t.Fatalf("total bandwidth = (%v, %v), want exact physical if1 rate (%v, %v)",
+			*metrics.BandwidthIn, *metrics.BandwidthOut, *byName["if1"].InRate, *byName["if1"].OutRate)
+	}
+}

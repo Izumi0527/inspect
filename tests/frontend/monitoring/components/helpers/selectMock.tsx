@@ -70,9 +70,18 @@ export function createSelectMock() {
       const { open } = useSelectContext()
       return open ? <div role="listbox">{children}</div> : <div hidden>{children}</div>
     },
-    SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => {
+    SelectItem: ({
+      value,
+      children,
+      description,
+    }: {
+      value: string
+      children: React.ReactNode
+      description?: React.ReactNode
+    }) => {
       const { value: currentValue, onValueChange, setOpen, registerLabel } = useSelectContext()
       const label = typeof children === 'string' ? children : String(children ?? '')
+      const hasDescription = description !== undefined && description !== null && description !== ''
       React.useEffect(() => {
         registerLabel(value, label)
       }, [label, registerLabel, value])
@@ -86,7 +95,14 @@ export function createSelectMock() {
             setOpen(false)
           }}
         >
-          {children}
+          {hasDescription ? (
+            <>
+              <span>{children}</span>
+              <span data-slot="select-item-description">{description}</span>
+            </>
+          ) : (
+            children
+          )}
         </button>
       )
     },

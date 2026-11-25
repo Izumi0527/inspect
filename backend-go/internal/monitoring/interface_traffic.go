@@ -23,9 +23,10 @@ func networkAllMetricNames() []string {
 }
 
 type upInterfaceRow struct {
-	Name  string  `gorm:"column:name"`
-	Alias *string `gorm:"column:alias"`
-	Speed *int64  `gorm:"column:speed"`
+	Name        string  `gorm:"column:name"`
+	Alias       *string `gorm:"column:alias"`
+	Description *string `gorm:"column:description"`
+	Speed       *int64  `gorm:"column:speed"`
 }
 
 type interfaceTrafficRow struct {
@@ -34,9 +35,10 @@ type interfaceTrafficRow struct {
 	Outbound *float64  `gorm:"column:outbound"`
 }
 
-// GetDeviceInterfaceTraffic 查询单台设备某个物理接口的上行/下行流量时序（Mbps）。
-// 接口列表只含当前 UP 的物理口（Vlanif/LoopBack/NULL/Console/Eth-Trunk 等逻辑口剔除，
-// 它们的流量已体现在物理口上）；interfaceName 为空时默认取列表首个，没有可选接口则返回空序列。
+// GetDeviceInterfaceTraffic 查询单台设备某个物理接口或链路聚合口的 上行/下行流量时序（Mbps）。
+// 接口列表只含当前 UP 的物理口与链路聚合口本体（如 Eth-Trunk/Bridge-Aggregation/Port-channel），
+// 剔除 Vlanif/LoopBack/NULL/Console/Tunnel 等其余逻辑口、虚拟转发口及三层子接口（如 Eth-Trunk1.20）；
+// interfaceName 为空时默认取列表首个，没有可选接口则返回空序列。
 //
 // 桶内先按接口 AVG 再输出：采集周期与桶宽不对齐时同一桶内会落入多个样本，
 // 直接 SUM 会把这些桶成倍放大；速率类指标在桶内取均值才是正确口径。
@@ -56,7 +58,7 @@ func (w *MetricsWriter) GetDeviceInterfaceTraffic(ctx context.Context, deviceID 
 
 	upRows := make([]upInterfaceRow, 0)
 	if err := w.db.WithContext(ctx).
-		Raw(`SELECT name, alias, speed FROM device_interfaces WHERE device_id = ? AND is_up = TRUE`, deviceID).
+		Raw(`SELECT name, alias, description, speed FROM device_interfaces WHERE device_id = ? AND is_up = TRUE`, deviceID).
 		Scan(&upRows).Error; err != nil {
 		return DeviceInterfaceTraffic{}, err
 	}
@@ -71,10 +73,15 @@ func (w *MetricsWriter) GetDeviceInterfaceTraffic(ctx context.Context, deviceID 
 		if row.Alias != nil && strings.TrimSpace(*row.Alias) != "" {
 			label = strings.TrimSpace(*row.Alias)
 		}
-		if devices.IsLogicalInterface(label) {
+		if devices.IsAggregateExcludedInterface(label) && !devices.IsLinkAggregationInterface(label) {
 			continue
 		}
-		result.Interfaces = append(result.Interfaces, InterfaceTrafficInterface{Name: name, Label: label, SpeedMbps: row.Speed})
+		result.Interfaces = append(result.Interfaces, InterfaceTrafficInterface{
+			Name:        name,
+			Label:       label,
+			Description: normalizeOptionalString(row.Description),
+			SpeedMbps:   row.Speed,
+		})
 	}
 
 	if interfaceName == "" {

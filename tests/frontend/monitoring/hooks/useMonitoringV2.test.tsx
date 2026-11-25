@@ -89,4 +89,80 @@ describe('useMonitoringV2', () => {
     expect(result.current.data?.failedSections).toContain('networkTraffic')
     expect(result.current.data?.failedSections).toEqual(expect.not.arrayContaining(['deviceStatus', 'realtimeAlerts']))
   })
+
+  it('切换 deviceIds 时通过 keepPreviousData 保留上一帧数据，isLoading 保持 false', async () => {
+    let resolveNext: ((value: unknown) => void) | null = null
+    mockPost.mockImplementation((url: string, body?: { device_ids?: number[] }) => {
+      if (url !== '/monitoring/dashboard/v2') {
+        return Promise.reject(new Error(`unexpected POST: ${url}`))
+      }
+      if (!body?.device_ids) {
+        return Promise.resolve({
+          data: {
+            statsV2: [{ id: 'total_devices', title: '总设备', value: '3' }],
+            systemPerformance: [],
+            temperatureHistory: [],
+            networkTrafficHistory: [],
+            lastUpdate: now,
+          },
+          sections: {
+            stats: { ok: true },
+            systemPerformance: { ok: true },
+            temperature: { ok: true },
+            networkTraffic: { ok: true },
+          },
+          hasPartialFailure: false,
+          failedSections: [],
+          lastUpdate: now,
+        })
+      }
+      return new Promise((resolve) => {
+        resolveNext = resolve
+      })
+    })
+
+    const { result, rerender } = renderHook(
+      ({ deviceIds }: { deviceIds: number[] }) =>
+        useMonitoringV2({ timeRange: '1h', deviceIds, enablePolling: false }),
+      {
+        initialProps: { deviceIds: [] as number[] },
+        wrapper: createWrapper(),
+      }
+    )
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true)
+    })
+    expect(result.current.data?.data.statsV2?.[0]?.value).toBe('3')
+
+    rerender({ deviceIds: [6, 7] })
+
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.isPlaceholderData).toBe(true)
+    expect(result.current.data?.data.statsV2?.[0]?.value).toBe('3')
+
+    resolveNext?.({
+      data: {
+        statsV2: [{ id: 'total_devices', title: '总设备', value: '2' }],
+        systemPerformance: [],
+        temperatureHistory: [],
+        networkTrafficHistory: [],
+        lastUpdate: now,
+      },
+      sections: {
+        stats: { ok: true },
+        systemPerformance: { ok: true },
+        temperature: { ok: true },
+        networkTraffic: { ok: true },
+      },
+      hasPartialFailure: false,
+      failedSections: [],
+      lastUpdate: now,
+    })
+
+    await waitFor(() => {
+      expect(result.current.isPlaceholderData).toBe(false)
+    })
+    expect(result.current.data?.data.statsV2?.[0]?.value).toBe('2')
+  })
 })

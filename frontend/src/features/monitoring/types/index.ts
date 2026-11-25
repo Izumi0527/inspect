@@ -35,12 +35,14 @@ export interface NetworkTrafficDataPoint {
   outbound: number // Mbps
 }
 
-// 单台设备当前 UP 的物理接口（流量卡接口选择器的选项；Vlanif/LoopBack/NULL/Console 等逻辑口不返回）
+// 单台设备当前 UP 的物理口或链路聚合口（流量卡接口选择器的选项；Vlanif/LoopBack/NULL/Console 与三层子接口等不返回）
 export interface DeviceInterfaceOption {
   /** 采集内部名（if<ifIndex>），也是接口流量查询的 interface 参数 */
   name: string
   /** ifDescr 别名，缺省回退 name */
   label: string
+  /** 接口描述（SNMP ifAlias），无描述时为 undefined */
+  description?: string
   speedMbps?: number
 }
 

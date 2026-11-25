@@ -60,12 +60,13 @@ function queryResult(overrides: Partial<{ data: DeviceInterfaceTraffic; isPendin
   }
 }
 
-function renderSection(deviceIds: number[]) {
+function renderSection(deviceIds: number[], activeGroupName?: string | null) {
   return render(
     <NetworkSection
       sectionRef={createRef<HTMLDivElement>()}
       networkInView
       deviceIds={deviceIds}
+      activeGroupName={activeGroupName}
       timeRange="1h"
       pageVisible
       sectionNetworkTraffic={{ ok: true }}
@@ -118,31 +119,73 @@ describe('NetworkSection（流量监控卡）', () => {
     )
   })
 
-  it('全部设备（未筛选）时不发起接口流量查询，显示聚合曲线与提示', () => {
+  it('全部设备（未筛选）时不发起接口流量查询，显示聚合曲线、口径说明与提示', () => {
     renderSection([])
 
     expect(mockUseDeviceInterfaceTraffic).toHaveBeenLastCalledWith(expect.objectContaining({ deviceId: null }))
     expect(screen.queryByRole('combobox', { name: '接口选择' })).not.toBeInTheDocument()
+    expect(screen.getByText('全部设备')).toBeInTheDocument()
+    const scopeHint = screen.getByText('活跃设备物理口聚合总吞吐').closest('[data-slot="traffic-aggregate-scope-hint"]')
+    expect(scopeHint).toBeInTheDocument()
+    expect(scopeHint).toHaveAttribute('title', expect.stringContaining('活跃设备的物理接口总吞吐'))
     expect(screen.getByText(/勾选单台设备可查看各接口流量/)).toBeInTheDocument()
     expect(screen.getByTestId('traffic-chart')).toHaveTextContent('2 points')
   })
 
-  it('多选设备时同样走聚合视图', () => {
+  it('按分组筛选且未选单台设备时显示分组名称与聚合口径说明', () => {
+    renderSection([], '核心机房')
+
+    expect(screen.getByText('分组 · 核心机房')).toBeInTheDocument()
+    expect(screen.queryByText('全部设备')).not.toBeInTheDocument()
+    expect(screen.getByText('活跃设备物理口聚合总吞吐')).toBeInTheDocument()
+  })
+
+  it('多选设备时同样走聚合视图并展示聚合口径说明', () => {
     renderSection([6, 7])
 
     expect(mockUseDeviceInterfaceTraffic).toHaveBeenLastCalledWith(expect.objectContaining({ deviceId: null }))
     expect(screen.getByText(/已选 2 台/)).toBeInTheDocument()
+    expect(screen.getByText('活跃设备物理口聚合总吞吐')).toBeInTheDocument()
     expect(screen.getByTestId('traffic-chart')).toHaveTextContent('2 points')
   })
 
-  it('单设备没有 UP 物理接口时给出明确空态', () => {
+  it('单设备没有 UP 物理或聚合接口时给出明确空态', () => {
     mockUseDeviceInterfaceTraffic.mockReturnValue(
       queryResult({ data: { ...interfaceTraffic, interface: '', interfaces: [], points: [] } })
     )
     renderSection([6])
 
-    expect(screen.getByText('该设备当前没有 UP 状态的物理接口')).toBeInTheDocument()
+    expect(screen.getByText('该设备当前没有 UP 状态的物理或聚合接口')).toBeInTheDocument()
     expect(screen.queryByTestId('traffic-chart')).not.toBeInTheDocument()
+  })
+
+  it('单设备视图支持展示与切换 Eth-Trunk 聚合口流量', async () => {
+    const user = userEvent.setup()
+    mockUseDeviceInterfaceTraffic.mockReturnValue(
+      queryResult({
+        data: {
+          ...interfaceTraffic,
+          interfaces: [
+            { name: 'if6', label: 'GigabitEthernet0/0/1', speedMbps: 1000 },
+            { name: 'if8', label: 'Eth-Trunk1', description: '核心聚合上行', speedMbps: 2000 },
+          ],
+        },
+      })
+    )
+
+    renderSection([6])
+
+    await user.click(screen.getByRole('combobox', { name: '接口选择' }))
+    const listbox = screen.getByRole('listbox')
+    const options = within(listbox).getAllByRole('option')
+    expect(options).toHaveLength(2)
+    expect(options[1]).toHaveTextContent('Eth-Trunk1')
+    expect(options[1].querySelector('[data-slot="select-item-description"]')).toHaveTextContent('核心聚合上行')
+
+    await user.click(options[1])
+    expect(mockUseDeviceInterfaceTraffic).toHaveBeenLastCalledWith(
+      expect.objectContaining({ deviceId: 6, interfaceName: 'if8' })
+    )
   })
 
   it('接口流量查询失败时显示失败态并可重试', async () => {
@@ -156,6 +199,53 @@ describe('NetworkSection（流量监控卡）', () => {
     expect(screen.getByText('接口流量加载失败')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /重试/ }))
     expect(refetch).toHaveBeenCalled()
+  })
+
+  it('接口描述仅在下拉展开时于接口名旁显示，有则显示、无则不显示，触发器始终只显示接口名', async () => {
+    const user = userEvent.setup()
+    mockUseDeviceInterfaceTraffic.mockReturnValue(
+      queryResult({
+        data: {
+          ...interfaceTraffic,
+          interfaces: [
+            { name: 'if6', label: 'GigabitEthernet0/0/1', description: '上联核心交换机', speedMbps: 1000 },
+            { name: 'if7', label: 'GigabitEthernet0/0/2', speedMbps: 1000 },
+            { name: 'if8', label: 'GigabitEthernet0/0/3', description: '接入楼层汇聚', speedMbps: 1000 },
+          ],
+        },
+      })
+    )
+
+    renderSection([6])
+
+    const combobox = screen.getByRole('combobox', { name: '接口选择' })
+    // 未展开时触发器仅显示接口名，且不渲染 listbox
+    expect(combobox).toHaveTextContent('GigabitEthernet0/0/1')
+    expect(combobox).not.toHaveTextContent('上联核心交换机')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // 展开下拉后：有描述的接口在旁显示描述，无描述的不显示描述元素
+    await user.click(combobox)
+    const listbox = screen.getByRole('listbox')
+    const options = within(listbox).getAllByRole('option')
+    expect(options).toHaveLength(3)
+
+    expect(options[0]).toHaveTextContent('GigabitEthernet0/0/1')
+    expect(options[0].querySelector('[data-slot="select-item-description"]')).toHaveTextContent('上联核心交换机')
+
+    expect(options[1]).toHaveTextContent('GigabitEthernet0/0/2')
+    expect(options[1].querySelector('[data-slot="select-item-description"]')).toBeNull()
+
+    expect(options[2]).toHaveTextContent('GigabitEthernet0/0/3')
+    expect(options[2].querySelector('[data-slot="select-item-description"]')).toHaveTextContent('接入楼层汇聚')
+
+    // 选中另一个带描述的接口后，触发器仍只显示接口名，不显示描述
+    await user.click(options[2])
+    expect(mockUseDeviceInterfaceTraffic).toHaveBeenLastCalledWith(
+      expect.objectContaining({ deviceId: 6, interfaceName: 'if8' })
+    )
+    expect(combobox).toHaveTextContent('GigabitEthernet0/0/3')
+    expect(combobox).not.toHaveTextContent('接入楼层汇聚')
   })
 
   it('卡片内不再出现「总流量」与「网络流量」区块标题', () => {

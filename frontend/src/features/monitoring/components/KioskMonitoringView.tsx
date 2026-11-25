@@ -59,6 +59,11 @@ export function KioskMonitoringView({
   ) : null
 
   const hasGroupSummaries = Boolean(data?.groupSummaries && data.groupSummaries.length > 0)
+  const activeGroupName =
+    page.activeGroupId !== null && page.activeGroupId > 0
+      ? (data?.groupSummaries?.find((g) => g.group_id === page.activeGroupId)?.group_name ??
+        `分组 #${page.activeGroupId}`)
+      : null
 
   return (
     <div
@@ -162,6 +167,7 @@ export function KioskMonitoringView({
                     sectionRef={networkRef}
                     networkInView={networkInView}
                     deviceIds={page.deviceIds}
+                    activeGroupName={activeGroupName}
                     timeRange={page.timeRange}
                     pageVisible={page.pageVisible}
                     sectionNetworkTraffic={page.envelope?.sections.networkTraffic}

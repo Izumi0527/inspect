@@ -53,7 +53,7 @@ func TestDashboardSampleInterval_ForcesFiveMinuteBucketOnLongRanges(t *testing.T
 	speed := int64(1000)
 	mock.ExpectQuery(upInterfacesQueryPattern).
 		WithArgs(6).
-		WillReturnRows(sqlmock.NewRows([]string{"name", "alias", "speed"}).AddRow("if6", "GigabitEthernet0/0/1", speed))
+		WillReturnRows(sqlmock.NewRows([]string{"name", "alias", "description", "speed"}).AddRow("if6", "GigabitEthernet0/0/1", nil, speed))
 	mock.ExpectQuery(`(?is)FROM interface_metrics WHERE device_id = \$1 AND collected_at >= \$2 AND collected_at <= \$3.*time_bucket\('5 minutes', collected_at\)|(?is)time_bucket\('5 minutes', collected_at\).*FROM interface_metrics`).
 		WithArgs(6, start, end, "if6").
 		WillReturnRows(sqlmock.NewRows([]string{"bucket", "inbound", "outbound"}))

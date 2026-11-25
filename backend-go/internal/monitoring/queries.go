@@ -687,17 +687,19 @@ func (w *MetricsWriter) GetDevicePerformanceHistory(ctx context.Context, start t
 }
 
 // aggregateTrafficQuery 生成多设备聚合流量 SQL（参数顺序：start, end[, deviceIDs]）。
-// 只读 device_metrics：设备级 bandwidth_* 已是采集器按接口累加的结果，再并上
-// interface_metrics 会 ×2。同一（桶, 设备）内多个样本取 AVG——速率是瞬时量，采集周期
-// 与桶宽不对齐时 SUM 会把双样本桶放大一倍形成锯齿；跨设备再 SUM 得总吞吐。
+// 只读 device_metrics 且关联 devices 限定活跃设备（is_active = TRUE）：
+// 设备级 bandwidth_* 已是采集器按物理接口累加的结果（已剔除逻辑口/子接口，避免重复计数），
+// 再并上 interface_metrics 会 ×2。同一（桶, 设备）内多个样本取 AVG——速率是瞬时量，采集周期
+// 与桶宽不对齐时 SUM 会把双样本桶放大一倍形成锯齿；跨活跃设备再 SUM 得总吞吐。
 func aggregateTrafficQuery(interval string, deviceFilter string) string {
 	return fmt.Sprintf(
 		`SELECT bucket, SUM(inbound) AS inbound, SUM(outbound) AS outbound FROM (`+
-			`SELECT time_bucket('%s', collected_at) AS bucket, device_id, `+
-			`AVG(CASE WHEN metric_name IN (%s) THEN metric_value END) AS inbound, `+
-			`AVG(CASE WHEN metric_name IN (%s) THEN metric_value END) AS outbound `+
-			`FROM device_metrics WHERE collected_at >= ? AND collected_at <= ? AND metric_name IN (%s)%s `+
-			`GROUP BY bucket, device_id) AS per_device GROUP BY bucket ORDER BY bucket ASC`,
+			`SELECT time_bucket('%s', dm.collected_at) AS bucket, dm.device_id, `+
+			`AVG(CASE WHEN dm.metric_name IN (%s) THEN dm.metric_value END) AS inbound, `+
+			`AVG(CASE WHEN dm.metric_name IN (%s) THEN dm.metric_value END) AS outbound `+
+			`FROM device_metrics dm INNER JOIN devices d ON d.id = dm.device_id `+
+			`WHERE dm.collected_at >= ? AND dm.collected_at <= ? AND d.is_active = TRUE AND dm.metric_name IN (%s)%s `+
+			`GROUP BY bucket, dm.device_id) AS per_device GROUP BY bucket ORDER BY bucket ASC`,
 		interval,
 		formatMetricList(networkInboundMetricNames),
 		formatMetricList(networkOutboundMetricNames),
@@ -706,8 +708,9 @@ func aggregateTrafficQuery(interval string, deviceFilter string) string {
 	)
 }
 
-// GetNetworkTrafficHistory 查询网络流量时序；deviceIDs 非空时仅聚合所选设备。
-// interval <= 0（AutoBucket）时按时间范围分档；监控中心页传 DashboardSampleInterval 固定 5 分钟。
+// GetNetworkTrafficHistory 查询当前活跃设备（d.is_active = TRUE）物理口聚合总吞吐时序；
+// deviceIDs 非空时仅聚合所选设备。interval <= 0（AutoBucket）时按时间范围分档；
+// 监控中心页传 DashboardSampleInterval 固定 5 分钟。
 func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time.Time, end time.Time, deviceIDs []int, interval time.Duration) ([]NetworkTrafficPoint, error) {
 	if w.db == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -727,7 +730,7 @@ func (w *MetricsWriter) GetNetworkTrafficHistory(ctx context.Context, start time
 
 	deviceFilter := ""
 	if len(deviceIDs) > 0 {
-		deviceFilter = " AND device_id IN (?)"
+		deviceFilter = " AND dm.device_id IN (?)"
 	}
 
 	type row struct {
@@ -966,7 +969,8 @@ type PeakNetworkSnapshot struct {
 
 // PeakNetworkMetrics24h 查询24小时内的峰值网络流量，一次产出分向与合并口径，
 // 总览（上/下行卡）与监控中心（峰值流量卡）共用，调整桶宽/异常阈值只改此处。
-// 返回值单位为 bps；会过滤掉超过 10 Gbps 的异常数据；deviceIDs 非空时仅统计所选设备。
+// 仅统计当前活跃设备（d.is_active = TRUE），返回值单位为 bps；会过滤掉超过 10 Gbps 的异常数据；
+// deviceIDs 非空时仅统计所选设备。
 func PeakNetworkMetrics24h(ctx context.Context, db *gorm.DB, deviceIDs []int) (PeakNetworkSnapshot, error) {
 	if db == nil {
 		return PeakNetworkSnapshot{}, fmt.Errorf("database not initialized")
@@ -996,24 +1000,26 @@ func PeakNetworkMetrics24h(ctx context.Context, db *gorm.DB, deviceIDs []int) (P
 		MaxReasonableBandwidthBps,
 	}
 	if len(deviceIDs) > 0 {
-		deviceFilter = " AND device_id IN (?)"
+		deviceFilter = " AND dm.device_id IN (?)"
 		args = append(args, deviceIDs)
 	}
 
-	// 先按（5 分钟桶, 设备）取速率均值（桶内多样本 SUM 会成倍放大），再跨设备 SUM，
-	// 最后取各口径的桶峰值。过滤掉超过 10 Gbps 的异常数据（可能是历史错误数据）。
+	// 先按（5 分钟桶, 设备）取速率均值（桶内多样本 SUM 会成倍放大），关联 devices 排除停用/已删设备，
+	// 再跨设备 SUM，最后取各口径的桶峰值。过滤掉超过 10 Gbps 的异常数据（可能是历史错误数据）。
 	query := fmt.Sprintf(`
 		WITH per_device AS (
 			SELECT
-				time_bucket('5 minutes', collected_at) AS bucket,
-				device_id,
-				AVG(CASE WHEN metric_name IN (?) THEN metric_value END) AS inbound,
-				AVG(CASE WHEN metric_name IN (?) THEN metric_value END) AS outbound
-			FROM device_metrics
-			WHERE metric_name IN (?)
-			AND collected_at >= NOW() - INTERVAL '24 hours'
-			AND metric_value < ?%s
-			GROUP BY bucket, device_id
+				time_bucket('5 minutes', dm.collected_at) AS bucket,
+				dm.device_id,
+				AVG(CASE WHEN dm.metric_name IN (?) THEN dm.metric_value END) AS inbound,
+				AVG(CASE WHEN dm.metric_name IN (?) THEN dm.metric_value END) AS outbound
+			FROM device_metrics dm
+			INNER JOIN devices d ON d.id = dm.device_id
+			WHERE dm.metric_name IN (?)
+			AND dm.collected_at >= NOW() - INTERVAL '24 hours'
+			AND d.is_active = TRUE
+			AND dm.metric_value < ?%s
+			GROUP BY bucket, dm.device_id
 		),
 		time_buckets AS (
 			SELECT bucket, SUM(inbound) AS inbound, SUM(outbound) AS outbound FROM per_device GROUP BY bucket

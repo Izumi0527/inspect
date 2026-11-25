@@ -12,7 +12,9 @@ import {
   triggerDeviceCollectNow,
 } from '../../api/monitoring-hosts.api'
 import { MONITORING_HOSTS_QUERY_KEY } from '../../hooks/useMonitoringHosts'
+import { INTERFACE_TRAFFIC_QUERY_KEY } from '../../hooks/useDeviceInterfaceTraffic'
 import type { HostDetailResponse } from '../../types/zabbix-monitoring.types'
+import { LATEST_DATA_QUERY_KEY } from '../latest/latestDataHelpers'
 import { buildSanitizedDiagnosticSummary } from './hostDisplayHelpers'
 import { HostActiveAlertsPanel, HostLatestMetricsPanel } from './HostAlertsAndLatestPanel'
 import { HostCrossPagePanel } from './HostCrossPagePanel'
@@ -144,6 +146,9 @@ export function HostDetailDrawer({
       void queryClient.invalidateQueries({ queryKey: ['monitoring-host-detail', effectiveDeviceId] })
       void queryClient.invalidateQueries({ queryKey: [MONITORING_HOSTS_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: [MONITORING_TOPN_QUERY_KEY] })
+      void queryClient.invalidateQueries({ queryKey: [LATEST_DATA_QUERY_KEY] })
+      void queryClient.invalidateQueries({ queryKey: [INTERFACE_TRAFFIC_QUERY_KEY] })
+      void queryClient.invalidateQueries({ queryKey: ['monitoring-v2'] })
     },
     onError: (err) => {
       if (err instanceof CollectCooldownError) {

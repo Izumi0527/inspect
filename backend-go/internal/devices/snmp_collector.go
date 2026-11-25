@@ -1214,9 +1214,11 @@ func (c *SNMPCollector) collectInterfaces(
 
 				iface.InRate = &inRateBps
 				iface.OutRate = &outRateBps
-				totalInRate += inRateBps
-				totalOutRate += outRateBps
-				ratedInterfaces++
+				if !IsAggregateExcludedInterface(iface.Description) {
+					totalInRate += inRateBps
+					totalOutRate += outRateBps
+					ratedInterfaces++
+				}
 			}
 		} else {
 			lastCache[idx] = octetsCache{

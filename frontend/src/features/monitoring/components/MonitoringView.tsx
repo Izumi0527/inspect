@@ -93,6 +93,11 @@ export function MonitoringView() {
   }
 
   const activeAlertCount = resolveActiveAlertCount(page.data)
+  const activeGroupName =
+    page.activeGroupId !== null && page.activeGroupId > 0
+      ? (page.data.groupSummaries?.find((g) => g.group_id === page.activeGroupId)?.group_name ??
+        `分组 #${page.activeGroupId}`)
+      : null
 
   return (
     <AppLayout title="监控中心" actions={<MonitoringHeaderActions page={page} />}>
@@ -177,6 +182,7 @@ export function MonitoringView() {
                 sectionRef={networkRef}
                 networkInView={networkInView}
                 deviceIds={page.deviceIds}
+                activeGroupName={activeGroupName}
                 timeRange={page.timeRange}
                 pageVisible={page.pageVisible}
                 sectionNetworkTraffic={page.envelope?.sections.networkTraffic}

@@ -167,13 +167,15 @@ describe('monitoring.api', () => {
     expect(mockedApi.get.mock.calls.some(([url]) => String(url).startsWith('/alerts'))).toBe(false)
   })
 
-  it('fetchDeviceInterfaceTraffic: 按设备与接口拼接查询参数，并归一化响应（label 缺省回退 name）', async () => {
+  it('fetchDeviceInterfaceTraffic: 按设备与接口拼接查询参数，并归一化响应（label 缺省回退 name，description 裁剪空白且空值省略）', async () => {
     mockedApi.get.mockReset()
     mockedApi.get.mockResolvedValue({
       device_id: 6,
       interface: 'if6',
       interfaces: [
-        { name: 'if6', label: 'GigabitEthernet0/0/1', speed_mbps: 1000 },
+        { name: 'if6', label: 'GigabitEthernet0/0/1', description: ' 上联核心交换机 ', speed_mbps: 1000 },
+        { name: 'if7', label: 'GigabitEthernet0/0/2', description: '   ', speed_mbps: 1000 },
+        { name: 'if8', label: 'GigabitEthernet0/0/3', description: null },
         { name: 'if1' },
         { name: '' },
       ],
@@ -189,9 +191,14 @@ describe('monitoring.api', () => {
     expect(result.deviceId).toBe(6)
     expect(result.interface).toBe('if6')
     expect(result.interfaces).toEqual([
-      { name: 'if6', label: 'GigabitEthernet0/0/1', speedMbps: 1000 },
+      { name: 'if6', label: 'GigabitEthernet0/0/1', description: '上联核心交换机', speedMbps: 1000 },
+      { name: 'if7', label: 'GigabitEthernet0/0/2', speedMbps: 1000 },
+      { name: 'if8', label: 'GigabitEthernet0/0/3', speedMbps: undefined },
       { name: 'if1', label: 'if1', speedMbps: undefined },
     ])
+    expect('description' in result.interfaces[1]).toBe(false)
+    expect('description' in result.interfaces[2]).toBe(false)
+    expect('description' in result.interfaces[3]).toBe(false)
     expect(result.points).toEqual([{ timestamp: '2026-09-10T02:00:00Z', inbound: 2.5, outbound: 0.5 }])
   })
 

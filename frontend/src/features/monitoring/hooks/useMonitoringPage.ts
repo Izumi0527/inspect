@@ -7,8 +7,10 @@ import { usePermission } from '@/lib/contexts/auth-context'
 import { Permission } from '@/lib/types/auth.types'
 import { useWebSocket, useWebSocketEvent, WebSocketEvents } from '@/lib/websocket'
 import { MONITORING_TOPN_QUERY_KEY } from '../api/monitoring-hosts.api'
+import { LATEST_DATA_QUERY_KEY } from '../components/latest/latestDataHelpers'
 import { useMonitoringV2 } from './useMonitoringV2'
 import { INTERFACE_TRAFFIC_QUERY_KEY } from './useDeviceInterfaceTraffic'
+import { MONITORING_HOSTS_QUERY_KEY } from './useMonitoringHosts'
 import {
   useMonitoringNavigation,
   type MonitoringNavigationState,
@@ -211,6 +213,9 @@ export function useMonitoringPage(): UseMonitoringPageFullResult {
   const refetch = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: [INTERFACE_TRAFFIC_QUERY_KEY] })
     void queryClient.invalidateQueries({ queryKey: [MONITORING_TOPN_QUERY_KEY] })
+    void queryClient.invalidateQueries({ queryKey: [LATEST_DATA_QUERY_KEY] })
+    void queryClient.invalidateQueries({ queryKey: [MONITORING_HOSTS_QUERY_KEY] })
+    void queryClient.invalidateQueries({ queryKey: ['monitoring-host-detail'] })
     nav.resetKioskCountdown()
     return refetchV2()
   }, [queryClient, refetchV2, nav])

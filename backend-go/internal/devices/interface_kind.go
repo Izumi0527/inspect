@@ -31,6 +31,16 @@ var nonPhysicalExtraPrefixes = []string{
 	"bvi", "irb", "nve", "bridge-if", "cellular", "async", "serial",
 }
 
+// virtualOverlayInterfacePrefixes 识别虚拟桥接/Overlay 三层转发口（其流量归属于底层物理口）。
+var virtualOverlayInterfacePrefixes = []string{
+	"bvi", "irb", "nve", "bridge-if",
+}
+
+// linkAggregationInterfacePrefixes 识别链路聚合口本体（华为/H3C/Cisco）。
+var linkAggregationInterfacePrefixes = []string{
+	"eth-trunk", "bridge-aggregation", "route-aggregation", "port-channel",
+}
+
 func hasInterfacePrefix(descr string, prefixes []string) bool {
 	name := strings.ToLower(strings.TrimSpace(descr))
 	if name == "" {
@@ -53,6 +63,25 @@ func hasInterfacePrefix(descr string, prefixes []string) bool {
 // 无法判定的名字（含采集内部名 if<idx>、空串）一律按物理口处理，避免误删业务口。
 func IsLogicalInterface(descr string) bool {
 	return hasInterfacePrefix(descr, logicalInterfacePrefixes)
+}
+
+// IsAggregateExcludedInterface 判断接口是否应排除在设备总带宽累加与物理口流量视图之外：
+// 包含逻辑口（Vlanif/Eth-Trunk/Port-channel/LoopBack/Null/Console/Tunnel 等）、
+// 虚拟转发口（BVI/IRB/NVE/Bridge-if）及三层子接口（如 GE0/0/1.100），
+// 它们的流量已体现在底层物理口上或属于设备内部控制口，避免重复计数。
+func IsAggregateExcludedInterface(descr string) bool {
+	return IsLogicalInterface(descr) ||
+		hasInterfacePrefix(descr, virtualOverlayInterfacePrefixes) ||
+		isSubInterfaceName(descr)
+}
+
+// IsLinkAggregationInterface 判断接口是否为链路聚合口本体（如 Eth-Trunk1、Bridge-Aggregation1、
+// Route-Aggregation1、Port-channel1）；聚合口上的三层子接口（如 Eth-Trunk1.20）返回 false。
+func IsLinkAggregationInterface(descr string) bool {
+	if isSubInterfaceName(descr) {
+		return false
+	}
+	return hasInterfacePrefix(descr, linkAggregationInterfacePrefixes)
 }
 
 // IsIgnoredInspectionInterface 判断接口是否属于不纳入巡检报告统计的非业务逻辑端口。

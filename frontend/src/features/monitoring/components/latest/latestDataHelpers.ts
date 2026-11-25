@@ -5,6 +5,41 @@ import type {
 import { DEVICE_SERIES_COLORS } from '../../utils/monitoring'
 import { isSyntheticInterfaceKey } from '../hosts/hostDisplayHelpers'
 
+export const LATEST_DATA_QUERY_KEY = 'monitoring-latest-data'
+
+export interface LatestDataQueryKeyParams {
+  deviceIds?: number[]
+  groupId?: number | null
+  applicationTag?: string
+  search?: string
+  onlyAbnormalOrChanged?: boolean
+  page: number
+  pageSize: number
+}
+
+export function buildLatestDataQueryKey({
+  deviceIds = [],
+  groupId = null,
+  applicationTag = '',
+  search = '',
+  onlyAbnormalOrChanged = false,
+  page,
+  pageSize,
+}: LatestDataQueryKeyParams) {
+  return [
+    LATEST_DATA_QUERY_KEY,
+    {
+      deviceIds: [...deviceIds].sort((a, b) => a - b),
+      groupId: groupId !== null && groupId > 0 ? groupId : null,
+      applicationTag: applicationTag.trim(),
+      search: search.trim(),
+      onlyAbnormalOrChanged: Boolean(onlyAbnormalOrChanged),
+      page,
+      pageSize,
+    },
+  ] as const
+}
+
 export const COMPARISON_PALETTE: readonly string[] = [
   ...DEVICE_SERIES_COLORS,
   '#8B5CF6',
@@ -131,6 +166,33 @@ export function compareLatestDataItemsNaturally(
   }
 
   return a.metric_name.localeCompare(b.metric_name)
+}
+
+export function filterAndSortLatestDataItems<
+  T extends Pick<LatestDataItem, 'interface_name' | 'interface_display_name' | 'metric_name'> & {
+    device_id?: number
+  },
+>(items: ReadonlyArray<T>): T[] {
+  return items
+    .filter((item) => {
+      if (item.interface_name.trim() === '') return true
+      const portLabel = resolveLatestDataPortLabel(item)
+      return !isNonTrafficPortName(portLabel) && !isNonTrafficPortName(item.interface_name)
+    })
+    .sort(compareLatestDataItemsNaturally)
+}
+
+export function resolveLatestDataMetricTooltip(
+  item: Pick<LatestDataItem, 'interface_name' | 'metric_name'>
+): string | undefined {
+  if (item.interface_name.trim() !== '') return undefined
+  if (item.metric_name === 'bandwidth_in') {
+    return '整机所有物理接口入方向总流量（与总览流量监控同源，已剔除逻辑口与聚合口）'
+  }
+  if (item.metric_name === 'bandwidth_out') {
+    return '整机所有物理接口出方向总流量（与总览流量监控同源，已剔除逻辑口与聚合口）'
+  }
+  return undefined
 }
 
 export interface NormalizedSeriesStats {
