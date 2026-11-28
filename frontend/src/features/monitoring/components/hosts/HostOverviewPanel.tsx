@@ -76,8 +76,12 @@ function FingerprintCard({ detail }: { detail: HostDetailResponse }) {
           <span className="font-mono text-foreground">{detail.serial_number || '—'}</span>
         </div>
         <div>
-          <span className="text-muted-foreground">固件版本：</span>
-          <span className="text-foreground">{detail.firmware_version || '—'}</span>
+          <span className="text-muted-foreground">软件版本：</span>
+          <span className="text-foreground break-all">{detail.firmware_version || '—'}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground">补丁版本：</span>
+          <span className="text-foreground break-all">{detail.patch_version || '—'}</span>
         </div>
         <div>
           <span className="text-muted-foreground">所属分组：</span>

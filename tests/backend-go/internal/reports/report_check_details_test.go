@@ -1,6 +1,7 @@
 package reports_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,6 +60,9 @@ func writeInspectionPDF(path string, data reports.InspectionReportData) error
 
 //go:linkname bodyCellTextIndent github.com/your-org/inspect-system/backend-go/internal/reports/pdfkit.gridBodyCellTextIndent
 func bodyCellTextIndent(accents [][3]int, rowIndex, colIndex int) float64
+
+//go:linkname summarizeInterfaceSkippedForPDF github.com/your-org/inspect-system/backend-go/internal/reports.summarizeInterfaceSkippedForPDF
+func summarizeInterfaceSkippedForPDF(hasEvaluatedTable bool, skipped []reports.InterfaceUtilizationSkippedReport) ([]reports.InterfaceUtilizationSkippedReport, string)
 
 func rawJSON(s string) *string { return &s }
 
@@ -874,9 +878,25 @@ func TestParseFirmwareVersionDetailsAndResolveDevicePatchVersion(t *testing.T) {
 			t.Errorf("dev1: got %q, want V200R019SPH020", got)
 		}
 
-		// 2. 从 CheckResults 的 FirmwareVersion 中获取
+		// 2. 从 CheckResults 的 FirmwareVersion 中获取（真实热补丁保留，历史误存的 SPC500 忽略）
 		dev2 := reports.InspectionDeviceData{
-			SoftwareVersion: "V200R019C00",
+			SoftwareVersion: "V200R019C00SPC500",
+			CheckResults: []reports.InspectionCheckResult{
+				{
+					FirmwareVersion: &reports.FirmwareVersionReport{
+						Kind:         "firmware_version",
+						PatchVersion: "V200R019SPH020",
+					},
+				},
+			},
+		}
+		if got := resolveDevicePatchVersion(dev2); got != "V200R019SPH020" {
+			t.Errorf("dev2: got %q, want V200R019SPH020", got)
+		}
+
+		dev2Stale := reports.InspectionDeviceData{
+			SoftwareVersion: "V200R019C00SPC500",
+			PatchVersion:    "SPC500",
 			CheckResults: []reports.InspectionCheckResult{
 				{
 					FirmwareVersion: &reports.FirmwareVersionReport{
@@ -886,8 +906,8 @@ func TestParseFirmwareVersionDetailsAndResolveDevicePatchVersion(t *testing.T) {
 				},
 			},
 		}
-		if got := resolveDevicePatchVersion(dev2); got != "SPC500" {
-			t.Errorf("dev2: got %q, want SPC500", got)
+		if got := resolveDevicePatchVersion(dev2Stale); got != "无" {
+			t.Errorf("dev2Stale: got %q, want 无", got)
 		}
 
 		// 3. 已删除设备
@@ -922,4 +942,138 @@ func TestParseFirmwareVersionDetailsAndResolveDevicePatchVersion(t *testing.T) {
 			t.Errorf("dev6: got %q, want empty", got)
 		}
 	})
+}
+
+func makeSkippedInterfaces(count int, reason string) []reports.InterfaceUtilizationSkippedReport {
+	out := make([]reports.InterfaceUtilizationSkippedReport, 0, count)
+	for i := 1; i <= count; i++ {
+		out = append(out, reports.InterfaceUtilizationSkippedReport{
+			Name:   fmt.Sprintf("GigabitEthernet0/0/%d", i),
+			Reason: reason,
+		})
+	}
+	return out
+}
+
+func TestSummarizeInterfaceSkippedForPDF(t *testing.T) {
+	t.Run("utilization mixed down and no-rate without evaluated table", func(t *testing.T) {
+		skipped := append(makeSkippedInterfaces(25, "接口未 UP"), reports.InterfaceUtilizationSkippedReport{
+			Name:   "GigabitEthernet0/0/26",
+			Reason: "无速率样本（尚未形成差分基线）",
+		})
+		remaining, note := summarizeInterfaceSkippedForPDF(false, skipped)
+		if len(remaining) != 0 {
+			t.Fatalf("len(remaining) = %d, want 0", len(remaining))
+		}
+		want := "说明：共 26 个接口暂无有效评估数据（25 个接口未 UP、1 个接口尚未形成速率采样基线），故不展开逐接口明细。"
+		if note != want {
+			t.Fatalf("note = %q, want %q", note, want)
+		}
+	})
+
+	t.Run("all down without evaluated table", func(t *testing.T) {
+		remaining, note := summarizeInterfaceSkippedForPDF(false, makeSkippedInterfaces(26, "接口未 UP"))
+		if len(remaining) != 0 {
+			t.Fatalf("len(remaining) = %d, want 0", len(remaining))
+		}
+		want := "说明：全部 26 个接口均未 UP，无有效采集数据，故不展开逐接口明细。"
+		if note != want {
+			t.Fatalf("note = %q, want %q", note, want)
+		}
+	})
+
+	t.Run("ratio no-packet with evaluated table", func(t *testing.T) {
+		remaining, note := summarizeInterfaceSkippedForPDF(true, makeSkippedInterfaces(25, "无包计数样本，无法计算比率"))
+		if len(remaining) != 0 {
+			t.Fatalf("len(remaining) = %d, want 0", len(remaining))
+		}
+		want := "说明：另有 25 个接口未 UP 或无有效流量/包计数数据，未参与评估，故不在明细表中展示。"
+		if note != want {
+			t.Fatalf("note = %q, want %q", note, want)
+		}
+	})
+
+	t.Run("broadcast low-packet with evaluated table", func(t *testing.T) {
+		remaining, note := summarizeInterfaceSkippedForPDF(true, makeSkippedInterfaces(25, "样本包数不足 1000，不计风暴比率"))
+		if len(remaining) != 0 {
+			t.Fatalf("len(remaining) = %d, want 0", len(remaining))
+		}
+		want := "说明：另有 25 个接口未 UP 或有效包数样本不足（低于 1000 包），未参与评估，故不在明细表中展示。"
+		if note != want {
+			t.Fatalf("note = %q, want %q", note, want)
+		}
+	})
+
+	t.Run("down ports with evaluated table", func(t *testing.T) {
+		remaining, note := summarizeInterfaceSkippedForPDF(true, makeSkippedInterfaces(25, "接口未 UP"))
+		if len(remaining) != 0 {
+			t.Fatalf("len(remaining) = %d, want 0", len(remaining))
+		}
+		want := "说明：另有 25 个接口未 UP，无有效采集数据，故不在明细表中展示。"
+		if note != want {
+			t.Fatalf("note = %q, want %q", note, want)
+		}
+	})
+
+	t.Run("preserves genuine MIB counter skip alongside omitted down ports", func(t *testing.T) {
+		skipped := append(
+			[]reports.InterfaceUtilizationSkippedReport{{Name: "Vlanif1", Reason: "设备未上报该计数器"}},
+			makeSkippedInterfaces(10, "接口未 UP")...,
+		)
+		remaining, note := summarizeInterfaceSkippedForPDF(true, skipped)
+		if len(remaining) != 1 || remaining[0].Name != "Vlanif1" {
+			t.Fatalf("remaining = %+v, want [Vlanif1]", remaining)
+		}
+		want := "说明：另有 10 个接口未 UP，无有效采集数据，故不在明细表中展示。"
+		if note != want {
+			t.Fatalf("note = %q, want %q", note, want)
+		}
+	})
+
+	t.Run("remaining table counts as table above when no evaluated interfaces", func(t *testing.T) {
+		skipped := append(
+			[]reports.InterfaceUtilizationSkippedReport{{Name: "Vlanif1", Reason: "设备未上报该计数器"}},
+			makeSkippedInterfaces(10, "接口未 UP")...,
+		)
+		remaining, note := summarizeInterfaceSkippedForPDF(false, skipped)
+		if len(remaining) != 1 || remaining[0].Name != "Vlanif1" {
+			t.Fatalf("remaining = %+v, want [Vlanif1]", remaining)
+		}
+		if !strings.HasPrefix(note, "说明：另有 ") {
+			t.Fatalf("note = %q, want prefix '说明：另有 '", note)
+		}
+	})
+}
+
+func TestInspectionPDF_OmitsDownAndNoDataInterfaceRows(t *testing.T) {
+	skippedJSON := `{"kind":"interface_utilization","total":26,"evaluated":0,"warning_threshold":70,"critical_threshold":90,"interfaces":[],"skipped":[`
+	for i := 1; i <= 25; i++ {
+		skippedJSON += fmt.Sprintf(`{"name":"GigabitEthernet0/0/%d","reason":"接口未 UP"},`, i)
+	}
+	skippedJSON += `{"name":"GigabitEthernet0/0/26","reason":"无速率样本（尚未形成差分基线）"}]}`
+
+	data := reports.InspectionReportData{
+		InspectionName: "接口利用率精简测试",
+		InspectionID:   "INSP-SKIP-1",
+		Devices: []reports.InspectionDeviceData{
+			{
+				DeviceName: "接入交换机-01",
+				IPAddress:  "10.0.0.1",
+				DeviceType: "switch",
+				CheckResults: []reports.InspectionCheckResult{
+					{
+						CheckItemName:        "接口利用率",
+						CheckItemType:        "snmp",
+						Status:               "skip",
+						InterfaceUtilization: parseInterfaceUtilizationDetails(rawJSON(skippedJSON)),
+					},
+				},
+			},
+		},
+	}
+
+	size := renderInspectionPDFSize(t, data, "omitted-skipped.pdf")
+	if size < 5*1024 {
+		t.Fatalf("PDF size = %d bytes, expected valid PDF", size)
+	}
 }

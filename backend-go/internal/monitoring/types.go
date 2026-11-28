@@ -165,6 +165,7 @@ type DeviceMetricsRequest struct {
 type DeviceIdentity struct {
 	Model           string `json:"model,omitempty"`
 	FirmwareVersion string `json:"firmware_version,omitempty"`
+	PatchVersion    string `json:"patch_version,omitempty"`
 	SerialNumber    string `json:"serial_number,omitempty"`
 	// DetectedDeviceType 是 SNMP 识别出的类型，只回填 detected_device_type 列，不覆盖用户填写的 device_type
 	DetectedDeviceType string `json:"detected_device_type,omitempty"`

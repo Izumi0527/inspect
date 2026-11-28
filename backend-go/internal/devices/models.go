@@ -32,6 +32,7 @@ type Device struct {
 	Model           *string `gorm:"column:model"`
 	SerialNumber    *string `gorm:"column:serial_number"`
 	FirmwareVersion *string `gorm:"column:firmware_version"`
+	PatchVersion    *string `gorm:"column:patch_version"`
 	Location        *string `gorm:"column:location"`
 	GroupID         *int    `gorm:"column:group_id"`
 	Status          string  `gorm:"column:status"`

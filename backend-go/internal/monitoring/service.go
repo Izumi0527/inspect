@@ -545,6 +545,7 @@ func writeDeviceIdentityIfChanged(tx *gorm.DB, deviceID int, identity *DeviceIde
 
 	apply("model", sanitizeIdentityField(identity.Model, maxIdentityFieldLen))
 	apply("firmware_version", sanitizeIdentityField(identity.FirmwareVersion, maxIdentityFieldLen))
+	apply("patch_version", sanitizeIdentityField(identity.PatchVersion, maxIdentityFieldLen))
 	apply("serial_number", devices.SanitizeSerialNumber(identity.SerialNumber))
 	apply("detected_device_type", sanitizeIdentityField(identity.DetectedDeviceType, maxIdentityFieldLen))
 	apply("detected_sys_name", sanitizeIdentityField(identity.SysName, maxIdentityFieldLen))

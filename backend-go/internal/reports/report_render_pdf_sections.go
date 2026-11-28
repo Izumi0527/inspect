@@ -37,6 +37,10 @@ func writeInspectionMetadataTable(pdf *gofpdf.Fpdf, data InspectionReportData, g
 	pdfkit.GridTable(pdf, []string{"项目", "内容", "项目", "内容"}, rows, []float64{26, 61, 26, 61}, style)
 }
 
+func inspectionCategoryStatsWidths() []float64 {
+	return []float64{38, 18, 18, 18, 26, 28, 28}
+}
+
 // writeInspectionCategoryStatsSection 在「统计摘要」下渲染四大运维域健康度汇总表。
 func writeInspectionCategoryStatsSection(pdf *gofpdf.Fpdf, stats []InspectionCategoryStat) {
 	if len(stats) == 0 {
@@ -65,7 +69,7 @@ func writeInspectionCategoryStatsSection(pdf *gofpdf.Fpdf, stats []InspectionCat
 		pdf,
 		[]string{"巡检维度分类", "总项数", "通过", "警告", "失败/错误", "跳过/不适用", "分类通过率"},
 		rows,
-		[]float64{38, 18, 18, 18, 26, 28, 28},
+		inspectionCategoryStatsWidths(),
 		style,
 	)
 }
@@ -195,6 +199,10 @@ func formatCoreMetricPart(label, actual string) string {
 	return label + " " + actual
 }
 
+func inspectionDeviceCheckWrapColumns() []int {
+	return []int{0, 1, 2, 3, 4, 5}
+}
+
 // writeInspectionDeviceProfileAndChecks 渲染单设备 6×4 档案矩阵与 6 列检查结果总表。
 func writeInspectionDeviceProfileAndChecks(pdf *gofpdf.Fpdf, device InspectionDeviceData) {
 	deviceRows := [][]string{
@@ -234,7 +242,7 @@ func writeInspectionDeviceProfileAndChecks(pdf *gofpdf.Fpdf, device InspectionDe
 	}
 	resultStyle := defaultPDFTableStyle(pdfHeaderStyleBlue)
 	resultStyle.BodyAlign = "L"
-	resultStyle.WrapColumns = []int{0, 4, 5}
+	resultStyle.WrapColumns = inspectionDeviceCheckWrapColumns()
 	resultStyle.RowFills, resultStyle.RowAccents = checkResultRowTints(resultRows, 3)
 	pdfkit.GridTable(
 		pdf,
@@ -276,7 +284,7 @@ func writeComponentStatusPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult
 	style.BodyAlign = "L"
 	style.WrapColumns = []int{0, 1, 3}
 	style.RowFills, style.RowAccents = checkResultRowTints(rows, 2)
-	pdfkit.GridTable(pdf, []string{"编号", "名称", "判定", "状态描述", "原始状态码"}, rows, []float64{26, 46, 18, 52, 24}, style)
+	pdfkit.GridTable(pdf, []string{"编号", "名称", "判定", "状态描述", "原始状态码"}, rows, []float64{28, 48, 18, 56, 24}, style)
 	writePDFRightAligned(pdf, fmt.Sprintf("判定依据：正常状态码 %s，异常状态码 %s，其余不作判定",
 		formatStateCodeSet(detail.NormalStates), formatStateCodeSet(detail.AbnormalStates)))
 }

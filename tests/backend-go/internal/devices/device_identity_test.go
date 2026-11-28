@@ -174,10 +174,10 @@ func TestExtractPatchVersion(t *testing.T) {
 			wantPatch:       "HP001",
 		},
 		{
-			name:            "华为 VRP 固件版本内嵌补丁号 SPC500",
+			name:            "华为 VRP 固件版本内嵌 SPC500 属基础软件服务包，不视为补丁",
 			sysDescr:        "",
 			firmwareVersion: "V200R019C00SPC500",
-			wantPatch:       "SPC500",
+			wantPatch:       "",
 		},
 		{
 			name:            "H3C Release 内嵌补丁号 P08",
@@ -216,10 +216,10 @@ func TestExtractPatchVersion(t *testing.T) {
 			wantPatch:       "",
 		},
 		{
-			name:            "华为 V600 sysDescr 内嵌补丁号 SPC500",
+			name:            "华为 V600 sysDescr 内嵌 SPC500 属基础软件服务包，不视为补丁",
 			sysDescr:        "Huawei Versatile Routing Platform Software\r\nVRP (R) software, Version 8.230 (CloudEngine S5755-H48T4XC V600R023C00SPC500)",
 			firmwareVersion: "V600R023C00SPC500",
-			wantPatch:       "SPC500",
+			wantPatch:       "",
 		},
 		{
 			name:            "空输入返回空串",
@@ -829,6 +829,113 @@ func TestCollectDeviceIdentityWithContext_HuaweiELabel3ModelFallback(t *testing.
 		)
 		if metricsGetScalar.Model == nil || *metricsGetScalar.Model != "S5736-S48T4XC" {
 			t.Fatalf("Get scalar Model = %v, want S5736-S48T4XC", metricsGetScalar.Model)
+		}
+	})
+}
+
+func TestCollectHuaweiPatchVersion(t *testing.T) {
+	registry, err := snmpmib.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("DefaultRegistry() error = %v", err)
+	}
+	collector := devices.NewSNMPCollectorWithRegistry(nil, registry)
+
+	strPDU := func(base, idx, val string) gosnmp.SnmpPDU {
+		return gosnmp.SnmpPDU{Name: "." + base + "." + idx, Type: gosnmp.OctetString, Value: []byte(val)}
+	}
+	intPDU := func(base, idx string, val int) gosnmp.SnmpPDU {
+		return gosnmp.SnmpPDU{Name: "." + base + "." + idx, Type: gosnmp.Integer, Value: val}
+	}
+
+	const (
+		hwPatchVersionOID      = "1.3.6.1.4.1.2011.5.25.19.1.8.5.1.1.4"
+		hwPatchStateOID        = "1.3.6.1.4.1.2011.5.25.19.1.8.5.1.1.14"
+		hwCurPatchFileIndexOID = "1.3.6.1.4.1.2011.5.25.19.1.2.1.1.6"
+		hwPatchFileVersionOID  = "1.3.6.1.4.1.2011.5.25.19.1.8.2.1.5"
+
+		fmPatchVersionOID = "1.3.6.1.4.1.56813.5.25.19.1.8.5.1.1.4"
+		fmPatchStateOID   = "1.3.6.1.4.1.56813.5.25.19.1.8.5.1.1.14"
+	)
+
+	t.Run("HUAWEI 2011 hwPatchTable 优先取 running(1) 且忽略 deactive(3)", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				hwPatchVersionOID: {
+					strPDU(hwPatchVersionOID, "0.1", "V200R024SPH005"),
+					strPDU(hwPatchVersionOID, "0.2", "V200R024SPH010"),
+					strPDU(hwPatchVersionOID, "0.3", "V200R024SPH001"),
+				},
+				hwPatchStateOID: {
+					intPDU(hwPatchStateOID, "0.1", 2), // active
+					intPDU(hwPatchStateOID, "0.2", 1), // running
+					intPDU(hwPatchStateOID, "0.3", 3), // deactive
+				},
+			},
+		}
+		collectDeviceIdentityWithDeviceContext(
+			collector, client, metrics, registry, "huawei",
+			"CloudEngine S5736-S24T4XC\r\nVRP (R) software, Version 5.170 (S5736-S24T4XC V200R024C00SPC500)",
+			true, ".1.3.6.1.4.1.2011.2.23.982", true, newEntityCatalog(client, registry),
+		)
+		if metrics.PatchVersion == nil || *metrics.PatchVersion != "V200R024SPH010" {
+			t.Fatalf("PatchVersion = %v, want V200R024SPH010", metrics.PatchVersion)
+		}
+	})
+
+	t.Run("FutureMatrix 56813 FMPatchTable 重映射采集补丁版本", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				fmPatchVersionOID: {
+					strPDU(fmPatchVersionOID, "0.1", "V200R025SPH002"),
+				},
+				fmPatchStateOID: {
+					intPDU(fmPatchStateOID, "0.1", 1),
+				},
+			},
+		}
+		collectDeviceIdentityWithDeviceContext(
+			collector, client, metrics, registry, "futurematrix",
+			"FutureMatrix S5736-S24T4XC\r\nVRP (R) software, Version 5.170 (FutureMatrix S5736-S24T4XC V200R025C00SPC500)",
+			true, ".1.3.6.1.4.1.56813.2.23.811", true, newEntityCatalog(client, registry),
+		)
+		if metrics.PatchVersion == nil || *metrics.PatchVersion != "V200R025SPH002" {
+			t.Fatalf("PatchVersion = %v, want V200R025SPH002", metrics.PatchVersion)
+		}
+	})
+
+	t.Run("hwPatchTable 为空时回退 hwSysCurPatchFileIndex + hwPatchFileVersion", func(t *testing.T) {
+		metrics := &devices.SNMPMetrics{}
+		client := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				hwCurPatchFileIndexOID: {intPDU(hwCurPatchFileIndexOID, "1", 7)},
+				hwPatchFileVersionOID:  {strPDU(hwPatchFileVersionOID, "7", "V200R024SPH007")},
+			},
+		}
+		collectDeviceIdentityWithDeviceContext(
+			collector, client, metrics, registry, "huawei",
+			"VRP (R) software, Version 5.170 (S5736-S24T4XC V200R024C00SPC500)",
+			true, ".1.3.6.1.4.1.2011.2.23.982", true, newEntityCatalog(client, registry),
+		)
+		if metrics.PatchVersion == nil || *metrics.PatchVersion != "V200R024SPH007" {
+			t.Fatalf("PatchVersion = %v, want V200R024SPH007", metrics.PatchVersion)
+		}
+
+		// hwSysCurPatchFileIndex == 0 表示无补丁，且不误取 SPC500
+		metricsNone := &devices.SNMPMetrics{}
+		clientNone := &fakeCollectorSNMPClient{
+			bulkWalkPackets: map[string][]gosnmp.SnmpPDU{
+				hwCurPatchFileIndexOID: {intPDU(hwCurPatchFileIndexOID, "1", 0)},
+			},
+		}
+		collectDeviceIdentityWithDeviceContext(
+			collector, clientNone, metricsNone, registry, "huawei",
+			"VRP (R) software, Version 5.170 (S5736-S24T4XC V200R024C00SPC500)",
+			true, ".1.3.6.1.4.1.2011.2.23.982", true, newEntityCatalog(clientNone, registry),
+		)
+		if metricsNone.PatchVersion != nil {
+			t.Fatalf("PatchVersion = %q, want nil when no patch loaded", *metricsNone.PatchVersion)
 		}
 	})
 }

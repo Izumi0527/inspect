@@ -295,6 +295,7 @@ export interface SNMPExtensionsResponse {
 export interface HostDetailResponse {
   device: HostMatrixItem
   firmware_version?: string
+  patch_version?: string
   serial_number?: string
   location?: string
   topology_role: string

@@ -80,7 +80,7 @@ func writeStackStatusPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
 	}}
 	summaryStyle := defaultPDFTableStyle(pdfHeaderStyleLight)
 	summaryStyle.BodyAlign = "C"
-	pdfkit.GridTable(pdf, []string{"运行模式", "堆叠拓扑", "成员数量", "堆叠端口 (Up / Down)"}, summaryRows, []float64{40, 40, 36, 48}, summaryStyle)
+	pdfkit.GridTable(pdf, []string{"运行模式", "堆叠拓扑", "成员数量", "堆叠端口 (Up / Down)"}, summaryRows, []float64{42, 42, 38, 52}, summaryStyle)
 
 	writeStackMembersPDFTable(pdf, detail.Members)
 	writeStackPortsPDFTable(pdf, detail.Ports)
@@ -121,7 +121,7 @@ func writeStackMembersPDFTable(pdf *gofpdf.Fpdf, members []StackMemberReport) {
 	style.BodyAlign = "L"
 	style.WrapColumns = []int{3}
 	style.RowFills, style.RowAccents = checkResultRowTints(rows, 4)
-	pdfkit.GridTable(pdf, []string{"成员 ID", "角色", "优先级", "MAC 地址", "判定"}, rows, []float64{24, 30, 22, 56, 32}, style)
+	pdfkit.GridTable(pdf, []string{"成员 ID", "角色", "优先级", "MAC 地址", "判定"}, rows, []float64{26, 32, 24, 60, 32}, style)
 }
 
 func writeStackPortsPDFTable(pdf *gofpdf.Fpdf, ports []StackPortReport) {
@@ -142,7 +142,7 @@ func writeStackPortsPDFTable(pdf *gofpdf.Fpdf, ports []StackPortReport) {
 	style.BodyAlign = "L"
 	style.WrapColumns = []int{0}
 	style.RowFills, style.RowAccents = checkResultRowTints(rows, 2)
-	pdfkit.GridTable(pdf, []string{"堆叠端口", "链路状态", "判定"}, rows, []float64{74, 48, 42}, style)
+	pdfkit.GridTable(pdf, []string{"堆叠端口", "链路状态", "判定"}, rows, []float64{80, 50, 44}, style)
 }
 
 // writeInterfaceStatusDetailPDFTable 输出接口状态一致性或双工模式异常明细表。
@@ -252,7 +252,7 @@ func writeFlashUsagePDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
 			pdf,
 			[]string{"分区", "判定", "使用率", "已用", "可用容量", "总容量"},
 			rows,
-			[]float64{50, 18, 22, 26, 26, 26},
+			[]float64{56, 18, 22, 26, 26, 26},
 			style,
 		)
 	}

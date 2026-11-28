@@ -567,3 +567,38 @@ func TestInterfaceHealthChecks_FiltersIgnoredLogicalPorts(t *testing.T) {
 		})
 	}
 }
+
+func TestInterfaceRatioAndBroadcast_DownEmptyPortRecordsNotUpReason(t *testing.T) {
+	upPort := healthyPort("GigabitEthernet0/0/1")
+	upPort.InNUcastPkts = u64(10)
+	upPort.OutNUcastPkts = u64(10)
+
+	downPort := devices.InterfaceMetrics{
+		Name:         "GigabitEthernet0/0/16",
+		Description:  "GigabitEthernet0/0/16",
+		IsUp:         boolPtr(false),
+		AdminUp:      boolPtr(false),
+		InErrors:     u64(0),
+		OutErrors:    u64(0),
+		InDiscards:   u64(0),
+		OutDiscards:  u64(0),
+		InNUcastPkts: u64(0),
+		InUcastPkts:  u64(0),
+	}
+
+	for _, metric := range []string{"interface_errors", "interface_discards", "interface_broadcast"} {
+		t.Run(metric, func(t *testing.T) {
+			result := runMetricCheck(t, metric, &devices.SNMPMetrics{
+				Interfaces: []devices.InterfaceMetrics{upPort, downPort},
+			}, nil)
+			payload := decodeDetails(t, result)
+			skipped := detailRows(t, payload, "skipped")
+			if len(skipped) != 1 {
+				t.Fatalf("%s skipped len = %d, want 1", metric, len(skipped))
+			}
+			if got := rowString(t, skipped[0], "reason"); got != "接口未 UP" {
+				t.Errorf("%s skipped reason = %q, want 接口未 UP", metric, got)
+			}
+		})
+	}
+}

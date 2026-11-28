@@ -105,6 +105,7 @@ const mockDetail: HostDetailResponse = {
     sparkline: [],
   },
   firmware_version: 'VRP 8.210',
+  patch_version: 'V200R024SPH010',
   serial_number: 'SN20261120001',
   location: 'A机房-R01',
   topology_role: 'core',
@@ -315,8 +316,13 @@ describe('单机 6 视角观测抽屉 HostDetailDrawer (Task 11)', () => {
       <HostDetailDrawer deviceId={21} onClose={jest.fn()} onSelectHost={onSelectHost} />
     )
 
-    // 1. 运行概览：巡检、拓扑角色中文同步与邻居下钻
+    // 1. 运行概览：巡检、拓扑角色中文同步、软件版本/补丁版本标签与邻居下钻
     expect(await screen.findByText('健康分 91.5')).toBeInTheDocument()
+    expect(screen.getByText('软件版本：')).toBeInTheDocument()
+    expect(screen.getByText('补丁版本：')).toBeInTheDocument()
+    expect(screen.getByText('VRP 8.210')).toBeInTheDocument()
+    expect(screen.getByText('V200R024SPH010')).toBeInTheDocument()
+    expect(screen.queryByText('固件版本：')).not.toBeInTheDocument()
     expect(screen.getByText('核心')).toBeInTheDocument()
     expect(screen.getByText('（按拓扑推断）')).toBeInTheDocument()
     expect(screen.queryByText('core')).not.toBeInTheDocument()

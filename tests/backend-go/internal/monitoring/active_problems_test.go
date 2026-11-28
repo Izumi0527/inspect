@@ -147,7 +147,7 @@ func TestHostsAlerts_IncludeOpenStatusInDetailAndMatrix(t *testing.T) {
 
 		rows := sqlmock.NewRows(hostDetailMockColumns()).AddRow(
 			deviceID, "test-sw", "192.168.20.1", "test-sw", "SW-CORE-01",
-			"switch", nil, "huawei", "S5700", "SN-1", "V200R001",
+			"switch", nil, "huawei", "S5700", "SN-1", "V200R001", nil,
 			nil, "access", nil, "", "online",
 			true, nil, nil, nil, nil,
 			nil, nil, "online", "success", "",

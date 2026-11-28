@@ -233,6 +233,7 @@ type HostActiveAlertSummary struct {
 type HostDetailResponse struct {
 	Device              HostMatrixItem           `json:"device"`
 	FirmwareVersion     *string                  `json:"firmware_version,omitempty"`
+	PatchVersion        *string                  `json:"patch_version,omitempty"`
 	SerialNumber        *string                  `json:"serial_number,omitempty"`
 	Location            *string                  `json:"location,omitempty"`
 	TopologyRole        string                   `json:"topology_role"`
@@ -719,6 +720,7 @@ func (w *MetricsWriter) GetHostDetail(
 		Model               *string    `gorm:"column:model"`
 		SerialNumber        *string    `gorm:"column:serial_number"`
 		FirmwareVersion     *string    `gorm:"column:firmware_version"`
+		PatchVersion        *string    `gorm:"column:patch_version"`
 		Location            *string    `gorm:"column:location"`
 		TopologyRole        string     `gorm:"column:topology_role"`
 		GroupID             *int       `gorm:"column:group_id"`
@@ -746,7 +748,7 @@ func (w *MetricsWriter) GetHostDetail(
 		Table("devices AS d").
 		Select(`
 			d.id, d.name, d.ip_address, d.hostname, d.detected_sys_name, d.device_type, d.detected_device_type, d.vendor, d.model,
-			d.serial_number, d.firmware_version, d.location, COALESCE(d.topology_role, 'access') AS topology_role,
+			d.serial_number, d.firmware_version, d.patch_version, d.location, COALESCE(d.topology_role, 'access') AS topology_role,
 			d.group_id, COALESCE(dg.name, '') AS group_name, d.status, d.is_monitored,
 			d.cpu_usage, d.memory_usage, d.temperature, d.uptime, d.response_time, d.last_seen,
 			d.icmp_status, d.snmp_status, d.cli_protocol,
@@ -820,6 +822,7 @@ func (w *MetricsWriter) GetHostDetail(
 		Sparkline:          []HostSparklinePoint{},
 	}
 	resp.FirmwareVersion = dev.FirmwareVersion
+	resp.PatchVersion = resolveHostPatchVersion(dev.PatchVersion, dev.FirmwareVersion)
 	resp.SerialNumber = normalizeOptionalString(dev.SerialNumber)
 	resp.Location = dev.Location
 	roleRes := w.resolveDeviceTopologyRole(ctx, dev.ID, dev.DeviceType, dev.DetectedDeviceType, dev.Name, dev.TopologyRole)
@@ -883,6 +886,27 @@ func (w *MetricsWriter) GetHostDetail(
 	}
 
 	return resp, nil
+}
+
+func resolveHostPatchVersion(patchVersion, firmwareVersion *string) *string {
+	fw := ""
+	if firmwareVersion != nil {
+		fw = strings.TrimSpace(*firmwareVersion)
+	}
+	if patchVersion != nil {
+		p := strings.TrimSpace(*patchVersion)
+		if p != "" && !devices.IsHuaweiSPCSegment(p, fw) {
+			return &p
+		}
+	}
+	if fw != "" {
+		if extracted := devices.ExtractPatchVersion("", fw); extracted != "" {
+			return &extracted
+		}
+		none := "无"
+		return &none
+	}
+	return nil
 }
 
 func (w *MetricsWriter) resolveDeviceTopologyRole(

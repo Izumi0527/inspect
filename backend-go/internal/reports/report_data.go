@@ -663,18 +663,21 @@ func parseFirmwareVersionDetails(raw *string) *FirmwareVersionReport {
 
 // resolveDevicePatchVersion 解析设备的补丁版本。
 // 优先级：
-// 1. 若 device.PatchVersion 非空则直接返回；
-// 2. 遍历 CheckResults，若 item.FirmwareVersion 带有非空 PatchVersion 则返回；
+// 1. 若 device.PatchVersion 非空、非“无”且非误提取的华为 SPCxxx 服务包后缀则直接返回；
+// 2. 遍历 CheckResults，若 item.FirmwareVersion 带有有效 PatchVersion 则返回；
 // 3. 若 device.SoftwareVersion 为 deletedDeviceField 则返回 deletedDeviceField；
 // 4. 若 device.SoftwareVersion 非空，调用 devices.ExtractPatchVersion，非空返回该补丁，为空返回“无”；
-// 5. 否则返回空串。
+// 5. 若 device.PatchVersion 显式为“无”则返回“无”，否则返回空串。
 func resolveDevicePatchVersion(device InspectionDeviceData) string {
-	if trimmed := strings.TrimSpace(device.PatchVersion); trimmed != "" {
+	if trimmed := strings.TrimSpace(device.PatchVersion); trimmed != "" && trimmed != "无" && !devices.IsHuaweiSPCSegment(trimmed, device.SoftwareVersion) {
 		return trimmed
 	}
 	for _, item := range device.CheckResults {
-		if item.FirmwareVersion != nil && strings.TrimSpace(item.FirmwareVersion.PatchVersion) != "" {
-			return strings.TrimSpace(item.FirmwareVersion.PatchVersion)
+		if item.FirmwareVersion == nil {
+			continue
+		}
+		if patch := strings.TrimSpace(item.FirmwareVersion.PatchVersion); patch != "" && patch != "无" && !devices.IsHuaweiSPCSegment(patch, device.SoftwareVersion) {
+			return patch
 		}
 	}
 	if strings.TrimSpace(device.SoftwareVersion) == deletedDeviceField {
@@ -684,6 +687,9 @@ func resolveDevicePatchVersion(device InspectionDeviceData) string {
 		if patch := devices.ExtractPatchVersion("", device.SoftwareVersion); patch != "" {
 			return patch
 		}
+		return "无"
+	}
+	if strings.TrimSpace(device.PatchVersion) == "无" {
 		return "无"
 	}
 	return ""
@@ -1701,6 +1707,7 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		SerialNumber  *string    `gorm:"column:serial_number"`
 		Location      *string    `gorm:"column:location"`
 		Version       *string    `gorm:"column:firmware_version"`
+		PatchVersion  *string    `gorm:"column:patch_version"`
 		Uptime        *int       `gorm:"column:uptime"`
 		CPUUsage      *float64   `gorm:"column:cpu_usage"`
 		MemoryUsage   *float64   `gorm:"column:memory_usage"`
@@ -1728,6 +1735,7 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 		        COALESCE(i.device_snapshot->>'serial_number', d.serial_number) AS serial_number,
 		        COALESCE(i.device_snapshot->>'location', d.location) AS location,
 		        COALESCE(i.device_snapshot->>'firmware_version', d.firmware_version) AS firmware_version,
+		        COALESCE(i.device_snapshot->>'patch_version', d.patch_version) AS patch_version,
 		        COALESCE((i.device_snapshot->>'uptime')::bigint, d.uptime) AS uptime,
 		        d.cpu_usage, d.memory_usage, (d.id IS NULL AND i.device_snapshot IS NULL) AS identity_lost,
 		        t.name AS template_name, t.check_items AS template_check_items, t.device_types AS template_device_types`).
@@ -1894,6 +1902,7 @@ func buildInspectionReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 			SerialNumber:       defaultStringPtr(row.SerialNumber),
 			Location:           defaultStringPtr(row.Location),
 			SoftwareVersion:    defaultStringPtr(row.Version),
+			PatchVersion:       defaultStringPtr(row.PatchVersion),
 			Uptime:             formatUptimeSeconds(row.Uptime),
 			LastInspectionTime: inspectedAt.Format("2006-01-02 15:04:05"),
 			InspectionStatus:   defaultStringPtr(row.Status),

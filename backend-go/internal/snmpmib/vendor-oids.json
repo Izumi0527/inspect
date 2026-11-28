@@ -673,6 +673,56 @@
           "description": "设备或主堆叠成员 ESN"
         }
       ],
+      "patch": [
+        {
+          "id": "huawei_patch_version",
+          "name": "hwPatchVersion",
+          "oid": "1.3.6.1.4.1.2011.5.25.19.1.8.5.1.1.4",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "华为/FM 运行或激活补丁版本"
+        },
+        {
+          "id": "huawei_patch_operate_state",
+          "name": "hwPatchOperateState",
+          "oid": "1.3.6.1.4.1.2011.5.25.19.1.8.5.1.1.14",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "补丁运行状态（1=patchRunning, 2=patchActive, 3=patchDeactive, 4=patchDeleting）"
+        },
+        {
+          "id": "huawei_patch_used_filename",
+          "name": "hwPatchUsedFileName",
+          "oid": "1.3.6.1.4.1.2011.5.25.19.1.8.5.1.1.3",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "当前使用的补丁文件名"
+        },
+        {
+          "id": "huawei_sys_cur_patch_file_index",
+          "name": "hwSysCurPatchFileIndex",
+          "oid": "1.3.6.1.4.1.2011.5.25.19.1.2.1.1.6",
+          "method": "bulkwalk",
+          "value_type": "integer",
+          "description": "当前生效补丁文件索引（0 表示无补丁）"
+        },
+        {
+          "id": "huawei_patch_file_version",
+          "name": "hwPatchFileVersion",
+          "oid": "1.3.6.1.4.1.2011.5.25.19.1.8.2.1.5",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "系统补丁文件版本"
+        },
+        {
+          "id": "huawei_patch_file_name",
+          "name": "hwPatchFileName",
+          "oid": "1.3.6.1.4.1.2011.5.25.19.1.8.2.1.2",
+          "method": "bulkwalk",
+          "value_type": "string",
+          "description": "系统补丁文件名"
+        }
+      ],
       "interface_monitor": [
         {
           "id": "hw_if_monitor_input_rate",

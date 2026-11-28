@@ -53,6 +53,11 @@ func BuildSNMPDeviceMetricsRequest(deviceID int, metrics *devices.SNMPMetrics) D
 	if metrics.FirmwareVersion != nil {
 		identity.FirmwareVersion = *metrics.FirmwareVersion
 	}
+	if metrics.PatchVersion != nil && strings.TrimSpace(*metrics.PatchVersion) != "" {
+		identity.PatchVersion = strings.TrimSpace(*metrics.PatchVersion)
+	} else if metrics.FirmwareVersion != nil && strings.TrimSpace(*metrics.FirmwareVersion) != "" {
+		identity.PatchVersion = "无"
+	}
 	if metrics.SerialNumber != nil {
 		identity.SerialNumber = *metrics.SerialNumber
 	}

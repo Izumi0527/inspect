@@ -295,7 +295,7 @@ func writeInspectionDeviceDetailSheet(file *excelize.File, sheet string, data In
 		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+4), device.Model); err != nil {
 			return err
 		}
-		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+5), "系统版本:"); err != nil {
+		if err := setCell(file, sheet, fmt.Sprintf("A%d", row+5), "软件版本:"); err != nil {
 			return err
 		}
 		if err := setCell(file, sheet, fmt.Sprintf("B%d", row+5), device.SoftwareVersion); err != nil {

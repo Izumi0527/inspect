@@ -8,8 +8,9 @@ import (
 
 // 网格式表格渲染器（原 reports 包的 writePDFTable 整体迁入）：完整边框、
 // 斑马纹、行染色/行色条、WrapColumns 自动换行、普通列按宽度截断、跨页手工
-// 分页并重绘表头。与 SoftTable 并列成为 pdfkit 的两种表格风格；两套共享
-// TruncateToWidth / SplitLines / SanitizeCellText 与颜色、字号令牌。
+// 分页（支持超长行分段续画）并重绘表头。与 SoftTable 并列成为 pdfkit 的
+// 两种表格风格；两套共享 TruncateToWidth / SplitLines / SanitizeCellText
+// 与颜色、字号令牌。
 
 // GridHeaderStyle 描述表头单元格的配色、字体与对齐。
 type GridHeaderStyle struct {
@@ -35,8 +36,8 @@ type GridTableStyle struct {
 	BodyBorder         string
 	TableAlign         string
 	// WrapColumns 列出的列索引启用自动换行：单元格按列宽拆行、行高随
-	// 行数增长（上限 gridMaxWrapLines），完整展示长文本；未列出的列保持
-	// 单行 + 截断省略号。
+	// 行数增长，完整展示长文本；单行高度超过单页剩余空间时支持跨页
+	// 分段续画。未列出的列保持单行 + 截断省略号。
 	WrapColumns []int
 	// RowFills 按行索引覆盖该行底色（零值回退斑马纹），RowAccents 在行
 	// 左缘绘制一条竖色条。两者用于把「警告 / 失败 / 错误」行从通过行里
@@ -55,13 +56,14 @@ type GridTableStyle struct {
 const (
 	// GridTableLineMM 网格线宽（mm）。
 	GridTableLineMM = 0.14
-	// gridMaxWrapLines 限制换行列单格最多展开的行数，防止异常超长的采集
-	// 输出把一行撑到整页；到达上限后末行以省略号收尾。
-	gridMaxWrapLines = 6
 	// gridAccentBarWidth 行强调条宽度（mm）。
 	gridAccentBarWidth = 1.5
 	// gridDefaultBottomMM 未指定 BottomMarginMM 时的兜底底部边距。
 	gridDefaultBottomMM = 15.0
+	// gridDefaultBodyHeightMM 未指定 BodyHeight 时的兜底行高（mm）。
+	gridDefaultBodyHeightMM = 7.0
+	// gridPageBreakEpsilonMM 分页判定容差（mm），避免浮点临界相等触发 gofpdf 自动换页。
+	gridPageBreakEpsilonMM = 0.1
 )
 
 // DefaultGridTableStyle 返回带设计令牌默认值的网格表样式。
@@ -82,141 +84,211 @@ func DefaultGridTableStyle(header GridHeaderStyle) GridTableStyle {
 	}
 }
 
+type gridRowContext struct {
+	pdf        *gofpdf.Fpdf
+	style      GridTableStyle
+	colWidths  []float64
+	startX     float64
+	bodyBorder string
+	bodyHeight float64
+}
+
+type gridRowChunk struct {
+	startLine      int
+	count          int
+	centerVertical bool
+}
+
 // GridTable renders the table at the current cursor. Column widths are in mm;
 // horizontal placement follows style.TableAlign.
 func GridTable(pdf *gofpdf.Fpdf, headers []string, rows [][]string, colWidths []float64, style GridTableStyle) {
 	if len(headers) == 0 || len(colWidths) == 0 {
 		return
 	}
-	bottomMM := style.BottomMarginMM
-	if bottomMM <= 0 {
-		bottomMM = gridDefaultBottomMM
-	}
-	newPage := style.PageBreak
-	if newPage == nil {
-		newPage = func(p *gofpdf.Fpdf) { p.AddPage() }
-	}
-
+	colCount := min(len(headers), len(colWidths))
+	colWidths = colWidths[:colCount]
 	totalWidth := 0.0
 	for _, width := range colWidths {
 		totalWidth += width
 	}
-	startX := gridTableStartX(pdf, totalWidth, style.TableAlign)
+	ctx := newGridRowContext(pdf, style, colWidths, totalWidth)
 	prevLineWidth := pdf.GetLineWidth()
 	pdf.SetLineWidth(GridTableLineMM)
 	defer pdf.SetLineWidth(prevLineWidth)
 
-	headerBorder := style.HeaderBorder
-	if headerBorder == "" {
-		headerBorder = "1"
-	}
-	bodyBorder := style.BodyBorder
-	if bodyBorder == "" {
-		bodyBorder = "1"
-	}
-
-	// renderHeader also runs after every manual page break so multi-page
-	// tables repeat their column headers instead of continuing "naked".
-	renderHeader := func() {
-		pdf.SetDrawColor(style.BorderColor[0], style.BorderColor[1], style.BorderColor[2])
-		pdf.SetFont(FontFamilyCJK, style.Header.FontStyle, style.Header.FontSize)
-		pdf.SetFillColor(style.Header.FillColor[0], style.Header.FillColor[1], style.Header.FillColor[2])
-		pdf.SetTextColor(style.Header.TextColor[0], style.Header.TextColor[1], style.Header.TextColor[2])
-		pdf.SetX(startX)
-		for i, header := range headers {
-			if i >= len(colWidths) {
-				break
-			}
-			pdf.CellFormat(colWidths[i], style.HeaderHeight, TruncateToWidth(pdf, header, colWidths[i]-cellPadMM), headerBorder, 0, style.Header.Align, true, 0, "")
-		}
-		pdf.Ln(-1)
-		pdf.SetFont(FontFamilyCJK, "", style.BodyFontSize)
-		pdf.SetTextColor(style.BodyTextColor[0], style.BodyTextColor[1], style.BodyTextColor[2])
-	}
+	renderHeader := func() { ctx.drawHeader(headers) }
 	renderHeader()
 
 	wrapSet := make(map[int]bool, len(style.WrapColumns))
 	for _, idx := range style.WrapColumns {
 		wrapSet[idx] = true
 	}
-
-	_, pageH := pdf.GetPageSize()
-	breakLimit := pageH - bottomMM
-	for rowIndex, row := range rows {
-		// 先按列拆行并计算本行动态行高：换行列按列宽拆行（封顶
-		// gridMaxWrapLines 行，超出末行加省略号），普通列单行截断。
-		cellLines := make([][]string, len(headers))
-		maxLines := 1
-		for i := range headers {
-			if i >= len(colWidths) {
-				break
-			}
-			value := ""
-			if i < len(row) {
-				value = row[i]
-			}
-			value = SanitizeCellText(value)
-			textWidth := colWidths[i] - cellPadMM
-			if wrapSet[i] {
-				split := SplitLines(pdf, value, textWidth)
-				if len(split) > gridMaxWrapLines {
-					last := split[gridMaxWrapLines-1]
-					split = split[:gridMaxWrapLines]
-					split[gridMaxWrapLines-1] = TruncateToWidth(pdf, last+"…", textWidth)
-				}
-				cellLines[i] = split
-				if len(split) > maxLines {
-					maxLines = len(split)
-				}
-			} else {
-				cellLines[i] = []string{TruncateToWidth(pdf, value, textWidth)}
-			}
-		}
-		rowH := float64(maxLines) * style.BodyHeight
-
-		// 手动分页：整行放不下就先换页并重绘表头。否则 gofpdf 的自动分页
-		// 会在绘制某个单元格时才触发，导致新页丢表头、居中表格的行首
-		// 退回左边距，产生错位。
-		if pdf.GetY()+rowH > breakLimit {
-			newPage(pdf)
-			renderHeader()
-		}
-		rowY := pdf.GetY()
-		fill := style.BodyFillColor
-		if rowIndex%2 == 1 && !IsZero(style.AlternateFillColor) {
-			fill = style.AlternateFillColor
-		}
-		if tint, ok := gridRowTint(style.RowFills, rowIndex); ok {
-			fill = tint
-		}
-		pdf.SetFillColor(fill[0], fill[1], fill[2])
-		x := startX
-		for i := range headers {
-			if i >= len(colWidths) {
-				break
-			}
-			// 先画整格底色+边框（空文本），再在格内逐行写字；单行内容在
-			// 多行高度的行里垂直居中。
-			pdf.SetXY(x, rowY)
-			pdf.CellFormat(colWidths[i], rowH, "", bodyBorder, 0, "", true, 0, "")
-			offsetY := (rowH - float64(len(cellLines[i]))*style.BodyHeight) / 2
-			// 让开行强调条：条最后绘制且压在格上，首列文本不缩进会被裁掉半个字。
-			indent := gridBodyCellTextIndent(style.RowAccents, rowIndex, i)
-			for li, line := range cellLines[i] {
-				pdf.SetXY(x+indent, rowY+offsetY+float64(li)*style.BodyHeight)
-				pdf.CellFormat(colWidths[i]-indent, style.BodyHeight, line, "", 0, style.BodyAlign, false, 0, "")
-			}
-			x += colWidths[i]
-		}
-		// 色条最后画，压在左侧单元格边框上，形成实心强调条。
-		if accent, ok := gridRowTint(style.RowAccents, rowIndex); ok {
-			pdf.SetFillColor(accent[0], accent[1], accent[2])
-			pdf.Rect(startX, rowY, gridAccentBarWidth, rowH, "F")
-		}
-		pdf.SetY(rowY + rowH)
+	newPage := style.PageBreak
+	if newPage == nil {
+		newPage = func(p *gofpdf.Fpdf) { p.AddPage() }
 	}
+	ctx.drawRows(rows, wrapSet, renderHeader, newPage)
 	pdf.SetTextColor(ColorBlack[0], ColorBlack[1], ColorBlack[2])
 	pdf.SetFont(FontFamilyCJK, "", FontBody)
+}
+
+func newGridRowContext(pdf *gofpdf.Fpdf, style GridTableStyle, colWidths []float64, totalWidth float64) gridRowContext {
+	bodyBorder := style.BodyBorder
+	if bodyBorder == "" {
+		bodyBorder = "1"
+	}
+	bodyHeight := style.BodyHeight
+	if bodyHeight <= 0 {
+		bodyHeight = gridDefaultBodyHeightMM
+	}
+	return gridRowContext{
+		pdf:        pdf,
+		style:      style,
+		colWidths:  colWidths,
+		startX:     gridTableStartX(pdf, totalWidth, style.TableAlign),
+		bodyBorder: bodyBorder,
+		bodyHeight: bodyHeight,
+	}
+}
+
+func (c gridRowContext) drawHeader(headers []string) {
+	headerBorder := c.style.HeaderBorder
+	if headerBorder == "" {
+		headerBorder = "1"
+	}
+	// PageFooter 在分页回调中会把线宽改成 0.2mm，重绘表头前恢复表格线宽。
+	c.pdf.SetLineWidth(GridTableLineMM)
+	c.pdf.SetDrawColor(c.style.BorderColor[0], c.style.BorderColor[1], c.style.BorderColor[2])
+	c.pdf.SetFont(FontFamilyCJK, c.style.Header.FontStyle, c.style.Header.FontSize)
+	c.pdf.SetFillColor(c.style.Header.FillColor[0], c.style.Header.FillColor[1], c.style.Header.FillColor[2])
+	c.pdf.SetTextColor(c.style.Header.TextColor[0], c.style.Header.TextColor[1], c.style.Header.TextColor[2])
+	c.pdf.SetX(c.startX)
+	for i, width := range c.colWidths {
+		c.pdf.CellFormat(width, c.style.HeaderHeight, TruncateToWidth(c.pdf, headers[i], width-cellPadMM), headerBorder, 0, c.style.Header.Align, true, 0, "")
+	}
+	c.pdf.Ln(-1)
+	c.pdf.SetFont(FontFamilyCJK, "", c.style.BodyFontSize)
+	c.pdf.SetTextColor(c.style.BodyTextColor[0], c.style.BodyTextColor[1], c.style.BodyTextColor[2])
+}
+
+func (c gridRowContext) drawRows(rows [][]string, wrapSet map[int]bool, renderHeader func(), newPage func(*gofpdf.Fpdf)) {
+	bottomMM := c.style.BottomMarginMM
+	if bottomMM <= 0 {
+		bottomMM = gridDefaultBottomMM
+	}
+	_, pageH := c.pdf.GetPageSize()
+	_, topMargin, _, _ := c.pdf.GetMargins()
+	breakLimit := pageH - bottomMM
+	approxFreshBodyH := breakLimit - topMargin - c.style.HeaderHeight - gridPageBreakEpsilonMM
+	atFreshPageTop := false
+
+	for rowIndex, row := range rows {
+		cellLines, maxLines := c.prepareRowLines(row, rowIndex, wrapSet)
+		rowH := float64(maxLines) * c.bodyHeight
+		if c.pdf.GetY()+rowH <= breakLimit-gridPageBreakEpsilonMM {
+			c.drawChunk(cellLines, rowIndex, gridRowChunk{startLine: 0, count: maxLines, centerVertical: true})
+			atFreshPageTop = false
+			continue
+		}
+		if !atFreshPageTop && rowH <= approxFreshBodyH {
+			newPage(c.pdf)
+			renderHeader()
+			atFreshPageTop = true
+			if c.pdf.GetY()+rowH <= breakLimit-gridPageBreakEpsilonMM {
+				c.drawChunk(cellLines, rowIndex, gridRowChunk{startLine: 0, count: maxLines, centerVertical: true})
+				atFreshPageTop = false
+				continue
+			}
+		}
+		atFreshPageTop = c.drawSplitRow(cellLines, rowIndex, maxLines, breakLimit, renderHeader, newPage)
+	}
+}
+
+func (c gridRowContext) drawSplitRow(cellLines [][]string, rowIndex, maxLines int, breakLimit float64, renderHeader func(), newPage func(*gofpdf.Fpdf)) bool {
+	for lineOffset := 0; lineOffset < maxLines; {
+		availLines := int((breakLimit - c.pdf.GetY() - gridPageBreakEpsilonMM) / c.bodyHeight)
+		if availLines <= 0 {
+			newPage(c.pdf)
+			renderHeader()
+			availLines = max(1, int((breakLimit-c.pdf.GetY()-gridPageBreakEpsilonMM)/c.bodyHeight))
+		}
+		chunkCount := min(maxLines-lineOffset, availLines)
+		c.drawChunk(cellLines, rowIndex, gridRowChunk{startLine: lineOffset, count: chunkCount, centerVertical: false})
+		lineOffset += chunkCount
+	}
+	return false
+}
+
+func (c gridRowContext) prepareRowLines(row []string, rowIndex int, wrapSet map[int]bool) ([][]string, int) {
+	cellLines := make([][]string, len(c.colWidths))
+	maxLines := 1
+	for i, colW := range c.colWidths {
+		value := ""
+		if i < len(row) {
+			value = row[i]
+		}
+		value = SanitizeCellText(value)
+		indent := gridBodyCellTextIndent(c.style.RowAccents, rowIndex, i)
+		textWidth := max(0.0, colW-indent-cellPadMM)
+		if wrapSet[i] {
+			split := SplitLines(c.pdf, value, textWidth)
+			cellLines[i] = split
+			if len(split) > maxLines {
+				maxLines = len(split)
+			}
+			continue
+		}
+		cellLines[i] = []string{TruncateToWidth(c.pdf, value, textWidth)}
+	}
+	return cellLines, maxLines
+}
+
+func (c gridRowContext) drawChunk(cellLines [][]string, rowIndex int, chunk gridRowChunk) {
+	rowY := c.pdf.GetY()
+	chunkH := float64(chunk.count) * c.bodyHeight
+	fill := gridRowFillColor(c.style, rowIndex)
+	c.pdf.SetFillColor(fill[0], fill[1], fill[2])
+	x := c.startX
+	for i, colW := range c.colWidths {
+		c.pdf.SetXY(x, rowY)
+		c.pdf.CellFormat(colW, chunkH, "", c.bodyBorder, 0, "", true, 0, "")
+		lines := sliceCellLines(cellLines[i], chunk.startLine, chunk.count)
+		offsetY := 0.0
+		if chunk.centerVertical {
+			offsetY = (chunkH - float64(len(lines))*c.bodyHeight) / 2
+		}
+		indent := gridBodyCellTextIndent(c.style.RowAccents, rowIndex, i)
+		for li, line := range lines {
+			c.pdf.SetXY(x+indent, rowY+offsetY+float64(li)*c.bodyHeight)
+			c.pdf.CellFormat(colW-indent, c.bodyHeight, line, "", 0, c.style.BodyAlign, false, 0, "")
+		}
+		x += colW
+	}
+	// 色条最后画，压在左侧单元格边框上，形成实心强调条。
+	if accent, ok := gridRowTint(c.style.RowAccents, rowIndex); ok {
+		c.pdf.SetFillColor(accent[0], accent[1], accent[2])
+		c.pdf.Rect(c.startX, rowY, gridAccentBarWidth, chunkH, "F")
+	}
+	c.pdf.SetY(rowY + chunkH)
+}
+
+func sliceCellLines(lines []string, start, count int) []string {
+	if start >= len(lines) || count <= 0 {
+		return nil
+	}
+	end := min(len(lines), start+count)
+	return lines[start:end]
+}
+
+func gridRowFillColor(style GridTableStyle, rowIndex int) [3]int {
+	fill := style.BodyFillColor
+	if rowIndex%2 == 1 && !IsZero(style.AlternateFillColor) {
+		fill = style.AlternateFillColor
+	}
+	if tint, ok := gridRowTint(style.RowFills, rowIndex); ok {
+		fill = tint
+	}
+	return fill
 }
 
 // gridRowTint 取第 index 行的语义色（底色或色条），越界或零值时返回 false。

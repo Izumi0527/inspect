@@ -1,6 +1,8 @@
 package reports_test
 
 import (
+	"bytes"
+	"math"
 	"strings"
 	"testing"
 	_ "unsafe"
@@ -172,4 +174,122 @@ func TestSplitPDFRightAlignedLines_PreservesFullInspectionTallyWithoutTruncation
 			t.Errorf("joined short text mismatch:\n got %q\nwant %q", joined, shortText)
 		}
 	})
+}
+
+func TestGridTable_WrappedCellDoesNotTruncatePastSixLines(t *testing.T) {
+	pdf := newMeasurePDF(t)
+	pdf.SetMargins(18, 18, 18)
+	pdf.SetXY(18, 25)
+
+	style := pdfkit.DefaultGridTableStyle(pdfkit.GridHeaderStyle{
+		FillColor: pdfkit.ColorPrimary,
+		TextColor: pdfkit.ColorWhite,
+		FontStyle: "B",
+		FontSize:  pdfkit.FontSmall,
+		Align:     "C",
+	})
+	style.WrapColumns = []int{0}
+	colWidth := 36.2
+	text := "已评估 52 个接口；中断 11 个，空闲 36 个，人为关闭 0 个（11 个接口曾承载流量、现已中断（链路故障或对端异常）：GigabitEthernet0/0/1、GigabitEthernet0/0/2、GigabitEthernet0/0/3、GigabitEthernet0/0/4、GigabitEthernet0/0/5）"
+
+	pdf.SetFont(pdfkit.FontFamilyCJK, "", style.BodyFontSize)
+	expectedLines := pdfkit.SplitLines(pdf, text, colWidth-2.2)
+	if len(expectedLines) <= 6 {
+		t.Fatalf("test premise broken: expected > 6 wrapped lines, got %d", len(expectedLines))
+	}
+
+	startY := pdf.GetY()
+	pdfkit.GridTable(pdf, []string{"实际值"}, [][]string{{text}}, []float64{colWidth}, style)
+	endY := pdf.GetY()
+
+	wantDelta := style.HeaderHeight + float64(len(expectedLines))*style.BodyHeight
+	if math.Abs((endY-startY)-wantDelta) > 0.01 {
+		t.Fatalf("rendered height = %.2fmm, want %.2fmm for %d lines (6-line truncation regression)", endY-startY, wantDelta, len(expectedLines))
+	}
+	if err := pdf.Error(); err != nil {
+		t.Fatalf("pdf.Error() = %v", err)
+	}
+}
+
+func TestGridTable_OversizedWrappedRowSplitsAcrossPages(t *testing.T) {
+	pdf := newMeasurePDF(t)
+	pdf.SetMargins(18, 18, 18)
+	pdf.SetAutoPageBreak(true, 15)
+	pdf.SetXY(18, 25)
+
+	style := pdfkit.DefaultGridTableStyle(pdfkit.GridHeaderStyle{
+		FillColor: pdfkit.ColorPrimary,
+		TextColor: pdfkit.ColorWhite,
+		FontStyle: "B",
+		FontSize:  pdfkit.FontSmall,
+		Align:     "C",
+	})
+	style.WrapColumns = []int{0}
+	style.BottomMarginMM = 15
+
+	longText := strings.Repeat("GigabitEthernet0/0/1、", 50)
+	pdf.SetFont(pdfkit.FontFamilyCJK, "", style.BodyFontSize)
+	if lines := pdfkit.SplitLines(pdf, longText, 36.2-2.2); len(lines) <= 45 {
+		t.Fatalf("test premise broken: expected > 45 wrapped lines, got %d", len(lines))
+	}
+
+	pdfkit.GridTable(pdf, []string{"实际值"}, [][]string{{longText}}, []float64{36.2}, style)
+
+	if pdf.PageNo() < 2 {
+		t.Fatalf("PageNo() = %d, want >= 2 for oversized wrapped row", pdf.PageNo())
+	}
+	if pdf.GetY() > 297-15+0.01 {
+		t.Fatalf("GetY() = %.2fmm exceeds bottom margin limit %.2fmm", pdf.GetY(), 297.0-15.0)
+	}
+	if err := pdf.Error(); err != nil {
+		t.Fatalf("pdf.Error() = %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := pdf.Output(&buf); err != nil {
+		t.Fatalf("pdf.Output() error = %v", err)
+	}
+	if !bytes.HasPrefix(buf.Bytes(), []byte("%PDF-")) {
+		t.Fatalf("output is not a valid PDF")
+	}
+}
+
+func TestGridTable_DeviceCategoryColumnWrapsAt24MM(t *testing.T) {
+	pdf := newMeasurePDF(t)
+	pdf.SetMargins(18, 18, 18)
+	pdf.SetXY(18, 25)
+
+	style := pdfkit.DefaultGridTableStyle(pdfkit.GridHeaderStyle{
+		FillColor: pdfkit.ColorPrimary,
+		TextColor: pdfkit.ColorWhite,
+		FontStyle: "B",
+		FontSize:  pdfkit.FontSmall,
+		Align:     "C",
+	})
+	style.WrapColumns = []int{1}
+
+	categories := []string{"硬件与系统健康", "端口与链路性能", "配置与安全合规"}
+	rows := make([][]string, 0, len(categories))
+	expectedTotalLines := 0
+	pdf.SetFont(pdfkit.FontFamilyCJK, "", style.BodyFontSize)
+	for _, cat := range categories {
+		lines := pdfkit.SplitLines(pdf, cat, 24.0-2.2)
+		if len(lines) < 2 {
+			t.Fatalf("test premise broken: category %q did not wrap in 24mm column (lines=%d)", cat, len(lines))
+		}
+		expectedTotalLines += len(lines)
+		rows = append(rows, []string{"检查项", cat})
+	}
+
+	startY := pdf.GetY()
+	pdfkit.GridTable(pdf, []string{"检查项", "维度分类"}, rows, []float64{34, 24}, style)
+	endY := pdf.GetY()
+
+	wantDelta := style.HeaderHeight + float64(expectedTotalLines)*style.BodyHeight
+	if math.Abs((endY-startY)-wantDelta) > 0.01 {
+		t.Fatalf("rendered height = %.2fmm, want %.2fmm for %d total lines", endY-startY, wantDelta, expectedTotalLines)
+	}
+	if err := pdf.Error(); err != nil {
+		t.Fatalf("pdf.Error() = %v", err)
+	}
 }

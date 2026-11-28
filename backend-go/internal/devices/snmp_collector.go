@@ -34,7 +34,7 @@ type SNMPMetrics struct {
 	Model               *string                     `json:"model,omitempty"`            // 设备型号，如 S5700-28P-LI-AC
 	FirmwareVersion     *string                     `json:"firmware_version,omitempty"` // 软件/固件版本，如 V200R019C00SPC500
 	SerialNumber        *string                     `json:"serial_number,omitempty"`    // 设备序列号，如 210235A1B2C3
-	PatchVersion        *string                     `json:"patch_version,omitempty"`    // 补丁版本，如 SPC500、V200R019SPH020
+	PatchVersion        *string                     `json:"patch_version,omitempty"`    // 补丁版本，如 V200R024SPH010、P08
 	// DetectedType 是按 sysDescr / LLDP 能力位 / sysServices 推断的设备类型（switch/router/firewall/ap），
 	// 只回填 devices.detected_device_type，不覆盖用户填写的 device_type；推断不出为 nil。
 	DetectedType *string `json:"detected_type,omitempty"`
@@ -1329,11 +1329,12 @@ var (
 	// 开头的 "Version" 是描述词而非版本内容，去掉后档案更干净。
 	identityVersionPrefixRe = regexp.MustCompile(`(?i)^\s*(software\s+version|version|ver)\s*[:：]?\s*`)
 
-	// 补丁提取规则：显式声明、热补丁标识、VRP/Release/RGOS 内嵌补丁
+	// 补丁提取规则：显式声明、热补丁标识、H3C/锐捷 Release 内嵌补丁（华为 SPCxxx 属于基础软件服务包，不视为热补丁）
 	patchExplicitRe        = regexp.MustCompile(`(?i)(?:patch\s+version|patch|补丁版本|补丁)\s*[:：=]\s*([A-Za-z0-9][A-Za-z0-9._-]*)`)
 	patchHotfixTokenRe     = regexp.MustCompile(`(?i)\b(V\d+R\d+[A-Za-z0-9]*SPH\d+[A-Za-z0-9]*|SPH\d+[A-Za-z0-9]*|HP\d{3,}[A-Za-z0-9]*)\b`)
-	patchEmbeddedVRPRe     = regexp.MustCompile(`(?i)\bV\d+R\d+[A-Za-z0-9]*?(SP[A-Z]?\d+[A-Za-z0-9]*)\b`)
 	patchEmbeddedReleaseRe = regexp.MustCompile(`(?i)(?:\b(?:release|ess)\s+[A-Za-z0-9]*?\d+(P\d+[A-Za-z0-9]*)\b|\b\d+\.\d+\([^)]+\)[A-Za-z0-9]+?(P\d+[A-Za-z0-9]*)\b)`)
+	patchVRPTokenRe        = regexp.MustCompile(`(?i)\bV\d+R\d+[A-Za-z0-9]*\b`)
+	patchHuaweiSPCRe       = regexp.MustCompile(`(?i)^SPC\d+[A-Za-z0-9]*$`)
 )
 
 // sanitizeIdentityValue 清理设备自报字符串的冗余前缀与空白。
@@ -1462,13 +1463,23 @@ func isNonePatchValue(v string) bool {
 	return lower == "" || lower == "none" || lower == "null" || lower == "n/a" || lower == "nil" || lower == "无"
 }
 
-// extractEmbeddedPatch 从固件版本或 sysDescr 文本中提取内嵌的补丁标识（SPCxxx/Pxx）。
-func extractEmbeddedPatch(text string) string {
-	if m := patchEmbeddedVRPRe.FindStringSubmatch(text); len(m) == 2 {
-		if val := strings.Trim(m[1], " \t\r\n,;:.()[]"); val != "" {
-			return val
+// IsHuaweiSPCSegment 判断 patch 是否为误从华为 VRP 软件版本号中截出的 SPCxxx 服务包后缀。
+func IsHuaweiSPCSegment(patch, softwareVersion string) bool {
+	trimmedPatch := strings.TrimSpace(patch)
+	if !patchHuaweiSPCRe.MatchString(trimmedPatch) {
+		return false
+	}
+	upperPatch := strings.ToUpper(trimmedPatch)
+	for _, token := range patchVRPTokenRe.FindAllString(softwareVersion, -1) {
+		if strings.Contains(strings.ToUpper(token), upperPatch) {
+			return true
 		}
 	}
+	return false
+}
+
+// extractEmbeddedPatch 从固件版本或 sysDescr 文本中提取内嵌的补丁标识（H3C/锐捷 Pxx）。
+func extractEmbeddedPatch(text string) string {
 	if m := patchEmbeddedReleaseRe.FindStringSubmatch(text); len(m) >= 2 {
 		val := m[1]
 		if val == "" && len(m) > 2 {
@@ -1512,7 +1523,7 @@ func ExtractPatchVersion(sysDescr string, firmwareVersion string) string {
 		}
 	}
 
-	// 3. 固件版本内嵌补丁号：如华为 SPC500、H3C Release 2612P08 -> P08、锐捷 P2
+	// 3. 固件版本内嵌补丁号：如 H3C Release 2612P08 -> P08、锐捷 P2
 	for _, text := range texts {
 		if text == "" {
 			continue
@@ -1523,6 +1534,189 @@ func ExtractPatchVersion(sysDescr string, firmwareVersion string) string {
 	}
 
 	return ""
+}
+
+const (
+	huaweiPatchVersionOID         = "1.3.6.1.4.1.2011.5.25.19.1.8.5.1.1.4"
+	huaweiPatchOperateStateOID    = "1.3.6.1.4.1.2011.5.25.19.1.8.5.1.1.14"
+	huaweiPatchUsedFileNameOID    = "1.3.6.1.4.1.2011.5.25.19.1.8.5.1.1.3"
+	huaweiSysCurPatchFileIndexOID = "1.3.6.1.4.1.2011.5.25.19.1.2.1.1.6"
+	huaweiPatchFileVersionOID     = "1.3.6.1.4.1.2011.5.25.19.1.8.2.1.5"
+	huaweiPatchFileNameOID        = "1.3.6.1.4.1.2011.5.25.19.1.8.2.1.2"
+	maxPatchVersionLen            = 255
+)
+
+func sanitizePatchVersion(raw string) string {
+	cleaned := strings.TrimSpace(strings.Trim(raw, "\x00\"'"))
+	if cleaned == "" || len(cleaned) > maxPatchVersionLen {
+		return ""
+	}
+	for _, r := range cleaned {
+		if r < 0x20 || r >= 0x7f {
+			return ""
+		}
+	}
+	if m := patchExplicitRe.FindStringSubmatch(cleaned); len(m) == 2 {
+		cleaned = m[1]
+	}
+	cleaned = sanitizeIdentityValue(cleaned)
+	lower := strings.ToLower(strings.TrimSpace(cleaned))
+	if isNonePatchValue(cleaned) || lower == "no patch" || lower == "no patch exists" || lower == "-" || lower == "0" {
+		return ""
+	}
+	return cleaned
+}
+
+func extractPatchFromFilename(raw string) string {
+	cleaned := sanitizePatchVersion(raw)
+	if cleaned == "" {
+		return ""
+	}
+	if m := patchHotfixTokenRe.FindStringSubmatch(cleaned); len(m) == 2 {
+		return m[1]
+	}
+	if idx := strings.LastIndexAny(cleaned, "/\\:"); idx >= 0 {
+		cleaned = cleaned[idx+1:]
+	}
+	if strings.HasSuffix(strings.ToLower(cleaned), ".pat") {
+		cleaned = cleaned[:len(cleaned)-4]
+	}
+	return sanitizePatchVersion(cleaned)
+}
+
+func walkPatchStringMap(target snmpClient, oid string, transform func(string) string) map[string]string {
+	rows, err := target.BulkWalkAll(oid)
+	if err != nil || len(rows) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(rows))
+	for _, pdu := range rows {
+		if pdu.Type != gosnmp.OctetString {
+			continue
+		}
+		rawVal, ok := rawSNMPSerialString(pdu.Value)
+		if !ok {
+			continue
+		}
+		val := transform(rawVal)
+		if val == "" {
+			continue
+		}
+		suffix := extractOIDIndexSuffix(pdu.Name, oid)
+		out[suffix] = val
+	}
+	return out
+}
+
+func walkPatchIntMap(target snmpClient, oid string) map[string]int64 {
+	rows, err := target.BulkWalkAll(oid)
+	if err != nil || len(rows) == 0 {
+		return nil
+	}
+	out := make(map[string]int64, len(rows))
+	for _, pdu := range rows {
+		val, ok := numericPDUInt64(pdu)
+		if !ok {
+			continue
+		}
+		out[extractOIDIndexSuffix(pdu.Name, oid)] = val
+	}
+	return out
+}
+
+func pickHuaweiPatchByState(states map[string]int64, versions, files map[string]string) string {
+	if len(states) == 0 {
+		keys := make([]string, 0, len(versions))
+		for k := range versions {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if v := versions[k]; v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+	keys := make([]string, 0, len(states))
+	for k := range states {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, wantState := range []int64{1, 2} { // 1=patchRunning, 2=patchActive
+		for _, k := range keys {
+			if states[k] != wantState {
+				continue
+			}
+			if v := versions[k]; v != "" {
+				return v
+			}
+			if f := files[k]; f != "" {
+				return f
+			}
+		}
+	}
+	return ""
+}
+
+func hasRunningOrActivePatchState(states map[string]int64) bool {
+	for _, s := range states {
+		if s == 1 || s == 2 {
+			return true
+		}
+	}
+	return false
+}
+
+func collectHuaweiPatchFromFileTable(target snmpClient, rewrite func(string) string) string {
+	curIdxMap := walkPatchIntMap(target, rewrite(huaweiSysCurPatchFileIndexOID))
+	curIdx := int64(0)
+	keys := make([]string, 0, len(curIdxMap))
+	for k := range curIdxMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if curIdxMap[k] > 0 {
+			curIdx = curIdxMap[k]
+			break
+		}
+	}
+	if curIdx <= 0 {
+		return ""
+	}
+	key := strconv.FormatInt(curIdx, 10)
+	if fileVersions := walkPatchStringMap(target, rewrite(huaweiPatchFileVersionOID), sanitizePatchVersion); fileVersions[key] != "" {
+		return fileVersions[key]
+	}
+	if fileNames := walkPatchStringMap(target, rewrite(huaweiPatchFileNameOID), extractPatchFromFilename); fileNames[key] != "" {
+		return fileNames[key]
+	}
+	return ""
+}
+
+// collectHuaweiPatchVersionForDevice 通过 HUAWEI-SYS-MAN-MIB 采集华为/FutureMatrix 设备的运行态热补丁版本。
+func collectHuaweiPatchVersionForDevice(target snmpClient, registry *snmpmib.Registry, vendor, sysObjectID, sysDescr string) string {
+	if registry == nil || registry.ResolveVendorByContext(vendor, sysObjectID, sysDescr) != "huawei" {
+		return ""
+	}
+	rewrite := func(oid string) string {
+		return registry.RewriteVendorOID(vendor, sysObjectID, oid, sysDescr)
+	}
+
+	versions := walkPatchStringMap(target, rewrite(huaweiPatchVersionOID), sanitizePatchVersion)
+	states := walkPatchIntMap(target, rewrite(huaweiPatchOperateStateOID))
+	var files map[string]string
+	if patch := pickHuaweiPatchByState(states, versions, files); patch != "" {
+		return patch
+	}
+	if hasRunningOrActivePatchState(states) {
+		files = walkPatchStringMap(target, rewrite(huaweiPatchUsedFileNameOID), extractPatchFromFilename)
+		if patch := pickHuaweiPatchByState(states, versions, files); patch != "" {
+			return patch
+		}
+	}
+	return collectHuaweiPatchFromFileTable(target, rewrite)
 }
 
 // collectDeviceIdentity 采集设备型号与软件版本。
@@ -1663,11 +1857,17 @@ func (c *SNMPCollector) collectDeviceIdentityWithDeviceContext(
 		metrics.FirmwareVersion = &version
 	}
 
-	patch := ExtractPatchVersion(descr, version)
-	if patch == "" && descr == "" && !sysDescrCached {
-		if d := c.readSysDescr(target, registry); d != "" {
-			descr = d
-			patch = ExtractPatchVersion(descr, version)
+	if !sysObjectIDCached && sysObjID == "" && registry != nil {
+		sysObjID = snmpmib.NormalizeOID(readStringScalar(target, registry.Common.System.SysObjectID.OID))
+	}
+	patch := collectHuaweiPatchVersionForDevice(target, registry, vendor, sysObjID, descr)
+	if patch == "" {
+		patch = ExtractPatchVersion(descr, version)
+		if patch == "" && descr == "" && !sysDescrCached {
+			if d := c.readSysDescr(target, registry); d != "" {
+				descr = d
+				patch = ExtractPatchVersion(descr, version)
+			}
 		}
 	}
 	if patch != "" {

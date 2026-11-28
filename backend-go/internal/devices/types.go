@@ -79,6 +79,7 @@ type DeviceResponse struct {
 	Model           *string     `json:"model,omitempty"`
 	SerialNumber    *string     `json:"serial_number,omitempty"`
 	FirmwareVersion *string     `json:"firmware_version,omitempty"`
+	PatchVersion    *string     `json:"patch_version,omitempty"`
 	Location        *string     `json:"location,omitempty"`
 	GroupID         *int        `json:"group_id,omitempty"`
 	Status          string      `json:"status"`

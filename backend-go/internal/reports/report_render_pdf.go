@@ -171,7 +171,7 @@ func writeStatisticsPDF(path string, data StatisticsReportData) error {
 	overview := buildStatisticsPDFOverviewRows(data)
 	overviewStyle := defaultPDFTableStyle(pdfHeaderStyleLight)
 	overviewStyle.TableAlign = "L"
-	pdfkit.GridTable(pdf, []string{"统计项", "数值"}, overview, []float64{68, 48}, overviewStyle)
+	pdfkit.GridTable(pdf, []string{"统计项", "数值"}, overview, []float64{102, 72}, overviewStyle)
 
 	ensurePDFSpace(pdf, 110)
 	writePDFSectionTitle(pdf, "设备类型分布")
@@ -183,13 +183,13 @@ func writeStatisticsPDF(path string, data StatisticsReportData) error {
 	rows := buildIntDistributionRows(typeCounts, typePreferred, "暂无设备类型分布数据")
 	distributionStyle := defaultPDFTableStyle(pdfHeaderStyleLight)
 	distributionStyle.BodyAlign = "L"
-	pdfkit.GridTable(pdf, []string{"设备类型", "数量"}, rows, []float64{76.2, 50.8}, distributionStyle)
+	pdfkit.GridTable(pdf, []string{"设备类型", "数量"}, rows, []float64{104, 70}, distributionStyle)
 	pdf.Ln(9)
 
 	writePDFSectionTitle(pdf, "位置分布")
 	embedDistributionBar(pdf, "位置占比", data.Distribution.ByLocation, nil)
 	locationRows := buildIntDistributionRows(data.Distribution.ByLocation, nil, "暂无位置分布数据")
-	pdfkit.GridTable(pdf, []string{"位置", "数量"}, locationRows, []float64{76.2, 50.8}, distributionStyle)
+	pdfkit.GridTable(pdf, []string{"位置", "数量"}, locationRows, []float64{104, 70}, distributionStyle)
 
 	if len(data.TopDevices) > 0 {
 		pdf.Ln(9)
@@ -203,7 +203,7 @@ func writeStatisticsPDF(path string, data StatisticsReportData) error {
 		}
 		topStyle := defaultPDFTableStyle(pdfHeaderStyleBlue)
 		topStyle.BodyAlign = "C"
-		pdfkit.GridTable(pdf, []string{"设备名称", "设备类型", "健康评分"}, topRows, []float64{61, 38.1, 30.5}, topStyle)
+		pdfkit.GridTable(pdf, []string{"设备名称", "设备类型", "健康评分"}, topRows, []float64{86, 48, 40}, topStyle)
 	}
 
 	if len(data.Performance.ByDevice) > 0 {
@@ -225,7 +225,7 @@ func writeStatisticsPDF(path string, data StatisticsReportData) error {
 		}
 		performanceStyle := defaultPDFTableStyle(pdfHeaderStyleBlue)
 		performanceStyle.BodyAlign = "C"
-		pdfkit.GridTable(pdf, []string{"设备", "CPU", "内存", "可用性", "健康分"}, performanceRows, []float64{45.7, 25.4, 25.4, 25.4, 25.4}, performanceStyle)
+		pdfkit.GridTable(pdf, []string{"设备", "CPU", "内存", "可用性", "健康分"}, performanceRows, []float64{62, 28, 28, 28, 28}, performanceStyle)
 	}
 
 	return pdf.OutputFileAndClose(path)
@@ -280,7 +280,7 @@ func writeDeviceSummaryPDF(path string, data DeviceSummaryData) error {
 		deviceStyle.BodyAlign = "C"
 		deviceStyle.HeaderHeight = 9.5
 		deviceStyle.BodyHeight = 6.5
-		pdfkit.GridTable(pdf, []string{"设备名称", "IP地址", "设备类型", "状态", "位置"}, rows, []float64{38.1, 30.5, 25.4, 20.3, 38.1}, deviceStyle)
+		pdfkit.GridTable(pdf, []string{"设备名称", "IP地址", "设备类型", "状态", "位置"}, rows, []float64{46, 34, 26, 22, 46}, deviceStyle)
 	}
 
 	return pdf.OutputFileAndClose(path)
@@ -319,7 +319,7 @@ func writeGenericPDF(path string, data GenericReportData) error {
 	overviewRows := buildGenericPDFOverviewRows(data, reportName, generatedAt)
 	overviewStyle := defaultPDFTableStyle(pdfHeaderStyleLight)
 	overviewStyle.BodyAlign = "L"
-	pdfkit.GridTable(pdf, []string{"项目", "内容"}, overviewRows, []float64{45.7, 91.4}, overviewStyle)
+	pdfkit.GridTable(pdf, []string{"项目", "内容"}, overviewRows, []float64{54, 120}, overviewStyle)
 	pdf.Ln(9)
 
 	writePDFSectionTitle(pdf, "摘要指标")
@@ -330,7 +330,7 @@ func writeGenericPDF(path string, data GenericReportData) error {
 	}
 	summaryStyle := defaultPDFTableStyle(pdfHeaderStyleBlue)
 	summaryStyle.BodyAlign = "L"
-	pdfkit.GridTable(pdf, []string{"指标", "值"}, summaryRows, []float64{45.7, 91.4}, summaryStyle)
+	pdfkit.GridTable(pdf, []string{"指标", "值"}, summaryRows, []float64{54, 120}, summaryStyle)
 
 	extraRows := buildGenericPDFExtraRows(data)
 	if len(extraRows) > 0 {
@@ -709,21 +709,10 @@ func writeInterfaceUtilizationPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckR
 		style.WrapColumns = []int{0}
 		pdfkit.GridTable(pdf,
 			[]string{"接口", "峰值方向", "利用率", "带宽容量", "入向速率", "出向速率"},
-			rows, []float64{50, 18, 20, 22, 22, 22}, style)
+			rows, []float64{60, 20, 22, 24, 24, 24}, style)
 	}
 
-	if len(detail.Skipped) > 0 {
-		pdf.Ln(3)
-		ensurePDFSpace(pdf, 25)
-		rows := make([][]string, 0, len(detail.Skipped))
-		for _, item := range detail.Skipped {
-			rows = append(rows, []string{item.Name, item.Reason})
-		}
-		style := defaultPDFTableStyle(pdfHeaderStyleLight)
-		style.BodyAlign = "L"
-		style.WrapColumns = []int{0, 1}
-		pdfkit.GridTable(pdf, []string{"未评估接口", "原因"}, rows, []float64{60, 82.2}, style)
-	}
+	writeInterfaceSkippedPDFSection(pdf, len(detail.Interfaces) > 0, detail.Skipped)
 }
 
 // writeCheckDetailTables 按明细类型分派渲染。
@@ -769,7 +758,7 @@ func writeLLDPNeighborsPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) 
 	style.WrapColumns = []int{0, 1, 2, 4}
 	pdfkit.GridTable(pdf,
 		[]string{"本端端口", "对端设备名", "对端端口", "对端管理IP", "对端机箱MAC/ID"},
-		rows, []float64{30, 36, 26, 26, 24.2}, style)
+		rows, []float64{36, 44, 32, 30, 32}, style)
 }
 
 // writePoEPDFTable 为「PoE 供电余量」输出逐端口供电与 PSE 余量明细表。
@@ -820,7 +809,7 @@ func writePoEPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
 	style.WrapColumns = []int{0}
 	pdfkit.GridTable(pdf,
 		[]string{"端口", "当前消耗功率", "峰值功率"},
-		rows, []float64{50, 46, 46.2}, style)
+		rows, []float64{74, 50, 50}, style)
 }
 
 // writeDiskUsagePDFTable 输出服务器逐分区磁盘使用率明细，最坏的分区在前（执行端已排序）。
@@ -853,7 +842,7 @@ func writeDiskUsagePDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
 		style.RowFills, style.RowAccents = checkResultRowTints(rows, 1)
 		pdfkit.GridTable(pdf,
 			[]string{"挂载点", "判定", "使用率", "已用", "容量"},
-			rows, []float64{50, 20, 22, 25, 25.2}, style)
+			rows, []float64{72, 20, 24, 29, 29}, style)
 	}
 
 	writeDetailSkippedPDFTable(pdf, "未评估分区", detail.Skipped)
@@ -877,6 +866,120 @@ func formatDetailBytes(bytes int64) string {
 	return fmt.Sprintf("%.1f %s", value, units[unit])
 }
 
+type omittedInterfaceSkipCounts struct {
+	Down      int
+	NoRate    int
+	NoPacket  int
+	LowPacket int
+}
+
+func (c omittedInterfaceSkipCounts) total() int {
+	return c.Down + c.NoRate + c.NoPacket + c.LowPacket
+}
+
+func partitionInterfaceSkipped(skipped []InterfaceUtilizationSkippedReport) ([]InterfaceUtilizationSkippedReport, omittedInterfaceSkipCounts) {
+	remaining := make([]InterfaceUtilizationSkippedReport, 0, len(skipped))
+	var omitted omittedInterfaceSkipCounts
+	for _, item := range skipped {
+		reason := strings.TrimSpace(item.Reason)
+		switch {
+		case strings.Contains(reason, "未 UP") || strings.Contains(reason, "未UP"):
+			omitted.Down++
+		case strings.Contains(reason, "无速率样本") || strings.Contains(reason, "未上报该接口速率采样"):
+			omitted.NoRate++
+		case strings.Contains(reason, "无包计数样本"):
+			omitted.NoPacket++
+		case strings.Contains(reason, "样本包数不足"):
+			omitted.LowPacket++
+		default:
+			remaining = append(remaining, item)
+		}
+	}
+	return remaining, omitted
+}
+
+func formatOmittedInterfaceSkippedNote(hasTableAbove bool, omitted omittedInterfaceSkipCounts) string {
+	total := omitted.total()
+	if total == 0 {
+		return ""
+	}
+	parts := make([]string, 0, 4)
+	if omitted.Down > 0 {
+		parts = append(parts, fmt.Sprintf("%d 个接口未 UP", omitted.Down))
+	}
+	if omitted.NoRate > 0 {
+		parts = append(parts, fmt.Sprintf("%d 个接口尚未形成速率采样基线", omitted.NoRate))
+	}
+	if omitted.NoPacket > 0 {
+		parts = append(parts, fmt.Sprintf("%d 个接口无有效流量/包计数数据", omitted.NoPacket))
+	}
+	if omitted.LowPacket > 0 {
+		parts = append(parts, fmt.Sprintf("%d 个接口有效包数样本不足（低于 1000 包）", omitted.LowPacket))
+	}
+	if len(parts) > 1 {
+		if hasTableAbove {
+			return fmt.Sprintf("说明：另有 %d 个接口无有效评估数据（%s），故不在明细表中展示。", total, strings.Join(parts, "、"))
+		}
+		return fmt.Sprintf("说明：共 %d 个接口暂无有效评估数据（%s），故不展开逐接口明细。", total, strings.Join(parts, "、"))
+	}
+	return formatSingleBucketInterfaceSkipNote(hasTableAbove, omitted)
+}
+
+func formatSingleBucketInterfaceSkipNote(hasTableAbove bool, omitted omittedInterfaceSkipCounts) string {
+	switch {
+	case omitted.Down > 0 && hasTableAbove:
+		return fmt.Sprintf("说明：另有 %d 个接口未 UP，无有效采集数据，故不在明细表中展示。", omitted.Down)
+	case omitted.Down > 0:
+		return fmt.Sprintf("说明：全部 %d 个接口均未 UP，无有效采集数据，故不展开逐接口明细。", omitted.Down)
+	case omitted.NoRate > 0 && hasTableAbove:
+		return fmt.Sprintf("说明：另有 %d 个接口尚未形成速率采样基线，暂无有效利用率数据，故不在明细表中展示。", omitted.NoRate)
+	case omitted.NoRate > 0:
+		return fmt.Sprintf("说明：共 %d 个接口尚未形成速率采样基线，暂无有效利用率数据，故不展开逐接口明细。", omitted.NoRate)
+	case omitted.NoPacket > 0 && hasTableAbove:
+		return fmt.Sprintf("说明：另有 %d 个接口未 UP 或无有效流量/包计数数据，未参与评估，故不在明细表中展示。", omitted.NoPacket)
+	case omitted.NoPacket > 0:
+		return fmt.Sprintf("说明：共 %d 个接口均未 UP 或无有效流量/包计数数据，无法计算比率，故不展开逐接口明细。", omitted.NoPacket)
+	case omitted.LowPacket > 0 && hasTableAbove:
+		return fmt.Sprintf("说明：另有 %d 个接口未 UP 或有效包数样本不足（低于 1000 包），未参与评估，故不在明细表中展示。", omitted.LowPacket)
+	default:
+		return fmt.Sprintf("说明：共 %d 个接口均未 UP 或有效包数样本不足（低于 1000 包），未参与评估，故不展开逐接口明细。", omitted.LowPacket)
+	}
+}
+
+func summarizeInterfaceSkippedForPDF(hasEvaluatedTable bool, skipped []InterfaceUtilizationSkippedReport) ([]InterfaceUtilizationSkippedReport, string) {
+	remaining, omitted := partitionInterfaceSkipped(skipped)
+	note := formatOmittedInterfaceSkippedNote(hasEvaluatedTable || len(remaining) > 0, omitted)
+	return remaining, note
+}
+
+func writePDFMutedNote(pdf *gofpdf.Fpdf, text string) {
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	pdf.SetFont(pdfFontName, "", pdfSmallSize)
+	pdf.SetTextColor(pdfColorMuted[0], pdfColorMuted[1], pdfColorMuted[2])
+	lines := pdfkit.SplitLines(pdf, text, pdfkit.UsableWidth(pdf))
+	ensurePDFSpace(pdf, float64(len(lines))*5.5+2)
+	for _, line := range lines {
+		pdf.CellFormat(0, 5.5, line, "", 1, "L", false, 0, "")
+	}
+	pdf.SetTextColor(pdfkit.ColorBlack[0], pdfkit.ColorBlack[1], pdfkit.ColorBlack[2])
+	pdf.SetFont(pdfFontName, "", pdfBodySize)
+}
+
+func writeInterfaceSkippedPDFSection(pdf *gofpdf.Fpdf, hasEvaluatedTable bool, skipped []InterfaceUtilizationSkippedReport) {
+	remaining, note := summarizeInterfaceSkippedForPDF(hasEvaluatedTable, skipped)
+	if len(remaining) > 0 {
+		writeDetailSkippedPDFTable(pdf, "未评估接口", remaining)
+	}
+	if note != "" {
+		if hasEvaluatedTable || len(remaining) > 0 {
+			pdf.Ln(2)
+		}
+		writePDFMutedNote(pdf, note)
+	}
+}
+
 // writeDetailSkippedPDFTable 输出「未参与评估的对象及原因」表。
 // 错包与光模块共用：两者都会因设备未上报某个计数器而跳过部分对象，
 // 不列出来就会出现「29 个接口只看到 2 行」的困惑。
@@ -893,7 +996,7 @@ func writeDetailSkippedPDFTable(pdf *gofpdf.Fpdf, header string, skipped []Inter
 	style := defaultPDFTableStyle(pdfHeaderStyleLight)
 	style.BodyAlign = "L"
 	style.WrapColumns = []int{0, 1}
-	pdfkit.GridTable(pdf, []string{header, "原因"}, rows, []float64{60, 82.2}, style)
+	pdfkit.GridTable(pdf, []string{header, "原因"}, rows, []float64{68, 106}, style)
 }
 
 // formatDetailPercent 格式化比率。极小的非零值显示成 "<0.01%" 而不是 "0.00%"：
@@ -958,10 +1061,10 @@ func writeInterfaceRatioPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult)
 		}
 		pdfkit.GridTable(pdf,
 			[]string{"接口", "峰值方向", ratioHeader, countHeader, packetsHeader},
-			rows, []float64{54, 20, 22, 27, 27}, style)
+			rows, []float64{68, 22, 24, 30, 30}, style)
 	}
 
-	writeDetailSkippedPDFTable(pdf, "未评估接口", detail.Skipped)
+	writeInterfaceSkippedPDFSection(pdf, len(detail.Interfaces) > 0, detail.Skipped)
 }
 
 // writeBGPPeersPDFTable 为「BGP 邻居状态」输出逐邻居明细表。
@@ -992,7 +1095,7 @@ func writeBGPPeersPDFTable(pdf *gofpdf.Fpdf, result InspectionCheckResult) {
 	style.RowFills, style.RowAccents = checkResultRowTints(rows, 1)
 	pdfkit.GridTable(pdf,
 		[]string{"邻居", "判定", "会话状态", "建立时长", "最后错误"},
-		rows, []float64{32, 16, 26, 28, 40.2}, style)
+		rows, []float64{36, 16, 28, 30, 64}, style)
 
 	if detail.FlappingThresholdSeconds > 0 {
 		writePDFRightAligned(pdf, fmt.Sprintf("判定口径：建立时长低于 %s 视为近期重建",
@@ -1269,6 +1372,10 @@ func writePDFCallout(pdf *gofpdf.Fpdf, title, hint string, accent, tint [3]int) 
 	pdf.SetY(y + height + 3)
 }
 
+func inspectionIssueWidths() []float64 {
+	return []float64{16, 30, 30, 36, 62}
+}
+
 // writeInspectionIssueSection 输出「异常与告警」章节。无异常时给出绿色
 // 结论横幅，而不是留白或空表。
 func writeInspectionIssueSection(pdf *gofpdf.Fpdf, issues []inspectionIssue, record func(string, int)) {
@@ -1309,12 +1416,12 @@ func writeInspectionIssueSection(pdf *gofpdf.Fpdf, issues []inspectionIssue, rec
 	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
 	style.BodyAlign = "L"
 	style.AlternateFillColor = [3]int{}
-	style.WrapColumns = []int{2, 3, 4}
+	style.WrapColumns = []int{1, 2, 3, 4}
 	style.RowFills = fills
 	style.RowAccents = accents
 	pdfkit.GridTable(pdf,
 		[]string{"级别", "设备", "检查项", "参考标准", "实际值"},
-		rows, []float64{14, 30, 32, 30, 36.2}, style)
+		rows, inspectionIssueWidths(), style)
 	pdf.Ln(3)
 	writePDFRightAlignedColored(pdf,
 		fmt.Sprintf("共 %d 项需关注，按严重度排序（错误 > 失败 > 警告）", len(issues)),
@@ -1975,7 +2082,7 @@ func writeInspectionConclusion(pdf *gofpdf.Fpdf, data InspectionReportData, reco
 	style.RowAccents = accents
 	pdfkit.GridTable(pdf,
 		[]string{"级别", "对象", "现状", "建议措施"},
-		rows, []float64{14, 34, 34, 60.2}, style)
+		rows, []float64{16, 38, 48, 72}, style)
 
 	pdf.Ln(3)
 	writePDFRightAlignedColored(pdf,
@@ -2150,7 +2257,7 @@ func writeTrendPDF(path string, data TrendReportData) error {
 	writePDFSectionTitle(pdf, "报表概览")
 	overviewStyle := defaultPDFTableStyle(pdfHeaderStyleLight)
 	overviewStyle.BodyAlign = "L"
-	pdfkit.GridTable(pdf, []string{"项目", "内容"}, buildTrendPDFOverviewRows(data, generatedAt), []float64{45.7, 91.4}, overviewStyle)
+	pdfkit.GridTable(pdf, []string{"项目", "内容"}, buildTrendPDFOverviewRows(data, generatedAt), []float64{54, 120}, overviewStyle)
 
 	writeTrendPDFMetrics(pdf, data)
 	writeTrendPDFPredictions(pdf, data)
@@ -2192,7 +2299,7 @@ func writeTrendPDFMetrics(pdf *gofpdf.Fpdf, data TrendReportData) {
 	style := defaultPDFTableStyle(pdfHeaderStyleBlue)
 	style.BodyAlign = "C"
 	pdfkit.GridTable(pdf, []string{"指标", "当前值", "上期值", "变化", "变化率", "趋势"}, rows,
-		[]float64{38.2, 22, 22, 22, 20, 18}, style)
+		[]float64{50, 26, 26, 26, 24, 22}, style)
 }
 
 // writeTrendPDFPredictions 预测分析：当前值与预测值必须同时呈现，
@@ -2219,7 +2326,7 @@ func writeTrendPDFPredictions(pdf *gofpdf.Fpdf, data TrendReportData) {
 	style.BodyAlign = "C"
 	style.WrapColumns = []int{5}
 	pdfkit.GridTable(pdf, []string{"指标", "当前值", "预测值", "预测周期", "置信水平", "建议"}, rows,
-		[]float64{32, 20, 20, 22, 20, 28.2}, style)
+		[]float64{36, 22, 22, 24, 22, 48}, style)
 }
 
 // writeTrendPDFAlerts 趋势告警；空告警按 alerts_meta 区分三种语义。
@@ -2259,7 +2366,7 @@ func writeTrendPDFAlerts(pdf *gofpdf.Fpdf, data TrendReportData) {
 	style.WrapColumns = []int{1, 2}
 	style.RowAccents = accents
 	pdfkit.GridTable(pdf, []string{"级别", "标题", "说明", "检测时间"}, rows,
-		[]float64{16, 36, 58, 32.2}, style)
+		[]float64{16, 42, 82, 34}, style)
 }
 
 // trendSeverityAccent 告警行左侧色条：与前端三级着色（红/黄/蓝）语义一致，

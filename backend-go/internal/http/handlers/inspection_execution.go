@@ -2156,7 +2156,7 @@ func (h InspectionHandler) checkFirmwareVersionMetric(result *inspection.Result,
 	actual := fmt.Sprintf("%s / %s / 补丁: %s", model, version, patch)
 	result.ActualValue = &actual
 	result.Status = "pass"
-	result.Message = stringPtr(fmt.Sprintf("型号 %s，固件版本 %s，补丁版本 %s；请对照厂商推荐版本与安全公告自行评估", model, version, patch))
+	result.Message = stringPtr(fmt.Sprintf("型号 %s，软件版本 %s，补丁版本 %s；请对照厂商推荐版本与安全公告自行评估", model, version, patch))
 	result.Details = marshalDetails(map[string]interface{}{"kind": "firmware_version", "model": model, "firmware_version": version, "patch_version": patch})
 }
 
@@ -2338,6 +2338,13 @@ type interfaceRatioSummary struct {
 	Skipped      []interfaceUtilizationSkipped
 }
 
+func interfaceSkipReason(iface devices.InterfaceMetrics, fallback string) string {
+	if iface.IsUp != nil && !*iface.IsUp {
+		return "接口未 UP"
+	}
+	return fallback
+}
+
 // summarizeInterfaceCounterRatio 逐接口计算「计数器 / (计数器 + 包数)」的累计比率。
 //
 // 用累计比率而非采样速率：巡检是周期性体检而非实时监控，「这个口自上电以来错了
@@ -2389,7 +2396,7 @@ func summarizeInterfaceCounterRatio(
 		evaluate("出", outCount, outPkts)
 
 		if best.Percent < 0 {
-			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "无包计数样本，无法计算比率"})
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: interfaceSkipReason(iface, "无包计数样本，无法计算比率")})
 			continue
 		}
 
@@ -2574,12 +2581,12 @@ func summarizeInterfaceBroadcast(
 		evaluate("出", outCount, outPkts)
 
 		if !hasEnoughPackets {
-			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "样本包数不足 1000，不计风暴比率"})
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: interfaceSkipReason(iface, "样本包数不足 1000，不计风暴比率")})
 			continue
 		}
 
 		if best.Percent < 0 {
-			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: "无包计数样本，无法计算比率"})
+			summary.Skipped = append(summary.Skipped, interfaceUtilizationSkipped{Name: name, Reason: interfaceSkipReason(iface, "无包计数样本，无法计算比率")})
 			continue
 		}
 

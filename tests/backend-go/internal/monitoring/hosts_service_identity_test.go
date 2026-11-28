@@ -13,7 +13,7 @@ import (
 func hostDetailMockColumns() []string {
 	return []string{
 		"id", "name", "ip_address", "hostname", "detected_sys_name",
-		"device_type", "detected_device_type", "vendor", "model", "serial_number", "firmware_version",
+		"device_type", "detected_device_type", "vendor", "model", "serial_number", "firmware_version", "patch_version",
 		"location", "topology_role", "group_id", "group_name", "status",
 		"is_monitored", "cpu_usage", "memory_usage", "temperature", "uptime",
 		"response_time", "last_seen", "icmp_status", "snmp_status", "cli_protocol",
@@ -110,7 +110,7 @@ func TestGetHostDetail_HostnameFallbackAndSerialNormalization(t *testing.T) {
 
 			rows := sqlmock.NewRows(hostDetailMockColumns()).AddRow(
 				deviceID, "test-sw", "192.168.20.1", tc.hostname, tc.detectedSysName,
-				"switch", nil, "huawei", "S5700-28C-HI", tc.serialNumber, "3.30 V200R001C00",
+				"switch", nil, "huawei", "S5700-28C-HI", tc.serialNumber, "3.30 V200R001C00", nil,
 				nil, "access", nil, "", "online",
 				true, nil, nil, nil, nil,
 				nil, nil, "online", "success", "",
@@ -209,7 +209,7 @@ func TestGetHostDetail_InterfaceDisplayNameAndDescription(t *testing.T) {
 
 	devRows := sqlmock.NewRows(hostDetailMockColumns()).AddRow(
 		deviceID, "test-sw", "192.168.20.1", nil, "SW-CORE-01",
-		"switch", nil, "huawei", "S5700-28C-HI", "210235A1B2C3", "3.30 V200R001C00",
+		"switch", nil, "huawei", "S5700-28C-HI", "210235A1B2C3", "3.30 V200R001C00", nil,
 		nil, "access", nil, "", "online",
 		true, nil, nil, nil, nil,
 		nil, nil, "online", "success", "",
@@ -300,7 +300,7 @@ func TestGetHostDetail_TopologyRoleSyncedWithFullTopology(t *testing.T) {
 
 		devRows := sqlmock.NewRows(hostDetailMockColumns()).AddRow(
 			deviceID, "SW-42", "10.10.0.42", nil, nil,
-			"switch", nil, "huawei", "S5735", "SN-42", "V200R021",
+			"switch", nil, "huawei", "S5735", "SN-42", "V200R021", nil,
 			nil, "access", nil, "", "online",
 			true, nil, nil, nil, nil,
 			nil, nil, "online", "success", "",
@@ -368,7 +368,7 @@ func TestGetHostDetail_TopologyRoleSyncedWithFullTopology(t *testing.T) {
 
 		devRows := sqlmock.NewRows(hostDetailMockColumns()).AddRow(
 			deviceID, "SW-42", "10.10.0.42", nil, nil,
-			"switch", "router", "huawei", "NE40E", "SN-42", "V800",
+			"switch", "router", "huawei", "NE40E", "SN-42", "V800", nil,
 			nil, "access", nil, "", "online",
 			true, nil, nil, nil, nil,
 			nil, nil, "online", "success", "",
@@ -411,4 +411,63 @@ func TestGetHostDetail_TopologyRoleSyncedWithFullTopology(t *testing.T) {
 			t.Fatalf("sqlmock expectations not met: %v", err)
 		}
 	})
+}
+
+func TestGetHostDetail_PatchVersionResolution(t *testing.T) {
+	cases := []struct {
+		name         string
+		firmware     interface{}
+		patch        interface{}
+		wantPatchVer *string
+	}{
+		{
+			name:         "显式热补丁版本透传",
+			firmware:     "V200R024C00SPC500",
+			patch:        "V200R024SPH010",
+			wantPatchVer: strPtr("V200R024SPH010"),
+		},
+		{
+			name:         "历史误存 SPC500 纠偏为无",
+			firmware:     "V200R024C00SPC500",
+			patch:        "SPC500",
+			wantPatchVer: strPtr("无"),
+		},
+		{
+			name:         "仅有软件版本且无补丁时展示无",
+			firmware:     "V200R024C00SPC500",
+			patch:        nil,
+			wantPatchVer: strPtr("无"),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db, mock, cleanup := newMonitoringGormDBWithSQLMock(t)
+			defer cleanup()
+
+			writer := monitoring.NewMetricsWriter(db, nil, zap.NewNop())
+			deviceID := 42
+			rows := sqlmock.NewRows(hostDetailMockColumns()).AddRow(
+				deviceID, "test-sw", "192.168.20.1", nil, "SW-CORE-01",
+				"switch", nil, "huawei", "S5736-S24T4XC", "210235A1B2C3", tc.firmware, tc.patch,
+				nil, "access", nil, "", "online",
+				true, nil, nil, nil, nil,
+				nil, nil, "online", "success", "",
+				"", 0, nil, nil, 0,
+			)
+			mock.ExpectQuery(`SELECT\s+d\.id, d\.name, d\.ip_address, d\.hostname, d\.detected_sys_name`).
+				WithArgs(deviceID, 1).
+				WillReturnRows(rows)
+			expectGetHostDetailSupportingQueries(mock, deviceID)
+
+			detail, err := writer.GetHostDetail(context.Background(), deviceID, "", false, false, false)
+			if err != nil {
+				t.Fatalf("GetHostDetail() error = %v", err)
+			}
+			assertOptionalStrEqual(t, "PatchVersion", detail.PatchVersion, tc.wantPatchVer)
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("sqlmock expectations not met: %v", err)
+			}
+		})
+	}
 }

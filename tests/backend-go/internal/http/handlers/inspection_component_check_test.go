@@ -341,7 +341,8 @@ func TestFirmwareVersion_AlwaysPassesWhenCollected(t *testing.T) {
 	if result.ActualValue == nil {
 		t.Fatal("应把型号与版本写入实际值")
 	}
-	wantActual := "S5700-28C-HI / V200R019C00SPC500 / 补丁: SPC500"
+	// 华为 V200R019C00SPC500 的 SPC500 属基础软件服务包，未采集到热补丁时应展示 补丁: 无
+	wantActual := "S5700-28C-HI / V200R019C00SPC500 / 补丁: 无"
 	if *result.ActualValue != wantActual {
 		t.Errorf("ActualValue = %q, 期望 %q", *result.ActualValue, wantActual)
 	}
