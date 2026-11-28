@@ -192,18 +192,31 @@ export const useInspectionTemplateStats = (params: {
   return useQuery({
     queryKey: ['inspection', 'templates', 'stats', filters, total],
     queryFn: async () => {
-      const pageCount = Math.ceil(total / TEMPLATE_STATS_BATCH_SIZE)
-      const responses = await Promise.all(
-        Array.from({ length: pageCount }, (_, index) =>
-          fetchInspectionTemplates({
-            ...filters,
-            page: index + 1,
-            pageSize: TEMPLATE_STATS_BATCH_SIZE,
-          })
-        )
-      )
+      const firstPage = await fetchInspectionTemplates({
+        ...filters,
+        page: 1,
+        pageSize: TEMPLATE_STATS_BATCH_SIZE,
+      })
 
-      const allTemplates = responses.flatMap(response => response.templates)
+      const actualTotal = firstPage.total ?? firstPage.templates.length
+      const pageCount = Math.ceil(actualTotal / TEMPLATE_STATS_BATCH_SIZE)
+      const restResponses =
+        pageCount > 1
+          ? await Promise.all(
+              Array.from({ length: pageCount - 1 }, (_, index) =>
+                fetchInspectionTemplates({
+                  ...filters,
+                  page: index + 2,
+                  pageSize: TEMPLATE_STATS_BATCH_SIZE,
+                })
+              )
+            )
+          : []
+
+      const allTemplates = [
+        ...firstPage.templates,
+        ...restResponses.flatMap((response) => response.templates),
+      ]
 
       return {
         builtInTotal: allTemplates.filter(template => template.isBuiltIn).length,
@@ -211,7 +224,7 @@ export const useInspectionTemplateStats = (params: {
         activeTotal: allTemplates.filter(template => template.isActive).length,
       }
     },
-    enabled: enabled && total > 0,
+    enabled,
     staleTime: 10 * 60 * 1000,
   })
 }
@@ -423,6 +436,10 @@ export const useStopExecution = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inspection', 'executions'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'stats'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'trends'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'device-distribution'] })
+      queryClient.invalidateQueries({ queryKey: ['inspection', 'problem-distribution'] })
       toast.success('巡检任务已停止')
     },
     onError: (error: Error) => {

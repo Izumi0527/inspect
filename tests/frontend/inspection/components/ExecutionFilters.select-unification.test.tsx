@@ -44,92 +44,8 @@ jest.mock('@/components/atoms', () => ({
   ),
 }))
 
-jest.mock('@/components/ui/select', () => {
-  const React = require('react') as typeof import('react')
-
-  type SelectContextValue = {
-    value?: string
-    open: boolean
-    setOpen: (open: boolean) => void
-    onValueChange?: (value: string) => void
-  }
-
-  const SelectContext = React.createContext<SelectContextValue | null>(null)
-
-  const useSelectContext = () => {
-    const context = React.useContext(SelectContext)
-    if (!context) {
-      throw new Error('Select mock context is missing')
-    }
-    return context
-  }
-
-  return {
-    Select: ({
-      value,
-      onValueChange,
-      children,
-    }: {
-      value?: string
-      onValueChange?: (value: string) => void
-      children: React.ReactNode
-    }) => {
-      const [open, setOpen] = React.useState(false)
-      return (
-        <SelectContext.Provider value={{ value, open, setOpen, onValueChange }}>
-          <div>{children}</div>
-        </SelectContext.Provider>
-      )
-    },
-    SelectTrigger: ({
-      children,
-      ...props
-    }: React.ButtonHTMLAttributes<HTMLButtonElement>) => {
-      const { open, setOpen } = useSelectContext()
-      return (
-        <button
-          type="button"
-          role="combobox"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-          {...props}
-        >
-          {children}
-        </button>
-      )
-    },
-    SelectValue: ({ placeholder }: { placeholder?: string }) => <>{placeholder ?? null}</>,
-    SelectContent: ({ children }: { children: React.ReactNode }) => {
-      const { open } = useSelectContext()
-      return open ? <div role="listbox">{children}</div> : null
-    },
-    SelectItem: ({
-      value,
-      children,
-    }: {
-      value: string
-      children: React.ReactNode
-    }) => {
-      const { value: currentValue, onValueChange, setOpen } = useSelectContext()
-      return (
-        <button
-          type="button"
-          role="option"
-          aria-selected={currentValue === value}
-          onClick={() => {
-            onValueChange?.(value)
-            setOpen(false)
-          }}
-        >
-          {children}
-        </button>
-      )
-    },
-  }
-})
-
-describe('ExecutionFilters 下拉统一化', () => {
-  it('应使用统一 Select 实现状态筛选，并保持 onStatusChange 契约', async () => {
+describe('ExecutionFilters 状态分段器与工具栏规范', () => {
+  it('应渲染内联状态分段器且不含原生 select，点击切换保持 onStatusChange 契约', async () => {
     const user = userEvent.setup()
     const onStatusChange = jest.fn()
     const { container } = render(
@@ -149,17 +65,25 @@ describe('ExecutionFilters 下拉统一化', () => {
     )
 
     expect(container.querySelector('select')).toBeNull()
-    expect(screen.getByRole('combobox', { name: '执行状态筛选' })).toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('combobox', { name: '执行状态筛选' }))
-    await user.click(screen.getByRole('option', { name: '失败' }))
+    const statusGroup = screen.getByRole('group', { name: '执行状态筛选' })
+    expect(statusGroup).toBeInTheDocument()
+    expect(statusGroup).toHaveClass('h-9')
+
+    const allButton = screen.getByRole('button', { name: '全部' })
+    const failedButton = screen.getByRole('button', { name: '失败' })
+    expect(allButton).toHaveAttribute('aria-pressed', 'true')
+    expect(failedButton).toHaveAttribute('aria-pressed', 'false')
+
+    await user.click(failedButton)
     expect(onStatusChange).toHaveBeenCalledWith('failed')
   })
 
-  it('应使用统一紧凑工具栏规格渲染状态筛选与刷新按钮', () => {
+  it('应使用统一紧凑工具栏规格渲染状态分段器与刷新按钮，不再渲染旧计数或清除按钮', () => {
     render(
       <ExecutionFilters
-        statusFilter="all"
+        statusFilter="completed"
         startDate=""
         endDate=""
         onStatusChange={jest.fn()}
@@ -173,13 +97,14 @@ describe('ExecutionFilters 下拉统一化', () => {
       />
     )
 
-    const statusSelect = screen.getByRole('combobox', { name: '执行状态筛选' })
+    const statusGroup = screen.getByRole('group', { name: '执行状态筛选' })
     const refreshButton = screen.getByRole('button', { name: '刷新' })
+    const completedButton = screen.getByRole('button', { name: '已完成' })
 
-    expect(statusSelect).toHaveClass('h-9')
-    expect(statusSelect).toHaveClass('text-sm')
+    expect(statusGroup).toHaveClass('h-9')
+    expect(completedButton).toHaveClass('h-7')
+    expect(completedButton).toHaveAttribute('aria-pressed', 'true')
     expect(refreshButton).toHaveClass('h-9')
-    // 筛选栏不再渲染「已应用 N 个筛选」徽章与「清除筛选」按钮
     expect(screen.queryByText(/已应用 \d+ 个筛选/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^清除筛选$/ })).not.toBeInTheDocument()
   })

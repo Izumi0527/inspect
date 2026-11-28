@@ -75,66 +75,124 @@ func resolveStatsRange(value string, loc *time.Location) (time.Time, time.Time) 
 	}
 }
 
+var allowedStatsTimeColumns = map[string]bool{
+	"started_at":   true,
+	"created_at":   true,
+	"completed_at": true,
+}
+
+func batchStatsSubquerySelect(includeStartedAt bool) string {
+	cols := []string{
+		executionGroupKeyExpr + " AS group_key",
+	}
+	if includeStartedAt {
+		cols = append(cols, "MIN(started_at) AS batch_started_at")
+	}
+	cols = append(
+		cols,
+		// 批次完成口径：批内无 running/pending 且至少有一台设备完成
+		"CASE WHEN SUM(CASE WHEN status IN ('running', 'pending') THEN 1 ELSE 0 END) = 0 AND SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END AS batch_completed",
+		// 批次失败口径：批内无 running/pending/completed 且存在 failed/timeout
+		"CASE WHEN SUM(CASE WHEN status IN ('running', 'pending', 'completed') THEN 1 ELSE 0 END) = 0 AND SUM(CASE WHEN status IN ('failed', 'timeout') THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END AS batch_failed",
+		// 评分口径与执行历史一致：仅统计已执行项（排除 skipped / not_applicable）
+		"CASE WHEN SUM(passed_checks + failed_checks + warning_checks) > 0 THEN SUM(passed_checks)::float / SUM(passed_checks + failed_checks + warning_checks) * 100 ELSE NULL END AS batch_score",
+	)
+	return strings.Join(cols, ", ")
+}
+
 func computeStatsSummary(ctx context.Context, db *gorm.DB, timeColumn string, start time.Time, end time.Time) (statsSummary, error) {
 	if db == nil {
 		return statsSummary{}, fmt.Errorf("database not initialized")
 	}
 	column := strings.TrimSpace(timeColumn)
-	if column == "" {
+	if !allowedStatsTimeColumns[column] {
 		column = "started_at"
 	}
 	rangeCondition := fmt.Sprintf("%s >= ? AND %s <= ?", column, column)
 
-	var total int64
-	if err := db.WithContext(ctx).
+	sub := db.WithContext(ctx).
 		Table("inspections").
+		Select(batchStatsSubquerySelect(false)).
 		Where(rangeCondition, start, end).
-		Count(&total).Error; err != nil {
-		return statsSummary{}, err
-	}
+		Group(executionGroupKeyExpr)
 
-	var success int64
-	if err := db.WithContext(ctx).
-		Table("inspections").
-		Where(rangeCondition+" AND status = ? AND failed_checks = 0 AND warning_checks = 0", start, end, inspection.StatusCompleted).
-		Count(&success).Error; err != nil {
-		return statsSummary{}, err
+	type statsAggRow struct {
+		TotalExecutions   int     `gorm:"column:total_executions"`
+		SuccessExecutions int     `gorm:"column:success_executions"`
+		AvgScore          float64 `gorm:"column:avg_score"`
 	}
-
-	type avgRow struct {
-		AvgScore float64 `gorm:"column:avg_score"`
-	}
-	avg := avgRow{}
+	agg := statsAggRow{}
 	if err := db.WithContext(ctx).
-		Table("inspections").
-		Select("AVG(CASE WHEN total_checks > 0 THEN passed_checks::float / total_checks * 100 ELSE NULL END) AS avg_score").
-		Where(rangeCondition+" AND status = ?", start, end, inspection.StatusCompleted).
-		Scan(&avg).Error; err != nil {
+		Table("(?) AS batch_stats", sub).
+		Select("COUNT(*) AS total_executions, COALESCE(SUM(batch_completed), 0) AS success_executions, COALESCE(AVG(CASE WHEN batch_completed = 1 THEN batch_score ELSE NULL END), 0) AS avg_score").
+		Scan(&agg).Error; err != nil {
 		return statsSummary{}, err
 	}
 
 	successRate := 0.0
-	if total > 0 {
-		successRate = float64(success) / float64(total) * 100
+	if agg.TotalExecutions > 0 {
+		successRate = float64(agg.SuccessExecutions) / float64(agg.TotalExecutions) * 100
 	}
 
 	return statsSummary{
-		TotalExecutions: int(total),
+		TotalExecutions: agg.TotalExecutions,
 		SuccessRate:     roundFloat(successRate, 1),
-		AvgScore:        roundFloat(avg.AvgScore, 1),
+		AvgScore:        roundFloat(agg.AvgScore, 1),
 	}, nil
 }
 
 func pctChange(current int, previous int) string {
 	if previous == 0 {
+		if current > 0 {
+			return "+100.0%"
+		}
 		return "0.0%"
 	}
 	diff := (float64(current-previous) / float64(previous)) * 100
 	return fmt.Sprintf("%+.1f%%", diff)
 }
 
-func deltaChange(current float64, previous float64) string {
+func deltaChangeWithBaseline(current float64, previous float64, hasPrevious bool) string {
+	if !hasPrevious {
+		return "0.0%"
+	}
 	return fmt.Sprintf("%+.1f%%", current-previous)
+}
+
+// resolvePreviousRange 计算与 [start, end] 等长且不重叠的上一比较周期，
+// 防止 <= 边界把 start 时刻的记录同时算入当前周期与上一周期；
+// 使用 -1µs 适配 PostgreSQL timestamptz 微秒精度，避免纳秒进位到 start。
+func resolvePreviousRange(start time.Time, end time.Time) (time.Time, time.Time) {
+	span := end.Sub(start)
+	if end.Nanosecond() == 999999999 {
+		span += time.Nanosecond
+	}
+	previousEnd := start.Add(-time.Microsecond)
+	previousStart := start.Add(-span)
+	return previousStart, previousEnd
+}
+
+// validateAnalyticsRange 限制分析查询时间跨度，防止恶意大跨度触发百万级趋势点内存溢出。
+func validateAnalyticsRange(period string, start time.Time, end time.Time) error {
+	if start.After(end) {
+		return fmt.Errorf("start_date must not be after end_date")
+	}
+	span := end.Sub(start)
+	switch strings.ToLower(strings.TrimSpace(period)) {
+	case "day":
+		if span > 367*24*time.Hour {
+			return fmt.Errorf("date range for day period must not exceed 366 days")
+		}
+	case "month":
+		if span > 120*31*24*time.Hour {
+			return fmt.Errorf("date range for month period must not exceed 10 years")
+		}
+	default:
+		if span > 261*7*24*time.Hour {
+			return fmt.Errorf("date range for week period must not exceed 260 weeks")
+		}
+	}
+	return nil
 }
 
 func roundFloat(value float64, precision int) float64 {
@@ -164,8 +222,8 @@ func resolveTrendRange(period string, start *time.Time, end *time.Time, loc *tim
 			value := time.Date(now.Year(), now.Month(), now.Day()-6, 0, 0, 0, 0, loc)
 			start = &value
 		case "month":
-			// 按月显示：查询最近12个月的数据
-			value := time.Date(now.Year()-1, now.Month(), 1, 0, 0, 0, 0, loc)
+			// 按月显示：查询最近12个自然月的数据（含当月共12个月）
+			value := time.Date(now.Year(), now.Month()-11, 1, 0, 0, 0, 0, loc)
 			start = &value
 		default:
 			// 按周显示：查询最近4周的数据

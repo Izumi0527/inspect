@@ -5,71 +5,86 @@ import { Card, CardContent, Button } from '@/components/atoms'
 /**
  * 执行记录空状态组件
  *
- * 根据不同场景显示友好的提示信息和快速操作
+ * 默认内嵌于一体式数据面板，也可作为独立卡片展示。
  */
 
 interface Props {
   hasFilters: boolean
   onClearFilters?: () => void
   onRefresh?: () => void
+  embedded?: boolean
 }
 
 export const ExecutionEmptyState: React.FC<Props> = React.memo(({
   hasFilters,
   onClearFilters,
-  onRefresh
+  onRefresh,
+  embedded = true,
 }) => {
-  // 使用 useMemo 缓存内容计算
   const content = useMemo(() => {
     if (hasFilters) {
       return {
         title: '未找到匹配的执行记录',
-        description: '当前筛选条件下没有找到执行记录，请尝试调整筛选条件'
+        description: '当前筛选条件下没有找到执行记录，请尝试调整筛选条件',
       }
     }
 
     return {
       title: '暂无执行记录',
-      description: '还没有执行过巡检任务，开始第一次巡检吧'
+      description: '还没有执行过巡检任务，开始第一次巡检吧',
     }
   }, [hasFilters])
+
+  const body = (
+    <div className="flex flex-col items-center gap-3 max-w-sm mx-auto">
+      {/* 图标 */}
+      <div className="w-12 h-12 rounded-full bg-surface-2 flex items-center justify-center text-muted-foreground">
+        <AlertCircle className="w-6 h-6" />
+      </div>
+
+      {/* 文本内容 */}
+      <div>
+        <h3 className="text-base font-semibold text-foreground">
+          {content.title}
+        </h3>
+        <p className="mt-1 text-sm text-muted-foreground">{content.description}</p>
+      </div>
+
+      {/* 快速操作按钮 */}
+      {hasFilters && (onClearFilters || onRefresh) && (
+        <div className="flex gap-2 mt-1">
+          {onClearFilters && (
+            <Button variant="outline" onClick={onClearFilters} className="cursor-pointer">
+              <X className="w-4 h-4 mr-1.5" />
+              清除筛选
+            </Button>
+          )}
+          {onRefresh && (
+            <Button variant="default" onClick={onRefresh} className="cursor-pointer">
+              <RefreshCw className="w-4 h-4 mr-1.5" />
+              刷新数据
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  if (embedded) {
+    return (
+      <div className="flex flex-1 min-h-0 items-center justify-center px-6 py-12 text-center">
+        {body}
+      </div>
+    )
+  }
 
   return (
     <Card>
       <CardContent className="p-12 text-center">
-        <div className="flex flex-col items-center gap-4 max-w-md mx-auto">
-          {/* 图标 */}
-          <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-            <AlertCircle className="w-8 h-8 text-gray-400 dark:text-gray-500" />
-          </div>
-
-          {/* 文本内容 */}
-          <div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">
-              {content.title}
-            </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{content.description}</p>
-          </div>
-
-          {/* 快速操作按钮 */}
-          {hasFilters && (onClearFilters || onRefresh) && (
-            <div className="flex gap-2 mt-2">
-              {onClearFilters && (
-                <Button variant="outline" onClick={onClearFilters}>
-                  <X className="w-4 h-4 mr-2" />
-                  清除筛选
-                </Button>
-              )}
-              {onRefresh && (
-                <Button variant="default" onClick={onRefresh}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  刷新数据
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
+        {body}
       </CardContent>
     </Card>
   )
 })
+
+ExecutionEmptyState.displayName = 'ExecutionEmptyState'

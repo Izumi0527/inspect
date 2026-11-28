@@ -1905,11 +1905,32 @@ func buildStatisticsReportDataFromDB(ctx context.Context, db *gorm.DB, report Re
 	var avgUptime float64
 	_ = db.WithContext(ctx).Table("devices").Select("AVG(uptime) AS avg_uptime").Scan(&avgUptime).Error
 
-	var totalExecutions int64
-	_ = db.WithContext(ctx).Table("inspections").Where("created_at BETWEEN ? AND ?", start, end).Count(&totalExecutions).Error
+	const reportExecutionGroupKeyExpr = `CASE WHEN batch_id IS NOT NULL AND batch_id <> '' ` +
+		`THEN 'b:' || batch_id ` +
+		`ELSE 'l:' || COALESCE(CAST(schedule_id AS VARCHAR(255)), '0') || ':' || COALESCE(name, '') || ':' || COALESCE(CAST(created_at AS VARCHAR(255)), '') END`
 
-	var avgScore float64
-	_ = db.WithContext(ctx).Table("inspections").Select("AVG(score) AS avg_score").Scan(&avgScore).Error
+	subExecutions := db.WithContext(ctx).
+		Table("inspections").
+		Select(reportExecutionGroupKeyExpr+" AS group_key, "+
+			"CASE WHEN SUM(CASE WHEN status IN ('running', 'pending') THEN 1 ELSE 0 END) = 0 AND SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END AS batch_completed, "+
+			"CASE WHEN SUM(passed_checks + failed_checks + warning_checks) > 0 THEN SUM(passed_checks)::float / SUM(passed_checks + failed_checks + warning_checks) * 100 ELSE NULL END AS batch_score").
+		Where("started_at >= ? AND started_at <= ?", start, end).
+		Group(reportExecutionGroupKeyExpr)
+
+	type inspectionOverviewAgg struct {
+		TotalExecutions int     `gorm:"column:total_executions"`
+		AvgScore        float64 `gorm:"column:avg_score"`
+	}
+	inspAgg := inspectionOverviewAgg{}
+	if err := db.WithContext(ctx).
+		Table("(?) AS batch_stats", subExecutions).
+		Select("COUNT(*) AS total_executions, COALESCE(AVG(CASE WHEN batch_completed = 1 THEN batch_score ELSE NULL END), 0) AS avg_score").
+		Scan(&inspAgg).Error; err != nil {
+		return data, err
+	}
+
+	totalExecutions := int64(inspAgg.TotalExecutions)
+	avgScore := inspAgg.AvgScore
 
 	overview := StatisticsOverview{
 		TotalDevices:    int(totalDevices),

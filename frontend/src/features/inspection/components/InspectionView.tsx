@@ -199,10 +199,10 @@ export const InspectionView: React.FC = () => {
 
         {/* 标签导航 */}
       <Card className="flex-1 flex flex-col overflow-hidden min-h-0">
-        <CardHeader className="pb-0">
+        <CardHeader className="pb-3 border-b border-border">
           <div className="flex flex-col sm:flex-row gap-3 justify-between">
             {/* 标签按钮 */}
-            <div className="flex flex-wrap gap-2">
+            <nav aria-label="巡检管理视图" className="flex flex-wrap gap-2">
               {tabs.map((tab) => {
                 const Icon = tab.icon
                 const isActive = activeTab === tab.key
@@ -210,9 +210,12 @@ export const InspectionView: React.FC = () => {
                 return (
                   <motion.button
                     key={tab.key}
+                    type="button"
+                    aria-current={isActive ? 'page' : undefined}
                     onClick={() => setActiveTab(tab.key)}
                     className={`
-                      relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+                      relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer
+                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40
                       transition-all duration-200
                       ${isActive
                         ? 'bg-primary/10 text-primary shadow-sm dark:bg-primary/12'
@@ -233,13 +236,13 @@ export const InspectionView: React.FC = () => {
                   </motion.button>
                 )
               })}
-            </div>
+            </nav>
           </div>
         </CardHeader>
 
         <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden pt-4">
           {/* 标签内容区域：flex-1 min-h-0 确保高度由父容器约束，overflow-y-auto 在界内滚动 */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
             {(Object.keys(mountedTabs) as TabType[]).map((tab) => {
               if (!mountedTabs[tab]) {
                 return null
@@ -252,6 +255,7 @@ export const InspectionView: React.FC = () => {
                   key={tab}
                   hidden={!isActive}
                   aria-hidden={!isActive}
+                  className={isActive ? 'flex-1 min-h-0 flex flex-col' : undefined}
                   initial={isActive ? { opacity: 0, y: 20 } : undefined}
                   animate={isActive ? { opacity: 1, y: 0 } : undefined}
                   exit={isActive ? { opacity: 0, y: -20 } : undefined}

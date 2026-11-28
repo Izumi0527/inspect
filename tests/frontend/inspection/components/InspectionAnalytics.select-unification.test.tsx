@@ -4,8 +4,6 @@ import userEvent from '@testing-library/user-event'
 import * as inspectionHooks from '@/features/inspection/hooks/useInspection'
 import { InspectionAnalytics } from '@/features/inspection/components/InspectionAnalytics'
 
-const mockSharedSelect = jest.fn()
-
 jest.mock('@/features/inspection/hooks/useInspection', () => ({
   useInspectionTrends: jest.fn(),
   useInspectionStats: jest.fn(),
@@ -28,8 +26,6 @@ jest.mock('react-hot-toast', () => ({
 
 jest.mock('@/components/atoms', () => ({
   Card: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  CardHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  CardTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   CardContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Button: ({
     children,
@@ -44,38 +40,11 @@ jest.mock('@/components/atoms', () => ({
   ),
   LineChartComponent: () => <div>LineChartComponent</div>,
   AreaChartComponent: () => <div>AreaChartComponent</div>,
-  BarChartComponent: () => <div>BarChartComponent</div>,
   PieChartComponent: () => <div>PieChartComponent</div>,
 }))
 
-jest.mock(
-  '@/components/atoms/shared-select',
-  () => ({
-    SharedSelect: (props: {
-      value?: string
-      options: Array<{ value: string; label: React.ReactNode }>
-      onChange?: (value: string) => void
-      ariaLabel?: string
-    }) => {
-      mockSharedSelect(props)
-      return (
-        <button
-          type="button"
-          data-testid="inspection-analytics-shared-select"
-          aria-label={props.ariaLabel}
-          onClick={() => props.onChange?.('month')}
-        >
-          {`共享下拉:${props.value}`}
-        </button>
-      )
-    },
-  }),
-  { virtual: true }
-)
-
-describe('InspectionAnalytics 下拉统一化', () => {
+describe('InspectionAnalytics 时间周期分段器', () => {
   beforeEach(() => {
-    mockSharedSelect.mockReset()
     ;(inspectionHooks.useInspectionStats as jest.Mock).mockReturnValue({
       data: {
         executionCount: 10,
@@ -120,30 +89,29 @@ describe('InspectionAnalytics 下拉统一化', () => {
     })
   })
 
-  it('应使用共享 SharedSelect 实现时间周期选择，并保持 period 参数更新', async () => {
+  it('应使用 h-9 内联时间周期分段器，不再渲染原生 select 或 combobox，并同步更新 period', async () => {
     const user = userEvent.setup()
-    render(<InspectionAnalytics />)
+    const { container } = render(<InspectionAnalytics />)
 
-    expect(screen.getByTestId('inspection-analytics-shared-select')).toBeInTheDocument()
-    expect(mockSharedSelect).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        value: 'week',
-        ariaLabel: '巡检分析时间周期',
-        triggerClassName: expect.stringContaining('h-9'),
-        options: [
-          { value: 'day', label: '按天' },
-          { value: 'week', label: '按周' },
-          { value: 'month', label: '按月' },
-        ],
-      })
-    )
+    expect(container.querySelector('select')).toBeNull()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
 
-    await user.click(screen.getByTestId('inspection-analytics-shared-select'))
+    const periodGroup = screen.getByRole('group', { name: '巡检分析时间周期' })
+    expect(periodGroup).toBeInTheDocument()
+    expect(periodGroup).toHaveClass('h-9')
+
+    const weekBtn = screen.getByRole('button', { name: '按周' })
+    const monthBtn = screen.getByRole('button', { name: '按月' })
+    expect(weekBtn).toHaveClass('h-7')
+    expect(weekBtn).toHaveAttribute('aria-pressed', 'true')
+    expect(monthBtn).toHaveAttribute('aria-pressed', 'false')
+
+    await user.click(monthBtn)
 
     await waitFor(() => {
       const latestCall = (inspectionHooks.useInspectionTrends as jest.Mock).mock.calls.at(-1)
       expect(latestCall?.[0]).toEqual(expect.objectContaining({ period: 'month' }))
     })
+    expect(screen.getByRole('button', { name: '按月' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
-

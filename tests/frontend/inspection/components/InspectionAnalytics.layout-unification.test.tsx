@@ -25,20 +25,24 @@ jest.mock('react-hot-toast', () => ({
 
 jest.mock('@/components/shared', () => ({
   CompactPageToolbar: ({
+    layout,
+    filters,
     secondaryActions,
     primaryActions,
-    customActions,
     testIdPrefix,
   }: {
+    layout?: string
+    filters?: React.ReactNode
     secondaryActions?: Array<{ key: string; label: string }>
     primaryActions?: Array<{ key: string; label: string }>
-    customActions?: React.ReactNode
     testIdPrefix?: string
   }) => (
-    <div data-testid={`${testIdPrefix ?? 'toolbar'}-end-group`}>
-      {secondaryActions?.map((action) => <span key={action.key}>{action.label}</span>)}
-      {primaryActions?.map((action) => <span key={action.key}>{action.label}</span>)}
-      {customActions}
+    <div data-testid={`${testIdPrefix ?? 'toolbar'}-${layout ?? 'end'}-group`}>
+      <div>{filters}</div>
+      <div>
+        {secondaryActions?.map((action) => <span key={action.key}>{action.label}</span>)}
+        {primaryActions?.map((action) => <span key={action.key}>{action.label}</span>)}
+      </div>
     </div>
   ),
   CompactStatCard: ({
@@ -47,13 +51,16 @@ jest.mock('@/components/shared', () => ({
   }: {
     title: string
     value: React.ReactNode
-  }) => <div>{`${title}:${value}`}</div>,
+  }) => (
+    <div>
+      <span>{title}</span>
+      <span>{value}</span>
+    </div>
+  ),
 }))
 
 jest.mock('@/components/atoms', () => ({
   Card: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  CardHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  CardTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   CardContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Button: ({
     children,
@@ -68,16 +75,7 @@ jest.mock('@/components/atoms', () => ({
   ),
   LineChartComponent: () => <div>LineChartComponent</div>,
   AreaChartComponent: () => <div>AreaChartComponent</div>,
-  BarChartComponent: () => <div>BarChartComponent</div>,
   PieChartComponent: () => <div>PieChartComponent</div>,
-}))
-
-jest.mock('@/components/atoms/shared-select', () => ({
-  SharedSelect: ({
-    ariaLabel,
-  }: {
-    ariaLabel?: string
-  }) => <button type="button" aria-label={ariaLabel}>时间周期</button>,
 }))
 
 describe('InspectionAnalytics 布局统一', () => {
@@ -128,16 +126,24 @@ describe('InspectionAnalytics 布局统一', () => {
     })
   })
 
-  it('应将操作栏和统计卡片统一到共享页面规格', () => {
+  it('应使用左右均衡工具栏、周期分段器与一体化单行指标条', () => {
     render(<InspectionAnalytics />)
 
-    expect(screen.getByTestId('inspection-analytics-toolbar-end-group')).toBeInTheDocument()
+    expect(screen.getByTestId('inspection-analytics-toolbar-between-group')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: '巡检分析时间周期' })).toBeInTheDocument()
+    expect(screen.getByTestId('analytics-date-range')).toBeInTheDocument()
     expect(screen.getByText('刷新')).toBeInTheDocument()
     expect(screen.getByText('导出报告')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '巡检分析时间周期' })).toBeInTheDocument()
-    expect(screen.getByText('执行次数:12')).toBeInTheDocument()
-    expect(screen.getByText('成功率:96.2%')).toBeInTheDocument()
-    expect(screen.getByText('平均评分:88.5')).toBeInTheDocument()
-    expect(screen.getByText('活跃策略:4')).toBeInTheDocument()
+
+    const kpiStrip = screen.getByTestId('analytics-kpi-strip')
+    expect(kpiStrip).toBeInTheDocument()
+    expect(kpiStrip).toHaveTextContent('执行次数')
+    expect(kpiStrip).toHaveTextContent('12')
+    expect(kpiStrip).toHaveTextContent('成功率')
+    expect(kpiStrip).toHaveTextContent('96.2%')
+    expect(kpiStrip).toHaveTextContent('平均评分')
+    expect(kpiStrip).toHaveTextContent('88.5')
+    expect(kpiStrip).toHaveTextContent('活跃策略')
+    expect(kpiStrip).toHaveTextContent('4')
   })
 })

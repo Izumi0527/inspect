@@ -1,6 +1,7 @@
 import {
   copyInspectionTemplate,
   exportAnalyticsReport,
+  fetchInspectionStats,
   fetchInspectionStrategies,
   fetchInspectionTemplate,
 } from '@/features/inspection/api/inspection.api'
@@ -201,5 +202,67 @@ describe('inspection.api exportAnalyticsReport', () => {
     expect(headers.Authorization).toBeUndefined()
 
     expect(appendedAnchor?.download).toBe('巡检统计分析报告_20260510143005.pdf')
+    expect(window.URL.revokeObjectURL).not.toHaveBeenCalled()
+    jest.advanceTimersByTime(60_000)
+    expect(window.URL.revokeObjectURL).toHaveBeenCalledWith('blob:inspection-report')
+  })
+
+  it('Excel 导出在包含畸形 content-disposition 时应安全回退文件名而不抛错', async () => {
+    jest.useFakeTimers().setSystemTime(new Date(2026, 4, 10, 14, 30, 5))
+    ;(global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      headers: {
+        get: (headerName: string) =>
+          headerName.toLowerCase() === 'content-disposition'
+            ? 'attachment; filename="%E0%A4%A_report.xlsx"; size=123'
+            : null,
+      },
+      blob: async () => new Blob(['xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    } as Partial<Response>)
+
+    await exportAnalyticsReport({
+      period: 'day',
+      formatType: 'excel',
+    })
+
+    expect(appendedAnchor?.download).toBe('%E0%A4%A_report.xlsx')
+  })
+
+  it('Excel 导出在缺少 content-disposition 时应回退为 .xlsx 后缀而非 .excel', async () => {
+    jest.useFakeTimers().setSystemTime(new Date(2026, 4, 10, 14, 30, 5))
+    ;(global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      headers: {
+        get: () => null,
+      },
+      blob: async () => new Blob(['xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    } as Partial<Response>)
+
+    await exportAnalyticsReport({
+      period: 'day',
+      formatType: 'excel',
+    })
+
+    expect(appendedAnchor?.download).toBe('巡检统计分析报告_20260510143005.xlsx')
+  })
+})
+
+describe('inspection.api fetchInspectionStats', () => {
+  it('字符串 range 参数应经 URL 编码后拼接请求路径', async () => {
+    const { api } = jest.requireMock('@/lib/api-client') as { api: { get: jest.Mock } }
+    api.get.mockResolvedValue({
+      data: {
+        totalStrategies: 1,
+        activeStrategies: 1,
+        executionCount: 2,
+        successRate: 100,
+        avgScore: 95,
+        changes: {},
+        recentExecutions: [],
+      },
+    })
+
+    await fetchInspectionStats('7d&extra=1')
+    expect(api.get).toHaveBeenCalledWith('/inspection/stats?range=7d%26extra%3D1')
   })
 })

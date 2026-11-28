@@ -1631,7 +1631,7 @@ export async function fetchInspectionStats(params?: string | InspectionAnalytics
       }
 
       if (typeof params === 'string') {
-        return `/inspection/stats?range=${params}`
+        return `/inspection/stats?range=${encodeURIComponent(params)}`
       }
 
       const searchParams = new URLSearchParams()
@@ -1755,8 +1755,10 @@ const formatDateTimeForReportFilename = (date: Date): string => {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
 }
 
-const buildAnalyticsReportFilename = (formatType: 'excel' | 'pdf'): string =>
-  `巡检统计分析报告_${formatDateTimeForReportFilename(new Date())}.${formatType}`
+const buildAnalyticsReportFilename = (formatType: 'excel' | 'pdf'): string => {
+  const ext = formatType === 'excel' ? 'xlsx' : formatType
+  return `巡检统计分析报告_${formatDateTimeForReportFilename(new Date())}.${ext}`
+}
 
 export async function exportAnalyticsReport(params: {
   period: 'day' | 'week' | 'month'
@@ -1789,9 +1791,14 @@ export async function exportAnalyticsReport(params: {
     const contentDisposition = response.headers.get('content-disposition')
     let filename = buildAnalyticsReportFilename(formatType)
     if (formatType !== 'pdf' && contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename="?(.+)"?/)
-      if (filenameMatch) {
-        filename = decodeURIComponent(filenameMatch[1])
+      const filenameMatch = contentDisposition.match(/filename\*?=(?:UTF-8'')?"?([^";\r\n]+)"?/i)
+      if (filenameMatch?.[1]) {
+        const rawName = filenameMatch[1].trim()
+        try {
+          filename = decodeURIComponent(rawName).replace(/[/\\]/g, '_') || filename
+        } catch {
+          filename = rawName.replace(/[/\\]/g, '_') || filename
+        }
       }
     }
 
@@ -1803,8 +1810,8 @@ export async function exportAnalyticsReport(params: {
     a.download = filename
     document.body.appendChild(a)
     a.click()
-    window.URL.revokeObjectURL(url)
     document.body.removeChild(a)
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000)
   } catch (error) {
     console.error('导出分析报告失败:', error)
     throw error

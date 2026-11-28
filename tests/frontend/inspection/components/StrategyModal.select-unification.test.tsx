@@ -289,4 +289,19 @@ describe('StrategyModal 下拉统一化', () => {
     expect(screen.getByText(/出口路由器（路由器）/)).toBeInTheDocument()
     expect(mockUpdateStrategy).not.toHaveBeenCalled()
   })
+
+  it('清空执行时刻后不应静默回退并应阻止保存', async () => {
+    const user = userEvent.setup()
+    render(<StrategyModal strategy={null} onClose={jest.fn()} onSuccess={jest.fn()} />)
+
+    await user.type(screen.getByPlaceholderText('请输入策略名称'), '未设时刻策略')
+    await user.click(screen.getByRole('radio', { name: /模板A/ }))
+    await user.click(screen.getByRole('checkbox', { name: /设备A/ }))
+    await user.clear(screen.getByLabelText('执行时刻'))
+
+    await user.click(screen.getByRole('button', { name: '创建策略' }))
+
+    expect(screen.getAllByText('请选择执行时刻').length).toBeGreaterThanOrEqual(1)
+    expect(mockCreateStrategy).not.toHaveBeenCalled()
+  })
 })

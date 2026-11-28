@@ -157,4 +157,35 @@ describe('CreateTemplateWizard 检查项', () => {
       checkItems: [expect.objectContaining({ name: '数据盘', type: 'snmp', metric: 'disk_usage' })],
     }))
   })
+
+  it('仅填警告阈值时应阻断保存，清空两侧阈值后应移除 threshold 对象', async () => {
+    const user = userEvent.setup()
+    render(<CreateTemplateWizard onClose={jest.fn()} onSuccess={jest.fn()} />)
+    await gotoCheckItemStep(user)
+
+    await user.click(screen.getByRole('button', { name: /添加检查项/ }))
+    await user.type(screen.getByPlaceholderText('例如：CPU 使用率'), '内存')
+    await user.click(screen.getByRole('combobox', { name: '采集指标' }))
+    await user.click(screen.getByRole('option', { name: /磁盘使用率/ }))
+
+    const warningInput = screen.getByLabelText('警告阈值')
+    const criticalInput = screen.getByLabelText('严重阈值')
+
+    await user.type(warningInput, '75')
+    await user.click(screen.getByRole('button', { name: /下一步/ }))
+    expect(screen.getByText('警告阈值和严重阈值需同时填写，或全部留空')).toBeInTheDocument()
+
+    // 填齐后可清空两侧，保存 payload 不含残余空 threshold
+    await user.type(criticalInput, '90')
+    await user.clear(warningInput)
+    await user.clear(criticalInput)
+    await user.click(screen.getByRole('button', { name: /下一步/ }))
+    await user.click(screen.getByRole('button', { name: /创建模板/ }))
+
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      checkItems: [
+        expect.not.objectContaining({ config: expect.objectContaining({ threshold: expect.anything() }) }),
+      ],
+    }))
+  })
 })

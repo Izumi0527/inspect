@@ -1,5 +1,5 @@
 import React from 'react'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { InspectionTemplates } from '@/features/inspection/components/InspectionTemplates'
 
@@ -315,7 +315,7 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
     })
   })
 
-  it('分页后统计卡片应基于当前筛选结果全集，而不是当前页数据', () => {
+  it('分页后来源分段计数应基于当前筛选结果全集，而不是当前页数据', () => {
     const pagedTemplates = Array.from({ length: 10 }, (_, index) =>
       buildTemplate(String(index + 1), `模板${index + 1}`, {
         isBuiltIn: true,
@@ -344,14 +344,10 @@ describe('InspectionTemplates 每页条数下拉统一化', () => {
 
     render(<InspectionTemplates />)
 
-    expect(screen.getByText('全部模板')).toBeInTheDocument()
-    expect(screen.getByText('19')).toBeInTheDocument()
-    expect(screen.getByText('内置模板')).toBeInTheDocument()
-    expect(screen.getByText('12')).toBeInTheDocument()
-    expect(screen.getByText('自定义模板')).toBeInTheDocument()
-    expect(screen.getByText('7')).toBeInTheDocument()
-    expect(screen.getByText('已启用')).toBeInTheDocument()
-    expect(screen.getByText('15')).toBeInTheDocument()
+    const sourceGroup = screen.getByRole('group', { name: '按模板来源筛选' })
+    expect(within(sourceGroup).getByText('19')).toBeInTheDocument()
+    expect(within(sourceGroup).getByText('12')).toBeInTheDocument()
+    expect(within(sourceGroup).getByText('7')).toBeInTheDocument()
     expect(mockUseInspectionTemplateStats).toHaveBeenCalled()
   })
 

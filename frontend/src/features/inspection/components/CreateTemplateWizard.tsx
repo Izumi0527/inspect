@@ -1,12 +1,11 @@
 /**
  * 创建模板向导组件
- * 采用分步向导式设计，提供更好的用户体验
+ * 采用分步向导式设计，统一接入 SimpleModal 与三皮肤语义令牌
  */
 
 import React, { useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  X,
   ChevronLeft,
   ChevronRight,
   Check,
@@ -21,34 +20,43 @@ import {
   Info,
   Zap,
   Eye,
-  Save
+  Save,
 } from 'lucide-react'
 import {
   Button,
   SimpleInput as Input,
   Badge,
   Card,
-  CardContent
+  CardContent,
 } from '@/components/atoms'
+import { TextArea } from '@/components/atoms/input'
+import { SimpleModal } from '@/components/atoms/modal'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
+  SelectValue,
 } from '@/components/ui/select'
+import { cn } from '@/utils/cn'
 import {
   INSPECTABLE_DEVICE_TYPE_OPTIONS,
   getDeviceTypeLabel,
-  isInspectableDeviceType
+  isInspectableDeviceType,
 } from '@/utils/deviceTypes'
-import { useCreateTemplate, useUpdateTemplate, useInspectionTemplates } from '../hooks/useInspection'
+import {
+  useCreateTemplate,
+  useUpdateTemplate,
+  useInspectionTemplates,
+} from '../hooks/useInspection'
 import { isCheckItemTypeSupported } from '../utils/check-item-support'
-import type { InspectionTemplate, InspectionCheckItem, CheckItemType, TemplateCategory } from '../types'
-
-// ============================================================================
-// 类型定义
-// ============================================================================
+import { getCategoryMeta, getCheckTypeMeta } from '../utils/templatePresentation'
+import type {
+  InspectionTemplate,
+  InspectionCheckItem,
+  CheckItemType,
+  TemplateCategory,
+} from '../types'
 
 interface Props {
   template?: InspectionTemplate | null
@@ -68,60 +76,96 @@ interface TemplateFormData {
 interface StepProps {
   formData: TemplateFormData
   errors: Record<string, string>
-  onChange: <K extends keyof TemplateFormData>(field: K, value: TemplateFormData[K]) => void
+  onChange: <K extends keyof TemplateFormData>(
+    field: K,
+    value: TemplateFormData[K]
+  ) => void
   onValidate?: () => boolean
-  /** 编辑的存量模板不满足「恰好一种可巡检类型」时，原先声明的类型（用于提示重选） */
   legacyDeviceTypes?: string[]
 }
-
-// ============================================================================
-// 常量配置
-// ============================================================================
 
 const STEPS = [
   { id: 1, title: '基本信息', icon: FileText, description: '设置模板名称和分类' },
   { id: 2, title: '设备类型', icon: Monitor, description: '选择模板适用的设备类型' },
   { id: 3, title: '检查项', icon: Settings, description: '配置巡检检查项' },
-  { id: 4, title: '预览确认', icon: Eye, description: '确认模板配置' }
+  { id: 4, title: '预览确认', icon: Eye, description: '确认模板配置' },
 ]
 
 const CATEGORY_OPTIONS = [
-  { value: 'network', label: '网络监控', icon: Monitor, color: 'blue', description: '网络设备状态、流量、连通性检查' },
-  { value: 'system', label: '系统检查', icon: Settings, color: 'green', description: 'CPU、内存、磁盘等系统资源检查' },
-  { value: 'security', label: '安全检测', icon: Shield, color: 'red', description: '安全策略、漏洞、配置合规检查' },
-  { value: 'custom', label: '自定义', icon: FileText, color: 'purple', description: '自定义检查项组合' }
+  {
+    value: 'network',
+    label: '网络监控',
+    icon: Monitor,
+    chipClass: 'bg-info-soft text-info-soft-foreground',
+    description: '网络设备状态、流量、连通性检查',
+  },
+  {
+    value: 'system',
+    label: '系统检查',
+    icon: Settings,
+    chipClass: 'bg-surface-2 text-foreground',
+    description: 'CPU、内存、磁盘等系统资源检查',
+  },
+  {
+    value: 'security',
+    label: '安全检测',
+    icon: Shield,
+    chipClass: 'bg-warning-soft text-warning-soft-foreground',
+    description: '安全策略、漏洞、配置合规检查',
+  },
+  {
+    value: 'custom',
+    label: '自定义',
+    icon: FileText,
+    chipClass: 'bg-primary/10 text-primary',
+    description: '自定义检查项组合',
+  },
 ] as const
 
-// Tailwind 动态拼接 class 在生产构建可能被裁剪，这里用静态映射确保样式稳定
-const CATEGORY_COLOR_CLASS = {
-  blue: { bg: 'bg-blue-100 dark:bg-blue-900/30', text600: 'text-blue-600' },
-  green: { bg: 'bg-green-100 dark:bg-green-900/30', text600: 'text-green-600' },
-  red: { bg: 'bg-red-100 dark:bg-red-900/30', text600: 'text-red-600' },
-  purple: { bg: 'bg-purple-100 dark:bg-purple-900/30', text600: 'text-purple-600' },
-  gray: { bg: 'bg-gray-100 dark:bg-gray-900/30', text600: 'text-gray-600' }
-} as const
-
-type CategoryColor = keyof typeof CATEGORY_COLOR_CLASS
-
-const getCategoryColorClass = (color?: string) => {
-  if (!color) return CATEGORY_COLOR_CLASS.gray
-  return CATEGORY_COLOR_CLASS[color as CategoryColor] ?? CATEGORY_COLOR_CLASS.gray
-}
-
-// 四类可巡检设备的图标；取值与中文名来自 utils/deviceTypes
+// 四类可巡检设备的图标；取值与中文名来自 utils/deviceTypes（单选文案契约）
 const DEVICE_TYPE_ICONS: Record<string, string> = {
   switch: '🔀',
   router: '🌐',
   firewall: '🛡️',
-  server: '🖥️'
+  server: '🖥️',
 }
 
-const CHECK_TYPE_OPTIONS: { value: CheckItemType; label: string; description: string; icon: string; supported: boolean }[] = [
-  { value: 'snmp', label: 'SNMP', description: '通过 SNMP 协议获取设备信息', icon: '📊', supported: isCheckItemTypeSupported('snmp') },
-  { value: 'ping', label: 'Ping', description: '检测设备连通性', icon: '📶', supported: isCheckItemTypeSupported('ping') },
-  { value: 'ssh', label: 'SSH', description: '通过 SSH 执行命令获取信息（当前版本不执行）', icon: '💻', supported: isCheckItemTypeSupported('ssh') },
-  { value: 'http', label: 'HTTP', description: '通过 HTTP 接口获取信息（当前版本不执行）', icon: '🌍', supported: isCheckItemTypeSupported('http') },
-  { value: 'script', label: 'Script', description: '执行自定义脚本（当前版本不执行）', icon: '📜', supported: isCheckItemTypeSupported('script') }
+const CHECK_TYPE_OPTIONS: {
+  value: CheckItemType
+  label: string
+  description: string
+  supported: boolean
+}[] = [
+  {
+    value: 'snmp',
+    label: 'SNMP',
+    description: '通过 SNMP 协议获取设备信息',
+    supported: isCheckItemTypeSupported('snmp'),
+  },
+  {
+    value: 'ping',
+    label: 'Ping',
+    description: '检测设备连通性',
+    supported: isCheckItemTypeSupported('ping'),
+  },
+  {
+    value: 'ssh',
+    label: 'SSH',
+    description: '通过 SSH 执行命令获取信息（当前版本不执行）',
+    supported: isCheckItemTypeSupported('ssh'),
+  },
+  {
+    value: 'http',
+    label: 'HTTP',
+    description: '通过 HTTP 接口获取信息（当前版本不执行）',
+    supported: isCheckItemTypeSupported('http'),
+  },
+  {
+    value: 'script',
+    label: 'Script',
+    description: '执行自定义脚本（当前版本不执行）',
+    supported: isCheckItemTypeSupported('script'),
+  },
 ]
 
 const OID_PATTERN = /^[0-9]+(\.[0-9]+)*$/
@@ -131,21 +175,16 @@ interface MetricOption {
   label: string
 }
 
-/**
- * 检查项的维度键：ping/icmp 没有 metric，统一记为 connectivity；其余取 metric。
- * 与后端 CheckItemDimensionKey 同一口径，用于「从内置模板添加」时去重。
- */
 const checkItemKey = (item: InspectionCheckItem): string =>
   item.type === 'ping' ? 'connectivity' : (item.metric ?? '').trim().toLowerCase()
 
-/**
- * SNMP 采集指标的可选项，取自后端内置模板的检查项（单一来源）：后端新增指标并
- * 写进内置模板后，这里自动出现，无需前端再维护一份清单。所选设备类型的模板排在前面。
- */
-const buildMetricOptions = (templates: InspectionTemplate[], deviceType?: string): MetricOption[] => {
+const buildMetricOptions = (
+  templates: InspectionTemplate[],
+  deviceType?: string
+): MetricOption[] => {
   const ordered = [
-    ...templates.filter(t => deviceType && t.deviceTypes.includes(deviceType)),
-    ...templates.filter(t => !deviceType || !t.deviceTypes.includes(deviceType))
+    ...templates.filter((t) => deviceType && t.deviceTypes.includes(deviceType)),
+    ...templates.filter((t) => !deviceType || !t.deviceTypes.includes(deviceType)),
   ]
   const seen = new Set<string>()
   const options: MetricOption[] = []
@@ -160,12 +199,6 @@ const buildMetricOptions = (templates: InspectionTemplate[], deviceType?: string
   return options
 }
 
-// ============================================================================
-// 工具函数
-// ============================================================================
-
-// 每个模板只能适用一种可巡检设备类型：存量模板声明了多种、未声明或声明了不可巡检的
-// 类型时，编辑时清空并要求重选（后端保存时同样会拒绝）。
 const initialDeviceTypes = (deviceTypes: string[]): string[] =>
   deviceTypes.length === 1 && isInspectableDeviceType(deviceTypes[0])
     ? [deviceTypes[0].trim().toLowerCase()]
@@ -177,10 +210,11 @@ const createInitialFormState = (): TemplateFormData => ({
   category: 'custom',
   deviceTypes: [],
   checkItems: [],
-  isActive: true
+  isActive: true,
 })
 
-const generateCheckItemId = () => `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+const generateCheckItemId = () =>
+  `item-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
 
 // ============================================================================
 // Step 1: 基本信息
@@ -188,55 +222,70 @@ const generateCheckItemId = () => `item-${Date.now()}-${Math.random().toString(3
 
 const StepBasicInfo: React.FC<StepProps> = ({ formData, errors, onChange }) => {
   return (
-    <div className="space-y-6">
-      {/* 模板名称 */}
+    <div className="space-y-5">
       <div>
-        <label className="block text-sm font-medium text-foreground/90 mb-2">
-          模板名称 <span className="text-red-500">*</span>
+        <label
+          htmlFor="wizard-template-name"
+          className="block text-sm font-medium text-foreground mb-1.5"
+        >
+          模板名称 <span className="text-danger">*</span>
         </label>
         <Input
+          id="wizard-template-name"
           value={formData.name}
           onChange={(e) => onChange('name', e.target.value)}
           placeholder="例如：Huawei 路由器标准巡检模板"
-          className={errors.name ? 'border-red-500' : ''}
+          className={errors.name ? 'border-danger' : ''}
           maxLength={100}
         />
         <div className="flex justify-between mt-1">
-          {errors.name && (
-            <p className="text-sm text-red-500">{errors.name}</p>
-          )}
-          <span className={`text-xs ml-auto ${formData.name.length > 80 ? 'text-orange-500' : 'text-gray-400'}`}>
+          {errors.name && <p className="text-xs text-danger">{errors.name}</p>}
+          <span
+            className={cn(
+              'text-xs ml-auto tabular-nums',
+              formData.name.length > 80 ? 'text-warning' : 'text-muted-foreground'
+            )}
+          >
             {formData.name.length}/100
           </span>
         </div>
       </div>
 
-      {/* 模板描述 */}
       <div>
-        <label className="block text-sm font-medium text-foreground/90 mb-2">
+        <label
+          htmlFor="wizard-template-desc"
+          className="block text-sm font-medium text-foreground mb-1.5"
+        >
           模板描述
         </label>
-        <textarea
+        <TextArea
+          id="wizard-template-desc"
           value={formData.description}
           onChange={(e) => onChange('description', e.target.value)}
           placeholder="描述此模板的用途、适用场景等信息..."
-          className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 resize-none"
+          className="min-h-[84px] px-3 py-2"
           rows={3}
           maxLength={500}
         />
         <div className="flex justify-end mt-1">
-          <span className={`text-xs ${formData.description.length > 400 ? 'text-orange-500' : 'text-gray-400'}`}>
+          <span
+            className={cn(
+              'text-xs tabular-nums',
+              formData.description.length > 400
+                ? 'text-warning'
+                : 'text-muted-foreground'
+            )}
+          >
             {formData.description.length}/500
           </span>
         </div>
       </div>
 
-      {/* 模板分类 */}
       <div>
-        <label className="block text-sm font-medium text-foreground/90 mb-3">
-          模板分类 <span className="text-red-500">*</span>
+        <label className="block text-sm font-medium text-foreground mb-2.5">
+          模板分类 <span className="text-danger">*</span>
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {CATEGORY_OPTIONS.map((option) => {
             const isSelected = formData.category === option.value
             const Icon = option.icon
@@ -245,22 +294,30 @@ const StepBasicInfo: React.FC<StepProps> = ({ formData, errors, onChange }) => {
                 key={option.value}
                 type="button"
                 onClick={() => onChange('category', option.value as TemplateCategory)}
-                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                className={cn(
+                  'p-3.5 rounded-lg border text-left transition-colors cursor-pointer',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
                   isSelected
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-border hover:border-border dark:hover:border-gray-500'
-                }`}
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border bg-card hover:bg-surface-2/60'
+                )}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${
-                    isSelected ? 'bg-blue-100 dark:bg-blue-800' : 'bg-gray-100 dark:bg-gray-700'
-                  }`}>
-                    <Icon className={`w-5 h-5 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`} />
+                  <div
+                    className={cn(
+                      'p-2 rounded-md shrink-0',
+                      isSelected ? 'bg-primary text-primary-foreground' : option.chipClass
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
                   </div>
-                  <div className="font-medium text-foreground">{option.label}</div>
-                  {isSelected && (
-                    <Check className="w-5 h-5 text-blue-600 ml-auto" />
-                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm text-foreground">{option.label}</div>
+                    <div className="text-xs text-muted-foreground truncate mt-0.5">
+                      {option.description}
+                    </div>
+                  </div>
+                  {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
                 </div>
               </button>
             )
@@ -275,16 +332,22 @@ const StepBasicInfo: React.FC<StepProps> = ({ formData, errors, onChange }) => {
 // Step 2: 设备类型
 // ============================================================================
 
-const StepDeviceTypes: React.FC<StepProps> = ({ formData, errors, onChange, legacyDeviceTypes }) => {
+const StepDeviceTypes: React.FC<StepProps> = ({
+  formData,
+  errors,
+  onChange,
+  legacyDeviceTypes,
+}) => {
   const selected = formData.deviceTypes[0]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {legacyDeviceTypes && (
-        <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-800 dark:text-amber-300">
-            该模板原先{legacyDeviceTypes.length > 0
+        <div className="flex items-start gap-2.5 p-3 bg-warning-soft text-warning-soft-foreground rounded-lg">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <p className="text-sm">
+            该模板原先
+            {legacyDeviceTypes.length > 0
               ? `声明适用于 ${legacyDeviceTypes.map(getDeviceTypeLabel).join('、')}`
               : '未声明适用设备类型'}
             。现在每个模板只能适用一种设备类型，请重新选择。
@@ -293,13 +356,17 @@ const StepDeviceTypes: React.FC<StepProps> = ({ formData, errors, onChange, lega
       )}
 
       <div>
-        <label className="block text-sm font-medium text-foreground/90 mb-1">
-          适用设备类型 <span className="text-red-500">*</span>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          适用设备类型 <span className="text-danger">*</span>
         </label>
         <p className="text-xs text-muted-foreground mb-3">
           每个模板只适用一种设备类型，策略与巡检任务只能为该类设备选用此模板。
         </p>
-        <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="适用设备类型">
+        <div
+          className="grid grid-cols-2 gap-3"
+          role="radiogroup"
+          aria-label="适用设备类型"
+        >
           {INSPECTABLE_DEVICE_TYPE_OPTIONS.map((option) => {
             const isSelected = selected === option.value
             return (
@@ -309,14 +376,21 @@ const StepDeviceTypes: React.FC<StepProps> = ({ formData, errors, onChange, lega
                 role="radio"
                 aria-checked={isSelected}
                 onClick={() => onChange('deviceTypes', [option.value])}
-                className={`p-4 rounded-xl border-2 text-center transition-all ${
+                className={cn(
+                  'p-4 rounded-lg border text-center transition-colors cursor-pointer',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
                   isSelected
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-border hover:border-border'
-                }`}
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border bg-card hover:bg-surface-2/60'
+                )}
               >
                 <div className="text-2xl mb-2">{DEVICE_TYPE_ICONS[option.value]}</div>
-                <div className={`font-medium ${isSelected ? 'text-blue-600' : 'text-foreground/90'}`}>
+                <div
+                  className={cn(
+                    'font-medium text-sm',
+                    isSelected ? 'text-primary' : 'text-foreground'
+                  )}
+                >
                   {option.label}
                 </div>
               </button>
@@ -329,17 +403,14 @@ const StepDeviceTypes: React.FC<StepProps> = ({ formData, errors, onChange, lega
       </div>
 
       {errors.deviceTypes && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-500" />
-          <p className="text-sm text-red-600 dark:text-red-400">{errors.deviceTypes}</p>
+        <div className="flex items-center gap-2 p-3 bg-danger-soft text-danger-soft-foreground rounded-lg">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <p className="text-sm">{errors.deviceTypes}</p>
         </div>
       )}
     </div>
   )
 }
-
-export default StepBasicInfo
-
 
 // ============================================================================
 // Step 3: 检查项配置
@@ -360,70 +431,113 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
   onUpdate,
   onDelete,
   isExpanded,
-  onToggleExpand
+  onToggleExpand,
 }) => {
-  const typeOption = CHECK_TYPE_OPTIONS.find(t => t.value === item.type)
+  const typeOption = CHECK_TYPE_OPTIONS.find((t) => t.value === item.type)
+  const typeMeta = getCheckTypeMeta(item.type)
 
   const updateConfig = <K extends keyof NonNullable<InspectionCheckItem['config']>>(
     key: K,
     value: NonNullable<InspectionCheckItem['config']>[K]
   ) => {
     onUpdate({
-      config: { ...item.config, [key]: value }
+      config: { ...item.config, [key]: value },
     })
   }
 
   const updateThreshold = (type: 'warning' | 'critical', value: string) => {
-    const numValue = value ? parseFloat(value) : undefined
-    onUpdate({
-      config: {
-        ...item.config,
-        threshold: {
-          ...item.config.threshold,
-          [type]: numValue
-        }
-      }
-    })
+    const trimmed = value.trim()
+    const parsed = trimmed === '' ? undefined : Number(trimmed)
+    const numValue = parsed !== undefined && Number.isFinite(parsed) ? parsed : undefined
+
+    const nextThreshold: { warning?: number; critical?: number } = {
+      ...item.config.threshold,
+      [type]: numValue,
+    }
+    if (nextThreshold.warning === undefined) {
+      delete nextThreshold.warning
+    }
+    if (nextThreshold.critical === undefined) {
+      delete nextThreshold.critical
+    }
+
+    const nextConfig = { ...item.config }
+    if (Object.keys(nextThreshold).length === 0) {
+      delete nextConfig.threshold
+    } else {
+      nextConfig.threshold = nextThreshold
+    }
+
+    onUpdate({ config: nextConfig })
   }
 
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      {/* 折叠头部 */}
+    <div className="border border-border rounded-lg overflow-hidden bg-card">
       <div
-        className={`flex items-center gap-3 p-4 cursor-pointer transition-colors ${
-          isExpanded ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-card hover:bg-muted/40 dark:hover:bg-gray-700'
-        }`}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
         onClick={onToggleExpand}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onToggleExpand()
+          }
+        }}
+        className={cn(
+          'flex items-center gap-3 p-3.5 cursor-pointer transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+          isExpanded ? 'bg-primary/8' : 'bg-card hover:bg-surface-2/60'
+        )}
       >
-        <GripVertical className="w-4 h-4 text-gray-400 cursor-grab" />
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{typeOption?.icon}</span>
-            <span className="font-medium text-foreground">{item.name || '未命名检查项'}</span>
-            <Badge variant="outline" size="sm">{typeOption?.label || item.type}</Badge>
-            <Badge variant="secondary" size="sm">权重: {item.weight}</Badge>
+        <GripVertical className="w-4 h-4 text-muted-foreground shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-sm text-foreground">
+              {item.name || '未命名检查项'}
+            </span>
+            <Badge variant={typeMeta.badgeVariant} size="sm">
+              {typeOption?.label || item.type}
+            </Badge>
+            <Badge variant="secondary" size="sm" className="tabular-nums">
+              权重: {item.weight}
+            </Badge>
           </div>
           {item.config.oid && (
-            <p className="text-xs text-gray-500 mt-1">OID: {item.config.oid}</p>
+            <p className="text-xs font-mono text-muted-foreground mt-1">
+              OID: {item.config.oid}
+            </p>
           )}
           {item.config.command && (
-            <p className="text-xs text-gray-500 mt-1">命令: {item.config.command}</p>
+            <p className="text-xs font-mono text-muted-foreground mt-1">
+              命令: {item.config.command}
+            </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 shrink-0">
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            onClick={(e) => { e.stopPropagation(); onDelete() }}
+            aria-label="删除检查项"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+            className="cursor-pointer"
           >
-            <Trash2 className="w-4 h-4 text-red-500" />
+            <Trash2 className="w-4 h-4 text-danger" />
           </Button>
-          <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+          <ChevronRight
+            className={cn(
+              'w-4 h-4 text-muted-foreground transition-transform',
+              isExpanded && 'rotate-90'
+            )}
+          />
         </div>
       </div>
 
-      {/* 展开内容 */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
@@ -433,36 +547,44 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="p-4 border-t border-border bg-muted/40 space-y-4">
-              {/* 基本信息 */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-foreground/90 mb-1">
-                    检查项名称 <span className="text-red-500">*</span>
+            <div className="p-4 border-t border-border bg-surface-2/40 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-2">
+                  <label
+                    htmlFor={`${item.id}-name`}
+                    className="block text-sm font-medium text-foreground mb-1"
+                  >
+                    检查项名称 <span className="text-danger">*</span>
                   </label>
                   <Input
+                    id={`${item.id}-name`}
                     value={item.name}
                     onChange={(e) => onUpdate({ name: e.target.value })}
                     placeholder="例如：CPU 使用率"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground/90 mb-1">
+                  <label
+                    htmlFor={`${item.id}-weight`}
+                    className="block text-sm font-medium text-foreground mb-1"
+                  >
                     权重 (1-10)
                   </label>
                   <Input
+                    id={`${item.id}-weight`}
                     type="number"
                     min={1}
                     max={10}
                     value={item.weight}
-                    onChange={(e) => onUpdate({ weight: parseInt(e.target.value) || 1 })}
+                    onChange={(e) =>
+                      onUpdate({ weight: parseInt(e.target.value, 10) || 1 })
+                    }
                   />
                 </div>
               </div>
 
-              {/* 检查类型 */}
               <div>
-                <label className="block text-sm font-medium text-foreground/90 mb-2">
+                <label className="block text-sm font-medium text-foreground mb-2">
                   检查类型
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -476,49 +598,48 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                         disabled={isDisabled}
                         onClick={() => {
                           if (isSelected) return
-                          // metric 只对 SNMP 有意义，换类型时一并清掉，免得残留到非 SNMP 项
                           onUpdate({ type: option.value, config: {}, metric: '' })
                         }}
-                        className={`px-3 py-2 rounded-lg border text-sm transition-all ${
+                        className={cn(
+                          'px-3 py-1.5 rounded-md border text-sm transition-colors',
                           isSelected
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700'
+                            ? 'border-primary bg-primary/10 text-primary font-medium'
                             : isDisabled
-                              ? 'opacity-50 cursor-not-allowed border-border'
-                              : 'border-border hover:border-border'
-                        }`}
+                              ? 'opacity-50 cursor-not-allowed border-border text-muted-foreground'
+                              : 'border-border bg-card text-foreground hover:bg-surface-2 cursor-pointer'
+                        )}
                       >
-                        <span className="mr-1">{option.icon}</span>
                         {option.label}
                         {!option.supported && (
-                          <span className="ml-1 text-xs text-amber-600">暂不支持</span>
+                          <span className="ml-1 text-xs text-warning">暂不支持</span>
                         )}
                       </button>
                     )
                   })}
                 </div>
                 {!isCheckItemTypeSupported(item.type) && (
-                  <p className="text-xs text-amber-700 mt-2">
+                  <p className="text-xs text-warning mt-2">
                     当前版本执行引擎暂不支持该检查类型，执行时将被跳过；建议改为 Ping 或 SNMP。
                   </p>
                 )}
               </div>
 
-              {/* 类型特定配置 */}
               {item.type === 'snmp' && (
-                <div className="space-y-3 p-4 bg-card rounded-lg">
-                  <h5 className="font-medium text-foreground flex items-center gap-2">
-                    <span>📊</span> SNMP 配置
-                  </h5>
+                <div className="space-y-3 p-3.5 bg-card border border-border rounded-lg">
+                  <h5 className="font-medium text-sm text-foreground">SNMP 配置</h5>
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-1">
-                      采集指标 <span className="text-red-500">*</span>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      采集指标 <span className="text-danger">*</span>
                     </label>
                     <Select
                       value={item.metric ?? ''}
                       onValueChange={(metric) => {
-                        // 未命名时带出内置检查项的名称，省得用户再敲一遍
-                        const option = metricOptions.find(o => o.metric === metric)
-                        onUpdate(item.name.trim() || !option ? { metric } : { metric, name: option.label })
+                        const option = metricOptions.find((o) => o.metric === metric)
+                        onUpdate(
+                          item.name.trim() || !option
+                            ? { metric }
+                            : { metric, name: option.label }
+                        )
                       }}
                     >
                       <SelectTrigger aria-label="采集指标">
@@ -532,46 +653,50 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       执行时按采集指标取数与判定，名称可随意修改；采集 OID 由系统按设备厂商自动选择
                     </p>
                   </div>
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-1">
-                      OID（可选）
-                    </label>
-                    <Input
-                      value={item.config.oid || ''}
-                      onChange={(e) => updateConfig('oid', e.target.value)}
-                      placeholder="例如：1.3.6.1.2.1.1.3.0"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">未填写也可执行；填写时仅用于格式校验与字段透传</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-1">
-                      超时时间 (毫秒)
-                    </label>
-                    <Input
-                      type="number"
-                      value={item.config.timeout || ''}
-                      onChange={(e) => updateConfig('timeout', e.target.value ? parseInt(e.target.value) : undefined)}
-                      placeholder="默认 5000"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">
+                        OID（可选）
+                      </label>
+                      <Input
+                        value={item.config.oid || ''}
+                        onChange={(e) => updateConfig('oid', e.target.value)}
+                        placeholder="例如：1.3.6.1.2.1.1.3.0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">
+                        超时时间 (毫秒)
+                      </label>
+                      <Input
+                        type="number"
+                        value={item.config.timeout || ''}
+                        onChange={(e) =>
+                          updateConfig(
+                            'timeout',
+                            e.target.value ? parseInt(e.target.value, 10) : undefined
+                          )
+                        }
+                        placeholder="默认 5000"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
 
               {item.type === 'ssh' && (
-                <div className="space-y-3 p-4 bg-card rounded-lg">
-                  <h5 className="font-medium text-foreground flex items-center gap-2">
-                    <span>💻</span> SSH 配置
-                  </h5>
-                  <p className="text-xs text-amber-700">
+                <div className="space-y-3 p-3.5 bg-card border border-border rounded-lg">
+                  <h5 className="font-medium text-sm text-foreground">SSH 配置</h5>
+                  <p className="text-xs text-warning">
                     提示：当前版本暂不执行 SSH 检查项（执行时会跳过），建议改为 Ping 或 SNMP。
                   </p>
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-1">
-                      执行命令 <span className="text-red-500">*</span>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
+                      执行命令 <span className="text-danger">*</span>
                     </label>
                     <Input
                       value={item.config.command || ''}
@@ -580,13 +705,18 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-1">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
                       超时时间 (毫秒)
                     </label>
                     <Input
                       type="number"
                       value={item.config.timeout || ''}
-                      onChange={(e) => updateConfig('timeout', e.target.value ? parseInt(e.target.value) : undefined)}
+                      onChange={(e) =>
+                        updateConfig(
+                          'timeout',
+                          e.target.value ? parseInt(e.target.value, 10) : undefined
+                        )
+                      }
                       placeholder="默认 30000"
                     />
                   </div>
@@ -594,15 +724,13 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
               )}
 
               {item.type === 'http' && (
-                <div className="space-y-3 p-4 bg-card rounded-lg">
-                  <h5 className="font-medium text-foreground flex items-center gap-2">
-                    <span>🌍</span> HTTP 配置
-                  </h5>
-                  <p className="text-xs text-amber-700">
+                <div className="space-y-3 p-3.5 bg-card border border-border rounded-lg">
+                  <h5 className="font-medium text-sm text-foreground">HTTP 配置</h5>
+                  <p className="text-xs text-warning">
                     提示：当前版本暂不执行 HTTP 检查项（执行时会跳过），建议改为 Ping 或 SNMP。
                   </p>
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-1">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
                       请求 URL（可选）
                     </label>
                     <Input
@@ -612,7 +740,7 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-1">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
                       期望值
                     </label>
                     <Input
@@ -625,39 +753,40 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
               )}
 
               {item.type === 'script' && (
-                <div className="space-y-3 p-4 bg-card rounded-lg">
-                  <h5 className="font-medium text-foreground flex items-center gap-2">
-                    <span>📜</span> 脚本配置
-                  </h5>
-                  <p className="text-xs text-amber-700">
+                <div className="space-y-3 p-3.5 bg-card border border-border rounded-lg">
+                  <h5 className="font-medium text-sm text-foreground">脚本配置</h5>
+                  <p className="text-xs text-warning">
                     提示：当前版本暂不执行脚本检查项（执行时会跳过），建议改为 Ping 或 SNMP。
                   </p>
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-1">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">
                       脚本内容
                     </label>
-                    <textarea
+                    <TextArea
                       value={item.config.script || ''}
                       onChange={(e) => updateConfig('script', e.target.value)}
                       placeholder="输入自定义脚本..."
-                      className="w-full px-3 py-2 border rounded-lg font-mono text-sm dark:bg-gray-800 dark:border-gray-600"
+                      className="font-mono text-sm min-h-[96px] px-3 py-2"
                       rows={4}
                     />
                   </div>
                 </div>
               )}
 
-              {/* 阈值配置 */}
-              <div className="p-4 bg-card rounded-lg">
-                <h5 className="font-medium text-foreground mb-3 flex items-center gap-2">
-                  <span>⚡</span> 阈值配置 (可选)
+              <div className="p-3.5 bg-card border border-border rounded-lg">
+                <h5 className="font-medium text-sm text-foreground mb-3">
+                  阈值配置 (可选)
                 </h5>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-1">
+                    <label
+                      htmlFor={`${item.id}-threshold-warning`}
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
                       警告阈值
                     </label>
                     <Input
+                      id={`${item.id}-threshold-warning`}
                       type="number"
                       step="0.01"
                       value={item.config.threshold?.warning ?? ''}
@@ -666,10 +795,14 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-1">
+                    <label
+                      htmlFor={`${item.id}-threshold-critical`}
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
                       严重阈值
                     </label>
                     <Input
+                      id={`${item.id}-threshold-critical`}
                       type="number"
                       step="0.01"
                       value={item.config.threshold?.critical ?? ''}
@@ -678,9 +811,9 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
                     />
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  <Info className="w-3 h-3 inline mr-1" />
-                  警告阈值应小于严重阈值
+                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                  <Info className="w-3.5 h-3.5" />
+                  <span>警告阈值应小于严重阈值</span>
                 </p>
               </div>
             </div>
@@ -694,17 +827,24 @@ const CheckItemEditorInline: React.FC<CheckItemEditorInlineProps> = ({
 const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const { data: builtInData } = useInspectionTemplates({ isBuiltIn: true, pageSize: 100 })
+  const { data: builtInData } = useInspectionTemplates({
+    isBuiltIn: true,
+    pageSize: 100,
+  })
   const deviceType = formData.deviceTypes[0]
   const builtInTemplates = useMemo(() => builtInData?.templates ?? [], [builtInData])
-  const builtInForType = builtInTemplates.find(t => deviceType && t.deviceTypes.includes(deviceType))
-  const metricOptions = useMemo(() => buildMetricOptions(builtInTemplates, deviceType), [builtInTemplates, deviceType])
+  const builtInForType = builtInTemplates.find(
+    (t) => deviceType && t.deviceTypes.includes(deviceType)
+  )
+  const metricOptions = useMemo(
+    () => buildMetricOptions(builtInTemplates, deviceType),
+    [builtInTemplates, deviceType]
+  )
 
-  // 内置模板里尚未加入本模板的检查项（按维度键去重，避免重复添加 CPU 等）
   const missingBuiltInItems = useMemo(() => {
     if (!builtInForType) return []
     const existing = new Set(formData.checkItems.map(checkItemKey).filter(Boolean))
-    return builtInForType.checkItems.filter(item => !existing.has(checkItemKey(item)))
+    return builtInForType.checkItems.filter((item) => !existing.has(checkItemKey(item)))
   }, [builtInForType, formData.checkItems])
 
   const addCheckItem = () => {
@@ -713,39 +853,44 @@ const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => 
       name: '',
       type: 'snmp',
       weight: 1,
-      config: {}
+      config: {},
     }
     onChange('checkItems', [...formData.checkItems, newItem])
     setExpandedId(newItem.id)
   }
 
   const updateCheckItem = (id: string, updates: Partial<InspectionCheckItem>) => {
-    onChange('checkItems', formData.checkItems.map(item =>
-      item.id === id ? { ...item, ...updates } : item
-    ))
+    onChange(
+      'checkItems',
+      formData.checkItems.map((item) =>
+        item.id === id ? { ...item, ...updates } : item
+      )
+    )
   }
 
   const deleteCheckItem = (id: string) => {
-    onChange('checkItems', formData.checkItems.filter(item => item.id !== id))
+    onChange(
+      'checkItems',
+      formData.checkItems.filter((item) => item.id !== id)
+    )
     if (expandedId === id) setExpandedId(null)
   }
 
   const addBuiltInItems = () => {
-    const usedIds = new Set(formData.checkItems.map(item => item.id))
-    const newItems = missingBuiltInItems.map(item => ({
+    const usedIds = new Set(formData.checkItems.map((item) => item.id))
+    const newItems = missingBuiltInItems.map((item) => ({
       ...item,
-      id: usedIds.has(item.id) ? generateCheckItemId() : item.id
+      id: usedIds.has(item.id) ? generateCheckItemId() : item.id,
     }))
     onChange('checkItems', [...formData.checkItems, ...newItems])
   }
 
   return (
-    <div className="space-y-6">
-      {/* 快速添加预设 */}
-      <div className="p-4 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/20 rounded-xl">
-        <div className="flex items-center gap-2 mb-3">
-          <Zap className="w-5 h-5 text-blue-600" />
-          <span className="font-medium text-foreground">快速添加检查项</span>
+    <div className="space-y-4">
+      <div className="p-4 rounded-lg border border-border bg-info-soft/70">
+        <div className="flex items-center gap-2 mb-2.5 text-info-soft-foreground">
+          <Zap className="w-4 h-4" />
+          <span className="font-medium text-sm">快速添加检查项</span>
         </div>
         {builtInForType ? (
           <div className="flex flex-wrap items-center gap-3">
@@ -755,6 +900,7 @@ const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => 
               size="sm"
               onClick={addBuiltInItems}
               disabled={missingBuiltInItems.length === 0}
+              className="cursor-pointer"
             >
               <Plus className="w-4 h-4 mr-1" />
               从内置「{builtInForType.name}」添加
@@ -770,8 +916,7 @@ const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => 
         )}
       </div>
 
-      {/* 检查项列表 */}
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {formData.checkItems.length > 0 ? (
           formData.checkItems.map((item) => (
             <CheckItemEditorInline
@@ -781,69 +926,79 @@ const StepCheckItems: React.FC<StepProps> = ({ formData, errors, onChange }) => 
               onUpdate={(updates) => updateCheckItem(item.id, updates)}
               onDelete={() => deleteCheckItem(item.id)}
               isExpanded={expandedId === item.id}
-              onToggleExpand={() => setExpandedId(expandedId === item.id ? null : item.id)}
+              onToggleExpand={() =>
+                setExpandedId(expandedId === item.id ? null : item.id)
+              }
             />
           ))
         ) : (
-          <div className="border-2 border-dashed border-border/70 rounded-xl p-8 text-center">
-            <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-muted-foreground mb-4">
+          <div className="border-2 border-dashed border-border rounded-lg p-8 text-center bg-surface-2/30">
+            <FileText className="w-10 h-10 text-muted-foreground mx-auto mb-2.5" />
+            <p className="text-sm text-muted-foreground">
               暂无检查项，点击下方按钮添加或使用预设
             </p>
           </div>
         )}
       </div>
 
-      {/* 添加按钮 */}
       <Button
         type="button"
         variant="outline"
-        className="w-full py-3"
+        className="w-full cursor-pointer"
         onClick={addCheckItem}
       >
-        <Plus className="w-4 h-4 mr-2" />
+        <Plus className="w-4 h-4 mr-1.5" />
         添加检查项
       </Button>
 
       {errors.checkItems && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-500" />
-          <p className="text-sm text-red-600 dark:text-red-400">{errors.checkItems}</p>
+        <div className="flex items-center gap-2 p-3 bg-danger-soft text-danger-soft-foreground rounded-lg">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <p className="text-sm">{errors.checkItems}</p>
         </div>
       )}
     </div>
   )
 }
 
-
 // ============================================================================
 // Step 4: 预览确认
 // ============================================================================
 
 const StepPreview: React.FC<StepProps> = ({ formData }) => {
-  const categoryOption = CATEGORY_OPTIONS.find(c => c.value === formData.category)
+  const categoryOption = CATEGORY_OPTIONS.find((c) => c.value === formData.category)
   const CategoryIcon = categoryOption?.icon || FileText
-  const categoryColorClass = getCategoryColorClass(categoryOption?.color)
+  const categoryMeta = getCategoryMeta(formData.category)
 
   return (
-    <div className="space-y-6">
-      {/* 基本信息预览 */}
+    <div className="space-y-4">
       <Card>
-        <CardContent className="p-6">
-          <div className="flex items-start gap-4">
-            <div className={`p-3 rounded-xl ${categoryColorClass.bg}`}>
-              <CategoryIcon className={`w-8 h-8 ${categoryColorClass.text600}`} />
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
+              <CategoryIcon className="w-6 h-6" />
             </div>
-            <div className="flex-1">
-              <h4 className="text-xl font-semibold text-foreground">
+            <div className="flex-1 min-w-0">
+              <h4 className="text-lg font-semibold text-foreground">
                 {formData.name || '未命名模板'}
               </h4>
-              <div className="flex items-center gap-2 mt-3">
-                <Badge variant="primary">{categoryOption?.label || '自定义'}</Badge>
+              {formData.description && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {formData.description}
+                </p>
+              )}
+              <div className="flex items-center gap-2 mt-2.5">
+                <Badge variant={categoryMeta.badgeVariant} size="sm">
+                  {categoryMeta.label}
+                </Badge>
                 {formData.isActive ? (
-                  <Badge variant="success">已启用</Badge>
+                  <Badge variant="success" size="sm">
+                    已启用
+                  </Badge>
                 ) : (
-                  <Badge variant="outline">已禁用</Badge>
+                  <Badge variant="outline" size="sm">
+                    已禁用
+                  </Badge>
                 )}
               </div>
             </div>
@@ -851,17 +1006,18 @@ const StepPreview: React.FC<StepProps> = ({ formData }) => {
         </CardContent>
       </Card>
 
-      {/* 设备类型预览 */}
       <Card>
-        <CardContent className="p-6">
-          <h5 className="font-medium text-foreground mb-3 flex items-center gap-2">
-            <Monitor className="w-5 h-5 text-purple-600" />
+        <CardContent className="p-4">
+          <h5 className="font-medium text-sm text-foreground mb-2.5 flex items-center gap-2">
+            <Monitor className="w-4 h-4 text-primary" />
             适用设备类型
           </h5>
           <div className="flex flex-wrap gap-2">
             {formData.deviceTypes.map((type) => (
-              <Badge key={type} variant="secondary" className="px-3 py-1.5">
-                {DEVICE_TYPE_ICONS[type] && <span className="mr-1">{DEVICE_TYPE_ICONS[type]}</span>}
+              <Badge key={type} variant="secondary" size="sm" className="px-2.5 py-1">
+                {DEVICE_TYPE_ICONS[type] && (
+                  <span className="mr-1">{DEVICE_TYPE_ICONS[type]}</span>
+                )}
                 {getDeviceTypeLabel(type)}
               </Badge>
             ))}
@@ -869,37 +1025,40 @@ const StepPreview: React.FC<StepProps> = ({ formData }) => {
         </CardContent>
       </Card>
 
-      {/* 检查项预览 */}
       <Card>
-        <CardContent className="p-6">
-          <h5 className="font-medium text-foreground mb-3 flex items-center gap-2">
-            <Settings className="w-5 h-5 text-green-600" />
+        <CardContent className="p-4">
+          <h5 className="font-medium text-sm text-foreground mb-2.5 flex items-center gap-2">
+            <Settings className="w-4 h-4 text-primary" />
             检查项配置 ({formData.checkItems.length} 项)
           </h5>
           <div className="space-y-2">
             {formData.checkItems.map((item, index) => {
-              const typeOption = CHECK_TYPE_OPTIONS.find(t => t.value === item.type)
+              const typeMeta = getCheckTypeMeta(item.type)
               return (
                 <div
                   key={item.id}
-                  className="flex items-center gap-3 p-3 bg-muted/40 rounded-lg"
+                  className="flex items-center gap-3 p-2.5 bg-surface-2/50 border border-border/60 rounded-lg"
                 >
-                  <span className="text-gray-400 font-mono text-sm w-6">{index + 1}.</span>
-                  <span className="text-lg">{typeOption?.icon}</span>
-                  <div className="flex-1">
-                    <span className="font-medium text-foreground">
+                  <span className="text-muted-foreground font-mono text-xs w-6 tabular-nums">
+                    {index + 1}.
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-sm text-foreground">
                       {item.name || '未命名'}
                     </span>
-                    <span className="text-gray-500 text-sm ml-2">
-                      ({typeOption?.label || item.type})
+                    <span className="text-muted-foreground text-xs ml-2">
+                      ({typeMeta.shortLabel})
                     </span>
                   </div>
-                  <Badge variant="outline" size="sm">权重: {item.weight}</Badge>
-                  {item.config.threshold && (
-                    <Badge variant="warning" size="sm">
-                      阈值: {item.config.threshold.warning}/{item.config.threshold.critical}
-                    </Badge>
-                  )}
+                  <Badge variant="outline" size="sm" className="tabular-nums">
+                    权重: {item.weight}
+                  </Badge>
+                  {item.config.threshold?.warning !== undefined &&
+                    item.config.threshold?.critical !== undefined && (
+                      <Badge variant="warning" size="sm" className="tabular-nums">
+                        阈值: {item.config.threshold.warning}/{item.config.threshold.critical}
+                      </Badge>
+                    )}
                 </div>
               )
             })}
@@ -914,7 +1073,11 @@ const StepPreview: React.FC<StepProps> = ({ formData }) => {
 // 主组件
 // ============================================================================
 
-export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuccess }) => {
+export const CreateTemplateWizard: React.FC<Props> = ({
+  template,
+  onClose,
+  onSuccess,
+}) => {
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState<TemplateFormData>(() => {
     if (template) {
@@ -924,16 +1087,16 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
         category: template.category,
         deviceTypes: initialDeviceTypes(template.deviceTypes),
         checkItems: [...template.checkItems],
-        isActive: template.isActive ?? true
+        isActive: template.isActive ?? true,
       }
     }
     return createInitialFormState()
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
-  // 存量模板的设备类型不满足新规则时，保留原值用于提示重选
-  const legacyDeviceTypes = template && initialDeviceTypes(template.deviceTypes).length === 0
-    ? template.deviceTypes
-    : undefined
+  const legacyDeviceTypes =
+    template && initialDeviceTypes(template.deviceTypes).length === 0
+      ? template.deviceTypes
+      : undefined
 
   const createTemplate = useCreateTemplate()
   const updateTemplate = useUpdateTemplate()
@@ -941,90 +1104,97 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
   const isEditing = !!template
   const isLoading = createTemplate.isPending || updateTemplate.isPending
 
-  // 更新表单字段
-  const handleChange = useCallback(<K extends keyof TemplateFormData>(
-    field: K,
-    value: TemplateFormData[K]
-  ) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }))
-    }
-  }, [errors])
+  const handleChange = useCallback(
+    <K extends keyof TemplateFormData>(field: K, value: TemplateFormData[K]) => {
+      setFormData((prev) => ({ ...prev, [field]: value }))
+      if (errors[field]) {
+        setErrors((prev) => ({ ...prev, [field]: '' }))
+      }
+    },
+    [errors]
+  )
 
-  // 验证当前步骤
-  const validateStep = useCallback((step: number): boolean => {
-    const newErrors: Record<string, string> = {}
+  const validateStep = useCallback(
+    (step: number): boolean => {
+      const newErrors: Record<string, string> = {}
 
-    switch (step) {
-      case 1:
-        if (!formData.name.trim()) {
-          newErrors.name = '请输入模板名称'
-        } else if (formData.name.length > 100) {
-          newErrors.name = '模板名称不能超过100个字符'
-        }
-        break
-      case 2:
-        if (formData.deviceTypes.length !== 1 || !isInspectableDeviceType(formData.deviceTypes[0])) {
-          newErrors.deviceTypes = '请选择模板适用的设备类型'
-        }
-        break
-      case 3:
-        if (formData.checkItems.length === 0) {
-          newErrors.checkItems = '请至少添加一个检查项'
-        } else {
-          // 验证每个检查项
-          for (const item of formData.checkItems) {
-            if (!item.name.trim()) {
-              newErrors.checkItems = '所有检查项都必须有名称'
-              break
-            }
-            // SNMP 按 metric 分派取数，缺了后端会拒绝保存（否则执行时无从采集）
-            if (item.type === 'snmp' && !item.metric?.trim()) {
-              newErrors.checkItems = `SNMP 检查项必须选择采集指标：「${item.name}」`
-              break
-            }
-            if (item.type === 'snmp' && typeof item.config.oid === 'string') {
-              const oid = item.config.oid.trim()
-              if (oid && !OID_PATTERN.test(oid)) {
-                newErrors.checkItems = 'SNMP 类型的检查项 OID 格式无效，应由数字和点组成'
+      switch (step) {
+        case 1:
+          if (!formData.name.trim()) {
+            newErrors.name = '请输入模板名称'
+          } else if (formData.name.length > 100) {
+            newErrors.name = '模板名称不能超过100个字符'
+          }
+          break
+        case 2:
+          if (
+            formData.deviceTypes.length !== 1 ||
+            !isInspectableDeviceType(formData.deviceTypes[0])
+          ) {
+            newErrors.deviceTypes = '请选择模板适用的设备类型'
+          }
+          break
+        case 3:
+          if (formData.checkItems.length === 0) {
+            newErrors.checkItems = '请至少添加一个检查项'
+          } else {
+            for (const item of formData.checkItems) {
+              if (!item.name.trim()) {
+                newErrors.checkItems = '所有检查项都必须有名称'
                 break
               }
-            }
-            // SSH：后端校验要求 command，避免提交后端失败
-            if (item.type === 'ssh' && !item.config.command?.trim()) {
-              newErrors.checkItems = 'SSH 类型的检查项必须配置命令（否则无法保存）'
-              break
-            }
-            if (item.config.threshold) {
-              const { warning, critical } = item.config.threshold
-              if (warning !== undefined && critical !== undefined && warning >= critical) {
-                newErrors.checkItems = '警告阈值必须小于严重阈值'
+              if (item.type === 'snmp' && !item.metric?.trim()) {
+                newErrors.checkItems = `SNMP 检查项必须选择采集指标：「${item.name}」`
                 break
+              }
+              if (item.type === 'snmp' && typeof item.config.oid === 'string') {
+                const oid = item.config.oid.trim()
+                if (oid && !OID_PATTERN.test(oid)) {
+                  newErrors.checkItems =
+                    'SNMP 类型的检查项 OID 格式无效，应由数字和点组成'
+                  break
+                }
+              }
+              if (item.type === 'ssh' && !item.config.command?.trim()) {
+                newErrors.checkItems =
+                  'SSH 类型的检查项必须配置命令（否则无法保存）'
+                break
+              }
+              if (item.config.threshold) {
+                const { warning, critical } = item.config.threshold
+                const hasWarning = warning !== undefined
+                const hasCritical = critical !== undefined
+                if (hasWarning !== hasCritical) {
+                  newErrors.checkItems =
+                    '警告阈值和严重阈值需同时填写，或全部留空'
+                  break
+                }
+                if (hasWarning && hasCritical && warning >= critical) {
+                  newErrors.checkItems = '警告阈值必须小于严重阈值'
+                  break
+                }
               }
             }
           }
-        }
-        break
-    }
+          break
+      }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }, [formData])
+      setErrors(newErrors)
+      return Object.keys(newErrors).length === 0
+    },
+    [formData]
+  )
 
-  // 下一步
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, STEPS.length))
+      setCurrentStep((prev) => Math.min(prev + 1, STEPS.length))
     }
   }
 
-  // 上一步
   const handlePrev = () => {
-    setCurrentStep(prev => Math.max(prev - 1, 1))
+    setCurrentStep((prev) => Math.max(prev - 1, 1))
   }
 
-  // 提交表单
   const handleSubmit = async () => {
     if (!validateStep(currentStep)) return
 
@@ -1032,24 +1202,23 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
       if (isEditing && template) {
         await updateTemplate.mutateAsync({
           id: template.id,
-          data: formData
+          data: formData,
         })
       } else {
         await createTemplate.mutateAsync(formData)
       }
       onSuccess()
-    } catch (error) {
-      console.error('Save template failed:', error)
+    } catch (saveError) {
+      console.error('Save template failed:', saveError)
     }
   }
 
-  // 渲染当前步骤内容
   const renderStepContent = () => {
     const stepProps: StepProps = {
       formData,
       errors,
       onChange: handleChange,
-      legacyDeviceTypes
+      legacyDeviceTypes,
     }
 
     switch (currentStep) {
@@ -1067,30 +1236,29 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
   }
 
   return (
-    <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-card rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-      >
+    <SimpleModal
+      open
+      onClose={() => {
+        if (!isLoading) {
+          onClose()
+        }
+      }}
+      ariaLabel={isEditing ? '编辑巡检模板' : '创建巡检模板'}
+      size="4xl"
+    >
+      <div className="flex flex-col gap-4">
         {/* 头部 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">
-              {isEditing ? '编辑巡检模板' : '创建巡检模板'}
-            </h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {STEPS[currentStep - 1].description}
-            </p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="w-5 h-5" />
-          </Button>
+        <div className="border-b border-border pb-3 pr-6">
+          <h2 className="text-lg font-semibold text-foreground">
+            {isEditing ? '编辑巡检模板' : '创建巡检模板'}
+          </h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {STEPS[currentStep - 1].description}
+          </p>
         </div>
 
         {/* 步骤指示器 */}
-        <div className="px-6 py-4 bg-muted/40">
+        <div className="rounded-lg border border-border bg-surface-2/50 px-4 py-3">
           <div className="flex items-center justify-between">
             {STEPS.map((step, index) => {
               const isActive = currentStep === step.id
@@ -1099,32 +1267,41 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
 
               return (
                 <React.Fragment key={step.id}>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5">
                     <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                      className={cn(
+                        'w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0',
                         isActive
-                          ? 'bg-blue-600 text-white'
+                          ? 'bg-primary text-primary-foreground'
                           : isCompleted
-                          ? 'bg-green-500 text-white'
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
-                      }`}
+                            ? 'bg-success text-success-foreground'
+                            : 'bg-surface-3 text-muted-foreground'
+                      )}
                     >
                       {isCompleted ? (
-                        <Check className="w-5 h-5" />
+                        <Check className="w-4 h-4" />
                       ) : (
-                        <Icon className="w-5 h-5" />
+                        <Icon className="w-4 h-4" />
                       )}
                     </div>
                     <div className="hidden sm:block">
-                      <div className={`font-medium ${isActive ? 'text-blue-600' : 'text-foreground/90'}`}>
+                      <div
+                        className={cn(
+                          'text-sm font-medium',
+                          isActive ? 'text-primary' : 'text-foreground'
+                        )}
+                      >
                         {step.title}
                       </div>
                     </div>
                   </div>
                   {index < STEPS.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-4 ${
-                      isCompleted ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-700'
-                    }`} />
+                    <div
+                      className={cn(
+                        'flex-1 h-0.5 mx-3',
+                        isCompleted ? 'bg-success' : 'bg-border'
+                      )}
+                    />
                   )}
                 </React.Fragment>
               )
@@ -1133,14 +1310,14 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
         </div>
 
         {/* 内容区域 */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-h-[calc(100vh-22rem)] overflow-y-auto pr-1">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentStep}
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: 16 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
+              exit={{ opacity: 0, x: -16 }}
+              transition={{ duration: 0.16 }}
             >
               {renderStepContent()}
             </motion.div>
@@ -1148,43 +1325,53 @@ export const CreateTemplateWizard: React.FC<Props> = ({ template, onClose, onSuc
         </div>
 
         {/* 底部操作栏 */}
-        <div className="flex items-center justify-between px-6 py-4 border-t dark:border-gray-700 bg-muted/40">
+        <div className="flex items-center justify-between pt-3 border-t border-border">
           <div>
             {currentStep > 1 && (
-              <Button variant="outline" onClick={handlePrev} disabled={isLoading}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handlePrev}
+                disabled={isLoading}
+                className="cursor-pointer"
+              >
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 上一步
               </Button>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={onClose} disabled={isLoading}>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isLoading}
+              className="cursor-pointer"
+            >
               取消
             </Button>
             {currentStep < STEPS.length ? (
-              <Button onClick={handleNext}>
+              <Button type="button" onClick={handleNext} className="cursor-pointer">
                 下一步
                 <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={isLoading}>
-                {isLoading ? (
-                  <>
-                    <span className="animate-spin mr-2">⏳</span>
-                    保存中...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    {isEditing ? '保存修改' : '创建模板'}
-                  </>
-                )}
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                loading={isLoading}
+                disabled={isLoading}
+                className="cursor-pointer"
+              >
+                {!isLoading && <Save className="w-4 h-4 mr-1.5" />}
+                {isLoading ? '保存中...' : isEditing ? '保存修改' : '创建模板'}
               </Button>
             )}
           </div>
         </div>
-      </motion.div>
-    </div>
+      </div>
+    </SimpleModal>
   )
 }
 
+export default CreateTemplateWizard

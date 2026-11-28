@@ -322,14 +322,15 @@ describe('InspectionTemplates 筛选栏重塑', () => {
     expect(screen.queryByRole('button', { name: /^清除筛选$/ })).not.toBeInTheDocument()
   })
 
-  it('应将筛选、动作和统计卡片统一到共享页面规格', () => {
+  it('应将筛选与动作统一到工具栏，并用来源分段器替代冗余统计卡片', () => {
     render(<InspectionTemplates />)
 
     expect(screen.getByTestId('inspection-templates-toolbar-end-group')).toBeInTheDocument()
-    expect(screen.getByText('全部模板:2')).toBeInTheDocument()
-    expect(screen.getByText('内置模板:0')).toBeInTheDocument()
-    expect(screen.getByText('自定义模板:2')).toBeInTheDocument()
-    expect(screen.getByText('已启用:2')).toBeInTheDocument()
+    expect(screen.queryByText('已启用')).not.toBeInTheDocument()
+    expect(screen.getByRole('group', { name: '按模板来源筛选' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /全部/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /内置/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /自定义/ })).toBeInTheDocument()
     expect(screen.getByText('导入模板')).toBeInTheDocument()
     expect(screen.getByText('快速创建')).toBeInTheDocument()
     expect(screen.getByText('创建模板')).toBeInTheDocument()

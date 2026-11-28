@@ -1,10 +1,9 @@
 import React from 'react'
-import { Card, CardContent } from '@/components/atoms'
 
 /**
  * 执行记录表格加载骨架屏
  *
- * 模拟真实表格结构，提供更好的加载体验
+ * 与一体式主数据面板结构保持一致，全部采用三皮肤语义 Token。
  */
 
 interface Props {
@@ -12,62 +11,79 @@ interface Props {
 }
 
 export const ExecutionTableSkeleton: React.FC<Props> = ({ rows = 5 }) => {
-  const headers = ['策略信息', '执行状态', '进度', '巡检结果', '执行时间', '操作']
-
   return (
-    <Card>
-      <CardContent className="p-6">
+    <div className="flex flex-1 min-h-0 flex-col gap-4">
+      {/* 顶部工具栏骨架 */}
+      <div className="flex flex-wrap items-center justify-between gap-3 py-1">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-72 rounded-lg bg-muted/60 animate-pulse" />
+          <div className="h-9 w-28 rounded-lg bg-muted/60 animate-pulse" />
+        </div>
+        <div className="h-9 w-20 rounded-lg bg-muted/60 animate-pulse" />
+      </div>
+
+      {/* 一体式面板骨架 */}
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
         {/* 表头骨架 */}
-        <div className="grid grid-cols-6 gap-4 pb-4 border-b border-border">
-          {headers.map((header) => (
-            <div
-              key={header}
-              className="h-4 bg-gray-200 rounded animate-pulse"
-            ></div>
-          ))}
+        <div className="grid grid-cols-6 gap-4 border-b border-border bg-muted/40 px-4 py-3">
+          <div className="h-3.5 w-20 rounded bg-muted animate-pulse" />
+          <div className="h-3.5 w-16 rounded bg-muted animate-pulse" />
+          <div className="h-3.5 w-20 rounded bg-muted animate-pulse" />
+          <div className="h-3.5 w-16 rounded bg-muted animate-pulse" />
+          <div className="h-3.5 w-16 rounded bg-muted animate-pulse" />
+          <div className="h-3.5 w-12 rounded bg-muted animate-pulse justify-self-end" />
         </div>
 
         {/* 表格行骨架 */}
-        {[...Array(rows)].map((_, index) => (
-          <div
-            key={index}
-            className="grid grid-cols-6 gap-4 py-4 border-b border-gray-100"
-          >
-            {/* 策略信息 */}
-            <div className="space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div>
-              <div className="h-3 bg-gray-100 rounded w-1/2 animate-pulse"></div>
-            </div>
+        <div className="flex-1 divide-y divide-border overflow-hidden">
+          {[...Array(rows)].map((_, index) => (
+            <div
+              key={index}
+              className="grid grid-cols-6 items-center gap-4 px-4 py-3.5 animate-pulse"
+            >
+              {/* 策略与触发 */}
+              <div className="space-y-2">
+                <div className="h-4 w-3/4 rounded bg-muted" />
+                <div className="h-3 w-1/2 rounded bg-muted/60" />
+              </div>
 
-            {/* 执行状态 */}
-            <div className="h-4 bg-gray-200 rounded w-2/3 animate-pulse"></div>
+              {/* 执行状态 */}
+              <div className="h-5 w-16 rounded-md bg-muted" />
 
-            {/* 进度 */}
-            <div className="space-y-2">
-              <div className="h-2 bg-gray-200 rounded animate-pulse"></div>
-              <div className="h-3 bg-gray-100 rounded w-1/2 animate-pulse"></div>
-            </div>
+              {/* 覆盖设备 / 进度 */}
+              <div className="space-y-2">
+                <div className="h-3 w-24 rounded bg-muted/60" />
+                <div className="h-1.5 w-32 rounded-full bg-muted" />
+              </div>
 
-            {/* 巡检结果 */}
-            <div className="space-y-2">
-              <div className="h-5 bg-gray-200 rounded w-12 animate-pulse"></div>
-              <div className="h-3 bg-gray-100 rounded w-3/4 animate-pulse"></div>
-            </div>
+              {/* 巡检结果 */}
+              <div className="space-y-1.5">
+                <div className="h-5 w-12 rounded bg-muted" />
+                <div className="h-3 w-24 rounded bg-muted/60" />
+              </div>
 
-            {/* 执行时间 */}
-            <div className="space-y-2">
-              <div className="h-3 bg-gray-200 rounded animate-pulse"></div>
-              <div className="h-3 bg-gray-100 rounded w-2/3 animate-pulse"></div>
-            </div>
+              {/* 执行时间 */}
+              <div className="space-y-1.5">
+                <div className="h-4 w-32 rounded bg-muted" />
+                <div className="h-3 w-16 rounded bg-muted/60" />
+              </div>
 
-            {/* 操作按钮 */}
-            <div className="flex gap-1">
-              <div className="h-8 w-8 bg-gray-200 rounded animate-pulse"></div>
-              <div className="h-8 w-8 bg-gray-200 rounded animate-pulse"></div>
+              {/* 操作按钮 */}
+              <div className="flex justify-end gap-1.5">
+                <div className="h-7 w-7 rounded bg-muted" />
+                <div className="h-7 w-7 rounded bg-muted" />
+                <div className="h-7 w-7 rounded bg-muted" />
+              </div>
             </div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
+          ))}
+        </div>
+
+        {/* 吸底分页条骨架 */}
+        <div className="flex items-center justify-between border-t border-border px-4 py-3">
+          <div className="h-4 w-32 rounded bg-muted/60 animate-pulse" />
+          <div className="h-7 w-48 rounded bg-muted/60 animate-pulse" />
+        </div>
+      </div>
+    </div>
   )
 }

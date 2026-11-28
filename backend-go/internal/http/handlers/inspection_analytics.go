@@ -49,11 +49,18 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 
 	loc := h.Settings.ResolveLocation(c.Request().Context())
 	start, end, hasExplicitRange := resolveRequestedAnalyticsRange(c, loc)
-	if !hasExplicitRange {
+	if hasExplicitRange {
+		period := strings.TrimSpace(c.QueryParam("period"))
+		if period == "" {
+			period = "week"
+		}
+		if err := validateAnalyticsRange(period, start, end); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+	} else {
 		start, end = resolveStatsRange(c.QueryParam("range"), loc)
 	}
-	previousStart := start.Add(start.Sub(end))
-	previousEnd := start
+	previousStart, previousEnd := resolvePreviousRange(start, end)
 
 	current, err := computeStatsSummary(c.Request().Context(), db, "started_at", start, end)
 	if err != nil {
@@ -68,6 +75,7 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load inspection stats")
 	}
 
+	hasPreviousBaseline := previous.TotalExecutions > 0
 	data := map[string]interface{}{
 		"totalStrategies":  int(totalStrategies),
 		"activeStrategies": int(activeStrategies),
@@ -76,8 +84,8 @@ func (h InspectionHandler) GetStats(c echo.Context) error {
 		"avgScore":         current.AvgScore,
 		"changes": map[string]interface{}{
 			"executionsChange":  pctChange(current.TotalExecutions, previous.TotalExecutions),
-			"successRateChange": deltaChange(current.SuccessRate, previous.SuccessRate),
-			"avgScoreChange":    deltaChange(current.AvgScore, previous.AvgScore),
+			"successRateChange": deltaChangeWithBaseline(current.SuccessRate, previous.SuccessRate, hasPreviousBaseline),
+			"avgScoreChange":    deltaChangeWithBaseline(current.AvgScore, previous.AvgScore, hasPreviousBaseline),
 			"strategiesChange":  "0.0%",
 		},
 		"recentExecutions": recentExecutions,
@@ -106,6 +114,9 @@ func (h InspectionHandler) GetTrends(c echo.Context) error {
 	endDate, _ := parseOptionalDate(c.QueryParam("end_date"), loc)
 
 	start, end := resolveTrendRange(period, startDate, endDate, loc)
+	if err := validateAnalyticsRange(period, start, end); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
 
 	db := h.Service.DB()
 	if db == nil {
@@ -120,26 +131,29 @@ func (h InspectionHandler) GetTrends(c echo.Context) error {
 		AvgScore   float64   `gorm:"column:avg_score"`
 	}
 
-	// 执行趋势统一以 started_at 为执行时间口径。
+	// 执行趋势按批次口径聚合，并以批次最早 started_at 为时间归属。
 	// AT TIME ZONE 先把 timestamptz 换算成业务时区的本地时间再截断，
 	// 使分周/分日/分月与查询区间边界处于同一时区口径，且不依赖数据库会话时区。
-	tz := loc.String()
-	dateExpr := fmt.Sprintf("date_trunc('week', started_at AT TIME ZONE '%s')", tz)
+	tz := strings.ReplaceAll(loc.String(), "'", "''")
+	unit := "week"
 	switch period {
 	case "day":
-		dateExpr = fmt.Sprintf("date_trunc('day', started_at AT TIME ZONE '%s')", tz)
+		unit = "day"
 	case "month":
-		dateExpr = fmt.Sprintf("date_trunc('month', started_at AT TIME ZONE '%s')", tz)
+		unit = "month"
 	}
+	dateExpr := fmt.Sprintf("date_trunc('%s', batch_started_at AT TIME ZONE '%s')", unit, tz)
 
 	rows := make([]trendRow, 0)
-
-	timeCol := "started_at"
+	sub := db.WithContext(c.Request().Context()).
+		Table("inspections").
+		Select(batchStatsSubquerySelect(true)).
+		Where("started_at >= ? AND started_at <= ?", start, end).
+		Group(executionGroupKeyExpr)
 
 	if err := db.WithContext(c.Request().Context()).
-		Table("inspections").
-		Select(fmt.Sprintf("%s AS date, COUNT(*) AS executions, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS success, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed, AVG(CASE WHEN total_checks > 0 THEN passed_checks::float / total_checks * 100 ELSE NULL END) AS avg_score", dateExpr)).
-		Where(fmt.Sprintf("%s >= ? AND %s <= ?", timeCol, timeCol), start, end).
+		Table("(?) AS batch_trends", sub).
+		Select(fmt.Sprintf("%s AS date, COUNT(*) AS executions, COALESCE(SUM(batch_completed), 0) AS success, COALESCE(SUM(batch_failed), 0) AS failed, COALESCE(AVG(CASE WHEN batch_completed = 1 THEN batch_score ELSE NULL END), 0) AS avg_score", dateExpr)).
 		Group("date").
 		Order("date ASC").
 		Scan(&rows).Error; err != nil {
@@ -194,6 +208,13 @@ func (h InspectionHandler) GetDeviceDistribution(c echo.Context) error {
 
 	loc := h.Settings.ResolveLocation(c.Request().Context())
 	if start, end, ok := resolveRequestedAnalyticsRange(c, loc); ok {
+		period := strings.TrimSpace(c.QueryParam("period"))
+		if period == "" {
+			period = "week"
+		}
+		if err := validateAnalyticsRange(period, start, end); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
 		query = query.Where("inspections.started_at >= ? AND inspections.started_at <= ?", start, end)
 	}
 
@@ -234,6 +255,8 @@ func (h InspectionHandler) GetProblemDistribution(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "database not initialized")
 	}
 
+	const problemCategoryExpr = "COALESCE(NULLIF(TRIM(inspection_results.check_item_name), ''), NULLIF(TRIM(inspection_results.check_item_type), ''), '其他')"
+
 	type row struct {
 		Category string `gorm:"column:category"`
 		Count    int    `gorm:"column:count"`
@@ -241,17 +264,24 @@ func (h InspectionHandler) GetProblemDistribution(c echo.Context) error {
 	rows := make([]row, 0)
 	query := db.WithContext(c.Request().Context()).
 		Table("inspection_results").
-		Select("inspection_results.check_item_type AS category, COUNT(*) AS count").
+		Select(problemCategoryExpr + " AS category, COUNT(*) AS count").
 		Joins("JOIN inspections ON inspections.id = inspection_results.inspection_id")
 
 	loc := h.Settings.ResolveLocation(c.Request().Context())
 	if start, end, ok := resolveRequestedAnalyticsRange(c, loc); ok {
+		period := strings.TrimSpace(c.QueryParam("period"))
+		if period == "" {
+			period = "week"
+		}
+		if err := validateAnalyticsRange(period, start, end); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
 		query = query.Where("inspections.started_at >= ? AND inspections.started_at <= ?", start, end)
 	}
 
 	if err := query.
 		Where("inspection_results.status IN ?", []string{"fail", "warning"}).
-		Group("inspection_results.check_item_type").
+		Group(problemCategoryExpr).
 		Order("COUNT(*) DESC").
 		Scan(&rows).Error; err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to load problem distribution")
@@ -268,6 +298,7 @@ func (h InspectionHandler) GetProblemDistribution(c echo.Context) error {
 		"ssh":              "SSH检查",
 		"http":             "HTTP检查",
 		"ping":             "Ping检查",
+		"icmp":             "ICMP连通性",
 		"script":           "脚本检查",
 	}
 
@@ -311,10 +342,18 @@ func (h InspectionHandler) ExportAnalytics(c echo.Context) error {
 	startDate, _ := parseOptionalDate(c.QueryParam("start_date"), loc)
 	endDate, _ := parseOptionalDate(c.QueryParam("end_date"), loc)
 	start, end := resolveTrendRange(period, startDate, endDate, loc)
+	if err := validateAnalyticsRange(period, start, end); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
 
 	format := strings.ToLower(strings.TrimSpace(c.QueryParam("format_type")))
 	if format == "" {
 		format = "excel"
+	}
+	switch format {
+	case "pdf", "excel", "word", "html":
+	default:
+		return echo.NewHTTPError(http.StatusBadRequest, "unsupported format_type")
 	}
 
 	params := map[string]interface{}{
@@ -335,17 +374,31 @@ func (h InspectionHandler) ExportAnalytics(c echo.Context) error {
 		Status:        "completed",
 	}
 
-	filePath, err := reports.GenerateReportFile(c.Request().Context(), h.Reports.DB(), h.ReportOutputDir, report, format)
+	if err := os.MkdirAll(h.ReportOutputDir, 0o755); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to prepare export workspace").SetInternal(err)
+	}
+	exportDir, err := os.MkdirTemp(h.ReportOutputDir, "analytics-export-*")
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to prepare export workspace").SetInternal(err)
+	}
+	defer func() { _ = os.RemoveAll(exportDir) }()
+
+	filePath, err := reports.GenerateReportFile(c.Request().Context(), h.Reports.DB(), exportDir, report, format)
 	if err != nil {
 		h.logReportFailure("导出统计报表失败", report.ID, format, err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to export analytics").SetInternal(err)
 	}
 
+	fileBytes, err := os.ReadFile(filePath)
+	if err != nil {
+		h.logReportFailure("读取导出统计报表失败", report.ID, format, err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to read exported analytics").SetInternal(err)
+	}
+
 	filename := filepath.Base(filePath)
 	contentType := reportContentType(filepath.Ext(filename))
-	c.Response().Header().Set(echo.HeaderContentType, contentType)
 	c.Response().Header().Set(echo.HeaderContentDisposition, fmt.Sprintf("attachment; filename=\"%s\"", filename))
-	return c.File(filePath)
+	return c.Blob(http.StatusOK, contentType, fileBytes)
 }
 
 // resolveReportInspectionRows 把报告生成载荷中的执行标识解析为整批 inspections 行。

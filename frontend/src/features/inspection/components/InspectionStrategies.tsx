@@ -1,15 +1,20 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import { formatDateYMD, formatTimeHM } from '@/utils/formatters'
+import { getDeviceTypeLabel } from '@/utils/deviceTypes'
+import { cn } from '@/utils/cn'
 import {
   Plus,
   Play,
-  Pause,
   Edit,
-  Clock,
-  Users,
-  CheckCircle,
-  AlertCircle
+  Server,
+  FileText,
+  CalendarClock,
+  Hand,
+  AlertCircle,
+  AlertTriangle,
+  RotateCcw,
+  ShieldCheck,
 } from 'lucide-react'
 import {
   Card,
@@ -18,22 +23,43 @@ import {
   Badge,
   Table,
   Column,
-  ConfirmModal
+  ConfirmModal,
 } from '@/components/atoms'
+import { Switch } from '@/components/atoms/switch'
 import { CompactPageToolbar } from '@/components/shared'
 import { DeleteIconButton } from '@/components/shared/DeleteIconButton'
 import { FloatingBatchActionBar } from '@/components/shared/FloatingBatchActionBar'
 import { BatchDeleteConfirmModal } from '@/components/shared/BatchDeleteConfirmModal'
 import { useBatchSelection } from '@/hooks'
-import { 
-  useInspectionStrategies, 
-  useToggleStrategy, 
+import {
+  useInspectionStrategies,
+  useInspectionTemplates,
+  useToggleStrategy,
   useDeleteStrategy,
   useBatchDeleteStrategies,
-  useTriggerExecution 
+  useTriggerExecution,
 } from '../hooks/useInspection'
-import { InspectionStrategy } from '../types'
+import { InspectionStrategy, InspectionTemplate } from '../types'
+import {
+  describeCronExpression,
+  formatRelativeFutureTime,
+} from '../utils/strategySchedule'
+import {
+  StrategyFilterSegments,
+  StrategyTypeFilter,
+  StrategyEnabledFilter,
+} from './StrategyFilterSegments'
 import { StrategyModal } from './StrategyModal'
+
+const useSafeInspectionTemplates =
+  typeof useInspectionTemplates === 'function'
+    ? useInspectionTemplates
+    : () => undefined
+
+const useSafeBatchDeleteStrategies =
+  typeof useBatchDeleteStrategies === 'function'
+    ? useBatchDeleteStrategies
+    : () => undefined
 
 export const InspectionStrategies: React.FC = () => {
   const [selectedStrategy, setSelectedStrategy] = useState<InspectionStrategy | null>(null)
@@ -42,9 +68,10 @@ export const InspectionStrategies: React.FC = () => {
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
-  const [typeFilter, setTypeFilter] = useState<'all' | 'manual' | 'scheduled'>('all')
-  const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
-  
+  const [typeFilter, setTypeFilter] = useState<StrategyTypeFilter>('all')
+  const [enabledFilter, setEnabledFilter] = useState<StrategyEnabledFilter>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+
   const { data: strategiesData, isLoading, error, refetch } = useInspectionStrategies({
     page,
     pageSize,
@@ -54,23 +81,59 @@ export const InspectionStrategies: React.FC = () => {
         ? undefined
         : enabledFilter === 'enabled',
   })
+
+  const templatesQuery = useSafeInspectionTemplates({ pageSize: 200 })
+
+  const templateMap = useMemo(() => {
+    const map = new Map<number, InspectionTemplate>()
+    const list = templatesQuery?.data?.templates ?? []
+    for (const template of list) {
+      const numericId = Number(template.id)
+      if (Number.isFinite(numericId) && numericId > 0) {
+        map.set(numericId, template)
+      }
+    }
+    return map
+  }, [templatesQuery?.data?.templates])
+
   const toggleStrategy = useToggleStrategy()
   const deleteStrategy = useDeleteStrategy()
-  const batchDeleteStrategies = typeof useBatchDeleteStrategies === 'function' ? useBatchDeleteStrategies() : undefined
+  const batchDeleteStrategies = useSafeBatchDeleteStrategies()
   const triggerExecution = useTriggerExecution()
   const isBatchDeleting = Boolean(batchDeleteStrategies?.isPending)
 
-  const strategies: InspectionStrategy[] = strategiesData?.items || []
+  const strategies: InspectionStrategy[] = useMemo(
+    () => strategiesData?.items || [],
+    [strategiesData?.items]
+  )
   const totalItems = strategiesData?.total || 0
 
-  // 显示所有策略列表
-  const filteredStrategies = strategies
+  const normalizedSearch = searchQuery.trim().toLowerCase()
+  const filteredStrategies = useMemo(() => {
+    if (!normalizedSearch) return strategies
+    return strategies.filter((strategy) => {
+      const templateIds = Array.isArray(strategy.templates) ? strategy.templates : []
+      const templateNames = templateIds
+        .map((id) => templateMap.get(id)?.name ?? '')
+        .join(' ')
+        .toLowerCase()
+      return (
+        strategy.name.toLowerCase().includes(normalizedSearch) ||
+        (strategy.description ?? '').toLowerCase().includes(normalizedSearch) ||
+        templateNames.includes(normalizedSearch)
+      )
+    })
+  }, [strategies, normalizedSearch, templateMap])
+
+  const isSearching = normalizedSearch.length > 0
+  const hasActiveFilter =
+    typeFilter !== 'all' || enabledFilter !== 'all' || isSearching
 
   const batchSelection = useBatchSelection<InspectionStrategy>({
     items: filteredStrategies,
-    totalCount: totalItems,
+    totalCount: isSearching ? filteredStrategies.length : totalItems,
     getId: (s) => s.id,
-    filterDeps: [typeFilter, enabledFilter],
+    filterDeps: [typeFilter, enabledFilter, normalizedSearch],
     pageDeps: [page, pageSize],
   })
 
@@ -79,14 +142,21 @@ export const InspectionStrategies: React.FC = () => {
     setIsModalOpen(true)
   }
 
-  const handleTypeFilterChange = (nextFilter: 'all' | 'manual' | 'scheduled') => {
+  const handleTypeFilterChange = (nextFilter: StrategyTypeFilter) => {
     setPage(1)
     setTypeFilter(nextFilter)
   }
 
-  const handleEnabledFilterChange = (nextFilter: 'all' | 'enabled' | 'disabled') => {
+  const handleEnabledFilterChange = (nextFilter: StrategyEnabledFilter) => {
     setPage(1)
     setEnabledFilter(nextFilter)
+  }
+
+  const handleResetFilters = () => {
+    setPage(1)
+    setTypeFilter('all')
+    setEnabledFilter('all')
+    setSearchQuery('')
   }
 
   const handleEditStrategy = (strategy: InspectionStrategy) => {
@@ -98,10 +168,10 @@ export const InspectionStrategies: React.FC = () => {
     try {
       await toggleStrategy.mutateAsync({
         id: strategy.id,
-        enabled: !strategy.enabled
+        enabled: !strategy.enabled,
       })
-    } catch (error) {
-      console.error('Toggle strategy failed:', error)
+    } catch (toggleError) {
+      console.error('Toggle strategy failed:', toggleError)
     }
   }
 
@@ -111,12 +181,7 @@ export const InspectionStrategies: React.FC = () => {
 
   const handleConfirmDeleteStrategy = async () => {
     if (!strategyToDelete) return
-
-    try {
-      await deleteStrategy.mutateAsync(strategyToDelete.id)
-    } catch (error) {
-      console.error('Delete strategy failed:', error)
-    }
+    await deleteStrategy.mutateAsync(strategyToDelete.id)
   }
 
   const handleConfirmBatchDelete = useCallback(async () => {
@@ -145,152 +210,279 @@ export const InspectionStrategies: React.FC = () => {
         setPage(page - 1)
       }
       refetch()
-    } catch (error) {
-      console.error('Batch delete strategies failed:', error)
+    } catch (batchError) {
+      console.error('Batch delete strategies failed:', batchError)
     }
-  }, [batchSelection, batchDeleteStrategies, typeFilter, enabledFilter, page, filteredStrategies.length, refetch])
+  }, [
+    batchSelection,
+    batchDeleteStrategies,
+    typeFilter,
+    enabledFilter,
+    page,
+    filteredStrategies.length,
+    refetch,
+  ])
 
   const handleTriggerExecution = async (strategyId: string) => {
     try {
       await triggerExecution.mutateAsync(strategyId)
-    } catch (error) {
-      console.error('Trigger execution failed:', error)
+    } catch (triggerError) {
+      console.error('Trigger execution failed:', triggerError)
     }
-  }
-
-  const getStrategyStatusBadge = (strategy: InspectionStrategy) => {
-    if (strategy.enabled) {
-      return <Badge variant="success">启用</Badge>
-    }
-    return <Badge variant="secondary">禁用</Badge>
-  }
-
-  const getStrategyTypeBadge = (type: string) => {
-    if (type === 'scheduled') {
-      return <Badge variant="info">定时巡检</Badge>
-    }
-    return <Badge variant="outline">手动巡检</Badge>
   }
 
   const columns: Column<InspectionStrategy>[] = [
     {
       key: 'name',
       title: '策略名称',
-      render: (_, strategy) => (
-        <div className="flex flex-col">
-          <span className="font-medium text-foreground">{strategy.name}</span>
-          <span className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{strategy.description}</span>
-        </div>
-      )
+      width: '26%',
+      render: (_, strategy) => {
+        const deviceCount = Array.isArray(strategy.devices) ? strategy.devices.length : 0
+        const templateCount = Array.isArray(strategy.templates) ? strategy.templates.length : 0
+        const missingParts: string[] = []
+        if (templateCount === 0) missingParts.push('巡检模板')
+        if (deviceCount === 0) missingParts.push('目标设备')
+        const isIncomplete = missingParts.length > 0
+
+        return (
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-medium text-foreground truncate">{strategy.name}</span>
+              {isIncomplete && (
+                <Badge
+                  variant="warning"
+                  size="sm"
+                  className="gap-1 shrink-0"
+                  title={`缺少${missingParts.join('和')}，无法执行`}
+                >
+                  <AlertTriangle className="w-3 h-3" />
+                  待完善
+                </Badge>
+              )}
+            </div>
+            <span className="text-xs text-muted-foreground line-clamp-1">
+              {strategy.description?.trim() ? strategy.description : '暂无描述'}
+            </span>
+          </div>
+        )
+      },
     },
     {
-      key: 'type',
-      title: '类型',
-      render: (_, strategy) => (
-        <div className="flex flex-col gap-1">
-          {getStrategyTypeBadge(strategy.type)}
-          {strategy.type === 'scheduled' && strategy.cron && (
-            <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-              <Clock className="w-3 h-3" />
-              {strategy.cron}
+      key: 'templates',
+      title: '巡检模板',
+      width: '19%',
+      render: (_, strategy) => {
+        const templateIds = Array.isArray(strategy.templates) ? strategy.templates : []
+        const primaryTemplateId = templateIds[0]
+        if (!primaryTemplateId) {
+          return <span className="text-xs font-medium text-warning">未配置模板</span>
+        }
+        const template = templateMap.get(primaryTemplateId)
+        if (!template) {
+          return (
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <FileText className="w-3.5 h-3.5 shrink-0" />
+              <span className="tabular-nums">模板 #{primaryTemplateId}</span>
             </div>
-          )}
-        </div>
-      )
+          )
+        }
+        const typeSummary =
+          template.deviceTypes.length > 0
+            ? template.deviceTypes.map(getDeviceTypeLabel).join('、')
+            : '通用设备'
+        return (
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <span className="text-sm font-medium text-foreground truncate" title={template.name}>
+                {template.name}
+              </span>
+            </div>
+            <span className="text-xs text-muted-foreground truncate">{typeSummary}</span>
+          </div>
+        )
+      },
     },
     {
       key: 'devices',
-      title: '设备数量',
-      render: (_, strategy) => (
-        <div className="flex items-center gap-1">
-          <Users className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-          <span className="font-medium">{strategy.devices.length}</span>
-        </div>
-      )
+      title: '目标设备',
+      width: '11%',
+      render: (_, strategy) => {
+        const count = Array.isArray(strategy.devices) ? strategy.devices.length : 0
+        if (count === 0) {
+          return (
+            <div className="inline-flex items-center gap-1.5 text-xs font-medium text-warning whitespace-nowrap">
+              <Server className="w-3.5 h-3.5 shrink-0" />
+              <span className="tabular-nums">0 台 · 未配置</span>
+            </div>
+          )
+        }
+        return (
+          <div className="inline-flex items-center gap-1.5 text-sm text-foreground whitespace-nowrap">
+            <Server className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="font-medium tabular-nums">{count} 台</span>
+          </div>
+        )
+      },
     },
     {
-      key: 'status',
-      title: '状态',
-      render: (_, strategy) => getStrategyStatusBadge(strategy)
+      key: 'type',
+      title: '触发与计划',
+      width: '17%',
+      render: (_, strategy) => {
+        if (strategy.type === 'scheduled') {
+          const scheduleText = describeCronExpression(strategy.cron)
+          return (
+            <div className="flex flex-col items-start gap-1">
+              <Badge variant="info" size="sm" className="gap-1">
+                <CalendarClock className="w-3 h-3" />
+                定时巡检
+              </Badge>
+              <span
+                className="text-xs text-muted-foreground"
+                title={strategy.cron ? `调度表达式: ${strategy.cron}` : undefined}
+              >
+                {scheduleText}
+              </span>
+            </div>
+          )
+        }
+
+        return (
+          <div className="flex flex-col items-start gap-1">
+            <Badge variant="neutral" size="sm" className="gap-1">
+              <Hand className="w-3 h-3" />
+              手动巡检
+            </Badge>
+            <span className="text-xs text-muted-foreground">按需手动触发</span>
+          </div>
+        )
+      },
     },
     {
       key: 'nextRunTime',
       title: '下次执行',
+      width: '13%',
+      render: (_, strategy) => {
+        if (strategy.type === 'scheduled' && !strategy.enabled) {
+          return <span className="text-xs text-muted-foreground">已暂停调度</span>
+        }
+        if (!strategy.nextRunTime) {
+          return <span className="text-sm text-muted-foreground">-</span>
+        }
+        const relative = formatRelativeFutureTime(strategy.nextRunTime)
+        return (
+          <div className="flex flex-col gap-0.5 text-sm">
+            <span className="font-medium tabular-nums text-foreground whitespace-nowrap">
+              {formatDateYMD(strategy.nextRunTime)} {formatTimeHM(strategy.nextRunTime)}
+            </span>
+            {relative && (
+              <span className="text-xs text-muted-foreground">{relative}</span>
+            )}
+          </div>
+        )
+      },
+    },
+    {
+      key: 'status',
+      title: '状态',
+      width: '9%',
       render: (_, strategy) => (
-        <div className="text-sm">
-          {strategy.nextRunTime ? (
-            <div className="flex flex-col">
-              <span>{formatDateYMD(strategy.nextRunTime)}</span>
-              <span className="text-gray-500 dark:text-gray-400">
-                {formatTimeHM(strategy.nextRunTime)}
-              </span>
-            </div>
-          ) : (
-            <span className="text-gray-400 dark:text-gray-500">-</span>
-          )}
+        <div className="inline-flex items-center gap-2 whitespace-nowrap">
+          <Switch
+            checked={strategy.enabled}
+            onCheckedChange={() => {
+              void handleToggleStrategy(strategy)
+            }}
+            disabled={toggleStrategy.isPending}
+            aria-label={strategy.enabled ? `禁用策略 ${strategy.name}` : `启用策略 ${strategy.name}`}
+            className="h-5 w-9 [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4"
+          />
+          <span
+            className={cn(
+              'text-xs font-medium',
+              strategy.enabled ? 'text-success' : 'text-muted-foreground'
+            )}
+          >
+            {strategy.enabled ? '启用' : '禁用'}
+          </span>
         </div>
-      )
+      ),
     },
     {
       key: 'actions',
       title: '操作',
-      render: (_, strategy) => (
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => handleTriggerExecution(strategy.id)}
-            disabled={!strategy.enabled || triggerExecution.isPending}
-            title="手动执行"
-          >
-            <Play className="w-4 h-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => handleToggleStrategy(strategy)}
-            disabled={toggleStrategy.isPending}
-            title={strategy.enabled ? '禁用' : '启用'}
-          >
-            {strategy.enabled ? (
-              <Pause className="w-4 h-4" />
-            ) : (
-              <CheckCircle className="w-4 h-4" />
-            )}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => handleEditStrategy(strategy)}
-            title="编辑"
-          >
-            <Edit className="w-4 h-4" />
-          </Button>
-          <DeleteIconButton
-            onClick={() => handleDeleteStrategy(strategy)}
-            title="删除"
-          />
-        </div>
-      )
-    }
+      align: 'right',
+      width: '15%',
+      render: (_, strategy) => {
+        const deviceCount = Array.isArray(strategy.devices) ? strategy.devices.length : 0
+        const templateCount = Array.isArray(strategy.templates) ? strategy.templates.length : 0
+        const disabledReasons: string[] = []
+        if (!strategy.enabled) disabledReasons.push('策略已禁用')
+        if (templateCount === 0) disabledReasons.push('未配置巡检模板')
+        if (deviceCount === 0) disabledReasons.push('未配置目标设备')
+        const runDisabled = disabledReasons.length > 0 || triggerExecution.isPending
+        const runTitle =
+          disabledReasons.length > 0 ? `不可执行：${disabledReasons.join('、')}` : '手动执行'
+
+        return (
+          <div className="inline-flex items-center justify-end gap-1 whitespace-nowrap">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleTriggerExecution(strategy.id)}
+              disabled={runDisabled}
+              title={runTitle}
+              aria-label="手动执行"
+              className="gap-1 cursor-pointer"
+            >
+              <Play className="w-3.5 h-3.5" />
+              <span>执行</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => handleEditStrategy(strategy)}
+              title="编辑"
+              aria-label="编辑"
+              className="cursor-pointer"
+            >
+              <Edit className="w-4 h-4" />
+            </Button>
+            <DeleteIconButton
+              onClick={() => handleDeleteStrategy(strategy)}
+              title="删除"
+              className="cursor-pointer"
+            />
+          </div>
+        )
+      },
+    },
   ]
 
   if (isLoading) {
     return (
-      <div className="space-y-4">
-        {/* 加载骨架屏 */}
-        {[...Array(5)].map((_, index) => (
-          <Card key={index} className="animate-pulse">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-4">
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/6"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/6"></div>
-                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+      <div className="flex flex-1 min-h-0 flex-col gap-4">
+        <div className="h-9 w-full rounded-lg bg-muted/60 animate-pulse" />
+        <div className="flex-1 rounded-lg border border-border bg-card overflow-hidden">
+          <div className="border-b border-border bg-muted/60 px-4 py-2.5 flex items-center gap-4">
+            <div className="h-3.5 w-24 rounded bg-muted animate-pulse" />
+            <div className="h-3.5 w-20 rounded bg-muted animate-pulse" />
+            <div className="h-3.5 w-16 rounded bg-muted animate-pulse" />
+            <div className="h-3.5 w-20 rounded bg-muted animate-pulse" />
+          </div>
+          <div className="divide-y divide-border">
+            {[...Array(5)].map((_, index) => (
+              <div key={index} className="px-4 py-3.5 flex items-center gap-4 animate-pulse">
+                <div className="h-4 bg-muted rounded w-1/4" />
+                <div className="h-4 bg-muted rounded w-1/6" />
+                <div className="h-4 bg-muted rounded w-1/12" />
+                <div className="h-4 bg-muted rounded w-1/6" />
+                <div className="h-4 bg-muted rounded w-1/6 ml-auto" />
               </div>
-            </CardContent>
-          </Card>
-        ))}
+            ))}
+          </div>
+        </div>
       </div>
     )
   }
@@ -300,12 +492,14 @@ export const InspectionStrategies: React.FC = () => {
       <Card>
         <CardContent className="p-8 text-center">
           <div className="flex flex-col items-center gap-4">
-            <AlertCircle className="w-12 h-12 text-red-500" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft text-danger-soft-foreground">
+              <AlertCircle className="w-6 h-6" />
+            </div>
             <div>
               <h3 className="text-lg font-medium text-foreground">加载失败</h3>
-              <p className="text-gray-500 dark:text-gray-400 mt-1">{error.message}</p>
+              <p className="text-sm text-muted-foreground mt-1">{error.message}</p>
             </div>
-            <Button onClick={() => refetch()}>
+            <Button onClick={() => refetch()} className="cursor-pointer">
               重试
             </Button>
           </div>
@@ -314,58 +508,39 @@ export const InspectionStrategies: React.FC = () => {
     )
   }
 
+  const isFilteredEmpty = filteredStrategies.length === 0 && hasActiveFilter
+
   return (
-    <div className="space-y-4">
+    <div className="flex flex-1 min-h-0 flex-col gap-3">
       <CompactPageToolbar
+        layout="between"
         testIdPrefix="inspection-strategies-toolbar"
+        search={{
+          value: searchQuery,
+          placeholder: '搜索当前页策略名称、描述或模板...',
+          ariaLabel: '搜索巡检策略',
+          onChange: setSearchQuery,
+        }}
         filters={(
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex flex-wrap items-center gap-2">
+            <StrategyFilterSegments
+              typeFilter={typeFilter}
+              enabledFilter={enabledFilter}
+              onTypeChange={handleTypeFilterChange}
+              onEnabledChange={handleEnabledFilterChange}
+            />
+            {hasActiveFilter && (
               <Button
                 type="button"
-                variant={typeFilter === 'all' ? 'default' : 'outline'}
-                onClick={() => handleTypeFilterChange('all')}
+                size="sm"
+                variant="ghost"
+                onClick={handleResetFilters}
+                className="gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
               >
-                全部类型
+                <RotateCcw className="w-3.5 h-3.5" />
+                重置筛选
               </Button>
-              <Button
-                type="button"
-                variant={typeFilter === 'manual' ? 'default' : 'outline'}
-                onClick={() => handleTypeFilterChange('manual')}
-              >
-                仅手动
-              </Button>
-              <Button
-                type="button"
-                variant={typeFilter === 'scheduled' ? 'default' : 'outline'}
-                onClick={() => handleTypeFilterChange('scheduled')}
-              >
-                仅定时
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant={enabledFilter === 'all' ? 'default' : 'outline'}
-                onClick={() => handleEnabledFilterChange('all')}
-              >
-                全部状态
-              </Button>
-              <Button
-                type="button"
-                variant={enabledFilter === 'enabled' ? 'default' : 'outline'}
-                onClick={() => handleEnabledFilterChange('enabled')}
-              >
-                仅启用
-              </Button>
-              <Button
-                type="button"
-                variant={enabledFilter === 'disabled' ? 'default' : 'outline'}
-                onClick={() => handleEnabledFilterChange('disabled')}
-              >
-                仅禁用
-              </Button>
-            </div>
+            )}
           </div>
         )}
         primaryActions={[
@@ -378,41 +553,73 @@ export const InspectionStrategies: React.FC = () => {
         ]}
       />
 
-      {/* 策略列表 */}
-      <Table
-        data={filteredStrategies}
-        columns={columns}
-        rowKey="id"
-        rowSelection={batchSelection.rowSelection}
-        className="border-0"
-        emptyContent={(
-          <div className="text-center py-6">
-            <div className="flex flex-col items-center gap-4">
-              <AlertCircle className="w-12 h-12 text-gray-400 dark:text-gray-500" />
-              <div>
-                <h3 className="text-lg font-medium text-foreground">暂无巡检策略</h3>
-                <p className="text-gray-500 dark:text-gray-400 mt-1">
-                  开始创建您的第一个巡检策略
-                </p>
+      {/* 策略列表容器：弹性撑满可视高度，使分页栏稳固收底 */}
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card">
+        <Table
+          data={filteredStrategies}
+          columns={columns}
+          rowKey="id"
+          rowSelection={batchSelection.rowSelection}
+          onRow={(strategy) => ({
+            className: strategy.enabled ? undefined : 'opacity-75',
+          })}
+          className="flex flex-1 min-h-0 flex-col border-0"
+          emptyContent={(
+            <div className="px-6 py-12 text-center">
+              <div className="mx-auto flex max-w-sm flex-col items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-2 text-muted-foreground">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">
+                    {isFilteredEmpty ? '未找到匹配的巡检策略' : '暂无巡检策略'}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {isFilteredEmpty
+                      ? '请调整筛选条件或清空关键词后重试'
+                      : '将巡检模板、目标设备与执行周期组合为策略，即可自动化巡检'}
+                  </p>
+                </div>
+                {isFilteredEmpty ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleResetFilters}
+                    className="mt-1 gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    清空筛选
+                  </Button>
+                ) : (
+                  <Button onClick={handleCreateStrategy} className="mt-1 gap-1.5 cursor-pointer">
+                    <Plus className="w-4 h-4" />
+                    创建策略
+                  </Button>
+                )}
               </div>
-              <Button onClick={handleCreateStrategy} className="mt-2">
-                <Plus className="w-4 h-4 mr-2" />
-                创建策略
-              </Button>
             </div>
-          </div>
-        )}
-        pagination={{
-          current: page,
-          pageSize,
-          total: totalItems,
-          onChange: (nextPage) => setPage(nextPage),
-          onPageSizeChange: (nextPageSize) => {
-            setPage(1)
-            setPageSize(nextPageSize)
-          },
-        }}
-      />
+          )}
+          pagination={
+            isSearching
+              ? {
+                  current: 1,
+                  pageSize: Math.max(filteredStrategies.length, pageSize),
+                  total: filteredStrategies.length,
+                  onChange: () => {},
+                }
+              : {
+                  current: page,
+                  pageSize,
+                  total: totalItems,
+                  onChange: (nextPage) => setPage(nextPage),
+                  onPageSizeChange: (nextPageSize) => {
+                    setPage(1)
+                    setPageSize(nextPageSize)
+                  },
+                }
+          }
+        />
+      </div>
 
       {/* 策略编辑/创建弹窗 */}
       {isModalOpen && (
@@ -451,10 +658,10 @@ export const InspectionStrategies: React.FC = () => {
       <FloatingBatchActionBar
         selectedCount={batchSelection.selectedCount}
         selectionMode={batchSelection.selectionMode}
-        totalCount={totalItems}
+        totalCount={isSearching ? filteredStrategies.length : totalItems}
         isAllCurrentPageSelected={batchSelection.isAllCurrentPageSelected}
         onSelectCurrentPage={batchSelection.selectCurrentPage}
-        onSelectAllFiltered={batchSelection.selectAllFiltered}
+        onSelectAllFiltered={isSearching ? undefined : batchSelection.selectAllFiltered}
         onInvertCurrentPage={batchSelection.invertCurrentPage}
         onClearSelection={batchSelection.clearSelection}
         onDelete={() => setShowBatchDeleteConfirm(true)}
@@ -471,7 +678,6 @@ export const InspectionStrategies: React.FC = () => {
         isAllFiltered={batchSelection.selectionMode === 'all_filtered'}
         entityLabel="条巡检策略"
       />
-
     </div>
   )
 }

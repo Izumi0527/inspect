@@ -192,8 +192,12 @@ export function Table<T extends object>({
 
   return (
     <div data-slot="table-container" className={cn('overflow-hidden', className)}>
-      {!loading && data.length === 0 && emptyContent ? emptyContent : (
-      <div className="overflow-auto" style={{ maxHeight: scroll?.y }}>
+      {!loading && data.length === 0 && emptyContent ? (
+        <div className="flex-1 min-h-0 flex items-center justify-center">
+          {emptyContent}
+        </div>
+      ) : (
+      <div className="flex-1 min-h-0 overflow-auto" style={{ maxHeight: scroll?.y }}>
         <table data-slot="table" className="w-full" style={{ minWidth: scroll?.x }}>
           {showHeader && (
             <thead>
@@ -388,7 +392,7 @@ export function Table<T extends object>({
       )}
 
       {pagination && (
-        <div data-slot="table-footer" className="border-t border-border">
+        <div data-slot="table-footer" className="shrink-0 border-t border-border">
           <Pagination
             currentPage={pagination.current}
             totalPages={Math.ceil(pagination.total / Math.max(pagination.pageSize, 1))}

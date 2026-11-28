@@ -34,8 +34,10 @@ jest.mock('@/features/inspection/hooks/useURLFilters', () => ({
       status: 'all',
       startDate: '',
       endDate: '',
+      deviceId: '',
     },
     updateFilter: jest.fn(),
+    updateFilters: jest.fn(),
     resetFilters: jest.fn(),
   }),
 }))
@@ -48,10 +50,6 @@ jest.mock('@/features/inspection/hooks/useDateFilters', () => ({
 
 jest.mock('@/features/inspection/components/ExecutionDetailModal', () => ({
   ExecutionDetailModal: () => null,
-}))
-
-jest.mock('@/features/inspection/components/ExecutionStatsCards', () => ({
-  ExecutionStatsCards: () => <div>ExecutionStatsCards</div>,
 }))
 
 jest.mock('@/features/inspection/components/ExecutionFilters', () => ({
@@ -106,7 +104,7 @@ jest.mock('@/components/atoms/modal', () => ({
   SimpleModal: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
-describe('InspectionExecutions 错误态', () => {
+describe('InspectionExecutions 错误态与基础布局', () => {
   it('列表加载失败时应展示错误态并允许重试', async () => {
     const user = userEvent.setup()
     const refetch = jest.fn()
@@ -132,7 +130,7 @@ describe('InspectionExecutions 错误态', () => {
     expect(refetch).toHaveBeenCalledTimes(1)
   })
 
-  it('正常态应展示统一筛选栏、统计卡片和默认表格规格', () => {
+  it('正常态应展示统一筛选栏与默认表格规格，不再渲染次级统计卡片和顶栏条数汇总', () => {
     ;(inspectionHooks.useInspectionExecutions as jest.Mock).mockReturnValue({
       data: {
         items: [
@@ -172,7 +170,8 @@ describe('InspectionExecutions 错误态', () => {
     render(<InspectionExecutions />)
 
     expect(screen.getByTestId('inspection-executions-filters')).toBeInTheDocument()
-    expect(screen.getByText('ExecutionStatsCards')).toBeInTheDocument()
+    expect(screen.queryByText(/共 \d+ 条执行记录/)).not.toBeInTheDocument()
+    expect(screen.queryByText('总执行数')).not.toBeInTheDocument()
     expect(screen.getByTestId('inspection-executions-table')).toHaveAttribute('data-size', 'default')
   })
 })

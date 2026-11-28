@@ -23,15 +23,27 @@ import { SimpleModal } from '@/components/atoms/modal'
 import { Badge } from '@/components/atoms/badge'
 import { cn } from '@/utils/cn'
 import { useGenerateReport, useExecutionDetail } from '../hooks/useInspection'
+import {
+  clampProgress,
+  formatDeviceScore,
+  formatExecutionDuration,
+  getDeviceStatusMeta,
+  getExecutionScoreMeta,
+  getExecutionStatusMeta,
+  getTriggerMeta,
+  normalizeExecutionSummary,
+} from '../utils/executionPresentation'
 import { InterfaceUtilizationTable } from './InterfaceUtilizationTable'
 import { CheckDetailTables } from './CheckDetailTables'
-import type { InspectionExecution, ReportFormat } from '../types'
+import type { CheckResult, DeviceInspectionResult, InspectionExecution, ReportFormat } from '../types'
 
 interface ExecutionDetailModalProps {
   open: boolean
   onClose: () => void
   execution: InspectionExecution | null
 }
+
+type CheckFilterType = 'all' | 'abnormal' | 'pass'
 
 // 报告格式配置
 const reportFormats: { value: ReportFormat; label: string; icon: React.ReactNode; description: string }[] = [
@@ -58,6 +70,20 @@ const getActualValueLabel = (checkName: string): string => {
   return '实际值'
 }
 
+const getStatusHeaderIcon = (status: string) => {
+  switch (status) {
+    case 'running':
+      return <Activity className="w-4 h-4 animate-pulse" />
+    case 'completed':
+      return <CheckCircle2 className="w-4 h-4" />
+    case 'failed':
+    case 'cancelled':
+      return <XCircle className="w-4 h-4" />
+    default:
+      return <Clock className="w-4 h-4" />
+  }
+}
+
 export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
   open,
   onClose,
@@ -65,10 +91,19 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'devices' | 'checks'>('overview')
   const [expandedDevice, setExpandedDevice] = useState<string | null>(null)
+  const [checkFilter, setCheckFilter] = useState<CheckFilterType>('all')
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [exportCompleted, setExportCompleted] = useState(false)
   const exportResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  
+  const isActiveModalRef = useRef(open)
+
+  useEffect(() => {
+    isActiveModalRef.current = open
+    return () => {
+      isActiveModalRef.current = false
+    }
+  }, [open])
+
   // 获取完整的执行详情（包含设备结果和检查项）
   const {
     data: detailedExecution,
@@ -78,18 +113,20 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
   } = useExecutionDetail(
     open && initialExecution ? initialExecution.id : null
   )
-  
+
   // 使用详情数据，如果没有则使用初始数据
   const execution = detailedExecution || initialExecution
-  
+
   // 报告生成 hook
   const generateReport = useGenerateReport()
 
-  // 重置标签页当弹窗打开时
+  // 弹窗打开时重置标签页与筛选状态
   useEffect(() => {
     if (open) {
       setActiveTab('overview')
       setExpandedDevice(null)
+      setCheckFilter('all')
+      setShowExportMenu(false)
       setExportCompleted(false)
     }
     return () => {
@@ -99,25 +136,40 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
     }
   }, [open])
 
+  // Escape 键关闭导出菜单
+  useEffect(() => {
+    if (!showExportMenu) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowExportMenu(false)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showExportMenu])
+
   // 处理导出报告
   const handleExportReport = useCallback(async (format: ReportFormat) => {
     if (!execution) return
-    
+
     setShowExportMenu(false)
     setExportCompleted(false)
     if (exportResetTimerRef.current) {
       clearTimeout(exportResetTimerRef.current)
     }
-    
+
     try {
       await generateReport.mutateAsync({
         executionId: execution.id,
         type: 'detailed',
         format,
       })
+      if (!isActiveModalRef.current) return
       setExportCompleted(true)
       exportResetTimerRef.current = setTimeout(() => {
-        setExportCompleted(false)
+        if (isActiveModalRef.current) {
+          setExportCompleted(false)
+        }
       }, 3000)
     } catch (error) {
       console.error('导出报告失败:', error)
@@ -126,75 +178,70 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
 
   if (!execution) return null
 
-  // 状态样式映射
-  const statusConfig: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
-    pending: { color: 'text-muted-foreground bg-gray-100 dark:bg-gray-800', icon: <Clock className="w-4 h-4" />, label: '待执行' },
-    running: { color: 'text-blue-500 bg-blue-100', icon: <Activity className="w-4 h-4 animate-pulse" />, label: '执行中' },
-    completed: { color: 'text-green-500 bg-green-100', icon: <CheckCircle2 className="w-4 h-4" />, label: '已完成' },
-    failed: { color: 'text-red-500 bg-red-100', icon: <XCircle className="w-4 h-4" />, label: '失败' },
-    cancelled: { color: 'text-orange-500 bg-orange-100', icon: <XCircle className="w-4 h-4" />, label: '已取消' },
-  }
+  const summary = normalizeExecutionSummary<DeviceInspectionResult>(execution.summary)
 
-  // 检查项状态样式：color 用于图标着色，variant 决定徽标的底色+文字（保证对比度可读）
-  const checkStatusConfig: Record<string, { color: string; variant: 'success' | 'warning' | 'error' | 'secondary'; icon: React.ReactNode; label: string }> = {
-    pass: { color: 'text-green-600', variant: 'success', icon: <CheckCircle2 className="w-4 h-4" />, label: '通过' },
-    warning: { color: 'text-yellow-600', variant: 'warning', icon: <AlertTriangle className="w-4 h-4" />, label: '警告' },
-    fail: { color: 'text-red-600', variant: 'error', icon: <XCircle className="w-4 h-4" />, label: '失败' },
-    skip: { color: 'text-gray-400', variant: 'secondary', icon: <Clock className="w-4 h-4" />, label: '跳过' },
+  // 检查项状态样式：color 用于图标着色，variant 决定语义徽标底色+文字
+  const checkStatusConfig: Record<
+    string,
+    { color: string; variant: 'success' | 'warning' | 'error' | 'neutral'; icon: React.ReactNode; label: string }
+  > = {
+    pass: { color: 'text-success', variant: 'success', icon: <CheckCircle2 className="w-4 h-4" />, label: '通过' },
+    warning: { color: 'text-warning', variant: 'warning', icon: <AlertTriangle className="w-4 h-4" />, label: '警告' },
+    fail: { color: 'text-danger', variant: 'error', icon: <XCircle className="w-4 h-4" />, label: '失败' },
+    skip: { color: 'text-muted-foreground', variant: 'neutral', icon: <Clock className="w-4 h-4" />, label: '跳过' },
     // 不适用与跳过分开呈现：前者设备天然没这个特性、无需处理，
     // 后者是该查却没查成、要跟进。用同一个标签会让运维分不清要不要动手。
-    not_applicable: { color: 'text-gray-300', variant: 'secondary', icon: <MinusCircle className="w-4 h-4" />, label: '不适用' },
+    not_applicable: {
+      color: 'text-muted-foreground/60',
+      variant: 'neutral',
+      icon: <MinusCircle className="w-4 h-4" />,
+      label: '不适用',
+    },
   }
 
-  const currentStatus = statusConfig[execution.status] || statusConfig.pending
-  
+  const statusMeta = getExecutionStatusMeta(execution.status)
+  const triggerMeta = getTriggerMeta(execution.triggerType)
+  const progressValue = clampProgress(execution.progress)
+  const scoreMeta = getExecutionScoreMeta(
+    summary.score,
+    execution.status,
+    summary.totalChecks
+  )
+  const clampedScore = Number.isFinite(summary.score)
+    ? Math.max(0, Math.min(100, summary.score))
+    : 0
+  const circumference = 2 * Math.PI * 56
+
   // 是否可以导出报告（只有已完成的巡检才能导出）
   const canExport = execution.status === 'completed'
-  
+
   // 是否正在加载详情
   const isLoading = isLoadingDetail && !detailedExecution
   const shouldShowDetailError = Boolean(detailError) && !detailedExecution
   const detailErrorMessage = detailError instanceof Error ? detailError.message : '执行详情加载失败'
 
-  // 格式化时长
-  const formatDuration = (seconds: number | undefined) => {
-    if (!seconds) return '-'
-    if (seconds < 60) return `${seconds}秒`
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}分${seconds % 60}秒`
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    return `${hours}小时${minutes}分`
-  }
-
   // 将字节数组字符串转换为可读文本
   const convertByteArrayToString = (byteArrayStr: string): string | null => {
     try {
-      // 移除方括号，获取数字部分
       const byteStr = byteArrayStr.replace(/^\[|\]$/g, '').trim()
       if (!byteStr) return null
-      
-      // 解析数字
+
       const bytes = byteStr.split(/\s+/).map(b => parseInt(b, 10)).filter(b => !isNaN(b))
       if (bytes.length === 0) return null
-      
-      // 将字节转换为字符，过滤不可打印字符
+
       const chars: string[] = []
       for (const b of bytes) {
         if (b >= 32 && b < 127) {
-          // 可打印 ASCII 字符
           chars.push(String.fromCharCode(b))
         } else if (b === 10 || b === 13) {
-          // 换行符转为空格
           if (chars.length > 0 && chars[chars.length - 1] !== ' ') {
             chars.push(' ')
           }
         } else if (b === 9) {
-          // Tab 转为空格
           chars.push(' ')
         }
-        // 其他不可打印字符忽略
       }
-      
+
       const result = chars.join('').trim()
       return result.length > 0 ? result : null
     } catch {
@@ -205,42 +252,35 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
   // 格式化检查值（处理字节数组格式的字符串）
   const formatCheckValue = (value: string | undefined): string | null => {
     if (!value) return null
-    
-    // 检查是否是字节数组格式 [83 53 55 50...] 或 [83 53 55 50...（未闭合）
+
     if (value.startsWith('[') && /^\[\d+(\s+\d+)*/.test(value)) {
       const converted = convertByteArrayToString(value)
       if (converted) {
         return converted.length > 50 ? converted.slice(0, 50) + '...' : converted
       }
     }
-    
-    // 检查是否是响应时间格式（如 "12.34ms"）
+
     if (/^\d+(\.\d+)?ms$/i.test(value.trim())) {
       return value.trim()
     }
-    
-    // 普通字符串，直接返回（截断过长的内容）
+
     return value.length > 100 ? value.slice(0, 100) + '...' : value
   }
 
   // 格式化消息字段（处理包含字节数组的消息）
   const formatMessage = (message: string | undefined): string | null => {
     if (!message) return null
-    
-    // 检查消息中是否包含字节数组格式 [83 53 55 50...]
-    // 支持未闭合的字节数组（如被截断的情况）
+
     const byteArrayMatch = message.match(/\[(\d+(?:\s+\d+)+)\]?/)
     if (byteArrayMatch) {
       const converted = convertByteArrayToString(byteArrayMatch[0])
       if (converted) {
-        // 替换消息中的字节数组为可读字符串
         const readableInfo = converted.length > 60 ? converted.slice(0, 60) + '...' : converted
         const newMessage = message.replace(byteArrayMatch[0], readableInfo)
         return newMessage.length > 150 ? newMessage.slice(0, 150) + '...' : newMessage
       }
     }
-    
-    // 返回原始消息（截断过长的内容）
+
     return message.length > 150 ? message.slice(0, 150) + '...' : message
   }
 
@@ -249,55 +289,98 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
     setExpandedDevice(expandedDevice === deviceId ? null : deviceId)
   }
 
+  // 统计分布条比例
+  const totalChecksForBar = summary.totalChecks > 0 ? summary.totalChecks : 0
+  const passRatio = totalChecksForBar > 0 ? (summary.passedChecks / totalChecksForBar) * 100 : 0
+  const warningRatio = totalChecksForBar > 0 ? (summary.warningChecks / totalChecksForBar) * 100 : 0
+  const failRatio = totalChecksForBar > 0 ? (summary.failedChecks / totalChecksForBar) * 100 : 0
+
+  // 扁平化检查项并按状态筛选
+  const deviceResults: DeviceInspectionResult[] = summary.deviceResults
+  const allChecks: Array<{ device: DeviceInspectionResult; check: CheckResult; key: string }> =
+    deviceResults.flatMap((device) =>
+      (device.checkResults ?? []).map((check, index) => ({
+        device,
+        check,
+        key: `${device.deviceId}-${check.checkItemId || index}`,
+      }))
+    )
+
+  const abnormalChecksCount = allChecks.filter(
+    ({ check }) => check.status === 'warning' || check.status === 'fail'
+  ).length
+  const passChecksCount = allChecks.filter(({ check }) => check.status === 'pass').length
+
+  const filteredChecks = allChecks.filter(({ check }) => {
+    if (checkFilter === 'abnormal') {
+      return check.status === 'warning' || check.status === 'fail'
+    }
+    if (checkFilter === 'pass') {
+      return check.status === 'pass'
+    }
+    return true
+  })
+
   return (
     <SimpleModal open={open} onClose={onClose} size="5xl" ariaLabel={`执行详情 - ${execution.strategyName}`}>
       <div className="flex flex-col h-[80vh]">
         {/* 头部 */}
-        <div className="flex items-center justify-between pb-4 border-b border-border">
-          <div className="flex items-center gap-3">
-            <div className={cn('p-2 rounded-lg', currentStatus.color)}>
-              {currentStatus.icon}
+        <div className="flex items-center justify-between gap-4 pb-4 border-b border-border">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={cn('p-2 rounded-lg shrink-0', statusMeta.iconSurfaceClass)}>
+              {getStatusHeaderIcon(execution.status)}
             </div>
-            <div>
-              <h2 className="text-xl font-semibold text-foreground">{execution.strategyName}</h2>
+            <div className="min-w-0">
+              <h2 className="text-xl font-semibold text-foreground truncate">{execution.strategyName}</h2>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground tabular-nums">
+                <span>{triggerMeta.label}</span>
+                {execution.triggerUser && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{execution.triggerUser}</span>
+                  </>
+                )}
+                <span aria-hidden="true">·</span>
+                <span>开始于 {formatDateTimeYMDHMS(execution.startTime)}</span>
+              </div>
             </div>
           </div>
-          <Badge className={currentStatus.color}>{currentStatus.label}</Badge>
+          <Badge variant={statusMeta.badgeVariant}>{statusMeta.label}</Badge>
         </div>
 
-        {/* 标签页 */}
+        {/* 标签页（保持精确标签文案以兼容可访问性查询） */}
         <div className="flex gap-4 mt-4 border-b border-border">
           {([
             { key: 'overview', label: '概览', icon: <FileText className="w-4 h-4" /> },
             { key: 'devices', label: '设备详情', icon: <Server className="w-4 h-4" /> },
             { key: 'checks', label: '检查项', icon: <Activity className="w-4 h-4" /> },
           ] as const).map((tab) => (
-            <motion.button
+            <button
               key={tab.key}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+              type="button"
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                'flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors border-b-2',
+                'flex items-center gap-2 px-4 py-2 text-sm font-medium cursor-pointer transition-colors border-b-2',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
                 activeTab === tab.key
-                  ? 'border-purple-600 text-purple-600'
+                  ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               )}
             >
               {tab.icon}
               {tab.label}
-            </motion.button>
+            </button>
           ))}
         </div>
 
         {/* 内容区域 */}
         <div className="flex-1 overflow-y-auto mt-4 space-y-4">
           {shouldShowDetailError && (
-            <div className="p-6 bg-red-50 rounded-lg border border-red-200">
-              <div className="text-sm text-red-700">{detailErrorMessage}</div>
+            <div className="p-6 bg-danger-soft/60 rounded-lg border border-danger/30 text-danger-soft-foreground">
+              <div className="text-sm font-medium">{detailErrorMessage}</div>
               <button
                 type="button"
-                className="mt-3 px-3 py-1.5 text-sm rounded bg-red-600 text-white hover:bg-red-700 transition-colors"
+                className="mt-3 px-3 py-1.5 text-sm font-medium rounded-md bg-danger text-danger-foreground hover:bg-danger/90 transition-colors cursor-pointer"
                 onClick={() => {
                   void refetchDetail()
                 }}
@@ -309,79 +392,102 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
 
           {/* 概览标签 */}
           {activeTab === 'overview' && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* 基本信息卡片 */}
-              <div className="col-span-2 p-4 bg-gradient-to-br from-teal-50 to-cyan-50 rounded-lg border border-teal-200">
-                <h3 className="text-sm font-semibold text-foreground/90 mb-3">基本信息</h3>
-                <div className="grid grid-cols-2 gap-3">
+              <div className="md:col-span-2 p-4 bg-surface-2/60 rounded-lg border border-border">
+                <h3 className="text-sm font-semibold text-foreground mb-3">基本信息</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div>
                     <span className="text-xs text-muted-foreground">触发方式</span>
-                    <p className="text-sm font-medium text-foreground mt-1">
-                      {execution.triggerType === 'manual' ? '手动触发' : '定时触发'}
-                    </p>
+                    <p className="text-sm font-medium text-foreground mt-1">{triggerMeta.label}</p>
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground">触发用户</span>
                     <p className="text-sm font-medium text-foreground mt-1">{execution.triggerUser || '-'}</p>
                   </div>
                   <div>
+                    <span className="text-xs text-muted-foreground">执行进度</span>
+                    <p className="text-sm font-medium text-foreground tabular-nums mt-1">{progressValue}%</p>
+                  </div>
+                  <div>
                     <span className="text-xs text-muted-foreground">开始时间</span>
-                    <p className="text-sm font-medium text-foreground mt-1">
+                    <p className="text-sm font-medium text-foreground tabular-nums mt-1">
                       {formatDateTimeYMDHMS(execution.startTime)}
                     </p>
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground">结束时间</span>
-                    <p className="text-sm font-medium text-foreground mt-1">
+                    <p className="text-sm font-medium text-foreground tabular-nums mt-1">
                       {execution.endTime ? formatDateTimeYMDHMS(execution.endTime) : '-'}
                     </p>
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground">执行时长</span>
-                    <p className="text-sm font-medium text-foreground mt-1">{formatDuration(execution.duration)}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">执行进度</span>
-                    <p className="text-sm font-medium text-foreground mt-1">{execution.progress}%</p>
+                    <p className="text-sm font-medium text-foreground tabular-nums mt-1">
+                      {formatExecutionDuration(execution.duration)}
+                    </p>
                   </div>
                 </div>
               </div>
 
               {/* 统计卡片 */}
-              <div className="p-4 bg-card rounded-lg border border-border">
-                <h3 className="text-sm font-semibold text-foreground/90 mb-3">检查统计</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">总检查项</span>
-                    <span className="text-lg font-bold text-foreground">{execution.summary.totalChecks}</span>
+              <div className="p-4 bg-card rounded-lg border border-border flex flex-col justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-3">检查统计</h3>
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">总检查项</span>
+                      <span className="text-lg font-bold text-foreground tabular-nums">
+                        {summary.totalChecks}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-success flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4" />
+                        通过
+                      </span>
+                      <span className="text-lg font-bold text-success tabular-nums">
+                        {summary.passedChecks}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-warning flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4" />
+                        警告
+                      </span>
+                      <span className="text-lg font-bold text-warning tabular-nums">
+                        {summary.warningChecks}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-danger flex items-center gap-1.5">
+                        <XCircle className="w-4 h-4" />
+                        失败
+                      </span>
+                      <span className="text-lg font-bold text-danger tabular-nums">
+                        {summary.failedChecks}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-green-600 flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4" />
-                      通过
-                    </span>
-                    <span className="text-lg font-bold text-green-600">{execution.summary.passedChecks}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-yellow-600 flex items-center gap-1">
-                      <AlertTriangle className="w-4 h-4" />
-                      警告
-                    </span>
-                    <span className="text-lg font-bold text-yellow-600">{execution.summary.warningChecks}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-red-600 flex items-center gap-1">
-                      <XCircle className="w-4 h-4" />
-                      失败
-                    </span>
-                    <span className="text-lg font-bold text-red-600">{execution.summary.failedChecks}</span>
-                  </div>
+                </div>
+
+                {/* 检查项结果分布占比条 */}
+                <div className="mt-4 h-1.5 w-full rounded-full bg-surface-3 overflow-hidden flex">
+                  {passRatio > 0 && (
+                    <div className="h-full bg-success" style={{ width: `${passRatio}%` }} />
+                  )}
+                  {warningRatio > 0 && (
+                    <div className="h-full bg-warning" style={{ width: `${warningRatio}%` }} />
+                  )}
+                  {failRatio > 0 && (
+                    <div className="h-full bg-danger" style={{ width: `${failRatio}%` }} />
+                  )}
                 </div>
               </div>
 
               {/* 评分卡片 */}
               <div className="p-4 bg-card rounded-lg border border-border">
-                <h3 className="text-sm font-semibold text-foreground/90 mb-3">巡检评分</h3>
+                <h3 className="text-sm font-semibold text-foreground mb-3">巡检评分</h3>
                 <div className="flex items-center justify-center">
                   <div className="relative w-32 h-32">
                     <svg className="w-full h-full transform -rotate-90">
@@ -392,7 +498,7 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                         stroke="currentColor"
                         strokeWidth="8"
                         fill="none"
-                        className="text-gray-200"
+                        className="text-border"
                       />
                       <circle
                         cx="64"
@@ -401,40 +507,32 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                         stroke="currentColor"
                         strokeWidth="8"
                         fill="none"
-                        strokeDasharray={`${2 * Math.PI * 56}`}
-                        strokeDashoffset={`${2 * Math.PI * 56 * (1 - execution.summary.score / 100)}`}
-                        className={cn(
-                          execution.summary.score >= 80
-                            ? 'text-green-500'
-                            : execution.summary.score >= 60
-                            ? 'text-yellow-500'
-                            : 'text-red-500'
-                        )}
+                        strokeDasharray={`${circumference}`}
+                        strokeDashoffset={`${circumference * (1 - (scoreMeta.hasScore ? clampedScore / 100 : 0))}`}
+                        className={scoreMeta.colorClass}
                         strokeLinecap="round"
                       />
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-3xl font-bold text-foreground">
-                        {Math.round(execution.summary.score)}
+                      <span className={cn('text-3xl font-bold tabular-nums', scoreMeta.hasScore ? 'text-foreground' : 'text-muted-foreground')}>
+                        {scoreMeta.hasScore ? Math.round(clampedScore) : '—'}
                       </span>
                     </div>
                   </div>
                 </div>
-                <p className="text-center text-sm text-muted-foreground mt-2">
-                  {execution.summary.score >= 80 ? '优秀' : execution.summary.score >= 60 ? '良好' : '需要改进'}
-                </p>
+                <p className="text-center text-sm text-muted-foreground mt-2">{scoreMeta.gradeLabel}</p>
               </div>
 
               {/* 设备信息 */}
-              <div className="col-span-2 p-4 bg-card rounded-lg border border-border">
-                <h3 className="text-sm font-semibold text-foreground/90 mb-3">设备信息</h3>
+              <div className="md:col-span-2 p-4 bg-card rounded-lg border border-border">
+                <h3 className="text-sm font-semibold text-foreground mb-3">设备信息</h3>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Server className="w-5 h-5 text-gray-400" />
+                    <Server className="w-5 h-5 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">巡检设备数</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg font-bold text-purple-600">{execution.completedDevices}</span>
+                  <div className="flex items-center gap-2 tabular-nums">
+                    <span className="text-lg font-bold text-primary">{execution.completedDevices}</span>
                     <span className="text-sm text-muted-foreground">/ {execution.totalDevices}</span>
                   </div>
                 </div>
@@ -447,112 +545,113 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
             <div className="space-y-3">
               {isLoading ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  <Loader2 className="w-12 h-12 mx-auto mb-3 animate-spin text-purple-500" />
+                  <Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin text-primary" />
                   <p>加载设备详情中...</p>
                 </div>
               ) : shouldShowDetailError ? null : (
-                execution.summary.deviceResults.length === 0 ? (
+                deviceResults.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
-                    <Server className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <Server className="w-10 h-10 mx-auto mb-3 opacity-50" />
                     <p>暂无设备巡检结果</p>
                   </div>
                 ) : (
-                  execution.summary.deviceResults.map((device) => (
-                    <div key={device.deviceId} className="bg-card rounded-lg border border-border overflow-hidden">
-                      <motion.button
-                        onClick={() => toggleDevice(device.deviceId)}
-                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted/40/50 dark:bg-gray-800/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          {expandedDevice === device.deviceId ? (
-                            <ChevronDown className="w-5 h-5 text-gray-400" />
-                          ) : (
-                            <ChevronRight className="w-5 h-5 text-gray-400" />
-                          )}
-                          <Server className="w-5 h-5 text-purple-500" />
-                          <div className="text-left">
-                            <p className="font-medium text-foreground">{device.deviceName}</p>
-                            <p className="text-sm text-muted-foreground">{device.deviceIp || `设备ID: ${device.deviceId}`}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="text-sm font-medium text-foreground">评分: {device.score.toFixed(1)}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {device.passedChecks}/{device.totalChecks} 通过
-                            </p>
-                          </div>
-                          <Badge
-                            className={
-                              device.status === 'success'
-                                ? 'bg-green-100 text-green-600'
-                                : device.status === 'warning'
-                                ? 'bg-yellow-100 text-yellow-600'
-                                : 'bg-red-100 text-red-600'
-                            }
-                          >
-                            {device.status}
-                          </Badge>
-                        </div>
-                      </motion.button>
-
-                      {/* 展开的检查项列表 */}
-                      {expandedDevice === device.deviceId && device.checkResults && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="border-t border-border bg-muted/40"
+                  deviceResults.map((device) => {
+                    const deviceStatus = getDeviceStatusMeta(device.status)
+                    const isExpanded = expandedDevice === device.deviceId
+                    return (
+                      <div key={device.deviceId} className="bg-card rounded-lg border border-border overflow-hidden">
+                        <button
+                          type="button"
+                          aria-expanded={isExpanded}
+                          onClick={() => toggleDevice(device.deviceId)}
+                          className="w-full px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-surface-2/70 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                         >
-                          <div className="p-4 space-y-2">
-                            {device.checkResults.map((check, index) => {
-                              const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
-                              return (
-                                <div
-                                  key={index}
-                                  className="bg-card rounded-lg p-3 border border-border hover:border-purple-200 transition-colors"
-                                >
-                                  <div className="flex items-start justify-between">
-                                    <div className="flex items-start gap-2 flex-1">
-                                      <div className={cn('mt-0.5', checkStatus.color)}>{checkStatus.icon}</div>
-                                      <div className="flex-1">
-                                        <p className="font-medium text-foreground text-sm">{check.checkItemName}</p>
-                                        {check.message && (
-                                          <p className="text-xs text-muted-foreground mt-1">{formatMessage(check.message)}</p>
-                                        )}
-                                        {(formatCheckValue(check.expectedValue) || formatCheckValue(check.actualValue)) && (
-                                          <div className="flex flex-wrap gap-4 mt-2 text-xs">
-                                            {formatCheckValue(check.actualValue) && (
-                                              <div>
-                                                <span className="text-muted-foreground">{getActualValueLabel(check.checkItemName)}: </span>
-                                                <span className="text-foreground/90 font-medium">{formatCheckValue(check.actualValue)}</span>
-                                              </div>
-                                            )}
-                                            {formatCheckValue(check.expectedValue) && (
-                                              <div>
-                                                <span className="text-muted-foreground">参考标准: </span>
-                                                <span className="text-foreground/70">{formatCheckValue(check.expectedValue)}</span>
-                                              </div>
-                                            )}
-                                          </div>
-                                        )}
-                                        {check.details?.kind === 'interface_utilization' ? (
-                                          <InterfaceUtilizationTable details={check.details} />
-                                        ) : (
-                                          check.details && <CheckDetailTables details={check.details} />
-                                        )}
-                                      </div>
-                                    </div>
-                                    <Badge variant={checkStatus.variant} className="ml-2">{checkStatus.label}</Badge>
-                                  </div>
-                                </div>
-                              )
-                            })}
+                          <div className="flex items-center gap-3 min-w-0">
+                            {isExpanded ? (
+                              <ChevronDown className="w-5 h-5 text-muted-foreground shrink-0" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
+                            )}
+                            <Server className="w-5 h-5 text-primary shrink-0" />
+                            <div className="min-w-0">
+                              <p className="font-medium text-foreground truncate">{device.deviceName}</p>
+                              <p className="text-sm text-muted-foreground tabular-nums truncate">
+                                {device.deviceIp || `设备ID: ${device.deviceId}`}
+                              </p>
+                            </div>
                           </div>
-                        </motion.div>
-                      )}
-                    </div>
-                  ))
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right tabular-nums">
+                              <p className="text-sm font-medium text-foreground">评分: {formatDeviceScore(device.score)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {device.passedChecks ?? 0}/{device.totalChecks ?? 0} 通过
+                              </p>
+                            </div>
+                            <Badge variant={deviceStatus.badgeVariant} size="sm">
+                              {deviceStatus.label}
+                            </Badge>
+                          </div>
+                        </button>
+
+                        {/* 展开的检查项列表 */}
+                        {isExpanded && device.checkResults && (
+                          <div className="border-t border-border bg-surface-2/40">
+                            <div className="p-4 space-y-2">
+                              {device.checkResults.map((check, index) => {
+                                const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
+                                const formattedActual = formatCheckValue(check.actualValue)
+                                const formattedExpected = formatCheckValue(check.expectedValue)
+                                return (
+                                  <div
+                                    key={check.checkItemId || index}
+                                    className="bg-card rounded-lg p-3 border border-border hover:border-primary/40 transition-colors"
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex items-start gap-2 flex-1 min-w-0">
+                                        <div className={cn('mt-0.5 shrink-0', checkStatus.color)}>{checkStatus.icon}</div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="font-medium text-foreground text-sm">{check.checkItemName}</p>
+                                          {check.message && (
+                                            <p className="text-xs text-muted-foreground mt-1">{formatMessage(check.message)}</p>
+                                          )}
+                                          {(formattedExpected || formattedActual) && (
+                                            <div className="flex flex-wrap gap-4 mt-2 text-xs">
+                                              {formattedActual && (
+                                                <div>
+                                                  <span className="text-muted-foreground">
+                                                    {getActualValueLabel(check.checkItemName)}:{' '}
+                                                  </span>
+                                                  <span className="text-foreground font-medium">{formattedActual}</span>
+                                                </div>
+                                              )}
+                                              {formattedExpected && (
+                                                <div>
+                                                  <span className="text-muted-foreground">参考标准: </span>
+                                                  <span className="text-muted-foreground">{formattedExpected}</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                          {check.details?.kind === 'interface_utilization' ? (
+                                            <InterfaceUtilizationTable details={check.details} />
+                                          ) : (
+                                            check.details && <CheckDetailTables details={check.details} />
+                                          )}
+                                        </div>
+                                      </div>
+                                      <Badge variant={checkStatus.variant} size="sm" className="shrink-0">
+                                        {checkStatus.label}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
                 )
               )}
             </div>
@@ -560,74 +659,119 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
 
           {/* 检查项标签 */}
           {activeTab === 'checks' && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {isLoading ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  <Loader2 className="w-12 h-12 mx-auto mb-3 animate-spin text-purple-500" />
+                  <Loader2 className="w-10 h-10 mx-auto mb-3 animate-spin text-primary" />
                   <p>加载检查项结果中...</p>
                 </div>
               ) : shouldShowDetailError ? null : (
-                execution.summary.deviceResults.length === 0 ? (
+                deviceResults.length === 0 || allChecks.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
-                    <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <Activity className="w-10 h-10 mx-auto mb-3 opacity-50" />
                     <p>暂无检查项结果</p>
                   </div>
                 ) : (
-                  execution.summary.deviceResults.flatMap((device) =>
-                    device.checkResults?.map((check, index) => {
-                      const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
-                      return (
-                        <motion.div
-                          key={`${device.deviceId}-${index}`}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          className="bg-card rounded-lg p-4 border border-border hover:shadow-md transition-shadow"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <div className={checkStatus.color}>{checkStatus.icon}</div>
-                              <span className="font-medium text-foreground">{check.checkItemName}</span>
-                            </div>
-                            <Badge variant={checkStatus.variant}>{checkStatus.label}</Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground space-y-1">
-                            <p>
-                              <span className="text-muted-foreground">设备: </span>
-                              {device.deviceName}
-                            </p>
-                            {check.message && (
-                              <p>
-                                <span className="text-muted-foreground">消息: </span>
-                                {formatMessage(check.message)}
-                              </p>
-                            )}
-                            {(formatCheckValue(check.actualValue) || formatCheckValue(check.expectedValue)) && (
-                              <div className="flex flex-wrap gap-4 pt-2 border-t border-border/40">
-                                {formatCheckValue(check.actualValue) && (
-                                  <div>
-                                    <span className="text-muted-foreground">{getActualValueLabel(check.checkItemName)}: </span>
-                                    <span className="font-medium text-foreground/90">{formatCheckValue(check.actualValue)}</span>
+                  <>
+                    {/* 检查项状态快捷筛选条 */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+                      <div
+                        role="group"
+                        aria-label="检查项状态筛选"
+                        className="inline-flex h-8 items-center rounded-lg border border-border/70 bg-surface-2 p-[3px]"
+                      >
+                        {([
+                          { key: 'all', label: `全部 (${allChecks.length})` },
+                          { key: 'abnormal', label: `仅异常 (${abnormalChecksCount})` },
+                          { key: 'pass', label: `通过 (${passChecksCount})` },
+                        ] as const).map((item) => {
+                          const isActive = checkFilter === item.key
+                          return (
+                            <button
+                              key={item.key}
+                              type="button"
+                              aria-pressed={isActive}
+                              onClick={() => setCheckFilter(item.key)}
+                              className={cn(
+                                'inline-flex h-6 items-center cursor-pointer rounded-md px-2.5 text-xs font-medium whitespace-nowrap transition-colors duration-150',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+                                isActive
+                                  ? 'bg-card text-foreground shadow-xs'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              )}
+                            >
+                              {item.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {filteredChecks.length === 0 ? (
+                      <div className="text-center py-10 rounded-lg border border-border bg-surface-2/40 text-sm text-muted-foreground">
+                        {checkFilter === 'abnormal'
+                          ? '当前无警告或失败检查项'
+                          : '暂无符合条件的检查项'}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {filteredChecks.map(({ device, check, key }) => {
+                          const checkStatus = checkStatusConfig[check.status] || checkStatusConfig.skip
+                          const formattedActual = formatCheckValue(check.actualValue)
+                          const formattedExpected = formatCheckValue(check.expectedValue)
+                          return (
+                            <div
+                              key={key}
+                              className="bg-card rounded-lg p-4 border border-border hover:border-primary/40 transition-colors"
+                            >
+                              <div className="flex items-center justify-between mb-2 gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className={cn('shrink-0', checkStatus.color)}>{checkStatus.icon}</div>
+                                  <span className="font-medium text-foreground truncate">{check.checkItemName}</span>
+                                </div>
+                                <Badge variant={checkStatus.variant} size="sm" className="shrink-0">
+                                  {checkStatus.label}
+                                </Badge>
+                              </div>
+                              <div className="text-sm text-muted-foreground space-y-1">
+                                <p>
+                                  <span>设备: </span>
+                                  <span className="text-foreground">{device.deviceName}</span>
+                                </p>
+                                {check.message && (
+                                  <p>
+                                    <span>消息: </span>
+                                    {formatMessage(check.message)}
+                                  </p>
+                                )}
+                                {(formattedActual || formattedExpected) && (
+                                  <div className="flex flex-wrap gap-4 pt-2 border-t border-border/60">
+                                    {formattedActual && (
+                                      <div>
+                                        <span>{getActualValueLabel(check.checkItemName)}: </span>
+                                        <span className="font-medium text-foreground">{formattedActual}</span>
+                                      </div>
+                                    )}
+                                    {formattedExpected && (
+                                      <div>
+                                        <span>参考标准: </span>
+                                        <span className="text-muted-foreground">{formattedExpected}</span>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
-                                {formatCheckValue(check.expectedValue) && (
-                                  <div>
-                                    <span className="text-muted-foreground">参考标准: </span>
-                                    <span className="text-foreground/70">{formatCheckValue(check.expectedValue)}</span>
-                                  </div>
+                                {check.details?.kind === 'interface_utilization' ? (
+                                  <InterfaceUtilizationTable details={check.details} />
+                                ) : (
+                                  check.details && <CheckDetailTables details={check.details} />
                                 )}
                               </div>
-                            )}
-                            {check.details?.kind === 'interface_utilization' ? (
-                              <InterfaceUtilizationTable details={check.details} />
-                            ) : (
-                              check.details && <CheckDetailTables details={check.details} />
-                            )}
-                          </div>
-                        </motion.div>
-                      )
-                    })
-                  )
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </>
                 )
               )}
             </div>
@@ -638,23 +782,23 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
         <div className="flex items-center justify-between pt-4 border-t border-border mt-4">
           {/* 导出报告按钮组 */}
           <div className="relative">
-            <motion.button
-              whileHover={{ scale: canExport ? 1.02 : 1 }}
-              whileTap={{ scale: canExport ? 0.98 : 1 }}
+            <button
+              type="button"
               onClick={() => canExport && setShowExportMenu(!showExportMenu)}
               disabled={!canExport || generateReport.isPending}
               className={cn(
-                'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+                'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
                 canExport
-                  ? 'text-purple-600 bg-purple-50 hover:bg-purple-100'
-                  : 'text-gray-400 bg-gray-100 dark:bg-gray-800 cursor-not-allowed'
+                  ? 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 cursor-pointer'
+                  : 'border-border bg-surface-2 text-muted-foreground cursor-not-allowed opacity-70'
               )}
               title={!canExport ? '只有已完成的巡检才能导出报告' : '导出巡检报告'}
             >
               {generateReport.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : exportCompleted ? (
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                <CheckCircle2 className="w-4 h-4 text-success" />
               ) : (
                 <Download className="w-4 h-4" />
               )}
@@ -662,7 +806,7 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
               {canExport && !generateReport.isPending && (
                 <ChevronDown className={cn('w-4 h-4 transition-transform', showExportMenu && 'rotate-180')} />
               )}
-            </motion.button>
+            </button>
 
             {/* 导出格式下拉菜单 */}
             <AnimatePresence>
@@ -679,20 +823,20 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
                       选择导出格式
                     </p>
                     {reportFormats.map((format) => (
-                      <motion.button
+                      <button
                         key={format.value}
-                        whileHover={{ backgroundColor: 'rgba(147, 51, 234, 0.05)' }}
+                        type="button"
                         onClick={() => handleExportReport(format.value)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-md transition-colors hover:bg-purple-50"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-md cursor-pointer transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                       >
-                        <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-purple-100 text-purple-600 rounded-lg">
+                        <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-primary/10 text-primary rounded-lg">
                           {format.icon}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-foreground">{format.label}</p>
                           <p className="text-xs text-muted-foreground truncate">{format.description}</p>
                         </div>
-                      </motion.button>
+                      </button>
                     ))}
                   </div>
                 </motion.div>
@@ -708,18 +852,15 @@ export const ExecutionDetailModal: React.FC<ExecutionDetailModalProps> = ({
             )}
           </div>
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+          <button
+            type="button"
             onClick={onClose}
-            className="px-6 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
+            className="px-6 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             关闭
-          </motion.button>
+          </button>
         </div>
       </div>
     </SimpleModal>
   )
 }
-
-
